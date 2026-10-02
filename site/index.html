@@ -134,6 +134,12 @@
       background: rgba(255,255,255,0.11);
     }
 
+    #orbit[aria-pressed='true'] {
+      background: rgba(141, 184, 255, 0.22);
+      border-color: rgba(173, 208, 255, 0.75);
+      box-shadow: 0 0 12px rgba(134, 179, 255, 0.35) inset;
+    }
+
     .note {
       margin: 0;
       min-height: 1.5em;
@@ -236,10 +242,11 @@
       <button id='drop' type='button'>drop a star</button>
       <button id='oracle' type='button'>ask the sky</button>
       <button id='meteor' type='button'>call a meteor</button>
+      <button id='orbit' type='button' aria-pressed='false'>start orbit mode</button>
       <button id='clear' type='button'>clear my constellation</button>
     </div>
     <p id='note' class='note' aria-live='polite'>No stars yet. Make the first one.</p>
-    <p class='hint'>Tip: click a star to read its thought, drag stars to reshape the web, and click passing meteors to catch rare comet thoughts.</p>
+    <p class='hint'>Tip: click a star to read its thought, drag stars to reshape the web, catch meteors for rare thoughts, or start orbit mode to make the whole sky dance.</p>
   </main>
 
   <script>
@@ -276,6 +283,7 @@
       var dropBtn = document.getElementById('drop');
       var oracleBtn = document.getElementById('oracle');
       var meteorBtn = document.getElementById('meteor');
+      var orbitBtn = document.getElementById('orbit');
       var clearBtn = document.getElementById('clear');
       var linksSvg = document.getElementById('links');
       var stars = [];
@@ -285,6 +293,8 @@
       var linksRenderQueued = false;
       var nextMeteorAt = 0;
       var lastFrameTime = 0;
+      var orbitMode = false;
+      var orbitClock = 0;
 
       function clamp(value, min, max) {
         return Math.max(min, Math.min(max, value));
@@ -464,8 +474,9 @@
         var hash = constellationHash();
         var opener = openers[hash % openers.length];
         var closer = closers[(hash >>> 5) % closers.length];
+        var orbitLine = orbitMode ? ' The sky is currently dancing in orbit.' : '';
 
-        setNote('🔮 ' + opener + ' A ' + size + ' in the ' + region + ' sky feels ' + density + '. ' + closer);
+        setNote('🔮 ' + opener + ' A ' + size + ' in the ' + region + ' sky feels ' + density + '. ' + closer + orbitLine);
       }
 
       function createStarElement(star) {
@@ -486,6 +497,12 @@
         el.addEventListener('pointerdown', function (ev) {
           ev.preventDefault();
           ev.stopPropagation();
+          if (orbitMode) {
+            orbitMode = false;
+            setOrbitButton();
+            saveStars();
+            setNote('Orbit mode paused so you can reshape the sky.');
+          }
           activeDrag = {
             star: star,
             pointerId: ev.pointerId,
@@ -495,7 +512,6 @@
             try {
               star.el.setPointerCapture(ev.pointerId);
             } catch (e) {
-              // ignore pointer capture failures
             }
           }
           star.el.classList.add('dragging');
@@ -503,6 +519,91 @@
         });
 
         document.body.appendChild(el);
+      }
+
+      function centerOfStars() {
+        if (!stars.length) return { x: 50, y: 50 };
+        var cx = 0;
+        var cy = 0;
+        for (var i = 0; i < stars.length; i++) {
+          cx += stars[i].x;
+          cy += stars[i].y;
+        }
+        return { x: cx / stars.length, y: cy / stars.length };
+      }
+
+      function primeOrbit() {
+        if (!stars.length) return;
+        var center = centerOfStars();
+        for (var i = 0; i < stars.length; i++) {
+          var star = stars[i];
+          var dx = star.x - center.x;
+          var dy = star.y - center.y;
+          var radius = Math.sqrt(dx * dx + dy * dy);
+          if (radius < 4) radius = randRange(4, 11);
+          star.orbitAngle = Math.atan2(dy || randRange(-1, 1), dx || randRange(-1, 1));
+          star.orbitRadius = clamp(radius, 4, 42);
+          star.orbitSpeed = randRange(0.25, 1.05) * (Math.random() < 0.5 ? -1 : 1);
+          star.orbitTilt = randRange(0.65, 1.1);
+          star.orbitPulse = randRange(0, Math.PI * 2);
+        }
+      }
+
+      function setOrbitButton() {
+        orbitBtn.textContent = orbitMode ? 'stop orbit mode' : 'start orbit mode';
+        orbitBtn.setAttribute('aria-pressed', orbitMode ? 'true' : 'false');
+      }
+
+      function toggleOrbit(forceOff) {
+        if (forceOff) {
+          if (orbitMode) {
+            orbitMode = false;
+            setOrbitButton();
+            saveStars();
+          }
+          return;
+        }
+
+        if (!orbitMode) {
+          if (!stars.length) {
+            setNote('Orbit needs at least one star. Drop one first.');
+            return;
+          }
+          orbitMode = true;
+          orbitClock = 0;
+          primeOrbit();
+          setOrbitButton();
+          setNote('🌀 Orbit mode engaged. Your constellation is now alive.');
+          return;
+        }
+
+        orbitMode = false;
+        setOrbitButton();
+        saveStars();
+        queueLinksRender();
+        setNote('Orbit mode paused. The stars hold their new places.');
+      }
+
+      function updateOrbit(dt) {
+        if (!orbitMode || !stars.length) return;
+        orbitClock += dt;
+
+        var baseCx = 50 + Math.sin(orbitClock * 0.23) * 3;
+        var baseCy = 50 + Math.cos(orbitClock * 0.19) * 2;
+
+        for (var i = 0; i < stars.length; i++) {
+          var star = stars[i];
+          if (typeof star.orbitAngle !== 'number') {
+            primeOrbit();
+            break;
+          }
+          star.orbitAngle += star.orbitSpeed * dt * 0.45;
+          var radius = star.orbitRadius * (1 + Math.sin(orbitClock + star.orbitPulse) * 0.04);
+          var nextX = baseCx + Math.cos(star.orbitAngle) * radius;
+          var nextY = baseCy + Math.sin(star.orbitAngle) * (radius * star.orbitTilt);
+          updateStarPosition(star, nextX, nextY);
+        }
+        queueLinksRender();
       }
 
       function addStar(xVw, yVh, text) {
@@ -514,11 +615,17 @@
           x: 50,
           y: 50,
           text: text,
-          el: null
+          el: null,
+          orbitAngle: null,
+          orbitRadius: null,
+          orbitSpeed: null,
+          orbitTilt: null,
+          orbitPulse: null
         };
         updateStarPosition(star, xVw, yVh);
         stars.push(star);
         createStarElement(star);
+        if (orbitMode) primeOrbit();
         queueLinksRender();
         setNote('✦ ' + star.text);
         saveStars();
@@ -621,7 +728,17 @@
             if (!item || typeof item.x !== 'number' || typeof item.y !== 'number' || typeof item.text !== 'string') {
               return;
             }
-            var star = { x: 50, y: 50, text: item.text, el: null };
+            var star = {
+              x: 50,
+              y: 50,
+              text: item.text,
+              el: null,
+              orbitAngle: null,
+              orbitRadius: null,
+              orbitSpeed: null,
+              orbitTilt: null,
+              orbitPulse: null
+            };
             updateStarPosition(star, item.x, item.y);
             stars.push(star);
             createStarElement(star);
@@ -637,6 +754,7 @@
 
       function clearStars() {
         activeDrag = null;
+        toggleOrbit(true);
         while (stars.length) {
           var star = stars.pop();
           if (star.el) star.el.remove();
@@ -644,7 +762,6 @@
         try {
           localStorage.removeItem(STORAGE_KEY);
         } catch (e) {
-          // ignore storage removal errors
         }
         queueLinksRender();
         setNote('Sky cleared. Ready for a new constellation.');
@@ -660,11 +777,11 @@
             try {
               drag.star.el.releasePointerCapture(pointerId);
             } catch (e) {
-              // ignore pointer release failures
             }
           }
         }
         if (drag.moved) {
+          if (orbitMode) primeOrbit();
           saveStars();
           queueLinksRender();
           suppressStarClickUntil = Date.now() + DRAG_SUPPRESS_MS;
@@ -687,6 +804,11 @@
         if (spawnMeteor(performance.now(), true)) {
           setNote('A meteor streaks by. Click it to catch a rare thought.');
         }
+      });
+
+      orbitBtn.addEventListener('click', function (ev) {
+        ev.stopPropagation();
+        toggleOrbit(false);
       });
 
       clearBtn.addEventListener('click', function (ev) {
@@ -718,6 +840,7 @@
       });
 
       loadStars();
+      setOrbitButton();
 
       var canvas = document.getElementById('sky');
       var ctx = canvas.getContext('2d');
@@ -766,6 +889,7 @@
         }
 
         updateMeteors(dt, now);
+        updateOrbit(dt);
         requestAnimationFrame(draw);
       }
 
