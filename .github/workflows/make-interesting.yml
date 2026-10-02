@@ -87,8 +87,10 @@ jobs:
           npm install --global --ignore-scripts "@github/copilot-linux-x64@${COPILOT_CLI_VERSION}"
           copilot-linux-x64 --version
 
-      # No credentials are left in the checkout: the model's answer is processed here, and its
-      # page is opened in a browser for the screenshot. Only the last step is given the token.
+      # No credentials are left in the checkout: the model's answer is applied here, and its page
+      # is opened in a browser for the screenshot. The screenshot step gets no token at all. The
+      # model step gets only the Copilot token (the workflow's own token, unless a
+      # COPILOT_GITHUB_TOKEN secret is set), and the last step gets the token it pushes with.
       - name: Checkout
         uses: actions/checkout@v5
         with:
@@ -126,6 +128,7 @@ jobs:
       - name: Save a screenshot of the site
         id: screenshot
         continue-on-error: true
+        timeout-minutes: 5
         run: |
           file="screenshots/$(date -u +%Y%m%d-%H%MZ).jpg"
           python3 .github/scripts/screenshot.py site "$file"
@@ -155,7 +158,8 @@ jobs:
           SCREENSHOT: ${{ steps.screenshot.outputs.file }}
           GITHUB_TOKEN: ${{ github.token }}
         run: |
-          git add -A -- site screenshots
+          git add -A -- site
+          if [ -d screenshots ]; then git add -A -- screenshots; fi
           if git diff --cached --quiet; then
             echo "No changes to commit."
             exit 0

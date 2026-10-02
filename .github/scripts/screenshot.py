@@ -151,8 +151,13 @@ class Chrome:
         return self._next_id
 
     def _next_message(self, deadline, waiting_for):
+        # The clock is checked here, not left to the queue: a queue that always has something in
+        # it never times out, so a page flooding the pipe with events could outstay any deadline.
+        remaining = deadline - time.monotonic()
         try:
-            message = self._messages.get(timeout=max(0.0, deadline - time.monotonic()))
+            if remaining <= 0:
+                raise queue.Empty
+            message = self._messages.get(timeout=remaining)
         except queue.Empty:
             raise ScreenshotError(f"Chrome did not answer in time ({waiting_for})") from None
         if message is None:
@@ -162,12 +167,18 @@ class Chrome:
             raise ScreenshotError(f"Chrome exited ({waiting_for}){detail}")
         # A page that opens alert(), confirm() or prompt() would wait for an answer forever.
         if message.get("method") == "Page.javascriptDialogOpening":
-            self._send("Page.handleJavaScriptDialog", {"accept": True}, message.get("sessionId"))
+            try:
+                self._send("Page.handleJavaScriptDialog", {"accept": True}, message.get("sessionId"))
+            except OSError:
+                pass  # Chrome has gone; the next read says so
         return message
 
     def call(self, method, params=None, session=None):
         """Send one command and return its result."""
-        wanted = self._send(method, params, session)
+        try:
+            wanted = self._send(method, params, session)
+        except OSError:  # the pipe is closed: Chrome has already exited
+            raise ScreenshotError(f"Chrome exited ({method})") from None
         deadline = time.monotonic() + REPLY_TIMEOUT_SECONDS
         while True:
             message = self._next_message(deadline, method)
@@ -208,8 +219,8 @@ class Chrome:
         if self.process.poll() is None:
             try:
                 os.killpg(self.process.pid, 9)
-            except ProcessLookupError:
-                pass
+            except (ProcessLookupError, PermissionError):
+                pass  # already gone; macOS answers EPERM for a group whose leader has exited
             self.process.wait()
         for fd in (self._send_fd, self._receive_fd):
             try:
@@ -225,6 +236,8 @@ def capture(url, binary, width=WIDTH, height=HEIGHT, quality=JPEG_QUALITY):
     with tempfile.TemporaryDirectory(prefix="screenshot-chrome-") as profile_dir:
         chrome = Chrome(binary, profile_dir, width, height)
         try:
+            # The page must not be able to save files: a download would land outside the profile.
+            chrome.call("Browser.setDownloadBehavior", {"behavior": "deny"})
             target = chrome.call("Target.createTarget", {"url": "about:blank"})["targetId"]
             session = chrome.call("Target.attachToTarget", {"targetId": target, "flatten": True})["sessionId"]
             chrome.call("Page.enable", session=session)

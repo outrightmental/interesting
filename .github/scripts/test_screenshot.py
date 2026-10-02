@@ -128,15 +128,40 @@ class RealChromeTest(unittest.TestCase):
 
     def test_nothing_is_left_running(self):
         site = RecordingSite(self, {"/index.html": "<body>bye</body>"})
-        with mock.patch.object(shot, "SETTLE_SECONDS", 0.2):
+        with mock.patch.object(shot, "SETTLE_SECONDS", 0.2), mock.patch.object(shot, "Chrome", wraps=shot.Chrome) as started:
             shot.capture(site.url + "/index.html", self.chrome)
-        leftovers = subprocess.run(["pgrep", "-f", "screenshot-chrome-"], capture_output=True, text=True).stdout.split()
-        for _ in range(50):  # Chrome's helper processes take a moment to go
-            if not leftovers:
+        profile = started.call_args.args[1]  # only this test's browser: its profile folder is unique
+
+        def leftovers():
+            return subprocess.run(["pgrep", "-f", profile], capture_output=True, text=True).stdout.split()
+
+        for _ in range(100):  # Chrome's helper processes take a moment to go
+            if not leftovers():
                 break
             time.sleep(0.1)
-            leftovers = subprocess.run(["pgrep", "-f", "screenshot-chrome-"], capture_output=True, text=True).stdout.split()
-        self.assertEqual(leftovers, [])
+        self.assertEqual(leftovers(), [])
+
+    def test_downloads_are_denied_before_the_page_is_opened(self):
+        # The page tries to save a file as soon as it loads. Real Chrome must accept the command
+        # that forbids it, and must be given it before the page is opened.
+        site = RecordingSite(self, {
+            "/index.html": "<body><script>var a = document.createElement('a');"
+                           "a.href = URL.createObjectURL(new Blob(['dropped by the page']));"
+                           "a.download = 'dropped-by-the-page.txt'; document.body.appendChild(a); a.click();"
+                           "</script></body>",
+        })
+        sent, real_call = [], shot.Chrome.call
+
+        def recording_call(chrome, method, params=None, session=None):
+            sent.append((method, params))
+            return real_call(chrome, method, params, session)
+
+        with mock.patch.object(shot.Chrome, "call", recording_call), mock.patch.object(shot, "SETTLE_SECONDS", 0.5):
+            image = shot.capture(site.url + "/index.html", self.chrome)
+        self.assertEqual(jpeg_size(image), (shot.WIDTH, shot.HEIGHT))
+        methods = [method for method, _ in sent]
+        self.assertIn(("Browser.setDownloadBehavior", {"behavior": "deny"}), sent)
+        self.assertLess(methods.index("Browser.setDownloadBehavior"), methods.index("Page.navigate"))
 
 
 class WithoutChromeTest(unittest.TestCase):
@@ -181,8 +206,20 @@ class WithoutChromeTest(unittest.TestCase):
                 "sleep 5\n"
             )
             fake.chmod(0o755)
-            with self.assertRaisesRegex(shot.ScreenshotError, "Target.createTarget failed: I am not Chrome"):
+            with self.assertRaisesRegex(shot.ScreenshotError, "Browser.setDownloadBehavior failed: I am not Chrome"):
                 shot.capture("http://127.0.0.1:9/", str(fake))
+
+    def test_a_flood_of_messages_cannot_outstay_a_deadline(self):
+        # A stand-in that never answers but never stops talking either.
+        with tempfile.TemporaryDirectory() as tmp:
+            fake = Path(tmp) / "chatty"
+            fake.write_text("#!/bin/sh\nwhile :; do printf '{\"method\":\"Page.frameAttached\"}\\0' >&4 || exit 0; done\n")
+            fake.chmod(0o755)
+            started = time.monotonic()
+            with mock.patch.object(shot, "REPLY_TIMEOUT_SECONDS", 2):
+                with self.assertRaisesRegex(shot.ScreenshotError, "did not answer in time"):
+                    shot.capture("http://127.0.0.1:9/", str(fake))
+            self.assertLess(time.monotonic() - started, 20)
 
     def test_chrome_bin_overrides_the_search(self):
         with mock.patch.dict(os.environ, {"CHROME_BIN": "/opt/my/chrome"}):
