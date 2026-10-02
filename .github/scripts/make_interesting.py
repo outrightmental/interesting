@@ -219,7 +219,8 @@ def main():
             print(f"::warning::{model} failed: {err}")
             continue
         apply_ops(ops)
-        summary = str(plan.get("summary") or MISSION).strip().splitlines()[0][:200]
+summary_text = str(plan.get("summary") or "").strip()
+        summary = summary_text.splitlines()[0][:200] if summary_text else MISSION
         print(f"Summary: {summary}")
         set_output("model", model)
         set_output("summary", summary)
