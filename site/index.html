@@ -134,7 +134,8 @@
       background: rgba(255,255,255,0.11);
     }
 
-    #orbit[aria-pressed='true'] {
+    #orbit[aria-pressed='true'],
+    #chime[aria-pressed='true'] {
       background: rgba(141, 184, 255, 0.22);
       border-color: rgba(173, 208, 255, 0.75);
       box-shadow: 0 0 12px rgba(134, 179, 255, 0.35) inset;
@@ -175,6 +176,12 @@
       animation: none;
       transform: scale(1.22);
       box-shadow: 0 0 18px rgba(180, 215, 255, 0.95);
+    }
+
+    .star.ping {
+      animation: ping 360ms ease-out;
+      transform: scale(1.55);
+      box-shadow: 0 0 22px rgba(213, 234, 255, 1);
     }
 
     .star:nth-of-type(2n) { animation-duration: 3.7s; }
@@ -223,6 +230,11 @@
       50% { transform: scale(1.12); opacity: 1; }
     }
 
+    @keyframes ping {
+      0% { transform: scale(1); opacity: 1; }
+      100% { transform: scale(1.7); opacity: 0.85; }
+    }
+
     @media (prefers-reduced-motion: reduce) {
       .star { animation: none; }
       button { transition: none; }
@@ -237,16 +249,17 @@
   <main>
     <h1>interesting</h1>
     <p class='tagline'>recursively iterate the most interesting possible website</p>
-    <p class='story'>Tonight's experiment: a wish constellation. Click to place tiny thoughts, drag stars to sketch your own sky map, then ask the sky what pattern it sees.</p>
+    <p class='story'>Tonight's experiment: a wish constellation. Click to place tiny thoughts, drag stars to sketch your own sky map, then ask the sky what pattern it sees, or play your sky as a tiny synth melody.</p>
     <div class='controls'>
       <button id='drop' type='button'>drop a star</button>
       <button id='oracle' type='button'>ask the sky</button>
       <button id='meteor' type='button'>call a meteor</button>
+      <button id='chime' type='button' aria-pressed='false'>play star chime</button>
       <button id='orbit' type='button' aria-pressed='false'>start orbit mode</button>
       <button id='clear' type='button'>clear my constellation</button>
     </div>
     <p id='note' class='note' aria-live='polite'>No stars yet. Make the first one.</p>
-    <p class='hint'>Tip: click a star to read its thought, drag stars to reshape the web, catch meteors for rare thoughts, or start orbit mode to make the whole sky dance.</p>
+    <p class='hint'>Tip: click a star to read its thought, drag stars to reshape the web, catch meteors for rare thoughts, try star chime to hear your pattern, or start orbit mode to make the whole sky dance.</p>
   </main>
 
   <script>
@@ -283,6 +296,7 @@
       var dropBtn = document.getElementById('drop');
       var oracleBtn = document.getElementById('oracle');
       var meteorBtn = document.getElementById('meteor');
+      var chimeBtn = document.getElementById('chime');
       var orbitBtn = document.getElementById('orbit');
       var clearBtn = document.getElementById('clear');
       var linksSvg = document.getElementById('links');
@@ -295,6 +309,10 @@
       var lastFrameTime = 0;
       var orbitMode = false;
       var orbitClock = 0;
+      var audioCtx = null;
+      var chimePlaying = false;
+      var chimeTimeouts = [];
+      var activeOscillators = [];
 
       function clamp(value, min, max) {
         return Math.max(min, Math.min(max, value));
@@ -554,6 +572,11 @@
         orbitBtn.setAttribute('aria-pressed', orbitMode ? 'true' : 'false');
       }
 
+      function setChimeButton() {
+        chimeBtn.textContent = chimePlaying ? 'stop star chime' : 'play star chime';
+        chimeBtn.setAttribute('aria-pressed', chimePlaying ? 'true' : 'false');
+      }
+
       function toggleOrbit(forceOff) {
         if (forceOff) {
           if (orbitMode) {
@@ -755,6 +778,7 @@
       function clearStars() {
         activeDrag = null;
         toggleOrbit(true);
+        stopChime(true);
         while (stars.length) {
           var star = stars.pop();
           if (star.el) star.el.remove();
@@ -789,6 +813,139 @@
         }
       }
 
+      function ensureAudioContext() {
+        if (audioCtx) return audioCtx;
+        var AudioCtor = window.AudioContext || window.webkitAudioContext;
+        if (!AudioCtor) return null;
+        audioCtx = new AudioCtor();
+        return audioCtx;
+      }
+
+      function starFrequency(star) {
+        var scale = [0, 3, 5, 7, 10, 12, 15, 17, 19, 22];
+        var degree = Math.floor((clamp(star.x, 0, 99.999) / 100) * scale.length);
+        degree = clamp(degree, 0, scale.length - 1);
+        var octaveLift = Math.floor((100 - clamp(star.y, 1, 99)) / 34);
+        var midi = 48 + scale[degree] + octaveLift * 12;
+        return 440 * Math.pow(2, (midi - 69) / 12);
+      }
+
+      function pingStar(star, delayMs) {
+        var onId = setTimeout(function () {
+          if (!star.el) return;
+          star.el.classList.add('ping');
+          var offId = setTimeout(function () {
+            if (star.el) star.el.classList.remove('ping');
+          }, 220);
+          chimeTimeouts.push(offId);
+        }, delayMs);
+        chimeTimeouts.push(onId);
+      }
+
+      function playTone(ctx, star, when, stepIndex) {
+        var osc = ctx.createOscillator();
+        var gain = ctx.createGain();
+        var duration = 0.16 + ((100 - star.y) / 100) * 0.24;
+        var volume = 0.035 + (star.y / 100) * 0.03;
+        var pan = (star.x / 50) - 1;
+        var wave = ['sine', 'triangle', 'square', 'sawtooth'][stepIndex % 4];
+
+        osc.type = wave;
+        osc.frequency.setValueAtTime(starFrequency(star), when);
+
+        gain.gain.setValueAtTime(0.0001, when);
+        gain.gain.linearRampToValueAtTime(volume, when + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, when + duration);
+
+        if (ctx.createStereoPanner) {
+          var panner = ctx.createStereoPanner();
+          panner.pan.setValueAtTime(clamp(pan, -1, 1), when);
+          osc.connect(gain);
+          gain.connect(panner);
+          panner.connect(ctx.destination);
+        } else {
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+        }
+
+        activeOscillators.push(osc);
+        osc.onended = function () {
+          for (var i = activeOscillators.length - 1; i >= 0; i--) {
+            if (activeOscillators[i] === osc) {
+              activeOscillators.splice(i, 1);
+              break;
+            }
+          }
+        };
+
+        osc.start(when);
+        osc.stop(when + duration + 0.03);
+      }
+
+      function stopChime(silent) {
+        for (var i = 0; i < chimeTimeouts.length; i++) {
+          clearTimeout(chimeTimeouts[i]);
+        }
+        chimeTimeouts = [];
+
+        for (var j = 0; j < activeOscillators.length; j++) {
+          try {
+            activeOscillators[j].stop();
+          } catch (e) {
+          }
+        }
+        activeOscillators = [];
+
+        for (var k = 0; k < stars.length; k++) {
+          if (stars[k].el) stars[k].el.classList.remove('ping');
+        }
+
+        chimePlaying = false;
+        setChimeButton();
+        if (!silent) setNote('Star chime stopped.');
+      }
+
+      function playChime() {
+        if (!stars.length) {
+          setNote('Drop a few stars first, then play the sky.');
+          return;
+        }
+
+        var ctx = ensureAudioContext();
+        if (!ctx) {
+          setNote('This browser cannot play star chimes, but your sky still shines.');
+          return;
+        }
+
+        if (ctx.state === 'suspended' && ctx.resume) {
+          ctx.resume().catch(function () {
+          });
+        }
+
+        stopChime(true);
+        chimePlaying = true;
+        setChimeButton();
+
+        var melody = stars.slice().sort(function (a, b) { return a.x - b.x; });
+        var step = Math.max(0.08, 0.38 - melody.length * 0.01);
+        var start = ctx.currentTime + 0.05;
+
+        for (var i = 0; i < melody.length; i++) {
+          var when = start + i * step;
+          playTone(ctx, melody[i], when, i);
+          pingStar(melody[i], Math.max(0, (when - ctx.currentTime) * 1000));
+        }
+
+        var doneId = setTimeout(function () {
+          chimePlaying = false;
+          setChimeButton();
+          setNote('✨ Star chime complete. Rearrange stars to compose a new one.');
+        }, Math.ceil((step * melody.length + 0.3) * 1000));
+        chimeTimeouts.push(doneId);
+
+        setNote('🎵 Playing your constellation from west to east.');
+      }
+
       dropBtn.addEventListener('click', function (ev) {
         ev.stopPropagation();
         addStar(50 + (Math.random() - 0.5) * 24, 50 + (Math.random() - 0.5) * 24, randomThought());
@@ -804,6 +961,15 @@
         if (spawnMeteor(performance.now(), true)) {
           setNote('A meteor streaks by. Click it to catch a rare thought.');
         }
+      });
+
+      chimeBtn.addEventListener('click', function (ev) {
+        ev.stopPropagation();
+        if (chimePlaying) {
+          stopChime(false);
+          return;
+        }
+        playChime();
       });
 
       orbitBtn.addEventListener('click', function (ev) {
@@ -832,6 +998,10 @@
         endDrag(ev.pointerId);
       });
 
+      document.addEventListener('visibilitychange', function () {
+        if (document.hidden && chimePlaying) stopChime(true);
+      });
+
       document.addEventListener('click', function (ev) {
         var target = ev.target;
         if (target && target.closest && target.closest('main')) return;
@@ -841,6 +1011,7 @@
 
       loadStars();
       setOrbitButton();
+      setChimeButton();
 
       var canvas = document.getElementById('sky');
       var ctx = canvas.getContext('2d');
