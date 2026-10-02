@@ -1,18 +1,16 @@
 name: Test
 
+# Runs on every pull request, and as the first stage of the main-branch pipeline in pages.yml.
 on:
   pull_request:
-  push:
-    branches: [main]
-    paths:
-      - ".github/scripts/**"
-      - ".github/workflows/test.yml"
+  workflow_call:
 
 permissions:
   contents: read
 
 concurrency:
-  group: test-${{ github.ref }}
+  # A newer push to a pull request replaces its older test run. Runs on main never cancel each other.
+  group: test-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: true
 
 jobs:
@@ -27,3 +25,8 @@ jobs:
       # No model is called: the tests swap the Copilot CLI for a stand-in.
       - name: Run the tests for the workflow scripts
         run: python3 -m unittest discover -s .github/scripts -v
+
+      - name: Check that the site has its two required pages
+        run: |
+          test -s site/index.html || { echo "::error::site/index.html is missing or empty"; exit 1; }
+          test -s site/error.html || { echo "::error::site/error.html is missing or empty"; exit 1; }
