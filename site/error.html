@@ -129,7 +129,8 @@
     }
 
     .radio,
-    .decoder {
+    .decoder,
+    .haiku {
       margin-top: 1rem;
       border: 1px solid rgba(255,255,255,0.15);
       border-radius: 12px;
@@ -210,6 +211,20 @@
       box-shadow: 0 0 10px rgba(255, 223, 148, 0.38) inset;
     }
 
+    #haiku-output {
+      margin: 0.55rem 0 0;
+      min-height: 7.1em;
+      white-space: pre-wrap;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+      font-size: 0.88rem;
+      line-height: 1.42;
+      color: #e7f0ff;
+      border: 1px solid rgba(255,255,255,0.14);
+      border-radius: 10px;
+      background: rgba(6, 10, 20, 0.56);
+      padding: 0.68rem;
+    }
+
     @media (prefers-reduced-motion: reduce) {
       button, a.action, .glyph { transition: none; }
     }
@@ -262,6 +277,19 @@
       <p id='decoder-note' class='hint' aria-live='polite'>Press play sequence to begin.</p>
     </section>
 
+    <section class='haiku' aria-label='Distress haiku terminal'>
+      <div class='radio-top'>
+        <p class='muted'>Distress haiku terminal</p>
+        <p>text burst</p>
+      </div>
+      <p class='hint'>Print a tiny poem from your current frequency and decoder state.</p>
+      <div class='controls'>
+        <button id='haiku' type='button'>print haiku</button>
+      </div>
+      <pre id='haiku-output' aria-live='polite'>Awaiting transmission...
+Tune the radio, decode a few runes, then print.</pre>
+    </section>
+
     <p class='hint'>Easter egg: type <strong>home</strong> while on this page.</p>
   </main>
 
@@ -284,6 +312,8 @@
       var decoderLevelLabel = document.getElementById('decoder-level');
       var playSeqBtn = document.getElementById('play-seq');
       var resetSeqBtn = document.getElementById('reset-seq');
+      var haikuBtn = document.getElementById('haiku');
+      var haikuOutput = document.getElementById('haiku-output');
       var glyphButtons = Array.prototype.slice.call(document.querySelectorAll('#glyph-grid .glyph'));
       var hints = [
         'Signal: try one tiny experiment before your next big decision.',
@@ -308,6 +338,30 @@
         'Beacon pulse: playful focus amplifies your momentum.',
         'Deep vault: bold drafts age into maps for others.',
         'Long-range message: you are closer than your doubt says.'
+      ];
+      var haikuFiveA = [
+        'static births a spark',
+        'midnight antennae',
+        'small meteors listen',
+        'quiet circuits glow',
+        'lost maps learn your name',
+        'signal dust settles'
+      ];
+      var haikuSeven = [
+        'the void hums in patient spirals',
+        'your brave draft crosses the dark',
+        'we tune fear into lanterns',
+        'cold stars applaud tiny starts',
+        'old satellites dream in blue',
+        'unknown roads answer in light'
+      ];
+      var haikuFiveB = [
+        'go where wonder points',
+        'home is a moving star',
+        'press start, then look up',
+        'orbit the unknown',
+        'signal found in mist',
+        'build small, then build more'
       ];
       var hintIndex = Math.floor(Math.random() * hints.length);
       var audioCtx = null;
@@ -493,6 +547,35 @@
         }
       }
 
+      function pick(arr, seed, step) {
+        return arr[Math.abs(seed + step * 17) % arr.length];
+      }
+
+      function printHaiku() {
+        var f = Number(freqInput.value);
+        var level = parseInt(decoderLevelLabel.textContent, 10) || 1;
+        var hit = nearestSignal(f);
+        var minuteSeed = Math.floor(Date.now() / 60000);
+        var seed = Math.floor(f * 10) + level * 31 + minuteSeed;
+
+        if (Math.abs(f - 99.7) < 0.11 && level >= 3) {
+          haikuOutput.textContent = 'archive gate opens\nold fears drop like satellites\nyour draft leaves the dark\n\nstation 99.7 · rare relay';
+          note.textContent = '☄ Rare haiku transmission decoded.';
+          burst();
+          tone(523.25, 0.12, 'triangle', 0.03);
+          tone(659.25, 0.16, 'sine', 0.028);
+          return;
+        }
+
+        var line1 = pick(haikuFiveA, seed, 1);
+        var line2 = pick(haikuSeven, seed, 2);
+        var line3 = pick(haikuFiveB, seed, 3);
+
+        haikuOutput.textContent = line1 + '\n' + line2 + '\n' + line3 + '\n\nstation ' + hit.signal.f.toFixed(1) + ' · tuned ' + f.toFixed(1) + ' · level ' + level;
+        note.textContent = '📡 Distress haiku printed from ' + f.toFixed(1) + ' MHz.';
+        tone(300 + f * 1.8, 0.11, 'triangle', 0.024);
+      }
+
       voidBtn.addEventListener('click', function () {
         hintIndex = (hintIndex + 1 + Math.floor(Math.random() * 2)) % hints.length;
         note.textContent = '✦ ' + hints[hintIndex];
@@ -520,8 +603,8 @@
       });
 
       lockBtn.addEventListener('click', lockFrequency);
-
       playSeqBtn.addEventListener('click', playDecoderSequence);
+      haikuBtn.addEventListener('click', printHaiku);
       resetSeqBtn.addEventListener('click', function () {
         clearDecoderTimers();
         decoderShowing = false;
