@@ -299,6 +299,84 @@ class BuildPromptTest(SiteDirTestCase):
         self.assertEqual([rel for rel, _ in mi.read_site()], ["error.html", "index.html"])
 
 
+class SmallModelTest(unittest.TestCase):
+    """Issue #2: small models must never be picked at random."""
+
+    SMALL = [
+        # the two named in the issue, in id form and as people write them
+        "claude-haiku-4.5", "claude-sonnet-5.5", "claude-sonnet-5", "Claude Haiku 4.5", "anthropic/claude-3-5-sonnet",
+        # the same tiers at other providers
+        "gpt-5-mini", "gpt-5.4-mini", "gpt-5.4-nano", "gpt-6-luna", "gpt-5.6-luna", "gpt-5.6-terra",
+        "openai/gpt-4o-mini", "o4-mini",
+        "gemini-3.8-flash", "gemini-2.5-flash-lite", "gemma-3-27b-it",
+        "grok-3-mini", "grok-code-fast-1", "claude-opus-4.8-fast",
+        "mai-code-1.1-flash", "microsoft/Phi-4", "Phi-4-mini-instruct",
+        "mistral-small-2503", "mistral-ai/mistral-medium-2505", "ministral-3b",
+        "amazon.nova-micro-v1", "nova-lite", "llama-3.1-8b-instant", "some-new-tiny-model",
+    ]
+    LARGE = [
+        "claude-fable-5.1", "claude-fable-5", "claude-opus-5.5", "claude-opus-5", "claude-opus-4.8",
+        "gpt-6.1-sol", "gpt-6-sol", "gpt-6-astra", "gpt-5.6-sol", "gpt-5.5", "gpt-5.3-codex",
+        "kimi-k3", "grok-4.6", "mistral-large-2411",
+        # contain the letters of a marker without being that tier
+        "gemini-3.1-pro", "gemini-3-pro", "minimax-m2", "nanobanana-pro", "flashpoint-xl",
+    ]
+
+    def test_small_and_mid_tier_models_are_recognised(self):
+        for model in self.SMALL:
+            with self.subTest(model=model):
+                self.assertTrue(mi.is_small_model(model))
+
+    def test_flagship_models_are_not_mistaken_for_small(self):
+        for model in self.LARGE:
+            with self.subTest(model=model):
+                self.assertFalse(mi.is_small_model(model))
+
+    def test_built_in_pool_contains_no_small_model(self):
+        self.assertTrue(mi.MODELS)
+        self.assertEqual([m for m in mi.MODELS if mi.is_small_model(m)], [])
+        self.assertEqual(len(set(mi.MODELS)), len(mi.MODELS))
+        for model in mi.MODELS:
+            self.assertFalse(any(tier in model for tier in ("haiku", "sonnet")), model)
+
+    def pool(self, configured):
+        with mock.patch.dict(os.environ, {"MODEL_POOL": configured}), mock.patch("builtins.print") as printed:
+            return mi.model_pool(), " ".join(str(call.args[0]) for call in printed.call_args_list)
+
+    def test_default_pool_is_the_built_in_list(self):
+        for unset in ["", "  ", " , "]:
+            self.assertEqual(self.pool(unset)[0], mi.MODELS)
+
+    def test_configured_pool_replaces_the_list_but_small_models_are_still_refused(self):
+        pool, log = self.pool("claude-opus-5.5, claude-haiku-4.5,gpt-5-mini  my-new-flagship\nclaude-opus-5.5,claude-sonnet-5")
+        self.assertEqual(pool, ["claude-opus-5.5", "my-new-flagship"])
+        for refused in ["claude-haiku-4.5", "gpt-5-mini", "claude-sonnet-5"]:
+            self.assertIn(f"{refused} is a small model", log)
+
+    def test_random_pick_never_lands_on_a_small_model(self):
+        everything = ",".join(self.SMALL + self.LARGE).replace(" ", "-")
+        with mock.patch.dict(os.environ, {"MODEL_POOL": everything, "MODEL": ""}), mock.patch("builtins.print"):
+            for _ in range(200):
+                candidates = mi.pick_candidates()
+                self.assertEqual(sorted(candidates), sorted(self.LARGE))
+                self.assertFalse(any(mi.is_small_model(m) for m in candidates))
+
+    def test_pool_of_only_small_models_stops_the_run(self):
+        with mock.patch.dict(os.environ, {"MODEL_POOL": "claude-haiku-4.5,gpt-5-mini", "MODEL": ""}):
+            with mock.patch("builtins.print"), self.assertRaises(SystemExit) as caught:
+                mi.pick_candidates()
+        self.assertIn("pool is empty", str(caught.exception))
+
+    def test_model_requested_by_name_is_used_as_asked_with_a_warning(self):
+        with mock.patch.dict(os.environ, {"MODEL": " claude-haiku-4.5 ", "MODEL_POOL": ""}):
+            with mock.patch("builtins.print") as printed:
+                self.assertEqual(mi.pick_candidates(), ["claude-haiku-4.5"])
+        self.assertIn("is a small model; using it because it was requested by name", printed.call_args.args[0])
+        with mock.patch.dict(os.environ, {"MODEL": "claude-opus-5.5"}), mock.patch("builtins.print") as printed:
+            self.assertEqual(mi.pick_candidates(), ["claude-opus-5.5"])
+        printed.assert_not_called()
+
+
 class FakeCopilot:
     """A stand-in `copilot` executable that records how it was called."""
 
@@ -449,7 +527,7 @@ GOOD_PLAN = json.dumps({
 class MainTest(SiteDirTestCase):
     def run_main(self, env=None):
         out = self.root / "github_output"
-        full_env = {"GITHUB_OUTPUT": str(out), "MODEL": ""}
+        full_env = {"GITHUB_OUTPUT": str(out), "MODEL": "", "MODEL_POOL": ""}
         full_env.update(env or {})
         with mock.patch.dict(os.environ, full_env), mock.patch("builtins.print"):
             mi.main()
@@ -525,6 +603,14 @@ class MainTest(SiteDirTestCase):
             with self.assertRaises(SystemExit) as caught:
                 self.run_main()
         self.assertIn("Could not apply the change", str(caught.exception))
+
+    def test_small_models_in_a_configured_pool_are_never_asked(self):
+        fake = FakeCopilot(self, "say('nope')")
+        with self.assertRaises(SystemExit):
+            self.run_main({"MODEL_POOL": "claude-haiku-4.5,big-a,gpt-5-mini,big-b,claude-sonnet-5,big-c,big-d"})
+        asked = [c["args"][1] for c in fake.calls()]
+        self.assertEqual(len(asked), mi.MAX_ATTEMPTS)
+        self.assertTrue(set(asked) <= {"big-a", "big-b", "big-c", "big-d"}, asked)
 
     def test_requested_model_is_the_only_one_tried(self):
         fake = FakeCopilot(self, "say('nope')")

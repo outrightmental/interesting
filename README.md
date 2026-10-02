@@ -18,6 +18,8 @@ recursively iterate the most interesting possible website
   subscription (see [Setup](#setup)), gives it the mission **"make the website more interesting"**,
   commits the result and redeploys the site. If a model is unavailable or returns an unusable
   answer, up to two other random models are tried.
+- **Only flagship models** — the random pick draws from a list of large, top-tier models (see
+  [Which models](#which-models)); small and mid-tier models are never picked.
 
 ### Silo
 
@@ -33,6 +35,22 @@ The AI can only ever modify `/site`:
    applies an answer whole or not at all.
 3. The workflow fails if anything outside `/site` changed, and only stages `site/` for commit.
    The model's one-line summary is stripped to plain text before it reaches the commit message.
+
+### Which models
+
+The random pick only ever draws from large, flagship models: the top tier of each provider that
+Copilot offers, listed as `MODELS` in
+[`.github/scripts/make_interesting.py`](.github/scripts/make_interesting.py).
+
+- **Small models are never picked at random.** Besides not being on the list, any model whose id
+  contains a small or mid-tier name is refused: `haiku` and `sonnet`, and their equivalents at
+  other providers such as `mini`, `nano`, `luna`, `terra`, `flash`, `lite`, `fast`, `small`,
+  `medium`, `micro` and `phi` (the full set is `SMALL_MODEL_MARKERS`).
+- **Changing the pool** needs no code change: set the repository variable `MODEL_POOL` to a
+  comma-separated list of Copilot model ids. Small models in that list are still refused.
+- **Naming a model yourself**, through the *Run workflow* form, is not a random pick: the model is
+  used as asked, with a warning in the log if it is a small one.
+- Models that Copilot has retired or that the account cannot use are skipped automatically.
 
 ### Setup
 

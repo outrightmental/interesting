@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       model:
-        description: "GitHub Copilot model ID to use (leave blank to pick one at random)"
+        description: "GitHub Copilot model ID to use (leave blank to pick a flagship model at random)"
         required: false
         default: ""
 
@@ -49,6 +49,9 @@ jobs:
           COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN || github.token }}
           COPILOT_BIN: copilot-linux-x64
           MODEL: ${{ inputs.model }}
+          # Optional comma-separated list of model ids to pick from instead of the built-in list.
+          # Small models are refused even if listed here.
+          MODEL_POOL: ${{ vars.MODEL_POOL }}
         run: python3 .github/scripts/make_interesting.py
 
       - name: Ensure only /site was modified
