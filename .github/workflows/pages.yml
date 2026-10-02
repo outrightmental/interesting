@@ -15,14 +15,20 @@ on:
 
 permissions: {}
 
+# One pipeline run at a time, and the rest wait their turn. Without `queue: max` only one run can
+# wait, and a newer run takes its place: a run with nothing to do (see the `if` below) could then
+# push out the run that was waiting to deploy a commit.
 concurrency:
   group: pages
   cancel-in-progress: false
+  queue: max
 
 jobs:
   test:
-    # After the AI workflow, only when it succeeded and left a new commit: for this event
-    # github.sha is the tip of main, and head_sha is the commit that workflow started from.
+    # After the AI workflow, only when it succeeded and main has moved since it started: for this
+    # event github.sha is the tip of main, and head_sha is the commit that workflow started from.
+    # Normally the move is the AI's own commit. A push by someone else in the meantime counts too,
+    # and is then tested and deployed once more, which is harmless.
     if: >-
       github.event_name != 'workflow_run' ||
       (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_sha != github.sha)
