@@ -16,8 +16,9 @@ recursively iterate the most interesting possible website
   [GitHub Copilot](https://docs.github.com/copilot), reached through the
   [Copilot CLI](https://docs.github.com/copilot/how-tos/copilot-cli) and billed to a GitHub Copilot
   subscription (see [Setup](#setup)), gives it the mission **"make the website more interesting"**,
-  commits the result and redeploys the site. If a model is unavailable or returns an unusable
-  answer, up to two other random models are tried.
+  commits the result and redeploys the site. Models the account cannot use are skipped. A model
+  that returns an unusable answer is replaced by another random model, or asked again if no other
+  is left, for up to three attempts per run.
 - **Only flagship models** — the random pick draws from a list of large, top-tier models (see
   [Which models](#which-models)); small and mid-tier models are never picked.
 
@@ -74,7 +75,7 @@ has no model in the pool, because Copilot only offers the Gemini Flash tier.
   models of the organization's Copilot plan and model policy: on 2026-10-02, for an organization
   with the policy enabled but no Copilot seats, that was `gpt-5.3-codex` alone, so every "random"
   pick landed on it. A personal token is offered every model of that user's plan. The run log
-  says how many of the models in the pool the account could not use.
+  names the models it tried that the account could not use.
 
 ### Development
 

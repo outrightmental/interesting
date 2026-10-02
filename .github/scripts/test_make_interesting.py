@@ -228,8 +228,8 @@ class ValidatePlanTest(SiteDirTestCase):
                 mi.validate_plan(plan, unseen=["big.js"])
         self.assertEqual(len(mi.validate_plan({"files": [{"path": "new.js", "content": "x"}]}, unseen=["big.js"])), 1)
 
-    def test_a_file_can_always_be_shown_to_the_next_model(self):
-        self.assertLess(mi.MAX_FILE_BYTES, mi.PROMPT_BUDGET_CHARS)
+    def test_the_prompt_has_room_for_both_fixed_pages_and_any_one_other_file(self):
+        self.assertGreaterEqual(mi.PROMPT_BUDGET_CHARS, 3 * mi.MAX_FILE_BYTES)
 
 
 class CleanSummaryTest(unittest.TestCase):
@@ -304,6 +304,20 @@ class BuildPromptTest(SiteDirTestCase):
             self.assertEqual(names[:2], ["index.html", "error.html"])
             self.assertEqual(len(names), 3)
             self.assertEqual(sorted(names + omitted), ["a.js", "b.js", "c.js", "error.html", "index.html"])
+            seen.update(names[2:])
+        self.assertEqual(seen, {"a.js", "b.js", "c.js"})
+
+    def test_every_file_gets_its_turn_even_when_the_fixed_pages_are_as_big_as_allowed(self):
+        (self.site / "index.html").write_text("i" * mi.MAX_FILE_BYTES)
+        (self.site / "error.html").write_text("e" * mi.MAX_FILE_BYTES)
+        for name in ["a.js", "b.js", "c.js"]:
+            (self.site / name).write_text(name[0] * mi.MAX_FILE_BYTES)
+        seen = set()
+        for _ in range(60):
+            shown, omitted = mi.split_for_prompt(mi.read_site())
+            names = [rel for rel, _ in shown]
+            self.assertEqual(names[:2], ["index.html", "error.html"])
+            self.assertEqual(len(names), 3)
             seen.update(names[2:])
         self.assertEqual(seen, {"a.js", "b.js", "c.js"})
 
@@ -654,10 +668,27 @@ class MainTest(SiteDirTestCase):
             output = self.run_main()
         self.assertEqual(len(fake.calls()), len(mi.MODELS))
         notice = [line for line in self.printed if line.startswith("::notice::")][-1]
-        self.assertIn(f"{len(mi.MODELS) - 1} of the {len(mi.MODELS)} models to pick from are not available", notice)
+        self.assertIn(f"{len(mi.MODELS) - 1} of the {len(mi.MODELS)} models tried this run are not available", notice)
         self.assertIn(mi.MODELS[0], notice)
         self.assertEqual(read_outputs(output)["model"], survivor)
         self.assertTrue((self.site / "clock.html").is_file())
+
+    def test_notice_counts_only_the_models_that_were_tried(self):
+        # The second model in line is the first that works: one was found unavailable, eleven or
+        # so were never asked, and the notice must not pretend to know about those.
+        first, second = mi.MODELS[0], mi.MODELS[1]
+        FakeCopilot(self, f"""
+            if MODEL == {first!r}:
+                sys.stderr.write('Error: Model "%s" from --model flag is not available.' % MODEL)
+                sys.exit(1)
+            say({GOOD_PLAN!r})
+        """)
+        with mock.patch.object(mi.random, "sample", lambda pool, k: list(pool)):
+            output = self.run_main()
+        self.assertEqual(read_outputs(output)["model"], second)
+        notice = [line for line in self.printed if line.startswith("::notice::")][-1]
+        self.assertIn("1 of the 2 models tried this run are not available", notice)
+        self.assertIn(f"The pool has {len(mi.MODELS)}", notice)
 
     def test_silo_breach_stops_the_run_and_applies_nothing(self):
         fake = FakeCopilot(self, f"""
@@ -713,6 +744,8 @@ class MainTest(SiteDirTestCase):
         output = self.run_main()
         asked = [c["args"][1] for c in fake.calls()]
         self.assertEqual(asked.count(survivor), 2)
+        notice = [line for line in self.printed if line.startswith("::notice::")][-1]
+        self.assertIn(f"{len(mi.MODELS) - 1} of the {len(mi.MODELS)} models tried this run are not available", notice)
         self.assertEqual(len(asked), len(mi.MODELS) + 1, "unavailable models are not asked twice")
         self.assertEqual(read_outputs(output)["model"], survivor)
 

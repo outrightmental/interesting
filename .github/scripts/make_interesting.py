@@ -128,7 +128,9 @@ AUTH_HELP = (
     "  2. Organization: as an owner of the organization that owns this repository, open Settings >\n"
     "     Copilot > Policies, enable \"Copilot CLI\" and select \"Allow use of Copilot CLI billed to\n"
     "     the organization\". The change can take a quarter of an hour to apply. Usage is billed to\n"
-    "     the organization, and only the models its Copilot plan and policies offer can be picked."
+    "     the organization, and only the models its Copilot plan and policies offer can be picked.\n"
+    "If a COPILOT_GITHUB_TOKEN secret already exists, it is used instead of the workflow's own token:\n"
+    "renew it (check its expiry and its \"Copilot Requests\" permission), or delete it to use route 2."
 )
 
 ALLOWED_EXTENSIONS = {
@@ -137,9 +139,11 @@ ALLOWED_EXTENSIONS = {
 }
 PROTECTED_FILES = {"index.html", "error.html"}  # may be rewritten, never deleted
 MAX_CHANGES = 20
-PROMPT_BUDGET_CHARS = 80_000  # keep the prompt comfortably inside every model's context window
-# Smaller than the prompt budget: a file too big to show to the next model could never be changed again.
 MAX_FILE_BYTES = 50_000
+# How much of the site a prompt carries; comfortably inside every model's context window. A file
+# that is not shown cannot be changed, so the budget always has room for index.html, error.html
+# and any one other file: every file gets its turn (see split_for_prompt).
+PROMPT_BUDGET_CHARS = 3 * MAX_FILE_BYTES
 MAX_ATTEMPTS = 3
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -524,20 +528,23 @@ def main():
     shown, omitted = split_for_prompt(read_site())
     prompt = build_prompt(shown, omitted)
     candidates = pick_candidates()
-    attempts, unavailable = 0, []
+    attempts, unavailable, tried = 0, [], set()
 
     def report_unavailable():
         # Worth saying out loud: when most of the pool is off limits, the pick is hardly random.
+        # Only the models tried this run are known; the rest of the pool was never asked.
         if unavailable:
             print(
-                f"::notice::{len(unavailable)} of the {len(candidates)} models to pick from are not available to "
-                f"this Copilot account ({one_line(', '.join(unavailable), 300)}). See Setup in the README."
+                f"::notice::{len(unavailable)} of the {len(tried)} models tried this run are not "
+                f"available to this Copilot account ({one_line(', '.join(unavailable), 300)}). "
+                f"The pool has {len(candidates)}. See Setup in the README."
             )
 
     queue, answering = list(candidates), []
     while queue and attempts < MAX_ATTEMPTS:
         model = queue.pop(0)
         print(f"Mission: {MISSION}\nModel:   {model}", flush=True)
+        tried.add(model)
         attempts += 1  # counted up front, so every path below that asks again is bounded
         try:
             plan = parse_response(call_model(model, prompt))
