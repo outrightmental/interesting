@@ -18,6 +18,8 @@ recursively iterate the most interesting possible website
   subscription (see [Setup](#setup)), gives it the mission **"make the website more interesting"**,
   commits the result and redeploys the site. If a model is unavailable or returns an unusable
   answer, up to two other random models are tried.
+- **Only flagship models** — the random pick draws from a list of large, top-tier models (see
+  [Which models](#which-models)); small and mid-tier models are never picked.
 
 ### Silo
 
@@ -33,6 +35,26 @@ The AI can only ever modify `/site`:
    applies an answer whole or not at all.
 3. The workflow fails if anything outside `/site` changed, and only stages `site/` for commit.
    The model's one-line summary is stripped to plain text before it reaches the commit message.
+
+### Which models
+
+The random pick only ever draws from large, flagship models, listed as `MODELS` in
+[`.github/scripts/make_interesting.py`](.github/scripts/make_interesting.py). Today they come from
+Anthropic (Fable, Opus), OpenAI (Sol, Astra, GPT-5.5, GPT-5.3-Codex) and Moonshot (Kimi K3). Google
+has no model in the pool, because Copilot only offers the Gemini Flash tier.
+
+- **Small models are never picked at random.** Besides not being on the list, any model whose id
+  contains a small or mid-tier name is refused: `haiku` and `sonnet`, and their equivalents at
+  other providers such as `mini`, `nano`, `luna`, `terra`, `flash`, `lite`, `small`, `medium`,
+  `micro` and `phi` (the full set is `SMALL_MODEL_MARKERS`). `fast` is on that list too, which
+  also keeps out speed-tuned variants of flagships such as `claude-opus-4.8-fast`.
+- **Changing the pool** needs no code change: set the repository variable `MODEL_POOL` to a
+  comma-separated list of Copilot model ids. Models recognised as small or mid-tier are still
+  refused. List flagships only, though: the rule works on names, so it cannot judge an unknown id
+  that is only a version number. The ones known today, such as `gpt-5.4`, are refused by id.
+- **Naming a model yourself**, through the *Run workflow* form, is not a random pick: the model is
+  used as asked, with a warning in the log if it is not a flagship.
+- Models that Copilot has retired or that the account cannot use are skipped automatically.
 
 ### Setup
 
