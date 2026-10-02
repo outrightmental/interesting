@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Not found · interesting</title>
+  <style>
+    html, body { margin: 0; height: 100%; }
+    body {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #0b0b10;
+      color: #f2f2f2;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      text-align: center;
+    }
+    h1 { margin: 0; font-size: clamp(3rem, 12vw, 8rem); }
+    a { color: inherit; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>404</h1>
+    <p>Nothing interesting here (yet).</p>
+    <p><a id="home" href="/">Go back home</a></p>
+  </main>
+  <script>
+    // On <owner>.github.io/<repo>/ project pages, home is the first path segment.
+    if (location.hostname.endsWith(".github.io")) {
+      var seg = location.pathname.split("/")[1];
+      if (seg) document.getElementById("home").href = "/" + seg + "/";
+    }
+  </script>
+</body>
+</html>

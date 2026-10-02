@@ -1,0 +1,81 @@
+name: Make the website more interesting
+
+on:
+  schedule:
+    - cron: "17 9 * * *" # daily
+  workflow_dispatch:
+    inputs:
+      model:
+        description: "GitHub Models model ID to use (leave blank to pick one at random)"
+        required: false
+        default: ""
+
+permissions: {}
+
+concurrency:
+  group: make-interesting
+  cancel-in-progress: false
+
+jobs:
+  iterate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write # commit changes to /site
+      models: read # call GitHub Models with this repository's GitHub AI subscription
+    outputs:
+      changed: ${{ steps.commit.outputs.changed }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Ask a random AI model to make the website more interesting
+        id: ai
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          MODEL: ${{ inputs.model }}
+        run: python3 .github/scripts/make_interesting.py
+
+      - name: Ensure only /site was modified
+        run: |
+          outside="$(git status --porcelain --untracked-files=all -- . ':(exclude)site')"
+          if [ -n "$outside" ]; then
+            echo "::error::Changes outside /site are not allowed:"
+            echo "$outside"
+            exit 1
+          fi
+          test -f site/index.html || { echo "::error::site/index.html is missing"; exit 1; }
+          test -f site/error.html || { echo "::error::site/error.html is missing"; exit 1; }
+
+      - name: Commit and push
+        id: commit
+        env:
+          MODEL: ${{ steps.ai.outputs.model }}
+          SUMMARY: ${{ steps.ai.outputs.summary }}
+        run: |
+          git add -A -- site
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Make the website more interesting: ${SUMMARY}" -m "Model: ${MODEL}"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+          {
+            echo "### Made the website more interesting"
+            echo "- **Model:** \`${MODEL}\`"
+            echo "- **Change:** ${SUMMARY}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # Pushes made with GITHUB_TOKEN don't trigger other workflows, so deploy explicitly.
+  deploy:
+    needs: iterate
+    if: needs.iterate.outputs.changed == 'true' && github.ref_name == github.event.repository.default_branch
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    uses: ./.github/workflows/pages.yml
