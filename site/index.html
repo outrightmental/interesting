@@ -179,6 +179,39 @@
       outline-offset: 2px;
     }
 
+    .meteor {
+      position: fixed;
+      width: 34px;
+      height: 6px;
+      margin-left: -17px;
+      margin-top: -3px;
+      border: 0;
+      border-radius: 999px;
+      background: linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(207,231,255,0.92) 45%, rgba(255,249,204,1) 100%);
+      box-shadow: 0 0 12px rgba(173, 222, 255, 0.9), 0 0 24px rgba(127, 190, 255, 0.55);
+      cursor: crosshair;
+      z-index: 4;
+      pointer-events: auto;
+    }
+
+    .meteor::before {
+      content: '';
+      position: absolute;
+      right: 70%;
+      top: 50%;
+      width: 28px;
+      height: 2px;
+      transform: translateY(-50%);
+      border-radius: 999px;
+      background: linear-gradient(90deg, rgba(255,255,255,0.16), rgba(255,255,255,0));
+      filter: blur(1px);
+    }
+
+    .meteor:focus-visible {
+      outline: 1px solid #fff;
+      outline-offset: 2px;
+    }
+
     @keyframes twinkle {
       0%, 100% { transform: scale(0.9); opacity: 0.75; }
       50% { transform: scale(1.12); opacity: 1; }
@@ -202,10 +235,11 @@
     <div class='controls'>
       <button id='drop' type='button'>drop a star</button>
       <button id='oracle' type='button'>ask the sky</button>
+      <button id='meteor' type='button'>call a meteor</button>
       <button id='clear' type='button'>clear my constellation</button>
     </div>
     <p id='note' class='note' aria-live='polite'>No stars yet. Make the first one.</p>
-    <p class='hint'>Tip: click a star to read its thought, or drag it anywhere to reshape the constellation web.</p>
+    <p class='hint'>Tip: click a star to read its thought, drag stars to reshape the web, and click passing meteors to catch rare comet thoughts.</p>
   </main>
 
   <script>
@@ -230,23 +264,42 @@
         'A quiet day can still be progress.',
         'The edge is where ideas hatch.'
       ];
+      var cometThoughts = [
+        'Comet memo: momentum loves imperfect beginnings.',
+        'Comet memo: aim for wonder, then refine.',
+        'Comet memo: brave ideas arrive before permission.',
+        'Comet memo: your future self votes for this attempt.',
+        'Comet memo: let play lead, precision will catch up.'
+      ];
 
       var note = document.getElementById('note');
       var dropBtn = document.getElementById('drop');
       var oracleBtn = document.getElementById('oracle');
+      var meteorBtn = document.getElementById('meteor');
       var clearBtn = document.getElementById('clear');
       var linksSvg = document.getElementById('links');
       var stars = [];
+      var meteors = [];
       var activeDrag = null;
       var suppressStarClickUntil = 0;
       var linksRenderQueued = false;
+      var nextMeteorAt = 0;
+      var lastFrameTime = 0;
 
       function clamp(value, min, max) {
         return Math.max(min, Math.min(max, value));
       }
 
+      function randRange(min, max) {
+        return min + Math.random() * (max - min);
+      }
+
       function randomThought() {
         return thoughts[Math.floor(Math.random() * thoughts.length)];
+      }
+
+      function randomCometThought() {
+        return cometThoughts[Math.floor(Math.random() * cometThoughts.length)];
       }
 
       function setNote(text) {
@@ -476,6 +529,82 @@
         addStar(point.x, point.y, randomThought());
       }
 
+      function removeMeteor(meteor) {
+        for (var i = meteors.length - 1; i >= 0; i--) {
+          if (meteors[i] === meteor) {
+            meteors.splice(i, 1);
+            break;
+          }
+        }
+        if (meteor.el) meteor.el.remove();
+      }
+
+      function catchMeteor(meteor) {
+        if (!meteor || meteor.caught) return;
+        meteor.caught = true;
+        addStar(clamp(meteor.x, 3, 97), clamp(meteor.y, 3, 97), randomCometThought());
+        setNote('☄ Meteor caught! A comet thought has joined your constellation.');
+        removeMeteor(meteor);
+      }
+
+      function spawnMeteor(now, manual) {
+        if (meteors.length >= 4) {
+          if (manual) setNote('Too many meteors at once. Catch one first.');
+          return false;
+        }
+
+        var meteor = {
+          x: randRange(-12, 12),
+          y: randRange(8, 58),
+          vx: randRange(22, 36),
+          vy: randRange(10, 18),
+          born: now,
+          ttl: randRange(2.1, 3.3),
+          el: document.createElement('button'),
+          caught: false
+        };
+
+        meteor.el.className = 'meteor';
+        meteor.el.type = 'button';
+        meteor.el.title = 'Catch this meteor';
+        meteor.el.setAttribute('aria-label', 'Catch this meteor to create a rare thought star');
+        meteor.el.style.transform = 'translate(' + meteor.x.toFixed(2) + 'vw, ' + meteor.y.toFixed(2) + 'vh) rotate(24deg)';
+
+        meteor.el.addEventListener('click', function (ev) {
+          ev.preventDefault();
+          ev.stopPropagation();
+          catchMeteor(meteor);
+        });
+
+        meteor.el.addEventListener('pointerdown', function (ev) {
+          ev.stopPropagation();
+        });
+
+        document.body.appendChild(meteor.el);
+        meteors.push(meteor);
+        return true;
+      }
+
+      function updateMeteors(dt, now) {
+        for (var i = meteors.length - 1; i >= 0; i--) {
+          var meteor = meteors[i];
+          meteor.x += meteor.vx * dt;
+          meteor.y += meteor.vy * dt;
+
+          if ((now - meteor.born) / 1000 > meteor.ttl || meteor.x > 112 || meteor.y > 108) {
+            removeMeteor(meteor);
+            continue;
+          }
+
+          meteor.el.style.transform = 'translate(' + meteor.x.toFixed(2) + 'vw, ' + meteor.y.toFixed(2) + 'vh) rotate(24deg)';
+        }
+
+        if (now >= nextMeteorAt) {
+          spawnMeteor(now, false);
+          nextMeteorAt = now + randRange(6500, 14000);
+        }
+      }
+
       function loadStars() {
         var raw;
         try {
@@ -553,6 +682,13 @@
         askTheSky();
       });
 
+      meteorBtn.addEventListener('click', function (ev) {
+        ev.stopPropagation();
+        if (spawnMeteor(performance.now(), true)) {
+          setNote('A meteor streaks by. Click it to catch a rare thought.');
+        }
+      });
+
       clearBtn.addEventListener('click', function (ev) {
         ev.stopPropagation();
         clearStars();
@@ -607,7 +743,11 @@
         queueLinksRender();
       }
 
-      function draw() {
+      function draw(now) {
+        if (typeof now !== 'number') now = performance.now();
+        var dt = lastFrameTime ? Math.min(0.05, (now - lastFrameTime) / 1000) : 0.016;
+        lastFrameTime = now;
+
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         for (var i = 0; i < dots.length; i++) {
           var d = dots[i];
@@ -624,10 +764,13 @@
           ctx.arc(d.x, d.y, d.r, 0, Math.PI * 2);
           ctx.fill();
         }
+
+        updateMeteors(dt, now);
         requestAnimationFrame(draw);
       }
 
       window.addEventListener('resize', resize);
+      nextMeteorAt = performance.now() + randRange(3500, 9000);
       resize();
       draw();
     })();
