@@ -15,6 +15,7 @@
       --accent: #9bc1ff;
       --accent2: #ffe5a3;
       --panel: rgba(10, 13, 25, 0.7);
+      --good: #b7ffcf;
     }
 
     * { box-sizing: border-box; }
@@ -56,7 +57,7 @@
     main {
       position: relative;
       z-index: 2;
-      width: min(700px, 94vw);
+      width: min(720px, 94vw);
       border: 1px solid var(--line);
       border-radius: 18px;
       background: var(--panel);
@@ -127,6 +128,51 @@
       font-size: 0.84rem;
     }
 
+    .radio {
+      margin-top: 1rem;
+      border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 12px;
+      padding: 0.8rem;
+      background: rgba(8, 11, 21, 0.5);
+      text-align: left;
+    }
+
+    .radio-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 0.7rem;
+      margin-bottom: 0.5rem;
+      flex-wrap: wrap;
+    }
+
+    .radio-top p {
+      margin: 0;
+    }
+
+    #freq-readout {
+      font-variant-numeric: tabular-nums;
+      color: #e8f0ff;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+    }
+
+    #freq {
+      width: 100%;
+      margin: 0.2rem 0 0.35rem;
+      accent-color: var(--accent);
+    }
+
+    #radio-note {
+      margin: 0.55rem 0 0;
+      min-height: 1.4em;
+      color: #c8daff;
+    }
+
+    #radio-note.good {
+      color: var(--good);
+    }
+
     @media (prefers-reduced-motion: reduce) {
       button, a.action { transition: none; }
     }
@@ -145,6 +191,20 @@
       <a id='home' class='action' href='/'>return home</a>
     </div>
     <p id='note' aria-live='polite'>Listening for a signal...</p>
+
+    <section class='radio' aria-label='Void radio'>
+      <div class='radio-top'>
+        <p class='muted'>Void radio receiver</p>
+        <p><span id='freq-readout'>94.6</span> MHz</p>
+      </div>
+      <input id='freq' type='range' min='88' max='108' step='0.1' value='94.6' aria-label='Radio frequency'>
+      <div class='controls'>
+        <button id='scan' type='button'>scan burst</button>
+        <button id='lock' type='button'>lock frequency</button>
+      </div>
+      <p id='radio-note' class='hint' aria-live='polite'>Sweep slowly near 99.7 MHz. Some signals only appear when you pause.</p>
+    </section>
+
     <p class='hint'>Easter egg: type <strong>home</strong> while on this page.</p>
   </main>
 
@@ -158,21 +218,134 @@
 
       var note = document.getElementById('note');
       var voidBtn = document.getElementById('void');
+      var freqInput = document.getElementById('freq');
+      var freqReadout = document.getElementById('freq-readout');
+      var radioNote = document.getElementById('radio-note');
+      var scanBtn = document.getElementById('scan');
+      var lockBtn = document.getElementById('lock');
       var hints = [
         'Signal: try one tiny experiment before your next big decision.',
         'Signal: curiosity can be navigation, not distraction.',
         'Signal: begin with the messiest first draft and keep going.',
         'Signal: if stuck, shrink the task until it moves.',
-        'Signal: your future self recommends pressing \"start\" today.',
+        'Signal: your future self recommends pressing start today.',
         'Signal: rest is part of the build process, not a detour.',
         'Signal: share the rough idea; polishing can come later.'
       ];
+      var radioSignals = [
+        { f: 89.4, m: 'Soft static. Someone whispers: begin where you are.' },
+        { f: 92.1, m: 'A distant chorus repeats: tiny progress still counts.' },
+        { f: 95.8, m: 'Carrier wave found: protect your focus like a flame.' },
+        { f: 99.7, m: 'ARCHIVE NODE OPEN: coordinates point to your next brave draft.' },
+        { f: 103.3, m: 'Meteor traffic: playful ideas are cleared for landing.' },
+        { f: 107.1, m: 'Final relay: future you says thank you for starting.' }
+      ];
       var hintIndex = Math.floor(Math.random() * hints.length);
+      var audioCtx = null;
+
+      function ensureAudio() {
+        if (audioCtx) return audioCtx;
+        var Ctor = window.AudioContext || window.webkitAudioContext;
+        if (!Ctor) return null;
+        audioCtx = new Ctor();
+        return audioCtx;
+      }
+
+      function tone(freq, duration, type, volume) {
+        var ctx = ensureAudio();
+        if (!ctx) return;
+        if (ctx.state === 'suspended' && ctx.resume) {
+          ctx.resume().catch(function () {});
+        }
+
+        var osc = ctx.createOscillator();
+        var gain = ctx.createGain();
+        osc.type = type || 'sine';
+        osc.frequency.setValueAtTime(freq, ctx.currentTime);
+
+        gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(volume || 0.03, ctx.currentTime + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + duration);
+
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + duration + 0.03);
+      }
+
+      function updateReadout() {
+        var f = Number(freqInput.value);
+        freqReadout.textContent = f.toFixed(1);
+      }
+
+      function nearestSignal(freq) {
+        var closest = radioSignals[0];
+        var diff = Math.abs(freq - closest.f);
+        for (var i = 1; i < radioSignals.length; i++) {
+          var d = Math.abs(freq - radioSignals[i].f);
+          if (d < diff) {
+            closest = radioSignals[i];
+            diff = d;
+          }
+        }
+        return { signal: closest, diff: diff };
+      }
+
+      function lockFrequency() {
+        var f = Number(freqInput.value);
+        var hit = nearestSignal(f);
+
+        if (hit.diff < 0.12) {
+          radioNote.classList.add('good');
+          radioNote.textContent = '✦ ' + hit.signal.m;
+          tone(420 + f * 2, 0.18, 'triangle', 0.04);
+          tone(620 + f * 2, 0.22, 'sine', 0.03);
+          burst();
+
+          if (Math.abs(f - 99.7) < 0.05) {
+            note.textContent = '☄ Rare transmission captured. The observatory lights up.';
+            burst();
+          }
+          return;
+        }
+
+        radioNote.classList.remove('good');
+        if (hit.diff < 0.45) {
+          radioNote.textContent = '...almost locked. Drift ' + (f < hit.signal.f ? 'up' : 'down') + ' by ' + hit.diff.toFixed(2) + ' MHz.';
+          tone(170, 0.08, 'sawtooth', 0.02);
+        } else {
+          radioNote.textContent = 'Only static at ' + f.toFixed(1) + ' MHz. Keep searching.';
+          tone(120, 0.06, 'square', 0.015);
+        }
+      }
 
       voidBtn.addEventListener('click', function () {
         hintIndex = (hintIndex + 1 + Math.floor(Math.random() * 2)) % hints.length;
         note.textContent = '✦ ' + hints[hintIndex];
       });
+
+      freqInput.addEventListener('input', function () {
+        updateReadout();
+        radioNote.classList.remove('good');
+      });
+
+      scanBtn.addEventListener('click', function () {
+        var next = Number(freqInput.value) + (Math.random() * 1.8 + 0.4);
+        if (next > 108) next = 88 + (next - 108);
+        freqInput.value = next.toFixed(1);
+        updateReadout();
+
+        var hit = nearestSignal(next);
+        if (hit.diff < 0.4) {
+          radioNote.textContent = 'Carrier spike detected near ' + hit.signal.f.toFixed(1) + ' MHz.';
+        } else {
+          radioNote.textContent = 'Scan burst complete. Static thins, then returns.';
+        }
+        radioNote.classList.remove('good');
+        tone(220 + next * 1.5, 0.08, 'triangle', 0.022);
+      });
+
+      lockBtn.addEventListener('click', lockFrequency);
 
       var codeBuffer = '';
       document.addEventListener('keydown', function (ev) {
@@ -181,6 +354,8 @@
         if (codeBuffer === 'home') {
           note.textContent = '☄ Secret route unlocked. The stars point home.';
           burst();
+          tone(523.25, 0.14, 'triangle', 0.032);
+          tone(659.25, 0.2, 'sine', 0.026);
         }
       });
 
@@ -262,6 +437,7 @@
       }
 
       window.addEventListener('resize', resize);
+      updateReadout();
       resize();
       draw();
     })();
