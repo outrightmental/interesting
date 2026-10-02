@@ -129,6 +129,7 @@
     }
 
     .radio,
+    .scope,
     .decoder,
     .haiku {
       margin-top: 1rem;
@@ -165,7 +166,17 @@
       accent-color: var(--accent);
     }
 
+    #scope-canvas {
+      width: 100%;
+      height: auto;
+      display: block;
+      border-radius: 10px;
+      border: 1px solid rgba(255,255,255,0.16);
+      background: #070b18;
+    }
+
     #radio-note,
+    #scope-note,
     #decoder-note {
       margin: 0.55rem 0 0;
       min-height: 1.4em;
@@ -173,6 +184,7 @@
     }
 
     #radio-note.good,
+    #scope-note.good,
     #decoder-note.good {
       color: var(--good);
     }
@@ -240,7 +252,7 @@
     <p class='muted'>But the observatory still works.</p>
     <div class='controls'>
       <button id='void' type='button'>ask the void</button>
-      <a id='home' class='action' href='/'>return home</a>
+      <a id='home' class='action' href='index.html'>return home</a>
     </div>
     <p id='note' aria-live='polite'>Listening for a signal...</p>
 
@@ -255,6 +267,19 @@
         <button id='lock' type='button'>lock frequency</button>
       </div>
       <p id='radio-note' class='hint' aria-live='polite'>Sweep slowly near 99.7 MHz. Some signals only appear when you pause.</p>
+    </section>
+
+    <section class='scope' aria-label='Signal scope'>
+      <div class='radio-top'>
+        <p class='muted'>Signal scope</p>
+        <p>wavefield monitor</p>
+      </div>
+      <p class='hint'>The waveform responds to frequency and decoder level. Freeze a frame to capture a glyph signature.</p>
+      <canvas id='scope-canvas' width='560' height='132' aria-label='Live signal waveform display'></canvas>
+      <div class='controls'>
+        <button id='scope-freeze' type='button'>freeze frame</button>
+      </div>
+      <p id='scope-note' class='hint' aria-live='polite'>Scope online. Tune and decode to reshape the pulse.</p>
     </section>
 
     <section class='decoder' aria-label='Signal decoder'>
@@ -295,12 +320,6 @@ Tune the radio, decode a few runes, then print.</pre>
 
   <script>
     (function () {
-      var homeLink = document.getElementById('home');
-      if (location.hostname.endsWith('.github.io')) {
-        var seg = location.pathname.split('/')[1];
-        homeLink.href = seg ? '/' + seg + '/' : '/';
-      }
-
       var note = document.getElementById('note');
       var voidBtn = document.getElementById('void');
       var freqInput = document.getElementById('freq');
@@ -308,6 +327,10 @@ Tune the radio, decode a few runes, then print.</pre>
       var radioNote = document.getElementById('radio-note');
       var scanBtn = document.getElementById('scan');
       var lockBtn = document.getElementById('lock');
+      var scopeCanvas = document.getElementById('scope-canvas');
+      var scopeCtx = scopeCanvas.getContext('2d');
+      var scopeNote = document.getElementById('scope-note');
+      var scopeFreezeBtn = document.getElementById('scope-freeze');
       var decoderNote = document.getElementById('decoder-note');
       var decoderLevelLabel = document.getElementById('decoder-level');
       var playSeqBtn = document.getElementById('play-seq');
@@ -370,6 +393,9 @@ Tune the radio, decode a few runes, then print.</pre>
       var decoderLevel = 1;
       var decoderShowing = false;
       var decoderTimers = [];
+      var scopeFrozen = false;
+      var scopeTime = 0;
+      var scopeFlash = 0;
 
       function ensureAudio() {
         if (audioCtx) return audioCtx;
@@ -428,6 +454,7 @@ Tune the radio, decode a few runes, then print.</pre>
           radioNote.textContent = '✦ ' + hit.signal.m;
           tone(420 + f * 2, 0.18, 'triangle', 0.04);
           tone(620 + f * 2, 0.22, 'sine', 0.03);
+          scopeFlash = 1;
           burst();
 
           if (Math.abs(f - 99.7) < 0.05) {
@@ -576,6 +603,110 @@ Tune the radio, decode a few runes, then print.</pre>
         tone(300 + f * 1.8, 0.11, 'triangle', 0.024);
       }
 
+      function scopeGlyph(freq, level) {
+        var glyphs = ['◌', '◍', '◎', '◉', '✶', '✷', '✦', '✧'];
+        var seed = (Math.floor(freq * 100) + level * 97 + Math.floor(Date.now() / 1000)) >>> 0;
+        var out = '';
+        for (var i = 0; i < 10; i++) {
+          seed = (seed * 1664525 + 1013904223) >>> 0;
+          out += glyphs[seed % glyphs.length];
+        }
+        return out;
+      }
+
+      function captureScopeSignature() {
+        var f = Number(freqInput.value);
+        var level = parseInt(decoderLevelLabel.textContent, 10) || 1;
+        var hit = nearestSignal(f);
+        var signature = scopeGlyph(f, level);
+
+        if (hit.diff < 0.12) {
+          scopeNote.classList.add('good');
+          scopeNote.textContent = 'Captured beacon signature ' + signature + ' @ ' + hit.signal.f.toFixed(1) + ' MHz.';
+        } else {
+          scopeNote.classList.remove('good');
+          scopeNote.textContent = 'Captured drifting signature ' + signature + ' @ ' + f.toFixed(1) + ' MHz.';
+        }
+      }
+
+      function toggleScopeFreeze() {
+        scopeFrozen = !scopeFrozen;
+        scopeFreezeBtn.textContent = scopeFrozen ? 'resume sweep' : 'freeze frame';
+
+        if (scopeFrozen) {
+          captureScopeSignature();
+          tone(430, 0.08, 'triangle', 0.024);
+        } else {
+          scopeNote.classList.remove('good');
+          scopeNote.textContent = 'Scope online. Tune and decode to reshape the pulse.';
+          tone(280, 0.06, 'sine', 0.02);
+        }
+      }
+
+      function drawScope(dt) {
+        if (!scopeCtx) return;
+        var w = scopeCanvas.width;
+        var h = scopeCanvas.height;
+        var f = Number(freqInput.value);
+        var level = parseInt(decoderLevelLabel.textContent, 10) || 1;
+
+        if (!scopeFrozen) {
+          scopeTime += dt * (0.8 + f / 140 + level * 0.03);
+        }
+
+        var grad = scopeCtx.createLinearGradient(0, 0, 0, h);
+        grad.addColorStop(0, '#0d1430');
+        grad.addColorStop(1, '#070b18');
+        scopeCtx.fillStyle = grad;
+        scopeCtx.fillRect(0, 0, w, h);
+
+        scopeCtx.strokeStyle = 'rgba(138, 172, 255, 0.15)';
+        scopeCtx.lineWidth = 1;
+        for (var gy = 16; gy < h; gy += 16) {
+          scopeCtx.beginPath();
+          scopeCtx.moveTo(0, gy + 0.5);
+          scopeCtx.lineTo(w, gy + 0.5);
+          scopeCtx.stroke();
+        }
+
+        var amp = 14 + (f - 88) * 0.85;
+        var drift = 1 + level * 0.08;
+        var mid = h * 0.5;
+
+        scopeCtx.beginPath();
+        for (var x = 0; x <= w; x++) {
+          var t = x / w;
+          var y = mid
+            + Math.sin((t * (8 + f * 0.08)) + scopeTime * 3.2 * drift) * amp * 0.42
+            + Math.sin((t * (17 + level)) - scopeTime * 2.1) * amp * 0.18
+            + Math.cos((t * (4 + level * 0.6)) + scopeTime * 1.3) * 4;
+          if (x === 0) scopeCtx.moveTo(x, y);
+          else scopeCtx.lineTo(x, y);
+        }
+        scopeCtx.strokeStyle = 'rgba(164, 206, 255, 0.96)';
+        scopeCtx.lineWidth = 1.8;
+        scopeCtx.stroke();
+
+        var hit = nearestSignal(f);
+        var beaconX = ((hit.signal.f - 88) / 20) * w;
+        scopeCtx.beginPath();
+        scopeCtx.moveTo(beaconX, 0);
+        scopeCtx.lineTo(beaconX, h);
+        scopeCtx.strokeStyle = hit.diff < 0.2 ? 'rgba(255, 230, 164, 0.9)' : 'rgba(255,255,255,0.18)';
+        scopeCtx.lineWidth = hit.diff < 0.2 ? 1.6 : 1;
+        scopeCtx.stroke();
+
+        scopeCtx.fillStyle = 'rgba(231, 241, 255, 0.9)';
+        scopeCtx.font = '12px ui-monospace, SFMono-Regular, Menlo, monospace';
+        scopeCtx.fillText('f ' + f.toFixed(1) + '  lvl ' + level, 10, 16);
+
+        if (scopeFlash > 0) {
+          scopeCtx.fillStyle = 'rgba(255, 230, 172, ' + (scopeFlash * 0.22).toFixed(3) + ')';
+          scopeCtx.fillRect(0, 0, w, h);
+          scopeFlash = Math.max(0, scopeFlash - dt * 2.8);
+        }
+      }
+
       voidBtn.addEventListener('click', function () {
         hintIndex = (hintIndex + 1 + Math.floor(Math.random() * 2)) % hints.length;
         note.textContent = '✦ ' + hints[hintIndex];
@@ -605,6 +736,7 @@ Tune the radio, decode a few runes, then print.</pre>
       lockBtn.addEventListener('click', lockFrequency);
       playSeqBtn.addEventListener('click', playDecoderSequence);
       haikuBtn.addEventListener('click', printHaiku);
+      scopeFreezeBtn.addEventListener('click', toggleScopeFreeze);
       resetSeqBtn.addEventListener('click', function () {
         clearDecoderTimers();
         decoderShowing = false;
@@ -637,6 +769,7 @@ Tune the radio, decode a few runes, then print.</pre>
       var ctx = canvas.getContext('2d');
       var stars = [];
       var sparks = [];
+      var lastFrame = 0;
 
       function rand(min, max) {
         return min + Math.random() * (max - min);
@@ -670,7 +803,11 @@ Tune the radio, decode a few runes, then print.</pre>
         }
       }
 
-      function draw() {
+      function draw(now) {
+        if (typeof now !== 'number') now = performance.now();
+        var dt = lastFrame ? Math.min(0.05, (now - lastFrame) / 1000) : 0.016;
+        lastFrame = now;
+
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
         for (var i = 0; i < stars.length; i++) {
@@ -707,6 +844,7 @@ Tune the radio, decode a few runes, then print.</pre>
           ctx.fill();
         }
 
+        drawScope(dt);
         requestAnimationFrame(draw);
       }
 
