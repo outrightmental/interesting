@@ -29,18 +29,19 @@ MISSION = "make the website more interesting"
 
 COPILOT_BIN = os.environ.get("COPILOT_BIN", "copilot")
 
-# Models available through GitHub Copilot CLI (`--model`). One is picked at
-# random each run. A model the account cannot use is skipped at run time.
+# Models available through GitHub Copilot CLI (`--model`), as of 2026-10-02. One is picked at
+# random each run. Copilot retires models often: an id the account can no longer use is skipped
+# at run time without costing an attempt, so a stale entry here is harmless.
+# Not listed: the Grok and MAI models, which Copilot CLI 1.0.91 cannot reach ("not accessible via
+# the /chat/completions endpoint").
 MODELS = [
     "claude-fable-5.1",
     "claude-fable-5",
     "claude-opus-5.5",
     "claude-opus-5",
     "claude-opus-4.8",
-    "claude-opus-4.7",
     "claude-sonnet-5.5",
     "claude-sonnet-5",
-    "claude-sonnet-4.6",
     "claude-haiku-4.5",
     "gpt-6.1-sol",
     "gpt-6-sol",
@@ -54,15 +55,9 @@ MODELS = [
     "gpt-5.4-mini",
     "gpt-5.3-codex",
     "gpt-5-mini",
-    "mai-code-1.1-flash",
     "gemini-3.8-flash",
     "gemini-3.7-flash",
-    "gemini-3.6-flash",
-    "gemini-3.5-flash",
-    "grok-4.6",
-    "grok-4.5",
     "kimi-k3",
-    "kimi-k2.7-code",
 ]
 
 # How the Copilot CLI is locked down. The model gets no tools at all:
@@ -121,8 +116,16 @@ class ModelError(Exception):
     """This model could not produce an answer; another model may still work."""
 
 
+class ModelUnavailable(ModelError):
+    """Copilot does not offer this model to the account (retired, disabled or misspelled)."""
+
+
 class CopilotAuthError(Exception):
     """Copilot rejected the credentials or policy; no model will work."""
+
+
+class SiloBreach(Exception):
+    """The model was able to use a tool. Nothing it returned may be trusted or applied."""
 
 
 def safe_site_path(raw):
@@ -186,10 +189,15 @@ def build_prompt(files):
     return system + "\n\n" + user
 
 
+AUTH_FAILURE = re.compile(r"authentication failed|no authentication information|access denied by policy", re.I)
+MODEL_UNAVAILABLE = re.compile(
+    r"is not available|is not accessible via|requires enablement|disabled by your organization", re.I)
+
+
 def call_model(model, prompt):
     """Ask one model for its answer through the Copilot CLI and return the text."""
     cmd = [COPILOT_BIN, "--model", model, *COPILOT_FLAGS]
-    env = dict(os.environ, NO_COLOR="1")
+    env = dict(os.environ, NO_COLOR="1", COPILOT_AUTO_UPDATE="false")
     try:
         with tempfile.TemporaryDirectory(prefix="copilot-silo-") as empty_dir:
             proc = subprocess.run(
@@ -197,6 +205,8 @@ def call_model(model, prompt):
                 input=prompt,  # the prompt goes over stdin: it is far too long for argv
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
+                errors="replace",
                 cwd=empty_dir,
                 env=env,
                 timeout=MODEL_TIMEOUT_SECONDS,
@@ -205,32 +215,61 @@ def call_model(model, prompt):
         sys.exit(f"GitHub Copilot CLI not found ({COPILOT_BIN!r}). Install it with: npm install -g @github/copilot")
     except subprocess.TimeoutExpired:
         raise ModelError(f"no answer within {MODEL_TIMEOUT_SECONDS}s") from None
-    if proc.returncode != 0:
-        detail = (proc.stderr or proc.stdout).strip()
-        if re.search(r"authentication failed|no authentication information|access denied by policy", detail, re.I):
+    events = parse_events(proc.stdout)
+    # Before the session starts, errors are plain text on stderr; after, they are session.error events.
+    errors = [describe_error(e) for e in events if e.get("type") == "session.error"]
+    detail = "; ".join(errors) or proc.stderr.strip() or proc.stdout.strip()
+    if errors or proc.returncode != 0:
+        if AUTH_FAILURE.search(detail) or any(error.startswith("authentication") for error in errors):
             raise CopilotAuthError(detail)
+        if MODEL_UNAVAILABLE.search(detail):
+            raise ModelUnavailable(detail[:300])
         raise ModelError(f"copilot exited with status {proc.returncode}: {detail[:500]}")
-    answer = extract_answer(proc.stdout)
-    if not answer:
-        raise ModelError("empty response")
-    return answer
+    return extract_answer(events, model)
 
 
-def extract_answer(jsonl):
-    """Return the model's last non-empty message from the Copilot CLI's JSONL event stream."""
-    answer = ""
+def parse_events(jsonl):
+    """The Copilot CLI's JSONL output as a list of event objects; anything else is ignored."""
+    events = []
     for line in jsonl.splitlines():
         try:
             event = json.loads(line)
         except ValueError:
             continue
-        if not isinstance(event, dict) or event.get("type") != "assistant.message":
-            continue
-        data = event.get("data")
-        content = data.get("content") if isinstance(data, dict) else None
-        if isinstance(content, str) and content.strip():
-            answer = content
-    return answer
+        if isinstance(event, dict):
+            events.append(event)
+    return events
+
+
+def event_data(event):
+    data = event.get("data")
+    return data if isinstance(data, dict) else {}
+
+
+def describe_error(event):
+    data = event_data(event)
+    parts = [str(data.get(key)) for key in ("errorType", "statusCode") if data.get(key)]
+    return " ".join(parts) + ": " + str(data.get("message") or "unknown error")
+
+
+def extract_answer(events, model):
+    """Return the model's answer from the CLI's events, or raise if the run cannot be trusted."""
+    for event in events:
+        kind = str(event.get("type"))
+        if kind.startswith("tool.") or event_data(event).get("toolRequests"):
+            raise SiloBreach(f"the model was able to call a tool ({kind})")
+    answered_by = {event_data(e).get("model") for e in events
+                   if e.get("type") in ("assistant.message", "session.tools_updated")} - {None, ""}
+    if answered_by - {model}:
+        raise ModelError(f"answered by {', '.join(sorted(map(str, answered_by)))} instead of {model}")
+    if sum(e.get("type") == "assistant.turn_start" for e in events) > 1:
+        # The CLI continues a cut-off answer in a new turn, and only the last piece is reported.
+        raise ModelError("the answer ran past the model's output limit")
+    answers = [event_data(e).get("content") for e in events if e.get("type") == "assistant.message"]
+    answers = [a for a in answers if isinstance(a, str) and a.strip()]
+    if not answers:
+        raise ModelError("empty response")
+    return answers[-1]
 
 
 def parse_response(text):
@@ -313,24 +352,48 @@ def set_output(name, value):
             fh.write(f"{name}<<__EOF__\n{value}\n__EOF__\n")
 
 
+def pick_candidates():
+    """The models to try, in order: the requested one, or every known model in random order."""
+    requested = (os.environ.get("MODEL") or "").strip()
+    if requested:
+        return [requested]
+    return random.sample(MODELS, k=len(MODELS))
+
+
+def one_line(text, limit):
+    return " ".join(str(text).split())[:limit]
+
+
 def main():
     if not SITE_DIR.is_dir():
         sys.exit(f"site directory not found: {SITE_DIR}")
 
-    requested = (os.environ.get("MODEL") or "").strip()
-    candidates = [requested] if requested else random.sample(MODELS, k=min(MAX_ATTEMPTS, len(MODELS)))
     prompt = build_prompt(read_site())
-
-    for model in candidates:
+    attempts = 0
+    for model in pick_candidates():
+        if attempts >= MAX_ATTEMPTS:
+            break
         print(f"Mission: {MISSION}\nModel:   {model}", flush=True)
         try:
-            plan = parse_response(call_model(model, prompt))
-            ops = validate_plan(plan)
+            answer = call_model(model, prompt)
+        except ModelUnavailable as err:
+            print(f"::notice::{model} is not available, trying another model: {one_line(err, 200)}")
+            continue  # no model was asked, so this does not count as an attempt
         except CopilotAuthError as err:
-            print(f"::error::GitHub Copilot authentication failed: {' '.join(str(err).split())[:300]}")
+            print(f"::error::GitHub Copilot authentication failed: {one_line(err, 300)}")
             sys.exit(AUTH_HELP)
-        except (ModelError, ValueError, RejectedChange) as err:
-            print(f"::warning::{model} failed: {' '.join(str(err).split())[:500]}")
+        except SiloBreach as err:
+            sys.exit(f"Stopping without applying anything: {err}. The Copilot CLI flags no longer disable every tool.")
+        except ModelError as err:
+            attempts += 1
+            print(f"::warning::{model} failed: {one_line(err, 500)}")
+            continue
+        attempts += 1
+        try:
+            plan = parse_response(answer)
+            ops = validate_plan(plan)
+        except (ValueError, RejectedChange) as err:
+            print(f"::warning::{model} failed: {one_line(err, 500)}")
             continue
         apply_ops(ops)
         summary_text = str(plan.get("summary") or "").strip()

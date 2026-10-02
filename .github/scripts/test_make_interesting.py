@@ -6,6 +6,7 @@ Run with:  python3 -m unittest discover -s .github/scripts -v
 
 import json
 import os
+import shlex
 import stat
 import subprocess
 import sys
@@ -82,6 +83,8 @@ class ParseResponseTest(unittest.TestCase):
         self.assertEqual(mi.loads_lenient('{"a": "it\\\'s \\d+"}'), {"a": "it\\'s \\d+"})
         # A properly escaped backslash must not be doubled again.
         self.assertEqual(mi.loads_lenient('{"a": "x\\\\\'y"}'), {"a": "x\\'y"})
+        # ...also when the same string needs repair: escaped backslash, slip, valid escapes.
+        self.assertEqual(mi.loads_lenient('{"a": "x\\\\ \\d \\" \\n \\u00e9"}'), {"a": 'x\\ \\d " \n \u00e9'})
         # Raw newlines inside a string are accepted.
         self.assertEqual(mi.loads_lenient('{"a": "line1\nline2"}'), {"a": "line1\nline2"})
         # Valid escapes keep their meaning.
@@ -92,22 +95,53 @@ class ParseResponseTest(unittest.TestCase):
             mi.loads_lenient('{"a": ')
 
 
+def events(*lines):
+    return mi.parse_events("\n".join(lines))
+
+
 class ExtractAnswerTest(unittest.TestCase):
+    def test_parse_events_ignores_everything_that_is_not_an_event_object(self):
+        parsed = mi.parse_events("\n".join(["not json at all", "[1]", '"x"', "", event("session.info", message="hi")]))
+        self.assertEqual(parsed, [{"type": "session.info", "data": {"message": "hi"}}])
+
     def test_returns_last_non_empty_assistant_message(self):
-        jsonl = "\n".join([
+        parsed = events(
             event("session.info", message="Disabled tools: bash"),
-            "not json at all",
+            event("session.tools_updated", model="m"),
+            event("assistant.turn_start", turnId="0"),
             event("assistant.message", content="first"),
-            event("assistant.message", content="second"),
+            event("assistant.message", content="second", toolRequests=[], model="m"),
             event("assistant.message", content="   "),
             json.dumps({"type": "result", "exitCode": 0}),
-        ])
-        self.assertEqual(mi.extract_answer(jsonl), "second")
+        )
+        self.assertEqual(mi.extract_answer(parsed, "m"), "second")
 
-    def test_returns_empty_string_when_there_is_no_answer(self):
-        self.assertEqual(mi.extract_answer(""), "")
-        self.assertEqual(mi.extract_answer(event("assistant.message", content=None)), "")
-        self.assertEqual(mi.extract_answer('{"type": "assistant.message", "data": "oops"}\n[1]\n"x"'), "")
+    def test_no_answer_is_a_model_error(self):
+        for parsed in [[], events(event("assistant.message", content=None)),
+                       events('{"type": "assistant.message", "data": "oops"}')]:
+            with self.subTest(parsed=parsed), self.assertRaisesRegex(mi.ModelError, "empty response"):
+                mi.extract_answer(parsed, "m")
+
+    def test_any_tool_use_is_a_silo_breach(self):
+        breaches = [
+            events(event("tool.execution_start", toolName="bash"), event("assistant.message", content="{}")),
+            events(event("assistant.message", content="{}", toolRequests=[{"name": "view"}])),
+        ]
+        for parsed in breaches:
+            with self.subTest(parsed=parsed), self.assertRaises(mi.SiloBreach):
+                mi.extract_answer(parsed, "m")
+
+    def test_answer_from_a_different_model_is_rejected(self):
+        for kind in ["assistant.message", "session.tools_updated"]:
+            parsed = events(event(kind, model="some-small-model"), event("assistant.message", content="{}"))
+            with self.subTest(kind=kind), self.assertRaisesRegex(mi.ModelError, "instead of m"):
+                mi.extract_answer(parsed, "m")
+
+    def test_answer_continued_past_the_output_limit_is_rejected(self):
+        parsed = events(event("assistant.turn_start", turnId="0"), event("assistant.turn_start", turnId="1"),
+                        event("assistant.message", content='the tail of a cut-off answer"}'))
+        with self.assertRaisesRegex(mi.ModelError, "output limit"):
+            mi.extract_answer(parsed, "m")
 
 
 class ValidatePlanTest(SiteDirTestCase):
@@ -139,6 +173,7 @@ class ValidatePlanTest(SiteDirTestCase):
             {"files": [{"path": "index.html", "content": "  "}]},
             {"delete": ["index.html"]},
             {"delete": ["site/error.html"]},
+            {"files": [{"path": "fine.html", "content": "x"}, {"path": "../x.html", "content": "x"}]},
             {"files": [{"path": f"p{i}.html", "content": "x"} for i in range(mi.MAX_CHANGES + 1)]},
         ]
         for plan in bad:
@@ -174,9 +209,8 @@ class FakeCopilot:
         test.addCleanup(tmp.cleanup)
         self.dir = Path(tmp.name).resolve()
         self.log = self.dir / "calls.jsonl"
-        exe = self.dir / "copilot"
-        exe.write_text(
-            f"#!{sys.executable}\n"
+        script = self.dir / "fake_copilot.py"
+        script.write_text(
             "import json, os, sys\n"
             f"LOG = {str(self.log)!r}\n"
             "PROMPT = sys.stdin.read()\n"
@@ -189,6 +223,9 @@ class FakeCopilot:
             "    print(json.dumps({'type': 'assistant.message', 'data': {'content': text}}))\n"
             + textwrap.dedent(body)
         )
+        # A shell wrapper rather than a "#!python" line: interpreter paths may contain spaces.
+        exe = self.dir / "copilot"
+        exe.write_text(f'#!/bin/sh\nexec {shlex.quote(sys.executable)} {shlex.quote(str(script))} "$@"\n')
         exe.chmod(exe.stat().st_mode | stat.S_IXUSR)
         patcher = mock.patch.object(mi, "COPILOT_BIN", str(exe))
         patcher.start()
@@ -211,12 +248,19 @@ class CallModelTest(unittest.TestCase):
         self.assertFalse(Path(call["cwd"]).exists(), "the silo directory is removed afterwards")
         args = call["args"]
         self.assertEqual(args[:2], ["--model", "model-a"])
+        self.assertEqual(args[2:], mi.COPILOT_FLAGS)
+
+    def test_flags_keep_the_model_tool_less_and_the_output_parseable(self):
+        flags = mi.COPILOT_FLAGS
         for flag in ["--available-tools=none", "--deny-tool=shell", "--deny-tool=write", "--deny-tool=url",
-                     "--disable-builtin-mcps", "--no-custom-instructions", "--no-ask-user",
-                     "--disallow-temp-dir"]:
-            self.assertIn(flag, args)
-        for arg in args:
-            self.assertFalse(arg.startswith(("--allow", "--yolo", "--add-dir", "--autopilot")), arg)
+                     "--disable-builtin-mcps", "--no-custom-instructions", "--no-ask-user", "--no-remote",
+                     "--disallow-temp-dir", "--no-auto-update",
+                     "--secret-env-vars=COPILOT_GITHUB_TOKEN,GH_TOKEN,GITHUB_TOKEN"]:
+            self.assertIn(flag, flags)
+        self.assertEqual(flags[flags.index("--output-format") + 1], "json")
+        self.assertEqual(flags[flags.index("--stream") + 1], "off")
+        for flag in flags:
+            self.assertFalse(flag.startswith(("--allow", "--yolo", "--add-dir", "--autopilot", "-p", "--prompt")), flag)
 
     def test_auth_and_policy_failures_are_fatal(self):
         messages = [
@@ -230,13 +274,51 @@ class CallModelTest(unittest.TestCase):
                 with self.assertRaises(mi.CopilotAuthError):
                     mi.call_model("model-a", "p")
 
+    def test_unavailable_model_is_reported_as_such(self):
+        messages = [
+            'Error: Model "x" from --model flag is not available.',
+            'Model "x" requires enablement before use.',
+            "This model is disabled by your organization's policy.",
+            'Execution failed: CAPIError: 400 model "x" is not accessible via the /chat/completions endpoint',
+        ]
+        for message in messages:
+            with self.subTest(message=message):
+                FakeCopilot(self, f"sys.stderr.write({message!r}); sys.exit(1)")
+                with self.assertRaises(mi.ModelUnavailable):
+                    mi.call_model("x", "p")
+
     def test_other_failures_only_fail_that_model(self):
-        FakeCopilot(self, "sys.stderr.write('Error: Model \"x\" from --model flag is not available.'); sys.exit(1)")
-        with self.assertRaisesRegex(mi.ModelError, "not available"):
+        FakeCopilot(self, "sys.stderr.write('Error: something broke'); sys.exit(1)")
+        with self.assertRaisesRegex(mi.ModelError, "status 1: Error: something broke") as caught:
             mi.call_model("x", "p")
+        self.assertNotIsInstance(caught.exception, mi.ModelUnavailable)
         FakeCopilot(self, "pass")
         with self.assertRaisesRegex(mi.ModelError, "empty response"):
             mi.call_model("x", "p")
+
+    def test_session_error_events_are_understood(self):
+        def session_error(**data):
+            return f"print(json.dumps({{'type': 'session.error', 'data': {data!r}}})); sys.exit(1)"
+
+        FakeCopilot(self, session_error(errorType="rate_limit", statusCode=429, message="slow down"))
+        with self.assertRaisesRegex(mi.ModelError, "rate_limit 429: slow down"):
+            mi.call_model("x", "p")
+        FakeCopilot(self, session_error(errorType="authentication", statusCode=401, message="bad credentials"))
+        with self.assertRaises(mi.CopilotAuthError):
+            mi.call_model("x", "p")
+        # An error event is a failure even if the CLI exits 0 and also printed an answer.
+        FakeCopilot(self, "print(json.dumps({'type': 'session.error', 'data': {'message': 'boom'}})); say('{}')")
+        with self.assertRaisesRegex(mi.ModelError, "boom"):
+            mi.call_model("x", "p")
+
+    def test_tool_use_is_a_silo_breach(self):
+        FakeCopilot(self, "print(json.dumps({'type': 'tool.execution_start', 'data': {'toolName': 'bash'}})); say('{}')")
+        with self.assertRaises(mi.SiloBreach):
+            mi.call_model("x", "p")
+
+    def test_output_that_is_not_utf8_does_not_crash(self):
+        FakeCopilot(self, "sys.stdout.buffer.write(b'\\xff\\xfe not utf-8\\n'); sys.stdout.flush(); say('ok')")
+        self.assertEqual(mi.call_model("x", "p"), "ok")
 
     def test_timeout_only_fails_that_model(self):
         FakeCopilot(self, "import time; time.sleep(30)")
@@ -293,6 +375,32 @@ class MainTest(SiteDirTestCase):
         self.assertEqual(len(fake.calls()), mi.MAX_ATTEMPTS)
         self.assertEqual(sorted(p.name for p in self.site.iterdir()), ["error.html", "index.html"])
 
+    def test_unavailable_models_are_skipped_without_using_an_attempt(self):
+        # Every model but one is "retired"; the survivor must be reached however the pool is shuffled.
+        survivor = mi.MODELS[-1]
+        fake = FakeCopilot(self, f"""
+            if MODEL != {survivor!r}:
+                sys.stderr.write('Error: Model "%s" from --model flag is not available.' % MODEL)
+                sys.exit(1)
+            say({GOOD_PLAN!r})
+        """)
+        with mock.patch.object(mi.random, "sample", lambda pool, k: list(pool)):
+            output = self.run_main()
+        self.assertEqual(len(fake.calls()), len(mi.MODELS))
+        self.assertIn(f"model<<__EOF__\n{survivor}\n", output)
+        self.assertTrue((self.site / "clock.html").is_file())
+
+    def test_silo_breach_stops_the_run_and_applies_nothing(self):
+        fake = FakeCopilot(self, f"""
+            print(json.dumps({{'type': 'tool.execution_start', 'data': {{'toolName': 'bash'}}}}))
+            say({GOOD_PLAN!r})
+        """)
+        with self.assertRaises(SystemExit) as caught:
+            self.run_main()
+        self.assertIn("Stopping without applying anything", str(caught.exception))
+        self.assertEqual(len(fake.calls()), 1)
+        self.assertFalse((self.site / "clock.html").exists())
+
     def test_requested_model_is_the_only_one_tried(self):
         fake = FakeCopilot(self, "say('nope')")
         with self.assertRaises(SystemExit):
@@ -306,12 +414,16 @@ class MainTest(SiteDirTestCase):
         self.assertIn("COPILOT_GITHUB_TOKEN", str(caught.exception))
         self.assertEqual(len(fake.calls()), 1, "no point trying other models")
 
-    def test_rejected_plan_never_writes_outside_site(self):
-        evil = json.dumps({"summary": "x", "files": [{"path": "../pwned.html", "content": "x"}]})
-        FakeCopilot(self, f"say({evil!r})")
+    def test_rejected_plan_is_not_applied_even_in_part(self):
+        evil = json.dumps({"summary": "x", "files": [{"path": "fine.html", "content": "x"},
+                                                     {"path": "../pwned.html", "content": "x"}],
+                           "delete": ["error.html"]})
+        fake = FakeCopilot(self, f"say({evil!r})")
         with self.assertRaises(SystemExit):
             self.run_main()
+        self.assertEqual(len(fake.calls()), mi.MAX_ATTEMPTS, "the model was really asked")
         self.assertFalse((self.root / "pwned.html").exists())
+        self.assertEqual(sorted(p.name for p in self.site.iterdir()), ["error.html", "index.html"])
 
 
 class ScriptSmokeTest(unittest.TestCase):
