@@ -128,7 +128,8 @@
       font-size: 0.84rem;
     }
 
-    .radio {
+    .radio,
+    .decoder {
       margin-top: 1rem;
       border: 1px solid rgba(255,255,255,0.15);
       border-radius: 12px;
@@ -163,18 +164,54 @@
       accent-color: var(--accent);
     }
 
-    #radio-note {
+    #radio-note,
+    #decoder-note {
       margin: 0.55rem 0 0;
       min-height: 1.4em;
       color: #c8daff;
     }
 
-    #radio-note.good {
+    #radio-note.good,
+    #decoder-note.good {
       color: var(--good);
     }
 
+    .glyph-grid {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 0.45rem;
+      margin-top: 0.45rem;
+    }
+
+    .glyph {
+      border-radius: 10px;
+      padding: 0.45rem 0;
+      font-size: 1.05rem;
+      line-height: 1;
+      text-align: center;
+      font-weight: 600;
+      border: 1px solid rgba(255,255,255,0.2);
+      background: rgba(255,255,255,0.04);
+      color: #e8efff;
+      transition: background 120ms ease, border-color 120ms ease, transform 120ms ease;
+    }
+
+    .glyph:hover,
+    .glyph:focus-visible {
+      transform: translateY(-1px);
+      border-color: rgba(185, 215, 255, 0.7);
+      background: rgba(147, 190, 255, 0.16);
+      outline: none;
+    }
+
+    .glyph.lit {
+      border-color: rgba(255, 234, 179, 0.95);
+      background: rgba(255, 226, 150, 0.26);
+      box-shadow: 0 0 10px rgba(255, 223, 148, 0.38) inset;
+    }
+
     @media (prefers-reduced-motion: reduce) {
-      button, a.action { transition: none; }
+      button, a.action, .glyph { transition: none; }
     }
   </style>
 </head>
@@ -205,6 +242,26 @@
       <p id='radio-note' class='hint' aria-live='polite'>Sweep slowly near 99.7 MHz. Some signals only appear when you pause.</p>
     </section>
 
+    <section class='decoder' aria-label='Signal decoder'>
+      <div class='radio-top'>
+        <p class='muted'>Signal decoder mini-game</p>
+        <p>level <span id='decoder-level'>1</span></p>
+      </div>
+      <p class='hint'>Memorize the flashing rune sequence, then replay it to decode deep-space messages.</p>
+      <div class='glyph-grid' id='glyph-grid'>
+        <button class='glyph' data-glyph='0' type='button' aria-label='Rune one'>☉</button>
+        <button class='glyph' data-glyph='1' type='button' aria-label='Rune two'>☾</button>
+        <button class='glyph' data-glyph='2' type='button' aria-label='Rune three'>✦</button>
+        <button class='glyph' data-glyph='3' type='button' aria-label='Rune four'>⟁</button>
+        <button class='glyph' data-glyph='4' type='button' aria-label='Rune five'>◌</button>
+      </div>
+      <div class='controls'>
+        <button id='play-seq' type='button'>play sequence</button>
+        <button id='reset-seq' type='button'>reset decoder</button>
+      </div>
+      <p id='decoder-note' class='hint' aria-live='polite'>Press play sequence to begin.</p>
+    </section>
+
     <p class='hint'>Easter egg: type <strong>home</strong> while on this page.</p>
   </main>
 
@@ -223,6 +280,11 @@
       var radioNote = document.getElementById('radio-note');
       var scanBtn = document.getElementById('scan');
       var lockBtn = document.getElementById('lock');
+      var decoderNote = document.getElementById('decoder-note');
+      var decoderLevelLabel = document.getElementById('decoder-level');
+      var playSeqBtn = document.getElementById('play-seq');
+      var resetSeqBtn = document.getElementById('reset-seq');
+      var glyphButtons = Array.prototype.slice.call(document.querySelectorAll('#glyph-grid .glyph'));
       var hints = [
         'Signal: try one tiny experiment before your next big decision.',
         'Signal: curiosity can be navigation, not distraction.',
@@ -240,8 +302,20 @@
         { f: 103.3, m: 'Meteor traffic: playful ideas are cleared for landing.' },
         { f: 107.1, m: 'Final relay: future you says thank you for starting.' }
       ];
+      var decoderLore = [
+        'Archive ping: courage detected in unstable weather.',
+        'Relay note: imperfect attempts create the signal path.',
+        'Beacon pulse: playful focus amplifies your momentum.',
+        'Deep vault: bold drafts age into maps for others.',
+        'Long-range message: you are closer than your doubt says.'
+      ];
       var hintIndex = Math.floor(Math.random() * hints.length);
       var audioCtx = null;
+      var decoderSequence = [];
+      var decoderStep = 0;
+      var decoderLevel = 1;
+      var decoderShowing = false;
+      var decoderTimers = [];
 
       function ensureAudio() {
         if (audioCtx) return audioCtx;
@@ -319,6 +393,106 @@
         }
       }
 
+      function clearDecoderTimers() {
+        for (var i = 0; i < decoderTimers.length; i++) {
+          clearTimeout(decoderTimers[i]);
+        }
+        decoderTimers = [];
+      }
+
+      function setDecoderNote(text, good) {
+        decoderNote.textContent = text;
+        if (good) decoderNote.classList.add('good');
+        else decoderNote.classList.remove('good');
+      }
+
+      function randomGlyph() {
+        return Math.floor(Math.random() * glyphButtons.length);
+      }
+
+      function buildDecoderSequence() {
+        var len = Math.min(7, 2 + decoderLevel);
+        decoderSequence = [];
+        for (var i = 0; i < len; i++) {
+          decoderSequence.push(randomGlyph());
+        }
+        decoderStep = 0;
+        decoderLevelLabel.textContent = String(decoderLevel);
+      }
+
+      function lightGlyph(index, duration) {
+        var btn = glyphButtons[index];
+        if (!btn) return;
+        btn.classList.add('lit');
+        setTimeout(function () {
+          btn.classList.remove('lit');
+        }, duration || 220);
+      }
+
+      function playDecoderSequence() {
+        if (decoderShowing) return;
+        decoderShowing = true;
+        decoderStep = 0;
+        clearDecoderTimers();
+        setDecoderNote('Watching sequence ' + decoderSequence.length + '. Replay it from memory.', false);
+
+        for (var i = 0; i < decoderSequence.length; i++) {
+          (function (step, glyph) {
+            var showId = setTimeout(function () {
+              lightGlyph(glyph, 250);
+              tone(320 + glyph * 90 + step * 6, 0.16, 'triangle', 0.025);
+            }, 220 + step * 420);
+            decoderTimers.push(showId);
+          })(i, decoderSequence[i]);
+        }
+
+        var doneId = setTimeout(function () {
+          decoderShowing = false;
+          setDecoderNote('Your turn: repeat the rune sequence.', false);
+        }, 260 + decoderSequence.length * 420);
+        decoderTimers.push(doneId);
+      }
+
+      function decoderSuccess() {
+        burst();
+        tone(540, 0.11, 'triangle', 0.03);
+        tone(680, 0.14, 'sine', 0.026);
+        var lore = decoderLore[(decoderLevel - 1) % decoderLore.length];
+        setDecoderNote('✦ Decoded: ' + lore, true);
+        note.textContent = 'Decoder lock confirmed at level ' + decoderLevel + '.';
+        decoderLevel += 1;
+        buildDecoderSequence();
+      }
+
+      function decoderFail(expectedIndex, gotIndex) {
+        tone(170, 0.09, 'square', 0.02);
+        var expected = glyphButtons[expectedIndex] ? glyphButtons[expectedIndex].textContent : '?';
+        var got = glyphButtons[gotIndex] ? glyphButtons[gotIndex].textContent : '?';
+        setDecoderNote('Signal mismatch: expected ' + expected + ' but got ' + got + '. Try again.', false);
+        decoderStep = 0;
+      }
+
+      function onGlyphPress(index) {
+        if (decoderShowing) {
+          setDecoderNote('Wait for playback to finish, then repeat.', false);
+          return;
+        }
+
+        lightGlyph(index, 180);
+        tone(280 + index * 95, 0.1, 'sine', 0.022);
+
+        if (index === decoderSequence[decoderStep]) {
+          decoderStep += 1;
+          if (decoderStep >= decoderSequence.length) {
+            decoderSuccess();
+          } else {
+            setDecoderNote('Good. ' + (decoderSequence.length - decoderStep) + ' rune' + (decoderSequence.length - decoderStep === 1 ? '' : 's') + ' left.', false);
+          }
+        } else {
+          decoderFail(decoderSequence[decoderStep], index);
+        }
+      }
+
       voidBtn.addEventListener('click', function () {
         hintIndex = (hintIndex + 1 + Math.floor(Math.random() * 2)) % hints.length;
         note.textContent = '✦ ' + hints[hintIndex];
@@ -346,6 +520,23 @@
       });
 
       lockBtn.addEventListener('click', lockFrequency);
+
+      playSeqBtn.addEventListener('click', playDecoderSequence);
+      resetSeqBtn.addEventListener('click', function () {
+        clearDecoderTimers();
+        decoderShowing = false;
+        decoderLevel = 1;
+        buildDecoderSequence();
+        setDecoderNote('Decoder reset. Press play sequence to begin again.', false);
+      });
+
+      for (var g = 0; g < glyphButtons.length; g++) {
+        (function (index) {
+          glyphButtons[index].addEventListener('click', function () {
+            onGlyphPress(index);
+          });
+        })(g);
+      }
 
       var codeBuffer = '';
       document.addEventListener('keydown', function (ev) {
@@ -438,6 +629,7 @@
 
       window.addEventListener('resize', resize);
       updateReadout();
+      buildDecoderSequence();
       resize();
       draw();
     })();
