@@ -50,7 +50,8 @@ jobs:
           COPILOT_BIN: copilot-linux-x64
           MODEL: ${{ inputs.model }}
           # Optional comma-separated list of model ids to pick from instead of the built-in list.
-          # Small models are refused even if listed here.
+          # List flagship models only: ids recognised as small or mid-tier are refused, but an
+          # unknown id that is only a version number cannot be judged and is used as listed.
           MODEL_POOL: ${{ vars.MODEL_POOL }}
         run: python3 .github/scripts/make_interesting.py
 

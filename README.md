@@ -38,18 +38,22 @@ The AI can only ever modify `/site`:
 
 ### Which models
 
-The random pick only ever draws from large, flagship models: the top tier of each provider that
-Copilot offers, listed as `MODELS` in
-[`.github/scripts/make_interesting.py`](.github/scripts/make_interesting.py).
+The random pick only ever draws from large, flagship models, listed as `MODELS` in
+[`.github/scripts/make_interesting.py`](.github/scripts/make_interesting.py). Today they come from
+Anthropic (Fable, Opus), OpenAI (Sol, Astra, GPT-5.5, GPT-5.3-Codex) and Moonshot (Kimi K3). Google
+has no model in the pool, because Copilot only offers the Gemini Flash tier.
 
 - **Small models are never picked at random.** Besides not being on the list, any model whose id
   contains a small or mid-tier name is refused: `haiku` and `sonnet`, and their equivalents at
-  other providers such as `mini`, `nano`, `luna`, `terra`, `flash`, `lite`, `fast`, `small`,
-  `medium`, `micro` and `phi` (the full set is `SMALL_MODEL_MARKERS`).
+  other providers such as `mini`, `nano`, `luna`, `terra`, `flash`, `lite`, `small`, `medium`,
+  `micro` and `phi` (the full set is `SMALL_MODEL_MARKERS`). `fast` is on that list too, which
+  also keeps out speed-tuned variants of flagships such as `claude-opus-4.8-fast`.
 - **Changing the pool** needs no code change: set the repository variable `MODEL_POOL` to a
-  comma-separated list of Copilot model ids. Small models in that list are still refused.
+  comma-separated list of Copilot model ids. Models recognised as small or mid-tier are still
+  refused. List flagships only, though: the rule works on names, so it cannot judge an unknown id
+  that is only a version number. The ones known today, such as `gpt-5.4`, are refused by id.
 - **Naming a model yourself**, through the *Run workflow* form, is not a random pick: the model is
-  used as asked, with a warning in the log if it is a small one.
+  used as asked, with a warning in the log if it is not a flagship.
 - Models that Copilot has retired or that the account cannot use are skipped automatically.
 
 ### Setup

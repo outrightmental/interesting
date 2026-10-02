@@ -31,13 +31,15 @@ MISSION = "make the website more interesting"
 
 COPILOT_BIN = os.environ.get("COPILOT_BIN", "copilot")
 
-# The models a random pick may draw from: only large, flagship models (the top tier of each
-# provider that GitHub Copilot CLI offers through `--model`), as of 2026-10-02. Small and mid-tier
-# models are deliberately absent, and is_small_model() below refuses them even if one is added.
+# The models a random pick may draw from: only large, flagship models, as of 2026-10-02. These are
+# the flagships GitHub Copilot CLI offers through `--model`, which today come from Anthropic,
+# OpenAI and Moonshot. Small and mid-tier models are deliberately absent, and is_small_model()
+# below refuses the ones it can recognise even if one is added.
 # Copilot retires models often: an id the account can no longer use is skipped at run time
 # without costing an attempt, so a stale entry here is harmless. The list can be replaced without
 # a code change by setting the MODEL_POOL repository variable (comma-separated ids).
-# Not listed: the Grok models, which Copilot CLI 1.0.91 cannot reach ("not accessible via the
+# Not listed: the Gemini models (Copilot offers only the Flash tier, which is refused as small)
+# and the Grok models (Copilot CLI 1.0.91 cannot reach them: "not accessible via the
 # /chat/completions endpoint").
 MODELS = [
     "claude-fable-5.1",
@@ -54,31 +56,42 @@ MODELS = [
     "kimi-k3",
 ]
 
-# Tier names that mark a model as a small, cheap, fast or mid-tier sibling of a flagship. A model
-# whose id contains one of these words is never picked at random, whatever list it came from.
-# The rule is deliberately general, so the equivalents of Haiku and Sonnet at every provider are
-# covered, including models that do not exist yet.
+# Tier names that mark a model as a small, cheap, speed-tuned or mid-tier sibling of a flagship. A
+# model whose id contains one of these words is never picked at random, whatever list it came
+# from. The rule is deliberately general, so it covers the equivalents of Haiku and Sonnet at other
+# providers, including models that do not exist yet, as long as the id names its tier.
 SMALL_MODEL_MARKERS = {
     "haiku", "sonnet",  # Anthropic: small and mid tier (the flagships are Opus and Fable)
     "mini", "nano", "luna", "terra",  # OpenAI: small tiers, and the mid tier of the Sol/Terra/Luna line
     "flash", "lite", "gemma",  # Google: small tiers
-    "fast",  # xAI's small tier, and speed-tuned variants generally
+    "fast",  # xAI's small tier, and speed-tuned variants generally (claude-opus-4.8-fast)
     "small", "medium", "ministral",  # Mistral: everything below Large
     "micro",  # Amazon Nova
     "phi",  # Microsoft's small-model family
     "tiny", "light", "lightweight", "instant",  # generic names for a lesser tier
 }
 
+# Models that are not flagships but whose id is only a version number, so no word gives them away.
+# A name rule cannot recognise these: they have to be listed.
+OTHER_NON_FLAGSHIP_MODELS = {
+    "gpt-5.4",  # mid tier of its generation, priced alongside Sonnet
+    "gpt-4.1",  # retired general-purpose model that Copilot still lists
+    "kimi-k2.7-code",  # Moonshot's lighter coding model (the flagship is kimi-k3)
+}
+
 
 def is_small_model(model):
-    """True if the model id names a small, cheap or mid-tier model rather than a flagship.
+    """True if the model is known to be a small, cheap, speed-tuned or mid-tier model, not a flagship.
 
     The id is split into words on anything that is not a letter or digit and compared with
     SMALL_MODEL_MARKERS, so "gpt-5.4-mini" and "Claude Haiku 4.5" are small but "gemini-3-pro"
-    (which merely contains the letters "mini") is not.
+    (which merely contains the letters "mini") is not. Ids in OTHER_NON_FLAGSHIP_MODELS are refused
+    by name. An unknown id that is only a version number cannot be judged and counts as large.
     """
-    words = re.split(r"[^a-z0-9]+", str(model).lower())
-    return any(word in SMALL_MODEL_MARKERS for word in words)
+    name = str(model).strip().lower()
+    if name.rsplit("/", 1)[-1] in OTHER_NON_FLAGSHIP_MODELS:  # tolerate a "provider/" prefix
+        return True
+    return any(word in SMALL_MODEL_MARKERS for word in re.split(r"[^a-z0-9]+", name))
 
 
 # How the Copilot CLI is locked down. The model gets no tools at all:
@@ -415,12 +428,13 @@ def set_output(name, value):
 
 
 def model_pool():
-    """The models a random pick may draw from: MODEL_POOL if set, else MODELS, minus small models."""
+    """The models a random pick may draw from: MODEL_POOL if set, else MODELS, minus the models
+    that is_small_model() recognises as small, mid-tier or speed-tuned."""
     configured = [m for m in re.split(r"[,\s]+", os.environ.get("MODEL_POOL") or "") if m]
     pool = []
     for model in configured or MODELS:
         if is_small_model(model):
-            print(f"::warning::{one_line(model, 100)} is a small model and is never picked at random; ignoring it.")
+            print(f"::warning::{one_line(model, 100)} is not a flagship model, so it is never picked at random; ignoring it.")
         elif model not in pool:
             pool.append(model)
     return pool
@@ -436,7 +450,7 @@ def pick_candidates():
     requested = (os.environ.get("MODEL") or "").strip()
     if requested:
         if is_small_model(requested):
-            print(f"::warning::{one_line(requested, 100)} is a small model; using it because it was requested by name.")
+            print(f"::warning::{one_line(requested, 100)} is not a flagship model; using it because it was requested by name.")
         return [requested]
     pool = model_pool()
     if not pool:

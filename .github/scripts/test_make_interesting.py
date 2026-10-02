@@ -313,11 +313,13 @@ class SmallModelTest(unittest.TestCase):
         "mai-code-1.1-flash", "microsoft/Phi-4", "Phi-4-mini-instruct",
         "mistral-small-2503", "mistral-ai/mistral-medium-2505", "ministral-3b",
         "amazon.nova-micro-v1", "nova-lite", "llama-3.1-8b-instant", "some-new-tiny-model",
+        # not flagships, but named by version alone: recognised by id
+        "gpt-5.4", "openai/gpt-4.1", "GPT-4.1", "kimi-k2.7-code",
     ]
     LARGE = [
         "claude-fable-5.1", "claude-fable-5", "claude-opus-5.5", "claude-opus-5", "claude-opus-4.8",
         "gpt-6.1-sol", "gpt-6-sol", "gpt-6-astra", "gpt-5.6-sol", "gpt-5.5", "gpt-5.3-codex",
-        "kimi-k3", "grok-4.6", "mistral-large-2411",
+        "kimi-k3", "mistral-large-2411", "gpt-5.4-pro", "gpt-5.40",
         # contain the letters of a marker without being that tier
         "gemini-3.1-pro", "gemini-3-pro", "minimax-m2", "nanobanana-pro", "flashpoint-xl",
     ]
@@ -339,6 +341,27 @@ class SmallModelTest(unittest.TestCase):
         for model in mi.MODELS:
             self.assertFalse(any(tier in model for tier in ("haiku", "sonnet")), model)
 
+    # Every model GitHub Copilot CLI listed on 2026-10-02, by GitHub's pricing category. The Grok
+    # ids are left out: xAI's top model is priced as Versatile, and the CLI cannot reach it anyway.
+    CATALOG_LIGHTWEIGHT = ["gpt-6-luna", "gpt-5.6-luna", "gpt-5-mini", "gpt-5.4-mini", "gemini-3.5-flash",
+                           "mai-code-1.1-flash"]
+    CATALOG_VERSATILE = ["gpt-5.6-terra", "gpt-5.4", "claude-haiku-4.5", "claude-sonnet-5", "claude-sonnet-5.5",
+                         "gemini-3.6-flash", "gemini-3.7-flash", "gemini-3.8-flash", "kimi-k2.7-code"]
+    CATALOG_POWERFUL = ["gpt-5.3-codex", "gpt-6-sol", "gpt-6.1-sol", "gpt-5.6-sol", "gpt-5.5", "gpt-6-astra",
+                        "claude-opus-5.5", "claude-opus-5", "claude-opus-4.8", "claude-opus-4.7",
+                        "claude-fable-5", "claude-fable-5.1", "kimi-k3"]
+    CATALOG_OTHER = ["claude-opus-4.8-fast", "gpt-4.1"]  # a double-price speed variant; a retired model
+
+    def test_only_flagships_survive_when_the_whole_catalog_is_the_pool(self):
+        catalog = self.CATALOG_LIGHTWEIGHT + self.CATALOG_VERSATILE + self.CATALOG_POWERFUL + self.CATALOG_OTHER
+        pool, log = self.pool(",".join(catalog))
+        self.assertEqual(sorted(pool), sorted(self.CATALOG_POWERFUL))
+        for refused in self.CATALOG_LIGHTWEIGHT + self.CATALOG_VERSATILE + self.CATALOG_OTHER:
+            self.assertIn(f"{refused} is not a flagship model", log)
+
+    def test_built_in_pool_is_drawn_from_the_flagship_tier(self):
+        self.assertTrue(set(mi.MODELS) <= set(self.CATALOG_POWERFUL), set(mi.MODELS) - set(self.CATALOG_POWERFUL))
+
     def pool(self, configured):
         with mock.patch.dict(os.environ, {"MODEL_POOL": configured}), mock.patch("builtins.print") as printed:
             return mi.model_pool(), " ".join(str(call.args[0]) for call in printed.call_args_list)
@@ -351,7 +374,7 @@ class SmallModelTest(unittest.TestCase):
         pool, log = self.pool("claude-opus-5.5, claude-haiku-4.5,gpt-5-mini  my-new-flagship\nclaude-opus-5.5,claude-sonnet-5")
         self.assertEqual(pool, ["claude-opus-5.5", "my-new-flagship"])
         for refused in ["claude-haiku-4.5", "gpt-5-mini", "claude-sonnet-5"]:
-            self.assertIn(f"{refused} is a small model", log)
+            self.assertIn(f"{refused} is not a flagship model", log)
 
     def test_random_pick_never_lands_on_a_small_model(self):
         everything = ",".join(self.SMALL + self.LARGE).replace(" ", "-")
@@ -371,7 +394,7 @@ class SmallModelTest(unittest.TestCase):
         with mock.patch.dict(os.environ, {"MODEL": " claude-haiku-4.5 ", "MODEL_POOL": ""}):
             with mock.patch("builtins.print") as printed:
                 self.assertEqual(mi.pick_candidates(), ["claude-haiku-4.5"])
-        self.assertIn("is a small model; using it because it was requested by name", printed.call_args.args[0])
+        self.assertIn("is not a flagship model; using it because it was requested by name", printed.call_args.args[0])
         with mock.patch.dict(os.environ, {"MODEL": "claude-opus-5.5"}), mock.patch("builtins.print") as printed:
             self.assertEqual(mi.pick_candidates(), ["claude-opus-5.5"])
         printed.assert_not_called()
