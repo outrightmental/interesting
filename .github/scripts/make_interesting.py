@@ -20,9 +20,11 @@ import json
 import os
 import random
 import re
+import signal
 import subprocess
 import sys
 import tempfile
+import uuid
 from pathlib import Path, PurePosixPath
 
 MISSION = "make the website more interesting"
@@ -99,9 +101,10 @@ ALLOWED_EXTENSIONS = {
     ".webmanifest",
 }
 PROTECTED_FILES = {"index.html", "error.html"}  # may be rewritten, never deleted
-MAX_FILE_BYTES = 200_000
 MAX_CHANGES = 20
 PROMPT_BUDGET_CHARS = 80_000  # keep the prompt comfortably inside every model's context window
+# Smaller than the prompt budget: a file too big to show to the next model could never be changed again.
+MAX_FILE_BYTES = 50_000
 MAX_ATTEMPTS = 3
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -128,22 +131,29 @@ class SiloBreach(Exception):
     """The model was able to use a tool. Nothing it returned may be trusted or applied."""
 
 
+# One path segment: lowercase letters, digits, ".", "_" and "-", not starting with a dot. Nothing
+# else is ever needed for a web path, and it rules out "..", hidden files, control characters
+# (a newline in a path could smuggle a workflow command into the log) and names that collide on
+# case-insensitive file systems.
+PATH_SEGMENT = re.compile(r"[a-z0-9][a-z0-9._-]{0,99}")
+
+
 def safe_site_path(raw):
     """Return the absolute path for a site-relative path, or raise RejectedChange."""
     if not isinstance(raw, str) or not raw.strip():
-        raise RejectedChange(f"invalid path: {raw!r}")
+        raise RejectedChange(f"invalid path: {raw!r:.200}")
     if "\\" in raw or "\x00" in raw or raw.startswith("/") or re.match(r"^[A-Za-z]:", raw):
-        raise RejectedChange(f"path must be relative to /site: {raw!r}")
+        raise RejectedChange(f"path must be relative to /site: {raw!r:.200}")
     rel = PurePosixPath(raw)
     if rel.parts and rel.parts[0] == "site":
         rel = PurePosixPath(*rel.parts[1:])  # tolerate "site/index.html"
-    if not rel.parts or any(p in ("", ".", "..") or p.startswith(".") for p in rel.parts):
-        raise RejectedChange(f"path not allowed: {raw!r}")
+    if not rel.parts or len(rel.parts) > 8 or not all(PATH_SEGMENT.fullmatch(p) for p in rel.parts):
+        raise RejectedChange(f"path not allowed: {raw!r:.200}")
     if rel.suffix.lower() not in ALLOWED_EXTENSIONS:
-        raise RejectedChange(f"file type not allowed: {raw!r}")
+        raise RejectedChange(f"file type not allowed: {raw!r:.200}")
     target = (SITE_DIR / rel).resolve()
     if SITE_DIR not in target.parents:
-        raise RejectedChange(f"path escapes /site: {raw!r}")
+        raise RejectedChange(f"path escapes /site: {raw!r:.200}")
     return target
 
 
@@ -155,7 +165,21 @@ def read_site():
     return files
 
 
-def build_prompt(files):
+def split_for_prompt(files):
+    """Split the site into (shown, omitted): files whose content fits the prompt budget, and the
+    names of the rest. index.html and error.html come first, so they are the last to be left out."""
+    ordered = sorted(files, key=lambda item: (item[0] not in PROTECTED_FILES, item[0] != "index.html", item[0]))
+    shown, omitted, used = [], [], 0
+    for rel, content in ordered:
+        if used + len(content) > PROMPT_BUDGET_CHARS:
+            omitted.append(rel)
+            continue
+        used += len(content)
+        shown.append((rel, content))
+    return shown, omitted
+
+
+def build_prompt(shown, omitted=()):
     system = (
         "You are the autonomous curator of a static website hosted on GitHub Pages. "
         f"Your mission, every single day: {MISSION}.\n\n"
@@ -166,25 +190,24 @@ def build_prompt(files):
         "- Only static files (HTML, CSS, JS, SVG, text). No build steps, no external "
         "dependencies that require keys, nothing harmful, deceptive or tracking.\n"
         "- Paths are relative to the site root (e.g. \"index.html\", \"css/style.css\"). "
-        "Use relative links between pages so the site works under a sub-path.\n"
+        "Use relative links between pages so the site works under a sub-path. File and folder "
+        "names may only contain lowercase letters, digits, \".\", \"_\" and \"-\".\n"
         "- index.html and error.html must always exist and remain valid.\n"
-        "- Keep each file small; return the COMPLETE new content of every file you change.\n"
+        f"- Keep each file small (at most {MAX_FILE_BYTES // 1000} KB); return the COMPLETE new "
+        "content of every file you change.\n"
         f"- At most {MAX_CHANGES} files per day.\n\n"
         "Respond with ONLY a JSON object, no prose and no markdown fences, shaped as:\n"
         '{"summary": "one sentence describing today\'s change", '
         '"files": [{"path": "index.html", "content": "<full file content>"}], '
         '"delete": ["old-page.html"]}'
     )
-    parts, used, omitted = [], 0, []
-    for rel, content in files:
-        if used + len(content) > PROMPT_BUDGET_CHARS:
-            omitted.append(rel)
-            continue
-        used += len(content)
-        parts.append(f"=== {rel} ===\n{content}")
+    parts = [f"=== {rel} ===\n{content}" for rel, content in shown]
     user = "Current contents of the website:\n\n" + "\n\n".join(parts)
     if omitted:
-        user += "\n\nOther existing files (content omitted for size): " + ", ".join(omitted)
+        user += (
+            "\n\nOther existing files (content omitted for size): " + ", ".join(omitted)
+            + "\nYou cannot see these files, so you may not change or delete them."
+        )
     user += f"\n\nToday's mission: {MISSION}. Respond with the JSON object only."
     return system + "\n\n" + user
 
@@ -198,27 +221,38 @@ def call_model(model, prompt):
     """Ask one model for its answer through the Copilot CLI and return the text."""
     cmd = [COPILOT_BIN, "--model", model, *COPILOT_FLAGS]
     env = dict(os.environ, NO_COLOR="1", COPILOT_AUTO_UPDATE="false")
-    try:
-        with tempfile.TemporaryDirectory(prefix="copilot-silo-") as empty_dir:
-            proc = subprocess.run(
+    with tempfile.TemporaryDirectory(prefix="copilot-silo-") as empty_dir:
+        try:
+            proc = subprocess.Popen(
                 cmd,
-                input=prompt,  # the prompt goes over stdin: it is far too long for argv
-                capture_output=True,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
                 text=True,
                 encoding="utf-8",
                 errors="replace",
                 cwd=empty_dir,
                 env=env,
-                timeout=MODEL_TIMEOUT_SECONDS,
+                start_new_session=True,  # its own process group, so a timeout can stop all of it
             )
-    except FileNotFoundError:
-        sys.exit(f"GitHub Copilot CLI not found ({COPILOT_BIN!r}). Install it with: npm install -g @github/copilot")
-    except subprocess.TimeoutExpired:
-        raise ModelError(f"no answer within {MODEL_TIMEOUT_SECONDS}s") from None
-    events = parse_events(proc.stdout)
+        except FileNotFoundError:
+            sys.exit(f"GitHub Copilot CLI not found ({COPILOT_BIN!r}). Install it with: npm install -g @github/copilot")
+        try:
+            # The prompt goes over stdin: it is far too long for argv.
+            stdout, stderr = proc.communicate(prompt, timeout=MODEL_TIMEOUT_SECONDS)
+        except subprocess.TimeoutExpired:
+            raise ModelError(f"no answer within {MODEL_TIMEOUT_SECONDS}s") from None
+        finally:
+            if proc.poll() is None:  # timed out or interrupted: leave nothing running
+                try:
+                    os.killpg(proc.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+                proc.communicate()
+    events = parse_events(stdout)
     # Before the session starts, errors are plain text on stderr; after, they are session.error events.
     errors = [describe_error(e) for e in events if e.get("type") == "session.error"]
-    detail = "; ".join(errors) or proc.stderr.strip() or proc.stdout.strip()
+    detail = "; ".join(errors) or stderr.strip() or stdout.strip()
     if errors or proc.returncode != 0:
         if AUTH_FAILURE.search(detail) or any(error.startswith("authentication") for error in errors):
             raise CopilotAuthError(detail)
@@ -231,10 +265,12 @@ def call_model(model, prompt):
 def parse_events(jsonl):
     """The Copilot CLI's JSONL output as a list of event objects; anything else is ignored."""
     events = []
-    for line in jsonl.splitlines():
+    # Split on "\n" only: splitlines() would also break on U+2028 and friends, which JSON
+    # serializers leave unescaped inside strings.
+    for line in jsonl.split("\n"):
         try:
             event = json.loads(line)
-        except ValueError:
+        except (ValueError, RecursionError):
             continue
         if isinstance(event, dict):
             events.append(event)
@@ -277,35 +313,24 @@ def parse_response(text):
     start, end = text.find("{"), text.rfind("}")
     if start == -1 or end <= start:
         raise ValueError("no JSON object in model response")
-    plan = loads_lenient(text[start:end + 1])
+    plan = json.loads(text[start:end + 1])
     if not isinstance(plan, dict):
         raise ValueError("model response is not a JSON object")
     return plan
 
 
-VALID_JSON_ESCAPES = set('"\\/bfnrtu')
+# Control characters that never belong in a web page. Finding one means the model's JSON escaping
+# went wrong (a regex \b written with one backslash decodes to a backspace), so the content cannot
+# be trusted. Answers that are not valid JSON are rejected outright rather than repaired: a model
+# that slipped on one escape has probably slipped on others that cannot be detected.
+STRAY_CONTROL_CHARACTER = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 
 
-def loads_lenient(text):
-    r"""json.loads that forgives the two slips models make when quoting code inside JSON strings.
+def validate_plan(plan, unseen=()):
+    """Turn the model's plan into a list of (action, path, content) or raise.
 
-    Raw newlines and tabs inside a string are accepted, and a backslash that does not start a
-    valid JSON escape (the \' or \d of embedded JavaScript) is taken as a literal backslash.
+    `unseen` names existing files whose content the model was not shown; it may not touch them.
     """
-    try:
-        return json.loads(text, strict=False)
-    except ValueError:
-        repaired = re.sub(
-            r"\\(.)",
-            lambda m: m.group(0) if m.group(1) in VALID_JSON_ESCAPES else "\\" + m.group(0),
-            text,
-            flags=re.S,
-        )
-        return json.loads(repaired, strict=False)
-
-
-def validate_plan(plan):
-    """Turn the model's plan into a list of (action, path, content) or raise."""
     files = plan.get("files") or []
     deletes = plan.get("delete") or []
     if not isinstance(files, list) or not isinstance(deletes, list):
@@ -319,16 +344,33 @@ def validate_plan(plan):
         if not isinstance(entry, dict) or not isinstance(entry.get("content"), str):
             raise RejectedChange(f"invalid file entry: {entry!r:.200}")
         target = safe_site_path(entry.get("path"))
+        rel = target.relative_to(SITE_DIR).as_posix()
         content = entry["content"]
         if len(content.encode()) > MAX_FILE_BYTES:
-            raise RejectedChange(f"file too large: {entry.get('path')}")
-        if target.relative_to(SITE_DIR).as_posix() in PROTECTED_FILES and not content.strip():
-            raise RejectedChange(f"refusing to empty {entry.get('path')}")
+            raise RejectedChange(f"file too large: {rel}")
+        if STRAY_CONTROL_CHARACTER.search(content):
+            raise RejectedChange(f"control character in the content of {rel} (broken JSON escaping?)")
+        if rel in PROTECTED_FILES and not content.strip():
+            raise RejectedChange(f"refusing to empty {rel}")
+        if rel in unseen:
+            raise RejectedChange(f"refusing to overwrite {rel}: its content was not shown to the model")
+        if target.is_dir():
+            raise RejectedChange(f"{rel} is a folder")
         ops.append(("write", target, content))
+    written = {target for _, target, _ in ops}
+    for target in written:
+        for parent in target.parents:
+            if parent == SITE_DIR:
+                break
+            if parent in written or parent.is_file():
+                raise RejectedChange(f"{parent.relative_to(SITE_DIR).as_posix()} cannot be both a file and a folder")
     for raw in deletes:
         target = safe_site_path(raw)
-        if target.relative_to(SITE_DIR).as_posix() in PROTECTED_FILES:
-            raise RejectedChange(f"refusing to delete {raw}")
+        rel = target.relative_to(SITE_DIR).as_posix()
+        if rel in PROTECTED_FILES:
+            raise RejectedChange(f"refusing to delete {rel}")
+        if rel in unseen:
+            raise RejectedChange(f"refusing to delete {rel}: its content was not shown to the model")
         ops.append(("delete", target, None))
     return ops
 
@@ -348,8 +390,9 @@ def apply_ops(ops):
 def set_output(name, value):
     out = os.environ.get("GITHUB_OUTPUT")
     if out:
+        delimiter = f"EOF_{uuid.uuid4().hex}"  # unguessable, so a value can never end itself early
         with open(out, "a") as fh:
-            fh.write(f"{name}<<__EOF__\n{value}\n__EOF__\n")
+            fh.write(f"{name}<<{delimiter}\n{value}\n{delimiter}\n")
 
 
 def pick_candidates():
@@ -364,11 +407,23 @@ def one_line(text, limit):
     return " ".join(str(text).split())[:limit]
 
 
+def clean_summary(text):
+    """The model's summary as one plain line that is safe in a commit message and in Markdown.
+
+    Only letters, digits, spaces and plain punctuation survive. That drops "#" and "@" (GitHub acts
+    on "fixes #1" and mentions in commit messages) as well as links, markup and control characters.
+    """
+    lines = str(text or "").strip().splitlines()
+    first = re.sub(r"[^\w .,;:!?'\"()+%&=-]", "", lines[0] if lines else "")
+    return " ".join(first.split())[:200] or MISSION
+
+
 def main():
     if not SITE_DIR.is_dir():
         sys.exit(f"site directory not found: {SITE_DIR}")
 
-    prompt = build_prompt(read_site())
+    shown, omitted = split_for_prompt(read_site())
+    prompt = build_prompt(shown, omitted)
     attempts = 0
     for model in pick_candidates():
         if attempts >= MAX_ATTEMPTS:
@@ -391,13 +446,16 @@ def main():
         attempts += 1
         try:
             plan = parse_response(answer)
-            ops = validate_plan(plan)
-        except (ValueError, RejectedChange) as err:
+            ops = validate_plan(plan, unseen=omitted)
+        except (ValueError, RecursionError, RejectedChange) as err:
             print(f"::warning::{model} failed: {one_line(err, 500)}")
             continue
-        apply_ops(ops)
-        summary_text = str(plan.get("summary") or "").strip()
-        summary = summary_text.splitlines()[0][:200] if summary_text else MISSION
+        try:
+            apply_ops(ops)
+        except OSError as err:
+            # The site may be half written, so stop here: the workflow only commits after success.
+            sys.exit(f"Could not apply the change from {model}: {one_line(err, 300)}")
+        summary = clean_summary(plan.get("summary"))
         print(f"Summary: {summary}")
         set_output("model", model)
         set_output("summary", summary)

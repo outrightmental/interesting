@@ -29,9 +29,13 @@ jobs:
     outputs:
       changed: ${{ steps.commit.outputs.changed }}
     steps:
-      # Installed before checkout, so the install never runs next to the repository's credentials.
+      # The platform package is the CLI binary itself: an exact version with no dependencies and no
+      # install scripts, so nothing unpinned ever runs next to the token. It is installed before
+      # checkout, away from the repository's credentials.
       - name: Install GitHub Copilot CLI
-        run: npm install --global "@github/copilot@${COPILOT_CLI_VERSION}"
+        run: |
+          npm install --global --ignore-scripts "@github/copilot-linux-x64@${COPILOT_CLI_VERSION}"
+          copilot-linux-x64 --version
 
       - name: Checkout
         uses: actions/checkout@v5
@@ -43,7 +47,7 @@ jobs:
           # to that user's Copilot plan). Otherwise the workflow's own token, which Copilot accepts
           # once the organization allows Copilot CLI usage billed to the organization.
           COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN || github.token }}
-          S2STOKENS: ${{ secrets.COPILOT_GITHUB_TOKEN == '' && 'true' || '' }} # lets the CLI use an Actions token
+          COPILOT_BIN: copilot-linux-x64
           MODEL: ${{ inputs.model }}
         run: python3 .github/scripts/make_interesting.py
 
@@ -73,7 +77,23 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git commit -m "Make the website more interesting: ${SUMMARY}" -m "Model: ${MODEL}"
-          git push origin "HEAD:${GITHUB_REF_NAME}"
+          # The branch may have moved while the model was thinking: rebase the commit and try again.
+          pushed=false
+          for attempt in 1 2 3; do
+            if git push origin "HEAD:${GITHUB_REF_NAME}"; then
+              pushed=true
+              break
+            fi
+            echo "::notice::Push ${attempt} was rejected; rebasing onto the latest ${GITHUB_REF_NAME}."
+            if ! git pull --rebase origin "${GITHUB_REF_NAME}"; then
+              git rebase --abort || true
+              break
+            fi
+          done
+          if [ "$pushed" != true ]; then
+            echo "::error::Could not push the change to ${GITHUB_REF_NAME}."
+            exit 1
+          fi
           echo "changed=true" >> "$GITHUB_OUTPUT"
           {
             echo "### Made the website more interesting"

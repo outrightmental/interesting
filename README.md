@@ -24,11 +24,15 @@ recursively iterate the most interesting possible website
 The AI can only ever modify `/site`:
 
 1. The model has no tools or shell: the Copilot CLI runs in an empty directory with every tool
-   disabled, so the model only returns JSON describing files to write/delete.
+   disabled, so the model only returns JSON describing files to write/delete. If the model ever
+   manages to use a tool, the run stops and nothing is applied.
 2. [`.github/scripts/make_interesting.py`](.github/scripts/make_interesting.py) rejects any path
-   that is absolute, contains `..`/hidden segments, resolves outside `/site` (including via
-   symlinks) or has a non-static file type, and never deletes `index.html`/`error.html`.
+   that is absolute, contains `..`/hidden segments or anything but lowercase letters, digits, `.`,
+   `_` and `-`, resolves outside `/site` (including via symlinks) or has a non-static file type.
+   It never deletes `index.html`/`error.html`, never touches a file the model was not shown, and
+   applies an answer whole or not at all.
 3. The workflow fails if anything outside `/site` changed, and only stages `site/` for commit.
+   The model's one-line summary is stripped to plain text before it reaches the commit message.
 
 ### Setup
 

@@ -12,6 +12,7 @@ import subprocess
 import sys
 import tempfile
 import textwrap
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -22,6 +23,29 @@ import make_interesting as mi  # noqa: E402
 
 def event(kind, **data):
     return json.dumps({"type": kind, "data": data})
+
+
+def process_is_running(pid):
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    # A killed child of the test process's children is reparented and reaped by init; a zombie
+    # still answers signal 0, so ask ps for its state.
+    state = subprocess.run(["ps", "-o", "stat=", "-p", str(pid)], capture_output=True, text=True).stdout.strip()
+    return bool(state) and not state.startswith("Z")
+
+
+def read_outputs(text):
+    """Parse a GITHUB_OUTPUT file written with `name<<delimiter` heredocs, as the runner does."""
+    outputs, lines = {}, text.split("\n")
+    while lines and lines[0]:
+        name, delimiter = lines.pop(0).split("<<", 1)
+        end = lines.index(delimiter)
+        outputs[name], lines = "\n".join(lines[:end]), lines[end + 1:]
+    return outputs
 
 
 class SiteDirTestCase(unittest.TestCase):
@@ -45,6 +69,7 @@ class SafeSitePathTest(SiteDirTestCase):
         self.assertEqual(mi.safe_site_path("index.html"), self.site / "index.html")
         self.assertEqual(mi.safe_site_path("toys/clock.html"), self.site / "toys" / "clock.html")
         self.assertEqual(mi.safe_site_path("site/css/style.css"), self.site / "css" / "style.css")
+        self.assertEqual(mi.safe_site_path("a_b/c-d.e/2048.min.js"), self.site / "a_b" / "c-d.e" / "2048.min.js")
 
     def test_rejects_paths_that_leave_site_or_are_not_static(self):
         bad = [
@@ -52,6 +77,11 @@ class SafeSitePathTest(SiteDirTestCase):
             "/etc/passwd", "../README.md", "a/../../x.html", "C:\\x.html", "a\\b.html",
             ".github/workflows/x.yml", ".hidden.html", "a/.git/config.txt", "x\x00.html",
             "run.sh", "page.php", "noextension", "site",
+            # Only lowercase letters, digits, ".", "_" and "-": no way to start a new log line,
+            # no case games with the protected files, nothing exotic.
+            "a\n::error title=Leaked::rotate now.html", "a\rb.html", "a\x1b[31m.html", "a\u2028b.html",
+            "Index.html", "ERROR.HTML", "my page.html", "caf\u00e9.html", "a/-b/c.html", "x.html ", "x.html.",
+            "a/" * 8 + "x.html", "a" * 101 + ".html",
         ]
         for raw in bad:
             with self.subTest(raw=raw), self.assertRaises(mi.RejectedChange):
@@ -78,21 +108,12 @@ class ParseResponseTest(unittest.TestCase):
             with self.subTest(text=text), self.assertRaises(ValueError):
                 mi.parse_response(text)
 
-    def test_forgives_code_quoting_slips(self):
-        # \' and \d are not JSON escapes; models emit them when quoting JavaScript.
-        self.assertEqual(mi.loads_lenient('{"a": "it\\\'s \\d+"}'), {"a": "it\\'s \\d+"})
-        # A properly escaped backslash must not be doubled again.
-        self.assertEqual(mi.loads_lenient('{"a": "x\\\\\'y"}'), {"a": "x\\'y"})
-        # ...also when the same string needs repair: escaped backslash, slip, valid escapes.
-        self.assertEqual(mi.loads_lenient('{"a": "x\\\\ \\d \\" \\n \\u00e9"}'), {"a": 'x\\ \\d " \n \u00e9'})
-        # Raw newlines inside a string are accepted.
-        self.assertEqual(mi.loads_lenient('{"a": "line1\nline2"}'), {"a": "line1\nline2"})
-        # Valid escapes keep their meaning.
-        self.assertEqual(mi.loads_lenient('{"a": "q\\"q \\u00e9 \\n"}'), {"a": 'q"q \u00e9 \n'})
-
-    def test_still_rejects_hopeless_json(self):
-        with self.assertRaises(ValueError):
-            mi.loads_lenient('{"a": ')
+    def test_invalid_json_is_rejected_not_repaired(self):
+        # \' and \d are not JSON escapes. A model that writes them has stopped escaping its code,
+        # and its valid-looking \n and \b cannot be trusted either, so the whole answer goes.
+        for text in ['{"a": "it\\\'s"}', '{"a": "\\d+"}', '{"a": "line1\nline2"}', '{"a": ']:
+            with self.subTest(text=text), self.assertRaises(ValueError):
+                mi.parse_response(text)
 
 
 def events(*lines):
@@ -103,6 +124,16 @@ class ExtractAnswerTest(unittest.TestCase):
     def test_parse_events_ignores_everything_that_is_not_an_event_object(self):
         parsed = mi.parse_events("\n".join(["not json at all", "[1]", '"x"', "", event("session.info", message="hi")]))
         self.assertEqual(parsed, [{"type": "session.info", "data": {"message": "hi"}}])
+
+    def test_unusual_line_separators_inside_an_answer_do_not_split_the_event(self):
+        content = "before\u2028middle\u2029after\x85end"
+        line = json.dumps({"type": "assistant.message", "data": {"content": content}}, ensure_ascii=False)
+        self.assertEqual(mi.extract_answer(mi.parse_events(line + "\r\n"), "m"), content)
+
+    def test_absurdly_nested_output_is_ignored_not_fatal(self):
+        self.assertEqual(mi.parse_events("[" * 100_000), [])
+        with self.assertRaises((ValueError, RecursionError)):
+            mi.parse_response('{"files": ' + "[" * 100_000 + "}")
 
     def test_returns_last_non_empty_assistant_message(self):
         parsed = events(
@@ -161,6 +192,7 @@ class ValidatePlanTest(SiteDirTestCase):
 
     def test_rejects_bad_plans(self):
         big = "x" * (mi.MAX_FILE_BYTES + 1)
+        (self.site / "folder.html").mkdir()
         bad = [
             {},
             {"files": [], "delete": []},
@@ -170,6 +202,10 @@ class ValidatePlanTest(SiteDirTestCase):
             {"files": ["index.html"]},
             {"files": [{"path": "../x.html", "content": "x"}]},
             {"files": [{"path": "big.html", "content": big}]},
+            {"files": [{"path": "app.js", "content": "s.match(/\x08\\d+\x08/g)"}]},  # \b decoded as backspace
+            {"files": [{"path": "index.html/x.html", "content": "x"}]},  # index.html is a file
+            {"files": [{"path": "a.html", "content": "x"}, {"path": "a.html/b.html", "content": "x"}]},
+            {"files": [{"path": "folder.html", "content": "x"}]},  # exists as a folder
             {"files": [{"path": "index.html", "content": "  "}]},
             {"delete": ["index.html"]},
             {"delete": ["site/error.html"]},
@@ -181,9 +217,60 @@ class ValidatePlanTest(SiteDirTestCase):
                 mi.validate_plan(plan)
 
 
+    def test_files_the_model_was_not_shown_cannot_be_touched(self):
+        (self.site / "big.js").write_text("y")
+        for plan in [{"files": [{"path": "big.js", "content": "new"}]}, {"delete": ["site/big.js"]}]:
+            with self.subTest(plan=plan), self.assertRaisesRegex(mi.RejectedChange, "not shown"):
+                mi.validate_plan(plan, unseen=["big.js"])
+        self.assertEqual(len(mi.validate_plan({"files": [{"path": "new.js", "content": "x"}]}, unseen=["big.js"])), 1)
+
+    def test_a_file_can_always_be_shown_to_the_next_model(self):
+        self.assertLess(mi.MAX_FILE_BYTES, mi.PROMPT_BUDGET_CHARS)
+
+
+class CleanSummaryTest(unittest.TestCase):
+    def test_keeps_plain_sentences(self):
+        text = "Added a clock (it's 100% CSS); try it: fast, fun & free!"
+        self.assertEqual(mi.clean_summary(text), text)
+        self.assertEqual(mi.clean_summary("Añadió un reloj"), "Añadió un reloj")
+
+    def test_first_line_only_and_bounded(self):
+        self.assertEqual(mi.clean_summary("  one   two \n three"), "one two")
+        self.assertEqual(len(mi.clean_summary("x" * 500)), 200)
+
+    def test_falls_back_to_the_mission(self):
+        for empty in [None, "", "   ", "\n", "###", 0]:
+            with self.subTest(empty=empty):
+                self.assertEqual(mi.clean_summary(empty), mi.MISSION)
+
+    def test_strips_what_github_would_act_on(self):
+        cleaned = mi.clean_summary("Fixes #1, closes org/repo#2 cc @octocat [click](https://evil.example) `x` <b>\x1b[31m")
+        for char in "#@[]<>`/\\\x1b":
+            self.assertNotIn(char, cleaned)
+        self.assertEqual(mi.clean_summary("ok \ud83d"), "ok")  # a lone surrogate cannot be printed
+
+
+class SetOutputTest(unittest.TestCase):
+    def test_value_cannot_terminate_its_own_heredoc(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "out"
+            with mock.patch.dict(os.environ, {"GITHUB_OUTPUT": str(out)}):
+                mi.set_output("summary", "__EOF__")
+                mi.set_output("model", "EOF")
+            text = out.read_text()
+            self.assertEqual(read_outputs(text), {"summary": "__EOF__", "model": "EOF"})
+            first, second = [line.split("<<")[1] for line in text.splitlines() if "<<" in line]
+            self.assertNotEqual(first, second)
+
+    def test_does_nothing_outside_actions(self):
+        with mock.patch.dict(os.environ):
+            os.environ.pop("GITHUB_OUTPUT", None)
+            mi.set_output("summary", "x")
+
+
 class BuildPromptTest(SiteDirTestCase):
     def test_prompt_contains_mission_site_files_and_format(self):
-        prompt = mi.build_prompt(mi.read_site())
+        prompt = mi.build_prompt(*mi.split_for_prompt(mi.read_site()))
         self.assertIn(mi.MISSION, prompt)
         self.assertIn("=== index.html ===\n<h1>interesting</h1>", prompt)
         self.assertIn("=== error.html ===", prompt)
@@ -191,9 +278,20 @@ class BuildPromptTest(SiteDirTestCase):
 
     def test_files_over_budget_are_listed_by_name_only(self):
         (self.site / "huge.js").write_text("y" * (mi.PROMPT_BUDGET_CHARS + 1))
-        prompt = mi.build_prompt(mi.read_site())
+        shown, omitted = mi.split_for_prompt(mi.read_site())
+        self.assertEqual(omitted, ["huge.js"])
+        prompt = mi.build_prompt(shown, omitted)
         self.assertNotIn("yyyy", prompt)
         self.assertIn("content omitted for size): huge.js", prompt)
+        self.assertIn("may not change or delete them", prompt)
+
+    def test_home_page_is_the_last_file_to_be_left_out(self):
+        (self.site / "a.js").write_text("a" * (mi.PROMPT_BUDGET_CHARS - 10))  # sorts first, fits only alone
+        (self.site / "b.css").write_text("b" * 200)
+        shown, omitted = mi.split_for_prompt(mi.read_site())
+        self.assertEqual([rel for rel, _ in shown][:2], ["index.html", "error.html"])
+        self.assertEqual(omitted, ["a.js"])
+        self.assertIn("b.css", [rel for rel, _ in shown])
 
     def test_only_static_non_symlink_files_are_read(self):
         (self.site / "notes.bin").write_bytes(b"\x00\x01")
@@ -320,10 +418,22 @@ class CallModelTest(unittest.TestCase):
         FakeCopilot(self, "sys.stdout.buffer.write(b'\\xff\\xfe not utf-8\\n'); sys.stdout.flush(); say('ok')")
         self.assertEqual(mi.call_model("x", "p"), "ok")
 
-    def test_timeout_only_fails_that_model(self):
-        FakeCopilot(self, "import time; time.sleep(30)")
-        with mock.patch.object(mi, "MODEL_TIMEOUT_SECONDS", 0.2), self.assertRaisesRegex(mi.ModelError, "no answer"):
+    def test_timeout_only_fails_that_model_and_leaves_nothing_running(self):
+        # The stand-in starts a child of its own, as the npm launcher of the real CLI does.
+        fake = FakeCopilot(self, """
+            import subprocess, time
+            child = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)'])
+            open(LOG + '.pids', 'w').write('%d %d' % (os.getpid(), child.pid))
+            time.sleep(60)
+        """)
+        with mock.patch.object(mi, "MODEL_TIMEOUT_SECONDS", 1.5), self.assertRaisesRegex(mi.ModelError, "no answer"):
             mi.call_model("x", "p")
+        for pid in map(int, Path(str(fake.log) + ".pids").read_text().split()):
+            for _ in range(50):  # the kill is asynchronous; give the kernel a moment
+                if not process_is_running(pid):
+                    break
+                time.sleep(0.1)
+            self.assertFalse(process_is_running(pid), f"process {pid} survived the timeout")
 
     def test_missing_cli_stops_the_run(self):
         with mock.patch.object(mi, "COPILOT_BIN", "/nonexistent/copilot"), self.assertRaises(SystemExit):
@@ -352,7 +462,7 @@ class MainTest(SiteDirTestCase):
         (call,) = fake.calls()
         model = call["args"][1]
         self.assertIn(model, mi.MODELS)
-        self.assertEqual(output, f"model<<__EOF__\n{model}\n__EOF__\nsummary<<__EOF__\nAdded a clock.\n__EOF__\n")
+        self.assertEqual(read_outputs(output), {"model": model, "summary": "Added a clock."})
 
     def test_falls_back_to_another_model(self):
         fake = FakeCopilot(self, f"""
@@ -387,7 +497,7 @@ class MainTest(SiteDirTestCase):
         with mock.patch.object(mi.random, "sample", lambda pool, k: list(pool)):
             output = self.run_main()
         self.assertEqual(len(fake.calls()), len(mi.MODELS))
-        self.assertIn(f"model<<__EOF__\n{survivor}\n", output)
+        self.assertEqual(read_outputs(output)["model"], survivor)
         self.assertTrue((self.site / "clock.html").is_file())
 
     def test_silo_breach_stops_the_run_and_applies_nothing(self):
@@ -400,6 +510,21 @@ class MainTest(SiteDirTestCase):
         self.assertIn("Stopping without applying anything", str(caught.exception))
         self.assertEqual(len(fake.calls()), 1)
         self.assertFalse((self.site / "clock.html").exists())
+
+    def test_files_left_out_of_the_prompt_are_protected_end_to_end(self):
+        (self.site / "zz-huge.js").write_text("y" * (mi.PROMPT_BUDGET_CHARS + 1))
+        blind = json.dumps({"summary": "x", "files": [{"path": "zz-huge.js", "content": "rewritten blind"}]})
+        FakeCopilot(self, f"say({blind!r})")
+        with self.assertRaises(SystemExit):
+            self.run_main()
+        self.assertEqual(len((self.site / "zz-huge.js").read_text()), mi.PROMPT_BUDGET_CHARS + 1)
+
+    def test_a_failed_write_stops_the_run(self):
+        FakeCopilot(self, f"say({GOOD_PLAN!r})")
+        with mock.patch.object(mi.Path, "write_text", side_effect=OSError("disk full")):
+            with self.assertRaises(SystemExit) as caught:
+                self.run_main()
+        self.assertIn("Could not apply the change", str(caught.exception))
 
     def test_requested_model_is_the_only_one_tried(self):
         fake = FakeCopilot(self, "say('nope')")
