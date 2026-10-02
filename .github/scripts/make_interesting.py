@@ -121,11 +121,16 @@ MODEL_TIMEOUT_SECONDS = 480
 AUTH_HELP = (
     "GitHub Copilot refused the request, so no model can run.\n"
     "Fix it one of two ways:\n"
-    "  1. Add a repository secret named COPILOT_GITHUB_TOKEN holding a fine-grained personal\n"
-    "     access token that has the \"Copilot Requests\" permission (usage is billed to that\n"
-    "     user's Copilot plan), or\n"
-    "  2. Enable GitHub Copilot (including the Copilot CLI policy) for the organization that\n"
-    "     owns this repository, so the workflow's own token (copilot-requests: write) is accepted."
+    "  1. Personal plan: add a repository secret named COPILOT_GITHUB_TOKEN holding a fine-grained\n"
+    "     personal access token (resource owner: your own account) that has the account permission\n"
+    "     \"Copilot Requests\". Usage is billed to that user's Copilot plan, and every model that\n"
+    "     plan includes can be picked.\n"
+    "  2. Organization: as an owner of the organization that owns this repository, open Settings >\n"
+    "     Copilot > Policies, enable \"Copilot CLI\" and select \"Allow use of Copilot CLI billed to\n"
+    "     the organization\". The change can take a quarter of an hour to apply. Usage is billed to\n"
+    "     the organization, and only the models its Copilot plan and policies offer can be picked.\n"
+    "If a COPILOT_GITHUB_TOKEN secret already exists, it is used instead of the workflow's own token:\n"
+    "renew it (check its expiry and its \"Copilot Requests\" permission), or delete it to use route 2."
 )
 
 ALLOWED_EXTENSIONS = {
@@ -134,9 +139,11 @@ ALLOWED_EXTENSIONS = {
 }
 PROTECTED_FILES = {"index.html", "error.html"}  # may be rewritten, never deleted
 MAX_CHANGES = 20
-PROMPT_BUDGET_CHARS = 80_000  # keep the prompt comfortably inside every model's context window
-# Smaller than the prompt budget: a file too big to show to the next model could never be changed again.
 MAX_FILE_BYTES = 50_000
+# How much of the site a prompt carries; comfortably inside every model's context window. A file
+# that is not shown cannot be changed, so the budget always has room for index.html, error.html
+# and any one other file: every file gets its turn (see split_for_prompt).
+PROMPT_BUDGET_CHARS = 3 * MAX_FILE_BYTES
 MAX_ATTEMPTS = 3
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -163,11 +170,13 @@ class SiloBreach(Exception):
     """The model was able to use a tool. Nothing it returned may be trusted or applied."""
 
 
-# One path segment: lowercase letters, digits, ".", "_" and "-", not starting with a dot. Nothing
-# else is ever needed for a web path, and it rules out "..", hidden files, control characters
-# (a newline in a path could smuggle a workflow command into the log) and names that collide on
-# case-insensitive file systems.
-PATH_SEGMENT = re.compile(r"[a-z0-9][a-z0-9._-]{0,99}")
+# One path segment: lowercase letters, digits, ".", "_" and "-", starting and ending with a letter
+# or digit. Nothing else is ever needed for a web path, and it rules out "..", hidden files,
+# control characters (a newline in a path could smuggle a workflow command into the log) and names
+# that collide on case-insensitive file systems.
+PATH_SEGMENT = re.compile(r"[a-z0-9](?:[a-z0-9._-]{0,98}[a-z0-9])?")
+# Names a Windows checkout refuses, with or without an extension: one would break every clone there.
+WINDOWS_RESERVED = re.compile(r"(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?")
 
 
 def safe_site_path(raw):
@@ -181,6 +190,8 @@ def safe_site_path(raw):
         rel = PurePosixPath(*rel.parts[1:])  # tolerate "site/index.html"
     if not rel.parts or len(rel.parts) > 8 or not all(PATH_SEGMENT.fullmatch(p) for p in rel.parts):
         raise RejectedChange(f"path not allowed: {raw!r:.200}")
+    if any(WINDOWS_RESERVED.fullmatch(p) for p in rel.parts):
+        raise RejectedChange(f"path uses a name reserved on Windows: {raw!r:.200}")
     if rel.suffix.lower() not in ALLOWED_EXTENSIONS:
         raise RejectedChange(f"file type not allowed: {raw!r:.200}")
     target = (SITE_DIR / rel).resolve()
@@ -199,16 +210,26 @@ def read_site():
 
 def split_for_prompt(files):
     """Split the site into (shown, omitted): files whose content fits the prompt budget, and the
-    names of the rest. index.html and error.html come first, so they are the last to be left out."""
-    ordered = sorted(files, key=lambda item: (item[0] not in PROTECTED_FILES, item[0] != "index.html", item[0]))
+    names of the rest.
+
+    index.html and error.html are considered first, so they are the last to be left out. The other
+    files are considered in a different random order each run: a file the model is not shown
+    cannot be changed, and no file should stay unchangeable run after run.
+    """
+    def prompt_order(item):
+        return (item[0] != "index.html", item[0] not in PROTECTED_FILES, item[0])
+
+    first = sorted((item for item in files if item[0] in PROTECTED_FILES), key=prompt_order)
+    rest = [item for item in files if item[0] not in PROTECTED_FILES]
+    random.shuffle(rest)
     shown, omitted, used = [], [], 0
-    for rel, content in ordered:
+    for rel, content in first + rest:
         if used + len(content) > PROMPT_BUDGET_CHARS:
             omitted.append(rel)
             continue
         used += len(content)
         shown.append((rel, content))
-    return shown, omitted
+    return sorted(shown, key=prompt_order), sorted(omitted)
 
 
 def build_prompt(shown, omitted=()):
@@ -231,7 +252,10 @@ def build_prompt(shown, omitted=()):
         "Respond with ONLY a JSON object, no prose and no markdown fences, shaped as:\n"
         '{"summary": "one sentence describing today\'s change", '
         '"files": [{"path": "index.html", "content": "<full file content>"}], '
-        '"delete": ["old-page.html"]}'
+        '"delete": ["old-page.html"]}\n'
+        "It must be valid JSON, or it is discarded. Inside each \"content\" string write every "
+        "line break as \\n, every double quote as \\\" and every backslash as \\\\ (so a "
+        "JavaScript '\\n' or \\d becomes '\\\\n' or \\\\d)."
     )
     parts = [f"=== {rel} ===\n{content}" for rel, content in shown]
     user = "Current contents of the website:\n\n" + "\n\n".join(parts)
@@ -245,8 +269,11 @@ def build_prompt(shown, omitted=()):
 
 
 AUTH_FAILURE = re.compile(r"authentication failed|no authentication information|access denied by policy", re.I)
+# What the CLI says when the account cannot use a model: retired or misspelled, not reachable by
+# this CLI version, or listed but not enabled by the plan's or the organization's model policy.
 MODEL_UNAVAILABLE = re.compile(
-    r"is not available|is not accessible via|requires enablement|disabled by your organization", re.I)
+    r"is not available|is not accessible via|in interactive mode to enable this model"
+    r"|requires enablement|disabled by your organization", re.I)
 
 
 def call_model(model, prompt):
@@ -269,29 +296,43 @@ def call_model(model, prompt):
             )
         except FileNotFoundError:
             sys.exit(f"GitHub Copilot CLI not found ({COPILOT_BIN!r}). Install it with: npm install -g @github/copilot")
+        timed_out = False
         try:
             # The prompt goes over stdin: it is far too long for argv.
             stdout, stderr = proc.communicate(prompt, timeout=MODEL_TIMEOUT_SECONDS)
         except subprocess.TimeoutExpired:
-            raise ModelError(f"no answer within {MODEL_TIMEOUT_SECONDS}s") from None
-        finally:
-            if proc.poll() is None:  # timed out or interrupted: leave nothing running
-                try:
-                    os.killpg(proc.pid, signal.SIGKILL)
-                except ProcessLookupError:
-                    pass
-                proc.communicate()
+            timed_out = True
+            stdout, stderr = stop_process_group(proc)  # keep what it printed: it is checked below
+        except BaseException:
+            stop_process_group(proc)  # interrupted: leave nothing running
+            raise
     events = parse_events(stdout)
-    # Before the session starts, errors are plain text on stderr; after, they are session.error events.
+    # First, on every path: a run in which the model used a tool must stop everything, whether the
+    # CLI then succeeded, failed or hung.
+    refuse_tool_use(events)
+    if timed_out:
+        raise ModelError(f"no answer within {MODEL_TIMEOUT_SECONDS}s")
+    # Before the session starts, errors are plain text on stderr; after, they are session.error
+    # events. Only that text is classified: stdout also carries the model's own words, and a page
+    # that says "this page is not available" is not a Copilot error.
     errors = [describe_error(e) for e in events if e.get("type") == "session.error"]
-    detail = "; ".join(errors) or stderr.strip() or stdout.strip()
+    problem = "; ".join(errors) or stderr.strip()
     if errors or proc.returncode != 0:
-        if AUTH_FAILURE.search(detail) or any(error.startswith("authentication") for error in errors):
-            raise CopilotAuthError(detail)
-        if MODEL_UNAVAILABLE.search(detail):
-            raise ModelUnavailable(detail[:300])
-        raise ModelError(f"copilot exited with status {proc.returncode}: {detail[:500]}")
+        if AUTH_FAILURE.search(problem) or any(error.startswith("authentication") for error in errors):
+            raise CopilotAuthError(problem)
+        if MODEL_UNAVAILABLE.search(problem):
+            raise ModelUnavailable(problem[:300])
+        raise ModelError(f"copilot exited with status {proc.returncode}: {(problem or stdout.strip())[:500]}")
     return extract_answer(events, model)
+
+
+def stop_process_group(proc):
+    """Kill the CLI and everything it started, and return the (stdout, stderr) captured so far."""
+    try:
+        os.killpg(proc.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+    return proc.communicate()
 
 
 def parse_events(jsonl):
@@ -320,12 +361,17 @@ def describe_error(event):
     return " ".join(parts) + ": " + str(data.get("message") or "unknown error")
 
 
-def extract_answer(events, model):
-    """Return the model's answer from the CLI's events, or raise if the run cannot be trusted."""
+def refuse_tool_use(events):
+    """Raise SiloBreach if the CLI's events show the model calling, or asking to call, any tool."""
     for event in events:
         kind = str(event.get("type"))
         if kind.startswith("tool.") or event_data(event).get("toolRequests"):
             raise SiloBreach(f"the model was able to call a tool ({kind})")
+
+
+def extract_answer(events, model):
+    """Return the model's answer from the CLI's events, or raise if the run cannot be trusted."""
+    refuse_tool_use(events)
     answered_by = {event_data(e).get("model") for e in events
                    if e.get("type") in ("assistant.message", "session.tools_updated")} - {None, ""}
     if answered_by - {model}:
@@ -467,9 +513,11 @@ def clean_summary(text):
 
     Only letters, digits, spaces and plain punctuation survive. That drops "#" and "@" (GitHub acts
     on "fixes #1" and mentions in commit messages) as well as links, markup and control characters.
+    "GH-1", GitHub's other way to write "#1", is taken apart as well.
     """
     lines = str(text or "").strip().splitlines()
     first = re.sub(r"[^\w .,;:!?'\"()+%&=-]", "", lines[0] if lines else "")
+    first = re.sub(r"(?i)(gh)-(?=\d)", r"\1 ", first)
     return " ".join(first.split())[:200] or MISSION
 
 
@@ -479,42 +527,57 @@ def main():
 
     shown, omitted = split_for_prompt(read_site())
     prompt = build_prompt(shown, omitted)
-    attempts = 0
-    for model in pick_candidates():
-        if attempts >= MAX_ATTEMPTS:
-            break
+    candidates = pick_candidates()
+    attempts, unavailable, tried = 0, [], set()
+
+    def report_unavailable():
+        # Worth saying out loud: when most of the pool is off limits, the pick is hardly random.
+        # Only the models tried this run are known; the rest of the pool was never asked.
+        if unavailable:
+            print(
+                f"::notice::{len(unavailable)} of the {len(tried)} models tried this run are not "
+                f"available to this Copilot account ({one_line(', '.join(unavailable), 300)}). "
+                f"The pool has {len(candidates)}. See Setup in the README."
+            )
+
+    queue, answering = list(candidates), []
+    while queue and attempts < MAX_ATTEMPTS:
+        model = queue.pop(0)
         print(f"Mission: {MISSION}\nModel:   {model}", flush=True)
+        tried.add(model)
+        attempts += 1  # counted up front, so every path below that asks again is bounded
         try:
-            answer = call_model(model, prompt)
+            plan = parse_response(call_model(model, prompt))
+            ops = validate_plan(plan, unseen=omitted)
         except ModelUnavailable as err:
-            print(f"::notice::{model} is not available, trying another model: {one_line(err, 200)}")
-            continue  # no model was asked, so this does not count as an attempt
+            attempts -= 1  # no model was asked, so this does not count as an attempt
+            print(f"{model} is not available, trying another model: {one_line(err, 200)}")
+            unavailable.append(model)
         except CopilotAuthError as err:
             print(f"::error::GitHub Copilot authentication failed: {one_line(err, 300)}")
             sys.exit(AUTH_HELP)
         except SiloBreach as err:
             sys.exit(f"Stopping without applying anything: {err}. The Copilot CLI flags no longer disable every tool.")
-        except ModelError as err:
-            attempts += 1
+        except (ModelError, ValueError, RecursionError, RejectedChange) as err:
+            answering.append(model)
             print(f"::warning::{model} failed: {one_line(err, 500)}")
-            continue
-        attempts += 1
-        try:
-            plan = parse_response(answer)
-            ops = validate_plan(plan, unseen=omitted)
-        except (ValueError, RecursionError, RejectedChange) as err:
-            print(f"::warning::{model} failed: {one_line(err, 500)}")
-            continue
-        try:
-            apply_ops(ops)
-        except OSError as err:
-            # The site may be half written, so stop here: the workflow only commits after success.
-            sys.exit(f"Could not apply the change from {model}: {one_line(err, 300)}")
-        summary = clean_summary(plan.get("summary"))
-        print(f"Summary: {summary}")
-        set_output("model", model)
-        set_output("summary", summary)
-        return
+        else:
+            try:
+                apply_ops(ops)
+            except OSError as err:
+                # The site may be half written, so stop here: the workflow only commits after success.
+                sys.exit(f"Could not apply the change from {model}: {one_line(err, 300)}")
+            summary = clean_summary(plan.get("summary"))
+            print(f"Summary: {summary}")
+            set_output("model", model)
+            set_output("summary", summary)
+            report_unavailable()
+            return
+        if not queue:
+            # Every model has had a turn. With attempts left, ask again the ones that can answer:
+            # a model does not give the same answer twice.
+            queue, answering = answering, []
+    report_unavailable()
     sys.exit("No model produced a usable change today.")
 
 

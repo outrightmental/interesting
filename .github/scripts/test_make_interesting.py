@@ -70,6 +70,8 @@ class SafeSitePathTest(SiteDirTestCase):
         self.assertEqual(mi.safe_site_path("toys/clock.html"), self.site / "toys" / "clock.html")
         self.assertEqual(mi.safe_site_path("site/css/style.css"), self.site / "css" / "style.css")
         self.assertEqual(mi.safe_site_path("a_b/c-d.e/2048.min.js"), self.site / "a_b" / "c-d.e" / "2048.min.js")
+        for fine in ["console.js", "aux-page.html", "com10.css", "nullable/x.html", "a.html"]:
+            self.assertEqual(mi.safe_site_path(fine), self.site / fine)
 
     def test_rejects_paths_that_leave_site_or_are_not_static(self):
         bad = [
@@ -82,6 +84,8 @@ class SafeSitePathTest(SiteDirTestCase):
             "a\n::error title=Leaked::rotate now.html", "a\rb.html", "a\x1b[31m.html", "a\u2028b.html",
             "Index.html", "ERROR.HTML", "my page.html", "caf\u00e9.html", "a/-b/c.html", "x.html ", "x.html.",
             "a/" * 8 + "x.html", "a" * 101 + ".html",
+            # A Windows checkout refuses these, which would break every clone there.
+            "aux.html", "con.js", "nul.txt", "prn.css", "com1.css", "lpt9.svg", "con/x.html", "a./b.html", "a-/b.html",
         ]
         for raw in bad:
             with self.subTest(raw=raw), self.assertRaises(mi.RejectedChange):
@@ -224,8 +228,8 @@ class ValidatePlanTest(SiteDirTestCase):
                 mi.validate_plan(plan, unseen=["big.js"])
         self.assertEqual(len(mi.validate_plan({"files": [{"path": "new.js", "content": "x"}]}, unseen=["big.js"])), 1)
 
-    def test_a_file_can_always_be_shown_to_the_next_model(self):
-        self.assertLess(mi.MAX_FILE_BYTES, mi.PROMPT_BUDGET_CHARS)
+    def test_the_prompt_has_room_for_both_fixed_pages_and_any_one_other_file(self):
+        self.assertGreaterEqual(mi.PROMPT_BUDGET_CHARS, 3 * mi.MAX_FILE_BYTES)
 
 
 class CleanSummaryTest(unittest.TestCase):
@@ -248,6 +252,9 @@ class CleanSummaryTest(unittest.TestCase):
         for char in "#@[]<>`/\\\x1b":
             self.assertNotIn(char, cleaned)
         self.assertEqual(mi.clean_summary("ok \ud83d"), "ok")  # a lone surrogate cannot be printed
+        # "GH-1" is GitHub's other spelling of "#1".
+        self.assertEqual(mi.clean_summary("Fixes GH-1, closes gh-22 and Gh-3"), "Fixes GH 1, closes gh 22 and Gh 3")
+        self.assertEqual(mi.clean_summary("x_GH-7 and the gh-pages look"), "x_GH 7 and the gh-pages look")
 
 
 class SetOutputTest(unittest.TestCase):
@@ -284,6 +291,35 @@ class BuildPromptTest(SiteDirTestCase):
         self.assertNotIn("yyyy", prompt)
         self.assertIn("content omitted for size): huge.js", prompt)
         self.assertIn("may not change or delete them", prompt)
+
+    def test_every_file_gets_its_turn_in_the_prompt(self):
+        # Three files that each fill most of the budget: only one fits per run. Whichever is left
+        # out cannot be changed that run, so the choice must rotate rather than follow the alphabet.
+        for name in ["a.js", "b.js", "c.js"]:
+            (self.site / name).write_text(name[0] * (mi.PROMPT_BUDGET_CHARS - 1000))
+        seen = set()
+        for _ in range(60):
+            shown, omitted = mi.split_for_prompt(mi.read_site())
+            names = [rel for rel, _ in shown]
+            self.assertEqual(names[:2], ["index.html", "error.html"])
+            self.assertEqual(len(names), 3)
+            self.assertEqual(sorted(names + omitted), ["a.js", "b.js", "c.js", "error.html", "index.html"])
+            seen.update(names[2:])
+        self.assertEqual(seen, {"a.js", "b.js", "c.js"})
+
+    def test_every_file_gets_its_turn_even_when_the_fixed_pages_are_as_big_as_allowed(self):
+        (self.site / "index.html").write_text("i" * mi.MAX_FILE_BYTES)
+        (self.site / "error.html").write_text("e" * mi.MAX_FILE_BYTES)
+        for name in ["a.js", "b.js", "c.js"]:
+            (self.site / name).write_text(name[0] * mi.MAX_FILE_BYTES)
+        seen = set()
+        for _ in range(60):
+            shown, omitted = mi.split_for_prompt(mi.read_site())
+            names = [rel for rel, _ in shown]
+            self.assertEqual(names[:2], ["index.html", "error.html"])
+            self.assertEqual(len(names), 3)
+            seen.update(names[2:])
+        self.assertEqual(seen, {"a.js", "b.js", "c.js"})
 
     def test_home_page_is_the_last_file_to_be_left_out(self):
         (self.site / "a.js").write_text("a" * (mi.PROMPT_BUDGET_CHARS - 10))  # sorts first, fits only alone
@@ -476,7 +512,7 @@ class CallModelTest(unittest.TestCase):
     def test_unavailable_model_is_reported_as_such(self):
         messages = [
             'Error: Model "x" from --model flag is not available.',
-            'Model "x" requires enablement before use.',
+            "Error: Run `copilot --model x` in interactive mode to enable this model",  # blocked by model policy
             "This model is disabled by your organization's policy.",
             'Execution failed: CAPIError: 400 model "x" is not accessible via the /chat/completions endpoint',
         ]
@@ -510,10 +546,40 @@ class CallModelTest(unittest.TestCase):
         with self.assertRaisesRegex(mi.ModelError, "boom"):
             mi.call_model("x", "p")
 
+    TOOL_EVENT = "print(json.dumps({'type': 'tool.execution_start', 'data': {'toolName': 'bash'}}), flush=True)"
+
     def test_tool_use_is_a_silo_breach(self):
-        FakeCopilot(self, "print(json.dumps({'type': 'tool.execution_start', 'data': {'toolName': 'bash'}})); say('{}')")
+        FakeCopilot(self, self.TOOL_EVENT + "; say('{}')")
         with self.assertRaises(mi.SiloBreach):
             mi.call_model("x", "p")
+
+    def test_tool_use_is_a_silo_breach_even_when_the_call_then_fails(self):
+        endings = {
+            "exit 1": "sys.exit(1)",
+            "unavailable": "sys.stderr.write('Error: Model \"x\" from --model flag is not available.'); sys.exit(1)",
+            "auth": "sys.stderr.write('Error: Authentication failed'); sys.exit(1)",
+            "session error": "print(json.dumps({'type': 'session.error', 'data': {'message': 'boom'}})); sys.exit(1)",
+        }
+        for name, ending in endings.items():
+            with self.subTest(ending=name):
+                FakeCopilot(self, self.TOOL_EVENT + "\n" + ending)
+                with self.assertRaises(mi.SiloBreach):
+                    mi.call_model("x", "p")
+
+    def test_tool_use_is_a_silo_breach_even_when_the_call_then_hangs(self):
+        FakeCopilot(self, self.TOOL_EVENT + "\nimport time; time.sleep(60)")
+        with mock.patch.object(mi, "MODEL_TIMEOUT_SECONDS", 1.5), self.assertRaises(mi.SiloBreach):
+            mi.call_model("x", "p")
+
+    def test_the_models_own_words_are_never_read_as_a_copilot_error(self):
+        # The CLI dies without saying why, after printing an answer that happens to contain the
+        # phrases Copilot uses for its own errors.
+        for phrase in ["Authentication failed. Try again!", "This page is not available.", "Access denied by policy"]:
+            with self.subTest(phrase=phrase):
+                FakeCopilot(self, f"say({phrase!r}); sys.exit(1)")
+                with self.assertRaises(mi.ModelError) as caught:
+                    mi.call_model("x", "p")
+                self.assertIs(type(caught.exception), mi.ModelError)
 
     def test_output_that_is_not_utf8_does_not_crash(self):
         FakeCopilot(self, "sys.stdout.buffer.write(b'\\xff\\xfe not utf-8\\n'); sys.stdout.flush(); say('ok')")
@@ -552,13 +618,16 @@ class MainTest(SiteDirTestCase):
         out = self.root / "github_output"
         full_env = {"GITHUB_OUTPUT": str(out), "MODEL": "", "MODEL_POOL": ""}
         full_env.update(env or {})
-        with mock.patch.dict(os.environ, full_env), mock.patch("builtins.print"):
-            mi.main()
+        self.printed = []
+        with mock.patch.dict(os.environ, full_env):
+            with mock.patch("builtins.print", lambda *args, **kwargs: self.printed.append(" ".join(map(str, args)))):
+                mi.main()
         return out.read_text() if out.exists() else ""
 
     def test_applies_first_usable_answer_and_reports_it(self):
         fake = FakeCopilot(self, f"say({GOOD_PLAN!r})")
         output = self.run_main()
+        self.assertFalse([line for line in self.printed if "not available" in line])
         self.assertEqual((self.site / "clock.html").read_text(), "<p>tick</p>")
         (call,) = fake.calls()
         model = call["args"][1]
@@ -598,8 +667,28 @@ class MainTest(SiteDirTestCase):
         with mock.patch.object(mi.random, "sample", lambda pool, k: list(pool)):
             output = self.run_main()
         self.assertEqual(len(fake.calls()), len(mi.MODELS))
+        notice = [line for line in self.printed if line.startswith("::notice::")][-1]
+        self.assertIn(f"{len(mi.MODELS) - 1} of the {len(mi.MODELS)} models tried this run are not available", notice)
+        self.assertIn(mi.MODELS[0], notice)
         self.assertEqual(read_outputs(output)["model"], survivor)
         self.assertTrue((self.site / "clock.html").is_file())
+
+    def test_notice_counts_only_the_models_that_were_tried(self):
+        # The second model in line is the first that works: one was found unavailable, eleven or
+        # so were never asked, and the notice must not pretend to know about those.
+        first, second = mi.MODELS[0], mi.MODELS[1]
+        FakeCopilot(self, f"""
+            if MODEL == {first!r}:
+                sys.stderr.write('Error: Model "%s" from --model flag is not available.' % MODEL)
+                sys.exit(1)
+            say({GOOD_PLAN!r})
+        """)
+        with mock.patch.object(mi.random, "sample", lambda pool, k: list(pool)):
+            output = self.run_main()
+        self.assertEqual(read_outputs(output)["model"], second)
+        notice = [line for line in self.printed if line.startswith("::notice::")][-1]
+        self.assertIn("1 of the 2 models tried this run are not available", notice)
+        self.assertIn(f"The pool has {len(mi.MODELS)}", notice)
 
     def test_silo_breach_stops_the_run_and_applies_nothing(self):
         fake = FakeCopilot(self, f"""
@@ -639,7 +728,33 @@ class MainTest(SiteDirTestCase):
         fake = FakeCopilot(self, "say('nope')")
         with self.assertRaises(SystemExit):
             self.run_main({"MODEL": " my-model "})
-        self.assertEqual([c["args"][1] for c in fake.calls()], ["my-model"])
+        self.assertEqual([c["args"][1] for c in fake.calls()], ["my-model"] * mi.MAX_ATTEMPTS)
+
+    def test_a_lone_available_model_is_asked_again_after_a_bad_answer(self):
+        # The situation on an account that is offered a single model: everything else is skipped,
+        # and the one model that answers gets the remaining attempts.
+        survivor = mi.MODELS[0]
+        fake = FakeCopilot(self, f"""
+            if MODEL != {survivor!r}:
+                sys.stderr.write('Error: Model "%s" from --model flag is not available.' % MODEL)
+                sys.exit(1)
+            mine = [line for line in open(LOG).read().splitlines() if json.loads(line)['args'][1] == MODEL]
+            say('not json' if len(mine) < 2 else {GOOD_PLAN!r})
+        """)
+        output = self.run_main()
+        asked = [c["args"][1] for c in fake.calls()]
+        self.assertEqual(asked.count(survivor), 2)
+        notice = [line for line in self.printed if line.startswith("::notice::")][-1]
+        self.assertIn(f"{len(mi.MODELS) - 1} of the {len(mi.MODELS)} models tried this run are not available", notice)
+        self.assertEqual(len(asked), len(mi.MODELS) + 1, "unavailable models are not asked twice")
+        self.assertEqual(read_outputs(output)["model"], survivor)
+
+    def test_gives_up_when_no_model_is_available(self):
+        fake = FakeCopilot(self, "sys.stderr.write('Error: Model \"x\" from --model flag is not available.'); sys.exit(1)")
+        with self.assertRaises(SystemExit) as caught:
+            self.run_main()
+        self.assertIn("No model produced a usable change", str(caught.exception))
+        self.assertEqual(len(fake.calls()), len(mi.MODELS))
 
     def test_auth_failure_stops_immediately_with_setup_help(self):
         fake = FakeCopilot(self, "sys.stderr.write('Error: Access denied by policy settings'); sys.exit(1)")
