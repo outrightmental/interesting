@@ -2,7 +2,7 @@ name: Make the website more interesting
 
 on:
   schedule:
-    - cron: "17 9 * * *" # daily
+    - cron: "17 * * * *" # hourly, at 17 minutes past
   workflow_dispatch:
     inputs:
       model:
@@ -12,15 +12,67 @@ on:
 
 permissions: {}
 
-concurrency:
-  group: make-interesting
-  cancel-in-progress: false
-
 env:
   COPILOT_CLI_VERSION: "1.0.91" # pinned: the silo relies on this version's flags and output format
 
 jobs:
+  # Never more than one run at a time: a run that starts while an earlier run of this workflow is
+  # still going does nothing. (A workflow-level `concurrency` group would queue the run instead.)
+  guard:
+    name: Skip if a previous run is still going
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read # list this workflow's runs
+    outputs:
+      proceed: ${{ steps.check.outputs.proceed }}
+    steps:
+      - name: Look for an earlier run that is still going
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          workflow_file="${GITHUB_WORKFLOW_REF%%@*}"
+          workflow_file="${workflow_file##*/}"
+          api="repos/${GITHUB_REPOSITORY}/actions"
+          started_at="$(gh api "${api}/runs/${GITHUB_RUN_ID}" --jq '.run_started_at')"
+
+          # Every run of this workflow that has not finished yet. One listing rather than one per
+          # status, so that a run changing status cannot slip between two queries. It covers the
+          # newest 100 runs, which is days of history at this cadence.
+          unfinished="${RUNNER_TEMP}/unfinished-runs.jsonl"
+          gh api "${api}/workflows/${workflow_file}/runs?per_page=100" \
+            --jq '.workflow_runs[] | select(.status != "completed")' > "$unfinished"
+
+          # Keep the ones that started before this run. When two runs start in the same second, the
+          # lower run id counts as earlier, so exactly one of them proceeds.
+          earlier="$(jq -r --arg started "$started_at" --argjson id "$GITHUB_RUN_ID" '
+            select(.id != $id)
+            | select(.run_started_at < $started or (.run_started_at == $started and .id < $id))
+            | "\(.html_url) (\(.status), started \(.run_started_at))"' "$unfinished" | sort -u)"
+
+          if [ -n "$earlier" ]; then
+            echo "proceed=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Skipped: an earlier run of this workflow is still going."
+            {
+              echo "### Skipped"
+              echo "An earlier run of this workflow is still going:"
+              printf '%s\n' "$earlier" | sed 's/^/- /'
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "proceed=true" >> "$GITHUB_OUTPUT"
+          fi
+
   iterate:
+    needs: guard
+    if: needs.guard.outputs.proceed == 'true'
+    # Backstop for the guard: even a race can never run two iterations at once. "Re-run failed
+    # jobs" does not repeat the guard, so such a re-run waits its turn here instead of skipping;
+    # use "Run workflow" to retry.
+    concurrency:
+      group: make-interesting
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
