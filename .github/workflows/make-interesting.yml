@@ -87,8 +87,12 @@ jobs:
           npm install --global --ignore-scripts "@github/copilot-linux-x64@${COPILOT_CLI_VERSION}"
           copilot-linux-x64 --version
 
+      # No credentials are left in the checkout: the model's answer is processed here, and its
+      # page is opened in a browser for the screenshot. Only the last step is given the token.
       - name: Checkout
         uses: actions/checkout@v5
+        with:
+          persist-credentials: false
 
       - name: Ask a random AI model to make the website more interesting
         id: ai
@@ -116,14 +120,42 @@ jobs:
           test -f site/index.html || { echo "::error::site/index.html is missing"; exit 1; }
           test -f site/error.html || { echo "::error::site/error.html is missing"; exit 1; }
 
+      # One screenshot per run, of the site as this run leaves it: screenshots/YYYYMMDD-HHMMZ.jpg,
+      # in UTC. The workflow takes it; the model still cannot write outside /site. A run whose
+      # screenshot fails keeps its change to the site and says so with a warning.
+      - name: Save a screenshot of the site
+        id: screenshot
+        continue-on-error: true
+        run: |
+          file="screenshots/$(date -u +%Y%m%d-%H%MZ).jpg"
+          python3 .github/scripts/screenshot.py site "$file"
+          echo "file=$file" >> "$GITHUB_OUTPUT"
+
+      - name: Warn if there is no screenshot
+        if: steps.screenshot.outcome == 'failure'
+        run: echo "::warning::This run has no screenshot. See the step \"Save a screenshot of the site\"."
+
+      - name: Ensure only /site and a screenshot were added
+        run: |
+          outside="$(git status --porcelain --untracked-files=all -- . ':(exclude)site' ':(exclude)screenshots')"
+          odd="$(git status --porcelain --untracked-files=all -- screenshots \
+            | grep -v -E '^(\?\?| M|A ) screenshots/[0-9]{8}-[0-9]{4}Z\.jpg$' || true)"
+          if [ -n "$outside$odd" ]; then
+            echo "::error::Only /site and one screenshots/YYYYMMDD-HHMMZ.jpg may change:"
+            echo "$outside$odd"
+            exit 1
+          fi
+
       # Nothing here deploys. Once this workflow finishes, the main-branch pipeline in pages.yml
       # tests the new commit and deploys it.
       - name: Commit and push
         env:
           MODEL: ${{ steps.ai.outputs.model }}
           SUMMARY: ${{ steps.ai.outputs.summary }}
+          SCREENSHOT: ${{ steps.screenshot.outputs.file }}
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
-          git add -A -- site
+          git add -A -- site screenshots
           if git diff --cached --quiet; then
             echo "No changes to commit."
             exit 0
@@ -132,9 +164,11 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git commit -m "Make the website more interesting: ${SUMMARY}" -m "Model: ${MODEL}"
           # The branch may have moved while the model was thinking: rebase the commit and try again.
+          # The token is given to this one command; it was never written into the checkout.
+          remote="https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
           pushed=false
           for attempt in 1 2 3; do
-            if git push origin "HEAD:${GITHUB_REF_NAME}"; then
+            if git push "$remote" "HEAD:${GITHUB_REF_NAME}"; then
               pushed=true
               break
             fi
@@ -152,4 +186,5 @@ jobs:
             echo "### Made the website more interesting"
             echo "- **Model:** \`${MODEL}\`"
             echo "- **Change:** \`${SUMMARY}\`"
+            echo "- **Screenshot:** \`${SCREENSHOT:-none}\`"
           } >> "$GITHUB_STEP_SUMMARY"
