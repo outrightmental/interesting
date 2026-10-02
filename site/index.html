@@ -6,32 +6,238 @@
   <title>interesting</title>
   <meta name="description" content="Recursively iterate the most interesting possible website.">
   <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0b0b10;
+      --fg: #f2f2f2;
+      --muted: rgba(242, 242, 242, 0.72);
+      --card: rgba(11, 11, 16, 0.62);
+      --accent: #8bd3ff;
+    }
+
+    * { box-sizing: border-box; }
     html, body { margin: 0; height: 100%; }
+
     body {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background: #0b0b10;
-      color: #f2f2f2;
+      overflow: hidden;
+      display: grid;
+      place-items: center;
+      background: var(--bg);
+      color: var(--fg);
       font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
       text-align: center;
+      transition: filter 500ms ease;
     }
-    header.masthead h1 {
+
+    body.prism {
+      filter: hue-rotate(160deg) saturate(1.25);
+    }
+
+    #sky {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 0;
+      display: block;
+    }
+
+    main {
+      position: relative;
+      z-index: 1;
+      width: min(92vw, 56rem);
+      padding: clamp(1.25rem, 2.4vw, 2rem);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 1rem;
+      background: var(--card);
+      backdrop-filter: blur(6px);
+      box-shadow: 0 16px 48px rgba(0, 0, 0, 0.35);
+    }
+
+    h1 {
       margin: 0;
       font-size: clamp(3rem, 12vw, 9rem);
       letter-spacing: -0.04em;
+      line-height: 0.95;
     }
-    header.masthead p {
-      margin: 0.5rem 0 0;
-      opacity: 0.7;
-      font-size: clamp(1rem, 2.5vw, 1.5rem);
+
+    .tag {
+      margin: 0.7rem 0 1.1rem;
+      opacity: 0.8;
+      font-size: clamp(1rem, 2.5vw, 1.4rem);
+    }
+
+    #mantra {
+      margin: 0 auto;
+      min-height: 3.2em;
+      max-width: 40ch;
+      font-size: clamp(1rem, 2.2vw, 1.3rem);
+      line-height: 1.4;
+      color: var(--accent);
+      text-wrap: balance;
+    }
+
+    .controls {
+      margin-top: 1rem;
+      display: grid;
+      gap: 0.65rem;
+      justify-items: center;
+    }
+
+    button {
+      border: 1px solid rgba(255, 255, 255, 0.35);
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--fg);
+      padding: 0.55rem 1rem;
+      font: inherit;
+      cursor: pointer;
+      transition: background 180ms ease, transform 180ms ease;
+    }
+
+    button:hover,
+    button:focus-visible {
+      background: rgba(255, 255, 255, 0.16);
+      transform: translateY(-1px);
+      outline: none;
+    }
+
+    #hint {
+      font-size: 0.9rem;
+      opacity: 0.74;
     }
   </style>
 </head>
 <body>
-  <header class="masthead">
+  <canvas id="sky" aria-hidden="true"></canvas>
+  <main>
     <h1>interesting</h1>
-    <p>recursively iterate the most interesting possible website</p>
-  </header>
+    <p class="tag">recursively iterate the most interesting possible website</p>
+    <p id="mantra" aria-live="polite"></p>
+    <div class="controls">
+      <button id="remix" type="button">remix thought</button>
+      <span id="hint">click anywhere for a ripple · type "interesting" for a surprise</span>
+    </div>
+  </main>
+
+  <script>
+    const canvas = document.getElementById("sky");
+    const ctx = canvas.getContext("2d");
+    const mantra = document.getElementById("mantra");
+    const hint = document.getElementById("hint");
+    const remixButton = document.getElementById("remix");
+
+    const stars = [];
+    const ripples = [];
+
+    const openers = ["Tonight", "Somewhere", "Quietly", "In this moment", "Beyond the scroll", "Between heartbeats", "In the next second", "Under this pixel sky"];
+    const subjects = ["a small comet", "an unfinished idea", "a pocket universe", "a curious algorithm", "a paper lantern", "a wandering melody", "a silver moth", "an electric seed"];
+    const actions = ["learns to glow", "changes its mind", "maps new constellations", "waits for your signal", "folds into a secret", "drifts into focus", "collects tiny wonders", "writes itself a beginning"];
+    const places = ["inside the dark", "behind the obvious", "near the horizon", "at the edge of maybe", "inside this tab", "where questions shimmer", "between two clicks", "in the soft static"];
+
+    function pick(list) {
+      return list[Math.floor(Math.random() * list.length)];
+    }
+
+    function remixThought() {
+      mantra.textContent = pick(openers) + ", " + pick(subjects) + " " + pick(actions) + " " + pick(places) + ".";
+    }
+
+    function resize() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+      if (!stars.length) {
+        const count = Math.max(80, Math.floor((canvas.width * canvas.height) / 12000));
+        for (let i = 0; i < count; i++) {
+          stars.push({
+            x: Math.random() * canvas.width,
+            y: Math.random() * canvas.height,
+            r: Math.random() * 1.4 + 0.3,
+            s: Math.random() * 0.15 + 0.03,
+            t: Math.random() * Math.PI * 2
+          });
+        }
+      }
+    }
+
+    function addRipple(x, y) {
+      ripples.push({ x: x, y: y, r: 2, a: 0.8 });
+      if (ripples.length > 28) ripples.shift();
+    }
+
+    function drawBackground() {
+      const g = ctx.createRadialGradient(
+        canvas.width * 0.5,
+        canvas.height * 0.45,
+        0,
+        canvas.width * 0.5,
+        canvas.height * 0.5,
+        canvas.width * 0.9
+      );
+      g.addColorStop(0, "#15152a");
+      g.addColorStop(1, "#07070c");
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
+
+    function tick() {
+      drawBackground();
+
+      for (const star of stars) {
+        star.y += star.s;
+        if (star.y > canvas.height + 3) {
+          star.y = -3;
+          star.x = Math.random() * canvas.width;
+        }
+        star.t += 0.02;
+        const glow = 0.35 + (Math.sin(star.t) + 1) * 0.32;
+        ctx.beginPath();
+        ctx.fillStyle = "rgba(255,255,255," + glow.toFixed(3) + ")";
+        ctx.arc(star.x, star.y, star.r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      for (let i = ripples.length - 1; i >= 0; i--) {
+        const p = ripples[i];
+        p.r += 1.4;
+        p.a -= 0.012;
+        if (p.a <= 0) {
+          ripples.splice(i, 1);
+          continue;
+        }
+        ctx.beginPath();
+        ctx.strokeStyle = "rgba(139,211,255," + p.a.toFixed(3) + ")";
+        ctx.lineWidth = 1.5;
+        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+
+      requestAnimationFrame(tick);
+    }
+
+    remixButton.addEventListener("click", remixThought);
+    window.addEventListener("resize", resize);
+    window.addEventListener("pointerdown", function (event) {
+      addRipple(event.clientX, event.clientY);
+    });
+
+    let keyBuffer = "";
+    window.addEventListener("keydown", function (event) {
+      if (event.key.length === 1) {
+        keyBuffer = (keyBuffer + event.key.toLowerCase()).slice(-24);
+      }
+      if (keyBuffer.includes("interesting")) {
+        document.body.classList.toggle("prism");
+        hint.textContent = document.body.classList.contains("prism")
+          ? "prism mode unlocked · type \"interesting\" again to toggle"
+          : "click anywhere for a ripple · type \"interesting\" for a surprise";
+        keyBuffer = "";
+      }
+    });
+
+    resize();
+    remixThought();
+    tick();
+  </script>
 </body>
 </html>
