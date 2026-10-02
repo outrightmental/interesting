@@ -102,7 +102,7 @@ jobs:
           {
             echo "### Made the website more interesting"
             echo "- **Model:** \`${MODEL}\`"
-            echo "- **Change:** ${SUMMARY}"
+            echo "- **Change:** \`${SUMMARY}\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
   # Pushes made with GITHUB_TOKEN don't trigger other workflows, so deploy explicitly.

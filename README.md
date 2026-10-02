@@ -62,12 +62,14 @@ has no model in the pool, because Copilot only offers the Gemini Flash tier.
 - Actions must be allowed to push to the default branch (the daily commit uses `GITHUB_TOKEN`).
 - GitHub Copilot must accept the workflow's requests. Either of these works:
   - **Personal plan:** add a repository secret named `COPILOT_GITHUB_TOKEN` holding a fine-grained
-    personal access token with the account permission **Copilot Requests**. Usage is billed to that
-    user's Copilot plan.
-  - **Organization:** in the organization's *Settings → Copilot → Policies*, enable **Copilot CLI**
-    and **Allow use of Copilot CLI billed to the organization**. No secret is needed: the workflow's
-    own token is accepted through its `copilot-requests: write` permission, and usage is billed to
-    the organization.
+    personal access token (resource owner: your own account) with the account permission
+    **Copilot Requests**. Usage is billed to that user's Copilot plan.
+  - **Organization plan:** the organization needs a Copilot plan of its own. In its
+    *Settings → Copilot → Policies*, enable **Copilot CLI** and select **Allow use of Copilot CLI
+    billed to the organization**. No secret is needed then: the workflow's own token is accepted
+    through its `copilot-requests: write` permission, and usage is billed to the organization. The
+    policy alone is not enough: without an organization Copilot plan the token is still refused
+    with "Access denied by policy settings".
 
 ### Development
 
