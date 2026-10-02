@@ -1,44 +1,103 @@
 #!/usr/bin/env python3
 """Make the website more interesting.
 
-Picks a random model from GitHub Models, shows it the current contents of the
+Picks a random model from GitHub Copilot, shows it the current contents of the
 /site folder, and asks it to make the website more interesting.
 
-The model is silo'd: it has no tools and no shell access. It can only return a
-JSON document describing files to write or delete, and this script refuses any
-change whose path would land outside of the /site folder (or that touches a
-disallowed file type). The calling workflow additionally verifies that nothing
-outside /site was modified before committing.
+The model is reached through the GitHub Copilot CLI (`copilot`), which bills the
+GitHub Copilot subscription behind the token in COPILOT_GITHUB_TOKEN. (GitHub
+Models, which this script originally called, was retired on 2026-07-30.)
+
+The model is silo'd: the CLI is started in an empty directory with every tool
+disabled, so the model has no shell, no file access and no network access. It
+can only return a JSON document describing files to write or delete, and this
+script refuses any change whose path would land outside of the /site folder (or
+that touches a disallowed file type). The calling workflow additionally verifies
+that nothing outside /site was modified before committing.
 """
 
 import json
 import os
 import random
 import re
+import subprocess
 import sys
-import urllib.error
-import urllib.request
+import tempfile
 from pathlib import Path, PurePosixPath
 
 MISSION = "make the website more interesting"
 
-ENDPOINT = "https://models.github.ai/inference/chat/completions"
+COPILOT_BIN = os.environ.get("COPILOT_BIN", "copilot")
 
-# Chat models available via GitHub Models. One is picked at random each run.
+# Models available through GitHub Copilot CLI (`--model`). One is picked at
+# random each run. A model the account cannot use is skipped at run time.
 MODELS = [
-    "openai/gpt-4.1",
-    "openai/gpt-4.1-mini",
-    "openai/gpt-4o",
-    "openai/gpt-4o-mini",
-    "meta/Llama-4-Maverick-17B-128E-Instruct-FP8",
-    "meta/Llama-3.3-70B-Instruct",
-    "mistral-ai/mistral-medium-2505",
-    "mistral-ai/Codestral-2501",
-    "deepseek/DeepSeek-V3-0324",
-    "microsoft/Phi-4",
-    "cohere/cohere-command-a",
-    "xai/grok-3-mini",
+    "claude-fable-5.1",
+    "claude-fable-5",
+    "claude-opus-5.5",
+    "claude-opus-5",
+    "claude-opus-4.8",
+    "claude-opus-4.7",
+    "claude-sonnet-5.5",
+    "claude-sonnet-5",
+    "claude-sonnet-4.6",
+    "claude-haiku-4.5",
+    "gpt-6.1-sol",
+    "gpt-6-sol",
+    "gpt-6-luna",
+    "gpt-6-astra",
+    "gpt-5.6-sol",
+    "gpt-5.6-terra",
+    "gpt-5.6-luna",
+    "gpt-5.5",
+    "gpt-5.4",
+    "gpt-5.4-mini",
+    "gpt-5.3-codex",
+    "gpt-5-mini",
+    "mai-code-1.1-flash",
+    "gemini-3.8-flash",
+    "gemini-3.7-flash",
+    "gemini-3.6-flash",
+    "gemini-3.5-flash",
+    "grok-4.6",
+    "grok-4.5",
+    "kimi-k3",
+    "kimi-k2.7-code",
 ]
+
+# How the Copilot CLI is locked down. The model gets no tools at all:
+#   --available-tools=none  allowlist that matches no tool, so none are exposed
+#   --deny-tool=...         belt and braces: denial beats any allow rule
+#   no --allow-* flag       non-interactive mode refuses anything needing approval
+# and it is started in an empty directory, with nothing to read.
+COPILOT_FLAGS = [
+    "--output-format", "json",  # JSONL events; plain text output is re-wrapped for a terminal
+    "--stream", "off",
+    "--no-color",
+    "--log-level", "error",
+    "--no-auto-update",
+    "--no-custom-instructions",
+    "--no-ask-user",
+    "--no-remote",
+    "--disable-builtin-mcps",
+    "--disallow-temp-dir",
+    "--available-tools=none",
+    "--deny-tool=shell",
+    "--deny-tool=write",
+    "--deny-tool=url",
+    "--secret-env-vars=COPILOT_GITHUB_TOKEN,GH_TOKEN,GITHUB_TOKEN",
+]
+MODEL_TIMEOUT_SECONDS = 480
+
+AUTH_HELP = (
+    "GitHub Copilot refused the request, so no model can run.\n"
+    "Fix it one of two ways:\n"
+    "  1. Add a repository secret named COPILOT_GITHUB_TOKEN holding a fine-grained personal\n"
+    "     access token that has the \"Copilot Requests\" permission (usage is billed to that\n"
+    "     user's Copilot plan), or\n"
+    "  2. Enable GitHub Copilot (including the Copilot CLI policy) for the organization that\n"
+    "     owns this repository, so the workflow's own token (copilot-requests: write) is accepted."
+)
 
 ALLOWED_EXTENSIONS = {
     ".html", ".css", ".js", ".mjs", ".svg", ".txt", ".json", ".md", ".xml",
@@ -47,7 +106,7 @@ ALLOWED_EXTENSIONS = {
 PROTECTED_FILES = {"index.html", "error.html"}  # may be rewritten, never deleted
 MAX_FILE_BYTES = 200_000
 MAX_CHANGES = 20
-PROMPT_BUDGET_CHARS = 24_000  # keep within GitHub Models input token limits
+PROMPT_BUDGET_CHARS = 80_000  # keep the prompt comfortably inside every model's context window
 MAX_ATTEMPTS = 3
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -56,6 +115,14 @@ SITE_DIR = Path(os.environ.get("SITE_DIR", REPO_ROOT / "site")).resolve()
 
 class RejectedChange(Exception):
     pass
+
+
+class ModelError(Exception):
+    """This model could not produce an answer; another model may still work."""
+
+
+class CopilotAuthError(Exception):
+    """Copilot rejected the credentials or policy; no model will work."""
 
 
 def safe_site_path(raw):
@@ -85,7 +152,7 @@ def read_site():
     return files
 
 
-def build_messages(files):
+def build_prompt(files):
     system = (
         "You are the autonomous curator of a static website hosted on GitHub Pages. "
         f"Your mission, every single day: {MISSION}.\n\n"
@@ -116,25 +183,54 @@ def build_messages(files):
     if omitted:
         user += "\n\nOther existing files (content omitted for size): " + ", ".join(omitted)
     user += f"\n\nToday's mission: {MISSION}. Respond with the JSON object only."
-    return [{"role": "system", "content": system}, {"role": "user", "content": user}]
+    return system + "\n\n" + user
 
 
-def call_model(model, messages, token):
-    body = json.dumps({"model": model, "messages": messages}).encode()
-    req = urllib.request.Request(
-        ENDPOINT,
-        data=body,
-        method="POST",
-        headers={
-            "Accept": "application/vnd.github+json",
-            "Authorization": "Bearer " + token,
-            "Content-Type": "application/json",
-            "X-GitHub-Api-Version": "2022-11-28",
-        },
-    )
-    with urllib.request.urlopen(req, timeout=300) as resp:
-        data = json.load(resp)
-    return data["choices"][0]["message"]["content"]
+def call_model(model, prompt):
+    """Ask one model for its answer through the Copilot CLI and return the text."""
+    cmd = [COPILOT_BIN, "--model", model, *COPILOT_FLAGS]
+    env = dict(os.environ, NO_COLOR="1")
+    try:
+        with tempfile.TemporaryDirectory(prefix="copilot-silo-") as empty_dir:
+            proc = subprocess.run(
+                cmd,
+                input=prompt,  # the prompt goes over stdin: it is far too long for argv
+                capture_output=True,
+                text=True,
+                cwd=empty_dir,
+                env=env,
+                timeout=MODEL_TIMEOUT_SECONDS,
+            )
+    except FileNotFoundError:
+        sys.exit(f"GitHub Copilot CLI not found ({COPILOT_BIN!r}). Install it with: npm install -g @github/copilot")
+    except subprocess.TimeoutExpired:
+        raise ModelError(f"no answer within {MODEL_TIMEOUT_SECONDS}s") from None
+    if proc.returncode != 0:
+        detail = (proc.stderr or proc.stdout).strip()
+        if re.search(r"authentication failed|no authentication information|access denied by policy", detail, re.I):
+            raise CopilotAuthError(detail)
+        raise ModelError(f"copilot exited with status {proc.returncode}: {detail[:500]}")
+    answer = extract_answer(proc.stdout)
+    if not answer:
+        raise ModelError("empty response")
+    return answer
+
+
+def extract_answer(jsonl):
+    """Return the model's last non-empty message from the Copilot CLI's JSONL event stream."""
+    answer = ""
+    for line in jsonl.splitlines():
+        try:
+            event = json.loads(line)
+        except ValueError:
+            continue
+        if not isinstance(event, dict) or event.get("type") != "assistant.message":
+            continue
+        data = event.get("data")
+        content = data.get("content") if isinstance(data, dict) else None
+        if isinstance(content, str) and content.strip():
+            answer = content
+    return answer
 
 
 def parse_response(text):
@@ -142,10 +238,31 @@ def parse_response(text):
     start, end = text.find("{"), text.rfind("}")
     if start == -1 or end <= start:
         raise ValueError("no JSON object in model response")
-    plan = json.loads(text[start:end + 1])
+    plan = loads_lenient(text[start:end + 1])
     if not isinstance(plan, dict):
         raise ValueError("model response is not a JSON object")
     return plan
+
+
+VALID_JSON_ESCAPES = set('"\\/bfnrtu')
+
+
+def loads_lenient(text):
+    r"""json.loads that forgives the two slips models make when quoting code inside JSON strings.
+
+    Raw newlines and tabs inside a string are accepted, and a backslash that does not start a
+    valid JSON escape (the \' or \d of embedded JavaScript) is taken as a literal backslash.
+    """
+    try:
+        return json.loads(text, strict=False)
+    except ValueError:
+        repaired = re.sub(
+            r"\\(.)",
+            lambda m: m.group(0) if m.group(1) in VALID_JSON_ESCAPES else "\\" + m.group(0),
+            text,
+            flags=re.S,
+        )
+        return json.loads(repaired, strict=False)
 
 
 def validate_plan(plan):
@@ -197,26 +314,23 @@ def set_output(name, value):
 
 
 def main():
-    token = os.environ.get("GITHUB_TOKEN")
-    if not token:
-        sys.exit("GITHUB_TOKEN is required")
     if not SITE_DIR.is_dir():
         sys.exit(f"site directory not found: {SITE_DIR}")
 
     requested = (os.environ.get("MODEL") or "").strip()
     candidates = [requested] if requested else random.sample(MODELS, k=min(MAX_ATTEMPTS, len(MODELS)))
-    messages = build_messages(read_site())
+    prompt = build_prompt(read_site())
 
     for model in candidates:
-        print(f"Mission: {MISSION}\nModel:   {model}")
+        print(f"Mission: {MISSION}\nModel:   {model}", flush=True)
         try:
-            plan = parse_response(call_model(model, messages, token))
+            plan = parse_response(call_model(model, prompt))
             ops = validate_plan(plan)
-        except urllib.error.HTTPError as err:
-            print(f"::warning::{model} failed: HTTP {err.code} {err.read()[:500]!r}")
-            continue
-        except (urllib.error.URLError, TimeoutError, KeyError, IndexError, ValueError, RejectedChange) as err:
-            print(f"::warning::{model} failed: {err}")
+        except CopilotAuthError as err:
+            print(f"::error::GitHub Copilot authentication failed: {' '.join(str(err).split())[:300]}")
+            sys.exit(AUTH_HELP)
+        except (ModelError, ValueError, RejectedChange) as err:
+            print(f"::warning::{model} failed: {' '.join(str(err).split())[:500]}")
             continue
         apply_ops(ops)
         summary_text = str(plan.get("summary") or "").strip()

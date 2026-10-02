@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       model:
-        description: "GitHub Models model ID to use (leave blank to pick one at random)"
+        description: "GitHub Copilot model ID to use (leave blank to pick one at random)"
         required: false
         default: ""
 
@@ -16,23 +16,34 @@ concurrency:
   group: make-interesting
   cancel-in-progress: false
 
+env:
+  COPILOT_CLI_VERSION: "1.0.91" # pinned: the silo relies on this version's flags and output format
+
 jobs:
   iterate:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     permissions:
       contents: write # commit changes to /site
-      models: read # call GitHub Models with this repository's GitHub AI subscription
+      copilot-requests: write # call GitHub Copilot with the workflow's own token
     outputs:
       changed: ${{ steps.commit.outputs.changed }}
     steps:
+      # Installed before checkout, so the install never runs next to the repository's credentials.
+      - name: Install GitHub Copilot CLI
+        run: npm install --global "@github/copilot@${COPILOT_CLI_VERSION}"
+
       - name: Checkout
         uses: actions/checkout@v5
 
       - name: Ask a random AI model to make the website more interesting
         id: ai
         env:
-          GITHUB_TOKEN: ${{ github.token }}
+          # A fine-grained PAT with the "Copilot Requests" permission, if one is configured (billed
+          # to that user's Copilot plan). Otherwise the workflow's own token, which Copilot accepts
+          # once the organization allows Copilot CLI usage billed to the organization.
+          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN || github.token }}
+          S2STOKENS: ${{ secrets.COPILOT_GITHUB_TOKEN == '' && 'true' || '' }} # lets the CLI use an Actions token
           MODEL: ${{ inputs.model }}
         run: python3 .github/scripts/make_interesting.py
 
