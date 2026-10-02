@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang='en'>
+<head>
+  <meta charset='utf-8'>
+  <meta name='viewport' content='width=device-width, initial-scale=1'>
+  <title>sky archive oracle · interesting</title>
+  <meta name='description' content='Spin your saved constellation through a rune wheel and collect tiny omen readings.'>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #080b16;
+      --bg2: #1a2142;
+      --fg: #eef3ff;
+      --muted: #a8b3d6;
+      --line: rgba(255,255,255,0.18);
+      --panel: rgba(10, 13, 25, 0.72);
+      --accent: #9ec8ff;
+      --accent2: #ffe2a0;
+      --good: #b8ffd6;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      min-height: 100%;
+      font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      color: var(--fg);
+      background: radial-gradient(circle at 18% 5%, #25305c 0%, var(--bg) 58%);
+    }
+
+    body {
+      display: grid;
+      place-items: center;
+      padding: 1rem;
+    }
+
+    main {
+      width: min(920px, 96vw);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: var(--panel);
+      backdrop-filter: blur(8px);
+      box-shadow: 0 16px 40px rgba(0,0,0,0.35);
+      padding: 1rem;
+    }
+
+    h1 {
+      margin: 0;
+      line-height: 0.95;
+      letter-spacing: -0.03em;
+      font-size: clamp(1.9rem, 6vw, 3.4rem);
+    }
+
+    .tagline {
+      margin: 0.45rem 0 0.9rem;
+      color: var(--muted);
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 1.1fr 0.9fr;
+      gap: 0.85rem;
+    }
+
+    #oracle-canvas {
+      width: 100%;
+      height: auto;
+      display: block;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.15);
+      background: #060913;
+    }
+
+    .panel {
+      border: 1px solid rgba(255,255,255,0.14);
+      border-radius: 12px;
+      background: rgba(8, 11, 21, 0.54);
+      padding: 0.8rem;
+    }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin: 0.55rem 0;
+    }
+
+    button, a.action {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: rgba(255,255,255,0.07);
+      color: var(--fg);
+      text-decoration: none;
+      padding: 0.48rem 0.88rem;
+      font: inherit;
+      cursor: pointer;
+    }
+
+    button:hover,
+    button:focus-visible,
+    a.action:hover,
+    a.action:focus-visible {
+      outline: none;
+      transform: translateY(-1px);
+      border-color: rgba(183, 216, 255, 0.78);
+      background: rgba(150, 195, 255, 0.16);
+    }
+
+    #spin[aria-busy='true'] {
+      background: rgba(158, 200, 255, 0.23);
+      border-color: rgba(194, 223, 255, 0.85);
+      box-shadow: 0 0 12px rgba(145, 192, 255, 0.35) inset;
+    }
+
+    #status {
+      margin: 0.4rem 0 0;
+      min-height: 1.5em;
+      color: var(--accent2);
+      font-size: 0.95rem;
+    }
+
+    #omen {
+      margin: 0.75rem 0 0;
+      min-height: 7.3em;
+      white-space: pre-wrap;
+      border: 1px solid rgba(255,255,255,0.14);
+      border-radius: 10px;
+      background: rgba(6, 9, 18, 0.65);
+      color: #e8f1ff;
+      font-size: 0.9rem;
+      line-height: 1.43;
+      padding: 0.7rem;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+    }
+
+    .history {
+      margin-top: 0.8rem;
+      border: 1px solid rgba(255,255,255,0.14);
+      border-radius: 10px;
+      background: rgba(7, 10, 20, 0.5);
+      padding: 0.68rem;
+    }
+
+    .history p {
+      margin: 0;
+      color: #d7e5ff;
+      font-size: 0.9rem;
+    }
+
+    #history-list {
+      margin: 0.5rem 0 0;
+      padding-left: 1.1rem;
+      color: #bed3ff;
+      font-size: 0.86rem;
+      line-height: 1.4;
+      max-height: 10.5rem;
+      overflow: auto;
+    }
+
+    #history-list li { margin-bottom: 0.38rem; }
+
+    .empty {
+      color: var(--muted);
+      font-size: 0.84rem;
+      margin-top: 0.45rem;
+    }
+
+    .footer {
+      margin-top: 0.8rem;
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      color: var(--muted);
+      font-size: 0.86rem;
+    }
+
+    @media (max-width: 780px) {
+      .layout { grid-template-columns: 1fr; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      button, a.action { transition: none; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>sky archive oracle</h1>
+    <p class='tagline'>Spin your saved constellation through a rune wheel and collect tiny omen readings.</p>
+
+    <div class='layout'>
+      <canvas id='oracle-canvas' width='620' height='340' aria-label='Animated rune wheel based on your constellation'></canvas>
+
+      <section class='panel'>
+        <p style='margin:0;color:#d7e4ff;'>This page reads the same saved stars from the main constellation page.</p>
+        <div class='controls'>
+          <button id='load' type='button'>refresh saved sky</button>
+          <button id='spin' type='button' aria-busy='false'>spin omen wheel</button>
+          <button id='remix' type='button'>remix runes</button>
+          <button id='clear-history' type='button'>clear omens</button>
+        </div>
+        <p id='status' aria-live='polite'>Loading archive memory...</p>
+        <pre id='omen' aria-live='polite'>Awaiting spin.
+Load your saved sky, then spin to ask for a tiny omen.</pre>
+
+        <section class='history' aria-label='Omen history'>
+          <p>Recent omens</p>
+          <ol id='history-list'></ol>
+          <p id='history-empty' class='empty'>No omens yet. Spin once to seed the archive.</p>
+        </section>
+      </section>
+    </div>
+
+    <p class='footer'>
+      <a class='action' href='index.html'>back to constellation</a>
+      <a class='action' href='constellation-diary.html'>open constellation diary</a>
+      <a class='action' href='error.html'>visit observatory 404</a>
+    </p>
+  </main>
+
+  <script>
+    (function () {
+      var STORAGE_KEY = 'interesting_wish_constellation_v1';
+      var OMEN_KEY = 'interesting_sky_archive_omens_v1';
+      var MAX_OMENS = 8;
+
+      var loadBtn = document.getElementById('load');
+      var spinBtn = document.getElementById('spin');
+      var remixBtn = document.getElementById('remix');
+      var clearHistoryBtn = document.getElementById('clear-history');
+      var statusEl = document.getElementById('status');
+      var omenEl = document.getElementById('omen');
+      var historyList = document.getElementById('history-list');
+      var historyEmpty = document.getElementById('history-empty');
+      var canvas = document.getElementById('oracle-canvas');
+      var ctx = canvas.getContext('2d');
+
+      var stars = [];
+      var omens = [];
+      var glyphSetIndex = 0;
+      var wheelAngle = 0;
+      var spinVelocity = 0;
+      var spinning = false;
+      var sparkle = 0;
+      var t = 0;
+      var lastFrame = 0;
+
+      var glyphSets = [
+        ['☉', '☾', '✦', '⟁', '◌', '◉', '✶', '⟡'],
+        ['ᚠ', 'ᚢ', 'ᚱ', 'ᚲ', 'ᚷ', 'ᛃ', 'ᛇ', 'ᛉ'],
+        ['◈', '◇', '○', '✧', '✷', '⟢', '⟣', '⬡'],
+        ['☌', '☍', '☿', '♁', '♄', '♆', '♇', '✹']
+      ];
+
+      function clamp(v, min, max) {
+        return Math.max(min, Math.min(max, v));
+      }
+
+      function dayStamp(ms) {
+        var d = new Date(ms || Date.now());
+        var y = d.getFullYear();
+        var m = String(d.getMonth() + 1).padStart(2, '0');
+        var day = String(d.getDate()).padStart(2, '0');
+        var hh = String(d.getHours()).padStart(2, '0');
+        var mm = String(d.getMinutes()).padStart(2, '0');
+        return y + '-' + m + '-' + day + ' ' + hh + ':' + mm;
+      }
+
+      function setSpinButton() {
+        spinBtn.textContent = spinning ? 'spinning...' : 'spin omen wheel';
+        spinBtn.setAttribute('aria-busy', spinning ? 'true' : 'false');
+      }
+
+      function cloneStars(arr) {
+        return arr.filter(function (s) {
+          return s && typeof s.x === 'number' && typeof s.y === 'number' && typeof s.text === 'string';
+        }).map(function (s) {
+          return {
+            x: Number(clamp(s.x, 0, 100).toFixed(2)),
+            y: Number(clamp(s.y, 0, 100).toFixed(2)),
+            text: s.text
+          };
+        });
+      }
+
+      function loadStars() {
+        var raw = null;
+        try {
+          raw = localStorage.getItem(STORAGE_KEY);
+        } catch (e) {
+          stars = [];
+          statusEl.textContent = 'Local storage is unavailable here.';
+          return;
+        }
+
+        if (!raw) {
+          stars = [];
+          statusEl.textContent = 'No saved constellation found. Make one on the main page first.';
+          return;
+        }
+
+        try {
+          var parsed = JSON.parse(raw);
+          if (!Array.isArray(parsed)) throw new Error('invalid');
+          stars = cloneStars(parsed).slice(0, 180);
+          if (!stars.length) {
+            statusEl.textContent = 'A sky file exists, but no readable stars were found.';
+            return;
+          }
+          statusEl.textContent = 'Archive synced: ' + stars.length + ' star' + (stars.length === 1 ? '' : 's') + ' loaded.';
+        } catch (e2) {
+          stars = [];
+          statusEl.textContent = 'Saved constellation data is unreadable. Return home and remake it.';
+        }
+      }
+
+      function hashConstellation() {
+        var h = 2166136261;
+        for (var i = 0; i < stars.length; i++) {
+          var s = stars[i];
+          h ^= Math.round(s.x * 10);
+          h += (h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24);
+          h ^= Math.round(s.y * 10);
+          h += (h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24);
+          for (var c = 0; c < s.text.length; c++) {
+            h ^= s.text.charCodeAt(c);
+            h += (h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24);
+          }
+        }
+        return h >>> 0;
+      }
+
+      function summary() {
+        var cx = 0;
+        var cy = 0;
+        for (var i = 0; i < stars.length; i++) {
+          cx += stars[i].x;
+          cy += stars[i].y;
+        }
+        cx /= stars.length || 1;
+        cy /= stars.length || 1;
+
+        var spread = 0;
+        for (var j = 0; j < stars.length; j++) {
+          var dx = stars[j].x - cx;
+          var dy = stars[j].y - cy;
+          spread += Math.sqrt(dx * dx + dy * dy);
+        }
+        spread /= stars.length || 1;
+
+        return { cx: cx, cy: cy, spread: spread };
+      }
+
+      function pick(arr, seed, step) {
+        return arr[Math.abs(seed + step * 29) % arr.length];
+      }
+
+      function buildOmen() {
+        var s = summary();
+        var h = hashConstellation();
+        var zones = [
+          'northwest archive',
+          'northeast archive',
+          'southwest archive',
+          'southeast archive'
+        ];
+        var zone = zones[(s.cy < 50 ? 0 : 2) + (s.cx < 50 ? 0 : 1)];
+        var spreadWord = s.spread < 12 ? 'tight' : (s.spread < 24 ? 'balanced' : 'wide');
+
+        var openers = [
+          'oracle reading:',
+          'sky archive result:',
+          'wheel transmission:',
+          'night relay:'
+        ];
+        var middles = [
+          'Your pattern favors momentum over perfection.',
+          'A small brave draft will unlock the next doorway.',
+          'Play first, polish second, publish third.',
+          'A tiny experiment is already enough to begin.',
+          'Your focus grows fastest when protected gently.'
+        ];
+        var closers = [
+          'Keep one promise to yourself before midnight.',
+          'Move one star tomorrow and ask again.',
+          'Name the next step in seven words and do it.',
+          'Let curiosity lead for ten uninterrupted minutes.',
+          'Share one unfinished idea with someone kind.'
+        ];
+
+        var rune = glyphSets[glyphSetIndex][h % glyphSets[glyphSetIndex].length];
+        var title = pick(openers, h, 1) + ' ' + rune;
+        var body1 = 'Constellation state: ' + stars.length + ' stars, ' + spreadWord + ' spread, centered near ' + zone + '.';
+        var body2 = pick(middles, h, 2);
+        var body3 = pick(closers, h, 3);
+        return title + '\n' + body1 + '\n' + body2 + '\n' + body3;
+      }
+
+      function loadOmens() {
+        var raw = null;
+        try {
+          raw = localStorage.getItem(OMEN_KEY);
+        } catch (e) {
+          omens = [];
+          renderOmens();
+          return;
+        }
+
+        if (!raw) {
+          omens = [];
+          renderOmens();
+          return;
+        }
+
+        try {
+          var parsed = JSON.parse(raw);
+          if (!Array.isArray(parsed)) throw new Error('invalid');
+          omens = parsed.filter(function (item) {
+            return item && typeof item.text === 'string' && typeof item.time === 'number';
+          }).slice(0, MAX_OMENS);
+        } catch (e2) {
+          omens = [];
+        }
+        renderOmens();
+      }
+
+      function saveOmens() {
+        try {
+          localStorage.setItem(OMEN_KEY, JSON.stringify(omens));
+        } catch (e) {
+          statusEl.textContent = 'Could not save omen history in this browser context.';
+        }
+      }
+
+      function renderOmens() {
+        while (historyList.firstChild) {
+          historyList.removeChild(historyList.firstChild);
+        }
+
+        if (!omens.length) {
+          historyEmpty.style.display = 'block';
+          return;
+        }
+
+        historyEmpty.style.display = 'none';
+        for (var i = 0; i < omens.length; i++) {
+          var item = document.createElement('li');
+          item.textContent = dayStamp(omens[i].time) + ' · ' + omens[i].title;
+          historyList.appendChild(item);
+        }
+      }
+
+      function spinOmen() {
+        if (spinning) return;
+        if (!stars.length) {
+          statusEl.textContent = 'No stars loaded yet. Refresh after creating a constellation.';
+          return;
+        }
+
+        spinning = true;
+        sparkle = 1;
+        setSpinButton();
+        spinVelocity = 0.55 + Math.random() * 0.22;
+        statusEl.textContent = 'Wheel spinning... listening for a clear signal.';
+      }
+
+      function resolveSpin() {
+        var text = buildOmen();
+        omenEl.textContent = text + '\n\narchive stamp: ' + dayStamp();
+
+        var firstLine = text.split('\n')[0];
+        omens.unshift({
+          time: Date.now(),
+          title: firstLine.replace(':', ''),
+          text: text
+        });
+        if (omens.length > MAX_OMENS) omens = omens.slice(0, MAX_OMENS);
+        saveOmens();
+        renderOmens();
+
+        statusEl.textContent = '✦ Omen archived. Spin again after moving stars for a different result.';
+      }
+
+      function remixRunes() {
+        glyphSetIndex = (glyphSetIndex + 1) % glyphSets.length;
+        statusEl.textContent = 'Rune set remixed. Same sky, different alphabet.';
+      }
+
+      function clearHistory() {
+        omens = [];
+        saveOmens();
+        renderOmens();
+        statusEl.textContent = 'Omen archive cleared.';
+      }
+
+      function drawBackground(w, h) {
+        var grad = ctx.createLinearGradient(0, 0, 0, h);
+        grad.addColorStop(0, '#0e1430');
+        grad.addColorStop(1, '#060913');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, w, h);
+
+        for (var i = 0; i < 48; i++) {
+          var x = (i * 119.3 + t * 13) % w;
+          var y = (i * 73.1 + t * 7) % h;
+          var a = 0.08 + (i % 6) * 0.025;
+          ctx.beginPath();
+          ctx.fillStyle = 'rgba(181, 208, 255, ' + a.toFixed(3) + ')';
+          ctx.arc(x, y, 1.05, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+
+      function drawWheel() {
+        var w = canvas.width;
+        var h = canvas.height;
+        var cx = w * 0.5;
+        var cy = h * 0.5;
+        var ringR = Math.min(w, h) * 0.32;
+
+        drawBackground(w, h);
+
+        ctx.beginPath();
+        ctx.strokeStyle = 'rgba(148, 189, 255, 0.4)';
+        ctx.lineWidth = 2;
+        ctx.arc(cx, cy, ringR, 0, Math.PI * 2);
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.strokeStyle = 'rgba(255, 225, 160, 0.34)';
+        ctx.lineWidth = 1;
+        ctx.arc(cx, cy, ringR * 0.72, 0, Math.PI * 2);
+        ctx.stroke();
+
+        var glyphs = glyphSets[glyphSetIndex];
+        for (var i = 0; i < glyphs.length; i++) {
+          var a = wheelAngle + (i / glyphs.length) * Math.PI * 2;
+          var gx = cx + Math.cos(a) * ringR;
+          var gy = cy + Math.sin(a) * ringR;
+          ctx.fillStyle = i % 2 ? '#e6f0ff' : '#ffe7b7';
+          ctx.font = '600 22px system-ui, -apple-system, Segoe UI, sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(glyphs[i], gx, gy);
+        }
+
+        ctx.beginPath();
+        ctx.moveTo(cx, cy - ringR - 24);
+        ctx.lineTo(cx - 8, cy - ringR - 8);
+        ctx.lineTo(cx + 8, cy - ringR - 8);
+        ctx.closePath();
+        ctx.fillStyle = 'rgba(255, 232, 177, 0.95)';
+        ctx.fill();
+
+        if (!stars.length) {
+          ctx.fillStyle = 'rgba(223, 236, 255, 0.85)';
+          ctx.font = '13px ui-monospace, SFMono-Regular, Menlo, monospace';
+          ctx.textAlign = 'center';
+          ctx.fillText('No saved stars yet. Create a constellation first.', cx, cy + ringR + 28);
+          return;
+        }
+
+        var mapped = [];
+        for (var s = 0; s < stars.length; s++) {
+          var star = stars[s];
+          var angle = wheelAngle * 0.38 + (star.x / 100) * Math.PI * 2;
+          var radius = 24 + ((100 - star.y) / 100) * (ringR * 0.78);
+          mapped.push({
+            x: cx + Math.cos(angle) * radius,
+            y: cy + Math.sin(angle) * radius,
+            r: 1.5 + (s % 3) * 0.55
+          });
+        }
+
+        var maxD = ringR * 0.46;
+        var maxD2 = maxD * maxD;
+        for (var a1 = 0; a1 < mapped.length; a1++) {
+          for (var b1 = a1 + 1; b1 < mapped.length; b1++) {
+            var dx = mapped[b1].x - mapped[a1].x;
+            var dy = mapped[b1].y - mapped[a1].y;
+            var d2 = dx * dx + dy * dy;
+            if (d2 > maxD2) continue;
+            var alpha = 0.08 + (1 - d2 / maxD2) * 0.42;
+            ctx.strokeStyle = 'rgba(146, 194, 255, ' + alpha.toFixed(3) + ')';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(mapped[a1].x, mapped[a1].y);
+            ctx.lineTo(mapped[b1].x, mapped[b1].y);
+            ctx.stroke();
+          }
+        }
+
+        for (var p = 0; p < mapped.length; p++) {
+          ctx.beginPath();
+          ctx.fillStyle = 'rgba(148, 204, 255, 0.2)';
+          ctx.arc(mapped[p].x, mapped[p].y, mapped[p].r * 2.5, 0, Math.PI * 2);
+          ctx.fill();
+
+          ctx.beginPath();
+          ctx.fillStyle = 'rgba(230, 241, 255, 0.95)';
+          ctx.arc(mapped[p].x, mapped[p].y, mapped[p].r, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        if (sparkle > 0) {
+          ctx.fillStyle = 'rgba(255, 233, 176, ' + (sparkle * 0.2).toFixed(3) + ')';
+          ctx.fillRect(0, 0, w, h);
+        }
+      }
+
+      function frame(now) {
+        if (typeof now !== 'number') now = performance.now();
+        var dt = lastFrame ? Math.min(0.05, (now - lastFrame) / 1000) : 0.016;
+        lastFrame = now;
+        t += dt;
+
+        if (spinning) {
+          wheelAngle += spinVelocity;
+          spinVelocity *= 0.985;
+          if (spinVelocity < 0.013) {
+            spinning = false;
+            spinVelocity = 0;
+            setSpinButton();
+            resolveSpin();
+          }
+        } else {
+          wheelAngle += dt * 0.22;
+        }
+
+        sparkle = Math.max(0, sparkle - dt * 1.4);
+        drawWheel();
+        requestAnimationFrame(frame);
+      }
+
+      loadBtn.addEventListener('click', function () {
+        loadStars();
+      });
+
+      spinBtn.addEventListener('click', spinOmen);
+      remixBtn.addEventListener('click', remixRunes);
+      clearHistoryBtn.addEventListener('click', clearHistory);
+
+      loadStars();
+      loadOmens();
+      setSpinButton();
+      frame();
+    })();
+  </script>
+</body>
+</html>
