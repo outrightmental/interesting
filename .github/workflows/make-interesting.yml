@@ -78,8 +78,6 @@ jobs:
     permissions:
       contents: write # commit changes to /site
       copilot-requests: write # call GitHub Copilot with the workflow's own token
-    outputs:
-      changed: ${{ steps.commit.outputs.changed }}
     steps:
       # The platform package is the CLI binary itself: an exact version with no dependencies and no
       # install scripts, so nothing unpinned ever runs next to the token. It is installed before
@@ -118,8 +116,9 @@ jobs:
           test -f site/index.html || { echo "::error::site/index.html is missing"; exit 1; }
           test -f site/error.html || { echo "::error::site/error.html is missing"; exit 1; }
 
+      # Nothing here deploys. Once this workflow finishes, the main-branch pipeline in pages.yml
+      # tests the new commit and deploys it.
       - name: Commit and push
-        id: commit
         env:
           MODEL: ${{ steps.ai.outputs.model }}
           SUMMARY: ${{ steps.ai.outputs.summary }}
@@ -127,7 +126,6 @@ jobs:
           git add -A -- site
           if git diff --cached --quiet; then
             echo "No changes to commit."
-            echo "changed=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           git config user.name "github-actions[bot]"
@@ -150,19 +148,8 @@ jobs:
             echo "::error::Could not push the change to ${GITHUB_REF_NAME}."
             exit 1
           fi
-          echo "changed=true" >> "$GITHUB_OUTPUT"
           {
             echo "### Made the website more interesting"
             echo "- **Model:** \`${MODEL}\`"
             echo "- **Change:** \`${SUMMARY}\`"
           } >> "$GITHUB_STEP_SUMMARY"
-
-  # Pushes made with GITHUB_TOKEN don't trigger other workflows, so deploy explicitly.
-  deploy:
-    needs: iterate
-    if: needs.iterate.outputs.changed == 'true' && github.ref_name == github.event.repository.default_branch
-    permissions:
-      contents: read
-      pages: write
-      id-token: write
-    uses: ./.github/workflows/pages.yml

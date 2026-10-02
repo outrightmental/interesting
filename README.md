@@ -1,22 +1,26 @@
 [![Deploy site to GitHub Pages](https://github.com/outrightmental/interesting/actions/workflows/pages.yml/badge.svg)](https://github.com/outrightmental/interesting/actions/workflows/pages.yml)
 [![Make the website more interesting](https://github.com/outrightmental/interesting/actions/workflows/make-interesting.yml/badge.svg)](https://github.com/outrightmental/interesting/actions/workflows/make-interesting.yml)
 [![pages-build-deployment](https://github.com/outrightmental/interesting/actions/workflows/pages/pages-build-deployment/badge.svg)](https://github.com/outrightmental/interesting/actions/workflows/pages/pages-build-deployment)
-[![Test](https://github.com/outrightmental/interesting/actions/workflows/test.yml/badge.svg)](https://github.com/outrightmental/interesting/actions/workflows/test.yml)
 
 # interesting
 iterate a more interesting website
 
 ## How it works
 
-- **`/site`** — the static website, published to GitHub Pages by
-  [`.github/workflows/pages.yml`](.github/workflows/pages.yml). `error.html` is also served as the
+- **`/site`** — the static website, published to GitHub Pages. `error.html` is also served as the
   Pages `404.html`.
+- **Test, then deploy** — [`.github/workflows/pages.yml`](.github/workflows/pages.yml) is the
+  pipeline for `main`. Every commit that lands there is tested
+  ([`.github/workflows/test.yml`](.github/workflows/test.yml)), and when the tests pass, `/site`
+  is deployed. A failing test blocks the deploy. The pipeline also starts when the hourly AI
+  workflow finishes, because GitHub starts no workflow for a commit pushed by another workflow.
 - **Hourly AI iteration** — [`.github/workflows/make-interesting.yml`](.github/workflows/make-interesting.yml)
   runs every hour (or manually via *Run workflow*). It picks a random model from
   [GitHub Copilot](https://docs.github.com/copilot), reached through the
   [Copilot CLI](https://docs.github.com/copilot/how-tos/copilot-cli) and billed to a GitHub Copilot
   subscription (see [Setup](#setup)), gives it the mission **"make the website more interesting"**,
-  commits the result and redeploys the site. Models the account cannot use are skipped. A model
+  and commits the result to `main`; the pipeline above then tests and deploys it. Models the
+  account cannot use are skipped. A model
   that returns an unusable answer is replaced by another random model, or asked again if no other
   is left, for up to three attempts per run.
 - **One run at a time** — a run that starts while an earlier run of the workflow is still going
@@ -87,7 +91,7 @@ has no model in the pool, because Copilot only offers the Gemini Flash tier.
 ### Development
 
 [`.github/scripts/test_make_interesting.py`](.github/scripts/test_make_interesting.py) tests the
-script without calling any model, and runs on every pull request:
+script without calling any model. It runs on every pull request, and on `main` before each deploy:
 
 ```bash
 python3 -m unittest discover -s .github/scripts -v

@@ -1,35 +1,57 @@
 name: Deploy site to GitHub Pages
 
+# The pipeline for main: every commit that lands there is tested, and when the tests pass, /site is
+# deployed to GitHub Pages. A failing test blocks the deploy.
 on:
   push:
     branches: [main]
-    paths:
-      - "site/**"
-      - ".github/workflows/pages.yml"
-  workflow_dispatch:
-  workflow_call:
+  # The AI's commit is pushed with GITHUB_TOKEN, and GitHub starts no workflow for such a push. So
+  # the pipeline also starts when that workflow finishes, and picks up the commit it left on main.
+  workflow_run:
+    workflows: ["Make the website more interesting"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch: # manual fallback
 
-permissions:
-  contents: read
-  pages: write
-  id-token: write
+permissions: {}
 
+# One pipeline run at a time, and the rest wait their turn. Without `queue: max` only one run can
+# wait, and a newer run takes its place: a run with nothing to do (see the `if` below) could then
+# push out the run that was waiting to deploy a commit.
 concurrency:
   group: pages
   cancel-in-progress: false
+  queue: max
 
 jobs:
+  test:
+    # After the AI workflow, only when it succeeded and main has moved since it started: for this
+    # event github.sha is the tip of main, and head_sha is the commit that workflow started from.
+    # Normally the move is the AI's own commit. A push by someone else in the meantime counts too,
+    # and is then tested and deployed once more, which is harmless.
+    if: >-
+      github.event_name != 'workflow_run' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_sha != github.sha)
+    permissions:
+      contents: read
+    uses: ./.github/workflows/test.yml
+
   deploy:
+    needs: test # a failed or skipped test job means no deploy
+    # Only main is ever deployed; a manual run on another branch stops after the tests.
+    if: github.ref_name == github.event.repository.default_branch
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: Checkout
         uses: actions/checkout@v5
-        with:
-          # When called after the AI's commit, deploy the branch tip rather than the triggering SHA.
-          ref: ${{ github.ref }}
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
