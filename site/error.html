@@ -1,36 +1,270 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang='en'>
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Not found · interesting</title>
+  <meta charset='utf-8'>
+  <meta name='viewport' content='width=device-width, initial-scale=1'>
+  <title>Lost in space · interesting</title>
   <style>
-    html, body { margin: 0; height: 100%; }
-    body {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background: #0b0b10;
-      color: #f2f2f2;
-      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-      text-align: center;
+    :root {
+      color-scheme: dark;
+      --bg: #090b14;
+      --bg2: #171a2f;
+      --fg: #f2f4ff;
+      --muted: #a8b1d1;
+      --line: rgba(255,255,255,0.18);
+      --accent: #9bc1ff;
+      --accent2: #ffe5a3;
+      --panel: rgba(10, 13, 25, 0.7);
     }
-    h1 { margin: 0; font-size: clamp(3rem, 12vw, 8rem); }
-    a { color: inherit; }
+
+    * { box-sizing: border-box; }
+
+    html, body { margin: 0; min-height: 100%; }
+
+    body {
+      font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      color: var(--fg);
+      background: radial-gradient(circle at 20% 5%, #232b53 0%, var(--bg) 55%);
+      overflow: hidden;
+      display: grid;
+      place-items: center;
+      padding: 1rem;
+    }
+
+    #sky {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 0;
+    }
+
+    .scan {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 1;
+      background: repeating-linear-gradient(
+        to bottom,
+        transparent 0,
+        transparent 2px,
+        rgba(255,255,255,0.02) 3px
+      );
+      mix-blend-mode: screen;
+    }
+
+    main {
+      position: relative;
+      z-index: 2;
+      width: min(700px, 94vw);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: var(--panel);
+      backdrop-filter: blur(8px);
+      box-shadow: 0 15px 40px rgba(0,0,0,0.35);
+      text-align: center;
+      padding: clamp(1rem, 4vw, 2rem);
+    }
+
+    h1 {
+      margin: 0;
+      line-height: 0.9;
+      letter-spacing: -0.04em;
+      font-size: clamp(2.7rem, 14vw, 7rem);
+    }
+
+    p {
+      margin: 0.7rem 0;
+      color: #dce3ff;
+    }
+
+    .muted {
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+
+    .controls {
+      margin-top: 0.9rem;
+      display: flex;
+      gap: 0.55rem;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    button,
+    a.action {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: rgba(255,255,255,0.07);
+      color: var(--fg);
+      text-decoration: none;
+      padding: 0.5rem 0.9rem;
+      font: inherit;
+      cursor: pointer;
+      transition: transform 120ms ease, background 120ms ease, border-color 120ms ease;
+    }
+
+    button:hover,
+    button:focus-visible,
+    a.action:hover,
+    a.action:focus-visible {
+      outline: none;
+      transform: translateY(-1px);
+      background: rgba(255,255,255,0.12);
+      border-color: rgba(255,255,255,0.34);
+    }
+
+    #note {
+      margin-top: 0.9rem;
+      min-height: 1.5em;
+      color: var(--accent2);
+      font-size: 0.97rem;
+    }
+
+    .hint {
+      margin-top: 0.65rem;
+      color: var(--muted);
+      font-size: 0.84rem;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      button, a.action { transition: none; }
+    }
   </style>
 </head>
 <body>
+  <canvas id='sky' aria-hidden='true'></canvas>
+  <div class='scan' aria-hidden='true'></div>
+
   <main>
     <h1>404</h1>
-    <p>Nothing interesting here (yet).</p>
-    <p><a id="home" href="/">Go back home</a></p>
+    <p>This corridor of the cosmos is uncharted.</p>
+    <p class='muted'>But the observatory still works.</p>
+    <div class='controls'>
+      <button id='void' type='button'>ask the void</button>
+      <a id='home' class='action' href='/'>return home</a>
+    </div>
+    <p id='note' aria-live='polite'>Listening for a signal...</p>
+    <p class='hint'>Easter egg: type <strong>home</strong> while on this page.</p>
   </main>
+
   <script>
-    // On <owner>.github.io/<repo>/ project pages, home is the first path segment.
-    if (location.hostname.endsWith(".github.io")) {
-      var seg = location.pathname.split("/")[1];
-      if (seg) document.getElementById("home").href = "/" + seg + "/";
-    }
+    (function () {
+      var homeLink = document.getElementById('home');
+      if (location.hostname.endsWith('.github.io')) {
+        var seg = location.pathname.split('/')[1];
+        homeLink.href = seg ? '/' + seg + '/' : '/';
+      }
+
+      var note = document.getElementById('note');
+      var voidBtn = document.getElementById('void');
+      var hints = [
+        'Signal: try one tiny experiment before your next big decision.',
+        'Signal: curiosity can be navigation, not distraction.',
+        'Signal: begin with the messiest first draft and keep going.',
+        'Signal: if stuck, shrink the task until it moves.',
+        'Signal: your future self recommends pressing \"start\" today.',
+        'Signal: rest is part of the build process, not a detour.',
+        'Signal: share the rough idea; polishing can come later.'
+      ];
+      var hintIndex = Math.floor(Math.random() * hints.length);
+
+      voidBtn.addEventListener('click', function () {
+        hintIndex = (hintIndex + 1 + Math.floor(Math.random() * 2)) % hints.length;
+        note.textContent = '✦ ' + hints[hintIndex];
+      });
+
+      var codeBuffer = '';
+      document.addEventListener('keydown', function (ev) {
+        if (!ev.key || ev.key.length !== 1) return;
+        codeBuffer = (codeBuffer + ev.key.toLowerCase()).slice(-4);
+        if (codeBuffer === 'home') {
+          note.textContent = '☄ Secret route unlocked. The stars point home.';
+          burst();
+        }
+      });
+
+      var canvas = document.getElementById('sky');
+      var ctx = canvas.getContext('2d');
+      var stars = [];
+      var sparks = [];
+
+      function rand(min, max) {
+        return min + Math.random() * (max - min);
+      }
+
+      function resize() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        stars = [];
+        var total = Math.max(45, Math.floor((canvas.width * canvas.height) / 18000));
+        for (var i = 0; i < total; i++) {
+          stars.push({
+            x: Math.random() * canvas.width,
+            y: Math.random() * canvas.height,
+            r: rand(0.25, 1.8),
+            a: rand(0.12, 0.85),
+            s: rand(0.06, 0.32)
+          });
+        }
+      }
+
+      function burst() {
+        for (var i = 0; i < 22; i++) {
+          sparks.push({
+            x: canvas.width * 0.5,
+            y: canvas.height * 0.42,
+            vx: rand(-2.6, 2.6),
+            vy: rand(-2.2, 1.8),
+            life: rand(26, 52)
+          });
+        }
+      }
+
+      function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        for (var i = 0; i < stars.length; i++) {
+          var s = stars[i];
+          s.y += s.s;
+          if (s.y > canvas.height + 2) {
+            s.y = -2;
+            s.x = Math.random() * canvas.width;
+          }
+          s.a += (Math.random() - 0.5) * 0.03;
+          if (s.a < 0.08) s.a = 0.08;
+          if (s.a > 0.88) s.a = 0.88;
+
+          ctx.beginPath();
+          ctx.fillStyle = 'rgba(168, 201, 255, ' + s.a.toFixed(3) + ')';
+          ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        for (var j = sparks.length - 1; j >= 0; j--) {
+          var p = sparks[j];
+          p.x += p.vx;
+          p.y += p.vy;
+          p.vy += 0.03;
+          p.life -= 1;
+          if (p.life <= 0) {
+            sparks.splice(j, 1);
+            continue;
+          }
+          var alpha = Math.min(1, p.life / 28);
+          ctx.beginPath();
+          ctx.fillStyle = 'rgba(255, 236, 176, ' + alpha.toFixed(3) + ')';
+          ctx.arc(p.x, p.y, 1.8, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        requestAnimationFrame(draw);
+      }
+
+      window.addEventListener('resize', resize);
+      resize();
+      draw();
+    })();
   </script>
 </body>
 </html>
