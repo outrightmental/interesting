@@ -1,5 +1,6 @@
 [![Deploy site to GitHub Pages](https://github.com/outrightmental/interesting/actions/workflows/pages.yml/badge.svg)](https://github.com/outrightmental/interesting/actions/workflows/pages.yml)
 [![Make the website more interesting](https://github.com/outrightmental/interesting/actions/workflows/make-interesting.yml/badge.svg)](https://github.com/outrightmental/interesting/actions/workflows/make-interesting.yml)
+[![pages-build-deployment](https://github.com/outrightmental/interesting/actions/workflows/pages/pages-build-deployment/badge.svg)](https://github.com/outrightmental/interesting/actions/workflows/pages/pages-build-deployment)
 
 # interesting
 recursively iterate the most interesting possible website
