@@ -90,6 +90,16 @@ def high_fd(fd):
     return copy
 
 
+# Chrome reads DevTools commands on file descriptor 3 and writes replies on 4. This one-liner,
+# run by a fresh Python, puts the two pipe ends there and then becomes Chrome. A shell could do
+# the same with redirections, but /bin/sh on Ubuntu (dash) refuses descriptor numbers above 9.
+LAUNCHER = (
+    "import os, sys; r, w = int(sys.argv[1]), int(sys.argv[2]); "
+    "os.dup2(r, 3); os.dup2(w, 4); os.close(r); os.close(w); "
+    "os.execv(sys.argv[3], sys.argv[3:])"
+)
+
+
 class Chrome:
     """A headless Chrome, spoken to over its DevTools pipe (JSON messages, each ended by a NUL)."""
 
@@ -98,10 +108,8 @@ class Chrome:
         self._receive_fd, from_chrome = os.pipe()
         to_chrome, from_chrome = high_fd(to_chrome), high_fd(from_chrome)
         try:
-            # Chrome reads commands on descriptor 3 and writes replies on 4. The shell does the
-            # renumbering, which keeps this free of code that runs between fork and exec.
             self.process = subprocess.Popen(
-                ["/bin/sh", "-c", f'exec "$0" "$@" 3<&{to_chrome} 4>&{from_chrome}', binary,
+                [sys.executable, "-c", LAUNCHER, str(to_chrome), str(from_chrome), binary,
                  *CHROME_FLAGS, f"--user-data-dir={profile_dir}", f"--window-size={width},{height}", "about:blank"],
                 pass_fds=(to_chrome, from_chrome),
                 stdin=subprocess.DEVNULL,

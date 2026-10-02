@@ -168,6 +168,22 @@ class WithoutChromeTest(unittest.TestCase):
                     shot.capture("http://127.0.0.1:9/", str(sleeper))
             self.assertLess(time.monotonic() - started, 15, "the silent browser was killed, not waited for")
 
+    def test_browser_is_handed_the_devtools_pipe_on_descriptors_3_and_4(self):
+        # A stand-in browser that answers one command over the pipe, as Chrome would. It is a
+        # /bin/sh script on purpose: the launcher must not depend on what the shell can redirect.
+        with tempfile.TemporaryDirectory() as tmp:
+            fake = Path(tmp) / "fake-chrome"
+            fake.write_text(
+                "#!/bin/sh\n"
+                "# reply to whatever arrives on 3 with an error on 4, then wait\n"
+                "head -c 20 <&3 >/dev/null\n"
+                "printf '{\"id\":1,\"error\":{\"message\":\"I am not Chrome\"}}\\0' >&4\n"
+                "sleep 5\n"
+            )
+            fake.chmod(0o755)
+            with self.assertRaisesRegex(shot.ScreenshotError, "Target.createTarget failed: I am not Chrome"):
+                shot.capture("http://127.0.0.1:9/", str(fake))
+
     def test_chrome_bin_overrides_the_search(self):
         with mock.patch.dict(os.environ, {"CHROME_BIN": "/opt/my/chrome"}):
             self.assertEqual(shot.find_chrome(), "/opt/my/chrome")
