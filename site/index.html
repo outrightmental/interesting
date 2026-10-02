@@ -43,6 +43,23 @@
       z-index: 0;
     }
 
+    #links {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 1;
+      pointer-events: none;
+      overflow: visible;
+    }
+
+    #links line {
+      stroke: rgba(151, 195, 255, 0.38);
+      stroke-width: 1.1;
+      stroke-linecap: round;
+      filter: drop-shadow(0 0 4px rgba(120, 170, 255, 0.4));
+    }
+
     .scan {
       position: fixed;
       inset: 0;
@@ -175,18 +192,20 @@
 </head>
 <body>
   <canvas id='sky' aria-hidden='true'></canvas>
+  <svg id='links' aria-hidden='true'></svg>
   <div class='scan' aria-hidden='true'></div>
 
   <main>
     <h1>interesting</h1>
     <p class='tagline'>recursively iterate the most interesting possible website</p>
-    <p class='story'>Tonight's experiment: a wish constellation. Click to place tiny thoughts, then drag stars to sketch your own sky map. It all remembers itself when you return.</p>
+    <p class='story'>Tonight's experiment: a wish constellation. Click to place tiny thoughts, drag stars to sketch your own sky map, then ask the sky what pattern it sees.</p>
     <div class='controls'>
       <button id='drop' type='button'>drop a star</button>
+      <button id='oracle' type='button'>ask the sky</button>
       <button id='clear' type='button'>clear my constellation</button>
     </div>
     <p id='note' class='note' aria-live='polite'>No stars yet. Make the first one.</p>
-    <p class='hint'>Tip: click a star to read its thought, or drag it anywhere to reshape the constellation.</p>
+    <p class='hint'>Tip: click a star to read its thought, or drag it anywhere to reshape the constellation web.</p>
   </main>
 
   <script>
@@ -214,10 +233,13 @@
 
       var note = document.getElementById('note');
       var dropBtn = document.getElementById('drop');
+      var oracleBtn = document.getElementById('oracle');
       var clearBtn = document.getElementById('clear');
+      var linksSvg = document.getElementById('links');
       var stars = [];
       var activeDrag = null;
       var suppressStarClickUntil = 0;
+      var linksRenderQueued = false;
 
       function clamp(value, min, max) {
         return Math.max(min, Math.min(max, value));
@@ -264,12 +286,139 @@
         };
       }
 
+      function starToPixels(star) {
+        return {
+          x: (star.x / 100) * window.innerWidth,
+          y: (star.y / 100) * window.innerHeight
+        };
+      }
+
+      function queueLinksRender() {
+        if (linksRenderQueued) return;
+        linksRenderQueued = true;
+        requestAnimationFrame(function () {
+          linksRenderQueued = false;
+          renderLinks();
+        });
+      }
+
+      function renderLinks() {
+        while (linksSvg.firstChild) {
+          linksSvg.removeChild(linksSvg.firstChild);
+        }
+
+        if (stars.length < 2) return;
+
+        var maxDistance = Math.min(window.innerWidth, window.innerHeight) * 0.28;
+        var maxDistanceSq = maxDistance * maxDistance;
+        var used = Object.create(null);
+
+        for (var i = 0; i < stars.length; i++) {
+          var origin = starToPixels(stars[i]);
+          var nearest = [];
+
+          for (var j = 0; j < stars.length; j++) {
+            if (i === j) continue;
+            var target = starToPixels(stars[j]);
+            var dx = target.x - origin.x;
+            var dy = target.y - origin.y;
+            var d2 = dx * dx + dy * dy;
+            if (d2 > maxDistanceSq) continue;
+            nearest.push({ j: j, d2: d2, x: target.x, y: target.y });
+          }
+
+          nearest.sort(function (a, b) { return a.d2 - b.d2; });
+          nearest.slice(0, 2).forEach(function (pair) {
+            var a = i < pair.j ? i : pair.j;
+            var b = i < pair.j ? pair.j : i;
+            var key = a + '-' + b;
+            if (used[key]) return;
+            used[key] = true;
+
+            var line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+            line.setAttribute('x1', origin.x.toFixed(2));
+            line.setAttribute('y1', origin.y.toFixed(2));
+            line.setAttribute('x2', pair.x.toFixed(2));
+            line.setAttribute('y2', pair.y.toFixed(2));
+            line.setAttribute('stroke-opacity', (0.12 + (1 - pair.d2 / maxDistanceSq) * 0.52).toFixed(3));
+            linksSvg.appendChild(line);
+          });
+        }
+      }
+
+      function constellationHash() {
+        var hash = 2166136261;
+        for (var i = 0; i < stars.length; i++) {
+          var sx = Math.round(stars[i].x * 10);
+          var sy = Math.round(stars[i].y * 10);
+          var t = stars[i].text;
+          hash ^= sx;
+          hash += (hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24);
+          hash ^= sy;
+          hash += (hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24);
+          for (var c = 0; c < t.length; c++) {
+            hash ^= t.charCodeAt(c);
+            hash += (hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24);
+          }
+        }
+        return hash >>> 0;
+      }
+
+      function askTheSky() {
+        if (!stars.length) {
+          setNote('The sky is quiet. Drop a star first.');
+          return;
+        }
+
+        var cx = 0;
+        var cy = 0;
+        for (var i = 0; i < stars.length; i++) {
+          cx += stars[i].x;
+          cy += stars[i].y;
+        }
+        cx /= stars.length;
+        cy /= stars.length;
+
+        var spread = 0;
+        for (var j = 0; j < stars.length; j++) {
+          var dx = stars[j].x - cx;
+          var dy = stars[j].y - cy;
+          spread += Math.sqrt(dx * dx + dy * dy);
+        }
+        spread /= stars.length;
+
+        var region = (cy < 50 ? 'northern' : 'southern') + '-' + (cx < 50 ? 'western' : 'eastern');
+        var density = spread < 12 ? 'tight' : (spread < 24 ? 'balanced' : 'wide');
+        var size = stars.length < 4 ? 'faint signal' : (stars.length < 12 ? 'steady chorus' : 'bright crowd');
+
+        var openers = [
+          'The constellation leans toward momentum.',
+          'The constellation hums with patient energy.',
+          'The constellation suggests a turning point.',
+          'The constellation maps a curious detour.',
+          'The constellation carries a brave undertone.'
+        ];
+
+        var closers = [
+          'Follow the smallest spark and let it grow.',
+          'Name one next step and begin before overthinking.',
+          'Protect your attention like it is lantern light.',
+          'Share a rough draft; feedback is part of flight.',
+          'Keep play in the process and precision will follow.',
+          'Make the next move tiny, clear, and kind.'
+        ];
+
+        var hash = constellationHash();
+        var opener = openers[hash % openers.length];
+        var closer = closers[(hash >>> 5) % closers.length];
+
+        setNote('🔮 ' + opener + ' A ' + size + ' in the ' + region + ' sky feels ' + density + '. ' + closer);
+      }
+
       function createStarElement(star) {
         var el = document.createElement('button');
         el.className = 'star';
         el.type = 'button';
-        // The star must know its element before it is positioned: applyStarPosition() does
-        // nothing without one, which left every new and every reloaded star at the default spot.
         star.el = el;
         applyStarPosition(star);
         el.title = star.text;
@@ -317,6 +466,7 @@
         updateStarPosition(star, xVw, yVh);
         stars.push(star);
         createStarElement(star);
+        queueLinksRender();
         setNote('✦ ' + star.text);
         saveStars();
       }
@@ -347,8 +497,9 @@
             stars.push(star);
             createStarElement(star);
           });
+          queueLinksRender();
           if (stars.length) {
-            setNote('You have ' + stars.length + ' saved star' + (stars.length === 1 ? '' : 's') + '. Drag to rearrange them.');
+            setNote('You have ' + stars.length + ' saved star' + (stars.length === 1 ? '' : 's') + '. Ask the sky for a reading.');
           }
         } catch (e) {
           setNote('Constellation data was unreadable, so tonight starts fresh.');
@@ -366,6 +517,7 @@
         } catch (e) {
           // ignore storage removal errors
         }
+        queueLinksRender();
         setNote('Sky cleared. Ready for a new constellation.');
       }
 
@@ -385,6 +537,7 @@
         }
         if (drag.moved) {
           saveStars();
+          queueLinksRender();
           suppressStarClickUntil = Date.now() + DRAG_SUPPRESS_MS;
           setNote('Constellation updated and saved.');
         }
@@ -393,6 +546,11 @@
       dropBtn.addEventListener('click', function (ev) {
         ev.stopPropagation();
         addStar(50 + (Math.random() - 0.5) * 24, 50 + (Math.random() - 0.5) * 24, randomThought());
+      });
+
+      oracleBtn.addEventListener('click', function (ev) {
+        ev.stopPropagation();
+        askTheSky();
       });
 
       clearBtn.addEventListener('click', function (ev) {
@@ -405,6 +563,7 @@
         activeDrag.moved = true;
         var point = pointerToViewport(ev.clientX, ev.clientY);
         updateStarPosition(activeDrag.star, point.x, point.y);
+        queueLinksRender();
       });
 
       document.addEventListener('pointerup', function (ev) {
@@ -431,6 +590,9 @@
       function resize() {
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
+        linksSvg.setAttribute('viewBox', '0 0 ' + canvas.width + ' ' + canvas.height);
+        linksSvg.setAttribute('width', canvas.width);
+        linksSvg.setAttribute('height', canvas.height);
         dots = [];
         var total = Math.max(35, Math.floor((canvas.width * canvas.height) / 22000));
         for (var i = 0; i < total; i++) {
@@ -442,6 +604,7 @@
             s: Math.random() * 0.23 + 0.04
           });
         }
+        queueLinksRender();
       }
 
       function draw() {
