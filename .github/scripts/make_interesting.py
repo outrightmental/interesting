@@ -528,16 +528,18 @@ def main():
     shown, omitted = split_for_prompt(read_site())
     prompt = build_prompt(shown, omitted)
     candidates = pick_candidates()
+    requested = bool((os.environ.get("MODEL") or "").strip())  # named by hand, not drawn from the pool
     attempts, unavailable, tried = 0, [], set()
 
     def report_unavailable():
         # Worth saying out loud: when most of the pool is off limits, the pick is hardly random.
         # Only the models tried this run are known; the rest of the pool was never asked.
         if unavailable:
+            pool = "" if requested else f"The pool has {len(candidates)}. "
             print(
                 f"::notice::{len(unavailable)} of the {len(tried)} models tried this run are not "
                 f"available to this Copilot account ({one_line(', '.join(unavailable), 300)}). "
-                f"The pool has {len(candidates)}. See Setup in the README."
+                f"{pool}See Setup in the README."
             )
 
     queue, answering = list(candidates), []
@@ -551,7 +553,8 @@ def main():
             ops = validate_plan(plan, unseen=omitted)
         except ModelUnavailable as err:
             attempts -= 1  # no model was asked, so this does not count as an attempt
-            print(f"{model} is not available, trying another model: {one_line(err, 200)}")
+            more = ", trying another model" if queue or answering else ""
+            print(f"{model} is not available{more}: {one_line(err, 200)}")
             unavailable.append(model)
         except CopilotAuthError as err:
             print(f"::error::GitHub Copilot authentication failed: {one_line(err, 300)}")

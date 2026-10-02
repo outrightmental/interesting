@@ -568,8 +568,10 @@ class CallModelTest(unittest.TestCase):
 
     def test_tool_use_is_a_silo_breach_even_when_the_call_then_hangs(self):
         FakeCopilot(self, self.TOOL_EVENT + "\nimport time; time.sleep(60)")
+        started = time.monotonic()
         with mock.patch.object(mi, "MODEL_TIMEOUT_SECONDS", 1.5), self.assertRaises(mi.SiloBreach):
             mi.call_model("x", "p")
+        self.assertLess(time.monotonic() - started, 20, "the hung CLI was waited for, not killed")
 
     def test_the_models_own_words_are_never_read_as_a_copilot_error(self):
         # The CLI dies without saying why, after printing an answer that happens to contain the
@@ -593,8 +595,10 @@ class CallModelTest(unittest.TestCase):
             open(LOG + '.pids', 'w').write('%d %d' % (os.getpid(), child.pid))
             time.sleep(60)
         """)
+        started = time.monotonic()
         with mock.patch.object(mi, "MODEL_TIMEOUT_SECONDS", 1.5), self.assertRaisesRegex(mi.ModelError, "no answer"):
             mi.call_model("x", "p")
+        self.assertLess(time.monotonic() - started, 20, "the hung CLI was waited for, not killed")
         for pid in map(int, Path(str(fake.log) + ".pids").read_text().split()):
             for _ in range(50):  # the kill is asynchronous; give the kernel a moment
                 if not process_is_running(pid):
@@ -755,6 +759,35 @@ class MainTest(SiteDirTestCase):
             self.run_main()
         self.assertIn("No model produced a usable change", str(caught.exception))
         self.assertEqual(len(fake.calls()), len(mi.MODELS))
+        count = len(mi.MODELS)
+        notice = [line for line in self.printed if line.startswith("::notice::")][-1]
+        self.assertIn(f"{count} of the {count} models tried this run are not available", notice)
+        self.assertIn(f"The pool has {count}.", notice)
+        skipped = [line for line in self.printed if " is not available" in line and not line.startswith("::")]
+        self.assertEqual(len(skipped), count)
+        self.assertTrue(all("trying another model" in line for line in skipped[:-1]))
+        self.assertNotIn("trying another model", skipped[-1], "nothing was left to try")
+
+    def test_a_model_named_by_hand_that_is_unavailable_is_reported_plainly(self):
+        fake = FakeCopilot(self, "sys.stderr.write('Error: Model \"x\" from --model flag is not available.'); sys.exit(1)")
+        with self.assertRaises(SystemExit):
+            self.run_main({"MODEL": "claude-fable-5.1"})
+        self.assertEqual(len(fake.calls()), 1)
+        log = "\n".join(self.printed)
+        self.assertNotIn("trying another model", log)
+        self.assertNotIn("The pool has", log)
+        self.assertIn("1 of the 1 models tried this run are not available", log)
+
+    def test_a_lone_model_is_asked_again_after_a_cli_failure(self):
+        fake = FakeCopilot(self, f"""
+            if len(open(LOG).read().splitlines()) < 2:
+                sys.stderr.write('Error: rate limit exceeded')
+                sys.exit(1)
+            say({GOOD_PLAN!r})
+        """)
+        output = self.run_main({"MODEL": "only-model"})
+        self.assertEqual([c["args"][1] for c in fake.calls()], ["only-model", "only-model"])
+        self.assertEqual(read_outputs(output)["model"], "only-model")
 
     def test_auth_failure_stops_immediately_with_setup_help(self):
         fake = FakeCopilot(self, "sys.stderr.write('Error: Access denied by policy settings'); sys.exit(1)")
