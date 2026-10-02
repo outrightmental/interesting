@@ -104,6 +104,11 @@
       background: rgba(152, 194, 255, 0.17);
     }
 
+    button:disabled {
+      opacity: 0.62;
+      cursor: default;
+    }
+
     .row {
       display: flex;
       align-items: center;
@@ -223,6 +228,7 @@
           <button id='refresh' type='button'>refresh saved sky</button>
           <button id='shuffle' type='button'>shuffle palette</button>
           <button id='write' type='button'>write diary entry</button>
+          <button id='replay' type='button'>replay birth order</button>
           <button id='seal' type='button'>seal time capsule</button>
         </div>
         <div class='row'>
@@ -260,6 +266,7 @@
       var refreshBtn = document.getElementById('refresh');
       var shuffleBtn = document.getElementById('shuffle');
       var writeBtn = document.getElementById('write');
+      var replayBtn = document.getElementById('replay');
       var sealBtn = document.getElementById('seal');
       var capsulesList = document.getElementById('capsules-list');
 
@@ -268,6 +275,11 @@
       var t = 0;
       var tapCount = 0;
       var paletteIndex = 0;
+      var replayActive = false;
+      var replayPointer = 0;
+      var replayTimer = 0;
+      var replayHold = 0;
+      var replayCaption = '';
       var palettes = [
         { bgTop: '#0e1532', bgBottom: '#070b18', link: 'rgba(150,196,255,0.44)', dot: 'rgba(228,239,255,0.96)', halo: 'rgba(153,206,255,0.22)' },
         { bgTop: '#2d1430', bgBottom: '#12091a', link: 'rgba(255,167,228,0.36)', dot: 'rgba(255,226,244,0.95)', halo: 'rgba(233,140,255,0.22)' },
@@ -362,6 +374,20 @@
         return y + '-' + m + '-' + day + ' ' + hh + ':' + mm;
       }
 
+      function setReplayButton() {
+        replayBtn.textContent = replayActive ? 'replaying...' : 'replay birth order';
+        replayBtn.disabled = replayActive;
+      }
+
+      function stopReplay() {
+        replayActive = false;
+        replayPointer = 0;
+        replayTimer = 0;
+        replayHold = 0;
+        replayCaption = '';
+        setReplayButton();
+      }
+
       function loadStars() {
         var raw = null;
         try {
@@ -369,12 +395,14 @@
         } catch (e) {
           statusEl.textContent = 'Local storage is unavailable in this browser context.';
           stars = [];
+          stopReplay();
           return;
         }
 
         if (!raw) {
           stars = [];
           statusEl.textContent = 'No saved constellation found yet. Create one on the main page first.';
+          stopReplay();
           return;
         }
 
@@ -385,13 +413,16 @@
 
           if (!stars.length) {
             statusEl.textContent = 'A sky file exists, but it has no readable stars.';
+            stopReplay();
             return;
           }
 
           statusEl.textContent = 'Loaded ' + stars.length + ' star' + (stars.length === 1 ? '' : 's') + ' from your saved sky memory.';
+          stopReplay();
         } catch (e2) {
           stars = [];
           statusEl.textContent = 'Saved constellation data is unreadable. Return home and create a new pattern.';
+          stopReplay();
         }
       }
 
@@ -555,8 +586,25 @@
           paletteIndex = ((cap.palette % palettes.length) + palettes.length) % palettes.length;
         }
 
+        stopReplay();
         writeEntry();
         statusEl.textContent = 'Loaded capsule from ' + dateTimeStamp(cap.createdAt) + ': ' + cap.title + '.';
+      }
+
+      function startReplay() {
+        if (!stars.length) {
+          statusEl.textContent = 'No stars available for replay. Refresh after creating stars on the main page.';
+          return;
+        }
+
+        replayActive = true;
+        replayPointer = 0;
+        replayTimer = 0;
+        replayHold = 0;
+        replayCaption = '';
+        setReplayButton();
+        statusEl.textContent = 'Replaying constellation birth order...';
+        entryEl.textContent = 'replay mode:\nwatch each saved thought return to the sky in sequence.';
       }
 
       function drawBackground(p) {
@@ -592,9 +640,10 @@
         if (!stars.length) return;
 
         var driftStrength = (Number(driftInput.value) / 100) * 7;
+        var source = replayActive ? stars.slice(0, replayPointer) : stars;
         var mapped = [];
-        for (var i = 0; i < stars.length; i++) {
-          mapped.push(starPx(stars[i], driftStrength, i));
+        for (var i = 0; i < source.length; i++) {
+          mapped.push(starPx(source[i], driftStrength, i));
         }
 
         var maxD = Math.min(canvas.width, canvas.height) * 0.27;
@@ -628,10 +677,55 @@
           ctx.arc(mapped[j].x, mapped[j].y, r, 0, Math.PI * 2);
           ctx.fill();
         }
+
+        if (replayActive && replayPointer < stars.length) {
+          var next = starPx(stars[replayPointer], driftStrength, replayPointer);
+          var pulse = 10 + Math.sin(t * 8) * 2.5;
+          ctx.beginPath();
+          ctx.strokeStyle = 'rgba(255, 231, 170, 0.82)';
+          ctx.lineWidth = 1.6;
+          ctx.arc(next.x, next.y, pulse, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+
+        if (replayActive && replayCaption) {
+          ctx.fillStyle = 'rgba(8, 12, 24, 0.68)';
+          ctx.fillRect(8, canvas.height - 34, canvas.width - 16, 24);
+          ctx.fillStyle = '#ffe9b2';
+          ctx.font = '12px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace';
+          ctx.fillText('latest thought: ' + replayCaption, 14, canvas.height - 18);
+        }
       }
 
-      function frame() {
-        t += 0.016;
+      function updateReplay(dt) {
+        if (!replayActive) return;
+
+        var stepDuration = Math.max(0.09, 0.34 - stars.length * 0.0022);
+        replayTimer += dt;
+
+        while (replayPointer < stars.length && replayTimer >= stepDuration) {
+          replayTimer -= stepDuration;
+          replayCaption = stars[replayPointer].text;
+          replayPointer += 1;
+        }
+
+        if (replayPointer >= stars.length) {
+          replayHold += dt;
+          if (replayHold > 1.15) {
+            stopReplay();
+            statusEl.textContent = 'Replay complete. Your full constellation is now in view.';
+          }
+        }
+      }
+
+      var lastFrameTime = 0;
+      function frame(now) {
+        if (typeof now !== 'number') now = performance.now();
+        var dt = lastFrameTime ? Math.min(0.05, (now - lastFrameTime) / 1000) : 0.016;
+        lastFrameTime = now;
+
+        t += dt;
+        updateReplay(dt);
         drawConstellation();
         requestAnimationFrame(frame);
       }
@@ -646,7 +740,12 @@
         statusEl.textContent = 'Palette shifted. Same stars, different mood.';
       });
 
-      writeBtn.addEventListener('click', writeEntry);
+      writeBtn.addEventListener('click', function () {
+        stopReplay();
+        writeEntry();
+      });
+
+      replayBtn.addEventListener('click', startReplay);
       sealBtn.addEventListener('click', sealCapsule);
 
       capsulesList.addEventListener('click', function (ev) {
@@ -672,6 +771,7 @@
       writeEntry();
       loadCapsules();
       renderCapsules();
+      setReplayButton();
       frame();
     })();
   </script>
