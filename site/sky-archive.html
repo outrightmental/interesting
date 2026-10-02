@@ -4,7 +4,7 @@
   <meta charset='utf-8'>
   <meta name='viewport' content='width=device-width, initial-scale=1'>
   <title>sky archive oracle · interesting</title>
-  <meta name='description' content='Spin your saved constellation through a rune wheel and collect tiny omen readings.'>
+  <meta name='description' content='Spin your saved constellation through a rune wheel, collect tiny omen readings, and forge a portable sigil.'>
   <style>
     :root {
       color-scheme: dark;
@@ -134,7 +134,8 @@
       font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
     }
 
-    .history {
+    .history,
+    .sigil {
       margin-top: 0.8rem;
       border: 1px solid rgba(255,255,255,0.14);
       border-radius: 10px;
@@ -142,7 +143,8 @@
       padding: 0.68rem;
     }
 
-    .history p {
+    .history p,
+    .sigil p {
       margin: 0;
       color: #d7e5ff;
       font-size: 0.9rem;
@@ -159,6 +161,30 @@
     }
 
     #history-list li { margin-bottom: 0.38rem; }
+
+    #sigil-preview {
+      display: block;
+      width: 100%;
+      min-height: 130px;
+      margin-top: 0.2rem;
+      border-radius: 10px;
+      border: 1px solid rgba(255,255,255,0.14);
+      background: radial-gradient(circle at 35% 20%, #10173b 0%, #070b18 72%);
+      object-fit: contain;
+    }
+
+    #sigil-download[aria-disabled='true'] {
+      opacity: 0.5;
+      pointer-events: none;
+      cursor: default;
+    }
+
+    #sigil-note {
+      margin-top: 0.45rem;
+      color: #bed3ff;
+      font-size: 0.84rem;
+      min-height: 1.35em;
+    }
 
     .empty {
       color: var(--muted);
@@ -209,6 +235,16 @@ Load your saved sky, then spin to ask for a tiny omen.</pre>
           <ol id='history-list'></ol>
           <p id='history-empty' class='empty'>No omens yet. Spin once to seed the archive.</p>
         </section>
+
+        <section class='sigil' aria-label='Constellation sigil forge'>
+          <p>Forge a portable SVG sigil from your current sky and rune alphabet.</p>
+          <div class='controls'>
+            <button id='forge' type='button'>forge sigil</button>
+            <a id='sigil-download' class='action' href='#' download='sky-sigil.svg' aria-disabled='true'>download sigil.svg</a>
+          </div>
+          <img id='sigil-preview' alt='Generated constellation sigil preview'>
+          <p id='sigil-note' class='empty'>No sigil forged yet.</p>
+        </section>
       </section>
     </div>
 
@@ -229,6 +265,10 @@ Load your saved sky, then spin to ask for a tiny omen.</pre>
       var spinBtn = document.getElementById('spin');
       var remixBtn = document.getElementById('remix');
       var clearHistoryBtn = document.getElementById('clear-history');
+      var forgeBtn = document.getElementById('forge');
+      var sigilDownload = document.getElementById('sigil-download');
+      var sigilPreview = document.getElementById('sigil-preview');
+      var sigilNote = document.getElementById('sigil-note');
       var statusEl = document.getElementById('status');
       var omenEl = document.getElementById('omen');
       var historyList = document.getElementById('history-list');
@@ -267,9 +307,35 @@ Load your saved sky, then spin to ask for a tiny omen.</pre>
         return y + '-' + m + '-' + day + ' ' + hh + ':' + mm;
       }
 
+      function fileStamp(ms) {
+        var d = new Date(ms || Date.now());
+        var y = d.getFullYear();
+        var m = String(d.getMonth() + 1).padStart(2, '0');
+        var day = String(d.getDate()).padStart(2, '0');
+        var hh = String(d.getHours()).padStart(2, '0');
+        var mm = String(d.getMinutes()).padStart(2, '0');
+        return y + m + day + '-' + hh + mm;
+      }
+
       function setSpinButton() {
         spinBtn.textContent = spinning ? 'spinning...' : 'spin omen wheel';
         spinBtn.setAttribute('aria-busy', spinning ? 'true' : 'false');
+      }
+
+      function setSigilDownloadEnabled(enabled) {
+        sigilDownload.setAttribute('aria-disabled', enabled ? 'false' : 'true');
+        if (!enabled) {
+          sigilDownload.setAttribute('href', '#');
+          sigilDownload.setAttribute('download', 'sky-sigil.svg');
+        }
+      }
+
+      function clearSigil(keepNote) {
+        sigilPreview.removeAttribute('src');
+        setSigilDownloadEnabled(false);
+        if (!keepNote) {
+          sigilNote.textContent = 'No sigil forged yet.';
+        }
       }
 
       function cloneStars(arr) {
@@ -291,12 +357,14 @@ Load your saved sky, then spin to ask for a tiny omen.</pre>
         } catch (e) {
           stars = [];
           statusEl.textContent = 'Local storage is unavailable here.';
+          clearSigil(true);
           return;
         }
 
         if (!raw) {
           stars = [];
           statusEl.textContent = 'No saved constellation found. Make one on the main page first.';
+          clearSigil(true);
           return;
         }
 
@@ -306,12 +374,14 @@ Load your saved sky, then spin to ask for a tiny omen.</pre>
           stars = cloneStars(parsed).slice(0, 180);
           if (!stars.length) {
             statusEl.textContent = 'A sky file exists, but no readable stars were found.';
+            clearSigil(true);
             return;
           }
           statusEl.textContent = 'Archive synced: ' + stars.length + ' star' + (stars.length === 1 ? '' : 's') + ' loaded.';
         } catch (e2) {
           stars = [];
           statusEl.textContent = 'Saved constellation data is unreadable. Return home and remake it.';
+          clearSigil(true);
         }
       }
 
@@ -451,6 +521,122 @@ Load your saved sky, then spin to ask for a tiny omen.</pre>
         }
       }
 
+      function escapeXml(text) {
+        return text.replace(/[&<>\"']/g, function (ch) {
+          if (ch === '&') return '&amp;';
+          if (ch === '<') return '&lt;';
+          if (ch === '>') return '&gt;';
+          if (ch === '\"') return '&quot;';
+          return '&apos;';
+        });
+      }
+
+      function buildSigilSvg() {
+        if (!stars.length) return null;
+
+        var w = 420;
+        var h = 420;
+        var cx = w * 0.5;
+        var cy = h * 0.5;
+        var outer = 168;
+        var mid = 122;
+        var inner = 80;
+        var mapped = [];
+        var hash = hashConstellation();
+        var glyphs = glyphSets[glyphSetIndex];
+        var phase = (hash % 360) * (Math.PI / 180);
+
+        var maxStars = Math.min(stars.length, 120);
+        for (var i = 0; i < maxStars; i++) {
+          var s = stars[i];
+          var angle = phase + (s.x / 100) * Math.PI * 2;
+          var radius = 28 + ((100 - s.y) / 100) * (mid - 26);
+          mapped.push({
+            x: cx + Math.cos(angle) * radius,
+            y: cy + Math.sin(angle) * radius,
+            r: 1.3 + (i % 3) * 0.65
+          });
+        }
+
+        var links = [];
+        var maxD = 74;
+        var maxD2 = maxD * maxD;
+        for (var a = 0; a < mapped.length; a++) {
+          for (var b = a + 1; b < mapped.length; b++) {
+            var dx = mapped[b].x - mapped[a].x;
+            var dy = mapped[b].y - mapped[a].y;
+            var d2 = dx * dx + dy * dy;
+            if (d2 > maxD2) continue;
+            var alpha = 0.12 + (1 - d2 / maxD2) * 0.4;
+            links.push('<line x1=\'' + mapped[a].x.toFixed(2) + '\' y1=\'' + mapped[a].y.toFixed(2) + '\' x2=\'' + mapped[b].x.toFixed(2) + '\' y2=\'' + mapped[b].y.toFixed(2) + '\' stroke=\'rgba(142,197,255,' + alpha.toFixed(3) + ')\' stroke-width=\'1\' />');
+          }
+        }
+
+        var runeMarks = [];
+        for (var g = 0; g < glyphs.length; g++) {
+          var ga = phase + (g / glyphs.length) * Math.PI * 2;
+          var gx = cx + Math.cos(ga) * outer;
+          var gy = cy + Math.sin(ga) * outer;
+          runeMarks.push('<text x=\'' + gx.toFixed(2) + '\' y=\'' + gy.toFixed(2) + '\' fill=\'' + (g % 2 ? '#f5e3ba' : '#e7f2ff') + '\' font-size=\'22\' font-family=\'system-ui, -apple-system, Segoe UI, sans-serif\' text-anchor=\'middle\' dominant-baseline=\'middle\'>' + escapeXml(glyphs[g]) + '</text>');
+        }
+
+        var points = [];
+        for (var p = 0; p < mapped.length; p++) {
+          points.push('<circle cx=\'' + mapped[p].x.toFixed(2) + '\' cy=\'' + mapped[p].y.toFixed(2) + '\' r=\'' + (mapped[p].r * 2.2).toFixed(2) + '\' fill=\'rgba(134,196,255,0.2)\' />');
+          points.push('<circle cx=\'' + mapped[p].x.toFixed(2) + '\' cy=\'' + mapped[p].y.toFixed(2) + '\' r=\'' + mapped[p].r.toFixed(2) + '\' fill=\'rgba(233,244,255,0.97)\' />');
+        }
+
+        var titleLine = omens.length ? omens[0].title : 'unread omen';
+        var stamped = dayStamp().replace(' ', ' · ');
+
+        return ''
+          + '<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'' + w + '\' height=\'' + h + '\' viewBox=\'0 0 ' + w + ' ' + h + '\' role=\'img\' aria-label=\'Constellation sigil\'>'
+          + '<defs>'
+          + '<linearGradient id=\'bg\' x1=\'0\' y1=\'0\' x2=\'0\' y2=\'1\'><stop offset=\'0%\' stop-color=\'#111a3a\'/><stop offset=\'100%\' stop-color=\'#070b18\'/></linearGradient>'
+          + '</defs>'
+          + '<rect width=\'' + w + '\' height=\'' + h + '\' fill=\'url(#bg)\' />'
+          + '<circle cx=\'' + cx + '\' cy=\'' + cy + '\' r=\'' + outer + '\' fill=\'none\' stroke=\'rgba(152,196,255,0.46)\' stroke-width=\'2\' />'
+          + '<circle cx=\'' + cx + '\' cy=\'' + cy + '\' r=\'' + mid + '\' fill=\'none\' stroke=\'rgba(255,227,165,0.34)\' stroke-width=\'1.3\' />'
+          + '<circle cx=\'' + cx + '\' cy=\'' + cy + '\' r=\'' + inner + '\' fill=\'none\' stroke=\'rgba(150,190,255,0.2)\' stroke-width=\'1\' />'
+          + runeMarks.join('')
+          + links.join('')
+          + points.join('')
+          + '<rect x=\'12\' y=\'' + (h - 56) + '\' width=\'' + (w - 24) + '\' height=\'42\' rx=\'8\' fill=\'rgba(5,10,20,0.64)\' stroke=\'rgba(255,255,255,0.12)\' />'
+          + '<text x=\'22\' y=\'' + (h - 33) + '\' fill=\'#eaf3ff\' font-size=\'13\' font-family=\'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace\'>' + escapeXml(titleLine) + '</text>'
+          + '<text x=\'22\' y=\'' + (h - 18) + '\' fill=\'#bad4ff\' font-size=\'11\' font-family=\'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace\'>stars ' + mapped.length + ' · rune set ' + (glyphSetIndex + 1) + ' · ' + escapeXml(stamped) + '</text>'
+          + '</svg>';
+      }
+
+      function forgeSigil(silent) {
+        if (!stars.length) {
+          sigilNote.textContent = 'No stars loaded, so there is nothing to forge yet.';
+          setSigilDownloadEnabled(false);
+          if (!silent) statusEl.textContent = 'Forge failed: load or create a constellation first.';
+          return;
+        }
+
+        var svg = buildSigilSvg();
+        if (!svg) {
+          sigilNote.textContent = 'Sigil forge could not map this constellation.';
+          setSigilDownloadEnabled(false);
+          return;
+        }
+
+        var encoded = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+        var stamp = fileStamp();
+        var filename = 'sky-sigil-' + stamp + '.svg';
+
+        sigilPreview.setAttribute('src', encoded);
+        sigilDownload.setAttribute('href', encoded);
+        sigilDownload.setAttribute('download', filename);
+        setSigilDownloadEnabled(true);
+
+        sigilNote.textContent = 'Sigil forged: ' + filename + ' · ' + stars.length + ' stars encoded.';
+        if (!silent) {
+          statusEl.textContent = '✧ Sigil forged. Download it or remix runes and forge again.';
+        }
+      }
+
       function spinOmen() {
         if (spinning) return;
         if (!stars.length) {
@@ -485,6 +671,9 @@ Load your saved sky, then spin to ask for a tiny omen.</pre>
       function remixRunes() {
         glyphSetIndex = (glyphSetIndex + 1) % glyphSets.length;
         statusEl.textContent = 'Rune set remixed. Same sky, different alphabet.';
+        if (sigilDownload.getAttribute('aria-disabled') === 'false') {
+          forgeSigil(true);
+        }
       }
 
       function clearHistory() {
@@ -640,10 +829,14 @@ Load your saved sky, then spin to ask for a tiny omen.</pre>
       spinBtn.addEventListener('click', spinOmen);
       remixBtn.addEventListener('click', remixRunes);
       clearHistoryBtn.addEventListener('click', clearHistory);
+      forgeBtn.addEventListener('click', function () {
+        forgeSigil(false);
+      });
 
       loadStars();
       loadOmens();
       setSpinButton();
+      clearSigil(false);
       frame();
     })();
   </script>
