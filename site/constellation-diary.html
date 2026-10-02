@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang='en'>
+<head>
+  <meta charset='utf-8'>
+  <meta name='viewport' content='width=device-width, initial-scale=1'>
+  <title>constellation diary · interesting</title>
+  <meta name='description' content='A logbook that turns your saved wish constellation into animated diary entries.'>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #090c1a;
+      --fg: #eef3ff;
+      --muted: #a7b3d4;
+      --line: rgba(255,255,255,0.18);
+      --panel: rgba(10, 14, 28, 0.72);
+      --accent: #9fc8ff;
+      --accent2: #ffe6a8;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      min-height: 100%;
+      background: radial-gradient(circle at 20% 0%, #212b57 0%, var(--bg) 55%);
+      color: var(--fg);
+      font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    }
+
+    body {
+      padding: 1rem;
+      display: grid;
+      place-items: center;
+    }
+
+    main {
+      width: min(900px, 96vw);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: var(--panel);
+      backdrop-filter: blur(8px);
+      box-shadow: 0 14px 38px rgba(0,0,0,0.35);
+      padding: 1rem;
+    }
+
+    h1 {
+      margin: 0;
+      letter-spacing: -0.03em;
+      font-size: clamp(1.8rem, 5vw, 3.1rem);
+      cursor: default;
+    }
+
+    .tagline {
+      margin: 0.35rem 0 0.9rem;
+      color: var(--muted);
+    }
+
+    .top {
+      display: grid;
+      grid-template-columns: 1.1fr 0.9fr;
+      gap: 0.8rem;
+    }
+
+    #sky {
+      width: 100%;
+      height: auto;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.16);
+      background: #070b18;
+      display: block;
+    }
+
+    .panel {
+      border: 1px solid rgba(255,255,255,0.14);
+      border-radius: 12px;
+      background: rgba(6, 9, 19, 0.56);
+      padding: 0.8rem;
+    }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin: 0.6rem 0;
+    }
+
+    button, a.action {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: rgba(255,255,255,0.07);
+      color: var(--fg);
+      text-decoration: none;
+      padding: 0.46rem 0.85rem;
+      font: inherit;
+      cursor: pointer;
+    }
+
+    button:hover,
+    button:focus-visible,
+    a.action:hover,
+    a.action:focus-visible {
+      outline: none;
+      border-color: rgba(182, 213, 255, 0.76);
+      background: rgba(152, 194, 255, 0.17);
+    }
+
+    .row {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      margin-top: 0.35rem;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    input[type='range'] {
+      width: 100%;
+      accent-color: var(--accent);
+    }
+
+    #status {
+      margin: 0.5rem 0 0;
+      min-height: 1.4em;
+      color: var(--accent2);
+      font-size: 0.94rem;
+    }
+
+    #entry {
+      margin: 0.8rem 0 0;
+      padding: 0.72rem;
+      border: 1px solid rgba(255,255,255,0.14);
+      border-radius: 10px;
+      background: rgba(7, 11, 23, 0.66);
+      color: #e6efff;
+      white-space: pre-wrap;
+      min-height: 9em;
+      font-size: 0.92rem;
+      line-height: 1.45;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+    }
+
+    .footer {
+      margin-top: 0.8rem;
+      color: var(--muted);
+      font-size: 0.86rem;
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+
+    @media (max-width: 760px) {
+      .top { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1 id='title'>constellation diary</h1>
+    <p class='tagline'>Your saved wish constellation, replayed as a tiny observatory logbook.</p>
+
+    <div class='top'>
+      <canvas id='sky' width='620' height='300' aria-label='Animated view of your saved constellation'></canvas>
+
+      <section class='panel'>
+        <p style='margin:0;color:#d8e5ff;'>Generate entries from the exact star layout saved on the main page.</p>
+        <div class='controls'>
+          <button id='refresh' type='button'>refresh saved sky</button>
+          <button id='shuffle' type='button'>shuffle palette</button>
+          <button id='write' type='button'>write diary entry</button>
+        </div>
+        <div class='row'>
+          <label for='drift'>time drift</label>
+          <input id='drift' type='range' min='0' max='100' value='38'>
+        </div>
+        <p id='status' aria-live='polite'>Loading sky memory...</p>
+        <pre id='entry' aria-live='polite'>Awaiting constellation data...</pre>
+      </section>
+    </div>
+
+    <p class='footer'>
+      <a class='action' href='index.html'>back to constellation</a>
+      <a class='action' href='error.html'>visit observatory 404</a>
+      <span>easter egg: tap the title five times</span>
+    </p>
+  </main>
+
+  <script>
+    (function () {
+      var STORAGE_KEY = 'interesting_wish_constellation_v1';
+      var canvas = document.getElementById('sky');
+      var ctx = canvas.getContext('2d');
+      var titleEl = document.getElementById('title');
+      var entryEl = document.getElementById('entry');
+      var statusEl = document.getElementById('status');
+      var driftInput = document.getElementById('drift');
+      var refreshBtn = document.getElementById('refresh');
+      var shuffleBtn = document.getElementById('shuffle');
+      var writeBtn = document.getElementById('write');
+
+      var stars = [];
+      var t = 0;
+      var tapCount = 0;
+      var paletteIndex = 0;
+      var palettes = [
+        { bgTop: '#0e1532', bgBottom: '#070b18', link: 'rgba(150,196,255,0.44)', dot: 'rgba(228,239,255,0.96)', halo: 'rgba(153,206,255,0.22)' },
+        { bgTop: '#2d1430', bgBottom: '#12091a', link: 'rgba(255,167,228,0.36)', dot: 'rgba(255,226,244,0.95)', halo: 'rgba(233,140,255,0.22)' },
+        { bgTop: '#163124', bgBottom: '#08160f', link: 'rgba(170,255,201,0.34)', dot: 'rgba(225,255,237,0.95)', halo: 'rgba(118,255,180,0.2)' },
+        { bgTop: '#2a2a12', bgBottom: '#151206', link: 'rgba(255,221,148,0.38)', dot: 'rgba(255,246,221,0.95)', halo: 'rgba(255,206,92,0.23)' }
+      ];
+
+      function clamp(v, min, max) {
+        return Math.max(min, Math.min(max, v));
+      }
+
+      function hashConstellation() {
+        var h = 2166136261;
+        for (var i = 0; i < stars.length; i++) {
+          var s = stars[i];
+          h ^= Math.round(s.x * 10);
+          h += (h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24);
+          h ^= Math.round(s.y * 10);
+          h += (h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24);
+          for (var c = 0; c < s.text.length; c++) {
+            h ^= s.text.charCodeAt(c);
+            h += (h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24);
+          }
+        }
+        return h >>> 0;
+      }
+
+      function constellationSummary() {
+        var cx = 0;
+        var cy = 0;
+        for (var i = 0; i < stars.length; i++) {
+          cx += stars[i].x;
+          cy += stars[i].y;
+        }
+        cx /= stars.length || 1;
+        cy /= stars.length || 1;
+
+        var spread = 0;
+        for (var j = 0; j < stars.length; j++) {
+          var dx = stars[j].x - cx;
+          var dy = stars[j].y - cy;
+          spread += Math.sqrt(dx * dx + dy * dy);
+        }
+        spread /= stars.length || 1;
+
+        return { cx: cx, cy: cy, spread: spread };
+      }
+
+      function constellationTitle(hash, summary) {
+        var a = ['Velvet', 'Copper', 'Echo', 'Saffron', 'Silver', 'Midnight', 'Lumen', 'Quiet'];
+        var b = ['Harbor', 'Signal', 'Bridge', 'Garden', 'Archive', 'Compass', 'Choir', 'Voyage'];
+        var region = (summary.cy < 50 ? 'North' : 'South') + (summary.cx < 50 ? 'West' : 'East');
+        var mood = summary.spread < 12 ? 'Knot' : (summary.spread < 24 ? 'Field' : 'Trail');
+        return a[hash % a.length] + ' ' + b[(hash >>> 4) % b.length] + ' of the ' + region + ' ' + mood;
+      }
+
+      function pick(arr, seed, step) {
+        return arr[Math.abs(seed + step * 31) % arr.length];
+      }
+
+      function dayStamp() {
+        var d = new Date();
+        var y = d.getFullYear();
+        var m = String(d.getMonth() + 1).padStart(2, '0');
+        var day = String(d.getDate()).padStart(2, '0');
+        return y + '-' + m + '-' + day;
+      }
+
+      function loadStars() {
+        var raw = null;
+        try {
+          raw = localStorage.getItem(STORAGE_KEY);
+        } catch (e) {
+          statusEl.textContent = 'Local storage is unavailable in this browser context.';
+          stars = [];
+          return;
+        }
+
+        if (!raw) {
+          stars = [];
+          statusEl.textContent = 'No saved constellation found yet. Create one on the main page first.';
+          return;
+        }
+
+        try {
+          var parsed = JSON.parse(raw);
+          if (!Array.isArray(parsed)) throw new Error('invalid');
+          stars = parsed.filter(function (s) {
+            return s && typeof s.x === 'number' && typeof s.y === 'number' && typeof s.text === 'string';
+          }).slice(0, 160);
+
+          if (!stars.length) {
+            statusEl.textContent = 'A sky file exists, but it has no readable stars.';
+            return;
+          }
+
+          statusEl.textContent = 'Loaded ' + stars.length + ' star' + (stars.length === 1 ? '' : 's') + ' from your saved sky memory.';
+        } catch (e2) {
+          stars = [];
+          statusEl.textContent = 'Saved constellation data is unreadable. Return home and create a new pattern.';
+        }
+      }
+
+      function writeEntry() {
+        if (!stars.length) {
+          entryEl.textContent = 'No constellation loaded yet.\n\n1) Visit index.html\n2) Place a few stars\n3) Return here and press refresh';
+          return;
+        }
+
+        var summary = constellationSummary();
+        var hash = hashConstellation();
+        var title = constellationTitle(hash, summary);
+        var mood = summary.spread < 12 ? 'tight and intentional' : (summary.spread < 24 ? 'balanced and exploratory' : 'wide and adventurous');
+
+        var openers = [
+          'logbook note:',
+          'observatory memo:',
+          'night watch report:',
+          'drift entry:'
+        ];
+        var middles = [
+          'the pattern keeps choosing motion over certainty.',
+          'small lights negotiated a map out of static.',
+          'tonight the sky preferred curiosity to caution.',
+          'the constellation leaned toward unfinished courage.'
+        ];
+        var closers = [
+          'tomorrow: move one star and test a new story.',
+          'recommendation: protect one hour for playful drafting.',
+          'next action: begin before your inner critic wakes.',
+          'forecast: momentum improving with each tiny attempt.'
+        ];
+
+        var line1 = pick(openers, hash, 1) + ' ' + title;
+        var line2 = stars.length + ' stars, center at ' + summary.cx.toFixed(1) + ' / ' + summary.cy.toFixed(1) + ', mood: ' + mood + '.';
+        var line3 = pick(middles, hash, 2);
+        var line4 = pick(closers, hash, 3);
+
+        entryEl.textContent = line1 + '\n' + line2 + '\n' + line3 + '\n' + line4 + '\n\nentry date: ' + dayStamp();
+        statusEl.textContent = 'New diary entry written from your current constellation geometry.';
+      }
+
+      function drawBackground(p) {
+        var grad = ctx.createLinearGradient(0, 0, 0, canvas.height);
+        grad.addColorStop(0, p.bgTop);
+        grad.addColorStop(1, p.bgBottom);
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        for (var i = 0; i < 40; i++) {
+          var sx = (i * 137.7 + (t * 14)) % canvas.width;
+          var sy = (i * 91.3 + (t * 8)) % canvas.height;
+          var a = 0.06 + (i % 5) * 0.025;
+          ctx.beginPath();
+          ctx.fillStyle = 'rgba(200,220,255,' + a.toFixed(3) + ')';
+          ctx.arc(sx, sy, 1.1, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+
+      function starPx(s, driftStrength, idx) {
+        var x = (s.x / 100) * canvas.width;
+        var y = (s.y / 100) * canvas.height;
+        var wobbleX = Math.cos(t * 0.8 + idx * 0.9) * driftStrength * 0.9;
+        var wobbleY = Math.sin(t * 1.1 + idx * 0.7) * driftStrength;
+        return { x: x + wobbleX, y: y + wobbleY };
+      }
+
+      function drawConstellation() {
+        var p = palettes[paletteIndex % palettes.length];
+        drawBackground(p);
+
+        if (!stars.length) return;
+
+        var driftStrength = (Number(driftInput.value) / 100) * 7;
+        var mapped = [];
+        for (var i = 0; i < stars.length; i++) {
+          mapped.push(starPx(stars[i], driftStrength, i));
+        }
+
+        var maxD = Math.min(canvas.width, canvas.height) * 0.27;
+        var maxD2 = maxD * maxD;
+
+        for (var a = 0; a < mapped.length; a++) {
+          for (var b = a + 1; b < mapped.length; b++) {
+            var dx = mapped[b].x - mapped[a].x;
+            var dy = mapped[b].y - mapped[a].y;
+            var d2 = dx * dx + dy * dy;
+            if (d2 > maxD2) continue;
+            var alpha = 0.1 + (1 - d2 / maxD2) * 0.5;
+            ctx.strokeStyle = p.link.replace('0.44', alpha.toFixed(3)).replace('0.36', alpha.toFixed(3)).replace('0.34', alpha.toFixed(3)).replace('0.38', alpha.toFixed(3));
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(mapped[a].x, mapped[a].y);
+            ctx.lineTo(mapped[b].x, mapped[b].y);
+            ctx.stroke();
+          }
+        }
+
+        for (var j = 0; j < mapped.length; j++) {
+          var r = 1.8 + (j % 3) * 0.7;
+          ctx.beginPath();
+          ctx.fillStyle = p.halo;
+          ctx.arc(mapped[j].x, mapped[j].y, r * 2.4, 0, Math.PI * 2);
+          ctx.fill();
+
+          ctx.beginPath();
+          ctx.fillStyle = p.dot;
+          ctx.arc(mapped[j].x, mapped[j].y, r, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+
+      function frame() {
+        t += 0.016;
+        drawConstellation();
+        requestAnimationFrame(frame);
+      }
+
+      refreshBtn.addEventListener('click', function () {
+        loadStars();
+        writeEntry();
+      });
+
+      shuffleBtn.addEventListener('click', function () {
+        paletteIndex = (paletteIndex + 1) % palettes.length;
+        statusEl.textContent = 'Palette shifted. Same stars, different mood.';
+      });
+
+      writeBtn.addEventListener('click', writeEntry);
+
+      titleEl.addEventListener('click', function () {
+        tapCount += 1;
+        if (tapCount >= 5) {
+          tapCount = 0;
+          paletteIndex = (paletteIndex + 2) % palettes.length;
+          statusEl.textContent = 'Secret whisper: the diary changed ink under moonlight.';
+        }
+      });
+
+      loadStars();
+      writeEntry();
+      frame();
+    })();
+  </script>
+</body>
+</html>
