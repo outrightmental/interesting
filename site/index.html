@@ -268,6 +268,9 @@
         var el = document.createElement('button');
         el.className = 'star';
         el.type = 'button';
+        // The star must know its element before it is positioned: applyStarPosition() does
+        // nothing without one, which left every new and every reloaded star at the default spot.
+        star.el = el;
         applyStarPosition(star);
         el.title = star.text;
         el.setAttribute('aria-label', 'Star note: ' + star.text);
@@ -298,7 +301,6 @@
         });
 
         document.body.appendChild(el);
-        star.el = el;
       }
 
       function addStar(xVw, yVh, text) {
