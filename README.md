@@ -4,7 +4,7 @@
 [![Test](https://github.com/outrightmental/interesting/actions/workflows/test.yml/badge.svg)](https://github.com/outrightmental/interesting/actions/workflows/test.yml)
 
 # interesting
-recursively iterate the most interesting possible website
+iterate a more interesting website
 
 ## How it works
 
