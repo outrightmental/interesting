@@ -36,7 +36,7 @@ jobs:
 
       - name: Serve error.html as the 404 page
         run: |
-cp site/error.html site/404.html
+          cp site/error.html site/404.html
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v4
