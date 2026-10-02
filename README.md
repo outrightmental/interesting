@@ -11,14 +11,18 @@ recursively iterate the most interesting possible website
 - **`/site`** — the static website, published to GitHub Pages by
   [`.github/workflows/pages.yml`](.github/workflows/pages.yml). `error.html` is also served as the
   Pages `404.html`.
-- **Daily AI iteration** — [`.github/workflows/make-interesting.yml`](.github/workflows/make-interesting.yml)
-  runs on a daily cron (or manually via *Run workflow*). It picks a random model from
+- **Hourly AI iteration** — [`.github/workflows/make-interesting.yml`](.github/workflows/make-interesting.yml)
+  runs every hour (or manually via *Run workflow*). It picks a random model from
   [GitHub Copilot](https://docs.github.com/copilot), reached through the
   [Copilot CLI](https://docs.github.com/copilot/how-tos/copilot-cli) and billed to a GitHub Copilot
   subscription (see [Setup](#setup)), gives it the mission **"make the website more interesting"**,
   commits the result and redeploys the site. Models the account cannot use are skipped. A model
   that returns an unusable answer is replaced by another random model, or asked again if no other
   is left, for up to three attempts per run.
+- **One run at a time** — a run that starts while an earlier run of the workflow is still going
+  skips itself and finishes green without doing anything, so there is never more than one
+  iteration in flight. (To retry a failed run use *Run workflow*: *Re-run failed jobs* does not
+  repeat the check, so it waits for the current run instead of skipping.)
 - **Only flagship models** — the random pick draws from a list of large, top-tier models (see
   [Which models](#which-models)); small and mid-tier models are never picked.
 
@@ -60,7 +64,7 @@ has no model in the pool, because Copilot only offers the Gemini Flash tier.
 ### Setup
 
 - *Settings → Pages → Source*: **GitHub Actions**.
-- Actions must be allowed to push to the default branch (the daily commit uses `GITHUB_TOKEN`).
+- Actions must be allowed to push to the default branch (the AI's commit uses `GITHUB_TOKEN`).
 - GitHub Copilot must accept the workflow's requests. Either of these works:
   - **Organization:** as an owner, open the organization's *Settings → Copilot → Policies*, enable
     **Copilot CLI** and select **Allow use of Copilot CLI billed to the organization**. No secret
@@ -71,6 +75,9 @@ has no model in the pool, because Copilot only offers the Gemini Flash tier.
     personal access token (resource owner: your own account) with the account permission
     **Copilot Requests**. Usage is billed to that user's Copilot plan. When this secret exists it
     is used instead of the workflow's own token.
+- The hourly schedule makes about 720 model calls a month, more when answers have to be asked
+  for again. They are billed as Copilot AI credits to whoever pays (see the two routes above), from
+  the same allowance as that account's other Copilot use.
 - Which models can be picked depends on who pays. The workflow's own token is only offered the
   models of the organization's Copilot plan and model policy: on 2026-10-02, for an organization
   with the policy enabled but no Copilot seats, that was `gpt-5.3-codex` alone, so every "random"

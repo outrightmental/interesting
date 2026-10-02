@@ -28,7 +28,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
         with:
-          # When called after the daily commit, deploy the branch tip rather than the triggering SHA.
+          # When called after the AI's commit, deploy the branch tip rather than the triggering SHA.
           ref: ${{ github.ref }}
 
       - name: Configure Pages

@@ -235,8 +235,8 @@ def split_for_prompt(files):
 def build_prompt(shown, omitted=()):
     system = (
         "You are the autonomous curator of a static website hosted on GitHub Pages. "
-        f"Your mission, every single day: {MISSION}.\n\n"
-        "Each day make one focused, delightful improvement: new content, a new page, "
+        f"Your mission, every single run: {MISSION}.\n\n"
+        "Each run, make one focused, delightful improvement: new content, a new page, "
         "an interactive toy, better visuals, a hidden easter egg, anything that makes the "
         "site more interesting. Build on what is already there rather than starting over.\n\n"
         "Rules:\n"
@@ -248,9 +248,9 @@ def build_prompt(shown, omitted=()):
         "- index.html and error.html must always exist and remain valid.\n"
         f"- Keep each file small (at most {MAX_FILE_BYTES // 1000} KB); return the COMPLETE new "
         "content of every file you change.\n"
-        f"- At most {MAX_CHANGES} files per day.\n\n"
+        f"- At most {MAX_CHANGES} files per run.\n\n"
         "Respond with ONLY a JSON object, no prose and no markdown fences, shaped as:\n"
-        '{"summary": "one sentence describing today\'s change", '
+        '{"summary": "one sentence describing this change", '
         '"files": [{"path": "index.html", "content": "<full file content>"}], '
         '"delete": ["old-page.html"]}\n'
         "It must be valid JSON, or it is discarded. Inside each \"content\" string write every "
@@ -264,7 +264,7 @@ def build_prompt(shown, omitted=()):
             "\n\nOther existing files (content omitted for size): " + ", ".join(omitted)
             + "\nYou cannot see these files, so you may not change or delete them."
         )
-    user += f"\n\nToday's mission: {MISSION}. Respond with the JSON object only."
+    user += f"\n\nThis run's mission: {MISSION}. Respond with the JSON object only."
     return system + "\n\n" + user
 
 
@@ -578,7 +578,7 @@ def main():
             # a model does not give the same answer twice.
             queue, answering = answering, []
     report_unavailable()
-    sys.exit("No model produced a usable change today.")
+    sys.exit("No model produced a usable change this run.")
 
 
 if __name__ == "__main__":
