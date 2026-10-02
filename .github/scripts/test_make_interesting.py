@@ -604,13 +604,16 @@ class MainTest(SiteDirTestCase):
         out = self.root / "github_output"
         full_env = {"GITHUB_OUTPUT": str(out), "MODEL": "", "MODEL_POOL": ""}
         full_env.update(env or {})
-        with mock.patch.dict(os.environ, full_env), mock.patch("builtins.print"):
-            mi.main()
+        self.printed = []
+        with mock.patch.dict(os.environ, full_env):
+            with mock.patch("builtins.print", lambda *args, **kwargs: self.printed.append(" ".join(map(str, args)))):
+                mi.main()
         return out.read_text() if out.exists() else ""
 
     def test_applies_first_usable_answer_and_reports_it(self):
         fake = FakeCopilot(self, f"say({GOOD_PLAN!r})")
         output = self.run_main()
+        self.assertFalse([line for line in self.printed if "not available" in line])
         self.assertEqual((self.site / "clock.html").read_text(), "<p>tick</p>")
         (call,) = fake.calls()
         model = call["args"][1]
@@ -650,6 +653,9 @@ class MainTest(SiteDirTestCase):
         with mock.patch.object(mi.random, "sample", lambda pool, k: list(pool)):
             output = self.run_main()
         self.assertEqual(len(fake.calls()), len(mi.MODELS))
+        notice = [line for line in self.printed if line.startswith("::notice::")][-1]
+        self.assertIn(f"{len(mi.MODELS) - 1} of the {len(mi.MODELS)} models to pick from are not available", notice)
+        self.assertIn(mi.MODELS[0], notice)
         self.assertEqual(read_outputs(output)["model"], survivor)
         self.assertTrue((self.site / "clock.html").is_file())
 
@@ -691,7 +697,31 @@ class MainTest(SiteDirTestCase):
         fake = FakeCopilot(self, "say('nope')")
         with self.assertRaises(SystemExit):
             self.run_main({"MODEL": " my-model "})
-        self.assertEqual([c["args"][1] for c in fake.calls()], ["my-model"])
+        self.assertEqual([c["args"][1] for c in fake.calls()], ["my-model"] * mi.MAX_ATTEMPTS)
+
+    def test_a_lone_available_model_is_asked_again_after_a_bad_answer(self):
+        # The situation on an account that is offered a single model: everything else is skipped,
+        # and the one model that answers gets the remaining attempts.
+        survivor = mi.MODELS[0]
+        fake = FakeCopilot(self, f"""
+            if MODEL != {survivor!r}:
+                sys.stderr.write('Error: Model "%s" from --model flag is not available.' % MODEL)
+                sys.exit(1)
+            mine = [line for line in open(LOG).read().splitlines() if json.loads(line)['args'][1] == MODEL]
+            say('not json' if len(mine) < 2 else {GOOD_PLAN!r})
+        """)
+        output = self.run_main()
+        asked = [c["args"][1] for c in fake.calls()]
+        self.assertEqual(asked.count(survivor), 2)
+        self.assertEqual(len(asked), len(mi.MODELS) + 1, "unavailable models are not asked twice")
+        self.assertEqual(read_outputs(output)["model"], survivor)
+
+    def test_gives_up_when_no_model_is_available(self):
+        fake = FakeCopilot(self, "sys.stderr.write('Error: Model \"x\" from --model flag is not available.'); sys.exit(1)")
+        with self.assertRaises(SystemExit) as caught:
+            self.run_main()
+        self.assertIn("No model produced a usable change", str(caught.exception))
+        self.assertEqual(len(fake.calls()), len(mi.MODELS))
 
     def test_auth_failure_stops_immediately_with_setup_help(self):
         fake = FakeCopilot(self, "sys.stderr.write('Error: Access denied by policy settings'); sys.exit(1)")

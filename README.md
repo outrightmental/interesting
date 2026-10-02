@@ -61,15 +61,20 @@ has no model in the pool, because Copilot only offers the Gemini Flash tier.
 - *Settings → Pages → Source*: **GitHub Actions**.
 - Actions must be allowed to push to the default branch (the daily commit uses `GITHUB_TOKEN`).
 - GitHub Copilot must accept the workflow's requests. Either of these works:
+  - **Organization:** as an owner, open the organization's *Settings → Copilot → Policies*, enable
+    **Copilot CLI** and select **Allow use of Copilot CLI billed to the organization**. No secret
+    is needed: the workflow's own token is accepted through its `copilot-requests: write`
+    permission, and usage is billed to the organization. The change can take a quarter of an hour
+    to apply; until then runs fail with "Access denied by policy settings".
   - **Personal plan:** add a repository secret named `COPILOT_GITHUB_TOKEN` holding a fine-grained
     personal access token (resource owner: your own account) with the account permission
-    **Copilot Requests**. Usage is billed to that user's Copilot plan.
-  - **Organization plan:** the organization needs a Copilot plan of its own. In its
-    *Settings → Copilot → Policies*, enable **Copilot CLI** and select **Allow use of Copilot CLI
-    billed to the organization**. No secret is needed then: the workflow's own token is accepted
-    through its `copilot-requests: write` permission, and usage is billed to the organization. The
-    policy alone is not enough: without an organization Copilot plan the token is still refused
-    with "Access denied by policy settings".
+    **Copilot Requests**. Usage is billed to that user's Copilot plan. When this secret exists it
+    is used instead of the workflow's own token.
+- Which models can be picked depends on who pays. The workflow's own token is only offered the
+  models of the organization's Copilot plan and model policy: on 2026-10-02, for an organization
+  with the policy enabled but no Copilot seats, that was `gpt-5.3-codex` alone, so every "random"
+  pick landed on it. A personal token is offered every model of that user's plan. The run log
+  says how many of the models in the pool the account could not use.
 
 ### Development
 

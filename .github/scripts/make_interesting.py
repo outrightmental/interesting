@@ -123,11 +123,12 @@ AUTH_HELP = (
     "Fix it one of two ways:\n"
     "  1. Personal plan: add a repository secret named COPILOT_GITHUB_TOKEN holding a fine-grained\n"
     "     personal access token (resource owner: your own account) that has the account permission\n"
-    "     \"Copilot Requests\". Usage is billed to that user's Copilot plan.\n"
-    "  2. Organization plan: the organization that owns this repository needs a Copilot plan of its\n"
-    "     own, with the \"Copilot CLI\" policy enabled and \"Allow use of Copilot CLI billed to the\n"
-    "     organization\" selected (Settings > Copilot > Policies). The policy alone is not enough:\n"
-    "     without an organization Copilot plan the workflow's own token is still refused."
+    "     \"Copilot Requests\". Usage is billed to that user's Copilot plan, and every model that\n"
+    "     plan includes can be picked.\n"
+    "  2. Organization: as an owner of the organization that owns this repository, open Settings >\n"
+    "     Copilot > Policies, enable \"Copilot CLI\" and select \"Allow use of Copilot CLI billed to\n"
+    "     the organization\". The change can take a quarter of an hour to apply. Usage is billed to\n"
+    "     the organization, and only the models its Copilot plan and policies offer can be picked."
 )
 
 ALLOWED_EXTENSIONS = {
@@ -522,42 +523,54 @@ def main():
 
     shown, omitted = split_for_prompt(read_site())
     prompt = build_prompt(shown, omitted)
-    attempts = 0
-    for model in pick_candidates():
-        if attempts >= MAX_ATTEMPTS:
-            break
+    candidates = pick_candidates()
+    attempts, unavailable = 0, []
+
+    def report_unavailable():
+        # Worth saying out loud: when most of the pool is off limits, the pick is hardly random.
+        if unavailable:
+            print(
+                f"::notice::{len(unavailable)} of the {len(candidates)} models to pick from are not available to "
+                f"this Copilot account ({one_line(', '.join(unavailable), 300)}). See Setup in the README."
+            )
+
+    queue, answering = list(candidates), []
+    while queue and attempts < MAX_ATTEMPTS:
+        model = queue.pop(0)
         print(f"Mission: {MISSION}\nModel:   {model}", flush=True)
+        attempts += 1  # counted up front, so every path below that asks again is bounded
         try:
-            answer = call_model(model, prompt)
+            plan = parse_response(call_model(model, prompt))
+            ops = validate_plan(plan, unseen=omitted)
         except ModelUnavailable as err:
-            print(f"::notice::{model} is not available, trying another model: {one_line(err, 200)}")
-            continue  # no model was asked, so this does not count as an attempt
+            attempts -= 1  # no model was asked, so this does not count as an attempt
+            print(f"{model} is not available, trying another model: {one_line(err, 200)}")
+            unavailable.append(model)
         except CopilotAuthError as err:
             print(f"::error::GitHub Copilot authentication failed: {one_line(err, 300)}")
             sys.exit(AUTH_HELP)
         except SiloBreach as err:
             sys.exit(f"Stopping without applying anything: {err}. The Copilot CLI flags no longer disable every tool.")
-        except ModelError as err:
-            attempts += 1
+        except (ModelError, ValueError, RecursionError, RejectedChange) as err:
+            answering.append(model)
             print(f"::warning::{model} failed: {one_line(err, 500)}")
-            continue
-        attempts += 1
-        try:
-            plan = parse_response(answer)
-            ops = validate_plan(plan, unseen=omitted)
-        except (ValueError, RecursionError, RejectedChange) as err:
-            print(f"::warning::{model} failed: {one_line(err, 500)}")
-            continue
-        try:
-            apply_ops(ops)
-        except OSError as err:
-            # The site may be half written, so stop here: the workflow only commits after success.
-            sys.exit(f"Could not apply the change from {model}: {one_line(err, 300)}")
-        summary = clean_summary(plan.get("summary"))
-        print(f"Summary: {summary}")
-        set_output("model", model)
-        set_output("summary", summary)
-        return
+        else:
+            try:
+                apply_ops(ops)
+            except OSError as err:
+                # The site may be half written, so stop here: the workflow only commits after success.
+                sys.exit(f"Could not apply the change from {model}: {one_line(err, 300)}")
+            summary = clean_summary(plan.get("summary"))
+            print(f"Summary: {summary}")
+            set_output("model", model)
+            set_output("summary", summary)
+            report_unavailable()
+            return
+        if not queue:
+            # Every model has had a turn. With attempts left, ask again the ones that can answer:
+            # a model does not give the same answer twice.
+            queue, answering = answering, []
+    report_unavailable()
     sys.exit("No model produced a usable change today.")
 
 
