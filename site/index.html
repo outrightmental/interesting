@@ -154,6 +154,50 @@
       font-size: 0.85rem;
     }
 
+    .postcard {
+      display: none;
+      margin: 0.95rem auto 0;
+      width: min(430px, 100%);
+      border: 1px solid rgba(255,255,255,0.16);
+      border-radius: 14px;
+      background: rgba(11, 13, 24, 0.72);
+      box-shadow: 0 8px 22px rgba(0,0,0,0.28);
+      padding: 0.7rem;
+      text-align: left;
+    }
+
+    .postcard.show {
+      display: block;
+      animation: fadeup 260ms ease-out;
+    }
+
+    .postcard h2 {
+      margin: 0 0 0.4rem;
+      font-size: 1.05rem;
+      letter-spacing: 0.01em;
+      color: #ecf2ff;
+    }
+
+    #postcard-canvas {
+      width: 100%;
+      height: auto;
+      display: block;
+      border-radius: 10px;
+      border: 1px solid rgba(255,255,255,0.16);
+      background: #090d1b;
+    }
+
+    .postcard-text {
+      margin: 0.5rem 0 0;
+      color: #d7e3ff;
+      font-size: 0.92rem;
+    }
+
+    .postcard-hint {
+      margin: 0.45rem 0 0;
+      font-size: 0.8rem;
+    }
+
     .star {
       position: fixed;
       width: 14px;
@@ -235,9 +279,15 @@
       100% { transform: scale(1.7); opacity: 0.85; }
     }
 
+    @keyframes fadeup {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
     @media (prefers-reduced-motion: reduce) {
       .star { animation: none; }
       button { transition: none; }
+      .postcard.show { animation: none; }
     }
   </style>
 </head>
@@ -256,10 +306,19 @@
       <button id='meteor' type='button'>call a meteor</button>
       <button id='chime' type='button' aria-pressed='false'>play star chime</button>
       <button id='orbit' type='button' aria-pressed='false'>start orbit mode</button>
+      <button id='postcard' type='button'>mint sky postcard</button>
       <button id='clear' type='button'>clear my constellation</button>
     </div>
     <p id='note' class='note' aria-live='polite'>No stars yet. Make the first one.</p>
-    <p class='hint'>Tip: click a star to read its thought, drag stars to reshape the web, catch meteors for rare thoughts, try star chime to hear your pattern, or start orbit mode to make the whole sky dance.</p>
+
+    <section id='postcard-panel' class='postcard' aria-live='polite'>
+      <h2 id='postcard-title'>Your constellation postcard</h2>
+      <canvas id='postcard-canvas' width='396' height='210' aria-label='Constellation postcard preview'></canvas>
+      <p id='postcard-text' class='postcard-text'>Mint a postcard to capture your current sky pattern.</p>
+      <p class='hint postcard-hint'>Each postcard title is generated from your exact star arrangement.</p>
+    </section>
+
+    <p class='hint'>Tip: click a star to read its thought, drag stars to reshape the web, catch meteors for rare thoughts, try star chime to hear your pattern, mint postcards as your sky evolves, or start orbit mode to make the whole sky dance.</p>
   </main>
 
   <script>
@@ -298,8 +357,13 @@
       var meteorBtn = document.getElementById('meteor');
       var chimeBtn = document.getElementById('chime');
       var orbitBtn = document.getElementById('orbit');
+      var postcardBtn = document.getElementById('postcard');
       var clearBtn = document.getElementById('clear');
       var linksSvg = document.getElementById('links');
+      var postcardPanel = document.getElementById('postcard-panel');
+      var postcardTitle = document.getElementById('postcard-title');
+      var postcardText = document.getElementById('postcard-text');
+      var postcardCanvas = document.getElementById('postcard-canvas');
       var stars = [];
       var meteors = [];
       var activeDrag = null;
@@ -445,20 +509,15 @@
         return hash >>> 0;
       }
 
-      function askTheSky() {
-        if (!stars.length) {
-          setNote('The sky is quiet. Drop a star first.');
-          return;
-        }
-
+      function constellationSummary() {
         var cx = 0;
         var cy = 0;
         for (var i = 0; i < stars.length; i++) {
           cx += stars[i].x;
           cy += stars[i].y;
         }
-        cx /= stars.length;
-        cy /= stars.length;
+        cx /= stars.length || 1;
+        cy /= stars.length || 1;
 
         var spread = 0;
         for (var j = 0; j < stars.length; j++) {
@@ -466,7 +525,143 @@
           var dy = stars[j].y - cy;
           spread += Math.sqrt(dx * dx + dy * dy);
         }
-        spread /= stars.length;
+        spread /= stars.length || 1;
+
+        return { cx: cx, cy: cy, spread: spread };
+      }
+
+      function constellationRegionWord(cx, cy) {
+        var northSouth = cy < 50 ? 'North' : 'South';
+        var eastWest = cx < 50 ? 'West' : 'East';
+        return northSouth + eastWest;
+      }
+
+      function constellationTitle(hash, cx, cy, spread, count) {
+        var first = ['Lantern', 'Velvet', 'Copper', 'Quiet', 'Spiral', 'Silver', 'Saffron', 'Echo', 'Midnight', 'Bloom'];
+        var second = ['Harbor', 'Engine', 'Garden', 'Signal', 'Bridge', 'Compass', 'Archive', 'Drift', 'Choir', 'Voyage'];
+        var region = constellationRegionWord(cx, cy);
+        var mood = spread < 12 ? 'Knot' : (spread < 24 ? 'Field' : 'Trail');
+        var core = first[hash % first.length] + ' ' + second[(hash >>> 3) % second.length];
+        if (count < 4) {
+          core = first[hash % first.length] + ' Seed';
+        }
+        return core + ' of the ' + region + ' ' + mood;
+      }
+
+      function dayStamp() {
+        var d = new Date();
+        var y = d.getFullYear();
+        var m = String(d.getMonth() + 1).padStart(2, '0');
+        var day = String(d.getDate()).padStart(2, '0');
+        return y + '-' + m + '-' + day;
+      }
+
+      function drawPostcard(hash, title) {
+        if (!postcardCanvas) return;
+        var pctx = postcardCanvas.getContext('2d');
+        if (!pctx) return;
+
+        var w = postcardCanvas.width;
+        var h = postcardCanvas.height;
+        var grad = pctx.createLinearGradient(0, 0, w, h);
+        grad.addColorStop(0, '#0d1330');
+        grad.addColorStop(0.5, '#121b3d');
+        grad.addColorStop(1, '#090d1b');
+        pctx.fillStyle = grad;
+        pctx.fillRect(0, 0, w, h);
+
+        var seed = hash || 1;
+        function seeded() {
+          seed = (seed * 1664525 + 1013904223) >>> 0;
+          return seed / 4294967296;
+        }
+
+        for (var i = 0; i < 72; i++) {
+          var sx = seeded() * w;
+          var sy = seeded() * h * 0.78;
+          var sr = 0.4 + seeded() * 1.7;
+          var sa = 0.12 + seeded() * 0.5;
+          pctx.beginPath();
+          pctx.fillStyle = 'rgba(181, 207, 255, ' + sa.toFixed(3) + ')';
+          pctx.arc(sx, sy, sr, 0, Math.PI * 2);
+          pctx.fill();
+        }
+
+        var mapped = [];
+        var margin = 22;
+        for (var j = 0; j < stars.length; j++) {
+          mapped.push({
+            x: margin + (stars[j].x / 100) * (w - margin * 2),
+            y: margin + (stars[j].y / 100) * (h * 0.72 - margin * 1.2)
+          });
+        }
+
+        var maxD = Math.min(w, h) * 0.24;
+        var maxDSq = maxD * maxD;
+        pctx.lineWidth = 1;
+        for (var a = 0; a < mapped.length; a++) {
+          for (var b = a + 1; b < mapped.length; b++) {
+            var dx = mapped[b].x - mapped[a].x;
+            var dy = mapped[b].y - mapped[a].y;
+            var d2 = dx * dx + dy * dy;
+            if (d2 > maxDSq) continue;
+            var alpha = 0.1 + (1 - d2 / maxDSq) * 0.42;
+            pctx.strokeStyle = 'rgba(155, 196, 255, ' + alpha.toFixed(3) + ')';
+            pctx.beginPath();
+            pctx.moveTo(mapped[a].x, mapped[a].y);
+            pctx.lineTo(mapped[b].x, mapped[b].y);
+            pctx.stroke();
+          }
+        }
+
+        for (var k = 0; k < mapped.length; k++) {
+          var r = 1.8 + (k % 3) * 0.65;
+          pctx.beginPath();
+          pctx.fillStyle = 'rgba(223, 237, 255, 0.96)';
+          pctx.arc(mapped[k].x, mapped[k].y, r, 0, Math.PI * 2);
+          pctx.fill();
+        }
+
+        pctx.fillStyle = 'rgba(8, 12, 24, 0.6)';
+        pctx.fillRect(0, h - 54, w, 54);
+
+        pctx.fillStyle = '#f0f5ff';
+        pctx.font = '600 16px system-ui, -apple-system, Segoe UI, sans-serif';
+        pctx.fillText(title, 12, h - 30);
+
+        pctx.fillStyle = '#bdd1ff';
+        pctx.font = '12px system-ui, -apple-system, Segoe UI, sans-serif';
+        pctx.fillText('wish constellation postcard · ' + dayStamp(), 12, h - 12);
+      }
+
+      function mintPostcard() {
+        if (!stars.length) {
+          setNote('You need at least one star before minting a postcard.');
+          return;
+        }
+
+        var hash = constellationHash();
+        var summary = constellationSummary();
+        var title = constellationTitle(hash, summary.cx, summary.cy, summary.spread, stars.length);
+        var spreadText = summary.spread < 12 ? 'tight and intentional' : (summary.spread < 24 ? 'balanced and exploratory' : 'wide and adventurous');
+
+        postcardTitle.textContent = title;
+        postcardText.textContent = 'Stamped ' + dayStamp() + ' · ' + stars.length + ' stars · ' + spreadText + '. Rearrange the sky and mint again for a new named card.';
+        drawPostcard(hash, title);
+        postcardPanel.classList.add('show');
+        setNote('🪐 Postcard minted: ' + title + '.');
+      }
+
+      function askTheSky() {
+        if (!stars.length) {
+          setNote('The sky is quiet. Drop a star first.');
+          return;
+        }
+
+        var summary = constellationSummary();
+        var cx = summary.cx;
+        var cy = summary.cy;
+        var spread = summary.spread;
 
         var region = (cy < 50 ? 'northern' : 'southern') + '-' + (cx < 50 ? 'western' : 'eastern');
         var density = spread < 12 ? 'tight' : (spread < 24 ? 'balanced' : 'wide');
@@ -787,6 +982,7 @@
           localStorage.removeItem(STORAGE_KEY);
         } catch (e) {
         }
+        postcardPanel.classList.remove('show');
         queueLinksRender();
         setNote('Sky cleared. Ready for a new constellation.');
       }
@@ -975,6 +1171,11 @@
       orbitBtn.addEventListener('click', function (ev) {
         ev.stopPropagation();
         toggleOrbit(false);
+      });
+
+      postcardBtn.addEventListener('click', function (ev) {
+        ev.stopPropagation();
+        mintPostcard();
       });
 
       clearBtn.addEventListener('click', function (ev) {
