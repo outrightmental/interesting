@@ -140,9 +140,18 @@
       border-radius: 50%;
       background: radial-gradient(circle at 35% 35%, #fff 0 20%, #d4e4ff 45%, #86a9ff 70%, transparent 73%);
       box-shadow: 0 0 13px rgba(145, 188, 255, 0.85);
-      cursor: pointer;
+      cursor: grab;
+      touch-action: none;
+      user-select: none;
       z-index: 3;
       animation: twinkle 2.8s ease-in-out infinite;
+    }
+
+    .star.dragging {
+      cursor: grabbing;
+      animation: none;
+      transform: scale(1.22);
+      box-shadow: 0 0 18px rgba(180, 215, 255, 0.95);
     }
 
     .star:nth-of-type(2n) { animation-duration: 3.7s; }
@@ -171,19 +180,20 @@
   <main>
     <h1>interesting</h1>
     <p class='tagline'>recursively iterate the most interesting possible website</p>
-    <p class='story'>Tonight's experiment: a wish constellation. Click anywhere in the sky to place a tiny thought. Each star remembers itself when you come back.</p>
+    <p class='story'>Tonight's experiment: a wish constellation. Click to place tiny thoughts, then drag stars to sketch your own sky map. It all remembers itself when you return.</p>
     <div class='controls'>
       <button id='drop' type='button'>drop a star</button>
       <button id='clear' type='button'>clear my constellation</button>
     </div>
     <p id='note' class='note' aria-live='polite'>No stars yet. Make the first one.</p>
-    <p class='hint'>Tip: click any glowing star to read the thought attached to it.</p>
+    <p class='hint'>Tip: click a star to read its thought, or drag it anywhere to reshape the constellation.</p>
   </main>
 
   <script>
     (function () {
       var STORAGE_KEY = 'interesting_wish_constellation_v1';
       var MAX_STARS = 120;
+      var DRAG_SUPPRESS_MS = 250;
       var thoughts = [
         'A future version of me already solved this.',
         'Curiosity is a compass.',
@@ -206,6 +216,12 @@
       var dropBtn = document.getElementById('drop');
       var clearBtn = document.getElementById('clear');
       var stars = [];
+      var activeDrag = null;
+      var suppressStarClickUntil = 0;
+
+      function clamp(value, min, max) {
+        return Math.max(min, Math.min(max, value));
+      }
 
       function randomThought() {
         return thoughts[Math.floor(Math.random() * thoughts.length)];
@@ -215,26 +231,72 @@
         note.textContent = text;
       }
 
+      function serializeStars() {
+        return stars.map(function (star) {
+          return { x: star.x, y: star.y, text: star.text };
+        });
+      }
+
       function saveStars() {
         try {
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(stars));
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(serializeStars()));
         } catch (e) {
           setNote('Saved in memory only. Local storage is unavailable.');
         }
+      }
+
+      function applyStarPosition(star) {
+        if (!star.el) return;
+        star.el.style.left = star.x + 'vw';
+        star.el.style.top = star.y + 'vh';
+      }
+
+      function updateStarPosition(star, xVw, yVh) {
+        star.x = Number(clamp(xVw, 1, 99).toFixed(2));
+        star.y = Number(clamp(yVh, 1, 99).toFixed(2));
+        applyStarPosition(star);
+      }
+
+      function pointerToViewport(clientX, clientY) {
+        return {
+          x: (clientX / window.innerWidth) * 100,
+          y: (clientY / window.innerHeight) * 100
+        };
       }
 
       function createStarElement(star) {
         var el = document.createElement('button');
         el.className = 'star';
         el.type = 'button';
-        el.style.left = star.x + 'vw';
-        el.style.top = star.y + 'vh';
+        applyStarPosition(star);
         el.title = star.text;
         el.setAttribute('aria-label', 'Star note: ' + star.text);
+
         el.addEventListener('click', function (ev) {
           ev.stopPropagation();
+          if (Date.now() < suppressStarClickUntil) return;
           setNote('✦ ' + star.text);
         });
+
+        el.addEventListener('pointerdown', function (ev) {
+          ev.preventDefault();
+          ev.stopPropagation();
+          activeDrag = {
+            star: star,
+            pointerId: ev.pointerId,
+            moved: false
+          };
+          if (star.el && star.el.setPointerCapture) {
+            try {
+              star.el.setPointerCapture(ev.pointerId);
+            } catch (e) {
+              // ignore pointer capture failures
+            }
+          }
+          star.el.classList.add('dragging');
+          setNote('Drag to sketch your constellation.');
+        });
+
         document.body.appendChild(el);
         star.el = el;
       }
@@ -245,10 +307,12 @@
           if (first && first.el) first.el.remove();
         }
         var star = {
-          x: Math.max(1, Math.min(99, Number(xVw.toFixed(2)))),
-          y: Math.max(1, Math.min(99, Number(yVh.toFixed(2)))),
-          text: text
+          x: 50,
+          y: 50,
+          text: text,
+          el: null
         };
+        updateStarPosition(star, xVw, yVh);
         stars.push(star);
         createStarElement(star);
         setNote('✦ ' + star.text);
@@ -256,9 +320,8 @@
       }
 
       function addStarFromPoint(clientX, clientY) {
-        var x = (clientX / window.innerWidth) * 100;
-        var y = (clientY / window.innerHeight) * 100;
-        addStar(x, y, randomThought());
+        var point = pointerToViewport(clientX, clientY);
+        addStar(point.x, point.y, randomThought());
       }
 
       function loadStars() {
@@ -277,12 +340,13 @@
             if (!item || typeof item.x !== 'number' || typeof item.y !== 'number' || typeof item.text !== 'string') {
               return;
             }
-            var star = { x: item.x, y: item.y, text: item.text };
+            var star = { x: 50, y: 50, text: item.text, el: null };
+            updateStarPosition(star, item.x, item.y);
             stars.push(star);
             createStarElement(star);
           });
           if (stars.length) {
-            setNote('You have ' + stars.length + ' saved star' + (stars.length === 1 ? '' : 's') + '.');
+            setNote('You have ' + stars.length + ' saved star' + (stars.length === 1 ? '' : 's') + '. Drag to rearrange them.');
           }
         } catch (e) {
           setNote('Constellation data was unreadable, so tonight starts fresh.');
@@ -290,6 +354,7 @@
       }
 
       function clearStars() {
+        activeDrag = null;
         while (stars.length) {
           var star = stars.pop();
           if (star.el) star.el.remove();
@@ -302,6 +367,27 @@
         setNote('Sky cleared. Ready for a new constellation.');
       }
 
+      function endDrag(pointerId) {
+        if (!activeDrag || activeDrag.pointerId !== pointerId) return;
+        var drag = activeDrag;
+        activeDrag = null;
+        if (drag.star.el) {
+          drag.star.el.classList.remove('dragging');
+          if (drag.star.el.releasePointerCapture) {
+            try {
+              drag.star.el.releasePointerCapture(pointerId);
+            } catch (e) {
+              // ignore pointer release failures
+            }
+          }
+        }
+        if (drag.moved) {
+          saveStars();
+          suppressStarClickUntil = Date.now() + DRAG_SUPPRESS_MS;
+          setNote('Constellation updated and saved.');
+        }
+      }
+
       dropBtn.addEventListener('click', function (ev) {
         ev.stopPropagation();
         addStar(50 + (Math.random() - 0.5) * 24, 50 + (Math.random() - 0.5) * 24, randomThought());
@@ -312,9 +398,25 @@
         clearStars();
       });
 
+      document.addEventListener('pointermove', function (ev) {
+        if (!activeDrag || activeDrag.pointerId !== ev.pointerId) return;
+        activeDrag.moved = true;
+        var point = pointerToViewport(ev.clientX, ev.clientY);
+        updateStarPosition(activeDrag.star, point.x, point.y);
+      });
+
+      document.addEventListener('pointerup', function (ev) {
+        endDrag(ev.pointerId);
+      });
+
+      document.addEventListener('pointercancel', function (ev) {
+        endDrag(ev.pointerId);
+      });
+
       document.addEventListener('click', function (ev) {
         var target = ev.target;
         if (target && target.closest && target.closest('main')) return;
+        if (Date.now() < suppressStarClickUntil) return;
         addStarFromPoint(ev.clientX, ev.clientY);
       });
 
