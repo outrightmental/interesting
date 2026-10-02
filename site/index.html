@@ -1,37 +1,369 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang='en'>
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta charset='utf-8'>
+  <meta name='viewport' content='width=device-width, initial-scale=1'>
   <title>interesting</title>
-  <meta name="description" content="Recursively iterate the most interesting possible website.">
+  <meta name='description' content='Recursively iterate the most interesting possible website.'>
   <style>
-    html, body { margin: 0; height: 100%; }
+    :root {
+      color-scheme: dark;
+      --bg: #0b0b10;
+      --bg2: #141426;
+      --fg: #f2f2f2;
+      --muted: #a7adc0;
+      --accent: #8db8ff;
+      --accent2: #ffd98d;
+      --panel: rgba(12, 12, 20, 0.7);
+      --line: rgba(255, 255, 255, 0.14);
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      min-height: 100%;
+      background: radial-gradient(circle at 20% 10%, #1d2340 0%, var(--bg) 55%), var(--bg);
+      color: var(--fg);
+      font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    }
+
     body {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background: #0b0b10;
-      color: #f2f2f2;
-      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      display: grid;
+      place-items: center;
+      padding: 1.2rem;
+      overflow: hidden;
+    }
+
+    #sky {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 0;
+    }
+
+    .scan {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background: repeating-linear-gradient(
+        to bottom,
+        transparent 0,
+        transparent 2px,
+        rgba(255,255,255,0.015) 3px
+      );
+      mix-blend-mode: screen;
+      z-index: 1;
+    }
+
+    main {
+      position: relative;
+      z-index: 2;
+      width: min(780px, 96vw);
+      padding: clamp(1rem, 4vw, 2rem);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      backdrop-filter: blur(8px);
+      background: var(--panel);
+      box-shadow: 0 15px 40px rgba(0,0,0,0.35);
       text-align: center;
     }
-    header.masthead h1 {
+
+    h1 {
       margin: 0;
-      font-size: clamp(3rem, 12vw, 9rem);
+      font-size: clamp(2.3rem, 9vw, 6rem);
       letter-spacing: -0.04em;
+      line-height: 0.95;
     }
-    header.masthead p {
-      margin: 0.5rem 0 0;
-      opacity: 0.7;
-      font-size: clamp(1rem, 2.5vw, 1.5rem);
+
+    .tagline {
+      margin: 0.65rem 0 1rem;
+      color: var(--muted);
+      font-size: clamp(0.95rem, 2.3vw, 1.25rem);
+    }
+
+    .story {
+      margin: 0 auto 1.1rem;
+      max-width: 58ch;
+      color: #d8dcef;
+      font-size: 0.98rem;
+    }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 0.6rem;
+      margin: 0 0 0.95rem;
+    }
+
+    button {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: rgba(255,255,255,0.06);
+      color: var(--fg);
+      padding: 0.5rem 0.9rem;
+      font: inherit;
+      cursor: pointer;
+      transition: transform 120ms ease, background 120ms ease, border-color 120ms ease;
+    }
+
+    button:hover,
+    button:focus-visible {
+      outline: none;
+      transform: translateY(-1px);
+      border-color: rgba(255,255,255,0.32);
+      background: rgba(255,255,255,0.11);
+    }
+
+    .note {
+      margin: 0;
+      min-height: 1.5em;
+      color: var(--accent2);
+      font-size: 0.95rem;
+    }
+
+    .hint {
+      margin: 0.65rem 0 0;
+      color: var(--muted);
+      font-size: 0.85rem;
+    }
+
+    .star {
+      position: fixed;
+      width: 14px;
+      height: 14px;
+      margin-left: -7px;
+      margin-top: -7px;
+      border: 0;
+      border-radius: 50%;
+      background: radial-gradient(circle at 35% 35%, #fff 0 20%, #d4e4ff 45%, #86a9ff 70%, transparent 73%);
+      box-shadow: 0 0 13px rgba(145, 188, 255, 0.85);
+      cursor: pointer;
+      z-index: 3;
+      animation: twinkle 2.8s ease-in-out infinite;
+    }
+
+    .star:nth-of-type(2n) { animation-duration: 3.7s; }
+    .star:nth-of-type(3n) { animation-duration: 2.2s; }
+
+    .star:focus-visible {
+      outline: 1px solid #fff;
+      outline-offset: 2px;
+    }
+
+    @keyframes twinkle {
+      0%, 100% { transform: scale(0.9); opacity: 0.75; }
+      50% { transform: scale(1.12); opacity: 1; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .star { animation: none; }
+      button { transition: none; }
     }
   </style>
 </head>
 <body>
-  <header class="masthead">
+  <canvas id='sky' aria-hidden='true'></canvas>
+  <div class='scan' aria-hidden='true'></div>
+
+  <main>
     <h1>interesting</h1>
-    <p>recursively iterate the most interesting possible website</p>
-  </header>
+    <p class='tagline'>recursively iterate the most interesting possible website</p>
+    <p class='story'>Tonight's experiment: a wish constellation. Click anywhere in the sky to place a tiny thought. Each star remembers itself when you come back.</p>
+    <div class='controls'>
+      <button id='drop' type='button'>drop a star</button>
+      <button id='clear' type='button'>clear my constellation</button>
+    </div>
+    <p id='note' class='note' aria-live='polite'>No stars yet. Make the first one.</p>
+    <p class='hint'>Tip: click any glowing star to read the thought attached to it.</p>
+  </main>
+
+  <script>
+    (function () {
+      var STORAGE_KEY = 'interesting_wish_constellation_v1';
+      var MAX_STARS = 120;
+      var thoughts = [
+        'A future version of me already solved this.',
+        'Curiosity is a compass.',
+        'Small experiments become worlds.',
+        'Kindness scales better than fear.',
+        'The map is not the journey.',
+        'I can start tiny and still start.',
+        'The next draft can be playful.',
+        'Breathe. Then build.',
+        'Wonder is a useful skill.',
+        'It is allowed to be unfinished.',
+        'Notice what sparks and follow it.',
+        'Good questions bend reality.',
+        'Make room for surprise.',
+        'A quiet day can still be progress.',
+        'The edge is where ideas hatch.'
+      ];
+
+      var note = document.getElementById('note');
+      var dropBtn = document.getElementById('drop');
+      var clearBtn = document.getElementById('clear');
+      var stars = [];
+
+      function randomThought() {
+        return thoughts[Math.floor(Math.random() * thoughts.length)];
+      }
+
+      function setNote(text) {
+        note.textContent = text;
+      }
+
+      function saveStars() {
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(stars));
+        } catch (e) {
+          setNote('Saved in memory only. Local storage is unavailable.');
+        }
+      }
+
+      function createStarElement(star) {
+        var el = document.createElement('button');
+        el.className = 'star';
+        el.type = 'button';
+        el.style.left = star.x + 'vw';
+        el.style.top = star.y + 'vh';
+        el.title = star.text;
+        el.setAttribute('aria-label', 'Star note: ' + star.text);
+        el.addEventListener('click', function (ev) {
+          ev.stopPropagation();
+          setNote('✦ ' + star.text);
+        });
+        document.body.appendChild(el);
+        star.el = el;
+      }
+
+      function addStar(xVw, yVh, text) {
+        if (stars.length >= MAX_STARS) {
+          var first = stars.shift();
+          if (first && first.el) first.el.remove();
+        }
+        var star = {
+          x: Math.max(1, Math.min(99, Number(xVw.toFixed(2)))),
+          y: Math.max(1, Math.min(99, Number(yVh.toFixed(2)))),
+          text: text
+        };
+        stars.push(star);
+        createStarElement(star);
+        setNote('✦ ' + star.text);
+        saveStars();
+      }
+
+      function addStarFromPoint(clientX, clientY) {
+        var x = (clientX / window.innerWidth) * 100;
+        var y = (clientY / window.innerHeight) * 100;
+        addStar(x, y, randomThought());
+      }
+
+      function loadStars() {
+        var raw;
+        try {
+          raw = localStorage.getItem(STORAGE_KEY);
+        } catch (e) {
+          return;
+        }
+        if (!raw) return;
+
+        try {
+          var parsed = JSON.parse(raw);
+          if (!Array.isArray(parsed)) return;
+          parsed.slice(0, MAX_STARS).forEach(function (item) {
+            if (!item || typeof item.x !== 'number' || typeof item.y !== 'number' || typeof item.text !== 'string') {
+              return;
+            }
+            var star = { x: item.x, y: item.y, text: item.text };
+            stars.push(star);
+            createStarElement(star);
+          });
+          if (stars.length) {
+            setNote('You have ' + stars.length + ' saved star' + (stars.length === 1 ? '' : 's') + '.');
+          }
+        } catch (e) {
+          setNote('Constellation data was unreadable, so tonight starts fresh.');
+        }
+      }
+
+      function clearStars() {
+        while (stars.length) {
+          var star = stars.pop();
+          if (star.el) star.el.remove();
+        }
+        try {
+          localStorage.removeItem(STORAGE_KEY);
+        } catch (e) {
+          // ignore storage removal errors
+        }
+        setNote('Sky cleared. Ready for a new constellation.');
+      }
+
+      dropBtn.addEventListener('click', function (ev) {
+        ev.stopPropagation();
+        addStar(50 + (Math.random() - 0.5) * 24, 50 + (Math.random() - 0.5) * 24, randomThought());
+      });
+
+      clearBtn.addEventListener('click', function (ev) {
+        ev.stopPropagation();
+        clearStars();
+      });
+
+      document.addEventListener('click', function (ev) {
+        var target = ev.target;
+        if (target && target.closest && target.closest('main')) return;
+        addStarFromPoint(ev.clientX, ev.clientY);
+      });
+
+      loadStars();
+
+      var canvas = document.getElementById('sky');
+      var ctx = canvas.getContext('2d');
+      var dots = [];
+
+      function resize() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        dots = [];
+        var total = Math.max(35, Math.floor((canvas.width * canvas.height) / 22000));
+        for (var i = 0; i < total; i++) {
+          dots.push({
+            x: Math.random() * canvas.width,
+            y: Math.random() * canvas.height,
+            r: Math.random() * 1.4 + 0.2,
+            a: Math.random() * 0.6 + 0.1,
+            s: Math.random() * 0.23 + 0.04
+          });
+        }
+      }
+
+      function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        for (var i = 0; i < dots.length; i++) {
+          var d = dots[i];
+          d.a += (Math.random() - 0.5) * 0.03;
+          if (d.a < 0.08) d.a = 0.08;
+          if (d.a > 0.85) d.a = 0.85;
+          d.y += d.s;
+          if (d.y > canvas.height + 2) {
+            d.y = -2;
+            d.x = Math.random() * canvas.width;
+          }
+          ctx.beginPath();
+          ctx.fillStyle = 'rgba(173, 203, 255, ' + d.a.toFixed(3) + ')';
+          ctx.arc(d.x, d.y, d.r, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        requestAnimationFrame(draw);
+      }
+
+      window.addEventListener('resize', resize);
+      resize();
+      draw();
+    })();
+  </script>
 </body>
 </html>
