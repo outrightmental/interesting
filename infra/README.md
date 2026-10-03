@@ -76,9 +76,22 @@ while CloudFront settles in. To retire it: delete the `pages` job from `deploy.y
   (`blacklist_locations` in `modules/website/_inputs.tf`). Pass `[]` from `website.tf` to serve
   everywhere.
 - `PriceClass_100` keeps edge locations to North America and Europe.
+- `validate` reports two deprecation warnings, both for arguments of
+  `github_repository.interesting`: `pages` and `vulnerability_alerts` have dedicated resources
+  now. They are kept inline on purpose — written that way they are adopted by the repo's own
+  import, where separate resources would each need their own import block, and the `pages` one
+  is due to be deleted when Pages is retired. The provider is pinned to `~> 6.2`, so neither
+  argument disappears underneath this project.
+- `.terraform.lock.hcl` is committed, with hashes recorded for Linux, Windows and Apple Silicon
+  so an `init` on any of them is reproducible and leaves the file alone. It currently pins the
+  same provider versions as BoardingFlow's.
 
 ## Costs
 
 A static site behind CloudFront's `PriceClass_100` with a handful of visitors rounds to pennies
-per month: S3 storage (<10 MB), CloudFront requests, one Route53 query volume. The hosted zone
-is shared and already paid for.
+per month: S3 storage (`site/` is a few hundred KB), CloudFront requests, one Route53 query
+volume. The hosted zone is shared and already paid for.
+
+The hourly AI iteration makes this busier than a normal property: roughly 720 deploys a month,
+each one an `aws s3 sync` and an invalidation. An invalidation of `/*` counts as one path, so
+that stays inside CloudFront's 1,000 free paths a month.

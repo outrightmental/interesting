@@ -234,7 +234,7 @@ def split_for_prompt(files):
 
 def build_prompt(shown, omitted=()):
     system = (
-        "You are the autonomous curator of a static website hosted on GitHub Pages. "
+        "You are the autonomous curator of a static website served from S3 behind a CDN. "
         f"Your mission, every single run: {MISSION}.\n\n"
         "Each run, make one focused, delightful improvement: new content, a new page, "
         "an interactive toy, better visuals, a hidden easter egg, anything that makes the "
@@ -243,7 +243,8 @@ def build_prompt(shown, omitted=()):
         "- Only static files (HTML, CSS, JS, SVG, text). No build steps, no external "
         "dependencies that require keys, nothing harmful, deceptive or tracking.\n"
         "- Paths are relative to the site root (e.g. \"index.html\", \"css/style.css\"). "
-        "Use relative links between pages so the site works under a sub-path. File and folder "
+        "Use relative links between pages, so the site works wherever it is published, "
+        "including under a sub-path. File and folder "
         "names may only contain lowercase letters, digits, \".\", \"_\" and \"-\".\n"
         "- index.html and error.html must always exist and remain valid.\n"
         f"- Keep each file small (at most {MAX_FILE_BYTES // 1000} KB); return the COMPLETE new "
