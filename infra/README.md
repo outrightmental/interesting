@@ -10,7 +10,7 @@ One project owns the whole stack for one property — including the GitHub repos
 | File | Resources | Purpose |
 | ---- | --------- | ------- |
 | `repo.tf` | `github_repository.interesting` | The repository itself — `outrightmental/interesting` is repo-as-code: name, visibility, merge settings, all here. It pre-existed this configuration, so the first apply **adopts** it via an import block; `archive_on_destroy` means a destroy archives rather than deletes it. There is no `pages` block, which is how GitHub Pages stays retired. |
-| `website.tf` + `modules/website` | S3 bucket + CloudFront distribution, ACM certificate + DNS validation, A/AAAA alias records | The static site at https://interesting.outright.io/. The module is copied from BoardingFlow/infra. |
+| `website.tf` + `modules/website` | S3 bucket + CloudFront distribution, ACM certificate + DNS validation, A/AAAA alias records | The static site at https://interesting.outright.io/. The module is copied from BoardingFlow/infra, with the two changes listed under [Notes](#notes). |
 | `iam-deploy.tf` | `interesting-outright-io-deploy` IAM user + key + policy | Dedicated deploy credentials for the GitHub Actions workflow (S3 sync + CloudFront invalidation), scoped to exactly this bucket and this distribution. |
 | `github.tf` | Repository Actions secrets | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_S3_BUCKET`, `AWS_CLOUDFRONT_DISTRIBUTION_ID` — set from this project's own resources so the deploy can never drift from the infrastructure. A single apply rotates the deploy credentials end to end. |
 | `data.tf` | *(read-only)* | The `outright.io` hosted zone stays owned by the shared infra state; this project only reads its zone id and writes the `interesting.` records + cert-validation records into it. The AWS account id is read from the caller rather than written down. |
@@ -74,6 +74,12 @@ CloudFront is the site's only publisher.
 
 ## Notes
 
+- `modules/website` is BoardingFlow's module with two changes, both in `cloudfront.tf`:
+  the `custom_error_response` blocks that serve the error document (BoardingFlow has none —
+  its site has no equivalent of `error.html`), and an empty `blacklist_locations` now meaning
+  no geo restriction rather than an apply CloudFront must reject. `_inputs.tf` and `_outputs.tf`
+  are byte-identical and `s3.tf` differs only in its header comment, so a fix in either property
+  ports to the other.
 - The distribution geo-blocks `CN`, the studio default inherited with the module
   (`blacklist_locations` in `modules/website/_inputs.tf`). Pass `[]` from `website.tf` to serve
   everywhere.
