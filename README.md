@@ -1,19 +1,30 @@
-[![Deploy site to GitHub Pages](https://github.com/outrightmental/interesting/actions/workflows/pages.yml/badge.svg)](https://github.com/outrightmental/interesting/actions/workflows/pages.yml)
+[![Deploy site](https://github.com/outrightmental/interesting/actions/workflows/deploy.yml/badge.svg)](https://github.com/outrightmental/interesting/actions/workflows/deploy.yml)
 [![Make the website more interesting](https://github.com/outrightmental/interesting/actions/workflows/make-interesting.yml/badge.svg)](https://github.com/outrightmental/interesting/actions/workflows/make-interesting.yml)
-[![pages-build-deployment](https://github.com/outrightmental/interesting/actions/workflows/pages/pages-build-deployment/badge.svg)](https://github.com/outrightmental/interesting/actions/workflows/pages/pages-build-deployment)
 
 # interesting
 iterate a more interesting website
 
+**https://interesting.outright.io/**
+
 ## How it works
 
-- **`/site`** — the static website, published to GitHub Pages. `error.html` is also served as the
-  Pages `404.html`.
-- **Test, then deploy** — [`.github/workflows/pages.yml`](.github/workflows/pages.yml) is the
+- **`/site`** — the static website, published to an S3 bucket behind CloudFront at
+  [interesting.outright.io](https://interesting.outright.io/). `site/` is the whole artifact:
+  plain HTML with no build step, and nothing else is published. `error.html` is the bucket's
+  error document, so a request for a page that is not there gets it back with a 404.
+- **`/infra`** — the hosting, as code. [`infra/`](infra) is a self-contained Terraform project
+  that owns the bucket, the CloudFront distribution, the certificate and DNS, the deploy IAM
+  user, the Actions secrets the deploy uses — and this repository itself. It is applied by hand:
+  no workflow here runs `terraform plan` or `apply`. See [`infra/README.md`](infra/README.md).
+- **Test, then deploy** — [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) is the
   pipeline for `main`. Every commit that lands there is tested
   ([`.github/workflows/test.yml`](.github/workflows/test.yml)), and when the tests pass, `/site`
-  is deployed. A failing test blocks the deploy. The pipeline also starts when the hourly AI
-  workflow finishes, because GitHub starts no workflow for a commit pushed by another workflow.
+  is published: synced to the bucket with `--delete`, then the CloudFront cache is invalidated.
+  A failing test blocks the deploy. The pipeline also starts when the hourly AI workflow
+  finishes, because GitHub starts no workflow for a commit pushed by another workflow.
+- **GitHub Pages, in parallel** — the same pipeline still publishes the same tested commit to
+  [Pages](https://outrightmental.github.io/interesting/) as a fallback while the CloudFront
+  deploy settles in. [`infra/README.md`](infra/README.md#publishing) says how to retire it.
 - **Hourly AI iteration** — [`.github/workflows/make-interesting.yml`](.github/workflows/make-interesting.yml)
   runs every hour (or manually via *Run workflow*). It picks a random model from
   [GitHub Copilot](https://docs.github.com/copilot), reached through the
@@ -75,7 +86,15 @@ has no model in the pool, because Copilot only offers the Gemini Flash tier.
 
 ### Setup
 
-- *Settings → Pages → Source*: **GitHub Actions**.
+- **Hosting** — run `terraform apply` in [`infra/`](infra) once, by hand. That creates the bucket,
+  the distribution, the certificate and DNS, and sets the four repository secrets the deploy reads
+  (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_S3_BUCKET`,
+  `AWS_CLOUDFRONT_DISTRIBUTION_ID`). No secret is set by hand: they come from the same apply that
+  creates what they point at, so they cannot drift from it.
+  [`infra/README.md`](infra/README.md) has the order and the costs. Until that apply has run, the
+  deploy says so and finishes green instead of failing hourly.
+- Pages, while it runs in parallel, needs *Settings → Pages → Source*: **GitHub Actions** — which
+  [`infra/repo.tf`](infra/repo.tf) also sets, so a fresh apply is enough.
 - Actions must be allowed to push to the default branch (the AI's commit uses `GITHUB_TOKEN`).
 - GitHub Copilot must accept the workflow's requests. Either of these works:
   - **Organization:** as an owner, open the organization's *Settings → Copilot → Policies*, enable
@@ -103,6 +122,14 @@ script without calling any model. It runs on every pull request, and on `main` b
 
 ```bash
 python3 -m unittest discover -s .github/scripts -v
+```
+
+The same test workflow checks the infrastructure as code. It reads no state and needs no
+credentials:
+
+```bash
+terraform -chdir=infra fmt -check -recursive -diff
+terraform -chdir=infra init -backend=false && terraform -chdir=infra validate
 ```
 
 To take a screenshot of the site as it is now (this needs Chrome or Chromium):
