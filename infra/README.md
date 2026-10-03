@@ -44,8 +44,8 @@ adopts rather than creates the repo:
    distribution, certificate, DNS, deploy user, and the repo's Actions secrets. The same apply
    asks GitHub to turn the repository's Pages site off, since `repo.tf` no longer configures one;
    confirm that under *Settings → Pages* afterwards.
-2. `git push` to `main` (or run the *Deploy site* workflow by hand) — the workflow syncs `site/`
-   to the bucket and invalidates the distribution.
+2. `git push` to `main` (or run the *Deploy site* workflow by hand) — the workflow builds `site/`,
+   syncs the result to the bucket, and invalidates the distribution.
 
 The certificate is DNS-validated automatically (validation records land in the `outright.io`
 zone and `aws_acm_certificate_validation` blocks until issued), so a first apply takes a few
@@ -59,16 +59,19 @@ commit. The first push after the apply publishes for real, with no change needed
 ## Publishing
 
 [`.github/workflows/deploy.yml`](../.github/workflows/deploy.yml) is the pipeline for `main`:
-test, then sync `site/` to the bucket (`--delete` keeps the bucket an exact mirror) and
-invalidate `/*`. There is no build step — `site/` is the finished artifact, plain HTML/CSS/JS
-with zero dependencies, and the only thing published to the bucket.
+test, then build `site/` and sync the result to the bucket (`--delete` keeps the bucket an exact
+mirror) and invalidate `/*`. `site/` is source now, not the finished artifact: `npm ci` and
+`npm run build` render its templates and compile its Sass into a folder under `RUNNER_TEMP` (see
+the repository's own README for the pipeline), and it is that built folder — never the checkout —
+that is published. The deploy refuses to sync a build with no `index.html` or `error.html`.
 
-One substitution happens on the way, and only one: `site/js/analytics.js` ships a
+One substitution happens on the way, and only one: `js/analytics.js` ships a
 `__GA_MEASUREMENT_ID__` placeholder, and the deploy replaces it with the `GA_MEASUREMENT_ID` secret
-before the sync, after checking the value against `^G-[A-Z0-9]+$`. So no measurement ID is committed,
-and a checkout the deploy has not run over keeps the placeholder, which switches that file off: no
-Google tag, no consent banner, no cookies. If the secret is not set the site is published without
-analytics rather than not published at all.
+in the built artifact — the build copies the file through verbatim, placeholder and all — after
+checking the value against `^G-[A-Z0-9]+$`. So no measurement ID is committed, and a checkout the
+deploy has not run over keeps the placeholder, which switches that file off: no Google tag, no
+consent banner, no cookies. If the secret is not set the site is published without analytics rather
+than not published at all.
 
 Not-found requests are served `site/error.html` by a CloudFront custom error response
 (`modules/website/cloudfront.tf`): a key that is not in the bucket makes the S3 *website*
