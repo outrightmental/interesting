@@ -45,10 +45,11 @@
                                Anything but 'ok' hands back `fallback`, so a caller can render
                                first and explain afterwards, in its own words
         .get(key, fallback)    the value, or `fallback` when it is missing or unreadable
-        .set(key, value)       writes it; true if it reached the browser's store, false if it could
-                               only be kept in memory
+        .set(key, value)       writes it under that one name, leaving every other name as the
+                               browser has it; true if it reached the browser's store, false if it
+                               could only be kept in memory
         .remove(key)
-        .keys()                the names the document holds today
+        .keys()                the names the document held when this page read it
         .toText()              the whole document as indented JSON: what the meta menu exports
         .replace(text)         replaces the whole document with an exported one -> { ok, note }
         .clear()               empties it -> { ok, note }
@@ -57,6 +58,11 @@
   all, and the caller's default whenever a value is missing or the stored document is malformed. A
   reader is told which of those happened through `status`, because "you have not made a
   constellation yet" and "your constellation could not be read" are different things to say.
+
+  A page reads the document once, at load, and reads it again before every change it makes: one
+  document for the whole site is also one document for every tab of it, and a tab that wrote its
+  copy back whole would quietly throw away what another tab had saved since. So a write settles one
+  name and leaves the rest alone, which is what a key per page gave for free.
 
   The per-page keys the site used before this file existed are folded into the document the first
   time a visitor arrives with them, and then taken away.
@@ -155,6 +161,18 @@
     return document_;
   }
 
+  /* The document as the browser holds it now, rather than as this page first read it.
+
+     One document for the whole site means two tabs of it share one document, and a page that wrote
+     its own copy back whole would throw away whatever another tab had written since -- which a key
+     per page could never do. So every change starts from a fresh read, and a write is last one
+     wins by name and not by document. A browser that stores nothing has nothing to re-read: there
+     the in-memory copy is all there is, and dropping it would be the only way to lose it. */
+  function freshDocument() {
+    if (store) document_ = null;
+    return currentDocument();
+  }
+
   function write(doc) {
     doc.format = FORMAT;
     doc.version = VERSION;
@@ -205,8 +223,10 @@
   }
 
   function read(key, fallback) {
-    var doc = currentDocument();
-    var value = doc.values[key];
+    var values = currentDocument().values;
+    // Only what the document itself holds: a name is a name the site chose, not one it inherited
+    // from Object.prototype, so read('valueOf') is missing rather than a function.
+    var value = Object.prototype.hasOwnProperty.call(values, key) ? values[key] : undefined;
     if (value !== undefined && value !== null) return { status: 'ok', value: value };
     return {
       status: !persistent ? 'unavailable' : (readable ? 'missing' : 'unreadable'),
@@ -215,7 +235,7 @@
   }
 
   function set(key, value) {
-    var doc = currentDocument();
+    var doc = freshDocument();
     if (value === undefined) delete doc.values[key];
     else doc.values[key] = value;
     return write(doc);
@@ -225,8 +245,10 @@
     return set(key, undefined);
   }
 
+  /* Exported fresh, not as this page read it: what a visitor copies out has to be their whole
+     state, including anything another tab of the site has written while this one sat open. */
   function toText() {
-    return JSON.stringify(currentDocument(), null, 2);
+    return JSON.stringify(freshDocument(), null, 2);
   }
 
   /* Replace the whole document with an exported one. Replace, never merge: a shared state is only

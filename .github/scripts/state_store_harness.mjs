@@ -171,6 +171,8 @@ const scenarios = {
       indented: state.toText().includes("\n  "),
       shelf: shelf(storage),
       missing: state.read("constellation", []),
+      // A name the document does not hold is missing even when Object.prototype does hold it.
+      inherited: state.read("valueOf", []),
     };
   },
 
@@ -187,6 +189,24 @@ const scenarios = {
       read: second.read("constellation", []),
       get: second.get("constellation", []),
       saved: typeof JSON.parse(storage.items.get(first.storageKey)).saved,
+    };
+  },
+
+  /* Two tabs of the site, open at once, each keeping its own name. One document for the whole
+     site is one document for every tab of it, so a write has to settle one name and leave the
+     rest as the browser has them -- which is what a key per page gave for free. */
+  twoTabs() {
+    const storage = makeStorage();
+    const home = load(storage).state; // the home page, which keeps the constellation
+    const archive = load(storage).state; // the archive, open in another tab, which keeps omens
+    archive.set("omens", [{ text: "an omen", time: 1 }]);
+    home.set("constellation", SKY);
+    const exported = JSON.parse(home.toText()).values;
+    return {
+      shelf: shelf(storage),
+      reloaded: load(storage).state.keys(),
+      exported,
+      homeStillReads: home.read("constellation", []),
     };
   },
 
