@@ -10,7 +10,7 @@ styles and behaviour into shared files, unify navigation and visual language,
 merge or retire pages that overlap). Either outcome is a successful run, so the
 site can be made more interesting by becoming coherent and not only by growing.
 
-Three axioms stand over every run, each stated in the prompt and held to in code:
+Four axioms stand over every run, each stated in the prompt and held to in code:
 
   - All of the content stays reachable from the root, both by following links
     from index.html and through sitemap.xml. check_reachability() refuses a plan
@@ -18,11 +18,20 @@ Three axioms stand over every run, each stated in the prompt and held to in code
   - Every page loads js/analytics.js, the one line that brings the site its
     cookie consent banner and, once a visitor accepts, its Google Analytics tag.
     check_analytics() refuses a plan that would leave a page without it, and the
-    three files behind it (FIXED_FILES) are never shown to a model and never
-    written or deleted by one.
+    three files behind it are never shown to a model and never written or
+    deleted by one.
   - Every page is responsive and accessible, to WCAG 2.2 level AA.
     check_accessibility() refuses a plan that would make a page fail the part of
     that which markup alone can settle.
+  - Every page loads js/state.js, the one line that brings the site its single
+    local-state document, the shared accessor every page reads and writes
+    through, and the meta menu a visitor exports, imports and clears it with.
+    check_state() refuses a plan that would leave a page without it or have a
+    page touch localStorage itself, and the file behind it is fixed like the
+    analytics ones.
+
+The files behind the last three (FIXED_FILES) are never shown to a model and are
+refused outright as a write or a delete.
 
 The model is reached through the GitHub Copilot CLI (`copilot`), which bills the
 GitHub Copilot subscription behind the token in COPILOT_GITHUB_TOKEN. (GitHub
@@ -183,11 +192,23 @@ PROTECTED_FILES = {"index.html", "error.html", "sitemap.xml"}
 # tag, so a single line per page carries the whole of it and a single check can hold it in place.
 ANALYTICS_SCRIPT = "js/analytics.js"
 ANALYTICS_TAG = f"<script src='{ANALYTICS_SCRIPT}' defer></script>"
-# Those files are the site's measurement and privacy machinery rather than its content, so they are
-# kept out of every run's reach: never shown to a model (see split_for_prompt, which hands them to
-# validate_plan as unseen) and refused outright as a write or a delete. Two of them are a vendored
-# release of orestbida/cookieconsent, which no model should be rewriting from memory in any case.
-FIXED_FILES = {ANALYTICS_SCRIPT, "js/cookieconsent.umd.js", "css/cookieconsent.css"}
+# Those files are the site's measurement, privacy and local-state machinery rather than its
+# content, so they are kept out of every run's reach: never shown to a model (see split_for_prompt,
+# which hands them to validate_plan as unseen) and refused outright as a write or a delete. Two of
+# them are a vendored release of orestbida/cookieconsent, which no model should be rewriting from
+# memory in any case.
+ANALYTICS_FILES = {ANALYTICS_SCRIPT, "js/cookieconsent.umd.js", "css/cookieconsent.css"}
+# The other line every page carries, and the one file behind it (issue #31). js/state.js holds the
+# whole of the site's local state in one JSON document, the shared accessor every page reads and
+# writes through, and the small meta menu that exports, imports and clears that document. It is
+# fixed for the same reason the analytics files are, and for one more: a visitor's own way to take
+# their state out of this site has to be the one thing on it an hourly rewrite cannot touch.
+STATE_SCRIPT = "js/state.js"
+# Not deferred, unlike the analytics line: a page's own <script> runs while the body is parsed,
+# which is before any deferred script, so the store has to be there already.
+STATE_TAG = f"<script src='{STATE_SCRIPT}'></script>"
+STATE_FILES = {STATE_SCRIPT}
+FIXED_FILES = ANALYTICS_FILES | STATE_FILES
 # How many files one run may touch. Roomy enough that a run which federates the site can rewrite
 # every page of it and add the shared files those pages link to, which is what the whole-site
 # review in build_prompt asks for; small enough that a runaway answer is still refused. A page is
@@ -469,16 +490,20 @@ def check_reachability(before, after):
 # carries the tag and a page a run rewrites keeps it.
 
 
-def pages_missing_analytics(site):
-    """The pages of `site` that do not load ANALYTICS_SCRIPT, as a set of site-relative paths.
+def pages_missing(site, script):
+    """The pages of `site` that do not load `script`, as a set of site-relative paths.
 
     A site without that file is not held to the axiom at all: there is nothing for a page to load,
     and refusing every plan until someone puts the file back would leave no plan able to do it.
     """
-    if ANALYTICS_SCRIPT not in site:
+    if script not in site:
         return set()
-    return {page for page in html_pages(site)
-            if ANALYTICS_SCRIPT not in references_from(page, site)}
+    return {page for page in html_pages(site) if script not in references_from(page, site)}
+
+
+def pages_missing_analytics(site):
+    """The pages of `site` that do not load ANALYTICS_SCRIPT."""
+    return pages_missing(site, ANALYTICS_SCRIPT)
 
 
 def check_analytics(before, after):
@@ -740,6 +765,68 @@ def check_accessibility(before, after):
                 f"every page must be responsive and accessible: {page} " + " and ".join(broke))
 
 
+# The local-state axiom (issue #31). Everything this site keeps in a visitor's browser lives in one
+# JSON document, every page reads and writes it through one shared accessor, and a very small meta
+# menu in the corner of every page lets a visitor copy that document out, paste someone else's in,
+# or throw it away -- so a person can collect and share their experiences of this site. All of it
+# arrives with one line, js/state.js, and that file is fixed: the one affordance a visitor has for
+# getting their own state back out cannot be something an hourly rewrite might quietly reword.
+#
+# Two halves, as the issue asks: the line on every page, and nothing behind the store's back. The
+# second is what makes the first worth having -- a page that parses localStorage itself is state
+# the meta menu cannot export.
+
+# A page reaching for the browser's storage on its own account. Only the fixed files may: state.js
+# *is* the store, and the consent banner keeps the visitor's answer to it (which is the banner's,
+# not the site's, so it is deliberately not in the document).
+DIRECT_STORAGE = re.compile(r"\b(?:local|session)Storage\b")
+
+
+def pages_missing_state(site):
+    """The pages of `site` that do not load STATE_SCRIPT."""
+    return pages_missing(site, STATE_SCRIPT)
+
+
+def pages_touching_storage(site):
+    """The pages of `site` that use the browser's storage themselves, as {page: [file, ...]}.
+
+    A page is read along with every stylesheet and script it loads, as in the accessibility checks,
+    because a federated site keeps its behaviour in shared files; the fixed files are skipped,
+    being the ones the storage belongs to. A site without the store is not held to this at all, for
+    the same reason it is not held to the line.
+    """
+    if STATE_SCRIPT not in site:
+        return {}
+    touching = {}
+    for page in sorted(html_pages(site)):
+        where = [rel for rel in [page, *assets_of(page, site)]
+                 if rel not in FIXED_FILES and DIRECT_STORAGE.search(site.get(rel) or "")]
+        if where:
+            touching[page] = where
+    return touching
+
+
+def check_state(before, after):
+    """Raise RejectedChange if the change from site `before` to site `after` leaves a page without
+    the local-state line, or has a page keep state behind the shared store's back.
+
+    Only what this run breaks is refused, as with the other three axioms.
+    """
+    broke = sorted(pages_missing_state(after) - pages_missing_state(before))
+    if broke:
+        raise RejectedChange(
+            "every page must load the shared local-state store and its meta menu: "
+            f"{broke[0]} has no {STATE_TAG} in its <head>")
+    was = pages_touching_storage(before)
+    for page, files in sorted(pages_touching_storage(after).items()):
+        new = [rel for rel in files if rel not in was.get(page, ())]
+        if new:
+            where = "its own script" if new[0] == page else new[0]
+            raise RejectedChange(
+                f"no page may use the browser's storage directly: {page} does, in {where}, where "
+                f"it should read and write through window.interestingState (see {STATE_SCRIPT})")
+
+
 def apply_to(site, ops):
     """The site mapping `site` as it would be once `ops` have been applied."""
     after = dict(site)
@@ -856,7 +943,7 @@ def build_prompt(shown, omitted=()):
         "Keep that line on every page you rewrite, exactly as it is, and put it on every page you "
         "add (a page in a sub-folder uses the matching relative src, such as "
         f"\"../{ANALYTICS_SCRIPT}\"). It loads a consent banner and, only once a visitor accepts, "
-        f"Google Analytics. The files behind it ({', '.join(sorted(FIXED_FILES))}) are fixed: they "
+        f"Google Analytics. The files behind it ({', '.join(sorted(ANALYTICS_FILES))}) are fixed: they "
         "are not shown to you, you may not write or delete them, and they need nothing from you. A "
         "plan that leaves a page of the site without that line is refused.\n"
         "- AXIOM, every run: every page is responsive and accessible. It works on a small phone as "
@@ -874,6 +961,33 @@ def build_prompt(shown, omitted=()):
         "of this is refused, exactly as one that orphans a page is. This is checked on the built "
         "site, so a layout or a Sass partial is judged through the pages and stylesheets it "
         "produces.\n"
+        "- AXIOM, every run: every page carries the site's local-state store and its meta menu. "
+        f"One line in the <head> of a page brings both:\n    {STATE_TAG}\n"
+        "Keep that line on every page you rewrite, exactly as it is, and put it on every page you "
+        "add (a page in a sub-folder uses the matching relative src, such as "
+        f"\"../{STATE_SCRIPT}\"). It is not deferred on purpose: a page's own script runs while the "
+        "body is parsed, which is before any deferred script, so the store has to be there "
+        "already. Everything this site keeps in a visitor's browser lives in one JSON document, "
+        "and no page may touch localStorage or sessionStorage itself -- a plan in which one does "
+        "is refused. Read and write through the shared store:\n"
+        "    var state = window.interestingState;\n"
+        "    var saved = state.read('constellation', []);  // { status, value }, where status is\n"
+        "                                                  // 'ok', 'missing', 'unreadable' or\n"
+        "                                                  // 'unavailable' and value is the\n"
+        "                                                  // fallback unless it is 'ok'\n"
+        "    state.get('omens', []);                       // just the value, or the fallback\n"
+        "    state.set('omens', omens);                    // false if it could only be kept in\n"
+        "                                                  // memory, which is worth telling a\n"
+        "                                                  // visitor in the page's own words\n"
+        "The store owns the parsing, the defaults and every failure path, so a page needs no "
+        "try/catch and no JSON.parse of its own. The names the site keeps today are "
+        "\"constellation\" (the home sky every other page reinterprets), \"capsules\" and "
+        f"\"omens\"; to keep something new, pick a name and set it. {STATE_SCRIPT} is fixed like "
+        "the analytics files: it is not shown to you, you may not write or delete it, and the very "
+        "small meta menu it puts in the corner of every page -- where a visitor copies that "
+        "document out, pastes someone else's in, or clears it -- is not yours to change or to "
+        "restyle. Leave room for it: it sits in the bottom-right corner, opposite the consent "
+        "banner's button in the bottom-left.\n"
         "- Leave the site working at the end of the run. If you extract something into a shared "
         "file, or merge or delete a page, update every page that refers to it in the same run: "
         "never leave a link, a stylesheet, a script, a layout or an @use pointing at something "
@@ -1056,10 +1170,11 @@ def validate_plan(plan, unseen=()):
     `unseen` names existing files whose content the model was not shown; it may not touch them.
 
     A plan that would leave a page of the site unreachable from the root, leave one without the
-    analytics and consent line, or make one fail the responsive-and-accessible axiom is refused: all
-    three axioms hold however the prompt is answered. All three are judged on the built site (issue
-    #25), which is the only site a visitor ever sees, so the plan is built before any of them is
-    asked, and a plan that does not build is refused for that alone.
+    analytics and consent line, make one fail the responsive-and-accessible axiom, or leave one
+    without the local-state store and its meta menu is refused: all four axioms hold however the
+    prompt is answered. All four are judged on the built site (issue #25), which is the only site a
+    visitor ever sees, so the plan is built before any of them is asked, and a plan that does not
+    build is refused for that alone.
     """
     files = plan.get("files") or []
     deletes = plan.get("delete") or []
@@ -1083,8 +1198,9 @@ def validate_plan(plan, unseen=()):
         if rel in PROTECTED_FILES and not content.strip():
             raise RejectedChange(f"refusing to empty {rel}")
         if rel in FIXED_FILES:
-            raise RejectedChange(f"refusing to rewrite {rel}: it carries the analytics tag and the "
-                                 "consent banner, and is not a model's to change")
+            raise RejectedChange(f"refusing to rewrite {rel}: the fixed files carry the analytics "
+                                 "tag, the consent banner and the local-state store with its meta "
+                                 "menu, and are not a model's to change")
         if rel in unseen:
             raise RejectedChange(f"refusing to overwrite {rel}: its content was not shown to the model")
         if target.is_dir():
@@ -1116,13 +1232,14 @@ def validate_plan(plan, unseen=()):
         # The site as committed does not build, so there is no "before" to compare against and the
         # axioms have nothing to say this run. Same reasoning as check_reachability's: every run is
         # asked to repair the site, and refusing a plan over damage it did not do would leave no
-        # plan able to. This run still had to build, and the next is held to all three axioms again.
+        # plan able to. This run still had to build, and the next is held to all four axioms again.
         print(f"::warning::the site as committed does not build ({one_line(err, 300)}), so this "
               "run's change was only checked for building, not against the axioms")
         return ops
     check_reachability(built_before, built_after)
     check_analytics(built_before, built_after)
     check_accessibility(built_before, built_after)
+    check_state(built_before, built_after)
     return ops
 
 
