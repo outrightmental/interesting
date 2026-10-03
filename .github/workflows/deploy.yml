@@ -3,9 +3,9 @@ name: Deploy site
 # The pipeline for main: every commit that lands there is tested, and when the tests pass, /site is
 # published to S3 and the CloudFront cache is invalidated. A failing test blocks every deploy.
 #
-# https://interesting.outright.io/ is the site's only home — the bucket, the distribution and the
-# AWS secrets this workflow reads are all defined in /infra. (GitHub Pages used to publish /site in
-# parallel; it is retired, and nothing here publishes to it.)
+# https://interesting.outright.io/ is the site's only home — the bucket, the distribution and every
+# secret this workflow reads, the GA4 measurement ID included, are all defined in /infra. (GitHub
+# Pages used to publish /site in parallel; it is retired, and nothing here publishes to it.)
 on:
   push:
     branches: [main]
