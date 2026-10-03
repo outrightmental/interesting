@@ -42,6 +42,33 @@ iterate a more interesting website
 - **Only flagship models** — the random pick draws from a list of large, top-tier models (see
   [Which models](#which-models)); small and mid-tier models are never picked.
 
+### Reachability axiom
+
+All of the content stays reachable from the root, through a navigation affordance and through a
+sitemap. It is an invariant of the iteration process rather than a one-off tidy-up:
+
+- **Stated in the prompt.** The `Rules:` block every run is given says that `index.html` must lead
+  to every page — directly, or by following links through the pages it leads to, such as a site map
+  page — and that `sitemap.xml` must list every page. A page a run adds is wired into both by that
+  same run, and a page it deletes comes out of both.
+- **Held to in code.** `check_reachability` in
+  [`.github/scripts/make_interesting.py`](.github/scripts/make_interesting.py) refuses a plan that
+  would orphan a page: one no chain of links from `index.html` arrives at, or one the sitemap stops
+  listing. A shared nav, a site map page and a nav built by a shared script all count as a way
+  through. Only what the run itself breaks is refused: a page that was already orphaned stays the
+  site's own problem to repair, because rejecting every plan over it would leave no plan able to
+  repair it.
+- **Both kinds of sitemap.** [`site/sitemap.xml`](site/sitemap.xml) for anything that reads the
+  site mechanically, and [`site/sitemap.html`](site/sitemap.html) for a visitor. The `<loc>` values
+  are relative paths, like every other link in `/site`: the site has no fixed domain and is served
+  under a sub-path, so a hard-coded origin would be wrong for every fork and local copy.
+- **`sitemap.xml` is protected**, alongside `index.html` and `error.html`: it may be rewritten,
+  never deleted, and it is always shown to the model, so a run can always wire a new page into it.
+- **True of the site as committed**, not only of what a future run adds. Because the code only
+  refuses what a run breaks, the invariant has to start out true, so `RealSiteTest` in
+  [`.github/scripts/test_make_interesting.py`](.github/scripts/test_make_interesting.py) checks
+  `/site` itself on every pull request and before every deploy.
+
 ### Silo
 
 The AI can only ever modify `/site`:
@@ -52,8 +79,8 @@ The AI can only ever modify `/site`:
 2. [`.github/scripts/make_interesting.py`](.github/scripts/make_interesting.py) rejects any path
    that is absolute, contains `..`/hidden segments or anything but lowercase letters, digits, `.`,
    `_` and `-`, resolves outside `/site` (including via symlinks) or has a non-static file type.
-   It never deletes `index.html`/`error.html`, never touches a file the model was not shown, and
-   applies an answer whole or not at all.
+   It never deletes `index.html`, `error.html` or `sitemap.xml`, never touches a file the model was
+   not shown, and applies an answer whole or not at all.
 3. The workflow fails if anything outside `/site` changed, and only stages `site/` for commit. The
    repository's token is not in the checkout while the model's answer is processed. The model's
    one-line summary is stripped to plain text before it reaches the commit message.

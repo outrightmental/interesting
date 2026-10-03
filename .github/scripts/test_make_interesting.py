@@ -48,6 +48,18 @@ def read_outputs(text):
     return outputs
 
 
+def sitemap(*pages):
+    """A sitemaps.org urlset listing `pages`, written the way /site writes one: relative <loc>s."""
+    locs = "".join(f"  <url><loc>{page}</loc></url>\n" for page in pages)
+    return ("<?xml version='1.0' encoding='UTF-8'?>\n"
+            "<urlset xmlns='http://www.sitemaps.org/schemas/sitemap/0.9'>\n" + locs + "</urlset>\n")
+
+
+def home(*links):
+    """A home page whose navigation links to `links`."""
+    return "<h1>interesting</h1>\n<nav>" + "".join(f"<a href='{to}'>{to}</a>" for to in links) + "</nav>"
+
+
 class SiteDirTestCase(unittest.TestCase):
     """Points the script at a throwaway /site so no test touches the real one."""
 
@@ -407,7 +419,7 @@ class WholeSiteReviewTest(unittest.TestCase):
     def test_the_silo_rules_survive_the_new_guidance(self):
         prompt = self.prompt(["hidden.html"])
         for rule in ["Only static files", "relative to the site root",
-                     "index.html and error.html must always exist",
+                     "index.html, error.html and sitemap.xml must always exist",
                      f"at most {mi.MAX_FILE_BYTES // 1000} KB", "COMPLETE new content",
                      f"At most {mi.MAX_CHANGES} files per run", "may not change or delete them"]:
             with self.subTest(rule=rule):
@@ -428,6 +440,171 @@ class WholeSiteReviewTest(unittest.TestCase):
         # Lifting the repeated parts into "css/site.css" and "js/site.js" and relinking every page
         # of a site that size takes len + 2 changes; the limit must not forbid it.
         self.assertGreaterEqual(mi.MAX_CHANGES, len(self.GROWN_SITE) + 2)
+
+
+class ReachabilityAxiomTest(SiteDirTestCase):
+    """Issue #21: all of the content stays reachable from the root, through the navigation and
+    through the sitemap. The axiom is a standing rule of every prompt, and validate_plan holds the
+    line, so a page a run adds is wired into both by that same run."""
+
+    PAGES = ["index.html", "error.html", "toy.html"]
+
+    def wired_site(self):
+        """A site that satisfies the axiom: the home page links every page, the sitemap lists them."""
+        (self.site / "index.html").write_text(home("toy.html", "error.html"))
+        (self.site / "toy.html").write_text("<p>toy</p>")
+        (self.site / "sitemap.xml").write_text(sitemap(*self.PAGES))
+
+    def test_the_axiom_is_a_standing_rule_of_every_prompt(self):
+        # Not one optional flavour of a federation run: a rule stated in the Rules block, which
+        # every run has to satisfy whichever kind of change it chooses.
+        prompt = mi.build_prompt([("index.html", "<h1>hi</h1>")])
+        rules = prompt[prompt.index("Rules:"):]
+        for rule in ["all of the content stays reachable from the root",
+                     "index.html must lead to every page",
+                     "sitemap.xml must list every page",
+                     "Wire a page you add into both in the same run",
+                     "take a page you delete out of both",
+                     "sitemaps.org urlset"]:
+            with self.subTest(rule=rule):
+                self.assertIn(rule, rules)
+
+    def test_a_page_a_run_adds_must_be_linked_and_listed_by_the_same_run(self):
+        self.wired_site()
+        orphan = {"files": [{"path": "new.html", "content": "<p>new</p>"}]}
+        with self.assertRaisesRegex(mi.RejectedChange, r"new\.html is not reachable.*not listed"):
+            mi.validate_plan(orphan)
+        linked_only = {"files": [{"path": "new.html", "content": "<p>new</p>"},
+                                 {"path": "index.html", "content": home("toy.html", "error.html", "new.html")}]}
+        with self.assertRaisesRegex(mi.RejectedChange, r"new\.html is not listed in sitemap\.xml"):
+            mi.validate_plan(linked_only)
+        listed_only = {"files": [{"path": "new.html", "content": "<p>new</p>"},
+                                 {"path": "sitemap.xml", "content": sitemap(*self.PAGES, "new.html")}]}
+        with self.assertRaisesRegex(mi.RejectedChange, r"new\.html is not reachable from index\.html"):
+            mi.validate_plan(listed_only)
+        wired = {"files": linked_only["files"] + listed_only["files"][1:]}
+        self.assertEqual(len(mi.validate_plan(wired)), 3)
+
+    def test_reachability_may_pass_through_a_site_map_page(self):
+        # Open question 4 of the issue: a page does not have to hang off index.html itself. A
+        # shared nav or a site map page the home page links to is navigation just the same.
+        (self.site / "index.html").write_text(home("sitemap.html"))
+        (self.site / "sitemap.html").write_text(home("toy.html", "error.html"))
+        (self.site / "toy.html").write_text("<p>toy</p>")
+        (self.site / "sitemap.xml").write_text(sitemap(*self.PAGES, "sitemap.html"))
+        self.assertEqual(mi.unreachable_pages(dict(mi.read_site())), {})
+
+    def test_a_navigation_built_by_a_shared_script_counts(self):
+        # The prompt invites lifting the shared header into "js/site.js". A page whose nav arrives
+        # from there is reachable, and a run that federates that way must not be refused for it.
+        (self.site / "index.html").write_text("<h1>hi</h1><script src='js/site.js'></script>")
+        (self.site / "js").mkdir()
+        (self.site / "js" / "site.js").write_text("var NAV = ['toy.html', 'error.html'];")
+        (self.site / "toy.html").write_text("<p>toy</p>")
+        (self.site / "sitemap.xml").write_text(sitemap(*self.PAGES))
+        self.assertEqual(mi.unreachable_pages(dict(mi.read_site())), {})
+
+    def test_unlinking_or_unlisting_a_page_that_was_reachable_is_refused(self):
+        self.wired_site()
+        for plan, broke in [
+            ({"files": [{"path": "index.html", "content": home("error.html")}]}, "not reachable"),
+            ({"files": [{"path": "sitemap.xml", "content": sitemap("index.html", "error.html")}]}, "not listed"),
+        ]:
+            with self.subTest(broke=broke), self.assertRaisesRegex(mi.RejectedChange, f"toy.html is {broke}"):
+                mi.validate_plan(plan)
+
+    def test_retiring_a_page_and_its_links_together_is_fine(self):
+        # A run that only deletes stays a successful run (issue #16), as long as it tidies up.
+        self.wired_site()
+        ops = mi.validate_plan({
+            "delete": ["toy.html"],
+            "files": [{"path": "index.html", "content": home("error.html")},
+                      {"path": "sitemap.xml", "content": sitemap("index.html", "error.html")}],
+        })
+        self.assertEqual(len(ops), 3)
+
+    def test_an_orphan_that_was_already_there_blocks_nothing(self):
+        # Only what the run itself breaks is refused. If a plan had to repair every pre-existing
+        # orphan before it could do anything, no plan could ever be applied -- including the one
+        # that repairs them. The fixture site has no sitemap and links nothing.
+        ops = mi.validate_plan({"files": [{"path": "index.html", "content": "<h1>still nothing linked</h1>"}]})
+        self.assertEqual(len(ops), 1)
+        self.assertIn("error.html", mi.unreachable_pages(dict(mi.read_site())))
+
+    def test_only_links_that_stay_in_the_site_are_navigation(self):
+        site = {"index.html": (
+            "<a href='https://example.com/toy.html'>off site</a>"
+            "<a href='//example.com/toy.html'>off site</a>"
+            "<a href='mailto:someone@example.com'>mail</a>"
+            "<a href='../toy.html'>above the root</a>"
+            "<a href='#toy.html'>a fragment</a>"
+            "<a href=''>nowhere</a>"
+        ), "toy.html": "<p>toy</p>"}
+        self.assertEqual(mi.reachable_pages(site), {"index.html"})
+        # ".", "./", "?query" and a folder link all do name a page of the site.
+        site["index.html"] = "<a href='./toy.html?x=1#here'>toy</a><a href='sub/'>sub</a><a href='.'>home</a>"
+        site["sub/index.html"] = "<p>sub</p>"
+        self.assertEqual(mi.reachable_pages(site), {"index.html", "toy.html", "sub/index.html"})
+
+    def test_a_sitemap_loc_may_be_a_relative_path_or_a_full_url(self):
+        # /site writes relative locs, having no fixed domain, but a run that writes absolute URLs
+        # has still listed the page.
+        pages = {"index.html": "", "toy.html": "", "sub/deep.html": ""}
+        for loc in ["toy.html", "./toy.html", "https://example.com/interesting/toy.html",
+                    "https://example.com/toy.html?v=2"]:
+            with self.subTest(loc=loc):
+                self.assertEqual(mi.listed_pages(dict(pages, **{"sitemap.xml": sitemap(loc)})), {"toy.html"})
+        self.assertEqual(mi.listed_pages(dict(pages, **{"sitemap.xml": sitemap("https://example.com/")})),
+                         {"index.html"})
+        self.assertEqual(mi.listed_pages(dict(pages, **{"sitemap.xml": sitemap("deep.html")})), set(),
+                         "a loc has to name the page's whole path, not just its file name")
+        self.assertEqual(mi.listed_pages(dict(pages, **{"sitemap.xml": sitemap("sub/deep.html")})),
+                         {"sub/deep.html"})
+
+    def test_the_sitemap_is_protected_like_the_home_page(self):
+        # It can be rewritten -- every run that adds a page has to -- but never deleted or emptied,
+        # and it is shown to the model before any ordinary file so it can always be rewritten.
+        self.assertIn("sitemap.xml", mi.PROTECTED_FILES)
+        self.wired_site()
+        for plan in [{"delete": ["sitemap.xml"]}, {"files": [{"path": "sitemap.xml", "content": " "}]}]:
+            with self.subTest(plan=plan), self.assertRaises(mi.RejectedChange):
+                mi.validate_plan(plan)
+
+    def test_the_sitemap_is_shown_to_the_model_before_any_ordinary_file(self):
+        self.wired_site()
+        (self.site / "zz-big.js").write_text("y" * mi.PROMPT_BUDGET_CHARS)  # fits only on its own
+        shown, omitted = mi.split_for_prompt(mi.read_site())
+        self.assertEqual([rel for rel, _ in shown][:3], ["index.html", "error.html", "sitemap.xml"])
+        self.assertEqual(omitted, ["zz-big.js"])
+
+
+class RealSiteTest(unittest.TestCase):
+    """The site in this repository obeys the reachability axiom.
+
+    validate_plan only refuses what a run breaks, so the invariant has to start out true: this is
+    what makes it hold from the next deploy onward and not only for pages a later run adds. It
+    runs on every pull request and on main before each deploy, so a hand-written commit that
+    orphans a page is caught there too.
+    """
+
+    def setUp(self):
+        site = Path(mi.__file__).resolve().parents[2] / "site"
+        if not site.is_dir():
+            self.skipTest(f"no site directory at {site}")
+        patcher = mock.patch.object(mi, "SITE_DIR", site)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.site = dict(mi.read_site())
+
+    def test_every_page_is_reachable_from_the_root_and_listed_in_the_sitemap(self):
+        self.assertEqual(mi.unreachable_pages(self.site), {})
+        self.assertGreater(len(mi.html_pages(self.site)), 1, "the check is worth nothing on one page")
+
+    def test_the_site_has_a_sitemap_of_both_kinds(self):
+        # Open question 2 of the issue: both. sitemap.xml for anything reading the site
+        # mechanically, and a page a visitor can read, reachable from the home page.
+        self.assertIn("sitemap.xml", self.site)
+        self.assertIn("sitemap.html", mi.links_from("index.html", self.site))
 
 
 class SmallModelTest(unittest.TestCase):
@@ -706,9 +883,15 @@ class CallModelTest(unittest.TestCase):
             mi.call_model("x", "p")
 
 
+# A plan that respects the reachability axiom (issue #21): the page it adds is linked from the home
+# page and listed in the sitemap by the same answer, so nothing it leaves behind is orphaned.
 GOOD_PLAN = json.dumps({
     "summary": "Added a clock.\nSecond line is dropped.",
-    "files": [{"path": "clock.html", "content": "<p>tick</p>"}],
+    "files": [
+        {"path": "clock.html", "content": "<p>tick</p>"},
+        {"path": "index.html", "content": home("clock.html", "error.html")},
+        {"path": "sitemap.xml", "content": sitemap("index.html", "clock.html", "error.html")},
+    ],
 })
 
 

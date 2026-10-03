@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang='en'>
+<head>
+  <meta charset='utf-8'>
+  <meta name='viewport' content='width=device-width, initial-scale=1'>
+  <title>site map · interesting</title>
+  <meta name='description' content='Every page of interesting, in one place: the whole sky, reachable from the root.'>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #080b17;
+      --bg2: #1c2550;
+      --fg: #eef3ff;
+      --muted: #a9b5d9;
+      --line: rgba(255,255,255,0.18);
+      --panel: rgba(10, 14, 28, 0.72);
+      --accent: #9fcbff;
+      --accent2: #ffe6a9;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      min-height: 100%;
+      background: radial-gradient(circle at 18% 0%, var(--bg2) 0%, var(--bg) 60%);
+      color: var(--fg);
+      font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    }
+
+    body {
+      display: grid;
+      place-items: center;
+      align-content: safe center;
+      padding: 1rem;
+    }
+
+    main {
+      width: min(940px, 96vw);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: var(--panel);
+      backdrop-filter: blur(8px);
+      box-shadow: 0 16px 40px rgba(0,0,0,0.36);
+      padding: 1rem;
+    }
+
+    h1 {
+      margin: 0;
+      line-height: 0.95;
+      letter-spacing: -0.03em;
+      font-size: clamp(1.9rem, 6vw, 3.2rem);
+    }
+
+    .tagline {
+      margin: 0.45rem 0 0.85rem;
+      color: var(--muted);
+    }
+
+    h2 {
+      margin: 1.1rem 0 0.5rem;
+      font-size: 0.82rem;
+      font-weight: 600;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--accent2);
+    }
+
+    .pages {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 0.6rem;
+    }
+
+    .pages li {
+      border: 1px solid rgba(255,255,255,0.14);
+      border-radius: 12px;
+      background: rgba(7, 10, 20, 0.56);
+      padding: 0.7rem 0.8rem;
+    }
+
+    .pages a {
+      display: inline-block;
+      color: var(--accent);
+      font-size: 1.02rem;
+      text-decoration: none;
+      border-bottom: 1px solid rgba(159, 203, 255, 0.35);
+    }
+
+    .pages a:hover,
+    .pages a:focus-visible {
+      outline: none;
+      color: #eaf1ff;
+      border-bottom-color: rgba(234, 241, 255, 0.85);
+    }
+
+    .pages a::before {
+      content: '·';
+      margin-right: 0.4rem;
+      color: var(--accent2);
+      animation: twinkle 3.1s ease-in-out infinite;
+    }
+
+    .pages li:nth-child(2n) a::before { animation-duration: 2.3s; }
+    .pages li:nth-child(3n) a::before { animation-duration: 4.2s; }
+
+    .pages p {
+      margin: 0.35rem 0 0;
+      color: #d4ddf6;
+      font-size: 0.88rem;
+      line-height: 1.45;
+    }
+
+    .pages code {
+      color: var(--muted);
+      font-size: 0.8rem;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+    }
+
+    .axiom {
+      margin: 1.1rem 0 0;
+      border: 1px solid rgba(255,255,255,0.14);
+      border-radius: 12px;
+      background: rgba(6, 9, 18, 0.5);
+      padding: 0.75rem 0.8rem;
+      color: #d8e4ff;
+      font-size: 0.9rem;
+      line-height: 1.5;
+    }
+
+    .axiom a { color: var(--accent); }
+
+    a.action {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: rgba(255,255,255,0.07);
+      color: var(--fg);
+      text-decoration: none;
+      padding: 0.48rem 0.88rem;
+      font: inherit;
+      transition: transform 120ms ease, background 120ms ease, border-color 120ms ease;
+    }
+
+    a.action:hover,
+    a.action:focus-visible {
+      outline: none;
+      transform: translateY(-1px);
+      border-color: rgba(184, 217, 255, 0.8);
+      background: rgba(151, 197, 255, 0.16);
+    }
+
+    .footer {
+      margin-top: 0.9rem;
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      align-items: center;
+      color: var(--muted);
+      font-size: 0.86rem;
+    }
+
+    @keyframes twinkle {
+      0%, 100% { opacity: 0.45; }
+      50% { opacity: 1; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      a.action { transition: none; }
+      .pages a::before { animation: none; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>site map</h1>
+    <p class='tagline'>Every page of the sky, in one place. Nothing here is more than one click from the root.</p>
+
+    <h2>the sky</h2>
+    <ul class='pages'>
+      <li>
+        <a href='index.html'>interesting</a> <code>index.html</code>
+        <p>The home sky: place tiny thoughts as stars, drag them into a constellation, ask the sky what it sees, play it as a chime, mint a postcard.</p>
+      </li>
+      <li>
+        <a href='sky-atlas.html'>sky atlas</a> <code>sky-atlas.html</code>
+        <p>A single hub that maps every experience, shows the shared constellation memory, and offers a guided random jump across the whole sky.</p>
+      </li>
+      <li>
+        <a href='constellation-diary.html'>constellation diary</a> <code>constellation-diary.html</code>
+        <p>A logbook that turns your saved wish constellation into animated diary entries.</p>
+      </li>
+      <li>
+        <a href='constellation-echo.html'>constellation echo chamber</a> <code>constellation-echo.html</code>
+        <p>Listen to your saved constellation as drifting echoes, pulse the field, and read a tiny atmospheric report.</p>
+      </li>
+      <li>
+        <a href='constellation-weather.html'>constellation weather lab</a> <code>constellation-weather.html</code>
+        <p>An animated weather lab generated from your saved constellation: probe skies, read forecasts, and toggle midnight rain.</p>
+      </li>
+      <li>
+        <a href='orbital-weaver.html'>orbital weaver</a> <code>orbital-weaver.html</code>
+        <p>Transform your saved constellation into a mirrored orbital mandala, then read a tiny mantra forecast.</p>
+      </li>
+      <li>
+        <a href='sky-archive.html'>sky archive oracle</a> <code>sky-archive.html</code>
+        <p>Spin your saved constellation through a rune wheel, collect tiny omen readings, and forge a portable sigil.</p>
+      </li>
+      <li>
+        <a href='star-lantern.html'>star lantern ritual</a> <code>star-lantern.html</code>
+        <p>Turn your saved constellation into floating lanterns and pull a tiny mood reading from the sky.</p>
+      </li>
+      <li>
+        <a href='wish-terrarium.html'>wish terrarium</a> <code>wish-terrarium.html</code>
+        <p>Grow a living terrarium from your saved constellation and read tiny weather reports from your wishes.</p>
+      </li>
+    </ul>
+
+    <h2>edges of the sky</h2>
+    <ul class='pages'>
+      <li>
+        <a href='sitemap.html'>site map</a> <code>sitemap.html</code>
+        <p>This page. Written by hand, kept honest by a test.</p>
+      </li>
+      <li>
+        <a href='error.html'>lost in space</a> <code>error.html</code>
+        <p>The observatory 404, served for any address this site does not have. Still worth a visit on purpose.</p>
+      </li>
+      <li>
+        <a href='sitemap.xml'>sitemap.xml</a> <code>sitemap.xml</code>
+        <p>The same list, machine-readable, with relative locations so it holds under any sub-path.</p>
+      </li>
+    </ul>
+
+    <p class='axiom'>
+      <strong>Axiom.</strong> This site is rewritten every hour by a model that is asked to make it
+      more interesting as a coherent whole. One rule stands over every one of those runs: all of
+      the content stays reachable from the root, through the navigation on
+      <a href='index.html'>the home sky</a> and through <a href='sitemap.xml'>sitemap.xml</a>. A page
+      that arrives is wired into both in the same run, or the change is refused.
+    </p>
+
+    <p class='footer'>
+      <a class='action' href='index.html'>back to constellation</a>
+      <a class='action' href='error.html'>visit observatory 404</a>
+      <span>every page, one sky</span>
+    </p>
+  </main>
+</body>
+</html>
