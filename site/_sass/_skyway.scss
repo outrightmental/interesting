@@ -38,13 +38,20 @@
   transition: vars.$lift;
 }
 
-.skyway-links a:hover,
-.skyway-links a:focus-visible {
-  outline: none;
+.skyway-links a:hover {
   transform: translateY(-1px);
   border-color: rgba(173, 208, 255, 0.7);
   background: rgba(141, 184, 255, 0.16);
   color: #eaf1ff;
+}
+
+.skyway-links a:focus-visible {
+  outline: 2px solid transparent;
+  transform: translateY(-1px);
+  border-color: rgba(173, 208, 255, 0.7);
+  background: rgba(141, 184, 255, 0.16);
+  color: #eaf1ff;
+  box-shadow: 0 0 0 3px vars.$focus-ring;
 }
 
 .skyway-links a.current {

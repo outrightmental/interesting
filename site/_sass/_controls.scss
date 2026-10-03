@@ -24,13 +24,19 @@ a.action {
 }
 
 button:hover,
-button:focus-visible,
-a.action:hover,
-a.action:focus-visible {
-  outline: none;
+a.action:hover {
   transform: translateY(-1px);
   border-color: vars.$focus-line;
   background: vars.$focus-fill;
+}
+
+button:focus-visible,
+a.action:focus-visible {
+  outline: 2px solid transparent;
+  transform: translateY(-1px);
+  border-color: vars.$focus-line;
+  background: vars.$focus-fill;
+  box-shadow: 0 0 0 3px vars.$focus-ring;
 }
 
 button:disabled {
