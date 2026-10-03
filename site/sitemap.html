@@ -12,22 +12,7 @@ footerNote: every page, one sky
     <h1>site map</h1>
     <p class='tagline'>Every page of the sky, in one place, now with a live atlas console for route planning.</p>
 
-    <nav class='skyway' aria-label='Skyway navigation'>
-      <p class='skyway-label'>skyway</p>
-      <div class='skyway-links'>
-        <a href='index.html'>interesting</a>
-        <a href='sky-atlas.html'>sky atlas</a>
-        <a href='constellation-diary.html'>constellation diary</a>
-        <a href='constellation-echo.html'>echo chamber</a>
-        <a href='constellation-weather.html'>weather lab</a>
-        <a href='orbital-weaver.html'>orbital weaver</a>
-        <a href='sky-archive.html'>sky archive oracle</a>
-        <a href='star-lantern.html'>star lantern ritual</a>
-        <a href='wish-terrarium.html'>wish terrarium</a>
-        <a class='current' href='sitemap.html' aria-current='page'>site map</a>
-        <a href='error.html'>observatory 404</a>
-      </div>
-    </nav>
+{% include 'skyway.njk' %}
 
     <section class='atlas' aria-live='polite'>
       <h2>atlas console</h2>

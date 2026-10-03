@@ -17,22 +17,7 @@ stylesheet: error
       <a class='action' href='sitemap.html'>site map</a>
     </div>
 
-    <nav class='skyway' aria-label='Skyway navigation'>
-      <p class='skyway-label'>skyway</p>
-      <div class='skyway-links'>
-        <a href='index.html'>interesting</a>
-        <a href='sky-atlas.html'>sky atlas</a>
-        <a href='constellation-diary.html'>constellation diary</a>
-        <a href='constellation-echo.html'>echo chamber</a>
-        <a href='constellation-weather.html'>weather lab</a>
-        <a href='orbital-weaver.html'>orbital weaver</a>
-        <a href='sky-archive.html'>sky archive oracle</a>
-        <a href='star-lantern.html'>star lantern ritual</a>
-        <a href='wish-terrarium.html'>wish terrarium</a>
-        <a href='sitemap.html'>site map</a>
-        <a class='current' href='error.html' aria-current='page'>observatory 404</a>
-      </div>
-    </nav>
+{% include 'skyway.njk' %}
 
     <p id='note' aria-live='polite'>Listening for a signal...</p>
 
