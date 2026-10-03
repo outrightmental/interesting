@@ -4,7 +4,7 @@
   <meta charset='utf-8'>
   <meta name='viewport' content='width=device-width, initial-scale=1'>
   <title>sky atlas alias · interesting</title>
-  <meta name='description' content='Legacy sky-atlas route preserved as an alias that points to the unified site map hub.'>
+  <meta name='description' content='Legacy sky-atlas route preserved as a forwarding alias to the unified site map hub.'>
   <style>
     :root {
       color-scheme: dark;
@@ -16,7 +16,6 @@
       --panel: rgba(10, 14, 28, 0.74);
       --accent: #9fcaff;
       --accent2: #ffe7ab;
-      --good: #bdfed8;
       --warn: #ffd4b0;
     }
 
@@ -60,8 +59,6 @@
     }
 
     .muted { color: var(--muted); }
-    #memory.good { color: var(--good); }
-    #memory.warn { color: var(--warn); }
 
     .panel {
       margin-top: 0.7rem;
@@ -69,6 +66,15 @@
       border-radius: 12px;
       background: rgba(7, 10, 20, 0.56);
       padding: 0.75rem;
+    }
+
+    #status {
+      color: var(--accent2);
+      min-height: 1.5em;
+    }
+
+    #status.warn {
+      color: var(--warn);
     }
 
     .controls {
@@ -119,88 +125,77 @@
 </head>
 <body>
   <main>
-    <h1>sky atlas</h1>
-    <p>This route is now a lightweight alias.</p>
-    <p class='muted'>The live atlas console has been merged into <a class='action' href='sitemap.html'>site map</a> to keep navigation in one canonical place.</p>
+    <h1>sky atlas alias</h1>
+    <p>This route now forwards to the unified <strong>site map</strong>.</p>
+    <p class='muted'>To keep navigation coherent, all live atlas guidance has one canonical home: <a class='action' href='sitemap.html'>sitemap.html</a>.</p>
 
     <section class='panel' aria-live='polite'>
-      <p id='memory'>Checking shared constellation memory...</p>
-      <p id='route' class='muted'>Use the unified map for route hints, then jump anywhere.</p>
+      <p id='status'>Forwarding to site map in <span id='count'>5</span>…</p>
+      <p class='muted'>You can stay here, jump now, or choose another route.</p>
       <div class='controls'>
-        <a class='action' href='sitemap.html'>open unified site map</a>
+        <a class='action' href='sitemap.html' id='jump-now'>open site map now</a>
         <a class='action' href='index.html'>open home constellation</a>
-        <button id='random' type='button'>random jump</button>
+        <a class='action' href='error.html'>visit observatory 404</a>
+        <button id='stay' type='button'>stay on this page</button>
       </div>
     </section>
 
     <p class='footer'>
-      <a class='action' href='sitemap.html'>site map</a>
-      <a class='action' href='error.html'>observatory 404</a>
       <span>legacy link preserved</span>
+      <span>canonical atlas: sitemap.html</span>
     </p>
   </main>
 
   <script>
     (function () {
-      var STORAGE_KEY = 'interesting_wish_constellation_v1';
-      var memoryEl = document.getElementById('memory');
-      var routeEl = document.getElementById('route');
-      var randomBtn = document.getElementById('random');
+      var statusEl = document.getElementById('status');
+      var countEl = document.getElementById('count');
+      var stayBtn = document.getElementById('stay');
+      var jumpNow = document.getElementById('jump-now');
 
-      var pages = [
-        'index.html',
-        'sitemap.html',
-        'constellation-diary.html',
-        'constellation-echo.html',
-        'constellation-weather.html',
-        'orbital-weaver.html',
-        'sky-archive.html',
-        'star-lantern.html',
-        'wish-terrarium.html',
-        'error.html'
-      ];
+      var seconds = 5;
+      var cancelled = false;
+      var timer = 0;
 
-      function loadCount() {
-        var raw = null;
-        try {
-          raw = localStorage.getItem(STORAGE_KEY);
-        } catch (e) {
-          memoryEl.textContent = 'Local storage is unavailable here, so shared sky memory cannot be read.';
-          memoryEl.className = 'warn';
-          routeEl.textContent = 'You can still use random jump or head to the site map manually.';
-          return;
-        }
-
-        if (!raw) {
-          memoryEl.textContent = 'No saved stars yet. Start on home to seed the shared sky memory.';
-          memoryEl.className = 'warn';
-          routeEl.textContent = 'Recommended route: home constellation → site map atlas console.';
-          return;
-        }
-
-        try {
-          var parsed = JSON.parse(raw);
-          if (!Array.isArray(parsed)) throw new Error('invalid');
-          var count = parsed.filter(function (s) {
-            return s && typeof s.x === 'number' && typeof s.y === 'number' && typeof s.text === 'string';
-          }).length;
-
-          memoryEl.textContent = 'Shared memory detected: ' + count + ' saved star' + (count === 1 ? '' : 's') + '.';
-          memoryEl.className = 'good';
-          routeEl.textContent = 'Jump to the unified site map for route guidance tailored to constellation density.';
-        } catch (e2) {
-          memoryEl.textContent = 'Saved data exists but is unreadable. Rebuild your constellation on home.';
-          memoryEl.className = 'warn';
-          routeEl.textContent = 'Open home constellation, make a new pattern, then return.';
-        }
+      function destination() {
+        var hash = window.location.hash || '';
+        var query = window.location.search || '';
+        return 'sitemap.html' + query + hash;
       }
 
-      randomBtn.addEventListener('click', function () {
-        var pick = pages[Math.floor(Math.random() * pages.length)];
-        window.location.href = pick;
+      function go() {
+        window.location.href = destination();
+      }
+
+      function tick() {
+        if (cancelled) return;
+        countEl.textContent = String(seconds);
+
+        if (seconds <= 0) {
+          go();
+          return;
+        }
+
+        seconds -= 1;
+        timer = window.setTimeout(tick, 1000);
+      }
+
+      stayBtn.addEventListener('click', function () {
+        cancelled = true;
+        if (timer) {
+          clearTimeout(timer);
+          timer = 0;
+        }
+        statusEl.classList.add('warn');
+        statusEl.textContent = 'Auto-forward paused. Use any route button when ready.';
       });
 
-      loadCount();
+      jumpNow.addEventListener('click', function () {
+        cancelled = true;
+        if (timer) clearTimeout(timer);
+      });
+
+      tick();
     })();
   </script>
 </body>
