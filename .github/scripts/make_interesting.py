@@ -583,7 +583,8 @@ def build_prompt(shown, omitted=()):
         "valid, and change the shared files with the care they deserve: the layout and "
         f"\"{SASS_DIR}/\" reach every page at once.\n\n"
         "Rules:\n"
-        "- Only static files (HTML, CSS, JS, SVG, text). No build steps, no external "
+        "- Only files of these types: "
+        + ", ".join(sorted(ALLOWED_EXTENSIONS)) + ". No external "
         "dependencies that require keys, nothing harmful or deceptive. The site's own analytics, "
         "described below, are the only measurement it carries and the only one it needs: add no "
         "tracking, telemetry, beacon or third-party script of your own.\n"
@@ -598,7 +599,9 @@ def build_prompt(shown, omitted=()):
         f"leads to, such as a site map page -- and {SITEMAP} must list every page. Wire a page you "
         "add into both in the same run, and take a page you delete out of both: a plan that leaves "
         f"a page the root cannot reach is refused. {SITEMAP} is a sitemaps.org urlset whose <loc> "
-        "values are the same relative paths used in links, because the site has no fixed domain.\n"
+        "values are the same relative paths used in links, because the site has no fixed domain. "
+        "This is checked on the built site, so the pages it counts are the ones the templates "
+        "produce, and a layout or a partial is not one of them.\n"
         "- AXIOM, every run: every page carries the site's analytics and cookie consent banner. "
         f"One line in the <head> of a page brings both:\n    {ANALYTICS_TAG}\n"
         "Keep that line on every page you rewrite, exactly as it is, and put it on every page you "
@@ -789,7 +792,9 @@ def validate_plan(plan, unseen=()):
     `unseen` names existing files whose content the model was not shown; it may not touch them.
 
     A plan that would leave a page of the site unreachable from the root, or leave one without the
-    analytics and consent line, is refused: both axioms hold however the prompt is answered.
+    analytics and consent line, is refused: both axioms hold however the prompt is answered. Both
+    are judged on the built site (issue #25), which is the only site a visitor ever sees, so the
+    plan is built before either is asked, and a plan that does not build is refused for that alone.
     """
     files = plan.get("files") or []
     deletes = plan.get("delete") or []
@@ -836,9 +841,22 @@ def validate_plan(plan, unseen=()):
             raise RejectedChange(f"refusing to delete {rel}: its content was not shown to the model")
         ops.append(("delete", target, None))
     before = dict(read_site())
-    after = apply_to(before, ops)
-    check_reachability(before, after)
-    check_analytics(before, after)
+    try:
+        built_after = build_site(apply_to(before, ops))
+    except BuildError as err:
+        raise RejectedChange(f"the site does not build with this change: {one_line(err, 500)}") from None
+    try:
+        built_before = build_site(before)
+    except BuildError as err:
+        # The site as committed does not build, so there is no "before" to compare against and the
+        # axioms have nothing to say this run. Same reasoning as check_reachability's: every run is
+        # asked to repair the site, and refusing a plan over damage it did not do would leave no
+        # plan able to. This run still had to build, and the next one is held to both axioms again.
+        print(f"::warning::the site as committed does not build ({one_line(err, 300)}), so this "
+              "run's change was only checked for building, not against the axioms")
+        return ops
+    check_reachability(built_before, built_after)
+    check_analytics(built_before, built_after)
     return ops
 
 
