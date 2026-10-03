@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html lang='en'>
+<head>
+  <meta charset='utf-8'>
+  <meta name='viewport' content='width=device-width, initial-scale=1'>
+  <title>orbital weaver · interesting</title>
+  <meta name='description' content='Transform your saved constellation into a mirrored orbital mandala, then read a tiny mantra forecast.'>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #060914;
+      --bg2: #1b2953;
+      --fg: #eef4ff;
+      --muted: #a9b7da;
+      --line: rgba(255,255,255,0.18);
+      --panel: rgba(10, 14, 28, 0.74);
+      --accent: #a6d2ff;
+      --accent2: #ffe7ab;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      min-height: 100%;
+      background: radial-gradient(circle at 18% 0%, var(--bg2) 0%, var(--bg) 62%);
+      color: var(--fg);
+      font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    }
+
+    body {
+      display: grid;
+      place-items: center;
+      padding: 1rem;
+    }
+
+    main {
+      width: min(960px, 96vw);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: var(--panel);
+      backdrop-filter: blur(8px);
+      box-shadow: 0 16px 40px rgba(0,0,0,0.36);
+      padding: 1rem;
+    }
+
+    h1 {
+      margin: 0;
+      line-height: 0.95;
+      letter-spacing: -0.03em;
+      font-size: clamp(1.9rem, 6vw, 3.2rem);
+    }
+
+    .tagline {
+      margin: 0.45rem 0 0.85rem;
+      color: var(--muted);
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 1.15fr 0.85fr;
+      gap: 0.85rem;
+    }
+
+    #weaver {
+      width: 100%;
+      height: auto;
+      display: block;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.16);
+      background: #060913;
+      cursor: crosshair;
+    }
+
+    .panel {
+      border: 1px solid rgba(255,255,255,0.14);
+      border-radius: 12px;
+      background: rgba(7, 10, 20, 0.56);
+      padding: 0.8rem;
+    }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin: 0.55rem 0;
+    }
+
+    button, a.action {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: rgba(255,255,255,0.07);
+      color: var(--fg);
+      text-decoration: none;
+      padding: 0.48rem 0.88rem;
+      font: inherit;
+      cursor: pointer;
+      transition: transform 120ms ease, background 120ms ease, border-color 120ms ease;
+    }
+
+    button:hover,
+    button:focus-visible,
+    a.action:hover,
+    a.action:focus-visible {
+      outline: none;
+      transform: translateY(-1px);
+      border-color: rgba(184, 217, 255, 0.8);
+      background: rgba(151, 197, 255, 0.16);
+    }
+
+    #spin[aria-pressed='true'] {
+      background: rgba(166, 210, 255, 0.24);
+      border-color: rgba(194, 224, 255, 0.86);
+      box-shadow: 0 0 12px rgba(143, 195, 255, 0.34) inset;
+    }
+
+    .dial-wrap {
+      margin-top: 0.45rem;
+      color: #dbe9ff;
+      font-size: 0.9rem;
+    }
+
+    #symmetry {
+      width: 100%;
+      margin-top: 0.3rem;
+      accent-color: var(--accent);
+    }
+
+    #status {
+      margin: 0.5rem 0 0;
+      min-height: 1.5em;
+      color: var(--accent2);
+      font-size: 0.95rem;
+    }
+
+    #reading {
+      margin: 0.75rem 0 0;
+      min-height: 8em;
+      white-space: pre-wrap;
+      border: 1px solid rgba(255,255,255,0.14);
+      border-radius: 10px;
+      background: rgba(6, 9, 18, 0.66);
+      color: #e7f0ff;
+      font-size: 0.9rem;
+      line-height: 1.42;
+      padding: 0.7rem;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+    }
+
+    .hint {
+      margin: 0.65rem 0 0;
+      color: var(--muted);
+      font-size: 0.84rem;
+    }
+
+    .footer {
+      margin-top: 0.8rem;
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      color: var(--muted);
+      font-size: 0.86rem;
+    }
+
+    @media (max-width: 800px) {
+      .layout { grid-template-columns: 1fr; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      button, a.action { transition: none; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>orbital weaver</h1>
+    <p class='tagline'>Your saved stars become a mirrored orbital mandala. Spin the weave, adjust symmetry, click to ripple, then print a mantra report.</p>
+
+    <div class='layout'>
+      <canvas id='weaver' width='620' height='340' aria-label='Mirrored orbital mandala generated from saved constellation stars'></canvas>
+
+      <section class='panel'>
+        <p style='margin:0;color:#d8e4ff;'>This reads the same saved constellation memory as the main sky.</p>
+        <div class='controls'>
+          <button id='refresh' type='button'>refresh saved sky</button>
+          <button id='shuffle' type='button'>shuffle weave</button>
+          <button id='spin' type='button' aria-pressed='true'>stop spin</button>
+          <button id='mantra' type='button'>print mantra</button>
+        </div>
+
+        <label class='dial-wrap' for='symmetry'>symmetry spokes: <span id='sym-label'>6</span></label>
+        <input id='symmetry' type='range' min='3' max='12' step='1' value='6' aria-label='Symmetry spokes'>
+
+        <p id='status' aria-live='polite'>Loading star memory...</p>
+        <pre id='reading' aria-live='polite'>Awaiting pattern.
+Load your saved sky, click the weave to send ripples, or print a mantra from your current geometry.</pre>
+        <p class='hint'>Easter egg: type <strong>weave</strong> while this page is focused.</p>
+      </section>
+    </div>
+
+    <p class='footer'>
+      <a class='action' href='index.html'>back to constellation</a>
+      <a class='action' href='constellation-echo.html'>open echo chamber</a>
+      <a class='action' href='constellation-weather.html'>open weather lab</a>
+      <a class='action' href='star-lantern.html'>open star lantern ritual</a>
+      <a class='action' href='wish-terrarium.html'>open wish terrarium</a>
+      <a class='action' href='error.html'>visit observatory 404</a>
+    </p>
+  </main>
+
+  <script>
+    (function () {
+      var STORAGE_KEY = 'interesting_wish_constellation_v1';
+      var canvas = document.getElementById('weaver');
+      var ctx = canvas.getContext('2d');
+      var refreshBtn = document.getElementById('refresh');
+      var shuffleBtn = document.getElementById('shuffle');
+      var spinBtn = document.getElementById('spin');
+      var mantraBtn = document.getElementById('mantra');
+      var symmetryInput = document.getElementById('symmetry');
+      var symLabel = document.getElementById('sym-label');
+      var statusEl = document.getElementById('status');
+      var readingEl = document.getElementById('reading');
+
+      var stars = [];
+      var shards = [];
+      var ripples = [];
+      var t = 0;
+      var lastFrame = 0;
+      var spinning = true;
+      var prism = false;
+      var codeBuffer = '';
+      var rotation = 0;
+      var symmetry = Number(symmetryInput.value);
+
+      function clamp(v, min, max) {
+        return Math.max(min, Math.min(max, v));
+      }
+
+      function rand(min, max) {
+        return min + Math.random() * (max - min);
+      }
+
+      function dayStamp() {
+        var d = new Date();
+        var y = d.getFullYear();
+        var m = String(d.getMonth() + 1).padStart(2, '0');
+        var day = String(d.getDate()).padStart(2, '0');
+        return y + '-' + m + '-' + day;
+      }
+
+      function hashConstellation() {
+        var h = 2166136261;
+        for (var i = 0; i < stars.length; i++) {
+          var s = stars[i];
+          h ^= Math.round(s.x * 10);
+          h = Math.imul(h, 16777619);
+          h ^= Math.round(s.y * 10);
+          h = Math.imul(h, 16777619);
+          for (var c = 0; c < s.text.length; c++) {
+            h ^= s.text.charCodeAt(c);
+            h = Math.imul(h, 16777619);
+          }
+        }
+        return h >>> 0;
+      }
+
+      function setSpinButton() {
+        spinBtn.textContent = spinning ? 'stop spin' : 'start spin';
+        spinBtn.setAttribute('aria-pressed', spinning ? 'true' : 'false');
+      }
+
+      function safeStars(input) {
+        return input.filter(function (s) {
+          return s && typeof s.x === 'number' && typeof s.y === 'number' && typeof s.text === 'string';
+        }).map(function (s) {
+          return {
+            x: Number(clamp(s.x, 0, 100).toFixed(2)),
+            y: Number(clamp(s.y, 0, 100).toFixed(2)),
+            text: s.text
+          };
+        });
+      }
+
+      function ghostStars() {
+        var out = [];
+        for (var i = 0; i < 12; i++) {
+          out.push({
+            x: 20 + (i % 6) * 12 + rand(-3, 3),
+            y: 24 + Math.floor(i / 6) * 22 + rand(-4, 4),
+            text: 'Ghost seed ' + (i + 1)
+          });
+        }
+        return out;
+      }
+
+      function loadStars() {
+        var raw = null;
+        try {
+          raw = localStorage.getItem(STORAGE_KEY);
+        } catch (e) {
+          stars = ghostStars();
+          buildShards();
+          statusEl.textContent = 'Local storage unavailable. Running with ghost seeds.';
+          return;
+        }
+
+        if (!raw) {
+          stars = ghostStars();
+          buildShards();
+          statusEl.textContent = 'No saved constellation found. Running with ghost seeds until you create stars on home.';
+          return;
+        }
+
+        try {
+          var parsed = JSON.parse(raw);
+          if (!Array.isArray(parsed)) throw new Error('invalid');
+          stars = safeStars(parsed).slice(0, 180);
+          if (!stars.length) stars = ghostStars();
+          buildShards();
+
+          if (stars.length && stars[0].text.indexOf('Ghost seed') !== 0) {
+            statusEl.textContent = 'Orbital weave synced: ' + stars.length + ' star' + (stars.length === 1 ? '' : 's') + ' loaded.';
+          } else {
+            statusEl.textContent = 'Saved data had no readable stars. Running with ghost seeds.';
+          }
+        } catch (e2) {
+          stars = ghostStars();
+          buildShards();
+          statusEl.textContent = 'Saved constellation unreadable. Running with ghost seeds.';
+        }
+      }
+
+      function buildShards() {
+        shards = [];
+        ripples = [];
+
+        var cx = canvas.width * 0.5;
+        var cy = canvas.height * 0.5;
+        var maxR = Math.min(canvas.width, canvas.height) * 0.44;
+
+        for (var i = 0; i < stars.length; i++) {
+          var s = stars[i];
+          var px = (s.x / 100) * canvas.width;
+          var py = (s.y / 100) * canvas.height;
+          var dx = px - cx;
+          var dy = py - cy;
+          var angle = Math.atan2(dy, dx);
+          var radius = clamp(Math.sqrt(dx * dx + dy * dy), 12, maxR);
+
+          shards.push({
+            star: s,
+            baseAngle: angle,
+            radius: radius,
+            size: 1.6 + (i % 4) * 0.7,
+            phase: rand(0, Math.PI * 2),
+            hue: (i * 31 + Math.floor(rand(0, 30))) % 360,
+            energy: 0
+          });
+        }
+      }
+
+      function emitRipple(x, y) {
+        ripples.push({ x: x, y: y, r: 2, life: 1 });
+
+        for (var i = 0; i < shards.length; i++) {
+          var p = projectShard(shards[i], 0);
+          var dx = p.x - x;
+          var dy = p.y - y;
+          var d = Math.sqrt(dx * dx + dy * dy) || 1;
+          shards[i].energy = clamp(shards[i].energy + 0.9 / (1 + d * 0.03), 0, 1.4);
+        }
+      }
+
+      function summarize() {
+        var cx = 0;
+        var cy = 0;
+        for (var i = 0; i < stars.length; i++) {
+          cx += stars[i].x;
+          cy += stars[i].y;
+        }
+        cx /= stars.length || 1;
+        cy /= stars.length || 1;
+
+        var spread = 0;
+        for (var j = 0; j < stars.length; j++) {
+          var dx = stars[j].x - cx;
+          var dy = stars[j].y - cy;
+          spread += Math.sqrt(dx * dx + dy * dy);
+        }
+        spread /= stars.length || 1;
+
+        return { cx: cx, cy: cy, spread: spread };
+      }
+
+      function printMantra() {
+        if (!stars.length) {
+          statusEl.textContent = 'No stars loaded yet.';
+          return;
+        }
+
+        var sum = summarize();
+        var hash = hashConstellation();
+        var zone = (sum.cy < 50 ? 'north' : 'south') + '-' + (sum.cx < 50 ? 'west' : 'east');
+        var spreadWord = sum.spread < 12 ? 'compact' : (sum.spread < 24 ? 'balanced' : 'expansive');
+        var density = stars.length < 6 ? 'quiet' : (stars.length < 16 ? 'steady' : 'bright');
+
+        var openers = [
+          'orbital mantra:',
+          'weave transmission:',
+          'midnight geometry note:',
+          'mandala field memo:'
+        ];
+        var middles = [
+          'Start small; repetition turns sparks into structure.',
+          'Play first, refine second, repeat until it sings.',
+          'Momentum likes imperfect beginnings more than hesitation.',
+          'A tiny brave move reshapes the whole pattern.'
+        ];
+        var closers = [
+          'Commit to one clear action before the next hour.',
+          'Rearrange one star on home, then return and re-read.',
+          'Share one rough idea while it is still warm.',
+          'Protect ten focused minutes and build inside them.'
+        ];
+
+        var a = openers[hash % openers.length];
+        var b = middles[(hash >>> 3) % middles.length];
+        var c = closers[(hash >>> 7) % closers.length];
+
+        readingEl.textContent = a + '\n'
+          + stars.length + ' shards · ' + spreadWord + ' spread · ' + zone + ' chamber · ' + density + ' tone.\n'
+          + b + '\n'
+          + c + '\n\n'
+          + 'stamp: ' + dayStamp();
+
+        statusEl.textContent = 'Mantra generated from your constellation geometry.';
+        emitRipple(canvas.width * 0.5, canvas.height * 0.5);
+      }
+
+      function projectShard(shard, armOffset) {
+        var cx = canvas.width * 0.5;
+        var cy = canvas.height * 0.5;
+        var pulse = Math.sin(t * 2.1 + shard.phase) * 7;
+        var angle = shard.baseAngle + rotation + armOffset + Math.sin(t * 0.7 + shard.phase) * 0.05;
+        var r = shard.radius + pulse + shard.energy * 14;
+
+        return {
+          x: cx + Math.cos(angle) * r,
+          y: cy + Math.sin(angle) * r
+        };
+      }
+
+      function drawBackground() {
+        var grad = ctx.createLinearGradient(0, 0, 0, canvas.height);
+        if (prism) {
+          var hue = (t * 28) % 360;
+          grad.addColorStop(0, 'hsl(' + hue.toFixed(1) + ', 58%, 16%)');
+          grad.addColorStop(1, 'hsl(' + ((hue + 95) % 360).toFixed(1) + ', 62%, 8%)');
+        } else {
+          grad.addColorStop(0, '#0d1531');
+          grad.addColorStop(1, '#060913');
+        }
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        for (var i = 0; i < 46; i++) {
+          var sx = (i * 129.3 + t * 10) % canvas.width;
+          var sy = (i * 83.7 + t * 6) % canvas.height;
+          var a = 0.05 + (i % 6) * 0.02;
+          ctx.beginPath();
+          ctx.fillStyle = 'rgba(178, 207, 255, ' + a.toFixed(3) + ')';
+          ctx.arc(sx, sy, 1.05, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+
+      function drawWeave(dt) {
+        if (!shards.length) return;
+
+        var arms = symmetry;
+        var step = (Math.PI * 2) / arms;
+
+        for (var a = 0; a < arms; a++) {
+          var offset = a * step;
+
+          for (var i = 0; i < shards.length - 1; i++) {
+            var p1 = projectShard(shards[i], offset);
+            var p2 = projectShard(shards[i + 1], offset);
+            var alpha = 0.08 + (i % 5) * 0.03 + shards[i].energy * 0.05;
+
+            if (prism) {
+              ctx.strokeStyle = 'hsla(' + ((shards[i].hue + a * 27 + t * 50) % 360).toFixed(1) + ', 92%, 74%, ' + alpha.toFixed(3) + ')';
+            } else {
+              ctx.strokeStyle = 'rgba(154, 198, 255, ' + alpha.toFixed(3) + ')';
+            }
+
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(p1.x, p1.y);
+            ctx.lineTo(p2.x, p2.y);
+            ctx.stroke();
+          }
+
+          for (var j = 0; j < shards.length; j++) {
+            var shard = shards[j];
+            var p = projectShard(shard, offset);
+            shard.energy = Math.max(0, shard.energy - dt * 0.85);
+
+            var glow = shard.size * (2.4 + shard.energy * 2.5);
+            ctx.beginPath();
+            if (prism) {
+              ctx.fillStyle = 'hsla(' + ((shard.hue + a * 24 + t * 60) % 360).toFixed(1) + ', 90%, 74%, 0.21)';
+            } else {
+              ctx.fillStyle = 'rgba(146, 205, 255, ' + (0.1 + shard.energy * 0.22).toFixed(3) + ')';
+            }
+            ctx.arc(p.x, p.y, glow, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.beginPath();
+            ctx.fillStyle = shard.energy > 0.2 ? 'rgba(255, 239, 189, 0.96)' : 'rgba(230, 242, 255, 0.95)';
+            ctx.arc(p.x, p.y, shard.size + shard.energy * 0.8, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+      }
+
+      function drawRipples(dt) {
+        for (var i = ripples.length - 1; i >= 0; i--) {
+          var r = ripples[i];
+          r.r += dt * 170;
+          r.life -= dt * 0.75;
+
+          if (r.life <= 0) {
+            ripples.splice(i, 1);
+            continue;
+          }
+
+          ctx.beginPath();
+          ctx.strokeStyle = 'rgba(255, 232, 170, ' + (r.life * 0.5).toFixed(3) + ')';
+          ctx.lineWidth = 1.35;
+          ctx.arc(r.x, r.y, r.r, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+      }
+
+      function drawOverlay() {
+        ctx.fillStyle = 'rgba(231, 241, 255, 0.9)';
+        ctx.font = '12px ui-monospace, SFMono-Regular, Menlo, monospace';
+        ctx.fillText('shards ' + shards.length + ' · spokes ' + symmetry + (spinning ? ' · spin on' : ' · spin off'), 10, 16);
+      }
+
+      function frame(now) {
+        if (typeof now !== 'number') now = performance.now();
+        var dt = lastFrame ? Math.min(0.05, (now - lastFrame) / 1000) : 0.016;
+        lastFrame = now;
+
+        t += dt;
+        if (spinning) rotation += dt * 0.24;
+
+        drawBackground();
+        drawWeave(dt);
+        drawRipples(dt);
+        drawOverlay();
+
+        requestAnimationFrame(frame);
+      }
+
+      function shuffleWeave() {
+        if (!shards.length) return;
+        for (var i = 0; i < shards.length; i++) {
+          shards[i].phase = rand(0, Math.PI * 2);
+          shards[i].hue = Math.floor(rand(0, 360));
+          shards[i].energy = clamp(shards[i].energy + 0.35, 0, 1.4);
+        }
+        rotation += rand(-0.5, 0.5);
+        emitRipple(rand(canvas.width * 0.3, canvas.width * 0.7), rand(canvas.height * 0.3, canvas.height * 0.7));
+        statusEl.textContent = 'Weave shuffled: same stars, new harmonic palette.';
+      }
+
+      refreshBtn.addEventListener('click', loadStars);
+
+      shuffleBtn.addEventListener('click', shuffleWeave);
+
+      spinBtn.addEventListener('click', function () {
+        spinning = !spinning;
+        setSpinButton();
+        statusEl.textContent = spinning ? 'Spin resumed. The weave is in motion.' : 'Spin paused. Geometry is hovering.';
+      });
+
+      mantraBtn.addEventListener('click', printMantra);
+
+      symmetryInput.addEventListener('input', function () {
+        symmetry = Number(symmetryInput.value);
+        symLabel.textContent = String(symmetry);
+        statusEl.textContent = 'Symmetry tuned to ' + symmetry + ' spokes.';
+      });
+
+      canvas.addEventListener('click', function (ev) {
+        var rect = canvas.getBoundingClientRect();
+        var x = ((ev.clientX - rect.left) / rect.width) * canvas.width;
+        var y = ((ev.clientY - rect.top) / rect.height) * canvas.height;
+        emitRipple(x, y);
+        statusEl.textContent = 'Ripple emitted into the weave.';
+      });
+
+      document.addEventListener('keydown', function (ev) {
+        if (!ev.key || ev.key.length !== 1) return;
+        codeBuffer = (codeBuffer + ev.key.toLowerCase()).slice(-5);
+        if (codeBuffer === 'weave') {
+          prism = !prism;
+          emitRipple(canvas.width * 0.5, canvas.height * 0.5);
+          statusEl.textContent = prism
+            ? 'Secret prism weave unlocked. Spectrum shifted.'
+            : 'Prism weave closed. Returning to midnight tones.';
+        }
+      });
+
+      setSpinButton();
+      loadStars();
+      frame();
+    })();
+  </script>
+</body>
+</html>
