@@ -1,0 +1,21 @@
+{%- set links = [
+  ['index', 'index.html', 'interesting'],
+  ['sky-atlas', 'sky-atlas.html', 'sky atlas'],
+  ['constellation-diary', 'constellation-diary.html', 'constellation diary'],
+  ['constellation-echo', 'constellation-echo.html', 'echo chamber'],
+  ['constellation-weather', 'constellation-weather.html', 'weather lab'],
+  ['orbital-weaver', 'orbital-weaver.html', 'orbital weaver'],
+  ['sky-archive', 'sky-archive.html', 'sky archive oracle'],
+  ['star-lantern', 'star-lantern.html', 'star lantern ritual'],
+  ['wish-terrarium', 'wish-terrarium.html', 'wish terrarium'],
+  ['sitemap', 'sitemap.html', 'site map'],
+  ['error', 'error.html', 'observatory 404']
+] -%}
+    <nav class='skyway' aria-label='Skyway navigation'>
+      <p class='skyway-label'>skyway</p>
+      <div class='skyway-links'>
+{%- for link in links %}
+        <a href='{{ link[1] }}'{% if page and page.fileSlug == link[0] %} class='current' aria-current='page'{% endif %}>{{ link[2] }}</a>
+{%- endfor %}
+      </div>
+    </nav>

@@ -16,3 +16,6 @@
       <span>{{ footerNote }}</span>
 {%- endif %}
     </p>
+{%- if not (page and page.fileSlug == 'sitemap') %}
+{% include 'skyway.njk' %}
+{%- endif %}
