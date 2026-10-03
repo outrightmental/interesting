@@ -367,6 +367,13 @@ class WholeSiteReviewTest(unittest.TestCase):
     def prompt(self, omitted=()):
         return mi.build_prompt([("index.html", "<h1>hi</h1>")], omitted)
 
+    def test_the_mission_string_itself_carries_the_holistic_aim(self):
+        # Issue #16, question 4: the mission string itself should change, not only the surrounding
+        # guidance. It still opens with the original phrase so every other use reads naturally.
+        self.assertTrue(mi.MISSION.startswith("make the website more interesting"))
+        self.assertNotEqual(mi.MISSION, "make the website more interesting")
+        self.assertIn("coherent whole", mi.MISSION)
+
     def test_every_run_is_asked_to_weigh_the_site_as_a_whole_first(self):
         prompt = self.prompt()
         self.assertIn("Begin every run", prompt)

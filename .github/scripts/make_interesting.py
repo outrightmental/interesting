@@ -33,7 +33,12 @@ import tempfile
 import uuid
 from pathlib import Path, PurePosixPath
 
-MISSION = "make the website more interesting"
+# The mission every run serves. It names the holistic aim issue #16 asks for -- the site gets more
+# interesting by becoming a coherent whole, not only by growing -- while keeping "make the website
+# more interesting" as its opening so the prompt, the console line and clean_summary's fallback all
+# still read naturally. (The workflow name and commit-message prefix are separate strings in
+# make-interesting.yml and are not affected by this constant.)
+MISSION = "make the website more interesting as a coherent whole"
 
 COPILOT_BIN = os.environ.get("COPILOT_BIN", "copilot")
 
