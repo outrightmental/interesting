@@ -16,7 +16,10 @@
 
   The analytics and consent line is written here rather than in every page, which is the whole
   point of a shared shell: the axiom is about the built site, so one line here carries it to all of
-  them (see ANALYTICS_TAG and check_analytics in .github/scripts/make_interesting.py).
+  them (see ANALYTICS_TAG and check_analytics in .github/scripts/make_interesting.py). The
+  local-state line below it is there for the same reason, and carries the same kind of axiom
+  (STATE_TAG and check_state). Both lines are written once, here, and neither may be dropped: the
+  files behind them are fixed, and a built page without either line is refused.
 
   Links are relative, like every link in the site: it has no fixed domain and may be served under
   a sub-path, so "css/site.css" and not "/css/site.css".
@@ -40,6 +43,9 @@
 {%- endif %}
   <!-- Analytics and the cookie consent banner that gates it; see js/analytics.js. -->
   <script src='js/analytics.js' defer></script>
+  <!-- The one local-state store every page reads and writes through, and its meta menu; see
+       js/state.js. Not deferred: a page's own script runs before any deferred one does. -->
+  <script src='js/state.js'></script>
 </head>
 <body>
   <a class='skip-link' href='#main-content'>skip to main content</a>
