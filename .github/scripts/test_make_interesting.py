@@ -1281,6 +1281,14 @@ class RealSiteTest(unittest.TestCase):
         deploy = (self.repo / ".github" / "workflows" / "deploy.yml").read_text()
         self.assertIn(self.GA_PLACEHOLDER, deploy, "nothing replaces the placeholder at deploy time")
         self.assertIn("GA_MEASUREMENT_ID", deploy)
+        # The injection has to edit the built artifact -- the copy that is synced to S3 -- and not
+        # site/ in the checkout. /site is source now (issue #25): the build renders analytics.js
+        # into that artifact (copied through verbatim, placeholder and all), and the deploy publishes
+        # the artifact, never the checkout. Injecting into the source would leave the deployed
+        # analytics.js on its placeholder, so the whole site would ship with analytics switched off.
+        self.assertIn('analytics="${BUILD_DIR}/js/analytics.js"', deploy)
+        self.assertNotIn("analytics='site/js/analytics.js'", deploy,
+                         "the deploy injects into the source, which is never published")
 
     def test_the_vendored_consent_library_keeps_its_license_and_version(self):
         for rel in ["js/cookieconsent.umd.js", "css/cookieconsent.css"]:

@@ -123,14 +123,19 @@ jobs:
       # banner appears and no cookie is set. GA_MEASUREMENT_ID comes from the same
       # `terraform apply` as the AWS secrets (infra/github.tf); until it is set, the site is
       # published without analytics rather than not published at all.
+      #
+      # The substitution is done on the built artifact, not on site/ in the checkout: the build runs
+      # above and copies analytics.js through verbatim (placeholder and all), and it is that built
+      # copy that the sync step publishes. Editing the source would leave the deployed file untouched.
       - name: Inject the Google Analytics measurement ID
         if: steps.secrets.outputs.ready == 'true'
         env:
           GA_MEASUREMENT_ID: ${{ secrets.GA_MEASUREMENT_ID }}
+          BUILD_DIR: ${{ steps.build.outputs.dir }}
         run: |
           set -euo pipefail
           placeholder='__GA_MEASUREMENT_ID__'
-          analytics='site/js/analytics.js'
+          analytics="${BUILD_DIR}/js/analytics.js"
           if ! grep -q "$placeholder" "$analytics"; then
             echo "::error::${analytics} has no ${placeholder} for the measurement ID to replace."
             exit 1
@@ -158,8 +163,8 @@ jobs:
           fi
           echo "Measurement ID injected into ${analytics}."
 
-      # --delete keeps the bucket an exact mirror of /site: a page the AI removed stops being
-      # served. /site is the whole artifact — there is no build step, and nothing else is published.
+      # --delete keeps the bucket an exact mirror of the built site: a page the AI removed stops
+      # being served. The built artifact is the whole of what is published, and nothing else is.
       - name: Sync /site to S3
         if: steps.secrets.outputs.ready == 'true'
         env:
