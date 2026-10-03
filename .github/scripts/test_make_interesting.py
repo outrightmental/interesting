@@ -66,34 +66,9 @@ def home(*links):
     return "<h1>interesting</h1>\n<nav>" + "".join(f"<a href='{to}'>{to}</a>" for to in links) + "</nav>"
 
 
-def page(body="<p>a page</p>", title="a page", lang="en",
-         viewport="width=device-width, initial-scale=1", css="", focus=True, calm=True):
-    """A whole page that satisfies the responsive-and-accessible axiom (issue #26).
-
-    This is what a page a run adds has to look like, so it is also what a fixture standing in for one
-    has to look like. Every argument takes one part of the axiom away again, so a test can break
-    exactly one thing: the style block always animates (`transition`) and always drops the browser's
-    focus ring (`outline: none`), so `calm=False` and `focus=False` really do leave a page failing.
-    """
-    style = ["  * { box-sizing: border-box; }",
-             "  .panel { max-width: 60rem; padding: clamp(0.8rem, 3vw, 2rem); }",
-             "  a { transition: color 0.2s ease; }",
-             "  button { outline: none; min-height: 44px; }"]
-    if focus:
-        style.append("  a:focus-visible, button:focus-visible { outline: 2px solid #8db8ff; }")
-    if calm:
-        style.append("  @media (prefers-reduced-motion: reduce) { * { transition: none; } }")
-    return (f"<!DOCTYPE html>\n<html{f' lang={lang!r}' if lang else ''}>\n<head>\n"
-            "  <meta charset='utf-8'>\n"
-            + (f"  <meta name='viewport' content='{viewport}'>\n" if viewport else "")
-            + f"  <title>{title}</title>\n  <style>\n"
-            + "\n".join(style + ([f"  {css}"] if css else [])) + "\n  </style>\n</head>\n<body>\n"
-            f"  <main class='panel'>\n    <h1>{title}</h1>\n    {body}\n  </main>\n</body>\n</html>\n")
-
-
-# A page a plan may add without the responsive-and-accessible axiom having anything to say about it,
-# so a test about reachability only ever fails on reachability.
-NEW_PAGE = page(title="new")
+def page(body):
+    """A page that loads the shared analytics and consent script, as every page of /site does."""
+    return f"<head>{mi.ANALYTICS_TAG}</head>\n<body>{body}</body>"
 
 
 class SiteDirTestCase(unittest.TestCase):
@@ -350,7 +325,7 @@ class BuildPromptTest(SiteDirTestCase):
         self.assertEqual(omitted, ["huge.js"])
         prompt = mi.build_prompt(shown, omitted)
         self.assertNotIn("yyyy", prompt)
-        self.assertIn("content omitted for size): huge.js", prompt)
+        self.assertIn("not shown to you: huge.js", prompt)
         self.assertIn("may not change or delete them", prompt)
         self.assertIn("3 files in all", prompt)  # the whole site is counted, not only what is shown
         # A file left out still belongs to the piece the run is asked to weigh, and the federation
@@ -614,263 +589,131 @@ class ReachabilityAxiomTest(SiteDirTestCase):
         self.assertEqual(omitted, ["zz-big.js"])
 
 
-class ResponsiveAccessibleAxiomTest(SiteDirTestCase):
-    """Issue #26: every page is responsive and accessible, on every run, the way every page stays
-    reachable from the root. Stated as a rule of every prompt and held to by validate_plan, so it
-    does not depend on which model happens to be drawn in a given hour."""
+class AnalyticsAxiomTest(SiteDirTestCase):
+    """Issue #24: every page carries the site's analytics tag and its cookie consent banner, both of
+    which arrive with one line. The axiom is a standing rule of every prompt, validate_plan holds
+    the line, and the files behind that line are kept out of every run's reach."""
 
-    def violations(self, content, **assets):
-        return mi.page_violations("p.html", dict({"p.html": content}, **assets))
+    PAGES = ["index.html", "error.html", "toy.html"]
+
+    def setUp(self):
+        super().setUp()
+        (self.site / "js").mkdir()
+        (self.site / mi.ANALYTICS_SCRIPT).write_text("/* the shared tag and banner */")
+        (self.site / "index.html").write_text(page(home("toy.html", "error.html")))
+        (self.site / "error.html").write_text(page("<p>404</p>"))
+        (self.site / "toy.html").write_text(page("<p>toy</p>"))
+        (self.site / "sitemap.xml").write_text(sitemap(*self.PAGES))
+
+    def prompt(self):
+        return mi.build_prompt([("index.html", "<h1>hi</h1>")])
 
     def test_the_axiom_is_a_standing_rule_of_every_prompt(self):
-        # In the Rules block beside reachability, not one optional flavour of a run: whichever kind
-        # of change a run chooses, the pages it writes have to satisfy this.
-        prompt = mi.build_prompt([("index.html", "<h1>hi</h1>")])
-        rules = prompt[prompt.index("Rules:"):]
-        for rule in ["AXIOM, every run: every page is responsive and accessible",
-                     "WCAG 2.2 level AA",
-                     "width=device-width", "does not forbid zooming",
-                     "lang on <html>", "<title>", "exactly one <main> landmark",
-                     "start at <h1> and skip no level", "alt on every <img>",
-                     "accessible name on every link, button and form control",
-                     "<label for>", "aria-label", ":focus-visible",
-                     "no positive tabindex", "prefers-reduced-motion",
-                     "refused, exactly as one that orphans a page is"]:
+        rules = self.prompt()
+        rules = rules[rules.index("Rules:"):]
+        for rule in ["every page carries the site's analytics and cookie consent banner",
+                     mi.ANALYTICS_TAG,
+                     "Keep that line on every page you rewrite",
+                     "put it on every page you add",
+                     f"../{mi.ANALYTICS_SCRIPT}",  # a page in a sub-folder
+                     "only once a visitor accepts",
+                     "are fixed: they are not shown to you",
+                     "without that line is refused"]:
             with self.subTest(rule=rule):
                 self.assertIn(rule, rules)
-        self.assertEqual(rules.count("AXIOM, every run:"), 2, "both axioms stand over every run")
+        for fixed in mi.FIXED_FILES:
+            with self.subTest(fixed=fixed):
+                self.assertIn(fixed, rules)
 
-    def test_the_prompt_also_asks_for_what_no_validator_can_judge(self):
-        # Open question 1 of the issue: both, and the prompt is the wider of the two. Contrast needs
-        # the rendered colours of a gradient, and tap targets and sideways overflow need a layout, so
-        # the prompt has to ask for what check_accessibility cannot see.
-        rules = mi.build_prompt([("index.html", "<h1>hi</h1>")])
-        for asked in ["fluid units", "overflows sideways at 320px wide", "tap targets around 44px",
-                      "contrast at 4.5:1", "the mechanical half"]:
-            with self.subTest(asked=asked):
-                self.assertIn(asked, rules)
+    def test_the_prompt_no_longer_forbids_the_sites_own_analytics(self):
+        # The rule used to end "nothing harmful, deceptive or tracking", which this axiom
+        # contradicts as written. A run still may not add measurement of its own.
+        prompt = self.prompt()
+        self.assertNotIn("nothing harmful, deceptive or tracking", prompt)
+        self.assertIn("nothing harmful or deceptive", prompt)
+        self.assertIn("add no tracking, telemetry, beacon or third-party script of your own", prompt)
 
-    def test_a_page_that_satisfies_the_axiom_has_no_violations(self):
-        self.assertEqual(self.violations(page()), [])
-        self.assertEqual(self.violations(page(body="<h2>a section</h2><p>text</p>")), [])
+    def test_a_page_a_run_adds_must_carry_the_tag(self):
+        plan = {"files": [
+            {"path": "new.html", "content": "<p>new</p>"},
+            {"path": "index.html", "content": page(home("toy.html", "error.html", "new.html"))},
+            {"path": "sitemap.xml", "content": sitemap(*self.PAGES, "new.html")},
+        ]}
+        with self.assertRaisesRegex(mi.RejectedChange, r"new\.html has no <script"):
+            mi.validate_plan(plan)
+        plan["files"][0]["content"] = page("<p>new</p>")
+        self.assertEqual(len(mi.validate_plan(plan)), 3)
 
-    # Open question 2 of the issue: these are the signals, each one something a page either plainly
-    # has or plainly lacks, so the check never comes down to taste.
-    def test_every_signal_the_axiom_rests_on_is_checked(self):
-        img, button = "<img src='a.png' alt='a'>", "<button aria-label='Play'></button>"
-        cases = [
-            ("no viewport tag", page(viewport=""),
-             ["has no viewport meta tag with width=device-width"]),
-            ("zoom forbidden outright", page(viewport="width=device-width, user-scalable=no"),
-             ["forbids zooming in its viewport meta tag"]),
-            ("zoom capped below 200%", page(viewport="width=device-width, maximum-scale=1.5"),
-             ["forbids zooming in its viewport meta tag"]),
-            ("no lang", page(lang=""), ["has no lang attribute on <html>"]),
-            ("empty title", page(title=""), ["has no page title"]),
-            ("no main landmark", page().replace("main", "div"), ["has no <main> landmark"]),
-            ("two main landmarks", page().replace("</main>", "</main><main>more</main>"),
-             ["has more than one <main> landmark"]),
-            ("headings start below h1", page().replace("h1", "h2"),
-             ["has no <h1>", "skips a heading level"]),
-            ("a heading level skipped", page(body="<h3>a section</h3>"), ["skips a heading level"]),
-            ("an image with no alt", page(body="<img src='a.png'>"),
-             ["has an <img> with no alt attribute"]),
-            ("the focus ring taken away", page(focus=False),
-             ["takes the focus outline away without a :focus style of its own"]),
-            ("a positive tabindex", page(body=f"<p tabindex='1'>{img}</p>"),
-             ["uses a positive tabindex"]),
-            ("motion with no escape from it", page(calm=False),
-             ["animates without honouring prefers-reduced-motion"]),
-            ("a nameless button", page(body="<button></button>"),
-             ["has a <button> with no accessible name"]),
-            ("a nameless link", page(body="<a href='toy.html'></a>"),
-             ["has an <a> with no accessible name"]),
-            ("an unlabelled field", page(body=f"<input id='q' type='search'>{button}"),
-             ["has an <input> with no accessible name"]),
-        ]
-        for name, content, expected in cases:
-            with self.subTest(case=name):
-                self.assertEqual(sorted(self.violations(content)), sorted(expected))
+    def test_dropping_the_tag_from_a_page_a_run_rewrites_is_refused(self):
+        for content in ["<p>no tag at all</p>", "<head><script>var ANALYTICS = 'js/analytics.js';</script></head>"]:
+            with self.subTest(content=content[:40]), self.assertRaisesRegex(mi.RejectedChange, r"toy\.html has no <script"):
+                mi.validate_plan({"files": [{"path": "toy.html", "content": content}]})
+        # It is the src that counts, not the exact spelling of the tag around it.
+        loaded = '<head><script defer src="js/analytics.js"></script></head>'
+        self.assertEqual(len(mi.validate_plan({"files": [{"path": "toy.html", "content": loaded}]})), 1)
 
-    def test_zoom_may_be_capped_at_200_percent_but_no_lower(self):
-        # WCAG 1.4.4 asks for text that can be enlarged to 200%, so maximum-scale=2 is as low as a
-        # page may go and a page that says nothing about scale is fine.
-        for allowed in ["width=device-width, initial-scale=1", "width=device-width, maximum-scale=2",
-                        "width=device-width, maximum-scale=5.0"]:
-            with self.subTest(viewport=allowed):
-                self.assertEqual(self.violations(page(viewport=allowed)), [])
+    def test_a_page_in_a_sub_folder_loads_it_by_a_relative_src(self):
+        plan = {"files": [
+            {"path": "deep/new.html",
+             "content": f"<head><script src='../{mi.ANALYTICS_SCRIPT}' defer></script></head>"},
+            {"path": "index.html", "content": page(home("toy.html", "error.html", "deep/new.html"))},
+            {"path": "sitemap.xml", "content": sitemap(*self.PAGES, "deep/new.html")},
+        ]}
+        self.assertEqual(len(mi.validate_plan(plan)), 3)
 
-    def test_a_decorative_image_is_marked_decorative_rather_than_left_unmarked(self):
-        # alt="" is how a page says "this one carries no meaning", so an empty alt passes and a
-        # missing one does not. WCAG 1.1.1 Non-text Content.
-        self.assertEqual(self.violations(page(body="<img src='a.png' alt=''>")), [])
-        self.assertEqual(self.violations(page(body="<img src='a.png' aria-hidden='true'>")),
-                         ["has an <img> with no alt attribute"])
-
-    def test_a_control_may_take_its_name_from_its_text_a_label_or_an_attribute(self):
-        named = [
-            "<button>play</button>",
-            "<button aria-label='Play the sky'></button>",
-            "<button aria-labelledby='heading'></button>",
-            "<button title='Play'></button>",
-            "<button><img src='play.svg' alt='Play'></button>",  # an image inside names the button
-            "<button><span><em>play</em></span></button>",  # however deeply the text is nested
-            "<button><svg role='img'><title>Play</title></svg></button>",  # and an svg's own title
-            "<label for='q'>search</label><input id='q'>",  # a label before the field it names
-            "<input id='q'><label for='q'>search</label>",  # and a label after it
-            "<select id='s' aria-label='Palette'><option>one</option></select>",
-            "<textarea aria-label='Your wish'></textarea>",
-            "<input type='hidden' name='token' value='x'>",  # not a control at all
-            "<input type='submit' value='Send'>",  # carries its own text
-            "<a>a target, not a link</a>",  # no href, so nothing to operate
-            "<details><summary>more</summary><p>text</p></details>",
-        ]
-        for markup in named:
-            with self.subTest(markup=markup):
-                self.assertEqual(self.violations(page(body=markup)), [])
-
-    def test_markup_written_inside_a_script_is_not_markup_of_the_page(self):
-        # Every page of this site draws part of itself from JavaScript, so a check that read the
-        # file as text would refuse them all over strings like these.
-        drawn = ("<script>\n"
-                 "  var row = \"<img src=x>\" + \"<button></button>\" + \"<input>\";\n"
-                 "  el.innerHTML = \"<a href='toy.html'></a>\" + row;\n"
-                 "</script>")
-        self.assertEqual(self.violations(page(body=drawn)), [])
-
-    def test_a_shared_stylesheet_or_script_is_read_along_with_the_page(self):
-        # The prompt invites lifting shared styles and behaviour into "css/site.css" and
-        # "js/site.js". A page's focus ring and its motion are then as likely to live there as in
-        # the page, so the check has to follow them or a federated site would pass vacuously.
-        bare = ("<!DOCTYPE html>\n<html lang='en'>\n<head>\n<meta name='viewport' "
-                "content='width=device-width, initial-scale=1'>\n<title>t</title>\n"
-                "<link rel='stylesheet' href='css/site.css'>\n</head>\n<body>\n<main><h1>t</h1>"
-                "</main>\n<script src='js/site.js'></script>\n</body>\n</html>")
-        shared = {"css/site.css": "button { outline: none; }",
-                  "js/site.js": "requestAnimationFrame(frame);"}
-        self.assertEqual(sorted(self.violations(bare, **shared)),
-                         ["animates without honouring prefers-reduced-motion",
-                          "takes the focus outline away without a :focus style of its own"])
-        shared["css/site.css"] += " button:focus-visible { outline: 2px solid; }"
-        shared["js/site.js"] = ("if (!matchMedia('(prefers-reduced-motion: reduce)').matches) "
-                                "requestAnimationFrame(frame);")
-        self.assertEqual(self.violations(bare, **shared), [])
-
-    def test_motion_only_has_to_be_answered_for_where_there_is_motion(self):
-        # A still page owes nobody a prefers-reduced-motion rule; a page that moves owes one however
-        # it moves, in CSS or from script.
-        still = page(calm=False).replace("transition: color 0.2s ease;", "color: #8db8ff;")
-        self.assertEqual(self.violations(still), [])
-        for motion in ["@keyframes drift { to { transform: translateY(1rem); } }",
-                       "div { animation: drift 4s infinite; }"]:
-            with self.subTest(motion=motion):
-                self.assertEqual(self.violations(still.replace("</style>", motion + "</style>")),
-                                 ["animates without honouring prefers-reduced-motion"])
-        for motion in ["<script>requestAnimationFrame(frame);</script>",
-                       "<script>el.animate(frames, 900);</script>"]:
-            with self.subTest(motion=motion):
-                self.assertEqual(self.violations(still.replace("</main>", motion + "</main>")),
-                                 ["animates without honouring prefers-reduced-motion"])
-        # Honouring it from script counts as much as a media query does.
-        answered = still.replace("</main>", "<script>if (!matchMedia('(prefers-reduced-motion: "
-                                 "reduce)').matches) requestAnimationFrame(frame);</script></main>")
-        self.assertEqual(self.violations(answered), [])
-
-    def wired_site(self):
-        """A /site that satisfies both axioms, so a test can break one thing about it at a time."""
-        links = "<nav><a href='toy.html'>toy</a> <a href='error.html'>error</a></nav>"
-        (self.site / "index.html").write_text(page(title="home", body=links))
-        (self.site / "error.html").write_text(page(title="not found"))
-        (self.site / "toy.html").write_text(page(title="toy"))
-        (self.site / "sitemap.xml").write_text(sitemap("index.html", "error.html", "toy.html"))
-        self.assertEqual(mi.inaccessible_pages(dict(mi.read_site())), {})
-
-    def wiring_in(self, content):
-        """A plan that adds "new.html" with `content`, wired into the navigation and the sitemap."""
-        links = ("<nav><a href='toy.html'>toy</a> <a href='error.html'>error</a> "
-                 "<a href='new.html'>new</a></nav>")
-        return {"files": [{"path": "new.html", "content": content},
-                          {"path": "index.html", "content": page(title="home", body=links)},
-                          {"path": "sitemap.xml",
-                           "content": sitemap("index.html", "error.html", "toy.html", "new.html")}]}
-
-    def test_a_page_a_run_adds_is_born_responsive_and_accessible(self):
-        # The page is wired in properly, so reachability is satisfied and this is the only thing
-        # left to refuse it for. A run that adds a page has no excuse: it is writing it from scratch.
-        self.wired_site()
-        with self.assertRaisesRegex(mi.RejectedChange,
-                                   r"responsive and accessible: new\.html has no viewport meta tag"):
-            mi.validate_plan(self.wiring_in("<h1>new</h1><p>a bare fragment</p>"))
-        with self.assertRaisesRegex(mi.RejectedChange, r"new\.html has an <img> with no alt"):
-            mi.validate_plan(self.wiring_in(page(title="new", body="<img src='a.png'>")))
-        self.assertEqual(len(mi.validate_plan(self.wiring_in(page(title="new")))), 3)
-
-    def test_making_a_page_that_was_fine_worse_is_refused(self):
-        self.wired_site()
-        for broken, reason in [
-            (page(title="toy", viewport=""), "has no viewport meta tag with width=device-width"),
-            (page(title="toy", lang=""), "has no lang attribute on <html>"),
-            (page(title="toy", calm=False), "animates without honouring prefers-reduced-motion"),
-            (page(title="toy", focus=False), "takes the focus outline away"),
-            (page(title="toy", body="<button></button>"), "has a <button> with no accessible name"),
-        ]:
-            with self.subTest(reason=reason):
-                with self.assertRaisesRegex(mi.RejectedChange, f"toy.html {re.escape(reason)}"):
-                    mi.validate_plan({"files": [{"path": "toy.html", "content": broken}]})
-
-    def test_a_page_that_already_fell_short_blocks_nothing(self):
-        # The same bargain check_reachability makes, for the same reason: if a plan had to repair
-        # every page that already falls short before it could do anything, no plan could ever be
-        # applied -- including the one that repairs them. The throwaway /site here is two bare
-        # fragments, so both of its pages fail the axiom from the start.
-        self.assertEqual(sorted(mi.inaccessible_pages(dict(mi.read_site()))),
-                         ["error.html", "index.html"])
-        ops = mi.validate_plan({"files": [{"path": "index.html", "content": home("error.html")}]})
+    def test_a_page_that_was_already_missing_the_tag_blocks_nothing(self):
+        # Only what the run itself breaks is refused, as with the reachability axiom: a plan that
+        # had to repair every page first could never be applied, including the one that repairs them.
+        (self.site / "index.html").write_text(home("toy.html", "error.html"))
+        ops = mi.validate_plan({"files": [{"path": "toy.html", "content": page("<p>still tagged</p>")}]})
         self.assertEqual(len(ops), 1)
-        self.assertIn("index.html", mi.inaccessible_pages(dict(mi.read_site())))
+        self.assertEqual(mi.pages_missing_analytics(dict(mi.read_site())), {"index.html"})
 
-    def test_repairing_part_of_a_page_is_never_mistaken_for_breaking_it(self):
-        # Every reason is a fixed string, so a repair can only take reasons away. Were they to carry
-        # counts or lists, mending one of two nameless buttons would read as a brand-new reason and
-        # the repair would be refused -- which would make the axiom unrepairable in practice.
-        half_mended = page(title="home", body="<button></button><img src='a.png'>")
-        (self.site / "index.html").write_text(
-            page(title="home", body="<button></button><button></button><img src='a.png'>"))
-        self.assertEqual(sorted(mi.inaccessible_pages(dict(mi.read_site()))["index.html"]),
-                         ["has a <button> with no accessible name",
-                          "has an <img> with no alt attribute"])
-        self.assertEqual(len(mi.validate_plan({"files": [{"path": "index.html",
-                                                          "content": half_mended}]})), 1)
-        mended = page(title="home", body="<button>go</button><img src='a.png' alt='a'>")
-        self.assertEqual(len(mi.validate_plan({"files": [{"path": "index.html",
-                                                          "content": mended}]})), 1)
+    def test_a_site_without_the_shared_script_is_not_held_to_the_axiom(self):
+        (self.site / mi.ANALYTICS_SCRIPT).unlink()
+        self.assertEqual(mi.pages_missing_analytics(dict(mi.read_site())), set())
+        self.assertEqual(len(mi.validate_plan({"files": [{"path": "toy.html", "content": "<p>bare</p>"}]})), 1)
 
-    def test_retiring_a_page_that_fell_short_is_fine(self):
-        # A run that only deletes stays a successful run (issue #16), and deleting a page can only
-        # take violations away.
-        self.wired_site()
-        (self.site / "old.html").write_text("<h1>old</h1>")
-        ops = mi.validate_plan({"delete": ["old.html"]})
-        self.assertEqual(len(ops), 1)
+    def test_the_files_behind_the_tag_can_neither_be_rewritten_nor_deleted(self):
+        for rel in sorted(mi.FIXED_FILES):
+            for plan in [{"files": [{"path": rel, "content": "rewritten from memory"}]},
+                         {"delete": [rel]}, {"delete": [f"site/{rel}"]}]:
+                with self.subTest(plan=str(plan)[:80]), self.assertRaises(mi.RejectedChange):
+                    mi.validate_plan(plan)
 
-    def test_an_unparseable_page_is_its_own_kind_of_broken(self):
-        with mock.patch.object(mi, "PageFacts", side_effect=ValueError("not HTML")):
-            self.assertEqual(self.violations(page()), ["cannot be parsed as HTML"])
+    def test_the_files_behind_the_tag_are_never_shown_and_cost_the_prompt_nothing(self):
+        # 55 KB of vendored consent library must not push a page of the site out of the prompt, and
+        # a file the model cannot see is a file it cannot break.
+        for rel in sorted(mi.FIXED_FILES):
+            path = self.site / rel
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("z" * mi.PROMPT_BUDGET_CHARS)
+        shown, omitted = mi.split_for_prompt(mi.read_site())
+        self.assertEqual(sorted(rel for rel, _ in shown),
+                         ["error.html", "index.html", "sitemap.xml", "toy.html"])
+        self.assertEqual(sorted(set(omitted) & mi.FIXED_FILES), sorted(mi.FIXED_FILES))
+        prompt = mi.build_prompt(shown, omitted)
+        self.assertNotIn("zzzz", prompt)
+        self.assertIn("you may not change or delete them", prompt)
 
 
 class RealSiteTest(unittest.TestCase):
     """The site in this repository obeys both axioms: every page is reachable from the root, and
-    every page is responsive and accessible.
+    every page carries the analytics tag and consent banner.
 
-    validate_plan only refuses what a run breaks, so both invariants have to start out true: this is
+    validate_plan only refuses what a run breaks, so the invariants have to start out true: this is
     what makes them hold from the next deploy onward and not only for pages a later run adds. It
-    runs on every pull request and on main before each deploy, so a hand-written commit that orphans
-    a page or makes one inaccessible is caught there too, and the deploy is blocked (open question 5
-    of issue #26: fail, not warn -- a warning in an hourly log nobody reads changes nothing).
+    runs on every pull request and on main before each deploy, so a hand-written commit that
+    orphans a page or drops the tag is caught there too.
     """
 
+    # What deploy.yml replaces with the GA_MEASUREMENT_ID repository secret on the way to S3.
+    # Spelled out here rather than imported, so renaming it in one place fails here.
+    GA_PLACEHOLDER = "__GA_MEASUREMENT_ID__"
+
     def setUp(self):
-        site = Path(mi.__file__).resolve().parents[2] / "site"
+        self.repo = Path(mi.__file__).resolve().parents[2]
+        site = self.repo / "site"
         if not site.is_dir():
             self.skipTest(f"no site directory at {site}")
         patcher = mock.patch.object(mi, "SITE_DIR", site)
@@ -912,6 +755,27 @@ class RealSiteTest(unittest.TestCase):
         # mechanically, and a page a visitor can read, reachable from the home page.
         self.assertIn("sitemap.xml", self.site)
         self.assertIn("sitemap.html", mi.links_from("index.html", self.site))
+
+    def test_every_page_loads_the_analytics_and_consent_script(self):
+        for rel in mi.FIXED_FILES:
+            self.assertIn(rel, self.site, "the files behind the tag have to be there")
+        self.assertEqual(mi.pages_missing_analytics(self.site), set())
+        self.assertGreater(len(mi.html_pages(self.site)), 1, "the check is worth nothing on one page")
+
+    def test_the_measurement_id_is_not_committed_but_the_deploy_injects_it(self):
+        analytics = self.site[mi.ANALYTICS_SCRIPT]
+        self.assertIn(self.GA_PLACEHOLDER, analytics)
+        self.assertNotRegex(analytics, r"G-[A-Z0-9]{6,}", "a measurement ID is committed")
+        deploy = (self.repo / ".github" / "workflows" / "deploy.yml").read_text()
+        self.assertIn(self.GA_PLACEHOLDER, deploy, "nothing replaces the placeholder at deploy time")
+        self.assertIn("GA_MEASUREMENT_ID", deploy)
+
+    def test_the_vendored_consent_library_keeps_its_license_and_version(self):
+        for rel in ["js/cookieconsent.umd.js", "css/cookieconsent.css"]:
+            with self.subTest(rel=rel):
+                self.assertIn("CookieConsent 3.1.0", self.site[rel])
+                self.assertIn("github.com/orestbida/cookieconsent", self.site[rel])
+                self.assertIn("MIT License", self.site[rel])
 
 
 class SmallModelTest(unittest.TestCase):

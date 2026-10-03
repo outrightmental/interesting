@@ -10,8 +10,10 @@ iterate a more interesting website
 
 - **`/site`** — the static website, published to an S3 bucket behind CloudFront at
   [interesting.outright.io](https://interesting.outright.io/). `site/` is the whole artifact:
-  plain HTML with no build step, and nothing else is published. A request for a page that is not
-  there gets `error.html` back, with a 404, from a CloudFront custom error response.
+  plain HTML with no build step, plus the three shared files behind the analytics tag (see
+  [Analytics axiom](#analytics-axiom)), and nothing else is published. The deploy changes one thing
+  on the way — the GA4 measurement ID — and copies everything else as it is. A request for a page
+  that is not there gets `error.html` back, with a 404, from a CloudFront custom error response.
 - **`/infra`** — the hosting, as code. [`infra/`](infra) is a self-contained Terraform project
   that owns the bucket, the CloudFront distribution, the certificate and DNS, the deploy IAM
   user, the Actions secrets the deploy uses — and this repository itself. It is applied by hand:
@@ -68,47 +70,40 @@ sitemap. It is an invariant of the iteration process rather than a one-off tidy-
   [`.github/scripts/test_make_interesting.py`](.github/scripts/test_make_interesting.py) checks
   `/site` itself on every pull request and before every deploy.
 
-### Responsive and accessible axiom
+### Analytics axiom
 
-Every page works on a small screen as well as a large one, and works for a visitor who cannot see
-it, cannot use a mouse, or has asked their system for less motion. Like reachability it is an
-invariant of the iteration process, not a one-off tidy-up: it does not depend on which model happens
-to be drawn in a given hour.
+Every page reports to Google Analytics, and asks for consent before it does. That is an invariant of
+the iteration process too, for the same reason the one above is: the hourly run may return complete
+new content for any page it is shown.
 
-- **The standard is [WCAG 2.2 level AA](https://www.w3.org/TR/WCAG22/).** Every check names the
-  success criterion it stands for, so the set can grow without becoming a matter of taste.
-- **Stated in the prompt.** The `Rules:` block every run is given carries this as a second `AXIOM`
-  beside reachability. It asks for more than any validator can judge — fluid layout with nothing
-  overflowing sideways at 320px wide, tap targets around 44px, text contrast at 4.5:1 — because the
-  prompt can ask for what code cannot see.
-- **Held to in code.** `check_accessibility` in
+- **One line per page.** Every page carries
+  `<script src='js/analytics.js' defer></script>` in its `<head>`, and
+  [`site/js/analytics.js`](site/js/analytics.js) brings the rest with it, resolving its neighbours
+  from its own URL so a page in a sub-folder works too: the consent banner
+  ([orestbida/cookieconsent](https://github.com/orestbida/cookieconsent) 3.1.0, MIT, vendored into
+  `site/js/` and `site/css/` exactly as published) and — only once a visitor accepts the analytics
+  category — the Google tag, which is not even fetched before then. Declining later switches
+  measurement back off and lets the banner clear the cookies it set, and a small *cookies* button in
+  the corner of every page reopens the choice.
+- **No measurement ID in the repository.** `analytics.js` ships a placeholder, and
+  [`deploy.yml`](.github/workflows/deploy.yml) pastes the `GA_MEASUREMENT_ID` repository secret into
+  the copy on its way to the bucket. The placeholder switches the whole file off, so a fork, a local
+  copy or any checkout the deploy has not run over loads no tag, shows no banner and sets no cookie.
+  The secret comes from the same `terraform apply` as the AWS ones ([`infra/github.tf`](infra/github.tf)).
+- **Stated in the prompt.** The `Rules:` block names the exact line, tells a run to keep it on every
+  page it rewrites and to put it on every page it adds, and names the relative `src` a page in a
+  sub-folder uses. The rule that used to end "nothing harmful, deceptive or tracking" now forbids a
+  run from adding tracking, telemetry, a beacon or a third-party script *of its own*.
+- **Held to in code.** `check_analytics` in
   [`.github/scripts/make_interesting.py`](.github/scripts/make_interesting.py) refuses a plan that
-  makes a page fail the mechanical half of it. Thirteen signals, each one something a page either
-  plainly has or plainly lacks: `width=device-width` and zoom left alone (1.4.10 Reflow, 1.4.4
-  Resize Text); `lang` on `<html>` (3.1.1); a `<title>` (2.4.2); exactly one `<main>` landmark
-  (1.3.1, 2.4.1); headings that start at `<h1>` and skip no level (1.3.1); `alt` on every `<img>`,
-  `alt=""` being how a page marks one decorative (1.1.1); an accessible name on every link, button
-  and form control, from its own text, a `<label for>` or an `aria-label` (4.1.2, 2.4.4, 3.3.2); a
-  `:focus` style wherever the browser's outline is taken away (2.4.7); no positive `tabindex`
-  (2.4.3); and a `prefers-reduced-motion` rule, in CSS or through `matchMedia`, wherever the page
-  animates (2.3.3).
-- **Responsiveness is checked as accessibility**, because that is what it is. A page that insists on
-  a desktop-width window, or that forbids the pinch zoom people enlarge text with, has shut out the
-  same visitor a missing alt text does.
-- **Only what the run itself breaks is refused**, exactly as with reachability: a page that already
-  falls short stays the site's own problem to repair, because rejecting every plan over it would
-  leave no plan able to repair it. A page a run writes from scratch has no such excuse, so it is
-  born responsive and accessible. Every reason is a fixed string, so a repair can only take reasons
-  away — mending one of two nameless buttons is never read as a new fault.
-- **Read as markup, not as text.** Pages are parsed with `html.parser`, so the markup these pages
-  build inside JavaScript strings is never mistaken for markup of the page itself, and a page's
-  linked stylesheets and scripts are read along with it, so the checks stay true of a federated site
-  where the focus ring and the motion live in `css/site.css` and `js/site.js`.
-- **True of the site as committed.** Because the code only refuses what a run breaks, the invariant
-  has to start out true, so `RealSiteTest` in
-  [`.github/scripts/test_make_interesting.py`](.github/scripts/test_make_interesting.py) checks
-  `/site` itself on every pull request and before every deploy. A violation **fails the build and
-  blocks the deploy**; a warning in an hourly log nobody reads would change nothing.
+  leaves a page without the line. As with reachability, only what the run itself breaks is refused.
+- **The three files are out of reach.** `FIXED_FILES` — `js/analytics.js` and the two vendored
+  `cookieconsent` files — are never shown to a model and are refused outright as a write or a
+  delete, so no run can quietly gut the tag or the banner. They skip the prompt budget as well, so
+  55 KB of consent library cannot push a page of the site out of the prompt.
+- **True of the site as committed**, checked by `RealSiteTest` on every pull request and before every
+  deploy: every page loads the script, the three files are there, no measurement ID is committed,
+  `deploy.yml` still replaces the placeholder, and the vendored library keeps its license and version.
 
 ### Silo
 
@@ -120,8 +115,9 @@ The AI can only ever modify `/site`:
 2. [`.github/scripts/make_interesting.py`](.github/scripts/make_interesting.py) rejects any path
    that is absolute, contains `..`/hidden segments or anything but lowercase letters, digits, `.`,
    `_` and `-`, resolves outside `/site` (including via symlinks) or has a non-static file type.
-   It never deletes `index.html`, `error.html` or `sitemap.xml`, never touches a file the model was
-   not shown, and applies an answer whole or not at all.
+   It never deletes `index.html`, `error.html` or `sitemap.xml`, never writes or deletes the three
+   files behind the analytics tag, never touches a file the model was not shown, and applies an
+   answer whole or not at all.
 3. The workflow fails if anything outside `/site` changed, and only stages `site/` for commit. The
    repository's token is not in the checkout while the model's answer is processed. The model's
    one-line summary is stripped to plain text before it reaches the commit message.
@@ -149,10 +145,10 @@ has no model in the pool, because Copilot only offers the Gemini Flash tier.
 ### Setup
 
 - **Hosting** — run `terraform apply` in [`infra/`](infra) once, by hand. That creates the bucket,
-  the distribution, the certificate and DNS, and sets the four repository secrets the deploy reads
+  the distribution, the certificate and DNS, and sets the five repository secrets the deploy reads
   (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_S3_BUCKET`,
-  `AWS_CLOUDFRONT_DISTRIBUTION_ID`). No secret is set by hand: they come from the same apply that
-  creates what they point at, so they cannot drift from it.
+  `AWS_CLOUDFRONT_DISTRIBUTION_ID` and `GA_MEASUREMENT_ID`). No secret is set by hand: they come
+  from the same apply that creates or names what they point at, so they cannot drift from it.
   [`infra/README.md`](infra/README.md) has the order and the costs. Until that apply has run, the
   deploy says so in its summary and finishes green instead of failing hourly — so run it around
   the time this lands, because GitHub Pages is retired and nothing else publishes the site.
