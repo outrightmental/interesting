@@ -68,6 +68,48 @@ sitemap. It is an invariant of the iteration process rather than a one-off tidy-
   [`.github/scripts/test_make_interesting.py`](.github/scripts/test_make_interesting.py) checks
   `/site` itself on every pull request and before every deploy.
 
+### Responsive and accessible axiom
+
+Every page works on a small screen as well as a large one, and works for a visitor who cannot see
+it, cannot use a mouse, or has asked their system for less motion. Like reachability it is an
+invariant of the iteration process, not a one-off tidy-up: it does not depend on which model happens
+to be drawn in a given hour.
+
+- **The standard is [WCAG 2.2 level AA](https://www.w3.org/TR/WCAG22/).** Every check names the
+  success criterion it stands for, so the set can grow without becoming a matter of taste.
+- **Stated in the prompt.** The `Rules:` block every run is given carries this as a second `AXIOM`
+  beside reachability. It asks for more than any validator can judge — fluid layout with nothing
+  overflowing sideways at 320px wide, tap targets around 44px, text contrast at 4.5:1 — because the
+  prompt can ask for what code cannot see.
+- **Held to in code.** `check_accessibility` in
+  [`.github/scripts/make_interesting.py`](.github/scripts/make_interesting.py) refuses a plan that
+  makes a page fail the mechanical half of it. Thirteen signals, each one something a page either
+  plainly has or plainly lacks: `width=device-width` and zoom left alone (1.4.10 Reflow, 1.4.4
+  Resize Text); `lang` on `<html>` (3.1.1); a `<title>` (2.4.2); exactly one `<main>` landmark
+  (1.3.1, 2.4.1); headings that start at `<h1>` and skip no level (1.3.1); `alt` on every `<img>`,
+  `alt=""` being how a page marks one decorative (1.1.1); an accessible name on every link, button
+  and form control, from its own text, a `<label for>` or an `aria-label` (4.1.2, 2.4.4, 3.3.2); a
+  `:focus` style wherever the browser's outline is taken away (2.4.7); no positive `tabindex`
+  (2.4.3); and a `prefers-reduced-motion` rule, in CSS or through `matchMedia`, wherever the page
+  animates (2.3.3).
+- **Responsiveness is checked as accessibility**, because that is what it is. A page that insists on
+  a desktop-width window, or that forbids the pinch zoom people enlarge text with, has shut out the
+  same visitor a missing alt text does.
+- **Only what the run itself breaks is refused**, exactly as with reachability: a page that already
+  falls short stays the site's own problem to repair, because rejecting every plan over it would
+  leave no plan able to repair it. A page a run writes from scratch has no such excuse, so it is
+  born responsive and accessible. Every reason is a fixed string, so a repair can only take reasons
+  away — mending one of two nameless buttons is never read as a new fault.
+- **Read as markup, not as text.** Pages are parsed with `html.parser`, so the markup these pages
+  build inside JavaScript strings is never mistaken for markup of the page itself, and a page's
+  linked stylesheets and scripts are read along with it, so the checks stay true of a federated site
+  where the focus ring and the motion live in `css/site.css` and `js/site.js`.
+- **True of the site as committed.** Because the code only refuses what a run breaks, the invariant
+  has to start out true, so `RealSiteTest` in
+  [`.github/scripts/test_make_interesting.py`](.github/scripts/test_make_interesting.py) checks
+  `/site` itself on every pull request and before every deploy. A violation **fails the build and
+  blocks the deploy**; a warning in an hourly log nobody reads would change nothing.
+
 ### Silo
 
 The AI can only ever modify `/site`:
