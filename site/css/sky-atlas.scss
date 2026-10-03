@@ -24,11 +24,12 @@ p {
   color: var(--muted);
 }
 
-#memory.good {
-  color: var(--good);
+#status {
+  color: var(--accent2);
+  min-height: 1.5em;
 }
 
-#memory.warn {
+#status.warn {
   color: var(--warn);
 }
 

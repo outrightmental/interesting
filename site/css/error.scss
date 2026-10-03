@@ -43,7 +43,9 @@ body {
 main {
   position: relative;
   z-index: 2;
-  width: min(720px, 94vw);
+  width: min(820px, 95vw);
+  max-height: min(94vh, 1080px);
+  overflow: auto;
   border-radius: 18px;
   box-shadow: 0 15px 40px rgba(0, 0, 0, 0.35);
   text-align: center;
@@ -83,6 +85,57 @@ a.action:hover,
 a.action:focus-visible {
   background: rgba(255, 255, 255, 0.12);
   border-color: rgba(255, 255, 255, 0.34);
+}
+
+// The full-site "skyway" navigation this page shares with the site map.
+.skyway {
+  margin-top: 0.95rem;
+  border-top: 1px solid vars.$hairline;
+  padding-top: 0.75rem;
+  text-align: left;
+}
+
+.skyway-label {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-align: center;
+}
+
+.skyway-links {
+  margin-top: 0.55rem;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.45rem;
+}
+
+.skyway-links a {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--accent);
+  text-decoration: none;
+  padding: 0.3rem 0.7rem;
+  font-size: 0.84rem;
+  transition: vars.$lift;
+}
+
+.skyway-links a:hover,
+.skyway-links a:focus-visible {
+  outline: none;
+  transform: translateY(-1px);
+  border-color: rgba(173, 208, 255, 0.7);
+  background: rgba(141, 184, 255, 0.16);
+  color: #eaf1ff;
+}
+
+.skyway-links a.current {
+  color: var(--accent2);
+  border-color: rgba(255, 229, 163, 0.56);
+  background: rgba(255, 229, 163, 0.12);
 }
 
 #note {
@@ -205,7 +258,8 @@ a.action:focus-visible {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .glyph {
+  .glyph,
+  .skyway-links a {
     transition: none;
   }
 }

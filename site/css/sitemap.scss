@@ -19,6 +19,58 @@ body {
   align-content: safe center;
 }
 
+// The full-site "skyway" navigation this page shares with the 404 observatory.
+.skyway {
+  margin: 0 0 1rem;
+  border: 1px solid vars.$hairline;
+  border-radius: vars.$radius-panel;
+  background: rgba(7, 10, 20, 0.56);
+  padding: 0.75rem;
+}
+
+.skyway-label {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  text-align: center;
+}
+
+.skyway-links {
+  margin-top: 0.55rem;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.45rem;
+}
+
+.skyway-links a {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--accent);
+  text-decoration: none;
+  padding: 0.3rem 0.7rem;
+  font-size: 0.84rem;
+  transition: vars.$lift;
+}
+
+.skyway-links a:hover,
+.skyway-links a:focus-visible {
+  outline: none;
+  transform: translateY(-1px);
+  border-color: rgba(173, 208, 255, 0.7);
+  background: rgba(141, 184, 255, 0.16);
+  color: #eaf1ff;
+}
+
+.skyway-links a.current {
+  color: var(--accent2);
+  border-color: rgba(255, 230, 171, 0.56);
+  background: rgba(255, 230, 171, 0.12);
+}
+
 .atlas {
   margin: 0 0 1rem;
   border: 1px solid vars.$hairline;
@@ -154,6 +206,10 @@ h2.section-title {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .skyway-links a {
+    transition: none;
+  }
+
   .pages a::before {
     animation: none;
   }
