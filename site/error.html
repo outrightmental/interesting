@@ -1,11 +1,302 @@
----
-layout: layout.njk
-title: Lost in space
-stylesheet: error
-# CloudFront returns this page for any 404, at whatever path was asked for, so its styles cannot be
-# a relative link: they travel with the page.
-inlineStyles: true
----
+<!DOCTYPE html>
+<html lang='en'>
+<head>
+  <meta charset='utf-8'>
+  <meta name='viewport' content='width=device-width, initial-scale=1'>
+  <title>Lost in space · interesting</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #090b14;
+      --bg2: #171a2f;
+      --fg: #f2f4ff;
+      --muted: #a8b1d1;
+      --line: rgba(255,255,255,0.18);
+      --accent: #9bc1ff;
+      --accent2: #ffe5a3;
+      --panel: rgba(10, 13, 25, 0.7);
+      --good: #b7ffcf;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body { margin: 0; min-height: 100%; }
+
+    body {
+      font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      color: var(--fg);
+      background: radial-gradient(circle at 20% 5%, #232b53 0%, var(--bg) 55%);
+      overflow: hidden;
+      display: grid;
+      place-items: center;
+      padding: 1rem;
+    }
+
+    #sky {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 0;
+    }
+
+    .scan {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 1;
+      background: repeating-linear-gradient(
+        to bottom,
+        transparent 0,
+        transparent 2px,
+        rgba(255,255,255,0.02) 3px
+      );
+      mix-blend-mode: screen;
+    }
+
+    main {
+      position: relative;
+      z-index: 2;
+      width: min(820px, 95vw);
+      max-height: min(94vh, 1080px);
+      overflow: auto;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: var(--panel);
+      backdrop-filter: blur(8px);
+      box-shadow: 0 15px 40px rgba(0,0,0,0.35);
+      text-align: center;
+      padding: clamp(1rem, 4vw, 2rem);
+    }
+
+    h1 {
+      margin: 0;
+      line-height: 0.9;
+      letter-spacing: -0.04em;
+      font-size: clamp(2.7rem, 14vw, 7rem);
+    }
+
+    p {
+      margin: 0.7rem 0;
+      color: #dce3ff;
+    }
+
+    .muted {
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+
+    .controls {
+      margin-top: 0.9rem;
+      display: flex;
+      gap: 0.55rem;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    button,
+    a.action {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: rgba(255,255,255,0.07);
+      color: var(--fg);
+      text-decoration: none;
+      padding: 0.5rem 0.9rem;
+      font: inherit;
+      cursor: pointer;
+      transition: transform 120ms ease, background 120ms ease, border-color 120ms ease;
+    }
+
+    button:hover,
+    button:focus-visible,
+    a.action:hover,
+    a.action:focus-visible {
+      outline: none;
+      transform: translateY(-1px);
+      background: rgba(255,255,255,0.12);
+      border-color: rgba(255,255,255,0.34);
+    }
+
+    .skyway {
+      margin-top: 0.95rem;
+      border-top: 1px solid rgba(255,255,255,0.14);
+      padding-top: 0.75rem;
+      text-align: left;
+    }
+
+    .skyway-label {
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.82rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      text-align: center;
+    }
+
+    .skyway-links {
+      margin-top: 0.55rem;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 0.45rem;
+    }
+
+    .skyway-links a {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: rgba(255,255,255,0.05);
+      color: var(--accent);
+      text-decoration: none;
+      padding: 0.3rem 0.7rem;
+      font-size: 0.84rem;
+      transition: transform 120ms ease, background 120ms ease, border-color 120ms ease;
+    }
+
+    .skyway-links a:hover,
+    .skyway-links a:focus-visible {
+      outline: none;
+      transform: translateY(-1px);
+      border-color: rgba(173, 208, 255, 0.7);
+      background: rgba(141, 184, 255, 0.16);
+      color: #eaf1ff;
+    }
+
+    .skyway-links a.current {
+      color: var(--accent2);
+      border-color: rgba(255, 229, 163, 0.56);
+      background: rgba(255, 229, 163, 0.12);
+    }
+
+    #note {
+      margin-top: 0.9rem;
+      min-height: 1.5em;
+      color: var(--accent2);
+      font-size: 0.97rem;
+    }
+
+    .hint {
+      margin-top: 0.65rem;
+      color: var(--muted);
+      font-size: 0.84rem;
+    }
+
+    .radio,
+    .scope,
+    .decoder,
+    .haiku {
+      margin-top: 1rem;
+      border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 12px;
+      padding: 0.8rem;
+      background: rgba(8, 11, 21, 0.5);
+      text-align: left;
+    }
+
+    .radio-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 0.7rem;
+      margin-bottom: 0.5rem;
+      flex-wrap: wrap;
+    }
+
+    .radio-top p {
+      margin: 0;
+    }
+
+    #freq-readout {
+      font-variant-numeric: tabular-nums;
+      color: #e8f0ff;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+    }
+
+    #freq {
+      width: 100%;
+      margin: 0.2rem 0 0.35rem;
+      accent-color: var(--accent);
+    }
+
+    #scope-canvas {
+      width: 100%;
+      height: auto;
+      display: block;
+      border-radius: 10px;
+      border: 1px solid rgba(255,255,255,0.16);
+      background: #070b18;
+    }
+
+    #radio-note,
+    #scope-note,
+    #decoder-note {
+      margin: 0.55rem 0 0;
+      min-height: 1.4em;
+      color: #c8daff;
+    }
+
+    #radio-note.good,
+    #scope-note.good,
+    #decoder-note.good {
+      color: var(--good);
+    }
+
+    .glyph-grid {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 0.45rem;
+      margin-top: 0.45rem;
+    }
+
+    .glyph {
+      border-radius: 10px;
+      padding: 0.45rem 0;
+      font-size: 1.05rem;
+      line-height: 1;
+      text-align: center;
+      font-weight: 600;
+      border: 1px solid rgba(255,255,255,0.2);
+      background: rgba(255,255,255,0.04);
+      color: #e8efff;
+      transition: background 120ms ease, border-color 120ms ease, transform 120ms ease;
+    }
+
+    .glyph:hover,
+    .glyph:focus-visible {
+      transform: translateY(-1px);
+      border-color: rgba(185, 215, 255, 0.7);
+      background: rgba(147, 190, 255, 0.16);
+      outline: none;
+    }
+
+    .glyph.lit {
+      border-color: rgba(255, 234, 179, 0.95);
+      background: rgba(255, 226, 150, 0.26);
+      box-shadow: 0 0 10px rgba(255, 223, 148, 0.38) inset;
+    }
+
+    #haiku-output {
+      margin: 0.55rem 0 0;
+      min-height: 7.1em;
+      white-space: pre-wrap;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+      font-size: 0.88rem;
+      line-height: 1.42;
+      color: #e7f0ff;
+      border: 1px solid rgba(255,255,255,0.14);
+      border-radius: 10px;
+      background: rgba(6, 10, 20, 0.56);
+      padding: 0.68rem;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      button, a.action, .glyph, .skyway-links a { transition: none; }
+    }
+  </style>
+  <!-- Analytics and the cookie consent banner that gates it; see js/analytics.js. -->
+  <script src='js/analytics.js' defer></script>
+</head>
+<body>
   <canvas id='sky' aria-hidden='true'></canvas>
   <div class='scan' aria-hidden='true'></div>
 
@@ -18,6 +309,24 @@ inlineStyles: true
       <a id='home' class='action' href='index.html'>return home</a>
       <a class='action' href='sitemap.html'>site map</a>
     </div>
+
+    <nav class='skyway' aria-label='Skyway navigation'>
+      <p class='skyway-label'>skyway</p>
+      <div class='skyway-links'>
+        <a href='index.html'>interesting</a>
+        <a href='sky-atlas.html'>sky atlas</a>
+        <a href='constellation-diary.html'>constellation diary</a>
+        <a href='constellation-echo.html'>echo chamber</a>
+        <a href='constellation-weather.html'>weather lab</a>
+        <a href='orbital-weaver.html'>orbital weaver</a>
+        <a href='sky-archive.html'>sky archive oracle</a>
+        <a href='star-lantern.html'>star lantern ritual</a>
+        <a href='wish-terrarium.html'>wish terrarium</a>
+        <a href='sitemap.html'>site map</a>
+        <a class='current' href='error.html' aria-current='page'>observatory 404</a>
+      </div>
+    </nav>
+
     <p id='note' aria-live='polite'>Listening for a signal...</p>
 
     <section class='radio' aria-label='Void radio'>
@@ -619,3 +928,5 @@ Tune the radio, decode a few runes, then print.</pre>
       draw();
     })();
   </script>
+</body>
+</html>
