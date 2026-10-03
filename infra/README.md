@@ -82,9 +82,11 @@ while CloudFront settles in. To retire it: delete the `pages` job from `deploy.y
   import, where separate resources would each need their own import block, and the `pages` one
   is due to be deleted when Pages is retired. The provider is pinned to `~> 6.2`, so neither
   argument disappears underneath this project.
-- `.terraform.lock.hcl` is committed, with hashes recorded for Linux, Windows and Apple Silicon
-  so an `init` on any of them is reproducible and leaves the file alone. It currently pins the
-  same provider versions as BoardingFlow's.
+- `.terraform.lock.hcl` is committed, as `terraform init` wrote it — currently byte-identical to
+  BoardingFlow's, so both properties run the same provider versions. It carries the registry's
+  platform-independent hashes, so an `init` verifies on any OS; the first `init` on a new one
+  also appends that platform's own hash. To record them all up front instead:
+  `terraform -chdir=infra providers lock -platform=linux_amd64 -platform=darwin_arm64`.
 
 ## Costs
 
