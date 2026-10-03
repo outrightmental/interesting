@@ -1,4 +1,4 @@
-// The home page: a live sky you drop stars into, and the nav that reaches every other page.
+// The home page: a live sky you drop stars into, and shared skyway navigation.
 
 @use 'vars';
 
@@ -124,47 +124,15 @@ button:focus-visible {
   font-size: 0.85rem;
 }
 
-// The one nav that names every page of the site. The axiom the whole repository holds to -- all of
-// the content stays reachable from the root -- is this list.
-.sitenav {
-  margin: 1rem 0 0;
-  padding: 0.85rem 0 0;
-  border-top: 1px solid var(--line);
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  align-items: center;
-  gap: 0.4rem 0.45rem;
-  font-size: 0.85rem;
+// The home page now reuses the shared skyway include instead of its own one-off nav cluster.
+.skyway {
+  margin-top: 1rem;
+  text-align: left;
 }
 
-.sitenav-label {
-  color: var(--muted);
-  margin-right: 0.15rem;
-}
-
-.sitenav a {
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.05);
-  color: var(--accent);
-  text-decoration: none;
-  padding: 0.3rem 0.7rem;
-  transition: vars.$lift;
-}
-
-.sitenav a:hover,
-.sitenav a:focus-visible {
-  outline: none;
-  transform: translateY(-1px);
-  border-color: rgba(173, 208, 255, 0.7);
-  background: rgba(141, 184, 255, 0.16);
-  color: #eaf1ff;
-}
-
-.sitenav a.map {
-  color: var(--accent2);
-  border-color: rgba(255, 217, 141, 0.42);
+.skyway-label,
+.skyway-note {
+  text-align: left;
 }
 
 .postcard {
@@ -329,8 +297,7 @@ button:focus-visible {
     animation: none;
   }
 
-  button,
-  .sitenav a {
+  button {
     transition: none;
   }
 
