@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang='en'>
+<head>
+  <meta charset='utf-8'>
+  <meta name='viewport' content='width=device-width, initial-scale=1'>
+  <title>constellation weather lab · interesting</title>
+  <meta name='description' content='An animated weather lab generated from your saved constellation: probe skies, read forecasts, and toggle midnight rain.'>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #070b16;
+      --bg2: #1b2a52;
+      --fg: #eef4ff;
+      --muted: #a8b7da;
+      --line: rgba(255,255,255,0.18);
+      --panel: rgba(10, 14, 28, 0.74);
+      --accent: #9fcbff;
+      --accent2: #ffe7ab;
+      --good: #beffd8;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      min-height: 100%;
+      background: radial-gradient(circle at 20% 0%, var(--bg2) 0%, var(--bg) 60%);
+      color: var(--fg);
+      font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    }
+
+    body {
+      display: grid;
+      place-items: center;
+      padding: 1rem;
+    }
+
+    main {
+      width: min(960px, 96vw);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: var(--panel);
+      backdrop-filter: blur(8px);
+      box-shadow: 0 16px 40px rgba(0,0,0,0.36);
+      padding: 1rem;
+    }
+
+    h1 {
+      margin: 0;
+      line-height: 0.95;
+      letter-spacing: -0.03em;
+      font-size: clamp(1.9rem, 6vw, 3.2rem);
+    }
+
+    .tagline {
+      margin: 0.45rem 0 0.9rem;
+      color: var(--muted);
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 1.15fr 0.85fr;
+      gap: 0.85rem;
+    }
+
+    #lab {
+      width: 100%;
+      height: auto;
+      display: block;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.16);
+      background: #060913;
+      cursor: crosshair;
+    }
+
+    .panel {
+      border: 1px solid rgba(255,255,255,0.14);
+      border-radius: 12px;
+      background: rgba(7, 10, 20, 0.56);
+      padding: 0.8rem;
+    }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin: 0.55rem 0;
+    }
+
+    button, a.action {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: rgba(255,255,255,0.07);
+      color: var(--fg);
+      text-decoration: none;
+      padding: 0.48rem 0.88rem;
+      font: inherit;
+      cursor: pointer;
+      transition: transform 120ms ease, background 120ms ease, border-color 120ms ease;
+    }
+
+    button:hover,
+    button:focus-visible,
+    a.action:hover,
+    a.action:focus-visible {
+      outline: none;
+      transform: translateY(-1px);
+      border-color: rgba(184, 217, 255, 0.8);
+      background: rgba(151, 197, 255, 0.16);
+    }
+
+    #rain[aria-pressed='true'] {
+      background: rgba(159, 203, 255, 0.24);
+      border-color: rgba(194, 224, 255, 0.86);
+      box-shadow: 0 0 12px rgba(143, 195, 255, 0.34) inset;
+    }
+
+    .time-wrap {
+      margin-top: 0.45rem;
+      color: #dbe9ff;
+      font-size: 0.9rem;
+    }
+
+    #hour {
+      width: 100%;
+      margin-top: 0.3rem;
+      accent-color: var(--accent);
+    }
+
+    #status {
+      margin: 0.5rem 0 0;
+      min-height: 1.5em;
+      color: var(--accent2);
+      font-size: 0.95rem;
+    }
+
+    #report {
+      margin: 0.75rem 0 0;
+      min-height: 8.2em;
+      white-space: pre-wrap;
+      border: 1px solid rgba(255,255,255,0.14);
+      border-radius: 10px;
+      background: rgba(6, 9, 18, 0.66);
+      color: #e7f0ff;
+      font-size: 0.9rem;
+      line-height: 1.42;
+      padding: 0.7rem;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+    }
+
+    .hint {
+      margin: 0.65rem 0 0;
+      color: var(--muted);
+      font-size: 0.84rem;
+    }
+
+    .footer {
+      margin-top: 0.8rem;
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      color: var(--muted);
+      font-size: 0.86rem;
+    }
+
+    @media (max-width: 800px) {
+      .layout { grid-template-columns: 1fr; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      button, a.action { transition: none; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>constellation weather lab</h1>
+    <p class='tagline'>Your saved stars become pressure systems. Probe the sky, scrub the hour, and print a tiny forecast.</p>
+
+    <div class='layout'>
+      <canvas id='lab' width='620' height='340' aria-label='Animated weather map grown from saved constellation stars'></canvas>
+
+      <section class='panel'>
+        <p style='margin:0;color:#d8e4ff;'>This uses the same saved constellation memory as the main page.</p>
+        <div class='controls'>
+          <button id='refresh' type='button'>refresh saved sky</button>
+          <button id='forecast' type='button'>generate forecast</button>
+          <button id='rain' type='button' aria-pressed='false'>start rain mode</button>
+        </div>
+
+        <label class='time-wrap' for='hour'>forecast hour: <span id='hour-label'>22:00</span></label>
+        <input id='hour' type='range' min='0' max='23' step='1' value='22' aria-label='Forecast hour'>
+
+        <p id='status' aria-live='polite'>Loading pressure seeds...</p>
+        <pre id='report' aria-live='polite'>Awaiting report.
+Load your saved sky, click the map to launch a weather probe, or generate a full forecast.</pre>
+        <p class='hint'>Easter egg: type <strong>storm</strong> while this page is focused.</p>
+      </section>
+    </div>
+
+    <p class='footer'>
+      <a class='action' href='index.html'>back to constellation</a>
+      <a class='action' href='sky-archive.html'>open sky archive oracle</a>
+      <a class='action' href='wish-terrarium.html'>open wish terrarium</a>
+      <a class='action' href='error.html'>visit observatory 404</a>
+    </p>
+  </main>
+
+  <script>
+    (function () {
+      var STORAGE_KEY = 'interesting_wish_constellation_v1';
+      var canvas = document.getElementById('lab');
+      var ctx = canvas.getContext('2d');
+      var refreshBtn = document.getElementById('refresh');
+      var forecastBtn = document.getElementById('forecast');
+      var rainBtn = document.getElementById('rain');
+      var hourInput = document.getElementById('hour');
+      var hourLabel = document.getElementById('hour-label');
+      var statusEl = document.getElementById('status');
+      var reportEl = document.getElementById('report');
+
+      var stars = [];
+      var cells = [];
+      var drops = [];
+      var rainMode = false;
+      var stormMode = false;
+      var flash = 0;
+      var t = 0;
+      var lastFrame = 0;
+      var codeBuffer = '';
+
+      function clamp(v, min, max) {
+        return Math.max(min, Math.min(max, v));
+      }
+
+      function pad2(n) {
+        return String(n).padStart(2, '0');
+      }
+
+      function fmtHour(h) {
+        return pad2(h) + ':00';
+      }
+
+      function setRainButton() {
+        rainBtn.textContent = rainMode ? 'stop rain mode' : 'start rain mode';
+        rainBtn.setAttribute('aria-pressed', rainMode ? 'true' : 'false');
+      }
+
+      function dayStamp() {
+        var d = new Date();
+        var y = d.getFullYear();
+        var m = String(d.getMonth() + 1).padStart(2, '0');
+        var day = String(d.getDate()).padStart(2, '0');
+        return y + '-' + m + '-' + day;
+      }
+
+      function safeStars(input) {
+        return input.filter(function (s) {
+          return s && typeof s.x === 'number' && typeof s.y === 'number' && typeof s.text === 'string';
+        }).map(function (s) {
+          return {
+            x: Number(clamp(s.x, 0, 100).toFixed(2)),
+            y: Number(clamp(s.y, 0, 100).toFixed(2)),
+            text: s.text
+          };
+        });
+      }
+
+      function hashConstellation() {
+        var h = 2166136261;
+        for (var i = 0; i < stars.length; i++) {
+          var s = stars[i];
+          h ^= Math.round(s.x * 10);
+          h = Math.imul(h, 16777619);
+          h ^= Math.round(s.y * 10);
+          h = Math.imul(h, 16777619);
+          for (var c = 0; c < s.text.length; c++) {
+            h ^= s.text.charCodeAt(c);
+            h = Math.imul(h, 16777619);
+          }
+        }
+        return h >>> 0;
+      }
+
+      function summarize() {
+        var cx = 0;
+        var cy = 0;
+        for (var i = 0; i < stars.length; i++) {
+          cx += stars[i].x;
+          cy += stars[i].y;
+        }
+        cx /= stars.length || 1;
+        cy /= stars.length || 1;
+
+        var spread = 0;
+        for (var j = 0; j < stars.length; j++) {
+          var dx = stars[j].x - cx;
+          var dy = stars[j].y - cy;
+          spread += Math.sqrt(dx * dx + dy * dy);
+        }
+        spread /= stars.length || 1;
+
+        return { cx: cx, cy: cy, spread: spread };
+      }
+
+      function rebuildCells() {
+        cells = [];
+        if (!stars.length) return;
+
+        for (var i = 0; i < stars.length; i++) {
+          var s = stars[i];
+          cells.push({
+            sx: (s.x / 100) * canvas.width,
+            sy: (s.y / 100) * canvas.height,
+            power: 0.6 + ((100 - s.y) / 100) * 1.2,
+            drift: (i % 2 ? 1 : -1) * (0.15 + (i % 7) * 0.03)
+          });
+        }
+      }
+
+      function loadStars() {
+        var raw = null;
+        try {
+          raw = localStorage.getItem(STORAGE_KEY);
+        } catch (e) {
+          stars = [];
+          cells = [];
+          statusEl.textContent = 'Local storage is unavailable in this browser context.';
+          return;
+        }
+
+        if (!raw) {
+          stars = [];
+          cells = [];
+          statusEl.textContent = 'No saved constellation found yet. Create one on the main page first.';
+          return;
+        }
+
+        try {
+          var parsed = JSON.parse(raw);
+          if (!Array.isArray(parsed)) throw new Error('invalid');
+          stars = safeStars(parsed).slice(0, 160);
+          rebuildCells();
+
+          if (!stars.length) {
+            statusEl.textContent = 'A sky file exists, but no readable stars were found.';
+            return;
+          }
+
+          statusEl.textContent = 'Weather seeds synced: ' + stars.length + ' star' + (stars.length === 1 ? '' : 's') + ' loaded.';
+        } catch (e2) {
+          stars = [];
+          cells = [];
+          statusEl.textContent = 'Saved constellation data is unreadable. Return home and remake it.';
+        }
+      }
+
+      function fieldValue(x, y, hourFloat) {
+        if (!cells.length) return -0.5;
+        var total = 0;
+        for (var i = 0; i < cells.length; i++) {
+          var c = cells[i];
+          var wx = c.sx + Math.sin(hourFloat * 0.28 + i * 0.9 + t * c.drift) * 12;
+          var wy = c.sy + Math.cos(hourFloat * 0.24 + i * 0.7 + t * c.drift * 0.8) * 10;
+          var dx = x - wx;
+          var dy = y - wy;
+          var d2 = dx * dx + dy * dy;
+          total += c.power * Math.exp(-d2 / 9000);
+        }
+        return total - 0.65;
+      }
+
+      function regionWord(cx, cy) {
+        var ns = cy < 50 ? 'north' : 'south';
+        var ew = cx < 50 ? 'west' : 'east';
+        return ns + '-' + ew;
+      }
+
+      function generateForecast() {
+        if (!stars.length) {
+          statusEl.textContent = 'No stars loaded yet. Refresh after creating stars on the main page.';
+          return;
+        }
+
+        var hour = Number(hourInput.value);
+        var s = summarize();
+        var hash = hashConstellation();
+        var spreadWord = s.spread < 12 ? 'compact' : (s.spread < 24 ? 'balanced' : 'expansive');
+        var density = stars.length < 6 ? 'quiet' : (stars.length < 16 ? 'steady' : 'busy');
+        var rainChance = clamp(Math.round((s.spread * 2.4) + (stars.length * 1.7) + (hour > 17 ? 8 : 0) - 15), 5, 98);
+        var windKts = clamp(Math.round(4 + s.spread * 0.9 + (hash % 11)), 3, 36);
+
+        var openers = [
+          'constellation synoptic:',
+          'midnight weather desk:',
+          'sky pattern bulletin:',
+          'starlit pressure report:'
+        ];
+        var insights = [
+          'A gentle front rewards tiny, consistent progress.',
+          'Conditions favor playful drafts over perfect plans.',
+          'Momentum improves when you start before certainty.',
+          'Visibility increases after one brave unfinished step.'
+        ];
+        var advisories = [
+          'Carry one clear intention into the next hour.',
+          'Protect a short focus window and build inside it.',
+          'Share a rough version, then refine with feedback.',
+          'If stalled, shrink the task until movement returns.'
+        ];
+
+        var a = openers[hash % openers.length];
+        var b = insights[(hash >>> 3) % insights.length];
+        var c = advisories[(hash >>> 6) % advisories.length];
+
+        reportEl.textContent = a + '\n'
+          + 'time ' + fmtHour(hour) + ' · region ' + regionWord(s.cx, s.cy) + ' · field ' + density + '\n'
+          + stars.length + ' systems with ' + spreadWord + ' spread · wind ' + windKts + ' kt · rain chance ' + rainChance + '%\n'
+          + b + '\n'
+          + c + '\n\n'
+          + 'forecast stamp: ' + dayStamp();
+
+        statusEl.textContent = 'Forecast generated from your current constellation geometry.';
+        flash = 1;
+      }
+
+      function probeAt(clientX, clientY) {
+        if (!stars.length) return;
+
+        var rect = canvas.getBoundingClientRect();
+        var x = ((clientX - rect.left) / rect.width) * canvas.width;
+        var y = ((clientY - rect.top) / rect.height) * canvas.height;
+
+        var nearest = null;
+        var nearestD2 = 1e12;
+        for (var i = 0; i < stars.length; i++) {
+          var sx = (stars[i].x / 100) * canvas.width;
+          var sy = (stars[i].y / 100) * canvas.height;
+          var dx = x - sx;
+          var dy = y - sy;
+          var d2 = dx * dx + dy * dy;
+          if (d2 < nearestD2) {
+            nearestD2 = d2;
+            nearest = stars[i];
+          }
+        }
+
+        var hour = Number(hourInput.value);
+        var localField = fieldValue(x, y, hour);
+        var localWind = clamp(Math.round(6 + Math.abs(localField) * 18 + (hour % 5)), 4, 32);
+        var localState = localField > 0.65 ? 'glowing high-pressure pocket' : (localField > 0.2 ? 'calm mid-band' : (localField > -0.2 ? 'wandering seam' : 'storm-leaning trough'));
+
+        reportEl.textContent = 'weather probe:\n'
+          + 'point ' + x.toFixed(0) + ', ' + y.toFixed(0) + ' at ' + fmtHour(hour) + '\n'
+          + 'local state: ' + localState + ' · wind ' + localWind + ' kt\n\n'
+          + 'nearest star memo:\n'
+          + (nearest ? nearest.text : 'No nearby thought found.') + '\n\n'
+          + 'tip: click elsewhere to compare microclimates.';
+
+        statusEl.textContent = 'Probe deployed. Microforecast printed.';
+        drops.push({ x: x, y: y, life: 1 });
+        flash = 0.8;
+      }
+
+      function updateHourLabel() {
+        hourLabel.textContent = fmtHour(Number(hourInput.value));
+      }
+
+      function drawBackground() {
+        var grad = ctx.createLinearGradient(0, 0, 0, canvas.height);
+        if (stormMode) {
+          var hue = (t * 24) % 360;
+          grad.addColorStop(0, 'hsl(' + hue.toFixed(1) + ', 62%, 15%)');
+          grad.addColorStop(1, 'hsl(' + ((hue + 80) % 360).toFixed(1) + ', 65%, 7%)');
+        } else {
+          grad.addColorStop(0, '#0d1633');
+          grad.addColorStop(1, '#060913');
+        }
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        for (var i = 0; i < 44; i++) {
+          var sx = (i * 121.1 + t * 9) % canvas.width;
+          var sy = (i * 81.7 + t * 6) % canvas.height;
+          var a = 0.06 + (i % 6) * 0.02;
+          ctx.beginPath();
+          ctx.fillStyle = 'rgba(180, 208, 255, ' + a.toFixed(3) + ')';
+          ctx.arc(sx, sy, 1.1, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+
+      function drawField(hourFloat) {
+        var cols = 26;
+        var rows = 14;
+        var cw = canvas.width / cols;
+        var rh = canvas.height / rows;
+
+        for (var gy = 0; gy < rows; gy++) {
+          for (var gx = 0; gx < cols; gx++) {
+            var px = (gx + 0.5) * cw;
+            var py = (gy + 0.5) * rh;
+            var v = fieldValue(px, py, hourFloat);
+            var warm = clamp((v + 0.8) / 1.8, 0, 1);
+            var cool = 1 - warm;
+            var r = Math.round(70 + warm * 120);
+            var g = Math.round(100 + cool * 55 + warm * 35);
+            var b = Math.round(145 + cool * 90);
+            var a = 0.08 + Math.abs(v) * 0.16;
+            ctx.fillStyle = 'rgba(' + r + ',' + g + ',' + b + ',' + a.toFixed(3) + ')';
+            ctx.fillRect(gx * cw, gy * rh, cw + 1, rh + 1);
+          }
+        }
+      }
+
+      function drawSystems(hourFloat) {
+        for (var i = 0; i < cells.length; i++) {
+          var c = cells[i];
+          var x = c.sx + Math.sin(hourFloat * 0.28 + i * 0.9 + t * c.drift) * 12;
+          var y = c.sy + Math.cos(hourFloat * 0.24 + i * 0.7 + t * c.drift * 0.8) * 10;
+          var r = 2.2 + (i % 3) * 0.7;
+
+          ctx.beginPath();
+          ctx.fillStyle = 'rgba(145, 205, 255, 0.2)';
+          ctx.arc(x, y, r * 3.2, 0, Math.PI * 2);
+          ctx.fill();
+
+          ctx.beginPath();
+          ctx.fillStyle = 'rgba(235, 245, 255, 0.95)';
+          ctx.arc(x, y, r, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+
+      function drawRain(dt) {
+        if (!rainMode) return;
+
+        if (drops.length < 110) {
+          for (var i = 0; i < 4; i++) {
+            drops.push({
+              x: Math.random() * canvas.width,
+              y: -8 - Math.random() * 60,
+              life: 1,
+              vy: 160 + Math.random() * 120
+            });
+          }
+        }
+
+        for (var j = drops.length - 1; j >= 0; j--) {
+          var d = drops[j];
+          if (typeof d.vy === 'number') {
+            d.y += d.vy * dt;
+            if (d.y > canvas.height + 12) {
+              drops.splice(j, 1);
+              continue;
+            }
+            ctx.strokeStyle = 'rgba(176, 218, 255, 0.55)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(d.x, d.y);
+            ctx.lineTo(d.x - 2, d.y + 10);
+            ctx.stroke();
+          } else {
+            d.life -= dt * 1.4;
+            if (d.life <= 0) {
+              drops.splice(j, 1);
+              continue;
+            }
+            ctx.beginPath();
+            ctx.strokeStyle = 'rgba(255, 231, 170, ' + (d.life * 0.65).toFixed(3) + ')';
+            ctx.lineWidth = 1.2;
+            ctx.arc(d.x, d.y, (1 - d.life) * 22, 0, Math.PI * 2);
+            ctx.stroke();
+          }
+        }
+      }
+
+      function drawOverlay(hourFloat) {
+        ctx.fillStyle = 'rgba(229, 240, 255, 0.9)';
+        ctx.font = '12px ui-monospace, SFMono-Regular, Menlo, monospace';
+        ctx.fillText('hour ' + fmtHour(Math.floor(hourFloat)) + ' · systems ' + stars.length + (rainMode ? ' · rain on' : ' · rain off'), 10, 16);
+
+        if (!stars.length) {
+          ctx.fillStyle = 'rgba(230, 240, 255, 0.88)';
+          ctx.fillText('No saved stars yet. Build a constellation first.', 10, 34);
+        }
+      }
+
+      function frame(now) {
+        if (typeof now !== 'number') now = performance.now();
+        var dt = lastFrame ? Math.min(0.05, (now - lastFrame) / 1000) : 0.016;
+        lastFrame = now;
+        t += dt;
+        flash = Math.max(0, flash - dt * 1.8);
+
+        var hour = Number(hourInput.value);
+        var hourFloat = hour + Math.sin(t * 0.2) * 0.35;
+
+        drawBackground();
+        drawField(hourFloat);
+        drawSystems(hourFloat);
+        drawRain(dt);
+        drawOverlay(hourFloat);
+
+        if (flash > 0) {
+          ctx.fillStyle = 'rgba(255, 234, 176, ' + (flash * 0.18).toFixed(3) + ')';
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
+
+        requestAnimationFrame(frame);
+      }
+
+      refreshBtn.addEventListener('click', loadStars);
+      forecastBtn.addEventListener('click', generateForecast);
+      rainBtn.addEventListener('click', function () {
+        rainMode = !rainMode;
+        setRainButton();
+        statusEl.textContent = rainMode ? 'Rain mode engaged. Pressure bands are precipitating.' : 'Rain mode paused. Clouds are holding.';
+      });
+
+      hourInput.addEventListener('input', function () {
+        updateHourLabel();
+      });
+
+      canvas.addEventListener('click', function (ev) {
+        probeAt(ev.clientX, ev.clientY);
+      });
+
+      document.addEventListener('keydown', function (ev) {
+        if (!ev.key || ev.key.length !== 1) return;
+        codeBuffer = (codeBuffer + ev.key.toLowerCase()).slice(-5);
+        if (codeBuffer === 'storm') {
+          stormMode = !stormMode;
+          flash = 1;
+          statusEl.textContent = stormMode
+            ? 'Secret storm mode unlocked. The weather lab shifted spectrum.'
+            : 'Storm mode closed. Returning to midnight bands.';
+        }
+      });
+
+      setRainButton();
+      updateHourLabel();
+      loadStars();
+      frame();
+    })();
+  </script>
+</body>
+</html>
