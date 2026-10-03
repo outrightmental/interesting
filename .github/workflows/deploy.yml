@@ -1,12 +1,11 @@
 name: Deploy site
 
 # The pipeline for main: every commit that lands there is tested, and when the tests pass, /site is
-# published. A failing test blocks every deploy.
+# published to S3 and the CloudFront cache is invalidated. A failing test blocks every deploy.
 #
-# Two publishers run side by side from the same tested commit:
-#   - S3 + CloudFront at https://interesting.outright.io/ — the canonical home, with the bucket,
-#     distribution and this workflow's AWS secrets all defined in /infra.
-#   - GitHub Pages — kept for now while the AWS deploy settles in; see /infra/README.md.
+# https://interesting.outright.io/ is the site's only home — the bucket, the distribution and the
+# AWS secrets this workflow reads are all defined in /infra. (GitHub Pages used to publish /site in
+# parallel; it is retired, and nothing here publishes to it.)
 on:
   push:
     branches: [main]
@@ -117,39 +116,3 @@ jobs:
             echo "### Published to S3 and CloudFront"
             echo "<https://interesting.outright.io/>"
           } >> "$GITHUB_STEP_SUMMARY"
-
-  pages:
-    name: Publish to GitHub Pages
-    needs: test # a failed or skipped test job means no deploy
-    # Only main is ever deployed; a manual run on another branch stops after the tests.
-    if: github.ref_name == github.event.repository.default_branch
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      contents: read
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v5
-
-      - name: Configure Pages
-        uses: actions/configure-pages@v5
-
-      # CloudFront needs no equivalent step: error.html is the S3 bucket's error document, so the
-      # bucket itself answers a request for a missing page with it (see /infra/modules/website).
-      - name: Serve error.html as the 404 page
-        run: |
-          cp site/error.html site/404.html
-
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v4
-        with:
-          path: site
-
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4

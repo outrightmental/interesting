@@ -10,8 +10,8 @@ iterate a more interesting website
 
 - **`/site`** — the static website, published to an S3 bucket behind CloudFront at
   [interesting.outright.io](https://interesting.outright.io/). `site/` is the whole artifact:
-  plain HTML with no build step, and nothing else is published. `error.html` is the bucket's
-  error document, so a request for a page that is not there gets it back with a 404.
+  plain HTML with no build step, and nothing else is published. A request for a page that is not
+  there gets `error.html` back, with a 404, from a CloudFront custom error response.
 - **`/infra`** — the hosting, as code. [`infra/`](infra) is a self-contained Terraform project
   that owns the bucket, the CloudFront distribution, the certificate and DNS, the deploy IAM
   user, the Actions secrets the deploy uses — and this repository itself. It is applied by hand:
@@ -22,9 +22,8 @@ iterate a more interesting website
   is published: synced to the bucket with `--delete`, then the CloudFront cache is invalidated.
   A failing test blocks the deploy. The pipeline also starts when the hourly AI workflow
   finishes, because GitHub starts no workflow for a commit pushed by another workflow.
-- **GitHub Pages, in parallel** — the same pipeline still publishes the same tested commit to
-  [Pages](https://outrightmental.github.io/interesting/) as a fallback while the CloudFront
-  deploy settles in. [`infra/README.md`](infra/README.md#publishing) says how to retire it.
+  CloudFront is the only publisher: the site used to be served from GitHub Pages as well, which
+  is retired.
 - **Hourly AI iteration** — [`.github/workflows/make-interesting.yml`](.github/workflows/make-interesting.yml)
   runs every hour (or manually via *Run workflow*). It picks a random model from
   [GitHub Copilot](https://docs.github.com/copilot), reached through the
@@ -86,9 +85,8 @@ has no model in the pool, because Copilot only offers the Gemini Flash tier.
   `AWS_CLOUDFRONT_DISTRIBUTION_ID`). No secret is set by hand: they come from the same apply that
   creates what they point at, so they cannot drift from it.
   [`infra/README.md`](infra/README.md) has the order and the costs. Until that apply has run, the
-  deploy says so and finishes green instead of failing hourly.
-- Pages, while it runs in parallel, needs *Settings → Pages → Source*: **GitHub Actions** — which
-  [`infra/repo.tf`](infra/repo.tf) also sets, so a fresh apply is enough.
+  deploy says so in its summary and finishes green instead of failing hourly — so run it around
+  the time this lands, because GitHub Pages is retired and nothing else publishes the site.
 - Actions must be allowed to push to the default branch (the AI's commit uses `GITHUB_TOKEN`).
 - GitHub Copilot must accept the workflow's requests. Either of these works:
   - **Organization:** as an owner, open the organization's *Settings → Copilot → Policies*, enable

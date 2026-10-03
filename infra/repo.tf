@@ -26,13 +26,10 @@ resource "github_repository" "interesting" {
 
   vulnerability_alerts = true
 
-  # GitHub Pages still publishes /site in parallel with CloudFront while the
-  # AWS deploy settles in. Managing it here is what the README used to ask for
-  # by hand (Settings → Pages → Source: GitHub Actions); removing this block
-  # is how the Pages site gets retired. See ../README.md#hosting.
-  pages {
-    build_type = "workflow"
-  }
-
+  # There is deliberately no `pages` block: GitHub Pages is retired, and the site
+  # is served from S3 behind CloudFront. Leaving Pages out of this configuration
+  # is what asks the provider to turn the repository's Pages site off; check
+  # Settings → Pages once after the first apply, and set its source to None by
+  # hand if anything of it is still there.
   archive_on_destroy = true
 }

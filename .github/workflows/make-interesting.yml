@@ -121,8 +121,8 @@ jobs:
           test -f site/index.html || { echo "::error::site/index.html is missing"; exit 1; }
           test -f site/error.html || { echo "::error::site/error.html is missing"; exit 1; }
 
-      # Nothing here deploys. Once this workflow finishes, the main-branch pipeline in pages.yml
-      # tests the new commit and deploys it.
+      # Nothing here deploys. Once this workflow finishes, the main-branch pipeline in deploy.yml
+      # tests the new commit and publishes it.
       - name: Commit and push
         env:
           MODEL: ${{ steps.ai.outputs.model }}
