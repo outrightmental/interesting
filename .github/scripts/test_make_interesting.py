@@ -61,7 +61,13 @@ def home(*links):
 
 
 class SiteDirTestCase(unittest.TestCase):
-    """Points the script at a throwaway /site so no test touches the real one."""
+    """Points the script at a throwaway /site so no test touches the real one.
+
+    The build is stood in for as well, by the identity: these fixtures are plain HTML with no front
+    matter and no Sass, which is exactly what the build leaves alone, and running Node twice per
+    validate_plan() call would make the suite slow and need `npm ci` to run at all. What the real
+    build does, and that the reachability axiom is judged on its output, is BuildPipelineTest's job.
+    """
 
     def setUp(self):
         tmp = tempfile.TemporaryDirectory()
@@ -71,9 +77,10 @@ class SiteDirTestCase(unittest.TestCase):
         self.site.mkdir()
         (self.site / "index.html").write_text("<h1>interesting</h1>")
         (self.site / "error.html").write_text("<h1>not found</h1>")
-        patcher = mock.patch.object(mi, "SITE_DIR", self.site)
-        patcher.start()
-        self.addCleanup(patcher.stop)
+        for name, value in [("SITE_DIR", self.site), ("build_site", dict)]:
+            patcher = mock.patch.object(mi, name, value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
 
 
 class SafeSitePathTest(SiteDirTestCase):
@@ -84,6 +91,15 @@ class SafeSitePathTest(SiteDirTestCase):
         self.assertEqual(mi.safe_site_path("a_b/c-d.e/2048.min.js"), self.site / "a_b" / "c-d.e" / "2048.min.js")
         for fine in ["console.js", "aux-page.html", "com10.css", "nullable/x.html", "a.html"]:
             self.assertEqual(mi.safe_site_path(fine), self.site / fine)
+
+    def test_accepts_the_files_the_build_is_made_of(self):
+        # Issue #25: the model writes the layout and the shared styles too, so a leading "_" -- how
+        # both halves of the build mark what is not a page -- and the two source types are allowed.
+        for fine in ["_includes/layout.njk", "_sass/_tokens.scss", "css/site.scss", "_data/nav.json"]:
+            with self.subTest(fine=fine):
+                self.assertEqual(mi.safe_site_path(fine), self.site / fine)
+        for extension in [".njk", ".scss"]:
+            self.assertIn(extension, mi.ALLOWED_EXTENSIONS)
 
     def test_rejects_paths_that_leave_site_or_are_not_static(self):
         bad = [
@@ -418,12 +434,16 @@ class WholeSiteReviewTest(unittest.TestCase):
 
     def test_the_silo_rules_survive_the_new_guidance(self):
         prompt = self.prompt(["hidden.html"])
-        for rule in ["Only static files", "relative to the site root",
+        for rule in ["Only files of these types", "relative to the site root",
                      "index.html, error.html and sitemap.xml must always exist",
                      f"at most {mi.MAX_FILE_BYTES // 1000} KB", "COMPLETE new content",
                      f"At most {mi.MAX_CHANGES} files per run", "may not change or delete them"]:
             with self.subTest(rule=rule):
                 self.assertIn(rule, prompt)
+        # The allowed types are listed rather than described, so the rule cannot drift from the set.
+        for extension in mi.ALLOWED_EXTENSIONS:
+            with self.subTest(extension=extension):
+                self.assertIn(extension, prompt)
 
     # A run can only federate what it was shown, so the budget has to carry the whole site with
     # room for it to keep growing. This stand-in is half again as big as the site was when the
@@ -440,6 +460,38 @@ class WholeSiteReviewTest(unittest.TestCase):
         # Lifting the repeated parts into "css/site.css" and "js/site.js" and relinking every page
         # of a site that size takes len + 2 changes; the limit must not forbid it.
         self.assertGreaterEqual(mi.MAX_CHANGES, len(self.GROWN_SITE) + 2)
+
+
+class BuildPipelinePromptTest(unittest.TestCase):
+    """Issue #25: /site is source now, and the prompt says so. A run that does not know the pipeline
+    cannot write for it, and the answers to the issue gave it the whole thing to write."""
+
+    def prompt(self):
+        return mi.build_prompt([("index.html", "<h1>hi</h1>")])
+
+    def test_the_prompt_explains_both_halves_of_the_build(self):
+        prompt = self.prompt()
+        self.assertIn("What you write is source", prompt)
+        for fact in ["front matter", "layout: layout.njk", f"{mi.INCLUDES_DIR}/", f"{mi.SASS_DIR}/",
+                     "compiles to .css at the same path", "{% raw %}", "does not build is refused"]:
+            with self.subTest(fact=fact):
+                self.assertIn(fact, prompt)
+
+    def test_the_pipeline_comes_before_the_rules_that_lean_on_it(self):
+        prompt = self.prompt()
+        self.assertLess(prompt.index("How the site is built"), prompt.index("Rules:"))
+
+    def test_the_axiom_says_which_site_it_is_checked_on(self):
+        prompt = self.prompt()
+        self.assertIn("checked on the built site", prompt[prompt.index("AXIOM"):])
+
+    def test_federating_may_now_reach_the_layout_and_the_shared_sass(self):
+        # "Full creative opportunity within its silo": the shared files are part of what a run may
+        # federate, not a fixed frame around what it may.
+        federate = self.prompt()
+        federate = federate[federate.index("FEDERATE"):federate.index("How the site is built")]
+        self.assertIn(mi.INCLUDES_DIR, federate)
+        self.assertIn(mi.SASS_DIR, federate)
 
 
 class ReachabilityAxiomTest(SiteDirTestCase):
@@ -578,23 +630,149 @@ class ReachabilityAxiomTest(SiteDirTestCase):
         self.assertEqual(omitted, ["zz-big.js"])
 
 
+def needs_the_build(test):
+    """Skip a test that runs the real Node build when the toolchain is not installed.
+
+    In CI it is a failure instead: a silent skip there would quietly stop checking the built site,
+    which is the only site the axiom is about.
+    """
+    try:
+        mi.build_site({"index.html": "<h1>hi</h1>"})
+    except mi.BuildToolchainError as err:
+        if os.environ.get("CI"):
+            test.fail(f"the Node build toolchain is missing in CI: {err}")
+        test.skipTest(f"the Node build toolchain is not installed ({err})")
+
+
+def front_matter(**fields):
+    return "---\n" + "".join(f"{key}: {value}\n" for key, value in fields.items()) + "---\n"
+
+
+class BuildPipelineTest(unittest.TestCase):
+    """Issue #25: the real build, and the reachability axiom judged on what it produces.
+
+    SiteDirTestCase stands the build in with the identity, which is exactly right for its plain-HTML
+    fixtures; this is where the pipeline itself is exercised. /site is source now -- a layout is not
+    a page, and a page is whatever the templates make of it -- so these are the tests that say what
+    "every page" means.
+    """
+
+    LAYOUT = ("<!DOCTYPE html>\n<html lang='en'>\n<head><title>{{ title }}</title>\n"
+              "<link rel='stylesheet' href='css/site.css'></head>\n"
+              "<body>\n{{ content | safe }}</body>\n</html>\n")
+    NAV = "<nav>{% for page in ['toy.html', 'error.html'] %}<a href='{{ page }}'>{{ page }}</a>{% endfor %}</nav>\n"
+    PAGES = ["index.html", "toy.html", "error.html"]
+
+    def setUp(self):
+        needs_the_build(self)
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.site = Path(tmp.name).resolve() / "site"
+        (self.site / "_includes").mkdir(parents=True)
+        (self.site / "_sass").mkdir()
+        (self.site / "css").mkdir()
+        patcher = mock.patch.object(mi, "SITE_DIR", self.site)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.write("_includes/layout.njk", self.LAYOUT)
+        self.write("_includes/nav.njk", self.NAV)
+        self.write("_sass/_tokens.scss", ":root { --fg: #eeeeff; }\n")
+        self.write("css/site.scss", "@use 'tokens';\nbody { color: var(--fg); }\n")
+        # The home page links nothing itself: its navigation arrives from the shared partial, so
+        # only the built site shows that toy.html and error.html can be reached.
+        self.write("index.html", front_matter(layout="layout.njk", title="interesting")
+                   + '<h1>interesting</h1>\n{% include "nav.njk" %}')
+        self.write("toy.html", front_matter(layout="layout.njk", title="toy") + "<p>toy</p>\n")
+        self.write("error.html", front_matter(layout="layout.njk", title="lost") + "<p>lost</p>\n")
+        self.write("sitemap.xml", sitemap(*self.PAGES))
+
+    def write(self, rel, content):
+        (self.site / rel).write_text(content, encoding="utf-8")
+
+    def built(self):
+        return mi.build_site(dict(mi.read_site()))
+
+    def test_templates_render_and_sass_compiles_to_the_same_paths(self):
+        built = self.built()
+        self.assertEqual(sorted(built), ["css/site.css", "error.html", "index.html", "sitemap.xml", "toy.html"])
+        self.assertTrue(built["index.html"].startswith("<!DOCTYPE html>"))
+        self.assertIn("<title>interesting</title>", built["index.html"])
+        self.assertIn("<h1>interesting</h1>", built["index.html"])
+        self.assertNotIn("layout: layout.njk", built["index.html"], "front matter is not published")
+        self.assertIn("--fg: #eeeeff", built["css/site.css"], "the @use'd partial reached the output")
+        self.assertIn("color:var(--fg)", built["css/site.css"])
+
+    def test_the_shared_files_are_never_published(self):
+        # A layout, a partial and a Sass partial are source: they are built into the pages and the
+        # stylesheets that use them, and nothing of them is served on its own.
+        built = self.built()
+        for shared in ["_includes/layout.njk", "_includes/nav.njk", "_sass/_tokens.scss", "css/site.scss"]:
+            with self.subTest(shared=shared):
+                self.assertIn(shared, dict(mi.read_site()))
+                self.assertNotIn(shared, built)
+
+    def test_a_page_is_whatever_the_templates_make_of_it(self):
+        # The axiom's question -- can the root reach every page? -- is asked of the built site. In
+        # the source, index.html names no page at all; built, its navigation names both.
+        source = dict(mi.read_site())
+        self.assertEqual(mi.links_from("index.html", source), set())
+        built = self.built()
+        self.assertEqual(mi.html_pages(built), set(self.PAGES))
+        self.assertEqual(mi.links_from("index.html", built), {"toy.html", "error.html"})
+        self.assertEqual(mi.unreachable_pages(built), {})
+
+    def test_a_page_added_as_a_template_is_held_to_the_axiom_through_the_build(self):
+        added = {"path": "new.html", "content": front_matter(layout="layout.njk", title="new") + "<p>new</p>\n"}
+        with self.assertRaisesRegex(mi.RejectedChange, r"new\.html is not reachable.*not listed"):
+            mi.validate_plan({"files": [added]})
+        wired = {"files": [
+            added,
+            {"path": "_includes/nav.njk", "content": self.NAV.replace("'error.html'", "'error.html', 'new.html'")},
+            {"path": "sitemap.xml", "content": sitemap(*self.PAGES, "new.html")},
+        ]}
+        self.assertEqual(len(mi.validate_plan(wired)), 3)
+
+    def test_a_plan_that_does_not_build_is_refused(self):
+        for broken, what in [
+            ({"path": "index.html", "content": front_matter(layout="gone.njk") + "<p>x</p>"}, "a missing layout"),
+            ({"path": "index.html", "content": '{% include "gone.njk" %}'}, "a missing partial"),
+            ({"path": "css/site.scss", "content": "@use 'gone';\n"}, "a missing Sass partial"),
+            ({"path": "css/site.scss", "content": "body { color: ; }\n"}, "broken Sass"),
+        ]:
+            with self.subTest(what=what), self.assertRaisesRegex(mi.RejectedChange, "does not build"):
+                mi.validate_plan({"files": [broken]})
+
+    def test_a_site_that_already_does_not_build_blocks_nothing(self):
+        # Same reasoning as the orphan that was already there: every run is asked to repair the
+        # site, so a run must not be refused over damage it did not do. It still has to build.
+        self.write("css/site.scss", "@use 'gone';\n")
+        with mock.patch("builtins.print"):
+            ops = mi.validate_plan({"files": [{"path": "css/site.scss", "content": "body { color: red; }\n"}]})
+        self.assertEqual(len(ops), 1)
+
+
 class RealSiteTest(unittest.TestCase):
-    """The site in this repository obeys the reachability axiom.
+    """The site in this repository obeys the reachability axiom, once built.
 
     validate_plan only refuses what a run breaks, so the invariant has to start out true: this is
     what makes it hold from the next deploy onward and not only for pages a later run adds. It
     runs on every pull request and on main before each deploy, so a hand-written commit that
     orphans a page is caught there too.
+
+    It is the built site that is checked, because that is the one that gets deployed and the one a
+    visitor sees. Building it here also means every pull request finds out that /site still builds.
     """
 
     def setUp(self):
         site = Path(mi.__file__).resolve().parents[2] / "site"
         if not site.is_dir():
             self.skipTest(f"no site directory at {site}")
+        needs_the_build(self)
         patcher = mock.patch.object(mi, "SITE_DIR", site)
         patcher.start()
         self.addCleanup(patcher.stop)
-        self.site = dict(mi.read_site())
+        self.source = dict(mi.read_site())
+        self.site = mi.build_site(self.source)
 
     def test_every_page_is_reachable_from_the_root_and_listed_in_the_sitemap(self):
         self.assertEqual(mi.unreachable_pages(self.site), {})
@@ -605,6 +783,17 @@ class RealSiteTest(unittest.TestCase):
         # mechanically, and a page a visitor can read, reachable from the home page.
         self.assertIn("sitemap.xml", self.site)
         self.assertIn("sitemap.html", mi.links_from("index.html", self.site))
+
+    def test_the_two_pages_the_deploy_needs_are_built(self):
+        for required in ["index.html", "error.html"]:
+            with self.subTest(required=required):
+                self.assertTrue(self.site.get(required, "").strip(), f"{required} is missing or empty")
+
+    def test_one_run_could_still_rewrite_the_whole_site(self):
+        # A page is a template and a stylesheet now, so federating costs about twice what it did.
+        # A run that has to leave part of the site behind cannot make it a coherent whole.
+        self.assertGreaterEqual(mi.MAX_CHANGES, len(self.source))
+        self.assertGreaterEqual(mi.PROMPT_BUDGET_CHARS, sum(len(text) for text in self.source.values()))
 
 
 class SmallModelTest(unittest.TestCase):

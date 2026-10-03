@@ -10,10 +10,18 @@ styles and behaviour into shared files, unify navigation and visual language,
 merge or retire pages that overlap). Either outcome is a successful run, so the
 site can be made more interesting by becoming coherent and not only by growing.
 
+/site is source, not the site: build.mjs renders its templates and compiles its
+Sass into the folder that actually gets deployed. The model writes source here
+like anything else -- the shared layout in _includes and the Sass partials in
+_sass are as open to it as a page is -- and every answer is checked by building
+it, so a plan that does not build is refused.
+
 One axiom stands over every run: all of the content stays reachable from the
 root, both by following links from index.html and through sitemap.xml. It is
 stated in the prompt and held to by check_reachability(), which refuses a plan
-that would orphan a page.
+that would orphan a page. It is checked on the built site, because that is the
+one a visitor sees: a layout is not a page, and a page is whatever the templates
+make of it.
 
 The model is reached through the GitHub Copilot CLI (`copilot`), which bills the
 GitHub Copilot subscription behind the token in COPILOT_GITHUB_TOKEN. (GitHub
@@ -31,6 +39,7 @@ import json
 import os
 import random
 import re
+import shutil
 import signal
 import subprocess
 import sys
@@ -152,14 +161,26 @@ AUTH_HELP = (
 ALLOWED_EXTENSIONS = {
     ".html", ".css", ".js", ".mjs", ".svg", ".txt", ".json", ".md", ".xml",
     ".webmanifest",
+    # The build pipeline's own source types (issue #25). /site is no longer published as it stands:
+    # build.mjs renders the templates and compiles the Sass into the artifact that is. The model
+    # writes source here like anything else, so it has the same reach over the layout and the
+    # shared styles as it has over a page.
+    ".njk", ".scss",
 }
+# Where the build's shared files live inside /site, named here only so the prompt can point at
+# them. They are Eleventy's conventions and are set in eleventy.config.mjs; nothing below depends
+# on the names, because the build itself decides what is a page (see build_site).
+INCLUDES_DIR = "_includes"
+SASS_DIR = "_sass"
+
 # May be rewritten, never deleted, and shown to the model first so it can always be rewritten.
 # sitemap.xml is one of them because the reachability axiom below leans on it.
 PROTECTED_FILES = {"index.html", "error.html", "sitemap.xml"}
 # How many files one run may touch. Roomy enough that a run which federates the site can rewrite
 # every page of it and add the shared files those pages link to, which is what the whole-site
-# review in build_prompt asks for; small enough that a runaway answer is still refused.
-MAX_CHANGES = 30
+# review in build_prompt asks for; small enough that a runaway answer is still refused. A page is
+# two files now that it has a template and a stylesheet, so this is bigger than it was.
+MAX_CHANGES = 40
 MAX_FILE_BYTES = 50_000
 # How much of the site a prompt carries; comfortably inside every flagship model's context window.
 # Generous on purpose: every run is asked to weigh the site as a whole and may choose to federate
@@ -173,9 +194,23 @@ MAX_ATTEMPTS = 3
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SITE_DIR = Path(os.environ.get("SITE_DIR", REPO_ROOT / "site")).resolve()
 
+# The build that turns /site into the artifact that gets published (issue #25). It is run here too,
+# so the reachability axiom below is checked against what a visitor would actually be served.
+BUILD_SCRIPT = REPO_ROOT / "build.mjs"
+NODE_BIN = os.environ.get("NODE_BIN", "node")
+BUILD_TIMEOUT_SECONDS = 180
+
 
 class RejectedChange(Exception):
     pass
+
+
+class BuildError(Exception):
+    """This site does not build, so there is nothing to check and nothing to publish."""
+
+
+class BuildToolchainError(Exception):
+    """The build cannot be run at all. Not the model's fault, so no answer can get past it."""
 
 
 class ModelError(Exception):
@@ -194,11 +229,14 @@ class SiloBreach(Exception):
     """The model was able to use a tool. Nothing it returned may be trusted or applied."""
 
 
-# One path segment: lowercase letters, digits, ".", "_" and "-", starting and ending with a letter
-# or digit. Nothing else is ever needed for a web path, and it rules out "..", hidden files,
-# control characters (a newline in a path could smuggle a workflow command into the log) and names
-# that collide on case-insensitive file systems.
-PATH_SEGMENT = re.compile(r"[a-z0-9](?:[a-z0-9._-]{0,98}[a-z0-9])?")
+# One path segment: lowercase letters, digits, ".", "_" and "-", starting with a letter, a digit or
+# "_" and ending with a letter or digit. Nothing else is ever needed for a web path or for the
+# build's own source, and it rules out "..", hidden files, control characters (a newline in a path
+# could smuggle a workflow command into the log) and names that collide on case-insensitive file
+# systems. A leading "_" is allowed because that is how both halves of the build mark something
+# that is not a page: "_includes" and "_sass" for the shared files, "_tokens.scss" for a Sass
+# partial that is only ever @use'd.
+PATH_SEGMENT = re.compile(r"[a-z0-9_](?:[a-z0-9._-]{0,98}[a-z0-9])?")
 # Names a Windows checkout refuses, with or without an extension: one would break every clone there.
 WINDOWS_RESERVED = re.compile(r"(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?")
 
@@ -232,10 +270,62 @@ def read_site():
     return files
 
 
+def require_build_toolchain():
+    """Stop the run if the build cannot be run at all.
+
+    Every answer is checked by building it, so a run without the toolchain could only ever waste a
+    model call and then refuse the answer it paid for. Said here, before any model is asked.
+    """
+    if not BUILD_SCRIPT.is_file():
+        sys.exit(f"The build script is missing ({BUILD_SCRIPT}), so no answer could be checked.")
+    if not (REPO_ROOT / "node_modules").is_dir():
+        sys.exit(f"The build's packages are not installed: run `npm ci` in {REPO_ROOT}.")
+    if shutil.which(NODE_BIN) is None:
+        sys.exit(f"The build needs Node, which was not found ({NODE_BIN!r}).")
+
+
+def build_site(files):
+    """The site mapping `files` as the build makes it: {path: content} of the generated artifact.
+
+    /site is source now, not the published site (issue #25): build.mjs renders its templates and
+    compiles its Sass into a folder, and that folder is what gets deployed. The reachability axiom
+    is about what a visitor can reach, and a visitor only ever sees that folder -- a layout is not
+    a page, and a page is whatever the templates make of it -- so the check below runs the real
+    build on a copy rather than keeping a second guess at what it does.
+
+    Raises BuildError if this site does not build, and BuildToolchainError if the build could not be
+    run at all; those two must not be confused, because the first is the model's problem to fix and
+    the second is nobody's answer to give.
+    """
+    if not BUILD_SCRIPT.is_file():
+        raise BuildToolchainError(f"no build script at {BUILD_SCRIPT}")
+    if not (REPO_ROOT / "node_modules").is_dir():
+        raise BuildToolchainError(f"the build's packages are not installed: run `npm ci` in {REPO_ROOT}")
+    with tempfile.TemporaryDirectory(prefix="site-build-") as work:
+        source, out = Path(work) / "site", Path(work) / "out"
+        for rel, content in files.items():
+            target = source / rel
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(content, encoding="utf-8", newline="")
+        cmd = [NODE_BIN, str(BUILD_SCRIPT), "--source", str(source), "--out", str(out), "--quiet"]
+        try:
+            built = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8",
+                                   errors="replace", cwd=REPO_ROOT, timeout=BUILD_TIMEOUT_SECONDS)
+        except FileNotFoundError:
+            raise BuildToolchainError(f"the build needs Node, which was not found ({NODE_BIN!r})") from None
+        except subprocess.TimeoutExpired:
+            raise BuildError(f"the build did not finish within {BUILD_TIMEOUT_SECONDS}s") from None
+        if built.returncode != 0:
+            raise BuildError((built.stderr.strip() or built.stdout.strip() or "the build failed")[:1000])
+        return {path.relative_to(out).as_posix(): path.read_text(errors="replace")
+                for path in sorted(out.rglob("*")) if path.is_file()}
+
+
 # The reachability axiom (issue #21). All of the content stays reachable from the root: index.html
 # leads to every page, directly or by following links through pages it leads to, and sitemap.xml
 # lists every page. The prompt states it as a standing rule for every run; the functions below let
-# validate_plan hold the line, so a page a run adds is wired into both in the same run.
+# validate_plan hold the line, so a page a run adds is wired into both in the same run. They all
+# work on a built site (issue #25), which is the one a visitor sees.
 HOME_PAGE = "index.html"
 SITEMAP = "sitemap.xml"
 PAGE_SUFFIX = ".html"
@@ -404,7 +494,8 @@ def build_prompt(shown, omitted=()):
         "easter egg.\n"
         "- FEDERATE what is already there: one holistic change that improves the whole "
         "experience without adding a page. Lift markup, styles or behaviour that the pages "
-        "repeat into shared files (for example \"css/site.css\" or \"js/site.js\") and link them "
+        "repeat into shared files (for example \"css/site.css\" or \"js/site.js\", the shared "
+        f"layout in \"{INCLUDES_DIR}/\" or a Sass partial in \"{SASS_DIR}/\") and use them "
         "from every page that needs them. Give every page the same header and navigation, so the "
         "whole site is reachable from anywhere. Settle on one visual language: palette, type, "
         "spacing, motion. Merge pages that overlap, and retire the ones that no longer earn "
@@ -415,23 +506,49 @@ def build_prompt(shown, omitted=()):
         "do not add for the sake of adding: when the site has grown repetitive, scattered or "
         "inconsistent, federating it is the more interesting change. Either way, build on what is "
         "already there rather than starting over.\n\n"
+        "How the site is built:\n"
+        "What you write is source. A small build turns it into the files that are served, and only "
+        "the built site is ever published or checked. The whole pipeline is two conventions:\n"
+        "- An .html file is a template, with optional YAML front matter between --- lines and "
+        "Nunjucks syntax in the body. \"layout: layout.njk\" wraps the page in the shared shell in "
+        f"\"{INCLUDES_DIR}/layout.njk\", which writes the <head>, the stylesheet links and the "
+        "closing tags, so the page itself is only its <main>; that layout documents the front "
+        "matter it reads. Nothing in "
+        f"\"{INCLUDES_DIR}/\" is a page: it holds the layouts and the partials other templates "
+        "include. Because the body is a template, write any literal \"{{\" or \"{%\" inside "
+        "{% raw %} ... {% endraw %}.\n"
+        "- A .scss file compiles to .css at the same path, so \"css/site.scss\" becomes "
+        "\"css/site.css\" and a page links the .css. A .scss file whose name starts with \"_\" is a "
+        f"partial: it is built into whatever @use's it and never on its own, which is what "
+        f"\"{SASS_DIR}/\" holds -- the palette, the base rules and the mixins every stylesheet "
+        "shares. Every other file type is copied through untouched.\n"
+        "So one new page is two files: \"thing.html\" with front matter naming the layout and its "
+        "stylesheet, and \"css/thing.scss\" beside it that @use's the shared partials.\n"
+        "A plan whose source does not build is refused, so keep the templates and the stylesheets "
+        "valid, and change the shared files with the care they deserve: the layout and "
+        f"\"{SASS_DIR}/\" reach every page at once.\n\n"
         "Rules:\n"
-        "- Only static files (HTML, CSS, JS, SVG, text). No build steps, no external "
+        "- Only files of these types: "
+        + ", ".join(sorted(ALLOWED_EXTENSIONS)) + ". No external "
         "dependencies that require keys, nothing harmful, deceptive or tracking.\n"
         "- Paths are relative to the site root (e.g. \"index.html\", \"css/style.css\"). "
         "Use relative links between pages, so the site works wherever it is published. "
         "File and folder "
-        "names may only contain lowercase letters, digits, \".\", \"_\" and \"-\".\n"
+        "names may only contain lowercase letters, digits, \".\", \"_\" and \"-\", and only a "
+        "leading \"_\" is allowed, which is how the build marks what is not a page.\n"
         f"- index.html, error.html and {SITEMAP} must always exist and remain valid.\n"
         "- AXIOM, every run: all of the content stays reachable from the root. index.html must "
         "lead to every page of the site -- directly, or by following links through the pages it "
         f"leads to, such as a site map page -- and {SITEMAP} must list every page. Wire a page you "
         "add into both in the same run, and take a page you delete out of both: a plan that leaves "
         f"a page the root cannot reach is refused. {SITEMAP} is a sitemaps.org urlset whose <loc> "
-        "values are the same relative paths used in links, because the site has no fixed domain.\n"
+        "values are the same relative paths used in links, because the site has no fixed domain. "
+        "This is checked on the built site, so the pages it counts are the ones the templates "
+        "produce, and a layout or a partial is not one of them.\n"
         "- Leave the site working at the end of the run. If you extract something into a shared "
         "file, or merge or delete a page, update every page that refers to it in the same run: "
-        "never leave a link, a stylesheet or a script pointing at something that is not there.\n"
+        "never leave a link, a stylesheet, a script, a layout or an @use pointing at something "
+        "that is not there.\n"
         f"- Keep each file small (at most {MAX_FILE_BYTES // 1000} KB); return the COMPLETE new "
         "content of every file you change.\n"
         f"- At most {MAX_CHANGES} files per run, and keep the whole answer inside your output "
@@ -653,7 +770,21 @@ def validate_plan(plan, unseen=()):
             raise RejectedChange(f"refusing to delete {rel}: its content was not shown to the model")
         ops.append(("delete", target, None))
     before = dict(read_site())
-    check_reachability(before, apply_to(before, ops))
+    try:
+        built_after = build_site(apply_to(before, ops))
+    except BuildError as err:
+        raise RejectedChange(f"the site does not build with this change: {one_line(err, 500)}")
+    try:
+        built_before = build_site(before)
+    except BuildError as err:
+        # The site as committed does not build, so there is no "before" to compare against and the
+        # axiom has nothing to say this run. Same reasoning as check_reachability's: every run is
+        # asked to repair the site, and refusing a plan over damage it did not do would leave no
+        # plan able to. This run still had to build, and the next one is held to the axiom again.
+        print(f"::warning::the site as committed does not build ({one_line(err, 300)}), so this "
+              "run's change was only checked for building, not for reachability")
+        return ops
+    check_reachability(built_before, built_after)
     return ops
 
 
@@ -728,6 +859,7 @@ def clean_summary(text):
 def main():
     if not SITE_DIR.is_dir():
         sys.exit(f"site directory not found: {SITE_DIR}")
+    require_build_toolchain()
 
     shown, omitted = split_for_prompt(read_site())
     prompt = build_prompt(shown, omitted)
@@ -765,6 +897,9 @@ def main():
             sys.exit(AUTH_HELP)
         except SiloBreach as err:
             sys.exit(f"Stopping without applying anything: {err}. The Copilot CLI flags no longer disable every tool.")
+        except BuildToolchainError as err:
+            # Not this model's fault and not the next one's either: nothing can be checked.
+            sys.exit(f"Stopping without applying anything: the build could not be run ({err}).")
         except (ModelError, ValueError, RecursionError, RejectedChange) as err:
             answering.append(model)
             print(f"::warning::{model} failed: {one_line(err, 500)}")
