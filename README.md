@@ -8,19 +8,22 @@ iterate a more interesting website
 
 ## How it works
 
-- **`/site`** — the static website, published to an S3 bucket behind CloudFront at
-  [interesting.outright.io](https://interesting.outright.io/). `site/` is the whole artifact:
-  plain HTML with no build step, and nothing else is published. A request for a page that is not
-  there gets `error.html` back, with a 404, from a CloudFront custom error response.
+- **`/site`** — the website, in source form. Everything anyone edits — a person or the hourly AI —
+  lives here, and nothing else does. A request for a page that is not there gets `error.html` back,
+  with a 404, from a CloudFront custom error response.
+- **The build** — [`build.mjs`](build.mjs) turns `/site` into the artifact that is published, in a
+  throwaway folder outside the repository. Nothing generated is ever committed. See
+  [Building the site](#building-the-site).
 - **`/infra`** — the hosting, as code. [`infra/`](infra) is a self-contained Terraform project
   that owns the bucket, the CloudFront distribution, the certificate and DNS, the deploy IAM
   user, the Actions secrets the deploy uses — and this repository itself. It is applied by hand:
   no workflow here runs `terraform plan` or `apply`. See [`infra/README.md`](infra/README.md).
 - **Test, then deploy** — [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) is the
   pipeline for `main`. Every commit that lands there is tested
-  ([`.github/workflows/test.yml`](.github/workflows/test.yml)), and when the tests pass, `/site`
-  is published: synced to the bucket with `--delete`, then the CloudFront cache is invalidated.
-  A failing test blocks the deploy. The pipeline also starts when the hourly AI workflow
+  ([`.github/workflows/test.yml`](.github/workflows/test.yml)), and when the tests pass, `/site` is
+  built and the generated folder is published: synced to the bucket with `--delete`, then the
+  CloudFront cache is invalidated. A failing test blocks the deploy, and so does a failing build.
+  The pipeline also starts when the hourly AI workflow
   finishes, because GitHub starts no workflow for a commit pushed by another workflow.
   CloudFront is the only publisher: the site used to be served from GitHub Pages as well, which
   is retired.
@@ -41,6 +44,42 @@ iterate a more interesting website
 - **Only flagship models** — the random pick draws from a list of large, top-tier models (see
   [Which models](#which-models)); small and mid-tier models are never picked.
 
+### Building the site
+
+`/site` used to be the published artifact as it stood. It is source now, and the build underneath it
+is deliberately small: a foundation to build a more holistic experience on, not a framework to learn.
+
+- **Eleventy, and two conventions.** [`eleventy.config.mjs`](eleventy.config.mjs) is the whole
+  pipeline. An `.html` file is a [Nunjucks](https://mozilla.github.io/nunjucks/) template with
+  optional YAML front matter; `layout: layout.njk` wraps it in the shared shell in
+  [`site/_includes`](site/_includes), so the `<head>`, the stylesheet links and the footer are
+  written once instead of in every page, and a page is little more than its `<main>`. A `.scss` file
+  compiles to `.css` at the same path, and one whose name starts with `_` is a partial, built into
+  whatever `@use`s it and never on its own. Every other file type is copied through verbatim, never
+  rendered, so a stray `{{` in a script cannot break a build.
+- **Common files.** [`site/_sass`](site/_sass) is what "shared partials" means here: the palette as
+  custom properties a page can override (`_tokens.scss`), the base rules, the panel, the controls,
+  the footer, the values the stylesheets have in common (`_vars.scss`, which emits no CSS of its own)
+  and the monospace readout seven pages use (`_readout.scss`, a mixin). `css/site.scss` is those
+  partials and nothing else, and every page links the `css/site.css` it compiles to. `css/<page>.scss`
+  holds what is true of that page alone and is linked after it, so a page overrides rather than
+  repeats. `error.html` writes its styles into the page instead: CloudFront returns it for any 404,
+  at whatever path was asked for, so a relative `<link>` next to it would be a guess.
+- **Output paths mirror source paths.** `site/index.html` becomes `index.html` and
+  `site/css/site.scss` becomes `css/site.css`. Eleventy's "pretty" permalinks would turn
+  `about.html` into `about/index.html`, which would break every relative link the site is written
+  with.
+- **The output is throwaway.** `npm run build` writes to a temp folder outside the repository and
+  prints the path as its last line, so a caller can read it without parsing anything else; the
+  deploy builds into `$RUNNER_TEMP` and syncs that. Nothing generated is committed, and
+  `node_modules/` is gitignored while `package-lock.json` is not, because `npm ci` needs it.
+
+```bash
+npm ci                              # once
+npm run build                       # prints the folder it built into
+npm run build -- --out ./build      # or pick the folder yourself
+```
+
 ### Reachability axiom
 
 All of the content stays reachable from the root, through a navigation affordance and through a
@@ -57,6 +96,12 @@ sitemap. It is an invariant of the iteration process rather than a one-off tidy-
   through. Only what the run itself breaks is refused: a page that was already orphaned stays the
   site's own problem to repair, because rejecting every plan over it would leave no plan able to
   repair it.
+- **Checked on the built site**, which is the one a visitor sees. `build_site` runs the real build on
+  a copy of the plan rather than keeping a second guess at what the build does, so a layout is not a
+  page, a page is whatever the templates make of it, and a navigation that only exists once a partial
+  has been included counts just the same. An answer that does not build is refused for that alone. A
+  site that already does not build blocks nothing, for the same reason a pre-existing orphan does
+  not.
 - **Both kinds of sitemap.** [`site/sitemap.xml`](site/sitemap.xml) for anything that reads the
   site mechanically, and [`site/sitemap.html`](site/sitemap.html) for a visitor. The `<loc>` values
   are relative paths, like every other link in `/site`: the site has no fixed domain and is served
@@ -65,22 +110,29 @@ sitemap. It is an invariant of the iteration process rather than a one-off tidy-
   never deleted, and it is always shown to the model, so a run can always wire a new page into it.
 - **True of the site as committed**, not only of what a future run adds. Because the code only
   refuses what a run breaks, the invariant has to start out true, so `RealSiteTest` in
-  [`.github/scripts/test_make_interesting.py`](.github/scripts/test_make_interesting.py) checks
-  `/site` itself on every pull request and before every deploy.
+  [`.github/scripts/test_make_interesting.py`](.github/scripts/test_make_interesting.py) builds
+  `/site` and checks the result on every pull request and before every deploy.
 
 ### Silo
 
-The AI can only ever modify `/site`:
+The AI can only ever modify `/site` — but within it, everything: pages, the shared layout and
+partials in `_includes`, the Sass in `_sass` and `css/`. There is no corner of the site it is kept
+out of, because a run that cannot touch the shared files cannot make the site a coherent whole.
 
 1. The model has no tools or shell: the Copilot CLI runs in an empty directory with every tool
    disabled, so the model only returns JSON describing files to write/delete. If the model ever
    manages to use a tool, the run stops and nothing is applied.
 2. [`.github/scripts/make_interesting.py`](.github/scripts/make_interesting.py) rejects any path
    that is absolute, contains `..`/hidden segments or anything but lowercase letters, digits, `.`,
-   `_` and `-`, resolves outside `/site` (including via symlinks) or has a non-static file type.
+   `_` and `-`, resolves outside `/site` (including via symlinks) or has a file type that is not one
+   of `ALLOWED_EXTENSIONS` (which includes `.njk` and `.scss`, the build's own source types). A
+   segment may begin with `_`, because that is how both halves of the build mark what is not a page.
    It never deletes `index.html`, `error.html` or `sitemap.xml`, never touches a file the model was
    not shown, and applies an answer whole or not at all.
-3. The workflow fails if anything outside `/site` changed, and only stages `site/` for commit. The
+3. Every answer has to build. The prompt explains the two conventions of the pipeline, and a plan
+   whose source does not build is refused before anything is written, so the model cannot break the
+   layout or a shared partial for the whole site.
+4. The workflow fails if anything outside `/site` changed, and only stages `site/` for commit. The
    repository's token is not in the checkout while the model's answer is processed. The model's
    one-line summary is stripped to plain text before it reaches the commit message.
 
@@ -140,11 +192,17 @@ has no model in the pool, because Copilot only offers the Gemini Flash tier.
 script without calling any model. It runs on every pull request, and on `main` before each deploy:
 
 ```bash
+npm ci                                            # the tests build the site
 python3 -m unittest discover -s .github/scripts -v
 ```
 
+Most of the suite stands the build in with the identity, which is exactly what it is for the plain
+HTML those fixtures are made of. `BuildPipelineTest` and `RealSiteTest` run the real build; without
+the toolchain they skip, except in CI, where a missing toolchain is the thing to find out about.
+
 To try a real run without touching the repository's site, point the script at a copy (this needs a
-logged-in `copilot` CLI):
+logged-in `copilot` CLI). The build still runs from this repository, on a copy of whatever the model
+proposes:
 
 ```bash
 cp -R site /tmp/site-copy && SITE_DIR=/tmp/site-copy python3 .github/scripts/make_interesting.py
