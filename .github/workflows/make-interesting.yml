@@ -149,8 +149,8 @@ jobs:
             exit 1
           fi
 
-      # Nothing here deploys. Once this workflow finishes, the main-branch pipeline in pages.yml
-      # tests the new commit and deploys it.
+      # Nothing here deploys. Once this workflow finishes, the main-branch pipeline in deploy.yml
+      # tests the new commit and publishes it.
       - name: Commit and push
         env:
           MODEL: ${{ steps.ai.outputs.model }}
