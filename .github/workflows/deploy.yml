@@ -93,6 +93,48 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: us-east-1
 
+      # The one thing the published copy of /site does not carry in the repository. site/js/analytics.js
+      # ships a placeholder instead of the GA4 measurement ID, and the copy on its way to S3 gets
+      # the real one here. That is what lets a fork, a local copy or any checkout this step has not
+      # run over stay silent: the placeholder switches that file off, so no tag loads, no consent
+      # banner appears and no cookie is set. GA_MEASUREMENT_ID comes from the same
+      # `terraform apply` as the AWS secrets (infra/github.tf); until it is set, the site is
+      # published without analytics rather than not published at all.
+      - name: Inject the Google Analytics measurement ID
+        if: steps.secrets.outputs.ready == 'true'
+        env:
+          GA_MEASUREMENT_ID: ${{ secrets.GA_MEASUREMENT_ID }}
+        run: |
+          set -euo pipefail
+          placeholder='__GA_MEASUREMENT_ID__'
+          analytics='site/js/analytics.js'
+          if ! grep -q "$placeholder" "$analytics"; then
+            echo "::error::${analytics} has no ${placeholder} for the measurement ID to replace."
+            exit 1
+          fi
+          if [ -z "$GA_MEASUREMENT_ID" ]; then
+            echo "::notice::GA_MEASUREMENT_ID is not set, so the site is published without analytics."
+            {
+              echo "### Published without analytics"
+              echo "The \`GA_MEASUREMENT_ID\` repository secret is not set, so \`site/js/analytics.js\`"
+              echo "keeps its placeholder and loads neither the Google tag nor the consent banner."
+              echo "It is created by \`terraform apply\` in \`/infra\` (see \`infra/README.md\`)."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          # Checked, not trusted: the value is pasted into a file, and a GA4 measurement ID is only
+          # ever "G-" followed by capitals and digits.
+          if ! printf '%s' "$GA_MEASUREMENT_ID" | grep -Eq '^G-[A-Z0-9]+$'; then
+            echo "::error::GA_MEASUREMENT_ID is not a GA4 measurement ID (expected G-XXXXXXX)."
+            exit 1
+          fi
+          sed -i "s/${placeholder}/${GA_MEASUREMENT_ID}/g" "$analytics"
+          if grep -q "$placeholder" "$analytics"; then
+            echo "::error::the placeholder survived the substitution in ${analytics}."
+            exit 1
+          fi
+          echo "Measurement ID injected into ${analytics}."
+
       # --delete keeps the bucket an exact mirror of /site: a page the AI removed stops being
       # served. /site is the whole artifact — there is no build step, and nothing else is published.
       - name: Sync /site to S3
