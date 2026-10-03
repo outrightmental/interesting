@@ -51,8 +51,9 @@ Load your saved sky, then spin to ask for a tiny omen.</pre>
 
   <script>
     (function () {
-      var STORAGE_KEY = 'interesting_wish_constellation_v1';
-      var OMEN_KEY = 'interesting_sky_archive_omens_v1';
+      var state = window.interestingState;
+      var SKY = 'constellation';
+      var OMENS = 'omens';
       var MAX_OMENS = 8;
 
       var loadBtn = document.getElementById('load');
@@ -144,39 +145,24 @@ Load your saved sky, then spin to ask for a tiny omen.</pre>
         });
       }
 
+      // Why the archive has no sky to read, in this page's own words: the shared store says which
+      // of the four it is (see js/state.js).
+      var EMPTY_NOTES = {
+        unavailable: 'Local storage is unavailable here.',
+        unreadable: 'Saved constellation data is unreadable. Return home and remake it.',
+        missing: 'No saved constellation found. Make one on the main page first.',
+        ok: 'A sky file exists, but no readable stars were found.'
+      };
+
       function loadStars() {
-        var raw = null;
-        try {
-          raw = localStorage.getItem(STORAGE_KEY);
-        } catch (e) {
-          stars = [];
-          statusEl.textContent = 'Local storage is unavailable here.';
+        var saved = state.read(SKY, []);
+        stars = cloneStars(Array.isArray(saved.value) ? saved.value : []).slice(0, 180);
+        if (!stars.length) {
+          statusEl.textContent = EMPTY_NOTES[saved.status];
           clearSigil(true);
           return;
         }
-
-        if (!raw) {
-          stars = [];
-          statusEl.textContent = 'No saved constellation found. Make one on the main page first.';
-          clearSigil(true);
-          return;
-        }
-
-        try {
-          var parsed = JSON.parse(raw);
-          if (!Array.isArray(parsed)) throw new Error('invalid');
-          stars = cloneStars(parsed).slice(0, 180);
-          if (!stars.length) {
-            statusEl.textContent = 'A sky file exists, but no readable stars were found.';
-            clearSigil(true);
-            return;
-          }
-          statusEl.textContent = 'Archive synced: ' + stars.length + ' star' + (stars.length === 1 ? '' : 's') + ' loaded.';
-        } catch (e2) {
-          stars = [];
-          statusEl.textContent = 'Saved constellation data is unreadable. Return home and remake it.';
-          clearSigil(true);
-        }
+        statusEl.textContent = 'Archive synced: ' + stars.length + ' star' + (stars.length === 1 ? '' : 's') + ' loaded.';
       }
 
       function hashConstellation() {
@@ -262,37 +248,15 @@ Load your saved sky, then spin to ask for a tiny omen.</pre>
       }
 
       function loadOmens() {
-        var raw = null;
-        try {
-          raw = localStorage.getItem(OMEN_KEY);
-        } catch (e) {
-          omens = [];
-          renderOmens();
-          return;
-        }
-
-        if (!raw) {
-          omens = [];
-          renderOmens();
-          return;
-        }
-
-        try {
-          var parsed = JSON.parse(raw);
-          if (!Array.isArray(parsed)) throw new Error('invalid');
-          omens = parsed.filter(function (item) {
-            return item && typeof item.text === 'string' && typeof item.time === 'number';
-          }).slice(0, MAX_OMENS);
-        } catch (e2) {
-          omens = [];
-        }
+        var stored = state.get(OMENS, []);
+        omens = (Array.isArray(stored) ? stored : []).filter(function (item) {
+          return item && typeof item.text === 'string' && typeof item.time === 'number';
+        }).slice(0, MAX_OMENS);
         renderOmens();
       }
 
       function saveOmens() {
-        try {
-          localStorage.setItem(OMEN_KEY, JSON.stringify(omens));
-        } catch (e) {
+        if (!state.set(OMENS, omens)) {
           statusEl.textContent = 'Could not save omen history in this browser context.';
         }
       }

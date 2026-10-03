@@ -43,7 +43,8 @@ Load your saved sky, click the weave to send ripples, or print a mantra from you
 
   <script>
     (function () {
-      var STORAGE_KEY = 'interesting_wish_constellation_v1';
+      var state = window.interestingState;
+      var SKY = 'constellation';
       var canvas = document.getElementById('weaver');
       var ctx = canvas.getContext('2d');
       var refreshBtn = document.getElementById('refresh');
@@ -127,41 +128,24 @@ Load your saved sky, click the weave to send ripples, or print a mantra from you
         return out;
       }
 
+      // Why the weave is running on ghost seeds instead of a real sky, in this page's own words:
+      // the shared store says which of the four it is (see js/state.js).
+      var GHOST_NOTES = {
+        unavailable: 'Local storage unavailable. Running with ghost seeds.',
+        unreadable: 'Saved constellation unreadable. Running with ghost seeds.',
+        missing: 'No saved constellation found. Running with ghost seeds until you create stars on home.',
+        ok: 'Saved data had no readable stars. Running with ghost seeds.'
+      };
+
       function loadStars() {
-        var raw = null;
-        try {
-          raw = localStorage.getItem(STORAGE_KEY);
-        } catch (e) {
-          stars = ghostStars();
-          buildShards();
-          statusEl.textContent = 'Local storage unavailable. Running with ghost seeds.';
-          return;
-        }
-
-        if (!raw) {
-          stars = ghostStars();
-          buildShards();
-          statusEl.textContent = 'No saved constellation found. Running with ghost seeds until you create stars on home.';
-          return;
-        }
-
-        try {
-          var parsed = JSON.parse(raw);
-          if (!Array.isArray(parsed)) throw new Error('invalid');
-          stars = safeStars(parsed).slice(0, 180);
-          if (!stars.length) stars = ghostStars();
-          buildShards();
-
-          if (stars.length && stars[0].text.indexOf('Ghost seed') !== 0) {
-            statusEl.textContent = 'Orbital weave synced: ' + stars.length + ' star' + (stars.length === 1 ? '' : 's') + ' loaded.';
-          } else {
-            statusEl.textContent = 'Saved data had no readable stars. Running with ghost seeds.';
-          }
-        } catch (e2) {
-          stars = ghostStars();
-          buildShards();
-          statusEl.textContent = 'Saved constellation unreadable. Running with ghost seeds.';
-        }
+        var saved = state.read(SKY, []);
+        stars = safeStars(Array.isArray(saved.value) ? saved.value : []).slice(0, 180);
+        var real = stars.length;
+        if (!real) stars = ghostStars();
+        buildShards();
+        statusEl.textContent = real
+          ? 'Orbital weave synced: ' + real + ' star' + (real === 1 ? '' : 's') + ' loaded.'
+          : GHOST_NOTES[saved.status];
       }
 
       function buildShards() {

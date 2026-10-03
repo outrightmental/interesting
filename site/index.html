@@ -36,7 +36,8 @@ stylesheet: index
 
   <script>
     (function () {
-      var STORAGE_KEY = 'interesting_wish_constellation_v1';
+      var state = window.interestingState;
+      var SKY = 'constellation';
       var MAX_STARS = 120;
       var DRAG_SUPPRESS_MS = 250;
       var thoughts = [
@@ -118,9 +119,7 @@ stylesheet: index
       }
 
       function saveStars() {
-        try {
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(serializeStars()));
-        } catch (e) {
+        if (!state.set(SKY, serializeStars())) {
           setNote('Saved in memory only. Local storage is unavailable.');
         }
       }
@@ -644,41 +643,31 @@ stylesheet: index
       }
 
       function loadStars() {
-        var raw;
-        try {
-          raw = localStorage.getItem(STORAGE_KEY);
-        } catch (e) {
-          return;
-        }
-        if (!raw) return;
-
-        try {
-          var parsed = JSON.parse(raw);
-          if (!Array.isArray(parsed)) return;
-          parsed.slice(0, MAX_STARS).forEach(function (item) {
-            if (!item || typeof item.x !== 'number' || typeof item.y !== 'number' || typeof item.text !== 'string') {
-              return;
-            }
-            var star = {
-              x: 50,
-              y: 50,
-              text: item.text,
-              el: null,
-              orbitAngle: null,
-              orbitRadius: null,
-              orbitSpeed: null,
-              orbitTilt: null,
-              orbitPulse: null
-            };
-            updateStarPosition(star, item.x, item.y);
-            stars.push(star);
-            createStarElement(star);
-          });
-          queueLinksRender();
-          if (stars.length) {
-            setNote('You have ' + stars.length + ' saved star' + (stars.length === 1 ? '' : 's') + '. Ask the sky for a reading.');
+        var saved = state.read(SKY, []);
+        var items = Array.isArray(saved.value) ? saved.value : [];
+        items.slice(0, MAX_STARS).forEach(function (item) {
+          if (!item || typeof item.x !== 'number' || typeof item.y !== 'number' || typeof item.text !== 'string') {
+            return;
           }
-        } catch (e) {
+          var star = {
+            x: 50,
+            y: 50,
+            text: item.text,
+            el: null,
+            orbitAngle: null,
+            orbitRadius: null,
+            orbitSpeed: null,
+            orbitTilt: null,
+            orbitPulse: null
+          };
+          updateStarPosition(star, item.x, item.y);
+          stars.push(star);
+          createStarElement(star);
+        });
+        queueLinksRender();
+        if (stars.length) {
+          setNote('You have ' + stars.length + ' saved star' + (stars.length === 1 ? '' : 's') + '. Ask the sky for a reading.');
+        } else if (saved.status === 'unreadable') {
           setNote('Constellation data was unreadable, so this sky starts fresh.');
         }
       }
@@ -691,10 +680,7 @@ stylesheet: index
           var star = stars.pop();
           if (star.el) star.el.remove();
         }
-        try {
-          localStorage.removeItem(STORAGE_KEY);
-        } catch (e) {
-        }
+        state.remove(SKY);
         postcardPanel.classList.remove('show');
         queueLinksRender();
         setNote('Sky cleared. Ready for a new constellation.');
