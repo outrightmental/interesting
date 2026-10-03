@@ -1,0 +1,13 @@
+// Shared canvas shell for the constellation labs: one frame style, many instruments.
+
+@use 'vars';
+
+.layout > canvas,
+.top > canvas {
+  width: 100%;
+  height: auto;
+  display: block;
+  border-radius: vars.$radius-panel;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: #060913;
+}

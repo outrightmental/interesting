@@ -21,15 +21,6 @@ body {
   gap: 0.85rem;
 }
 
-#ritual {
-  width: 100%;
-  height: auto;
-  display: block;
-  border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  background: #070b18;
-}
-
 #drift[aria-pressed='true'] {
   background: rgba(159, 203, 255, 0.24);
   border-color: rgba(194, 224, 255, 0.86);
