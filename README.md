@@ -29,15 +29,12 @@ iterate a more interesting website
   runs every hour (or manually via *Run workflow*). It picks a random model from
   [GitHub Copilot](https://docs.github.com/copilot), reached through the
   [Copilot CLI](https://docs.github.com/copilot/how-tos/copilot-cli) and billed to a GitHub Copilot
-  subscription (see [Setup](#setup)), gives it the mission **"make the website more interesting"**,
+  subscription (see [Setup](#setup)), gives it the mission **"make the website more interesting as a
+  coherent whole"**,
   and commits the result to `main`; the pipeline above then tests and deploys it. Models the
   account cannot use are skipped. A model
   that returns an unusable answer is replaced by another random model, or asked again if no other
   is left, for up to three attempts per run.
-- **A screenshot of every run** — after each change, the workflow opens the site in a browser and
-  saves what a visitor sees first to [`/screenshots`](screenshots), as `YYYYMMDD-HHMMZ.jpg` in
-  UTC (for example `20261005-0428Z.jpg`). The folder is a picture history of the site, one
-  frame per run.
 - **One run at a time** — a run that starts while an earlier run of the workflow is still going
   skips itself and finishes green without doing anything, so there is never more than one
   iteration in flight. (To retry a failed run use *Run workflow*: *Re-run failed jobs* does not
@@ -57,12 +54,9 @@ The AI can only ever modify `/site`:
    `_` and `-`, resolves outside `/site` (including via symlinks) or has a non-static file type.
    It never deletes `index.html`/`error.html`, never touches a file the model was not shown, and
    applies an answer whole or not at all.
-3. The workflow fails if anything outside `/site` changed, and only stages `site/` and the run's
-   screenshot for commit. The screenshot is taken by the workflow
-   ([`.github/scripts/screenshot.py`](.github/scripts/screenshot.py)), not by the model: the
-   model cannot write to `/screenshots`. The repository's token is not in the checkout while the
-   model's answer is processed or its page is open in the browser.
-   The model's one-line summary is stripped to plain text before it reaches the commit message.
+3. The workflow fails if anything outside `/site` changed, and only stages `site/` for commit. The
+   repository's token is not in the checkout while the model's answer is processed. The model's
+   one-line summary is stripped to plain text before it reaches the commit message.
 
 ### Which models
 
@@ -122,20 +116,6 @@ script without calling any model. It runs on every pull request, and on `main` b
 
 ```bash
 python3 -m unittest discover -s .github/scripts -v
-```
-
-The same test workflow checks the infrastructure as code. It reads no state and needs no
-credentials:
-
-```bash
-terraform -chdir=infra fmt -check -recursive -diff
-terraform -chdir=infra init -backend=false && terraform -chdir=infra validate
-```
-
-To take a screenshot of the site as it is now (this needs Chrome or Chromium):
-
-```bash
-python3 .github/scripts/screenshot.py site /tmp/site.jpg
 ```
 
 To try a real run without touching the repository's site, point the script at a copy (this needs a
