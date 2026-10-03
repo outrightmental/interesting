@@ -4,6 +4,12 @@
 Picks a random model from GitHub Copilot, shows it the current contents of the
 /site folder, and asks it to make the website more interesting.
 
+Every run starts with a look at the site as a whole: the model may add something
+new, or it may federate what is already there (consolidate repeated markup,
+styles and behaviour into shared files, unify navigation and visual language,
+merge or retire pages that overlap). Either outcome is a successful run, so the
+site can be made more interesting by becoming coherent and not only by growing.
+
 The model is reached through the GitHub Copilot CLI (`copilot`), which bills the
 GitHub Copilot subscription behind the token in COPILOT_GITHUB_TOKEN. (GitHub
 Models, which this script originally called, was retired on 2026-07-30.)
@@ -138,12 +144,18 @@ ALLOWED_EXTENSIONS = {
     ".webmanifest",
 }
 PROTECTED_FILES = {"index.html", "error.html"}  # may be rewritten, never deleted
-MAX_CHANGES = 20
+# How many files one run may touch. Roomy enough that a run which federates the site can rewrite
+# every page of it and add the shared files those pages link to, which is what the whole-site
+# review in build_prompt asks for; small enough that a runaway answer is still refused.
+MAX_CHANGES = 30
 MAX_FILE_BYTES = 50_000
-# How much of the site a prompt carries; comfortably inside every model's context window. A file
-# that is not shown cannot be changed, so the budget always has room for index.html, error.html
-# and any one other file: every file gets its turn (see split_for_prompt).
-PROMPT_BUDGET_CHARS = 3 * MAX_FILE_BYTES
+# How much of the site a prompt carries; comfortably inside every flagship model's context window.
+# Generous on purpose: every run is asked to weigh the site as a whole and may choose to federate
+# across all of it, and a file that is not shown cannot be changed. While the site fits in here it
+# is shown whole and nothing is off limits. Once it outgrows this, the budget still always has room
+# for index.html, error.html and any one other file, and which file that is rotates, so every file
+# gets its turn (see split_for_prompt).
+PROMPT_BUDGET_CHARS = 8 * MAX_FILE_BYTES
 MAX_ATTEMPTS = 3
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -212,6 +224,9 @@ def split_for_prompt(files):
     """Split the site into (shown, omitted): files whose content fits the prompt budget, and the
     names of the rest.
 
+    While the whole site fits in the budget nothing is omitted, which is what lets a run federate
+    across every page of it.
+
     index.html and error.html are considered first, so they are the last to be left out. The other
     files are considered in a different random order each run: a file the model is not shown
     cannot be changed, and no file should stay unchangeable run after run.
@@ -236,9 +251,25 @@ def build_prompt(shown, omitted=()):
     system = (
         "You are the autonomous curator of a static website hosted on GitHub Pages. "
         f"Your mission, every single run: {MISSION}.\n\n"
-        "Each run, make one focused, delightful improvement: new content, a new page, "
-        "an interactive toy, better visuals, a hidden easter egg, anything that makes the "
-        "site more interesting. Build on what is already there rather than starting over.\n\n"
+        "Begin every run by taking a moment to look at the site as a whole. Read the pages "
+        "below, notice what they repeat and where they have drifted apart, and ask what the "
+        "piece as a whole needs most right now. Only then choose this run's one focused change. "
+        "Two kinds of change are equally welcome:\n"
+        "- ADD something: new content, a new page, an interactive toy, better visuals, a hidden "
+        "easter egg.\n"
+        "- FEDERATE what is already there: one holistic change that improves the whole "
+        "experience without adding a page. Lift markup, styles or behaviour that the pages "
+        "repeat into shared files (for example \"css/site.css\" or \"js/site.js\") and link them "
+        "from every page that needs them. Give every page the same header and navigation, so the "
+        "whole site is reachable from anywhere. Settle on one visual language: palette, type, "
+        "spacing, motion. Merge pages that overlap, and retire the ones that no longer earn "
+        "their place. Simplify, repair or remove what has stopped working.\n\n"
+        "A run whose entire change is a holistic improvement -- consolidating, unifying, merging, "
+        "or only deleting -- is a complete and successful run. It needs no new page alongside it. "
+        "The site becomes more interesting by becoming a coherent whole, not only by growing, so "
+        "do not add for the sake of adding: when the site has grown repetitive, scattered or "
+        "inconsistent, federating it is the more interesting change. Either way, build on what is "
+        "already there rather than starting over.\n\n"
         "Rules:\n"
         "- Only static files (HTML, CSS, JS, SVG, text). No build steps, no external "
         "dependencies that require keys, nothing harmful, deceptive or tracking.\n"
@@ -246,25 +277,41 @@ def build_prompt(shown, omitted=()):
         "Use relative links between pages so the site works under a sub-path. File and folder "
         "names may only contain lowercase letters, digits, \".\", \"_\" and \"-\".\n"
         "- index.html and error.html must always exist and remain valid.\n"
+        "- Leave the site working at the end of the run. If you extract something into a shared "
+        "file, or merge or delete a page, update every page that refers to it in the same run: "
+        "never leave a link, a stylesheet or a script pointing at something that is not there.\n"
         f"- Keep each file small (at most {MAX_FILE_BYTES // 1000} KB); return the COMPLETE new "
         "content of every file you change.\n"
-        f"- At most {MAX_CHANGES} files per run.\n\n"
+        f"- At most {MAX_CHANGES} files per run, and keep the whole answer inside your output "
+        "limit: an answer that is cut off is discarded. A federation too large for one answer is "
+        "better carried out in coherent stages, one per run, than attempted all at once.\n\n"
         "Respond with ONLY a JSON object, no prose and no markdown fences, shaped as:\n"
         '{"summary": "one sentence describing this change", '
         '"files": [{"path": "index.html", "content": "<full file content>"}], '
         '"delete": ["old-page.html"]}\n'
+        "Either list may be empty or absent as long as the other has something in it: a plan that "
+        "only deletes is accepted and applied like any other.\n"
         "It must be valid JSON, or it is discarded. Inside each \"content\" string write every "
         "line break as \\n, every double quote as \\\" and every backslash as \\\\ (so a "
         "JavaScript '\\n' or \\d becomes '\\\\n' or \\\\d)."
     )
     parts = [f"=== {rel} ===\n{content}" for rel, content in shown]
-    user = "Current contents of the website:\n\n" + "\n\n".join(parts)
+    total = len(shown) + len(omitted)
+    user = (f"Current contents of the website, {total} file{'s' if total != 1 else ''} in all:\n\n"
+            + "\n\n".join(parts))
     if omitted:
         user += (
             "\n\nOther existing files (content omitted for size): " + ", ".join(omitted)
-            + "\nYou cannot see these files, so you may not change or delete them."
+            + "\nYou cannot see these files, so you may not change or delete them. Still count "
+            "them as part of the piece when you weigh the site as a whole, and keep whatever you "
+            "do compatible with them. A different selection of files is shown each run, so a "
+            "federation that has to reach these can be carried on by a later run."
         )
-    user += f"\n\nThis run's mission: {MISSION}. Respond with the JSON object only."
+    user += (
+        f"\n\nThis run's mission: {MISSION}. Weigh the whole of the above first, then make the one "
+        "change it needs most -- adding something new, or federating what is already there. "
+        "Respond with the JSON object only."
+    )
     return system + "\n\n" + user
 
 
