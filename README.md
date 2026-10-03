@@ -24,19 +24,6 @@ iterate a more interesting website
   account cannot use are skipped. A model
   that returns an unusable answer is replaced by another random model, or asked again if no other
   is left, for up to three attempts per run.
-- **The whole piece first, then one change** — every run begins by weighing the site as a whole
-  before choosing what to do, and *federating* what is already there counts for as much as adding
-  something new: lifting markup, styles and behaviour that the pages repeat into shared files,
-  giving every page the same header and navigation, settling on one visual language, merging pages
-  that overlap and retiring the ones that no longer earn their place. A run whose entire change is
-  a consolidation — even one that only deletes — is a successful run; the site gets more
-  interesting by becoming a coherent whole, not only by growing. So that a run can really do this,
-  the prompt carries the whole site for as long as it fits (`PROMPT_BUDGET_CHARS`), and one run may
-  change up to `MAX_CHANGES` files, enough to relink every page to a shared stylesheet in one go.
-- **A screenshot of every run** — after each change, the workflow opens the site in a browser and
-  saves what a visitor sees first to [`/screenshots`](screenshots), as `YYYYMMDD-HHMMZ.jpg` in
-  UTC (for example `20261005-0428Z.jpg`). The folder is a picture history of the site, one
-  frame per run.
 - **One run at a time** — a run that starts while an earlier run of the workflow is still going
   skips itself and finishes green without doing anything, so there is never more than one
   iteration in flight. (To retry a failed run use *Run workflow*: *Re-run failed jobs* does not
@@ -56,12 +43,9 @@ The AI can only ever modify `/site`:
    `_` and `-`, resolves outside `/site` (including via symlinks) or has a non-static file type.
    It never deletes `index.html`/`error.html`, never touches a file the model was not shown, and
    applies an answer whole or not at all.
-3. The workflow fails if anything outside `/site` changed, and only stages `site/` and the run's
-   screenshot for commit. The screenshot is taken by the workflow
-   ([`.github/scripts/screenshot.py`](.github/scripts/screenshot.py)), not by the model: the
-   model cannot write to `/screenshots`. The repository's token is not in the checkout while the
-   model's answer is processed or its page is open in the browser.
-   The model's one-line summary is stripped to plain text before it reaches the commit message.
+3. The workflow fails if anything outside `/site` changed, and only stages `site/` for commit. The
+   repository's token is not in the checkout while the model's answer is processed. The model's
+   one-line summary is stripped to plain text before it reaches the commit message.
 
 ### Which models
 
@@ -113,12 +97,6 @@ script without calling any model. It runs on every pull request, and on `main` b
 
 ```bash
 python3 -m unittest discover -s .github/scripts -v
-```
-
-To take a screenshot of the site as it is now (this needs Chrome or Chromium):
-
-```bash
-python3 .github/scripts/screenshot.py site /tmp/site.jpg
 ```
 
 To try a real run without touching the repository's site, point the script at a copy (this needs a
