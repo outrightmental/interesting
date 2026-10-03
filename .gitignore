@@ -1,5 +1,13 @@
 __pycache__/
 
+# The build toolchain for /site. package-lock.json is committed on purpose: `npm ci` needs it.
+node_modules/
+# The built site. `npm run build` writes to a throwaway temp folder outside the repository, so
+# there is normally nothing to ignore here; these are the paths a local build is likely to use by
+# hand, and a built copy of the site must never be committed.
+/_site/
+/build/
+
 # Terraform: everything local to a working directory. The provider lock file
 # (.terraform.lock.hcl) is committed on purpose, and state lives in S3.
 .terraform/

@@ -1,0 +1,18 @@
+{#
+  The row of links a page ends with. Which pages a page points at is part of what that page is, so
+  the list stays in the page's own front matter as [href, text] pairs; the markup and the styling
+  are shared, so a change to how the footer looks is one edit rather than ten.
+
+      footer:
+        - [index.html, back to constellation]
+        - [sitemap.html, site map]
+      footerNote: 'easter egg: tap the title five times'
+#}
+    <p class='footer'>
+{%- for link in footer %}
+      <a class='action' href='{{ link[0] }}'>{{ link[1] }}</a>
+{%- endfor %}
+{%- if footerNote %}
+      <span>{{ footerNote }}</span>
+{%- endif %}
+    </p>

@@ -1,0 +1,20 @@
+// The frosted slab a page sits on, and the smaller panels inside it.
+
+@use 'vars';
+
+main {
+  width: min(940px, 96vw);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--panel);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.36);
+  padding: 1rem;
+}
+
+.panel {
+  border: 1px solid vars.$hairline;
+  border-radius: vars.$radius-panel;
+  background: rgba(7, 10, 20, 0.56);
+  padding: 0.8rem;
+}

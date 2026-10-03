@@ -1,0 +1,148 @@
+// The sky archive oracle: a rune wheel over the saved sky, an omen log, and a sigil to download.
+
+@use 'vars';
+@use 'readout';
+
+:root {
+  --bg: #080b16;
+  --bg2: #1a2142;
+  --fg: #eef3ff;
+  --muted: #a8b3d6;
+  --panel: rgba(10, 13, 25, 0.72);
+  --accent: #9ec8ff;
+  --accent2: #ffe2a0;
+  --good: #b8ffd6;
+}
+
+html,
+body {
+  background: radial-gradient(circle at 18% 5%, #25305c 0%, var(--bg) 58%);
+}
+
+main {
+  width: min(920px, 96vw);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
+}
+
+h1 {
+  font-size: clamp(1.9rem, 6vw, 3.4rem);
+}
+
+.tagline {
+  margin: 0.45rem 0 0.9rem;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: 1.1fr 0.9fr;
+  gap: 0.85rem;
+}
+
+#oracle-canvas {
+  width: 100%;
+  height: auto;
+  display: block;
+  border-radius: vars.$radius-panel;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: #060913;
+}
+
+.panel {
+  background: rgba(8, 11, 21, 0.54);
+}
+
+button:hover,
+button:focus-visible,
+a.action:hover,
+a.action:focus-visible {
+  border-color: rgba(183, 216, 255, 0.78);
+  background: rgba(150, 195, 255, 0.16);
+}
+
+#spin[aria-busy='true'] {
+  background: rgba(158, 200, 255, 0.23);
+  border-color: rgba(194, 223, 255, 0.85);
+  box-shadow: 0 0 12px rgba(145, 192, 255, 0.35) inset;
+}
+
+#status {
+  margin: 0.4rem 0 0;
+  min-height: 1.5em;
+  color: var(--accent2);
+  font-size: 0.95rem;
+}
+
+#omen {
+  @include readout.readout(
+    7.3em,
+    $line-height: 1.43,
+    $color: #e8f1ff,
+    $background: rgba(6, 9, 18, 0.65)
+  );
+}
+
+.history,
+.sigil {
+  margin-top: 0.8rem;
+  border: 1px solid vars.$hairline;
+  border-radius: vars.$radius-well;
+  background: rgba(7, 10, 20, 0.5);
+  padding: 0.68rem;
+}
+
+.history p,
+.sigil p {
+  margin: 0;
+  color: #d7e5ff;
+  font-size: 0.9rem;
+}
+
+#history-list {
+  margin: 0.5rem 0 0;
+  padding-left: 1.1rem;
+  color: #bed3ff;
+  font-size: 0.86rem;
+  line-height: 1.4;
+  max-height: 10.5rem;
+  overflow: auto;
+}
+
+#history-list li {
+  margin-bottom: 0.38rem;
+}
+
+#sigil-preview {
+  display: block;
+  width: 100%;
+  min-height: 130px;
+  margin-top: 0.2rem;
+  border-radius: vars.$radius-well;
+  border: 1px solid vars.$hairline;
+  background: radial-gradient(circle at 35% 20%, #10173b 0%, #070b18 72%);
+  object-fit: contain;
+}
+
+#sigil-download[aria-disabled='true'] {
+  opacity: 0.5;
+  pointer-events: none;
+  cursor: default;
+}
+
+#sigil-note {
+  margin-top: 0.45rem;
+  color: #bed3ff;
+  font-size: 0.84rem;
+  min-height: 1.35em;
+}
+
+.empty {
+  color: var(--muted);
+  font-size: 0.84rem;
+  margin-top: 0.45rem;
+}
+
+@media (max-width: 780px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+}

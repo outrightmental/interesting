@@ -10,7 +10,7 @@ styles and behaviour into shared files, unify navigation and visual language,
 merge or retire pages that overlap). Either outcome is a successful run, so the
 site can be made more interesting by becoming coherent and not only by growing.
 
-Two axioms stand over every run, each stated in the prompt and held to in code:
+Three axioms stand over every run, each stated in the prompt and held to in code:
 
   - All of the content stays reachable from the root, both by following links
     from index.html and through sitemap.xml. check_reachability() refuses a plan
@@ -20,6 +20,9 @@ Two axioms stand over every run, each stated in the prompt and held to in code:
     check_analytics() refuses a plan that would leave a page without it, and the
     three files behind it (FIXED_FILES) are never shown to a model and never
     written or deleted by one.
+  - Every page is responsive and accessible, to WCAG 2.2 level AA.
+    check_accessibility() refuses a plan that would make a page fail the part of
+    that which markup alone can settle.
 
 The model is reached through the GitHub Copilot CLI (`copilot`), which bills the
 GitHub Copilot subscription behind the token in COPILOT_GITHUB_TOKEN. (GitHub
@@ -37,6 +40,7 @@ import json
 import os
 import random
 import re
+import shutil
 import signal
 import subprocess
 import sys
@@ -159,7 +163,18 @@ AUTH_HELP = (
 ALLOWED_EXTENSIONS = {
     ".html", ".css", ".js", ".mjs", ".svg", ".txt", ".json", ".md", ".xml",
     ".webmanifest",
+    # The build pipeline's own source types (issue #25). /site is no longer published as it stands:
+    # build.mjs renders the templates and compiles the Sass into the artifact that is. The model
+    # writes source here like anything else, so it has the same reach over the layout and the
+    # shared styles as it has over a page.
+    ".njk", ".scss",
 }
+# Where the build's shared files live inside /site, named here only so the prompt can point at
+# them. They are Eleventy's conventions and are set in eleventy.config.mjs; nothing below depends
+# on the names, because the build itself decides what is a page (see build_site).
+INCLUDES_DIR = "_includes"
+SASS_DIR = "_sass"
+
 # May be rewritten, never deleted, and shown to the model first so it can always be rewritten.
 # sitemap.xml is one of them because the reachability axiom below leans on it.
 PROTECTED_FILES = {"index.html", "error.html", "sitemap.xml"}
@@ -175,8 +190,9 @@ ANALYTICS_TAG = f"<script src='{ANALYTICS_SCRIPT}' defer></script>"
 FIXED_FILES = {ANALYTICS_SCRIPT, "js/cookieconsent.umd.js", "css/cookieconsent.css"}
 # How many files one run may touch. Roomy enough that a run which federates the site can rewrite
 # every page of it and add the shared files those pages link to, which is what the whole-site
-# review in build_prompt asks for; small enough that a runaway answer is still refused.
-MAX_CHANGES = 30
+# review in build_prompt asks for; small enough that a runaway answer is still refused. A page is
+# two files now that it has a template and a stylesheet, so this is bigger than it was.
+MAX_CHANGES = 40
 MAX_FILE_BYTES = 50_000
 # How much of the site a prompt carries; comfortably inside every flagship model's context window.
 # Generous on purpose: every run is asked to weigh the site as a whole and may choose to federate
@@ -190,9 +206,23 @@ MAX_ATTEMPTS = 3
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SITE_DIR = Path(os.environ.get("SITE_DIR", REPO_ROOT / "site")).resolve()
 
+# The build that turns /site into the artifact that gets published (issue #25). It is run here too,
+# so the reachability axiom below is checked against what a visitor would actually be served.
+BUILD_SCRIPT = REPO_ROOT / "build.mjs"
+NODE_BIN = os.environ.get("NODE_BIN", "node")
+BUILD_TIMEOUT_SECONDS = 180
+
 
 class RejectedChange(Exception):
     pass
+
+
+class BuildError(Exception):
+    """This site does not build, so there is nothing to check and nothing to publish."""
+
+
+class BuildToolchainError(Exception):
+    """The build cannot be run at all. Not the model's fault, so no answer can get past it."""
 
 
 class ModelError(Exception):
@@ -211,11 +241,14 @@ class SiloBreach(Exception):
     """The model was able to use a tool. Nothing it returned may be trusted or applied."""
 
 
-# One path segment: lowercase letters, digits, ".", "_" and "-", starting and ending with a letter
-# or digit. Nothing else is ever needed for a web path, and it rules out "..", hidden files,
-# control characters (a newline in a path could smuggle a workflow command into the log) and names
-# that collide on case-insensitive file systems.
-PATH_SEGMENT = re.compile(r"[a-z0-9](?:[a-z0-9._-]{0,98}[a-z0-9])?")
+# One path segment: lowercase letters, digits, ".", "_" and "-", starting with a letter, a digit or
+# "_" and ending with a letter or digit. Nothing else is ever needed for a web path or for the
+# build's own source, and it rules out "..", hidden files, control characters (a newline in a path
+# could smuggle a workflow command into the log) and names that collide on case-insensitive file
+# systems. A leading "_" is allowed because that is how both halves of the build mark something
+# that is not a page: "_includes" and "_sass" for the shared files, "_tokens.scss" for a Sass
+# partial that is only ever @use'd.
+PATH_SEGMENT = re.compile(r"[a-z0-9_](?:[a-z0-9._-]{0,98}[a-z0-9])?")
 # Names a Windows checkout refuses, with or without an extension: one would break every clone there.
 WINDOWS_RESERVED = re.compile(r"(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?")
 
@@ -249,10 +282,62 @@ def read_site():
     return files
 
 
+def require_build_toolchain():
+    """Stop the run if the build cannot be run at all.
+
+    Every answer is checked by building it, so a run without the toolchain could only ever waste a
+    model call and then refuse the answer it paid for. Said here, before any model is asked.
+    """
+    if not BUILD_SCRIPT.is_file():
+        sys.exit(f"The build script is missing ({BUILD_SCRIPT}), so no answer could be checked.")
+    if not (REPO_ROOT / "node_modules").is_dir():
+        sys.exit(f"The build's packages are not installed: run `npm ci` in {REPO_ROOT}.")
+    if shutil.which(NODE_BIN) is None:
+        sys.exit(f"The build needs Node, which was not found ({NODE_BIN!r}).")
+
+
+def build_site(files):
+    """The site mapping `files` as the build makes it: {path: content} of the generated artifact.
+
+    /site is source now, not the published site (issue #25): build.mjs renders its templates and
+    compiles its Sass into a folder, and that folder is what gets deployed. The reachability axiom
+    is about what a visitor can reach, and a visitor only ever sees that folder -- a layout is not
+    a page, and a page is whatever the templates make of it -- so the check below runs the real
+    build on a copy rather than keeping a second guess at what it does.
+
+    Raises BuildError if this site does not build, and BuildToolchainError if the build could not be
+    run at all; those two must not be confused, because the first is the model's problem to fix and
+    the second is nobody's answer to give.
+    """
+    if not BUILD_SCRIPT.is_file():
+        raise BuildToolchainError(f"no build script at {BUILD_SCRIPT}")
+    if not (REPO_ROOT / "node_modules").is_dir():
+        raise BuildToolchainError(f"the build's packages are not installed: run `npm ci` in {REPO_ROOT}")
+    with tempfile.TemporaryDirectory(prefix="site-build-") as work:
+        source, out = Path(work) / "site", Path(work) / "out"
+        for rel, content in files.items():
+            target = source / rel
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(content, encoding="utf-8", newline="")
+        cmd = [NODE_BIN, str(BUILD_SCRIPT), "--source", str(source), "--out", str(out), "--quiet"]
+        try:
+            built = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8",
+                                   errors="replace", cwd=REPO_ROOT, timeout=BUILD_TIMEOUT_SECONDS)
+        except FileNotFoundError:
+            raise BuildToolchainError(f"the build needs Node, which was not found ({NODE_BIN!r})") from None
+        except subprocess.TimeoutExpired:
+            raise BuildError(f"the build did not finish within {BUILD_TIMEOUT_SECONDS}s") from None
+        if built.returncode != 0:
+            raise BuildError((built.stderr.strip() or built.stdout.strip() or "the build failed")[:1000])
+        return {path.relative_to(out).as_posix(): path.read_text(errors="replace")
+                for path in sorted(out.rglob("*")) if path.is_file()}
+
+
 # The reachability axiom (issue #21). All of the content stays reachable from the root: index.html
 # leads to every page, directly or by following links through pages it leads to, and sitemap.xml
 # lists every page. The prompt states it as a standing rule for every run; the functions below let
-# validate_plan hold the line, so a page a run adds is wired into both in the same run.
+# validate_plan hold the line, so a page a run adds is wired into both in the same run. They all
+# work on a built site (issue #25), which is the one a visitor sees.
 HOME_PAGE = "index.html"
 SITEMAP = "sitemap.xml"
 PAGE_SUFFIX = ".html"
@@ -410,6 +495,251 @@ def check_analytics(before, after):
             f"{ANALYTICS_TAG} in its <head>")
 
 
+# The responsive-and-accessible axiom (issue #26). The site is worth as much on a small screen as a
+# large one, and is usable by a visitor who cannot see it, cannot use a mouse, or has asked for less
+# motion. Like reachability, this is a property of the site as a whole that every run upholds rather
+# than a one-off tidy-up of the pages that exist today: the prompt states it in full, and the
+# functions below hold the line on the part of it that markup alone can settle, so a page a run
+# writes is born responsive and accessible instead of being audited into shape later.
+#
+# Responsiveness is checked here as accessibility, because that is what it is: WCAG 2.2 names it
+# Reflow (1.4.10) and Resize Text (1.4.4). A page that insists on a desktop-width window, or that
+# forbids the pinch zoom people enlarge text with, has shut out the same visitor a missing alt text
+# does.
+#
+# The standard is WCAG 2.2 level AA, and every reason below names the criterion it stands for, so
+# the set can grow without becoming a matter of taste. What markup cannot settle is still required
+# by the prompt and simply not checked here: contrast ratios need the rendered colours of a
+# gradient, and tap target sizes and horizontal overflow need a layout. That is the same split the
+# reachability axiom makes, where a nav built by a shared script counts as a way through without the
+# script ever being run.
+
+# Interactive elements that may take their accessible name from their own content: the text inside
+# them, or the alt text of an image inside them.
+NAMED_BY_CONTENT = {"a", "button", "summary"}
+# Form controls whose content is not their name: it has to come from a <label for> or an attribute.
+NAMED_BY_LABEL = {"input", "select", "textarea"}
+# Attributes that name an element outright, wherever it sits.
+NAMING_ATTRIBUTES = ("aria-label", "aria-labelledby", "title", "alt")
+# <input type> values that need no label: a hidden field is not a control at all, and the button
+# types carry their own text in "value" or fall back to one the browser supplies.
+SELF_NAMING_INPUTS = {"hidden", "submit", "reset", "button"}
+
+
+class PageFacts(HTMLParser):
+    """The handful of facts the accessibility checks ask of one page's markup.
+
+    HTMLParser hands over the body of <style> and <script> as raw text instead of parsing it, so
+    markup a page builds inside a JavaScript string -- which every page that draws its own DOM is
+    full of -- is never mistaken for markup of the page itself. Only the page as committed is
+    judged, which is the same bargain the reachability check makes.
+    """
+
+    def __init__(self, content):
+        super().__init__(convert_charrefs=True)
+        self.lang = ""
+        self.viewport = None  # the content of the viewport meta tag, if the page has one
+        self.title = ""
+        self.headings = []  # heading levels, in document order
+        self.mains = 0
+        self.css = ""  # the text of every <style>
+        self.js = ""  # the text of every <script>
+        self.images_without_alt = 0
+        self.positive_tabindex = False
+        self.controls = []  # one record per interactive element; see control()
+        self.labelled = set()  # the ids some <label for> points at
+        self.raw = None  # "style" or "script" while inside one
+        self.svg = 0  # how many <svg> elements are open: a <title> in one names the graphic
+        self.in_title = False
+        self.open = []  # controls still open, innermost last, named by what is written inside them
+        self.feed(content)
+        self.close()
+
+    def control(self, tag, attr, by_content):
+        """Record one interactive element, and start collecting its text if that can name it."""
+        record = {"tag": tag, "id": attr.get("id", "").strip(),
+                  "named": any(attr.get(name, "").strip() for name in NAMING_ATTRIBUTES)}
+        self.controls.append(record)
+        if by_content:
+            self.open.append(record)
+
+    def name_enclosing(self, text):
+        """Text or alt text inside the open controls names every one of them, however deeply nested."""
+        if text.strip():
+            for record in self.open:
+                record["named"] = True
+
+    def handle_starttag(self, tag, attrs):
+        attr = {key.lower(): (value or "") for key, value in attrs}
+        if tag in ("style", "script"):
+            self.raw = tag
+        elif tag == "html":
+            self.lang = attr.get("lang", "").strip()
+        elif tag == "meta" and attr.get("name", "").strip().lower() == "viewport":
+            self.viewport = attr.get("content", "")
+        elif tag == "title":
+            self.in_title = not self.svg  # inside an <svg> a <title> is the graphic's name
+        elif tag == "svg":
+            self.svg += 1
+        elif tag == "main":
+            self.mains += 1
+        elif tag == "label" and attr.get("for", "").strip():
+            self.labelled.add(attr["for"].strip())
+        elif len(tag) == 2 and tag[0] == "h" and tag[1] in "123456":
+            self.headings.append(int(tag[1]))
+        elif tag == "img" and "alt" not in attr:
+            self.images_without_alt += 1
+        if attr.get("tabindex", "").strip().lstrip("+").isdigit() and attr["tabindex"].strip("+ ") != "0":
+            self.positive_tabindex = True
+        if tag in NAMED_BY_CONTENT and (tag != "a" or "href" in attr):  # an <a> with no href is a target
+            self.control(tag, attr, by_content=True)
+        elif tag in NAMED_BY_LABEL and attr.get("type", "").strip().lower() not in SELF_NAMING_INPUTS:
+            self.control(tag, attr, by_content=False)
+        if tag in ("img", "svg"):
+            self.name_enclosing(attr.get("alt", "") or attr.get("aria-label", ""))
+
+    def handle_data(self, data):
+        if self.raw == "style":
+            self.css += data
+        elif self.raw == "script":
+            self.js += data
+        elif self.in_title and not self.svg:
+            self.title += data
+        else:
+            self.name_enclosing(data)
+
+    def handle_endtag(self, tag):
+        if self.raw:
+            if tag == self.raw:
+                self.raw = None
+            return
+        if tag == "svg":
+            self.svg = max(0, self.svg - 1)
+        elif tag == "title":
+            self.in_title = False
+        for index in range(len(self.open) - 1, -1, -1):
+            if self.open[index]["tag"] == tag:
+                del self.open[index:]  # whatever sat inside it was left unclosed, so it closes too
+                break
+
+    def unnamed_controls(self):
+        """The kinds of interactive element the page leaves without an accessible name.
+
+        A <label for> may be written either side of the control it labels, so the ids it points at
+        are only all known once the whole page has been read.
+        """
+        return sorted({record["tag"] for record in self.controls
+                       if not record["named"] and record["id"] not in self.labelled})
+
+
+# Motion the page commits to, in its CSS or its script, and the one thing a page that moves owes the
+# visitor who has asked for less of it. Only unambiguous motion counts: a @keyframes rule, an
+# animation or transition declaration, a frame loop, or the Web Animations API. A bare setInterval is
+# left out on purpose -- it as often ticks a clock's text as moves anything -- so the check cannot
+# refuse a run over something that does not actually move.
+MOTION = re.compile(r"@keyframes|(?<![\w-])(?:animation|transition)(?:-[a-z]+)?\s*[:=]"
+                    r"|requestAnimationFrame|\.animate\s*\(", re.I)
+REDUCED_MOTION = "prefers-reduced-motion"
+# A page may only take the browser's focus ring away if it draws one of its own (WCAG 2.4.7).
+DROPS_FOCUS_RING = re.compile(r"outline\s*:\s*(?:none|0[a-z%]*)\b", re.I)
+DRAWS_FOCUS_RING = re.compile(r":focus(?:-visible|-within)?\b", re.I)
+# The viewport meta tag that makes a page lay out at the device's width instead of a desktop's
+# (WCAG 1.4.10 Reflow), and the two ways of forbidding the zoom WCAG 1.4.4 asks to leave alone.
+DEVICE_WIDTH = re.compile(r"\bwidth\s*=\s*device-width", re.I)
+NO_USER_SCALING = re.compile(r"user-scalable\s*=\s*(?:no|0|false)", re.I)
+MAXIMUM_SCALE = re.compile(r"maximum-scale\s*=\s*([0-9]*\.?[0-9]+)", re.I)
+
+
+def assets_of(rel, site):
+    """The stylesheets and scripts page `rel` loads, as site-relative paths that exist in `site`.
+
+    A run is invited to lift shared styles and behaviour into "css/site.css" and "js/site.js", so a
+    page's focus ring and its motion are as likely to live there as in the page. Reading them with
+    the page keeps the checks true of a federated site, where a page's own <style> block may be empty.
+    """
+    found = []
+    for match in REFERENCE.finditer(site.get(rel) or ""):
+        target = resolve_link(rel, next(group for group in match.groups() if group is not None))
+        if target in site and not target.endswith(PAGE_SUFFIX) and target not in found:
+            found.append(target)
+    return found
+
+
+def page_violations(rel, site):
+    """Why page `rel` fails the responsive-and-accessible axiom, as a list of short reasons.
+
+    Every reason names one signal the page either plainly has or plainly lacks, so no judgement of
+    taste is involved, and every reason is a fixed string: repairing one has to remove a reason and
+    can never add a different one, which is what lets check_accessibility tell a repair from a
+    regression. A page with no reasons is not thereby proved accessible -- contrast and tap targets
+    are not judged here -- but a page with one is certainly not.
+    """
+    try:
+        page = PageFacts(site.get(rel) or "")
+    except (ValueError, AssertionError, RecursionError):
+        return ["cannot be parsed as HTML"]
+    css, js = page.css, page.js
+    for asset in assets_of(rel, site):
+        if asset.endswith(".css"):
+            css += "\n" + site[asset]
+        elif asset.endswith((".js", ".mjs")):
+            js += "\n" + site[asset]
+    scale = MAXIMUM_SCALE.search(page.viewport or "")
+    reasons = [reason for reason, ok in (
+        # Responsive: the page lays out at the device's width, and the visitor may still zoom.
+        ("has no viewport meta tag with width=device-width",  # WCAG 1.4.10 Reflow
+         bool(DEVICE_WIDTH.search(page.viewport or ""))),
+        ("forbids zooming in its viewport meta tag",  # WCAG 1.4.4 Resize Text
+         not NO_USER_SCALING.search(page.viewport or "") and not (scale and float(scale[1]) < 2)),
+        # Accessible: named, structured, described, operable by keyboard, and calm when asked to be.
+        ("has no lang attribute on <html>", bool(page.lang)),  # WCAG 3.1.1 Language of Page
+        ("has no page title", bool(page.title.strip())),  # WCAG 2.4.2 Page Titled
+        ("has no <main> landmark", page.mains >= 1),  # WCAG 1.3.1, and 2.4.1 Bypass Blocks
+        ("has more than one <main> landmark", page.mains <= 1),
+        ("has no <h1>", 1 in page.headings),  # WCAG 1.3.1 Info and Relationships
+        ("skips a heading level", all(
+            level <= previous + 1 for previous, level in zip([0] + page.headings, page.headings))),
+        ("has an <img> with no alt attribute", not page.images_without_alt),  # WCAG 1.1.1
+        ("takes the focus outline away without a :focus style of its own",  # WCAG 2.4.7
+         not DROPS_FOCUS_RING.search(css) or bool(DRAWS_FOCUS_RING.search(css))),
+        ("uses a positive tabindex", not page.positive_tabindex),  # WCAG 2.4.3 Focus Order
+        (f"animates without honouring {REDUCED_MOTION}",  # WCAG 2.3.3, and 2.2.2 for anything long
+         not MOTION.search(css + "\n" + js) or REDUCED_MOTION in css + js),
+    ) if not ok]
+    # WCAG 4.1.2 Name, Role, Value; 2.4.4 Link Purpose; 3.3.2 Labels or Instructions. One reason per
+    # kind of element, so fixing the buttons takes the buttons' reason away and leaves the rest.
+    reasons += [f"has a{'n' if tag[0] in 'aeiou' else ''} <{tag}> with no accessible name"
+                for tag in page.unnamed_controls()]
+    return reasons
+
+
+def inaccessible_pages(site):
+    """The pages of `site` that fail the axiom, as {page: [reason, ...]}."""
+    failing = {}
+    for page in sorted(html_pages(site)):
+        reasons = page_violations(page, site)
+        if reasons:
+            failing[page] = reasons
+    return failing
+
+
+def check_accessibility(before, after):
+    """Raise RejectedChange if the change from site `before` to site `after` makes a page fail the
+    responsive-and-accessible axiom.
+
+    Only what this run breaks is refused, for the same reason check_reachability only refuses what
+    this run breaks: a page that already falls short stays the site's own problem to repair -- every
+    run is asked to -- and refusing every plan over it would leave no plan able to repair it. A page
+    a run writes from scratch has no such excuse, so it is born responsive and accessible.
+    """
+    was = inaccessible_pages(before)
+    for page, reasons in sorted(inaccessible_pages(after).items()):
+        broke = [reason for reason in reasons if reason not in was.get(page, ())]
+        if broke:
+            raise RejectedChange(
+                f"every page must be responsive and accessible: {page} " + " and ".join(broke))
+
+
 def apply_to(site, ops):
     """The site mapping `site` as it would be once `ops` have been applied."""
     after = dict(site)
@@ -468,7 +798,8 @@ def build_prompt(shown, omitted=()):
         "easter egg.\n"
         "- FEDERATE what is already there: one holistic change that improves the whole "
         "experience without adding a page. Lift markup, styles or behaviour that the pages "
-        "repeat into shared files (for example \"css/site.css\" or \"js/site.js\") and link them "
+        "repeat into shared files (for example \"css/site.css\" or \"js/site.js\", the shared "
+        f"layout in \"{INCLUDES_DIR}/\" or a Sass partial in \"{SASS_DIR}/\") and use them "
         "from every page that needs them. Give every page the same header and navigation, so the "
         "whole site is reachable from anywhere. Settle on one visual language: palette, type, "
         "spacing, motion. Merge pages that overlap, and retire the ones that no longer earn "
@@ -479,22 +810,47 @@ def build_prompt(shown, omitted=()):
         "do not add for the sake of adding: when the site has grown repetitive, scattered or "
         "inconsistent, federating it is the more interesting change. Either way, build on what is "
         "already there rather than starting over.\n\n"
+        "How the site is built:\n"
+        "What you write is source. A small build turns it into the files that are served, and only "
+        "the built site is ever published or checked. The whole pipeline is two conventions:\n"
+        "- An .html file is a template, with optional YAML front matter between --- lines and "
+        "Nunjucks syntax in the body. \"layout: layout.njk\" wraps the page in the shared shell in "
+        f"\"{INCLUDES_DIR}/layout.njk\", which writes the <head>, the stylesheet links and the "
+        "closing tags, so the page itself is only its <main>; that layout documents the front "
+        "matter it reads. Nothing in "
+        f"\"{INCLUDES_DIR}/\" is a page: it holds the layouts and the partials other templates "
+        "include. Because the body is a template, write any literal \"{{\" or \"{%\" inside "
+        "{% raw %} ... {% endraw %}.\n"
+        "- A .scss file compiles to .css at the same path, so \"css/site.scss\" becomes "
+        "\"css/site.css\" and a page links the .css. A .scss file whose name starts with \"_\" is a "
+        f"partial: it is built into whatever @use's it and never on its own, which is what "
+        f"\"{SASS_DIR}/\" holds -- the palette, the base rules and the mixins every stylesheet "
+        "shares. Every other file type is copied through untouched.\n"
+        "So one new page is two files: \"thing.html\" with front matter naming the layout and its "
+        "stylesheet, and \"css/thing.scss\" beside it that @use's the shared partials.\n"
+        "A plan whose source does not build is refused, so keep the templates and the stylesheets "
+        "valid, and change the shared files with the care they deserve: the layout and "
+        f"\"{SASS_DIR}/\" reach every page at once.\n\n"
         "Rules:\n"
-        "- Only static files (HTML, CSS, JS, SVG, text). No build steps, no external "
+        "- Only files of these types: "
+        + ", ".join(sorted(ALLOWED_EXTENSIONS)) + ". No external "
         "dependencies that require keys, nothing harmful or deceptive. The site's own analytics, "
         "described below, are the only measurement it carries and the only one it needs: add no "
         "tracking, telemetry, beacon or third-party script of your own.\n"
         "- Paths are relative to the site root (e.g. \"index.html\", \"css/style.css\"). "
         "Use relative links between pages, so the site works wherever it is published. "
         "File and folder "
-        "names may only contain lowercase letters, digits, \".\", \"_\" and \"-\".\n"
+        "names may only contain lowercase letters, digits, \".\", \"_\" and \"-\", and only a "
+        "leading \"_\" is allowed, which is how the build marks what is not a page.\n"
         f"- index.html, error.html and {SITEMAP} must always exist and remain valid.\n"
         "- AXIOM, every run: all of the content stays reachable from the root. index.html must "
         "lead to every page of the site -- directly, or by following links through the pages it "
         f"leads to, such as a site map page -- and {SITEMAP} must list every page. Wire a page you "
         "add into both in the same run, and take a page you delete out of both: a plan that leaves "
         f"a page the root cannot reach is refused. {SITEMAP} is a sitemaps.org urlset whose <loc> "
-        "values are the same relative paths used in links, because the site has no fixed domain.\n"
+        "values are the same relative paths used in links, because the site has no fixed domain. "
+        "This is checked on the built site, so the pages it counts are the ones the templates "
+        "produce, and a layout or a partial is not one of them.\n"
         "- AXIOM, every run: every page carries the site's analytics and cookie consent banner. "
         f"One line in the <head> of a page brings both:\n    {ANALYTICS_TAG}\n"
         "Keep that line on every page you rewrite, exactly as it is, and put it on every page you "
@@ -503,9 +859,25 @@ def build_prompt(shown, omitted=()):
         f"Google Analytics. The files behind it ({', '.join(sorted(FIXED_FILES))}) are fixed: they "
         "are not shown to you, you may not write or delete them, and they need nothing from you. A "
         "plan that leaves a page of the site without that line is refused.\n"
+        "- AXIOM, every run: every page is responsive and accessible. It works on a small phone as "
+        "well as a wide desktop, and it works for a visitor who cannot see it, cannot use a mouse, "
+        "or has asked their system for less motion. Hold to WCAG 2.2 level AA. Concretely, on every "
+        "page you write: a <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"> "
+        "that does not forbid zooming; lang on <html>; a <title>; exactly one <main> landmark, with "
+        "headings that start at <h1> and skip no level; alt on every <img> (alt=\"\" if it is purely "
+        "decorative); an accessible name on every link, button and form control, from its own text, "
+        "a <label for>, or aria-label; a visible :focus-visible style wherever you take the "
+        f"browser's outline away; no positive tabindex; and a {REDUCED_MOTION} rule, in CSS or "
+        "through matchMedia, wherever the page animates. Lay out with fluid units, wrapping and "
+        "media queries so that nothing overflows sideways at 320px wide, keep tap targets around "
+        "44px, and keep text contrast at 4.5:1. A plan that makes a page fail the mechanical half "
+        "of this is refused, exactly as one that orphans a page is. This is checked on the built "
+        "site, so a layout or a Sass partial is judged through the pages and stylesheets it "
+        "produces.\n"
         "- Leave the site working at the end of the run. If you extract something into a shared "
         "file, or merge or delete a page, update every page that refers to it in the same run: "
-        "never leave a link, a stylesheet or a script pointing at something that is not there.\n"
+        "never leave a link, a stylesheet, a script, a layout or an @use pointing at something "
+        "that is not there.\n"
         f"- Keep each file small (at most {MAX_FILE_BYTES // 1000} KB); return the COMPLETE new "
         "content of every file you change.\n"
         f"- At most {MAX_CHANGES} files per run, and keep the whole answer inside your output "
@@ -683,8 +1055,11 @@ def validate_plan(plan, unseen=()):
 
     `unseen` names existing files whose content the model was not shown; it may not touch them.
 
-    A plan that would leave a page of the site unreachable from the root, or leave one without the
-    analytics and consent line, is refused: both axioms hold however the prompt is answered.
+    A plan that would leave a page of the site unreachable from the root, leave one without the
+    analytics and consent line, or make one fail the responsive-and-accessible axiom is refused: all
+    three axioms hold however the prompt is answered. All three are judged on the built site (issue
+    #25), which is the only site a visitor ever sees, so the plan is built before any of them is
+    asked, and a plan that does not build is refused for that alone.
     """
     files = plan.get("files") or []
     deletes = plan.get("delete") or []
@@ -731,9 +1106,23 @@ def validate_plan(plan, unseen=()):
             raise RejectedChange(f"refusing to delete {rel}: its content was not shown to the model")
         ops.append(("delete", target, None))
     before = dict(read_site())
-    after = apply_to(before, ops)
-    check_reachability(before, after)
-    check_analytics(before, after)
+    try:
+        built_after = build_site(apply_to(before, ops))
+    except BuildError as err:
+        raise RejectedChange(f"the site does not build with this change: {one_line(err, 500)}") from None
+    try:
+        built_before = build_site(before)
+    except BuildError as err:
+        # The site as committed does not build, so there is no "before" to compare against and the
+        # axioms have nothing to say this run. Same reasoning as check_reachability's: every run is
+        # asked to repair the site, and refusing a plan over damage it did not do would leave no
+        # plan able to. This run still had to build, and the next is held to all three axioms again.
+        print(f"::warning::the site as committed does not build ({one_line(err, 300)}), so this "
+              "run's change was only checked for building, not against the axioms")
+        return ops
+    check_reachability(built_before, built_after)
+    check_analytics(built_before, built_after)
+    check_accessibility(built_before, built_after)
     return ops
 
 
@@ -808,6 +1197,7 @@ def clean_summary(text):
 def main():
     if not SITE_DIR.is_dir():
         sys.exit(f"site directory not found: {SITE_DIR}")
+    require_build_toolchain()
 
     shown, omitted = split_for_prompt(read_site())
     prompt = build_prompt(shown, omitted)
@@ -845,6 +1235,9 @@ def main():
             sys.exit(AUTH_HELP)
         except SiloBreach as err:
             sys.exit(f"Stopping without applying anything: {err}. The Copilot CLI flags no longer disable every tool.")
+        except BuildToolchainError as err:
+            # Not this model's fault and not the next one's either: nothing can be checked.
+            sys.exit(f"Stopping without applying anything: the build could not be run ({err}).")
         except (ModelError, ValueError, RecursionError, RejectedChange) as err:
             answering.append(model)
             print(f"::warning::{model} failed: {one_line(err, 500)}")

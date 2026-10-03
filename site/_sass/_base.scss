@@ -1,0 +1,35 @@
+// The page itself: the reset, the night sky behind it, the heading and the tagline under it.
+//
+// A page that wants a different sky sets --bg and --bg2 (see _tokens.scss); one that wants a
+// different gradient altogether overrides `background` on `html, body` in its own stylesheet.
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+  background: radial-gradient(circle at 18% 0%, var(--bg2) 0%, var(--bg) 62%);
+  color: var(--fg);
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+
+body {
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+}
+
+h1 {
+  margin: 0;
+  line-height: 0.95;
+  letter-spacing: -0.03em;
+  font-size: clamp(1.9rem, 6vw, 3.2rem);
+}
+
+.tagline {
+  margin: 0.45rem 0 0.85rem;
+  color: var(--muted);
+}

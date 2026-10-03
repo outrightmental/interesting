@@ -1,0 +1,32 @@
+// The recessed monospace block a page writes its long answer into: a diary entry, a weather
+// report, an omen, a haiku. Seven pages have one and no two are quite the same size, so this is a
+// mixin rather than a class: the page keeps its own id and passes in what makes its block its own.
+//
+//     @use 'readout';
+//     #reading { @include readout.readout(7.2em); }
+//
+// Emits nothing until it is included, so css/site.css carries none of it.
+
+@use 'vars';
+
+@mixin readout(
+  $min-height,
+  $font-size: 0.9rem,
+  $line-height: 1.42,
+  $color: #e7f0ff,
+  $background: vars.$well,
+  $padding: 0.7rem,
+  $margin: 0.75rem 0 0
+) {
+  margin: $margin;
+  min-height: $min-height;
+  white-space: pre-wrap;
+  border: 1px solid vars.$hairline;
+  border-radius: vars.$radius-well;
+  background: $background;
+  color: $color;
+  font-size: $font-size;
+  line-height: $line-height;
+  padding: $padding;
+  font-family: vars.$mono;
+}

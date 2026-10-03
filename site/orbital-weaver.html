@@ -1,179 +1,17 @@
-<!DOCTYPE html>
-<html lang='en'>
-<head>
-  <meta charset='utf-8'>
-  <meta name='viewport' content='width=device-width, initial-scale=1'>
-  <title>orbital weaver · interesting</title>
-  <meta name='description' content='Transform your saved constellation into a mirrored orbital mandala, then read a tiny mantra forecast.'>
-  <style>
-    :root {
-      color-scheme: dark;
-      --bg: #060914;
-      --bg2: #1b2953;
-      --fg: #eef4ff;
-      --muted: #a9b7da;
-      --line: rgba(255,255,255,0.18);
-      --panel: rgba(10, 14, 28, 0.74);
-      --accent: #a6d2ff;
-      --accent2: #ffe7ab;
-    }
-
-    * { box-sizing: border-box; }
-
-    html, body {
-      margin: 0;
-      min-height: 100%;
-      background: radial-gradient(circle at 18% 0%, var(--bg2) 0%, var(--bg) 62%);
-      color: var(--fg);
-      font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-    }
-
-    body {
-      display: grid;
-      place-items: center;
-      padding: 1rem;
-    }
-
-    main {
-      width: min(960px, 96vw);
-      border: 1px solid var(--line);
-      border-radius: 16px;
-      background: var(--panel);
-      backdrop-filter: blur(8px);
-      box-shadow: 0 16px 40px rgba(0,0,0,0.36);
-      padding: 1rem;
-    }
-
-    h1 {
-      margin: 0;
-      line-height: 0.95;
-      letter-spacing: -0.03em;
-      font-size: clamp(1.9rem, 6vw, 3.2rem);
-    }
-
-    .tagline {
-      margin: 0.45rem 0 0.85rem;
-      color: var(--muted);
-    }
-
-    .layout {
-      display: grid;
-      grid-template-columns: 1.15fr 0.85fr;
-      gap: 0.85rem;
-    }
-
-    #weaver {
-      width: 100%;
-      height: auto;
-      display: block;
-      border-radius: 12px;
-      border: 1px solid rgba(255,255,255,0.16);
-      background: #060913;
-      cursor: crosshair;
-    }
-
-    .panel {
-      border: 1px solid rgba(255,255,255,0.14);
-      border-radius: 12px;
-      background: rgba(7, 10, 20, 0.56);
-      padding: 0.8rem;
-    }
-
-    .controls {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.5rem;
-      margin: 0.55rem 0;
-    }
-
-    button, a.action {
-      border: 1px solid var(--line);
-      border-radius: 999px;
-      background: rgba(255,255,255,0.07);
-      color: var(--fg);
-      text-decoration: none;
-      padding: 0.48rem 0.88rem;
-      font: inherit;
-      cursor: pointer;
-      transition: transform 120ms ease, background 120ms ease, border-color 120ms ease;
-    }
-
-    button:hover,
-    button:focus-visible,
-    a.action:hover,
-    a.action:focus-visible {
-      outline: none;
-      transform: translateY(-1px);
-      border-color: rgba(184, 217, 255, 0.8);
-      background: rgba(151, 197, 255, 0.16);
-    }
-
-    #spin[aria-pressed='true'] {
-      background: rgba(166, 210, 255, 0.24);
-      border-color: rgba(194, 224, 255, 0.86);
-      box-shadow: 0 0 12px rgba(143, 195, 255, 0.34) inset;
-    }
-
-    .dial-wrap {
-      margin-top: 0.45rem;
-      color: #dbe9ff;
-      font-size: 0.9rem;
-    }
-
-    #symmetry {
-      width: 100%;
-      margin-top: 0.3rem;
-      accent-color: var(--accent);
-    }
-
-    #status {
-      margin: 0.5rem 0 0;
-      min-height: 1.5em;
-      color: var(--accent2);
-      font-size: 0.95rem;
-    }
-
-    #reading {
-      margin: 0.75rem 0 0;
-      min-height: 8em;
-      white-space: pre-wrap;
-      border: 1px solid rgba(255,255,255,0.14);
-      border-radius: 10px;
-      background: rgba(6, 9, 18, 0.66);
-      color: #e7f0ff;
-      font-size: 0.9rem;
-      line-height: 1.42;
-      padding: 0.7rem;
-      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
-    }
-
-    .hint {
-      margin: 0.65rem 0 0;
-      color: var(--muted);
-      font-size: 0.84rem;
-    }
-
-    .footer {
-      margin-top: 0.8rem;
-      display: flex;
-      gap: 0.5rem;
-      flex-wrap: wrap;
-      color: var(--muted);
-      font-size: 0.86rem;
-    }
-
-    @media (max-width: 800px) {
-      .layout { grid-template-columns: 1fr; }
-    }
-
-    @media (prefers-reduced-motion: reduce) {
-      button, a.action { transition: none; }
-    }
-  </style>
-  <!-- Analytics and the cookie consent banner that gates it; see js/analytics.js. -->
-  <script src='js/analytics.js' defer></script>
-</head>
-<body>
+---
+layout: layout.njk
+title: orbital weaver
+description: 'Transform your saved constellation into a mirrored orbital mandala, then read a tiny mantra forecast.'
+stylesheet: orbital-weaver
+footer:
+  - [index.html, back to constellation]
+  - [sitemap.html, site map]
+  - [constellation-echo.html, open echo chamber]
+  - [constellation-weather.html, open weather lab]
+  - [star-lantern.html, open star lantern ritual]
+  - [wish-terrarium.html, open wish terrarium]
+  - [error.html, visit observatory 404]
+---
   <main>
     <h1>orbital weaver</h1>
     <p class='tagline'>Your saved stars become a mirrored orbital mandala. Spin the weave, adjust symmetry, click to ripple, then print a mantra report.</p>
@@ -200,15 +38,7 @@ Load your saved sky, click the weave to send ripples, or print a mantra from you
       </section>
     </div>
 
-    <p class='footer'>
-      <a class='action' href='index.html'>back to constellation</a>
-      <a class='action' href='sitemap.html'>site map</a>
-      <a class='action' href='constellation-echo.html'>open echo chamber</a>
-      <a class='action' href='constellation-weather.html'>open weather lab</a>
-      <a class='action' href='star-lantern.html'>open star lantern ritual</a>
-      <a class='action' href='wish-terrarium.html'>open wish terrarium</a>
-      <a class='action' href='error.html'>visit observatory 404</a>
-    </p>
+{% include "footer.njk" %}
   </main>
 
   <script>
@@ -624,5 +454,3 @@ Load your saved sky, click the weave to send ripples, or print a mantra from you
       frame();
     })();
   </script>
-</body>
-</html>

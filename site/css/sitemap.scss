@@ -1,0 +1,216 @@
+// The site map: the live atlas console, then every page of the site as a card.
+
+@use 'vars';
+
+:root {
+  --bg: #080b17;
+  --bg2: #1c2550;
+  --fg: #eef3ff;
+  --muted: #a9b5d9;
+  --accent2: #ffe6a9;
+}
+
+html,
+body {
+  background: radial-gradient(circle at 18% 0%, var(--bg2) 0%, var(--bg) 60%);
+}
+
+body {
+  align-content: safe center;
+}
+
+// The full-site "skyway" navigation this page shares with the 404 observatory.
+.skyway {
+  margin: 0 0 1rem;
+  border: 1px solid vars.$hairline;
+  border-radius: vars.$radius-panel;
+  background: rgba(7, 10, 20, 0.56);
+  padding: 0.75rem;
+}
+
+.skyway-label {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  text-align: center;
+}
+
+.skyway-links {
+  margin-top: 0.55rem;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.45rem;
+}
+
+.skyway-links a {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--accent);
+  text-decoration: none;
+  padding: 0.3rem 0.7rem;
+  font-size: 0.84rem;
+  transition: vars.$lift;
+}
+
+.skyway-links a:hover,
+.skyway-links a:focus-visible {
+  outline: none;
+  transform: translateY(-1px);
+  border-color: rgba(173, 208, 255, 0.7);
+  background: rgba(141, 184, 255, 0.16);
+  color: #eaf1ff;
+}
+
+.skyway-links a.current {
+  color: var(--accent2);
+  border-color: rgba(255, 230, 171, 0.56);
+  background: rgba(255, 230, 171, 0.12);
+}
+
+.atlas {
+  margin: 0 0 1rem;
+  border: 1px solid vars.$hairline;
+  border-radius: vars.$radius-panel;
+  background: rgba(7, 10, 20, 0.56);
+  padding: 0.75rem;
+  color: #dce9ff;
+}
+
+.atlas h2 {
+  margin: 0 0 0.45rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent2);
+}
+
+.atlas p {
+  margin: 0.35rem 0;
+  line-height: 1.35;
+}
+
+#memory.good {
+  color: var(--good);
+}
+
+#memory.warn {
+  color: var(--warn);
+}
+
+.controls {
+  margin: 0.6rem 0 0;
+}
+
+h2.section-title {
+  margin: 1.1rem 0 0.5rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent2);
+}
+
+.pages {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 0.6rem;
+}
+
+.pages li {
+  border: 1px solid vars.$hairline;
+  border-radius: vars.$radius-panel;
+  background: rgba(7, 10, 20, 0.56);
+  padding: 0.7rem 0.8rem;
+}
+
+.pages a {
+  display: inline-block;
+  color: var(--accent);
+  font-size: 1.02rem;
+  text-decoration: none;
+  border-bottom: 1px solid rgba(159, 203, 255, 0.35);
+}
+
+.pages a:hover,
+.pages a:focus-visible {
+  outline: none;
+  color: #eaf1ff;
+  border-bottom-color: rgba(234, 241, 255, 0.85);
+}
+
+.pages a::before {
+  content: '·';
+  margin-right: 0.4rem;
+  color: var(--accent2);
+  animation: twinkle 3.1s ease-in-out infinite;
+}
+
+.pages li:nth-child(2n) a::before {
+  animation-duration: 2.3s;
+}
+
+.pages li:nth-child(3n) a::before {
+  animation-duration: 4.2s;
+}
+
+.pages p {
+  margin: 0.35rem 0 0;
+  color: #d4ddf6;
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
+.pages code {
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-family: vars.$mono;
+}
+
+.axiom {
+  margin: 1.1rem 0 0;
+  border: 1px solid vars.$hairline;
+  border-radius: vars.$radius-panel;
+  background: rgba(6, 9, 18, 0.5);
+  padding: 0.75rem 0.8rem;
+  color: #d8e4ff;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.axiom a {
+  color: var(--accent);
+}
+
+.footer {
+  margin-top: 0.9rem;
+  align-items: center;
+}
+
+@keyframes twinkle {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skyway-links a {
+    transition: none;
+  }
+
+  .pages a::before {
+    animation: none;
+  }
+}
