@@ -18,7 +18,8 @@ iterate a more interesting website
   runs every hour (or manually via *Run workflow*). It picks a random model from
   [GitHub Copilot](https://docs.github.com/copilot), reached through the
   [Copilot CLI](https://docs.github.com/copilot/how-tos/copilot-cli) and billed to a GitHub Copilot
-  subscription (see [Setup](#setup)), gives it the mission **"make the website more interesting"**,
+  subscription (see [Setup](#setup)), gives it the mission **"make the website more interesting as a
+  coherent whole"**,
   and commits the result to `main`; the pipeline above then tests and deploys it. Models the
   account cannot use are skipped. A model
   that returns an unusable answer is replaced by another random model, or asked again if no other

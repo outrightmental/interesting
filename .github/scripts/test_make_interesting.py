@@ -221,6 +221,18 @@ class ValidatePlanTest(SiteDirTestCase):
                 mi.validate_plan(plan)
 
 
+    def test_accepts_a_run_that_only_consolidates(self):
+        # Issue #16: a run whose entire change is a holistic improvement -- here, retiring two
+        # pages that overlapped -- is a successful run, with no new file to go with it.
+        (self.site / "a.html").write_text("a")
+        (self.site / "b.html").write_text("b")
+        ops = mi.validate_plan({"summary": "Retired two overlapping pages.", "delete": ["a.html", "b.html"]})
+        self.assertEqual([(action, t.name) for action, t, _ in ops],
+                         [("delete", "a.html"), ("delete", "b.html")])
+        with mock.patch("builtins.print"):
+            mi.apply_ops(ops)
+        self.assertEqual(sorted(p.name for p in self.site.iterdir()), ["error.html", "index.html"])
+
     def test_files_the_model_was_not_shown_cannot_be_touched(self):
         (self.site / "big.js").write_text("y")
         for plan in [{"files": [{"path": "big.js", "content": "new"}]}, {"delete": ["site/big.js"]}]:
@@ -282,6 +294,7 @@ class BuildPromptTest(SiteDirTestCase):
         self.assertIn("=== index.html ===\n<h1>interesting</h1>", prompt)
         self.assertIn("=== error.html ===", prompt)
         self.assertIn('"files"', prompt)
+        self.assertIn("2 files in all", prompt)
 
     def test_files_over_budget_are_listed_by_name_only(self):
         (self.site / "huge.js").write_text("y" * (mi.PROMPT_BUDGET_CHARS + 1))
@@ -291,15 +304,22 @@ class BuildPromptTest(SiteDirTestCase):
         self.assertNotIn("yyyy", prompt)
         self.assertIn("content omitted for size): huge.js", prompt)
         self.assertIn("may not change or delete them", prompt)
+        self.assertIn("3 files in all", prompt)  # the whole site is counted, not only what is shown
+        # A file left out still belongs to the piece the run is asked to weigh, and the federation
+        # it is part of can be continued by a run that is shown it.
+        self.assertIn("weigh the site as a whole", prompt)
+        self.assertIn("carried on by a later run", prompt)
 
     def test_every_file_gets_its_turn_in_the_prompt(self):
         # Three files that each fill most of the budget: only one fits per run. Whichever is left
         # out cannot be changed that run, so the choice must rotate rather than follow the alphabet.
+        budget = 30_000
         for name in ["a.js", "b.js", "c.js"]:
-            (self.site / name).write_text(name[0] * (mi.PROMPT_BUDGET_CHARS - 1000))
+            (self.site / name).write_text(name[0] * (budget - 1000))
         seen = set()
         for _ in range(60):
-            shown, omitted = mi.split_for_prompt(mi.read_site())
+            with mock.patch.object(mi, "PROMPT_BUDGET_CHARS", budget):
+                shown, omitted = mi.split_for_prompt(mi.read_site())
             names = [rel for rel, _ in shown]
             self.assertEqual(names[:2], ["index.html", "error.html"])
             self.assertEqual(len(names), 3)
@@ -308,13 +328,16 @@ class BuildPromptTest(SiteDirTestCase):
         self.assertEqual(seen, {"a.js", "b.js", "c.js"})
 
     def test_every_file_gets_its_turn_even_when_the_fixed_pages_are_as_big_as_allowed(self):
+        # The tightest the budget is ever allowed to be, with the biggest files allowed: the two
+        # fixed pages and exactly one other file fit, so that third place has to rotate.
         (self.site / "index.html").write_text("i" * mi.MAX_FILE_BYTES)
         (self.site / "error.html").write_text("e" * mi.MAX_FILE_BYTES)
         for name in ["a.js", "b.js", "c.js"]:
             (self.site / name).write_text(name[0] * mi.MAX_FILE_BYTES)
         seen = set()
         for _ in range(60):
-            shown, omitted = mi.split_for_prompt(mi.read_site())
+            with mock.patch.object(mi, "PROMPT_BUDGET_CHARS", 3 * mi.MAX_FILE_BYTES):
+                shown, omitted = mi.split_for_prompt(mi.read_site())
             names = [rel for rel, _ in shown]
             self.assertEqual(names[:2], ["index.html", "error.html"])
             self.assertEqual(len(names), 3)
@@ -322,9 +345,11 @@ class BuildPromptTest(SiteDirTestCase):
         self.assertEqual(seen, {"a.js", "b.js", "c.js"})
 
     def test_home_page_is_the_last_file_to_be_left_out(self):
-        (self.site / "a.js").write_text("a" * (mi.PROMPT_BUDGET_CHARS - 10))  # sorts first, fits only alone
+        budget = 30_000
+        (self.site / "a.js").write_text("a" * (budget - 10))  # sorts first, fits only alone
         (self.site / "b.css").write_text("b" * 200)
-        shown, omitted = mi.split_for_prompt(mi.read_site())
+        with mock.patch.object(mi, "PROMPT_BUDGET_CHARS", budget):
+            shown, omitted = mi.split_for_prompt(mi.read_site())
         self.assertEqual([rel for rel, _ in shown][:2], ["index.html", "error.html"])
         self.assertEqual(omitted, ["a.js"])
         self.assertIn("b.css", [rel for rel, _ in shown])
@@ -333,6 +358,76 @@ class BuildPromptTest(SiteDirTestCase):
         (self.site / "notes.bin").write_bytes(b"\x00\x01")
         (self.site / "link.html").symlink_to(self.site / "index.html")
         self.assertEqual([rel for rel, _ in mi.read_site()], ["error.html", "index.html"])
+
+
+class WholeSiteReviewTest(unittest.TestCase):
+    """Issue #16: every run begins by weighing the site as a whole, and federating what is already
+    there is a successful run in its own right, not a lesser outcome than adding a page."""
+
+    def prompt(self, omitted=()):
+        return mi.build_prompt([("index.html", "<h1>hi</h1>")], omitted)
+
+    def test_the_mission_string_itself_carries_the_holistic_aim(self):
+        # Issue #16, question 4: the mission string itself should change, not only the surrounding
+        # guidance. It still opens with the original phrase so every other use reads naturally.
+        self.assertTrue(mi.MISSION.startswith("make the website more interesting"))
+        self.assertNotEqual(mi.MISSION, "make the website more interesting")
+        self.assertIn("coherent whole", mi.MISSION)
+
+    def test_every_run_is_asked_to_weigh_the_site_as_a_whole_first(self):
+        prompt = self.prompt()
+        self.assertIn("Begin every run", prompt)
+        self.assertIn("look at the site as a whole", prompt)
+        self.assertLess(prompt.index("site as a whole"), prompt.index("ADD something"),
+                        "the review has to come before the choice of change")
+
+    def test_federation_is_offered_as_concretely_as_adding(self):
+        prompt = self.prompt().lower()
+        self.assertIn("add something", prompt)
+        self.assertIn("federate", prompt)
+        for move in ["shared files", "css/site.css", "js/site.js", "header and navigation",
+                     "visual language", "merge pages that overlap", "retire"]:
+            with self.subTest(move=move):
+                self.assertIn(move, prompt)
+
+    def test_a_run_that_only_federates_is_called_a_success(self):
+        # validate_plan() has always accepted a plan that only deletes; now the prompt invites one.
+        prompt = self.prompt()
+        self.assertIn("complete and successful run", prompt)
+        self.assertIn("only deleting", prompt)
+        self.assertIn("only deletes is accepted", prompt)
+        self.assertIn("do not add for the sake of adding", prompt)
+
+    def test_a_federation_may_not_leave_the_site_half_done(self):
+        prompt = self.prompt()
+        self.assertIn("Leave the site working at the end of the run", prompt)
+        self.assertIn("update every page that refers to it in the same run", prompt)
+        self.assertIn("coherent stages", prompt)  # a federation too big for one answer
+
+    def test_the_silo_rules_survive_the_new_guidance(self):
+        prompt = self.prompt(["hidden.html"])
+        for rule in ["Only static files", "relative to the site root",
+                     "index.html and error.html must always exist",
+                     f"at most {mi.MAX_FILE_BYTES // 1000} KB", "COMPLETE new content",
+                     f"At most {mi.MAX_CHANGES} files per run", "may not change or delete them"]:
+            with self.subTest(rule=rule):
+                self.assertIn(rule, prompt)
+
+    # A run can only federate what it was shown, so the budget has to carry the whole site with
+    # room for it to keep growing. This stand-in is half again as big as the site was when the
+    # whole-site review was introduced (nine files, 232 KB, the largest 42 KB).
+    GROWN_SITE = ([("index.html", "i" * 50_000), ("error.html", "e" * 50_000)]
+                  + [(f"page-{i:02d}.html", "x" * 22_000) for i in range(12)])
+
+    def test_a_site_half_again_as_big_as_this_one_is_still_shown_whole(self):
+        shown, omitted = mi.split_for_prompt(list(self.GROWN_SITE))
+        self.assertEqual(omitted, [], "the prompt cannot carry the whole site, so a run cannot federate it")
+        self.assertEqual(len(shown), len(self.GROWN_SITE))
+
+    def test_one_run_may_rewrite_a_whole_site_and_add_the_files_it_shares(self):
+        # Lifting the repeated parts into "css/site.css" and "js/site.js" and relinking every page
+        # of a site that size takes len + 2 changes; the limit must not forbid it.
+        self.assertGreaterEqual(mi.MAX_CHANGES, len(self.GROWN_SITE) + 2)
 
 
 class SmallModelTest(unittest.TestCase):
