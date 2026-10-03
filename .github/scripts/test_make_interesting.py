@@ -1135,6 +1135,14 @@ class CadenceAxiomTest(SiteDirTestCase):
             with self.subTest(phrase=phrase):
                 self.assertEqual(self.phrases(content), [phrase])
 
+    def test_a_possessive_counts_however_its_apostrophe_is_written(self):
+        # "today&rsquo;s sky" promises a schedule as plainly as "today's sky" does, and the bare
+        # words would not catch either, so every apostrophe a page might be written with counts.
+        for mark in ["'", "’", "&rsquo;", "&apos;", "&#39;", "&#8217;"]:
+            with self.subTest(mark=mark):
+                self.assertEqual(self.phrases(f"<p>Read today{mark}s sky.</p>"), [f"today{mark}s"])
+        self.assertEqual(self.phrases("<p>Read the sky today.</p>"), [])
+
     def test_copy_that_defers_the_visitor_is_found(self):
         # The second half of the axiom, and the reason it is one: sending someone away until
         # tomorrow spends the engagement time the whole mission is measured in.

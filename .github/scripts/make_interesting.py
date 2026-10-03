@@ -775,9 +775,14 @@ def check_accessibility(before, after):
 # tones", "night acoustics memo" and "before midnight" all name a mood rather than a schedule, and
 # so does a page that merely shows an hour. The list is short enough to state in full in the prompt,
 # which is what makes it a rule a run can follow rather than a trap it springs.
+#
+# The possessives allow any apostrophe a page might be written with -- straight, typographic, or
+# either of the entities for them -- because "today&rsquo;s sky" promises a schedule just as plainly
+# as "today's sky" does, and the bare words below would not catch it.
+APOSTROPHE = r"(?:'|’|&(?:rsquo|apos|#39|#8217);)"
 CADENCE_COPY = re.compile(
     r"\btonight\b|\btomorrow\b|\byesterday\b"            # dates the content, or defers the visitor
-    r"|\b(?:today|this hour|this week|this month)'s\b"   # the same, in the possessive
+    rf"|\b(?:today|this hour|this week|this month){APOSTROPHE}s\b"   # the same, in the possessive
     r"|\b(?:hourly|nightly|daily|weekly)\b"              # names the rhythm outright
     r"|\bevery (?:hour|night|day|week)\b"
     r"|\beach (?:hour|night|day|week)\b"
