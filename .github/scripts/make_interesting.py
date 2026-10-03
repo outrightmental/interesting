@@ -10,7 +10,11 @@ styles and behaviour into shared files, unify navigation and visual language,
 merge or retire pages that overlap). Either outcome is a successful run, so the
 site can be made more interesting by becoming coherent and not only by growing.
 
-Three axioms stand over every run, each stated in the prompt and held to in code:
+"Interesting" is not left to a model's taste: INTERESTING names the measure, and
+it is user engagement time. The site is more interesting when a person stays
+longer and wants to keep going.
+
+Four axioms stand over every run, each stated in the prompt and held to in code:
 
   - All of the content stays reachable from the root, both by following links
     from index.html and through sitemap.xml. check_reachability() refuses a plan
@@ -23,6 +27,11 @@ Three axioms stand over every run, each stated in the prompt and held to in code
   - Every page is responsive and accessible, to WCAG 2.2 level AA.
     check_accessibility() refuses a plan that would make a page fail the part of
     that which markup alone can settle.
+  - No page ties the site to an update frequency. The site iterates continuously
+    and publishes no nightly, daily or hourly edition, so check_cadence()
+    refuses a plan that puts a rhythm in front of a visitor -- or that defers
+    one to another day, which spends the engagement time the mission is measured
+    in. Night-sky atmosphere ("midnight rain") is untouched.
 
 The model is reached through the GitHub Copilot CLI (`copilot`), which bills the
 GitHub Copilot subscription behind the token in COPILOT_GITHUB_TOKEN. (GitHub
@@ -55,6 +64,19 @@ from pathlib import Path, PurePosixPath
 # still read naturally. (The workflow name and commit-message prefix are separate strings in
 # make-interesting.yml and are not affected by this constant.)
 MISSION = "make the website more interesting as a coherent whole"
+
+# What "interesting" means here (issue #32). MISSION names the aim; this names the measure, so a run
+# is held to a standard instead of its own taste. Interesting is user engagement time: a visitor who
+# stays, keeps going and wants one more go is the whole point, and a change that only looks tidy has
+# not earned the run.
+#
+# It is a standard stated to the model, not a number read back from analytics. The site does measure
+# engagement -- that is what the GA4 tag in js/analytics.js is for -- but nothing feeds it back into
+# a run, and nothing could usefully: a model cannot be shown the engagement of a change it has not
+# made yet, and the feedback loop for a change deployed within the hour is noise. Closing that loop
+# is its own piece of work; what this constant does is make the aim of a run unambiguous.
+INTERESTING = ("how long a person stays engaged -- how much they want to keep going, and how "
+               "intrigued, astonished or entertained they are while they do")
 
 COPILOT_BIN = os.environ.get("COPILOT_BIN", "copilot")
 
@@ -740,6 +762,79 @@ def check_accessibility(before, after):
                 f"every page must be responsive and accessible: {page} " + " and ".join(broke))
 
 
+# The cadence axiom (issue #32). Nothing a visitor reads ties the site to an update frequency. The
+# site does not run nightly experiments: it iterates continuously, so copy that dates its content --
+# "Tonight's experiment", "rewritten every hour" -- is false as often as it is true. Copy that
+# defers a visitor to another day ("move one star tomorrow and ask again") is refused for a second
+# reason: engagement time is the measure (see INTERESTING), and sending someone away is the one
+# thing a run can do that spends it outright. The prompt states this, and the functions below hold
+# the line, the same arrangement the three axioms above have.
+#
+# Deliberately narrow. Only words that date the site or defer the visitor are listed, so the
+# night-sky theming the whole site is built on survives untouched: "midnight rain", "midnight
+# tones", "night acoustics memo" and "before midnight" all name a mood rather than a schedule, and
+# so does a page that merely shows an hour. The list is short enough to state in full in the prompt,
+# which is what makes it a rule a run can follow rather than a trap it springs.
+CADENCE_COPY = re.compile(
+    r"\btonight\b|\btomorrow\b|\byesterday\b"            # dates the content, or defers the visitor
+    r"|\b(?:today|this hour|this week|this month)'s\b"   # the same, in the possessive
+    r"|\b(?:hourly|nightly|daily|weekly)\b"              # names the rhythm outright
+    r"|\bevery (?:hour|night|day|week)\b"
+    r"|\beach (?:hour|night|day|week)\b"
+    r"|\bonce (?:an hour|a day|a night|a week)\b",
+    re.I)
+
+
+def cadence_phrases(rel, site):
+    """The cadence-tied phrases page `rel` would put in front of a visitor, lowercased and sorted.
+
+    Read as text, not parsed as markup -- the one check here that is. Most of this site's prose
+    lives in the JavaScript that draws the page rather than in its markup, so the readings in
+    star-lantern.html and the notes in index.html would all be invisible to a parser that handed
+    <script> bodies over as opaque text, which is exactly what the accessibility checks want it to
+    do. A phrase in a comment counts too; a comment is a poor place to promise a schedule.
+
+    The stylesheets and scripts the page loads are read with it, as in assets_of's own reasoning: a
+    run is invited to federate shared copy into "js/site.js", and copy that moved there would
+    otherwise slip the check. FIXED_FILES are left out. They are never a model's to write, so a
+    phrase in one can never be a run's fault, and 55 KB of vendored consent library is not prose
+    this repository gets to police -- a future version of it saying "daily" in a comment must not
+    be able to fail every page of the site at once.
+    """
+    sources = [site.get(rel) or ""]
+    sources += [site[asset] for asset in assets_of(rel, site) if asset not in FIXED_FILES]
+    return sorted({match.group(0).lower() for source in sources
+                   for match in CADENCE_COPY.finditer(source)})
+
+
+def pages_dating_the_site(site):
+    """The pages of `site` whose copy names an update rhythm, as {page: [phrase, ...]}."""
+    found = {}
+    for page in sorted(html_pages(site)):
+        phrases = cadence_phrases(page, site)
+        if phrases:
+            found[page] = phrases
+    return found
+
+
+def check_cadence(before, after):
+    """Raise RejectedChange if the change from site `before` to site `after` ties a page to an
+    update frequency.
+
+    Only what this run breaks is refused, for the same reason the three checks above only refuse
+    what this run breaks: a phrase a page already carries stays the site's own to clear away --
+    every run is asked to -- and refusing every plan over one would leave no plan able to clear it.
+    Each reason is one phrase, so taking a phrase out of a page can only ever take a reason away.
+    """
+    was = pages_dating_the_site(before)
+    for page, phrases in sorted(pages_dating_the_site(after).items()):
+        broke = [phrase for phrase in phrases if phrase not in was.get(page, ())]
+        if broke:
+            raise RejectedChange(
+                f"no page may tie the site to an update frequency: {page} says "
+                + " and ".join(f'"{phrase}"' for phrase in broke))
+
+
 def apply_to(site, ops):
     """The site mapping `site` as it would be once `ops` have been applied."""
     after = dict(site)
@@ -790,6 +885,12 @@ def build_prompt(shown, omitted=()):
     system = (
         "You are the autonomous curator of a static website served from S3 behind a CDN. "
         f"Your mission, every single run: {MISSION}.\n\n"
+        f"\"Interesting\" means one thing here, and it is the standard every change is held to: "
+        f"{INTERESTING}. User engagement time is the measure. So judge a change by whether it "
+        "gives a visitor a reason to stay and keep going -- something to play with, to discover, "
+        "to be surprised by, to come back to one more time -- and not by whether it looks tidy or "
+        "busy. A page nobody lingers on is not interesting however handsome it is, and coherence "
+        "is worth doing because a site that holds together is one a visitor keeps exploring.\n\n"
         "Begin every run by taking a moment to look at the site as a whole. Read the pages "
         "below, notice what they repeat and where they have drifted apart, and ask what the "
         "piece as a whole needs most right now. Only then choose this run's one focused change. "
@@ -874,6 +975,20 @@ def build_prompt(shown, omitted=()):
         "of this is refused, exactly as one that orphans a page is. This is checked on the built "
         "site, so a layout or a Sass partial is judged through the pages and stylesheets it "
         "produces.\n"
+        "- AXIOM, every run: nothing on the site is tied to an update frequency. This site "
+        "iterates continuously. It runs no nightly experiment and publishes no daily or hourly "
+        "edition, so no page may say or imply that it does: never write \"Tonight's experiment\", "
+        "\"today's sky\", \"this week's theme\" or \"rewritten every hour\". Never defer a visitor "
+        "to another day either -- not \"move one star tomorrow and ask again\" but \"move one star "
+        "and ask again\" -- because engagement time is the measure and the next move is the one "
+        "worth asking for. Concretely, these are refused in anything a page carries, markup, "
+        "script and comments alike: the words tonight, tomorrow, yesterday, hourly, nightly, daily "
+        "and weekly; the possessives today's, this hour's, this week's and this month's; and "
+        "\"every hour\", \"each day\", \"once a week\" and the rest of that family. Night-sky "
+        "atmosphere is untouched and welcome: midnight, dusk, night, starlight and the like name a "
+        "mood, not a schedule, so \"midnight rain\" and \"before midnight\" are fine. A plan that "
+        "adds one of the refused phrasings to a page is refused, and this too is checked on the "
+        "built site, including the shared scripts and stylesheets a page loads.\n"
         "- Leave the site working at the end of the run. If you extract something into a shared "
         "file, or merge or delete a page, update every page that refers to it in the same run: "
         "never leave a link, a stylesheet, a script, a layout or an @use pointing at something "
@@ -907,9 +1022,9 @@ def build_prompt(shown, omitted=()):
             "by a later run."
         )
     user += (
-        f"\n\nThis run's mission: {MISSION}. Weigh the whole of the above first, then make the one "
-        "change it needs most -- adding something new, or federating what is already there. "
-        "Respond with the JSON object only."
+        f"\n\nThis run's mission: {MISSION}, measured in {INTERESTING}. Weigh the whole of the "
+        "above first, then make the one change it needs most -- adding something new, or "
+        "federating what is already there. Respond with the JSON object only."
     )
     return system + "\n\n" + user
 
@@ -1056,10 +1171,10 @@ def validate_plan(plan, unseen=()):
     `unseen` names existing files whose content the model was not shown; it may not touch them.
 
     A plan that would leave a page of the site unreachable from the root, leave one without the
-    analytics and consent line, or make one fail the responsive-and-accessible axiom is refused: all
-    three axioms hold however the prompt is answered. All three are judged on the built site (issue
-    #25), which is the only site a visitor ever sees, so the plan is built before any of them is
-    asked, and a plan that does not build is refused for that alone.
+    analytics and consent line, make one fail the responsive-and-accessible axiom, or tie one to an
+    update frequency is refused: all four axioms hold however the prompt is answered. All four are
+    judged on the built site (issue #25), which is the only site a visitor ever sees, so the plan is
+    built before any of them is asked, and a plan that does not build is refused for that alone.
     """
     files = plan.get("files") or []
     deletes = plan.get("delete") or []
@@ -1116,13 +1231,14 @@ def validate_plan(plan, unseen=()):
         # The site as committed does not build, so there is no "before" to compare against and the
         # axioms have nothing to say this run. Same reasoning as check_reachability's: every run is
         # asked to repair the site, and refusing a plan over damage it did not do would leave no
-        # plan able to. This run still had to build, and the next is held to all three axioms again.
+        # plan able to. This run still had to build, and the next is held to all four axioms again.
         print(f"::warning::the site as committed does not build ({one_line(err, 300)}), so this "
               "run's change was only checked for building, not against the axioms")
         return ops
     check_reachability(built_before, built_after)
     check_analytics(built_before, built_after)
     check_accessibility(built_before, built_after)
+    check_cadence(built_before, built_after)
     return ops
 
 
