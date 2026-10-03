@@ -4,7 +4,7 @@
   <meta charset='utf-8'>
   <meta name='viewport' content='width=device-width, initial-scale=1'>
   <title>site map · interesting</title>
-  <meta name='description' content='Every page of interesting, in one place: the whole sky, reachable from the root.'>
+  <meta name='description' content='Every page of interesting, plus a live atlas console with memory-aware route hints and random jumps.'>
   <style>
     :root {
       color-scheme: dark;
@@ -16,6 +16,8 @@
       --panel: rgba(10, 14, 28, 0.72);
       --accent: #9fcbff;
       --accent2: #ffe6a9;
+      --good: #bdfed8;
+      --warn: #ffd4b0;
     }
 
     * { box-sizing: border-box; }
@@ -57,7 +59,63 @@
       color: var(--muted);
     }
 
-    h2 {
+    .atlas {
+      margin: 0 0 1rem;
+      border: 1px solid rgba(255,255,255,0.14);
+      border-radius: 12px;
+      background: rgba(7, 10, 20, 0.56);
+      padding: 0.75rem;
+      color: #dce9ff;
+    }
+
+    .atlas h2 {
+      margin: 0 0 0.45rem;
+      font-size: 0.82rem;
+      font-weight: 600;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--accent2);
+    }
+
+    .atlas p {
+      margin: 0.35rem 0;
+      line-height: 1.35;
+    }
+
+    #memory.good { color: var(--good); }
+    #memory.warn { color: var(--warn); }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin: 0.6rem 0 0;
+    }
+
+    button,
+    a.action {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: rgba(255,255,255,0.07);
+      color: var(--fg);
+      text-decoration: none;
+      padding: 0.48rem 0.88rem;
+      font: inherit;
+      cursor: pointer;
+      transition: transform 120ms ease, background 120ms ease, border-color 120ms ease;
+    }
+
+    button:hover,
+    button:focus-visible,
+    a.action:hover,
+    a.action:focus-visible {
+      outline: none;
+      transform: translateY(-1px);
+      border-color: rgba(184, 217, 255, 0.8);
+      background: rgba(151, 197, 255, 0.16);
+    }
+
+    h2.section-title {
       margin: 1.1rem 0 0.5rem;
       font-size: 0.82rem;
       font-weight: 600;
@@ -133,25 +191,6 @@
 
     .axiom a { color: var(--accent); }
 
-    a.action {
-      border: 1px solid var(--line);
-      border-radius: 999px;
-      background: rgba(255,255,255,0.07);
-      color: var(--fg);
-      text-decoration: none;
-      padding: 0.48rem 0.88rem;
-      font: inherit;
-      transition: transform 120ms ease, background 120ms ease, border-color 120ms ease;
-    }
-
-    a.action:hover,
-    a.action:focus-visible {
-      outline: none;
-      transform: translateY(-1px);
-      border-color: rgba(184, 217, 255, 0.8);
-      background: rgba(151, 197, 255, 0.16);
-    }
-
     .footer {
       margin-top: 0.9rem;
       display: flex;
@@ -168,7 +207,7 @@
     }
 
     @media (prefers-reduced-motion: reduce) {
-      a.action { transition: none; }
+      button, a.action { transition: none; }
       .pages a::before { animation: none; }
     }
   </style>
@@ -176,17 +215,27 @@
 <body>
   <main>
     <h1>site map</h1>
-    <p class='tagline'>Every page of the sky, in one place. Nothing here is more than one click from the root.</p>
+    <p class='tagline'>Every page of the sky, in one place, now with a live atlas console for route planning.</p>
 
-    <h2>the sky</h2>
+    <section class='atlas' aria-live='polite'>
+      <h2>atlas console</h2>
+      <p id='memory'>Checking shared constellation memory...</p>
+      <p id='route'>Pick a route: create stars on home, then jump to any lab to reinterpret the same sky.</p>
+      <div class='controls'>
+        <a class='action' href='index.html'>open home constellation</a>
+        <button id='random' type='button'>random jump</button>
+      </div>
+    </section>
+
+    <h2 class='section-title'>the sky</h2>
     <ul class='pages'>
       <li>
         <a href='index.html'>interesting</a> <code>index.html</code>
         <p>The home sky: place tiny thoughts as stars, drag them into a constellation, ask the sky what it sees, play it as a chime, mint a postcard.</p>
       </li>
       <li>
-        <a href='sky-atlas.html'>sky atlas</a> <code>sky-atlas.html</code>
-        <p>A single hub that maps every experience, shows the shared constellation memory, and offers a guided random jump across the whole sky.</p>
+        <a href='sky-atlas.html'>sky atlas alias</a> <code>sky-atlas.html</code>
+        <p>Legacy route preserved: now a lightweight signpost that points back to this unified map and keeps old links working.</p>
       </li>
       <li>
         <a href='constellation-diary.html'>constellation diary</a> <code>constellation-diary.html</code>
@@ -218,11 +267,11 @@
       </li>
     </ul>
 
-    <h2>edges of the sky</h2>
+    <h2 class='section-title'>edges of the sky</h2>
     <ul class='pages'>
       <li>
         <a href='sitemap.html'>site map</a> <code>sitemap.html</code>
-        <p>This page. Written by hand, kept honest by a test.</p>
+        <p>This page: human-readable index and live atlas console.</p>
       </li>
       <li>
         <a href='error.html'>lost in space</a> <code>error.html</code>
@@ -248,5 +297,76 @@
       <span>every page, one sky</span>
     </p>
   </main>
+
+  <script>
+    (function () {
+      var STORAGE_KEY = 'interesting_wish_constellation_v1';
+      var memoryEl = document.getElementById('memory');
+      var routeEl = document.getElementById('route');
+      var randomBtn = document.getElementById('random');
+
+      var pages = [
+        'index.html',
+        'constellation-diary.html',
+        'constellation-echo.html',
+        'constellation-weather.html',
+        'orbital-weaver.html',
+        'sky-archive.html',
+        'star-lantern.html',
+        'wish-terrarium.html',
+        'error.html',
+        'sky-atlas.html'
+      ];
+
+      function loadCount() {
+        var raw = null;
+        try {
+          raw = localStorage.getItem(STORAGE_KEY);
+        } catch (e) {
+          memoryEl.textContent = 'Local storage is unavailable here, so cross-page sky memory cannot be read.';
+          memoryEl.className = 'warn';
+          routeEl.textContent = 'You can still explore every page, but shared constellation state is unavailable in this context.';
+          return;
+        }
+
+        if (!raw) {
+          memoryEl.textContent = 'No saved stars yet. Make your first constellation on the home page.';
+          memoryEl.className = 'warn';
+          routeEl.textContent = 'Suggested route: home constellation → weather lab → sky archive oracle.';
+          return;
+        }
+
+        try {
+          var parsed = JSON.parse(raw);
+          if (!Array.isArray(parsed)) throw new Error('invalid');
+          var count = parsed.filter(function (s) {
+            return s && typeof s.x === 'number' && typeof s.y === 'number' && typeof s.text === 'string';
+          }).length;
+
+          memoryEl.textContent = 'Shared memory detected: ' + count + ' saved star' + (count === 1 ? '' : 's') + ' available across labs.';
+          memoryEl.className = 'good';
+
+          if (count < 4) {
+            routeEl.textContent = 'Best next step: add a few more stars on home, then test echo chamber and lantern ritual.';
+          } else if (count < 12) {
+            routeEl.textContent = 'Good constellation density: try diary replay, then forge a sigil in sky archive oracle.';
+          } else {
+            routeEl.textContent = 'Dense sky detected: orbital weaver and weather lab will generate richer structures.';
+          }
+        } catch (e2) {
+          memoryEl.textContent = 'Saved data exists but is unreadable. Rebuild your constellation on the home page.';
+          memoryEl.className = 'warn';
+          routeEl.textContent = 'Suggested route: home constellation → refresh this map → continue to any lab.';
+        }
+      }
+
+      randomBtn.addEventListener('click', function () {
+        var pick = pages[Math.floor(Math.random() * pages.length)];
+        window.location.href = pick;
+      });
+
+      loadCount();
+    })();
+  </script>
 </body>
 </html>
