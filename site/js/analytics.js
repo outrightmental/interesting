@@ -110,7 +110,7 @@
   /* A small, quiet way back to the choice: withdrawing consent has to be as easy as giving it, and
      the banner is gone once answered. The styles live here rather than in a page, because every
      page of this site may be rewritten by the hourly AI run. */
-  function addPreferencesButton() {
+  function addPreferencesButton(cc) {
     addStyle([
       '.site-consent-link {',
       '  position: fixed; left: 0.55rem; bottom: 0.5rem; z-index: 20;',
@@ -130,9 +130,14 @@
     var button = document.createElement('button');
     button.type = 'button';
     button.className = 'site-consent-link';
-    button.setAttribute('data-cc', 'show-preferencesModal');
     button.textContent = 'cookies';
     button.setAttribute('aria-label', 'Change cookie preferences');
+    button.setAttribute('aria-haspopup', 'dialog');
+    // showPreferences() rather than the library's data-cc attribute: it binds those listeners while
+    // it runs, and this button is added after that.
+    button.addEventListener('click', function () {
+      cc.showPreferences();
+    });
     if (document.body) document.body.appendChild(button);
     else document.addEventListener('DOMContentLoaded', function () {
       document.body.appendChild(button);
@@ -213,7 +218,7 @@
       onChange: applyConsent
     });
 
-    addPreferencesButton();
+    addPreferencesButton(cc);
   }
 
   loadStylesheet(base + CONSENT_STYLE);
