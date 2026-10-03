@@ -14,6 +14,10 @@
     footer      the links the page ends with, as [href, text] pairs (see footer.njk).
     footerNote  an aside shown after those links.
 
+  The analytics and consent line is written here rather than in every page, which is the whole
+  point of a shared shell: the axiom is about the built site, so one line here carries it to all of
+  them (see ANALYTICS_TAG and check_analytics in .github/scripts/make_interesting.py).
+
   Links are relative, like every link in the site: it has no fixed domain and may be served under
   a sub-path, so "css/site.css" and not "/css/site.css".
 -#}
@@ -34,6 +38,8 @@
   <link rel='stylesheet' href='css/{{ stylesheet }}.css'>
 {%- endif %}
 {%- endif %}
+  <!-- Analytics and the cookie consent banner that gates it; see js/analytics.js. -->
+  <script src='js/analytics.js' defer></script>
 </head>
 <body>
 {{ content | safe }}</body>
