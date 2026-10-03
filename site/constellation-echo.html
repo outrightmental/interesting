@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang='en'>
+<head>
+  <meta charset='utf-8'>
+  <meta name='viewport' content='width=device-width, initial-scale=1'>
+  <title>constellation echo chamber · interesting</title>
+  <meta name='description' content='Listen to your saved constellation as drifting echoes, pulse the field, and read a tiny atmospheric report.'>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #070a14;
+      --bg2: #1c2b53;
+      --fg: #eef4ff;
+      --muted: #a9b7da;
+      --line: rgba(255,255,255,0.18);
+      --panel: rgba(10, 14, 28, 0.72);
+      --accent: #a7d1ff;
+      --accent2: #ffe7ab;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      min-height: 100%;
+      background: radial-gradient(circle at 18% 0%, var(--bg2) 0%, var(--bg) 62%);
+      color: var(--fg);
+      font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    }
+
+    body {
+      display: grid;
+      place-items: center;
+      padding: 1rem;
+    }
+
+    main {
+      width: min(940px, 96vw);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: var(--panel);
+      backdrop-filter: blur(8px);
+      box-shadow: 0 16px 40px rgba(0,0,0,0.36);
+      padding: 1rem;
+    }
+
+    h1 {
+      margin: 0;
+      line-height: 0.95;
+      letter-spacing: -0.03em;
+      font-size: clamp(1.9rem, 6vw, 3.2rem);
+    }
+
+    .tagline {
+      margin: 0.45rem 0 0.85rem;
+      color: var(--muted);
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 1.08fr 0.92fr;
+      gap: 0.85rem;
+    }
+
+    #echo-canvas {
+      width: 100%;
+      height: auto;
+      display: block;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.16);
+      background: #060913;
+      cursor: crosshair;
+    }
+
+    .panel {
+      border: 1px solid rgba(255,255,255,0.14);
+      border-radius: 12px;
+      background: rgba(7, 10, 20, 0.56);
+      padding: 0.8rem;
+    }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin: 0.55rem 0;
+    }
+
+    button, a.action {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: rgba(255,255,255,0.07);
+      color: var(--fg);
+      text-decoration: none;
+      padding: 0.48rem 0.88rem;
+      font: inherit;
+      cursor: pointer;
+      transition: transform 120ms ease, background 120ms ease, border-color 120ms ease;
+    }
+
+    button:hover,
+    button:focus-visible,
+    a.action:hover,
+    a.action:focus-visible {
+      outline: none;
+      transform: translateY(-1px);
+      border-color: rgba(184, 217, 255, 0.8);
+      background: rgba(151, 197, 255, 0.16);
+    }
+
+    #drift[aria-pressed='true'] {
+      background: rgba(167, 209, 255, 0.24);
+      border-color: rgba(194, 224, 255, 0.86);
+      box-shadow: 0 0 12px rgba(143, 195, 255, 0.34) inset;
+    }
+
+    #status {
+      margin: 0.45rem 0 0;
+      min-height: 1.5em;
+      color: var(--accent2);
+      font-size: 0.95rem;
+    }
+
+    #reading {
+      margin: 0.75rem 0 0;
+      min-height: 7.2em;
+      white-space: pre-wrap;
+      border: 1px solid rgba(255,255,255,0.14);
+      border-radius: 10px;
+      background: rgba(6, 9, 18, 0.66);
+      color: #e7f0ff;
+      font-size: 0.9rem;
+      line-height: 1.42;
+      padding: 0.7rem;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+    }
+
+    .hint {
+      margin: 0.65rem 0 0;
+      color: var(--muted);
+      font-size: 0.84rem;
+    }
+
+    .footer {
+      margin-top: 0.8rem;
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      color: var(--muted);
+      font-size: 0.86rem;
+    }
+
+    @media (max-width: 780px) {
+      .layout { grid-template-columns: 1fr; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      button, a.action { transition: none; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>constellation echo chamber</h1>
+    <p class='tagline'>Your saved stars become drifting echoes. Pulse the field, click an echo, and listen for what your sky repeats.</p>
+
+    <div class='layout'>
+      <canvas id='echo-canvas' width='620' height='340' aria-label='Animated echo field generated from saved constellation stars'></canvas>
+
+      <section class='panel'>
+        <p style='margin:0;color:#d8e4ff;'>This page reads the same saved constellation memory as the main sky.</p>
+        <div class='controls'>
+          <button id='refresh' type='button'>refresh saved sky</button>
+          <button id='pulse' type='button'>emit center pulse</button>
+          <button id='shuffle' type='button'>shuffle harmonics</button>
+          <button id='report' type='button'>read echo weather</button>
+          <button id='drift' type='button' aria-pressed='false'>pause drift</button>
+        </div>
+        <p id='status' aria-live='polite'>Loading echo memory...</p>
+        <pre id='reading' aria-live='polite'>Awaiting resonance.
+Load your saved sky, click the field to pulse, or select an echo to hear its thought.</pre>
+        <p class='hint'>Easter egg: type echo while this page is focused.</p>
+      </section>
+    </div>
+
+    <p class='footer'>
+      <a class='action' href='index.html'>back to constellation</a>
+      <a class='action' href='sky-archive.html'>open sky archive oracle</a>
+      <a class='action' href='star-lantern.html'>open star lantern ritual</a>
+      <a class='action' href='wish-terrarium.html'>open wish terrarium</a>
+      <a class='action' href='error.html'>visit observatory 404</a>
+    </p>
+  </main>
+
+  <script>
+    (function () {
+      var STORAGE_KEY = 'interesting_wish_constellation_v1';
+      var canvas = document.getElementById('echo-canvas');
+      var ctx = canvas.getContext('2d');
+      var refreshBtn = document.getElementById('refresh');
+      var pulseBtn = document.getElementById('pulse');
+      var shuffleBtn = document.getElementById('shuffle');
+      var reportBtn = document.getElementById('report');
+      var driftBtn = document.getElementById('drift');
+      var statusEl = document.getElementById('status');
+      var readingEl = document.getElementById('reading');
+
+      var stars = [];
+      var echoes = [];
+      var pulses = [];
+      var pausedDrift = false;
+      var prismMode = false;
+      var codeBuffer = '';
+      var t = 0;
+      var lastFrame = 0;
+
+      function clamp(v, min, max) {
+        return Math.max(min, Math.min(max, v));
+      }
+
+      function rand(min, max) {
+        return min + Math.random() * (max - min);
+      }
+
+      function dayStamp() {
+        var d = new Date();
+        var y = d.getFullYear();
+        var m = String(d.getMonth() + 1).padStart(2, '0');
+        var day = String(d.getDate()).padStart(2, '0');
+        return y + '-' + m + '-' + day;
+      }
+
+      function hashConstellation() {
+        var h = 2166136261;
+        for (var i = 0; i < stars.length; i++) {
+          var s = stars[i];
+          h ^= Math.round(s.x * 10);
+          h += (h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24);
+          h ^= Math.round(s.y * 10);
+          h += (h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24);
+          for (var c = 0; c < s.text.length; c++) {
+            h ^= s.text.charCodeAt(c);
+            h += (h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24);
+          }
+        }
+        return h >>> 0;
+      }
+
+      function setDriftButton() {
+        driftBtn.textContent = pausedDrift ? 'resume drift' : 'pause drift';
+        driftBtn.setAttribute('aria-pressed', pausedDrift ? 'true' : 'false');
+      }
+
+      function normalizeStars(input) {
+        return input.filter(function (s) {
+          return s && typeof s.x === 'number' && typeof s.y === 'number' && typeof s.text === 'string';
+        }).map(function (s) {
+          return {
+            x: Number(clamp(s.x, 0, 100).toFixed(2)),
+            y: Number(clamp(s.y, 0, 100).toFixed(2)),
+            text: s.text
+          };
+        });
+      }
+
+      function loadStars() {
+        var raw = null;
+        try {
+          raw = localStorage.getItem(STORAGE_KEY);
+        } catch (e) {
+          stars = [];
+          echoes = [];
+          statusEl.textContent = 'Local storage is unavailable in this browser context.';
+          return;
+        }
+
+        if (!raw) {
+          stars = [];
+          echoes = [];
+          statusEl.textContent = 'No saved constellation found yet. Create one on the main page first.';
+          return;
+        }
+
+        try {
+          var parsed = JSON.parse(raw);
+          if (!Array.isArray(parsed)) throw new Error('invalid');
+          stars = normalizeStars(parsed).slice(0, 160);
+          buildEchoes();
+
+          if (!stars.length) {
+            statusEl.textContent = 'A sky file exists, but no readable stars were found.';
+            return;
+          }
+
+          statusEl.textContent = 'Echo field synced: ' + stars.length + ' star' + (stars.length === 1 ? '' : 's') + ' loaded.';
+        } catch (e2) {
+          stars = [];
+          echoes = [];
+          statusEl.textContent = 'Saved constellation data is unreadable. Return home and remake it.';
+        }
+      }
+
+      function buildEchoes() {
+        echoes = [];
+        pulses = [];
+
+        for (var i = 0; i < stars.length; i++) {
+          var s = stars[i];
+          var px = (s.x / 100) * canvas.width;
+          var py = (s.y / 100) * canvas.height;
+          var tone = 180 + ((100 - s.y) / 100) * 480;
+
+          echoes.push({
+            star: s,
+            x: px,
+            y: py,
+            vx: rand(-0.34, 0.34),
+            vy: rand(-0.28, 0.28),
+            radius: 2 + (i % 4) * 0.8,
+            phase: rand(0, Math.PI * 2),
+            energy: 0,
+            tone: tone
+          });
+        }
+      }
+
+      function emitPulse(px, py) {
+        if (!echoes.length) {
+          statusEl.textContent = 'No echoes available yet. Refresh after creating stars on the main page.';
+          return;
+        }
+
+        pulses.push({ x: px, y: py, r: 2, life: 1 });
+
+        for (var i = 0; i < echoes.length; i++) {
+          var e = echoes[i];
+          var dx = e.x - px;
+          var dy = e.y - py;
+          var d = Math.sqrt(dx * dx + dy * dy) || 1;
+          var push = clamp(16 / d, 0.08, 0.8);
+          e.vx += (dx / d) * push;
+          e.vy += (dy / d) * push;
+          e.energy = clamp(e.energy + (0.8 / (d * 0.03 + 1)), 0, 1.4);
+        }
+      }
+
+      function centerPulse() {
+        emitPulse(canvas.width * 0.5, canvas.height * 0.5);
+        statusEl.textContent = 'Center pulse released. Echoes are scattering and returning.';
+      }
+
+      function shuffleHarmonics() {
+        if (!echoes.length) {
+          statusEl.textContent = 'No echoes available yet. Refresh after creating stars on the main page.';
+          return;
+        }
+
+        for (var i = 0; i < echoes.length; i++) {
+          var e = echoes[i];
+          e.vx = rand(-0.55, 0.55);
+          e.vy = rand(-0.46, 0.46);
+          e.phase = rand(0, Math.PI * 2);
+          e.energy = clamp(e.energy + 0.45, 0, 1.4);
+          e.tone = 170 + ((100 - e.star.y) / 100) * 520 + rand(-18, 18);
+        }
+
+        emitPulse(rand(canvas.width * 0.2, canvas.width * 0.8), rand(canvas.height * 0.2, canvas.height * 0.8));
+        statusEl.textContent = 'Harmonics reshuffled. Same stars, new resonance behavior.';
+      }
+
+      function summarize() {
+        var cx = 0;
+        var cy = 0;
+        for (var i = 0; i < stars.length; i++) {
+          cx += stars[i].x;
+          cy += stars[i].y;
+        }
+        cx /= stars.length || 1;
+        cy /= stars.length || 1;
+
+        var spread = 0;
+        for (var j = 0; j < stars.length; j++) {
+          var dx = stars[j].x - cx;
+          var dy = stars[j].y - cy;
+          spread += Math.sqrt(dx * dx + dy * dy);
+        }
+        spread /= stars.length || 1;
+
+        return { cx: cx, cy: cy, spread: spread };
+      }
+
+      function echoWeather() {
+        if (!stars.length) {
+          statusEl.textContent = 'No stars loaded yet. Refresh after creating a constellation.';
+          return;
+        }
+
+        var s = summarize();
+        var zone = (s.cy < 50 ? 'north' : 'south') + '-' + (s.cx < 50 ? 'west' : 'east');
+        var spreadWord = s.spread < 12 ? 'compact' : (s.spread < 24 ? 'balanced' : 'wide');
+        var density = stars.length < 5 ? 'quiet' : (stars.length < 14 ? 'steady' : 'crowded');
+        var hash = hashConstellation();
+
+        var openers = [
+          'echo weather bulletin:',
+          'resonance report:',
+          'night acoustics memo:',
+          'field monitor:'
+        ];
+        var mids = [
+          'The chamber favors momentum over perfection.',
+          'Small experiments are amplifying quickly tonight.',
+          'The pattern suggests a brave draft is ready to leave the dock.',
+          'Playful focus is currently louder than hesitation.'
+        ];
+        var closers = [
+          'Send one tiny signal before midnight.',
+          'Move a star on the main page and read again.',
+          'Name the next action in six words and do it.',
+          'Share one unfinished idea with someone kind.'
+        ];
+
+        var a = openers[hash % openers.length];
+        var b = mids[(hash >>> 3) % mids.length];
+        var c = closers[(hash >>> 7) % closers.length];
+
+        readingEl.textContent = a + '\n'
+          + stars.length + ' echoes, ' + spreadWord + ' spread, chamber ' + zone + ', tone ' + density + '.\n'
+          + b + '\n'
+          + c + '\n\n'
+          + 'echo stamp: ' + dayStamp();
+
+        statusEl.textContent = 'Echo weather generated from your current constellation geometry.';
+      }
+
+      function pickEcho(clientX, clientY) {
+        if (!echoes.length) return;
+
+        var rect = canvas.getBoundingClientRect();
+        var x = ((clientX - rect.left) / rect.width) * canvas.width;
+        var y = ((clientY - rect.top) / rect.height) * canvas.height;
+
+        var near = null;
+        var nearD2 = 999999;
+
+        for (var i = 0; i < echoes.length; i++) {
+          var e = echoes[i];
+          var dx = x - e.x;
+          var dy = y - e.y;
+          var d2 = dx * dx + dy * dy;
+          if (d2 < nearD2) {
+            nearD2 = d2;
+            near = e;
+          }
+        }
+
+        emitPulse(x, y);
+
+        if (!near || nearD2 > 4200) {
+          statusEl.textContent = 'Pulse emitted into open space. Try closer to an echo.';
+          return;
+        }
+
+        near.energy = 1.2;
+        readingEl.textContent = 'selected echo:\n'
+          + near.star.text + '\n\n'
+          + 'coords ' + near.star.x.toFixed(1) + ', ' + near.star.y.toFixed(1) + '\n'
+          + 'tone ' + near.tone.toFixed(1) + ' hz\n'
+          + 'tip: pulse twice, then request echo weather.';
+
+        statusEl.textContent = 'Echo selected and energized.';
+      }
+
+      function toggleDrift() {
+        pausedDrift = !pausedDrift;
+        setDriftButton();
+        statusEl.textContent = pausedDrift
+          ? 'Drift paused. Echoes are hovering in place.'
+          : 'Drift resumed. Echoes are wandering again.';
+      }
+
+      function drawBackground() {
+        var grad = ctx.createLinearGradient(0, 0, 0, canvas.height);
+        if (prismMode) {
+          var hue = (t * 26) % 360;
+          grad.addColorStop(0, 'hsl(' + hue.toFixed(1) + ', 56%, 16%)');
+          grad.addColorStop(1, 'hsl(' + ((hue + 95) % 360).toFixed(1) + ', 58%, 8%)');
+        } else {
+          grad.addColorStop(0, '#0d1531');
+          grad.addColorStop(1, '#060913');
+        }
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        for (var i = 0; i < 42; i++) {
+          var sx = (i * 127.3 + t * 11) % canvas.width;
+          var sy = (i * 79.7 + t * 6) % canvas.height;
+          var a = 0.05 + (i % 6) * 0.02;
+          ctx.beginPath();
+          ctx.fillStyle = 'rgba(179, 207, 255, ' + a.toFixed(3) + ')';
+          ctx.arc(sx, sy, 1.1, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+
+      function drawEchoes(dt) {
+        var maxD = Math.min(canvas.width, canvas.height) * 0.23;
+        var maxD2 = maxD * maxD;
+
+        for (var a = 0; a < echoes.length; a++) {
+          for (var b = a + 1; b < echoes.length; b++) {
+            var ea = echoes[a];
+            var eb = echoes[b];
+            var dx = eb.x - ea.x;
+            var dy = eb.y - ea.y;
+            var d2 = dx * dx + dy * dy;
+            if (d2 > maxD2) continue;
+            var alpha = 0.06 + (1 - d2 / maxD2) * 0.34;
+            ctx.strokeStyle = 'rgba(150, 198, 255, ' + alpha.toFixed(3) + ')';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(ea.x, ea.y);
+            ctx.lineTo(eb.x, eb.y);
+            ctx.stroke();
+          }
+        }
+
+        for (var i = 0; i < echoes.length; i++) {
+          var e = echoes[i];
+
+          if (!pausedDrift) {
+            e.phase += dt * (0.6 + (i % 5) * 0.16);
+            e.x += e.vx + Math.cos(e.phase) * 0.07;
+            e.y += e.vy + Math.sin(e.phase * 0.85) * 0.05;
+
+            if (e.x < 8 || e.x > canvas.width - 8) e.vx *= -1;
+            if (e.y < 8 || e.y > canvas.height - 8) e.vy *= -1;
+            e.x = clamp(e.x, 8, canvas.width - 8);
+            e.y = clamp(e.y, 8, canvas.height - 8);
+          }
+
+          e.energy = Math.max(0, e.energy - dt * 0.8);
+
+          var pulse = 0.6 + Math.sin(t * 2 + e.phase) * 0.24;
+          var glowR = e.radius * (2.4 + pulse + e.energy * 2.8);
+
+          if (prismMode) {
+            ctx.beginPath();
+            ctx.fillStyle = 'hsla(' + ((i * 28 + t * 70) % 360).toFixed(1) + ', 92%, 73%, 0.24)';
+            ctx.arc(e.x, e.y, glowR, 0, Math.PI * 2);
+            ctx.fill();
+          } else {
+            ctx.beginPath();
+            ctx.fillStyle = 'rgba(143, 201, 255, ' + (0.12 + e.energy * 0.26).toFixed(3) + ')';
+            ctx.arc(e.x, e.y, glowR, 0, Math.PI * 2);
+            ctx.fill();
+          }
+
+          ctx.beginPath();
+          ctx.fillStyle = e.energy > 0.18 ? 'rgba(255, 238, 190, 0.96)' : 'rgba(230, 242, 255, 0.95)';
+          ctx.arc(e.x, e.y, e.radius + e.energy * 0.9, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+
+      function drawPulses(dt) {
+        for (var i = pulses.length - 1; i >= 0; i--) {
+          var p = pulses[i];
+          p.r += dt * 160;
+          p.life -= dt * 0.72;
+
+          if (p.life <= 0) {
+            pulses.splice(i, 1);
+            continue;
+          }
+
+          ctx.beginPath();
+          ctx.strokeStyle = 'rgba(255, 231, 169, ' + (p.life * 0.5).toFixed(3) + ')';
+          ctx.lineWidth = 1.4;
+          ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+      }
+
+      function frame(now) {
+        if (typeof now !== 'number') now = performance.now();
+        var dt = lastFrame ? Math.min(0.05, (now - lastFrame) / 1000) : 0.016;
+        lastFrame = now;
+        t += dt;
+
+        drawBackground();
+        drawEchoes(dt);
+        drawPulses(dt);
+
+        requestAnimationFrame(frame);
+      }
+
+      refreshBtn.addEventListener('click', loadStars);
+      pulseBtn.addEventListener('click', centerPulse);
+      shuffleBtn.addEventListener('click', shuffleHarmonics);
+      reportBtn.addEventListener('click', echoWeather);
+      driftBtn.addEventListener('click', toggleDrift);
+
+      canvas.addEventListener('click', function (ev) {
+        pickEcho(ev.clientX, ev.clientY);
+      });
+
+      document.addEventListener('keydown', function (ev) {
+        if (!ev.key || ev.key.length !== 1) return;
+        codeBuffer = (codeBuffer + ev.key.toLowerCase()).slice(-4);
+        if (codeBuffer === 'echo') {
+          prismMode = !prismMode;
+          emitPulse(canvas.width * 0.5, canvas.height * 0.5);
+          statusEl.textContent = prismMode
+            ? 'Secret prism mode unlocked. Echo colors are refracting.'
+            : 'Prism mode closed. Returning to midnight tones.';
+        }
+      });
+
+      setDriftButton();
+      loadStars();
+      frame();
+    })();
+  </script>
+</body>
+</html>
