@@ -79,6 +79,14 @@ jobs:
       contents: write # commit changes to /site
       copilot-requests: write # call GitHub Copilot with the workflow's own token
     steps:
+      # One Node for everything this job runs: the Copilot CLI below is a global npm install, so it
+      # has to be installed with the Node that will later go looking for it on PATH. No cache here,
+      # because caching npm needs the lock file and the checkout has not happened yet.
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
       # The platform package is the CLI binary itself: an exact version with no dependencies and no
       # install scripts, so nothing unpinned ever runs next to the token. It is installed before
       # checkout, away from the repository's credentials.
@@ -94,6 +102,13 @@ jobs:
         uses: actions/checkout@v5
         with:
           persist-credentials: false
+
+      # The script builds every answer before it accepts it: /site is source, so the reachability
+      # axiom is about the built site, and an answer that does not build is refused. node_modules is
+      # gitignored, so installing it here cannot look like a change to the repository, and
+      # --ignore-scripts keeps npm from running install hooks at all.
+      - name: Install the build toolchain
+        run: npm ci --ignore-scripts
 
       - name: Ask a random AI model to make the website more interesting
         id: ai

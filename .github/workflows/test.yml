@@ -22,14 +22,22 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
-      # No model is called: the tests swap the Copilot CLI for a stand-in.
+      # The tests build /site: the reachability axiom is about the built site, and a pull request
+      # should also find out that the site still builds. --ignore-scripts because nothing in the
+      # build needs an install script, so none should run.
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install the build toolchain
+        run: npm ci --ignore-scripts
+
+      # No model is called: the tests swap the Copilot CLI for a stand-in. The tests that build the
+      # site fail here instead of skipping if the toolchain is missing, because the runner sets CI.
       - name: Run the tests for the workflow scripts
         run: python3 -m unittest discover -s .github/scripts -v
-
-      - name: Check that the site has its two required pages
-        run: |
-          test -s site/index.html || { echo "::error::site/index.html is missing or empty"; exit 1; }
-          test -s site/error.html || { echo "::error::site/error.html is missing or empty"; exit 1; }
 
   infra:
     name: Infrastructure
