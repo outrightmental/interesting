@@ -18,6 +18,10 @@ a.action {
   color: var(--fg);
   text-decoration: none;
   padding: 0.48rem 0.88rem;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   font: inherit;
   cursor: pointer;
   transition: vars.$lift;
@@ -39,7 +43,15 @@ a.action:focus-visible {
   box-shadow: 0 0 0 3px vars.$focus-ring;
 }
 
-button:disabled {
+button[aria-pressed='true'],
+button[aria-busy='true'] {
+  border-color: vars.$focus-line;
+  background: vars.$focus-fill;
+  box-shadow: 0 0 10px vars.$focus-ring inset;
+}
+
+button:disabled,
+a.action[aria-disabled='true'] {
   opacity: 0.62;
   cursor: default;
 }
