@@ -36,7 +36,8 @@ iterate a more interesting website
   [GitHub Copilot](https://docs.github.com/copilot), reached through the
   [Copilot CLI](https://docs.github.com/copilot/how-tos/copilot-cli) and billed to a GitHub Copilot
   subscription (see [Setup](#setup)), gives it the mission **"make the website more interesting as a
-  coherent whole"**,
+  coherent whole"** — where *interesting* means user engagement time, and nothing else (see
+  [Engagement-time axiom](#engagement-time-axiom)) —
   and commits the result to `main`; the pipeline above then tests and deploys it. Models the
   account cannot use are skipped. A model
   that returns an unusable answer is replaced by another random model, or asked again if no other
@@ -84,6 +85,70 @@ npm ci                              # once
 npm run build                       # prints the folder it built into
 npm run build -- --out ./build      # or pick the folder yourself
 ```
+
+### Engagement-time axiom
+
+The mission says the site gets *more interesting*. This is what interesting means here, and it is
+the only thing it means: **user engagement time** — how long a person stays engaged, how much they
+want to keep going, and how intrigued, astonished or entertained they are while they do. A page
+nobody lingers on is not interesting however handsome it is. Coherence is worth the trouble for the
+same reason: a site that holds together is one a visitor keeps exploring.
+
+The site has no update rhythm to put in front of a visitor, either. It does not run a nightly
+experiment and publishes no daily or hourly edition — it iterates continuously — so copy that dates
+its content was false as often as it was true, and copy that deferred a visitor to another day spent
+the one thing the mission is measured in.
+
+- **Stated in the prompt.** The system prompt gives the definition twice: once before a run chooses
+  what to do, so the standard is in hand while the choice is still open, and once in the line a run
+  reads last. It says outright that a change is judged on whether it gives someone a reason to stay
+  and keep going, not on whether it looks tidy or busy. `MISSION` names the aim and `INTERESTING`
+  names the measure, both in
+  [`.github/scripts/make_interesting.py`](.github/scripts/make_interesting.py).
+- **The cadence rule is the fourth `AXIOM`**, stated in the `Rules:` block beside the three below.
+  It names every phrasing the code refuses, in full, so it is a rule a run can follow rather than a
+  trap it springs: the words *tonight*, *tomorrow*, *yesterday*, *hourly*, *nightly*, *daily* and
+  *weekly*; the possessives *today's*, *this hour's*, *this week's*, *this month's*; and *every
+  hour*, *each day*, *once a week* and the rest of that family. It also asks a run not to send a
+  visitor away — "move one star **and** ask again", never "move one star **tomorrow** and ask
+  again" — because the next move is the one worth asking for.
+- **Held to in code.** `check_cadence` in
+  [`.github/scripts/make_interesting.py`](.github/scripts/make_interesting.py) refuses a plan that
+  puts one of those phrasings on a page. As with the three axioms below, only what the run itself
+  breaks is refused, and every reason is one phrase, so clearing part of a page can only take
+  reasons away. The engagement-time definition itself is *not* checked in code, because no check
+  could: it is a standard for the model to aim at, and the prompt is where a standard like that
+  lives.
+- **Checked on the built site**, like the others, and read as text rather than parsed as markup —
+  the one check here that is. Most of this site's prose lives in the JavaScript that draws the page
+  rather than in its markup, so a parser that handed `<script>` bodies over as opaque text (which is
+  exactly what the accessibility checks want it to do) would have missed nearly every instance there
+  was to find. A page's shared stylesheets and scripts are read with it as well, so copy cannot be
+  federated out of reach.
+- **The night-sky theme is untouched.** The sweep is deliberately narrow: only words that date the
+  site or defer the visitor are refused, so *midnight*, *dusk*, *night* and *starlight* keep naming
+  a mood rather than a schedule. "Toggle midnight rain", "returning to midnight tones" and "before
+  midnight" are all still there, and a test fails if the atmosphere ever disappears along with the
+  cadence.
+- **The three vendored files are not policed.** `FIXED_FILES` are never a model's to write, so a
+  phrase in one could not be a run's fault, and 55 KB of consent library is not this repository's
+  prose to police — a future release of it saying "daily" in a comment must not be able to fail
+  every page of the site at once.
+- **A stated standard, not a feedback loop.** The site does measure engagement — that is what the
+  GA4 tag is for — but nothing feeds those numbers back into a run, and nothing here could usefully:
+  a model cannot be shown the engagement of a change it has not made yet, and the signal for a
+  change deployed within the hour is noise. Closing that loop is its own piece of work.
+- **This document still names the cadence, on purpose.** The ban is on what a visitor reads. The
+  schedule is a real fact about the workflow — it runs hourly, that is what it costs, and anyone
+  running or forking this needs to know — so "Hourly AI iteration", the `cron`, the workflow name
+  and the figures under [Setup](#setup) all stay as they are. What changed in the repository is
+  that `/site` no longer repeats any of it.
+- **True of the site as committed**, not only of what a future run writes: `RealSiteTest` in
+  [`.github/scripts/test_make_interesting.py`](.github/scripts/test_make_interesting.py) sweeps the
+  built site on every pull request and before every deploy. That sweep is what found
+  "Tonight's experiment" on the home page, "tonight starts fresh" in its storage-failure note,
+  "rewritten every hour" in the site map's closing axiom, and the readings that sent a visitor away
+  until tomorrow.
 
 ### Reachability axiom
 
