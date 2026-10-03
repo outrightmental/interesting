@@ -1,0 +1,155 @@
+name: Deploy site
+
+# The pipeline for main: every commit that lands there is tested, and when the tests pass, /site is
+# published. A failing test blocks every deploy.
+#
+# Two publishers run side by side from the same tested commit:
+#   - S3 + CloudFront at https://interesting.outright.io/ — the canonical home, with the bucket,
+#     distribution and this workflow's AWS secrets all defined in /infra.
+#   - GitHub Pages — kept for now while the AWS deploy settles in; see /infra/README.md.
+on:
+  push:
+    branches: [main]
+  # The AI's commit is pushed with GITHUB_TOKEN, and GitHub starts no workflow for such a push. So
+  # the pipeline also starts when that workflow finishes, and picks up the commit it left on main.
+  workflow_run:
+    workflows: ["Make the website more interesting"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch: # manual fallback
+
+permissions: {}
+
+# One pipeline run at a time, and the rest wait their turn. Without `queue: max` only one run can
+# wait, and a newer run takes its place: a run with nothing to do (see the `if` below) could then
+# push out the run that was waiting to deploy a commit.
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+  queue: max
+
+jobs:
+  test:
+    # After the AI workflow, only when it succeeded and main has moved since it started: for this
+    # event github.sha is the tip of main, and head_sha is the commit that workflow started from.
+    # Normally the move is the AI's own commit. A push by someone else in the meantime counts too,
+    # and is then tested and deployed once more, which is harmless.
+    if: >-
+      github.event_name != 'workflow_run' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_sha != github.sha)
+    permissions:
+      contents: read
+    uses: ./.github/workflows/test.yml
+
+  aws:
+    name: Publish to S3 and CloudFront
+    needs: test # a failed or skipped test job means no deploy
+    # Only main is ever deployed; a manual run on another branch stops after the tests.
+    if: github.ref_name == github.event.repository.default_branch
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      # No credentials are written into the checkout: the AWS keys reach the two commands below as
+      # environment variables and nothing else.
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      # /infra is applied by hand, so the bucket and its secrets may not exist yet. Until they do
+      # this job says so and finishes green, rather than failing on every hourly commit; the first
+      # push after `terraform apply` publishes for real with no further change here.
+      - name: Check for the deploy secrets
+        id: secrets
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_S3_BUCKET: ${{ secrets.AWS_S3_BUCKET }}
+          AWS_CLOUDFRONT_DISTRIBUTION_ID: ${{ secrets.AWS_CLOUDFRONT_DISTRIBUTION_ID }}
+        run: |
+          missing=""
+          for name in AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_S3_BUCKET AWS_CLOUDFRONT_DISTRIBUTION_ID; do
+            [ -n "${!name}" ] || missing="${missing} ${name}"
+          done
+          if [ -n "$missing" ]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Nothing published: the AWS deploy secrets are not set yet."
+            {
+              echo "### Not published to S3 and CloudFront"
+              echo "These repository secrets are not set yet:${missing}."
+              echo ""
+              echo "They are created by \`terraform apply\` in \`/infra\` (see \`infra/README.md\`)."
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Configure AWS credentials
+        if: steps.secrets.outputs.ready == 'true'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      # --delete keeps the bucket an exact mirror of /site: a page the AI removed stops being
+      # served. /site is the whole artifact — there is no build step, and nothing else is published.
+      - name: Sync /site to S3
+        if: steps.secrets.outputs.ready == 'true'
+        env:
+          AWS_S3_BUCKET: ${{ secrets.AWS_S3_BUCKET }}
+        run: aws s3 sync ./site/ "s3://${AWS_S3_BUCKET}" --delete
+
+      - name: Invalidate the CloudFront cache
+        if: steps.secrets.outputs.ready == 'true'
+        env:
+          AWS_CLOUDFRONT_DISTRIBUTION_ID: ${{ secrets.AWS_CLOUDFRONT_DISTRIBUTION_ID }}
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id "${AWS_CLOUDFRONT_DISTRIBUTION_ID}" --paths "/*"
+
+      - name: Summarise the deploy
+        if: steps.secrets.outputs.ready == 'true'
+        run: |
+          {
+            echo "### Published to S3 and CloudFront"
+            echo "<https://interesting.outright.io/>"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  pages:
+    name: Publish to GitHub Pages
+    needs: test # a failed or skipped test job means no deploy
+    # Only main is ever deployed; a manual run on another branch stops after the tests.
+    if: github.ref_name == github.event.repository.default_branch
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      # CloudFront needs no equivalent step: error.html is the S3 bucket's error document, so the
+      # bucket itself answers a request for a missing page with it (see /infra/modules/website).
+      - name: Serve error.html as the 404 page
+        run: |
+          cp site/error.html site/404.html
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: site
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

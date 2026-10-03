@@ -1,6 +1,6 @@
 name: Test
 
-# Runs on every pull request, and as the first stage of the main-branch pipeline in pages.yml.
+# Runs on every pull request, and as the first stage of the main-branch pipeline in deploy.yml.
 on:
   pull_request:
   workflow_call:
@@ -30,3 +30,27 @@ jobs:
         run: |
           test -s site/index.html || { echo "::error::site/index.html is missing or empty"; exit 1; }
           test -s site/error.html || { echo "::error::site/error.html is missing or empty"; exit 1; }
+
+  infra:
+    name: Infrastructure
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Install Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - name: Check formatting
+        run: terraform -chdir=infra fmt -check -recursive -diff
+
+      # Only the configuration is checked: this reads no state and touches no cloud account, so it
+      # needs no credentials. Nothing in this repository ever runs `terraform plan` or `apply` —
+      # /infra is applied by hand (see infra/README.md).
+      - name: Validate the configuration
+        run: |
+          terraform -chdir=infra init -backend=false -input=false
+          terraform -chdir=infra validate
