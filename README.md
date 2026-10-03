@@ -9,8 +9,9 @@ iterate a more interesting website
 ## How it works
 
 - **`/site`** — the website, in source form. Everything anyone edits — a person or the hourly AI —
-  lives here, and nothing else does: the pages, the shared layout and partials, the Sass, and the
-  three shared files behind the analytics tag (see [Analytics axiom](#analytics-axiom)). A request
+  lives here, and nothing else does: the pages, the shared layout and partials, the Sass, the three
+  shared files behind the analytics tag (see [Analytics axiom](#analytics-axiom)) and the one behind
+  the local-state store (see [Local state axiom](#local-state-axiom)). A request
   for a page that is not there gets `error.html` back, with a 404, from a CloudFront custom error
   response.
 - **The build** — [`build.mjs`](build.mjs) turns `/site` into the artifact that is published to an
@@ -56,8 +57,9 @@ is deliberately small: a foundation to build a more holistic experience on, not 
 - **Eleventy, and two conventions.** [`eleventy.config.mjs`](eleventy.config.mjs) is the whole
   pipeline. An `.html` file is a [Nunjucks](https://mozilla.github.io/nunjucks/) template with
   optional YAML front matter; `layout: layout.njk` wraps it in the shared shell in
-  [`site/_includes`](site/_includes), so the `<head>`, the stylesheet links, the analytics line and
-  the footer are written once instead of in every page, and a page is little more than its `<main>`.
+  [`site/_includes`](site/_includes), so the `<head>`, the stylesheet links, the analytics and
+  local-state lines and the footer are written once instead of in every page, and a page is little
+  more than its `<main>`.
   A `.scss` file
   compiles to `.css` at the same path, and one whose name starts with `_` is a partial, built into
   whatever `@use`s it and never on its own. Every other file type is copied through verbatim, never
@@ -165,8 +167,8 @@ to be drawn in a given hour.
 
 - **The standard is [WCAG 2.2 level AA](https://www.w3.org/TR/WCAG22/).** Every check names the
   success criterion it stands for, so the set can grow without becoming a matter of taste.
-- **Stated in the prompt.** The `Rules:` block every run is given carries this as a third `AXIOM`
-  beside reachability and analytics. It asks for more than any validator can judge — fluid layout
+- **Stated in the prompt.** The `Rules:` block every run is given carries this as one `AXIOM`
+  among four. It asks for more than any validator can judge — fluid layout
   with nothing overflowing sideways at 320px wide, tap targets around 44px, text contrast at 4.5:1 —
   because the prompt can ask for what code cannot see.
 - **Held to in code.** `check_accessibility` in
@@ -202,6 +204,66 @@ to be drawn in a given hour.
   `/site` and checks the result on every pull request and before every deploy. A violation **fails
   the build and blocks the deploy**; a warning in an hourly log nobody reads would change nothing.
 
+### Local state axiom
+
+Everything this site keeps in a visitor's browser lives in one JSON document, every page reads and
+writes it through one shared accessor, and a very small *state* menu in the corner of every page
+takes that document out, puts someone else's in, or throws it away — so a person can collect their
+skies here and hand one to someone else. Like the three above it, it is an invariant of the
+iteration process rather than a one-off tidy-up.
+
+- **One line per page.** Every page carries `<script src='js/state.js'></script>` in its `<head>`,
+  written once in [`site/_includes/layout.njk`](site/_includes/layout.njk). It is deliberately not
+  deferred, unlike the analytics line beside it: a page's own `<script>` runs while the body is
+  parsed, which is before any deferred script, so the store has to be there already.
+- **One document.** [`site/js/state.js`](site/js/state.js) keeps the whole of a visitor's state
+  under one key, `interesting_state_v1`, as a self-describing envelope — `format`, `version`,
+  `saved` and a `values` object — rather than a key per page with a parse and a `try`/`catch` per
+  page to match. `values` holds the site's own page state and only that: the names today are
+  `constellation` (the home sky every other page reinterprets), `capsules` and `omens`. The
+  cookie-consent choice is not in there, because it belongs to the consent banner, which keeps it
+  itself.
+- **One way in and out.** `window.interestingState` owns the parsing, the defaults and every
+  failure path. `read(key, fallback)` hands back `{ status, value }`, where `status` is `ok`,
+  `missing`, `unreadable` or `unavailable` — a page can render first and explain afterwards, in its
+  own words, because "you have not made a constellation yet" and "your constellation could not be
+  read" are different things to say. `get` is the value alone; `set` returns `false` when it could
+  only be kept in memory. **Two fallbacks**: an in-memory document when `localStorage` cannot be
+  used at all, and the caller's default whenever a value is missing or the stored document is
+  malformed.
+- **The earlier keys are carried over.** `interesting_wish_constellation_v1` and its two siblings
+  are folded into the document the first time a visitor arrives with them, and then taken away, so
+  nobody loses a sky to the change.
+- **The meta menu.** One button, bottom-right, opposite the consent banner's *cookies* button,
+  bottom-left. It opens a panel holding the whole document as text: copy it out, paste one in and
+  press *replace mine*, or *clear*. Import **replaces** rather than merges, for reproducibility —
+  the sky it opens is the sky it came from — and clearing asks first. Both reload the page
+  afterwards, which is the simplest honest way to show a state every page reads at load time.
+  Export and import are copy-paste rather than file download, so sharing is a paste into any
+  message. The panel is keyboard-operable, closes on Escape with the focus returned, carries its
+  own focus ring and 44px controls because the pages are free to restyle their own, and fits a
+  320px screen.
+- **Stated in the prompt.** The `Rules:` block names the exact line, shows the three calls a page
+  needs, names the keys the site keeps, and says that no page may touch `localStorage` or
+  `sessionStorage` itself.
+- **Held to in code.** `check_state` in
+  [`.github/scripts/make_interesting.py`](.github/scripts/make_interesting.py) refuses a plan that
+  leaves a page without the line, and `pages_touching_storage` refuses one in which a page — or a
+  shared script it loads — reaches for the browser's storage behind the store's back, because that
+  would be state the meta menu could not export. As with the other three, only what the run itself
+  breaks is refused.
+- **The file is out of reach.** `js/state.js` is in `FIXED_FILES` beside the analytics files: never
+  shown to a model, refused outright as a write or a delete, and skipping the prompt budget. A
+  visitor's own way of getting their state back out of this site cannot be something an hourly
+  rewrite might quietly reword.
+- **True of the site as committed**, checked by `RealSiteTest` on every pull request and before
+  every deploy: every built page loads the store, no page goes round it, the line is in the shared
+  shell, and the earlier keys are still named in the migration. `LocalStateStoreTest` goes further
+  and runs the real `state.js` against a stub browser
+  ([`state_store_harness.mjs`](.github/scripts/state_store_harness.mjs)) — the fallbacks, the
+  migration, export, import, clearing and the menu itself — because this is the one piece of
+  behaviour on the site that every page leans on and no run may repair.
+
 ### Silo
 
 The AI can only ever modify `/site` — but within it, everything: pages, the shared layout and
@@ -214,9 +276,10 @@ out of, because a run that cannot touch the shared files cannot make the site a 
 2. [`.github/scripts/make_interesting.py`](.github/scripts/make_interesting.py) rejects any path
    that is absolute, contains `..`/hidden segments or anything but lowercase letters, digits, `.`,
    `_` and `-`, resolves outside `/site` (including via symlinks) or has a non-static file type.
-   It never deletes `index.html`, `error.html` or `sitemap.xml`, never writes or deletes the three
-   files behind the analytics tag, never touches a file the model was not shown, and applies an
-   answer whole or not at all.
+   It never deletes `index.html`, `error.html` or `sitemap.xml`, never writes or deletes the four
+   fixed files — the three behind the analytics tag and the one behind the local-state store and its
+   meta menu — never touches a file the model was not shown, and applies an answer whole or not at
+   all.
 3. The workflow fails if anything outside `/site` changed, and only stages `site/` for commit. The
    repository's token is not in the checkout while the model's answer is processed. The model's
    one-line summary is stripped to plain text before it reaches the commit message.
