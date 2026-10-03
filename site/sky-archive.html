@@ -1,216 +1,14 @@
-<!DOCTYPE html>
-<html lang='en'>
-<head>
-  <meta charset='utf-8'>
-  <meta name='viewport' content='width=device-width, initial-scale=1'>
-  <title>sky archive oracle · interesting</title>
-  <meta name='description' content='Spin your saved constellation through a rune wheel, collect tiny omen readings, and forge a portable sigil.'>
-  <style>
-    :root {
-      color-scheme: dark;
-      --bg: #080b16;
-      --bg2: #1a2142;
-      --fg: #eef3ff;
-      --muted: #a8b3d6;
-      --line: rgba(255,255,255,0.18);
-      --panel: rgba(10, 13, 25, 0.72);
-      --accent: #9ec8ff;
-      --accent2: #ffe2a0;
-      --good: #b8ffd6;
-    }
-
-    * { box-sizing: border-box; }
-
-    html, body {
-      margin: 0;
-      min-height: 100%;
-      font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-      color: var(--fg);
-      background: radial-gradient(circle at 18% 5%, #25305c 0%, var(--bg) 58%);
-    }
-
-    body {
-      display: grid;
-      place-items: center;
-      padding: 1rem;
-    }
-
-    main {
-      width: min(920px, 96vw);
-      border: 1px solid var(--line);
-      border-radius: 16px;
-      background: var(--panel);
-      backdrop-filter: blur(8px);
-      box-shadow: 0 16px 40px rgba(0,0,0,0.35);
-      padding: 1rem;
-    }
-
-    h1 {
-      margin: 0;
-      line-height: 0.95;
-      letter-spacing: -0.03em;
-      font-size: clamp(1.9rem, 6vw, 3.4rem);
-    }
-
-    .tagline {
-      margin: 0.45rem 0 0.9rem;
-      color: var(--muted);
-    }
-
-    .layout {
-      display: grid;
-      grid-template-columns: 1.1fr 0.9fr;
-      gap: 0.85rem;
-    }
-
-    #oracle-canvas {
-      width: 100%;
-      height: auto;
-      display: block;
-      border-radius: 12px;
-      border: 1px solid rgba(255,255,255,0.15);
-      background: #060913;
-    }
-
-    .panel {
-      border: 1px solid rgba(255,255,255,0.14);
-      border-radius: 12px;
-      background: rgba(8, 11, 21, 0.54);
-      padding: 0.8rem;
-    }
-
-    .controls {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.5rem;
-      margin: 0.55rem 0;
-    }
-
-    button, a.action {
-      border: 1px solid var(--line);
-      border-radius: 999px;
-      background: rgba(255,255,255,0.07);
-      color: var(--fg);
-      text-decoration: none;
-      padding: 0.48rem 0.88rem;
-      font: inherit;
-      cursor: pointer;
-    }
-
-    button:hover,
-    button:focus-visible,
-    a.action:hover,
-    a.action:focus-visible {
-      outline: none;
-      transform: translateY(-1px);
-      border-color: rgba(183, 216, 255, 0.78);
-      background: rgba(150, 195, 255, 0.16);
-    }
-
-    #spin[aria-busy='true'] {
-      background: rgba(158, 200, 255, 0.23);
-      border-color: rgba(194, 223, 255, 0.85);
-      box-shadow: 0 0 12px rgba(145, 192, 255, 0.35) inset;
-    }
-
-    #status {
-      margin: 0.4rem 0 0;
-      min-height: 1.5em;
-      color: var(--accent2);
-      font-size: 0.95rem;
-    }
-
-    #omen {
-      margin: 0.75rem 0 0;
-      min-height: 7.3em;
-      white-space: pre-wrap;
-      border: 1px solid rgba(255,255,255,0.14);
-      border-radius: 10px;
-      background: rgba(6, 9, 18, 0.65);
-      color: #e8f1ff;
-      font-size: 0.9rem;
-      line-height: 1.43;
-      padding: 0.7rem;
-      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
-    }
-
-    .history,
-    .sigil {
-      margin-top: 0.8rem;
-      border: 1px solid rgba(255,255,255,0.14);
-      border-radius: 10px;
-      background: rgba(7, 10, 20, 0.5);
-      padding: 0.68rem;
-    }
-
-    .history p,
-    .sigil p {
-      margin: 0;
-      color: #d7e5ff;
-      font-size: 0.9rem;
-    }
-
-    #history-list {
-      margin: 0.5rem 0 0;
-      padding-left: 1.1rem;
-      color: #bed3ff;
-      font-size: 0.86rem;
-      line-height: 1.4;
-      max-height: 10.5rem;
-      overflow: auto;
-    }
-
-    #history-list li { margin-bottom: 0.38rem; }
-
-    #sigil-preview {
-      display: block;
-      width: 100%;
-      min-height: 130px;
-      margin-top: 0.2rem;
-      border-radius: 10px;
-      border: 1px solid rgba(255,255,255,0.14);
-      background: radial-gradient(circle at 35% 20%, #10173b 0%, #070b18 72%);
-      object-fit: contain;
-    }
-
-    #sigil-download[aria-disabled='true'] {
-      opacity: 0.5;
-      pointer-events: none;
-      cursor: default;
-    }
-
-    #sigil-note {
-      margin-top: 0.45rem;
-      color: #bed3ff;
-      font-size: 0.84rem;
-      min-height: 1.35em;
-    }
-
-    .empty {
-      color: var(--muted);
-      font-size: 0.84rem;
-      margin-top: 0.45rem;
-    }
-
-    .footer {
-      margin-top: 0.8rem;
-      display: flex;
-      gap: 0.5rem;
-      flex-wrap: wrap;
-      color: var(--muted);
-      font-size: 0.86rem;
-    }
-
-    @media (max-width: 780px) {
-      .layout { grid-template-columns: 1fr; }
-    }
-
-    @media (prefers-reduced-motion: reduce) {
-      button, a.action { transition: none; }
-    }
-  </style>
-</head>
-<body>
+---
+layout: layout.njk
+title: sky archive oracle
+description: 'Spin your saved constellation through a rune wheel, collect tiny omen readings, and forge a portable sigil.'
+stylesheet: sky-archive
+footer:
+  - [index.html, back to constellation]
+  - [sitemap.html, site map]
+  - [constellation-diary.html, open constellation diary]
+  - [error.html, visit observatory 404]
+---
   <main>
     <h1>sky archive oracle</h1>
     <p class='tagline'>Spin your saved constellation through a rune wheel and collect tiny omen readings.</p>
@@ -248,12 +46,7 @@ Load your saved sky, then spin to ask for a tiny omen.</pre>
       </section>
     </div>
 
-    <p class='footer'>
-      <a class='action' href='index.html'>back to constellation</a>
-      <a class='action' href='sitemap.html'>site map</a>
-      <a class='action' href='constellation-diary.html'>open constellation diary</a>
-      <a class='action' href='error.html'>visit observatory 404</a>
-    </p>
+{% include "footer.njk" %}
   </main>
 
   <script>
@@ -841,5 +634,3 @@ Load your saved sky, then spin to ask for a tiny omen.</pre>
       frame();
     })();
   </script>
-</body>
-</html>

@@ -1,0 +1,10 @@
+// The row of links every page ends with, built by _includes/footer.njk.
+
+.footer {
+  margin-top: 0.8rem;
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  color: var(--muted);
+  font-size: 0.86rem;
+}

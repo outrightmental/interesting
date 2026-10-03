@@ -1,0 +1,28 @@
+// The site's palette, as custom properties on :root.
+//
+// Every page used to carry its own copy of this block. It is one block now, and a page that wants
+// a different sky overrides only the handful it changes, in its own stylesheet:
+//
+//     :root {
+//       --bg: #090c1a;
+//       --bg2: #212b57;
+//     }
+//
+// Custom properties cascade, and a page's stylesheet is linked after this one, so that is all it
+// takes. Keep every colour a page might want to shift in here rather than as a literal, so the
+// whole site can be re-skinned from one file.
+
+:root {
+  color-scheme: dark;
+
+  --bg: #070a14; // the night behind everything
+  --bg2: #1c2a4e; // the lighter corner the background gradient opens from
+  --fg: #eef4ff;
+  --muted: #a9b7da; // captions, labels, the footer
+  --line: rgba(255,255,255,0.18); // the outer border of a panel or a control
+  --panel: rgba(10,14,28,0.72); // the frosted slab every page sits on
+  --accent: #9fcbff; // links and the live edge of a control
+  --accent2: #ffe7ab; // the status line a page writes its answers to
+  --good: #bdfed8;
+  --warn: #ffd4b0;
+}

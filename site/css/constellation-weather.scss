@@ -1,0 +1,81 @@
+// The weather lab: a forecast drawn from the saved sky, with an hour dial and midnight rain.
+
+@use 'readout';
+
+:root {
+  --bg: #070b16;
+  --bg2: #1b2a52;
+  --muted: #a8b7da;
+  --panel: rgba(10, 14, 28, 0.74);
+  --good: #beffd8;
+}
+
+html,
+body {
+  background: radial-gradient(circle at 20% 0%, var(--bg2) 0%, var(--bg) 60%);
+}
+
+main {
+  width: min(960px, 96vw);
+}
+
+.tagline {
+  margin: 0.45rem 0 0.9rem;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: 1.15fr 0.85fr;
+  gap: 0.85rem;
+}
+
+#lab {
+  width: 100%;
+  height: auto;
+  display: block;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: #060913;
+  cursor: crosshair;
+}
+
+#rain[aria-pressed='true'] {
+  background: rgba(159, 203, 255, 0.24);
+  border-color: rgba(194, 224, 255, 0.86);
+  box-shadow: 0 0 12px rgba(143, 195, 255, 0.34) inset;
+}
+
+.time-wrap {
+  margin-top: 0.45rem;
+  color: #dbe9ff;
+  font-size: 0.9rem;
+}
+
+#hour {
+  width: 100%;
+  margin-top: 0.3rem;
+  accent-color: var(--accent);
+}
+
+#status {
+  margin: 0.5rem 0 0;
+  min-height: 1.5em;
+  color: var(--accent2);
+  font-size: 0.95rem;
+}
+
+#report {
+  @include readout.readout(8.2em);
+}
+
+.hint {
+  margin: 0.65rem 0 0;
+  color: var(--muted);
+  font-size: 0.84rem;
+}
+
+@media (max-width: 800px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+}

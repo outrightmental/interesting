@@ -37,8 +37,27 @@ export const SASS_DIR = "_sass"; // the common Sass partials, on every styleshee
 // File types copied through untouched. Text only, which is every type /site is allowed to hold.
 export const COPIED = ["css", "js", "mjs", "json", "md", "svg", "txt", "webmanifest", "xml"];
 
+/** How a stylesheet is compiled, wherever it is compiled from. */
+function sassOptions(fromDir) {
+  return {
+    // A stylesheet can `@use 'tokens'` and reach site/_sass/_tokens.scss from anywhere.
+    loadPaths: [fromDir, path.join(SOURCE_DIR, SASS_DIR), SOURCE_DIR],
+    style: "compressed",
+  };
+}
+
 export default function (eleventyConfig) {
   eleventyConfig.setTemplateFormats(["html", "njk", "scss", ...COPIED]);
+
+  // `{{ 'error' | css }}` is the CSS of site/css/error.scss, for a page that has to carry its
+  // styles inline instead of linking them. error.html is the one: CloudFront returns it for any
+  // 404, at whatever path was asked for, so "css/site.css" next to it would be a guess. It still
+  // compiles from the same partials as every other page, so it still shares the one palette.
+  eleventyConfig.addFilter("css", (name) => {
+    if (!name) return "";
+    const file = path.join(SOURCE_DIR, "css", `${name}.scss`);
+    return sass.compile(file, sassOptions(path.dirname(file))).css;
+  });
 
   // Keep every output path identical to its source path. Without this Eleventy writes "pretty"
   // permalinks (about.html -> about/index.html), which would break the relative links the site is
@@ -53,11 +72,7 @@ export default function (eleventyConfig) {
     compile(input, inputPath) {
       // "_name.scss" is a partial: @use'd by other stylesheets, never a stylesheet itself.
       if (path.basename(inputPath).startsWith("_")) return;
-      const compiled = sass.compileString(input, {
-        // A stylesheet can `@use 'tokens'` and reach site/_sass/_tokens.scss from anywhere.
-        loadPaths: [path.dirname(inputPath), path.join(SOURCE_DIR, SASS_DIR), SOURCE_DIR],
-        style: "compressed",
-      });
+      const compiled = sass.compileString(input, sassOptions(path.dirname(inputPath)));
       this.addDependencies(inputPath, compiled.loadedUrls);
       return () => compiled.css;
     },

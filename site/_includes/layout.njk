@@ -1,0 +1,40 @@
+{#-
+  The shell every page of the site is built into. A page supplies its own <main> and nothing else:
+  the doctype, the head, the stylesheet links and the closing tags are written once, here.
+
+  Front matter a page may set:
+    title       the page's name. "interesting" is appended, so index.html leaves it out.
+    description the <meta name='description'>, omitted when absent.
+    stylesheet  a name in css/: "diary" links css/diary.css after the shared css/site.css, so the
+                page's own rules win over the shared ones. Omit it for a page that needs none.
+    inlineStyles
+                write the styles into the page instead of linking them. Only error.html needs it:
+                CloudFront returns that page for any 404, at whatever path was asked for, so a
+                relative <link> next to it would be a guess.
+    footer      the links the page ends with, as [href, text] pairs (see footer.njk).
+    footerNote  an aside shown after those links.
+
+  Links are relative, like every link in the site: it has no fixed domain and may be served under
+  a sub-path, so "css/site.css" and not "/css/site.css".
+-#}
+<!DOCTYPE html>
+<html lang='en'>
+<head>
+  <meta charset='utf-8'>
+  <meta name='viewport' content='width=device-width, initial-scale=1'>
+  <title>{% if title %}{{ title }} · {% endif %}interesting</title>
+{%- if description %}
+  <meta name='description' content='{{ description }}'>
+{%- endif %}
+{%- if inlineStyles %}
+  <style>{{ 'site' | css | safe }}{{ stylesheet | css | safe }}</style>
+{%- else %}
+  <link rel='stylesheet' href='css/site.css'>
+{%- if stylesheet %}
+  <link rel='stylesheet' href='css/{{ stylesheet }}.css'>
+{%- endif %}
+{%- endif %}
+</head>
+<body>
+{{ content | safe }}</body>
+</html>
