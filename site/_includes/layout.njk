@@ -48,5 +48,24 @@
   <script src='js/state.js'></script>
 </head>
 <body>
+  <header class='site-header'>
+    <p class='site-header-title'>
+      <a href='index.html'>interesting</a>
+      <span>one sky, many instruments</span>
+    </p>
+    <nav class='site-header-nav' aria-label='Primary navigation'>
+      <a href='index.html'{% if page and page.fileSlug == 'index' %} aria-current='page'{% endif %}>home</a>
+      <a href='constellation-diary.html'{% if page and page.fileSlug == 'constellation-diary' %} aria-current='page'{% endif %}>diary</a>
+      <a href='constellation-echo.html'{% if page and page.fileSlug == 'constellation-echo' %} aria-current='page'{% endif %}>echo</a>
+      <a href='constellation-weather.html'{% if page and page.fileSlug == 'constellation-weather' %} aria-current='page'{% endif %}>weather</a>
+      <a href='orbital-weaver.html'{% if page and page.fileSlug == 'orbital-weaver' %} aria-current='page'{% endif %}>weaver</a>
+      <a href='sky-archive.html'{% if page and page.fileSlug == 'sky-archive' %} aria-current='page'{% endif %}>archive</a>
+      <a href='star-lantern.html'{% if page and page.fileSlug == 'star-lantern' %} aria-current='page'{% endif %}>lantern</a>
+      <a href='wish-terrarium.html'{% if page and page.fileSlug == 'wish-terrarium' %} aria-current='page'{% endif %}>terrarium</a>
+      <a href='sitemap.html'{% if page and page.fileSlug == 'sitemap' %} aria-current='page'{% endif %}>site map</a>
+      <a href='sky-atlas.html'{% if page and page.fileSlug == 'sky-atlas' %} aria-current='page'{% endif %}>atlas alias</a>
+      <a href='error.html'{% if page and page.fileSlug == 'error' %} aria-current='page'{% endif %}>404</a>
+    </nav>
+  </header>
 {{ content | safe }}</body>
 </html>
