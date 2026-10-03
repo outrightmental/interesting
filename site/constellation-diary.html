@@ -1,14 +1,228 @@
----
-layout: layout.njk
-title: constellation diary
-description: A logbook that turns your saved wish constellation into animated diary entries.
-stylesheet: constellation-diary
-footer:
-  - [index.html, back to constellation]
-  - [sitemap.html, site map]
-  - [error.html, visit observatory 404]
-footerNote: 'easter egg: tap the title five times'
----
+<!DOCTYPE html>
+<html lang='en'>
+<head>
+  <meta charset='utf-8'>
+  <meta name='viewport' content='width=device-width, initial-scale=1'>
+  <title>constellation diary · interesting</title>
+  <meta name='description' content='A logbook that turns your saved wish constellation into animated diary entries.'>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #090c1a;
+      --fg: #eef3ff;
+      --muted: #a7b3d4;
+      --line: rgba(255,255,255,0.18);
+      --panel: rgba(10, 14, 28, 0.72);
+      --accent: #9fc8ff;
+      --accent2: #ffe6a8;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      min-height: 100%;
+      background: radial-gradient(circle at 20% 0%, #212b57 0%, var(--bg) 55%);
+      color: var(--fg);
+      font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    }
+
+    body {
+      padding: 1rem;
+      display: grid;
+      place-items: center;
+    }
+
+    main {
+      width: min(900px, 96vw);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: var(--panel);
+      backdrop-filter: blur(8px);
+      box-shadow: 0 14px 38px rgba(0,0,0,0.35);
+      padding: 1rem;
+    }
+
+    h1 {
+      margin: 0;
+      letter-spacing: -0.03em;
+      font-size: clamp(1.8rem, 5vw, 3.1rem);
+      cursor: default;
+    }
+
+    .tagline {
+      margin: 0.35rem 0 0.9rem;
+      color: var(--muted);
+    }
+
+    .top {
+      display: grid;
+      grid-template-columns: 1.1fr 0.9fr;
+      gap: 0.8rem;
+    }
+
+    #sky {
+      width: 100%;
+      height: auto;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.16);
+      background: #070b18;
+      display: block;
+    }
+
+    .panel {
+      border: 1px solid rgba(255,255,255,0.14);
+      border-radius: 12px;
+      background: rgba(6, 9, 19, 0.56);
+      padding: 0.8rem;
+    }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin: 0.6rem 0;
+    }
+
+    button, a.action {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: rgba(255,255,255,0.07);
+      color: var(--fg);
+      text-decoration: none;
+      padding: 0.46rem 0.85rem;
+      font: inherit;
+      cursor: pointer;
+    }
+
+    button:hover,
+    button:focus-visible,
+    a.action:hover,
+    a.action:focus-visible {
+      outline: none;
+      border-color: rgba(182, 213, 255, 0.76);
+      background: rgba(152, 194, 255, 0.17);
+    }
+
+    button:disabled {
+      opacity: 0.62;
+      cursor: default;
+    }
+
+    #sound[aria-pressed='true'] {
+      background: rgba(159, 200, 255, 0.22);
+      border-color: rgba(190, 221, 255, 0.82);
+      box-shadow: 0 0 10px rgba(144, 194, 255, 0.34) inset;
+    }
+
+    .row {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      margin-top: 0.35rem;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    input[type='range'] {
+      width: 100%;
+      accent-color: var(--accent);
+    }
+
+    #status {
+      margin: 0.5rem 0 0;
+      min-height: 1.4em;
+      color: var(--accent2);
+      font-size: 0.94rem;
+    }
+
+    #entry {
+      margin: 0.8rem 0 0;
+      padding: 0.72rem;
+      border: 1px solid rgba(255,255,255,0.14);
+      border-radius: 10px;
+      background: rgba(7, 11, 23, 0.66);
+      color: #e6efff;
+      white-space: pre-wrap;
+      min-height: 9em;
+      font-size: 0.92rem;
+      line-height: 1.45;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+    }
+
+    .capsules {
+      margin-top: 0.8rem;
+      padding: 0.72rem;
+      border: 1px solid rgba(255,255,255,0.14);
+      border-radius: 10px;
+      background: rgba(7, 11, 23, 0.5);
+    }
+
+    .capsules p {
+      margin: 0;
+      color: #d9e6ff;
+      font-size: 0.9rem;
+    }
+
+    #capsules-list {
+      margin-top: 0.55rem;
+      display: grid;
+      gap: 0.45rem;
+    }
+
+    .capsule-item {
+      width: 100%;
+      border-radius: 10px;
+      border: 1px solid rgba(255,255,255,0.18);
+      background: rgba(255,255,255,0.04);
+      text-align: left;
+      padding: 0.48rem 0.6rem;
+      color: #ebf2ff;
+      cursor: pointer;
+    }
+
+    .capsule-item:hover,
+    .capsule-item:focus-visible {
+      border-color: rgba(183, 219, 255, 0.8);
+      background: rgba(151, 196, 255, 0.15);
+      outline: none;
+    }
+
+    .capsule-title {
+      display: block;
+      font-size: 0.9rem;
+      font-weight: 600;
+    }
+
+    .capsule-meta {
+      display: block;
+      margin-top: 0.2rem;
+      font-size: 0.8rem;
+      color: #bed2fb;
+    }
+
+    .capsule-empty {
+      color: var(--muted);
+      font-size: 0.86rem;
+    }
+
+    .footer {
+      margin-top: 0.8rem;
+      color: var(--muted);
+      font-size: 0.86rem;
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+
+    @media (max-width: 760px) {
+      .top { grid-template-columns: 1fr; }
+    }
+  </style>
+  <!-- Analytics and the cookie consent banner that gates it; see js/analytics.js. -->
+  <script src='js/analytics.js' defer></script>
+</head>
+<body>
   <main>
     <h1 id='title'>constellation diary</h1>
     <p class='tagline'>Your saved wish constellation, replayed as a tiny observatory logbook.</p>

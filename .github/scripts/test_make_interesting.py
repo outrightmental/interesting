@@ -60,6 +60,11 @@ def home(*links):
     return "<h1>interesting</h1>\n<nav>" + "".join(f"<a href='{to}'>{to}</a>" for to in links) + "</nav>"
 
 
+def page(body):
+    """A page that loads the shared analytics and consent script, as every page of /site does."""
+    return f"<head>{mi.ANALYTICS_TAG}</head>\n<body>{body}</body>"
+
+
 class SiteDirTestCase(unittest.TestCase):
     """Points the script at a throwaway /site so no test touches the real one.
 
@@ -330,7 +335,7 @@ class BuildPromptTest(SiteDirTestCase):
         self.assertEqual(omitted, ["huge.js"])
         prompt = mi.build_prompt(shown, omitted)
         self.assertNotIn("yyyy", prompt)
-        self.assertIn("content omitted for size): huge.js", prompt)
+        self.assertIn("not shown to you: huge.js", prompt)
         self.assertIn("may not change or delete them", prompt)
         self.assertIn("3 files in all", prompt)  # the whole site is counted, not only what is shown
         # A file left out still belongs to the piece the run is asked to weigh, and the federation
@@ -630,141 +635,131 @@ class ReachabilityAxiomTest(SiteDirTestCase):
         self.assertEqual(omitted, ["zz-big.js"])
 
 
-def needs_the_build(test):
-    """Skip a test that runs the real Node build when the toolchain is not installed.
+class AnalyticsAxiomTest(SiteDirTestCase):
+    """Issue #24: every page carries the site's analytics tag and its cookie consent banner, both of
+    which arrive with one line. The axiom is a standing rule of every prompt, validate_plan holds
+    the line, and the files behind that line are kept out of every run's reach."""
 
-    In CI it is a failure instead: a silent skip there would quietly stop checking the built site,
-    which is the only site the axiom is about.
-    """
-    try:
-        mi.build_site({"index.html": "<h1>hi</h1>"})
-    except mi.BuildToolchainError as err:
-        if os.environ.get("CI"):
-            test.fail(f"the Node build toolchain is missing in CI: {err}")
-        test.skipTest(f"the Node build toolchain is not installed ({err})")
-
-
-def front_matter(**fields):
-    return "---\n" + "".join(f"{key}: {value}\n" for key, value in fields.items()) + "---\n"
-
-
-class BuildPipelineTest(unittest.TestCase):
-    """Issue #25: the real build, and the reachability axiom judged on what it produces.
-
-    SiteDirTestCase stands the build in with the identity, which is exactly right for its plain-HTML
-    fixtures; this is where the pipeline itself is exercised. /site is source now -- a layout is not
-    a page, and a page is whatever the templates make of it -- so these are the tests that say what
-    "every page" means.
-    """
-
-    LAYOUT = ("<!DOCTYPE html>\n<html lang='en'>\n<head><title>{{ title }}</title>\n"
-              "<link rel='stylesheet' href='css/site.css'></head>\n"
-              "<body>\n{{ content | safe }}</body>\n</html>\n")
-    NAV = "<nav>{% for page in ['toy.html', 'error.html'] %}<a href='{{ page }}'>{{ page }}</a>{% endfor %}</nav>\n"
-    PAGES = ["index.html", "toy.html", "error.html"]
+    PAGES = ["index.html", "error.html", "toy.html"]
 
     def setUp(self):
-        needs_the_build(self)
-        tmp = tempfile.TemporaryDirectory()
-        self.addCleanup(tmp.cleanup)
-        self.site = Path(tmp.name).resolve() / "site"
-        (self.site / "_includes").mkdir(parents=True)
-        (self.site / "_sass").mkdir()
-        (self.site / "css").mkdir()
-        patcher = mock.patch.object(mi, "SITE_DIR", self.site)
-        patcher.start()
-        self.addCleanup(patcher.stop)
-        self.write("_includes/layout.njk", self.LAYOUT)
-        self.write("_includes/nav.njk", self.NAV)
-        self.write("_sass/_tokens.scss", ":root { --fg: #eeeeff; }\n")
-        self.write("css/site.scss", "@use 'tokens';\nbody { color: var(--fg); }\n")
-        # The home page links nothing itself: its navigation arrives from the shared partial, so
-        # only the built site shows that toy.html and error.html can be reached.
-        self.write("index.html", front_matter(layout="layout.njk", title="interesting")
-                   + '<h1>interesting</h1>\n{% include "nav.njk" %}')
-        self.write("toy.html", front_matter(layout="layout.njk", title="toy") + "<p>toy</p>\n")
-        self.write("error.html", front_matter(layout="layout.njk", title="lost") + "<p>lost</p>\n")
-        self.write("sitemap.xml", sitemap(*self.PAGES))
+        super().setUp()
+        (self.site / "js").mkdir()
+        (self.site / mi.ANALYTICS_SCRIPT).write_text("/* the shared tag and banner */")
+        (self.site / "index.html").write_text(page(home("toy.html", "error.html")))
+        (self.site / "error.html").write_text(page("<p>404</p>"))
+        (self.site / "toy.html").write_text(page("<p>toy</p>"))
+        (self.site / "sitemap.xml").write_text(sitemap(*self.PAGES))
 
-    def write(self, rel, content):
-        (self.site / rel).write_text(content, encoding="utf-8")
+    def prompt(self):
+        return mi.build_prompt([("index.html", "<h1>hi</h1>")])
 
-    def built(self):
-        return mi.build_site(dict(mi.read_site()))
+    def test_the_axiom_is_a_standing_rule_of_every_prompt(self):
+        rules = self.prompt()
+        rules = rules[rules.index("Rules:"):]
+        for rule in ["every page carries the site's analytics and cookie consent banner",
+                     mi.ANALYTICS_TAG,
+                     "Keep that line on every page you rewrite",
+                     "put it on every page you add",
+                     f"../{mi.ANALYTICS_SCRIPT}",  # a page in a sub-folder
+                     "only once a visitor accepts",
+                     "are fixed: they are not shown to you",
+                     "without that line is refused"]:
+            with self.subTest(rule=rule):
+                self.assertIn(rule, rules)
+        for fixed in mi.FIXED_FILES:
+            with self.subTest(fixed=fixed):
+                self.assertIn(fixed, rules)
 
-    def test_templates_render_and_sass_compiles_to_the_same_paths(self):
-        built = self.built()
-        self.assertEqual(sorted(built), ["css/site.css", "error.html", "index.html", "sitemap.xml", "toy.html"])
-        self.assertTrue(built["index.html"].startswith("<!DOCTYPE html>"))
-        self.assertIn("<title>interesting</title>", built["index.html"])
-        self.assertIn("<h1>interesting</h1>", built["index.html"])
-        self.assertNotIn("layout: layout.njk", built["index.html"], "front matter is not published")
-        self.assertIn("--fg: #eeeeff", built["css/site.css"], "the @use'd partial reached the output")
-        self.assertIn("color:var(--fg)", built["css/site.css"])
+    def test_the_prompt_no_longer_forbids_the_sites_own_analytics(self):
+        # The rule used to end "nothing harmful, deceptive or tracking", which this axiom
+        # contradicts as written. A run still may not add measurement of its own.
+        prompt = self.prompt()
+        self.assertNotIn("nothing harmful, deceptive or tracking", prompt)
+        self.assertIn("nothing harmful or deceptive", prompt)
+        self.assertIn("add no tracking, telemetry, beacon or third-party script of your own", prompt)
 
-    def test_the_shared_files_are_never_published(self):
-        # A layout, a partial and a Sass partial are source: they are built into the pages and the
-        # stylesheets that use them, and nothing of them is served on its own.
-        built = self.built()
-        for shared in ["_includes/layout.njk", "_includes/nav.njk", "_sass/_tokens.scss", "css/site.scss"]:
-            with self.subTest(shared=shared):
-                self.assertIn(shared, dict(mi.read_site()))
-                self.assertNotIn(shared, built)
-
-    def test_a_page_is_whatever_the_templates_make_of_it(self):
-        # The axiom's question -- can the root reach every page? -- is asked of the built site. In
-        # the source, index.html names no page at all; built, its navigation names both.
-        source = dict(mi.read_site())
-        self.assertEqual(mi.links_from("index.html", source), set())
-        built = self.built()
-        self.assertEqual(mi.html_pages(built), set(self.PAGES))
-        self.assertEqual(mi.links_from("index.html", built), {"toy.html", "error.html"})
-        self.assertEqual(mi.unreachable_pages(built), {})
-
-    def test_a_page_added_as_a_template_is_held_to_the_axiom_through_the_build(self):
-        added = {"path": "new.html", "content": front_matter(layout="layout.njk", title="new") + "<p>new</p>\n"}
-        with self.assertRaisesRegex(mi.RejectedChange, r"new\.html is not reachable.*not listed"):
-            mi.validate_plan({"files": [added]})
-        wired = {"files": [
-            added,
-            {"path": "_includes/nav.njk", "content": self.NAV.replace("'error.html'", "'error.html', 'new.html'")},
+    def test_a_page_a_run_adds_must_carry_the_tag(self):
+        plan = {"files": [
+            {"path": "new.html", "content": "<p>new</p>"},
+            {"path": "index.html", "content": page(home("toy.html", "error.html", "new.html"))},
             {"path": "sitemap.xml", "content": sitemap(*self.PAGES, "new.html")},
         ]}
-        self.assertEqual(len(mi.validate_plan(wired)), 3)
+        with self.assertRaisesRegex(mi.RejectedChange, r"new\.html has no <script"):
+            mi.validate_plan(plan)
+        plan["files"][0]["content"] = page("<p>new</p>")
+        self.assertEqual(len(mi.validate_plan(plan)), 3)
 
-    def test_a_plan_that_does_not_build_is_refused(self):
-        for broken, what in [
-            ({"path": "index.html", "content": front_matter(layout="gone.njk") + "<p>x</p>"}, "a missing layout"),
-            ({"path": "index.html", "content": '{% include "gone.njk" %}'}, "a missing partial"),
-            ({"path": "css/site.scss", "content": "@use 'gone';\n"}, "a missing Sass partial"),
-            ({"path": "css/site.scss", "content": "body { color: ; }\n"}, "broken Sass"),
-        ]:
-            with self.subTest(what=what), self.assertRaisesRegex(mi.RejectedChange, "does not build"):
-                mi.validate_plan({"files": [broken]})
+    def test_dropping_the_tag_from_a_page_a_run_rewrites_is_refused(self):
+        for content in ["<p>no tag at all</p>", "<head><script>var ANALYTICS = 'js/analytics.js';</script></head>"]:
+            with self.subTest(content=content[:40]), self.assertRaisesRegex(mi.RejectedChange, r"toy\.html has no <script"):
+                mi.validate_plan({"files": [{"path": "toy.html", "content": content}]})
+        # It is the src that counts, not the exact spelling of the tag around it.
+        loaded = '<head><script defer src="js/analytics.js"></script></head>'
+        self.assertEqual(len(mi.validate_plan({"files": [{"path": "toy.html", "content": loaded}]})), 1)
 
-    def test_a_site_that_already_does_not_build_blocks_nothing(self):
-        # Same reasoning as the orphan that was already there: every run is asked to repair the
-        # site, so a run must not be refused over damage it did not do. It still has to build.
-        self.write("css/site.scss", "@use 'gone';\n")
-        with mock.patch("builtins.print"):
-            ops = mi.validate_plan({"files": [{"path": "css/site.scss", "content": "body { color: red; }\n"}]})
+    def test_a_page_in_a_sub_folder_loads_it_by_a_relative_src(self):
+        plan = {"files": [
+            {"path": "deep/new.html",
+             "content": f"<head><script src='../{mi.ANALYTICS_SCRIPT}' defer></script></head>"},
+            {"path": "index.html", "content": page(home("toy.html", "error.html", "deep/new.html"))},
+            {"path": "sitemap.xml", "content": sitemap(*self.PAGES, "deep/new.html")},
+        ]}
+        self.assertEqual(len(mi.validate_plan(plan)), 3)
+
+    def test_a_page_that_was_already_missing_the_tag_blocks_nothing(self):
+        # Only what the run itself breaks is refused, as with the reachability axiom: a plan that
+        # had to repair every page first could never be applied, including the one that repairs them.
+        (self.site / "index.html").write_text(home("toy.html", "error.html"))
+        ops = mi.validate_plan({"files": [{"path": "toy.html", "content": page("<p>still tagged</p>")}]})
         self.assertEqual(len(ops), 1)
+        self.assertEqual(mi.pages_missing_analytics(dict(mi.read_site())), {"index.html"})
+
+    def test_a_site_without_the_shared_script_is_not_held_to_the_axiom(self):
+        (self.site / mi.ANALYTICS_SCRIPT).unlink()
+        self.assertEqual(mi.pages_missing_analytics(dict(mi.read_site())), set())
+        self.assertEqual(len(mi.validate_plan({"files": [{"path": "toy.html", "content": "<p>bare</p>"}]})), 1)
+
+    def test_the_files_behind_the_tag_can_neither_be_rewritten_nor_deleted(self):
+        for rel in sorted(mi.FIXED_FILES):
+            for plan in [{"files": [{"path": rel, "content": "rewritten from memory"}]},
+                         {"delete": [rel]}, {"delete": [f"site/{rel}"]}]:
+                with self.subTest(plan=str(plan)[:80]), self.assertRaises(mi.RejectedChange):
+                    mi.validate_plan(plan)
+
+    def test_the_files_behind_the_tag_are_never_shown_and_cost_the_prompt_nothing(self):
+        # 55 KB of vendored consent library must not push a page of the site out of the prompt, and
+        # a file the model cannot see is a file it cannot break.
+        for rel in sorted(mi.FIXED_FILES):
+            path = self.site / rel
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("z" * mi.PROMPT_BUDGET_CHARS)
+        shown, omitted = mi.split_for_prompt(mi.read_site())
+        self.assertEqual(sorted(rel for rel, _ in shown),
+                         ["error.html", "index.html", "sitemap.xml", "toy.html"])
+        self.assertEqual(sorted(set(omitted) & mi.FIXED_FILES), sorted(mi.FIXED_FILES))
+        prompt = mi.build_prompt(shown, omitted)
+        self.assertNotIn("zzzz", prompt)
+        self.assertIn("you may not change or delete them", prompt)
 
 
 class RealSiteTest(unittest.TestCase):
-    """The site in this repository obeys the reachability axiom, once built.
+    """The site in this repository obeys both axioms: every page is reachable from the root, and
+    every page carries the analytics tag and consent banner.
 
-    validate_plan only refuses what a run breaks, so the invariant has to start out true: this is
-    what makes it hold from the next deploy onward and not only for pages a later run adds. It
+    validate_plan only refuses what a run breaks, so the invariants have to start out true: this is
+    what makes them hold from the next deploy onward and not only for pages a later run adds. It
     runs on every pull request and on main before each deploy, so a hand-written commit that
-    orphans a page is caught there too.
-
-    It is the built site that is checked, because that is the one that gets deployed and the one a
-    visitor sees. Building it here also means every pull request finds out that /site still builds.
+    orphans a page or drops the tag is caught there too.
     """
 
+    # What deploy.yml replaces with the GA_MEASUREMENT_ID repository secret on the way to S3.
+    # Spelled out here rather than imported, so renaming it in one place fails here.
+    GA_PLACEHOLDER = "__GA_MEASUREMENT_ID__"
+
     def setUp(self):
-        site = Path(mi.__file__).resolve().parents[2] / "site"
+        self.repo = Path(mi.__file__).resolve().parents[2]
+        site = self.repo / "site"
         if not site.is_dir():
             self.skipTest(f"no site directory at {site}")
         needs_the_build(self)
@@ -784,16 +779,26 @@ class RealSiteTest(unittest.TestCase):
         self.assertIn("sitemap.xml", self.site)
         self.assertIn("sitemap.html", mi.links_from("index.html", self.site))
 
-    def test_the_two_pages_the_deploy_needs_are_built(self):
-        for required in ["index.html", "error.html"]:
-            with self.subTest(required=required):
-                self.assertTrue(self.site.get(required, "").strip(), f"{required} is missing or empty")
+    def test_every_page_loads_the_analytics_and_consent_script(self):
+        for rel in mi.FIXED_FILES:
+            self.assertIn(rel, self.site, "the files behind the tag have to be there")
+        self.assertEqual(mi.pages_missing_analytics(self.site), set())
+        self.assertGreater(len(mi.html_pages(self.site)), 1, "the check is worth nothing on one page")
 
-    def test_one_run_could_still_rewrite_the_whole_site(self):
-        # A page is a template and a stylesheet now, so federating costs about twice what it did.
-        # A run that has to leave part of the site behind cannot make it a coherent whole.
-        self.assertGreaterEqual(mi.MAX_CHANGES, len(self.source))
-        self.assertGreaterEqual(mi.PROMPT_BUDGET_CHARS, sum(len(text) for text in self.source.values()))
+    def test_the_measurement_id_is_not_committed_but_the_deploy_injects_it(self):
+        analytics = self.site[mi.ANALYTICS_SCRIPT]
+        self.assertIn(self.GA_PLACEHOLDER, analytics)
+        self.assertNotRegex(analytics, r"G-[A-Z0-9]{6,}", "a measurement ID is committed")
+        deploy = (self.repo / ".github" / "workflows" / "deploy.yml").read_text()
+        self.assertIn(self.GA_PLACEHOLDER, deploy, "nothing replaces the placeholder at deploy time")
+        self.assertIn("GA_MEASUREMENT_ID", deploy)
+
+    def test_the_vendored_consent_library_keeps_its_license_and_version(self):
+        for rel in ["js/cookieconsent.umd.js", "css/cookieconsent.css"]:
+            with self.subTest(rel=rel):
+                self.assertIn("CookieConsent 3.1.0", self.site[rel])
+                self.assertIn("github.com/orestbida/cookieconsent", self.site[rel])
+                self.assertIn("MIT License", self.site[rel])
 
 
 class SmallModelTest(unittest.TestCase):

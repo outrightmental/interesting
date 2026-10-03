@@ -8,12 +8,12 @@ iterate a more interesting website
 
 ## How it works
 
-- **`/site`** — the website, in source form. Everything anyone edits — a person or the hourly AI —
-  lives here, and nothing else does. A request for a page that is not there gets `error.html` back,
-  with a 404, from a CloudFront custom error response.
-- **The build** — [`build.mjs`](build.mjs) turns `/site` into the artifact that is published, in a
-  throwaway folder outside the repository. Nothing generated is ever committed. See
-  [Building the site](#building-the-site).
+- **`/site`** — the static website, published to an S3 bucket behind CloudFront at
+  [interesting.outright.io](https://interesting.outright.io/). `site/` is the whole artifact:
+  plain HTML with no build step, plus the three shared files behind the analytics tag (see
+  [Analytics axiom](#analytics-axiom)), and nothing else is published. The deploy changes one thing
+  on the way — the GA4 measurement ID — and copies everything else as it is. A request for a page
+  that is not there gets `error.html` back, with a 404, from a CloudFront custom error response.
 - **`/infra`** — the hosting, as code. [`infra/`](infra) is a self-contained Terraform project
   that owns the bucket, the CloudFront distribution, the certificate and DNS, the deploy IAM
   user, the Actions secrets the deploy uses — and this repository itself. It is applied by hand:
@@ -113,6 +113,41 @@ sitemap. It is an invariant of the iteration process rather than a one-off tidy-
   [`.github/scripts/test_make_interesting.py`](.github/scripts/test_make_interesting.py) builds
   `/site` and checks the result on every pull request and before every deploy.
 
+### Analytics axiom
+
+Every page reports to Google Analytics, and asks for consent before it does. That is an invariant of
+the iteration process too, for the same reason the one above is: the hourly run may return complete
+new content for any page it is shown.
+
+- **One line per page.** Every page carries
+  `<script src='js/analytics.js' defer></script>` in its `<head>`, and
+  [`site/js/analytics.js`](site/js/analytics.js) brings the rest with it, resolving its neighbours
+  from its own URL so a page in a sub-folder works too: the consent banner
+  ([orestbida/cookieconsent](https://github.com/orestbida/cookieconsent) 3.1.0, MIT, vendored into
+  `site/js/` and `site/css/` exactly as published) and — only once a visitor accepts the analytics
+  category — the Google tag, which is not even fetched before then. Declining later switches
+  measurement back off and lets the banner clear the cookies it set, and a small *cookies* button in
+  the corner of every page reopens the choice.
+- **No measurement ID in the repository.** `analytics.js` ships a placeholder, and
+  [`deploy.yml`](.github/workflows/deploy.yml) pastes the `GA_MEASUREMENT_ID` repository secret into
+  the copy on its way to the bucket. The placeholder switches the whole file off, so a fork, a local
+  copy or any checkout the deploy has not run over loads no tag, shows no banner and sets no cookie.
+  The secret comes from the same `terraform apply` as the AWS ones ([`infra/github.tf`](infra/github.tf)).
+- **Stated in the prompt.** The `Rules:` block names the exact line, tells a run to keep it on every
+  page it rewrites and to put it on every page it adds, and names the relative `src` a page in a
+  sub-folder uses. The rule that used to end "nothing harmful, deceptive or tracking" now forbids a
+  run from adding tracking, telemetry, a beacon or a third-party script *of its own*.
+- **Held to in code.** `check_analytics` in
+  [`.github/scripts/make_interesting.py`](.github/scripts/make_interesting.py) refuses a plan that
+  leaves a page without the line. As with reachability, only what the run itself breaks is refused.
+- **The three files are out of reach.** `FIXED_FILES` — `js/analytics.js` and the two vendored
+  `cookieconsent` files — are never shown to a model and are refused outright as a write or a
+  delete, so no run can quietly gut the tag or the banner. They skip the prompt budget as well, so
+  55 KB of consent library cannot push a page of the site out of the prompt.
+- **True of the site as committed**, checked by `RealSiteTest` on every pull request and before every
+  deploy: every page loads the script, the three files are there, no measurement ID is committed,
+  `deploy.yml` still replaces the placeholder, and the vendored library keeps its license and version.
+
 ### Silo
 
 The AI can only ever modify `/site` — but within it, everything: pages, the shared layout and
@@ -124,15 +159,11 @@ out of, because a run that cannot touch the shared files cannot make the site a 
    manages to use a tool, the run stops and nothing is applied.
 2. [`.github/scripts/make_interesting.py`](.github/scripts/make_interesting.py) rejects any path
    that is absolute, contains `..`/hidden segments or anything but lowercase letters, digits, `.`,
-   `_` and `-`, resolves outside `/site` (including via symlinks) or has a file type that is not one
-   of `ALLOWED_EXTENSIONS` (which includes `.njk` and `.scss`, the build's own source types). A
-   segment may begin with `_`, because that is how both halves of the build mark what is not a page.
-   It never deletes `index.html`, `error.html` or `sitemap.xml`, never touches a file the model was
-   not shown, and applies an answer whole or not at all.
-3. Every answer has to build. The prompt explains the two conventions of the pipeline, and a plan
-   whose source does not build is refused before anything is written, so the model cannot break the
-   layout or a shared partial for the whole site.
-4. The workflow fails if anything outside `/site` changed, and only stages `site/` for commit. The
+   `_` and `-`, resolves outside `/site` (including via symlinks) or has a non-static file type.
+   It never deletes `index.html`, `error.html` or `sitemap.xml`, never writes or deletes the three
+   files behind the analytics tag, never touches a file the model was not shown, and applies an
+   answer whole or not at all.
+3. The workflow fails if anything outside `/site` changed, and only stages `site/` for commit. The
    repository's token is not in the checkout while the model's answer is processed. The model's
    one-line summary is stripped to plain text before it reaches the commit message.
 
@@ -159,10 +190,10 @@ has no model in the pool, because Copilot only offers the Gemini Flash tier.
 ### Setup
 
 - **Hosting** — run `terraform apply` in [`infra/`](infra) once, by hand. That creates the bucket,
-  the distribution, the certificate and DNS, and sets the four repository secrets the deploy reads
+  the distribution, the certificate and DNS, and sets the five repository secrets the deploy reads
   (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_S3_BUCKET`,
-  `AWS_CLOUDFRONT_DISTRIBUTION_ID`). No secret is set by hand: they come from the same apply that
-  creates what they point at, so they cannot drift from it.
+  `AWS_CLOUDFRONT_DISTRIBUTION_ID` and `GA_MEASUREMENT_ID`). No secret is set by hand: they come
+  from the same apply that creates or names what they point at, so they cannot drift from it.
   [`infra/README.md`](infra/README.md) has the order and the costs. Until that apply has run, the
   deploy says so in its summary and finishes green instead of failing hourly — so run it around
   the time this lands, because GitHub Pages is retired and nothing else publishes the site.
