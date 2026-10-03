@@ -229,8 +229,9 @@ iteration process rather than a one-off tidy-up.
   own words, because "you have not made a constellation yet" and "your constellation could not be
   read" are different things to say. `get` is the value alone; `set` returns `false` when it could
   only be kept in memory. **Two fallbacks**: an in-memory document when `localStorage` cannot be
-  used at all, and the caller's default whenever a value is missing or the stored document is
-  malformed. A `set` re-reads the document first and settles one name, leaving every other name as
+  used — refused outright, or out of room part-way through a visit, after which what the page kept
+  stays kept for as long as it is open — and the caller's default whenever a value is missing or
+  the stored document is malformed. A `set` re-reads the document first and settles one name, leaving every other name as
   the browser has it: one document for the whole site is also one document for every tab of it, and
   a tab that wrote its own copy back whole would throw away what another tab had saved since.
 - **The earlier keys are carried over.** `interesting_wish_constellation_v1` and its two siblings
