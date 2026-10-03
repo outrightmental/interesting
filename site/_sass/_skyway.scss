@@ -4,8 +4,10 @@
 
 .skyway {
   margin-top: 0.95rem;
-  border-top: 1px solid vars.$hairline;
-  padding-top: 0.75rem;
+  border: 1px solid vars.$hairline;
+  border-radius: vars.$radius-panel;
+  background: rgba(7, 10, 20, 0.56);
+  padding: 0.75rem;
 }
 
 .skyway-label {
