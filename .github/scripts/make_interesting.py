@@ -10,6 +10,11 @@ styles and behaviour into shared files, unify navigation and visual language,
 merge or retire pages that overlap). Either outcome is a successful run, so the
 site can be made more interesting by becoming coherent and not only by growing.
 
+One axiom stands over every run: all of the content stays reachable from the
+root, both by following links from index.html and through sitemap.xml. It is
+stated in the prompt and held to by check_reachability(), which refuses a plan
+that would orphan a page.
+
 The model is reached through the GitHub Copilot CLI (`copilot`), which bills the
 GitHub Copilot subscription behind the token in COPILOT_GITHUB_TOKEN. (GitHub
 Models, which this script originally called, was retired on 2026-07-30.)
@@ -148,7 +153,9 @@ ALLOWED_EXTENSIONS = {
     ".html", ".css", ".js", ".mjs", ".svg", ".txt", ".json", ".md", ".xml",
     ".webmanifest",
 }
-PROTECTED_FILES = {"index.html", "error.html"}  # may be rewritten, never deleted
+# May be rewritten, never deleted, and shown to the model first so it can always be rewritten.
+# sitemap.xml is one of them because the reachability axiom below leans on it.
+PROTECTED_FILES = {"index.html", "error.html", "sitemap.xml"}
 # How many files one run may touch. Roomy enough that a run which federates the site can rewrite
 # every page of it and add the shared files those pages link to, which is what the whole-site
 # review in build_prompt asks for; small enough that a runaway answer is still refused.
@@ -225,6 +232,138 @@ def read_site():
     return files
 
 
+# The reachability axiom (issue #21). All of the content stays reachable from the root: index.html
+# leads to every page, directly or by following links through pages it leads to, and sitemap.xml
+# lists every page. The prompt states it as a standing rule for every run; the functions below let
+# validate_plan hold the line, so a page a run adds is wired into both in the same run.
+HOME_PAGE = "index.html"
+SITEMAP = "sitemap.xml"
+PAGE_SUFFIX = ".html"
+
+# An href or src in HTML, quoted with ' or " or bare.
+REFERENCE = re.compile(r"\b(?:href|src)\s*=\s*(?:\"([^\"]*)\"|'([^']*)'|([^\s\"'<>]+))", re.I)
+# One <loc> of a sitemaps.org urlset.
+SITEMAP_LOC = re.compile(r"<loc>([^<]*)</loc>", re.I)
+# The start of a link that leaves the site: a scheme ("https:", "mailto:", "data:") or a host.
+LEAVES_SITE = re.compile(r"[a-z][a-z0-9+.-]*:|//", re.I)
+
+
+def html_pages(site):
+    """The pages of a site mapping ({path: content}), as a set of site-relative paths."""
+    return {rel for rel in site if rel.endswith(PAGE_SUFFIX)}
+
+
+def resolve_link(rel, raw):
+    """A link written on page `rel` as a site-relative path, or None if it names no file in /site.
+
+    Fragments and queries are dropped, "." and ".." are followed, a link to a folder means that
+    folder's home page, and anything that leaves the site is ignored.
+    """
+    target = raw.split("#", 1)[0].split("?", 1)[0].strip()
+    if not target or LEAVES_SITE.match(target):
+        return None
+    if target.endswith("/"):
+        target += HOME_PAGE
+    # A site-absolute link starts at the site root; anything else starts in the linking page's folder.
+    parts = [] if target.startswith("/") else list(PurePosixPath(rel).parent.parts)
+    for part in PurePosixPath(target.lstrip("/")).parts:
+        if part == "..":
+            if not parts:
+                return None  # climbs out of /site, so it is not a page of it
+            parts.pop()
+        elif part != ".":
+            parts.append(part)
+    return "/".join(parts) or None
+
+
+def links_from(rel, site):
+    """The pages that page `rel` offers a way to reach.
+
+    The pages it links to, plus the pages named by any stylesheet or script it loads: a federated
+    site may well build its shared navigation in "js/site.js", and a page whose navigation arrives
+    that way is reachable all the same.
+    """
+    pages = html_pages(site)
+    reached = set()
+    for match in REFERENCE.finditer(site.get(rel) or ""):
+        target = resolve_link(rel, next(group for group in match.groups() if group is not None))
+        if target in pages:
+            reached.add(target)
+        elif target in site:  # a stylesheet or script, which may carry the shared navigation
+            reached |= {page for page in pages if page in site[target]}
+    return reached
+
+
+def reachable_pages(site):
+    """The pages of `site` that can be reached from the home page by following links."""
+    if HOME_PAGE not in site:
+        return set()
+    seen, queue = {HOME_PAGE}, [HOME_PAGE]
+    while queue:
+        for page in links_from(queue.pop(), site) - seen:
+            seen.add(page)
+            queue.append(page)
+    return seen
+
+
+def listed_pages(site):
+    """The pages of `site` that its sitemap lists.
+
+    A <loc> may be a relative path -- which is what this site writes, having no fixed domain and
+    being served under a sub-path -- or a full URL, so a loc counts for the page its path ends with.
+    """
+    locs = []
+    for raw in SITEMAP_LOC.findall(site.get(SITEMAP) or ""):
+        loc = raw.split("#", 1)[0].split("?", 1)[0].strip()
+        locs.append(loc + HOME_PAGE if loc.endswith("/") else loc)
+    return {page for page in html_pages(site)
+            if any(loc == page or loc.endswith("/" + page) for loc in locs)}
+
+
+def unreachable_pages(site):
+    """The pages of `site` that the root cannot reach, as {page: [reason, ...]}.
+
+    The axiom asks for both ways in, so there are two ways to fail it: a page that no chain of
+    links from the home page arrives at, and a page the sitemap does not list.
+    """
+    reachable, listed = reachable_pages(site), listed_pages(site)
+    missing = {}
+    for page in html_pages(site):
+        reasons = [reason for reason, ok in
+                   ((f"not reachable from {HOME_PAGE}", page in reachable),
+                    (f"not listed in {SITEMAP}", page in listed)) if not ok]
+        if reasons:
+            missing[page] = reasons
+    return missing
+
+
+def check_reachability(before, after):
+    """Raise RejectedChange if the change from site `before` to site `after` orphans a page.
+
+    Only what this run breaks is refused. A page that was already unreachable stays the site's own
+    problem to repair -- every run is asked to -- because refusing a plan over it would leave no
+    plan able to repair it. What a run adds, though, it wires in itself.
+    """
+    was = unreachable_pages(before)
+    for page, reasons in sorted(unreachable_pages(after).items()):
+        broke = [reason for reason in reasons if reason not in was.get(page, ())]
+        if broke:
+            raise RejectedChange(
+                f"every page must stay reachable from the root: {page} is " + " and ".join(broke))
+
+
+def apply_to(site, ops):
+    """The site mapping `site` as it would be once `ops` have been applied."""
+    after = dict(site)
+    for action, target, content in ops:
+        rel = target.relative_to(SITE_DIR).as_posix()
+        if action == "write":
+            after[rel] = content
+        else:
+            after.pop(rel, None)
+    return after
+
+
 def split_for_prompt(files):
     """Split the site into (shown, omitted): files whose content fits the prompt budget, and the
     names of the rest.
@@ -232,12 +371,13 @@ def split_for_prompt(files):
     While the whole site fits in the budget nothing is omitted, which is what lets a run federate
     across every page of it.
 
-    index.html and error.html are considered first, so they are the last to be left out. The other
+    The protected files are considered first, so they are the last to be left out: every run needs
+    to be able to rewrite the home page, and to wire a page it adds into the sitemap. The other
     files are considered in a different random order each run: a file the model is not shown
     cannot be changed, and no file should stay unchangeable run after run.
     """
     def prompt_order(item):
-        return (item[0] != "index.html", item[0] not in PROTECTED_FILES, item[0])
+        return (item[0] != HOME_PAGE, item[0] not in PROTECTED_FILES, item[0])
 
     first = sorted((item for item in files if item[0] in PROTECTED_FILES), key=prompt_order)
     rest = [item for item in files if item[0] not in PROTECTED_FILES]
@@ -281,7 +421,13 @@ def build_prompt(shown, omitted=()):
         "- Paths are relative to the site root (e.g. \"index.html\", \"css/style.css\"). "
         "Use relative links between pages so the site works under a sub-path. File and folder "
         "names may only contain lowercase letters, digits, \".\", \"_\" and \"-\".\n"
-        "- index.html and error.html must always exist and remain valid.\n"
+        f"- index.html, error.html and {SITEMAP} must always exist and remain valid.\n"
+        "- AXIOM, every run: all of the content stays reachable from the root. index.html must "
+        "lead to every page of the site -- directly, or by following links through the pages it "
+        f"leads to, such as a site map page -- and {SITEMAP} must list every page. Wire a page you "
+        "add into both in the same run, and take a page you delete out of both: a plan that leaves "
+        f"a page the root cannot reach is refused. {SITEMAP} is a sitemaps.org urlset whose <loc> "
+        "values are the same relative paths used in links, because the site has no fixed domain.\n"
         "- Leave the site working at the end of the run. If you extract something into a shared "
         "file, or merge or delete a page, update every page that refers to it in the same run: "
         "never leave a link, a stylesheet or a script pointing at something that is not there.\n"
@@ -460,6 +606,9 @@ def validate_plan(plan, unseen=()):
     """Turn the model's plan into a list of (action, path, content) or raise.
 
     `unseen` names existing files whose content the model was not shown; it may not touch them.
+
+    A plan that would leave a page of the site unreachable from the root is refused, so the
+    reachability axiom holds however the prompt is answered.
     """
     files = plan.get("files") or []
     deletes = plan.get("delete") or []
@@ -502,6 +651,8 @@ def validate_plan(plan, unseen=()):
         if rel in unseen:
             raise RejectedChange(f"refusing to delete {rel}: its content was not shown to the model")
         ops.append(("delete", target, None))
+    before = dict(read_site())
+    check_reachability(before, apply_to(before, ops))
     return ops
 
 
