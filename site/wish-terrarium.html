@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang='en'>
+<head>
+  <meta charset='utf-8'>
+  <meta name='viewport' content='width=device-width, initial-scale=1'>
+  <title>wish terrarium · interesting</title>
+  <meta name='description' content='Grow a living terrarium from your saved constellation and read tiny weather reports from your wishes.'>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #070a14;
+      --bg2: #1c2a4e;
+      --fg: #eef4ff;
+      --muted: #a9b7da;
+      --line: rgba(255,255,255,0.18);
+      --panel: rgba(10, 14, 28, 0.72);
+      --accent: #a7d3ff;
+      --accent2: #ffe7ab;
+      --good: #beffd8;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      min-height: 100%;
+      background: radial-gradient(circle at 18% 0%, var(--bg2) 0%, var(--bg) 62%);
+      color: var(--fg);
+      font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    }
+
+    body {
+      display: grid;
+      place-items: center;
+      padding: 1rem;
+    }
+
+    main {
+      width: min(940px, 96vw);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: var(--panel);
+      backdrop-filter: blur(8px);
+      box-shadow: 0 16px 40px rgba(0,0,0,0.36);
+      padding: 1rem;
+    }
+
+    h1 {
+      margin: 0;
+      line-height: 0.95;
+      letter-spacing: -0.03em;
+      font-size: clamp(1.9rem, 6vw, 3.2rem);
+    }
+
+    .tagline {
+      margin: 0.45rem 0 0.85rem;
+      color: var(--muted);
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 1.1fr 0.9fr;
+      gap: 0.85rem;
+    }
+
+    #terrarium {
+      width: 100%;
+      height: auto;
+      display: block;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.16);
+      background: #060913;
+      cursor: pointer;
+    }
+
+    .panel {
+      border: 1px solid rgba(255,255,255,0.14);
+      border-radius: 12px;
+      background: rgba(7, 10, 20, 0.56);
+      padding: 0.8rem;
+    }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin: 0.55rem 0;
+    }
+
+    button, a.action {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: rgba(255,255,255,0.07);
+      color: var(--fg);
+      text-decoration: none;
+      padding: 0.48rem 0.88rem;
+      font: inherit;
+      cursor: pointer;
+      transition: transform 120ms ease, background 120ms ease, border-color 120ms ease;
+    }
+
+    button:hover,
+    button:focus-visible,
+    a.action:hover,
+    a.action:focus-visible {
+      outline: none;
+      transform: translateY(-1px);
+      border-color: rgba(184, 217, 255, 0.8);
+      background: rgba(151, 197, 255, 0.16);
+    }
+
+    #wind[aria-pressed='true'] {
+      background: rgba(159, 203, 255, 0.24);
+      border-color: rgba(194, 224, 255, 0.86);
+      box-shadow: 0 0 12px rgba(143, 195, 255, 0.34) inset;
+    }
+
+    #status {
+      margin: 0.45rem 0 0;
+      min-height: 1.5em;
+      color: var(--accent2);
+      font-size: 0.95rem;
+    }
+
+    #reading {
+      margin: 0.75rem 0 0;
+      min-height: 7.2em;
+      white-space: pre-wrap;
+      border: 1px solid rgba(255,255,255,0.14);
+      border-radius: 10px;
+      background: rgba(6, 9, 18, 0.66);
+      color: #e7f0ff;
+      font-size: 0.9rem;
+      line-height: 1.42;
+      padding: 0.7rem;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+    }
+
+    .hint {
+      margin: 0.65rem 0 0;
+      color: var(--muted);
+      font-size: 0.84rem;
+    }
+
+    .footer {
+      margin-top: 0.8rem;
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      color: var(--muted);
+      font-size: 0.86rem;
+    }
+
+    @media (max-width: 780px) {
+      .layout { grid-template-columns: 1fr; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      button, a.action { transition: none; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>wish terrarium</h1>
+    <p class='tagline'>Your saved constellation grows roots: each star becomes a swaying plant in a midnight glasshouse.</p>
+
+    <div class='layout'>
+      <canvas id='terrarium' width='620' height='340' aria-label='Animated terrarium grown from saved constellation stars'></canvas>
+
+      <section class='panel'>
+        <p style='margin:0;color:#d8e4ff;'>This page uses the same saved constellation memory as the main sky.</p>
+        <div class='controls'>
+          <button id='refresh' type='button'>refresh saved sky</button>
+          <button id='regrow' type='button'>regrow terrarium</button>
+          <button id='forecast' type='button'>ask greenhouse forecast</button>
+          <button id='wind' type='button' aria-pressed='false'>pause wind</button>
+        </div>
+        <p id='status' aria-live='polite'>Loading constellation seeds...</p>
+        <pre id='reading' aria-live='polite'>Awaiting growth.
+Load your sky memory, then click any plant to hear its thought.</pre>
+        <p class='hint'>Easter egg: type moss while this page is focused.</p>
+      </section>
+    </div>
+
+    <p class='footer'>
+      <a class='action' href='index.html'>back to constellation</a>
+      <a class='action' href='constellation-diary.html'>open constellation diary</a>
+      <a class='action' href='star-lantern.html'>open star lantern ritual</a>
+      <a class='action' href='sky-archive.html'>open sky archive oracle</a>
+    </p>
+  </main>
+
+  <script>
+    (function () {
+      var STORAGE_KEY = 'interesting_wish_constellation_v1';
+      var canvas = document.getElementById('terrarium');
+      var ctx = canvas.getContext('2d');
+      var refreshBtn = document.getElementById('refresh');
+      var regrowBtn = document.getElementById('regrow');
+      var forecastBtn = document.getElementById('forecast');
+      var windBtn = document.getElementById('wind');
+      var statusEl = document.getElementById('status');
+      var readingEl = document.getElementById('reading');
+
+      var stars = [];
+      var plants = [];
+      var lastFrame = 0;
+      var t = 0;
+      var frozenWind = false;
+      var neonMoss = false;
+      var flash = 0;
+      var codeBuffer = '';
+      var shuffleOffset = 0;
+
+      function clamp(v, min, max) {
+        return Math.max(min, Math.min(max, v));
+      }
+
+      function dayStamp() {
+        var d = new Date();
+        var y = d.getFullYear();
+        var m = String(d.getMonth() + 1).padStart(2, '0');
+        var day = String(d.getDate()).padStart(2, '0');
+        return y + '-' + m + '-' + day;
+      }
+
+      function hashText(text) {
+        var h = 2166136261;
+        for (var i = 0; i < text.length; i++) {
+          h ^= text.charCodeAt(i);
+          h = Math.imul(h, 16777619);
+        }
+        return h >>> 0;
+      }
+
+      function makeRng(seed) {
+        var s = seed >>> 0;
+        return function () {
+          s = (Math.imul(s, 1664525) + 1013904223) >>> 0;
+          return s / 4294967296;
+        };
+      }
+
+      function setWindButton() {
+        windBtn.textContent = frozenWind ? 'resume wind' : 'pause wind';
+        windBtn.setAttribute('aria-pressed', frozenWind ? 'true' : 'false');
+      }
+
+      function safeStars(input) {
+        return input.filter(function (s) {
+          return s && typeof s.x === 'number' && typeof s.y === 'number' && typeof s.text === 'string';
+        }).map(function (s) {
+          return {
+            x: Number(clamp(s.x, 0, 100).toFixed(2)),
+            y: Number(clamp(s.y, 0, 100).toFixed(2)),
+            text: s.text
+          };
+        });
+      }
+
+      function loadStars() {
+        var raw = null;
+        try {
+          raw = localStorage.getItem(STORAGE_KEY);
+        } catch (e) {
+          stars = [];
+          plants = [];
+          statusEl.textContent = 'Local storage is unavailable in this browser context.';
+          return;
+        }
+
+        if (!raw) {
+          stars = [];
+          plants = [];
+          statusEl.textContent = 'No saved constellation found yet. Create one on the main page first.';
+          return;
+        }
+
+        try {
+          var parsed = JSON.parse(raw);
+          if (!Array.isArray(parsed)) throw new Error('invalid');
+          stars = safeStars(parsed).slice(0, 140);
+          buildPlants();
+
+          if (!stars.length) {
+            statusEl.textContent = 'A sky file exists, but no readable stars were found.';
+            return;
+          }
+
+          statusEl.textContent = 'Terrarium synced: ' + stars.length + ' seed' + (stars.length === 1 ? '' : 's') + ' loaded from your sky.';
+        } catch (e2) {
+          stars = [];
+          plants = [];
+          statusEl.textContent = 'Saved constellation data is unreadable. Return home and remake it.';
+        }
+      }
+
+      function buildPlants() {
+        plants = [];
+        if (!stars.length) return;
+
+        var ordered = stars.slice();
+        if (shuffleOffset % 2 === 1) {
+          ordered.reverse();
+        } else if (shuffleOffset > 1) {
+          ordered.sort(function (a, b) {
+            return (a.y + shuffleOffset * 0.1) - (b.y + shuffleOffset * 0.1);
+          });
+        }
+
+        for (var i = 0; i < ordered.length; i++) {
+          var s = ordered[i];
+          var seed = (Math.round(s.x * 1000) ^ (Math.round(s.y * 1000) << 3) ^ hashText(s.text) ^ (i * 2654435761)) >>> 0;
+          var rnd = makeRng(seed);
+          var segments = 5 + Math.floor(rnd() * 5);
+          var height = 44 + ((100 - s.y) / 100) * 186;
+          var baseX = (s.x / 100) * canvas.width;
+          var baseY = canvas.height - 16 - (i % 3);
+          var hue = Math.floor((seed % 250) + 70) % 360;
+
+          plants.push({
+            star: s,
+            baseX: baseX,
+            baseY: baseY,
+            height: height,
+            segments: segments,
+            bend: 0.35 + rnd() * 0.95,
+            sway: 0.3 + rnd() * 1.2,
+            phase: rnd() * Math.PI * 2,
+            thickness: 1.1 + rnd() * 1.7,
+            leafSize: 2.4 + rnd() * 2.1,
+            leafEvery: 2 + Math.floor(rnd() * 2),
+            hue: hue,
+            pulse: 0,
+            glow: 0
+          });
+        }
+      }
+
+      function summarize() {
+        var cx = 0;
+        var cy = 0;
+        for (var i = 0; i < stars.length; i++) {
+          cx += stars[i].x;
+          cy += stars[i].y;
+        }
+        cx /= stars.length || 1;
+        cy /= stars.length || 1;
+
+        var spread = 0;
+        for (var j = 0; j < stars.length; j++) {
+          var dx = stars[j].x - cx;
+          var dy = stars[j].y - cy;
+          spread += Math.sqrt(dx * dx + dy * dy);
+        }
+        spread /= stars.length || 1;
+
+        return { cx: cx, cy: cy, spread: spread };
+      }
+
+      function forecast() {
+        if (!stars.length) {
+          statusEl.textContent = 'No seeds loaded yet. Refresh after creating stars on the main page.';
+          return;
+        }
+
+        var s = summarize();
+        var zone = (s.cy < 50 ? 'north' : 'south') + '-' + (s.cx < 50 ? 'west' : 'east');
+        var spreadWord = s.spread < 12 ? 'compact' : (s.spread < 24 ? 'balanced' : 'wild');
+        var density = stars.length < 5 ? 'quiet' : (stars.length < 14 ? 'steady' : 'lush');
+
+        var openers = [
+          'greenhouse bulletin:',
+          'soil telemetry:',
+          'midnight horticulture note:',
+          'terrarium weather report:'
+        ];
+        var mids = [
+          'Roots prefer tiny momentum over perfect timing.',
+          'The next bloom appears after one brave unfinished step.',
+          'Your best growth pattern is playful, then precise.',
+          'A gentle routine will outgrow a dramatic sprint.'
+        ];
+        var closers = [
+          'Water one small idea before sleep.',
+          'Prune one distraction, keep one promise.',
+          'Share a rough sprout instead of waiting for a tree.',
+          'Move one star tomorrow, then regrow this garden.'
+        ];
+
+        var seed = Math.floor(s.cx * 19 + s.cy * 23 + s.spread * 13 + stars.length * 29 + shuffleOffset * 7);
+        var a = openers[Math.abs(seed + 2) % openers.length];
+        var b = mids[Math.abs(seed + 5) % mids.length];
+        var c = closers[Math.abs(seed + 9) % closers.length];
+
+        readingEl.textContent = a + '\n'
+          + stars.length + ' plants, ' + spreadWord + ' spread, bed ' + zone + ', canopy mood ' + density + '.\n'
+          + b + '\n'
+          + c + '\n\n'
+          + 'forecast stamp: ' + dayStamp();
+
+        statusEl.textContent = 'Forecast prepared from your current constellation geometry.';
+      }
+
+      function clickPlant(clientX, clientY) {
+        if (!plants.length) return;
+        var rect = canvas.getBoundingClientRect();
+        var x = ((clientX - rect.left) / rect.width) * canvas.width;
+        var y = ((clientY - rect.top) / rect.height) * canvas.height;
+
+        var nearest = null;
+        var nearestD2 = 999999;
+
+        for (var i = 0; i < plants.length; i++) {
+          var p = plants[i];
+          var topY = p.baseY - p.height;
+          var dx = x - p.baseX;
+          var dy = y - topY;
+          var d2 = dx * dx + dy * dy;
+          if (d2 < nearestD2) {
+            nearestD2 = d2;
+            nearest = p;
+          }
+        }
+
+        if (!nearest || nearestD2 > 6400) return;
+
+        nearest.pulse = 1;
+        nearest.glow = 1;
+        flash = 1;
+
+        readingEl.textContent = 'picked leaf memory:\n'
+          + nearest.star.text + '\n\n'
+          + 'seed coordinates ' + nearest.star.x.toFixed(1) + ', ' + nearest.star.y.toFixed(1) + '\n'
+          + 'tip: regrow after rearranging stars on the main page.';
+
+        statusEl.textContent = 'Plant selected. This stem remembers one saved thought.';
+      }
+
+      function toggleWind() {
+        frozenWind = !frozenWind;
+        setWindButton();
+        statusEl.textContent = frozenWind
+          ? 'Wind paused. The terrarium is holding its breath.'
+          : 'Wind resumed. Stems sway again.';
+      }
+
+      function drawBackground() {
+        var grad = ctx.createLinearGradient(0, 0, 0, canvas.height);
+        if (neonMoss) {
+          var hue = (t * 22) % 360;
+          grad.addColorStop(0, 'hsl(' + hue.toFixed(1) + ', 58%, 14%)');
+          grad.addColorStop(1, 'hsl(' + ((hue + 80) % 360).toFixed(1) + ', 62%, 7%)');
+        } else {
+          grad.addColorStop(0, '#0e1530');
+          grad.addColorStop(1, '#060913');
+        }
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        for (var i = 0; i < 36; i++) {
+          var sx = (i * 131.7 + t * 8) % canvas.width;
+          var sy = (i * 83.9 + t * 5) % canvas.height;
+          var a = 0.05 + (i % 4) * 0.03;
+          ctx.beginPath();
+          ctx.fillStyle = 'rgba(178, 205, 255, ' + a.toFixed(3) + ')';
+          ctx.arc(sx, sy, 1.1, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        var soil = ctx.createLinearGradient(0, canvas.height - 64, 0, canvas.height);
+        soil.addColorStop(0, neonMoss ? 'rgba(40, 70, 34, 0.72)' : 'rgba(26, 35, 54, 0.72)');
+        soil.addColorStop(1, neonMoss ? 'rgba(22, 42, 20, 0.94)' : 'rgba(14, 21, 36, 0.94)');
+        ctx.fillStyle = soil;
+        ctx.fillRect(0, canvas.height - 64, canvas.width, 64);
+      }
+
+      function drawPlant(p, idx, dt) {
+        p.pulse = Math.max(0, p.pulse - dt * 1.6);
+        p.glow = Math.max(0, p.glow - dt * 0.9);
+
+        var wind = frozenWind ? 0 : (0.45 + Math.sin(t * 0.6) * 0.3);
+        var points = [];
+
+        for (var s = 0; s <= p.segments; s++) {
+          var ratio = s / p.segments;
+          var y = p.baseY - ratio * p.height;
+          var sway = Math.sin(t * (0.8 + p.sway) + p.phase + ratio * 2.4) * p.bend * wind * (ratio * 22);
+          var pulseNudge = Math.sin(t * 12 + idx) * p.pulse * 2.5 * ratio;
+          var x = p.baseX + sway + pulseNudge;
+          points.push({ x: x, y: y });
+        }
+
+        var lineHue = neonMoss ? (p.hue + t * 55 + idx * 7) % 360 : p.hue;
+        var lineAlpha = 0.35 + p.glow * 0.35;
+        ctx.strokeStyle = 'hsla(' + lineHue.toFixed(1) + ', 70%, 68%, ' + lineAlpha.toFixed(3) + ')';
+        ctx.lineWidth = p.thickness + p.pulse * 0.8;
+        ctx.beginPath();
+        for (var i = 0; i < points.length; i++) {
+          if (i === 0) ctx.moveTo(points[i].x, points[i].y);
+          else ctx.lineTo(points[i].x, points[i].y);
+        }
+        ctx.stroke();
+
+        for (var j = 1; j < points.length - 1; j++) {
+          if (j % p.leafEvery !== 0) continue;
+          var dir = j % 2 === 0 ? 1 : -1;
+          var leafX = points[j].x;
+          var leafY = points[j].y;
+          var leafW = p.leafSize * (1 + p.pulse * 0.4);
+          var leafH = leafW * 0.62;
+
+          ctx.save();
+          ctx.translate(leafX, leafY);
+          ctx.rotate((dir * 0.75) + Math.sin(t * 1.2 + j) * 0.14);
+          ctx.fillStyle = 'hsla(' + ((lineHue + 20) % 360).toFixed(1) + ', 72%, 72%, ' + (0.24 + p.glow * 0.35).toFixed(3) + ')';
+          ctx.beginPath();
+          ctx.ellipse(0, 0, leafW, leafH, 0, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        }
+
+        var top = points[points.length - 1];
+        var halo = 3.6 + p.pulse * 7.5;
+        ctx.beginPath();
+        ctx.fillStyle = 'hsla(' + ((lineHue + 30) % 360).toFixed(1) + ', 85%, 74%, ' + (0.18 + p.glow * 0.3).toFixed(3) + ')';
+        ctx.arc(top.x, top.y, halo, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.beginPath();
+        ctx.fillStyle = p.pulse > 0.2 ? 'rgba(255, 240, 194, 0.98)' : 'rgba(228, 241, 255, 0.95)';
+        ctx.arc(top.x, top.y, 1.6 + p.pulse * 1.1, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      function frame(now) {
+        if (typeof now !== 'number') now = performance.now();
+        var dt = lastFrame ? Math.min(0.05, (now - lastFrame) / 1000) : 0.016;
+        lastFrame = now;
+        t += dt;
+
+        flash = Math.max(0, flash - dt * 1.7);
+
+        drawBackground();
+        for (var i = 0; i < plants.length; i++) {
+          drawPlant(plants[i], i, dt);
+        }
+
+        if (flash > 0) {
+          ctx.fillStyle = 'rgba(255, 232, 170, ' + (flash * 0.18).toFixed(3) + ')';
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
+
+        requestAnimationFrame(frame);
+      }
+
+      refreshBtn.addEventListener('click', function () {
+        loadStars();
+      });
+
+      regrowBtn.addEventListener('click', function () {
+        if (!stars.length) {
+          statusEl.textContent = 'No seeds loaded yet. Refresh after creating stars on the main page.';
+          return;
+        }
+        shuffleOffset += 1;
+        buildPlants();
+        flash = 1;
+        statusEl.textContent = 'Terrarium regrown. Same stars, new plant geometry.';
+      });
+
+      forecastBtn.addEventListener('click', forecast);
+      windBtn.addEventListener('click', toggleWind);
+
+      canvas.addEventListener('click', function (ev) {
+        clickPlant(ev.clientX, ev.clientY);
+      });
+
+      document.addEventListener('keydown', function (ev) {
+        if (!ev.key || ev.key.length !== 1) return;
+        codeBuffer = (codeBuffer + ev.key.toLowerCase()).slice(-4);
+        if (codeBuffer === 'moss') {
+          neonMoss = !neonMoss;
+          flash = 1;
+          statusEl.textContent = neonMoss
+            ? 'Secret moss mode unlocked. The greenhouse shifted into neon bloom.'
+            : 'Neon moss dimmed. Returning to midnight glass tones.';
+        }
+      });
+
+      setWindButton();
+      loadStars();
+      frame();
+    })();
+  </script>
+</body>
+</html>
