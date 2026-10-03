@@ -952,8 +952,9 @@ def split_for_prompt(files):
     cannot be changed, and no file should stay unchangeable run after run.
 
     FIXED_FILES skip the budget entirely and go straight into the omitted list, which is exactly
-    the protection the analytics axiom wants: validate_plan refuses to touch what was not shown,
-    and the site's measurement and privacy machinery never costs the prompt a byte.
+    the protection the analytics and local-state axioms want: validate_plan refuses to touch what
+    was not shown, and the site's measurement, privacy and local-state machinery never costs the
+    prompt a byte.
     """
     def prompt_order(item):
         return (item[0] != HOME_PAGE, item[0] not in PROTECTED_FILES, item[0])

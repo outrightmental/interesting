@@ -295,7 +295,9 @@ iteration process rather than a one-off tidy-up.
   read" are different things to say. `get` is the value alone; `set` returns `false` when it could
   only be kept in memory. **Two fallbacks**: an in-memory document when `localStorage` cannot be
   used at all, and the caller's default whenever a value is missing or the stored document is
-  malformed.
+  malformed. A `set` re-reads the document first and settles one name, leaving every other name as
+  the browser has it: one document for the whole site is also one document for every tab of it, and
+  a tab that wrote its own copy back whole would throw away what another tab had saved since.
 - **The earlier keys are carried over.** `interesting_wish_constellation_v1` and its two siblings
   are folded into the document the first time a visitor arrives with them, and then taken away, so
   nobody loses a sky to the change.

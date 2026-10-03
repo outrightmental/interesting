@@ -1237,6 +1237,8 @@ class LocalStateStoreTest(unittest.TestCase):
         self.assertTrue(fresh["indented"], "an exported document is for a person to read and paste")
         self.assertEqual(fresh["shelf"], {}, "nothing is written until something is kept")
         self.assertEqual(fresh["missing"], {"status": "missing", "value": []})
+        self.assertEqual(fresh["inherited"], {"status": "missing", "value": []},
+                         "a name is one the site kept, not one Object.prototype happens to have")
 
     def test_everything_is_kept_in_one_json_document_under_one_key(self):
         trip = self.seen["roundTrip"]
@@ -1248,6 +1250,18 @@ class LocalStateStoreTest(unittest.TestCase):
         self.assertEqual(trip["read"], {"status": "ok", "value": self.SKY})
         self.assertEqual(trip["get"], self.SKY)
         self.assertEqual(trip["saved"], "string", "a document says when it was saved")
+
+    def test_a_write_in_one_tab_keeps_what_another_tab_saved(self):
+        # One document for the whole site is one document for every tab of it, which a key per page
+        # was not: a page that wrote its own copy of the document back whole would throw away
+        # whatever the other tab had saved while it sat open.
+        tabs = self.seen["twoTabs"]
+        self.assertEqual(tabs["shelf"]["interesting_state_v1"]["values"],
+                         {"omens": [{"text": "an omen", "time": 1}], "constellation": self.SKY})
+        self.assertEqual(tabs["reloaded"], ["constellation", "omens"])
+        self.assertEqual(sorted(tabs["exported"]), ["constellation", "omens"],
+                         "and an export is the whole state, not one tab's view of it")
+        self.assertEqual(tabs["homeStillReads"], {"status": "ok", "value": self.SKY})
 
     def test_a_browser_that_stores_nothing_falls_back_to_memory(self):
         # The first of the two fallbacks the issue asks for.
