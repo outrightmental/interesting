@@ -31,11 +31,12 @@ const SOURCE_DIR = process.env.SITE_SOURCE_DIR || "site";
 
 // Where the shared files live, inside the source folder. Both are Eleventy conventions ("_" says
 // "not a page"), and both are inside /site so the hourly AI can edit them like anything else.
-export const INCLUDES_DIR = "_includes"; // layouts and partials: layout.njk, footer.njk
-export const SASS_DIR = "_sass"; // the common Sass partials, on every stylesheet's load path
+const INCLUDES_DIR = "_includes"; // layouts and partials: layout.njk, footer.njk
+const SASS_DIR = "_sass"; // the common Sass partials, on every stylesheet's load path
 
-// File types copied through untouched. Text only, which is every type /site is allowed to hold.
-export const COPIED = ["css", "js", "mjs", "json", "md", "svg", "txt", "webmanifest", "xml"];
+// File types copied through untouched. Text only, which is every type /site is allowed to hold;
+// make_interesting.py's ALLOWED_EXTENSIONS is the other half of that list.
+const COPIED = ["css", "js", "mjs", "json", "md", "svg", "txt", "webmanifest", "xml"];
 
 /** How a stylesheet is compiled, wherever it is compiled from. */
 function sassOptions(fromDir) {
