@@ -39,9 +39,8 @@ module "website" {
   region              = local.aws_region
   acm_certificate_arn = aws_acm_certificate_validation.interesting.certificate_arn
   aliases             = [local.domain]
-  # site/error.html is the bucket's error document, so a request for a key that
-  # is not there gets that page with a 404 — the CloudFront equivalent of the
-  # 404.html copy the GitHub Pages deploy used to make.
+  # CloudFront answers a 403/404 from the origin with site/error.html, as a 404 —
+  # replacing the site/404.html copy the GitHub Pages deploy used to make.
   error_document = "error.html"
 }
 

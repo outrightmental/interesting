@@ -2,9 +2,10 @@
 # BoardingFlow/infra/modules/website (itself copied from FishCareers, which
 # follows outrightmental.com).
 #
-# The website configuration is what serves the error document: a request for a
-# key that is not in the bucket gets `error_document` back with a 404, which
-# CloudFront passes on to the visitor. No separate 404.html copy is needed.
+# The website configuration is what makes a request for a key that is not in the
+# bucket a 404 rather than a 403; CloudFront's custom error response turns that
+# into the error document (see cloudfront.tf). No separate 404.html copy is
+# needed.
 
 resource "aws_s3_bucket" "website_bucket" {
   bucket = var.bucket
