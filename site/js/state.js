@@ -54,10 +54,12 @@
         .replace(text)         replaces the whole document with an exported one -> { ok, note }
         .clear()               empties it -> { ok, note }
 
-  Two fallbacks, as issue #31 asks for: an in-memory document when localStorage cannot be used at
-  all, and the caller's default whenever a value is missing or the stored document is malformed. A
-  reader is told which of those happened through `status`, because "you have not made a
-  constellation yet" and "your constellation could not be read" are different things to say.
+  Two fallbacks, as issue #31 asks for: an in-memory document when localStorage cannot be used --
+  either refused outright or out of room part-way through a visit, after which what the page kept
+  stays kept for as long as it is open -- and the caller's default whenever a value is missing or
+  the stored document is malformed. A reader is told which of those happened through `status`,
+  because "you have not made a constellation yet" and "your constellation could not be read" are
+  different things to say.
 
   A page reads the document once, at load, and reads it again before every change it makes: one
   document for the whole site is also one document for every tab of it, and a tab that wrote its
@@ -97,6 +99,10 @@
   var persistent = !!store;
   var document_ = null; // the document, once read: both the cache and the in-memory fallback
   var readable = true; // false once the stored document has turned out to be malformed
+  // True once a write has not reached the browser's store: out of room, or storage taken away
+  // mid-visit. From then on the in-memory document is the only copy of what this page has kept,
+  // so freshDocument() stops throwing it away. A later write that gets through clears it again.
+  var onlyInMemory = false;
 
   /* The browser's localStorage, or null if it cannot be used. A write has to be attempted: Safari
      in private mode, and any browser with storage switched off, offer the object and then throw. */
@@ -167,9 +173,11 @@
      its own copy back whole would throw away whatever another tab had written since -- which a key
      per page could never do. So every change starts from a fresh read, and a write is last one
      wins by name and not by document. A browser that stores nothing has nothing to re-read: there
-     the in-memory copy is all there is, and dropping it would be the only way to lose it. */
+     the in-memory copy is all there is, and dropping it would be the only way to lose it -- and the
+     same goes for a browser that offered to store and then refused, which is what onlyInMemory is
+     for. A page told "kept in memory only" has to find it still there the next time it looks. */
   function freshDocument() {
-    if (store) document_ = null;
+    if (store && !onlyInMemory) document_ = null;
     return currentDocument();
   }
 
@@ -182,9 +190,11 @@
     if (!store) return false;
     try {
       store.setItem(STORAGE_KEY, JSON.stringify(doc));
+      onlyInMemory = false;
       return true;
     } catch (e) {
-      return false; // out of room, or storage was taken away mid-visit
+      onlyInMemory = true; // out of room, or storage was taken away mid-visit
+      return false;
     }
   }
 
@@ -285,6 +295,7 @@
     } catch (e) {
       return { ok: false, note: 'The browser would not let go of it.' };
     }
+    onlyInMemory = false; // the store is empty, so it agrees with the document again
     return { ok: true, note: 'Cleared. Nothing of yours is kept here now.' };
   }
 

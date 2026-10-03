@@ -1274,6 +1274,25 @@ class LocalStateStoreTest(unittest.TestCase):
         self.assertEqual(without["shelf"], {})
         self.assertEqual(without["reloaded"], {"status": "unavailable", "value": []})
 
+    def test_a_browser_that_runs_out_of_room_keeps_what_the_page_was_told_it_kept(self):
+        # The same fallback, reached the other way: storage was offered and then refused a write.
+        # `set` saying false has to mean "kept in memory", so a later read -- or the meta menu
+        # asking for the whole document -- must not roll the page back to what the browser saved.
+        filled = self.seen["storageFillsUp"]
+        self.assertFalse(filled["wrote"], "a page is told the write did not reach the browser")
+        self.assertEqual(filled["afterWriting"], {"status": "ok", "value": self.SKY})
+        self.assertEqual(filled["exported"]["constellation"], self.SKY,
+                         "an export is the state the page has, not the part that got saved")
+        self.assertEqual(filled["afterExporting"], {"status": "ok", "value": self.SKY},
+                         "and asking for the document does not throw the rest of it away")
+        self.assertEqual(filled["omens"], [{"text": "saved in time", "time": 1}])
+        self.assertEqual(list(filled["shelf"]["interesting_state_v1"]["values"]), ["omens"],
+                         "the browser still holds only what it accepted")
+        self.assertTrue(filled["roomAgain"]["wrote"], "and a write gets through once there is room")
+        self.assertEqual(sorted(filled["roomAgain"]["shelf"]["interesting_state_v1"]["values"]),
+                         ["capsules", "constellation", "omens"],
+                         "carrying what had only been in memory with it")
+
     def test_a_missing_or_malformed_value_falls_back_to_the_callers_default(self):
         # The second fallback, and the reason `status` exists: "you have not saved anything" and
         # "what you saved is lost" are different things for a page to say.
@@ -1593,8 +1612,6 @@ class CadenceAxiomTest(SiteDirTestCase):
         self.assertEqual(len(mi.validate_plan({"delete": ["old.html"]})), 1)
 
 
-
-
 def needs_the_build(test):
     """Skip a test that runs the real Node build when the toolchain is not installed.
 
@@ -1622,13 +1639,15 @@ class BuildPipelineTest(unittest.TestCase):
     "every page" means.
     """
 
-    # The shell carries what every page owes the axioms: the analytics line, the viewport tag and
-    # the one <main> landmark. That is how the real /site writes it, and it is why a layout a run
-    # damages is refused through every page it builds rather than on its own account.
+    # The shell carries what every page owes the axioms: the analytics line, the local-state line,
+    # the viewport tag and the one <main> landmark. That is how the real /site writes it, and it is
+    # why a layout a run damages is refused through every page it builds rather than on its own
+    # account -- which matters most for the two lines, since layout.njk is a file a run may rewrite
+    # while the files behind those lines are not.
     LAYOUT = ("<!DOCTYPE html>\n<html lang='en'>\n<head><title>{{ title }}</title>\n"
               "<meta name='viewport' content='width=device-width, initial-scale=1'>\n"
               "<link rel='stylesheet' href='css/site.css'>\n"
-              f"{mi.ANALYTICS_TAG}</head>\n"
+              f"{mi.ANALYTICS_TAG}\n{mi.STATE_TAG}</head>\n"
               "<body>\n<main>{{ content | safe }}</main></body>\n</html>\n")
     NAV = "<nav>{% for page in ['toy.html', 'error.html'] %}<a href='{{ page }}'>{{ page }}</a>{% endfor %}</nav>\n"
     PAGES = ["index.html", "toy.html", "error.html"]
@@ -1649,9 +1668,11 @@ class BuildPipelineTest(unittest.TestCase):
         self.write("_includes/nav.njk", self.NAV)
         self.write("_sass/_tokens.scss", ":root { --fg: #eeeeff; }\n")
         self.write("css/site.scss", "@use 'tokens';\nbody { color: var(--fg); }\n")
-        # The analytics axiom reaches the built site too: the one line lives in the shared layout,
-        # exactly as /site writes it, so no page below carries it and every built page has it.
+        # The analytics and local-state axioms reach the built site too: both lines live in the
+        # shared layout, exactly as /site writes them, so no page below carries either and every
+        # built page has both.
         self.write(mi.ANALYTICS_SCRIPT, "/* the shared tag and banner */\n")
+        self.write(mi.STATE_SCRIPT, "/* the shared store and its meta menu */\n")
         # The home page links nothing itself: its navigation arrives from the shared partial, so
         # only the built site shows that toy.html and error.html can be reached.
         self.write("index.html", front_matter(layout="layout.njk", title="interesting")
@@ -1670,8 +1691,9 @@ class BuildPipelineTest(unittest.TestCase):
 
     def test_templates_render_and_sass_compiles_to_the_same_paths(self):
         built = self.built()
-        self.assertEqual(sorted(built), ["css/site.css", "error.html", "index.html",
-                                         mi.ANALYTICS_SCRIPT, "sitemap.xml", "toy.html"])
+        self.assertEqual(sorted(built), sorted(["css/site.css", "error.html", "index.html",
+                                                mi.ANALYTICS_SCRIPT, mi.STATE_SCRIPT,
+                                                "sitemap.xml", "toy.html"]))
         self.assertTrue(built["index.html"].startswith("<!DOCTYPE html>"))
         self.assertIn("<title>interesting</title>", built["index.html"])
         self.assertIn("<h1>interesting</h1>", built["index.html"])
@@ -1690,17 +1712,19 @@ class BuildPipelineTest(unittest.TestCase):
 
     def test_a_page_is_whatever_the_templates_make_of_it(self):
         # All five axioms ask about pages, and all five are asked of the built site. In the source,
-        # index.html names no page, no page carries the analytics line, and no page is a whole page
+        # index.html names no page, no page carries either shared line, and no page is a whole page
         # at all; built, every page is each of those things.
         source = dict(mi.read_site())
         self.assertEqual(mi.links_from("index.html", source), set())
         self.assertEqual(mi.pages_missing_analytics(source), set(self.PAGES))
+        self.assertEqual(mi.pages_missing_state(source), set(self.PAGES))
         self.assertEqual(sorted(mi.inaccessible_pages(source)), sorted(self.PAGES))
         built = self.built()
         self.assertEqual(mi.html_pages(built), set(self.PAGES))
         self.assertEqual(mi.links_from("index.html", built), {"toy.html", "error.html"})
         self.assertEqual(mi.unreachable_pages(built), {})
         self.assertEqual(mi.pages_missing_analytics(built), set())
+        self.assertEqual(mi.pages_missing_state(built), set())
         self.assertEqual(mi.inaccessible_pages(built), {})
 
     def test_damaging_the_shared_shell_is_refused_through_every_page_it_builds(self):
@@ -1727,12 +1751,17 @@ class BuildPipelineTest(unittest.TestCase):
         ]}
         self.assertEqual(len(mi.validate_plan(wired)), 3)
 
-    def test_dropping_the_shared_line_breaks_every_page_at_once(self):
-        # The flip side of putting the line in the layout: a run that rewrites the shell without it
-        # leaves the whole site untagged, and the analytics axiom is judged on that built site.
-        bare = self.LAYOUT.replace(mi.ANALYTICS_TAG, "")
-        with self.assertRaisesRegex(mi.RejectedChange, r"has no <script"):
-            mi.validate_plan({"files": [{"path": "_includes/layout.njk", "content": bare}]})
+    def test_dropping_either_shared_line_breaks_every_page_at_once(self):
+        # The flip side of putting the two lines in the layout: a run that rewrites the shell
+        # without one leaves the whole site without it, and both axioms are judged on that built
+        # site. layout.njk is a file a run may rewrite, which is why this is the scenario that
+        # matters: the files behind the lines are fixed, the line that loads them is not.
+        for tag, axiom in [(mi.ANALYTICS_TAG, "analytics tag and consent banner"),
+                           (mi.STATE_TAG, "shared local-state store and its meta menu")]:
+            with self.subTest(axiom=axiom):
+                bare = self.LAYOUT.replace(tag, "")
+                with self.assertRaisesRegex(mi.RejectedChange, r"has no <script"):
+                    mi.validate_plan({"files": [{"path": "_includes/layout.njk", "content": bare}]})
 
     def test_a_plan_that_does_not_build_is_refused(self):
         for broken, what in [

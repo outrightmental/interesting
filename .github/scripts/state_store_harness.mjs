@@ -20,18 +20,25 @@ import vm from "node:vm";
 const source = readFileSync(process.argv[2], "utf8");
 
 /** A stand-in for localStorage. `broken: true` makes every call throw, as a browser with storage
- *  switched off does -- it offers the object and then refuses to use it. */
+ *  switched off does -- it offers the object and then refuses to use it. A stub can also be filled
+ *  up part-way through a visit (`stub.full = true`), which is what a browser out of room does: it
+ *  reads back happily and refuses every write. */
 function makeStorage(initial = {}, { broken = false } = {}) {
   const items = new Map(Object.entries(initial));
   const refuse = () => {
     throw new Error("storage is not available");
   };
-  return {
+  const stub = {
     items,
+    full: false,
     getItem: broken ? refuse : (key) => (items.has(key) ? items.get(key) : null),
-    setItem: broken ? refuse : (key, value) => void items.set(key, String(value)),
+    setItem: broken ? refuse : (key, value) => {
+      if (stub.full) throw new Error("the quota has been exceeded");
+      items.set(key, String(value));
+    },
     removeItem: broken ? refuse : (key) => void items.delete(key),
   };
+  return stub;
 }
 
 /** The handful of DOM an element needs to be built, named, nested and clicked. */
@@ -223,6 +230,34 @@ const scenarios = {
       afterWriting: state.read("constellation", []),
       shelf: shelf(storage),
       reloaded: load(makeStorage({}, { broken: true })).state.read("constellation", []),
+    };
+  },
+
+  /* A browser that offered to store and then runs out of room part-way through a visit. The write
+     is refused, the page is told so, and what it kept has to stay kept for as long as the page is
+     open -- a later read, or the meta menu asking for the whole document, must not quietly roll it
+     back to what the browser managed to save. */
+  storageFillsUp() {
+    const storage = makeStorage();
+    const { state } = load(storage);
+    state.set("omens", [{ text: "saved in time", time: 1 }]);
+    storage.full = true;
+    const wrote = state.set("constellation", SKY);
+    const afterWriting = state.read("constellation", []);
+    const exported = JSON.parse(state.toText()).values;
+    return {
+      wrote,
+      afterWriting,
+      exported,
+      afterExporting: state.read("constellation", []),
+      // The other name is still the one the browser has: a failed write loses nothing else.
+      omens: state.get("omens", []),
+      shelf: shelf(storage),
+      // Once the browser takes a write again, the document is the browser's once more.
+      roomAgain: (() => {
+        storage.full = false;
+        return { wrote: state.set("capsules", [{ title: "later" }]), shelf: shelf(storage) };
+      })(),
     };
   },
 
