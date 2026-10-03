@@ -1,6 +1,12 @@
-// Shared canvas shell for the constellation labs: one frame style, many instruments.
+// Shared canvas shell and two-column layout for the constellation labs.
 
 @use 'vars';
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+  gap: 0.85rem;
+}
 
 .layout > canvas,
 .top > canvas {
@@ -10,4 +16,10 @@
   border-radius: vars.$radius-panel;
   border: 1px solid rgba(255, 255, 255, 0.16);
   background: #060913;
+}
+
+@media (max-width: 800px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
 }

@@ -13,12 +13,6 @@ main {
   width: min(960px, 96vw);
 }
 
-.layout {
-  display: grid;
-  grid-template-columns: 1.15fr 0.85fr;
-  gap: 0.85rem;
-}
-
 #weaver {
   cursor: crosshair;
 }
@@ -50,16 +44,4 @@ main {
 
 #reading {
   @include readout.readout(8em);
-}
-
-.hint {
-  margin: 0.65rem 0 0;
-  color: var(--muted);
-  font-size: 0.84rem;
-}
-
-@media (max-width: 800px) {
-  .layout {
-    grid-template-columns: 1fr;
-  }
 }

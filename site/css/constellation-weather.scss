@@ -23,12 +23,6 @@ main {
   margin: 0.45rem 0 0.9rem;
 }
 
-.layout {
-  display: grid;
-  grid-template-columns: 1.15fr 0.85fr;
-  gap: 0.85rem;
-}
-
 #lab {
   cursor: crosshair;
 }
@@ -60,16 +54,4 @@ main {
 
 #report {
   @include readout.readout(8.2em);
-}
-
-.hint {
-  margin: 0.65rem 0 0;
-  color: var(--muted);
-  font-size: 0.84rem;
-}
-
-@media (max-width: 800px) {
-  .layout {
-    grid-template-columns: 1fr;
-  }
 }
