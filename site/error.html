@@ -57,7 +57,9 @@
     main {
       position: relative;
       z-index: 2;
-      width: min(720px, 94vw);
+      width: min(820px, 95vw);
+      max-height: min(94vh, 1080px);
+      overflow: auto;
       border: 1px solid var(--line);
       border-radius: 18px;
       background: var(--panel);
@@ -113,6 +115,56 @@
       transform: translateY(-1px);
       background: rgba(255,255,255,0.12);
       border-color: rgba(255,255,255,0.34);
+    }
+
+    .skyway {
+      margin-top: 0.95rem;
+      border-top: 1px solid rgba(255,255,255,0.14);
+      padding-top: 0.75rem;
+      text-align: left;
+    }
+
+    .skyway-label {
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.82rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      text-align: center;
+    }
+
+    .skyway-links {
+      margin-top: 0.55rem;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 0.45rem;
+    }
+
+    .skyway-links a {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: rgba(255,255,255,0.05);
+      color: var(--accent);
+      text-decoration: none;
+      padding: 0.3rem 0.7rem;
+      font-size: 0.84rem;
+      transition: transform 120ms ease, background 120ms ease, border-color 120ms ease;
+    }
+
+    .skyway-links a:hover,
+    .skyway-links a:focus-visible {
+      outline: none;
+      transform: translateY(-1px);
+      border-color: rgba(173, 208, 255, 0.7);
+      background: rgba(141, 184, 255, 0.16);
+      color: #eaf1ff;
+    }
+
+    .skyway-links a.current {
+      color: var(--accent2);
+      border-color: rgba(255, 229, 163, 0.56);
+      background: rgba(255, 229, 163, 0.12);
     }
 
     #note {
@@ -238,7 +290,7 @@
     }
 
     @media (prefers-reduced-motion: reduce) {
-      button, a.action, .glyph { transition: none; }
+      button, a.action, .glyph, .skyway-links a { transition: none; }
     }
   </style>
   <!-- Analytics and the cookie consent banner that gates it; see js/analytics.js. -->
@@ -257,6 +309,24 @@
       <a id='home' class='action' href='index.html'>return home</a>
       <a class='action' href='sitemap.html'>site map</a>
     </div>
+
+    <nav class='skyway' aria-label='Skyway navigation'>
+      <p class='skyway-label'>skyway</p>
+      <div class='skyway-links'>
+        <a href='index.html'>interesting</a>
+        <a href='sky-atlas.html'>sky atlas</a>
+        <a href='constellation-diary.html'>constellation diary</a>
+        <a href='constellation-echo.html'>echo chamber</a>
+        <a href='constellation-weather.html'>weather lab</a>
+        <a href='orbital-weaver.html'>orbital weaver</a>
+        <a href='sky-archive.html'>sky archive oracle</a>
+        <a href='star-lantern.html'>star lantern ritual</a>
+        <a href='wish-terrarium.html'>wish terrarium</a>
+        <a href='sitemap.html'>site map</a>
+        <a class='current' href='error.html' aria-current='page'>observatory 404</a>
+      </div>
+    </nav>
+
     <p id='note' aria-live='polite'>Listening for a signal...</p>
 
     <section class='radio' aria-label='Void radio'>

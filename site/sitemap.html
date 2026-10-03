@@ -59,6 +59,57 @@
       color: var(--muted);
     }
 
+    .skyway {
+      margin: 0 0 1rem;
+      border: 1px solid rgba(255,255,255,0.14);
+      border-radius: 12px;
+      background: rgba(7, 10, 20, 0.56);
+      padding: 0.75rem;
+    }
+
+    .skyway-label {
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.8rem;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      text-align: center;
+    }
+
+    .skyway-links {
+      margin-top: 0.55rem;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 0.45rem;
+    }
+
+    .skyway-links a {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: rgba(255,255,255,0.05);
+      color: var(--accent);
+      text-decoration: none;
+      padding: 0.3rem 0.7rem;
+      font-size: 0.84rem;
+      transition: transform 120ms ease, background 120ms ease, border-color 120ms ease;
+    }
+
+    .skyway-links a:hover,
+    .skyway-links a:focus-visible {
+      outline: none;
+      transform: translateY(-1px);
+      border-color: rgba(173, 208, 255, 0.7);
+      background: rgba(141, 184, 255, 0.16);
+      color: #eaf1ff;
+    }
+
+    .skyway-links a.current {
+      color: var(--accent2);
+      border-color: rgba(255, 230, 171, 0.56);
+      background: rgba(255, 230, 171, 0.12);
+    }
+
     .atlas {
       margin: 0 0 1rem;
       border: 1px solid rgba(255,255,255,0.14);
@@ -207,7 +258,7 @@
     }
 
     @media (prefers-reduced-motion: reduce) {
-      button, a.action { transition: none; }
+      button, a.action, .skyway-links a { transition: none; }
       .pages a::before { animation: none; }
     }
   </style>
@@ -218,6 +269,23 @@
   <main>
     <h1>site map</h1>
     <p class='tagline'>Every page of the sky, in one place, now with a live atlas console for route planning.</p>
+
+    <nav class='skyway' aria-label='Skyway navigation'>
+      <p class='skyway-label'>skyway</p>
+      <div class='skyway-links'>
+        <a href='index.html'>interesting</a>
+        <a href='sky-atlas.html'>sky atlas</a>
+        <a href='constellation-diary.html'>constellation diary</a>
+        <a href='constellation-echo.html'>echo chamber</a>
+        <a href='constellation-weather.html'>weather lab</a>
+        <a href='orbital-weaver.html'>orbital weaver</a>
+        <a href='sky-archive.html'>sky archive oracle</a>
+        <a href='star-lantern.html'>star lantern ritual</a>
+        <a href='wish-terrarium.html'>wish terrarium</a>
+        <a class='current' href='sitemap.html' aria-current='page'>site map</a>
+        <a href='error.html'>observatory 404</a>
+      </div>
+    </nav>
 
     <section class='atlas' aria-live='polite'>
       <h2>atlas console</h2>
