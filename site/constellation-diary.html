@@ -281,6 +281,12 @@
 
       var stars = [];
       var capsules = [];
+      // Whether this visitor has asked their system for less motion. Kept as the live MediaQueryList
+      // rather than a snapshot of it, so .matches answers for the preference as it is right now and
+      // the sky settles the moment the preference changes, with no listener to wire up.
+      var calmSky = window.matchMedia
+        ? window.matchMedia('(prefers-reduced-motion: reduce)')
+        : { matches: false };
       var t = 0;
       var tapCount = 0;
       var paletteIndex = 0;
@@ -761,6 +767,17 @@
         replayHold = 0;
         replayCaption = '';
         setReplayButton();
+
+        // Less motion does not mean less diary. The replay still gives back the whole
+        // constellation, it just arrives at once instead of marching across the sky for several
+        // seconds, which is the part a visitor who asked for less motion did not want.
+        if (calmSky.matches) {
+          stopReplay();
+          statusEl.textContent = 'Your full constellation is in view, in birth order.';
+          entryEl.textContent = 'replay mode:\nevery saved thought is back in the sky at once.';
+          return;
+        }
+
         statusEl.textContent = 'Replaying constellation birth order...';
         entryEl.textContent = 'replay mode:\nwatch each saved thought return to the sky in sequence.';
       }
@@ -882,7 +899,10 @@
         var dt = lastFrameTime ? Math.min(0.05, (now - lastFrameTime) / 1000) : 0.016;
         lastFrameTime = now;
 
-        t += dt;
+        // A visitor who has asked for less motion gets a still sky: leaving t where it is holds
+        // every star at a fixed offset instead of drifting it, and the drift slider then chooses how
+        // far the sky is spread rather than how far it wanders.
+        if (!calmSky.matches) t += dt;
         updateReplay(dt);
         drawConstellation();
         requestAnimationFrame(frame);
