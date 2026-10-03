@@ -12,7 +12,7 @@ One project owns the whole stack for one property — including the GitHub repos
 | `repo.tf` | `github_repository.interesting` | The repository itself — `outrightmental/interesting` is repo-as-code: name, visibility, merge settings, all here. It pre-existed this configuration, so the first apply **adopts** it via an import block; `archive_on_destroy` means a destroy archives rather than deletes it. There is no `pages` block, which is how GitHub Pages stays retired. |
 | `website.tf` + `modules/website` | S3 bucket + CloudFront distribution, ACM certificate + DNS validation, A/AAAA alias records | The static site at https://interesting.outright.io/. The module is copied from BoardingFlow/infra, with the two changes listed under [Notes](#notes). |
 | `iam-deploy.tf` | `interesting-outright-io-deploy` IAM user + key + policy | Dedicated deploy credentials for the GitHub Actions workflow (S3 sync + CloudFront invalidation), scoped to exactly this bucket and this distribution. |
-| `github.tf` | Repository Actions secrets | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_S3_BUCKET`, `AWS_CLOUDFRONT_DISTRIBUTION_ID` — set from this project's own resources so the deploy can never drift from the infrastructure. A single apply rotates the deploy credentials end to end. |
+| `github.tf` | Repository Actions secrets | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_S3_BUCKET`, `AWS_CLOUDFRONT_DISTRIBUTION_ID` — set from this project's own resources so the deploy can never drift from the infrastructure. A single apply rotates the deploy credentials end to end. Plus `GA_MEASUREMENT_ID`, the GA4 property the site reports to (`ga_measurement_id` in `locals.tf`): not a credential, since the deploy publishes it in every page, but owned here so the repository itself holds no measurement ID. |
 | `data.tf` | *(read-only)* | The `outright.io` hosted zone stays owned by the shared infra state; this project only reads its zone id and writes the `interesting.` records + cert-validation records into it. The AWS account id is read from the caller rather than written down. |
 
 ## Usage
@@ -63,6 +63,13 @@ test, then sync `site/` to the bucket (`--delete` keeps the bucket an exact mirr
 invalidate `/*`. There is no build step — `site/` is the finished artifact, plain HTML/CSS/JS
 with zero dependencies, and the only thing published to the bucket.
 
+One substitution happens on the way, and only one: `site/js/analytics.js` ships a
+`__GA_MEASUREMENT_ID__` placeholder, and the deploy replaces it with the `GA_MEASUREMENT_ID` secret
+before the sync, after checking the value against `^G-[A-Z0-9]+$`. So no measurement ID is committed,
+and a checkout the deploy has not run over keeps the placeholder, which switches that file off: no
+Google tag, no consent banner, no cookies. If the secret is not set the site is published without
+analytics rather than not published at all.
+
 Not-found requests are served `site/error.html` by a CloudFront custom error response
 (`modules/website/cloudfront.tf`): a key that is not in the bucket makes the S3 *website*
 endpoint answer 404 — 403 if an object is there but unreadable — and the distribution maps both
@@ -84,11 +91,13 @@ CloudFront is the site's only publisher.
   (`blacklist_locations` in `modules/website/_inputs.tf`). Pass `[]` from `website.tf` to serve
   everywhere.
 - `PriceClass_100` keeps edge locations to North America and Europe.
-- `validate` reports one deprecation warning, for `vulnerability_alerts` on
-  `github_repository.interesting`: there is a dedicated resource for it now. It is kept inline on
-  purpose — written that way it is adopted by the repo's own import, where a separate resource
-  would need its own import block. The provider is pinned to `~> 6.2`, so the argument cannot
-  disappear underneath this project.
+- `validate` reports two deprecation warnings, both from the `github` provider and both deliberate.
+  One is for `vulnerability_alerts` on `github_repository.interesting`: there is a dedicated resource
+  for it now, but it is kept inline because written that way it is adopted by the repo's own import,
+  where a separate resource would need its own import block. The other is for `plaintext_value` on
+  the Actions secrets, which the provider would rather have as `value`; identical warnings collapse
+  into one, so it is reported against whichever secret comes last in `github.tf` and covers all five.
+  The provider is pinned to `~> 6.2`, so neither argument can disappear underneath this project.
 - `.terraform.lock.hcl` is committed, as `terraform init` wrote it — currently byte-identical to
   BoardingFlow's, so both properties run the same provider versions. It carries the registry's
   platform-independent hashes, so an `init` verifies on any OS; the first `init` on a new one

@@ -24,3 +24,13 @@ resource "github_actions_secret" "aws_cloudfront_distribution_id" {
   secret_name     = "AWS_CLOUDFRONT_DISTRIBUTION_ID"
   plaintext_value = module.website.cdn_id
 }
+
+# The GA4 measurement ID the deploy pastes into site/js/analytics.js on its way to the bucket, so
+# that /site carries no measurement ID of its own and a fork or a local copy of it measures nothing.
+# Delivered as a secret for the same reason as the four above: one place owns it, and the deploy
+# cannot drift from the property it reports to.
+resource "github_actions_secret" "ga_measurement_id" {
+  repository      = github_repository.interesting.name
+  secret_name     = "GA_MEASUREMENT_ID"
+  plaintext_value = local.ga_measurement_id
+}

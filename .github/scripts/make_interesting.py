@@ -10,10 +10,16 @@ styles and behaviour into shared files, unify navigation and visual language,
 merge or retire pages that overlap). Either outcome is a successful run, so the
 site can be made more interesting by becoming coherent and not only by growing.
 
-One axiom stands over every run: all of the content stays reachable from the
-root, both by following links from index.html and through sitemap.xml. It is
-stated in the prompt and held to by check_reachability(), which refuses a plan
-that would orphan a page.
+Two axioms stand over every run, each stated in the prompt and held to in code:
+
+  - All of the content stays reachable from the root, both by following links
+    from index.html and through sitemap.xml. check_reachability() refuses a plan
+    that would orphan a page.
+  - Every page loads js/analytics.js, the one line that brings the site its
+    cookie consent banner and, once a visitor accepts, its Google Analytics tag.
+    check_analytics() refuses a plan that would leave a page without it, and the
+    three files behind it (FIXED_FILES) are never shown to a model and never
+    written or deleted by one.
 
 The model is reached through the GitHub Copilot CLI (`copilot`), which bills the
 GitHub Copilot subscription behind the token in COPILOT_GITHUB_TOKEN. (GitHub
@@ -156,6 +162,16 @@ ALLOWED_EXTENSIONS = {
 # May be rewritten, never deleted, and shown to the model first so it can always be rewritten.
 # sitemap.xml is one of them because the reachability axiom below leans on it.
 PROTECTED_FILES = {"index.html", "error.html", "sitemap.xml"}
+# The one line every page carries, and the files it pulls in (issue #24). js/analytics.js brings the
+# site both its cookie consent banner and -- only once a visitor accepts -- its Google Analytics
+# tag, so a single line per page carries the whole of it and a single check can hold it in place.
+ANALYTICS_SCRIPT = "js/analytics.js"
+ANALYTICS_TAG = f"<script src='{ANALYTICS_SCRIPT}' defer></script>"
+# Those files are the site's measurement and privacy machinery rather than its content, so they are
+# kept out of every run's reach: never shown to a model (see split_for_prompt, which hands them to
+# validate_plan as unseen) and refused outright as a write or a delete. Two of them are a vendored
+# release of orestbida/cookieconsent, which no model should be rewriting from memory in any case.
+FIXED_FILES = {ANALYTICS_SCRIPT, "js/cookieconsent.umd.js", "css/cookieconsent.css"}
 # How many files one run may touch. Roomy enough that a run which federates the site can rewrite
 # every page of it and add the shared files those pages link to, which is what the whole-site
 # review in build_prompt asks for; small enough that a runaway answer is still refused.
@@ -276,6 +292,16 @@ def resolve_link(rel, raw):
     return "/".join(parts) or None
 
 
+def references_from(rel, site):
+    """The files of `site` that page `rel` links to or loads, as site-relative paths."""
+    found = set()
+    for match in REFERENCE.finditer(site.get(rel) or ""):
+        target = resolve_link(rel, next(group for group in match.groups() if group is not None))
+        if target:
+            found.add(target)
+    return found
+
+
 def links_from(rel, site):
     """The pages that page `rel` offers a way to reach.
 
@@ -285,8 +311,7 @@ def links_from(rel, site):
     """
     pages = html_pages(site)
     reached = set()
-    for match in REFERENCE.finditer(site.get(rel) or ""):
-        target = resolve_link(rel, next(group for group in match.groups() if group is not None))
+    for target in references_from(rel, site):
         if target in pages:
             reached.add(target)
         elif target in site:  # a stylesheet or script, which may carry the shared navigation
@@ -352,6 +377,38 @@ def check_reachability(before, after):
                 f"every page must stay reachable from the root: {page} is " + " and ".join(broke))
 
 
+# The analytics axiom (issue #24). Every page loads js/analytics.js, so every page asks for consent
+# and -- once it is given -- reports to Google Analytics. The prompt states it as a standing rule and
+# names the line to use; the functions below let validate_plan hold the line, so a page a run adds
+# carries the tag and a page a run rewrites keeps it.
+
+
+def pages_missing_analytics(site):
+    """The pages of `site` that do not load ANALYTICS_SCRIPT, as a set of site-relative paths.
+
+    A site without that file is not held to the axiom at all: there is nothing for a page to load,
+    and refusing every plan until someone puts the file back would leave no plan able to do it.
+    """
+    if ANALYTICS_SCRIPT not in site:
+        return set()
+    return {page for page in html_pages(site)
+            if ANALYTICS_SCRIPT not in references_from(page, site)}
+
+
+def check_analytics(before, after):
+    """Raise RejectedChange if the change from site `before` to site `after` leaves a page without
+    the analytics and consent line.
+
+    As with check_reachability, only what this run breaks is refused: a page that was already
+    missing the line stays the site's own to repair, and the run that rewrites it can repair it.
+    """
+    broke = sorted(pages_missing_analytics(after) - pages_missing_analytics(before))
+    if broke:
+        raise RejectedChange(
+            f"every page must load the analytics and consent banner script: {broke[0]} has no "
+            f"{ANALYTICS_TAG} in its <head>")
+
+
 def apply_to(site, ops):
     """The site mapping `site` as it would be once `ops` have been applied."""
     after = dict(site)
@@ -375,14 +432,20 @@ def split_for_prompt(files):
     to be able to rewrite the home page, and to wire a page it adds into the sitemap. The other
     files are considered in a different random order each run: a file the model is not shown
     cannot be changed, and no file should stay unchangeable run after run.
+
+    FIXED_FILES skip the budget entirely and go straight into the omitted list, which is exactly
+    the protection the analytics axiom wants: validate_plan refuses to touch what was not shown,
+    and the site's measurement and privacy machinery never costs the prompt a byte.
     """
     def prompt_order(item):
         return (item[0] != HOME_PAGE, item[0] not in PROTECTED_FILES, item[0])
 
+    spoken_for = PROTECTED_FILES | FIXED_FILES
     first = sorted((item for item in files if item[0] in PROTECTED_FILES), key=prompt_order)
-    rest = [item for item in files if item[0] not in PROTECTED_FILES]
+    rest = [item for item in files if item[0] not in spoken_for]
+    fixed = [rel for rel, _ in files if rel in FIXED_FILES]
     random.shuffle(rest)
-    shown, omitted, used = [], [], 0
+    shown, omitted, used = [], fixed, 0
     for rel, content in first + rest:
         if used + len(content) > PROMPT_BUDGET_CHARS:
             omitted.append(rel)
@@ -417,7 +480,9 @@ def build_prompt(shown, omitted=()):
         "already there rather than starting over.\n\n"
         "Rules:\n"
         "- Only static files (HTML, CSS, JS, SVG, text). No build steps, no external "
-        "dependencies that require keys, nothing harmful, deceptive or tracking.\n"
+        "dependencies that require keys, nothing harmful or deceptive. The site's own analytics, "
+        "described below, are the only measurement it carries and the only one it needs: add no "
+        "tracking, telemetry, beacon or third-party script of your own.\n"
         "- Paths are relative to the site root (e.g. \"index.html\", \"css/style.css\"). "
         "Use relative links between pages, so the site works wherever it is published. "
         "File and folder "
@@ -429,6 +494,14 @@ def build_prompt(shown, omitted=()):
         "add into both in the same run, and take a page you delete out of both: a plan that leaves "
         f"a page the root cannot reach is refused. {SITEMAP} is a sitemaps.org urlset whose <loc> "
         "values are the same relative paths used in links, because the site has no fixed domain.\n"
+        "- AXIOM, every run: every page carries the site's analytics and cookie consent banner. "
+        f"One line in the <head> of a page brings both:\n    {ANALYTICS_TAG}\n"
+        "Keep that line on every page you rewrite, exactly as it is, and put it on every page you "
+        "add (a page in a sub-folder uses the matching relative src, such as "
+        f"\"../{ANALYTICS_SCRIPT}\"). It loads a consent banner and, only once a visitor accepts, "
+        f"Google Analytics. The files behind it ({', '.join(sorted(FIXED_FILES))}) are fixed: they "
+        "are not shown to you, you may not write or delete them, and they need nothing from you. A "
+        "plan that leaves a page of the site without that line is refused.\n"
         "- Leave the site working at the end of the run. If you extract something into a shared "
         "file, or merge or delete a page, update every page that refers to it in the same run: "
         "never leave a link, a stylesheet or a script pointing at something that is not there.\n"
@@ -453,11 +526,12 @@ def build_prompt(shown, omitted=()):
             + "\n\n".join(parts))
     if omitted:
         user += (
-            "\n\nOther existing files (content omitted for size): " + ", ".join(omitted)
+            "\n\nOther existing files, whose content is not shown to you: " + ", ".join(omitted)
             + "\nYou cannot see these files, so you may not change or delete them. Still count "
             "them as part of the piece when you weigh the site as a whole, and keep whatever you "
-            "do compatible with them. A different selection of files is shown each run, so a "
-            "federation that has to reach these can be carried on by a later run."
+            "do compatible with them. Most are left out only for size, and a different selection "
+            "is shown each run, so a federation that has to reach one of those can be carried on "
+            "by a later run."
         )
     user += (
         f"\n\nThis run's mission: {MISSION}. Weigh the whole of the above first, then make the one "
@@ -608,8 +682,8 @@ def validate_plan(plan, unseen=()):
 
     `unseen` names existing files whose content the model was not shown; it may not touch them.
 
-    A plan that would leave a page of the site unreachable from the root is refused, so the
-    reachability axiom holds however the prompt is answered.
+    A plan that would leave a page of the site unreachable from the root, or leave one without the
+    analytics and consent line, is refused: both axioms hold however the prompt is answered.
     """
     files = plan.get("files") or []
     deletes = plan.get("delete") or []
@@ -632,6 +706,9 @@ def validate_plan(plan, unseen=()):
             raise RejectedChange(f"control character in the content of {rel} (broken JSON escaping?)")
         if rel in PROTECTED_FILES and not content.strip():
             raise RejectedChange(f"refusing to empty {rel}")
+        if rel in FIXED_FILES:
+            raise RejectedChange(f"refusing to rewrite {rel}: it carries the analytics tag and the "
+                                 "consent banner, and is not a model's to change")
         if rel in unseen:
             raise RejectedChange(f"refusing to overwrite {rel}: its content was not shown to the model")
         if target.is_dir():
@@ -647,13 +724,15 @@ def validate_plan(plan, unseen=()):
     for raw in deletes:
         target = safe_site_path(raw)
         rel = target.relative_to(SITE_DIR).as_posix()
-        if rel in PROTECTED_FILES:
+        if rel in PROTECTED_FILES or rel in FIXED_FILES:
             raise RejectedChange(f"refusing to delete {rel}")
         if rel in unseen:
             raise RejectedChange(f"refusing to delete {rel}: its content was not shown to the model")
         ops.append(("delete", target, None))
     before = dict(read_site())
-    check_reachability(before, apply_to(before, ops))
+    after = apply_to(before, ops)
+    check_reachability(before, after)
+    check_analytics(before, after)
     return ops
 
 

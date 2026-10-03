@@ -60,6 +60,11 @@ def home(*links):
     return "<h1>interesting</h1>\n<nav>" + "".join(f"<a href='{to}'>{to}</a>" for to in links) + "</nav>"
 
 
+def page(body):
+    """A page that loads the shared analytics and consent script, as every page of /site does."""
+    return f"<head>{mi.ANALYTICS_TAG}</head>\n<body>{body}</body>"
+
+
 class SiteDirTestCase(unittest.TestCase):
     """Points the script at a throwaway /site so no test touches the real one."""
 
@@ -314,7 +319,7 @@ class BuildPromptTest(SiteDirTestCase):
         self.assertEqual(omitted, ["huge.js"])
         prompt = mi.build_prompt(shown, omitted)
         self.assertNotIn("yyyy", prompt)
-        self.assertIn("content omitted for size): huge.js", prompt)
+        self.assertIn("not shown to you: huge.js", prompt)
         self.assertIn("may not change or delete them", prompt)
         self.assertIn("3 files in all", prompt)  # the whole site is counted, not only what is shown
         # A file left out still belongs to the piece the run is asked to weigh, and the federation
@@ -578,17 +583,131 @@ class ReachabilityAxiomTest(SiteDirTestCase):
         self.assertEqual(omitted, ["zz-big.js"])
 
 
-class RealSiteTest(unittest.TestCase):
-    """The site in this repository obeys the reachability axiom.
+class AnalyticsAxiomTest(SiteDirTestCase):
+    """Issue #24: every page carries the site's analytics tag and its cookie consent banner, both of
+    which arrive with one line. The axiom is a standing rule of every prompt, validate_plan holds
+    the line, and the files behind that line are kept out of every run's reach."""
 
-    validate_plan only refuses what a run breaks, so the invariant has to start out true: this is
-    what makes it hold from the next deploy onward and not only for pages a later run adds. It
-    runs on every pull request and on main before each deploy, so a hand-written commit that
-    orphans a page is caught there too.
-    """
+    PAGES = ["index.html", "error.html", "toy.html"]
 
     def setUp(self):
-        site = Path(mi.__file__).resolve().parents[2] / "site"
+        super().setUp()
+        (self.site / "js").mkdir()
+        (self.site / mi.ANALYTICS_SCRIPT).write_text("/* the shared tag and banner */")
+        (self.site / "index.html").write_text(page(home("toy.html", "error.html")))
+        (self.site / "error.html").write_text(page("<p>404</p>"))
+        (self.site / "toy.html").write_text(page("<p>toy</p>"))
+        (self.site / "sitemap.xml").write_text(sitemap(*self.PAGES))
+
+    def prompt(self):
+        return mi.build_prompt([("index.html", "<h1>hi</h1>")])
+
+    def test_the_axiom_is_a_standing_rule_of_every_prompt(self):
+        rules = self.prompt()
+        rules = rules[rules.index("Rules:"):]
+        for rule in ["every page carries the site's analytics and cookie consent banner",
+                     mi.ANALYTICS_TAG,
+                     "Keep that line on every page you rewrite",
+                     "put it on every page you add",
+                     f"../{mi.ANALYTICS_SCRIPT}",  # a page in a sub-folder
+                     "only once a visitor accepts",
+                     "are fixed: they are not shown to you",
+                     "without that line is refused"]:
+            with self.subTest(rule=rule):
+                self.assertIn(rule, rules)
+        for fixed in mi.FIXED_FILES:
+            with self.subTest(fixed=fixed):
+                self.assertIn(fixed, rules)
+
+    def test_the_prompt_no_longer_forbids_the_sites_own_analytics(self):
+        # The rule used to end "nothing harmful, deceptive or tracking", which this axiom
+        # contradicts as written. A run still may not add measurement of its own.
+        prompt = self.prompt()
+        self.assertNotIn("nothing harmful, deceptive or tracking", prompt)
+        self.assertIn("nothing harmful or deceptive", prompt)
+        self.assertIn("add no tracking, telemetry, beacon or third-party script of your own", prompt)
+
+    def test_a_page_a_run_adds_must_carry_the_tag(self):
+        plan = {"files": [
+            {"path": "new.html", "content": "<p>new</p>"},
+            {"path": "index.html", "content": page(home("toy.html", "error.html", "new.html"))},
+            {"path": "sitemap.xml", "content": sitemap(*self.PAGES, "new.html")},
+        ]}
+        with self.assertRaisesRegex(mi.RejectedChange, r"new\.html has no <script"):
+            mi.validate_plan(plan)
+        plan["files"][0]["content"] = page("<p>new</p>")
+        self.assertEqual(len(mi.validate_plan(plan)), 3)
+
+    def test_dropping_the_tag_from_a_page_a_run_rewrites_is_refused(self):
+        for content in ["<p>no tag at all</p>", "<head><script>var ANALYTICS = 'js/analytics.js';</script></head>"]:
+            with self.subTest(content=content[:40]), self.assertRaisesRegex(mi.RejectedChange, r"toy\.html has no <script"):
+                mi.validate_plan({"files": [{"path": "toy.html", "content": content}]})
+        # It is the src that counts, not the exact spelling of the tag around it.
+        loaded = '<head><script defer src="js/analytics.js"></script></head>'
+        self.assertEqual(len(mi.validate_plan({"files": [{"path": "toy.html", "content": loaded}]})), 1)
+
+    def test_a_page_in_a_sub_folder_loads_it_by_a_relative_src(self):
+        plan = {"files": [
+            {"path": "deep/new.html",
+             "content": f"<head><script src='../{mi.ANALYTICS_SCRIPT}' defer></script></head>"},
+            {"path": "index.html", "content": page(home("toy.html", "error.html", "deep/new.html"))},
+            {"path": "sitemap.xml", "content": sitemap(*self.PAGES, "deep/new.html")},
+        ]}
+        self.assertEqual(len(mi.validate_plan(plan)), 3)
+
+    def test_a_page_that_was_already_missing_the_tag_blocks_nothing(self):
+        # Only what the run itself breaks is refused, as with the reachability axiom: a plan that
+        # had to repair every page first could never be applied, including the one that repairs them.
+        (self.site / "index.html").write_text(home("toy.html", "error.html"))
+        ops = mi.validate_plan({"files": [{"path": "toy.html", "content": page("<p>still tagged</p>")}]})
+        self.assertEqual(len(ops), 1)
+        self.assertEqual(mi.pages_missing_analytics(dict(mi.read_site())), {"index.html"})
+
+    def test_a_site_without_the_shared_script_is_not_held_to_the_axiom(self):
+        (self.site / mi.ANALYTICS_SCRIPT).unlink()
+        self.assertEqual(mi.pages_missing_analytics(dict(mi.read_site())), set())
+        self.assertEqual(len(mi.validate_plan({"files": [{"path": "toy.html", "content": "<p>bare</p>"}]})), 1)
+
+    def test_the_files_behind_the_tag_can_neither_be_rewritten_nor_deleted(self):
+        for rel in sorted(mi.FIXED_FILES):
+            for plan in [{"files": [{"path": rel, "content": "rewritten from memory"}]},
+                         {"delete": [rel]}, {"delete": [f"site/{rel}"]}]:
+                with self.subTest(plan=str(plan)[:80]), self.assertRaises(mi.RejectedChange):
+                    mi.validate_plan(plan)
+
+    def test_the_files_behind_the_tag_are_never_shown_and_cost_the_prompt_nothing(self):
+        # 55 KB of vendored consent library must not push a page of the site out of the prompt, and
+        # a file the model cannot see is a file it cannot break.
+        for rel in sorted(mi.FIXED_FILES):
+            path = self.site / rel
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("z" * mi.PROMPT_BUDGET_CHARS)
+        shown, omitted = mi.split_for_prompt(mi.read_site())
+        self.assertEqual(sorted(rel for rel, _ in shown),
+                         ["error.html", "index.html", "sitemap.xml", "toy.html"])
+        self.assertEqual(sorted(set(omitted) & mi.FIXED_FILES), sorted(mi.FIXED_FILES))
+        prompt = mi.build_prompt(shown, omitted)
+        self.assertNotIn("zzzz", prompt)
+        self.assertIn("you may not change or delete them", prompt)
+
+
+class RealSiteTest(unittest.TestCase):
+    """The site in this repository obeys both axioms: every page is reachable from the root, and
+    every page carries the analytics tag and consent banner.
+
+    validate_plan only refuses what a run breaks, so the invariants have to start out true: this is
+    what makes them hold from the next deploy onward and not only for pages a later run adds. It
+    runs on every pull request and on main before each deploy, so a hand-written commit that
+    orphans a page or drops the tag is caught there too.
+    """
+
+    # What deploy.yml replaces with the GA_MEASUREMENT_ID repository secret on the way to S3.
+    # Spelled out here rather than imported, so renaming it in one place fails here.
+    GA_PLACEHOLDER = "__GA_MEASUREMENT_ID__"
+
+    def setUp(self):
+        self.repo = Path(mi.__file__).resolve().parents[2]
+        site = self.repo / "site"
         if not site.is_dir():
             self.skipTest(f"no site directory at {site}")
         patcher = mock.patch.object(mi, "SITE_DIR", site)
@@ -605,6 +724,27 @@ class RealSiteTest(unittest.TestCase):
         # mechanically, and a page a visitor can read, reachable from the home page.
         self.assertIn("sitemap.xml", self.site)
         self.assertIn("sitemap.html", mi.links_from("index.html", self.site))
+
+    def test_every_page_loads_the_analytics_and_consent_script(self):
+        for rel in mi.FIXED_FILES:
+            self.assertIn(rel, self.site, "the files behind the tag have to be there")
+        self.assertEqual(mi.pages_missing_analytics(self.site), set())
+        self.assertGreater(len(mi.html_pages(self.site)), 1, "the check is worth nothing on one page")
+
+    def test_the_measurement_id_is_not_committed_but_the_deploy_injects_it(self):
+        analytics = self.site[mi.ANALYTICS_SCRIPT]
+        self.assertIn(self.GA_PLACEHOLDER, analytics)
+        self.assertNotRegex(analytics, r"G-[A-Z0-9]{6,}", "a measurement ID is committed")
+        deploy = (self.repo / ".github" / "workflows" / "deploy.yml").read_text()
+        self.assertIn(self.GA_PLACEHOLDER, deploy, "nothing replaces the placeholder at deploy time")
+        self.assertIn("GA_MEASUREMENT_ID", deploy)
+
+    def test_the_vendored_consent_library_keeps_its_license_and_version(self):
+        for rel in ["js/cookieconsent.umd.js", "css/cookieconsent.css"]:
+            with self.subTest(rel=rel):
+                self.assertIn("CookieConsent 3.1.0", self.site[rel])
+                self.assertIn("github.com/orestbida/cookieconsent", self.site[rel])
+                self.assertIn("MIT License", self.site[rel])
 
 
 class SmallModelTest(unittest.TestCase):
