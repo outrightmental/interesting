@@ -23,6 +23,15 @@ iterate a more interesting website
   account cannot use are skipped. A model
   that returns an unusable answer is replaced by another random model, or asked again if no other
   is left, for up to three attempts per run.
+- **The whole piece first, then one change** — every run begins by weighing the site as a whole
+  before choosing what to do, and *federating* what is already there counts for as much as adding
+  something new: lifting markup, styles and behaviour that the pages repeat into shared files,
+  giving every page the same header and navigation, settling on one visual language, merging pages
+  that overlap and retiring the ones that no longer earn their place. A run whose entire change is
+  a consolidation — even one that only deletes — is a successful run; the site gets more
+  interesting by becoming a coherent whole, not only by growing. So that a run can really do this,
+  the prompt carries the whole site for as long as it fits (`PROMPT_BUDGET_CHARS`), and one run may
+  change up to `MAX_CHANGES` files, enough to relink every page to a shared stylesheet in one go.
 - **A screenshot of every run** — after each change, the workflow opens the site in a browser and
   saves what a visitor sees first to [`/screenshots`](screenshots), as `YYYYMMDD-HHMMZ.jpg` in
   UTC (for example `20261005-0428Z.jpg`). The folder is a picture history of the site, one
