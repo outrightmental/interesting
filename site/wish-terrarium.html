@@ -37,7 +37,8 @@ Load your sky memory, then click any plant to hear its thought.</pre>
 
   <script>
     (function () {
-      var STORAGE_KEY = 'interesting_wish_constellation_v1';
+      var state = window.interestingState;
+      var SKY = 'constellation';
       var canvas = document.getElementById('terrarium');
       var ctx = canvas.getContext('2d');
       var refreshBtn = document.getElementById('refresh');
@@ -103,41 +104,22 @@ Load your sky memory, then click any plant to hear its thought.</pre>
         });
       }
 
+      // Why the terrarium has nothing to grow from, in this page's own words. The shared store
+      // says which of the four it is; see js/state.js.
+      var EMPTY_NOTES = {
+        unavailable: 'Local storage is unavailable in this browser context.',
+        unreadable: 'Saved constellation data is unreadable. Return home and remake it.',
+        missing: 'No saved constellation found yet. Create one on the main page first.',
+        ok: 'A sky file exists, but no readable stars were found.'
+      };
+
       function loadStars() {
-        var raw = null;
-        try {
-          raw = localStorage.getItem(STORAGE_KEY);
-        } catch (e) {
-          stars = [];
-          plants = [];
-          statusEl.textContent = 'Local storage is unavailable in this browser context.';
-          return;
-        }
-
-        if (!raw) {
-          stars = [];
-          plants = [];
-          statusEl.textContent = 'No saved constellation found yet. Create one on the main page first.';
-          return;
-        }
-
-        try {
-          var parsed = JSON.parse(raw);
-          if (!Array.isArray(parsed)) throw new Error('invalid');
-          stars = safeStars(parsed).slice(0, 140);
-          buildPlants();
-
-          if (!stars.length) {
-            statusEl.textContent = 'A sky file exists, but no readable stars were found.';
-            return;
-          }
-
-          statusEl.textContent = 'Terrarium synced: ' + stars.length + ' seed' + (stars.length === 1 ? '' : 's') + ' loaded from your sky.';
-        } catch (e2) {
-          stars = [];
-          plants = [];
-          statusEl.textContent = 'Saved constellation data is unreadable. Return home and remake it.';
-        }
+        var saved = state.read(SKY, []);
+        stars = safeStars(Array.isArray(saved.value) ? saved.value : []).slice(0, 140);
+        buildPlants();
+        statusEl.textContent = stars.length
+          ? 'Terrarium synced: ' + stars.length + ' seed' + (stars.length === 1 ? '' : 's') + ' loaded from your sky.'
+          : EMPTY_NOTES[saved.status];
       }
 
       function buildPlants() {

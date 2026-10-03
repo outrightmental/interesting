@@ -40,7 +40,8 @@ Load your saved sky, click the map to launch a weather probe, or generate a full
 
   <script>
     (function () {
-      var STORAGE_KEY = 'interesting_wish_constellation_v1';
+      var state = window.interestingState;
+      var SKY = 'constellation';
       var canvas = document.getElementById('lab');
       var ctx = canvas.getContext('2d');
       var refreshBtn = document.getElementById('refresh');
@@ -150,41 +151,22 @@ Load your saved sky, click the map to launch a weather probe, or generate a full
         }
       }
 
+      // Why there is nothing to show, in this page's own words: the shared store says which of
+      // the four it is (see js/state.js).
+      var EMPTY_NOTES = {
+        unavailable: 'Local storage is unavailable in this browser context.',
+        unreadable: 'Saved constellation data is unreadable. Return home and remake it.',
+        missing: 'No saved constellation found yet. Create one on the main page first.',
+        ok: 'A sky file exists, but no readable stars were found.'
+      };
+
       function loadStars() {
-        var raw = null;
-        try {
-          raw = localStorage.getItem(STORAGE_KEY);
-        } catch (e) {
-          stars = [];
-          cells = [];
-          statusEl.textContent = 'Local storage is unavailable in this browser context.';
-          return;
-        }
-
-        if (!raw) {
-          stars = [];
-          cells = [];
-          statusEl.textContent = 'No saved constellation found yet. Create one on the main page first.';
-          return;
-        }
-
-        try {
-          var parsed = JSON.parse(raw);
-          if (!Array.isArray(parsed)) throw new Error('invalid');
-          stars = safeStars(parsed).slice(0, 160);
-          rebuildCells();
-
-          if (!stars.length) {
-            statusEl.textContent = 'A sky file exists, but no readable stars were found.';
-            return;
-          }
-
-          statusEl.textContent = 'Weather seeds synced: ' + stars.length + ' star' + (stars.length === 1 ? '' : 's') + ' loaded.';
-        } catch (e2) {
-          stars = [];
-          cells = [];
-          statusEl.textContent = 'Saved constellation data is unreadable. Return home and remake it.';
-        }
+        var saved = state.read(SKY, []);
+        stars = safeStars(Array.isArray(saved.value) ? saved.value : []).slice(0, 160);
+        rebuildCells();
+        statusEl.textContent = stars.length
+          ? 'Weather seeds synced: ' + stars.length + ' star' + (stars.length === 1 ? '' : 's') + ' loaded.'
+          : EMPTY_NOTES[saved.status];
       }
 
       function fieldValue(x, y, hourFloat) {
