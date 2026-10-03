@@ -64,13 +64,13 @@ jobs:
       - name: Check for the deploy secrets
         id: secrets
         env:
-          BUCKET: ${{ secrets.AWS_S3_BUCKET }}
-          DISTRIBUTION: ${{ secrets.AWS_CLOUDFRONT_DISTRIBUTION_ID }}
-          KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          KEY_SECRET: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_S3_BUCKET: ${{ secrets.AWS_S3_BUCKET }}
+          AWS_CLOUDFRONT_DISTRIBUTION_ID: ${{ secrets.AWS_CLOUDFRONT_DISTRIBUTION_ID }}
         run: |
           missing=""
-          for name in BUCKET DISTRIBUTION KEY_ID KEY_SECRET; do
+          for name in AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_S3_BUCKET AWS_CLOUDFRONT_DISTRIBUTION_ID; do
             [ -n "${!name}" ] || missing="${missing} ${name}"
           done
           if [ -n "$missing" ]; then
@@ -99,15 +99,16 @@ jobs:
       - name: Sync /site to S3
         if: steps.secrets.outputs.ready == 'true'
         env:
-          BUCKET: ${{ secrets.AWS_S3_BUCKET }}
-        run: aws s3 sync ./site/ "s3://${BUCKET}" --delete
+          AWS_S3_BUCKET: ${{ secrets.AWS_S3_BUCKET }}
+        run: aws s3 sync ./site/ "s3://${AWS_S3_BUCKET}" --delete
 
       - name: Invalidate the CloudFront cache
         if: steps.secrets.outputs.ready == 'true'
         env:
-          DISTRIBUTION: ${{ secrets.AWS_CLOUDFRONT_DISTRIBUTION_ID }}
+          AWS_CLOUDFRONT_DISTRIBUTION_ID: ${{ secrets.AWS_CLOUDFRONT_DISTRIBUTION_ID }}
         run: |
-          aws cloudfront create-invalidation --distribution-id "${DISTRIBUTION}" --paths "/*"
+          aws cloudfront create-invalidation \
+            --distribution-id "${AWS_CLOUDFRONT_DISTRIBUTION_ID}" --paths "/*"
 
       - name: Summarise the deploy
         if: steps.secrets.outputs.ready == 'true'
