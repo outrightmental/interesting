@@ -10,10 +10,15 @@ styles and behaviour into shared files, unify navigation and visual language,
 merge or retire pages that overlap). Either outcome is a successful run, so the
 site can be made more interesting by becoming coherent and not only by growing.
 
-One axiom stands over every run: all of the content stays reachable from the
-root, both by following links from index.html and through sitemap.xml. It is
-stated in the prompt and held to by check_reachability(), which refuses a plan
-that would orphan a page.
+Two axioms stand over every run, stated in the prompt and held to in code so
+they do not depend on which model happens to be drawn in a given hour:
+
+  * All of the content stays reachable from the root, both by following links
+    from index.html and through sitemap.xml. check_reachability() refuses a plan
+    that would orphan a page.
+  * Every page is responsive and accessible, to WCAG 2.2 level AA.
+    check_accessibility() refuses a plan that would make a page fail the part of
+    that which markup alone can settle.
 
 The model is reached through the GitHub Copilot CLI (`copilot`), which bills the
 GitHub Copilot subscription behind the token in COPILOT_GITHUB_TOKEN. (GitHub
@@ -36,6 +41,7 @@ import subprocess
 import sys
 import tempfile
 import uuid
+from html.parser import HTMLParser
 from pathlib import Path, PurePosixPath
 
 # The mission every run serves. It names the holistic aim issue #16 asks for -- the site gets more
@@ -352,6 +358,251 @@ def check_reachability(before, after):
                 f"every page must stay reachable from the root: {page} is " + " and ".join(broke))
 
 
+# The responsive-and-accessible axiom (issue #26). Every page works on a small screen as well as a
+# large one, and is usable by a visitor who cannot see it, cannot use a mouse, or has asked for less
+# motion. Like reachability, this is a property of the site as a whole that every run upholds rather
+# than a one-off tidy-up of the pages that exist today: the prompt states it in full, and the
+# functions below hold the line on the part of it that markup alone can settle, so a page a run
+# writes is born responsive and accessible instead of being audited into shape later.
+#
+# Responsiveness is checked here as accessibility, because that is what it is: WCAG 2.2 names it
+# Reflow (1.4.10) and Resize Text (1.4.4). A page that insists on a desktop-width window, or that
+# forbids the pinch zoom people enlarge text with, has shut out the same visitor a missing alt text
+# does.
+#
+# The standard is WCAG 2.2 level AA, and every reason below names the criterion it stands for, so
+# the set can grow without becoming a matter of taste. What markup cannot settle is still required
+# by the prompt and simply not checked here: contrast ratios need the rendered colours of a
+# gradient, and tap target sizes and horizontal overflow need a layout. That is the same split the
+# reachability axiom makes, where a nav built by a shared script counts as a way through without the
+# script ever being run.
+
+# Interactive elements that may take their accessible name from their own content: the text inside
+# them, or the alt text of an image inside them.
+NAMED_BY_CONTENT = {"a", "button", "summary"}
+# Form controls whose content is not their name: it has to come from a <label for> or an attribute.
+NAMED_BY_LABEL = {"input", "select", "textarea"}
+# Attributes that name an element outright, wherever it sits.
+NAMING_ATTRIBUTES = ("aria-label", "aria-labelledby", "title", "alt")
+# <input type> values that need no label: a hidden field is not a control at all, and the button
+# types carry their own text in "value" or fall back to one the browser supplies.
+SELF_NAMING_INPUTS = {"hidden", "submit", "reset", "button"}
+
+
+class PageFacts(HTMLParser):
+    """The handful of facts the accessibility checks ask of one page's markup.
+
+    HTMLParser hands over the body of <style> and <script> as raw text instead of parsing it, so
+    markup a page builds inside a JavaScript string -- which every page that draws its own DOM is
+    full of -- is never mistaken for markup of the page itself. Only the page as committed is
+    judged, which is the same bargain the reachability check makes.
+    """
+
+    def __init__(self, content):
+        super().__init__(convert_charrefs=True)
+        self.lang = ""
+        self.viewport = None  # the content of the viewport meta tag, if the page has one
+        self.title = ""
+        self.headings = []  # heading levels, in document order
+        self.mains = 0
+        self.css = ""  # the text of every <style>
+        self.js = ""  # the text of every <script>
+        self.images_without_alt = 0
+        self.positive_tabindex = False
+        self.controls = []  # one record per interactive element; see control()
+        self.labelled = set()  # the ids some <label for> points at
+        self.raw = None  # "style" or "script" while inside one
+        self.svg = 0  # how many <svg> elements are open: a <title> in one names the graphic
+        self.in_title = False
+        self.open = []  # controls still open, innermost last, named by what is written inside them
+        self.feed(content)
+        self.close()
+
+    def control(self, tag, attr, by_content):
+        """Record one interactive element, and start collecting its text if that can name it."""
+        record = {"tag": tag, "id": attr.get("id", "").strip(),
+                  "named": any(attr.get(name, "").strip() for name in NAMING_ATTRIBUTES)}
+        self.controls.append(record)
+        if by_content:
+            self.open.append(record)
+
+    def name_enclosing(self, text):
+        """Text or alt text inside the open controls names every one of them, however deeply nested."""
+        if text.strip():
+            for record in self.open:
+                record["named"] = True
+
+    def handle_starttag(self, tag, attrs):
+        attr = {key.lower(): (value or "") for key, value in attrs}
+        if tag in ("style", "script"):
+            self.raw = tag
+        elif tag == "html":
+            self.lang = attr.get("lang", "").strip()
+        elif tag == "meta" and attr.get("name", "").strip().lower() == "viewport":
+            self.viewport = attr.get("content", "")
+        elif tag == "title":
+            self.in_title = not self.svg  # inside an <svg> a <title> is the graphic's name
+        elif tag == "svg":
+            self.svg += 1
+        elif tag == "main":
+            self.mains += 1
+        elif tag == "label" and attr.get("for", "").strip():
+            self.labelled.add(attr["for"].strip())
+        elif len(tag) == 2 and tag[0] == "h" and tag[1] in "123456":
+            self.headings.append(int(tag[1]))
+        elif tag == "img" and "alt" not in attr:
+            self.images_without_alt += 1
+        if attr.get("tabindex", "").strip().lstrip("+").isdigit() and attr["tabindex"].strip("+ ") != "0":
+            self.positive_tabindex = True
+        if tag in NAMED_BY_CONTENT and (tag != "a" or "href" in attr):  # an <a> with no href is a target
+            self.control(tag, attr, by_content=True)
+        elif tag in NAMED_BY_LABEL and attr.get("type", "").strip().lower() not in SELF_NAMING_INPUTS:
+            self.control(tag, attr, by_content=False)
+        if tag in ("img", "svg"):
+            self.name_enclosing(attr.get("alt", "") or attr.get("aria-label", ""))
+
+    def handle_data(self, data):
+        if self.raw == "style":
+            self.css += data
+        elif self.raw == "script":
+            self.js += data
+        elif self.in_title and not self.svg:
+            self.title += data
+        else:
+            self.name_enclosing(data)
+
+    def handle_endtag(self, tag):
+        if self.raw:
+            if tag == self.raw:
+                self.raw = None
+            return
+        if tag == "svg":
+            self.svg = max(0, self.svg - 1)
+        elif tag == "title":
+            self.in_title = False
+        for index in range(len(self.open) - 1, -1, -1):
+            if self.open[index]["tag"] == tag:
+                del self.open[index:]  # whatever sat inside it was left unclosed, so it closes too
+                break
+
+    def unnamed_controls(self):
+        """The kinds of interactive element the page leaves without an accessible name.
+
+        A <label for> may be written either side of the control it labels, so the ids it points at
+        are only all known once the whole page has been read.
+        """
+        return sorted({record["tag"] for record in self.controls
+                       if not record["named"] and record["id"] not in self.labelled})
+
+
+# Motion the page commits to, in its CSS or its script, and the one thing a page that moves owes the
+# visitor who has asked for less of it. Only unambiguous motion counts: a @keyframes rule, an
+# animation or transition declaration, a frame loop, or the Web Animations API. A bare setInterval is
+# left out on purpose -- it as often ticks a clock's text as moves anything -- so the check cannot
+# refuse a run over something that does not actually move.
+MOTION = re.compile(r"@keyframes|(?<![\w-])(?:animation|transition)(?:-[a-z]+)?\s*[:=]"
+                    r"|requestAnimationFrame|\.animate\s*\(", re.I)
+REDUCED_MOTION = "prefers-reduced-motion"
+# A page may only take the browser's focus ring away if it draws one of its own (WCAG 2.4.7).
+DROPS_FOCUS_RING = re.compile(r"outline\s*:\s*(?:none|0[a-z%]*)\b", re.I)
+DRAWS_FOCUS_RING = re.compile(r":focus(?:-visible|-within)?\b", re.I)
+# The viewport meta tag that makes a page lay out at the device's width instead of a desktop's
+# (WCAG 1.4.10 Reflow), and the two ways of forbidding the zoom WCAG 1.4.4 asks to leave alone.
+DEVICE_WIDTH = re.compile(r"\bwidth\s*=\s*device-width", re.I)
+NO_USER_SCALING = re.compile(r"user-scalable\s*=\s*(?:no|0|false)", re.I)
+MAXIMUM_SCALE = re.compile(r"maximum-scale\s*=\s*([0-9]*\.?[0-9]+)", re.I)
+
+
+def assets_of(rel, site):
+    """The stylesheets and scripts page `rel` loads, as site-relative paths that exist in `site`.
+
+    A run is invited to lift shared styles and behaviour into "css/site.css" and "js/site.js", so a
+    page's focus ring and its motion are as likely to live there as in the page. Reading them with
+    the page keeps the checks true of a federated site, where a page's own <style> block may be empty.
+    """
+    found = []
+    for match in REFERENCE.finditer(site.get(rel) or ""):
+        target = resolve_link(rel, next(group for group in match.groups() if group is not None))
+        if target in site and not target.endswith(PAGE_SUFFIX) and target not in found:
+            found.append(target)
+    return found
+
+
+def page_violations(rel, site):
+    """Why page `rel` fails the responsive-and-accessible axiom, as a list of short reasons.
+
+    Every reason names one signal the page either plainly has or plainly lacks, so no judgement of
+    taste is involved, and every reason is a fixed string: repairing one has to remove a reason and
+    can never add a different one, which is what lets check_accessibility tell a repair from a
+    regression. A page with no reasons is not thereby proved accessible -- contrast and tap targets
+    are not judged here -- but a page with one is certainly not.
+    """
+    try:
+        page = PageFacts(site.get(rel) or "")
+    except (ValueError, AssertionError, RecursionError):
+        return ["cannot be parsed as HTML"]
+    css, js = page.css, page.js
+    for asset in assets_of(rel, site):
+        if asset.endswith(".css"):
+            css += "\n" + site[asset]
+        elif asset.endswith((".js", ".mjs")):
+            js += "\n" + site[asset]
+    scale = MAXIMUM_SCALE.search(page.viewport or "")
+    reasons = [reason for reason, ok in (
+        # Responsive: the page lays out at the device's width, and the visitor may still zoom.
+        ("has no viewport meta tag with width=device-width",  # WCAG 1.4.10 Reflow
+         bool(DEVICE_WIDTH.search(page.viewport or ""))),
+        ("forbids zooming in its viewport meta tag",  # WCAG 1.4.4 Resize Text
+         not NO_USER_SCALING.search(page.viewport or "") and not (scale and float(scale[1]) < 2)),
+        # Accessible: named, structured, described, operable by keyboard, and calm when asked to be.
+        ("has no lang attribute on <html>", bool(page.lang)),  # WCAG 3.1.1 Language of Page
+        ("has no page title", bool(page.title.strip())),  # WCAG 2.4.2 Page Titled
+        ("has no <main> landmark", page.mains >= 1),  # WCAG 1.3.1, and 2.4.1 Bypass Blocks
+        ("has more than one <main> landmark", page.mains <= 1),
+        ("has no <h1>", 1 in page.headings),  # WCAG 1.3.1 Info and Relationships
+        ("skips a heading level", all(
+            level <= previous + 1 for previous, level in zip([0] + page.headings, page.headings))),
+        ("has an <img> with no alt attribute", not page.images_without_alt),  # WCAG 1.1.1
+        ("takes the focus outline away without a :focus style of its own",  # WCAG 2.4.7
+         not DROPS_FOCUS_RING.search(css) or bool(DRAWS_FOCUS_RING.search(css))),
+        ("uses a positive tabindex", not page.positive_tabindex),  # WCAG 2.4.3 Focus Order
+        (f"animates without honouring {REDUCED_MOTION}",  # WCAG 2.3.3, and 2.2.2 for anything long
+         not MOTION.search(css + "\n" + js) or REDUCED_MOTION in css + js),
+    ) if not ok]
+    # WCAG 4.1.2 Name, Role, Value; 2.4.4 Link Purpose; 3.3.2 Labels or Instructions. One reason per
+    # kind of element, so fixing the buttons takes the buttons' reason away and leaves the rest.
+    reasons += [f"has a{'n' if tag[0] in 'aeiou' else ''} <{tag}> with no accessible name"
+                for tag in page.unnamed_controls()]
+    return reasons
+
+
+def inaccessible_pages(site):
+    """The pages of `site` that fail the axiom, as {page: [reason, ...]}."""
+    failing = {}
+    for page in sorted(html_pages(site)):
+        reasons = page_violations(page, site)
+        if reasons:
+            failing[page] = reasons
+    return failing
+
+
+def check_accessibility(before, after):
+    """Raise RejectedChange if the change from site `before` to site `after` makes a page fail the
+    responsive-and-accessible axiom.
+
+    Only what this run breaks is refused, for the same reason check_reachability only refuses what
+    this run breaks: a page that already falls short stays the site's own problem to repair -- every
+    run is asked to -- and refusing every plan over it would leave no plan able to repair it. A page
+    a run writes from scratch has no such excuse, so it is born responsive and accessible.
+    """
+    was = inaccessible_pages(before)
+    for page, reasons in sorted(inaccessible_pages(after).items()):
+        broke = [reason for reason in reasons if reason not in was.get(page, ())]
+        if broke:
+            raise RejectedChange(
+                f"every page must be responsive and accessible: {page} " + " and ".join(broke))
+
+
 def apply_to(site, ops):
     """The site mapping `site` as it would be once `ops` have been applied."""
     after = dict(site)
@@ -429,6 +680,19 @@ def build_prompt(shown, omitted=()):
         "add into both in the same run, and take a page you delete out of both: a plan that leaves "
         f"a page the root cannot reach is refused. {SITEMAP} is a sitemaps.org urlset whose <loc> "
         "values are the same relative paths used in links, because the site has no fixed domain.\n"
+        "- AXIOM, every run: every page is responsive and accessible. It works on a small phone as "
+        "well as a wide desktop, and it works for a visitor who cannot see it, cannot use a mouse, "
+        "or has asked their system for less motion. Hold to WCAG 2.2 level AA. Concretely, on every "
+        "page you write: a <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"> "
+        "that does not forbid zooming; lang on <html>; a <title>; exactly one <main> landmark, with "
+        "headings that start at <h1> and skip no level; alt on every <img> (alt=\"\" if it is purely "
+        "decorative); an accessible name on every link, button and form control, from its own text, "
+        "a <label for>, or aria-label; a visible :focus-visible style wherever you take the "
+        f"browser's outline away; no positive tabindex; and a {REDUCED_MOTION} rule, in CSS or "
+        "through matchMedia, wherever the page animates. Lay out with fluid units, wrapping and "
+        "media queries so that nothing overflows sideways at 320px wide, keep tap targets around "
+        "44px, and keep text contrast at 4.5:1. A plan that makes a page fail the mechanical half "
+        "of this is refused, exactly as one that orphans a page is.\n"
         "- Leave the site working at the end of the run. If you extract something into a shared "
         "file, or merge or delete a page, update every page that refers to it in the same run: "
         "never leave a link, a stylesheet or a script pointing at something that is not there.\n"
@@ -608,8 +872,9 @@ def validate_plan(plan, unseen=()):
 
     `unseen` names existing files whose content the model was not shown; it may not touch them.
 
-    A plan that would leave a page of the site unreachable from the root is refused, so the
-    reachability axiom holds however the prompt is answered.
+    A plan that would leave a page of the site unreachable from the root, or that would make a page
+    fail the responsive-and-accessible axiom, is refused: both axioms hold however the prompt is
+    answered.
     """
     files = plan.get("files") or []
     deletes = plan.get("delete") or []
@@ -653,7 +918,9 @@ def validate_plan(plan, unseen=()):
             raise RejectedChange(f"refusing to delete {rel}: its content was not shown to the model")
         ops.append(("delete", target, None))
     before = dict(read_site())
-    check_reachability(before, apply_to(before, ops))
+    after = apply_to(before, ops)
+    check_reachability(before, after)
+    check_accessibility(before, after)
     return ops
 
 
