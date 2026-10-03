@@ -6,6 +6,7 @@ Run with:  python3 -m unittest discover -s .github/scripts -v
 
 import json
 import os
+import re
 import shlex
 import stat
 import subprocess
@@ -56,7 +57,12 @@ def sitemap(*pages):
 
 
 def home(*links):
-    """A home page whose navigation links to `links`."""
+    """A home page whose navigation links to `links`.
+
+    It is a bare fragment, so it fails the responsive-and-accessible axiom in several ways -- which
+    is deliberate: the throwaway /site below starts out failing the axiom, and that is what exercises
+    the rule that a page which already falls short blocks no plan. Pages a plan *adds* use page().
+    """
     return "<h1>interesting</h1>\n<nav>" + "".join(f"<a href='{to}'>{to}</a>" for to in links) + "</nav>"
 
 
@@ -528,14 +534,14 @@ class ReachabilityAxiomTest(SiteDirTestCase):
 
     def test_a_page_a_run_adds_must_be_linked_and_listed_by_the_same_run(self):
         self.wired_site()
-        orphan = {"files": [{"path": "new.html", "content": "<p>new</p>"}]}
+        orphan = {"files": [{"path": "new.html", "content": NEW_PAGE}]}
         with self.assertRaisesRegex(mi.RejectedChange, r"new\.html is not reachable.*not listed"):
             mi.validate_plan(orphan)
-        linked_only = {"files": [{"path": "new.html", "content": "<p>new</p>"},
+        linked_only = {"files": [{"path": "new.html", "content": NEW_PAGE},
                                  {"path": "index.html", "content": home("toy.html", "error.html", "new.html")}]}
         with self.assertRaisesRegex(mi.RejectedChange, r"new\.html is not listed in sitemap\.xml"):
             mi.validate_plan(linked_only)
-        listed_only = {"files": [{"path": "new.html", "content": "<p>new</p>"},
+        listed_only = {"files": [{"path": "new.html", "content": NEW_PAGE},
                                  {"path": "sitemap.xml", "content": sitemap(*self.PAGES, "new.html")}]}
         with self.assertRaisesRegex(mi.RejectedChange, r"new\.html is not reachable from index\.html"):
             mi.validate_plan(listed_only)
@@ -909,6 +915,31 @@ class RealSiteTest(unittest.TestCase):
         self.assertEqual(mi.unreachable_pages(self.site), {})
         self.assertGreater(len(mi.html_pages(self.site)), 1, "the check is worth nothing on one page")
 
+    def test_every_page_is_responsive_and_accessible(self):
+        # Open question 3 of issue #26: the pages that exist today are audited and held to the rule
+        # too, not just the ones a future run writes. This is the check that does the auditing, and
+        # it is the reason constellation-diary.html gained its prefers-reduced-motion handling.
+        self.assertEqual(mi.inaccessible_pages(self.site), {})
+        self.assertGreater(len(mi.html_pages(self.site)), 1, "the check is worth nothing on one page")
+
+    def test_the_check_would_notice_a_real_page_losing_what_makes_it_accessible(self):
+        # A guard against the checks quietly becoming no-ops as the site is rewritten around them:
+        # take one thing away from the real home page and the check has to say so.
+        for damage, reason in [
+            (lambda html: re.sub(r"<meta[^>]*viewport[^>]*>", "", html, flags=re.I),
+             "has no viewport meta tag with width=device-width"),
+            (lambda html: re.sub(r"<html[^>]*>", "<html>", html, count=1, flags=re.I),
+             "has no lang attribute on <html>"),
+            (lambda html: html.replace("main", "div"), "has no <main> landmark"),
+            (lambda html: re.sub(r":focus(-visible|-within)?", ":hover", html),
+             "takes the focus outline away without a :focus style of its own"),
+            (lambda html: html.replace("prefers-reduced-motion", "prefers-contrast"),
+             "animates without honouring prefers-reduced-motion"),
+        ]:
+            with self.subTest(reason=reason):
+                broken = dict(self.site, **{"index.html": damage(self.site["index.html"])})
+                self.assertIn(reason, mi.inaccessible_pages(broken).get("index.html", []))
+
     def test_the_site_has_a_sitemap_of_both_kinds(self):
         # Open question 2 of the issue: both. sitemap.xml for anything reading the site
         # mechanically, and a page a visitor can read, reachable from the home page.
@@ -1213,12 +1244,15 @@ class CallModelTest(unittest.TestCase):
             mi.call_model("x", "p")
 
 
-# A plan that respects the reachability axiom (issue #21): the page it adds is linked from the home
-# page and listed in the sitemap by the same answer, so nothing it leaves behind is orphaned.
+# A plan that respects both axioms. Reachability (issue #21): the page it adds is linked from the
+# home page and listed in the sitemap by the same answer, so nothing it leaves behind is orphaned.
+# Responsive and accessible (issue #26): the page it adds arrives as a whole page that satisfies the
+# axiom, which is what a run writing a page from scratch has to do.
+CLOCK_PAGE = page(title="clock", body="<p>tick</p>")
 GOOD_PLAN = json.dumps({
     "summary": "Added a clock.\nSecond line is dropped.",
     "files": [
-        {"path": "clock.html", "content": "<p>tick</p>"},
+        {"path": "clock.html", "content": CLOCK_PAGE},
         {"path": "index.html", "content": home("clock.html", "error.html")},
         {"path": "sitemap.xml", "content": sitemap("index.html", "clock.html", "error.html")},
     ],
@@ -1240,7 +1274,7 @@ class MainTest(SiteDirTestCase):
         fake = FakeCopilot(self, f"say({GOOD_PLAN!r})")
         output = self.run_main()
         self.assertFalse([line for line in self.printed if "not available" in line])
-        self.assertEqual((self.site / "clock.html").read_text(), "<p>tick</p>")
+        self.assertEqual((self.site / "clock.html").read_text(), CLOCK_PAGE)
         (call,) = fake.calls()
         model = call["args"][1]
         self.assertIn(model, mi.MODELS)
