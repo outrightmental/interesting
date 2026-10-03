@@ -52,8 +52,9 @@ is deliberately small: a foundation to build a more holistic experience on, not 
 - **Eleventy, and two conventions.** [`eleventy.config.mjs`](eleventy.config.mjs) is the whole
   pipeline. An `.html` file is a [Nunjucks](https://mozilla.github.io/nunjucks/) template with
   optional YAML front matter; `layout: layout.njk` wraps it in the shared shell in
-  [`site/_includes`](site/_includes), so the `<head>`, the stylesheet links and the footer are
-  written once instead of in every page, and a page is little more than its `<main>`. A `.scss` file
+  [`site/_includes`](site/_includes), so the `<head>`, the stylesheet links, the analytics line and
+  the footer are written once instead of in every page, and a page is little more than its `<main>`.
+  A `.scss` file
   compiles to `.css` at the same path, and one whose name starts with `_` is a partial, built into
   whatever `@use`s it and never on its own. Every other file type is copied through verbatim, never
   rendered, so a stray `{{` in a script cannot break a build.
@@ -120,8 +121,11 @@ the iteration process too, for the same reason the one above is: the hourly run 
 new content for any page it is shown.
 
 - **One line per page.** Every page carries
-  `<script src='js/analytics.js' defer></script>` in its `<head>`, and
-  [`site/js/analytics.js`](site/js/analytics.js) brings the rest with it, resolving its neighbours
+  `<script src='js/analytics.js' defer></script>` in its `<head>` — written once in
+  [`site/_includes/layout.njk`](site/_includes/layout.njk), the shared shell every page is built
+  into, which is what a shared shell is for. The axiom is checked on the built site, so one line
+  there satisfies it for all of them, and a run that rewrites the shell without it is refused for
+  every page at once. [`site/js/analytics.js`](site/js/analytics.js) brings the rest with it, resolving its neighbours
   from its own URL so a page in a sub-folder works too: the consent banner
   ([orestbida/cookieconsent](https://github.com/orestbida/cookieconsent) 3.1.0, MIT, vendored into
   `site/js/` and `site/css/` exactly as published) and — only once a visitor accepts the analytics

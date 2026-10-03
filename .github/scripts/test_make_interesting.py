@@ -743,6 +743,142 @@ class AnalyticsAxiomTest(SiteDirTestCase):
         self.assertIn("you may not change or delete them", prompt)
 
 
+def needs_the_build(test):
+    """Skip a test that runs the real Node build when the toolchain is not installed.
+
+    In CI it is a failure instead: a silent skip there would quietly stop checking the built site,
+    which is the only site the axioms are about.
+    """
+    try:
+        mi.build_site({"index.html": "<h1>hi</h1>"})
+    except mi.BuildToolchainError as err:
+        if os.environ.get("CI"):
+            test.fail(f"the Node build toolchain is missing in CI: {err}")
+        test.skipTest(f"the Node build toolchain is not installed ({err})")
+
+
+def front_matter(**fields):
+    return "---\n" + "".join(f"{key}: {value}\n" for key, value in fields.items()) + "---\n"
+
+
+class BuildPipelineTest(unittest.TestCase):
+    """Issue #25: the real build, and the two axioms judged on what it produces.
+
+    SiteDirTestCase stands the build in with the identity, which is exactly right for its plain-HTML
+    fixtures; this is where the pipeline itself is exercised. /site is source now -- a layout is not
+    a page, and a page is whatever the templates make of it -- so these are the tests that say what
+    "every page" means.
+    """
+
+    LAYOUT = ("<!DOCTYPE html>\n<html lang='en'>\n<head><title>{{ title }}</title>\n"
+              "<link rel='stylesheet' href='css/site.css'>\n"
+              f"{mi.ANALYTICS_TAG}</head>\n"
+              "<body>\n{{ content | safe }}</body>\n</html>\n")
+    NAV = "<nav>{% for page in ['toy.html', 'error.html'] %}<a href='{{ page }}'>{{ page }}</a>{% endfor %}</nav>\n"
+    PAGES = ["index.html", "toy.html", "error.html"]
+
+    def setUp(self):
+        needs_the_build(self)
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.site = Path(tmp.name).resolve() / "site"
+        (self.site / "_includes").mkdir(parents=True)
+        (self.site / "_sass").mkdir()
+        (self.site / "js").mkdir()
+        (self.site / "css").mkdir()
+        patcher = mock.patch.object(mi, "SITE_DIR", self.site)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.write("_includes/layout.njk", self.LAYOUT)
+        self.write("_includes/nav.njk", self.NAV)
+        self.write("_sass/_tokens.scss", ":root { --fg: #eeeeff; }\n")
+        self.write("css/site.scss", "@use 'tokens';\nbody { color: var(--fg); }\n")
+        # The analytics axiom reaches the built site too: the one line lives in the shared layout,
+        # exactly as /site writes it, so no page below carries it and every built page has it.
+        self.write(mi.ANALYTICS_SCRIPT, "/* the shared tag and banner */\n")
+        # The home page links nothing itself: its navigation arrives from the shared partial, so
+        # only the built site shows that toy.html and error.html can be reached.
+        self.write("index.html", front_matter(layout="layout.njk", title="interesting")
+                   + '<h1>interesting</h1>\n{% include "nav.njk" %}')
+        self.write("toy.html", front_matter(layout="layout.njk", title="toy") + "<p>toy</p>\n")
+        self.write("error.html", front_matter(layout="layout.njk", title="lost") + "<p>lost</p>\n")
+        self.write("sitemap.xml", sitemap(*self.PAGES))
+
+    def write(self, rel, content):
+        (self.site / rel).write_text(content, encoding="utf-8")
+
+    def built(self):
+        return mi.build_site(dict(mi.read_site()))
+
+    def test_templates_render_and_sass_compiles_to_the_same_paths(self):
+        built = self.built()
+        self.assertEqual(sorted(built), ["css/site.css", "error.html", "index.html",
+                                         mi.ANALYTICS_SCRIPT, "sitemap.xml", "toy.html"])
+        self.assertTrue(built["index.html"].startswith("<!DOCTYPE html>"))
+        self.assertIn("<title>interesting</title>", built["index.html"])
+        self.assertIn("<h1>interesting</h1>", built["index.html"])
+        self.assertNotIn("layout: layout.njk", built["index.html"], "front matter is not published")
+        self.assertIn("--fg: #eeeeff", built["css/site.css"], "the @use'd partial reached the output")
+        self.assertIn("color:var(--fg)", built["css/site.css"])
+
+    def test_the_shared_files_are_never_published(self):
+        # A layout, a partial and a Sass partial are source: they are built into the pages and the
+        # stylesheets that use them, and nothing of them is served on its own.
+        built = self.built()
+        for shared in ["_includes/layout.njk", "_includes/nav.njk", "_sass/_tokens.scss", "css/site.scss"]:
+            with self.subTest(shared=shared):
+                self.assertIn(shared, dict(mi.read_site()))
+                self.assertNotIn(shared, built)
+
+    def test_a_page_is_whatever_the_templates_make_of_it(self):
+        # Both axioms ask about pages, and both are asked of the built site. In the source,
+        # index.html names no page and no page carries the analytics line; built, every page does.
+        source = dict(mi.read_site())
+        self.assertEqual(mi.links_from("index.html", source), set())
+        self.assertEqual(mi.pages_missing_analytics(source), set(self.PAGES))
+        built = self.built()
+        self.assertEqual(mi.html_pages(built), set(self.PAGES))
+        self.assertEqual(mi.links_from("index.html", built), {"toy.html", "error.html"})
+        self.assertEqual(mi.unreachable_pages(built), {})
+        self.assertEqual(mi.pages_missing_analytics(built), set())
+
+    def test_a_page_added_as_a_template_is_held_to_the_axiom_through_the_build(self):
+        added = {"path": "new.html", "content": front_matter(layout="layout.njk", title="new") + "<p>new</p>\n"}
+        with self.assertRaisesRegex(mi.RejectedChange, r"new\.html is not reachable.*not listed"):
+            mi.validate_plan({"files": [added]})
+        wired = {"files": [
+            added,
+            {"path": "_includes/nav.njk", "content": self.NAV.replace("'error.html'", "'error.html', 'new.html'")},
+            {"path": "sitemap.xml", "content": sitemap(*self.PAGES, "new.html")},
+        ]}
+        self.assertEqual(len(mi.validate_plan(wired)), 3)
+
+    def test_dropping_the_shared_line_breaks_every_page_at_once(self):
+        # The flip side of putting the line in the layout: a run that rewrites the shell without it
+        # leaves the whole site untagged, and the analytics axiom is judged on that built site.
+        bare = self.LAYOUT.replace(mi.ANALYTICS_TAG, "")
+        with self.assertRaisesRegex(mi.RejectedChange, r"has no <script"):
+            mi.validate_plan({"files": [{"path": "_includes/layout.njk", "content": bare}]})
+
+    def test_a_plan_that_does_not_build_is_refused(self):
+        for broken, what in [
+            ({"path": "index.html", "content": front_matter(layout="gone.njk") + "<p>x</p>"}, "a missing layout"),
+            ({"path": "index.html", "content": '{% include "gone.njk" %}'}, "a missing partial"),
+            ({"path": "css/site.scss", "content": "@use 'gone';\n"}, "a missing Sass partial"),
+            ({"path": "css/site.scss", "content": "body { color: ; }\n"}, "broken Sass"),
+        ]:
+            with self.subTest(what=what), self.assertRaisesRegex(mi.RejectedChange, "does not build"):
+                mi.validate_plan({"files": [broken]})
+
+    def test_a_site_that_already_does_not_build_blocks_nothing(self):
+        # Same reasoning as the orphan that was already there: every run is asked to repair the
+        # site, so a run must not be refused over damage it did not do. It still has to build.
+        self.write("css/site.scss", "@use 'gone';\n")
+        with mock.patch("builtins.print"):
+            ops = mi.validate_plan({"files": [{"path": "css/site.scss", "content": "body { color: red; }\n"}]})
+        self.assertEqual(len(ops), 1)
+
+
 class RealSiteTest(unittest.TestCase):
     """The site in this repository obeys both axioms: every page is reachable from the root, and
     every page carries the analytics tag and consent banner.
