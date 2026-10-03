@@ -8,12 +8,16 @@ iterate a more interesting website
 
 ## How it works
 
-- **`/site`** — the static website, published to an S3 bucket behind CloudFront at
-  [interesting.outright.io](https://interesting.outright.io/). `site/` is the whole artifact:
-  plain HTML with no build step, plus the three shared files behind the analytics tag (see
-  [Analytics axiom](#analytics-axiom)), and nothing else is published. The deploy changes one thing
-  on the way — the GA4 measurement ID — and copies everything else as it is. A request for a page
-  that is not there gets `error.html` back, with a 404, from a CloudFront custom error response.
+- **`/site`** — the website, in source form. Everything anyone edits — a person or the hourly AI —
+  lives here, and nothing else does: the pages, the shared layout and partials, the Sass, and the
+  three shared files behind the analytics tag (see [Analytics axiom](#analytics-axiom)). A request
+  for a page that is not there gets `error.html` back, with a 404, from a CloudFront custom error
+  response.
+- **The build** — [`build.mjs`](build.mjs) turns `/site` into the artifact that is published to an
+  S3 bucket behind CloudFront at [interesting.outright.io](https://interesting.outright.io/), in a
+  throwaway folder outside the repository. Nothing generated is ever committed. The deploy changes
+  one thing on the way — the GA4 measurement ID — and copies everything else as the build left it.
+  See [Building the site](#building-the-site).
 - **`/infra`** — the hosting, as code. [`infra/`](infra) is a self-contained Terraform project
   that owns the bucket, the CloudFront distribution, the certificate and DNS, the deploy IAM
   user, the Actions secrets the deploy uses — and this repository itself. It is applied by hand:
