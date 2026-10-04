@@ -45,8 +45,9 @@ footerNote: 'easter egg: tap the title five times'
 
   <script>
     (function () {
-      var STORAGE_KEY = 'interesting_wish_constellation_v1';
-      var CAPSULE_KEY = 'interesting_constellation_capsules_v1';
+      var state = window.interestingState;
+      var SKY = 'constellation';
+      var CAPSULES = 'capsules';
       var MAX_CAPSULES = 6;
       var canvas = document.getElementById('sky');
       var ctx = canvas.getContext('2d');
@@ -331,89 +332,48 @@ footerNote: 'easter egg: tap the title five times'
         setReplayButton();
       }
 
+      // Why there is nothing to replay, in this page's own words: the shared store says which of
+      // the four it is (see js/state.js).
+      var EMPTY_NOTES = {
+        unavailable: 'Local storage is unavailable in this browser context.',
+        unreadable: 'Saved constellation data is unreadable. Return home and create a new pattern.',
+        missing: 'No saved constellation found yet. Create one on the main page first.',
+        ok: 'A sky file exists, but it has no readable stars.'
+      };
+
       function loadStars() {
-        var raw = null;
-        try {
-          raw = localStorage.getItem(STORAGE_KEY);
-        } catch (e) {
-          statusEl.textContent = 'Local storage is unavailable in this browser context.';
-          stars = [];
-          stopReplay();
+        var saved = state.read(SKY, []);
+        stars = cloneStars(Array.isArray(saved.value) ? saved.value : []).slice(0, 160);
+        stopReplay();
+        if (!stars.length) {
+          statusEl.textContent = EMPTY_NOTES[saved.status];
           stopAmbience(true);
           return;
         }
-
-        if (!raw) {
-          stars = [];
-          statusEl.textContent = 'No saved constellation found yet. Create one on the main page first.';
-          stopReplay();
-          stopAmbience(true);
-          return;
-        }
-
-        try {
-          var parsed = JSON.parse(raw);
-          if (!Array.isArray(parsed)) throw new Error('invalid');
-          stars = cloneStars(parsed).slice(0, 160);
-
-          if (!stars.length) {
-            statusEl.textContent = 'A sky file exists, but it has no readable stars.';
-            stopReplay();
-            stopAmbience(true);
-            return;
-          }
-
-          statusEl.textContent = 'Loaded ' + stars.length + ' star' + (stars.length === 1 ? '' : 's') + ' from your saved sky memory.';
-          stopReplay();
-        } catch (e2) {
-          stars = [];
-          statusEl.textContent = 'Saved constellation data is unreadable. Return home and create a new pattern.';
-          stopReplay();
-          stopAmbience(true);
-        }
+        statusEl.textContent = 'Loaded ' + stars.length + ' star' + (stars.length === 1 ? '' : 's') + ' from your saved sky memory.';
       }
 
       function loadCapsules() {
-        var raw = null;
-        try {
-          raw = localStorage.getItem(CAPSULE_KEY);
-        } catch (e) {
-          capsules = [];
-          return;
-        }
-
-        if (!raw) {
-          capsules = [];
-          return;
-        }
-
-        try {
-          var parsed = JSON.parse(raw);
-          if (!Array.isArray(parsed)) throw new Error('invalid');
-          capsules = parsed.filter(function (cap) {
-            return cap && Array.isArray(cap.stars);
-          }).map(function (cap) {
-            var safeStars = cloneStars(cap.stars).slice(0, 160);
-            return {
-              createdAt: typeof cap.createdAt === 'number' ? cap.createdAt : Date.now(),
-              title: typeof cap.title === 'string' ? cap.title : 'Unnamed Capsule',
-              mood: typeof cap.mood === 'string' ? cap.mood : 'unclassified',
-              count: safeStars.length,
-              stars: safeStars,
-              palette: typeof cap.palette === 'number' ? cap.palette : 0
-            };
-          }).filter(function (cap) {
-            return cap.stars.length > 0;
-          }).slice(0, MAX_CAPSULES);
-        } catch (e2) {
-          capsules = [];
-        }
+        var stored = state.get(CAPSULES, []);
+        capsules = (Array.isArray(stored) ? stored : []).filter(function (cap) {
+          return cap && Array.isArray(cap.stars);
+        }).map(function (cap) {
+          var safeStars = cloneStars(cap.stars).slice(0, 160);
+          return {
+            createdAt: typeof cap.createdAt === 'number' ? cap.createdAt : Date.now(),
+            title: typeof cap.title === 'string' ? cap.title : 'Unnamed Capsule',
+            mood: typeof cap.mood === 'string' ? cap.mood : 'unclassified',
+            count: safeStars.length,
+            stars: safeStars,
+            palette: typeof cap.palette === 'number' ? cap.palette : 0
+          };
+        }).filter(function (cap) {
+          return cap.stars.length > 0;
+        }).slice(0, MAX_CAPSULES);
       }
 
       function saveCapsules() {
-        try {
-          localStorage.setItem(CAPSULE_KEY, JSON.stringify(capsules));
-        } catch (e) {
+        if (!state.set(CAPSULES, capsules)) {
           statusEl.textContent = 'Unable to save capsules locally in this browser context.';
         }
       }
