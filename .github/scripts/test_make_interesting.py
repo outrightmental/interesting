@@ -632,10 +632,10 @@ class SingleExperienceTest(SiteDirTestCase):
         self.assertIn("count them as part of the piece when you weigh the site as a whole", prompt)
         self.assertIn("carried on by a later run", prompt)
 
-    def test_the_aim_is_a_stated_standard_and_not_a_fifth_axiom(self):
+    def test_the_aim_is_a_stated_standard_and_not_a_sixth_axiom(self):
         # Issue #36, question 3: prompt-only. No check could settle whether a site reads as one
-        # experience, so the four axioms are still the whole of what the code refuses -- a page
-        # that shares nothing with the rest is accepted, exactly as before, and the prompt is
+        # experience, so the five coded axioms are still the whole of what the code refuses -- a
+        # page that shares nothing with the rest is accepted, exactly as before, and the prompt is
         # where the aim lives. (The same reasoning INTERESTING is left uncoded for.)
         (self.site / "index.html").write_text(home("sitemap.xml", "stranger.html", "error.html"))
         (self.site / "sitemap.xml").write_text(sitemap("index.html", "error.html"))
@@ -649,7 +649,7 @@ class SingleExperienceTest(SiteDirTestCase):
         self.assertEqual(sorted(t.name for _, t, _ in ops), ["sitemap.xml", "stranger.html"])
         self.assertEqual(sorted(name for name in dir(mi) if name.startswith("check_")),
                          ["check_accessibility", "check_analytics", "check_cadence",
-                          "check_reachability"])
+                          "check_reachability", "check_state"])
 
 
 class BuildPipelinePromptTest(unittest.TestCase):
