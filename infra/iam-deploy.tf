@@ -3,7 +3,7 @@
 # distribution. A single apply rotates them end to end (see github.tf).
 
 resource "aws_iam_user" "deploy" {
-  name = "interesting-outright-io-deploy"
+  name = "makeitmoreinteresting-com-deploy"
 }
 
 resource "aws_iam_access_key" "deploy" {
@@ -11,7 +11,7 @@ resource "aws_iam_access_key" "deploy" {
 }
 
 resource "aws_iam_user_policy" "deploy" {
-  name = "interesting-outright-io-deploy"
+  name = "makeitmoreinteresting-com-deploy"
   user = aws_iam_user.deploy.name
 
   policy = jsonencode({
