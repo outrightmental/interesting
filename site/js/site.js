@@ -17,6 +17,8 @@
   var statusEl = document.getElementById('site-pulse-status');
   var trailEl = document.getElementById('site-pulse-trail');
   var linkEl = document.getElementById('site-pulse-link');
+  var passportStatusEl = document.getElementById('constellation-passport-status');
+  var passportNextEl = document.getElementById('constellation-passport-next');
 
   if (!statusEl || !linkEl || !store || typeof store.read !== 'function') {
     return;
@@ -156,6 +158,17 @@
     return CIRCUIT[0];
   }
 
+  function setPassport(status, next) {
+    if (passportStatusEl) {
+      passportStatusEl.textContent = status;
+    }
+    if (passportNextEl) {
+      passportNextEl.textContent = next;
+    }
+  }
+
+  var inCircuit = circuitIndex(currentFile) !== -1;
+
   // 'unavailable' and 'unreadable' are the whole document's business rather than any one name's, so
   // the first read settles them and there is nothing to learn from reading the rest.
   var found = [];
@@ -183,17 +196,35 @@
   if (trouble === 'unavailable') {
     statusEl.textContent = 'this browser stores nothing, so nothing you make here will be waiting.';
     trailEl.textContent = 'The site still works as a full map; it only cannot carry your trail forward.';
+    if (inCircuit) {
+      setPassport(
+        'This browser keeps no lasting trail, so this relay resets when you leave.',
+        'You can still roam every world in any order.'
+      );
+    }
     return;
   }
   if (trouble === 'unreadable') {
     statusEl.textContent = 'what this browser saved cannot be read. the state menu can clear it.';
     trailEl.textContent = 'After clearing, leave one trace in any world and the trail rebuilds from there.';
+    if (inCircuit) {
+      setPassport(
+        'Saved sky data is unreadable in this browser right now.',
+        'Clear state from the menu, place one star in the wish constellation, then continue through the circuit.'
+      );
+    }
     return;
   }
 
   if (!found.length) {
     statusEl.textContent = 'nothing kept in this browser yet.';
     trailEl.textContent = 'Start a trail by leaving one thing in any world, then follow what it opens.';
+    if (inCircuit) {
+      setPassport(
+        'No saved stars are live in the relay yet.',
+        'Start at the wish constellation, place one thought-star, then continue through the circuit.'
+      );
+    }
     return;
   }
 
@@ -215,10 +246,24 @@
 
     var prompt = TRAIL_PROMPTS[(stars + found.length + currentFile.length) % TRAIL_PROMPTS.length];
     trailEl.textContent = prompt + ' ' + stars + ' star' + (stars === 1 ? ' is' : 's are') + ' live across the circuit.';
+
+    if (inCircuit) {
+      setPassport(
+        stars + ' saved star' + (stars === 1 ? ' is' : 's are') + ' live in this relay.',
+        'Next hop: ' + destination.where + '. Move one star there and compare what shifts.'
+      );
+    }
     return;
   }
 
   trailEl.textContent = 'Start a sky trail by placing one thought in the wish constellation; linked worlds will then reinterpret it.';
+
+  if (inCircuit) {
+    setPassport(
+      'The relay is waiting for its first saved sky.',
+      'Begin at the wish constellation to seed it, then return here to continue the chain.'
+    );
+  }
 
   for (i = 0; i < found.length; i++) {
     if (found[i].kept.href !== currentFile) {

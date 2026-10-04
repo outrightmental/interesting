@@ -11,15 +11,6 @@
   The constellation pages also share one loop of onward links, so they now get one federated
   circuit nav here rather than each carrying its own hand-written sky cluster.
 #}
-    <p class='footer'>
-{%- for link in footer %}
-      <a class='action' href='{{ link[0] }}'>{{ link[1] }}</a>
-{%- endfor %}
-{%- if footerNote %}
-      <span>{{ footerNote }}</span>
-{%- endif %}
-    </p>
-
 {%- set circuitSlugs = [
   'wish-constellation',
   'constellation-diary',
@@ -40,8 +31,33 @@
   ['star-lantern', 'star-lantern.html', 'lantern ritual'],
   ['wish-terrarium', 'wish-terrarium.html', 'terrarium']
 ] -%}
+{%- set inCircuit = page and (page.fileSlug in circuitSlugs) -%}
+{%- if inCircuit %}
+{%- set footerLinks = [
+  ['index.html', 'back to the threshold'],
+  ['moods.html', 'mood atlas'],
+  ['sitemap.html', 'site map'],
+  ['error.html', 'observatory 404']
+] -%}
+{%- else %}
+{%- set footerLinks = footer or [] -%}
+{%- endif %}
+    <p class='footer'>
+{%- for link in footerLinks %}
+      <a class='action' href='{{ link[0] }}'>{{ link[1] }}</a>
+{%- endfor %}
+{%- if footerNote %}
+      <span>{{ footerNote }}</span>
+{%- endif %}
+    </p>
 
-{%- if page and (page.fileSlug in circuitSlugs) %}
+{%- if inCircuit %}
+    <section class='constellation-passport' aria-label='Constellation relay passport'>
+      <p class='constellation-passport-title'>constellation relay passport</p>
+      <p class='constellation-passport-status' id='constellation-passport-status'>Checking your saved sky…</p>
+      <p class='constellation-passport-next' id='constellation-passport-next'>Each world in this circuit remixes the same saved stars.</p>
+    </section>
+
     <nav class='footer-circuit' aria-label='Constellation circuit'>
       <p class='footer-circuit-label'>constellation circuit</p>
       <div class='footer-circuit-links'>

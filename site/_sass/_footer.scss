@@ -11,6 +11,36 @@
   font-size: 0.86rem;
 }
 
+// Shared relay state shown across the constellation circuit pages, so each world repeats the same
+// saved-sky through-line in one place and visitors always get a next hop.
+.constellation-passport {
+  margin-top: 0.55rem;
+  border: 1px solid vars.$hairline;
+  border-radius: vars.$radius-panel;
+  background: rgba(7, 10, 20, 0.5);
+  padding: 0.62rem;
+}
+
+.constellation-passport-title {
+  margin: 0;
+  color: var(--accent2);
+  font-size: 0.76rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.constellation-passport-status,
+.constellation-passport-next {
+  margin: 0.42rem 0 0;
+  color: #d8e6ff;
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
+.constellation-passport-next {
+  color: var(--muted);
+}
+
 // Shared onward loop for the constellation worlds, federated into one include so those pages
 // keep one coherent cross-page route without repeating hand-written link clusters.
 .footer-circuit {
