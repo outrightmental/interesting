@@ -4,7 +4,8 @@ title: constellation diary
 description: A logbook that turns your saved wish constellation into animated diary entries.
 stylesheet: constellation-diary
 footer:
-  - [index.html, back to constellation]
+  - [wish-constellation.html, back to the wish constellation]
+  - [index.html, back to the threshold]
   - [sitemap.html, site map]
   - [error.html, visit observatory 404]
 footerNote: 'easter egg: tap the title five times'
@@ -17,7 +18,7 @@ footerNote: 'easter egg: tap the title five times'
       <canvas id='sky' width='620' height='300' aria-label='Animated view of your saved constellation'></canvas>
 
       <section class='panel'>
-        <p style='margin:0;color:#d8e5ff;'>Generate entries from the exact star layout saved on the main page.</p>
+        <p style='margin:0;color:#d8e5ff;'>Generate entries from the exact star layout saved on the wish constellation page.</p>
         <div class='controls'>
           <button id='refresh' type='button'>refresh saved sky</button>
           <button id='shuffle' type='button'>shuffle palette</button>
@@ -45,8 +46,9 @@ footerNote: 'easter egg: tap the title five times'
 
   <script>
     (function () {
-      var STORAGE_KEY = 'interesting_wish_constellation_v1';
-      var CAPSULE_KEY = 'interesting_constellation_capsules_v1';
+      var state = window.interestingState;
+      var SKY = 'constellation';
+      var CAPSULES = 'capsules';
       var MAX_CAPSULES = 6;
       var canvas = document.getElementById('sky');
       var ctx = canvas.getContext('2d');
@@ -223,7 +225,7 @@ footerNote: 'easter egg: tap the title five times'
         }
 
         if (!stars.length) {
-          statusEl.textContent = 'Add stars on the main page first, then return to play ambience.';
+          statusEl.textContent = 'Add stars on the wish constellation page first, then return to play ambience.';
           return;
         }
 
@@ -331,89 +333,48 @@ footerNote: 'easter egg: tap the title five times'
         setReplayButton();
       }
 
+      // Why there is nothing to replay, in this page's own words: the shared store says which of
+      // the four it is (see js/state.js).
+      var EMPTY_NOTES = {
+        unavailable: 'Local storage is unavailable in this browser context.',
+        unreadable: 'Saved constellation data is unreadable. Open the wish constellation and create a new pattern.',
+        missing: 'No saved constellation found yet. Create one on the wish constellation page first.',
+        ok: 'A sky file exists, but it has no readable stars.'
+      };
+
       function loadStars() {
-        var raw = null;
-        try {
-          raw = localStorage.getItem(STORAGE_KEY);
-        } catch (e) {
-          statusEl.textContent = 'Local storage is unavailable in this browser context.';
-          stars = [];
-          stopReplay();
+        var saved = state.read(SKY, []);
+        stars = cloneStars(Array.isArray(saved.value) ? saved.value : []).slice(0, 160);
+        stopReplay();
+        if (!stars.length) {
+          statusEl.textContent = EMPTY_NOTES[saved.status];
           stopAmbience(true);
           return;
         }
-
-        if (!raw) {
-          stars = [];
-          statusEl.textContent = 'No saved constellation found yet. Create one on the main page first.';
-          stopReplay();
-          stopAmbience(true);
-          return;
-        }
-
-        try {
-          var parsed = JSON.parse(raw);
-          if (!Array.isArray(parsed)) throw new Error('invalid');
-          stars = cloneStars(parsed).slice(0, 160);
-
-          if (!stars.length) {
-            statusEl.textContent = 'A sky file exists, but it has no readable stars.';
-            stopReplay();
-            stopAmbience(true);
-            return;
-          }
-
-          statusEl.textContent = 'Loaded ' + stars.length + ' star' + (stars.length === 1 ? '' : 's') + ' from your saved sky memory.';
-          stopReplay();
-        } catch (e2) {
-          stars = [];
-          statusEl.textContent = 'Saved constellation data is unreadable. Return home and create a new pattern.';
-          stopReplay();
-          stopAmbience(true);
-        }
+        statusEl.textContent = 'Loaded ' + stars.length + ' star' + (stars.length === 1 ? '' : 's') + ' from your saved sky memory.';
       }
 
       function loadCapsules() {
-        var raw = null;
-        try {
-          raw = localStorage.getItem(CAPSULE_KEY);
-        } catch (e) {
-          capsules = [];
-          return;
-        }
-
-        if (!raw) {
-          capsules = [];
-          return;
-        }
-
-        try {
-          var parsed = JSON.parse(raw);
-          if (!Array.isArray(parsed)) throw new Error('invalid');
-          capsules = parsed.filter(function (cap) {
-            return cap && Array.isArray(cap.stars);
-          }).map(function (cap) {
-            var safeStars = cloneStars(cap.stars).slice(0, 160);
-            return {
-              createdAt: typeof cap.createdAt === 'number' ? cap.createdAt : Date.now(),
-              title: typeof cap.title === 'string' ? cap.title : 'Unnamed Capsule',
-              mood: typeof cap.mood === 'string' ? cap.mood : 'unclassified',
-              count: safeStars.length,
-              stars: safeStars,
-              palette: typeof cap.palette === 'number' ? cap.palette : 0
-            };
-          }).filter(function (cap) {
-            return cap.stars.length > 0;
-          }).slice(0, MAX_CAPSULES);
-        } catch (e2) {
-          capsules = [];
-        }
+        var stored = state.get(CAPSULES, []);
+        capsules = (Array.isArray(stored) ? stored : []).filter(function (cap) {
+          return cap && Array.isArray(cap.stars);
+        }).map(function (cap) {
+          var safeStars = cloneStars(cap.stars).slice(0, 160);
+          return {
+            createdAt: typeof cap.createdAt === 'number' ? cap.createdAt : Date.now(),
+            title: typeof cap.title === 'string' ? cap.title : 'Unnamed Capsule',
+            mood: typeof cap.mood === 'string' ? cap.mood : 'unclassified',
+            count: safeStars.length,
+            stars: safeStars,
+            palette: typeof cap.palette === 'number' ? cap.palette : 0
+          };
+        }).filter(function (cap) {
+          return cap.stars.length > 0;
+        }).slice(0, MAX_CAPSULES);
       }
 
       function saveCapsules() {
-        try {
-          localStorage.setItem(CAPSULE_KEY, JSON.stringify(capsules));
-        } catch (e) {
+        if (!state.set(CAPSULES, capsules)) {
           statusEl.textContent = 'Unable to save capsules locally in this browser context.';
         }
       }
@@ -455,7 +416,7 @@ footerNote: 'easter egg: tap the title five times'
 
       function writeEntry() {
         if (!stars.length) {
-          entryEl.textContent = 'No constellation loaded yet.\n\n1) Visit index.html\n2) Place a few stars\n3) Return here and press refresh';
+          entryEl.textContent = 'No constellation loaded yet.\n\n1) Visit wish-constellation.html\n2) Place a few stars\n3) Return here and press refresh';
           return;
         }
 
@@ -494,7 +455,7 @@ footerNote: 'easter egg: tap the title five times'
 
       function sealCapsule() {
         if (!stars.length) {
-          statusEl.textContent = 'Cannot seal an empty sky. Refresh or create stars on the main page first.';
+          statusEl.textContent = 'Cannot seal an empty sky. Refresh or create stars on the wish constellation page first.';
           return;
         }
 
@@ -540,7 +501,7 @@ footerNote: 'easter egg: tap the title five times'
 
       function startReplay() {
         if (!stars.length) {
-          statusEl.textContent = 'No stars available for replay. Refresh after creating stars on the main page.';
+          statusEl.textContent = 'No stars available for replay. Refresh after creating stars on the wish constellation page.';
           return;
         }
 

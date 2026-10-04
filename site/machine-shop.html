@@ -1,0 +1,180 @@
+---
+layout: layout.njk
+title: the machine shop
+description: An elementary cellular automaton you can take apart rule by rule, for anyone reading as cold and clear.
+stylesheet: machine-shop
+footer:
+  - [index.html, back to the threshold]
+  - [moods.html, mood atlas]
+  - [orbital-weaver.html, open the orbital weaver]
+footerNote: 256 machines, all of them small enough to hold
+---
+  <main>
+    <h1>the machine shop</h1>
+    <p class='tagline'>Where the threshold sends anyone reading as cold and clear. Two hundred and fifty-six machines, each one eight bits long.</p>
+
+    <div class='layout'>
+      <canvas id='mill' width='620' height='360' aria-label='The output of the current rule, one generation per row'></canvas>
+
+      <section class='panel'>
+        <p class='shop-note'>A row of cells. Each new row is decided by the three cells above it,
+          and the eight possible neighbourhoods are the eight bits of the rule number. That is the
+          whole machine. Rule 110 can compute anything; rule 0 cannot be bothered.</p>
+        <div class='row'>
+          <label for='rule'>rule</label>
+          <input id='rule' type='range' min='0' max='255' value='110'>
+        </div>
+        <div class='controls'>
+          <button id='run' type='button' aria-pressed='true'>pause the mill</button>
+          <button id='single' type='button'>single seed</button>
+          <button id='noise' type='button'>noisy seed</button>
+          <button id='interesting' type='button'>pick a lively rule</button>
+        </div>
+        <p id='status' aria-live='polite'>Rule 110, running from one live cell.</p>
+        <pre id='reading'>111 110 101 100 011 010 001 000
+  0   1   1   0   1   1   1   0
+rule 110</pre>
+        <p class='hint'>The eight columns above are the eight neighbourhoods, high to low. Drag the rule slider and watch which bit you just flipped.</p>
+      </section>
+    </div>
+
+{% include "footer.njk" %}
+  </main>
+
+  <script>
+    (function () {
+      var canvas = document.getElementById('mill');
+      var ctx = canvas.getContext('2d');
+      var ruleInput = document.getElementById('rule');
+      var runBtn = document.getElementById('run');
+      var singleBtn = document.getElementById('single');
+      var noiseBtn = document.getElementById('noise');
+      var livelyBtn = document.getElementById('interesting');
+      var statusEl = document.getElementById('status');
+      var readingEl = document.getElementById('reading');
+
+      var calm = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
+      var CELL = 4;
+      var cols = Math.floor(canvas.width / CELL);
+      var rows = Math.floor(canvas.height / CELL);
+      var cells = new Uint8Array(cols);
+      var history = [];
+      var rule = 110;
+      var running = true;
+      var accumulator = 0;
+      var last = 0;
+
+      // Rules with something to look at: class III and IV in Wolfram's rough grouping.
+      var LIVELY = [18, 22, 26, 30, 45, 54, 60, 73, 75, 86, 89, 90, 101, 105, 106, 110, 120, 124, 126, 129, 137, 150, 161, 182, 193, 195, 225];
+
+      function seedSingle() {
+        cells = new Uint8Array(cols);
+        cells[Math.floor(cols / 2)] = 1;
+        history = [];
+      }
+
+      function seedNoise() {
+        cells = new Uint8Array(cols);
+        for (var i = 0; i < cols; i++) cells[i] = Math.random() < 0.34 ? 1 : 0;
+        history = [];
+      }
+
+      function advance() {
+        var next = new Uint8Array(cols);
+        for (var i = 0; i < cols; i++) {
+          var left = cells[(i - 1 + cols) % cols];
+          var middle = cells[i];
+          var right = cells[(i + 1) % cols];
+          var pattern = (left << 2) | (middle << 1) | right;
+          next[i] = (rule >> pattern) & 1;
+        }
+        cells = next;
+        history.push(cells);
+        if (history.length > rows) history.shift();
+      }
+
+      function draw() {
+        ctx.fillStyle = '#070a0d';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        for (var r = 0; r < history.length; r++) {
+          var row = history[r];
+          var age = r / Math.max(1, history.length - 1);
+          ctx.fillStyle = 'rgba(166, 219, 255, ' + (0.32 + age * 0.62).toFixed(3) + ')';
+          for (var c = 0; c < cols; c++) {
+            if (row[c]) ctx.fillRect(c * CELL, r * CELL, CELL - 1, CELL - 1);
+          }
+        }
+      }
+
+      function bits() {
+        var top = '';
+        var bottom = '';
+        for (var p = 7; p >= 0; p--) {
+          top += (p >> 2 & 1) + '' + (p >> 1 & 1) + '' + (p & 1) + ' ';
+          bottom += '  ' + ((rule >> p) & 1) + ' ';
+        }
+        return top.trim() + '\n' + bottom.replace(/\s+$/, '') + '\nrule ' + rule;
+      }
+
+      function setRule(value, why) {
+        rule = Math.max(0, Math.min(255, Math.round(value)));
+        ruleInput.value = String(rule);
+        readingEl.textContent = bits();
+        statusEl.textContent = why || ('Rule ' + rule + ' loaded. The mill keeps the rows it already made.');
+      }
+
+      function setRunning(on) {
+        running = on;
+        runBtn.textContent = on ? 'pause the mill' : 'start the mill';
+        runBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
+      }
+
+      function frame(now) {
+        if (typeof now !== 'number') now = performance.now();
+        var dt = last ? Math.min(0.1, (now - last) / 1000) : 0.016;
+        last = now;
+        if (running) {
+          accumulator += dt;
+          var period = calm && calm.matches ? 0.12 : 0.028;
+          while (accumulator > period) {
+            accumulator -= period;
+            advance();
+          }
+          draw();
+        }
+        requestAnimationFrame(frame);
+      }
+
+      ruleInput.addEventListener('input', function () {
+        setRule(Number(ruleInput.value));
+      });
+
+      runBtn.addEventListener('click', function () {
+        setRunning(!running);
+        statusEl.textContent = running ? 'Running.' : 'Held. The rows stay where they are.';
+      });
+
+      singleBtn.addEventListener('click', function () {
+        seedSingle();
+        statusEl.textContent = 'Reseeded from one live cell in the middle.';
+      });
+
+      noiseBtn.addEventListener('click', function () {
+        seedNoise();
+        statusEl.textContent = 'Reseeded from noise. Watch what the rule does to it.';
+      });
+
+      livelyBtn.addEventListener('click', function () {
+        var pick = LIVELY[Math.floor(Math.random() * LIVELY.length)];
+        setRule(pick, 'Rule ' + pick + ' is one of the ones worth watching.');
+        seedSingle();
+      });
+
+      seedSingle();
+      setRule(110, 'Rule 110, running from one live cell.');
+      if (calm && calm.matches) {
+        statusEl.textContent = 'Reduced motion is on, so the mill turns slowly.';
+      }
+      requestAnimationFrame(frame);
+    })();
+  </script>

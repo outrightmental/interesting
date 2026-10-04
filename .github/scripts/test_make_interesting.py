@@ -8,6 +8,7 @@ import json
 import os
 import re
 import shlex
+import shutil
 import stat
 import subprocess
 import sys
@@ -77,9 +78,35 @@ def tagged(body):
     return f"<head>{mi.ANALYTICS_TAG}</head>\n<body>{body}</body>"
 
 
+def stored(body):
+    """A bare fragment that loads the shared local-state store and its meta menu, and nothing more.
+
+    The local-state counterpart of tagged(): it carries the one line the axiom is about but, being
+    a fragment, falls short of the responsive-and-accessible axiom from the start, so only
+    check_state can refuse a fixture built from it.
+    """
+    return f"<head>{mi.STATE_TAG}</head>\n<body>{body}</body>"
+
+
+def queried(body):
+    """A bare fragment that loads the shared mood script, and nothing more.
+
+    The mood counterpart of tagged(): it carries the one line and, being a fragment, fails the
+    responsive-and-accessible axiom from the start, so only the mood check can refuse a fixture
+    built from it.
+    """
+    return f"<head>{mi.MOOD_TAG}</head>\n<body>{body}</body>"
+
+
+def mood_script(*probes):
+    """A stand-in for the shared mood script, declaring `probes` as its query mechanisms."""
+    declared = ",\n".join(f"  {{ probe: '{name}', kind: 'choice' }}" for name in probes)
+    return "var PROBES = [\n" + declared + "\n];\n"
+
+
 def page(body="<p>a page</p>", title="a page", lang="en",
          viewport="width=device-width, initial-scale=1", css="", focus=True, calm=True,
-         analytics=mi.ANALYTICS_SCRIPT):
+         analytics=mi.ANALYTICS_SCRIPT, state=mi.STATE_SCRIPT, mood=mi.MOOD_SCRIPT):
     """A whole page that satisfies every axiom: responsive and accessible (issue #26), and carrying
     the analytics and consent line (issue #24).
 
@@ -87,8 +114,9 @@ def page(body="<p>a page</p>", title="a page", lang="en",
     has to look like. Every argument takes one part of the axiom away again, so a test can break
     exactly one thing: the style block always animates (`transition`) and always drops the browser's
     focus ring (`outline: none`), so `calm=False` and `focus=False` really do leave a page failing.
-    `analytics` is the src of the shared script, so a page in a sub-folder can load it by the
-    matching relative path, and `analytics=""` leaves the line off without touching anything else.
+    `analytics`, `state` and `mood` are the srcs of the three shared scripts, so a page in a
+    sub-folder can load them by the matching relative path, and `analytics=""`, `state=""` or
+    `mood=""` leaves one line off without touching anything else.
     """
     style = ["  * { box-sizing: border-box; }",
              "  .panel { max-width: 60rem; padding: clamp(0.8rem, 3vw, 2rem); }",
@@ -102,6 +130,8 @@ def page(body="<p>a page</p>", title="a page", lang="en",
             "  <meta charset='utf-8'>\n"
             + (f"  <meta name='viewport' content='{viewport}'>\n" if viewport else "")
             + (f"  <script src='{analytics}' defer></script>\n" if analytics else "")
+            + (f"  <script src='{state}'></script>\n" if state else "")
+            + (f"  <script src='{mood}' defer></script>\n" if mood else "")
             + f"  <title>{title}</title>\n  <style>\n"
             + "\n".join(style + ([f"  {css}"] if css else [])) + "\n  </style>\n</head>\n<body>\n"
             f"  <main class='panel'>\n    <h1>{title}</h1>\n    {body}\n  </main>\n</body>\n</html>\n")
@@ -498,10 +528,10 @@ class WholeSiteReviewTest(unittest.TestCase):
                 self.assertIn(extension, prompt)
 
     # A run can only federate what it was shown, so the budget has to carry the whole site with
-    # room for it to keep growing. This stand-in is half again as big as the site was when the
-    # whole-site review was introduced (nine files, 232 KB, the largest 42 KB).
+    # room for it to keep growing. This stand-in is half again as big as the site was when the mood
+    # axiom gave every orientation a world of its own (57 files, 357 KB, the largest 38 KB).
     GROWN_SITE = ([("index.html", "i" * 50_000), ("error.html", "e" * 50_000)]
-                  + [(f"page-{i:02d}.html", "x" * 22_000) for i in range(12)])
+                  + [(f"page-{i:02d}.html", "x" * 11_000) for i in range(40)])
 
     def test_a_site_half_again_as_big_as_this_one_is_still_shown_whole(self):
         shown, omitted = mi.split_for_prompt(list(self.GROWN_SITE))
@@ -816,7 +846,7 @@ class ResponsiveAccessibleAxiomTest(SiteDirTestCase):
                      "refused, exactly as one that orphans a page is"]:
             with self.subTest(rule=rule):
                 self.assertIn(rule, rules)
-        self.assertEqual(rules.count("AXIOM, every run:"), 4, "every axiom stands over every run")
+        self.assertEqual(rules.count("AXIOM, every run:"), 6, "every axiom stands over every run")
 
     def test_the_prompt_also_asks_for_what_no_validator_can_judge(self):
         # Open question 1 of the issue: both, and the prompt is the wider of the two. Contrast needs
@@ -1038,6 +1068,375 @@ class ResponsiveAccessibleAxiomTest(SiteDirTestCase):
             self.assertEqual(self.violations(page()), ["cannot be parsed as HTML"])
 
 
+class LocalStateAxiomTest(SiteDirTestCase):
+    """Issue #31: everything the site keeps in a visitor's browser lives in one JSON document, every
+    page reads and writes it through one shared accessor, and a very small meta menu in the corner
+    of every page exports, imports and clears it. All of it arrives with one line, and that line and
+    the file behind it are held in place by exactly the machinery the analytics tag uses."""
+
+    PAGES = ["index.html", "error.html", "toy.html"]
+
+    def setUp(self):
+        super().setUp()
+        (self.site / "js").mkdir()
+        (self.site / mi.STATE_SCRIPT).write_text("/* the shared store and its meta menu */")
+        (self.site / "index.html").write_text(stored(home("toy.html", "error.html")))
+        (self.site / "error.html").write_text(stored("<p>404</p>"))
+        (self.site / "toy.html").write_text(stored("<p>toy</p>"))
+        (self.site / "sitemap.xml").write_text(sitemap(*self.PAGES))
+
+    def prompt(self):
+        return mi.build_prompt([("index.html", "<h1>hi</h1>")])
+
+    def test_the_axiom_is_a_standing_rule_of_every_prompt(self):
+        rules = self.prompt()
+        rules = rules[rules.index("Rules:"):]
+        for rule in ["every page carries the site's local-state store and its meta menu",
+                     mi.STATE_TAG,
+                     "Keep that line on every page you rewrite",
+                     "put it on every page you add",
+                     f"../{mi.STATE_SCRIPT}",  # a page in a sub-folder
+                     "It is not deferred on purpose",
+                     "lives in one JSON document",
+                     "no page may touch localStorage or sessionStorage itself",
+                     "a shared file counts as the pages that load it",
+                     "window.interestingState",
+                     "state.read('constellation', [])",
+                     "state.set('omens', omens)",
+                     "is not shown to you, you may not write or delete it",
+                     "is not yours to change or to restyle"]:
+            with self.subTest(rule=rule):
+                self.assertIn(rule, rules)
+
+    def test_the_prompt_names_the_statuses_and_the_keys_the_site_keeps(self):
+        # A page has to be able to tell "you have not saved anything" from "what you saved is lost",
+        # and has to reach the sky the other pages are reinterpreting under the name they use.
+        rules = self.prompt()
+        for named in ["'ok'", "'missing'", "'unreadable'", "'unavailable'",
+                      '"constellation"', '"capsules"', '"omens"', '"threshold"']:
+            with self.subTest(named=named):
+                self.assertIn(named, rules)
+
+    def test_a_page_a_run_adds_must_carry_the_line(self):
+        # A whole page but for the one line, so this axiom is the only thing left to refuse it for.
+        plan = {"files": [
+            {"path": "new.html", "content": page(title="new", state="")},
+            {"path": "index.html", "content": stored(home("toy.html", "error.html", "new.html"))},
+            {"path": "sitemap.xml", "content": sitemap(*self.PAGES, "new.html")},
+        ]}
+        with self.assertRaisesRegex(mi.RejectedChange, r"new\.html has no <script"):
+            mi.validate_plan(plan)
+        plan["files"][0]["content"] = page(title="new")
+        self.assertEqual(len(mi.validate_plan(plan)), 3)
+
+    def test_dropping_the_line_from_a_page_a_run_rewrites_is_refused(self):
+        for content in ["<p>no line at all</p>",
+                        "<head><script>var STORE = 'js/state.js';</script></head>"]:
+            with self.subTest(content=content[:40]), \
+                    self.assertRaisesRegex(mi.RejectedChange, r"toy\.html has no <script"):
+                mi.validate_plan({"files": [{"path": "toy.html", "content": content}]})
+        # It is the src that counts, not the exact spelling of the tag around it.
+        loaded = '<head><script src="js/state.js"></script></head>'
+        self.assertEqual(len(mi.validate_plan({"files": [{"path": "toy.html", "content": loaded}]})), 1)
+
+    def test_a_page_in_a_sub_folder_loads_it_by_a_relative_src(self):
+        plan = {"files": [
+            {"path": "deep/new.html", "content": page(title="new", state=f"../{mi.STATE_SCRIPT}")},
+            {"path": "index.html", "content": stored(home("toy.html", "error.html", "deep/new.html"))},
+            {"path": "sitemap.xml", "content": sitemap(*self.PAGES, "deep/new.html")},
+        ]}
+        self.assertEqual(len(mi.validate_plan(plan)), 3)
+
+    def test_a_page_that_was_already_missing_the_line_blocks_nothing(self):
+        (self.site / "index.html").write_text(home("toy.html", "error.html"))
+        ops = mi.validate_plan({"files": [{"path": "toy.html", "content": stored("<p>still has it</p>")}]})
+        self.assertEqual(len(ops), 1)
+        self.assertEqual(mi.pages_missing_state(dict(mi.read_site())), {"index.html"})
+
+    def test_a_site_without_the_store_is_not_held_to_the_axiom(self):
+        (self.site / mi.STATE_SCRIPT).unlink()
+        self.assertEqual(mi.pages_missing_state(dict(mi.read_site())), set())
+        self.assertEqual(mi.pages_touching_storage(dict(mi.read_site())), {})
+        self.assertEqual(len(mi.validate_plan({"files": [{"path": "toy.html", "content": "<p>bare</p>"}]})), 1)
+
+    def test_the_store_can_neither_be_rewritten_nor_deleted(self):
+        self.assertIn(mi.STATE_SCRIPT, mi.FIXED_FILES)
+        for plan in [{"files": [{"path": mi.STATE_SCRIPT, "content": "rewritten from memory"}]},
+                     {"delete": [mi.STATE_SCRIPT]}, {"delete": [f"site/{mi.STATE_SCRIPT}"]}]:
+            with self.subTest(plan=str(plan)[:80]), self.assertRaises(mi.RejectedChange):
+                mi.validate_plan(plan)
+
+    def test_the_store_is_never_shown_to_a_model(self):
+        shown, omitted = mi.split_for_prompt(mi.read_site())
+        self.assertNotIn(mi.STATE_SCRIPT, [rel for rel, _ in shown])
+        self.assertIn(mi.STATE_SCRIPT, omitted)
+        self.assertNotIn("the shared store and its meta menu", mi.build_prompt(shown, omitted))
+
+    def test_a_page_that_reaches_for_the_browsers_storage_is_refused(self):
+        for code in ["localStorage.getItem('mine')", "window.sessionStorage.setItem('a', '1')"]:
+            with self.subTest(code=code), \
+                    self.assertRaisesRegex(mi.RejectedChange, r"no page may use the browser's storage"):
+                mi.validate_plan({"files": [
+                    {"path": "toy.html", "content": stored(f"<script>{code}</script>")}]})
+        # The same page, going through the store instead, is fine.
+        through = stored("<script>window.interestingState.get('constellation', []);</script>")
+        self.assertEqual(len(mi.validate_plan({"files": [{"path": "toy.html", "content": through}]})), 1)
+
+    def test_a_shared_script_is_read_along_with_the_pages_that_load_it(self):
+        # A federated site keeps its behaviour in shared files, so state kept behind the store's
+        # back is as likely to be in "js/site.js" as in a page.
+        plan = {"files": [
+            {"path": "js/site.js", "content": "var saved = localStorage.getItem('mine');"},
+            {"path": "toy.html", "content": stored("<script src='js/site.js'></script>")},
+        ]}
+        with self.assertRaisesRegex(mi.RejectedChange, r"toy\.html"):
+            mi.validate_plan(plan)
+
+    def test_the_fixed_files_may_use_the_browsers_storage(self):
+        # They are the ones it belongs to: state.js is the store, and the consent banner keeps the
+        # visitor's answer to it, which is deliberately not in the document.
+        (self.site / mi.STATE_SCRIPT).write_text("localStorage.setItem('interesting_state_v1', '{}');")
+        (self.site / "toy.html").write_text(stored("<script src='js/state.js'></script>"))
+        self.assertEqual(mi.pages_touching_storage(dict(mi.read_site())), {})
+
+    def test_a_page_that_already_went_round_the_store_blocks_nothing(self):
+        # Only what the run itself breaks is refused, as with every other axiom.
+        (self.site / "index.html").write_text(
+            stored(home("toy.html", "error.html") + "<script>localStorage.clear();</script>"))
+        ops = mi.validate_plan({"files": [{"path": "toy.html", "content": stored("<p>toy</p>")}]})
+        self.assertEqual(len(ops), 1)
+        self.assertEqual(sorted(mi.pages_touching_storage(dict(mi.read_site()))), ["index.html"])
+
+
+def needs_node(test):
+    """Skip a test that runs Node when Node is not installed; in CI that is a failure instead."""
+    if shutil.which(mi.NODE_BIN) is None:
+        if os.environ.get("CI"):
+            test.fail(f"Node is missing in CI ({mi.NODE_BIN!r})")
+        test.skipTest(f"Node is not installed ({mi.NODE_BIN!r})")
+
+
+class LocalStateStoreTest(unittest.TestCase):
+    """What site/js/state.js actually does, run against a stub browser.
+
+    The store and its meta menu are the one piece of behaviour every page of the site leans on and
+    no run may rewrite, so unlike a page they are worth testing rather than only holding in place.
+    state_store_harness.mjs loads the real file, drives it through a scenario each, and reports what
+    it saw; the assertions are here.
+    """
+
+    SKY = [{"x": 10, "y": 20, "text": "a wish"}]
+    CONSENT = "cc_cookie"  # the consent banner's own key, which is none of the store's business
+
+    @classmethod
+    def setUpClass(cls):
+        cls.repo = Path(mi.__file__).resolve().parents[2]
+        cls.harness = Path(mi.__file__).resolve().parent / "state_store_harness.mjs"
+        cls.store = cls.repo / "site" / mi.STATE_SCRIPT
+        cls.observed = None
+
+    def setUp(self):
+        if not self.store.is_file():
+            self.skipTest(f"no local-state store at {self.store}")
+        needs_node(self)
+        if LocalStateStoreTest.observed is None:
+            run = subprocess.run([mi.NODE_BIN, str(self.harness), str(self.store)],
+                                 capture_output=True, text=True, timeout=60)
+            self.assertEqual(run.returncode, 0, f"the harness failed: {run.stderr[-2000:]}")
+            LocalStateStoreTest.observed = json.loads(run.stdout)
+        self.seen = LocalStateStoreTest.observed
+
+    def test_an_empty_browser_starts_from_one_empty_document(self):
+        fresh = self.seen["fresh"]
+        self.assertEqual(fresh["keys"], [])
+        self.assertTrue(fresh["persistent"])
+        self.assertEqual(fresh["document"], {"format": "interesting", "version": 1,
+                                             "saved": None, "values": {}})
+        self.assertTrue(fresh["indented"], "an exported document is for a person to read and paste")
+        self.assertEqual(fresh["shelf"], {}, "nothing is written until something is kept")
+        self.assertEqual(fresh["missing"], {"status": "missing", "value": []})
+        self.assertEqual(fresh["inherited"], {"status": "missing", "value": []},
+                         "a name is one the site kept, not one Object.prototype happens to have")
+
+    def test_everything_is_kept_in_one_json_document_under_one_key(self):
+        trip = self.seen["roundTrip"]
+        self.assertTrue(trip["wrote"])
+        self.assertEqual(list(trip["shelf"]), ["interesting_state_v1"])
+        self.assertEqual(self.seen["fresh"]["storageKey"], "interesting_state_v1")
+        self.assertEqual(trip["shelf"]["interesting_state_v1"]["values"], {"constellation": self.SKY})
+        self.assertEqual(trip["keys"], ["constellation"])
+        self.assertEqual(trip["read"], {"status": "ok", "value": self.SKY})
+        self.assertEqual(trip["get"], self.SKY)
+        self.assertEqual(trip["saved"], "string", "a document says when it was saved")
+
+    def test_a_write_in_one_tab_keeps_what_another_tab_saved(self):
+        # One document for the whole site is one document for every tab of it, which a key per page
+        # was not: a page that wrote its own copy of the document back whole would throw away
+        # whatever the other tab had saved while it sat open.
+        tabs = self.seen["twoTabs"]
+        self.assertEqual(tabs["shelf"]["interesting_state_v1"]["values"],
+                         {"omens": [{"text": "an omen", "time": 1}], "constellation": self.SKY})
+        self.assertEqual(tabs["reloaded"], ["constellation", "omens"])
+        self.assertEqual(sorted(tabs["exported"]), ["constellation", "omens"],
+                         "and an export is the whole state, not one tab's view of it")
+        self.assertEqual(tabs["homeStillReads"], {"status": "ok", "value": self.SKY})
+
+    def test_a_browser_that_stores_nothing_falls_back_to_memory(self):
+        # The first of the two fallbacks the issue asks for.
+        without = self.seen["withoutStorage"]
+        self.assertFalse(without["persistent"])
+        self.assertEqual(without["missing"], {"status": "unavailable", "value": []})
+        self.assertFalse(without["wrote"], "a page is told it could only keep this in memory")
+        self.assertEqual(without["afterWriting"], {"status": "ok", "value": self.SKY},
+                         "the page still works, for as long as it is open")
+        self.assertEqual(without["shelf"], {})
+        self.assertEqual(without["reloaded"], {"status": "unavailable", "value": []})
+
+    def test_a_browser_that_runs_out_of_room_keeps_what_the_page_was_told_it_kept(self):
+        # The same fallback, reached the other way: storage was offered and then refused a write.
+        # `set` saying false has to mean "kept in memory", so a later read -- or the meta menu
+        # asking for the whole document -- must not roll the page back to what the browser saved.
+        filled = self.seen["storageFillsUp"]
+        self.assertFalse(filled["wrote"], "a page is told the write did not reach the browser")
+        self.assertEqual(filled["afterWriting"], {"status": "ok", "value": self.SKY})
+        self.assertEqual(filled["exported"]["constellation"], self.SKY,
+                         "an export is the state the page has, not the part that got saved")
+        self.assertEqual(filled["afterExporting"], {"status": "ok", "value": self.SKY},
+                         "and asking for the document does not throw the rest of it away")
+        self.assertEqual(filled["omens"], [{"text": "saved in time", "time": 1}])
+        self.assertEqual(list(filled["shelf"]["interesting_state_v1"]["values"]), ["omens"],
+                         "the browser still holds only what it accepted")
+        self.assertTrue(filled["roomAgain"]["wrote"], "and a write gets through once there is room")
+        self.assertEqual(sorted(filled["roomAgain"]["shelf"]["interesting_state_v1"]["values"]),
+                         ["capsules", "constellation", "omens"],
+                         "carrying what had only been in memory with it")
+
+    def test_a_missing_or_malformed_value_falls_back_to_the_callers_default(self):
+        # The second fallback, and the reason `status` exists: "you have not saved anything" and
+        # "what you saved is lost" are different things for a page to say.
+        bad = self.seen["malformed"]
+        for name in ["truncated", "notAnObject", "emptyEnvelope"]:
+            with self.subTest(name=name):
+                self.assertEqual(bad[name]["read"], {"status": "unreadable", "value": []})
+                self.assertEqual(bad[name]["keys"], [])
+        self.assertEqual(bad["bareValues"]["read"]["status"], "ok",
+                         "a document trimmed down to its values by hand still reads")
+
+    def test_the_keys_the_site_used_to_keep_are_carried_into_the_document(self):
+        carried = self.seen["carriesEarlierKeysOver"]
+        self.assertEqual(carried["keys"], ["capsules", "constellation", "omens"])
+        self.assertEqual(carried["values"]["constellation"], self.SKY)
+        self.assertEqual(sorted(carried["shelf"]), [self.CONSENT, "interesting_state_v1"],
+                         "the old per-page keys are taken away, and nothing else is touched")
+        self.assertEqual(carried["again"], ["capsules", "constellation", "omens"],
+                         "a second visit finds the document, not the keys")
+        kept = self.seen["earlierKeyDoesNotOverwrite"]
+        self.assertEqual(kept["value"], [{"x": 1, "y": 1, "text": "newer"}])
+        self.assertEqual(list(kept["shelf"]), ["interesting_state_v1"])
+
+    def test_a_whole_state_travels_as_one_piece_of_text(self):
+        # The point of the thing: someone can collect their skies, and hand one to someone else.
+        swap = self.seen["exportThenImport"]
+        self.assertEqual(json.loads(swap["text"])["values"], {"constellation": self.SKY})
+        self.assertTrue(swap["outcome"]["ok"], swap["outcome"]["note"])
+        self.assertEqual(swap["constellation"], self.SKY)
+        # Replace, not merge, for reproducibility: the sky they open is the sky it came from.
+        self.assertEqual(swap["keys"], ["constellation"])
+        self.assertEqual(swap["omens"], {"status": "missing", "value": []})
+
+    def test_import_refuses_what_is_not_a_state_document_and_changes_nothing(self):
+        edges = self.seen["importEdges"]
+        for name in ["blank", "notJson", "anArray", "brokenEnvelope", "tooBig"]:
+            with self.subTest(name=name):
+                self.assertFalse(edges[name]["outcome"]["ok"])
+                self.assertTrue(edges[name]["outcome"]["note"])
+                self.assertEqual(edges[name]["keys"], ["constellation"], "nothing was changed")
+        for name in ["envelope", "bareValues"]:
+            with self.subTest(name=name):
+                self.assertTrue(edges[name]["outcome"]["ok"])
+                self.assertEqual(edges[name]["keys"], ["omens"])
+
+    def test_clearing_takes_the_sites_own_state_and_nothing_else(self):
+        cleared = self.seen["clearing"]
+        self.assertTrue(cleared["outcome"]["ok"], cleared["outcome"]["note"])
+        self.assertEqual(cleared["keys"], [])
+        self.assertEqual(list(cleared["shelf"]), [self.CONSENT],
+                         "the consent answer is the banner's, not the store's (open question 7)")
+        self.assertEqual(cleared["reloaded"], [])
+        self.assertTrue(cleared["removed"])
+
+    def test_the_meta_menu_is_one_small_named_affordance_that_starts_closed(self):
+        menu = self.seen["menu"]
+        self.assertEqual(menu["affordances"], 1, "one corner affordance, like the cookies button")
+        self.assertEqual(menu["rootClass"], "site-meta")
+        self.assertEqual(menu["shut"]["openTag"], "button")
+        self.assertEqual(menu["shut"]["openType"], "button")
+        self.assertEqual(menu["shut"]["openText"], "state")
+        self.assertTrue(menu["shut"]["openLabel"], "WCAG 4.1.2: it has an accessible name")
+        self.assertTrue(menu["shut"]["panelHidden"], "it pops up when clicked, and not before")
+        self.assertEqual(menu["shut"]["openExpanded"], "false")
+        self.assertEqual(menu["shut"]["openControls"], menu["shut"]["panelId"])
+        self.assertEqual(menu["shut"]["panelRole"], "dialog")
+        self.assertTrue(menu["shut"]["panelLabel"])
+        self.assertEqual(menu["shut"]["labelFor"], menu["shut"]["fieldId"],
+                         "WCAG 3.3.2: the textarea is labelled")
+        self.assertEqual(menu["shut"]["buttons"], ["copy", "replace mine", "clear", "close"],
+                         "export, import, clear -- and a way out")
+        self.assertEqual(menu["shut"]["noteLive"], "polite", "what it did is announced")
+
+    def test_opening_the_menu_shows_the_whole_document_ready_to_copy(self):
+        menu = self.seen["menu"]
+        self.assertFalse(menu["opened"]["panelHidden"])
+        self.assertEqual(menu["opened"]["openExpanded"], "true")
+        self.assertEqual(menu["filledParses"], self.SKY, "export is the text in the box")
+
+    def test_the_menu_is_operable_and_escapable_by_keyboard(self):
+        menu = self.seen["menu"]
+        self.assertEqual(sorted(menu["documentListeners"]), ["keydown", "pointerdown"])
+        self.assertTrue(menu["escaped"]["panelHidden"], "Escape closes it")
+        self.assertEqual(menu["escaped"]["openExpanded"], "false")
+        self.assertTrue(menu["closed"]["openFocused"], "and the focus comes back to the button")
+
+    def test_the_menu_carries_its_own_focus_ring_and_tap_targets(self):
+        # The pages are free to take the browser's outline off their own controls, and several do,
+        # so the menu brings its own styles with it rather than trusting a stylesheet it cannot own.
+        styles = self.seen["menu"]["styles"]
+        self.assertIn(":focus-visible", styles)
+        self.assertIn("outline: 2px solid", styles)
+        self.assertIn("min-height: 44px", styles)
+        self.assertIn("calc(100vw", styles, "it has to fit a 320px screen")
+        self.assertNotIn("outline: none", styles)
+
+    def test_the_three_operations_work_from_the_menus_own_buttons(self):
+        acted = self.seen["menuActions"]
+        self.assertTrue(acted["copied"]["selected"],
+                        "with no clipboard to write to, the text is at least selected")
+        self.assertTrue(acted["copied"]["note"])
+        self.assertEqual(acted["imported"]["keys"], ["omens"])
+        self.assertEqual(acted["imported"]["reloads"], 1,
+                         "every page reads the new state the way it reads any other: from the start")
+        self.assertEqual(acted["refused"]["keys"], ["omens"], "a bad paste changes nothing")
+        self.assertEqual(acted["refused"]["reloads"], 1, "and reloads nothing")
+        self.assertEqual(acted["cleared"]["keys"], [])
+        self.assertEqual(acted["cleared"]["shelf"], {})
+        self.assertEqual(acted["cleared"]["confirmed"], 1, "clearing everything is asked about first")
+        refused = self.seen["clearingIsConfirmed"]
+        self.assertEqual(refused["confirmed"], 1)
+        self.assertEqual(refused["keys"], ["constellation"], "saying no keeps everything")
+
+    def test_a_browser_that_stores_nothing_says_so_when_the_menu_opens(self):
+        self.assertIn("stores nothing", self.seen["menuWithoutStorage"]["note"])
+
+    def test_importing_without_storage_holds_the_sky_and_does_not_reload_it_away(self):
+        # A reload re-reads from the store, which a browser that stores nothing leaves empty, so
+        # reloading an import it could only hold in memory would discard the very sky just pasted in.
+        imported = self.seen["importWithoutStorage"]
+        self.assertEqual(imported["imported"], [{"text": "theirs", "time": 3}],
+                         "the imported sky is live for this page")
+        self.assertEqual(imported["reloads"], 0, "but the menu must not reload it away")
+        self.assertIn("this page only", imported["note"])
+
+
 class EngagementTimeTest(unittest.TestCase):
     """Issue #32: "interesting" is not left to a model's taste. It means user engagement time, and
     the prompt says so, because a run cannot aim at a standard it has not been told."""
@@ -1240,6 +1639,179 @@ class CadenceAxiomTest(SiteDirTestCase):
         self.assertEqual(len(mi.validate_plan({"delete": ["old.html"]})), 1)
 
 
+class MoodAxiomTest(SiteDirTestCase):
+    """Issue #30: the site asks before it offers.
+
+    Not everyone likes stars, and the target of interest is the whole population, so no page may
+    put particular content in front of a visitor on the assumption that they want it. The fifth
+    axiom stands beside the other four -- stated in the prompt, held to by validate_plan -- and
+    what code can settle about it is three things: that every page carries the flow, that the
+    library of ways to ask does not collapse, and that no page ever asks a visitor to report their
+    own mood.
+    """
+
+    PAGES = ["index.html", "error.html", "toy.html"]
+    MECHANISMS = ["doorway", "pocket", "window", "stone", "misfit", "stair", "tempo", "hold",
+                  "placement", "dial"]
+
+    def setUp(self):
+        super().setUp()
+        (self.site / "js").mkdir()
+        (self.site / mi.MOOD_SCRIPT).write_text(mood_script(*self.MECHANISMS))
+        (self.site / "index.html").write_text(queried(home("toy.html", "error.html")))
+        (self.site / "error.html").write_text(queried("<p>404</p>"))
+        (self.site / "toy.html").write_text(queried("<p>toy</p>"))
+        (self.site / "sitemap.xml").write_text(sitemap(*self.PAGES))
+
+    def rules(self):
+        prompt = mi.build_prompt([("index.html", "<h1>hi</h1>")])
+        return prompt[prompt.index("Rules:"):]
+
+    def test_the_axiom_is_a_standing_rule_of_every_prompt(self):
+        rules = self.rules()
+        for rule in ["AXIOM, every run: the site asks before it offers",
+                     "The whole population is the target of interest",
+                     "ascertain their mood or mental orientation",
+                     mi.MOOD_TAG,
+                     "Keep that line on every page you rewrite",
+                     "Query, never self-report",
+                     "Never the same way twice",
+                     "Never a gate",
+                     "do not hide a world behind an answer"]:
+            with self.subTest(rule=rule):
+                self.assertIn(rule, rules)
+
+    def test_the_prompt_names_every_phrasing_the_code_refuses(self):
+        # The same bargain the cadence axiom makes: a rule a run can follow rather than a trap it
+        # springs, so anything check_mood would refuse is spelled out in the prompt first.
+        rules = self.rules().lower()
+        for refused in ["how are you feeling", "how do you feel", "how are you doing",
+                        "what's your mood", "pick your mood", "rate your energy",
+                        "describe your feelings"]:
+            with self.subTest(refused=refused):
+                self.assertIn(refused, rules)
+                self.assertRegex(refused, mi.SELF_REPORT_COPY,
+                                 "the prompt names a phrasing the code does not actually refuse")
+
+    def test_the_prompt_asks_for_more_mechanisms_and_more_worlds(self):
+        # Open question 1 and 3 of the issue: inventing new ways of asking is meant to be part of
+        # the site's ongoing interesting-ness, so the prompt has to invite it where a run chooses
+        # what to do, not only forbid the collapse of what is there.
+        prompt = mi.build_prompt([("index.html", "<h1>hi</h1>")])
+        self.assertIn("a new way of querying a visitor's orientation", prompt)
+        self.assertIn("a new world for an orientation that has none", prompt)
+        self.assertIn(f"at least {mi.MIN_MOOD_PROBES} distinct query mechanisms", prompt)
+        self.assertIn("probe: 'some-id'", prompt)
+
+    def test_a_page_a_run_adds_must_carry_the_flow(self):
+        # A whole page but for the one line, so the mood axiom is the only thing left to refuse it.
+        plan = {"files": [
+            {"path": "new.html", "content": page(title="new", mood="")},
+            {"path": "index.html", "content": queried(home("toy.html", "error.html", "new.html"))},
+            {"path": "sitemap.xml", "content": sitemap(*self.PAGES, "new.html")},
+        ]}
+        with self.assertRaisesRegex(mi.RejectedChange, r"new\.html has no <script"):
+            mi.validate_plan(plan)
+        plan["files"][0]["content"] = page(title="new")
+        self.assertEqual(len(mi.validate_plan(plan)), 3)
+
+    def test_dropping_the_flow_from_a_page_a_run_rewrites_is_refused(self):
+        with self.assertRaisesRegex(mi.RejectedChange, r"toy\.html has no <script"):
+            mi.validate_plan({"files": [{"path": "toy.html", "content": "<p>no query at all</p>"}]})
+        # It is the src that counts, not the exact spelling of the tag around it.
+        loaded = '<head><script defer src="js/threshold.js"></script></head>'
+        self.assertEqual(len(mi.validate_plan({"files": [{"path": "toy.html", "content": loaded}]})), 1)
+
+    def test_a_page_that_was_already_without_it_blocks_nothing(self):
+        # Only what the run itself breaks is refused, as with the five axioms above.
+        (self.site / "index.html").write_text(home("toy.html", "error.html"))
+        ops = mi.validate_plan({"files": [{"path": "toy.html", "content": queried("<p>still asked</p>")}]})
+        self.assertEqual(len(ops), 1)
+        self.assertEqual(mi.pages_missing_mood(dict(mi.read_site())), {"index.html"})
+
+    def test_the_shared_script_may_be_rewritten_but_never_deleted(self):
+        # The opposite arrangement to the analytics files: this one is the model's to extend, which
+        # is where new mechanisms come from, but every page leans on it, so it cannot be removed.
+        self.assertIn(mi.MOOD_SCRIPT, mi.PROTECTED_FILES)
+        self.assertNotIn(mi.MOOD_SCRIPT, mi.FIXED_FILES)
+        for plan in [{"delete": [mi.MOOD_SCRIPT]}, {"delete": [f"site/{mi.MOOD_SCRIPT}"]},
+                     {"files": [{"path": mi.MOOD_SCRIPT, "content": "   "}]}]:
+            with self.subTest(plan=str(plan)[:70]), self.assertRaises(mi.RejectedChange):
+                mi.validate_plan(plan)
+        grown = mood_script(*self.MECHANISMS, "volley", "stroke")
+        self.assertEqual(len(mi.validate_plan({"files": [{"path": mi.MOOD_SCRIPT, "content": grown}]})), 1)
+
+    def test_the_shared_script_is_shown_to_the_model_before_any_ordinary_file(self):
+        (self.site / "zz-big.js").write_text("y" * mi.PROMPT_BUDGET_CHARS)  # fits only on its own
+        shown, omitted = mi.split_for_prompt(mi.read_site())
+        self.assertEqual([rel for rel, _ in shown][:4],
+                         ["index.html", "error.html", mi.MOOD_SCRIPT, "sitemap.xml"])
+        self.assertEqual(omitted, ["zz-big.js"])
+
+    def test_mechanisms_are_counted_from_the_sites_own_source(self):
+        site = dict(mi.read_site())
+        self.assertEqual(mi.probe_mechanisms(site), set(self.MECHANISMS))
+        # Wherever a run chooses to keep them: a page's own script counts as readily as the shared
+        # one, and a declaration without quotes around the id is a reference, not a declaration.
+        site["toy.html"] = queried("<script>var one = { probe: 'kettle' }; var two = probe;</script>")
+        self.assertEqual(mi.probe_mechanisms(site), set(self.MECHANISMS) | {"kettle"})
+
+    def test_letting_the_library_collapse_is_refused(self):
+        thin = mood_script("doorway", "pocket")
+        with self.assertRaisesRegex(mi.RejectedChange, "at least 8 ways of querying"):
+            mi.validate_plan({"files": [{"path": mi.MOOD_SCRIPT, "content": thin}]})
+
+    def test_swapping_one_mechanism_for_another_is_fine(self):
+        # Retiring a question that is not working is allowed; emptying the drawer is not.
+        swapped = mood_script(*self.MECHANISMS[:-1], "volley")
+        ops = mi.validate_plan({"files": [{"path": mi.MOOD_SCRIPT, "content": swapped}]})
+        self.assertEqual(len(ops), 1)
+
+    def test_a_site_that_never_had_a_library_blocks_nothing(self):
+        # The floor is a floor, not a ratchet: a site below it already stays the site's own to
+        # repair, exactly as a page that already falls short of the other axioms does.
+        (self.site / mi.MOOD_SCRIPT).write_text(mood_script("doorway"))
+        ops = mi.validate_plan({"files": [{"path": mi.MOOD_SCRIPT, "content": mood_script("pocket")}]})
+        self.assertEqual(len(ops), 1)
+
+    def test_asking_a_visitor_to_report_their_own_mood_is_refused(self):
+        for asked in ["<p>How are you feeling today?</p>",
+                      "<p>What's your mood?</p>",
+                      "<p>What&rsquo;s your vibe?</p>",
+                      "<p>Pick your mood from the list.</p>",
+                      "<p>Rate your energy, 1 to 5.</p>",
+                      "<script>var ask = 'Describe your feelings';</script>"]:
+            with self.subTest(asked=asked[:40]), self.assertRaisesRegex(mi.RejectedChange,
+                                                                       "report their own mood"):
+                mi.validate_plan({"files": [{"path": "toy.html", "content": queried(asked)}]})
+
+    def test_asking_sideways_is_exactly_what_the_axiom_wants(self):
+        sideways = ("<p>Four doors, all unlocked. Pick the one with a draught under it.</p>"
+                    "<p>Tap this five times, at whatever rate feels like the rate.</p>")
+        self.assertEqual(len(mi.validate_plan({"files": [{"path": "toy.html", "content": queried(sideways)}]})), 1)
+
+    def test_prose_about_the_method_is_not_a_question(self):
+        # The page may say what it does not do. The check is narrow enough to let it.
+        about = "<p>This site never asks you how you feel. It asks about a stone instead.</p>"
+        self.assertEqual(mi.pages_asking_to_self_report({"p.html": about}), {})
+
+    def test_a_question_federated_into_a_shared_script_counts(self):
+        # The same reasoning as cadence_phrases: most of this site's questions live in the script
+        # that draws the page, so copy that moved there must not slip the check.
+        site = {"p.html": "<head><script src='js/ask.js'></script></head>",
+                "js/ask.js": "var q = 'How do you feel?';"}
+        self.assertEqual(mi.pages_asking_to_self_report(site), {"p.html": ["how do you feel"]})
+
+    def test_a_question_a_page_already_carried_blocks_nothing(self):
+        (self.site / "toy.html").write_text(queried("<p>How do you feel?</p>"))
+        ops = mi.validate_plan({"files": [{"path": "toy.html", "content": queried("<p>How do you feel? Still.</p>")}]})
+        self.assertEqual(len(ops), 1)
+
+    def test_retiring_a_page_that_asked_outright_is_fine(self):
+        (self.site / "old.html").write_text(queried("<p>What is your mood?</p>"))
+        self.assertEqual(len(mi.validate_plan({"delete": ["old.html"]})), 1)
+
+
 def needs_the_build(test):
     """Skip a test that runs the real Node build when the toolchain is not installed.
 
@@ -1259,7 +1831,7 @@ def front_matter(**fields):
 
 
 class BuildPipelineTest(unittest.TestCase):
-    """Issue #25: the real build, and all four axioms judged on what it produces.
+    """Issue #25: the real build, and all six axioms judged on what it produces.
 
     SiteDirTestCase stands the build in with the identity, which is exactly right for its plain-HTML
     fixtures; this is where the pipeline itself is exercised. /site is source now -- a layout is not
@@ -1267,13 +1839,15 @@ class BuildPipelineTest(unittest.TestCase):
     "every page" means.
     """
 
-    # The shell carries what every page owes the axioms: the analytics line, the viewport tag and
-    # the one <main> landmark. That is how the real /site writes it, and it is why a layout a run
-    # damages is refused through every page it builds rather than on its own account.
+    # The shell carries what every page owes the axioms: the analytics line, the local-state line,
+    # the viewport tag and the one <main> landmark. That is how the real /site writes it, and it is
+    # why a layout a run damages is refused through every page it builds rather than on its own
+    # account -- which matters most for the two lines, since layout.njk is a file a run may rewrite
+    # while the files behind those lines are not.
     LAYOUT = ("<!DOCTYPE html>\n<html lang='en'>\n<head><title>{{ title }}</title>\n"
               "<meta name='viewport' content='width=device-width, initial-scale=1'>\n"
               "<link rel='stylesheet' href='css/site.css'>\n"
-              f"{mi.ANALYTICS_TAG}</head>\n"
+              f"{mi.ANALYTICS_TAG}\n{mi.STATE_TAG}</head>\n"
               "<body>\n<main>{{ content | safe }}</main></body>\n</html>\n")
     NAV = "<nav>{% for page in ['toy.html', 'error.html'] %}<a href='{{ page }}'>{{ page }}</a>{% endfor %}</nav>\n"
     PAGES = ["index.html", "toy.html", "error.html"]
@@ -1294,9 +1868,11 @@ class BuildPipelineTest(unittest.TestCase):
         self.write("_includes/nav.njk", self.NAV)
         self.write("_sass/_tokens.scss", ":root { --fg: #eeeeff; }\n")
         self.write("css/site.scss", "@use 'tokens';\nbody { color: var(--fg); }\n")
-        # The analytics axiom reaches the built site too: the one line lives in the shared layout,
-        # exactly as /site writes it, so no page below carries it and every built page has it.
+        # The analytics and local-state axioms reach the built site too: both lines live in the
+        # shared layout, exactly as /site writes them, so no page below carries either and every
+        # built page has both.
         self.write(mi.ANALYTICS_SCRIPT, "/* the shared tag and banner */\n")
+        self.write(mi.STATE_SCRIPT, "/* the shared store and its meta menu */\n")
         # The home page links nothing itself: its navigation arrives from the shared partial, so
         # only the built site shows that toy.html and error.html can be reached.
         self.write("index.html", front_matter(layout="layout.njk", title="interesting")
@@ -1315,8 +1891,9 @@ class BuildPipelineTest(unittest.TestCase):
 
     def test_templates_render_and_sass_compiles_to_the_same_paths(self):
         built = self.built()
-        self.assertEqual(sorted(built), ["css/site.css", "error.html", "index.html",
-                                         mi.ANALYTICS_SCRIPT, "sitemap.xml", "toy.html"])
+        self.assertEqual(sorted(built), sorted(["css/site.css", "error.html", "index.html",
+                                                mi.ANALYTICS_SCRIPT, mi.STATE_SCRIPT,
+                                                "sitemap.xml", "toy.html"]))
         self.assertTrue(built["index.html"].startswith("<!DOCTYPE html>"))
         self.assertIn("<title>interesting</title>", built["index.html"])
         self.assertIn("<h1>interesting</h1>", built["index.html"])
@@ -1334,18 +1911,20 @@ class BuildPipelineTest(unittest.TestCase):
                 self.assertNotIn(shared, built)
 
     def test_a_page_is_whatever_the_templates_make_of_it(self):
-        # All four axioms ask about pages, and all four are asked of the built site. In the source,
-        # index.html names no page, no page carries the analytics line, and no page is a whole page
+        # All six axioms ask about pages, and all six are asked of the built site. In the source,
+        # index.html names no page, no page carries either shared line, and no page is a whole page
         # at all; built, every page is each of those things.
         source = dict(mi.read_site())
         self.assertEqual(mi.links_from("index.html", source), set())
         self.assertEqual(mi.pages_missing_analytics(source), set(self.PAGES))
+        self.assertEqual(mi.pages_missing_state(source), set(self.PAGES))
         self.assertEqual(sorted(mi.inaccessible_pages(source)), sorted(self.PAGES))
         built = self.built()
         self.assertEqual(mi.html_pages(built), set(self.PAGES))
         self.assertEqual(mi.links_from("index.html", built), {"toy.html", "error.html"})
         self.assertEqual(mi.unreachable_pages(built), {})
         self.assertEqual(mi.pages_missing_analytics(built), set())
+        self.assertEqual(mi.pages_missing_state(built), set())
         self.assertEqual(mi.inaccessible_pages(built), {})
 
     def test_damaging_the_shared_shell_is_refused_through_every_page_it_builds(self):
@@ -1372,12 +1951,17 @@ class BuildPipelineTest(unittest.TestCase):
         ]}
         self.assertEqual(len(mi.validate_plan(wired)), 3)
 
-    def test_dropping_the_shared_line_breaks_every_page_at_once(self):
-        # The flip side of putting the line in the layout: a run that rewrites the shell without it
-        # leaves the whole site untagged, and the analytics axiom is judged on that built site.
-        bare = self.LAYOUT.replace(mi.ANALYTICS_TAG, "")
-        with self.assertRaisesRegex(mi.RejectedChange, r"has no <script"):
-            mi.validate_plan({"files": [{"path": "_includes/layout.njk", "content": bare}]})
+    def test_dropping_either_shared_line_breaks_every_page_at_once(self):
+        # The flip side of putting the two lines in the layout: a run that rewrites the shell
+        # without one leaves the whole site without it, and both axioms are judged on that built
+        # site. layout.njk is a file a run may rewrite, which is why this is the scenario that
+        # matters: the files behind the lines are fixed, the line that loads them is not.
+        for tag, axiom in [(mi.ANALYTICS_TAG, "analytics tag and consent banner"),
+                           (mi.STATE_TAG, "shared local-state store and its meta menu")]:
+            with self.subTest(axiom=axiom):
+                bare = self.LAYOUT.replace(tag, "")
+                with self.assertRaisesRegex(mi.RejectedChange, r"has no <script"):
+                    mi.validate_plan({"files": [{"path": "_includes/layout.njk", "content": bare}]})
 
     def test_a_plan_that_does_not_build_is_refused(self):
         for broken, what in [
@@ -1399,9 +1983,10 @@ class BuildPipelineTest(unittest.TestCase):
 
 
 class RealSiteTest(unittest.TestCase):
-    """The site in this repository obeys all four axioms: every page is reachable from the root,
+    """The site in this repository obeys all six axioms: every page is reachable from the root,
     every page carries the analytics tag and consent banner, every page is responsive and
-    accessible, and no page ties the site to an update frequency.
+    accessible, every page carries the local-state store and its meta menu, no page ties the site
+    to an update frequency, and every page asks before it offers.
 
     validate_plan only refuses what a run breaks, so the invariants have to start out true: this is
     what makes them hold from the next deploy onward and not only for pages a later run adds. It
@@ -1490,6 +2075,82 @@ class RealSiteTest(unittest.TestCase):
                 dated = dict(self.site, **{"index.html": self.site["index.html"] + f"<p>{damage}</p>"})
                 self.assertEqual(mi.pages_dating_the_site(dated), {"index.html": [phrase]})
 
+    # How the mood flow names the world an orientation opens onto, so this test can check that
+    # every one of them is a real page and that they are not all sky.
+    WORLD = re.compile(r"world:\s*'([a-z0-9][a-z0-9-]*\.html)'")
+    SKY = re.compile(r"constellation|sky|star|orbit|wish")
+
+    def worlds(self):
+        return set(self.WORLD.findall(self.site[mi.MOOD_SCRIPT]))
+
+    def test_every_page_carries_the_mood_flow(self):
+        # Issue #30: the site asks before it offers, on every page, not only at the front door --
+        # the flow is ongoing, which is what "the whole site transmogrifies" needs.
+        self.assertIn(mi.MOOD_SCRIPT, self.site, "the file behind the one line has to be there")
+        self.assertEqual(mi.pages_missing_mood(self.site), set())
+        self.assertGreater(len(mi.html_pages(self.site)), 1, "the check is worth nothing on one page")
+
+    def test_the_site_keeps_a_wide_library_of_ways_to_ask(self):
+        # "Never the same way twice" is only true while there are ways to spare, and the issue asks
+        # for the library to be wildly varied rather than merely present.
+        self.assertGreaterEqual(len(mi.probe_mechanisms(self.site)), mi.MIN_MOOD_PROBES)
+
+    def test_no_page_asks_a_visitor_to_report_their_own_mood(self):
+        self.assertEqual(mi.pages_asking_to_self_report(self.site), {})
+
+    def test_the_site_leaves_the_meta_menu_its_own_class_names(self):
+        # js/state.js draws the export/import menu and injects the styles for it, and the prompt says
+        # in as many words that the menu is not the site's to restyle. Every name it uses is
+        # site-meta*, so a template or stylesheet of the site's own that mentions one is either
+        # restyling that menu or colliding with it. That is not hypothetical: the header's pulse
+        # arrived as <p class='site-meta'>, which the menu's own `position: fixed` then tore out of
+        # the header and pinned over the menu in the bottom-right corner.
+        # Either form that actually takes one of those names: a selector, or a class written onto an
+        # element. Prose about them is neither, so the comments that explain this rule -- in the
+        # layout, the header's Sass and js/site.js -- do not trip it.
+        theirs = re.compile(r"\.site-meta\b"
+                            r"|class(?:Name)?\s*[=:]\s*'[^']*\bsite-meta\b"
+                            r"|class(?:Name)?\s*[=:]\s*\"[^\"]*\bsite-meta\b")
+        claiming = sorted(rel for rel, content in self.source.items()
+                          if rel not in mi.FIXED_FILES and theirs.search(content))
+        self.assertEqual(claiming, [])
+
+    def test_every_orientation_opens_onto_a_real_world_and_not_all_of_them_are_sky(self):
+        # The whole point of the issue: a visitor who does not respond to stars still arrives
+        # somewhere that suits them. A world named by the flow has to be a page that exists, and
+        # enough of them have to be off the sky for the answer to mean anything.
+        worlds = self.worlds()
+        self.assertGreaterEqual(len(worlds), 10, "too few orientations to be choosing between")
+        for world in sorted(worlds):
+            with self.subTest(world=world):
+                self.assertIn(world, self.site, "an orientation opens onto a page that is not there")
+        off_sky = {world for world in worlds if not self.SKY.search(world)}
+        self.assertGreaterEqual(len(off_sky), 6,
+                                f"the sky is still nearly all there is on offer: {sorted(worlds)}")
+
+    def test_the_query_is_never_a_gate(self):
+        # references_from reads the threshold's own markup and not the scripts it loads, so this
+        # fails if a world is only reachable by answering the question -- or by having scripting at
+        # all. That is the line between asking before offering and gating.
+        offered = mi.references_from("index.html", self.site)
+        for world in sorted(self.worlds()):
+            with self.subTest(world=world):
+                self.assertIn(world, offered, "this world is hidden behind an answer")
+
+    def test_the_check_would_notice_the_site_assuming_again(self):
+        # A guard against the mood checks quietly becoming no-ops, as with the two above: take the
+        # flow off the real home page, gut the library, or ask outright, and each has to be caught.
+        without = dict(self.site)
+        without["index.html"] = without["index.html"].replace(mi.MOOD_SCRIPT, "js/nothing.js")
+        self.assertEqual(mi.pages_missing_mood(without), {"index.html"})
+
+        gutted = dict(self.site, **{mi.MOOD_SCRIPT: "/* one question, asked over and over */"})
+        self.assertLess(len(mi.probe_mechanisms(gutted)), mi.MIN_MOOD_PROBES)
+
+        asked = dict(self.site,
+                     **{"index.html": self.site["index.html"] + "<p>So, how are you feeling?</p>"})
+        self.assertEqual(mi.pages_asking_to_self_report(asked), {"index.html": ["how are you feeling"]})
+
     def test_the_site_has_a_sitemap_of_both_kinds(self):
         # Open question 2 of the issue: both. sitemap.xml for anything reading the site
         # mechanically, and a page a visitor can read, reachable from the home page.
@@ -1517,6 +2178,51 @@ class RealSiteTest(unittest.TestCase):
         self.assertIn('analytics="${BUILD_DIR}/js/analytics.js"', deploy)
         self.assertNotIn("analytics='site/js/analytics.js'", deploy,
                          "the deploy injects into the source, which is never published")
+
+    def test_every_page_loads_the_local_state_store_and_its_meta_menu(self):
+        self.assertIn(mi.STATE_SCRIPT, self.site, "the file behind the line has to be there")
+        self.assertEqual(mi.pages_missing_state(self.site), set())
+        self.assertGreater(len(mi.html_pages(self.site)), 1, "the check is worth nothing on one page")
+
+    def test_the_line_is_written_once_in_the_shared_shell(self):
+        # The same bargain the analytics line makes: the axiom is about the built site, so one line
+        # in the shell carries it to every page, and a run that drops it is refused for all of them
+        # at once rather than page by page.
+        self.assertIn(mi.STATE_TAG, self.source["_includes/layout.njk"])
+
+    def test_no_page_keeps_state_behind_the_stores_back(self):
+        # Issue #31: one document and one way in and out of it. A page that parsed localStorage
+        # itself would be state the meta menu could not export.
+        self.assertEqual(mi.pages_touching_storage(self.site), {})
+        self.assertGreater(len(mi.html_pages(self.site)), 1, "the check is worth nothing on one page")
+
+    def test_the_check_would_notice_a_page_going_round_the_store(self):
+        # A guard against the check quietly becoming a no-op, as with the accessibility one: put a
+        # direct read back into the real home page and it has to be named.
+        broken = dict(self.site)
+        broken["index.html"] += "<script>var raw = localStorage.getItem('mine');</script>"
+        self.assertEqual(sorted(mi.pages_touching_storage(broken)), ["index.html"])
+
+    def test_the_store_carries_over_every_key_the_site_used_to_keep(self):
+        # The per-page keys of issue #31's "today": each one is named in the store's migration
+        # table, and none is left in a page, so a visitor who was here before keeps their sky.
+        store = self.site[mi.STATE_SCRIPT]
+        for earlier in ["interesting_wish_constellation_v1",
+                        "interesting_constellation_capsules_v1",
+                        "interesting_sky_archive_omens_v1"]:
+            with self.subTest(earlier=earlier):
+                self.assertIn(earlier, store, "the store has to know what to carry over")
+                for page in sorted(mi.html_pages(self.site)):
+                    self.assertNotIn(earlier, self.site[page], f"{page} still keeps its own slice")
+
+    def test_the_meta_menu_is_out_of_every_runs_reach(self):
+        # Open question 4 of the issue: the same machinery as the analytics tag, which means the
+        # file is fixed rather than merely discouraged.
+        self.assertIn(mi.STATE_SCRIPT, mi.FIXED_FILES)
+        with self.assertRaises(mi.RejectedChange):
+            mi.validate_plan({"files": [{"path": mi.STATE_SCRIPT, "content": "mine now"}]})
+        with self.assertRaises(mi.RejectedChange):
+            mi.validate_plan({"delete": [mi.STATE_SCRIPT]})
 
     def test_the_vendored_consent_library_keeps_its_license_and_version(self):
         for rel in ["js/cookieconsent.umd.js", "css/cookieconsent.css"]:

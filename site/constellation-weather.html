@@ -4,7 +4,8 @@ title: constellation weather lab
 description: 'An animated weather lab generated from your saved constellation: probe skies, read forecasts, and toggle midnight rain.'
 stylesheet: constellation-weather
 footer:
-  - [index.html, back to constellation]
+  - [wish-constellation.html, back to the wish constellation]
+  - [index.html, back to the threshold]
   - [sitemap.html, site map]
   - [sky-archive.html, open sky archive oracle]
   - [wish-terrarium.html, open wish terrarium]
@@ -18,7 +19,7 @@ footer:
       <canvas id='lab' width='620' height='340' aria-label='Animated weather map grown from saved constellation stars'></canvas>
 
       <section class='panel'>
-        <p style='margin:0;color:#d8e4ff;'>This uses the same saved constellation memory as the main page.</p>
+        <p style='margin:0;color:#d8e4ff;'>This uses the same saved constellation memory as the wish constellation page.</p>
         <div class='controls'>
           <button id='refresh' type='button'>refresh saved sky</button>
           <button id='forecast' type='button'>generate forecast</button>
@@ -40,7 +41,8 @@ Load your saved sky, click the map to launch a weather probe, or generate a full
 
   <script>
     (function () {
-      var STORAGE_KEY = 'interesting_wish_constellation_v1';
+      var state = window.interestingState;
+      var SKY = 'constellation';
       var canvas = document.getElementById('lab');
       var ctx = canvas.getContext('2d');
       var refreshBtn = document.getElementById('refresh');
@@ -150,41 +152,22 @@ Load your saved sky, click the map to launch a weather probe, or generate a full
         }
       }
 
+      // Why there is nothing to show, in this page's own words: the shared store says which of
+      // the four it is (see js/state.js).
+      var EMPTY_NOTES = {
+        unavailable: 'Local storage is unavailable in this browser context.',
+        unreadable: 'Saved constellation data is unreadable. Open the wish constellation and remake it.',
+        missing: 'No saved constellation found yet. Create one on the wish constellation page first.',
+        ok: 'A sky file exists, but no readable stars were found.'
+      };
+
       function loadStars() {
-        var raw = null;
-        try {
-          raw = localStorage.getItem(STORAGE_KEY);
-        } catch (e) {
-          stars = [];
-          cells = [];
-          statusEl.textContent = 'Local storage is unavailable in this browser context.';
-          return;
-        }
-
-        if (!raw) {
-          stars = [];
-          cells = [];
-          statusEl.textContent = 'No saved constellation found yet. Create one on the main page first.';
-          return;
-        }
-
-        try {
-          var parsed = JSON.parse(raw);
-          if (!Array.isArray(parsed)) throw new Error('invalid');
-          stars = safeStars(parsed).slice(0, 160);
-          rebuildCells();
-
-          if (!stars.length) {
-            statusEl.textContent = 'A sky file exists, but no readable stars were found.';
-            return;
-          }
-
-          statusEl.textContent = 'Weather seeds synced: ' + stars.length + ' star' + (stars.length === 1 ? '' : 's') + ' loaded.';
-        } catch (e2) {
-          stars = [];
-          cells = [];
-          statusEl.textContent = 'Saved constellation data is unreadable. Return home and remake it.';
-        }
+        var saved = state.read(SKY, []);
+        stars = safeStars(Array.isArray(saved.value) ? saved.value : []).slice(0, 160);
+        rebuildCells();
+        statusEl.textContent = stars.length
+          ? 'Weather seeds synced: ' + stars.length + ' star' + (stars.length === 1 ? '' : 's') + ' loaded.'
+          : EMPTY_NOTES[saved.status];
       }
 
       function fieldValue(x, y, hourFloat) {
@@ -210,7 +193,7 @@ Load your saved sky, click the map to launch a weather probe, or generate a full
 
       function generateForecast() {
         if (!stars.length) {
-          statusEl.textContent = 'No stars loaded yet. Refresh after creating stars on the main page.';
+          statusEl.textContent = 'No stars loaded yet. Refresh after creating stars on the wish constellation page.';
           return;
         }
 

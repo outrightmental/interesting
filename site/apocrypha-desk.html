@@ -1,0 +1,219 @@
+---
+layout: layout.njk
+title: the apocrypha desk
+description: A catalogue of objects that do not exist, dealt one at a time and filed in a drawer you keep, for anyone reading as magpie.
+stylesheet: apocrypha-desk
+footer:
+  - [index.html, back to the threshold]
+  - [moods.html, mood atlas]
+  - [sky-archive.html, open the archive oracle]
+footerNote: every specimen here is fiction, catalogued carefully
+---
+  <main>
+    <h1>the apocrypha desk</h1>
+    <p class='tagline'>Where the threshold sends anyone reading as magpie. A catalogue of things that were never accessioned anywhere, because they were never real.</p>
+
+    <div class='layout'>
+      <div class='card' id='card'>
+        <p class='card-number' id='card-number'>— — —</p>
+        <h2 class='card-name' id='card-name'>nothing on the desk</h2>
+        <p class='card-line' id='card-provenance'>Pull something out of the cabinet.</p>
+        <p class='card-line' id='card-note'></p>
+        <p class='card-verdict' id='card-verdict'></p>
+      </div>
+
+      <section class='panel'>
+        <p class='desk-note'>Each specimen is generated from its own catalogue number, so the same
+          number always describes the same object — and no number here describes anything that
+          exists. Pin the ones worth keeping; the drawer is yours and stays on this machine.</p>
+        <div class='controls'>
+          <button id='deal' type='button'>open a drawer at random</button>
+          <button id='pin' type='button'>pin this one</button>
+          <button id='cross' type='button'>cross-reference the drawer</button>
+          <button id='burn' type='button'>empty the drawer</button>
+        </div>
+        <p id='status' aria-live='polite'>The desk is clear. Nothing accessioned.</p>
+        <pre id='reading'>drawer empty</pre>
+        <p class='hint'>Nothing on this page is a real object, a real collection or a real claim about the world.</p>
+      </section>
+    </div>
+
+{% include "footer.njk" %}
+  </main>
+
+  <script>
+    (function () {
+      var state = window.interestingState;
+      var DRAWER = 'apocrypha'; // this page's one name in the shared local-state document
+      var dealBtn = document.getElementById('deal');
+      var pinBtn = document.getElementById('pin');
+      var crossBtn = document.getElementById('cross');
+      var burnBtn = document.getElementById('burn');
+      var statusEl = document.getElementById('status');
+      var readingEl = document.getElementById('reading');
+      var numberEl = document.getElementById('card-number');
+      var nameEl = document.getElementById('card-name');
+      var provEl = document.getElementById('card-provenance');
+      var noteEl = document.getElementById('card-note');
+      var verdictEl = document.getElementById('card-verdict');
+      var card = document.getElementById('card');
+
+      var MATERIAL = ['brass', 'whalebone', 'green glass', 'pressed tin', 'oak and wax',
+                      'slate', 'horn', 'cold-rolled steel', 'cork', 'lacquered paper', 'lead',
+                      'boxwood'];
+      var OBJECT = ['key', 'ledger', 'lens', 'whistle', 'reel', 'die', 'compass', 'hinge',
+                    'tuning peg', 'seal', 'measure', 'plumb bob', 'spool', 'bell'];
+      var QUALIFIER = ['with no matching lock', 'in a hand nobody has identified',
+                       'ground slightly off-axis', 'that sounds a note below hearing',
+                       'wound the wrong way', 'with seven faces',
+                       'that disagrees with every other one', 'that fits nothing on record',
+                       'tuned to a scale with eleven steps', 'bearing an unused crest',
+                       'calibrated in a unit of its own', 'that hangs out of true on purpose'];
+      var PLACE = ['a house clearance', 'the back of a theatre', 'a flooded archive',
+                   'a shipbreaker’s yard', 'a disused telephone exchange', 'a bequest',
+                   'the gap behind a bookcase', 'a lot bought unseen', 'a skip outside a surveyor’s office'];
+      var NOTE = [
+        'Two previous owners described it differently and both descriptions fit.',
+        'Weighs rather more than it should and nobody has explained why.',
+        'The wear pattern suggests constant use by someone left-handed.',
+        'Catalogued twice, under different names, by the same person.',
+        'Comes with a label that refers to a second object never found.',
+        'Repaired at some point by someone who understood it better than the maker.',
+        'Shows no wear at all, which is the strangest thing about it.',
+        'Half of a pair. The other half is also here, and also described as half of a pair.'
+      ];
+      var VERDICT = ['genuine, of nothing in particular', 'a careful forgery of nothing',
+                     'undecided, and likely to stay so', 'authentic but misfiled',
+                     'later than claimed, better than claimed', 'withdrawn from assessment'];
+
+      var drawer = [];
+      var current = null;
+
+      function hash(text) {
+        var h = 2166136261;
+        for (var i = 0; i < text.length; i++) {
+          h ^= text.charCodeAt(i);
+          h = (h * 16777619) >>> 0;
+        }
+        return h;
+      }
+
+      function pick(list, seed, salt) {
+        return list[(seed + salt * 2654435761) % list.length];
+      }
+
+      function catalogueNumber() {
+        var letters = 'ABCDEFGHJKLMNPQRSTVWXYZ';
+        return letters[Math.floor(Math.random() * letters.length)]
+          + letters[Math.floor(Math.random() * letters.length)]
+          + '-' + String(Math.floor(Math.random() * 9000) + 1000)
+          + '.' + String(Math.floor(Math.random() * 90) + 10);
+      }
+
+      function specimen(number) {
+        var seed = hash(number);
+        return {
+          number: number,
+          name: pick(MATERIAL, seed, 3) + ' ' + pick(OBJECT, seed, 5) + ' ' + pick(QUALIFIER, seed, 7),
+          provenance: 'Came out of ' + pick(PLACE, seed, 11) + '. No prior record.',
+          note: pick(NOTE, seed, 13),
+          verdict: pick(VERDICT, seed, 17)
+        };
+      }
+
+      function show(item) {
+        current = item;
+        numberEl.textContent = item.number;
+        nameEl.textContent = item.name;
+        provEl.textContent = item.provenance;
+        noteEl.textContent = item.note;
+        verdictEl.textContent = 'assessment: ' + item.verdict;
+        card.setAttribute('data-filled', 'true');
+      }
+
+      function renderDrawer() {
+        if (!drawer.length) {
+          readingEl.textContent = 'drawer empty';
+          return;
+        }
+        readingEl.textContent = drawer.map(function (item) {
+          return item.number + '  ' + item.name;
+        }).join('\n');
+      }
+
+      function remember() {
+        // A drawer that does not shut is still a drawer, so a write that only reached memory is
+        // left unremarked: what is in front of the visitor is on the desk either way.
+        state.set(DRAWER, drawer.slice(0, 24));
+      }
+
+      function restore() {
+        var saved = state.get(DRAWER, []);
+        if (Array.isArray(saved)) {
+          drawer = saved.filter(function (item) {
+            return item && typeof item.number === 'string' && typeof item.name === 'string';
+          }).slice(0, 24);
+        }
+      }
+
+      dealBtn.addEventListener('click', function () {
+        show(specimen(catalogueNumber()));
+        statusEl.textContent = 'Specimen ' + current.number + ' is on the desk.';
+      });
+
+      pinBtn.addEventListener('click', function () {
+        if (!current) {
+          statusEl.textContent = 'Nothing on the desk to pin.';
+          return;
+        }
+        var already = drawer.some(function (item) { return item.number === current.number; });
+        if (already) {
+          statusEl.textContent = current.number + ' is already in the drawer.';
+          return;
+        }
+        drawer.unshift(current);
+        if (drawer.length > 24) drawer.pop();
+        remember();
+        renderDrawer();
+        statusEl.textContent = 'Pinned ' + current.number + '. The drawer holds ' + drawer.length + '.';
+      });
+
+      crossBtn.addEventListener('click', function () {
+        if (drawer.length < 2) {
+          statusEl.textContent = 'Cross-referencing needs at least two specimens.';
+          return;
+        }
+        var a = drawer[Math.floor(Math.random() * drawer.length)];
+        var b = drawer[Math.floor(Math.random() * drawer.length)];
+        while (b === a) b = drawer[Math.floor(Math.random() * drawer.length)];
+        var links = [
+          'were accessioned on the same afternoon by the same hand',
+          'share a serial sequence that belongs to neither of them',
+          'are described in the same paragraph of a catalogue nobody has produced',
+          'fit together, which neither of them should',
+          'were both withdrawn once and both reinstated without comment',
+          'carry the same scratch in the same place'
+        ];
+        var hinge = links[Math.floor(Math.random() * links.length)];
+        readingEl.textContent = 'cross-reference\n\n  ' + a.number + '\n  ' + b.number + '\n\n'
+          + '  These two ' + hinge + '.\n\n'
+          + 'drawer (' + drawer.length + ')\n'
+          + drawer.map(function (item) { return '  ' + item.number + '  ' + item.name; }).join('\n');
+        statusEl.textContent = 'Cross-referenced ' + a.number + ' against ' + b.number + '.';
+      });
+
+      burnBtn.addEventListener('click', function () {
+        drawer = [];
+        remember();
+        renderDrawer();
+        statusEl.textContent = 'Drawer emptied. The desk keeps no copy.';
+      });
+
+      restore();
+      renderDrawer();
+      if (drawer.length) {
+        statusEl.textContent = 'The drawer already holds ' + drawer.length + ' specimen'
+          + (drawer.length === 1 ? '' : 's') + '.';
+      }
+    })();
+  </script>

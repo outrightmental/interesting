@@ -1,0 +1,71 @@
+// The quiet room: one ring, one dimmer, nothing that keeps score.
+
+@use 'vars';
+
+:root {
+  --bg: #140d13;
+  --bg2: #46293c;
+  --accent: #ffc6d6;
+  --accent2: #ffe4c8;
+}
+
+.room {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 300px;
+  border-radius: vars.$radius-panel;
+  border: 1px solid vars.$hairline;
+  background:
+    radial-gradient(circle at 50% 46%, rgba(255, 214, 226, 0.1) 0%, transparent 62%),
+    #150e14;
+  overflow: hidden;
+}
+
+// The dimmer: one custom property, set by the slider, darkening this room and nothing else.
+.room::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: #050305;
+  opacity: calc(var(--dim, 0.4) * 0.82);
+  pointer-events: none;
+}
+
+.breath {
+  width: min(210px, 54%);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 214, 226, 0.5) 0%, rgba(255, 198, 214, 0.08) 68%, transparent 72%);
+  border: 1px solid rgba(255, 214, 226, 0.36);
+  will-change: transform, opacity;
+}
+
+.breath-word {
+  position: absolute;
+  bottom: 0.9rem;
+  margin: 0;
+  z-index: 1;
+  color: var(--accent2);
+  font-size: 0.88rem;
+  letter-spacing: 0.22em;
+  text-transform: lowercase;
+}
+
+.room-note {
+  margin: 0;
+  color: #f0dde4;
+  line-height: 1.5;
+  font-size: 0.92rem;
+}
+
+.layout .panel #reading {
+  min-height: 8em;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .breath {
+    transform: scale(0.84) !important;
+    opacity: 0.6 !important;
+  }
+}

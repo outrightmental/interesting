@@ -62,6 +62,32 @@
   font-size: 0.82rem;
 }
 
+/* The header's pulse (see js/site.js). Named site-pulse* and not site-meta*: the meta menu
+   js/state.js draws owns every site-meta* name, injects its own styles for them, and is not this
+   site's to restyle. */
+.site-pulse {
+  margin: 0;
+  border: 1px solid vars.$hairline;
+  border-radius: vars.$radius-well;
+  background: rgba(5, 8, 16, 0.56);
+  padding: 0.42rem 0.5rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+}
+
+.site-pulse-status {
+  color: #d9e7ff;
+  font-size: 0.83rem;
+}
+
+.site-pulse-link {
+  @include nav-chips.chip(0.8rem, 0.3rem 0.7rem);
+  min-height: 44px;
+}
+
 .site-header-nav {
   display: flex;
   flex-wrap: wrap;
@@ -86,6 +112,10 @@
     justify-content: flex-start;
   }
 
+  .site-pulse {
+    justify-content: flex-start;
+  }
+
   .site-header-nav {
     justify-content: flex-start;
   }
@@ -93,7 +123,8 @@
 
 @media (prefers-reduced-motion: reduce) {
   .skip-link,
-  .site-header-nav a {
+  .site-header-nav a,
+  .site-pulse-link {
     transition: none;
   }
 }

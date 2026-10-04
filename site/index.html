@@ -1,986 +1,119 @@
 ---
 layout: layout.njk
-description: iterate a more interesting website
+description: 'This site asks what you are like before it offers you anything: fourteen orientations, a dozen ways of asking, and a world at the end of each.'
 stylesheet: index
 ---
-  <canvas id='sky' aria-hidden='true'></canvas>
-  <svg id='links' aria-hidden='true'></svg>
-  <div class='scan' aria-hidden='true'></div>
+  <div class='drift' aria-hidden='true'></div>
 
   <main>
     <h1>interesting</h1>
-    <p class='tagline'>iterate a more interesting website</p>
-    <p class='story'>This sky is a wish constellation. Click to place tiny thoughts, drag stars to sketch your own sky map, then ask the sky what pattern it sees, or play your sky as a tiny synth melody.</p>
-    <div class='controls'>
-      <button id='drop' type='button'>drop a star</button>
-      <button id='oracle' type='button'>ask the sky</button>
-      <button id='meteor' type='button'>call a meteor</button>
-      <button id='chime' type='button' aria-pressed='false'>play star chime</button>
-      <button id='orbit' type='button' aria-pressed='false'>start orbit mode</button>
-      <button id='postcard' type='button'>mint sky postcard</button>
-      <button id='clear' type='button'>clear my constellation</button>
-    </div>
-    <p id='note' class='note' aria-live='polite'>No stars yet. Make the first one.</p>
+    <p class='tagline'>You have not been offered anything yet.</p>
+    <p class='story'>Not everyone likes stars. This site used to hand everybody the same night sky
+      and hope, which is a poor way to treat a whole population. So it asks first — sideways, about
+      a door or a stone or the rate at which you tap — and reads the clock and your time zone over
+      your shoulder while you answer. The question is different on every arrival, you are never
+      asked to report on yourself, and whatever it decides wears off.</p>
 
-    <section id='postcard-panel' class='postcard' aria-live='polite'>
-      <h2 id='postcard-title'>Your constellation postcard</h2>
-      <canvas id='postcard-canvas' width='396' height='210' aria-label='Constellation postcard preview'></canvas>
-      <p id='postcard-text' class='postcard-text'>Mint a postcard to capture your current sky pattern.</p>
-      <p class='hint postcard-hint'>Each postcard title is generated from your exact star arrangement.</p>
+    <section class='threshold-panel' aria-labelledby='threshold-heading'>
+      <h2 id='threshold-heading'>the query</h2>
+      <div id='threshold' class='threshold-host'>
+        <p class='threshold-fallback'>This one needs scripting. Without it, nothing is hidden from
+          you: every world is listed further down, and
+          <a href='moods.html'>the mood atlas</a> describes each orientation and the question
+          mechanisms behind it.</p>
+      </div>
+      <p id='threshold-signals' class='threshold-signals'>reading the clock and the zone…</p>
     </section>
 
-    <p class='hint'>Tip: click a star to read its thought, drag stars to reshape the web, catch meteors for rare thoughts, try star chime to hear your pattern, mint postcards as your sky evolves, or start orbit mode to make the whole sky dance.</p>
+    <section id='offer' class='offer' aria-labelledby='offer-heading' hidden>
+      <h2 id='offer-heading'>what that opens onto</h2>
+      <p id='offer-read' class='offer-read'></p>
+      <div class='controls' id='offer-links'></div>
+      <p id='offer-near' class='hint'></p>
+      <div class='controls'>
+        <button id='again' type='button'>ask me a different way</button>
+        <a class='action' href='moods.html'>see every orientation</a>
+      </div>
+    </section>
 
-{% include 'skyway.njk' %}
+    <h2 class='section-title'>every world, unasked</h2>
+    <p class='hint'>The query is an offer, not a gate. Ignore it and take whichever of these you
+      like — including the one the site would never have picked for you.</p>
+
+{% include 'wayfinding.njk' %}
   </main>
 
   <script>
     (function () {
-      var STORAGE_KEY = 'interesting_wish_constellation_v1';
-      var MAX_STARS = 120;
-      var DRAG_SUPPRESS_MS = 250;
-      var thoughts = [
-        'A future version of me already solved this.',
-        'Curiosity is a compass.',
-        'Small experiments become worlds.',
-        'Kindness scales better than fear.',
-        'The map is not the journey.',
-        'I can start tiny and still start.',
-        'The next draft can be playful.',
-        'Breathe. Then build.',
-        'Wonder is a useful skill.',
-        'It is allowed to be unfinished.',
-        'Notice what sparks and follow it.',
-        'Good questions bend reality.',
-        'Make room for surprise.',
-        'A quiet day can still be progress.',
-        'The edge is where ideas hatch.'
-      ];
-      var cometThoughts = [
-        'Comet memo: momentum loves imperfect beginnings.',
-        'Comet memo: aim for wonder, then refine.',
-        'Comet memo: brave ideas arrive before permission.',
-        'Comet memo: your future self votes for this attempt.',
-        'Comet memo: let play lead, precision will catch up.'
-      ];
+      // Tell the shared ribbon to stay quiet here: this page runs the query itself, at full size.
+      // Set during parsing, which is before js/threshold.js runs, because that script is deferred.
+      document.documentElement.setAttribute('data-threshold', 'true');
 
-      var note = document.getElementById('note');
-      var dropBtn = document.getElementById('drop');
-      var oracleBtn = document.getElementById('oracle');
-      var meteorBtn = document.getElementById('meteor');
-      var chimeBtn = document.getElementById('chime');
-      var orbitBtn = document.getElementById('orbit');
-      var postcardBtn = document.getElementById('postcard');
-      var clearBtn = document.getElementById('clear');
-      var linksSvg = document.getElementById('links');
-      var postcardPanel = document.getElementById('postcard-panel');
-      var postcardTitle = document.getElementById('postcard-title');
-      var postcardText = document.getElementById('postcard-text');
-      var postcardCanvas = document.getElementById('postcard-canvas');
-      var stars = [];
-      var meteors = [];
-      var activeDrag = null;
-      var suppressStarClickUntil = 0;
-      var linksRenderQueued = false;
-      var nextMeteorAt = 0;
-      var lastFrameTime = 0;
-      var orbitMode = false;
-      var orbitClock = 0;
-      var audioCtx = null;
-      var chimePlaying = false;
-      var chimeTimeouts = [];
-      var activeOscillators = [];
+      function start() {
+        var api = window.threshold;
+        var host = document.getElementById('threshold');
+        var signalsEl = document.getElementById('threshold-signals');
+        var offer = document.getElementById('offer');
+        var readEl = document.getElementById('offer-read');
+        var linksEl = document.getElementById('offer-links');
+        var nearEl = document.getElementById('offer-near');
+        var againBtn = document.getElementById('again');
+        if (!api || !host) return;
 
-      function clamp(value, min, max) {
-        return Math.max(min, Math.min(max, value));
-      }
-
-      function randRange(min, max) {
-        return min + Math.random() * (max - min);
-      }
-
-      function randomThought() {
-        return thoughts[Math.floor(Math.random() * thoughts.length)];
-      }
-
-      function randomCometThought() {
-        return cometThoughts[Math.floor(Math.random() * cometThoughts.length)];
-      }
-
-      function setNote(text) {
-        note.textContent = text;
-      }
-
-      function serializeStars() {
-        return stars.map(function (star) {
-          return { x: star.x, y: star.y, text: star.text };
-        });
-      }
-
-      function saveStars() {
-        try {
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(serializeStars()));
-        } catch (e) {
-          setNote('Saved in memory only. Local storage is unavailable.');
-        }
-      }
-
-      function applyStarPosition(star) {
-        if (!star.el) return;
-        star.el.style.left = star.x + 'vw';
-        star.el.style.top = star.y + 'vh';
-      }
-
-      function updateStarPosition(star, xVw, yVh) {
-        star.x = Number(clamp(xVw, 1, 99).toFixed(2));
-        star.y = Number(clamp(yVh, 1, 99).toFixed(2));
-        applyStarPosition(star);
-      }
-
-      function pointerToViewport(clientX, clientY) {
-        return {
-          x: (clientX / window.innerWidth) * 100,
-          y: (clientY / window.innerHeight) * 100
-        };
-      }
-
-      function starToPixels(star) {
-        return {
-          x: (star.x / 100) * window.innerWidth,
-          y: (star.y / 100) * window.innerHeight
-        };
-      }
-
-      function queueLinksRender() {
-        if (linksRenderQueued) return;
-        linksRenderQueued = true;
-        requestAnimationFrame(function () {
-          linksRenderQueued = false;
-          renderLinks();
-        });
-      }
-
-      function renderLinks() {
-        while (linksSvg.firstChild) {
-          linksSvg.removeChild(linksSvg.firstChild);
+        function showSignals() {
+          var s = api.signals();
+          signalsEl.textContent = s.clock + ' where you are'
+            + (s.zone ? ' (' + s.zone + ')' : '')
+            + ' · ' + s.part
+            + ' · ' + s.sinceText
+            + ' · arrival ' + s.visits;
         }
 
-        if (stars.length < 2) return;
-
-        var maxDistance = Math.min(window.innerWidth, window.innerHeight) * 0.28;
-        var maxDistanceSq = maxDistance * maxDistance;
-        var used = Object.create(null);
-
-        for (var i = 0; i < stars.length; i++) {
-          var origin = starToPixels(stars[i]);
-          var nearest = [];
-
-          for (var j = 0; j < stars.length; j++) {
-            if (i === j) continue;
-            var target = starToPixels(stars[j]);
-            var dx = target.x - origin.x;
-            var dy = target.y - origin.y;
-            var d2 = dx * dx + dy * dy;
-            if (d2 > maxDistanceSq) continue;
-            nearest.push({ j: j, d2: d2, x: target.x, y: target.y });
-          }
-
-          nearest.sort(function (a, b) { return a.d2 - b.d2; });
-          nearest.slice(0, 2).forEach(function (pair) {
-            var a = i < pair.j ? i : pair.j;
-            var b = i < pair.j ? pair.j : i;
-            var key = a + '-' + b;
-            if (used[key]) return;
-            used[key] = true;
-
-            var line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-            line.setAttribute('x1', origin.x.toFixed(2));
-            line.setAttribute('y1', origin.y.toFixed(2));
-            line.setAttribute('x2', pair.x.toFixed(2));
-            line.setAttribute('y2', pair.y.toFixed(2));
-            line.setAttribute('stroke-opacity', (0.12 + (1 - pair.d2 / maxDistanceSq) * 0.52).toFixed(3));
-            linksSvg.appendChild(line);
-          });
-        }
-      }
-
-      function constellationHash() {
-        var hash = 2166136261;
-        for (var i = 0; i < stars.length; i++) {
-          var sx = Math.round(stars[i].x * 10);
-          var sy = Math.round(stars[i].y * 10);
-          var t = stars[i].text;
-          hash ^= sx;
-          hash += (hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24);
-          hash ^= sy;
-          hash += (hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24);
-          for (var c = 0; c < t.length; c++) {
-            hash ^= t.charCodeAt(c);
-            hash += (hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24);
-          }
-        }
-        return hash >>> 0;
-      }
-
-      function constellationSummary() {
-        var cx = 0;
-        var cy = 0;
-        for (var i = 0; i < stars.length; i++) {
-          cx += stars[i].x;
-          cy += stars[i].y;
-        }
-        cx /= stars.length || 1;
-        cy /= stars.length || 1;
-
-        var spread = 0;
-        for (var j = 0; j < stars.length; j++) {
-          var dx = stars[j].x - cx;
-          var dy = stars[j].y - cy;
-          spread += Math.sqrt(dx * dx + dy * dy);
-        }
-        spread /= stars.length || 1;
-
-        return { cx: cx, cy: cy, spread: spread };
-      }
-
-      function constellationRegionWord(cx, cy) {
-        var northSouth = cy < 50 ? 'North' : 'South';
-        var eastWest = cx < 50 ? 'West' : 'East';
-        return northSouth + eastWest;
-      }
-
-      function constellationTitle(hash, cx, cy, spread, count) {
-        var first = ['Lantern', 'Velvet', 'Copper', 'Quiet', 'Spiral', 'Silver', 'Saffron', 'Echo', 'Midnight', 'Bloom'];
-        var second = ['Harbor', 'Engine', 'Garden', 'Signal', 'Bridge', 'Compass', 'Archive', 'Drift', 'Choir', 'Voyage'];
-        var region = constellationRegionWord(cx, cy);
-        var mood = spread < 12 ? 'Knot' : (spread < 24 ? 'Field' : 'Trail');
-        var core = first[hash % first.length] + ' ' + second[(hash >>> 3) % second.length];
-        if (count < 4) {
-          core = first[hash % first.length] + ' Seed';
-        }
-        return core + ' of the ' + region + ' ' + mood;
-      }
-
-      function dayStamp() {
-        var d = new Date();
-        var y = d.getFullYear();
-        var m = String(d.getMonth() + 1).padStart(2, '0');
-        var day = String(d.getDate()).padStart(2, '0');
-        return y + '-' + m + '-' + day;
-      }
-
-      function drawPostcard(hash, title) {
-        if (!postcardCanvas) return;
-        var pctx = postcardCanvas.getContext('2d');
-        if (!pctx) return;
-
-        var w = postcardCanvas.width;
-        var h = postcardCanvas.height;
-        var grad = pctx.createLinearGradient(0, 0, w, h);
-        grad.addColorStop(0, '#0d1330');
-        grad.addColorStop(0.5, '#121b3d');
-        grad.addColorStop(1, '#090d1b');
-        pctx.fillStyle = grad;
-        pctx.fillRect(0, 0, w, h);
-
-        var seed = hash || 1;
-        function seeded() {
-          seed = (seed * 1664525 + 1013904223) >>> 0;
-          return seed / 4294967296;
+        function link(href, text) {
+          var a = document.createElement('a');
+          a.className = 'action';
+          a.href = href;
+          a.textContent = text;
+          return a;
         }
 
-        for (var i = 0; i < 72; i++) {
-          var sx = seeded() * w;
-          var sy = seeded() * h * 0.78;
-          var sr = 0.4 + seeded() * 1.7;
-          var sa = 0.12 + seeded() * 0.5;
-          pctx.beginPath();
-          pctx.fillStyle = 'rgba(181, 207, 255, ' + sa.toFixed(3) + ')';
-          pctx.arc(sx, sy, sr, 0, Math.PI * 2);
-          pctx.fill();
-        }
-
-        var mapped = [];
-        var margin = 22;
-        for (var j = 0; j < stars.length; j++) {
-          mapped.push({
-            x: margin + (stars[j].x / 100) * (w - margin * 2),
-            y: margin + (stars[j].y / 100) * (h * 0.72 - margin * 1.2)
-          });
-        }
-
-        var maxD = Math.min(w, h) * 0.24;
-        var maxDSq = maxD * maxD;
-        pctx.lineWidth = 1;
-        for (var a = 0; a < mapped.length; a++) {
-          for (var b = a + 1; b < mapped.length; b++) {
-            var dx = mapped[b].x - mapped[a].x;
-            var dy = mapped[b].y - mapped[a].y;
-            var d2 = dx * dx + dy * dy;
-            if (d2 > maxDSq) continue;
-            var alpha = 0.1 + (1 - d2 / maxDSq) * 0.42;
-            pctx.strokeStyle = 'rgba(155, 196, 255, ' + alpha.toFixed(3) + ')';
-            pctx.beginPath();
-            pctx.moveTo(mapped[a].x, mapped[a].y);
-            pctx.lineTo(mapped[b].x, mapped[b].y);
-            pctx.stroke();
-          }
-        }
-
-        for (var k = 0; k < mapped.length; k++) {
-          var r = 1.8 + (k % 3) * 0.65;
-          pctx.beginPath();
-          pctx.fillStyle = 'rgba(223, 237, 255, 0.96)';
-          pctx.arc(mapped[k].x, mapped[k].y, r, 0, Math.PI * 2);
-          pctx.fill();
-        }
-
-        pctx.fillStyle = 'rgba(8, 12, 24, 0.6)';
-        pctx.fillRect(0, h - 54, w, 54);
-
-        pctx.fillStyle = '#f0f5ff';
-        pctx.font = '600 16px system-ui, -apple-system, Segoe UI, sans-serif';
-        pctx.fillText(title, 12, h - 30);
-
-        pctx.fillStyle = '#bdd1ff';
-        pctx.font = '12px system-ui, -apple-system, Segoe UI, sans-serif';
-        pctx.fillText('wish constellation postcard · ' + dayStamp(), 12, h - 12);
-      }
-
-      function mintPostcard() {
-        if (!stars.length) {
-          setNote('You need at least one star before minting a postcard.');
-          return;
-        }
-
-        var hash = constellationHash();
-        var summary = constellationSummary();
-        var title = constellationTitle(hash, summary.cx, summary.cy, summary.spread, stars.length);
-        var spreadText = summary.spread < 12 ? 'tight and intentional' : (summary.spread < 24 ? 'balanced and exploratory' : 'wide and adventurous');
-
-        postcardTitle.textContent = title;
-        postcardText.textContent = 'Stamped ' + dayStamp() + ' · ' + stars.length + ' stars · ' + spreadText + '. Rearrange the sky and mint again for a new named card.';
-        drawPostcard(hash, title);
-        postcardPanel.classList.add('show');
-        setNote('🪐 Postcard minted: ' + title + '.');
-      }
-
-      function askTheSky() {
-        if (!stars.length) {
-          setNote('The sky is quiet. Drop a star first.');
-          return;
-        }
-
-        var summary = constellationSummary();
-        var cx = summary.cx;
-        var cy = summary.cy;
-        var spread = summary.spread;
-
-        var region = (cy < 50 ? 'northern' : 'southern') + '-' + (cx < 50 ? 'western' : 'eastern');
-        var density = spread < 12 ? 'tight' : (spread < 24 ? 'balanced' : 'wide');
-        var size = stars.length < 4 ? 'faint signal' : (stars.length < 12 ? 'steady chorus' : 'bright crowd');
-
-        var openers = [
-          'The constellation leans toward momentum.',
-          'The constellation hums with patient energy.',
-          'The constellation suggests a turning point.',
-          'The constellation maps a curious detour.',
-          'The constellation carries a brave undertone.'
-        ];
-
-        var closers = [
-          'Follow the smallest spark and let it grow.',
-          'Name one next step and begin before overthinking.',
-          'Protect your attention like it is lantern light.',
-          'Share a rough draft; feedback is part of flight.',
-          'Keep play in the process and precision will follow.',
-          'Make the next move tiny, clear, and kind.'
-        ];
-
-        var hash = constellationHash();
-        var opener = openers[hash % openers.length];
-        var closer = closers[(hash >>> 5) % closers.length];
-        var orbitLine = orbitMode ? ' The sky is currently dancing in orbit.' : '';
-
-        setNote('🔮 ' + opener + ' A ' + size + ' in the ' + region + ' sky feels ' + density + '. ' + closer + orbitLine);
-      }
-
-      function createStarElement(star) {
-        var el = document.createElement('button');
-        el.className = 'star';
-        el.type = 'button';
-        star.el = el;
-        applyStarPosition(star);
-        el.title = star.text;
-        el.setAttribute('aria-label', 'Star note: ' + star.text);
-
-        el.addEventListener('click', function (ev) {
-          ev.stopPropagation();
-          if (Date.now() < suppressStarClickUntil) return;
-          setNote('✦ ' + star.text);
-        });
-
-        el.addEventListener('pointerdown', function (ev) {
-          ev.preventDefault();
-          ev.stopPropagation();
-          if (orbitMode) {
-            orbitMode = false;
-            setOrbitButton();
-            saveStars();
-            setNote('Orbit mode paused so you can reshape the sky.');
-          }
-          activeDrag = {
-            star: star,
-            pointerId: ev.pointerId,
-            moved: false
-          };
-          if (star.el && star.el.setPointerCapture) {
-            try {
-              star.el.setPointerCapture(ev.pointerId);
-            } catch (e) {
-            }
-          }
-          star.el.classList.add('dragging');
-          setNote('Drag to sketch your constellation.');
-        });
-
-        document.body.appendChild(el);
-      }
-
-      function centerOfStars() {
-        if (!stars.length) return { x: 50, y: 50 };
-        var cx = 0;
-        var cy = 0;
-        for (var i = 0; i < stars.length; i++) {
-          cx += stars[i].x;
-          cy += stars[i].y;
-        }
-        return { x: cx / stars.length, y: cy / stars.length };
-      }
-
-      function primeOrbit() {
-        if (!stars.length) return;
-        var center = centerOfStars();
-        for (var i = 0; i < stars.length; i++) {
-          var star = stars[i];
-          var dx = star.x - center.x;
-          var dy = star.y - center.y;
-          var radius = Math.sqrt(dx * dx + dy * dy);
-          if (radius < 4) radius = randRange(4, 11);
-          star.orbitAngle = Math.atan2(dy || randRange(-1, 1), dx || randRange(-1, 1));
-          star.orbitRadius = clamp(radius, 4, 42);
-          star.orbitSpeed = randRange(0.25, 1.05) * (Math.random() < 0.5 ? -1 : 1);
-          star.orbitTilt = randRange(0.65, 1.1);
-          star.orbitPulse = randRange(0, Math.PI * 2);
-        }
-      }
-
-      function setOrbitButton() {
-        orbitBtn.textContent = orbitMode ? 'stop orbit mode' : 'start orbit mode';
-        orbitBtn.setAttribute('aria-pressed', orbitMode ? 'true' : 'false');
-      }
-
-      function setChimeButton() {
-        chimeBtn.textContent = chimePlaying ? 'stop star chime' : 'play star chime';
-        chimeBtn.setAttribute('aria-pressed', chimePlaying ? 'true' : 'false');
-      }
-
-      function toggleOrbit(forceOff) {
-        if (forceOff) {
-          if (orbitMode) {
-            orbitMode = false;
-            setOrbitButton();
-            saveStars();
-          }
-          return;
-        }
-
-        if (!orbitMode) {
-          if (!stars.length) {
-            setNote('Orbit needs at least one star. Drop one first.');
+        function offerWorld(reading) {
+          var o = reading.orientation;
+          offer.hidden = false;
+          if (!o) {
+            readEl.textContent = 'Nothing read. Take any world you like.';
             return;
           }
-          orbitMode = true;
-          orbitClock = 0;
-          primeOrbit();
-          setOrbitButton();
-          setNote('🌀 Orbit mode engaged. Your constellation is now alive.');
-          return;
-        }
-
-        orbitMode = false;
-        setOrbitButton();
-        saveStars();
-        queueLinksRender();
-        setNote('Orbit mode paused. The stars hold their new places.');
-      }
-
-      function updateOrbit(dt) {
-        if (!orbitMode || !stars.length) return;
-        orbitClock += dt;
-
-        var baseCx = 50 + Math.sin(orbitClock * 0.23) * 3;
-        var baseCy = 50 + Math.cos(orbitClock * 0.19) * 2;
-
-        for (var i = 0; i < stars.length; i++) {
-          var star = stars[i];
-          if (typeof star.orbitAngle !== 'number') {
-            primeOrbit();
-            break;
+          readEl.textContent = 'Read as ' + o.name + ' — ' + o.pull + '.';
+          linksEl.textContent = '';
+          linksEl.appendChild(link(o.world, 'open ' + o.worldName));
+          nearEl.textContent = '';
+          if (reading.alternates && reading.alternates.length) {
+            nearEl.textContent = 'Close behind: ' + reading.alternates.map(function (alt) {
+              return alt.name;
+            }).join(', ') + '. Any of them is one click away in the list below.';
           }
-          star.orbitAngle += star.orbitSpeed * dt * 0.45;
-          var radius = star.orbitRadius * (1 + Math.sin(orbitClock + star.orbitPulse) * 0.04);
-          var nextX = baseCx + Math.cos(star.orbitAngle) * radius;
-          var nextY = baseCy + Math.sin(star.orbitAngle) * (radius * star.orbitTilt);
-          updateStarPosition(star, nextX, nextY);
-        }
-        queueLinksRender();
-      }
-
-      function addStar(xVw, yVh, text) {
-        if (stars.length >= MAX_STARS) {
-          var first = stars.shift();
-          if (first && first.el) first.el.remove();
-        }
-        var star = {
-          x: 50,
-          y: 50,
-          text: text,
-          el: null,
-          orbitAngle: null,
-          orbitRadius: null,
-          orbitSpeed: null,
-          orbitTilt: null,
-          orbitPulse: null
-        };
-        updateStarPosition(star, xVw, yVh);
-        stars.push(star);
-        createStarElement(star);
-        if (orbitMode) primeOrbit();
-        queueLinksRender();
-        setNote('✦ ' + star.text);
-        saveStars();
-      }
-
-      function addStarFromPoint(clientX, clientY) {
-        var point = pointerToViewport(clientX, clientY);
-        addStar(point.x, point.y, randomThought());
-      }
-
-      function removeMeteor(meteor) {
-        for (var i = meteors.length - 1; i >= 0; i--) {
-          if (meteors[i] === meteor) {
-            meteors.splice(i, 1);
-            break;
-          }
-        }
-        if (meteor.el) meteor.el.remove();
-      }
-
-      function catchMeteor(meteor) {
-        if (!meteor || meteor.caught) return;
-        meteor.caught = true;
-        addStar(clamp(meteor.x, 3, 97), clamp(meteor.y, 3, 97), randomCometThought());
-        setNote('☄ Meteor caught! A comet thought has joined your constellation.');
-        removeMeteor(meteor);
-      }
-
-      function spawnMeteor(now, manual) {
-        if (meteors.length >= 4) {
-          if (manual) setNote('Too many meteors at once. Catch one first.');
-          return false;
+          offer.scrollIntoView({ behavior: api.reducedMotion() ? 'auto' : 'smooth', block: 'nearest' });
         }
 
-        var meteor = {
-          x: randRange(-12, 12),
-          y: randRange(8, 58),
-          vx: randRange(22, 36),
-          vy: randRange(10, 18),
-          born: now,
-          ttl: randRange(2.1, 3.3),
-          el: document.createElement('button'),
-          caught: false
-        };
+        function query() {
+          offer.hidden = true;
+          api.mount(host, { onAnswer: offerWorld });
+        }
 
-        meteor.el.className = 'meteor';
-        meteor.el.type = 'button';
-        meteor.el.title = 'Catch this meteor';
-        meteor.el.setAttribute('aria-label', 'Catch this meteor to create a rare thought star');
-        meteor.el.style.transform = 'translate(' + meteor.x.toFixed(2) + 'vw, ' + meteor.y.toFixed(2) + 'vh) rotate(24deg)';
-
-        meteor.el.addEventListener('click', function (ev) {
-          ev.preventDefault();
-          ev.stopPropagation();
-          catchMeteor(meteor);
+        againBtn.addEventListener('click', function () {
+          query();
+          host.scrollIntoView({ behavior: api.reducedMotion() ? 'auto' : 'smooth', block: 'nearest' });
         });
 
-        meteor.el.addEventListener('pointerdown', function (ev) {
-          ev.stopPropagation();
-        });
-
-        document.body.appendChild(meteor.el);
-        meteors.push(meteor);
-        return true;
+        showSignals();
+        query();
       }
 
-      function updateMeteors(dt, now) {
-        for (var i = meteors.length - 1; i >= 0; i--) {
-          var meteor = meteors[i];
-          meteor.x += meteor.vx * dt;
-          meteor.y += meteor.vy * dt;
-
-          if ((now - meteor.born) / 1000 > meteor.ttl || meteor.x > 112 || meteor.y > 108) {
-            removeMeteor(meteor);
-            continue;
-          }
-
-          meteor.el.style.transform = 'translate(' + meteor.x.toFixed(2) + 'vw, ' + meteor.y.toFixed(2) + 'vh) rotate(24deg)';
-        }
-
-        if (now >= nextMeteorAt) {
-          spawnMeteor(now, false);
-          nextMeteorAt = now + randRange(6500, 14000);
-        }
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', start);
+      } else {
+        start();
       }
-
-      function loadStars() {
-        var raw;
-        try {
-          raw = localStorage.getItem(STORAGE_KEY);
-        } catch (e) {
-          return;
-        }
-        if (!raw) return;
-
-        try {
-          var parsed = JSON.parse(raw);
-          if (!Array.isArray(parsed)) return;
-          parsed.slice(0, MAX_STARS).forEach(function (item) {
-            if (!item || typeof item.x !== 'number' || typeof item.y !== 'number' || typeof item.text !== 'string') {
-              return;
-            }
-            var star = {
-              x: 50,
-              y: 50,
-              text: item.text,
-              el: null,
-              orbitAngle: null,
-              orbitRadius: null,
-              orbitSpeed: null,
-              orbitTilt: null,
-              orbitPulse: null
-            };
-            updateStarPosition(star, item.x, item.y);
-            stars.push(star);
-            createStarElement(star);
-          });
-          queueLinksRender();
-          if (stars.length) {
-            setNote('You have ' + stars.length + ' saved star' + (stars.length === 1 ? '' : 's') + '. Ask the sky for a reading.');
-          }
-        } catch (e) {
-          setNote('Constellation data was unreadable, so this sky starts fresh.');
-        }
-      }
-
-      function clearStars() {
-        activeDrag = null;
-        toggleOrbit(true);
-        stopChime(true);
-        while (stars.length) {
-          var star = stars.pop();
-          if (star.el) star.el.remove();
-        }
-        try {
-          localStorage.removeItem(STORAGE_KEY);
-        } catch (e) {
-        }
-        postcardPanel.classList.remove('show');
-        queueLinksRender();
-        setNote('Sky cleared. Ready for a new constellation.');
-      }
-
-      function endDrag(pointerId) {
-        if (!activeDrag || activeDrag.pointerId !== pointerId) return;
-        var drag = activeDrag;
-        activeDrag = null;
-        if (drag.star.el) {
-          drag.star.el.classList.remove('dragging');
-          if (drag.star.el.releasePointerCapture) {
-            try {
-              drag.star.el.releasePointerCapture(pointerId);
-            } catch (e) {
-            }
-          }
-        }
-        if (drag.moved) {
-          if (orbitMode) primeOrbit();
-          saveStars();
-          queueLinksRender();
-          suppressStarClickUntil = Date.now() + DRAG_SUPPRESS_MS;
-          setNote('Constellation updated and saved.');
-        }
-      }
-
-      function ensureAudioContext() {
-        if (audioCtx) return audioCtx;
-        var AudioCtor = window.AudioContext || window.webkitAudioContext;
-        if (!AudioCtor) return null;
-        audioCtx = new AudioCtor();
-        return audioCtx;
-      }
-
-      function starFrequency(star) {
-        var scale = [0, 3, 5, 7, 10, 12, 15, 17, 19, 22];
-        var degree = Math.floor((clamp(star.x, 0, 99.999) / 100) * scale.length);
-        degree = clamp(degree, 0, scale.length - 1);
-        var octaveLift = Math.floor((100 - clamp(star.y, 1, 99)) / 34);
-        var midi = 48 + scale[degree] + octaveLift * 12;
-        return 440 * Math.pow(2, (midi - 69) / 12);
-      }
-
-      function pingStar(star, delayMs) {
-        var onId = setTimeout(function () {
-          if (!star.el) return;
-          star.el.classList.add('ping');
-          var offId = setTimeout(function () {
-            if (star.el) star.el.classList.remove('ping');
-          }, 220);
-          chimeTimeouts.push(offId);
-        }, delayMs);
-        chimeTimeouts.push(onId);
-      }
-
-      function playTone(ctx, star, when, stepIndex) {
-        var osc = ctx.createOscillator();
-        var gain = ctx.createGain();
-        var duration = 0.16 + ((100 - star.y) / 100) * 0.24;
-        var volume = 0.035 + (star.y / 100) * 0.03;
-        var pan = (star.x / 50) - 1;
-        var wave = ['sine', 'triangle', 'square', 'sawtooth'][stepIndex % 4];
-
-        osc.type = wave;
-        osc.frequency.setValueAtTime(starFrequency(star), when);
-
-        gain.gain.setValueAtTime(0.0001, when);
-        gain.gain.linearRampToValueAtTime(volume, when + 0.02);
-        gain.gain.exponentialRampToValueAtTime(0.0001, when + duration);
-
-        if (ctx.createStereoPanner) {
-          var panner = ctx.createStereoPanner();
-          panner.pan.setValueAtTime(clamp(pan, -1, 1), when);
-          osc.connect(gain);
-          gain.connect(panner);
-          panner.connect(ctx.destination);
-        } else {
-          osc.connect(gain);
-          gain.connect(ctx.destination);
-        }
-
-        activeOscillators.push(osc);
-        osc.onended = function () {
-          for (var i = activeOscillators.length - 1; i >= 0; i--) {
-            if (activeOscillators[i] === osc) {
-              activeOscillators.splice(i, 1);
-              break;
-            }
-          }
-        };
-
-        osc.start(when);
-        osc.stop(when + duration + 0.03);
-      }
-
-      function stopChime(silent) {
-        for (var i = 0; i < chimeTimeouts.length; i++) {
-          clearTimeout(chimeTimeouts[i]);
-        }
-        chimeTimeouts = [];
-
-        for (var j = 0; j < activeOscillators.length; j++) {
-          try {
-            activeOscillators[j].stop();
-          } catch (e) {
-          }
-        }
-        activeOscillators = [];
-
-        for (var k = 0; k < stars.length; k++) {
-          if (stars[k].el) stars[k].el.classList.remove('ping');
-        }
-
-        chimePlaying = false;
-        setChimeButton();
-        if (!silent) setNote('Star chime stopped.');
-      }
-
-      function playChime() {
-        if (!stars.length) {
-          setNote('Drop a few stars first, then play the sky.');
-          return;
-        }
-
-        var ctx = ensureAudioContext();
-        if (!ctx) {
-          setNote('This browser cannot play star chimes, but your sky still shines.');
-          return;
-        }
-
-        if (ctx.state === 'suspended' && ctx.resume) {
-          ctx.resume().catch(function () {
-          });
-        }
-
-        stopChime(true);
-        chimePlaying = true;
-        setChimeButton();
-
-        var melody = stars.slice().sort(function (a, b) { return a.x - b.x; });
-        var step = Math.max(0.08, 0.38 - melody.length * 0.01);
-        var start = ctx.currentTime + 0.05;
-
-        for (var i = 0; i < melody.length; i++) {
-          var when = start + i * step;
-          playTone(ctx, melody[i], when, i);
-          pingStar(melody[i], Math.max(0, (when - ctx.currentTime) * 1000));
-        }
-
-        var doneId = setTimeout(function () {
-          chimePlaying = false;
-          setChimeButton();
-          setNote('✨ Star chime complete. Rearrange stars to compose a new one.');
-        }, Math.ceil((step * melody.length + 0.3) * 1000));
-        chimeTimeouts.push(doneId);
-
-        setNote('🎵 Playing your constellation from west to east.');
-      }
-
-      dropBtn.addEventListener('click', function (ev) {
-        ev.stopPropagation();
-        addStar(50 + (Math.random() - 0.5) * 24, 50 + (Math.random() - 0.5) * 24, randomThought());
-      });
-
-      oracleBtn.addEventListener('click', function (ev) {
-        ev.stopPropagation();
-        askTheSky();
-      });
-
-      meteorBtn.addEventListener('click', function (ev) {
-        ev.stopPropagation();
-        if (spawnMeteor(performance.now(), true)) {
-          setNote('A meteor streaks by. Click it to catch a rare thought.');
-        }
-      });
-
-      chimeBtn.addEventListener('click', function (ev) {
-        ev.stopPropagation();
-        if (chimePlaying) {
-          stopChime(false);
-          return;
-        }
-        playChime();
-      });
-
-      orbitBtn.addEventListener('click', function (ev) {
-        ev.stopPropagation();
-        toggleOrbit(false);
-      });
-
-      postcardBtn.addEventListener('click', function (ev) {
-        ev.stopPropagation();
-        mintPostcard();
-      });
-
-      clearBtn.addEventListener('click', function (ev) {
-        ev.stopPropagation();
-        clearStars();
-      });
-
-      document.addEventListener('pointermove', function (ev) {
-        if (!activeDrag || activeDrag.pointerId !== ev.pointerId) return;
-        activeDrag.moved = true;
-        var point = pointerToViewport(ev.clientX, ev.clientY);
-        updateStarPosition(activeDrag.star, point.x, point.y);
-        queueLinksRender();
-      });
-
-      document.addEventListener('pointerup', function (ev) {
-        endDrag(ev.pointerId);
-      });
-
-      document.addEventListener('pointercancel', function (ev) {
-        endDrag(ev.pointerId);
-      });
-
-      document.addEventListener('visibilitychange', function () {
-        if (document.hidden && chimePlaying) stopChime(true);
-      });
-
-      document.addEventListener('click', function (ev) {
-        var target = ev.target;
-        if (target && target.closest && target.closest('main')) return;
-        if (Date.now() < suppressStarClickUntil) return;
-        addStarFromPoint(ev.clientX, ev.clientY);
-      });
-
-      loadStars();
-      setOrbitButton();
-      setChimeButton();
-
-      var canvas = document.getElementById('sky');
-      var ctx = canvas.getContext('2d');
-      var dots = [];
-
-      function resize() {
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
-        linksSvg.setAttribute('viewBox', '0 0 ' + canvas.width + ' ' + canvas.height);
-        linksSvg.setAttribute('width', canvas.width);
-        linksSvg.setAttribute('height', canvas.height);
-        dots = [];
-        var total = Math.max(35, Math.floor((canvas.width * canvas.height) / 22000));
-        for (var i = 0; i < total; i++) {
-          dots.push({
-            x: Math.random() * canvas.width,
-            y: Math.random() * canvas.height,
-            r: Math.random() * 1.4 + 0.2,
-            a: Math.random() * 0.6 + 0.1,
-            s: Math.random() * 0.23 + 0.04
-          });
-        }
-        queueLinksRender();
-      }
-
-      function draw(now) {
-        if (typeof now !== 'number') now = performance.now();
-        var dt = lastFrameTime ? Math.min(0.05, (now - lastFrameTime) / 1000) : 0.016;
-        lastFrameTime = now;
-
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        for (var i = 0; i < dots.length; i++) {
-          var d = dots[i];
-          d.a += (Math.random() - 0.5) * 0.03;
-          if (d.a < 0.08) d.a = 0.08;
-          if (d.a > 0.85) d.a = 0.85;
-          d.y += d.s;
-          if (d.y > canvas.height + 2) {
-            d.y = -2;
-            d.x = Math.random() * canvas.width;
-          }
-          ctx.beginPath();
-          ctx.fillStyle = 'rgba(173, 203, 255, ' + d.a.toFixed(3) + ')';
-          ctx.arc(d.x, d.y, d.r, 0, Math.PI * 2);
-          ctx.fill();
-        }
-
-        updateMeteors(dt, now);
-        updateOrbit(dt);
-        requestAnimationFrame(draw);
-      }
-
-      window.addEventListener('resize', resize);
-      nextMeteorAt = performance.now() + randRange(3500, 9000);
-      resize();
-      draw();
     })();
   </script>

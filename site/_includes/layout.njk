@@ -14,9 +14,26 @@
     footer      the links the page ends with, as [href, text] pairs (see footer.njk).
     footerNote  an aside shown after those links.
 
-  The analytics and consent line is written here rather than in every page, which is the whole
-  point of a shared shell: the axiom is about the built site, so one line here carries it to all of
-  them (see ANALYTICS_TAG and check_analytics in .github/scripts/make_interesting.py).
+  Three shared lines are written here rather than in every page, which is the whole point of a
+  shared shell: each axiom is about the built site, so one line here carries it to all of them.
+    js/analytics.js  the Google Analytics tag and the consent banner that gates it (see
+                     ANALYTICS_TAG and check_analytics in .github/scripts/make_interesting.py).
+    js/state.js      the one local-state document every page reads and writes through, and the
+                     meta menu that exports it (STATE_TAG and check_state).
+    js/threshold.js  the mood flow: the site ascertains a visitor's orientation before it offers
+                     them anything, and keeps asking, in a new way, on every page (MOOD_TAG and
+                     check_mood).
+  None of the three may be dropped: a built page missing any of them is refused. The files behind
+  the first two are fixed; js/threshold.js is protected instead, so a run may rewrite the flow but
+  never delete it.
+
+  js/site.js is the fourth line and is not one of those: it draws the header's pulse out of what the
+  shared document is already holding, and no axiom rests on it, so it may be rewritten or dropped
+  like any other page source.
+
+  The mood ribbon below is the flow made visible. It sits outside <main> on every page, so the
+  question is never a gate in front of the content: the whole site is reachable with the ribbon
+  ignored, or with scripting switched off entirely.
 
   Links are relative, like every link in the site: it has no fixed domain and may be served under
   a sub-path, so "css/site.css" and not "/css/site.css".
@@ -40,27 +57,49 @@
 {%- endif %}
   <!-- Analytics and the cookie consent banner that gates it; see js/analytics.js. -->
   <script src='js/analytics.js' defer></script>
+  <!-- The one local-state store every page reads and writes through, and its meta menu; see
+       js/state.js. Not deferred: a page's own script runs before any deferred one does. -->
+  <script src='js/state.js'></script>
+  <!-- The mood flow: ask before offering, on every page; see js/threshold.js. Deferred, and so
+       after js/state.js, which is what it keeps its reading in. -->
+  <script src='js/threshold.js' defer></script>
+  <!-- The header's pulse; see js/site.js. Deferred too, and after the store it reads. -->
+  <script src='js/site.js' defer></script>
 </head>
 <body>
   <a class='skip-link' href='#main-content'>skip to main content</a>
   <header class='site-header'>
     <p class='site-header-title'>
       <a href='index.html'>interesting</a>
-      <span>one sky, many instruments</span>
+      <span>many worlds, no default</span>
+    </p>
+    <!-- The pulse: what the shared document is already holding for this visitor, and one step back
+         to it (see js/site.js). The copy here is what a visitor with scripting switched off reads,
+         so it claims nothing. The classes are site-pulse*, never site-meta*: those belong to the
+         meta menu js/state.js draws in the bottom-right corner, whose styles that file injects and
+         which is not the site's to restyle -- one of its names here is pulled out of the header
+         and pinned on top of that menu. -->
+    <p class='site-pulse' aria-live='polite'>
+      <span id='site-pulse-status' class='site-pulse-status'>nothing kept in this browser yet.</span>
+      <a id='site-pulse-link' class='site-pulse-link' href='moods.html'>find your world</a>
     </p>
     <nav class='site-header-nav' aria-label='Primary navigation'>
-      <a href='index.html'{% if page and page.fileSlug == 'index' %} aria-current='page'{% endif %}>home</a>
-      <a href='constellation-diary.html'{% if page and page.fileSlug == 'constellation-diary' %} aria-current='page'{% endif %}>diary</a>
-      <a href='constellation-echo.html'{% if page and page.fileSlug == 'constellation-echo' %} aria-current='page'{% endif %}>echo</a>
-      <a href='constellation-weather.html'{% if page and page.fileSlug == 'constellation-weather' %} aria-current='page'{% endif %}>weather</a>
-      <a href='orbital-weaver.html'{% if page and page.fileSlug == 'orbital-weaver' %} aria-current='page'{% endif %}>weaver</a>
-      <a href='sky-archive.html'{% if page and page.fileSlug == 'sky-archive' %} aria-current='page'{% endif %}>archive</a>
-      <a href='star-lantern.html'{% if page and page.fileSlug == 'star-lantern' %} aria-current='page'{% endif %}>lantern</a>
-      <a href='wish-terrarium.html'{% if page and page.fileSlug == 'wish-terrarium' %} aria-current='page'{% endif %}>terrarium</a>
+      <a href='index.html'{% if page and page.fileSlug == 'index' %} aria-current='page'{% endif %}>threshold</a>
+      <a href='moods.html'{% if page and page.fileSlug == 'moods' %} aria-current='page'{% endif %}>mood atlas</a>
       <a href='sitemap.html'{% if page and page.fileSlug == 'sitemap' %} aria-current='page'{% endif %}>site map</a>
       <a href='error.html'{% if page and page.fileSlug == 'error' %} aria-current='page'{% endif %}>404</a>
     </nav>
   </header>
+  <aside class='mood-ribbon' id='mood-ribbon' data-asking='false' aria-label='What this site has read about you'>
+    <p class='mood-ribbon-text' id='mood-ribbon-text'>Nothing read yet.</p>
+    <p class='mood-ribbon-where' id='mood-ribbon-where'>reading the clock and the zone…</p>
+    <div class='mood-ribbon-actions'>
+      <button type='button' id='mood-ribbon-ask' aria-expanded='false' aria-controls='mood-probe'>ask me another way</button>
+      <a class='action' id='mood-ribbon-go' href='moods.html' hidden>go to your world</a>
+      <a class='action' href='moods.html'>mood atlas</a>
+    </div>
+    <div class='mood-probe' id='mood-probe' hidden></div>
+  </aside>
   <div id='main-content' tabindex='-1'>{{ content | safe }}</div>
 </body>
 </html>

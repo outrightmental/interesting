@@ -1,0 +1,37 @@
+// The kinetic floor: heavy things, a lot of them, nothing breakable.
+
+:root {
+  --bg: #0a1210;
+  --bg2: #1a5040;
+  --accent: #7cffc4;
+  --accent2: #fff2a6;
+}
+
+.layout > canvas {
+  background: #040807;
+  cursor: grab;
+  touch-action: none;
+}
+
+.layout > canvas:active {
+  cursor: grabbing;
+}
+
+.floor-note {
+  margin: 0;
+  color: #d8f6e8;
+  line-height: 1.5;
+  font-size: 0.92rem;
+}
+
+.layout .panel #reading {
+  min-height: 6.4em;
+}
+
+// The canvas takes keyboard focus (the kicker is driven with the arrow keys), so it needs a ring
+// of its own: the shared one only covers buttons and links.
+.layout > canvas:focus-visible {
+  outline: 2px solid transparent;
+  border-color: rgba(184, 217, 255, 0.8);
+  box-shadow: 0 0 0 3px rgba(184, 217, 255, 0.45);
+}

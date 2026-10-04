@@ -1,0 +1,130 @@
+// The mood atlas: the apparatus shown rather than hidden.
+
+@use 'vars';
+
+body {
+  align-content: safe center;
+}
+
+.atlas-state {
+  margin: 0 0 1rem;
+  border: 1px solid vars.$hairline;
+  border-radius: vars.$radius-panel;
+  background: rgba(7, 10, 20, 0.56);
+  padding: 0.8rem;
+}
+
+.atlas-state h2,
+.section-title {
+  margin: 0 0 0.5rem;
+  color: var(--muted);
+  font-size: 0.78rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.section-title {
+  margin-top: 1.2rem;
+}
+
+.current {
+  margin: 0;
+  color: var(--accent2);
+  font-size: clamp(1rem, 2.8vw, 1.22rem);
+  line-height: 1.38;
+}
+
+.signal-line {
+  margin: 0.45rem 0 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-family: vars.$mono;
+  line-height: 1.5;
+}
+
+.atlas-probe {
+  margin-top: 0.75rem;
+  border-top: 1px solid vars.$hairline;
+  padding-top: 0.75rem;
+}
+
+.atlas-copy {
+  margin: 0 0 0.7rem;
+  color: #dce7ff;
+  line-height: 1.55;
+  max-width: 68ch;
+}
+
+.mechanisms,
+.orientations {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.mechanisms li,
+.orientations li {
+  border: 1px solid vars.$hairline;
+  border-radius: vars.$radius-well;
+  background: vars.$well;
+  padding: 0.6rem 0.7rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  color: #dce7ff;
+  line-height: 1.45;
+}
+
+.mechanism-name {
+  color: var(--accent2);
+  font-family: vars.$mono;
+  font-size: 0.84rem;
+  letter-spacing: 0.06em;
+  min-width: 7rem;
+}
+
+.mechanism-ask {
+  flex: 1 1 18rem;
+  color: var(--muted);
+  font-size: 0.86rem;
+}
+
+.mechanisms button {
+  font-size: 0.82rem;
+  padding: 0.34rem 0.8rem;
+}
+
+.orientations a {
+  color: var(--accent);
+  font-size: 0.98rem;
+  min-width: 10rem;
+}
+
+.orientations span {
+  flex: 1 1 16rem;
+  color: var(--muted);
+  font-size: 0.86rem;
+}
+
+.orientations em {
+  color: var(--accent2);
+  font-style: normal;
+  font-family: vars.$mono;
+  font-size: 0.8rem;
+}
+
+.axiom {
+  margin: 1.1rem 0 0;
+  border-left: 2px solid vars.$focus-line;
+  padding-left: 0.75rem;
+  color: #cfdcf5;
+  font-size: 0.9rem;
+  line-height: 1.55;
+}
+
+.axiom a {
+  color: var(--accent);
+}
