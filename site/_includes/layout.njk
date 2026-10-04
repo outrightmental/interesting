@@ -34,6 +34,10 @@
   js/relay-quests.js is the fifth: a shared cross-world quest loop for the constellation circuit,
   rendered through _includes/footer.njk and kept in the same shared state document.
 
+  js/constellation-remixer.js is the sixth: shared constellation mutation controls shown through
+  _includes/footer.njk across the same circuit pages, also reading and writing through the one
+  shared state document.
+
   The mood ribbon below is the flow made visible. It sits outside <main> on every page, so the
   question is never a gate in front of the content: the whole site is reachable with the ribbon
   ignored, or with scripting switched off entirely.
@@ -70,6 +74,8 @@
   <script src='js/site.js' defer></script>
   <!-- Shared relay quests for the constellation circuit, also kept in the shared state document. -->
   <script src='js/relay-quests.js' defer></script>
+  <!-- Shared constellation remixer controls for the same circuit, through the shared state store. -->
+  <script src='js/constellation-remixer.js' defer></script>
 </head>
 <body>
   <a class='skip-link' href='#main-content'>skip to main content</a>
