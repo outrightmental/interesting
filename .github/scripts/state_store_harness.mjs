@@ -452,6 +452,21 @@ const scenarios = {
     click(menu.open);
     return { note: menu.note.textContent };
   },
+
+  /* Importing in a browser that stores nothing: the sky is held in memory for this page, and the
+     menu must not reload -- a reload re-reads from the (empty) store and would throw it away. */
+  importWithoutStorage() {
+    const { window, state } = load(makeStorage({}, { broken: true }));
+    const menu = menuOf(window);
+    click(menu.open);
+    menu.field.value = JSON.stringify({ omens: [{ text: "theirs", time: 3 }] });
+    click(menu.buttons["replace mine"]);
+    return {
+      note: menu.note.textContent,
+      reloads: window.location.reloads,
+      imported: state.get("omens", []),
+    };
+  },
 };
 
 const results = {};

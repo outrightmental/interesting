@@ -51,7 +51,8 @@
         .remove(key)
         .keys()                the names the document held when this page read it
         .toText()              the whole document as indented JSON: what the meta menu exports
-        .replace(text)         replaces the whole document with an exported one -> { ok, note }
+        .replace(text)         replaces the whole document with an exported one -> { ok, stored,
+                               note }, where stored is false when it could only be held in memory
         .clear()               empties it -> { ok, note }
 
   Two fallbacks, as issue #31 asks for: an in-memory document when localStorage cannot be used --
@@ -277,10 +278,15 @@
     if (!values) return { ok: false, note: 'That JSON is not a state document, so nothing was changed.' };
     var doc = emptyDocument();
     doc.values = values;
+    // `stored` is what the menu reloads on: a reload only shows the new sky when the browser kept
+    // it, since a fresh page load has nothing in memory. An import the browser would not store is
+    // held for this page alone -- real for any later read, but reloading would throw it away.
     if (!write(doc)) {
-      return { ok: true, note: 'Imported for this page only: this browser would not store it.' };
+      return { ok: true, stored: false,
+               note: 'Imported for this page only: this browser would not store it, so it is ' +
+                 'gone when you leave, and a reload would lose it now.' };
     }
-    return { ok: true, note: 'Imported. Everything on this site now reads that sky.' };
+    return { ok: true, stored: true, note: 'Imported. Everything on this site now reads that sky.' };
   }
 
   function clear() {
@@ -481,7 +487,9 @@
     paste.addEventListener('click', function () {
       var outcome = replace(text.value);
       say(outcome.note);
-      if (outcome.ok) window.setTimeout(reload, 900);
+      // Only reload when the browser kept it: a reload re-reads from the store, so reloading an
+      // import that could only be held in memory would discard the very sky just pasted in.
+      if (outcome.stored) window.setTimeout(reload, 900);
     });
 
     wipe.addEventListener('click', function () {

@@ -1409,6 +1409,15 @@ class LocalStateStoreTest(unittest.TestCase):
     def test_a_browser_that_stores_nothing_says_so_when_the_menu_opens(self):
         self.assertIn("stores nothing", self.seen["menuWithoutStorage"]["note"])
 
+    def test_importing_without_storage_holds_the_sky_and_does_not_reload_it_away(self):
+        # A reload re-reads from the store, which a browser that stores nothing leaves empty, so
+        # reloading an import it could only hold in memory would discard the very sky just pasted in.
+        imported = self.seen["importWithoutStorage"]
+        self.assertEqual(imported["imported"], [{"text": "theirs", "time": 3}],
+                         "the imported sky is live for this page")
+        self.assertEqual(imported["reloads"], 0, "but the menu must not reload it away")
+        self.assertIn("this page only", imported["note"])
+
 
 class EngagementTimeTest(unittest.TestCase):
     """Issue #32: "interesting" is not left to a model's taste. It means user engagement time, and
