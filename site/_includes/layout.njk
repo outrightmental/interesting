@@ -31,6 +31,9 @@
   shared document is already holding, and no axiom rests on it, so it may be rewritten or dropped
   like any other page source.
 
+  js/relay-quests.js is the fifth: a shared cross-world quest loop for the constellation circuit,
+  rendered through _includes/footer.njk and kept in the same shared state document.
+
   The mood ribbon below is the flow made visible. It sits outside <main> on every page, so the
   question is never a gate in front of the content: the whole site is reachable with the ribbon
   ignored, or with scripting switched off entirely.
@@ -65,6 +68,8 @@
   <script src='js/threshold.js' defer></script>
   <!-- The header's pulse; see js/site.js. Deferred too, and after the store it reads. -->
   <script src='js/site.js' defer></script>
+  <!-- Shared relay quests for the constellation circuit, also kept in the shared state document. -->
+  <script src='js/relay-quests.js' defer></script>
 </head>
 <body>
   <a class='skip-link' href='#main-content'>skip to main content</a>

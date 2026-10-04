@@ -75,6 +75,46 @@
   padding: 0.32rem 0.68rem;
 }
 
+// Shared optional objective loop across the same circuit, so visitors who want a thread can keep
+// one running through multiple worlds without losing free roam.
+.constellation-quest {
+  margin-top: 0.55rem;
+  border: 1px solid vars.$hairline;
+  border-radius: vars.$radius-panel;
+  background: rgba(7, 10, 20, 0.5);
+  padding: 0.62rem;
+}
+
+.constellation-quest-title {
+  margin: 0;
+  color: var(--accent2);
+  font-size: 0.76rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.constellation-quest-status,
+.constellation-quest-objective {
+  margin: 0.42rem 0 0;
+  color: #d8e6ff;
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
+.constellation-quest-objective {
+  color: var(--muted);
+}
+
+.constellation-quest-controls {
+  margin-top: 0.5rem;
+}
+
+.constellation-quest-controls .action,
+.constellation-quest-controls button {
+  font-size: 0.78rem;
+  padding: 0.32rem 0.68rem;
+}
+
 // Shared onward loop for the constellation worlds, federated into one include so those pages
 // keep one coherent cross-page route without repeating hand-written link clusters.
 .footer-circuit {
@@ -112,12 +152,15 @@
 }
 
 @media (max-width: 620px) {
-  .constellation-passport-controls {
+  .constellation-passport-controls,
+  .constellation-quest-controls {
     flex-direction: column;
   }
 
   .constellation-passport-controls .action,
-  .constellation-passport-controls button {
+  .constellation-passport-controls button,
+  .constellation-quest-controls .action,
+  .constellation-quest-controls button {
     width: 100%;
   }
 }
