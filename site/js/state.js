@@ -72,7 +72,7 @@
   ---------------------------------------------------------------------------------------------
   Out of reach
 
-  The hourly AI iteration may rewrite any page of this site, so the line above is an axiom of every
+  The AI iteration may rewrite any page of this site, so the line above is an axiom of every
   run and this file is kept out of its reach: see STATE_SCRIPT, FIXED_FILES, check_state and
   pages_touching_storage in .github/scripts/make_interesting.py. The meta menu is the one thing on
   the site a visitor can rely on being where they left it.
@@ -323,7 +323,7 @@
   /* The meta menu: one very small affordance in the corner of every page, opposite the consent
      banner's "cookies" button, that opens the whole document for copying, pasting over or
      clearing. Its styles live here rather than in a stylesheet for the same reason the consent
-     button's do: every page of this site may be rewritten by the hourly AI run, and this must not
+     button's do: every page of this site may be rewritten by an AI run, and this must not
      be rewritten with them. Nothing in here moves, so there is no motion to answer for. */
 
   var MENU_CSS = [

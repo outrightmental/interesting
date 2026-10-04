@@ -107,7 +107,7 @@ the one thing the mission is measured in.
   and keep going, not on whether it looks tidy or busy. `MISSION` names the aim and `INTERESTING`
   names the measure, both in
   [`.github/scripts/make_interesting.py`](.github/scripts/make_interesting.py).
-- **The cadence rule is the fourth `AXIOM`**, stated in the `Rules:` block beside the three below.
+- **The cadence rule is the fifth `AXIOM`**, stated in the `Rules:` block beside the four below.
   It names every phrasing the code refuses, in full, so it is a rule a run can follow rather than a
   trap it springs: the words *tonight*, *tomorrow*, *yesterday*, *hourly*, *nightly*, *daily* and
   *weekly*; the possessives *today's*, *this hour's*, *this week's*, *this month's*; and *every
@@ -116,7 +116,7 @@ the one thing the mission is measured in.
   again" — because the next move is the one worth asking for.
 - **Held to in code.** `check_cadence` in
   [`.github/scripts/make_interesting.py`](.github/scripts/make_interesting.py) refuses a plan that
-  puts one of those phrasings on a page. As with the three axioms below, only what the run itself
+  puts one of those phrasings on a page. As with the four axioms below, only what the run itself
   breaks is refused, and every reason is one phrase, so clearing part of a page can only take
   reasons away. The engagement-time definition itself is *not* checked in code, because no check
   could: it is a standard for the model to aim at, and the prompt is where a standard like that
@@ -233,7 +233,7 @@ to be drawn in a given hour.
 - **The standard is [WCAG 2.2 level AA](https://www.w3.org/TR/WCAG22/).** Every check names the
   success criterion it stands for, so the set can grow without becoming a matter of taste.
 - **Stated in the prompt.** The `Rules:` block every run is given carries this as one `AXIOM`
-  among four. It asks for more than any validator can judge — fluid layout
+  among five. It asks for more than any validator can judge — fluid layout
   with nothing overflowing sideways at 320px wide, tap targets around 44px, text contrast at 4.5:1 —
   because the prompt can ask for what code cannot see.
 - **Held to in code.** `check_accessibility` in
@@ -274,7 +274,7 @@ to be drawn in a given hour.
 Everything this site keeps in a visitor's browser lives in one JSON document, every page reads and
 writes it through one shared accessor, and a very small *state* menu in the corner of every page
 takes that document out, puts someone else's in, or throws it away — so a person can collect their
-skies here and hand one to someone else. Like the three above it, it is an invariant of the
+skies here and hand one to someone else. Like the four above it, it is an invariant of the
 iteration process rather than a one-off tidy-up.
 
 - **One line per page.** Every page carries `<script src='js/state.js'></script>` in its `<head>`,
@@ -318,7 +318,7 @@ iteration process rather than a one-off tidy-up.
   [`.github/scripts/make_interesting.py`](.github/scripts/make_interesting.py) refuses a plan that
   leaves a page without the line, and `pages_touching_storage` refuses one in which a page — or a
   shared script it loads — reaches for the browser's storage behind the store's back, because that
-  would be state the meta menu could not export. As with the other three, only what the run itself
+  would be state the meta menu could not export. As with the other four, only what the run itself
   breaks is refused.
 - **The file is out of reach.** `js/state.js` is in `FIXED_FILES` beside the analytics files: never
   shown to a model, refused outright as a write or a delete, and skipping the prompt budget. A
