@@ -456,7 +456,7 @@ class WholeSiteReviewTest(unittest.TestCase):
 
     def test_every_run_is_asked_to_weigh_the_site_as_a_whole_first(self):
         prompt = self.prompt()
-        self.assertIn("Begin every run", prompt)
+        self.assertIn("Every run begins this way", prompt)
         self.assertIn("look at the site as a whole", prompt)
         self.assertLess(prompt.index("site as a whole"), prompt.index("ADD something"),
                         "the review has to come before the choice of change")
@@ -465,8 +465,10 @@ class WholeSiteReviewTest(unittest.TestCase):
         prompt = self.prompt().lower()
         self.assertIn("add something", prompt)
         self.assertIn("federate", prompt)
-        for move in ["shared files", "css/site.css", "js/site.js", "header and navigation",
-                     "visual language", "merge pages that overlap", "retire"]:
+        # The source paths a run actually writes, and the built path a page links (issue #36).
+        for move in ["shared files", "css/site.scss", "css/site.css", "js/site.js",
+                     "header and navigation", "visual language", "merge pages that overlap",
+                     "retire"]:
             with self.subTest(move=move):
                 self.assertIn(move, prompt)
 
@@ -512,6 +514,129 @@ class WholeSiteReviewTest(unittest.TestCase):
         # Lifting the repeated parts into "css/site.css" and "js/site.js" and relinking every page
         # of a site that size takes len + 2 changes; the limit must not forbid it.
         self.assertGreaterEqual(mi.MAX_CHANGES, len(self.GROWN_SITE) + 2)
+
+
+class SingleExperienceTest(SiteDirTestCase):
+    """Issue #36: every run is told, every single time, to envision the site as one whole and then
+    re-federate it aggressively, so what is published is one functioning excellent experience and
+    not a pile of pages that happen to share a domain.
+
+    Issue #16 made the holistic pass a habit and federation a permitted outcome. This is the
+    stronger version: the pass is unconditional, re-federating is the default work of a run, and
+    adding is the exception that still has to arrive federated."""
+
+    def prompt(self, omitted=()):
+        return mi.build_prompt([("index.html", "<h1>hi</h1>")], omitted)
+
+    def test_the_whole_is_named_as_its_own_standard(self):
+        # Spelled out here rather than imported, so rewording WHOLE into something that no longer
+        # asks for one single experience fails this test instead of passing quietly. Issue #36,
+        # question 2: MISSION carries the word "single" too, since it is the line read at both ends.
+        self.assertEqual(mi.WHOLE, "a single functioning excellent experience")
+        self.assertIn("single coherent whole", mi.MISSION)
+        self.assertTrue(mi.MISSION.startswith("make the website more interesting"))
+
+    def test_every_run_envisions_the_whole_before_it_chooses_anything(self):
+        prompt = self.prompt()
+        self.assertIn("ENVISION THE WHOLE FIRST", prompt)
+        for insistence in ["Every run begins this way", "with no exceptions",
+                           "before you choose anything"]:
+            with self.subTest(insistence=insistence):
+                self.assertIn(insistence, prompt)
+        # The pass comes before either kind of change and before the Rules block, so a run holds
+        # the aim while the choice is still open rather than as a constraint on a settled one.
+        for later in ["RE-FEDERATE", "ADD something", "Rules:"]:
+            with self.subTest(later=later):
+                self.assertLess(prompt.index("ENVISION THE WHOLE FIRST"), prompt.index(later))
+
+    def test_the_one_experience_is_spelled_out_rather_than_gestured_at(self):
+        envision = self.prompt()
+        envision = envision[envision.index("ENVISION THE WHOLE FIRST"):envision.index("RE-FEDERATE")]
+        for through_line in ["one navigation", "one visual language", "one through-line"]:
+            with self.subTest(through_line=through_line):
+                self.assertIn(through_line, envision)
+        self.assertIn(mi.WHOLE, envision)
+
+    def test_re_federating_is_the_normal_work_of_a_run(self):
+        # Issue #36, question 1: not "federating is also welcome" but "this is what a run does".
+        prompt = self.prompt()
+        self.assertIn("RE-FEDERATE, AGGRESSIVELY", prompt)
+        for posture in ["the normal work of a run, not an alternative to it",
+                        "every run should leave the site more of a single piece than it found it",
+                        "Be aggressive about it",
+                        "the consolidation that is overdue rather than the one that is merely easy"]:
+            with self.subTest(posture=posture):
+                self.assertIn(posture, prompt)
+
+    def test_re_federating_names_every_shared_file_it_reaches(self):
+        federate = self.prompt()
+        federate = federate[federate.index("RE-FEDERATE"):federate.index("ADD something")]
+        for target in [f"{mi.INCLUDES_DIR}/", f"{mi.SASS_DIR}/", "css/site.scss", "css/site.css",
+                       "js/site.js"]:
+            with self.subTest(target=target):
+                self.assertIn(target, federate)
+        for move in ["markup, styles and behaviour that the pages repeat",
+                     "the same header and navigation", "one visual language and hold every page to it"]:
+            with self.subTest(move=move):
+                self.assertIn(move, federate)
+
+    def test_re_federating_reaches_as_far_as_merging_and_retiring_pages(self):
+        # Issue #36, question 4: yes -- the pages themselves, not only the markup they share.
+        federate = self.prompt()
+        federate = federate[federate.index("RE-FEDERATE"):federate.index("ADD something")]
+        self.assertIn("Merge pages that overlap", federate)
+        self.assertIn("retire the ones that no longer earn their place", federate)
+        self.assertIn("fewer pages that belong together than as more that do not", federate)
+
+    def test_adding_is_the_exception_and_arrives_already_federated(self):
+        add = self.prompt()
+        add = add[add.index("ADD something"):add.index("How the site is built")]
+        self.assertIn("the exception rather than the default", add)
+        self.assertIn("never a way around the paragraph above", add)
+        self.assertIn("arrives already federated, in the same run", add)
+        self.assertIn("A page that stands apart leaves the site less of a whole", add)
+
+    def test_the_aim_is_in_hand_at_both_ends_of_the_run(self):
+        # The restatement pattern this repository uses for its standards (see EngagementTimeTest):
+        # stated before a run chooses what to do, and again in the line it reads last.
+        prompt = self.prompt()
+        self.assertGreaterEqual(prompt.count(mi.WHOLE), 2)
+        self.assertLess(prompt.index(mi.WHOLE), prompt.index("Rules:"))
+        last = prompt[prompt.index(f"This run's mission: {mi.MISSION}"):]
+        self.assertIn(f"Envision all of the above as {mi.WHOLE}", last)
+        self.assertIn("re-federate what is already there, aggressively", last)
+        self.assertIn("add something new only as part of the same whole", last)
+
+    def test_a_federation_the_run_cannot_finish_is_carried_on_by_the_next(self):
+        # Aggressive, not reckless: the answer limit has not moved, so the way to be aggressive
+        # about something too big for one answer is to stage it, never to leave it half done.
+        prompt = self.prompt()
+        self.assertIn("coherent stages", prompt)
+        self.assertIn("Leave the site working at the end of the run", prompt)
+
+    def test_the_files_a_run_cannot_see_still_count_as_part_of_the_whole(self):
+        prompt = self.prompt(["hidden.html"])
+        self.assertIn("count them as part of the piece when you weigh the site as a whole", prompt)
+        self.assertIn("carried on by a later run", prompt)
+
+    def test_the_aim_is_a_stated_standard_and_not_a_fifth_axiom(self):
+        # Issue #36, question 3: prompt-only. No check could settle whether a site reads as one
+        # experience, so the four axioms are still the whole of what the code refuses -- a page
+        # that shares nothing with the rest is accepted, exactly as before, and the prompt is
+        # where the aim lives. (The same reasoning INTERESTING is left uncoded for.)
+        (self.site / "index.html").write_text(home("sitemap.xml", "stranger.html", "error.html"))
+        (self.site / "sitemap.xml").write_text(sitemap("index.html", "error.html"))
+        stranger = page(title="stranger", css=".stranger { color: #fff; background: #000; }")
+        ops = mi.validate_plan({
+            "summary": "Added a page that shares nothing with the rest of the site.",
+            "files": [{"path": "stranger.html", "content": stranger},
+                      {"path": "sitemap.xml",
+                       "content": sitemap("index.html", "error.html", "stranger.html")}],
+        })
+        self.assertEqual(sorted(t.name for _, t, _ in ops), ["sitemap.xml", "stranger.html"])
+        self.assertEqual(sorted(name for name in dir(mi) if name.startswith("check_")),
+                         ["check_accessibility", "check_analytics", "check_cadence",
+                          "check_reachability"])
 
 
 class BuildPipelinePromptTest(unittest.TestCase):
