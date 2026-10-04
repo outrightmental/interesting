@@ -25,6 +25,10 @@
   var passportNextLinkEl = document.getElementById('constellation-passport-next-link');
   var passportRandomBtn = document.getElementById('constellation-passport-random');
   var passportResetBtn = document.getElementById('constellation-passport-reset');
+  var honorsStatusEl = document.getElementById('constellation-honors-status');
+  var honorsListEl = document.getElementById('constellation-honors-list');
+  var honorsPreviewBtn = document.getElementById('constellation-honors-preview');
+  var honorsClearBtn = document.getElementById('constellation-honors-clear');
 
   if (!statusEl || !linkEl || !store || typeof store.read !== 'function') {
     return;
@@ -65,6 +69,7 @@
 
   // Kept in the shared state document to track a visitor's cross-world relay progress.
   var RELAY = 'constellation-relay';
+  var HONORS_LIMIT = 12;
 
   // For visitors whose latest reading points into the sky cluster, keep that as a preferred branch.
   var ORIENTATION_WORLD = {
@@ -85,14 +90,8 @@
     'Linked run: one saved sky can become weather, audio, ritual and archive in sequence.'
   ];
 
-  var RELAY_TITLES = [
-    'midnight cartographer',
-    'weather listener',
-    'orbital signal-keeper',
-    'lantern surveyor',
-    'archive runner',
-    'echo gardener'
-  ];
+  var RELAY_RANK = ['midnight', 'orbital', 'glasshouse', 'echo', 'weather', 'lantern', 'archive', 'signal'];
+  var RELAY_ROLE = ['cartographer', 'listener', 'forger', 'keeper', 'weaver', 'runner', 'gardener', 'navigator'];
 
   // How many worlds the line names before it stops counting them out.
   var NAMED = 2;
@@ -201,85 +200,49 @@
     return out;
   }
 
-  function relayTitle(stars, loops) {
-    return RELAY_TITLES[(stars + loops) % RELAY_TITLES.length];
+  function sanitizeTitles(list) {
+    var out = [];
+    if (!Array.isArray(list)) return out;
+    for (var i = 0; i < list.length; i++) {
+      if (typeof list[i] !== 'string') continue;
+      var title = list[i].trim();
+      if (!title) continue;
+      if (out.indexOf(title) !== -1) continue;
+      out.push(title);
+      if (out.length >= HONORS_LIMIT) break;
+    }
+    return out;
   }
 
-  var inCircuit = circuitIndex(currentFile) !== -1;
-
-  // Track relay progress across constellation worlds in the one shared state document.
-  var relayRead = store.read(RELAY, { visited: [], completed: 0 });
-  var relayStatus = relayRead.status;
-  var relayPersisted = true;
-  var relay = { visited: [], completed: 0, reachedNow: false };
-
-  if (relayStatus === 'ok' && relayRead.value && typeof relayRead.value === 'object') {
-    relay.visited = normalizeVisited(relayRead.value.visited);
-    relay.completed = typeof relayRead.value.completed === 'number' && relayRead.value.completed > 0
-      ? Math.floor(relayRead.value.completed)
-      : 0;
+  function mintRelayTitle(stars, loops) {
+    var count = Math.max(1, stars || 0);
+    var rank = RELAY_RANK[(count + loops * 3) % RELAY_RANK.length];
+    var role = RELAY_ROLE[(loops + count * 5) % RELAY_ROLE.length];
+    return rank + ' ' + role + ' · loop ' + loops + ' · ' + count + ' star' + (count === 1 ? '' : 's');
   }
 
-  if (inCircuit && (relayStatus === 'ok' || relayStatus === 'missing')) {
-    var before = relay.visited.length;
-    if (relay.visited.indexOf(currentFile) === -1) {
-      relay.visited.push(currentFile);
-    }
-    if (before < CIRCUIT.length && relay.visited.length === CIRCUIT.length) {
-      relay.reachedNow = true;
-      relay.completed += 1;
-    }
-    relayPersisted = store.set(RELAY, {
-      visited: relay.visited,
-      completed: relay.completed
-    });
-  }
+  function setPassportProgress(visitedCount, totalCount) {
+    var ratio = totalCount ? (visitedCount / totalCount) : 0;
+    var width = Math.max(0, Math.min(100, ratio * 100));
 
-  function relayStory(destination, stars) {
-    if (!inCircuit) return '';
-
-    if (relayStatus === 'unreadable') {
-      return 'Relay memory is unreadable in this browser context.';
+    if (passportMeterEl) {
+      passportMeterEl.setAttribute('aria-valuenow', String(visitedCount));
+      passportMeterEl.setAttribute('aria-valuemax', String(totalCount));
     }
-    if (relayStatus === 'unavailable' || !relayPersisted) {
-      return 'Relay marks are in memory only for this visit.';
+    if (passportFillEl) {
+      passportFillEl.style.width = width.toFixed(1) + '%';
     }
-
-    var marked = relay.visited.length;
-    if (!marked) {
-      return 'No relay marks yet. Start from any sky world and keep moving.';
+    if (passportCountEl) {
+      passportCountEl.textContent = visitedCount + ' of ' + totalCount + ' relay worlds marked'
+        + (relay.completed ? ' · loops completed ' + relay.completed + '.' : '.');
     }
-
-    var names = relay.visited.map(circuitLabel).join(' -> ');
-    if (marked >= CIRCUIT.length) {
-      var title = relayTitle(stars, relay.completed || 1);
-      return 'Relay complete: ' + names + '. Title unlocked: ' + title + '.';
-    }
-
-    var left = CIRCUIT.length - marked;
-    var prompt = destination ? (' Next hop: ' + destination.where + '.') : '';
-    return marked + ' of ' + CIRCUIT.length + ' relay worlds marked (' + names + '). '
-      + left + ' left.' + prompt;
   }
 
   function updatePassportProgress() {
     if (!inCircuit) return;
 
     var marked = relay.visited.length;
-    var ratio = CIRCUIT.length ? (marked / CIRCUIT.length) : 0;
-    var width = Math.max(0, Math.min(100, ratio * 100));
-
-    if (passportMeterEl) {
-      passportMeterEl.setAttribute('aria-valuenow', String(marked));
-      passportMeterEl.setAttribute('aria-valuemax', String(CIRCUIT.length));
-    }
-    if (passportFillEl) {
-      passportFillEl.style.width = width.toFixed(1) + '%';
-    }
-    if (passportCountEl) {
-      passportCountEl.textContent = marked + ' of ' + CIRCUIT.length + ' relay worlds marked'
-        + (relay.completed ? ' · loops completed ' + relay.completed + '.' : '.');
-    }
+    setPassportProgress(marked, CIRCUIT.length);
 
     if (passportNextLinkEl) {
       var destination = circuitDestination(preferredWorldFromReading());
@@ -303,12 +266,125 @@
     return countStars(saved.value);
   }
 
+  function normalizeRelay(value) {
+    var normalized = {
+      visited: [],
+      completed: 0,
+      titles: [],
+      reachedNow: false
+    };
+
+    if (!value || typeof value !== 'object') return normalized;
+
+    normalized.visited = normalizeVisited(value.visited);
+    normalized.completed = typeof value.completed === 'number' && value.completed > 0
+      ? Math.floor(value.completed)
+      : 0;
+    normalized.titles = sanitizeTitles(value.titles);
+    return normalized;
+  }
+
+  function saveRelay() {
+    return store.set(RELAY, {
+      visited: relay.visited,
+      completed: relay.completed,
+      titles: relay.titles
+    });
+  }
+
+  function addRelayTitle(title) {
+    if (!title) return;
+    relay.titles = relay.titles.filter(function (item) { return item !== title; });
+    relay.titles.unshift(title);
+    if (relay.titles.length > HONORS_LIMIT) {
+      relay.titles = relay.titles.slice(0, HONORS_LIMIT);
+    }
+  }
+
+  function relayStory(destination, stars) {
+    if (!inCircuit) return '';
+
+    if (relayStatus === 'unreadable') {
+      return 'Relay memory is unreadable in this browser context.';
+    }
+    if (relayStatus === 'unavailable' || !relayPersisted) {
+      return 'Relay marks are in memory only for this visit.';
+    }
+
+    var marked = relay.visited.length;
+    if (!marked) {
+      return 'No relay marks yet. Start from any sky world and keep moving.';
+    }
+
+    var names = relay.visited.map(circuitLabel).join(' -> ');
+    if (marked >= CIRCUIT.length) {
+      var latestHonor = relay.titles.length ? (' Latest honor: ' + relay.titles[0] + '.') : '';
+      return 'Relay complete: ' + names + '.' + latestHonor;
+    }
+
+    var left = CIRCUIT.length - marked;
+    var prompt = destination ? (' Next hop: ' + destination.where + '.') : '';
+    return marked + ' of ' + CIRCUIT.length + ' relay worlds marked (' + names + '). '
+      + left + ' left.' + prompt;
+  }
+
+  function disableHonorControls(disabled) {
+    if (honorsPreviewBtn) honorsPreviewBtn.disabled = disabled;
+    if (honorsClearBtn) honorsClearBtn.disabled = disabled;
+  }
+
+  function renderHonors(stars) {
+    if (!honorsStatusEl || !honorsListEl) return;
+
+    while (honorsListEl.firstChild) {
+      honorsListEl.removeChild(honorsListEl.firstChild);
+    }
+
+    if (relayStatus === 'unreadable') {
+      honorsStatusEl.textContent = 'Relay honor memory is unreadable in this browser context.';
+      var unreadable = document.createElement('li');
+      unreadable.className = 'constellation-honors-empty';
+      unreadable.textContent = 'Clear state from the menu to start a fresh honor board.';
+      honorsListEl.appendChild(unreadable);
+      disableHonorControls(true);
+      return;
+    }
+
+    disableHonorControls(false);
+
+    if (!relay.titles.length) {
+      var empty = document.createElement('li');
+      empty.className = 'constellation-honors-empty';
+      empty.textContent = 'No honors minted yet. Complete a full relay loop to earn one.';
+      honorsListEl.appendChild(empty);
+    } else {
+      for (var i = 0; i < relay.titles.length; i++) {
+        var item = document.createElement('li');
+        item.textContent = relay.titles[i];
+        honorsListEl.appendChild(item);
+      }
+    }
+
+    var persistence = '';
+    if (relayStatus === 'unavailable' || !relayPersisted) {
+      persistence = ' This board is in memory only for this visit.';
+    } else {
+      persistence = ' Honors are saved in this browser.';
+    }
+
+    var previewLoop = relay.completed + 1;
+    var preview = mintRelayTitle(stars, previewLoop);
+
+    honorsStatusEl.textContent = relay.titles.length
+      ? (relay.titles.length + ' honor' + (relay.titles.length === 1 ? '' : 's') + ' minted. Next preview: ' + preview + '.' + persistence)
+      : ('Next honor preview: ' + preview + '.' + persistence);
+  }
+
   function resetRelayMarks() {
     relay.visited = [];
-    relay.completed = 0;
     relay.reachedNow = false;
 
-    relayPersisted = store.set(RELAY, { visited: [], completed: 0 });
+    relayPersisted = saveRelay();
     updatePassportProgress();
 
     var destination = circuitDestination(preferredWorldFromReading());
@@ -332,6 +408,29 @@
     } else {
       trailEl.textContent = 'Relay reset complete. Place one star in the wish constellation to start a fresh run.';
     }
+
+    renderHonors(stars);
+  }
+
+  var inCircuit = circuitIndex(currentFile) !== -1;
+
+  // Track relay progress across constellation worlds in the one shared state document.
+  var relayRead = store.read(RELAY, { visited: [], completed: 0, titles: [] });
+  var relayStatus = relayRead.status;
+  var relayPersisted = true;
+  var relay = normalizeRelay(relayRead.value);
+
+  if (inCircuit && (relayStatus === 'ok' || relayStatus === 'missing')) {
+    var before = relay.visited.length;
+    if (relay.visited.indexOf(currentFile) === -1) {
+      relay.visited.push(currentFile);
+    }
+    if (before < CIRCUIT.length && relay.visited.length === CIRCUIT.length) {
+      relay.reachedNow = true;
+      relay.completed += 1;
+      addRelayTitle(mintRelayTitle(currentStoredStars(), relay.completed));
+    }
+    relayPersisted = saveRelay();
   }
 
   if (passportRandomBtn) {
@@ -339,6 +438,25 @@
   }
   if (passportResetBtn) {
     passportResetBtn.addEventListener('click', resetRelayMarks);
+  }
+  if (honorsPreviewBtn) {
+    honorsPreviewBtn.addEventListener('click', function () {
+      var stars = currentStoredStars();
+      var preview = mintRelayTitle(stars, relay.completed + 1);
+      if (honorsStatusEl) {
+        honorsStatusEl.textContent = 'Next honor preview: ' + preview + '.';
+      }
+    });
+  }
+  if (honorsClearBtn) {
+    honorsClearBtn.addEventListener('click', function () {
+      relay.titles = [];
+      relayPersisted = saveRelay();
+      renderHonors(currentStoredStars());
+      if (honorsStatusEl) {
+        honorsStatusEl.textContent = 'Honor board cleared. Complete another loop to mint a new one.';
+      }
+    });
   }
 
   // 'unavailable' and 'unreadable' are the whole document's business rather than any one name's, so
@@ -375,6 +493,7 @@
       );
       updatePassportProgress();
     }
+    renderHonors(stars);
     return;
   }
   if (trouble === 'unreadable') {
@@ -387,6 +506,7 @@
       );
       updatePassportProgress();
     }
+    renderHonors(stars);
     return;
   }
 
@@ -400,6 +520,7 @@
       );
       updatePassportProgress();
     }
+    renderHonors(stars);
     return;
   }
 
@@ -430,9 +551,13 @@
       );
       updatePassportProgress();
       if (relay.reachedNow) {
-        trailEl.textContent = 'Relay completed across all eight constellation worlds. Move one star and run the whole circuit again for a different title.';
+        var honor = relay.titles.length ? relay.titles[0] : mintRelayTitle(stars, relay.completed || 1);
+        trailEl.textContent = 'Relay completed across all eight constellation worlds. Honor minted: '
+          + honor + '. Move one star and run the whole circuit again for a new one.';
       }
     }
+
+    renderHonors(stars);
     return;
   }
 
@@ -451,7 +576,10 @@
     if (found[i].kept.href !== currentFile) {
       linkEl.setAttribute('href', found[i].kept.href);
       linkEl.textContent = 'back to ' + found[i].kept.where;
+      renderHonors(stars);
       return;
     }
   }
+
+  renderHonors(stars);
 })();

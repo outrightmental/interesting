@@ -115,6 +115,55 @@
   padding: 0.32rem 0.68rem;
 }
 
+// Shared honor board for completed relay loops, so the circuit has a persistent collectible thread.
+.constellation-honors {
+  margin-top: 0.55rem;
+  border: 1px solid vars.$hairline;
+  border-radius: vars.$radius-panel;
+  background: rgba(7, 10, 20, 0.5);
+  padding: 0.62rem;
+}
+
+.constellation-honors-title {
+  margin: 0;
+  color: var(--accent2);
+  font-size: 0.76rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.constellation-honors-status {
+  margin: 0.42rem 0 0;
+  color: #d8e6ff;
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
+.constellation-honors-list {
+  margin: 0.52rem 0 0;
+  padding-left: 1.1rem;
+  color: #d8e6ff;
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.constellation-honors-list li {
+  margin: 0.2rem 0;
+}
+
+.constellation-honors-list .constellation-honors-empty {
+  color: var(--muted);
+}
+
+.constellation-honors-controls {
+  margin-top: 0.52rem;
+}
+
+.constellation-honors-controls button {
+  font-size: 0.78rem;
+  padding: 0.32rem 0.68rem;
+}
+
 // Shared onward loop for the constellation worlds, federated into one include so those pages
 // keep one coherent cross-page route without repeating hand-written link clusters.
 .footer-circuit {
@@ -153,14 +202,16 @@
 
 @media (max-width: 620px) {
   .constellation-passport-controls,
-  .constellation-quest-controls {
+  .constellation-quest-controls,
+  .constellation-honors-controls {
     flex-direction: column;
   }
 
   .constellation-passport-controls .action,
   .constellation-passport-controls button,
   .constellation-quest-controls .action,
-  .constellation-quest-controls button {
+  .constellation-quest-controls button,
+  .constellation-honors-controls button {
     width: 100%;
   }
 }
