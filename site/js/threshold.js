@@ -427,7 +427,9 @@
       alternates: order.slice(1, 4),
       scores: scores,
       signals: s,
-      queried: !!answer
+      // Where the reading came from, which is worth saying out loud: a reading taken from the
+      // clock alone is a guess the site has not earned yet, and should not be dressed up as one.
+      source: answer ? 'answer' : 'signals'
     };
   }
 
@@ -456,7 +458,8 @@
     if (answer) add(drift, answer, 1);
     state.drift = drift;
     state.orientation = reading.orientation ? reading.orientation.id : null;
-    save({ visits: state.visits, last: Date.now(), drift: state.drift,
+    state.last = Date.now();
+    save({ visits: state.visits, last: state.last, drift: state.drift,
            recent: state.recent, orientation: state.orientation });
     transmogrify(reading.orientation);
     return reading;
@@ -800,7 +803,9 @@
   function describe(reading) {
     if (!reading || !reading.orientation) return 'Nothing read yet.';
     var o = reading.orientation;
-    var lead = reading.queried ? 'Read just now as ' : 'Carried over as ';
+    var lead = reading.source === 'answer' ? 'Read just now as '
+      : (reading.source === 'memory' ? 'Carried over from your last visit as '
+        : 'Guessed from the clock and the zone, which is not much to go on: ');
     return lead + o.name + ' -- ' + o.pull + '.';
   }
 
@@ -832,8 +837,9 @@
         + ' · ' + s.sinceText;
     }
 
-    var current = readingFor(null);
-    show(state.orientation ? { orientation: ORIENTATION_BY_ID[state.orientation], queried: false } : current);
+    show(state.orientation
+      ? { orientation: ORIENTATION_BY_ID[state.orientation], source: 'memory' }
+      : readingFor(null));
 
     function query() {
       if (!probeHost) return;
@@ -884,6 +890,9 @@
   /* ---- start ------------------------------------------------------------------------------ */
 
   state.visits += 1;
+  // sinceLast already holds the gap before this arrival, so the stored timestamp can move to now:
+  // what the next visit wants to know is how long it has been since this one.
+  state.last = Date.now();
   transmogrify(state.orientation ? ORIENTATION_BY_ID[state.orientation] : null);
   save({ visits: state.visits, last: state.last, drift: state.drift,
          recent: state.recent, orientation: state.orientation });
@@ -897,7 +906,7 @@
     signals: signals,
     reading: function () {
       return state.orientation
-        ? { orientation: ORIENTATION_BY_ID[state.orientation], queried: false, signals: signals() }
+        ? { orientation: ORIENTATION_BY_ID[state.orientation], source: 'memory', signals: signals() }
         : readingFor(null);
     },
     mount: mount,
