@@ -135,7 +135,8 @@ footerNote: every page, no default
 
   <script>
     (function () {
-      var SKY_KEY = 'interesting_wish_constellation_v1';
+      var state = window.interestingState;
+      var SKY = 'constellation';
       var memoryEl = document.getElementById('memory');
       var routeEl = document.getElementById('route');
       var randomBtn = document.getElementById('random');
@@ -161,45 +162,42 @@ footerNote: every page, no default
         'error.html'
       ];
 
-      function savedStars() {
-        try {
-          var raw = localStorage.getItem(SKY_KEY);
-          if (!raw) return null;
-          var parsed = JSON.parse(raw);
-          if (!Array.isArray(parsed)) return null;
-          return parsed.filter(function (s) {
-            return s && typeof s.x === 'number' && typeof s.y === 'number' && typeof s.text === 'string';
-          }).length;
-        } catch (e) {
-          return undefined;
-        }
-      }
+      // What the console says when there is no shared sky to count, and where to go next. The
+      // shared store says which of the four it is (see js/state.js).
+      var EMPTY_NOTES = {
+        unavailable: ['Local storage is unavailable here, so cross-page sky memory cannot be read.',
+          'You can still explore every page, but shared constellation state is unavailable in this context.'],
+        unreadable: ['Saved data exists but is unreadable. Rebuild your constellation on the home page.',
+          'Suggested route: home constellation → refresh this map → continue to any lab.'],
+        missing: ['No saved stars yet. Make your first constellation on the home page.',
+          'Suggested route: home constellation → weather lab → sky archive oracle.'],
+        ok: ['No readable stars in the shared sky yet. Make your first constellation on the home page.',
+          'Suggested route: home constellation → weather lab → sky archive oracle.']
+      };
 
-      function report() {
-        var api = window.threshold;
-        var reading = api ? api.reading() : null;
-        var orientation = reading && reading.orientation;
-        var stars = savedStars();
+      function loadCount() {
+        var saved = state.read(SKY, []);
+        var stored = Array.isArray(saved.value) ? saved.value : [];
+        var count = stored.filter(function (s) {
+          return s && typeof s.x === 'number' && typeof s.y === 'number' && typeof s.text === 'string';
+        }).length;
 
-        if (stars === undefined) {
-          memoryEl.textContent = 'Local storage is unavailable here, so nothing about you can be read or kept.';
+        if (!count) {
+          memoryEl.textContent = EMPTY_NOTES[saved.status][0];
           memoryEl.className = 'warn';
-        } else if (orientation) {
-          memoryEl.textContent = 'Read as ' + orientation.name + ' — ' + orientation.pull + '.'
-            + (api ? ' ' + api.signals().sinceText + '.' : '')
-            + (stars ? ' ' + stars + ' saved star' + (stars === 1 ? '' : 's') + ' under the sky.' : '');
-          memoryEl.className = 'good';
-        } else {
-          memoryEl.textContent = 'Nothing read about you yet'
-            + (stars ? ', though there are ' + stars + ' saved stars under the sky.' : '. Every world below is equally on offer.');
-          memoryEl.className = 'warn';
+          routeEl.textContent = EMPTY_NOTES[saved.status][1];
+          return;
         }
 
-        if (orientation) {
-          routeEl.textContent = 'Suggested route: ' + orientation.worldName
-            + ', then whichever of these looks least like it.';
+        memoryEl.textContent = 'Shared memory detected: ' + count + ' saved star' + (count === 1 ? '' : 's') + ' available across labs.';
+        memoryEl.className = 'good';
+
+        if (count < 4) {
+          routeEl.textContent = 'Best next step: add a few more stars on home, then test echo chamber and lantern ritual.';
+        } else if (count < 12) {
+          routeEl.textContent = 'Good constellation density: try diary replay, then forge a sigil in sky archive oracle.';
         } else {
-          routeEl.textContent = 'Suggested route: take the query at the threshold, or skip it entirely and pick a world by its name alone.';
+          routeEl.textContent = 'Dense sky detected: orbital weaver and weather lab will generate richer structures.';
         }
       }
 
