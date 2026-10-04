@@ -16,16 +16,15 @@ iterate a more interesting website
   for a page that is not there gets `error.html` back, with a 404, from a CloudFront custom error
   response.
 - **The build** — [`build.mjs`](build.mjs) turns `/site` into the artifact that is published to an
-  S3 bucket behind CloudFront at
-  [makeitmoreinteresting.com](https://makeitmoreinteresting.com/), in a
-  throwaway folder outside the repository. Nothing generated is ever committed. The deploy changes
-  one thing on the way — the GA4 measurement ID — and copies everything else as the build left it.
-  See [Building the site](#building-the-site).
+  S3 bucket behind CloudFront at [makeitmoreinteresting.com](https://makeitmoreinteresting.com/),
+  in a throwaway folder outside the repository. Nothing generated is ever committed. The deploy
+  changes one thing on the way — the GA4 measurement ID — and copies everything else as the build
+  left it. See [Building the site](#building-the-site).
 - **`/infra`** — the hosting, as code. [`infra/`](infra) is a self-contained Terraform project
   that owns the bucket, the CloudFront distribution, the certificate, the
-  `makeitmoreinteresting.com` hosted zone and the records in it, the deploy IAM
-  user, the Actions secrets the deploy uses — and this repository itself. It is applied by hand:
-  no workflow here runs `terraform plan` or `apply`. See [`infra/README.md`](infra/README.md).
+  `makeitmoreinteresting.com` hosted zone and the records in it, the deploy IAM user, the Actions
+  secrets the deploy uses — and this repository itself. It is applied by hand: no workflow here
+  runs `terraform plan` or `apply`. See [`infra/README.md`](infra/README.md).
 - **Test, then deploy** — [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) is the
   pipeline for `main`. Every commit that lands there is tested
   ([`.github/workflows/test.yml`](.github/workflows/test.yml)), and when the tests pass, `/site` is
@@ -509,13 +508,14 @@ the plan allows, and makes one run comparable with the next.
 
 - **Hosting** — run `terraform apply` in [`infra/`](infra) once, by hand. That creates the bucket,
   the distribution, the certificate, the hosted zone and its records, and sets the five repository
-  secrets the deploy reads
-  (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_S3_BUCKET`,
+  secrets the deploy reads (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_S3_BUCKET`,
   `AWS_CLOUDFRONT_DISTRIBUTION_ID` and `GA_MEASUREMENT_ID`). No secret is set by hand: they come
   from the same apply that creates or names what they point at, so they cannot drift from it.
-  [`infra/README.md`](infra/README.md) has the order and the costs. Until that apply has run, the
-  deploy says so in its summary and finishes green instead of failing hourly — so run it around
-  the time this lands, because GitHub Pages is retired and nothing else publishes the site.
+  [`infra/README.md`](infra/README.md) has the order and the costs — including the one step AWS
+  cannot do for itself: pointing `makeitmoreinteresting.com`'s nameservers at the hosted zone, at
+  the registrar, before the certificate can be validated. Until that apply has run, the deploy
+  says so in its summary and finishes green instead of failing hourly — so run it around the time
+  this lands, because GitHub Pages is retired and nothing else publishes the site.
 - Actions must be allowed to push to the default branch (the AI's commit uses `GITHUB_TOKEN`).
 - GitHub Copilot must accept the workflow's requests. Either of these works:
   - **Organization:** as an owner, open the organization's *Settings → Copilot → Policies*, enable

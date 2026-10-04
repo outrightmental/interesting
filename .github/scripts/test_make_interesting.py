@@ -2361,11 +2361,12 @@ class DomainTest(unittest.TestCase):
     """Where the site is published, and the one folder that decides it.
 
     Issue #40 moved the site from interesting.outright.io to its own apex domain,
-    makeitmoreinteresting.com. The move touched no page, because /site names no domain at all:
-    every link in it is relative and sitemap.xml's <loc> values are relative too, deliberately, so
-    the same source serves a fork, a local copy and the live site. These tests hold both halves of
-    that -- /infra declares the domain in one place, /site declares it nowhere -- so the next move
-    is a change to locals.tf and the prose that quotes it, and nothing else.
+    makeitmoreinteresting.com. The move touched no page, because /site addresses itself by no
+    domain: every link in it is relative and sitemap.xml's <loc> values are relative too,
+    deliberately, so the same source serves a fork, a local copy and the live site. These tests
+    hold both halves of that -- /infra declares the domain in one place, /site pins itself to no
+    origin -- so the next move is a change to locals.tf and the prose that quotes it, and nothing
+    else.
     """
 
     DOMAIN = "makeitmoreinteresting.com"
@@ -2448,14 +2449,17 @@ class DomainTest(unittest.TestCase):
             self.assertIn(f"**https://{self.DOMAIN}/**", readme.read_text(),
                           "the README's headline link is the live site")
 
-    def test_the_site_itself_names_no_domain_of_its_own(self):
+    def test_the_site_itself_pins_itself_to_no_origin(self):
+        # A page may say the domain's name in prose; what it may not do is address itself by it.
+        # `//domain` catches https://, http:// and protocol-relative alike. The retired host is
+        # refused outright, in prose or not: it does not resolve any more.
         site = self.repo / "site"
         if not site.is_dir():
             self.skipTest(f"no site directory at {site}")
         for path, text in self.text_files(site):
-            for domain in (self.DOMAIN, self.RETIRED):
-                self.assertNotIn(domain, text,
-                                 f"{path} hard-codes an origin; /site is served under any")
+            self.assertNotIn(f"//{self.DOMAIN}", text,
+                             f"{path} hard-codes its own origin; /site is served under any")
+            self.assertNotIn(self.RETIRED, text, f"{path} names the retired host")
 
     def test_the_sitemap_keeps_relative_locations(self):
         sitemap_xml = self.repo / "site" / "sitemap.xml"

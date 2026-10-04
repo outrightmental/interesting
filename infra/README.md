@@ -212,10 +212,10 @@ CloudFront is the site's only publisher.
 
 A static site behind CloudFront's `PriceClass_100` with a handful of visitors rounds to pennies
 per month: S3 storage (`site/` is a few hundred KB), CloudFront requests, one Route53 query
-volume. The one line that is not pennies is the hosted zone, at $0.50 a month — it used to be the
-shared `outright.io` zone, already paid for; `makeitmoreinteresting.com`'s is this property's own
-(`dns.tf`), and so is its bill. Domain registration is the registrar's, not AWS's, and is not
-managed here.
+volume. The one fixed charge rather than a usage one is the hosted zone, at $0.50 a month: it used
+to be the shared `outright.io` zone, already paid for, and `makeitmoreinteresting.com`'s is this
+property's own (`dns.tf`), so its bill is too. Domain registration is the registrar's, not AWS's,
+and is not managed here.
 
 The hourly AI iteration makes this busier than a normal property: roughly 720 deploys a month,
 each one an `aws s3 sync` and an invalidation. An invalidation of `/*` counts as one path, so
