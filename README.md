@@ -4,7 +4,7 @@
 # interesting
 iterate a more interesting website
 
-**https://interesting.outright.io/**
+**https://makeitmoreinteresting.com/**
 
 ## How it works
 
@@ -16,12 +16,14 @@ iterate a more interesting website
   for a page that is not there gets `error.html` back, with a 404, from a CloudFront custom error
   response.
 - **The build** — [`build.mjs`](build.mjs) turns `/site` into the artifact that is published to an
-  S3 bucket behind CloudFront at [interesting.outright.io](https://interesting.outright.io/), in a
+  S3 bucket behind CloudFront at
+  [makeitmoreinteresting.com](https://makeitmoreinteresting.com/), in a
   throwaway folder outside the repository. Nothing generated is ever committed. The deploy changes
   one thing on the way — the GA4 measurement ID — and copies everything else as the build left it.
   See [Building the site](#building-the-site).
 - **`/infra`** — the hosting, as code. [`infra/`](infra) is a self-contained Terraform project
-  that owns the bucket, the CloudFront distribution, the certificate and DNS, the deploy IAM
+  that owns the bucket, the CloudFront distribution, the certificate, the
+  `makeitmoreinteresting.com` hosted zone and the records in it, the deploy IAM
   user, the Actions secrets the deploy uses — and this repository itself. It is applied by hand:
   no workflow here runs `terraform plan` or `apply`. See [`infra/README.md`](infra/README.md).
 - **Test, then deploy** — [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) is the
@@ -506,7 +508,8 @@ the plan allows, and makes one run comparable with the next.
 ### Setup
 
 - **Hosting** — run `terraform apply` in [`infra/`](infra) once, by hand. That creates the bucket,
-  the distribution, the certificate and DNS, and sets the five repository secrets the deploy reads
+  the distribution, the certificate, the hosted zone and its records, and sets the five repository
+  secrets the deploy reads
   (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_S3_BUCKET`,
   `AWS_CLOUDFRONT_DISTRIBUTION_ID` and `GA_MEASUREMENT_ID`). No secret is set by hand: they come
   from the same apply that creates or names what they point at, so they cannot drift from it.

@@ -2357,6 +2357,116 @@ class RealSiteTest(unittest.TestCase):
                 self.assertIn("MIT License", self.site[rel])
 
 
+class DomainTest(unittest.TestCase):
+    """Where the site is published, and the one folder that decides it.
+
+    Issue #40 moved the site from interesting.outright.io to its own apex domain,
+    makeitmoreinteresting.com. The move touched no page, because /site names no domain at all:
+    every link in it is relative and sitemap.xml's <loc> values are relative too, deliberately, so
+    the same source serves a fork, a local copy and the live site. These tests hold both halves of
+    that -- /infra declares the domain in one place, /site declares it nowhere -- so the next move
+    is a change to locals.tf and the prose that quotes it, and nothing else.
+    """
+
+    DOMAIN = "makeitmoreinteresting.com"
+    RETIRED = "interesting.outright.io"
+
+    @classmethod
+    def setUpClass(cls):
+        cls.repo = Path(mi.__file__).resolve().parents[2]
+        cls.infra = cls.repo / "infra"
+
+    def infra_file(self, name):
+        path = self.infra / name
+        if not path.is_file():
+            self.skipTest(f"no {name} at {path}")
+        return path.read_text()
+
+    def local_value(self, name):
+        """The literal assigned to a `name = "..."` argument in infra/locals.tf."""
+        match = re.search(rf'^\s*{name}\s*=\s*"([^"]*)"', self.infra_file("locals.tf"), re.M)
+        self.assertIsNotNone(match, f"locals.tf declares no {name}")
+        return match.group(1)
+
+    def text_files(self, folder):
+        for path in sorted(folder.rglob("*")):
+            if path.is_file() and not path.is_symlink():
+                try:
+                    yield path, path.read_text()
+                except UnicodeDecodeError:
+                    continue
+
+    def test_locals_is_the_one_place_the_domain_is_declared(self):
+        self.assertEqual(self.local_value("domain"), self.DOMAIN)
+        self.assertEqual(self.local_value("www_domain"), f"www.{self.DOMAIN}")
+        # The bucket is named after the domain, the way every other studio property's is.
+        self.assertEqual(self.local_value("bucket"), self.DOMAIN)
+
+    def test_the_certificate_covers_every_hostname_the_distribution_answers_to(self):
+        # CloudFront refuses an alias its viewer certificate does not cover, so the two lists are
+        # built from the same local rather than written out twice.
+        website = self.infra_file("website.tf")
+        self.assertIn("subject_alternative_names = [local.www_domain]", website)
+        self.assertRegex(website, r"aliases\s*=\s*local\.hostnames")
+        hostnames = re.search(r"^\s*hostnames\s*=\s*\[([^\]]*)\]",
+                              self.infra_file("locals.tf"), re.M)
+        self.assertIsNotNone(hostnames, "locals.tf declares no hostnames")
+        self.assertEqual([name.strip() for name in hostnames.group(1).split(",")],
+                         ["local.domain", "local.www_domain"])
+
+    def test_the_hosted_zone_is_owned_here_and_every_record_goes_into_it(self):
+        # The old subdomain lived in a zone owned by another state and read through data.tf; an
+        # apex domain of this property's own is owned by this property's own project.
+        self.assertIn('resource "aws_route53_zone" "primary"', self.infra_file("dns.tf"))
+        for name in ("data.tf", "dns.tf", "website.tf"):
+            self.assertNotIn('data "aws_route53_zone"', self.infra_file(name),
+                             f"{name} still reads a zone it should own")
+        # A record's own zone, at the resource's indentation -- `terraform fmt` in CI keeps it at
+        # two spaces, which is what tells it apart from the distribution's zone inside `alias`.
+        zone_ids = re.findall(r"^  zone_id\s*=\s*(\S+)", self.infra_file("website.tf"), re.M)
+        self.assertEqual(set(zone_ids), {"aws_route53_zone.primary.zone_id"})
+        self.assertEqual(len(zone_ids), 2, "the validation records and the alias records")
+
+    def test_the_bucket_the_state_key_and_the_deploy_user_all_carry_the_domain(self):
+        # Renaming these three is what made the move a cutover rather than one apply (see the
+        # order of operations in infra/README.md); nothing may keep the retired name.
+        self.assertRegex(self.infra_file("main.tf"), rf'key\s*=\s*"{re.escape(self.DOMAIN)}"')
+        user = self.DOMAIN.replace(".", "-") + "-deploy"
+        self.assertIn(f'name = "{user}"', self.infra_file("iam-deploy.tf"))
+
+    def test_the_retired_host_is_never_offered_as_the_live_site(self):
+        # It may be named as history -- infra/README.md walks through the cutover -- but no file
+        # may still link to it.
+        for folder in (self.repo / "infra", self.repo / ".github", self.repo / "site"):
+            if not folder.is_dir():
+                continue
+            for path, text in self.text_files(folder):
+                self.assertNotIn(f"https://{self.RETIRED}", text, f"{path} links to the old host")
+        readme = self.repo / "README.md"
+        if readme.is_file():
+            self.assertNotIn(self.RETIRED, readme.read_text())
+            self.assertIn(f"**https://{self.DOMAIN}/**", readme.read_text(),
+                          "the README's headline link is the live site")
+
+    def test_the_site_itself_names_no_domain_of_its_own(self):
+        site = self.repo / "site"
+        if not site.is_dir():
+            self.skipTest(f"no site directory at {site}")
+        for path, text in self.text_files(site):
+            for domain in (self.DOMAIN, self.RETIRED):
+                self.assertNotIn(domain, text,
+                                 f"{path} hard-codes an origin; /site is served under any")
+
+    def test_the_sitemap_keeps_relative_locations(self):
+        sitemap_xml = self.repo / "site" / "sitemap.xml"
+        if not sitemap_xml.is_file():
+            self.skipTest(f"no sitemap at {sitemap_xml}")
+        locs = re.findall(r"<loc>([^<]+)</loc>", sitemap_xml.read_text())
+        self.assertTrue(locs, "the sitemap lists nothing")
+        for loc in locs:
+            self.assertNotRegex(loc.strip(), r"^[a-z]+://", "a <loc> pins the site to one origin")
+
+
 class SmallModelTest(unittest.TestCase):
     """Issue #2: the model used must never be a small one. Issue #35 pinned it to one flagship,
     so the rule now guards the only way another id can get in: the workflow's "model" input."""
