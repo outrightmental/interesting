@@ -1,6 +1,7 @@
 // Shared canvas shell and two-column layout for the constellation labs.
 
 @use 'vars';
+@use 'readout';
 
 .layout {
   display: grid;
@@ -22,4 +23,25 @@
   .layout {
     grid-template-columns: 1fr;
   }
+}
+
+.layout .panel #status,
+.top .panel #status {
+  margin: 0.5rem 0 0;
+  min-height: 1.5em;
+  color: var(--accent2);
+  font-size: 0.95rem;
+}
+
+.layout .panel #reading {
+  @include readout.readout(7.2em);
+}
+
+.layout .panel #drift[aria-pressed='true'],
+.layout .panel #rain[aria-pressed='true'],
+.layout .panel #spin[aria-pressed='true'],
+.layout .panel #wind[aria-pressed='true'] {
+  background: rgba(159, 203, 255, 0.24);
+  border-color: rgba(194, 224, 255, 0.86);
+  box-shadow: 0 0 12px rgba(143, 195, 255, 0.34) inset;
 }

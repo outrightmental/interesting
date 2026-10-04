@@ -17,12 +17,6 @@ main {
   cursor: crosshair;
 }
 
-#spin[aria-pressed='true'] {
-  background: rgba(166, 210, 255, 0.24);
-  border-color: rgba(194, 224, 255, 0.86);
-  box-shadow: 0 0 12px rgba(143, 195, 255, 0.34) inset;
-}
-
 .dial-wrap {
   margin-top: 0.45rem;
   color: #dbe9ff;
@@ -33,13 +27,6 @@ main {
   width: 100%;
   margin-top: 0.3rem;
   accent-color: var(--accent);
-}
-
-#status {
-  margin: 0.5rem 0 0;
-  min-height: 1.5em;
-  color: var(--accent2);
-  font-size: 0.95rem;
 }
 
 #reading {

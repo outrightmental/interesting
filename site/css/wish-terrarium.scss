@@ -1,7 +1,5 @@
 // The wish terrarium: the saved sky grown into a living terrarium, with a weather report.
 
-@use 'readout';
-
 :root {
   --accent: #a7d3ff;
   --good: #beffd8;
@@ -9,21 +7,4 @@
 
 #terrarium {
   cursor: pointer;
-}
-
-#wind[aria-pressed='true'] {
-  background: rgba(159, 203, 255, 0.24);
-  border-color: rgba(194, 224, 255, 0.86);
-  box-shadow: 0 0 12px rgba(143, 195, 255, 0.34) inset;
-}
-
-#status {
-  margin: 0.45rem 0 0;
-  min-height: 1.5em;
-  color: var(--accent2);
-  font-size: 0.95rem;
-}
-
-#reading {
-  @include readout.readout(7.2em);
 }

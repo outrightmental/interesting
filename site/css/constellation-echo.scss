@@ -1,7 +1,5 @@
 // The echo chamber: the saved sky as drifting echoes, with an atmospheric reading beside it.
 
-@use 'readout';
-
 :root {
   --bg2: #1c2b53;
   --accent: #a7d1ff;
@@ -9,21 +7,4 @@
 
 #echo-canvas {
   cursor: crosshair;
-}
-
-#drift[aria-pressed='true'] {
-  background: rgba(167, 209, 255, 0.24);
-  border-color: rgba(194, 224, 255, 0.86);
-  box-shadow: 0 0 12px rgba(143, 195, 255, 0.34) inset;
-}
-
-#status {
-  margin: 0.45rem 0 0;
-  min-height: 1.5em;
-  color: var(--accent2);
-  font-size: 0.95rem;
-}
-
-#reading {
-  @include readout.readout(7.2em);
 }
