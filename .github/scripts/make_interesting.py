@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Make the website more interesting.
 
-Picks a random model from GitHub Copilot, shows it the current contents of the
-/site folder, and asks it to make the website more interesting.
+Asks one model -- Claude Fable 5.1, at the most reasoning effort GitHub
+Copilot offers -- to look at the current contents of the /site folder and make
+the website more interesting.
 
 Every run starts with a look at the site as a whole: the model may add something
 new, or it may federate what is already there (consolidate repeated markup,
@@ -95,35 +96,25 @@ INTERESTING = ("how long a person stays engaged -- how much they want to keep go
 
 COPILOT_BIN = os.environ.get("COPILOT_BIN", "copilot")
 
-# The models a random pick may draw from: only large, flagship models, as of 2026-10-02. These are
-# the flagships GitHub Copilot CLI offers through `--model`, which today come from Anthropic,
-# OpenAI and Moonshot. Small and mid-tier models are deliberately absent, and is_small_model()
-# below refuses the ones it can recognise even if one is added.
-# Copilot retires models often: an id the account can no longer use is skipped at run time
-# without costing an attempt, so a stale entry here is harmless. The list can be replaced without
-# a code change by setting the MODEL_POOL repository variable (comma-separated ids).
-# Not listed: the Gemini models (Copilot offers only the Flash tier, which is refused as small)
-# and the Grok models (Copilot CLI 1.0.91 cannot reach them: "not accessible via the
-# /chat/completions endpoint").
-MODELS = [
-    "claude-fable-5.1",
-    "claude-fable-5",
-    "claude-opus-5.5",
-    "claude-opus-5",
-    "claude-opus-4.8",
-    "gpt-6.1-sol",
-    "gpt-6-sol",
-    "gpt-6-astra",
-    "gpt-5.6-sol",
-    "gpt-5.5",
-    "gpt-5.3-codex",
-    "kimi-k3",
-]
+# The one model every run uses: Anthropic's Claude Fable 5.1, reached through the Copilot CLI.
+# Runs used to draw a model at random from a pool of a dozen flagships. They no longer do, and
+# nothing picks a model at random any more: one model, asked for all the reasoning effort it has,
+# makes each hour's change as considered as it can be and makes one run comparable with the next.
+# Copilot retires models: if this id goes, or the account's plan does not offer it, there is
+# nothing to fall back on and the run says so and fails (see main()).
+PINNED_MODEL = "claude-fable-5.1"
+
+# How hard the model is asked to think. "max" is the top of the scale Copilot CLI 1.0.91 accepts
+# for --reasoning-effort (none, minimal, low, medium, high, xhigh, max), and the mission is worth
+# it: one well-weighed change an hour beats a hasty one. It costs thinking time, which is what
+# MODEL_TIMEOUT_SECONDS below allows for.
+REASONING_EFFORT = "max"
 
 # Tier names that mark a model as a small, cheap, speed-tuned or mid-tier sibling of a flagship. A
-# model whose id contains one of these words is never picked at random, whatever list it came
-# from. The rule is deliberately general, so it covers the equivalents of Haiku and Sonnet at other
-# providers, including models that do not exist yet, as long as the id names its tier.
+# model whose id contains one of these words is not a flagship, so naming one by hand through the
+# workflow's "model" input is worth a warning in the log. The rule is deliberately general, so it
+# covers the equivalents of Haiku and Sonnet at other providers, including models that do not
+# exist yet, as long as the id names its tier.
 SMALL_MODEL_MARKERS = {
     "haiku", "sonnet",  # Anthropic: small and mid tier (the flagships are Opus and Fable)
     "mini", "nano", "luna", "terra",  # OpenAI: small tiers, and the mid tier of the Sol/Terra/Luna line
@@ -149,8 +140,8 @@ def is_small_model(model):
 
     The id is split into words on anything that is not a letter or digit and compared with
     SMALL_MODEL_MARKERS, so "gpt-5.4-mini" and "Claude Haiku 4.5" are small but "gemini-3-pro"
-    (which merely contains the letters "mini") is not. Ids in OTHER_NON_FLAGSHIP_MODELS are refused
-    by name. An unknown id that is only a version number cannot be judged and counts as large.
+    (which merely contains the letters "mini") is not. Ids in OTHER_NON_FLAGSHIP_MODELS are named
+    outright. An unknown id that is only a version number cannot be judged and counts as large.
     """
     name = str(model).strip().lower()
     if name.rsplit("/", 1)[-1] in OTHER_NON_FLAGSHIP_MODELS:  # tolerate a "provider/" prefix
@@ -162,8 +153,10 @@ def is_small_model(model):
 #   --available-tools=none  allowlist that matches no tool, so none are exposed
 #   --deny-tool=...         belt and braces: denial beats any allow rule
 #   no --allow-* flag       non-interactive mode refuses anything needing approval
-# and it is started in an empty directory, with nothing to read.
+# and it is started in an empty directory, with nothing to read. The rest of the list settles how
+# hard it is asked to think and how its answer comes back.
 COPILOT_FLAGS = [
+    "--reasoning-effort", REASONING_EFFORT,  # think as hard as this model can
     "--output-format", "json",  # JSONL events; plain text output is re-wrapped for a terminal
     "--stream", "off",
     "--no-color",
@@ -180,19 +173,22 @@ COPILOT_FLAGS = [
     "--deny-tool=url",
     "--secret-env-vars=COPILOT_GITHUB_TOKEN,GH_TOKEN,GITHUB_TOKEN",
 ]
-MODEL_TIMEOUT_SECONDS = 480
+# Long enough for one answer at max reasoning effort, which thinks for minutes before it writes.
+# MAX_ATTEMPTS answers have to fit inside the calling job's timeout-minutes, together with the
+# build each answer is checked against.
+MODEL_TIMEOUT_SECONDS = 720
 
 AUTH_HELP = (
     "GitHub Copilot refused the request, so no model can run.\n"
     "Fix it one of two ways:\n"
     "  1. Personal plan: add a repository secret named COPILOT_GITHUB_TOKEN holding a fine-grained\n"
     "     personal access token (resource owner: your own account) that has the account permission\n"
-    "     \"Copilot Requests\". Usage is billed to that user's Copilot plan, and every model that\n"
-    "     plan includes can be picked.\n"
+    "     \"Copilot Requests\". Usage is billed to that user's Copilot plan, which has to include\n"
+    f"     {PINNED_MODEL}.\n"
     "  2. Organization: as an owner of the organization that owns this repository, open Settings >\n"
     "     Copilot > Policies, enable \"Copilot CLI\" and select \"Allow use of Copilot CLI billed to\n"
     "     the organization\". The change can take a quarter of an hour to apply. Usage is billed to\n"
-    "     the organization, and only the models its Copilot plan and policies offer can be picked.\n"
+    f"     the organization, whose Copilot plan and model policy have to offer {PINNED_MODEL}.\n"
     "If a COPILOT_GITHUB_TOKEN secret already exists, it is used instead of the workflow's own token:\n"
     "renew it (check its expiry and its \"Copilot Requests\" permission), or delete it to use route 2."
 )
@@ -1558,35 +1554,21 @@ def set_output(name, value):
             fh.write(f"{name}<<{delimiter}\n{value}\n{delimiter}\n")
 
 
-def model_pool():
-    """The models a random pick may draw from: MODEL_POOL if set, else MODELS, minus the models
-    that is_small_model() recognises as small, mid-tier or speed-tuned."""
-    configured = [m for m in re.split(r"[,\s]+", os.environ.get("MODEL_POOL") or "") if m]
-    pool = []
-    for model in configured or MODELS:
-        if is_small_model(model):
-            print(f"::warning::{one_line(model, 100)} is not a flagship model, so it is never picked at random; ignoring it.")
-        elif model not in pool:
-            pool.append(model)
-    return pool
+def pick_model():
+    """The one model this run asks: PINNED_MODEL, or whatever a person named by hand.
 
-
-def pick_candidates():
-    """The models to try, in order: the requested one, or the whole pool in random order.
-
-    Random selection only ever draws from model_pool(), so it can never land on a small model.
-    A model named explicitly (the workflow's manual "model" input) is a person's choice, not a
-    random pick, and is used as asked.
+    Every unattended run -- which is every hourly run -- gets PINNED_MODEL. The workflow's manual
+    "model" input is a person's deliberate choice and is used as asked, with the departure from
+    the pinned model said out loud, and a second warning if the id is not even a flagship.
     """
     requested = (os.environ.get("MODEL") or "").strip()
-    if requested:
-        if is_small_model(requested):
-            print(f"::warning::{one_line(requested, 100)} is not a flagship model; using it because it was requested by name.")
-        return [requested]
-    pool = model_pool()
-    if not pool:
-        sys.exit("No model to pick from: the pool is empty once small models are excluded.")
-    return random.sample(pool, k=len(pool))
+    if not requested or requested == PINNED_MODEL:
+        return PINNED_MODEL
+    print(f"::warning::Using {one_line(requested, 100)} because it was requested by name; every "
+          f"other run uses {PINNED_MODEL}.")
+    if is_small_model(requested):
+        print(f"::warning::{one_line(requested, 100)} is not a flagship model.")
+    return requested
 
 
 def one_line(text, limit):
@@ -1613,45 +1595,33 @@ def main():
 
     shown, omitted = split_for_prompt(read_site())
     prompt = build_prompt(shown, omitted)
-    candidates = pick_candidates()
-    requested = bool((os.environ.get("MODEL") or "").strip())  # named by hand, not drawn from the pool
-    attempts, unavailable, tried = 0, [], set()
+    model = pick_model()
+    attempts = 0
 
-    def report_unavailable():
-        # Worth saying out loud: when most of the pool is off limits, the pick is hardly random.
-        # Only the models tried this run are known; the rest of the pool was never asked.
-        if unavailable:
-            pool = "" if requested else f"The pool has {len(candidates)}. "
-            print(
-                f"::notice::{len(unavailable)} of the {len(tried)} models tried this run are not "
-                f"available to this Copilot account ({one_line(', '.join(unavailable), 300)}). "
-                f"{pool}See Setup in the README."
-            )
-
-    queue, answering = list(candidates), []
-    while queue and attempts < MAX_ATTEMPTS:
-        model = queue.pop(0)
-        print(f"Mission: {MISSION}\nModel:   {model}", flush=True)
-        tried.add(model)
+    # One model, up to MAX_ATTEMPTS turns at it. A model does not give the same answer twice, so an
+    # unusable answer is worth asking for again; there is no other model to fall back on.
+    while attempts < MAX_ATTEMPTS:
         attempts += 1  # counted up front, so every path below that asks again is bounded
+        print(f"Mission: {MISSION}\nModel:   {model} at {REASONING_EFFORT} reasoning effort "
+              f"(attempt {attempts} of {MAX_ATTEMPTS})", flush=True)
         try:
             plan = parse_response(call_model(model, prompt))
             ops = validate_plan(plan, unseen=omitted)
         except ModelUnavailable as err:
-            attempts -= 1  # no model was asked, so this does not count as an attempt
-            more = ", trying another model" if queue or answering else ""
-            print(f"{model} is not available{more}: {one_line(err, 200)}")
-            unavailable.append(model)
+            # Nothing was asked and nothing else can be: this run has no model. Fail loudly rather
+            # than quietly substituting another one.
+            print(f"::error::{model} is not available to this Copilot account: {one_line(err, 300)}")
+            sys.exit(f"{model} is the only model this run may use and it is not available to this "
+                     f"Copilot account, so nothing was asked. See Setup in the README.")
         except CopilotAuthError as err:
             print(f"::error::GitHub Copilot authentication failed: {one_line(err, 300)}")
             sys.exit(AUTH_HELP)
         except SiloBreach as err:
             sys.exit(f"Stopping without applying anything: {err}. The Copilot CLI flags no longer disable every tool.")
         except BuildToolchainError as err:
-            # Not this model's fault and not the next one's either: nothing can be checked.
+            # Not the model's fault, and asking it again would not help: nothing can be checked.
             sys.exit(f"Stopping without applying anything: the build could not be run ({err}).")
         except (ModelError, ValueError, RecursionError, RejectedChange) as err:
-            answering.append(model)
             print(f"::warning::{model} failed: {one_line(err, 500)}")
         else:
             try:
@@ -1663,14 +1633,8 @@ def main():
             print(f"Summary: {summary}")
             set_output("model", model)
             set_output("summary", summary)
-            report_unavailable()
             return
-        if not queue:
-            # Every model has had a turn. With attempts left, ask again the ones that can answer:
-            # a model does not give the same answer twice.
-            queue, answering = answering, []
-    report_unavailable()
-    sys.exit("No model produced a usable change this run.")
+    sys.exit(f"{model} produced no usable change in {MAX_ATTEMPTS} attempts this run.")
 
 
 if __name__ == "__main__":
