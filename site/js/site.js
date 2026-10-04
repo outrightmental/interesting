@@ -1,140 +1,123 @@
+/*
+  The pulse in the site header, on every page: what the shared local-state document is already
+  holding for this visitor, and one step back to it.
+
+  It used to count the stars saved on the home page and then rotate a visitor through the sky pages.
+  The constellation is not on the home page any more, and the site no longer assumes anyone wants
+  the sky (issue #30), so this line never guesses at what a visitor likes: the step it offers points
+  only at work they made themselves, and while they have made none it points at the mood atlas,
+  where every orientation is laid out and none is the default. Where to go *next* is the mood
+  ribbon's business, and follows the reading js/threshold.js takes.
+
+  Reads nothing itself: the saved state arrives through window.interestingState (js/state.js), which
+  the layout loads first. Its classes are site-pulse*; every site-meta* name belongs to the meta
+  menu js/state.js draws, which is not this site's to restyle.
+*/
 (function () {
-  var state = window.interestingState;
+  'use strict';
+
+  var store = window.interestingState;
   var statusEl = document.getElementById('site-pulse-status');
   var linkEl = document.getElementById('site-pulse-link');
 
-  if (!statusEl || !linkEl || !state || typeof state.read !== 'function') {
+  if (!statusEl || !linkEl || !store || typeof store.read !== 'function') {
     return;
   }
 
-  var currentPath = window.location.pathname || '';
-  var currentFile = currentPath.split('/').pop() || 'index.html';
-
-  var destinations = [
-    {
-      href: 'constellation-diary.html',
-      label: 'continue: constellation diary',
-      desc: 'open constellation diary'
-    },
-    {
-      href: 'constellation-echo.html',
-      label: 'continue: echo chamber',
-      desc: 'open constellation echo chamber'
-    },
-    {
-      href: 'constellation-weather.html',
-      label: 'continue: weather lab',
-      desc: 'open constellation weather lab'
-    },
-    {
-      href: 'orbital-weaver.html',
-      label: 'continue: orbital weaver',
-      desc: 'open orbital weaver'
-    },
-    {
-      href: 'sky-archive.html',
-      label: 'continue: sky archive oracle',
-      desc: 'open sky archive oracle'
-    },
-    {
-      href: 'star-lantern.html',
-      label: 'continue: star lantern ritual',
-      desc: 'open star lantern ritual'
-    },
-    {
-      href: 'wish-terrarium.html',
-      label: 'continue: wish terrarium',
-      desc: 'open wish terrarium'
-    },
-    {
-      href: 'sitemap.html',
-      label: 'continue: site map',
-      desc: 'open site map'
-    }
+  /* The names the shared document keeps, the page each one belongs to, and what to call the things
+     under it. A page that starts keeping something new belongs here beside its name; a name this
+     list does not know is simply not reported. "threshold" is left out on purpose: what the site
+     has read about a visitor is the ribbon's to say, in the ribbon's own words. */
+  var KEPT = [
+    { key: 'constellation', href: 'wish-constellation.html', where: 'the wish constellation',
+      one: 'star', many: 'stars' },
+    { key: 'capsules', href: 'constellation-diary.html', where: 'the diary',
+      one: 'entry', many: 'entries' },
+    { key: 'omens', href: 'sky-archive.html', where: 'the archive oracle',
+      one: 'omen', many: 'omens' },
+    { key: 'apocrypha', href: 'apocrypha-desk.html', where: 'the apocrypha desk',
+      one: 'specimen', many: 'specimens' },
+    { key: 'kiln', href: 'word-kiln.html', where: 'the word kiln' },
+    { key: 'loam', href: 'loam.html', where: 'loam' },
+    { key: 'quiet-room', href: 'quiet-room.html', where: 'the quiet room' }
   ];
 
-  function countStars(value) {
-    var list = Array.isArray(value) ? value : [];
-    var total = 0;
+  // How many worlds the line names before it stops counting them out.
+  var NAMED = 2;
 
-    for (var i = 0; i < list.length; i++) {
-      var star = list[i];
-      if (!star || typeof star.x !== 'number' || typeof star.y !== 'number' || typeof star.text !== 'string') {
-        continue;
-      }
-      total += 1;
+  var currentFile = (window.location.pathname || '').split('/').pop() || 'index.html';
+
+  /* Something is there to go back to. A page keeps either a list of things or one settled object,
+     so an empty list is nothing kept -- which is what a visitor who has opened a world and left it
+     alone has. */
+  function held(value) {
+    if (Array.isArray(value)) {
+      return value.length > 0;
     }
-
-    return total;
+    return !!value && typeof value === 'object';
   }
 
-  function hashStars(value) {
-    var list = Array.isArray(value) ? value : [];
-    var hash = 2166136261;
-
-    for (var i = 0; i < list.length; i++) {
-      var star = list[i];
-      if (!star || typeof star.x !== 'number' || typeof star.y !== 'number' || typeof star.text !== 'string') {
-        continue;
-      }
-
-      var sx = Math.round(star.x * 10);
-      var sy = Math.round(star.y * 10);
-
-      hash ^= sx;
-      hash += (hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24);
-      hash ^= sy;
-      hash += (hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24);
-
-      for (var c = 0; c < star.text.length; c++) {
-        hash ^= star.text.charCodeAt(c);
-        hash += (hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24);
-      }
+  function phrase(kept, value) {
+    var n = Array.isArray(value) ? value.length : 0;
+    if (!kept.one || !n) {
+      return 'what you left in ' + kept.where;
     }
-
-    return hash >>> 0;
+    return n + ' ' + (n === 1 ? kept.one : kept.many) + ' in ' + kept.where;
   }
 
-  function setLink(href, text, label) {
-    linkEl.setAttribute('href', href);
-    linkEl.textContent = text;
-    linkEl.setAttribute('aria-label', label);
+  function sentence(parts) {
+    if (parts.length === 1) {
+      return parts[0];
+    }
+    return parts.slice(0, -1).join(', ') + ' and ' + parts[parts.length - 1];
   }
 
-  var saved = state.read('constellation', []);
-  var stars = Array.isArray(saved.value) ? saved.value : [];
-  var starCount = countStars(stars);
+  // 'unavailable' and 'unreadable' are the whole document's business rather than any one name's, so
+  // the first read settles them and there is nothing to learn from reading the rest.
+  var found = [];
+  var trouble = null;
 
-  if (!starCount) {
-    if (saved.status === 'missing' || saved.status === 'ok') {
-      statusEl.textContent = 'sky pulse: no saved stars yet. place a few on home, then return to any lab.';
-    } else if (saved.status === 'unreadable') {
-      statusEl.textContent = 'sky pulse: saved constellation is unreadable. rebuild your sky on home.';
-    } else {
-      statusEl.textContent = 'sky pulse: shared memory is unavailable in this browser context.';
+  for (var i = 0; i < KEPT.length; i++) {
+    var saved = store.read(KEPT[i].key, null);
+    if (saved.status === 'unavailable' || saved.status === 'unreadable') {
+      trouble = saved.status;
+      break;
     }
+    if (held(saved.value)) {
+      found.push({ kept: KEPT[i], value: saved.value });
+    }
+  }
 
-    setLink('index.html', 'open home constellation', 'open home constellation');
+  // Nothing to go back to leaves the link exactly as the layout wrote it, which is the one
+  // destination that assumes nothing: the atlas of every orientation.
+  if (trouble === 'unavailable') {
+    statusEl.textContent = 'this browser stores nothing, so nothing you make here will be waiting.';
+    return;
+  }
+  if (trouble === 'unreadable') {
+    statusEl.textContent = 'what this browser saved cannot be read. the state menu can clear it.';
+    return;
+  }
+  if (!found.length) {
+    statusEl.textContent = 'nothing kept in this browser yet.';
     return;
   }
 
-  statusEl.textContent = 'sky pulse: ' + starCount + ' saved star' + (starCount === 1 ? '' : 's') + ' detected across the site.';
+  var named = [];
+  for (i = 0; i < found.length && i < NAMED; i++) {
+    named.push(phrase(found[i].kept, found[i].value));
+  }
+  var rest = found.length - named.length;
+  if (rest) {
+    named.push(rest === 1 ? 'one more world' : rest + ' more worlds');
+  }
+  statusEl.textContent = 'kept here: ' + sentence(named) + '.';
 
-  var hash = hashStars(stars);
-  var candidates = [];
-
-  for (var i = 0; i < destinations.length; i++) {
-    if (destinations[i].href === currentFile) {
-      continue;
+  for (i = 0; i < found.length; i++) {
+    if (found[i].kept.href !== currentFile) {
+      linkEl.setAttribute('href', found[i].kept.href);
+      linkEl.textContent = 'back to ' + found[i].kept.where;
+      return;
     }
-    candidates.push(destinations[i]);
   }
-
-  if (!candidates.length) {
-    setLink('index.html', 'open home constellation', 'open home constellation');
-    return;
-  }
-
-  var pick = candidates[hash % candidates.length];
-  setLink(pick.href, pick.label, pick.desc);
 })();

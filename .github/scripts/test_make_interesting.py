@@ -2098,6 +2098,23 @@ class RealSiteTest(unittest.TestCase):
     def test_no_page_asks_a_visitor_to_report_their_own_mood(self):
         self.assertEqual(mi.pages_asking_to_self_report(self.site), {})
 
+    def test_the_site_leaves_the_meta_menu_its_own_class_names(self):
+        # js/state.js draws the export/import menu and injects the styles for it, and the prompt says
+        # in as many words that the menu is not the site's to restyle. Every name it uses is
+        # site-meta*, so a template or stylesheet of the site's own that mentions one is either
+        # restyling that menu or colliding with it. That is not hypothetical: the header's pulse
+        # arrived as <p class='site-meta'>, which the menu's own `position: fixed` then tore out of
+        # the header and pinned over the menu in the bottom-right corner.
+        # Either form that actually takes one of those names: a selector, or a class written onto an
+        # element. Prose about them is neither, so the comments that explain this rule -- in the
+        # layout, the header's Sass and js/site.js -- do not trip it.
+        theirs = re.compile(r"\.site-meta\b"
+                            r"|class(?:Name)?\s*[=:]\s*'[^']*\bsite-meta\b"
+                            r"|class(?:Name)?\s*[=:]\s*\"[^\"]*\bsite-meta\b")
+        claiming = sorted(rel for rel, content in self.source.items()
+                          if rel not in mi.FIXED_FILES and theirs.search(content))
+        self.assertEqual(claiming, [])
+
     def test_every_orientation_opens_onto_a_real_world_and_not_all_of_them_are_sky(self):
         # The whole point of the issue: a visitor who does not respond to stars still arrives
         # somewhere that suits them. A world named by the flow has to be a page that exists, and

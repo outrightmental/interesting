@@ -62,7 +62,10 @@
   font-size: 0.82rem;
 }
 
-.site-meta {
+/* The header's pulse (see js/site.js). Named site-pulse* and not site-meta*: the meta menu
+   js/state.js draws owns every site-meta* name, injects its own styles for them, and is not this
+   site's to restyle. */
+.site-pulse {
   margin: 0;
   border: 1px solid vars.$hairline;
   border-radius: vars.$radius-well;
@@ -75,12 +78,12 @@
   gap: 0.45rem;
 }
 
-.site-meta-status {
+.site-pulse-status {
   color: #d9e7ff;
   font-size: 0.83rem;
 }
 
-.site-meta-link {
+.site-pulse-link {
   @include nav-chips.chip(0.8rem, 0.3rem 0.7rem);
   min-height: 44px;
 }
@@ -109,7 +112,7 @@
     justify-content: flex-start;
   }
 
-  .site-meta {
+  .site-pulse {
     justify-content: flex-start;
   }
 
@@ -121,7 +124,7 @@
 @media (prefers-reduced-motion: reduce) {
   .skip-link,
   .site-header-nav a,
-  .site-meta-link {
+  .site-pulse-link {
     transition: none;
   }
 }
