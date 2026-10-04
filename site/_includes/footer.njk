@@ -7,6 +7,9 @@
         - [index.html, back to constellation]
         - [sitemap.html, site map]
       footerNote: 'easter egg: tap the title five times'
+
+  The constellation pages also share one loop of onward links, so they now get one federated
+  circuit nav here rather than each carrying its own hand-written sky cluster.
 #}
     <p class='footer'>
 {%- for link in footer %}
@@ -16,6 +19,38 @@
       <span>{{ footerNote }}</span>
 {%- endif %}
     </p>
+
+{%- set circuitSlugs = [
+  'wish-constellation',
+  'constellation-diary',
+  'constellation-echo',
+  'constellation-weather',
+  'orbital-weaver',
+  'sky-archive',
+  'star-lantern',
+  'wish-terrarium'
+] -%}
+{%- set circuitLinks = [
+  ['wish-constellation', 'wish-constellation.html', 'wish constellation'],
+  ['constellation-diary', 'constellation-diary.html', 'diary'],
+  ['constellation-echo', 'constellation-echo.html', 'echo chamber'],
+  ['constellation-weather', 'constellation-weather.html', 'weather lab'],
+  ['orbital-weaver', 'orbital-weaver.html', 'orbital weaver'],
+  ['sky-archive', 'sky-archive.html', 'archive oracle'],
+  ['star-lantern', 'star-lantern.html', 'lantern ritual'],
+  ['wish-terrarium', 'wish-terrarium.html', 'terrarium']
+] -%}
+
+{%- if page and (page.fileSlug in circuitSlugs) %}
+    <nav class='footer-circuit' aria-label='Constellation circuit'>
+      <p class='footer-circuit-label'>constellation circuit</p>
+      <div class='footer-circuit-links'>
+{%- for link in circuitLinks %}
+        <a class='action' href='{{ link[1] }}'{% if page.fileSlug == link[0] %} aria-current='page'{% endif %}>{{ link[2] }}</a>
+{%- endfor %}
+      </div>
+    </nav>
+{%- endif %}
 {%- if not (page and page.fileSlug == 'sitemap') %}
 {% include 'wayfinding.njk' %}
 {%- endif %}

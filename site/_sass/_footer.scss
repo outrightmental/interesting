@@ -1,5 +1,7 @@
 // The row of links every page ends with, built by _includes/footer.njk.
 
+@use 'vars';
+
 .footer {
   margin-top: 0.8rem;
   display: flex;
@@ -7,4 +9,40 @@
   flex-wrap: wrap;
   color: var(--muted);
   font-size: 0.86rem;
+}
+
+// Shared onward loop for the constellation worlds, federated into one include so those pages
+// keep one coherent cross-page route without repeating hand-written link clusters.
+.footer-circuit {
+  margin-top: 0.55rem;
+  border: 1px solid vars.$hairline;
+  border-radius: vars.$radius-panel;
+  background: rgba(7, 10, 20, 0.5);
+  padding: 0.6rem;
+}
+
+.footer-circuit-label {
+  margin: 0;
+  color: var(--accent2);
+  font-size: 0.76rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.footer-circuit-links {
+  margin-top: 0.45rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.footer-circuit-links .action {
+  font-size: 0.8rem;
+  padding: 0.34rem 0.68rem;
+}
+
+.footer-circuit-links .action[aria-current='page'] {
+  border-color: rgba(255, 229, 163, 0.56);
+  background: rgba(255, 229, 163, 0.12);
+  color: var(--accent2);
 }
