@@ -816,7 +816,7 @@ class ResponsiveAccessibleAxiomTest(SiteDirTestCase):
                      "refused, exactly as one that orphans a page is"]:
             with self.subTest(rule=rule):
                 self.assertIn(rule, rules)
-        self.assertEqual(rules.count("AXIOM, every run:"), 3, "every axiom stands over every run")
+        self.assertEqual(rules.count("AXIOM, every run:"), 4, "every axiom stands over every run")
 
     def test_the_prompt_also_asks_for_what_no_validator_can_judge(self):
         # Open question 1 of the issue: both, and the prompt is the wider of the two. Contrast needs
@@ -1038,6 +1038,208 @@ class ResponsiveAccessibleAxiomTest(SiteDirTestCase):
             self.assertEqual(self.violations(page()), ["cannot be parsed as HTML"])
 
 
+class EngagementTimeTest(unittest.TestCase):
+    """Issue #32: "interesting" is not left to a model's taste. It means user engagement time, and
+    the prompt says so, because a run cannot aim at a standard it has not been told."""
+
+    def prompt(self):
+        return mi.build_prompt([("index.html", "<h1>hi</h1>")])
+
+    def test_the_definition_is_the_mission_statement(self):
+        # Spelled out here rather than imported, so rewording INTERESTING into something that no
+        # longer names engagement time fails this test instead of passing quietly.
+        self.assertIn("how long a person stays engaged", mi.INTERESTING)
+        self.assertIn("want to keep going", mi.INTERESTING)
+        for word in ["intrigued", "astonished", "entertained"]:
+            with self.subTest(word=word):
+                self.assertIn(word, mi.INTERESTING)
+
+    def test_the_prompt_says_what_interesting_means_before_asking_for_it(self):
+        prompt = self.prompt()
+        self.assertIn(mi.INTERESTING, prompt)
+        self.assertIn("User engagement time is the measure", prompt)
+        # Before the first "Rules:", so a run reads the standard while it is still deciding what to
+        # do rather than as a constraint on a change it has already chosen.
+        self.assertLess(prompt.index(mi.INTERESTING), prompt.index("Rules:"))
+
+    def test_the_definition_is_repeated_where_the_run_is_asked_to_choose(self):
+        # The mission is stated twice -- once up front, once at the end of the site dump, which is
+        # the last thing the model reads before answering. Both carry the measure now.
+        prompt = self.prompt()
+        self.assertIn(f"This run's mission: {mi.MISSION}, measured in {mi.INTERESTING}", prompt)
+
+    def test_the_prompt_prefers_engagement_to_tidiness(self):
+        # The point of naming the measure: a run that only makes the site look neat has not earned
+        # its hour, and coherence is worth doing because it keeps a visitor exploring.
+        prompt = self.prompt()
+        for asked in ["gives a visitor a reason to stay and keep going",
+                      "not by whether it looks tidy or busy",
+                      "a site that holds together is one a visitor keeps exploring"]:
+            with self.subTest(asked=asked):
+                self.assertIn(asked, prompt)
+
+
+class CadenceAxiomTest(SiteDirTestCase):
+    """Issue #32: no page ties the site to an update frequency. The site iterates continuously, so
+    the fourth axiom stands beside the other three -- stated in the prompt, held to by
+    validate_plan -- and copy that defers a visitor to another day is refused with it, because
+    engagement time is the measure."""
+
+    PAGES = ["index.html", "error.html", "toy.html"]
+
+    def wired_site(self):
+        """A site that satisfies reachability, so only the cadence check can refuse a plan here."""
+        (self.site / "index.html").write_text(home("toy.html", "error.html"))
+        (self.site / "toy.html").write_text("<p>toy</p>")
+        (self.site / "sitemap.xml").write_text(sitemap(*self.PAGES))
+
+    def phrases(self, content, **assets):
+        return mi.cadence_phrases("p.html", dict({"p.html": content}, **assets))
+
+    def test_the_axiom_is_a_standing_rule_of_every_prompt(self):
+        prompt = mi.build_prompt([("index.html", "<h1>hi</h1>")])
+        rules = prompt[prompt.index("Rules:"):]
+        for rule in ["AXIOM, every run: nothing on the site is tied to an update frequency",
+                     "iterates continuously",
+                     "Tonight's experiment",
+                     "rewritten every hour",
+                     "Never defer a visitor to another day",
+                     "engagement time is the measure",
+                     "tonight, tomorrow, yesterday, hourly, nightly, daily",
+                     "today's, this hour's, this week's and this month's",
+                     "Night-sky atmosphere is untouched and welcome",
+                     "adds one of the refused phrasings to a page is refused"]:
+            with self.subTest(rule=rule):
+                self.assertIn(rule, rules)
+
+    def test_the_prompt_names_every_phrasing_the_code_refuses(self):
+        # A rule a run can follow rather than a trap it springs: anything check_cadence would refuse
+        # is spelled out in the prompt first, so the list and the regex cannot drift apart.
+        rules = mi.build_prompt([("index.html", "<h1>hi</h1>")]).lower()
+        for refused in ["tonight", "tomorrow", "yesterday", "hourly", "nightly", "daily", "weekly",
+                        "today's", "this hour's", "this week's", "this month's",
+                        "every hour", "each day", "once a week"]:
+            with self.subTest(refused=refused):
+                self.assertIn(refused, rules)
+
+    def test_copy_that_dates_the_site_is_found(self):
+        for content, phrase in [
+            ("<p class='story'>Tonight's experiment: a wish constellation.</p>", "tonight"),
+            ("<p>This site is rewritten every hour by a model.</p>", "every hour"),
+            ("<p>Read today's sky.</p>", "today's"),
+            ("<p>A new toy each night.</p>", "each night"),
+            ("<p>The nightly experiment.</p>", "nightly"),
+            ("<p>Rebuilt once a day.</p>", "once a day"),
+            ("<p>This week's theme is copper.</p>", "this week's"),
+        ]:
+            with self.subTest(phrase=phrase):
+                self.assertEqual(self.phrases(content), [phrase])
+
+    def test_a_possessive_counts_however_its_apostrophe_is_written(self):
+        # "today&rsquo;s sky" promises a schedule as plainly as "today's sky" does, and the bare
+        # words would not catch either, so every apostrophe a page might be written with counts.
+        for mark in ["'", "’", "&rsquo;", "&apos;", "&#39;", "&#8217;"]:
+            with self.subTest(mark=mark):
+                self.assertEqual(self.phrases(f"<p>Read today{mark}s sky.</p>"), [f"today{mark}s"])
+        self.assertEqual(self.phrases("<p>Read the sky today.</p>"), [])
+
+    def test_copy_that_defers_the_visitor_is_found(self):
+        # The second half of the axiom, and the reason it is one: sending someone away until
+        # tomorrow spends the engagement time the whole mission is measured in.
+        self.assertEqual(self.phrases("<p>Move one star tomorrow and ask again.</p>"), ["tomorrow"])
+        self.assertEqual(self.phrases("<p>Move one star and ask again.</p>"), [])
+
+    def test_night_sky_atmosphere_is_left_alone(self):
+        # Open question 2 of the issue: only copy that puts the site on a schedule counts. The whole
+        # site is night-sky themed, and a check that read "midnight" as a cadence would make the
+        # theme unwritable -- these are the phrasings /site actually uses.
+        for kept in ["<p>toggle midnight rain</p>",
+                     "<p>Returning to midnight tones.</p>",
+                     "<p>midnight horticulture note:</p>",
+                     "<p>night acoustics memo:</p>",
+                     "<p>Kindle one idea before midnight.</p>",
+                     "<p>The hour dial reads 23.</p>",
+                     "<p>Dusk, dawn and starlight.</p>",
+                     "<script>var tonightly = 1; var hour = 3;</script>"]:
+            with self.subTest(kept=kept):
+                self.assertEqual(self.phrases(kept), [])
+
+    def test_copy_inside_a_script_counts(self):
+        # Most of this site's prose lives in the JavaScript that draws the page -- the oracle
+        # readings, the storage-failure notes -- so a check that only read markup would have missed
+        # every instance issue #32 names but one.
+        self.assertEqual(
+            self.phrases("<script>setNote('Constellation data was unreadable, so tonight starts "
+                         "fresh.');</script>"),
+            ["tonight"])
+
+    def test_copy_federated_into_a_shared_script_or_stylesheet_counts(self):
+        # A run is invited to lift shared copy into js/site.js, so the check follows a page into its
+        # assets exactly as the accessibility check does. Otherwise federating the phrase out of the
+        # page would be a way of keeping it.
+        page_html = "<head><link rel='stylesheet' href='css/site.css'>" \
+                    "<script src='js/site.js'></script></head><body><p>a sky</p></body>"
+        self.assertEqual(
+            self.phrases(page_html, **{"js/site.js": "var reading = 'Tonight favors action.';",
+                                       "css/site.css": "/* a stylesheet */"}),
+            ["tonight"])
+        self.assertEqual(
+            self.phrases(page_html, **{"js/site.js": "var reading = 'This sky favors action.';",
+                                       "css/site.css": "/* rebuilt hourly */"}),
+            ["hourly"])
+
+    def test_the_files_behind_the_analytics_tag_are_not_policed(self):
+        # They are never a model's to write, so a phrase in one could not be a run's fault, and 55
+        # KB of vendored consent library is not this repository's prose to police: a future version
+        # of it saying "daily" in a comment must not fail every page of the site at once.
+        page_html = f"<head><script src='{mi.ANALYTICS_SCRIPT}'></script></head><body><p>a</p></body>"
+        self.assertEqual(self.phrases(page_html, **{mi.ANALYTICS_SCRIPT: "/* rebuilt hourly */"}), [])
+
+    def test_a_page_a_run_adds_may_not_date_the_site(self):
+        self.wired_site()
+        dated = page(title="new", body="<p>Tonight's experiment: a new toy.</p>")
+        plan = {"files": [
+            {"path": "new.html", "content": dated},
+            {"path": "index.html", "content": home("toy.html", "error.html", "new.html")},
+            {"path": "sitemap.xml", "content": sitemap(*self.PAGES, "new.html")},
+        ]}
+        with self.assertRaisesRegex(mi.RejectedChange, r'new\.html says "tonight"'):
+            mi.validate_plan(plan)
+        plan["files"][0]["content"] = page(title="new", body="<p>A new toy.</p>")
+        self.assertEqual(len(mi.validate_plan(plan)), 3)
+
+    def test_putting_cadence_copy_back_into_a_page_a_run_rewrites_is_refused(self):
+        self.wired_site()
+        with self.assertRaisesRegex(mi.RejectedChange, r'toy\.html says "every hour"'):
+            mi.validate_plan({"files": [{"path": "toy.html",
+                                         "content": "<p>Rewritten every hour.</p>"}]})
+
+    def test_a_phrase_a_page_already_carried_blocks_nothing(self):
+        # The same bargain the three other axioms make: a page that already dates itself stays the
+        # site's own to clear away, because refusing every plan over it would leave no plan able to.
+        self.wired_site()
+        (self.site / "toy.html").write_text("<p>Tonight's experiment, with a typo.</p>")
+        self.assertEqual(mi.pages_dating_the_site(dict(mi.read_site())), {"toy.html": ["tonight"]})
+        ops = mi.validate_plan({"files": [{"path": "toy.html",
+                                           "content": "<p>Tonight's experiment, no typo.</p>"}]})
+        self.assertEqual(len(ops), 1)
+
+    def test_clearing_one_phrase_is_never_mistaken_for_adding_another(self):
+        # Each reason is one phrase, so a partial clean-up can only take reasons away -- the same
+        # property that makes the accessibility reasons repairable.
+        self.wired_site()
+        (self.site / "toy.html").write_text("<p>Tonight, or tomorrow, a daily toy.</p>")
+        self.assertEqual(mi.pages_dating_the_site(dict(mi.read_site())),
+                         {"toy.html": ["daily", "tomorrow", "tonight"]})
+        half = {"files": [{"path": "toy.html", "content": "<p>Tonight, a toy.</p>"}]}
+        self.assertEqual(len(mi.validate_plan(half)), 1)
+
+    def test_retiring_a_dated_page_is_fine(self):
+        self.wired_site()
+        (self.site / "old.html").write_text("<p>Tonight's experiment.</p>")
+        self.assertEqual(len(mi.validate_plan({"delete": ["old.html"]})), 1)
+
+
 def needs_the_build(test):
     """Skip a test that runs the real Node build when the toolchain is not installed.
 
@@ -1057,7 +1259,7 @@ def front_matter(**fields):
 
 
 class BuildPipelineTest(unittest.TestCase):
-    """Issue #25: the real build, and all three axioms judged on what it produces.
+    """Issue #25: the real build, and all four axioms judged on what it produces.
 
     SiteDirTestCase stands the build in with the identity, which is exactly right for its plain-HTML
     fixtures; this is where the pipeline itself is exercised. /site is source now -- a layout is not
@@ -1132,7 +1334,7 @@ class BuildPipelineTest(unittest.TestCase):
                 self.assertNotIn(shared, built)
 
     def test_a_page_is_whatever_the_templates_make_of_it(self):
-        # All three axioms ask about pages, and all three are asked of the built site. In the source,
+        # All four axioms ask about pages, and all four are asked of the built site. In the source,
         # index.html names no page, no page carries the analytics line, and no page is a whole page
         # at all; built, every page is each of those things.
         source = dict(mi.read_site())
@@ -1197,9 +1399,9 @@ class BuildPipelineTest(unittest.TestCase):
 
 
 class RealSiteTest(unittest.TestCase):
-    """The site in this repository obeys all three axioms: every page is reachable from the root,
-    every page carries the analytics tag and consent banner, and every page is responsive and
-    accessible.
+    """The site in this repository obeys all four axioms: every page is reachable from the root,
+    every page carries the analytics tag and consent banner, every page is responsive and
+    accessible, and no page ties the site to an update frequency.
 
     validate_plan only refuses what a run breaks, so the invariants have to start out true: this is
     what makes them hold from the next deploy onward and not only for pages a later run adds. It
@@ -1261,6 +1463,32 @@ class RealSiteTest(unittest.TestCase):
                 for rel in ["index.html", *mi.assets_of("index.html", self.site)]:
                     broken[rel] = damage(broken[rel])
                 self.assertIn(reason, mi.inaccessible_pages(broken).get("index.html", []))
+
+    def test_no_page_ties_the_site_to_an_update_frequency(self):
+        # Issue #32, and the audit half of it: the pages that exist today are swept too, not only
+        # the ones a future run writes. This is the check that caught "Tonight's experiment" on the
+        # home page, "tonight starts fresh" in its storage-failure note, "rewritten every hour" in
+        # the sitemap's closing axiom, and the oracle readings that sent a visitor away until
+        # tomorrow.
+        self.assertEqual(mi.pages_dating_the_site(self.site), {})
+        self.assertGreater(len(mi.html_pages(self.site)), 1, "the check is worth nothing on one page")
+
+    def test_the_night_sky_theme_survives_the_cadence_axiom(self):
+        # The other side of open question 2: the check has to be narrow enough to leave the theme
+        # alone, so this fails if "midnight" is ever read as a schedule and the atmosphere is swept
+        # out of the site along with the cadence.
+        atmosphere = [rel for rel in self.site if "midnight" in self.site[rel].lower()]
+        self.assertGreater(len(atmosphere), 1, f"the night-sky theme has gone: {atmosphere}")
+
+    def test_the_check_would_notice_a_real_page_dating_itself_again(self):
+        # A guard against the check quietly becoming a no-op, as with accessibility above: put the
+        # phrase this issue removed back on the real home page and the check has to say so.
+        for damage, phrase in [("Tonight's experiment: a wish constellation.", "tonight"),
+                               ("Rewritten every hour by a model.", "every hour"),
+                               ("Move one star tomorrow and ask again.", "tomorrow")]:
+            with self.subTest(phrase=phrase):
+                dated = dict(self.site, **{"index.html": self.site["index.html"] + f"<p>{damage}</p>"})
+                self.assertEqual(mi.pages_dating_the_site(dated), {"index.html": [phrase]})
 
     def test_the_site_has_a_sitemap_of_both_kinds(self):
         # Open question 2 of the issue: both. sitemap.xml for anything reading the site

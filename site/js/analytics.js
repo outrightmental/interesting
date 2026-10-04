@@ -24,7 +24,7 @@
   deploy has not been through, the placeholder stays and switches this whole file off: no tag, no
   banner, no cookies, nothing to consent to.
 
-  The hourly AI iteration may rewrite any page of this site, so the line above is an axiom of every
+  The AI iteration may rewrite any page of this site, so the line above is an axiom of every
   run and these three files are kept out of its reach: see ANALYTICS_SCRIPT, FIXED_FILES and
   check_analytics in .github/scripts/make_interesting.py.
 */
@@ -109,7 +109,7 @@
 
   /* A small, quiet way back to the choice: withdrawing consent has to be as easy as giving it, and
      the banner is gone once answered. The styles live here rather than in a page, because every
-     page of this site may be rewritten by the hourly AI run. */
+     page of this site may be rewritten by an AI run. */
   function addPreferencesButton(cc) {
     addStyle([
       '.site-consent-link {',
@@ -204,9 +204,9 @@
                 {
                   title: 'Analytics',
                   description:
-                    'Google Analytics 4, used to count visits and see which pages the hourly ' +
-                    'iteration should spend its attention on. Declining removes its cookies and ' +
-                    'stops the measurement.',
+                    'Google Analytics 4, used to count visits and see where visitors stay ' +
+                    'engaged, so the iteration knows what to spend its attention on. Declining ' +
+                    'removes its cookies and stops the measurement.',
                   linkedCategory: 'analytics'
                 }
               ]
