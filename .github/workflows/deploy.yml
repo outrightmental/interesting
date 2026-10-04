@@ -4,7 +4,7 @@ name: Deploy site
 # built and the result is published to S3 and the CloudFront cache is invalidated. A failing test
 # blocks every deploy, and so does a failing build.
 #
-# https://interesting.outright.io/ is the site's only home — the bucket, the distribution and every
+# https://makeitmoreinteresting.com/ is the site's only home — the bucket, the distribution and every
 # secret this workflow reads, the GA4 measurement ID included, are all defined in /infra. (GitHub
 # Pages used to publish /site in parallel; it is retired, and nothing here publishes to it.)
 on:
@@ -185,5 +185,5 @@ jobs:
         run: |
           {
             echo "### Published to S3 and CloudFront"
-            echo "<https://interesting.outright.io/>"
+            echo "<https://makeitmoreinteresting.com/>"
           } >> "$GITHUB_STEP_SUMMARY"

@@ -3,6 +3,16 @@ output "site_url" {
   value       = "https://${local.domain}/"
 }
 
+output "route53_name_servers" {
+  description = "The hosted zone's nameservers — give these four to the registrar for makeitmoreinteresting.com"
+  value       = aws_route53_zone.primary.name_servers
+}
+
+output "route53_zone_id" {
+  description = "The makeitmoreinteresting.com hosted zone, owned by this project"
+  value       = aws_route53_zone.primary.zone_id
+}
+
 output "repository" {
   description = "The Terraform-managed GitHub repository"
   value       = github_repository.interesting.html_url
@@ -14,7 +24,7 @@ output "s3_bucket" {
 }
 
 output "cloudfront_distribution_id" {
-  description = "CloudFront distribution ID for interesting.outright.io"
+  description = "CloudFront distribution ID for makeitmoreinteresting.com"
   value       = module.website.cdn_id
 }
 

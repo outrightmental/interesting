@@ -1,9 +1,9 @@
 # interesting — infrastructure
 #
-# Self-contained Terraform project for https://interesting.outright.io/, built
-# the same way BoardingFlow's /infra folder is (which follows FishCareers',
-# which follows outrightmental.com's): one project that owns the whole stack
-# for one property.
+# Self-contained Terraform project for https://makeitmoreinteresting.com/,
+# built the same way BoardingFlow's /infra folder is (which follows
+# FishCareers', which follows outrightmental.com's): one project that owns the
+# whole stack for one property.
 #
 # This project owns:
 #
@@ -11,12 +11,15 @@
 #     Terraform-managed resource, so the repo's settings can never drift.
 #     (The repo pre-existed this configuration; repo.tf adopts it via an
 #     import block on the first apply.)
-#   - The static website: interesting.outright.io S3 bucket + CloudFront
+#   - The makeitmoreinteresting.com hosted zone (dns.tf). The site used to live
+#     at interesting.outright.io, a subdomain of a studio-wide zone this
+#     project could only read; its own apex domain belongs to the same project
+#     as the rest of its stack.
+#   - The static website: makeitmoreinteresting.com S3 bucket + CloudFront
 #     distribution (modules/website, copied from BoardingFlow/infra).
-#   - The ACM certificate for interesting.outright.io, DNS-validated in the
-#     outright.io hosted zone (which stays owned by the shared infra state and
-#     is consumed read-only via data.tf).
-#   - The A/AAAA alias records pointing the subdomain at the distribution.
+#   - The ACM certificate for makeitmoreinteresting.com and
+#     www.makeitmoreinteresting.com, DNS-validated in that same hosted zone.
+#   - The A/AAAA alias records pointing both hostnames at the distribution.
 #   - A dedicated deploy IAM user and the GitHub Actions secrets the deploy
 #     workflow reads, managed here so the deploy credentials can never drift
 #     from the infrastructure.
@@ -37,7 +40,9 @@ terraform {
 
   backend "s3" {
     bucket = "outrightmental-terraform-state"
-    key    = "interesting.outright.io"
+    # Renamed with the domain; `terraform init -migrate-state` copies the state
+    # the old key held (see the cutover order in README.md).
+    key    = "makeitmoreinteresting.com"
     region = "us-east-1"
   }
 }

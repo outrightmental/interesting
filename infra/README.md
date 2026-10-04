@@ -1,4 +1,4 @@
-# infra — interesting.outright.io
+# infra — makeitmoreinteresting.com
 
 Self-contained Terraform project for the *interesting* website, built the same way
 [BoardingFlow/infra](https://github.com/outrightmental/BoardingFlow/tree/main/infra) is (which
@@ -10,10 +10,11 @@ One project owns the whole stack for one property — including the GitHub repos
 | File | Resources | Purpose |
 | ---- | --------- | ------- |
 | `repo.tf` | `github_repository.interesting` | The repository itself — `outrightmental/interesting` is repo-as-code: name, visibility, merge settings, all here. It pre-existed this configuration, so the first apply **adopts** it via an import block; `archive_on_destroy` means a destroy archives rather than deletes it. There is no `pages` block, which is how GitHub Pages stays retired. |
-| `website.tf` + `modules/website` | S3 bucket + CloudFront distribution, ACM certificate + DNS validation, A/AAAA alias records | The static site at https://interesting.outright.io/. The module is copied from BoardingFlow/infra, with the two changes listed under [Notes](#notes). |
-| `iam-deploy.tf` | `interesting-outright-io-deploy` IAM user + key + policy | Dedicated deploy credentials for the GitHub Actions workflow (S3 sync + CloudFront invalidation), scoped to exactly this bucket and this distribution. |
+| `dns.tf` | `aws_route53_zone.primary` | The `makeitmoreinteresting.com` hosted zone. The site used to live at `interesting.outright.io`, a subdomain of a studio-wide zone this project could only read; its own apex domain has nothing in it but this site, so the zone is owned here with the rest of the stack. The domain's nameservers at the registrar have to point at it — `terraform output route53_name_servers` prints the four. |
+| `website.tf` + `modules/website` | S3 bucket + CloudFront distribution, ACM certificate + DNS validation, A/AAAA alias records | The static site at https://makeitmoreinteresting.com/, also served at `www.` from the same distribution (one certificate with www as a SAN, both hostnames as CloudFront aliases, four alias records from one `for_each`). The module is copied from BoardingFlow/infra, with the two changes listed under [Notes](#notes). |
+| `iam-deploy.tf` | `makeitmoreinteresting-com-deploy` IAM user + key + policy | Dedicated deploy credentials for the GitHub Actions workflow (S3 sync + CloudFront invalidation), scoped to exactly this bucket and this distribution. |
 | `github.tf` | Repository Actions secrets | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_S3_BUCKET`, `AWS_CLOUDFRONT_DISTRIBUTION_ID` — set from this project's own resources so the deploy can never drift from the infrastructure. A single apply rotates the deploy credentials end to end. Plus `GA_MEASUREMENT_ID`, the GA4 property the site reports to (`ga_measurement_id` in `locals.tf`): not a credential, since the deploy publishes it in every page, but owned here so the repository itself holds no measurement ID. |
-| `data.tf` | *(read-only)* | The `outright.io` hosted zone stays owned by the shared infra state; this project only reads its zone id and writes the `interesting.` records + cert-validation records into it. The AWS account id is read from the caller rather than written down. |
+| `data.tf` | *(read-only)* | The AWS account id, read from the caller rather than written down. Nothing else is read from outside this project any more: the hosted zone used to be, back when the site was a subdomain of `outright.io`. |
 
 ## Usage
 
@@ -32,8 +33,9 @@ terraform -chdir=infra apply
 
 PowerShell equivalent for the token: `$env:GITHUB_TOKEN = (gh auth token)`.
 
-State is kept in the shared S3 backend under the `interesting.outright.io` key (`main.tf`),
-independent of every other property's state.
+State is kept in the shared S3 backend under the `makeitmoreinteresting.com` key (`main.tf`),
+independent of every other property's state. It was under `interesting.outright.io` until the
+domain moved; see [Moving the domain](#moving-the-domain) for the migration.
 
 ## First-time order
 
@@ -47,14 +49,113 @@ adopts rather than creates the repo:
 2. `git push` to `main` (or run the *Deploy site* workflow by hand) — the workflow builds `site/`,
    syncs the result to the bucket, and invalidates the distribution.
 
-The certificate is DNS-validated automatically (validation records land in the `outright.io`
-zone and `aws_acm_certificate_validation` blocks until issued), so a first apply takes a few
-minutes — most of it CloudFront distribution creation.
+The certificate is DNS-validated automatically (validation records land in this project's own
+`makeitmoreinteresting.com` zone and `aws_acm_certificate_validation` blocks until issued), so a
+first apply takes a few minutes — most of it CloudFront distribution creation. It can only
+succeed once the domain's nameservers point at that zone: ACM resolves the validation record over
+public DNS, so an undelegated zone makes the apply wait until it times out. Create and delegate
+the zone first, as step 2 of [Moving the domain](#moving-the-domain) does.
 
 **Run step 1 around the time the retirement of GitHub Pages merges.** Until it has run there is
 no live deploy at all: the Pages publisher is gone from `deploy.yml`, and the AWS job finds no
 secrets, so it says so in its summary and finishes green rather than failing on every hourly
 commit. The first push after the apply publishes for real, with no change needed to the workflow.
+
+## Moving the domain
+
+The site was served from `interesting.outright.io` until the studio acquired
+**makeitmoreinteresting.com**. Everything in this project now names the new domain, and three of
+those things cannot simply be updated in place: the **bucket** is named after the domain, so it is
+replaced; the **backend state key** is too, so the state has to be migrated; and the **hosted
+zone** is a different zone altogether, which the registrar has to be pointing at before anything
+that depends on it can apply. So the move is not one `terraform apply` — it is this order, once,
+by hand.
+
+Run it with the token exported, as in [Usage](#usage): `export GITHUB_TOKEN=$(gh auth token)`.
+
+1. **Migrate the state.** `main.tf`'s backend key changed with the domain, so the first `init`
+   after this merges has to carry the state across:
+
+   ```bash
+   terraform -chdir=infra init -migrate-state
+   ```
+
+   Terraform notices the key is different and offers to copy the state from
+   `interesting.outright.io` to `makeitmoreinteresting.com`; answer `yes`. The old object is left
+   where it was — delete it once the move is finished (step 6), not before.
+
+2. **Create the zone, then delegate the domain to it.** Nothing else can be applied until public
+   DNS answers for names in the new zone, because that is how ACM validates the certificate:
+
+   ```bash
+   terraform -chdir=infra apply -target=aws_route53_zone.primary
+   terraform -chdir=infra output route53_name_servers
+   ```
+
+   Set those four as the nameservers for `makeitmoreinteresting.com` at the registrar it is
+   registered with, and wait until the delegation is live:
+
+   ```bash
+   dig +short NS makeitmoreinteresting.com @1.1.1.1
+   ```
+
+   Do not go on until that answers with the four. A `.com` delegation is usually minutes, but it
+   is the registrar's clock, not ours, and a premature step 4 just sits in
+   `aws_acm_certificate_validation` until it times out.
+
+3. **Empty the old bucket.** Renaming the bucket means replacing it, and Terraform cannot delete a
+   bucket that still has objects in it (`modules/website` sets no `force_destroy`, deliberately —
+   it is shared with BoardingFlow). The bucket holds nothing but a mirror of the last build, so
+   emptying it costs nothing that the next deploy will not put back:
+
+   ```bash
+   aws s3 rm s3://interesting.outright.io --recursive
+   ```
+
+   From here until step 5 the old host serves errors. It is being retired anyway.
+
+4. **Apply the rest.**
+
+   ```bash
+   terraform -chdir=infra plan
+   terraform -chdir=infra apply
+   ```
+
+   One apply does all of the rest: the new certificate is requested and DNS-validated in the new
+   zone; the `makeitmoreinteresting.com` bucket is created and the old one destroyed; the
+   distribution's aliases, origin and certificate are updated in place; the apex and `www` alias
+   records are created; and the old `interesting.` A/AAAA and cert-validation records are deleted
+   out of the `outright.io` zone, which is what retires the old host. The deploy IAM user is
+   renamed in place, but its access key is replaced — `aws_iam_access_key.deploy` is keyed on the
+   user's name — and the same apply writes the new key and the new bucket name into the
+   repository's Actions secrets, so the deploy never holds a credential or a target that no longer
+   exists. Budget ten to twenty minutes, nearly all of it the CloudFront update.
+
+5. **Publish.** Run *Deploy site* by hand (or push to `main`): the new bucket is empty until the
+   workflow syncs a build into it and invalidates `/*`.
+
+6. **Then, by hand, the things Terraform does not own:**
+
+   - Delete the old `interesting.outright.io` object from the `outrightmental-terraform-state`
+     bucket, now that step 1's copy has been proven by a successful apply.
+   - Point the GA4 data stream at `https://makeitmoreinteresting.com/`. The measurement ID is
+     unchanged (`ga_measurement_id` in `locals.tf`) — GA4 measures a stream, not a hostname — so
+     nothing in this project or the repository changes with it.
+   - Check that `https://makeitmoreinteresting.com/` and `https://www.makeitmoreinteresting.com/`
+     both serve the site over HTTPS, and that a made-up path still gets `error.html` with a 404.
+
+### What the move deliberately leaves out
+
+- **No redirect from `interesting.outright.io`.** The old records are deleted rather than pointed
+  somewhere, so the old host stops resolving. Keeping it alive would mean keeping a certificate for
+  a name in a zone this project no longer touches, plus something to do the redirecting — and the
+  ask was to switch everything over, for a site whose pages have never named a domain. If inbound
+  links turn out to matter, a redirect is a separate change to the `outright.io` zone's own project.
+- **`www` serves the same site rather than redirecting to the apex.** Both hostnames are aliases on
+  one distribution, which is one certificate SAN and two more records; making `www` 301 to the apex
+  instead would need a CloudFront Function and a reason. The site publishes no canonical URL in any
+  page (every link in `/site` is relative, and `sitemap.xml` uses relative `<loc>` values), so it
+  has no absolute address to disagree with.
 
 ## Publishing
 
@@ -111,7 +212,10 @@ CloudFront is the site's only publisher.
 
 A static site behind CloudFront's `PriceClass_100` with a handful of visitors rounds to pennies
 per month: S3 storage (`site/` is a few hundred KB), CloudFront requests, one Route53 query
-volume. The hosted zone is shared and already paid for.
+volume. The one fixed charge rather than a usage one is the hosted zone, at $0.50 a month: it used
+to be the shared `outright.io` zone, already paid for, and `makeitmoreinteresting.com`'s is this
+property's own (`dns.tf`), so its bill is too. Domain registration is the registrar's, not AWS's,
+and is not managed here.
 
 The hourly AI iteration makes this busier than a normal property: roughly 720 deploys a month,
 each one an `aws s3 sync` and an invalidation. An invalidation of `/*` counts as one path, so
