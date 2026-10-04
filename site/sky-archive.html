@@ -4,7 +4,8 @@ title: sky archive oracle
 description: 'Spin your saved constellation through a rune wheel, collect tiny omen readings, and forge a portable sigil.'
 stylesheet: sky-archive
 footer:
-  - [index.html, back to constellation]
+  - [wish-constellation.html, back to the wish constellation]
+  - [index.html, back to the threshold]
   - [sitemap.html, site map]
   - [constellation-diary.html, open constellation diary]
   - [error.html, visit observatory 404]
@@ -157,7 +158,7 @@ Load your saved sky, then spin to ask for a tiny omen.</pre>
 
         if (!raw) {
           stars = [];
-          statusEl.textContent = 'No saved constellation found. Make one on the main page first.';
+          statusEl.textContent = 'No saved constellation found. Make one on the wish constellation page first.';
           clearSigil(true);
           return;
         }
@@ -174,7 +175,7 @@ Load your saved sky, then spin to ask for a tiny omen.</pre>
           statusEl.textContent = 'Archive synced: ' + stars.length + ' star' + (stars.length === 1 ? '' : 's') + ' loaded.';
         } catch (e2) {
           stars = [];
-          statusEl.textContent = 'Saved constellation data is unreadable. Return home and remake it.';
+          statusEl.textContent = 'Saved constellation data is unreadable. Open the wish constellation and remake it.';
           clearSigil(true);
         }
       }

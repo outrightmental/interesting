@@ -1,0 +1,171 @@
+---
+layout: layout.njk
+title: the quiet room
+description: 'A low-demand room for when something is banked low: a breath you can follow, a dimmer, and nothing that needs doing.'
+stylesheet: quiet-room
+footer:
+  - [index.html, back to the threshold]
+  - [moods.html, mood atlas]
+  - [loam.html, open loam]
+footerNote: this world asks for nothing
+---
+  <main>
+    <h1>the quiet room</h1>
+    <p class='tagline'>Where the threshold sends anyone reading as banked low. Nothing in here keeps score.</p>
+
+    <div class='layout'>
+      <div class='room' id='room'>
+        <div class='breath' id='breath' aria-hidden='true'></div>
+        <p class='breath-word' id='breath-word' aria-live='polite'>settling</p>
+      </div>
+
+      <section class='panel'>
+        <p class='room-note'>The ring takes six seconds out and six back. Follow it or do not. The
+          dimmer is real: it darkens this room only, and it stays where you leave it.</p>
+        <div class='controls'>
+          <button id='breathe' type='button' aria-pressed='true'>pause the breath</button>
+          <button id='sigh' type='button'>one long sigh</button>
+          <button id='weight' type='button'>put something down</button>
+        </div>
+        <div class='row'>
+          <label for='dim'>dimmer</label>
+          <input id='dim' type='range' min='0' max='100' value='40'>
+        </div>
+        <p id='status' aria-live='polite'>The room is lit low and the door is shut.</p>
+        <pre id='reading'>Nothing is required of you here.
+There is no score, no streak and no next thing.</pre>
+        <p class='hint'>Easter egg: press the spacebar and hold it. The room holds its breath with you.</p>
+      </section>
+    </div>
+
+{% include "footer.njk" %}
+  </main>
+
+  <script>
+    (function () {
+      var STORE = 'interesting_quiet_room_v1';
+      var room = document.getElementById('room');
+      var breath = document.getElementById('breath');
+      var word = document.getElementById('breath-word');
+      var breatheBtn = document.getElementById('breathe');
+      var sighBtn = document.getElementById('sigh');
+      var weightBtn = document.getElementById('weight');
+      var dim = document.getElementById('dim');
+      var statusEl = document.getElementById('status');
+      var readingEl = document.getElementById('reading');
+
+      var calm = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
+      var running = true;
+      var held = false;
+      var phase = 0;
+      var last = 0;
+      var cycle = 12;
+      var putDown = [];
+
+      var burdens = [
+        'the unread thing',
+        'the half-finished message',
+        'the thing you said in 2014',
+        'the small debt of attention',
+        'the opinion you did not need to have',
+        'the tab you are keeping open out of guilt',
+        'the plan that was never yours',
+        'the correction nobody asked for'
+      ];
+
+      function restore() {
+        try {
+          var raw = localStorage.getItem(STORE);
+          if (!raw) return;
+          var saved = JSON.parse(raw);
+          if (saved && typeof saved.dim === 'number') dim.value = String(saved.dim);
+          if (saved && Array.isArray(saved.down)) putDown = saved.down.slice(0, 12);
+        } catch (e) {
+          /* a room that cannot remember is still a room */
+        }
+      }
+
+      function remember() {
+        try {
+          localStorage.setItem(STORE, JSON.stringify({ dim: Number(dim.value), down: putDown }));
+        } catch (e) {
+          /* nothing to do about it, and nothing lost that matters */
+        }
+      }
+
+      function applyDim() {
+        room.style.setProperty('--dim', String(Number(dim.value) / 100));
+      }
+
+      function setBreathing(on) {
+        running = on;
+        breatheBtn.textContent = on ? 'pause the breath' : 'start the breath';
+        breatheBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
+      }
+
+      function frame(now) {
+        if (typeof now !== 'number') now = performance.now();
+        var dt = last ? Math.min(0.1, (now - last) / 1000) : 0.016;
+        last = now;
+        if (running && !held) phase = (phase + dt / cycle) % 1;
+        var swell = (1 - Math.cos(phase * Math.PI * 2)) / 2;
+        breath.style.transform = 'scale(' + (0.62 + swell * 0.38).toFixed(4) + ')';
+        breath.style.opacity = (0.4 + swell * 0.5).toFixed(3);
+        var next = held ? 'holding' : (swell > 0.52 ? 'out' : 'in');
+        if (word.textContent !== next) word.textContent = next;
+        requestAnimationFrame(frame);
+      }
+
+      breatheBtn.addEventListener('click', function () {
+        setBreathing(!running);
+        statusEl.textContent = running ? 'The ring is moving again.' : 'The ring is still. So is the room.';
+      });
+
+      sighBtn.addEventListener('click', function () {
+        cycle = 20;
+        phase = 0.5;
+        statusEl.textContent = 'One long one. The cycle stretches, then comes back.';
+        window.setTimeout(function () { cycle = 12; }, 20000);
+      });
+
+      weightBtn.addEventListener('click', function () {
+        var pick = burdens[Math.floor(Math.random() * burdens.length)];
+        if (putDown.indexOf(pick) === -1) putDown.push(pick);
+        if (putDown.length > 12) putDown.shift();
+        remember();
+        readingEl.textContent = 'put down, and left down:\n\n' + putDown.map(function (b) {
+          return '  · ' + b;
+        }).join('\n') + '\n\nNone of it is coming back up with you.';
+        statusEl.textContent = 'Set down: ' + pick + '.';
+      });
+
+      dim.addEventListener('input', function () {
+        applyDim();
+        remember();
+      });
+
+      document.addEventListener('keydown', function (ev) {
+        if (ev.key !== ' ' || ev.target !== document.body) return;
+        ev.preventDefault();
+        if (held) return;
+        held = true;
+        word.textContent = 'holding';
+        statusEl.textContent = 'Held. Let go when it has been enough.';
+      });
+
+      document.addEventListener('keyup', function (ev) {
+        if (ev.key !== ' ' || !held) return;
+        held = false;
+        statusEl.textContent = 'Released. The room carries on without comment.';
+      });
+
+      restore();
+      applyDim();
+      if (calm && calm.matches) {
+        setBreathing(false);
+        word.textContent = 'in — hold — out, at whatever rate suits you';
+        statusEl.textContent = 'Reduced motion is on, so the ring is holding still.';
+      }
+      requestAnimationFrame(frame);
+    })();
+  </script>

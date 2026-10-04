@@ -1,0 +1,263 @@
+---
+layout: layout.njk
+title: loam
+description: Everything happens below the soil line here. Plant, water, and watch a root system work its way down, for anyone reading as low and slow.
+stylesheet: loam
+footer:
+  - [index.html, back to the threshold]
+  - [moods.html, mood atlas]
+  - [wish-terrarium.html, open the terrarium]
+footerNote: the interesting part was always underground
+---
+  <main>
+    <h1>loam</h1>
+    <p class='tagline'>Where the threshold sends anyone reading as low and slow. Nothing above ground is shown, on purpose.</p>
+
+    <div class='layout'>
+      <canvas id='soil' width='620' height='380' aria-label='A cutaway of soil with root systems growing downward through it'></canvas>
+
+      <section class='panel'>
+        <p class='soil-note'>Click anywhere in the soil to put something in it. Roots take the path
+          of least resistance, so the stones matter: a seed planted over gravel goes sideways for a
+          long while before it finds a way down.</p>
+        <div class='controls'>
+          <button id='plant' type='button'>plant one</button>
+          <button id='water' type='button'>water it</button>
+          <button id='turn' type='button'>turn the soil</button>
+          <button id='sample' type='button'>take a core sample</button>
+        </div>
+        <div class='row'>
+          <label for='grit'>grit</label>
+          <input id='grit' type='range' min='0' max='100' value='38'>
+        </div>
+        <p id='status' aria-live='polite'>Bare soil, well drained, nothing in it yet.</p>
+        <pre id='reading'>core sample pending
+put something in the ground first</pre>
+        <p class='hint'>The soil keeps only the count of what went into it. The roots themselves are grown fresh and lost again, which is the usual arrangement with soil.</p>
+      </section>
+    </div>
+
+{% include "footer.njk" %}
+  </main>
+
+  <script>
+    (function () {
+      var STORE = 'interesting_loam_v1';
+      var canvas = document.getElementById('soil');
+      var ctx = canvas.getContext('2d');
+      var plantBtn = document.getElementById('plant');
+      var waterBtn = document.getElementById('water');
+      var turnBtn = document.getElementById('turn');
+      var sampleBtn = document.getElementById('sample');
+      var grit = document.getElementById('grit');
+      var statusEl = document.getElementById('status');
+      var readingEl = document.getElementById('reading');
+
+      var calm = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
+      var SURFACE = 44;
+      var stones = [];
+      var roots = [];
+      var tips = [];
+      var moisture = 0.5;
+      var planted = 0;
+      var last = 0;
+
+      var NAMES = ['vetch', 'comfrey', 'chicory', 'yarrow', 'burdock', 'sorrel', 'tansy',
+                   'mallow', 'plantain', 'fescue', 'clover', 'dock'];
+
+      function rand(min, max) {
+        return min + Math.random() * (max - min);
+      }
+
+      function layStones() {
+        stones = [];
+        var count = 18 + Math.round(Number(grit.value) / 3);
+        for (var i = 0; i < count; i++) {
+          stones.push({
+            x: rand(10, canvas.width - 10),
+            y: rand(SURFACE + 30, canvas.height - 10),
+            r: rand(6, 20)
+          });
+        }
+      }
+
+      function blocked(x, y) {
+        for (var i = 0; i < stones.length; i++) {
+          var dx = x - stones[i].x;
+          var dy = y - stones[i].y;
+          if (dx * dx + dy * dy < stones[i].r * stones[i].r) return stones[i];
+        }
+        return null;
+      }
+
+      function plant(x) {
+        planted += 1;
+        var name = NAMES[Math.floor(Math.random() * NAMES.length)];
+        tips.push({
+          x: x, y: SURFACE, angle: Math.PI / 2, width: 3.2, life: 1,
+          name: name, hue: Math.floor(rand(28, 58))
+        });
+        statusEl.textContent = 'Planted ' + name + ' at ' + Math.round(x) + ' across. It will take its time.';
+        remember();
+      }
+
+      function grow(dt) {
+        var speed = (calm && calm.matches ? 22 : 40) * (0.5 + moisture);
+        var next = [];
+        for (var i = 0; i < tips.length; i++) {
+          var tip = tips[i];
+          if (tip.life <= 0 || tip.y > canvas.height - 6) continue;
+          var stepLen = speed * dt;
+          var nx = tip.x + Math.cos(tip.angle) * stepLen;
+          var ny = tip.y + Math.sin(tip.angle) * stepLen;
+          var stone = blocked(nx, ny);
+          if (stone) {
+            // Go around rather than through: that is the whole character of a root.
+            tip.angle += (nx < stone.x ? -1 : 1) * 0.55;
+            continue;
+          }
+          if (nx < 4 || nx > canvas.width - 4) tip.angle = Math.PI - tip.angle;
+          roots.push({ x1: tip.x, y1: tip.y, x2: nx, y2: ny, w: tip.width, hue: tip.hue });
+          if (roots.length > 5000) roots.splice(0, 800);
+          tip.x = nx;
+          tip.y = ny;
+          tip.angle += rand(-0.22, 0.22) + (Math.PI / 2 - tip.angle) * 0.04;
+          tip.width = Math.max(0.6, tip.width - dt * 0.22);
+          tip.life -= dt * 0.012;
+          next.push(tip);
+          if (Math.random() < dt * 1.4 * moisture && tip.width > 1.1 && tips.length + next.length < 90) {
+            next.push({
+              x: tip.x, y: tip.y, angle: tip.angle + rand(-0.9, 0.9),
+              width: tip.width * 0.64, life: tip.life * 0.8, name: tip.name, hue: tip.hue
+            });
+          }
+        }
+        tips = next;
+      }
+
+      function draw() {
+        var sky = ctx.createLinearGradient(0, 0, 0, SURFACE);
+        sky.addColorStop(0, '#0c0a06');
+        sky.addColorStop(1, '#17110a');
+        ctx.fillStyle = sky;
+        ctx.fillRect(0, 0, canvas.width, SURFACE);
+
+        var ground = ctx.createLinearGradient(0, SURFACE, 0, canvas.height);
+        ground.addColorStop(0, 'rgb(' + Math.round(58 - moisture * 18) + ', ' + Math.round(42 - moisture * 12) + ', 24)');
+        ground.addColorStop(1, '#120d07');
+        ctx.fillStyle = ground;
+        ctx.fillRect(0, SURFACE, canvas.width, canvas.height - SURFACE);
+
+        ctx.strokeStyle = 'rgba(224, 196, 142, 0.5)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(0, SURFACE);
+        ctx.lineTo(canvas.width, SURFACE);
+        ctx.stroke();
+
+        for (var s = 0; s < stones.length; s++) {
+          ctx.fillStyle = 'rgba(126, 118, 104, 0.58)';
+          ctx.beginPath();
+          ctx.arc(stones[s].x, stones[s].y, stones[s].r, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        ctx.lineCap = 'round';
+        for (var r = 0; r < roots.length; r++) {
+          var seg = roots[r];
+          ctx.strokeStyle = 'hsla(' + seg.hue + ', 46%, ' + (62 + moisture * 14).toFixed(0) + '%, 0.82)';
+          ctx.lineWidth = seg.w;
+          ctx.beginPath();
+          ctx.moveTo(seg.x1, seg.y1);
+          ctx.lineTo(seg.x2, seg.y2);
+          ctx.stroke();
+        }
+      }
+
+      function frame(now) {
+        if (typeof now !== 'number') now = performance.now();
+        var dt = last ? Math.min(0.05, (now - last) / 1000) : 0.016;
+        last = now;
+        moisture = Math.max(0.12, moisture - dt * 0.012);
+        grow(dt);
+        draw();
+        requestAnimationFrame(frame);
+      }
+
+      function depth() {
+        var deepest = SURFACE;
+        for (var r = 0; r < roots.length; r++) if (roots[r].y2 > deepest) deepest = roots[r].y2;
+        return (deepest - SURFACE) / 10;
+      }
+
+      function remember() {
+        try {
+          localStorage.setItem(STORE, JSON.stringify({ planted: planted, at: Date.now() }));
+        } catch (e) {
+          /* soil does not mind being forgotten */
+        }
+      }
+
+      function restore() {
+        try {
+          var raw = localStorage.getItem(STORE);
+          if (!raw) return;
+          var saved = JSON.parse(raw);
+          if (saved && typeof saved.planted === 'number') {
+            planted = saved.planted;
+            if (planted > 0) {
+              statusEl.textContent = planted + ' thing' + (planted === 1 ? '' : 's') + ' went into this soil before. It does not keep the roots, only the count.';
+            }
+          }
+        } catch (e) {
+          /* nothing in the ground, then */
+        }
+      }
+
+      canvas.addEventListener('click', function (ev) {
+        var box = canvas.getBoundingClientRect();
+        plant((ev.clientX - box.left) / box.width * canvas.width);
+      });
+
+      plantBtn.addEventListener('click', function () {
+        plant(rand(30, canvas.width - 30));
+      });
+
+      waterBtn.addEventListener('click', function () {
+        moisture = Math.min(1.6, moisture + 0.45);
+        statusEl.textContent = 'Watered. Moisture at ' + Math.round(moisture * 60) + ' per cent of field capacity.';
+      });
+
+      turnBtn.addEventListener('click', function () {
+        roots = [];
+        tips = [];
+        layStones();
+        statusEl.textContent = 'Turned over. Everything that was down there is down there differently now.';
+      });
+
+      sampleBtn.addEventListener('click', function () {
+        var d = depth();
+        var tilth = Number(grit.value) < 30 ? 'heavy, slow to drain'
+          : (Number(grit.value) < 65 ? 'balanced loam' : 'gritty, drains fast');
+        readingEl.textContent = 'core sample\n'
+          + '  depth reached: ' + d.toFixed(1) + ' cm\n'
+          + '  living tips: ' + tips.length + '\n'
+          + '  segments laid down: ' + roots.length + '\n'
+          + '  tilth: ' + tilth + '\n'
+          + '  moisture: ' + Math.round(moisture * 60) + '%\n\n'
+          + (d < 4 ? 'Early. Nothing to judge yet, and nothing wrong with that.'
+            : (d < 16 ? 'Established. The system is wider than it is deep, which is normal.'
+              : 'Deep. Whatever is up top is the smaller half of this.'));
+        statusEl.textContent = 'Core taken. The hole closes itself.';
+      });
+
+      grit.addEventListener('input', function () {
+        layStones();
+        statusEl.textContent = 'Grit at ' + grit.value + '. The stones are somewhere else now.';
+      });
+
+      restore();
+      layStones();
+      requestAnimationFrame(frame);
+    })();
+  </script>

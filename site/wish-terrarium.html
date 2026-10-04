@@ -4,7 +4,8 @@ title: wish terrarium
 description: Grow a living terrarium from your saved constellation and read tiny weather reports from your wishes.
 stylesheet: wish-terrarium
 footer:
-  - [index.html, back to constellation]
+  - [wish-constellation.html, back to the wish constellation]
+  - [index.html, back to the threshold]
   - [sitemap.html, site map]
   - [constellation-diary.html, open constellation diary]
   - [star-lantern.html, open star lantern ritual]
@@ -18,7 +19,7 @@ footer:
       <canvas id='terrarium' width='620' height='340' aria-label='Animated terrarium grown from saved constellation stars'></canvas>
 
       <section class='panel'>
-        <p style='margin:0;color:#d8e4ff;'>This page uses the same saved constellation memory as the main sky.</p>
+        <p style='margin:0;color:#d8e4ff;'>This page uses the same saved constellation memory as the wish constellation page.</p>
         <div class='controls'>
           <button id='refresh' type='button'>refresh saved sky</button>
           <button id='regrow' type='button'>regrow terrarium</button>
@@ -117,7 +118,7 @@ Load your sky memory, then click any plant to hear its thought.</pre>
         if (!raw) {
           stars = [];
           plants = [];
-          statusEl.textContent = 'No saved constellation found yet. Create one on the main page first.';
+          statusEl.textContent = 'No saved constellation found yet. Create one on the wish constellation page first.';
           return;
         }
 
@@ -136,7 +137,7 @@ Load your sky memory, then click any plant to hear its thought.</pre>
         } catch (e2) {
           stars = [];
           plants = [];
-          statusEl.textContent = 'Saved constellation data is unreadable. Return home and remake it.';
+          statusEl.textContent = 'Saved constellation data is unreadable. Open the wish constellation and remake it.';
         }
       }
 
@@ -205,7 +206,7 @@ Load your sky memory, then click any plant to hear its thought.</pre>
 
       function forecast() {
         if (!stars.length) {
-          statusEl.textContent = 'No seeds loaded yet. Refresh after creating stars on the main page.';
+          statusEl.textContent = 'No seeds loaded yet. Refresh after creating stars on the wish constellation page.';
           return;
         }
 
@@ -277,7 +278,7 @@ Load your sky memory, then click any plant to hear its thought.</pre>
         readingEl.textContent = 'picked leaf memory:\n'
           + nearest.star.text + '\n\n'
           + 'seed coordinates ' + nearest.star.x.toFixed(1) + ', ' + nearest.star.y.toFixed(1) + '\n'
-          + 'tip: regrow after rearranging stars on the main page.';
+          + 'tip: regrow after rearranging stars on the wish constellation page.';
 
         statusEl.textContent = 'Plant selected. This stem remembers one saved thought.';
       }
@@ -405,7 +406,7 @@ Load your sky memory, then click any plant to hear its thought.</pre>
 
       regrowBtn.addEventListener('click', function () {
         if (!stars.length) {
-          statusEl.textContent = 'No seeds loaded yet. Refresh after creating stars on the main page.';
+          statusEl.textContent = 'No seeds loaded yet. Refresh after creating stars on the wish constellation page.';
           return;
         }
         shuffleOffset += 1;

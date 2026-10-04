@@ -4,7 +4,8 @@ title: constellation diary
 description: A logbook that turns your saved wish constellation into animated diary entries.
 stylesheet: constellation-diary
 footer:
-  - [index.html, back to constellation]
+  - [wish-constellation.html, back to the wish constellation]
+  - [index.html, back to the threshold]
   - [sitemap.html, site map]
   - [error.html, visit observatory 404]
 footerNote: 'easter egg: tap the title five times'
@@ -17,7 +18,7 @@ footerNote: 'easter egg: tap the title five times'
       <canvas id='sky' width='620' height='300' aria-label='Animated view of your saved constellation'></canvas>
 
       <section class='panel'>
-        <p style='margin:0;color:#d8e5ff;'>Generate entries from the exact star layout saved on the main page.</p>
+        <p style='margin:0;color:#d8e5ff;'>Generate entries from the exact star layout saved on the wish constellation page.</p>
         <div class='controls'>
           <button id='refresh' type='button'>refresh saved sky</button>
           <button id='shuffle' type='button'>shuffle palette</button>
@@ -223,7 +224,7 @@ footerNote: 'easter egg: tap the title five times'
         }
 
         if (!stars.length) {
-          statusEl.textContent = 'Add stars on the main page first, then return to play ambience.';
+          statusEl.textContent = 'Add stars on the wish constellation page first, then return to play ambience.';
           return;
         }
 
@@ -345,7 +346,7 @@ footerNote: 'easter egg: tap the title five times'
 
         if (!raw) {
           stars = [];
-          statusEl.textContent = 'No saved constellation found yet. Create one on the main page first.';
+          statusEl.textContent = 'No saved constellation found yet. Create one on the wish constellation page first.';
           stopReplay();
           stopAmbience(true);
           return;
@@ -455,7 +456,7 @@ footerNote: 'easter egg: tap the title five times'
 
       function writeEntry() {
         if (!stars.length) {
-          entryEl.textContent = 'No constellation loaded yet.\n\n1) Visit index.html\n2) Place a few stars\n3) Return here and press refresh';
+          entryEl.textContent = 'No constellation loaded yet.\n\n1) Visit wish-constellation.html\n2) Place a few stars\n3) Return here and press refresh';
           return;
         }
 
@@ -494,7 +495,7 @@ footerNote: 'easter egg: tap the title five times'
 
       function sealCapsule() {
         if (!stars.length) {
-          statusEl.textContent = 'Cannot seal an empty sky. Refresh or create stars on the main page first.';
+          statusEl.textContent = 'Cannot seal an empty sky. Refresh or create stars on the wish constellation page first.';
           return;
         }
 
@@ -540,7 +541,7 @@ footerNote: 'easter egg: tap the title five times'
 
       function startReplay() {
         if (!stars.length) {
-          statusEl.textContent = 'No stars available for replay. Refresh after creating stars on the main page.';
+          statusEl.textContent = 'No stars available for replay. Refresh after creating stars on the wish constellation page.';
           return;
         }
 

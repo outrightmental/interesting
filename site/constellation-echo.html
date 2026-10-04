@@ -4,7 +4,8 @@ title: constellation echo chamber
 description: 'Listen to your saved constellation as drifting echoes, pulse the field, and read a tiny atmospheric report.'
 stylesheet: constellation-echo
 footer:
-  - [index.html, back to constellation]
+  - [wish-constellation.html, back to the wish constellation]
+  - [index.html, back to the threshold]
   - [sitemap.html, site map]
   - [sky-archive.html, open sky archive oracle]
   - [star-lantern.html, open star lantern ritual]
@@ -19,7 +20,7 @@ footer:
       <canvas id='echo-canvas' width='620' height='340' aria-label='Animated echo field generated from saved constellation stars'></canvas>
 
       <section class='panel'>
-        <p style='margin:0;color:#d8e4ff;'>This page reads the same saved constellation memory as the main sky.</p>
+        <p style='margin:0;color:#d8e4ff;'>This page reads the same saved constellation memory as the wish constellation page.</p>
         <div class='controls'>
           <button id='refresh' type='button'>refresh saved sky</button>
           <button id='pulse' type='button'>emit center pulse</button>
@@ -122,7 +123,7 @@ Load your saved sky, click the field to pulse, or select an echo to hear its tho
         if (!raw) {
           stars = [];
           echoes = [];
-          statusEl.textContent = 'No saved constellation found yet. Create one on the main page first.';
+          statusEl.textContent = 'No saved constellation found yet. Create one on the wish constellation page first.';
           return;
         }
 
@@ -141,7 +142,7 @@ Load your saved sky, click the field to pulse, or select an echo to hear its tho
         } catch (e2) {
           stars = [];
           echoes = [];
-          statusEl.textContent = 'Saved constellation data is unreadable. Return home and remake it.';
+          statusEl.textContent = 'Saved constellation data is unreadable. Open the wish constellation and remake it.';
         }
       }
 
@@ -171,7 +172,7 @@ Load your saved sky, click the field to pulse, or select an echo to hear its tho
 
       function emitPulse(px, py) {
         if (!echoes.length) {
-          statusEl.textContent = 'No echoes available yet. Refresh after creating stars on the main page.';
+          statusEl.textContent = 'No echoes available yet. Refresh after creating stars on the wish constellation page.';
           return;
         }
 
@@ -196,7 +197,7 @@ Load your saved sky, click the field to pulse, or select an echo to hear its tho
 
       function shuffleHarmonics() {
         if (!echoes.length) {
-          statusEl.textContent = 'No echoes available yet. Refresh after creating stars on the main page.';
+          statusEl.textContent = 'No echoes available yet. Refresh after creating stars on the wish constellation page.';
           return;
         }
 
@@ -260,7 +261,7 @@ Load your saved sky, click the field to pulse, or select an echo to hear its tho
         ];
         var closers = [
           'Send one tiny signal before midnight.',
-          'Move a star on the main page and read again.',
+          'Move a star on the wish constellation and read again.',
           'Name the next action in six words and do it.',
           'Share one unfinished idea with someone kind.'
         ];

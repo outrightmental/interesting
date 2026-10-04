@@ -4,7 +4,8 @@ title: constellation weather lab
 description: 'An animated weather lab generated from your saved constellation: probe skies, read forecasts, and toggle midnight rain.'
 stylesheet: constellation-weather
 footer:
-  - [index.html, back to constellation]
+  - [wish-constellation.html, back to the wish constellation]
+  - [index.html, back to the threshold]
   - [sitemap.html, site map]
   - [sky-archive.html, open sky archive oracle]
   - [wish-terrarium.html, open wish terrarium]
@@ -18,7 +19,7 @@ footer:
       <canvas id='lab' width='620' height='340' aria-label='Animated weather map grown from saved constellation stars'></canvas>
 
       <section class='panel'>
-        <p style='margin:0;color:#d8e4ff;'>This uses the same saved constellation memory as the main page.</p>
+        <p style='margin:0;color:#d8e4ff;'>This uses the same saved constellation memory as the wish constellation page.</p>
         <div class='controls'>
           <button id='refresh' type='button'>refresh saved sky</button>
           <button id='forecast' type='button'>generate forecast</button>
@@ -164,7 +165,7 @@ Load your saved sky, click the map to launch a weather probe, or generate a full
         if (!raw) {
           stars = [];
           cells = [];
-          statusEl.textContent = 'No saved constellation found yet. Create one on the main page first.';
+          statusEl.textContent = 'No saved constellation found yet. Create one on the wish constellation page first.';
           return;
         }
 
@@ -183,7 +184,7 @@ Load your saved sky, click the map to launch a weather probe, or generate a full
         } catch (e2) {
           stars = [];
           cells = [];
-          statusEl.textContent = 'Saved constellation data is unreadable. Return home and remake it.';
+          statusEl.textContent = 'Saved constellation data is unreadable. Open the wish constellation and remake it.';
         }
       }
 
@@ -210,7 +211,7 @@ Load your saved sky, click the map to launch a weather probe, or generate a full
 
       function generateForecast() {
         if (!stars.length) {
-          statusEl.textContent = 'No stars loaded yet. Refresh after creating stars on the main page.';
+          statusEl.textContent = 'No stars loaded yet. Refresh after creating stars on the wish constellation page.';
           return;
         }
 
