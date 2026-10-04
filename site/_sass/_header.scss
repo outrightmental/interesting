@@ -62,6 +62,29 @@
   font-size: 0.82rem;
 }
 
+.site-meta {
+  margin: 0;
+  border: 1px solid vars.$hairline;
+  border-radius: vars.$radius-well;
+  background: rgba(5, 8, 16, 0.56);
+  padding: 0.42rem 0.5rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+}
+
+.site-meta-status {
+  color: #d9e7ff;
+  font-size: 0.83rem;
+}
+
+.site-meta-link {
+  @include nav-chips.chip(0.8rem, 0.3rem 0.7rem);
+  min-height: 44px;
+}
+
 .site-header-nav {
   display: flex;
   flex-wrap: wrap;
@@ -86,6 +109,10 @@
     justify-content: flex-start;
   }
 
+  .site-meta {
+    justify-content: flex-start;
+  }
+
   .site-header-nav {
     justify-content: flex-start;
   }
@@ -93,7 +120,8 @@
 
 @media (prefers-reduced-motion: reduce) {
   .skip-link,
-  .site-header-nav a {
+  .site-header-nav a,
+  .site-meta-link {
     transition: none;
   }
 }

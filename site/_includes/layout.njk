@@ -46,6 +46,7 @@
   <!-- The one local-state store every page reads and writes through, and its meta menu; see
        js/state.js. Not deferred: a page's own script runs before any deferred one does. -->
   <script src='js/state.js'></script>
+  <script src='js/site.js' defer></script>
 </head>
 <body>
   <a class='skip-link' href='#main-content'>skip to main content</a>
@@ -53,6 +54,10 @@
     <p class='site-header-title'>
       <a href='index.html'>interesting</a>
       <span>one sky, many instruments</span>
+    </p>
+    <p class='site-meta' aria-live='polite'>
+      <span id='site-pulse-status' class='site-meta-status'>sky pulse: checking shared constellation memory...</span>
+      <a id='site-pulse-link' class='site-meta-link' href='index.html'>open home constellation</a>
     </p>
     <nav class='site-header-nav' aria-label='Primary navigation'>
       <a href='index.html'{% if page and page.fileSlug == 'index' %} aria-current='page'{% endif %}>home</a>
