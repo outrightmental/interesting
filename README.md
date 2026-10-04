@@ -38,10 +38,12 @@ iterate a more interesting website
   [GitHub Copilot](https://docs.github.com/copilot), reached through the
   [Copilot CLI](https://docs.github.com/copilot/how-tos/copilot-cli) and billed to a GitHub Copilot
   subscription (see [Setup](#setup)), gives it the mission **"make the website more interesting as a
-  coherent whole"** — where *interesting* means user engagement time, and nothing else (see
-  [Engagement-time axiom](#engagement-time-axiom)) —
-  and commits the result to `main`; the pipeline above then tests and deploys it. Models the
-  account cannot use are skipped. A model
+  single coherent whole"** — where *interesting* means user engagement time, and nothing else (see
+  [Engagement-time axiom](#engagement-time-axiom)) — and commits the result to `main`; the pipeline
+  above then tests and deploys it. Every run is told to start by envisioning the site as **one
+  functioning excellent experience** and then to re-federate it aggressively, which is the normal
+  work of a run rather than one option among two (see [One single experience](#one-single-experience)).
+  Models the account cannot use are skipped. A model
   that returns an unusable answer is replaced by another random model, or asked again if no other
   is left, for up to three attempts per run.
 - **One run at a time** — a run that starts while an earlier run of the workflow is still going
@@ -106,9 +108,11 @@ the one thing the mission is measured in.
 - **Stated in the prompt.** The system prompt gives the definition twice: once before a run chooses
   what to do, so the standard is in hand while the choice is still open, and once in the line a run
   reads last. It says outright that a change is judged on whether it gives someone a reason to stay
-  and keep going, not on whether it looks tidy or busy. `MISSION` names the aim and `INTERESTING`
-  names the measure, both in
-  [`.github/scripts/make_interesting.py`](.github/scripts/make_interesting.py).
+  and keep going, not on whether it looks tidy or busy. `MISSION` names the aim, `INTERESTING`
+  names the measure and `WHOLE` names the shape
+  ([One single experience](#one-single-experience)), all three in
+  [`.github/scripts/make_interesting.py`](.github/scripts/make_interesting.py) and all three stated
+  at both ends of a run.
 - **The cadence rule is the fifth `AXIOM`**, stated in the `Rules:` block beside the five below.
   It names every phrasing the code refuses, in full, so it is a rule a run can follow rather than a
   trap it springs: the words *tonight*, *tomorrow*, *yesterday*, *hourly*, *nightly*, *daily* and
@@ -153,6 +157,61 @@ the one thing the mission is measured in.
   "Tonight's experiment" on the home page, "tonight starts fresh" in its storage-failure note,
   "rewritten every hour" in the site map's closing axiom, and the readings that sent a visitor away
   until tomorrow.
+
+### One single experience
+
+Engagement time says how good the site has to be. This says what shape it has to be in: **one
+functioning excellent experience** — one navigation, one visual language, one through-line a visitor
+follows from the first page to the last — and not a set of pages that happen to share a domain. A
+pile of individually decent pages satisfies "more interesting" and even satisfies engagement time
+for a while, which is exactly why it has to be ruled out by name.
+
+- **Every run envisions the whole first, unconditionally.** The system prompt opens the choice with
+  `ENVISION THE WHOLE FIRST`: before a run chooses anything it reads every file it was given and
+  pictures the site as one experience, then asks where what is there falls short of that — what the
+  pages repeat, where they have drifted apart, which of them a visitor would not guess belong to the
+  same site. That pass is the first half of every run, with nothing to decide about it; what the run
+  does is the second half and follows from what it saw. It used to be a suggestion ("begin every run
+  by taking a moment"), which is a different instruction.
+- **Re-federating is the normal work of a run**, not one of two options. `RE-FEDERATE,
+  AGGRESSIVELY` asks every run to leave the site more of a single piece than it found it: lift the
+  markup, styles and behaviour the pages repeat into the shared files
+  ([`site/_includes`](site/_includes), [`site/_sass`](site/_sass), `css/site.scss`, a shared
+  `js/site.js`), give every page the same header and navigation, settle on one visual language and
+  hold every page to it. The prompt asks for the consolidation that is overdue rather than the one
+  that is merely easy, and asks a run not to leave a near-duplicate standing because no single page
+  is to blame for it.
+- **It reaches the pages themselves.** Merging pages that overlap and retiring the ones that no
+  longer earn their place is part of re-federating, not a separate licence: the site is better as
+  fewer pages that belong together than as more that do not. The reachability axiom is what keeps
+  that safe — a page a run retires comes out of the navigation and the sitemap in the same run, or
+  the plan is refused — and a run whose entire change is a deletion has always been accepted.
+- **Adding is the exception, and it arrives federated.** A site that already holds together gets
+  more interesting by growing, so `ADD something` is still there: new content, a new page, an
+  interactive toy, a hidden easter egg, a new way of querying a visitor's orientation, a new world
+  for an orientation that has none ([Mood axiom](#mood-axiom)). But it is no longer the equal first
+  option, and it is never a way around the paragraph above. Whatever a run adds arrives inside the
+  shared layout, in the one visual language, wired into the one navigation, sharing the styles and
+  behaviour it has in common with the rest, in that same run. A page that stands apart leaves the
+  site less of a whole however good that page is on its own.
+- **Aggressive, not reckless.** The answer limit has not moved, so a federation too large for one
+  answer is staged across runs rather than half done: the prompt says so, and the rule that a run
+  leaves the site working — every link, stylesheet, script, layout and `@use` still pointing at
+  something that is there — is unchanged.
+- **Stated at both ends of the run**, the pattern this repository uses for every standard it holds a
+  model to. `WHOLE` in
+  [`.github/scripts/make_interesting.py`](.github/scripts/make_interesting.py) is named in the first
+  line of the system prompt, again where the run chooses what to do, and again in the last line
+  before the answer, so the aim is in hand while the choice is open and still in hand when it is
+  made. `MISSION` carries it too: "make the website more interesting as a **single** coherent
+  whole".
+- **Not a seventh axiom, on purpose.** No check could settle whether a site reads as one
+  experience, in the way `check_reachability` settles whether a page is orphaned, so this is a
+  standard stated to the model and nothing else — the same reasoning that leaves the
+  engagement-time definition uncoded. The six coded axioms are still the whole of what the code
+  refuses, and a plan that adds a page sharing nothing with the rest is accepted exactly as before.
+  A test holds that open: it asserts the accepted plan *and* that no seventh `check_` has quietly
+  appeared.
 
 ### Reachability axiom
 
@@ -403,7 +462,8 @@ this is an invariant of the iteration rather than a one-off change to the site a
 
 The AI can only ever modify `/site` — but within it, everything: pages, the shared layout and
 partials in `_includes`, the Sass in `_sass` and `css/`. There is no corner of the site it is kept
-out of, because a run that cannot touch the shared files cannot make the site a coherent whole.
+out of, because a run told to re-federate the site aggressively cannot do it without the shared
+files (see [One single experience](#one-single-experience)).
 
 1. The model has no tools or shell: the Copilot CLI runs in an empty directory with every tool
    disabled, so the model only returns JSON describing files to write/delete. If the model ever
