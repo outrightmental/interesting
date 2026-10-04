@@ -14,12 +14,22 @@
     footer      the links the page ends with, as [href, text] pairs (see footer.njk).
     footerNote  an aside shown after those links.
 
-  The analytics and consent line is written here rather than in every page, which is the whole
-  point of a shared shell: the axiom is about the built site, so one line here carries it to all of
-  them (see ANALYTICS_TAG and check_analytics in .github/scripts/make_interesting.py). The
-  local-state line below it is there for the same reason, and carries the same kind of axiom
-  (STATE_TAG and check_state). Both lines are written once, here, and neither may be dropped: the
-  files behind them are fixed, and a built page without either line is refused.
+  Three shared lines are written here rather than in every page, which is the whole point of a
+  shared shell: each axiom is about the built site, so one line here carries it to all of them.
+    js/analytics.js  the Google Analytics tag and the consent banner that gates it (see
+                     ANALYTICS_TAG and check_analytics in .github/scripts/make_interesting.py).
+    js/state.js      the one local-state document every page reads and writes through, and the
+                     meta menu that exports it (STATE_TAG and check_state).
+    js/threshold.js  the mood flow: the site ascertains a visitor's orientation before it offers
+                     them anything, and keeps asking, in a new way, on every page (MOOD_TAG and
+                     check_mood).
+  None of the three may be dropped: a built page missing any of them is refused. The files behind
+  the first two are fixed; js/threshold.js is protected instead, so a run may rewrite the flow but
+  never delete it.
+
+  The mood ribbon below is the flow made visible. It sits outside <main> on every page, so the
+  question is never a gate in front of the content: the whole site is reachable with the ribbon
+  ignored, or with scripting switched off entirely.
 
   Links are relative, like every link in the site: it has no fixed domain and may be served under
   a sub-path, so "css/site.css" and not "/css/site.css".
@@ -46,6 +56,9 @@
   <!-- The one local-state store every page reads and writes through, and its meta menu; see
        js/state.js. Not deferred: a page's own script runs before any deferred one does. -->
   <script src='js/state.js'></script>
+  <!-- The mood flow: ask before offering, on every page; see js/threshold.js. Deferred, and so
+       after js/state.js, which is what it keeps its reading in. -->
+  <script src='js/threshold.js' defer></script>
 </head>
 <body>
   <a class='skip-link' href='#main-content'>skip to main content</a>

@@ -43,7 +43,8 @@ footerNote: every coinage here is invented on the spot
 
   <script>
     (function () {
-      var STORE = 'interesting_word_kiln_v1';
+      var state = window.interestingState;
+      var KILN = 'kiln'; // this page's one name in the shared local-state document
       var form = document.getElementById('feed');
       var input = document.getElementById('word');
       var randomBtn = document.getElementById('random-word');
@@ -131,28 +132,20 @@ footerNote: every coinage here is invented on the spot
       }
 
       function remember() {
-        try {
-          localStorage.setItem(STORE, JSON.stringify({ fired: fired.slice(0, 8), heat: heat }));
-        } catch (e) {
-          /* the kiln keeps no records either */
-        }
+        // false means this firing was only kept in memory, which is a kiln that keeps no records
+        // either -- nothing here is worth interrupting someone over.
+        state.set(KILN, { fired: fired.slice(0, 8), heat: heat });
       }
 
       function restore() {
-        try {
-          var raw = localStorage.getItem(STORE);
-          if (!raw) return;
-          var saved = JSON.parse(raw);
-          if (saved && Array.isArray(saved.fired) && saved.fired.length) {
-            fired = saved.fired.slice(0, 8);
-            heat = typeof saved.heat === 'number' ? saved.heat : 1;
-            readingEl.textContent = fired.join('\n\n');
-            out.textContent = 'warm';
-            statusEl.textContent = 'The kiln is still warm from the last firing.';
-            kiln.setAttribute('data-heat', String(Math.min(3, heat)));
-          }
-        } catch (e) {
-          /* a cold kiln, then */
+        var saved = state.get(KILN, null);
+        if (saved && Array.isArray(saved.fired) && saved.fired.length) {
+          fired = saved.fired.slice(0, 8);
+          heat = typeof saved.heat === 'number' ? saved.heat : 1;
+          readingEl.textContent = fired.join('\n\n');
+          out.textContent = 'warm';
+          statusEl.textContent = 'The kiln is still warm from the last firing.';
+          kiln.setAttribute('data-heat', String(Math.min(3, heat)));
         }
       }
 

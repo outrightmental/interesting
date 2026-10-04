@@ -43,7 +43,8 @@ footerNote: every specimen here is fiction, catalogued carefully
 
   <script>
     (function () {
-      var STORE = 'interesting_apocrypha_v1';
+      var state = window.interestingState;
+      var DRAWER = 'apocrypha'; // this page's one name in the shared local-state document
       var dealBtn = document.getElementById('deal');
       var pinBtn = document.getElementById('pin');
       var crossBtn = document.getElementById('cross');
@@ -141,25 +142,17 @@ footerNote: every specimen here is fiction, catalogued carefully
       }
 
       function remember() {
-        try {
-          localStorage.setItem(STORE, JSON.stringify(drawer.slice(0, 24)));
-        } catch (e) {
-          /* a drawer that does not shut is still a drawer */
-        }
+        // A drawer that does not shut is still a drawer, so a write that only reached memory is
+        // left unremarked: what is in front of the visitor is on the desk either way.
+        state.set(DRAWER, drawer.slice(0, 24));
       }
 
       function restore() {
-        try {
-          var raw = localStorage.getItem(STORE);
-          if (!raw) return;
-          var saved = JSON.parse(raw);
-          if (Array.isArray(saved)) {
-            drawer = saved.filter(function (item) {
-              return item && typeof item.number === 'string' && typeof item.name === 'string';
-            }).slice(0, 24);
-          }
-        } catch (e) {
-          /* nothing filed, then */
+        var saved = state.get(DRAWER, []);
+        if (Array.isArray(saved)) {
+          drawer = saved.filter(function (item) {
+            return item && typeof item.number === 'string' && typeof item.name === 'string';
+          }).slice(0, 24);
         }
       }
 

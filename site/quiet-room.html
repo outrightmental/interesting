@@ -43,7 +43,8 @@ There is no score, no streak and no next thing.</pre>
 
   <script>
     (function () {
-      var STORE = 'interesting_quiet_room_v1';
+      var state = window.interestingState;
+      var ROOM = 'quiet-room'; // this page's one name in the shared local-state document
       var room = document.getElementById('room');
       var breath = document.getElementById('breath');
       var word = document.getElementById('breath-word');
@@ -74,23 +75,15 @@ There is no score, no streak and no next thing.</pre>
       ];
 
       function restore() {
-        try {
-          var raw = localStorage.getItem(STORE);
-          if (!raw) return;
-          var saved = JSON.parse(raw);
-          if (saved && typeof saved.dim === 'number') dim.value = String(saved.dim);
-          if (saved && Array.isArray(saved.down)) putDown = saved.down.slice(0, 12);
-        } catch (e) {
-          /* a room that cannot remember is still a room */
-        }
+        // A room that cannot remember is still a room, so nothing is said about a missing or
+        // unreadable one: the defaults already in the markup are the quiet version of this page.
+        var saved = state.get(ROOM, null);
+        if (saved && typeof saved.dim === 'number') dim.value = String(saved.dim);
+        if (saved && Array.isArray(saved.down)) putDown = saved.down.slice(0, 12);
       }
 
       function remember() {
-        try {
-          localStorage.setItem(STORE, JSON.stringify({ dim: Number(dim.value), down: putDown }));
-        } catch (e) {
-          /* nothing to do about it, and nothing lost that matters */
-        }
+        state.set(ROOM, { dim: Number(dim.value), down: putDown });
       }
 
       function applyDim() {

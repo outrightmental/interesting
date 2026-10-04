@@ -26,6 +26,11 @@
   front door: any page can ask again, in a new way, and the whole site re-skins itself around the
   answer through the data-mood attribute (see _sass/_mood.scss).
 
+  What is remembered is kept in the site's one local-state document, under "threshold", through
+  window.interestingState -- like every page of this site, this file never reaches for the
+  browser's storage itself, so a visitor can export and carry their reading away with the rest of
+  their state (see js/state.js, and pages_touching_storage in make_interesting.py).
+
   The AI iteration may rewrite any page of this site, so the line above is an axiom of every run:
   see MOOD_SCRIPT, PROBE_DECLARATION and check_mood in .github/scripts/make_interesting.py. This
   file is protected -- it may be rewritten, never deleted -- because every page leans on it.
@@ -33,12 +38,15 @@
 (function () {
   'use strict';
 
-  var STORE_KEY = 'interesting_threshold_v1';
-  var ARRIVAL_KEY = 'interesting_threshold_arrival_v1';
+  var store = window.interestingState;
+  var READING = 'threshold'; // this file's one name inside the shared local-state document
   var RECENT = 6; // how many mechanisms back still counts as "the same way twice"
   var HALF_LIFE_H = 30; // a remembered reading fades to half its pull in this many hours
   var ANSWER_PULL = 3; // the fresh answer outweighs memory and signal, on every arrival
   var SIGNAL_PULL = 1;
+  // A gap this long before a page view makes it a fresh arrival, which is what the ribbon asks
+  // on. Clicking from one page to the next is the same arrival; coming back later is a new one.
+  var ARRIVAL_GAP_MS = 30 * 60 * 1000;
 
   /* The orientations the site distinguishes between, and the world each opens onto. The list is
      meant to grow: a new world belongs here beside its page, and nothing else has to change. */
@@ -271,29 +279,21 @@
 
   function load() {
     var blank = { visits: 0, last: null, drift: {}, recent: [], orientation: null };
-    try {
-      var raw = localStorage.getItem(STORE_KEY);
-      if (!raw) return blank;
-      var parsed = JSON.parse(raw);
-      if (!parsed || typeof parsed !== 'object') return blank;
-      return {
-        visits: typeof parsed.visits === 'number' ? parsed.visits : 0,
-        last: typeof parsed.last === 'number' ? parsed.last : null,
-        drift: parsed.drift && typeof parsed.drift === 'object' ? parsed.drift : {},
-        recent: Array.isArray(parsed.recent) ? parsed.recent.slice(-RECENT) : [],
-        orientation: ORIENTATION_BY_ID[parsed.orientation] ? parsed.orientation : null
-      };
-    } catch (e) {
-      return blank;
-    }
+    var parsed = store.get(READING, blank);
+    if (!parsed || typeof parsed !== 'object') return blank;
+    return {
+      visits: typeof parsed.visits === 'number' ? parsed.visits : 0,
+      last: typeof parsed.last === 'number' ? parsed.last : null,
+      drift: parsed.drift && typeof parsed.drift === 'object' ? parsed.drift : {},
+      recent: Array.isArray(parsed.recent) ? parsed.recent.slice(-RECENT) : [],
+      orientation: ORIENTATION_BY_ID[parsed.orientation] ? parsed.orientation : null
+    };
   }
 
   function save(next) {
-    try {
-      localStorage.setItem(STORE_KEY, JSON.stringify(next));
-    } catch (e) {
-      /* a visitor with storage switched off still gets queried, just never remembered */
-    }
+    // false means the browser would store nothing, so this reading lasts only as long as the page:
+    // a visitor with storage switched off still gets queried, just never remembered.
+    store.set(READING, next);
   }
 
   var state = load();
@@ -877,13 +877,12 @@
     // Always a new query on arrival -- but the page it lands on decides where it goes. A page that
     // runs its own threshold (index.html does) sets data-threshold on <html> and the ribbon stays
     // quiet; everywhere else the ribbon asks, inline, without covering anything up.
-    var arrived = false;
-    try {
-      arrived = !sessionStorage.getItem(ARRIVAL_KEY);
-      sessionStorage.setItem(ARRIVAL_KEY, '1');
-    } catch (e) {
-      arrived = false;
-    }
+    //
+    // "Arrival" is read off the gap the shared document already records rather than a session key
+    // of its own, because no page of this site touches the browser's storage directly (see
+    // js/state.js): a first visit, or a return after ARRIVAL_GAP_MS, is an arrival, and clicking
+    // through the site is not.
+    var arrived = sinceLast === null || sinceLast > ARRIVAL_GAP_MS;
     if (arrived && !document.documentElement.hasAttribute('data-threshold')) query();
   }
 
@@ -914,7 +913,7 @@
     forget: function () {
       state = { visits: 1, last: null, drift: {}, recent: [], orientation: null };
       sinceLast = null;
-      try { localStorage.removeItem(STORE_KEY); } catch (e) { /* nothing to forget */ }
+      store.remove(READING);
       transmogrify(null);
     }
   };

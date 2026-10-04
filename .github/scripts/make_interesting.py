@@ -949,7 +949,7 @@ def check_cadence(before, after):
 # put particular content in front of a visitor on the assumption that they want it: the site makes
 # an effort to ascertain their mood or mental orientation first, and what is offered follows from
 # that. The prompt states it, and the three signals below are the part of it that markup and source
-# can settle, the same bargain the four axioms above make.
+# can settle, the same bargain the five axioms above make.
 #
 # What is checked, and why each is something a page either plainly has or plainly lacks:
 #
@@ -1215,7 +1215,9 @@ def build_prompt(shown, omitted=()):
         "body is parsed, which is before any deferred script, so the store has to be there "
         "already. Everything this site keeps in a visitor's browser lives in one JSON document, "
         "and no page may touch localStorage or sessionStorage itself -- a plan in which one does "
-        "is refused. Read and write through the shared store:\n"
+        "is refused. This is read of a page along with every script and stylesheet it loads, so a "
+        f"shared file counts as the pages that load it: {MOOD_SCRIPT} keeps its reading through "
+        "the store for exactly that reason. Read and write through the shared store:\n"
         "    var state = window.interestingState;\n"
         "    var saved = state.read('constellation', []);  // { status, value }, where status is\n"
         "                                                  // 'ok', 'missing', 'unreadable' or\n"
@@ -1227,8 +1229,10 @@ def build_prompt(shown, omitted=()):
         "                                                  // visitor in the page's own words\n"
         "The store owns the parsing, the defaults and every failure path, so a page needs no "
         "try/catch and no JSON.parse of its own. The names the site keeps today are "
-        "\"constellation\" (the home sky every other page reinterprets), \"capsules\" and "
-        f"\"omens\"; to keep something new, pick a name and set it. {STATE_SCRIPT} is fixed like "
+        "\"constellation\" (the sky several pages reinterpret), \"capsules\", \"omens\", "
+        "\"threshold\" (what the mood flow has read about this visitor), \"kiln\", \"loam\", "
+        f"\"quiet-room\" and \"apocrypha\"; to keep something new, pick a name and set it. "
+        f"{STATE_SCRIPT} is fixed like "
         "the analytics files: it is not shown to you, you may not write or delete it, and the very "
         "small meta menu it puts in the corner of every page -- where a visitor copies that "
         "document out, pastes someone else's in, or clears it -- is not yours to change or to "
@@ -1275,7 +1279,7 @@ def build_prompt(shown, omitted=()):
         "  * Never a gate. The query is an offer. Every page stays reachable with it ignored, "
         "declined, or scripting switched off altogether, which is what the reachability axiom "
         "demands anyway: do not hide a world behind an answer.\n"
-        "This is checked on the built site, like the four above.\n"
+        "This is checked on the built site, like the five above.\n"
         "- Leave the site working at the end of the run. If you extract something into a shared "
         "file, or merge or delete a page, update every page that refers to it in the same run: "
         "never leave a link, a stylesheet, a script, a layout or an @use pointing at something "
@@ -1459,10 +1463,11 @@ def validate_plan(plan, unseen=()):
 
     A plan that would leave a page of the site unreachable from the root, leave one without the
     analytics and consent line, make one fail the responsive-and-accessible axiom, leave one without
-    the local-state store and its meta menu, or tie one to an update frequency is refused: all five
-    axioms hold however the prompt is answered. All five are judged on the built site (issue #25),
-    which is the only site a visitor ever sees, so the plan is built before any of them is asked,
-    and a plan that does not build is refused for that alone.
+    the local-state store and its meta menu, tie one to an update frequency, or stop the site
+    asking before it offers is refused: all six axioms hold however the prompt is answered. All six
+    are judged on the built site (issue #25), which is the only site a visitor ever sees, so the
+    plan is built before any of them is asked, and a plan that does not build is refused for that
+    alone.
     """
     files = plan.get("files") or []
     deletes = plan.get("delete") or []
@@ -1520,7 +1525,7 @@ def validate_plan(plan, unseen=()):
         # The site as committed does not build, so there is no "before" to compare against and the
         # axioms have nothing to say this run. Same reasoning as check_reachability's: every run is
         # asked to repair the site, and refusing a plan over damage it did not do would leave no
-        # plan able to. This run still had to build, and the next is held to all five axioms again.
+        # plan able to. This run still had to build, and the next is held to all six axioms again.
         print(f"::warning::the site as committed does not build ({one_line(err, 300)}), so this "
               "run's change was only checked for building, not against the axioms")
         return ops

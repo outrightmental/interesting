@@ -162,42 +162,43 @@ footerNote: every page, no default
         'error.html'
       ];
 
-      // What the console says when there is no shared sky to count, and where to go next. The
-      // shared store says which of the four it is (see js/state.js).
-      var EMPTY_NOTES = {
-        unavailable: ['Local storage is unavailable here, so cross-page sky memory cannot be read.',
-          'You can still explore every page, but shared constellation state is unavailable in this context.'],
-        unreadable: ['Saved data exists but is unreadable. Rebuild your constellation on the home page.',
-          'Suggested route: home constellation → refresh this map → continue to any lab.'],
-        missing: ['No saved stars yet. Make your first constellation on the home page.',
-          'Suggested route: home constellation → weather lab → sky archive oracle.'],
-        ok: ['No readable stars in the shared sky yet. Make your first constellation on the home page.',
-          'Suggested route: home constellation → weather lab → sky archive oracle.']
-      };
-
-      function loadCount() {
+      // The shared sky, counted through the one store: a status of 'unavailable' means this
+      // browser will keep nothing at all, which is worth saying outright, because it is also why
+      // the site cannot remember a reading about you (see js/state.js).
+      function savedStars() {
         var saved = state.read(SKY, []);
+        if (saved.status === 'unavailable') return null;
         var stored = Array.isArray(saved.value) ? saved.value : [];
-        var count = stored.filter(function (s) {
+        return stored.filter(function (s) {
           return s && typeof s.x === 'number' && typeof s.y === 'number' && typeof s.text === 'string';
         }).length;
+      }
 
-        if (!count) {
-          memoryEl.textContent = EMPTY_NOTES[saved.status][0];
+      function report() {
+        var api = window.threshold;
+        var reading = api ? api.reading() : null;
+        var orientation = reading && reading.orientation;
+        var stars = savedStars();
+
+        if (stars === null) {
+          memoryEl.textContent = 'Local storage is unavailable here, so nothing about you can be read or kept.';
           memoryEl.className = 'warn';
-          routeEl.textContent = EMPTY_NOTES[saved.status][1];
-          return;
+        } else if (orientation) {
+          memoryEl.textContent = 'Read as ' + orientation.name + ' — ' + orientation.pull + '.'
+            + (api ? ' ' + api.signals().sinceText + '.' : '')
+            + (stars ? ' ' + stars + ' saved star' + (stars === 1 ? '' : 's') + ' under the sky.' : '');
+          memoryEl.className = 'good';
+        } else {
+          memoryEl.textContent = 'Nothing read about you yet'
+            + (stars ? ', though there are ' + stars + ' saved stars under the sky.' : '. Every world below is equally on offer.');
+          memoryEl.className = 'warn';
         }
 
-        memoryEl.textContent = 'Shared memory detected: ' + count + ' saved star' + (count === 1 ? '' : 's') + ' available across labs.';
-        memoryEl.className = 'good';
-
-        if (count < 4) {
-          routeEl.textContent = 'Best next step: add a few more stars on home, then test echo chamber and lantern ritual.';
-        } else if (count < 12) {
-          routeEl.textContent = 'Good constellation density: try diary replay, then forge a sigil in sky archive oracle.';
+        if (orientation) {
+          routeEl.textContent = 'Suggested route: ' + orientation.worldName
+            + ', then whichever of these looks least like it.';
         } else {
-          routeEl.textContent = 'Dense sky detected: orbital weaver and weather lab will generate richer structures.';
+          routeEl.textContent = 'Suggested route: take the query at the threshold, or skip it entirely and pick a world by its name alone.';
         }
       }
 

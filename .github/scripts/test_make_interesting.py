@@ -88,9 +88,25 @@ def stored(body):
     return f"<head>{mi.STATE_TAG}</head>\n<body>{body}</body>"
 
 
+def queried(body):
+    """A bare fragment that loads the shared mood script, and nothing more.
+
+    The mood counterpart of tagged(): it carries the one line and, being a fragment, fails the
+    responsive-and-accessible axiom from the start, so only the mood check can refuse a fixture
+    built from it.
+    """
+    return f"<head>{mi.MOOD_TAG}</head>\n<body>{body}</body>"
+
+
+def mood_script(*probes):
+    """A stand-in for the shared mood script, declaring `probes` as its query mechanisms."""
+    declared = ",\n".join(f"  {{ probe: '{name}', kind: 'choice' }}" for name in probes)
+    return "var PROBES = [\n" + declared + "\n];\n"
+
+
 def page(body="<p>a page</p>", title="a page", lang="en",
          viewport="width=device-width, initial-scale=1", css="", focus=True, calm=True,
-         analytics=mi.ANALYTICS_SCRIPT, state=mi.STATE_SCRIPT):
+         analytics=mi.ANALYTICS_SCRIPT, state=mi.STATE_SCRIPT, mood=mi.MOOD_SCRIPT):
     """A whole page that satisfies every axiom: responsive and accessible (issue #26), and carrying
     the analytics and consent line (issue #24).
 
@@ -98,9 +114,9 @@ def page(body="<p>a page</p>", title="a page", lang="en",
     has to look like. Every argument takes one part of the axiom away again, so a test can break
     exactly one thing: the style block always animates (`transition`) and always drops the browser's
     focus ring (`outline: none`), so `calm=False` and `focus=False` really do leave a page failing.
-    `analytics` and `state` are the srcs of the two shared scripts, so a page in a sub-folder can
-    load them by the matching relative path, and `analytics=""` or `state=""` leaves one line off
-    without touching anything else.
+    `analytics`, `state` and `mood` are the srcs of the three shared scripts, so a page in a
+    sub-folder can load them by the matching relative path, and `analytics=""`, `state=""` or
+    `mood=""` leaves one line off without touching anything else.
     """
     style = ["  * { box-sizing: border-box; }",
              "  .panel { max-width: 60rem; padding: clamp(0.8rem, 3vw, 2rem); }",
@@ -115,6 +131,7 @@ def page(body="<p>a page</p>", title="a page", lang="en",
             + (f"  <meta name='viewport' content='{viewport}'>\n" if viewport else "")
             + (f"  <script src='{analytics}' defer></script>\n" if analytics else "")
             + (f"  <script src='{state}'></script>\n" if state else "")
+            + (f"  <script src='{mood}' defer></script>\n" if mood else "")
             + f"  <title>{title}</title>\n  <style>\n"
             + "\n".join(style + ([f"  {css}"] if css else [])) + "\n  </style>\n</head>\n<body>\n"
             f"  <main class='panel'>\n    <h1>{title}</h1>\n    {body}\n  </main>\n</body>\n</html>\n")
@@ -829,7 +846,7 @@ class ResponsiveAccessibleAxiomTest(SiteDirTestCase):
                      "refused, exactly as one that orphans a page is"]:
             with self.subTest(rule=rule):
                 self.assertIn(rule, rules)
-        self.assertEqual(rules.count("AXIOM, every run:"), 5, "every axiom stands over every run")
+        self.assertEqual(rules.count("AXIOM, every run:"), 6, "every axiom stands over every run")
 
     def test_the_prompt_also_asks_for_what_no_validator_can_judge(self):
         # Open question 1 of the issue: both, and the prompt is the wider of the two. Contrast needs
@@ -1082,6 +1099,7 @@ class LocalStateAxiomTest(SiteDirTestCase):
                      "It is not deferred on purpose",
                      "lives in one JSON document",
                      "no page may touch localStorage or sessionStorage itself",
+                     "a shared file counts as the pages that load it",
                      "window.interestingState",
                      "state.read('constellation', [])",
                      "state.set('omens', omens)",
@@ -1095,7 +1113,7 @@ class LocalStateAxiomTest(SiteDirTestCase):
         # and has to reach the sky the other pages are reinterpreting under the name they use.
         rules = self.prompt()
         for named in ["'ok'", "'missing'", "'unreadable'", "'unavailable'",
-                      '"constellation"', '"capsules"', '"omens"']:
+                      '"constellation"', '"capsules"', '"omens"', '"threshold"']:
             with self.subTest(named=named):
                 self.assertIn(named, rules)
 
@@ -1705,7 +1723,7 @@ class MoodAxiomTest(SiteDirTestCase):
         self.assertEqual(len(mi.validate_plan({"files": [{"path": "toy.html", "content": loaded}]})), 1)
 
     def test_a_page_that_was_already_without_it_blocks_nothing(self):
-        # Only what the run itself breaks is refused, as with the four axioms above.
+        # Only what the run itself breaks is refused, as with the five axioms above.
         (self.site / "index.html").write_text(home("toy.html", "error.html"))
         ops = mi.validate_plan({"files": [{"path": "toy.html", "content": queried("<p>still asked</p>")}]})
         self.assertEqual(len(ops), 1)
@@ -1813,7 +1831,7 @@ def front_matter(**fields):
 
 
 class BuildPipelineTest(unittest.TestCase):
-    """Issue #25: the real build, and all five axioms judged on what it produces.
+    """Issue #25: the real build, and all six axioms judged on what it produces.
 
     SiteDirTestCase stands the build in with the identity, which is exactly right for its plain-HTML
     fixtures; this is where the pipeline itself is exercised. /site is source now -- a layout is not
@@ -1893,7 +1911,7 @@ class BuildPipelineTest(unittest.TestCase):
                 self.assertNotIn(shared, built)
 
     def test_a_page_is_whatever_the_templates_make_of_it(self):
-        # All five axioms ask about pages, and all five are asked of the built site. In the source,
+        # All six axioms ask about pages, and all six are asked of the built site. In the source,
         # index.html names no page, no page carries either shared line, and no page is a whole page
         # at all; built, every page is each of those things.
         source = dict(mi.read_site())
@@ -1965,10 +1983,10 @@ class BuildPipelineTest(unittest.TestCase):
 
 
 class RealSiteTest(unittest.TestCase):
-    """The site in this repository obeys all five axioms: every page is reachable from the root,
+    """The site in this repository obeys all six axioms: every page is reachable from the root,
     every page carries the analytics tag and consent banner, every page is responsive and
-    accessible, every page carries the local-state store and its meta menu, and no page ties the
-    site to an update frequency.
+    accessible, every page carries the local-state store and its meta menu, no page ties the site
+    to an update frequency, and every page asks before it offers.
 
     validate_plan only refuses what a run breaks, so the invariants have to start out true: this is
     what makes them hold from the next deploy onward and not only for pages a later run adds. It

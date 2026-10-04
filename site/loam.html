@@ -42,7 +42,8 @@ put something in the ground first</pre>
 
   <script>
     (function () {
-      var STORE = 'interesting_loam_v1';
+      var state = window.interestingState;
+      var LOAM = 'loam'; // this page's one name in the shared local-state document
       var canvas = document.getElementById('soil');
       var ctx = canvas.getContext('2d');
       var plantBtn = document.getElementById('plant');
@@ -191,26 +192,17 @@ put something in the ground first</pre>
       }
 
       function remember() {
-        try {
-          localStorage.setItem(STORE, JSON.stringify({ planted: planted, at: Date.now() }));
-        } catch (e) {
-          /* soil does not mind being forgotten */
-        }
+        // Nothing is said when this is only kept in memory: soil does not mind being forgotten.
+        state.set(LOAM, { planted: planted, at: Date.now() });
       }
 
       function restore() {
-        try {
-          var raw = localStorage.getItem(STORE);
-          if (!raw) return;
-          var saved = JSON.parse(raw);
-          if (saved && typeof saved.planted === 'number') {
-            planted = saved.planted;
-            if (planted > 0) {
-              statusEl.textContent = planted + ' thing' + (planted === 1 ? '' : 's') + ' went into this soil before. It does not keep the roots, only the count.';
-            }
+        var saved = state.get(LOAM, null);
+        if (saved && typeof saved.planted === 'number') {
+          planted = saved.planted;
+          if (planted > 0) {
+            statusEl.textContent = planted + ' thing' + (planted === 1 ? '' : 's') + ' went into this soil before. It does not keep the roots, only the count.';
           }
-        } catch (e) {
-          /* nothing in the ground, then */
         }
       }
 
