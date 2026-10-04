@@ -6,14 +6,16 @@ on:
   workflow_dispatch:
     inputs:
       model:
-        description: "GitHub Copilot model ID to use (leave blank to pick a flagship model at random)"
+        description: "GitHub Copilot model ID to use by hand (leave blank for claude-fable-5.1, the model every other run uses)"
         required: false
         default: ""
 
 permissions: {}
 
 env:
-  COPILOT_CLI_VERSION: "1.0.91" # pinned: the silo relies on this version's flags and output format
+  # Pinned: the silo relies on this version's flags and output format, and the script asks it for
+  # the "max" level of --reasoning-effort.
+  COPILOT_CLI_VERSION: "1.0.91"
 
 jobs:
   # Never more than one run at a time: a run that starts while an earlier run of this workflow is
@@ -74,7 +76,10 @@ jobs:
       group: make-interesting
       cancel-in-progress: false
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # Room for MODEL_TIMEOUT_SECONDS x MAX_ATTEMPTS at max reasoning effort, plus the build that
+    # checks each answer. A run still going when the next hour comes round makes that run skip
+    # itself (see the guard above), it does not make two run at once.
+    timeout-minutes: 45
     permissions:
       contents: write # commit changes to /site
       copilot-requests: write # call GitHub Copilot with the workflow's own token
@@ -110,7 +115,7 @@ jobs:
       - name: Install the build toolchain
         run: npm ci --ignore-scripts
 
-      - name: Ask a random AI model to make the website more interesting
+      - name: Ask Claude Fable 5.1 to make the website more interesting, at max reasoning effort
         id: ai
         env:
           # A fine-grained PAT with the "Copilot Requests" permission, if one is configured (billed
@@ -118,11 +123,9 @@ jobs:
           # once the organization allows Copilot CLI usage billed to the organization.
           COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN || github.token }}
           COPILOT_BIN: copilot-linux-x64
+          # Empty on every scheduled run, so the script uses the model it pins (claude-fable-5.1).
+          # A model typed into the "Run workflow" form is used instead, for that run only.
           MODEL: ${{ inputs.model }}
-          # Optional comma-separated list of model ids to pick from instead of the built-in list.
-          # List flagship models only: ids recognised as small or mid-tier are refused, but an
-          # unknown id that is only a version number cannot be judged and is used as listed.
-          MODEL_POOL: ${{ vars.MODEL_POOL }}
         run: python3 .github/scripts/make_interesting.py
 
       - name: Ensure only /site was modified

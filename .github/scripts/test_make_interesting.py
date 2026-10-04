@@ -2358,7 +2358,8 @@ class RealSiteTest(unittest.TestCase):
 
 
 class SmallModelTest(unittest.TestCase):
-    """Issue #2: small models must never be picked at random."""
+    """Issue #2: the model used must never be a small one. Issue #35 pinned it to one flagship,
+    so the rule now guards the only way another id can get in: the workflow's "model" input."""
 
     SMALL = [
         # the two named in the issue, in id form and as people write them
@@ -2392,12 +2393,9 @@ class SmallModelTest(unittest.TestCase):
             with self.subTest(model=model):
                 self.assertFalse(mi.is_small_model(model))
 
-    def test_built_in_pool_contains_no_small_model(self):
-        self.assertTrue(mi.MODELS)
-        self.assertEqual([m for m in mi.MODELS if mi.is_small_model(m)], [])
-        self.assertEqual(len(set(mi.MODELS)), len(mi.MODELS))
-        for model in mi.MODELS:
-            self.assertFalse(any(tier in model for tier in ("haiku", "sonnet")), model)
+    def test_the_pinned_model_is_claude_fable_5_1(self):
+        self.assertEqual(mi.PINNED_MODEL, "claude-fable-5.1")
+        self.assertFalse(mi.is_small_model(mi.PINNED_MODEL))
 
     # Every model GitHub Copilot CLI listed on 2026-10-02, by GitHub's pricing category. The Grok
     # ids are left out: xAI's top model is priced as Versatile, and the CLI cannot reach it anyway.
@@ -2410,52 +2408,64 @@ class SmallModelTest(unittest.TestCase):
                         "claude-fable-5", "claude-fable-5.1", "kimi-k3"]
     CATALOG_OTHER = ["claude-opus-4.8-fast", "gpt-4.1"]  # a double-price speed variant; a retired model
 
-    def test_only_flagships_survive_when_the_whole_catalog_is_the_pool(self):
-        catalog = self.CATALOG_LIGHTWEIGHT + self.CATALOG_VERSATILE + self.CATALOG_POWERFUL + self.CATALOG_OTHER
-        pool, log = self.pool(",".join(catalog))
-        self.assertEqual(sorted(pool), sorted(self.CATALOG_POWERFUL))
-        for refused in self.CATALOG_LIGHTWEIGHT + self.CATALOG_VERSATILE + self.CATALOG_OTHER:
-            self.assertIn(f"{refused} is not a flagship model", log)
+    def test_the_pinned_model_is_in_copilots_flagship_tier(self):
+        self.assertIn(mi.PINNED_MODEL, self.CATALOG_POWERFUL)
 
-    def test_built_in_pool_is_drawn_from_the_flagship_tier(self):
-        self.assertTrue(set(mi.MODELS) <= set(self.CATALOG_POWERFUL), set(mi.MODELS) - set(self.CATALOG_POWERFUL))
+    def test_the_whole_catalog_is_sorted_into_flagships_and_lesser_models(self):
+        for model in self.CATALOG_LIGHTWEIGHT + self.CATALOG_VERSATILE + self.CATALOG_OTHER:
+            with self.subTest(model=model):
+                self.assertTrue(mi.is_small_model(model))
+        for model in self.CATALOG_POWERFUL:
+            with self.subTest(model=model):
+                self.assertFalse(mi.is_small_model(model))
 
-    def pool(self, configured):
-        with mock.patch.dict(os.environ, {"MODEL_POOL": configured}), mock.patch("builtins.print") as printed:
-            return mi.model_pool(), " ".join(str(call.args[0]) for call in printed.call_args_list)
+    def pick(self, requested):
+        with mock.patch.dict(os.environ, {"MODEL": requested}), mock.patch("builtins.print") as printed:
+            return mi.pick_model(), " ".join(str(call.args[0]) for call in printed.call_args_list)
 
-    def test_default_pool_is_the_built_in_list(self):
-        for unset in ["", "  ", " , "]:
-            self.assertEqual(self.pool(unset)[0], mi.MODELS)
+    def test_a_run_that_names_no_model_uses_the_pinned_one_without_comment(self):
+        for unset in ["", "  ", "\n", " claude-fable-5.1 "]:
+            with self.subTest(requested=unset):
+                model, log = self.pick(unset)
+                self.assertEqual(model, mi.PINNED_MODEL)
+                self.assertEqual(log, "")
 
-    def test_configured_pool_replaces_the_list_but_small_models_are_still_refused(self):
-        pool, log = self.pool("claude-opus-5.5, claude-haiku-4.5,gpt-5-mini  my-new-flagship\nclaude-opus-5.5,claude-sonnet-5")
-        self.assertEqual(pool, ["claude-opus-5.5", "my-new-flagship"])
-        for refused in ["claude-haiku-4.5", "gpt-5-mini", "claude-sonnet-5"]:
-            self.assertIn(f"{refused} is not a flagship model", log)
+    def test_a_model_named_by_hand_is_used_as_asked_and_said_out_loud(self):
+        model, log = self.pick(" claude-opus-5.5 ")
+        self.assertEqual(model, "claude-opus-5.5")
+        self.assertIn("Using claude-opus-5.5 because it was requested by name", log)
+        self.assertIn(f"every other run uses {mi.PINNED_MODEL}", log)
+        self.assertNotIn("not a flagship", log)
 
-    def test_random_pick_never_lands_on_a_small_model(self):
-        everything = ",".join(self.SMALL + self.LARGE).replace(" ", "-")
-        with mock.patch.dict(os.environ, {"MODEL_POOL": everything, "MODEL": ""}), mock.patch("builtins.print"):
-            for _ in range(200):
-                candidates = mi.pick_candidates()
-                self.assertEqual(sorted(candidates), sorted(self.LARGE))
-                self.assertFalse(any(mi.is_small_model(m) for m in candidates))
+    def test_a_small_model_named_by_hand_is_warned_about_twice_and_still_used(self):
+        model, log = self.pick("claude-haiku-4.5")
+        self.assertEqual(model, "claude-haiku-4.5")
+        self.assertIn("because it was requested by name", log)
+        self.assertIn("claude-haiku-4.5 is not a flagship model", log)
 
-    def test_pool_of_only_small_models_stops_the_run(self):
-        with mock.patch.dict(os.environ, {"MODEL_POOL": "claude-haiku-4.5,gpt-5-mini", "MODEL": ""}):
-            with mock.patch("builtins.print"), self.assertRaises(SystemExit) as caught:
-                mi.pick_candidates()
-        self.assertIn("pool is empty", str(caught.exception))
 
-    def test_model_requested_by_name_is_used_as_asked_with_a_warning(self):
-        with mock.patch.dict(os.environ, {"MODEL": " claude-haiku-4.5 ", "MODEL_POOL": ""}):
-            with mock.patch("builtins.print") as printed:
-                self.assertEqual(mi.pick_candidates(), ["claude-haiku-4.5"])
-        self.assertIn("is not a flagship model; using it because it was requested by name", printed.call_args.args[0])
-        with mock.patch.dict(os.environ, {"MODEL": "claude-opus-5.5"}), mock.patch("builtins.print") as printed:
-            self.assertEqual(mi.pick_candidates(), ["claude-opus-5.5"])
-        printed.assert_not_called()
+class ReasoningEffortTest(unittest.TestCase):
+    """Issue #35: the pinned model is asked for all the reasoning effort the CLI offers."""
+
+    # The scale GitHub Copilot CLI 1.0.91 accepts for --reasoning-effort, lowest first.
+    LEVELS = ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+
+    def test_the_effort_asked_for_is_the_top_of_the_scale(self):
+        self.assertEqual(mi.REASONING_EFFORT, "max")
+        self.assertEqual(mi.REASONING_EFFORT, self.LEVELS[-1])
+
+    def test_every_call_carries_the_effort_flag(self):
+        flags = mi.COPILOT_FLAGS
+        self.assertEqual(flags[flags.index("--reasoning-effort") + 1], mi.REASONING_EFFORT)
+
+    def test_there_is_time_for_an_answer_at_that_effort(self):
+        # Thinking at max effort takes minutes, so the per-answer timeout has to be generous --
+        # and MAX_ATTEMPTS of them have to fit inside the workflow job's own timeout.
+        self.assertGreaterEqual(mi.MODEL_TIMEOUT_SECONDS, 600)
+        workflow = (Path(mi.__file__).parents[1] / "workflows" / "make-interesting.yml").read_text()
+        minutes = [int(m) for m in re.findall(r"timeout-minutes: (\d+)", workflow)]
+        budget = mi.MODEL_TIMEOUT_SECONDS * mi.MAX_ATTEMPTS / 60
+        self.assertGreaterEqual(max(minutes), budget, "the job would be killed mid-answer")
 
 
 class FakeCopilot:
@@ -2516,6 +2526,7 @@ class CallModelTest(unittest.TestCase):
             self.assertIn(flag, flags)
         self.assertEqual(flags[flags.index("--output-format") + 1], "json")
         self.assertEqual(flags[flags.index("--stream") + 1], "off")
+        self.assertEqual(flags[flags.index("--reasoning-effort") + 1], "max")
         for flag in flags:
             self.assertFalse(flag.startswith(("--allow", "--yolo", "--add-dir", "--autopilot", "-p", "--prompt")), flag)
 
@@ -2651,7 +2662,7 @@ GOOD_PLAN = json.dumps({
 class MainTest(SiteDirTestCase):
     def run_main(self, env=None):
         out = self.root / "github_output"
-        full_env = {"GITHUB_OUTPUT": str(out), "MODEL": "", "MODEL_POOL": ""}
+        full_env = {"GITHUB_OUTPUT": str(out), "MODEL": ""}
         full_env.update(env or {})
         self.printed = []
         with mock.patch.dict(os.environ, full_env):
@@ -2665,65 +2676,35 @@ class MainTest(SiteDirTestCase):
         self.assertFalse([line for line in self.printed if "not available" in line])
         self.assertEqual((self.site / "clock.html").read_text(), CLOCK_PAGE)
         (call,) = fake.calls()
-        model = call["args"][1]
-        self.assertIn(model, mi.MODELS)
-        self.assertEqual(read_outputs(output), {"model": model, "summary": "Added a clock."})
+        self.assertEqual(call["args"][1], mi.PINNED_MODEL)
+        self.assertEqual(read_outputs(output), {"model": mi.PINNED_MODEL, "summary": "Added a clock."})
 
-    def test_falls_back_to_another_model(self):
+    def test_every_attempt_asks_the_pinned_model_at_max_effort(self):
         fake = FakeCopilot(self, f"""
-            if len(open(LOG).read().splitlines()) < 3:  # the first two models asked
+            if len(open(LOG).read().splitlines()) < 3:  # the first two attempts
                 say('I would rather write prose than JSON.')
             else:
                 say({GOOD_PLAN!r})
         """)
-        self.run_main()
+        output = self.run_main()
         calls = fake.calls()
         self.assertEqual(len(calls), mi.MAX_ATTEMPTS)
-        self.assertEqual(len({c["args"][1] for c in calls}), mi.MAX_ATTEMPTS, "each attempt uses a different model")
+        self.assertEqual({c["args"][1] for c in calls}, {mi.PINNED_MODEL}, "no other model is ever asked")
+        for call in calls:
+            args = call["args"]
+            self.assertEqual(args[args.index("--reasoning-effort") + 1], "max")
         self.assertTrue((self.site / "clock.html").is_file())
+        self.assertEqual(read_outputs(output)["model"], mi.PINNED_MODEL)
+        self.assertIn(f"{mi.PINNED_MODEL} at max reasoning effort (attempt 3 of 3)", "\n".join(self.printed))
 
     def test_gives_up_after_max_attempts_without_touching_the_site(self):
         fake = FakeCopilot(self, "say('nope')")
         with self.assertRaises(SystemExit) as caught:
             self.run_main()
-        self.assertIn("No model produced a usable change", str(caught.exception))
+        self.assertIn(f"{mi.PINNED_MODEL} produced no usable change in {mi.MAX_ATTEMPTS} attempts",
+                      str(caught.exception))
         self.assertEqual(len(fake.calls()), mi.MAX_ATTEMPTS)
         self.assertEqual(sorted(p.name for p in self.site.iterdir()), ["error.html", "index.html"])
-
-    def test_unavailable_models_are_skipped_without_using_an_attempt(self):
-        # Every model but one is "retired"; the survivor must be reached however the pool is shuffled.
-        survivor = mi.MODELS[-1]
-        fake = FakeCopilot(self, f"""
-            if MODEL != {survivor!r}:
-                sys.stderr.write('Error: Model "%s" from --model flag is not available.' % MODEL)
-                sys.exit(1)
-            say({GOOD_PLAN!r})
-        """)
-        with mock.patch.object(mi.random, "sample", lambda pool, k: list(pool)):
-            output = self.run_main()
-        self.assertEqual(len(fake.calls()), len(mi.MODELS))
-        notice = [line for line in self.printed if line.startswith("::notice::")][-1]
-        self.assertIn(f"{len(mi.MODELS) - 1} of the {len(mi.MODELS)} models tried this run are not available", notice)
-        self.assertIn(mi.MODELS[0], notice)
-        self.assertEqual(read_outputs(output)["model"], survivor)
-        self.assertTrue((self.site / "clock.html").is_file())
-
-    def test_notice_counts_only_the_models_that_were_tried(self):
-        # The second model in line is the first that works: one was found unavailable, eleven or
-        # so were never asked, and the notice must not pretend to know about those.
-        first, second = mi.MODELS[0], mi.MODELS[1]
-        FakeCopilot(self, f"""
-            if MODEL == {first!r}:
-                sys.stderr.write('Error: Model "%s" from --model flag is not available.' % MODEL)
-                sys.exit(1)
-            say({GOOD_PLAN!r})
-        """)
-        with mock.patch.object(mi.random, "sample", lambda pool, k: list(pool)):
-            output = self.run_main()
-        self.assertEqual(read_outputs(output)["model"], second)
-        notice = [line for line in self.printed if line.startswith("::notice::")][-1]
-        self.assertIn("1 of the 2 models tried this run are not available", notice)
-        self.assertIn(f"The pool has {len(mi.MODELS)}", notice)
 
     def test_silo_breach_stops_the_run_and_applies_nothing(self):
         fake = FakeCopilot(self, f"""
@@ -2751,63 +2732,32 @@ class MainTest(SiteDirTestCase):
                 self.run_main()
         self.assertIn("Could not apply the change", str(caught.exception))
 
-    def test_small_models_in_a_configured_pool_are_never_asked(self):
-        fake = FakeCopilot(self, "say('nope')")
-        with self.assertRaises(SystemExit):
-            self.run_main({"MODEL_POOL": "claude-haiku-4.5,big-a,gpt-5-mini,big-b,claude-sonnet-5,big-c,big-d"})
-        asked = [c["args"][1] for c in fake.calls()]
-        self.assertEqual(len(asked), mi.MAX_ATTEMPTS)
-        self.assertTrue(set(asked) <= {"big-a", "big-b", "big-c", "big-d"}, asked)
-
     def test_requested_model_is_the_only_one_tried(self):
         fake = FakeCopilot(self, "say('nope')")
         with self.assertRaises(SystemExit):
             self.run_main({"MODEL": " my-model "})
         self.assertEqual([c["args"][1] for c in fake.calls()], ["my-model"] * mi.MAX_ATTEMPTS)
 
-    def test_a_lone_available_model_is_asked_again_after_a_bad_answer(self):
-        # The situation on an account that is offered a single model: everything else is skipped,
-        # and the one model that answers gets the remaining attempts.
-        survivor = mi.MODELS[0]
-        fake = FakeCopilot(self, f"""
-            if MODEL != {survivor!r}:
-                sys.stderr.write('Error: Model "%s" from --model flag is not available.' % MODEL)
-                sys.exit(1)
-            mine = [line for line in open(LOG).read().splitlines() if json.loads(line)['args'][1] == MODEL]
-            say('not json' if len(mine) < 2 else {GOOD_PLAN!r})
-        """)
-        output = self.run_main()
-        asked = [c["args"][1] for c in fake.calls()]
-        self.assertEqual(asked.count(survivor), 2)
-        notice = [line for line in self.printed if line.startswith("::notice::")][-1]
-        self.assertIn(f"{len(mi.MODELS) - 1} of the {len(mi.MODELS)} models tried this run are not available", notice)
-        self.assertEqual(len(asked), len(mi.MODELS) + 1, "unavailable models are not asked twice")
-        self.assertEqual(read_outputs(output)["model"], survivor)
-
-    def test_gives_up_when_no_model_is_available(self):
+    def test_a_pinned_model_the_account_cannot_use_fails_the_run_loudly(self):
+        # There is nothing to fall back on, so the run must say which model it could not use and
+        # stop -- without retrying, and without quietly substituting another model.
         fake = FakeCopilot(self, "sys.stderr.write('Error: Model \"x\" from --model flag is not available.'); sys.exit(1)")
         with self.assertRaises(SystemExit) as caught:
             self.run_main()
-        self.assertIn("No model produced a usable change", str(caught.exception))
-        self.assertEqual(len(fake.calls()), len(mi.MODELS))
-        count = len(mi.MODELS)
-        notice = [line for line in self.printed if line.startswith("::notice::")][-1]
-        self.assertIn(f"{count} of the {count} models tried this run are not available", notice)
-        self.assertIn(f"The pool has {count}.", notice)
-        skipped = [line for line in self.printed if " is not available" in line and not line.startswith("::")]
-        self.assertEqual(len(skipped), count)
-        self.assertTrue(all("trying another model" in line for line in skipped[:-1]))
-        self.assertNotIn("trying another model", skipped[-1], "nothing was left to try")
-
-    def test_a_model_named_by_hand_that_is_unavailable_is_reported_plainly(self):
-        fake = FakeCopilot(self, "sys.stderr.write('Error: Model \"x\" from --model flag is not available.'); sys.exit(1)")
-        with self.assertRaises(SystemExit):
-            self.run_main({"MODEL": "claude-fable-5.1"})
-        self.assertEqual(len(fake.calls()), 1)
+        self.assertEqual(len(fake.calls()), 1, "an unavailable model is not asked again")
+        self.assertIn(mi.PINNED_MODEL, str(caught.exception))
+        self.assertIn("the only model this run may use", str(caught.exception))
+        self.assertIn("See Setup in the README", str(caught.exception))
         log = "\n".join(self.printed)
-        self.assertNotIn("trying another model", log)
-        self.assertNotIn("The pool has", log)
-        self.assertIn("1 of the 1 models tried this run are not available", log)
+        self.assertIn(f"::error::{mi.PINNED_MODEL} is not available to this Copilot account", log)
+        self.assertEqual(sorted(p.name for p in self.site.iterdir()), ["error.html", "index.html"])
+
+    def test_a_model_named_by_hand_that_is_unavailable_fails_the_same_way(self):
+        fake = FakeCopilot(self, "sys.stderr.write('Error: Model \"x\" from --model flag is not available.'); sys.exit(1)")
+        with self.assertRaises(SystemExit) as caught:
+            self.run_main({"MODEL": "claude-opus-5.5"})
+        self.assertEqual(len(fake.calls()), 1)
+        self.assertIn("claude-opus-5.5 is the only model this run may use", str(caught.exception))
 
     def test_a_lone_model_is_asked_again_after_a_cli_failure(self):
         fake = FakeCopilot(self, f"""

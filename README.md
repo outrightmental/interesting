@@ -34,24 +34,22 @@ iterate a more interesting website
   CloudFront is the only publisher: the site used to be served from GitHub Pages as well, which
   is retired.
 - **Hourly AI iteration** — [`.github/workflows/make-interesting.yml`](.github/workflows/make-interesting.yml)
-  runs every hour (or manually via *Run workflow*). It picks a random model from
-  [GitHub Copilot](https://docs.github.com/copilot), reached through the
+  runs every hour (or manually via *Run workflow*). It asks **Claude Fable 5.1**, at the **most
+  reasoning effort** the CLI offers, reached through
+  [GitHub Copilot](https://docs.github.com/copilot) and its
   [Copilot CLI](https://docs.github.com/copilot/how-tos/copilot-cli) and billed to a GitHub Copilot
   subscription (see [Setup](#setup)), gives it the mission **"make the website more interesting as a
-  single coherent whole"** — where *interesting* means user engagement time, and nothing else (see
-  [Engagement-time axiom](#engagement-time-axiom)) — and commits the result to `main`; the pipeline
-  above then tests and deploys it. Every run is told to start by envisioning the site as **one
-  functioning excellent experience** and then to re-federate it aggressively, which is the normal
-  work of a run rather than one option among two (see [One single experience](#one-single-experience)).
-  Models the account cannot use are skipped. A model
-  that returns an unusable answer is replaced by another random model, or asked again if no other
-  is left, for up to three attempts per run.
+  coherent whole"** — where *interesting* means user engagement time, and nothing else (see
+  [Engagement-time axiom](#engagement-time-axiom)) —
+  and commits the result to `main`; the pipeline above then tests and deploys it. An answer that is
+  unusable earns the same model another turn, for up to three attempts per run; no other model is
+  ever substituted. See [Which model](#which-model).
 - **One run at a time** — a run that starts while an earlier run of the workflow is still going
   skips itself and finishes green without doing anything, so there is never more than one
   iteration in flight. (To retry a failed run use *Run workflow*: *Re-run failed jobs* does not
   repeat the check, so it waits for the current run instead of skipping.)
-- **Only flagship models** — the random pick draws from a list of large, top-tier models (see
-  [Which models](#which-models)); small and mid-tier models are never picked.
+- **One model, at max effort** — every run uses `claude-fable-5.1` and nothing else, and asks it
+  for `max` reasoning effort. Nothing is picked at random (see [Which model](#which-model)).
 
 ### Building the site
 
@@ -479,25 +477,31 @@ files (see [One single experience](#one-single-experience)).
    repository's token is not in the checkout while the model's answer is processed. The model's
    one-line summary is stripped to plain text before it reaches the commit message.
 
-### Which models
+### Which model
 
-The random pick only ever draws from large, flagship models, listed as `MODELS` in
-[`.github/scripts/make_interesting.py`](.github/scripts/make_interesting.py). Today they come from
-Anthropic (Fable, Opus), OpenAI (Sol, Astra, GPT-5.5, GPT-5.3-Codex) and Moonshot (Kimi K3). Google
-has no model in the pool, because Copilot only offers the Gemini Flash tier.
+One model, always: Anthropic's **Claude Fable 5.1** (`claude-fable-5.1`), asked for **`max`
+reasoning effort**. Both are pinned as `PINNED_MODEL` and `REASONING_EFFORT` in
+[`.github/scripts/make_interesting.py`](.github/scripts/make_interesting.py). Runs used to draw a
+model at random from a dozen Copilot flagships; they no longer do, and nothing here picks a model
+at random any more. One model thinking as hard as it can makes each hour's change as considered as
+the plan allows, and makes one run comparable with the next.
 
-- **Small models are never picked at random.** Besides not being on the list, any model whose id
-  contains a small or mid-tier name is refused: `haiku` and `sonnet`, and their equivalents at
+- **`max` is the top of Copilot's scale** for `--reasoning-effort` (`none`, `minimal`, `low`,
+  `medium`, `high`, `xhigh`, `max`), and the flag travels with every call the script makes.
+  Thinking that hard takes minutes, which is what `MODEL_TIMEOUT_SECONDS` (12 minutes per answer)
+  and the job's `timeout-minutes` allow for.
+- **No fallback.** If Copilot retires the id, or the account's plan does not offer it, the run says
+  which model it could not use and fails, rather than quietly substituting another one. Fix the
+  plan or the policy (see [Setup](#setup)), or change `PINNED_MODEL`.
+- **An unusable answer is asked for again**, from the same model, for up to three attempts per run
+  — a model does not give the same answer twice.
+- **Naming a model yourself** is still possible, for trying one by hand: type an id into the
+  *Run workflow* form and that run uses it instead, with the departure noted in the log. Nothing
+  unattended ever uses anything but `claude-fable-5.1`. A hand-named id that is recognisable as a
+  small or mid-tier model earns a second warning: `haiku` and `sonnet`, and their equivalents at
   other providers such as `mini`, `nano`, `luna`, `terra`, `flash`, `lite`, `small`, `medium`,
   `micro` and `phi` (the full set is `SMALL_MODEL_MARKERS`). `fast` is on that list too, which
-  also keeps out speed-tuned variants of flagships such as `claude-opus-4.8-fast`.
-- **Changing the pool** needs no code change: set the repository variable `MODEL_POOL` to a
-  comma-separated list of Copilot model ids. Models recognised as small or mid-tier are still
-  refused. List flagships only, though: the rule works on names, so it cannot judge an unknown id
-  that is only a version number. The ones known today, such as `gpt-5.4`, are refused by id.
-- **Naming a model yourself**, through the *Run workflow* form, is not a random pick: the model is
-  used as asked, with a warning in the log if it is not a flagship.
-- Models that Copilot has retired or that the account cannot use are skipped automatically.
+  also catches speed-tuned variants of flagships such as `claude-opus-4.8-fast`.
 
 ### Setup
 
@@ -522,12 +526,14 @@ has no model in the pool, because Copilot only offers the Gemini Flash tier.
     is used instead of the workflow's own token.
 - The hourly schedule makes about 720 model calls a month, more when answers have to be asked
   for again. They are billed as Copilot AI credits to whoever pays (see the two routes above), from
-  the same allowance as that account's other Copilot use.
-- Which models can be picked depends on who pays. The workflow's own token is only offered the
-  models of the organization's Copilot plan and model policy: on 2026-10-02, for an organization
-  with the policy enabled but no Copilot seats, that was `gpt-5.3-codex` alone, so every "random"
-  pick landed on it. A personal token is offered every model of that user's plan. The run log
-  names the models it tried that the account could not use.
+  the same allowance as that account's other Copilot use. `max` reasoning effort makes each of
+  those calls think longer, and cost more, than a lesser setting would.
+- Whether `claude-fable-5.1` can be used at all depends on who pays. The workflow's own token is
+  only offered the models of the organization's Copilot plan and model policy: on 2026-10-02, for
+  an organization with the policy enabled but no Copilot seats, that was `gpt-5.3-codex` alone. A
+  personal token is offered every model of that user's plan. If the pinned model is not among
+  them, every run fails and says so — there is no fallback (see
+  [Which model](#which-model)).
 
 ### Development
 
