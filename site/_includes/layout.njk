@@ -56,6 +56,9 @@
   <!-- The one local-state store every page reads and writes through, and its meta menu; see
        js/state.js. Not deferred: a page's own script runs before any deferred one does. -->
   <script src='js/state.js'></script>
+  <!-- The mood flow: ask before offering, on every page; see js/threshold.js. Deferred, and so
+       after js/state.js, which is what it keeps its reading in. -->
+  <script src='js/threshold.js' defer></script>
   <script src='js/site.js' defer></script>
 </head>
 <body>
