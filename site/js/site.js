@@ -19,6 +19,12 @@
   var linkEl = document.getElementById('site-pulse-link');
   var passportStatusEl = document.getElementById('constellation-passport-status');
   var passportNextEl = document.getElementById('constellation-passport-next');
+  var passportMeterEl = document.getElementById('constellation-passport-meter');
+  var passportFillEl = document.getElementById('constellation-passport-fill');
+  var passportCountEl = document.getElementById('constellation-passport-count');
+  var passportNextLinkEl = document.getElementById('constellation-passport-next-link');
+  var passportRandomBtn = document.getElementById('constellation-passport-random');
+  var passportResetBtn = document.getElementById('constellation-passport-reset');
 
   if (!statusEl || !linkEl || !store || typeof store.read !== 'function') {
     return;
@@ -256,6 +262,85 @@
       + left + ' left.' + prompt;
   }
 
+  function updatePassportProgress() {
+    if (!inCircuit) return;
+
+    var marked = relay.visited.length;
+    var ratio = CIRCUIT.length ? (marked / CIRCUIT.length) : 0;
+    var width = Math.max(0, Math.min(100, ratio * 100));
+
+    if (passportMeterEl) {
+      passportMeterEl.setAttribute('aria-valuenow', String(marked));
+      passportMeterEl.setAttribute('aria-valuemax', String(CIRCUIT.length));
+    }
+    if (passportFillEl) {
+      passportFillEl.style.width = width.toFixed(1) + '%';
+    }
+    if (passportCountEl) {
+      passportCountEl.textContent = marked + ' of ' + CIRCUIT.length + ' relay worlds marked'
+        + (relay.completed ? ' · loops completed ' + relay.completed + '.' : '.');
+    }
+
+    if (passportNextLinkEl) {
+      var destination = circuitDestination(preferredWorldFromReading());
+      passportNextLinkEl.href = destination.href;
+      passportNextLinkEl.textContent = 'continue to ' + destination.where;
+    }
+  }
+
+  function randomCircuitJump() {
+    var options = CIRCUIT.filter(function (node) {
+      return node.href !== currentFile;
+    });
+    if (!options.length) options = CIRCUIT.slice();
+    var pick = options[Math.floor(Math.random() * options.length)];
+    if (pick) window.location.href = pick.href;
+  }
+
+  function currentStoredStars() {
+    var saved = store.read('constellation', []);
+    if (saved.status !== 'ok') return 0;
+    return countStars(saved.value);
+  }
+
+  function resetRelayMarks() {
+    relay.visited = [];
+    relay.completed = 0;
+    relay.reachedNow = false;
+
+    relayPersisted = store.set(RELAY, { visited: [], completed: 0 });
+    updatePassportProgress();
+
+    var destination = circuitDestination(preferredWorldFromReading());
+    if (relayPersisted) {
+      setPassport(
+        'Relay marks reset for this browser.',
+        'Start from any sky world and leave a fresh trail. Suggested next hop: ' + destination.where + '.'
+      );
+    } else {
+      setPassport(
+        'Relay marks reset in memory for this visit.',
+        'This browser cannot keep relay marks after you leave. Continue to ' + destination.where + ' now.'
+      );
+    }
+
+    var stars = currentStoredStars();
+    if (stars > 0) {
+      trailEl.textContent = 'Relay reset complete. ' + stars + ' saved star'
+        + (stars === 1 ? ' is' : 's are')
+        + ' still live across the circuit.';
+    } else {
+      trailEl.textContent = 'Relay reset complete. Place one star in the wish constellation to start a fresh run.';
+    }
+  }
+
+  if (passportRandomBtn) {
+    passportRandomBtn.addEventListener('click', randomCircuitJump);
+  }
+  if (passportResetBtn) {
+    passportResetBtn.addEventListener('click', resetRelayMarks);
+  }
+
   // 'unavailable' and 'unreadable' are the whole document's business rather than any one name's, so
   // the first read settles them and there is nothing to learn from reading the rest.
   var found = [];
@@ -288,6 +373,7 @@
         'This browser keeps no lasting trail, so this relay resets when you leave.',
         'You can still roam every world in any order.'
       );
+      updatePassportProgress();
     }
     return;
   }
@@ -299,6 +385,7 @@
         'Saved sky data is unreadable in this browser right now.',
         'Clear state from the menu, place one star in the wish constellation, then continue through the circuit.'
       );
+      updatePassportProgress();
     }
     return;
   }
@@ -311,6 +398,7 @@
         'No saved stars are live in the relay yet.',
         'Start at the wish constellation, place one thought-star, then continue through the circuit.'
       );
+      updatePassportProgress();
     }
     return;
   }
@@ -340,6 +428,7 @@
         stars + ' saved star' + (stars === 1 ? ' is' : 's are') + ' live in this relay.',
         relayLine
       );
+      updatePassportProgress();
       if (relay.reachedNow) {
         trailEl.textContent = 'Relay completed across all eight constellation worlds. Move one star and run the whole circuit again for a different title.';
       }
@@ -355,6 +444,7 @@
       'The relay is waiting for its first saved sky.',
       relayStory(fallbackDestination, 0)
     );
+    updatePassportProgress();
   }
 
   for (i = 0; i < found.length; i++) {

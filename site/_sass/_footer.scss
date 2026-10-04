@@ -41,6 +41,40 @@
   color: var(--muted);
 }
 
+.constellation-passport-meter {
+  margin-top: 0.52rem;
+  height: 0.66rem;
+  border: 1px solid vars.$hairline;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  overflow: hidden;
+}
+
+.constellation-passport-fill {
+  width: 0%;
+  height: 100%;
+  background: linear-gradient(90deg, rgba(160, 203, 255, 0.74), rgba(255, 227, 163, 0.78));
+  transition: width 220ms ease;
+}
+
+.constellation-passport-count {
+  margin: 0.42rem 0 0;
+  color: #c5d7fa;
+  font-family: vars.$mono;
+  font-size: 0.76rem;
+  line-height: 1.4;
+}
+
+.constellation-passport-controls {
+  margin-top: 0.5rem;
+}
+
+.constellation-passport-controls .action,
+.constellation-passport-controls button {
+  font-size: 0.78rem;
+  padding: 0.32rem 0.68rem;
+}
+
 // Shared onward loop for the constellation worlds, federated into one include so those pages
 // keep one coherent cross-page route without repeating hand-written link clusters.
 .footer-circuit {
@@ -75,4 +109,21 @@
   border-color: rgba(255, 229, 163, 0.56);
   background: rgba(255, 229, 163, 0.12);
   color: var(--accent2);
+}
+
+@media (max-width: 620px) {
+  .constellation-passport-controls {
+    flex-direction: column;
+  }
+
+  .constellation-passport-controls .action,
+  .constellation-passport-controls button {
+    width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .constellation-passport-fill {
+    transition: none;
+  }
 }

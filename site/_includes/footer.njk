@@ -56,6 +56,15 @@
       <p class='constellation-passport-title'>constellation relay passport</p>
       <p class='constellation-passport-status' id='constellation-passport-status'>Checking your saved sky…</p>
       <p class='constellation-passport-next' id='constellation-passport-next'>Each world in this circuit remixes the same saved stars.</p>
+      <div class='constellation-passport-meter' id='constellation-passport-meter' role='progressbar' aria-valuemin='0' aria-valuemax='8' aria-valuenow='0' aria-label='Constellation relay progress'>
+        <div class='constellation-passport-fill' id='constellation-passport-fill'></div>
+      </div>
+      <p class='constellation-passport-count' id='constellation-passport-count'>0 of 8 relay worlds marked.</p>
+      <div class='controls constellation-passport-controls'>
+        <a class='action' id='constellation-passport-next-link' href='wish-constellation.html'>continue relay</a>
+        <button id='constellation-passport-random' type='button'>random relay jump</button>
+        <button id='constellation-passport-reset' type='button'>reset relay marks</button>
+      </div>
     </section>
 
     <nav class='footer-circuit' aria-label='Constellation circuit'>
