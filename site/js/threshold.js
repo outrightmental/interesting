@@ -161,6 +161,49 @@
       ]
     },
     {
+      probe: 'bench', kind: 'sequence',
+      ask: 'A workbench has four objects. Arrange three from nearest the door to nearest the window.',
+      take: 3,
+      items: [
+        {
+          label: 'a warm mug',
+          detail: 'still steaming',
+          slots: [
+            { tender: 2, rooted: 1 },
+            { attentive: 1, verbal: 1 },
+            { ceremonial: 1, brooding: 1 }
+          ]
+        },
+        {
+          label: 'a brass compass',
+          detail: 'needle wandering, then settling',
+          slots: [
+            { analytic: 2, geometric: 1 },
+            { curious: 2, divinatory: 1 },
+            { cosmic: 2, restless: 1 }
+          ]
+        },
+        {
+          label: 'a hand bell',
+          detail: 'wrapped in cloth',
+          slots: [
+            { ceremonial: 2, attentive: 1 },
+            { divinatory: 2, verbal: 1 },
+            { tempestuous: 2, restless: 1 }
+          ]
+        },
+        {
+          label: 'a packet of seeds',
+          detail: 'label smudged',
+          slots: [
+            { tending: 2, rooted: 2 },
+            { tender: 1, curious: 1 },
+            { cosmic: 1, brooding: 1 }
+          ]
+        }
+      ]
+    },
+    {
       probe: 'stair', kind: 'choice',
       ask: 'Three landings, and no going back up. Pick a way down.',
       steps: [
@@ -528,7 +571,7 @@
     }
 
     var kinds = {
-      choice: choiceProbe, tap: tapProbe, hold: holdProbe,
+      choice: choiceProbe, sequence: sequenceProbe, tap: tapProbe, hold: holdProbe,
       place: placeProbe, draw: drawProbe, slider: sliderProbe
     };
     (kinds[probe.kind] || choiceProbe)(probe, body, trace, answer, finish);
@@ -571,6 +614,90 @@
       if (first && index > 0) first.focus();
     }
     step();
+  }
+
+  function sequenceProbe(probe, body, trace, answer, finish) {
+    var items = Array.isArray(probe.items) ? probe.items.slice() : [];
+    var target = Math.max(1, Math.min(items.length, probe.take || items.length));
+    var picked = [];
+
+    function remaining() {
+      return items.filter(function (item) {
+        return picked.indexOf(item) === -1;
+      });
+    }
+
+    function scoreAndFinish() {
+      for (var i = 0; i < picked.length; i++) {
+        var item = picked[i];
+        if (!item.slots || !item.slots[i]) continue;
+        add(answer, item.slots[i], 1);
+      }
+      finish();
+    }
+
+    function redraw() {
+      body.textContent = '';
+
+      if (picked.length) {
+        var order = picked.map(function (item) { return item.label; }).join(' -> ');
+        body.appendChild(el('p', 'probe-step', 'bench order: ' + order));
+      }
+
+      var options = remaining();
+      if (picked.length < target && options.length) {
+        var group = el('div', 'probe-options');
+        group.setAttribute('role', 'group');
+        group.setAttribute('aria-label', 'objects to place');
+
+        options.forEach(function (item) {
+          var button = el('button', 'probe-option');
+          button.type = 'button';
+          button.appendChild(el('span', 'probe-option-label', item.label));
+          if (item.detail) button.appendChild(el('span', 'probe-option-detail', item.detail));
+          button.addEventListener('click', function () {
+            picked.push(item);
+            trace.textContent = 'placed: ' + item.label;
+            if (picked.length >= target) {
+              scoreAndFinish();
+              return;
+            }
+            redraw();
+          });
+          group.appendChild(button);
+        });
+
+        body.appendChild(group);
+      }
+
+      var left = target - picked.length;
+      body.appendChild(el('p', 'probe-count', left > 0 ? (left + ' to place') : 'reading order'));
+
+      var controls = el('div', 'controls');
+      var undo = el('button', 'probe-option probe-skip', 'undo last');
+      undo.type = 'button';
+      undo.disabled = picked.length === 0;
+      undo.addEventListener('click', function () {
+        if (!picked.length) return;
+        picked.pop();
+        trace.textContent = 'last object removed';
+        redraw();
+      });
+      controls.appendChild(undo);
+
+      var reset = el('button', 'probe-option probe-skip', 'start over');
+      reset.type = 'button';
+      reset.disabled = picked.length === 0;
+      reset.addEventListener('click', function () {
+        picked = [];
+        trace.textContent = 'order cleared';
+        redraw();
+      });
+      controls.appendChild(reset);
+      body.appendChild(controls);
+    }
+
+    redraw();
   }
 
   function tapProbe(probe, body, trace, answer, finish) {
