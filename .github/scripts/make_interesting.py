@@ -14,7 +14,7 @@ site can be made more interesting by becoming coherent and not only by growing.
 it is user engagement time. The site is more interesting when a person stays
 longer and wants to keep going.
 
-Four axioms stand over every run, each stated in the prompt and held to in code:
+Five axioms stand over every run, each stated in the prompt and held to in code:
 
   - All of the content stays reachable from the root, both by following links
     from index.html and through sitemap.xml. check_reachability() refuses a plan
@@ -32,6 +32,12 @@ Four axioms stand over every run, each stated in the prompt and held to in code:
     refuses a plan that puts a rhythm in front of a visitor -- or that defers
     one to another day, which spends the engagement time the mission is measured
     in. Night-sky atmosphere ("midnight rain") is untouched.
+  - The site asks before it offers. It makes an effort to ascertain a visitor's
+    mood or mental orientation before putting particular content in front of
+    them, it does that by querying rather than by asking them to self-report,
+    and it never queries the same way twice. check_mood() refuses a plan that
+    takes the mood flow off a page, that lets the library of query mechanisms
+    fall below MIN_MOOD_PROBES, or that asks a visitor to report their own mood.
 
 The model is reached through the GitHub Copilot CLI (`copilot`), which bills the
 GitHub Copilot subscription behind the token in COPILOT_GITHUB_TOKEN. (GitHub
@@ -197,9 +203,19 @@ ALLOWED_EXTENSIONS = {
 INCLUDES_DIR = "_includes"
 SASS_DIR = "_sass"
 
+# The one line every page carries for the mood axiom (issue #30), and the file it brings. The
+# whole flow lives in that one file: the orientations, the library of query mechanisms, the clock
+# and time-zone signals, the partly-remembered drift and the ribbon every page shows.
+MOOD_SCRIPT = "js/threshold.js"
+MOOD_TAG = f"<script src='{MOOD_SCRIPT}' defer></script>"
+
 # May be rewritten, never deleted, and shown to the model first so it can always be rewritten.
-# sitemap.xml is one of them because the reachability axiom below leans on it.
-PROTECTED_FILES = {"index.html", "error.html", "sitemap.xml"}
+# sitemap.xml is one of them because the reachability axiom below leans on it, and MOOD_SCRIPT
+# because the mood axiom does: every page of the site loads it, so a run that deleted it would
+# leave a dangling script tag on every page and no query for anyone arriving. Unlike FIXED_FILES
+# it is always shown and always writable -- inventing another query mechanism in it is the single
+# most interesting change a run can make.
+PROTECTED_FILES = {"index.html", "error.html", "sitemap.xml", MOOD_SCRIPT}
 # The one line every page carries, and the files it pulls in (issue #24). js/analytics.js brings the
 # site both its cookie consent banner and -- only once a visitor accepts -- its Google Analytics
 # tag, so a single line per page carries the whole of it and a single check can hold it in place.
@@ -213,8 +229,9 @@ FIXED_FILES = {ANALYTICS_SCRIPT, "js/cookieconsent.umd.js", "css/cookieconsent.c
 # How many files one run may touch. Roomy enough that a run which federates the site can rewrite
 # every page of it and add the shared files those pages link to, which is what the whole-site
 # review in build_prompt asks for; small enough that a runaway answer is still refused. A page is
-# two files now that it has a template and a stylesheet, so this is bigger than it was.
-MAX_CHANGES = 40
+# two files now that it has a template and a stylesheet, and the site grew a world per orientation
+# when the mood axiom landed (issue #30), so this is bigger than it was.
+MAX_CHANGES = 72
 MAX_FILE_BYTES = 50_000
 # How much of the site a prompt carries; comfortably inside every flagship model's context window.
 # Generous on purpose: every run is asked to weigh the site as a whole and may choose to federate
@@ -222,7 +239,7 @@ MAX_FILE_BYTES = 50_000
 # is shown whole and nothing is off limits. Once it outgrows this, the budget still always has room
 # for index.html, error.html and any one other file, and which file that is rotates, so every file
 # gets its turn (see split_for_prompt).
-PROMPT_BUDGET_CHARS = 8 * MAX_FILE_BYTES
+PROMPT_BUDGET_CHARS = 12 * MAX_FILE_BYTES
 MAX_ATTEMPTS = 3
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -840,6 +857,127 @@ def check_cadence(before, after):
                 + " and ".join(f'"{phrase}"' for phrase in broke))
 
 
+# The mood axiom (issue #30). The site asks before it offers. The target of interest is the whole
+# population, not the part of it that happens to like the sky this site grew up as, so no page may
+# put particular content in front of a visitor on the assumption that they want it: the site makes
+# an effort to ascertain their mood or mental orientation first, and what is offered follows from
+# that. The prompt states it, and the three signals below are the part of it that markup and source
+# can settle, the same bargain the four axioms above make.
+#
+# What is checked, and why each is something a page either plainly has or plainly lacks:
+#
+#   1. Every page carries the flow. One line brings it, exactly as the analytics axiom works, so a
+#      shared shell carries it to every page at once and a run that drops it is refused.
+#   2. The library of query mechanisms does not collapse. A run may rewrite MOOD_SCRIPT freely --
+#      that is where new mechanisms come from, and inventing them is the point -- but it may not
+#      leave the site with fewer than MIN_MOOD_PROBES ways of asking, because "never the same way
+#      twice" is only true while there are ways to spare.
+#   3. No page asks a visitor to report their own mood. Querying sideways is the whole method; a
+#      mood dropdown would be the one answer the issue ruled out.
+#
+# What is deliberately not checked: whether a particular question is a good question, whether the
+# orientations are the right orientations, and whether a world suits the orientation that opens on
+# to it. No code could judge any of that, so the prompt asks for it and this does not pretend to.
+
+# How many distinct ways of asking the site has to keep. Twelve shipped with the axiom, so the
+# floor leaves room to retire a mechanism that is not working without the rule becoming a ratchet
+# that forbids ever simplifying.
+MIN_MOOD_PROBES = 8
+# How a query mechanism announces itself: `probe: 'doorway'` on the object that defines it. Named
+# rather than counted by shape, so a run can add one by writing one, and so this check never has to
+# parse JavaScript.
+PROBE_DECLARATION = re.compile(r"""(?<![\w-])probe\s*:\s*['"]([a-z][a-z0-9-]*)['"]""")
+# The one thing the site may never do: ask a visitor to name their own state. The list is short and
+# stated in full in the prompt, so it is a rule a run can follow rather than a trap it springs, and
+# it only catches a page addressing the visitor -- prose *about* the method ("it never asks you how
+# you feel") is not a question and is not matched.
+SELF_REPORT_COPY = re.compile(
+    r"\bhow (?:are|do) you feel(?:ing)?\b"
+    r"|\bhow are you (?:doing|today)\b"
+    rf"|\bwhat{APOSTROPHE}?s your (?:mood|vibe|energy)\b"
+    r"|\bwhat is your (?:mood|vibe|energy)\b"
+    r"|\b(?:select|choose|pick|set|rate|describe|name|tell us|tell me) your "
+    r"(?:mood|vibe|energy|feelings?|emotional state|state of mind)\b",
+    re.I)
+
+
+def pages_missing_mood(site):
+    """The pages of `site` that do not load MOOD_SCRIPT, as a set of site-relative paths.
+
+    A site without that file is not held to the axiom at all, for the same reason
+    pages_missing_analytics is not: there would be nothing for a page to load. It cannot happen
+    here, because MOOD_SCRIPT is in PROTECTED_FILES and so can never be deleted.
+    """
+    if MOOD_SCRIPT not in site:
+        return set()
+    return {page for page in html_pages(site)
+            if MOOD_SCRIPT not in references_from(page, site)}
+
+
+def probe_mechanisms(site):
+    """The distinct query mechanisms `site` declares, as a set of ids.
+
+    Read out of the site's own source rather than from a list kept here, so the library is the
+    site's to grow: a run invents a mechanism by writing one, and the floor below starts counting
+    it in the same run. FIXED_FILES are left out, as everywhere else -- a vendored library is not
+    this site's apparatus.
+    """
+    found = set()
+    for rel, content in site.items():
+        if rel in FIXED_FILES or not rel.endswith((".js", ".mjs", PAGE_SUFFIX)):
+            continue
+        found |= set(PROBE_DECLARATION.findall(content))
+    return found
+
+
+def pages_asking_to_self_report(site):
+    """The pages of `site` that ask a visitor to report their own mood, as {page: [phrase, ...]}.
+
+    Read as text and followed into the page's stylesheets and scripts, exactly as cadence_phrases
+    is and for the same reason: most of this site's prose, and all of its questions, live in the
+    JavaScript that draws the page.
+    """
+    found = {}
+    for page in sorted(html_pages(site)):
+        sources = [site.get(page) or ""]
+        sources += [site[asset] for asset in assets_of(page, site) if asset not in FIXED_FILES]
+        phrases = sorted({match.group(0).lower() for source in sources
+                          for match in SELF_REPORT_COPY.finditer(source)})
+        if phrases:
+            found[page] = phrases
+    return found
+
+
+def check_mood(before, after):
+    """Raise RejectedChange if the change from site `before` to site `after` stops the site asking
+    before it offers.
+
+    Only what this run breaks is refused, exactly as the four checks above only refuse what this
+    run breaks: a page that already lacks the flow stays the site's own to repair -- every run is
+    asked to -- and refusing every plan over it would leave no plan able to repair it.
+    """
+    broke = sorted(pages_missing_mood(after) - pages_missing_mood(before))
+    if broke:
+        raise RejectedChange(
+            f"every page must carry the mood flow, so the site asks before it offers: {broke[0]} "
+            f"has no {MOOD_TAG} in its <head>")
+
+    had, has = probe_mechanisms(before), probe_mechanisms(after)
+    if len(had) >= MIN_MOOD_PROBES > len(has):
+        raise RejectedChange(
+            f"the site must keep at least {MIN_MOOD_PROBES} ways of querying a visitor, so it "
+            f"never asks the same way twice: this leaves {len(has)} "
+            f"(gone: {', '.join(sorted(had - has)) or 'none'})")
+
+    was = pages_asking_to_self_report(before)
+    for page, phrases in sorted(pages_asking_to_self_report(after).items()):
+        added = [phrase for phrase in phrases if phrase not in was.get(page, ())]
+        if added:
+            raise RejectedChange(
+                f"no page may ask a visitor to report their own mood: {page} says "
+                + " and ".join(f'"{phrase}"' for phrase in added))
+
+
 def apply_to(site, ops):
     """The site mapping `site` as it would be once `ops` have been applied."""
     after = dict(site)
@@ -901,7 +1039,8 @@ def build_prompt(shown, omitted=()):
         "piece as a whole needs most right now. Only then choose this run's one focused change. "
         "Two kinds of change are equally welcome:\n"
         "- ADD something: new content, a new page, an interactive toy, better visuals, a hidden "
-        "easter egg.\n"
+        "easter egg, a new way of querying a visitor's orientation, or a new world for an "
+        "orientation that has none.\n"
         "- FEDERATE what is already there: one holistic change that improves the whole "
         "experience without adding a page. Lift markup, styles or behaviour that the pages "
         "repeat into shared files (for example \"css/site.css\" or \"js/site.js\", the shared "
@@ -994,6 +1133,34 @@ def build_prompt(shown, omitted=()):
         "mood, not a schedule, so \"midnight rain\" and \"before midnight\" are fine. A plan that "
         "adds one of the refused phrasings to a page is refused, and this too is checked on the "
         "built site, including the shared scripts and stylesheets a page loads.\n"
+        "- AXIOM, every run: the site asks before it offers. The whole population is the target "
+        "of interest, not the part of it that happens to like whatever aesthetic the site is "
+        "wearing, so no page may put particular content in front of a visitor on the assumption "
+        "that they want it. The site makes an effort to ascertain their mood or mental "
+        "orientation first, and what is offered follows from that. One line in the <head> of a "
+        f"page carries the whole flow:\n    {MOOD_TAG}\n"
+        "Keep that line on every page you rewrite and put it on every page you add, exactly as "
+        f"with the analytics line above. \"{MOOD_SCRIPT}\" holds the orientations, the world "
+        "each one opens onto, the library of query mechanisms, the clock and time-zone signals "
+        "read alongside an answer, and how much of a past visit is remembered. Unlike the "
+        "analytics files it is yours to rewrite and extend; it may never be deleted. Three "
+        "things about how the asking is done, each of them refused in code:\n"
+        "  * Query, never self-report. Ask about a door, a stone, the thing they would put in a "
+        "pocket, the rate at which they tap, how long they hold a button down, where they put "
+        "one mark in an empty field. Never ask a visitor to name their own state: \"how are you "
+        "feeling\", \"how do you feel\", \"how are you doing\", \"what's your mood\", "
+        "\"pick your mood\", \"rate your energy\", \"describe your feelings\" and the rest "
+        "of that family are refused outright, in markup, script and comments alike.\n"
+        "  * Never the same way twice. The site keeps at least "
+        f"{MIN_MOOD_PROBES} distinct query mechanisms, each one declaring itself as "
+        "probe: 'some-id', and a plan that leaves fewer than that is refused. Inventing another "
+        "mechanism is the single most interesting change there is to make here, and a run whose "
+        "whole change is one new mechanism -- or one new world for an orientation that has "
+        "none -- is a complete and successful run.\n"
+        "  * Never a gate. The query is an offer. Every page stays reachable with it ignored, "
+        "declined, or scripting switched off altogether, which is what the reachability axiom "
+        "demands anyway: do not hide a world behind an answer.\n"
+        "This is checked on the built site, like the four above.\n"
         "- Leave the site working at the end of the run. If you extract something into a shared "
         "file, or merge or delete a page, update every page that refers to it in the same run: "
         "never leave a link, a stylesheet, a script, a layout or an @use pointing at something "
@@ -1176,10 +1343,11 @@ def validate_plan(plan, unseen=()):
     `unseen` names existing files whose content the model was not shown; it may not touch them.
 
     A plan that would leave a page of the site unreachable from the root, leave one without the
-    analytics and consent line, make one fail the responsive-and-accessible axiom, or tie one to an
-    update frequency is refused: all four axioms hold however the prompt is answered. All four are
-    judged on the built site (issue #25), which is the only site a visitor ever sees, so the plan is
-    built before any of them is asked, and a plan that does not build is refused for that alone.
+    analytics and consent line, make one fail the responsive-and-accessible axiom, tie one to an
+    update frequency, or stop the site asking before it offers is refused: all five axioms hold
+    however the prompt is answered. All five are judged on the built site (issue #25), which is the
+    only site a visitor ever sees, so the plan is built before any of them is asked, and a plan that
+    does not build is refused for that alone.
     """
     files = plan.get("files") or []
     deletes = plan.get("delete") or []
@@ -1236,7 +1404,7 @@ def validate_plan(plan, unseen=()):
         # The site as committed does not build, so there is no "before" to compare against and the
         # axioms have nothing to say this run. Same reasoning as check_reachability's: every run is
         # asked to repair the site, and refusing a plan over damage it did not do would leave no
-        # plan able to. This run still had to build, and the next is held to all four axioms again.
+        # plan able to. This run still had to build, and the next is held to all five axioms again.
         print(f"::warning::the site as committed does not build ({one_line(err, 300)}), so this "
               "run's change was only checked for building, not against the axioms")
         return ops
@@ -1244,6 +1412,7 @@ def validate_plan(plan, unseen=()):
     check_analytics(built_before, built_after)
     check_accessibility(built_before, built_after)
     check_cadence(built_before, built_after)
+    check_mood(built_before, built_after)
     return ops
 
 

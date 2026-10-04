@@ -77,9 +77,25 @@ def tagged(body):
     return f"<head>{mi.ANALYTICS_TAG}</head>\n<body>{body}</body>"
 
 
+def queried(body):
+    """A bare fragment that loads the shared mood script, and nothing more.
+
+    The counterpart of tagged() for the mood axiom: it carries the one line and, being a fragment,
+    fails the responsive-and-accessible axiom from the start, so only the mood check can refuse a
+    fixture built from it.
+    """
+    return f"<head>{mi.MOOD_TAG}</head>\n<body>{body}</body>"
+
+
+def mood_script(*probes):
+    """A stand-in for the shared mood script, declaring `probes` as its query mechanisms."""
+    declared = ",\n".join(f"  {{ probe: '{name}', kind: 'choice' }}" for name in probes)
+    return "var PROBES = [\n" + declared + "\n];\n"
+
+
 def page(body="<p>a page</p>", title="a page", lang="en",
          viewport="width=device-width, initial-scale=1", css="", focus=True, calm=True,
-         analytics=mi.ANALYTICS_SCRIPT):
+         analytics=mi.ANALYTICS_SCRIPT, mood=mi.MOOD_SCRIPT):
     """A whole page that satisfies every axiom: responsive and accessible (issue #26), and carrying
     the analytics and consent line (issue #24).
 
@@ -89,6 +105,7 @@ def page(body="<p>a page</p>", title="a page", lang="en",
     focus ring (`outline: none`), so `calm=False` and `focus=False` really do leave a page failing.
     `analytics` is the src of the shared script, so a page in a sub-folder can load it by the
     matching relative path, and `analytics=""` leaves the line off without touching anything else.
+    `mood` is the same for the shared mood script (issue #30).
     """
     style = ["  * { box-sizing: border-box; }",
              "  .panel { max-width: 60rem; padding: clamp(0.8rem, 3vw, 2rem); }",
@@ -102,6 +119,7 @@ def page(body="<p>a page</p>", title="a page", lang="en",
             "  <meta charset='utf-8'>\n"
             + (f"  <meta name='viewport' content='{viewport}'>\n" if viewport else "")
             + (f"  <script src='{analytics}' defer></script>\n" if analytics else "")
+            + (f"  <script src='{mood}' defer></script>\n" if mood else "")
             + f"  <title>{title}</title>\n  <style>\n"
             + "\n".join(style + ([f"  {css}"] if css else [])) + "\n  </style>\n</head>\n<body>\n"
             f"  <main class='panel'>\n    <h1>{title}</h1>\n    {body}\n  </main>\n</body>\n</html>\n")
@@ -498,10 +516,10 @@ class WholeSiteReviewTest(unittest.TestCase):
                 self.assertIn(extension, prompt)
 
     # A run can only federate what it was shown, so the budget has to carry the whole site with
-    # room for it to keep growing. This stand-in is half again as big as the site was when the
-    # whole-site review was introduced (nine files, 232 KB, the largest 42 KB).
+    # room for it to keep growing. This stand-in is half again as big as the site was when the mood
+    # axiom gave every orientation a world of its own (57 files, 357 KB, the largest 38 KB).
     GROWN_SITE = ([("index.html", "i" * 50_000), ("error.html", "e" * 50_000)]
-                  + [(f"page-{i:02d}.html", "x" * 22_000) for i in range(12)])
+                  + [(f"page-{i:02d}.html", "x" * 11_000) for i in range(40)])
 
     def test_a_site_half_again_as_big_as_this_one_is_still_shown_whole(self):
         shown, omitted = mi.split_for_prompt(list(self.GROWN_SITE))
@@ -816,7 +834,7 @@ class ResponsiveAccessibleAxiomTest(SiteDirTestCase):
                      "refused, exactly as one that orphans a page is"]:
             with self.subTest(rule=rule):
                 self.assertIn(rule, rules)
-        self.assertEqual(rules.count("AXIOM, every run:"), 4, "every axiom stands over every run")
+        self.assertEqual(rules.count("AXIOM, every run:"), 5, "every axiom stands over every run")
 
     def test_the_prompt_also_asks_for_what_no_validator_can_judge(self):
         # Open question 1 of the issue: both, and the prompt is the wider of the two. Contrast needs
@@ -1240,6 +1258,179 @@ class CadenceAxiomTest(SiteDirTestCase):
         self.assertEqual(len(mi.validate_plan({"delete": ["old.html"]})), 1)
 
 
+class MoodAxiomTest(SiteDirTestCase):
+    """Issue #30: the site asks before it offers.
+
+    Not everyone likes stars, and the target of interest is the whole population, so no page may
+    put particular content in front of a visitor on the assumption that they want it. The fifth
+    axiom stands beside the other four -- stated in the prompt, held to by validate_plan -- and
+    what code can settle about it is three things: that every page carries the flow, that the
+    library of ways to ask does not collapse, and that no page ever asks a visitor to report their
+    own mood.
+    """
+
+    PAGES = ["index.html", "error.html", "toy.html"]
+    MECHANISMS = ["doorway", "pocket", "window", "stone", "misfit", "stair", "tempo", "hold",
+                  "placement", "dial"]
+
+    def setUp(self):
+        super().setUp()
+        (self.site / "js").mkdir()
+        (self.site / mi.MOOD_SCRIPT).write_text(mood_script(*self.MECHANISMS))
+        (self.site / "index.html").write_text(queried(home("toy.html", "error.html")))
+        (self.site / "error.html").write_text(queried("<p>404</p>"))
+        (self.site / "toy.html").write_text(queried("<p>toy</p>"))
+        (self.site / "sitemap.xml").write_text(sitemap(*self.PAGES))
+
+    def rules(self):
+        prompt = mi.build_prompt([("index.html", "<h1>hi</h1>")])
+        return prompt[prompt.index("Rules:"):]
+
+    def test_the_axiom_is_a_standing_rule_of_every_prompt(self):
+        rules = self.rules()
+        for rule in ["AXIOM, every run: the site asks before it offers",
+                     "The whole population is the target of interest",
+                     "ascertain their mood or mental orientation",
+                     mi.MOOD_TAG,
+                     "Keep that line on every page you rewrite",
+                     "Query, never self-report",
+                     "Never the same way twice",
+                     "Never a gate",
+                     "do not hide a world behind an answer"]:
+            with self.subTest(rule=rule):
+                self.assertIn(rule, rules)
+
+    def test_the_prompt_names_every_phrasing_the_code_refuses(self):
+        # The same bargain the cadence axiom makes: a rule a run can follow rather than a trap it
+        # springs, so anything check_mood would refuse is spelled out in the prompt first.
+        rules = self.rules().lower()
+        for refused in ["how are you feeling", "how do you feel", "how are you doing",
+                        "what's your mood", "pick your mood", "rate your energy",
+                        "describe your feelings"]:
+            with self.subTest(refused=refused):
+                self.assertIn(refused, rules)
+                self.assertRegex(refused, mi.SELF_REPORT_COPY,
+                                 "the prompt names a phrasing the code does not actually refuse")
+
+    def test_the_prompt_asks_for_more_mechanisms_and_more_worlds(self):
+        # Open question 1 and 3 of the issue: inventing new ways of asking is meant to be part of
+        # the site's ongoing interesting-ness, so the prompt has to invite it where a run chooses
+        # what to do, not only forbid the collapse of what is there.
+        prompt = mi.build_prompt([("index.html", "<h1>hi</h1>")])
+        self.assertIn("a new way of querying a visitor's orientation", prompt)
+        self.assertIn("a new world for an orientation that has none", prompt)
+        self.assertIn(f"at least {mi.MIN_MOOD_PROBES} distinct query mechanisms", prompt)
+        self.assertIn("probe: 'some-id'", prompt)
+
+    def test_a_page_a_run_adds_must_carry_the_flow(self):
+        # A whole page but for the one line, so the mood axiom is the only thing left to refuse it.
+        plan = {"files": [
+            {"path": "new.html", "content": page(title="new", mood="")},
+            {"path": "index.html", "content": queried(home("toy.html", "error.html", "new.html"))},
+            {"path": "sitemap.xml", "content": sitemap(*self.PAGES, "new.html")},
+        ]}
+        with self.assertRaisesRegex(mi.RejectedChange, r"new\.html has no <script"):
+            mi.validate_plan(plan)
+        plan["files"][0]["content"] = page(title="new")
+        self.assertEqual(len(mi.validate_plan(plan)), 3)
+
+    def test_dropping_the_flow_from_a_page_a_run_rewrites_is_refused(self):
+        with self.assertRaisesRegex(mi.RejectedChange, r"toy\.html has no <script"):
+            mi.validate_plan({"files": [{"path": "toy.html", "content": "<p>no query at all</p>"}]})
+        # It is the src that counts, not the exact spelling of the tag around it.
+        loaded = '<head><script defer src="js/threshold.js"></script></head>'
+        self.assertEqual(len(mi.validate_plan({"files": [{"path": "toy.html", "content": loaded}]})), 1)
+
+    def test_a_page_that_was_already_without_it_blocks_nothing(self):
+        # Only what the run itself breaks is refused, as with the four axioms above.
+        (self.site / "index.html").write_text(home("toy.html", "error.html"))
+        ops = mi.validate_plan({"files": [{"path": "toy.html", "content": queried("<p>still asked</p>")}]})
+        self.assertEqual(len(ops), 1)
+        self.assertEqual(mi.pages_missing_mood(dict(mi.read_site())), {"index.html"})
+
+    def test_the_shared_script_may_be_rewritten_but_never_deleted(self):
+        # The opposite arrangement to the analytics files: this one is the model's to extend, which
+        # is where new mechanisms come from, but every page leans on it, so it cannot be removed.
+        self.assertIn(mi.MOOD_SCRIPT, mi.PROTECTED_FILES)
+        self.assertNotIn(mi.MOOD_SCRIPT, mi.FIXED_FILES)
+        for plan in [{"delete": [mi.MOOD_SCRIPT]}, {"delete": [f"site/{mi.MOOD_SCRIPT}"]},
+                     {"files": [{"path": mi.MOOD_SCRIPT, "content": "   "}]}]:
+            with self.subTest(plan=str(plan)[:70]), self.assertRaises(mi.RejectedChange):
+                mi.validate_plan(plan)
+        grown = mood_script(*self.MECHANISMS, "volley", "stroke")
+        self.assertEqual(len(mi.validate_plan({"files": [{"path": mi.MOOD_SCRIPT, "content": grown}]})), 1)
+
+    def test_the_shared_script_is_shown_to_the_model_before_any_ordinary_file(self):
+        (self.site / "zz-big.js").write_text("y" * mi.PROMPT_BUDGET_CHARS)  # fits only on its own
+        shown, omitted = mi.split_for_prompt(mi.read_site())
+        self.assertEqual([rel for rel, _ in shown][:4],
+                         ["index.html", "error.html", mi.MOOD_SCRIPT, "sitemap.xml"])
+        self.assertEqual(omitted, ["zz-big.js"])
+
+    def test_mechanisms_are_counted_from_the_sites_own_source(self):
+        site = dict(mi.read_site())
+        self.assertEqual(mi.probe_mechanisms(site), set(self.MECHANISMS))
+        # Wherever a run chooses to keep them: a page's own script counts as readily as the shared
+        # one, and a declaration without quotes around the id is a reference, not a declaration.
+        site["toy.html"] = queried("<script>var one = { probe: 'kettle' }; var two = probe;</script>")
+        self.assertEqual(mi.probe_mechanisms(site), set(self.MECHANISMS) | {"kettle"})
+
+    def test_letting_the_library_collapse_is_refused(self):
+        thin = mood_script("doorway", "pocket")
+        with self.assertRaisesRegex(mi.RejectedChange, "at least 8 ways of querying"):
+            mi.validate_plan({"files": [{"path": mi.MOOD_SCRIPT, "content": thin}]})
+
+    def test_swapping_one_mechanism_for_another_is_fine(self):
+        # Retiring a question that is not working is allowed; emptying the drawer is not.
+        swapped = mood_script(*self.MECHANISMS[:-1], "volley")
+        ops = mi.validate_plan({"files": [{"path": mi.MOOD_SCRIPT, "content": swapped}]})
+        self.assertEqual(len(ops), 1)
+
+    def test_a_site_that_never_had_a_library_blocks_nothing(self):
+        # The floor is a floor, not a ratchet: a site below it already stays the site's own to
+        # repair, exactly as a page that already falls short of the other axioms does.
+        (self.site / mi.MOOD_SCRIPT).write_text(mood_script("doorway"))
+        ops = mi.validate_plan({"files": [{"path": mi.MOOD_SCRIPT, "content": mood_script("pocket")}]})
+        self.assertEqual(len(ops), 1)
+
+    def test_asking_a_visitor_to_report_their_own_mood_is_refused(self):
+        for asked in ["<p>How are you feeling today?</p>",
+                      "<p>What's your mood?</p>",
+                      "<p>What&rsquo;s your vibe?</p>",
+                      "<p>Pick your mood from the list.</p>",
+                      "<p>Rate your energy, 1 to 5.</p>",
+                      "<script>var ask = 'Describe your feelings';</script>"]:
+            with self.subTest(asked=asked[:40]), self.assertRaisesRegex(mi.RejectedChange,
+                                                                       "report their own mood"):
+                mi.validate_plan({"files": [{"path": "toy.html", "content": queried(asked)}]})
+
+    def test_asking_sideways_is_exactly_what_the_axiom_wants(self):
+        sideways = ("<p>Four doors, all unlocked. Pick the one with a draught under it.</p>"
+                    "<p>Tap this five times, at whatever rate feels like the rate.</p>")
+        self.assertEqual(len(mi.validate_plan({"files": [{"path": "toy.html", "content": queried(sideways)}]})), 1)
+
+    def test_prose_about_the_method_is_not_a_question(self):
+        # The page may say what it does not do. The check is narrow enough to let it.
+        about = "<p>This site never asks you how you feel. It asks about a stone instead.</p>"
+        self.assertEqual(mi.pages_asking_to_self_report({"p.html": about}), {})
+
+    def test_a_question_federated_into_a_shared_script_counts(self):
+        # The same reasoning as cadence_phrases: most of this site's questions live in the script
+        # that draws the page, so copy that moved there must not slip the check.
+        site = {"p.html": "<head><script src='js/ask.js'></script></head>",
+                "js/ask.js": "var q = 'How do you feel?';"}
+        self.assertEqual(mi.pages_asking_to_self_report(site), {"p.html": ["how do you feel"]})
+
+    def test_a_question_a_page_already_carried_blocks_nothing(self):
+        (self.site / "toy.html").write_text(queried("<p>How do you feel?</p>"))
+        ops = mi.validate_plan({"files": [{"path": "toy.html", "content": queried("<p>How do you feel? Still.</p>")}]})
+        self.assertEqual(len(ops), 1)
+
+    def test_retiring_a_page_that_asked_outright_is_fine(self):
+        (self.site / "old.html").write_text(queried("<p>What is your mood?</p>"))
+        self.assertEqual(len(mi.validate_plan({"delete": ["old.html"]})), 1)
+
+
 def needs_the_build(test):
     """Skip a test that runs the real Node build when the toolchain is not installed.
 
@@ -1259,7 +1450,7 @@ def front_matter(**fields):
 
 
 class BuildPipelineTest(unittest.TestCase):
-    """Issue #25: the real build, and all four axioms judged on what it produces.
+    """Issue #25: the real build, and all five axioms judged on what it produces.
 
     SiteDirTestCase stands the build in with the identity, which is exactly right for its plain-HTML
     fixtures; this is where the pipeline itself is exercised. /site is source now -- a layout is not
@@ -1334,7 +1525,7 @@ class BuildPipelineTest(unittest.TestCase):
                 self.assertNotIn(shared, built)
 
     def test_a_page_is_whatever_the_templates_make_of_it(self):
-        # All four axioms ask about pages, and all four are asked of the built site. In the source,
+        # All five axioms ask about pages, and all five are asked of the built site. In the source,
         # index.html names no page, no page carries the analytics line, and no page is a whole page
         # at all; built, every page is each of those things.
         source = dict(mi.read_site())
@@ -1399,9 +1590,10 @@ class BuildPipelineTest(unittest.TestCase):
 
 
 class RealSiteTest(unittest.TestCase):
-    """The site in this repository obeys all four axioms: every page is reachable from the root,
+    """The site in this repository obeys all five axioms: every page is reachable from the root,
     every page carries the analytics tag and consent banner, every page is responsive and
-    accessible, and no page ties the site to an update frequency.
+    accessible, no page ties the site to an update frequency, and the site asks a visitor what
+    they are like before it offers them anything.
 
     validate_plan only refuses what a run breaks, so the invariants have to start out true: this is
     what makes them hold from the next deploy onward and not only for pages a later run adds. It
@@ -1489,6 +1681,65 @@ class RealSiteTest(unittest.TestCase):
             with self.subTest(phrase=phrase):
                 dated = dict(self.site, **{"index.html": self.site["index.html"] + f"<p>{damage}</p>"})
                 self.assertEqual(mi.pages_dating_the_site(dated), {"index.html": [phrase]})
+
+    # How the mood flow names the world an orientation opens onto, so this test can check that
+    # every one of them is a real page and that they are not all sky.
+    WORLD = re.compile(r"world:\s*'([a-z0-9][a-z0-9-]*\.html)'")
+    SKY = re.compile(r"constellation|sky|star|orbit|wish")
+
+    def worlds(self):
+        return set(self.WORLD.findall(self.site[mi.MOOD_SCRIPT]))
+
+    def test_every_page_carries_the_mood_flow(self):
+        # Issue #30: the site asks before it offers, on every page, not only at the front door --
+        # the flow is ongoing, which is what "the whole site transmogrifies" needs.
+        self.assertIn(mi.MOOD_SCRIPT, self.site, "the file behind the one line has to be there")
+        self.assertEqual(mi.pages_missing_mood(self.site), set())
+        self.assertGreater(len(mi.html_pages(self.site)), 1, "the check is worth nothing on one page")
+
+    def test_the_site_keeps_a_wide_library_of_ways_to_ask(self):
+        # "Never the same way twice" is only true while there are ways to spare, and the issue asks
+        # for the library to be wildly varied rather than merely present.
+        self.assertGreaterEqual(len(mi.probe_mechanisms(self.site)), mi.MIN_MOOD_PROBES)
+
+    def test_no_page_asks_a_visitor_to_report_their_own_mood(self):
+        self.assertEqual(mi.pages_asking_to_self_report(self.site), {})
+
+    def test_every_orientation_opens_onto_a_real_world_and_not_all_of_them_are_sky(self):
+        # The whole point of the issue: a visitor who does not respond to stars still arrives
+        # somewhere that suits them. A world named by the flow has to be a page that exists, and
+        # enough of them have to be off the sky for the answer to mean anything.
+        worlds = self.worlds()
+        self.assertGreaterEqual(len(worlds), 10, "too few orientations to be choosing between")
+        for world in sorted(worlds):
+            with self.subTest(world=world):
+                self.assertIn(world, self.site, "an orientation opens onto a page that is not there")
+        off_sky = {world for world in worlds if not self.SKY.search(world)}
+        self.assertGreaterEqual(len(off_sky), 6,
+                                f"the sky is still nearly all there is on offer: {sorted(worlds)}")
+
+    def test_the_query_is_never_a_gate(self):
+        # references_from reads the threshold's own markup and not the scripts it loads, so this
+        # fails if a world is only reachable by answering the question -- or by having scripting at
+        # all. That is the line between asking before offering and gating.
+        offered = mi.references_from("index.html", self.site)
+        for world in sorted(self.worlds()):
+            with self.subTest(world=world):
+                self.assertIn(world, offered, "this world is hidden behind an answer")
+
+    def test_the_check_would_notice_the_site_assuming_again(self):
+        # A guard against the mood checks quietly becoming no-ops, as with the two above: take the
+        # flow off the real home page, gut the library, or ask outright, and each has to be caught.
+        without = dict(self.site)
+        without["index.html"] = without["index.html"].replace(mi.MOOD_SCRIPT, "js/nothing.js")
+        self.assertEqual(mi.pages_missing_mood(without), {"index.html"})
+
+        gutted = dict(self.site, **{mi.MOOD_SCRIPT: "/* one question, asked over and over */"})
+        self.assertLess(len(mi.probe_mechanisms(gutted)), mi.MIN_MOOD_PROBES)
+
+        asked = dict(self.site,
+                     **{"index.html": self.site["index.html"] + "<p>So, how are you feeling?</p>"})
+        self.assertEqual(mi.pages_asking_to_self_report(asked), {"index.html": ["how are you feeling"]})
 
     def test_the_site_has_a_sitemap_of_both_kinds(self):
         # Open question 2 of the issue: both. sitemap.xml for anything reading the site
