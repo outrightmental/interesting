@@ -3,6 +3,33 @@
 @use 'vars';
 @use 'nav-chips';
 
+.skip-link {
+  position: fixed;
+  top: 0.55rem;
+  left: 0.55rem;
+  z-index: 20;
+  transform: translateY(-140%);
+  border: 1px solid vars.$focus-line;
+  border-radius: 0.65rem;
+  background: rgba(8, 12, 24, 0.95);
+  color: #f2f7ff;
+  text-decoration: none;
+  font-size: 0.86rem;
+  line-height: 1.2;
+  padding: 0.5rem 0.75rem;
+  transition: transform 120ms ease;
+}
+
+.skip-link:focus-visible {
+  transform: translateY(0);
+  outline: 2px solid transparent;
+  box-shadow: 0 0 0 3px vars.$focus-ring;
+}
+
+#main-content:focus {
+  outline: none;
+}
+
 .site-header {
   width: min(980px, 96vw);
   border: 1px solid vars.$hairline;
@@ -65,6 +92,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .skip-link,
   .site-header-nav a {
     transition: none;
   }

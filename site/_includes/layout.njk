@@ -42,6 +42,7 @@
   <script src='js/analytics.js' defer></script>
 </head>
 <body>
+  <a class='skip-link' href='#main-content'>skip to main content</a>
   <header class='site-header'>
     <p class='site-header-title'>
       <a href='index.html'>interesting</a>
@@ -60,5 +61,6 @@
       <a href='error.html'{% if page and page.fileSlug == 'error' %} aria-current='page'{% endif %}>404</a>
     </nav>
   </header>
-{{ content | safe }}</body>
+  <div id='main-content' tabindex='-1'>{{ content | safe }}</div>
+</body>
 </html>
