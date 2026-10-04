@@ -38,6 +38,10 @@
   _includes/footer.njk across the same circuit pages, also reading and writing through the one
   shared state document.
 
+  js/constellation-signals.js is the seventh: a shared relay signal deck shown through
+  _includes/footer.njk across the same circuit pages, keeping one cross-world prompt thread in the
+  same shared state document.
+
   The mood ribbon below is the flow made visible. It sits outside <main> on every page, so the
   question is never a gate in front of the content: the whole site is reachable with the ribbon
   ignored, or with scripting switched off entirely.
@@ -76,6 +80,8 @@
   <script src='js/relay-quests.js' defer></script>
   <!-- Shared constellation remixer controls for the same circuit, through the shared state store. -->
   <script src='js/constellation-remixer.js' defer></script>
+  <!-- Shared relay signal deck for the same circuit, through the shared state store. -->
+  <script src='js/constellation-signals.js' defer></script>
 </head>
 <body>
   <a class='skip-link' href='#main-content'>skip to main content</a>
