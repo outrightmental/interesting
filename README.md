@@ -9,8 +9,9 @@ iterate a more interesting website
 ## How it works
 
 - **`/site`** — the website, in source form. Everything anyone edits — a person or the hourly AI —
-  lives here, and nothing else does: the pages, the shared layout and partials, the Sass, and the
-  three shared files behind the analytics tag (see [Analytics axiom](#analytics-axiom)). A request
+  lives here, and nothing else does: the pages, the shared layout and partials, the Sass, the
+  three shared files behind the analytics tag (see [Analytics axiom](#analytics-axiom)) and the
+  one behind the mood flow (see [Mood axiom](#mood-axiom)). A request
   for a page that is not there gets `error.html` back, with a 404, from a CloudFront custom error
   response.
 - **The build** — [`build.mjs`](build.mjs) turns `/site` into the artifact that is published to an
@@ -57,16 +58,18 @@ is deliberately small: a foundation to build a more holistic experience on, not 
 - **Eleventy, and two conventions.** [`eleventy.config.mjs`](eleventy.config.mjs) is the whole
   pipeline. An `.html` file is a [Nunjucks](https://mozilla.github.io/nunjucks/) template with
   optional YAML front matter; `layout: layout.njk` wraps it in the shared shell in
-  [`site/_includes`](site/_includes), so the `<head>`, the stylesheet links, the analytics line and
-  the footer are written once instead of in every page, and a page is little more than its `<main>`.
+  [`site/_includes`](site/_includes), so the `<head>`, the stylesheet links, the analytics and mood
+  lines, the mood ribbon and the footer are written once instead of in every page, and a page is
+  little more than its `<main>`.
   A `.scss` file
   compiles to `.css` at the same path, and one whose name starts with `_` is a partial, built into
   whatever `@use`s it and never on its own. Every other file type is copied through verbatim, never
   rendered, so a stray `{{` in a script cannot break a build.
 - **Common files.** [`site/_sass`](site/_sass) is what "shared partials" means here: the palette as
   custom properties a page can override (`_tokens.scss`), the base rules, the panel, the controls,
-  the footer, the values the stylesheets have in common (`_vars.scss`, which emits no CSS of its own)
-  and the monospace readout seven pages use (`_readout.scss`, a mixin). `css/site.scss` is those
+  the footer, the fourteen mood palettes and the query styling the mood flow renders into
+  (`_mood.scss`), the values the stylesheets have in common (`_vars.scss`, which emits no CSS of
+  its own) and the monospace readout ten pages use (`_readout.scss`, a mixin). `css/site.scss` is those
   partials and nothing else, and every page links the `css/site.css` it compiles to. `css/<page>.scss`
   holds what is true of that page alone and is linked after it, so a page overrides rather than
   repeats. `error.html` writes its styles into the page instead: CloudFront returns it for any 404,
@@ -114,7 +117,7 @@ the one thing the mission is measured in.
   again" — because the next move is the one worth asking for.
 - **Held to in code.** `check_cadence` in
   [`.github/scripts/make_interesting.py`](.github/scripts/make_interesting.py) refuses a plan that
-  puts one of those phrasings on a page. As with the three axioms below, only what the run itself
+  puts one of those phrasings on a page. As with the four axioms below, only what the run itself
   breaks is refused, and every reason is one phrase, so clearing part of a page can only take
   reasons away. The engagement-time definition itself is *not* checked in code, because no check
   could: it is a standard for the model to aim at, and the prompt is where a standard like that
@@ -266,6 +269,66 @@ to be drawn in a given hour.
   [`.github/scripts/test_make_interesting.py`](.github/scripts/test_make_interesting.py) builds
   `/site` and checks the result on every pull request and before every deploy. A violation **fails
   the build and blocks the deploy**; a warning in an hourly log nobody reads would change nothing.
+
+### Mood axiom
+
+The site asks before it offers. The target of interest is **the whole population**, not the part of
+it that happens to like whatever aesthetic the site is wearing, so no page puts particular content
+in front of a visitor on the assumption that they want it: the site makes an effort to ascertain
+their mood or mental orientation first, and what is offered follows from that. Like the four above,
+this is an invariant of the iteration rather than a one-off change to the site as it stands.
+
+- **One line per page, again.** Every page carries
+  `<script src='js/threshold.js' defer></script>` in its `<head>`, written once in
+  [`site/_includes/layout.njk`](site/_includes/layout.njk). That file
+  ([`site/js/threshold.js`](site/js/threshold.js)) is the whole flow: fourteen orientations and
+  the world each one opens onto, the library of query mechanisms, the clock and time-zone signals
+  read alongside an answer, how much of a past visit survives, and the ribbon every page shows.
+- **Queried, never asked to self-report.** A visitor is never asked to name their own state. They
+  are asked about a door, a stone, the thing they would put in a pocket, the rate at which they
+  tap, how long they hold a button down, where they put one mark in an empty field, which way they
+  draw one line, where they set an unlabelled dial. Twelve mechanisms shipped with the axiom, and
+  the clock, the time zone and the gap since the last visit are read alongside whichever one comes
+  up.
+- **Never the same way twice.** A mechanism counts as used the moment it is put in front of
+  someone, answered or not, so the rule holds for a visitor who ignores the question as well as one
+  who answers it. `check_mood` refuses a plan that leaves the site with fewer than
+  `MIN_MOOD_PROBES` distinct mechanisms, counted out of the site's own source by their
+  `probe: 'some-id'` declarations — so a run adds one simply by writing one, and **inventing
+  another is the single most interesting change there is to make here**. The prompt says so where
+  a run chooses what to do, beside "add a page".
+- **Partly remembered.** What the site learns decays by half every thirty hours and a fresh answer
+  always outweighs what is left, so a visitor is read again on every arrival rather than filed once.
+  The ribbon says how long it has been since they were last here, and
+  [`site/moods.html`](site/moods.html) will run any mechanism on demand or forget them entirely.
+- **The whole site transmogrifies.** The ascertained orientation lands on `<html data-mood>`, and
+  `_sass/_mood.scss` turns that into fourteen palettes over the shared custom properties in
+  `_tokens.scss`, so every page re-skins itself. The flow is ongoing rather than a gate at the
+  front door: any page can ask again, in a new way.
+- **Never a gate.** The query sits outside `<main>`, and every world is a plain link from the
+  threshold, the site map and the shared wayfinding index, so the whole site is reachable with the
+  question ignored, declined, or scripting switched off altogether. That is also what the
+  reachability axiom demands, and `RealSiteTest` checks the stronger half of it: the threshold's
+  own markup — not the scripts it loads — has to link to every world.
+- **The shared script is protected, not fixed.** `js/threshold.js` joins `index.html`,
+  `error.html` and `sitemap.xml` in `PROTECTED_FILES`: it may be rewritten and is always shown to
+  the model, unlike the three analytics files, but it can never be deleted, because every page
+  leans on it.
+- **Stated in the prompt and held to in code**, the same arrangement as the others. `check_mood`
+  in [`.github/scripts/make_interesting.py`](.github/scripts/make_interesting.py) refuses a plan
+  that takes the line off a page, collapses the library, or puts a direct self-report question
+  ("how are you feeling", "what's your mood", "pick your mood" and the rest of that short family)
+  on one. Every refused phrasing is named in the prompt first, as with the cadence axiom, so it is
+  a rule a run can follow rather than a trap it springs. Only what the run itself breaks is
+  refused.
+- **What is deliberately not checked**: whether a question is a good question, whether the
+  orientations are the right orientations, and whether a world suits the orientation that opens on
+  to it. No code could judge any of that, so the prompt asks for it and the checks do not pretend
+  to.
+- **True of the site as committed**, like the rest: `RealSiteTest` builds `/site` on every pull
+  request and before every deploy and checks that every page carries the flow, that the library is
+  wide, that no page asks outright, that every orientation opens onto a page that exists — with at
+  least six of them off the sky — and that nothing is hidden behind an answer.
 
 ### Silo
 
