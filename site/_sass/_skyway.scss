@@ -1,6 +1,7 @@
 // The shared full-site navigation row used across pages.
 
 @use 'vars';
+@use 'nav-chips';
 
 .skyway {
   margin-top: 0.95rem;
@@ -56,36 +57,11 @@
 }
 
 .skyway-links a {
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.05);
-  color: var(--accent);
-  text-decoration: none;
-  padding: 0.3rem 0.7rem;
-  font-size: 0.84rem;
-  transition: vars.$lift;
-}
-
-.skyway-links a:hover {
-  transform: translateY(-1px);
-  border-color: rgba(173, 208, 255, 0.7);
-  background: rgba(141, 184, 255, 0.16);
-  color: #eaf1ff;
-}
-
-.skyway-links a:focus-visible {
-  outline: 2px solid transparent;
-  transform: translateY(-1px);
-  border-color: rgba(173, 208, 255, 0.7);
-  background: rgba(141, 184, 255, 0.16);
-  color: #eaf1ff;
-  box-shadow: 0 0 0 3px vars.$focus-ring;
+  @include nav-chips.chip;
 }
 
 .skyway-links a.current {
-  color: var(--accent2);
-  border-color: rgba(255, 229, 163, 0.56);
-  background: rgba(255, 229, 163, 0.12);
+  @include nav-chips.current;
 }
 
 @media (max-width: 760px) {
