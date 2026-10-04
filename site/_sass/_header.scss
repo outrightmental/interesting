@@ -83,6 +83,13 @@
   font-size: 0.83rem;
 }
 
+.site-pulse-trail {
+  flex: 1 1 100%;
+  color: var(--muted);
+  font-size: 0.77rem;
+  text-align: center;
+}
+
 .site-pulse-link {
   @include nav-chips.chip(0.8rem, 0.3rem 0.7rem);
   min-height: 44px;
@@ -114,6 +121,10 @@
 
   .site-pulse {
     justify-content: flex-start;
+  }
+
+  .site-pulse-trail {
+    text-align: left;
   }
 
   .site-header-nav {

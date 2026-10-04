@@ -1,13 +1,10 @@
 /*
   The pulse in the site header, on every page: what the shared local-state document is already
-  holding for this visitor, and one step back to it.
+  holding for this visitor, one step back to it, and one suggested onward trail.
 
-  It used to count the stars saved on the home page and then rotate a visitor through the sky pages.
-  The constellation is not on the home page any more, and the site no longer assumes anyone wants
-  the sky (issue #30), so this line never guesses at what a visitor likes: the step it offers points
-  only at work they made themselves, and while they have made none it points at the mood atlas,
-  where every orientation is laid out and none is the default. Where to go *next* is the mood
-  ribbon's business, and follows the reading js/threshold.js takes.
+  It used to count stars and point at one remembered world. The site now has a stronger through-line:
+  once someone has a saved constellation, the pulse keeps an expedition route live across the linked
+  sky worlds so they can keep moving through reinterpretations of the same material.
 
   Reads nothing itself: the saved state arrives through window.interestingState (js/state.js), which
   the layout loads first. Its classes are site-pulse*; every site-meta* name belongs to the meta
@@ -18,10 +15,14 @@
 
   var store = window.interestingState;
   var statusEl = document.getElementById('site-pulse-status');
+  var trailEl = document.getElementById('site-pulse-trail');
   var linkEl = document.getElementById('site-pulse-link');
 
   if (!statusEl || !linkEl || !store || typeof store.read !== 'function') {
     return;
+  }
+  if (!trailEl) {
+    trailEl = { textContent: '' };
   }
 
   /* The names the shared document keeps, the page each one belongs to, and what to call the things
@@ -40,6 +41,37 @@
     { key: 'kiln', href: 'word-kiln.html', where: 'the word kiln' },
     { key: 'loam', href: 'loam.html', where: 'loam' },
     { key: 'quiet-room', href: 'quiet-room.html', where: 'the quiet room' }
+  ];
+
+  // The linked worlds that reinterpret one saved constellation from different angles.
+  var CIRCUIT = [
+    { href: 'wish-constellation.html', where: 'the wish constellation' },
+    { href: 'constellation-diary.html', where: 'the diary' },
+    { href: 'constellation-echo.html', where: 'the echo chamber' },
+    { href: 'constellation-weather.html', where: 'the weather lab' },
+    { href: 'orbital-weaver.html', where: 'the orbital weaver' },
+    { href: 'sky-archive.html', where: 'the archive oracle' },
+    { href: 'star-lantern.html', where: 'the lantern ritual' },
+    { href: 'wish-terrarium.html', where: 'the terrarium' }
+  ];
+
+  // For visitors whose latest reading points into the sky cluster, keep that as a preferred branch.
+  var ORIENTATION_WORLD = {
+    cosmic: 'wish-constellation.html',
+    brooding: 'constellation-diary.html',
+    attentive: 'constellation-echo.html',
+    tempestuous: 'constellation-weather.html',
+    geometric: 'orbital-weaver.html',
+    divinatory: 'sky-archive.html',
+    ceremonial: 'star-lantern.html',
+    tending: 'wish-terrarium.html'
+  };
+
+  var TRAIL_PROMPTS = [
+    'Sky trail live: each world remixes the same stars into a different instrument.',
+    'Expedition route: keep the same constellation and compare what each world hears in it.',
+    'Constellation relay: move one star, then follow the route to watch every reading shift.',
+    'Linked run: one saved sky can become weather, audio, ritual and archive in sequence.'
   ];
 
   // How many worlds the line names before it stops counting them out.
@@ -72,6 +104,58 @@
     return parts.slice(0, -1).join(', ') + ' and ' + parts[parts.length - 1];
   }
 
+  function countStars(value) {
+    if (!Array.isArray(value)) {
+      return 0;
+    }
+    var count = 0;
+    for (var i = 0; i < value.length; i++) {
+      var star = value[i];
+      if (!star || typeof star !== 'object') continue;
+      if (typeof star.x === 'number' && typeof star.y === 'number' && typeof star.text === 'string') {
+        count += 1;
+      }
+    }
+    return count;
+  }
+
+  function preferredWorldFromReading() {
+    var saved = store.read('threshold', null);
+    if (saved.status !== 'ok' || !saved.value || typeof saved.value !== 'object') {
+      return null;
+    }
+    var id = saved.value.orientation;
+    if (typeof id !== 'string') {
+      return null;
+    }
+    return ORIENTATION_WORLD[id] || null;
+  }
+
+  function circuitIndex(href) {
+    for (var i = 0; i < CIRCUIT.length; i++) {
+      if (CIRCUIT[i].href === href) {
+        return i;
+      }
+    }
+    return -1;
+  }
+
+  function circuitDestination(preferredHref) {
+    var here = circuitIndex(currentFile);
+    if (here !== -1) {
+      return CIRCUIT[(here + 1) % CIRCUIT.length];
+    }
+
+    if (preferredHref) {
+      var preferred = circuitIndex(preferredHref);
+      if (preferred !== -1) {
+        return CIRCUIT[preferred];
+      }
+    }
+
+    return CIRCUIT[0];
+  }
+
   // 'unavailable' and 'unreadable' are the whole document's business rather than any one name's, so
   // the first read settles them and there is nothing to learn from reading the rest.
   var found = [];
@@ -88,18 +172,28 @@
     }
   }
 
+  var constellation = store.read('constellation', []);
+  if (!trouble && (constellation.status === 'unavailable' || constellation.status === 'unreadable')) {
+    trouble = constellation.status;
+  }
+  var stars = constellation.status === 'ok' ? countStars(constellation.value) : 0;
+
   // Nothing to go back to leaves the link exactly as the layout wrote it, which is the one
   // destination that assumes nothing: the atlas of every orientation.
   if (trouble === 'unavailable') {
     statusEl.textContent = 'this browser stores nothing, so nothing you make here will be waiting.';
+    trailEl.textContent = 'The site still works as a full map; it only cannot carry your trail forward.';
     return;
   }
   if (trouble === 'unreadable') {
     statusEl.textContent = 'what this browser saved cannot be read. the state menu can clear it.';
+    trailEl.textContent = 'After clearing, leave one trace in any world and the trail rebuilds from there.';
     return;
   }
+
   if (!found.length) {
     statusEl.textContent = 'nothing kept in this browser yet.';
+    trailEl.textContent = 'Start a trail by leaving one thing in any world, then follow what it opens.';
     return;
   }
 
@@ -112,6 +206,19 @@
     named.push(rest === 1 ? 'one more world' : rest + ' more worlds');
   }
   statusEl.textContent = 'kept here: ' + sentence(named) + '.';
+
+  if (stars > 0) {
+    var preferred = preferredWorldFromReading();
+    var destination = circuitDestination(preferred);
+    linkEl.setAttribute('href', destination.href);
+    linkEl.textContent = 'continue to ' + destination.where;
+
+    var prompt = TRAIL_PROMPTS[(stars + found.length + currentFile.length) % TRAIL_PROMPTS.length];
+    trailEl.textContent = prompt + ' ' + stars + ' star' + (stars === 1 ? ' is' : 's are') + ' live across the circuit.';
+    return;
+  }
+
+  trailEl.textContent = 'Start a sky trail by placing one thought in the wish constellation; linked worlds will then reinterpret it.';
 
   for (i = 0; i < found.length; i++) {
     if (found[i].kept.href !== currentFile) {

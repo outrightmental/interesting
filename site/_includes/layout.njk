@@ -73,14 +73,15 @@
       <a href='index.html'>interesting</a>
       <span>many worlds, no default</span>
     </p>
-    <!-- The pulse: what the shared document is already holding for this visitor, and one step back
-         to it (see js/site.js). The copy here is what a visitor with scripting switched off reads,
-         so it claims nothing. The classes are site-pulse*, never site-meta*: those belong to the
-         meta menu js/state.js draws in the bottom-right corner, whose styles that file injects and
-         which is not the site's to restyle -- one of its names here is pulled out of the header
-         and pinned on top of that menu. -->
+    <!-- The pulse: what the shared document is already holding for this visitor, one step back to
+         it, and one suggested onward trail through related worlds (see js/site.js). The copy here
+         is what a visitor with scripting switched off reads, so it claims nothing. The classes are
+         site-pulse*, never site-meta*: those belong to the meta menu js/state.js draws in the
+         bottom-right corner, whose styles that file injects and which is not the site's to restyle
+         -- one of its names here is pulled out of the header and pinned on top of that menu. -->
     <p class='site-pulse' aria-live='polite'>
       <span id='site-pulse-status' class='site-pulse-status'>nothing kept in this browser yet.</span>
+      <span id='site-pulse-trail' class='site-pulse-trail'>build a trail by leaving something in any world.</span>
       <a id='site-pulse-link' class='site-pulse-link' href='moods.html'>find your world</a>
     </p>
     <nav class='site-header-nav' aria-label='Primary navigation'>
