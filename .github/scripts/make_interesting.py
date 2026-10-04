@@ -5,11 +5,15 @@ Asks one model -- Claude Fable 5.1, at the most reasoning effort GitHub
 Copilot offers -- to look at the current contents of the /site folder and make
 the website more interesting.
 
-Every run starts with a look at the site as a whole: the model may add something
-new, or it may federate what is already there (consolidate repeated markup,
-styles and behaviour into shared files, unify navigation and visual language,
-merge or retire pages that overlap). Either outcome is a successful run, so the
-site can be made more interesting by becoming coherent and not only by growing.
+Every run starts the same way, unconditionally: the model is told to envision the
+site as one experience -- one navigation, one visual language, one through-line --
+before it chooses anything. WHOLE names what that experience has to be, and
+re-federating the site aggressively is then the normal work of a run: consolidate
+repeated markup, styles and behaviour into the shared files, unify navigation and
+visual language across every page, merge or retire pages that overlap. Adding
+something new is the exception rather than the default, and whatever a run adds
+arrives federated in the same run. So the site is made more interesting by
+becoming one piece and not only by growing.
 
 "Interesting" is not left to a model's taste: INTERESTING names the measure, and
 it is user engagement time. The site is more interesting when a person stays
@@ -79,7 +83,22 @@ from pathlib import Path, PurePosixPath
 # more interesting" as its opening so the prompt, the console line and clean_summary's fallback all
 # still read naturally. (The workflow name and commit-message prefix are separate strings in
 # make-interesting.yml and are not affected by this constant.)
-MISSION = "make the website more interesting as a coherent whole"
+#
+# Issue #36 added the one word "single". The aim was already holistic; what it did not say is that
+# the whole is one thing rather than a well-behaved collection, which is the distinction WHOLE below
+# turns into the posture of a run.
+MISSION = "make the website more interesting as a single coherent whole"
+
+# What the site has to add up to (issue #36). MISSION names the aim and INTERESTING below names the
+# measure; this names the shape, because "more interesting" and "engagement time" are both satisfied
+# by a pile of individually good pages, and a pile is not what this site is for.
+#
+# Like INTERESTING, it is a standard stated to the model rather than one held to in code: no check
+# can settle whether a site reads as one experience, in the way check_reachability() can settle
+# whether a page is orphaned. So it is said where it can do some good -- before a run chooses what
+# to do, and again in the line it reads last -- and it is said insistently, because the failure it
+# guards against is the comfortable one of adding another page and calling the hour spent.
+WHOLE = "a single functioning excellent experience"
 
 # What "interesting" means here (issue #32). MISSION names the aim; this names the measure, so a run
 # is held to a standard instead of its own taste. Interesting is user engagement time: a visitor who
@@ -1111,34 +1130,51 @@ def split_for_prompt(files):
 def build_prompt(shown, omitted=()):
     system = (
         "You are the autonomous curator of a static website served from S3 behind a CDN. "
-        f"Your mission, every single run: {MISSION}.\n\n"
+        f"Your mission, every single run: {MISSION}. What all of it has to add up to is {WHOLE} -- "
+        "not a set of pages that happen to share a domain.\n\n"
         f"\"Interesting\" means one thing here, and it is the standard every change is held to: "
         f"{INTERESTING}. User engagement time is the measure. So judge a change by whether it "
         "gives a visitor a reason to stay and keep going -- something to play with, to discover, "
         "to be surprised by, to come back to one more time -- and not by whether it looks tidy or "
         "busy. A page nobody lingers on is not interesting however handsome it is, and coherence "
         "is worth doing because a site that holds together is one a visitor keeps exploring.\n\n"
-        "Begin every run by taking a moment to look at the site as a whole. Read the pages "
-        "below, notice what they repeat and where they have drifted apart, and ask what the "
-        "piece as a whole needs most right now. Only then choose this run's one focused change. "
-        "Two kinds of change are equally welcome:\n"
-        "- ADD something: new content, a new page, an interactive toy, better visuals, a hidden "
+        "ENVISION THE WHOLE FIRST. Every run begins this way, with no exceptions and nothing to "
+        "decide about it: before you choose anything, read every file below and envision the site "
+        "as one experience -- one navigation, one visual language, one through-line a visitor "
+        "follows from the first page to the last. Then ask where what is there falls short of "
+        "that: what the pages repeat, where they have drifted apart, which of them a visitor "
+        "would not guess belong to the same site, and what the piece as a whole needs most right "
+        "now. That look at the site as a whole is the first half of every run. What you do is the "
+        f"second half, and it follows from what you saw, because the site has to become {WHOLE} "
+        "and not a collection of individually decent pages.\n\n"
+        "RE-FEDERATE, AGGRESSIVELY. This is the normal work of a run, not an alternative to it: "
+        "every run should leave the site more of a single piece than it found it. Lift markup, "
+        "styles and behaviour that the pages repeat into the shared files -- the layout and "
+        f"partials in \"{INCLUDES_DIR}/\", a Sass partial in \"{SASS_DIR}/\", the shared "
+        "stylesheet \"css/site.scss\" that every page links as \"css/site.css\", a shared "
+        "script such as \"js/site.js\" -- and use them from every page that needs them. Give "
+        "every page the same header and navigation, so the whole site is reachable from anywhere. "
+        "Settle on one visual language and hold every page to it: palette, type, spacing, motion. "
+        "Merge pages that overlap, and retire the ones that no longer earn their place: the site "
+        "is better as fewer pages that belong together than as more that do not. Simplify, repair "
+        "or remove what has stopped working. Be aggressive about it -- take on the consolidation "
+        "that is overdue rather than the one that is merely easy, and do not leave a "
+        "near-duplicate standing because no single page is to blame for it.\n\n"
+        "ADD something -- new content, a new page, an interactive toy, better visuals, a hidden "
         "easter egg, a new way of querying a visitor's orientation, or a new world for an "
-        "orientation that has none.\n"
-        "- FEDERATE what is already there: one holistic change that improves the whole "
-        "experience without adding a page. Lift markup, styles or behaviour that the pages "
-        "repeat into shared files (for example \"css/site.css\" or \"js/site.js\", the shared "
-        f"layout in \"{INCLUDES_DIR}/\" or a Sass partial in \"{SASS_DIR}/\") and use them "
-        "from every page that needs them. Give every page the same header and navigation, so the "
-        "whole site is reachable from anywhere. Settle on one visual language: palette, type, "
-        "spacing, motion. Merge pages that overlap, and retire the ones that no longer earn "
-        "their place. Simplify, repair or remove what has stopped working.\n\n"
+        "orientation that has none -- when a site that already holds together is what the whole "
+        "needs next, because then it gets more interesting by growing. Adding is never a way "
+        "around the paragraph above, though, and it is the exception rather than the default: "
+        "whatever you add arrives already federated, in the same run, inside the shared layout, "
+        "in the one visual language, wired into the one navigation, sharing the styles and "
+        "behaviour it has in common with the rest. A page that stands apart leaves the site less "
+        "of a whole, however good that page is on its own.\n\n"
         "A run whose entire change is a holistic improvement -- consolidating, unifying, merging, "
         "or only deleting -- is a complete and successful run. It needs no new page alongside it. "
-        "The site becomes more interesting by becoming a coherent whole, not only by growing, so "
-        "do not add for the sake of adding: when the site has grown repetitive, scattered or "
-        "inconsistent, federating it is the more interesting change. Either way, build on what is "
-        "already there rather than starting over.\n\n"
+        "The site becomes more interesting by becoming a single coherent whole, not only by "
+        "growing, so do not add for the sake of adding: when the site is repetitive, scattered or "
+        "inconsistent, re-federating it is the more interesting change. Either way, build on what "
+        "is already there rather than starting over.\n\n"
         "How the site is built:\n"
         "What you write is source. A small build turns it into the files that are served, and only "
         "the built site is ever published or checked. The whole pipeline is two conventions:\n"
@@ -1309,9 +1345,11 @@ def build_prompt(shown, omitted=()):
             "by a later run."
         )
     user += (
-        f"\n\nThis run's mission: {MISSION}, measured in {INTERESTING}. Weigh the whole of the "
-        "above first, then make the one change it needs most -- adding something new, or "
-        "federating what is already there. Respond with the JSON object only."
+        f"\n\nThis run's mission: {MISSION}, measured in {INTERESTING}. Envision all of the above "
+        f"as {WHOLE} -- one navigation, one visual language, one through-line -- and then make the "
+        "one change that brings it closest to being that: re-federate what is already there, "
+        "aggressively, and add something new only as part of the same whole. Respond with the JSON "
+        "object only."
     )
     return system + "\n\n" + user
 
