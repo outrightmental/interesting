@@ -1,7 +1,7 @@
 ---
 layout: layout.njk
 title: site map
-description: 'Every page of interesting, plus a live atlas console with memory-aware route hints and random jumps.'
+description: 'Every page of interesting, plus a live route console with memory-aware hints and random jumps.'
 stylesheet: sitemap
 footer:
   - [index.html, back to constellation]
@@ -10,7 +10,7 @@ footerNote: every page, one sky
 ---
   <main>
     <h1>site map</h1>
-    <p class='tagline'>Every page of the sky, in one place, now with a live atlas console for route planning.</p>
+    <p class='tagline'>Every page of the sky, in one place, now with a live route console for route planning.</p>
 
 {% include 'skyway.njk' %}
 
@@ -29,10 +29,6 @@ footerNote: every page, one sky
       <li>
         <a href='index.html'>interesting</a> <code>index.html</code>
         <p>The home sky: place tiny thoughts as stars, drag them into a constellation, ask the sky what it sees, play it as a chime, mint a postcard.</p>
-      </li>
-      <li>
-        <a href='sky-atlas.html'>sky atlas alias</a> <code>sky-atlas.html</code>
-        <p>Legacy route preserved: now a lightweight signpost that points back to this unified map and keeps old links working.</p>
       </li>
       <li>
         <a href='constellation-diary.html'>constellation diary</a> <code>constellation-diary.html</code>
@@ -107,8 +103,7 @@ footerNote: every page, one sky
         'sky-archive.html',
         'star-lantern.html',
         'wish-terrarium.html',
-        'error.html',
-        'sky-atlas.html'
+        'error.html'
       ];
 
       function loadCount() {
