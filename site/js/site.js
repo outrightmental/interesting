@@ -57,6 +57,9 @@
     { href: 'wish-terrarium.html', where: 'the terrarium' }
   ];
 
+  // Kept in the shared state document to track a visitor's cross-world relay progress.
+  var RELAY = 'constellation-relay';
+
   // For visitors whose latest reading points into the sky cluster, keep that as a preferred branch.
   var ORIENTATION_WORLD = {
     cosmic: 'wish-constellation.html',
@@ -74,6 +77,15 @@
     'Expedition route: keep the same constellation and compare what each world hears in it.',
     'Constellation relay: move one star, then follow the route to watch every reading shift.',
     'Linked run: one saved sky can become weather, audio, ritual and archive in sequence.'
+  ];
+
+  var RELAY_TITLES = [
+    'midnight cartographer',
+    'weather listener',
+    'orbital signal-keeper',
+    'lantern surveyor',
+    'archive runner',
+    'echo gardener'
   ];
 
   // How many worlds the line names before it stops counting them out.
@@ -142,6 +154,11 @@
     return -1;
   }
 
+  function circuitLabel(href) {
+    var idx = circuitIndex(href);
+    return idx === -1 ? href : CIRCUIT[idx].where;
+  }
+
   function circuitDestination(preferredHref) {
     var here = circuitIndex(currentFile);
     if (here !== -1) {
@@ -167,7 +184,77 @@
     }
   }
 
+  function normalizeVisited(list) {
+    var out = [];
+    if (!Array.isArray(list)) return out;
+    for (var i = 0; i < list.length; i++) {
+      if (circuitIndex(list[i]) === -1) continue;
+      if (out.indexOf(list[i]) !== -1) continue;
+      out.push(list[i]);
+    }
+    return out;
+  }
+
+  function relayTitle(stars, loops) {
+    return RELAY_TITLES[(stars + loops) % RELAY_TITLES.length];
+  }
+
   var inCircuit = circuitIndex(currentFile) !== -1;
+
+  // Track relay progress across constellation worlds in the one shared state document.
+  var relayRead = store.read(RELAY, { visited: [], completed: 0 });
+  var relayStatus = relayRead.status;
+  var relayPersisted = true;
+  var relay = { visited: [], completed: 0, reachedNow: false };
+
+  if (relayStatus === 'ok' && relayRead.value && typeof relayRead.value === 'object') {
+    relay.visited = normalizeVisited(relayRead.value.visited);
+    relay.completed = typeof relayRead.value.completed === 'number' && relayRead.value.completed > 0
+      ? Math.floor(relayRead.value.completed)
+      : 0;
+  }
+
+  if (inCircuit && (relayStatus === 'ok' || relayStatus === 'missing')) {
+    var before = relay.visited.length;
+    if (relay.visited.indexOf(currentFile) === -1) {
+      relay.visited.push(currentFile);
+    }
+    if (before < CIRCUIT.length && relay.visited.length === CIRCUIT.length) {
+      relay.reachedNow = true;
+      relay.completed += 1;
+    }
+    relayPersisted = store.set(RELAY, {
+      visited: relay.visited,
+      completed: relay.completed
+    });
+  }
+
+  function relayStory(destination, stars) {
+    if (!inCircuit) return '';
+
+    if (relayStatus === 'unreadable') {
+      return 'Relay memory is unreadable in this browser context.';
+    }
+    if (relayStatus === 'unavailable' || !relayPersisted) {
+      return 'Relay marks are in memory only for this visit.';
+    }
+
+    var marked = relay.visited.length;
+    if (!marked) {
+      return 'No relay marks yet. Start from any sky world and keep moving.';
+    }
+
+    var names = relay.visited.map(circuitLabel).join(' -> ');
+    if (marked >= CIRCUIT.length) {
+      var title = relayTitle(stars, relay.completed || 1);
+      return 'Relay complete: ' + names + '. Title unlocked: ' + title + '.';
+    }
+
+    var left = CIRCUIT.length - marked;
+    var prompt = destination ? (' Next hop: ' + destination.where + '.') : '';
+    return marked + ' of ' + CIRCUIT.length + ' relay worlds marked (' + names + '). '
+      + left + ' left.' + prompt;
+  }
 
   // 'unavailable' and 'unreadable' are the whole document's business rather than any one name's, so
   // the first read settles them and there is nothing to learn from reading the rest.
@@ -248,10 +335,14 @@
     trailEl.textContent = prompt + ' ' + stars + ' star' + (stars === 1 ? ' is' : 's are') + ' live across the circuit.';
 
     if (inCircuit) {
+      var relayLine = relayStory(destination, stars);
       setPassport(
         stars + ' saved star' + (stars === 1 ? ' is' : 's are') + ' live in this relay.',
-        'Next hop: ' + destination.where + '. Move one star there and compare what shifts.'
+        relayLine
       );
+      if (relay.reachedNow) {
+        trailEl.textContent = 'Relay completed across all eight constellation worlds. Move one star and run the whole circuit again for a different title.';
+      }
     }
     return;
   }
@@ -259,9 +350,10 @@
   trailEl.textContent = 'Start a sky trail by placing one thought in the wish constellation; linked worlds will then reinterpret it.';
 
   if (inCircuit) {
+    var fallbackDestination = circuitDestination(preferredWorldFromReading());
     setPassport(
       'The relay is waiting for its first saved sky.',
-      'Begin at the wish constellation to seed it, then return here to continue the chain.'
+      relayStory(fallbackDestination, 0)
     );
   }
 
