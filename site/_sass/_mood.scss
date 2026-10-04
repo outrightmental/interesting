@@ -1,0 +1,223 @@
+// The mood flow, as it looks: the ribbon every page carries, the query mechanisms it renders, and
+// the fourteen palettes the whole site re-skins itself with once it has read someone.
+//
+// js/threshold.js puts the ascertained orientation on <html data-mood='...'>, and every rule in
+// MOODS below is one orientation's override of the shared custom properties in _tokens.scss. That
+// is the whole of the transmogrification: a page writes no colour of its own, so changing the
+// attribute changes the site. A page that wants to go further can hang its own rules off the same
+// attribute.
+
+@use 'sass:list';
+@use 'vars';
+
+// orientation -> (bg, bg2, accent, accent2), the four that carry a mood. --fg and --muted are left
+// alone on purpose: they are what keeps text at 4.5:1 against every one of these.
+$moods: (
+  tender: (#140d13, #46293c, #ffc6d6, #ffe4c8),
+  restless: (#0a1210, #1a5040, #7cffc4, #fff2a6),
+  analytic: (#090d11, #243743, #a6dbff, #d9f4ff),
+  rooted: (#100c07, #40301a, #e0c48e, #cfe6a6),
+  verbal: (#120c07, #512c15, #ffb98c, #ffe2b4),
+  curious: (#0d0c13, #332b52, #cdbcff, #ffe7ab),
+  cosmic: (#070a14, #1c2a4e, #9fcbff, #ffe7ab),
+  ceremonial: (#0c0a15, #3e2d55, #e4c6ff, #ffe1aa),
+  brooding: (#090b10, #222c3d, #aec6de, #ecdcc4),
+  tempestuous: (#070d12, #1d3d53, #8ad6ff, #ffd6b2),
+  attentive: (#0a0c12, #26334e, #bcd3ff, #ffeecd),
+  tending: (#070f0b, #1c4330, #a6ecb9, #ffe7ab),
+  divinatory: (#0d0a11, #3e2345, #edbcff, #ffdba4),
+  geometric: (#080b14, #212c5c, #adbcff, #d4eaff)
+);
+
+@each $mood, $palette in $moods {
+  :root[data-mood='#{$mood}'] {
+    --bg: #{list.nth($palette, 1)};
+    --bg2: #{list.nth($palette, 2)};
+    --accent: #{list.nth($palette, 3)};
+    --accent2: #{list.nth($palette, 4)};
+  }
+}
+
+// The ribbon sits between the header and the page, on every page, because the flow is ongoing
+// rather than a gate at the front door.
+.mood-ribbon {
+  width: min(980px, 96vw);
+  margin: 0 0 0.62rem;
+  border: 1px solid vars.$hairline;
+  border-radius: vars.$radius-panel;
+  background: rgba(7, 10, 20, 0.62);
+  padding: 0.58rem 0.7rem;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.mood-ribbon-text {
+  margin: 0;
+  color: var(--accent2);
+  font-size: 0.92rem;
+  line-height: 1.35;
+}
+
+.mood-ribbon-where {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-family: vars.$mono;
+}
+
+.mood-ribbon-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.mood-ribbon-actions button,
+.mood-ribbon-actions a.action {
+  font-size: 0.84rem;
+  padding: 0.38rem 0.8rem;
+}
+
+.mood-ribbon[data-asking='true'] {
+  border-color: vars.$focus-line;
+}
+
+// A query, wherever it is rendered: in the ribbon, or as the whole of the threshold page.
+.probe {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.probe-ask {
+  margin: 0;
+  color: var(--fg);
+  font-size: clamp(1rem, 2.6vw, 1.22rem);
+  line-height: 1.38;
+}
+
+.probe-step {
+  margin: 0 0 0.5rem;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.probe-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
+  gap: 0.5rem;
+}
+
+.probe-option {
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-start;
+  text-align: left;
+  gap: 0.18rem;
+  border-radius: vars.$radius-well;
+  padding: 0.6rem 0.75rem;
+  width: 100%;
+}
+
+.probe-option-label {
+  color: var(--fg);
+  font-size: 0.95rem;
+}
+
+.probe-option-detail {
+  color: var(--muted);
+  font-size: 0.8rem;
+  line-height: 1.35;
+}
+
+.probe-skip {
+  width: auto;
+  margin-top: 0.5rem;
+}
+
+.probe-big {
+  min-width: min(260px, 100%);
+  min-height: 72px;
+  font-size: 1.05rem;
+  border-radius: vars.$radius-well;
+}
+
+.probe-big.held {
+  border-color: vars.$focus-line;
+  background: vars.$focus-fill;
+}
+
+.probe-count,
+.probe-trace {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-family: vars.$mono;
+  min-height: 1.2em;
+}
+
+.probe-field {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 7;
+  min-height: 140px;
+  border: 1px solid vars.$hairline;
+  border-radius: vars.$radius-well;
+  background:
+    radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.07) 0%, transparent 62%),
+    vars.$well;
+  cursor: crosshair;
+}
+
+.probe-field:focus-visible {
+  outline: 2px solid transparent;
+  border-color: vars.$focus-line;
+  box-shadow: 0 0 0 3px vars.$focus-ring;
+}
+
+.probe-mark {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  margin: -7px 0 0 -7px;
+  border-radius: 50%;
+  background: var(--accent2);
+  box-shadow: 0 0 14px var(--accent);
+}
+
+.probe-pad {
+  width: 100%;
+  height: auto;
+  display: block;
+  border: 1px solid vars.$hairline;
+  border-radius: vars.$radius-well;
+  background: vars.$well;
+  touch-action: none;
+  cursor: crosshair;
+}
+
+.probe-dial {
+  display: grid;
+  gap: 0.35rem;
+  border: 1px solid vars.$hairline;
+  border-radius: vars.$radius-well;
+  background: vars.$well;
+  padding: 0.7rem;
+}
+
+.probe-dial-label {
+  color: var(--muted);
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.probe-dial-end {
+  color: var(--accent2);
+  font-size: 0.84rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .probe-option,
+  .probe-big {
+    transition: none;
+  }
+}

@@ -1,0 +1,308 @@
+// The wish constellation: a live sky you drop stars into. One world among several, reached
+// from the threshold when a visitor reads as looking up (see js/threshold.js).
+
+@use 'vars';
+
+:root {
+  --bg: #0b0b10;
+  --bg2: #141426;
+  --fg: #f2f2f2;
+  --muted: #a7adc0;
+  --accent: #8db8ff;
+  --accent2: #ffd98d;
+  --panel: rgba(12, 12, 20, 0.7);
+  --line: rgba(255, 255, 255, 0.14);
+}
+
+html,
+body {
+  background: radial-gradient(circle at 20% 10%, #1d2340 0%, var(--bg) 55%), var(--bg);
+}
+
+body {
+  // The panel carries the whole sky's navigation now, so on a short viewport it has to be able to
+  // scroll instead of being clipped by the centring.
+  align-content: safe center;
+  padding: 1.2rem;
+  overflow-x: hidden;
+}
+
+#sky {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+}
+
+#links {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+  pointer-events: none;
+  overflow: visible;
+}
+
+#links line {
+  stroke: rgba(151, 195, 255, 0.38);
+  stroke-width: 1.1;
+  stroke-linecap: round;
+  filter: drop-shadow(0 0 4px rgba(120, 170, 255, 0.4));
+}
+
+.scan {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(to bottom, transparent 0, transparent 2px, rgba(255, 255, 255, 0.015) 3px);
+  mix-blend-mode: screen;
+  z-index: 1;
+}
+
+main {
+  position: relative;
+  z-index: 2;
+  width: min(780px, 96vw);
+  padding: clamp(1rem, 4vw, 2rem);
+  border-radius: 18px;
+  box-shadow: 0 15px 40px rgba(0, 0, 0, 0.35);
+  text-align: center;
+}
+
+h1 {
+  font-size: clamp(2.3rem, 9vw, 6rem);
+  letter-spacing: -0.04em;
+}
+
+.tagline {
+  margin: 0.65rem 0 1rem;
+  font-size: clamp(0.95rem, 2.3vw, 1.25rem);
+}
+
+.story {
+  margin: 0 auto 1.1rem;
+  max-width: 58ch;
+  color: #d8dcef;
+  font-size: 0.98rem;
+}
+
+.controls {
+  justify-content: center;
+  gap: 0.6rem;
+  margin: 0 0 0.95rem;
+}
+
+button {
+  background: rgba(255, 255, 255, 0.06);
+  padding: 0.5rem 0.9rem;
+}
+
+button:hover,
+button:focus-visible {
+  border-color: rgba(255, 255, 255, 0.32);
+  background: rgba(255, 255, 255, 0.11);
+}
+
+#orbit[aria-pressed='true'],
+#chime[aria-pressed='true'] {
+  background: rgba(141, 184, 255, 0.22);
+  border-color: rgba(173, 208, 255, 0.75);
+  box-shadow: 0 0 12px rgba(134, 179, 255, 0.35) inset;
+}
+
+.note {
+  margin: 0;
+  min-height: 1.5em;
+  color: var(--accent2);
+  font-size: 0.95rem;
+}
+
+.hint {
+  margin: 0.65rem 0 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+// This world reuses the shared wayfinding include instead of its own one-off nav cluster.
+.wayfinding {
+  margin-top: 1rem;
+  text-align: left;
+}
+
+.wayfinding-label,
+.wayfinding-note {
+  text-align: left;
+}
+
+.postcard {
+  display: none;
+  margin: 0.95rem auto 0;
+  width: min(430px, 100%);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 14px;
+  background: rgba(11, 13, 24, 0.72);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.28);
+  padding: 0.7rem;
+  text-align: left;
+}
+
+.postcard.show {
+  display: block;
+  animation: fadeup 260ms ease-out;
+}
+
+.postcard h2 {
+  margin: 0 0 0.4rem;
+  font-size: 1.05rem;
+  letter-spacing: 0.01em;
+  color: #ecf2ff;
+}
+
+#postcard-canvas {
+  width: 100%;
+  height: auto;
+  display: block;
+  border-radius: vars.$radius-well;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: #090d1b;
+}
+
+.postcard-text {
+  margin: 0.5rem 0 0;
+  color: #d7e3ff;
+  font-size: 0.92rem;
+}
+
+.postcard-hint {
+  margin: 0.45rem 0 0;
+  font-size: 0.8rem;
+}
+
+.star {
+  position: fixed;
+  width: 14px;
+  height: 14px;
+  margin-left: -7px;
+  margin-top: -7px;
+  border: 0;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #fff 0 20%, #d4e4ff 45%, #86a9ff 70%, transparent 73%);
+  box-shadow: 0 0 13px rgba(145, 188, 255, 0.85);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  z-index: 3;
+  animation: twinkle 2.8s ease-in-out infinite;
+}
+
+.star.dragging {
+  cursor: grabbing;
+  animation: none;
+  transform: scale(1.22);
+  box-shadow: 0 0 18px rgba(180, 215, 255, 0.95);
+}
+
+.star.ping {
+  animation: ping 360ms ease-out;
+  transform: scale(1.55);
+  box-shadow: 0 0 22px rgba(213, 234, 255, 1);
+}
+
+.star:nth-of-type(2n) {
+  animation-duration: 3.7s;
+}
+
+.star:nth-of-type(3n) {
+  animation-duration: 2.2s;
+}
+
+.star:focus-visible {
+  outline: 1px solid #fff;
+  outline-offset: 2px;
+}
+
+.meteor {
+  position: fixed;
+  width: 34px;
+  height: 6px;
+  margin-left: -17px;
+  margin-top: -3px;
+  border: 0;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0) 0%, rgba(207, 231, 255, 0.92) 45%, rgba(255, 249, 204, 1) 100%);
+  box-shadow: 0 0 12px rgba(173, 222, 255, 0.9), 0 0 24px rgba(127, 190, 255, 0.55);
+  cursor: crosshair;
+  z-index: 4;
+  pointer-events: auto;
+}
+
+.meteor::before {
+  content: '';
+  position: absolute;
+  right: 70%;
+  top: 50%;
+  width: 28px;
+  height: 2px;
+  transform: translateY(-50%);
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0));
+  filter: blur(1px);
+}
+
+.meteor:focus-visible {
+  outline: 1px solid #fff;
+  outline-offset: 2px;
+}
+
+@keyframes twinkle {
+  0%,
+  100% {
+    transform: scale(0.9);
+    opacity: 0.75;
+  }
+
+  50% {
+    transform: scale(1.12);
+    opacity: 1;
+  }
+}
+
+@keyframes ping {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+
+  100% {
+    transform: scale(1.7);
+    opacity: 0.85;
+  }
+}
+
+@keyframes fadeup {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .star {
+    animation: none;
+  }
+
+  button {
+    transition: none;
+  }
+
+  .postcard.show {
+    animation: none;
+  }
+}

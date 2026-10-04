@@ -1,0 +1,66 @@
+{#-
+  The full index of the site, grouped by what a visitor is after rather than by what the site is
+  made of. It used to be the "skyway", and it used to be sky all the way down; the site no longer
+  assumes anyone wants the sky, so the sky is one group among several here (issue #30).
+
+  Every world names the orientation it answers to, and those orientations are the same ones
+  js/threshold.js reads a visitor for -- so a visitor who ignores the query entirely still has the
+  whole map in front of them, and the reachability axiom holds with scripting switched off.
+-#}
+{%- set offSkyLinks = [
+  ['quiet-room', 'quiet-room.html', 'the quiet room', 'banked low'],
+  ['kinetic-floor', 'kinetic-floor.html', 'the kinetic floor', 'wound tight'],
+  ['machine-shop', 'machine-shop.html', 'the machine shop', 'cold and clear'],
+  ['loam', 'loam.html', 'loam', 'low and slow'],
+  ['word-kiln', 'word-kiln.html', 'the word kiln', 'full of half-sentences'],
+  ['apocrypha-desk', 'apocrypha-desk.html', 'the apocrypha desk', 'magpie']
+] -%}
+{%- set skyLinks = [
+  ['wish-constellation', 'wish-constellation.html', 'the wish constellation', 'looking up'],
+  ['constellation-diary', 'constellation-diary.html', 'the diary', 'in the long look'],
+  ['constellation-echo', 'constellation-echo.html', 'the echo chamber', 'ears first'],
+  ['constellation-weather', 'constellation-weather.html', 'the weather lab', 'weather coming'],
+  ['orbital-weaver', 'orbital-weaver.html', 'the orbital weaver', 'after symmetry'],
+  ['sky-archive', 'sky-archive.html', 'the archive oracle', 'asking elsewhere'],
+  ['star-lantern', 'star-lantern.html', 'the lantern ritual', 'wants a rite'],
+  ['wish-terrarium', 'wish-terrarium.html', 'the terrarium', 'minding something']
+] -%}
+{%- set wayfindingLinks = [
+  ['index', 'index.html', 'the threshold', 'the way in'],
+  ['moods', 'moods.html', 'the mood atlas', 'every orientation'],
+  ['sitemap', 'sitemap.html', 'site map', 'every page'],
+  ['error', 'error.html', 'observatory 404', 'the edge']
+] -%}
+    <nav class='wayfinding' aria-label='All worlds'>
+      <p class='wayfinding-label'>every world</p>
+      <p class='wayfinding-note'>Nothing here is the default. Take the one that fits, or take the one that does not.</p>
+
+      <div class='wayfinding-grid'>
+        <section class='wayfinding-group' aria-label='Worlds off the sky'>
+          <p class='wayfinding-group-title'>off the sky</p>
+          <div class='wayfinding-links'>
+{%- for link in offSkyLinks %}
+            <a href='{{ link[1] }}'{% if page and page.fileSlug == link[0] %} class='current' aria-current='page'{% endif %}>{{ link[2] }}<span>{{ link[3] }}</span></a>
+{%- endfor %}
+          </div>
+        </section>
+
+        <section class='wayfinding-group' aria-label='Worlds under the sky'>
+          <p class='wayfinding-group-title'>under the sky</p>
+          <div class='wayfinding-links'>
+{%- for link in skyLinks %}
+            <a href='{{ link[1] }}'{% if page and page.fileSlug == link[0] %} class='current' aria-current='page'{% endif %}>{{ link[2] }}<span>{{ link[3] }}</span></a>
+{%- endfor %}
+          </div>
+        </section>
+
+        <section class='wayfinding-group' aria-label='Wayfinding'>
+          <p class='wayfinding-group-title'>wayfinding</p>
+          <div class='wayfinding-links'>
+{%- for link in wayfindingLinks %}
+            <a href='{{ link[1] }}'{% if page and page.fileSlug == link[0] %} class='current' aria-current='page'{% endif %}>{{ link[2] }}<span>{{ link[3] }}</span></a>
+{%- endfor %}
+          </div>
+        </section>
+      </div>
+    </nav>

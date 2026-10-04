@@ -1,9 +1,13 @@
-// The shared full-site navigation row used across pages.
+// The full-site index shown on every page by _includes/wayfinding.njk.
+//
+// It was the "skyway" when the sky was the only thing on offer. It is three groups now -- worlds
+// off the sky, worlds under it, and the wayfinding pages -- because the site no longer assumes
+// anyone wants any particular one of them (issue #30).
 
 @use 'vars';
 @use 'nav-chips';
 
-.skyway {
+.wayfinding {
   margin-top: 0.95rem;
   border: 1px solid vars.$hairline;
   border-radius: vars.$radius-panel;
@@ -11,7 +15,7 @@
   padding: 0.75rem;
 }
 
-.skyway-label {
+.wayfinding-label {
   margin: 0;
   color: var(--muted);
   font-size: 0.82rem;
@@ -20,28 +24,28 @@
   text-align: center;
 }
 
-.skyway-note {
+.wayfinding-note {
   margin: 0.35rem 0 0;
   color: #d4e3ff;
   font-size: 0.84rem;
   text-align: center;
 }
 
-.skyway-grid {
+.wayfinding-grid {
   margin-top: 0.6rem;
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr));
   gap: 0.6rem;
 }
 
-.skyway-group {
+.wayfinding-group {
   border: 1px solid vars.$hairline;
   border-radius: vars.$radius-well;
   background: rgba(6, 9, 18, 0.44);
   padding: 0.55rem;
 }
 
-.skyway-group-title {
+.wayfinding-group-title {
   margin: 0;
   color: var(--accent2);
   font-size: 0.76rem;
@@ -49,29 +53,35 @@
   text-transform: uppercase;
 }
 
-.skyway-links {
+.wayfinding-links {
   margin-top: 0.45rem;
   display: flex;
   flex-wrap: wrap;
   gap: 0.45rem;
 }
 
-.skyway-links a {
+.wayfinding-links a {
   @include nav-chips.chip;
+
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.1rem;
+  border-radius: vars.$radius-well;
+  padding: 0.4rem 0.7rem;
 }
 
-.skyway-links a.current {
+// The orientation each world answers to, under its name.
+.wayfinding-links a span {
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.wayfinding-links a.current {
   @include nav-chips.current;
 }
 
-@media (max-width: 760px) {
-  .skyway-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .skyway-links a {
+  .wayfinding-links a {
     transition: none;
   }
 }

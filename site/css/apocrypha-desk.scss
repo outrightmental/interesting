@@ -1,0 +1,68 @@
+// The apocrypha desk: one specimen card at a time, and a drawer of the ones worth keeping.
+
+@use 'vars';
+@use 'readout';
+
+:root {
+  --bg: #0d0c13;
+  --bg2: #332b52;
+  --accent: #cdbcff;
+  --accent2: #ffe7ab;
+}
+
+.card {
+  display: grid;
+  align-content: start;
+  gap: 0.5rem;
+  min-height: 300px;
+  border: 1px solid vars.$hairline;
+  border-radius: vars.$radius-panel;
+  background:
+    repeating-linear-gradient(0deg, transparent 0 25px, rgba(255, 255, 255, 0.03) 25px 26px),
+    rgba(18, 15, 28, 0.9);
+  padding: 1rem;
+}
+
+.card[data-filled='true'] {
+  border-color: rgba(205, 188, 255, 0.4);
+}
+
+.card-number {
+  margin: 0;
+  color: var(--accent2);
+  font-family: vars.$mono;
+  font-size: 0.9rem;
+  letter-spacing: 0.1em;
+}
+
+.card-name {
+  margin: 0;
+  font-size: clamp(1.05rem, 3.4vw, 1.5rem);
+  line-height: 1.25;
+  color: #f1ecff;
+}
+
+.card-line {
+  margin: 0;
+  color: #d8d0ef;
+  font-size: 0.92rem;
+  line-height: 1.5;
+}
+
+.card-verdict {
+  margin: auto 0 0;
+  color: var(--accent);
+  font-family: vars.$mono;
+  font-size: 0.82rem;
+}
+
+.desk-note {
+  margin: 0;
+  color: #e3dcfb;
+  line-height: 1.5;
+  font-size: 0.92rem;
+}
+
+.layout .panel #reading {
+  @include readout.readout(10em, $font-size: 0.8rem, $line-height: 1.5);
+}

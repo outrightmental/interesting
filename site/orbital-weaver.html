@@ -4,7 +4,8 @@ title: orbital weaver
 description: 'Transform your saved constellation into a mirrored orbital mandala, then read a tiny mantra forecast.'
 stylesheet: orbital-weaver
 footer:
-  - [index.html, back to constellation]
+  - [wish-constellation.html, back to the wish constellation]
+  - [index.html, back to the threshold]
   - [sitemap.html, site map]
   - [constellation-echo.html, open echo chamber]
   - [constellation-weather.html, open weather lab]
@@ -20,7 +21,7 @@ footer:
       <canvas id='weaver' width='620' height='340' aria-label='Mirrored orbital mandala generated from saved constellation stars'></canvas>
 
       <section class='panel'>
-        <p style='margin:0;color:#d8e4ff;'>This reads the same saved constellation memory as the main sky.</p>
+        <p style='margin:0;color:#d8e4ff;'>This reads the same saved constellation memory as the wish constellation page.</p>
         <div class='controls'>
           <button id='refresh' type='button'>refresh saved sky</button>
           <button id='shuffle' type='button'>shuffle weave</button>
@@ -133,7 +134,7 @@ Load your saved sky, click the weave to send ripples, or print a mantra from you
       var GHOST_NOTES = {
         unavailable: 'Local storage unavailable. Running with ghost seeds.',
         unreadable: 'Saved constellation unreadable. Running with ghost seeds.',
-        missing: 'No saved constellation found. Running with ghost seeds until you create stars on home.',
+        missing: 'No saved constellation found. Running with ghost seeds until you create stars on the wish constellation page.',
         ok: 'Saved data had no readable stars. Running with ghost seeds.'
       };
 
@@ -236,7 +237,7 @@ Load your saved sky, click the weave to send ripples, or print a mantra from you
         ];
         var closers = [
           'Commit to one clear action before the next hour.',
-          'Rearrange one star on home, then return and re-read.',
+          'Rearrange one star on the wish constellation page, then return and re-read.',
           'Share one rough idea while it is still warm.',
           'Protect ten focused minutes and build inside them.'
         ];

@@ -1,70 +1,113 @@
 ---
 layout: layout.njk
 title: site map
-description: 'Every page of interesting, plus a live route console with memory-aware hints and random jumps.'
+description: 'Every page of interesting, grouped by the orientation it answers to, plus a route console that reads what the site currently knows about you.'
 stylesheet: sitemap
 footer:
-  - [index.html, back to constellation]
+  - [index.html, back to the threshold]
+  - [moods.html, mood atlas]
   - [error.html, visit observatory 404]
-footerNote: every page, one sky
+footerNote: every page, no default
 ---
   <main>
     <h1>site map</h1>
-    <p class='tagline'>Every page of the sky, in one place, now with a live route console for route planning.</p>
+    <p class='tagline'>Every page, in one place, with nothing hidden behind a question.</p>
 
-{% include 'skyway.njk' %}
+{% include 'wayfinding.njk' %}
 
     <section class='atlas' aria-live='polite'>
-      <h2>atlas console</h2>
-      <p id='memory'>Checking shared constellation memory...</p>
-      <p id='route'>Pick a route: create stars on home, then jump to any lab to reinterpret the same sky.</p>
+      <h2>route console</h2>
+      <p id='memory'>Checking what this machine remembers...</p>
+      <p id='route'>Pick a route: take the query at the threshold, or overrule it and go straight to any world.</p>
       <div class='controls'>
-        <a class='action' href='index.html'>open home constellation</a>
+        <a class='action' href='index.html'>open the threshold</a>
+        <a class='action' href='moods.html'>open the mood atlas</a>
         <button id='random' type='button'>random jump</button>
+        <button id='contrary' type='button'>send me somewhere I would not pick</button>
       </div>
     </section>
 
-    <h2 class='section-title'>the sky</h2>
+    <h2 class='section-title'>the way in</h2>
     <ul class='pages'>
       <li>
-        <a href='index.html'>interesting</a> <code>index.html</code>
-        <p>The home sky: place tiny thoughts as stars, drag them into a constellation, ask the sky what it sees, play it as a chime, mint a postcard.</p>
+        <a href='index.html'>the threshold</a> <code>index.html</code>
+        <p>The entry point. It offers nothing until it has asked something, and it asks a different way on every arrival.</p>
       </li>
       <li>
-        <a href='constellation-diary.html'>constellation diary</a> <code>constellation-diary.html</code>
+        <a href='moods.html'>the mood atlas</a> <code>moods.html</code>
+        <p>Every orientation the site distinguishes between, every world behind one, and every mechanism it has for asking. Run any of them on demand, or make it forget you.</p>
+      </li>
+    </ul>
+
+    <h2 class='section-title'>worlds off the sky</h2>
+    <ul class='pages'>
+      <li>
+        <a href='quiet-room.html'>the quiet room</a> <code>quiet-room.html</code>
+        <p>A breath to follow, a dimmer that stays where you leave it, and a list of things you have put down. Nothing in here keeps score.</p>
+      </li>
+      <li>
+        <a href='kinetic-floor.html'>the kinetic floor</a> <code>kinetic-floor.html</code>
+        <p>Heavy blocks, flingable with a pointer or the arrow keys, with gravity you can turn upside down.</p>
+      </li>
+      <li>
+        <a href='machine-shop.html'>the machine shop</a> <code>machine-shop.html</code>
+        <p>All 256 elementary cellular automata, one slider wide, with the eight bits of the current rule printed underneath.</p>
+      </li>
+      <li>
+        <a href='loam.html'>loam</a> <code>loam.html</code>
+        <p>A cutaway of soil. Plant something, water it, and watch a root system find its way around the stones.</p>
+      </li>
+      <li>
+        <a href='word-kiln.html'>the word kiln</a> <code>word-kiln.html</code>
+        <p>Feed it a word and it fires a coinage out of it, with a definition and a citation that never existed.</p>
+      </li>
+      <li>
+        <a href='apocrypha-desk.html'>the apocrypha desk</a> <code>apocrypha-desk.html</code>
+        <p>A catalogue of objects that do not exist, dealt one at a time, with a drawer you keep.</p>
+      </li>
+    </ul>
+
+    <h2 class='section-title'>worlds under the sky</h2>
+    <ul class='pages'>
+      <li>
+        <a href='wish-constellation.html'>the wish constellation</a> <code>wish-constellation.html</code>
+        <p>Place tiny thoughts as stars, drag them into a constellation, ask the sky what it sees, play it as a chime, mint a postcard. The saved sky every world below reads from.</p>
+      </li>
+      <li>
+        <a href='constellation-diary.html'>the diary</a> <code>constellation-diary.html</code>
         <p>A logbook that turns your saved wish constellation into animated diary entries.</p>
       </li>
       <li>
-        <a href='constellation-echo.html'>constellation echo chamber</a> <code>constellation-echo.html</code>
+        <a href='constellation-echo.html'>the echo chamber</a> <code>constellation-echo.html</code>
         <p>Listen to your saved constellation as drifting echoes, pulse the field, and read a tiny atmospheric report.</p>
       </li>
       <li>
-        <a href='constellation-weather.html'>constellation weather lab</a> <code>constellation-weather.html</code>
+        <a href='constellation-weather.html'>the weather lab</a> <code>constellation-weather.html</code>
         <p>An animated weather lab generated from your saved constellation: probe skies, read forecasts, and toggle midnight rain.</p>
       </li>
       <li>
-        <a href='orbital-weaver.html'>orbital weaver</a> <code>orbital-weaver.html</code>
+        <a href='orbital-weaver.html'>the orbital weaver</a> <code>orbital-weaver.html</code>
         <p>Transform your saved constellation into a mirrored orbital mandala, then read a tiny mantra forecast.</p>
       </li>
       <li>
-        <a href='sky-archive.html'>sky archive oracle</a> <code>sky-archive.html</code>
+        <a href='sky-archive.html'>the archive oracle</a> <code>sky-archive.html</code>
         <p>Spin your saved constellation through a rune wheel, collect tiny omen readings, and forge a portable sigil.</p>
       </li>
       <li>
-        <a href='star-lantern.html'>star lantern ritual</a> <code>star-lantern.html</code>
-        <p>Turn your saved constellation into floating lanterns and pull a tiny mood reading from the sky.</p>
+        <a href='star-lantern.html'>the lantern ritual</a> <code>star-lantern.html</code>
+        <p>Turn your saved constellation into floating lanterns and pull a tiny reading from the sky.</p>
       </li>
       <li>
-        <a href='wish-terrarium.html'>wish terrarium</a> <code>wish-terrarium.html</code>
+        <a href='wish-terrarium.html'>the terrarium</a> <code>wish-terrarium.html</code>
         <p>Grow a living terrarium from your saved constellation and read tiny weather reports from your wishes.</p>
       </li>
     </ul>
 
-    <h2 class='section-title'>edges of the sky</h2>
+    <h2 class='section-title'>edges</h2>
     <ul class='pages'>
       <li>
         <a href='sitemap.html'>site map</a> <code>sitemap.html</code>
-        <p>This page: human-readable index and live atlas console.</p>
+        <p>This page: human-readable index and route console.</p>
       </li>
       <li>
         <a href='error.html'>lost in space</a> <code>error.html</code>
@@ -80,10 +123,11 @@ footerNote: every page, one sky
       <strong>Axiom.</strong> This site is written and rewritten by a model asked to make it more
       interesting as a coherent whole, and <em>interesting</em> means one thing here: how long you
       stay engaged, how much you want to keep going, and how intrigued, astonished or entertained
-      you are while you do. One rule stands over every one of those runs: all of
-      the content stays reachable from the root, through the navigation on
-      <a href='index.html'>the home sky</a> and through <a href='sitemap.xml'>sitemap.xml</a>. A page
-      that arrives is wired into both in the same run, or the change is refused.
+      you are while you do. Two rules stand over every one of those runs. All of the content stays
+      reachable from the root, through the navigation on <a href='index.html'>the threshold</a> and
+      through <a href='sitemap.xml'>sitemap.xml</a>. And the site asks before it offers: no page
+      assumes what you want, the question is never put the same way twice, and the whole map is
+      still right here whether you answer it or not.
     </p>
 
 {% include "footer.njk" %}
@@ -96,9 +140,18 @@ footerNote: every page, one sky
       var memoryEl = document.getElementById('memory');
       var routeEl = document.getElementById('route');
       var randomBtn = document.getElementById('random');
+      var contraryBtn = document.getElementById('contrary');
 
       var pages = [
         'index.html',
+        'moods.html',
+        'quiet-room.html',
+        'kinetic-floor.html',
+        'machine-shop.html',
+        'loam.html',
+        'word-kiln.html',
+        'apocrypha-desk.html',
+        'wish-constellation.html',
         'constellation-diary.html',
         'constellation-echo.html',
         'constellation-weather.html',
@@ -109,50 +162,61 @@ footerNote: every page, one sky
         'error.html'
       ];
 
-      // What the console says when there is no shared sky to count, and where to go next. The
-      // shared store says which of the four it is (see js/state.js).
-      var EMPTY_NOTES = {
-        unavailable: ['Local storage is unavailable here, so cross-page sky memory cannot be read.',
-          'You can still explore every page, but shared constellation state is unavailable in this context.'],
-        unreadable: ['Saved data exists but is unreadable. Rebuild your constellation on the home page.',
-          'Suggested route: home constellation → refresh this map → continue to any lab.'],
-        missing: ['No saved stars yet. Make your first constellation on the home page.',
-          'Suggested route: home constellation → weather lab → sky archive oracle.'],
-        ok: ['No readable stars in the shared sky yet. Make your first constellation on the home page.',
-          'Suggested route: home constellation → weather lab → sky archive oracle.']
-      };
-
-      function loadCount() {
+      // The shared sky, counted through the one store: a status of 'unavailable' means this
+      // browser will keep nothing at all, which is worth saying outright, because it is also why
+      // the site cannot remember a reading about you (see js/state.js).
+      function savedStars() {
         var saved = state.read(SKY, []);
+        if (saved.status === 'unavailable') return null;
         var stored = Array.isArray(saved.value) ? saved.value : [];
-        var count = stored.filter(function (s) {
+        return stored.filter(function (s) {
           return s && typeof s.x === 'number' && typeof s.y === 'number' && typeof s.text === 'string';
         }).length;
+      }
 
-        if (!count) {
-          memoryEl.textContent = EMPTY_NOTES[saved.status][0];
+      function report() {
+        var api = window.threshold;
+        var reading = api ? api.reading() : null;
+        var orientation = reading && reading.orientation;
+        var stars = savedStars();
+
+        if (stars === null) {
+          memoryEl.textContent = 'Local storage is unavailable here, so nothing about you can be read or kept.';
           memoryEl.className = 'warn';
-          routeEl.textContent = EMPTY_NOTES[saved.status][1];
-          return;
+        } else if (orientation) {
+          memoryEl.textContent = 'Read as ' + orientation.name + ' — ' + orientation.pull + '.'
+            + (api ? ' ' + api.signals().sinceText + '.' : '')
+            + (stars ? ' ' + stars + ' saved star' + (stars === 1 ? '' : 's') + ' under the sky.' : '');
+          memoryEl.className = 'good';
+        } else {
+          memoryEl.textContent = 'Nothing read about you yet'
+            + (stars ? ', though there are ' + stars + ' saved stars under the sky.' : '. Every world below is equally on offer.');
+          memoryEl.className = 'warn';
         }
 
-        memoryEl.textContent = 'Shared memory detected: ' + count + ' saved star' + (count === 1 ? '' : 's') + ' available across labs.';
-        memoryEl.className = 'good';
-
-        if (count < 4) {
-          routeEl.textContent = 'Best next step: add a few more stars on home, then test echo chamber and lantern ritual.';
-        } else if (count < 12) {
-          routeEl.textContent = 'Good constellation density: try diary replay, then forge a sigil in sky archive oracle.';
+        if (orientation) {
+          routeEl.textContent = 'Suggested route: ' + orientation.worldName
+            + ', then whichever of these looks least like it.';
         } else {
-          routeEl.textContent = 'Dense sky detected: orbital weaver and weather lab will generate richer structures.';
+          routeEl.textContent = 'Suggested route: take the query at the threshold, or skip it entirely and pick a world by its name alone.';
         }
       }
 
       randomBtn.addEventListener('click', function () {
-        var pick = pages[Math.floor(Math.random() * pages.length)];
-        window.location.href = pick;
+        window.location.href = pages[Math.floor(Math.random() * pages.length)];
       });
 
-      loadCount();
+      contraryBtn.addEventListener('click', function () {
+        var api = window.threshold;
+        var reading = api ? api.reading() : null;
+        var mine = reading && reading.orientation ? reading.orientation.world : 'index.html';
+        var others = pages.filter(function (page) {
+          return page !== mine && page !== 'index.html' && page !== 'moods.html' && page !== 'sitemap.html';
+        });
+        window.location.href = others[Math.floor(Math.random() * others.length)];
+      });
+
+      window.addEventListener('threshold:reading', report);
+      report();
     })();
   </script>

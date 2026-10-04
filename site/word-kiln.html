@@ -1,0 +1,183 @@
+---
+layout: layout.njk
+title: the word kiln
+description: 'Put a word in the fire and see what comes out: a coinage, a definition and a citation that never existed, for anyone reading as full of half-sentences.'
+stylesheet: word-kiln
+footer:
+  - [index.html, back to the threshold]
+  - [moods.html, mood atlas]
+  - [apocrypha-desk.html, open the apocrypha desk]
+footerNote: every coinage here is invented on the spot
+---
+  <main>
+    <h1>the word kiln</h1>
+    <p class='tagline'>Where the threshold sends anyone reading as full of half-sentences. Feed it a word. It will not give the same one back.</p>
+
+    <div class='layout'>
+      <div class='kiln' id='kiln'>
+        <div class='kiln-mouth' id='kiln-mouth' aria-hidden='true'>
+          <span class='ember' id='ember'></span>
+        </div>
+        <p class='kiln-out' id='kiln-out' aria-live='polite'>cold</p>
+      </div>
+
+      <section class='panel'>
+        <form id='feed' class='kiln-feed'>
+          <label for='word'>a word to fire</label>
+          <input id='word' name='word' type='text' maxlength='28' autocomplete='off' spellcheck='false' placeholder='anything, really'>
+          <button type='submit'>fire it</button>
+        </form>
+        <div class='controls'>
+          <button id='random-word' type='button'>take one from the shelf</button>
+          <button id='hotter' type='button'>fire it hotter</button>
+          <button id='empty' type='button'>empty the kiln</button>
+        </div>
+        <p id='status' aria-live='polite'>The kiln is cold. Put something in it.</p>
+        <pre id='reading'>nothing fired yet</pre>
+        <p class='hint'>Nothing here is a real word, a real etymology or a real citation. It is a kiln, not a dictionary.</p>
+      </section>
+    </div>
+
+{% include "footer.njk" %}
+  </main>
+
+  <script>
+    (function () {
+      var state = window.interestingState;
+      var KILN = 'kiln'; // this page's one name in the shared local-state document
+      var form = document.getElementById('feed');
+      var input = document.getElementById('word');
+      var randomBtn = document.getElementById('random-word');
+      var hotterBtn = document.getElementById('hotter');
+      var emptyBtn = document.getElementById('empty');
+      var statusEl = document.getElementById('status');
+      var readingEl = document.getElementById('reading');
+      var out = document.getElementById('kiln-out');
+      var kiln = document.getElementById('kiln');
+
+      var SHELF = ['lantern', 'gravel', 'hinge', 'fathom', 'bramble', 'quarry', 'kettle', 'moss',
+                   'ledger', 'thistle', 'anvil', 'marrow', 'cipher', 'harbour', 'spindle', 'furrow'];
+      var PREFIX = ['un', 'mis', 'over', 'inter', 'sub', 'pre', 'counter', 'trans', 'fore', 'out'];
+      var SUFFIX = ['-ward', '-some', '-ling', '-craft', '-wise', '-fast', '-let', '-ish', '-most', '-hood'];
+      var SENSE = [
+        'the particular silence that follows',
+        'a small debt owed to',
+        'the habit of returning to',
+        'the useful part of',
+        'the residue left by',
+        'a deliberate misreading of',
+        'the hour at which one stops pretending about',
+        'the shape a room takes around'
+      ];
+      var FIELD = ['dialect', 'trade usage', 'obsolete', 'nautical', 'regional', 'cant',
+                   'bookbinding', 'masonry', 'falconry', 'printing'];
+      var CITE = [
+        'attested once, in a margin',
+        'recorded by a clerk who misheard it',
+        'in use among people who would deny it',
+        'found on a crate, never since',
+        'spoken only indoors',
+        'last written down by someone leaving'
+      ];
+
+      var heat = 1;
+      var fired = [];
+
+      function hash(text) {
+        var h = 2166136261;
+        for (var i = 0; i < text.length; i++) {
+          h ^= text.charCodeAt(i);
+          h = (h * 16777619) >>> 0;
+        }
+        return h;
+      }
+
+      function pick(list, seed, salt) {
+        return list[(seed + salt * 2654435761) % list.length];
+      }
+
+      function reverse(text) {
+        return text.split('').reverse().join('');
+      }
+
+      function coin(word, seed) {
+        var core = word.replace(/[^a-z]/gi, '').toLowerCase() || 'kiln';
+        var mode = (seed + heat) % 5;
+        if (mode === 0) return pick(PREFIX, seed, 3) + core;
+        if (mode === 1) return core + pick(SUFFIX, seed, 5).slice(1);
+        if (mode === 2) return core.slice(0, Math.max(2, Math.ceil(core.length / 2))) + reverse(core).slice(0, 3);
+        if (mode === 3) return core.replace(/[aeiou]/g, '') + 'a' + core.slice(-2);
+        return core.slice(0, 3) + pick(SHELF, seed, 7).slice(-4);
+      }
+
+      function fire(word) {
+        var cleaned = String(word || '').trim();
+        if (!cleaned) {
+          statusEl.textContent = 'Nothing went in, so nothing came out.';
+          return;
+        }
+        var seed = hash(cleaned.toLowerCase() + ':' + heat + ':' + Math.floor(Math.random() * 9973));
+        var made = coin(cleaned, seed);
+        var entry = made + '\n'
+          + '  [' + pick(FIELD, seed, 11) + ', heat ' + heat + ']\n'
+          + '  n. ' + pick(SENSE, seed, 13) + ' ' + cleaned.toLowerCase() + '.\n'
+          + '  ' + pick(CITE, seed, 17) + '.';
+        fired.unshift(entry);
+        if (fired.length > 8) fired.pop();
+        readingEl.textContent = fired.join('\n\n');
+        out.textContent = made;
+        kiln.setAttribute('data-heat', String(Math.min(3, heat)));
+        statusEl.textContent = '"' + cleaned + '" came out as "' + made + '".';
+        remember();
+      }
+
+      function remember() {
+        // false means this firing was only kept in memory, which is a kiln that keeps no records
+        // either -- nothing here is worth interrupting someone over.
+        state.set(KILN, { fired: fired.slice(0, 8), heat: heat });
+      }
+
+      function restore() {
+        var saved = state.get(KILN, null);
+        if (saved && Array.isArray(saved.fired) && saved.fired.length) {
+          fired = saved.fired.slice(0, 8);
+          heat = typeof saved.heat === 'number' ? saved.heat : 1;
+          readingEl.textContent = fired.join('\n\n');
+          out.textContent = 'warm';
+          statusEl.textContent = 'The kiln is still warm from the last firing.';
+          kiln.setAttribute('data-heat', String(Math.min(3, heat)));
+        }
+      }
+
+      form.addEventListener('submit', function (ev) {
+        ev.preventDefault();
+        fire(input.value);
+        input.value = '';
+        input.focus();
+      });
+
+      randomBtn.addEventListener('click', function () {
+        var word = SHELF[Math.floor(Math.random() * SHELF.length)];
+        input.value = word;
+        fire(word);
+      });
+
+      hotterBtn.addEventListener('click', function () {
+        heat = heat >= 4 ? 1 : heat + 1;
+        kiln.setAttribute('data-heat', String(Math.min(3, heat)));
+        statusEl.textContent = 'Heat ' + heat + '. Higher heat breaks the word up more.';
+      });
+
+      emptyBtn.addEventListener('click', function () {
+        fired = [];
+        heat = 1;
+        readingEl.textContent = 'nothing fired yet';
+        out.textContent = 'cold';
+        kiln.setAttribute('data-heat', '0');
+        remember();
+        statusEl.textContent = 'Emptied, swept and cold.';
+      });
+
+      restore();
+    })();
+  </script>
