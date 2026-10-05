@@ -8,11 +8,20 @@
 //   .btn-filled    the one action on a page that matters most (the unlock button, "set up persona")
 //   .btn-tonal     the default, named for completeness
 //   .btn-outlined  what a.action is
-//   .btn-text      the quietest: "close", "forget my reading", a card's "another"
+//   .btn-text      the quietest: "close", "ask another way", a card's "another"
+//   .warning       the one warm variant, in M3's error family: a control that throws a visitor's
+//                  saved state away, which is painted and guarded at the bottom of this file
 //
 // A pressed toggle (aria-pressed='true') and a working control (aria-busy='true') read as filled,
 // so the state of a toggle is the state of its colour. Every control carries an M3 state layer:
 // an overlay of its own text colour at 8% on hover, 10% on focus and 12% while pressed.
+//
+// .warning and .are-you-sure are two halves of one thing: the treatment every control that throws
+// a visitor's saved state away wears, and the modal that every press of one opens. Both are
+// rendered by window.interestingSite.destructive() in js/site.js, so the three parts of the
+// law -- a control that reads as destructive before it is pressed, a question that names what is
+// about to go, and a plain confirm/cancel -- are written here once and nowhere else. See the
+// README section "Destructive-caution axiom" for the threshold they apply beyond.
 
 @use 'type';
 
@@ -231,6 +240,101 @@ textarea:focus-visible {
   outline: 2px solid var(--md-sys-color-primary);
   outline-offset: -1px;
   border-color: var(--md-sys-color-primary);
+}
+
+// --------------------------------------------------------------------------------------------
+// The warning button: one treatment, the same on every page that has one.
+//
+// It is the first half of the destructive-caution law, and the half that does its work before a
+// press: a control that is about to throw saved state away has to look unlike the twenty ordinary
+// controls beside it. So it is the one control on the site in M3's error family -- warm where
+// every other control is cool -- which makes the family recognised rather than read. Otherwise it
+// is an ordinary tonal button, state layer and all, because it is still something to press and
+// not something to be afraid of.
+
+button.warning,
+a.action.warning {
+  background: var(--md-sys-color-error-container);
+  color: var(--md-sys-color-on-error-container);
+  box-shadow: none;
+}
+
+button.warning:focus-visible,
+a.action.warning:focus-visible {
+  outline-color: var(--md-sys-color-error);
+}
+
+// --------------------------------------------------------------------------------------------
+// The one "are you sure you want to ______?" modal, opened by every press of a control above the
+// threshold and by nothing else. The second half of the law, and the half that does its work
+// after a press. It is a <dialog>, so the browser supplies the backdrop, the focus trap and
+// Escape; js/site.js returns the focus to the control that opened it.
+//
+// An M3 dialog, as the persona sheet is (_persona.scss), and narrower: it holds a question, a
+// line about what the question costs, and two buttons.
+
+.are-you-sure {
+  box-sizing: border-box;
+  width: min(28rem, calc(100vw - 2rem));
+  max-height: calc(100vh - 2rem);
+  max-height: calc(100dvh - 2rem);
+  margin: auto;
+  padding: 1.5rem;
+  border: 0;
+  border-radius: var(--md-sys-shape-corner-extra-large);
+  background: var(--md-sys-color-surface-container-high);
+  color: var(--md-sys-color-on-surface);
+  box-shadow: var(--md-sys-elevation-level3);
+  overflow: auto;
+}
+
+// Spelled out rather than left to the browser, so the box stays hidden in a browser that does not
+// know <dialog> at all and the fallback below is the only thing that shows it.
+.are-you-sure:not([open]) {
+  display: none;
+}
+
+.are-you-sure[open] {
+  display: grid;
+  gap: 1rem;
+  align-content: start;
+}
+
+.are-you-sure::backdrop {
+  background: rgba(0, 0, 0, 0.4);
+}
+
+// A browser without dialog.showModal() gets the same box pinned over the page, as the persona
+// sheet does, and above it: the sheet's own controls are among the ones that ask.
+.are-you-sure-fallback[open] {
+  position: fixed;
+  top: 1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 40;
+}
+
+// The question itself, with the caller's words in the blank. Not an <h2>: it is written by script
+// into a box that floats over a page whose own headings it knows nothing about, so it names the
+// dialog through aria-labelledby instead of joining an outline it could only break.
+.are-you-sure-title {
+  margin: 0;
+  color: var(--md-sys-color-error);
+  @include type.scale(headline-small);
+}
+
+.are-you-sure-note {
+  margin: 0;
+  color: var(--md-sys-color-on-surface-variant);
+  @include type.scale(body-medium);
+}
+
+.are-you-sure-actions {
+  margin: 0;
+}
+
+.are-you-sure-actions button {
+  flex: 1 1 9rem;
 }
 
 @media (prefers-reduced-motion: reduce) {

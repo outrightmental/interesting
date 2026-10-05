@@ -13,8 +13,10 @@ iterate a more interesting website
   and its one module per world (see [The feature and the feed](#the-feature-and-the-feed)), the three
   shared files behind the analytics tag (see [Analytics axiom](#analytics-axiom)), the one behind
   the local-state store (see [Local state axiom](#local-state-axiom)), the one behind the mood
-  flow (see [Mood axiom](#mood-axiom)) and the one behind a visitor's way of steering the site
-  (see [Participation axiom](#participation-axiom)). A request
+  flow (see [Mood axiom](#mood-axiom)), the one behind a visitor's way of steering the site (see
+  [Participation axiom](#participation-axiom)) and the shared helpers every page calls, among them
+  the one destructive-control component (see
+  [Destructive-caution axiom](#destructive-caution-axiom)). A request
   for a page that is not there gets `error.html` back, with a 404, from a CloudFront custom error
   response.
 - **The build** — [`build.mjs`](build.mjs) turns `/site` into the artifact that is published to an
@@ -76,11 +78,16 @@ is deliberately small: a foundation to build a more holistic experience on, not 
   the whole of the site's visual language (see [Material Design 3](#material-design-3)): the
   tokens (`_tokens.scss`: every M3 colour role derived from four seeds, the shape scale, the
   motion scheme, the elevation levels), the type scale as a mixin (`_type.scss`), the base rules,
-  the top app bar (`_header.scss`), the buttons, chips, sliders and text fields (`_controls.scss`),
-  the feature a page is and the filled card (`_panel.scss`), the unlock box, the persona's avatar
-  and sheet (`_persona.scss`), the fourteen mood palettes and the query styling the mood flow
-  renders into (`_mood.scss`), the feed's masonry and cards (`_feed.scss`) and the stage with its knobs (`_stage.scss`). `css/site.scss` is those partials and nothing else, and every page links the
-  `css/site.css` it compiles to. A world page has no stylesheet of its own: its scene is drawn, not styled. `css/<page>.scss` is for the two list pages and holds what is true of that page alone, linked after the shared sheet so it overrides rather than repeats. `error.html` writes its styles into the page instead: CloudFront returns it for any 404,
+  the top app bar (`_header.scss`), the buttons, chips, sliders and text fields, among them the
+  warning button and the one confirmation modal (`_controls.scss`, see
+  [Destructive-caution axiom](#destructive-caution-axiom)), the feature a page is and the filled
+  card (`_panel.scss`), the unlock box, the persona's avatar
+  and sheet (`_persona.scss`), the fifteen mood palettes and the query styling the mood flow
+  renders into (`_mood.scss`), the feed's masonry and cards (`_feed.scss`) and the stage with its
+  knobs (`_stage.scss`). `css/site.scss` is those partials and nothing else, and every page links the
+  `css/site.css` it compiles to. A world page has no stylesheet of its own: its scene is drawn, not
+  styled. `css/<page>.scss` is for the two list pages and holds what is true of that page alone,
+  linked after the shared sheet so it overrides rather than repeats. `error.html` writes its styles into the page instead: CloudFront returns it for any 404,
   at whatever path was asked for, so a relative `<link>` next to it would be a guess. For the same
   reason it names the site's root in its front matter (`siteRoot: /`), and the layout writes its
   scripts and links from there; it is the one page that does, and a copy of the site served under
@@ -113,7 +120,7 @@ slab per page, small-caps labels, pill borders on everything, a footer index two
   on anything carrying `data-mood`, so a mood re-skins the whole site and a card in the feed
   re-tints itself from its own world's seeds. The dark scheme is the only scheme: the site is a
   night sky, and M3 lays dark surfaces out by tone rather than shadow.
-- **A page's palette is its world's.** The fourteen palettes in `_mood.scss` are keyed by
+- **A page's palette is its world's.** The fifteen palettes in `_mood.scss` are keyed by
   orientation id, the layout writes `<html data-world='…'>` from
   [`site/_data/worlds.json`](site/_data/worlds.json), and a visitor's reading on
   `<html data-mood='…'>` wins over it. No page carries colours of its own any more.
@@ -204,7 +211,7 @@ the one thing the mission is measured in.
   ([One single experience](#one-single-experience)), all three in
   [`.github/scripts/make_interesting.py`](.github/scripts/make_interesting.py) and all three stated
   at both ends of a run.
-- **The cadence rule is the fifth `AXIOM`**, stated in the `Rules:` block beside the seven below.
+- **The cadence rule is the fifth `AXIOM`**, stated in the `Rules:` block beside the eight below.
   It names every phrasing the code refuses, in full, so it is a rule a run can follow rather than a
   trap it springs: the words *tonight*, *tomorrow*, *yesterday*, *hourly*, *nightly*, *daily* and
   *weekly*; the possessives *today's*, *this hour's*, *this week's*, *this month's*; and *every
@@ -213,7 +220,7 @@ the one thing the mission is measured in.
   again" — because the next move is the one worth asking for.
 - **Held to in code.** `check_cadence` in
   [`.github/scripts/make_interesting.py`](.github/scripts/make_interesting.py) refuses a plan that
-  puts one of those phrasings on a page. As with the five axioms below, only what the run itself
+  puts one of those phrasings on a page. As with the eight axioms below, only what the run itself
   breaks is refused, and every reason is one phrase, so clearing part of a page can only take
   reasons away. The engagement-time definition itself is *not* checked in code, because no check
   could: it is a standard for the model to aim at, and the prompt is where a standard like that
@@ -299,10 +306,12 @@ for a while, which is exactly why it has to be ruled out by name.
 - **Not a coded axiom, on purpose.** No check could settle whether a site reads as one
   experience, in the way `check_reachability` settles whether a page is orphaned, so this is a
   standard stated to the model and nothing else — the same reasoning that leaves the
-  engagement-time definition uncoded. The eight coded axioms are still the whole of what the code
-  refuses, and a plan that adds a page sharing nothing with the rest is accepted exactly as before.
-  A test holds that open: it asserts the accepted plan *and* that no ninth `check_` has quietly
-  appeared.
+  engagement-time definition uncoded. A plan that adds a page sharing nothing with the rest is
+  accepted exactly as before. A test holds that open: it asserts the accepted plan *and* the whole
+  list of `check_` functions, so an axiom cannot be added or retired without saying so there. That
+  list grew to eight when [Destructive-caution axiom](#destructive-caution-axiom) arrived and to
+  nine with [Completion axiom](#completion-axiom), which is what tells a standard no check could
+  judge apart from a law that can be held.
 
 ### Legible to a stranger
 
@@ -328,9 +337,9 @@ saying where to go next, and the home page explained none of its own words.
   screen, and what follows it is the feed and nothing else, with no caption); copy that speaks to the visitor
   and never about the machinery; and never a dead end, which is its own standard below.
 - **Deliberately not held to in code.** No check could judge whether a page reads clearly, so the
-  prompt is where this standard lives, exactly as `WHOLE` and `INTERESTING` do: the eight coded
-  axioms are still the whole of what the code refuses, and `LegibilityStandardTest` holds the
-  prompt to the standard the way `EngagementTimeTest` holds it to the measure.
+  prompt is where this standard lives, exactly as `WHOLE` and `INTERESTING` do: it is not among the
+  nine coded axioms, and `LegibilityStandardTest` holds the prompt to the standard the way
+  `EngagementTimeTest` holds it to the measure.
 - **One list of pages.** [`site/_data/worlds.json`](site/_data/worlds.json) is the one place a
   world's name, orientation, mood, card aspect and one-line description are kept, in one flat
   list. The feed ([`site/_includes/worlds.njk`](site/_includes/worlds.njk)), the site map and the
@@ -360,7 +369,7 @@ and never replaces it: for the sky, a button that opens the persona sheet, where
 by hand.
 
 - **Stated in the prompt**, under `POWERED DOWN, NEVER BROKEN`, to the model only: as with `WHOLE`,
-  no check could tell a dead end from a deliberate one, so a ninth `check_` was ruled out
+  no check could tell a dead end from a deliberate one, so a `check_` of its own was ruled out
   (issue #46, question 1).
 - **Held in the framework.** `window.interestingSite.unlock(host, { onReady })` in
   [`site/js/site.js`](site/js/site.js) is the pattern made shared: pass it the element to power
@@ -598,7 +607,7 @@ iteration process rather than a one-off tidy-up.
   [`.github/scripts/make_interesting.py`](.github/scripts/make_interesting.py) refuses a plan that
   leaves a page without the line, and `pages_touching_storage` refuses one in which a page — or a
   shared script it loads — reaches for the browser's storage behind the store's back, because that
-  would be state the meta menu could not export. As with the other five, only what the run itself
+  would be state the meta menu could not export. As with the other eight, only what the run itself
   breaks is refused.
 - **The file is out of reach.** `js/state.js` is in `FIXED_FILES` beside the analytics files: never
   shown to a model, refused outright as a write or a delete, and skipping the prompt budget. A
@@ -617,13 +626,14 @@ iteration process rather than a one-off tidy-up.
 The site asks before it offers. The target of interest is **the whole population**, not the part of
 it that happens to like whatever aesthetic the site is wearing, so no page puts particular content
 in front of a visitor on the assumption that they want it: the site makes an effort to ascertain
-their mood or mental orientation first, and what is offered follows from that. Like the five above,
-this is an invariant of the iteration rather than a one-off change to the site as it stands.
+their mood or mental orientation first, and what is offered follows from that. Like the five above
+and the two below, this is an invariant of the iteration rather than a one-off change to the site as
+it stands.
 
 - **One line per page, again.** Every page carries
   `<script src='js/threshold.js' defer></script>` in its `<head>`, written once in
   [`site/_includes/layout.njk`](site/_includes/layout.njk). That file
-  ([`site/js/threshold.js`](site/js/threshold.js)) is the whole flow: fourteen orientations and
+  ([`site/js/threshold.js`](site/js/threshold.js)) is the whole flow: fifteen orientations and
   the world each one opens onto, the library of query mechanisms, the clock and time-zone signals
   read alongside an answer, and how much of a past visit survives. What it reads is shown beside
   the persona's avatar and in the persona sheet
@@ -654,7 +664,7 @@ this is an invariant of the iteration rather than a one-off change to the site a
   the rest of a visitor's state — and the gap that document already records is what tells an
   arrival apart from a click through the site.
 - **The whole site transmogrifies.** The ascertained orientation lands on `<html data-mood>`, and
-  `_sass/_mood.scss` turns that into fourteen palettes over the shared custom properties in
+  `_sass/_mood.scss` turns that into fifteen palettes over the shared custom properties in
   `_tokens.scss`, so every page re-skins itself. The flow is ongoing rather than a gate at the
   front door: any page can ask again, in a new way.
 - **Never a gate.** The query sits outside `<main>`, and every world is a plain link from the
@@ -738,7 +748,7 @@ addition — and it is the only one that is about the reader rather than about t
   the site in its own prose is welcome, and is not a substitute for the line.
 - **Held to in code.** `check_participate` in
   [`.github/scripts/make_interesting.py`](.github/scripts/make_interesting.py) refuses a plan that
-  leaves a page without the line. As with the other seven, only what the run itself breaks is
+  leaves a page without the line. As with the other eight, only what the run itself breaks is
   refused.
 - **The file is out of reach.** `js/participate.js` is in `FIXED_FILES` beside the analytics files
   and the local-state store: never shown to a model, refused outright as a write or a delete, and
@@ -751,6 +761,93 @@ addition — and it is the only one that is about the reader rather than about t
   stub browser ([`participate_harness.mjs`](.github/scripts/participate_harness.mjs)) — the link,
   its name, its icon, what it knows about which page it is on, and what it refuses to carry.
 
+### Destructive-caution axiom
+
+Caution before a destructive action is a law of the site rather than a page's own choice. Any
+control that throws a visitor's saved state away **reads as a warning button**, and **every press of
+one opens the one shared modal** that asks *"are you sure you want to \_\_\_\_\_\_?"* with the
+specific thing about to go in the blank — *clear your constellation*, *throw away everything this
+site has kept in your browser* — and never a generic "are you sure?". Like the seven above, it is an
+invariant of the iteration rather than a one-off tidy-up.
+
+Both halves are about **consistency**, not about friction. The button is recognised as dangerous
+before it is read, because it is the only warm control on a site of cool ones; and the question is
+the same question in every corner, so a visitor learns in one place what a press is going to cost
+them everywhere. **That is the safety switch** — there is no separate arming affordance, no
+checkbox, no toggle and no hold-to-arm press, and the modal is a plain confirm/cancel with nothing
+to type and no second press. *Don't overdo it.*
+
+- **The threshold**, because there is a spectrum of severity and the caution has to begin
+  somewhere:
+  - **Above it**, held to both halves: a press that is **nothing but a loss**. The whole
+    local-state document goes, or the whole of one name in it — a sky, a reading, a kept list — and
+    nothing takes its place. Today: the meta menu's *clear*, the persona sheet's *clear the sky*
+    and *forget my reading*, and the mood atlas's *forget my reading*. No world adds one of its
+    own any more — a world's page is a stage and its piece keeps nothing, so there is no
+    world-owned list left to throw away (see [Completion axiom](#completion-axiom)).
+  - **At it**, held to the modal but not the warning: a **trade rather than a loss**. The whole of
+    a name goes, but something the visitor asked for arrives in its place — *seed a small sky* over
+    a placed one, *replace mine* over your own document. The question is the same; the paint is
+    not, because the one button that gets a beginner started, and the one that walks a visitor into
+    someone else's sky, are not dangers to be warned about.
+  - **Below it**, held to neither: **one thing rather than the whole thing** — *remove this star*,
+    one entry out of a list that can be added to again, which one more press puts back — and
+    anything that only changes what is on the screen: *sweep the floor*, *reset decoder*, *turn the
+    soil*. *remove* is the site's word for the one-item case, and naming it that is what lets the
+    sweep of words below stay narrow.
+- **One shared component.** `window.interestingSite.destructive(control, options)` in
+  [`site/js/site.js`](site/js/site.js) is the whole law made shared: pass it the control and what
+  the press is about to cost, and it paints the warning, guards every press with the modal, and
+  calls back when the visitor says yes. `areYouSure(options)` is that modal alone, for a control at
+  the threshold rather than above it. `options.when` says whether there is anything to lose right
+  now, so an empty drawer emptied again takes nothing away and asks nothing — and the warning stays
+  on the control either way, because a control that changes its clothes is a control nobody learns.
+  [`site/_sass/_controls.scss`](site/_sass/_controls.scss) paints both: `button.warning` beside the
+  ordinary pill, and `.are-you-sure`, which reaches every page through `css/site.scss`.
+- **What a visitor is owed, once.** The modal is a `<dialog>`, so the browser supplies the
+  backdrop, the focus trap and Escape; the focus starts on *cancel*, because the one press someone
+  who got here by mistake should be a key away from is the one that changes nothing, and it comes
+  back to the control that opened it however the question is answered. A press on the backdrop
+  dismisses it, the buttons are 44px and wrap, and the box fits a 320px screen. Nothing in it
+  animates, so there is no motion to answer for.
+- **The meta menu adopts it too.** [`site/js/state.js`](site/js/state.js) is in `FIXED_FILES`, is
+  never shown to a model and deliberately carries its own inline styles — and its *clear* still
+  goes through the shared component, because a visitor should meet the same question there as in a
+  world. It used to ask `window.confirm('Clear everything this site has kept in your browser?')`
+  and wear no warning at all. The one concession to the file being fixed is an adapter: if
+  `js/site.js` — ordinary site source, and a run's to rewrite — no longer offers the component, the
+  menu falls back to the browser's own question, which is less good and still asks. The menu paints
+  its own `.warning`, under the same class name, for the same reason it paints its own everything.
+- **Stated in the prompt.** The eighth `AXIOM` in the `Rules:` block names the class, shows the
+  call, states the three steps of the threshold, and names in full the family of words the code
+  reads as destructive — *clear*, *forget*, *empty*, *erase*, *wipe*, *delete*, *discard*, *throw
+  away*, *throw out* — so it is a rule a run can follow rather than a trap it springs, as with the
+  cadence and mood axioms.
+- **Held to in code.** `check_destructive` in
+  [`.github/scripts/make_interesting.py`](.github/scripts/make_interesting.py) refuses three
+  things: a plan that leaves the site without the shared component (the behaviour in `js/site.js`
+  or the `.warning` treatment in `css/site.css`); a plan in which a control whose own words say it
+  throws saved state away does not wear the warning class, read off the page as committed; and a
+  plan in which a page, or a script it loads, calls `window.confirm`. As with the other eight, only
+  what the run itself breaks is refused, and every reason is one control's name or one file's, so a
+  partial repair can only take reasons away.
+- **What is deliberately not checked**: whether a given control is above the threshold or below it,
+  and whether a warning button's press really reaches the modal. No regex can tie a click handler
+  to the button it was attached to, and no code can judge how much a visitor would miss what a
+  press takes away. So the prompt asks for both and the check does not pretend to — the same
+  bargain the mood axiom makes with "is this a good question".
+- **Read off the page as committed**, like the reachability and accessibility checks: `<script>`
+  bodies are handed over as opaque text, so a control a page builds inside a JavaScript string is
+  not a control of the page. The meta menu's own buttons are built that way and are in a fixed file
+  besides, which is why `LocalStateStoreTest` is what holds them instead.
+- **True of the site as committed**, not only of what a future run writes: `RealSiteTest` sweeps
+  the built site on every pull request and before every deploy. That sweep is what found *clear
+  omens*, *empty the drawer* and *empty the kiln* pressing without a word of warning — controls
+  that have since gone with the pages that kept those lists — and the two `window.confirm` calls
+  the persona sheet had grown. `LocalStateStoreTest` drives the meta menu's
+  *clear* and *replace mine* against the stub browser, with the shared component in place and with
+  it taken away, so the confirmation path there stays tested.
+
 ### Completion axiom
 
 Every world is a piece a visitor can finish. A world's page is not fixed content but a **stage**,
@@ -760,7 +857,7 @@ seed, with a clear flow that asks them to make a few choices and finish, expedie
 finished the whole piece vanishes with some ceremony and the next card in the feed opens in its
 place, so one piece follows another without end and no two are quite the same. A "content page"
 does not discretely exist: it exists as a procedural generation, and the feed that keeps dealing
-is the river of pieces coming up the pipe. Like the seven above, this is an invariant of the
+is the river of pieces coming up the pipe. Like the eight above, this is an invariant of the
 iteration, stated in the prompt and held to in code.
 
 - **The stage.** [`site/_includes/stage.njk`](site/_includes/stage.njk) is every world page's

@@ -21,7 +21,7 @@ stylesheet: moods
       <p id='signal-line' class='signal-line'></p>
       <div class='controls'>
         <button id='requery' type='button'>ask me another way</button>
-        <button id='forget' type='button' class='btn-text'>forget my reading</button>
+        <button id='forget' type='button' class='warning'>forget my reading</button>
         <a class='action' id='current-world' href='index.html' hidden>go to that world</a>
       </div>
       <div id='atlas-probe' class='atlas-probe' hidden></div>
@@ -134,11 +134,21 @@ stylesheet: moods
 
         requeryBtn.addEventListener('click', function () { run(null); });
 
-        forgetBtn.addEventListener('click', function () {
-          api.forget();
-          showReading(null);
-          showSignals();
-          currentEl.textContent = 'The reading is forgotten. What you left in the worlds stays until you clear it from the state menu, bottom right.';
+        // Above the threshold: the whole reading goes and nothing takes its place, so the control
+        // is a warning button guarded by the one shared "are you sure you want to ______?" modal
+        // (window.interestingSite.destructive in js/site.js). The class is in the markup too, so
+        // it reads as a warning before any script runs.
+        window.interestingSite.destructive(forgetBtn, {
+          what: 'forget what this site has read about you',
+          detail: 'The orientation it arrived at would go, and the palette the site is wearing '
+            + 'with it. What you left in the worlds stays. It asks again whenever you like.',
+          onConfirm: function () {
+            api.forget();
+            showReading(null);
+            showSignals();
+            currentEl.textContent = 'The reading is forgotten. What you left in the worlds stays until you clear it from the state menu, bottom right.';
+          },
+          onCancel: function () { showReading(api.reading()); }
         });
 
         window.addEventListener('threshold:reading', function () {

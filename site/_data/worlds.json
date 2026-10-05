@@ -16,7 +16,7 @@
       "what": "A logbook entry written from where your stars sit and sealed in wax, or the thoughts called back one by one in the order they came." },
     { "file": "constellation-echo.html", "name": "the echo chamber", "orientation": "ears first", "mood": "attentive", "aspect": "1 / 1",
       "what": "Pulse your saved sky into drifting echoes, click one thought at a time, then print an echo weather bulletin." },
-    { "file": "pulse-choir.html", "name": "the pulse choir", "orientation": "counting in echoes", "mood": "attentive", "aspect": "4 / 3",
+    { "file": "pulse-choir.html", "name": "the pulse choir", "orientation": "counting in echoes", "mood": "metrical", "aspect": "4 / 3",
       "what": "Your stars as a looping choir: set the tempo, mute a few voices by touch, reshuffle the phrasing, and print the score." },
     { "file": "star-lantern.html", "name": "the lantern ritual", "orientation": "wants a rite", "mood": "ceremonial", "aspect": "3 / 4",
       "what": "Your stars as lanterns: choose the order, kindle them one by one, set the wind, and let them rise." },

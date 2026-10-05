@@ -72,10 +72,11 @@ body:
         A person reads this. From there it either becomes a change by hand or becomes part of what
         the iteration is asked for, and this issue is where you can follow it.
 
-        Eight things about the site hold whatever is asked of it, because they are checked in code
+        Nine things about the site hold whatever is asked of it, because they are checked in code
         rather than left to taste: every page stays reachable from the root, every page carries the
         analytics and cookie-consent line, every page is responsive and accessible to WCAG 2.2 AA,
         every page carries the one local-state store, nothing on the site is tied to an update
         frequency, the site asks before it offers, every page carries the button you arrived by,
+        nothing throws away what the site has kept for you without warning you first and asking,
         and every world is a piece you can finish. A request that runs into one of those gets a
         conversation here, not a silent no.
