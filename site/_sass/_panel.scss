@@ -32,7 +32,7 @@ main {
   // The page's own sky, washing in from the top left corner to the viewport's edges.
   background:
     radial-gradient(130vw 90vh at 12% -14%, color-mix(in oklab, var(--bg2) 80%, transparent) 0%, transparent 62%),
-    radial-gradient(70vw 60vh at 100% 110%, color-mix(in oklab, var(--md-sys-color-primary) 9%, transparent) 0%, transparent 60%);
+    radial-gradient(70vw 60vh at 100% 55%, color-mix(in oklab, var(--md-sys-color-primary) 9%, transparent) 0%, transparent 60%);
 }
 
 .panel {

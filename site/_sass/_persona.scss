@@ -116,6 +116,12 @@
 // The "go to" link beside the avatar: a text button, on a screen wide enough for it. On a phone
 // the feed's first card carries the same suggestion. (Written as a.action.persona-go so it
 // outranks the outlined button a.action is.)
+// On the threshold the stage itself opens the world a reading opens onto, so the bar does not
+// also point there.
+html[data-page='index.html'] .persona-go {
+  display: none;
+}
+
 a.action.persona-go {
   background: transparent;
   box-shadow: none;

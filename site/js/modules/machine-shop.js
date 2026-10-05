@@ -1,5 +1,7 @@
-/* The machine shop, as a card: one elementary cellular automaton, run from one seed, with its
-   eight bits printed under it. See js/feed.js for what a module is. */
+/* The machine shop: one elementary cellular automaton on a bench. As a card it is one rule run
+   from one seed with its eight bits printed under it (paint, spark); as a piece it is a bench
+   with a tape to choose, a rule to tune and a run button. See js/feed.js for what a module is
+   and js/stage.js for what a piece is. */
 
 const LIVELY = [30, 45, 54, 60, 73, 90, 105, 110, 124, 126, 137, 150, 182, 193];
 
@@ -21,13 +23,19 @@ const KNOWN = {
   255: 'Everything, at once, forever.'
 };
 
+const TAPES = [
+  { label: 'one live cell', value: 'one' },
+  { label: 'a noisy tape', value: 'noise' },
+  { label: 'two cells apart', value: 'pair' }
+];
+
 function describe(rule) {
   if (KNOWN[rule]) return KNOWN[rule];
   let set = 0;
   for (let b = 0; b < 8; b++) if (rule & (1 << b)) set++;
   if (set <= 2) return 'A quiet rule: most neighbourhoods go dark.';
   if (set >= 6) return 'A busy rule: most neighbourhoods light up.';
-  return 'A middling rule. Drag the slider on its page and watch which bit you just flipped.';
+  return 'A middling rule. Nudge it one bit and watch what changes.';
 }
 
 // The eight neighbourhoods and the bit each one gives, four to a row so the table fits a card
@@ -45,6 +53,27 @@ function pickRule(env) {
   return env.chance(0.7) ? env.pick(LIVELY) : env.int(1, 254);
 }
 
+function firstRow(cols, tape, rnd) {
+  const row = new Uint8Array(cols);
+  if (tape === 'noise') for (let i = 0; i < cols; i++) row[i] = rnd() < 0.3 ? 1 : 0;
+  else if (tape === 'pair') {
+    row[Math.floor(cols * 0.35)] = 1;
+    row[Math.floor(cols * 0.65)] = 1;
+  } else row[cols >> 1] = 1;
+  return row;
+}
+
+function nextRow(row, rule) {
+  const cols = row.length;
+  const next = new Uint8Array(cols);
+  for (let x = 0; x < cols; x++) {
+    const l = row[(x + cols - 1) % cols];
+    const r = row[(x + 1) % cols];
+    next[x] = (rule >> ((l << 2) | (row[x] << 1) | r)) & 1;
+  }
+  return next;
+}
+
 function run(ctx, w, h, env, rule, noisy) {
   const c = env.colors;
   ctx.fillStyle = c.bg;
@@ -52,22 +81,93 @@ function run(ctx, w, h, env, rule, noisy) {
   const cols = Math.max(24, Math.round(w / 3));
   const size = w / cols;
   const rows = Math.ceil(h / size);
-  let row = new Uint8Array(cols);
-  if (noisy) for (let i = 0; i < cols; i++) row[i] = env.rnd() < 0.3 ? 1 : 0;
-  else row[cols >> 1] = 1;
+  let row = firstRow(cols, noisy ? 'noise' : 'one', env.rnd);
   ctx.fillStyle = env.alpha(c.accent, 0.9);
   for (let y = 0; y < rows; y++) {
     for (let x = 0; x < cols; x++) {
       if (row[x]) ctx.fillRect(x * size, y * size, size + 0.3, size + 0.3);
     }
-    const next = new Uint8Array(cols);
-    for (let x = 0; x < cols; x++) {
-      const l = row[(x + cols - 1) % cols];
-      const r = row[(x + 1) % cols];
-      next[x] = (rule >> ((l << 2) | (row[x] << 1) | r)) & 1;
-    }
-    row = next;
+    row = nextRow(row, rule);
   }
+}
+
+// The bench: a tape of rows that scrolls up as the rule runs, drawn from the history kept in `s`.
+function bench(g, w, h, c, s) {
+  g.fillStyle = c.colors.bg;
+  g.fillRect(0, 0, w, h);
+  const size = w / s.cols;
+  const rows = s.history.length;
+  const top = h - rows * size;
+  g.fillStyle = c.alpha(c.colors.accent, 0.9);
+  for (let y = 0; y < rows; y++) {
+    const row = s.history[y];
+    for (let x = 0; x < s.cols; x++) {
+      if (row[x]) g.fillRect(x * size, top + y * size, size + 0.3, size + 0.3);
+    }
+  }
+  if (s.flash > 0) {
+    g.fillStyle = c.alpha(c.colors.accent2, s.flash * 0.25);
+    g.fillRect(0, 0, w, h);
+  }
+}
+
+function piece(env) {
+  const rule = pickRule(env);
+  const runs = env.int(2, 3);
+  const perRun = env.pick([60, 90, 120]);
+  const seedRnd = env.rnd;
+  const s = { rule, tape: 'one', cols: 96, history: [], pending: 0, flash: 0, ran: 0 };
+  function reset(c) {
+    s.cols = Math.max(32, Math.round((c.w || 400) / 4));
+    s.history = [firstRow(s.cols, s.tape, seedRnd)];
+    s.pending = Math.min(perRun, Math.ceil((c.h || 300) / ((c.w || 400) / s.cols)) >> 1);
+  }
+  return {
+    title: 'rule ' + rule + ' on the bench',
+    brief: describe(rule) + ' Pick a tape, tune the rule, and run it ' + (runs === 2 ? 'twice' : 'three times') + '; the bench is cleared when you are done.',
+    aspect: '16 / 10',
+    steps: [
+      { id: 'tape', ask: 'the starting tape', kind: 'choice', options: TAPES },
+      { id: 'rule', ask: 'the rule', kind: 'range', min: 1, max: 254, step: 1, value: rule, low: '1', high: '254' },
+      { id: 'run', ask: 'run the tape', kind: 'press', count: runs, label: 'run', after: 'tape' }
+    ],
+    start(c) {
+      reset(c);
+      bench(c.g, c.w, c.h, c, s);
+    },
+    apply(id, value, c) {
+      if (id === 'tape') {
+        s.tape = String(value);
+        reset(c);
+      }
+      if (id === 'rule') {
+        s.rule = Math.max(0, Math.min(255, Math.round(Number(value)))) || 0;
+        c.status('rule ' + s.rule + ': ' + describe(s.rule));
+      }
+      if (id === 'run') {
+        s.ran += 1;
+        s.pending += perRun;
+        s.flash = 1;
+        c.status(s.ran < runs ? 'running' : 'the tape is through');
+      }
+    },
+    frame(t, dt, c) {
+      const size = c.w / s.cols;
+      const keep = Math.ceil(c.h / size);
+      const step = Math.min(s.pending, Math.max(1, Math.round(dt * 90)));
+      for (let i = 0; i < step && s.pending > 0; i++) {
+        s.history.push(nextRow(s.history[s.history.length - 1], s.rule));
+        s.pending -= 1;
+      }
+      while (s.history.length > keep) s.history.shift();
+      s.flash = Math.max(0, s.flash - dt * 2);
+      if (c.done) s.pending = Math.max(s.pending, 1);
+      bench(c.g, c.w, c.h, c, s);
+    },
+    end(c) {
+      c.status('rule ' + s.rule + ', ' + bits(s.rule).split('\n')[1].replace(/\s+/g, ' ').trim() + ' ' + bits(s.rule).split('\n')[3].replace(/\s+/g, ' ').trim());
+    }
+  };
 }
 
 export default {
@@ -85,5 +185,6 @@ export default {
       aspect: '3 / 4',
       paint: (ctx, w, h, e) => run(ctx, w, h, e, rule, noisy)
     };
-  }
+  },
+  piece
 };

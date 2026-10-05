@@ -326,7 +326,8 @@
     var r = reading();
     var isRead = readOf(r);
 
-    card.text.textContent = cardText(saved, list, r);
+    var sentence = cardText(saved, list, r);
+    if (card.text.textContent !== sentence) card.text.textContent = sentence; // a live region: say it once
     card.host.setAttribute('data-state', askingInCard ? 'asking' : (!list.length && !isRead ? 'empty' : 'ready'));
     card.host.setAttribute('data-reading', !isRead ? 'none' : (r.source === 'answer' ? 'answered' : 'carried'));
     card.host.setAttribute('data-asking', askingInCard ? 'true' : 'false');
