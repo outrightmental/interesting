@@ -68,6 +68,20 @@
         </div>
       </section>
 
+      <section class='wayfinding-arcade' data-wayfinding-arcade aria-label='Exploration arcade'>
+        <p class='wayfinding-arcade-title'>exploration arcade</p>
+        <p class='wayfinding-arcade-status' data-wayfinding-arcade-status aria-live='polite'>Calibrating your route streak…</p>
+        <p class='wayfinding-arcade-challenge' data-wayfinding-arcade-challenge>Deal a challenge to get one focused move and a destination.</p>
+        <p class='wayfinding-arcade-score' data-wayfinding-arcade-score>Streak 0 · best 0 · sparks 0.</p>
+        <div class='controls wayfinding-arcade-controls'>
+          <a class='action' data-wayfinding-arcade-link href='index.html'>open challenge world</a>
+          <button type='button' data-wayfinding-arcade-deal>deal challenge</button>
+          <button type='button' data-wayfinding-arcade-complete>mark challenge complete</button>
+          <button type='button' data-wayfinding-arcade-spend>spend one spark</button>
+        </div>
+        <ol class='wayfinding-arcade-log' data-wayfinding-arcade-log></ol>
+      </section>
+
       <div class='wayfinding-grid'>
         <section class='wayfinding-group' aria-label='Worlds off the sky'>
           <p class='wayfinding-group-title'>off the sky</p>
@@ -98,3 +112,4 @@
       </div>
     </nav>
     <script src='js/wayfinding-journal.js' defer></script>
+    <script src='js/wayfinding-arcade.js' defer></script>
