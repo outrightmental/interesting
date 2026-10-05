@@ -16,6 +16,8 @@
       "what": "Turn your stars into logbook entries, replay their birth order, and seal capsules you can reopen as future prompts." },
     { "file": "constellation-echo.html", "name": "the echo chamber", "orientation": "ears first", "mood": "attentive", "aspect": "1 / 1",
       "what": "Pulse your saved sky into drifting echoes, click one thought at a time, then print an echo weather bulletin." },
+    { "file": "pulse-choir.html", "name": "the pulse choir", "orientation": "counting in echoes", "mood": "attentive", "aspect": "4 / 3",
+      "what": "Turn your saved stars into a looping choir, conduct it by tempo and muting, and print a constellation score." },
     { "file": "star-lantern.html", "name": "the lantern ritual", "orientation": "wants a rite", "mood": "ceremonial", "aspect": "3 / 4",
       "what": "Kindle your stars as lanterns, let them drift, and pull a ritual reading from the field when one glow feels right." },
     { "file": "wish-terrarium.html", "name": "the terrarium", "orientation": "minding something", "mood": "tending", "aspect": "4 / 5",
