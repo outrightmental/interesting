@@ -381,10 +381,6 @@ function id(context, name) {
   return context.document.getElementById(name);
 }
 
-function fireOn(target, type, event = {}) {
-  return dispatch(target, Object.assign({ type }, event));
-}
-
 function fireWindow(context, type) {
   for (const handler of (context.window.listeners[type] || []).slice()) handler({ type });
 }
@@ -419,7 +415,8 @@ function drawCorners(context, { cookies = true, state = true } = {}) {
   if (state) {
     const root = make("div", { class: "site-meta" });
     root.appendChild(make("button", { class: "site-meta-open", "aria-expanded": "false" }, CHIP));
-    root.appendChild(make("div", { class: "site-meta-panel", hidden: "" }));
+    root.appendChild(make("div", { class: "site-meta-panel", id: "site-meta-panel",
+                                   role: "dialog", hidden: "" }));
     context.document.body.appendChild(root);
   }
   for (const el of context.document.documentElement.descendants()) {
@@ -640,9 +637,12 @@ const scenarios = {
     const wrappedTo = context.document.activeElement === logo;
     context.document.activeElement = logo;
     const back = fireDocument(context, "keydown", { key: "Tab", shiftKey: true });
+    const wrappedBack = context.document.activeElement === last;
+    // And a Tab from anywhere but the two ends is the browser's to answer, not this one's.
+    context.document.activeElement = stars[1];
     return {
       forward: { prevented: forward.defaultPrevented, toTheLogo: wrappedTo },
-      back: { prevented: back.defaultPrevented, toTheLast: context.document.activeElement === last },
+      back: { prevented: back.defaultPrevented, toTheLast: wrappedBack },
       middle: fireDocument(context, "keydown", { key: "Tab" }).defaultPrevented,
     };
   },
@@ -669,12 +669,23 @@ const scenarios = {
     };
     toggle(context, true);
     id(context, "sparknav-state-open").click();
+    const state = {
+      corner: context.document.querySelector(".site-meta-open").clicks,
+      open: id(context, "sparknav").open,
+      focusedLogo: id(context, "sparknav-logo").focused,
+    };
+    /* And what happens when that menu closes again: it hands the focus back to its own button,
+       which the shell has hidden, so the logo takes it instead. */
+    const panel = context.document.querySelector(".site-meta-panel");
+    panel.hidden = false;
+    mutated(context);
+    const whileOpen = id(context, "sparknav-logo").focused;
+    panel.hidden = true;
+    mutated(context);
     return {
       cookies,
-      state: {
-        corner: context.document.querySelector(".site-meta-open").clicks,
-        open: id(context, "sparknav").open,
-      },
+      state,
+      focus: { whileOpen, afterClose: id(context, "sparknav-logo").focused },
     };
   },
 
@@ -694,6 +705,24 @@ const scenarios = {
       shapes[name] = { viewport, stars: constellation(context) };
     }
     return shapes;
+  },
+
+  /* A viewport too short for a constellation of any shape: the stylesheet's other layout takes
+     over -- a list under the logo that scrolls -- rather than leaving an option below the fold
+     where nothing could reach it. */
+  onAViewportTooShortForIt() {
+    const context = load({ viewport: { width: 360, height: 300 } });
+    drawCorners(context);
+    toggle(context, true);
+    const roomy = load({ viewport: { width: 360, height: 780 } });
+    drawCorners(roomy);
+    toggle(roomy, true);
+    return {
+      tooShort: context.document.documentElement.getAttribute("data-nav"),
+      roomy: roomy.document.documentElement.getAttribute("data-nav"),
+      stillOpen: id(context, "sparknav").open,
+      stillALightbox: lightbox(context).lightbox,
+    };
   },
 
   /* A page the shell wrote without the nav in it: nothing is built, nothing throws, and the rest

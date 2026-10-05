@@ -2551,10 +2551,13 @@ class NavTest(unittest.TestCase):
     # The ids the three pieces agree on: the shell writes them, js/site.js finds them, and the
     # harness builds the same tree. A rename that touched only one of the three would leave the
     # nav quietly inert, which is exactly what this catches.
-    IDS = ["sparknav", "sparknav-logo", "sparknav-veil", "sparknav-near", "sparknav-far",
+    IDS = ["sparknav", "sparknav-logo", "sparknav-veil",
            "sparknav-reading", "sparknav-reading-go", "sparknav-reading-label",
            "sparknav-cookies", "sparknav-cookies-open", "sparknav-state", "sparknav-state-open",
            "sparknav-state-label"]
+    # And the two the script never names, because it takes the orbits as it finds them: however
+    # many the shell writes, in the order it writes them.
+    ORBITS = ["sparknav-near", "sparknav-far"]
 
     built = None
     observed = None
@@ -2645,7 +2648,10 @@ class NavTest(unittest.TestCase):
             nav = nav[nav.index("<details class='sparknav'"):nav.index("</details>")]
             for file in wanted:
                 with self.subTest(page=page, file=file):
-                    self.assertIn(f"class='sparknav-node' href='{file}'", nav)
+                    # error.html writes its links from the site's root, as its front matter says,
+                    # because it is served at whatever path was asked for; every other page keeps
+                    # the relative link the whole site is written with.
+                    self.assertRegex(nav, rf"class='sparknav-node' href='/?{re.escape(file)}'")
 
     def test_the_options_that_depend_on_something_are_written_away(self):
         # "Things come and go from here depending on the state": the three that do are in the
@@ -2662,6 +2668,9 @@ class NavTest(unittest.TestCase):
         for page in ["moods.html", "sitemap.html", "privacy.html", "terms.html", "index.html"]:
             with self.subTest(page=page):
                 self.assertIn(f"href='{page}' aria-current='page'", self.site[page])
+        # And a page that is on no destination of the nav's has nothing marked in it.
+        self.assertNotIn("aria-current", self.site["quiet-room.html"][:self.site["quiet-room.html"]
+                                                                      .index("</details>")])
 
     def test_the_shell_the_script_and_the_harness_agree_on_every_id(self):
         shell = self.source["_includes/layout.njk"]
@@ -2670,8 +2679,15 @@ class NavTest(unittest.TestCase):
         for name in self.IDS:
             with self.subTest(id=name):
                 self.assertIn(f"id='{name}'", shell, "the shell has to write it")
-                self.assertIn(f'"{name}"', script, "the script has to look for it")
-                self.assertIn(f'"{name}"', harness, "the harness has to stand in for it")
+                # Either quote: the script writes strings with single ones, the harness double.
+                quoted = "['\"]" + re.escape(name) + "['\"]"
+                self.assertRegex(script, quoted, "the script has to look for it")
+                self.assertRegex(harness, quoted, "the harness has to stand in for it")
+        for name in self.ORBITS:
+            with self.subTest(orbit=name):
+                self.assertIn(f"id='{name}'", shell)
+                self.assertNotIn(name, script, "the orbits are taken as they are found")
+        self.assertIn("'.sparknav-orbit'", script, "which is by their one shared class")
 
     def test_the_fine_print_is_two_real_pages_listed_everywhere(self):
         for page in self.worlds["finePrint"]:
@@ -2737,6 +2753,11 @@ class NavTest(unittest.TestCase):
         self.assertEqual(pressed["state"]["corner"], 1, "and the state menu's own button")
         self.assertFalse(pressed["cookies"]["open"], "and closed the lightbox out of the way")
         self.assertFalse(pressed["state"]["open"])
+        # Hiding a button means its own dialog cannot hand the focus back to it, so the logo takes
+        # it: on the way out, and again when the state menu closes (WCAG 2.4.3 Focus Order).
+        self.assertGreaterEqual(pressed["state"]["focusedLogo"], 1)
+        self.assertEqual(pressed["focus"]["afterClose"], pressed["focus"]["whileOpen"] + 1,
+                         "the logo takes the focus back when the menu closes, and not before")
 
     def test_an_affordance_that_was_never_drawn_is_not_offered(self):
         # A copy of the site with no measurement id draws no consent button, so there is nothing to
@@ -2842,6 +2863,19 @@ class NavTest(unittest.TestCase):
                         self.assertTrue(abs(one["y"] - other["y"]) >= 44
                                         or abs(one["x"] - other["x"]) >= 150,
                                         f"{one['label']} and {other['label']} overlap")
+
+    def test_a_viewport_too_short_for_a_constellation_gets_the_cascade(self):
+        # The one layout that can always fit, because it scrolls: an option below the fold of a
+        # fixed constellation would be one nothing could reach (WCAG 1.4.10 Reflow).
+        seen = self.seen()["onAViewportTooShortForIt"]
+        self.assertEqual(seen["tooShort"], "cascade")
+        self.assertEqual(seen["roomy"], "live", "the same width with room for it keeps the scatter")
+        self.assertTrue(seen["stillOpen"], "and it is still the same open menu either way")
+        self.assertEqual(seen["stillALightbox"], "nav")
+        # Which means the stylesheet has to hold both layouts, and say so by name.
+        css = self.source["_sass/_nav.scss"]
+        self.assertIn("html[data-nav='live']", css)
+        self.assertIn("overflow: auto", css, "the cascade is what scrolls")
 
     def test_a_shell_without_the_nav_takes_nothing_else_down(self):
         # js/site.js carries the unlock helper every world leans on, so a half-rewritten shell must

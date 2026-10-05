@@ -26,7 +26,9 @@
 //                  flash of the other layout.
 //   without it     a plain cascade of the same chips under the logo, which is what the markup is
 //                  on its own: the disclosure is the browser's, the options are links, and the
-//                  rays are hidden because nothing has measured them.
+//                  rays are hidden because nothing has measured them. The script falls back to
+//                  this layout too (data-nav='cascade'), on a viewport too short for a
+//                  constellation of any shape, because the cascade scrolls and a scatter cannot.
 
 @use 'type';
 
@@ -161,7 +163,9 @@
 html[data-lightbox] #main-content,
 html[data-lightbox] #main-content *,
 html[data-lightbox] .page,
-html[data-lightbox] .page * {
+html[data-lightbox] .page *,
+html[data-lightbox] .persona,
+html[data-lightbox] .persona * {
   animation-play-state: paused;
 }
 
@@ -299,6 +303,7 @@ html[data-nav='live'] {
     position: absolute;
     top: 0;
     left: 0;
+    z-index: 2; // above the veil, which the sky itself is no longer positioned over
     width: 0;
     height: 0;
     margin: 0;
@@ -325,7 +330,7 @@ html[data-nav='live'] {
     width: var(--len, 0);
     height: 1px;
     transform-origin: 0 50%;
-    transform: rotate(var(--a, 0));
+    transform: rotate(var(--a, 0deg));
     background: linear-gradient(
       90deg,
       color-mix(in oklab, var(--md-sys-color-primary) 85%, transparent) 0%,
@@ -356,12 +361,12 @@ html[data-nav='live'] {
 @keyframes sparknav-ray {
   from {
     opacity: 0;
-    transform: rotate(var(--a, 0)) scaleX(0.2);
+    transform: rotate(var(--a, 0deg)) scaleX(0.2);
   }
 
   to {
     opacity: 1;
-    transform: rotate(var(--a, 0)) scaleX(1);
+    transform: rotate(var(--a, 0deg)) scaleX(1);
   }
 }
 
