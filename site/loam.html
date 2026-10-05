@@ -50,6 +50,7 @@ put something in the ground first</pre>
 
       var calm = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
       var SURFACE = 44;
+      var SEG = 2.5; // a root is drawn as one segment per this many pixels travelled
       var stones = [];
       var roots = [];
       var tips = [];
@@ -76,6 +77,13 @@ put something in the ground first</pre>
         }
       }
 
+      // A root is turned aside by a stone and may run sideways a long way, but it does not climb
+      // back out of the ground: every angle is kept in the half of the circle that still goes down.
+      function downward(angle) {
+        var a = Math.atan2(Math.sin(angle), Math.cos(angle)); // back into -PI..PI
+        return Math.min(Math.PI - 0.08, Math.max(0.08, a < 0 ? -a : a));
+      }
+
       function blocked(x, y) {
         for (var i = 0; i < stones.length; i++) {
           var dx = x - stones[i].x;
@@ -90,7 +98,7 @@ put something in the ground first</pre>
         var name = NAMES[Math.floor(Math.random() * NAMES.length)];
         tips.push({
           x: x, y: SURFACE, angle: Math.PI / 2, width: 3.2, life: 1,
-          name: name, hue: Math.floor(rand(28, 58))
+          lx: x, ly: SURFACE, name: name, hue: Math.floor(rand(28, 58))
         });
         statusEl.textContent = 'Planted ' + name + ' at ' + Math.round(x) + ' across. It will take its time.';
         remember();
@@ -105,25 +113,44 @@ put something in the ground first</pre>
           var stepLen = speed * dt;
           var nx = tip.x + Math.cos(tip.angle) * stepLen;
           var ny = tip.y + Math.sin(tip.angle) * stepLen;
+          tip.life -= dt * 0.012; // a tip ages whether it got anywhere this step or not
           var stone = blocked(nx, ny);
           if (stone) {
-            // Go around rather than through: that is the whole character of a root.
-            tip.angle += (nx < stone.x ? -1 : 1) * 0.55;
+            // Go around rather than through: that is the whole character of a root. The tip turns
+            // to run along the face of the stone -- the tangent at the point it met it, whichever
+            // way round still heads down -- and keeps its place in `next`. Dropping it here
+            // instead ended the root at the first stone it ever met, which is the opposite.
+            tip.stuck = (tip.stuck || 0) + 1;
+            if (tip.stuck > 30) continue; // walled in on every side: this one does stop here
+            var out = Math.atan2(tip.y - stone.y, tip.x - stone.x);
+            var way = Math.sin(out + Math.PI / 2) >= Math.sin(out - Math.PI / 2) ? 1 : -1;
+            // Still against something next frame, so sweep a little further round each time: in a
+            // pocket of gravel a root feels its way out rather than standing still until it dies.
+            tip.angle = downward(out + way * (Math.PI / 2 + tip.stuck * 0.12));
+            next.push(tip);
             continue;
           }
+          tip.stuck = 0;
           if (nx < 4 || nx > canvas.width - 4) tip.angle = Math.PI - tip.angle;
-          roots.push({ x1: tip.x, y1: tip.y, x2: nx, y2: ny, w: tip.width, hue: tip.hue });
-          if (roots.length > 5000) roots.splice(0, 800);
           tip.x = nx;
           tip.y = ny;
-          tip.angle += rand(-0.22, 0.22) + (Math.PI / 2 - tip.angle) * 0.04;
+          // One segment every few pixels travelled, not one per frame: the same line to look at,
+          // and a list short enough that the cap below stops eating the oldest segments -- the
+          // ones at the surface, without which a root system floats loose in the soil.
+          if ((nx - tip.lx) * (nx - tip.lx) + (ny - tip.ly) * (ny - tip.ly) >= SEG * SEG) {
+            roots.push({ x1: tip.lx, y1: tip.ly, x2: nx, y2: ny, w: tip.width, hue: tip.hue });
+            if (roots.length > 5000) roots.splice(0, 800);
+            tip.lx = nx;
+            tip.ly = ny;
+          }
+          tip.angle = downward(tip.angle + rand(-0.22, 0.22) + (Math.PI / 2 - tip.angle) * 0.04);
           tip.width = Math.max(0.6, tip.width - dt * 0.22);
-          tip.life -= dt * 0.012;
           next.push(tip);
           if (Math.random() < dt * 1.4 * moisture && tip.width > 1.1 && tips.length + next.length < 90) {
             next.push({
-              x: tip.x, y: tip.y, angle: tip.angle + rand(-0.9, 0.9),
-              width: tip.width * 0.64, life: tip.life * 0.8, name: tip.name, hue: tip.hue
+              x: tip.x, y: tip.y, angle: downward(tip.angle + rand(-0.9, 0.9)),
+              width: tip.width * 0.64, life: tip.life * 0.8,
+              lx: tip.x, ly: tip.y, name: tip.name, hue: tip.hue
             });
           }
         }
