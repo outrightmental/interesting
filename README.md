@@ -65,7 +65,8 @@ is deliberately small: a foundation to build a more holistic experience on, not 
   pipeline. An `.html` file is a [Nunjucks](https://mozilla.github.io/nunjucks/) template with
   optional YAML front matter; `layout: layout.njk` wraps it in the shared shell in
   [`site/_includes`](site/_includes), so the `<head>`, the stylesheet links, the analytics,
-  local-state, persona, helper, mood and feed lines, the top app bar with the persona in it, the sheet
+  local-state, persona, helper, mood and feed lines, the logo and the constellation it opens, the
+  persona floating opposite it, the sheet
   and the feed of every world are written once instead of in every page, and a page is nothing
   but its `<main>`. The feed, the site map and the mood atlas are rendered from
   [`site/_data/worlds.json`](site/_data/worlds.json), Eleventy global
@@ -78,8 +79,8 @@ is deliberately small: a foundation to build a more holistic experience on, not 
   the whole of the site's visual language (see [Material Design 3](#material-design-3)): the
   tokens (`_tokens.scss`: every M3 colour role derived from four seeds, the shape scale, the
   motion scheme, the elevation levels), the type scale as a mixin (`_type.scss`), the base rules,
-  the top app bar (`_header.scss`), the buttons, chips, sliders and text fields, among them the
-  warning button and the one confirmation modal (`_controls.scss`, see
+  the main nav — the logo and its constellation (`_nav.scss`) — the buttons, chips, sliders and
+  text fields, among them the warning button and the one confirmation modal (`_controls.scss`, see
   [Destructive-caution axiom](#destructive-caution-axiom)), the feature a page is and the filled
   card (`_panel.scss`), the unlock box, the persona's avatar
   and sheet (`_persona.scss`), the fifteen mood palettes and the query styling the mood flow
@@ -128,10 +129,10 @@ slab per page, small-caps labels, pill borders on everything, a footer index two
   the shared classes every page already used: a bare `<button>` is a tonal button, `a.action` an
   outlined one, `.btn-filled` and `.btn-text` the other two emphases, `aria-pressed='true'` reads
   as filled; `.panel` is a filled card, `.panel-title` title-medium, `.panel-note` body-medium;
-  the persona is the top app bar's trailing avatar; `input[type=range]` is the
+  the logo and the chips of its constellation are tonal surfaces with M3 elevation, and the
+  persona is the avatar floating opposite them; `input[type=range]` is the
   M3 slider with its 16px track and 4px handle (`js/site.js` keeps `--range-pct` on each one so
-  the active track can fill to the handle); the top app bar lifts to a tonal container once the
-  page scrolls under it. Every pressable thing carries a state layer, and the one focus indicator
+  the active track can fill to the handle). Every pressable thing carries a state layer, and the one focus indicator
   is a 3px primary ring.
 - **No font is fetched.** Roboto is M3's default and is used where it is installed; nothing is
   loaded from a third party, which is the analytics axiom's rule for the site's own code too.
@@ -139,6 +140,61 @@ slab per page, small-caps labels, pill borders on everything, a footer index two
   a non-ASCII character, and inside the one page that inlines its styles (`error.html`) that mark
   glued itself to the first selector, which the browser then dropped — the whole `:root` block.
   The `css` filter in [`eleventy.config.mjs`](eleventy.config.mjs) strips it.
+
+### The logo and the constellation
+
+This is not the sort of website that uses conventional navigation (issue #54). The top app bar is
+gone — the sticky blurred surface, its scroll lift, its row of destinations — and what is left is
+two marks floating over the page: the sparkles **logo** in the upper left, and the **persona** in
+the upper right. Nothing else is chrome.
+
+- **At rest, one mark.** A tonal pill with the sparkles in it, blurred so it reads over any
+  world's palette. Roll over it, or give it the focus, and the site's name fades in beside it —
+  quick and tight, clipped to nothing rather than hidden, so the logo keeps its accessible name
+  either way.
+- **On press, a lightbox.** The page goes behind a veil that dims it, blurs it, takes the press
+  that closes it again, and sits over the three corner affordances as well as the content. Behind
+  it everything is made `inert` and hidden from a screen reader, its CSS animation is paused, and
+  its frame loop is **held**: `js/site.js` keeps the `requestAnimationFrame` callbacks a page asks
+  for while the menu is open and runs them when it closes, because CSS can pause an animation but
+  not a loop, and every animated page here runs one of its own. Escape, the veil and any
+  destination all close it; Tab stays inside the menu while it is up.
+- **The options branch out as a constellation.** Each one is a chip on a ray back to the logo's
+  heart. `js/site.js` places them, because it is the only thing that can count them: the stars
+  fall down the left edge in even steps, each pushed out sideways by its own amount so the set
+  reads as a scatter rather than a list, and the second orbit takes a column of its own as soon as
+  there is room for one — a phone gets one column, a wider screen two, and a short landscape
+  viewport two because that is what makes them fit. `NavTest` holds the one thing a constellation
+  of chips can get wrong that a list cannot: no two stars land on each other, on any of the three
+  shapes of screen.
+- **The near orbit is where to go, the far orbit is the apparatus.** Near: the three destinations
+  from [`site/_data/worlds.json`](site/_data/worlds.json) — *the threshold* (the home icon, which
+  is how a visitor gets home now that pressing the logo no longer navigates), *the mood atlas*,
+  *site map* — plus the world a reading opens onto, once there is one. Far: *cookies*, *state*,
+  *privacy* and *terms*.
+- **Things come and go with the state.** The reading's world appears when the mood flow has read
+  something and goes when it is forgotten; on that world itself the option says the world's name
+  and is marked *you are here* rather than offering a trip to where the visitor already is, as the
+  feed's own card does. *cookies* is there only on a copy of the site that has a measurement ID
+  and so draws a consent banner. *state* says how much there is to carry away — *state · 3 kept*.
+  And the option for the page a visitor is on carries `aria-current='page'` wherever it appears.
+- **Two options are adopted, not copied.** *cookies* and *state* belong to `js/analytics.js` and
+  `js/state.js`, which are fixed files no run may write (see [Analytics
+  axiom](#analytics-axiom) and [Local state axiom](#local-state-axiom)). So the shell does it from
+  outside: it waits for each corner button to be drawn, hides it where its own file pinned it, and
+  presses that same button from the constellation. One cookies dialog, one state menu, neither
+  fixed file touched — and `RealSiteTest` still holds every other file of the site to naming
+  neither of them.
+- **It is a `<details>`.** The logo is the `<summary>`, so the disclosure, the keyboard handling
+  and the no-script fallback are the browser's own: with scripting switched off the same chips
+  cascade under the logo as plain links. Every option is written in the markup of every page,
+  which is what keeps the [reachability axiom](#reachability-axiom) true without a script — and
+  the two pages the far orbit added, `privacy.html` and `terms.html`, are listed in
+  `sitemap.xml` and on the site map like everything else.
+- **Responsive and accessible, like the rest.** 44px targets, the site's one focus ring, an
+  accessible name on the logo with its visible word inside it (WCAG 2.5.3), `aria-current` on the
+  page a visitor is on, and a `prefers-reduced-motion` path that drops the fade, the veil's fade
+  and the branching alike.
 
 ### The feature and the feed
 
@@ -148,14 +204,15 @@ itself.
 
 - **The feature fills the first screen.** A page's `<main>` is unbordered and full-bleed, the
   page's own palette washing to the viewport's edges, and at least the first screen tall (the
-  viewport less the top bar and a margin), so the feed peeks above the fold on any display, a
-  very large one included. Every direct child of `<main>` lands in one centred column
-  (`_panel.scss`), so a page writes its content straight into `<main>`. A world page's `<main>` is the stage
-  ([`site/_includes/stage.njk`](site/_includes/stage.njk), [`site/js/stage.js`](site/js/stage.js)):
-  a piece of that world, played and finished there and followed by the next; see
-  [Completion axiom](#completion-axiom). The threshold's feature is the same stage in its asking
-  state: the sideways question itself, asked large on arrival, and once answered a piece of the
-  world the reading opens onto.
+  viewport less the room the floating nav leaves and a margin), so the feed peeks above the fold
+  on any display, a very large one included; the logo and the persona float over it, and it keeps
+  the room they need clear at the top. Every direct child of `<main>` lands in one centred column
+  (`_panel.scss`), so a page writes its content straight into `<main>`. A world page's `<main>` is
+  the stage ([`site/_includes/stage.njk`](site/_includes/stage.njk),
+  [`site/js/stage.js`](site/js/stage.js)): a piece of that world, played and finished there and
+  followed by the next; see [Completion axiom](#completion-axiom). The threshold's feature is the
+  same stage in its asking state: the sideways question itself, asked large on arrival, and once
+  answered a piece of the world the reading opens onto.
 - **The feed has no caption.** Its heading is written for screen readers only, and nothing says
   how many worlds there are or what to do with them: the grid speaks for itself. It replaced the
   footer index and its two groups, *off the sky* and *under the sky*, which are gone:
@@ -333,8 +390,9 @@ saying where to go next, and the home page explained none of its own words.
   explained once where a visitor first meets them; one way to do each thing (one navigation, one
   suggestion of where next, one index of every world, one place that asks — a new control
   improves the one that exists or replaces it, never stands beside it); content first and chrome
-  small (the top app bar, with the persona in it, is one line; a page's feature fills the first
-  screen, and what follows it is the feed and nothing else, with no caption); copy that speaks to the visitor
+  small (the whole of the chrome is the logo in one top corner and the persona in the other; a
+  page's feature fills the first screen, and what follows it is the feed and nothing else, with no
+  caption); copy that speaks to the visitor
   and never about the machinery; and never a dead end, which is its own standard below.
 - **Deliberately not held to in code.** No check could judge whether a page reads clearly, so the
   prompt is where this standard lives, exactly as `WHOLE` and `INTERESTING` do: it is not among the
@@ -347,8 +405,9 @@ saying where to go next, and the home page explained none of its own words.
   of the build. Three places still carry the name by hand and change with the list: the page's
   own `title:` and `<h1>`, its `worldName` in `js/threshold.js`, and its `<loc>` in
   `sitemap.xml`; and a world's module in `js/modules/` is named for its file.
-- **The shell it left behind.** The top app bar is the site's name, three navigation
-  destinations and the persona's avatar (see [Persona](#persona)); a page's `<main>` is its
+- **The shell it left behind.** The main nav is the sparkles logo in the upper left and the
+  constellation it opens (see [The logo and the constellation](#the-logo-and-the-constellation)),
+  with the persona floating opposite it (see [Persona](#persona)); a page's `<main>` is its
   feature and fills the first screen; every page but the site map and the mood atlas (which list
   every page themselves) ends with the feed, the one index of every world, which has no caption
   (see [The feature and the feed](#the-feature-and-the-feed)). That is the whole of the shared
@@ -404,7 +463,7 @@ and shown on every page.
   the whole page, with the oracle, the meteors, the chime, orbit mode and the postcard, and a sky
   that follows the sheet as it is edited. A caught meteor adds a star through the persona, so every
   other world sees it too.
-- **The avatar.** At the end of the top app bar on every page sits the persona the way an app
+- **The avatar.** In the upper right of every page floats the persona the way an app
   shows its account: a round portrait of the sky, which is the button that opens the sheet. That
   shape is understood on sight, and it takes no room from the page's feature: with no persona yet
   the portrait ring is dashed and the button, *set up persona*, is filled and beckoning, the one
@@ -412,7 +471,8 @@ and shown on every page.
   persona the portrait alone remains, its label *open persona* read by a screen reader; the one
   sentence on where things stand is written beside it for screen readers only; and once a reading
   exists a *go to* link to the world it opens onto sits beside the avatar on a screen wide enough
-  for it (on a phone the feed's first card carries the same suggestion).
+  for it (on a phone the feed's first card carries the same suggestion, and the logo's
+  constellation carries it at any size).
 - **The sheet.** The button opens a `<dialog>` floating over whatever page is open, with two
   sections. *Constellation* is the sky editor: tap the sky to place a star, drag one to move it,
   tap one to read its thought and remove it, or drop one, seed a small sky, or clear the sky — by
@@ -424,7 +484,7 @@ and shown on every page.
   request. When nothing has been read yet the sheet asks of its own accord on opening, so setting
   up a persona is placing a sky and answering one question, in one place.
 - **Where the question is asked.** The threshold still asks on arrival, inline and never in the
-  bar: `index.html` hosts `#persona-probe` in its own `<main>`, so the question is that page's
+  chrome: `index.html` hosts `#persona-probe` in its own `<main>`, so the question is that page's
   feature, asked large, and it is never a dialog in a visitor's way; the mood axiom's *never a
   gate* holds as it did. Every other page keeps the question one press away, inside the sheet.
   `js/threshold.js` is the engine only — orientations, mechanisms, signals, memory, `arrival()` —
@@ -588,9 +648,12 @@ iteration process rather than a one-off tidy-up.
 - **The earlier keys are carried over.** `interesting_wish_constellation_v1` and its two siblings
   are folded into the document the first time a visitor arrives with them, and then taken away, so
   nobody loses a sky to the change.
-- **The meta menu.** One button, bottom-right, opposite the consent banner's *cookies* button,
-  bottom-left, with the *steer the site* button of the [participation
-  axiom](#participation-axiom) between the two. It opens a panel holding the whole document as
+- **The meta menu.** *state*, an option in the logo's constellation (see [The logo and the
+  constellation](#the-logo-and-the-constellation)): the button `js/state.js` pins to the
+  bottom-right corner is still what the site presses, but the shell hides it there and offers it
+  in the nav beside *cookies* instead, so the only thing left on the bottom edge is the *steer the
+  site* button of the [participation axiom](#participation-axiom). It opens a panel holding the
+  whole document as
   text: copy it out, paste one in and press *replace mine*, or *clear*. Import **replaces** rather
   than merges, for reproducibility — the sky it opens is the sky it came from — and clearing asks
   first. Both reload the page
@@ -709,16 +772,20 @@ addition — and it is the only one that is about the reader rather than about t
   its `<head>`, written once in [`site/_includes/layout.njk`](site/_includes/layout.njk). Deferred,
   unlike the local-state line beside it: nothing on the page waits for it, and there is no API for
   a page to call.
-- **The cadre of meta-menus.** Three affordances are pinned to the edge of the viewport on every
-  page and they are the only three — *cookies* bottom-left (the consent banner's way back to the
-  choice), *steer the site* bottom-centre, *state* bottom-right (the local-state document, in and
-  out). Each injects its own styles rather than reading a stylesheet, each is fixed to the device
-  boundary rather than placed in page content, and none of them is a page's to restyle. That is
-  what makes them reliable: whatever the page around them has become, they are where they were.
-  The one in the middle is the prominent member — full strength, a 44px target, an icon that says
-  the verb — because the other two answer a question a visitor occasionally has while this one is
-  an invitation. It reserves 9.5rem of the bottom edge for its neighbours, in `rem` so that
-  enlarging the text enlarges the room it leaves them, and the three do not meet at 320px wide.
+- **The cadre of meta-menus.** Three affordances belong to the fixed files and to no page —
+  *cookies* (the consent banner's way back to the choice), *steer the site*, and *state* (the
+  local-state document, in and out). Each injects its own styles rather than reading a stylesheet,
+  each is fixed to the device boundary rather than placed in page content, and none of them is a
+  page's to restyle, reproduce or reword. That is what makes them reliable: whatever the page
+  around them has become, they answer. *steer the site* keeps the bottom edge and is the prominent
+  member — full strength, a 44px target, an icon that says the verb — because the other two answer
+  a question a visitor occasionally has while this one is an invitation. It still reserves 9.5rem
+  of the bottom edge for its neighbours, in `rem` so that enlarging the text enlarges the room it
+  leaves them. The other two are **adopted** rather than copied: the shell hides the corner buttons
+  `js/analytics.js` and `js/state.js` draw for themselves and offers *cookies* and *state* in the
+  logo's constellation, which presses those very buttons (see [The logo and the
+  constellation](#the-logo-and-the-constellation)) — one cookies dialog and one state menu on the
+  site, with neither fixed file edited to arrange it.
 - **Responsive and accessible, like everything else here.** An accessible name that says where the
   link goes and that it opens a new tab, with the visible words inside it (WCAG 2.5.3 Label in
   Name); its own `:focus-visible` ring, because pages of this site are free to take the browser's
@@ -743,8 +810,9 @@ addition — and it is the only one that is about the reader rather than about t
   bargain the mood axiom's question makes. The two labels the forms ask for are owned in code, with
   the repository itself, in [`infra/issue-labels.tf`](infra/issue-labels.tf).
 - **Stated in the prompt.** The `Rules:` block names the exact line, says the button and its
-  wording are not a run's to change, to restyle or to reproduce, and names where all three corner
-  affordances sit so that a run leaves the bottom edge to them. A page inviting a visitor to steer
+  wording are not a run's to change, to restyle or to reproduce, names the three affordances so
+  that a run leaves the bottom edge to them, and says how the shell adopts two of them into the
+  main nav so that a run never draws a second *cookies* or *state* control of its own. A page inviting a visitor to steer
   the site in its own prose is welcome, and is not a substitute for the line.
 - **Held to in code.** `check_participate` in
   [`.github/scripts/make_interesting.py`](.github/scripts/make_interesting.py) refuses a plan that
