@@ -45,6 +45,7 @@ function makeStorage(initial = {}, { broken = false } = {}) {
 function makeElement(tag) {
   const el = {
     tagName: tag,
+    className: "",
     attributes: {},
     children: [],
     listeners: {},
@@ -77,7 +78,46 @@ function makeElement(tag) {
   return el;
 }
 
-function makeWindow(storage, { confirms = true } = {}) {
+/** A stand-in for the shared destructive-control component in site/js/site.js
+ *  (window.interestingSite.destructive and .areYouSure). `component: false` takes it away again,
+ *  which is the case the meta menu's fallback to window.confirm exists for: js/site.js is ordinary
+ *  site source and an hourly run may yet break it, while this file never changes.
+ *
+ *  `answers` is what the visitor says to the question: true confirms, false cancels. Every
+ *  question it was asked is recorded, so a test can read the specific words in the blank. */
+function makeDestructiveComponent({ answers = true } = {}) {
+  const asked = [];
+  function ask(options) {
+    asked.push({
+      what: options.what,
+      detail: typeof options.detail === "function" ? options.detail() : options.detail,
+      confirm: options.confirm,
+      opener: options.opener ? options.opener.textContent : null,
+    });
+    if (answers) options.onConfirm();
+    else if (options.onCancel) options.onCancel();
+  }
+  return {
+    asked,
+    site: {
+      areYouSure: ask,
+      destructive(control, options) {
+        control.className = ((control.className || "") + " warning").trim();
+        control.addEventListener("click", () => {
+          const when = typeof options.when === "function" ? options.when : () => true;
+          if (!when()) {
+            options.onConfirm();
+            return;
+          }
+          ask({ ...options, opener: control });
+        });
+        return () => {};
+      },
+    },
+  };
+}
+
+function makeWindow(storage, { confirms = true, component = null } = {}) {
   const document = {
     head: makeElement("head"),
     body: makeElement("body"),
@@ -90,6 +130,7 @@ function makeWindow(storage, { confirms = true } = {}) {
   return {
     document,
     localStorage: storage,
+    ...(component ? { interestingSite: component } : {}),
     navigator: {},
     location: { reloads: 0, reload() { this.reloads += 1; } },
     confirmed: 0,
@@ -120,6 +161,15 @@ function shelf(storage) {
     }
   }
   return out;
+}
+
+/** The menu, loaded with the shared destructive-control component in place, which is how it runs
+ *  on every real page: js/site.js is in the <head> above it. Returns the component's record of
+ *  every question it was asked alongside the menu itself. */
+function loadWithComponent(storage, options = {}) {
+  const component = makeDestructiveComponent(options);
+  const { window, state } = load(storage, { ...options, component: component.site });
+  return { window, state, asked: component.asked, menu: menuOf(window) };
 }
 
 /** The meta menu as the stub saw it built: the affordance, the panel and the controls inside it. */
@@ -401,12 +451,12 @@ const scenarios = {
     };
   },
 
-  /* The three operations a visitor reaches the menu for, driven through its own buttons. */
+  /* The three operations a visitor reaches the menu for, driven through its own buttons, with the
+     shared destructive-control component in place as it is on every real page. */
   menuActions() {
     const storage = makeStorage();
-    const { window, state } = load(storage);
+    const { window, state, menu, asked } = loadWithComponent(storage);
     state.set("constellation", SKY);
-    const menu = menuOf(window);
     click(menu.open);
 
     click(menu.buttons.copy);
@@ -418,11 +468,18 @@ const scenarios = {
       note: menu.note.textContent,
       keys: state.keys(),
       reloads: window.location.reloads,
+      asked: asked.length,
     };
 
     menu.field.value = "not json";
     click(menu.buttons["replace mine"]);
-    const refused = { note: menu.note.textContent, keys: state.keys(), reloads: window.location.reloads };
+    const refused = {
+      note: menu.note.textContent,
+      keys: state.keys(),
+      reloads: window.location.reloads,
+      // A paste that could not land asks nothing: there is nothing to be sure about.
+      asked: asked.length,
+    };
 
     click(menu.buttons.clear);
     const cleared = {
@@ -431,18 +488,64 @@ const scenarios = {
       keys: state.keys(),
       shelf: shelf(storage),
     };
-    return { copied, imported, refused, cleared };
+    return { copied, imported, refused, cleared, asked };
   },
 
-  /* A visitor who says no to the confirmation keeps everything. */
-  clearingIsConfirmed() {
+  /* Clearing is a control above the destructive threshold, so the menu adopts both halves of the
+     shared component: the warning treatment on the button, and the one modal on every press. */
+  clearingIsGuarded() {
+    const storage = makeStorage();
+    const { window, state, menu, asked } = loadWithComponent(storage, { answers: false });
+    state.set("constellation", SKY);
+    click(menu.open);
+    click(menu.buttons.clear);
+    return {
+      warning: menu.buttons.clear.className,
+      // The other controls of the menu are not warnings: the treatment means one thing.
+      plain: ["copy", "replace mine", "close"].map((name) => menu.buttons[name].className),
+      asked,
+      // Saying no keeps everything, and the menu says so in its own words.
+      note: menu.note.textContent,
+      keys: state.keys(),
+      // The browser's own question is never reached while the component is there.
+      confirmed: window.confirmed,
+    };
+  },
+
+  /* An empty document has nothing to lose, so the press goes straight through without a question --
+     and the warning stays on the button either way, because a control that changes its clothes is
+     a control nobody learns. */
+  clearingAnEmptyDocument() {
+    const { window, menu, asked } = loadWithComponent(makeStorage());
+    click(menu.open);
+    click(menu.buttons.clear);
+    return { asked, warning: menu.buttons.clear.className, note: menu.note.textContent,
+             confirmed: window.confirmed };
+  },
+
+  /* js/site.js is ordinary site source and an hourly run may yet break it, while this file never
+     changes, so the menu falls back to the browser's own question. It is less good and it still
+     asks -- and the button still wears the warning class the shared styling paints. */
+  withoutTheSharedComponent() {
     const storage = makeStorage();
     const { window, state } = load(storage, { confirms: false });
     state.set("constellation", SKY);
     const menu = menuOf(window);
     click(menu.open);
     click(menu.buttons.clear);
-    return { note: menu.note.textContent, keys: state.keys(), confirmed: window.confirmed };
+    const refused = { note: menu.note.textContent, keys: state.keys(), confirmed: window.confirmed };
+
+    const agreeable = makeStorage();
+    const second = load(agreeable, { confirms: true });
+    second.state.set("constellation", SKY);
+    const menu2 = menuOf(second.window);
+    click(menu2.open);
+    click(menu2.buttons.clear);
+    return {
+      warning: menu.buttons.clear.className,
+      refused,
+      cleared: { keys: second.state.keys(), confirmed: second.window.confirmed },
+    };
   },
 
   /* A page in a browser that stores nothing is told so, the moment it opens the menu. */
@@ -456,8 +559,7 @@ const scenarios = {
   /* Importing in a browser that stores nothing: the sky is held in memory for this page, and the
      menu must not reload -- a reload re-reads from the (empty) store and would throw it away. */
   importWithoutStorage() {
-    const { window, state } = load(makeStorage({}, { broken: true }));
-    const menu = menuOf(window);
+    const { window, state, menu } = loadWithComponent(makeStorage({}, { broken: true }));
     click(menu.open);
     menu.field.value = JSON.stringify({ omens: [{ text: "theirs", time: 3 }] });
     click(menu.buttons["replace mine"]);
@@ -465,6 +567,31 @@ const scenarios = {
       note: menu.note.textContent,
       reloads: window.location.reloads,
       imported: state.get("omens", []),
+    };
+  },
+
+  /* "replace mine" sits at the threshold rather than above it: the whole document goes, but the
+     one in the box takes its place, so it asks the same question through the same modal without
+     wearing the warning. A visitor who says no keeps their own. */
+  importIsAskedAboutAndRefusable() {
+    const storage = makeStorage();
+    const { state, menu, asked } = loadWithComponent(storage, { answers: false });
+    state.set("constellation", SKY);
+    click(menu.open);
+    menu.field.value = JSON.stringify({ omens: [{ text: "theirs", time: 3 }] });
+    click(menu.buttons["replace mine"]);
+    const refused = { note: menu.note.textContent, keys: state.keys() };
+
+    // Nothing of theirs to lose: an empty document is replaced without a question.
+    const fresh = loadWithComponent(makeStorage(), { answers: false });
+    click(fresh.menu.open);
+    fresh.menu.field.value = JSON.stringify({ omens: [{ text: "theirs", time: 3 }] });
+    click(fresh.menu.buttons["replace mine"]);
+
+    return {
+      asked,
+      refused,
+      ontoNothing: { asked: fresh.asked.length, keys: fresh.state.keys() },
     };
   },
 };
