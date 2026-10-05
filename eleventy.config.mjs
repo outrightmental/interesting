@@ -60,7 +60,11 @@ export default function (eleventyConfig) {
   eleventyConfig.addFilter("css", (name) => {
     if (!name) return "";
     const file = path.join(SOURCE_DIR, "css", `${name}.scss`);
-    return sass.compile(file, sassOptions(path.dirname(file))).css;
+    // Compressed Sass opens with a byte-order mark when the sheet holds a non-ASCII character
+    // (the persona's star does). A browser strips it from a .css file, but inside a <style>
+    // element it is text, and it glues itself to the first selector, which the browser then drops
+    // -- the whole :root block of tokens, on the one page that inlines its styles.
+    return sass.compile(file, sassOptions(path.dirname(file))).css.replace(/^\uFEFF/, "");
   });
 
   // `{{ worlds.underSky.length | words }}` is "eight": a count from _data/worlds.json, spelled out

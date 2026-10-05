@@ -1,60 +1,46 @@
 {#-
-  The index of every world, written once and shown after <main> on every page but the two that
-  list every page themselves (sitemap.html, moods.html). It is the one list of worlds the site
-  has, and _data/worlds.json is the one place the list and every world's name are kept: a world
-  is added, renamed or retired there, and this include, the header, sitemap.html and the sky
-  circuit all follow.
+  The feed: every world as a card, shown after <main> on every page but the two that list every
+  page themselves (sitemap.html, moods.html). It is the one index of worlds the site has, and
+  _data/worlds.json is the one place the list and every world's name are kept: a world is added,
+  renamed or retired there, and this include, the site map and the mood atlas all follow.
 
-  Two groups, in the words every page uses: off the sky (worlds that share nothing but the site)
-  and under the sky (worlds that read one saved sky). Under each name is the orientation the world
-  answers to, which is the same phrase the persona card reads a visitor as. On a world under the
-  sky that group comes first and says where in that circuit this world is. Every count is read off
-  the list, so a world added there is counted here.
+  One flat list, no groups. Each card carries the world's orientation over its name -- the same
+  phrase the persona card reads a visitor as -- and the world's own palette, through data-mood
+  (_sass/_mood.scss), so the feed is a mosaic of the moods the worlds answer to. The world a
+  visitor is already on is left out of its own feed.
 
-  One shared suggestion of where to go next lives in this include: a single circuit link at the
-  bottom of the panel. It is always one world name as a plain link, and it advances through the
-  same off-sky then under-sky order for everyone.
+  What the template writes is the whole of what a visitor without scripting gets: a column grid
+  of plain cards, every one a link, so the reachability axiom holds and index.html's own markup
+  links every world. js/feed.js then lays the cards out as masonry columns, paints each card
+  through its module in js/modules/, moves the world the visitor's reading opens onto to the
+  front, and keeps dealing fresh cards -- the things the worlds make -- as the visitor scrolls,
+  without end. The sentinel at the bottom is what tells it to deal more.
 
-  The headings are real (h2, then h3), so a visitor listening to the page hears its shape, and the
-  reachability axiom holds with scripting off because every link here is plain markup.
+  The headings are real (h2, then h3 per card), so a visitor listening to the page hears its
+  shape.
 -#}
 {%- set here = (page.filePathStem | replace('/', '')) + '.html' if page else '' -%}
-{%- set skyIndex = -1 -%}
-{%- for world in worlds.underSky %}{% if world.file == here %}{% set skyIndex = loop.index0 %}{% endif %}{% endfor -%}
-{%- set skyCount = worlds.underSky.length -%}
-{%- set groups = [['sky', 'under the sky', worlds.underSky], ['off', 'off the sky', worlds.offSky]] if skyIndex >= 0 else [['off', 'off the sky', worlds.offSky], ['sky', 'under the sky', worlds.underSky]] -%}
-{%- set circuit = worlds.offSky.concat(worlds.underSky) -%}
-{%- set circuitIndex = -1 -%}
-{%- for world in circuit %}{% if world.file == here %}{% set circuitIndex = loop.index0 %}{% endif %}{% endfor -%}
-{%- set nextWorld = circuit[(circuitIndex + 1) % circuit.length] if circuit.length else null -%}
-<footer class='site-footer'>
-  <nav class='panel worlds' aria-labelledby='worlds-title'>
-    <h2 class='panel-title' id='worlds-title'>every world</h2>
-    <p class='panel-note'>{{ (worlds.offSky.length + skyCount) | words | capitalize }} worlds and no default. Under each name is who the site would send there: take the one that fits, or the one that does not.</p>
-    <div class='worlds-groups'>
-{%- for group in groups %}
-      <section class='worlds-group' aria-labelledby='worlds-{{ group[0] }}'>
-        <h3 class='panel-label' id='worlds-{{ group[0] }}'>{{ group[1] }}</h3>
-{%- if group[0] == 'sky' %}
-{%- if skyIndex >= 0 %}
-        <p class='panel-note'>These {{ skyCount | words }} read one saved sky: the stars of your persona, the card at the top of the page. This is {{ skyIndex + 1 }} of {{ skyCount }} in that sky circuit.</p>
-{%- else %}
-        <p class='panel-note'>These {{ skyCount | words }} read one saved sky: the stars of your persona, the card at the top of the page.</p>
+<section class='feed' id='feed' aria-labelledby='feed-title'>
+  <div class='feed-head'>
+    <h2 class='feed-title' id='feed-title'>every world</h2>
+    <p class='feed-note'>{{ worlds.worlds.length | words | capitalize }} worlds and no default, each a card, with the things they make dealt in between. Over each name is who the site would send there: open the one that fits, or the one that does not, and keep scrolling.</p>
+  </div>
+  <div class='feed-grid' id='feed-grid'>
+{%- for world in worlds.worlds %}
+{%- if world.file != here %}
+    <article class='card card-world' data-world='{{ world.file }}' data-mood='{{ world.mood }}' data-name='{{ world.name }}' data-orientation='{{ world.orientation }}'>
+      <a class='card-link' href='{{ siteRoot }}{{ world.file }}'>
+        <div class='card-media' style='aspect-ratio: {{ world.aspect }}'><canvas class='card-canvas' aria-hidden='true'></canvas></div>
+        <div class='card-body'>
+          <p class='card-overline'>{{ world.orientation }}</p>
+          <h3 class='card-title'>{{ world.name }}</h3>
+          <p class='card-text'>{{ world.what }}</p>
+        </div>
+      </a>
+    </article>
 {%- endif %}
-{%- endif %}
-        <ul class='chips chips-tall'>
-{%- for world in group[2] %}
-          <li><a href='{{ siteRoot }}{{ world.file }}'{% if world.file == here %} class='current' aria-current='page'{% endif %}>{{ world.name }}<span>{{ world.orientation }}</span></a></li>
 {%- endfor %}
-        </ul>
-      </section>
-{%- endfor %}
-    </div>
-    <p class='panel-foot'>
-{%- if nextWorld %}
-      <a class='action site-next-world' href='{{ siteRoot }}{{ nextWorld.file }}' data-default-href='{{ siteRoot }}{{ nextWorld.file }}' data-default-name='{{ nextWorld.name }}'>{{ nextWorld.name }}</a>
-{%- endif %}
-      <span><a href='{{ siteRoot }}sitemap.html'>site map</a></span>
-    </p>
-  </nav>
-</footer>
+  </div>
+  <div class='feed-sentinel' id='feed-more' aria-hidden='true'></div>
+  <p class='feed-foot'><a href='{{ siteRoot }}sitemap.html'>site map</a></p>
+</section>

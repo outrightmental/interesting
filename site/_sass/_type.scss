@@ -1,0 +1,46 @@
+// The M3 type scale (m3.material.io/styles/typography), as a mixin: fifteen roles, each a size, a
+// line height, a weight and a tracking. Sizes are written in rem so a visitor's own text size is
+// respected; the figures are the spec's, at 16px.
+//
+//     @use 'type';
+//     h1 { @include type.scale(headline-large); }
+//
+// Emits nothing until it is included, so css/site.css carries none of it.
+
+@use 'sass:list';
+@use 'sass:map';
+@use 'sass:math';
+
+$scale: (
+  display-large: (57px, 64px, 400, -0.25px),
+  display-medium: (45px, 52px, 400, 0),
+  display-small: (36px, 44px, 400, 0),
+  headline-large: (32px, 40px, 400, 0),
+  headline-medium: (28px, 36px, 400, 0),
+  headline-small: (24px, 32px, 400, 0),
+  title-large: (22px, 28px, 400, 0),
+  title-medium: (16px, 24px, 500, 0.15px),
+  title-small: (14px, 20px, 500, 0.1px),
+  body-large: (16px, 24px, 400, 0.5px),
+  body-medium: (14px, 20px, 400, 0.25px),
+  body-small: (12px, 16px, 400, 0.4px),
+  label-large: (14px, 20px, 500, 0.1px),
+  label-medium: (12px, 16px, 500, 0.5px),
+  label-small: (11px, 16px, 500, 0.5px)
+);
+
+@mixin scale($name) {
+  $role: map.get($scale, $name);
+  @if not $role {
+    @error "no type role named #{$name}";
+  }
+  $size: list.nth($role, 1);
+  font-size: math.div($size, 16px) * 1rem;
+  line-height: math.div(list.nth($role, 2), $size);
+  font-weight: list.nth($role, 3);
+  letter-spacing: list.nth($role, 4);
+}
+
+// The font stacks. Roboto is M3's default and lands wherever it is installed; nothing is fetched.
+$sans: Roboto, 'Helvetica Neue', system-ui, -apple-system, 'Segoe UI', sans-serif;
+$mono: 'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;

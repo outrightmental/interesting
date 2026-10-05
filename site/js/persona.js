@@ -6,7 +6,7 @@
       <script src='js/persona.js'></script>
 
   Not deferred, like js/state.js and js/site.js before it: a page's own <script> runs while the body
-  is parsed, and a world under the sky reads the persona's stars from there. The card and the sheet
+  is parsed, and a world that reads the sky reads the persona's stars from there. The card and the sheet
   are built on DOMContentLoaded, which is after every deferred script has run, so the orientation
   panel can lean on js/threshold.js.
 
@@ -14,7 +14,7 @@
   What a persona is
 
   Two things, and every world reads from them: a small sky of stars the visitor places, which the
-  eight worlds under the sky each reinterpret, and the reading the mood flow has taken of them,
+  worlds that read the sky each reinterpret, and the reading the mood flow has taken of them,
   which is what the site offers a world from. The sky used to be placed on the wish constellation
   page and nowhere else, which made one world of eighteen the configuration screen for the rest.
   It is a persona now: configured in one place, shown in one place, and read everywhere.
@@ -310,7 +310,7 @@
     if (askingInCard) return ASKING_TEXT;
     if (!list.length && !readOf(r) && saved.status !== 'unreadable') {
       return 'No persona yet. Yours is a small sky of stars you place and one sideways question '
-        + 'you answer: the worlds under the sky each read the stars their own way, and the answer '
+        + 'you answer: several worlds read the stars, each its own way, and the answer '
         + 'picks a world to suggest. Set it up here, or take any world below.' + keptClause();
     }
     return describeSky(saved, list) + ' ' + describeReading(r) + keptClause();
@@ -784,7 +784,7 @@
           sheetStatus('The sky is already empty.');
           return;
         }
-        if (!window.confirm('Clear every star from your sky? Every world under the sky will read nothing until you place more.')) {
+        if (!window.confirm('Clear every star from your sky? Every world that reads it will read nothing until you place more.')) {
           sheetStatus('Kept as it was.');
           return;
         }

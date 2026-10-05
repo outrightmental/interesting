@@ -1,61 +1,46 @@
 // The mood atlas: the apparatus shown rather than hidden. What it has read, how it asks, and the
 // fourteen answers, each a world.
 
-@use 'vars';
-
-body {
-  align-content: safe center;
-}
+@use 'type';
 
 .atlas-state {
-  margin: 0 0 1rem;
-  border: 1px solid vars.$hairline;
-  border-radius: vars.$radius-panel;
-  background: rgba(7, 10, 20, 0.56);
-  padding: 0.8rem;
-}
-
-.atlas-state h2,
-.section-title {
-  margin: 0 0 0.5rem;
-  color: var(--muted);
-  font-size: 0.78rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+  margin: 0 0 1.25rem;
 }
 
 .section-title {
-  margin-top: 1.2rem;
+  margin: 1.5rem 0 0.5rem;
+  color: var(--md-sys-color-on-surface);
+  @include type.scale(title-medium);
 }
 
 .current {
-  margin: 0;
-  color: var(--accent2);
-  font-size: clamp(1rem, 2.8vw, 1.22rem);
-  line-height: 1.38;
+  margin: 0.5rem 0 0;
+  color: var(--md-sys-color-on-surface);
+  @include type.scale(body-large);
 }
 
 .signal-line {
-  margin: 0.45rem 0 0;
-  color: var(--muted);
-  font-size: 0.78rem;
-  font-family: vars.$mono;
-  line-height: 1.5;
+  margin: 0.5rem 0 0;
+  color: var(--md-sys-color-on-surface-variant);
+  font-family: type.$mono;
+  @include type.scale(body-small);
 }
 
 .atlas-probe {
-  margin-top: 0.75rem;
-  border-top: 1px solid vars.$hairline;
-  padding-top: 0.75rem;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--md-sys-color-outline-variant);
 }
 
 .atlas-copy {
-  margin: 0 0 0.7rem;
-  color: #dce7ff;
-  line-height: 1.55;
+  margin: 0 0 0.75rem;
   max-width: 68ch;
+  color: var(--md-sys-color-on-surface);
+  @include type.scale(body-large);
 }
 
+// Two lists of M3 list items: a mechanism with a trailing text button, and a world with the
+// orientation that opens it and what that orientation wants.
 .mechanisms,
 .orientations {
   list-style: none;
@@ -67,57 +52,58 @@ body {
 
 .mechanisms li,
 .orientations li {
-  border: 1px solid vars.$hairline;
-  border-radius: vars.$radius-well;
-  background: vars.$well;
-  padding: 0.6rem 0.7rem;
+  padding: 0.75rem 1rem;
+  border-radius: var(--md-sys-shape-corner-medium);
+  background: var(--md-sys-color-surface-container);
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.5rem;
-  color: #dce7ff;
-  line-height: 1.45;
+  gap: 0.5rem 0.75rem;
+  color: var(--md-sys-color-on-surface);
+  @include type.scale(body-medium);
 }
 
 .mechanism-name {
-  color: var(--accent2);
-  font-size: 0.9rem;
   min-width: 9rem;
+  color: var(--md-sys-color-on-surface);
+  @include type.scale(title-small);
 }
 
 .mechanism-ask {
   flex: 1 1 18rem;
-  color: var(--muted);
-  font-size: 0.86rem;
+  color: var(--md-sys-color-on-surface-variant);
 }
 
 .mechanisms button {
-  font-size: 0.82rem;
-  padding: 0.34rem 0.8rem;
+  min-height: 40px;
+  padding: 0.25rem 0.75rem;
+  background: transparent;
+  color: var(--md-sys-color-primary);
 }
 
-// A row is the world (the link), the orientation that opens it, and what that orientation wants.
 .orientations a {
   display: inline-block;
-  padding: 0.15rem 0; // a 24px line box, so the link is a tap target
-  color: var(--accent);
-  font-size: 0.98rem;
   min-width: 10rem;
+  padding: 0.15rem 0; // a 24px line box, so the link is a tap target
+  color: var(--md-sys-color-primary);
+  text-decoration: none;
+  @include type.scale(title-small);
+}
+
+.orientations a:hover {
+  text-decoration: underline;
 }
 
 .orientations strong {
-  color: var(--accent2);
-  font-weight: 600;
-  font-size: 0.9rem;
+  color: var(--md-sys-color-tertiary);
+  @include type.scale(label-large);
 }
 
 .orientations .pull {
   flex: 1 1 14rem;
-  color: var(--muted);
-  font-size: 0.86rem;
+  color: var(--md-sys-color-on-surface-variant);
 }
 
 .orientations .pull:empty {
   display: none;
 }
-

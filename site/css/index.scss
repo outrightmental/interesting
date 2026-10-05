@@ -1,16 +1,14 @@
 // The threshold: the way in. The question is asked in the persona card above, so the page
-// itself is a few lines on what the site is and, after them, the index of every
-// world the shared shell writes after <main>.
+// itself is a few lines on what the site is and, after them, the feed of every world the shared
+// shell writes after <main>.
 //
 // It carries no palette of its own on purpose. js/threshold.js puts the ascertained orientation
 // on <html data-mood='...'> and _sass/_mood.scss turns that into the colours, so the entry page
 // is the first thing to change when a visitor is read.
 
-@use 'vars';
+@use 'type';
 
 body {
-  align-content: safe center;
-  padding: 1.2rem 1rem;
   overflow-x: hidden;
 }
 
@@ -21,8 +19,8 @@ body {
   z-index: 0;
   pointer-events: none;
   background:
-    radial-gradient(60vw 60vw at 15% 12%, color-mix(in srgb, var(--accent) 16%, transparent) 0%, transparent 70%),
-    radial-gradient(50vw 50vw at 85% 80%, color-mix(in srgb, var(--accent2) 12%, transparent) 0%, transparent 72%);
+    radial-gradient(60vw 60vw at 15% 12%, color-mix(in oklab, var(--md-sys-color-primary) 14%, transparent) 0%, transparent 70%),
+    radial-gradient(50vw 50vw at 85% 80%, color-mix(in oklab, var(--md-sys-color-tertiary) 10%, transparent) 0%, transparent 72%);
   animation: threshold-drift 48s ease-in-out infinite alternate;
 }
 
@@ -37,14 +35,10 @@ main {
 }
 
 .story {
-  margin: 0.2rem 0 0.9rem;
-  color: #dbe6ff;
-  line-height: 1.5;
-  max-width: 62ch;
-}
-
-.hint a {
-  color: var(--accent);
+  margin: 0 0 1rem;
+  max-width: 64ch;
+  color: var(--md-sys-color-on-surface);
+  @include type.scale(body-large);
 }
 
 @media (prefers-reduced-motion: reduce) {

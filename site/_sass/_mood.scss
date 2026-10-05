@@ -1,15 +1,22 @@
-// The mood flow, as it looks: the query mechanisms it renders -- into the persona card on the
-// threshold, and into the persona sheet everywhere (see _persona.scss) -- and the fourteen
-// palettes the whole site re-skins itself with once it has read someone.
+// The mood flow, as it looks: the fourteen palettes the site re-skins itself with, and the query
+// mechanisms it renders -- into the persona card on the threshold, into the persona sheet
+// everywhere, and onto the mood atlas.
 //
-// js/threshold.js puts the ascertained orientation on <html data-mood='...'>, and every rule in
-// MOODS below is one orientation's override of the shared custom properties in _tokens.scss. That
-// is the whole of the transmogrification: a page writes no colour of its own, so changing the
-// attribute changes the site. A page that wants to go further can hang its own rules off the same
-// attribute.
+// Every palette is four seeds (see _tokens.scss), and the whole scheme follows from them: that is
+// the whole of the transmogrification. The seeds land in three places:
+//
+//   :root[data-world='x']   the page's own world (set by _includes/layout.njk from _data/worlds.json),
+//                           so a world page wears its world's palette by default;
+//   :root[data-mood='x']    the visitor's reading (set by js/threshold.js), which wins over the
+//                           page's own world because it is written after it here;
+//   [data-mood='x']         a card in the feed (_includes/worlds.njk), which wears its own world's
+//                           palette whatever the page around it wears, so the feed is a mosaic.
+//
+// A page writes no colour of its own, so changing the attribute changes the site. A page that
+// wants to go further can hang its own rules off the same attribute.
 
 @use 'sass:list';
-@use 'vars';
+@use 'type';
 
 // orientation -> (bg, bg2, accent, accent2), the four that carry a mood. --fg and --muted are left
 // alone on purpose: they are what keeps text at 4.5:1 against every one of these.
@@ -30,33 +37,44 @@ $moods: (
   geometric: (#080b14, #212c5c, #adbcff, #d4eaff)
 );
 
+@mixin seeds($palette) {
+  --bg: #{list.nth($palette, 1)};
+  --bg2: #{list.nth($palette, 2)};
+  --accent: #{list.nth($palette, 3)};
+  --accent2: #{list.nth($palette, 4)};
+}
+
+// The page's own world first, so the visitor's reading below outranks it at equal specificity.
 @each $mood, $palette in $moods {
-  :root[data-mood='#{$mood}'] {
-    --bg: #{list.nth($palette, 1)};
-    --bg2: #{list.nth($palette, 2)};
-    --accent: #{list.nth($palette, 3)};
-    --accent2: #{list.nth($palette, 4)};
+  :root[data-world='#{$mood}'] {
+    @include seeds($palette);
   }
 }
 
+@each $mood, $palette in $moods {
+  :root[data-mood='#{$mood}'],
+  [data-mood='#{$mood}'] {
+    @include seeds($palette);
+  }
+}
 
-// A query, wherever it is rendered: in the persona card, in the persona sheet, or on the mood atlas.
+// ---- a query, wherever it is rendered ----------------------------------------------------------
+
 .probe {
   display: grid;
-  gap: 0.6rem;
+  gap: 0.75rem;
 }
 
 .probe-ask {
   margin: 0;
-  color: var(--fg);
-  font-size: clamp(1rem, 2.6vw, 1.22rem);
-  line-height: 1.38;
+  color: var(--md-sys-color-on-surface);
+  @include type.scale(title-medium);
 }
 
 .probe-step {
   margin: 0 0 0.5rem;
-  color: var(--muted);
-  font-size: 0.9rem;
+  color: var(--md-sys-color-on-surface-variant);
+  @include type.scale(body-medium);
 }
 
 .probe-options {
@@ -65,46 +83,55 @@ $moods: (
   gap: 0.5rem;
 }
 
+// An answer: a filled card the visitor presses, in the highest container tone so it stands off
+// the card it sits in.
 .probe-option {
   flex-direction: column;
   align-items: flex-start;
   justify-content: flex-start;
-  text-align: left;
-  gap: 0.18rem;
-  border-radius: vars.$radius-well;
-  padding: 0.6rem 0.75rem;
+  gap: 0.15rem;
   width: 100%;
+  min-height: 56px;
+  padding: 0.75rem 1rem;
+  border-radius: var(--md-sys-shape-corner-medium);
+  background: var(--md-sys-color-surface-container-highest);
+  color: var(--md-sys-color-on-surface);
+  text-align: left;
 }
 
 .probe-option-label {
-  color: var(--fg);
-  font-size: 0.95rem;
+  color: var(--md-sys-color-on-surface);
+  @include type.scale(body-large);
 }
 
 .probe-option-detail {
-  color: var(--muted);
-  font-size: 0.8rem;
-  line-height: 1.35;
+  color: var(--md-sys-color-on-surface-variant);
+  @include type.scale(body-small);
 }
 
+// The skip sits last in every mechanism, as a text button, quieter than the answers; undo and
+// start over the same.
 .probe-skip,
 .probe-undo {
   width: auto;
+  min-height: 40px;
   justify-self: start;
-  margin-top: 0.5rem;
+  padding: 0.25rem 0.75rem;
+  border-radius: var(--md-sys-shape-corner-full);
+  background: transparent;
+  color: var(--md-sys-color-primary);
+  @include type.scale(label-large);
 }
 
-// The skip sits last in every mechanism, quieter than the answers.
 .probe-skip {
-  color: var(--muted);
-  font-size: 0.86rem;
+  margin-top: 0.25rem;
 }
 
 .probe-big {
   min-width: min(260px, 100%);
   min-height: 72px;
-  font-size: 1.05rem;
-  border-radius: vars.$radius-well;
+  border-radius: var(--md-sys-shape-corner-medium);
+  @include type.scale(title-medium);
   // A long press on a phone must not select text or open a menu: the press is the answer.
   touch-action: none;
   user-select: none;
@@ -113,17 +140,17 @@ $moods: (
 }
 
 .probe-big.held {
-  border-color: vars.$focus-line;
-  background: vars.$focus-fill;
+  background: var(--md-sys-color-primary);
+  color: var(--md-sys-color-on-primary);
 }
 
 .probe-count,
 .probe-trace {
   margin: 0;
-  color: var(--muted);
-  font-size: 0.8rem;
-  font-family: vars.$mono;
   min-height: 1.2em;
+  color: var(--md-sys-color-on-surface-variant);
+  font-family: type.$mono;
+  @include type.scale(body-small);
 }
 
 .probe-meter:empty {
@@ -135,19 +162,17 @@ $moods: (
   width: 100%;
   aspect-ratio: 16 / 7;
   min-height: 140px;
-  border: 1px solid vars.$hairline;
-  border-radius: vars.$radius-well;
+  border-radius: var(--md-sys-shape-corner-medium);
   background:
-    radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.07) 0%, transparent 62%),
-    vars.$well;
+    radial-gradient(circle at 50% 50%, color-mix(in oklab, var(--md-sys-color-primary) 10%, transparent) 0%, transparent 62%),
+    var(--md-sys-color-surface-container-lowest);
   cursor: crosshair;
 }
 
 .probe-field:focus-visible,
 .probe-pad:focus-visible {
-  outline: 2px solid transparent;
-  border-color: vars.$focus-line;
-  box-shadow: 0 0 0 3px vars.$focus-ring;
+  outline: 3px solid var(--md-sys-color-primary);
+  outline-offset: 2px;
 }
 
 .probe-mark {
@@ -156,17 +181,16 @@ $moods: (
   height: 14px;
   margin: -7px 0 0 -7px;
   border-radius: 50%;
-  background: var(--accent2);
-  box-shadow: 0 0 14px var(--accent);
+  background: var(--md-sys-color-tertiary);
+  box-shadow: 0 0 14px var(--md-sys-color-primary);
 }
 
 .probe-pad {
   width: 100%;
   height: auto;
   display: block;
-  border: 1px solid vars.$hairline;
-  border-radius: vars.$radius-well;
-  background: vars.$well;
+  border-radius: var(--md-sys-shape-corner-medium);
+  background: var(--md-sys-color-surface-container-lowest);
   touch-action: none;
   cursor: crosshair;
 }
@@ -174,22 +198,19 @@ $moods: (
 .probe-dial {
   display: grid;
   gap: 0.35rem;
-  border: 1px solid vars.$hairline;
-  border-radius: vars.$radius-well;
-  background: vars.$well;
-  padding: 0.7rem;
+  padding: 0.85rem 1rem;
+  border-radius: var(--md-sys-shape-corner-medium);
+  background: var(--md-sys-color-surface-container-lowest);
 }
 
 .probe-dial-label {
-  color: var(--muted);
-  font-size: 0.78rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  color: var(--md-sys-color-on-surface-variant);
+  @include type.scale(label-medium);
 }
 
 .probe-dial-end {
-  color: var(--accent2);
-  font-size: 0.84rem;
+  color: var(--md-sys-color-tertiary);
+  @include type.scale(body-small);
 }
 
 @media (prefers-reduced-motion: reduce) {

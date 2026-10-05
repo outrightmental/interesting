@@ -1,12 +1,17 @@
-// Shared canvas shell and two-column layout for the constellation labs.
+// The shape most worlds share: a canvas (or a stage) beside a panel of controls, two columns on a
+// wide screen and one on a phone. The canvas is the lowest surface, so it reads as the one
+// recessed thing on the page -- the view into the world -- and the panel beside it is a filled
+// card like any other.
 
-@use 'vars';
 @use 'readout';
+@use 'type';
 
-.layout {
+.layout,
+.top {
   display: grid;
   grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
-  gap: 0.85rem;
+  gap: 1rem;
+  align-items: start;
 }
 
 .layout > canvas,
@@ -14,34 +19,32 @@
   width: 100%;
   height: auto;
   display: block;
-  border-radius: vars.$radius-panel;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  background: #060913;
+  border-radius: var(--md-sys-shape-corner-large);
+  background: var(--md-sys-color-surface-container-lowest);
+}
+
+// A canvas that takes keyboard focus (the kicker, the ring) rings like every other control.
+.layout > canvas:focus-visible,
+.top > canvas:focus-visible {
+  outline: 3px solid var(--md-sys-color-primary);
+  outline-offset: 2px;
 }
 
 @media (max-width: 800px) {
-  .layout {
+  .layout,
+  .top {
     grid-template-columns: 1fr;
   }
-}
-
-.layout .panel #status,
-.top .panel #status {
-  margin: 0.5rem 0 0;
-  min-height: 1.5em;
-  color: var(--accent2);
-  font-size: 0.95rem;
 }
 
 .layout .panel #reading {
   @include readout.readout(7.2em);
 }
 
-.layout .panel #drift[aria-pressed='true'],
-.layout .panel #rain[aria-pressed='true'],
-.layout .panel #spin[aria-pressed='true'],
-.layout .panel #wind[aria-pressed='true'] {
-  background: rgba(159, 203, 255, 0.24);
-  border-color: rgba(194, 224, 255, 0.86);
-  box-shadow: 0 0 12px rgba(143, 195, 255, 0.34) inset;
+// The one line of a page's own prose at the top of its panel, before the controls.
+.layout .panel > p:first-child,
+.top .panel > p:first-child {
+  margin: 0;
+  color: var(--md-sys-color-on-surface);
+  @include type.scale(body-medium);
 }

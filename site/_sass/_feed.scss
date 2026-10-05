@@ -1,0 +1,305 @@
+// The feed: every world as a card, laid out as masonry columns, shown after <main> on every page
+// by _includes/worlds.njk and kept flowing by js/feed.js.
+//
+// Without scripting the grid is CSS columns: every card the template wrote is in it, each a plain
+// link. With scripting the script switches the grid to flex columns (.is-masonry) and places each
+// card in the shortest one, Pinterest's layout, so a new card never moves an old one. A card is an
+// M3 elevated card (m3.material.io/components/cards) at level 1, lifting to level 2 under the
+// pointer, with a state layer over the whole of it. Each card carries data-mood, so its colours are
+// its own world's (see _mood.scss): the feed is a mosaic of palettes whatever the page wears.
+//
+// What a card holds:
+//   .card-media     the painting at the top, in the world's aspect ratio, a canvas the module fills
+//   .card-overline  who the site would send there (label-medium, primary)
+//   .card-title     the world's name, or the title of the thing it made
+//   .card-text      one line
+//   .card-quote     a line the world said, at body-large  (spark cards)
+//   .card-mono      a readout, monospace                   (spark cards)
+//   .card-badge     a small tertiary chip over the media ("for you")
+//   .card-actions   a row of text buttons under the body   (spark cards: "another")
+
+@use 'type';
+
+.feed {
+  position: relative;
+  z-index: 2; // above any page's full-screen backdrop canvas, like the top bar and the persona card
+  margin-top: 1.5rem;
+}
+
+.feed-head {
+  margin: 0 0.25rem 1rem;
+  display: grid;
+  gap: 0.25rem;
+}
+
+.feed-title {
+  margin: 0;
+  color: var(--md-sys-color-on-surface);
+  @include type.scale(title-large);
+}
+
+.feed-note {
+  margin: 0;
+  max-width: 72ch;
+  color: var(--md-sys-color-on-surface-variant);
+  @include type.scale(body-medium);
+}
+
+.feed-grid {
+  columns: 15rem;
+  column-gap: var(--feed-gap);
+}
+
+.feed-grid > .card {
+  break-inside: avoid;
+  margin: 0 0 var(--feed-gap);
+}
+
+.feed-grid.is-masonry {
+  columns: auto;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--feed-gap);
+}
+
+.feed-col {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--feed-gap);
+}
+
+.feed-col > .card {
+  margin: 0;
+}
+
+.card {
+  position: relative;
+  border-radius: var(--md-sys-shape-corner-large);
+  background: var(--md-sys-color-surface-container);
+  color: var(--md-sys-color-on-surface);
+  overflow: hidden;
+  box-shadow: var(--md-sys-elevation-level1);
+  transition:
+    box-shadow var(--md-sys-motion-duration-medium) var(--md-sys-motion-easing-standard),
+    transform var(--md-sys-motion-duration-medium) var(--md-sys-motion-easing-standard);
+}
+
+.card:hover {
+  box-shadow: var(--md-sys-elevation-level2);
+}
+
+// The whole card is the link, with the state layer over all of it.
+.card-link {
+  position: relative;
+  isolation: isolate;
+  display: block;
+  color: inherit;
+  text-decoration: none;
+  border-radius: inherit;
+}
+
+.card-link::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border-radius: inherit;
+  background: var(--md-sys-color-on-surface);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--md-sys-motion-duration-short) var(--md-sys-motion-easing-standard);
+}
+
+.card-link:hover::after {
+  opacity: var(--md-sys-state-hover-opacity);
+}
+
+.card-link:focus-visible {
+  outline: 3px solid var(--md-sys-color-primary);
+  outline-offset: -3px;
+}
+
+.card-link:focus-visible::after {
+  opacity: var(--md-sys-state-focus-opacity);
+}
+
+.card-link:active::after {
+  opacity: var(--md-sys-state-pressed-opacity);
+}
+
+.card-media {
+  position: relative;
+  width: 100%;
+  background: radial-gradient(circle at 30% 20%, var(--bg2) 0%, var(--bg) 75%);
+  overflow: hidden;
+}
+
+.card-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.card-body {
+  padding: 0.9rem 1rem 1rem;
+  display: grid;
+  gap: 0.25rem;
+}
+
+.card-overline {
+  margin: 0;
+  color: var(--md-sys-color-primary);
+  @include type.scale(label-medium);
+}
+
+.card-title {
+  margin: 0;
+  color: var(--md-sys-color-on-surface);
+  @include type.scale(title-medium);
+  overflow-wrap: anywhere;
+}
+
+.card-text {
+  margin: 0;
+  color: var(--md-sys-color-on-surface-variant);
+  @include type.scale(body-medium);
+}
+
+// The things a world made, dealt between the world cards.
+.card-spark .card-title {
+  @include type.scale(title-large);
+}
+
+.card-quote {
+  margin: 0.25rem 0 0;
+  color: var(--md-sys-color-on-surface);
+  @include type.scale(body-large);
+}
+
+.card-mono {
+  margin: 0.25rem 0 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--md-sys-color-on-surface);
+  font-family: type.$mono;
+  @include type.scale(body-small);
+  letter-spacing: 0.25px;
+}
+
+.card-cite {
+  margin: 0.25rem 0 0;
+  color: var(--md-sys-color-on-surface-variant);
+  font-style: italic;
+  @include type.scale(body-small);
+}
+
+.card-badge {
+  position: absolute;
+  top: 0.6rem;
+  left: 0.6rem;
+  z-index: 2;
+  padding: 0.2rem 0.6rem;
+  border-radius: var(--md-sys-shape-corner-small);
+  background: var(--md-sys-color-tertiary-container);
+  color: var(--md-sys-color-on-tertiary-container);
+  @include type.scale(label-small);
+}
+
+.card-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.25rem;
+  padding: 0 0.5rem 0.5rem;
+}
+
+.card-actions button {
+  min-height: 40px;
+  padding: 0.25rem 0.75rem;
+  background: transparent;
+  color: var(--md-sys-color-primary);
+}
+
+// A card that asks: the question's host inside it is the persona's, so it opens the sheet.
+.card-ask .card-body {
+  gap: 0.5rem;
+}
+
+.card-ask .controls {
+  margin: 0.25rem 0 0;
+}
+
+// A card that is powered down: the unlock box inside it is the shared one (_unlock.scss), with the
+// card's own corners.
+.card-unlock .unlock {
+  margin: 0;
+  border-radius: 0;
+  outline: none;
+  background: transparent;
+}
+
+.card-unlock .card-media {
+  min-height: 120px;
+}
+
+// A new card arrives from a little below, the way M3 enters content.
+.card-enter {
+  animation: card-in var(--md-sys-motion-duration-long) var(--md-sys-motion-easing-emphasized) both;
+}
+
+@keyframes card-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.feed-sentinel {
+  height: 1px;
+  margin-top: 1rem;
+}
+
+.feed-foot {
+  margin: 1.5rem 0 0;
+  text-align: center;
+  color: var(--md-sys-color-on-surface-variant);
+  @include type.scale(label-large);
+}
+
+@media (max-width: 599px) {
+  .feed-grid {
+    columns: 2;
+    column-gap: 0.6rem;
+  }
+
+  .feed-grid.is-masonry {
+    gap: 0.6rem;
+  }
+
+  .feed-col {
+    gap: 0.6rem;
+  }
+
+  .card-body {
+    padding: 0.7rem 0.75rem 0.85rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card,
+  .card-link::after {
+    transition: none;
+  }
+
+  .card-enter {
+    animation: none;
+  }
+}

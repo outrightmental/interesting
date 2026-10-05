@@ -1,20 +1,20 @@
 ---
 layout: layout.njk
 title: the threshold
-description: 'Small interactive worlds, from a quiet room and a machine shop to a sky you fill with wishes. One short sideways question picks the first to open; every world is a plain link if you would rather choose.'
+description: 'Small interactive worlds, from a quiet room and a machine shop to a sky you fill with wishes, in one feed that keeps going. One short sideways question picks the first to open; every world is a card if you would rather choose.'
 stylesheet: index
 ---
   <div class='drift' aria-hidden='true'></div>
 
   <main>
     <h1>the threshold</h1>
-    <p class='tagline'>{{ (worlds.offSky.length + worlds.underSky.length) | words | capitalize }} small worlds, none of them the default. One sideways question picks a first one to open; all of them are listed below.</p>
+    <p class='tagline'>{{ worlds.worlds.length | words | capitalize }} small worlds, none of them the default, in one feed below that keeps going for as long as you do. One sideways question picks a first one to open.</p>
     <p class='story'>Not everyone likes stars. So before this site offers anything it asks one short
       question, sideways, about a door or a stone or the rate at which you tap, and glances at your
       clock while you answer. It never asks you to report on yourself, it never asks the same way
       twice, and whatever it concludes fades over a few days. Answer in your persona above, or do
       not: every world is open either way, including the one it would never have picked for you.</p>
-    <p class='hint'>Each world is built for a different frame of mind, named under its link.
+    <p class='hint'>Each world is built for a different frame of mind, named over its card.
       <a href='moods.html'>The mood atlas</a> shows the whole apparatus: every way it asks and
       every answer it can arrive at, with a way to be asked again or forgotten.</p>
   </main>

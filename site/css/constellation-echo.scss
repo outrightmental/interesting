@@ -1,9 +1,5 @@
-// The echo chamber: the saved sky as drifting echoes, with an atmospheric reading beside it.
-
-:root {
-  --bg2: #1c2b53;
-  --accent: #a7d1ff;
-}
+// The echo chamber: the saved sky as drifting echoes, with an atmospheric reading beside it. Its
+// palette is its world's (attentive), from _sass/_mood.scss through <html data-world>.
 
 #echo-canvas {
   cursor: crosshair;
