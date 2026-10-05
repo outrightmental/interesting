@@ -14,15 +14,23 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # One job, and deliberately so. These were two jobs — the workflow scripts and the
-  # infrastructure, side by side — until a run in which the hosted runner pool served one of them
-  # and never served the other: the unserved job sat queued for about ten minutes, was cancelled
-  # having run no step at all, and reported a failure about nothing while its sibling passed in
-  # ninety seconds. That ten minutes is GitHub's own limit on acquiring a runner, not this job's
-  # `timeout-minutes`, so no setting here avoids it; three runs in a row lost a different half
-  # each time. Both halves together finish inside two minutes, so sharing one runner costs a few
-  # seconds of wall clock and asks the pool for half as much. Keep it one job: the parallelism is
-  # worth less than the runs it loses.
+  # One job, and deliberately so — though not for the reason the two were first merged. These
+  # were two jobs, the workflow scripts and the infrastructure side by side, and on 2026-10-05 a
+  # run lost the infrastructure half: it sat queued about ten minutes, was handed no runner at all,
+  # and was cancelled with zero steps while its sibling passed in ninety seconds. Merging them was
+  # meant to stop that by asking the pool for one runner instead of two. It did not. The very next
+  # run — one job, one runner — sat queued ten minutes and fifteen seconds and was cancelled the
+  # same way, with an empty runner name and no steps; its re-run lasted fifteen minutes and went
+  # the same way again; and so did a single-job Test on an unrelated branch, twice, and a scheduled
+  # run on main. GitHub had an incident open for precisely this, delays assigning hosted runners
+  # across runner configurations. So the starvation was never about how many runners this workflow
+  # asks for, there is no fixed queue limit to design around, and no value configurable here
+  # avoids any of it: a run cancelled with no runner name and no steps wants re-running once the
+  # pool recovers, not editing.
+  #
+  # What survives is the smaller, true claim. Both halves together finish inside two minutes, so
+  # one job costs a few seconds of wall clock and asks the pool once rather than twice. Keep it
+  # one job for that reason alone: the parallelism was worth less than it cost.
   test:
     name: Workflow scripts and infrastructure
     runs-on: ubuntu-latest
