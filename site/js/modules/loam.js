@@ -178,11 +178,19 @@ function grow(s, dt, w, h, c) {
     const stone = blocked(s, nx, ny);
     if (stone) {
       if (blocked(s, tip.x, tip.y)) continue; // a stone laid over it since: that root ends there
+      // Round it rather than through it, and the tip keeps its place in `next`: that is how a root
+      // planted over gravel goes sideways for a long while before it finds a way down. It ages
+      // while it does, so one walled in on every side gives up after half a second instead of
+      // standing there alive and still for as long as the piece lasts.
+      tip.stuck = (tip.stuck || 0) + 1;
+      if (tip.stuck > 30) continue;
       tip.angle += (nx < stone.x ? -1 : 1) * 0.55;
+      tip.life -= dt * 0.012;
       hit = hit || stone;
       next.push(tip);
       continue;
     }
+    tip.stuck = 0;
     if (nx < 3 || nx > w - 3) tip.angle = Math.PI - tip.angle;
     else if (ny < s.top + 1) tip.angle = Math.PI / 2;
     else {
