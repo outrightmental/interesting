@@ -13,6 +13,13 @@
 // A pressed toggle (aria-pressed='true') and a working control (aria-busy='true') read as filled,
 // so the state of a toggle is the state of its colour. Every control carries an M3 state layer:
 // an overlay of its own text colour at 8% on hover, 10% on focus and 12% while pressed.
+//
+// One variant is a warning: .warning is the single treatment every control that throws a visitor's
+// saved state away wears, and .are-you-sure is the single modal that every press of one opens.
+// Both are rendered by window.interestingSite.destructive() in js/site.js, so the three parts of
+// the law -- a control that reads as destructive before it is pressed, a question that names what
+// is about to go, and a plain confirm/cancel -- are written here once and nowhere else. See the
+// README section "Destructive-caution axiom" for the threshold they apply beyond.
 
 @use 'type';
 
@@ -228,6 +235,107 @@ textarea:focus-visible {
   outline: 2px solid var(--md-sys-color-primary);
   outline-offset: -1px;
   border-color: var(--md-sys-color-primary);
+}
+
+// --------------------------------------------------------------------------------------------
+// The warning button: one treatment, the same on every page that has one.
+//
+// It is the first half of the destructive-caution law, and the half that does its work before a
+// press: a control that is about to throw saved state away has to look unlike the twenty ordinary
+// controls beside it. Warm instead of cool, and the only warm control on the site, so the family
+// is recognised rather than read.
+
+button.warning,
+a.action.warning {
+  border-color: rgba(255, 176, 138, 0.52);
+  background: rgba(255, 138, 96, 0.13);
+  color: var(--warn);
+}
+
+button.warning:hover,
+a.action.warning:hover,
+button.warning:focus-visible,
+a.action.warning:focus-visible {
+  border-color: rgba(255, 198, 166, 0.92);
+  background: rgba(255, 138, 96, 0.24);
+}
+
+button.warning:focus-visible,
+a.action.warning:focus-visible {
+  box-shadow: 0 0 0 3px rgba(255, 176, 138, 0.46);
+}
+
+// --------------------------------------------------------------------------------------------
+// The one "are you sure you want to ______?" modal, opened by every press of a control above the
+// threshold and by nothing else. The second half of the law, and the half that does its work
+// after a press. It is a <dialog>, so the browser supplies the backdrop, the focus trap and
+// Escape; js/site.js returns the focus to the control that opened it.
+
+.are-you-sure {
+  box-sizing: border-box;
+  width: min(28rem, calc(100vw - 1.25rem));
+  max-height: calc(100vh - 1.25rem);
+  max-height: calc(100dvh - 1.25rem);
+  margin: auto;
+  padding: 0.95rem;
+  border: 1px solid rgba(255, 176, 138, 0.42);
+  border-radius: 16px;
+  background: rgba(7, 10, 20, 0.98);
+  color: var(--fg);
+  box-shadow: 0 1.2rem 3rem rgba(0, 0, 0, 0.62);
+  overflow: auto;
+}
+
+// Spelled out rather than left to the browser, so the box stays hidden in a browser that does not
+// know <dialog> at all and the fallback below is the only thing that shows it.
+.are-you-sure:not([open]) {
+  display: none;
+}
+
+.are-you-sure[open] {
+  display: grid;
+  gap: 0.6rem;
+  align-content: start;
+}
+
+.are-you-sure::backdrop {
+  background: rgba(3, 5, 12, 0.72);
+}
+
+// A browser without dialog.showModal() gets the same box pinned over the page, as the persona
+// sheet does.
+.are-you-sure-fallback[open] {
+  position: fixed;
+  top: 0.6rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 40;
+}
+
+// The question itself, with the caller's words in the blank. Not an <h2>: it is written by script
+// into a box that floats over a page whose own headings it knows nothing about, so it names the
+// dialog through aria-labelledby instead of joining an outline it could only break.
+.are-you-sure-title {
+  margin: 0;
+  color: var(--warn);
+  font-size: 1.02rem;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.are-you-sure-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.are-you-sure-actions {
+  margin: 0.15rem 0 0;
+}
+
+.are-you-sure-actions button {
+  flex: 1 1 9rem;
 }
 
 @media (prefers-reduced-motion: reduce) {
