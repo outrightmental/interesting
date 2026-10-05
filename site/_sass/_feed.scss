@@ -7,7 +7,11 @@
 // card in the shortest one, Pinterest's layout, so a new card never moves an old one. A card is an
 // M3 elevated card (m3.material.io/components/cards) at level 1, lifting to level 2 under the
 // pointer, with a state layer over the whole of it. Each card carries data-mood, so its colours are
-// its own world's (see _mood.scss): the feed is a mosaic of palettes whatever the page wears.
+// its own world's (see _mood.scss): the feed is a mosaic of palettes whatever the page wears. A card
+// the feed dealt also carries a configuration (js/variant.js), which re-derives those four seeds
+// inside the same mood and writes them back onto the card, so the second appearance of a world is a
+// different colour from the first; --card-light is the part of the configuration this sheet reads
+// directly, the origin of the gradient behind the card's picture.
 //
 // What a card holds:
 //   .card-media     the painting at the top, in the world's aspect ratio, a canvas the module fills
@@ -114,7 +118,7 @@
 .card-media {
   position: relative;
   width: 100%;
-  background: radial-gradient(circle at 30% 20%, var(--bg2) 0%, var(--bg) 75%);
+  background: radial-gradient(circle at var(--card-light, 30% 20%), var(--bg2) 0%, var(--bg) 75%);
   overflow: hidden;
 }
 
