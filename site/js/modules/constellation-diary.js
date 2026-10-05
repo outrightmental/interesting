@@ -277,16 +277,20 @@ function seal(g, c, x, y, r, glow) {
   }
 }
 
-// The card: the sky over the page, with the birth-order path and one mark per star.
+// The card: the sky over the page, with the birth-order path and one mark per star. The
+// configuration the card was dealt sets where the sky gives way to the page, how large the stars
+// are written and how many rules the page is ruled for.
 function logbook(ctx, w, h, env) {
-  const split = h * 0.58;
+  const v = env.variant;
+  const split = h * (0.5 + v.turn * 0.16);
   const ink = env.colors.accent;
   sky(ctx, w, split, skyTint(env, 'midnight'));
   const pts = env.points(w, split, 10);
   links(ctx, pts, env, ink, 'path', 0);
-  dots(ctx, pts, env, ink, 1);
-  const step = page(ctx, w, h, split, env, ink, 26, 5);
-  marks(ctx, w, split, step, pts, env, 26, 5);
+  dots(ctx, pts, env, ink, v.scale);
+  const rows = Math.max(3, Math.round(5 * v.density));
+  const step = page(ctx, w, h, split, env, ink, 26, rows);
+  marks(ctx, w, split, step, pts, env, 26, rows);
 }
 
 /* ---- the pieces ---------------------------------------------------------------------------- */

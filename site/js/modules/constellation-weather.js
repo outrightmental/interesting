@@ -332,8 +332,13 @@ function tick(s, dt, w, h, e) {
   if (s.clear) s.clear = Math.min(1, s.clear + dt * 0.8);
 }
 
-function map(g, w, h, e, kind) {
-  scene(g, w, h, e, blank(22, kind || 'cold'));
+// The card: the field as it stands, at the hour and in the wind the configuration `v` the card was
+// dealt chose, so a repeat is a different map of the same stars.
+function map(g, w, h, e, kind, v) {
+  const state = blank(2 + Math.round(v.turn * 20), kind || 'cold');
+  state.wind = clamp((v.density - 0.7) * 1.6, 0, 1);
+  state.t = v.turn * 6;
+  scene(g, w, h, e, state);
 }
 
 // The forecast, composed from the geometry of the stars and whatever the knobs say now.
@@ -546,7 +551,7 @@ export default {
   id: 'constellation-weather',
   needsSky: true,
   paint(ctx, w, h, env) {
-    map(ctx, w, h, env, env.pick(KINDS).value);
+    map(ctx, w, h, env, env.pick(KINDS).value, env.variant);
   },
   spark(env) {
     const stars = env.stars;
@@ -568,7 +573,7 @@ export default {
         + '\nvisibility: ' + env.pick(VIS),
       text: env.pick(LINES),
       aspect: '16 / 10',
-      paint: (ctx, w, h, e) => map(ctx, w, h, e, kind.value)
+      paint: (ctx, w, h, e) => map(ctx, w, h, e, kind.value, e.variant)
     };
   },
   piece(env) {
