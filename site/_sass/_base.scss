@@ -1,9 +1,13 @@
-// The page itself: the reset, the night sky behind it, the heading and the tagline under it.
+// The page itself: the reset, the surface, the type, and the few elements every page shares.
 //
-// A page that wants a different sky sets --bg and --bg2 (see _tokens.scss); one that wants a
-// different gradient altogether overrides `background` on `html, body` in its own stylesheet.
+// A page that wants a different sky sets the seeds (see _tokens.scss and _mood.scss); one that
+// wants a different gradient altogether overrides `background` on `body` in its own stylesheet.
 
-* {
+@use 'type';
+
+*,
+*::before,
+*::after {
   box-sizing: border-box;
 }
 
@@ -13,36 +17,111 @@
   display: none !important;
 }
 
-html,
-body {
-  margin: 0;
-  min-height: 100%;
-  background: radial-gradient(circle at 18% 0%, var(--bg2) 0%, var(--bg) 62%);
-  color: var(--fg);
-  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+html {
+  background: var(--md-sys-color-surface);
+  color: var(--md-sys-color-on-surface);
+  font-family: type.$sans;
+  -webkit-text-size-adjust: 100%;
+  scroll-behavior: smooth;
 }
 
 body {
-  display: grid;
-  place-items: center;
-  padding: 1rem;
+  margin: 0;
+  min-height: 100vh;
+  // The night sky, as a tint rather than a picture: the lighter corner every mood names opens
+  // from the top left, over the flat surface M3 lays everything on.
+  background:
+    radial-gradient(120vw 70vh at 12% -12%, color-mix(in oklab, var(--bg2) 55%, transparent) 0%, transparent 62%)
+    fixed,
+    var(--md-sys-color-surface);
+  @include type.scale(body-large);
+}
+
+// The column everything but the top bar sits in.
+.page {
+  width: min(var(--page-max), 100% - 2 * var(--gutter));
+  margin-inline: auto;
+  padding: 1rem 0 3.5rem;
 }
 
 h1 {
   margin: 0;
-  line-height: 0.95;
-  letter-spacing: -0.03em;
-  font-size: clamp(1.9rem, 6vw, 3.2rem);
+  @include type.scale(headline-large);
+  letter-spacing: -0.01em;
+}
+
+@media (min-width: 840px) {
+  h1 {
+    @include type.scale(display-small);
+  }
+}
+
+h2,
+h3 {
+  margin: 0;
+}
+
+p {
+  margin: 0;
+}
+
+p + p {
+  margin-top: 0.75rem;
+}
+
+a {
+  color: var(--md-sys-color-primary);
+  text-underline-offset: 0.15em;
 }
 
 .tagline {
-  margin: 0.45rem 0 0.85rem;
-  color: var(--muted);
+  margin: 0.5rem 0 1.25rem;
+  max-width: 64ch;
+  color: var(--md-sys-color-on-surface-variant);
+  @include type.scale(body-large);
 }
 
 .hint {
-  margin: 0.65rem 0 0;
-  color: var(--muted);
-  font-size: 0.84rem;
-  line-height: 1.4;
+  margin: 0.75rem 0 0;
+  color: var(--md-sys-color-on-surface-variant);
+  @include type.scale(body-small);
+}
+
+// The one focus indicator, M3's: a ring in the primary colour, offset from the thing it rings.
+:focus-visible {
+  outline: 3px solid var(--md-sys-color-primary);
+  outline-offset: 2px;
+}
+
+canvas,
+img,
+svg {
+  max-width: 100%;
+}
+
+.icon {
+  width: 24px;
+  height: 24px;
+  flex: none;
+  fill: currentColor;
+}
+
+// Text that only a screen reader should hear: a label the layout hides on a phone.
+.visually-hidden {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
 }

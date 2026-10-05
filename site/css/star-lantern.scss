@@ -1,14 +1,7 @@
-// The lantern ritual: the saved sky released as floating lanterns, with a mood reading.
+// The lantern ritual: the saved sky released as floating lanterns, with a mood reading. Its
+// palette is its world's (ceremonial), from _sass/_mood.scss through <html data-world>; the
+// shared layout does the rest.
 
-:root {
-  --bg: #080b17;
-  --bg2: #202b58;
-  --fg: #eef3ff;
-  --muted: #a9b5d9;
-  --accent2: #ffe6a9;
-}
-
-html,
-body {
-  background: radial-gradient(circle at 18% 0%, var(--bg2) 0%, var(--bg) 60%);
+#ritual {
+  cursor: pointer;
 }

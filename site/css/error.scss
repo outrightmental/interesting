@@ -1,23 +1,16 @@
 // Lost in space: the 404 page CloudFront serves for anything that is not there, at whatever path
-// was asked for. The page scrolls like every other page; the starfield stays fixed behind it.
+// was asked for. The page scrolls like every other page; the starfield stays fixed behind it, and
+// the sheet is translucent so the stars show through.
 
-@use 'vars';
 @use 'readout';
+@use 'type';
 
 :root {
   --bg: #090b14;
   --bg2: #171a2f;
-  --fg: #f2f4ff;
-  --muted: #a8b1d1;
   --accent: #9bc1ff;
   --accent2: #ffe5a3;
-  --panel: rgba(10, 13, 25, 0.7);
   --good: #b7ffcf;
-}
-
-html,
-body {
-  background: radial-gradient(circle at 20% 5%, #232b53 0%, var(--bg) 55%);
 }
 
 #sky {
@@ -41,58 +34,21 @@ main {
   position: relative;
   z-index: 2;
   width: min(820px, 100%);
-  border-radius: 18px;
-  box-shadow: 0 15px 40px rgba(0, 0, 0, 0.35);
+  background: var(--panel);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
   text-align: center;
-  padding: clamp(1rem, 4vw, 2rem);
-}
-
-h1 {
-  line-height: 1;
-  letter-spacing: -0.03em;
-  font-size: clamp(2rem, 8vw, 3.6rem);
-}
-
-main p {
-  margin: 0.7rem 0;
-  color: #dce3ff;
-}
-
-main .muted {
-  color: var(--muted);
-  font-size: 0.95rem;
 }
 
 main .controls {
-  margin: 0.9rem 0 0;
-  gap: 0.55rem;
   justify-content: center;
 }
 
-main button,
-main a.action {
-  padding: 0.5rem 0.9rem;
-}
-
-main button:hover,
-main button:focus-visible,
-main a.action:hover,
-main a.action:focus-visible {
-  background: rgba(255, 255, 255, 0.12);
-  border-color: rgba(255, 255, 255, 0.34);
-}
-
 #note {
-  margin-top: 0.9rem;
+  margin-top: 1rem;
   min-height: 1.5em;
-  color: var(--accent2);
-  font-size: 0.97rem;
-}
-
-main .hint {
-  margin-top: 0.65rem;
-  color: var(--muted);
-  font-size: 0.84rem;
+  color: var(--md-sys-color-tertiary);
+  @include type.scale(body-medium);
 }
 
 // The four instruments a stranded visitor can play with: radio, oscilloscope, decoder, haiku.
@@ -101,54 +57,52 @@ main .hint {
 .decoder,
 .haiku {
   margin-top: 1rem;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: vars.$radius-panel;
-  padding: 0.8rem;
-  background: rgba(8, 11, 21, 0.5);
   text-align: left;
+}
+
+.radio .controls,
+.scope .controls,
+.decoder .controls,
+.haiku .controls {
+  justify-content: flex-start;
 }
 
 .radio-top {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
-  gap: 0.7rem;
+  gap: 0.75rem;
   margin-bottom: 0.5rem;
   flex-wrap: wrap;
 }
 
 .radio-top p {
   margin: 0;
+  color: var(--md-sys-color-on-surface-variant);
+  @include type.scale(label-large);
 }
 
 #freq-readout {
   font-variant-numeric: tabular-nums;
-  color: #e8f0ff;
+  color: var(--md-sys-color-on-surface);
   font-weight: 600;
-  letter-spacing: 0.02em;
-}
-
-#freq {
-  width: 100%;
-  margin: 0.2rem 0 0.35rem;
-  accent-color: var(--accent);
 }
 
 #scope-canvas {
   width: 100%;
   height: auto;
   display: block;
-  border-radius: vars.$radius-well;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  background: #070b18;
+  border-radius: var(--md-sys-shape-corner-medium);
+  background: var(--md-sys-color-surface-container-lowest);
 }
 
 #radio-note,
 #scope-note,
 #decoder-note {
-  margin: 0.55rem 0 0;
+  margin: 0.5rem 0 0;
   min-height: 1.4em;
-  color: #c8daff;
+  color: var(--md-sys-color-on-surface);
+  @include type.scale(body-medium);
 }
 
 #radio-note.good,
@@ -160,49 +114,24 @@ main .hint {
 .glyph-grid {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 0.45rem;
-  margin-top: 0.45rem;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
 }
 
+// A rune: a tonal button that lights to filled while the sequence plays it.
 .glyph {
-  border-radius: vars.$radius-well;
-  padding: 0.45rem 0;
-  font-size: 1.05rem;
+  padding: 0.5rem 0;
+  border-radius: var(--md-sys-shape-corner-medium);
+  font-size: 1.1rem;
   line-height: 1;
-  text-align: center;
   font-weight: 600;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  background: rgba(255, 255, 255, 0.04);
-  color: #e8efff;
-  transition: background 120ms ease, border-color 120ms ease, transform 120ms ease;
-}
-
-.glyph:hover,
-.glyph:focus-visible {
-  transform: translateY(-1px);
-  border-color: rgba(185, 215, 255, 0.7);
-  background: rgba(147, 190, 255, 0.16);
-  outline: none;
 }
 
 .glyph.lit {
-  border-color: rgba(255, 234, 179, 0.95);
-  background: rgba(255, 226, 150, 0.26);
-  box-shadow: 0 0 10px rgba(255, 223, 148, 0.38) inset;
+  background: var(--md-sys-color-tertiary);
+  color: var(--md-sys-color-on-tertiary);
 }
 
 #haiku-output {
-  @include readout.readout(
-    7.1em,
-    $font-size: 0.88rem,
-    $background: rgba(6, 10, 20, 0.56),
-    $padding: 0.68rem,
-    $margin: 0.55rem 0 0
-  );
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .glyph {
-    transition: none;
-  }
+  @include readout.readout(7.1em, $margin: 0.5rem 0 0);
 }

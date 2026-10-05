@@ -1,28 +1,33 @@
 // Values the stylesheets share, as Sass variables.
 //
 // This partial emits no CSS of its own, so any stylesheet can `@use 'vars'` without a byte of
-// duplication. Anything that should reach the browser as a value a page can override belongs in
-// _tokens.scss as a custom property instead; what lives here are the literals that were written
-// out by hand on page after page.
+// duplication. Every value here is a token from _tokens.scss, so a page stylesheet written against
+// these names follows the one scheme: a hairline is the outline-variant role, a well is the lowest
+// surface container, and the radii are the M3 shape scale. New rules should read the tokens
+// directly; these stay for the page stylesheets that already name them.
 
-// The inner hairline around a panel, a well or a list item, one step softer than --line.
-$hairline: rgba(255,255,255,0.14);
+@use 'type';
+
+// The inner hairline around a well or a list item, one step softer than --line.
+$hairline: var(--md-sys-color-outline-variant);
 
 // The recessed background behind a readout: a diary entry, a forecast, an omen.
-$well: rgba(6, 9, 18, 0.66);
+$well: var(--md-sys-color-surface-container-lowest);
 
-$radius-panel: 12px;
-$radius-well: 10px;
+$radius-panel: var(--md-sys-shape-corner-large);
+$radius-well: var(--md-sys-shape-corner-medium);
 
 // How a focused or hovered control answers.
-$focus-line: rgba(184, 217, 255, 0.8);
-$focus-fill: rgba(151, 197, 255, 0.16);
+$focus-line: var(--md-sys-color-primary);
+$focus-fill: color-mix(in oklab, var(--md-sys-color-primary) 16%, transparent);
 
-// The shared halo for keyboard focus, used across controls and the chip links.
-$focus-ring: rgba(184, 217, 255, 0.45);
+// The halo for keyboard focus on a thing that is not a button.
+$focus-ring: color-mix(in oklab, var(--md-sys-color-primary) 45%, transparent);
 
-// The shared easing for the small lift controls make on hover.
-$lift: transform 120ms ease, background 120ms ease, border-color 120ms ease;
+// The shared easing for the small answer a control makes on hover.
+$lift: box-shadow var(--md-sys-motion-duration-short) var(--md-sys-motion-easing-standard),
+  background-color var(--md-sys-motion-duration-short) var(--md-sys-motion-easing-standard),
+  color var(--md-sys-motion-duration-short) var(--md-sys-motion-easing-standard);
 
 // Every page that prints a machine-ish readout uses this stack.
-$mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+$mono: type.$mono;

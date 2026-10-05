@@ -1,22 +1,22 @@
 ---
 layout: layout.njk
 title: site map
-description: 'Every page of interesting with a line on what it is: the way in, the worlds off the sky, the worlds that read one saved sky, and the edges.'
+description: 'Every page of interesting with a line on what it is: the way in, every world, and the edges.'
 stylesheet: sitemap
 ---
 {#-
-  The one page where every page has a sentence. The names, the groups and the sentences come
-  from _data/worlds.json, the one list the site keeps, so a world added or renamed there appears
-  here in the same change. This page lists every world itself, which is why the shared index
-  after <main> is left off it (see _includes/layout.njk).
+  The one page where every page has a sentence. The names and the sentences come from
+  _data/worlds.json, the one list the site keeps, so a world added or renamed there appears here
+  in the same change. This page lists every world itself, which is why the shared feed after
+  <main> is left off it (see _includes/layout.njk).
 -#}
   <main>
     <h1>site map</h1>
     <p class='tagline'>Every page, with a line on what it is. Nothing here is behind a question.</p>
-    <p class='about'>This site is {{ (worlds.offSky.length + worlds.underSky.length) | words }} small worlds, written and rewritten continuously by a
+    <p class='about'>This site is {{ worlds.worlds.length | words }} small worlds, written and rewritten continuously by a
       model asked to make it more interesting, where interesting means you wanting to stay. It
       asks one sideways question before it offers anything and opens the world that fits; every
-      world is open anyway.</p>
+      world is open anyway, and every page ends in a feed of all of them.</p>
 
     <h2 class='section-title'>the way in</h2>
     <ul class='pages'>
@@ -28,22 +28,11 @@ stylesheet: sitemap
 {%- endfor %}
     </ul>
 
-    <h2 class='section-title'>off the sky</h2>
-    <p class='section-note'>{{ worlds.offSky.length | words | capitalize }} worlds that share nothing but the site. After each name is who the site would send there.</p>
+    <h2 class='section-title'>every world</h2>
+    <p class='section-note'>{{ worlds.worlds.length | words | capitalize }} worlds and no default. After each name is who the site would send there. Several of them read the stars of your persona, each its own way, and any of those can seed a sky to begin with.</p>
     <ul class='pages'>
-{%- for p in worlds.offSky %}
-      <li>
-        <a href='{{ p.file }}'>{{ p.name }}</a> <span class='gloss'>{{ p.orientation }}</span>
-        <p>{{ p.what }}</p>
-      </li>
-{%- endfor %}
-    </ul>
-
-    <h2 class='section-title'>under the sky</h2>
-    <p class='section-note'>{{ worlds.underSky.length | words | capitalize }} worlds that read one saved sky: the stars of your persona, placed in the card at the top of every page. Each reads them its own way, and any of them can seed a sky to begin with.</p>
-    <ul class='pages'>
-{%- for p in worlds.underSky %}
-      <li>
+{%- for p in worlds.worlds %}
+      <li data-mood='{{ p.mood }}'>
         <a href='{{ p.file }}'>{{ p.name }}</a> <span class='gloss'>{{ p.orientation }}</span>
         <p>{{ p.what }}</p>
       </li>

@@ -1,32 +1,23 @@
 // The orbital weaver: the saved sky mirrored into a mandala, with a symmetry dial and a mantra.
+// Its palette is its world's (geometric), from _sass/_mood.scss through <html data-world>.
 
 @use 'readout';
-
-:root {
-  --bg: #060914;
-  --bg2: #1b2953;
-  --panel: rgba(10, 14, 28, 0.74);
-  --accent: #a6d2ff;
-}
-
-main {
-  width: min(960px, 96vw);
-}
+@use 'type';
 
 #weaver {
   cursor: crosshair;
 }
 
+// The symmetry dial: a label over the shared slider.
 .dial-wrap {
-  margin-top: 0.45rem;
-  color: #dbe9ff;
-  font-size: 0.9rem;
+  display: block;
+  margin-top: 0.75rem;
+  color: var(--md-sys-color-on-surface-variant);
+  @include type.scale(label-large);
 }
 
 #symmetry {
-  width: 100%;
-  margin-top: 0.3rem;
-  accent-color: var(--accent);
+  margin-top: 0.25rem;
 }
 
 #reading {

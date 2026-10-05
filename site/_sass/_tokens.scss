@@ -1,28 +1,108 @@
-// The site's palette, as custom properties on :root.
+// The design tokens, after Material Design 3 (m3.material.io/foundations): one tonal colour scheme,
+// the shape scale, the motion scheme, the elevation levels and the state-layer opacities, as custom
+// properties on :root.
 //
-// Every page used to carry its own copy of this block. It is one block now, and a page that wants
-// a different sky overrides only the handful it changes, in its own stylesheet:
+// Colour works the way M3's dynamic colour works: a handful of seeds, and every role derived from
+// them. The seeds are the four custom properties this site has always used -- --bg (the night behind
+// everything), --bg2 (the lighter corner the sky opens from), --accent (the primary) and --accent2
+// (the tertiary) -- plus --fg and --muted for text. A mood (_mood.scss) or a page sets the seeds and
+// nothing else, and every surface, container and outline follows, because the roles are derived
+// with color-mix() wherever `derive` is applied: on :root, and on anything carrying data-mood, so a
+// card in the feed derives its own scheme from its own world's seeds.
 //
-//     :root {
-//       --bg: #090c1a;
-//       --bg2: #212b57;
-//     }
+//     [data-mood='tender'] { --bg: #140d13; --accent: #ffc6d6; }   // and the card re-tints itself
 //
-// Custom properties cascade, and a page's stylesheet is linked after this one, so that is all it
-// takes. Keep every colour a page might want to shift in here rather than as a literal, so the
-// whole site can be re-skinned from one file.
+// The dark scheme is the only scheme: the site is a night sky, and M3 lays surfaces out in the dark
+// by tone rather than shadow, which is what the five surface-container tiers below are. Text stays
+// on --fg and --muted, which is what keeps it at 4.5:1 over every tier and every mood.
+
+@mixin derive {
+  // Primary: links, the live edge of a control, the filled button.
+  --md-sys-color-primary: var(--accent);
+  --md-sys-color-on-primary: color-mix(in oklab, var(--accent) 24%, #000);
+  --md-sys-color-primary-container: color-mix(in oklab, var(--accent) 32%, var(--bg));
+  --md-sys-color-on-primary-container: color-mix(in oklab, var(--accent) 78%, #fff);
+  // Secondary: the tonal button, the active navigation pill, the chip.
+  --md-sys-color-secondary: color-mix(in oklab, var(--accent) 64%, var(--muted));
+  --md-sys-color-secondary-container: color-mix(in oklab, var(--accent) 20%, var(--bg));
+  --md-sys-color-on-secondary-container: color-mix(in oklab, var(--accent) 70%, #fff);
+  // Tertiary: the status line a page writes its answers to, the badge on a suggested card.
+  --md-sys-color-tertiary: var(--accent2);
+  --md-sys-color-on-tertiary: color-mix(in oklab, var(--accent2) 24%, #000);
+  --md-sys-color-tertiary-container: color-mix(in oklab, var(--accent2) 28%, var(--bg));
+  --md-sys-color-on-tertiary-container: color-mix(in oklab, var(--accent2) 82%, #fff);
+  // Surfaces, by tone: the page, then five containers from lowest to highest.
+  --md-sys-color-surface: color-mix(in oklab, var(--bg) 95%, var(--accent));
+  --md-sys-color-surface-dim: var(--bg);
+  --md-sys-color-surface-bright: color-mix(in oklab, var(--bg), #fff 16%);
+  --md-sys-color-surface-container-lowest: color-mix(in oklab, var(--bg), #000 32%);
+  --md-sys-color-surface-container-low: color-mix(in oklab, color-mix(in oklab, var(--bg), var(--accent) 7%), #fff 3%);
+  --md-sys-color-surface-container: color-mix(in oklab, color-mix(in oklab, var(--bg), var(--accent) 9%), #fff 5.5%);
+  --md-sys-color-surface-container-high: color-mix(in oklab, color-mix(in oklab, var(--bg), var(--accent) 11%), #fff 8.5%);
+  --md-sys-color-surface-container-highest: color-mix(in oklab, color-mix(in oklab, var(--bg), var(--accent) 13%), #fff 12%);
+  --md-sys-color-on-surface: var(--fg);
+  --md-sys-color-on-surface-variant: var(--muted);
+  --md-sys-color-outline: color-mix(in oklab, var(--muted) 52%, var(--bg));
+  --md-sys-color-outline-variant: color-mix(in oklab, var(--muted) 22%, var(--bg));
+  --md-sys-color-inverse-surface: var(--fg);
+  --md-sys-color-inverse-on-surface: var(--bg);
+  --md-sys-color-scrim: #000;
+  --md-sys-color-shadow: #000;
+  // The two names older page stylesheets still read: the outer border of a control, and the
+  // translucent slab a page over a full-screen canvas sits on.
+  --line: var(--md-sys-color-outline-variant);
+  --panel: color-mix(in oklab, var(--md-sys-color-surface-container-low) 88%, transparent);
+}
 
 :root {
   color-scheme: dark;
 
-  --bg: #070a14; // the night behind everything
-  --bg2: #1c2a4e; // the lighter corner the background gradient opens from
-  --fg: #eef4ff;
-  --muted: #a9b7da; // captions, labels, the notes under a panel's title
-  --line: rgba(255,255,255,0.18); // the outer border of a panel or a control
-  --panel: rgba(10,14,28,0.72); // the frosted slab every page sits on
-  --accent: #9fcbff; // links and the live edge of a control
-  --accent2: #ffe7ab; // the status line a page writes its answers to
+  // The seeds. A mood or a page's world overrides these four (see _mood.scss) and nothing else.
+  --bg: #0d1020;
+  --bg2: #1c2a4e;
+  --accent: #9fcbff;
+  --accent2: #ffe7ab;
+  --fg: #e6eaf5;
+  --muted: #b7c0da;
   --good: #bdfed8;
   --warn: #ffd4b0;
+
+  // Shape scale (m3.material.io/styles/shape).
+  --md-sys-shape-corner-extra-small: 4px;
+  --md-sys-shape-corner-small: 8px;
+  --md-sys-shape-corner-medium: 12px;
+  --md-sys-shape-corner-large: 16px;
+  --md-sys-shape-corner-extra-large: 28px;
+  --md-sys-shape-corner-full: 999px;
+
+  // Motion scheme (m3.material.io/styles/motion).
+  --md-sys-motion-easing-standard: cubic-bezier(0.2, 0, 0, 1);
+  --md-sys-motion-easing-emphasized: cubic-bezier(0.05, 0.7, 0.1, 1);
+  --md-sys-motion-easing-emphasized-accelerate: cubic-bezier(0.3, 0, 0.8, 0.15);
+  --md-sys-motion-duration-short: 150ms;
+  --md-sys-motion-duration-medium: 300ms;
+  --md-sys-motion-duration-long: 500ms;
+
+  // Elevation (m3.material.io/styles/elevation): in the dark the tone does most of the work, and
+  // these shadows do the rest.
+  --md-sys-elevation-level1: 0 1px 2px rgba(0, 0, 0, 0.3), 0 1px 3px 1px rgba(0, 0, 0, 0.15);
+  --md-sys-elevation-level2: 0 1px 2px rgba(0, 0, 0, 0.3), 0 2px 6px 2px rgba(0, 0, 0, 0.15);
+  --md-sys-elevation-level3: 0 1px 3px rgba(0, 0, 0, 0.3), 0 4px 8px 3px rgba(0, 0, 0, 0.15);
+
+  // State layers (m3.material.io/foundations/interaction/states).
+  --md-sys-state-hover-opacity: 0.08;
+  --md-sys-state-focus-opacity: 0.1;
+  --md-sys-state-pressed-opacity: 0.12;
+
+  // The page's measure: how wide the feed may run, how wide a page's own content may, and the
+  // gutter either side on a phone.
+  --page-max: 1320px;
+  --main-max: 1000px;
+  --gutter: 1rem;
+  --feed-gap: 1rem;
+}
+
+:root,
+[data-mood] {
+  @include derive;
 }

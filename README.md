@@ -9,7 +9,8 @@ iterate a more interesting website
 ## How it works
 
 - **`/site`** — the website, in source form. Everything anyone edits — a person or the hourly AI —
-  lives here, and nothing else does: the pages, the shared layout and partials, the Sass, the three
+  lives here, and nothing else does: the pages, the shared layout and partials, the Sass, the feed
+  and its one module per world (see [The feed](#the-feed)), the three
   shared files behind the analytics tag (see [Analytics axiom](#analytics-axiom)), the one behind
   the local-state store (see [Local state axiom](#local-state-axiom)) and the one behind the mood
   flow (see [Mood axiom](#mood-axiom)). A request
@@ -61,23 +62,29 @@ is deliberately small: a foundation to build a more holistic experience on, not 
   pipeline. An `.html` file is a [Nunjucks](https://mozilla.github.io/nunjucks/) template with
   optional YAML front matter; `layout: layout.njk` wraps it in the shared shell in
   [`site/_includes`](site/_includes), so the `<head>`, the stylesheet links, the analytics,
-  local-state, persona, helper and mood lines, the header, the persona card and sheet and the
-  index of every world are written once instead of in every page, and a page is nothing but its
-  `<main>`. The index and the
-  site map are rendered from [`site/_data/worlds.json`](site/_data/worlds.json), Eleventy global
-  data that every template reads as `worlds`: the one list of the site's pages.
+  local-state, persona, helper, mood and feed lines, the top app bar, the persona card and sheet
+  and the feed of every world are written once instead of in every page, and a page is nothing
+  but its `<main>`. The feed, the site map and the mood atlas are rendered from
+  [`site/_data/worlds.json`](site/_data/worlds.json), Eleventy global
+  data that every template reads as `worlds`: the one flat list of the site's worlds.
   A `.scss` file
   compiles to `.css` at the same path, and one whose name starts with `_` is a partial, built into
   whatever `@use`s it and never on its own. Every other file type is copied through verbatim, never
   rendered, so a stray `{{` in a script cannot break a build.
-- **Common files.** [`site/_sass`](site/_sass) is what "shared partials" means here: the palette as
-  custom properties a page can override (`_tokens.scss`), the base rules, the panel, the controls,
-  the index of every world, the unlock box, the persona card and sheet (`_persona.scss`), the
-  fourteen mood palettes and the query styling the mood flow renders into (`_mood.scss`), the values the stylesheets have in common (`_vars.scss`, which emits no CSS of
-  its own) and the monospace readout ten pages use (`_readout.scss`, a mixin). `css/site.scss` is those
-  partials and nothing else, and every page links the `css/site.css` it compiles to. `css/<page>.scss`
-  holds what is true of that page alone and is linked after it, so a page overrides rather than
-  repeats. `error.html` writes its styles into the page instead: CloudFront returns it for any 404,
+- **Common files.** [`site/_sass`](site/_sass) is what "shared partials" means here, and it is
+  the whole of the site's visual language (see [Material Design 3](#material-design-3)): the
+  tokens (`_tokens.scss`: every M3 colour role derived from four seeds, the shape scale, the
+  motion scheme, the elevation levels), the type scale as a mixin (`_type.scss`), the base rules,
+  the top app bar (`_header.scss`), the buttons, chips, sliders and text fields (`_controls.scss`),
+  the sheet a page sits on and the filled card (`_panel.scss`), the unlock box, the persona card
+  and sheet (`_persona.scss`), the fourteen mood palettes and the query styling the mood flow
+  renders into (`_mood.scss`), the feed's masonry and cards (`_feed.scss`), the canvas-beside-panel
+  shape most worlds share (`_labs.scss`), the values the stylesheets have in common (`_vars.scss`,
+  which emits no CSS of its own) and the monospace readout ten pages use (`_readout.scss`, a
+  mixin). `css/site.scss` is those partials and nothing else, and every page links the
+  `css/site.css` it compiles to. `css/<page>.scss` holds what is true of that page alone and is
+  linked after it, so a page overrides rather than repeats — and since a page's palette is its
+  world's (below), most page stylesheets are now a cursor and a readout's height. `error.html` writes its styles into the page instead: CloudFront returns it for any 404,
   at whatever path was asked for, so a relative `<link>` next to it would be a guess. For the same
   reason it names the site's root in its front matter (`siteRoot: /`), and the layout writes its
   scripts and links from there; it is the one page that does, and a copy of the site served under
@@ -96,6 +103,73 @@ npm ci                              # once
 npm run build                       # prints the folder it built into
 npm run build -- --out ./build      # or pick the folder yourself
 ```
+
+### Material Design 3
+
+The site's one visual language is [Material Design 3](https://m3.material.io/), and it is written
+once, in [`site/_sass`](site/_sass). It replaced a look that had grown by accretion — a frosted
+slab per page, small-caps labels, pill borders on everything, a footer index two groups deep.
+
+- **One tonal scheme, derived.** `_tokens.scss` works the way M3's dynamic colour works: four
+  seeds (`--bg`, `--bg2`, `--accent`, `--accent2`) and every colour role derived from them with
+  `color-mix()` — primary and its container, secondary container, tertiary, the five
+  surface-container tiers, outline and outline-variant. The derivation is applied on `:root` and
+  on anything carrying `data-mood`, so a mood re-skins the whole site and a card in the feed
+  re-tints itself from its own world's seeds. The dark scheme is the only scheme: the site is a
+  night sky, and M3 lays dark surfaces out by tone rather than shadow.
+- **A page's palette is its world's.** The fourteen palettes in `_mood.scss` are keyed by
+  orientation id, the layout writes `<html data-world='…'>` from
+  [`site/_data/worlds.json`](site/_data/worlds.json), and a visitor's reading on
+  `<html data-mood='…'>` wins over it. No page carries colours of its own any more.
+- **The M3 parts, as classes.** The type scale is a mixin (`_type.scss`), and the components are
+  the shared classes every page already used: a bare `<button>` is a tonal button, `a.action` an
+  outlined one, `.btn-filled` and `.btn-text` the other two emphases, `aria-pressed='true'` reads
+  as filled; `main` is the sheet (extra-large corners, the low surface container), `.panel` a
+  filled card, `.panel-title` title-medium, `.panel-note` body-medium; `input[type=range]` is the
+  M3 slider with its 16px track and 4px handle (`js/site.js` keeps `--range-pct` on each one so
+  the active track can fill to the handle); the top app bar lifts to a tonal container once the
+  page scrolls under it. Every pressable thing carries a state layer, and the one focus indicator
+  is a 3px primary ring.
+- **No font is fetched.** Roboto is M3's default and is used where it is installed; nothing is
+  loaded from a third party, which is the analytics axiom's rule for the site's own code too.
+- **One build fix came with it.** Compressed Sass opens with a byte-order mark when a sheet holds
+  a non-ASCII character, and inside the one page that inlines its styles (`error.html`) that mark
+  glued itself to the first selector, which the browser then dropped — the whole `:root` block.
+  The `css` filter in [`eleventy.config.mjs`](eleventy.config.mjs) strips it.
+
+### The feed
+
+Every page ends in the feed: every world as a card, in masonry columns, that keeps dealing as a
+visitor scrolls — the things the worlds make, between the worlds themselves, without end. It
+replaced the footer index and its two groups, *off the sky* and *under the sky*, which are gone:
+[`site/_data/worlds.json`](site/_data/worlds.json) is one flat list now, and a world is a world
+whether or not it reads the persona's stars.
+
+- **The cards the template writes are the index.** [`site/_includes/worlds.njk`](site/_includes/worlds.njk)
+  writes one card per world from the list, each a plain link with the world's orientation over
+  its name, in the world's own palette (`data-mood`) and aspect ratio (`aspect`), so the
+  reachability axiom holds with scripting off and index.html's own markup links every world. The
+  world a visitor is on is left out of its own feed. Without scripting the grid is CSS columns.
+- **One module per world.** [`site/js/feed.js`](site/js/feed.js) lays the cards out
+  Pinterest-fashion (each new card into the shortest column, so nothing already placed moves),
+  paints each as it comes into view, and deals more as the bottom nears. What it paints and deals
+  comes from [`site/js/modules/`](site/js/modules), one ES module per world named for its file:
+  `paint(ctx, w, h, env)` draws the card, `spark(env)` makes one thing for the feed to deal — a
+  coinage, a specimen, a rule with its bits, a core sample, an omen, a forecast, a mantra — with or
+  without a picture, `animate()` is optional and never runs for a visitor who asked for less
+  motion, and `needsSky` marks the eight that read the persona's stars. `env` carries a seeded
+  random source, the stars, the card's own colours and the helpers to mix them, so a card paints
+  the same picture every time and a different one from its neighbour.
+- **It follows the persona.** The world the visitor's reading opens onto is moved to the front and
+  badged *for you*, and follows the reading as it changes. With no sky yet, a card that reads the
+  sky paints a veiled ghost of itself, and one unpowered card is dealt early carrying the shared
+  unlock (see [Powered down, never broken](#powered-down-never-broken)); every sky card repaints
+  as stars are placed. Now and then the feed deals the question as a card, which opens the
+  persona sheet — the one place that asks. Nothing in the feed writes to the state document.
+- **Modular is the point.** A world is its page, its stylesheet, its line in the list and its
+  module, and the feed is where the modules meet. Adding a world adds one of each; the hourly run
+  is told so, and `RealSiteTest` holds the list, the modules and the mood flow to naming the same
+  worlds.
 
 ### Engagement-time axiom
 
@@ -246,17 +320,17 @@ saying where to go next, and the home page explained none of its own words.
   are still the whole of what the code refuses, and `LegibilityStandardTest` holds the prompt to
   the standard the way `EngagementTimeTest` holds it to the measure.
 - **One list of pages.** [`site/_data/worlds.json`](site/_data/worlds.json) is the one place a
-  page's name, group, orientation and one-line description are kept. The header, the index of
-  every world ([`site/_includes/worlds.njk`](site/_includes/worlds.njk)), the site map, the mood
-  atlas and the sky circuit are rendered from it, counts included, so most of "one name per page"
-  is a property of the build. Three places still carry the name by hand and change with the list:
-  the page's own `title:` and `<h1>`, its `worldName` in `js/threshold.js`, and its `<loc>` in
-  `sitemap.xml`.
-- **The shell it left behind.** The header is the site's name, one line about it, and three links;
-  the persona card is a portrait, one sentence, one button and, on the threshold, the question
-  (see [Persona](#persona)); every page but the site map and
-  the mood atlas (which list every page themselves) ends with the one index of every world, which on a sky world leads with the sky group and says which of the eight
-  this is and which is next. That is the whole of the shared chrome, written once in
+  world's name, orientation, mood, card aspect and one-line description are kept, in one flat
+  list. The feed ([`site/_includes/worlds.njk`](site/_includes/worlds.njk)), the site map and the
+  mood atlas are rendered from it, counts included, so most of "one name per page" is a property
+  of the build. Three places still carry the name by hand and change with the list: the page's
+  own `title:` and `<h1>`, its `worldName` in `js/threshold.js`, and its `<loc>` in
+  `sitemap.xml`; and a world's module in `js/modules/` is named for its file.
+- **The shell it left behind.** The top app bar is the site's name and three navigation
+  destinations; the persona card is a portrait, one sentence, one button and, on the threshold,
+  the question (see [Persona](#persona)); every page but the site map and the mood atlas (which
+  list every page themselves) ends with the feed, the one index of every world (see
+  [The feed](#the-feed)). That is the whole of the shared chrome, written once in
   [`site/_includes/layout.njk`](site/_includes/layout.njk), and a page sets nothing about
   navigation: no footer lists, no notes, no includes. A run is asked to keep it that size.
 
@@ -282,8 +356,8 @@ by hand.
   sky is already there, when the button is pressed, and again every time the sky changes in the
   persona while the page is open, so a world follows the sheet floating over it star by star and
   powers down again if the sky is cleared. [`site/_sass/_unlock.scss`](site/_sass/_unlock.scss)
-  styles the powered-down host and the unlock box once for every page. All eight worlds under the
-  sky use it, the wish constellation included; `js/site.js` is loaded without `defer` so the helper
+  styles the powered-down host and the unlock box once for every page. All eight worlds that read the sky use it, the wish constellation included, and so
+  does the feed's unpowered card; `js/site.js` is loaded without `defer` so the helper
   exists by the time a page's own script runs.
 - **It applies when the prerequisite cannot be performed, too.** A browser that stores nothing
   still gets the button; the sky it seeds lasts for the page, and the box says so in one line.
@@ -293,7 +367,7 @@ by hand.
 
 ### Persona
 
-The sky every world under the sky reads is a visitor's configuration of this site, and for a while
+The sky that several worlds read is a visitor's configuration of this site, and for a while
 it was configured on one world of eighteen, the wish constellation, which made that page the
 settings screen for the rest and left the rest pointing at it. It is a **persona** now — the term
 interaction design uses for the configured self a system addresses — kept and changed in one place
@@ -587,7 +661,7 @@ this is an invariant of the iteration rather than a one-off change to the site a
 - **True of the site as committed**, like the rest: `RealSiteTest` builds `/site` on every pull
   request and before every deploy and checks that every page carries the flow, that the library is
   wide, that no page asks outright, that every orientation opens onto a page that exists — with at
-  least six of them off the sky — and that nothing is hidden behind an answer.
+  least six of them not sky worlds — and that nothing is hidden behind an answer.
 
 ### Silo
 

@@ -2313,6 +2313,40 @@ class RealSiteTest(unittest.TestCase):
         self.assertGreaterEqual(len(off_sky), 6,
                                 f"the sky is still nearly all there is on offer: {sorted(worlds)}")
 
+    def test_the_one_list_of_worlds_is_flat_and_every_world_is_whole(self):
+        # One flat list, no sky and off-sky groups: a world is a world. Every entry on it is a page
+        # that exists, has a module for the feed to paint and deal from, wears a mood that
+        # _mood.scss knows, and is a world the mood flow can open onto -- and the flow names no
+        # world the list does not.
+        listed = json.loads((self.repo / "site" / "_data" / "worlds.json").read_text())
+        self.assertIn("worlds", listed)
+        for group in ("offSky", "underSky"):
+            self.assertNotIn(group, listed, "the sky categories are gone")
+        moods = set(re.findall(r"^\s+([a-z]+):\s*\(#", self.source["_sass/_mood.scss"], re.M))
+        self.assertGreaterEqual(len(moods), 10)
+        files = set()
+        for world in listed["worlds"]:
+            with self.subTest(world=world.get("file")):
+                for key in ("file", "name", "orientation", "mood", "aspect", "what"):
+                    self.assertIn(key, world)
+                self.assertIn(world["file"], self.site, "a listed world is a page that exists")
+                self.assertIn("js/modules/" + world["file"].replace(".html", ".js"), self.site,
+                              "a listed world has a feed module")
+                self.assertIn(world["mood"], moods, "a listed world wears a mood the Sass knows")
+                files.add(world["file"])
+        self.assertEqual(files, self.worlds(), "the mood flow and the list name the same worlds")
+
+    def test_every_page_but_the_two_lists_ends_in_the_feed(self):
+        # The feed is the one index of every world, written once in the shell: every page carries
+        # it as plain markup, except the two that list every page themselves.
+        for page in sorted(mi.html_pages(self.site)):
+            with self.subTest(page=page):
+                if page in ("sitemap.html", "moods.html"):
+                    self.assertNotIn("id='feed-grid'", self.site[page])
+                else:
+                    self.assertIn("id='feed-grid'", self.site[page])
+                    self.assertIn("js/feed.js", self.site[page])
+
     def test_the_query_is_never_a_gate(self):
         # references_from reads the threshold's own markup and not the scripts it loads, so this
         # fails if a world is only reachable by answering the question -- or by having scripting at
