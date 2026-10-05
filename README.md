@@ -491,9 +491,10 @@ iteration process rather than a one-off tidy-up.
   nobody loses a sky to the change.
 - **The meta menu.** One button, bottom-right, opposite the consent banner's *cookies* button,
   bottom-left, with the *steer the site* button of the [participation
-  axiom](#participation-axiom) between the two. It opens a panel holding the whole document as text: copy it out, paste one in and
-  press *replace mine*, or *clear*. Import **replaces** rather than merges, for reproducibility —
-  the sky it opens is the sky it came from — and clearing asks first. Both reload the page
+  axiom](#participation-axiom) between the two. It opens a panel holding the whole document as
+  text: copy it out, paste one in and press *replace mine*, or *clear*. Import **replaces** rather
+  than merges, for reproducibility — the sky it opens is the sky it came from — and clearing asks
+  first. Both reload the page
   afterwards, which is the simplest honest way to show a state every page reads at load time.
   Export and import are copy-paste rather than file download, so sharing is a paste into any
   message. The panel is keyboard-operable, closes on Escape with the focus returned, carries its
