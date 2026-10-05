@@ -47,6 +47,17 @@
         <a class='action wayfinding-trail-start' data-wayfinding-trail-start href='index.html'>start this trail</a>
       </section>
 
+      <section class='wayfinding-journal' data-wayfinding-journal aria-label='Cross-world trail journal'>
+        <p class='wayfinding-journal-title'>trail journal</p>
+        <p class='wayfinding-journal-status' data-wayfinding-journal-status aria-live='polite'>Reading your cross-world trail…</p>
+        <ol class='wayfinding-journal-list' data-wayfinding-journal-list></ol>
+        <div class='controls wayfinding-journal-controls'>
+          <a class='action' data-wayfinding-journal-back href='index.html'>rewind one step</a>
+          <button type='button' data-wayfinding-journal-branch>branch from here</button>
+          <button type='button' data-wayfinding-journal-clear>clear trail</button>
+        </div>
+      </section>
+
       <div class='wayfinding-grid'>
         <section class='wayfinding-group' aria-label='Worlds off the sky'>
           <p class='wayfinding-group-title'>off the sky</p>
@@ -76,3 +87,4 @@
         </section>
       </div>
     </nav>
+    <script src='js/wayfinding-journal.js' defer></script>
