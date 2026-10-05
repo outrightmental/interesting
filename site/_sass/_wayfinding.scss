@@ -91,6 +91,44 @@
   padding: 0.34rem 0.72rem;
 }
 
+.wayfinding-expedition {
+  margin-top: 0.55rem;
+  border: 1px solid vars.$hairline;
+  border-radius: vars.$radius-well;
+  background: rgba(6, 9, 18, 0.44);
+  padding: 0.58rem;
+}
+
+.wayfinding-expedition-title {
+  margin: 0;
+  color: var(--accent2);
+  font-size: 0.74rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.wayfinding-expedition-status {
+  margin: 0.4rem 0 0;
+  color: #d3e4ff;
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.wayfinding-expedition-controls {
+  margin-top: 0.48rem;
+}
+
+.wayfinding-expedition-controls .action,
+.wayfinding-expedition-controls button {
+  font-size: 0.8rem;
+  padding: 0.34rem 0.72rem;
+}
+
+.wayfinding-expedition-controls .action[aria-disabled='true'] {
+  opacity: 0.62;
+  pointer-events: none;
+}
+
 .wayfinding-journal {
   margin-top: 0.55rem;
   border: 1px solid vars.$hairline;
@@ -199,10 +237,13 @@
 }
 
 @media (max-width: 620px) {
+  .wayfinding-expedition-controls,
   .wayfinding-journal-controls {
     flex-direction: column;
   }
 
+  .wayfinding-expedition-controls .action,
+  .wayfinding-expedition-controls button,
   .wayfinding-journal-controls .action,
   .wayfinding-journal-controls button {
     width: 100%;
