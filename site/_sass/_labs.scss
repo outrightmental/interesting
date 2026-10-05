@@ -21,7 +21,7 @@
 
 .layout > canvas,
 .top > canvas {
-  --stage-h: calc(100svh - var(--top-bar-h) - 13rem);
+  --stage-h: calc(100svh - var(--nav-h) - 13rem);
   width: min(100%, calc(var(--stage-h) * var(--stage-ratio, 1.72)));
   height: auto;
   display: block;
@@ -33,7 +33,7 @@
 // A stage that is not a canvas (the quiet room, the kiln, the specimen) fills its column and
 // stands as tall as the screen leaves it.
 .layout > :not(canvas):not(.panel) {
-  min-height: clamp(300px, calc(100svh - var(--top-bar-h) - 14rem), 720px);
+  min-height: clamp(300px, calc(100svh - var(--nav-h) - 14rem), 720px);
 }
 
 // A canvas that takes keyboard focus (the kicker, the ring) rings like every other control.
@@ -52,7 +52,7 @@
 
   .layout > canvas,
   .top > canvas {
-    --stage-h: calc(100svh - var(--top-bar-h) - 16rem);
+    --stage-h: calc(100svh - var(--nav-h) - 16rem);
   }
 
   .layout > :not(canvas):not(.panel) {

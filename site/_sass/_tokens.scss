@@ -100,9 +100,11 @@
   --main-max: 1000px;
   --gutter: 1rem;
   --feed-gap: 1rem;
-  // The top app bar's height, which the feature subtracts from the viewport to fill the first
-  // screen, and the margin it leaves so the feed peeks above the fold.
-  --top-bar-h: 64px;
+  // How far in from the top corners the logo and the persona float (see _nav.scss), the room
+  // they leave at the top of a page, which the feature subtracts from the viewport to fill the
+  // first screen, and the margin it leaves so the feed peeks above the fold.
+  --nav-inset: 0.75rem;
+  --nav-h: 64px;
   --fold-peek: clamp(3rem, 5vh, 5rem);
 }
 
@@ -122,7 +124,8 @@
 
 @media (max-width: 599px) {
   :root {
-    --top-bar-h: 56px;
+    --nav-inset: 0.6rem;
+    --nav-h: 56px;
     --fold-peek: 2.25rem;
   }
 }

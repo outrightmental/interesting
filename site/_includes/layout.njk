@@ -1,14 +1,18 @@
 {#-
   The shell every page of the site is built into. A page supplies its own <main> and nothing else:
-  the doctype, the head, the stylesheet links, the top app bar with the persona in it, the feed of
-  every world and the persona sheet are written once, here.
+  the doctype, the head, the stylesheet links, the logo and the constellation it opens, the persona
+  floating opposite it, the feed of every world and the persona sheet are written once, here.
+
+  This is not the sort of website that uses conventional navigation (issue #54). There is no app
+  bar: two things float over the page and they are the whole of the navigation -- the sparkles logo
+  in the upper left, which says the site's name on rollover and opens a constellation of options on
+  tap, and the persona in the upper right, itself a small constellation.
 
   The visual language is Material Design 3 (m3.material.io): one tonal colour scheme derived from a
   few seed colours (_sass/_tokens.scss), the M3 type scale, the M3 shape scale, state layers on
   everything that can be pressed, and tonal surfaces instead of borders. The components the shell
-  is made of are the M3 ones -- a top app bar with navigation destinations and a trailing avatar,
-  a basic dialog for the sheet, and cards in a masonry feed -- so the whole site reads as one
-  system.
+  is made of are the M3 ones -- a floating button and the tonal chips it opens, a basic dialog for
+  the sheet, and cards in a masonry feed -- so the whole site reads as one system.
 
   Front matter a page may set:
     title       the page's name, the same words every link to it uses (see _data/worlds.json):
@@ -32,28 +36,34 @@
                 relative links, so they work under any sub-path unchanged.
 
   What a page is: its <main> is the feature. It is unbordered, it fills the first screen (the
-  viewport less the top bar and a margin, so the feed peeks above the fold), its background is
-  the page's own palette bleeding to the viewport's edges, and its content sits in a centred
-  column (every direct child of <main> lands in that column; see _sass/_panel.scss). A page sets
-  nothing about navigation: the top bar and the feed are the whole of the shared chrome, and they
-  are the same on every page.
+  viewport less the room the floating nav leaves and a margin, so the feed peeks above the fold),
+  its background is the page's own palette bleeding to the viewport's edges, and its content sits
+  in a centred column (every direct child of <main> lands in that column; see _sass/_panel.scss).
+  A page sets nothing about navigation: the logo, the persona and the feed are the whole of the
+  shared chrome, and they are the same on every page.
 
-  The shared chrome, top to bottom, and why it is this size:
-    the top bar  an M3 top app bar: the site's name, three navigation destinations -- the
-                 threshold, the mood atlas, site map -- each an icon over its label, the active
-                 one marked with the M3 indicator pill, and the persona as the trailing avatar.
-                 Nothing else lives here; in particular no status line. It sticks to the top of
-                 the viewport and takes a tonal lift once the page has scrolled under it
-                 (js/site.js).
-    the persona  the one thing a visitor configures here, shown the way an app shows its
-                 account: a round portrait of their sky in the bar, which opens the sheet
+  The shared chrome, and why it is this size:
+    the logo     a sparkles mark in the upper left, floating over the page, and nothing else at
+                 rest. Rolling over it (or focusing it) fades the site's name in beside it,
+                 quickly and tightly; pressing it turns the page into a lightbox -- dimmed,
+                 blurred, its animation held and its controls inert -- and branches the options
+                 out from the logo as a constellation (_sass/_nav.scss for the geometry,
+                 js/site.js for the lightbox and the options that come and go). It is a <details>
+                 element, so with scripting switched off it is still a disclosure a visitor can
+                 open, and its options are plain links either way. Pressing it never navigates:
+                 the threshold is the home icon in the near orbit.
+                 The near orbit is where the site's destinations are -- the threshold, the mood
+                 atlas, site map, and the world a reading opens onto once there is one -- and the
+                 far orbit is the apparatus: "cookies", "state", privacy, terms.
+    the persona  the one thing a visitor configures here, shown the way an app shows its account:
+                 a round portrait of their sky floating in the upper right, which opens the sheet
                  (js/persona.js). With no persona yet the portrait ring is dashed and the button
                  reads "set up persona", filled and beckoning, so the first thing to do is the
                  first thing seen; once a reading exists a "go to" link to the world it opens
                  onto sits beside it. The one sentence on where things stand is written for
                  screen readers and never takes space. On the threshold the sideways question is
                  asked in the page's own feature (index.html hosts #persona-probe), never in the
-                 bar.
+                 chrome.
     the feed     every world as a card, in a masonry grid that keeps going as a visitor scrolls
                  (_includes/worlds.njk, from _data/worlds.json, and js/feed.js with one module per
                  world in js/modules/). It has no caption: the grid speaks for itself. The cards
@@ -81,9 +91,11 @@
                      window.interestingPersona.stars() while the body is parsed.
     js/site.js       the shared helpers a page can call: window.interestingSite.unlock(), which
                      renders a part that needs a saved sky as powered down with the one button
-                     that powers it (see the README, "Powered down, never broken"), plus the top
-                     bar's scroll state, the slider fill and each stage's aspect ratio. Not
-                     deferred either, and after the persona it reads from.
+                     that powers it (see the README, "Powered down, never broken"), plus the main
+                     nav -- the logo's lightbox, the options that come and go with the state, and
+                     the two corner affordances it adopts -- the slider fill and each stage's
+                     aspect ratio. Not deferred either, both because a page's own script may call
+                     it and because it marks the document as scripted before the body is drawn.
     js/threshold.js  the mood flow's engine: the orientations, the library of query mechanisms,
                      the clock and time-zone signals and the partly-remembered reading. The
                      threshold's feature and the persona sheet are where it is seen (MOOD_TAG and
@@ -97,9 +109,13 @@
   instead, so a run may rewrite the flow but never delete it. The other three are ordinary site
   source.
 
-  The three corner affordances those fixed files draw -- "cookies" bottom-left, "steer the site"
-  bottom-centre, "state" bottom-right -- are a cadre of their own, outside this site's visual
-  language and outside what any page may restyle. Leave the bottom edge to them.
+  Three corner affordances those fixed files draw are a cadre of their own, outside this site's
+  visual language and outside what any page may restyle or reword. "steer the site" keeps the
+  bottom edge, and nothing of the site's goes there. The other two -- "cookies" and "state" -- are
+  adopted by the shell into the far orbit of the constellation, where a visitor finds them with
+  everything else: js/site.js hides the two buttons their own files pin to the corners and forwards
+  the constellation's options to them, so there is still exactly one cookies dialog and one state
+  menu, and neither fixed file is edited to do it.
 
   The page's own world, when it has one, is named on <html data-world> so _sass/_mood.scss gives
   the page that world's palette; a visitor's reading lands on <html data-mood> and wins over it.
@@ -114,7 +130,12 @@
   'home': 'M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z',
   'explore': 'M12 10.9c-.61 0-1.1.49-1.1 1.1s.49 1.1 1.1 1.1c.61 0 1.1-.49 1.1-1.1s-.49-1.1-1.1-1.1zM12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm2.19 12.19L6 18l3.81-8.19L18 6l-3.81 8.19z',
   'map': 'M20.5 3l-.16.03L15 5.1 9 3 3.36 4.9c-.21.07-.36.25-.36.48V20.5c0 .28.22.5.5.5l.16-.03L9 18.9l6 2.1 5.64-1.9c.21-.07.36-.25.36-.48V3.5c0-.28-.22-.5-.5-.5zM15 19l-6-2.11V5l6 2.11V19z',
-  'spark': 'M19 9l1.25-2.75L23 5l-2.75-1.25L19 1l-1.25 2.75L15 5l2.75 1.25L19 9zm-7.5.5L9 4 6.5 9.5 1 12l5.5 2.5L9 20l2.5-5.5L17 12l-5.5-2.5zM19 15l-1.25 2.75L15 19l2.75 1.25L19 23l1.25-2.75L23 19l-2.75-1.25L19 15z'
+  'spark': 'M19 9l1.25-2.75L23 5l-2.75-1.25L19 1l-1.25 2.75L15 5l2.75 1.25L19 9zm-7.5.5L9 4 6.5 9.5 1 12l5.5 2.5L9 20l2.5-5.5L17 12l-5.5-2.5zM19 15l-1.25 2.75L15 19l2.75 1.25L19 23l1.25-2.75L23 19l-2.75-1.25L19 15z',
+  'star': 'M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z',
+  'shield': 'M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z',
+  'page': 'M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z',
+  'tune': 'M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z',
+  'swap': 'M16 17.01V10h-2v7.01h-3L15 21l4-3.99h-3zM9 3L5 6.99h3V14h2V6.99h3L9 3z'
 } %}
 <!DOCTYPE html>
 <html lang='en' data-page='{{ here }}'{% if thisWorld %} data-world='{{ thisWorld.mood }}'{% endif %}{% if siteRoot %} data-root='{{ siteRoot }}'{% endif %}>
@@ -169,35 +190,85 @@
 </head>
 <body>
   <a class='skip-link' href='#main-content'>skip to main content</a>
-  <header class='top-bar' id='top-bar'>
-    <div class='top-bar-inner'>
-      <a class='top-bar-brand' href='{{ siteRoot }}index.html'>
-        <svg class='icon' viewBox='0 0 24 24' aria-hidden='true' focusable='false'><path d='{{ icons.spark }}'/></svg>
-        <span>interesting</span>
-      </a>
-      <nav class='top-bar-nav' aria-label='Site'>
+  {#- The main nav: the logo, and the constellation it opens. A <details>, so the disclosure is
+      the browser's own -- operable by keyboard, and still an open-and-close affordance with
+      scripting switched off, where the options lay out as a cascade under the logo instead of a
+      constellation around it. js/site.js adds the lightbox, the stagger, and the options that
+      come and go with the state; _sass/_nav.scss places them. Every option is written here, so
+      index.html's own markup leads to every page of the site and the reachability axiom holds
+      with no script at all. -#}
+  <details class='sparknav' id='sparknav'>
+    <summary class='sparknav-logo' id='sparknav-logo' aria-label='interesting: the site menu'>
+      <svg class='icon sparknav-spark' viewBox='0 0 24 24' aria-hidden='true' focusable='false'><path d='{{ icons.spark }}'/></svg>
+      <span class='sparknav-name'>interesting</span>
+    </summary>
+    {#- The lightbox: it dims and blurs everything behind it, and takes the press that closes the
+        constellation again. js/site.js holds the page's motion and makes it inert to match. -#}
+    <div class='sparknav-veil' id='sparknav-veil'></div>
+    <nav class='sparknav-sky' aria-label='Site'>
+      <ul class='sparknav-orbit sparknav-near' id='sparknav-near'>
 {%- for link in worlds.wayIn %}
-        <a class='nav-dest' href='{{ siteRoot }}{{ link.file }}'{% if here == link.file %} aria-current='page'{% endif %}>
-          <span class='nav-pill'><svg class='icon' viewBox='0 0 24 24' aria-hidden='true' focusable='false'><path d='{{ icons[link.icon] }}'/></svg></span>
-          <span class='nav-label'>{{ link.name }}</span>
-        </a>
+        <li class='sparknav-option'>
+          <span class='sparknav-ray' aria-hidden='true'></span>
+          <a class='sparknav-node' href='{{ siteRoot }}{{ link.file }}'{% if here == link.file %} aria-current='page'{% endif %}>
+            <svg class='icon' viewBox='0 0 24 24' aria-hidden='true' focusable='false'><path d='{{ icons[link.icon] }}'/></svg>
+            <span class='sparknav-label'>{{ link.name }}</span>
+          </a>
+        </li>
 {%- endfor %}
-      </nav>
-      {#- The persona, as the bar's trailing avatar. What a visitor with scripting switched off
-          gets is written here and claims nothing; js/persona.js rewrites the sentence, draws the
-          portrait and un-hides the two controls. -#}
-      <div class='persona' id='persona' data-state='empty' data-sky='none' data-reading='none' data-asking='false'>
-        <p class='persona-text visually-hidden' id='persona-text'>No persona yet.</p>
-        <div class='persona-actions'>
-          <a class='action persona-go' id='persona-go' href='{{ siteRoot }}moods.html' hidden>go to your world</a>
-          <button type='button' class='persona-avatar' id='persona-open' aria-haspopup='dialog' aria-controls='persona-sheet' aria-describedby='persona-text' hidden>
-            <span class='persona-portrait' aria-hidden='true'><canvas id='persona-portrait' width='40' height='40'></canvas></span>
-            <span class='persona-label'>set up persona</span>
+        {#- The world a reading opens onto: in the orbit only once something has been read, and
+            named for that world (js/site.js, from window.threshold). -#}
+        <li class='sparknav-option' id='sparknav-reading' hidden>
+          <span class='sparknav-ray' aria-hidden='true'></span>
+          <a class='sparknav-node' id='sparknav-reading-go' href='{{ siteRoot }}moods.html'>
+            <svg class='icon' viewBox='0 0 24 24' aria-hidden='true' focusable='false'><path d='{{ icons.star }}'/></svg>
+            <span class='sparknav-label' id='sparknav-reading-label'>your world</span>
+          </a>
+        </li>
+      </ul>
+      <ul class='sparknav-orbit sparknav-far' id='sparknav-far'>
+        {#- The two adopted affordances. Each is in the orbit only while the file that owns it has
+            drawn its own button, which js/site.js then hides and presses on this one's behalf --
+            js/analytics.js and js/state.js are fixed files and are never edited for this. -#}
+        <li class='sparknav-option' id='sparknav-cookies' hidden>
+          <span class='sparknav-ray' aria-hidden='true'></span>
+          <button type='button' class='sparknav-node' id='sparknav-cookies-open' aria-haspopup='dialog'>
+            <svg class='icon' viewBox='0 0 24 24' aria-hidden='true' focusable='false'><path d='{{ icons.tune }}'/></svg>
+            <span class='sparknav-label'>cookies</span>
           </button>
-        </div>
-      </div>
+        </li>
+        <li class='sparknav-option' id='sparknav-state' hidden>
+          <span class='sparknav-ray' aria-hidden='true'></span>
+          <button type='button' class='sparknav-node' id='sparknav-state-open' aria-haspopup='dialog'>
+            <svg class='icon' viewBox='0 0 24 24' aria-hidden='true' focusable='false'><path d='{{ icons.swap }}'/></svg>
+            <span class='sparknav-label' id='sparknav-state-label'>state</span>
+          </button>
+        </li>
+{%- for link in worlds.finePrint %}
+        <li class='sparknav-option'>
+          <span class='sparknav-ray' aria-hidden='true'></span>
+          <a class='sparknav-node' href='{{ siteRoot }}{{ link.file }}'{% if here == link.file %} aria-current='page'{% endif %}>
+            <svg class='icon' viewBox='0 0 24 24' aria-hidden='true' focusable='false'><path d='{{ icons[link.icon] }}'/></svg>
+            <span class='sparknav-label'>{{ link.name }}</span>
+          </a>
+        </li>
+{%- endfor %}
+      </ul>
+    </nav>
+  </details>
+  {#- The persona, floating in the upper right: the only other navigation on the site. What a
+      visitor with scripting switched off gets is written here and claims nothing; js/persona.js
+      rewrites the sentence, draws the portrait and un-hides the two controls. -#}
+  <div class='persona' id='persona' data-state='empty' data-sky='none' data-reading='none' data-asking='false'>
+    <p class='persona-text visually-hidden' id='persona-text'>No persona yet.</p>
+    <div class='persona-actions'>
+      <a class='action persona-go' id='persona-go' href='{{ siteRoot }}moods.html' hidden>go to your world</a>
+      <button type='button' class='persona-avatar' id='persona-open' aria-haspopup='dialog' aria-controls='persona-sheet' aria-describedby='persona-text' hidden>
+        <span class='persona-portrait' aria-hidden='true'><canvas id='persona-portrait' width='40' height='40'></canvas></span>
+        <span class='persona-label'>set up persona</span>
+      </button>
     </div>
-  </header>
+  </div>
   <div id='main-content' tabindex='-1'>{{ content | safe }}</div>
 {%- if not (here == 'sitemap.html' or here == 'moods.html') %}
   <div class='page'>
