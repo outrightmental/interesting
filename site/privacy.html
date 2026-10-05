@@ -1,0 +1,56 @@
+---
+layout: layout.njk
+title: privacy
+description: 'What this site keeps, where it keeps it, and how to take it back: your sky stays in your own browser, and the only thing measured is a visit count you can decline.'
+---
+{#-
+  One of the two fine-print pages, reached from the constellation the logo opens (see
+  _includes/layout.njk) and listed in the site map from _data/worlds.json. Prose only: no
+  stylesheet of its own, no script of its own, nothing to configure here. The two controls it
+  talks about -- "cookies" and "state" -- are options in that same constellation, so the page
+  names them rather than offering copies of them.
+-#}
+  <main>
+    <h1>privacy</h1>
+    <p class='tagline'>What you make here stays in your browser. The only thing measured is that a
+      visit happened, and that only if you say yes.</p>
+
+    <div class='prose'>
+      <h2>what stays in your browser</h2>
+      <p>Everything this site remembers about you is one JSON document in your own browser's
+        storage: the stars of your persona, what the sideways question read of you, and whatever
+        the worlds you have played with kept — a sealed capsule, an archived omen, a core sample.
+        None of it is sent anywhere. There is no account, no profile and no server holding a copy.</p>
+      <p>Open <strong>state</strong> in the menu under the sparkles logo to read that document,
+        copy it, paste someone else's over it, or throw it away. Throwing it away is immediate and
+        complete: the site keeps no second copy to restore it from.</p>
+      <p>If your browser refuses storage — private browsing, or settings that allow none — the site
+        holds the same document in memory instead, and it is gone when you close the page. Nothing
+        breaks either way.</p>
+
+      <h2>what the counter counts</h2>
+      <p>If you accept analytics, this site loads Google Analytics 4, which counts visits and
+        which pages hold attention. That is the whole of it: no advertising, no profiles sold on,
+        nothing about you beyond what a visit looks like from the outside.</p>
+      <p>Nothing is loaded and no cookie is set before you accept. Decline and the tag is never
+        fetched; accept now and decline later and its cookies are cleared. The choice lives behind
+        <strong>cookies</strong> in the same menu, and it can be changed as often as you like.</p>
+
+      <h2>what the host sees</h2>
+      <p>The pages are plain files served from a content delivery network. Like any web host, it
+        records the requests it answers — an address, a time, a path — to serve the files and keep
+        itself standing. That record belongs to the host, is not joined to anything above, and is
+        not something this site reads.</p>
+      <p>No fonts, trackers, embeds or third-party widgets are fetched from anywhere else. The
+        cookie banner is a copy of an open-source library, served from this site like everything
+        else.</p>
+
+      <h2>what you can take back</h2>
+      <p>All of it, at any moment, without asking anyone: decline cookies under
+        <strong>cookies</strong>, and clear the document under <strong>state</strong>. There is
+        nothing left over for you to request, because there is nowhere else for it to be.</p>
+      <p>If something here does not match what you find, say so with <em>steer the site</em> at the
+        bottom of any page — that opens an issue on the repository this site is built from, in
+        public, where it can be fixed. The other half of the fine print is <a href='terms.html'>terms</a>.</p>
+    </div>
+  </main>
