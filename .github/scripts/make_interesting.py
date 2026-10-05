@@ -20,7 +20,7 @@ longer and wants to keep going. LEGIBLE names the test a stranger puts the site
 to -- one name per page, one way to do each thing, content before chrome, never
 a dead end -- because confusion spends engagement time as surely as boredom.
 
-Seven axioms stand over every run, each stated in the prompt and held to in code:
+Eight axioms stand over every run, each stated in the prompt and held to in code:
 
   - All of the content stays reachable from the root, both by following links
     from index.html and through sitemap.xml. check_reachability() refuses a plan
@@ -56,6 +56,13 @@ Seven axioms stand over every run, each stated in the prompt and held to in code
     that would leave a page without it, and the file behind it is fixed like the
     analytics and state ones: a visitor's way of saying what this site should
     become is not a run's to reword, move or drop.
+  - Every world is a piece a visitor can finish. A world's page is not fixed
+    content but a stage (js/stage.js) on which its module makes a small,
+    randomly configured piece from a seed -- a few knobs, a clear end -- which
+    vanishes when finished and is followed by the next card from the feed.
+    check_completion() plays every listed world's piece to its end without a
+    browser (.github/scripts/piece_harness.mjs) and refuses a plan that leaves a
+    world without a module, without a piece, or with one that cannot be finished.
 
 The files behind the analytics, state and participation axioms (FIXED_FILES) are
 never shown to a model and are refused outright as a write or a delete.
@@ -1158,6 +1165,137 @@ def check_participate(before, after):
             f"{broke[0]} has no {PARTICIPATE_TAG} in its <head>")
 
 
+# The completion axiom. Every world is a piece a visitor can finish: a world's page is a stage
+# (js/stage.js, _includes/stage.njk) on which the world's module (js/modules/<world>.js) makes a
+# small, randomly configured piece from a seed -- a title, a line, PIECE_MIN_STEPS to PIECE_MAX_STEPS
+# knobs and a clear end -- which vanishes with some ceremony when it is finished and is followed by the next card
+# from the feed, so one piece follows another without end. The prompt states the contract; the
+# harness below plays every piece to its end without a browser, the way the stage would, and
+# check_completion() holds every plan to it. The limits are the harness's own, repeated here for
+# the prompt; RealSiteTest checks that the two agree.
+PIECE_HARNESS_REL = ".github/scripts/piece_harness.mjs"
+PIECE_HARNESS = REPO_ROOT / PIECE_HARNESS_REL
+PIECE_TIMEOUT_SECONDS = 120
+PIECE_MIN_STEPS = 2
+PIECE_MAX_STEPS = 5
+PIECE_MAX_TAPS = 12
+PIECE_MAX_SECONDS = 45
+STAGE_SCRIPT = "js/stage.js"
+STAGE_INCLUDE = "_includes/stage.njk"
+MODULES_DIR = "js/modules/"
+# The one list of worlds the layout writes into every page for the scripts, as JSON in a script
+# element; the stage opens pieces from it, and the check reads it to know which worlds there are.
+WORLD_LIST_ID = "site-worlds"
+WORLD_LIST = re.compile(r"<script[^>]*\bid=['\"]" + WORLD_LIST_ID + r"['\"][^>]*>(.*?)</script>", re.S | re.I)
+
+
+def listed_worlds(site):
+    """The worlds the built `site` lists for its scripts, as [page, ...], read off the home page.
+
+    The list is the layout's #site-worlds JSON, rendered from _data/worlds.json, so what the stage
+    can open and what the check requires a piece of are the same list. A site without the list has
+    no worlds in this sense, and the check has nothing to say about it.
+    """
+    found = WORLD_LIST.search(site.get(HOME_PAGE) or "")
+    if not found:
+        return []
+    try:
+        data = json.loads(found.group(1))
+    except ValueError:
+        return []
+    if not isinstance(data, list):
+        return []
+    return [entry["file"] for entry in data
+            if isinstance(entry, dict) and isinstance(entry.get("file"), str)
+            and entry["file"].endswith(PAGE_SUFFIX)]
+
+
+def module_of(world):
+    """The module a world's page is played from: quiet-room.html -> js/modules/quiet-room.js."""
+    return f"{MODULES_DIR}{world[:-len(PAGE_SUFFIX)]}.js"
+
+
+def run_piece_harness(site):
+    """Play every module of `site` through the harness, as {module id: its report}.
+
+    The report is the harness's own JSON: `hasPiece`, `ok` and `problems` per module. A site with
+    no modules is not played at all. Raises BuildToolchainError if the harness or Node cannot be
+    run, which is nobody's answer to give; a run of the harness that does not finish in time is
+    reported against every module, since one piece that never ends is enough to hold the rest up.
+    """
+    modules = {rel: content for rel, content in site.items()
+               if rel.startswith(MODULES_DIR) and rel.endswith(".js")
+               and "/" not in rel[len(MODULES_DIR):]}
+    if not modules:
+        return {}
+    if not PIECE_HARNESS.is_file():
+        raise BuildToolchainError(f"no piece harness at {PIECE_HARNESS}")
+    with tempfile.TemporaryDirectory(prefix="pieces-") as work:
+        for rel, content in modules.items():
+            (Path(work) / PurePosixPath(rel).name).write_text(content, encoding="utf-8", newline="")
+        cmd = [NODE_BIN, str(PIECE_HARNESS), "--modules", work, "--json"]
+        try:
+            played = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8",
+                                    errors="replace", cwd=REPO_ROOT, timeout=PIECE_TIMEOUT_SECONDS)
+        except FileNotFoundError:
+            raise BuildToolchainError(f"the piece harness needs Node, which was not found ({NODE_BIN!r})") from None
+        except subprocess.TimeoutExpired:
+            late = f"the pieces did not all finish within {PIECE_TIMEOUT_SECONDS}s of real time"
+            return {PurePosixPath(rel).stem: {"id": PurePosixPath(rel).stem, "hasPiece": True, "ok": False,
+                                              "problems": [late]} for rel in modules}
+        try:
+            report = json.loads(played.stdout)
+        except ValueError:
+            raise BuildToolchainError("the piece harness gave no report: "
+                                      + one_line(played.stderr or played.stdout or "nothing", 500))
+        return {entry["id"]: entry for entry in report.get("modules", [])
+                if isinstance(entry, dict) and isinstance(entry.get("id"), str)}
+
+
+def worlds_without_a_finish(site):
+    """The listed worlds of `site` a visitor cannot finish, as {page: why}.
+
+    A world is finished through its module: one that has no module, whose module exports no
+    piece(), or whose piece the harness could not play to its end is a world a visitor opens and
+    cannot complete, which is what the axiom forbids.
+    """
+    worlds = listed_worlds(site)
+    if not worlds:
+        return {}
+    report = run_piece_harness(site)
+    missing = {}
+    for world in worlds:
+        entry = report.get(world[:-len(PAGE_SUFFIX)])
+        if entry is None:
+            missing[world] = f"has no module at {module_of(world)}"
+        elif not entry.get("hasPiece"):
+            missing[world] = f"has a module, {module_of(world)}, that exports no piece()"
+        elif not entry.get("ok"):
+            problems = entry.get("problems") or ["its piece does not finish"]
+            missing[world] = f"has a piece that cannot be finished ({problems[0]})"
+    return missing
+
+
+def check_completion(before, after):
+    """Raise RejectedChange if the change from site `before` to site `after` leaves a world a
+    visitor cannot finish.
+
+    Only what this run breaks is refused, exactly as the seven checks above only refuse what this
+    run breaks: a world that already could not be finished stays the site's own to repair -- every
+    run is asked to -- and refusing every plan over it would leave no plan able to repair it. The
+    one list of worlds is held to the same rule: a site that had it may not lose it, because the
+    stage opens pieces from it.
+    """
+    if listed_worlds(before) and not listed_worlds(after):
+        raise RejectedChange(
+            f"every page must carry the one list of worlds (the #{WORLD_LIST_ID} JSON the layout "
+            f"writes from _data/worlds.json), which the stage opens pieces from: {HOME_PAGE} has lost it")
+    was = worlds_without_a_finish(before)
+    for world, why in sorted(worlds_without_a_finish(after).items()):
+        if world not in was:
+            raise RejectedChange(f"every world must be a piece a visitor can finish: {world} {why}")
+
+
 def apply_to(site, ops):
     """The site mapping `site` as it would be once `ops` have been applied."""
     after = dict(site)
@@ -1340,11 +1478,13 @@ def build_prompt(shown, omitted=()):
         "worlds make, between the worlds themselves, without end. It has no caption: its heading "
         "is for screen readers only, and it says nothing about itself. A world's part in it is its "
         "module, \"js/modules/<world>.js\", an ES module exporting { id, needsSky, paint(ctx, w, "
-        "h, env), animate(ctx, w, h, env, t), spark(env) }: paint draws its card in the world's own "
-        "palette, spark makes one thing for the feed to deal (a title, a line, a readout, with or "
-        "without a picture), needsSky says it reads the persona's stars. js/feed.js documents the "
-        "contract and what env carries. A world without a module still has its card; the feed just "
-        "has nothing of its to deal.\n"
+        "h, env), animate(ctx, w, h, env, t), spark(env), piece(env) }: paint draws its card in the "
+        "world's own palette, spark makes one thing for the feed to deal (a title, a line, a "
+        "readout, with or without a picture), piece makes the piece the stage plays when the card "
+        "is opened (the axiom below), needsSky says it reads the persona's stars. js/feed.js "
+        "documents the card half of the contract and what env carries; js/stage.js the piece "
+        "half. Pressing a card opens its piece on the page's stage and takes the card out of the "
+        "feed; a finished piece is followed by the next card in the feed's order.\n"
         "- \"js/persona.js\" is the persona: the one thing a visitor configures here, shown as the "
         "avatar at the end of the top app bar on every page and set up in the sheet that avatar "
         "opens, the way an app shows its account. It holds the sky that several worlds read -- "
@@ -1358,16 +1498,19 @@ def build_prompt(shown, omitted=()):
         "- A page's <main> is its feature. It is unbordered and full-bleed, the page's own palette "
         "washing to the viewport's edges, and at least the first screen tall (the viewport less "
         "the top bar and a margin), so the feed peeks above the fold; every direct child of <main> "
-        "lands in one centred column (_panel.scss), and a world's stage -- the canvas beside its "
-        "panel -- is sized by the screen's height as well as its column (_labs.scss, with the "
-        "stage's aspect ratio from js/site.js). The threshold's feature is the question itself, "
-        "and once answered the world the reading opens onto, painted across it by "
-        "window.interestingFeed.feature(host, canvas, file).\n"
-        "So one new world is five edits: \"thing.html\" with front matter naming the layout and "
-        f"its stylesheet, \"css/thing.scss\" beside it that @use's the shared partials, its line "
-        f"in \"_data/worlds.json\" with a mood and an aspect, its module \"js/modules/thing.js\", "
-        f"and its <loc> in {SITEMAP} (plus an orientation in js/threshold.js if it is to be "
-        "offered, and a palette in _mood.scss if its mood is new).\n"
+        "lands in one centred column (_panel.scss). A world page's <main> is the stage: the page "
+        f"is nothing but front matter and {{% set stageWorld = 'thing' %}}{{% include "
+        f"'stage.njk' %}}, and \"{STAGE_INCLUDE}\" with \"{STAGE_SCRIPT}\" (styled by "
+        "_sass/_stage.scss) does the rest -- the world's name, the piece's title and line, the "
+        "scene beside the knobs, the progress, the finish, the vanish and the next. The "
+        "threshold's feature is the same stage in its asking state: the question itself, and once "
+        "answered a piece of the world the reading opens onto.\n"
+        "So one new world is four edits: \"thing.html\", which is front matter naming the layout "
+        "and the two lines that include the stage, its line in \"_data/worlds.json\" with a mood "
+        "and an aspect, its module \"js/modules/thing.js\" with its card and its piece, and its "
+        f"<loc> in {SITEMAP} (plus an orientation in js/threshold.js if it is to be offered, and a "
+        "palette in _mood.scss if its mood is new). A world needs no stylesheet of its own: its "
+        "scene is drawn, not styled.\n"
         "A plan whose source does not build is refused, so keep the templates and the stylesheets "
         "valid, and change the shared files with the care they deserve: the layout and "
         f"\"{SASS_DIR}/\" reach every page at once.\n\n"
@@ -1507,6 +1650,36 @@ def build_prompt(shown, omitted=()):
         "edge, and the local-state \"state\" menu in the bottom-right. Leave the bottom edge to "
         "them: nothing of yours goes there, and nothing of yours restyles them. Inviting a visitor "
         "to steer the site in a page's own prose is welcome, and is not a substitute for the line.\n"
+        "- AXIOM, every run: every world is a piece a visitor can finish. A world's page is not "
+        "fixed content but a stage, and what a visitor opens there is a piece: a small, randomly "
+        "configured item -- think of a fidget toy with a few levers and knobs on it -- generated "
+        "on the spot by the world's module from a seed, with a clear flow that asks them to make a "
+        "few choices and finish, expediently. When it is finished the whole piece vanishes with "
+        "some ceremony and the next card in the feed opens in its place, so one piece follows "
+        "another without end and no two are quite the same; the river of cards is the river of "
+        f"pieces. Concretely: every listed world's module exports piece(env), and \"{STAGE_SCRIPT}\" "
+        "documents the contract and runs it. A piece is { title, brief, aspect, steps, start(ctx), "
+        f"apply(id, value, ctx), frame(t, dt, ctx), tap(x, y, ctx), end(ctx) }}: {PIECE_MIN_STEPS} to "
+        f"{PIECE_MAX_STEPS} knobs (steps), each {{ id, ask, kind, ... }} of a kind the stage renders -- "
+        "choice (two to four options), toggle, range, press, hold, tap, wait -- and it is finished "
+        "when every knob is set (a tap or a wait knob is set by the piece itself, through "
+        "ctx.satisfy(id); a tap anywhere on the scene must count, because the stage's own 'tap "
+        "for me' button and the check tap at random points), or when it calls ctx.complete() -- "
+        "and it is finished by its visitor, never by itself before they have set a knob. The "
+        "same seed makes the same piece and different seeds make different pieces. A piece is "
+        "pure drawing and arithmetic on what the stage hands it (ctx: the canvas and its 2d "
+        "context, the size, the world's colours, a seeded random source, the stars, status(), "
+        "progress()) and never reaches for the document, the window or the browser's storage. The "
+        "world's old interactive page is the piece's material, and re-thinking a world as a piece "
+        "is the normal work of a run: what it let a visitor do becomes the knobs, what it showed "
+        "becomes the scene, what it said becomes the title and the one line under it, in the "
+        "site's own voice. Make the pieces differ as much as they can, between worlds and between "
+        "seeds of one world: a second shape of piece for a world is as good a change as a new "
+        "world. This is checked on the built site by playing every piece to its end without a "
+        f"browser (\"{PIECE_HARNESS_REL}\", which a run cannot change): a plan that leaves a listed "
+        "world without a module, without a piece, with a piece that does not finish within "
+        f"{PIECE_MAX_TAPS} taps and {PIECE_MAX_SECONDS} seconds of play, that is not the same for the "
+        "same seed, or that is the same for every seed, is refused.\n"
         "- Leave the site working at the end of the run. If you extract something into a shared "
         "file, or merge or delete a page, update every page that refers to it in the same run: "
         "never leave a link, a stylesheet, a script, a layout or an @use pointing at something "
@@ -1694,8 +1867,9 @@ def validate_plan(plan, unseen=()):
     A plan that would leave a page of the site unreachable from the root, leave one without the
     analytics and consent line, make one fail the responsive-and-accessible axiom, leave one without
     the local-state store and its meta menu, tie one to an update frequency, stop the site asking
-    before it offers, or leave one without a visitor's way of steering the site is refused: all
-    seven axioms hold however the prompt is answered. All seven are judged on the built site
+    before it offers, leave one without a visitor's way of steering the site, or leave a world a
+    visitor cannot finish is refused: all eight axioms hold however the prompt is answered. All
+    eight are judged on the built site
     (issue #25), which is the only site a visitor ever sees, so the plan is built before any of
     them is asked, and a plan that does not build is refused for that alone.
     """
@@ -1756,7 +1930,7 @@ def validate_plan(plan, unseen=()):
         # The site as committed does not build, so there is no "before" to compare against and the
         # axioms have nothing to say this run. Same reasoning as check_reachability's: every run is
         # asked to repair the site, and refusing a plan over damage it did not do would leave no
-        # plan able to. This run still had to build, and the next is held to all seven axioms again.
+        # plan able to. This run still had to build, and the next is held to all eight axioms again.
         print(f"::warning::the site as committed does not build ({one_line(err, 300)}), so this "
               "run's change was only checked for building, not against the axioms")
         return ops
@@ -1767,6 +1941,7 @@ def validate_plan(plan, unseen=()):
     check_cadence(built_before, built_after)
     check_mood(built_before, built_after)
     check_participate(built_before, built_after)
+    check_completion(built_before, built_after)
     return ops
 
 
