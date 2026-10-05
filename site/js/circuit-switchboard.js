@@ -2,8 +2,12 @@
   Shared relay switchboard for the constellation circuit pages.
 
   This panel is rendered through _includes/footer.njk across all constellation worlds and gives one
-  federated lane system: previous/next world links plus one generated move card that points to a
+  federated lane system: previous/next world links plus a generated relay card that points to a
   target world and a tiny action to try there.
+
+  This version extends that card into a persistent three-step relay chain. As visitors move through
+  constellation worlds, the chain marks progress automatically, then mints a new chain when the
+  current one is complete.
 
   State key inside the shared interestingState document: "constellation-switchboard".
 */
@@ -65,6 +69,11 @@
     return -1;
   }
 
+  function whereFor(href) {
+    var idx = indexOf(href);
+    return idx === -1 ? href : CIRCUIT[idx].where;
+  }
+
   function countStars(value) {
     if (!Array.isArray(value)) return 0;
     var total = 0;
@@ -92,19 +101,66 @@
     return countStars(read.value);
   }
 
+  function normalizeCard(value) {
+    if (!value || typeof value !== 'object') return null;
+    if (typeof value.href !== 'string' || typeof value.text !== 'string') return null;
+    return { href: value.href, text: value.text };
+  }
+
+  function normalizeSteps(steps) {
+    var out = [];
+    if (!Array.isArray(steps)) return out;
+    for (var i = 0; i < steps.length; i++) {
+      if (typeof steps[i] !== 'string') continue;
+      if (indexOf(steps[i]) === -1) continue;
+      if (out.indexOf(steps[i]) !== -1) continue;
+      out.push(steps[i]);
+      if (out.length >= 3) break;
+    }
+    return out;
+  }
+
+  function normalizeChain(value) {
+    var out = {
+      id: '',
+      steps: [],
+      cursor: 0,
+      completed: 0,
+      lastMark: ''
+    };
+
+    if (!value || typeof value !== 'object') return out;
+
+    if (typeof value.id === 'string') out.id = value.id;
+    out.steps = normalizeSteps(value.steps);
+
+    if (typeof value.cursor === 'number' && value.cursor > 0) {
+      out.cursor = Math.floor(value.cursor);
+    }
+
+    if (typeof value.completed === 'number' && value.completed > 0) {
+      out.completed = Math.floor(value.completed);
+    }
+
+    if (typeof value.lastMark === 'string') out.lastMark = value.lastMark;
+
+    if (out.steps.length) {
+      out.cursor = Math.max(0, Math.min(out.cursor, out.steps.length));
+    } else {
+      out.cursor = 0;
+    }
+
+    return out;
+  }
+
   function normalize(value) {
     var out = {
-      card: null
+      card: null,
+      chain: normalizeChain(null)
     };
     if (!value || typeof value !== 'object') return out;
-    if (value.card && typeof value.card === 'object') {
-      if (typeof value.card.href === 'string' && typeof value.card.text === 'string') {
-        out.card = {
-          href: value.card.href,
-          text: value.card.text
-        };
-      }
-    }
+    out.card = normalizeCard(value.card);
+    out.chain = normalizeChain(value.chain);
     return out;
   }
 
@@ -134,27 +190,119 @@
     };
   }
 
-  function makeCard() {
-    var lanes = laneLinks();
+  function chainToken(chain) {
+    return currentFile + '#' + chain.id + '#' + chain.cursor;
+  }
+
+  function nextStep(chain) {
+    if (!chain || !chain.steps.length) return null;
+    if (chain.cursor >= chain.steps.length) return null;
+    return chain.steps[chain.cursor];
+  }
+
+  function nextStepLabel(chain) {
+    var href = nextStep(chain);
+    return href ? whereFor(href) : null;
+  }
+
+  function chainProgress(chain) {
+    if (!chain || !chain.steps.length) return '0/3';
+    return Math.min(chain.cursor, chain.steps.length) + '/' + chain.steps.length;
+  }
+
+  function makeSeed(offset) {
     var counts = relayCounts();
     var stars = starsCount();
     var here = indexOf(currentFile);
-    var base = (Date.now() % 100003) + (counts.visited * 17) + (counts.loops * 31) + (stars * 13) + Math.max(0, here) * 7;
+    var extra = typeof offset === 'number' ? offset : 0;
+    return ((Date.now() % 100003)
+      + counts.visited * 17
+      + counts.loops * 31
+      + stars * 13
+      + Math.max(0, here) * 7
+      + deck.chain.completed * 19
+      + extra) >>> 0;
+  }
 
-    var target = CIRCUIT[Math.abs(base) % CIRCUIT.length];
-    if (target.href === currentFile) target = lanes.next;
+  function buildChain(seed) {
+    var lanes = laneLinks();
+    var available = CIRCUIT.map(function (node) { return node.href; }).filter(function (href) {
+      return href !== currentFile;
+    });
 
-    var move = pick(MOVES, base, 1);
-    var bridge = pick(BRIDGES, base, 2);
-    return {
-      href: target.href,
-      text: 'Move card: ' + move + ', then continue to ' + target.where + '. ' + bridge
+    var chain = {
+      id: 'chain-' + String(Math.abs(seed % 100000)),
+      steps: [],
+      cursor: 0,
+      completed: deck.chain.completed || 0,
+      lastMark: ''
     };
+
+    function pushStep(href) {
+      if (!href) return;
+      if (href === currentFile) return;
+      if (chain.steps.indexOf(href) !== -1) return;
+      chain.steps.push(href);
+    }
+
+    pushStep(lanes.next.href);
+
+    var spin = seed >>> 0;
+    while (chain.steps.length < 3 && available.length) {
+      spin = (Math.imul(spin, 1664525) + 1013904223) >>> 0;
+      var idx = spin % available.length;
+      pushStep(available[idx]);
+      available.splice(idx, 1);
+    }
+
+    while (chain.steps.length < 3) {
+      pushStep(CIRCUIT[chain.steps.length % CIRCUIT.length].href);
+      if (chain.steps.length >= CIRCUIT.length) break;
+    }
+
+    return chain;
+  }
+
+  function makeCardFromChain(chain, seed) {
+    var stepHref = nextStep(chain);
+    var move = pick(MOVES, seed, 1);
+    var bridge = pick(BRIDGES, seed, 2);
+    var labels = chain.steps.map(function (href) {
+      return whereFor(href);
+    });
+    var route = labels.join(' -> ');
+
+    if (!stepHref) {
+      var lanes = laneLinks();
+      return {
+        href: lanes.next.href,
+        text: 'Relay chain complete. Draw a new card to mint the next three-step route.'
+      };
+    }
+
+    return {
+      href: stepHref,
+      text: 'Relay chain ' + chainProgress(chain) + ': ' + route + '. Next move: ' + move + ', then continue to ' + whereFor(stepHref) + '. ' + bridge
+    };
+  }
+
+  function ensureChain(offset) {
+    if (deck.chain.steps.length >= 3) return;
+    var seed = makeSeed(offset || 0);
+    deck.chain = buildChain(seed);
+    deck.card = makeCardFromChain(deck.chain, seed);
   }
 
   function persist() {
     return store.set(KEY, {
-      card: deck.card
+      card: deck.card,
+      chain: {
+        id: deck.chain.id,
+        steps: deck.chain.steps,
+        cursor: deck.chain.cursor,
+        completed: deck.chain.completed,
+        lastMark: deck.chain.lastMark
+      }
     });
   }
 
@@ -169,42 +317,95 @@
   function applyCard() {
     var card = deck.card || fallbackCard();
     cardEl.textContent = card.text;
-    followEl.href = card.href;
 
-    var target = indexOf(card.href);
+    var href = card.href;
+    if (!href) {
+      var lanes = laneLinks();
+      href = lanes.next.href;
+    }
+
+    followEl.href = href;
+
+    var target = indexOf(href);
     followEl.textContent = target === -1 ? 'follow card' : ('follow card to ' + CIRCUIT[target].where);
     followEl.setAttribute('aria-disabled', 'false');
   }
 
-  function render(savedOk) {
+  function syncChainProgress() {
+    var note = '';
+    ensureChain(7);
+
+    var target = nextStep(deck.chain);
+    if (!target) return note;
+
+    if (target === currentFile) {
+      var token = chainToken(deck.chain);
+      if (deck.chain.lastMark !== token) {
+        deck.chain.lastMark = token;
+        deck.chain.cursor += 1;
+
+        if (deck.chain.cursor >= deck.chain.steps.length) {
+          deck.chain.completed += 1;
+          note = 'Relay chain complete. New chain minted.';
+          deck.chain = buildChain(makeSeed(97 + deck.chain.completed * 11));
+        } else {
+          note = 'Relay chain advanced to ' + chainProgress(deck.chain) + '.';
+        }
+      }
+    }
+
+    deck.card = makeCardFromChain(deck.chain, makeSeed(3));
+    return note;
+  }
+
+  function render(savedOk, note) {
+    ensureChain(1);
     applyLanes();
     applyCard();
 
     var counts = relayCounts();
     var stars = starsCount();
-    var storageLine = savedOk ? 'Switchboard saved in this browser.' : 'Switchboard held in memory for this visit.';
+    var nextLabel = nextStepLabel(deck.chain);
+    var progress = chainProgress(deck.chain);
+    var memoryLine = savedOk ? 'Switchboard saved in this browser.' : 'Switchboard held in memory for this visit.';
+
+    var chainLine = 'Chain ' + progress + ' · completed chains ' + deck.chain.completed + '.';
+    if (nextLabel) {
+      chainLine += ' Next: ' + nextLabel + '.';
+    }
+
+    var lead = note ? (note + ' ') : '';
 
     if (stars > 0) {
       statusEl.classList.add('good');
-      statusEl.textContent = 'Relay lanes live: ' + counts.visited + ' of ' + CIRCUIT.length
-        + ' marked, loops ' + counts.loops + ', stars ' + stars + '. ' + storageLine;
+      statusEl.textContent = lead + 'Relay lanes live: ' + counts.visited + ' of ' + CIRCUIT.length
+        + ' marked, loops ' + counts.loops + ', stars ' + stars + '. '
+        + chainLine + ' ' + memoryLine;
       return;
     }
 
     statusEl.classList.remove('good');
-    statusEl.textContent = 'Relay lanes are ready. Place one star in the wish constellation to seed stronger cards. ' + storageLine;
+    statusEl.textContent = lead + 'Relay lanes are ready. Place one star in the wish constellation to seed stronger cards. '
+      + chainLine + ' ' + memoryLine;
   }
 
   function drawCard() {
-    deck.card = makeCard();
-    render(persist());
+    var seed = makeSeed(211 + deck.chain.completed * 13 + deck.chain.cursor * 5);
+    deck.chain = buildChain(seed);
+    deck.card = makeCardFromChain(deck.chain, seed);
+    render(persist(), 'New relay chain drawn.');
   }
 
   drawBtn.addEventListener('click', drawCard);
 
-  var read = store.read(KEY, { card: null });
+  var read = store.read(KEY, { card: null, chain: null });
   var deck = normalize(read.value);
-  if (!deck.card) deck.card = fallbackCard();
 
-  render(persist());
+  ensureChain(0);
+  if (!deck.card) {
+    deck.card = makeCardFromChain(deck.chain, makeSeed(5));
+  }
+
+  var note = syncChainProgress();
+  render(persist(), note);
 })();
