@@ -3,6 +3,7 @@
 
 function drawChoir(ctx, w, h, env, t) {
   var c = env.colors;
+  var v = env.variant;
   var grad = ctx.createLinearGradient(0, 0, 0, h);
   grad.addColorStop(0, c.bg2);
   grad.addColorStop(1, c.bg);
@@ -10,7 +11,8 @@ function drawChoir(ctx, w, h, env, t) {
   ctx.fillRect(0, 0, w, h);
 
   var pts = env.points(w, h, 14);
-  var maxD = Math.min(w, h) * 0.3;
+  // How far a voice hears its neighbours, and so how much of the loop is strung together.
+  var maxD = Math.min(w, h) * 0.3 * v.scale;
   var maxD2 = maxD * maxD;
 
   for (var a = 0; a < pts.length; a++) {
@@ -29,16 +31,24 @@ function drawChoir(ctx, w, h, env, t) {
     }
   }
 
+  // The harmonic halo every voice carries. A second one arrives as density rises, so the card the
+  // template wrote is still the single halo this world leads with.
+  var halos = Math.max(1, Math.round(1.4 * v.density));
+
   for (var i = 0; i < pts.length; i++) {
-    var pulse = 0.8 + Math.sin((t || 0) * 2 + i * 0.9) * 0.25;
-    ctx.beginPath();
-    ctx.fillStyle = env.alpha(c.accent2, 0.16);
-    ctx.arc(pts[i].x, pts[i].y, 6 * pulse, 0, Math.PI * 2);
-    ctx.fill();
+    // turn is where the loop starts, so a repeat catches the choir mid-phrase rather than at its
+    // opening. It is read here rather than at the call sites so the printed score follows it too.
+    var pulse = 0.8 + Math.sin((t || 0) * 2 + i * 0.9 + v.turn * Math.PI * 2) * 0.25;
+    for (var r = 0; r < halos; r++) {
+      ctx.beginPath();
+      ctx.fillStyle = env.alpha(c.accent2, 0.16 / (r + 1));
+      ctx.arc(pts[i].x, pts[i].y, (6 + r * 4) * pulse * v.scale, 0, Math.PI * 2);
+      ctx.fill();
+    }
 
     ctx.beginPath();
     ctx.fillStyle = env.alpha(c.fg, 0.95);
-    ctx.arc(pts[i].x, pts[i].y, 1.9 + pulse * 0.8, 0, Math.PI * 2);
+    ctx.arc(pts[i].x, pts[i].y, (1.9 + pulse * 0.8) * v.scale, 0, Math.PI * 2);
     ctx.fill();
   }
 }
