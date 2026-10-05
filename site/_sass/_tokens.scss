@@ -5,10 +5,11 @@
 // Colour works the way M3's dynamic colour works: a handful of seeds, and every role derived from
 // them. The seeds are the four custom properties this site has always used -- --bg (the night behind
 // everything), --bg2 (the lighter corner the sky opens from), --accent (the primary) and --accent2
-// (the tertiary) -- plus --fg and --muted for text. A mood (_mood.scss) or a page sets the seeds and
-// nothing else, and every surface, container and outline follows, because the roles are derived
-// with color-mix() wherever `derive` is applied: on :root, and on anything carrying data-mood, so a
-// card in the feed derives its own scheme from its own world's seeds.
+// (the tertiary) -- plus --fg and --muted for text and --warn, which the error roles and the one
+// warning button derive from. A mood (_mood.scss) or a page sets the seeds and nothing else, and
+// every surface, container and outline follows, because the roles are derived with color-mix()
+// wherever `derive` is applied: on :root, and on anything carrying data-mood, so a card in the
+// feed derives its own scheme from its own world's seeds.
 //
 //     [data-mood='tender'] { --bg: #140d13; --accent: #ffc6d6; }   // and the card re-tints itself
 //
@@ -31,6 +32,12 @@
   --md-sys-color-on-tertiary: color-mix(in oklab, var(--accent2) 24%, #000);
   --md-sys-color-tertiary-container: color-mix(in oklab, var(--accent2) 28%, var(--bg));
   --md-sys-color-on-tertiary-container: color-mix(in oklab, var(--accent2) 82%, #fff);
+  // Error: the one warm family on the site, worn by every control that throws a visitor's saved
+  // state away and by the modal that guards it (see "the warning button" in _controls.scss).
+  --md-sys-color-error: var(--warn);
+  --md-sys-color-on-error: color-mix(in oklab, var(--warn) 24%, #000);
+  --md-sys-color-error-container: color-mix(in oklab, var(--warn) 30%, var(--bg));
+  --md-sys-color-on-error-container: color-mix(in oklab, var(--warn) 84%, #fff);
   // Surfaces, by tone: the page, then five containers from lowest to highest.
   --md-sys-color-surface: color-mix(in oklab, var(--bg) 95%, var(--accent));
   --md-sys-color-surface-dim: var(--bg);
