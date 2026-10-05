@@ -3,7 +3,7 @@
 // everywhere, and onto the mood atlas.
 //
 // Every palette is four seeds (see _tokens.scss), and the whole scheme follows from them: that is
-// the whole of the transmogrification. The seeds land in three places:
+// the whole of the transmogrification. The seeds land in four places:
 //
 //   :root[data-world='x']   the page's own world (set by _includes/layout.njk from _data/worlds.json),
 //                           so a world page wears its world's palette by default;
@@ -14,6 +14,13 @@
 //
 // A page writes no colour of its own, so changing the attribute changes the site. A page that
 // wants to go further can hang its own rules off the same attribute.
+//
+// There is a fourth place, and it is the same four names again: a card the feed dealt carries a
+// randomized configuration (js/variant.js), and js/feed.js writes the four seeds that configuration
+// derives -- from the ones the card's own mood gives it, below -- onto the card inline, which wins
+// over the rule here. So a repeat of a world is a different colour from the first card of it while
+// still wearing that world's mood, and --fg and --muted, the two that hold the text at 4.5:1, are
+// left alone by that as well.
 
 @use 'sass:list';
 @use 'type';

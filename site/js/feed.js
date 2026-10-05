@@ -15,6 +15,12 @@
       world's own palette (each card carries data-mood, and _sass/_mood.scss re-tints it).
     - It keeps dealing as the visitor nears the bottom: the things the worlds make -- a coinage, a
       specimen, a rule, an omen, a forecast -- dealt between the worlds themselves, without end.
+    - Every card it deals gets a variant: a randomized configuration (js/variant.js) that is what
+      makes the second appearance of a world a different card and not a reprint of the first. The
+      variant re-derives the card's four palette seeds inside its own mood, stretches its frame from
+      its world's aspect ratio, and rides on env for the module to draw from. The card the template
+      wrote for each world wears the variant that changes nothing (PLAIN), so a world leads with its
+      own palette and its own frame, and the repeats are what vary.
     - It leads with the world the visitor's reading opens onto, badged "for you", and follows the
       reading as it changes (threshold:reading). With no sky yet it deals one unpowered card early,
       carrying the shared unlock (window.interestingSite.unlock), and every card that reads the sky
@@ -41,12 +47,17 @@
 
   env is the same for both: { seed, rnd(), pick(list), int(a, b), chance(p), hash(text), stars,
   points(w, h, pad), colors: { bg, bg2, accent, accent2, fg, muted }, mix(a, b, t), alpha(c, a),
-  reduced, world: { file, name, orientation } }. rnd is seeded, so a card paints the same picture
-  every time it is painted and a different one from its neighbour.
+  reduced, world: { file, name, orientation }, variant }. rnd is seeded, so a card paints the same
+  picture every time it is painted and a different one from its neighbour, and variant is the card's
+  configuration (js/variant.js): variant.density is how much of itself to draw, variant.scale how
+  large, variant.turn where to start. A module that reads none of them still varies, because its
+  colours have been configured for it already; one that reads them varies in shape as well.
 
   Nothing here reaches for the browser's storage: the sky is read through window.interestingPersona
   and the reading through window.threshold, and nothing is written at all.
 */
+
+import { roll, PLAIN, recolor, aspect, light, mulberry32, hash, mix, alpha } from './variant.js';
 
 const persona = window.interestingPersona;
 const site = window.interestingSite;
@@ -75,54 +86,12 @@ function el(tag, className, text) {
   return node;
 }
 
-function mulberry32(a) {
-  return function () {
-    a |= 0;
-    a = (a + 0x6D2B79F5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-function hash(text) {
-  let h = 2166136261;
-  for (let i = 0; i < text.length; i++) {
-    h ^= text.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  return h >>> 0;
-}
-
 function shuffle(list, rnd) {
   for (let i = list.length - 1; i > 0; i--) {
     const j = Math.floor(rnd() * (i + 1));
     [list[i], list[j]] = [list[j], list[i]];
   }
   return list;
-}
-
-function toRgb(value) {
-  const v = String(value || '').trim();
-  if (v[0] === '#') {
-    let hex = v.slice(1);
-    if (hex.length === 3) hex = hex.split('').map((c) => c + c).join('');
-    const n = parseInt(hex.slice(0, 6), 16);
-    return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
-  }
-  const m = v.match(/[\d.]+/g);
-  return m && m.length >= 3 ? m.slice(0, 3).map(Number) : [160, 170, 200];
-}
-
-function mix(a, b, t) {
-  const A = toRgb(a);
-  const B = toRgb(b);
-  return 'rgb(' + A.map((v, i) => Math.round(v + (B[i] - v) * t)).join(',') + ')';
-}
-
-function alpha(c, a) {
-  const [r, g, b] = toRgb(c);
-  return 'rgba(' + r + ',' + g + ',' + b + ',' + a + ')';
 }
 
 function readColors(card) {
@@ -150,9 +119,10 @@ function skyStars() {
 }
 
 /* The environment a module paints and sparks from. The colours are read off the card, which has
-   to be in the document for them to be its world's. `starsOverride` is the ghost sky a powered-down
-   card paints with. */
-function makeEnv(card, seed, world, starsOverride) {
+   to be in the document for them to be its world's -- and for them to be the ones its variant
+   configured, which is why tint() runs before this does. `starsOverride` is the ghost sky a
+   powered-down card paints with. */
+function makeEnv(card, seed, world, variant, starsOverride) {
   const rnd = mulberry32(seed);
   const stars = starsOverride || skyStars();
   return {
@@ -171,8 +141,35 @@ function makeEnv(card, seed, world, starsOverride) {
     mix,
     alpha,
     reduced: calm.matches,
-    world
+    world,
+    variant: variant || PLAIN
   };
+}
+
+/* ---- the card's configuration ---------------------------------------------------------------- */
+
+// The four seeds a variant moves. --fg and --muted are not among them on purpose (js/variant.js):
+// they are what holds the text on a card at 4.5:1, whatever else the configuration does.
+const SEEDS = ['bg', 'bg2', 'accent', 'accent2'];
+
+/* Write a card's variant onto the card, as colour.
+
+   The card already wears its world's palette through data-mood (_sass/_mood.scss). This reads those
+   four seeds off it once, re-derives them through the variant (variant.recolor) and sets the result
+   inline, which wins over the mood rule at the same names -- so _sass/_tokens.scss derives every M3
+   role from the configured seeds, _sass/_feed.scss paints the card's surface and its media gradient
+   from them, and makeEnv's readColors hands the module the same four. One configuration, one
+   palette, everywhere the card is coloured.
+
+   Nothing happens for a plain variant: the card the template wrote keeps its world's palette
+   exactly, so the feed still leads with the fourteen moods and the repeats are what vary. */
+function tint(card, m) {
+  if (!m || !m.variant || m.variant.plain || m.tinted === m.variant || !card.isConnected) return;
+  if (!m.base) m.base = readColors(card); // its own mood's seeds, before any configuration
+  m.tinted = m.variant;
+  const seeds = recolor(m.base, m.variant);
+  for (const name of SEEDS) card.style.setProperty('--' + name, seeds[name]);
+  card.style.setProperty('--card-light', light(m.variant));
 }
 
 /* ---- the worlds, read off the cards the template wrote --------------------------------------- */
@@ -215,12 +212,13 @@ function loadModule(id) {
 
 // A sample sky for a world that reads the sky to paint with while there is none: seven stars in a
 // ring, the shape the persona seeds, so the card shows what the world does with a sky.
-function ghostSky(seed) {
+function ghostSky(seed, v) {
   const rnd = mulberry32(seed);
   const list = [];
-  for (let i = 0; i < 7; i++) {
-    const angle = (i / 7) * Math.PI * 2 + (rnd() - 0.5) * 0.8;
-    const radius = 14 + rnd() * 24;
+  const n = Math.max(4, Math.round(7 * v.density));
+  for (let i = 0; i < n; i++) {
+    const angle = (i / n) * Math.PI * 2 + v.turn * Math.PI * 2 + (rnd() - 0.5) * 0.8;
+    const radius = (14 + rnd() * 24) * v.scale;
     list.push({ x: 50 + Math.cos(angle) * radius, y: 48 + Math.sin(angle) * radius * 0.8, text: 'a star not yet placed' });
   }
   return list;
@@ -237,10 +235,10 @@ function paintUnpowered(ctx, w, h, env) {
   ctx.strokeStyle = alpha(c.muted, 0.35);
   ctx.lineWidth = 1;
   ctx.beginPath();
-  ctx.arc(w / 2, h / 2, Math.min(w, h) * 0.3, 0, Math.PI * 2);
+  ctx.arc(w / 2, h / 2, Math.min(w, h) * 0.3 * env.variant.scale, 0, Math.PI * 2);
   ctx.stroke();
   ctx.setLineDash([]);
-  for (let i = 0; i < 9; i++) {
+  for (let i = 0, n = Math.round(9 * env.variant.density); i < n; i++) {
     ctx.fillStyle = alpha(c.muted, 0.12 + env.rnd() * 0.15);
     ctx.beginPath();
     ctx.arc(env.rnd() * w, env.rnd() * h, 1 + env.rnd() * 1.5, 0, Math.PI * 2);
@@ -250,7 +248,12 @@ function paintUnpowered(ctx, w, h, env) {
 
 function paintFallback(ctx, w, h, env) {
   const c = env.colors;
-  const g = ctx.createRadialGradient(w * 0.3, h * 0.2, 0, w * 0.3, h * 0.2, Math.max(w, h));
+  const v = env.variant;
+  // The same corner variant.light() gives _sass/_feed.scss, so the picture and the frame behind it
+  // agree about where the light is coming from.
+  const x = w * (0.3 + v.turn * 0.52);
+  const y = h * (0.2 + v.turn * 0.16);
+  const g = ctx.createRadialGradient(x, y, 0, x, y, Math.max(w, h) * v.scale);
   g.addColorStop(0, c.bg2);
   g.addColorStop(1, c.bg);
   ctx.fillStyle = g;
@@ -260,6 +263,7 @@ function paintFallback(ctx, w, h, env) {
 async function paint(card) {
   const m = meta.get(card);
   if (!m || !m.canvas || !card.isConnected) return;
+  tint(card, m);
   const mod = m.id ? await loadModule(m.id) : null;
   const box = m.canvas.parentNode;
   const w = box.clientWidth;
@@ -267,7 +271,7 @@ async function paint(card) {
   if (!w || !h) return;
   const ctx = sizeCanvas(m.canvas, w, h);
   if (!ctx) return;
-  const env = makeEnv(card, m.seed, m.world);
+  const env = makeEnv(card, m.seed, m.world, m.variant);
   m.ctx = ctx;
   m.w = w;
   m.h = h;
@@ -281,7 +285,7 @@ async function paint(card) {
     return;
   }
   if (mod && mod.needsSky && !env.stars.length) {
-    const ghost = makeEnv(card, m.seed, m.world, ghostSky(m.seed));
+    const ghost = makeEnv(card, m.seed, m.world, m.variant, ghostSky(m.seed, env.variant));
     if (typeof mod.paint === 'function') mod.paint(ctx, w, h, ghost);
     else paintFallback(ctx, w, h, ghost);
     paintUnpowered(ctx, w, h, env);
@@ -304,7 +308,7 @@ function paintSky(ctx, w, h, env) {
   for (let i = 0; i < pts.length; i++) {
     for (let j = i + 1; j < pts.length; j++) {
       const d = Math.hypot(pts[j].x - pts[i].x, pts[j].y - pts[i].y);
-      if (d > Math.min(w, h) * 0.32) continue;
+      if (d > Math.min(w, h) * 0.32 * env.variant.scale) continue;
       ctx.strokeStyle = alpha(c.accent, 0.5 - (d / Math.min(w, h)) * 0.9);
       ctx.beginPath();
       ctx.moveTo(pts[i].x, pts[i].y);
@@ -315,7 +319,7 @@ function paintSky(ctx, w, h, env) {
   for (const p of pts) {
     ctx.fillStyle = alpha(c.fg, 0.95);
     ctx.beginPath();
-    ctx.arc(p.x, p.y, 1.8, 0, Math.PI * 2);
+    ctx.arc(p.x, p.y, 1.8 * env.variant.scale, 0, Math.PI * 2);
     ctx.fill();
   }
 }
@@ -387,6 +391,10 @@ function place(card) {
   let shortest = 0;
   for (let i = 1; i < heights.length; i++) if (heights[i] < heights[shortest]) shortest = i;
   columns[shortest].appendChild(card);
+  // Now that it is in the document its own mood's seeds can be read off it, so this is the first
+  // moment its variant can be written onto it. A card whose spark has no picture is never painted
+  // and would otherwise never be configured at all.
+  tint(card, meta.get(card));
   heights[shortest] += card.offsetHeight + gap;
 }
 
@@ -427,15 +435,17 @@ function registerStatic() {
   for (const card of Array.from(grid.querySelectorAll('.card-world'))) {
     const world = WORLDS.find((w) => w.file === card.dataset.world);
     if (!world) continue;
+    // The first card of every world, and the one the template wrote: the plain variant, so a world
+    // leads with its own palette, its own frame and its module's plainest reading.
     meta.set(card, { kind: 'world', world, id: world.id, seed: (hash(world.file) ^ salt) >>> 0,
-      canvas: card.querySelector('.card-canvas'), isStatic: true });
+      variant: PLAIN, canvas: card.querySelector('.card-canvas'), isStatic: true });
     add(card);
   }
 }
 
-function media(aspect) {
+function media(ratio) {
   const box = el('div', 'card-media');
-  box.style.aspectRatio = aspect;
+  box.style.aspectRatio = ratio;
   const canvas = el('canvas', 'card-canvas');
   canvas.setAttribute('aria-hidden', 'true');
   box.appendChild(canvas);
@@ -443,12 +453,13 @@ function media(aspect) {
 }
 
 function worldCard(world, seed) {
+  const variant = roll(seed);
   const card = el('article', 'card card-world card-enter');
   card.dataset.world = world.file;
   card.dataset.mood = world.mood;
   const link = el('a', 'card-link');
   link.href = root + world.file;
-  const { box, canvas } = media(world.aspect);
+  const { box, canvas } = media(aspect(world.aspect, variant));
   link.appendChild(box);
   const body = el('div', 'card-body');
   body.appendChild(el('p', 'card-overline', world.orientation));
@@ -456,7 +467,7 @@ function worldCard(world, seed) {
   body.appendChild(el('p', 'card-text', world.what));
   link.appendChild(body);
   card.appendChild(link);
-  meta.set(card, { kind: 'world', world, id: world.id, seed, canvas });
+  meta.set(card, { kind: 'world', world, id: world.id, seed, variant, canvas });
   return card;
 }
 
@@ -472,12 +483,13 @@ function sparkBody(world, spec) {
 }
 
 function sparkCard(world, mod, seed) {
+  const variant = roll(seed);
   const card = el('article', 'card card-spark card-enter');
   card.dataset.world = world.file;
   card.dataset.mood = world.mood;
   let spec;
   try {
-    spec = mod.spark(makeEnv(card, seed, world));
+    spec = mod.spark(makeEnv(card, seed, world, variant));
   } catch (e) {
     spec = null;
   }
@@ -487,7 +499,7 @@ function sparkCard(world, mod, seed) {
   link.href = root + world.file;
   let canvas = null;
   if (spec.paint) {
-    const m = media(spec.aspect || world.aspect);
+    const m = media(aspect(spec.aspect || world.aspect, variant));
     canvas = m.canvas;
     link.appendChild(m.box);
   }
@@ -502,37 +514,42 @@ function sparkCard(world, mod, seed) {
   actions.appendChild(again);
   card.appendChild(actions);
 
-  meta.set(card, { kind: 'spark', world, id: world.id, seed, canvas, spec, mod });
+  meta.set(card, { kind: 'spark', world, id: world.id, seed, variant, canvas, spec, mod });
   return card;
 }
 
-// The same card, dealt again: a fresh seed, a fresh thing from the same world, in place.
+// The same card, dealt again: a fresh seed and a fresh configuration, so another from this world
+// is another card -- a different thing, in a different palette, in a different frame -- in place.
 function reroll(card) {
   const m = meta.get(card);
   if (!m || !m.mod) return;
   const seed = newSeed();
+  const variant = roll(seed);
   let spec;
   try {
-    spec = m.mod.spark(makeEnv(card, seed, m.world));
+    spec = m.mod.spark(makeEnv(card, seed, m.world, variant));
   } catch (e) {
     spec = null;
   }
   if (!spec) return;
   m.seed = seed;
   m.spec = spec;
+  m.variant = variant;
+  tint(card, m);
   const link = card.querySelector('.card-link');
   const oldBody = link.querySelector('.card-body');
   link.replaceChild(sparkBody(m.world, spec), oldBody);
   const oldMedia = link.querySelector('.card-media');
+  const ratio = aspect(spec.aspect || m.world.aspect, variant);
   if (spec.paint && !oldMedia) {
-    const made = media(spec.aspect || m.world.aspect);
+    const made = media(ratio);
     link.insertBefore(made.box, link.firstChild);
     m.canvas = made.canvas;
   } else if (!spec.paint && oldMedia) {
     oldMedia.remove();
     m.canvas = null;
   } else if (oldMedia) {
-    oldMedia.style.aspectRatio = spec.aspect || m.world.aspect;
+    oldMedia.style.aspectRatio = ratio;
   }
   m.painted = false;
   if (m.canvas) paint(card);
@@ -585,7 +602,7 @@ function unlockCard() {
   body.appendChild(text);
   stack.appendChild(body);
   card.appendChild(stack);
-  meta.set(card, { kind: 'unlock', sky: true, seed: newSeed(), canvas, world: null });
+  meta.set(card, { kind: 'unlock', sky: true, seed: newSeed(), variant: PLAIN, canvas, world: null });
   if (site && typeof site.unlock === 'function') {
     // The box the helper puts before the host says everything there is to say; this card adds
     // one line only once there is a sky to count.
@@ -622,7 +639,9 @@ function feature(host, canvas, file) {
   if (!world || !host || !canvas) return false;
   unfeature(host);
   host.dataset.mood = world.mood;
-  meta.set(host, { kind: 'feature', world, id: world.id, seed: newSeed(), canvas });
+  // The plain variant: a page's feature is the world itself, not a repeat of it, so it is painted
+  // in the world's own palette at the world's own size.
+  meta.set(host, { kind: 'feature', world, id: world.id, seed: newSeed(), variant: PLAIN, canvas });
   features.add(host);
   if (watcher) watcher.observe(host);
   else paint(host);
