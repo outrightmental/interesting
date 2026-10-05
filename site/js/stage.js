@@ -207,7 +207,9 @@ function worldOf(file) {
 
 // The four names a palette is (_sass/_mood.scss, js/variant.js), and no others.
 const SEEDS = ['bg', 'bg2', 'accent', 'accent2'];
-const THEME_MS = 420; // how long the site takes to become the colour of the card just pressed
+const GRAY = '#808080'; // the neutral the theme dips through, so one colour clears before the next
+const DIP_MS = 140; // the quick fade out to that neutral
+const RISE_MS = 420; // the fade from it into the colour of the card just pressed
 
 let featured = null; // the palette the site is wearing for the activity on the stage, once landed
 let fading = 0; // the crossfade in flight, so two picks in a row never fight over the seeds
@@ -240,9 +242,11 @@ function someSeeds(seeds) {
   return out;
 }
 
-/* The site becomes `to` from wherever it is now, over THEME_MS, and lands exactly on it -- so the
-   theme shifts rather than jumps, and the colour it settles in is the colour that was asked for.
-   A visitor who asked for less motion gets the change and not the shift. */
+/* The site becomes `to` from wherever it is now, by way of a neutral grey, and lands exactly on
+   it (issue #61) -- a quick fade out to the neutral so the colour it was leaves cleanly, then a
+   fuller fade from the neutral into the colour that was asked for, so the theme shifts through a
+   settled middle rather than smearing one palette straight over another. A visitor who asked for
+   less motion gets the change and not the shift. */
 function crossfade(from, to, done) {
   if (fading) cancelAnimationFrame(fading);
   fading = 0;
@@ -257,11 +261,19 @@ function crossfade(from, to, done) {
   writeSeeds(from);
   const startedAt = performance.now();
   const step = (now) => {
-    const t = Math.min(1, Math.max(0, (now - startedAt) / THEME_MS));
+    const elapsed = now - startedAt;
     const at = {};
-    for (const name of SEEDS) at[name] = t < 1 ? mix(from[name], to[name], t) : to[name];
+    if (elapsed < DIP_MS) {
+      // Fading out to the neutral grey.
+      const t = Math.max(0, elapsed / DIP_MS);
+      for (const name of SEEDS) at[name] = mix(from[name], GRAY, t);
+    } else {
+      // Rising from the neutral grey into the new theme, landing exactly on it.
+      const t = Math.min(1, (elapsed - DIP_MS) / RISE_MS);
+      for (const name of SEEDS) at[name] = t < 1 ? mix(GRAY, to[name], t) : to[name];
+    }
     writeSeeds(at);
-    if (t < 1) {
+    if (elapsed < DIP_MS + RISE_MS) {
       fading = requestAnimationFrame(step);
       return;
     }

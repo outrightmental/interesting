@@ -133,8 +133,9 @@ slab per page, small-caps labels, pill borders on everything, a footer index two
   the page's own world *and* over the reading — and only while that piece is on the stage, because
   `js/stage.js` takes the attribute off again on the way home. The card that was pressed hands its
   own four seeds over with it, so the site takes the colour of that card and not merely of its
-  world (see [The feature and the feed](#the-feature-and-the-feed)), and the shift is a 420ms
-  crossfade, or no shift at all for a visitor who asked for less motion.
+  world (see [The feature and the feed](#the-feature-and-the-feed)), and the shift is a crossfade
+  through a neutral grey — a quick fade out to it, then a fuller fade into the new theme — or no
+  shift at all for a visitor who asked for less motion.
 - **The M3 parts, as classes.** The type scale is a mixin (`_type.scss`), and the components are
   the shared classes every page already used: a bare `<button>` is a tonal button, `a.action` an
   outlined one, `.btn-filled` and `.btn-text` the other two emphases, `aria-pressed='true'` reads
