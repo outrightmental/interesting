@@ -11,9 +11,9 @@ stylesheet: moods
   runs. This page lists every world itself, which is why the shared feed after <main> is left
   off it (see _includes/layout.njk).
 -#}
-  <main>
+  <main class='list-page-main'>
     <h1>the mood atlas</h1>
-    <p class='tagline'>What the site is trying to work out about you, how it goes about it, and every answer it can arrive at.</p>
+    <p class='page-purpose'>This page shows how the site asks its sideways question and what each answer opens; try a mechanism, read what it sees, then jump to the matching world.</p>
 
     <section class='atlas-state panel' aria-labelledby='state-heading'>
       <h2 id='state-heading' class='panel-title'>what it has read</h2>
@@ -28,21 +28,14 @@ stylesheet: moods
     </section>
 
     <h2 class='section-title'>how it asks</h2>
-    <p class='atlas-copy'>It never asks you to describe yourself. It asks about a door, a stone, the
-      thing you would put in your pocket, the rate at which you tap, how long you hold a button
-      down, where you put one mark in an empty field. It glances at the clock while you answer, and
-      it knows how long it has been since you were last here. You get a different mechanism each
-      time it asks, and whatever it concludes fades over a few days.</p>
-    <ul id='mechanisms' class='mechanisms'>
-      <li>The mechanisms are listed here once scripting is available. Without it, nothing is lost:
-        every world below is a plain link.</li>
+    <p class='section-note'>It asks about choices and actions in the world around you: doors, stones, taps, holds, marks and lines. Pick any mechanism below to run it now.</p>
+    <ul id='mechanisms' class='mechanisms list-stack'>
+      <li>The mechanisms are listed here once scripting is available. Without it, nothing is lost: every world below is a plain link.</li>
     </ul>
 
     <h2 class='section-title'>every answer, and its world</h2>
-    <p class='atlas-copy'>{{ worlds.worlds.length | words | capitalize }} frames of mind, each with one world behind it.
-      Nothing in this list is the default, and the site would rather you overruled it than took
-      its word.</p>
-    <ul class='orientations'>
+    <p class='section-note'>{{ worlds.worlds.length | words | capitalize }} frames of mind, each with one world behind it. Nothing in this list is the default, and the site would rather you overrule it than take its word.</p>
+    <ul class='orientations list-stack'>
 {%- for world in worlds.worlds %}
       <li data-world='{{ world.file }}' data-mood='{{ world.mood }}'><a href='{{ world.file }}'>{{ world.name }}</a> <strong>{{ world.orientation }}</strong> <span class='pull'></span></li>
 {%- endfor %}
