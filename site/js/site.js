@@ -672,10 +672,115 @@
     return { href: 'index.html', where: 'the threshold' };
   }
 
+  function inList(list, href) {
+    for (var i = 0; i < list.length; i++) {
+      if (list[i].href === href) return true;
+    }
+    return false;
+  }
+
+  function pickUnique(list, avoid) {
+    var candidates = [];
+    for (var i = 0; i < list.length; i++) {
+      if (!list[i] || !list[i].href) continue;
+      if (avoid.indexOf(list[i].href) !== -1) continue;
+      if (list[i].href === currentFile) continue;
+      candidates.push(list[i]);
+    }
+    if (!candidates.length) return null;
+    return candidates[Math.floor(Math.random() * candidates.length)];
+  }
+
+  function plotTrail() {
+    var preferred = preferredWorldFromReading();
+    var avoid = [currentFile];
+    var planned = [];
+
+    function push(world) {
+      if (!world || !world.href) return;
+      if (avoid.indexOf(world.href) !== -1) return;
+      planned.push(world);
+      avoid.push(world.href);
+    }
+
+    if (preferred && preferred !== currentFile) {
+      var preferredWorld = null;
+      for (var i = 0; i < ALL_WORLDS.length; i++) {
+        if (ALL_WORLDS[i].href === preferred) {
+          preferredWorld = ALL_WORLDS[i];
+          break;
+        }
+      }
+      push(preferredWorld);
+    } else {
+      push(routeJump('surprise'));
+    }
+
+    if (planned.length) {
+      var first = planned[0];
+      if (inList(CIRCUIT, first.href)) push(pickUnique(OFF_SKY, avoid));
+      else if (inList(OFF_SKY, first.href)) push(pickUnique(CIRCUIT, avoid));
+      else push(routeJump('counter'));
+    }
+
+    if (planned.length < 2) push(routeJump('counter'));
+    if (planned.length < 3) push(routeJump('surprise'));
+
+    if (planned.length < 3) {
+      var fill = worldPool(ALL_WORLDS, null);
+      while (planned.length < 3 && fill.length) {
+        var next = pickUnique(fill, avoid);
+        if (!next) break;
+        push(next);
+      }
+    }
+
+    return planned.slice(0, 3);
+  }
+
   function setWayfindingJumpNote(text) {
     var notes = document.querySelectorAll('[data-wayfinding-jump-note]');
     for (var i = 0; i < notes.length; i++) {
       notes[i].textContent = text;
+    }
+  }
+
+  function renderTrail(trail) {
+    var hosts = document.querySelectorAll('[data-wayfinding-trail]');
+    for (var i = 0; i < hosts.length; i++) {
+      var host = hosts[i];
+      var list = host.querySelector('[data-wayfinding-trail-list]');
+      var start = host.querySelector('[data-wayfinding-trail-start]');
+      if (!list || !start) continue;
+
+      while (list.firstChild) list.removeChild(list.firstChild);
+
+      if (!trail || !trail.length) {
+        host.hidden = true;
+        start.href = 'index.html';
+        start.textContent = 'start this trail';
+        continue;
+      }
+
+      for (var j = 0; j < trail.length; j++) {
+        var item = document.createElement('li');
+        if (trail[j].href === currentFile) {
+          var current = document.createElement('span');
+          current.className = 'current';
+          current.textContent = trail[j].where + ' (you are here)';
+          item.appendChild(current);
+        } else {
+          var link = document.createElement('a');
+          link.href = trail[j].href;
+          link.textContent = trail[j].where;
+          item.appendChild(link);
+        }
+        list.appendChild(item);
+      }
+
+      host.hidden = false;
+      start.href = trail[0].href;
+      start.textContent = 'start with ' + trail[0].where;
     }
   }
 
@@ -686,6 +791,18 @@
     for (var i = 0; i < buttons.length; i++) {
       buttons[i].addEventListener('click', function () {
         var mode = this.getAttribute('data-wayfinding-jump') || 'surprise';
+
+        if (mode === 'trail') {
+          var trail = plotTrail();
+          renderTrail(trail);
+          if (trail.length) {
+            setWayfindingJumpNote('Trail plotted: ' + trail.map(function (step) { return step.where; }).join(' -> ') + '.');
+          } else {
+            setWayfindingJumpNote('Could not plot a trail right now. Try again.');
+          }
+          return;
+        }
+
         var picked = routeJump(mode);
 
         if (mode === 'counter') {

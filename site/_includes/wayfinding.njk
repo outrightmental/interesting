@@ -37,8 +37,15 @@
       <div class='controls wayfinding-jump-controls'>
         <button type='button' class='wayfinding-jump' data-wayfinding-jump='surprise'>surprise jump</button>
         <button type='button' class='wayfinding-jump' data-wayfinding-jump='counter'>counter-jump</button>
+        <button type='button' class='wayfinding-jump' data-wayfinding-jump='trail'>plot a 3-stop trail</button>
       </div>
       <p class='wayfinding-jump-note' data-wayfinding-jump-note aria-live='polite'>Need a shove? Let the map pick your next world.</p>
+
+      <section class='wayfinding-trail' data-wayfinding-trail hidden aria-label='Plotted exploration trail'>
+        <p class='wayfinding-trail-title'>plotted trail</p>
+        <ol class='wayfinding-trail-list' data-wayfinding-trail-list></ol>
+        <a class='action wayfinding-trail-start' data-wayfinding-trail-start href='index.html'>start this trail</a>
+      </section>
 
       <div class='wayfinding-grid'>
         <section class='wayfinding-group' aria-label='Worlds off the sky'>
