@@ -2,21 +2,10 @@
 // fifteen answers, each a world.
 
 @use 'type';
-
-// A list page: its feature is the list, read at a column's width.
-main {
-  grid-template-columns: minmax(0, var(--main-max));
-  align-content: start;
-}
+@use 'list-page';
 
 .atlas-state {
   margin: 0 0 1.25rem;
-}
-
-.section-title {
-  margin: 1.5rem 0 0.5rem;
-  color: var(--md-sys-color-on-surface);
-  @include type.scale(title-medium);
 }
 
 .current {
@@ -38,29 +27,15 @@ main {
   border-top: 1px solid var(--md-sys-color-outline-variant);
 }
 
-.atlas-copy {
-  margin: 0 0 0.75rem;
-  max-width: 68ch;
-  color: var(--md-sys-color-on-surface);
-  @include type.scale(body-large);
-}
-
 // Two lists of M3 list items: a mechanism with a trailing text button, and a world with the
 // orientation that opens it and what that orientation wants.
 .mechanisms,
 .orientations {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  gap: 0.5rem;
+  @extend .list-stack;
 }
 
 .mechanisms li,
 .orientations li {
-  padding: 0.75rem 1rem;
-  border-radius: var(--md-sys-shape-corner-medium);
-  background: var(--md-sys-color-surface-container);
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -90,7 +65,7 @@ main {
 .orientations a {
   display: inline-block;
   min-width: 10rem;
-  padding: 0.15rem 0; // a 24px line box, so the link is a tap target
+  padding: 0.15rem 0;
   color: var(--md-sys-color-primary);
   text-decoration: none;
   @include type.scale(title-small);

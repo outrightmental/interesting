@@ -1,49 +1,13 @@
 // The site map: every page of the site as a filled card, with a line on what it is.
 
 @use 'type';
-
-// A list page: its feature is the list, read at a column's width.
-main {
-  grid-template-columns: minmax(0, var(--main-max));
-  align-content: start;
-}
-
-.about {
-  margin: 0 0 1.25rem;
-  max-width: 66ch;
-  color: var(--md-sys-color-on-surface);
-  @include type.scale(body-large);
-}
-
-h2.section-title {
-  margin: 1.5rem 0 0.5rem;
-  color: var(--md-sys-color-on-surface);
-  @include type.scale(title-medium);
-}
-
-.section-note {
-  margin: 0 0 0.75rem;
-  max-width: 70ch;
-  color: var(--md-sys-color-on-surface-variant);
-  @include type.scale(body-medium);
-}
+@use 'list-page';
 
 .pages {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr));
-  gap: 0.75rem;
+  @extend .list-grid;
 }
 
-// Each page is a filled card; a world's card wears its own world's palette through data-mood.
-.pages li {
-  padding: 0.9rem 1rem 1rem;
-  border-radius: var(--md-sys-shape-corner-large);
-  background: var(--md-sys-color-surface-container);
-}
-
+// A world's card wears its own world's palette through data-mood.
 .pages a {
   display: inline-block;
   min-height: 24px;
