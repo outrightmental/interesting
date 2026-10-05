@@ -15,7 +15,7 @@
  *     from the same seed, in the same colours, under two configurations, and the drawing calls have
  *     to differ.
  *
- * The third argument is the fourteen mood palettes, read out of _sass/_mood.scss by the caller, so
+ * The third argument is the fifteen mood palettes, read out of _sass/_mood.scss by the caller, so
  * the colour a configuration derives can be checked against the palette it was derived from rather
  * than against a copy of it kept here.
  *

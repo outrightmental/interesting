@@ -1659,7 +1659,7 @@ class CardVariantTest(unittest.TestCase):
     nothing else moving at all. A variant is what else there is now, and two things about it are
     worth testing rather than only reading: it is arithmetic over a seed with no browser in it,
     which is the whole reason it is its own file; and what it is for is that a card looks
-    different, which is measurable. card_variant_harness.mjs rolls it, re-derives all fourteen mood
+    different, which is measurable. card_variant_harness.mjs rolls it, re-derives all fifteen mood
     palettes through it and paints every world's module under it against a recording stand-in for a
     canvas; the assertions are here.
     """
@@ -1698,7 +1698,7 @@ class CardVariantTest(unittest.TestCase):
         self.seen = CardVariantTest.observed
 
     def palettes(self):
-        """The fourteen palettes, read out of _sass/_mood.scss: the colours a configuration starts
+        """The fifteen palettes, read out of _sass/_mood.scss: the colours a configuration starts
         from, taken from the one place they are written rather than from a copy kept here."""
         sass = (self.repo / "site" / "_sass" / "_mood.scss").read_text()
         found = {mood: seeds.split(", ") for mood, seeds
@@ -1749,7 +1749,7 @@ class CardVariantTest(unittest.TestCase):
 
     def test_the_first_card_of_a_world_is_configured_to_change_nothing(self):
         # Open question 3 of the issue, answered: the card the template wrote keeps its world's
-        # palette and its world's frame, so the feed still leads with the fourteen moods, and the
+        # palette and its world's frame, so the feed still leads with the fifteen moods, and the
         # repeats are what vary. Every dial of the plain variant is its no-op value.
         plain = self.seen["plain"]
         self.assertTrue(plain["plain"])

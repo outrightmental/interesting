@@ -118,7 +118,7 @@ export function dim(color, ceiling) {
 // How bright a card's ground may get, as WCAG relative luminance. Every mood's own ground sits under
 // this already (0.003 to 0.006), so the ceiling is not a colour but the headroom a configuration has
 // above one: it is the brightest a ground can be while the surface tones _sass/_tokens.scss derives
-// from it still hold --muted well clear of 4.5:1, over all fourteen palettes and with the accents
+// from it still hold --muted well clear of 4.5:1, over all fifteen palettes and with the accents
 // either way round. CardVariantTest measures that rather than taking it on trust.
 export const GROUND_CEILING = 0.008;
 
@@ -174,7 +174,7 @@ export function roll(seed) {
    --fg and --muted are deliberately not among them: they are what holds the text on a card at
    4.5:1, and no configuration gets to move them. What the text sits on does move -- every surface
    tier is derived from --bg (_sass/_tokens.scss) -- so `lift` carries the ground as far as its own
-   lit corner and dim() holds it under GROUND_CEILING, the headroom every one of the fourteen
+   lit corner and dim() holds it under GROUND_CEILING, the headroom every one of the fifteen
    palettes has before the text on a card stops clearing 4.5:1. The ground takes the colour of its
    corner and some of its light, and stops where the axiom does. */
 export function recolor(base, v) {

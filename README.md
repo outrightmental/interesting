@@ -10,7 +10,8 @@ iterate a more interesting website
 
 - **`/site`** — the website, in source form. Everything anyone edits — a person or the hourly AI —
   lives here, and nothing else does: the pages, the shared layout and partials, the Sass, the feed
-  and its one module per world (see [The feature and the feed](#the-feature-and-the-feed)), the three
+  with its one module per world and the configuration a repeated card wears
+  (see [The feature and the feed](#the-feature-and-the-feed)), the three
   shared files behind the analytics tag (see [Analytics axiom](#analytics-axiom)), the one behind
   the local-state store (see [Local state axiom](#local-state-axiom)), the one behind the mood
   flow (see [Mood axiom](#mood-axiom)), the one behind a visitor's way of steering the site (see
@@ -118,8 +119,10 @@ slab per page, small-caps labels, pill borders on everything, a footer index two
   `color-mix()` — primary and its container, secondary container, tertiary, the five
   surface-container tiers, outline and outline-variant. The derivation is applied on `:root` and
   on anything carrying `data-mood`, so a mood re-skins the whole site and a card in the feed
-  re-tints itself from its own world's seeds. The dark scheme is the only scheme: the site is a
-  night sky, and M3 lays dark surfaces out by tone rather than shadow.
+  re-tints itself from its own world's seeds — a card the feed dealt from its world's seeds *and*
+  its own configuration, which only ever blends the four that mood gives it (see
+  [The feature and the feed](#the-feature-and-the-feed)). The dark scheme is the only scheme: the
+  site is a night sky, and M3 lays dark surfaces out by tone rather than shadow.
 - **A page's palette is its world's.** The fifteen palettes in `_mood.scss` are keyed by
   orientation id, the layout writes `<html data-world='…'>` from
   [`site/_data/worlds.json`](site/_data/worlds.json), and a visitor's reading on
@@ -179,6 +182,21 @@ itself.
   (see [Completion axiom](#completion-axiom)), and every world's module has one, by law. `env` carries a seeded
   random source, the stars, the card's own colours and the helpers to mix them, so a card paints
   the same picture every time and a different one from its neighbour.
+- **A repeat is configured, not reprinted.** The feed deals without end, so every world comes round
+  again and again, and a repeat used to differ only in whatever its module did with a fresh seed —
+  same palette, same frame, four of the worlds drawing from the stars alone and so repeating one
+  picture exactly. Every card the feed deals now carries a *variant*:
+  [`site/js/variant.js`](site/js/variant.js), seven dials rolled from the card's own seed. Three are
+  colour — which of the mood's two accents leads, how far the ground rises toward its lit corner,
+  how far that corner is pushed into the accent — and the feed writes the four seeds they derive
+  back onto the card, so `_tokens.scss` derives every M3 role from them, the card's surface and
+  gradient follow, and `env.colors` hands the module the same four. The other four are shape:
+  `stretch` frames the card away from its world's aspect ratio, and `density`, `scale` and `turn`
+  are what every module leans on to draw itself differently. The card the template wrote keeps the
+  variant that changes nothing, so a world leads with its own palette and its own frame and it is
+  the repeats that vary; `--fg` and `--muted` are never configured, and the ground's ceiling is set
+  where the contrast the accessibility axiom asks for runs out, which `CardVariantTest` measures
+  over all fifteen palettes rather than taking on trust.
 - **It follows the persona.** The world the visitor's reading opens onto is moved to the front and
   badged *for you*, and follows the reading as it changes. With no sky yet, a card that reads the
   sky paints a veiled ghost of itself, and one unpowered card is dealt early carrying the shared
@@ -188,7 +206,7 @@ itself.
 - **Modular is the point.** A world is its page (two lines that include the stage), its line in the
   list and its module, and the feed is where the modules meet. Adding a world adds one of each; the hourly run
   is told so, and `RealSiteTest` holds the list, the modules and the mood flow to naming the same
-  worlds.
+  worlds, while `CardVariantTest` holds every module to varying with the card's configuration.
 
 ### Engagement-time axiom
 

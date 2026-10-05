@@ -166,7 +166,7 @@ const SEEDS = ['bg', 'bg2', 'accent', 'accent2'];
    palette, everywhere the card is coloured.
 
    Nothing happens for a plain variant: the card the template wrote keeps its world's palette
-   exactly, so the feed still leads with the fourteen moods and the repeats are what vary. */
+   exactly, so the feed still leads with the fifteen moods and the repeats are what vary. */
 function tint(card, m) {
   if (!m || !m.variant || m.variant.plain || m.tinted === m.variant || !card.isConnected) return;
   if (!m.base) m.base = readColors(card); // its own mood's seeds, before any configuration
