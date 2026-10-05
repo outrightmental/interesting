@@ -63,6 +63,13 @@ export default function (eleventyConfig) {
     return sass.compile(file, sassOptions(path.dirname(file))).css;
   });
 
+  // `{{ worlds.underSky.length | words }}` is "eight": a count from _data/worlds.json, spelled out
+  // the way the site's copy writes numbers, so the copy follows the list when a world is added.
+  const WORDS = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
+    "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen",
+    "nineteen", "twenty"];
+  eleventyConfig.addFilter("words", (n) => (Number.isInteger(n) && n >= 0 && n < WORDS.length ? WORDS[n] : String(n)));
+
   // Keep every output path identical to its source path. Without this Eleventy writes "pretty"
   // permalinks (about.html -> about/index.html), which would break the relative links the site is
   // built from. A .scss file lands next to its source as .css.

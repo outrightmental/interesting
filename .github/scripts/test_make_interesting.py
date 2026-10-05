@@ -1644,7 +1644,8 @@ class LegibilityStandardTest(unittest.TestCase):
         prompt = self.prompt()
         self.assertIn("POWERED DOWN, NEVER BROKEN", prompt)
         self.assertIn("window.interestingSite.unlock(host, { onReady })", prompt)
-        self.assertIn("make one on the wish constellation page first", prompt)
+        self.assertIn('Never "make one on the wish constellation page first"', prompt)
+        self.assertIn('never "refresh after creating"', prompt)
         self.assertIn("writing to the shared state exactly as the visitor's own action would", prompt)
         self.assertIn("a browser that stores nothing still gets the button", prompt)
 

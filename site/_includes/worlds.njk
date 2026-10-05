@@ -5,10 +5,11 @@
   is added, renamed or retired there, and this include, the header, sitemap.html and the sky
   circuit all follow.
 
-  Two groups, in the words every page uses: off the sky (six worlds that share nothing but the
-  site) and under the sky (eight that read one saved sky). Under each name is the orientation the
-  world answers to, which is the same phrase the ribbon reads a visitor as. On a world under the
-  sky that group comes first and carries the circuit: which of the eight this is, and the next.
+  Two groups, in the words every page uses: off the sky (worlds that share nothing but the site)
+  and under the sky (worlds that read one saved sky). Under each name is the orientation the world
+  answers to, which is the same phrase the ribbon reads a visitor as. On a world under the sky that
+  group comes first and carries the circuit: where in it this world is, and the next. Every count
+  is read off the list, so a world added there is counted here.
 
   The headings are real (h2, then h3), so a visitor listening to the page hears its shape, and the
   reachability axiom holds with scripting off because every link here is plain markup. One
@@ -17,20 +18,21 @@
 {%- set here = (page.filePathStem | replace('/', '')) + '.html' if page else '' -%}
 {%- set skyIndex = -1 -%}
 {%- for world in worlds.underSky %}{% if world.file == here %}{% set skyIndex = loop.index0 %}{% endif %}{% endfor -%}
+{%- set skyCount = worlds.underSky.length -%}
 {%- set groups = [['sky', 'under the sky', worlds.underSky], ['off', 'off the sky', worlds.offSky]] if skyIndex >= 0 else [['off', 'off the sky', worlds.offSky], ['sky', 'under the sky', worlds.underSky]] -%}
 <footer class='site-footer'>
   <nav class='panel worlds' aria-labelledby='worlds-title'>
     <h2 class='panel-title' id='worlds-title'>every world</h2>
-    <p class='panel-note'>Fourteen worlds and no default. Under each name is who the site would send there: take the one that fits, or the one that does not.</p>
+    <p class='panel-note'>{{ (worlds.offSky.length + skyCount) | words | capitalize }} worlds and no default. Under each name is who the site would send there: take the one that fits, or the one that does not.</p>
 {%- for group in groups %}
     <section class='worlds-group' aria-labelledby='worlds-{{ group[0] }}'>
       <h3 class='panel-label' id='worlds-{{ group[0] }}'>{{ group[1] }}</h3>
 {%- if group[0] == 'sky' %}
 {%- if skyIndex >= 0 %}
-{%- set nextWorld = worlds.underSky[(skyIndex + 1) % worlds.underSky.length] %}
-      <p class='panel-note'>These eight read one saved sky, the stars placed in the wish constellation. This is {{ skyIndex + 1 }} of 8. <a href='{{ siteRoot }}{{ nextWorld.file }}'>next: {{ nextWorld.name }}</a></p>
+{%- set nextWorld = worlds.underSky[(skyIndex + 1) % skyCount] %}
+      <p class='panel-note'>These {{ skyCount | words }} read one saved sky, the stars placed in the wish constellation. This is {{ skyIndex + 1 }} of {{ skyCount }}. <a href='{{ siteRoot }}{{ nextWorld.file }}'>next: {{ nextWorld.name }}</a></p>
 {%- else %}
-      <p class='panel-note'>These eight read one saved sky; the wish constellation is where it is placed.</p>
+      <p class='panel-note'>These {{ skyCount | words }} read one saved sky; the wish constellation is where it is placed.</p>
 {%- endif %}
 {%- endif %}
       <ul class='chips chips-tall'>

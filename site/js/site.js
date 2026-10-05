@@ -191,7 +191,8 @@
   function wireRandom() {
     var button = document.getElementById('worlds-random');
     if (!button) return;
-    var here = (window.location.pathname || '').split('/').pop() || 'index.html';
+    var here = document.documentElement.getAttribute('data-page')
+      || (window.location.pathname || '').split('/').pop() || 'index.html';
     var links = document.querySelectorAll('.worlds .chips a[href]');
     var pool = [];
     for (var i = 0; i < links.length; i++) {

@@ -20,7 +20,8 @@
     - The clock and the time zone are read as well, so an arrival in the small hours from the far
       side of the world starts from a different place than one at midday.
     - What is learned is only partly remembered: the drift below decays with the time since the
-      last visit, and the fresh answer always outweighs it. Every arrival is queried again.
+      last visit, and the fresh answer always outweighs it. Every arrival at the threshold is
+      queried again; every other page invites, one press away.
 
   Every page carries the ribbon this file builds, so the flow is ongoing rather than a gate at the
   front door. On the threshold (index.html) the ribbon asks on arrival; on every other page it
@@ -327,13 +328,9 @@
 
   /* ---- what is partly remembered -------------------------------------------------------- */
 
-  var readStatus = 'missing'; // what the store said of the saved reading, for the ribbon to mention
-
   function load() {
     var blank = { visits: 0, last: null, drift: {}, recent: [], orientation: null };
-    var read = store.read(READING, blank);
-    readStatus = read.status;
-    var parsed = read.value;
+    var parsed = store.get(READING, blank);
     if (!parsed || typeof parsed !== 'object') return blank;
     return {
       visits: typeof parsed.visits === 'number' ? parsed.visits : 0,
@@ -505,6 +502,10 @@
     }
   }
 
+  // The answer given on this page, if any, so every part of the page reports it as "read just now"
+  // rather than as a reading carried over from memory.
+  var lastAnswered = null;
+
   function record(answer) {
     var reading = readingFor(answer);
     var drift = {};
@@ -515,6 +516,7 @@
     state.last = Date.now();
     save({ visits: state.visits, last: state.last, drift: state.drift,
            recent: state.recent, orientation: state.orientation });
+    lastAnswered = reading.orientation ? reading : null;
     transmogrify(reading.orientation);
     return reading;
   }
@@ -792,6 +794,7 @@
       started = 0;
       window.clearInterval(ticker);
       button.classList.remove('held');
+      if (trace.meter) trace.meter.textContent = '';
       trace.textContent = 'let go early; press again';
     });
     // A keyboard holds too: keydown repeats while the key is down, keyup ends it.
@@ -814,7 +817,9 @@
 
   function placeProbe(probe, body, trace, answer, finish) {
     var field = el('div', 'probe-field');
-    field.setAttribute('aria-label', 'a field to place one mark in');
+    // application: a screen reader in browse mode passes the arrow keys through to the field.
+    field.setAttribute('role', 'application');
+    field.setAttribute('aria-label', 'a field to place one mark in: the arrow keys move the mark, enter leaves it there');
     field.tabIndex = 0;
     var mark = el('span', 'probe-mark');
     mark.hidden = true;
@@ -870,7 +875,8 @@
     pad.width = 520;
     pad.height = 180;
     pad.tabIndex = 0;
-    pad.setAttribute('role', 'img');
+    // application, like the placement field, so the arrow keys reach the pad in browse mode too.
+    pad.setAttribute('role', 'application');
     pad.setAttribute('aria-label', 'a pad to draw one line on: the arrow keys draw, enter finishes');
     var ctx = pad.getContext('2d');
     var points = [];
@@ -991,9 +997,7 @@
     var o = reading && reading.orientation;
     var kept = store.persistent === false
       ? ' This browser keeps nothing, so the reading lasts for this page.'
-      : (readStatus === 'unreadable'
-        ? ' What this browser saved cannot be read; the state menu, bottom right, can clear it.'
-        : '');
+      : '';
     if (!o || !reading.source || reading.source === 'signals') {
       return 'Nothing read yet. Answer one sideways question and the site suggests a world to '
         + 'start in, or take any world below.' + kept;
@@ -1004,6 +1008,9 @@
   }
 
   function currentReading() {
+    if (lastAnswered && state.orientation && lastAnswered.orientation.id === state.orientation) {
+      return lastAnswered;
+    }
     return state.orientation
       ? { orientation: ORIENTATION_BY_ID[state.orientation], source: 'memory', signals: signals() }
       : readingFor(null);
@@ -1047,7 +1054,7 @@
       }
       if (ask) {
         ask.hidden = false;
-        ask.textContent = asking ? 'not now' : (read ? 'ask another way' : 'ask me');
+        ask.textContent = read ? 'ask another way' : 'ask me';
         ask.setAttribute('aria-expanded', asking ? 'true' : 'false');
       }
       host.setAttribute('data-asking', asking ? 'true' : 'false');
@@ -1086,8 +1093,15 @@
 
     if (ask) {
       ask.addEventListener('click', function () {
-        if (asking) close();
-        else query();
+        if (asking) {
+          close();
+          return;
+        }
+        query();
+        // The ask button steps aside while the question is open, so focus moves into the
+        // question: its first control, or the field or pad it asks for.
+        var first = probeHost && probeHost.querySelector('button, input, [tabindex]');
+        if (first && typeof first.focus === 'function') first.focus();
       });
     }
 
@@ -1099,20 +1113,20 @@
 
     askRibbon = query;
     show();
+    // Live only from here on: the sentence written as the page loads is the page's, not news, and a
+    // screen reader should hear the ribbon when it changes, not on every page a visitor opens.
+    if (text) text.setAttribute('aria-live', 'polite');
 
     // The threshold asks unprompted: on arrival (a first visit, or a return after
     // ARRIVAL_GAP_MS), and whenever nothing has been read yet, because asking is what that page
     // is for. Every other page invites instead -- the question is one press away -- so a visitor
-    // who followed a link to a world meets the world first. A page that offers the mechanisms
-    // itself (the mood atlas) sets data-threshold on <html> and the ribbon only reports there.
+    // who followed a link to a world meets the world first.
     //
     // "Arrival" is read off the gap the shared document already records rather than a session
     // key of its own, because no page of this site touches the browser's storage directly.
-    var here = (window.location.pathname || '').split('/').pop();
-    var threshold = here === '' || here === 'index.html';
+    var threshold = document.documentElement.getAttribute('data-page') === 'index.html';
     var arrived = sinceLast === null || sinceLast > ARRIVAL_GAP_MS;
-    var quiet = document.documentElement.hasAttribute('data-threshold');
-    if (threshold && !quiet && (arrived || !state.orientation)) query();
+    if (threshold && (arrived || !state.orientation)) query();
   }
 
   /* ---- start ------------------------------------------------------------------------------ */
@@ -1141,6 +1155,7 @@
     reducedMotion: reducedMotion,
     forget: function () {
       state = { visits: 1, last: null, drift: {}, recent: [], orientation: null };
+      lastAnswered = null;
       sinceLast = null;
       store.remove(READING);
       transmogrify(null);

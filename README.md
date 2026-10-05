@@ -77,7 +77,10 @@ is deliberately small: a foundation to build a more holistic experience on, not 
   partials and nothing else, and every page links the `css/site.css` it compiles to. `css/<page>.scss`
   holds what is true of that page alone and is linked after it, so a page overrides rather than
   repeats. `error.html` writes its styles into the page instead: CloudFront returns it for any 404,
-  at whatever path was asked for, so a relative `<link>` next to it would be a guess.
+  at whatever path was asked for, so a relative `<link>` next to it would be a guess. For the same
+  reason it names the site's root in its front matter (`siteRoot: /`), and the layout writes its
+  scripts and links from there; it is the one page that does, and a copy of the site served under
+  a sub-path sets that sub-path there instead.
 - **Output paths mirror source paths.** `site/index.html` becomes `index.html` and
   `site/css/site.scss` becomes `css/site.css`. Eleventy's "pretty" permalinks would turn
   `about.html` into `about/index.html`, which would break every relative link the site is written
@@ -232,7 +235,7 @@ saying where to go next, and the home page explained none of its own words.
 - **Six holds**, each one a thing a run can check its own change against: one name per page, used
   everywhere; one sentence of plain purpose at the top of every page, with the site's own terms
   explained once where a visitor first meets them; one way to do each thing (one navigation, one
-  suggestion of where next, one account of what this browser holds, one world index — a new control
+  suggestion of where next, one index of every world, one place that asks — a new control
   improves the one that exists or replaces it, never stands beside it); content first and chrome
   small (the shared header and ribbon are a few lines, a page's own content starts within the first
   screen of a phone, what closes a page is shorter than the page); copy that speaks to the visitor
@@ -243,12 +246,14 @@ saying where to go next, and the home page explained none of its own words.
   the standard the way `EngagementTimeTest` holds it to the measure.
 - **One list of pages.** [`site/_data/worlds.json`](site/_data/worlds.json) is the one place a
   page's name, group, orientation and one-line description are kept. The header, the index of
-  every world ([`site/_includes/worlds.njk`](site/_includes/worlds.njk)), the site map and the
-  sky circuit are rendered from it, so "one name per page" is a property of the build rather than
-  a discipline, and a world is added, renamed or retired in one place.
+  every world ([`site/_includes/worlds.njk`](site/_includes/worlds.njk)), the site map, the mood
+  atlas and the sky circuit are rendered from it, counts included, so most of "one name per page"
+  is a property of the build. Three places still carry the name by hand and change with the list:
+  the page's own `title:` and `<h1>`, its `worldName` in `js/threshold.js`, and its `<loc>` in
+  `sitemap.xml`.
 - **The shell it left behind.** The header is the site's name, one line about it, and three links;
-  the ribbon is one sentence and, on the threshold, the question; every page ends with the one
-  index of every world, which on a sky world leads with the sky group and says which of the eight
+  the ribbon is one sentence and, on the threshold, the question; every page but the site map and
+  the mood atlas (which list every page themselves) ends with the one index of every world, which on a sky world leads with the sky group and says which of the eight
   this is and which is next. That is the whole of the shared chrome, written once in
   [`site/_includes/layout.njk`](site/_includes/layout.njk), and a page sets nothing about
   navigation: no footer lists, no notes, no includes. A run is asked to keep it that size.
@@ -267,7 +272,7 @@ prerequisite usually happens may follow the button; it never replaces it.
 - **Stated in the prompt**, under `POWERED DOWN, NEVER BROKEN`, to the model only: as with `WHOLE`,
   no check could tell a dead end from a deliberate one, so a seventh `check_` was ruled out
   (issue #46, question 1).
-- **Held in the framework.** `window.interestingSite.sky.require({ host, onReady })` in
+- **Held in the framework.** `window.interestingSite.unlock(host, { onReady })` in
   [`site/js/site.js`](site/js/site.js) is the pattern made shared: pass it the element to power
   down and the function to run once a sky exists, and it renders the unpowered state, the button and
   the quiet link, writes the seeded sky through the one state store, and calls back — now, if a sky
@@ -496,7 +501,8 @@ this is an invariant of the iteration rather than a one-off change to the site a
   another is the single most interesting change there is to make here**. The prompt says so where
   a run chooses what to do, beside "add a page".
 - **Partly remembered.** What the site learns decays by half every thirty hours and a fresh answer
-  always outweighs what is left, so a visitor is read again on every arrival rather than filed once.
+  always outweighs what is left, so a visitor is read again on every arrival at the threshold
+  rather than filed once, and invited to be read again on every other page.
   [`site/moods.html`](site/moods.html) says how long it has been since they were last here, runs
   any mechanism on demand, and forgets the reading on request.
   The reading itself is kept under `threshold` in the one local-state document, through

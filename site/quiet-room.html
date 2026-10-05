@@ -158,6 +158,13 @@ There is no score, no streak and no next thing.</pre>
         hold();
       });
       room.addEventListener('pointerup', release);
+      // A screen reader or switch activates the ring with a click and no pointer behind it, which
+      // cannot be held: that click holds the breath, and the next one lets it go.
+      room.addEventListener('click', function (ev) {
+        if (ev.detail !== 0) return;
+        if (held) release();
+        else hold();
+      });
       room.addEventListener('pointercancel', release);
       room.addEventListener('blur', release);
       window.addEventListener('blur', release);

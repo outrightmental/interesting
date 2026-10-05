@@ -1,7 +1,7 @@
 ---
 layout: layout.njk
 title: site map
-description: 'Every page of interesting with a line on what it is: three doors in, six worlds off the sky, eight that read one saved sky, and the edges.'
+description: 'Every page of interesting with a line on what it is: the way in, the worlds off the sky, the worlds that read one saved sky, and the edges.'
 stylesheet: sitemap
 ---
 {#-
@@ -13,7 +13,7 @@ stylesheet: sitemap
   <main>
     <h1>site map</h1>
     <p class='tagline'>Every page, with a line on what it is. Nothing here is behind a question.</p>
-    <p class='about'>This site is fourteen small worlds, written and rewritten continuously by a
+    <p class='about'>This site is {{ (worlds.offSky.length + worlds.underSky.length) | words }} small worlds, written and rewritten continuously by a
       model asked to make it more interesting, where interesting means you wanting to stay. It
       asks one sideways question before it offers anything and opens the world that fits; every
       world is open anyway.</p>
@@ -29,7 +29,7 @@ stylesheet: sitemap
     </ul>
 
     <h2 class='section-title'>off the sky</h2>
-    <p class='section-note'>Six worlds that share nothing but the site. After each name is who the site would send there.</p>
+    <p class='section-note'>{{ worlds.offSky.length | words | capitalize }} worlds that share nothing but the site. After each name is who the site would send there.</p>
     <ul class='pages'>
 {%- for p in worlds.offSky %}
       <li>
@@ -40,7 +40,7 @@ stylesheet: sitemap
     </ul>
 
     <h2 class='section-title'>under the sky</h2>
-    <p class='section-note'>Eight worlds that read one saved sky. The wish constellation is where the stars are placed; the rest read them, each its own way, and any of them can seed a sky to begin with.</p>
+    <p class='section-note'>{{ worlds.underSky.length | words | capitalize }} worlds that read one saved sky. The wish constellation is where the stars are placed; the rest read them, each its own way, and any of them can seed a sky to begin with.</p>
     <ul class='pages'>
 {%- for p in worlds.underSky %}
       <li>

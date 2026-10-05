@@ -519,11 +519,14 @@ Tune the radio, decode a few runes, then print.</pre>
         })(g);
       }
 
-      // Typing "home" anywhere on the page takes the visitor to the threshold, after the burst.
+      // Typing "home" on the page takes the visitor to the threshold, after the burst. Keys typed
+      // into a field -- the state menu's text box, say -- are that field's, not the page's.
       var codeBuffer = '';
       var leaving = false;
       document.addEventListener('keydown', function (ev) {
         if (leaving || !ev.key || ev.key.length !== 1) return;
+        var target = ev.target;
+        if (target && target.closest && target.closest('input, textarea, select, [contenteditable]')) return;
         codeBuffer = (codeBuffer + ev.key.toLowerCase()).slice(-4);
         if (codeBuffer === 'home') {
           leaving = true;

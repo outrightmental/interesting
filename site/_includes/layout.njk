@@ -4,8 +4,9 @@
   world are written once, here.
 
   Front matter a page may set:
-    title       the page's name, the same words every link to it uses (see _data/worlds.json).
-                "interesting" is appended, so index.html leaves it out.
+    title       the page's name, the same words every link to it uses (see _data/worlds.json):
+                every page sets it, index.html included ("the threshold"), and " · interesting"
+                is appended to it in the <title>.
     description the <meta name='description'>: one plain sentence a search result or a shared
                 link shows, omitted when absent.
     stylesheet  a name in css/: "quiet-room" links css/quiet-room.css after the shared
@@ -18,7 +19,10 @@
     siteRoot    the site's root as a path, for the same page and the same reason: with it set
                 to "/", every shared script and link is written from the root, so a visitor who
                 lands on the 404 page at /some/deep/path still gets the scripts and can leave.
-                Every other page leaves it out and keeps relative links.
+                It is the one place the site names where it is served from: "/" is right for
+                makeitmoreinteresting.com, and a copy served under a sub-path sets that sub-path
+                here instead ("/interesting/"). Every other page leaves it out and keeps
+                relative links, so they work under any sub-path unchanged.
 
   A page sets nothing about navigation. The header, the ribbon and the world index are the whole
   of the shared chrome, and they are the same on every page: a page that wants to offer something
@@ -27,8 +31,9 @@
   The shared chrome, top to bottom, and why it is this size:
     the header   the site's name, one line about it, and three links: the threshold, the mood
                  atlas, site map. Nothing else lives here; in particular no status line.
-    the ribbon   the mood flow made visible (js/threshold.js). It asks one sideways question on
-                 arrival, says what it read, and offers the one world that reading opens onto. It
+    the ribbon   the mood flow made visible (js/threshold.js). On the threshold it asks one
+                 sideways question on arrival; on every other page it invites, one press away. It
+                 says what it read and offers the one world that reading opens onto. It
                  sits outside <main>, so the question is never a gate: every page is reachable
                  with it ignored, skipped, or scripting switched off.
     the index    every world as a plain link, grouped, with the orientation each one answers to
@@ -56,8 +61,9 @@
   Links are relative, like every link in the site: it has no fixed domain and may be served under
   a sub-path, so "css/site.css" and not "/css/site.css".
 -#}
+{%- set here = (page.filePathStem | replace('/', '')) + '.html' if page else '' %}
 <!DOCTYPE html>
-<html lang='en'{% if siteRoot %} data-root='{{ siteRoot }}'{% endif %}>
+<html lang='en' data-page='{{ here }}'{% if siteRoot %} data-root='{{ siteRoot }}'{% endif %}>
 <head>
   <meta charset='utf-8'>
   <meta name='viewport' content='width=device-width, initial-scale=1'>
@@ -89,7 +95,8 @@
   <!-- The shared helpers; see js/site.js. Not deferred either, for the same reason, and after the
        store it writes through. -->
   <script src='js/site.js'></script>
-  <!-- The mood flow: ask before offering, on every page; see js/threshold.js. Deferred, and so
+  <!-- The mood flow: ask before offering -- on arrival at the threshold, one press away on every
+       other page; see js/threshold.js. Deferred, and so
        after js/state.js, which is what it keeps its reading in. -->
   <script src='js/threshold.js' defer></script>
 {%- endif %}
@@ -101,8 +108,7 @@
       <a href='{{ siteRoot }}index.html'>interesting</a>
       <span>many worlds, no default</span>
     </p>
-    {%- set here = (page.filePathStem | replace('/', '')) + '.html' if page else '' %}
-    <nav class='site-header-nav chips' aria-label='Site'>
+        <nav class='site-header-nav chips' aria-label='Site'>
 {%- for link in worlds.wayIn %}
       <a href='{{ siteRoot }}{{ link.file }}'{% if here == link.file %} aria-current='page'{% endif %}>{{ link.name }}</a>
 {%- endfor %}
@@ -112,7 +118,7 @@
       nothing; js/threshold.js rewrites it, asks on the threshold, invites everywhere else, and
       un-hides the two controls. -#}
   <aside class='mood-ribbon' id='mood-ribbon' data-asking='false' data-state='quiet' aria-label='What this site has read about you'>
-    <p class='mood-ribbon-text' id='mood-ribbon-text' aria-live='polite'>Nothing read yet. Every world is on offer below.</p>
+    <p class='mood-ribbon-text' id='mood-ribbon-text'>Nothing read yet. Every world is on offer below.</p>
     <div class='controls mood-ribbon-actions'>
       <a class='action' id='mood-ribbon-go' href='{{ siteRoot }}moods.html' hidden>go to your world</a>
       <button type='button' id='mood-ribbon-ask' aria-expanded='false' aria-controls='mood-probe' hidden>ask me</button>

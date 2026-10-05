@@ -3,7 +3,7 @@
     { "file": "index.html", "name": "the threshold", "gloss": "where it asks",
       "what": "The way in. One sideways question picks a world to open; every world is listed under it for anyone who would rather choose." },
     { "file": "moods.html", "name": "the mood atlas", "gloss": "how it asks, and every answer",
-      "what": "What the site is trying to work out about you, every way it has of asking, and the fourteen answers it can arrive at. Ask again here, or make it forget you." },
+      "what": "What the site is trying to work out about you, every way it has of asking, and every answer it can arrive at. Ask again here, or make it forget you." },
     { "file": "sitemap.html", "name": "site map", "gloss": "every page, described",
       "what": "This page: every page of the site with a line on what it is." }
   ],
@@ -41,7 +41,7 @@
   ],
   "edges": [
     { "file": "error.html", "name": "lost in space", "gloss": "the 404 page",
-      "what": "Served for any address this site does not have. The observatory on it still works." },
+      "what": "Served for any address this site does not have. The radio on it still works." },
     { "file": "sitemap.xml", "name": "sitemap.xml", "gloss": "machine-readable",
       "what": "The same list, machine-readable, with relative locations so it holds under any sub-path." }
   ]

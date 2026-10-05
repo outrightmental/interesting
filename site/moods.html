@@ -1,19 +1,19 @@
 ---
 layout: layout.njk
 title: the mood atlas
-description: 'How this site reads a visitor without asking them to describe themselves: every way it has of asking, the fourteen answers it can arrive at, and the world each one opens.'
+description: 'How this site reads a visitor without asking them to describe themselves: every way it has of asking, every answer it can arrive at, and the world each one opens.'
 stylesheet: moods
 ---
 {#-
-  The apparatus, shown rather than hidden: what the site has read, how it asks, and the fourteen
-  answers. The orientations and the worlds come from _data/worlds.json, the one list the site
+  The apparatus, shown rather than hidden: what the site has read, how it asks, and every answer
+  it can arrive at. The orientations and the worlds come from _data/worlds.json, the one list the site
   keeps; js/threshold.js supplies the mechanisms and the pull of each orientation once scripting
   runs. This page lists every world itself, which is why the shared index after <main> is left
   off it (see _includes/layout.njk).
 -#}
   <main>
     <h1>the mood atlas</h1>
-    <p class='tagline'>What the site is trying to work out about you, how it goes about it, and the fourteen answers it can arrive at.</p>
+    <p class='tagline'>What the site is trying to work out about you, how it goes about it, and every answer it can arrive at.</p>
 
     <section class='atlas-state' aria-labelledby='state-heading'>
       <h2 id='state-heading'>what it has read</h2>
@@ -38,9 +38,9 @@ stylesheet: moods
         every world below is a plain link.</li>
     </ul>
 
-    <h2 class='section-title'>the fourteen</h2>
-    <p class='atlas-copy'>Fourteen frames of mind, each with one world behind it. Six of those worlds
-      are off the sky; eight read one saved sky. Nothing in this list is the default, and the site
+    <h2 class='section-title'>every answer, and its world</h2>
+    <p class='atlas-copy'>{{ (worlds.offSky.length + worlds.underSky.length) | words | capitalize }} frames of mind, each with one world behind it.
+      {{ worlds.offSky.length | words | capitalize }} of those worlds are off the sky; {{ worlds.underSky.length | words }} read one saved sky. Nothing in this list is the default, and the site
       would rather you overruled it than took its word.</p>
     <ul class='orientations'>
 {%- for world in worlds.offSky.concat(worlds.underSky) %}
@@ -100,6 +100,10 @@ stylesheet: moods
             }
           });
           probeHost.scrollIntoView({ behavior: api.reducedMotion() ? 'auto' : 'smooth', block: 'nearest' });
+          // The question opens above the list it was chosen from; focus goes to it, so the next Tab
+          // answers it rather than moving on down the list.
+          var first = probeHost.querySelector('button, input, [tabindex]');
+          if (first) first.focus({ preventScroll: true });
         }
 
         list.textContent = '';
