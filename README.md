@@ -82,7 +82,7 @@ is deliberately small: a foundation to build a more holistic experience on, not 
   warning button and the one confirmation modal (`_controls.scss`, see
   [Destructive-caution axiom](#destructive-caution-axiom)), the feature a page is and the filled
   card (`_panel.scss`), the unlock box, the persona's avatar
-  and sheet (`_persona.scss`), the fourteen mood palettes and the query styling the mood flow
+  and sheet (`_persona.scss`), the fifteen mood palettes and the query styling the mood flow
   renders into (`_mood.scss`), the feed's masonry and cards (`_feed.scss`), the canvas-beside-panel
   shape most worlds share (`_labs.scss`), the values the stylesheets have in common (`_vars.scss`,
   which emits no CSS of its own) and the monospace readout ten pages use (`_readout.scss`, a
@@ -122,7 +122,7 @@ slab per page, small-caps labels, pill borders on everything, a footer index two
   on anything carrying `data-mood`, so a mood re-skins the whole site and a card in the feed
   re-tints itself from its own world's seeds. The dark scheme is the only scheme: the site is a
   night sky, and M3 lays dark surfaces out by tone rather than shadow.
-- **A page's palette is its world's.** The fourteen palettes in `_mood.scss` are keyed by
+- **A page's palette is its world's.** The fifteen palettes in `_mood.scss` are keyed by
   orientation id, the layout writes `<html data-world='…'>` from
   [`site/_data/worlds.json`](site/_data/worlds.json), and a visitor's reading on
   `<html data-mood='…'>` wins over it. No page carries colours of its own any more.
@@ -633,7 +633,7 @@ it stands.
 - **One line per page, again.** Every page carries
   `<script src='js/threshold.js' defer></script>` in its `<head>`, written once in
   [`site/_includes/layout.njk`](site/_includes/layout.njk). That file
-  ([`site/js/threshold.js`](site/js/threshold.js)) is the whole flow: fourteen orientations and
+  ([`site/js/threshold.js`](site/js/threshold.js)) is the whole flow: fifteen orientations and
   the world each one opens onto, the library of query mechanisms, the clock and time-zone signals
   read alongside an answer, and how much of a past visit survives. What it reads is shown beside
   the persona's avatar and in the persona sheet
@@ -664,7 +664,7 @@ it stands.
   the rest of a visitor's state — and the gap that document already records is what tells an
   arrival apart from a click through the site.
 - **The whole site transmogrifies.** The ascertained orientation lands on `<html data-mood>`, and
-  `_sass/_mood.scss` turns that into fourteen palettes over the shared custom properties in
+  `_sass/_mood.scss` turns that into fifteen palettes over the shared custom properties in
   `_tokens.scss`, so every page re-skins itself. The flow is ongoing rather than a gate at the
   front door: any page can ask again, in a new way.
 - **Never a gate.** The query sits outside `<main>`, and every world is a plain link from the

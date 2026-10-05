@@ -87,7 +87,9 @@
     { id: 'divinatory', name: 'asking elsewhere', pull: 'wants an answer it did not author',
       world: 'sky-archive.html', worldName: 'the archive oracle' },
     { id: 'geometric', name: 'after symmetry', pull: 'wants a pattern to close',
-      world: 'orbital-weaver.html', worldName: 'the orbital weaver' }
+      world: 'orbital-weaver.html', worldName: 'the orbital weaver' },
+    { id: 'metrical', name: 'counting in echoes', pull: 'wants a pulse to keep time with',
+      world: 'pulse-choir.html', worldName: 'the pulse choir' }
   ];
 
   /* The query mechanisms. Each carries a `probe` id, which is the handle the framework counts,
@@ -107,7 +109,7 @@
         { label: 'the one with a light under it', detail: 'someone left a lamp on and a page half-turned',
           weights: { verbal: 3, brooding: 2, curious: 1 } },
         { label: 'the one that hums', detail: 'a machine behind it, running without supervision',
-          weights: { analytic: 3, geometric: 2, attentive: 1 } }
+          weights: { analytic: 3, geometric: 2, metrical: 2, attentive: 1 } }
       ]
     },
     {
@@ -159,7 +161,7 @@
       ask: 'Five things are on the table. Four of them belong together. Take away the one that does not.',
       options: [
         { label: 'a tuning fork', detail: 'because the others are silent',
-          weights: { attentive: 3, ceremonial: 1, analytic: 1 } },
+          weights: { attentive: 3, metrical: 2, ceremonial: 1, analytic: 1 } },
         { label: 'a pressed leaf', detail: 'because the others were made',
           weights: { rooted: 3, tending: 2 } },
         { label: 'a six-sided die', detail: 'because the others are not asking anything',
@@ -306,7 +308,7 @@
           { label: 'mirror glass', weights: { geometric: 2, cosmic: 1 } }
         ] },
         { ask: 'one or the other', options: [
-          { label: 'a long echo', weights: { attentive: 2, brooding: 1 } },
+          { label: 'a long echo', weights: { attentive: 2, metrical: 1, brooding: 1 } },
           { label: 'a struck match', weights: { ceremonial: 2, curious: 1 } }
         ] },
         { ask: 'one or the other', options: [
@@ -321,12 +323,12 @@
       label: 'tap',
       buckets: [
         { under: 220, weights: { restless: 3, tempestuous: 2, verbal: 1 } },
-        { under: 420, weights: { analytic: 2, geometric: 2, curious: 2 } },
+        { under: 420, weights: { metrical: 3, analytic: 2, geometric: 2, curious: 2 } },
         { under: 800, weights: { attentive: 2, tending: 2, verbal: 1 } },
         { under: 1600, weights: { brooding: 2, rooted: 2, ceremonial: 1 } },
         { under: Infinity, weights: { tender: 3, cosmic: 2, brooding: 1 } }
       ],
-      wobble: { steady: { geometric: 2, analytic: 1 }, loose: { tempestuous: 2, curious: 1 } }
+      wobble: { steady: { metrical: 2, geometric: 2, analytic: 1 }, loose: { tempestuous: 2, curious: 1 } }
     },
     {
       probe: 'hold', name: 'press and hold', kind: 'hold',

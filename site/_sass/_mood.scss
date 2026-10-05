@@ -1,4 +1,4 @@
-// The mood flow, as it looks: the fourteen palettes the site re-skins itself with, and the query
+// The mood flow, as it looks: the fifteen palettes the site re-skins itself with, and the query
 // mechanisms it renders -- into the persona card on the threshold, into the persona sheet
 // everywhere, and onto the mood atlas.
 //
@@ -34,7 +34,8 @@ $moods: (
   attentive: (#0a0c12, #26334e, #bcd3ff, #ffeecd),
   tending: (#070f0b, #1c4330, #a6ecb9, #ffe7ab),
   divinatory: (#0d0a11, #3e2345, #edbcff, #ffdba4),
-  geometric: (#080b14, #212c5c, #adbcff, #d4eaff)
+  geometric: (#080b14, #212c5c, #adbcff, #d4eaff),
+  metrical: (#060f11, #14454a, #8ff0e4, #ffdfc2)
 );
 
 @mixin seeds($palette) {
