@@ -14,51 +14,67 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  scripts:
-    name: Workflow scripts
+  # Both halves in one job, on purpose. This used to be two — "Workflow scripts" and
+  # "Infrastructure" — and between them they are under two minutes of work, most of it one runner
+  # idle while the other does the fifteen seconds of Terraform. Asking for two runners instead of
+  # one doubled every run's exposure to a queue that does not always have one to give: when GitHub
+  # was slow to hand them out, one half would be picked up straight away and the other would sit
+  # unassigned with no runner and no steps until somebody cancelled the run by hand — a red check
+  # on a pull request whose code was fine. One job waits in one queue.
+  test:
+    name: Tests
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    # Both halves, back to back, where they used to have five and ten minutes side by side.
+    timeout-minutes: 15
     steps:
       - name: Checkout
+        id: checkout
         uses: actions/checkout@v5
 
+      # Terraform first: it is by far the quickest half, so a formatting nit fails in seconds
+      # rather than behind the site build.
+      - name: Install Terraform
+        id: terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - name: Check the infrastructure formatting
+        run: terraform -chdir=infra fmt -check -recursive -diff
+
+      # Only the configuration is checked: this reads no state and touches no cloud account, so it
+      # needs no credentials. Nothing in this repository ever runs `terraform plan` or `apply` —
+      # /infra is applied by hand (see infra/README.md).
+      - name: Validate the infrastructure configuration
+        if: ${{ !cancelled() && steps.terraform.outcome == 'success' }}
+        run: |
+          terraform -chdir=infra init -backend=false -input=false
+          terraform -chdir=infra validate
+
+      # `!cancelled()` starts the second half whatever the first half did, so a broken /infra still
+      # reports whether the scripts pass — the one thing two separate jobs gave that one does not.
+      # Inside this half the steps chain on the one before, so a failed install does not go on to
+      # run the tests against a toolchain that is not there. A cancelled run — a newer push to the
+      # same pull request — stops at the first of these, as it should.
+      #
       # The tests build /site: the reachability axiom is about the built site, and a pull request
       # should also find out that the site still builds. --ignore-scripts because nothing in the
       # build needs an install script, so none should run.
       - name: Set up Node
+        id: node
+        if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
         uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
 
       - name: Install the build toolchain
+        id: toolchain
+        if: ${{ !cancelled() && steps.node.outcome == 'success' }}
         run: npm ci --ignore-scripts
 
       # No model is called: the tests swap the Copilot CLI for a stand-in. The tests that build the
       # site fail here instead of skipping if the toolchain is missing, because the runner sets CI.
       - name: Run the tests for the workflow scripts
+        if: ${{ !cancelled() && steps.toolchain.outcome == 'success' }}
         run: python3 -m unittest discover -s .github/scripts -v
-
-  infra:
-    name: Infrastructure
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v5
-
-      - name: Install Terraform
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_wrapper: false
-
-      - name: Check formatting
-        run: terraform -chdir=infra fmt -check -recursive -diff
-
-      # Only the configuration is checked: this reads no state and touches no cloud account, so it
-      # needs no credentials. Nothing in this repository ever runs `terraform plan` or `apply` —
-      # /infra is applied by hand (see infra/README.md).
-      - name: Validate the configuration
-        run: |
-          terraform -chdir=infra init -backend=false -input=false
-          terraform -chdir=infra validate
