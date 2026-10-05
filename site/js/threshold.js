@@ -214,6 +214,58 @@
       ]
     },
     {
+      probe: 'shelf-jars', name: 'the shelf of jars', kind: 'sequence',
+      ask: 'Five jars on a shelf. Pull three forward, in order: the first is what you trust, the last is what you open first.',
+      take: 3,
+      items: [
+        {
+          label: 'the jar of nails',
+          detail: 'sorted by length, labelled in pencil',
+          slots: [
+            { analytic: 2, geometric: 1 },
+            { restless: 1, tempestuous: 1 },
+            { analytic: 1, verbal: 1 }
+          ]
+        },
+        {
+          label: 'the jar of rainwater',
+          detail: 'clear, with one willow leaf',
+          slots: [
+            { attentive: 2, cosmic: 1 },
+            { divinatory: 2, brooding: 1 },
+            { attentive: 1, tender: 1 }
+          ]
+        },
+        {
+          label: 'the jar of match stubs',
+          detail: 'burnt ends and one unstruck head',
+          slots: [
+            { ceremonial: 2, restless: 1 },
+            { tempestuous: 2, verbal: 1 },
+            { ceremonial: 1, curious: 1 }
+          ]
+        },
+        {
+          label: 'the jar of sea glass',
+          detail: 'frosted green and cloudy white',
+          slots: [
+            { curious: 2, cosmic: 1 },
+            { brooding: 2, attentive: 1 },
+            { curious: 1, geometric: 1 }
+          ]
+        },
+        {
+          label: 'the jar of seed pods',
+          detail: 'light as paper, still rattling',
+          slots: [
+            { rooted: 2, tending: 2 },
+            { tender: 2, rooted: 1 },
+            { tending: 1, divinatory: 1 }
+          ]
+        }
+      ]
+    },
+    {
       probe: 'stair', name: 'three landings', kind: 'choice',
       ask: 'Three landings, and no going back up. Pick a way down.',
       steps: [
