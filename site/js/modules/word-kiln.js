@@ -109,6 +109,9 @@ function forge(env, word, b) {
   return tidy(env.chance(0.5) ? bare + 'a' + word.slice(-2) : reverse(word).slice(0, Math.ceil(word.length / 2)) + env.pick(TAILS));
 }
 
+/* The kiln's mouth and its ember. `o` is where it sits and how it is drawn: the piece places its
+   own mouth and holds the sparks still, and a card passes the configuration it was dealt --
+   `o.sparks` being how many of them rise. */
 function kiln(ctx, w, h, env, heat, o) {
   const c = env.colors;
   const cx = o && o.cx != null ? o.cx : w / 2;
@@ -139,7 +142,8 @@ function kiln(ctx, w, h, env, heat, o) {
   ctx.fill();
   if (o && o.still) return;
   // Sparks rising, for the card.
-  for (let i = 0; i < 6 + heat * 10; i++) {
+  const sparks = (6 + heat * 10) * (o && o.sparks ? o.sparks : 1);
+  for (let i = 0; i < sparks; i++) {
     ctx.fillStyle = env.alpha(c.accent2, 0.2 + env.rnd() * 0.6);
     ctx.beginPath();
     ctx.arc(cx + (env.rnd() - 0.5) * r * 1.4, cy - r * 0.6 - env.rnd() * h * 0.35, 0.8 + env.rnd() * 1.2, 0, Math.PI * 2);
@@ -571,7 +575,13 @@ function wordWidth(g, word, wordPx) {
 export default {
   id: 'word-kiln',
   paint(ctx, w, h, env) {
-    kiln(ctx, w, h, env, env.rnd());
+    const v = env.variant;
+    // The mouth where the configuration put it, as wide as it asks, with as many sparks over it.
+    kiln(ctx, w, h, env, env.rnd(), {
+      cy: h * (0.44 + v.turn * 0.16),
+      r: Math.min(w, h) * 0.26 * v.scale,
+      sparks: v.density
+    });
   },
   spark(env) {
     const pos = env.pick(POS);

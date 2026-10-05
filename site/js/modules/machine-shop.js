@@ -74,14 +74,21 @@ function nextRow(row, rule) {
   return next;
 }
 
+// The card: the rule run from the top of the picture down. The configuration the card was dealt
+// sets how large a cell is and which column the tape starts from, so the same rule runs as a
+// different pattern.
 function run(ctx, w, h, env, rule, noisy) {
   const c = env.colors;
+  const v = env.variant;
   ctx.fillStyle = c.bg;
   ctx.fillRect(0, 0, w, h);
-  const cols = Math.max(24, Math.round(w / 3));
+  const cols = Math.max(16, Math.round(w / (3 * v.scale)));
   const size = w / cols;
   const rows = Math.ceil(h / size);
-  let row = firstRow(cols, noisy ? 'noise' : 'one', env.rnd);
+  const first = firstRow(cols, noisy ? 'noise' : 'one', env.rnd);
+  const shift = Math.round(v.turn * cols) % cols;
+  let row = new Uint8Array(cols);
+  for (let x = 0; x < cols; x++) row[x] = first[(x + shift) % cols];
   ctx.fillStyle = env.alpha(c.accent, 0.9);
   for (let y = 0; y < rows; y++) {
     for (let x = 0; x < cols; x++) {

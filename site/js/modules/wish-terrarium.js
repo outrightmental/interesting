@@ -334,10 +334,17 @@ function tick(s, dt) {
   });
 }
 
+// The card: the terrarium as it stands, in the light and on the vent the configuration the card was
+// dealt chose, with as much fog on the glass as it asks for -- so a repeat is the same stems under
+// different weather.
 function glasshouse(ctx, w, h, env, t) {
+  const v = env.variant;
   const s = fresh(env.stars, 7);
-  s.t = t;
-  s.wind = 0.35;
+  s.t = t + v.turn * 6;
+  s.wind = 0.15 + v.turn * 0.55;
+  s.light = Math.round(v.turn * 3);
+  s.fog = Math.max(0, (v.density - 1) * 0.55);
+  for (const p of s.plants) p.grow = v.scale;
   scene(ctx, w, h, env, s);
 }
 

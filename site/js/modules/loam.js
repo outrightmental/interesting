@@ -33,21 +33,22 @@ const TURNED = [
 
 function soil(ctx, w, h, env) {
   const c = env.colors;
-  const top = h * (0.12 + env.rnd() * 0.08);
+  const v = env.variant;
+  const top = h * (0.09 + v.turn * 0.1 + env.rnd() * 0.06);
   ctx.fillStyle = env.mix(c.bg, c.bg2, 0.25);
   ctx.fillRect(0, 0, w, h);
   ctx.fillStyle = env.mix(c.bg, '#000', 0.35);
   ctx.fillRect(0, 0, w, top);
   // Grit, as flecks.
-  for (let i = 0; i < 160; i++) {
+  for (let i = 0, grit = Math.round(160 * v.density); i < grit; i++) {
     ctx.fillStyle = env.alpha(c.accent, 0.05 + env.rnd() * 0.12);
     ctx.fillRect(env.rnd() * w, top + env.rnd() * (h - top), 1.5, 1.5);
   }
   // Stones.
   const stones = [];
-  const count = env.int(4, 9);
+  const count = Math.max(2, Math.round(env.int(4, 9) * v.density));
   for (let i = 0; i < count; i++) {
-    const s = { x: env.rnd() * w, y: top + h * 0.1 + env.rnd() * (h - top - h * 0.2), r: 4 + env.rnd() * Math.min(w, h) * 0.06 };
+    const s = { x: env.rnd() * w, y: top + h * 0.1 + env.rnd() * (h - top - h * 0.2), r: (4 + env.rnd() * Math.min(w, h) * 0.06) * v.scale };
     stones.push(s);
     ctx.fillStyle = env.alpha(c.muted, 0.2);
     ctx.beginPath();

@@ -16,14 +16,16 @@ const WORDS = ['in — hold — out', 'nothing is required of you here', 'the do
 
 const PACES = [{ label: 'quick', value: 6 }, { label: 'slow', value: 8 }, { label: 'slower', value: 10 }];
 
-function room(ctx, w, h, env, swell, dim) {
+// The room, out to `swell` and dimmed by `dim`. `scale` is how large the ring is drawn: the card's
+// own, from the configuration it was dealt, and one for the piece, which is the room itself.
+function room(ctx, w, h, env, swell, dim, scale) {
   const c = env.colors;
   const g = ctx.createRadialGradient(w / 2, h * 0.46, 0, w / 2, h * 0.46, Math.max(w, h) * 0.7);
   g.addColorStop(0, env.mix(c.bg, c.accent, 0.1));
   g.addColorStop(1, c.bg);
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, w, h);
-  const r = Math.min(w, h) * (0.17 + swell * 0.11);
+  const r = Math.min(w, h) * (0.17 + swell * 0.11) * (scale || 1);
   const glow = ctx.createRadialGradient(w / 2, h / 2, r * 0.2, w / 2, h / 2, r * 1.6);
   glow.addColorStop(0, env.alpha(c.accent, 0.28 + swell * 0.2));
   glow.addColorStop(0.7, env.alpha(c.accent, 0.06));
@@ -146,12 +148,13 @@ function putDown(env) {
 export default {
   id: 'quiet-room',
   paint(ctx, w, h, env) {
-    room(ctx, w, h, env, 0.5, 0);
+    // The breath caught where the configuration caught it, at the size it asks for.
+    room(ctx, w, h, env, 0.32 + env.variant.turn * 0.36, 0, env.variant.scale);
   },
   animate(ctx, w, h, env, t) {
-    const phase = (t % 12) / 12;
+    const phase = ((t % 12) / 12 + env.variant.turn) % 1;
     const swell = (1 - Math.cos(phase * Math.PI * 2)) / 2;
-    room(ctx, w, h, env, swell, 0);
+    room(ctx, w, h, env, swell, 0, env.variant.scale);
   },
   spark(env) {
     if (env.chance(0.6)) {
@@ -161,7 +164,7 @@ export default {
         quote: env.pick(BURDENS),
         text: 'Set it down here and leave it down. Nothing in the quiet room keeps score.',
         aspect: '5 / 3',
-        paint: (ctx, w, h, e) => room(ctx, w, h, e, 0.3, dim)
+        paint: (ctx, w, h, e) => room(ctx, w, h, e, 0.3, dim, e.variant.scale)
       };
     }
     return {

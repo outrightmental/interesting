@@ -267,13 +267,15 @@ function ring(c, x, y, a, r) {
   c.g.stroke();
 }
 
-// The card's sky: the stars, their nearest links, and dust.
+// The card's sky: the stars, their nearest links, and dust -- as many motes, as far a reach between
+// two stars and as large a star as the configuration the card was dealt asks for.
 function sky(ctx, w, h, env, t) {
+  const v = env.variant;
   backdrop(ctx, w, h, env);
-  drawDust(ctx, w, h, env, dustOf(env.rnd, 40), 0);
+  drawDust(ctx, w, h, env, dustOf(env.rnd, Math.round(40 * v.density)), 0);
   const pts = env.points(w, h, PAD);
-  links(ctx, w, h, env, pts, 0.34, 'map', 1);
-  pts.forEach((p, i) => star(ctx, env, p, t ? 0.75 + 0.25 * Math.sin(t * 1.7 + i * 1.3) : 1, 1));
+  links(ctx, w, h, env, pts, 0.34 * v.scale, 'map', 1);
+  pts.forEach((p, i) => star(ctx, env, p, t ? 0.75 + 0.25 * Math.sin(t * 1.7 + i * 1.3) : 1, v.scale));
 }
 
 /* ---- the pieces ---------------------------------------------------------------------------- */
@@ -606,7 +608,7 @@ export default {
     sky(ctx, w, h, env, 0);
   },
   animate(ctx, w, h, env, t) {
-    sky(ctx, w, h, env, t);
+    sky(ctx, w, h, env, t + env.variant.turn * 6);
   },
   spark(env) {
     if (!env.stars.length) return null;

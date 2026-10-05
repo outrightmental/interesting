@@ -66,12 +66,17 @@ function field(ctx, w, h, env, voices, t, flash) {
   }
 }
 
-// The card's picture: every star a voice, pulsing in turn.
+// The card's picture: every star a voice, pulsing in turn. The configuration the card was dealt says
+// how many of them are singing, how hard they pulse and where in the loop the card caught them.
 function drawChoir(ctx, w, h, env, t) {
-  var voices = env.points(w, h, 14).map(function (p, i) {
-    return { x: p.x, y: p.y, muted: false, pulse: Math.max(0, Math.sin((t || 0) * 2 + i * 0.9)) * 0.4 };
+  var cfg = env.variant;
+  var at = (t || 0) + cfg.turn * 6;
+  var pts = env.points(w, h, 14);
+  var singing = Math.max(1, Math.round(pts.length * cfg.density));
+  var voices = pts.map(function (p, i) {
+    return { x: p.x, y: p.y, muted: i >= singing, pulse: Math.max(0, Math.sin(at * 2 + i * 0.9)) * 0.4 * cfg.scale };
   });
-  field(ctx, w, h, env, voices, t || 0, 0);
+  field(ctx, w, h, env, voices, at, 0);
 }
 
 function summary(stars) {
