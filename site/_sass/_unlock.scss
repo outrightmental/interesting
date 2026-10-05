@@ -44,14 +44,34 @@
   margin: 0.2rem 0 0;
 }
 
+// The quiet second choice under the button: a link to a page, or a button that opens the persona
+// sheet. As a button it drops the pill and reads like the link it stands in for.
 .unlock-else {
+  justify-self: start;
+  min-height: 24px;
+  margin: 0;
+  padding: 0.2rem 0;
+  border: 0;
+  border-radius: 0.3rem;
+  background: none;
   color: var(--muted);
   font-size: 0.82rem;
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+  box-shadow: none;
 }
 
 .unlock-else:hover,
 .unlock-else:focus-visible {
+  transform: none;
+  border: 0;
+  background: none;
   color: var(--accent);
+}
+
+.unlock-else:focus-visible {
+  outline: 2px solid transparent;
+  box-shadow: 0 0 0 3px vars.$focus-ring;
 }
 
 @media (prefers-reduced-motion: reduce) {

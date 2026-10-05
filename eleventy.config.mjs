@@ -6,7 +6,7 @@
  *
  *   - .html files are Nunjucks templates with optional YAML front matter. `layout: layout.njk`
  *     wraps the page in the shared shell in site/_includes, so the <head>, the stylesheet links,
- *     the header, the mood ribbon and the index of every world live in one place rather than
+ *     the header, the persona card and sheet and the index of every world live in one place rather than
  *     in every page.
  *   - .scss files compile to .css at the same path. A file whose name starts with "_" is a
  *     partial: it is only ever @use'd by another file, never built on its own. The shared partials

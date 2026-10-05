@@ -7,8 +7,9 @@
 
   Two groups, in the words every page uses: off the sky (worlds that share nothing but the site)
   and under the sky (worlds that read one saved sky). Under each name is the orientation the world
-  answers to, which is the same phrase the ribbon reads a visitor as. On a world under the sky that
-  group comes first and says where in that circuit this world is.
+  answers to, which is the same phrase the persona card reads a visitor as. On a world under the
+  sky that group comes first and says where in that circuit this world is. Every count is read off
+  the list, so a world added there is counted here.
 
   One shared suggestion of where to go next lives in this include: a single circuit link at the
   bottom of the panel. It is always one world name as a plain link, and it advances through the
@@ -36,9 +37,9 @@
         <h3 class='panel-label' id='worlds-{{ group[0] }}'>{{ group[1] }}</h3>
 {%- if group[0] == 'sky' %}
 {%- if skyIndex >= 0 %}
-        <p class='panel-note'>These {{ skyCount | words }} read one saved sky, the stars placed in the wish constellation. This is {{ skyIndex + 1 }} of {{ skyCount }} in that sky circuit.</p>
+        <p class='panel-note'>These {{ skyCount | words }} read one saved sky: the stars of your persona, the card at the top of the page. This is {{ skyIndex + 1 }} of {{ skyCount }} in that sky circuit.</p>
 {%- else %}
-        <p class='panel-note'>These {{ skyCount | words }} read one saved sky; the wish constellation is where it is placed.</p>
+        <p class='panel-note'>These {{ skyCount | words }} read one saved sky: the stars of your persona, the card at the top of the page.</p>
 {%- endif %}
 {%- endif %}
         <ul class='chips chips-tall'>

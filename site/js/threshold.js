@@ -23,12 +23,14 @@
       last visit, and the fresh answer always outweighs it. Every arrival at the threshold is
       queried again; every other page invites, one press away.
 
-  Every page carries the ribbon this file builds, so the flow is ongoing rather than a gate at the
-  front door. On the threshold (index.html) the ribbon asks on arrival; on every other page it
-  invites, one press away, so a visitor who followed a link to a world meets that world first.
-  Any page can ask again, in a new way, and the whole site re-skins itself around the answer
-  through the data-mood attribute (see _sass/_mood.scss). The mood atlas (moods.html) runs any
-  mechanism on demand, shows the clock and the gap since the last visit, and can forget.
+  This file is the engine; the persona card every page carries (js/persona.js) is where the flow
+  is seen, so it is ongoing rather than a gate at the front door. On the threshold (index.html) the
+  card asks on arrival, inline, when arrival() below says so; on every other page the question
+  waits inside the persona sheet, one press away, so a visitor who followed a link to a world meets
+  that world first. Any page can ask again, in a new way, through mount(), and the whole site
+  re-skins itself around the answer through the data-mood attribute (see _sass/_mood.scss). The
+  mood atlas (moods.html) runs any mechanism on demand, shows the clock and the gap since the last
+  visit, and can forget.
 
   What is remembered is kept in the site's one local-state document, under "threshold", through
   window.interestingState -- like every page of this site, this file never reaches for the
@@ -51,7 +53,7 @@
   var HALF_LIFE_H = 30; // a remembered reading fades to half its pull in this many hours
   var ANSWER_PULL = 3; // the fresh answer outweighs memory and signal, on every arrival
   var SIGNAL_PULL = 1;
-  // A gap this long before a page view makes it a fresh arrival, which is what the ribbon asks
+  // A gap this long before a page view makes it a fresh arrival, which is what the persona card asks
   // on. Clicking from one page to the next is the same arrival; coming back later is a new one.
   var ARRIVAL_GAP_MS = 30 * 60 * 1000;
 
@@ -988,23 +990,21 @@
     body.appendChild(done);
   }
 
-  /* ---- the ribbon every page carries ----------------------------------------------------- */
+  /* ---- what the persona shows ----------------------------------------------------------- */
 
-  /* What the ribbon says about a reading, in words a stranger can use. A reading the visitor
+  /* What the persona card says about a reading, in words a stranger can use. A reading the visitor
      gave, or one carried over from an earlier answer, is said; the clock's own guess is not
-     dressed up as a reading, because a site that asks before it offers does not offer first. */
+     dressed up as a reading, because a site that asks before it offers does not offer first. The
+     one note about a browser that keeps nothing is the persona's to add, once, so it is not here. */
   function describe(reading) {
     var o = reading && reading.orientation;
-    var kept = store.persistent === false
-      ? ' This browser keeps nothing, so the reading lasts for this page.'
-      : '';
     if (!o || !reading.source || reading.source === 'signals') {
       return 'Nothing read yet. Answer one sideways question and the site suggests a world to '
-        + 'start in, or take any world below.' + kept;
+        + 'start in, or take any world you like.';
     }
     var line = o.name + ' — ' + o.pull + '. That opens onto ' + o.worldName + '.';
-    if (reading.source === 'answer') return 'Read just now as ' + line + kept;
-    return 'Carried over from your last answer: ' + line + kept;
+    if (reading.source === 'answer') return 'Read just now as ' + line;
+    return 'Carried over from your last answer: ' + line;
   }
 
   function currentReading() {
@@ -1016,117 +1016,16 @@
       : readingFor(null);
   }
 
-  var askRibbon = null; // set by ribbon(), so moods.html can ask through the ribbon too
-
-  // What the ribbon says while its question is open: what the question is for, and that nothing
-  // depends on it.
-  var ASKING_TEXT = 'Before it offers anything, this site asks one sideways question. Whatever '
-    + 'you answer picks a world to suggest; every world stays open below either way.';
-
-  function ribbon() {
-    var host = document.getElementById('mood-ribbon');
-    if (!host) return;
-    var text = document.getElementById('mood-ribbon-text');
-    var actions = host.querySelector('.mood-ribbon-actions');
-    var ask = document.getElementById('mood-ribbon-ask');
-    var go = document.getElementById('mood-ribbon-go');
-    var probeHost = document.getElementById('mood-probe');
-    var asking = false;
-
-    /* The ribbon has five states, named on the element so the stylesheet can colour them:
-       quiet (nothing read), answered (read just now), carried (an earlier answer), asking (the
-       question is open) and the no-script default the layout writes. */
-    function show(reading) {
-      var r = reading || currentReading();
-      var read = !!(r && r.orientation && r.source && r.source !== 'signals');
-      // While the question is open the sentence frames it; the question carries its own skip, so
-      // the ribbon's two controls step aside until it is answered or skipped.
-      if (text) text.textContent = asking ? ASKING_TEXT : describe(r);
-      if (actions) actions.hidden = asking;
-      if (go) {
-        if (read && !asking) {
-          go.hidden = false;
-          go.href = root + r.orientation.world;
-          go.textContent = 'go to ' + r.orientation.worldName;
-        } else {
-          go.hidden = true;
-        }
-      }
-      if (ask) {
-        ask.hidden = false;
-        ask.textContent = read ? 'ask another way' : 'ask me';
-        ask.setAttribute('aria-expanded', asking ? 'true' : 'false');
-      }
-      host.setAttribute('data-asking', asking ? 'true' : 'false');
-      host.setAttribute('data-state', asking ? 'asking' : (!read ? 'quiet' : (r.source === 'answer' ? 'answered' : 'carried')));
-    }
-
-    function close() {
-      if (probeHost) {
-        probeHost.textContent = '';
-        probeHost.hidden = true;
-      }
-      asking = false;
-      show();
-    }
-
-    function query() {
-      if (!probeHost || asking) return;
-      asking = true;
-      probeHost.hidden = false;
-      show();
-      mount(probeHost, {
-        onAnswer: function (reading) {
-          probeHost.textContent = '';
-          probeHost.hidden = true;
-          asking = false;
-          show(reading);
-          if (go && !go.hidden) go.focus();
-          else if (ask) ask.focus();
-        },
-        onSkip: function () {
-          close();
-          if (ask) ask.focus();
-        }
-      });
-    }
-
-    if (ask) {
-      ask.addEventListener('click', function () {
-        if (asking) {
-          close();
-          return;
-        }
-        query();
-        // The ask button steps aside while the question is open, so focus moves into the
-        // question: its first control, or the field or pad it asks for.
-        var first = probeHost && probeHost.querySelector('button, input, [tabindex]');
-        if (first && typeof first.focus === 'function') first.focus();
-      });
-    }
-
-    // A reading taken anywhere else on the page -- the mood atlas runs mechanisms of its own, and
-    // can forget -- is the ribbon's to report too.
-    window.addEventListener('threshold:reading', function () {
-      if (!asking) show();
-    });
-
-    askRibbon = query;
-    show();
-    // Live only from here on: the sentence written as the page loads is the page's, not news, and a
-    // screen reader should hear the ribbon when it changes, not on every page a visitor opens.
-    if (text) text.setAttribute('aria-live', 'polite');
-
-    // The threshold asks unprompted: on arrival (a first visit, or a return after
-    // ARRIVAL_GAP_MS), and whenever nothing has been read yet, because asking is what that page
-    // is for. Every other page invites instead -- the question is one press away -- so a visitor
-    // who followed a link to a world meets the world first.
-    //
-    // "Arrival" is read off the gap the shared document already records rather than a session
-    // key of its own, because no page of this site touches the browser's storage directly.
+  /* Whether this page view is an arrival at the threshold, which the site asks on: a first visit,
+     a return after ARRIVAL_GAP_MS, or nothing read yet, because asking is what that page is for.
+     Clicking from one page to the next is the same arrival; coming back later is a new one.
+     "Arrival" is read off the gap the shared document already records rather than a session key
+     of its own, because no page of this site touches the browser's storage directly. The persona
+     card (js/persona.js) asks, inline, when this says so. */
+  function arrival() {
     var threshold = document.documentElement.getAttribute('data-page') === 'index.html';
     var arrived = sinceLast === null || sinceLast > ARRIVAL_GAP_MS;
-    if (threshold && (arrived || !state.orientation)) query();
+    return threshold && (arrived || !state.orientation);
   }
 
   /* ---- start ------------------------------------------------------------------------------ */
@@ -1151,7 +1050,8 @@
     reading: currentReading,
     describe: describe,
     mount: mount,
-    ask: function () { if (askRibbon) askRibbon(); },
+    arrival: arrival,
+    ask: function () { if (window.interestingPersona) window.interestingPersona.ask(); },
     reducedMotion: reducedMotion,
     forget: function () {
       state = { visits: 1, last: null, drift: {}, recent: [], orientation: null };
@@ -1161,10 +1061,4 @@
       transmogrify(null);
     }
   };
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', ribbon);
-  } else {
-    ribbon();
-  }
 })();

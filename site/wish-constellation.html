@@ -1,7 +1,7 @@
 ---
 layout: layout.njk
 title: the wish constellation
-description: 'A sky you fill with small thoughts as stars and drag into a shape, then ask for a reading, play as a chime or mint as a postcard.'
+description: 'The stars of your persona as a live sky across the whole page: ask it for a reading, catch a meteor, play it as a chime, set it orbiting or mint a postcard.'
 stylesheet: wish-constellation
 ---
   <canvas id='sky' aria-hidden='true'></canvas>
@@ -10,66 +10,45 @@ stylesheet: wish-constellation
 
   <main>
     <h1>the wish constellation</h1>
-    <p class='tagline'>Place small thoughts as stars and drag them into a shape. The sky you make here is the one every other world under the sky reads.</p>
-    <p class='hint sky-hint'>Tap or click the dark sky to place a star, drag a star to move it, tap one to read its thought.</p>
-    <div class='controls'>
-      <button id='drop' type='button'>drop a star</button>
-      <button id='oracle' type='button'>ask the sky</button>
-      <button id='meteor' type='button'>call a meteor</button>
-      <button id='chime' type='button' aria-pressed='false'>play star chime</button>
-      <button id='orbit' type='button' aria-pressed='false'>start orbit mode</button>
-      <button id='postcard' type='button'>mint sky postcard</button>
-      <button id='clear' type='button'>clear my constellation</button>
-    </div>
-    <p id='note' class='note' aria-live='polite'>No stars yet. Make the first one.</p>
+    <p class='tagline'>Your stars as a live sky across the whole page: ask it for a reading, catch a meteor, play it as a chime, set it orbiting, mint a postcard. It reads the sky of your persona.</p>
+    <div class='desk' id='desk'>
+      <p class='hint sky-hint'>Tap a star to read its thought. To place or move stars, open your persona above; the sky here follows as you do.</p>
+      <div class='controls'>
+        <button id='oracle' type='button'>ask the sky</button>
+        <button id='meteor' type='button'>call a meteor</button>
+        <button id='chime' type='button' aria-pressed='false'>play star chime</button>
+        <button id='orbit' type='button' aria-pressed='false'>start orbit mode</button>
+        <button id='postcard' type='button'>mint sky postcard</button>
+      </div>
+      <p id='note' class='note' aria-live='polite'></p>
 
-    <section id='postcard-panel' class='postcard' aria-labelledby='postcard-title'>
-      <h2 id='postcard-title'>Your constellation postcard</h2>
-      <canvas id='postcard-canvas' width='396' height='210' aria-label='Constellation postcard preview'></canvas>
-      <p id='postcard-text' class='postcard-text' aria-live='polite'>Mint a postcard to capture your current sky pattern.</p>
-      <p class='hint postcard-hint'>Each postcard title is generated from your exact star arrangement.</p>
-    </section>
+      <section id='postcard-panel' class='postcard' aria-labelledby='postcard-title'>
+        <h2 id='postcard-title'>Your constellation postcard</h2>
+        <canvas id='postcard-canvas' width='396' height='210' aria-label='Constellation postcard preview'></canvas>
+        <p id='postcard-text' class='postcard-text' aria-live='polite'>Mint a postcard to capture your current sky pattern.</p>
+        <p class='hint postcard-hint'>Each postcard title is generated from your exact star arrangement.</p>
+      </section>
+    </div>
   </main>
 
   <script>
     (function () {
-      var state = window.interestingState;
-      var SKY = 'constellation';
-      var MAX_STARS = 120;
-      var DRAG_SUPPRESS_MS = 250;
-      var thoughts = [
-        'A future version of me already solved this.',
-        'Curiosity is a compass.',
-        'Small experiments become worlds.',
-        'Kindness scales better than fear.',
-        'The map is not the journey.',
-        'I can start tiny and still start.',
-        'The next draft can be playful.',
-        'Breathe. Then build.',
-        'Wonder is a useful skill.',
-        'It is allowed to be unfinished.',
-        'Notice what sparks and follow it.',
-        'Good questions bend reality.',
-        'Make room for surprise.',
-        'A quiet day can still be progress.',
-        'The edge is where ideas hatch.'
-      ];
+      var persona = window.interestingPersona;
       var cometThoughts = [
-        'Comet memo: momentum loves imperfect beginnings.',
-        'Comet memo: aim for wonder, then refine.',
-        'Comet memo: brave ideas arrive before permission.',
-        'Comet memo: your future self votes for this attempt.',
-        'Comet memo: let play lead, precision will catch up.'
+        'comet memo: momentum loves imperfect beginnings',
+        'comet memo: aim for wonder, then refine',
+        'comet memo: brave ideas arrive before permission',
+        'comet memo: your future self votes for this attempt',
+        'comet memo: let play lead, precision will catch up'
       ];
 
+      var desk = document.getElementById('desk');
       var note = document.getElementById('note');
-      var dropBtn = document.getElementById('drop');
       var oracleBtn = document.getElementById('oracle');
       var meteorBtn = document.getElementById('meteor');
       var chimeBtn = document.getElementById('chime');
       var orbitBtn = document.getElementById('orbit');
       var postcardBtn = document.getElementById('postcard');
-      var clearBtn = document.getElementById('clear');
       var linksSvg = document.getElementById('links');
       var postcardPanel = document.getElementById('postcard-panel');
       var postcardTitle = document.getElementById('postcard-title');
@@ -77,8 +56,6 @@ stylesheet: wish-constellation
       var postcardCanvas = document.getElementById('postcard-canvas');
       var stars = [];
       var meteors = [];
-      var activeDrag = null;
-      var suppressStarClickUntil = 0;
       var linksRenderQueued = false;
       var nextMeteorAt = 0;
       var lastFrameTime = 0;
@@ -97,28 +74,12 @@ stylesheet: wish-constellation
         return min + Math.random() * (max - min);
       }
 
-      function randomThought() {
-        return thoughts[Math.floor(Math.random() * thoughts.length)];
-      }
-
       function randomCometThought() {
         return cometThoughts[Math.floor(Math.random() * cometThoughts.length)];
       }
 
       function setNote(text) {
         note.textContent = text;
-      }
-
-      function serializeStars() {
-        return stars.map(function (star) {
-          return { x: star.x, y: star.y, text: star.text };
-        });
-      }
-
-      function saveStars() {
-        if (!state.set(SKY, serializeStars())) {
-          setNote('Kept for this visit only. This browser stores nothing between visits.');
-        }
       }
 
       function applyStarPosition(star) {
@@ -131,13 +92,6 @@ stylesheet: wish-constellation
         star.x = Number(clamp(xVw, 1, 99).toFixed(2));
         star.y = Number(clamp(yVh, 1, 99).toFixed(2));
         applyStarPosition(star);
-      }
-
-      function pointerToViewport(clientX, clientY) {
-        return {
-          x: (clientX / window.innerWidth) * 100,
-          y: (clientY / window.innerHeight) * 100
-        };
       }
 
       function starToPixels(star) {
@@ -355,7 +309,7 @@ stylesheet: wish-constellation
         var spreadText = summary.spread < 12 ? 'tight and intentional' : (summary.spread < 24 ? 'balanced and exploratory' : 'wide and adventurous');
 
         postcardTitle.textContent = title;
-        postcardText.textContent = 'Stamped ' + dayStamp() + ' · ' + stars.length + ' stars · ' + spreadText + '. Rearrange the sky and mint again for a new named card.';
+        postcardText.textContent = 'Stamped ' + dayStamp() + ' · ' + stars.length + ' stars · ' + spreadText + '. Rearrange the sky in your persona and mint again for a new named card.';
         drawPostcard(hash, title);
         postcardPanel.classList.add('show');
         setNote('🪐 Postcard minted: ' + title + '.');
@@ -363,7 +317,7 @@ stylesheet: wish-constellation
 
       function askTheSky() {
         if (!stars.length) {
-          setNote('The sky is quiet. Drop a star first.');
+          setNote('The sky is quiet. Place a star in your persona first.');
           return;
         }
 
@@ -401,6 +355,8 @@ stylesheet: wish-constellation
         setNote('🔮 ' + opener + ' A ' + size + ' in the ' + region + ' sky feels ' + density + '. ' + closer + orbitLine);
       }
 
+      // A star on the page is a thing to read, not to move: placing and moving happen in the
+      // persona, and the sky here follows.
       function createStarElement(star) {
         var el = document.createElement('button');
         el.className = 'star';
@@ -412,32 +368,7 @@ stylesheet: wish-constellation
 
         el.addEventListener('click', function (ev) {
           ev.stopPropagation();
-          if (Date.now() < suppressStarClickUntil) return;
           setNote('✦ ' + star.text);
-        });
-
-        el.addEventListener('pointerdown', function (ev) {
-          ev.preventDefault();
-          ev.stopPropagation();
-          if (orbitMode) {
-            orbitMode = false;
-            setOrbitButton();
-            saveStars();
-            setNote('Orbit mode paused so you can reshape the sky.');
-          }
-          activeDrag = {
-            star: star,
-            pointerId: ev.pointerId,
-            moved: false
-          };
-          if (star.el && star.el.setPointerCapture) {
-            try {
-              star.el.setPointerCapture(ev.pointerId);
-            } catch (e) {
-            }
-          }
-          star.el.classList.add('dragging');
-          setNote('Drag to sketch your constellation.');
         });
 
         document.body.appendChild(el);
@@ -481,19 +412,20 @@ stylesheet: wish-constellation
         chimeBtn.setAttribute('aria-pressed', chimePlaying ? 'true' : 'false');
       }
 
+      // Orbit is a way of seeing the sky, not of changing it: when it stops, the stars go back to
+      // where the persona has them.
       function toggleOrbit(forceOff) {
         if (forceOff) {
           if (orbitMode) {
             orbitMode = false;
             setOrbitButton();
-            saveStars();
           }
           return;
         }
 
         if (!orbitMode) {
           if (!stars.length) {
-            setNote('Orbit needs at least one star. Drop one first.');
+            setNote('Orbit needs at least one star. Place one in your persona first.');
             return;
           }
           orbitMode = true;
@@ -506,9 +438,8 @@ stylesheet: wish-constellation
 
         orbitMode = false;
         setOrbitButton();
-        saveStars();
-        queueLinksRender();
-        setNote('Orbit mode paused. The stars hold their new places.');
+        loadStars('orbit');
+        setNote('Orbit mode paused. The stars return to their places.');
       }
 
       function updateOrbit(dt) {
@@ -533,36 +464,6 @@ stylesheet: wish-constellation
         queueLinksRender();
       }
 
-      function addStar(xVw, yVh, text) {
-        if (stars.length >= MAX_STARS) {
-          var first = stars.shift();
-          if (first && first.el) first.el.remove();
-        }
-        var star = {
-          x: 50,
-          y: 50,
-          text: text,
-          el: null,
-          orbitAngle: null,
-          orbitRadius: null,
-          orbitSpeed: null,
-          orbitTilt: null,
-          orbitPulse: null
-        };
-        updateStarPosition(star, xVw, yVh);
-        stars.push(star);
-        createStarElement(star);
-        if (orbitMode) primeOrbit();
-        queueLinksRender();
-        setNote('✦ ' + star.text);
-        saveStars();
-      }
-
-      function addStarFromPoint(clientX, clientY) {
-        var point = pointerToViewport(clientX, clientY);
-        addStar(point.x, point.y, randomThought());
-      }
-
       function removeMeteor(meteor) {
         for (var i = meteors.length - 1; i >= 0; i--) {
           if (meteors[i] === meteor) {
@@ -573,12 +474,14 @@ stylesheet: wish-constellation
         if (meteor.el) meteor.el.remove();
       }
 
+      // A caught meteor joins the persona's sky like any placed star, through the persona, so every
+      // other world under the sky sees it too. The sky here redraws through the unlock helper.
       function catchMeteor(meteor) {
         if (!meteor || meteor.caught) return;
         meteor.caught = true;
-        addStar(clamp(meteor.x, 3, 97), clamp(meteor.y, 3, 97), randomCometThought());
-        setNote('☄ Meteor caught. A comet thought has joined your constellation.');
         removeMeteor(meteor);
+        persona.addStar({ x: clamp(meteor.x, 3, 97), y: clamp(meteor.y, 3, 97), text: randomCometThought() });
+        setNote('☄ Meteor caught. A comet thought has joined your constellation.');
       }
 
       function spawnMeteor(now, manual) {
@@ -601,17 +504,13 @@ stylesheet: wish-constellation
         meteor.el.className = 'meteor';
         meteor.el.type = 'button';
         meteor.el.title = 'Catch this meteor';
-        meteor.el.setAttribute('aria-label', 'Catch this meteor to create a rare thought star');
+        meteor.el.setAttribute('aria-label', 'Catch this meteor to add a rare thought to your constellation');
         meteor.el.style.transform = 'translate(' + meteor.x.toFixed(2) + 'vw, ' + meteor.y.toFixed(2) + 'vh) rotate(24deg)';
 
         meteor.el.addEventListener('click', function (ev) {
           ev.preventDefault();
           ev.stopPropagation();
           catchMeteor(meteor);
-        });
-
-        meteor.el.addEventListener('pointerdown', function (ev) {
-          ev.stopPropagation();
         });
 
         document.body.appendChild(meteor.el);
@@ -639,17 +538,27 @@ stylesheet: wish-constellation
         }
       }
 
-      function loadStars() {
-        var saved = state.read(SKY, []);
-        var items = Array.isArray(saved.value) ? saved.value : [];
-        items.slice(0, MAX_STARS).forEach(function (item) {
-          if (!item || typeof item.x !== 'number' || typeof item.y !== 'number' || typeof item.text !== 'string') {
-            return;
-          }
+      function unloadStars() {
+        while (stars.length) {
+          var star = stars.pop();
+          if (star.el) star.el.remove();
+        }
+        queueLinksRender();
+      }
+
+      // Reads the persona's sky and hangs it across the page. Called from unlock()'s onReady -- at
+      // once if a sky exists, when the button seeds one, and again every time the persona changes
+      // while this page is open -- and when orbit mode stops, to put the stars back.
+      function loadStars(how) {
+        toggleOrbit(true);
+        stopChime(true);
+        unloadStars();
+        var saved = persona.stars();
+        for (var i = 0; i < saved.length; i++) {
           var star = {
             x: 50,
             y: 50,
-            text: item.text,
+            text: saved[i].text,
             el: null,
             orbitAngle: null,
             orbitRadius: null,
@@ -657,56 +566,15 @@ stylesheet: wish-constellation
             orbitTilt: null,
             orbitPulse: null
           };
-          updateStarPosition(star, item.x, item.y);
+          updateStarPosition(star, saved[i].x, saved[i].y);
           stars.push(star);
           createStarElement(star);
-        });
-        queueLinksRender();
-        if (stars.length) {
-          setNote('You have ' + stars.length + ' saved star' + (stars.length === 1 ? '' : 's') + '. Ask the sky for a reading.');
-        } else if (saved.status === 'unreadable') {
-          setNote('Constellation data was unreadable, so this sky starts fresh.');
         }
-      }
-
-      function clearStars() {
-        var count = stars.length;
-        activeDrag = null;
-        toggleOrbit(true);
-        stopChime(true);
-        while (stars.length) {
-          var star = stars.pop();
-          if (star.el) star.el.remove();
-        }
-        state.remove(SKY);
         postcardPanel.classList.remove('show');
         queueLinksRender();
-        if (!count) {
-          setNote('Nothing to clear. The sky was already empty.');
-          return;
-        }
-        setNote('Cleared ' + count + ' star' + (count === 1 ? '' : 's') + ' and forgot the saved sky in this browser. Place a star to begin again.');
-      }
-
-      function endDrag(pointerId) {
-        if (!activeDrag || activeDrag.pointerId !== pointerId) return;
-        var drag = activeDrag;
-        activeDrag = null;
-        if (drag.star.el) {
-          drag.star.el.classList.remove('dragging');
-          if (drag.star.el.releasePointerCapture) {
-            try {
-              drag.star.el.releasePointerCapture(pointerId);
-            } catch (e) {
-            }
-          }
-        }
-        if (drag.moved) {
-          if (orbitMode) primeOrbit();
-          saveStars();
-          queueLinksRender();
-          suppressStarClickUntil = Date.now() + DRAG_SUPPRESS_MS;
-          setNote('Constellation updated and saved.');
+        if (how === 'orbit') return;
+        if (stars.length) {
+          setNote(stars.length + ' star' + (stars.length === 1 ? '' : 's') + ' in your sky. Ask the sky for a reading.');
         }
       }
 
@@ -804,7 +672,7 @@ stylesheet: wish-constellation
 
       function playChime() {
         if (!stars.length) {
-          setNote('Drop a few stars first, then play the sky.');
+          setNote('Place a few stars in your persona first, then play the sky.');
           return;
         }
 
@@ -836,16 +704,12 @@ stylesheet: wish-constellation
         var doneId = setTimeout(function () {
           chimePlaying = false;
           setChimeButton();
-          setNote('✨ Star chime complete. Rearrange stars to compose a new one.');
+          setNote('✨ Star chime complete. Rearrange stars in your persona to compose a new one.');
         }, Math.ceil((step * melody.length + 0.3) * 1000));
         chimeTimeouts.push(doneId);
 
         setNote('🎵 Playing your constellation from west to east.');
       }
-
-      dropBtn.addEventListener('click', function () {
-        addStar(50 + (Math.random() - 0.5) * 24, 50 + (Math.random() - 0.5) * 24, randomThought());
-      });
 
       oracleBtn.addEventListener('click', function () {
         askTheSky();
@@ -873,45 +737,16 @@ stylesheet: wish-constellation
         mintPostcard();
       });
 
-      clearBtn.addEventListener('click', function () {
-        clearStars();
-      });
-
-      document.addEventListener('pointermove', function (ev) {
-        if (!activeDrag || activeDrag.pointerId !== ev.pointerId) return;
-        activeDrag.moved = true;
-        var point = pointerToViewport(ev.clientX, ev.clientY);
-        updateStarPosition(activeDrag.star, point.x, point.y);
-        queueLinksRender();
-      });
-
-      document.addEventListener('pointerup', function (ev) {
-        endDrag(ev.pointerId);
-      });
-
-      document.addEventListener('pointercancel', function (ev) {
-        endDrag(ev.pointerId);
-      });
-
       document.addEventListener('visibilitychange', function () {
         if (document.hidden && chimePlaying) stopChime(true);
       });
 
-      loadStars();
       setOrbitButton();
       setChimeButton();
 
       var canvas = document.getElementById('sky');
       var ctx = canvas.getContext('2d');
       var dots = [];
-
-      // A tap on the sky itself places a star. The header, the ribbon, the panel and the index
-      // sit above the canvas, so a tap on any of them is theirs; nothing here listens on the
-      // document.
-      canvas.addEventListener('click', function (ev) {
-        if (Date.now() < suppressStarClickUntil) return;
-        addStarFromPoint(ev.clientX, ev.clientY);
-      });
 
       function resize() {
         canvas.width = window.innerWidth;
@@ -964,5 +799,19 @@ stylesheet: wish-constellation
       nextMeteorAt = performance.now() + randRange(3500, 9000);
       resize();
       draw();
+
+      // Powered down until a sky exists: unlock() dims the desk and offers the one button that
+      // seeds one, calls onReady at once when the persona already holds a sky, and calls it again
+      // whenever the persona changes while this page is open, so the sky here follows the sheet.
+      window.interestingSite.unlock(desk, {
+        onReady: function (list, how) { loadStars(how); },
+        onPowerDown: function () {
+          toggleOrbit(true);
+          stopChime(true);
+          unloadStars();
+          postcardPanel.classList.remove('show');
+          setNote('');
+        }
+      });
     })();
   </script>

@@ -1,46 +1,56 @@
 /*
   The shared helpers every page can call, loaded by _includes/layout.njk without `defer` so they
-  exist while a page's own script runs, exactly as window.interestingState does.
+  exist while a page's own script runs, exactly as window.interestingState and
+  window.interestingPersona do.
 
       window.interestingSite.unlock(host, options)   a part that needs something the browser does
                                                       not hold yet, rendered as powered down with
                                                       the one button that powers it (see below)
-      window.interestingSite.seedSky()                a small random sky, the shape the wish
-                                                      constellation saves
       window.interestingSite.root                     '' on every page but the 404, where the
                                                       site's root has to be spelled out
+      window.interestingSite.seedSky(), .holdsSky(), .skyKey
+                                                      the persona's own (js/persona.js), kept here
+                                                      under the names pages used before it existed
 
-  Nothing in here keeps score, routes a visitor, or writes to the shared state document except
-  the sky a visitor asks it to seed: the shell's job is to be understood in one reading and get
-  out of the way. What it draws on the page is the one "send me somewhere" button in the index of
-  every world, and nothing else.
+  Nothing in here keeps score, routes a visitor, or writes to the shared state document except the
+  sky a visitor asks it to seed, which it does through the persona: the shell's job is to be
+  understood in one reading and get out of the way. It draws nothing of its own on a page but the
+  unlock box below, where a page asks for one.
 
   ---------------------------------------------------------------------------------------------
   Powered down, never broken
 
   Wherever a component depends on something the visitor has not done yet, its only announcement
-  of that is the solution, in place. A world that reads the saved sky never says "make one on the
-  wish constellation page first": it presents as unpowered -- dimmed and inert, like the part of
-  an adventure game whose generator is off -- and carries the one button that starts it, which
-  does the prerequisite itself, in the background, writing to the shared document exactly as the
-  visitor's own action would. A quieter link to the page where it usually happens may follow the
-  button; it never replaces it. The README section of the same name has the reasoning.
+  of that is the solution, in place. A world that reads the saved sky never says "set up your
+  persona first": it presents as unpowered -- dimmed and inert, like the part of an adventure
+  game whose generator is off -- and carries the one button that starts it, which does the
+  prerequisite itself, in the background, writing to the persona exactly as the visitor's own
+  action would. A quieter second choice may follow the button, never replace it: for the sky, a
+  button that opens the persona sheet, where stars are placed by hand. The README section of the
+  same name has the reasoning.
 
       var ready = window.interestingSite.unlock(document.querySelector('.layout'), {
         onReady: function (stars, how) { loadStars(); }   // now if a sky exists, else on press
       });
 
   options, all optional:
-    key        the state name the part depends on; 'constellation' (the sky) by default
+    key        the state name the part depends on; the persona's sky ('constellation') by default
     holds      function (value) -> boolean: is the value enough? By default: a non-empty array
                of { x, y, text } stars
-    seed       function () -> value to write when the button is pressed; by default seedSky()
+    seed       function () -> value to write when the button is pressed; by default a small
+               random sky from the persona
     onReady    function (value, how): called now with how 'saved' if the value is already there,
-               or after the press with 'seeded' (written to the browser) or 'memory' (written,
-               but this browser keeps nothing between visits)
+               after the press with 'seeded' (written to the browser) or 'memory' (written, but
+               this browser keeps nothing between visits), and again with 'persona' every time
+               the sky changes in the persona while the page is open -- a star placed in the
+               sheet floating over a world reaches that world at once
+    onPowerDown
+               function (): called if the sky is emptied while the page is open, after the part
+               has been powered down again, for a page that drew the stars somewhere of its own
     copy       { title, note, button } to override the words, for a prerequisite other than the sky
-    elsewhere  { href, text } for the quiet second choice; null for none; the wish constellation
-               by default
+    elsewhere  the quiet second choice under the button: { text, open } opens the persona sheet on
+               that section ('sky' or 'reading'); { href, text } is a link; null for none. For
+               the sky it opens the persona by default
 
   It returns true when the part was ready at once, false when it rendered the unpowered state.
   The host keeps its children: they are dimmed by _sass/_unlock.scss and made inert, and the
@@ -52,19 +62,9 @@
   'use strict';
 
   var store = window.interestingState;
+  var persona = window.interestingPersona;
   var root = document.documentElement.getAttribute('data-root') || '';
-  var SKY = 'constellation';
-  var MAX_STARS = 120;
-  var SEED_COUNT = 7;
-
-  // What a seeded star says when a world reads it out. Short, lowercase, the site's own voice.
-  var SEED_THOUGHTS = [
-    'a door left ajar', 'the kettle, just off the boil', 'rain arriving sideways',
-    'a lamp in a window across the way', 'an unanswered letter, kept', 'moss on the north side',
-    'a tune with the middle missing', 'the long way home', 'one more look up',
-    'a stone kept for no reason', 'a page half-turned', 'a machine running with nobody watching',
-    'the tree in the courtyard, doing fine', 'a name nearly said', 'the smell before rain'
-  ];
+  var SKY = persona ? persona.key : 'constellation';
 
   // The names the shell used to keep for games that are gone: relay marks, quests, honors,
   // signals, a switchboard, a logbook, a cipher, a remix snapshot, a trail and an arcade. Taken
@@ -76,31 +76,20 @@
     'constellation-remix-snapshot', 'trail-journal', 'wayfinding-arcade'
   ];
 
-  function validStar(s) {
-    return !!s && typeof s === 'object' && typeof s.x === 'number' && typeof s.y === 'number'
-      && isFinite(s.x) && isFinite(s.y) && typeof s.text === 'string';
-  }
-
   function holdsSky(value) {
-    return Array.isArray(value) && value.some(validStar);
+    if (persona) return persona.holds(value);
+    return Array.isArray(value) && value.some(function (s) {
+      return !!s && typeof s.x === 'number' && typeof s.y === 'number' && typeof s.text === 'string';
+    });
   }
 
-  /* A fresh sky: `count` stars spread around the middle of the field rather than clumped, in the
-     0-100 space every sky world reads (the wish constellation keeps them as vw and vh). */
   function seedSky(count) {
-    var n = Math.max(1, Math.min(MAX_STARS, count || SEED_COUNT));
-    var stars = [];
-    var start = Math.floor(Math.random() * SEED_THOUGHTS.length);
-    for (var i = 0; i < n; i++) {
-      var angle = (i / n) * Math.PI * 2 + (Math.random() - 0.5) * 0.8;
-      var radius = 14 + Math.random() * 24;
-      stars.push({
-        x: Number(Math.min(92, Math.max(8, 50 + Math.cos(angle) * radius)).toFixed(2)),
-        y: Number(Math.min(86, Math.max(12, 48 + Math.sin(angle) * radius * 0.8)).toFixed(2)),
-        text: SEED_THOUGHTS[(start + i) % SEED_THOUGHTS.length]
-      });
+    if (persona) return persona.seedSky(count);
+    var list = [];
+    for (var i = 0; i < (count || 7); i++) {
+      list.push({ x: 20 + Math.random() * 60, y: 20 + Math.random() * 60, text: 'a wish' });
     }
-    return stars;
+    return list;
   }
 
   function el(tag, className, text) {
@@ -115,96 +104,122 @@
   function unlock(host, options) {
     var opts = options || {};
     var key = opts.key || SKY;
+    var isSky = key === SKY;
     var holds = typeof opts.holds === 'function' ? opts.holds : holdsSky;
     var seed = typeof opts.seed === 'function' ? opts.seed : seedSky;
     var onReady = typeof opts.onReady === 'function' ? opts.onReady : function () {};
-    var read = store ? store.read(key, null) : { status: 'unavailable', value: null };
-
-    if (read.status === 'ok' && holds(read.value)) {
-      onReady(read.value, 'saved');
-      return true;
-    }
-    if (!host || !host.parentNode) {
-      onReady(null, 'missing');
-      return false;
-    }
-
+    var onPowerDown = typeof opts.onPowerDown === 'function' ? opts.onPowerDown : function () {};
     var copy = opts.copy || {};
-    var title = copy.title || 'no sky yet';
-    var note = copy.note;
-    var button = copy.button || 'seed a sky to begin';
-    if (!note) {
-      if (read.status === 'unavailable') {
-        note = 'This part reads the sky kept in this browser, and this browser keeps nothing between visits. A sky seeded here lasts until you leave.';
-        button = copy.button || 'seed a sky for now';
-      } else if (read.status === 'unreadable') {
-        title = copy.title || 'the saved sky cannot be read';
-        note = 'What this browser kept of the sky is not something this part can use. A fresh one replaces it.';
-        button = copy.button || 'start a fresh sky';
-      } else {
-        note = 'This part reads the sky kept in this browser, and there is none yet.';
-      }
-    }
     var elsewhere = 'elsewhere' in opts ? opts.elsewhere
-      : { href: root + 'wish-constellation.html', text: 'or place your own stars in the wish constellation' };
+      : (isSky ? { text: 'or place your own stars in your persona', open: 'sky' } : null);
+    var powered = false;
+    var box = null;
 
-    unlockCount += 1;
-    var box = el('div', 'unlock');
-    var heading = el('p', 'unlock-title', title);
-    heading.id = 'unlock-title-' + unlockCount;
-    box.setAttribute('role', 'group');
-    box.setAttribute('aria-labelledby', heading.id);
-    box.appendChild(heading);
-    box.appendChild(el('p', 'unlock-note', note));
-    var controls = el('div', 'controls');
-    var go = el('button', 'unlock-go', button);
-    go.type = 'button';
-    controls.appendChild(go);
-    box.appendChild(controls);
-    if (elsewhere && elsewhere.href) {
-      var link = el('a', 'unlock-else', elsewhere.text || elsewhere.href);
-      link.href = elsewhere.href;
-      box.appendChild(link);
+    function readValue() {
+      return store ? store.read(key, null) : { status: 'unavailable', value: null };
     }
 
-    host.parentNode.insertBefore(box, host);
-    host.classList.add('powered-down');
-    host.setAttribute('inert', '');
-    host.setAttribute('aria-hidden', 'true');
-
-    go.addEventListener('click', function () {
-      var value = seed();
-      var kept = store ? store.set(key, value) : false;
-      if (box.parentNode) box.parentNode.removeChild(box);
+    function powerUp(value, how) {
+      if (box && box.parentNode) box.parentNode.removeChild(box);
+      box = null;
       host.classList.remove('powered-down');
       host.removeAttribute('inert');
       host.removeAttribute('aria-hidden');
       var first = host.querySelector('button:not([disabled]), a[href], input, [tabindex]');
-      if (first && typeof first.focus === 'function') first.focus();
-      onReady(value, kept ? 'seeded' : 'memory');
-    });
-    return false;
-  }
-
-  /* The one random control on the site: the "send me somewhere" button in the index of every
-     world, which picks any world but this one. It is hidden in the markup, because without
-     scripting it would do nothing. */
-  function wireRandom() {
-    var button = document.getElementById('worlds-random');
-    if (!button) return;
-    var here = document.documentElement.getAttribute('data-page')
-      || (window.location.pathname || '').split('/').pop() || 'index.html';
-    var links = document.querySelectorAll('.worlds .chips a[href]');
-    var pool = [];
-    for (var i = 0; i < links.length; i++) {
-      var href = links[i].getAttribute('href');
-      if (href && href !== here && href.split('/').pop() !== here && pool.indexOf(href) === -1) pool.push(href);
+      if (first && typeof first.focus === 'function' && how !== 'persona') first.focus();
+      powered = true;
+      onReady(value, how);
     }
-    if (!pool.length) return;
-    button.hidden = false;
-    button.addEventListener('click', function () {
-      window.location.href = pool[Math.floor(Math.random() * pool.length)];
-    });
+
+    function powerDown(status) {
+      var title = copy.title || 'no sky yet';
+      var note = copy.note;
+      var button = copy.button || 'seed a sky to begin';
+      if (!note) {
+        if (status === 'unavailable') {
+          note = 'This part reads the sky kept in this browser, and this browser keeps nothing between visits. A sky seeded here lasts until you leave.';
+          button = copy.button || 'seed a sky for now';
+        } else if (status === 'unreadable') {
+          title = copy.title || 'the saved sky cannot be read';
+          note = 'What this browser kept of the sky is not something this part can use. A fresh one replaces it.';
+          button = copy.button || 'start a fresh sky';
+        } else {
+          note = 'This part reads the sky kept in this browser, and there is none yet.';
+        }
+      }
+
+      unlockCount += 1;
+      box = el('div', 'unlock');
+      var heading = el('p', 'unlock-title', title);
+      heading.id = 'unlock-title-' + unlockCount;
+      box.setAttribute('role', 'group');
+      box.setAttribute('aria-labelledby', heading.id);
+      box.appendChild(heading);
+      box.appendChild(el('p', 'unlock-note', note));
+      var controls = el('div', 'controls');
+      var go = el('button', 'unlock-go', button);
+      go.type = 'button';
+      controls.appendChild(go);
+      box.appendChild(controls);
+      if (elsewhere && elsewhere.open && persona) {
+        var more = el('button', 'unlock-else', elsewhere.text || 'or open your persona');
+        more.type = 'button';
+        more.addEventListener('click', function () {
+          persona.open(elsewhere.open);
+        });
+        box.appendChild(more);
+      } else if (elsewhere && elsewhere.href) {
+        var link = el('a', 'unlock-else', elsewhere.text || elsewhere.href);
+        link.href = elsewhere.href;
+        box.appendChild(link);
+      }
+
+      host.parentNode.insertBefore(box, host);
+      host.classList.add('powered-down');
+      host.setAttribute('inert', '');
+      host.setAttribute('aria-hidden', 'true');
+      var wasPowered = powered;
+      powered = false;
+      if (wasPowered) onPowerDown();
+
+      go.addEventListener('click', function () {
+        var value = seed();
+        if (isSky && persona) {
+          // Written through the persona, which tells every listener -- this one included, below,
+          // which is what powers the part up.
+          persona.setStars(value, 'seeded');
+          return;
+        }
+        var kept = store ? store.set(key, value) : false;
+        powerUp(value, kept ? 'seeded' : 'memory');
+      });
+    }
+
+    var read = readValue();
+    if (read.status === 'ok' && holds(read.value)) {
+      powered = true;
+      onReady(read.value, 'saved');
+    } else if (host && host.parentNode) {
+      powerDown(read.status);
+    } else {
+      onReady(null, 'missing');
+      return false;
+    }
+
+    // The sky follows the persona: placed, seeded or cleared in the sheet floating over this page,
+    // or by a meteor the page itself caught, the part powers up, reloads, or powers down to match.
+    if (isSky && persona) {
+      persona.onSky(function (list, how, kept) {
+        if (!host.parentNode) return;
+        if (holds(list)) {
+          if (!powered) powerUp(list, how === 'seeded' ? (kept ? 'seeded' : 'memory') : 'persona');
+          else onReady(list, 'persona');
+        } else if (powered) {
+          powerDown(readValue().status);
+        }
+      });
+    }
+    return powered;
   }
 
   function retireOldKeys() {
@@ -224,7 +239,6 @@
   };
 
   function start() {
-    wireRandom();
     retireOldKeys();
   }
 
