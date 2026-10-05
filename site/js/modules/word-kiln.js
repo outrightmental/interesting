@@ -235,14 +235,17 @@ function scene(c, s, dt, t, lit, label, labelTone) {
   return m;
 }
 
+// A line or two stamped along the foot of the scene (lines split on a newline).
 function stamp(c, text, a) {
   if (a <= 0) return;
   const g = c.g;
-  font(g, px(c, 0.034, 10), 'italic 400');
+  const size = px(c, 0.034, 10);
+  const lines = String(text).split('\n');
+  font(g, size, 'italic 400');
   g.textAlign = 'center';
   g.textBaseline = 'alphabetic';
   g.fillStyle = c.alpha(c.colors.muted, Math.min(1, a));
-  g.fillText(text, c.w / 2, c.h * 0.95);
+  lines.forEach((line, i) => g.fillText(line, c.w / 2, c.h * 0.95 - (lines.length - 1 - i) * size * 1.3));
 }
 
 function heatLine(b, notes) {
@@ -266,7 +269,7 @@ function fired(env) {
     const list = [];
     for (let n = 0; n < count; n++) {
       let made = forge(env, o.value, b);
-      if (list.indexOf(made) !== -1) made = forge(env, o.value, b);
+      if (made === o.value || list.indexOf(made) !== -1) made = forge(env, o.value, b);
       list.push(made);
     }
     return list;
@@ -329,7 +332,10 @@ function fired(env) {
       if (s.cool >= 0 && s.cool < 1 && !c.done) {
         s.cool = Math.min(1, s.cool + dt / s.coolFor);
         c.progress('cool', s.cool);
-        if (s.cool >= 1) c.satisfy('cool');
+        if (s.cool >= 1) {
+          c.status('"' + s.entry.made + '" has cooled and set');
+          c.satisfy('cool');
+        }
       }
       if (c.done) s.fin = Math.min(1, s.fin + dt);
       const cooled = s.cool < 0 ? 0 : s.cool;
@@ -390,7 +396,7 @@ function fired(env) {
         y += small * 1.4;
         font(g, small, '400');
         g.fillStyle = c.alpha(c.colors.muted, 0.55);
-        g.fillText('earlier: ' + s.log.join(', '), x0, y);
+        g.fillText(wrap(g, 'earlier: ' + s.log.join(', '), width, 1)[0], x0, y);
       }
       stamp(c, 'it is a kiln, not a dictionary', s.fin * 1.5);
     },
@@ -500,8 +506,7 @@ function kilnLoad(env) {
       const width = c.w * 0.46;
       const wordPx = px(c, 0.055, 13);
       const defPx = px(c, 0.04, 10);
-      const pitch = wordPx * 1.35 + defPx * 1.25 * 2 + defPx * 0.5;
-      let y = c.h * 0.1;
+      let y = c.h * 0.08;
       g.textAlign = 'left';
       g.textBaseline = 'alphabetic';
       font(g, defPx, 'italic 400');
@@ -514,6 +519,10 @@ function kilnLoad(env) {
       g.moveTo(x0, y);
       g.lineTo(x0 + width, y);
       g.stroke();
+      // One slot per word, with two lines under each for its meaning, fitted above the stamp.
+      const ideal = wordPx * 1.35 + defPx * 2.5 + defPx * 0.5;
+      const room = c.h * 0.85 - y - wordPx * 1.2 - defPx * 2.5;
+      const pitch = need > 1 ? Math.min(ideal, room / (need - 1)) : ideal;
       s.pulled.forEach((p, i) => {
         const k = Math.min(1, p.age * 1.6);
         const e = 1 - (1 - k) * (1 - k);
@@ -531,15 +540,15 @@ function kilnLoad(env) {
           if (s.fin > 0) {
             font(g, defPx, '400');
             g.fillStyle = c.alpha(c.colors.fg, Math.min(1, s.fin * 1.5));
-            let dy = wy + defPx * 1.35;
+            let dy = wy + defPx * 1.3;
             for (const line of wrap(g, p.def, width, 2)) {
               g.fillText(line, x0, dy);
-              dy += defPx * 1.25;
+              dy += defPx * 1.2;
             }
           }
         }
       });
-      stamp(c, 'cited by ' + author + ', p. ' + page + '. neither the words nor the book exist.', s.fin * 1.5);
+      stamp(c, 'cited by ' + author + ', p. ' + page + '.\nneither the words nor the book exist.', s.fin * 1.5);
     },
     end(c) {
       c.status(NUM[need] + ' words that were never in any dictionary, cooling on the shelf');
