@@ -19,6 +19,11 @@
       reading as it changes (threshold:reading). With no sky yet it deals one unpowered card early,
       carrying the shared unlock (window.interestingSite.unlock), and every card that reads the sky
       follows the persona as stars are placed (persona:sky).
+    - It paints a page's feature on request: window.interestingFeed.feature(host, canvas, file)
+      paints the named world across the canvas in that world's palette (the host takes the
+      world's data-mood) and keeps it live exactly as a card is, and unfeature(host) clears it.
+      The threshold uses it to show the world a reading opens onto. feed:ready is dispatched on
+      window once the API is there.
 
   ---------------------------------------------------------------------------------------------
   A module, in js/modules/<world>.js, where <world> is the page's file without ".html":
@@ -543,12 +548,8 @@ function askCard() {
   const o = r && r.orientation;
   const read = !!(o && r.source && r.source !== 'signals');
   body.appendChild(el('p', 'card-overline', 'one sideways question'));
-  body.appendChild(el('h3', 'card-title', read ? 'read as ' + o.name : 'ask me another way'));
-  body.appendChild(el('p', 'card-text', read
-    ? o.pull.charAt(0).toUpperCase() + o.pull.slice(1) + '. That opens onto ' + o.worldName
-      + '. The site never asks the same way twice, so it can ask again.'
-    : 'Before it offers anything the site asks about a door, a stone, a dial. Answer in your '
-      + 'persona and the feed leads with the world the answer picks.'));
+  body.appendChild(el('h3', 'card-title', read ? 'read as ' + o.name : 'ask me sideways'));
+  if (read) body.appendChild(el('p', 'card-text', o.pull.charAt(0).toUpperCase() + o.pull.slice(1) + '. That opens onto ' + o.worldName + '.'));
   const controls = el('div', 'controls');
   if (persona) {
     const ask = el('button', null, read ? 'ask another way' : 'ask me');
@@ -577,18 +578,22 @@ function unlockCard() {
   const stack = el('div', 'card-stack');
   const { box, canvas } = media('16 / 10');
   stack.appendChild(box);
-  const text = el('p', 'card-text', 'Several worlds read the stars of your persona, each its own way.');
   const body = el('div', 'card-body');
   body.appendChild(el('p', 'card-overline', 'your sky'));
+  const text = el('p', 'card-text');
+  text.hidden = true;
   body.appendChild(text);
   stack.appendChild(body);
   card.appendChild(stack);
   meta.set(card, { kind: 'unlock', sky: true, seed: newSeed(), canvas, world: null });
   if (site && typeof site.unlock === 'function') {
+    // The box the helper puts before the host says everything there is to say; this card adds
+    // one line only once there is a sky to count.
     site.unlock(box, {
       onReady(stars) {
         const n = Array.isArray(stars) ? stars.length : 0;
-        text.textContent = n + ' star' + (n === 1 ? '' : 's') + ' in your sky. Every world that reads it is lit; open your persona to move them.';
+        text.textContent = n + ' star' + (n === 1 ? '' : 's') + '. Open your persona to move them.';
+        text.hidden = false;
         const m = meta.get(card);
         if (m) {
           m.dirty = true;
@@ -597,12 +602,43 @@ function unlockCard() {
         relayout();
       },
       onPowerDown() {
-        text.textContent = 'The sky is clear again. Seed one, or place stars in your persona.';
+        text.hidden = true;
         relayout();
       }
     });
   }
   return card;
+}
+
+/* ---- a page's feature ---------------------------------------------------------------------- */
+
+const features = new Set();
+
+// Paint `file`'s world across `canvas`, which fills `host`, in that world's palette, and keep it
+// live exactly as a card is: painted when near, animated when visible, repainted as the sky
+// changes. The threshold's feature is one; a world page's feature is the world itself.
+function feature(host, canvas, file) {
+  const world = WORLDS.find((w) => w.file === file);
+  if (!world || !host || !canvas) return false;
+  unfeature(host);
+  host.dataset.mood = world.mood;
+  meta.set(host, { kind: 'feature', world, id: world.id, seed: newSeed(), canvas });
+  features.add(host);
+  if (watcher) watcher.observe(host);
+  else paint(host);
+  return true;
+}
+
+function unfeature(host) {
+  const m = meta.get(host);
+  if (!m) return;
+  if (watcher) watcher.unobserve(host);
+  deactivate(host);
+  features.delete(host);
+  meta.delete(host);
+  delete host.dataset.mood;
+  const ctx = m.canvas && m.canvas.getContext('2d');
+  if (ctx) ctx.clearRect(0, 0, m.canvas.width, m.canvas.height);
 }
 
 /* ---- dealing -------------------------------------------------------------------------------- */
@@ -733,6 +769,12 @@ function start() {
 
   let lastWidth = grid.clientWidth;
   window.addEventListener('resize', () => {
+    for (const host of features) {
+      const m = meta.get(host);
+      if (!m || !m.painted) continue;
+      m.dirty = true;
+      if (m.visible) paint(host);
+    }
     if (grid.clientWidth === lastWidth) return;
     lastWidth = grid.clientWidth;
     relayout();
@@ -745,7 +787,7 @@ function start() {
   // The sky changed in the persona: every card that reads it paints again, and the sparks that
   // were waiting on a sky can be dealt from here on.
   window.addEventListener('persona:sky', () => {
-    for (const card of cards) {
+    for (const card of [...cards, ...features]) {
       const m = meta.get(card);
       if (!m) continue;
       const reads = m.sky || (m.id && modules.has(m.id) && m.painted);
@@ -766,4 +808,11 @@ function start() {
   }
 }
 
+window.interestingFeed = { feature, unfeature };
+
 if (grid && WORLDS.length) start();
+try {
+  window.dispatchEvent(new CustomEvent('feed:ready'));
+} catch (e) {
+  /* an older browser gets the API and no event */
+}

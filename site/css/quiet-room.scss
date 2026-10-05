@@ -7,7 +7,6 @@
   position: relative;
   display: grid;
   place-items: center;
-  min-height: 300px;
   border-radius: var(--md-sys-shape-corner-large);
   background:
     radial-gradient(circle at 50% 46%, color-mix(in oklab, var(--md-sys-color-primary) 10%, transparent) 0%, transparent 62%),

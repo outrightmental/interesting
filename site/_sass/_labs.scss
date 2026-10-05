@@ -1,7 +1,12 @@
-// The shape most worlds share: a canvas (or a stage) beside a panel of controls, two columns on a
-// wide screen and one on a phone. The canvas is the lowest surface, so it reads as the one
-// recessed thing on the page -- the view into the world -- and the panel beside it is a filled
-// card like any other.
+// The shape most worlds share: a stage (a canvas, or a room, a kiln, a desk) beside a panel of
+// controls, two columns on a wide screen and one on a phone. The stage is the lowest surface, so
+// it reads as the one recessed thing on the page -- the view into the world -- and the panel
+// beside it is a filled card like any other.
+//
+// The feature fills the first screen, so the stage is sized by the screen's height as well as by
+// its column: as wide as the column allows, or as wide as the height left under the heading
+// allows at the stage's own aspect ratio (--stage-ratio, which js/site.js reads off each canvas),
+// whichever is less.
 
 @use 'readout';
 @use 'type';
@@ -9,18 +14,26 @@
 .layout,
 .top {
   display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
-  gap: 1rem;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 400px);
+  gap: 1.5rem;
   align-items: start;
 }
 
 .layout > canvas,
 .top > canvas {
-  width: 100%;
+  --stage-h: calc(100svh - var(--top-bar-h) - 13rem);
+  width: min(100%, calc(var(--stage-h) * var(--stage-ratio, 1.72)));
   height: auto;
   display: block;
+  justify-self: start;
   border-radius: var(--md-sys-shape-corner-large);
   background: var(--md-sys-color-surface-container-lowest);
+}
+
+// A stage that is not a canvas (the quiet room, the kiln, the specimen) fills its column and
+// stands as tall as the screen leaves it.
+.layout > :not(canvas):not(.panel) {
+  min-height: clamp(300px, calc(100svh - var(--top-bar-h) - 14rem), 720px);
 }
 
 // A canvas that takes keyboard focus (the kicker, the ring) rings like every other control.
@@ -30,10 +43,20 @@
   outline-offset: 2px;
 }
 
-@media (max-width: 800px) {
+@media (max-width: 900px) {
   .layout,
   .top {
     grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+
+  .layout > canvas,
+  .top > canvas {
+    --stage-h: calc(100svh - var(--top-bar-h) - 16rem);
+  }
+
+  .layout > :not(canvas):not(.panel) {
+    min-height: clamp(260px, 48svh, 520px);
   }
 }
 

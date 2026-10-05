@@ -1,118 +1,105 @@
-// The persona: the card under the top bar on every page, and the sheet it opens. Both are drawn
+// The persona: the avatar in the top bar on every page, and the sheet it opens. Both are drawn
 // by js/persona.js into the markup _includes/layout.njk writes; see that file for what a persona
 // is and why it sits where it does.
 //
-// The card is an M3 card with a leading avatar -- a round portrait of the sky, a label, one line,
-// one button -- the grammar every role-playing game uses for the player. With no persona yet it is
-// the outlined kind, its outline dashed, and its one button is filled: the first thing to do on
-// the site is the first thing a visitor's eye lands on. The sheet is an M3 basic dialog.
+// The avatar is the grammar every app uses for the account: a round portrait of the sky at the
+// end of the bar, which is the button that opens the sheet. With no persona yet the ring is
+// dashed and the button is filled, with its label showing, so the first thing to do on the site
+// is the first thing a visitor's eye lands on; after that it is the portrait alone, and the label
+// is for screen readers. The sheet is an M3 basic dialog.
 
 @use 'type';
 
-// ---- the card ----------------------------------------------------------------------------
+// ---- the avatar in the bar ---------------------------------------------------------------
 
 .persona {
-  position: relative;
-  z-index: 2; // above any page's full-screen backdrop canvas
-  width: min(var(--main-max), 100%);
-  margin: 0 auto 1rem;
-  padding: 1rem;
-  border-radius: var(--md-sys-shape-corner-large);
-  background: var(--md-sys-color-surface-container);
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: 0.25rem 1rem;
-  align-items: start;
+  display: flex;
+  align-items: center;
+  flex: none;
 }
 
-.persona[data-state='empty'] {
-  background: var(--md-sys-color-surface-container-low);
-  outline: 1px dashed var(--md-sys-color-outline);
-  outline-offset: -1px;
+.persona-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
 }
 
-.persona[data-asking='true'] {
-  background: var(--md-sys-color-surface-container-high);
-  outline: none;
+.persona-avatar {
+  gap: 0.6rem;
+  min-height: 40px;
+  padding: 0;
+  background: transparent;
+  color: var(--md-sys-color-on-surface-variant);
 }
 
 .persona-portrait {
   position: relative;
-  width: 56px;
-  height: 56px;
+  width: 40px;
+  height: 40px;
+  flex: none;
   border-radius: var(--md-sys-shape-corner-full);
   background:
-    radial-gradient(circle at 50% 45%, color-mix(in oklab, var(--md-sys-color-primary) 12%, transparent) 0%, transparent 70%),
-    var(--md-sys-color-surface-container-lowest);
+    radial-gradient(circle at 50% 45%, color-mix(in oklab, var(--md-sys-color-primary) 14%, transparent) 0%, transparent 70%),
+    var(--md-sys-color-surface-container-highest);
   overflow: hidden;
   display: grid;
   place-items: center;
 }
 
-// With no persona yet the ring is dashed and holds one faint star where the portrait will be.
-.persona[data-state='empty'] .persona-portrait {
-  outline: 1px dashed var(--md-sys-color-outline);
-  outline-offset: -1px;
+.persona-portrait canvas {
+  display: block;
+  width: 40px;
+  height: 40px;
 }
 
-.persona[data-state='empty'] .persona-portrait::after {
+.persona-label {
+  @include type.scale(label-large);
+}
+
+// The one lit control on a page with no persona yet: the label shows, filled and beckoning.
+.persona[data-state='empty'] .persona-avatar {
+  padding-right: 1rem;
+  background: var(--md-sys-color-primary);
+  color: var(--md-sys-color-on-primary);
+  animation: persona-beckon 2.8s var(--md-sys-motion-easing-standard) infinite;
+}
+
+// With no sky placed yet the ring is dashed, with one faint star where the portrait will be,
+// whatever else the persona is doing (asking, say).
+.persona[data-sky='none'] .persona-portrait {
+  outline: 1px dashed color-mix(in oklab, currentColor 60%, transparent);
+  outline-offset: -2px;
+}
+
+.persona[data-state='empty'] .persona-portrait {
+  background: color-mix(in oklab, var(--md-sys-color-on-primary) 18%, transparent);
+}
+
+.persona[data-sky='none'] .persona-portrait::after {
   content: '\2726';
   position: absolute;
   inset: 0;
   display: grid;
   place-items: center;
-  color: var(--md-sys-color-tertiary);
-  opacity: 0.6;
-  font-size: 1.15rem;
+  color: currentColor;
+  opacity: 0.8;
+  font-size: 1rem;
 }
 
-.persona-portrait canvas {
-  display: block;
-  width: 56px;
-  height: 56px;
+// With a persona the portrait is enough; the label is read, not seen.
+.persona:not([data-state='empty']) .persona-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
-.persona-body {
-  min-width: 0;
-  display: grid;
-  gap: 0.25rem;
-}
-
-.persona-label {
-  margin: 0;
-  color: var(--md-sys-color-primary);
-  @include type.scale(label-medium);
-}
-
-.persona-text {
-  margin: 0;
-  color: var(--md-sys-color-on-surface-variant);
-  @include type.scale(body-medium);
-}
-
-// While the question is open the sentence that frames it reads at full strength; so does a reading
-// the visitor gave or one carried over.
-.persona[data-state='asking'] .persona-text,
-.persona[data-reading='answered'] .persona-text,
-.persona[data-reading='carried'] .persona-text {
-  color: var(--md-sys-color-on-surface);
-}
-
-.persona-actions {
-  margin: 0.5rem 0 0;
-}
-
-.persona-actions button,
-.persona-actions a.action {
-  min-height: 40px;
-  padding: 0.35rem 1.25rem;
-}
-
-// The one lit control on a page with no persona yet: the thing to do first, filled and beckoning.
-.persona[data-state='empty'] #persona-open {
-  background: var(--md-sys-color-primary);
-  color: var(--md-sys-color-on-primary);
-  animation: persona-beckon 2.8s var(--md-sys-motion-easing-standard) infinite;
+.persona[data-asking='true'] .persona-portrait {
+  outline: 2px solid var(--md-sys-color-primary);
+  outline-offset: 1px;
 }
 
 @keyframes persona-beckon {
@@ -126,27 +113,40 @@
   }
 }
 
-// The "go to" link reads as a text button with an arrow's worth of air after it.
-#persona-go {
+// The "go to" link beside the avatar: a text button, on a screen wide enough for it. On a phone
+// the feed's first card carries the same suggestion. (Written as a.action.persona-go so it
+// outranks the outlined button a.action is.)
+a.action.persona-go {
   background: transparent;
   box-shadow: none;
-  padding-inline: 0.75rem;
+  min-height: 40px;
+  padding: 0.25rem 0.75rem;
+  white-space: nowrap;
 }
 
+@media (max-width: 839px) {
+  a.action.persona-go {
+    display: none;
+  }
+
+  .persona[data-state='empty'] .persona-avatar {
+    padding-right: 0;
+  }
+
+  .persona[data-state='empty'] .persona-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+
+// The question, wherever the persona mounts it (the threshold's feature, or the sheet).
 .persona-probe {
   margin-top: 0.5rem;
-}
-
-@media (max-width: 599px) {
-  .persona {
-    padding: 0.85rem;
-    gap: 0.25rem 0.75rem;
-  }
-
-  // The question needs the whole card's width, so it goes under the portrait rather than beside it.
-  .persona-probe {
-    grid-column: 1 / -1;
-  }
 }
 
 // ---- the sheet ---------------------------------------------------------------------------
@@ -215,7 +215,8 @@
 
 .persona-section .controls,
 .persona-section .panel-note,
-.persona-section .panel-status {
+.persona-section .panel-status,
+.persona-section .persona-probe {
   margin: 0;
 }
 
@@ -309,7 +310,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .persona[data-state='empty'] #persona-open {
+  .persona[data-state='empty'] .persona-avatar {
     animation: none;
   }
 

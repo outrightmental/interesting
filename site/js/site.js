@@ -16,7 +16,8 @@
   a hand with two things only a script can know: whether the page has scrolled under the top app
   bar (which then takes its tonal lift, .is-scrolled, as an M3 top app bar does), and how full
   each slider is (the M3 slider paints its active track in the primary colour up to the handle,
-  which CSS can only do when --range-pct says where the handle is).
+  which CSS can only do when --range-pct says where the handle is), and the aspect ratio of each
+  world's stage (so the feature can size it by the height of the first screen).
 
   Nothing in here keeps score, routes a visitor, or writes to the shared state document except
   the sky a visitor asks it to seed, which it does through the persona: the shell's job is to be
@@ -288,6 +289,18 @@
     fillAllRanges();
   }
 
+  // A world's stage -- the canvas beside its panel -- fills the first screen, so it is sized by the
+  // viewport's height as well as its column's width. CSS can hold both only if it knows the
+  // stage's aspect ratio, which is read off the canvas's own width and height here.
+  function stageRatios() {
+    var stages = document.querySelectorAll('.layout > canvas, .top > canvas');
+    for (var i = 0; i < stages.length; i++) {
+      var w = Number(stages[i].getAttribute('width')) || stages[i].width;
+      var h = Number(stages[i].getAttribute('height')) || stages[i].height;
+      if (w > 0 && h > 0) stages[i].style.setProperty('--stage-ratio', (w / h).toFixed(4));
+    }
+  }
+
   window.interestingSite = {
     unlock: unlock,
     seedSky: seedSky,
@@ -300,6 +313,7 @@
     retireOldKeys();
     watchTopBar();
     watchRanges();
+    stageRatios();
   }
 
   if (document.readyState === 'loading') {

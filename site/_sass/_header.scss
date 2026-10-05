@@ -1,10 +1,12 @@
 // The top app bar (m3.material.io/components/top-app-bar) on every page, from _includes/layout.njk:
-// the site's name and three navigation destinations, each an icon in a pill over its label, the
-// active one marked the way M3's navigation bar marks it. It sticks to the top of the viewport and
-// takes a tonal lift once the page has scrolled under it (js/site.js adds .is-scrolled).
+// the site's name, three navigation destinations -- each an icon in a pill over its label, the
+// active one marked the way M3's navigation bar marks it -- and the persona as the trailing
+// avatar (see _persona.scss for the avatar and the sheet it opens). It sticks to the top of the
+// viewport and takes a tonal lift once the page has scrolled under it (js/site.js adds
+// .is-scrolled).
 //
 // Nothing else lives here; in particular no status line, so the page's own heading is never more
-// than a few lines down.
+// than one bar down.
 
 @use 'type';
 
@@ -29,8 +31,7 @@
   outline-color: var(--md-sys-color-on-surface);
 }
 
-// The wrapper the skip link lands on spans the column, and the page's <main> is centred inside it,
-// so a page is centred however wide or narrow its own content is.
+// The wrapper the skip link lands on spans the page; the feature inside it is full-bleed.
 #main-content {
   width: 100%;
 }
@@ -59,13 +60,11 @@
 
 .top-bar-inner {
   width: min(var(--page-max), 100% - 2 * var(--gutter));
-  min-height: 64px;
+  min-height: var(--top-bar-h);
   margin-inline: auto;
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 0.75rem;
-  padding: 0.25rem 0;
 }
 
 .top-bar-brand {
@@ -90,6 +89,7 @@
 }
 
 .top-bar-nav {
+  margin-left: auto;
   display: flex;
   align-items: stretch;
   gap: 0.25rem;
@@ -146,12 +146,16 @@
   font-weight: 700;
 }
 
-// Compact: the bar stays one row, the brand loses its word and the destinations their labels; the
-// labels stay in the markup for anyone listening, and the active pill still says which is which.
+// Compact: the bar stays one row, the destinations lose their labels; the labels stay in the
+// markup for anyone listening, and the active pill still says which is which.
 @media (max-width: 599px) {
   .top-bar-inner {
-    min-height: 56px;
     gap: 0.25rem;
+  }
+
+  .top-bar-brand {
+    gap: 0.4rem;
+    padding-right: 0.5rem;
   }
 
   .top-bar-brand span {
@@ -159,13 +163,13 @@
   }
 
   .nav-dest {
-    min-width: 48px;
-    min-height: 48px;
+    min-width: 44px;
+    min-height: 44px;
     padding: 0.25rem;
   }
 
   .nav-pill {
-    width: 48px;
+    width: 44px;
     height: 32px;
   }
 

@@ -17,7 +17,6 @@
 }
 
 .specimen[data-filled='true'] {
-  min-height: 300px;
   outline: 1px solid color-mix(in oklab, var(--md-sys-color-primary) 40%, transparent);
   outline-offset: -1px;
 }
