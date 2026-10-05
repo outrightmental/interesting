@@ -20,8 +20,9 @@
 //                  many there are: a column of stars down the left edge on a phone, two
 //                  interleaved columns on a wider screen, each star pushed out sideways by its
 //                  own amount so the set reads as a scatter rather than a list. The script writes
-//                  --x, --y, --len and --a (where the star sits, and the ray that reaches it) on
-//                  to each option, and the rules below are what consume them. <html data-nav>
+//                  --x, --y, --len, --a, --fx, --fy and --k on to each option (where the star
+//                  sits, the ray that reaches it, where it branches out from, and its place in
+//                  the order), and the rules below are what consume them. <html data-nav>
 //                  says the script is here; it is set before the body is drawn, so there is no
 //                  flash of the other layout.
 //   without it     a plain cascade of the same chips under the logo, which is what the markup is
@@ -279,8 +280,10 @@ html[data-lightbox] .persona * {
   justify-items: start;
 }
 
+// A staircase rather than a column, where the script has said what order the options are in;
+// flush left where nothing has, which is the markup on its own.
 .sparknav-orbit .sparknav-option {
-  margin-left: calc(var(--i, 0) * 0.5rem);
+  margin-left: calc(var(--k, 0) * 0.5rem);
 }
 
 // The scatter: the script has placed every star, so each option is absolute, each chip sits where

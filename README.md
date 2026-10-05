@@ -189,7 +189,10 @@ the upper right. Nothing else is chrome.
   neither of them.
 - **It is a `<details>`.** The logo is the `<summary>`, so the disclosure, the keyboard handling
   and the no-script fallback are the browser's own: with scripting switched off the same chips
-  cascade under the logo as plain links. Every option is written in the markup of every page,
+  cascade under the logo as plain links, staggered into a staircase where the script has said what
+  order they are in. A viewport too short for a constellation of any shape falls back to that
+  cascade as well, because it scrolls and a placed scatter cannot — an option below the fold would
+  be one nothing could reach. Every option is written in the markup of every page,
   which is what keeps the [reachability axiom](#reachability-axiom) true without a script — and
   the two pages the far orbit added, `privacy.html` and `terms.html`, are listed in
   `sitemap.xml` and on the site map like everything else.
