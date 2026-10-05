@@ -39,6 +39,12 @@
     { "file": "sky-archive.html", "name": "the archive oracle", "orientation": "asking elsewhere", "mood": "divinatory", "aspect": "1 / 1",
       "what": "Spin your constellation through changing rune sets, archive omens, and forge a downloadable sigil." }
   ],
+  "finePrint": [
+    { "file": "privacy.html", "name": "privacy", "gloss": "what is kept, and where", "icon": "shield",
+      "what": "Read the whole bargain on one page: what stays in your browser, what the counter counts, and what you can take back." },
+    { "file": "terms.html", "name": "terms", "gloss": "the deal, in plain words", "icon": "page",
+      "what": "The short version of using a site that rewrites itself: play with everything, keep what you make, expect no promises." }
+  ],
   "edges": [
     { "file": "error.html", "name": "lost in space", "gloss": "the 404 page",
       "what": "If a link misses, you still land in a playable station with a radio, decoder, scope, and clear routes back in." },
