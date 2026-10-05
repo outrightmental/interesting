@@ -26,7 +26,7 @@ stylesheet: loam
           <input id='grit' type='range' min='0' max='100' value='38'>
         </div>
         <p id='status' aria-live='polite'>Bare soil, well drained, nothing in it yet.</p>
-        <pre id='reading'>core sample pending
+        <pre id='reading' aria-live='polite'>core sample pending
 put something in the ground first</pre>
         <p class='hint'>The soil keeps only the count of what went into it. The roots themselves are grown fresh and lost again, which is the usual arrangement with soil. The interesting part was always underground.</p>
       </section>
@@ -50,10 +50,14 @@ put something in the ground first</pre>
 
       var calm = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
       var SURFACE = 44;
+      var CORE_W = 14; // the barrel of the corer, in canvas pixels
       var SEG = 2.5; // a root is drawn as one segment per this many pixels travelled
+      var PER_CM = 10; // canvas pixels to a centimetre, for every depth and distance reported
       var stones = [];
       var roots = [];
       var tips = [];
+      var cores = []; // the holes the corer has left, each closing itself again
+      var lastCore = null; // where the last one was cut, so the next works across the plot
       var moisture = 0.5;
       var planted = 0;
       var last = 0;
@@ -100,7 +104,7 @@ put something in the ground first</pre>
           x: x, y: SURFACE, angle: Math.PI / 2, width: 3.2, life: 1,
           lx: x, ly: SURFACE, name: name, hue: Math.floor(rand(28, 58))
         });
-        statusEl.textContent = 'Planted ' + name + ' at ' + Math.round(x) + ' across. It will take its time.';
+        statusEl.textContent = 'Planted ' + name + ' at ' + across(x) + ' across. It will take its time.';
         remember();
       }
 
@@ -194,6 +198,17 @@ put something in the ground first</pre>
           ctx.lineTo(seg.x2, seg.y2);
           ctx.stroke();
         }
+
+        // The holes the corer left, drawn last: a core cuts through whatever it went past.
+        for (var c = 0; c < cores.length; c++) {
+          var open = Math.max(0, Math.min(1, cores[c].life));
+          var left = cores[c].x - CORE_W / 2;
+          ctx.fillStyle = 'rgba(12, 10, 6, ' + (0.78 * open).toFixed(3) + ')';
+          ctx.fillRect(left, SURFACE, CORE_W, canvas.height - SURFACE);
+          ctx.strokeStyle = 'rgba(224, 196, 142, ' + (0.72 * open).toFixed(3) + ')';
+          ctx.lineWidth = 1;
+          ctx.strokeRect(left + 0.5, SURFACE + 0.5, CORE_W - 1, canvas.height - SURFACE - 1);
+        }
       }
 
       function frame(now) {
@@ -202,6 +217,12 @@ put something in the ground first</pre>
         last = now;
         moisture = Math.max(0.12, moisture - dt * 0.012);
         grow(dt);
+        // "The hole closes itself": slowly enough to be seen, slower still for a calm visitor.
+        var closes = calm && calm.matches ? 3.2 : 1.6;
+        for (var c = cores.length - 1; c >= 0; c--) {
+          cores[c].life -= dt / closes;
+          if (cores[c].life <= 0) cores.splice(c, 1);
+        }
         draw();
         requestAnimationFrame(frame);
       }
@@ -209,7 +230,53 @@ put something in the ground first</pre>
       function depth() {
         var deepest = SURFACE;
         for (var r = 0; r < roots.length; r++) if (roots[r].y2 > deepest) deepest = roots[r].y2;
-        return (deepest - SURFACE) / 10;
+        return (deepest - SURFACE) / PER_CM;
+      }
+
+      function across(x) {
+        return Math.round(x / PER_CM) + ' cm';
+      }
+
+      function down(y) {
+        return Math.max(0, (y - SURFACE) / PER_CM).toFixed(1) + ' cm';
+      }
+
+      // Everything the corer's barrel passes through at `x`: the stones it has to come down
+      // beside, and the roots crossing it. Taken from the soil as it stands, so no two cores
+      // read alike and none of it is made up.
+      function coreAt(x) {
+        var half = CORE_W / 2;
+        var core = { stones: 0, firstStone: null, crossings: 0, deepest: null };
+        for (var i = 0; i < stones.length; i++) {
+          var stone = stones[i];
+          var gap = Math.max(0, Math.abs(stone.x - x) - half);
+          if (gap >= stone.r) continue;
+          core.stones += 1;
+          var top = stone.y - Math.sqrt(stone.r * stone.r - gap * gap);
+          if (core.firstStone === null || top < core.firstStone) core.firstStone = top;
+        }
+        for (var r = 0; r < roots.length; r++) {
+          var seg = roots[r];
+          if (Math.abs((seg.x1 + seg.x2) / 2 - x) > half) continue;
+          core.crossings += 1;
+          var low = Math.max(seg.y1, seg.y2);
+          if (core.deepest === null || low > core.deepest) core.deepest = low;
+        }
+        return core;
+      }
+
+      // The closing sentence: what this core found, not only how old the whole system is.
+      function closing(d, core) {
+        if (!roots.length) {
+          return core.stones
+            ? 'Nothing in the ground yet, and ' + (core.stones === 1 ? 'a stone' : core.stones + ' stones')
+              + ' in the way of whatever goes in.'
+            : 'Nothing in the ground yet. Clean soil the whole way down this line.';
+        }
+        if (!core.crossings) return 'No roots down this line. They are going round something, elsewhere.';
+        if (d < 4) return 'Early. Nothing to judge yet, and nothing wrong with that.';
+        if (d < 16) return 'Established. The system is wider than it is deep, which is normal.';
+        return 'Deep. Whatever is up top is the smaller half of this.';
       }
 
       function remember() {
@@ -244,23 +311,35 @@ put something in the ground first</pre>
       turnBtn.addEventListener('click', function () {
         roots = [];
         tips = [];
+        cores = [];
         layStones();
         statusEl.textContent = 'Turned over. Everything that was down there is down there differently now.';
       });
 
       sampleBtn.addEventListener('click', function () {
+        // A core is cut somewhere, not nowhere, and cores are taken on a transect: a step across
+        // the plot each press, so a run of them reads the whole width instead of landing twice in
+        // the same place, and every reading is of soil the visitor can see it was taken from.
+        var span = canvas.width - 2 * CORE_W;
+        lastCore = lastCore === null ? rand(0, span)
+          : (lastCore + span / 6.5 + rand(-10, 10) + span) % span;
+        var x = CORE_W + lastCore;
+        var core = coreAt(x);
+        cores.push({ x: x, life: 1 });
         var d = depth();
         var tilth = Number(grit.value) < 30 ? 'heavy, slow to drain'
           : (Number(grit.value) < 65 ? 'balanced loam' : 'gritty, drains fast');
-        readingEl.textContent = 'core sample\n'
+        readingEl.textContent = 'core sample at ' + across(x) + ' across\n'
           + '  depth reached: ' + d.toFixed(1) + ' cm\n'
           + '  living tips: ' + tips.length + '\n'
           + '  segments laid down: ' + roots.length + '\n'
           + '  tilth: ' + tilth + '\n'
-          + '  moisture: ' + Math.round(moisture * 60) + '%\n\n'
-          + (d < 4 ? 'Early. Nothing to judge yet, and nothing wrong with that.'
-            : (d < 16 ? 'Established. The system is wider than it is deep, which is normal.'
-              : 'Deep. Whatever is up top is the smaller half of this.'));
+          + '  moisture: ' + Math.round(moisture * 60) + '%\n'
+          + '  stones hit: ' + (core.stones
+            ? core.stones + ', first at ' + down(core.firstStone) : 'none in this core') + '\n'
+          + '  roots crossed: ' + (core.crossings
+            ? core.crossings + ', deepest at ' + down(core.deepest) : 'none in this core') + '\n\n'
+          + closing(d, core);
         statusEl.textContent = 'Core taken. The hole closes itself.';
       });
 

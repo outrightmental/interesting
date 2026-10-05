@@ -5,6 +5,10 @@
   cursor: crosshair;
 }
 
+// The core sample's readout is already a readout: _sass/_labs.scss includes the shared mixin for
+// `.layout .panel #reading` on every page shaped like this one, so all that is left here is how
+// tall loam's own core sample wants to be. A page only reaches for `@use 'readout'` itself when it
+// needs different type in the block (machine-shop, word-kiln) or an id of its own (orbital-weaver).
 .layout .panel #reading {
   min-height: 9.2em;
 }
