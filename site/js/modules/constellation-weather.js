@@ -140,25 +140,26 @@ function isobars(g, e, q, u, wind, fade) {
 }
 
 // The front, with the teeth of its kind: a segment between the two systems while it sits on them
-// (off 0), a line across the whole map once it is moving, with the air it brought shaded behind.
+// (off 0), unfurling to a line across the whole map as it sets off, with the air it brought shaded
+// behind. One star alone gets a front lying east-west through it.
 function front(g, w, h, e, a, b, kind, off, dir, u) {
   const c = e.colors;
   const tone = (k) => (k === 'warm' ? c.accent2 : k === 'cold' ? c.accent : k === 'squalls' ? c.fg : e.mix(c.accent, c.accent2, 0.5));
-  const len = Math.hypot(b.x - a.x, b.y - a.y) || 1;
-  const tx = (b.x - a.x) / len;
-  const ty = (b.y - a.y) / len;
+  const len = Math.hypot(b.x - a.x, b.y - a.y);
+  const tx = len ? (b.x - a.x) / len : 1;
+  const ty = len ? (b.y - a.y) / len : 0;
   const nx = -ty * dir;
   const ny = tx * dir;
   const mx = (a.x + b.x) / 2 + nx * off;
   const my = (a.y + b.y) / 2 + ny * off;
   const R = Math.hypot(w, h);
-  const reach = off ? R : len / 2;
+  const reach = off ? len / 2 + (R - len / 2) * Math.min(1, off / (6 * u)) : Math.max(len / 2, u);
   if (off) {
     g.save();
     g.translate(mx, my);
     g.rotate(Math.atan2(ny, nx));
     g.fillStyle = e.alpha(tone(kind), 0.1);
-    g.fillRect(-R, -R, R, 2 * R);
+    g.fillRect(-R, -reach, R, 2 * reach);
     g.restore();
   }
   g.strokeStyle = e.alpha(tone(kind), 0.8);
@@ -287,7 +288,7 @@ function scene(g, w, h, e, s) {
   for (const q of sys) isobars(g, e, q, u, s.wind, fade);
   const a = sys[s.pair[0]];
   const b = sys[s.pair[1]];
-  if (sys.length > 1 && s.front) front(g, w, h, e, a, b, s.front, s.off, s.dir, u);
+  if (s.front) front(g, w, h, e, a, b, s.front, s.off, s.dir, u);
   else if (sys.length > 1 && s.hint) {
     g.strokeStyle = e.alpha(c.fg, 0.3);
     g.lineWidth = 1;
@@ -449,9 +450,9 @@ function course(c, s) {
   const pts = c.points(c.w, c.h, 14);
   const a = pts[s.pair[0]];
   const b = pts[s.pair[1]];
-  const len = Math.hypot(b.x - a.x, b.y - a.y) || 1;
-  const nx = (-(b.y - a.y) / len) * s.dir;
-  const ny = ((b.x - a.x) / len) * s.dir;
+  const len = Math.hypot(b.x - a.x, b.y - a.y);
+  const nx = len ? (-(b.y - a.y) / len) * s.dir : 0;
+  const ny = len ? ((b.x - a.x) / len) * s.dir : s.dir;
   const mx = (a.x + b.x) / 2;
   const my = (a.y + b.y) / 2;
   let far = 0;
@@ -477,9 +478,10 @@ function passing(env) {
   const kt = env.int(6, 30);
   const vis = env.pick(VIS);
   const s = Object.assign(blank(env.pick([0, 2, 21, 23]), null), { dir, pair, kt, sweep: 0, passed: false, where: '', hint: true });
+  const span = a === b ? 'over “' + a.text + '”' : 'between “' + a.text + '” and “' + b.text + '”';
   return {
     title: 'a front out of the ' + DIRS[(idx + 4) % 8],
-    brief: 'Name the front that forms between your two farthest stars, set the wind, and watch it cross the map toward the ' + DIRS[idx] + '; once it has passed, hold the barometer steady and the air settles behind it.',
+    brief: 'Name the front that forms ' + (a === b ? 'over your star' : 'between your two farthest stars') + ', set the wind, and watch it cross the map toward the ' + DIRS[idx] + '; once it has passed, hold the barometer steady and the air settles behind it.',
     aspect: '16 / 10',
     steps: [
       { id: 'front', ask: 'what kind of front', kind: 'choice', options },
@@ -496,7 +498,7 @@ function passing(env) {
         s.front = String(value);
         s.rain = !s.passed && s.front !== 'warm' && s.front !== 'stationary';
         const k = KINDS.find((o) => o.value === s.front) || KINDS[1];
-        c.status(k.label + ' forms between “' + a.text + '” and “' + b.text + '”' + (s.rain ? ', and it is raining' : ''));
+        c.status(k.label + ' forms ' + span + (s.rain ? ', and it is raining' : ''));
       }
       if (id === 'wind') {
         s.kt = clamp(Math.round(Number(value)) || 3, 3, 36);
