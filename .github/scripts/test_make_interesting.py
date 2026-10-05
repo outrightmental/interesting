@@ -2661,18 +2661,22 @@ class DestructiveCautionAxiomTest(SiteDirTestCase):
         self.assertEqual([t.name for _, t, _ in ops], ["toy.html"])
 
 
-def needs_the_build(test):
-    """Skip a test that runs the real Node build when the toolchain is not installed.
+def needs_the_build():
+    """Skip the tests that run the real Node build when the toolchain is not installed.
 
     In CI it is a failure instead: a silent skip there would quietly stop checking the built site,
     which is the only site the axioms are about.
+
+    This raises rather than calling skipTest/fail on a test, because it is asked from setUpClass:
+    every build is a fresh Node process, so a probe per test would cost more than the checks do
+    (see RealSiteTest.setUpClass).
     """
     try:
         mi.build_site({"index.html": "<h1>hi</h1>"})
     except mi.BuildToolchainError as err:
         if os.environ.get("CI"):
-            test.fail(f"the Node build toolchain is missing in CI: {err}")
-        test.skipTest(f"the Node build toolchain is not installed ({err})")
+            raise AssertionError(f"the Node build toolchain is missing in CI: {err}") from None
+        raise unittest.SkipTest(f"the Node build toolchain is not installed ({err})") from None
 
 
 def front_matter(**fields):
@@ -2701,8 +2705,11 @@ class BuildPipelineTest(unittest.TestCase):
     NAV = "<nav>{% for page in ['toy.html', 'error.html'] %}<a href='{{ page }}'>{{ page }}</a>{% endfor %}</nav>\n"
     PAGES = ["index.html", "toy.html", "error.html"]
 
+    @classmethod
+    def setUpClass(cls):
+        needs_the_build()
+
     def setUp(self):
-        needs_the_build(self)
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.site = Path(tmp.name).resolve() / "site"
@@ -2857,17 +2864,22 @@ class RealSiteTest(unittest.TestCase):
     # Spelled out here rather than imported, so renaming it in one place fails here.
     GA_PLACEHOLDER = "__GA_MEASUREMENT_ID__"
 
-    def setUp(self):
-        self.repo = Path(mi.__file__).resolve().parents[2]
-        site = self.repo / "site"
+    # The real site is read and built once for the whole class. Every test below only reads the
+    # two mappings -- a test that wants damaged source builds its own copy with dict(self.site,
+    # ...) -- and a build is a whole Node run, so building per test spent minutes of the job's
+    # five-minute budget rendering the same site forty times over.
+    @classmethod
+    def setUpClass(cls):
+        cls.repo = Path(mi.__file__).resolve().parents[2]
+        site = cls.repo / "site"
         if not site.is_dir():
-            self.skipTest(f"no site directory at {site}")
-        needs_the_build(self)
+            raise unittest.SkipTest(f"no site directory at {site}")
+        needs_the_build()
         patcher = mock.patch.object(mi, "SITE_DIR", site)
         patcher.start()
-        self.addCleanup(patcher.stop)
-        self.source = dict(mi.read_site())
-        self.site = mi.build_site(self.source)
+        cls.addClassCleanup(patcher.stop)
+        cls.source = dict(mi.read_site())
+        cls.site = mi.build_site(cls.source)
 
     def test_every_page_is_reachable_from_the_root_and_listed_in_the_sitemap(self):
         self.assertEqual(mi.unreachable_pages(self.site), {})
