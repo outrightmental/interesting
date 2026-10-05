@@ -1562,12 +1562,70 @@ class LocalStateStoreTest(unittest.TestCase):
                          "every page reads the new state the way it reads any other: from the start")
         self.assertEqual(acted["refused"]["keys"], ["omens"], "a bad paste changes nothing")
         self.assertEqual(acted["refused"]["reloads"], 1, "and reloads nothing")
+        self.assertEqual(acted["refused"]["asked"], acted["imported"]["asked"],
+                         "a paste that could not land asks nothing: there is nothing to be sure of")
         self.assertEqual(acted["cleared"]["keys"], [])
         self.assertEqual(acted["cleared"]["shelf"], {})
-        self.assertEqual(acted["cleared"]["confirmed"], 1, "clearing everything is asked about first")
-        refused = self.seen["clearingIsConfirmed"]
-        self.assertEqual(refused["confirmed"], 1)
-        self.assertEqual(refused["keys"], ["constellation"], "saying no keeps everything")
+        self.assertEqual(acted["cleared"]["confirmed"], 0,
+                         "the shared modal is the question; the browser's own is never reached")
+
+    def test_the_menus_clear_is_the_shared_destructive_control(self):
+        # Issue #42: the meta menu adopts the one shared component every other destructive control
+        # on the site uses, even though this file is fixed, is never shown to a model and carries
+        # its own styles. Both halves of the law hold here: the warning treatment on the button,
+        # and the one modal naming the specific thing about to go.
+        guarded = self.seen["clearingIsGuarded"]
+        self.assertIn(mi.WARNING_CLASS, guarded["warning"].split())
+        self.assertEqual(guarded["plain"], ["", "", ""],
+                         "the warning treatment means one thing, so only clear wears it")
+        self.assertEqual(len(guarded["asked"]), 1, "one press, one question")
+        asked = guarded["asked"][0]
+        self.assertEqual(asked["what"], "clear everything this site has kept in your browser",
+                         "the blank in \"are you sure you want to ______?\" names what goes")
+        self.assertIn("nothing would take their place", asked["detail"])
+        self.assertTrue(asked["confirm"], "the modal's own button says what it will do")
+        self.assertEqual(guarded["note"], "Nothing was cleared.")
+        self.assertEqual(guarded["keys"], ["constellation"], "saying no keeps everything")
+        self.assertEqual(guarded["confirmed"], 0, "window.confirm is not what asks any more")
+
+    def test_clearing_an_empty_document_has_nothing_to_ask_about(self):
+        # The question is about what is lost, so a press that loses nothing goes straight through.
+        # The warning stays on the button either way: a control that changes its clothes is a
+        # control nobody learns.
+        empty = self.seen["clearingAnEmptyDocument"]
+        self.assertEqual(empty["asked"], [])
+        self.assertEqual(empty["confirmed"], 0)
+        self.assertIn(mi.WARNING_CLASS, empty["warning"].split())
+        self.assertTrue(empty["note"])
+
+    def test_importing_someone_elses_document_is_asked_about_too(self):
+        # "replace mine" sits at the threshold rather than above it -- the whole document goes, but
+        # the one in the box takes its place -- so it asks the same question through the same modal
+        # and wears no warning.
+        imported = self.seen["importIsAskedAboutAndRefusable"]
+        self.assertEqual(len(imported["asked"]), 1)
+        self.assertIn("replace everything this site has kept in your browser",
+                      imported["asked"][0]["what"])
+        self.assertEqual(imported["asked"][0]["opener"], "replace mine",
+                         "the focus goes back to the control that opened it")
+        self.assertEqual(imported["refused"]["keys"], ["constellation"], "saying no keeps your own")
+        self.assertEqual(imported["refused"]["note"], "Nothing was replaced.")
+        self.assertEqual(imported["ontoNothing"]["asked"], 0,
+                         "an empty document has nothing to lose, so there is nothing to ask")
+        self.assertEqual(imported["ontoNothing"]["keys"], ["omens"])
+
+    def test_the_menu_still_asks_if_the_shared_component_has_gone(self):
+        # js/site.js is ordinary site source that an hourly run may break; this file never changes,
+        # and the menu is the one thing on the site a visitor can rely on being where they left it.
+        # So each call falls back to the browser's own question: less good, and it still asks.
+        alone = self.seen["withoutTheSharedComponent"]
+        self.assertIn(mi.WARNING_CLASS, alone["warning"].split(),
+                      "the button still wears the class the shared styling paints")
+        self.assertEqual(alone["refused"]["confirmed"], 1)
+        self.assertEqual(alone["refused"]["keys"], ["constellation"], "saying no keeps everything")
+        self.assertEqual(alone["refused"]["note"], "Nothing was cleared.")
+        self.assertEqual(alone["cleared"]["confirmed"], 1)
+        self.assertEqual(alone["cleared"]["keys"], [], "and saying yes clears it")
 
     def test_a_browser_that_stores_nothing_says_so_when_the_menu_opens(self):
         self.assertIn("stores nothing", self.seen["menuWithoutStorage"]["note"])
