@@ -127,6 +127,13 @@ slab per page, small-caps labels, pill borders on everything, a footer index two
   orientation id, the layout writes `<html data-world='…'>` from
   [`site/_data/worlds.json`](site/_data/worlds.json), and a visitor's reading on
   `<html data-mood='…'>` wins over it. No page carries colours of its own any more.
+- **The activity on the stage outranks both.** `<html data-featured='…'>` is the third place the
+  seeds land, written last in `_mood.scss`, so the piece a visitor picked colours the site over
+  the page's own world *and* over the reading — and only while that piece is on the stage, because
+  `js/stage.js` takes the attribute off again on the way home. The card that was pressed hands its
+  own four seeds over with it, so the site takes the colour of that card and not merely of its
+  world (see [The feature and the feed](#the-feature-and-the-feed)), and the shift is a 420ms
+  crossfade, or no shift at all for a visitor who asked for less motion.
 - **The M3 parts, as classes.** The type scale is a mixin (`_type.scss`), and the components are
   the shared classes every page already used: a bare `<button>` is a tonal button, `a.action` an
   outlined one, `.btn-filled` and `.btn-text` the other two emphases, `aria-pressed='true'` reads
@@ -684,7 +691,10 @@ it stands.
 - **The whole site transmogrifies.** The ascertained orientation lands on `<html data-mood>`, and
   `_sass/_mood.scss` turns that into fifteen palettes over the shared custom properties in
   `_tokens.scss`, so every page re-skins itself. The flow is ongoing rather than a gate at the
-  front door: any page can ask again, in a new way.
+  front door: any page can ask again, in a new way. The reading is the site's standing skin, not
+  the last word on its colour: an activity on the stage is featured over it (`<html
+  data-featured>`) for as long as its piece is there, so the site matches the card a visitor
+  picked, and the reading has the site back the moment nothing is featured.
 - **Never a gate.** The query sits outside `<main>`, and every world is a plain link from the
   threshold, the site map and the shared index of every world, so the whole site is reachable with the
   question ignored, declined, or scripting switched off altogether. That is also what the
@@ -889,7 +899,11 @@ iteration, stated in the prompt and held to in code.
   its asking state. The URL carries the piece (`quiet-room.html#<seed>`), so a piece can be sent
   to someone and the back button walks back through what was finished; opening a card of another
   world moves the address to that world's page without a load, because a page is wherever the
-  stage is.
+  stage is. So is the site's colour: the piece on the stage is what the whole site is wearing
+  while it is there — `<html data-featured>` and the pressed card's own four seeds, over both the
+  page's world and the visitor's reading (see [Material Design 3](#material-design-3)) — so
+  picking a card out of the feed shifts the site to match the card that was picked, and going home
+  gives the reading the site back.
 - **The piece contract.** A world's module exports `piece(env)` beside `paint` and `spark`, and
   returns `{ title, brief, aspect, steps, start, apply, frame, tap, end }`: two to five knobs
   (`steps`), each `{ id, ask, kind, … }` of a kind the stage renders — `choice` (two to four
