@@ -1,60 +1,69 @@
 {#-
   The shell every page of the site is built into. A page supplies its own <main> and nothing else:
-  the doctype, the head, the stylesheet links and the closing tags are written once, here.
+  the doctype, the head, the stylesheet links, the header, the mood ribbon and the index of every
+  world are written once, here.
 
   Front matter a page may set:
-    title       the page's name. "interesting" is appended, so index.html leaves it out.
-    description the <meta name='description'>, omitted when absent.
-    stylesheet  a name in css/: "diary" links css/diary.css after the shared css/site.css, so the
-                page's own rules win over the shared ones. Omit it for a page that needs none.
+    title       the page's name, the same words every link to it uses (see _data/worlds.json):
+                every page sets it, index.html included ("the threshold"), and " · interesting"
+                is appended to it in the <title>.
+    description the <meta name='description'>: one plain sentence a search result or a shared
+                link shows, omitted when absent.
+    stylesheet  a name in css/: "quiet-room" links css/quiet-room.css after the shared
+                css/site.css, so the page's own rules win over the shared ones. Omit it for a page
+                that needs none.
     inlineStyles
                 write the styles into the page instead of linking them. Only error.html needs it:
                 CloudFront returns that page for any 404, at whatever path was asked for, so a
                 relative <link> next to it would be a guess.
-    footer      the links the page ends with, as [href, text] pairs (see footer.njk).
-    footerNote  an aside shown after those links.
+    siteRoot    the site's root as a path, for the same page and the same reason: with it set
+                to "/", every shared script and link is written from the root, so a visitor who
+                lands on the 404 page at /some/deep/path still gets the scripts and can leave.
+                It is the one place the site names where it is served from: "/" is right for
+                makeitmoreinteresting.com, and a copy served under a sub-path sets that sub-path
+                here instead ("/interesting/"). Every other page leaves it out and keeps
+                relative links, so they work under any sub-path unchanged.
 
-  Three shared lines are written here rather than in every page, which is the whole point of a
-  shared shell: each axiom is about the built site, so one line here carries it to all of them.
+  A page sets nothing about navigation. The header, the ribbon and the world index are the whole
+  of the shared chrome, and they are the same on every page: a page that wants to offer something
+  does it inside its own <main>, under its own heading.
+
+  The shared chrome, top to bottom, and why it is this size:
+    the header   the site's name, one line about it, and three links: the threshold, the mood
+                 atlas, site map. Nothing else lives here; in particular no status line.
+    the ribbon   the mood flow made visible (js/threshold.js). On the threshold it asks one
+                 sideways question on arrival; on every other page it invites, one press away. It
+                 says what it read and offers the one world that reading opens onto. It
+                 sits outside <main>, so the question is never a gate: every page is reachable
+                 with it ignored, skipped, or scripting switched off.
+    the index    every world as a plain link, grouped, with the orientation each one answers to
+                 (_includes/worlds.njk, from _data/worlds.json). Written once here, after <main>,
+                 so index.html's own markup links every world and the reachability axiom holds
+                 with scripting off. sitemap.html and moods.html list every page themselves, so
+                 they are the two pages without it.
+
+  Four shared lines in the <head>:
     js/analytics.js  the Google Analytics tag and the consent banner that gates it (see
                      ANALYTICS_TAG and check_analytics in .github/scripts/make_interesting.py).
     js/state.js      the one local-state document every page reads and writes through, and the
                      meta menu that exports it (STATE_TAG and check_state).
     js/threshold.js  the mood flow: the site ascertains a visitor's orientation before it offers
-                     them anything, and keeps asking, in a new way, on every page (MOOD_TAG and
-                     check_mood).
-  None of the three may be dropped: a built page missing any of them is refused. The files behind
-  the first two are fixed; js/threshold.js is protected instead, so a run may rewrite the flow but
-  never delete it.
-
-  js/site.js is the fourth line and is not one of those: it draws the header's pulse out of what the
-  shared document is already holding, and no axiom rests on it, so it may be rewritten or dropped
-  like any other page source.
-
-  js/relay-quests.js is the fifth: a shared cross-world quest loop for the constellation circuit,
-  rendered through _includes/footer.njk and kept in the same shared state document.
-
-  js/constellation-remixer.js is the sixth: shared constellation mutation controls shown through
-  _includes/footer.njk across the same circuit pages, also reading and writing through the one
-  shared state document.
-
-  js/constellation-signals.js is the seventh: a shared relay signal deck shown through
-  _includes/footer.njk across the same circuit pages, keeping one cross-world prompt thread in the
-  same shared state document.
-
-  js/circuit-switchboard.js is the eighth: a shared relay switchboard that gives every constellation
-  world the same previous/next lanes and one generated move card, persisted through the one shared
-  state document.
-
-  The mood ribbon below is the flow made visible. It sits outside <main> on every page, so the
-  question is never a gate in front of the content: the whole site is reachable with the ribbon
-  ignored, or with scripting switched off entirely.
+                     them anything, and keeps asking, in a new way (MOOD_TAG and check_mood).
+    js/site.js       the shared helpers a page can call: window.interestingSite.unlock(), which
+                     renders a part that needs a saved sky as powered down with the one button
+                     that powers it (see the README, "Powered down, never broken"), and the
+                     index's "send me somewhere" button. Not deferred, so a page's own script can
+                     call it while the body is parsed, exactly as it can call the state store.
+  The first three may never be dropped: a built page missing any of them is refused. The files
+  behind the first two are fixed; js/threshold.js is protected instead, so a run may rewrite the
+  flow but never delete it. js/site.js is ordinary site source.
 
   Links are relative, like every link in the site: it has no fixed domain and may be served under
   a sub-path, so "css/site.css" and not "/css/site.css".
 -#}
+{%- set here = (page.filePathStem | replace('/', '')) + '.html' if page else '' %}
 <!DOCTYPE html>
-<html lang='en'>
+<html lang='en' data-page='{{ here }}'{% if siteRoot %} data-root='{{ siteRoot }}'{% endif %}>
 <head>
   <meta charset='utf-8'>
   <meta name='viewport' content='width=device-width, initial-scale=1'>
@@ -70,60 +79,55 @@
   <link rel='stylesheet' href='css/{{ stylesheet }}.css'>
 {%- endif %}
 {%- endif %}
+{%- if siteRoot %}
+  {#- The 404 page is served at any missing path, so its scripts are named from the site's root;
+      see the note on siteRoot above. The four lines are the same four as below. -#}
+  <script src='{{ siteRoot }}js/analytics.js' defer></script>
+  <script src='{{ siteRoot }}js/state.js'></script>
+  <script src='{{ siteRoot }}js/site.js'></script>
+  <script src='{{ siteRoot }}js/threshold.js' defer></script>
+{%- else %}
   <!-- Analytics and the cookie consent banner that gates it; see js/analytics.js. -->
   <script src='js/analytics.js' defer></script>
   <!-- The one local-state store every page reads and writes through, and its meta menu; see
        js/state.js. Not deferred: a page's own script runs before any deferred one does. -->
   <script src='js/state.js'></script>
-  <!-- The mood flow: ask before offering, on every page; see js/threshold.js. Deferred, and so
+  <!-- The shared helpers; see js/site.js. Not deferred either, for the same reason, and after the
+       store it writes through. -->
+  <script src='js/site.js'></script>
+  <!-- The mood flow: ask before offering -- on arrival at the threshold, one press away on every
+       other page; see js/threshold.js. Deferred, and so
        after js/state.js, which is what it keeps its reading in. -->
   <script src='js/threshold.js' defer></script>
-  <!-- The header's pulse; see js/site.js. Deferred too, and after the store it reads. -->
-  <script src='js/site.js' defer></script>
-  <!-- Shared relay quests for the constellation circuit, also kept in the shared state document. -->
-  <script src='js/relay-quests.js' defer></script>
-  <!-- Shared constellation remixer controls for the same circuit, through the shared state store. -->
-  <script src='js/constellation-remixer.js' defer></script>
-  <!-- Shared relay signal deck for the same circuit, through the shared state store. -->
-  <script src='js/constellation-signals.js' defer></script>
-  <!-- Shared relay switchboard lanes + generated move cards for the same circuit. -->
-  <script src='js/circuit-switchboard.js' defer></script>
+{%- endif %}
 </head>
 <body>
   <a class='skip-link' href='#main-content'>skip to main content</a>
   <header class='site-header'>
     <p class='site-header-title'>
-      <a href='index.html'>interesting</a>
+      <a href='{{ siteRoot }}index.html'>interesting</a>
       <span>many worlds, no default</span>
     </p>
-    <!-- The pulse: what the shared document is already holding for this visitor, one step back to
-         it, and one suggested onward trail through related worlds (see js/site.js). The copy here
-         is what a visitor with scripting switched off reads, so it claims nothing. The classes are
-         site-pulse*, never site-meta*: those belong to the meta menu js/state.js draws in the
-         bottom-right corner, whose styles that file injects and which is not the site's to restyle
-         -- one of its names here is pulled out of the header and pinned on top of that menu. -->
-    <p class='site-pulse' aria-live='polite'>
-      <span id='site-pulse-status' class='site-pulse-status'>nothing kept in this browser yet.</span>
-      <span id='site-pulse-trail' class='site-pulse-trail'>build a trail by leaving something in any world.</span>
-      <a id='site-pulse-link' class='site-pulse-link' href='moods.html'>find your world</a>
-    </p>
-    <nav class='site-header-nav' aria-label='Primary navigation'>
-      <a href='index.html'{% if page and page.fileSlug == 'index' %} aria-current='page'{% endif %}>threshold</a>
-      <a href='moods.html'{% if page and page.fileSlug == 'moods' %} aria-current='page'{% endif %}>mood atlas</a>
-      <a href='sitemap.html'{% if page and page.fileSlug == 'sitemap' %} aria-current='page'{% endif %}>site map</a>
-      <a href='error.html'{% if page and page.fileSlug == 'error' %} aria-current='page'{% endif %}>404</a>
+        <nav class='site-header-nav chips' aria-label='Site'>
+{%- for link in worlds.wayIn %}
+      <a href='{{ siteRoot }}{{ link.file }}'{% if here == link.file %} aria-current='page'{% endif %}>{{ link.name }}</a>
+{%- endfor %}
     </nav>
   </header>
-  <aside class='mood-ribbon' id='mood-ribbon' data-asking='false' aria-label='What this site has read about you'>
-    <p class='mood-ribbon-text' id='mood-ribbon-text'>Nothing read yet.</p>
-    <p class='mood-ribbon-where' id='mood-ribbon-where'>reading the clock and the zone…</p>
-    <div class='mood-ribbon-actions'>
-      <button type='button' id='mood-ribbon-ask' aria-expanded='false' aria-controls='mood-probe'>ask me another way</button>
-      <a class='action' id='mood-ribbon-go' href='moods.html' hidden>go to your world</a>
-      <a class='action' href='moods.html'>mood atlas</a>
+  {#- The ribbon: what a visitor with scripting switched off reads is written here and claims
+      nothing; js/threshold.js rewrites it, asks on the threshold, invites everywhere else, and
+      un-hides the two controls. -#}
+  <aside class='mood-ribbon' id='mood-ribbon' data-asking='false' data-state='quiet' aria-label='What this site has read about you'>
+    <p class='mood-ribbon-text' id='mood-ribbon-text'>Nothing read yet. Every world is on offer below.</p>
+    <div class='controls mood-ribbon-actions'>
+      <a class='action' id='mood-ribbon-go' href='{{ siteRoot }}moods.html' hidden>go to your world</a>
+      <button type='button' id='mood-ribbon-ask' aria-expanded='false' aria-controls='mood-probe' hidden>ask me</button>
     </div>
     <div class='mood-probe' id='mood-probe' hidden></div>
   </aside>
   <div id='main-content' tabindex='-1'>{{ content | safe }}</div>
+{%- if not (here == 'sitemap.html' or here == 'moods.html') %}
+{% include 'worlds.njk' %}
+{%- endif %}
 </body>
 </html>

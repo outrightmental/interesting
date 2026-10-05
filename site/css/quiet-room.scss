@@ -20,6 +20,21 @@
     radial-gradient(circle at 50% 46%, rgba(255, 214, 226, 0.1) 0%, transparent 62%),
     #150e14;
   overflow: hidden;
+  // The ring is the hold target: pressed with a pointer or a finger, so a long press must not
+  // select the word or open a callout, and a double tap must not zoom.
+  cursor: pointer;
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+// The room takes keyboard focus (space held on it holds the breath), so it needs a ring of its
+// own: the shared one only covers buttons and links.
+.room:focus-visible {
+  outline: 2px solid transparent;
+  border-color: vars.$focus-line;
+  box-shadow: 0 0 0 3px vars.$focus-ring;
 }
 
 // The dimmer: one custom property, set by the slider, darkening this room and nothing else.

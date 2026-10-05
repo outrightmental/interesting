@@ -1,29 +1,19 @@
 ---
 layout: layout.njk
-title: orbital weaver
-description: 'Transform your saved constellation into a mirrored orbital mandala, then read a tiny mantra forecast.'
+title: the orbital weaver
+description: 'Your saved stars mirrored into a slow mandala you can spin, ripple and tune, with a mantra to print.'
 stylesheet: orbital-weaver
-footer:
-  - [wish-constellation.html, back to the wish constellation]
-  - [index.html, back to the threshold]
-  - [sitemap.html, site map]
-  - [constellation-echo.html, open echo chamber]
-  - [constellation-weather.html, open weather lab]
-  - [star-lantern.html, open star lantern ritual]
-  - [wish-terrarium.html, open wish terrarium]
-  - [error.html, visit observatory 404]
 ---
   <main>
-    <h1>orbital weaver</h1>
-    <p class='tagline'>Your saved stars become a mirrored orbital mandala. Spin the weave, adjust symmetry, click to ripple, then print a mantra report.</p>
+    <h1>the orbital weaver</h1>
+    <p class='tagline'>Your stars mirrored into a slow mandala you can ripple. It reads the sky you placed in the wish constellation.</p>
 
     <div class='layout'>
-      <canvas id='weaver' width='620' height='340' aria-label='Mirrored orbital mandala generated from saved constellation stars'></canvas>
+      <canvas id='weaver' width='620' height='340' aria-label='Mandala woven from your saved stars'></canvas>
 
-      <section class='panel'>
-        <p style='margin:0;color:#d8e4ff;'>This reads the same saved constellation memory as the wish constellation page.</p>
+      <section class='panel' aria-labelledby='loom-title'>
+        <h2 class='panel-title' id='loom-title'>the loom</h2>
         <div class='controls'>
-          <button id='refresh' type='button'>refresh saved sky</button>
           <button id='shuffle' type='button'>shuffle weave</button>
           <button id='spin' type='button' aria-pressed='true'>stop spin</button>
           <button id='mantra' type='button'>print mantra</button>
@@ -32,14 +22,11 @@ footer:
         <label class='dial-wrap' for='symmetry'>symmetry spokes: <span id='sym-label'>6</span></label>
         <input id='symmetry' type='range' min='3' max='12' step='1' value='6' aria-label='Symmetry spokes'>
 
-        <p id='status' aria-live='polite'>Loading star memory...</p>
-        <pre id='reading' aria-live='polite'>Awaiting pattern.
-Load your saved sky, click the weave to send ripples, or print a mantra from your current geometry.</pre>
-        <p class='hint'>Easter egg: type <strong>weave</strong> while this page is focused.</p>
+        <p id='status' aria-live='polite'></p>
+        <pre id='reading' aria-live='polite'>Click the weave to ripple it, or press print mantra.</pre>
+        <p class='hint'>Type <strong>weave</strong> while this page is focused.</p>
       </section>
     </div>
-
-{% include "footer.njk" %}
   </main>
 
   <script>
@@ -48,7 +35,7 @@ Load your saved sky, click the weave to send ripples, or print a mantra from you
       var SKY = 'constellation';
       var canvas = document.getElementById('weaver');
       var ctx = canvas.getContext('2d');
-      var refreshBtn = document.getElementById('refresh');
+      var host = document.querySelector('.layout');
       var shuffleBtn = document.getElementById('shuffle');
       var spinBtn = document.getElementById('spin');
       var mantraBtn = document.getElementById('mantra');
@@ -56,13 +43,14 @@ Load your saved sky, click the weave to send ripples, or print a mantra from you
       var symLabel = document.getElementById('sym-label');
       var statusEl = document.getElementById('status');
       var readingEl = document.getElementById('reading');
+      var reduceMotion = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
 
       var stars = [];
       var shards = [];
       var ripples = [];
       var t = 0;
       var lastFrame = 0;
-      var spinning = true;
+      var spinning = !reduceMotion;
       var prism = false;
       var codeBuffer = '';
       var rotation = 0;
@@ -117,36 +105,13 @@ Load your saved sky, click the weave to send ripples, or print a mantra from you
         });
       }
 
-      function ghostStars() {
-        var out = [];
-        for (var i = 0; i < 12; i++) {
-          out.push({
-            x: 20 + (i % 6) * 12 + rand(-3, 3),
-            y: 24 + Math.floor(i / 6) * 22 + rand(-4, 4),
-            text: 'Ghost seed ' + (i + 1)
-          });
-        }
-        return out;
-      }
-
-      // Why the weave is running on ghost seeds instead of a real sky, in this page's own words:
-      // the shared store says which of the four it is (see js/state.js).
-      var GHOST_NOTES = {
-        unavailable: 'Local storage unavailable. Running with ghost seeds.',
-        unreadable: 'Saved constellation unreadable. Running with ghost seeds.',
-        missing: 'No saved constellation found. Running with ghost seeds until you create stars on the wish constellation page.',
-        ok: 'Saved data had no readable stars. Running with ghost seeds.'
-      };
-
+      // Reads the saved sky and spins the shards out of it. Called from unlock's onReady, so by
+      // the time it runs there is a sky to read.
       function loadStars() {
         var saved = state.read(SKY, []);
         stars = safeStars(Array.isArray(saved.value) ? saved.value : []).slice(0, 180);
-        var real = stars.length;
-        if (!real) stars = ghostStars();
         buildShards();
-        statusEl.textContent = real
-          ? 'Orbital weave synced: ' + real + ' star' + (real === 1 ? '' : 's') + ' loaded.'
-          : GHOST_NOTES[saved.status];
+        statusEl.textContent = stars.length + ' saved star' + (stars.length === 1 ? '' : 's') + ' loaded.';
       }
 
       function buildShards() {
@@ -212,10 +177,7 @@ Load your saved sky, click the weave to send ripples, or print a mantra from you
       }
 
       function printMantra() {
-        if (!stars.length) {
-          statusEl.textContent = 'No stars loaded yet.';
-          return;
-        }
+        if (!stars.length) return;
 
         var sum = summarize();
         var hash = hashConstellation();
@@ -237,7 +199,7 @@ Load your saved sky, click the weave to send ripples, or print a mantra from you
         ];
         var closers = [
           'Commit to one clear action before the next hour.',
-          'Rearrange one star on the wish constellation page, then return and re-read.',
+          'Turn the symmetry dial one notch and read the weave again.',
           'Share one rough idea while it is still warm.',
           'Protect ten focused minutes and build inside them.'
         ];
@@ -293,6 +255,7 @@ Load your saved sky, click the weave to send ripples, or print a mantra from you
         }
       }
 
+      // Draws nothing without shards: an empty sky is an empty loom, not a weave of stand-ins.
       function drawWeave(dt) {
         if (!shards.length) return;
 
@@ -368,6 +331,8 @@ Load your saved sky, click the weave to send ripples, or print a mantra from you
         ctx.fillText('shards ' + shards.length + ' · spokes ' + symmetry + (spinning ? ' · spin on' : ' · spin off'), 10, 16);
       }
 
+      // The loop runs from the start, with or without stars: an empty sky draws the background
+      // and nothing else, while the host waits powered down.
       function frame(now) {
         if (typeof now !== 'number') now = performance.now();
         var dt = lastFrame ? Math.min(0.05, (now - lastFrame) / 1000) : 0.016;
@@ -395,8 +360,6 @@ Load your saved sky, click the weave to send ripples, or print a mantra from you
         emitRipple(rand(canvas.width * 0.3, canvas.width * 0.7), rand(canvas.height * 0.3, canvas.height * 0.7));
         statusEl.textContent = 'Weave shuffled: same stars, new harmonic palette.';
       }
-
-      refreshBtn.addEventListener('click', loadStars);
 
       shuffleBtn.addEventListener('click', shuffleWeave);
 
@@ -429,13 +392,15 @@ Load your saved sky, click the weave to send ripples, or print a mantra from you
           prism = !prism;
           emitRipple(canvas.width * 0.5, canvas.height * 0.5);
           statusEl.textContent = prism
-            ? 'Secret prism weave unlocked. Spectrum shifted.'
-            : 'Prism weave closed. Returning to midnight tones.';
+            ? 'Prism weave on. Spectrum shifted.'
+            : 'Prism weave off. Back to midnight tones.';
         }
       });
 
       setSpinButton();
-      loadStars();
+      window.interestingSite.unlock(host, {
+        onReady: function (stars, how) { loadStars(); }
+      });
       frame();
     })();
   </script>

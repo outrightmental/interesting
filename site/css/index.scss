@@ -1,15 +1,16 @@
-// The threshold: the way in. It offers nothing until it has asked something, so the page is almost
-// entirely the query, the signals it read while you answered, and what the answer opens onto.
+// The threshold: the way in. The question is asked in the ribbon above, like everywhere else,
+// so the page itself is a few lines on what the site is and, after them, the index of every
+// world the shared shell writes after <main>.
 //
-// It carries no palette of its own on purpose. js/threshold.js puts the ascertained orientation on
-// <html data-mood='...'> and _sass/_mood.scss turns that into the colours, so the entry page is the
-// first thing to change when a visitor is read.
+// It carries no palette of its own on purpose. js/threshold.js puts the ascertained orientation
+// on <html data-mood='...'> and _sass/_mood.scss turns that into the colours, so the entry page
+// is the first thing to change when a visitor is read.
 
 @use 'vars';
 
 body {
   align-content: safe center;
-  padding: 1.2rem;
+  padding: 1.2rem 1rem;
   overflow-x: hidden;
 }
 
@@ -42,75 +43,8 @@ main {
   max-width: 62ch;
 }
 
-.threshold-panel {
-  border: 1px solid vars.$hairline;
-  border-radius: vars.$radius-panel;
-  background: rgba(7, 10, 20, 0.52);
-  padding: 0.85rem;
-}
-
-.threshold-panel h2,
-.offer h2 {
-  margin: 0 0 0.6rem;
-  color: var(--muted);
-  font-size: 0.78rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
-
-.threshold-host {
-  min-height: 9rem;
-}
-
-.threshold-fallback {
-  margin: 0;
-  color: #dbe6ff;
-  line-height: 1.5;
-}
-
-.threshold-fallback a {
+.hint a {
   color: var(--accent);
-}
-
-.threshold-signals {
-  margin: 0.75rem 0 0;
-  color: var(--muted);
-  font-size: 0.78rem;
-  font-family: vars.$mono;
-  line-height: 1.5;
-}
-
-.offer {
-  margin-top: 0.9rem;
-  border: 1px solid vars.$focus-line;
-  border-radius: vars.$radius-panel;
-  background: vars.$well;
-  padding: 0.85rem;
-}
-
-.offer-read {
-  margin: 0;
-  color: var(--accent2);
-  font-size: clamp(1.05rem, 3vw, 1.3rem);
-  line-height: 1.35;
-}
-
-.section-title {
-  margin: 1.1rem 0 0.2rem;
-  font-size: 1rem;
-  letter-spacing: 0.02em;
-  color: #e7efff;
-}
-
-// This world reuses the shared wayfinding include instead of its own one-off nav cluster.
-.wayfinding {
-  margin-top: 0.75rem;
-  text-align: left;
-}
-
-.wayfinding-label,
-.wayfinding-note {
-  text-align: left;
 }
 
 @media (prefers-reduced-motion: reduce) {

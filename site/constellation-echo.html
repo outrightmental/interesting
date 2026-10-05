@@ -1,41 +1,28 @@
 ---
 layout: layout.njk
-title: constellation echo chamber
-description: 'Listen to your saved constellation as drifting echoes, pulse the field, and read a tiny atmospheric report.'
+title: the echo chamber
+description: 'Your saved stars as drifting echoes, where you pulse the field, click an echo to hear its thought and read a small echo weather report.'
 stylesheet: constellation-echo
-footer:
-  - [wish-constellation.html, back to the wish constellation]
-  - [index.html, back to the threshold]
-  - [sitemap.html, site map]
-  - [sky-archive.html, open sky archive oracle]
-  - [star-lantern.html, open star lantern ritual]
-  - [wish-terrarium.html, open wish terrarium]
-  - [error.html, visit observatory 404]
 ---
   <main>
-    <h1>constellation echo chamber</h1>
-    <p class='tagline'>Your saved stars become drifting echoes. Pulse the field, click an echo, and listen for what your sky repeats.</p>
+    <h1>the echo chamber</h1>
+    <p class='tagline'>Your stars as drifting echoes you can pulse and listen to. It reads the sky you placed in the wish constellation.</p>
 
     <div class='layout'>
-      <canvas id='echo-canvas' width='620' height='340' aria-label='Animated echo field generated from saved constellation stars'></canvas>
+      <canvas id='echo-canvas' width='620' height='340' aria-label='Animated echo field generated from your saved stars'></canvas>
 
       <section class='panel'>
-        <p style='margin:0;color:#d8e4ff;'>This page reads the same saved constellation memory as the wish constellation page.</p>
         <div class='controls'>
-          <button id='refresh' type='button'>refresh saved sky</button>
           <button id='pulse' type='button'>emit center pulse</button>
           <button id='shuffle' type='button'>shuffle harmonics</button>
           <button id='report' type='button'>read echo weather</button>
           <button id='drift' type='button' aria-pressed='false'>pause drift</button>
         </div>
-        <p id='status' aria-live='polite'>Loading echo memory...</p>
-        <pre id='reading' aria-live='polite'>Awaiting resonance.
-Load your saved sky, click the field to pulse, or select an echo to hear its thought.</pre>
-        <p class='hint'>Easter egg: type echo while this page is focused.</p>
+        <p id='status' aria-live='polite'></p>
+        <pre id='reading' aria-live='polite'>Click the field to pulse, or press read echo weather.</pre>
+        <p class='hint'>Type echo while this page is focused and listen.</p>
       </section>
     </div>
-
-{% include "footer.njk" %}
   </main>
 
   <script>
@@ -44,13 +31,14 @@ Load your saved sky, click the field to pulse, or select an echo to hear its tho
       var SKY = 'constellation';
       var canvas = document.getElementById('echo-canvas');
       var ctx = canvas.getContext('2d');
-      var refreshBtn = document.getElementById('refresh');
       var pulseBtn = document.getElementById('pulse');
       var shuffleBtn = document.getElementById('shuffle');
       var reportBtn = document.getElementById('report');
       var driftBtn = document.getElementById('drift');
       var statusEl = document.getElementById('status');
       var readingEl = document.getElementById('reading');
+
+      var NEXT_STEP = 'Click the field to pulse, or press read echo weather.';
 
       var stars = [];
       var echoes = [];
@@ -110,22 +98,14 @@ Load your saved sky, click the field to pulse, or select an echo to hear its tho
         });
       }
 
-      // Why there is nothing to show, in this page's own words: the shared store says which of
-      // the four it is (see js/state.js).
-      var EMPTY_NOTES = {
-        unavailable: 'Local storage is unavailable in this browser context.',
-        unreadable: 'Saved constellation data is unreadable. Open the wish constellation and remake it.',
-        missing: 'No saved constellation found yet. Create one on the wish constellation page first.',
-        ok: 'A sky file exists, but no readable stars were found.'
-      };
-
+      // Reads the saved sky and builds the echoes. Called from unlock()'s onReady, so a sky is there
+      // to read: the helper has either found one or just written one.
       function loadStars() {
         var saved = state.read(SKY, []);
         stars = normalizeStars(Array.isArray(saved.value) ? saved.value : []).slice(0, 160);
         buildEchoes();
-        statusEl.textContent = stars.length
-          ? 'Echo field synced: ' + stars.length + ' star' + (stars.length === 1 ? '' : 's') + ' loaded.'
-          : EMPTY_NOTES[saved.status];
+        statusEl.textContent = stars.length + ' saved star' + (stars.length === 1 ? '' : 's') + ' loaded.';
+        readingEl.textContent = NEXT_STEP;
       }
 
       function buildEchoes() {
@@ -153,11 +133,6 @@ Load your saved sky, click the field to pulse, or select an echo to hear its tho
       }
 
       function emitPulse(px, py) {
-        if (!echoes.length) {
-          statusEl.textContent = 'No echoes available yet. Refresh after creating stars on the wish constellation page.';
-          return;
-        }
-
         pulses.push({ x: px, y: py, r: 2, life: 1 });
 
         for (var i = 0; i < echoes.length; i++) {
@@ -178,11 +153,6 @@ Load your saved sky, click the field to pulse, or select an echo to hear its tho
       }
 
       function shuffleHarmonics() {
-        if (!echoes.length) {
-          statusEl.textContent = 'No echoes available yet. Refresh after creating stars on the wish constellation page.';
-          return;
-        }
-
         for (var i = 0; i < echoes.length; i++) {
           var e = echoes[i];
           e.vx = rand(-0.55, 0.55);
@@ -218,11 +188,6 @@ Load your saved sky, click the field to pulse, or select an echo to hear its tho
       }
 
       function echoWeather() {
-        if (!stars.length) {
-          statusEl.textContent = 'No stars loaded yet. Refresh after creating a constellation.';
-          return;
-        }
-
         var s = summarize();
         var zone = (s.cy < 50 ? 'north' : 'south') + '-' + (s.cx < 50 ? 'west' : 'east');
         var spreadWord = s.spread < 12 ? 'compact' : (s.spread < 24 ? 'balanced' : 'wide');
@@ -243,7 +208,7 @@ Load your saved sky, click the field to pulse, or select an echo to hear its tho
         ];
         var closers = [
           'Send one tiny signal before midnight.',
-          'Move a star on the wish constellation and read again.',
+          'Pulse the field twice and read again.',
           'Name the next action in six words and do it.',
           'Share one unfinished idea with someone kind.'
         ];
@@ -423,7 +388,6 @@ Load your saved sky, click the field to pulse, or select an echo to hear its tho
         requestAnimationFrame(frame);
       }
 
-      refreshBtn.addEventListener('click', loadStars);
       pulseBtn.addEventListener('click', centerPulse);
       shuffleBtn.addEventListener('click', shuffleHarmonics);
       reportBtn.addEventListener('click', echoWeather);
@@ -446,7 +410,11 @@ Load your saved sky, click the field to pulse, or select an echo to hear its tho
       });
 
       setDriftButton();
-      loadStars();
+      // Powered down until a sky exists: unlock() dims the canvas and the panel and offers the one
+      // button that seeds one, or calls onReady at once when the wish constellation already saved it.
+      window.interestingSite.unlock(document.querySelector('.layout'), {
+        onReady: function (stars, how) { loadStars(); }
+      });
       frame();
     })();
   </script>

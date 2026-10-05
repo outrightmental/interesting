@@ -1,4 +1,6 @@
-// Shared top-level wayfinding shown on every page via _includes/layout.njk.
+// The shared header on every page (_includes/layout.njk): the site's name, one line about it,
+// and three links. Nothing else lives here; in particular no status line, so the page's own
+// heading is never more than a few lines down.
 
 @use 'vars';
 @use 'nav-chips';
@@ -26,19 +28,30 @@
   box-shadow: 0 0 0 3px vars.$focus-ring;
 }
 
+// The wrapper the skip link lands on spans the column, and the page's <main> is centred inside it,
+// so a page is centred however wide or narrow its own content is.
+#main-content {
+  width: 100%;
+}
+
 #main-content:focus {
   outline: none;
 }
 
 .site-header {
-  width: min(980px, 96vw);
+  position: relative;
+  z-index: 2; // above any page's full-screen backdrop canvas
+  width: min(980px, 100%);
   border: 1px solid vars.$hairline;
   border-radius: vars.$radius-panel;
   background: rgba(7, 10, 20, 0.62);
-  padding: 0.58rem 0.65rem;
+  padding: 0.55rem 0.65rem;
   margin: 0 0 0.62rem;
-  display: grid;
-  gap: 0.52rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 0.9rem;
 }
 
 .site-header-title {
@@ -46,11 +59,13 @@
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
-  justify-content: center;
   gap: 0.48rem;
 }
 
 .site-header-title a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
   color: var(--fg);
   text-decoration: none;
   font-weight: 700;
@@ -62,80 +77,18 @@
   font-size: 0.82rem;
 }
 
-/* The header's pulse (see js/site.js). Named site-pulse* and not site-meta*: the meta menu
-   js/state.js draws owns every site-meta* name, injects its own styles for them, and is not this
-   site's to restyle. */
-.site-pulse {
-  margin: 0;
-  border: 1px solid vars.$hairline;
-  border-radius: vars.$radius-well;
-  background: rgba(5, 8, 16, 0.56);
-  padding: 0.42rem 0.5rem;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: center;
-  gap: 0.45rem;
-}
-
-.site-pulse-status {
-  color: #d9e7ff;
-  font-size: 0.83rem;
-}
-
-.site-pulse-trail {
-  flex: 1 1 100%;
-  color: var(--muted);
-  font-size: 0.77rem;
-  text-align: center;
-}
-
-.site-pulse-link {
-  @include nav-chips.chip(0.8rem, 0.3rem 0.7rem);
-  min-height: 44px;
-}
-
 .site-header-nav {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
+  margin: 0;
   gap: 0.42rem;
 }
 
 .site-header-nav a {
-  @include nav-chips.chip(0.82rem, 0.34rem 0.74rem);
-}
-
-.site-header-nav a[aria-current='page'] {
-  @include nav-chips.current;
-}
-
-@media (max-width: 700px) {
-  .site-header {
-    padding: 0.52rem;
-  }
-
-  .site-header-title {
-    justify-content: flex-start;
-  }
-
-  .site-pulse {
-    justify-content: flex-start;
-  }
-
-  .site-pulse-trail {
-    text-align: left;
-  }
-
-  .site-header-nav {
-    justify-content: flex-start;
-  }
+  font-size: 0.82rem;
+  padding: 0.34rem 0.74rem;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .skip-link,
-  .site-header-nav a,
-  .site-pulse-link {
+  .skip-link {
     transition: none;
   }
 }

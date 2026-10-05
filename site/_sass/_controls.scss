@@ -1,5 +1,5 @@
 // Everything a visitor can press, drag or slide. One pill shape for buttons and for the links that
-// act like buttons, so a page's controls and its footer links read as the same family.
+// act like buttons, so a page's controls and the links that act like them read as the same family.
 
 @use 'vars';
 
@@ -68,6 +68,7 @@ a.action[aria-disabled='true'] {
 
 input[type='range'] {
   width: 100%;
+  min-height: 24px; // a slider is a tap target too (WCAG 2.5.8)
   accent-color: var(--accent);
 }
 

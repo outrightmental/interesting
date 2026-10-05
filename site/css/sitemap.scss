@@ -1,70 +1,32 @@
-// The site map: the live atlas console, then every page of the site as a card.
+// The site map: every page of the site as a card, with a line on what it is.
 
 @use 'vars';
-
-:root {
-  --bg: #080b17;
-  --bg2: #1c2550;
-  --fg: #eef3ff;
-  --muted: #a9b5d9;
-  --accent2: #ffe6a9;
-}
-
-html,
-body {
-  background: radial-gradient(circle at 18% 0%, var(--bg2) 0%, var(--bg) 60%);
-}
 
 body {
   align-content: safe center;
 }
 
-.wayfinding {
-  margin: 0 0 1rem;
-}
-
-.atlas {
-  margin: 0 0 1rem;
-  border: 1px solid vars.$hairline;
-  border-radius: vars.$radius-panel;
-  background: rgba(7, 10, 20, 0.56);
-  padding: 0.75rem;
-  color: #dce9ff;
-}
-
-.atlas h2 {
-  margin: 0 0 0.45rem;
-  font-size: 0.82rem;
-  font-weight: 600;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--accent2);
-}
-
-.atlas p {
-  margin: 0.35rem 0;
-  line-height: 1.35;
-}
-
-#memory.good {
-  color: var(--good);
-}
-
-#memory.warn {
-  color: var(--warn);
-}
-
-.controls {
-  margin: 0.6rem 0 0;
+.about {
+  margin: 0.2rem 0 0.9rem;
+  color: #dbe6ff;
+  line-height: 1.5;
+  max-width: 64ch;
 }
 
 h2.section-title {
-  margin: 1.1rem 0 0.5rem;
+  margin: 1.1rem 0 0.4rem;
   font-size: 0.82rem;
   font-weight: 600;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--accent2);
+}
+
+.section-note {
+  margin: 0 0 0.5rem;
+  color: var(--muted);
+  font-size: 0.88rem;
+  line-height: 1.45;
 }
 
 .pages {
@@ -72,7 +34,7 @@ h2.section-title {
   margin: 0;
   padding: 0;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr));
   gap: 0.6rem;
 }
 
@@ -98,19 +60,9 @@ h2.section-title {
   border-bottom-color: rgba(234, 241, 255, 0.85);
 }
 
-.pages a::before {
-  content: '·';
-  margin-right: 0.4rem;
-  color: var(--accent2);
-  animation: twinkle 3.1s ease-in-out infinite;
-}
-
-.pages li:nth-child(2n) a::before {
-  animation-duration: 2.3s;
-}
-
-.pages li:nth-child(3n) a::before {
-  animation-duration: 4.2s;
+.pages .gloss {
+  color: var(--muted);
+  font-size: 0.8rem;
 }
 
 .pages p {
@@ -118,47 +70,4 @@ h2.section-title {
   color: #d4ddf6;
   font-size: 0.88rem;
   line-height: 1.45;
-}
-
-.pages code {
-  color: var(--muted);
-  font-size: 0.8rem;
-  font-family: vars.$mono;
-}
-
-.axiom {
-  margin: 1.1rem 0 0;
-  border: 1px solid vars.$hairline;
-  border-radius: vars.$radius-panel;
-  background: rgba(6, 9, 18, 0.5);
-  padding: 0.75rem 0.8rem;
-  color: #d8e4ff;
-  font-size: 0.9rem;
-  line-height: 1.5;
-}
-
-.axiom a {
-  color: var(--accent);
-}
-
-.footer {
-  margin-top: 0.9rem;
-  align-items: center;
-}
-
-@keyframes twinkle {
-  0%,
-  100% {
-    opacity: 0.45;
-  }
-
-  50% {
-    opacity: 1;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .pages a::before {
-    animation: none;
-  }
 }

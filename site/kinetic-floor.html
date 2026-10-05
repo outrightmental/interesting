@@ -1,24 +1,19 @@
 ---
 layout: layout.njk
 title: the kinetic floor
-description: A floor full of heavy things to shove, for anyone reading as wound tight. Fling them, stack them, sweep them, break the gravity.
+description: 'A floor of heavy blocks to fling with a pointer or the arrow keys, with a gravity you can turn over.'
 stylesheet: kinetic-floor
-footer:
-  - [index.html, back to the threshold]
-  - [moods.html, mood atlas]
-  - [machine-shop.html, open the machine shop]
-footerNote: nothing here is fragile
 ---
   <main>
     <h1>the kinetic floor</h1>
-    <p class='tagline'>Where the threshold sends anyone reading as wound tight. Shove something. It is built for it.</p>
+    <p class='tagline'>Heavy blocks on a floor with gravity you can turn over. Shove something.</p>
 
     <div class='layout'>
-      <canvas id='floor' width='620' height='360' aria-label='A floor of blocks you can fling with the pointer or the arrow keys'></canvas>
+      <canvas id='floor' width='620' height='360' aria-label='A floor of blocks. Drag one to throw it; tap empty floor to add one; with keyboard focus, arrow keys aim the kicker and space kicks.'></canvas>
 
       <section class='panel'>
-        <p class='floor-note'>Drag a block and let go — it keeps whatever speed you gave it. With a
-          keyboard: tab to the floor, arrow keys to aim the kicker, space to kick.</p>
+        <p class='floor-note'>Drag a block and let go, or tap bare floor to add one. Keyboard: tab to
+          the floor, arrow keys aim, space kicks. Nothing here is fragile.</p>
         <div class='controls'>
           <button id='more' type='button'>drop five more</button>
           <button id='kick' type='button'>kick everything</button>
@@ -33,11 +28,10 @@ footerNote: nothing here is fragile
         <pre id='reading'>impacts: 0
 fastest block: 0 px/s
 total distance shoved: 0 m</pre>
-        <p class='hint'>Easter egg: kick everything three times without stopping.</p>
+        <p class='hint'>Kick everything three times without stopping and see what happens.</p>
       </section>
     </div>
 
-{% include "footer.njk" %}
   </main>
 
   <script>

@@ -1,0 +1,61 @@
+// Powered down, never broken: how a part that needs something the browser does not hold yet
+// looks while it waits, and the box that powers it. Rendered by window.interestingSite.unlock()
+// in js/site.js; see the README section of the same name.
+//
+// The host keeps its children, dimmed and inert -- a machine with its generator off -- and the
+// unlock box sits in front of it in reading order, so the one lit control is the button.
+
+@use 'vars';
+
+.powered-down {
+  opacity: 0.38;
+  filter: saturate(0.35);
+  pointer-events: none;
+  transition: opacity 160ms ease, filter 160ms ease;
+}
+
+.unlock {
+  margin: 0.75rem 0;
+  border: 1px dashed rgba(255, 255, 255, 0.28);
+  border-radius: vars.$radius-panel;
+  background: rgba(6, 9, 18, 0.7);
+  padding: 0.85rem;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.unlock-title {
+  margin: 0;
+  color: var(--accent2);
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.unlock-note {
+  margin: 0;
+  color: var(--fg);
+  font-size: 0.95rem;
+  line-height: 1.45;
+}
+
+.unlock .controls {
+  margin: 0.2rem 0 0;
+}
+
+.unlock-else {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.unlock-else:hover,
+.unlock-else:focus-visible {
+  color: var(--accent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .powered-down {
+    transition: none;
+  }
+}

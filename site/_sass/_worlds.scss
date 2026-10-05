@@ -1,0 +1,34 @@
+// The index of every world, shown after <main> on every page by _includes/worlds.njk. It is a
+// panel like any other (see _panel.scss); what is here is only its place on the page and the
+// grid its two groups sit in.
+
+@use 'vars';
+
+.site-footer {
+  position: relative;
+  z-index: 2; // above any page's full-screen backdrop canvas, like the header and the ribbon
+  width: min(940px, 100%);
+  margin: 0.9rem 0 0;
+}
+
+.worlds {
+  text-align: left;
+}
+
+.worlds-group {
+  margin-top: 0.7rem;
+  border-top: 1px solid vars.$hairline;
+  padding-top: 0.6rem;
+}
+
+.worlds-group .panel-note {
+  margin-top: 0.3rem;
+}
+
+@media (min-width: 760px) {
+  .worlds-groups {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0 1rem;
+  }
+}

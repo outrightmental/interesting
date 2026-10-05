@@ -20,11 +20,15 @@
     - The clock and the time zone are read as well, so an arrival in the small hours from the far
       side of the world starts from a different place than one at midday.
     - What is learned is only partly remembered: the drift below decays with the time since the
-      last visit, and the fresh answer always outweighs it. Every arrival is queried again.
+      last visit, and the fresh answer always outweighs it. Every arrival at the threshold is
+      queried again; every other page invites, one press away.
 
   Every page carries the ribbon this file builds, so the flow is ongoing rather than a gate at the
-  front door: any page can ask again, in a new way, and the whole site re-skins itself around the
-  answer through the data-mood attribute (see _sass/_mood.scss).
+  front door. On the threshold (index.html) the ribbon asks on arrival; on every other page it
+  invites, one press away, so a visitor who followed a link to a world meets that world first.
+  Any page can ask again, in a new way, and the whole site re-skins itself around the answer
+  through the data-mood attribute (see _sass/_mood.scss). The mood atlas (moods.html) runs any
+  mechanism on demand, shows the clock and the gap since the last visit, and can forget.
 
   What is remembered is kept in the site's one local-state document, under "threshold", through
   window.interestingState -- like every page of this site, this file never reaches for the
@@ -39,6 +43,9 @@
   'use strict';
 
   var store = window.interestingState;
+  // '' everywhere but the 404 page, which is served at any missing path and names the site's
+  // root so the links this file writes still lead somewhere (see siteRoot in layout.njk).
+  var root = document.documentElement.getAttribute('data-root') || '';
   var READING = 'threshold'; // this file's one name inside the shared local-state document
   var RECENT = 6; // how many mechanisms back still counts as "the same way twice"
   var HALF_LIFE_H = 30; // a remembered reading fades to half its pull in this many hours
@@ -81,13 +88,14 @@
       world: 'orbital-weaver.html', worldName: 'the orbital weaver' }
   ];
 
-  /* The query mechanisms. Each carries a `probe` id, which is the handle the framework counts
+  /* The query mechanisms. Each carries a `probe` id, which is the handle the framework counts,
+     and a `name`, which is what the mood atlas shows a visitor instead of the id
      (see PROBE_DECLARATION in .github/scripts/make_interesting.py): the site is held to keeping a
      wide library of them, and a run that invents another is doing the most interesting work there
      is to do here. The rule every one of them obeys: ask about the world, never about the self. */
   var PROBES = [
     {
-      probe: 'doorway', kind: 'choice',
+      probe: 'doorway', name: 'four doors', kind: 'choice',
       ask: 'Four doors, all unlocked. One of them is already ajar, and it is not the one you want.',
       options: [
         { label: 'the one with a draught under it', detail: 'cold air, and a sound like far-off traffic',
@@ -101,7 +109,7 @@
       ]
     },
     {
-      probe: 'pocket', kind: 'choice',
+      probe: 'pocket', name: 'one object for the pocket', kind: 'choice',
       ask: 'You are going out. One object fits in the pocket. The rest stay on the table.',
       options: [
         { label: 'a short crowbar', detail: 'nothing in particular to open yet',
@@ -117,7 +125,7 @@
       ]
     },
     {
-      probe: 'window', kind: 'choice',
+      probe: 'window', name: 'the window', kind: 'choice',
       ask: 'There is one window in this room and you get to decide what is behind it.',
       options: [
         { label: 'a flat black sky, no cloud', detail: 'and whatever is up there, up there',
@@ -131,7 +139,7 @@
       ]
     },
     {
-      probe: 'stone', kind: 'choice',
+      probe: 'stone', name: 'four stones', kind: 'choice',
       ask: 'Four stones on a shelf. Pick one up -- you will be carrying it for a while.',
       options: [
         { label: 'the heavy one', detail: 'river-smoothed, cold, two hands',
@@ -145,7 +153,7 @@
       ]
     },
     {
-      probe: 'misfit', kind: 'choice',
+      probe: 'misfit', name: 'the odd one out', kind: 'choice',
       ask: 'Five things are on the table. Four of them belong together. Take away the one that does not.',
       options: [
         { label: 'a tuning fork', detail: 'because the others are silent',
@@ -161,8 +169,8 @@
       ]
     },
     {
-      probe: 'bench', kind: 'sequence',
-      ask: 'A workbench has four objects. Arrange three from nearest the door to nearest the window.',
+      probe: 'bench', name: 'the workbench', kind: 'sequence',
+      ask: 'A workbench, four objects. Take three, in order: the one nearest the door first, the one nearest the window last.',
       take: 3,
       items: [
         {
@@ -204,7 +212,7 @@
       ]
     },
     {
-      probe: 'stair', kind: 'choice',
+      probe: 'stair', name: 'three landings', kind: 'choice',
       ask: 'Three landings, and no going back up. Pick a way down.',
       steps: [
         { ask: 'First landing. Two corridors.', options: [
@@ -228,7 +236,7 @@
       ]
     },
     {
-      probe: 'volley', kind: 'choice', quick: true,
+      probe: 'volley', name: 'five quick pairs', kind: 'choice', quick: true,
       ask: 'Five pairs, no thinking. Whichever one you would rather have in the room.',
       steps: [
         { ask: 'one or the other', options: [
@@ -254,7 +262,7 @@
       ]
     },
     {
-      probe: 'tempo', kind: 'tap',
+      probe: 'tempo', name: 'five taps', kind: 'tap',
       ask: 'Tap this five times, at whatever rate feels like the rate.',
       label: 'tap',
       buckets: [
@@ -267,7 +275,7 @@
       wobble: { steady: { geometric: 2, analytic: 1 }, loose: { tempestuous: 2, curious: 1 } }
     },
     {
-      probe: 'hold', kind: 'hold',
+      probe: 'hold', name: 'press and hold', kind: 'hold',
       ask: 'Press this and keep pressing. Let go when it has been enough.',
       label: 'press and hold',
       buckets: [
@@ -279,7 +287,7 @@
       ]
     },
     {
-      probe: 'placement', kind: 'place',
+      probe: 'placement', name: 'one mark', kind: 'place',
       ask: 'One mark, anywhere in the field. There is no wrong place and no second go.',
       corners: {
         topLeft: { cosmic: 3, brooding: 1 },
@@ -291,7 +299,7 @@
       edge: { curious: 2, verbal: 1 }
     },
     {
-      probe: 'stroke', kind: 'draw',
+      probe: 'stroke', name: 'one line', kind: 'draw',
       ask: 'Draw one line across this. Any line. Lift your hand when it is done.',
       short: { tender: 2, analytic: 1 },
       long: { restless: 2, tempestuous: 1 },
@@ -300,7 +308,7 @@
       jagged: { tempestuous: 3, restless: 1 }
     },
     {
-      probe: 'dial', kind: 'slider',
+      probe: 'dial', name: 'the dial', kind: 'slider',
       ask: 'Set the room. The dial does not say what it does.',
       low: 'frost on the inside of the glass',
       high: 'a kettle just off the boil',
@@ -494,6 +502,10 @@
     }
   }
 
+  // The answer given on this page, if any, so every part of the page reports it as "read just now"
+  // rather than as a reading carried over from memory.
+  var lastAnswered = null;
+
   function record(answer) {
     var reading = readingFor(answer);
     var drift = {};
@@ -504,6 +516,7 @@
     state.last = Date.now();
     save({ visits: state.visits, last: state.last, drift: state.drift,
            recent: state.recent, orientation: state.orientation });
+    lastAnswered = reading.orientation ? reading : null;
     transmogrify(reading.orientation);
     return reading;
   }
@@ -557,14 +570,34 @@
     var ask = el('p', 'probe-ask', probe.ask);
     ask.id = 'probe-ask-' + probe.probe;
     frame.appendChild(ask);
+    frame.appendChild(el('p', 'probe-count', 'There is no right answer, and you can skip it.'));
     var body = el('div', 'probe-body');
     frame.appendChild(body);
     var trace = el('p', 'probe-trace');
     trace.setAttribute('aria-live', 'polite');
     frame.appendChild(trace);
+    // Values that tick -- the seconds of a press, the samples of a line -- are shown here and not
+    // in the live trace, so a screen reader is not read a stopwatch.
+    var meter = el('p', 'probe-trace probe-meter');
+    meter.setAttribute('aria-hidden', 'true');
+    frame.appendChild(meter);
+    trace.meter = meter;
+    // Every mechanism can be declined. Skipping records nothing: the question still counts as
+    // asked, so it is not asked the same way next time, and the reading is whatever it was.
+    var skip = el('button', 'probe-option probe-skip', 'skip this');
+    skip.type = 'button';
+    skip.addEventListener('click', function () {
+      host.textContent = '';
+      if (typeof opts.onSkip === 'function') opts.onSkip(probe);
+    });
+    frame.appendChild(skip);
     host.appendChild(frame);
 
+    var answered = false;
     function finish() {
+      if (answered) return;
+      answered = true;
+      skip.hidden = true;
       var reading = record(answer);
       trace.textContent = '';
       if (typeof opts.onAnswer === 'function') opts.onAnswer(reading, probe);
@@ -584,7 +617,7 @@
     function step() {
       body.textContent = '';
       var stage = steps[index];
-      if (stage.ask && steps.length > 1) body.appendChild(el('p', 'probe-step', stage.ask));
+      if (stage.ask && steps.length > 1 && !probe.quick) body.appendChild(el('p', 'probe-step', stage.ask));
       var group = el('div', 'probe-options');
       group.setAttribute('role', 'group');
       group.setAttribute('aria-label', 'choices');
@@ -608,7 +641,7 @@
       });
       body.appendChild(group);
       if (steps.length > 1) {
-        body.appendChild(el('p', 'probe-count', (index + 1) + ' of ' + steps.length));
+        body.appendChild(el('p', 'probe-count', (probe.quick ? 'pair ' : '') + (index + 1) + ' of ' + steps.length));
       }
       var first = group.querySelector('button');
       if (first && index > 0) first.focus();
@@ -640,7 +673,7 @@
       body.textContent = '';
 
       if (picked.length) {
-        var order = picked.map(function (item) { return item.label; }).join(' -> ');
+        var order = picked.map(function (item) { return item.label; }).join(' \u2192 ');
         body.appendChild(el('p', 'probe-step', 'bench order: ' + order));
       }
 
@@ -674,7 +707,7 @@
       body.appendChild(el('p', 'probe-count', left > 0 ? (left + ' to place') : 'reading order'));
 
       var controls = el('div', 'controls');
-      var undo = el('button', 'probe-option probe-skip', 'undo last');
+      var undo = el('button', 'probe-option probe-undo', 'undo last');
       undo.type = 'button';
       undo.disabled = picked.length === 0;
       undo.addEventListener('click', function () {
@@ -685,7 +718,7 @@
       });
       controls.appendChild(undo);
 
-      var reset = el('button', 'probe-option probe-skip', 'start over');
+      var reset = el('button', 'probe-option probe-undo', 'start over');
       reset.type = 'button';
       reset.disabled = picked.length === 0;
       reset.addEventListener('click', function () {
@@ -708,7 +741,7 @@
     button.addEventListener('click', function () {
       taps.push(Date.now());
       var left = 5 - taps.length;
-      button.textContent = left > 0 ? probe.label + ' (' + left + ')' : 'held';
+      button.textContent = left > 0 ? probe.label + ' (' + left + ')' : 'done';
       trace.textContent = left > 0 ? left + ' to go' : 'reading the interval';
       if (taps.length < 5) return;
       var gaps = [];
@@ -735,8 +768,9 @@
       if (started) return;
       started = Date.now();
       button.classList.add('held');
+      trace.textContent = 'holding';
       ticker = window.setInterval(function () {
-        trace.textContent = ((Date.now() - started) / 1000).toFixed(1) + 's';
+        if (trace.meter) trace.meter.textContent = ((Date.now() - started) / 1000).toFixed(1) + 's';
       }, 100);
     }
     function up() {
@@ -744,6 +778,7 @@
       var held = Date.now() - started;
       started = 0;
       window.clearInterval(ticker);
+      if (trace.meter) trace.meter.textContent = '';
       button.classList.remove('held');
       button.disabled = true;
       bucket(probe.buckets, held, answer);
@@ -752,6 +787,16 @@
     button.addEventListener('pointerdown', down);
     button.addEventListener('pointerup', up);
     button.addEventListener('pointerleave', up);
+    // A finger that drifts into a scroll cancels the press: stop counting and say so, rather
+    // than leaving a timer running under a button that will never finish.
+    button.addEventListener('pointercancel', function () {
+      if (!started) return;
+      started = 0;
+      window.clearInterval(ticker);
+      button.classList.remove('held');
+      if (trace.meter) trace.meter.textContent = '';
+      trace.textContent = 'let go early; press again';
+    });
     // A keyboard holds too: keydown repeats while the key is down, keyup ends it.
     button.addEventListener('keydown', function (ev) {
       if (ev.key === ' ' || ev.key === 'Enter') { ev.preventDefault(); down(); }
@@ -772,8 +817,9 @@
 
   function placeProbe(probe, body, trace, answer, finish) {
     var field = el('div', 'probe-field');
+    // application: a screen reader in browse mode passes the arrow keys through to the field.
     field.setAttribute('role', 'application');
-    field.setAttribute('aria-label', 'a field to place one mark in');
+    field.setAttribute('aria-label', 'a field to place one mark in: the arrow keys move the mark, enter leaves it there');
     field.tabIndex = 0;
     var mark = el('span', 'probe-mark');
     mark.hidden = true;
@@ -793,13 +839,18 @@
       var fromCentre = Math.max(Math.abs(cursor.x - 0.5), Math.abs(cursor.y - 0.5)) * 2;
       add(answer, fromCentre < 0.3 ? probe.centre : probe.edge, 1);
       field.setAttribute('aria-disabled', 'true');
+      field.tabIndex = -1;
+      placed = true;
       finish();
     }
+    var placed = false;
     field.addEventListener('click', function (ev) {
+      if (placed) return;
       var box = field.getBoundingClientRect();
       place((ev.clientX - box.left) / box.width, (ev.clientY - box.top) / box.height);
     });
     field.addEventListener('keydown', function (ev) {
+      if (placed) return;
       var step = 0.08;
       var moves = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] };
       if (moves[ev.key]) {
@@ -816,14 +867,17 @@
       }
     });
     body.appendChild(field);
-    body.appendChild(el('p', 'probe-count', 'click the field, or use the arrow keys and enter'));
+    body.appendChild(el('p', 'probe-count', 'tap or click anywhere in the field, or move the mark with the arrow keys and press enter'));
   }
 
   function drawProbe(probe, body, trace, answer, finish) {
     var pad = el('canvas', 'probe-pad');
     pad.width = 520;
     pad.height = 180;
-    pad.setAttribute('aria-label', 'a pad to draw one line on');
+    pad.tabIndex = 0;
+    // application, like the placement field, so the arrow keys reach the pad in browse mode too.
+    pad.setAttribute('role', 'application');
+    pad.setAttribute('aria-label', 'a pad to draw one line on: the arrow keys draw, enter finishes');
     var ctx = pad.getContext('2d');
     var points = [];
     var drawing = false;
@@ -851,12 +905,28 @@
       if (!drawing) return;
       points.push(at(ev));
       paint();
-      trace.textContent = points.length + ' samples';
+      if (trace.meter) trace.meter.textContent = points.length + ' samples';
     });
     pad.addEventListener('pointerup', function () {
       if (!drawing) return;
       drawing = false;
       score();
+    });
+    // A keyboard draws too: each arrow adds a stroke in that direction, enter lifts the hand.
+    pad.addEventListener('keydown', function (ev) {
+      var moves = { ArrowLeft: [-24, 0], ArrowRight: [24, 0], ArrowUp: [0, -24], ArrowDown: [0, 24] };
+      if (moves[ev.key]) {
+        ev.preventDefault();
+        var last = points.length ? points[points.length - 1] : { x: 40, y: pad.height / 2 };
+        points.push({ x: Math.min(pad.width, Math.max(0, last.x + moves[ev.key][0])),
+                      y: Math.min(pad.height, Math.max(0, last.y + moves[ev.key][1])) });
+        paint();
+        if (trace.meter) trace.meter.textContent = points.length + ' samples';
+        if (points.length === 1) trace.textContent = 'the arrow keys draw; enter finishes the line';
+      } else if (ev.key === 'Enter' || ev.key === ' ') {
+        ev.preventDefault();
+        score();
+      }
     });
     function score() {
       if (points.length < 2) { trace.textContent = 'one line, any line'; return; }
@@ -884,14 +954,7 @@
       finish();
     }
     body.appendChild(pad);
-    var skip = el('button', 'probe-option probe-skip', 'no line, move on');
-    skip.type = 'button';
-    skip.addEventListener('click', function () {
-      add(answer, probe.short, 1);
-      add(answer, probe.straight, 1);
-      finish();
-    });
-    body.appendChild(skip);
+    body.appendChild(el('p', 'probe-count', 'draw with a finger, a mouse, or the arrow keys'));
   }
 
   function sliderProbe(probe, body, trace, answer, finish) {
@@ -902,13 +965,13 @@
     input.max = '100';
     input.value = String(20 + Math.floor(Math.random() * 61)); // never starts in the same place
     input.id = 'probe-dial-' + probe.probe;
-    var label = el('label', 'probe-dial-label', 'the dial');
+    var label = el('label', 'probe-dial-label', 'the dial starts somewhere random; put it where the room should be');
     label.setAttribute('for', input.id);
     wrap.appendChild(label);
     wrap.appendChild(el('span', 'probe-dial-end', probe.low));
     wrap.appendChild(input);
     wrap.appendChild(el('span', 'probe-dial-end', probe.high));
-    var done = el('button', 'probe-option probe-skip', 'leave it there');
+    var done = el('button', 'probe-option probe-undo', 'leave it there');
     done.type = 'button';
     input.addEventListener('input', function () {
       trace.textContent = 'the dial is somewhere it was not';
@@ -927,90 +990,143 @@
 
   /* ---- the ribbon every page carries ----------------------------------------------------- */
 
+  /* What the ribbon says about a reading, in words a stranger can use. A reading the visitor
+     gave, or one carried over from an earlier answer, is said; the clock's own guess is not
+     dressed up as a reading, because a site that asks before it offers does not offer first. */
   function describe(reading) {
-    if (!reading || !reading.orientation) return 'Nothing read yet.';
-    var o = reading.orientation;
-    var lead = reading.source === 'answer' ? 'Read just now as '
-      : (reading.source === 'memory' ? 'Carried over from your last visit as '
-        : 'Guessed from the clock and the zone, which is not much to go on: ');
-    return lead + o.name + ' -- ' + o.pull + '.';
+    var o = reading && reading.orientation;
+    var kept = store.persistent === false
+      ? ' This browser keeps nothing, so the reading lasts for this page.'
+      : '';
+    if (!o || !reading.source || reading.source === 'signals') {
+      return 'Nothing read yet. Answer one sideways question and the site suggests a world to '
+        + 'start in, or take any world below.' + kept;
+    }
+    var line = o.name + ' — ' + o.pull + '. That opens onto ' + o.worldName + '.';
+    if (reading.source === 'answer') return 'Read just now as ' + line + kept;
+    return 'Carried over from your last answer: ' + line + kept;
   }
+
+  function currentReading() {
+    if (lastAnswered && state.orientation && lastAnswered.orientation.id === state.orientation) {
+      return lastAnswered;
+    }
+    return state.orientation
+      ? { orientation: ORIENTATION_BY_ID[state.orientation], source: 'memory', signals: signals() }
+      : readingFor(null);
+  }
+
+  var askRibbon = null; // set by ribbon(), so moods.html can ask through the ribbon too
+
+  // What the ribbon says while its question is open: what the question is for, and that nothing
+  // depends on it.
+  var ASKING_TEXT = 'Before it offers anything, this site asks one sideways question. Whatever '
+    + 'you answer picks a world to suggest; every world stays open below either way.';
 
   function ribbon() {
     var host = document.getElementById('mood-ribbon');
     if (!host) return;
     var text = document.getElementById('mood-ribbon-text');
-    var where = document.getElementById('mood-ribbon-where');
+    var actions = host.querySelector('.mood-ribbon-actions');
     var ask = document.getElementById('mood-ribbon-ask');
     var go = document.getElementById('mood-ribbon-go');
     var probeHost = document.getElementById('mood-probe');
-    var s = signals();
+    var asking = false;
 
+    /* The ribbon has five states, named on the element so the stylesheet can colour them:
+       quiet (nothing read), answered (read just now), carried (an earlier answer), asking (the
+       question is open) and the no-script default the layout writes. */
     function show(reading) {
-      if (text) text.textContent = describe(reading);
+      var r = reading || currentReading();
+      var read = !!(r && r.orientation && r.source && r.source !== 'signals');
+      // While the question is open the sentence frames it; the question carries its own skip, so
+      // the ribbon's two controls step aside until it is answered or skipped.
+      if (text) text.textContent = asking ? ASKING_TEXT : describe(r);
+      if (actions) actions.hidden = asking;
       if (go) {
-        if (reading && reading.orientation) {
+        if (read && !asking) {
           go.hidden = false;
-          go.href = reading.orientation.world;
-          go.textContent = 'go to ' + reading.orientation.worldName;
+          go.href = root + r.orientation.world;
+          go.textContent = 'go to ' + r.orientation.worldName;
         } else {
           go.hidden = true;
         }
       }
+      if (ask) {
+        ask.hidden = false;
+        ask.textContent = read ? 'ask another way' : 'ask me';
+        ask.setAttribute('aria-expanded', asking ? 'true' : 'false');
+      }
+      host.setAttribute('data-asking', asking ? 'true' : 'false');
+      host.setAttribute('data-state', asking ? 'asking' : (!read ? 'quiet' : (r.source === 'answer' ? 'answered' : 'carried')));
     }
 
-    if (where) {
-      where.textContent = s.clock + ' local' + (s.zone ? ', ' + s.zone : '') + ' · ' + s.part
-        + ' · ' + s.sinceText;
+    function close() {
+      if (probeHost) {
+        probeHost.textContent = '';
+        probeHost.hidden = true;
+      }
+      asking = false;
+      show();
     }
-
-    show(state.orientation
-      ? { orientation: ORIENTATION_BY_ID[state.orientation], source: 'memory' }
-      : readingFor(null));
 
     function query() {
-      if (!probeHost) return;
+      if (!probeHost || asking) return;
+      asking = true;
       probeHost.hidden = false;
-      host.setAttribute('data-asking', 'true');
-      if (ask) ask.setAttribute('aria-expanded', 'true');
+      show();
       mount(probeHost, {
         onAnswer: function (reading) {
           probeHost.textContent = '';
           probeHost.hidden = true;
-          host.setAttribute('data-asking', 'false');
-          if (ask) {
-            ask.setAttribute('aria-expanded', 'false');
-            ask.textContent = 'ask me another way';
-            ask.focus();
-          }
+          asking = false;
           show(reading);
+          if (go && !go.hidden) go.focus();
+          else if (ask) ask.focus();
+        },
+        onSkip: function () {
+          close();
+          if (ask) ask.focus();
         }
       });
     }
 
     if (ask) {
       ask.addEventListener('click', function () {
-        if (probeHost && !probeHost.hidden) {
-          probeHost.textContent = '';
-          probeHost.hidden = true;
-          host.setAttribute('data-asking', 'false');
-          ask.setAttribute('aria-expanded', 'false');
+        if (asking) {
+          close();
           return;
         }
         query();
+        // The ask button steps aside while the question is open, so focus moves into the
+        // question: its first control, or the field or pad it asks for.
+        var first = probeHost && probeHost.querySelector('button, input, [tabindex]');
+        if (first && typeof first.focus === 'function') first.focus();
       });
     }
 
-    // Always a new query on arrival -- but the page it lands on decides where it goes. A page that
-    // runs its own threshold (index.html does) sets data-threshold on <html> and the ribbon stays
-    // quiet; everywhere else the ribbon asks, inline, without covering anything up.
+    // A reading taken anywhere else on the page -- the mood atlas runs mechanisms of its own, and
+    // can forget -- is the ribbon's to report too.
+    window.addEventListener('threshold:reading', function () {
+      if (!asking) show();
+    });
+
+    askRibbon = query;
+    show();
+    // Live only from here on: the sentence written as the page loads is the page's, not news, and a
+    // screen reader should hear the ribbon when it changes, not on every page a visitor opens.
+    if (text) text.setAttribute('aria-live', 'polite');
+
+    // The threshold asks unprompted: on arrival (a first visit, or a return after
+    // ARRIVAL_GAP_MS), and whenever nothing has been read yet, because asking is what that page
+    // is for. Every other page invites instead -- the question is one press away -- so a visitor
+    // who followed a link to a world meets the world first.
     //
-    // "Arrival" is read off the gap the shared document already records rather than a session key
-    // of its own, because no page of this site touches the browser's storage directly (see
-    // js/state.js): a first visit, or a return after ARRIVAL_GAP_MS, is an arrival, and clicking
-    // through the site is not.
+    // "Arrival" is read off the gap the shared document already records rather than a session
+    // key of its own, because no page of this site touches the browser's storage directly.
+    var threshold = document.documentElement.getAttribute('data-page') === 'index.html';
     var arrived = sinceLast === null || sinceLast > ARRIVAL_GAP_MS;
-    if (arrived && !document.documentElement.hasAttribute('data-threshold')) query();
+    if (threshold && (arrived || !state.orientation)) query();
   }
 
   /* ---- start ------------------------------------------------------------------------------ */
@@ -1027,18 +1143,19 @@
     orientations: function () { return ORIENTATIONS.slice(); },
     orientation: function (id) { return ORIENTATION_BY_ID[id] || null; },
     probes: function () {
-      return PROBES.map(function (p) { return { probe: p.probe, kind: p.kind, ask: p.ask }; });
+      return PROBES.map(function (p) {
+        return { probe: p.probe, name: p.name || p.probe, kind: p.kind, ask: p.ask };
+      });
     },
     signals: signals,
-    reading: function () {
-      return state.orientation
-        ? { orientation: ORIENTATION_BY_ID[state.orientation], source: 'memory', signals: signals() }
-        : readingFor(null);
-    },
+    reading: currentReading,
+    describe: describe,
     mount: mount,
+    ask: function () { if (askRibbon) askRibbon(); },
     reducedMotion: reducedMotion,
     forget: function () {
       state = { visits: 1, last: null, drift: {}, recent: [], orientation: null };
+      lastAnswered = null;
       sinceLast = null;
       store.remove(READING);
       transmogrify(null);

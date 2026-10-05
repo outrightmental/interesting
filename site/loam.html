@@ -1,23 +1,18 @@
 ---
 layout: layout.njk
 title: loam
-description: Everything happens below the soil line here. Plant, water, and watch a root system work its way down, for anyone reading as low and slow.
+description: 'A cutaway of soil where you plant something, water it, change the grit and watch the roots work their way down round the stones.'
 stylesheet: loam
-footer:
-  - [index.html, back to the threshold]
-  - [moods.html, mood atlas]
-  - [wish-terrarium.html, open the terrarium]
-footerNote: the interesting part was always underground
 ---
   <main>
     <h1>loam</h1>
-    <p class='tagline'>Where the threshold sends anyone reading as low and slow. Nothing above ground is shown, on purpose.</p>
+    <p class='tagline'>A cutaway of soil. Plant something, water it, and watch the roots find their way down.</p>
 
     <div class='layout'>
       <canvas id='soil' width='620' height='380' aria-label='A cutaway of soil with root systems growing downward through it'></canvas>
 
       <section class='panel'>
-        <p class='soil-note'>Click anywhere in the soil to put something in it. Roots take the path
+        <p class='soil-note'>Tap or click anywhere in the soil to put something in it. Roots take the path
           of least resistance, so the stones matter: a seed planted over gravel goes sideways for a
           long while before it finds a way down.</p>
         <div class='controls'>
@@ -33,11 +28,10 @@ footerNote: the interesting part was always underground
         <p id='status' aria-live='polite'>Bare soil, well drained, nothing in it yet.</p>
         <pre id='reading'>core sample pending
 put something in the ground first</pre>
-        <p class='hint'>The soil keeps only the count of what went into it. The roots themselves are grown fresh and lost again, which is the usual arrangement with soil.</p>
+        <p class='hint'>The soil keeps only the count of what went into it. The roots themselves are grown fresh and lost again, which is the usual arrangement with soil. The interesting part was always underground.</p>
       </section>
     </div>
 
-{% include "footer.njk" %}
   </main>
 
   <script>

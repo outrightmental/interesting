@@ -1,29 +1,28 @@
 ---
 layout: layout.njk
-title: Lost in space
+title: lost in space
+description: 'There is no page at this address. The site still works, and so does the radio.'
 inlineStyles: true
 stylesheet: error
+siteRoot: /
 ---
   <canvas id='sky' aria-hidden='true'></canvas>
   <div class='scan' aria-hidden='true'></div>
 
   <main>
-    <h1>404</h1>
-    <p>This corridor of the cosmos is uncharted.</p>
-    <p class='muted'>But the observatory still works.</p>
+    <h1>lost in space</h1>
+    <p class='tagline'>There is no page at this address (404). The site still works, and so does the radio below.</p>
     <div class='controls'>
       <button id='void' type='button'>ask the void</button>
-      <a id='home' class='action' href='index.html'>back to the threshold</a>
-      <a class='action' href='sitemap.html'>site map</a>
+      <a id='home' class='action' href='/index.html'>the threshold</a>
+      <a class='action' href='/sitemap.html'>site map</a>
     </div>
 
-{% include 'wayfinding.njk' %}
+    <p id='note' aria-live='polite'>Nothing on the line yet.</p>
 
-    <p id='note' aria-live='polite'>Listening for a signal...</p>
-
-    <section class='radio' aria-label='Void radio'>
+    <section class='radio' aria-labelledby='radio-heading'>
       <div class='radio-top'>
-        <p class='muted'>Void radio receiver</p>
+        <h2 id='radio-heading' class='panel-title'>the void radio</h2>
         <p><span id='freq-readout'>94.6</span> MHz</p>
       </div>
       <input id='freq' type='range' min='88' max='108' step='0.1' value='94.6' aria-label='Radio frequency'>
@@ -34,9 +33,9 @@ stylesheet: error
       <p id='radio-note' class='hint' aria-live='polite'>Sweep slowly near 99.7 MHz. Some signals only appear when you pause.</p>
     </section>
 
-    <section class='scope' aria-label='Signal scope'>
+    <section class='scope' aria-labelledby='scope-heading'>
       <div class='radio-top'>
-        <p class='muted'>Signal scope</p>
+        <h2 id='scope-heading' class='panel-title'>the signal scope</h2>
         <p>wavefield monitor</p>
       </div>
       <p class='hint'>The waveform responds to frequency and decoder level. Freeze a frame to capture a glyph signature.</p>
@@ -47,9 +46,9 @@ stylesheet: error
       <p id='scope-note' class='hint' aria-live='polite'>Scope online. Tune and decode to reshape the pulse.</p>
     </section>
 
-    <section class='decoder' aria-label='Signal decoder'>
+    <section class='decoder' aria-labelledby='decoder-heading'>
       <div class='radio-top'>
-        <p class='muted'>Signal decoder mini-game</p>
+        <h2 id='decoder-heading' class='panel-title'>the signal decoder</h2>
         <p>level <span id='decoder-level'>1</span></p>
       </div>
       <p class='hint'>Memorize the flashing rune sequence, then replay it to decode deep-space messages.</p>
@@ -67,24 +66,27 @@ stylesheet: error
       <p id='decoder-note' class='hint' aria-live='polite'>Press play sequence to begin.</p>
     </section>
 
-    <section class='haiku' aria-label='Distress haiku terminal'>
+    <section class='haiku' aria-labelledby='haiku-heading'>
       <div class='radio-top'>
-        <p class='muted'>Distress haiku terminal</p>
+        <h2 id='haiku-heading' class='panel-title'>the distress haiku</h2>
         <p>text burst</p>
       </div>
       <p class='hint'>Print a tiny poem from your current frequency and decoder state.</p>
       <div class='controls'>
         <button id='haiku' type='button'>print haiku</button>
       </div>
-      <pre id='haiku-output' aria-live='polite'>Awaiting transmission...
+      <pre id='haiku-output' aria-live='polite'>No haiku yet.
 Tune the radio, decode a few runes, then print.</pre>
     </section>
 
-    <p class='hint'>Easter egg: type <strong>home</strong> while on this page.</p>
+    <p class='hint'>Type <strong>home</strong> to be taken back.</p>
   </main>
 
   <script>
     (function () {
+      // This page is served at any missing path, so every link it writes starts at the site's
+      // root, which js/site.js reads from data-root on <html>.
+      var root = (window.interestingSite && window.interestingSite.root) || '/';
       var note = document.getElementById('note');
       var voidBtn = document.getElementById('void');
       var freqInput = document.getElementById('freq');
@@ -108,7 +110,7 @@ Tune the radio, decode a few runes, then print.</pre>
         'Signal: curiosity can be navigation, not distraction.',
         'Signal: begin with the messiest first draft and keep going.',
         'Signal: if stuck, shrink the task until it moves.',
-        'Signal: your future self recommends pressing start today.',
+        'Signal: your future self recommends pressing start now.',
         'Signal: rest is part of the build process, not a detour.',
         'Signal: share the rough idea; polishing can come later.'
       ];
@@ -210,6 +212,8 @@ Tune the radio, decode a few runes, then print.</pre>
         return { signal: closest, diff: diff };
       }
 
+      // Each instrument speaks through its own live line, and #note belongs to the controls at
+      // the top: no single press writes two live regions at once.
       function lockFrequency() {
         var f = Number(freqInput.value);
         var hit = nearestSignal(f);
@@ -223,7 +227,7 @@ Tune the radio, decode a few runes, then print.</pre>
           burst();
 
           if (Math.abs(f - 99.7) < 0.05) {
-            note.textContent = '☄ Rare transmission captured. The observatory lights up.';
+            radioNote.textContent = '☄ Rare transmission captured. ' + hit.signal.m;
             burst();
           }
           return;
@@ -304,8 +308,7 @@ Tune the radio, decode a few runes, then print.</pre>
         tone(540, 0.11, 'triangle', 0.03);
         tone(680, 0.14, 'sine', 0.026);
         var lore = decoderLore[(decoderLevel - 1) % decoderLore.length];
-        setDecoderNote('✦ Decoded: ' + lore, true);
-        note.textContent = 'Decoder lock confirmed at level ' + decoderLevel + '.';
+        setDecoderNote('✦ Decoded at level ' + decoderLevel + ': ' + lore, true);
         decoderLevel += 1;
         buildDecoderSequence();
       }
@@ -352,7 +355,6 @@ Tune the radio, decode a few runes, then print.</pre>
 
         if (Math.abs(f - 99.7) < 0.11 && level >= 3) {
           haikuOutput.textContent = 'archive gate opens\nold fears drop like satellites\nyour draft leaves the dark\n\nstation 99.7 · rare relay';
-          note.textContent = '☄ Rare haiku transmission decoded.';
           burst();
           tone(523.25, 0.12, 'triangle', 0.03);
           tone(659.25, 0.16, 'sine', 0.028);
@@ -364,7 +366,6 @@ Tune the radio, decode a few runes, then print.</pre>
         var line3 = pick(haikuFiveB, seed, 3);
 
         haikuOutput.textContent = line1 + '\n' + line2 + '\n' + line3 + '\n\nstation ' + hit.signal.f.toFixed(1) + ' · tuned ' + f.toFixed(1) + ' · level ' + level;
-        note.textContent = '📡 Distress haiku printed from ' + f.toFixed(1) + ' MHz.';
         tone(300 + f * 1.8, 0.11, 'triangle', 0.024);
       }
 
@@ -518,15 +519,24 @@ Tune the radio, decode a few runes, then print.</pre>
         })(g);
       }
 
+      // Typing "home" on the page takes the visitor to the threshold, after the burst. Keys typed
+      // into a field -- the state menu's text box, say -- are that field's, not the page's.
       var codeBuffer = '';
+      var leaving = false;
       document.addEventListener('keydown', function (ev) {
-        if (!ev.key || ev.key.length !== 1) return;
+        if (leaving || !ev.key || ev.key.length !== 1) return;
+        var target = ev.target;
+        if (target && target.closest && target.closest('input, textarea, select, [contenteditable]')) return;
         codeBuffer = (codeBuffer + ev.key.toLowerCase()).slice(-4);
         if (codeBuffer === 'home') {
-          note.textContent = '☄ Secret route unlocked. The stars point home.';
+          leaving = true;
+          note.textContent = '☄ Taking you home.';
           burst();
           tone(523.25, 0.14, 'triangle', 0.032);
           tone(659.25, 0.2, 'sine', 0.026);
+          setTimeout(function () {
+            window.location.href = root + 'index.html';
+          }, 900);
         }
       });
 

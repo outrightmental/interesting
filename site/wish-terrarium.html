@@ -1,39 +1,27 @@
 ---
 layout: layout.njk
-title: wish terrarium
-description: Grow a living terrarium from your saved constellation and read tiny weather reports from your wishes.
+title: the terrarium
+description: 'A glasshouse where each of your saved stars grows into a swaying plant you can click for its thought, with a greenhouse forecast to ask for.'
 stylesheet: wish-terrarium
-footer:
-  - [wish-constellation.html, back to the wish constellation]
-  - [index.html, back to the threshold]
-  - [sitemap.html, site map]
-  - [constellation-diary.html, open constellation diary]
-  - [star-lantern.html, open star lantern ritual]
-  - [sky-archive.html, open sky archive oracle]
 ---
   <main>
-    <h1>wish terrarium</h1>
-    <p class='tagline'>Your saved constellation grows roots: each star becomes a swaying plant in a midnight glasshouse.</p>
+    <h1>the terrarium</h1>
+    <p class='tagline'>Your stars as plants in a glasshouse, with their own small weather. It reads the sky you placed in the wish constellation.</p>
 
     <div class='layout'>
-      <canvas id='terrarium' width='620' height='340' aria-label='Animated terrarium grown from saved constellation stars'></canvas>
+      <canvas id='terrarium' width='620' height='340' aria-label='Animated terrarium grown from your saved stars'></canvas>
 
       <section class='panel'>
-        <p style='margin:0;color:#d8e4ff;'>This page uses the same saved constellation memory as the wish constellation page.</p>
         <div class='controls'>
-          <button id='refresh' type='button'>refresh saved sky</button>
           <button id='regrow' type='button'>regrow terrarium</button>
           <button id='forecast' type='button'>ask greenhouse forecast</button>
           <button id='wind' type='button' aria-pressed='false'>pause wind</button>
         </div>
-        <p id='status' aria-live='polite'>Loading constellation seeds...</p>
-        <pre id='reading' aria-live='polite'>Awaiting growth.
-Load your sky memory, then click any plant to hear its thought.</pre>
-        <p class='hint'>Easter egg: type moss while this page is focused.</p>
+        <p id='status' aria-live='polite'></p>
+        <pre id='reading' aria-live='polite'>Click any plant to hear its thought, or ask for a greenhouse forecast.</pre>
+        <p class='hint'>Type moss while this page is focused.</p>
       </section>
     </div>
-
-{% include "footer.njk" %}
   </main>
 
   <script>
@@ -42,12 +30,12 @@ Load your sky memory, then click any plant to hear its thought.</pre>
       var SKY = 'constellation';
       var canvas = document.getElementById('terrarium');
       var ctx = canvas.getContext('2d');
-      var refreshBtn = document.getElementById('refresh');
       var regrowBtn = document.getElementById('regrow');
       var forecastBtn = document.getElementById('forecast');
       var windBtn = document.getElementById('wind');
       var statusEl = document.getElementById('status');
       var readingEl = document.getElementById('reading');
+      var NEXT_STEP = 'Click any plant to hear its thought, or ask for a greenhouse forecast.';
 
       var stars = [];
       var plants = [];
@@ -95,7 +83,8 @@ Load your sky memory, then click any plant to hear its thought.</pre>
 
       function safeStars(input) {
         return input.filter(function (s) {
-          return s && typeof s.x === 'number' && typeof s.y === 'number' && typeof s.text === 'string';
+          return s && typeof s.x === 'number' && typeof s.y === 'number' && isFinite(s.x) && isFinite(s.y)
+            && typeof s.text === 'string';
         }).map(function (s) {
           return {
             x: Number(clamp(s.x, 0, 100).toFixed(2)),
@@ -105,22 +94,14 @@ Load your sky memory, then click any plant to hear its thought.</pre>
         });
       }
 
-      // Why the terrarium has nothing to grow from, in this page's own words. The shared store
-      // says which of the four it is; see js/state.js.
-      var EMPTY_NOTES = {
-        unavailable: 'Local storage is unavailable in this browser context.',
-        unreadable: 'Saved constellation data is unreadable. Open the wish constellation and remake it.',
-        missing: 'No saved constellation found yet. Create one on the wish constellation page first.',
-        ok: 'A sky file exists, but no readable stars were found.'
-      };
-
+      // Reads the saved sky and grows the glasshouse from it. Called from the unlock helper's
+      // onReady: at once when a sky exists, otherwise after the visitor seeds one.
       function loadStars() {
         var saved = state.read(SKY, []);
         stars = safeStars(Array.isArray(saved.value) ? saved.value : []).slice(0, 140);
         buildPlants();
-        statusEl.textContent = stars.length
-          ? 'Terrarium synced: ' + stars.length + ' seed' + (stars.length === 1 ? '' : 's') + ' loaded from your sky.'
-          : EMPTY_NOTES[saved.status];
+        statusEl.textContent = stars.length + ' saved stars loaded.';
+        readingEl.textContent = NEXT_STEP;
       }
 
       function buildPlants() {
@@ -187,11 +168,6 @@ Load your sky memory, then click any plant to hear its thought.</pre>
       }
 
       function forecast() {
-        if (!stars.length) {
-          statusEl.textContent = 'No seeds loaded yet. Refresh after creating stars on the wish constellation page.';
-          return;
-        }
-
         var s = summarize();
         var zone = (s.cy < 50 ? 'north' : 'south') + '-' + (s.cx < 50 ? 'west' : 'east');
         var spreadWord = s.spread < 12 ? 'compact' : (s.spread < 24 ? 'balanced' : 'wild');
@@ -227,7 +203,7 @@ Load your sky memory, then click any plant to hear its thought.</pre>
           + c + '\n\n'
           + 'forecast stamp: ' + dayStamp();
 
-        statusEl.textContent = 'Forecast prepared from your current constellation geometry.';
+        statusEl.textContent = 'Forecast prepared from the shape of your saved sky.';
       }
 
       function clickPlant(clientX, clientY) {
@@ -259,8 +235,7 @@ Load your sky memory, then click any plant to hear its thought.</pre>
 
         readingEl.textContent = 'picked leaf memory:\n'
           + nearest.star.text + '\n\n'
-          + 'seed coordinates ' + nearest.star.x.toFixed(1) + ', ' + nearest.star.y.toFixed(1) + '\n'
-          + 'tip: regrow after rearranging stars on the wish constellation page.';
+          + 'seed coordinates ' + nearest.star.x.toFixed(1) + ', ' + nearest.star.y.toFixed(1);
 
         statusEl.textContent = 'Plant selected. This stem remembers one saved thought.';
       }
@@ -382,15 +357,7 @@ Load your sky memory, then click any plant to hear its thought.</pre>
         requestAnimationFrame(frame);
       }
 
-      refreshBtn.addEventListener('click', function () {
-        loadStars();
-      });
-
       regrowBtn.addEventListener('click', function () {
-        if (!stars.length) {
-          statusEl.textContent = 'No seeds loaded yet. Refresh after creating stars on the wish constellation page.';
-          return;
-        }
         shuffleOffset += 1;
         buildPlants();
         flash = 1;
@@ -417,7 +384,11 @@ Load your sky memory, then click any plant to hear its thought.</pre>
       });
 
       setWindButton();
-      loadStars();
+      // Powered down until a sky exists: the helper dims the glasshouse and offers the one button
+      // that seeds one, or grows it at once from the sky already kept here.
+      window.interestingSite.unlock(document.querySelector('.layout'), {
+        onReady: function (stars, how) { loadStars(); }
+      });
       frame();
     })();
   </script>

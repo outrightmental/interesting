@@ -5,8 +5,9 @@
  * Two conventions, and nothing else:
  *
  *   - .html files are Nunjucks templates with optional YAML front matter. `layout: layout.njk`
- *     wraps the page in the shared shell in site/_includes, so the <head>, the stylesheet links
- *     and the footer live in one place rather than in every page.
+ *     wraps the page in the shared shell in site/_includes, so the <head>, the stylesheet links,
+ *     the header, the mood ribbon and the index of every world live in one place rather than
+ *     in every page.
  *   - .scss files compile to .css at the same path. A file whose name starts with "_" is a
  *     partial: it is only ever @use'd by another file, never built on its own. The shared partials
  *     in site/_sass are what "common files" means -- one palette, one set of base rules, one
@@ -31,8 +32,10 @@ const SOURCE_DIR = process.env.SITE_SOURCE_DIR || "site";
 
 // Where the shared files live, inside the source folder. Both are Eleventy conventions ("_" says
 // "not a page"), and both are inside /site so the hourly AI can edit them like anything else.
-const INCLUDES_DIR = "_includes"; // layouts and partials: layout.njk, footer.njk
+const INCLUDES_DIR = "_includes"; // layouts and partials: layout.njk, worlds.njk
 const SASS_DIR = "_sass"; // the common Sass partials, on every stylesheet's load path
+// A third, Eleventy's own default and so not named here: "_data", whose worlds.json every template
+// reads as `worlds` -- the one list of the site's pages. Like the other two it is never published.
 
 // File types copied through untouched. Text only, which is every type /site is allowed to hold;
 // make_interesting.py's ALLOWED_EXTENSIONS is the other half of that list.
@@ -59,6 +62,13 @@ export default function (eleventyConfig) {
     const file = path.join(SOURCE_DIR, "css", `${name}.scss`);
     return sass.compile(file, sassOptions(path.dirname(file))).css;
   });
+
+  // `{{ worlds.underSky.length | words }}` is "eight": a count from _data/worlds.json, spelled out
+  // the way the site's copy writes numbers, so the copy follows the list when a world is added.
+  const WORDS = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
+    "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen",
+    "nineteen", "twenty"];
+  eleventyConfig.addFilter("words", (n) => (Number.isInteger(n) && n >= 0 && n < WORDS.length ? WORDS[n] : String(n)));
 
   // Keep every output path identical to its source path. Without this Eleventy writes "pretty"
   // permalinks (about.html -> about/index.html), which would break the relative links the site is

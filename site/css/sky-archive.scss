@@ -1,4 +1,4 @@
-// The sky archive oracle: a rune wheel over the saved sky, an omen log, and a sigil to download.
+// The archive oracle: a rune wheel over the saved sky, an omen log, and a sigil to download.
 
 @use 'vars';
 @use 'readout';
@@ -66,6 +66,8 @@ a.action:focus-visible {
   );
 }
 
+// The two sections under the readout: the omen log and the sigil forge, each headed by a real
+// <h2 class='panel-title'> (styled by _panel.scss).
 .history,
 .sigil {
   margin-top: 0.8rem;
@@ -73,13 +75,6 @@ a.action:focus-visible {
   border-radius: vars.$radius-well;
   background: rgba(7, 10, 20, 0.5);
   padding: 0.68rem;
-}
-
-.history p,
-.sigil p {
-  margin: 0;
-  color: #d7e5ff;
-  font-size: 0.9rem;
 }
 
 #history-list {
@@ -107,10 +102,12 @@ a.action:focus-visible {
   object-fit: contain;
 }
 
-#sigil-download[aria-disabled='true'] {
-  opacity: 0.5;
-  pointer-events: none;
-  cursor: default;
+// The preview and the download link are hidden in the markup until a sigil exists. Their own
+// `display` rules above (and a.action's in _controls.scss) would otherwise beat the browser's
+// [hidden] rule, so the attribute is honoured here explicitly.
+#sigil-preview[hidden],
+#sigil-download[hidden] {
+  display: none;
 }
 
 #sigil-note {

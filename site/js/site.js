@@ -1,818 +1,236 @@
 /*
-  The pulse in the site header, on every page: what the shared local-state document is already
-  holding for this visitor, one step back to it, and one suggested onward trail.
+  The shared helpers every page can call, loaded by _includes/layout.njk without `defer` so they
+  exist while a page's own script runs, exactly as window.interestingState does.
 
-  It used to count stars and point at one remembered world. The site now has a stronger through-line:
-  once someone has a saved constellation, the pulse keeps an expedition route live across the linked
-  sky worlds so they can keep moving through reinterpretations of the same material.
+      window.interestingSite.unlock(host, options)   a part that needs something the browser does
+                                                      not hold yet, rendered as powered down with
+                                                      the one button that powers it (see below)
+      window.interestingSite.seedSky()                a small random sky, the shape the wish
+                                                      constellation saves
+      window.interestingSite.root                     '' on every page but the 404, where the
+                                                      site's root has to be spelled out
 
-  Reads nothing itself: the saved state arrives through window.interestingState (js/state.js), which
-  the layout loads first. Its classes are site-pulse*; every site-meta* name belongs to the meta
-  menu js/state.js draws, which is not this site's to restyle.
+  Nothing in here keeps score, routes a visitor, or writes to the shared state document except
+  the sky a visitor asks it to seed: the shell's job is to be understood in one reading and get
+  out of the way. What it draws on the page is the one "send me somewhere" button in the index of
+  every world, and nothing else.
+
+  ---------------------------------------------------------------------------------------------
+  Powered down, never broken
+
+  Wherever a component depends on something the visitor has not done yet, its only announcement
+  of that is the solution, in place. A world that reads the saved sky never says "make one on the
+  wish constellation page first": it presents as unpowered -- dimmed and inert, like the part of
+  an adventure game whose generator is off -- and carries the one button that starts it, which
+  does the prerequisite itself, in the background, writing to the shared document exactly as the
+  visitor's own action would. A quieter link to the page where it usually happens may follow the
+  button; it never replaces it. The README section of the same name has the reasoning.
+
+      var ready = window.interestingSite.unlock(document.querySelector('.layout'), {
+        onReady: function (stars, how) { loadStars(); }   // now if a sky exists, else on press
+      });
+
+  options, all optional:
+    key        the state name the part depends on; 'constellation' (the sky) by default
+    holds      function (value) -> boolean: is the value enough? By default: a non-empty array
+               of { x, y, text } stars
+    seed       function () -> value to write when the button is pressed; by default seedSky()
+    onReady    function (value, how): called now with how 'saved' if the value is already there,
+               or after the press with 'seeded' (written to the browser) or 'memory' (written,
+               but this browser keeps nothing between visits)
+    copy       { title, note, button } to override the words, for a prerequisite other than the sky
+    elsewhere  { href, text } for the quiet second choice; null for none; the wish constellation
+               by default
+
+  It returns true when the part was ready at once, false when it rendered the unpowered state.
+  The host keeps its children: they are dimmed by _sass/_unlock.scss and made inert, and the
+  unlock box is put in front of the host, so the button is the first thing in reading order. The
+  axiom applies when the prerequisite cannot be kept, too: a browser that stores nothing still
+  gets the button, and the sky it seeds lasts for the page.
 */
 (function () {
   'use strict';
 
   var store = window.interestingState;
-  var statusEl = document.getElementById('site-pulse-status');
-  var trailEl = document.getElementById('site-pulse-trail');
-  var linkEl = document.getElementById('site-pulse-link');
-  var passportStatusEl = document.getElementById('constellation-passport-status');
-  var passportNextEl = document.getElementById('constellation-passport-next');
-  var passportMeterEl = document.getElementById('constellation-passport-meter');
-  var passportFillEl = document.getElementById('constellation-passport-fill');
-  var passportCountEl = document.getElementById('constellation-passport-count');
-  var passportNextLinkEl = document.getElementById('constellation-passport-next-link');
-  var passportRandomBtn = document.getElementById('constellation-passport-random');
-  var passportResetBtn = document.getElementById('constellation-passport-reset');
-  var honorsStatusEl = document.getElementById('constellation-honors-status');
-  var honorsListEl = document.getElementById('constellation-honors-list');
-  var honorsPreviewBtn = document.getElementById('constellation-honors-preview');
-  var honorsClearBtn = document.getElementById('constellation-honors-clear');
+  var root = document.documentElement.getAttribute('data-root') || '';
+  var SKY = 'constellation';
+  var MAX_STARS = 120;
+  var SEED_COUNT = 7;
 
-  if (!statusEl || !linkEl || !store || typeof store.read !== 'function') {
-    return;
-  }
-  if (!trailEl) {
-    trailEl = { textContent: '' };
-  }
-
-  /* The names the shared document keeps, the page each one belongs to, and what to call the things
-     under it. A page that starts keeping something new belongs here beside its name; a name this
-     list does not know is simply not reported. "threshold" is left out on purpose: what the site
-     has read about a visitor is the ribbon's to say, in the ribbon's own words. */
-  var KEPT = [
-    { key: 'constellation', href: 'wish-constellation.html', where: 'the wish constellation',
-      one: 'star', many: 'stars' },
-    { key: 'capsules', href: 'constellation-diary.html', where: 'the diary',
-      one: 'entry', many: 'entries' },
-    { key: 'omens', href: 'sky-archive.html', where: 'the archive oracle',
-      one: 'omen', many: 'omens' },
-    { key: 'apocrypha', href: 'apocrypha-desk.html', where: 'the apocrypha desk',
-      one: 'specimen', many: 'specimens' },
-    { key: 'kiln', href: 'word-kiln.html', where: 'the word kiln' },
-    { key: 'loam', href: 'loam.html', where: 'loam' },
-    { key: 'quiet-room', href: 'quiet-room.html', where: 'the quiet room' }
+  // What a seeded star says when a world reads it out. Short, lowercase, the site's own voice.
+  var SEED_THOUGHTS = [
+    'a door left ajar', 'the kettle, just off the boil', 'rain arriving sideways',
+    'a lamp in a window across the way', 'an unanswered letter, kept', 'moss on the north side',
+    'a tune with the middle missing', 'the long way home', 'one more look up',
+    'a stone kept for no reason', 'a page half-turned', 'a machine running with nobody watching',
+    'the tree in the courtyard, doing fine', 'a name nearly said', 'the smell before rain'
   ];
 
-  // The linked worlds that reinterpret one saved constellation from different angles.
-  var CIRCUIT = [
-    { href: 'wish-constellation.html', where: 'the wish constellation' },
-    { href: 'constellation-diary.html', where: 'the diary' },
-    { href: 'constellation-echo.html', where: 'the echo chamber' },
-    { href: 'constellation-weather.html', where: 'the weather lab' },
-    { href: 'orbital-weaver.html', where: 'the orbital weaver' },
-    { href: 'sky-archive.html', where: 'the archive oracle' },
-    { href: 'star-lantern.html', where: 'the lantern ritual' },
-    { href: 'wish-terrarium.html', where: 'the terrarium' }
+  // The names the shell used to keep for games that are gone: relay marks, quests, honors,
+  // signals, a switchboard, a logbook, a cipher, a remix snapshot, a trail and an arcade. Taken
+  // out of a visitor's document once, so an exported state stays an honest account of what the
+  // site keeps.
+  var RETIRED_KEYS = [
+    'constellation-relay', 'constellation-quests', 'constellation-signals',
+    'constellation-switchboard', 'constellation-logbook', 'constellation-cipher',
+    'constellation-remix-snapshot', 'trail-journal', 'wayfinding-arcade'
   ];
 
-  var OFF_SKY = [
-    { href: 'quiet-room.html', where: 'the quiet room' },
-    { href: 'kinetic-floor.html', where: 'the kinetic floor' },
-    { href: 'machine-shop.html', where: 'the machine shop' },
-    { href: 'loam.html', where: 'loam' },
-    { href: 'word-kiln.html', where: 'the word kiln' },
-    { href: 'apocrypha-desk.html', where: 'the apocrypha desk' }
-  ];
-
-  var WAYFINDING = [
-    { href: 'index.html', where: 'the threshold' },
-    { href: 'moods.html', where: 'the mood atlas' },
-    { href: 'sitemap.html', where: 'the site map' },
-    { href: 'error.html', where: 'the observatory 404' }
-  ];
-
-  var ALL_WORLDS = OFF_SKY.concat(CIRCUIT, WAYFINDING);
-
-  // Kept in the shared state document to track a visitor's cross-world relay progress.
-  var RELAY = 'constellation-relay';
-  var HONORS_LIMIT = 12;
-
-  // For visitors whose latest reading points into the sky cluster, keep that as a preferred branch.
-  var ORIENTATION_WORLD = {
-    cosmic: 'wish-constellation.html',
-    brooding: 'constellation-diary.html',
-    attentive: 'constellation-echo.html',
-    tempestuous: 'constellation-weather.html',
-    geometric: 'orbital-weaver.html',
-    divinatory: 'sky-archive.html',
-    ceremonial: 'star-lantern.html',
-    tending: 'wish-terrarium.html'
-  };
-
-  var TRAIL_PROMPTS = [
-    'Sky trail live: each world remixes the same stars into a different instrument.',
-    'Expedition route: keep the same constellation and compare what each world hears in it.',
-    'Constellation relay: move one star, then follow the route to watch every reading shift.',
-    'Linked run: one saved sky can become weather, audio, ritual and archive in sequence.'
-  ];
-
-  var RELAY_RANK = ['midnight', 'orbital', 'glasshouse', 'echo', 'weather', 'lantern', 'archive', 'signal'];
-  var RELAY_ROLE = ['cartographer', 'listener', 'forger', 'keeper', 'weaver', 'runner', 'gardener', 'navigator'];
-
-  // How many worlds the line names before it stops counting them out.
-  var NAMED = 2;
-
-  var currentFile = (window.location.pathname || '').split('/').pop() || 'index.html';
-
-  /* Something is there to go back to. A page keeps either a list of things or one settled object,
-     so an empty list is nothing kept -- which is what a visitor who has opened a world and left it
-     alone has. */
-  function held(value) {
-    if (Array.isArray(value)) {
-      return value.length > 0;
-    }
-    return !!value && typeof value === 'object';
+  function validStar(s) {
+    return !!s && typeof s === 'object' && typeof s.x === 'number' && typeof s.y === 'number'
+      && isFinite(s.x) && isFinite(s.y) && typeof s.text === 'string';
   }
 
-  function phrase(kept, value) {
-    var n = Array.isArray(value) ? value.length : 0;
-    if (!kept.one || !n) {
-      return 'what you left in ' + kept.where;
-    }
-    return n + ' ' + (n === 1 ? kept.one : kept.many) + ' in ' + kept.where;
+  function holdsSky(value) {
+    return Array.isArray(value) && value.some(validStar);
   }
 
-  function sentence(parts) {
-    if (parts.length === 1) {
-      return parts[0];
+  /* A fresh sky: `count` stars spread around the middle of the field rather than clumped, in the
+     0-100 space every sky world reads (the wish constellation keeps them as vw and vh). */
+  function seedSky(count) {
+    var n = Math.max(1, Math.min(MAX_STARS, count || SEED_COUNT));
+    var stars = [];
+    var start = Math.floor(Math.random() * SEED_THOUGHTS.length);
+    for (var i = 0; i < n; i++) {
+      var angle = (i / n) * Math.PI * 2 + (Math.random() - 0.5) * 0.8;
+      var radius = 14 + Math.random() * 24;
+      stars.push({
+        x: Number(Math.min(92, Math.max(8, 50 + Math.cos(angle) * radius)).toFixed(2)),
+        y: Number(Math.min(86, Math.max(12, 48 + Math.sin(angle) * radius * 0.8)).toFixed(2)),
+        text: SEED_THOUGHTS[(start + i) % SEED_THOUGHTS.length]
+      });
     }
-    return parts.slice(0, -1).join(', ') + ' and ' + parts[parts.length - 1];
+    return stars;
   }
 
-  function countStars(value) {
-    if (!Array.isArray(value)) {
-      return 0;
-    }
-    var count = 0;
-    for (var i = 0; i < value.length; i++) {
-      var star = value[i];
-      if (!star || typeof star !== 'object') continue;
-      if (typeof star.x === 'number' && typeof star.y === 'number' && typeof star.text === 'string') {
-        count += 1;
-      }
-    }
-    return count;
+  function el(tag, className, text) {
+    var node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text) node.textContent = text;
+    return node;
   }
 
-  function preferredWorldFromReading() {
-    var saved = store.read('threshold', null);
-    if (saved.status !== 'ok' || !saved.value || typeof saved.value !== 'object') {
-      return null;
-    }
-    var id = saved.value.orientation;
-    if (typeof id !== 'string') {
-      return null;
-    }
-    return ORIENTATION_WORLD[id] || null;
-  }
+  var unlockCount = 0;
 
-  function circuitIndex(href) {
-    for (var i = 0; i < CIRCUIT.length; i++) {
-      if (CIRCUIT[i].href === href) {
-        return i;
-      }
+  function unlock(host, options) {
+    var opts = options || {};
+    var key = opts.key || SKY;
+    var holds = typeof opts.holds === 'function' ? opts.holds : holdsSky;
+    var seed = typeof opts.seed === 'function' ? opts.seed : seedSky;
+    var onReady = typeof opts.onReady === 'function' ? opts.onReady : function () {};
+    var read = store ? store.read(key, null) : { status: 'unavailable', value: null };
+
+    if (read.status === 'ok' && holds(read.value)) {
+      onReady(read.value, 'saved');
+      return true;
     }
-    return -1;
-  }
-
-  function circuitLabel(href) {
-    var idx = circuitIndex(href);
-    return idx === -1 ? href : CIRCUIT[idx].where;
-  }
-
-  function circuitDestination(preferredHref) {
-    var here = circuitIndex(currentFile);
-    if (here !== -1) {
-      return CIRCUIT[(here + 1) % CIRCUIT.length];
+    if (!host || !host.parentNode) {
+      onReady(null, 'missing');
+      return false;
     }
 
-    if (preferredHref) {
-      var preferred = circuitIndex(preferredHref);
-      if (preferred !== -1) {
-        return CIRCUIT[preferred];
-      }
-    }
-
-    return CIRCUIT[0];
-  }
-
-  function setPassport(status, next) {
-    if (passportStatusEl) {
-      passportStatusEl.textContent = status;
-    }
-    if (passportNextEl) {
-      passportNextEl.textContent = next;
-    }
-  }
-
-  function normalizeVisited(list) {
-    var out = [];
-    if (!Array.isArray(list)) return out;
-    for (var i = 0; i < list.length; i++) {
-      if (circuitIndex(list[i]) === -1) continue;
-      if (out.indexOf(list[i]) !== -1) continue;
-      out.push(list[i]);
-    }
-    return out;
-  }
-
-  function sanitizeTitles(list) {
-    var out = [];
-    if (!Array.isArray(list)) return out;
-    for (var i = 0; i < list.length; i++) {
-      if (typeof list[i] !== 'string') continue;
-      var title = list[i].trim();
-      if (!title) continue;
-      if (out.indexOf(title) !== -1) continue;
-      out.push(title);
-      if (out.length >= HONORS_LIMIT) break;
-    }
-    return out;
-  }
-
-  function mintRelayTitle(stars, loops) {
-    var count = Math.max(1, stars || 0);
-    var rank = RELAY_RANK[(count + loops * 3) % RELAY_RANK.length];
-    var role = RELAY_ROLE[(loops + count * 5) % RELAY_ROLE.length];
-    return rank + ' ' + role + ' · loop ' + loops + ' · ' + count + ' star' + (count === 1 ? '' : 's');
-  }
-
-  function setPassportProgress(visitedCount, totalCount) {
-    var ratio = totalCount ? (visitedCount / totalCount) : 0;
-    var width = Math.max(0, Math.min(100, ratio * 100));
-
-    if (passportMeterEl) {
-      passportMeterEl.setAttribute('aria-valuenow', String(visitedCount));
-      passportMeterEl.setAttribute('aria-valuemax', String(totalCount));
-    }
-    if (passportFillEl) {
-      passportFillEl.style.width = width.toFixed(1) + '%';
-    }
-    if (passportCountEl) {
-      passportCountEl.textContent = visitedCount + ' of ' + totalCount + ' relay worlds marked'
-        + (relay.completed ? ' · loops completed ' + relay.completed + '.' : '.');
-    }
-  }
-
-  function updatePassportProgress() {
-    if (!inCircuit) return;
-
-    var marked = relay.visited.length;
-    setPassportProgress(marked, CIRCUIT.length);
-
-    if (passportNextLinkEl) {
-      var destination = circuitDestination(preferredWorldFromReading());
-      passportNextLinkEl.href = destination.href;
-      passportNextLinkEl.textContent = 'continue to ' + destination.where;
-    }
-  }
-
-  function randomCircuitJump() {
-    var options = CIRCUIT.filter(function (node) {
-      return node.href !== currentFile;
-    });
-    if (!options.length) options = CIRCUIT.slice();
-    var pick = options[Math.floor(Math.random() * options.length)];
-    if (pick) window.location.href = pick.href;
-  }
-
-  function currentStoredStars() {
-    var saved = store.read('constellation', []);
-    if (saved.status !== 'ok') return 0;
-    return countStars(saved.value);
-  }
-
-  function normalizeRelay(value) {
-    var normalized = {
-      visited: [],
-      completed: 0,
-      titles: [],
-      reachedNow: false
-    };
-
-    if (!value || typeof value !== 'object') return normalized;
-
-    normalized.visited = normalizeVisited(value.visited);
-    normalized.completed = typeof value.completed === 'number' && value.completed > 0
-      ? Math.floor(value.completed)
-      : 0;
-    normalized.titles = sanitizeTitles(value.titles);
-    return normalized;
-  }
-
-  function saveRelay() {
-    return store.set(RELAY, {
-      visited: relay.visited,
-      completed: relay.completed,
-      titles: relay.titles
-    });
-  }
-
-  function addRelayTitle(title) {
-    if (!title) return;
-    relay.titles = relay.titles.filter(function (item) { return item !== title; });
-    relay.titles.unshift(title);
-    if (relay.titles.length > HONORS_LIMIT) {
-      relay.titles = relay.titles.slice(0, HONORS_LIMIT);
-    }
-  }
-
-  function relayStory(destination, stars) {
-    if (!inCircuit) return '';
-
-    if (relayStatus === 'unreadable') {
-      return 'Relay memory is unreadable in this browser context.';
-    }
-    if (relayStatus === 'unavailable' || !relayPersisted) {
-      return 'Relay marks are in memory only for this visit.';
-    }
-
-    var marked = relay.visited.length;
-    if (!marked) {
-      return 'No relay marks yet. Start from any sky world and keep moving.';
-    }
-
-    var names = relay.visited.map(circuitLabel).join(' -> ');
-    if (marked >= CIRCUIT.length) {
-      var latestHonor = relay.titles.length ? (' Latest honor: ' + relay.titles[0] + '.') : '';
-      return 'Relay complete: ' + names + '.' + latestHonor;
-    }
-
-    var left = CIRCUIT.length - marked;
-    var prompt = destination ? (' Next hop: ' + destination.where + '.') : '';
-    return marked + ' of ' + CIRCUIT.length + ' relay worlds marked (' + names + '). '
-      + left + ' left.' + prompt;
-  }
-
-  function disableHonorControls(disabled) {
-    if (honorsPreviewBtn) honorsPreviewBtn.disabled = disabled;
-    if (honorsClearBtn) honorsClearBtn.disabled = disabled;
-  }
-
-  function renderHonors(stars) {
-    if (!honorsStatusEl || !honorsListEl) return;
-
-    while (honorsListEl.firstChild) {
-      honorsListEl.removeChild(honorsListEl.firstChild);
-    }
-
-    if (relayStatus === 'unreadable') {
-      honorsStatusEl.textContent = 'Relay honor memory is unreadable in this browser context.';
-      var unreadable = document.createElement('li');
-      unreadable.className = 'constellation-honors-empty';
-      unreadable.textContent = 'Clear state from the menu to start a fresh honor board.';
-      honorsListEl.appendChild(unreadable);
-      disableHonorControls(true);
-      return;
-    }
-
-    disableHonorControls(false);
-
-    if (!relay.titles.length) {
-      var empty = document.createElement('li');
-      empty.className = 'constellation-honors-empty';
-      empty.textContent = 'No honors minted yet. Complete a full relay loop to earn one.';
-      honorsListEl.appendChild(empty);
-    } else {
-      for (var i = 0; i < relay.titles.length; i++) {
-        var item = document.createElement('li');
-        item.textContent = relay.titles[i];
-        honorsListEl.appendChild(item);
-      }
-    }
-
-    var persistence = '';
-    if (relayStatus === 'unavailable' || !relayPersisted) {
-      persistence = ' This board is in memory only for this visit.';
-    } else {
-      persistence = ' Honors are saved in this browser.';
-    }
-
-    var previewLoop = relay.completed + 1;
-    var preview = mintRelayTitle(stars, previewLoop);
-
-    honorsStatusEl.textContent = relay.titles.length
-      ? (relay.titles.length + ' honor' + (relay.titles.length === 1 ? '' : 's') + ' minted. Next preview: ' + preview + '.' + persistence)
-      : ('Next honor preview: ' + preview + '.' + persistence);
-  }
-
-  function resetRelayMarks() {
-    relay.visited = [];
-    relay.reachedNow = false;
-
-    relayPersisted = saveRelay();
-    updatePassportProgress();
-
-    var destination = circuitDestination(preferredWorldFromReading());
-    if (relayPersisted) {
-      setPassport(
-        'Relay marks reset for this browser.',
-        'Start from any sky world and leave a fresh trail. Suggested next hop: ' + destination.where + '.'
-      );
-    } else {
-      setPassport(
-        'Relay marks reset in memory for this visit.',
-        'This browser cannot keep relay marks after you leave. Continue to ' + destination.where + ' now.'
-      );
-    }
-
-    var stars = currentStoredStars();
-    if (stars > 0) {
-      trailEl.textContent = 'Relay reset complete. ' + stars + ' saved star'
-        + (stars === 1 ? ' is' : 's are')
-        + ' still live across the circuit.';
-    } else {
-      trailEl.textContent = 'Relay reset complete. Place one star in the wish constellation to start a fresh run.';
-    }
-
-    renderHonors(stars);
-  }
-
-  var inCircuit = circuitIndex(currentFile) !== -1;
-
-  // Track relay progress across constellation worlds in the one shared state document.
-  var relayRead = store.read(RELAY, { visited: [], completed: 0, titles: [] });
-  var relayStatus = relayRead.status;
-  var relayPersisted = true;
-  var relay = normalizeRelay(relayRead.value);
-
-  if (inCircuit && (relayStatus === 'ok' || relayStatus === 'missing')) {
-    var before = relay.visited.length;
-    if (relay.visited.indexOf(currentFile) === -1) {
-      relay.visited.push(currentFile);
-    }
-    if (before < CIRCUIT.length && relay.visited.length === CIRCUIT.length) {
-      relay.reachedNow = true;
-      relay.completed += 1;
-      addRelayTitle(mintRelayTitle(currentStoredStars(), relay.completed));
-    }
-    relayPersisted = saveRelay();
-  }
-
-  if (passportRandomBtn) {
-    passportRandomBtn.addEventListener('click', randomCircuitJump);
-  }
-  if (passportResetBtn) {
-    passportResetBtn.addEventListener('click', resetRelayMarks);
-  }
-  if (honorsPreviewBtn) {
-    honorsPreviewBtn.addEventListener('click', function () {
-      var stars = currentStoredStars();
-      var preview = mintRelayTitle(stars, relay.completed + 1);
-      if (honorsStatusEl) {
-        honorsStatusEl.textContent = 'Next honor preview: ' + preview + '.';
-      }
-    });
-  }
-  if (honorsClearBtn) {
-    honorsClearBtn.addEventListener('click', function () {
-      relay.titles = [];
-      relayPersisted = saveRelay();
-      renderHonors(currentStoredStars());
-      if (honorsStatusEl) {
-        honorsStatusEl.textContent = 'Honor board cleared. Complete another loop to mint a new one.';
-      }
-    });
-  }
-
-  // 'unavailable' and 'unreadable' are the whole document's business rather than any one name's, so
-  // the first read settles them and there is nothing to learn from reading the rest.
-  var found = [];
-  var trouble = null;
-
-  for (var i = 0; i < KEPT.length; i++) {
-    var saved = store.read(KEPT[i].key, null);
-    if (saved.status === 'unavailable' || saved.status === 'unreadable') {
-      trouble = saved.status;
-      break;
-    }
-    if (held(saved.value)) {
-      found.push({ kept: KEPT[i], value: saved.value });
-    }
-  }
-
-  var constellation = store.read('constellation', []);
-  if (!trouble && (constellation.status === 'unavailable' || constellation.status === 'unreadable')) {
-    trouble = constellation.status;
-  }
-  var stars = constellation.status === 'ok' ? countStars(constellation.value) : 0;
-
-  // Nothing to go back to leaves the link exactly as the layout wrote it, which is the one
-  // destination that assumes nothing: the atlas of every orientation.
-  if (trouble === 'unavailable') {
-    statusEl.textContent = 'this browser stores nothing, so nothing you make here will be waiting.';
-    trailEl.textContent = 'The site still works as a full map; it only cannot carry your trail forward.';
-    if (inCircuit) {
-      setPassport(
-        'This browser keeps no lasting trail, so this relay resets when you leave.',
-        'You can still roam every world in any order.'
-      );
-      updatePassportProgress();
-    }
-    renderHonors(stars);
-    wireWayfindingJumps();
-    return;
-  }
-  if (trouble === 'unreadable') {
-    statusEl.textContent = 'what this browser saved cannot be read. the state menu can clear it.';
-    trailEl.textContent = 'After clearing, leave one trace in any world and the trail rebuilds from there.';
-    if (inCircuit) {
-      setPassport(
-        'Saved sky data is unreadable in this browser right now.',
-        'Clear state from the menu, place one star in the wish constellation, then continue through the circuit.'
-      );
-      updatePassportProgress();
-    }
-    renderHonors(stars);
-    wireWayfindingJumps();
-    return;
-  }
-
-  if (!found.length) {
-    statusEl.textContent = 'nothing kept in this browser yet.';
-    trailEl.textContent = 'Start a trail by leaving one thing in any world, then follow what it opens.';
-    if (inCircuit) {
-      setPassport(
-        'No saved stars are live in the relay yet.',
-        'Start at the wish constellation, place one thought-star, then continue through the circuit.'
-      );
-      updatePassportProgress();
-    }
-    renderHonors(stars);
-    wireWayfindingJumps();
-    return;
-  }
-
-  var named = [];
-  for (i = 0; i < found.length && i < NAMED; i++) {
-    named.push(phrase(found[i].kept, found[i].value));
-  }
-  var rest = found.length - named.length;
-  if (rest) {
-    named.push(rest === 1 ? 'one more world' : rest + ' more worlds');
-  }
-  statusEl.textContent = 'kept here: ' + sentence(named) + '.';
-
-  if (stars > 0) {
-    var preferred = preferredWorldFromReading();
-    var destination = circuitDestination(preferred);
-    linkEl.setAttribute('href', destination.href);
-    linkEl.textContent = 'continue to ' + destination.where;
-
-    var prompt = TRAIL_PROMPTS[(stars + found.length + currentFile.length) % TRAIL_PROMPTS.length];
-    trailEl.textContent = prompt + ' ' + stars + ' star' + (stars === 1 ? ' is' : 's are') + ' live across the circuit.';
-
-    if (inCircuit) {
-      var relayLine = relayStory(destination, stars);
-      setPassport(
-        stars + ' saved star' + (stars === 1 ? ' is' : 's are') + ' live in this relay.',
-        relayLine
-      );
-      updatePassportProgress();
-      if (relay.reachedNow) {
-        var honor = relay.titles.length ? relay.titles[0] : mintRelayTitle(stars, relay.completed || 1);
-        trailEl.textContent = 'Relay completed across all eight constellation worlds. Honor minted: '
-          + honor + '. Move one star and run the whole circuit again for a new one.';
-      }
-    }
-
-    renderHonors(stars);
-    wireWayfindingJumps();
-    return;
-  }
-
-  trailEl.textContent = 'Start a sky trail by placing one thought in the wish constellation; linked worlds will then reinterpret it.';
-
-  if (inCircuit) {
-    var fallbackDestination = circuitDestination(preferredWorldFromReading());
-    setPassport(
-      'The relay is waiting for its first saved sky.',
-      relayStory(fallbackDestination, 0)
-    );
-    updatePassportProgress();
-  }
-
-  for (i = 0; i < found.length; i++) {
-    if (found[i].kept.href !== currentFile) {
-      linkEl.setAttribute('href', found[i].kept.href);
-      linkEl.textContent = 'back to ' + found[i].kept.where;
-      renderHonors(stars);
-      wireWayfindingJumps();
-      return;
-    }
-  }
-
-  renderHonors(stars);
-  wireWayfindingJumps();
-
-  function uniqueWorlds(list) {
-    var seen = Object.create(null);
-    var out = [];
-    for (var i = 0; i < list.length; i++) {
-      var item = list[i];
-      if (!item || typeof item.href !== 'string') continue;
-      if (seen[item.href]) continue;
-      seen[item.href] = true;
-      out.push(item);
-    }
-    return out;
-  }
-
-  function worldPool(base, avoid) {
-    var items = uniqueWorlds(base);
-    var out = [];
-    for (var i = 0; i < items.length; i++) {
-      var href = items[i].href;
-      if (href === currentFile) continue;
-      if (avoid && href === avoid) continue;
-      out.push(items[i]);
-    }
-    return out;
-  }
-
-  function randomPick(list) {
-    if (!list.length) return null;
-    return list[Math.floor(Math.random() * list.length)];
-  }
-
-  function routeJump(mode) {
-    var preferred = preferredWorldFromReading();
-    var pool;
-
-    if (mode === 'counter') {
-      var preferredInCircuit = preferred && circuitIndex(preferred) !== -1;
-      var preferredInOffSky = false;
-      for (var i = 0; i < OFF_SKY.length; i++) {
-        if (OFF_SKY[i].href === preferred) {
-          preferredInOffSky = true;
-          break;
-        }
-      }
-
-      if (preferredInCircuit) {
-        pool = worldPool(OFF_SKY.concat(WAYFINDING), preferred);
-      } else if (preferredInOffSky) {
-        pool = worldPool(CIRCUIT.concat(WAYFINDING), preferred);
+    var copy = opts.copy || {};
+    var title = copy.title || 'no sky yet';
+    var note = copy.note;
+    var button = copy.button || 'seed a sky to begin';
+    if (!note) {
+      if (read.status === 'unavailable') {
+        note = 'This part reads the sky kept in this browser, and this browser keeps nothing between visits. A sky seeded here lasts until you leave.';
+        button = copy.button || 'seed a sky for now';
+      } else if (read.status === 'unreadable') {
+        title = copy.title || 'the saved sky cannot be read';
+        note = 'What this browser kept of the sky is not something this part can use. A fresh one replaces it.';
+        button = copy.button || 'start a fresh sky';
       } else {
-        pool = worldPool(ALL_WORLDS, preferred);
+        note = 'This part reads the sky kept in this browser, and there is none yet.';
       }
-    } else {
-      pool = worldPool(ALL_WORLDS, null);
+    }
+    var elsewhere = 'elsewhere' in opts ? opts.elsewhere
+      : { href: root + 'wish-constellation.html', text: 'or place your own stars in the wish constellation' };
+
+    unlockCount += 1;
+    var box = el('div', 'unlock');
+    var heading = el('p', 'unlock-title', title);
+    heading.id = 'unlock-title-' + unlockCount;
+    box.setAttribute('role', 'group');
+    box.setAttribute('aria-labelledby', heading.id);
+    box.appendChild(heading);
+    box.appendChild(el('p', 'unlock-note', note));
+    var controls = el('div', 'controls');
+    var go = el('button', 'unlock-go', button);
+    go.type = 'button';
+    controls.appendChild(go);
+    box.appendChild(controls);
+    if (elsewhere && elsewhere.href) {
+      var link = el('a', 'unlock-else', elsewhere.text || elsewhere.href);
+      link.href = elsewhere.href;
+      box.appendChild(link);
     }
 
-    var pick = randomPick(pool);
-    if (!pick) {
-      pick = randomPick(worldPool(ALL_WORLDS, null));
-    }
-    if (pick) {
-      return pick;
-    }
-    return { href: 'index.html', where: 'the threshold' };
-  }
+    host.parentNode.insertBefore(box, host);
+    host.classList.add('powered-down');
+    host.setAttribute('inert', '');
+    host.setAttribute('aria-hidden', 'true');
 
-  function inList(list, href) {
-    for (var i = 0; i < list.length; i++) {
-      if (list[i].href === href) return true;
-    }
+    go.addEventListener('click', function () {
+      var value = seed();
+      var kept = store ? store.set(key, value) : false;
+      if (box.parentNode) box.parentNode.removeChild(box);
+      host.classList.remove('powered-down');
+      host.removeAttribute('inert');
+      host.removeAttribute('aria-hidden');
+      var first = host.querySelector('button:not([disabled]), a[href], input, [tabindex]');
+      if (first && typeof first.focus === 'function') first.focus();
+      onReady(value, kept ? 'seeded' : 'memory');
+    });
     return false;
   }
 
-  function pickUnique(list, avoid) {
-    var candidates = [];
-    for (var i = 0; i < list.length; i++) {
-      if (!list[i] || !list[i].href) continue;
-      if (avoid.indexOf(list[i].href) !== -1) continue;
-      if (list[i].href === currentFile) continue;
-      candidates.push(list[i]);
+  /* The one random control on the site: the "send me somewhere" button in the index of every
+     world, which picks any world but this one. It is hidden in the markup, because without
+     scripting it would do nothing. */
+  function wireRandom() {
+    var button = document.getElementById('worlds-random');
+    if (!button) return;
+    var here = document.documentElement.getAttribute('data-page')
+      || (window.location.pathname || '').split('/').pop() || 'index.html';
+    var links = document.querySelectorAll('.worlds .chips a[href]');
+    var pool = [];
+    for (var i = 0; i < links.length; i++) {
+      var href = links[i].getAttribute('href');
+      if (href && href !== here && href.split('/').pop() !== here && pool.indexOf(href) === -1) pool.push(href);
     }
-    if (!candidates.length) return null;
-    return candidates[Math.floor(Math.random() * candidates.length)];
+    if (!pool.length) return;
+    button.hidden = false;
+    button.addEventListener('click', function () {
+      window.location.href = pool[Math.floor(Math.random() * pool.length)];
+    });
   }
 
-  function plotTrail() {
-    var preferred = preferredWorldFromReading();
-    var avoid = [currentFile];
-    var planned = [];
-
-    function push(world) {
-      if (!world || !world.href) return;
-      if (avoid.indexOf(world.href) !== -1) return;
-      planned.push(world);
-      avoid.push(world.href);
-    }
-
-    if (preferred && preferred !== currentFile) {
-      var preferredWorld = null;
-      for (var i = 0; i < ALL_WORLDS.length; i++) {
-        if (ALL_WORLDS[i].href === preferred) {
-          preferredWorld = ALL_WORLDS[i];
-          break;
-        }
-      }
-      push(preferredWorld);
-    } else {
-      push(routeJump('surprise'));
-    }
-
-    if (planned.length) {
-      var first = planned[0];
-      if (inList(CIRCUIT, first.href)) push(pickUnique(OFF_SKY, avoid));
-      else if (inList(OFF_SKY, first.href)) push(pickUnique(CIRCUIT, avoid));
-      else push(routeJump('counter'));
-    }
-
-    if (planned.length < 2) push(routeJump('counter'));
-    if (planned.length < 3) push(routeJump('surprise'));
-
-    if (planned.length < 3) {
-      var fill = worldPool(ALL_WORLDS, null);
-      while (planned.length < 3 && fill.length) {
-        var next = pickUnique(fill, avoid);
-        if (!next) break;
-        push(next);
-      }
-    }
-
-    return planned.slice(0, 3);
-  }
-
-  function setWayfindingJumpNote(text) {
-    var notes = document.querySelectorAll('[data-wayfinding-jump-note]');
-    for (var i = 0; i < notes.length; i++) {
-      notes[i].textContent = text;
+  function retireOldKeys() {
+    if (!store || typeof store.keys !== 'function') return;
+    var kept = store.keys();
+    for (var i = 0; i < RETIRED_KEYS.length; i++) {
+      if (kept.indexOf(RETIRED_KEYS[i]) !== -1) store.remove(RETIRED_KEYS[i]);
     }
   }
 
-  function renderTrail(trail) {
-    var hosts = document.querySelectorAll('[data-wayfinding-trail]');
-    for (var i = 0; i < hosts.length; i++) {
-      var host = hosts[i];
-      var list = host.querySelector('[data-wayfinding-trail-list]');
-      var start = host.querySelector('[data-wayfinding-trail-start]');
-      if (!list || !start) continue;
+  window.interestingSite = {
+    unlock: unlock,
+    seedSky: seedSky,
+    holdsSky: holdsSky,
+    root: root,
+    skyKey: SKY
+  };
 
-      while (list.firstChild) list.removeChild(list.firstChild);
-
-      if (!trail || !trail.length) {
-        host.hidden = true;
-        start.href = 'index.html';
-        start.textContent = 'start this trail';
-        continue;
-      }
-
-      for (var j = 0; j < trail.length; j++) {
-        var item = document.createElement('li');
-        if (trail[j].href === currentFile) {
-          var current = document.createElement('span');
-          current.className = 'current';
-          current.textContent = trail[j].where + ' (you are here)';
-          item.appendChild(current);
-        } else {
-          var link = document.createElement('a');
-          link.href = trail[j].href;
-          link.textContent = trail[j].where;
-          item.appendChild(link);
-        }
-        list.appendChild(item);
-      }
-
-      host.hidden = false;
-      start.href = trail[0].href;
-      start.textContent = 'start with ' + trail[0].where;
-    }
+  function start() {
+    wireRandom();
+    retireOldKeys();
   }
 
-  function wireWayfindingJumps() {
-    var buttons = document.querySelectorAll('[data-wayfinding-jump]');
-    if (!buttons.length) return;
-
-    for (var i = 0; i < buttons.length; i++) {
-      buttons[i].addEventListener('click', function () {
-        var mode = this.getAttribute('data-wayfinding-jump') || 'surprise';
-
-        if (mode === 'trail') {
-          var trail = plotTrail();
-          renderTrail(trail);
-          if (trail.length) {
-            setWayfindingJumpNote('Trail plotted: ' + trail.map(function (step) { return step.where; }).join(' -> ') + '.');
-          } else {
-            setWayfindingJumpNote('Could not plot a trail right now. Try again.');
-          }
-          return;
-        }
-
-        var picked = routeJump(mode);
-
-        if (mode === 'counter') {
-          setWayfindingJumpNote('Counter-jump selected: ' + picked.where + '.');
-        } else {
-          setWayfindingJumpNote('Surprise jump selected: ' + picked.where + '.');
-        }
-
-        window.location.href = picked.href;
-      });
-    }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', start);
+  } else {
+    start();
   }
 })();

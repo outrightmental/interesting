@@ -61,21 +61,26 @@ is deliberately small: a foundation to build a more holistic experience on, not 
   pipeline. An `.html` file is a [Nunjucks](https://mozilla.github.io/nunjucks/) template with
   optional YAML front matter; `layout: layout.njk` wraps it in the shared shell in
   [`site/_includes`](site/_includes), so the `<head>`, the stylesheet links, the analytics,
-  local-state and mood lines, the mood ribbon and the footer are written once instead of in every
-  page, and a page is little more than its `<main>`.
+  local-state, mood and helper lines, the header, the mood ribbon and the index of every world are
+  written once instead of in every page, and a page is nothing but its `<main>`. The index and the
+  site map are rendered from [`site/_data/worlds.json`](site/_data/worlds.json), Eleventy global
+  data that every template reads as `worlds`: the one list of the site's pages.
   A `.scss` file
   compiles to `.css` at the same path, and one whose name starts with `_` is a partial, built into
   whatever `@use`s it and never on its own. Every other file type is copied through verbatim, never
   rendered, so a stray `{{` in a script cannot break a build.
 - **Common files.** [`site/_sass`](site/_sass) is what "shared partials" means here: the palette as
   custom properties a page can override (`_tokens.scss`), the base rules, the panel, the controls,
-  the footer, the fourteen mood palettes and the query styling the mood flow renders into
-  (`_mood.scss`), the values the stylesheets have in common (`_vars.scss`, which emits no CSS of
+  the index of every world, the unlock box, the fourteen mood palettes and the query styling the
+  mood flow renders into (`_mood.scss`), the values the stylesheets have in common (`_vars.scss`, which emits no CSS of
   its own) and the monospace readout ten pages use (`_readout.scss`, a mixin). `css/site.scss` is those
   partials and nothing else, and every page links the `css/site.css` it compiles to. `css/<page>.scss`
   holds what is true of that page alone and is linked after it, so a page overrides rather than
   repeats. `error.html` writes its styles into the page instead: CloudFront returns it for any 404,
-  at whatever path was asked for, so a relative `<link>` next to it would be a guess.
+  at whatever path was asked for, so a relative `<link>` next to it would be a guess. For the same
+  reason it names the site's root in its front matter (`siteRoot: /`), and the layout writes its
+  scripts and links from there; it is the one page that does, and a copy of the site served under
+  a sub-path sets that sub-path there instead.
 - **Output paths mirror source paths.** `site/index.html` becomes `index.html` and
   `site/css/site.scss` becomes `css/site.css`. Eleventy's "pretty" permalinks would turn
   `about.html` into `about/index.html`, which would break every relative link the site is written
@@ -212,6 +217,75 @@ for a while, which is exactly why it has to be ruled out by name.
   A test holds that open: it asserts the accepted plan *and* that no seventh `check_` has quietly
   appeared.
 
+### Legible to a stranger
+
+Engagement time says how good the site has to be and *One single experience* says what shape it has
+to be in. This says what it has to read like: **legible to a stranger** — a first-time visitor on a
+phone can tell what the site is, what any page is for, what to do on it and where to go next,
+without being told twice. Confusion spends engagement time as surely as boredom does, and a site
+rewritten continuously by a model told to engage and to federate drifts, left to itself, towards
+more chrome: by 2026-10-05 every sky page ended in eight stacked "relay" panels, three trail
+gadgets and a world index, ~85 controls and six thousand pixels on a phone, nine of them ways of
+saying where to go next, and the home page explained none of its own words.
+
+- **Stated in the prompt.** `LEGIBLE` names the standard beside `WHOLE` and `INTERESTING` in
+  [`.github/scripts/make_interesting.py`](.github/scripts/make_interesting.py), and the system
+  prompt spells out what it asks for under `LEGIBLE TO A STRANGER`, before the `Rules:` block so it
+  is in hand while a run is still choosing, and again in the line a run reads last.
+- **Six holds**, each one a thing a run can check its own change against: one name per page, used
+  everywhere; one sentence of plain purpose at the top of every page, with the site's own terms
+  explained once where a visitor first meets them; one way to do each thing (one navigation, one
+  suggestion of where next, one index of every world, one place that asks — a new control
+  improves the one that exists or replaces it, never stands beside it); content first and chrome
+  small (the shared header and ribbon are a few lines, a page's own content starts within the first
+  screen of a phone, what closes a page is shorter than the page); copy that speaks to the visitor
+  and never about the machinery; and never a dead end, which is its own standard below.
+- **Deliberately not held to in code.** No check could judge whether a page reads clearly, so the
+  prompt is where this standard lives, exactly as `WHOLE` and `INTERESTING` do: the six coded axioms
+  are still the whole of what the code refuses, and `LegibilityStandardTest` holds the prompt to
+  the standard the way `EngagementTimeTest` holds it to the measure.
+- **One list of pages.** [`site/_data/worlds.json`](site/_data/worlds.json) is the one place a
+  page's name, group, orientation and one-line description are kept. The header, the index of
+  every world ([`site/_includes/worlds.njk`](site/_includes/worlds.njk)), the site map, the mood
+  atlas and the sky circuit are rendered from it, counts included, so most of "one name per page"
+  is a property of the build. Three places still carry the name by hand and change with the list:
+  the page's own `title:` and `<h1>`, its `worldName` in `js/threshold.js`, and its `<loc>` in
+  `sitemap.xml`.
+- **The shell it left behind.** The header is the site's name, one line about it, and three links;
+  the ribbon is one sentence and, on the threshold, the question; every page but the site map and
+  the mood atlas (which list every page themselves) ends with the one index of every world, which on a sky world leads with the sky group and says which of the eight
+  this is and which is next. That is the whole of the shared chrome, written once in
+  [`site/_includes/layout.njk`](site/_includes/layout.njk), and a page sets nothing about
+  navigation: no footer lists, no notes, no includes. A run is asked to keep it that size.
+
+### Powered down, never broken
+
+Wherever a component depends on something the visitor has not done yet, the component's only
+announcement of that is the solution, in place (issue #46). A world that reads the saved sky does
+not say "make one on the wish constellation page first" and does not offer a *refresh* button to
+press after coming back: it presents as unpowered — dimmed, inert, like the part of an adventure
+game whose generator has not been started — and carries the one button that starts it, *seed a sky
+to begin*, which writes a small random sky to the shared state exactly as the wish constellation
+would, and powers the world up where the visitor stands. A quieter link to the page where the
+prerequisite usually happens may follow the button; it never replaces it.
+
+- **Stated in the prompt**, under `POWERED DOWN, NEVER BROKEN`, to the model only: as with `WHOLE`,
+  no check could tell a dead end from a deliberate one, so a seventh `check_` was ruled out
+  (issue #46, question 1).
+- **Held in the framework.** `window.interestingSite.unlock(host, { onReady })` in
+  [`site/js/site.js`](site/js/site.js) is the pattern made shared: pass it the element to power
+  down and the function to run once a sky exists, and it renders the unpowered state, the button and
+  the quiet link, writes the seeded sky through the one state store, and calls back — now, if a sky
+  is already there, or when the button is pressed. [`site/_sass/_unlock.scss`](site/_sass/_unlock.scss)
+  styles the powered-down host and the unlock box once for every page. The seven worlds that read
+  the sky use it; `js/site.js` is loaded without `defer` so the helper exists by the time a page's
+  own script runs.
+- **It applies when the prerequisite cannot be performed, too.** A browser that stores nothing
+  still gets the button; the sky it seeds lasts for the page, and the box says so in one line.
+- **The background action is the visitor's action.** The seeded sky is written under
+  `constellation` like any other and overwrites what was there (question 4), so every sky world,
+  the state menu and an exported document all see the same thing.
+
 ### Reachability axiom
 
 All of the content stays reachable from the root, through a navigation affordance and through a
@@ -347,7 +421,10 @@ iteration process rather than a one-off tidy-up.
   page to match. `values` holds the site's own page state and only that: the names today are
   `constellation` (the home sky every other page reinterprets), `capsules` and `omens`. The
   cookie-consent choice is not in there, because it belongs to the consent banner, which keeps it
-  itself.
+  itself. The shared shell writes two names and no more: `threshold`, the mood flow's reading, and
+  `constellation` when a visitor asks a powered-down world to seed a sky; the nine names the
+  shell's retired games once kept (`constellation-relay` and its kin) are taken out of a visitor's
+  document on load, so an export stays an honest account of what the site keeps.
 - **One way in and out.** `window.interestingState` owns the parsing, the defaults and every
   failure path. `read(key, fallback)` hands back `{ status, value }`, where `status` is `ok`,
   `missing`, `unreadable` or `unavailable` — a page can render first and explain afterwards, in its
@@ -407,6 +484,9 @@ this is an invariant of the iteration rather than a one-off change to the site a
   ([`site/js/threshold.js`](site/js/threshold.js)) is the whole flow: fourteen orientations and
   the world each one opens onto, the library of query mechanisms, the clock and time-zone signals
   read alongside an answer, how much of a past visit survives, and the ribbon every page shows.
+  The ribbon asks unprompted on the threshold, which is the page that is the question; on every
+  other page it invites — the question is one press away — so a visitor who followed a link to a
+  world meets the world first, and every mechanism carries its own *skip*.
 - **Queried, never asked to self-report.** A visitor is never asked to name their own state. They
   are asked about a door, a stone, the thing they would put in a pocket, the rate at which they
   tap, how long they hold a button down, where they put one mark in an empty field, which way they
@@ -421,9 +501,10 @@ this is an invariant of the iteration rather than a one-off change to the site a
   another is the single most interesting change there is to make here**. The prompt says so where
   a run chooses what to do, beside "add a page".
 - **Partly remembered.** What the site learns decays by half every thirty hours and a fresh answer
-  always outweighs what is left, so a visitor is read again on every arrival rather than filed once.
-  The ribbon says how long it has been since they were last here, and
-  [`site/moods.html`](site/moods.html) will run any mechanism on demand or forget them entirely.
+  always outweighs what is left, so a visitor is read again on every arrival at the threshold
+  rather than filed once, and invited to be read again on every other page.
+  [`site/moods.html`](site/moods.html) says how long it has been since they were last here, runs
+  any mechanism on demand, and forgets the reading on request.
   The reading itself is kept under `threshold` in the one local-state document, through
   `window.interestingState` like everything else the site remembers, so it exports and travels with
   the rest of a visitor's state — and the gap that document already records is what tells an
@@ -433,7 +514,7 @@ this is an invariant of the iteration rather than a one-off change to the site a
   `_tokens.scss`, so every page re-skins itself. The flow is ongoing rather than a gate at the
   front door: any page can ask again, in a new way.
 - **Never a gate.** The query sits outside `<main>`, and every world is a plain link from the
-  threshold, the site map and the shared wayfinding index, so the whole site is reachable with the
+  threshold, the site map and the shared index of every world, so the whole site is reachable with the
   question ignored, declined, or scripting switched off altogether. That is also what the
   reachability axiom demands, and `RealSiteTest` checks the stronger half of it: the threshold's
   own markup — not the scripts it loads — has to link to every world.

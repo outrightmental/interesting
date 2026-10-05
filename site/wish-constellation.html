@@ -1,14 +1,8 @@
 ---
 layout: layout.njk
 title: the wish constellation
-description: 'Place tiny thoughts as stars, drag them into a constellation, ask the sky what it sees, play it as a chime, mint a postcard.'
+description: 'A sky you fill with small thoughts as stars and drag into a shape, then ask for a reading, play as a chime or mint as a postcard.'
 stylesheet: wish-constellation
-footer:
-  - [index.html, back to the threshold]
-  - [moods.html, mood atlas]
-  - [constellation-diary.html, open the diary]
-  - [star-lantern.html, open the lantern ritual]
-footerNote: one world of several
 ---
   <canvas id='sky' aria-hidden='true'></canvas>
   <svg id='links' aria-hidden='true'></svg>
@@ -16,8 +10,8 @@ footerNote: one world of several
 
   <main>
     <h1>the wish constellation</h1>
-    <p class='tagline'>For looking up: distance, scale, and a sky you build yourself.</p>
-    <p class='story'>This sky is a wish constellation. Click to place tiny thoughts, drag stars to sketch your own sky map, then ask the sky what pattern it sees, or play your sky as a tiny synth melody.</p>
+    <p class='tagline'>Place small thoughts as stars and drag them into a shape. The sky you make here is the one every other world under the sky reads.</p>
+    <p class='hint sky-hint'>Tap or click the dark sky to place a star, drag a star to move it, tap one to read its thought.</p>
     <div class='controls'>
       <button id='drop' type='button'>drop a star</button>
       <button id='oracle' type='button'>ask the sky</button>
@@ -29,16 +23,12 @@ footerNote: one world of several
     </div>
     <p id='note' class='note' aria-live='polite'>No stars yet. Make the first one.</p>
 
-    <section id='postcard-panel' class='postcard' aria-live='polite'>
+    <section id='postcard-panel' class='postcard' aria-labelledby='postcard-title'>
       <h2 id='postcard-title'>Your constellation postcard</h2>
       <canvas id='postcard-canvas' width='396' height='210' aria-label='Constellation postcard preview'></canvas>
-      <p id='postcard-text' class='postcard-text'>Mint a postcard to capture your current sky pattern.</p>
+      <p id='postcard-text' class='postcard-text' aria-live='polite'>Mint a postcard to capture your current sky pattern.</p>
       <p class='hint postcard-hint'>Each postcard title is generated from your exact star arrangement.</p>
     </section>
-
-    <p class='hint'>Tip: click a star to read its thought, drag stars to reshape the web, catch meteors for rare thoughts, try star chime to hear your pattern, mint postcards as your sky evolves, or start orbit mode to make the whole sky dance.</p>
-
-{% include "footer.njk" %}
   </main>
 
   <script>
@@ -127,7 +117,7 @@ footerNote: one world of several
 
       function saveStars() {
         if (!state.set(SKY, serializeStars())) {
-          setNote('Saved in memory only. Local storage is unavailable.');
+          setNote('Kept for this visit only. This browser stores nothing between visits.');
         }
       }
 
@@ -587,7 +577,7 @@ footerNote: one world of several
         if (!meteor || meteor.caught) return;
         meteor.caught = true;
         addStar(clamp(meteor.x, 3, 97), clamp(meteor.y, 3, 97), randomCometThought());
-        setNote('☄ Meteor caught! A comet thought has joined your constellation.');
+        setNote('☄ Meteor caught. A comet thought has joined your constellation.');
         removeMeteor(meteor);
       }
 
@@ -680,6 +670,7 @@ footerNote: one world of several
       }
 
       function clearStars() {
+        var count = stars.length;
         activeDrag = null;
         toggleOrbit(true);
         stopChime(true);
@@ -690,7 +681,11 @@ footerNote: one world of several
         state.remove(SKY);
         postcardPanel.classList.remove('show');
         queueLinksRender();
-        setNote('Sky cleared. Ready for a new constellation.');
+        if (!count) {
+          setNote('Nothing to clear. The sky was already empty.');
+          return;
+        }
+        setNote('Cleared ' + count + ' star' + (count === 1 ? '' : 's') + ' and forgot the saved sky in this browser. Place a star to begin again.');
       }
 
       function endDrag(pointerId) {
@@ -848,25 +843,21 @@ footerNote: one world of several
         setNote('🎵 Playing your constellation from west to east.');
       }
 
-      dropBtn.addEventListener('click', function (ev) {
-        ev.stopPropagation();
+      dropBtn.addEventListener('click', function () {
         addStar(50 + (Math.random() - 0.5) * 24, 50 + (Math.random() - 0.5) * 24, randomThought());
       });
 
-      oracleBtn.addEventListener('click', function (ev) {
-        ev.stopPropagation();
+      oracleBtn.addEventListener('click', function () {
         askTheSky();
       });
 
-      meteorBtn.addEventListener('click', function (ev) {
-        ev.stopPropagation();
+      meteorBtn.addEventListener('click', function () {
         if (spawnMeteor(performance.now(), true)) {
           setNote('A meteor streaks by. Click it to catch a rare thought.');
         }
       });
 
-      chimeBtn.addEventListener('click', function (ev) {
-        ev.stopPropagation();
+      chimeBtn.addEventListener('click', function () {
         if (chimePlaying) {
           stopChime(false);
           return;
@@ -874,18 +865,15 @@ footerNote: one world of several
         playChime();
       });
 
-      orbitBtn.addEventListener('click', function (ev) {
-        ev.stopPropagation();
+      orbitBtn.addEventListener('click', function () {
         toggleOrbit(false);
       });
 
-      postcardBtn.addEventListener('click', function (ev) {
-        ev.stopPropagation();
+      postcardBtn.addEventListener('click', function () {
         mintPostcard();
       });
 
-      clearBtn.addEventListener('click', function (ev) {
-        ev.stopPropagation();
+      clearBtn.addEventListener('click', function () {
         clearStars();
       });
 
@@ -909,13 +897,6 @@ footerNote: one world of several
         if (document.hidden && chimePlaying) stopChime(true);
       });
 
-      document.addEventListener('click', function (ev) {
-        var target = ev.target;
-        if (target && target.closest && target.closest('main')) return;
-        if (Date.now() < suppressStarClickUntil) return;
-        addStarFromPoint(ev.clientX, ev.clientY);
-      });
-
       loadStars();
       setOrbitButton();
       setChimeButton();
@@ -923,6 +904,14 @@ footerNote: one world of several
       var canvas = document.getElementById('sky');
       var ctx = canvas.getContext('2d');
       var dots = [];
+
+      // A tap on the sky itself places a star. The header, the ribbon, the panel and the index
+      // sit above the canvas, so a tap on any of them is theirs; nothing here listens on the
+      // document.
+      canvas.addEventListener('click', function (ev) {
+        if (Date.now() < suppressStarClickUntil) return;
+        addStarFromPoint(ev.clientX, ev.clientY);
+      });
 
       function resize() {
         canvas.width = window.innerWidth;

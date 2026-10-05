@@ -1,9 +1,24 @@
-// The frosted slab a page sits on, and the smaller panels inside it.
+// The frosted slab a page sits on, and the one kind of panel everything else on the site is made
+// of: the index of every world, the sky circuit's note, a page's own control panel. One border,
+// one radius, one background, one small-caps heading, one note line -- so that a panel reads as a
+// panel wherever it appears, and a new one costs a class and not a stylesheet.
+//
+//   .panel          the box
+//   .panel-title    its heading, small and uppercase: always an h2 or h3, never a styled <p>, so
+//                   the heading outline a screen reader walks stays real
+//   .panel-label    the same for an h3 inside a panel
+//   .panel-note     one explanatory line in the muted colour
+//   .panel-status   a line a script writes into (a page's #status is one)
+//   .panel-foot     the closing row of a panel
+//   .chips          a list of pill links; .chips-tall puts a sub-label under each name
+//   .controls--stack  the buttons of a row go full width on a phone
 
 @use 'vars';
+@use 'nav-chips';
 
 main {
-  width: min(940px, 96vw);
+  width: min(940px, 100%);
+  margin-inline: auto;
   border: 1px solid var(--line);
   border-radius: 16px;
   background: var(--panel);
@@ -17,4 +32,97 @@ main {
   border-radius: vars.$radius-panel;
   background: rgba(7, 10, 20, 0.56);
   padding: 0.8rem;
+}
+
+.panel-title,
+.panel-label {
+  margin: 0;
+  color: var(--accent2);
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.panel-label {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.panel-note {
+  margin: 0.35rem 0 0;
+  color: var(--muted);
+  font-size: 0.86rem;
+  line-height: 1.45;
+}
+
+.panel-note a {
+  color: var(--accent);
+}
+
+.panel-status {
+  margin: 0.4rem 0 0;
+  min-height: 1.25em;
+  color: #d8e6ff;
+  font-size: 0.86rem;
+  line-height: 1.45;
+}
+
+.panel-status.good {
+  color: var(--good);
+}
+
+.panel-foot {
+  margin: 0.65rem 0 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.panel-foot a {
+  color: var(--accent);
+}
+
+.chips {
+  list-style: none;
+  margin: 0.45rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.chips a {
+  @include nav-chips.chip;
+}
+
+.chips a[aria-current='page'] {
+  @include nav-chips.current;
+}
+
+.chips-tall a {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.1rem;
+  border-radius: vars.$radius-well;
+  padding: 0.4rem 0.7rem;
+}
+
+// The orientation a world answers to, under its name.
+.chips-tall a span {
+  color: var(--muted);
+  font-size: 0.76rem;
+}
+
+@media (max-width: 620px) {
+  .controls--stack {
+    flex-direction: column;
+  }
+
+  .controls--stack > * {
+    width: 100%;
+  }
 }

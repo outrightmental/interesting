@@ -14,7 +14,6 @@
   display: grid;
   align-content: start;
   gap: 0.5rem;
-  min-height: 300px;
   border: 1px solid vars.$hairline;
   border-radius: vars.$radius-panel;
   background:
@@ -24,6 +23,7 @@
 }
 
 .card[data-filled='true'] {
+  min-height: 300px;
   border-color: rgba(205, 188, 255, 0.4);
 }
 

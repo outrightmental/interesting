@@ -1603,6 +1603,66 @@ class EngagementTimeTest(unittest.TestCase):
                 self.assertIn(asked, prompt)
 
 
+class LegibilityStandardTest(unittest.TestCase):
+    """Issue #46 and the usability work of 2026-10-05: the site is legible to a stranger, and a
+    blocked component presents its own unlock. Both are standards stated to the model, like WHOLE
+    and INTERESTING, because no check could judge whether a page reads clearly or whether a dead
+    end is a deliberate one -- so the tests hold the prompt, not the site."""
+
+    def prompt(self):
+        return mi.build_prompt([("index.html", "<h1>hi</h1>")])
+
+    def test_the_standard_names_the_stranger_and_the_four_questions(self):
+        # Spelled out here rather than imported, so rewording LEGIBLE into something that no longer
+        # puts a first-time visitor's questions first fails this test instead of passing quietly.
+        self.assertIn("first-time visitor on a phone", mi.LEGIBLE)
+        for question in ["what the site is", "what any page is for", "what to do on it",
+                         "where to go next"]:
+            with self.subTest(question=question):
+                self.assertIn(question, mi.LEGIBLE)
+
+    def test_the_standard_is_stated_before_the_rules_and_after_the_choice(self):
+        prompt = self.prompt()
+        self.assertIn("LEGIBLE TO A STRANGER", prompt)
+        self.assertIn(mi.LEGIBLE, prompt)
+        self.assertLess(prompt.index("ADD something"), prompt.index("LEGIBLE TO A STRANGER"))
+        self.assertLess(prompt.index("LEGIBLE TO A STRANGER"), prompt.index("Rules:"))
+
+    def test_the_six_holds_are_each_named(self):
+        prompt = self.prompt()
+        for hold in ["One name per page", "One sentence of plain purpose", "One way to do each thing",
+                     "Content first, chrome small", "never about the machinery", "Never a dead end"]:
+            with self.subTest(hold=hold):
+                self.assertIn(hold, prompt)
+        # The shell is named as the thing a page may not add to, and the one list of pages is named.
+        self.assertIn("the header, the ribbon and the index of every world", prompt)
+        self.assertIn("_data/worlds.json", prompt)
+
+    def test_a_blocked_component_presents_its_own_unlock(self):
+        # Issue #46: the component powers itself up in place, never sends the visitor elsewhere,
+        # and the prompt names the shared helper a run uses for it.
+        prompt = self.prompt()
+        self.assertIn("POWERED DOWN, NEVER BROKEN", prompt)
+        self.assertIn("window.interestingSite.unlock(host, { onReady })", prompt)
+        self.assertIn('Never "make one on the wish constellation page first"', prompt)
+        self.assertIn('never "refresh after creating"', prompt)
+        self.assertIn("writing to the shared state exactly as the visitor's own action would", prompt)
+        self.assertIn("a browser that stores nothing still gets the button", prompt)
+
+    def test_the_standard_is_in_hand_at_the_end_of_the_run_too(self):
+        prompt = self.prompt()
+        last = prompt[prompt.index(f"This run's mission: {mi.MISSION}"):]
+        self.assertIn(f"Keep it {mi.LEGIBLE}", last)
+        self.assertIn("never a dead end", last)
+
+    def test_the_standard_is_stated_and_not_a_seventh_check(self):
+        # The same reasoning WHOLE and INTERESTING are left uncoded for: the six coded axioms are
+        # still the whole of what the code refuses (issue #46, question 1).
+        self.assertEqual(sorted(name for name in dir(mi) if name.startswith("check_")),
+                         ["check_accessibility", "check_analytics", "check_cadence", "check_mood",
+                          "check_reachability", "check_state"])
+
+
 class CadenceAxiomTest(SiteDirTestCase):
     """Issue #32: no page ties the site to an update frequency. The site iterates continuously, so
     the fourth axiom stands beside the other three -- stated in the prompt, held to by

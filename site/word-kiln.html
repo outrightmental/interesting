@@ -1,17 +1,12 @@
 ---
 layout: layout.njk
 title: the word kiln
-description: 'Put a word in the fire and see what comes out: a coinage, a definition and a citation that never existed, for anyone reading as full of half-sentences.'
+description: 'Type a word, fire it, and the kiln hands back a coinage with a definition and a citation that never existed.'
 stylesheet: word-kiln
-footer:
-  - [index.html, back to the threshold]
-  - [moods.html, mood atlas]
-  - [apocrypha-desk.html, open the apocrypha desk]
-footerNote: every coinage here is invented on the spot
 ---
   <main>
     <h1>the word kiln</h1>
-    <p class='tagline'>Where the threshold sends anyone reading as full of half-sentences. Feed it a word. It will not give the same one back.</p>
+    <p class='tagline'>Put a word in the fire and a coinage comes out, with a definition that never existed. Feed it.</p>
 
     <div class='layout'>
       <div class='kiln' id='kiln'>
@@ -38,7 +33,6 @@ footerNote: every coinage here is invented on the spot
       </section>
     </div>
 
-{% include "footer.njk" %}
   </main>
 
   <script>
@@ -126,7 +120,7 @@ footerNote: every coinage here is invented on the spot
         if (fired.length > 8) fired.pop();
         readingEl.textContent = fired.join('\n\n');
         out.textContent = made;
-        kiln.setAttribute('data-heat', String(Math.min(3, heat)));
+        kiln.setAttribute('data-heat', String(heat));
         statusEl.textContent = '"' + cleaned + '" came out as "' + made + '".';
         remember();
       }
@@ -141,11 +135,11 @@ footerNote: every coinage here is invented on the spot
         var saved = state.get(KILN, null);
         if (saved && Array.isArray(saved.fired) && saved.fired.length) {
           fired = saved.fired.slice(0, 8);
-          heat = typeof saved.heat === 'number' ? saved.heat : 1;
+          heat = saved.heat === 2 || saved.heat === 3 ? saved.heat : 1;
           readingEl.textContent = fired.join('\n\n');
           out.textContent = 'warm';
           statusEl.textContent = 'The kiln is still warm from the last firing.';
-          kiln.setAttribute('data-heat', String(Math.min(3, heat)));
+          kiln.setAttribute('data-heat', String(heat));
         }
       }
 
@@ -163,8 +157,8 @@ footerNote: every coinage here is invented on the spot
       });
 
       hotterBtn.addEventListener('click', function () {
-        heat = heat >= 4 ? 1 : heat + 1;
-        kiln.setAttribute('data-heat', String(Math.min(3, heat)));
+        heat = heat >= 3 ? 1 : heat + 1;
+        kiln.setAttribute('data-heat', String(heat));
         statusEl.textContent = 'Heat ' + heat + '. Higher heat breaks the word up more.';
       });
 

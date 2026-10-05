@@ -1,26 +1,18 @@
 ---
 layout: layout.njk
-title: constellation diary
-description: A logbook that turns your saved wish constellation into animated diary entries.
+title: the diary
+description: 'A logbook written from your saved stars, where you write diary entries, replay their birth order and seal time capsules.'
 stylesheet: constellation-diary
-footer:
-  - [wish-constellation.html, back to the wish constellation]
-  - [index.html, back to the threshold]
-  - [sitemap.html, site map]
-  - [error.html, visit observatory 404]
-footerNote: 'easter egg: tap the title five times'
 ---
   <main>
-    <h1 id='title'>constellation diary</h1>
-    <p class='tagline'>Your saved wish constellation, replayed as a tiny observatory logbook.</p>
+    <h1 id='title'>the diary</h1>
+    <p class='tagline'>Your stars replayed as a logbook, with entries written from where they sit. It reads the sky you placed in the wish constellation.</p>
 
     <div class='top'>
-      <canvas id='sky' width='620' height='300' aria-label='Animated view of your saved constellation'></canvas>
+      <canvas id='sky' width='620' height='300' aria-label='Animated view of your saved sky'></canvas>
 
       <section class='panel'>
-        <p style='margin:0;color:#d8e5ff;'>Generate entries from the exact star layout saved on the wish constellation page.</p>
         <div class='controls'>
-          <button id='refresh' type='button'>refresh saved sky</button>
           <button id='shuffle' type='button'>shuffle palette</button>
           <button id='write' type='button'>write diary entry</button>
           <button id='replay' type='button'>replay birth order</button>
@@ -31,17 +23,17 @@ footerNote: 'easter egg: tap the title five times'
           <label for='drift'>time drift</label>
           <input id='drift' type='range' min='0' max='100' value='38'>
         </div>
-        <p id='status' aria-live='polite'>Loading sky memory...</p>
-        <pre id='entry' aria-live='polite'>Awaiting constellation data...</pre>
+        <p id='status' aria-live='polite'></p>
+        <pre id='entry' aria-live='polite'>Press write diary entry, or replay birth order.</pre>
+        <p class='hint'>Tap the title five times for a surprise.</p>
 
-        <section class='capsules' aria-label='Constellation time capsules'>
+        <section class='capsules' aria-labelledby='capsules-title'>
+          <h2 id='capsules-title' class='panel-title'>time capsules</h2>
           <p>Seal snapshots of your current constellation and replay them later.</p>
           <div id='capsules-list' aria-live='polite'></div>
         </section>
       </section>
     </div>
-
-{% include "footer.njk" %}
   </main>
 
   <script>
@@ -56,13 +48,14 @@ footerNote: 'easter egg: tap the title five times'
       var entryEl = document.getElementById('entry');
       var statusEl = document.getElementById('status');
       var driftInput = document.getElementById('drift');
-      var refreshBtn = document.getElementById('refresh');
       var shuffleBtn = document.getElementById('shuffle');
       var writeBtn = document.getElementById('write');
       var replayBtn = document.getElementById('replay');
       var soundBtn = document.getElementById('sound');
       var sealBtn = document.getElementById('seal');
       var capsulesList = document.getElementById('capsules-list');
+
+      var NEXT_STEP = 'Press write diary entry, or replay birth order.';
 
       var stars = [];
       var capsules = [];
@@ -182,7 +175,6 @@ footerNote: 'easter egg: tap the title five times'
 
         if (!stars.length) {
           stopAmbience(true);
-          statusEl.textContent = 'No stars available for ambience. Refresh after making a constellation.';
           return;
         }
 
@@ -221,11 +213,6 @@ footerNote: 'easter egg: tap the title five times'
       function toggleAmbience() {
         if (ambienceOn) {
           stopAmbience(false);
-          return;
-        }
-
-        if (!stars.length) {
-          statusEl.textContent = 'Add stars on the wish constellation page first, then return to play ambience.';
           return;
         }
 
@@ -333,25 +320,14 @@ footerNote: 'easter egg: tap the title five times'
         setReplayButton();
       }
 
-      // Why there is nothing to replay, in this page's own words: the shared store says which of
-      // the four it is (see js/state.js).
-      var EMPTY_NOTES = {
-        unavailable: 'Local storage is unavailable in this browser context.',
-        unreadable: 'Saved constellation data is unreadable. Open the wish constellation and create a new pattern.',
-        missing: 'No saved constellation found yet. Create one on the wish constellation page first.',
-        ok: 'A sky file exists, but it has no readable stars.'
-      };
-
+      // Reads the saved sky and draws it. Called from unlock()'s onReady, so a sky is there to read:
+      // the helper has either found one or just written one.
       function loadStars() {
         var saved = state.read(SKY, []);
         stars = cloneStars(Array.isArray(saved.value) ? saved.value : []).slice(0, 160);
         stopReplay();
-        if (!stars.length) {
-          statusEl.textContent = EMPTY_NOTES[saved.status];
-          stopAmbience(true);
-          return;
-        }
-        statusEl.textContent = 'Loaded ' + stars.length + ' star' + (stars.length === 1 ? '' : 's') + ' from your saved sky memory.';
+        statusEl.textContent = stars.length + ' saved star' + (stars.length === 1 ? '' : 's') + ' loaded.';
+        entryEl.textContent = NEXT_STEP;
       }
 
       function loadCapsules() {
@@ -375,7 +351,7 @@ footerNote: 'easter egg: tap the title five times'
 
       function saveCapsules() {
         if (!state.set(CAPSULES, capsules)) {
-          statusEl.textContent = 'Unable to save capsules locally in this browser context.';
+          statusEl.textContent = 'This browser keeps nothing between visits, so the capsule lasts until you leave.';
         }
       }
 
@@ -415,11 +391,6 @@ footerNote: 'easter egg: tap the title five times'
       }
 
       function writeEntry() {
-        if (!stars.length) {
-          entryEl.textContent = 'No constellation loaded yet.\n\n1) Visit wish-constellation.html\n2) Place a few stars\n3) Return here and press refresh';
-          return;
-        }
-
         var summary = constellationSummary();
         var hash = hashConstellation();
         var title = constellationTitle(hash, summary);
@@ -454,10 +425,7 @@ footerNote: 'easter egg: tap the title five times'
       }
 
       function sealCapsule() {
-        if (!stars.length) {
-          statusEl.textContent = 'Cannot seal an empty sky. Refresh or create stars on the wish constellation page first.';
-          return;
-        }
+        if (!stars.length) return;
 
         var summary = constellationSummary();
         var hash = hashConstellation();
@@ -500,11 +468,6 @@ footerNote: 'easter egg: tap the title five times'
       }
 
       function startReplay() {
-        if (!stars.length) {
-          statusEl.textContent = 'No stars available for replay. Refresh after creating stars on the wish constellation page.';
-          return;
-        }
-
         replayActive = true;
         replayPointer = 0;
         replayTimer = 0;
@@ -652,11 +615,6 @@ footerNote: 'easter egg: tap the title five times'
         requestAnimationFrame(frame);
       }
 
-      refreshBtn.addEventListener('click', function () {
-        loadStars();
-        writeEntry();
-      });
-
       shuffleBtn.addEventListener('click', function () {
         paletteIndex = (paletteIndex + 1) % palettes.length;
         statusEl.textContent = 'Palette shifted. Same stars, different mood.';
@@ -700,8 +658,11 @@ footerNote: 'easter egg: tap the title five times'
         stopAmbience(true);
       });
 
-      loadStars();
-      writeEntry();
+      // Powered down until a sky exists: unlock() dims the canvas and the panel and offers the one
+      // button that seeds one, or calls onReady at once when the wish constellation already saved it.
+      window.interestingSite.unlock(document.querySelector('.top'), {
+        onReady: function (stars, how) { loadStars(); }
+      });
       loadCapsules();
       renderCapsules();
       setReplayButton();
