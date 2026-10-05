@@ -1,0 +1,54 @@
+// Shared structure for list-first pages (the mood atlas and the site map):
+// one centered reading column, one plain purpose line, section headings and
+// reusable list wrappers that render each row as the same filled card.
+
+@use 'type';
+
+.list-page-main {
+  grid-template-columns: minmax(0, var(--main-max));
+  align-content: start;
+}
+
+.page-purpose {
+  margin: 0 0 1.25rem;
+  max-width: 68ch;
+  color: var(--md-sys-color-on-surface);
+  @include type.scale(body-large);
+}
+
+.section-title {
+  margin: 1.5rem 0 0.5rem;
+  color: var(--md-sys-color-on-surface);
+  @include type.scale(title-medium);
+}
+
+.section-note {
+  margin: 0 0 0.75rem;
+  max-width: 70ch;
+  color: var(--md-sys-color-on-surface-variant);
+  @include type.scale(body-medium);
+}
+
+.list-stack,
+.list-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+}
+
+.list-stack {
+  gap: 0.5rem;
+}
+
+.list-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr));
+  gap: 0.75rem;
+}
+
+.list-stack > li,
+.list-grid > li {
+  padding: 0.9rem 1rem 1rem;
+  border-radius: var(--md-sys-shape-corner-large);
+  background: var(--md-sys-color-surface-container);
+}

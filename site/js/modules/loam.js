@@ -33,21 +33,22 @@ const TURNED = [
 
 function soil(ctx, w, h, env) {
   const c = env.colors;
-  const top = h * (0.12 + env.rnd() * 0.08);
+  const v = env.variant;
+  const top = h * (0.09 + v.turn * 0.1 + env.rnd() * 0.06);
   ctx.fillStyle = env.mix(c.bg, c.bg2, 0.25);
   ctx.fillRect(0, 0, w, h);
   ctx.fillStyle = env.mix(c.bg, '#000', 0.35);
   ctx.fillRect(0, 0, w, top);
   // Grit, as flecks.
-  for (let i = 0; i < 160; i++) {
+  for (let i = 0, grit = Math.round(160 * v.density); i < grit; i++) {
     ctx.fillStyle = env.alpha(c.accent, 0.05 + env.rnd() * 0.12);
     ctx.fillRect(env.rnd() * w, top + env.rnd() * (h - top), 1.5, 1.5);
   }
   // Stones.
   const stones = [];
-  const count = env.int(4, 9);
+  const count = Math.max(2, Math.round(env.int(4, 9) * v.density));
   for (let i = 0; i < count; i++) {
-    const s = { x: env.rnd() * w, y: top + h * 0.1 + env.rnd() * (h - top - h * 0.2), r: 4 + env.rnd() * Math.min(w, h) * 0.06 };
+    const s = { x: env.rnd() * w, y: top + h * 0.1 + env.rnd() * (h - top - h * 0.2), r: (4 + env.rnd() * Math.min(w, h) * 0.06) * v.scale };
     stones.push(s);
     ctx.fillStyle = env.alpha(c.muted, 0.2);
     ctx.beginPath();
@@ -178,11 +179,19 @@ function grow(s, dt, w, h, c) {
     const stone = blocked(s, nx, ny);
     if (stone) {
       if (blocked(s, tip.x, tip.y)) continue; // a stone laid over it since: that root ends there
+      // Round it rather than through it, and the tip keeps its place in `next`: that is how a root
+      // planted over gravel goes sideways for a long while before it finds a way down. It ages
+      // while it does, so one walled in on every side gives up after half a second instead of
+      // standing there alive and still for as long as the piece lasts.
+      tip.stuck = (tip.stuck || 0) + 1;
+      if (tip.stuck > 30) continue;
       tip.angle += (nx < stone.x ? -1 : 1) * 0.55;
+      tip.life -= dt * 0.012;
       hit = hit || stone;
       next.push(tip);
       continue;
     }
+    tip.stuck = 0;
     if (nx < 3 || nx > w - 3) tip.angle = Math.PI - tip.angle;
     else if (ny < s.top + 1) tip.angle = Math.PI / 2;
     else {
@@ -236,20 +245,64 @@ function water(s, c) {
   say(s, c, pct > 90 ? 'Watered again. Field capacity was a while ago; this is a puddle.' : 'Watered. Moisture at ' + pct + ' per cent of field capacity.');
 }
 
-function reading(s, h) {
-  const d = cm(s, s.deepest, h);
-  const verdict = d < 4 ? 'Early. Nothing to judge yet, and nothing wrong with that.'
-    : d < 16 ? 'Established. The system is wider than it is deep, which is normal.'
-      : 'Deep. Whatever is up top is the smaller half of this.';
-  return { d, verdict, lines: ['core sample', 'depth reached  ' + d.toFixed(1) + ' cm', 'living tips  ' + s.tips.length,
-    'laid down  ' + s.roots.length + ' segments', 'tilth  ' + tilthOf(s.grit), 'moisture  ' + Math.round(s.moisture * 60) + '%'] };
+// Everything the corer's barrel at `x` passes through: the stones it has to come down beside, and
+// whose roots cross it and how deep they got. Both are counted the way coreSample() below draws
+// them, so the reading is of the column the visitor can see it was taken from and nothing in it is
+// invented -- which also means no two cores along the transect read alike.
+function coreAt(s, x, cw) {
+  const core = { stones: 0, firstStone: 0, plants: 0, deepest: 0 };
+  for (const st of s.stones) {
+    const gap = Math.max(0, Math.abs(st.x - x) - cw / 2);
+    if (gap >= st.r) continue;
+    const top = st.y - Math.sqrt(st.r * st.r - gap * gap); // where the barrel first meets it
+    if (!core.stones || top < core.firstStone) core.firstStone = top;
+    core.stones++;
+  }
+  const seen = [];
+  for (const r of s.roots) {
+    if (Math.abs(r.x1 - x) >= cw / 2 || !s.plants[r.k]) continue;
+    if (seen.indexOf(r.k) < 0) seen.push(r.k);
+    core.deepest = Math.max(core.deepest, r.y1, r.y2);
+  }
+  core.plants = seen.length;
+  return core;
 }
 
-// A core is taken under whichever thing's roots went deepest; the column is drawn up out of the
-// ground and its reading printed beside it.
+// The closing sentence follows the core, so bare soil, a line that missed the roots and a deep
+// system each read differently. Without a core -- at the finish of a bed that was never cored --
+// it is the age of the whole system, as it was.
+function verdictOf(s, d, core) {
+  if (core && !s.roots.length) {
+    return core.stones
+      ? 'Nothing in the ground yet, and ' + (core.stones === 1 ? 'a stone' : core.stones + ' stones')
+        + ' in the way of whatever goes in.'
+      : 'Nothing in the ground yet. Clean soil the whole way down this line.';
+  }
+  if (core && !core.plants) return 'No roots down this line. They are going round something, elsewhere.';
+  return d < 4 ? 'Early. Nothing to judge yet, and nothing wrong with that.'
+    : d < 16 ? 'Established. The system is wider than it is deep, which is normal.'
+      : 'Deep. Whatever is up top is the smaller half of this.';
+}
+
+function reading(s, h, core) {
+  const d = cm(s, s.deepest, h);
+  const lines = ['core sample', 'depth reached  ' + d.toFixed(1) + ' cm', 'living tips  ' + s.tips.length,
+    'laid down  ' + s.roots.length + ' segments', 'tilth  ' + tilthOf(s.grit), 'moisture  ' + Math.round(s.moisture * 60) + '%'];
+  // What this core in particular came down through, which is the half that changes press to press.
+  if (core) {
+    lines.push('stones  ' + (core.stones
+      ? core.stones + ', first at ' + Math.round(cm(s, core.firstStone, h)) + ' cm' : 'none in this core'));
+    lines.push('roots  ' + (core.plants
+      ? core.plants + ' of ' + s.plants.length + ', deepest at ' + Math.round(cm(s, core.deepest, h)) + ' cm'
+      : 'none in this core'));
+  }
+  return { d, verdict: verdictOf(s, d, core), lines };
+}
+
+// A core is cut somewhere rather than nowhere: the column is drawn up out of the ground with the
+// stones and roots it passed through, and its reading printed beside it.
 function takeCore(s, c) {
   const again = !!s.reading;
-  s.reading = reading(s, c.h);
   let best = s.plants.length ? s.plants[0].x : c.w / 2;
   let deep = -1;
   for (const r of s.roots) {
@@ -259,9 +312,17 @@ function takeCore(s, c) {
     }
   }
   const cw = Math.min(c.w, c.h) * 0.09;
-  s.coreX = Math.max(cw, Math.min(c.w - cw, best));
+  // The first core goes under the deepest roots. A second is taken a step across the plot, so a
+  // run of them reads the whole width instead of cutting the one hole over and reading it back
+  // unchanged: the point of a core is the soil it is cut from. The step is not a clean fraction of
+  // the width, so a long run keeps finding new ground rather than walking the same few columns.
+  const span = c.w - 2 * cw;
+  const step = span / 3.5 + (c.rnd() - 0.5) * cw;
+  s.coreX = again ? cw + ((s.coreX - cw + step + span) % span) : Math.max(cw, Math.min(c.w - cw, best));
+  s.reading = reading(s, c.h, coreAt(s, s.coreX, cw));
   s.core = 0.001;
-  say(s, c, again ? 'Another core. The first hole had already closed.' : 'Core taken. The hole closes itself.');
+  say(s, c, again ? 'Another core, a step across the plot. The first hole had already closed.'
+    : 'Core taken. The hole closes itself.');
 }
 
 function bed(g, w, h, c, s) {

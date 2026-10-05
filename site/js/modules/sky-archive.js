@@ -303,11 +303,14 @@ function scene(g, w, h, c, v) {
   g.textBaseline = 'alphabetic';
 }
 
-// The card's wheel: every star's rune on the rim, the stars inside, and one rune lit.
+// The card's wheel: every star's rune on the rim, the stars inside, and one rune lit. The
+// configuration the card was dealt turns the rim and says how far a bond between two stars reaches,
+// so a repeat is the same sky read at a different rotation.
 function wheel(ctx, w, h, env, lit) {
+  const v = env.variant;
   const on = [];
   if (lit) env.stars.forEach((s, i) => { if (runeFor(s)[1] === lit[1]) on.push(i); });
-  scene(ctx, w, h, env, { spokes: true, lit: on });
+  scene(ctx, w, h, env, { spokes: true, lit: on, phase: v.turn * Math.PI * 2, reach: 0.42 * v.density });
 }
 
 // Three of the four alphabets, in an order of their own, with eight runes drawn for the rune set.

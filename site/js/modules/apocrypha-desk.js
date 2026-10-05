@@ -273,16 +273,19 @@ function specimen(g, c, kind, r, fill, scratches, n, warm) {
   }
 }
 
-// The card half: the desk, one card askew, a specimen's silhouette and its catalogue mark.
+// The card half: the desk, one card askew, a specimen's silhouette and its catalogue mark. The
+// configuration the card was dealt says how much of the grain shows, how large the index card lies
+// on the desk and how far askew it is.
 function desk(ctx, w, h, env) {
+  const v = env.variant;
   const look = scenery(env);
-  deskTop(ctx, w, h, env, look.rows);
-  const cw = w * 0.72;
+  deskTop(ctx, w, h, env, look.rows.slice(0, Math.max(8, Math.round(look.rows.length * v.density))));
+  const cw = Math.min(w * 0.92, w * 0.72 * v.scale);
   const ch = Math.min(h * 0.62, cw * 0.62);
   ctx.save();
   ctx.translate(w / 2, h / 2);
-  ctx.rotate(look.tilt);
-  card(ctx, env, cw, ch, 0.3, look.spots, 0, 6);
+  ctx.rotate(look.tilt + (v.turn - 0.5) * 0.11);
+  card(ctx, env, cw, ch, 0.3, look.spots, 0, Math.max(4, Math.round(6 * v.density)));
   ctx.save();
   ctx.translate(-cw * 0.32, ch * 0.12);
   specimen(ctx, env, KINDS[env.pick(OBJECTS)] || 'disc', ch * 0.17, env.alpha(env.colors.accent, 0.55), look.scratches, 5, 0);

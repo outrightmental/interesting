@@ -46,6 +46,7 @@ function block(ctx, x, y, bw, bh, angle, fill, stroke) {
 // The card: a still heap of blocks, one of them mid-air because something was just thrown.
 function floor(ctx, w, h, env, flipped) {
   const c = env.colors;
+  const v = env.variant;
   ctx.fillStyle = c.bg;
   ctx.fillRect(0, 0, w, h);
   const floorY = flipped ? h * 0.1 : h * 0.9;
@@ -55,14 +56,14 @@ function floor(ctx, w, h, env, flipped) {
   ctx.moveTo(0, floorY + 0.5);
   ctx.lineTo(w, floorY + 0.5);
   ctx.stroke();
-  const piles = env.int(3, 6);
+  const piles = Math.max(2, Math.round(env.int(3, 6) * v.density));
   const slot = w / piles;
   for (let p = 0; p < piles; p++) {
     let level = floorY;
     const count = env.int(1, 4);
     for (let i = 0; i < count; i++) {
       const bw = slot * (0.35 + env.rnd() * 0.5);
-      const bh = Math.min(h * 0.22, 14 + env.rnd() * h * 0.16);
+      const bh = Math.min(h * 0.26, (14 + env.rnd() * h * 0.16) * v.scale);
       const x = p * slot + (slot - bw) * (0.2 + env.rnd() * 0.6);
       const y = flipped ? level : level - bh;
       const tilt = (env.rnd() - 0.5) * 0.08;
