@@ -83,13 +83,11 @@ is deliberately small: a foundation to build a more holistic experience on, not 
   [Destructive-caution axiom](#destructive-caution-axiom)), the feature a page is and the filled
   card (`_panel.scss`), the unlock box, the persona's avatar
   and sheet (`_persona.scss`), the fifteen mood palettes and the query styling the mood flow
-  renders into (`_mood.scss`), the feed's masonry and cards (`_feed.scss`), the canvas-beside-panel
-  shape most worlds share (`_labs.scss`), the values the stylesheets have in common (`_vars.scss`,
-  which emits no CSS of its own) and the monospace readout ten pages use (`_readout.scss`, a
-  mixin). `css/site.scss` is those partials and nothing else, and every page links the
-  `css/site.css` it compiles to. `css/<page>.scss` holds what is true of that page alone and is
-  linked after it, so a page overrides rather than repeats — and since a page's palette is its
-  world's (below), most page stylesheets are now a cursor and a readout's height. `error.html` writes its styles into the page instead: CloudFront returns it for any 404,
+  renders into (`_mood.scss`), the feed's masonry and cards (`_feed.scss`) and the stage with its
+  knobs (`_stage.scss`). `css/site.scss` is those partials and nothing else, and every page links the
+  `css/site.css` it compiles to. A world page has no stylesheet of its own: its scene is drawn, not
+  styled. `css/<page>.scss` is for the two list pages and holds what is true of that page alone,
+  linked after the shared sheet so it overrides rather than repeats. `error.html` writes its styles into the page instead: CloudFront returns it for any 404,
   at whatever path was asked for, so a relative `<link>` next to it would be a guess. For the same
   reason it names the site's root in its front matter (`siteRoot: /`), and the layout writes its
   scripts and links from there; it is the one page that does, and a copy of the site served under
@@ -152,12 +150,12 @@ itself.
   page's own palette washing to the viewport's edges, and at least the first screen tall (the
   viewport less the top bar and a margin), so the feed peeks above the fold on any display, a
   very large one included. Every direct child of `<main>` lands in one centred column
-  (`_panel.scss`), so a page writes its content straight into `<main>`; a world's stage, the
-  canvas beside its panel, is sized by the screen's height as well as its column (`_labs.scss`,
-  with the stage's aspect ratio read off the canvas by `js/site.js`). The threshold's feature is
-  the sideways question itself, asked large on arrival, and once answered it is the world the
-  reading opens onto, painted across the feature by `window.interestingFeed.feature` with the
-  reading and the one button that goes there over it.
+  (`_panel.scss`), so a page writes its content straight into `<main>`. A world page's `<main>` is the stage
+  ([`site/_includes/stage.njk`](site/_includes/stage.njk), [`site/js/stage.js`](site/js/stage.js)):
+  a piece of that world, played and finished there and followed by the next; see
+  [Completion axiom](#completion-axiom). The threshold's feature is the same stage in its asking
+  state: the sideways question itself, asked large on arrival, and once answered a piece of the
+  world the reading opens onto.
 - **The feed has no caption.** Its heading is written for screen readers only, and nothing says
   how many worlds there are or what to do with them: the grid speaks for itself. It replaced the
   footer index and its two groups, *off the sky* and *under the sky*, which are gone:
@@ -177,7 +175,8 @@ itself.
   `paint(ctx, w, h, env)` draws the card, `spark(env)` makes one thing for the feed to deal — a
   coinage, a specimen, a rule with its bits, a core sample, an omen, a forecast, a mantra — with or
   without a picture, `animate()` is optional and never runs for a visitor who asked for less
-  motion, and `needsSky` marks the eight that read the persona's stars. `env` carries a seeded
+  motion, and `needsSky` marks the eight that read the persona's stars. `piece(env)` makes the piece the stage plays when the card is opened
+  (see [Completion axiom](#completion-axiom)), and every world's module has one, by law. `env` carries a seeded
   random source, the stars, the card's own colours and the helpers to mix them, so a card paints
   the same picture every time and a different one from its neighbour.
 - **It follows the persona.** The world the visitor's reading opens onto is moved to the front and
@@ -186,8 +185,8 @@ itself.
   unlock (see [Powered down, never broken](#powered-down-never-broken)); every sky card repaints
   as stars are placed. Now and then the feed deals the question as a card, which opens the
   persona sheet — the one place that asks. Nothing in the feed writes to the state document.
-- **Modular is the point.** A world is its page, its stylesheet, its line in the list and its
-  module, and the feed is where the modules meet. Adding a world adds one of each; the hourly run
+- **Modular is the point.** A world is its page (two lines that include the stage), its line in the
+  list and its module, and the feed is where the modules meet. Adding a world adds one of each; the hourly run
   is told so, and `RealSiteTest` holds the list, the modules and the mood flow to naming the same
   worlds.
 
@@ -212,7 +211,7 @@ the one thing the mission is measured in.
   ([One single experience](#one-single-experience)), all three in
   [`.github/scripts/make_interesting.py`](.github/scripts/make_interesting.py) and all three stated
   at both ends of a run.
-- **The cadence rule is the fifth `AXIOM`**, stated in the `Rules:` block beside the seven below.
+- **The cadence rule is the fifth `AXIOM`**, stated in the `Rules:` block beside the eight below.
   It names every phrasing the code refuses, in full, so it is a rule a run can follow rather than a
   trap it springs: the words *tonight*, *tomorrow*, *yesterday*, *hourly*, *nightly*, *daily* and
   *weekly*; the possessives *today's*, *this hour's*, *this week's*, *this month's*; and *every
@@ -221,7 +220,7 @@ the one thing the mission is measured in.
   again" — because the next move is the one worth asking for.
 - **Held to in code.** `check_cadence` in
   [`.github/scripts/make_interesting.py`](.github/scripts/make_interesting.py) refuses a plan that
-  puts one of those phrasings on a page. As with the seven axioms below, only what the run itself
+  puts one of those phrasings on a page. As with the eight axioms below, only what the run itself
   breaks is refused, and every reason is one phrase, so clearing part of a page can only take
   reasons away. The engagement-time definition itself is *not* checked in code, because no check
   could: it is a standard for the model to aim at, and the prompt is where a standard like that
@@ -310,8 +309,9 @@ for a while, which is exactly why it has to be ruled out by name.
   engagement-time definition uncoded. A plan that adds a page sharing nothing with the rest is
   accepted exactly as before. A test holds that open: it asserts the accepted plan *and* the whole
   list of `check_` functions, so an axiom cannot be added or retired without saying so there. That
-  list grew to eight when [Destructive-caution axiom](#destructive-caution-axiom) arrived, which is
-  what tells a standard no check could judge apart from a law that can be held.
+  list grew to eight when [Destructive-caution axiom](#destructive-caution-axiom) arrived and to
+  nine with [Completion axiom](#completion-axiom), which is what tells a standard no check could
+  judge apart from a law that can be held.
 
 ### Legible to a stranger
 
@@ -338,7 +338,7 @@ saying where to go next, and the home page explained none of its own words.
   and never about the machinery; and never a dead end, which is its own standard below.
 - **Deliberately not held to in code.** No check could judge whether a page reads clearly, so the
   prompt is where this standard lives, exactly as `WHOLE` and `INTERESTING` do: it is not among the
-  eight coded axioms, and `LegibilityStandardTest` holds the prompt to the standard the way
+  nine coded axioms, and `LegibilityStandardTest` holds the prompt to the standard the way
   `EngagementTimeTest` holds it to the measure.
 - **One list of pages.** [`site/_data/worlds.json`](site/_data/worlds.json) is the one place a
   world's name, orientation, mood, card aspect and one-line description are kept, in one flat
@@ -515,7 +515,7 @@ to be drawn in a given hour.
 - **The standard is [WCAG 2.2 level AA](https://www.w3.org/TR/WCAG22/).** Every check names the
   success criterion it stands for, so the set can grow without becoming a matter of taste.
 - **Stated in the prompt.** The `Rules:` block every run is given carries this as one `AXIOM`
-  among seven. It asks for more than any validator can judge — fluid layout
+  among eight. It asks for more than any validator can judge — fluid layout
   with nothing overflowing sideways at 320px wide, tap targets around 44px, text contrast at 4.5:1 —
   because the prompt can ask for what code cannot see.
 - **Held to in code.** `check_accessibility` in
@@ -607,7 +607,7 @@ iteration process rather than a one-off tidy-up.
   [`.github/scripts/make_interesting.py`](.github/scripts/make_interesting.py) refuses a plan that
   leaves a page without the line, and `pages_touching_storage` refuses one in which a page — or a
   shared script it loads — reaches for the browser's storage behind the store's back, because that
-  would be state the meta menu could not export. As with the other seven, only what the run itself
+  would be state the meta menu could not export. As with the other eight, only what the run itself
   breaks is refused.
 - **The file is out of reach.** `js/state.js` is in `FIXED_FILES` beside the analytics files: never
   shown to a model, refused outright as a write or a delete, and skipping the prompt budget. A
@@ -748,7 +748,7 @@ addition — and it is the only one that is about the reader rather than about t
   the site in its own prose is welcome, and is not a substitute for the line.
 - **Held to in code.** `check_participate` in
   [`.github/scripts/make_interesting.py`](.github/scripts/make_interesting.py) refuses a plan that
-  leaves a page without the line. As with the other seven, only what the run itself breaks is
+  leaves a page without the line. As with the other eight, only what the run itself breaks is
   refused.
 - **The file is out of reach.** `js/participate.js` is in `FIXED_FILES` beside the analytics files
   and the local-state store: never shown to a model, refused outright as a write or a delete, and
@@ -782,8 +782,9 @@ to type and no second press. *Don't overdo it.*
   - **Above it**, held to both halves: a press that is **nothing but a loss**. The whole
     local-state document goes, or the whole of one name in it — a sky, a reading, a kept list — and
     nothing takes its place. Today: the meta menu's *clear*, the persona sheet's *clear the sky*
-    and *forget my reading*, the mood atlas's *forget my reading*, *clear omens* in the sky
-    archive, *empty the drawer* on the apocrypha desk, *empty the kiln* in the word kiln.
+    and *forget my reading*, and the mood atlas's *forget my reading*. No world adds one of its
+    own any more — a world's page is a stage and its piece keeps nothing, so there is no
+    world-owned list left to throw away (see [Completion axiom](#completion-axiom)).
   - **At it**, held to the modal but not the warning: a **trade rather than a loss**. The whole of
     a name goes, but something the visitor asked for arrives in its place — *seed a small sky* over
     a placed one, *replace mine* over your own document. The question is the same; the paint is
@@ -827,7 +828,7 @@ to type and no second press. *Don't overdo it.*
   things: a plan that leaves the site without the shared component (the behaviour in `js/site.js`
   or the `.warning` treatment in `css/site.css`); a plan in which a control whose own words say it
   throws saved state away does not wear the warning class, read off the page as committed; and a
-  plan in which a page, or a script it loads, calls `window.confirm`. As with the other seven, only
+  plan in which a page, or a script it loads, calls `window.confirm`. As with the other eight, only
   what the run itself breaks is refused, and every reason is one control's name or one file's, so a
   partial repair can only take reasons away.
 - **What is deliberately not checked**: whether a given control is above the threshold or below it,
@@ -841,10 +842,85 @@ to type and no second press. *Don't overdo it.*
   besides, which is why `LocalStateStoreTest` is what holds them instead.
 - **True of the site as committed**, not only of what a future run writes: `RealSiteTest` sweeps
   the built site on every pull request and before every deploy. That sweep is what found *clear
-  omens*, *empty the drawer* and *empty the kiln* pressing without a word of warning, and the two
-  `window.confirm` calls the persona sheet had grown. `LocalStateStoreTest` drives the meta menu's
+  omens*, *empty the drawer* and *empty the kiln* pressing without a word of warning — controls
+  that have since gone with the pages that kept those lists — and the two `window.confirm` calls
+  the persona sheet had grown. `LocalStateStoreTest` drives the meta menu's
   *clear* and *replace mine* against the stub browser, with the shared component in place and with
   it taken away, so the confirmation path there stays tested.
+
+### Completion axiom
+
+Every world is a piece a visitor can finish. A world's page is not fixed content but a **stage**,
+and what a visitor opens there is a **piece**: a small, randomly configured item — think of a
+fidget toy with a few levers and knobs on it — generated on the spot by the world's module from a
+seed, with a clear flow that asks them to make a few choices and finish, expediently. When it is
+finished the whole piece vanishes with some ceremony and the next card in the feed opens in its
+place, so one piece follows another without end and no two are quite the same. A "content page"
+does not discretely exist: it exists as a procedural generation, and the feed that keeps dealing
+is the river of pieces coming up the pipe. Like the eight above, this is an invariant of the
+iteration, stated in the prompt and held to in code.
+
+- **The stage.** [`site/_includes/stage.njk`](site/_includes/stage.njk) is every world page's
+  `<main>` — a world page is front matter and two lines that include it — and
+  [`site/js/stage.js`](site/js/stage.js), one shared line in the `<head>`, runs it: the world's
+  name over the piece's title and its one line, the scene (a canvas) beside the knobs, a row of
+  dots for progress, one text button that skips, and the ceremony — a done mark over the scene, a
+  burst in the world's palette and a short chime, the piece scaling away and the next arriving
+  from below; for a visitor who asked for less motion there is no burst and no transition, only
+  the mark and the next piece. The threshold is the same stage in
+  its asking state. The URL carries the piece (`quiet-room.html#<seed>`), so a piece can be sent
+  to someone and the back button walks back through what was finished; opening a card of another
+  world moves the address to that world's page without a load, because a page is wherever the
+  stage is.
+- **The piece contract.** A world's module exports `piece(env)` beside `paint` and `spark`, and
+  returns `{ title, brief, aspect, steps, start, apply, frame, tap, end }`: two to five knobs
+  (`steps`), each `{ id, ask, kind, … }` of a kind the stage renders — `choice` (two to four
+  options), `toggle`, `range`, `press`, `hold`, `tap`, `wait` — and the piece is finished when
+  every knob is set (the stage sets a choice, toggle, range, press or hold itself; a tap or a
+  wait knob is set by the piece, through `ctx.satisfy`), or when it calls `ctx.complete()`. A
+  knob may wait on another (`after`), and every knob stays live once set: a toy is for fidgeting
+  with. `ctx` is the canvas and its context, the size, the world's colours, a seeded random
+  source, the persona's stars, and `status()` and `progress()` for the one live line and the
+  knob's bar; `frame(t, dt, ctx)` counts `t` from the piece's start, and `auto: false` lets a
+  piece call `complete()` itself. A module is self-contained: it imports nothing. `js/stage.js`
+  documents all of it at the top.
+- **Pure, so it can be played anywhere.** A piece is drawing and arithmetic on what the stage
+  hands it and never reaches for the document, the window or the browser's storage. That is what
+  lets [`.github/scripts/piece_harness.mjs`](.github/scripts/piece_harness.mjs) play every piece
+  to its end in Node, with no browser: it asks each module for a piece for each of six seeds and
+  sets the knobs the way the stage would — a choice at one of its options, a range at a point on
+  it, a press pressed its count, a hold held its time, the scene tapped at seeded points for a
+  tap knob, frames run for a wait knob — and reports whether the piece finished; one seed is also
+  played with the sky the stage may hand the module (none, or a single star). Each module plays
+  in a worker of its own with a time limit, an empty environment and no clock, no `Math.random`
+  and no timers, so a piece that reaches for any of them fails; the run itself starts under
+  Node's permission model with a scrubbed environment, because the modules are model-written
+  code (a quality gate, not a security boundary: the site's source is public). The harness is
+  not in `/site`, so a run cannot soften it.
+- **Held to in code.** `check_completion` in
+  [`.github/scripts/make_interesting.py`](.github/scripts/make_interesting.py) reads the one list
+  of worlds off the built home page (the `#site-worlds` JSON the layout writes from
+  `_data/worlds.json`, which the stage opens pieces from too) and refuses a plan that leaves a
+  listed world without a module, without a `piece()`, or with a piece the harness cannot finish:
+  one with fewer than two knobs or more than five, one that finishes itself before its visitor has
+  set a knob, a knob of a kind the stage does not render, a piece that
+  does not finish within twelve taps and forty-five seconds of simulated play, one that is not
+  the same for the same seed (a piece is an address), or one that is the same for every seed
+  (the river is of pieces that differ). Only what the run itself breaks is refused, as with every
+  other axiom, so a run can repair a world that is already stuck; and a plan that drops the list
+  of worlds is refused outright, because the stage would have nothing to open.
+- **Re-thought, not wrapped.** The worlds' old interactive pages were the material: what a page
+  let a visitor do became the knobs, what it showed became the scene, what it said became the
+  title and the line under it. The pages themselves are gone; a world has no stylesheet of its
+  own any more, because its scene is drawn rather than styled.
+- **What is deliberately not checked**: whether a piece is a good toy, whether its knobs are the
+  right knobs, and whether its finish feels like one. No code could judge that; the prompt asks
+  for it, names the old pages as the material, and says a second shape of piece for a world is
+  as good a change as a new world.
+- **True of the site as committed**: `RealSiteTest` builds `/site` and plays every world's piece
+  to its end on every pull request and before every deploy, checks that every world page is the
+  stage and that the threshold hosts the question on it, and checks that the limits the prompt
+  states are the harness's own.
 
 ### Silo
 

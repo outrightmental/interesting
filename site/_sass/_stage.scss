@@ -1,0 +1,555 @@
+// The stage (_includes/stage.njk, js/stage.js): a page's feature, where a piece is played,
+// finished and replaced. It is the feature every page is (see _panel.scss for main), with the
+// piece's parts laid out inside: the heading (the world, the piece's title, its one line), the
+// scene beside the knobs, the progress dots and the one text button that skips.
+//
+// The scene is sized the way a world's stage was: as wide as its column allows, or as wide as
+// the height left under the heading allows at the piece's own aspect ratio (--piece-ratio, set
+// by js/stage.js), whichever is less, so the feature fills the first screen and the feed peeks.
+//
+// The knobs are M3 controls: a choice is a row of tonal buttons that fill when pressed, a toggle
+// a tonal button that fills when on, a range the M3 slider, a press and a hold one big button
+// (the hold reads as pressed while it is held, and the bar under it fills), a tap and a wait a
+// bar the piece fills. A knob that is set gets a check mark; a knob gated on another is dimmed
+// until it opens.
+//
+// The ceremony: when the piece is finished, the done mark pops over the scene, the burst canvas
+// over the whole stage carries the particles, and the stage's inner scales away; the next piece
+// arrives from a little below. All of it stops still for a visitor who asked for less motion.
+
+@use 'type';
+
+.stage {
+  overflow: hidden;
+}
+
+.stage-burst {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  width: 100%;
+  height: 100%;
+  display: block;
+  pointer-events: none;
+}
+
+.stage-inner {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: 1.25rem;
+  transition:
+    transform var(--md-sys-motion-duration-long) var(--md-sys-motion-easing-emphasized-accelerate),
+    opacity var(--md-sys-motion-duration-long) var(--md-sys-motion-easing-emphasized-accelerate);
+}
+
+.stage[data-mode='vanishing'] .stage-inner {
+  transform: scale(0.9) translateY(-2%);
+  opacity: 0;
+}
+
+.stage[data-mode='arriving'] .stage-inner {
+  animation: stage-in 560ms var(--md-sys-motion-easing-emphasized) both;
+}
+
+.stage[data-mode='loading'] .stage-body {
+  opacity: 0.4;
+}
+
+@keyframes stage-in {
+  from {
+    opacity: 0;
+    transform: translateY(32px) scale(0.97);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+// Before a piece is on -- the threshold waiting or asking, a world page without scripting -- the
+// piece's parts stay out of the way, and on the threshold the ask is what shows instead.
+.stage[data-mode='idle'] .stage-body,
+.stage[data-mode='quiet'] .stage-body,
+.stage[data-mode='asking'] .stage-body {
+  display: none;
+}
+
+.stage-ask {
+  display: none;
+}
+
+.stage[data-mode='quiet'] .stage-ask,
+.stage[data-mode='asking'] .stage-ask {
+  display: grid;
+  gap: 1rem;
+  max-width: 64rem;
+}
+
+.stage-ask .controls {
+  margin: 0;
+}
+
+// While the question is up it is the whole feature: the invitation and the page's own line step
+// aside for it.
+.stage[data-mode='asking'] #threshold-controls,
+.stage[data-mode='asking'] .stage-title,
+.stage[data-mode='asking'] .stage-brief {
+  display: none;
+}
+
+// Unpowered: the unlock box is the feature, and the scene waits out of sight until a sky exists.
+.stage[data-mode='unpowered'] .stage-body,
+.stage[data-mode='empty'] .stage-body {
+  grid-template-columns: 1fr;
+}
+
+.stage[data-mode='unpowered'] .stage-scene,
+.stage[data-mode='empty'] .stage-scene {
+  display: none;
+}
+
+.stage-head {
+  display: grid;
+  gap: 0.35rem;
+  max-width: 64rem;
+}
+
+.stage-world {
+  margin: 0;
+  color: var(--md-sys-color-primary);
+  @include type.scale(label-large);
+}
+
+.stage-read {
+  margin: 0;
+  color: var(--md-sys-color-on-surface-variant);
+  @include type.scale(label-large);
+}
+
+.stage-title {
+  margin: 0;
+  color: var(--md-sys-color-on-surface);
+  letter-spacing: -0.01em;
+  @include type.scale(headline-large);
+}
+
+@media (min-width: 840px) {
+  .stage-title {
+    @include type.scale(display-small);
+  }
+}
+
+@media (min-width: 1800px) {
+  .stage-title {
+    @include type.scale(display-medium);
+  }
+}
+
+.stage-title:focus-visible {
+  outline: none;
+}
+
+.stage-brief {
+  margin: 0;
+  max-width: 60ch;
+  color: var(--md-sys-color-on-surface-variant);
+  @include type.scale(body-large);
+}
+
+.stage-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 420px);
+  gap: 1.5rem;
+  align-items: start;
+  transition: opacity var(--md-sys-motion-duration-short) var(--md-sys-motion-easing-standard);
+}
+
+.stage-scene {
+  --stage-h: max(16rem, calc(100vh - var(--top-bar-h) - 19rem));
+  position: relative;
+  width: min(100%, calc(var(--stage-h) * var(--piece-ratio, 1.7778)));
+  aspect-ratio: var(--piece-aspect, 16 / 9);
+  justify-self: start;
+  border-radius: var(--md-sys-shape-corner-large);
+  background: var(--md-sys-color-surface-container-lowest);
+  overflow: hidden;
+}
+
+// The element the unlock helper powers down for a piece that needs a sky: it has nothing to show
+// of its own, and it is removed with the piece.
+.stage-gate {
+  display: none;
+}
+
+@supports (height: 100svh) {
+  .stage-scene {
+    --stage-h: max(16rem, calc(100svh - var(--top-bar-h) - 19rem));
+  }
+}
+
+.stage-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  touch-action: manipulation; // a tap reaches the piece; a swipe still scrolls the page
+  cursor: pointer;
+}
+
+.stage-side {
+  display: grid;
+  gap: 0.75rem;
+  align-content: start;
+}
+
+.stage-knobs {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.knob {
+  --knob-pct: 0%;
+  position: relative;
+  display: grid;
+  gap: 0.6rem;
+  padding: 0.85rem 2.75rem 0.85rem 1rem;
+  border-radius: var(--md-sys-shape-corner-medium);
+  background: var(--md-sys-color-surface-container);
+  transition:
+    background-color var(--md-sys-motion-duration-short) var(--md-sys-motion-easing-standard),
+    opacity var(--md-sys-motion-duration-short) var(--md-sys-motion-easing-standard);
+}
+
+.knob.is-locked {
+  opacity: 0.45;
+}
+
+.knob.is-set {
+  background: var(--md-sys-color-surface-container-high);
+}
+
+.knob-ask {
+  margin: 0;
+  color: var(--md-sys-color-on-surface);
+  @include type.scale(title-small);
+}
+
+// The check mark a set knob earns, in the top right corner.
+.knob-mark {
+  position: absolute;
+  top: 0.85rem;
+  right: 0.85rem;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--md-sys-shape-corner-full);
+  background: var(--md-sys-color-primary);
+  color: var(--md-sys-color-on-primary);
+  opacity: 0;
+  transform: scale(0.4);
+  transition:
+    opacity var(--md-sys-motion-duration-short) var(--md-sys-motion-easing-emphasized),
+    transform var(--md-sys-motion-duration-medium) var(--md-sys-motion-easing-emphasized);
+}
+
+.knob-mark::after {
+  content: '';
+  position: absolute;
+  left: 7px;
+  top: 4px;
+  width: 5px;
+  height: 10px;
+  border: solid currentColor;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+.knob.is-set .knob-mark {
+  opacity: 1;
+  transform: none;
+}
+
+.segmented {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.segmented button {
+  min-height: 44px;
+  padding: 0.4rem 1rem;
+}
+
+.knob-toggle {
+  justify-self: start;
+}
+
+.knob-range {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.knob-end {
+  flex: none;
+  color: var(--md-sys-color-on-surface-variant);
+  @include type.scale(body-small);
+}
+
+.knob-big {
+  width: 100%;
+  min-height: 64px;
+  border-radius: var(--md-sys-shape-corner-medium);
+  @include type.scale(title-medium);
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+// Held: filled, as a pressed toggle is; the bar under it says how long is left.
+.knob-hold.is-held {
+  background: var(--md-sys-color-primary);
+  color: var(--md-sys-color-on-primary);
+}
+
+// A bar the piece (or the hold) fills: a tap's progress, a timed phase.
+.knob-bar {
+  display: block;
+  height: 8px;
+  border-radius: var(--md-sys-shape-corner-full);
+  background: var(--md-sys-color-secondary-container);
+  overflow: hidden;
+}
+
+.knob-bar::before {
+  content: '';
+  display: block;
+  width: var(--knob-pct);
+  height: 100%;
+  border-radius: inherit;
+  background: var(--md-sys-color-primary);
+  transition: width var(--md-sys-motion-duration-short) linear;
+}
+
+.knob-alt {
+  justify-self: start;
+  min-height: 44px;
+  padding: 0.2rem 0.75rem;
+}
+
+.stage-status {
+  margin: 0;
+  min-height: 1.5em;
+  color: var(--md-sys-color-tertiary);
+  @include type.scale(body-medium);
+}
+
+.stage-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.stage-progress {
+  display: flex;
+  gap: 0.4rem;
+}
+
+// The actions sit at the left, clear of the state menu's button in the corner of every page.
+.stage-foot-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin-left: -0.75rem;
+}
+
+.stage-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: var(--md-sys-shape-corner-full);
+  background: var(--md-sys-color-outline-variant);
+  transition: background-color var(--md-sys-motion-duration-short) var(--md-sys-motion-easing-standard);
+}
+
+.stage-dot.is-set {
+  background: var(--md-sys-color-primary);
+}
+
+// The done mark, in the scene's corner, so the piece's own finale stays in view under it.
+.stage-done {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+  gap: 0.6rem;
+  padding: 1rem;
+  pointer-events: none;
+}
+
+.stage-done-mark {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  border-radius: var(--md-sys-shape-corner-full);
+  background: var(--md-sys-color-primary);
+  color: var(--md-sys-color-on-primary);
+  box-shadow: var(--md-sys-elevation-level3);
+  animation: stage-pop 520ms var(--md-sys-motion-easing-emphasized) both;
+}
+
+.stage-done-mark .icon {
+  width: 40px;
+  height: 40px;
+}
+
+.stage-done-text {
+  margin: 0;
+  padding: 0.35rem 0.8rem;
+  border-radius: var(--md-sys-shape-corner-full);
+  background: color-mix(in oklab, var(--md-sys-color-surface) 80%, transparent);
+  color: var(--md-sys-color-on-surface);
+  @include type.scale(title-medium);
+  animation: stage-pop 520ms 120ms var(--md-sys-motion-easing-emphasized) both;
+}
+
+@keyframes stage-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+
+  65% {
+    opacity: 1;
+    transform: scale(1.1);
+  }
+
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+// The question, asked large on the threshold: the ask at headline size, the answers as the big
+// filled cards the mood flow renders, laid across the width on a wide screen.
+.threshold-probe {
+  margin: 0;
+}
+
+.threshold-probe .probe-ask {
+  max-width: 36ch;
+  @include type.scale(headline-medium);
+}
+
+@media (min-width: 840px) {
+  .threshold-probe .probe-ask {
+    @include type.scale(headline-large);
+  }
+}
+
+.threshold-probe .probe-options {
+  grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr));
+  gap: 0.75rem;
+}
+
+.threshold-probe .probe-option:not(.probe-skip):not(.probe-undo) {
+  min-height: 88px;
+  padding: 1rem 1.25rem;
+  background: var(--md-sys-color-surface-container);
+}
+
+.threshold-probe .probe-option-label {
+  @include type.scale(title-medium);
+}
+
+.threshold-probe .probe-option-detail {
+  @include type.scale(body-medium);
+}
+
+.threshold-probe .probe-big {
+  min-height: 96px;
+}
+
+// Unpowered: the scene waits dim behind the shared unlock box, which the helper puts before it.
+.stage-body .unlock {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+@media (max-width: 900px) {
+  .stage-body {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+
+  .stage-scene {
+    --stage-h: max(14rem, calc(100vh - var(--top-bar-h) - 22rem));
+    width: min(100%, calc(var(--stage-h) * var(--piece-ratio, 1.7778)));
+  }
+
+  @supports (height: 100svh) {
+    .stage-scene {
+      --stage-h: max(14rem, calc(100svh - var(--top-bar-h) - 22rem));
+    }
+  }
+}
+
+// A short viewport (a laptop at 768 or 800 tall): the knobs close up so the feed still peeks.
+@media (min-width: 901px) and (max-height: 860px) {
+  .stage-inner {
+    gap: 0.9rem;
+  }
+
+  .stage-head {
+    gap: 0.2rem;
+  }
+
+  .stage-brief {
+    @include type.scale(body-medium);
+  }
+
+  .stage-knobs {
+    gap: 0.45rem;
+  }
+
+  .knob {
+    gap: 0.45rem;
+    padding: 0.6rem 2.5rem 0.6rem 0.85rem;
+  }
+
+  .knob-mark {
+    top: 0.6rem;
+    right: 0.6rem;
+  }
+
+  .knob-big {
+    min-height: 52px;
+  }
+
+  .stage-side {
+    gap: 0.5rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stage-inner,
+  .stage-body,
+  .knob,
+  .knob-mark,
+  .knob-bar::before,
+  .stage-dot {
+    transition: none;
+  }
+
+  .stage[data-mode='arriving'] .stage-inner,
+  .stage-done-mark,
+  .stage-done-text {
+    animation: none;
+  }
+}

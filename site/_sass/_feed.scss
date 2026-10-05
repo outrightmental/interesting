@@ -261,6 +261,19 @@
   }
 }
 
+// A card taken to the stage leaves upward and fades; the column closes behind it.
+.card-leave {
+  pointer-events: none;
+  animation: card-out var(--md-sys-motion-duration-medium) var(--md-sys-motion-easing-emphasized-accelerate) both;
+}
+
+@keyframes card-out {
+  to {
+    opacity: 0;
+    transform: translateY(-24px) scale(0.96);
+  }
+}
+
 .feed-sentinel {
   height: 1px;
   margin-top: 1rem;
@@ -291,7 +304,8 @@
     transition: none;
   }
 
-  .card-enter {
+  .card-enter,
+  .card-leave {
     animation: none;
   }
 }
