@@ -978,7 +978,9 @@ class ResponsiveAccessibleAxiomTest(SiteDirTestCase):
                      "refused, exactly as one that orphans a page is"]:
             with self.subTest(rule=rule):
                 self.assertIn(rule, rules)
-        self.assertEqual(rules.count("AXIOM, every run:"), 6, "every axiom stands over every run")
+        # One AXIOM in the prompt per coded axiom, so neither list can grow without the other.
+        self.assertEqual(rules.count("AXIOM, every run:"), len(CODED_AXIOMS),
+                         "every axiom stands over every run")
 
     def test_the_prompt_also_asks_for_what_no_validator_can_judge(self):
         # Open question 1 of the issue: both, and the prompt is the wider of the two. Contrast needs
