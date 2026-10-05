@@ -19,11 +19,16 @@
       reading as it changes (threshold:reading). With no sky yet it deals one unpowered card early,
       carrying the shared unlock (window.interestingSite.unlock), and every card that reads the sky
       follows the persona as stars are placed (persona:sky).
+    - Every card is a piece waiting to be played: a world card is a fresh piece of that world, a
+      spark card is the piece its seed makes. Pressing a card opens it on the page's stage
+      (js/stage.js) instead of leaving the page, and the card leaves the feed; when a piece is
+      finished the stage takes the next card from the top of the feed
+      (window.interestingFeed.take), so the feed is the stack of what comes next. Without the
+      stage a card is the plain link it was written as.
     - It paints a page's feature on request: window.interestingFeed.feature(host, canvas, file)
       paints the named world across the canvas in that world's palette (the host takes the
       world's data-mood) and keeps it live exactly as a card is, and unfeature(host) clears it.
-      The threshold uses it to show the world a reading opens onto. feed:ready is dispatched on
-      window once the API is there.
+      feed:ready is dispatched on window once the API is there.
 
   ---------------------------------------------------------------------------------------------
   A module, in js/modules/<world>.js, where <world> is the page's file without ".html":
@@ -261,6 +266,7 @@ async function paint(card) {
   const m = meta.get(card);
   if (!m || !m.canvas || !card.isConnected) return;
   const mod = m.id ? await loadModule(m.id) : null;
+  if (meta.get(card) !== m) return; // featured again, or taken, while the module loaded
   const box = m.canvas.parentNode;
   const w = box.clientWidth;
   const h = box.clientHeight;
@@ -610,6 +616,58 @@ function unlockCard() {
   return card;
 }
 
+/* ---- the stack: a card leaves the feed to be played ------------------------------------------ */
+
+// Take `card` out of the feed, with a short leave, and keep the feed stocked.
+function consume(card) {
+  const at = cards.indexOf(card);
+  if (at < 0) return;
+  cards.splice(at, 1);
+  if (watcher) watcher.unobserve(card);
+  deactivate(card);
+  if (card === suggested) suggested = null;
+  card.classList.add('card-leave');
+  const gone = () => {
+    card.remove();
+    meta.delete(card);
+    relayout();
+  };
+  if (calm.matches) gone();
+  else window.setTimeout(gone, 300);
+  if (cards.length < 12) more();
+}
+
+// The next piece: the first card in feed order that is a world's (and that `fit`, when given,
+// accepts by file), taken out of the feed.
+function take(fit) {
+  const playable = cards.filter((c) => {
+    const m = meta.get(c);
+    return m && m.world && (m.kind === 'world' || m.kind === 'spark');
+  });
+  const card = (typeof fit === 'function' && playable.find((c) => fit(meta.get(c).world.file))) || playable[0];
+  if (!card) return null;
+  const m = meta.get(card);
+  const taken = { file: m.world.file, seed: m.seed, kind: m.kind };
+  consume(card);
+  return taken;
+}
+
+// A press on a card opens its piece on the stage, when there is one; a modified press, a middle
+// press or a page without a stage keeps the link as written.
+function openFromCard(ev) {
+  const link = ev.target.closest('.card-link');
+  if (!link || !window.interestingStage) return;
+  if (ev.button !== 0 || ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey) return;
+  const card = link.closest('.card');
+  const m = card && meta.get(card);
+  if (!m || !m.world) return;
+  ev.preventDefault();
+  const file = m.world.file;
+  const seed = m.seed;
+  consume(card);
+  window.interestingStage.open(file, seed, { arriving: true, scroll: true });
+}
+
 /* ---- a page's feature ---------------------------------------------------------------------- */
 
 const features = new Set();
@@ -766,6 +824,7 @@ function start() {
       if (entries.some((e) => e.isIntersecting)) more();
     }, { rootMargin: '900px 0px' }).observe(sentinel);
   }
+  grid.addEventListener('click', openFromCard);
 
   let lastWidth = grid.clientWidth;
   window.addEventListener('resize', () => {
@@ -808,7 +867,7 @@ function start() {
   }
 }
 
-window.interestingFeed = { feature, unfeature };
+window.interestingFeed = { feature, unfeature, take, consume };
 
 if (grid && WORLDS.length) start();
 try {

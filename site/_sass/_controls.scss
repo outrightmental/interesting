@@ -86,6 +86,7 @@ a.action:focus-visible {
 }
 
 .btn-filled,
+a.action.btn-filled,
 button[aria-pressed='true'],
 button[aria-busy='true'] {
   background: var(--md-sys-color-primary);
@@ -93,6 +94,7 @@ button[aria-busy='true'] {
 }
 
 .btn-filled:focus-visible,
+a.action.btn-filled:focus-visible,
 button[aria-pressed='true']:focus-visible {
   outline-color: var(--md-sys-color-on-surface);
 }
@@ -104,7 +106,8 @@ a.action,
   box-shadow: inset 0 0 0 1px var(--md-sys-color-outline);
 }
 
-.btn-text {
+.btn-text,
+a.action.btn-text {
   background: transparent;
   color: var(--md-sys-color-primary);
   padding-inline: 0.75rem;

@@ -649,9 +649,9 @@ class SingleExperienceTest(SiteDirTestCase):
         self.assertIn("count them as part of the piece when you weigh the site as a whole", prompt)
         self.assertIn("carried on by a later run", prompt)
 
-    def test_the_aim_is_a_stated_standard_and_not_a_seventh_axiom(self):
+    def test_the_aim_is_a_stated_standard_and_not_a_further_axiom(self):
         # Issue #36, question 3: prompt-only. No check could settle whether a site reads as one
-        # experience, so the six coded axioms are still the whole of what the code refuses -- a
+        # experience, so the seven coded axioms are still the whole of what the code refuses -- a
         # page that shares nothing with the rest is accepted, exactly as before, and the prompt is
         # where the aim lives. (The same reasoning INTERESTING is left uncoded for.)
         (self.site / "index.html").write_text(home("sitemap.xml", "stranger.html", "error.html"))
@@ -665,8 +665,8 @@ class SingleExperienceTest(SiteDirTestCase):
         })
         self.assertEqual(sorted(t.name for _, t, _ in ops), ["sitemap.xml", "stranger.html"])
         self.assertEqual(sorted(name for name in dir(mi) if name.startswith("check_")),
-                         ["check_accessibility", "check_analytics", "check_cadence", "check_mood",
-                          "check_reachability", "check_state"])
+                         ["check_accessibility", "check_analytics", "check_cadence", "check_completion",
+                          "check_mood", "check_reachability", "check_state"])
 
 
 class BuildPipelinePromptTest(unittest.TestCase):
@@ -971,7 +971,7 @@ class ResponsiveAccessibleAxiomTest(SiteDirTestCase):
                      "refused, exactly as one that orphans a page is"]:
             with self.subTest(rule=rule):
                 self.assertIn(rule, rules)
-        self.assertEqual(rules.count("AXIOM, every run:"), 6, "every axiom stands over every run")
+        self.assertEqual(rules.count("AXIOM, every run:"), 7, "every axiom stands over every run")
 
     def test_the_prompt_also_asks_for_what_no_validator_can_judge(self):
         # Open question 1 of the issue: both, and the prompt is the wider of the two. Contrast needs
@@ -1655,12 +1655,12 @@ class LegibilityStandardTest(unittest.TestCase):
         self.assertIn(f"Keep it {mi.LEGIBLE}", last)
         self.assertIn("never a dead end", last)
 
-    def test_the_standard_is_stated_and_not_a_seventh_check(self):
-        # The same reasoning WHOLE and INTERESTING are left uncoded for: the six coded axioms are
+    def test_the_standard_is_stated_and_not_a_further_check(self):
+        # The same reasoning WHOLE and INTERESTING are left uncoded for: the seven coded axioms are
         # still the whole of what the code refuses (issue #46, question 1).
         self.assertEqual(sorted(name for name in dir(mi) if name.startswith("check_")),
-                         ["check_accessibility", "check_analytics", "check_cadence", "check_mood",
-                          "check_reachability", "check_state"])
+                         ["check_accessibility", "check_analytics", "check_cadence", "check_completion",
+                          "check_mood", "check_reachability", "check_state"])
 
 
 class CadenceAxiomTest(SiteDirTestCase):
@@ -2015,8 +2015,258 @@ def front_matter(**fields):
     return "---\n" + "".join(f"{key}: {value}\n" for key, value in fields.items()) + "---\n"
 
 
+def needs_node(test):
+    """Skip a test that plays pieces through the Node harness when Node is not installed.
+
+    In CI it is a failure instead, for the same reason needs_the_build fails there: a silent skip
+    would quietly stop holding the site to the completion axiom.
+    """
+    try:
+        mi.run_piece_harness({"js/modules/probe.js": "export default { id: 'probe' };\n"})
+    except mi.BuildToolchainError as err:
+        if os.environ.get("CI"):
+            test.fail(f"Node is missing in CI: {err}")
+        test.skipTest(f"Node is not installed ({err})")
+
+
+def world_list(*worlds):
+    """The #site-worlds JSON the layout writes into every page, listing `worlds` (page names)."""
+    entries = [{"file": world, "name": world[:-5], "orientation": "o", "mood": "m", "aspect": "1 / 1", "what": "."}
+               for world in worlds]
+    return f"<script type='application/json' id='{mi.WORLD_LIST_ID}'>{json.dumps(entries)}</script>"
+
+
+def piece_module(piece_js, world="toy"):
+    """A world's module exporting the card half of the contract and `piece_js` as its piece()."""
+    return ("export default {\n  id: '" + world + "',\n  paint() {},\n  spark() { return null; },\n"
+            "  piece(env) {\n" + piece_js + "\n  }\n};\n")
+
+
+# A piece that finishes: a press knob and a wait knob the piece satisfies itself, differing by seed.
+FINISHING_PIECE = """    const n = env.int(2, 4);
+    let settled = 0;
+    return {
+      title: n + ' turns of the toy',
+      brief: 'Turn it, then let it settle.',
+      steps: [
+        { id: 'turn', ask: 'turn it', kind: 'press', count: n },
+        { id: 'settle', ask: 'let it settle', kind: 'wait', after: 'turn' }
+      ],
+      start(ctx) { ctx.g.fillRect(0, 0, ctx.w, ctx.h); },
+      frame(t, dt, ctx) {
+        if ((ctx.value('turn') || 0) >= n) {
+          settled += dt;
+          ctx.progress('settle', settled / 2);
+          if (settled >= 2) ctx.satisfy('settle');
+        }
+      }
+    };"""
+
+# The same piece, but the wait knob is never satisfied: a visitor opens it and cannot finish.
+ENDLESS_PIECE = FINISHING_PIECE.replace("if (settled >= 2) ctx.satisfy('settle');", "")
+
+# A piece whose title is drawn from Math.random: the same seed does not make the same piece.
+UNSTABLE_PIECE = FINISHING_PIECE.replace("title: n + ' turns of the toy'", "title: Math.random() + ' turns'")
+
+# A piece that is the same whatever the seed.
+SAME_PIECE = FINISHING_PIECE.replace("const n = env.int(2, 4);", "const n = 3;")
+
+# A piece with six knobs: one more than the stage renders, and more than finishes expediently.
+LONG_PIECE = """    return {
+      title: 'the long way round',
+      brief: 'Six things.',
+      steps: ['a', 'b', 'c', 'd', 'e', 'f'].map((id) => ({ id, ask: id, kind: 'toggle' }))
+    };"""
+
+# A piece that reaches for the document, which the stage never hands it and the harness has not got.
+DOCUMENT_PIECE = "    document.title = 'x';\n" + FINISHING_PIECE
+
+# A piece with one knob: a lever, not a flow.
+ONE_KNOB_PIECE = """    return {
+      title: 'one switch',
+      brief: 'Flip it.',
+      steps: [{ id: 'flip', ask: 'flip it', kind: 'toggle' }]
+    };"""
+
+# A piece that finishes itself on arrival, before its visitor has set anything.
+SELF_FINISHING_PIECE = """    return {
+      title: 'already done',
+      brief: 'Nothing to do.',
+      auto: false,
+      steps: [{ id: 'a', ask: 'a', kind: 'toggle' }, { id: 'b', ask: 'b', kind: 'toggle' }],
+      start(ctx) { ctx.complete(); }
+    };"""
+
+
+class CompletionAxiomTest(SiteDirTestCase):
+    """Every world is a piece a visitor can finish.
+
+    A world's page is a stage, and what a visitor opens there is a piece its module makes from a
+    seed: a few knobs, a clear end, a vanish, and the next. The seventh axiom stands beside the
+    other six -- stated in the prompt, held to by validate_plan -- and what code can settle about
+    it is that every listed world has a module with a piece, and that the piece can be played to
+    its end: by the harness here, exactly as by the stage in a browser.
+    """
+
+    PAGES = ["index.html", "error.html", "toy.html"]
+
+    def setUp(self):
+        super().setUp()
+        needs_node(self)
+        (self.site / "js" / "modules").mkdir(parents=True)
+        (self.site / mi.MOOD_SCRIPT).write_text(mood_script(*MoodAxiomTest.MECHANISMS))
+        (self.site / "index.html").write_text(queried(home("toy.html", "error.html") + world_list("toy.html")))
+        (self.site / "error.html").write_text(queried("<p>404</p>"))
+        (self.site / "toy.html").write_text(queried("<p>toy</p>"))
+        (self.site / "sitemap.xml").write_text(sitemap(*self.PAGES))
+        self.module = self.site / "js" / "modules" / "toy.js"
+        self.module.write_text(piece_module(FINISHING_PIECE))
+
+    def rules(self):
+        prompt = mi.build_prompt([("index.html", "<h1>hi</h1>")])
+        return prompt[prompt.index("Rules:"):]
+
+    def plan(self, **files):
+        return {"summary": "a change", "files": [{"path": path, "content": content} for path, content in files.items()]}
+
+    def test_the_axiom_is_a_standing_rule_of_every_prompt(self):
+        rules = self.rules()
+        for rule in ["AXIOM, every run: every world is a piece a visitor can finish",
+                     "a fidget toy with a few levers and knobs on it",
+                     "vanishes with some ceremony and the next card in the feed opens in its place",
+                     "every listed world's module exports piece(env)",
+                     mi.STAGE_SCRIPT,
+                     "choice (two to four options), toggle, range, press, hold, tap, wait",
+                     "The same seed makes the same piece and different seeds make different pieces",
+                     "never reaches for the document, the window or the browser's storage",
+                     "The world's old interactive page is the piece's material",
+                     mi.PIECE_HARNESS_REL,
+                     f"within {mi.PIECE_MAX_TAPS} taps and {mi.PIECE_MAX_SECONDS} seconds of play"]:
+            with self.subTest(rule=rule):
+                self.assertIn(rule, rules)
+        self.assertIn(f"{mi.PIECE_MIN_STEPS} to {mi.PIECE_MAX_STEPS} knobs", rules)
+        self.assertIn("finished by its visitor, never by itself", rules)
+
+    def test_the_prompt_tells_a_run_how_a_world_page_is_the_stage(self):
+        prompt = mi.build_prompt([("index.html", "<h1>hi</h1>")])
+        self.assertIn("A world page's <main> is the stage", prompt)
+        self.assertIn("{% set stageWorld = 'thing' %}{% include 'stage.njk' %}", prompt)
+        self.assertIn("with its card and its piece", prompt)
+        self.assertIn("A world needs no stylesheet of its own", prompt)
+
+    def test_the_list_of_worlds_is_read_off_the_home_page(self):
+        self.assertEqual(mi.listed_worlds(dict(mi.read_site())), ["toy.html"])
+        self.assertEqual(mi.listed_worlds({"index.html": "<p>no list</p>"}), [])
+        self.assertEqual(mi.listed_worlds({"index.html": world_list().replace("[]", "not json")}), [])
+
+    def test_a_world_whose_piece_finishes_is_not_a_world_without_a_finish(self):
+        self.assertEqual(mi.worlds_without_a_finish(dict(mi.read_site())), {})
+
+    def test_a_world_without_a_module_cannot_be_finished(self):
+        self.module.unlink()
+        self.assertEqual(mi.worlds_without_a_finish(dict(mi.read_site())),
+                         {"toy.html": "has no module at js/modules/toy.js"})
+
+    def test_a_module_without_a_piece_cannot_be_finished(self):
+        self.module.write_text("export default { id: 'toy', paint() {}, spark() { return null; } };\n")
+        self.assertEqual(mi.worlds_without_a_finish(dict(mi.read_site())),
+                         {"toy.html": "has a module, js/modules/toy.js, that exports no piece()"})
+
+    def test_a_piece_that_never_finishes_is_a_world_without_a_finish(self):
+        self.module.write_text(piece_module(ENDLESS_PIECE))
+        missing = mi.worlds_without_a_finish(dict(mi.read_site()))
+        self.assertEqual(list(missing), ["toy.html"])
+        self.assertIn("cannot be finished", missing["toy.html"])
+        self.assertIn('"settle" was not set', missing["toy.html"])
+
+    def test_the_same_seed_must_make_the_same_piece(self):
+        self.module.write_text(piece_module(UNSTABLE_PIECE))
+        missing = mi.worlds_without_a_finish(dict(mi.read_site()))
+        self.assertIn("the same seed does not make the same piece", missing.get("toy.html", ""))
+
+    def test_different_seeds_must_make_different_pieces(self):
+        self.module.write_text(piece_module(SAME_PIECE))
+        missing = mi.worlds_without_a_finish(dict(mi.read_site()))
+        self.assertIn("every seed makes the same piece", missing.get("toy.html", ""))
+
+    def test_a_piece_has_at_most_the_knobs_the_stage_renders(self):
+        self.module.write_text(piece_module(LONG_PIECE))
+        missing = mi.worlds_without_a_finish(dict(mi.read_site()))
+        self.assertIn(f"at most {mi.PIECE_MAX_STEPS}", missing.get("toy.html", ""))
+
+    def test_a_flow_is_more_than_one_knob(self):
+        self.module.write_text(piece_module(ONE_KNOB_PIECE))
+        missing = mi.worlds_without_a_finish(dict(mi.read_site()))
+        self.assertIn(f"a flow is at least {mi.PIECE_MIN_STEPS}", missing.get("toy.html", ""))
+
+    def test_a_piece_is_finished_by_its_visitor(self):
+        self.module.write_text(piece_module(SELF_FINISHING_PIECE))
+        missing = mi.worlds_without_a_finish(dict(mi.read_site()))
+        self.assertIn("finished before any knob was set", missing.get("toy.html", ""))
+
+    def test_a_piece_that_reaches_for_the_document_fails(self):
+        self.module.write_text(piece_module(DOCUMENT_PIECE))
+        missing = mi.worlds_without_a_finish(dict(mi.read_site()))
+        self.assertIn("piece() threw", missing.get("toy.html", ""))
+
+    def test_a_plan_that_leaves_a_world_unfinishable_is_refused(self):
+        with self.assertRaises(mi.RejectedChange) as refused:
+            mi.validate_plan(self.plan(**{"js/modules/toy.js": piece_module(ENDLESS_PIECE)}))
+        self.assertIn("every world must be a piece a visitor can finish: toy.html", str(refused.exception))
+
+    def test_a_plan_that_takes_a_piece_away_is_refused(self):
+        with self.assertRaises(mi.RejectedChange) as refused:
+            mi.validate_plan(self.plan(**{"js/modules/toy.js": "export default { id: 'toy', paint() {} };\n"}))
+        self.assertIn("exports no piece()", str(refused.exception))
+
+    def test_a_world_added_without_a_piece_is_refused(self):
+        plan = self.plan(**{
+            "index.html": queried(home("toy.html", "new.html", "error.html") + world_list("toy.html", "new.html")),
+            "new.html": page(title="new"),
+            "sitemap.xml": sitemap(*self.PAGES, "new.html"),
+        })
+        with self.assertRaises(mi.RejectedChange) as refused:
+            mi.validate_plan(plan)
+        self.assertIn("new.html has no module at js/modules/new.js", str(refused.exception))
+
+    def test_a_world_added_with_a_finishing_piece_is_accepted(self):
+        plan = self.plan(**{
+            "index.html": queried(home("toy.html", "new.html", "error.html") + world_list("toy.html", "new.html")),
+            "new.html": page(title="new"),
+            "sitemap.xml": sitemap(*self.PAGES, "new.html"),
+            "js/modules/new.js": piece_module(FINISHING_PIECE, world="new"),
+        })
+        ops = mi.validate_plan(plan)
+        self.assertEqual(sorted(t.name for _, t, _ in ops), ["index.html", "new.html", "new.js", "sitemap.xml"])
+
+    def test_only_what_the_run_breaks_is_refused(self):
+        # A world that already cannot be finished blocks no plan, so a run can repair the site.
+        self.module.write_text(piece_module(ENDLESS_PIECE))
+        ops = mi.validate_plan(self.plan(**{"toy.html": queried("<p>toy, retouched</p>")}))
+        self.assertEqual([t.name for _, t, _ in ops], ["toy.html"])
+
+    def test_a_plan_that_repairs_a_piece_is_accepted(self):
+        self.module.write_text(piece_module(ENDLESS_PIECE))
+        ops = mi.validate_plan(self.plan(**{"js/modules/toy.js": piece_module(FINISHING_PIECE)}))
+        self.assertEqual([t.name for _, t, _ in ops], ["toy.js"])
+
+    def test_dropping_the_list_of_worlds_is_refused(self):
+        with self.assertRaises(mi.RejectedChange) as refused:
+            mi.validate_plan(self.plan(**{"index.html": queried(home("toy.html", "error.html"))}))
+        self.assertIn("one list of worlds", str(refused.exception))
+
+    def test_a_site_with_no_list_of_worlds_is_not_held_to_the_axiom(self):
+        # The fixtures of every other axiom test list no worlds, and none of them is played.
+        self.assertEqual(mi.worlds_without_a_finish({"index.html": "<h1>hi</h1>", "js/modules/x.js": "nope"}), {})
+
+    def test_a_missing_harness_is_the_toolchain_and_not_the_model(self):
+        with mock.patch.object(mi, "PIECE_HARNESS", self.root / "nowhere.mjs"):
+            with self.assertRaises(mi.BuildToolchainError):
+                mi.worlds_without_a_finish(dict(mi.read_site()))
+
+
 class BuildPipelineTest(unittest.TestCase):
-    """Issue #25: the real build, and all six axioms judged on what it produces.
+    """Issue #25: the real build, and all seven axioms judged on what it produces.
 
     SiteDirTestCase stands the build in with the identity, which is exactly right for its plain-HTML
     fixtures; this is where the pipeline itself is exercised. /site is source now -- a layout is not
@@ -2168,10 +2418,11 @@ class BuildPipelineTest(unittest.TestCase):
 
 
 class RealSiteTest(unittest.TestCase):
-    """The site in this repository obeys all six axioms: every page is reachable from the root,
+    """The site in this repository obeys all seven axioms: every page is reachable from the root,
     every page carries the analytics tag and consent banner, every page is responsive and
     accessible, every page carries the local-state store and its meta menu, no page ties the site
-    to an update frequency, and every page asks before it offers.
+    to an update frequency, every page asks before it offers, and every world is a piece a visitor
+    can finish.
 
     validate_plan only refuses what a run breaks, so the invariants have to start out true: this is
     what makes them hold from the next deploy onward and not only for pages a later run adds. It
@@ -2200,6 +2451,44 @@ class RealSiteTest(unittest.TestCase):
     def test_every_page_is_reachable_from_the_root_and_listed_in_the_sitemap(self):
         self.assertEqual(mi.unreachable_pages(self.site), {})
         self.assertGreater(len(mi.html_pages(self.site)), 1, "the check is worth nothing on one page")
+
+    def test_every_world_is_a_piece_a_visitor_can_finish(self):
+        # The completion axiom, on the site as committed: every world the layout lists has a module
+        # with a piece, and the harness plays every one of them to its end for every seed it tries.
+        worlds = mi.listed_worlds(self.site)
+        self.assertGreaterEqual(len(worlds), 10, "the check is worth nothing on a few worlds")
+        self.assertEqual(mi.worlds_without_a_finish(self.site), {})
+
+    def test_every_world_page_is_the_stage(self):
+        # A world page is the stage and nothing else, so what a visitor opens is a piece, not a
+        # fixed page; the threshold is the same stage in its asking state.
+        for world in mi.listed_worlds(self.site):
+            with self.subTest(world=world):
+                page = self.site[world]
+                self.assertIn("id='stage'", page)
+                self.assertIn(f"data-stage-world='{world[:-5]}'", page)
+                self.assertIn(mi.STAGE_SCRIPT, page)
+        self.assertIn("data-threshold='true'", self.site["index.html"])
+        self.assertIn("id='persona-probe'", self.site["index.html"])
+
+    def test_the_list_of_worlds_is_the_one_list(self):
+        # The JSON the layout writes for the scripts is rendered from _data/worlds.json, so the
+        # stage, the feed, the site map and the mood atlas all name the same worlds.
+        data = json.loads(self.source["_data/worlds.json"])
+        self.assertEqual(mi.listed_worlds(self.site), [world["file"] for world in data["worlds"]])
+        for page in mi.html_pages(self.site):
+            with self.subTest(page=page):
+                self.assertIn(f"id='{mi.WORLD_LIST_ID}'", self.site[page])
+
+    def test_the_prompt_and_the_harness_agree_on_the_limits(self):
+        # The limits the prompt states are the harness's own, repeated in Python for the prompt.
+        played = subprocess.run([mi.NODE_BIN, str(mi.PIECE_HARNESS), "--modules",
+                                 str(self.repo / "site" / "js" / "modules"), "--json"],
+                                capture_output=True, text=True, cwd=self.repo, timeout=120)
+        report = json.loads(played.stdout)
+        self.assertEqual((report["minSteps"], report["maxSteps"], report["maxTaps"], report["maxSeconds"]),
+                         (mi.PIECE_MIN_STEPS, mi.PIECE_MAX_STEPS, mi.PIECE_MAX_TAPS, mi.PIECE_MAX_SECONDS))
+        self.assertTrue(report["ok"], [m for m in report["modules"] if not m["ok"]])
 
     def test_every_page_is_responsive_and_accessible(self):
         # Open question 3 of issue #26: the pages that exist today are audited and held to the rule

@@ -34,9 +34,11 @@
   What a page is: its <main> is the feature. It is unbordered, it fills the first screen (the
   viewport less the top bar and a margin, so the feed peeks above the fold), its background is
   the page's own palette bleeding to the viewport's edges, and its content sits in a centred
-  column (every direct child of <main> lands in that column; see _sass/_panel.scss). A page sets
-  nothing about navigation: the top bar and the feed are the whole of the shared chrome, and they
-  are the same on every page.
+  column (every direct child of <main> lands in that column; see _sass/_panel.scss). A world
+  page's <main> is the stage (_includes/stage.njk): a piece of that world, generated from a seed,
+  played and finished there, and replaced by the next card from the feed. A page sets nothing
+  about navigation: the top bar and the feed are the whole of the shared chrome, and they are
+  the same on every page.
 
   The shared chrome, top to bottom, and why it is this size:
     the top bar  an M3 top app bar: the site's name, three navigation destinations -- the
@@ -67,7 +69,7 @@
                  question, and what it read). Its headings come after the page's own, so the
                  heading outline a screen reader walks stays in order.
 
-  Six shared lines in the <head>:
+  Seven shared lines in the <head>:
     js/analytics.js  the Google Analytics tag and the consent banner that gates it (see
                      ANALYTICS_TAG and check_analytics in .github/scripts/make_interesting.py).
     js/state.js      the one local-state document every page reads and writes through, and the
@@ -86,11 +88,14 @@
                      check_mood).
     js/feed.js       the feed: lays the world cards out as columns, paints them through the
                      modules in js/modules/, keeps dealing cards as the visitor scrolls, and
-                     paints the threshold's feature (window.interestingFeed.feature). An ES
-                     module, so it loads each world's module only when a card of it is near.
+                     hands the stage the next card (window.interestingFeed.take). An ES module,
+                     so it loads each world's module only when a card of it is near.
+    js/stage.js      the stage: runs a piece in a page's feature -- the knobs, the progress, the
+                     finish, the vanish, the next -- and documents the piece contract every
+                     world's module meets (see the README, "Completion axiom").
   Three of them may never be dropped: a built page missing the analytics, state or mood line is
   refused. The files behind the first two are fixed; js/threshold.js is protected instead, so a
-  run may rewrite the flow but never delete it. The other three are ordinary site source.
+  run may rewrite the flow but never delete it. The other four are ordinary site source.
 
   The page's own world, when it has one, is named on <html data-world> so _sass/_mood.scss gives
   the page that world's palette; a visitor's reading lands on <html data-mood> and wins over it.
@@ -115,6 +120,9 @@
   <meta name='color-scheme' content='dark'>
   <title>{% if title %}{{ title }} · {% endif %}interesting</title>
   <link rel='icon' href='{{ siteRoot }}favicon.svg' type='image/svg+xml'>
+  {#- The one list of worlds, for the scripts that open pieces and deal cards: the same list the
+      feed, the site map and the mood atlas are rendered from. -#}
+  <script type='application/json' id='site-worlds'>{{ worlds.worlds | dump | safe }}</script>
 {%- if description %}
   <meta name='description' content='{{ description }}'>
 {%- endif %}
@@ -135,6 +143,7 @@
   <script src='{{ siteRoot }}js/site.js'></script>
   <script src='{{ siteRoot }}js/threshold.js' defer></script>
   <script src='{{ siteRoot }}js/feed.js' type='module'></script>
+  <script src='{{ siteRoot }}js/stage.js' type='module'></script>
 {%- else %}
   <!-- Analytics and the cookie consent banner that gates it; see js/analytics.js. -->
   <script src='js/analytics.js' defer></script>
@@ -152,6 +161,9 @@
   <script src='js/threshold.js' defer></script>
   <!-- The feed; see js/feed.js. A module script runs deferred too, after the flow it reads. -->
   <script src='js/feed.js' type='module'></script>
+  <!-- The stage, where a piece is played and finished; see js/stage.js. After the feed it draws
+       the next card from. -->
+  <script src='js/stage.js' type='module'></script>
 {%- endif %}
 </head>
 <body>
