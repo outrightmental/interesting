@@ -122,6 +122,17 @@
       </div>
     </section>
 
+    <section class='constellation-logbook' aria-label='Constellation relay logbook'>
+      <p class='constellation-logbook-title'>relay logbook</p>
+      <p class='constellation-logbook-status' id='constellation-logbook-status'>Preparing logbook capture controls…</p>
+      <ol class='constellation-logbook-list' id='constellation-logbook-list'></ol>
+      <div class='controls constellation-logbook-controls'>
+        <button id='constellation-logbook-capture' type='button'>capture this moment</button>
+        <button id='constellation-logbook-highlight' type='button'>highlight one entry</button>
+        <button id='constellation-logbook-clear' type='button'>clear logbook</button>
+      </div>
+    </section>
+
     <nav class='footer-circuit' aria-label='Constellation circuit'>
       <p class='footer-circuit-label'>constellation circuit</p>
       <div class='footer-circuit-links'>
@@ -130,6 +141,7 @@
 {%- endfor %}
       </div>
     </nav>
+    <script src='js/constellation-logbook.js' defer></script>
 {%- endif %}
 {%- if not (page and page.fileSlug == 'sitemap') %}
 {% include 'wayfinding.njk' %}

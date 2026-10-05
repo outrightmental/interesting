@@ -310,6 +310,94 @@
   pointer-events: none;
 }
 
+// Shared relay logbook for the same circuit, so each world can capture one live output and keep a
+// coherent cross-world narrative thread in one place.
+.constellation-logbook {
+  margin-top: 0.55rem;
+  border: 1px solid vars.$hairline;
+  border-radius: vars.$radius-panel;
+  background: rgba(7, 10, 20, 0.5);
+  padding: 0.62rem;
+}
+
+.constellation-logbook-title {
+  margin: 0;
+  color: var(--accent2);
+  font-size: 0.76rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.constellation-logbook-status {
+  margin: 0.42rem 0 0;
+  color: #d8e6ff;
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
+.constellation-logbook-status.good {
+  color: var(--good);
+}
+
+.constellation-logbook-list {
+  margin: 0.52rem 0 0;
+  padding-left: 1.1rem;
+  color: #d8e6ff;
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.constellation-logbook-list li {
+  margin: 0.26rem 0;
+}
+
+.constellation-logbook-entry-link {
+  color: var(--accent);
+}
+
+.constellation-logbook-entry-link:hover,
+.constellation-logbook-entry-link:focus-visible {
+  color: #eaf1ff;
+}
+
+.constellation-logbook-entry-meta,
+.constellation-logbook-entry-text {
+  display: block;
+}
+
+.constellation-logbook-entry-meta {
+  color: #bfd3f8;
+  font-family: vars.$mono;
+  font-size: 0.76rem;
+}
+
+.constellation-logbook-entry-text {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.constellation-logbook-list .constellation-logbook-entry-current .constellation-logbook-entry-link {
+  color: var(--accent2);
+}
+
+.constellation-logbook-list .constellation-logbook-entry-highlight {
+  border-left: 2px solid rgba(255, 229, 163, 0.62);
+  padding-left: 0.42rem;
+}
+
+.constellation-logbook-list .constellation-logbook-empty {
+  color: var(--muted);
+}
+
+.constellation-logbook-controls {
+  margin-top: 0.52rem;
+}
+
+.constellation-logbook-controls button {
+  font-size: 0.78rem;
+  padding: 0.32rem 0.68rem;
+}
+
 // Shared onward loop for the constellation worlds, federated into one include so those pages
 // keep one coherent cross-page route without repeating hand-written link clusters.
 .footer-circuit {
@@ -352,7 +440,8 @@
   .constellation-honors-controls,
   .constellation-remixer-controls,
   .constellation-signals-controls,
-  .constellation-switchboard-controls {
+  .constellation-switchboard-controls,
+  .constellation-logbook-controls {
     flex-direction: column;
   }
 
@@ -364,7 +453,8 @@
   .constellation-remixer-controls button,
   .constellation-signals-controls button,
   .constellation-switchboard-controls .action,
-  .constellation-switchboard-controls button {
+  .constellation-switchboard-controls button,
+  .constellation-logbook-controls button {
     width: 100%;
   }
 }
