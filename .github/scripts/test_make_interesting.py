@@ -2623,7 +2623,8 @@ class NavTest(unittest.TestCase):
         self.assertNotIn("href", logo)
         near = shell[shell.index("sparknav-near"):shell.index("sparknav-far")]
         self.assertIn("{{ icons[link.icon] }}", near)
-        self.assertIn("index.html", self.source["_data/worlds.json"])
+        self.assertEqual(self.worlds["wayIn"][0]["file"], "index.html")
+        self.assertEqual(self.worlds["wayIn"][0]["icon"], "home", "the way home is a home icon")
 
     def test_the_name_fades_rather_than_disappearing_from_the_nav_tree(self):
         # The title is clipped to nothing and faded out, never display:none, so the logo keeps its
