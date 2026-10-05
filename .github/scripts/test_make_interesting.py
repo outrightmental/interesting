@@ -1355,6 +1355,12 @@ class LocalStateAxiomTest(SiteDirTestCase):
         self.assertEqual(sorted(mi.pages_touching_storage(dict(mi.read_site()))), ["index.html"])
 
 
+def eval_ratio(aspect):
+    """"4 / 5" as 0.8: the same reading of an aspect ratio that site/js/variant.js does."""
+    parts = str(aspect).split("/")
+    return float(parts[0]) / (float(parts[1]) if len(parts) > 1 else 1.0)
+
+
 def needs_node(test):
     """Skip a test that runs Node when Node is not installed; in CI that is a failure instead."""
     if shutil.which(mi.NODE_BIN) is None:
@@ -1640,6 +1646,307 @@ class LocalStateStoreTest(unittest.TestCase):
                          "the imported sky is live for this page")
         self.assertEqual(imported["reloads"], 0, "but the menu must not reload it away")
         self.assertIn("this page only", imported["note"])
+
+
+class CardVariantTest(unittest.TestCase):
+    """What site/js/variant.js actually does: the randomized configuration a repeated feed card
+    wears (issue #53).
+
+    The feed deals endlessly, so every world comes round again and again, and a repeat used to
+    differ only in whatever its module happened to do with a fresh seed -- same palette, same frame,
+    nothing else moving at all. A variant is what else there is now, and two things about it are
+    worth testing rather than only reading: it is arithmetic over a seed with no browser in it,
+    which is the whole reason it is its own file; and what it is for is that a card looks
+    different, which is measurable. card_variant_harness.mjs rolls it, re-derives all fourteen mood
+    palettes through it and paints every world's module under it against a recording stand-in for a
+    canvas; the assertions are here.
+    """
+
+    # The two text colours a configuration may never move, and the ratio the accessibility axiom
+    # asks of them. They are spelled out here rather than read from the Sass so that moving them
+    # fails this test rather than passing quietly with a new pair.
+    FG = "#e6eaf5"
+    MUTED = "#b7c0da"
+    MIN_CONTRAST = 4.5
+    # How _sass/_tokens.scss derives the two surface tiers a card's text actually sits on, as
+    # (accent, white) fractions: surface-container, which a card's body is, and
+    # surface-container-highest, the brightest thing derived from a card's ground. Mixed here in
+    # sRGB where the sheet mixes in oklab, which is close enough for a guard and never flattering:
+    # the check is a floor on the contrast, not a reproduction of the browser's arithmetic.
+    TIERS = ((0.09, 0.055), (0.13, 0.12))
+
+    @classmethod
+    def setUpClass(cls):
+        cls.repo = Path(mi.__file__).resolve().parents[2]
+        cls.harness = Path(mi.__file__).resolve().parent / "card_variant_harness.mjs"
+        cls.variant = cls.repo / "site" / "js" / "variant.js"
+        cls.modules = cls.repo / "site" / "js" / "modules"
+        cls.observed = None
+
+    def setUp(self):
+        if not self.variant.is_file():
+            self.skipTest(f"no card configuration at {self.variant}")
+        needs_node(self)
+        if CardVariantTest.observed is None:
+            run = subprocess.run([mi.NODE_BIN, str(self.harness), str(self.variant),
+                                  str(self.modules), json.dumps(self.palettes())],
+                                 capture_output=True, text=True, timeout=180)
+            self.assertEqual(run.returncode, 0, f"the harness failed: {run.stderr[-2000:]}")
+            CardVariantTest.observed = json.loads(run.stdout)
+        self.seen = CardVariantTest.observed
+
+    def palettes(self):
+        """The fourteen palettes, read out of _sass/_mood.scss: the colours a configuration starts
+        from, taken from the one place they are written rather than from a copy kept here."""
+        sass = (self.repo / "site" / "_sass" / "_mood.scss").read_text()
+        found = {mood: seeds.split(", ") for mood, seeds
+                 in re.findall(r"^  ([a-z]+): \((#[0-9a-f]+(?:, #[0-9a-f]+)*)\),?$", sass, re.M)}
+        self.assertGreaterEqual(len(found), 10, "the mood palettes have moved out of _mood.scss")
+        for mood, seeds in found.items():
+            self.assertEqual(len(seeds), 4, f"{mood} is not four seeds")
+        return found
+
+    # ---- small colour arithmetic, so the assertions can be about what a visitor sees ----
+
+    @staticmethod
+    def rgb(value):
+        text = value.strip()
+        if text.startswith("#"):
+            hexed = text[1:]
+            if len(hexed) == 3:
+                hexed = "".join(c * 2 for c in hexed)
+            return tuple(int(hexed[i:i + 2], 16) for i in (0, 2, 4))
+        return tuple(float(n) for n in re.findall(r"[\d.]+", text)[:3])
+
+    @classmethod
+    def luminance(cls, value):
+        def channel(byte):
+            x = byte / 255.0
+            return x / 12.92 if x <= 0.04045 else ((x + 0.055) / 1.055) ** 2.4
+        r, g, b = (channel(byte) for byte in cls.rgb(value))
+        return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+    @classmethod
+    def contrast(cls, a, b):
+        la, lb = cls.luminance(a), cls.luminance(b)
+        return (max(la, lb) + 0.05) / (min(la, lb) + 0.05)
+
+    @classmethod
+    def mix(cls, a, b, t):
+        A, B = cls.rgb(a), cls.rgb(b)
+        return "rgb(%d,%d,%d)" % tuple(round(A[i] + (B[i] - A[i]) * t) for i in range(3))
+
+    @classmethod
+    def tiers(cls, seeds):
+        """The surface tones a card's text sits on, derived from its four configured seeds the way
+        _sass/_tokens.scss derives them."""
+        return [cls.mix(cls.mix(seeds["bg"], seeds["accent"], accent), "#fff", white)
+                for accent, white in cls.TIERS]
+
+    # ---- the configuration itself ----
+
+    def test_the_first_card_of_a_world_is_configured_to_change_nothing(self):
+        # Open question 3 of the issue, answered: the card the template wrote keeps its world's
+        # palette and its world's frame, so the feed still leads with the fourteen moods, and the
+        # repeats are what vary. Every dial of the plain variant is its no-op value.
+        plain = self.seen["plain"]
+        self.assertTrue(plain["plain"])
+        self.assertEqual({name: plain[name] for name in ("trade", "lift", "wash", "turn")},
+                         {"trade": 0, "lift": 0, "wash": 0, "turn": 0})
+        self.assertEqual({name: plain[name] for name in ("density", "scale", "stretch")},
+                         {"density": 1, "scale": 1, "stretch": 1})
+        for frame in self.seen["frames"]:
+            self.assertEqual(frame["plain"], frame["ratio"], "a plain card keeps its world's frame")
+        self.assertEqual(self.seen["plainLight"], "30% 20%",
+                         "and the light where _sass/_feed.scss puts it on its own")
+
+    def test_a_card_paints_the_same_picture_every_time_and_a_different_one_from_its_neighbour(self):
+        # The bargain the whole feed rests on: seeded, so a card repainted at a new column width is
+        # the same card, and no two cards are configured alike.
+        self.assertTrue(self.seen["repeatable"], "the same seed has to give the same configuration")
+        self.assertGreaterEqual(self.seen["distinct"], len(self.seen["rolls"]) - 1,
+                                "two seeds in six hundred rolled the same configuration")
+
+    def test_every_dial_covers_its_range(self):
+        # A dial that never leaves the middle is a dial that varies nothing. Each has to be found
+        # inside its declared range and spread across it.
+        rolls = self.seen["rolls"]
+        self.assertGreaterEqual(len(rolls), 100)
+        for name in self.seen["dials"]:
+            low, high = self.seen["ranges"][name]
+            values = sorted(roll[name] for roll in rolls)
+            with self.subTest(dial=name):
+                self.assertGreaterEqual(values[0], low)
+                self.assertLessEqual(values[-1], high)
+                span = values[-1] - values[0]
+                self.assertGreater(span, (high - low) * 0.8, "this dial hardly moves")
+
+    def test_a_cards_accents_either_keep_their_moods_order_or_turn_it_over(self):
+        # Half way through `trade` a palette's two accents meet in the middle, and a card with one
+        # accent instead of two has lost the contrast its palette is built on. So the middle is
+        # never visited, and both ends are.
+        trades = [roll["trade"] for roll in self.seen["rolls"]]
+        kept = [t for t in trades if t <= 0.3]
+        turned = [t for t in trades if t >= 0.7]
+        self.assertEqual(len(kept) + len(turned), len(trades), "a card landed on one accent")
+        self.assertGreater(min(len(kept), len(turned)), len(trades) * 0.3,
+                           "the accents go one way far more often than the other")
+
+    # ---- what it does to colour ----
+
+    def test_a_configured_card_is_a_different_colour_from_the_first_card_of_its_world(self):
+        # The second half of the issue: colour follows the configuration. Every mood has to come out
+        # of it as many palettes rather than one, and a rolled palette has to differ from the plain
+        # one in more than a rounding.
+        for mood, info in sorted(self.seen["colors"].items()):
+            rolled = info["rolled"]
+            with self.subTest(mood=mood):
+                palettes = {tuple(sorted(seeds.items())) for seeds in rolled}
+                self.assertGreater(len(palettes), len(rolled) * 0.9,
+                                   "this mood gives nearly every card the same palette")
+                moved = [seeds for seeds in rolled
+                         if self.rgb(seeds["bg2"]) != self.rgb(info["plain"]["bg2"])
+                         or self.rgb(seeds["bg"]) != self.rgb(info["plain"]["bg"])]
+                self.assertGreater(len(moved), len(rolled) * 0.9,
+                                   "a configured card is the colour of a plain one")
+
+    def test_a_configured_card_is_still_its_own_worlds_colour(self):
+        # Open question 5 of the issue, answered: yes, a card is still its world's. The
+        # configuration never fetches a colour from outside the palette the card's own mood gives
+        # it -- it only blends the four it has, and black, which is where a lifted ground is pulled
+        # back to. So every channel of every configured seed lands inside the range those five
+        # already span, which is what "re-tints itself from its own world's seeds" means.
+        for mood, info in sorted(self.seen["colors"].items()):
+            base = info["base"]
+            corners = [self.rgb(base[name]) for name in ("bg", "bg2", "accent", "accent2")] + [(0, 0, 0)]
+            low = [min(corner[i] for corner in corners) for i in range(3)]
+            high = [max(corner[i] for corner in corners) for i in range(3)]
+            with self.subTest(mood=mood):
+                for seeds in info["rolled"]:
+                    for name in ("bg", "bg2", "accent", "accent2"):
+                        for i, byte in enumerate(self.rgb(seeds[name])):
+                            self.assertGreaterEqual(byte, low[i] - 1, f"--{name} left the palette")
+                            self.assertLessEqual(byte, high[i] + 1, f"--{name} left the palette")
+
+    def test_a_configured_cards_accents_are_its_own_moods_two_accents(self):
+        # The most recognisable part of a palette is its accent, and the configuration only ever
+        # trades a mood's two for each other: whichever way round they land, a card is wearing the
+        # pair its world answers to.
+        for mood, info in sorted(self.seen["colors"].items()):
+            pair = (self.rgb(info["base"]["accent"]), self.rgb(info["base"]["accent2"]))
+            with self.subTest(mood=mood):
+                for seeds in info["rolled"]:
+                    for accent in (self.rgb(seeds["accent"]), self.rgb(seeds["accent2"])):
+                        between = all(min(pair[0][i], pair[1][i]) - 1 <= accent[i] <= max(pair[0][i], pair[1][i]) + 1
+                                      for i in range(3))
+                        self.assertTrue(between, f"{accent} is neither of this mood's accents")
+
+    def test_no_configuration_takes_a_cards_text_below_the_contrast_the_axiom_asks(self):
+        # The accessibility axiom, over the whole space the configuration can reach: --fg and
+        # --muted are never configured, and the surface tones the text sits on are derived from a
+        # ground the configuration does move, so this is the check that the ground's ceiling is in
+        # the right place. Every mood, every roll, both tiers, both text colours.
+        worst = (99.0, None)
+        for mood, info in sorted(self.seen["colors"].items()):
+            for seeds in [info["plain"]] + info["rolled"]:
+                for tier in self.tiers(seeds):
+                    for text in (self.FG, self.MUTED):
+                        worst = min(worst, (self.contrast(text, tier), (mood, text, tier)))
+        self.assertGreaterEqual(worst[0], self.MIN_CONTRAST,
+                                f"a configured card drops text to {worst[0]:.2f}:1 ({worst[1]})")
+
+    def test_a_cards_accents_stay_legible_as_the_primary_and_tertiary_roles(self):
+        # The overline on every card is --md-sys-color-primary, which is --accent, over the card's
+        # own container tone. Trading the accents must not leave that text unreadable either.
+        for mood, info in sorted(self.seen["colors"].items()):
+            container = None
+            with self.subTest(mood=mood):
+                for seeds in [info["plain"]] + info["rolled"]:
+                    container = self.tiers(seeds)[0]
+                    for accent in (seeds["accent"], seeds["accent2"]):
+                        self.assertGreaterEqual(self.contrast(accent, container), self.MIN_CONTRAST)
+
+    def test_the_ground_a_configuration_lifts_stays_dark(self):
+        # The one thing the ceiling is for: however far `lift` carries a card's ground toward its lit
+        # corner, the result is still a night sky rather than a lit room, which is also what keeps
+        # the tiers above in range.
+        for mood, info in sorted(self.seen["colors"].items()):
+            with self.subTest(mood=mood):
+                for seeds in info["rolled"]:
+                    self.assertLessEqual(self.luminance(seeds["bg"]), 0.0105,
+                                         "this card's ground is brighter than the dark scheme allows")
+
+    # ---- what it does to a world's picture ----
+
+    def test_a_repeat_of_a_world_draws_a_different_picture_from_the_first_card_of_it(self):
+        # The first half of the issue, measured: paint one world from one seed, in one palette,
+        # under three configurations, and the drawing calls have to differ. Same seed and same
+        # colours throughout, so the only thing moving is the configuration.
+        self.assertGreaterEqual(len(self.seen["modules"]), 10, "where are the world modules")
+        for name, mod in sorted(self.seen["modules"].items()):
+            with self.subTest(module=name):
+                drawings = mod["drawings"]
+                self.assertIn("plain", drawings, "this world drew nothing at all")
+                self.assertNotEqual(drawings["plain"], drawings["low"])
+                self.assertNotEqual(drawings["plain"], drawings["high"])
+                self.assertNotEqual(drawings["low"], drawings["high"])
+
+    def test_sixty_configurations_of_a_world_are_sixty_cards(self):
+        # And not three. A world whose module leans on one dial would pass the test above and still
+        # deal the same few pictures over and over; this is the one that says a repeat keeps on
+        # being a new card as a visitor scrolls. Several of these worlds drew from the persona's
+        # stars alone and so had exactly one picture before the configuration existed.
+        for name, mod in sorted(self.seen["modules"].items()):
+            with self.subTest(module=name):
+                self.assertGreaterEqual(mod["variety"], 40,
+                                        f"sixty configurations gave {mod['variety']} pictures")
+
+    def test_no_configuration_breaks_a_world(self):
+        # The modules' paint/animate/spark contract still holds everywhere in the ranges: the dials
+        # arrive as numbers a module multiplies by, and nothing in the space they cover may throw.
+        for name, mod in sorted(self.seen["modules"].items()):
+            with self.subTest(module=name):
+                self.assertEqual(mod["threw"], [])
+                self.assertGreater(mod["calls"]["plain"], 3, "this world barely draws anything")
+
+    def test_every_world_reads_the_configuration(self):
+        # A module that ignored it would still be configured -- its colours and its frame are the
+        # feed's to set -- but it would draw the same picture twice at the same size, which is the
+        # thing the issue is about. Read off the source as well as measured above, so a module added
+        # later is held to it too.
+        for module in sorted(self.modules.glob("*.js")):
+            with self.subTest(module=module.name):
+                self.assertIn("env.variant", module.read_text(),
+                              "this world's card does not vary with its configuration")
+
+    # ---- the frame ----
+
+    def test_a_repeat_of_a_world_is_a_different_shape_from_the_first_card_of_it(self):
+        # Colour and picture are not the whole of looking different: a repeat is framed differently
+        # too, stretched from its world's own aspect ratio and clamped so no card in the masonry
+        # becomes a letterbox or a column.
+        low, high = self.seen["aspectLimits"]
+        for frame in self.seen["frames"]:
+            with self.subTest(ratio=frame["ratio"]):
+                rolled = frame["rolled"]
+                plain = min(max(float(eval_ratio(frame["ratio"])), low), high)
+                self.assertGreater(len(set(rolled)), len(rolled) * 0.6, "every repeat is one shape")
+                self.assertGreater(max(rolled) - min(rolled), plain * 0.25,
+                                   "the frames are all but the same shape")
+                for ratio in rolled:
+                    self.assertGreaterEqual(ratio, low)
+                    self.assertLessEqual(ratio, high)
+
+    def test_an_unreadable_aspect_ratio_is_left_alone_rather_than_guessed_at(self):
+        self.assertEqual(self.seen["unreadableFrame"], "not a ratio")
+
+    def test_the_light_on_a_card_moves_with_the_configuration(self):
+        # The one part of the configuration _sass/_feed.scss reads directly: where the gradient
+        # behind a card's picture opens from.
+        lights = self.seen["lights"]
+        self.assertGreater(len(set(lights)), len(lights) * 0.6)
+        for light in lights:
+            self.assertRegex(light, r"^\d{1,3}% \d{1,3}%$")
 
 
 class EngagementTimeTest(unittest.TestCase):
