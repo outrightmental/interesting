@@ -7,44 +7,54 @@
 
   Two groups, in the words every page uses: off the sky (worlds that share nothing but the site)
   and under the sky (worlds that read one saved sky). Under each name is the orientation the world
-  answers to, which is the same phrase the persona card reads a visitor as. On a world under the sky that
-  group comes first and carries the circuit: where in it this world is, and the next. Every count
-  is read off the list, so a world added there is counted here.
+  answers to, which is the same phrase the persona card reads a visitor as. On a world under the
+  sky that group comes first and says where in that circuit this world is. Every count is read off
+  the list, so a world added there is counted here.
+
+  One shared suggestion of where to go next lives in this include: a single circuit link at the
+  bottom of the panel. It is always one world name as a plain link, and it advances through the
+  same off-sky then under-sky order for everyone.
 
   The headings are real (h2, then h3), so a visitor listening to the page hears its shape, and the
-  reachability axiom holds with scripting off because every link here is plain markup. One
-  button, "send me somewhere", is the site's one way of being sent at random (js/site.js).
+  reachability axiom holds with scripting off because every link here is plain markup.
 -#}
 {%- set here = (page.filePathStem | replace('/', '')) + '.html' if page else '' -%}
 {%- set skyIndex = -1 -%}
 {%- for world in worlds.underSky %}{% if world.file == here %}{% set skyIndex = loop.index0 %}{% endif %}{% endfor -%}
 {%- set skyCount = worlds.underSky.length -%}
 {%- set groups = [['sky', 'under the sky', worlds.underSky], ['off', 'off the sky', worlds.offSky]] if skyIndex >= 0 else [['off', 'off the sky', worlds.offSky], ['sky', 'under the sky', worlds.underSky]] -%}
+{%- set circuit = worlds.offSky.concat(worlds.underSky) -%}
+{%- set circuitIndex = -1 -%}
+{%- for world in circuit %}{% if world.file == here %}{% set circuitIndex = loop.index0 %}{% endif %}{% endfor -%}
+{%- set nextWorld = circuit[(circuitIndex + 1) % circuit.length] if circuit.length else null -%}
 <footer class='site-footer'>
   <nav class='panel worlds' aria-labelledby='worlds-title'>
     <h2 class='panel-title' id='worlds-title'>every world</h2>
     <p class='panel-note'>{{ (worlds.offSky.length + skyCount) | words | capitalize }} worlds and no default. Under each name is who the site would send there: take the one that fits, or the one that does not.</p>
+    <div class='worlds-groups'>
 {%- for group in groups %}
-    <section class='worlds-group' aria-labelledby='worlds-{{ group[0] }}'>
-      <h3 class='panel-label' id='worlds-{{ group[0] }}'>{{ group[1] }}</h3>
+      <section class='worlds-group' aria-labelledby='worlds-{{ group[0] }}'>
+        <h3 class='panel-label' id='worlds-{{ group[0] }}'>{{ group[1] }}</h3>
 {%- if group[0] == 'sky' %}
 {%- if skyIndex >= 0 %}
-{%- set nextWorld = worlds.underSky[(skyIndex + 1) % skyCount] %}
-      <p class='panel-note'>These {{ skyCount | words }} read one saved sky: the stars of your persona, the card at the top of the page. This is {{ skyIndex + 1 }} of {{ skyCount }}. <a href='{{ siteRoot }}{{ nextWorld.file }}'>next: {{ nextWorld.name }}</a></p>
+        <p class='panel-note'>These {{ skyCount | words }} read one saved sky: the stars of your persona, the card at the top of the page. This is {{ skyIndex + 1 }} of {{ skyCount }} in that sky circuit.</p>
 {%- else %}
-      <p class='panel-note'>These {{ skyCount | words }} read one saved sky: the stars of your persona, the card at the top of the page.</p>
+        <p class='panel-note'>These {{ skyCount | words }} read one saved sky: the stars of your persona, the card at the top of the page.</p>
 {%- endif %}
 {%- endif %}
-      <ul class='chips chips-tall'>
+        <ul class='chips chips-tall'>
 {%- for world in group[2] %}
-        <li><a href='{{ siteRoot }}{{ world.file }}'{% if world.file == here %} class='current' aria-current='page'{% endif %}>{{ world.name }}<span>{{ world.orientation }}</span></a></li>
+          <li><a href='{{ siteRoot }}{{ world.file }}'{% if world.file == here %} class='current' aria-current='page'{% endif %}>{{ world.name }}<span>{{ world.orientation }}</span></a></li>
 {%- endfor %}
-      </ul>
-    </section>
+        </ul>
+      </section>
 {%- endfor %}
+    </div>
     <p class='panel-foot'>
-      <button type='button' id='worlds-random' hidden>send me somewhere</button>
-      <span>Or <a href='{{ siteRoot }}sitemap.html'>site map</a> for every page with a line on what it is.</span>
+{%- if nextWorld %}
+      <a class='action' href='{{ siteRoot }}{{ nextWorld.file }}'>{{ nextWorld.name }}</a>
+{%- endif %}
+      <span><a href='{{ siteRoot }}sitemap.html'>site map</a></span>
     </p>
   </nav>
 </footer>

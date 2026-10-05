@@ -14,8 +14,8 @@
 
   Nothing in here keeps score, routes a visitor, or writes to the shared state document except the
   sky a visitor asks it to seed, which it does through the persona: the shell's job is to be
-  understood in one reading and get out of the way. What it draws on the page is the one "send me
-  somewhere" button in the index of every world, and nothing else.
+  understood in one reading and get out of the way. It draws nothing of its own on a page but the
+  unlock box below, where a page asks for one.
 
   ---------------------------------------------------------------------------------------------
   Powered down, never broken
@@ -222,27 +222,6 @@
     return powered;
   }
 
-  /* The one random control on the site: the "send me somewhere" button in the index of every
-     world, which picks any world but this one. It is hidden in the markup, because without
-     scripting it would do nothing. */
-  function wireRandom() {
-    var button = document.getElementById('worlds-random');
-    if (!button) return;
-    var here = document.documentElement.getAttribute('data-page')
-      || (window.location.pathname || '').split('/').pop() || 'index.html';
-    var links = document.querySelectorAll('.worlds .chips a[href]');
-    var pool = [];
-    for (var i = 0; i < links.length; i++) {
-      var href = links[i].getAttribute('href');
-      if (href && href !== here && href.split('/').pop() !== here && pool.indexOf(href) === -1) pool.push(href);
-    }
-    if (!pool.length) return;
-    button.hidden = false;
-    button.addEventListener('click', function () {
-      window.location.href = pool[Math.floor(Math.random() * pool.length)];
-    });
-  }
-
   function retireOldKeys() {
     if (!store || typeof store.keys !== 'function') return;
     var kept = store.keys();
@@ -260,7 +239,6 @@
   };
 
   function start() {
-    wireRandom();
     retireOldKeys();
   }
 
