@@ -20,7 +20,7 @@ longer and wants to keep going. LEGIBLE names the test a stranger puts the site
 to -- one name per page, one way to do each thing, content before chrome, never
 a dead end -- because confusion spends engagement time as surely as boredom.
 
-Five axioms stand over every run, each stated in the prompt and held to in code:
+Seven axioms stand over every run, each stated in the prompt and held to in code:
 
   - All of the content stays reachable from the root, both by following links
     from index.html and through sitemap.xml. check_reachability() refuses a plan
@@ -50,6 +50,14 @@ Five axioms stand over every run, each stated in the prompt and held to in code:
     and it never queries the same way twice. check_mood() refuses a plan that
     takes the mood flow off a page, that lets the library of query mechanisms
     fall below MIN_MOOD_PROBES, or that asks a visitor to report their own mood.
+  - Caution before a destructive action is a law of the site rather than a page's
+    own choice. Any control that throws a visitor's saved state away reads as a
+    warning button, and every press of one opens the one shared modal that names
+    what is about to go -- written once in js/site.js and _sass/_controls.scss.
+    check_destructive() refuses a plan that takes that component away, that
+    leaves a control whose own words say it discards saved state without the
+    warning treatment, or that writes a confirmation of its own with
+    window.confirm.
 
 The files behind the analytics and state axioms (FIXED_FILES) are never shown to
 a model and are refused outright as a write or a delete.
@@ -1102,6 +1110,217 @@ def check_mood(before, after):
                 + " and ".join(f'"{phrase}"' for phrase in added))
 
 
+# ------------------------------------------------------------------------------------------------
+# Caution before a destructive action: the seventh axiom (issue #42).
+#
+# Any control that throws a visitor's saved state away is a warning button, and pressing it opens
+# the one modal that asks "are you sure you want to ______?" with the specific thing about to go in
+# the blank. Both halves are about consistency rather than about friction, which is why one shared
+# component writes them once: the button is recognised as dangerous before it is read, and the
+# question is the same question in every corner of the site. There is no separate arming
+# affordance -- no checkbox, no toggle, no hold-to-arm press. The warning treatment plus the modal
+# is the safety switch.
+#
+# The threshold, because there is a spectrum of severity and this is where the caution begins:
+#
+#   above it, and held to both halves -- a press that is nothing but a loss. The whole local-state
+#     document goes, or the whole of one name in it (a sky, a reading, a kept list), and nothing
+#     takes its place. The site's own: the meta menu's "clear", the persona sheet's "clear the sky"
+#     and "forget my reading", the atlas's "forget my reading", "clear omens", "empty the drawer",
+#     "empty the kiln".
+#   at it, and held to the modal but not the warning -- a trade rather than a loss. The whole of a
+#     name goes, but something the visitor asked for arrives in its place: "seed a small sky" over
+#     a placed one, "replace mine" over your own document. The question is the same; the paint is
+#     not, because the one button that gets a beginner started must not read as a danger.
+#   below it, and held to neither -- one thing rather than the whole thing ("remove this star",
+#     one entry out of a list that can be added to again), and anything that only changes what is
+#     on the screen ("sweep the floor", "reset decoder", "turn the soil").
+#
+# Three things are refused in code, each of them mechanical:
+#
+#   1. The shared component may not go. js/site.js offers it and the stylesheet every page links
+#      paints it, and a change that leaves the site without either is refused -- the law is worth
+#      nothing if every page has to improvise it again.
+#   2. A control whose own words say it throws saved state away must wear the warning treatment.
+#      Read off the page as committed, from the family of words named in full in the prompt.
+#   3. No page may write a confirmation of its own. window.confirm is refused outright: a browser
+#      dialog cannot say which of a visitor's things is about to go, and a question that reads
+#      differently on every page is not a safety switch.
+#
+# What is deliberately not checked: whether a given control is above the threshold or below it, and
+# whether the press of a warning button really is wired to the shared modal. No regex can tie a
+# click handler to the button it was attached to, and no code can judge how much a visitor would
+# miss what a press takes away. So the prompt asks for both, and this does not pretend to.
+
+# Where the two halves of the shared component live. js/site.js is ordinary site source and may be
+# rewritten freely -- what may not happen is the component disappearing out of it.
+DESTRUCTIVE_SCRIPT = "js/site.js"
+SHARED_STYLESHEET = "css/site.css"
+# The one class a destructive control wears, under the same name in the markup and the styling.
+WARNING_CLASS = "warning"
+# How js/site.js offers the component, and how the shared stylesheet paints it. Named rather than
+# matched by shape, so a run may rewrite either as long as the names survive.
+OFFERS_DESTRUCTIVE = re.compile(r"(?<![\w.])destructive\s*:")
+PAINTS_WARNING = re.compile(rf"\.{WARNING_CLASS}\b")
+# The words that say a control takes the whole of a saved thing away. Short and stated in full in
+# the prompt, so it is a rule a run can follow rather than a trap it springs, and deliberately
+# narrow: "remove" is the site's word for one item out of a list, which is below the threshold, and
+# "reset", "sweep" and "turn" name controls that discard nothing kept.
+DISCARDS_SAVED_STATE = re.compile(
+    r"\b(?:clear|clears|forget|forgets|empty|empties|erase|erases|wipe|wipes"
+    r"|delete|deletes|discard|discards|throws? away|throws? out)\b", re.I)
+# The browser's own question, which the shared modal replaces everywhere.
+OWN_CONFIRMATION = re.compile(r"(?<![\w.$])(?:window\s*\.\s*)?confirm\s*\(")
+
+# The controls of this site that act like buttons: a <button>, and a link wearing .action.
+ACTS_LIKE_A_BUTTON = "action"
+
+
+class DestructiveControls(HTMLParser):
+    """The controls of one page whose own words say they throw saved state away, and which of them
+    wear the shared warning treatment.
+
+    Only <button> and the links that act like one (<a class='action'>) are controls here: an
+    ordinary link navigates rather than destroys. HTMLParser hands the body of <script> over as raw
+    text instead of parsing it, exactly as PageFacts relies on, so a control a page builds inside a
+    JavaScript string is not a control of the page -- only the page as committed is judged, which is
+    the same bargain the reachability and accessibility checks make.
+    """
+
+    def __init__(self, content):
+        super().__init__(convert_charrefs=True)
+        self.controls = []  # (name, wears the warning) for every destructive-sounding control
+        self.open = []  # the controls still open, innermost last
+        self.raw = None  # "style" or "script" while inside one
+        self.feed(content)
+        self.close()
+        for record in self.open:
+            self.settle(record)  # left unclosed, and still a control
+        self.open = []
+
+    def settle(self, record):
+        name = re.sub(r"\s+", " ", "".join(record["text"])).strip()
+        if name and DISCARDS_SAVED_STATE.search(name):
+            self.controls.append((name, WARNING_CLASS in record["classes"]))
+
+    def handle_starttag(self, tag, attrs):
+        attr = {key.lower(): (value or "") for key, value in attrs}
+        if tag in ("style", "script"):
+            self.raw = tag
+            return
+        if self.raw:
+            return
+        acts = tag == "button" or (tag == "a" and "href" in attr
+                                   and ACTS_LIKE_A_BUTTON in attr.get("class", "").split())
+        if acts:
+            # A control's own words are its text and whatever names it outright, so a button whose
+            # face is a glyph and whose aria-label says "clear everything" is not a way round this.
+            named = " ".join(attr.get(name, "") for name in ("aria-label", "title"))
+            self.open.append({"tag": tag, "classes": attr.get("class", "").split(),
+                              "text": [named, " "] if named.strip() else []})
+
+    def handle_data(self, data):
+        if self.raw:
+            return
+        for record in self.open:
+            record["text"].append(data)
+
+    def handle_endtag(self, tag):
+        if self.raw:
+            if tag == self.raw:
+                self.raw = None
+            return
+        for index in range(len(self.open) - 1, -1, -1):
+            if self.open[index]["tag"] == tag:
+                for record in self.open[index:]:
+                    self.settle(record)  # whatever sat inside it was left unclosed, so it closes too
+                del self.open[index:]
+                return
+
+    def bare(self):
+        """The names of the destructive-sounding controls that do not wear the warning treatment."""
+        warned = {name for name, wears in self.controls if wears}
+        return sorted({name for name, wears in self.controls if not wears and name not in warned})
+
+
+def pages_with_bare_destructive_controls(site):
+    """The pages of `site` with a control whose own words say it throws saved state away and that
+    does not wear the shared warning treatment, as {page: [name, ...]}."""
+    found = {}
+    for page in sorted(html_pages(site)):
+        bare = DestructiveControls(site.get(page) or "").bare()
+        if bare:
+            found[page] = bare
+    return found
+
+
+def pages_improvising_confirmation(site):
+    """The pages of `site` that ask a visitor to confirm in the browser's own dialog rather than
+    through the one shared modal, as {page: [file, ...]}.
+
+    Followed into the page's scripts and stylesheets, as cadence_phrases is and for the same
+    reason: this site's behaviour lives in the JavaScript that draws the page. FIXED_FILES are left
+    out, as everywhere else -- js/state.js keeps a window.confirm of its own as the fallback for a
+    run having broken js/site.js, and 55 KB of vendored consent library is not this site's code to
+    police.
+    """
+    found = {}
+    for page in sorted(html_pages(site)):
+        sources = [(page, site.get(page) or "")]
+        sources += [(asset, site[asset]) for asset in assets_of(page, site)
+                    if asset not in FIXED_FILES]
+        where = sorted({rel for rel, source in sources if OWN_CONFIRMATION.search(source)})
+        if where:
+            found[page] = where
+    return found
+
+
+def shares_destructive_caution(site):
+    """Is the one shared destructive-control component still there: the behaviour in js/site.js and
+    the warning treatment in the stylesheet every page links?
+
+    A site that carries neither is not held to the axiom at all, for the same reason
+    pages_missing_mood is not: there would be nothing for a control to use.
+    """
+    offers = OFFERS_DESTRUCTIVE.search(site.get(DESTRUCTIVE_SCRIPT) or "")
+    paints = PAINTS_WARNING.search(site.get(SHARED_STYLESHEET) or "")
+    return bool(offers and paints)
+
+
+def check_destructive(before, after):
+    """Raise RejectedChange if the change from site `before` to site `after` lets a control throw a
+    visitor's saved state away without the warning treatment and the one shared confirmation.
+
+    Only what this run breaks is refused, exactly as the six checks above only refuse what this run
+    breaks: a control that already falls short stays the site's own to repair -- every run is asked
+    to -- and refusing every plan over it would leave no plan able to repair it.
+    """
+    if shares_destructive_caution(before) and not shares_destructive_caution(after):
+        raise RejectedChange(
+            "the one shared destructive-control component must stay: "
+            f"{DESTRUCTIVE_SCRIPT} offers window.interestingSite.destructive() and "
+            f"{SHARED_STYLESHEET} paints .{WARNING_CLASS}, and this leaves the site without one "
+            "of them")
+
+    was = pages_with_bare_destructive_controls(before)
+    for page, names in sorted(pages_with_bare_destructive_controls(after).items()):
+        added = [name for name in names if name not in was.get(page, ())]
+        if added:
+            raise RejectedChange(
+                "a control that throws a visitor's saved state away must read as a warning "
+                f"button, with class=\"{WARNING_CLASS}\": {page} has "
+                + " and ".join(f'"{name}"' for name in added) + " without it")
+
+    had = pages_improvising_confirmation(before)
+    for page, where in sorted(pages_improvising_confirmation(after).items()):
+        added = [rel for rel in where if rel not in had.get(page, ())]
+        if added:
+            raise RejectedChange(
+                "no page may write a confirmation of its own: the one question is the modal "
+                f"window.interestingSite.destructive() opens, and {added[0]} calls "
+                "window.confirm()")
+
+
 def apply_to(site, ops):
     """The site mapping `site` as it would be once `ops` have been applied."""
     after = dict(site)
@@ -1392,6 +1611,43 @@ def build_prompt(shown, omitted=()):
         "declined, or scripting switched off altogether, which is what the reachability axiom "
         "demands anyway: do not hide a world behind an answer.\n"
         "This is checked on the built site, like the five above.\n"
+        "- AXIOM, every run: caution before a destructive action is a law of the site and not a "
+        "page's own choice. Any control that throws a visitor's saved state away reads as a "
+        f"warning button -- class=\"{WARNING_CLASS}\" -- and every press of one opens the one "
+        "shared modal that asks \"are you sure you want to ______?\" with the specific thing "
+        "about to go in the blank (\"clear your constellation\", not \"are you sure?\"). Both "
+        "halves are about consistency, not friction: the button is recognised before it is read, "
+        "and the question is the same question everywhere. There is no arming step beyond "
+        "them -- no checkbox, no toggle, no hold-to-arm press -- and the modal is a plain "
+        "confirm/cancel: never ask a visitor to type a word or press twice. One shared component "
+        "writes all of it, and every destructive control on the site uses that one:\n"
+        f"    window.interestingSite.destructive(button, {{\n"
+        f"      what: 'clear your omen archive',      // the blank, in the site's own voice\n"
+        f"      detail: function () {{ return 'The ' + omens.length + ' omens would go.'; }},\n"
+        f"      when: function () {{ return omens.length > 0; }},  // nothing to lose, nothing to ask\n"
+        f"      onConfirm: clearHistory, onCancel: function () {{ say('As it was.'); }}\n"
+        f"    }});\n"
+        f"It lives in \"{DESTRUCTIVE_SCRIPT}\" and is painted by \"{SASS_DIR}/_controls.scss\" "
+        f"through \"{SHARED_STYLESHEET}\"; both are yours to rewrite, but a plan that leaves the "
+        "site without the component, or without that warning styling, is refused. Where the "
+        "caution begins, because there is a spectrum of severity:\n"
+        "  * Above the threshold, and held to both halves: a press that is nothing but a loss -- "
+        "the whole local-state document goes, or the whole of one name in it (a sky, a reading, a "
+        "kept list), and nothing takes its place.\n"
+        "  * At the threshold, and held to the modal but not the warning: a trade rather than a "
+        "loss -- the whole of a name goes but something the visitor asked for arrives in its "
+        "place, as with seeding a fresh sky over a placed one. Use "
+        "window.interestingSite.areYouSure(options) for those, with `opener` naming the control.\n"
+        "  * Below the threshold, and held to neither: one thing rather than the whole thing, and "
+        "anything that only changes what is on the screen.\n"
+        "Two consequences in code. A control named with one of these words -- in its own text or "
+        "in the aria-label or title that names it -- is read as destructive and refused without "
+        "the warning class, in the markup of the page as you commit it: "
+        "clear, forget, empty, erase, wipe, delete, discard, throw away, throw out. Name a control "
+        "that takes one item out of a list \"remove\" instead -- that is the site's word for it, "
+        "and it is below the threshold. And window.confirm is refused outright, anywhere in a page "
+        "or a script it loads: a browser dialog cannot say which of a visitor's things is about to "
+        "go, and a question that reads differently on every page is not a safety switch.\n"
         "- Leave the site working at the end of the run. If you extract something into a shared "
         "file, or merge or delete a page, update every page that refers to it in the same run: "
         "never leave a link, a stylesheet, a script, a layout or an @use pointing at something "
@@ -1579,8 +1835,9 @@ def validate_plan(plan, unseen=()):
     A plan that would leave a page of the site unreachable from the root, leave one without the
     analytics and consent line, make one fail the responsive-and-accessible axiom, leave one without
     the local-state store and its meta menu, tie one to an update frequency, or stop the site
-    asking before it offers is refused: all six axioms hold however the prompt is answered. All six
-    are judged on the built site (issue #25), which is the only site a visitor ever sees, so the
+    asking before it offers, or let a control throw a visitor's saved state away without the
+    shared warning button and its confirmation is refused: all seven axioms hold however the
+    prompt is answered. All seven are judged on the built site (issue #25), which is the only site a visitor ever sees, so the
     plan is built before any of them is asked, and a plan that does not build is refused for that
     alone.
     """
@@ -1640,7 +1897,7 @@ def validate_plan(plan, unseen=()):
         # The site as committed does not build, so there is no "before" to compare against and the
         # axioms have nothing to say this run. Same reasoning as check_reachability's: every run is
         # asked to repair the site, and refusing a plan over damage it did not do would leave no
-        # plan able to. This run still had to build, and the next is held to all six axioms again.
+        # plan able to. This run still had to build, and the next is held to all seven axioms again.
         print(f"::warning::the site as committed does not build ({one_line(err, 300)}), so this "
               "run's change was only checked for building, not against the axioms")
         return ops
@@ -1650,6 +1907,7 @@ def validate_plan(plan, unseen=()):
     check_state(built_before, built_after)
     check_cadence(built_before, built_after)
     check_mood(built_before, built_after)
+    check_destructive(built_before, built_after)
     return ops
 
 
