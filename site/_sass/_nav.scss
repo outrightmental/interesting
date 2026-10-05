@@ -1,0 +1,392 @@
+// The main nav: the sparkles logo floating in the upper left of every page, and the constellation
+// of options it opens. Written in _includes/layout.njk, animated and placed by js/site.js. The
+// persona floating in the upper right is the only other navigation on the site (_persona.scss).
+//
+// There is no top app bar. This is not the sort of website that uses conventional navigation
+// (issue #54): at rest the whole of the chrome is one mark in each top corner, floating over the
+// page's own full-bleed feature, and the page keeps the room the bar used to take.
+//
+// How it behaves:
+//   at rest        the logo alone: a pill with the sparkles mark in it, tonal and blurred so it
+//                  reads over any world's palette.
+//   on rollover    the site's name fades in beside the mark, quickly and tightly, and fades out
+//                  again. Focus does the same thing, so a keyboard sees what a pointer sees.
+//   on press       the page becomes a lightbox -- dimmed, blurred, its animation held, its
+//                  controls inert (js/site.js) -- and the options branch out from the logo as a
+//                  constellation of chips, each on a ray back to the mark.
+//
+// Two layouts, and the <details> element does the work of switching between them:
+//   with scripting the options are placed by js/site.js, which is the only thing that knows how
+//                  many there are: a column of stars down the left edge on a phone, two
+//                  interleaved columns on a wider screen, each star pushed out sideways by its
+//                  own amount so the set reads as a scatter rather than a list. The script writes
+//                  --x, --y, --len, --a, --fx, --fy and --k on to each option (where the star
+//                  sits, the ray that reaches it, where it branches out from, and its place in
+//                  the order), and the rules below are what consume them. <html data-nav>
+//                  says the script is here; it is set before the body is drawn, so there is no
+//                  flash of the other layout.
+//   without it     a plain cascade of the same chips under the logo, which is what the markup is
+//                  on its own: the disclosure is the browser's, the options are links, and the
+//                  rays are hidden because nothing has measured them. The script falls back to
+//                  this layout too (data-nav='cascade'), on a viewport too short for a
+//                  constellation of any shape, because the cascade scrolls and a scatter cannot.
+
+@use 'type';
+
+.skip-link {
+  position: fixed;
+  top: 0.75rem;
+  left: 0.75rem;
+  z-index: 60; // above the lightbox, so it is reachable whatever is open
+  transform: translateY(-160%);
+  padding: 0.6rem 1rem;
+  border-radius: var(--md-sys-shape-corner-full);
+  background: var(--md-sys-color-primary);
+  color: var(--md-sys-color-on-primary);
+  text-decoration: none;
+  box-shadow: var(--md-sys-elevation-level3);
+  @include type.scale(label-large);
+  transition: transform var(--md-sys-motion-duration-short) var(--md-sys-motion-easing-standard);
+}
+
+.skip-link:focus-visible {
+  transform: translateY(0);
+  outline-color: var(--md-sys-color-on-surface);
+}
+
+// The wrapper the skip link lands on spans the page; the feature inside it is full-bleed.
+#main-content {
+  width: 100%;
+}
+
+#main-content:focus-visible {
+  outline: none;
+}
+
+// ---- the logo ----------------------------------------------------------------------------
+
+.sparknav {
+  position: fixed;
+  top: var(--nav-inset);
+  left: var(--nav-inset);
+  z-index: 50; // above the page, the persona and the three corner affordances
+  max-width: calc(100% - 2 * var(--nav-inset));
+}
+
+.sparknav-logo {
+  position: relative;
+  z-index: 3; // above the veil the lightbox lays over everything else
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0 0.6rem 0 0.55rem;
+  border-radius: var(--md-sys-shape-corner-full);
+  background: color-mix(in oklab, var(--md-sys-color-surface-container-high) 84%, transparent);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow: var(--md-sys-elevation-level2);
+  color: var(--md-sys-color-on-surface);
+  cursor: pointer;
+  list-style: none;
+  @include type.scale(title-medium);
+  transition: box-shadow var(--md-sys-motion-duration-short) var(--md-sys-motion-easing-standard);
+}
+
+// The disclosure triangle, in both spellings browsers give it.
+.sparknav-logo::marker,
+.sparknav-logo::-webkit-details-marker {
+  display: none;
+  content: '';
+}
+
+.sparknav-logo:hover {
+  box-shadow: var(--md-sys-elevation-level3);
+}
+
+.sparknav-spark {
+  color: var(--md-sys-color-primary);
+  transition: transform var(--md-sys-motion-duration-medium) var(--md-sys-motion-easing-standard);
+}
+
+.sparknav[open] .sparknav-spark {
+  transform: rotate(60deg);
+}
+
+// The title: the quick, tight fade in and out beside the mark. It keeps its place in the
+// accessibility tree throughout -- clipped, never display:none -- so the logo is always named.
+.sparknav-name {
+  max-width: 0;
+  margin-left: 0;
+  opacity: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  transition:
+    max-width var(--md-sys-motion-duration-short) var(--md-sys-motion-easing-standard),
+    margin-left var(--md-sys-motion-duration-short) var(--md-sys-motion-easing-standard),
+    opacity 110ms var(--md-sys-motion-easing-standard);
+}
+
+.sparknav:hover .sparknav-name,
+.sparknav-logo:focus-visible .sparknav-name,
+.sparknav[open] .sparknav-name {
+  max-width: 9rem;
+  margin-left: 0.45rem;
+  opacity: 1;
+}
+
+// ---- the lightbox ------------------------------------------------------------------------
+
+// Everything behind the constellation at once: dimmed, blurred, and taking the press that closes
+// it again. js/site.js holds the page's frame loop and makes it inert while this is up.
+.sparknav-veil {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  background: color-mix(in oklab, var(--md-sys-color-surface) 62%, transparent);
+  backdrop-filter: blur(9px) saturate(70%);
+  -webkit-backdrop-filter: blur(9px) saturate(70%);
+  animation: sparknav-veil var(--md-sys-motion-duration-medium) var(--md-sys-motion-easing-standard) both;
+}
+
+@keyframes sparknav-veil {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+// A page's own animation stops while the constellation is open, so there is nothing moving behind
+// it. The frame loops a world's canvas runs are held by js/site.js, which CSS cannot reach.
+html[data-lightbox] #main-content,
+html[data-lightbox] #main-content *,
+html[data-lightbox] .page,
+html[data-lightbox] .page *,
+html[data-lightbox] .persona,
+html[data-lightbox] .persona * {
+  animation-play-state: paused;
+}
+
+// ---- the constellation -------------------------------------------------------------------
+
+.sparknav-sky {
+  position: relative;
+  z-index: 2;
+}
+
+.sparknav-orbit {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+// An option: the chip, and the ray from the logo to it.
+.sparknav-node {
+  position: relative;
+  isolation: isolate;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.5rem;
+  min-height: 44px;
+  padding: 0.3rem 1rem 0.3rem 0.65rem;
+  border: 0;
+  border-radius: var(--md-sys-shape-corner-full);
+  background: color-mix(in oklab, var(--md-sys-color-surface-container-high) 92%, transparent);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  box-shadow: var(--md-sys-elevation-level2);
+  color: var(--md-sys-color-on-surface);
+  text-align: left;
+  text-decoration: none;
+  font-family: inherit;
+  cursor: pointer;
+  @include type.scale(label-large);
+}
+
+// The M3 state layer, as every pressable thing on the site carries (see _controls.scss; an <a>
+// that is not a.action has none of its own).
+.sparknav-node::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: currentColor;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--md-sys-motion-duration-short) var(--md-sys-motion-easing-standard);
+}
+
+.sparknav-node:hover::after {
+  opacity: var(--md-sys-state-hover-opacity);
+}
+
+.sparknav-node:focus-visible::after {
+  opacity: var(--md-sys-state-focus-opacity);
+}
+
+.sparknav-node:active::after {
+  opacity: var(--md-sys-state-pressed-opacity);
+}
+
+.sparknav-node:focus-visible {
+  outline: 3px solid var(--md-sys-color-primary);
+  outline-offset: 2px;
+}
+
+.sparknav-node .icon {
+  width: 20px;
+  height: 20px;
+  color: var(--md-sys-color-primary);
+}
+
+.sparknav-label {
+  white-space: nowrap;
+}
+
+// The page the visitor is already on, marked the way the feed marks its own card.
+.sparknav-node[aria-current='page'] {
+  background: var(--md-sys-color-secondary-container);
+  color: var(--md-sys-color-on-secondary-container);
+}
+
+.sparknav-node[aria-current='page'] .icon {
+  color: inherit;
+}
+
+.sparknav-ray {
+  display: none;
+}
+
+// The cascade: what the markup is on its own, with no script to measure a constellation. Also
+// what a very short viewport falls back to, where a scatter would not fit.
+.sparknav-sky {
+  margin-top: 0.4rem;
+  padding: 0.15rem;
+  max-height: calc(100vh - 5rem);
+  max-height: calc(100dvh - 5rem);
+  overflow: auto;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.sparknav-orbit {
+  display: grid;
+  gap: 0.35rem;
+  justify-items: start;
+}
+
+// A staircase rather than a column, where the script has said what order the options are in;
+// flush left where nothing has, which is the markup on its own.
+.sparknav-orbit .sparknav-option {
+  margin-left: calc(var(--k, 0) * 0.5rem);
+}
+
+// The scatter: the script has placed every star, so each option is absolute, each chip sits where
+// --x and --y put it, and each ray is the line of length --len at angle --a from the logo's heart.
+html[data-nav='live'] {
+  .sparknav-sky {
+    position: static;
+    margin: 0;
+    padding: 0;
+    max-height: none;
+    overflow: visible;
+    display: block;
+  }
+
+  .sparknav-orbit {
+    display: block;
+  }
+
+  .sparknav-option {
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 2; // above the veil, which the sky itself is no longer positioned over
+    width: 0;
+    height: 0;
+    margin: 0;
+  }
+
+  .sparknav-node {
+    position: absolute;
+    top: var(--y, 0);
+    left: var(--x, 0);
+  }
+
+  // js/site.js adds .is-branching on every press, so the constellation branches out again each
+  // time instead of only the first time it is rendered.
+  .is-branching .sparknav-node {
+    animation: sparknav-branch var(--md-sys-motion-duration-medium) var(--md-sys-motion-easing-standard) both;
+    animation-delay: calc(var(--k, 0) * 40ms);
+  }
+
+  .sparknav-ray {
+    display: block;
+    position: absolute;
+    top: var(--my, 22px);
+    left: var(--mx, 22px);
+    width: var(--len, 0);
+    height: 1px;
+    transform-origin: 0 50%;
+    transform: rotate(var(--a, 0deg));
+    background: linear-gradient(
+      90deg,
+      color-mix(in oklab, var(--md-sys-color-primary) 85%, transparent) 0%,
+      color-mix(in oklab, var(--md-sys-color-primary) 25%, transparent) 70%,
+      transparent 100%
+    );
+  }
+
+  .is-branching .sparknav-ray {
+    animation: sparknav-ray var(--md-sys-motion-duration-medium) var(--md-sys-motion-easing-standard) both;
+    animation-delay: calc(var(--k, 0) * 40ms);
+  }
+}
+
+// Each star shoots out from the logo it belongs to, and its ray is drawn after it.
+@keyframes sparknav-branch {
+  from {
+    opacity: 0;
+    transform: translate(var(--fx, 0), var(--fy, 0)) scale(0.8);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes sparknav-ray {
+  from {
+    opacity: 0;
+    transform: rotate(var(--a, 0deg)) scaleX(0.2);
+  }
+
+  to {
+    opacity: 1;
+    transform: rotate(var(--a, 0deg)) scaleX(1);
+  }
+}
+
+// Less motion: the name is there or it is not, and the constellation arrives all at once instead
+// of branching. Nothing here moves after that.
+@media (prefers-reduced-motion: reduce) {
+  .skip-link,
+  .sparknav-logo,
+  .sparknav-spark,
+  .sparknav-name,
+  .sparknav-node::after {
+    transition: none;
+  }
+
+  .sparknav-veil,
+  html[data-nav='live'] .is-branching .sparknav-node,
+  html[data-nav='live'] .is-branching .sparknav-ray {
+    animation: none;
+  }
+}

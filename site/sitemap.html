@@ -35,6 +35,17 @@ stylesheet: sitemap
 {%- endfor %}
     </ul>
 
+    <h2 class='section-title'>the fine print</h2>
+    <p class='section-note'>Both of these are options in the menu the sparkles logo opens, beside <em>cookies</em> and <em>state</em>.</p>
+    <ul class='pages'>
+{%- for p in worlds.finePrint %}
+      <li>
+        <a href='{{ p.file }}'>{{ p.name }}</a> <span class='gloss'>{{ p.gloss }}</span>
+        <p>{{ p.what }}</p>
+      </li>
+{%- endfor %}
+    </ul>
+
     <h2 class='section-title'>the edges</h2>
     <ul class='pages list-grid'>
 {%- for p in worlds.edges %}

@@ -5,7 +5,8 @@
 //
 //   main            the feature: unbordered, full-bleed, the page's own palette washing to the
 //                   viewport's edges, and at least the first screen tall (the viewport less the
-//                   top bar and a margin, so the feed peeks above the fold). Every direct child
+//                   room the floating nav leaves and a margin, so the feed peeks above the fold).
+//                   Every direct child
 //                   of <main> lands in one centred column, as wide as the page allows, so a page
 //                   writes its content straight into <main> and the feature does the rest.
 //   .panel          a filled card: the container tier, large corners
@@ -15,6 +16,8 @@
 //   .panel-note     one explanatory line in the variant colour
 //   .panel-status   a line a script writes into (a page's #status is one), in the tertiary colour
 //   .panel-foot     the closing row of a panel
+//   .prose          a page that is words: one readable measure, headings and paragraphs spaced,
+//                   for the pages that explain rather than play (privacy.html, terms.html)
 //   .chips          a list of chip links (M3 assist chips); .chips-tall puts a sub-label under each
 //   .controls--stack  the buttons of a row go full width on a phone
 
@@ -26,9 +29,13 @@ main {
   grid-template-columns: minmax(0, var(--page-max));
   justify-content: center;
   align-content: center;
-  min-height: calc(100vh - var(--top-bar-h) - var(--fold-peek));
-  min-height: calc(100svh - var(--top-bar-h) - var(--fold-peek));
-  padding: 1.25rem var(--gutter) 2rem;
+  // No bar sits above it any more, so the feature is the first screen less the margin that lets
+  // the feed peek over the fold.
+  min-height: calc(100vh - var(--fold-peek));
+  min-height: calc(100svh - var(--fold-peek));
+  // The logo and the persona float over this, so the feature keeps the room they need clear at
+  // the top and nothing of a page's lands under either of them.
+  padding: calc(var(--nav-h) + 1rem) var(--gutter) 2rem;
   // The page's own sky, washing in from the top left corner to the viewport's edges.
   background:
     radial-gradient(130vw 90vh at 12% -14%, color-mix(in oklab, var(--bg2) 80%, transparent) 0%, transparent 62%),
@@ -86,6 +93,33 @@ main {
 
 .panel-foot a {
   color: var(--md-sys-color-primary);
+}
+
+// A page that is words rather than a toy: one measure narrow enough to read, the M3 type scale
+// for its headings, and space between its paragraphs. The feature still fills the first screen and
+// still wears the page's palette; this only sets the column of text inside it.
+.prose {
+  max-width: 68ch;
+  margin-top: 0.5rem;
+  display: grid;
+  gap: 0.75rem;
+  color: var(--md-sys-color-on-surface-variant);
+  @include type.scale(body-large);
+}
+
+.prose h2 {
+  margin-top: 1rem;
+  color: var(--md-sys-color-on-surface);
+  @include type.scale(title-large);
+}
+
+.prose h2:first-child {
+  margin-top: 0;
+}
+
+.prose strong,
+.prose em {
+  color: var(--md-sys-color-on-surface);
 }
 
 // A chip: M3's assist chip, a small-cornered outlined pill with a label inside.
