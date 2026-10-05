@@ -422,7 +422,7 @@ iteration process rather than a one-off tidy-up.
   `constellation` (the home sky every other page reinterprets), `capsules` and `omens`. The
   cookie-consent choice is not in there, because it belongs to the consent banner, which keeps it
   itself. The shared shell writes two names and no more: `threshold`, the mood flow's reading, and
-  `constellation` when a visitor asks a powered-down world to seed a sky; the eight names the
+  `constellation` when a visitor asks a powered-down world to seed a sky; the nine names the
   shell's retired games once kept (`constellation-relay` and its kin) are taken out of a visitor's
   document on load, so an export stays an honest account of what the site keeps.
 - **One way in and out.** `window.interestingState` owns the parsing, the defaults and every

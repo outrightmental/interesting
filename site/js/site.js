@@ -67,12 +67,13 @@
   ];
 
   // The names the shell used to keep for games that are gone: relay marks, quests, honors,
-  // signals, a switchboard, a logbook, a cipher, a remix snapshot and a trail. Taken out of a
-  // visitor's document once, so an exported state stays an honest account of what the site keeps.
+  // signals, a switchboard, a logbook, a cipher, a remix snapshot, a trail and an arcade. Taken
+  // out of a visitor's document once, so an exported state stays an honest account of what the
+  // site keeps.
   var RETIRED_KEYS = [
     'constellation-relay', 'constellation-quests', 'constellation-signals',
     'constellation-switchboard', 'constellation-logbook', 'constellation-cipher',
-    'constellation-remix-snapshot', 'trail-journal'
+    'constellation-remix-snapshot', 'trail-journal', 'wayfinding-arcade'
   ];
 
   function validStar(s) {
