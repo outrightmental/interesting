@@ -1,22 +1,8 @@
-// Loam: a cutaway of soil, and nothing above the line.
-
-:root {
-  --bg: #100c07;
-  --bg2: #40301a;
-  --accent: #e0c48e;
-  --accent2: #cfe6a6;
-}
+// Loam: a cutaway of soil, and nothing above the line. Its palette is its world's (rooted), from
+// _sass/_mood.scss through <html data-world>.
 
 .layout > canvas {
-  background: #120d07;
   cursor: crosshair;
-}
-
-.soil-note {
-  margin: 0;
-  color: #efe2c9;
-  line-height: 1.5;
-  font-size: 0.92rem;
 }
 
 .layout .panel #reading {

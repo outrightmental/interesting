@@ -1,81 +1,233 @@
-// Everything a visitor can press, drag or slide. One pill shape for buttons and for the links that
-// act like buttons, so a page's controls and the links that act like them read as the same family.
+// Everything a visitor can press, drag or slide, after M3's common buttons, sliders and text
+// fields (m3.material.io/components).
 //
-// One of those shapes is a warning: .warning is the single treatment every control that throws a
-// visitor's saved state away wears, and .are-you-sure is the single modal that every press of one
-// opens. Both are rendered by window.interestingSite.destructive() in js/site.js, so the three
-// parts of the law -- a control that reads as destructive before it is pressed, a question that
-// names what is about to go, and a plain confirm/cancel -- are written here once and nowhere else.
-// See the README section "Destructive-caution axiom" for the threshold they apply beyond.
-@use 'vars';
+// A bare <button> is a tonal button: the secondary container with its text on it, the emphasis M3
+// gives most actions. A link that acts like a button (a.action) is an outlined button. The variants
+// are classes a page or the shell may add:
+//
+//   .btn-filled    the one action on a page that matters most (the unlock button, "set up persona")
+//   .btn-tonal     the default, named for completeness
+//   .btn-outlined  what a.action is
+//   .btn-text      the quietest: "close", "forget my reading", a card's "another"
+//
+// A pressed toggle (aria-pressed='true') and a working control (aria-busy='true') read as filled,
+// so the state of a toggle is the state of its colour. Every control carries an M3 state layer:
+// an overlay of its own text colour at 8% on hover, 10% on focus and 12% while pressed.
+
+@use 'type';
 
 .controls {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 0.5rem;
-  margin: 0.55rem 0;
+  margin: 0.75rem 0;
 }
 
 button,
 a.action {
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.07);
-  color: var(--fg);
-  text-decoration: none;
-  padding: 0.48rem 0.88rem;
-  min-height: 44px;
+  position: relative;
+  isolation: isolate;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font: inherit;
+  gap: 0.5rem;
+  min-height: 44px;
+  padding: 0.5rem 1.5rem;
+  border: 0;
+  border-radius: var(--md-sys-shape-corner-full);
+  background: var(--md-sys-color-secondary-container);
+  color: var(--md-sys-color-on-secondary-container);
+  text-decoration: none;
+  text-align: center;
+  font-family: inherit;
+  @include type.scale(label-large);
   cursor: pointer;
-  transition: vars.$lift;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    background-color var(--md-sys-motion-duration-short) var(--md-sys-motion-easing-standard),
+    color var(--md-sys-motion-duration-short) var(--md-sys-motion-easing-standard),
+    box-shadow var(--md-sys-motion-duration-short) var(--md-sys-motion-easing-standard);
 }
 
-button:hover,
-a.action:hover {
-  transform: translateY(-1px);
-  border-color: vars.$focus-line;
-  background: vars.$focus-fill;
+// The state layer.
+button::after,
+a.action::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: currentColor;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--md-sys-motion-duration-short) var(--md-sys-motion-easing-standard);
+}
+
+button:hover::after,
+a.action:hover::after {
+  opacity: var(--md-sys-state-hover-opacity);
+}
+
+button:focus-visible::after,
+a.action:focus-visible::after {
+  opacity: var(--md-sys-state-focus-opacity);
+}
+
+button:active::after,
+a.action:active::after {
+  opacity: var(--md-sys-state-pressed-opacity);
 }
 
 button:focus-visible,
 a.action:focus-visible {
-  outline: 2px solid transparent;
-  transform: translateY(-1px);
-  border-color: vars.$focus-line;
-  background: vars.$focus-fill;
-  box-shadow: 0 0 0 3px vars.$focus-ring;
+  outline: 3px solid var(--md-sys-color-primary);
+  outline-offset: 2px;
 }
 
+.btn-filled,
 button[aria-pressed='true'],
 button[aria-busy='true'] {
-  border-color: vars.$focus-line;
-  background: vars.$focus-fill;
-  box-shadow: 0 0 10px vars.$focus-ring inset;
+  background: var(--md-sys-color-primary);
+  color: var(--md-sys-color-on-primary);
+}
+
+.btn-filled:focus-visible,
+button[aria-pressed='true']:focus-visible {
+  outline-color: var(--md-sys-color-on-surface);
+}
+
+a.action,
+.btn-outlined {
+  background: transparent;
+  color: var(--md-sys-color-primary);
+  box-shadow: inset 0 0 0 1px var(--md-sys-color-outline);
+}
+
+.btn-text {
+  background: transparent;
+  color: var(--md-sys-color-primary);
+  padding-inline: 0.75rem;
+  box-shadow: none;
 }
 
 button:disabled,
 a.action[aria-disabled='true'] {
-  opacity: 0.62;
+  background: color-mix(in oklab, var(--md-sys-color-on-surface) 12%, transparent);
+  color: color-mix(in oklab, var(--md-sys-color-on-surface) 38%, transparent);
+  box-shadow: none;
   cursor: default;
 }
 
-// A labelled slider: "time drift", "wind", "bloom".
+button:disabled::after {
+  display: none;
+}
+
+// A labelled slider: "time drift", "wind", "bloom". The M3 slider: a 16px track with the active
+// part in the primary colour, and a 4px handle with a gap either side of it. The fill follows
+// --range-pct, which js/site.js keeps equal to the slider's value.
 .row {
   display: flex;
   align-items: center;
-  gap: 0.6rem;
-  margin-top: 0.35rem;
-  color: var(--muted);
-  font-size: 0.9rem;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+  color: var(--md-sys-color-on-surface-variant);
+  @include type.scale(label-large);
+}
+
+.row label {
+  flex: none;
 }
 
 input[type='range'] {
+  --range-pct: 50%;
+  -webkit-appearance: none;
+  appearance: none;
   width: 100%;
-  min-height: 24px; // a slider is a tap target too (WCAG 2.5.8)
-  accent-color: var(--accent);
+  height: 44px; // the whole height is the tap target (WCAG 2.5.8)
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+  accent-color: var(--md-sys-color-primary);
+}
+
+input[type='range']::-webkit-slider-runnable-track {
+  height: 16px;
+  border-radius: var(--md-sys-shape-corner-full);
+  background: linear-gradient(
+    to right,
+    var(--md-sys-color-primary) 0 var(--range-pct),
+    var(--md-sys-color-secondary-container) var(--range-pct) 100%
+  );
+}
+
+input[type='range']::-moz-range-track {
+  height: 16px;
+  border-radius: var(--md-sys-shape-corner-full);
+  background: var(--md-sys-color-secondary-container);
+}
+
+input[type='range']::-moz-range-progress {
+  height: 16px;
+  border-radius: var(--md-sys-shape-corner-full);
+  background: var(--md-sys-color-primary);
+}
+
+input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 4px;
+  height: 44px;
+  margin-top: -14px;
+  border: 0;
+  border-radius: 2px;
+  background: var(--md-sys-color-primary);
+  box-shadow: 0 0 0 6px var(--md-sys-color-surface-container);
+}
+
+input[type='range']::-moz-range-thumb {
+  width: 4px;
+  height: 44px;
+  border: 0;
+  border-radius: 2px;
+  background: var(--md-sys-color-primary);
+  box-shadow: 0 0 0 6px var(--md-sys-color-surface-container);
+}
+
+input[type='range']:focus-visible {
+  outline: 3px solid var(--md-sys-color-primary);
+  outline-offset: 0;
+  border-radius: var(--md-sys-shape-corner-full);
+}
+
+// A text field, outlined (the word kiln's). The label sits above it in the page's own markup.
+input[type='text'],
+input[type='search'],
+textarea {
+  width: 100%;
+  min-height: 56px;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--md-sys-color-outline);
+  border-radius: var(--md-sys-shape-corner-extra-small);
+  background: transparent;
+  color: var(--md-sys-color-on-surface);
+  font-family: inherit;
+  @include type.scale(body-large);
+}
+
+input[type='text']::placeholder,
+input[type='search']::placeholder,
+textarea::placeholder {
+  color: var(--md-sys-color-on-surface-variant);
+  opacity: 0.8;
+}
+
+input[type='text']:focus-visible,
+input[type='search']:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--md-sys-color-primary);
+  outline-offset: -1px;
+  border-color: var(--md-sys-color-primary);
 }
 
 // --------------------------------------------------------------------------------------------
@@ -181,7 +333,9 @@ a.action.warning:focus-visible {
 
 @media (prefers-reduced-motion: reduce) {
   button,
-  a.action {
+  a.action,
+  button::after,
+  a.action::after {
     transition: none;
   }
 }

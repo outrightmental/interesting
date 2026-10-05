@@ -8,20 +8,20 @@ stylesheet: moods
   The apparatus, shown rather than hidden: what the site has read, how it asks, and every answer
   it can arrive at. The orientations and the worlds come from _data/worlds.json, the one list the site
   keeps; js/threshold.js supplies the mechanisms and the pull of each orientation once scripting
-  runs. This page lists every world itself, which is why the shared index after <main> is left
+  runs. This page lists every world itself, which is why the shared feed after <main> is left
   off it (see _includes/layout.njk).
 -#}
   <main>
     <h1>the mood atlas</h1>
     <p class='tagline'>What the site is trying to work out about you, how it goes about it, and every answer it can arrive at.</p>
 
-    <section class='atlas-state' aria-labelledby='state-heading'>
-      <h2 id='state-heading'>what it has read</h2>
+    <section class='atlas-state panel' aria-labelledby='state-heading'>
+      <h2 id='state-heading' class='panel-title'>what it has read</h2>
       <p id='current' class='current'>Nothing read yet. Every world is on offer.</p>
       <p id='signal-line' class='signal-line'></p>
       <div class='controls'>
         <button id='requery' type='button'>ask me another way</button>
-        <button id='forget' type='button' class='warning'>forget my reading</button>
+        <button id='forget' type='button' class='btn-text'>forget my reading</button>
         <a class='action' id='current-world' href='index.html' hidden>go to that world</a>
       </div>
       <div id='atlas-probe' class='atlas-probe' hidden></div>
@@ -39,12 +39,12 @@ stylesheet: moods
     </ul>
 
     <h2 class='section-title'>every answer, and its world</h2>
-    <p class='atlas-copy'>{{ (worlds.offSky.length + worlds.underSky.length) | words | capitalize }} frames of mind, each with one world behind it.
-      {{ worlds.offSky.length | words | capitalize }} of those worlds are off the sky; {{ worlds.underSky.length | words }} read one saved sky. Nothing in this list is the default, and the site
-      would rather you overruled it than took its word.</p>
+    <p class='atlas-copy'>{{ worlds.worlds.length | words | capitalize }} frames of mind, each with one world behind it.
+      Nothing in this list is the default, and the site would rather you overruled it than took
+      its word.</p>
     <ul class='orientations'>
-{%- for world in worlds.offSky.concat(worlds.underSky) %}
-      <li data-world='{{ world.file }}'><a href='{{ world.file }}'>{{ world.name }}</a> <strong>{{ world.orientation }}</strong> <span class='pull'></span></li>
+{%- for world in worlds.worlds %}
+      <li data-world='{{ world.file }}' data-mood='{{ world.mood }}'><a href='{{ world.file }}'>{{ world.name }}</a> <strong>{{ world.orientation }}</strong> <span class='pull'></span></li>
 {%- endfor %}
     </ul>
   </main>

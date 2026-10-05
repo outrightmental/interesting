@@ -18,8 +18,15 @@
                                                       the persona's own (js/persona.js), kept here
                                                       under the names pages used before it existed
 
-  Nothing in here keeps score, routes a visitor, or writes to the shared state document except the
-  sky a visitor asks it to seed, which it does through the persona: the shell's job is to be
+  Two small pieces of the shell live here as well, because the shell is markup and Sass and needs
+  a hand with two things only a script can know: whether the page has scrolled under the top app
+  bar (which then takes its tonal lift, .is-scrolled, as an M3 top app bar does), and how full
+  each slider is (the M3 slider paints its active track in the primary colour up to the handle,
+  which CSS can only do when --range-pct says where the handle is), and the aspect ratio of each
+  world's stage (so the feature can size it by the height of the first screen).
+
+  Nothing in here keeps score, routes a visitor, or writes to the shared state document except
+  the sky a visitor asks it to seed, which it does through the persona: the shell's job is to be
   understood in one reading and get out of the way. It draws nothing of its own on a page but the
   unlock box below, where a page asks for one.
 
@@ -204,12 +211,12 @@
       box.appendChild(heading);
       box.appendChild(el('p', 'unlock-note', note));
       var controls = el('div', 'controls');
-      var go = el('button', 'unlock-go', button);
+      var go = el('button', 'unlock-go btn-filled', button);
       go.type = 'button';
       controls.appendChild(go);
       box.appendChild(controls);
       if (elsewhere && elsewhere.open && persona) {
-        var more = el('button', 'unlock-else', elsewhere.text || 'or open your persona');
+        var more = el('button', 'unlock-else btn-text', elsewhere.text || 'or open your persona');
         more.type = 'button';
         more.addEventListener('click', function () {
           persona.open(elsewhere.open);
@@ -269,175 +276,75 @@
     return powered;
   }
 
-  /* ---- caution before a destructive action ------------------------------------------------- */
-  /* One warning treatment, one modal, one question -- see the header comment and the README
-     section "Destructive-caution axiom". No page writes its own confirmation, and nothing on the
-     site calls window.confirm: a browser dialog cannot say which of a visitor's things is about
-     to go, and a question that reads differently on every page is not a safety switch. */
-
-  var sure = null; // the one modal, built the first time something asks and reused after that
-  var asking = null; // the question now on screen: who asked it, and what to do with the answer
-
-  function buildAreYouSure() {
-    var host = document.createElement('dialog');
-    host.className = 'are-you-sure';
-    var title = el('p', 'are-you-sure-title');
-    title.id = 'are-you-sure-title';
-    host.setAttribute('aria-labelledby', title.id);
-    var note = el('p', 'are-you-sure-note');
-    var actions = el('div', 'controls are-you-sure-actions');
-    var go = el('button', 'warning are-you-sure-go');
-    go.type = 'button';
-    var no = el('button', 'are-you-sure-no', 'cancel');
-    no.type = 'button';
-    actions.appendChild(go);
-    actions.appendChild(no);
-    host.appendChild(title);
-    host.appendChild(note);
-    host.appendChild(actions);
-    (document.body || document.documentElement).appendChild(host);
-
-    go.addEventListener('click', function () { settle(true); });
-    no.addEventListener('click', function () { settle(false); });
-    // Escape: the browser raises 'cancel' first, and a dismissal means no.
-    host.addEventListener('cancel', function (ev) {
-      if (ev && typeof ev.preventDefault === 'function') ev.preventDefault();
-      settle(false);
-    });
-    // Closed any other way the browser offers -- still no, and the caller still hears about it.
-    host.addEventListener('close', function () { settle(false); });
-    // A press on the backdrop, which is what a dialog owes anyone who opened it by mistake. The
-    // dialog element is the target for the backdrop as well as its own padding, so the press has
-    // to land outside the box itself.
-    host.addEventListener('click', function (ev) {
-      if (ev.target !== host) return;
-      var box = host.getBoundingClientRect();
-      if (ev.clientX < box.left || ev.clientX > box.right || ev.clientY < box.top || ev.clientY > box.bottom) {
-        settle(false);
-      }
-    });
-    // A browser without dialog.showModal() has no Escape of its own, so it is given one.
-    document.addEventListener('keydown', function (ev) {
-      if (asking && (ev.key === 'Escape' || ev.key === 'Esc')) settle(false);
-    });
-    return { host: host, title: title, note: note, go: go, no: no };
-  }
-
-  function settle(yes) {
-    var answered = asking;
-    asking = null; // first, so closing the dialog cannot send the answer twice
-    if (!answered) return;
-    if (sure.host.open && typeof sure.host.close === 'function') sure.host.close();
-    else sure.host.removeAttribute('open');
-    sure.host.classList.remove('are-you-sure-fallback');
-    var back = answered.opener;
-    if (back && typeof back.focus === 'function') back.focus();
-    if (yes) answered.onConfirm();
-    else answered.onCancel();
-  }
-
-  function areYouSure(options) {
-    var opts = options || {};
-    var onConfirm = typeof opts.onConfirm === 'function' ? opts.onConfirm : function () {};
-    var onCancel = typeof opts.onCancel === 'function' ? opts.onCancel : function () {};
-    var what = String(opts.what || '').trim() || 'throw this away';
-    if (asking) settle(false); // one question at a time, and an unanswered one means no
-    if (!sure) sure = buildAreYouSure();
-    sure.title.textContent = 'are you sure you want to ' + what + '?';
-    sure.note.textContent = opts.detail || '';
-    sure.note.hidden = !opts.detail;
-    sure.go.textContent = String(opts.confirm || '').trim() || ('yes, ' + what);
-    asking = {
-      onConfirm: onConfirm,
-      onCancel: onCancel,
-      opener: opts.opener || document.activeElement
-    };
-    if (typeof sure.host.showModal === 'function') {
-      sure.host.showModal();
-    } else {
-      sure.host.setAttribute('open', '');
-      sure.host.classList.add('are-you-sure-fallback');
-    }
-    // Cancel, not confirm: the one press a visitor who got here by mistake should be one key away
-    // from is the one that changes nothing.
-    sure.no.focus();
-  }
-
-  function destructive(control, options) {
-    var opts = options || {};
-    if (!control) return function () {};
-    control.classList.add('warning');
-
-    function pressed() {
-      var when = typeof opts.when === 'function' ? opts.when : function () { return true; };
-      if (!when()) {
-        // Nothing of the visitor's is about to go, so there is nothing to ask: an empty drawer
-        // emptied again takes nothing away, and the control says so in the page's own words.
-        if (typeof opts.onConfirm === 'function') opts.onConfirm();
-        return;
-      }
-      areYouSure({
-        what: opts.what,
-        detail: typeof opts.detail === 'function' ? opts.detail() : opts.detail,
-        confirm: opts.confirm || (control.textContent || '').trim(),
-        onConfirm: opts.onConfirm,
-        onCancel: opts.onCancel,
-        opener: control
-      });
-    }
-
-    control.addEventListener('click', pressed);
-    return function () {
-      control.removeEventListener('click', pressed);
-      control.classList.remove('warning');
-    };
-  }
-
-  // The footer's one "where next" world is personalized to an earned reading when there is one,
-  // and otherwise stays the default circuit link rendered in worlds.njk.
-  function personalizeNextWorld() {
-    var link = document.querySelector('.site-next-world');
-    if (!link) return;
-
-    var api = window.threshold;
-    if (!api || typeof api.reading !== 'function' || typeof api.orientations !== 'function') return;
-
-    var reading = null;
-    try {
-      reading = api.reading();
-    } catch (e) {
-      reading = null;
-    }
-    if (!reading || !reading.orientation || reading.source === 'signals') return;
-
-    var targetWorld = reading.orientation.world;
-    if (!targetWorld || typeof targetWorld !== 'string') return;
-
-    var here = document.documentElement.getAttribute('data-page') || '';
-    if (here === targetWorld) return;
-
-    var worldName = reading.orientation.worldName || '';
-    if (!worldName) {
-      var all = api.orientations();
-      for (var i = 0; i < all.length; i++) {
-        if (all[i].world === targetWorld) {
-          worldName = all[i].worldName || '';
-          break;
-        }
-      }
-    }
-    if (!worldName) worldName = link.getAttribute('data-default-name') || link.textContent.trim();
-
-    link.href = root + targetWorld;
-    link.textContent = worldName;
-    link.setAttribute('data-source', 'reading');
-  }
-
   function retireOldKeys() {
     if (!store || typeof store.keys !== 'function') return;
     var kept = store.keys();
     for (var i = 0; i < RETIRED_KEYS.length; i++) {
       if (kept.indexOf(RETIRED_KEYS[i]) !== -1) store.remove(RETIRED_KEYS[i]);
+    }
+  }
+
+  // The top app bar lifts once the page has scrolled under it.
+  function watchTopBar() {
+    var bar = document.getElementById('top-bar');
+    if (!bar) return;
+    var scrolled = null;
+    function check() {
+      var now = (window.scrollY || document.documentElement.scrollTop || 0) > 8;
+      if (now === scrolled) return;
+      scrolled = now;
+      bar.classList.toggle('is-scrolled', now);
+    }
+    window.addEventListener('scroll', check, { passive: true });
+    check();
+  }
+
+  // Every slider says how full it is, so the M3 track can paint up to the handle.
+  function fillRange(input) {
+    var min = Number(input.min === '' ? 0 : input.min);
+    var max = Number(input.max === '' ? 100 : input.max);
+    var value = Number(input.value);
+    var pct = max > min ? ((value - min) / (max - min)) * 100 : 0;
+    input.style.setProperty('--range-pct', Math.max(0, Math.min(100, pct)).toFixed(2) + '%');
+  }
+
+  var fillPending = false;
+
+  function fillAllRanges() {
+    fillPending = false;
+    var all = document.querySelectorAll('input[type="range"]');
+    for (var i = 0; i < all.length; i++) fillRange(all[i]);
+  }
+
+  function fillSoon() {
+    if (fillPending) return;
+    fillPending = true;
+    if (window.requestAnimationFrame) window.requestAnimationFrame(fillAllRanges);
+    else fillAllRanges();
+  }
+
+  function watchRanges() {
+    document.addEventListener('input', function (ev) {
+      if (ev.target && ev.target.type === 'range') fillRange(ev.target);
+    });
+    // A button may move a slider without an input event (the 404 page's scan does), and a
+    // mechanism may put a new one on the page: either way, everything is re-read on the next frame.
+    document.addEventListener('click', fillSoon);
+    if (window.MutationObserver) {
+      new MutationObserver(fillSoon).observe(document.body, { childList: true, subtree: true });
+    }
+    fillAllRanges();
+  }
+
+  // A world's stage -- the canvas beside its panel -- fills the first screen, so it is sized by the
+  // viewport's height as well as its column's width. CSS can hold both only if it knows the
+  // stage's aspect ratio, which is read off the canvas's own width and height here.
+  function stageRatios() {
+    var stages = document.querySelectorAll('.layout > canvas, .top > canvas');
+    for (var i = 0; i < stages.length; i++) {
+      var w = Number(stages[i].getAttribute('width')) || stages[i].width;
+      var h = Number(stages[i].getAttribute('height')) || stages[i].height;
+      if (w > 0 && h > 0) stages[i].style.setProperty('--stage-ratio', (w / h).toFixed(4));
     }
   }
 
@@ -453,8 +360,9 @@
 
   function start() {
     retireOldKeys();
-    personalizeNextWorld();
-    window.addEventListener('threshold:reading', personalizeNextWorld);
+    watchTopBar();
+    watchRanges();
+    stageRatios();
   }
 
   if (document.readyState === 'loading') {
