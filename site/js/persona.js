@@ -808,18 +808,24 @@
     // button guarded by the one modal (window.interestingSite.destructive in js/site.js). The
     // class is in the markup as well, so the control reads as a warning before any script runs.
     if (sheet.clear) {
-      sheet.clear.addEventListener('click', function () {
-        if (!fieldStars.length) {
-          sheetStatus('The sky is already empty.');
-          return;
-        }
-        if (!window.confirm('Clear every star from your sky? Every world that reads it will read nothing until you place more.')) {
-          sheetStatus('Kept as it was.');
-          return;
-        }
-        var kept = clear();
-        sheetStatus('Cleared. ' + fieldIntro(fieldStars) + keptNote(kept));
-        if (sheet.drop) sheet.drop.focus();
+      window.interestingSite.destructive(sheet.clear, {
+        what: 'clear your constellation',
+        detail: function () {
+          return 'The ' + fieldStars.length + ' star' + (fieldStars.length === 1 ? '' : 's')
+            + ' you placed would go, and every world that reads it would read nothing until you '
+            + 'place more.';
+        },
+        when: function () { return fieldStars.length > 0; },
+        onConfirm: function () {
+          if (!fieldStars.length) {
+            sheetStatus('The sky is already empty.');
+            return;
+          }
+          var kept = clear();
+          sheetStatus('Cleared. ' + fieldIntro(fieldStars) + keptNote(kept));
+          if (sheet.drop) sheet.drop.focus();
+        },
+        onCancel: function () { sheetStatus('Kept as it was.'); }
       });
     }
     if (sheet.ask) sheet.ask.addEventListener('click', function () { askInSheet(true); });
