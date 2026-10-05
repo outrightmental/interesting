@@ -1,0 +1,53 @@
+# The other half of steering: a page that will not work is as much a thing to say as a page that
+# should exist. The site's own button opens steer-the-site.yml rather than this one, because most
+# of what a visitor arrives with is a wish -- but a form for breakage costs nothing and spares
+# anyone who found some from having to answer "what should the site become?" first.
+name: Something is wrong
+description: A page that will not load, a control that does nothing, text you cannot read, a sky that went missing.
+title: "Broken: "
+labels: ["broken"]
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Thank you for saying so.** This site is rewritten by a model and tested by code, and the
+        tests cannot see everything: how it reads on your phone, whether a control did what you
+        expected, whether something you had saved came back.
+
+        Only the first box is required.
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you did, and what the site did instead.
+      placeholder: |
+        I tapped "drop a star" and nothing appeared, and the page scrolled to the top.
+    validations:
+      required: true
+
+  - type: input
+    id: where
+    attributes:
+      label: Which page
+      description: The file name is enough, or the address you were at.
+      placeholder: wish-constellation.html
+
+  - type: input
+    id: device
+    attributes:
+      label: What you were looking at it on
+      description: Phone or desktop, and the browser, if you know it. A rough answer still narrows it down.
+      placeholder: iPhone, Safari
+
+  - type: textarea
+    id: state
+    attributes:
+      label: Your saved state, if it is part of the problem
+      description: >
+        Everything this site keeps lives in your own browser, and the "state" button in the
+        bottom-right corner of any page copies it out as text. Pasting it here makes it public, so
+        that is entirely your call -- it is only worth doing when the thing that broke is about
+        what you had saved.
+      render: json

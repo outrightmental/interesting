@@ -1,0 +1,16 @@
+# What GitHub shows when someone presses "New issue" on this repository, and what the "steer the
+# site" button in the middle of the bottom edge of every page lands on (site/js/participate.js
+# links the form below by name).
+#
+# Blank issues stay enabled on purpose. The forms are here to save a visitor from inventing a
+# shape, never to insist on one -- the same bargain the site's own mood flow makes, where the
+# question is an offer and never a gate.
+blank_issues_enabled: true
+
+contact_links:
+  - name: The site itself
+    url: https://makeitmoreinteresting.com/
+    about: Have a look at what is there now. Every page carries a button back to the form above.
+  - name: How the site is made, and what it is held to
+    url: https://github.com/outrightmental/interesting#readme
+    about: The mission, what "interesting" means here, and the seven axioms every change is held to.

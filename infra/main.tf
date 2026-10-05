@@ -11,6 +11,8 @@
 #     Terraform-managed resource, so the repo's settings can never drift.
 #     (The repo pre-existed this configuration; repo.tf adopts it via an
 #     import block on the first apply.)
+#   - The issue labels the repository's issue forms ask for (issue-labels.tf),
+#     so the way a visitor steers the site is owned here too.
 #   - The makeitmoreinteresting.com hosted zone (dns.tf). The site used to live
 #     at interesting.outright.io, a subdomain of a studio-wide zone this
 #     project could only read; its own apex domain belongs to the same project
