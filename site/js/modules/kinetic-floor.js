@@ -166,6 +166,8 @@ function rig(c) {
     s.t += dt;
     s.flash = Math.max(0, s.flash - dt * 2);
     if (c.done) s.fade = Math.min(1, s.fade + dt * 2.5);
+    // The report is a tally, not a ticker: once the piece is finished the numbers stand still.
+    const tally = !c.done;
     const u = unit();
     const G = (c.reduced ? 0.35 : 1) * 900 * u * s.gravity;
     const [gx, gy] = DIRS[s.down];
@@ -173,7 +175,7 @@ function rig(c) {
     const w = W();
     const h = H();
     const hit = (b, side, v) => {
-      if (v > 30 * u) s.impacts += 1;
+      if (tally && v > 30 * u) s.impacts += 1;
       if (side === s.down) {
         if (side === 'd' || side === 'u') b.vx *= 0.94;
         else b.vy *= 0.94;
@@ -187,8 +189,10 @@ function rig(c) {
       b.vy *= 1 - dt * 0.03;
       b.spin *= 1 - dt * 0.8;
       const speed = Math.sqrt(b.vx * b.vx + b.vy * b.vy);
-      s.travelled += speed * dt;
-      if (speed > s.fastest) s.fastest = speed;
+      if (tally) {
+        s.travelled += speed * dt;
+        if (speed > s.fastest) s.fastest = speed;
+      }
       b.x += b.vx * dt;
       b.y += b.vy * dt;
       b.angle += b.spin * dt;
@@ -222,7 +226,7 @@ function rig(c) {
           a.vx -= nx * k; a.vy -= ny * k;
           b.vx += nx * k; b.vy += ny * k;
           a.spin += vn * 0.002; b.spin -= vn * 0.002;
-          if (-vn > 90 * u) s.impacts += 1;
+          if (tally && -vn > 90 * u) s.impacts += 1;
         }
       }
     }
@@ -294,18 +298,24 @@ function rig(c) {
       'fastest block: ' + Math.round(s.fastest) + ' px/s',
       'total distance shoved: ' + (s.travelled / 100).toFixed(1) + ' m'
     ];
-    const size = Math.max(12, Math.round(Math.min(w, h) * 0.055));
+    const size = Math.max(13, Math.round(Math.min(w, h) * 0.055));
+    const small = Math.max(11, Math.round(size * 0.8));
     const pad = size * 1.1;
-    const bw = Math.min(w - 32, size * 19);
+    const body = '600 ' + size + 'px system-ui, sans-serif';
+    // The box is as wide as its longest line, so the numbers never run past its edge on a phone.
+    g.font = body;
+    let widest = 0;
+    for (const line of lines) widest = Math.max(widest, g.measureText(line).width);
+    const bw = Math.min(w - 32, Math.max(size * 12, widest + pad * 2));
     const bh = pad * 2 + size * 1.5 * (lines.length + 1);
     g.fillStyle = c.alpha(col.bg, 0.82 * a);
     g.fillRect((w - bw) / 2, (h - bh) / 2, bw, bh);
     g.textAlign = 'center';
     g.textBaseline = 'middle';
-    g.font = '500 ' + Math.round(size * 0.75) + 'px system-ui, sans-serif';
+    g.font = '500 ' + small + 'px system-ui, sans-serif';
     g.fillStyle = c.alpha(col.muted, a);
     g.fillText(s.riot ? 'the damage report. riot mode.' : 'the damage report', w / 2, (h - bh) / 2 + pad + size * 0.6);
-    g.font = '600 ' + size + 'px system-ui, sans-serif';
+    g.font = body;
     g.fillStyle = c.alpha(col.fg, a);
     lines.forEach((line, i) => g.fillText(line, w / 2, (h - bh) / 2 + pad + size * 1.5 * (i + 1) + size * 0.6));
   }

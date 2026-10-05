@@ -401,7 +401,7 @@ function accession(env) {
         s.pop = 1;
         const now = printed();
         if (now.verdict && !before.verdict) c.status('assessment: ' + verdict + '.');
-        else if (now.number && !before.number) c.status('numbered ' + number + (now.place ? ', out of ' + place + '. no prior record.' : '. specimen ' + number + ' is on the desk.'));
+        else if (now.number && !before.number) c.status('numbered ' + number + (now.place ? ', out of ' + place + '. no prior record.' : '. nothing else is on record yet.'));
         else if (now.place && !before.place) c.status('provenance: came out of ' + place + '. no prior record.');
         else c.status('stamped again, for luck.');
       }
@@ -410,7 +410,8 @@ function accession(env) {
       s.t += dt;
       s.warm += ((s.lie ? 1 : 0) - s.warm) * Math.min(1, dt * 2);
       s.pop = Math.max(0, s.pop - dt * 3);
-      if (c.done) s.file = Math.min(1, s.file + dt * (c.reduced ? 2 : 0.7));
+      // The stage lingers about a second after the finish, so the filing takes one.
+      if (c.done) s.file = Math.min(1, s.file + dt * (c.reduced ? 2 : 1));
       draw(c);
     },
     end(c) {
@@ -444,7 +445,7 @@ function crossReference(env) {
       gr: (env.rnd() - 0.5) * 0.1
     });
   }
-  const s = { spread: 0.5, link: links[0], picks: [], lift: 0, file: 0, t: 0 };
+  const s = { spread: 0.5, link: links[0], chosen: false, picks: [], lift: 0, file: 0, t: 0 };
   function place(c, it) {
     const f = ease(s.file);
     const i = s.picks.indexOf(it);
@@ -545,6 +546,8 @@ function crossReference(env) {
     }
     const style = LINKS.indexOf(s.link);
     g.globalAlpha = 1 - ease(Math.min(1, f * 2));
+    // A length of the chosen thread lies on the desk until it is strung between two cards.
+    if (s.chosen && s.picks.length < 2) thread(g, c, { x: w * 0.72, y: h * 0.76 }, { x: w * 0.92, y: h * 0.76 }, style);
     for (let i = 1; i < s.picks.length; i++) thread(g, c, at.get(s.picks[i - 1]), at.get(s.picks[i]), style);
     g.globalAlpha = 1;
     if (f > 0.3) {
@@ -579,6 +582,7 @@ function crossReference(env) {
       }
       if (id === 'thread') {
         s.link = LINKS[Number(value)] || links[0];
+        s.chosen = true;
         c.status('the claim: they ' + s.link.text + '.');
       }
       if (id === 'file') {
@@ -612,7 +616,7 @@ function crossReference(env) {
     frame(t, dt, c) {
       s.t += dt;
       s.lift = Math.max(0.35, s.lift - dt * 1.5);
-      if (c.done) s.file = Math.min(1, s.file + dt * (c.reduced ? 2 : 0.6));
+      if (c.done) s.file = Math.min(1, s.file + dt * (c.reduced ? 2 : 1));
       draw(c);
     },
     end(c) {

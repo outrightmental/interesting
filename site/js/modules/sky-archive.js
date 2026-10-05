@@ -26,7 +26,7 @@ const RUNES = [
   ['ᛖ', 'ehwaz', 'the horse: trust the carrier'],
   ['ᛗ', 'mannaz', 'the self, among others'],
   ['ᛚ', 'laguz', 'water finding its level'],
-  ['ᛜ', 'ingwaz', 'the seed, kept'],
+  ['ᛜ', 'ingwaz', 'the grain, kept'],
   ['ᛞ', 'dagaz', 'first light: the turn'],
   ['ᛟ', 'othala', 'the home ground']
 ];
@@ -81,6 +81,10 @@ const COUNSEL = [
 ];
 const STRIKES = ['one strike, and the rings ring', 'twice; the glyphs take', 'three times; it holds its shape', 'four; it is nearly itself'];
 const NUM = ['no', 'one', 'two', 'three', 'four', 'five'];
+
+function starsOf(n) {
+  return n === 1 ? '1 star' : n + ' stars';
+}
 
 function hash(text) {
   let h = 2166136261;
@@ -196,6 +200,15 @@ function scene(g, w, h, c, v) {
   // in four shades so a crowded sky costs four strokes rather than hundreds.
   if (v.reach) {
     const maxD = v.reach * R;
+    // Each star's reach, as a faint halo of half the bond distance: two halos that touch are a bond.
+    g.strokeStyle = c.alpha(warm, 0.1);
+    g.lineWidth = 1;
+    g.beginPath();
+    pts.forEach((p) => {
+      g.moveTo(p.x + maxD / 2, p.y);
+      g.arc(p.x, p.y, maxD / 2, 0, Math.PI * 2);
+    });
+    g.stroke();
     const shades = [[], [], [], []];
     for (let i = 0; i < pts.length; i++) {
       for (let j = i + 1; j < pts.length; j++) {
@@ -391,7 +404,7 @@ function spin(env) {
     },
     end(c) {
       const l = lean(c.stars, s.phase);
-      s.plaque = [omen(false), s.glyphs[s.read][2], counsel, c.stars.length + ' stars · ' + l.spread + ' spread · the ' + l.zone + ' archive'];
+      s.plaque = [omen(false), s.glyphs[s.read][2], counsel, starsOf(c.stars.length) + ' · ' + l.spread + ' spread · the ' + l.zone + ' archive'];
       c.status('omen archived; move a star and ask again');
     }
   };
@@ -438,7 +451,7 @@ function forge(env) {
       if (id === 'reach') {
         s.reach = Math.max(0, Number(value) || 0) / 100;
         const b = count(c);
-        c.status(b ? b + (b === 1 ? ' bond' : ' bonds') + ' among ' + c.stars.length + ' stars' : 'no bonds; every star for itself');
+        c.status(b ? b + (b === 1 ? ' bond' : ' bonds') + ' among ' + c.stars.length + ' stars' : c.stars.length === 1 ? 'the one star reaches, and finds no other' : 'no bonds; every star for itself');
       }
       if (id === 'strike') {
         s.struck = Number(value) || 0;
@@ -464,8 +477,8 @@ function forge(env) {
       scene(c.g, c.w, c.h, c, view(c));
     },
     end(c) {
-      s.plaque = ['sigil forged', s.glyphs.map((e) => e[0]).join('  '), c.stars.length + ' stars · ' + s.bonds + (s.bonds === 1 ? ' bond · ' : ' bonds · ') + s.set];
-      c.status('sigil forged: ' + c.stars.length + ' stars encoded, ' + s.bonds + (s.bonds === 1 ? ' bond' : ' bonds'));
+      s.plaque = ['sigil forged', s.glyphs.map((e) => e[0]).join('  '), starsOf(c.stars.length) + ' · ' + s.bonds + (s.bonds === 1 ? ' bond · ' : ' bonds · ') + s.set];
+      c.status('sigil forged: ' + starsOf(c.stars.length) + ' encoded, ' + s.bonds + (s.bonds === 1 ? ' bond' : ' bonds'));
     }
   };
 }
@@ -481,7 +494,9 @@ function read(env) {
   }
   return {
     title: need === 1 ? 'read the one star' : 'read ' + NUM[need] + ' stars',
-    brief: 'Tap ' + NUM[need] + ' stars and each gives up its rune; set the lamp, join them if you like, and stamp the reading into the archive.',
+    brief: need === 1
+      ? 'Tap the one star and it gives up its rune; set the lamp, then stamp the reading into the archive.'
+      : 'Tap ' + NUM[need] + ' stars and each gives up its rune; set the lamp, join them if you like, and stamp the reading into the archive.',
     aspect: '1 / 1',
     steps: [
       { id: 'draw', ask: 'tap ' + NUM[need] + (need === 1 ? ' star' : ' stars'), kind: 'tap', label: 'draw one for me' },
@@ -538,7 +553,7 @@ function read(env) {
     },
     end(c) {
       const runes = s.drawn.map((i) => runeFor(c.stars[i]));
-      s.plaque = ['archived: ' + runes.map((r) => r[0]).join('  '), runes.map((r) => r[1]).join(' · '), NUM[need] + ' of ' + n + (n === 1 ? ' star read' : ' stars read')];
+      s.plaque = ['archived: ' + runes.map((r) => r[0]).join('  '), runes.map((r) => r[1]).join(' · '), n === 1 ? 'the one star, read' : NUM[need] + ' of ' + n + ' stars read'];
       c.status('the reading is archived: ' + runes.map((r) => r[1]).join(', '));
     }
   };

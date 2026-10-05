@@ -117,7 +117,7 @@ function tilthOf(grit) {
 
 function fresh(grit) {
   return { grit, top: 0, stones: [], flecks: [], roots: [], tips: [], plants: [], moisture: 0.5, deepest: 0,
-    said: 0, quiet: 0, flash: 0, splash: 0, rain: false, shoot: 0, core: 0, coreX: 0, reading: null, t: 0 };
+    said: 0, quiet: 0, flash: 0, splash: 0, rain: false, shoot: 0, dawn: 0, core: 0, coreX: 0, reading: null, t: 0 };
 }
 
 // A knob speaking marks the moment, so the soil's own remarks wait until the line has been read.
@@ -177,6 +177,7 @@ function grow(s, dt, w, h, c) {
     const ny = tip.y + Math.sin(tip.angle) * step;
     const stone = blocked(s, nx, ny);
     if (stone) {
+      if (blocked(s, tip.x, tip.y)) continue; // a stone laid over it since: that root ends there
       tip.angle += (nx < stone.x ? -1 : 1) * 0.55;
       hit = hit || stone;
       next.push(tip);
@@ -270,8 +271,8 @@ function bed(g, w, h, c, s) {
   const wet = Math.min(1, s.moisture / 1.2);
   g.fillStyle = col.bg;
   g.fillRect(0, 0, w, h);
-  // Nothing above the line but dark, and the rain when it rains.
-  g.fillStyle = 'rgba(0,0,0,' + (0.35 - s.shoot * 0.2) + ')';
+  // Nothing above the line but dark, and the rain when it rains; it lightens at the finish.
+  g.fillStyle = 'rgba(0,0,0,' + (0.35 - Math.max(s.shoot, s.dawn) * 0.22) + ')';
   g.fillRect(0, 0, w, top);
   if (s.rain) {
     g.strokeStyle = c.alpha(col.accent, 0.35);
@@ -339,8 +340,9 @@ function bed(g, w, h, c, s) {
   g.textAlign = 'center';
   g.textBaseline = 'bottom';
   const up = 1 - (1 - s.shoot) * (1 - s.shoot);
+  const reach = Math.max(m * 0.04, top - size * 1.8); // as tall as the sky allows, the name still above it
   for (const p of s.plants) {
-    const stem = m * 0.02 + up * m * 0.13;
+    const stem = m * 0.02 + up * (reach - m * 0.02);
     g.strokeStyle = c.alpha(c.mix(col.accent2, col.accent, 0.3 * up), 0.9);
     g.lineWidth = 2;
     g.beginPath();
@@ -356,7 +358,7 @@ function bed(g, w, h, c, s) {
       }
     }
     g.fillStyle = c.alpha(col.fg, 0.55 + up * 0.35);
-    g.fillText(p.name, p.x, top - stem - size * 0.3);
+    g.fillText(p.name, Math.max(size * 2.6, Math.min(w - size * 2.6, p.x)), top - stem - size * 0.3);
   }
   if (s.flash > 0) {
     g.fillStyle = c.alpha(col.accent2, s.flash * 0.22);
@@ -446,7 +448,7 @@ function sow(env) {
     ],
     start(c) {
       layStones(s, c.w, c.h, c.rnd);
-      say(s, c, 'Bare soil, well drained, nothing in it yet.');
+      say(s, c, 'Bare soil, ' + (s.grit < 30 ? 'heavy and slow to drain' : 'well drained') + ', nothing in it yet.');
       bed(c.g, c.w, c.h, c, s);
     },
     apply(id, value, c) {
@@ -460,7 +462,8 @@ function sow(env) {
     tap(x, y, c) {
       if (s.plants.length >= n + 3) return;
       const px = Math.max(c.w * 0.04, Math.min(c.w * 0.96, x * c.w));
-      const name = s.plants.length < n ? names[s.plants.length] : c.pick(NAMES);
+      const spare = NAMES.filter((x) => !s.plants.some((p) => p.name === x));
+      const name = s.plants.length < n ? names[s.plants.length] : c.pick(spare.length ? spare : NAMES);
       plant(s, px, name);
       if (s.plants.length > n) {
         say(s, c, 'Planted ' + name + ' as well. Nobody said stop.');
@@ -485,7 +488,7 @@ function sow(env) {
           c.satisfy('settle');
         }
       }
-      if (c.done) s.shoot = Math.min(1, s.shoot + dt / 1.5);
+      if (c.done) s.shoot = Math.min(1, s.shoot + dt / 1.2);
       bed(c.g, c.w, c.h, c, s);
     },
     end(c) {
@@ -549,7 +552,8 @@ function turnOver(env) {
     },
     frame(t, dt, c) {
       tick(s, dt, c);
-      if (s.core > 0) s.core = Math.min(1, s.core + dt / 1.4);
+      if (s.core > 0) s.core = Math.min(1, s.core + dt / 1.1);
+      if (c.done) s.dawn = Math.min(1, s.dawn + dt / 1.2);
       bed(c.g, c.w, c.h, c, s);
     },
     end(c) {
