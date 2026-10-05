@@ -812,8 +812,8 @@
         what: 'clear your constellation',
         detail: function () {
           return 'The ' + fieldStars.length + ' star' + (fieldStars.length === 1 ? '' : 's')
-            + ' you placed would go, and every world that reads it would read nothing until '
-            + 'you place more.';
+            + ' you placed would go, and every world that reads it would read nothing until you '
+            + 'place more.';
         },
         when: function () { return fieldStars.length > 0; },
         onConfirm: function () {
