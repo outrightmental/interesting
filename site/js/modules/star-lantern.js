@@ -78,7 +78,7 @@ function piece(env) {
     aspect: '16 / 10',
     steps: [
       { id: 'order', ask: 'which lights first', kind: 'choice', options: ORDERS },
-      { id: 'kindle', ask: 'tap the sky ' + need + ' times', kind: 'tap', label: 'kindle one for me', after: 'order' },
+      { id: 'kindle', ask: need === 1 ? 'tap the sky once' : 'tap the sky ' + need + ' times', kind: 'tap', label: 'kindle one for me', after: 'order' },
       { id: 'wind', ask: 'the wind', kind: 'range', min: 0, max: 100, step: 1, value: 30, low: 'still', high: 'gusting' },
       { id: 'release', ask: 'let them rise', kind: 'hold', ms: 1800, label: 'hold to release', after: 'kindle' }
     ],
