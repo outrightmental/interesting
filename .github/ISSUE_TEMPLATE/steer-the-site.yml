@@ -1,0 +1,80 @@
+# The form the site's own "steer the site" button opens. site/js/participate.js names this file in
+# the new-issue link and fills in the "where" field below, so a visitor arrives with the question
+# already asked and one box left to write in.
+#
+# Keep the file name as it is: the link names it, and that file is fixed -- never shown to a model,
+# never written by one -- so a rename here is a rename that has to be made in both places by hand.
+name: Steer the site
+description: Say what this site should do, be, or become next. One sentence is plenty.
+title: "Steer: "
+labels: ["steer"]
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Thank you for steering.** This site rewrites itself continuously: a model is handed the
+        whole of it and asked to make it more interesting as a single coherent whole, where
+        *interesting* means how long a person stays engaged. What it cannot do is know what you
+        wanted. That is what this form is for.
+
+        Only the first box is required. The rest is here so you have as little as possible to
+        invent, and any of it can be left alone.
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What should the site do, be, or become?
+      description: |
+        Plain words are perfect, and small is welcome. A whole idea, a thing that annoyed you, a
+        page you wish existed, a question you wish it had asked you, a world you went looking for
+        and could not find.
+      placeholder: |
+        I wanted somewhere to put a thought down and come back to it, and I could not tell which
+        page was for that.
+    validations:
+      required: true
+
+  - type: input
+    id: where
+    attributes:
+      label: Where you were
+      description: >
+        The page you pressed the button on, filled in for you. Clear it if it is beside the point.
+      placeholder: index.html
+
+  - type: dropdown
+    id: reach
+    attributes:
+      label: How far does it reach?
+      description: A guess is fine, and "not sure" is a real answer.
+      options:
+        - One page
+        - Every page — the shared shell, the header, the corner buttons
+        - The whole experience — navigation, visual language, the through-line
+        - Behind the site — the build, the iteration, the hosting
+        - Not sure
+
+  - type: textarea
+    id: why
+    attributes:
+      label: Why it would make the site more interesting
+      description: >
+        Optional, and the most useful box here when you have something for it. Interesting means
+        one thing on this site: how long a person stays engaged, and how intrigued, astonished or
+        entertained they are while they do. Anything you can say about that aims the next change.
+
+  - type: markdown
+    attributes:
+      value: |
+        ### What happens next
+
+        A person reads this. From there it either becomes a change by hand or becomes part of what
+        the iteration is asked for, and this issue is where you can follow it.
+
+        Seven things about the site hold whatever is asked of it, because they are checked in code
+        rather than left to taste: every page stays reachable from the root, every page carries the
+        analytics and cookie-consent line, every page is responsive and accessible to WCAG 2.2 AA,
+        every page carries the one local-state store, nothing on the site is tied to an update
+        frequency, the site asks before it offers, and every page carries the button you arrived
+        by. A request that runs into one of those gets a conversation here, not a silent no.

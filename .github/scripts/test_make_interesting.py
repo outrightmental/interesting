@@ -88,6 +88,17 @@ def stored(body):
     return f"<head>{mi.STATE_TAG}</head>\n<body>{body}</body>"
 
 
+def steered(body):
+    """A bare fragment that loads the shared participation script, and nothing more.
+
+    The participation counterpart of tagged(): it carries the one line the axiom is about -- the
+    way a visitor says what the site should become -- and, being a fragment, falls short of the
+    responsive-and-accessible axiom from the start, so only check_participate can refuse a fixture
+    built from it.
+    """
+    return f"<head>{mi.PARTICIPATE_TAG}</head>\n<body>{body}</body>"
+
+
 def queried(body):
     """A bare fragment that loads the shared mood script, and nothing more.
 
@@ -106,7 +117,8 @@ def mood_script(*probes):
 
 def page(body="<p>a page</p>", title="a page", lang="en",
          viewport="width=device-width, initial-scale=1", css="", focus=True, calm=True,
-         analytics=mi.ANALYTICS_SCRIPT, state=mi.STATE_SCRIPT, mood=mi.MOOD_SCRIPT):
+         analytics=mi.ANALYTICS_SCRIPT, state=mi.STATE_SCRIPT, mood=mi.MOOD_SCRIPT,
+         participate=mi.PARTICIPATE_SCRIPT):
     """A whole page that satisfies every axiom: responsive and accessible (issue #26), and carrying
     the analytics and consent line (issue #24).
 
@@ -114,9 +126,9 @@ def page(body="<p>a page</p>", title="a page", lang="en",
     has to look like. Every argument takes one part of the axiom away again, so a test can break
     exactly one thing: the style block always animates (`transition`) and always drops the browser's
     focus ring (`outline: none`), so `calm=False` and `focus=False` really do leave a page failing.
-    `analytics`, `state` and `mood` are the srcs of the three shared scripts, so a page in a
-    sub-folder can load them by the matching relative path, and `analytics=""`, `state=""` or
-    `mood=""` leaves one line off without touching anything else.
+    `analytics`, `state`, `mood` and `participate` are the srcs of the four shared scripts, so a
+    page in a sub-folder can load them by the matching relative path, and `analytics=""`,
+    `state=""`, `mood=""` or `participate=""` leaves one line off without touching anything else.
     """
     style = ["  * { box-sizing: border-box; }",
              "  .panel { max-width: 60rem; padding: clamp(0.8rem, 3vw, 2rem); }",
@@ -132,6 +144,7 @@ def page(body="<p>a page</p>", title="a page", lang="en",
             + (f"  <script src='{analytics}' defer></script>\n" if analytics else "")
             + (f"  <script src='{state}'></script>\n" if state else "")
             + (f"  <script src='{mood}' defer></script>\n" if mood else "")
+            + (f"  <script src='{participate}' defer></script>\n" if participate else "")
             + f"  <title>{title}</title>\n  <style>\n"
             + "\n".join(style + ([f"  {css}"] if css else [])) + "\n  </style>\n</head>\n<body>\n"
             f"  <main class='panel'>\n    <h1>{title}</h1>\n    {body}\n  </main>\n</body>\n</html>\n")
@@ -649,9 +662,9 @@ class SingleExperienceTest(SiteDirTestCase):
         self.assertIn("count them as part of the piece when you weigh the site as a whole", prompt)
         self.assertIn("carried on by a later run", prompt)
 
-    def test_the_aim_is_a_stated_standard_and_not_a_seventh_axiom(self):
+    def test_the_aim_is_a_stated_standard_and_not_an_eighth_axiom(self):
         # Issue #36, question 3: prompt-only. No check could settle whether a site reads as one
-        # experience, so the six coded axioms are still the whole of what the code refuses -- a
+        # experience, so the seven coded axioms are still the whole of what the code refuses -- a
         # page that shares nothing with the rest is accepted, exactly as before, and the prompt is
         # where the aim lives. (The same reasoning INTERESTING is left uncoded for.)
         (self.site / "index.html").write_text(home("sitemap.xml", "stranger.html", "error.html"))
@@ -666,7 +679,7 @@ class SingleExperienceTest(SiteDirTestCase):
         self.assertEqual(sorted(t.name for _, t, _ in ops), ["sitemap.xml", "stranger.html"])
         self.assertEqual(sorted(name for name in dir(mi) if name.startswith("check_")),
                          ["check_accessibility", "check_analytics", "check_cadence", "check_mood",
-                          "check_reachability", "check_state"])
+                          "check_participate", "check_reachability", "check_state"])
 
 
 class BuildPipelinePromptTest(unittest.TestCase):
@@ -971,7 +984,7 @@ class ResponsiveAccessibleAxiomTest(SiteDirTestCase):
                      "refused, exactly as one that orphans a page is"]:
             with self.subTest(rule=rule):
                 self.assertIn(rule, rules)
-        self.assertEqual(rules.count("AXIOM, every run:"), 6, "every axiom stands over every run")
+        self.assertEqual(rules.count("AXIOM, every run:"), 7, "every axiom stands over every run")
 
     def test_the_prompt_also_asks_for_what_no_validator_can_judge(self):
         # Open question 1 of the issue: both, and the prompt is the wider of the two. Contrast needs
@@ -1655,12 +1668,12 @@ class LegibilityStandardTest(unittest.TestCase):
         self.assertIn(f"Keep it {mi.LEGIBLE}", last)
         self.assertIn("never a dead end", last)
 
-    def test_the_standard_is_stated_and_not_a_seventh_check(self):
-        # The same reasoning WHOLE and INTERESTING are left uncoded for: the six coded axioms are
+    def test_the_standard_is_stated_and_not_an_eighth_check(self):
+        # The same reasoning WHOLE and INTERESTING are left uncoded for: the seven coded axioms are
         # still the whole of what the code refuses (issue #46, question 1).
         self.assertEqual(sorted(name for name in dir(mi) if name.startswith("check_")),
                          ["check_accessibility", "check_analytics", "check_cadence", "check_mood",
-                          "check_reachability", "check_state"])
+                          "check_participate", "check_reachability", "check_state"])
 
 
 class CadenceAxiomTest(SiteDirTestCase):
@@ -1997,6 +2010,342 @@ class MoodAxiomTest(SiteDirTestCase):
         self.assertEqual(len(mi.validate_plan({"delete": ["old.html"]})), 1)
 
 
+class ParticipationAxiomTest(SiteDirTestCase):
+    """Issue #43: every page carries a visitor's way of steering the site -- one prominent button,
+    pinned to the bottom edge, that opens a pre-shaped new issue on this repository.
+
+    The seventh axiom, and the one that is about the person reading the site rather than about the
+    site: a site rewritten continuously by a model is steered by whoever can reach the model, so
+    the standing channel back from a visitor is held in place by exactly the machinery the
+    analytics tag and the local-state store use -- the line is required on every page, and the file
+    behind it is fixed."""
+
+    PAGES = ["index.html", "error.html", "toy.html"]
+
+    def setUp(self):
+        super().setUp()
+        (self.site / "js").mkdir()
+        (self.site / mi.PARTICIPATE_SCRIPT).write_text("/* the button that opens a new issue */")
+        (self.site / "index.html").write_text(steered(home("toy.html", "error.html")))
+        (self.site / "error.html").write_text(steered("<p>404</p>"))
+        (self.site / "toy.html").write_text(steered("<p>toy</p>"))
+        (self.site / "sitemap.xml").write_text(sitemap(*self.PAGES))
+
+    def prompt(self):
+        return mi.build_prompt([("index.html", "<h1>hi</h1>")])
+
+    def test_the_axiom_is_a_standing_rule_of_every_prompt(self):
+        rules = self.prompt()
+        rules = rules[rules.index("Rules:"):]
+        for rule in ["every page carries a visitor's way of steering this site",
+                     mi.PARTICIPATE_TAG,
+                     "Keep that line on every page you rewrite",
+                     "put it on every page you add",
+                     f"../{mi.PARTICIPATE_SCRIPT}",  # a page in a sub-folder
+                     "a new issue on this repository",
+                     "is not shown to you, you may not write or delete it",
+                     "answers to the person reading it rather than to you",
+                     "A plan that leaves a page of the site without the line is refused"]:
+            with self.subTest(rule=rule):
+                self.assertIn(rule, rules)
+
+    def test_the_prompt_leaves_the_whole_bottom_edge_to_the_three_affordances(self):
+        # The three are a cadre of their own -- each injects its own styles, each is pinned to the
+        # device boundary, none is a page's to restyle -- so a run has to be told where they are as
+        # well as that they exist. The header's pulse once arrived as <p class='site-meta'> and was
+        # torn out of the header by the state menu's own `position: fixed`; this is the half of that
+        # lesson the prompt can carry.
+        rules = self.prompt()
+        for where in ["\"cookies\" button in the bottom-left",
+                      "\"steer the site\" button in the middle of the bottom edge",
+                      "\"state\" menu in the bottom-right",
+                      "Leave the bottom edge to them"]:
+            with self.subTest(where=where):
+                self.assertIn(where, rules)
+
+    def test_a_page_a_run_adds_must_carry_the_line(self):
+        # A whole page but for the one line, so this axiom is the only thing left to refuse it for.
+        plan = {"files": [
+            {"path": "new.html", "content": page(title="new", participate="")},
+            {"path": "index.html", "content": steered(home("toy.html", "error.html", "new.html"))},
+            {"path": "sitemap.xml", "content": sitemap(*self.PAGES, "new.html")},
+        ]}
+        with self.assertRaisesRegex(mi.RejectedChange, r"new\.html has no <script"):
+            mi.validate_plan(plan)
+        plan["files"][0]["content"] = page(title="new")
+        self.assertEqual(len(mi.validate_plan(plan)), 3)
+
+    def test_dropping_the_line_from_a_page_a_run_rewrites_is_refused(self):
+        for content in ["<p>no line at all</p>",
+                        "<head><script>var WAY_IN = 'js/participate.js';</script></head>"]:
+            with self.subTest(content=content[:40]), \
+                    self.assertRaisesRegex(mi.RejectedChange, r"toy\.html has no <script"):
+                mi.validate_plan({"files": [{"path": "toy.html", "content": content}]})
+        # It is the src that counts, not the exact spelling of the tag around it.
+        loaded = '<head><script src="js/participate.js" defer></script></head>'
+        self.assertEqual(len(mi.validate_plan({"files": [{"path": "toy.html", "content": loaded}]})), 1)
+
+    def test_a_page_in_a_sub_folder_loads_it_by_a_relative_src(self):
+        plan = {"files": [
+            {"path": "deep/new.html", "content": page(title="new", participate=f"../{mi.PARTICIPATE_SCRIPT}")},
+            {"path": "index.html", "content": steered(home("toy.html", "error.html", "deep/new.html"))},
+            {"path": "sitemap.xml", "content": sitemap(*self.PAGES, "deep/new.html")},
+        ]}
+        self.assertEqual(len(mi.validate_plan(plan)), 3)
+
+    def test_a_page_that_was_already_missing_the_line_blocks_nothing(self):
+        # Only what the run itself breaks is refused, as with the six axioms before it.
+        (self.site / "index.html").write_text(home("toy.html", "error.html"))
+        ops = mi.validate_plan({"files": [{"path": "toy.html", "content": steered("<p>still has it</p>")}]})
+        self.assertEqual(len(ops), 1)
+        self.assertEqual(mi.pages_missing_participate(dict(mi.read_site())), {"index.html"})
+
+    def test_a_site_without_the_way_in_is_not_held_to_the_axiom(self):
+        # Refusing every plan until someone put the file back would leave no plan able to.
+        (self.site / mi.PARTICIPATE_SCRIPT).unlink()
+        self.assertEqual(mi.pages_missing_participate(dict(mi.read_site())), set())
+        self.assertEqual(len(mi.validate_plan({"files": [{"path": "toy.html", "content": "<p>bare</p>"}]})), 1)
+
+    def test_the_way_in_can_neither_be_rewritten_nor_deleted(self):
+        # The whole point of the issue: an hourly rewrite cannot quietly reword, move or remove a
+        # visitor's way of saying what this site should become.
+        self.assertIn(mi.PARTICIPATE_SCRIPT, mi.FIXED_FILES)
+        for plan in [{"files": [{"path": mi.PARTICIPATE_SCRIPT, "content": "a quieter invitation"}]},
+                     {"delete": [mi.PARTICIPATE_SCRIPT]},
+                     {"delete": [f"site/{mi.PARTICIPATE_SCRIPT}"]}]:
+            with self.subTest(plan=str(plan)[:80]), self.assertRaises(mi.RejectedChange):
+                mi.validate_plan(plan)
+
+    def test_the_way_in_is_never_shown_to_a_model(self):
+        shown, omitted = mi.split_for_prompt(mi.read_site())
+        self.assertNotIn(mi.PARTICIPATE_SCRIPT, [rel for rel, _ in shown])
+        self.assertIn(mi.PARTICIPATE_SCRIPT, omitted)
+        self.assertNotIn("the button that opens a new issue", mi.build_prompt(shown, omitted))
+
+
+class ParticipateButtonTest(unittest.TestCase):
+    """What site/js/participate.js actually draws, run against a stub browser.
+
+    The one affordance on this site that answers to the person reading it rather than to the model
+    writing it, and the one no run may rewrite, so -- like the local-state store beside it -- it is
+    worth testing rather than only holding in place. participate_harness.mjs loads the real file,
+    drives it through a scenario each, and reports what it saw; the assertions are here.
+    """
+
+    NEW_ISSUE = "https://github.com/outrightmental/interesting/issues/new"
+    FORM = "steer-the-site.yml"
+    LABEL = "steer the site"
+
+    @classmethod
+    def setUpClass(cls):
+        cls.repo = Path(mi.__file__).resolve().parents[2]
+        cls.harness = Path(mi.__file__).resolve().parent / "participate_harness.mjs"
+        cls.script = cls.repo / "site" / mi.PARTICIPATE_SCRIPT
+        cls.observed = None
+
+    def setUp(self):
+        if not self.script.is_file():
+            self.skipTest(f"no participation script at {self.script}")
+        needs_node(self)
+        if ParticipateButtonTest.observed is None:
+            run = subprocess.run([mi.NODE_BIN, str(self.harness), str(self.script)],
+                                 capture_output=True, text=True, timeout=60)
+            self.assertEqual(run.returncode, 0, f"the harness failed: {run.stderr[-2000:]}")
+            ParticipateButtonTest.observed = json.loads(run.stdout)
+        self.seen = ParticipateButtonTest.observed
+
+    def test_one_named_link_per_page_and_nothing_else(self):
+        drawn = self.seen["onAPage"]
+        self.assertEqual(drawn["affordances"], 1, "one button, and nothing else added to the page")
+        self.assertEqual(drawn["tag"], "a", "a link to a page, not a button that does something")
+        self.assertEqual(drawn["className"], "site-steer")
+        self.assertEqual(drawn["text"], self.LABEL)
+        # WCAG 4.1.2 and 2.4.4: it says where it goes. WCAG 2.5.3 Label in Name: the words a
+        # visitor sees are inside the name a screen reader says, so "steer the site" reaches both.
+        self.assertIn(self.LABEL, drawn["label"].lower())
+        self.assertIn("GitHub", drawn["label"])
+        self.assertIn("new tab", drawn["label"])
+
+    def test_the_link_opens_the_repositorys_own_issue_form(self):
+        # "The most excellent possible templating from there": the destination arrives already
+        # shaped, so a visitor has as little as possible to invent.
+        href = self.seen["onAPage"]["href"]
+        self.assertTrue(href.startswith(self.NEW_ISSUE + "?"), href)
+        self.assertIn(f"template={self.FORM}", href)
+        # A new tab, because engagement time is the measure: filing an issue does not end the visit.
+        self.assertEqual(self.seen["onAPage"]["target"], "_blank")
+        self.assertEqual(self.seen["onAPage"]["rel"], "noopener noreferrer")
+
+    def test_the_page_the_visitor_was_on_travels_and_nothing_else_does(self):
+        # The site's bargain is that what it keeps stays in the visitor's own browser and is sent
+        # nowhere, and a new-issue URL is a public page: the page name is about the site rather than
+        # about the person, and it is the whole of what goes.
+        href = self.seen["onAPage"]["href"]
+        query = sorted(part.split("=", 1)[0] for part in href.split("?", 1)[1].split("&"))
+        self.assertEqual(query, ["template", "where"])
+        self.assertIn("where=quiet-room.html", href)
+
+    def test_the_shell_is_not_the_only_way_it_knows_which_page_it_is_on(self):
+        # The shared shell writes data-page onto <html>, and the shell is a file a run may rewrite,
+        # so the browser's own path is read when that attribute has gone. A copy of the site served
+        # under a sub-path still names the page rather than the path.
+        told = self.seen["withoutTheShellsHint"]
+        self.assertIn("where=sky-archive.html", told["plain"])
+        self.assertIn("where=loam.html", told["underASubPath"])
+        self.assertIn("where=word-kiln.html", told["trailingName"])
+
+    def test_a_page_name_that_is_not_one_is_left_out_rather_than_guessed(self):
+        # Whatever a path turns out to hold cannot be carried into an issue: the link still works,
+        # it just says nothing about where the visitor was.
+        for name, href in sorted(self.seen["whenThePageCannotBeTold"].items()):
+            with self.subTest(name=name):
+                self.assertEqual(href, f"{self.NEW_ISSUE}?template={self.FORM}")
+
+    def test_it_waits_for_the_body_rather_than_dropping_the_affordance(self):
+        # Deferred scripts run after the body is parsed, but the axiom is about every page however
+        # it is loaded, so a page that has no body yet gets the button when it has one.
+        early, then = self.seen["beforeTheBody"]["early"], self.seen["beforeTheBody"]["then"]
+        self.assertEqual(early["listeners"], ["DOMContentLoaded"])
+        self.assertEqual(early["styles"], 0, "nothing is injected until there is a page to put it on")
+        self.assertEqual(then["affordances"], 1)
+        self.assertIn("where=index.html", then["href"])
+
+    def test_it_carries_its_own_focus_ring_and_tap_target(self):
+        # The same reasoning the state menu's styles are its own for: several pages of this site
+        # take the browser's focus ring off their controls, and this must stay usable by keyboard
+        # whatever a page has done to its own.
+        styles = self.seen["onAPage"]["styles"]
+        self.assertIn(".site-steer:focus-visible", styles)
+        self.assertIn("outline: 2px solid", styles)
+        self.assertNotIn("outline: none", styles)
+        self.assertIn("min-height: 44px", styles)  # WCAG 2.5.8 Target Size
+        self.assertNotRegex(styles, r"(?<![\w-])(?:animation|transition)(?:-[a-z]+)?\s*:",
+                            "nothing here moves, so there is nothing to answer for")
+
+    def test_it_leaves_the_two_corners_to_their_own_affordances(self):
+        # Three affordances are pinned to the bottom edge of every page: "cookies" bottom-left,
+        # this one in the middle, "state" bottom-right. The middle one reserves the corners rather
+        # than trusting a wide screen, so the three never meet on a 320px phone.
+        styles = self.seen["onAPage"]["styles"]
+        self.assertIn("position: fixed", styles)
+        self.assertIn("left: 50%", styles)
+        self.assertIn("max-width: calc(100vw - 9.5rem)", styles)
+
+    def test_the_icon_says_the_verb_and_is_not_read_out_twice(self):
+        # "A prominent INPUT-verb-indicating icon": a speech balloon with a plus in it, drawn beside
+        # the words rather than instead of them, and hidden from the name the link already has.
+        drawn = self.seen["onAPage"]
+        self.assertEqual(drawn["iconHidden"], "true")
+        self.assertIn("<svg", drawn["iconMarkup"])
+        self.assertIn('aria-hidden="true"', drawn["iconMarkup"])
+        self.assertIn('focusable="false"', drawn["iconMarkup"])
+        self.assertIn("currentColor", drawn["iconMarkup"], "the icon takes the label's colour")
+
+    def test_nothing_of_the_visitors_own_can_travel(self):
+        # Read of the file itself, because the strongest statement here is about what is absent: it
+        # reaches for no stored value, so there is nothing of a visitor's for it to put in a URL.
+        source = self.script.read_text()
+        for reach in ["interestingState", "localStorage", "sessionStorage", "document.cookie",
+                      "fetch(", "XMLHttpRequest"]:
+            with self.subTest(reach=reach):
+                self.assertNotIn(reach, source)
+
+
+class IssueFormTest(unittest.TestCase):
+    """The GitHub side of issue #43: what a visitor lands on once they press the button.
+
+    The site's button names one form by file name, so these hold the two halves of that together --
+    the form is there, and every field the link fills is a field of it.
+    """
+
+    FORMS = ".github/ISSUE_TEMPLATE"
+
+    @classmethod
+    def setUpClass(cls):
+        cls.repo = Path(mi.__file__).resolve().parents[2]
+        cls.dir = cls.repo / ".github" / "ISSUE_TEMPLATE"
+        cls.script = (cls.repo / "site" / mi.PARTICIPATE_SCRIPT).read_text()
+
+    def setUp(self):
+        if not self.dir.is_dir():
+            self.fail(f"no issue templates at {self.dir}: the button has nowhere excellent to land")
+
+    def form(self, name):
+        path = self.dir / name
+        self.assertTrue(path.is_file(), f"{name} is missing, and the site's button names it")
+        return path.read_text()
+
+    def test_the_form_the_site_links_to_exists(self):
+        # The one coupling between the two halves: site/js/participate.js names the file, and the
+        # file is fixed, so a rename has to be made in both places by hand.
+        named = re.search(r"TEMPLATE\s*=\s*'([^']+)'", self.script)
+        self.assertIsNotNone(named, "the script no longer names an issue form")
+        self.assertTrue((self.dir / named[1]).is_file(),
+                        f"the button opens {named[1]}, which is not in {self.FORMS}")
+
+    def test_every_field_the_link_fills_is_a_field_of_that_form(self):
+        # A new-issue link fills a form's fields by id, and a name that is not a field of the form
+        # is simply dropped -- so the context a visitor is spared typing would vanish silently.
+        form = self.form("steer-the-site.yml")
+        field = re.search(r"WHERE_FIELD\s*=\s*'([^']+)'", self.script)
+        self.assertIsNotNone(field, "the script no longer names the field it fills")
+        self.assertRegex(form, rf"(?m)^\s+id:[ \t]*{re.escape(field[1])}[ \t]*$",
+                         f"the form has no \"{field[1]}\" field for the link to fill")
+
+    def test_the_form_asks_one_thing_and_shapes_the_rest(self):
+        # "Make it EASY to participate": one required box, and everything else there to save the
+        # visitor from inventing a shape.
+        form = self.form("steer-the-site.yml")
+        self.assertRegex(form, r"(?m)^name:[ \t]*Steer the site[ \t]*$")
+        self.assertRegex(form, r"(?m)^description:[ \t]*\S")
+        self.assertRegex(form, r"(?m)^title:[ \t]*\S")
+        self.assertEqual(form.count("required: true"), 1, "exactly one box is required")
+        self.assertIn("type: textarea", form)
+        self.assertIn("What should the site do, be, or become?", form)
+
+    def test_a_blank_issue_is_still_possible(self):
+        # The same bargain the mood axiom makes: the question is an offer and never a gate. A form
+        # is here to save someone the trouble of a shape, not to insist on one.
+        config = self.form("config.yml")
+        self.assertRegex(config, r"(?m)^blank_issues_enabled:[ \t]*true[ \t]*$")
+
+    def test_the_forms_parse_and_declare_what_github_needs(self):
+        # A form GitHub cannot parse is silently ignored, which would leave the button landing on a
+        # bare box. PyYAML is not in the standard library, so this is the one test that asks for it
+        # and skips without it; everything above is read as text and always runs.
+        try:
+            import yaml
+        except ImportError:
+            self.skipTest("PyYAML is not installed, so the forms are only checked as text")
+        for path in sorted(self.dir.glob("*.yml")):
+            with self.subTest(form=path.name):
+                parsed = yaml.safe_load(path.read_text())
+                self.assertIsInstance(parsed, dict)
+                if path.name == "config.yml":
+                    self.assertIn("blank_issues_enabled", parsed)
+                    continue
+                self.assertEqual(sorted(set(parsed) - {"labels", "title", "assignees"}),
+                                 ["body", "description", "name"])
+                for item in parsed["body"]:
+                    self.assertIn(item["type"],
+                                  ["markdown", "input", "textarea", "dropdown", "checkboxes"])
+                    self.assertIn("attributes", item)
+                    if item["type"] != "markdown":
+                        self.assertIn("id", item, "a field with no id cannot be filled by a link")
+                        self.assertIn("label", item["attributes"])
+
+    def test_the_labels_the_forms_ask_for_are_owned_in_code(self):
+        # The repository is repo-as-code (infra/repo.tf), so the labels its forms name are too. A
+        # form naming a label the repository lacks is not an error -- GitHub files the issue without
+        # it -- so this is about the labels existing on purpose rather than by hand.
+        labels = (self.repo / "infra" / "issue-labels.tf").read_text()
+        for path in sorted(self.dir.glob("*.yml")):
+            for asked in re.findall(r"^labels:\s*\[(.*)\]\s*$", path.read_text(), re.M):
+                for label in re.findall(r'"([^"]+)"', asked):
+                    with self.subTest(label=label):
+                        self.assertRegex(labels, rf'name\s*=\s*"{re.escape(label)}"')
+
+
 def needs_the_build(test):
     """Skip a test that runs the real Node build when the toolchain is not installed.
 
@@ -2016,7 +2365,7 @@ def front_matter(**fields):
 
 
 class BuildPipelineTest(unittest.TestCase):
-    """Issue #25: the real build, and all six axioms judged on what it produces.
+    """Issue #25: the real build, and all seven axioms judged on what it produces.
 
     SiteDirTestCase stands the build in with the identity, which is exactly right for its plain-HTML
     fixtures; this is where the pipeline itself is exercised. /site is source now -- a layout is not
@@ -2025,14 +2374,14 @@ class BuildPipelineTest(unittest.TestCase):
     """
 
     # The shell carries what every page owes the axioms: the analytics line, the local-state line,
-    # the viewport tag and the one <main> landmark. That is how the real /site writes it, and it is
-    # why a layout a run damages is refused through every page it builds rather than on its own
-    # account -- which matters most for the two lines, since layout.njk is a file a run may rewrite
-    # while the files behind those lines are not.
+    # the participation line, the viewport tag and the one <main> landmark. That is how the real
+    # /site writes it, and it is why a layout a run damages is refused through every page it builds
+    # rather than on its own account -- which matters most for the three lines, since layout.njk is
+    # a file a run may rewrite while the files behind those lines are not.
     LAYOUT = ("<!DOCTYPE html>\n<html lang='en'>\n<head><title>{{ title }}</title>\n"
               "<meta name='viewport' content='width=device-width, initial-scale=1'>\n"
               "<link rel='stylesheet' href='css/site.css'>\n"
-              f"{mi.ANALYTICS_TAG}\n{mi.STATE_TAG}</head>\n"
+              f"{mi.ANALYTICS_TAG}\n{mi.STATE_TAG}\n{mi.PARTICIPATE_TAG}</head>\n"
               "<body>\n<main>{{ content | safe }}</main></body>\n</html>\n")
     NAV = "<nav>{% for page in ['toy.html', 'error.html'] %}<a href='{{ page }}'>{{ page }}</a>{% endfor %}</nav>\n"
     PAGES = ["index.html", "toy.html", "error.html"]
@@ -2053,11 +2402,12 @@ class BuildPipelineTest(unittest.TestCase):
         self.write("_includes/nav.njk", self.NAV)
         self.write("_sass/_tokens.scss", ":root { --fg: #eeeeff; }\n")
         self.write("css/site.scss", "@use 'tokens';\nbody { color: var(--fg); }\n")
-        # The analytics and local-state axioms reach the built site too: both lines live in the
-        # shared layout, exactly as /site writes them, so no page below carries either and every
-        # built page has both.
+        # The analytics, local-state and participation axioms reach the built site too: all three
+        # lines live in the shared layout, exactly as /site writes them, so no page below carries
+        # one of them and every built page has all three.
         self.write(mi.ANALYTICS_SCRIPT, "/* the shared tag and banner */\n")
         self.write(mi.STATE_SCRIPT, "/* the shared store and its meta menu */\n")
+        self.write(mi.PARTICIPATE_SCRIPT, "/* the button that opens a new issue */\n")
         # The home page links nothing itself: its navigation arrives from the shared partial, so
         # only the built site shows that toy.html and error.html can be reached.
         self.write("index.html", front_matter(layout="layout.njk", title="interesting")
@@ -2078,6 +2428,7 @@ class BuildPipelineTest(unittest.TestCase):
         built = self.built()
         self.assertEqual(sorted(built), sorted(["css/site.css", "error.html", "index.html",
                                                 mi.ANALYTICS_SCRIPT, mi.STATE_SCRIPT,
+                                                mi.PARTICIPATE_SCRIPT,
                                                 "sitemap.xml", "toy.html"]))
         self.assertTrue(built["index.html"].startswith("<!DOCTYPE html>"))
         self.assertIn("<title>interesting</title>", built["index.html"])
@@ -2096,13 +2447,14 @@ class BuildPipelineTest(unittest.TestCase):
                 self.assertNotIn(shared, built)
 
     def test_a_page_is_whatever_the_templates_make_of_it(self):
-        # All six axioms ask about pages, and all six are asked of the built site. In the source,
-        # index.html names no page, no page carries either shared line, and no page is a whole page
-        # at all; built, every page is each of those things.
+        # All seven axioms ask about pages, and all seven are asked of the built site. In the
+        # source, index.html names no page, no page carries any shared line, and no page is a whole
+        # page at all; built, every page is each of those things.
         source = dict(mi.read_site())
         self.assertEqual(mi.links_from("index.html", source), set())
         self.assertEqual(mi.pages_missing_analytics(source), set(self.PAGES))
         self.assertEqual(mi.pages_missing_state(source), set(self.PAGES))
+        self.assertEqual(mi.pages_missing_participate(source), set(self.PAGES))
         self.assertEqual(sorted(mi.inaccessible_pages(source)), sorted(self.PAGES))
         built = self.built()
         self.assertEqual(mi.html_pages(built), set(self.PAGES))
@@ -2110,6 +2462,7 @@ class BuildPipelineTest(unittest.TestCase):
         self.assertEqual(mi.unreachable_pages(built), {})
         self.assertEqual(mi.pages_missing_analytics(built), set())
         self.assertEqual(mi.pages_missing_state(built), set())
+        self.assertEqual(mi.pages_missing_participate(built), set())
         self.assertEqual(mi.inaccessible_pages(built), {})
 
     def test_damaging_the_shared_shell_is_refused_through_every_page_it_builds(self):
@@ -2136,13 +2489,15 @@ class BuildPipelineTest(unittest.TestCase):
         ]}
         self.assertEqual(len(mi.validate_plan(wired)), 3)
 
-    def test_dropping_either_shared_line_breaks_every_page_at_once(self):
-        # The flip side of putting the two lines in the layout: a run that rewrites the shell
-        # without one leaves the whole site without it, and both axioms are judged on that built
-        # site. layout.njk is a file a run may rewrite, which is why this is the scenario that
-        # matters: the files behind the lines are fixed, the line that loads them is not.
+    def test_dropping_any_shared_line_breaks_every_page_at_once(self):
+        # The flip side of putting the three lines in the layout: a run that rewrites the shell
+        # without one leaves the whole site without it, and every one of those axioms is judged on
+        # that built site. layout.njk is a file a run may rewrite, which is why this is the
+        # scenario that matters: the files behind the lines are fixed, the line that loads them is
+        # not.
         for tag, axiom in [(mi.ANALYTICS_TAG, "analytics tag and consent banner"),
-                           (mi.STATE_TAG, "shared local-state store and its meta menu")]:
+                           (mi.STATE_TAG, "shared local-state store and its meta menu"),
+                           (mi.PARTICIPATE_TAG, "a visitor's way of steering the site")]:
             with self.subTest(axiom=axiom):
                 bare = self.LAYOUT.replace(tag, "")
                 with self.assertRaisesRegex(mi.RejectedChange, r"has no <script"):
@@ -2168,10 +2523,11 @@ class BuildPipelineTest(unittest.TestCase):
 
 
 class RealSiteTest(unittest.TestCase):
-    """The site in this repository obeys all six axioms: every page is reachable from the root,
+    """The site in this repository obeys all seven axioms: every page is reachable from the root,
     every page carries the analytics tag and consent banner, every page is responsive and
     accessible, every page carries the local-state store and its meta menu, no page ties the site
-    to an update frequency, and every page asks before it offers.
+    to an update frequency, every page asks before it offers, and every page carries a visitor's
+    way of steering the site.
 
     validate_plan only refuses what a run breaks, so the invariants have to start out true: this is
     what makes them hold from the next deploy onward and not only for pages a later run adds. It
@@ -2283,22 +2639,25 @@ class RealSiteTest(unittest.TestCase):
     def test_no_page_asks_a_visitor_to_report_their_own_mood(self):
         self.assertEqual(mi.pages_asking_to_self_report(self.site), {})
 
-    def test_the_site_leaves_the_meta_menu_its_own_class_names(self):
-        # js/state.js draws the export/import menu and injects the styles for it, and the prompt says
-        # in as many words that the menu is not the site's to restyle. Every name it uses is
-        # site-meta*, so a template or stylesheet of the site's own that mentions one is either
-        # restyling that menu or colliding with it. That is not hypothetical: the header's pulse
-        # arrived as <p class='site-meta'>, which the menu's own `position: fixed` then tore out of
-        # the header and pinned over the menu in the bottom-right corner.
+    def test_the_site_leaves_the_corner_affordances_their_own_class_names(self):
+        # js/state.js draws the export/import menu and js/participate.js the "steer the site"
+        # button, each injecting the styles for its own, and the prompt says in as many words that
+        # neither is the site's to restyle. Every name they use is site-meta* or site-steer*, so a
+        # template or stylesheet of the site's own that mentions one is either restyling them or
+        # colliding with them. That is not hypothetical: the header's pulse arrived as
+        # <p class='site-meta'>, which the menu's own `position: fixed` then tore out of the header
+        # and pinned over the menu in the bottom-right corner.
         # Either form that actually takes one of those names: a selector, or a class written onto an
         # element. Prose about them is neither, so the comments that explain this rule -- in the
         # layout, the header's Sass and js/site.js -- do not trip it.
-        theirs = re.compile(r"\.site-meta\b"
-                            r"|class(?:Name)?\s*[=:]\s*'[^']*\bsite-meta\b"
-                            r"|class(?:Name)?\s*[=:]\s*\"[^\"]*\bsite-meta\b")
-        claiming = sorted(rel for rel, content in self.source.items()
-                          if rel not in mi.FIXED_FILES and theirs.search(content))
-        self.assertEqual(claiming, [])
+        for prefix in ["site-meta", "site-steer"]:
+            with self.subTest(prefix=prefix):
+                theirs = re.compile(rf"\.{prefix}\b"
+                                    rf"|class(?:Name)?\s*[=:]\s*'[^']*\b{prefix}\b"
+                                    rf"|class(?:Name)?\s*[=:]\s*\"[^\"]*\b{prefix}\b")
+                claiming = sorted(rel for rel, content in self.source.items()
+                                  if rel not in mi.FIXED_FILES and theirs.search(content))
+                self.assertEqual(claiming, [])
 
     def test_every_orientation_opens_onto_a_real_world_and_not_all_of_them_are_sky(self):
         # The whole point of the issue: a visitor who does not respond to stars still arrives
@@ -2442,6 +2801,55 @@ class RealSiteTest(unittest.TestCase):
             mi.validate_plan({"files": [{"path": mi.STATE_SCRIPT, "content": "mine now"}]})
         with self.assertRaises(mi.RejectedChange):
             mi.validate_plan({"delete": [mi.STATE_SCRIPT]})
+
+    def test_every_page_carries_a_visitors_way_of_steering_the_site(self):
+        # Issue #43: the way in is on every page, not only on a page a visitor might think to look
+        # for -- steering the site should be no harder than looking at it.
+        self.assertIn(mi.PARTICIPATE_SCRIPT, self.site, "the file behind the line has to be there")
+        self.assertEqual(mi.pages_missing_participate(self.site), set())
+        self.assertGreater(len(mi.html_pages(self.site)), 1, "the check is worth nothing on one page")
+
+    def test_the_steering_line_is_written_once_in_the_shared_shell(self):
+        # The same bargain the analytics and local-state lines make: one line in the shell carries
+        # it to every page, so a run that drops it is refused for all of them at once.
+        self.assertIn(mi.PARTICIPATE_TAG, self.source["_includes/layout.njk"])
+
+    def test_the_way_in_is_out_of_every_runs_reach(self):
+        # The heart of the issue: an affordance the AI never modifies. The same machinery the
+        # analytics tag and the local-state store use, which means fixed rather than discouraged.
+        self.assertIn(mi.PARTICIPATE_SCRIPT, mi.FIXED_FILES)
+        with self.assertRaises(mi.RejectedChange):
+            mi.validate_plan({"files": [{"path": mi.PARTICIPATE_SCRIPT, "content": "a quieter word"}]})
+        with self.assertRaises(mi.RejectedChange):
+            mi.validate_plan({"delete": [mi.PARTICIPATE_SCRIPT]})
+
+    def test_the_check_would_notice_the_way_in_going_quiet(self):
+        # A guard against the check quietly becoming a no-op, as with the five above it: take the
+        # line off the real home page and it has to be named.
+        without = dict(self.site)
+        without["index.html"] = without["index.html"].replace(mi.PARTICIPATE_SCRIPT, "js/nothing.js")
+        self.assertEqual(mi.pages_missing_participate(without), {"index.html"})
+
+    def test_the_three_corner_affordances_each_keep_to_their_own_edge(self):
+        # They are a cadre: pinned to the device boundary, each injecting its own styles, none of
+        # them a page's to restyle. The one in the middle reserves room for the other two rather
+        # than trusting a wide screen, so the three do not meet on a 320px phone.
+        for rel, spot in [(mi.ANALYTICS_SCRIPT, "left: 0.55rem"),
+                          (mi.STATE_SCRIPT, "right: 0.55rem"),
+                          (mi.PARTICIPATE_SCRIPT, "left: 50%")]:
+            with self.subTest(rel=rel):
+                self.assertIn("position: fixed", self.site[rel])
+                self.assertIn(spot, self.site[rel])
+        self.assertRegex(self.site[mi.PARTICIPATE_SCRIPT], r"max-width: calc\(100vw - [\d.]+rem\)")
+
+    def test_the_destination_is_this_repositorys_new_issue_page(self):
+        # The one thing the issue asks for in as many words, held here so a rename of the
+        # repository or the form cannot leave the button pointing at nothing.
+        script = self.site[mi.PARTICIPATE_SCRIPT]
+        self.assertIn("https://github.com/outrightmental/interesting/issues/new", script)
+        named = re.search(r"TEMPLATE\s*=\s*'([^']+)'", script)
+        self.assertIsNotNone(named)
+        self.assertTrue((self.repo / ".github" / "ISSUE_TEMPLATE" / named[1]).is_file())
 
     def test_the_vendored_consent_library_keeps_its_license_and_version(self):
         for rel in ["js/cookieconsent.umd.js", "css/cookieconsent.css"]:

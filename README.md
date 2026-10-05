@@ -12,8 +12,9 @@ iterate a more interesting website
   lives here, and nothing else does: the pages, the shared layout and partials, the Sass, the feed
   and its one module per world (see [The feature and the feed](#the-feature-and-the-feed)), the three
   shared files behind the analytics tag (see [Analytics axiom](#analytics-axiom)), the one behind
-  the local-state store (see [Local state axiom](#local-state-axiom)) and the one behind the mood
-  flow (see [Mood axiom](#mood-axiom)). A request
+  the local-state store (see [Local state axiom](#local-state-axiom)), the one behind the mood
+  flow (see [Mood axiom](#mood-axiom)) and the one behind a visitor's way of steering the site
+  (see [Participation axiom](#participation-axiom)). A request
   for a page that is not there gets `error.html` back, with a 404, from a CloudFront custom error
   response.
 - **The build** — [`build.mjs`](build.mjs) turns `/site` into the artifact that is published to an
@@ -207,7 +208,7 @@ the one thing the mission is measured in.
   ([One single experience](#one-single-experience)), all three in
   [`.github/scripts/make_interesting.py`](.github/scripts/make_interesting.py) and all three stated
   at both ends of a run.
-- **The cadence rule is the fifth `AXIOM`**, stated in the `Rules:` block beside the five below.
+- **The cadence rule is the fifth `AXIOM`**, stated in the `Rules:` block beside the six below.
   It names every phrasing the code refuses, in full, so it is a rule a run can follow rather than a
   trap it springs: the words *tonight*, *tomorrow*, *yesterday*, *hourly*, *nightly*, *daily* and
   *weekly*; the possessives *today's*, *this hour's*, *this week's*, *this month's*; and *every
@@ -299,12 +300,12 @@ for a while, which is exactly why it has to be ruled out by name.
   before the answer, so the aim is in hand while the choice is open and still in hand when it is
   made. `MISSION` carries it too: "make the website more interesting as a **single** coherent
   whole".
-- **Not a seventh axiom, on purpose.** No check could settle whether a site reads as one
+- **Not a coded axiom, on purpose.** No check could settle whether a site reads as one
   experience, in the way `check_reachability` settles whether a page is orphaned, so this is a
   standard stated to the model and nothing else — the same reasoning that leaves the
-  engagement-time definition uncoded. The six coded axioms are still the whole of what the code
+  engagement-time definition uncoded. The seven coded axioms are still the whole of what the code
   refuses, and a plan that adds a page sharing nothing with the rest is accepted exactly as before.
-  A test holds that open: it asserts the accepted plan *and* that no seventh `check_` has quietly
+  A test holds that open: it asserts the accepted plan *and* that no eighth `check_` has quietly
   appeared.
 
 ### Legible to a stranger
@@ -331,9 +332,9 @@ saying where to go next, and the home page explained none of its own words.
   screen, and what follows it is the feed and nothing else, with no caption); copy that speaks to the visitor
   and never about the machinery; and never a dead end, which is its own standard below.
 - **Deliberately not held to in code.** No check could judge whether a page reads clearly, so the
-  prompt is where this standard lives, exactly as `WHOLE` and `INTERESTING` do: the six coded axioms
-  are still the whole of what the code refuses, and `LegibilityStandardTest` holds the prompt to
-  the standard the way `EngagementTimeTest` holds it to the measure.
+  prompt is where this standard lives, exactly as `WHOLE` and `INTERESTING` do: the seven coded
+  axioms are still the whole of what the code refuses, and `LegibilityStandardTest` holds the
+  prompt to the standard the way `EngagementTimeTest` holds it to the measure.
 - **One list of pages.** [`site/_data/worlds.json`](site/_data/worlds.json) is the one place a
   world's name, orientation, mood, card aspect and one-line description are kept, in one flat
   list. The feed ([`site/_includes/worlds.njk`](site/_includes/worlds.njk)), the site map and the
@@ -509,7 +510,7 @@ to be drawn in a given hour.
 - **The standard is [WCAG 2.2 level AA](https://www.w3.org/TR/WCAG22/).** Every check names the
   success criterion it stands for, so the set can grow without becoming a matter of taste.
 - **Stated in the prompt.** The `Rules:` block every run is given carries this as one `AXIOM`
-  among six. It asks for more than any validator can judge — fluid layout
+  among seven. It asks for more than any validator can judge — fluid layout
   with nothing overflowing sideways at 320px wide, tap targets around 44px, text contrast at 4.5:1 —
   because the prompt can ask for what code cannot see.
 - **Held to in code.** `check_accessibility` in
@@ -583,9 +584,11 @@ iteration process rather than a one-off tidy-up.
   are folded into the document the first time a visitor arrives with them, and then taken away, so
   nobody loses a sky to the change.
 - **The meta menu.** One button, bottom-right, opposite the consent banner's *cookies* button,
-  bottom-left. It opens a panel holding the whole document as text: copy it out, paste one in and
-  press *replace mine*, or *clear*. Import **replaces** rather than merges, for reproducibility —
-  the sky it opens is the sky it came from — and clearing asks first. Both reload the page
+  bottom-left, with the *steer the site* button of the [participation
+  axiom](#participation-axiom) between the two. It opens a panel holding the whole document as
+  text: copy it out, paste one in and press *replace mine*, or *clear*. Import **replaces** rather
+  than merges, for reproducibility — the sky it opens is the sky it came from — and clearing asks
+  first. Both reload the page
   afterwards, which is the simplest honest way to show a state every page reads at load time.
   Export and import are copy-paste rather than file download, so sharing is a paste into any
   message. The panel is keyboard-operable, closes on Escape with the focus returned, carries its
@@ -665,7 +668,7 @@ this is an invariant of the iteration rather than a one-off change to the site a
   own markup — not the scripts it loads — has to link to every world.
 - **The shared script is protected, not fixed.** `js/threshold.js` joins `index.html`,
   `error.html` and `sitemap.xml` in `PROTECTED_FILES`: it may be rewritten and is always shown to
-  the model, unlike the four fixed files, but it can never be deleted, because every page leans on
+  the model, unlike the five fixed files, but it can never be deleted, because every page leans on
   it.
 - **Stated in the prompt and held to in code**, the same arrangement as the others. `check_mood`
   in [`.github/scripts/make_interesting.py`](.github/scripts/make_interesting.py) refuses a plan
@@ -682,6 +685,75 @@ this is an invariant of the iteration rather than a one-off change to the site a
   request and before every deploy and checks that every page carries the flow, that the library is
   wide, that no page asks outright, that every orientation opens onto a page that exists — with at
   least six of them not sky worlds — and that nothing is hidden behind an answer.
+
+### Participation axiom
+
+Every page carries a **prominent, always-visible way for the person looking at the site to say what
+it should become**: one press of *steer the site*, pinned to the middle of the bottom edge, and they
+are on a new issue of this repository with the form already chosen and the page they came from
+already filled in. Like the six above it, it is an invariant of the iteration rather than a one-off
+addition — and it is the only one that is about the reader rather than about the site.
+
+- **Why it is an axiom and not a nicety.** A site rewritten continuously by a model is steered by
+  whoever can reach the model, and the only standing channel from a visitor back to the people and
+  the prompt behind it is an issue here. A run that reworded the invitation, moved it somewhere
+  quieter or dropped it altogether would be closing that channel — exactly the kind of change no
+  run should be able to make and no reviewer would notice for a long time.
+- **One line per page.** Every page carries `<script src='js/participate.js' defer></script>` in
+  its `<head>`, written once in [`site/_includes/layout.njk`](site/_includes/layout.njk). Deferred,
+  unlike the local-state line beside it: nothing on the page waits for it, and there is no API for
+  a page to call.
+- **The cadre of meta-menus.** Three affordances are pinned to the edge of the viewport on every
+  page and they are the only three — *cookies* bottom-left (the consent banner's way back to the
+  choice), *steer the site* bottom-centre, *state* bottom-right (the local-state document, in and
+  out). Each injects its own styles rather than reading a stylesheet, each is fixed to the device
+  boundary rather than placed in page content, and none of them is a page's to restyle. That is
+  what makes them reliable: whatever the page around them has become, they are where they were.
+  The one in the middle is the prominent member — full strength, a 44px target, an icon that says
+  the verb — because the other two answer a question a visitor occasionally has while this one is
+  an invitation. It reserves 9.5rem of the bottom edge for its neighbours, in `rem` so that
+  enlarging the text enlarges the room it leaves them, and the three do not meet at 320px wide.
+- **Responsive and accessible, like everything else here.** An accessible name that says where the
+  link goes and that it opens a new tab, with the visible words inside it (WCAG 2.5.3 Label in
+  Name); its own `:focus-visible` ring, because pages of this site are free to take the browser's
+  away for their own controls and several do (2.4.7); a 44px target (2.5.8); and no motion at all,
+  so there is nothing to answer for when less of it is asked for.
+- **Nothing of the visitor travels.** The link carries two things: the form to open, and the file
+  name of the page the button was pressed on. Not the constellation, not what the mood flow has
+  read, not a single value out of the local-state document — what this site keeps stays in the
+  visitor's own browser and a new-issue URL is a public page. The page name is about the site
+  rather than about the person, and it saves them describing where they were. `rel="noopener
+  noreferrer"` means the new tab gets nothing of the old one either, and
+  `ParticipateButtonTest` holds the absence: the file reaches for no stored value at all.
+- **Templating on the GitHub side.** [`.github/ISSUE_TEMPLATE/`](.github/ISSUE_TEMPLATE) is what
+  "excellent templating from there" means here. `steer-the-site.yml` is the form the button opens:
+  one required box — *what should the site do, be, or become?* — a prefilled *where you were*, an
+  optional *how far does it reach?*, an optional *why it would make the site more interesting*
+  (which says what *interesting* means here, so an answer can aim the next change), and a closing
+  note on what happens next and on the seven things no change can break. `something-is-wrong.yml`
+  is the other half of steering, for a page that does not work, and it points at the *state* button
+  for anyone whose saved sky is part of the problem. `config.yml` keeps blank issues enabled: a
+  form is here to save someone the trouble of inventing a shape, never to insist on one — the same
+  bargain the mood axiom's question makes. The two labels the forms ask for are owned in code, with
+  the repository itself, in [`infra/issue-labels.tf`](infra/issue-labels.tf).
+- **Stated in the prompt.** The `Rules:` block names the exact line, says the button and its
+  wording are not a run's to change, to restyle or to reproduce, and names where all three corner
+  affordances sit so that a run leaves the bottom edge to them. A page inviting a visitor to steer
+  the site in its own prose is welcome, and is not a substitute for the line.
+- **Held to in code.** `check_participate` in
+  [`.github/scripts/make_interesting.py`](.github/scripts/make_interesting.py) refuses a plan that
+  leaves a page without the line. As with the other six, only what the run itself breaks is
+  refused.
+- **The file is out of reach.** `js/participate.js` is in `FIXED_FILES` beside the analytics files
+  and the local-state store: never shown to a model, refused outright as a write or a delete, and
+  skipping the prompt budget. It is the one thing on the site that answers to the person reading it
+  rather than to the model writing it.
+- **True of the site as committed**, checked by `RealSiteTest` on every pull request and before
+  every deploy: every built page carries the line, the line is in the shared shell, the three
+  corner affordances each keep to their own edge, and the form the button names is a file that is
+  really there. `ParticipateButtonTest` goes further and runs the real `participate.js` against a
+  stub browser ([`participate_harness.mjs`](.github/scripts/participate_harness.mjs)) — the link,
+  its name, its icon, what it knows about which page it is on, and what it refuses to carry.
 
 ### Silo
 
@@ -769,6 +841,9 @@ python3 -m unittest discover -s .github/scripts -v
 Most of the suite stands the build in with the identity, which is exactly what it is for the plain
 HTML those fixtures are made of. `BuildPipelineTest` and `RealSiteTest` run the real build; without
 the toolchain they skip, except in CI, where a missing toolchain is the thing to find out about.
+`LocalStateStoreTest` and `ParticipateButtonTest` run the two fixed scripts a visitor actually
+operates against a stub browser in Node, for the same reason. `IssueFormTest` reads the issue
+forms as text, and parses them as YAML when PyYAML is importable.
 
 To try a real run without touching the repository's site, point the script at a copy (this needs a
 logged-in `copilot` CLI). The build still runs from this repository, on a copy of whatever the model

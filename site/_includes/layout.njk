@@ -67,11 +67,15 @@
                  question, and what it read). Its headings come after the page's own, so the
                  heading outline a screen reader walks stays in order.
 
-  Six shared lines in the <head>:
+  Seven shared lines in the <head>:
     js/analytics.js  the Google Analytics tag and the consent banner that gates it (see
                      ANALYTICS_TAG and check_analytics in .github/scripts/make_interesting.py).
     js/state.js      the one local-state document every page reads and writes through, and the
                      meta menu that exports it (STATE_TAG and check_state).
+    js/participate.js
+                     the one way a visitor can steer this site: the prominent button in the middle
+                     of the bottom edge that opens a pre-shaped new issue (PARTICIPATE_TAG and
+                     check_participate).
     js/persona.js    the persona: the sky several worlds read, kept and changed in one place, plus
                      the avatar and the sheet above. Not deferred, so a page's own script can read
                      window.interestingPersona.stars() while the body is parsed.
@@ -88,9 +92,14 @@
                      modules in js/modules/, keeps dealing cards as the visitor scrolls, and
                      paints the threshold's feature (window.interestingFeed.feature). An ES
                      module, so it loads each world's module only when a card of it is near.
-  Three of them may never be dropped: a built page missing the analytics, state or mood line is
-  refused. The files behind the first two are fixed; js/threshold.js is protected instead, so a
-  run may rewrite the flow but never delete it. The other three are ordinary site source.
+  Four of them may never be dropped: a built page missing the analytics, state, participation or
+  mood line is refused. The files behind the first three are fixed; js/threshold.js is protected
+  instead, so a run may rewrite the flow but never delete it. The other three are ordinary site
+  source.
+
+  The three corner affordances those fixed files draw -- "cookies" bottom-left, "steer the site"
+  bottom-centre, "state" bottom-right -- are a cadre of their own, outside this site's visual
+  language and outside what any page may restyle. Leave the bottom edge to them.
 
   The page's own world, when it has one, is named on <html data-world> so _sass/_mood.scss gives
   the page that world's palette; a visitor's reading lands on <html data-mood> and wins over it.
@@ -128,9 +137,10 @@
 {%- endif %}
 {%- if siteRoot %}
   {#- The 404 page is served at any missing path, so its scripts are named from the site's root;
-      see the note on siteRoot above. The six lines are the same six as below. -#}
+      see the note on siteRoot above. The seven lines are the same seven as below. -#}
   <script src='{{ siteRoot }}js/analytics.js' defer></script>
   <script src='{{ siteRoot }}js/state.js'></script>
+  <script src='{{ siteRoot }}js/participate.js' defer></script>
   <script src='{{ siteRoot }}js/persona.js'></script>
   <script src='{{ siteRoot }}js/site.js'></script>
   <script src='{{ siteRoot }}js/threshold.js' defer></script>
@@ -141,6 +151,9 @@
   <!-- The one local-state store every page reads and writes through, and its meta menu; see
        js/state.js. Not deferred: a page's own script runs before any deferred one does. -->
   <script src='js/state.js'></script>
+  <!-- The one way a visitor can steer this site: the button in the middle of the bottom edge that
+       opens a pre-shaped new issue; see js/participate.js. -->
+  <script src='js/participate.js' defer></script>
   <!-- The persona: the sky several worlds read, and the avatar and sheet it is set up in; see
        js/persona.js. Not deferred either, for the same reason, and after the store it writes
        through. -->
