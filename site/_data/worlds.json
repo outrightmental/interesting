@@ -1,46 +1,46 @@
 {
   "wayIn": [
     { "file": "index.html", "name": "the threshold", "gloss": "where it asks", "icon": "home",
-      "what": "Start here. Answer one sideways question to get a first world, or skip it and pick any card below." },
+      "what": "Start here: answer one sideways question for a suggested world, or skip it and open any world card." },
     { "file": "moods.html", "name": "the mood atlas", "gloss": "how it asks, and every answer", "icon": "explore",
-      "what": "See every way the site asks, every answer it can reach, and jump straight to any world from there." },
+      "what": "Try every question style, see every orientation it can read, then jump straight into the world that matches what you picked." },
     { "file": "sitemap.html", "name": "site map", "gloss": "every page, described", "icon": "map",
-      "what": "Scan the whole site at once, with one plain line on what each page is for and what to do there." }
+      "what": "Scan the whole site in one pass, with one plain line on what each page does and what to try first." }
   ],
   "worlds": [
     { "file": "quiet-room.html", "name": "the quiet room", "orientation": "banked low", "mood": "tender", "aspect": "1 / 1",
-      "what": "Slow down with one breathing ring and a dimmer that stays where you leave it; put one burden down and leave it down." },
+      "what": "Follow one breathing ring, dim the room, and set one burden down before returning with steadier hands." },
     { "file": "wish-constellation.html", "name": "the wish constellation", "orientation": "looking up", "mood": "cosmic", "aspect": "4 / 5",
-      "what": "Read your sky at full scale: ask it for guidance, catch meteors, play it as a chime, orbit it, and mint a postcard." },
+      "what": "Read your sky at full scale: ask for a reading, catch meteors, play star chimes, orbit it, and mint a postcard." },
     { "file": "constellation-diary.html", "name": "the diary", "orientation": "in the long look", "mood": "brooding", "aspect": "4 / 3",
-      "what": "Turn your stars into logbook entries, replay their order, and seal constellation snapshots as time capsules." },
+      "what": "Turn your stars into logbook entries, replay their birth order, and seal capsules you can reopen as future prompts." },
     { "file": "constellation-echo.html", "name": "the echo chamber", "orientation": "ears first", "mood": "attentive", "aspect": "1 / 1",
-      "what": "Pulse your saved sky into drifting echoes, click one thought at a time, and print an echo weather bulletin." },
+      "what": "Pulse your saved sky into drifting echoes, click one thought at a time, then print an echo weather bulletin." },
     { "file": "star-lantern.html", "name": "the lantern ritual", "orientation": "wants a rite", "mood": "ceremonial", "aspect": "3 / 4",
-      "what": "Kindle your stars as lanterns, drift them on purpose, and pull a ritual reading from the pattern they make." },
+      "what": "Kindle your stars as lanterns, let them drift, and pull a ritual reading from the field when one glow feels right." },
     { "file": "wish-terrarium.html", "name": "the terrarium", "orientation": "minding something", "mood": "tending", "aspect": "4 / 5",
-      "what": "Grow each saved star into a swaying plant, tap any stem for its thought, and ask the glasshouse for a forecast." },
+      "what": "Grow each saved star into a swaying plant, tap stems for their thoughts, and ask for a greenhouse forecast." },
     { "file": "constellation-weather.html", "name": "the weather lab", "orientation": "weather coming", "mood": "tempestuous", "aspect": "16 / 10",
-      "what": "Map your stars as pressure systems, launch probes into local microclimates, and print a forecast from the field." },
+      "what": "Map your stars as pressure systems, launch probes into microclimates, and print a forecast from the live field." },
     { "file": "orbital-weaver.html", "name": "the orbital weaver", "orientation": "after symmetry", "mood": "geometric", "aspect": "1 / 1",
-      "what": "Mirror your sky into a rotating mandala, tune its symmetry, ripple it by touch, and print a geometry mantra." },
+      "what": "Mirror your sky into a rotating mandala, tune symmetry, ripple it by touch, and print a geometry mantra." },
     { "file": "machine-shop.html", "name": "the machine shop", "orientation": "cold and clear", "mood": "analytic", "aspect": "3 / 4",
-      "what": "Run any of the 256 elementary cellular automata, flip rules live, and watch tiny bit changes rewrite the whole mill." },
+      "what": "Run any elementary cellular automaton rule, flip bits live, and watch tiny rule changes rewrite the entire mill." },
     { "file": "kinetic-floor.html", "name": "the kinetic floor", "orientation": "wound tight", "mood": "restless", "aspect": "16 / 10",
-      "what": "Throw heavy blocks with pointer or keyboard, flip gravity, and turn raw momentum into a playable mess." },
+      "what": "Throw heavy blocks by pointer or keyboard, flip gravity, and turn raw momentum into a playable physics mess." },
     { "file": "loam.html", "name": "loam", "orientation": "low and slow", "mood": "rooted", "aspect": "4 / 5",
       "what": "Plant into soil cross-sections, water and turn the ground, and watch roots route around stone and grit." },
     { "file": "word-kiln.html", "name": "the word kiln", "orientation": "full of half-sentences", "mood": "verbal", "aspect": "5 / 4",
-      "what": "Feed any word into the fire and pull out a forged coinage with its own fake definition and citation." },
+      "what": "Feed a word into the fire and pull out a forged coinage with its own fake definition and citation." },
     { "file": "apocrypha-desk.html", "name": "the apocrypha desk", "orientation": "magpie", "mood": "curious", "aspect": "4 / 5",
       "what": "Deal impossible specimens one by one, pin favorites to your drawer, and cross-reference strange matches." },
     { "file": "sky-archive.html", "name": "the archive oracle", "orientation": "asking elsewhere", "mood": "divinatory", "aspect": "1 / 1",
-      "what": "Spin your constellation through changing rune sets, archive omens, and forge a downloadable sigil from the result." }
+      "what": "Spin your constellation through changing rune sets, archive omens, and forge a downloadable sigil." }
   ],
   "edges": [
     { "file": "error.html", "name": "lost in space", "gloss": "the 404 page",
-      "what": "Miss a page and you still land somewhere playable: a working radio, decoder, scope, and route back in." },
+      "what": "If a link misses, you still land in a playable station with a radio, decoder, scope, and clear routes back in." },
     { "file": "sitemap.xml", "name": "sitemap.xml", "gloss": "machine-readable",
-      "what": "The same page list in XML, with relative paths so the whole site works under any publish path." }
+      "what": "The same page list in XML, using relative paths so the site works under any publish path." }
   ]
 }
