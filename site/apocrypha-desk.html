@@ -25,7 +25,7 @@ stylesheet: apocrypha-desk
           <button id='deal' type='button'>open a drawer at random</button>
           <button id='pin' type='button'>pin this one</button>
           <button id='cross' type='button'>cross-reference the drawer</button>
-          <button id='burn' type='button'>empty the drawer</button>
+          <button id='burn' type='button' class='warning'>empty the drawer</button>
         </div>
         <p id='status' aria-live='polite'>Nothing accessioned yet.</p>
         <pre id='reading'>drawer empty</pre>
@@ -196,11 +196,26 @@ stylesheet: apocrypha-desk
         statusEl.textContent = 'Cross-referenced ' + a.number + ' against ' + b.number + '.';
       });
 
-      burnBtn.addEventListener('click', function () {
-        drawer = [];
-        remember();
-        renderDrawer();
-        statusEl.textContent = 'Drawer emptied. The desk keeps no copy.';
+      // Above the threshold: the whole drawer goes and nothing takes its place, so it is a warning
+      // button guarded by the one shared modal (js/site.js, "Caution before a destructive action").
+      window.interestingSite.destructive(burnBtn, {
+        what: 'empty your drawer of specimens',
+        detail: function () {
+          return 'The ' + drawer.length + ' specimen' + (drawer.length === 1 ? '' : 's')
+            + ' in the drawer would go, and the desk keeps no copy. Opening drawers finds more.';
+        },
+        when: function () { return drawer.length > 0; },
+        onConfirm: function () {
+          if (!drawer.length) {
+            statusEl.textContent = 'The drawer is already empty.';
+            return;
+          }
+          drawer = [];
+          remember();
+          renderDrawer();
+          statusEl.textContent = 'Drawer emptied. The desk keeps no copy.';
+        },
+        onCancel: function () { statusEl.textContent = 'The drawer is as it was.'; }
       });
 
       restore();

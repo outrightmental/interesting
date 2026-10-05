@@ -25,7 +25,7 @@ stylesheet: word-kiln
         <div class='controls'>
           <button id='random-word' type='button'>take one from the shelf</button>
           <button id='hotter' type='button'>fire it hotter</button>
-          <button id='empty' type='button'>empty the kiln</button>
+          <button id='empty' type='button' class='warning'>empty the kiln</button>
         </div>
         <p id='status' aria-live='polite'>The kiln is cold. Put something in it.</p>
         <pre id='reading'>nothing fired yet</pre>
@@ -162,14 +162,29 @@ stylesheet: word-kiln
         statusEl.textContent = 'Heat ' + heat + '. Higher heat breaks the word up more.';
       });
 
-      emptyBtn.addEventListener('click', function () {
-        fired = [];
-        heat = 1;
-        readingEl.textContent = 'nothing fired yet';
-        out.textContent = 'cold';
-        kiln.setAttribute('data-heat', '0');
-        remember();
-        statusEl.textContent = 'Emptied, swept and cold.';
+      // Above the threshold: everything fired goes and nothing takes its place, so it is a warning
+      // button guarded by the one shared modal (js/site.js, "Caution before a destructive action").
+      window.interestingSite.destructive(emptyBtn, {
+        what: 'empty the kiln of everything you have fired',
+        detail: function () {
+          return 'The ' + fired.length + ' firing' + (fired.length === 1 ? '' : 's')
+            + ' the kiln still holds would go, and it would go cold. Firing again fills it.';
+        },
+        when: function () { return fired.length > 0; },
+        onConfirm: function () {
+          if (!fired.length) {
+            statusEl.textContent = 'The kiln is already empty and cold.';
+            return;
+          }
+          fired = [];
+          heat = 1;
+          readingEl.textContent = 'nothing fired yet';
+          out.textContent = 'cold';
+          kiln.setAttribute('data-heat', '0');
+          remember();
+          statusEl.textContent = 'Emptied, swept and cold.';
+        },
+        onCancel: function () { statusEl.textContent = 'The kiln is as it was.'; }
       });
 
       restore();
