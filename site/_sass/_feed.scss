@@ -16,8 +16,8 @@
 //   .card-text      one line
 //   .card-quote     a line the world said, at body-large  (spark cards)
 //   .card-mono      a readout, monospace                   (spark cards)
-//   .card-badge     a small tertiary chip over the media ("for you")
-//   .card-actions   a row of text buttons under the body   (spark cards: "another")
+//   .card-badge     a small tertiary chip over the media (or the current-world badge)
+//   .card-actions   a row of text buttons under the body   (spark cards: another)
 
 @use 'type';
 
@@ -149,6 +149,23 @@
   margin: 0;
   color: var(--md-sys-color-on-surface-variant);
   @include type.scale(body-medium);
+}
+
+// The world you are already in stays in the feed too, marked in the same shared badge grammar.
+.card-current {
+  box-shadow: var(--md-sys-elevation-level2);
+}
+
+.card-current .card-badge {
+  background: var(--md-sys-color-secondary-container);
+  color: var(--md-sys-color-on-secondary-container);
+}
+
+.card-current .card-link[aria-current='page'] .card-title {
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.18em;
 }
 
 // The things a world made, dealt between the world cards.
