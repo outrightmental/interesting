@@ -14,13 +14,30 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  scripts:
-    name: Workflow scripts
+  # One job, and deliberately so. These were two jobs — the workflow scripts and the
+  # infrastructure, side by side — until a run in which the hosted runner pool served one of them
+  # and never served the other: the unserved job sat queued for about ten minutes, was cancelled
+  # having run no step at all, and reported a failure about nothing while its sibling passed in
+  # ninety seconds. That ten minutes is GitHub's own limit on acquiring a runner, not this job's
+  # `timeout-minutes`, so no setting here avoids it; three runs in a row lost a different half
+  # each time. Both halves together finish inside two minutes, so sharing one runner costs a few
+  # seconds of wall clock and asks the pool for half as much. Keep it one job: the parallelism is
+  # worth less than the runs it loses.
+  test:
+    name: Workflow scripts and infrastructure
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+
+      # Installed before the tests, not after, so the infrastructure checks at the end of the job
+      # never fail for want of the tool rather than for a fault in /infra.
+      - name: Install Terraform
+        id: terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
 
       # The tests build /site: the reachability axiom is about the built site, and a pull request
       # should also find out that the site still builds. --ignore-scripts because nothing in the
@@ -39,26 +56,19 @@ jobs:
       - name: Run the tests for the workflow scripts
         run: python3 -m unittest discover -s .github/scripts -v
 
-  infra:
-    name: Infrastructure
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v5
-
-      - name: Install Terraform
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_wrapper: false
-
+      # Every check below reports whatever the ones above it did — `!cancelled()` rather than the
+      # default, which would stop the job at the first failure. These checks are independent of the
+      # tests and of each other, and were a separate job until they shared this one; a pull request
+      # should still learn everything that is wrong with it from a single run.
       - name: Check formatting
+        if: ${{ !cancelled() && steps.terraform.outcome == 'success' }}
         run: terraform -chdir=infra fmt -check -recursive -diff
 
       # Only the configuration is checked: this reads no state and touches no cloud account, so it
       # needs no credentials. Nothing in this repository ever runs `terraform plan` or `apply` —
       # /infra is applied by hand (see infra/README.md).
       - name: Validate the configuration
+        if: ${{ !cancelled() && steps.terraform.outcome == 'success' }}
         run: |
           terraform -chdir=infra init -backend=false -input=false
           terraform -chdir=infra validate

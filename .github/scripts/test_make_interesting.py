@@ -50,6 +50,12 @@ def read_outputs(text):
     return outputs
 
 
+# The coded axioms, by the name of the check that holds each one. Written down once, so adding or
+# retiring an axiom is one edit here rather than one per test that counts them.
+CODED_AXIOMS = ["check_accessibility", "check_analytics", "check_cadence", "check_destructive",
+                "check_mood", "check_participate", "check_reachability", "check_state"]
+
+
 def sitemap(*pages):
     """A sitemaps.org urlset listing `pages`, written the way /site writes one: relative <loc>s."""
     locs = "".join(f"  <url><loc>{page}</loc></url>\n" for page in pages)
@@ -662,11 +668,13 @@ class SingleExperienceTest(SiteDirTestCase):
         self.assertIn("count them as part of the piece when you weigh the site as a whole", prompt)
         self.assertIn("carried on by a later run", prompt)
 
-    def test_the_aim_is_a_stated_standard_and_not_an_eighth_axiom(self):
+    def test_the_aim_is_a_stated_standard_and_not_a_coded_axiom(self):
         # Issue #36, question 3: prompt-only. No check could settle whether a site reads as one
-        # experience, so the seven coded axioms are still the whole of what the code refuses -- a
-        # page that shares nothing with the rest is accepted, exactly as before, and the prompt is
-        # where the aim lives. (The same reasoning INTERESTING is left uncoded for.)
+        # experience, so this aim is not among the coded axioms -- a page that shares nothing with
+        # the rest is accepted, exactly as before, and the prompt is where the aim lives. (The same
+        # reasoning INTERESTING is left uncoded for.) The list is asserted whole, so an axiom
+        # cannot be added or dropped without saying so here; issue #42 added check_destructive to
+        # it, which is why this no longer counts the axioms in its own name.
         (self.site / "index.html").write_text(home("sitemap.xml", "stranger.html", "error.html"))
         (self.site / "sitemap.xml").write_text(sitemap("index.html", "error.html"))
         stranger = page(title="stranger", css=".stranger { color: #fff; background: #000; }")
@@ -678,8 +686,7 @@ class SingleExperienceTest(SiteDirTestCase):
         })
         self.assertEqual(sorted(t.name for _, t, _ in ops), ["sitemap.xml", "stranger.html"])
         self.assertEqual(sorted(name for name in dir(mi) if name.startswith("check_")),
-                         ["check_accessibility", "check_analytics", "check_cadence", "check_mood",
-                          "check_participate", "check_reachability", "check_state"])
+                         CODED_AXIOMS)
 
 
 class BuildPipelinePromptTest(unittest.TestCase):
@@ -984,7 +991,9 @@ class ResponsiveAccessibleAxiomTest(SiteDirTestCase):
                      "refused, exactly as one that orphans a page is"]:
             with self.subTest(rule=rule):
                 self.assertIn(rule, rules)
-        self.assertEqual(rules.count("AXIOM, every run:"), 7, "every axiom stands over every run")
+        # One AXIOM in the prompt per coded axiom, so neither list can grow without the other.
+        self.assertEqual(rules.count("AXIOM, every run:"), len(CODED_AXIOMS),
+                         "every axiom stands over every run")
 
     def test_the_prompt_also_asks_for_what_no_validator_can_judge(self):
         # Open question 1 of the issue: both, and the prompt is the wider of the two. Contrast needs
@@ -1555,12 +1564,70 @@ class LocalStateStoreTest(unittest.TestCase):
                          "every page reads the new state the way it reads any other: from the start")
         self.assertEqual(acted["refused"]["keys"], ["omens"], "a bad paste changes nothing")
         self.assertEqual(acted["refused"]["reloads"], 1, "and reloads nothing")
+        self.assertEqual(acted["refused"]["asked"], acted["imported"]["asked"],
+                         "a paste that could not land asks nothing: there is nothing to be sure of")
         self.assertEqual(acted["cleared"]["keys"], [])
         self.assertEqual(acted["cleared"]["shelf"], {})
-        self.assertEqual(acted["cleared"]["confirmed"], 1, "clearing everything is asked about first")
-        refused = self.seen["clearingIsConfirmed"]
-        self.assertEqual(refused["confirmed"], 1)
-        self.assertEqual(refused["keys"], ["constellation"], "saying no keeps everything")
+        self.assertEqual(acted["cleared"]["confirmed"], 0,
+                         "the shared modal is the question; the browser's own is never reached")
+
+    def test_the_menus_clear_is_the_shared_destructive_control(self):
+        # Issue #42: the meta menu adopts the one shared component every other destructive control
+        # on the site uses, even though this file is fixed, is never shown to a model and carries
+        # its own styles. Both halves of the law hold here: the warning treatment on the button,
+        # and the one modal naming the specific thing about to go.
+        guarded = self.seen["clearingIsGuarded"]
+        self.assertIn(mi.WARNING_CLASS, guarded["warning"].split())
+        self.assertEqual(guarded["plain"], ["", "", ""],
+                         "the warning treatment means one thing, so only clear wears it")
+        self.assertEqual(len(guarded["asked"]), 1, "one press, one question")
+        asked = guarded["asked"][0]
+        self.assertEqual(asked["what"], "clear everything this site has kept in your browser",
+                         "the blank in \"are you sure you want to ______?\" names what goes")
+        self.assertIn("nothing would take their place", asked["detail"])
+        self.assertTrue(asked["confirm"], "the modal's own button says what it will do")
+        self.assertEqual(guarded["note"], "Nothing was cleared.")
+        self.assertEqual(guarded["keys"], ["constellation"], "saying no keeps everything")
+        self.assertEqual(guarded["confirmed"], 0, "window.confirm is not what asks any more")
+
+    def test_clearing_an_empty_document_has_nothing_to_ask_about(self):
+        # The question is about what is lost, so a press that loses nothing goes straight through.
+        # The warning stays on the button either way: a control that changes its clothes is a
+        # control nobody learns.
+        empty = self.seen["clearingAnEmptyDocument"]
+        self.assertEqual(empty["asked"], [])
+        self.assertEqual(empty["confirmed"], 0)
+        self.assertIn(mi.WARNING_CLASS, empty["warning"].split())
+        self.assertTrue(empty["note"])
+
+    def test_importing_someone_elses_document_is_asked_about_too(self):
+        # "replace mine" sits at the threshold rather than above it -- the whole document goes, but
+        # the one in the box takes its place -- so it asks the same question through the same modal
+        # and wears no warning.
+        imported = self.seen["importIsAskedAboutAndRefusable"]
+        self.assertEqual(len(imported["asked"]), 1)
+        self.assertIn("replace everything this site has kept in your browser",
+                      imported["asked"][0]["what"])
+        self.assertEqual(imported["asked"][0]["opener"], "replace mine",
+                         "the focus goes back to the control that opened it")
+        self.assertEqual(imported["refused"]["keys"], ["constellation"], "saying no keeps your own")
+        self.assertEqual(imported["refused"]["note"], "Nothing was replaced.")
+        self.assertEqual(imported["ontoNothing"]["asked"], 0,
+                         "an empty document has nothing to lose, so there is nothing to ask")
+        self.assertEqual(imported["ontoNothing"]["keys"], ["omens"])
+
+    def test_the_menu_still_asks_if_the_shared_component_has_gone(self):
+        # js/site.js is ordinary site source that an hourly run may break; this file never changes,
+        # and the menu is the one thing on the site a visitor can rely on being where they left it.
+        # So each call falls back to the browser's own question: less good, and it still asks.
+        alone = self.seen["withoutTheSharedComponent"]
+        self.assertIn(mi.WARNING_CLASS, alone["warning"].split(),
+                      "the button still wears the class the shared styling paints")
+        self.assertEqual(alone["refused"]["confirmed"], 1)
+        self.assertEqual(alone["refused"]["keys"], ["constellation"], "saying no keeps everything")
+        self.assertEqual(alone["refused"]["note"], "Nothing was cleared.")
+        self.assertEqual(alone["cleared"]["confirmed"], 1)
+        self.assertEqual(alone["cleared"]["keys"], [], "and saying yes clears it")
 
     def test_a_browser_that_stores_nothing_says_so_when_the_menu_opens(self):
         self.assertIn("stores nothing", self.seen["menuWithoutStorage"]["note"])
@@ -1668,12 +1735,13 @@ class LegibilityStandardTest(unittest.TestCase):
         self.assertIn(f"Keep it {mi.LEGIBLE}", last)
         self.assertIn("never a dead end", last)
 
-    def test_the_standard_is_stated_and_not_an_eighth_check(self):
-        # The same reasoning WHOLE and INTERESTING are left uncoded for: the seven coded axioms are
-        # still the whole of what the code refuses (issue #46, question 1).
+    def test_the_standard_is_stated_and_not_a_check(self):
+        # The same reasoning WHOLE and INTERESTING are left uncoded for: legibility is not among
+        # the coded axioms (issue #46, question 1). Issue #42's destructive caution is, which is
+        # what distinguishes a standard no check could judge from a law that can be held.
         self.assertEqual(sorted(name for name in dir(mi) if name.startswith("check_")),
-                         ["check_accessibility", "check_analytics", "check_cadence", "check_mood",
-                          "check_participate", "check_reachability", "check_state"])
+                         CODED_AXIOMS)
+        self.assertNotIn("check_legible", CODED_AXIOMS)
 
 
 class CadenceAxiomTest(SiteDirTestCase):
@@ -2346,18 +2414,269 @@ class IssueFormTest(unittest.TestCase):
                         self.assertRegex(labels, rf'name\s*=\s*"{re.escape(label)}"')
 
 
-def needs_the_build(test):
-    """Skip a test that runs the real Node build when the toolchain is not installed.
+class DestructiveCautionAxiomTest(SiteDirTestCase):
+    """Issue #42: caution before a destructive action is a law of the site, not a page's own choice.
+
+    The eighth axiom stands beside the other seven -- stated in the prompt, held to by
+    validate_plan -- and it is held in the same shape: one shared component for the whole site, and
+    three mechanical refusals. What code can settle is that the component stays, that a control
+    whose own words say it throws saved state away reads as a warning button, and that no page
+    writes a confirmation of its own.
+
+    What it deliberately cannot settle -- whether a given control is above the threshold, and
+    whether a warning button's press really reaches the modal -- is asked for in the prompt and
+    left there, the way the mood axiom leaves "is this a good question" there.
+    """
+
+    PAGES = ["index.html", "error.html", "toy.html"]
+
+    def setUp(self):
+        super().setUp()
+        (self.site / "js").mkdir()
+        (self.site / "css").mkdir()
+        (self.site / mi.DESTRUCTIVE_SCRIPT).write_text(
+            "window.interestingSite = { destructive: function () {} };\n")
+        (self.site / mi.SHARED_STYLESHEET).write_text("button.warning { color: #ffd4b0; }\n")
+        (self.site / "index.html").write_text(self.wired(home("toy.html", "error.html")))
+        (self.site / "error.html").write_text(self.wired("<p>404</p>"))
+        (self.site / "toy.html").write_text(self.wired("<p>toy</p>"))
+        (self.site / "sitemap.xml").write_text(sitemap(*self.PAGES))
+
+    def wired(self, body):
+        """A bare fragment that loads the shared script and stylesheet the component lives in.
+
+        Like tagged() and queried(), it is a fragment, so it falls short of the
+        responsive-and-accessible axiom from the start and only check_destructive can refuse a
+        fixture built from it.
+        """
+        return (f"<head><link rel='stylesheet' href='{mi.SHARED_STYLESHEET}'>"
+                f"<script src='{mi.DESTRUCTIVE_SCRIPT}'></script></head>\n<body>{body}</body>")
+
+    def added(self, body):
+        """A whole page a run may add: it satisfies every other axiom, so only this one can refuse
+        it, which is what page() is for everywhere else in these tests."""
+        return page(body=body, title="notes")
+
+    def rules(self):
+        prompt = mi.build_prompt([("index.html", "<h1>hi</h1>")])
+        return prompt[prompt.index("Rules:"):]
+
+    def test_the_axiom_is_a_standing_rule_of_every_prompt(self):
+        rules = self.rules()
+        for rule in ["AXIOM, every run: caution before a destructive action",
+                     "a law of the site and not a page's own choice",
+                     'reads as a warning button -- class="warning"',
+                     'asks "are you sure you want to ______?"',
+                     "with the specific thing about to go in the blank",
+                     "window.interestingSite.destructive(button, {",
+                     mi.DESTRUCTIVE_SCRIPT,
+                     mi.SHARED_STYLESHEET,
+                     f"{mi.SASS_DIR}/_controls.scss"]:
+            with self.subTest(rule=rule):
+                self.assertIn(rule, rules)
+
+    def test_the_prompt_says_the_safety_switch_is_the_ui_and_nothing_more(self):
+        # The issue's own answers, in as many words: the warning plus the modal *is* the safety
+        # switch, and the modal is a plain confirm/cancel. Neither half may grow an extra act.
+        rules = self.rules()
+        for stated in ["There is no arming step beyond them",
+                       "no checkbox, no toggle, no hold-to-arm press",
+                       "the modal is a plain confirm/cancel",
+                       "never ask a visitor to type a word or press twice"]:
+            with self.subTest(stated=stated):
+                self.assertIn(stated, rules)
+
+    def test_the_prompt_states_the_threshold_the_caution_begins_at(self):
+        # The issue leaves the threshold to the implementation and asks for it to be defined. It is
+        # three steps, and the prompt names all three so a run can place a control it writes.
+        rules = self.rules()
+        self.assertIn("because there is a spectrum of severity", rules)
+        for step in ["Above the threshold, and held to both halves",
+                     "At the threshold, and held to the modal but not the warning",
+                     "Below the threshold, and held to neither"]:
+            with self.subTest(step=step):
+                self.assertIn(step, rules)
+        self.assertIn("window.interestingSite.areYouSure(options)", rules)
+
+    def test_the_prompt_names_every_word_the_code_reads_as_destructive(self):
+        # As with the cadence and mood axioms: the family is stated in full, so it is a rule a run
+        # can follow rather than a trap it springs -- and the one word that is deliberately not in
+        # it is named too, because that is the naming convention the narrowness rests on.
+        rules = self.rules()
+        for word in ["clear", "forget", "empty", "erase", "wipe", "delete", "discard",
+                     "throw away", "throw out"]:
+            with self.subTest(word=word):
+                self.assertIn(word, rules)
+                self.assertTrue(mi.DISCARDS_SAVED_STATE.search(f"{word} the thing"), word)
+        self.assertIn('Name a control that takes one item out of a list "remove" instead', rules)
+        self.assertIn("window.confirm is refused outright", rules)
+
+    def test_the_words_the_code_reads_as_destructive_are_deliberately_narrow(self):
+        # The other side of it, as with "midnight" and the cadence axiom: a control that discards
+        # nothing a visitor saved must not be dragged in. These are the real site's own.
+        for innocent in ["remove this star", "reset decoder", "sweep the floor", "turn the soil",
+                         "regrow terrarium", "seed a small sky", "drop a star", "take one from "
+                         "the shelf", "replace mine"]:
+            with self.subTest(innocent=innocent):
+                self.assertIsNone(mi.DISCARDS_SAVED_STATE.search(innocent))
+
+    def test_a_destructive_control_is_found_and_a_warning_one_is_not(self):
+        found = mi.DestructiveControls(
+            "<button>clear omens</button>"
+            "<button class='pill warning'>empty the kiln</button>"
+            "<a class='action' href='x.html'>forget my reading</a>"
+            "<a class='action warning' href='y.html'>wipe the slate</a>"
+            "<button>remove this star</button>"
+            "<a href='z.html'>clear your diary</a>"  # an ordinary link navigates, it does not act
+            "<button class='warning'><span>erase</span> everything</button>")
+        self.assertEqual(sorted(name for name, _ in found.controls),
+                         ["clear omens", "empty the kiln", "erase everything",
+                          "forget my reading", "wipe the slate"])
+        self.assertEqual(found.bare(), ["clear omens", "forget my reading"])
+
+    def test_a_glyph_with_a_destructive_label_is_not_a_way_round_it(self):
+        # A control's own words are its text and whatever names it outright, so a button whose face
+        # is a glyph cannot slip past by keeping the words in its aria-label.
+        found = mi.DestructiveControls(
+            "<button aria-label='clear everything'>&#10005;</button>"
+            "<button class='warning' title='wipe the slate'>x</button>"
+            "<button aria-label='try the doorway'>try this one</button>")
+        self.assertEqual(found.bare(), ["clear everything \u2715"])
+
+    def test_a_control_a_page_builds_in_a_script_is_not_markup_of_the_page(self):
+        # The same bargain PageFacts makes, and for the same reason: only the page as committed is
+        # judged, so a run cannot be refused over a string it happens to concatenate.
+        built = mi.DestructiveControls(
+            "<script>var b = \"<button>clear everything</button>\";</script>"
+            "<style>.x { content: '<button>wipe it</button>'; }</style>")
+        self.assertEqual(built.controls, [])
+
+    def test_a_page_a_run_adds_must_dress_its_destructive_control_as_a_warning(self):
+        plain = self.added("<button>clear my notes</button>")
+        with self.assertRaises(mi.RejectedChange) as refused:
+            mi.validate_plan({"files": [{"path": "notes.html", "content": plain},
+                                        {"path": "sitemap.xml",
+                                         "content": sitemap(*self.PAGES, "notes.html")},
+                                        {"path": "index.html",
+                                         "content": self.wired(home("toy.html", "error.html",
+                                                                     "notes.html"))}]})
+        self.assertIn("must read as a warning button", str(refused.exception))
+        self.assertIn('"clear my notes"', str(refused.exception))
+
+    def test_the_same_control_as_a_warning_button_is_exactly_what_the_axiom_wants(self):
+        warned = self.added("<button class='warning'>clear my notes</button>")
+        ops = mi.validate_plan({"files": [{"path": "notes.html", "content": warned},
+                                          {"path": "sitemap.xml",
+                                           "content": sitemap(*self.PAGES, "notes.html")},
+                                          {"path": "index.html",
+                                           "content": self.wired(home("toy.html", "error.html",
+                                                                      "notes.html"))}]})
+        self.assertEqual(sorted(t.name for _, t, _ in ops),
+                         ["index.html", "notes.html", "sitemap.xml"])
+
+    def test_taking_the_warning_off_a_page_a_run_rewrites_is_refused(self):
+        (self.site / "toy.html").write_text(
+            self.wired("<button class='warning'>empty the drawer</button>"))
+        with self.assertRaises(mi.RejectedChange) as refused:
+            mi.validate_plan({"files": [{"path": "toy.html",
+                                         "content": self.wired("<button>empty the drawer</button>")}]})
+        self.assertIn("must read as a warning button", str(refused.exception))
+
+    def test_a_control_that_already_fell_short_blocks_nothing(self):
+        # Only what the run itself breaks is refused, exactly as with the other six: a page that
+        # already has a bare destructive control stays the site's own to repair, and refusing every
+        # plan over it would leave no plan able to.
+        (self.site / "toy.html").write_text(self.wired("<button>clear the shelf</button>"))
+        ops = mi.validate_plan({"files": [{"path": "toy.html",
+                                           "content": self.wired("<button>clear the shelf</button>"
+                                                                  "<p>and a new line</p>")}]})
+        self.assertEqual([t.name for _, t, _ in ops], ["toy.html"])
+
+    def test_dressing_one_control_is_never_mistaken_for_undressing_another(self):
+        # Every reason is one control's name, so a partial repair can only take reasons away.
+        (self.site / "toy.html").write_text(
+            self.wired("<button>clear the shelf</button><button>empty the bin</button>"))
+        ops = mi.validate_plan({"files": [{"path": "toy.html", "content": self.wired(
+            "<button class='warning'>clear the shelf</button><button>empty the bin</button>")}]})
+        self.assertEqual([t.name for _, t, _ in ops], ["toy.html"])
+
+    def test_retiring_a_page_with_a_bare_destructive_control_is_fine(self):
+        (self.site / "old.html").write_text(self.wired("<button>wipe everything</button>"))
+        self.assertEqual(len(mi.validate_plan({"delete": ["old.html"]})), 1)
+
+    def test_a_page_that_writes_its_own_confirmation_is_refused(self):
+        page_with = self.added("<button class='warning'>clear my notes</button>"
+                               "<script>if (window.confirm('sure?')) wipe();</script>")
+        with self.assertRaises(mi.RejectedChange) as refused:
+            mi.validate_plan({"files": [{"path": "notes.html", "content": page_with},
+                                        {"path": "sitemap.xml",
+                                         "content": sitemap(*self.PAGES, "notes.html")},
+                                        {"path": "index.html",
+                                         "content": self.wired(home("toy.html", "error.html",
+                                                                     "notes.html"))}]})
+        self.assertIn("no page may write a confirmation of its own", str(refused.exception))
+
+    def test_a_confirmation_federated_into_a_shared_script_counts(self):
+        # Read of a page along with every script it loads, as the cadence and mood checks are: a
+        # confirmation lifted into a shared file is still a confirmation on every page that loads it.
+        with self.assertRaises(mi.RejectedChange) as refused:
+            mi.validate_plan({"files": [{"path": mi.DESTRUCTIVE_SCRIPT, "content":
+                                         "var ok = { destructive: function () { confirm('sure?'); } };"}]})
+        self.assertIn("no page may write a confirmation of its own", str(refused.exception))
+
+    def test_the_fixed_files_may_keep_a_confirmation_of_their_own(self):
+        # js/state.js carries one as the fallback for a run having broken js/site.js: the meta menu
+        # is the one thing on the site a visitor can rely on, and FIXED_FILES are never a run's
+        # fault, exactly as with the cadence axiom's vendored library.
+        (self.site / "js").mkdir(exist_ok=True)
+        (self.site / mi.STATE_SCRIPT).write_text("if (window.confirm('sure?')) {}")
+        (self.site / "toy.html").write_text(
+            f"<head><script src='{mi.STATE_SCRIPT}'></script></head><body><p>toy</p></body>")
+        self.assertEqual(mi.pages_improvising_confirmation(dict(mi.read_site())), {})
+
+    def test_a_page_that_already_asked_in_the_browsers_words_blocks_nothing(self):
+        asking = self.wired("<p>toy</p><script>if (confirm('sure?')) go();</script>")
+        (self.site / "toy.html").write_text(asking)
+        ops = mi.validate_plan({"files": [{"path": "toy.html", "content": asking + "<p>more</p>"}]})
+        self.assertEqual([t.name for _, t, _ in ops], ["toy.html"])
+
+    def test_the_shared_component_may_be_rewritten_but_never_taken_away(self):
+        kept = mi.validate_plan({"files": [{"path": mi.DESTRUCTIVE_SCRIPT, "content":
+                                            "window.interestingSite = { destructive: fn, areYouSure: fn };"}]})
+        self.assertEqual([t.name for _, t, _ in kept], ["site.js"])
+        for gone, content in [(mi.DESTRUCTIVE_SCRIPT, "window.interestingSite = { unlock: fn };"),
+                              (mi.SHARED_STYLESHEET, "button { color: #fff; }")]:
+            with self.subTest(gone=gone):
+                with self.assertRaises(mi.RejectedChange) as refused:
+                    mi.validate_plan({"files": [{"path": gone, "content": content}]})
+                self.assertIn("shared destructive-control component must stay",
+                              str(refused.exception))
+
+    def test_a_site_that_never_had_the_component_blocks_nothing(self):
+        # The same reasoning pages_missing_mood is not held to a site without the mood script:
+        # there would be nothing for a control to use, so there is nothing to refuse over.
+        (self.site / mi.DESTRUCTIVE_SCRIPT).unlink()
+        (self.site / mi.SHARED_STYLESHEET).unlink()
+        ops = mi.validate_plan({"files": [{"path": "toy.html", "content": "<p>a plainer toy</p>"}]})
+        self.assertEqual([t.name for _, t, _ in ops], ["toy.html"])
+
+
+def needs_the_build():
+    """Skip the tests that run the real Node build when the toolchain is not installed.
 
     In CI it is a failure instead: a silent skip there would quietly stop checking the built site,
     which is the only site the axioms are about.
+
+    This raises rather than calling skipTest/fail on a test, because it is asked from setUpClass:
+    every build is a fresh Node process, so a probe per test would cost more than the checks do
+    (see RealSiteTest.setUpClass).
     """
     try:
         mi.build_site({"index.html": "<h1>hi</h1>"})
     except mi.BuildToolchainError as err:
         if os.environ.get("CI"):
-            test.fail(f"the Node build toolchain is missing in CI: {err}")
-        test.skipTest(f"the Node build toolchain is not installed ({err})")
+            raise AssertionError(f"the Node build toolchain is missing in CI: {err}") from None
+        raise unittest.SkipTest(f"the Node build toolchain is not installed ({err})") from None
 
 
 def front_matter(**fields):
@@ -2365,7 +2684,7 @@ def front_matter(**fields):
 
 
 class BuildPipelineTest(unittest.TestCase):
-    """Issue #25: the real build, and all seven axioms judged on what it produces.
+    """Issue #25: the real build, and all eight axioms judged on what it produces.
 
     SiteDirTestCase stands the build in with the identity, which is exactly right for its plain-HTML
     fixtures; this is where the pipeline itself is exercised. /site is source now -- a layout is not
@@ -2386,8 +2705,11 @@ class BuildPipelineTest(unittest.TestCase):
     NAV = "<nav>{% for page in ['toy.html', 'error.html'] %}<a href='{{ page }}'>{{ page }}</a>{% endfor %}</nav>\n"
     PAGES = ["index.html", "toy.html", "error.html"]
 
+    @classmethod
+    def setUpClass(cls):
+        needs_the_build()
+
     def setUp(self):
-        needs_the_build(self)
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.site = Path(tmp.name).resolve() / "site"
@@ -2447,9 +2769,9 @@ class BuildPipelineTest(unittest.TestCase):
                 self.assertNotIn(shared, built)
 
     def test_a_page_is_whatever_the_templates_make_of_it(self):
-        # All seven axioms ask about pages, and all seven are asked of the built site. In the
-        # source, index.html names no page, no page carries any shared line, and no page is a whole
-        # page at all; built, every page is each of those things.
+        # Every axiom asks about pages, and every one is asked of the built site. In the source,
+        # index.html names no page, no page carries any shared line, and no page is a whole page
+        # at all; built, every page is each of those things.
         source = dict(mi.read_site())
         self.assertEqual(mi.links_from("index.html", source), set())
         self.assertEqual(mi.pages_missing_analytics(source), set(self.PAGES))
@@ -2523,11 +2845,12 @@ class BuildPipelineTest(unittest.TestCase):
 
 
 class RealSiteTest(unittest.TestCase):
-    """The site in this repository obeys all seven axioms: every page is reachable from the root,
+    """The site in this repository obeys all eight axioms: every page is reachable from the root,
     every page carries the analytics tag and consent banner, every page is responsive and
     accessible, every page carries the local-state store and its meta menu, no page ties the site
-    to an update frequency, every page asks before it offers, and every page carries a visitor's
-    way of steering the site.
+    to an update frequency, every page asks before it offers, every page carries a visitor's way
+    of steering the site, and no control throws a visitor's saved state away without the shared
+    warning button and its confirmation.
 
     validate_plan only refuses what a run breaks, so the invariants have to start out true: this is
     what makes them hold from the next deploy onward and not only for pages a later run adds. It
@@ -2541,17 +2864,22 @@ class RealSiteTest(unittest.TestCase):
     # Spelled out here rather than imported, so renaming it in one place fails here.
     GA_PLACEHOLDER = "__GA_MEASUREMENT_ID__"
 
-    def setUp(self):
-        self.repo = Path(mi.__file__).resolve().parents[2]
-        site = self.repo / "site"
+    # The real site is read and built once for the whole class. Every test below only reads the
+    # two mappings -- a test that wants damaged source builds its own copy with dict(self.site,
+    # ...) -- and a build is a whole Node run, so building per test spent minutes of the job's
+    # five-minute budget rendering the same site forty times over.
+    @classmethod
+    def setUpClass(cls):
+        cls.repo = Path(mi.__file__).resolve().parents[2]
+        site = cls.repo / "site"
         if not site.is_dir():
-            self.skipTest(f"no site directory at {site}")
-        needs_the_build(self)
+            raise unittest.SkipTest(f"no site directory at {site}")
+        needs_the_build()
         patcher = mock.patch.object(mi, "SITE_DIR", site)
         patcher.start()
-        self.addCleanup(patcher.stop)
-        self.source = dict(mi.read_site())
-        self.site = mi.build_site(self.source)
+        cls.addClassCleanup(patcher.stop)
+        cls.source = dict(mi.read_site())
+        cls.site = mi.build_site(cls.source)
 
     def test_every_page_is_reachable_from_the_root_and_listed_in_the_sitemap(self):
         self.assertEqual(mi.unreachable_pages(self.site), {})
@@ -2728,6 +3056,71 @@ class RealSiteTest(unittest.TestCase):
         asked = dict(self.site,
                      **{"index.html": self.site["index.html"] + "<p>So, how are you feeling?</p>"})
         self.assertEqual(mi.pages_asking_to_self_report(asked), {"index.html": ["how are you feeling"]})
+
+    # The controls of the real site that are above the destructive threshold today, by the words
+    # a visitor presses: the meta menu's "clear" (built by js/state.js, so not in any page's
+    # markup), the persona sheet's two, and one per world that keeps a list of its own. Spelled out
+    # rather than discovered, so retiring one is a deliberate edit here.
+    DESTRUCTIVE_CONTROLS = {"clear the sky", "forget my reading", "clear omens",
+                            "empty the drawer", "empty the kiln"}
+
+    def test_the_site_shares_one_destructive_control_component(self):
+        # Issue #42: the three steps are written once -- the behaviour in js/site.js, the warning
+        # treatment and the modal in the shared controls partial, which reaches every page through
+        # css/site.css -- rather than improvised per page.
+        self.assertTrue(mi.shares_destructive_caution(self.site))
+        helper = self.source[mi.DESTRUCTIVE_SCRIPT]
+        for part in ["window.interestingSite.destructive(", "function areYouSure(",
+                     "are you sure you want to ", "are-you-sure"]:
+            with self.subTest(part=part):
+                self.assertIn(part, helper)
+        partial = self.source[f"{mi.SASS_DIR}/_controls.scss"]
+        self.assertIn("button.warning", partial)
+        self.assertIn(".are-you-sure", partial)
+
+    def test_every_control_that_throws_saved_state_away_reads_as_a_warning(self):
+        # The audit half of the axiom, as with the other six: the controls that exist today are
+        # held to it too, not only the ones a future run writes. This is the check that found
+        # "clear omens", "empty the drawer" and "empty the kiln" pressing without a word.
+        self.assertEqual(mi.pages_with_bare_destructive_controls(self.site), {})
+        found = {name for page in mi.html_pages(self.site)
+                 for name, _ in mi.DestructiveControls(self.site[page]).controls}
+        self.assertEqual(found, self.DESTRUCTIVE_CONTROLS)
+
+    def test_no_page_writes_a_confirmation_of_its_own(self):
+        # One question, everywhere. js/state.js keeps a window.confirm as the fallback for a run
+        # having broken js/site.js, and it is in FIXED_FILES, so it is not a page's improvisation.
+        self.assertEqual(mi.pages_improvising_confirmation(self.site), {})
+        self.assertIn("window.confirm", self.source[mi.STATE_SCRIPT],
+                      "the fixed menu keeps a fallback, which is the one exception")
+        self.assertIn(mi.STATE_SCRIPT, mi.FIXED_FILES)
+
+    def test_the_modal_is_a_plain_confirm_cancel_and_nothing_more(self):
+        # "Don't overdo it": no typing a word, no second deliberate press, no arming affordance.
+        helper = self.source[mi.DESTRUCTIVE_SCRIPT]
+        for ceremony in ["prompt(", "type the word", "press again", "hold to"]:
+            with self.subTest(ceremony=ceremony):
+                self.assertNotIn(ceremony, helper)
+        # Keyboard-operable, Escape to dismiss, and the focus returned however it is answered.
+        for owed in ["showModal", "'cancel'", "Escape", "back.focus()", "sure.no.focus()"]:
+            with self.subTest(owed=owed):
+                self.assertIn(owed, helper)
+
+    def test_the_check_would_notice_a_real_destructive_control_losing_its_warning(self):
+        # A guard against the check quietly becoming a no-op as the site is rewritten around it:
+        # take the warning off a real control and the check has to say so.
+        for page, name in [("sky-archive.html", "clear omens"),
+                           ("word-kiln.html", "empty the kiln"),
+                           ("apocrypha-desk.html", "empty the drawer")]:
+            with self.subTest(page=page):
+                bare = dict(self.site)
+                bare[page] = bare[page].replace(f"class='warning'>{name}", f">{name}")
+                self.assertEqual(mi.pages_with_bare_destructive_controls(bare).get(page), [name])
+
+    def test_the_check_would_notice_a_page_asking_in_the_browsers_own_words(self):
+        asking = dict(self.site, **{"loam.html": self.site["loam.html"]
+                                    + "<script>if (window.confirm('sure?')) wipe();</script>"})
+        self.assertEqual(mi.pages_improvising_confirmation(asking), {"loam.html": ["loam.html"]})
 
     def test_the_site_has_a_sitemap_of_both_kinds(self):
         # Open question 2 of the issue: both. sitemap.xml for anything reading the site

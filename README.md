@@ -13,8 +13,10 @@ iterate a more interesting website
   and its one module per world (see [The feature and the feed](#the-feature-and-the-feed)), the three
   shared files behind the analytics tag (see [Analytics axiom](#analytics-axiom)), the one behind
   the local-state store (see [Local state axiom](#local-state-axiom)), the one behind the mood
-  flow (see [Mood axiom](#mood-axiom)) and the one behind a visitor's way of steering the site
-  (see [Participation axiom](#participation-axiom)). A request
+  flow (see [Mood axiom](#mood-axiom)), the one behind a visitor's way of steering the site (see
+  [Participation axiom](#participation-axiom)) and the shared helpers every page calls, among them
+  the one destructive-control component (see
+  [Destructive-caution axiom](#destructive-caution-axiom)). A request
   for a page that is not there gets `error.html` back, with a 404, from a CloudFront custom error
   response.
 - **The build** — [`build.mjs`](build.mjs) turns `/site` into the artifact that is published to an
@@ -76,9 +78,11 @@ is deliberately small: a foundation to build a more holistic experience on, not 
   the whole of the site's visual language (see [Material Design 3](#material-design-3)): the
   tokens (`_tokens.scss`: every M3 colour role derived from four seeds, the shape scale, the
   motion scheme, the elevation levels), the type scale as a mixin (`_type.scss`), the base rules,
-  the top app bar (`_header.scss`), the buttons, chips, sliders and text fields (`_controls.scss`),
-  the feature a page is and the filled card (`_panel.scss`), the unlock box, the persona's avatar
-  and sheet (`_persona.scss`), the fourteen mood palettes and the query styling the mood flow
+  the top app bar (`_header.scss`), the buttons, chips, sliders and text fields, among them the
+  warning button and the one confirmation modal (`_controls.scss`, see
+  [Destructive-caution axiom](#destructive-caution-axiom)), the feature a page is and the filled
+  card (`_panel.scss`), the unlock box, the persona's avatar
+  and sheet (`_persona.scss`), the fifteen mood palettes and the query styling the mood flow
   renders into (`_mood.scss`), the feed's masonry and cards (`_feed.scss`), the canvas-beside-panel
   shape most worlds share (`_labs.scss`), the values the stylesheets have in common (`_vars.scss`,
   which emits no CSS of its own) and the monospace readout ten pages use (`_readout.scss`, a
@@ -118,7 +122,7 @@ slab per page, small-caps labels, pill borders on everything, a footer index two
   on anything carrying `data-mood`, so a mood re-skins the whole site and a card in the feed
   re-tints itself from its own world's seeds. The dark scheme is the only scheme: the site is a
   night sky, and M3 lays dark surfaces out by tone rather than shadow.
-- **A page's palette is its world's.** The fourteen palettes in `_mood.scss` are keyed by
+- **A page's palette is its world's.** The fifteen palettes in `_mood.scss` are keyed by
   orientation id, the layout writes `<html data-world='…'>` from
   [`site/_data/worlds.json`](site/_data/worlds.json), and a visitor's reading on
   `<html data-mood='…'>` wins over it. No page carries colours of its own any more.
@@ -208,7 +212,7 @@ the one thing the mission is measured in.
   ([One single experience](#one-single-experience)), all three in
   [`.github/scripts/make_interesting.py`](.github/scripts/make_interesting.py) and all three stated
   at both ends of a run.
-- **The cadence rule is the fifth `AXIOM`**, stated in the `Rules:` block beside the six below.
+- **The cadence rule is the fifth `AXIOM`**, stated in the `Rules:` block beside the seven below.
   It names every phrasing the code refuses, in full, so it is a rule a run can follow rather than a
   trap it springs: the words *tonight*, *tomorrow*, *yesterday*, *hourly*, *nightly*, *daily* and
   *weekly*; the possessives *today's*, *this hour's*, *this week's*, *this month's*; and *every
@@ -217,7 +221,7 @@ the one thing the mission is measured in.
   again" — because the next move is the one worth asking for.
 - **Held to in code.** `check_cadence` in
   [`.github/scripts/make_interesting.py`](.github/scripts/make_interesting.py) refuses a plan that
-  puts one of those phrasings on a page. As with the five axioms below, only what the run itself
+  puts one of those phrasings on a page. As with the seven axioms below, only what the run itself
   breaks is refused, and every reason is one phrase, so clearing part of a page can only take
   reasons away. The engagement-time definition itself is *not* checked in code, because no check
   could: it is a standard for the model to aim at, and the prompt is where a standard like that
@@ -303,10 +307,11 @@ for a while, which is exactly why it has to be ruled out by name.
 - **Not a coded axiom, on purpose.** No check could settle whether a site reads as one
   experience, in the way `check_reachability` settles whether a page is orphaned, so this is a
   standard stated to the model and nothing else — the same reasoning that leaves the
-  engagement-time definition uncoded. The seven coded axioms are still the whole of what the code
-  refuses, and a plan that adds a page sharing nothing with the rest is accepted exactly as before.
-  A test holds that open: it asserts the accepted plan *and* that no eighth `check_` has quietly
-  appeared.
+  engagement-time definition uncoded. A plan that adds a page sharing nothing with the rest is
+  accepted exactly as before. A test holds that open: it asserts the accepted plan *and* the whole
+  list of `check_` functions, so an axiom cannot be added or retired without saying so there. That
+  list grew to eight when [Destructive-caution axiom](#destructive-caution-axiom) arrived, which is
+  what tells a standard no check could judge apart from a law that can be held.
 
 ### Legible to a stranger
 
@@ -332,9 +337,9 @@ saying where to go next, and the home page explained none of its own words.
   screen, and what follows it is the feed and nothing else, with no caption); copy that speaks to the visitor
   and never about the machinery; and never a dead end, which is its own standard below.
 - **Deliberately not held to in code.** No check could judge whether a page reads clearly, so the
-  prompt is where this standard lives, exactly as `WHOLE` and `INTERESTING` do: the seven coded
-  axioms are still the whole of what the code refuses, and `LegibilityStandardTest` holds the
-  prompt to the standard the way `EngagementTimeTest` holds it to the measure.
+  prompt is where this standard lives, exactly as `WHOLE` and `INTERESTING` do: it is not among the
+  eight coded axioms, and `LegibilityStandardTest` holds the prompt to the standard the way
+  `EngagementTimeTest` holds it to the measure.
 - **One list of pages.** [`site/_data/worlds.json`](site/_data/worlds.json) is the one place a
   world's name, orientation, mood, card aspect and one-line description are kept, in one flat
   list. The feed ([`site/_includes/worlds.njk`](site/_includes/worlds.njk)), the site map and the
@@ -364,7 +369,7 @@ and never replaces it: for the sky, a button that opens the persona sheet, where
 by hand.
 
 - **Stated in the prompt**, under `POWERED DOWN, NEVER BROKEN`, to the model only: as with `WHOLE`,
-  no check could tell a dead end from a deliberate one, so a seventh `check_` was ruled out
+  no check could tell a dead end from a deliberate one, so a `check_` of its own was ruled out
   (issue #46, question 1).
 - **Held in the framework.** `window.interestingSite.unlock(host, { onReady })` in
   [`site/js/site.js`](site/js/site.js) is the pattern made shared: pass it the element to power
@@ -602,7 +607,7 @@ iteration process rather than a one-off tidy-up.
   [`.github/scripts/make_interesting.py`](.github/scripts/make_interesting.py) refuses a plan that
   leaves a page without the line, and `pages_touching_storage` refuses one in which a page — or a
   shared script it loads — reaches for the browser's storage behind the store's back, because that
-  would be state the meta menu could not export. As with the other five, only what the run itself
+  would be state the meta menu could not export. As with the other seven, only what the run itself
   breaks is refused.
 - **The file is out of reach.** `js/state.js` is in `FIXED_FILES` beside the analytics files: never
   shown to a model, refused outright as a write or a delete, and skipping the prompt budget. A
@@ -621,13 +626,14 @@ iteration process rather than a one-off tidy-up.
 The site asks before it offers. The target of interest is **the whole population**, not the part of
 it that happens to like whatever aesthetic the site is wearing, so no page puts particular content
 in front of a visitor on the assumption that they want it: the site makes an effort to ascertain
-their mood or mental orientation first, and what is offered follows from that. Like the five above,
-this is an invariant of the iteration rather than a one-off change to the site as it stands.
+their mood or mental orientation first, and what is offered follows from that. Like the five above
+and the two below, this is an invariant of the iteration rather than a one-off change to the site as
+it stands.
 
 - **One line per page, again.** Every page carries
   `<script src='js/threshold.js' defer></script>` in its `<head>`, written once in
   [`site/_includes/layout.njk`](site/_includes/layout.njk). That file
-  ([`site/js/threshold.js`](site/js/threshold.js)) is the whole flow: fourteen orientations and
+  ([`site/js/threshold.js`](site/js/threshold.js)) is the whole flow: fifteen orientations and
   the world each one opens onto, the library of query mechanisms, the clock and time-zone signals
   read alongside an answer, and how much of a past visit survives. What it reads is shown beside
   the persona's avatar and in the persona sheet
@@ -658,7 +664,7 @@ this is an invariant of the iteration rather than a one-off change to the site a
   the rest of a visitor's state — and the gap that document already records is what tells an
   arrival apart from a click through the site.
 - **The whole site transmogrifies.** The ascertained orientation lands on `<html data-mood>`, and
-  `_sass/_mood.scss` turns that into fourteen palettes over the shared custom properties in
+  `_sass/_mood.scss` turns that into fifteen palettes over the shared custom properties in
   `_tokens.scss`, so every page re-skins itself. The flow is ongoing rather than a gate at the
   front door: any page can ask again, in a new way.
 - **Never a gate.** The query sits outside `<main>`, and every world is a plain link from the
@@ -730,7 +736,7 @@ addition — and it is the only one that is about the reader rather than about t
   one required box — *what should the site do, be, or become?* — a prefilled *where you were*, an
   optional *how far does it reach?*, an optional *why it would make the site more interesting*
   (which says what *interesting* means here, so an answer can aim the next change), and a closing
-  note on what happens next and on the seven things no change can break. `something-is-wrong.yml`
+  note on what happens next and on the eight things no change can break. `something-is-wrong.yml`
   is the other half of steering, for a page that does not work, and it points at the *state* button
   for anyone whose saved sky is part of the problem. `config.yml` keeps blank issues enabled: a
   form is here to save someone the trouble of inventing a shape, never to insist on one — the same
@@ -742,7 +748,7 @@ addition — and it is the only one that is about the reader rather than about t
   the site in its own prose is welcome, and is not a substitute for the line.
 - **Held to in code.** `check_participate` in
   [`.github/scripts/make_interesting.py`](.github/scripts/make_interesting.py) refuses a plan that
-  leaves a page without the line. As with the other six, only what the run itself breaks is
+  leaves a page without the line. As with the other seven, only what the run itself breaks is
   refused.
 - **The file is out of reach.** `js/participate.js` is in `FIXED_FILES` beside the analytics files
   and the local-state store: never shown to a model, refused outright as a write or a delete, and
@@ -754,6 +760,91 @@ addition — and it is the only one that is about the reader rather than about t
   really there. `ParticipateButtonTest` goes further and runs the real `participate.js` against a
   stub browser ([`participate_harness.mjs`](.github/scripts/participate_harness.mjs)) — the link,
   its name, its icon, what it knows about which page it is on, and what it refuses to carry.
+
+### Destructive-caution axiom
+
+Caution before a destructive action is a law of the site rather than a page's own choice. Any
+control that throws a visitor's saved state away **reads as a warning button**, and **every press of
+one opens the one shared modal** that asks *"are you sure you want to \_\_\_\_\_\_?"* with the
+specific thing about to go in the blank — *clear your constellation*, *throw away everything this
+site has kept in your browser* — and never a generic "are you sure?". Like the seven above, it is an
+invariant of the iteration rather than a one-off tidy-up.
+
+Both halves are about **consistency**, not about friction. The button is recognised as dangerous
+before it is read, because it is the only warm control on a site of cool ones; and the question is
+the same question in every corner, so a visitor learns in one place what a press is going to cost
+them everywhere. **That is the safety switch** — there is no separate arming affordance, no
+checkbox, no toggle and no hold-to-arm press, and the modal is a plain confirm/cancel with nothing
+to type and no second press. *Don't overdo it.*
+
+- **The threshold**, because there is a spectrum of severity and the caution has to begin
+  somewhere:
+  - **Above it**, held to both halves: a press that is **nothing but a loss**. The whole
+    local-state document goes, or the whole of one name in it — a sky, a reading, a kept list — and
+    nothing takes its place. Today: the meta menu's *clear*, the persona sheet's *clear the sky*
+    and *forget my reading*, the mood atlas's *forget my reading*, *clear omens* in the sky
+    archive, *empty the drawer* on the apocrypha desk, *empty the kiln* in the word kiln.
+  - **At it**, held to the modal but not the warning: a **trade rather than a loss**. The whole of
+    a name goes, but something the visitor asked for arrives in its place — *seed a small sky* over
+    a placed one, *replace mine* over your own document. The question is the same; the paint is
+    not, because the one button that gets a beginner started, and the one that walks a visitor into
+    someone else's sky, are not dangers to be warned about.
+  - **Below it**, held to neither: **one thing rather than the whole thing** — *remove this star*,
+    one entry out of a list that can be added to again, which one more press puts back — and
+    anything that only changes what is on the screen: *sweep the floor*, *reset decoder*, *turn the
+    soil*. *remove* is the site's word for the one-item case, and naming it that is what lets the
+    sweep of words below stay narrow.
+- **One shared component.** `window.interestingSite.destructive(control, options)` in
+  [`site/js/site.js`](site/js/site.js) is the whole law made shared: pass it the control and what
+  the press is about to cost, and it paints the warning, guards every press with the modal, and
+  calls back when the visitor says yes. `areYouSure(options)` is that modal alone, for a control at
+  the threshold rather than above it. `options.when` says whether there is anything to lose right
+  now, so an empty drawer emptied again takes nothing away and asks nothing — and the warning stays
+  on the control either way, because a control that changes its clothes is a control nobody learns.
+  [`site/_sass/_controls.scss`](site/_sass/_controls.scss) paints both: `button.warning` beside the
+  ordinary pill, and `.are-you-sure`, which reaches every page through `css/site.scss`.
+- **What a visitor is owed, once.** The modal is a `<dialog>`, so the browser supplies the
+  backdrop, the focus trap and Escape; the focus starts on *cancel*, because the one press someone
+  who got here by mistake should be a key away from is the one that changes nothing, and it comes
+  back to the control that opened it however the question is answered. A press on the backdrop
+  dismisses it, the buttons are 44px and wrap, and the box fits a 320px screen. Nothing in it
+  animates, so there is no motion to answer for.
+- **The meta menu adopts it too.** [`site/js/state.js`](site/js/state.js) is in `FIXED_FILES`, is
+  never shown to a model and deliberately carries its own inline styles — and its *clear* still
+  goes through the shared component, because a visitor should meet the same question there as in a
+  world. It used to ask `window.confirm('Clear everything this site has kept in your browser?')`
+  and wear no warning at all. The one concession to the file being fixed is an adapter: if
+  `js/site.js` — ordinary site source, and a run's to rewrite — no longer offers the component, the
+  menu falls back to the browser's own question, which is less good and still asks. The menu paints
+  its own `.warning`, under the same class name, for the same reason it paints its own everything.
+- **Stated in the prompt.** The eighth `AXIOM` in the `Rules:` block names the class, shows the
+  call, states the three steps of the threshold, and names in full the family of words the code
+  reads as destructive — *clear*, *forget*, *empty*, *erase*, *wipe*, *delete*, *discard*, *throw
+  away*, *throw out* — so it is a rule a run can follow rather than a trap it springs, as with the
+  cadence and mood axioms.
+- **Held to in code.** `check_destructive` in
+  [`.github/scripts/make_interesting.py`](.github/scripts/make_interesting.py) refuses three
+  things: a plan that leaves the site without the shared component (the behaviour in `js/site.js`
+  or the `.warning` treatment in `css/site.css`); a plan in which a control whose own words say it
+  throws saved state away does not wear the warning class, read off the page as committed; and a
+  plan in which a page, or a script it loads, calls `window.confirm`. As with the other seven, only
+  what the run itself breaks is refused, and every reason is one control's name or one file's, so a
+  partial repair can only take reasons away.
+- **What is deliberately not checked**: whether a given control is above the threshold or below it,
+  and whether a warning button's press really reaches the modal. No regex can tie a click handler
+  to the button it was attached to, and no code can judge how much a visitor would miss what a
+  press takes away. So the prompt asks for both and the check does not pretend to — the same
+  bargain the mood axiom makes with "is this a good question".
+- **Read off the page as committed**, like the reachability and accessibility checks: `<script>`
+  bodies are handed over as opaque text, so a control a page builds inside a JavaScript string is
+  not a control of the page. The meta menu's own buttons are built that way and are in a fixed file
+  besides, which is why `LocalStateStoreTest` is what holds them instead.
+- **True of the site as committed**, not only of what a future run writes: `RealSiteTest` sweeps
+  the built site on every pull request and before every deploy. That sweep is what found *clear
+  omens*, *empty the drawer* and *empty the kiln* pressing without a word of warning, and the two
+  `window.confirm` calls the persona sheet had grown. `LocalStateStoreTest` drives the meta menu's
+  *clear* and *replace mine* against the stub browser, with the shared component in place and with
+  it taken away, so the confirmation path there stays tested.
 
 ### Silo
 

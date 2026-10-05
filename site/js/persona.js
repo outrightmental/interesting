@@ -771,17 +771,32 @@
         select(fieldStars.length - 1);
       });
     }
+    function seedTheSky() {
+      var kept = seed();
+      sheetStatus('Seeded ' + fieldStars.length + ' stars. Drag them into a shape, or tap the sky for more.' + keptNote(kept));
+      var first = sheet.field.querySelector('.persona-star');
+      if (first) first.focus();
+    }
+
     if (sheet.seed) {
       sheet.seed.addEventListener('click', function () {
-        if (fieldStars.length && !window.confirm('Seed a fresh sky? The ' + fieldStars.length
-          + ' star' + (fieldStars.length === 1 ? '' : 's') + ' you have will go.')) {
-          sheetStatus('Kept as it was.');
+        if (!fieldStars.length) {
+          seedTheSky();
           return;
         }
-        var kept = seed();
-        sheetStatus('Seeded ' + fieldStars.length + ' stars. Drag them into a shape, or tap the sky for more.' + keptNote(kept));
-        var first = sheet.field.querySelector('.persona-star');
-        if (first) first.focus();
+        // At the threshold rather than above it: the placed sky goes, but a sky arrives in its
+        // place, so it asks the same question through the same shared modal and wears no warning.
+        // The one button that gets a visitor started must not read as a danger. See "Caution
+        // before a destructive action" in js/site.js.
+        window.interestingSite.areYouSure({
+          what: 'seed a fresh sky over the one you have placed',
+          detail: 'The ' + fieldStars.length + ' star' + (fieldStars.length === 1 ? '' : 's')
+            + ' you placed would go, and ' + SEED_COUNT + ' new ones would take their place.',
+          confirm: 'seed a fresh sky',
+          opener: sheet.seed,
+          onConfirm: seedTheSky,
+          onCancel: function () { sheetStatus('Kept as it was.'); }
+        });
       });
     }
     if (sheet.remove) {
@@ -789,30 +804,46 @@
         if (selected >= 0) removeStar(selected);
       });
     }
+    // Above the threshold: the whole sky goes and nothing takes its place, so it is a warning
+    // button guarded by the one modal (window.interestingSite.destructive in js/site.js). The
+    // class is in the markup as well, so the control reads as a warning before any script runs.
     if (sheet.clear) {
-      sheet.clear.addEventListener('click', function () {
-        if (!fieldStars.length) {
-          sheetStatus('The sky is already empty.');
-          return;
-        }
-        if (!window.confirm('Clear every star from your sky? Every world that reads it will read nothing until you place more.')) {
-          sheetStatus('Kept as it was.');
-          return;
-        }
-        var kept = clear();
-        sheetStatus('Cleared. ' + fieldIntro(fieldStars) + keptNote(kept));
-        if (sheet.drop) sheet.drop.focus();
+      window.interestingSite.destructive(sheet.clear, {
+        what: 'clear your constellation',
+        detail: function () {
+          return 'The ' + fieldStars.length + ' star' + (fieldStars.length === 1 ? '' : 's')
+            + ' you placed would go, and every world that reads it would read nothing until you '
+            + 'place more.';
+        },
+        when: function () { return fieldStars.length > 0; },
+        onConfirm: function () {
+          if (!fieldStars.length) {
+            sheetStatus('The sky is already empty.');
+            return;
+          }
+          var kept = clear();
+          sheetStatus('Cleared. ' + fieldIntro(fieldStars) + keptNote(kept));
+          if (sheet.drop) sheet.drop.focus();
+        },
+        onCancel: function () { sheetStatus('Kept as it was.'); }
       });
     }
     if (sheet.ask) sheet.ask.addEventListener('click', function () { askInSheet(true); });
+    // Above the threshold too: the whole reading goes, and the site has to ask all over again.
     if (sheet.forget) {
-      sheet.forget.addEventListener('click', function () {
-        var t = window.threshold;
-        if (t && typeof t.forget === 'function') t.forget();
-        renderReading();
-        refresh();
-        if (sheet.reading) sheet.reading.textContent = 'The reading is forgotten. Your stars stay.';
-        if (sheet.ask) sheet.ask.focus();
+      window.interestingSite.destructive(sheet.forget, {
+        what: 'forget what this site has read about you',
+        detail: 'The orientation it arrived at would go, and the palette the site is wearing with '
+          + 'it. Your stars stay. It asks again whenever you like.',
+        onConfirm: function () {
+          var t = window.threshold;
+          if (t && typeof t.forget === 'function') t.forget();
+          renderReading();
+          refresh();
+          if (sheet.reading) sheet.reading.textContent = 'The reading is forgotten. Your stars stay.';
+          if (sheet.ask) sheet.ask.focus();
+        },
+        onCancel: renderReading
       });
     }
 
