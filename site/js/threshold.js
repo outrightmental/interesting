@@ -82,6 +82,8 @@
       world: 'constellation-weather.html', worldName: 'the weather lab' },
     { id: 'attentive', name: 'ears first', pull: 'wants to listen to something decay',
       world: 'constellation-echo.html', worldName: 'the echo chamber' },
+    { id: 'metrical', name: 'counting in echoes', pull: 'wants a pulse to keep time with',
+      world: 'pulse-choir.html', worldName: 'the pulse choir' },
     { id: 'tending', name: 'minding something', pull: 'wants a living thing to keep',
       world: 'wish-terrarium.html', worldName: 'the terrarium' },
     { id: 'divinatory', name: 'asking elsewhere', pull: 'wants an answer it did not author',
@@ -107,7 +109,7 @@
         { label: 'the one with a light under it', detail: 'someone left a lamp on and a page half-turned',
           weights: { verbal: 3, brooding: 2, curious: 1 } },
         { label: 'the one that hums', detail: 'a machine behind it, running without supervision',
-          weights: { analytic: 3, geometric: 2, attentive: 1 } }
+          weights: { analytic: 3, geometric: 2, attentive: 1, metrical: 1 } }
       ]
     },
     {
@@ -123,7 +125,7 @@
         { label: 'a pocket notebook', detail: 'two thirds used, the pencil lost',
           weights: { verbal: 3, brooding: 2, curious: 1 } },
         { label: 'a small brass bell', detail: 'it only rings when you mean it to',
-          weights: { ceremonial: 3, attentive: 2, divinatory: 1 } }
+          weights: { ceremonial: 3, attentive: 2, divinatory: 1, metrical: 1 } }
       ]
     },
     {
@@ -137,7 +139,7 @@
         { label: 'a courtyard with one tree in it', detail: 'the tree is doing fine',
           weights: { rooted: 3, tending: 2, tender: 2 } },
         { label: 'a lit workshop across the way', detail: 'someone is still in there, making something',
-          weights: { analytic: 3, verbal: 1, curious: 2 } }
+          weights: { analytic: 3, verbal: 1, curious: 2, metrical: 1 } }
       ]
     },
     {
@@ -159,7 +161,7 @@
       ask: 'Five things are on the table. Four of them belong together. Take away the one that does not.',
       options: [
         { label: 'a tuning fork', detail: 'because the others are silent',
-          weights: { attentive: 3, ceremonial: 1, analytic: 1 } },
+          weights: { attentive: 3, ceremonial: 1, analytic: 1, metrical: 2 } },
         { label: 'a pressed leaf', detail: 'because the others were made',
           weights: { rooted: 3, tending: 2 } },
         { label: 'a six-sided die', detail: 'because the others are not asking anything',
@@ -197,7 +199,7 @@
           label: 'a hand bell',
           detail: 'wrapped in cloth',
           slots: [
-            { ceremonial: 2, attentive: 1 },
+            { ceremonial: 2, attentive: 1, metrical: 1 },
             { divinatory: 2, verbal: 1 },
             { tempestuous: 2, restless: 1 }
           ]
@@ -224,7 +226,7 @@
           slots: [
             { analytic: 2, geometric: 1 },
             { restless: 1, tempestuous: 1 },
-            { analytic: 1, verbal: 1 }
+            { analytic: 1, verbal: 1, metrical: 1 }
           ]
         },
         {
@@ -233,7 +235,7 @@
           slots: [
             { attentive: 2, cosmic: 1 },
             { divinatory: 2, brooding: 1 },
-            { attentive: 1, tender: 1 }
+            { attentive: 1, tender: 1, metrical: 1 }
           ]
         },
         {
@@ -277,7 +279,7 @@
         ] },
         { ask: 'Second landing. Something is on the floor.', options: [
           { label: 'step over it', detail: 'you have somewhere to be',
-            weights: { restless: 2, analytic: 1, geometric: 1 } },
+            weights: { restless: 2, analytic: 1, geometric: 1, metrical: 1 } },
           { label: 'crouch down and look', detail: 'you did not have anywhere to be',
             weights: { curious: 2, attentive: 1, tending: 1 } }
         ] },
@@ -306,7 +308,7 @@
           { label: 'mirror glass', weights: { geometric: 2, cosmic: 1 } }
         ] },
         { ask: 'one or the other', options: [
-          { label: 'a long echo', weights: { attentive: 2, brooding: 1 } },
+          { label: 'a long echo', weights: { attentive: 2, brooding: 1, metrical: 2 } },
           { label: 'a struck match', weights: { ceremonial: 2, curious: 1 } }
         ] },
         { ask: 'one or the other', options: [
@@ -321,12 +323,12 @@
       label: 'tap',
       buckets: [
         { under: 220, weights: { restless: 3, tempestuous: 2, verbal: 1 } },
-        { under: 420, weights: { analytic: 2, geometric: 2, curious: 2 } },
-        { under: 800, weights: { attentive: 2, tending: 2, verbal: 1 } },
+        { under: 420, weights: { analytic: 2, geometric: 2, curious: 2, metrical: 2 } },
+        { under: 800, weights: { attentive: 2, tending: 2, verbal: 1, metrical: 2 } },
         { under: 1600, weights: { brooding: 2, rooted: 2, ceremonial: 1 } },
         { under: Infinity, weights: { tender: 3, cosmic: 2, brooding: 1 } }
       ],
-      wobble: { steady: { geometric: 2, analytic: 1 }, loose: { tempestuous: 2, curious: 1 } }
+      wobble: { steady: { geometric: 2, analytic: 1, metrical: 3 }, loose: { tempestuous: 2, curious: 1 } }
     },
     {
       probe: 'hold', name: 'press and hold', kind: 'hold',
@@ -335,7 +337,7 @@
       buckets: [
         { under: 500, weights: { restless: 3, analytic: 1 } },
         { under: 1500, weights: { curious: 2, verbal: 2, geometric: 1 } },
-        { under: 3500, weights: { attentive: 2, tending: 2, ceremonial: 1 } },
+        { under: 3500, weights: { attentive: 2, tending: 2, ceremonial: 1, metrical: 1 } },
         { under: 7000, weights: { brooding: 2, rooted: 2, tender: 1 } },
         { under: Infinity, weights: { tender: 3, cosmic: 2, divinatory: 1 } }
       ]
@@ -349,7 +351,7 @@
         bottomLeft: { rooted: 3, tender: 1 },
         bottomRight: { analytic: 2, geometric: 2 }
       },
-      centre: { divinatory: 2, attentive: 1 },
+      centre: { divinatory: 2, attentive: 1, metrical: 1 },
       edge: { curious: 2, verbal: 1 }
     },
     {
@@ -358,7 +360,7 @@
       short: { tender: 2, analytic: 1 },
       long: { restless: 2, tempestuous: 1 },
       straight: { geometric: 3, analytic: 1 },
-      curved: { tending: 2, verbal: 2, attentive: 1 },
+      curved: { tending: 2, verbal: 2, attentive: 1, metrical: 1 },
       jagged: { tempestuous: 3, restless: 1 }
     },
     {
@@ -433,10 +435,10 @@
   var PARTS = [
     { until: 5, part: 'the small hours', weights: { cosmic: 2, brooding: 2, tender: 1, divinatory: 1 } },
     { until: 8, part: 'first light', weights: { rooted: 2, tender: 2, tending: 1 } },
-    { until: 12, part: 'the morning', weights: { analytic: 2, verbal: 2, geometric: 1 } },
+    { until: 12, part: 'the morning', weights: { analytic: 2, verbal: 2, geometric: 1, metrical: 1 } },
     { until: 15, part: 'the middle of the day', weights: { restless: 2, curious: 2, analytic: 1 } },
     { until: 18, part: 'the afternoon', weights: { curious: 2, tending: 1, verbal: 1 } },
-    { until: 21, part: 'dusk', weights: { ceremonial: 2, attentive: 2, brooding: 1 } },
+    { until: 21, part: 'dusk', weights: { ceremonial: 2, attentive: 2, brooding: 1, metrical: 1 } },
     { until: 24, part: 'the night', weights: { cosmic: 2, tempestuous: 1, attentive: 1, ceremonial: 1 } }
   ];
 
