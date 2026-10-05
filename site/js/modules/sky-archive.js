@@ -34,6 +34,7 @@ function runeFor(env, star) {
 
 function wheel(ctx, w, h, env, lit) {
   const c = env.colors;
+  const v = env.variant;
   const g = ctx.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, Math.max(w, h) * 0.75);
   g.addColorStop(0, c.bg2);
   g.addColorStop(1, c.bg);
@@ -41,7 +42,7 @@ function wheel(ctx, w, h, env, lit) {
   ctx.fillRect(0, 0, w, h);
   const cx = w / 2;
   const cy = h / 2;
-  const R = Math.min(w, h) * 0.42;
+  const R = Math.min(w, h) * 0.42 * v.scale;
   ctx.strokeStyle = env.alpha(c.accent, 0.4);
   ctx.lineWidth = 1;
   for (const r of [R, R * 0.78, R * 0.3]) {
@@ -53,7 +54,7 @@ function wheel(ctx, w, h, env, lit) {
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   env.stars.forEach((s) => {
-    const a = Math.atan2(s.y - 50, s.x - 50);
+    const a = Math.atan2(s.y - 50, s.x - 50) + v.turn * Math.PI * 2;
     const rune = runeFor(env, s);
     const on = lit && rune[1] === lit[1];
     const rx = cx + Math.cos(a) * R * 0.89;

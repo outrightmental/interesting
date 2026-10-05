@@ -23,7 +23,8 @@ function nearest(stars, star) {
 
 function logbook(ctx, w, h, env) {
   const c = env.colors;
-  const split = h * 0.58;
+  const v = env.variant;
+  const split = h * (0.5 + v.turn * 0.16);
   const g = ctx.createLinearGradient(0, 0, 0, split);
   g.addColorStop(0, c.bg2);
   g.addColorStop(1, c.bg);
@@ -41,13 +42,13 @@ function logbook(ctx, w, h, env) {
   for (const p of pts) {
     ctx.fillStyle = env.alpha(c.fg, 0.95);
     ctx.beginPath();
-    ctx.arc(p.x, p.y, 1.8, 0, Math.PI * 2);
+    ctx.arc(p.x, p.y, 1.8 * v.scale, 0, Math.PI * 2);
     ctx.fill();
   }
   // The logbook page beneath: ruled, with one mark per star in the order they were placed.
   ctx.fillStyle = env.mix(c.bg, c.fg, 0.06);
   ctx.fillRect(0, split, w, h - split);
-  const lines = 5;
+  const lines = Math.max(3, Math.round(5 * v.density));
   const step = (h - split) / (lines + 1);
   for (let i = 1; i <= lines; i++) {
     ctx.strokeStyle = env.alpha(c.accent, 0.25);

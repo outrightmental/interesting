@@ -15,12 +15,13 @@ const WORDS = ['in — hold — out', 'nothing is required of you here', 'the do
 
 function room(ctx, w, h, env, swell, dim) {
   const c = env.colors;
+  const v = env.variant;
   const g = ctx.createRadialGradient(w / 2, h * 0.46, 0, w / 2, h * 0.46, Math.max(w, h) * 0.7);
   g.addColorStop(0, env.mix(c.bg, c.accent, 0.1));
   g.addColorStop(1, c.bg);
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, w, h);
-  const r = Math.min(w, h) * (0.17 + swell * 0.11);
+  const r = Math.min(w, h) * (0.17 + swell * 0.11) * v.scale;
   const glow = ctx.createRadialGradient(w / 2, h / 2, r * 0.2, w / 2, h / 2, r * 1.6);
   glow.addColorStop(0, env.alpha(c.accent, 0.28 + swell * 0.2));
   glow.addColorStop(0.7, env.alpha(c.accent, 0.06));
@@ -44,7 +45,7 @@ export default {
     room(ctx, w, h, env, 0.5, 0);
   },
   animate(ctx, w, h, env, t) {
-    const phase = (t % 12) / 12;
+    const phase = ((t % 12) / 12 + env.variant.turn) % 1;
     const swell = (1 - Math.cos(phase * Math.PI * 2)) / 2;
     room(ctx, w, h, env, swell, 0);
   },

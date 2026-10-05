@@ -17,6 +17,7 @@ const CLOSERS = [
 
 function echoes(ctx, w, h, env, t) {
   const c = env.colors;
+  const v = env.variant;
   const g = ctx.createLinearGradient(0, 0, 0, h);
   g.addColorStop(0, c.bg2);
   g.addColorStop(1, c.bg);
@@ -27,7 +28,7 @@ function echoes(ctx, w, h, env, t) {
     x: p.x + Math.sin(t * 0.5 + i * 1.7) * 6,
     y: p.y + Math.cos(t * 0.4 + i * 2.3) * 5
   }));
-  const maxD = Math.min(w, h) * 0.3;
+  const maxD = Math.min(w, h) * 0.3 * v.scale;
   ctx.lineWidth = 1;
   for (let a = 0; a < pts.length; a++) {
     for (let b = a + 1; b < pts.length; b++) {
@@ -42,10 +43,10 @@ function echoes(ctx, w, h, env, t) {
   }
   pts.forEach((p, i) => {
     const pulse = 0.6 + Math.sin(t * 2 + i) * 0.3;
-    for (let r = 1; r <= 3; r++) {
-      ctx.strokeStyle = env.alpha(c.accent, (0.3 - r * 0.08) * pulse);
+    for (let r = 1, rings = Math.max(1, Math.round(3 * v.density)); r <= rings; r++) {
+      ctx.strokeStyle = env.alpha(c.accent, Math.max(0.03, 0.3 - r * (0.24 / rings)) * pulse);
       ctx.beginPath();
-      ctx.arc(p.x, p.y, 4 + r * 5 * pulse, 0, Math.PI * 2);
+      ctx.arc(p.x, p.y, (4 + r * 5 * pulse) * v.scale, 0, Math.PI * 2);
       ctx.stroke();
     }
     ctx.fillStyle = env.alpha(c.fg, 0.95);
@@ -59,10 +60,10 @@ export default {
   id: 'constellation-echo',
   needsSky: true,
   paint(ctx, w, h, env) {
-    echoes(ctx, w, h, env, env.rnd() * 10);
+    echoes(ctx, w, h, env, env.variant.turn * 12 + env.rnd() * 10);
   },
   animate(ctx, w, h, env, t) {
-    echoes(ctx, w, h, env, t);
+    echoes(ctx, w, h, env, t + env.variant.turn * 12);
   },
   spark(env) {
     const stars = env.stars;

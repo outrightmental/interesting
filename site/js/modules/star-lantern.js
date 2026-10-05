@@ -3,6 +3,7 @@
 
 function lanterns(ctx, w, h, env, litIndex, t) {
   const c = env.colors;
+  const v = env.variant;
   const g = ctx.createLinearGradient(0, 0, 0, h);
   g.addColorStop(0, c.bg);
   g.addColorStop(1, c.bg2);
@@ -10,14 +11,14 @@ function lanterns(ctx, w, h, env, litIndex, t) {
   ctx.fillRect(0, 0, w, h);
   const pts = env.points(w, h, 18);
   pts.forEach((p, i) => {
-    const bob = t ? Math.sin(t * 0.8 + i * 1.1) * 3 : 0;
+    const bob = t ? Math.sin(t * 0.8 + i * 1.1 + v.turn * Math.PI * 2) * 3 : 0;
     const x = p.x;
     const y = p.y + bob;
     const lit = i === litIndex;
-    const lw = 10;
-    const lh = 14;
+    const lw = 10 * v.scale;
+    const lh = 14 * v.scale;
     if (lit) {
-      const glow = ctx.createRadialGradient(x, y, 0, x, y, 34);
+      const glow = ctx.createRadialGradient(x, y, 0, x, y, 34 * v.scale);
       glow.addColorStop(0, env.alpha(c.accent2, 0.55));
       glow.addColorStop(1, env.alpha(c.accent2, 0));
       ctx.fillStyle = glow;
