@@ -360,7 +360,7 @@ and never replaces it: for the sky, a button that opens the persona sheet, where
 by hand.
 
 - **Stated in the prompt**, under `POWERED DOWN, NEVER BROKEN`, to the model only: as with `WHOLE`,
-  no check could tell a dead end from a deliberate one, so a seventh `check_` was ruled out
+  no check could tell a dead end from a deliberate one, so a ninth `check_` was ruled out
   (issue #46, question 1).
 - **Held in the framework.** `window.interestingSite.unlock(host, { onReady })` in
   [`site/js/site.js`](site/js/site.js) is the pattern made shared: pass it the element to power
