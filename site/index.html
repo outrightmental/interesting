@@ -4,11 +4,104 @@ title: the threshold
 description: 'Small interactive worlds, from a quiet room and a machine shop to a sky you fill with wishes, in one feed that keeps going. One short sideways question picks the first to open; every world is a card if you would rather choose.'
 stylesheet: index
 ---
-  <div class='drift' aria-hidden='true'></div>
-
-  <main>
-    <h1>the threshold</h1>
-    <p class='tagline'>{{ worlds.worlds.length | words | capitalize }} small worlds in one feed. Use the persona card above to answer one sideways question for a suggested first world, or skip it and open any card below.</p>
-    <p class='story'>The threshold is this front page. A world is one interactive page, and an orientation is the frame of mind a world is built for. The persona card is where you place stars and answer the question; those two signals shape what the site suggests next.</p>
-    <p class='hint'>Nothing is locked. Every world is open in the feed below, and <a href='moods.html'>the mood atlas</a> shows every orientation, every question style, and how the suggestion is chosen.</p>
+{#-
+  The threshold: the way in, and the page that is the question. Its feature is the sideways
+  question itself, asked here on arrival (js/persona.js mounts it in #persona-probe, which this
+  page hosts), and once answered the feature becomes the world the answer opens onto: painted
+  full-bleed behind the reading by js/feed.js (window.interestingFeed.feature), with the one
+  button that goes there. Nothing is explained that the feed below does not show.
+-#}
+  <main class='threshold' id='threshold' data-mode='quiet'>
+    <canvas class='threshold-canvas' id='threshold-canvas' aria-hidden='true'></canvas>
+    <div class='threshold-inner'>
+      <h1>the threshold</h1>
+      <div class='threshold-quiet' id='threshold-quiet'>
+        <p class='threshold-pull'>One sideways question, and a world to start in.</p>
+        <div class='controls'>
+          <button type='button' class='btn-filled' id='threshold-ask'>ask me</button>
+        </div>
+      </div>
+      <div class='persona-probe threshold-probe' id='persona-probe' hidden></div>
+      <div class='threshold-reading' id='threshold-reading' hidden>
+        <p class='threshold-overline' id='threshold-overline'></p>
+        <p class='threshold-name' id='threshold-name'></p>
+        <p class='threshold-pull' id='threshold-pull'></p>
+        <div class='controls'>
+          <a class='action btn-filled' id='threshold-go' href='moods.html'>go</a>
+          <button type='button' class='btn-text' id='threshold-again'>ask another way</button>
+        </div>
+      </div>
+    </div>
   </main>
+
+  <script>
+    (function () {
+      var main = document.getElementById('threshold');
+      var canvas = document.getElementById('threshold-canvas');
+      var probe = document.getElementById('persona-probe');
+      var quiet = document.getElementById('threshold-quiet');
+      var reading = document.getElementById('threshold-reading');
+      var overline = document.getElementById('threshold-overline');
+      var name = document.getElementById('threshold-name');
+      var pull = document.getElementById('threshold-pull');
+      var go = document.getElementById('threshold-go');
+      var featured = null;
+
+      function current() {
+        var t = window.threshold;
+        if (!t || typeof t.reading !== 'function') return null;
+        try {
+          return t.reading();
+        } catch (e) {
+          return null;
+        }
+      }
+
+      // The world the reading opens onto, painted across the whole feature by the feed's module
+      // for it, or nothing while the question is open or nothing has been read.
+      function feature(file) {
+        var feed = window.interestingFeed;
+        if (!feed || file === featured) return;
+        featured = file;
+        if (file) feed.feature(main, canvas, file);
+        else feed.unfeature(main);
+      }
+
+      function render() {
+        var asking = !!(probe && !probe.hidden);
+        var r = current();
+        var o = r && r.orientation;
+        var read = !!(o && r.source && r.source !== 'signals');
+        main.setAttribute('data-mode', asking ? 'asking' : (read ? 'read' : 'quiet'));
+        quiet.hidden = asking || read;
+        reading.hidden = asking || !read;
+        if (read) {
+          overline.textContent = r.source === 'answer' ? 'read just now as' : 'carried over from your last answer';
+          name.textContent = o.name;
+          pull.textContent = o.pull.charAt(0).toUpperCase() + o.pull.slice(1) + '. That opens onto ' + o.worldName + '.';
+          go.href = o.world;
+          go.textContent = 'go to ' + o.worldName;
+        }
+        feature(read && !asking ? o.world : null);
+      }
+
+      function ask() {
+        if (window.interestingPersona) window.interestingPersona.ask();
+      }
+
+      document.getElementById('threshold-ask').addEventListener('click', ask);
+      document.getElementById('threshold-again').addEventListener('click', ask);
+      // The persona asks on arrival by un-hiding the host this page lends it, and clears it when
+      // the question is answered or skipped; both are the cue to redraw the feature.
+      if (probe && window.MutationObserver) {
+        new MutationObserver(render).observe(probe, { attributes: true, attributeFilter: ['hidden'] });
+      }
+      window.addEventListener('threshold:reading', render);
+      window.addEventListener('feed:ready', render);
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', render);
+      } else {
+        render();
+      }
+    })();
+  </script>

@@ -4,10 +4,12 @@
   _data/worlds.json is the one place the list and every world's name are kept: a world is added,
   renamed or retired there, and this include, the site map and the mood atlas all follow.
 
-  One flat list, no groups. Each card carries the world's orientation over its name -- the same
-  phrase the persona card reads a visitor as -- and the world's own palette, through data-mood
-  (_sass/_mood.scss), so the feed is a mosaic of the moods the worlds answer to. The world a
-  visitor is already on is left out of its own feed.
+  One flat list, no groups, and no caption: the grid speaks for itself, so its heading is written
+  for screen readers only and nothing is said about how many worlds there are or what to do with
+  them. Each card carries the world's orientation over its name -- the same phrase the persona
+  reads a visitor as -- and the world's own palette, through data-mood (_sass/_mood.scss), so the
+  feed is a mosaic of the moods the worlds answer to. The world a visitor is already on is left
+  out of its own feed.
 
   What the template writes is the whole of what a visitor without scripting gets: a column grid
   of plain cards, every one a link, so the reachability axiom holds and index.html's own markup
@@ -15,16 +17,10 @@
   through its module in js/modules/, moves the world the visitor's reading opens onto to the
   front, and keeps dealing fresh cards -- the things the worlds make -- as the visitor scrolls,
   without end. The sentinel at the bottom is what tells it to deal more.
-
-  The headings are real (h2, then h3 per card), so a visitor listening to the page hears its
-  shape.
 -#}
 {%- set here = (page.filePathStem | replace('/', '')) + '.html' if page else '' -%}
 <section class='feed' id='feed' aria-labelledby='feed-title'>
-  <div class='feed-head'>
-    <h2 class='feed-title' id='feed-title'>every world</h2>
-    <p class='feed-note'>{{ worlds.worlds.length | words | capitalize }} worlds and no default, each a card, with the things they make dealt in between. Over each name is who the site would send there: open the one that fits, or the one that does not, and keep scrolling.</p>
-  </div>
+  <h2 class='feed-title visually-hidden' id='feed-title'>every world</h2>
   <div class='feed-grid' id='feed-grid'>
 {%- for world in worlds.worlds %}
 {%- if world.file != here %}
@@ -42,5 +38,4 @@
 {%- endfor %}
   </div>
   <div class='feed-sentinel' id='feed-more' aria-hidden='true'></div>
-  <p class='feed-foot'><a href='{{ siteRoot }}sitemap.html'>site map</a></p>
 </section>

@@ -1,5 +1,6 @@
 // The feed: every world as a card, laid out as masonry columns, shown after <main> on every page
-// by _includes/worlds.njk and kept flowing by js/feed.js.
+// by _includes/worlds.njk and kept flowing by js/feed.js. It has no caption: its heading is for
+// screen readers, and the first row of cards peeks above the fold under the feature.
 //
 // Without scripting the grid is CSS columns: every card the template wrote is in it, each a plain
 // link. With scripting the script switches the grid to flex columns (.is-masonry) and places each
@@ -22,27 +23,8 @@
 
 .feed {
   position: relative;
-  z-index: 2; // above any page's full-screen backdrop canvas, like the top bar and the persona card
-  margin-top: 1.5rem;
-}
-
-.feed-head {
-  margin: 0 0.25rem 1rem;
-  display: grid;
-  gap: 0.25rem;
-}
-
-.feed-title {
+  z-index: 2; // above any page's full-screen backdrop canvas, like the top bar
   margin: 0;
-  color: var(--md-sys-color-on-surface);
-  @include type.scale(title-large);
-}
-
-.feed-note {
-  margin: 0;
-  max-width: 72ch;
-  color: var(--md-sys-color-on-surface-variant);
-  @include type.scale(body-medium);
 }
 
 .feed-grid {
@@ -265,13 +247,6 @@
 .feed-sentinel {
   height: 1px;
   margin-top: 1rem;
-}
-
-.feed-foot {
-  margin: 1.5rem 0 0;
-  text-align: center;
-  color: var(--md-sys-color-on-surface-variant);
-  @include type.scale(label-large);
 }
 
 @media (max-width: 599px) {

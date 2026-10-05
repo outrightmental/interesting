@@ -2,6 +2,12 @@
 
 @use 'type';
 
+// A list page: its feature is the list, read at a column's width.
+main {
+  grid-template-columns: minmax(0, var(--main-max));
+  align-content: start;
+}
+
 .about {
   margin: 0 0 1.25rem;
   max-width: 66ch;

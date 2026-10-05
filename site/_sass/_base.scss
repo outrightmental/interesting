@@ -1,7 +1,7 @@
 // The page itself: the reset, the surface, the type, and the few elements every page shares.
 //
 // A page that wants a different sky sets the seeds (see _tokens.scss and _mood.scss); one that
-// wants a different gradient altogether overrides `background` on `body` in its own stylesheet.
+// wants a different gradient altogether overrides `background` on `main` in its own stylesheet.
 
 @use 'type';
 
@@ -28,20 +28,15 @@ html {
 body {
   margin: 0;
   min-height: 100vh;
-  // The night sky, as a tint rather than a picture: the lighter corner every mood names opens
-  // from the top left, over the flat surface M3 lays everything on.
-  background:
-    radial-gradient(120vw 70vh at 12% -12%, color-mix(in oklab, var(--bg2) 55%, transparent) 0%, transparent 62%)
-    fixed,
-    var(--md-sys-color-surface);
+  background: var(--md-sys-color-surface);
   @include type.scale(body-large);
 }
 
-// The column everything but the top bar sits in.
+// The column the feed sits in, under the feature.
 .page {
   width: min(var(--page-max), 100% - 2 * var(--gutter));
   margin-inline: auto;
-  padding: 1rem 0 3.5rem;
+  padding: 0 0 3.5rem;
 }
 
 h1 {
@@ -53,6 +48,12 @@ h1 {
 @media (min-width: 840px) {
   h1 {
     @include type.scale(display-small);
+  }
+}
+
+@media (min-width: 1280px) {
+  h1 {
+    @include type.scale(display-medium);
   }
 }
 
@@ -106,7 +107,7 @@ svg {
   fill: currentColor;
 }
 
-// Text that only a screen reader should hear: a label the layout hides on a phone.
+// Text that only a screen reader should hear: a heading the layout needs and the eye does not.
 .visually-hidden {
   position: absolute !important;
   width: 1px;

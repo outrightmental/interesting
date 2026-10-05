@@ -1,14 +1,14 @@
 {#-
   The shell every page of the site is built into. A page supplies its own <main> and nothing else:
-  the doctype, the head, the stylesheet links, the top app bar, the persona card, the feed of every
-  world and the persona sheet are written once, here.
+  the doctype, the head, the stylesheet links, the top app bar with the persona in it, the feed of
+  every world and the persona sheet are written once, here.
 
   The visual language is Material Design 3 (m3.material.io): one tonal colour scheme derived from a
   few seed colours (_sass/_tokens.scss), the M3 type scale, the M3 shape scale, state layers on
   everything that can be pressed, and tonal surfaces instead of borders. The components the shell
-  is made of are the M3 ones -- a top app bar with navigation destinations, a card with a leading
-  avatar for the persona, a basic dialog for the sheet, and cards in a masonry feed -- so the whole
-  site reads as one system.
+  is made of are the M3 ones -- a top app bar with navigation destinations and a trailing avatar,
+  a basic dialog for the sheet, and cards in a masonry feed -- so the whole site reads as one
+  system.
 
   Front matter a page may set:
     title       the page's name, the same words every link to it uses (see _data/worlds.json):
@@ -31,32 +31,37 @@
                 here instead ("/interesting/"). Every other page leaves it out and keeps
                 relative links, so they work under any sub-path unchanged.
 
-  A page sets nothing about navigation. The top app bar, the persona card and the feed are the
-  whole of the shared chrome, and they are the same on every page: a page that wants to offer
-  something does it inside its own <main>, under its own heading.
+  What a page is: its <main> is the feature. It is unbordered, it fills the first screen (the
+  viewport less the top bar and a margin, so the feed peeks above the fold), its background is
+  the page's own palette bleeding to the viewport's edges, and its content sits in a centred
+  column (every direct child of <main> lands in that column; see _sass/_panel.scss). A page sets
+  nothing about navigation: the top bar and the feed are the whole of the shared chrome, and they
+  are the same on every page.
 
   The shared chrome, top to bottom, and why it is this size:
-    the top bar  an M3 top app bar: the site's name and three navigation destinations -- the
+    the top bar  an M3 top app bar: the site's name, three navigation destinations -- the
                  threshold, the mood atlas, site map -- each an icon over its label, the active
-                 one marked with the M3 indicator pill. Nothing else lives here; in particular no
-                 status line. It sticks to the top of the viewport and takes a tonal lift once the
-                 page has scrolled under it (js/site.js).
-    the persona  the one thing a visitor configures here, shown the way a game shows its player:
-                 an M3 card with a leading avatar (a portrait of their sky), one line on where
-                 things stand, and one button that opens the sheet (js/persona.js). With no
-                 persona yet the card is outlined in dashes and the button is the one filled
-                 button on the page, so the first thing to do is the first thing seen. The mood
-                 flow is visible here too: on the threshold the card asks one sideways question on
-                 arrival, inline, and everywhere it says what was read and offers the one world
-                 that reading opens onto. It sits outside <main>, so the question is never a
-                 gate: every page is reachable with it ignored, skipped, or scripting switched off.
+                 one marked with the M3 indicator pill, and the persona as the trailing avatar.
+                 Nothing else lives here; in particular no status line. It sticks to the top of
+                 the viewport and takes a tonal lift once the page has scrolled under it
+                 (js/site.js).
+    the persona  the one thing a visitor configures here, shown the way an app shows its
+                 account: a round portrait of their sky in the bar, which opens the sheet
+                 (js/persona.js). With no persona yet the portrait ring is dashed and the button
+                 reads "set up persona", filled and beckoning, so the first thing to do is the
+                 first thing seen; once a reading exists a "go to" link to the world it opens
+                 onto sits beside it. The one sentence on where things stand is written for
+                 screen readers and never takes space. On the threshold the sideways question is
+                 asked in the page's own feature (index.html hosts #persona-probe), never in the
+                 bar.
     the feed     every world as a card, in a masonry grid that keeps going as a visitor scrolls
                  (_includes/worlds.njk, from _data/worlds.json, and js/feed.js with one module per
-                 world in js/modules/). The cards the template writes are plain links, so
-                 index.html's own markup links every world and the reachability axiom holds with
-                 scripting off; the script lays them out as columns, paints each one, and deals
-                 more between them without end. sitemap.html and moods.html list every page
-                 themselves, so they are the two pages without it.
+                 world in js/modules/). It has no caption: the grid speaks for itself. The cards
+                 the template writes are plain links, so index.html's own markup links every
+                 world and the reachability axiom holds with scripting off; the script lays them
+                 out as columns, paints each one, and deals more between them without end.
+                 sitemap.html and moods.html list every page themselves, so they are the two
+                 pages without it.
     the sheet    the persona's dialog, written after everything else and shown only when opened:
                  the constellation (stars placed, dragged and read) and the orientation (the
                  question, and what it read). Its headings come after the page's own, so the
@@ -68,18 +73,20 @@
     js/state.js      the one local-state document every page reads and writes through, and the
                      meta menu that exports it (STATE_TAG and check_state).
     js/persona.js    the persona: the sky several worlds read, kept and changed in one place, plus
-                     the card and the sheet above. Not deferred, so a page's own script can read
+                     the avatar and the sheet above. Not deferred, so a page's own script can read
                      window.interestingPersona.stars() while the body is parsed.
     js/site.js       the shared helpers a page can call: window.interestingSite.unlock(), which
                      renders a part that needs a saved sky as powered down with the one button
                      that powers it (see the README, "Powered down, never broken"), plus the top
-                     bar's scroll state and the slider fill. Not deferred either, and after the
-                     persona it reads from.
+                     bar's scroll state, the slider fill and each stage's aspect ratio. Not
+                     deferred either, and after the persona it reads from.
     js/threshold.js  the mood flow's engine: the orientations, the library of query mechanisms,
-                     the clock and time-zone signals and the partly-remembered reading. The persona
-                     card and sheet are where it is seen (MOOD_TAG and check_mood).
+                     the clock and time-zone signals and the partly-remembered reading. The
+                     threshold's feature and the persona sheet are where it is seen (MOOD_TAG and
+                     check_mood).
     js/feed.js       the feed: lays the world cards out as columns, paints them through the
-                     modules in js/modules/, and keeps dealing cards as the visitor scrolls. An ES
+                     modules in js/modules/, keeps dealing cards as the visitor scrolls, and
+                     paints the threshold's feature (window.interestingFeed.feature). An ES
                      module, so it loads each world's module only when a card of it is near.
   Three of them may never be dropped: a built page missing the analytics, state or mood line is
   refused. The files behind the first two are fixed; js/threshold.js is protected instead, so a
@@ -134,7 +141,7 @@
   <!-- The one local-state store every page reads and writes through, and its meta menu; see
        js/state.js. Not deferred: a page's own script runs before any deferred one does. -->
   <script src='js/state.js'></script>
-  <!-- The persona: the sky several worlds read, and the card and sheet it is set up in; see
+  <!-- The persona: the sky several worlds read, and the avatar and sheet it is set up in; see
        js/persona.js. Not deferred either, for the same reason, and after the store it writes
        through. -->
   <script src='js/persona.js'></script>
@@ -163,30 +170,28 @@
         </a>
 {%- endfor %}
       </nav>
+      {#- The persona, as the bar's trailing avatar. What a visitor with scripting switched off
+          gets is written here and claims nothing; js/persona.js rewrites the sentence, draws the
+          portrait and un-hides the two controls. -#}
+      <div class='persona' id='persona' data-state='empty' data-sky='none' data-reading='none' data-asking='false'>
+        <p class='persona-text visually-hidden' id='persona-text'>No persona yet.</p>
+        <div class='persona-actions'>
+          <a class='action persona-go' id='persona-go' href='{{ siteRoot }}moods.html' hidden>go to your world</a>
+          <button type='button' class='persona-avatar' id='persona-open' aria-haspopup='dialog' aria-controls='persona-sheet' aria-describedby='persona-text' hidden>
+            <span class='persona-portrait' aria-hidden='true'><canvas id='persona-portrait' width='40' height='40'></canvas></span>
+            <span class='persona-label'>set up persona</span>
+          </button>
+        </div>
+      </div>
     </div>
   </header>
-  <div class='page'>
-  {#- The persona card: what a visitor with scripting switched off reads is written here and claims
-      nothing; js/persona.js rewrites it, draws the portrait, asks on the threshold and un-hides
-      the two controls. -#}
-  <aside class='persona' id='persona' data-state='empty' data-sky='none' data-reading='none' data-asking='false' aria-label='Your persona: the sky you place and what this site has read about you'>
-    <div class='persona-portrait' aria-hidden='true'><canvas id='persona-portrait' width='56' height='56'></canvas></div>
-    <div class='persona-body'>
-      <p class='persona-label'>persona</p>
-      <p class='persona-text' id='persona-text'>No persona yet. Every world is on offer below.</p>
-      <div class='controls persona-actions'>
-        <button type='button' id='persona-open' aria-haspopup='dialog' aria-controls='persona-sheet' hidden>set up persona</button>
-        <a class='action' id='persona-go' href='{{ siteRoot }}moods.html' hidden>go to your world</a>
-      </div>
-      <div class='persona-probe' id='persona-probe' hidden></div>
-    </div>
-  </aside>
   <div id='main-content' tabindex='-1'>{{ content | safe }}</div>
 {%- if not (here == 'sitemap.html' or here == 'moods.html') %}
+  <div class='page'>
 {% include 'worlds.njk' %}
-{%- endif %}
   </div>
-  {#- The persona sheet: closed until the card opens it, and floating over the page when it does.
+{%- endif %}
+  {#- The persona sheet: closed until the avatar opens it, and floating over the page when it does.
       Written last so its headings follow the page's own. -#}
   <dialog class='persona-sheet' id='persona-sheet' aria-labelledby='persona-sheet-title'>
     <div class='persona-sheet-head'>
