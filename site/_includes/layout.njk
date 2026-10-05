@@ -42,6 +42,10 @@
   _includes/footer.njk across the same circuit pages, keeping one cross-world prompt thread in the
   same shared state document.
 
+  js/circuit-switchboard.js is the eighth: a shared relay switchboard that gives every constellation
+  world the same previous/next lanes and one generated move card, persisted through the one shared
+  state document.
+
   The mood ribbon below is the flow made visible. It sits outside <main> on every page, so the
   question is never a gate in front of the content: the whole site is reachable with the ribbon
   ignored, or with scripting switched off entirely.
@@ -82,6 +86,8 @@
   <script src='js/constellation-remixer.js' defer></script>
   <!-- Shared relay signal deck for the same circuit, through the shared state store. -->
   <script src='js/constellation-signals.js' defer></script>
+  <!-- Shared relay switchboard lanes + generated move cards for the same circuit. -->
+  <script src='js/circuit-switchboard.js' defer></script>
 </head>
 <body>
   <a class='skip-link' href='#main-content'>skip to main content</a>

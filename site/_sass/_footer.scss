@@ -261,6 +261,55 @@
   color: var(--muted);
 }
 
+// Shared route switchboard for the same circuit, so every sky page offers the same lane controls
+// and one generated move card that can be followed immediately.
+.constellation-switchboard {
+  margin-top: 0.55rem;
+  border: 1px solid vars.$hairline;
+  border-radius: vars.$radius-panel;
+  background: rgba(7, 10, 20, 0.5);
+  padding: 0.62rem;
+}
+
+.constellation-switchboard-title {
+  margin: 0;
+  color: var(--accent2);
+  font-size: 0.76rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.constellation-switchboard-status,
+.constellation-switchboard-card {
+  margin: 0.42rem 0 0;
+  color: #d8e6ff;
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
+.constellation-switchboard-status.good {
+  color: var(--good);
+}
+
+.constellation-switchboard-card {
+  color: var(--muted);
+}
+
+.constellation-switchboard-controls {
+  margin-top: 0.5rem;
+}
+
+.constellation-switchboard-controls .action,
+.constellation-switchboard-controls button {
+  font-size: 0.78rem;
+  padding: 0.32rem 0.68rem;
+}
+
+.constellation-switchboard-controls .action[aria-disabled='true'] {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
 // Shared onward loop for the constellation worlds, federated into one include so those pages
 // keep one coherent cross-page route without repeating hand-written link clusters.
 .footer-circuit {
@@ -302,7 +351,8 @@
   .constellation-quest-controls,
   .constellation-honors-controls,
   .constellation-remixer-controls,
-  .constellation-signals-controls {
+  .constellation-signals-controls,
+  .constellation-switchboard-controls {
     flex-direction: column;
   }
 
@@ -312,7 +362,9 @@
   .constellation-quest-controls button,
   .constellation-honors-controls button,
   .constellation-remixer-controls button,
-  .constellation-signals-controls button {
+  .constellation-signals-controls button,
+  .constellation-switchboard-controls .action,
+  .constellation-switchboard-controls button {
     width: 100%;
   }
 }
