@@ -67,6 +67,24 @@
     { href: 'wish-terrarium.html', where: 'the terrarium' }
   ];
 
+  var OFF_SKY = [
+    { href: 'quiet-room.html', where: 'the quiet room' },
+    { href: 'kinetic-floor.html', where: 'the kinetic floor' },
+    { href: 'machine-shop.html', where: 'the machine shop' },
+    { href: 'loam.html', where: 'loam' },
+    { href: 'word-kiln.html', where: 'the word kiln' },
+    { href: 'apocrypha-desk.html', where: 'the apocrypha desk' }
+  ];
+
+  var WAYFINDING = [
+    { href: 'index.html', where: 'the threshold' },
+    { href: 'moods.html', where: 'the mood atlas' },
+    { href: 'sitemap.html', where: 'the site map' },
+    { href: 'error.html', where: 'the observatory 404' }
+  ];
+
+  var ALL_WORLDS = OFF_SKY.concat(CIRCUIT, WAYFINDING);
+
   // Kept in the shared state document to track a visitor's cross-world relay progress.
   var RELAY = 'constellation-relay';
   var HONORS_LIMIT = 12;
@@ -494,6 +512,7 @@
       updatePassportProgress();
     }
     renderHonors(stars);
+    wireWayfindingJumps();
     return;
   }
   if (trouble === 'unreadable') {
@@ -507,6 +526,7 @@
       updatePassportProgress();
     }
     renderHonors(stars);
+    wireWayfindingJumps();
     return;
   }
 
@@ -521,6 +541,7 @@
       updatePassportProgress();
     }
     renderHonors(stars);
+    wireWayfindingJumps();
     return;
   }
 
@@ -558,6 +579,7 @@
     }
 
     renderHonors(stars);
+    wireWayfindingJumps();
     return;
   }
 
@@ -577,9 +599,103 @@
       linkEl.setAttribute('href', found[i].kept.href);
       linkEl.textContent = 'back to ' + found[i].kept.where;
       renderHonors(stars);
+      wireWayfindingJumps();
       return;
     }
   }
 
   renderHonors(stars);
+  wireWayfindingJumps();
+
+  function uniqueWorlds(list) {
+    var seen = Object.create(null);
+    var out = [];
+    for (var i = 0; i < list.length; i++) {
+      var item = list[i];
+      if (!item || typeof item.href !== 'string') continue;
+      if (seen[item.href]) continue;
+      seen[item.href] = true;
+      out.push(item);
+    }
+    return out;
+  }
+
+  function worldPool(base, avoid) {
+    var items = uniqueWorlds(base);
+    var out = [];
+    for (var i = 0; i < items.length; i++) {
+      var href = items[i].href;
+      if (href === currentFile) continue;
+      if (avoid && href === avoid) continue;
+      out.push(items[i]);
+    }
+    return out;
+  }
+
+  function randomPick(list) {
+    if (!list.length) return null;
+    return list[Math.floor(Math.random() * list.length)];
+  }
+
+  function routeJump(mode) {
+    var preferred = preferredWorldFromReading();
+    var pool;
+
+    if (mode === 'counter') {
+      var preferredInCircuit = preferred && circuitIndex(preferred) !== -1;
+      var preferredInOffSky = false;
+      for (var i = 0; i < OFF_SKY.length; i++) {
+        if (OFF_SKY[i].href === preferred) {
+          preferredInOffSky = true;
+          break;
+        }
+      }
+
+      if (preferredInCircuit) {
+        pool = worldPool(OFF_SKY.concat(WAYFINDING), preferred);
+      } else if (preferredInOffSky) {
+        pool = worldPool(CIRCUIT.concat(WAYFINDING), preferred);
+      } else {
+        pool = worldPool(ALL_WORLDS, preferred);
+      }
+    } else {
+      pool = worldPool(ALL_WORLDS, null);
+    }
+
+    var pick = randomPick(pool);
+    if (!pick) {
+      pick = randomPick(worldPool(ALL_WORLDS, null));
+    }
+    if (pick) {
+      return pick;
+    }
+    return { href: 'index.html', where: 'the threshold' };
+  }
+
+  function setWayfindingJumpNote(text) {
+    var notes = document.querySelectorAll('[data-wayfinding-jump-note]');
+    for (var i = 0; i < notes.length; i++) {
+      notes[i].textContent = text;
+    }
+  }
+
+  function wireWayfindingJumps() {
+    var buttons = document.querySelectorAll('[data-wayfinding-jump]');
+    if (!buttons.length) return;
+
+    for (var i = 0; i < buttons.length; i++) {
+      buttons[i].addEventListener('click', function () {
+        var mode = this.getAttribute('data-wayfinding-jump') || 'surprise';
+        var picked = routeJump(mode);
+
+        if (mode === 'counter') {
+          setWayfindingJumpNote('Counter-jump selected: ' + picked.where + '.');
+        } else {
+          setWayfindingJumpNote('Surprise jump selected: ' + picked.where + '.');
+        }
+
+        window.location.href = picked.href;
+      });
+    }
+  }
 })();

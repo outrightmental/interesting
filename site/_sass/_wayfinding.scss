@@ -31,6 +31,24 @@
   text-align: center;
 }
 
+.wayfinding-jump-controls {
+  margin-top: 0.6rem;
+  justify-content: center;
+}
+
+.wayfinding-jump-controls .wayfinding-jump {
+  font-size: 0.82rem;
+  padding: 0.34rem 0.75rem;
+}
+
+.wayfinding-jump-note {
+  margin: 0.3rem 0 0;
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.8rem;
+  min-height: 1.25em;
+}
+
 .wayfinding-grid {
   margin-top: 0.6rem;
   display: grid;
