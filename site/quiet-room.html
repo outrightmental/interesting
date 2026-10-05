@@ -1,22 +1,17 @@
 ---
 layout: layout.njk
 title: the quiet room
-description: 'A low-demand room for when something is banked low: a breath you can follow, a dimmer, and nothing that needs doing.'
+description: 'A low-demand room with a breath to follow and a dimmer that stays where you leave it; nothing here needs doing.'
 stylesheet: quiet-room
-footer:
-  - [index.html, back to the threshold]
-  - [moods.html, mood atlas]
-  - [loam.html, open loam]
-footerNote: this world asks for nothing
 ---
   <main>
     <h1>the quiet room</h1>
-    <p class='tagline'>Where the threshold sends anyone reading as banked low. Nothing in here keeps score.</p>
+    <p class='tagline'>A breath to follow and a dimmer that stays where you leave it. Nothing here keeps score.</p>
 
     <div class='layout'>
-      <div class='room' id='room'>
+      <div class='room' id='room' role='button' tabindex='0' aria-label='hold the breath'>
         <div class='breath' id='breath' aria-hidden='true'></div>
-        <p class='breath-word' id='breath-word' aria-live='polite'>settling</p>
+        <p class='breath-word' id='breath-word' aria-hidden='true'>settling</p>
       </div>
 
       <section class='panel'>
@@ -34,11 +29,10 @@ footerNote: this world asks for nothing
         <p id='status' aria-live='polite'>The room is lit low and the door is shut.</p>
         <pre id='reading'>Nothing is required of you here.
 There is no score, no streak and no next thing.</pre>
-        <p class='hint'>Easter egg: press the spacebar and hold it. The room holds its breath with you.</p>
+        <p class='hint'>Press and hold the ring, or the spacebar, and the room holds its breath with you.</p>
       </section>
     </div>
 
-{% include "footer.njk" %}
   </main>
 
   <script>
@@ -137,19 +131,46 @@ There is no score, no streak and no next thing.</pre>
         remember();
       });
 
-      document.addEventListener('keydown', function (ev) {
-        if (ev.key !== ' ' || ev.target !== document.body) return;
-        ev.preventDefault();
+      // The hold: press the ring (pointer or touch) or the spacebar, with the ring or nothing
+      // focused, and the breath stops until it is let go.
+      function hold() {
         if (held) return;
         held = true;
         word.textContent = 'holding';
         statusEl.textContent = 'Held. Let go when it has been enough.';
+      }
+
+      function release() {
+        if (!held) return;
+        held = false;
+        statusEl.textContent = 'Released. The room carries on without comment.';
+      }
+
+      function holdKey(ev) {
+        if (ev.key === ' ') return ev.target === room || ev.target === document.body;
+        return ev.key === 'Enter' && ev.target === room;
+      }
+
+      room.addEventListener('pointerdown', function (ev) {
+        if (ev.button !== 0) return;
+        ev.preventDefault();
+        try { room.setPointerCapture(ev.pointerId); } catch (e) { /* capture is a nicety */ }
+        hold();
+      });
+      room.addEventListener('pointerup', release);
+      room.addEventListener('pointercancel', release);
+      room.addEventListener('blur', release);
+      window.addEventListener('blur', release);
+
+      document.addEventListener('keydown', function (ev) {
+        if (!holdKey(ev)) return;
+        ev.preventDefault();
+        hold();
       });
 
       document.addEventListener('keyup', function (ev) {
-        if (ev.key !== ' ' || !held) return;
-        held = false;
-        statusEl.textContent = 'Released. The room carries on without comment.';
+        if (ev.key !== ' ' && ev.key !== 'Enter') return;
+        release();
       });
 
       restore();

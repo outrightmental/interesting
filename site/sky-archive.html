@@ -1,53 +1,43 @@
 ---
 layout: layout.njk
-title: sky archive oracle
-description: 'Spin your saved constellation through a rune wheel, collect tiny omen readings, and forge a portable sigil.'
+title: the archive oracle
+description: 'Spin your saved stars through a rune wheel, collect small omens, and forge a sigil to keep.'
 stylesheet: sky-archive
-footer:
-  - [wish-constellation.html, back to the wish constellation]
-  - [index.html, back to the threshold]
-  - [sitemap.html, site map]
-  - [constellation-diary.html, open constellation diary]
-  - [error.html, visit observatory 404]
 ---
   <main>
-    <h1>sky archive oracle</h1>
-    <p class='tagline'>Spin your saved constellation through a rune wheel and collect tiny omen readings.</p>
+    <h1>the archive oracle</h1>
+    <p class='tagline'>Spin your stars through a rune wheel and collect small omens. It reads the sky you placed in the wish constellation.</p>
 
     <div class='layout'>
       <canvas id='oracle-canvas' width='620' height='340' aria-label='Animated rune wheel based on your constellation'></canvas>
 
       <section class='panel'>
-        <p style='margin:0;color:#d7e4ff;'>This page reads the same saved stars from the main constellation page.</p>
         <div class='controls'>
-          <button id='load' type='button'>refresh saved sky</button>
           <button id='spin' type='button' aria-busy='false'>spin omen wheel</button>
           <button id='remix' type='button'>remix runes</button>
           <button id='clear-history' type='button'>clear omens</button>
         </div>
-        <p id='status' aria-live='polite'>Loading archive memory...</p>
-        <pre id='omen' aria-live='polite'>Awaiting spin.
-Load your saved sky, then spin to ask for a tiny omen.</pre>
+        <p id='status' aria-live='polite'></p>
+        <pre id='omen' aria-live='polite'>Press spin omen wheel.</pre>
 
-        <section class='history' aria-label='Omen history'>
-          <p>Recent omens</p>
+        <section class='history' aria-labelledby='history-title'>
+          <h2 id='history-title' class='panel-title'>recent omens</h2>
           <ol id='history-list'></ol>
           <p id='history-empty' class='empty'>No omens yet. Spin once to seed the archive.</p>
         </section>
 
-        <section class='sigil' aria-label='Constellation sigil forge'>
-          <p>Forge a portable SVG sigil from your current sky and rune alphabet.</p>
+        <section class='sigil' aria-labelledby='sigil-title'>
+          <h2 id='sigil-title' class='panel-title'>sigil forge</h2>
+          <p class='panel-note'>An SVG sigil drawn from your current sky and rune alphabet, to keep.</p>
           <div class='controls'>
             <button id='forge' type='button'>forge sigil</button>
-            <a id='sigil-download' class='action' href='#' download='sky-sigil.svg' aria-disabled='true'>download sigil.svg</a>
+            <a id='sigil-download' class='action' download='sky-sigil.svg' hidden>download sigil.svg</a>
           </div>
-          <img id='sigil-preview' alt='Generated constellation sigil preview'>
+          <img id='sigil-preview' alt='Generated constellation sigil preview' hidden>
           <p id='sigil-note' class='empty'>No sigil forged yet.</p>
         </section>
       </section>
     </div>
-
-{% include "footer.njk" %}
   </main>
 
   <script>
@@ -57,7 +47,6 @@ Load your saved sky, then spin to ask for a tiny omen.</pre>
       var OMENS = 'omens';
       var MAX_OMENS = 8;
 
-      var loadBtn = document.getElementById('load');
       var spinBtn = document.getElementById('spin');
       var remixBtn = document.getElementById('remix');
       var clearHistoryBtn = document.getElementById('clear-history');
@@ -118,17 +107,14 @@ Load your saved sky, then spin to ask for a tiny omen.</pre>
         spinBtn.setAttribute('aria-busy', spinning ? 'true' : 'false');
       }
 
-      function setSigilDownloadEnabled(enabled) {
-        sigilDownload.setAttribute('aria-disabled', enabled ? 'false' : 'true');
-        if (!enabled) {
-          sigilDownload.setAttribute('href', '#');
-          sigilDownload.setAttribute('download', 'sky-sigil.svg');
-        }
-      }
-
+      // The preview and the download link exist only while a sigil does: hidden until forgeSigil()
+      // has a real image to show and a real URL to hand out, never a broken image or a link to '#'.
       function clearSigil(keepNote) {
         sigilPreview.removeAttribute('src');
-        setSigilDownloadEnabled(false);
+        sigilPreview.hidden = true;
+        sigilDownload.removeAttribute('href');
+        sigilDownload.setAttribute('download', 'sky-sigil.svg');
+        sigilDownload.hidden = true;
         if (!keepNote) {
           sigilNote.textContent = 'No sigil forged yet.';
         }
@@ -146,24 +132,13 @@ Load your saved sky, then spin to ask for a tiny omen.</pre>
         });
       }
 
-      // Why the archive has no sky to read, in this page's own words: the shared store says which
-      // of the four it is (see js/state.js).
-      var EMPTY_NOTES = {
-        unavailable: 'Local storage is unavailable here.',
-        unreadable: 'Saved constellation data is unreadable. Open the wish constellation and remake it.',
-        missing: 'No saved constellation found. Make one on the wish constellation page first.',
-        ok: 'A sky file exists, but no readable stars were found.'
-      };
-
+      // Reads the saved sky and draws it. Called from unlock()'s onReady, which only fires once a sky
+      // exists -- saved already, or seeded by the one button the powered-down page carries.
       function loadStars() {
         var saved = state.read(SKY, []);
         stars = cloneStars(Array.isArray(saved.value) ? saved.value : []).slice(0, 180);
-        if (!stars.length) {
-          statusEl.textContent = EMPTY_NOTES[saved.status];
-          clearSigil(true);
-          return;
-        }
-        statusEl.textContent = 'Archive synced: ' + stars.length + ' star' + (stars.length === 1 ? '' : 's') + ' loaded.';
+        statusEl.textContent = stars.length === 1 ? '1 saved star loaded.' : stars.length + ' saved stars loaded.';
+        omenEl.textContent = 'Press spin omen wheel.';
       }
 
       function hashConstellation() {
@@ -258,7 +233,7 @@ Load your saved sky, then spin to ask for a tiny omen.</pre>
 
       function saveOmens() {
         if (!state.set(OMENS, omens)) {
-          statusEl.textContent = 'Could not save omen history in this browser context.';
+          statusEl.textContent = 'This browser keeps nothing between visits, so the omen lasts for the page.';
         }
       }
 
@@ -367,17 +342,10 @@ Load your saved sky, then spin to ask for a tiny omen.</pre>
       }
 
       function forgeSigil(silent) {
-        if (!stars.length) {
-          sigilNote.textContent = 'No stars loaded, so there is nothing to forge yet.';
-          setSigilDownloadEnabled(false);
-          if (!silent) statusEl.textContent = 'Forge failed: load or create a constellation first.';
-          return;
-        }
-
         var svg = buildSigilSvg();
         if (!svg) {
+          clearSigil(true);
           sigilNote.textContent = 'Sigil forge could not map this constellation.';
-          setSigilDownloadEnabled(false);
           return;
         }
 
@@ -385,29 +353,27 @@ Load your saved sky, then spin to ask for a tiny omen.</pre>
         var stamp = fileStamp();
         var filename = 'sky-sigil-' + stamp + '.svg';
 
+        // The real image and the real URL go in first; only then do the two come into view.
         sigilPreview.setAttribute('src', encoded);
         sigilDownload.setAttribute('href', encoded);
         sigilDownload.setAttribute('download', filename);
-        setSigilDownloadEnabled(true);
+        sigilPreview.hidden = false;
+        sigilDownload.hidden = false;
 
         sigilNote.textContent = 'Sigil forged: ' + filename + ' · ' + stars.length + ' stars encoded.';
         if (!silent) {
-          statusEl.textContent = '✧ Sigil forged. Download it or remix runes and forge again.';
+          statusEl.textContent = 'Sigil forged. Download it, or remix runes and forge again.';
         }
       }
 
       function spinOmen() {
-        if (spinning) return;
-        if (!stars.length) {
-          statusEl.textContent = 'No stars loaded yet. Refresh after creating a constellation.';
-          return;
-        }
+        if (spinning || !stars.length) return;
 
         spinning = true;
         sparkle = 1;
         setSpinButton();
         spinVelocity = 0.55 + Math.random() * 0.22;
-        statusEl.textContent = 'Wheel spinning... listening for a clear signal.';
+        statusEl.textContent = 'Wheel spinning...';
       }
 
       function resolveSpin() {
@@ -424,13 +390,13 @@ Load your saved sky, then spin to ask for a tiny omen.</pre>
         saveOmens();
         renderOmens();
 
-        statusEl.textContent = '✦ Omen archived. Spin again after moving stars for a different result.';
+        statusEl.textContent = 'Omen archived. Spin again after moving stars for a different result.';
       }
 
       function remixRunes() {
         glyphSetIndex = (glyphSetIndex + 1) % glyphSets.length;
         statusEl.textContent = 'Rune set remixed. Same sky, different alphabet.';
-        if (sigilDownload.getAttribute('aria-disabled') === 'false') {
+        if (!sigilDownload.hidden) {
           forgeSigil(true);
         }
       }
@@ -500,14 +466,6 @@ Load your saved sky, then spin to ask for a tiny omen.</pre>
         ctx.closePath();
         ctx.fillStyle = 'rgba(255, 232, 177, 0.95)';
         ctx.fill();
-
-        if (!stars.length) {
-          ctx.fillStyle = 'rgba(223, 236, 255, 0.85)';
-          ctx.font = '13px ui-monospace, SFMono-Regular, Menlo, monospace';
-          ctx.textAlign = 'center';
-          ctx.fillText('No saved stars yet. Create a constellation first.', cx, cy + ringR + 28);
-          return;
-        }
 
         var mapped = [];
         for (var s = 0; s < stars.length; s++) {
@@ -581,10 +539,6 @@ Load your saved sky, then spin to ask for a tiny omen.</pre>
         requestAnimationFrame(frame);
       }
 
-      loadBtn.addEventListener('click', function () {
-        loadStars();
-      });
-
       spinBtn.addEventListener('click', spinOmen);
       remixBtn.addEventListener('click', remixRunes);
       clearHistoryBtn.addEventListener('click', clearHistory);
@@ -592,7 +546,11 @@ Load your saved sky, then spin to ask for a tiny omen.</pre>
         forgeSigil(false);
       });
 
-      loadStars();
+      // Powered down until a sky exists: the wheel and its panel are dimmed and inert, with the one
+      // button that seeds a sky in front of them (js/site.js). Once there is one, loadStars() runs.
+      window.interestingSite.unlock(document.querySelector('.layout'), {
+        onReady: function (stars, how) { loadStars(); }
+      });
       loadOmens();
       setSpinButton();
       clearSigil(false);

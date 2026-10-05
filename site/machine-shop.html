@@ -1,17 +1,12 @@
 ---
 layout: layout.njk
 title: the machine shop
-description: An elementary cellular automaton you can take apart rule by rule, for anyone reading as cold and clear.
+description: 'All 256 elementary cellular automata, one rule at a time, with the eight bits of the rule printed underneath.'
 stylesheet: machine-shop
-footer:
-  - [index.html, back to the threshold]
-  - [moods.html, mood atlas]
-  - [orbital-weaver.html, open the orbital weaver]
-footerNote: 256 machines, all of them small enough to hold
 ---
   <main>
     <h1>the machine shop</h1>
-    <p class='tagline'>Where the threshold sends anyone reading as cold and clear. Two hundred and fifty-six machines, each one eight bits long.</p>
+    <p class='tagline'>All 256 elementary cellular automata, one rule at a time. Pick a rule and watch it run.</p>
 
     <div class='layout'>
       <canvas id='mill' width='620' height='360' aria-label='The output of the current rule, one generation per row'></canvas>
@@ -23,6 +18,7 @@ footerNote: 256 machines, all of them small enough to hold
         <div class='row'>
           <label for='rule'>rule</label>
           <input id='rule' type='range' min='0' max='255' value='110'>
+          <output for='rule' id='rule-out'>110</output>
         </div>
         <div class='controls'>
           <button id='run' type='button' aria-pressed='true'>pause the mill</button>
@@ -38,7 +34,6 @@ rule 110</pre>
       </section>
     </div>
 
-{% include "footer.njk" %}
   </main>
 
   <script>
@@ -46,6 +41,7 @@ rule 110</pre>
       var canvas = document.getElementById('mill');
       var ctx = canvas.getContext('2d');
       var ruleInput = document.getElementById('rule');
+      var ruleOut = document.getElementById('rule-out');
       var runBtn = document.getElementById('run');
       var singleBtn = document.getElementById('single');
       var noiseBtn = document.getElementById('noise');
@@ -119,6 +115,7 @@ rule 110</pre>
       function setRule(value, why) {
         rule = Math.max(0, Math.min(255, Math.round(value)));
         ruleInput.value = String(rule);
+        ruleOut.textContent = String(rule);
         readingEl.textContent = bits();
         statusEl.textContent = why || ('Rule ' + rule + ' loaded. The mill keeps the rows it already made.');
       }

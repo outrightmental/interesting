@@ -1,27 +1,19 @@
 ---
 layout: layout.njk
-title: constellation weather lab
-description: 'An animated weather lab generated from your saved constellation: probe skies, read forecasts, and toggle midnight rain.'
+title: the weather lab
+description: 'Your saved stars drawn as pressure systems on a weather map, with probes to launch and a forecast to print.'
 stylesheet: constellation-weather
-footer:
-  - [wish-constellation.html, back to the wish constellation]
-  - [index.html, back to the threshold]
-  - [sitemap.html, site map]
-  - [sky-archive.html, open sky archive oracle]
-  - [wish-terrarium.html, open wish terrarium]
-  - [error.html, visit observatory 404]
 ---
   <main>
-    <h1>constellation weather lab</h1>
-    <p class='tagline'>Your saved stars become pressure systems. Probe the sky, scrub the hour, and print a tiny forecast.</p>
+    <h1>the weather lab</h1>
+    <p class='tagline'>Your stars as pressure systems, with a forecast you can print. It reads the sky you placed in the wish constellation.</p>
 
     <div class='layout'>
-      <canvas id='lab' width='620' height='340' aria-label='Animated weather map grown from saved constellation stars'></canvas>
+      <canvas id='lab' width='620' height='340' aria-label='Weather map drawn from your saved stars'></canvas>
 
-      <section class='panel'>
-        <p style='margin:0;color:#d8e4ff;'>This uses the same saved constellation memory as the wish constellation page.</p>
+      <section class='panel' aria-labelledby='desk-title'>
+        <h2 class='panel-title' id='desk-title'>forecast desk</h2>
         <div class='controls'>
-          <button id='refresh' type='button'>refresh saved sky</button>
           <button id='forecast' type='button'>generate forecast</button>
           <button id='rain' type='button' aria-pressed='false'>start rain mode</button>
         </div>
@@ -29,14 +21,11 @@ footer:
         <label class='time-wrap' for='hour'>forecast hour: <span id='hour-label'>22:00</span></label>
         <input id='hour' type='range' min='0' max='23' step='1' value='22' aria-label='Forecast hour'>
 
-        <p id='status' aria-live='polite'>Loading pressure seeds...</p>
-        <pre id='report' aria-live='polite'>Awaiting report.
-Load your saved sky, click the map to launch a weather probe, or generate a full forecast.</pre>
-        <p class='hint'>Easter egg: type <strong>storm</strong> while this page is focused.</p>
+        <p id='status' aria-live='polite'></p>
+        <pre id='report' aria-live='polite'>Click the map to launch a probe, or press generate forecast.</pre>
+        <p class='hint'>Type <strong>storm</strong> while this page is focused.</p>
       </section>
     </div>
-
-{% include "footer.njk" %}
   </main>
 
   <script>
@@ -45,7 +34,7 @@ Load your saved sky, click the map to launch a weather probe, or generate a full
       var SKY = 'constellation';
       var canvas = document.getElementById('lab');
       var ctx = canvas.getContext('2d');
-      var refreshBtn = document.getElementById('refresh');
+      var host = document.querySelector('.layout');
       var forecastBtn = document.getElementById('forecast');
       var rainBtn = document.getElementById('rain');
       var hourInput = document.getElementById('hour');
@@ -152,22 +141,13 @@ Load your saved sky, click the map to launch a weather probe, or generate a full
         }
       }
 
-      // Why there is nothing to show, in this page's own words: the shared store says which of
-      // the four it is (see js/state.js).
-      var EMPTY_NOTES = {
-        unavailable: 'Local storage is unavailable in this browser context.',
-        unreadable: 'Saved constellation data is unreadable. Open the wish constellation and remake it.',
-        missing: 'No saved constellation found yet. Create one on the wish constellation page first.',
-        ok: 'A sky file exists, but no readable stars were found.'
-      };
-
+      // Reads the saved sky and seeds the map from it. Called from unlock's onReady, so by the
+      // time it runs there is a sky to read.
       function loadStars() {
         var saved = state.read(SKY, []);
         stars = safeStars(Array.isArray(saved.value) ? saved.value : []).slice(0, 160);
         rebuildCells();
-        statusEl.textContent = stars.length
-          ? 'Weather seeds synced: ' + stars.length + ' star' + (stars.length === 1 ? '' : 's') + ' loaded.'
-          : EMPTY_NOTES[saved.status];
+        statusEl.textContent = stars.length + ' saved star' + (stars.length === 1 ? '' : 's') + ' loaded.';
       }
 
       function fieldValue(x, y, hourFloat) {
@@ -192,10 +172,7 @@ Load your saved sky, click the map to launch a weather probe, or generate a full
       }
 
       function generateForecast() {
-        if (!stars.length) {
-          statusEl.textContent = 'No stars loaded yet. Refresh after creating stars on the wish constellation page.';
-          return;
-        }
+        if (!stars.length) return;
 
         var hour = Number(hourInput.value);
         var s = summarize();
@@ -394,13 +371,10 @@ Load your saved sky, click the map to launch a weather probe, or generate a full
         ctx.fillStyle = 'rgba(229, 240, 255, 0.9)';
         ctx.font = '12px ui-monospace, SFMono-Regular, Menlo, monospace';
         ctx.fillText('hour ' + fmtHour(Math.floor(hourFloat)) + ' · systems ' + stars.length + (rainMode ? ' · rain on' : ' · rain off'), 10, 16);
-
-        if (!stars.length) {
-          ctx.fillStyle = 'rgba(230, 240, 255, 0.88)';
-          ctx.fillText('No saved stars yet. Build a constellation first.', 10, 34);
-        }
       }
 
+      // The loop runs from the start, with or without stars: an empty sky draws the background
+      // and a flat field, nothing else, while the host waits powered down.
       function frame(now) {
         if (typeof now !== 'number') now = performance.now();
         var dt = lastFrame ? Math.min(0.05, (now - lastFrame) / 1000) : 0.016;
@@ -425,7 +399,6 @@ Load your saved sky, click the map to launch a weather probe, or generate a full
         requestAnimationFrame(frame);
       }
 
-      refreshBtn.addEventListener('click', loadStars);
       forecastBtn.addEventListener('click', generateForecast);
       rainBtn.addEventListener('click', function () {
         rainMode = !rainMode;
@@ -448,14 +421,16 @@ Load your saved sky, click the map to launch a weather probe, or generate a full
           stormMode = !stormMode;
           flash = 1;
           statusEl.textContent = stormMode
-            ? 'Secret storm mode unlocked. The weather lab shifted spectrum.'
-            : 'Storm mode closed. Returning to midnight bands.';
+            ? 'Storm mode on. The weather lab shifted spectrum.'
+            : 'Storm mode off. Back to midnight bands.';
         }
       });
 
       setRainButton();
       updateHourLabel();
-      loadStars();
+      window.interestingSite.unlock(host, {
+        onReady: function (stars, how) { loadStars(); }
+      });
       frame();
     })();
   </script>

@@ -1,39 +1,27 @@
 ---
 layout: layout.njk
-title: star lantern ritual
-description: Turn your saved constellation into floating lanterns and pull a tiny mood reading from the sky.
+title: the lantern ritual
+description: 'Your saved stars as floating lanterns you can kindle one at a time, with a reading pulled from the sky.'
 stylesheet: star-lantern
-footer:
-  - [wish-constellation.html, back to the wish constellation]
-  - [index.html, back to the threshold]
-  - [sitemap.html, site map]
-  - [constellation-diary.html, open constellation diary]
-  - [sky-archive.html, open sky archive oracle]
-  - [error.html, visit observatory 404]
 ---
   <main>
-    <h1>star lantern ritual</h1>
-    <p class='tagline'>Your saved constellation becomes a field of floating lanterns. Kindle one, listen, and ask for a mood reading.</p>
+    <h1>the lantern ritual</h1>
+    <p class='tagline'>Your stars as lanterns you can kindle one at a time. It reads the sky you placed in the wish constellation.</p>
 
     <div class='layout'>
       <canvas id='ritual' width='620' height='340' aria-label='Floating lantern view generated from your saved stars'></canvas>
 
       <section class='panel'>
-        <p style='margin:0;color:#d8e4ff;'>This page reads the same saved constellation used by the wish constellation page.</p>
         <div class='controls'>
-          <button id='refresh' type='button'>refresh saved sky</button>
           <button id='kindle' type='button'>kindle random lantern</button>
           <button id='whisper' type='button'>ask for mood reading</button>
           <button id='drift' type='button' aria-pressed='false'>start drift mode</button>
         </div>
-        <p id='status' aria-live='polite'>Loading constellation memory...</p>
-        <pre id='reading' aria-live='polite'>Awaiting signal.
-Load your sky, kindle a lantern, or ask for a mood reading.</pre>
-        <p class='hint'>Easter egg: type glow while this page is focused.</p>
+        <p id='status' aria-live='polite'></p>
+        <pre id='reading' aria-live='polite'>Press kindle random lantern, or ask for a mood reading.</pre>
+        <p class='hint'>Type glow while this page is focused.</p>
       </section>
     </div>
-
-{% include "footer.njk" %}
   </main>
 
   <script>
@@ -42,7 +30,6 @@ Load your sky, kindle a lantern, or ask for a mood reading.</pre>
       var SKY = 'constellation';
       var canvas = document.getElementById('ritual');
       var ctx = canvas.getContext('2d');
-      var refreshBtn = document.getElementById('refresh');
       var kindleBtn = document.getElementById('kindle');
       var whisperBtn = document.getElementById('whisper');
       var driftBtn = document.getElementById('drift');
@@ -91,22 +78,15 @@ Load your sky, kindle a lantern, or ask for a mood reading.</pre>
         });
       }
 
-      // Why there is nothing to show, in this page's own words: the shared store says which of
-      // the four it is (see js/state.js).
-      var EMPTY_NOTES = {
-        unavailable: 'Local storage is unavailable in this browser context.',
-        unreadable: 'Saved constellation data is unreadable. Open the wish constellation and remake it.',
-        missing: 'No saved constellation found yet. Create one on the wish constellation page first.',
-        ok: 'A sky file exists, but no readable stars were found.'
-      };
-
+      // Reads the saved sky and hangs a lantern on every star. Called from unlock()'s onReady, which
+      // only fires once a sky exists -- saved already, or seeded by the one button the powered-down
+      // page carries.
       function loadStars() {
         var saved = state.read(SKY, []);
         stars = cloneStars(Array.isArray(saved.value) ? saved.value : []).slice(0, 160);
         buildLanterns();
-        statusEl.textContent = stars.length
-          ? 'Lantern field synced: ' + stars.length + ' star' + (stars.length === 1 ? '' : 's') + ' loaded.'
-          : EMPTY_NOTES[saved.status];
+        statusEl.textContent = stars.length === 1 ? '1 saved star loaded.' : stars.length + ' saved stars loaded.';
+        readingEl.textContent = 'Press kindle random lantern, or ask for a mood reading.';
       }
 
       function buildLanterns() {
@@ -154,10 +134,7 @@ Load your sky, kindle a lantern, or ask for a mood reading.</pre>
       }
 
       function askReading() {
-        if (!stars.length) {
-          statusEl.textContent = 'No stars loaded yet. Refresh after creating a constellation.';
-          return;
-        }
+        if (!stars.length) return;
 
         var s = summarize();
         var spreadWord = s.spread < 12 ? 'tight' : (s.spread < 24 ? 'balanced' : 'wide');
@@ -199,10 +176,7 @@ Load your sky, kindle a lantern, or ask for a mood reading.</pre>
       }
 
       function kindleRandomLantern() {
-        if (!lanterns.length) {
-          statusEl.textContent = 'No lanterns available. Refresh after creating stars on the wish constellation page.';
-          return;
-        }
+        if (!lanterns.length) return;
 
         var index = Math.floor(Math.random() * lanterns.length);
         var l = lanterns[index];
@@ -213,7 +187,7 @@ Load your sky, kindle a lantern, or ask for a mood reading.</pre>
         readingEl.textContent = 'kindled lantern:' + sep
           + l.star.text + sep + sep
           + 'coordinates ' + l.star.x.toFixed(1) + ', ' + l.star.y.toFixed(1) + sep
-          + 'tip: ask for mood reading after moving stars on the wish constellation page.';
+          + 'Kindle another, or ask for a mood reading.';
 
         statusEl.textContent = 'Lantern kindled. Thought captured from your saved sky.';
       }
@@ -330,10 +304,6 @@ Load your sky, kindle a lantern, or ask for a mood reading.</pre>
         requestAnimationFrame(frame);
       }
 
-      refreshBtn.addEventListener('click', function () {
-        loadStars();
-      });
-
       kindleBtn.addEventListener('click', kindleRandomLantern);
       whisperBtn.addEventListener('click', askReading);
       driftBtn.addEventListener('click', toggleDrift);
@@ -351,7 +321,11 @@ Load your sky, kindle a lantern, or ask for a mood reading.</pre>
       });
 
       setDriftButton();
-      loadStars();
+      // Powered down until a sky exists: the field and its panel are dimmed and inert, with the one
+      // button that seeds a sky in front of them (js/site.js). Once there is one, loadStars() runs.
+      window.interestingSite.unlock(document.querySelector('.layout'), {
+        onReady: function (stars, how) { loadStars(); }
+      });
       frame();
     })();
   </script>

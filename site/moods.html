@@ -1,74 +1,52 @@
 ---
 layout: layout.njk
 title: the mood atlas
-description: Every orientation this site distinguishes between, every world one of them opens onto, and every way the site has of asking without asking.
+description: 'How this site reads a visitor without asking them to describe themselves: every way it has of asking, the fourteen answers it can arrive at, and the world each one opens.'
 stylesheet: moods
-footer:
-  - [index.html, back to the threshold]
-  - [sitemap.html, site map]
-  - [error.html, observatory 404]
-footerNote: the whole apparatus, shown rather than hidden
 ---
+{#-
+  The apparatus, shown rather than hidden: what the site has read, how it asks, and the fourteen
+  answers. The orientations and the worlds come from _data/worlds.json, the one list the site
+  keeps; js/threshold.js supplies the mechanisms and the pull of each orientation once scripting
+  runs. This page lists every world itself, which is why the shared index after <main> is left
+  off it (see _includes/layout.njk).
+-#}
   <main>
     <h1>the mood atlas</h1>
-    <p class='tagline'>The whole apparatus, laid open: what the site is trying to work out about you, how it goes about it, and what it does with the answer.</p>
+    <p class='tagline'>What the site is trying to work out about you, how it goes about it, and the fourteen answers it can arrive at.</p>
 
     <section class='atlas-state' aria-labelledby='state-heading'>
-      <h2 id='state-heading'>what it currently thinks</h2>
-      <p id='current' class='current'>Reading…</p>
-      <p id='signal-line' class='signal-line'>…</p>
+      <h2 id='state-heading'>what it has read</h2>
+      <p id='current' class='current'>Nothing read yet. Every world is on offer.</p>
+      <p id='signal-line' class='signal-line'></p>
       <div class='controls'>
-        <button id='requery' type='button'>ask me a new way</button>
-        <button id='forget' type='button'>forget everything about me</button>
+        <button id='requery' type='button'>ask me another way</button>
+        <button id='forget' type='button'>forget my reading</button>
         <a class='action' id='current-world' href='index.html' hidden>go to that world</a>
       </div>
       <div id='atlas-probe' class='atlas-probe' hidden></div>
     </section>
 
     <h2 class='section-title'>how it asks</h2>
-    <p class='atlas-copy'>It never asks you to report on yourself. It asks about a door, a stone,
-      the thing you would put in your pocket, the rate at which you tap, how long you hold a
-      button down, where you put a single mark in an empty field. It reads the clock and your
-      time zone over your shoulder while you answer, and it knows how long it has been since you
-      were last here. You get a different mechanism on arrival each time — the last few are
-      remembered precisely so that they are not repeated — and the library below is meant to keep
-      growing.</p>
+    <p class='atlas-copy'>It never asks you to describe yourself. It asks about a door, a stone, the
+      thing you would put in your pocket, the rate at which you tap, how long you hold a button
+      down, where you put one mark in an empty field. It glances at the clock while you answer, and
+      it knows how long it has been since you were last here. You get a different mechanism each
+      time it asks, and whatever it concludes fades over a few days.</p>
     <ul id='mechanisms' class='mechanisms'>
       <li>The mechanisms are listed here once scripting is available. Without it, nothing is lost:
         every world below is a plain link.</li>
     </ul>
 
-    <h2 class='section-title'>what it is choosing between</h2>
-    <p class='atlas-copy'>Fourteen orientations, each with one world behind it. Several of those
-      worlds are the night sky this site grew up as; the rest are not sky at all, which is the
-      point. Nothing in this list is the default, and the site would rather you overruled it than
-      took its word.</p>
+    <h2 class='section-title'>the fourteen</h2>
+    <p class='atlas-copy'>Fourteen frames of mind, each with one world behind it. Six of those worlds
+      are off the sky; eight read one saved sky. Nothing in this list is the default, and the site
+      would rather you overruled it than took its word.</p>
     <ul class='orientations'>
-      <li><a href='quiet-room.html'>banked low</a> <span>wants less asked of it</span> <em>the quiet room</em></li>
-      <li><a href='kinetic-floor.html'>wound tight</a> <span>wants to shove something and watch it go</span> <em>the kinetic floor</em></li>
-      <li><a href='machine-shop.html'>cold and clear</a> <span>wants a mechanism to take apart</span> <em>the machine shop</em></li>
-      <li><a href='loam.html'>low and slow</a> <span>wants something that grows downward</span> <em>loam</em></li>
-      <li><a href='word-kiln.html'>full of half-sentences</a> <span>wants words put in the fire</span> <em>the word kiln</em></li>
-      <li><a href='apocrypha-desk.html'>magpie</a> <span>wants a strange specimen in a drawer</span> <em>the apocrypha desk</em></li>
-      <li><a href='wish-constellation.html'>looking up</a> <span>wants distance and scale</span> <em>the wish constellation</em></li>
-      <li><a href='star-lantern.html'>wants a rite</a> <span>wants to light something on purpose</span> <em>the lantern ritual</em></li>
-      <li><a href='constellation-diary.html'>in the long look</a> <span>wants to re-read its own record</span> <em>the diary</em></li>
-      <li><a href='constellation-weather.html'>weather coming</a> <span>wants pressure, front and squall</span> <em>the weather lab</em></li>
-      <li><a href='constellation-echo.html'>ears first</a> <span>wants to listen to something decay</span> <em>the echo chamber</em></li>
-      <li><a href='wish-terrarium.html'>minding something</a> <span>wants a living thing to keep</span> <em>the terrarium</em></li>
-      <li><a href='sky-archive.html'>asking elsewhere</a> <span>wants an answer it did not author</span> <em>the archive oracle</em></li>
-      <li><a href='orbital-weaver.html'>after symmetry</a> <span>wants a pattern to close</span> <em>the orbital weaver</em></li>
+{%- for world in worlds.offSky.concat(worlds.underSky) %}
+      <li data-world='{{ world.file }}'><a href='{{ world.file }}'>{{ world.name }}</a> <strong>{{ world.orientation }}</strong> <span class='pull'></span></li>
+{%- endfor %}
     </ul>
-
-    <p class='axiom'>
-      <strong>Axiom.</strong> This site asks before it offers. No page assumes what a visitor
-      wants, the query is never the same way twice, and nothing here is ever a gate: the whole
-      site is reachable from <a href='index.html'>the threshold</a> and from
-      <a href='sitemap.xml'>sitemap.xml</a> with the question ignored, declined, or scripting
-      switched off entirely. What the site learns is partly remembered and wears off.
-    </p>
-
-{% include "footer.njk" %}
   </main>
 
   <script>
@@ -86,13 +64,11 @@ footerNote: the whole apparatus, shown rather than hidden
 
         function showReading(reading) {
           var o = reading && reading.orientation;
-          if (!o) {
-            currentEl.textContent = 'Nothing read yet. Everything below is equally on offer.';
+          currentEl.textContent = api.describe(reading);
+          if (!o || !reading.source || reading.source === 'signals') {
             worldLink.hidden = true;
             return;
           }
-          currentEl.textContent = 'Currently read as ' + o.name + ' — ' + o.pull
-            + '. That opens onto ' + o.worldName + '.';
           worldLink.hidden = false;
           worldLink.href = o.world;
           worldLink.textContent = 'go to ' + o.worldName;
@@ -100,11 +76,10 @@ footerNote: the whole apparatus, shown rather than hidden
 
         function showSignals() {
           var s = api.signals();
-          signalEl.textContent = 'clock ' + s.clock
-            + (s.zone ? ' · zone ' + s.zone : '')
-            + ' · ' + s.part
-            + ' · ' + s.sinceText
-            + ' · arrival number ' + s.visits;
+          signalEl.textContent = 'It also reads the clock: it is ' + s.part + ' where you are'
+            + (s.zone ? ' (' + s.zone + ')' : '') + '. '
+            + (s.sinceLast === null ? 'This is your first visit on this machine.'
+              : 'You were ' + s.sinceText + '.');
         }
 
         function run(probeId) {
@@ -117,6 +92,11 @@ footerNote: the whole apparatus, shown rather than hidden
               showReading(reading);
               showSignals();
               requeryBtn.focus();
+            },
+            onSkip: function () {
+              probeHost.textContent = '';
+              probeHost.hidden = true;
+              requeryBtn.focus();
             }
           });
           probeHost.scrollIntoView({ behavior: api.reducedMotion() ? 'auto' : 'smooth', block: 'nearest' });
@@ -127,13 +107,14 @@ footerNote: the whole apparatus, shown rather than hidden
           var item = document.createElement('li');
           var name = document.createElement('span');
           name.className = 'mechanism-name';
-          name.textContent = probe.probe;
+          name.textContent = probe.name || probe.probe;
           var ask = document.createElement('span');
           ask.className = 'mechanism-ask';
           ask.textContent = probe.ask;
           var button = document.createElement('button');
           button.type = 'button';
-          button.textContent = 'run the ' + probe.probe;
+          button.textContent = 'try this one';
+          button.setAttribute('aria-label', 'try ' + (probe.name || probe.probe));
           button.addEventListener('click', function () { run(probe.probe); });
           item.appendChild(name);
           item.appendChild(ask);
@@ -141,13 +122,23 @@ footerNote: the whole apparatus, shown rather than hidden
           list.appendChild(item);
         });
 
+        // The pull of each orientation, under the world it opens onto.
+        api.orientations().forEach(function (o) {
+          var row = document.querySelector('.orientations li[data-world="' + o.world + '"] .pull');
+          if (row) row.textContent = o.pull;
+        });
+
         requeryBtn.addEventListener('click', function () { run(null); });
 
         forgetBtn.addEventListener('click', function () {
           api.forget();
-          showReading({ orientation: null });
+          showReading(null);
           showSignals();
-          currentEl.textContent = 'Forgotten. Nothing is remembered about you on this machine.';
+          currentEl.textContent = 'The reading is forgotten. What you left in the worlds stays until you clear it from the state menu, bottom right.';
+        });
+
+        window.addEventListener('threshold:reading', function () {
+          if (probeHost.hidden) showReading(api.reading());
         });
 
         showReading(api.reading());

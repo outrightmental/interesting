@@ -1,23 +1,18 @@
 ---
 layout: layout.njk
 title: the apocrypha desk
-description: A catalogue of objects that do not exist, dealt one at a time and filed in a drawer you keep, for anyone reading as magpie.
+description: 'Open a drawer and a specimen that never existed lands on the desk with a catalogue number, a provenance and an assessment, and the ones you pin stay in the drawer.'
 stylesheet: apocrypha-desk
-footer:
-  - [index.html, back to the threshold]
-  - [moods.html, mood atlas]
-  - [sky-archive.html, open the archive oracle]
-footerNote: every specimen here is fiction, catalogued carefully
 ---
   <main>
     <h1>the apocrypha desk</h1>
-    <p class='tagline'>Where the threshold sends anyone reading as magpie. A catalogue of things that were never accessioned anywhere, because they were never real.</p>
+    <p class='tagline'>A catalogue of objects that were never real, dealt one at a time. Keep the ones you like in the drawer.</p>
 
     <div class='layout'>
       <div class='card' id='card'>
         <p class='card-number' id='card-number'>— — —</p>
-        <h2 class='card-name' id='card-name'>nothing on the desk</h2>
-        <p class='card-line' id='card-provenance'>Pull something out of the cabinet.</p>
+        <h2 class='card-name' id='card-name'>the desk is clear</h2>
+        <p class='card-line' id='card-provenance'>Open a drawer to put a specimen on it.</p>
         <p class='card-line' id='card-note'></p>
         <p class='card-verdict' id='card-verdict'></p>
       </div>
@@ -32,13 +27,12 @@ footerNote: every specimen here is fiction, catalogued carefully
           <button id='cross' type='button'>cross-reference the drawer</button>
           <button id='burn' type='button'>empty the drawer</button>
         </div>
-        <p id='status' aria-live='polite'>The desk is clear. Nothing accessioned.</p>
+        <p id='status' aria-live='polite'>Nothing accessioned yet.</p>
         <pre id='reading'>drawer empty</pre>
         <p class='hint'>Nothing on this page is a real object, a real collection or a real claim about the world.</p>
       </section>
     </div>
 
-{% include "footer.njk" %}
   </main>
 
   <script>

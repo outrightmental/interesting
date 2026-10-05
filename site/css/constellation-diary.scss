@@ -91,8 +91,9 @@ a.action:focus-visible {
   background: rgba(7, 11, 23, 0.5);
 }
 
+// The sub-note under the section's heading.
 .capsules p {
-  margin: 0;
+  margin: 0.35rem 0 0;
   color: #d9e6ff;
   font-size: 0.9rem;
 }

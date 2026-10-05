@@ -16,7 +16,9 @@ becoming one piece and not only by growing.
 
 "Interesting" is not left to a model's taste: INTERESTING names the measure, and
 it is user engagement time. The site is more interesting when a person stays
-longer and wants to keep going.
+longer and wants to keep going. LEGIBLE names the test a stranger puts the site
+to -- one name per page, one way to do each thing, content before chrome, never
+a dead end -- because confusion spends engagement time as surely as boredom.
 
 Five axioms stand over every run, each stated in the prompt and held to in code:
 
@@ -111,6 +113,21 @@ WHOLE = "a single functioning excellent experience"
 # is its own piece of work; what this constant does is make the aim of a run unambiguous.
 INTERESTING = ("how long a person stays engaged -- how much they want to keep going, and how "
                "intrigued, astonished or entertained they are while they do")
+
+# What the site has to read like (issue #46 and the usability work of 2026-10-05). MISSION names the
+# aim, INTERESTING the measure and WHOLE the shape; this names the test a stranger puts it to.
+# Confusion spends engagement time as surely as boredom does, and a site rewritten continuously by a
+# model told to engage and to federate drifts, left to itself, towards more chrome: by the time
+# this was written every sky page ended in eight stacked "relay" panels, three trail gadgets and a
+# world index, nine of them ways of saying where to go next, and the home page explained none of
+# its own words.
+#
+# Like WHOLE and INTERESTING it is a standard stated to the model rather than one held to in code:
+# no check can settle whether a page reads clearly. It is stated before a run chooses what to do
+# and again in the line it reads last, with the six holds a run can check its own change against
+# (see LEGIBLE TO A STRANGER in build_prompt).
+LEGIBLE = ("legible to a stranger -- a first-time visitor on a phone can tell what the site is, what "
+           "any page is for, what to do on it and where to go next, without being told twice")
 
 COPILOT_BIN = os.environ.get("COPILOT_BIN", "copilot")
 
@@ -1179,6 +1196,47 @@ def build_prompt(shown, omitted=()):
         "growing, so do not add for the sake of adding: when the site is repetitive, scattered or "
         "inconsistent, re-federating it is the more interesting change. Either way, build on what "
         "is already there rather than starting over.\n\n"
+        f"LEGIBLE TO A STRANGER. Everything above is held to one more standard, which no check can "
+        f"judge and the prompt therefore has to: the site is {LEGIBLE}. Confusion spends "
+        "engagement time as surely as boredom does, so hold every change to these six, and undo "
+        "what already breaks them:\n"
+        "- One name per page, used everywhere: its <title>, its <h1>, every link to it, the site "
+        "map and the mood flow all say the same words, and the one list of pages is "
+        "\"_data/worlds.json\". A link's label is the name of the page it opens, with nothing in "
+        "front of it.\n"
+        "- One sentence of plain purpose: a page's first line says what it is and what to do, in "
+        "plain words. The site's own terms -- the threshold, an orientation, a world, under the "
+        "sky -- are explained once, where a visitor first meets them, and never used as if "
+        "self-evident.\n"
+        "- One way to do each thing: one navigation, one suggestion of where to go next, one index "
+        "of every world, one place that asks. When a job already has a control, improve that "
+        "control; never add a second beside it. The shared shell -- the header, the ribbon and "
+        "the index of every world -- gains nothing from a page: what a page offers lives inside "
+        "its own <main>, under its own heading.\n"
+        "- Content first, chrome small: the header and the ribbon are a few lines; a page's own "
+        "content starts within the first screen of a phone; what follows a page's content is "
+        "shorter than the content. Nothing shared keeps score, fills a meter, mints a title or "
+        "logs a visitor's moves.\n"
+        "- Copy speaks to the visitor, never about the machinery: no axioms, models, runs, "
+        "federation, state documents or 'browser contexts' in anything a visitor reads. A status "
+        "line says what is true now; nothing reads 'loading' or ends in an ellipsis unless "
+        "something is loading, and nothing that scripting fills is written as if it already had.\n"
+        "- Never a dead end: see POWERED DOWN, NEVER BROKEN.\n\n"
+        "POWERED DOWN, NEVER BROKEN. Where a component depends on something the visitor has not "
+        "done yet -- a saved sky, a kept list, storage this browser does not offer -- its only "
+        "announcement of that is the solution, in place: the component presents as unpowered, not "
+        "failed, and carries the one button that powers it by doing the prerequisite itself, in "
+        "the background, writing to the shared state exactly as the visitor's own action would "
+        "(overwriting what is there). Never \"make one on the wish constellation page first\"; "
+        "never \"refresh after creating\". A link to the page where the prerequisite usually "
+        "happens may follow the button as a quieter second choice, never instead of it. This "
+        "holds when the prerequisite cannot be kept, too: a browser that stores nothing still gets "
+        "the button, and what it seeds lasts for the page. The shared helper is "
+        "window.interestingSite.unlock(host, { onReady }) in \"js/site.js\", styled by "
+        "\"_sass/_unlock.scss\": pass it the element to power down and the function to run once a "
+        "sky exists, and it renders the unpowered state, the 'seed a sky to begin' button and the "
+        "quiet link, then calls back. Every world that reads the saved sky uses it; follow its "
+        "shape for any prerequisite it does not cover.\n\n"
         "How the site is built:\n"
         "What you write is source. A small build turns it into the files that are served, and only "
         "the built site is ever published or checked. The whole pipeline is two conventions:\n"
@@ -1195,8 +1253,15 @@ def build_prompt(shown, omitted=()):
         f"partial: it is built into whatever @use's it and never on its own, which is what "
         f"\"{SASS_DIR}/\" holds -- the palette, the base rules and the mixins every stylesheet "
         "shares. Every other file type is copied through untouched.\n"
-        "So one new page is two files: \"thing.html\" with front matter naming the layout and its "
-        "stylesheet, and \"css/thing.scss\" beside it that @use's the shared partials.\n"
+        "- \"_data/worlds.json\" is data every template can read as `worlds`: the one list of the "
+        "site's pages, each with its file, its name, its group, the orientation it answers to and "
+        "a one-line description. The header, the index of every world, the site map and the sky "
+        "circuit are all rendered from it, so a page is added, renamed or retired there and "
+        "everywhere follows.\n"
+        "So one new world is three edits: \"thing.html\" with front matter naming the layout and "
+        "its stylesheet, \"css/thing.scss\" beside it that @use's the shared partials, and its "
+        "line in \"_data/worlds.json\" (plus an orientation in js/threshold.js if it is to be "
+        "offered).\n"
         "A plan whose source does not build is refused, so keep the templates and the stylesheets "
         "valid, and change the shared files with the care they deserve: the layout and "
         f"\"{SASS_DIR}/\" reach every page at once.\n\n"
@@ -1352,8 +1417,9 @@ def build_prompt(shown, omitted=()):
         f"\n\nThis run's mission: {MISSION}, measured in {INTERESTING}. Envision all of the above "
         f"as {WHOLE} -- one navigation, one visual language, one through-line -- and then make the "
         "one change that brings it closest to being that: re-federate what is already there, "
-        "aggressively, and add something new only as part of the same whole. Respond with the JSON "
-        "object only."
+        f"aggressively, and add something new only as part of the same whole. Keep it {LEGIBLE}: one "
+        "name per page, one way to do each thing, content before chrome, and never a dead end. "
+        "Respond with the JSON object only."
     )
     return system + "\n\n" + user
 

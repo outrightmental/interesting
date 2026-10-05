@@ -1,4 +1,5 @@
-// The mood atlas: the apparatus shown rather than hidden.
+// The mood atlas: the apparatus shown rather than hidden. What it has read, how it asks, and the
+// fourteen answers, each a world.
 
 @use 'vars';
 
@@ -80,10 +81,8 @@ body {
 
 .mechanism-name {
   color: var(--accent2);
-  font-family: vars.$mono;
-  font-size: 0.84rem;
-  letter-spacing: 0.06em;
-  min-width: 7rem;
+  font-size: 0.9rem;
+  min-width: 9rem;
 }
 
 .mechanism-ask {
@@ -97,34 +96,28 @@ body {
   padding: 0.34rem 0.8rem;
 }
 
+// A row is the world (the link), the orientation that opens it, and what that orientation wants.
 .orientations a {
+  display: inline-block;
+  padding: 0.15rem 0; // a 24px line box, so the link is a tap target
   color: var(--accent);
   font-size: 0.98rem;
   min-width: 10rem;
 }
 
-.orientations span {
-  flex: 1 1 16rem;
+.orientations strong {
+  color: var(--accent2);
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.orientations .pull {
+  flex: 1 1 14rem;
   color: var(--muted);
   font-size: 0.86rem;
 }
 
-.orientations em {
-  color: var(--accent2);
-  font-style: normal;
-  font-family: vars.$mono;
-  font-size: 0.8rem;
+.orientations .pull:empty {
+  display: none;
 }
 
-.axiom {
-  margin: 1.1rem 0 0;
-  border-left: 2px solid vars.$focus-line;
-  padding-left: 0.75rem;
-  color: #cfdcf5;
-  font-size: 0.9rem;
-  line-height: 1.55;
-}
-
-.axiom a {
-  color: var(--accent);
-}

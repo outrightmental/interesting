@@ -1,5 +1,6 @@
 // The machine shop: one automaton, eight bits, nothing decorative.
 
+@use 'vars';
 @use 'readout';
 
 :root {
@@ -19,6 +20,15 @@
   color: #d6ecff;
   line-height: 1.5;
   font-size: 0.92rem;
+}
+
+// The rule number beside its slider, in a fixed width so the row does not jitter as it changes.
+.row output {
+  min-width: 2.4em;
+  text-align: right;
+  color: var(--accent2);
+  font-family: vars.$mono;
+  font-variant-numeric: tabular-nums;
 }
 
 // The rule's eight bits, which have to line up in columns to be readable at all.

@@ -1,119 +1,20 @@
 ---
 layout: layout.njk
-description: 'This site asks what you are like before it offers you anything: fourteen orientations, a dozen ways of asking, and a world at the end of each.'
+title: the threshold
+description: 'Fourteen small interactive worlds, from a quiet room and a machine shop to a sky you fill with wishes. One short sideways question picks the first to open; every world is a plain link if you would rather choose.'
 stylesheet: index
 ---
   <div class='drift' aria-hidden='true'></div>
 
   <main>
-    <h1>interesting</h1>
-    <p class='tagline'>You have not been offered anything yet.</p>
-    <p class='story'>Not everyone likes stars. This site used to hand everybody the same night sky
-      and hope, which is a poor way to treat a whole population. So it asks first — sideways, about
-      a door or a stone or the rate at which you tap — and reads the clock and your time zone over
-      your shoulder while you answer. The question is different on every arrival, you are never
-      asked to report on yourself, and whatever it decides wears off.</p>
-
-    <section class='threshold-panel' aria-labelledby='threshold-heading'>
-      <h2 id='threshold-heading'>the query</h2>
-      <div id='threshold' class='threshold-host'>
-        <p class='threshold-fallback'>This one needs scripting. Without it, nothing is hidden from
-          you: every world is listed further down, and
-          <a href='moods.html'>the mood atlas</a> describes each orientation and the question
-          mechanisms behind it.</p>
-      </div>
-      <p id='threshold-signals' class='threshold-signals'>reading the clock and the zone…</p>
-    </section>
-
-    <section id='offer' class='offer' aria-labelledby='offer-heading' hidden>
-      <h2 id='offer-heading'>what that opens onto</h2>
-      <p id='offer-read' class='offer-read'></p>
-      <div class='controls' id='offer-links'></div>
-      <p id='offer-near' class='hint'></p>
-      <div class='controls'>
-        <button id='again' type='button'>ask me a different way</button>
-        <a class='action' href='moods.html'>see every orientation</a>
-      </div>
-    </section>
-
-    <h2 class='section-title'>every world, unasked</h2>
-    <p class='hint'>The query is an offer, not a gate. Ignore it and take whichever of these you
-      like — including the one the site would never have picked for you.</p>
-
-{% include 'wayfinding.njk' %}
+    <h1>the threshold</h1>
+    <p class='tagline'>Fourteen small worlds, none of them the default. One sideways question picks a first one to open; all of them are listed below.</p>
+    <p class='story'>Not everyone likes stars. So before this site offers anything it asks one short
+      question, sideways, about a door or a stone or the rate at which you tap, and glances at your
+      clock while you answer. It never asks you to report on yourself, it never asks the same way
+      twice, and whatever it concludes fades over a few days. Answer in the ribbon above, or do
+      not: every world is open either way, including the one it would never have picked for you.</p>
+    <p class='hint'>Each world is built for a different frame of mind, named under its link.
+      <a href='moods.html'>The mood atlas</a> shows the whole apparatus: every way it asks and
+      every answer it can arrive at, with a way to be asked again or forgotten.</p>
   </main>
-
-  <script>
-    (function () {
-      // Tell the shared ribbon to stay quiet here: this page runs the query itself, at full size.
-      // Set during parsing, which is before js/threshold.js runs, because that script is deferred.
-      document.documentElement.setAttribute('data-threshold', 'true');
-
-      function start() {
-        var api = window.threshold;
-        var host = document.getElementById('threshold');
-        var signalsEl = document.getElementById('threshold-signals');
-        var offer = document.getElementById('offer');
-        var readEl = document.getElementById('offer-read');
-        var linksEl = document.getElementById('offer-links');
-        var nearEl = document.getElementById('offer-near');
-        var againBtn = document.getElementById('again');
-        if (!api || !host) return;
-
-        function showSignals() {
-          var s = api.signals();
-          signalsEl.textContent = s.clock + ' where you are'
-            + (s.zone ? ' (' + s.zone + ')' : '')
-            + ' · ' + s.part
-            + ' · ' + s.sinceText
-            + ' · arrival ' + s.visits;
-        }
-
-        function link(href, text) {
-          var a = document.createElement('a');
-          a.className = 'action';
-          a.href = href;
-          a.textContent = text;
-          return a;
-        }
-
-        function offerWorld(reading) {
-          var o = reading.orientation;
-          offer.hidden = false;
-          if (!o) {
-            readEl.textContent = 'Nothing read. Take any world you like.';
-            return;
-          }
-          readEl.textContent = 'Read as ' + o.name + ' — ' + o.pull + '.';
-          linksEl.textContent = '';
-          linksEl.appendChild(link(o.world, 'open ' + o.worldName));
-          nearEl.textContent = '';
-          if (reading.alternates && reading.alternates.length) {
-            nearEl.textContent = 'Close behind: ' + reading.alternates.map(function (alt) {
-              return alt.name;
-            }).join(', ') + '. Any of them is one click away in the list below.';
-          }
-          offer.scrollIntoView({ behavior: api.reducedMotion() ? 'auto' : 'smooth', block: 'nearest' });
-        }
-
-        function query() {
-          offer.hidden = true;
-          api.mount(host, { onAnswer: offerWorld });
-        }
-
-        againBtn.addEventListener('click', function () {
-          query();
-          host.scrollIntoView({ behavior: api.reducedMotion() ? 'auto' : 'smooth', block: 'nearest' });
-        });
-
-        showSignals();
-        query();
-      }
-
-      if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', start);
-      } else {
-        start();
-      }
-    })();
-  </script>

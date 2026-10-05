@@ -38,10 +38,14 @@ $moods: (
   }
 }
 
+
 // The ribbon sits between the header and the page, on every page, because the flow is ongoing
-// rather than a gate at the front door.
+// rather than a gate at the front door. It is one sentence and at most two controls; while it
+// asks, the question takes the sentence's place.
 .mood-ribbon {
-  width: min(980px, 96vw);
+  position: relative;
+  z-index: 2; // above any page's full-screen backdrop canvas
+  width: min(980px, 100%);
   margin: 0 0 0.62rem;
   border: 1px solid vars.$hairline;
   border-radius: vars.$radius-panel;
@@ -53,22 +57,25 @@ $moods: (
 
 .mood-ribbon-text {
   margin: 0;
-  color: var(--accent2);
+  color: var(--muted);
   font-size: 0.92rem;
-  line-height: 1.35;
+  line-height: 1.4;
 }
 
-.mood-ribbon-where {
-  margin: 0;
-  color: var(--muted);
-  font-size: 0.78rem;
-  font-family: vars.$mono;
+// While the question is open, the sentence that frames it reads at full strength.
+.mood-ribbon[data-state='asking'] .mood-ribbon-text {
+  color: var(--fg);
+}
+
+// A reading the visitor gave, or one carried over, is said in the answer colour. A guess, or
+// nothing, stays quiet.
+.mood-ribbon[data-state='answered'] .mood-ribbon-text,
+.mood-ribbon[data-state='carried'] .mood-ribbon-text {
+  color: var(--accent2);
 }
 
 .mood-ribbon-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.45rem;
+  margin: 0;
 }
 
 .mood-ribbon-actions button,
@@ -80,7 +87,6 @@ $moods: (
 .mood-ribbon[data-asking='true'] {
   border-color: vars.$focus-line;
 }
-
 // A query, wherever it is rendered: in the ribbon, or as the whole of the threshold page.
 .probe {
   display: grid;
@@ -128,9 +134,17 @@ $moods: (
   line-height: 1.35;
 }
 
-.probe-skip {
+.probe-skip,
+.probe-undo {
   width: auto;
+  justify-self: start;
   margin-top: 0.5rem;
+}
+
+// The skip sits last in every mechanism, quieter than the answers.
+.probe-skip {
+  color: var(--muted);
+  font-size: 0.86rem;
 }
 
 .probe-big {
@@ -138,6 +152,11 @@ $moods: (
   min-height: 72px;
   font-size: 1.05rem;
   border-radius: vars.$radius-well;
+  // A long press on a phone must not select text or open a menu: the press is the answer.
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
 
 .probe-big.held {
@@ -149,9 +168,13 @@ $moods: (
 .probe-trace {
   margin: 0;
   color: var(--muted);
-  font-size: 0.78rem;
+  font-size: 0.8rem;
   font-family: vars.$mono;
   min-height: 1.2em;
+}
+
+.probe-meter:empty {
+  display: none;
 }
 
 .probe-field {
@@ -167,7 +190,8 @@ $moods: (
   cursor: crosshair;
 }
 
-.probe-field:focus-visible {
+.probe-field:focus-visible,
+.probe-pad:focus-visible {
   outline: 2px solid transparent;
   border-color: vars.$focus-line;
   box-shadow: 0 0 0 3px vars.$focus-ring;

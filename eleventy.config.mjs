@@ -5,8 +5,9 @@
  * Two conventions, and nothing else:
  *
  *   - .html files are Nunjucks templates with optional YAML front matter. `layout: layout.njk`
- *     wraps the page in the shared shell in site/_includes, so the <head>, the stylesheet links
- *     and the footer live in one place rather than in every page.
+ *     wraps the page in the shared shell in site/_includes, so the <head>, the stylesheet links,
+ *     the header, the mood ribbon and the index of every world live in one place rather than
+ *     in every page.
  *   - .scss files compile to .css at the same path. A file whose name starts with "_" is a
  *     partial: it is only ever @use'd by another file, never built on its own. The shared partials
  *     in site/_sass are what "common files" means -- one palette, one set of base rules, one
@@ -31,8 +32,10 @@ const SOURCE_DIR = process.env.SITE_SOURCE_DIR || "site";
 
 // Where the shared files live, inside the source folder. Both are Eleventy conventions ("_" says
 // "not a page"), and both are inside /site so the hourly AI can edit them like anything else.
-const INCLUDES_DIR = "_includes"; // layouts and partials: layout.njk, footer.njk
+const INCLUDES_DIR = "_includes"; // layouts and partials: layout.njk, worlds.njk
 const SASS_DIR = "_sass"; // the common Sass partials, on every stylesheet's load path
+// A third, Eleventy's own default and so not named here: "_data", whose worlds.json every template
+// reads as `worlds` -- the one list of the site's pages. Like the other two it is never published.
 
 // File types copied through untouched. Text only, which is every type /site is allowed to hold;
 // make_interesting.py's ALLOWED_EXTENSIONS is the other half of that list.
