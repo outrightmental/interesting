@@ -36,13 +36,14 @@
                 relative links, so they work under any sub-path unchanged.
 
   What a page is: its <main> is the feature. It is unbordered, it fills the first screen (the
-  viewport less the room the floating nav leaves and a margin, so the feed peeks above the fold),
-  its background is the page's own palette bleeding to the viewport's edges, and its content sits
-  in a centred column (every direct child of <main> lands in that column; see _sass/_panel.scss).
-  A world page's <main> is the stage (_includes/stage.njk): a piece of that world, generated from
-  a seed, played and finished there, and replaced by the next card from the feed. A page sets
-  nothing about navigation: the logo, the persona and the feed are the whole of the shared chrome,
-  and they are the same on every page.
+  viewport less the room the floating nav leaves and a margin, so the feed peeks above the fold --
+  nothing sits above it any more, and it keeps the room the two floating marks need clear at the
+  top), its background is the page's own palette bleeding to the viewport's edges, and its content
+  sits in a centred column (every direct child of <main> lands in that column; see
+  _sass/_panel.scss). A world page's <main> is the stage (_includes/stage.njk): a piece of that
+  world, generated from a seed, played and finished there, and replaced by the next card from the
+  feed. A page sets nothing about navigation: the logo, the persona and the feed are the whole of
+  the shared chrome, and they are the same on every page.
 
   The shared chrome, and why it is this size:
     the logo     a sparkles mark in the upper left, floating over the page, and nothing else at
@@ -99,7 +100,7 @@
                      "are you sure you want to ______?" modal (see the README,
                      "Destructive-caution axiom"), plus the main nav -- the logo's lightbox, the
                      options that come and go with the state, and the two corner affordances it
-                     adopts -- the slider fill and each stage's aspect ratio. Not deferred either,
+                     adopts -- and the slider fill. Not deferred either,
                      both because a page's own script may call it and because it marks the
                      document as scripted before the body is drawn, and after the persona it
                      reads from.

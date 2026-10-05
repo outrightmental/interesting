@@ -487,6 +487,7 @@
   // them, and nothing may restyle them or reproduce their words.
   var CORNER_COOKIES = '.site-consent-link'; // js/analytics.js draws it, bottom-left
   var CORNER_STATE = '.site-meta-open'; // js/state.js draws it, bottom-right
+  var STATE_PANEL = 'site-meta-panel'; // and the panel that button opens, which it names
 
   var STAR_STEP = 56; // the drop from one star to the next, in CSS pixels
   var STAR_STEP_MIN = 48; // never closer than this, or two chips would touch
@@ -647,13 +648,6 @@
     // A column per orbit as soon as the screen is wide enough for one -- and also when one column
     // would not fit the viewport, where the columns are the only thing that makes it fit.
     var columns = groups.length > 1 && (wide || room < counted * STAR_STEP_MIN) ? groups.length : 1;
-    var longest = counted;
-    if (columns > 1) {
-      longest = 0;
-      for (g = 0; g < groups.length; g++) longest = Math.max(longest, groups[g].length);
-    }
-    var step = longest > 1
-      ? Math.max(STAR_STEP_MIN, Math.min(STAR_STEP, room / (longest - 1))) : STAR_STEP;
     // Where each column starts: after the widest chip of the one before it, so a long label
     // ("go to the apocrypha desk") cannot land on top of the column beside it.
     var lefts = [STAR_EDGE];
@@ -667,8 +661,17 @@
         && lefts[last] + STAR_SPREAD + widths[last] + 16 > (window.innerWidth || 1024)) {
       columns = 1;
     }
+    // The longest column decides the step, so every orbit falls at the same rhythm.
+    var longest = counted;
+    if (columns > 1) {
+      longest = 0;
+      for (g = 0; g < groups.length; g++) longest = Math.max(longest, groups[g].length);
+    }
+    var step = longest > 1
+      ? Math.max(STAR_STEP_MIN, Math.min(STAR_STEP, room / (longest - 1))) : STAR_STEP;
     var order = 0;
     var y = top;
+    var deepest = top;
     for (g = 0; g < groups.length; g++) {
       var x0 = STAR_EDGE;
       if (columns > 1) {
@@ -678,9 +681,15 @@
       for (var i = 0; i < groups[g].length; i++, order++) {
         star(groups[g][i], x0 + STAR_SCATTER[order % STAR_SCATTER.length] * STAR_SPREAD,
           y + i * step, mid, order);
+        deepest = Math.max(deepest, y + i * step);
       }
       if (columns === 1) y += groups[g].length * step; // the next orbit carries on below
     }
+    // And if the lowest star would still be below the fold -- a very short viewport, or a very
+    // long list of options -- the cascade is what fits: the stylesheet's other layout, a list
+    // under the logo that scrolls, which is also what the markup is without a script at all.
+    var fits = deepest + STAR_STEP_MIN + mid + 16 <= (window.innerHeight || 700);
+    html.setAttribute('data-nav', fits ? 'live' : 'cascade');
   }
 
   /* ---- the options that come and go -------------------------------------------------------- */
@@ -740,8 +749,50 @@
 
   /* ---- opening and closing ---------------------------------------------------------------- */
 
-  function setOpen(on) {
-    if (nav && nav.host.open !== on) nav.host.open = on; // the toggle handler does the rest
+  /* The lightbox, up and down. Idempotent on purpose, because two things call it: the <details>
+     element's own toggle event, and close() below -- a browser fires `toggle` in a task of its
+     own, which is a moment too late for anything that has to happen before the next line runs. */
+  function lightbox(on) {
+    nav.logo.setAttribute('aria-expanded', on ? 'true' : 'false');
+    if (on) {
+      installHold();
+      shape();
+      aside(true);
+      hold(true);
+      html.setAttribute('data-lightbox', 'nav');
+      // The branch starts over on every press: a browser that keeps a closed <details> rendered
+      // would otherwise have run the animation once and left it there.
+      nav.sky.classList.remove('is-branching');
+      void nav.sky.offsetWidth;
+      nav.sky.classList.add('is-branching');
+    } else {
+      html.removeAttribute('data-lightbox');
+      hold(false);
+      aside(false);
+      nav.sky.classList.remove('is-branching');
+    }
+  }
+
+  /* Closing it, and giving the page straight back: the <details> closes, and the lightbox comes
+     down now rather than in the task the toggle event is queued in -- an adopted dialog opening
+     on the next line has to find the page live, not inert. */
+  function close(focusLogo) {
+    if (nav.host.open) nav.host.open = false;
+    lightbox(false);
+    if (focusLogo && typeof nav.logo.focus === 'function') nav.logo.focus();
+  }
+
+  /* The state menu hands the focus back to its own button when it closes -- the one the shell has
+     hidden, where a keyboard would land nowhere -- so the logo takes it instead, as soon as the
+     panel is away. Nothing of the menu is touched to arrange it; this only watches. */
+  function giveTheLogoTheFocusBack(panel) {
+    if (!panel || !window.MutationObserver) return;
+    var watch = new MutationObserver(function () {
+      if (!panel.hidden) return;
+      watch.disconnect();
+      if (typeof nav.logo.focus === 'function') nav.logo.focus();
+    });
+    watch.observe(panel, { attributes: true, attributeFilter: ['hidden'] });
   }
 
   // The chips, the logo included, in the order a Tab walks them.
@@ -782,41 +833,24 @@
       readingGo: document.getElementById('sparknav-reading-go'),
       readingLabel: document.getElementById('sparknav-reading-label'),
       cookies: document.getElementById('sparknav-cookies'),
+      cookiesOpen: document.getElementById('sparknav-cookies-open'),
       state: document.getElementById('sparknav-state'),
+      stateOpen: document.getElementById('sparknav-state-open'),
       stateLabel: document.getElementById('sparknav-state-label')
     };
-    if (!nav.logo || !nav.sky || !nav.orbits.length || !nav.cookies || !nav.state) {
+    if (!nav.logo || !nav.sky || !nav.orbits.length || !nav.cookiesOpen || !nav.stateOpen) {
       nav = null;
       return;
     }
 
     nav.host.addEventListener('toggle', function () {
-      var open = nav.host.open;
-      nav.logo.setAttribute('aria-expanded', open ? 'true' : 'false');
-      if (open) {
-        installHold();
-        shape();
-        aside(true);
-        hold(true);
-        html.setAttribute('data-lightbox', 'nav');
-        // The branch starts over on every press: a browser that keeps a closed <details> rendered
-        // would otherwise have run the animation once and left it there.
-        nav.sky.classList.remove('is-branching');
-        void nav.sky.offsetWidth;
-        nav.sky.classList.add('is-branching');
-      } else {
-        html.removeAttribute('data-lightbox');
-        hold(false);
-        aside(false);
-        nav.sky.classList.remove('is-branching');
-      }
+      lightbox(nav.host.open);
     });
     nav.logo.setAttribute('aria-expanded', nav.host.open ? 'true' : 'false');
 
     // A press on the veil is a press on the page behind it, which is a way of saying "not this".
     nav.veil.addEventListener('click', function () {
-      setOpen(false);
-      nav.logo.focus();
+      close(true);
     });
 
     // A destination closes the menu on its way out, so a link to the page the visitor is already
@@ -824,24 +858,29 @@
     nav.sky.addEventListener('click', function (event) {
       var node = event.target;
       while (node && node !== nav.sky && node.tagName !== 'A') node = node.parentNode;
-      if (node && node.tagName === 'A') setOpen(false);
+      if (node && node.tagName === 'A') close(false);
     });
 
-    nav.cookies.querySelector('.sparknav-node').addEventListener('click', function () {
-      setOpen(false);
+    nav.cookiesOpen.addEventListener('click', function () {
+      // The constellation gets out of the way first, and the focus goes to the logo rather than
+      // to the chip it is taking with it: both dialogs are the corner affordances' own, drawn
+      // where their own files draw them, and the consent library hands the focus back to whatever
+      // had it when its dialog opened.
+      close(true);
       if (nav.cookiesCorner) nav.cookiesCorner.click();
     });
 
-    nav.state.querySelector('.sparknav-node').addEventListener('click', function () {
-      setOpen(false);
-      if (nav.stateCorner) nav.stateCorner.click();
+    nav.stateOpen.addEventListener('click', function () {
+      close(true);
+      if (!nav.stateCorner) return;
+      giveTheLogoTheFocusBack(document.getElementById(STATE_PANEL));
+      nav.stateCorner.click();
     });
 
     document.addEventListener('keydown', function (event) {
       if (!nav.host.open) return;
       if (event.key === 'Escape' || event.key === 'Esc') {
-        setOpen(false);
-        nav.logo.focus();
+        close(true);
         return;
       }
       keepFocusInside(event);
@@ -863,6 +902,10 @@
   function watchForCorners() {
     if (!window.MutationObserver || !document.body) return;
     var watch = new MutationObserver(function () {
+      // Every page of this site mutates while it is read -- the feed deals cards without end --
+      // so the work only happens when one of the two buttons has actually come or gone.
+      if (document.querySelector(CORNER_COOKIES) === nav.cookiesCorner
+          && document.querySelector(CORNER_STATE) === nav.stateCorner) return;
       shape();
       if (nav.host.open) aside(true); // a button drawn while the lightbox is up belongs behind it
       if (nav.cookiesCorner && nav.stateCorner) watch.disconnect();
