@@ -1220,8 +1220,9 @@ def run_piece_harness(site):
 
     The report is the harness's own JSON: `hasPiece`, `ok` and `problems` per module. A site with
     no modules is not played at all. Raises BuildToolchainError if the harness or Node cannot be
-    run, which is nobody's answer to give; a run of the harness that does not finish in time is
-    reported against every module, since one piece that never ends is enough to hold the rest up.
+    run, which is nobody's answer to give. The harness plays each module in a worker of its own
+    with a limit of its own, so one piece that never ends is reported alone; only a harness that
+    does not return at all is reported against every module.
     """
     modules = {rel: content for rel, content in site.items()
                if rel.startswith(MODULES_DIR) and rel.endswith(".js")
@@ -1231,12 +1232,22 @@ def run_piece_harness(site):
     if not PIECE_HARNESS.is_file():
         raise BuildToolchainError(f"no piece harness at {PIECE_HARNESS}")
     with tempfile.TemporaryDirectory(prefix="pieces-") as work:
+        moddir = Path(work) / "modules"
+        moddir.mkdir()
         for rel, content in modules.items():
-            (Path(work) / PurePosixPath(rel).name).write_text(content, encoding="utf-8", newline="")
-        cmd = [NODE_BIN, str(PIECE_HARNESS), "--modules", work, "--json"]
+            (moddir / PurePosixPath(rel).name).write_text(content, encoding="utf-8", newline="")
+        report_file = Path(work) / "report.json"
+        # The modules are model-written code, so the run gets nothing it could misuse: an empty
+        # environment (no token, no secrets), and Node's permission model, under which it can read
+        # the harness and the modules, write the one report, start its worker threads, and nothing
+        # else -- no other file, no child process.
+        cmd = [NODE_BIN, "--experimental-permission", f"--allow-fs-read={PIECE_HARNESS.parent}",
+               f"--allow-fs-read={work}", f"--allow-fs-write={work}", "--allow-worker",
+               str(PIECE_HARNESS), "--modules", str(moddir), "--out", str(report_file)]
+        env = {"PATH": os.environ.get("PATH", ""), "HOME": work, "LANG": "C.UTF-8", "NODE_NO_WARNINGS": "1"}
         try:
-            played = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8",
-                                    errors="replace", cwd=REPO_ROOT, timeout=PIECE_TIMEOUT_SECONDS)
+            played = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace",
+                                    cwd=work, env=env, timeout=PIECE_TIMEOUT_SECONDS)
         except FileNotFoundError:
             raise BuildToolchainError(f"the piece harness needs Node, which was not found ({NODE_BIN!r})") from None
         except subprocess.TimeoutExpired:
@@ -1244,8 +1255,8 @@ def run_piece_harness(site):
             return {PurePosixPath(rel).stem: {"id": PurePosixPath(rel).stem, "hasPiece": True, "ok": False,
                                               "problems": [late]} for rel in modules}
         try:
-            report = json.loads(played.stdout)
-        except ValueError:
+            report = json.loads(report_file.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
             raise BuildToolchainError("the piece harness gave no report: "
                                       + one_line(played.stderr or played.stdout or "nothing", 500))
         return {entry["id"]: entry for entry in report.get("modules", [])
@@ -1454,11 +1465,12 @@ def build_prompt(shown, omitted=()):
         "shares. Every other file type is copied through untouched.\n"
         "- \"_data/worlds.json\" is data every template can read as `worlds`: the one flat list of "
         "the site's worlds, each with its file, its name, the orientation it answers to, the mood "
-        "id that gives it its palette, the aspect ratio of its card and a one-line description. "
-        "There are no groups: a world is a world, whether or not it reads the sky. The feed of "
-        "every world (the index, as cards), the site map and the mood atlas are all rendered from "
-        "it. Three things are not, and change with it by hand: the page's own title: and <h1>, "
-        f"its worldName in {MOOD_SCRIPT}, and its <loc> in {SITEMAP}.\n"
+        "id that gives it its palette, the aspect ratio of its card and a one-line description, "
+        "which is what the world's pieces are like. There are no groups: a world is a world, "
+        "whether or not it reads the sky. The feed of every world (the index, as cards), the site "
+        "map, the mood atlas and every world page's own <h1> are all rendered from it. Three "
+        "things are not, and change with it by hand: the page's title in its front matter, its "
+        f"worldName in {MOOD_SCRIPT}, and its <loc> in {SITEMAP}.\n"
         "- The one visual language is Material Design 3 (m3.material.io), written once in "
         f"\"{SASS_DIR}/\": the tokens in _tokens.scss (every M3 colour role derived with "
         "color-mix() from four seeds, --bg, --bg2, --accent and --accent2; the shape scale; the "
@@ -1664,12 +1676,15 @@ def build_prompt(shown, omitted=()):
         "choice (two to four options), toggle, range, press, hold, tap, wait -- and it is finished "
         "when every knob is set (a tap or a wait knob is set by the piece itself, through "
         "ctx.satisfy(id); a tap anywhere on the scene must count, because the stage's own 'tap "
-        "for me' button and the check tap at random points), or when it calls ctx.complete() -- "
-        "and it is finished by its visitor, never by itself before they have set a knob. The "
-        "same seed makes the same piece and different seeds make different pieces. A piece is "
-        "pure drawing and arithmetic on what the stage hands it (ctx: the canvas and its 2d "
-        "context, the size, the world's colours, a seeded random source, the stars, status(), "
-        "progress()) and never reaches for the document, the window or the browser's storage. The "
+        "for me' button and the check tap at random points; only a tap or a wait knob is the "
+        "piece's to set, and never before the visitor has set something), or, with auto: false, "
+        "when it calls ctx.complete() -- and it is finished by its visitor, never by itself "
+        "before they have set a knob. frame's t is seconds since the piece started. The same seed "
+        "makes the same piece and different seeds make different pieces. A piece is pure drawing "
+        "and arithmetic on what the stage hands it (ctx: the canvas and its 2d context, the size, "
+        "the world's colours, a seeded random source, the stars, status(), progress()) and never "
+        "reaches for the document, the window, the clock, Math.random or the browser's storage; "
+        "a module imports nothing and is self-contained. The "
         "world's old interactive page is the piece's material, and re-thinking a world as a piece "
         "is the normal work of a run: what it let a visitor do becomes the knobs, what it showed "
         "becomes the scene, what it said becomes the title and the one line under it, in the "

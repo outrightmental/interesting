@@ -49,7 +49,7 @@
 {%- endif %}
     <div class='stage-body' id='stage-body'>
       <div class='stage-scene' id='stage-scene'>
-        <canvas class='stage-canvas' id='stage-canvas' aria-label='The piece, drawn live. Its controls follow.'></canvas>
+        <canvas class='stage-canvas' id='stage-canvas' role='img' aria-label='the scene'></canvas>
         <div class='stage-done' id='stage-done' hidden>
           <span class='stage-done-mark' aria-hidden='true'><svg class='icon' viewBox='0 0 24 24' focusable='false'><path d='M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z'/></svg></span>
           <p class='stage-done-text' id='stage-done-text'>done</p>
@@ -59,13 +59,13 @@
         <div class='stage-knobs' id='stage-knobs'></div>
         <p class='stage-status' id='stage-status' aria-live='polite'></p>
         <div class='stage-foot'>
-          <div class='stage-progress' id='stage-progress' aria-hidden='true'></div>
           <div class='stage-foot-actions'>
+            <button type='button' class='btn-text' id='stage-skip' hidden>skip this one</button>
 {%- if threshold %}
             <button type='button' class='btn-text' id='stage-again' hidden>ask another way</button>
 {%- endif %}
-            <button type='button' class='btn-text' id='stage-skip' hidden>skip this one</button>
           </div>
+          <div class='stage-progress' id='stage-progress'></div>
         </div>
       </div>
     </div>

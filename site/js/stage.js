@@ -27,8 +27,10 @@
               options: [{ label: 'slow', value: 12 }, { label: 'slower', value: 16 }] },
             { id: 'breathe', ask: 'follow three breaths', kind: 'wait', after: 'pace' }
           ],
-          start(ctx) {},                            // the scene is ready to draw on
-          frame(t, dt, ctx) {},                     // one frame (optional); t and dt in seconds
+          start(ctx) {},                            // the scene is ready to draw on (called again
+                                                    // after a resize if the piece has no frame)
+          frame(t, dt, ctx) {},                     // one frame (optional); t is seconds since the
+                                                    // piece started, dt since the last frame
           apply(id, value, ctx) {},                 // a knob was set (the stage sets it)
           tap(x, y, ctx) {},                        // the scene was tapped, x and y in 0..1
                                                     // (optional; a 'tap' knob needs it)
@@ -38,19 +40,23 @@
 
   Knob kinds, and who satisfies them:
     choice   2-4 options; the stage calls apply(id, option.value) and marks the knob set
-    toggle   one button, on or off; apply(id, boolean)
+    toggle   one button, on or off (off unless `value` is true); apply(id, boolean)
     range    a slider: min, max, step, value, low, high (the words at the ends); apply(id, number)
-             on every move, set on the first release
+             on every move, set on the first release; ctx.value(id) is where it starts from the
+             first frame on
     press    one big button pressed `count` times (label); apply(id, n) each press, set at count
     hold     one big button held for `ms` (label); apply(id, heldMs) when let go after long enough
     tap      the scene itself, tapped: the piece's tap() decides, and calls ctx.satisfy(id)
-             when the knob is set (ctx.progress(id, 0..1) shows how close); the stage adds a
-             button for anyone who cannot tap the scene, which calls tap() at a random point
+             when the knob is set (ctx.progress(id, 0..1) shows how close). A tap anywhere must
+             count, since the stage adds a button for anyone who cannot tap the scene, which
+             calls tap() at a random point, and the law taps at random points too.
     wait     a timed phase the piece runs in frame(): it calls ctx.progress(id, 0..1) and
              ctx.satisfy(id) when done
-  A knob with `after: '<id>'` is disabled until that knob is set. Every knob stays live after it
-  is set -- a toy is for fidgeting with -- and the piece is finished when all are set (or, with
-  auto: false, when it calls ctx.complete()).
+  Only a tap or a wait knob is the piece's to set, and never before the visitor has set
+  something themselves: a piece is finished by the person playing it. A knob with
+  `after: '<id>'` is disabled until that knob is set. Every knob stays live after it is set -- a
+  toy is for fidgeting with -- and the piece is finished when all are set (or, with auto: false,
+  when it calls ctx.complete()).
 
   ctx, the same object for the whole piece:
     canvas, g (its 2d context), w, h (CSS pixels; the context is already scaled for the screen),
@@ -61,18 +67,19 @@
     complete().
 
   The law: every world's piece must finish. .github/scripts/piece_harness.mjs drives each
-  module's piece through its knobs with a stub canvas and refuses one that does not complete
-  expediently (two to five knobs, under forty-five seconds of simulated time), that finishes
-  itself before its visitor has set a knob, that is not the same piece for the same seed, or that
-  is the same piece for every seed. The AI run's
-  check_completion holds every plan to it, and RealSiteTest holds the site as committed. A
-  piece is pure drawing and arithmetic on ctx: it never reaches for the document, the window or
-  the browser's storage, which is also what lets the harness run it.
+  module's piece through its knobs with a stub canvas, in a worker with no document, no clock
+  and no Math.random, and refuses one that does not complete expediently (two to five knobs,
+  under forty-five seconds of simulated time), that sets its own knobs before the visitor has
+  touched it, that is not the same piece for the same seed, or that is the same piece for every
+  seed. The AI run's check_completion holds every plan to it, and RealSiteTest holds the site as
+  committed. A piece is pure drawing and arithmetic on ctx: it never reaches for the document,
+  the window, the clock or the browser's storage, and a module is self-contained (it imports
+  nothing), which is also what lets the harness run it.
 
   ---------------------------------------------------------------------------------------------
   What a page can call
 
-      window.interestingStage
+      window.interestingStage           (only on a page that has the stage)
         .open(file, seed, options)   open the named world's piece for `seed` on this stage;
                                      options.push=false keeps the URL, options.scroll=true
                                      brings the stage into view
@@ -83,8 +90,9 @@
       'stage:home' (the threshold's own state, on going back)
 
   The URL carries the piece: `world.html#<seed>` is this piece, shareable, and the back button
-  walks back through the pieces a visitor finished. Opening a card from another world moves the
-  address to that world's page without a load: a page is wherever the stage is.
+  walks back through the pieces a visitor finished (a skipped one is replaced, not kept).
+  Opening a card from another world moves the address to that world's page without a load: a
+  page is wherever the stage is.
 
   Nothing here reaches for the browser's storage. The sky is read through the persona, the next
   card through the feed, and nothing is written but the address.
@@ -116,6 +124,10 @@ function el(tag, className, text) {
   if (className) node.className = className;
   if (text !== undefined && text !== null) node.textContent = text;
   return node;
+}
+
+function hidden(text) {
+  return el('span', 'visually-hidden', text);
 }
 
 function mulberry32(a) {
@@ -206,13 +218,24 @@ const ui = stage ? {
   doneText: document.getElementById('stage-done-text'),
   skip: document.getElementById('stage-skip'),
   again: document.getElementById('stage-again'),
-  burst: document.getElementById('stage-burst')
+  burst: document.getElementById('stage-burst'),
+  gate: null // the element the unlock helper powers down, one per unpowered open
+} : null;
+
+// What the page said before any piece opened: the threshold goes back to it.
+const home = stage ? {
+  name: ui.world.textContent,
+  line: ui.title.textContent,
+  title: document.title,
+  world: document.documentElement.dataset.world || ''
 } : null;
 
 let current = null; // the piece on stage, and everything the stage knows about it
 let pending = null; // the token of the open() in flight, so a slow module cannot land late
 let frameHandle = 0;
 let lastFrame = 0;
+let firstPiece = null; // on a page of no world (the 404): the piece that opened on arrival
+const altRnd = mulberry32(newSeed()); // for the 'tap for me' button, apart from the piece's own
 
 function setMode(mode) {
   stage.dataset.mode = mode;
@@ -229,6 +252,10 @@ async function open(file, seed, options) {
   close();
   const token = {};
   pending = token;
+
+  // A card pressed while the threshold is asking answers the question another way: by leaving.
+  const probe = document.getElementById('persona-probe');
+  if (probe && !probe.hidden) probe.hidden = true;
 
   document.documentElement.dataset.world = world.mood;
   if (ui.world) ui.world.textContent = world.name;
@@ -249,39 +276,50 @@ async function open(file, seed, options) {
   ui.status.textContent = '';
   ui.done.hidden = true;
   ui.skip.hidden = true;
+  if (ui.read && !opts.keepRead) ui.read.hidden = true;
 
   const mod = await loadModule(world.id);
   if (pending !== token) return false;
   if (!mod || typeof mod.piece !== 'function') {
     // A world without a piece (the law forbids it, but a stage never breaks): the world's own
     // line, and the way on.
-    empty();
+    empty(opts);
     return false;
   }
   const stars = persona ? persona.stars() : [];
   if (mod.needsSky && !stars.length && site && typeof site.unlock === 'function') {
-    // Powered down, never broken: the piece needs a sky, and the one button that seeds it is the
-    // whole of what the stage says about that.
-    setMode('unpowered');
-    ui.skip.hidden = false; // the river does not stop here: a visitor can pass this one by
-    let begun = false;
-    site.unlock(ui.scene, {
-      onReady() {
-        if (pending !== token || begun) return;
-        begun = true;
-        begin(world, mod, seed, token, opts);
-      }
-    });
+    gate(world, mod, seed, token, opts);
     return true;
   }
   begin(world, mod, seed, token, opts);
   return true;
 }
 
-function empty() {
+// Powered down, never broken: the piece needs a sky, and the one button that seeds it is the
+// whole of what the stage says about that. The helper powers down a throwaway element of this
+// open's own, so a later piece is never dimmed by a sky cleared after this one is gone.
+function gate(world, mod, seed, token, opts) {
+  setMode('unpowered');
+  ui.skip.hidden = false;
+  const host = el('div', 'stage-gate');
+  ui.body.insertBefore(host, ui.scene);
+  ui.gate = host;
+  let begun = false;
+  site.unlock(host, {
+    onReady() {
+      if (pending !== token || begun) return;
+      begun = true;
+      begin(world, mod, seed, token, opts);
+    }
+  });
+  if (opts.focus !== false) ui.title.focus({ preventScroll: true });
+}
+
+function empty(opts) {
   ui.brief.textContent = 'Nothing to finish here yet.';
   ui.skip.hidden = false;
   setMode('empty');
+  if (!opts || opts.focus !== false) ui.title.focus({ preventScroll: true });
 }
 
 function makeEnv(seed, world, stars) {
@@ -324,8 +362,12 @@ function begin(world, mod, seed, token, opts) {
   }
   const steps = piece ? normalizeSteps(piece.steps) : [];
   if (!piece || !steps.length) {
-    empty();
+    empty(opts);
     return;
+  }
+  if (ui.gate) {
+    ui.gate.remove();
+    ui.gate = null;
   }
 
   current = {
@@ -333,13 +375,14 @@ function begin(world, mod, seed, token, opts) {
     steps,
     state: new Map(steps.map((s) => [s.id, { step: s, set: false, value: undefined, knob: null }])),
     completed: false,
+    touched: false,
     startedAt: performance.now(),
     ctx: null
   };
 
   ui.title.textContent = piece.title || world.name;
   ui.brief.textContent = piece.brief || '';
-  if (ui.read && !(opts && opts.keepRead)) ui.read.hidden = true;
+  ui.canvas.setAttribute('aria-label', 'the scene: ' + (piece.title || world.name));
   const ratio = aspectRatio(piece.aspect);
   ui.scene.style.setProperty('--piece-aspect', piece.aspect || '16 / 9');
   ui.scene.style.setProperty('--piece-ratio', ratio.toFixed(4));
@@ -347,6 +390,8 @@ function begin(world, mod, seed, token, opts) {
   renderProgress();
   ui.skip.hidden = false;
 
+  // The scene has a size only once the stage is in a mode that shows it.
+  setMode(opts && opts.arriving && !calm.matches ? 'arriving' : 'live');
   current.ctx = makeCtx(env);
   sizeScene();
   try {
@@ -354,13 +399,12 @@ function begin(world, mod, seed, token, opts) {
   } catch (e) {
     /* a piece that cannot start still has its knobs; the frame loop guards itself */
   }
-  setMode(opts && opts.arriving && !calm.matches ? 'arriving' : 'live');
   if (opts && opts.arriving) {
     window.setTimeout(() => {
       if (current && current.token === token && stage.dataset.mode === 'arriving') setMode('live');
     }, 600);
   }
-  if (opts && opts.focus !== false) ui.title.focus({ preventScroll: true });
+  if (!opts || opts.focus !== false) ui.title.focus({ preventScroll: true });
   startFrames();
   try {
     window.dispatchEvent(new CustomEvent('stage:open', { detail: { file: world.file, seed } }));
@@ -371,7 +415,7 @@ function begin(world, mod, seed, token, opts) {
 
 function makeCtx(env) {
   const c = current;
-  const ctx = {
+  return {
     canvas: ui.canvas,
     g: null,
     w: 0,
@@ -416,7 +460,6 @@ function makeCtx(env) {
       finish();
     }
   };
-  return ctx;
 }
 
 function sizeScene() {
@@ -449,7 +492,7 @@ function renderKnobs() {
     const render = KNOBS[step.kind] || KNOBS.choice;
     render(step, knob, ask.id);
     const mark = el('span', 'knob-mark');
-    mark.setAttribute('aria-hidden', 'true');
+    mark.appendChild(hidden('set'));
     knob.appendChild(mark);
     current.state.get(step.id).knob = knob;
     ui.knobs.appendChild(knob);
@@ -460,6 +503,7 @@ function renderKnobs() {
 function apply(id, value) {
   const c = current;
   if (!c) return;
+  c.touched = true;
   const s = c.state.get(id);
   if (s) s.value = value;
   try {
@@ -493,17 +537,25 @@ function updateGates() {
     const gate = s.step.after ? current.state.get(s.step.after) : null;
     const locked = !!(gate && !gate.set);
     s.knob.classList.toggle('is-locked', locked);
-    s.knob.setAttribute('aria-disabled', locked ? 'true' : 'false');
     for (const control of s.knob.querySelectorAll('button, input')) control.disabled = locked;
   }
 }
 
+function tapsOpen() {
+  // Whether a tap on the scene reaches the piece: always, unless every tap knob is still locked.
+  const taps = Array.from(current.state.values()).filter((s) => s.step.kind === 'tap');
+  if (!taps.length) return true;
+  return taps.some((s) => !s.knob || !s.knob.classList.contains('is-locked'));
+}
+
 function renderProgress() {
   ui.progress.textContent = '';
+  let set = 0;
   for (const s of current.state.values()) {
-    const dot = el('span', 'stage-dot' + (s.set ? ' is-set' : ''));
-    ui.progress.appendChild(dot);
+    if (s.set) set += 1;
+    ui.progress.appendChild(el('span', 'stage-dot' + (s.set ? ' is-set' : '')));
   }
+  ui.progress.appendChild(hidden(set + ' of ' + current.state.size + ' set'));
 }
 
 const KNOBS = {
@@ -554,20 +606,19 @@ const KNOBS = {
     row.appendChild(input);
     if (step.high) row.appendChild(el('span', 'knob-end', step.high));
     knob.appendChild(row);
-    // The scene is told where the slider starts, so it can draw that before anything moves.
-    window.setTimeout(() => {
-      if (current && current.state.get(step.id)) current.state.get(step.id).value = Number(input.value);
-    }, 0);
+    // The scene knows where the slider starts before anything moves (ctx.value), unasked.
+    current.state.get(step.id).value = Number(input.value);
   },
   press(step, knob) {
     const count = Math.max(1, Math.min(12, Number(step.count) || 3));
+    const label = step.label || 'press';
+    const word = (left) => (count > 1 && left > 0 ? label + ' (' + left + ')' : label);
     let n = 0;
-    const b = el('button', 'knob-big', (step.label || 'press') + ' (' + count + ')');
+    const b = el('button', 'knob-big', word(count));
     b.type = 'button';
     b.addEventListener('click', () => {
       n += 1;
-      const left = count - n;
-      b.textContent = left > 0 ? (step.label || 'press') + ' (' + left + ')' : (step.label || 'press');
+      b.textContent = word(count - n);
       knob.style.setProperty('--knob-pct', ((n / count) * 100).toFixed(1) + '%');
       apply(step.id, n);
       if (n >= count) markSet(step.id, n, 'knob');
@@ -584,6 +635,7 @@ const KNOBS = {
       if (started || b.disabled) return;
       started = performance.now();
       b.classList.add('is-held');
+      b.setAttribute('aria-pressed', 'true');
       ticker = window.setInterval(() => {
         knob.style.setProperty('--knob-pct', Math.min(100, ((performance.now() - started) / ms) * 100).toFixed(1) + '%');
       }, 50);
@@ -594,6 +646,7 @@ const KNOBS = {
       started = 0;
       window.clearInterval(ticker);
       b.classList.remove('is-held');
+      b.setAttribute('aria-pressed', 'false');
       if (held >= ms) {
         knob.style.setProperty('--knob-pct', '100%');
         apply(step.id, held);
@@ -610,6 +663,7 @@ const KNOBS = {
     b.addEventListener('pointerup', up);
     b.addEventListener('pointerleave', up);
     b.addEventListener('pointercancel', up);
+    b.addEventListener('blur', up);
     b.addEventListener('keydown', (ev) => {
       if ((ev.key === ' ' || ev.key === 'Enter') && !ev.repeat) {
         ev.preventDefault();
@@ -631,9 +685,10 @@ const KNOBS = {
     const b = el('button', 'btn-text knob-alt', step.label || 'tap for me');
     b.type = 'button';
     b.addEventListener('click', () => {
-      if (!current || typeof current.piece.tap !== 'function') return;
+      if (!current || current.completed || typeof current.piece.tap !== 'function') return;
+      current.touched = true;
       try {
-        current.piece.tap(0.2 + current.env.rnd() * 0.6, 0.2 + current.env.rnd() * 0.6, current.ctx);
+        current.piece.tap(0.2 + altRnd() * 0.6, 0.2 + altRnd() * 0.6, current.ctx);
       } catch (e) {
         /* the piece's tap failing is the piece's own problem */
       }
@@ -654,12 +709,15 @@ function startFrames() {
 function frame(now) {
   frameHandle = 0;
   const c = current;
-  if (!c || !c.ctx || !c.ctx.g) return;
+  if (!c || !c.ctx || !c.ctx.g) {
+    lastFrame = 0;
+    return;
+  }
   const dt = lastFrame ? Math.max(0, Math.min(0.05, (now - lastFrame) / 1000)) : 0.016;
   lastFrame = now;
   if (!document.hidden) {
     try {
-      if (typeof c.piece.frame === 'function') c.piece.frame(now / 1000, dt, c.ctx);
+      if (typeof c.piece.frame === 'function') c.piece.frame((now - c.startedAt) / 1000, dt, c.ctx);
     } catch (e) {
       /* a frame that throws is skipped; the next may not */
     }
@@ -670,9 +728,10 @@ function frame(now) {
 if (ui) {
   ui.canvas.addEventListener('pointerdown', (ev) => {
     const c = current;
-    if (!c || c.completed || typeof c.piece.tap !== 'function') return;
+    if (!c || c.completed || typeof c.piece.tap !== 'function' || !tapsOpen()) return;
     const r = ui.canvas.getBoundingClientRect();
     if (!r.width || !r.height) return;
+    c.touched = true;
     try {
       c.piece.tap((ev.clientX - r.left) / r.width, (ev.clientY - r.top) / r.height, c.ctx);
     } catch (e) {
@@ -696,6 +755,8 @@ function finish() {
   renderProgress();
   for (const control of ui.knobs.querySelectorAll('button, input')) control.disabled = true;
   ui.skip.hidden = true;
+  // The piece's own closing line, if it writes one in end(), stands; this is the default.
+  ui.status.textContent = c.piece.title ? 'finished: ' + c.piece.title : 'finished';
   try {
     if (typeof c.piece.end === 'function') c.piece.end(c.ctx);
   } catch (e) {
@@ -704,7 +765,11 @@ function finish() {
   setMode('done');
   ui.doneText.textContent = 'done';
   ui.done.hidden = false;
-  ui.status.textContent = c.piece.title ? 'finished: ' + c.piece.title : 'finished';
+  // The ceremony is on the scene, which on a phone may be above the knob that finished it.
+  const box = ui.scene.getBoundingClientRect();
+  if (box.top < 0 || box.bottom > window.innerHeight) {
+    ui.scene.scrollIntoView({ block: 'center', behavior: calm.matches ? 'auto' : 'smooth' });
+  }
   chime();
   burst();
   try {
@@ -724,17 +789,19 @@ function finish() {
   }, linger);
 }
 
+// Leave without ceremony. A skipped piece is replaced in the history, so going back walks
+// through what was finished and not what was passed over.
 function skip() {
   if (!current) {
-    next();
+    next({ replace: true });
     return;
   }
   const token = current.token;
   setMode('vanishing');
   window.setTimeout(() => {
     if (!current || current.token !== token) return;
-    next();
-  }, calm.matches ? 60 : 260);
+    next({ replace: true });
+  }, calm.matches ? 60 : 420);
 }
 
 async function next(options) {
@@ -754,14 +821,18 @@ async function next(options) {
     if (pending !== token) return; // something else opened meanwhile
   }
   const fit = stars.length ? null : (file) => readsSky.get(file.replace(/\.html$/, '')) !== true;
-  const taken = feed && typeof feed.take === 'function' ? feed.take(fit) : null;
-  if (taken && worldOf(taken.file)) {
-    open(taken.file, taken.seed, Object.assign({ arriving: true }, extra));
-    return;
+  const avoid = current ? current.world.file : null;
+  const taken = feed && typeof feed.take === 'function' ? feed.take(fit, avoid) : null;
+  let file = taken && worldOf(taken.file) ? taken.file : null;
+  let seed = taken ? taken.seed : newSeed();
+  if (!file) {
+    const pool = WORLDS.filter((w) => w.file !== avoid && (!fit || fit(w.file)));
+    const world = pool.length ? pool[Math.floor(Math.random() * pool.length)] : WORLDS[0];
+    if (!world) return;
+    file = world.file;
   }
-  const pool = WORLDS.filter((w) => !current || w.file !== current.world.file);
-  const world = pool.length ? pool[Math.floor(Math.random() * pool.length)] : WORLDS[0];
-  if (world) open(world.file, newSeed(), Object.assign({ arriving: true }, extra));
+  if (extra.first) firstPiece = { file, seed };
+  open(file, seed, Object.assign({ arriving: true }, extra));
 }
 
 function close() {
@@ -771,12 +842,30 @@ function close() {
     if (g) g.clearRect(0, 0, ui.canvas.width, ui.canvas.height);
     current = null;
   }
-  const box = ui.body.querySelector('.unlock');
-  if (box) box.remove();
-  ui.scene.classList.remove('powered-down');
-  ui.scene.removeAttribute('inert');
-  ui.scene.removeAttribute('aria-hidden');
+  if (ui.gate) {
+    ui.gate.remove();
+    ui.gate = null;
+  }
+  for (const box of ui.body.querySelectorAll('.unlock')) box.remove();
   ui.done.hidden = true;
+}
+
+// The threshold's own state, back from a piece: what the page said before anything opened.
+function goHome() {
+  close();
+  ui.world.textContent = home.name;
+  ui.title.textContent = home.line;
+  ui.brief.textContent = '';
+  if (ui.read) ui.read.hidden = true;
+  document.title = home.title;
+  if (home.world) document.documentElement.dataset.world = home.world;
+  else delete document.documentElement.dataset.world;
+  setMode('quiet');
+  try {
+    window.dispatchEvent(new CustomEvent('stage:home'));
+  } catch (e) {
+    /* nothing */
+  }
 }
 
 /* ---- ceremony ------------------------------------------------------------------------------ */
@@ -882,7 +971,7 @@ function thresholdStart() {
   const controls = document.getElementById('threshold-controls');
   const askButton = document.getElementById('threshold-ask');
   const skipButton = document.getElementById('threshold-skip');
-  let openedFor = null; // the orientation whose world is on stage from the reading
+  let wasAsking = false; // the question was just up: whatever it leaves behind opens a fresh piece
 
   if (controls) controls.hidden = false;
   if (ui.again) ui.again.hidden = false;
@@ -903,13 +992,15 @@ function thresholdStart() {
     if (asking) {
       if (current || pending) close();
       setMode('asking');
+      wasAsking = true;
       return;
     }
     const r = readingNow();
     const o = r && r.orientation;
     const read = !!(o && r.source && r.source !== 'signals');
-    if (read && worldOf(o.world) && openedFor !== o.id) {
-      openedFor = o.id;
+    const fresh = wasAsking;
+    wasAsking = false;
+    if (read && worldOf(o.world) && (fresh || (!current && !pending))) {
       if (ui.read) {
         ui.read.textContent = (r.source === 'answer' ? 'read just now as ' : 'carried over as ') + o.name;
         ui.read.hidden = false;
@@ -924,10 +1015,6 @@ function thresholdStart() {
     new MutationObserver(render).observe(probe, { attributes: true, attributeFilter: ['hidden'] });
   }
   window.addEventListener('threshold:reading', render);
-  window.addEventListener('stage:home', () => {
-    openedFor = null;
-    if (ui.read) ui.read.hidden = true;
-  });
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', render);
   else render();
 }
@@ -945,6 +1032,7 @@ function start() {
   if (!stage) return;
   const pageWorld = stage.dataset.stageWorld ? stage.dataset.stageWorld + '.html' : null;
   const threshold = stage.dataset.threshold === 'true';
+  const random = stage.dataset.stageRandom === 'true';
 
   ui.skip.addEventListener('click', skip);
   let lastWidth = 0;
@@ -954,22 +1042,25 @@ function start() {
     if (Math.abs(w - lastWidth) < 1) return;
     lastWidth = w;
     sizeScene();
+    // A piece that draws only in start() draws again at the new size.
+    if (typeof current.piece.frame !== 'function' && typeof current.piece.start === 'function') {
+      try {
+        current.piece.start(current.ctx);
+      } catch (e) {
+        /* nothing more to do */
+      }
+    }
   });
   window.addEventListener('popstate', (ev) => {
-    const s = (ev.state && ev.state.world) ? ev.state : parseHash();
+    const s = ev.state && ev.state.world ? ev.state : parseHash();
     if (s && s.world && worldOf(s.world)) {
-      open(s.world, s.seed, { push: false });
-    } else if (threshold) {
-      close();
-      setMode('quiet');
-      try {
-        window.dispatchEvent(new CustomEvent('stage:home'));
-      } catch (e) {
-        /* nothing */
-      }
-    } else if (pageWorld) {
-      open(pageWorld, (s && s.seed) || newSeed(), { push: false });
+      if (!current || current.world.file !== s.world || current.seed !== s.seed) open(s.world, s.seed, { push: false });
+      return;
     }
+    if (location.hash) return; // the page's own fragment (the skip link): nothing to do
+    if (threshold) goHome();
+    else if (random && firstPiece) open(firstPiece.file, firstPiece.seed, { push: false, keepRead: true });
+    // A world page's own entry always carries its piece's hash, so there is nothing else to land on.
   });
   // Learn which worlds read the sky, after the first paint has had its turn.
   window.setTimeout(() => {
@@ -977,8 +1068,9 @@ function start() {
   }, 1500);
   if (persona && typeof persona.onSky === 'function') {
     persona.onSky(() => {
-      // A piece that reads the sky is made from it: a changed sky is a new piece.
-      if (current && current.mod && current.mod.needsSky && !current.completed) {
+      // A piece that reads the sky is made from it: a changed sky is a new piece -- unless the
+      // visitor has already begun this one, whose progress is theirs to keep.
+      if (current && current.mod && current.mod.needsSky && !current.completed && !current.touched) {
         open(current.world.file, current.seed, { push: false, focus: false });
       }
     });
@@ -990,21 +1082,24 @@ function start() {
     const h = parseHash();
     const file = h && h.world && worldOf(h.world) ? h.world : pageWorld;
     open(file, h ? h.seed : newSeed(), { push: true, replace: true, focus: false });
-  } else if (stage.dataset.stageRandom === 'true') {
-    // A page of no world (the 404): whatever comes next, which is the first card of the feed.
+  } else if (random) {
+    // A page of no world (the 404): whatever comes next, which is the first card of the feed. The
+    // address stays what was asked for, with the line that says there is no page there.
     const h = parseHash();
-    if (h && h.world && worldOf(h.world)) open(h.world, h.seed, { push: true, replace: true, focus: false });
-    else next({ keepRead: true, focus: false });
+    if (h && h.world && worldOf(h.world)) open(h.world, h.seed, { push: false, focus: false });
+    else next({ push: false, keepRead: true, focus: false, first: true });
   }
 }
 
-window.interestingStage = {
-  open,
-  next,
-  skip,
-  current: () => (current ? { file: current.world.file, seed: current.seed } : null),
-  worlds: () => WORLDS.slice()
-};
+if (stage) {
+  window.interestingStage = {
+    open,
+    next,
+    skip,
+    current: () => (current ? { file: current.world.file, seed: current.seed } : null),
+    worlds: () => WORLDS.slice()
+  };
+}
 
 start();
 try {

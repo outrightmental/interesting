@@ -67,7 +67,7 @@ function postcardName(stars, m) {
   }
   const region = (m.cy < 50 ? 'North' : 'South') + (m.cx < 50 ? 'West' : 'East');
   const mood = m.spread < 12 ? 'Knot' : m.spread < 24 ? 'Field' : 'Trail';
-  return FIRST[h % FIRST.length] + ' ' + (stars.length < 4 ? 'Seed' : SECOND[(h >>> 3) % SECOND.length]) + ' of the ' + region + ' ' + mood;
+  return FIRST[h % FIRST.length] + ' ' + (stars.length < 4 ? 'Ember' : SECOND[(h >>> 3) % SECOND.length]) + ' of the ' + region + ' ' + mood;
 }
 
 function pickN(env, list, n) {
@@ -189,16 +189,17 @@ function font(c, k, weight) {
   return (weight || 500) + ' ' + Math.max(10, Math.round(Math.min(c.w, c.h) * k)) + 'px system-ui, sans-serif';
 }
 
-// A star's thought, written beside it.
+// A star's thought, written beside it: to its right, unless that would run off the edge.
 function label(c, p) {
   const g = c.g;
   const t = String(p.text || '');
-  const right = p.x > c.w * 0.72;
+  const text = t.length > 40 ? t.slice(0, 39) + '…' : t;
   g.font = font(c, 0.03);
   g.textBaseline = 'middle';
+  const right = p.x + 10 + g.measureText(text).width > c.w - 4;
   g.textAlign = right ? 'right' : 'left';
   g.fillStyle = c.alpha(p.hot ? c.colors.accent2 : c.colors.fg, 0.8);
-  g.fillText(t.length > 30 ? t.slice(0, 29) + '…' : t, p.x + (right ? -10 : 10), p.y);
+  g.fillText(text, p.x + (right ? -10 : 10), p.y);
 }
 
 function caption(c, text, a, y) {

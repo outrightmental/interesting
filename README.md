@@ -775,8 +775,9 @@ iteration, stated in the prompt and held to in code.
   [`site/js/stage.js`](site/js/stage.js), one shared line in the `<head>`, runs it: the world's
   name over the piece's title and its one line, the scene (a canvas) beside the knobs, a row of
   dots for progress, one text button that skips, and the ceremony — a done mark over the scene, a
-  burst in the world's palette, the piece scaling away and the next arriving from below, all of
-  it a quick fade for a visitor who asked for less motion. The threshold is the same stage in
+  burst in the world's palette and a short chime, the piece scaling away and the next arriving
+  from below; for a visitor who asked for less motion there is no burst and no transition, only
+  the mark and the next piece. The threshold is the same stage in
   its asking state. The URL carries the piece (`quiet-room.html#<seed>`), so a piece can be sent
   to someone and the back button walks back through what was finished; opening a card of another
   world moves the address to that world's page without a load, because a page is wherever the
@@ -790,14 +791,21 @@ iteration, stated in the prompt and held to in code.
   knob may wait on another (`after`), and every knob stays live once set: a toy is for fidgeting
   with. `ctx` is the canvas and its context, the size, the world's colours, a seeded random
   source, the persona's stars, and `status()` and `progress()` for the one live line and the
-  knob's bar. `js/stage.js` documents all of it at the top.
+  knob's bar; `frame(t, dt, ctx)` counts `t` from the piece's start, and `auto: false` lets a
+  piece call `complete()` itself. A module is self-contained: it imports nothing. `js/stage.js`
+  documents all of it at the top.
 - **Pure, so it can be played anywhere.** A piece is drawing and arithmetic on what the stage
   hands it and never reaches for the document, the window or the browser's storage. That is what
   lets [`.github/scripts/piece_harness.mjs`](.github/scripts/piece_harness.mjs) play every piece
   to its end in Node, with no browser: it asks each module for a piece for each of six seeds and
   sets the knobs the way the stage would — a choice at one of its options, a range at a point on
   it, a press pressed its count, a hold held its time, the scene tapped at seeded points for a
-  tap knob, frames run for a wait knob — and reports whether the piece finished. The harness is
+  tap knob, frames run for a wait knob — and reports whether the piece finished; one seed is also
+  played with the sky the stage may hand the module (none, or a single star). Each module plays
+  in a worker of its own with a time limit, an empty environment and no clock, no `Math.random`
+  and no timers, so a piece that reaches for any of them fails; the run itself starts under
+  Node's permission model with a scrubbed environment, because the modules are model-written
+  code (a quality gate, not a security boundary: the site's source is public). The harness is
   not in `/site`, so a run cannot soften it.
 - **Held to in code.** `check_completion` in
   [`.github/scripts/make_interesting.py`](.github/scripts/make_interesting.py) reads the one list

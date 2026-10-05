@@ -327,19 +327,24 @@ function entry(env) {
     const sy = split + (h - split) * 0.6;
     sky(c.g, w, split, skyTint(c, 'midnight'));
     let pts = placed(c, split, m * 0.6, s.drift, s.t);
+    const reach = Math.min(w, split) * 0.27 * (1 - f * 0.8) + 1;
     if (f > 0) {
-      // The sky goes into the seal.
+      // The sky goes dark and the stars stream into the seal: drawn over the page, below, so
+      // they can be seen to arrive, with the wax pressed on top of them.
       const k = f * f;
       pts = pts.map((p) => ({ x: p.x + (sx - p.x) * k, y: p.y + (sy - p.y) * k, text: p.text }));
-    }
-    links(c.g, pts, c, ink, 'near', Math.min(w, split) * 0.27 * (1 - f * 0.8) + 1);
-    dots(c.g, pts, c, ink, 1 - f * 0.7);
-    if (f > 0) {
       c.g.fillStyle = 'rgba(0, 0, 0, ' + (f * 0.6).toFixed(3) + ')';
       c.g.fillRect(0, 0, w, split);
+    } else {
+      links(c.g, pts, c, ink, 'near', reach);
+      dots(c.g, pts, c, ink, 1);
     }
     const step = page(c.g, w, h, split, c, ink, m, 5);
     rows(c, fr, step, lines(c).slice(0, s.written), c.alpha(c.colors.fg, 0.85));
+    if (f > 0) {
+      links(c.g, pts, c, ink, 'near', reach);
+      dots(c.g, pts, c, ink, 1 - f * 0.7);
+    }
     if (s.sealed) seal(c.g, c, sx, sy, r, 0.5 + f * 0.5);
   }
   return {
@@ -469,12 +474,13 @@ function replay(env) {
     },
     frame(t, dt, c) {
       if (!c.reduced) s.t += dt;
-      if (s.hum && s.back > 0) {
+      if (s.hum) {
         s.gap -= dt;
         if (s.gap <= 0) {
-          // A chord of three from the stars that are back, highest first, as the old ambience went.
+          // A chord of three from the stars that are back (from the whole sky, where they will be,
+          // until the first are), highest first, as the old ambience went.
           s.gap = 1.25 + s.drift * 0.9;
-          const k = s.back;
+          const k = s.back || n;
           const order = c.stars.slice(0, k).map((st, i) => i).sort((a, b) => c.stars[a].y - c.stars[b].y);
           s.pulses.push(
             { i: order[s.beat % k], age: 0, size: 1 },

@@ -25,10 +25,9 @@
       finished the stage takes the next card from the top of the feed
       (window.interestingFeed.take), so the feed is the stack of what comes next. Without the
       stage a card is the plain link it was written as.
-    - It paints a page's feature on request: window.interestingFeed.feature(host, canvas, file)
-      paints the named world across the canvas in that world's palette (the host takes the
-      world's data-mood) and keeps it live exactly as a card is, and unfeature(host) clears it.
-      feed:ready is dispatched on window once the API is there.
+    - The 'you are here' card follows the stage: when a piece of another world opens, the badge
+      moves to that world's card, so the feed always says where the visitor is. feed:ready is
+      dispatched on window once the API is there.
 
   ---------------------------------------------------------------------------------------------
   A module, in js/modules/<world>.js, where <world> is the page's file without ".html":
@@ -409,7 +408,10 @@ function rebuild() {
     columns.push(col);
     heights.push(0);
   }
-  for (const card of cards) place(card);
+  for (const card of cards) {
+    card.classList.remove('card-enter');
+    place(card);
+  }
   // A card's picture is the width of its column, so every painted card paints again at its new size.
   for (const card of cards) {
     const m = meta.get(card);
@@ -637,14 +639,18 @@ function consume(card) {
   if (cards.length < 12) more();
 }
 
-// The next piece: the first card in feed order that is a world's (and that `fit`, when given,
-// accepts by file), taken out of the feed.
-function take(fit) {
+// The next piece: the first card in feed order that is a world's -- of another world than
+// `avoid`, the one just played, when there is one, and one that `fit` accepts by file, when
+// given -- taken out of the feed.
+function take(fit, avoid) {
   const playable = cards.filter((c) => {
     const m = meta.get(c);
-    return m && m.world && (m.kind === 'world' || m.kind === 'spark');
+    return m && m.world && (m.kind === 'world' || m.kind === 'spark') && !c.classList.contains('card-leave');
   });
-  const card = (typeof fit === 'function' && playable.find((c) => fit(meta.get(c).world.file))) || playable[0];
+  const okay = (c) => typeof fit !== 'function' || fit(meta.get(c).world.file);
+  const card = playable.find((c) => okay(c) && meta.get(c).world.file !== avoid)
+    || playable.find(okay)
+    || playable[0];
   if (!card) return null;
   const m = meta.get(card);
   const taken = { file: m.world.file, seed: m.seed, kind: m.kind };
@@ -656,47 +662,16 @@ function take(fit) {
 // press or a page without a stage keeps the link as written.
 function openFromCard(ev) {
   const link = ev.target.closest('.card-link');
-  if (!link || !window.interestingStage) return;
+  if (!link || !window.interestingStage || !document.getElementById('stage')) return;
   if (ev.button !== 0 || ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey) return;
   const card = link.closest('.card');
   const m = card && meta.get(card);
-  if (!m || !m.world) return;
+  if (!m || !m.world || card.classList.contains('card-leave')) return;
   ev.preventDefault();
   const file = m.world.file;
   const seed = m.seed;
   consume(card);
   window.interestingStage.open(file, seed, { arriving: true, scroll: true });
-}
-
-/* ---- a page's feature ---------------------------------------------------------------------- */
-
-const features = new Set();
-
-// Paint `file`'s world across `canvas`, which fills `host`, in that world's palette, and keep it
-// live exactly as a card is: painted when near, animated when visible, repainted as the sky
-// changes. The threshold's feature is one; a world page's feature is the world itself.
-function feature(host, canvas, file) {
-  const world = WORLDS.find((w) => w.file === file);
-  if (!world || !host || !canvas) return false;
-  unfeature(host);
-  host.dataset.mood = world.mood;
-  meta.set(host, { kind: 'feature', world, id: world.id, seed: newSeed(), canvas });
-  features.add(host);
-  if (watcher) watcher.observe(host);
-  else paint(host);
-  return true;
-}
-
-function unfeature(host) {
-  const m = meta.get(host);
-  if (!m) return;
-  if (watcher) watcher.unobserve(host);
-  deactivate(host);
-  features.delete(host);
-  meta.delete(host);
-  delete host.dataset.mood;
-  const ctx = m.canvas && m.canvas.getContext('2d');
-  if (ctx) ctx.clearRect(0, 0, m.canvas.width, m.canvas.height);
 }
 
 /* ---- dealing -------------------------------------------------------------------------------- */
@@ -828,12 +803,6 @@ function start() {
 
   let lastWidth = grid.clientWidth;
   window.addEventListener('resize', () => {
-    for (const host of features) {
-      const m = meta.get(host);
-      if (!m || !m.painted) continue;
-      m.dirty = true;
-      if (m.visible) paint(host);
-    }
     if (grid.clientWidth === lastWidth) return;
     lastWidth = grid.clientWidth;
     relayout();
@@ -843,10 +812,30 @@ function start() {
     if (suggest()) relayout();
   });
 
+  // Where the visitor is, is where the stage is.
+  window.addEventListener('stage:open', (ev) => {
+    const file = ev.detail && ev.detail.file;
+    for (const card of cards) {
+      const m = meta.get(card);
+      const isHere = !!(m && m.isStatic && m.world.file === file);
+      const was = card.classList.contains('card-current');
+      if (isHere === was) continue;
+      card.classList.toggle('card-current', isHere);
+      const link = card.querySelector('.card-link');
+      if (link) {
+        if (isHere) link.setAttribute('aria-current', 'page');
+        else link.removeAttribute('aria-current');
+      }
+      const old = card.querySelector('.card-badge');
+      if (old && old.textContent === 'you are here') old.remove();
+      if (isHere) (card.querySelector('.card-media') || card).appendChild(el('span', 'card-badge', 'you are here'));
+    }
+  });
+
   // The sky changed in the persona: every card that reads it paints again, and the sparks that
   // were waiting on a sky can be dealt from here on.
   window.addEventListener('persona:sky', () => {
-    for (const card of [...cards, ...features]) {
+    for (const card of cards) {
       const m = meta.get(card);
       if (!m) continue;
       const reads = m.sky || (m.id && modules.has(m.id) && m.painted);
@@ -867,7 +856,7 @@ function start() {
   }
 }
 
-window.interestingFeed = { feature, unfeature, take, consume };
+window.interestingFeed = { take, consume };
 
 if (grid && WORLDS.length) start();
 try {
