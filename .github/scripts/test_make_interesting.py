@@ -2685,18 +2685,20 @@ def front_matter(**fields):
     return "---\n" + "".join(f"{key}: {value}\n" for key, value in fields.items()) + "---\n"
 
 
-def needs_node(test):
-    """Skip a test that plays pieces through the Node harness when Node is not installed.
+def needs_the_piece_harness(test):
+    """Skip a test that plays pieces through the Node harness when Node cannot run it.
 
-    In CI it is a failure instead, for the same reason needs_the_build fails there: a silent skip
-    would quietly stop holding the site to the completion axiom.
+    This is stricter than needs_node: the piece harness needs the permission model (Node >= 20),
+    so a probe through run_piece_harness also catches a Node too old to enforce the axiom, where a
+    plain `which node` would not. In CI it is a failure instead, for the same reason needs_the_build
+    fails there: a silent skip would quietly stop holding the site to the completion axiom.
     """
     try:
         mi.run_piece_harness({"js/modules/probe.js": "export default { id: 'probe' };\n"})
     except mi.BuildToolchainError as err:
         if os.environ.get("CI"):
             test.fail(f"Node is missing in CI: {err}")
-        test.skipTest(f"Node is not installed ({err})")
+        test.skipTest(f"Node cannot run the piece harness ({err})")
 
 
 def world_list(*worlds):
@@ -2785,7 +2787,7 @@ class CompletionAxiomTest(SiteDirTestCase):
 
     def setUp(self):
         super().setUp()
-        needs_node(self)
+        needs_the_piece_harness(self)
         (self.site / "js" / "modules").mkdir(parents=True)
         (self.site / mi.MOOD_SCRIPT).write_text(mood_script(*MoodAxiomTest.MECHANISMS))
         (self.site / "index.html").write_text(queried(home("toy.html", "error.html") + world_list("toy.html")))
@@ -3149,6 +3151,7 @@ class RealSiteTest(unittest.TestCase):
     def test_every_world_is_a_piece_a_visitor_can_finish(self):
         # The completion axiom, on the site as committed: every world the layout lists has a module
         # with a piece, and the harness plays every one of them to its end for every seed it tries.
+        needs_the_piece_harness(self)
         worlds = mi.listed_worlds(self.site)
         self.assertGreaterEqual(len(worlds), 10, "the check is worth nothing on a few worlds")
         self.assertEqual(mi.worlds_without_a_finish(self.site), {})
