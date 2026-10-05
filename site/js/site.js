@@ -6,6 +6,12 @@
       window.interestingSite.unlock(host, options)   a part that needs something the browser does
                                                       not hold yet, rendered as powered down with
                                                       the one button that powers it (see below)
+      window.interestingSite.destructive(control, options)
+                                                      a control that throws a visitor's saved state
+                                                      away: the one warning treatment and the one
+                                                      "are you sure?" modal (see below)
+      window.interestingSite.areYouSure(options)      that modal on its own, for a control at the
+                                                      threshold rather than above it
       window.interestingSite.root                     '' on every page but the 404, where the
                                                       site's root has to be spelled out
       window.interestingSite.seedSky(), .holdsSky(), .skyKey
@@ -57,6 +63,47 @@
   unlock box is put in front of the host, so the button is the first thing in reading order. The
   axiom applies when the prerequisite cannot be kept, too: a browser that stores nothing still
   gets the button, and the sky it seeds lasts for the page.
+
+  ---------------------------------------------------------------------------------------------
+  Caution before a destructive action
+
+  Nothing on this site asks a visitor to confirm in its own words. A control that throws saved
+  state away is a warning button, and pressing it opens the one modal that asks "are you sure you
+  want to ______?" with the caller's words in the blank. Both halves are about consistency: the
+  button is recognised as dangerous before it is read, and the question is the same question
+  everywhere, naming the specific thing about to go rather than asking a generic "are you sure?".
+  There is no separate arming affordance -- no checkbox, no toggle, no hold-to-arm press. The
+  warning treatment plus the modal is the safety switch. The README section of the same name has
+  the threshold and the reasoning; _sass/_controls.scss has the paint.
+
+      window.interestingSite.destructive(document.getElementById('clear-history'), {
+        what: 'clear your omen archive',
+        detail: 'The ' + omens.length + ' omens the archive holds would go. Spinning makes more.',
+        onConfirm: function () { clearHistory(); }
+      });
+
+  options:
+    what       required: the blank in "are you sure you want to ______?", in the site's own voice
+               and specific to this control -- "clear your constellation", not "do this"
+    detail     one optional line under the question, for what is about to go and what it costs.
+               A function is called at press time, so the line can count what is there now
+    confirm    the confirm button's words; the control's own words by default, so a visitor
+               presses the same thing twice
+    onConfirm  what to do once they say yes
+    onCancel   optional: a page that wants to say "kept as it was" in its own status line
+    when       optional: is there anything to lose right now? When it returns false the press
+               goes straight through without the question, because an empty drawer emptied again
+               takes nothing away. The warning treatment stays on either way -- a control that
+               changes its clothes is a control nobody learns
+
+  It returns a function that releases the control again. areYouSure(options) is the modal alone,
+  taking the same words plus `opener`, the control to return the focus to; it is for a control at
+  the threshold rather than above it -- one that takes the whole of a saved thing away but puts
+  something else in its place, which asks the same question without wearing the warning.
+
+  The modal is one <dialog>, built the first time something asks and reused after that, so the
+  browser supplies the backdrop, the focus trap and Escape. The focus starts on cancel and comes
+  back to the control that opened it however the question is answered.
 */
 (function () {
   'use strict';
@@ -222,6 +269,130 @@
     return powered;
   }
 
+  /* ---- caution before a destructive action ------------------------------------------------- */
+  /* One warning treatment, one modal, one question -- see the header comment and the README
+     section "Destructive-caution axiom". No page writes its own confirmation, and nothing on the
+     site calls window.confirm: a browser dialog cannot say which of a visitor's things is about
+     to go, and a question that reads differently on every page is not a safety switch. */
+
+  var sure = null; // the one modal, built the first time something asks and reused after that
+  var asking = null; // the question now on screen: who asked it, and what to do with the answer
+
+  function buildAreYouSure() {
+    var host = document.createElement('dialog');
+    host.className = 'are-you-sure';
+    var title = el('p', 'are-you-sure-title');
+    title.id = 'are-you-sure-title';
+    host.setAttribute('aria-labelledby', title.id);
+    var note = el('p', 'are-you-sure-note');
+    var actions = el('div', 'controls are-you-sure-actions');
+    var go = el('button', 'warning are-you-sure-go');
+    go.type = 'button';
+    var no = el('button', 'are-you-sure-no', 'cancel');
+    no.type = 'button';
+    actions.appendChild(go);
+    actions.appendChild(no);
+    host.appendChild(title);
+    host.appendChild(note);
+    host.appendChild(actions);
+    (document.body || document.documentElement).appendChild(host);
+
+    go.addEventListener('click', function () { settle(true); });
+    no.addEventListener('click', function () { settle(false); });
+    // Escape: the browser raises 'cancel' first, and a dismissal means no.
+    host.addEventListener('cancel', function (ev) {
+      if (ev && typeof ev.preventDefault === 'function') ev.preventDefault();
+      settle(false);
+    });
+    // Closed any other way the browser offers -- still no, and the caller still hears about it.
+    host.addEventListener('close', function () { settle(false); });
+    // A press on the backdrop, which is what a dialog owes anyone who opened it by mistake. The
+    // dialog element is the target for the backdrop as well as its own padding, so the press has
+    // to land outside the box itself.
+    host.addEventListener('click', function (ev) {
+      if (ev.target !== host) return;
+      var box = host.getBoundingClientRect();
+      if (ev.clientX < box.left || ev.clientX > box.right || ev.clientY < box.top || ev.clientY > box.bottom) {
+        settle(false);
+      }
+    });
+    // A browser without dialog.showModal() has no Escape of its own, so it is given one.
+    document.addEventListener('keydown', function (ev) {
+      if (asking && (ev.key === 'Escape' || ev.key === 'Esc')) settle(false);
+    });
+    return { host: host, title: title, note: note, go: go, no: no };
+  }
+
+  function settle(yes) {
+    var answered = asking;
+    asking = null; // first, so closing the dialog cannot send the answer twice
+    if (!answered) return;
+    if (sure.host.open && typeof sure.host.close === 'function') sure.host.close();
+    else sure.host.removeAttribute('open');
+    sure.host.classList.remove('are-you-sure-fallback');
+    var back = answered.opener;
+    if (back && typeof back.focus === 'function') back.focus();
+    if (yes) answered.onConfirm();
+    else answered.onCancel();
+  }
+
+  function areYouSure(options) {
+    var opts = options || {};
+    var onConfirm = typeof opts.onConfirm === 'function' ? opts.onConfirm : function () {};
+    var onCancel = typeof opts.onCancel === 'function' ? opts.onCancel : function () {};
+    var what = String(opts.what || '').trim() || 'throw this away';
+    if (asking) settle(false); // one question at a time, and an unanswered one means no
+    if (!sure) sure = buildAreYouSure();
+    sure.title.textContent = 'are you sure you want to ' + what + '?';
+    sure.note.textContent = opts.detail || '';
+    sure.note.hidden = !opts.detail;
+    sure.go.textContent = String(opts.confirm || '').trim() || ('yes, ' + what);
+    asking = {
+      onConfirm: onConfirm,
+      onCancel: onCancel,
+      opener: opts.opener || document.activeElement
+    };
+    if (typeof sure.host.showModal === 'function') {
+      sure.host.showModal();
+    } else {
+      sure.host.setAttribute('open', '');
+      sure.host.classList.add('are-you-sure-fallback');
+    }
+    // Cancel, not confirm: the one press a visitor who got here by mistake should be one key away
+    // from is the one that changes nothing.
+    sure.no.focus();
+  }
+
+  function destructive(control, options) {
+    var opts = options || {};
+    if (!control) return function () {};
+    control.classList.add('warning');
+
+    function pressed() {
+      var when = typeof opts.when === 'function' ? opts.when : function () { return true; };
+      if (!when()) {
+        // Nothing of the visitor's is about to go, so there is nothing to ask: an empty drawer
+        // emptied again takes nothing away, and the control says so in the page's own words.
+        if (typeof opts.onConfirm === 'function') opts.onConfirm();
+        return;
+      }
+      areYouSure({
+        what: opts.what,
+        detail: typeof opts.detail === 'function' ? opts.detail() : opts.detail,
+        confirm: opts.confirm || (control.textContent || '').trim(),
+        onConfirm: opts.onConfirm,
+        onCancel: opts.onCancel,
+        opener: control
+      });
+    }
+
+    control.addEventListener('click', pressed);
+    return function () {
+      control.removeEventListener('click', pressed);
+      control.classList.remove('warning');
+    };
+  }
+
   // The footer's one "where next" world is personalized to an earned reading when there is one,
   // and otherwise stays the default circuit link rendered in worlds.njk.
   function personalizeNextWorld() {
@@ -272,6 +443,8 @@
 
   window.interestingSite = {
     unlock: unlock,
+    destructive: destructive,
+    areYouSure: areYouSure,
     seedSky: seedSky,
     holdsSky: holdsSky,
     root: root,
