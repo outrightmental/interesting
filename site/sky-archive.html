@@ -15,7 +15,7 @@ stylesheet: sky-archive
         <div class='controls'>
           <button id='spin' type='button' aria-busy='false'>spin omen wheel</button>
           <button id='remix' type='button'>remix runes</button>
-          <button id='clear-history' type='button'>clear omens</button>
+          <button id='clear-history' type='button' class='warning'>clear omens</button>
         </div>
         <p id='status' aria-live='polite'></p>
         <pre id='omen' aria-live='polite'>Press spin omen wheel.</pre>
@@ -402,6 +402,10 @@ stylesheet: sky-archive
       }
 
       function clearHistory() {
+        if (!omens.length) {
+          statusEl.textContent = 'The archive is already empty.';
+          return;
+        }
         omens = [];
         saveOmens();
         renderOmens();
@@ -541,7 +545,19 @@ stylesheet: sky-archive
 
       spinBtn.addEventListener('click', spinOmen);
       remixBtn.addEventListener('click', remixRunes);
-      clearHistoryBtn.addEventListener('click', clearHistory);
+      // Above the threshold: the whole archive goes and nothing takes its place, so it is a
+      // warning button guarded by the one shared modal (js/site.js, "Caution before a destructive
+      // action"). Nothing on this site writes a confirmation of its own.
+      window.interestingSite.destructive(clearHistoryBtn, {
+        what: 'clear your omen archive',
+        detail: function () {
+          return 'The ' + omens.length + ' omen' + (omens.length === 1 ? '' : 's')
+            + ' the archive holds would go. Spinning the wheel makes more.';
+        },
+        when: function () { return omens.length > 0; },
+        onConfirm: clearHistory,
+        onCancel: function () { statusEl.textContent = 'The archive is as it was.'; }
+      });
       forgeBtn.addEventListener('click', function () {
         forgeSigil(false);
       });

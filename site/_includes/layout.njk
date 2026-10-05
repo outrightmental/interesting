@@ -81,9 +81,13 @@
                      window.interestingPersona.stars() while the body is parsed.
     js/site.js       the shared helpers a page can call: window.interestingSite.unlock(), which
                      renders a part that needs a saved sky as powered down with the one button
-                     that powers it (see the README, "Powered down, never broken"), plus the top
-                     bar's scroll state, the slider fill and each stage's aspect ratio. Not
-                     deferred either, and after the persona it reads from.
+                     that powers it (see the README, "Powered down, never broken"), and
+                     window.interestingSite.destructive(), which makes a control that throws
+                     saved state away a warning button and guards every press of it with the one
+                     "are you sure you want to ______?" modal (see the README,
+                     "Destructive-caution axiom"), plus the top bar's scroll state, the slider
+                     fill and each stage's aspect ratio. Not deferred either, and after the
+                     persona it reads from.
     js/threshold.js  the mood flow's engine: the orientations, the library of query mechanisms,
                      the clock and time-zone signals and the partly-remembered reading. The
                      threshold's feature and the persona sheet are where it is seen (MOOD_TAG and
@@ -220,7 +224,7 @@
         <button id='persona-drop' type='button'>drop a star</button>
         <button id='persona-seed' type='button'>seed a small sky</button>
         <button id='persona-remove' type='button' hidden>remove this star</button>
-        <button id='persona-clear' type='button' class='btn-text'>clear the sky</button>
+        <button id='persona-clear' type='button' class='warning'>clear the sky</button>
       </div>
       <p class='panel-status' id='persona-sky-status' aria-live='polite'></p>
     </section>
@@ -229,7 +233,7 @@
       <p class='panel-status' id='persona-reading'></p>
       <div class='controls persona-reading-actions'>
         <button id='persona-ask' type='button'>ask me</button>
-        <button id='persona-forget' type='button' class='btn-text' hidden>forget my reading</button>
+        <button id='persona-forget' type='button' class='warning' hidden>forget my reading</button>
         <a class='action' id='persona-reading-go' href='{{ siteRoot }}moods.html' hidden>go to that world</a>
       </div>
       <div class='persona-probe' id='persona-sheet-probe' hidden></div>
