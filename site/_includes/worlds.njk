@@ -8,8 +8,7 @@
   for screen readers only and nothing is said about how many worlds there are or what to do with
   them. Each card carries the world's orientation over its name -- the same phrase the persona
   reads a visitor as -- and the world's own palette, through data-mood (_sass/_mood.scss), so the
-  feed is a mosaic of the moods the worlds answer to. The world a visitor is already on is left
-  out of its own feed.
+  feed is a mosaic of the moods the worlds answer to.
 
   What the template writes is the whole of what a visitor without scripting gets: a column grid
   of plain cards, every one a link, so the reachability axiom holds and index.html's own markup
@@ -23,10 +22,9 @@
   <h2 class='feed-title visually-hidden' id='feed-title'>every world</h2>
   <div class='feed-grid' id='feed-grid'>
 {%- for world in worlds.worlds %}
-{%- if world.file != here %}
-    <article class='card card-world' data-world='{{ world.file }}' data-mood='{{ world.mood }}' data-name='{{ world.name }}' data-orientation='{{ world.orientation }}'>
-      <a class='card-link' href='{{ siteRoot }}{{ world.file }}'>
-        <div class='card-media' style='aspect-ratio: {{ world.aspect }}'><canvas class='card-canvas' aria-hidden='true'></canvas></div>
+    <article class='card card-world{% if world.file == here %} card-current{% endif %}' data-world='{{ world.file }}' data-mood='{{ world.mood }}' data-name='{{ world.name }}' data-orientation='{{ world.orientation }}'>
+      <a class='card-link' href='{{ siteRoot }}{{ world.file }}'{% if world.file == here %} aria-current='page'{% endif %}>
+        <div class='card-media' style='aspect-ratio: {{ world.aspect }}'><canvas class='card-canvas' aria-hidden='true'></canvas>{% if world.file == here %}<span class='card-badge'>you are here</span>{% endif %}</div>
         <div class='card-body'>
           <p class='card-overline'>{{ world.orientation }}</p>
           <h3 class='card-title'>{{ world.name }}</h3>
@@ -34,7 +32,6 @@
         </div>
       </a>
     </article>
-{%- endif %}
 {%- endfor %}
   </div>
   <div class='feed-sentinel' id='feed-more' aria-hidden='true'></div>
