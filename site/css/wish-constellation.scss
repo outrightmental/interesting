@@ -1,7 +1,8 @@
-// The wish constellation: a live sky you drop stars into, and the sky every other world under
-// the sky reads. The canvas is fixed behind everything; the shared header, ribbon and index are
-// raised above it (see _header.scss, _mood.scss and _worlds.scss), so a tap on any of them
-// is theirs and only a tap on the open sky places a star.
+// The wish constellation: the persona's stars hung across the whole page as a live sky. The
+// canvas is fixed behind everything; the shared header, persona card and index are raised above
+// it (see _header.scss, _persona.scss and _worlds.scss), so a tap on any of them is theirs. The
+// stars are placed and moved in the persona sheet, never here, so a star on this page is a thing
+// to read and the open sky answers to nothing.
 
 @use 'vars';
 
@@ -82,7 +83,7 @@ h1 {
   font-size: clamp(0.95rem, 2.3vw, 1.25rem);
 }
 
-// The one instruction for the page's own gesture, under the tagline and above the buttons.
+// The one line on what the stars here are for, above the buttons.
 .sky-hint {
   margin: 0 auto 0.9rem;
   max-width: 58ch;
@@ -93,6 +94,12 @@ h1 {
   justify-content: center;
   gap: 0.6rem;
   margin: 0 0 0.95rem;
+}
+
+// The unlock box, when the persona has no sky yet, sits where the desk would and reads left to
+// right like the box does everywhere else.
+main .unlock {
+  text-align: left;
 }
 
 button {
@@ -180,18 +187,10 @@ button:focus-visible {
   border-radius: 50%;
   background: radial-gradient(circle at 35% 35%, #fff 0 20%, #d4e4ff 45%, #86a9ff 70%, transparent 73%);
   box-shadow: 0 0 13px rgba(145, 188, 255, 0.85);
-  cursor: grab;
-  touch-action: none;
+  cursor: pointer;
   user-select: none;
   z-index: 3;
   animation: twinkle 2.8s ease-in-out infinite;
-}
-
-.star.dragging {
-  cursor: grabbing;
-  animation: none;
-  transform: scale(1.22);
-  box-shadow: 0 0 18px rgba(180, 215, 255, 0.95);
 }
 
 .star.ping {

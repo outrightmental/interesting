@@ -7,7 +7,7 @@
 
   Two groups, in the words every page uses: off the sky (worlds that share nothing but the site)
   and under the sky (worlds that read one saved sky). Under each name is the orientation the world
-  answers to, which is the same phrase the ribbon reads a visitor as. On a world under the sky that
+  answers to, which is the same phrase the persona card reads a visitor as. On a world under the sky that
   group comes first and carries the circuit: where in it this world is, and the next. Every count
   is read off the list, so a world added there is counted here.
 
@@ -30,9 +30,9 @@
 {%- if group[0] == 'sky' %}
 {%- if skyIndex >= 0 %}
 {%- set nextWorld = worlds.underSky[(skyIndex + 1) % skyCount] %}
-      <p class='panel-note'>These {{ skyCount | words }} read one saved sky, the stars placed in the wish constellation. This is {{ skyIndex + 1 }} of {{ skyCount }}. <a href='{{ siteRoot }}{{ nextWorld.file }}'>next: {{ nextWorld.name }}</a></p>
+      <p class='panel-note'>These {{ skyCount | words }} read one saved sky: the stars of your persona, the card at the top of the page. This is {{ skyIndex + 1 }} of {{ skyCount }}. <a href='{{ siteRoot }}{{ nextWorld.file }}'>next: {{ nextWorld.name }}</a></p>
 {%- else %}
-      <p class='panel-note'>These {{ skyCount | words }} read one saved sky; the wish constellation is where it is placed.</p>
+      <p class='panel-note'>These {{ skyCount | words }} read one saved sky: the stars of your persona, the card at the top of the page.</p>
 {%- endif %}
 {%- endif %}
       <ul class='chips chips-tall'>

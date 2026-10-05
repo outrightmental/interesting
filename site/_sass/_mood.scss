@@ -1,5 +1,6 @@
-// The mood flow, as it looks: the ribbon every page carries, the query mechanisms it renders, and
-// the fourteen palettes the whole site re-skins itself with once it has read someone.
+// The mood flow, as it looks: the query mechanisms it renders -- into the persona card on the
+// threshold, and into the persona sheet everywhere (see _persona.scss) -- and the fourteen
+// palettes the whole site re-skins itself with once it has read someone.
 //
 // js/threshold.js puts the ascertained orientation on <html data-mood='...'>, and every rule in
 // MOODS below is one orientation's override of the shared custom properties in _tokens.scss. That
@@ -39,55 +40,7 @@ $moods: (
 }
 
 
-// The ribbon sits between the header and the page, on every page, because the flow is ongoing
-// rather than a gate at the front door. It is one sentence and at most two controls; while it
-// asks, the question takes the sentence's place.
-.mood-ribbon {
-  position: relative;
-  z-index: 2; // above any page's full-screen backdrop canvas
-  width: min(980px, 100%);
-  margin: 0 0 0.62rem;
-  border: 1px solid vars.$hairline;
-  border-radius: vars.$radius-panel;
-  background: rgba(7, 10, 20, 0.62);
-  padding: 0.58rem 0.7rem;
-  display: grid;
-  gap: 0.45rem;
-}
-
-.mood-ribbon-text {
-  margin: 0;
-  color: var(--muted);
-  font-size: 0.92rem;
-  line-height: 1.4;
-}
-
-// While the question is open, the sentence that frames it reads at full strength.
-.mood-ribbon[data-state='asking'] .mood-ribbon-text {
-  color: var(--fg);
-}
-
-// A reading the visitor gave, or one carried over, is said in the answer colour. A guess, or
-// nothing, stays quiet.
-.mood-ribbon[data-state='answered'] .mood-ribbon-text,
-.mood-ribbon[data-state='carried'] .mood-ribbon-text {
-  color: var(--accent2);
-}
-
-.mood-ribbon-actions {
-  margin: 0;
-}
-
-.mood-ribbon-actions button,
-.mood-ribbon-actions a.action {
-  font-size: 0.84rem;
-  padding: 0.38rem 0.8rem;
-}
-
-.mood-ribbon[data-asking='true'] {
-  border-color: vars.$focus-line;
-}
-// A query, wherever it is rendered: in the ribbon, or as the whole of the threshold page.
+// A query, wherever it is rendered: in the persona card, in the persona sheet, or on the mood atlas.
 .probe {
   display: grid;
   gap: 0.6rem;

@@ -61,8 +61,9 @@ is deliberately small: a foundation to build a more holistic experience on, not 
   pipeline. An `.html` file is a [Nunjucks](https://mozilla.github.io/nunjucks/) template with
   optional YAML front matter; `layout: layout.njk` wraps it in the shared shell in
   [`site/_includes`](site/_includes), so the `<head>`, the stylesheet links, the analytics,
-  local-state, mood and helper lines, the header, the mood ribbon and the index of every world are
-  written once instead of in every page, and a page is nothing but its `<main>`. The index and the
+  local-state, persona, helper and mood lines, the header, the persona card and sheet and the
+  index of every world are written once instead of in every page, and a page is nothing but its
+  `<main>`. The index and the
   site map are rendered from [`site/_data/worlds.json`](site/_data/worlds.json), Eleventy global
   data that every template reads as `worlds`: the one list of the site's pages.
   A `.scss` file
@@ -71,8 +72,8 @@ is deliberately small: a foundation to build a more holistic experience on, not 
   rendered, so a stray `{{` in a script cannot break a build.
 - **Common files.** [`site/_sass`](site/_sass) is what "shared partials" means here: the palette as
   custom properties a page can override (`_tokens.scss`), the base rules, the panel, the controls,
-  the index of every world, the unlock box, the fourteen mood palettes and the query styling the
-  mood flow renders into (`_mood.scss`), the values the stylesheets have in common (`_vars.scss`, which emits no CSS of
+  the index of every world, the unlock box, the persona card and sheet (`_persona.scss`), the
+  fourteen mood palettes and the query styling the mood flow renders into (`_mood.scss`), the values the stylesheets have in common (`_vars.scss`, which emits no CSS of
   its own) and the monospace readout ten pages use (`_readout.scss`, a mixin). `css/site.scss` is those
   partials and nothing else, and every page links the `css/site.css` it compiles to. `css/<page>.scss`
   holds what is true of that page alone and is linked after it, so a page overrides rather than
@@ -237,7 +238,7 @@ saying where to go next, and the home page explained none of its own words.
   explained once where a visitor first meets them; one way to do each thing (one navigation, one
   suggestion of where next, one index of every world, one place that asks — a new control
   improves the one that exists or replaces it, never stands beside it); content first and chrome
-  small (the shared header and ribbon are a few lines, a page's own content starts within the first
+  small (the shared header and persona card are a few lines, a page's own content starts within the first
   screen of a phone, what closes a page is shorter than the page); copy that speaks to the visitor
   and never about the machinery; and never a dead end, which is its own standard below.
 - **Deliberately not held to in code.** No check could judge whether a page reads clearly, so the
@@ -252,7 +253,8 @@ saying where to go next, and the home page explained none of its own words.
   the page's own `title:` and `<h1>`, its `worldName` in `js/threshold.js`, and its `<loc>` in
   `sitemap.xml`.
 - **The shell it left behind.** The header is the site's name, one line about it, and three links;
-  the ribbon is one sentence and, on the threshold, the question; every page but the site map and
+  the persona card is a portrait, one sentence, one button and, on the threshold, the question
+  (see [Persona](#persona)); every page but the site map and
   the mood atlas (which list every page themselves) ends with the one index of every world, which on a sky world leads with the sky group and says which of the eight
   this is and which is next. That is the whole of the shared chrome, written once in
   [`site/_includes/layout.njk`](site/_includes/layout.njk), and a page sets nothing about
@@ -265,9 +267,10 @@ announcement of that is the solution, in place (issue #46). A world that reads t
 not say "make one on the wish constellation page first" and does not offer a *refresh* button to
 press after coming back: it presents as unpowered — dimmed, inert, like the part of an adventure
 game whose generator has not been started — and carries the one button that starts it, *seed a sky
-to begin*, which writes a small random sky to the shared state exactly as the wish constellation
-would, and powers the world up where the visitor stands. A quieter link to the page where the
-prerequisite usually happens may follow the button; it never replaces it.
+to begin*, which writes a small random sky to the persona exactly as placing stars in it would,
+and powers the world up where the visitor stands. A quieter second choice may follow the button
+and never replaces it: for the sky, a button that opens the persona sheet, where stars are placed
+by hand.
 
 - **Stated in the prompt**, under `POWERED DOWN, NEVER BROKEN`, to the model only: as with `WHOLE`,
   no check could tell a dead end from a deliberate one, so a seventh `check_` was ruled out
@@ -275,16 +278,61 @@ prerequisite usually happens may follow the button; it never replaces it.
 - **Held in the framework.** `window.interestingSite.unlock(host, { onReady })` in
   [`site/js/site.js`](site/js/site.js) is the pattern made shared: pass it the element to power
   down and the function to run once a sky exists, and it renders the unpowered state, the button and
-  the quiet link, writes the seeded sky through the one state store, and calls back — now, if a sky
-  is already there, or when the button is pressed. [`site/_sass/_unlock.scss`](site/_sass/_unlock.scss)
-  styles the powered-down host and the unlock box once for every page. The seven worlds that read
-  the sky use it; `js/site.js` is loaded without `defer` so the helper exists by the time a page's
-  own script runs.
+  the quiet second choice, writes the seeded sky through the persona, and calls back — now, if a
+  sky is already there, when the button is pressed, and again every time the sky changes in the
+  persona while the page is open, so a world follows the sheet floating over it star by star and
+  powers down again if the sky is cleared. [`site/_sass/_unlock.scss`](site/_sass/_unlock.scss)
+  styles the powered-down host and the unlock box once for every page. All eight worlds under the
+  sky use it, the wish constellation included; `js/site.js` is loaded without `defer` so the helper
+  exists by the time a page's own script runs.
 - **It applies when the prerequisite cannot be performed, too.** A browser that stores nothing
   still gets the button; the sky it seeds lasts for the page, and the box says so in one line.
 - **The background action is the visitor's action.** The seeded sky is written under
   `constellation` like any other and overwrites what was there (question 4), so every sky world,
   the state menu and an exported document all see the same thing.
+
+### Persona
+
+The sky every world under the sky reads is a visitor's configuration of this site, and for a while
+it was configured on one world of eighteen, the wish constellation, which made that page the
+settings screen for the rest and left the rest pointing at it. It is a **persona** now — the term
+interaction design uses for the configured self a system addresses — kept and changed in one place
+and shown on every page.
+
+- **One module.** [`site/js/persona.js`](site/js/persona.js) owns the sky as data (the key, the
+  validation, the seeding, the thoughts a star carries, every write) and as interface. Every page
+  loads it from the shared shell, without `defer`, so a world can read
+  `window.interestingPersona.stars()` while its body is parsed and follow changes with
+  `window.interestingPersona.onSky(fn)`. The eight sky worlds read the sky; none of them places a
+  star, and the wish constellation is a world like the other seven: the persona's stars hung across
+  the whole page, with the oracle, the meteors, the chime, orbit mode and the postcard, and a sky
+  that follows the sheet as it is edited. A caught meteor adds a star through the persona, so every
+  other world sees it too.
+- **The card.** Under the header on every page, where the mood ribbon used to be, sits the card: a
+  round portrait of the sky, the label *persona*, one sentence on where things stand, and one
+  button. It borrows the shape every role-playing game uses for the player — a portrait in the
+  corner that opens the character sheet — because that shape is understood on sight: with no
+  persona yet the card's border and its portrait ring go dashed and the button, *set up persona*,
+  is the one lit control on the page, so the first thing to do is the first thing seen. Once there
+  is a persona the button reads *open persona*, and the sentence says how many stars there are and
+  what the site has read, with *go to* the world that reading opens onto.
+- **The sheet.** The button opens a `<dialog>` floating over whatever page is open, with two
+  sections. *Constellation* is the sky editor: tap the sky to place a star, drag one to move it,
+  tap one to read its thought and remove it, or drop one, seed a small sky, or clear the sky — by
+  pointer or by keyboard, where the arrow keys move a focused star and *Delete* removes it. Every
+  change is written through the one state store under `constellation`, exactly as before, so the
+  state menu, an exported document and a world open underneath all see the same sky at once.
+  *Orientation* is the mood flow's home: it says what was read, asks the sideways question
+  (`js/threshold.js` supplies the mechanism through `window.threshold.mount`) and forgets on
+  request. When nothing has been read yet the sheet asks of its own accord on opening, so setting
+  up a persona is placing a sky and answering one question, in one place.
+- **Where the question is asked.** The threshold still asks on arrival, inline in the card, so the
+  question is never a dialog in a visitor's way and the mood axiom's *never a gate* holds as it did;
+  every other page keeps the question one press away, inside the sheet. `js/threshold.js` is the
+  engine only now — orientations, mechanisms, signals, memory, `arrival()` — and draws no chrome.
+- **Explained once, where it is met.** With nothing placed and nothing read, the card's one
+  sentence says what a persona is; after that it says where things stand. The word appears in the
+  prompt too, so a run knows that no page places stars itself and that the card is the one way in.
 
 ### Reachability axiom
 
@@ -422,7 +470,8 @@ iteration process rather than a one-off tidy-up.
   `constellation` (the home sky every other page reinterprets), `capsules` and `omens`. The
   cookie-consent choice is not in there, because it belongs to the consent banner, which keeps it
   itself. The shared shell writes two names and no more: `threshold`, the mood flow's reading, and
-  `constellation` when a visitor asks a powered-down world to seed a sky; the nine names the
+  `constellation`, which the persona writes when a visitor places a star or asks a powered-down
+  world to seed a sky; the nine names the
   shell's retired games once kept (`constellation-relay` and its kin) are taken out of a visitor's
   document on load, so an export stays an honest account of what the site keeps.
 - **One way in and out.** `window.interestingState` owns the parsing, the defaults and every
@@ -483,10 +532,12 @@ this is an invariant of the iteration rather than a one-off change to the site a
   [`site/_includes/layout.njk`](site/_includes/layout.njk). That file
   ([`site/js/threshold.js`](site/js/threshold.js)) is the whole flow: fourteen orientations and
   the world each one opens onto, the library of query mechanisms, the clock and time-zone signals
-  read alongside an answer, how much of a past visit survives, and the ribbon every page shows.
-  The ribbon asks unprompted on the threshold, which is the page that is the question; on every
-  other page it invites — the question is one press away — so a visitor who followed a link to a
-  world meets the world first, and every mechanism carries its own *skip*.
+  read alongside an answer, and how much of a past visit survives. What it reads is shown on the
+  persona card every page carries, and asked for in the persona sheet
+  ([`site/js/persona.js`](site/js/persona.js), see [Persona](#persona)). The card asks unprompted
+  on the threshold, which is the page that is the question; on every other page the question
+  waits inside the sheet, one press away, so a visitor who followed a link to a world meets the
+  world first, and every mechanism carries its own *skip*.
 - **Queried, never asked to self-report.** A visitor is never asked to name their own state. They
   are asked about a door, a stone, the thing they would put in a pocket, the rate at which they
   tap, how long they hold a button down, where they put one mark in an empty field, which way they

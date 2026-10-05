@@ -1635,7 +1635,7 @@ class LegibilityStandardTest(unittest.TestCase):
             with self.subTest(hold=hold):
                 self.assertIn(hold, prompt)
         # The shell is named as the thing a page may not add to, and the one list of pages is named.
-        self.assertIn("the header, the ribbon and the index of every world", prompt)
+        self.assertIn("the header, the persona card and the index of every world", prompt)
         self.assertIn("_data/worlds.json", prompt)
 
     def test_a_blocked_component_presents_its_own_unlock(self):
