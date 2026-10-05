@@ -500,6 +500,43 @@
   }
 }
 
+// A short viewport (a laptop at 768 or 800 tall): the knobs close up so the feed still peeks.
+@media (min-width: 901px) and (max-height: 860px) {
+  .stage-inner {
+    gap: 0.9rem;
+  }
+
+  .stage-head {
+    gap: 0.2rem;
+  }
+
+  .stage-brief {
+    @include type.scale(body-medium);
+  }
+
+  .stage-knobs {
+    gap: 0.45rem;
+  }
+
+  .knob {
+    gap: 0.45rem;
+    padding: 0.6rem 2.5rem 0.6rem 0.85rem;
+  }
+
+  .knob-mark {
+    top: 0.6rem;
+    right: 0.6rem;
+  }
+
+  .knob-big {
+    min-height: 52px;
+  }
+
+  .stage-side {
+    gap: 0.5rem;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .stage-inner,
   .stage-body,
