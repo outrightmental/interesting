@@ -1234,6 +1234,13 @@ def run_piece_harness(site):
     with tempfile.TemporaryDirectory(prefix="pieces-") as work:
         moddir = Path(work) / "modules"
         moddir.mkdir()
+        # A module is an ES module (it exports default), but a bare ".js" file in a temp directory
+        # with no package.json above it is read as CommonJS on every Node before syntax detection
+        # was unflagged (20.19 / 22.7), and "export" fails to parse -- which would report every
+        # world as having no piece() on a supported Node (engines: >=20), quietly stopping the
+        # axiom from being enforced. A package.json here marks the modules ESM on all of them, as
+        # the repository's own does for js/modules/ in the tree.
+        (moddir / "package.json").write_text('{"type":"module"}\n', encoding="utf-8")
         for rel, content in modules.items():
             (moddir / PurePosixPath(rel).name).write_text(content, encoding="utf-8", newline="")
         report_file = Path(work) / "report.json"
