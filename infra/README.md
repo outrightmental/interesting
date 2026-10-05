@@ -10,7 +10,7 @@ One project owns the whole stack for one property — including the GitHub repos
 | File | Resources | Purpose |
 | ---- | --------- | ------- |
 | `repo.tf` | `github_repository.interesting` | The repository itself — `outrightmental/interesting` is repo-as-code: name, visibility, merge settings, all here. It pre-existed this configuration, so the first apply **adopts** it via an import block; `archive_on_destroy` means a destroy archives rather than deletes it. There is no `pages` block, which is how GitHub Pages stays retired. |
-| `dns.tf` | `aws_route53_zone.primary` | The `makeitmoreinteresting.com` hosted zone. The site used to live at `interesting.outright.io`, a subdomain of a studio-wide zone this project could only read; its own apex domain has nothing in it but this site, so the zone is owned here with the rest of the stack. The domain's nameservers at the registrar have to point at it — `terraform output route53_name_servers` prints the four. |
+| `dns.tf` | `aws_route53_zone.primary`, `aws_route53domains_registered_domain.primary` | The `makeitmoreinteresting.com` hosted zone, and the domain's registration pointed at it. The site used to live at `interesting.outright.io`, a subdomain of a studio-wide zone this project could only read; its own apex domain has nothing in it but this site, so the zone is owned here with the rest of the stack. The domain is registered with Amazon Registrar in this same account, so its nameservers are set from the zone here too, and a registration pointing anywhere else is a plan diff rather than a site nobody can resolve. The registration is adopted, never registered or transferred: a destroy leaves it alone. |
 | `website.tf` + `modules/website` | S3 bucket + CloudFront distribution, ACM certificate + DNS validation, A/AAAA alias records | The static site at https://makeitmoreinteresting.com/, also served at `www.` from the same distribution (one certificate with www as a SAN, both hostnames as CloudFront aliases, four alias records from one `for_each`). The module is copied from BoardingFlow/infra, with the two changes listed under [Notes](#notes). |
 | `iam-deploy.tf` | `makeitmoreinteresting-com-deploy` IAM user + key + policy | Dedicated deploy credentials for the GitHub Actions workflow (S3 sync + CloudFront invalidation), scoped to exactly this bucket and this distribution. |
 | `github.tf` | Repository Actions secrets | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_S3_BUCKET`, `AWS_CLOUDFRONT_DISTRIBUTION_ID` — set from this project's own resources so the deploy can never drift from the infrastructure. A single apply rotates the deploy credentials end to end. Plus `GA_MEASUREMENT_ID`, the GA4 property the site reports to (`ga_measurement_id` in `locals.tf`): not a credential, since the deploy publishes it in every page, but owned here so the repository itself holds no measurement ID. |
@@ -85,22 +85,23 @@ Run it with the token exported, as in [Usage](#usage): `export GITHUB_TOKEN=$(gh
    where it was — delete it once the move is finished (step 6), not before.
 
 2. **Create the zone, then delegate the domain to it.** Nothing else can be applied until public
-   DNS answers for names in the new zone, because that is how ACM validates the certificate:
+   DNS answers for names in the new zone, because that is how ACM validates the certificate. The
+   registered domain takes its nameservers from the zone, so targeting it creates both and points
+   the registration at the zone:
 
    ```bash
-   terraform -chdir=infra apply -target=aws_route53_zone.primary
+   terraform -chdir=infra apply -target=aws_route53domains_registered_domain.primary
    terraform -chdir=infra output route53_name_servers
    ```
 
-   Set those four as the nameservers for `makeitmoreinteresting.com` at the registrar it is
-   registered with, and wait until the delegation is live:
+   Then wait until the delegation is live:
 
    ```bash
    dig +short NS makeitmoreinteresting.com @1.1.1.1
    ```
 
-   Do not go on until that answers with the four. A `.com` delegation is usually minutes, but it
-   is the registrar's clock, not ours, and a premature step 4 just sits in
+   Do not go on until that answers with the four `route53_name_servers`. A `.com` delegation is
+   usually minutes, but it is the registry's clock, not ours, and a premature step 4 just sits in
    `aws_acm_certificate_validation` until it times out.
 
 3. **Empty the old bucket.** Renaming the bucket means replacing it, and Terraform cannot delete a
@@ -138,6 +139,10 @@ Run it with the token exported, as in [Usage](#usage): `export GITHUB_TOKEN=$(gh
 
    - Delete the old `interesting.outright.io` object from the `outrightmental-terraform-state`
      bucket, now that step 1's copy has been proven by a successful apply.
+   - Delete the second `makeitmoreinteresting.com` hosted zone, the one commented *HostedZone
+     created by Route53 Registrar*. Registering the domain made it, and the registration pointed at
+     it until step 2. Wait two days after step 2 first: that is the `.com` NS TTL, so until then
+     a resolver can still be asking it.
    - Point the GA4 data stream at `https://makeitmoreinteresting.com/`. The measurement ID is
      unchanged (`ga_measurement_id` in `locals.tf`) — GA4 measures a stream, not a hostname — so
      nothing in this project or the repository changes with it.
@@ -214,8 +219,9 @@ A static site behind CloudFront's `PriceClass_100` with a handful of visitors ro
 per month: S3 storage (`site/` is a few hundred KB), CloudFront requests, one Route53 query
 volume. The one fixed charge rather than a usage one is the hosted zone, at $0.50 a month: it used
 to be the shared `outright.io` zone, already paid for, and `makeitmoreinteresting.com`'s is this
-property's own (`dns.tf`), so its bill is too. Domain registration is the registrar's, not AWS's,
-and is not managed here.
+property's own (`dns.tf`), so its bill is too. The domain registration is a yearly Amazon
+Registrar charge: `dns.tf` adopts the registration to set its nameservers, but never registers
+or pays for the domain.
 
 The hourly AI iteration makes this busier than a normal property: roughly 720 deploys a month,
 each one an `aws s3 sync` and an invalidation. An invalidation of `/*` counts as one path, so
