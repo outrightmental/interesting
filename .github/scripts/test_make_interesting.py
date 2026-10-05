@@ -2973,9 +2973,11 @@ class RealSiteTest(unittest.TestCase):
 
     def test_the_one_list_of_worlds_is_flat_and_every_world_is_whole(self):
         # One flat list, no sky and off-sky groups: a world is a world. Every entry on it is a page
-        # that exists, has a module for the feed to paint and deal from, wears a mood that
-        # _mood.scss knows, and is a world the mood flow can open onto -- and the flow names no
-        # world the list does not.
+        # that exists, has a module for the feed to paint and deal from, and wears a mood that
+        # _mood.scss knows; and the mood flow names no world the list does not. A world need not
+        # be offered by an orientation to be on the list -- the feed reaches every world, and a
+        # run adds an orientation only if the world is to be offered -- so the flow's worlds are
+        # a subset of the list, not the list.
         listed = json.loads((self.repo / "site" / "_data" / "worlds.json").read_text())
         self.assertIn("worlds", listed)
         for group in ("offSky", "underSky"):
@@ -2992,7 +2994,7 @@ class RealSiteTest(unittest.TestCase):
                               "a listed world has a feed module")
                 self.assertIn(world["mood"], moods, "a listed world wears a mood the Sass knows")
                 files.add(world["file"])
-        self.assertEqual(files, self.worlds(), "the mood flow and the list name the same worlds")
+        self.assertLessEqual(self.worlds(), files, "the mood flow names no world the list does not")
 
     def test_every_page_but_the_two_lists_ends_in_the_feed(self):
         # The feed is the one index of every world, written once in the shell: every page carries
