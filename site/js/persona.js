@@ -19,8 +19,10 @@
   page and nowhere else, which made one world of eighteen the configuration screen for the rest.
   It is a persona now: configured in one place, shown in one place, and read everywhere.
 
-  Anyone who has used an app knows the shape. In the top bar of every page sits the persona the way
-  an account sits there: a round portrait of the sky, which is the button that opens the sheet, and
+  Anyone who has used an app knows the shape. Floating in the upper right of every page sits the
+  persona the way an account sits in an app's own corner -- opposite the sparkles logo, and the
+  only other navigation the site has: a round portrait of the sky, which is the button that opens
+  the sheet, and
   a visitor with no persona yet sees that portrait ring dashed and the button filled and beckoning,
   because setting one up is the first thing to do. One sentence on where things stand is written
   beside it for screen readers and never takes space. The sheet is a dialog floating over whatever
@@ -31,7 +33,7 @@
 
   The threshold asks on arrival in its own feature: index.html hosts #persona-probe in its <main>,
   and the question is mounted there, inline, so it is never a dialog in the way and never cramped
-  into the bar. On every other page the question is one press away inside the sheet, which asks of
+  into the corner. On every other page the question is one press away inside the sheet, which asks of
   its own accord when nothing has been read yet.
 
   ---------------------------------------------------------------------------------------------
@@ -269,7 +271,8 @@
     return ctx;
   }
 
-  /* ---- the avatar in the bar (still "the card" below: it is the persona's card, wherever it sits) */
+  /* ---- the avatar in the corner (still "the card" below: it is the persona's card, wherever it
+     sits) */
 
   var card = null; // the elements of the card, once found
   var sheet = null; // the elements of the sheet, once found
@@ -356,7 +359,7 @@
   }
 
   /* The sideways question, asked in the host the threshold lends: on arrival, and whenever that
-     page asks for it. The avatar in the bar stays where it is throughout. */
+     page asks for it. The avatar in the corner stays where it is throughout. */
   function askInCard() {
     var t = window.threshold;
     if (!card || !card.probe || !t || typeof t.mount !== 'function' || askingInCard) return;

@@ -167,7 +167,7 @@
 }
 
 .stage-scene {
-  --stage-h: max(16rem, calc(100vh - var(--top-bar-h) - 19rem));
+  --stage-h: max(16rem, calc(100vh - var(--nav-h) - 19rem));
   position: relative;
   width: min(100%, calc(var(--stage-h) * var(--piece-ratio, 1.7778)));
   aspect-ratio: var(--piece-aspect, 16 / 9);
@@ -185,7 +185,7 @@
 
 @supports (height: 100svh) {
   .stage-scene {
-    --stage-h: max(16rem, calc(100svh - var(--top-bar-h) - 19rem));
+    --stage-h: max(16rem, calc(100svh - var(--nav-h) - 19rem));
   }
 }
 
@@ -489,13 +489,13 @@
   }
 
   .stage-scene {
-    --stage-h: max(14rem, calc(100vh - var(--top-bar-h) - 22rem));
+    --stage-h: max(14rem, calc(100vh - var(--nav-h) - 22rem));
     width: min(100%, calc(var(--stage-h) * var(--piece-ratio, 1.7778)));
   }
 
   @supports (height: 100svh) {
     .stage-scene {
-      --stage-h: max(14rem, calc(100svh - var(--top-bar-h) - 22rem));
+      --stage-h: max(14rem, calc(100svh - var(--nav-h) - 22rem));
     }
   }
 }
