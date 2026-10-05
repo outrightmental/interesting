@@ -446,7 +446,23 @@ async function workerMain() {
   Math.random = forbid('Math.random');
   Date.now = forbid('Date.now');
   globalThis.Date = forbid('Date');
-  if (globalThis.performance) globalThis.performance.now = forbid('performance.now');
+  // performance.now is a non-writable own property of the Performance global on some Node
+  // versions, so a plain assignment throws under strict mode and would kill the whole worker --
+  // reporting every module failed. Redefine it instead when assignment will not take, so the
+  // clock really is taken away (a swallowed assignment would leave the real clock in place, which
+  // is exactly what must not reach a piece).
+  if (globalThis.performance) {
+    const bar = forbid('performance.now');
+    try {
+      globalThis.performance.now = bar;
+    } catch (e) {
+      try {
+        Object.defineProperty(globalThis.performance, 'now', { value: bar, configurable: true });
+      } catch (e2) {
+        /* a Performance global that will not be redefined: the frame clock is still a piece's only time */
+      }
+    }
+  }
   for (const name of ['setTimeout', 'setInterval', 'setImmediate', 'requestAnimationFrame', 'fetch', 'XMLHttpRequest', 'WebSocket', 'localStorage', 'sessionStorage']) {
     try {
       globalThis[name] = forbid(name);
