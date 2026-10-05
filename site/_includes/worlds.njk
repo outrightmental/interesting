@@ -52,7 +52,7 @@
     </div>
     <p class='panel-foot'>
 {%- if nextWorld %}
-      <a class='action' href='{{ siteRoot }}{{ nextWorld.file }}'>{{ nextWorld.name }}</a>
+      <a class='action site-next-world' href='{{ siteRoot }}{{ nextWorld.file }}' data-default-href='{{ siteRoot }}{{ nextWorld.file }}' data-default-name='{{ nextWorld.name }}'>{{ nextWorld.name }}</a>
 {%- endif %}
       <span><a href='{{ siteRoot }}sitemap.html'>site map</a></span>
     </p>

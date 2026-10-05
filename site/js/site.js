@@ -222,6 +222,46 @@
     return powered;
   }
 
+  // The footer's one "where next" world is personalized to an earned reading when there is one,
+  // and otherwise stays the default circuit link rendered in worlds.njk.
+  function personalizeNextWorld() {
+    var link = document.querySelector('.site-next-world');
+    if (!link) return;
+
+    var api = window.threshold;
+    if (!api || typeof api.reading !== 'function' || typeof api.orientations !== 'function') return;
+
+    var reading = null;
+    try {
+      reading = api.reading();
+    } catch (e) {
+      reading = null;
+    }
+    if (!reading || !reading.orientation || reading.source === 'signals') return;
+
+    var targetWorld = reading.orientation.world;
+    if (!targetWorld || typeof targetWorld !== 'string') return;
+
+    var here = document.documentElement.getAttribute('data-page') || '';
+    if (here === targetWorld) return;
+
+    var worldName = reading.orientation.worldName || '';
+    if (!worldName) {
+      var all = api.orientations();
+      for (var i = 0; i < all.length; i++) {
+        if (all[i].world === targetWorld) {
+          worldName = all[i].worldName || '';
+          break;
+        }
+      }
+    }
+    if (!worldName) worldName = link.getAttribute('data-default-name') || link.textContent.trim();
+
+    link.href = root + targetWorld;
+    link.textContent = worldName;
+    link.setAttribute('data-source', 'reading');
+  }
+
   function retireOldKeys() {
     if (!store || typeof store.keys !== 'function') return;
     var kept = store.keys();
@@ -240,6 +280,8 @@
 
   function start() {
     retireOldKeys();
+    personalizeNextWorld();
+    window.addEventListener('threshold:reading', personalizeNextWorld);
   }
 
   if (document.readyState === 'loading') {
