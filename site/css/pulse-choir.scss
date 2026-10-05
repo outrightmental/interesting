@@ -1,0 +1,21 @@
+// The pulse choir: the saved sky as a looped voice field you can conduct by tempo and muting.
+// Its palette is borrowed from the attentive family through <html data-world>.
+
+@use 'readout';
+@use 'type';
+
+#choir {
+  cursor: pointer;
+}
+
+.row output {
+  min-width: 2.8em;
+  text-align: right;
+  color: var(--md-sys-color-tertiary);
+  font-family: type.$mono;
+  font-variant-numeric: tabular-nums;
+}
+
+#score {
+  @include readout.readout(8.5em, $font-size: 0.84rem, $line-height: 1.5);
+}
