@@ -1,11 +1,11 @@
 {
   "wayIn": [
     { "file": "index.html", "name": "the threshold", "gloss": "where it asks", "icon": "home",
-      "what": "Start here: answer one sideways question for a suggested world, or skip it and open any world card." },
+      "what": "Answer one sideways question for a suggested first world, or skip it and choose any world card yourself." },
     { "file": "moods.html", "name": "the mood atlas", "gloss": "how it asks, and every answer", "icon": "explore",
-      "what": "Try every question style, see every orientation it can read, then jump straight into the world that matches what you picked." },
+      "what": "Try each question style, see the orientation it reads, and jump straight to the matching world from one place." },
     { "file": "sitemap.html", "name": "site map", "gloss": "every page, described", "icon": "map",
-      "what": "Scan the whole site in one pass, with one plain line on what each page does and what to try first." }
+      "what": "Scan every page in one pass, with one plain line on what it is and what to do first." }
   ],
   "worlds": [
     { "file": "quiet-room.html", "name": "the quiet room", "orientation": "banked low", "mood": "tender", "aspect": "1 / 1",
@@ -15,7 +15,7 @@
     { "file": "constellation-diary.html", "name": "the diary", "orientation": "in the long look", "mood": "brooding", "aspect": "4 / 3",
       "what": "A logbook entry written from where your stars sit and sealed in wax, or the thoughts called back one by one in the order they came." },
     { "file": "constellation-echo.html", "name": "the echo chamber", "orientation": "ears first", "mood": "attentive", "aspect": "1 / 1",
-      "what": "Pulse your saved sky into drifting echoes, click one thought at a time, then print an echo weather bulletin." },
+      "what": "Pulse your saved sky into drifting echoes, pick one to hear its thought, then print an echo weather bulletin." },
     { "file": "pulse-choir.html", "name": "the pulse choir", "orientation": "counting in echoes", "mood": "metrical", "aspect": "4 / 3",
       "what": "Your stars as a looping choir: set the tempo, mute a few voices by touch, reshuffle the phrasing, and print the score." },
     { "file": "star-lantern.html", "name": "the lantern ritual", "orientation": "wants a rite", "mood": "ceremonial", "aspect": "3 / 4",
@@ -43,6 +43,6 @@
     { "file": "error.html", "name": "lost in space", "gloss": "the 404 page",
       "what": "Miss a page and you still land in the river: whatever comes next opens here, and every world is below." },
     { "file": "sitemap.xml", "name": "sitemap.xml", "gloss": "machine-readable",
-      "what": "The same page list in XML, using relative paths so the site works under any publish path." }
+      "what": "Get the same page list in XML, with relative paths so the site works under any publish path." }
   ]
 }
