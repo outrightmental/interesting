@@ -54,7 +54,7 @@
 {%- if inCircuit %}
     <section class='constellation-passport' aria-label='Constellation relay passport'>
       <p class='constellation-passport-title'>constellation relay passport</p>
-      <p class='constellation-passport-status' id='constellation-passport-status'>Checking your saved sky…</p>
+      <p class='constellation-passport-status' id='constellation-passport-status'>Checking your saved sky...</p>
       <p class='constellation-passport-next' id='constellation-passport-next'>Each world in this circuit remixes the same saved stars.</p>
       <div class='constellation-passport-meter' id='constellation-passport-meter' role='progressbar' aria-valuemin='0' aria-valuemax='8' aria-valuenow='0' aria-label='Constellation relay progress'>
         <div class='constellation-passport-fill' id='constellation-passport-fill'></div>
@@ -69,7 +69,7 @@
 
     <section class='constellation-quest' aria-label='Constellation relay quest'>
       <p class='constellation-quest-title'>relay quest terminal</p>
-      <p class='constellation-quest-status' id='constellation-quest-status'>Preparing your next relay objective…</p>
+      <p class='constellation-quest-status' id='constellation-quest-status'>Preparing your next relay objective...</p>
       <p class='constellation-quest-objective' id='constellation-quest-objective'>The quest loop is optional. You can always roam anywhere.</p>
       <div class='controls constellation-quest-controls'>
         <a class='action' id='constellation-quest-link' href='wish-constellation.html'>open quest world</a>
@@ -90,7 +90,7 @@
 
     <section class='constellation-remixer' aria-label='Constellation remixer'>
       <p class='constellation-remixer-title'>constellation remixer</p>
-      <p class='constellation-remixer-status' id='constellation-remixer-status'>Loading remixer state…</p>
+      <p class='constellation-remixer-status' id='constellation-remixer-status'>Loading remixer state...</p>
       <div class='controls constellation-remixer-controls'>
         <button id='constellation-remixer-shift' type='button'>remix one saved star</button>
         <button id='constellation-remixer-spark' type='button'>seed three sparks</button>
@@ -100,7 +100,7 @@
 
     <section class='constellation-signals' aria-label='Constellation relay signal deck'>
       <p class='constellation-signals-title'>relay signal deck</p>
-      <p class='constellation-signals-status' id='constellation-signals-status'>Calibrating relay signals…</p>
+      <p class='constellation-signals-status' id='constellation-signals-status'>Calibrating relay signals...</p>
       <p class='constellation-signals-current' id='constellation-signals-current'>Draw one signal to get a cross-world prompt.</p>
       <div class='controls constellation-signals-controls'>
         <button id='constellation-signals-draw' type='button'>draw signal</button>
@@ -112,7 +112,7 @@
 
     <section class='constellation-switchboard' aria-label='Constellation relay switchboard'>
       <p class='constellation-switchboard-title'>relay switchboard</p>
-      <p class='constellation-switchboard-status' id='constellation-switchboard-status'>Calculating your relay lanes…</p>
+      <p class='constellation-switchboard-status' id='constellation-switchboard-status'>Calculating your relay lanes...</p>
       <p class='constellation-switchboard-card' id='constellation-switchboard-card'>Draw a relay card to get one focused move and your next world.</p>
       <div class='controls constellation-switchboard-controls'>
         <a class='action' id='constellation-switchboard-prev' href='wish-terrarium.html'>previous world</a>
@@ -124,13 +124,33 @@
 
     <section class='constellation-logbook' aria-label='Constellation relay logbook'>
       <p class='constellation-logbook-title'>relay logbook</p>
-      <p class='constellation-logbook-status' id='constellation-logbook-status'>Preparing logbook capture controls…</p>
+      <p class='constellation-logbook-status' id='constellation-logbook-status'>Preparing logbook capture controls...</p>
       <ol class='constellation-logbook-list' id='constellation-logbook-list'></ol>
       <div class='controls constellation-logbook-controls'>
         <button id='constellation-logbook-capture' type='button'>capture this moment</button>
         <button id='constellation-logbook-highlight' type='button'>highlight one entry</button>
         <button id='constellation-logbook-clear' type='button'>clear logbook</button>
       </div>
+    </section>
+
+    <section class='constellation-cipher' aria-label='Constellation relay cipher console'>
+      <p class='constellation-cipher-title'>relay cipher console</p>
+      <p class='constellation-cipher-status' id='constellation-cipher-status'>Calibrating cipher deck...</p>
+      <p class='constellation-cipher-brief' id='constellation-cipher-brief'>Align three dials to crack one relay token.</p>
+      <div class='constellation-cipher-grid'>
+        <label for='constellation-cipher-a'>dial one</label>
+        <input id='constellation-cipher-a' type='range' min='0' max='9' step='1' value='0' aria-label='Cipher dial one'>
+        <label for='constellation-cipher-b'>dial two</label>
+        <input id='constellation-cipher-b' type='range' min='0' max='9' step='1' value='0' aria-label='Cipher dial two'>
+        <label for='constellation-cipher-c'>dial three</label>
+        <input id='constellation-cipher-c' type='range' min='0' max='9' step='1' value='0' aria-label='Cipher dial three'>
+      </div>
+      <div class='controls constellation-cipher-controls'>
+        <button id='constellation-cipher-check' type='button'>check alignment</button>
+        <button id='constellation-cipher-hint' type='button'>request hint</button>
+        <button id='constellation-cipher-new' type='button'>new cipher</button>
+      </div>
+      <p class='constellation-cipher-log' id='constellation-cipher-log'>No tokens minted yet.</p>
     </section>
 
     <nav class='footer-circuit' aria-label='Constellation circuit'>
@@ -142,6 +162,7 @@
       </div>
     </nav>
     <script src='js/constellation-logbook.js' defer></script>
+    <script src='js/constellation-cipher.js' defer></script>
 {%- endif %}
 {%- if not (page and page.fileSlug == 'sitemap') %}
 {% include 'wayfinding.njk' %}
