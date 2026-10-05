@@ -12,8 +12,15 @@
                                                       the persona's own (js/persona.js), kept here
                                                       under the names pages used before it existed
 
-  Nothing in here keeps score, routes a visitor, or writes to the shared state document except the
-  sky a visitor asks it to seed, which it does through the persona: the shell's job is to be
+  Two small pieces of the shell live here as well, because the shell is markup and Sass and needs
+  a hand with two things only a script can know: whether the page has scrolled under the top app
+  bar (which then takes its tonal lift, .is-scrolled, as an M3 top app bar does), and how full
+  each slider is (the M3 slider paints its active track in the primary colour up to the handle,
+  which CSS can only do when --range-pct says where the handle is), and the aspect ratio of each
+  world's stage (so the feature can size it by the height of the first screen).
+
+  Nothing in here keeps score, routes a visitor, or writes to the shared state document except
+  the sky a visitor asks it to seed, which it does through the persona: the shell's job is to be
   understood in one reading and get out of the way. It draws nothing of its own on a page but the
   unlock box below, where a page asks for one.
 
@@ -157,12 +164,12 @@
       box.appendChild(heading);
       box.appendChild(el('p', 'unlock-note', note));
       var controls = el('div', 'controls');
-      var go = el('button', 'unlock-go', button);
+      var go = el('button', 'unlock-go btn-filled', button);
       go.type = 'button';
       controls.appendChild(go);
       box.appendChild(controls);
       if (elsewhere && elsewhere.open && persona) {
-        var more = el('button', 'unlock-else', elsewhere.text || 'or open your persona');
+        var more = el('button', 'unlock-else btn-text', elsewhere.text || 'or open your persona');
         more.type = 'button';
         more.addEventListener('click', function () {
           persona.open(elsewhere.open);
@@ -222,51 +229,75 @@
     return powered;
   }
 
-  // The footer's one "where next" world is personalized to an earned reading when there is one,
-  // and otherwise stays the default circuit link rendered in worlds.njk.
-  function personalizeNextWorld() {
-    var link = document.querySelector('.site-next-world');
-    if (!link) return;
-
-    var api = window.threshold;
-    if (!api || typeof api.reading !== 'function' || typeof api.orientations !== 'function') return;
-
-    var reading = null;
-    try {
-      reading = api.reading();
-    } catch (e) {
-      reading = null;
-    }
-    if (!reading || !reading.orientation || reading.source === 'signals') return;
-
-    var targetWorld = reading.orientation.world;
-    if (!targetWorld || typeof targetWorld !== 'string') return;
-
-    var here = document.documentElement.getAttribute('data-page') || '';
-    if (here === targetWorld) return;
-
-    var worldName = reading.orientation.worldName || '';
-    if (!worldName) {
-      var all = api.orientations();
-      for (var i = 0; i < all.length; i++) {
-        if (all[i].world === targetWorld) {
-          worldName = all[i].worldName || '';
-          break;
-        }
-      }
-    }
-    if (!worldName) worldName = link.getAttribute('data-default-name') || link.textContent.trim();
-
-    link.href = root + targetWorld;
-    link.textContent = worldName;
-    link.setAttribute('data-source', 'reading');
-  }
-
   function retireOldKeys() {
     if (!store || typeof store.keys !== 'function') return;
     var kept = store.keys();
     for (var i = 0; i < RETIRED_KEYS.length; i++) {
       if (kept.indexOf(RETIRED_KEYS[i]) !== -1) store.remove(RETIRED_KEYS[i]);
+    }
+  }
+
+  // The top app bar lifts once the page has scrolled under it.
+  function watchTopBar() {
+    var bar = document.getElementById('top-bar');
+    if (!bar) return;
+    var scrolled = null;
+    function check() {
+      var now = (window.scrollY || document.documentElement.scrollTop || 0) > 8;
+      if (now === scrolled) return;
+      scrolled = now;
+      bar.classList.toggle('is-scrolled', now);
+    }
+    window.addEventListener('scroll', check, { passive: true });
+    check();
+  }
+
+  // Every slider says how full it is, so the M3 track can paint up to the handle.
+  function fillRange(input) {
+    var min = Number(input.min === '' ? 0 : input.min);
+    var max = Number(input.max === '' ? 100 : input.max);
+    var value = Number(input.value);
+    var pct = max > min ? ((value - min) / (max - min)) * 100 : 0;
+    input.style.setProperty('--range-pct', Math.max(0, Math.min(100, pct)).toFixed(2) + '%');
+  }
+
+  var fillPending = false;
+
+  function fillAllRanges() {
+    fillPending = false;
+    var all = document.querySelectorAll('input[type="range"]');
+    for (var i = 0; i < all.length; i++) fillRange(all[i]);
+  }
+
+  function fillSoon() {
+    if (fillPending) return;
+    fillPending = true;
+    if (window.requestAnimationFrame) window.requestAnimationFrame(fillAllRanges);
+    else fillAllRanges();
+  }
+
+  function watchRanges() {
+    document.addEventListener('input', function (ev) {
+      if (ev.target && ev.target.type === 'range') fillRange(ev.target);
+    });
+    // A button may move a slider without an input event (the 404 page's scan does), and a
+    // mechanism may put a new one on the page: either way, everything is re-read on the next frame.
+    document.addEventListener('click', fillSoon);
+    if (window.MutationObserver) {
+      new MutationObserver(fillSoon).observe(document.body, { childList: true, subtree: true });
+    }
+    fillAllRanges();
+  }
+
+  // A world's stage -- the canvas beside its panel -- fills the first screen, so it is sized by the
+  // viewport's height as well as its column's width. CSS can hold both only if it knows the
+  // stage's aspect ratio, which is read off the canvas's own width and height here.
+  function stageRatios() {
+    var stages = document.querySelectorAll('.layout > canvas, .top > canvas');
+    for (var i = 0; i < stages.length; i++) {
+      var w = Number(stages[i].getAttribute('width')) || stages[i].width;
+      var h = Number(stages[i].getAttribute('height')) || stages[i].height;
+      if (w > 0 && h > 0) stages[i].style.setProperty('--stage-ratio', (w / h).toFixed(4));
     }
   }
 
@@ -280,8 +311,9 @@
 
   function start() {
     retireOldKeys();
-    personalizeNextWorld();
-    window.addEventListener('threshold:reading', personalizeNextWorld);
+    watchTopBar();
+    watchRanges();
+    stageRatios();
   }
 
   if (document.readyState === 'loading') {

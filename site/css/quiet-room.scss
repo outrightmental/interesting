@@ -1,24 +1,16 @@
-// The quiet room: one ring, one dimmer, nothing that keeps score.
+// The quiet room: one ring, one dimmer, nothing that keeps score. Its palette is its world's
+// (tender), from _sass/_mood.scss through <html data-world>.
 
-@use 'vars';
-
-:root {
-  --bg: #140d13;
-  --bg2: #46293c;
-  --accent: #ffc6d6;
-  --accent2: #ffe4c8;
-}
+@use 'type';
 
 .room {
   position: relative;
   display: grid;
   place-items: center;
-  min-height: 300px;
-  border-radius: vars.$radius-panel;
-  border: 1px solid vars.$hairline;
+  border-radius: var(--md-sys-shape-corner-large);
   background:
-    radial-gradient(circle at 50% 46%, rgba(255, 214, 226, 0.1) 0%, transparent 62%),
-    #150e14;
+    radial-gradient(circle at 50% 46%, color-mix(in oklab, var(--md-sys-color-primary) 10%, transparent) 0%, transparent 62%),
+    var(--md-sys-color-surface-container-lowest);
   overflow: hidden;
   // The ring is the hold target: pressed with a pointer or a finger, so a long press must not
   // select the word or open a callout, and a double tap must not zoom.
@@ -29,12 +21,10 @@
   -webkit-touch-callout: none;
 }
 
-// The room takes keyboard focus (space held on it holds the breath), so it needs a ring of its
-// own: the shared one only covers buttons and links.
+// The room takes keyboard focus (space held on it holds the breath), so it rings like a control.
 .room:focus-visible {
-  outline: 2px solid transparent;
-  border-color: vars.$focus-line;
-  box-shadow: 0 0 0 3px vars.$focus-ring;
+  outline: 3px solid var(--md-sys-color-primary);
+  outline-offset: 2px;
 }
 
 // The dimmer: one custom property, set by the slider, darkening this room and nothing else.
@@ -51,27 +41,20 @@
   width: min(210px, 54%);
   aspect-ratio: 1;
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(255, 214, 226, 0.5) 0%, rgba(255, 198, 214, 0.08) 68%, transparent 72%);
-  border: 1px solid rgba(255, 214, 226, 0.36);
+  background: radial-gradient(circle, color-mix(in oklab, var(--md-sys-color-primary) 50%, transparent) 0%, color-mix(in oklab, var(--md-sys-color-primary) 8%, transparent) 68%, transparent 72%);
+  border: 1px solid color-mix(in oklab, var(--md-sys-color-primary) 36%, transparent);
   will-change: transform, opacity;
 }
 
 .breath-word {
   position: absolute;
-  bottom: 0.9rem;
+  bottom: 1rem;
   margin: 0;
   z-index: 1;
-  color: var(--accent2);
-  font-size: 0.88rem;
+  color: var(--md-sys-color-tertiary);
   letter-spacing: 0.22em;
   text-transform: lowercase;
-}
-
-.room-note {
-  margin: 0;
-  color: #f0dde4;
-  line-height: 1.5;
-  font-size: 0.92rem;
+  @include type.scale(label-large);
 }
 
 .layout .panel #reading {

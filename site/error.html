@@ -13,19 +13,19 @@ siteRoot: /
     <h1>lost in space</h1>
     <p class='tagline'>There is no page at this address (404). The site still works, and so does the radio below.</p>
     <div class='controls'>
-      <button id='void' type='button'>ask the void</button>
+      <button id='void' type='button' class='btn-filled'>ask the void</button>
       <a id='home' class='action' href='/index.html'>the threshold</a>
       <a class='action' href='/sitemap.html'>site map</a>
     </div>
 
     <p id='note' aria-live='polite'>Nothing on the line yet.</p>
 
-    <section class='radio' aria-labelledby='radio-heading'>
+    <section class='radio panel' aria-labelledby='radio-heading'>
       <div class='radio-top'>
         <h2 id='radio-heading' class='panel-title'>the void radio</h2>
         <p><span id='freq-readout'>94.6</span> MHz</p>
       </div>
-      <input id='freq' type='range' min='88' max='108' step='0.1' value='94.6' aria-label='Radio frequency'>
+      <div class='row'><label for='freq'>tune</label><input id='freq' type='range' min='88' max='108' step='0.1' value='94.6'></div>
       <div class='controls'>
         <button id='scan' type='button'>scan burst</button>
         <button id='lock' type='button'>lock frequency</button>
@@ -33,7 +33,7 @@ siteRoot: /
       <p id='radio-note' class='hint' aria-live='polite'>Sweep slowly near 99.7 MHz. Some signals only appear when you pause.</p>
     </section>
 
-    <section class='scope' aria-labelledby='scope-heading'>
+    <section class='scope panel' aria-labelledby='scope-heading'>
       <div class='radio-top'>
         <h2 id='scope-heading' class='panel-title'>the signal scope</h2>
         <p>wavefield monitor</p>
@@ -46,7 +46,7 @@ siteRoot: /
       <p id='scope-note' class='hint' aria-live='polite'>Scope online. Tune and decode to reshape the pulse.</p>
     </section>
 
-    <section class='decoder' aria-labelledby='decoder-heading'>
+    <section class='decoder panel' aria-labelledby='decoder-heading'>
       <div class='radio-top'>
         <h2 id='decoder-heading' class='panel-title'>the signal decoder</h2>
         <p>level <span id='decoder-level'>1</span></p>
@@ -66,7 +66,7 @@ siteRoot: /
       <p id='decoder-note' class='hint' aria-live='polite'>Press play sequence to begin.</p>
     </section>
 
-    <section class='haiku' aria-labelledby='haiku-heading'>
+    <section class='haiku panel' aria-labelledby='haiku-heading'>
       <div class='radio-top'>
         <h2 id='haiku-heading' class='panel-title'>the distress haiku</h2>
         <p>text burst</p>

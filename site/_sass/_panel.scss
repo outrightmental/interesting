@@ -1,71 +1,73 @@
-// The frosted slab a page sits on, and the one kind of panel everything else on the site is made
-// of: the index of every world, the sky circuit's note, a page's own control panel. One border,
-// one radius, one background, one small-caps heading, one note line -- so that a panel reads as a
-// panel wherever it appears, and a new one costs a class and not a stylesheet.
+// The surfaces a page is made of, after M3's cards (m3.material.io/components/cards): the feature
+// a page is, the filled card everything else on the site is made of, and the few text roles
+// inside one. One shape, one tone per tier, no borders -- so that a panel reads as a panel wherever
+// it appears, and a new one costs a class and not a stylesheet.
 //
-//   .panel          the box
-//   .panel-title    its heading, small and uppercase: always an h2 or h3, never a styled <p>, so
-//                   the heading outline a screen reader walks stays real
-//   .panel-label    the same for an h3 inside a panel
-//   .panel-note     one explanatory line in the muted colour
-//   .panel-status   a line a script writes into (a page's #status is one)
+//   main            the feature: unbordered, full-bleed, the page's own palette washing to the
+//                   viewport's edges, and at least the first screen tall (the viewport less the
+//                   top bar and a margin, so the feed peeks above the fold). Every direct child
+//                   of <main> lands in one centred column, as wide as the page allows, so a page
+//                   writes its content straight into <main> and the feature does the rest.
+//   .panel          a filled card: the container tier, large corners
+//   .panel-title    its heading, title-medium: always an h2 or h3, never a styled <p>, so the
+//                   heading outline a screen reader walks stays real
+//   .panel-label    the same for an h3 inside a panel, label-large in the variant colour
+//   .panel-note     one explanatory line in the variant colour
+//   .panel-status   a line a script writes into (a page's #status is one), in the tertiary colour
 //   .panel-foot     the closing row of a panel
-//   .chips          a list of pill links; .chips-tall puts a sub-label under each name
+//   .chips          a list of chip links (M3 assist chips); .chips-tall puts a sub-label under each
 //   .controls--stack  the buttons of a row go full width on a phone
 
-@use 'vars';
-@use 'nav-chips';
+@use 'type';
 
 main {
-  width: min(940px, 100%);
-  margin-inline: auto;
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  background: var(--panel);
-  backdrop-filter: blur(8px);
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.36);
-  padding: 1rem;
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, var(--page-max));
+  justify-content: center;
+  align-content: center;
+  min-height: calc(100vh - var(--top-bar-h) - var(--fold-peek));
+  min-height: calc(100svh - var(--top-bar-h) - var(--fold-peek));
+  padding: 1.25rem var(--gutter) 2rem;
+  // The page's own sky, washing in from the top left corner to the viewport's edges.
+  background:
+    radial-gradient(130vw 90vh at 12% -14%, color-mix(in oklab, var(--bg2) 80%, transparent) 0%, transparent 62%),
+    radial-gradient(70vw 60vh at 100% 110%, color-mix(in oklab, var(--md-sys-color-primary) 9%, transparent) 0%, transparent 60%);
 }
 
 .panel {
-  border: 1px solid vars.$hairline;
-  border-radius: vars.$radius-panel;
-  background: rgba(7, 10, 20, 0.56);
-  padding: 0.8rem;
+  padding: 1rem;
+  border-radius: var(--md-sys-shape-corner-large);
+  background: var(--md-sys-color-surface-container);
 }
 
-.panel-title,
+.panel-title {
+  margin: 0;
+  color: var(--md-sys-color-on-surface);
+  @include type.scale(title-medium);
+}
+
 .panel-label {
   margin: 0;
-  color: var(--accent2);
-  font-size: 0.82rem;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.panel-label {
-  color: var(--muted);
-  font-size: 0.78rem;
+  color: var(--md-sys-color-on-surface-variant);
+  @include type.scale(label-large);
 }
 
 .panel-note {
-  margin: 0.35rem 0 0;
-  color: var(--muted);
-  font-size: 0.86rem;
-  line-height: 1.45;
+  margin: 0.5rem 0 0;
+  color: var(--md-sys-color-on-surface-variant);
+  @include type.scale(body-medium);
 }
 
 .panel-note a {
-  color: var(--accent);
+  color: var(--md-sys-color-primary);
 }
 
 .panel-status {
-  margin: 0.4rem 0 0;
+  margin: 0.5rem 0 0;
   min-height: 1.25em;
-  color: #d8e6ff;
-  font-size: 0.86rem;
-  line-height: 1.45;
+  color: var(--md-sys-color-tertiary);
+  @include type.scale(body-medium);
 }
 
 .panel-status.good {
@@ -73,48 +75,90 @@ main {
 }
 
 .panel-foot {
-  margin: 0.65rem 0 0;
+  margin: 0.75rem 0 0;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 0.5rem;
-  color: var(--muted);
-  font-size: 0.82rem;
+  color: var(--md-sys-color-on-surface-variant);
+  @include type.scale(label-large);
 }
 
 .panel-foot a {
-  color: var(--accent);
+  color: var(--md-sys-color-primary);
 }
 
+// A chip: M3's assist chip, a small-cornered outlined pill with a label inside.
 .chips {
   list-style: none;
-  margin: 0.45rem 0 0;
+  margin: 0.5rem 0 0;
   padding: 0;
   display: flex;
   flex-wrap: wrap;
-  gap: 0.45rem;
+  gap: 0.5rem;
 }
 
 .chips a {
-  @include nav-chips.chip;
+  position: relative;
+  isolation: isolate;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  padding: 0.35rem 1rem;
+  border-radius: var(--md-sys-shape-corner-small);
+  box-shadow: inset 0 0 0 1px var(--md-sys-color-outline);
+  color: var(--md-sys-color-on-surface);
+  text-decoration: none;
+  @include type.scale(label-large);
+}
+
+.chips a::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: currentColor;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.chips a:hover::after {
+  opacity: var(--md-sys-state-hover-opacity);
 }
 
 .chips a[aria-current='page'] {
-  @include nav-chips.current;
+  box-shadow: none;
+  background: var(--md-sys-color-secondary-container);
+  color: var(--md-sys-color-on-secondary-container);
 }
 
 .chips-tall a {
   flex-direction: column;
   align-items: flex-start;
   gap: 0.1rem;
-  border-radius: vars.$radius-well;
-  padding: 0.4rem 0.7rem;
+  padding: 0.5rem 1rem;
 }
 
-// The orientation a world answers to, under its name.
 .chips-tall a span {
-  color: var(--muted);
-  font-size: 0.76rem;
+  color: var(--md-sys-color-on-surface-variant);
+  @include type.scale(label-medium);
+}
+
+// The lines a page writes into inside its panel: the status line, and the readout under it.
+.panel #status,
+.panel .status {
+  margin: 0.5rem 0 0;
+  min-height: 1.5em;
+  color: var(--md-sys-color-tertiary);
+  @include type.scale(body-medium);
+}
+
+// A plain paragraph of a page's own prose inside its panel.
+.panel > p:not([class]) {
+  color: var(--md-sys-color-on-surface);
+  @include type.scale(body-medium);
 }
 
 @media (max-width: 620px) {

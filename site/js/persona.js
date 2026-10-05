@@ -6,7 +6,7 @@
       <script src='js/persona.js'></script>
 
   Not deferred, like js/state.js and js/site.js before it: a page's own <script> runs while the body
-  is parsed, and a world under the sky reads the persona's stars from there. The card and the sheet
+  is parsed, and a world that reads the sky reads the persona's stars from there. The card and the sheet
   are built on DOMContentLoaded, which is after every deferred script has run, so the orientation
   panel can lean on js/threshold.js.
 
@@ -14,22 +14,25 @@
   What a persona is
 
   Two things, and every world reads from them: a small sky of stars the visitor places, which the
-  eight worlds under the sky each reinterpret, and the reading the mood flow has taken of them,
+  worlds that read the sky each reinterpret, and the reading the mood flow has taken of them,
   which is what the site offers a world from. The sky used to be placed on the wish constellation
   page and nowhere else, which made one world of eighteen the configuration screen for the rest.
   It is a persona now: configured in one place, shown in one place, and read everywhere.
 
-  Anyone who has opened a role-playing game knows the shape. Under the header on every page sits the
-  card -- a portrait of the sky, one line on where things stand, and one button -- and a visitor with
-  no persona yet sees that card unlit and that button beckoning, because setting one up is the first
-  thing to do. The button opens the sheet, a dialog floating over whatever page is open, with two
-  sections: the constellation, where stars are placed, dragged and read, and the orientation, where
-  the site asks its sideways question and says what it read. A world open underneath follows every
-  change as it is made (see onSky below and window.interestingSite.unlock in js/site.js).
+  Anyone who has used an app knows the shape. In the top bar of every page sits the persona the way
+  an account sits there: a round portrait of the sky, which is the button that opens the sheet, and
+  a visitor with no persona yet sees that portrait ring dashed and the button filled and beckoning,
+  because setting one up is the first thing to do. One sentence on where things stand is written
+  beside it for screen readers and never takes space. The sheet is a dialog floating over whatever
+  page is open, with two sections: the constellation, where stars are placed, dragged and read, and
+  the orientation, where the site asks its sideways question and says what it read. A world open
+  underneath follows every change as it is made (see onSky below and window.interestingSite.unlock
+  in js/site.js).
 
-  The card is also where the mood flow is visible. The threshold asks on arrival in the card itself,
-  inline, so the question is never a dialog in the way; on every other page the question is one
-  press away inside the sheet, which asks of its own accord when nothing has been read yet.
+  The threshold asks on arrival in its own feature: index.html hosts #persona-probe in its <main>,
+  and the question is mounted there, inline, so it is never a dialog in the way and never cramped
+  into the bar. On every other page the question is one press away inside the sheet, which asks of
+  its own accord when nothing has been read yet.
 
   ---------------------------------------------------------------------------------------------
   What a page can call
@@ -53,7 +56,7 @@
                              window as a 'persona:sky' CustomEvent, detail { stars, how, kept }
         .open(section)       open the sheet, on 'sky' (default) or 'reading'
         .close()
-        .ask()               put the sideways question in the card, where the threshold asks
+        .ask()               put the sideways question in #persona-probe, where the threshold asks
         .refresh()           redraw the card; called for you after every change and reading
 
   Nothing here reaches for the browser's storage: every read and write goes through
@@ -266,7 +269,7 @@
     return ctx;
   }
 
-  /* ---- the card --------------------------------------------------------------------------- */
+  /* ---- the avatar in the bar (still "the card" below: it is the persona's card, wherever it sits) */
 
   var card = null; // the elements of the card, once found
   var sheet = null; // the elements of the sheet, once found
@@ -310,7 +313,7 @@
     if (askingInCard) return ASKING_TEXT;
     if (!list.length && !readOf(r) && saved.status !== 'unreadable') {
       return 'No persona yet. Yours is a small sky of stars you place and one sideways question '
-        + 'you answer: the worlds under the sky each read the stars their own way, and the answer '
+        + 'you answer: several worlds read the stars, each its own way, and the answer '
         + 'picks a world to suggest. Set it up here, or take any world below.' + keptClause();
     }
     return describeSky(saved, list) + ' ' + describeReading(r) + keptClause();
@@ -328,9 +331,12 @@
     card.host.setAttribute('data-reading', !isRead ? 'none' : (r.source === 'answer' ? 'answered' : 'carried'));
     card.host.setAttribute('data-asking', askingInCard ? 'true' : 'false');
     card.host.setAttribute('data-sky', list.length ? 'set' : 'none');
-    card.actions.hidden = askingInCard;
     card.open.hidden = false;
-    card.open.textContent = list.length || isRead ? 'open persona' : 'set up persona';
+    // The button's label: visible while there is no persona, where it is the one lit control on
+    // the page, and read by a screen reader after that (the stylesheet hides it).
+    var label = list.length || isRead ? 'open persona' : 'set up persona';
+    if (card.label) card.label.textContent = label;
+    else card.open.textContent = label;
     if (isRead && !askingInCard) {
       card.go.hidden = false;
       card.go.href = root + r.orientation.world;
@@ -340,15 +346,16 @@
     }
 
     if (card.portrait) {
-      var ctx = sizeCanvas(card.portrait, 56, 56);
-      if (ctx && list.length) drawSky(ctx, list, 56, 56, 8, 1.7, 0.9);
+      var size = card.portraitSize;
+      var ctx = sizeCanvas(card.portrait, size, size);
+      if (ctx && list.length) drawSky(ctx, list, size, size, size * 0.15, size * 0.032, size * 0.018);
     }
 
     if (sheet && sheet.host.open) renderSheet();
   }
 
-  /* The sideways question, asked in the card: on arrival at the threshold, and whenever a page
-     asks for it. The card's own controls step aside until it is answered or skipped. */
+  /* The sideways question, asked in the host the threshold lends: on arrival, and whenever that
+     page asks for it. The avatar in the bar stays where it is throughout. */
   function askInCard() {
     var t = window.threshold;
     if (!card || !card.probe || !t || typeof t.mount !== 'function' || askingInCard) return;
@@ -389,7 +396,10 @@
       text: document.getElementById('persona-text'),
       actions: host.querySelector('.persona-actions'),
       open: document.getElementById('persona-open'),
+      label: host.querySelector('.persona-label'),
       go: document.getElementById('persona-go'),
+      // The question's host: the threshold lends one in its own feature; other pages have none,
+      // and ask inside the sheet instead.
       probe: document.getElementById('persona-probe'),
       portrait: document.getElementById('persona-portrait')
     };
@@ -397,8 +407,9 @@
       card = null;
       return;
     }
+    card.portraitSize = (card.portrait && Number(card.portrait.getAttribute('width'))) || 40;
     card.open.addEventListener('click', function () {
-      openSheet(card.open.textContent === 'set up persona' ? 'sky' : 'sky', card.open);
+      openSheet('sky', card.open);
     });
     // Live only from here on: the sentence written as the page loads is the page's, not news.
     card.text.setAttribute('aria-live', 'polite');
@@ -784,7 +795,7 @@
           sheetStatus('The sky is already empty.');
           return;
         }
-        if (!window.confirm('Clear every star from your sky? Every world under the sky will read nothing until you place more.')) {
+        if (!window.confirm('Clear every star from your sky? Every world that reads it will read nothing until you place more.')) {
           sheetStatus('Kept as it was.');
           return;
         }
@@ -820,9 +831,9 @@
       if (!askingInCard) refresh();
       if (sheet && sheet.host.open && !askingInSheet) renderReading();
     });
-    // The threshold asks unprompted, in the card: on arrival, and whenever nothing has been read
-    // yet, because asking is what that page is for. Every other page keeps the question one press
-    // away, inside the sheet.
+    // The threshold asks unprompted, in its own feature: on arrival, and whenever nothing has been
+    // read yet, because asking is what that page is for. Every other page keeps the question one
+    // press away, inside the sheet.
     var t = window.threshold;
     if (t && typeof t.arrival === 'function' && t.arrival()) askInCard();
   }

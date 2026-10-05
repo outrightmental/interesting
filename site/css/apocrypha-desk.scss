@@ -1,66 +1,51 @@
-// The apocrypha desk: one specimen card at a time, and a drawer of the ones worth keeping.
+// The apocrypha desk: one specimen card at a time, and a drawer of the ones worth keeping. Its
+// palette is its world's (curious), from _sass/_mood.scss through <html data-world>.
 
-@use 'vars';
 @use 'readout';
+@use 'type';
 
-:root {
-  --bg: #0d0c13;
-  --bg2: #332b52;
-  --accent: #cdbcff;
-  --accent2: #ffe7ab;
-}
-
-.card {
+// The specimen on the desk: a recessed card, ruled like an index card.
+.specimen {
   display: grid;
   align-content: start;
   gap: 0.5rem;
-  border: 1px solid vars.$hairline;
-  border-radius: vars.$radius-panel;
+  padding: 1.25rem;
+  border-radius: var(--md-sys-shape-corner-large);
   background:
     repeating-linear-gradient(0deg, transparent 0 25px, rgba(255, 255, 255, 0.03) 25px 26px),
-    rgba(18, 15, 28, 0.9);
-  padding: 1rem;
+    var(--md-sys-color-surface-container-lowest);
 }
 
-.card[data-filled='true'] {
-  min-height: 300px;
-  border-color: rgba(205, 188, 255, 0.4);
+.specimen[data-filled='true'] {
+  outline: 1px solid color-mix(in oklab, var(--md-sys-color-primary) 40%, transparent);
+  outline-offset: -1px;
 }
 
-.card-number {
+.specimen-number {
   margin: 0;
-  color: var(--accent2);
-  font-family: vars.$mono;
-  font-size: 0.9rem;
+  color: var(--md-sys-color-tertiary);
+  font-family: type.$mono;
   letter-spacing: 0.1em;
+  @include type.scale(label-large);
 }
 
-.card-name {
+.specimen-name {
   margin: 0;
-  font-size: clamp(1.05rem, 3.4vw, 1.5rem);
-  line-height: 1.25;
-  color: #f1ecff;
+  color: var(--md-sys-color-on-surface);
+  @include type.scale(headline-small);
 }
 
-.card-line {
+.specimen-line {
   margin: 0;
-  color: #d8d0ef;
-  font-size: 0.92rem;
-  line-height: 1.5;
+  color: var(--md-sys-color-on-surface);
+  @include type.scale(body-medium);
 }
 
-.card-verdict {
+.specimen-verdict {
   margin: auto 0 0;
-  color: var(--accent);
-  font-family: vars.$mono;
-  font-size: 0.82rem;
-}
-
-.desk-note {
-  margin: 0;
-  color: #e3dcfb;
-  line-height: 1.5;
-  font-size: 0.92rem;
+  color: var(--md-sys-color-primary);
+  font-family: type.$mono;
+  @include type.scale(body-small);
 }
 
 .layout .panel #reading {
