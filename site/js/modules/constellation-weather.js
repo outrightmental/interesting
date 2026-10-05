@@ -14,18 +14,20 @@ const LINES = [
 
 function map(ctx, w, h, env) {
   const c = env.colors;
+  const v = env.variant;
+  const step = Math.max(14, Math.round(24 / v.scale));
   ctx.fillStyle = c.bg;
   ctx.fillRect(0, 0, w, h);
   // A faint graticule.
   ctx.strokeStyle = env.alpha(c.muted, 0.12);
   ctx.lineWidth = 1;
-  for (let x = 0; x < w; x += 24) {
+  for (let x = 0; x < w; x += step) {
     ctx.beginPath();
     ctx.moveTo(x + 0.5, 0);
     ctx.lineTo(x + 0.5, h);
     ctx.stroke();
   }
-  for (let y = 0; y < h; y += 24) {
+  for (let y = 0; y < h; y += step) {
     ctx.beginPath();
     ctx.moveTo(0, y + 0.5);
     ctx.lineTo(w, y + 0.5);
@@ -35,11 +37,11 @@ function map(ctx, w, h, env) {
   // Isobars round each system; the high ones are the stars that sit high.
   pts.forEach((p, i) => {
     const high = p.y < h / 2;
-    const rings = 3 + (i % 3);
+    const rings = Math.max(2, Math.round((3 + (i % 3)) * v.density));
     for (let r = 1; r <= rings; r++) {
-      ctx.strokeStyle = env.alpha(high ? c.accent2 : c.accent, 0.42 - r * 0.08);
+      ctx.strokeStyle = env.alpha(high ? c.accent2 : c.accent, Math.max(0.04, 0.42 - r * (0.32 / rings)));
       ctx.beginPath();
-      ctx.ellipse(p.x, p.y, r * 11, r * 8.5, (i * 0.7) % Math.PI, 0, Math.PI * 2);
+      ctx.ellipse(p.x, p.y, r * 11 * v.scale, r * 8.5 * v.scale, (i * 0.7 + v.turn * Math.PI) % Math.PI, 0, Math.PI * 2);
       ctx.stroke();
     }
     ctx.fillStyle = env.alpha(c.fg, 0.9);

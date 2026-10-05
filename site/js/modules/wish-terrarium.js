@@ -6,16 +6,17 @@ const WIND = ['none; the glass is shut', 'a draught from the vent', 'the fan, on
 
 function glasshouse(ctx, w, h, env, t) {
   const c = env.colors;
+  const v = env.variant;
   const g = ctx.createLinearGradient(0, 0, 0, h);
   g.addColorStop(0, c.bg2);
   g.addColorStop(1, c.bg);
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, w, h);
-  const soilY = h * 0.82;
+  const soilY = h * (0.76 + v.turn * 0.1);
   // The soil.
   ctx.fillStyle = env.mix(c.bg, '#000', 0.3);
   ctx.fillRect(0, soilY, w, h - soilY);
-  for (let i = 0; i < 60; i++) {
+  for (let i = 0, grit = Math.round(60 * v.density); i < grit; i++) {
     ctx.fillStyle = env.alpha(c.accent2, 0.1 + env.rnd() * 0.15);
     ctx.fillRect(env.rnd() * w, soilY + env.rnd() * (h - soilY), 1.5, 1.5);
   }
@@ -24,7 +25,7 @@ function glasshouse(ctx, w, h, env, t) {
   stars.forEach((s, i) => {
     const x = 14 + (s.x / 100) * (w - 28);
     const height = ((100 - s.y) / 100) * (soilY - 16) * 0.85 + 10;
-    const sway = t ? Math.sin(t * 0.9 + i) * 3 : 0;
+    const sway = t ? Math.sin(t * 0.9 + i + v.turn * Math.PI * 2) * 3 * v.scale : 0;
     ctx.strokeStyle = env.alpha(c.accent, 0.85);
     ctx.lineWidth = 1.6;
     ctx.beginPath();
@@ -37,7 +38,7 @@ function glasshouse(ctx, w, h, env, t) {
       const side = l % 2 ? 1 : -1;
       ctx.fillStyle = env.alpha(c.accent, 0.5 + (l / leaves) * 0.3);
       ctx.beginPath();
-      ctx.ellipse(x + sway * (l / leaves) + side * 6, ly, 7, 3, side * 0.5, 0, Math.PI * 2);
+      ctx.ellipse(x + sway * (l / leaves) + side * 6 * v.scale, ly, 7 * v.scale, 3 * v.scale, side * 0.5, 0, Math.PI * 2);
       ctx.fill();
     }
     ctx.fillStyle = env.alpha(c.accent2, 0.9);
@@ -50,7 +51,7 @@ function glasshouse(ctx, w, h, env, t) {
   ctx.lineWidth = 2;
   ctx.strokeRect(1, 1, w - 2, h - 2);
   ctx.lineWidth = 1;
-  for (let x = w / 3; x < w; x += w / 3) {
+  for (let bars = Math.max(2, Math.round(3 * v.density)), x = w / bars; x < w - 1; x += w / bars) {
     ctx.beginPath();
     ctx.moveTo(x, 0);
     ctx.lineTo(x, h);

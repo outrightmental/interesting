@@ -47,14 +47,15 @@ function pickRule(env) {
 
 function run(ctx, w, h, env, rule, noisy) {
   const c = env.colors;
+  const v = env.variant;
   ctx.fillStyle = c.bg;
   ctx.fillRect(0, 0, w, h);
-  const cols = Math.max(24, Math.round(w / 3));
+  const cols = Math.max(16, Math.round(w / (3 * v.scale)));
   const size = w / cols;
   const rows = Math.ceil(h / size);
   let row = new Uint8Array(cols);
-  if (noisy) for (let i = 0; i < cols; i++) row[i] = env.rnd() < 0.3 ? 1 : 0;
-  else row[cols >> 1] = 1;
+  if (noisy) for (let i = 0; i < cols; i++) row[i] = env.rnd() < 0.3 * v.density ? 1 : 0;
+  else row[Math.floor(cols * (0.2 + v.turn * 0.6))] = 1;
   ctx.fillStyle = env.alpha(c.accent, 0.9);
   for (let y = 0; y < rows; y++) {
     for (let x = 0; x < cols; x++) {

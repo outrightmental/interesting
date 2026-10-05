@@ -50,14 +50,15 @@ function coin(env) {
 
 function kiln(ctx, w, h, env, heat) {
   const c = env.colors;
+  const v = env.variant;
   const g = ctx.createRadialGradient(w / 2, h * 0.7, 0, w / 2, h * 0.7, Math.max(w, h) * 0.8);
   g.addColorStop(0, env.mix(c.bg, c.accent, 0.18));
   g.addColorStop(1, c.bg);
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, w, h);
-  const r = Math.min(w, h) * 0.26;
+  const r = Math.min(w, h) * 0.26 * v.scale;
   const cx = w / 2;
-  const cy = h * 0.52;
+  const cy = h * (0.44 + v.turn * 0.16);
   // The mouth.
   ctx.fillStyle = env.mix(c.bg, '#000', 0.4);
   ctx.beginPath();
@@ -76,7 +77,7 @@ function kiln(ctx, w, h, env, heat) {
   ctx.ellipse(cx, cy, r * 0.95, r * 0.88, 0, 0, Math.PI * 2);
   ctx.fill();
   // Sparks rising.
-  for (let i = 0; i < 6 + heat * 10; i++) {
+  for (let i = 0, n = (6 + heat * 10) * v.density; i < n; i++) {
     ctx.fillStyle = env.alpha(c.accent2, 0.2 + env.rnd() * 0.6);
     ctx.beginPath();
     ctx.arc(cx + (env.rnd() - 0.5) * r * 1.4, cy - r * 0.6 - env.rnd() * h * 0.35, 0.8 + env.rnd() * 1.2, 0, Math.PI * 2);

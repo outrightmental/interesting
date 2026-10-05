@@ -37,19 +37,20 @@ const VERDICTS = [
 
 function desk(ctx, w, h, env) {
   const c = env.colors;
+  const v = env.variant;
   ctx.fillStyle = env.mix(c.bg, c.bg2, 0.3);
   ctx.fillRect(0, 0, w, h);
   // The desk's grain.
-  for (let y = 0; y < h; y += 7) {
+  for (let y = 0, grain = Math.max(4, Math.round(7 / v.scale)); y < h; y += grain) {
     ctx.fillStyle = env.alpha(c.bg2, 0.25 + env.rnd() * 0.2);
     ctx.fillRect(0, y, w, 1);
   }
   // An index card, slightly askew, ruled.
-  const cw = w * 0.72;
+  const cw = Math.min(w * 0.92, w * 0.72 * v.scale);
   const ch = Math.min(h * 0.62, cw * 0.62);
   ctx.save();
   ctx.translate(w / 2, h / 2);
-  ctx.rotate((env.rnd() - 0.5) * 0.12);
+  ctx.rotate(((env.rnd() - 0.5) + (v.turn - 0.5) * 0.8) * 0.14);
   ctx.fillStyle = env.mix(c.bg, c.fg, 0.08);
   ctx.shadowColor = 'rgba(0,0,0,0.5)';
   ctx.shadowBlur = 12;
