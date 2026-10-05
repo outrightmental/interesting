@@ -25,7 +25,7 @@ function sprout(star, i, salt) {
 }
 
 function fresh(stars, salt) {
-  return { t: 0, light: 0, wind: 0.4, fog: 0, moss: false, flash: 0, stamp: 0, stampText: '', needle: 0, gauge: false,
+  return { t: 0, light: -1, wind: 0.4, fog: 0, moss: false, flash: 0, stamp: 0, stampText: '', needle: 0, gauge: false,
     drops: [], lines: [], tips: [], plants: stars.map((star, i) => sprout(star, i, salt)) };
 }
 
@@ -66,7 +66,7 @@ function pickLights(env, count) {
 function air(g, w, h, c, s) {
   const col = c.colors;
   const top = s.light === 1 ? c.mix(col.bg2, col.fg, 0.2) : s.light === 3 ? c.mix(col.bg2, col.accent, 0.15) : col.bg2;
-  const base = s.moss ? c.mix(col.bg, col.accent, 0.12) : col.bg;
+  const base = c.mix(col.bg, col.accent, (s.moss ? 0.12 : 0) + (s.light === 0 ? 0.07 : 0));
   const grad = g.createLinearGradient(0, 0, 0, h);
   grad.addColorStop(0, top);
   if (s.light === 3) grad.addColorStop(0.3, base);
@@ -352,15 +352,19 @@ function watering(env) {
   const vent0 = env.pick([20, 35, 50]);
   const s = fresh(env.stars, env.int(1, 9999));
   s.wind = vent0 / 100;
+  let misted = false;
   const wet = () => s.plants.filter((p) => p.wet).length;
+  const one = need === 1;
+  const drink = (k) => (WORDS[k] || k) + (k === 1 ? ' stem drinks' : ' stems drink');
   return {
-    title: need === n ? 'water every stem' : 'water ' + WORDS[need] + ' stems',
-    brief: 'Set the light and the vent, tap ' + (need === n ? 'each stem' : WORDS[need] + ' stems') + ' to water them and hear what they remember, then hold to mist the glass; the terrarium fogs over and the stems drink.',
+    title: one ? 'water the one stem' : need === n ? 'water every stem' : 'water ' + WORDS[need] + ' stems',
+    brief: 'Set the light and the vent, tap ' + (one ? 'the one stem to water it and hear what it remembers' : (need === n ? 'each stem' : WORDS[need] + ' stems') + ' to water them and hear what they remember')
+      + ', then hold to mist the glass; the terrarium fogs over and ' + (n === 1 ? 'the stem drinks.' : 'the stems drink.'),
     aspect: '16 / 10',
     steps: [
       { id: 'light', ask: 'the light', kind: 'choice', options: lights },
       { id: 'vent', ask: 'the vent', kind: 'range', min: 0, max: 100, step: 1, value: vent0, low: 'shut', high: 'fan on low' },
-      { id: 'water', ask: 'tap ' + WORDS[need] + ' stems to water them', kind: 'tap', label: 'water one for me' },
+      { id: 'water', ask: one ? 'tap the stem to water it' : 'tap ' + WORDS[need] + ' stems to water them', kind: 'tap', label: 'water one for me' },
       { id: 'mist', ask: 'mist the glass', kind: 'hold', ms, label: 'hold to mist', after: 'water' }
     ],
     start(c) {
@@ -375,7 +379,11 @@ function watering(env) {
         s.wind = Math.max(0, Math.min(1, Number(value) / 100));
         c.status(s.wind < 0.1 ? 'wind: ' + WIND[0] + '. the terrarium holds its breath' : s.wind < 0.6 ? 'wind: ' + WIND[1] : 'wind: ' + WIND[2] + '. the stems sway again');
       }
-      if (id === 'mist') s.flash = 1;
+      if (id === 'mist') {
+        misted = true;
+        s.flash = 1;
+        c.status('misted: the glass fogs over and the drips start');
+      }
     },
     tap(x, y, c) {
       if (c.done) return;
@@ -397,19 +405,19 @@ function watering(env) {
       s.plants[best].wet = true;
       s.drops.push({ x: tip[0], y: 0, ty: tip[1], i: best, speed: c.h * 1.8 });
       c.progress('water', Math.min(1, wet() / need));
-      c.status('leaf memory: ' + (c.stars[best].text || 'a stem with nothing to say yet'));
+      const memory = c.stars[best].text || 'a stem with nothing to say yet';
+      s.lines = ['leaf memory', memory];
+      c.status('leaf memory: ' + memory);
       if (wet() >= need) c.satisfy('water');
     },
     frame(t, dt, c) {
       tick(s, dt);
-      if (c.done) {
-        s.fog = Math.min(1, s.fog + dt * 0.5);
-        for (const p of s.plants) if (p.wet) p.bud = 1;
-      }
+      if (misted) s.fog = Math.min(1, s.fog + dt * 0.8);
+      if (c.done) for (const p of s.plants) if (p.wet) p.bud = 1;
       scene(c.g, c.w, c.h, c, s);
     },
     end(c) {
-      c.status('misted and shut: ' + WORDS[Math.min(5, wet())] + ' stems drink, and the glass holds its breath');
+      c.status('misted and shut: ' + drink(wet()) + ', and the glass holds its breath');
     }
   };
 }
@@ -432,7 +440,7 @@ function forecast(env) {
   let paused = false;
   let jolt = 0;
   const damp = () => (hum - 55) / 41;
-  const SAID = ['', 'reading one: the shape of the bed', 'reading two: the weather under glass', 'forecast prepared from the shape of your sky'];
+  const SAID = ['', 'reading one: the shape of the bed', 'reading two: the weather under glass', 'reading three: what the roots advise'];
   return {
     title: opener,
     brief: 'Set the humidity and the light, pause the wind if you like, and take three readings; the glass prints a forecast from the shape of your sky and stamps it.',
@@ -477,7 +485,7 @@ function forecast(env) {
       s.needle += (damp() + Math.sin(s.t * 9) * jolt * 0.12 - s.needle) * Math.min(1, dt * 5);
       s.lines = [];
       if (read >= 1) s.lines.push(opener + ':', stats);
-      if (read >= 2) s.lines.push('humidity ' + hum + '%; light ' + LIGHT[s.light] + '; wind ' + (paused ? WIND[0] : WIND[2]) + '.');
+      if (read >= 2) s.lines.push('humidity ' + hum + '%; light ' + (LIGHT[s.light] || 'not yet chosen') + '; wind ' + (paused ? WIND[0] : WIND[2]) + '.');
       if (read >= 3) s.lines.push(mid, closer);
       if (c.done) s.stamp = Math.min(1, s.stamp + dt * 1.8);
       scene(c.g, c.w, c.h, c, s);
@@ -494,6 +502,7 @@ function forecast(env) {
 function regrow(env) {
   const n = env.stars.length;
   const times = env.int(2, 4);
+  const twice = times === 2 ? 'twice' : WORDS[times] + ' times';
   let salt = env.int(1, 9999);
   const s = fresh(env.stars, salt);
   s.wind = 0.45;
@@ -514,12 +523,12 @@ function regrow(env) {
   }
   return {
     title: env.pick(['regrow the terrarium', 'same stars, new stems']),
-    brief: 'Choose how the stems come up, regrow the bed ' + (times === 2 ? 'twice' : WORDS[times] + ' times') + ' from the same stars, switch the moss on if you dare, and watch the new stems come up and bloom.',
+    brief: 'Choose how the stems come up, regrow the bed ' + twice + ' from the same stars, switch the moss on if you dare, and watch the new stems come up and bloom.',
     aspect: '16 / 10',
     steps: [
       { id: 'order', ask: 'how they come up', kind: 'choice', options: ORDERS },
       { id: 'moss', ask: 'the secret moss', kind: 'toggle', label: 'neon moss' },
-      { id: 'regrow', ask: 'regrow the bed ' + WORDS[times] + ' times', kind: 'press', count: times, label: 'regrow', after: 'order' },
+      { id: 'regrow', ask: 'regrow the bed ' + twice, kind: 'press', count: times, label: 'regrow', after: 'order' },
       { id: 'grow', ask: 'watch them come up', kind: 'wait', after: 'regrow' }
     ],
     start(c) {
@@ -562,7 +571,7 @@ function regrow(env) {
       scene(c.g, c.w, c.h, c, s);
     },
     end(c) {
-      c.status(n + ' stem' + (n === 1 ? '' : 's') + ' up and in bloom; the tall one says: ' + tallest(c.stars).text);
+      c.status((WORDS[n] || n) + ' stem' + (n === 1 ? '' : 's') + ' up and in bloom; the tall one says: ' + tallest(c.stars).text);
     }
   };
 }

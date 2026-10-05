@@ -128,6 +128,10 @@ function step(F, P, dt, drift, speed, home) {
   }
 }
 
+function toneLook(hz) {
+  return hz < 300 ? 'hum' : hz < 500 ? 'midnight' : 'glass';
+}
+
 function tint(c, look, i, t) {
   const col = c.colors;
   if (look === 'prism') return c.mix(col.accent, col.accent2, (Math.sin(i * 0.9 + t * 1.3) + 1) / 2);
@@ -136,13 +140,34 @@ function tint(c, look, i, t) {
   return col.accent;
 }
 
-function word(g, m, c, text, x, y, a, size, align) {
+function word(g, m, c, text, x, y, a, size) {
   if (!text || a <= 0) return;
   g.fillStyle = c.alpha(c.colors.fg, a);
   g.font = '500 ' + Math.max(11, Math.round(m * size)) + 'px system-ui, sans-serif';
-  g.textAlign = align || 'center';
+  g.textAlign = 'center';
   g.textBaseline = 'middle';
   g.fillText(text, x, y);
+}
+
+// One thought said beside its echo: wrapped to a readable width and kept inside the chamber,
+// above the echo when it sits low and below it when it sits high.
+function thought(g, w, h, c, text, p, a) {
+  if (!text || a <= 0) return;
+  const m = Math.min(w, h);
+  const size = Math.max(11, Math.round(m * 0.034));
+  const lead = size * 1.3;
+  g.font = '500 ' + size + 'px system-ui, sans-serif';
+  const lines = wrap(g, text, Math.min(w - 16, m * 0.62));
+  let width = 0;
+  for (const l of lines) width = Math.max(width, g.measureText(l).width);
+  const x = Math.max(8 + width / 2, Math.min(w - 8 - width / 2, p.x));
+  const block = (lines.length - 1) * lead;
+  let y = p.y > h * 0.5 ? p.y - m * 0.05 - block : p.y + m * 0.05;
+  y = Math.max(8 + size / 2, Math.min(h - 8 - size / 2 - block, y));
+  for (const l of lines) {
+    word(g, m, c, l, x, y, a, 0.034);
+    y += lead;
+  }
 }
 
 function wrap(g, text, width) {
@@ -175,7 +200,7 @@ function scene(g, w, h, c, F, P, look, t, s) {
   for (let i = 0; i < 36; i++) g.fillRect((i * 127.3 + slide * 6) % w, (i * 79.7 + slide * 3) % h, 1.2, 1.2);
   const pts = F.map((e) => at(e, w, h));
   const maxD = m * 0.3;
-  const link = 1 + (s ? s.print * 1.3 : 0);
+  const link = 1 + (s ? (s.print + s.read) * 1.3 : 0);
   g.lineWidth = 1;
   for (let a = 0; a < pts.length; a++) {
     for (let b = a + 1; b < pts.length; b++) {
@@ -218,18 +243,16 @@ function scene(g, w, h, c, F, P, look, t, s) {
     g.stroke();
   }
   if (!s) return;
-  if (s.said && s.said.life > 0) {
-    const p = pts[s.said.i];
-    const right = p.x > w * 0.55;
-    word(g, m, c, F[s.said.i].text, p.x + (right ? -14 : 14), Math.max(14, p.y - m * 0.04), Math.min(0.9, s.said.life), 0.04, right ? 'right' : 'left');
-  }
+  if (s.said && s.said.life > 0) thought(g, w, h, c, F[s.said.i].text, pts[s.said.i], Math.min(0.9, s.said.life) * (1 - s.print));
   if (s.print > 0) {
     g.fillStyle = c.alpha(col.bg, 0.6 * s.print);
     g.fillRect(0, 0, w, h);
     const size = Math.max(11, Math.round(m * 0.042));
-    g.font = '500 ' + size + 'px system-ui, sans-serif';
     const rows = [];
-    s.lines.forEach((line, i) => wrap(g, line, w * 0.84).forEach((r) => rows.push({ text: r, head: i === 0 })));
+    s.lines.forEach((line, i) => {
+      g.font = '500 ' + Math.max(11, Math.round(m * (i === 0 ? 0.052 : 0.042))) + 'px system-ui, sans-serif';
+      wrap(g, line, w * 0.84).forEach((r) => rows.push({ text: r, head: i === 0 }));
+    });
     let y = h / 2 - ((rows.length - 1) * size * 1.5) / 2;
     rows.forEach((r, i) => {
       word(g, m, c, r.text, w / 2, y, Math.max(0, Math.min(1, s.print * (rows.length + 1) - i)), r.head ? 0.052 : 0.042);
@@ -256,8 +279,8 @@ function chamber(env) {
   const F = field(stars);
   const P = [];
   const s = {
-    drift: 0.4, look: 'midnight', paused: false, speed: 0.45, print: 0, said: null, home: false, t: 0,
-    lines: [env.pick(OPENERS).replace(':', ''), stars.length + ' echoes, ' + wx.spread + ' spread', 'chamber ' + wx.zone + ', tone ' + wx.density, env.pick(MIDS), env.pick(CLOSERS)]
+    drift: 0.4, look: 'midnight', paused: false, speed: 0.45, print: 0, read: 0, said: null, home: false, t: 0,
+    lines: [env.pick(OPENERS).replace(':', ''), (stars.length === 1 ? 'one echo, ' : stars.length + ' echoes, ') + wx.spread + ' spread', 'chamber ' + wx.zone + ', tone ' + wx.density, env.pick(MIDS), env.pick(CLOSERS)]
   };
   return {
     F, P, s, wx,
@@ -265,6 +288,7 @@ function chamber(env) {
       s.t += dt;
       step(F, P, dt, s.paused ? 0 : s.drift * (c.reduced ? 0.4 : 1), s.speed, s.home);
       if (s.home) s.print = Math.min(1, s.print + dt * 1.4);
+      s.read = Math.max(0, s.read - dt * 0.7);
       if (s.said) s.said.life -= dt;
       scene(c.g, c.w, c.h, c, F, P, s.look, s.t, s);
     },
@@ -301,7 +325,7 @@ function listen(env) {
   let heard = 0;
   return {
     title: earsFirst ? (need === n ? 'every echo, ears first' : need + ' echoes, ears first') : (need === n ? 'hear every echo' : 'hear ' + need + ' echoes'),
-    brief: 'Set how far the echoes wander, tap the field close to ' + (need === n ? 'each one' : need + ' of them') + ' to hear its thought, pulse the chamber from the centre, and hold to read the echo weather; the bulletin prints when you are done.',
+    brief: 'Set how far the echoes wander, tap the field close to ' + (need === n ? 'each one to hear its thought' : need + ' of them to hear their thoughts') + ', pulse the chamber from the centre, and hold to read the echo weather; the bulletin prints when you are done.',
     aspect: '1 / 1',
     steps: [
       { id: 'drift', ask: 'how far the echoes wander', kind: 'range', min: 0, max: 100, step: 1, value: from, low: 'hovering', high: 'restless' },
@@ -321,7 +345,10 @@ function listen(env) {
         pulse(ch.F, ch.P, 0.5, 0.5, 1.2);
         c.status(PULSE_WORDS[Math.min(PULSE_WORDS.length, Number(value) || 1) - 1]);
       }
-      if (id === 'weather') c.status('reading the field');
+      if (id === 'weather') {
+        s.read = 1;
+        c.status('reading the field');
+      }
     },
     tap(x, y, c) {
       const got = ch.hear(x, y, true);
@@ -421,6 +448,7 @@ function ring(env) {
   let chosen = -1;
   let rung = 0;
   s.speed = 0.25 + (tone / 700) * 0.5;
+  s.look = toneLook(tone);
   return {
     title,
     brief: 'Tap the echo you want to hear, set its tone, and ring it ' + count + ' times; its thought prints when the chamber is still again.',
@@ -437,7 +465,7 @@ function ring(env) {
       if (id === 'tone') {
         const hz = Math.round(Number(value) / 10) * 10 || tone;
         s.speed = 0.25 + (hz / 700) * 0.5;
-        s.look = hz < 300 ? 'hum' : hz < 500 ? 'midnight' : 'glass';
+        s.look = toneLook(hz);
         c.status(hz + ' hz: ' + (hz < 300 ? 'a low hum' : hz < 500 ? 'a middle tone' : 'glassy and quick'));
       }
       if (id === 'ring') {
@@ -445,7 +473,7 @@ function ring(env) {
         const e = ch.F[Math.max(0, chosen)];
         pulse(ch.F, ch.P, e.x, e.y, 1.4);
         e.energy = 1.4;
-        c.status(rung < count ? e.text + ' rings; the others scatter' : e.text + ', rung ' + count + ' times');
+        c.status(rung >= count ? e.text + ', rung ' + count + ' times' : rung === 1 ? e.text + ' rings; the others scatter' : rung === 2 ? 'rung again; the chamber knows the tune now' : 'and again; ' + e.text + ' is the loudest thing in here');
       }
     },
     tap(x, y, c) {

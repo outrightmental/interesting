@@ -9,8 +9,9 @@
 //
 // The knobs are M3 controls: a choice is a row of tonal buttons that fill when pressed, a toggle
 // a tonal button that fills when on, a range the M3 slider, a press and a hold one big button
-// (the hold fills from the left as it is held), a tap and a wait a bar the piece fills. A knob
-// that is set gets a check mark; a knob gated on another is dimmed until it opens.
+// (the hold reads as pressed while it is held, and the bar under it fills), a tap and a wait a
+// bar the piece fills. A knob that is set gets a check mark; a knob gated on another is dimmed
+// until it opens.
 //
 // The ceremony: when the piece is finished, the done mark pops over the scene, the burst canvas
 // over the whole stage carries the particles, and the stage's inner scales away; the next piece
@@ -176,6 +177,12 @@
   overflow: hidden;
 }
 
+// The element the unlock helper powers down for a piece that needs a sky: it has nothing to show
+// of its own, and it is removed with the piece.
+.stage-gate {
+  display: none;
+}
+
 @supports (height: 100svh) {
   .stage-scene {
     --stage-h: max(16rem, calc(100svh - var(--top-bar-h) - 19rem));
@@ -188,7 +195,7 @@
   width: 100%;
   height: 100%;
   display: block;
-  touch-action: none;
+  touch-action: manipulation; // a tap reaches the piece; a swipe still scrolls the page
   cursor: pointer;
 }
 
@@ -271,7 +278,7 @@
 }
 
 .segmented button {
-  min-height: 40px;
+  min-height: 44px;
   padding: 0.4rem 1rem;
 }
 
@@ -302,14 +309,9 @@
   -webkit-touch-callout: none;
 }
 
-.knob-hold {
-  background:
-    linear-gradient(to right, var(--md-sys-color-primary) 0 var(--knob-pct), transparent var(--knob-pct) 100%),
-    var(--md-sys-color-secondary-container);
-  transition: none;
-}
-
+// Held: filled, as a pressed toggle is; the bar under it says how long is left.
 .knob-hold.is-held {
+  background: var(--md-sys-color-primary);
   color: var(--md-sys-color-on-primary);
 }
 
@@ -334,8 +336,8 @@
 
 .knob-alt {
   justify-self: start;
-  min-height: 36px;
-  padding: 0.2rem 0.6rem;
+  min-height: 44px;
+  padding: 0.2rem 0.75rem;
 }
 
 .stage-status {
@@ -357,11 +359,12 @@
   gap: 0.4rem;
 }
 
+// The actions sit at the left, clear of the state menu's button in the corner of every page.
 .stage-foot-actions {
   display: flex;
   flex-wrap: wrap;
-  justify-content: flex-end;
   gap: 0.25rem;
+  margin-left: -0.75rem;
 }
 
 .stage-dot {
@@ -376,24 +379,24 @@
   background: var(--md-sys-color-primary);
 }
 
-// The done mark, over the scene.
+// The done mark, in the scene's corner, so the piece's own finale stays in view under it.
 .stage-done {
   position: absolute;
   inset: 0;
   z-index: 2;
-  display: grid;
-  place-items: center;
-  align-content: center;
-  gap: 0.5rem;
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+  gap: 0.6rem;
+  padding: 1rem;
   pointer-events: none;
-  background: color-mix(in oklab, var(--md-sys-color-surface) 28%, transparent);
 }
 
 .stage-done-mark {
   display: grid;
   place-items: center;
-  width: 96px;
-  height: 96px;
+  width: 64px;
+  height: 64px;
   border-radius: var(--md-sys-shape-corner-full);
   background: var(--md-sys-color-primary);
   color: var(--md-sys-color-on-primary);
@@ -402,15 +405,17 @@
 }
 
 .stage-done-mark .icon {
-  width: 56px;
-  height: 56px;
+  width: 40px;
+  height: 40px;
 }
 
 .stage-done-text {
   margin: 0;
+  padding: 0.35rem 0.8rem;
+  border-radius: var(--md-sys-shape-corner-full);
+  background: color-mix(in oklab, var(--md-sys-color-surface) 80%, transparent);
   color: var(--md-sys-color-on-surface);
-  text-shadow: 0 1px 12px var(--md-sys-color-surface);
-  @include type.scale(headline-small);
+  @include type.scale(title-medium);
   animation: stage-pop 520ms 120ms var(--md-sys-motion-easing-emphasized) both;
 }
 

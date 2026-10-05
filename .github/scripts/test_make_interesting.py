@@ -2389,7 +2389,7 @@ def world_list(*worlds):
 
 def piece_module(piece_js, world="toy"):
     """A world's module exporting the card half of the contract and `piece_js` as its piece()."""
-    return ("export default {\n  id: '" + world + "',\n  paint() {},\n  spark() { return null; },\n"
+    return ("let calls = 0;\nexport default {\n  id: '" + world + "',\n  paint() {},\n  spark() { return null; },\n"
             "  piece(env) {\n" + piece_js + "\n  }\n};\n")
 
 
@@ -2416,8 +2416,11 @@ FINISHING_PIECE = """    const n = env.int(2, 4);
 # The same piece, but the wait knob is never satisfied: a visitor opens it and cannot finish.
 ENDLESS_PIECE = FINISHING_PIECE.replace("if (settled >= 2) ctx.satisfy('settle');", "")
 
-# A piece whose title is drawn from Math.random: the same seed does not make the same piece.
-UNSTABLE_PIECE = FINISHING_PIECE.replace("title: n + ' turns of the toy'", "title: Math.random() + ' turns'")
+# A piece whose title counts the calls: the same seed does not make the same piece.
+UNSTABLE_PIECE = FINISHING_PIECE.replace("title: n + ' turns of the toy'", "title: (calls += 1) + ' turns'")
+
+# A piece that reaches for Math.random, which the harness takes away: randomness is the seed's.
+RANDOM_PIECE = FINISHING_PIECE.replace("const n = env.int(2, 4);", "const n = 2 + Math.floor(Math.random() * 3);")
 
 # A piece that is the same whatever the seed.
 SAME_PIECE = FINISHING_PIECE.replace("const n = env.int(2, 4);", "const n = 3;")
@@ -2489,7 +2492,8 @@ class CompletionAxiomTest(SiteDirTestCase):
                      mi.STAGE_SCRIPT,
                      "choice (two to four options), toggle, range, press, hold, tap, wait",
                      "The same seed makes the same piece and different seeds make different pieces",
-                     "never reaches for the document, the window or the browser's storage",
+                     "never reaches for the document, the window, the clock, Math.random or the browser's storage",
+                     "only a tap or a wait knob is the piece's to set",
                      "The world's old interactive page is the piece's material",
                      mi.PIECE_HARNESS_REL,
                      f"within {mi.PIECE_MAX_TAPS} taps and {mi.PIECE_MAX_SECONDS} seconds of play"]:
@@ -2534,6 +2538,11 @@ class CompletionAxiomTest(SiteDirTestCase):
         self.module.write_text(piece_module(UNSTABLE_PIECE))
         missing = mi.worlds_without_a_finish(dict(mi.read_site()))
         self.assertIn("the same seed does not make the same piece", missing.get("toy.html", ""))
+
+    def test_a_piece_draws_its_randomness_from_the_seed(self):
+        self.module.write_text(piece_module(RANDOM_PIECE))
+        missing = mi.worlds_without_a_finish(dict(mi.read_site()))
+        self.assertIn("Math.random is not for a piece", missing.get("toy.html", ""))
 
     def test_different_seeds_must_make_different_pieces(self):
         self.module.write_text(piece_module(SAME_PIECE))
