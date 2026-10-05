@@ -79,13 +79,8 @@ is deliberately small: a foundation to build a more holistic experience on, not 
   the top app bar (`_header.scss`), the buttons, chips, sliders and text fields (`_controls.scss`),
   the feature a page is and the filled card (`_panel.scss`), the unlock box, the persona's avatar
   and sheet (`_persona.scss`), the fourteen mood palettes and the query styling the mood flow
-  renders into (`_mood.scss`), the feed's masonry and cards (`_feed.scss`), the canvas-beside-panel
-  shape most worlds share (`_labs.scss`), the values the stylesheets have in common (`_vars.scss`,
-  which emits no CSS of its own) and the monospace readout ten pages use (`_readout.scss`, a
-  mixin). `css/site.scss` is those partials and nothing else, and every page links the
-  `css/site.css` it compiles to. `css/<page>.scss` holds what is true of that page alone and is
-  linked after it, so a page overrides rather than repeats — and since a page's palette is its
-  world's (below), most page stylesheets are now a cursor and a readout's height. `error.html` writes its styles into the page instead: CloudFront returns it for any 404,
+  renders into (`_mood.scss`), the feed's masonry and cards (`_feed.scss`) and the stage with its knobs (`_stage.scss`). `css/site.scss` is those partials and nothing else, and every page links the
+  `css/site.css` it compiles to. A world page has no stylesheet of its own: its scene is drawn, not styled. `css/<page>.scss` is for the two list pages and holds what is true of that page alone, linked after the shared sheet so it overrides rather than repeats. `error.html` writes its styles into the page instead: CloudFront returns it for any 404,
   at whatever path was asked for, so a relative `<link>` next to it would be a guess. For the same
   reason it names the site's root in its front matter (`siteRoot: /`), and the layout writes its
   scripts and links from there; it is the one page that does, and a copy of the site served under
@@ -148,9 +143,7 @@ itself.
   page's own palette washing to the viewport's edges, and at least the first screen tall (the
   viewport less the top bar and a margin), so the feed peeks above the fold on any display, a
   very large one included. Every direct child of `<main>` lands in one centred column
-  (`_panel.scss`), so a page writes its content straight into `<main>`; a world's stage, the
-  canvas beside its panel, is sized by the screen's height as well as its column (`_labs.scss`,
-  with the stage's aspect ratio read off the canvas by `js/site.js`). A world page's `<main>` is the stage
+  (`_panel.scss`), so a page writes its content straight into `<main>`. A world page's `<main>` is the stage
   ([`site/_includes/stage.njk`](site/_includes/stage.njk), [`site/js/stage.js`](site/js/stage.js)):
   a piece of that world, played and finished there and followed by the next; see
   [Completion axiom](#completion-axiom). The threshold's feature is the same stage in its asking

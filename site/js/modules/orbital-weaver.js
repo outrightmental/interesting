@@ -152,7 +152,7 @@ function loom(env, spokes) {
 // Where the weave sits: it shrinks and rises as the pattern closes, to leave room for the mantra.
 function frameOf(s, w, h) {
   const m = Math.min(w, h);
-  return { cx: w / 2, cy: h * (0.5 - 0.09 * s.close), R: m * (0.44 - 0.12 * s.close), k: m / 340 };
+  return { cx: w / 2, cy: h * (0.5 - 0.14 * s.close), R: m * (0.42 - 0.14 * s.close), k: m / 340 };
 }
 
 // One shard's place on one arm of the weave, pulsing while the pattern is open and pulled
@@ -164,6 +164,14 @@ function place(s, sh, arm, mirror, f, calm) {
   const a = s.rot + (arm / s.spokes) * Math.PI * 2 + mirror * (sh.a + wobble);
   const r = (sh.r * open + 0.78 * s.close) * f.R + pulse + sh.energy * 14 * f.k;
   return { x: f.cx + Math.cos(a) * r, y: f.cy + Math.sin(a) * r };
+}
+
+// A shard's colour in the chosen tones: pale by midnight, shimmering under the prism, warm by candle.
+function shardTone(c, s, i) {
+  const col = c.colors;
+  if (s.tone === 'prism') return c.mix(col.accent, col.accent2, (Math.sin(s.t * 1.3 + i * 0.7) + 1) / 2);
+  if (s.tone === 'candle') return c.mix(col.accent2, col.fg, 0.3);
+  return col.fg;
 }
 
 function thread(c, s, arm, mirror) {
@@ -199,24 +207,30 @@ function print(g, w, h, c, s) {
   g.textBaseline = 'middle';
   if (!s.mantra) {
     if (!s.said) return;
+    const text = s.words.slice(0, s.said).join(' · ');
     g.font = '500 ' + fs + 'px system-ui, sans-serif';
+    const wide = g.measureText(text).width;
+    if (wide > w * 0.9) {
+      fs = Math.max(Math.round(m * 0.026), Math.floor((fs * w * 0.9) / wide));
+      g.font = '500 ' + fs + 'px system-ui, sans-serif';
+    }
     g.fillStyle = c.alpha(c.colors.fg, 0.8);
-    g.fillText(s.words.slice(0, s.said).join(' · '), w / 2, m * 0.05);
+    wrap(g, text, w * 0.9).forEach((row, i) => g.fillText(row, w / 2, m * 0.05 + i * fs * 1.35));
     return;
   }
   g.font = '500 ' + fs + 'px system-ui, sans-serif';
   const rows = [];
-  for (const line of s.mantra) for (const t of wrap(g, line.text, w * 0.86)) rows.push({ t, tone: line.tone });
-  let lh = fs * 1.45;
-  if (rows.length * lh > h * 0.22) {
-    fs = (fs * h * 0.22) / (rows.length * lh);
-    lh = fs * 1.45;
+  for (const line of s.mantra) for (const t of wrap(g, line.text, w * 0.9)) rows.push({ t, tone: line.tone });
+  let lh = fs * 1.4;
+  if (rows.length * lh > h * 0.3) {
+    fs = (fs * h * 0.3) / (rows.length * lh);
+    lh = fs * 1.4;
     g.font = '500 ' + fs + 'px system-ui, sans-serif';
   }
   const a = Math.min(1, s.close * 1.5);
   rows.forEach((row, i) => {
     g.fillStyle = c.alpha(row.tone, a);
-    g.fillText(row.t, w / 2, h * 0.77 + i * lh);
+    g.fillText(row.t, w / 2, h * 0.69 + i * lh);
   });
 }
 
@@ -263,7 +277,7 @@ function draw(g, w, h, c, s) {
           g.arc(p.x, p.y, sh.size * (2.4 + sh.energy * 2.5) * f.k, 0, Math.PI * 2);
           g.fill();
         }
-        g.fillStyle = sh.energy > 0.2 ? col.accent2 : c.alpha(col.fg, 0.92);
+        g.fillStyle = sh.energy > 0.2 ? col.accent2 : c.alpha(shardTone(c, s, i), 0.92);
         g.beginPath();
         g.arc(p.x, p.y, (sh.size * 0.8 + sh.energy) * f.k, 0, Math.PI * 2);
         g.fill();
@@ -353,9 +367,11 @@ function open(s, c) {
   draw(c.g, c.w, c.h, c, s);
 }
 
+// The pattern closes as soon as the mantra is called for (print, or the hold let go), whether
+// or not every other knob has been set yet; the finish is the visitor's own lever.
 function run(s, dt, c) {
   tick(s, dt, c);
-  if (c.done) s.close = Math.min(1, s.close + dt * 1.4);
+  if (c.done || s.mantra) s.close = Math.min(1, s.close + dt * 1.4);
   draw(c.g, c.w, c.h, c, s);
 }
 
