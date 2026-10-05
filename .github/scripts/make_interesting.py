@@ -20,7 +20,7 @@ longer and wants to keep going. LEGIBLE names the test a stranger puts the site
 to -- one name per page, one way to do each thing, content before chrome, never
 a dead end -- because confusion spends engagement time as surely as boredom.
 
-Five axioms stand over every run, each stated in the prompt and held to in code:
+Seven axioms stand over every run, each stated in the prompt and held to in code:
 
   - All of the content stays reachable from the root, both by following links
     from index.html and through sitemap.xml. check_reachability() refuses a plan
@@ -50,9 +50,15 @@ Five axioms stand over every run, each stated in the prompt and held to in code:
     and it never queries the same way twice. check_mood() refuses a plan that
     takes the mood flow off a page, that lets the library of query mechanisms
     fall below MIN_MOOD_PROBES, or that asks a visitor to report their own mood.
+  - Every page loads js/participate.js, the one line that brings the site the
+    prominent button on the bottom edge of every page that sends a visitor to a
+    pre-shaped new issue on this repository. check_participate() refuses a plan
+    that would leave a page without it, and the file behind it is fixed like the
+    analytics and state ones: a visitor's way of saying what this site should
+    become is not a run's to reword, move or drop.
 
-The files behind the analytics and state axioms (FIXED_FILES) are never shown to
-a model and are refused outright as a write or a delete.
+The files behind the analytics, state and participation axioms (FIXED_FILES) are
+never shown to a model and are refused outright as a write or a delete.
 
 The model is reached through the GitHub Copilot CLI (`copilot`), which bills the
 GitHub Copilot subscription behind the token in COPILOT_GITHUB_TOKEN. (GitHub
@@ -267,11 +273,11 @@ PROTECTED_FILES = {"index.html", "error.html", "sitemap.xml", MOOD_SCRIPT}
 # tag, so a single line per page carries the whole of it and a single check can hold it in place.
 ANALYTICS_SCRIPT = "js/analytics.js"
 ANALYTICS_TAG = f"<script src='{ANALYTICS_SCRIPT}' defer></script>"
-# Those files are the site's measurement, privacy and local-state machinery rather than its
-# content, so they are kept out of every run's reach: never shown to a model (see split_for_prompt,
-# which hands them to validate_plan as unseen) and refused outright as a write or a delete. Two of
-# them are a vendored release of orestbida/cookieconsent, which no model should be rewriting from
-# memory in any case.
+# Those files are the site's measurement, privacy, local-state and participation machinery rather
+# than its content, so they are kept out of every run's reach: never shown to a model (see
+# split_for_prompt, which hands them to validate_plan as unseen) and refused outright as a write or
+# a delete. Two of them are a vendored release of orestbida/cookieconsent, which no model should be
+# rewriting from memory in any case.
 ANALYTICS_FILES = {ANALYTICS_SCRIPT, "js/cookieconsent.umd.js", "css/cookieconsent.css"}
 # The other line every page carries, and the one file behind it (issue #31). js/state.js holds the
 # whole of the site's local state in one JSON document, the shared accessor every page reads and
@@ -283,7 +289,21 @@ STATE_SCRIPT = "js/state.js"
 # which is before any deferred script, so the store has to be there already.
 STATE_TAG = f"<script src='{STATE_SCRIPT}'></script>"
 STATE_FILES = {STATE_SCRIPT}
-FIXED_FILES = ANALYTICS_FILES | STATE_FILES
+# The line every page carries for the participation axiom (issue #43), and the one file behind it.
+# js/participate.js draws the third and most prominent of the three affordances pinned to the
+# bottom edge of every page -- "cookies" bottom-left, "steer the site" bottom-centre, "state"
+# bottom-right -- and it is the only one that answers to the person reading the site rather than to
+# the model writing it: one press opens a pre-shaped new issue on this repository, with the issue
+# form already chosen and the page they were on already filled in.
+#
+# Fixed for the same reason the state file is, only more so. Every other word on this site is a
+# run's to rewrite, which is exactly why the way to say something about it cannot be: a run that
+# could reword the invitation, move it somewhere quieter or drop it altogether could close the one
+# door that leads back to a person.
+PARTICIPATE_SCRIPT = "js/participate.js"
+PARTICIPATE_TAG = f"<script src='{PARTICIPATE_SCRIPT}' defer></script>"
+PARTICIPATE_FILES = {PARTICIPATE_SCRIPT}
+FIXED_FILES = ANALYTICS_FILES | STATE_FILES | PARTICIPATE_FILES
 # How many files one run may touch. Roomy enough that a run which federates the site can rewrite
 # every page of it and add the shared files those pages link to, which is what the whole-site
 # review in build_prompt asks for; small enough that a runaway answer is still refused. A page is
@@ -1102,6 +1122,42 @@ def check_mood(before, after):
                 + " and ".join(f'"{phrase}"' for phrase in added))
 
 
+# The participation axiom (issue #43). Every page carries a prominent, always-visible way for the
+# person looking at the site to say what it should become: one press, and they are on a new issue
+# of this repository with the form chosen and the page they came from filled in.
+#
+# It is an axiom rather than a nicety because of what the other six leave unsaid. A site rewritten
+# continuously by a model is steered by whoever can reach the model, and the only standing channel
+# from a visitor back to the people and the prompt behind it is an issue on this repository. A run
+# that reworded the invitation, moved it somewhere quieter or dropped it would be closing that
+# channel -- which is precisely the kind of change no run should be able to make and no reviewer
+# would notice for a long time. So the line is required on every page like the analytics and state
+# lines, and PARTICIPATE_SCRIPT is fixed like the files behind those: never shown to a model,
+# refused outright as a write or a delete.
+#
+# Only the line and the file are held here. What the destination looks like is GitHub's side of it
+# (.github/ISSUE_TEMPLATE/), and what a page says about it in its own prose is the run's business
+# as usual, which is the same split every other axiom makes.
+
+
+def pages_missing_participate(site):
+    """The pages of `site` that do not load PARTICIPATE_SCRIPT."""
+    return pages_missing(site, PARTICIPATE_SCRIPT)
+
+
+def check_participate(before, after):
+    """Raise RejectedChange if the change from site `before` to site `after` leaves a page without
+    the line that carries a visitor's way of steering the site.
+
+    Only what this run breaks is refused, as with the six axioms above.
+    """
+    broke = sorted(pages_missing_participate(after) - pages_missing_participate(before))
+    if broke:
+        raise RejectedChange(
+            "every page must carry a visitor's way of steering this site: "
+            f"{broke[0]} has no {PARTICIPATE_TAG} in its <head>")
+
+
 def apply_to(site, ops):
     """The site mapping `site` as it would be once `ops` have been applied."""
     after = dict(site)
@@ -1127,9 +1183,9 @@ def split_for_prompt(files):
     cannot be changed, and no file should stay unchangeable run after run.
 
     FIXED_FILES skip the budget entirely and go straight into the omitted list, which is exactly
-    the protection the analytics and local-state axioms want: validate_plan refuses to touch what
-    was not shown, and the site's measurement, privacy and local-state machinery never costs the
-    prompt a byte.
+    the protection the analytics, local-state and participation axioms want: validate_plan refuses
+    to touch what was not shown, and the site's measurement, privacy, local-state and
+    participation machinery never costs the prompt a byte.
     """
     def prompt_order(item):
         return (item[0] != HOME_PAGE, item[0] not in PROTECTED_FILES, item[0])
@@ -1349,7 +1405,8 @@ def build_prompt(shown, omitted=()):
         "small meta menu it puts in the corner of every page -- where a visitor copies that "
         "document out, pastes someone else's in, or clears it -- is not yours to change or to "
         "restyle. Leave room for it: it sits in the bottom-right corner, opposite the consent "
-        "banner's button in the bottom-left.\n"
+        "banner's button in the bottom-left, with the participation button of the axiom below "
+        "between the two.\n"
         "- AXIOM, every run: nothing on the site is tied to an update frequency. This site "
         "iterates continuously. It runs no nightly experiment and publishes no daily or hourly "
         "edition, so no page may say or imply that it does: never write \"Tonight's experiment\", "
@@ -1392,6 +1449,25 @@ def build_prompt(shown, omitted=()):
         "declined, or scripting switched off altogether, which is what the reachability axiom "
         "demands anyway: do not hide a world behind an answer.\n"
         "This is checked on the built site, like the five above.\n"
+        "- AXIOM, every run: every page carries a visitor's way of steering this site. One line "
+        f"in the <head> of a page brings it:\n    {PARTICIPATE_TAG}\n"
+        "Keep that line on every page you rewrite, exactly as it is, and put it on every page you "
+        "add (a page in a sub-folder uses the matching relative src, such as "
+        f"\"../{PARTICIPATE_SCRIPT}\"). It draws the prominent button in the middle of the bottom "
+        "edge of every page -- \"steer the site\" -- which sends whoever is reading to a new issue "
+        "on this repository, with the issue form already chosen and the page they were on already "
+        f"filled in. {PARTICIPATE_SCRIPT} is fixed like the analytics files and the local-state "
+        "store: it is not shown to you, you may not write or delete it, and neither the button nor "
+        "its wording is yours to change, to restyle or to reproduce. It is the one thing on this "
+        "site that answers to the person reading it rather than to you, which is why no run may "
+        "touch it: every other word here is yours to rewrite, so the way to say something about "
+        "that cannot be. A plan that leaves a page of the site without the line is refused, and "
+        "this too is checked on the built site. Three affordances are pinned to the edge of the "
+        "viewport on every page and they are the only three -- the consent banner's \"cookies\" "
+        "button in the bottom-left, this \"steer the site\" button in the middle of the bottom "
+        "edge, and the local-state \"state\" menu in the bottom-right. Leave the bottom edge to "
+        "them: nothing of yours goes there, and nothing of yours restyles them. Inviting a visitor "
+        "to steer the site in a page's own prose is welcome, and is not a substitute for the line.\n"
         "- Leave the site working at the end of the run. If you extract something into a shared "
         "file, or merge or delete a page, update every page that refers to it in the same run: "
         "never leave a link, a stylesheet, a script, a layout or an @use pointing at something "
@@ -1578,11 +1654,11 @@ def validate_plan(plan, unseen=()):
 
     A plan that would leave a page of the site unreachable from the root, leave one without the
     analytics and consent line, make one fail the responsive-and-accessible axiom, leave one without
-    the local-state store and its meta menu, tie one to an update frequency, or stop the site
-    asking before it offers is refused: all six axioms hold however the prompt is answered. All six
-    are judged on the built site (issue #25), which is the only site a visitor ever sees, so the
-    plan is built before any of them is asked, and a plan that does not build is refused for that
-    alone.
+    the local-state store and its meta menu, tie one to an update frequency, stop the site asking
+    before it offers, or leave one without a visitor's way of steering the site is refused: all
+    seven axioms hold however the prompt is answered. All seven are judged on the built site
+    (issue #25), which is the only site a visitor ever sees, so the plan is built before any of
+    them is asked, and a plan that does not build is refused for that alone.
     """
     files = plan.get("files") or []
     deletes = plan.get("delete") or []
@@ -1607,8 +1683,9 @@ def validate_plan(plan, unseen=()):
             raise RejectedChange(f"refusing to empty {rel}")
         if rel in FIXED_FILES:
             raise RejectedChange(f"refusing to rewrite {rel}: the fixed files carry the analytics "
-                                 "tag, the consent banner and the local-state store with its meta "
-                                 "menu, and are not a model's to change")
+                                 "tag, the consent banner, the local-state store with its meta "
+                                 "menu and a visitor's way of steering the site, and are not a "
+                                 "model's to change")
         if rel in unseen:
             raise RejectedChange(f"refusing to overwrite {rel}: its content was not shown to the model")
         if target.is_dir():
@@ -1640,7 +1717,7 @@ def validate_plan(plan, unseen=()):
         # The site as committed does not build, so there is no "before" to compare against and the
         # axioms have nothing to say this run. Same reasoning as check_reachability's: every run is
         # asked to repair the site, and refusing a plan over damage it did not do would leave no
-        # plan able to. This run still had to build, and the next is held to all six axioms again.
+        # plan able to. This run still had to build, and the next is held to all seven axioms again.
         print(f"::warning::the site as committed does not build ({one_line(err, 300)}), so this "
               "run's change was only checked for building, not against the axioms")
         return ops
@@ -1650,6 +1727,7 @@ def validate_plan(plan, unseen=()):
     check_state(built_before, built_after)
     check_cadence(built_before, built_after)
     check_mood(built_before, built_after)
+    check_participate(built_before, built_after)
     return ops
 
 
