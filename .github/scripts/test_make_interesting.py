@@ -2419,7 +2419,7 @@ class IssueFormTest(unittest.TestCase):
 class DestructiveCautionAxiomTest(SiteDirTestCase):
     """Issue #42: caution before a destructive action is a law of the site, not a page's own choice.
 
-    The eighth axiom stands beside the other seven -- stated in the prompt, held to by
+    The eighth axiom stands beside the other eight -- stated in the prompt, held to by
     validate_plan -- and it is held in the same shape: one shared component for the whole site, and
     three mechanical refusals. What code can settle is that the component stays, that a control
     whose own words say it throws saved state away reads as a warning button, and that no page
@@ -2775,8 +2775,8 @@ class CompletionAxiomTest(SiteDirTestCase):
     """Every world is a piece a visitor can finish.
 
     A world's page is a stage, and what a visitor opens there is a piece its module makes from a
-    seed: a few knobs, a clear end, a vanish, and the next. The eighth axiom stands beside the
-    other seven -- stated in the prompt, held to by validate_plan -- and what code can settle about
+    seed: a few knobs, a clear end, a vanish, and the next. The ninth axiom stands beside the
+    other eight -- stated in the prompt, held to by validate_plan -- and what code can settle about
     it is that every listed world has a module with a piece, and that the piece can be played to
     its end: by the harness here, exactly as by the stage in a browser.
     """
@@ -2945,7 +2945,7 @@ class CompletionAxiomTest(SiteDirTestCase):
 
 
 class BuildPipelineTest(unittest.TestCase):
-    """Issue #25: the real build, and all eight axioms judged on what it produces.
+    """Issue #25: the real build, and all nine axioms judged on what it produces.
 
     SiteDirTestCase stands the build in with the identity, which is exactly right for its plain-HTML
     fixtures; this is where the pipeline itself is exercised. /site is source now -- a layout is not
