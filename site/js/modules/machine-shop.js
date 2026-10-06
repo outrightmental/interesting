@@ -1,7 +1,8 @@
-/* The machine shop: one elementary cellular automaton on a bench. As a card it is one rule run
-   from one seed with its eight bits printed under it (paint, spark); as a piece it is a bench
-   with a tape to choose, a rule to tune and a run button. See js/feed.js for what a module is
-   and js/stage.js for what a piece is. */
+/* The machine shop: elementary cellular automata on a bench. As a card it is a rule or two
+   tapes one cell apart (paint, spark); as a piece it is a tape to choose, a rule to tune and a
+   run button, or a controlled comparison whose last row the visitor predicts. Both shapes use
+   the same wrapped tape and rule arithmetic. See js/feed.js for what a module is and
+   js/stage.js for what a piece is. */
 
 const LIVELY = [30, 45, 54, 60, 73, 90, 105, 110, 124, 126, 137, 150, 182, 193];
 
@@ -118,7 +119,7 @@ function bench(g, w, h, c, s) {
   }
 }
 
-function piece(env) {
+function benchPiece(env) {
   const rule = pickRule(env);
   const runs = env.int(2, 3);
   const perRun = env.pick([60, 90, 120]);
@@ -177,12 +178,243 @@ function piece(env) {
   };
 }
 
+const FORECASTS = [
+  { label: 'none', value: 'none' },
+  { label: '1 to 4', value: 'few' },
+  { label: '5 or more', value: 'many' }
+];
+
+// Select the same shape for the card and its piece without advancing the bench's random stream.
+function compares(env) {
+  return (env.seed & 1) === 1;
+}
+
+function experiment(env) {
+  const rules = [env.pick([0, 184, 204]), env.pick([60, 90, 150]), env.pick([30, 45, 54, 110])];
+  for (let i = rules.length - 1; i > 0; i--) {
+    const j = env.int(0, i);
+    [rules[i], rules[j]] = [rules[j], rules[i]];
+  }
+  const tape = env.pick(TAPES);
+  const cols = env.pick([49, 57, 65]);
+  const chunk = env.pick([5, 7, 9]);
+  return {
+    rules, cols, chunk, rows: chunk * 4, tape: tape.label,
+    initial: firstRow(cols, tape.value, env.rnd),
+    fault: env.int(0, cols - 1)
+  };
+}
+
+function experimentTitle(spec) {
+  return 'one cell apart, ' + spec.rows + ' rows later';
+}
+
+function differenceHistory(spec, rule, fault) {
+  const upper = [spec.initial.slice()];
+  const lower = [spec.initial.slice()];
+  if (fault !== null) lower[0][fault] ^= 1;
+  for (let row = 1; row <= spec.rows; row++) {
+    upper.push(nextRow(upper[row - 1], rule));
+    lower.push(nextRow(lower[row - 1], rule));
+  }
+  const counts = [];
+  let changes = 0;
+  let firstSame = null;
+  for (let row = 0; row <= spec.rows; row++) {
+    let count = 0;
+    for (let x = 0; x < spec.cols; x++) count += upper[row][x] ^ lower[row][x];
+    counts.push(count);
+    changes += count;
+    if (fault !== null && row > 0 && count === 0 && firstSame === null) firstSame = row;
+  }
+  return { upper, lower, counts, changes, firstSame };
+}
+
+function comparisonGeometry(w, h, scale) {
+  const pad = Math.max(8, Math.min(w, h) * 0.04);
+  const width = Math.max(1, Math.min(w - pad * 2, w * 0.86 * scale));
+  const gap = Math.max(12, h * 0.05);
+  const panel = Math.max(1, (h - pad * 2 - gap) / 2);
+  const label = Math.max(20, Math.min(w, h) * 0.07);
+  return { left: (w - width) / 2, width, pad, gap, panel, label, grid: Math.max(1, panel - label) };
+}
+
+function drawComparison(g, w, h, c, spec, history, rule, fault, shown, scale) {
+  const box = comparisonGeometry(w, h, scale);
+  const last = Math.max(0, Math.min(spec.rows, Math.floor(shown)));
+  const dx = box.width / spec.cols;
+  const dy = box.grid / (spec.rows + 1);
+  const inset = Math.min(0.7, dx * 0.1, dy * 0.1);
+  const k = c.colors;
+  g.save();
+  g.fillStyle = k.bg;
+  g.fillRect(0, 0, w, h);
+  g.font = '500 ' + Math.max(11, Math.round(Math.min(w, h) * 0.034)) + 'px system-ui, sans-serif';
+  g.textBaseline = 'top';
+  for (let panel = 0; panel < 2; panel++) {
+    const top = box.pad + panel * (box.panel + box.gap);
+    const gridTop = top + box.label;
+    const rows = panel ? history.lower : history.upper;
+    g.fillStyle = k.fg;
+    g.textAlign = 'left';
+    const name = panel === 0 ? 'original' : fault === null
+      ? (w < 250 ? 'copy' : 'matching copy')
+      : (w < 250 ? 'changed' : 'one cell changed');
+    g.fillText(name, box.left, top);
+    g.textAlign = 'right';
+    g.fillText(panel ? history.counts[last] + ' differ' : 'rule ' + rule, box.left + box.width, top);
+    g.fillStyle = c.mix(k.bg, k.bg2, 0.25);
+    g.fillRect(box.left, gridTop, box.width, box.grid);
+    for (let row = 0; row <= last; row++) {
+      const y = gridTop + row * dy;
+      for (let x = 0; x < spec.cols; x++) {
+        const left = box.left + x * dx;
+        if (rows[row][x]) {
+          g.fillStyle = c.alpha(k.accent, 0.9);
+          g.fillRect(left + inset, y + inset, dx - inset, dy - inset);
+        }
+        if (panel && history.upper[row][x] !== history.lower[row][x]) {
+          // A slash marks both gained and missing cells, independently of their colour.
+          g.fillStyle = c.alpha(k.accent2, 0.25);
+          g.fillRect(left, y, dx, dy);
+          g.strokeStyle = k.accent2;
+          g.lineWidth = Math.max(0.6, Math.min(1.5, dy * 0.2));
+          g.beginPath();
+          g.moveTo(left + inset, y + dy - inset);
+          g.lineTo(left + dx - inset, y + inset);
+          g.stroke();
+        }
+      }
+    }
+    g.strokeStyle = c.alpha(k.muted, 0.55);
+    g.lineWidth = 1;
+    g.beginPath();
+    g.moveTo(box.left, gridTop + (last + 1) * dy);
+    g.lineTo(box.left + box.width, gridTop + (last + 1) * dy);
+    g.stroke();
+    if (panel && fault !== null) {
+      const x = box.left + (fault + 0.5) * dx;
+      g.fillStyle = k.accent2;
+      g.beginPath();
+      g.moveTo(x, gridTop - 1);
+      g.lineTo(x - 4, gridTop - 7);
+      g.lineTo(x + 4, gridTop - 7);
+      g.closePath();
+      g.fill();
+    }
+  }
+  g.restore();
+}
+
+function comparisonPreview(g, w, h, env, spec) {
+  const v = env.variant;
+  const fault = (spec.fault + Math.round(v.turn * (spec.cols - 1))) % spec.cols;
+  const history = differenceHistory(spec, spec.rules[0], fault);
+  const shown = Math.max(spec.chunk, Math.min(spec.rows, Math.round(spec.rows * v.density)));
+  drawComparison(g, w, h, env, spec, history, spec.rules[0], fault, shown, v.scale);
+}
+
+function comparisonPiece(env) {
+  const spec = experiment(env);
+  let rule = spec.rules[0];
+  let fault = null;
+  let prediction = '';
+  let bursts = 0;
+  let target = spec.chunk;
+  let shown = target;
+  let history = differenceHistory(spec, rule, fault);
+
+  function paint(c) {
+    drawComparison(c.g, c.w, c.h, c, spec, history, rule, fault, shown, 1);
+  }
+
+  function readout(row) {
+    if (fault === null) return 'At row ' + row + ', the tapes still match; no cell has been changed.';
+    const n = history.counts[row];
+    return 'At row ' + row + ', ' + n + ' of ' + spec.cols + ' cells differ.'
+      + (n === 0 ? ' They became identical at row ' + history.firstSame + '.' : '');
+  }
+
+  // Recompute from the unchanged input, retaining the revealed depth. Changing a rule or a cell
+  // after growing is the same experiment as changing it before growing; no knob loses its work.
+  function rebuild() {
+    history = differenceHistory(spec, rule, fault);
+  }
+
+  return {
+    title: experimentTitle(spec),
+    brief: 'Choose a rule for two matching tapes, tap to change one starting cell in the lower tape, make a prediction, and grow both in three bursts. Their edges join.',
+    aspect: '4 / 3',
+    steps: [
+      { id: 'rule', ask: 'the rule both tapes obey', kind: 'choice', options: spec.rules.map((value) => ({ label: 'rule ' + value, value })) },
+      { id: 'fault', ask: 'tap anywhere to choose the changed cell', kind: 'tap', label: 'change one cell for me' },
+      { id: 'prediction', ask: 'how many cells will differ in row ' + spec.rows + '?', kind: 'choice', options: FORECASTS },
+      { id: 'grow', ask: 'grow both tapes to row ' + spec.rows, kind: 'press', count: 3, label: 'grow ' + spec.chunk + ' rows' }
+    ],
+    start(c) {
+      paint(c);
+      c.status('Starting tape: ' + spec.tape + '. The first ' + spec.chunk + ' rows match. Slashed squares will mark differences in the lower tape.');
+    },
+    apply(id, value, c) {
+      if (id === 'rule') {
+        rule = Number(value);
+        rebuild();
+        c.status('Both tapes use rule ' + rule + '. ' + describe(rule) + ' ' + readout(Math.floor(shown)));
+      }
+      if (id === 'prediction') {
+        prediction = FORECASTS.find((p) => p.value === value).label;
+        c.status('You expect ' + prediction + ' cells to differ in row ' + spec.rows + '.');
+      }
+      if (id === 'grow') {
+        bursts = Math.min(3, Math.max(bursts, Number(value)));
+        target = (bursts + 1) * spec.chunk;
+        if (c.reduced) shown = target;
+        c.status(shown < target ? 'Growing both tapes to row ' + target + '.' : readout(target));
+      }
+      paint(c);
+    },
+    tap(x, y, c) {
+      if (c.done) return;
+      const box = comparisonGeometry(c.w, c.h, 1);
+      fault = Math.max(0, Math.min(spec.cols - 1, Math.floor(((x * c.w - box.left) / box.width) * spec.cols)));
+      rebuild();
+      paint(c);
+      c.progress('fault', 1);
+      c.status('Starting cell ' + (fault + 1) + ' changed from ' + spec.initial[fault] + ' to ' + (1 - spec.initial[fault]) + '. ' + readout(Math.floor(shown)));
+      c.satisfy('fault');
+    },
+    frame(t, dt, c) {
+      if (shown < target) {
+        shown = c.reduced ? target : Math.min(target, shown + dt * 20);
+        if (shown === target && !c.done) c.status(readout(target));
+      }
+      paint(c);
+    },
+    end(c) {
+      shown = target = spec.rows;
+      paint(c);
+      c.status(readout(spec.rows) + ' ' + history.changes + ' differing squares across the full history. You expected ' + prediction + ' cells in the last row.');
+    }
+  };
+}
+
 export default {
   id: 'machine-shop',
+  needsSky: false,
   paint(ctx, w, h, env) {
-    run(ctx, w, h, env, pickRule(env), env.chance(0.3));
+    if (compares(env)) comparisonPreview(ctx, w, h, env, experiment(env));
+    else run(ctx, w, h, env, pickRule(env), env.chance(0.3));
   },
   spark(env) {
+    if (compares(env)) {
+      const spec = experiment(env);
+      return {
+        title: experimentTitle(spec),
+        text: 'One starting cell changes in the lower copy. Will the tapes meet again, carry one scar, or grow into different patterns?',
+        aspect: '4 / 3',
+        paint: (ctx, w, h, e) => comparisonPreview(ctx, w, h, e, spec)
+      };
+    }
     const rule = pickRule(env);
     const noisy = env.chance(0.35);
     return {
@@ -193,5 +425,7 @@ export default {
       paint: (ctx, w, h, e) => run(ctx, w, h, e, rule, noisy)
     };
   },
-  piece
+  piece(env) {
+    return compares(env) ? comparisonPiece(env) : benchPiece(env);
+  }
 };

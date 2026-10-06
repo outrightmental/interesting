@@ -13,7 +13,9 @@
 //                  again. Focus does the same thing, so a keyboard sees what a pointer sees.
 //   on press       the page becomes a lightbox -- dimmed, blurred, its animation held, its
 //                  controls inert (js/site.js) -- and the options branch out from the logo as a
-//                  constellation of chips, each on a ray back to the mark.
+//                  constellation of chips, each on a ray back to the mark. Every ray is drawn
+//                  beneath every chip, so a ray crossing the scatter passes behind the options in
+//                  its way rather than over their labels (issue #72).
 //
 // Two layouts, and the <details> element does the work of switching between them:
 //   with scripting the options are placed by js/site.js, which is the only thing that knows how
@@ -75,7 +77,7 @@
 
 .sparknav-logo {
   position: relative;
-  z-index: 3; // above the veil the lightbox lays over everything else
+  z-index: 4; // above the veil, and above the rays and chips the constellation branches out
   display: inline-flex;
   align-items: center;
   min-height: 44px;
@@ -302,11 +304,19 @@ html[data-nav='live'] {
     display: block;
   }
 
+  // The layers of the constellation, and the one rule that decides them: a ray is never drawn
+  // over an option (issue #72). The sky is no longer positioned, so each part below takes its
+  // layer from .sparknav itself -- the veil at 1, every ray at 2, every chip at 3, and the logo
+  // above all of it -- and an option deliberately sets no z-index of its own. One that did would
+  // make a stacking context of itself and carry its own ray up inside it, so the last option in
+  // the order would paint its ray across the first option's chip, which is what the far column's
+  // rays used to do to the near column's chips. Layering the parts rather than the options puts
+  // every ray below every chip however the scatter is arranged: one column or two, interleaved
+  // or not, branching or at rest.
   .sparknav-option {
     position: absolute;
     top: 0;
     left: 0;
-    z-index: 2; // above the veil, which the sky itself is no longer positioned over
     width: 0;
     height: 0;
     margin: 0;
@@ -314,6 +324,7 @@ html[data-nav='live'] {
 
   .sparknav-node {
     position: absolute;
+    z-index: 3; // above every ray, and above the veil
     top: var(--y, 0);
     left: var(--x, 0);
   }
@@ -328,6 +339,7 @@ html[data-nav='live'] {
   .sparknav-ray {
     display: block;
     position: absolute;
+    z-index: 2; // above the veil, below every chip
     top: var(--my, 22px);
     left: var(--mx, 22px);
     width: var(--len, 0);

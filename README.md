@@ -191,6 +191,14 @@ same destination, the second adopted into the far orbit beside *cookies* and *st
   viewport two because that is what makes them fit. `NavTest` holds the one thing a constellation
   of chips can get wrong that a list cannot: no two stars land on each other, on any of the three
   shapes of screen.
+- **No ray is ever drawn over an option** (issue #72). A ray reaching across the scatter — the far
+  column's out past the near column, a lower star's up past the chips above it — passes behind the
+  pills in its way rather than across their labels. What is layered is the parts rather than the
+  options: the veil, then every ray, then every chip, then the logo they all leave from, so an
+  option sets no layer of its own and the stacking cannot turn on the order the options happen to
+  be in. `NavTest` holds both halves of that too — the harness reports each chip's box and each
+  ray's line, so the geometry says which rays cross which chips on each of the three shapes, and
+  the built stylesheet says a ray's layer is strictly below a chip's.
 - **The near orbit is where to go, the far orbit is the apparatus.** Near: the three destinations
   from [`site/_data/worlds.json`](site/_data/worlds.json) — *the threshold* (the home icon, which
   is how a visitor gets home now that pressing the logo no longer navigates), *the mood atlas*,
