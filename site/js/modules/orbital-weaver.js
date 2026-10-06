@@ -2,7 +2,21 @@
    offsets of two striped screens. Cards and pieces select the same shape from their seed. The
    loom closes into a mantra; the screens expose real moire bands through their overlap, with a
    prediction and a print of the visitor's settings. See js/feed.js for what a module is and
-   js/stage.js for what a piece is. */
+   js/stage.js for what a piece is.
+
+   A card and the feature it opens as are one weave: the mantra spark puts its symmetry and its
+   words on its spec as `of`, and the loom opens at that symmetry and prints those words, so
+   pressing a mantra in the feed opens the loom that was saying it. */
+
+// The card this piece was opened from, in the loom's own terms: the symmetry it was woven at and
+// the mantra it was saying, or null for a piece nobody pressed (js/stage.js, env.card.of).
+function pressed(env) {
+  const was = env.card && env.card.of;
+  const spokes = was ? Number(was.spokes) : NaN;
+  if (!isFinite(spokes)) return null;
+  const said = Array.isArray(was.words) ? was.words.filter((text) => typeof text === 'string' && text) : [];
+  return { spokes: Math.max(3, Math.min(12, Math.round(spokes))), words: said };
+}
 
 const NUMBERS = ['', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve'];
 
@@ -123,7 +137,7 @@ function weave(ctx, w, h, env, spokes, t) {
 
 // The loom: each star a shard in polar form about the centre, with a phase of its own, and
 // everything a piece turns: the spokes, the spin, the tones, how far the pattern has closed.
-function loom(env, spokes) {
+function loom(env, spokes, was) {
   const stars = env.stars.slice(0, 90);
   return {
     stars,
@@ -143,7 +157,9 @@ function loom(env, spokes) {
       phase: env.rnd() * Math.PI * 2,
       energy: 0
     })),
-    words: words(env, 3),
+    // The mantra the card was saying, when this loom was opened from one: the feature prints the
+    // very words a visitor pressed, and only picks its own for a piece nobody pressed.
+    words: was && was.words.length ? was.words.slice(0, 3) : words(env, 3),
     opener: env.pick(OPENERS),
     line: env.pick(LINES),
     geo: geometry(stars)
@@ -380,14 +396,16 @@ function run(s, dt, c) {
 
 // A few ripples tapped into the weave, each one waking a star's words, then the mantra printed.
 function ripples(env) {
+  const was = pressed(env);
   const count = env.int(3, 5);
-  const spokes = env.int(4, 9);
+  const spokes = was ? was.spokes : env.int(4, 9);
   const turn = env.pick([0.24, 0.4, -0.3]);
-  const s = loom(env, spokes);
+  const s = loom(env, spokes, was);
   let sent = 0;
   const printed = 'a mantra, printed from your constellation geometry';
   return {
-    title: NUMBERS[count] + ' ripples into the weave',
+    title: was ? NUMBERS[count] + ' ripples into ' + NUMBERS[spokes] + '-fold symmetry'
+      : NUMBERS[count] + ' ripples into the weave',
     brief: 'Tune the symmetry, start the spin if you like, tap the weave ' + NUMBERS[count] + ' times to ripple it, and print the mantra it has become.',
     aspect: '1 / 1',
     steps: [
@@ -422,11 +440,13 @@ function ripples(env) {
 
 // The symmetry dial turned up a notch at a time, then the weave held until the pattern closes.
 function dial(env) {
+  const was = pressed(env);
   const base = env.int(3, 5);
-  const notches = env.int(3, 6);
+  // The dial turns up to the symmetry the card was woven at, when it came from one.
+  const notches = was ? Math.max(2, Math.min(7, was.spokes - base)) : env.int(3, 6);
   const final = base + notches;
   const ms = env.pick([2000, 2500, 3000]);
-  const s = loom(env, base);
+  const s = loom(env, base, was);
   s.spin = 0.33;
   return {
     title: NUMBERS[final] + ' spokes and a mantra',
@@ -468,10 +488,11 @@ function dial(env) {
 
 // The loom left to wind down: tune it, then watch the pattern close and say its words.
 function rest(env) {
-  const spokes = env.int(3, 12);
+  const was = pressed(env);
+  const spokes = was ? was.spokes : env.int(3, 12);
   const secs = env.pick([6, 8, 10]);
   const title = env.pick(['the loom at rest', 'the weave winds down', 'let the pattern close']);
-  const s = loom(env, spokes);
+  const s = loom(env, spokes, was);
   s.spin = 0.24;
   let waited = -1;
   return {
@@ -784,12 +805,15 @@ export default {
       };
     }
     const k = env.int(3, 12);
+    const mantra = words(env, 3);
     return {
       title: 'a mantra',
-      quote: words(env, 3).join(' · '),
+      quote: mantra.join(' · '),
       text: k + ' spokes of symmetry, ' + env.stars.length + ' star' + (env.stars.length === 1 ? '' : 's') + ' mirrored. Say it until the pattern closes.',
       aspect: '1 / 1',
-      paint: (ctx, w, h, e) => weave(ctx, w, h, e, k, 0)
+      paint: (ctx, w, h, e) => weave(ctx, w, h, e, k, 0),
+      // What this card is of, for the piece it opens as: its symmetry and its mantra.
+      of: { spokes: k, words: mantra }
     };
   },
   piece

@@ -19,6 +19,17 @@
   again with its knobs reached in a seeded order rather than down the page, and the first seed is
   played through from the top a second time, which has to come out exactly as the first.
 
+  The first seed is then played three times more, for the alignment axiom (issue #80). A card and
+  the feature it opens as are one content piece, procedurally configured once: the stage hands the
+  piece the card's configuration on env.variant -- the seven dials of site/js/variant.js -- and the
+  content the card was showing on env.card. So the first seed is played under a configuration away
+  from the no-op one, then as the card that configuration deals it, then as a card another seed was
+  dealt. All three have to finish like any other play (a sky can change under a card, so a piece
+  reads the card it is handed defensively), and the last two have to be different pieces: what a
+  feature is follows from the card it was opened from, and a module that ignored env.card would
+  open the same item whichever of its cards a visitor pressed, which is the bug the axiom is here
+  to keep out.
+
   The stage harness beside this one (stage_harness.mjs) plays the other half of the axiom: the
   knobs through js/stage.js's own controls, which is where a knob can turn out to be one the
   visitor cannot actually set.
@@ -42,6 +53,10 @@
       visitor work in that order and one who does not would be left holding a toy that will not
       finish;
     - every seed makes the same piece, because the river is of pieces that differ;
+    - the piece is the same piece whichever card it was opened from, because then pressing two
+      different cards of one world would open the same feature twice (the alignment axiom, issue
+      #80). A module whose spark() makes nothing for the seeds tried is not held to this, because
+      there was no card to be of;
     - the piece does not finish within MAX_TAPS taps of its scene and MAX_SECONDS of simulated
       time once every knob is set, or start/apply/frame/tap/end throws;
     - it reaches for a clock or for Math.random: in here those throw, because a piece draws its
@@ -74,9 +89,10 @@ export const MIN_STEPS = 2;
 export const MAX_STEPS = 5;
 export const MAX_TAPS = 12;
 export const MAX_SECONDS = 45;
-// Real time, per module, for all fourteen of its plays: six seeds, one sky, six orders and the
-// replay. Twenty seconds was ample for seven plays and is thin for fourteen -- the busiest module
-// here takes eight on a quick machine -- and a runner that is twice as slow should still be judging
+// Real time, per module, for all seventeen of its plays: six seeds, one sky, six orders, the
+// replay, and the three the alignment axiom adds (configured, as its own card, as another card).
+// Twenty seconds was ample for seven plays and is thin for seventeen -- the busiest module here
+// takes ten on a quick machine -- and a runner that is twice as slow should still be judging
 // pieces rather than reporting timeouts.
 export const MODULE_TIMEOUT_MS = 45000;
 const FRAME = 1 / 30;
@@ -95,6 +111,14 @@ const STARS = [
   { x: 86, y: 26, text: 'a word I keep' }
 ];
 const ONE_STAR = [STARS[1]];
+
+// The configuration a piece is of: the seven dials of site/js/variant.js, which the stage hands it
+// on env.variant (the alignment axiom, issue #80). PLAIN_DIALS is the no-op configuration the card
+// the template wrote wears, and CONFIGURED is one away from it on every dial -- inside the ranges
+// variant.js rolls in, and spelled out here rather than imported because a module is played with
+// nothing but the harness beside it, exactly as it imports nothing itself.
+const PLAIN_DIALS = { plain: true, trade: 0, lift: 0, wash: 0, density: 1, scale: 1, turn: 0, stretch: 1 };
+const CONFIGURED = { plain: false, trade: 0.86, lift: 0.62, wash: 0.31, density: 1.21, scale: 0.91, turn: 0.74, stretch: 1.14 };
 
 function mulberry32(a) {
   return function () {
@@ -129,8 +153,19 @@ function alpha(c, a) {
   return 'rgba(' + r + ',' + g + ',' + b + ',' + a + ')';
 }
 
-// The same env js/stage.js makes, less the document.
-export function makeEnv(seed, stars) {
+function hash(text) {
+  let h = 2166136261;
+  for (let i = 0; i < text.length; i++) {
+    h ^= text.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+// The same env js/stage.js makes, less the document: the seeded source, the sky, the world's
+// colours, the configuration this piece is of (`variant`) and the card it was opened from
+// (`card`, null for a piece nobody pressed).
+export function makeEnv(seed, stars, variant, card) {
   const rnd = mulberry32(seed);
   const list = stars || STARS;
   return {
@@ -139,13 +174,45 @@ export function makeEnv(seed, stars) {
     pick: (items) => items[Math.floor(rnd() * items.length)],
     int: (a, b) => a + Math.floor(rnd() * (b - a + 1)),
     chance: (p) => rnd() < p,
+    hash,
     stars: list,
+    points(w, h, pad) {
+      const p = pad || 0;
+      return list.map((s) => ({ x: p + (s.x / 100) * (w - p * 2), y: p + (s.y / 100) * (h - p * 2), text: s.text }));
+    },
     colors: Object.assign({}, COLORS),
     mix,
     alpha,
     reduced: false,
-    world: { file: 'world.html', name: 'a world', orientation: 'an orientation' }
+    world: { file: 'world.html', name: 'a world', orientation: 'an orientation' },
+    variant: variant || PLAIN_DIALS,
+    card: card || null
   };
+}
+
+/* The card a seed and a configuration would be dealt, the way js/feed.js makes one and js/stage.js
+   derives one for a piece nobody pressed: the module's own spark() for that very configuration.
+   Null when the module makes nothing for it, which is a world with nothing to say right now. */
+export function sparkOf(mod, seed, stars, variant) {
+  if (!mod || typeof mod.spark !== 'function') return null;
+  try {
+    const spec = mod.spark(makeEnv(seed, stars, variant, null));
+    if (!spec || typeof spec !== 'object') return null;
+    const line = (value) => (typeof value === 'string' ? value : '');
+    return {
+      kind: 'spark',
+      overline: line(spec.overline),
+      title: line(spec.title),
+      quote: line(spec.quote),
+      text: line(spec.text),
+      mono: line(spec.mono),
+      cite: line(spec.cite),
+      aspect: line(spec.aspect),
+      of: spec.of || null
+    };
+  } catch (err) {
+    return null;
+  }
 }
 
 // A 2D context that accepts anything and records nothing, with a real context's defaults.
@@ -232,10 +299,15 @@ function shapeProblems(piece) {
 export function play(mod, seed, options) {
   const opts = options || {};
   const stars = opts.stars || STARS;
+  // The configuration this play is of, and the card it is of: what the stage hands a piece on
+  // env.variant and env.card (the alignment axiom). The no-op configuration and no card unless
+  // the caller asks for others, so every play below is one the stage could have opened.
+  const variant = opts.variant || PLAIN_DIALS;
+  const card = opts.card || null;
   const out = { seed, stars: stars.length, label: opts.label || '', ok: false, problems: [], taps: 0, seconds: 0, title: '', steps: 0, signature: '' };
   let piece;
   try {
-    piece = mod.piece(makeEnv(seed, stars));
+    piece = mod.piece(makeEnv(seed, stars, variant, card));
   } catch (err) {
     out.problems.push('piece() threw: ' + (err && err.message || err));
     return out;
@@ -249,7 +321,7 @@ export function play(mod, seed, options) {
   out.steps = piece.steps.length;
   out.signature = signatureOf(piece);
   try {
-    const again = mod.piece(makeEnv(seed, stars));
+    const again = mod.piece(makeEnv(seed, stars, variant, card));
     if (signatureOf(again) !== out.signature) out.problems.push('the same seed does not make the same piece');
   } catch (err) {
     out.problems.push('piece() threw the second time: ' + (err && err.message || err));
@@ -264,7 +336,7 @@ export function play(mod, seed, options) {
   let ended = false;
   let touched = false; // has the visitor set a knob yet?
   let time = 0;
-  const env = makeEnv(seed, stars);
+  const env = makeEnv(seed, stars, variant, card);
 
   function allSet() {
     for (const s of state.values()) if (!s.set) return false;
@@ -291,10 +363,7 @@ export function play(mod, seed, options) {
   const ctx = {
     canvas, g, w: W, h: H, dpr: 1,
     colors: env.colors, rnd: env.rnd, pick: env.pick, int: env.int, chance: env.chance, stars,
-    points(w, h, pad) {
-      const p = pad || 0;
-      return stars.map((s) => ({ x: p + (s.x / 100) * (w - p * 2), y: p + (s.y / 100) * (h - p * 2), text: s.text }));
-    },
+    points: env.points,
     mix, alpha, reduced: false,
     satisfy(id, value) {
       const s = state.get(id);
@@ -443,8 +512,9 @@ export function play(mod, seed, options) {
 
 // Judge one module, already imported: every seed with the five stars, the first seed again with
 // the sky the stage may hand it (none for a module that does not read the sky, one star for one
-// that does), every seed once more with its knobs reached in a seeded order, and the first seed
-// played through from the top a second time.
+// that does), every seed once more with its knobs reached in a seeded order, the first seed
+// played through from the top a second time, and the first seed under a configuration, as the card
+// that configuration deals it, and as a card another seed was dealt (the alignment axiom).
 export function judgeModule(mod, seeds) {
   const report = { hasPiece: false, ok: false, problems: [], runs: [] };
   if (!mod || typeof mod.piece !== 'function') {
@@ -491,6 +561,56 @@ export function judgeModule(mod, seeds) {
       report.problems.push('seed ' + seeds[0] + ' played a second time does not play out the same (' + first.taps + ' taps, '
         + first.seconds + 's, then ' + replay.taps + ' taps, ' + replay.seconds + 's); a module keeps nothing between instantiations');
     }
+  }
+
+  // The alignment axiom (issue #80): a card and the feature it opens as are one content piece,
+  // procedurally configured once. The stage hands the piece the card's configuration on
+  // env.variant and the content the card was showing on env.card, so the same seed under a
+  // configuration has to finish like any other play, and the piece a card opens as has to be a
+  // piece of that card -- different from the one the same seed makes with no card behind it.
+  // Otherwise two different cards of one world open the same feature, which is the bug the axiom
+  // is here to keep out.
+  const configured = play(mod, seeds[0], { variant: CONFIGURED, label: 'configured' });
+  report.runs.push(configured);
+  for (const p of configured.problems) report.problems.push('seed ' + seeds[0] + ' configured: ' + p);
+  // Its own card, and a card of another seed entirely. Both have to play to the end -- a sky can
+  // change under a card, so a piece reads the card it is handed defensively -- and the two have to
+  // be different pieces, which is the axiom itself: what a feature is follows from the card it was
+  // opened from. A module that ignored env.card would open the same item whichever of its cards was
+  // pressed, and one that agrees with its cards only because piece() and spark() happen to draw in
+  // the same order is one edit away from quietly disagreeing with them.
+  const own = sparkOf(mod, seeds[0], STARS, CONFIGURED);
+  // A card that says something else: the first other seed whose card is dealt different content,
+  // because two cards that read the same are two cards no piece could tell apart.
+  const said = (card) => (card ? [card.title, card.overline, card.quote, card.text, card.mono, card.cite].join('|') : '');
+  let other = null;
+  for (const seed of seeds.slice(1)) {
+    const card = sparkOf(mod, seed, STARS, CONFIGURED);
+    if (card && said(card) !== said(own)) {
+      other = card;
+      break;
+    }
+  }
+  const asCard = play(mod, seeds[0], { variant: CONFIGURED, card: own, label: 'as its card' });
+  report.runs.push(asCard);
+  for (const p of asCard.problems) report.problems.push('seed ' + seeds[0] + ' opened as its own card: ' + p);
+  const asOther = play(mod, seeds[0], { variant: CONFIGURED, card: other, label: 'as another card' });
+  report.runs.push(asOther);
+  for (const p of asOther.problems) report.problems.push('seed ' + seeds[0] + ' opened as another seed\'s card: ' + p);
+  report.alignment = {
+    hasSpark: typeof mod.spark === 'function',
+    // Whether there were two cards to tell apart at all: a module whose spark() deals every seed
+    // the same content cannot be held to the axiom here, and the caller is told so rather than
+    // left to read a silent pass as one (RealSiteTest asks for it of every world on the site).
+    tested: !!(own && other),
+    card: own ? (own.title || own.quote || own.mono || own.text) : '',
+    other: other ? (other.title || other.quote || other.mono || other.text) : '',
+    follows: !!(own && other && asCard.signature && asOther.signature && asCard.signature !== asOther.signature)
+  };
+  if (own && other && asCard.ok && asOther.ok && !report.alignment.follows) {
+    report.problems.push('the piece is the same piece (' + JSON.stringify(asCard.title) + ') whether it is opened from '
+      + JSON.stringify(report.alignment.card) + ' or from ' + JSON.stringify(report.alignment.other)
+      + '; a feature is the card that was pressed, so piece(env) has to read env.card');
   }
 
   report.ok = report.runs.every((r) => r.ok) && !report.problems.length;
