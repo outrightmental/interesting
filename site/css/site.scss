@@ -1,11 +1,7 @@
-// The stylesheet every page links. It is nothing but the shared partials from ../_sass, in the
-// order they cascade: the tokens, then the page, then the things on it.
-//
-// A page's own stylesheet (css/<name>.scss, linked after this one by _includes/layout.njk) holds
-// only what is true of that page alone.
-
+// Shared tokens and components, including the two list-first pages.
 @use 'tokens';
 @use 'base';
+@use 'lightbox';
 @use 'nav';
 @use 'mood';
 @use 'panel';
@@ -14,3 +10,4 @@
 @use 'persona';
 @use 'feed';
 @use 'stage';
+@use 'list-page';

@@ -175,14 +175,11 @@ same destination, the second adopted into the far orbit beside *cookies* and *st
   world's palette. Roll over it, or give it the focus, and the site's name fades in beside it —
   quick and tight, clipped to nothing rather than hidden, so the logo keeps its accessible name
   either way.
-- **On press, a lightbox.** The page goes behind a veil that dims it, blurs it, takes the press
-  that closes it again, and sits over everything a fixed file has pinned to the page as well as
-  over the content, hidden though all three of those now are. Behind
-  it everything is made `inert` and hidden from a screen reader, its CSS animation is paused, and
-  its frame loop is **held**: `js/site.js` keeps the `requestAnimationFrame` callbacks a page asks
-  for while the menu is open and runs them when it closes, because CSS can pause an animation but
-  not a loop, and every animated page here runs one of its own. Escape, the veil and any
-  destination all close it; Tab stays inside the menu while it is up.
+- **On press, the lightbox.** The page goes behind the veil, which is not the logo's own: it is the
+  one lightbox the whole site shares, the same one the persona sheet and the *are you sure?* modal
+  open through — see [The lightbox](#the-lightbox) below. Escape, the veil and any destination all
+  close it; Tab stays inside the menu while it is up, which is the one part of it the nav brings
+  itself, because the nav is not a dialog.
 - **The options branch out as a constellation.** Each one is a chip on a ray back to the logo's
   heart. `js/site.js` places them, because it is the only thing that can count them: the stars
   fall down the left edge in even steps, each pushed out sideways by its own amount so the set
@@ -194,11 +191,12 @@ same destination, the second adopted into the far orbit beside *cookies* and *st
 - **No ray is ever drawn over an option** (issue #72). A ray reaching across the scatter — the far
   column's out past the near column, a lower star's up past the chips above it — passes behind the
   pills in its way rather than across their labels. What is layered is the parts rather than the
-  options: the veil, then every ray, then every chip, then the logo they all leave from, so an
-  option sets no layer of its own and the stacking cannot turn on the order the options happen to
-  be in. `NavTest` holds both halves of that too — the harness reports each chip's box and each
-  ray's line, so the geometry says which rays cross which chips on each of the three shapes, and
-  the built stylesheet says a ray's layer is strictly below a chip's.
+  options: every ray, then every chip, then the logo they all leave from — all of it inside the
+  one layer the shared lightbox lifts the whole mark into — so an option sets no layer of its own
+  and the stacking cannot turn on the order the options happen to be in. `NavTest` holds both
+  halves of that too — the harness reports each chip's box and each ray's line, so the geometry
+  says which rays cross which chips on each of the three shapes, and the built stylesheet says a
+  ray's layer is strictly below a chip's.
 - **The near orbit is where to go, the far orbit is the apparatus.** Near: the three destinations
   from [`site/_data/worlds.json`](site/_data/worlds.json) — *the threshold* (the home icon, which
   is how a visitor gets home now that pressing the logo no longer navigates), *the mood atlas*,
@@ -258,6 +256,61 @@ same destination, the second adopted into the far orbit beside *cookies* and *st
   accessible name on the logo with its visible word inside it (WCAG 2.5.3), `aria-current` on the
   page a visitor is on, and a `prefers-reduced-motion` path that drops the fade, the veil's fade
   and the branching alike.
+
+### The lightbox
+
+Everything on this site that floats over the whole page opens the same way, because it opens through
+the same component. There are three of them: the constellation the sparkles logo branches out, the
+**persona sheet** the avatar opens, and the one *are you sure you want to ______?* modal every
+destructive control is guarded by. Before issue #70 only the first of them had any of this — the
+veil was the nav's own element, in the nav's own markup, painted in the nav's own partial — and the
+persona sheet was a bare `<dialog>` with a flat `::backdrop`: no blur, no fade, no stilled page, no
+held frame loop. The note that became the issue put it plainly: *the lightbox effect for the main nav
+(top left logo) is amazing!! the lightbox effect for the persona should be identical; they should
+share a common lightbox component. the current persona lightbox is weak.*
+
+- **Where it lives, and why there.** `window.interestingSite.lightbox()` in
+  [`site/js/site.js`](site/js/site.js), painted by
+  [`site/_sass/_lightbox.scss`](site/_sass/_lightbox.scss), over one `#lightbox-veil` the shell
+  writes. Not a new `site/js/lightbox.js`: `js/site.js` is already where every shared component of
+  the shell lives (`unlock`, `destructive`, `areYouSure`), every page already loads it, and it
+  already loads after `js/persona.js` and before anything builds — which is the one ordering
+  constraint a new file would have had to reproduce, for nothing. The veil is markup in
+  [`_includes/layout.njk`](site/_includes/layout.njk) because the shell is markup; it is `hidden`
+  until something raises it, so a visitor with no script gets no dimming they could not dismiss.
+- **What raising one does.** Four things, and a caller gets all four or none. The **veil** dims,
+  blurs and desaturates the page and fades in, and a press on it goes to whatever is on top. Every
+  other child of `<body>` is **put aside** — `inert`, hidden from a screen reader, and marked
+  `data-lightbox-aside`, which is also what the stylesheet pauses the CSS animations of; the one
+  thing open is marked `data-lightbox-front`, which is what lifts it over the veil. The page's frame
+  loop is **held**: the `requestAnimationFrame` callbacks a page asks for while a lightbox is up are
+  kept and run when the last one comes down, because CSS can pause an animation but not a loop, and
+  every animated page here runs one of its own. And `<html data-lightbox='nav'>` (or `'persona'`, or
+  `'are-you-sure'`) says which one is up — written only when it changes, so a caller that renames
+  its own box where it stands, as the constellation does when the state interface takes the lightbox
+  over (`box.up('state')`, issue #66), never clears the attribute in between.
+- **Which means each mark puts the other away.** The persona avatar goes behind the veil the logo
+  raises, and the logo behind the veil the sheet raises. The two marks are one piece of chrome, and
+  pressing either one of them makes the whole of the rest of the page the background.
+- **They nest, because one opens over another.** *seed a small sky* in the persona sheet asks the
+  shared question over a sky the visitor placed, so a second lightbox goes up over the first: the
+  veil never drops, the frame loop stays held, the sheet goes behind the question while it is asked,
+  and answering hands the sheet back to the front exactly as it was. The boxes are a stack and the
+  top of it is what the page is arranged around.
+- **A `<dialog>` keeps what a `<dialog>` is good at.** The persona sheet and the modal are still
+  native dialogs, so the focus trap, Escape, the top layer and the press on the backdrop are the
+  browser's own and nothing here reimplements them. The veil is the only thing they borrow, and
+  their `::backdrop` is `transparent` so the shared veil is the only dimming — a backdrop of their
+  own sits in the top layer *over* the veil and would flatten it.
+- **Something drawn while a lightbox is up goes behind it.** Each of the three affordances the
+  constellation adopts arrives from a deferred script, and one may arrive while the persona sheet is
+  open, where the nav is watching nothing — so the lightbox watches `<body>` itself.
+- **Tested as one component with three callers.**
+  [`.github/scripts/lightbox_harness.mjs`](.github/scripts/lightbox_harness.mjs) loads the real
+  `js/site.js` and `js/persona.js` into one stub browser and drives the logo, the sheet, the question
+  asked from a page and the question asked over the sheet; `LightboxTest` asserts that all of them
+  raise the same veil element, put the same page aside, leave exactly one thing in front and hold the
+  frame loop, and `NavTest` still holds the nav's half of it.
 
 ### The feature and the feed
 
@@ -529,12 +582,12 @@ saying where to go next, and the home page explained none of its own words.
 - **The shell it left behind.** The main nav is the sparkles logo in the upper left and the
   constellation it opens (see [The logo and the constellation](#the-logo-and-the-constellation)),
   with the persona floating opposite it (see [Persona](#persona)); a page's `<main>` is its
-  feature and fills the first screen; every page but the site map and the mood atlas (which list
-  every page themselves) ends with the feed, the one index of every world, which has no caption
-  (see [The feature and the feed](#the-feature-and-the-feed)). That is the whole of the shared
-  chrome, written once in [`site/_includes/layout.njk`](site/_includes/layout.njk), and a page
-  sets nothing about navigation: no footer lists, no notes, no includes. A run is asked to keep
-  it that size.
+  feature and fills the first screen; every page ends with the feed, the one index of every world,
+  which has no caption (see [The feature and the feed](#the-feature-and-the-feed)) — the site map
+  and the mood atlas included, since both retired the world list each used to write itself and
+  point at the cards below instead. That is the whole of the shared chrome, written once in
+  [`site/_includes/layout.njk`](site/_includes/layout.njk), and a page sets nothing about
+  navigation: no footer lists, no notes, no includes. A run is asked to keep it that size.
 
 ### Powered down, never broken
 
@@ -595,7 +648,9 @@ and shown on every page.
   made two floating items of one corner and a third piece of navigation on the site, and the world
   a reading opens onto is an option in the logo's constellation instead, where it already was
   (issue #64). On a phone the feed's first card carries the same suggestion, as it always has.
-- **The sheet.** The button opens a `<dialog>` floating over whatever page is open, with two
+- **The sheet.** The button opens a `<dialog>` floating over whatever page is open — inside the one
+  lightbox the whole site shares, so the page behind it is dimmed, blurred, stilled, held and inert
+  exactly as it is behind the logo's constellation; see [The lightbox](#the-lightbox) — with two
   sections. *Constellation* is the sky editor: tap the sky to place a star, drag one to move it,
   tap one to read its thought and remove it, or drop one, seed a small sky, or clear the sky — by
   pointer or by keyboard, where the arrow keys move a focused star and *Delete* removes it. Every
@@ -1019,12 +1074,20 @@ to type and no second press. *Don't overdo it.*
 - **What a visitor is owed, once.** The modal is a `<dialog>`, so the browser supplies the
   backdrop, the focus trap and Escape; the focus starts on *cancel*, because the one press someone
   who got here by mistake should be a key away from is the one that changes nothing, and it comes
-  back to the control that opened it however the question is answered. A press on the backdrop
+  back to the control that opened it however the question is answered — after the lightbox has come
+  down, because the control it goes back to was `inert` a moment before. A press on the backdrop
   dismisses it, the buttons are 44px and wrap, and the box fits a 320px screen. Nothing in it
-  animates, so there is no motion to answer for. It is also woken up before it is shown: the
-  dialog is a child of the body, built the first time anything asks, so the nav's lightbox may
-  have made it `inert` with the rest of the page long before — and since the state interface asks
-  from inside that lightbox now (issue #66), the marks come off at ask time. A question nobody can
+  animates, so there is no motion to answer for.
+- **And it is asked over the same lightbox as everything else.** The question goes up through
+  `window.interestingSite.lightbox()` (see [The lightbox](#the-lightbox)), so the page behind it is
+  dimmed, blurred, stilled and out of reach while it is asked — the same veil the sparkles logo and
+  the persona sheet raise. Asked from a control *inside* the persona sheet, as *seed a small sky* is,
+  it is the second lightbox up: the veil never drops, the sheet goes behind the question, and
+  answering hands the sheet back to the front. The same stack is what wakes the dialog up before it
+  is shown: the dialog is a child of the body, built the first time anything asks, so a lightbox
+  already up may have put it behind the veil with the rest of the page long before — and since the
+  state interface asks from inside the logo's lightbox now (issue #66), one is. Naming it as the one
+  thing to leave in front is what takes those marks off again, at ask time. A question nobody can
   answer is worse than no question.
 - **The meta menu adopts it too.** [`site/js/state.js`](site/js/state.js) is in `FIXED_FILES`, is
   never shown to a model and deliberately carries its own inline styles — and its *clear* still

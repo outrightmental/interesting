@@ -1,4 +1,4 @@
-{# Front matter: title and description name and describe the page; stylesheet adds a page-specific CSS file. error.html alone uses inlineStyles and siteRoot because it can be served at an arbitrary missing path. A page supplies its own main; this layout supplies the shared navigation, persona and feed. #}
+{# Front matter: title names the page; description describes it, or defaults to the world's description in _data/worlds.json. error.html uses inlineStyles and siteRoot because it can be served at an arbitrary missing path. A page supplies its main; the layout supplies navigation, persona and feed. #}
 {%- set here = (page.filePathStem | replace('/', '')) + '.html' if page else '' %}
 {%- set thisWorld = null %}
 {%- for world in worlds.worlds %}{% if world.file == here %}{% set thisWorld = world %}{% endif %}{% endfor %}
@@ -23,8 +23,8 @@
   <title>{% if title %}{{ title }} · {% endif %}interesting</title>
   <link rel='icon' href='{{ siteRoot }}favicon.svg' type='image/svg+xml'>
   <script type='application/json' id='site-worlds'>{{ worlds.worlds | dump | safe }}</script>
-{%- if description %}
-  <meta name='description' content='{{ description }}'>
+{%- if description or thisWorld %}
+  <meta name='description' content='{{ description if description else thisWorld.what }}'>
 {%- endif %}
 {%- if inlineStyles %}
   <style>{{ 'site' | css | safe }}{{ stylesheet | css | safe }}</style>
@@ -56,12 +56,12 @@
 </head>
 <body>
   <a class='skip-link' href='#main-content'>skip to main content</a>
+  <div class='lightbox-veil' id='lightbox-veil' hidden></div>
   <details class='sparknav' id='sparknav'>
     <summary class='sparknav-logo' id='sparknav-logo' aria-label='interesting: the site menu'>
       <svg class='icon sparknav-spark' viewBox='0 0 24 24' aria-hidden='true' focusable='false'><path d='{{ icons.spark }}'/></svg>
       <span class='sparknav-name'>interesting</span>
     </summary>
-    <div class='sparknav-veil' id='sparknav-veil'></div>
     <nav class='sparknav-sky' aria-label='Site'>
       <ul class='sparknav-orbit sparknav-near' id='sparknav-near'>
 {%- for link in worlds.wayIn %}
@@ -100,7 +100,7 @@
           <span class='sparknav-ray' aria-hidden='true'></span>
           <button type='button' class='sparknav-node' id='sparknav-state-open' aria-haspopup='dialog'>
             <svg class='icon' viewBox='0 0 24 24' aria-hidden='true' focusable='false'><path d='{{ icons.swap }}'/></svg>
-            <span class='sparknav-label'>state</span>
+            <span class='sparknav-label' id='sparknav-state-label'>state</span>
           </button>
         </li>
 {%- for link in worlds.finePrint %}

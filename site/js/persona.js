@@ -35,6 +35,17 @@
   underneath follows every change as it is made (see onSky below and window.interestingSite.unlock
   in js/site.js).
 
+  It opens inside the one lightbox the whole site shares -- window.interestingSite.lightbox() in
+  js/site.js -- so the page behind it is dimmed, blurred, desaturated, faded under, made inert and
+  hidden from a screen reader, its CSS animation paused and its frame loop held, exactly as it is
+  behind the constellation the sparkles logo opens. That is what issue #70 asked for in as many
+  words: "the lightbox effect for the persona should be identical; they should share a common
+  lightbox component". Before it, this was a bare <dialog> with a flat backdrop and none of the
+  rest. The dialog is still a dialog, so the focus trap, the Escape and the press on the backdrop
+  are the browser's own and nothing here reimplements them; the veil behind it is the only thing it
+  borrows, and the shared "are you sure?" modal a control in here opens stacks on top of it
+  (js/site.js again).
+
   The threshold asks on arrival in its own feature: index.html hosts #persona-probe in its <main>,
   and the question is mounted there, inline, so it is never a dialog in the way and never cramped
   into the corner. On every other page the question is one press away inside the sheet, which asks of
@@ -60,7 +71,8 @@
                              how is 'seeded', 'placed', 'added', 'moved', 'removed' or 'cleared'.
                              Returns a function that unsubscribes. The same news is dispatched on
                              window as a 'persona:sky' CustomEvent, detail { stars, how, kept }
-        .open(section)       open the sheet, on 'sky' (default) or 'reading'
+        .open(section)       open the sheet, on 'sky' (default) or 'reading', inside the shared
+                             lightbox
         .close()
         .ask()               put the sideways question in #persona-probe, where the threshold asks
         .refresh()           redraw the card; called for you after every change and reading
@@ -425,6 +437,7 @@
   var openedBy = null;
   var askingInSheet = false;
   var moveTimer = null;
+  var sheetBox = null; // the shared lightbox the sheet floats in (js/site.js), or null without it
 
   function sheetStatus(text) {
     if (sheet && sheet.status) sheet.status.textContent = text;
@@ -651,6 +664,8 @@
     openedBy = opener || document.activeElement;
     stopAskingInCard();
     if (!sheet.host.open) {
+      // The veil first, so the page is already under it when the sheet arrives over the top.
+      if (sheetBox) sheetBox.up();
       if (typeof sheet.host.showModal === 'function') {
         sheet.host.showModal();
       } else {
@@ -686,6 +701,11 @@
     if (askingInSheet) stopAskingInSheet();
     activeDrag = null;
     sheet.host.classList.remove('persona-sheet-fallback');
+    // The page comes back -- live, un-dimmed, its frame loop running again -- before the card is
+    // redrawn and before the focus goes anywhere, because the control the focus returns to was
+    // inert a moment ago. Idempotent, which matters: a dialog closed by the browser raises 'close'
+    // and closeSheet() calls this itself.
+    if (sheetBox) sheetBox.down();
     refresh();
     var back = openedBy;
     openedBy = null;
@@ -715,6 +735,14 @@
     if (!sheet.field) {
       sheet = null;
       return;
+    }
+
+    /* The one lightbox the site shares, with the sheet as the thing it leaves in front of the
+       veil (issue #70). Guarded rather than assumed: a half-rewritten js/site.js must not be able
+       to take the persona down with it, and a sheet with no veil behind it is still a sheet. */
+    var shell = window.interestingSite;
+    if (shell && typeof shell.lightbox === 'function') {
+      sheetBox = shell.lightbox({ name: 'persona', keep: host, onPress: closeSheet });
     }
 
     if (sheet.close) sheet.close.addEventListener('click', closeSheet);

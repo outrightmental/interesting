@@ -12,10 +12,13 @@
 //   on rollover    the site's name fades in beside the mark, quickly and tightly, and fades out
 //                  again. Focus does the same thing, so a keyboard sees what a pointer sees.
 //   on press       the page becomes a lightbox -- dimmed, blurred, its animation held, its
-//                  controls inert (js/site.js) -- and the options branch out from the logo as a
-//                  constellation of chips, each on a ray back to the mark. Every ray is drawn
-//                  beneath every chip, so a ray crossing the scatter passes behind the options in
-//                  its way rather than over their labels (issue #72).
+//                  controls inert -- and the options branch out from the logo as a constellation of
+//                  chips, each on a ray back to the mark. Every ray is drawn beneath every chip, so
+//                  a ray crossing the scatter passes behind the options in its way rather than over
+//                  their labels (issue #72). The lightbox itself is not this file's: it is the one
+//                  the whole site shares (_lightbox.scss, and window.interestingSite.lightbox in
+//                  js/site.js), the same one the persona sheet and the shared "are you sure?" modal
+//                  open through (issue #70).
 //
 // Two layouts, and the <details> element does the work of switching between them:
 //   with scripting the options are placed by js/site.js, which is the only thing that knows how
@@ -71,13 +74,19 @@
   position: fixed;
   top: var(--nav-inset);
   left: var(--nav-inset);
-  z-index: 50; // above the page, the persona and anything a fixed file has pinned over it
+  // Above the page, the persona and anything a fixed file has pinned over it -- and lifted over the
+  // shared veil as well, by the data-lightbox-front the lightbox names it with while it is open.
+  z-index: 50;
   max-width: calc(100% - 2 * var(--nav-inset));
 }
 
 .sparknav-logo {
   position: relative;
-  z-index: 4; // above the veil, and above the rays and chips the constellation branches out
+  // Above everything else inside the mark -- the state interface's box at 2, and every ray at 2
+  // and every chip at 3 (issue #72) -- so a star placed close in never lands on the mark and the
+  // one control that closes the whole thing stays pressable. The shared veil is outside the mark
+  // and sorted against the mark as a whole, not in here (_lightbox.scss).
+  z-index: 4;
   display: inline-flex;
   align-items: center;
   min-height: 44px;
@@ -137,41 +146,6 @@
   opacity: 1;
 }
 
-// ---- the lightbox ------------------------------------------------------------------------
-
-// Everything behind the constellation at once: dimmed, blurred, and taking the press that closes
-// it again. js/site.js holds the page's frame loop and makes it inert while this is up.
-.sparknav-veil {
-  position: fixed;
-  inset: 0;
-  z-index: 1;
-  background: color-mix(in oklab, var(--md-sys-color-surface) 62%, transparent);
-  backdrop-filter: blur(9px) saturate(70%);
-  -webkit-backdrop-filter: blur(9px) saturate(70%);
-  animation: sparknav-veil var(--md-sys-motion-duration-medium) var(--md-sys-motion-easing-standard) both;
-}
-
-@keyframes sparknav-veil {
-  from {
-    opacity: 0;
-  }
-
-  to {
-    opacity: 1;
-  }
-}
-
-// A page's own animation stops while the constellation is open, so there is nothing moving behind
-// it. The frame loops a world's canvas runs are held by js/site.js, which CSS cannot reach.
-html[data-lightbox] #main-content,
-html[data-lightbox] #main-content *,
-html[data-lightbox] .page,
-html[data-lightbox] .page *,
-html[data-lightbox] .persona,
-html[data-lightbox] .persona * {
-  animation-play-state: paused;
-}
-
 // ---- the state interface, hosted in the lightbox -----------------------------------------
 
 // "state" is the one option that is a thing to do rather than a place to go, so it gets the
@@ -179,15 +153,17 @@ html[data-lightbox] .persona * {
 // the panel js/state.js owns into this box. The veil behind it never comes down, which is what
 // makes the swap continuous -- nothing here raises a lightbox of its own.
 //
-// The box is the whole viewport, over the veil and under the logo, and it centres whatever is in
-// it. The panel brings its own size and its own paint with it, from the fixed file: a stylesheet
-// an hourly run owns may frame the state interface but can never make it unreadable. The top
-// padding is what keeps the panel clear of the logo on a small screen, and the overflow is for a
-// viewport too short for it, where the box scrolls rather than cropping it.
+// The box is the whole viewport and it centres whatever is in it. It is a layer inside the mark
+// itself, which the shared lightbox lifts over the veil whole (_lightbox.scss), so this only has
+// to sort itself against the constellation it replaces and the logo above them both. The panel
+// brings its own size and its own paint with it, from the fixed file: a stylesheet an hourly run
+// owns may frame the state interface but can never make it unreadable. The top padding is what
+// keeps the panel clear of the logo on a small screen, and the overflow is for a viewport too
+// short for it, where the box scrolls rather than cropping it.
 .sparknav-modal {
   position: fixed;
   inset: 0;
-  z-index: 2; // over the veil, under the logo, which stays pressable and closes the whole thing
+  z-index: 2; // under the logo, which stays pressable and closes the whole thing
   display: grid;
   place-items: center;
   padding: calc(var(--nav-inset) + 3.5rem) 1rem 1.5rem;
@@ -355,13 +331,13 @@ html[data-nav='live'] {
 
   // The layers of the constellation, and the one rule that decides them: a ray is never drawn
   // over an option (issue #72). The sky is no longer positioned, so each part below takes its
-  // layer from .sparknav itself -- the veil at 1, every ray at 2, every chip at 3, and the logo
-  // above all of it -- and an option deliberately sets no z-index of its own. One that did would
-  // make a stacking context of itself and carry its own ray up inside it, so the last option in
-  // the order would paint its ray across the first option's chip, which is what the far column's
-  // rays used to do to the near column's chips. Layering the parts rather than the options puts
-  // every ray below every chip however the scatter is arranged: one column or two, interleaved
-  // or not, branching or at rest.
+  // layer from .sparknav itself -- every ray at 2, every chip at 3, and the logo at 4 above all of
+  // it, the whole mark lifted over the shared veil together (_lightbox.scss) -- and an option
+  // deliberately sets no z-index of its own. One that did would make a stacking context of itself
+  // and carry its own ray up inside it, so the last option in the order would paint its ray across
+  // the first option's chip, which is what the far column's rays used to do to the near column's
+  // chips. Layering the parts rather than the options puts every ray below every chip however the
+  // scatter is arranged: one column or two, interleaved or not, branching or at rest.
   .sparknav-option {
     position: absolute;
     top: 0;
@@ -373,7 +349,7 @@ html[data-nav='live'] {
 
   .sparknav-node {
     position: absolute;
-    z-index: 3; // above every ray, and above the veil
+    z-index: 3; // above every ray, whatever the order the options happen to be in
     top: var(--y, 0);
     left: var(--x, 0);
   }
@@ -388,7 +364,7 @@ html[data-nav='live'] {
   .sparknav-ray {
     display: block;
     position: absolute;
-    z-index: 2; // above the veil, below every chip
+    z-index: 2; // below every chip, whatever the order the options happen to be in
     top: var(--my, 22px);
     left: var(--mx, 22px);
     width: var(--len, 0);
@@ -445,7 +421,6 @@ html[data-nav='live'] {
     transition: none;
   }
 
-  .sparknav-veil,
   .sparknav-modal,
   html[data-nav='live'] .is-branching .sparknav-node,
   html[data-nav='live'] .is-branching .sparknav-ray {
