@@ -12,6 +12,9 @@
                                                       "are you sure?" modal (see below)
       window.interestingSite.areYouSure(options)      that modal on its own, for a control at the
                                                       threshold rather than above it
+      window.interestingSite.lightbox(options)        the one lightbox everything that floats over
+                                                      the whole page opens through: the veil, the
+                                                      inert page, the held frame loop (see below)
       window.interestingSite.root                     '' on every page but the 404, where the
                                                       site's root has to be spelled out
       window.interestingSite.seedSky(), .holdsSky(), .skyKey
@@ -19,11 +22,11 @@
                                                       under the names pages used before it existed
 
   Pieces of the shell live here as well, because the shell is markup and Sass and needs a hand
-  with the things only a script can know: the main nav -- the sparkles logo, the lightbox it
-  opens, the constellation of options it branches out and the three pinned affordances that
-  constellation adopts, which is the long section at the bottom of this file -- and how full each
-  slider is (the M3 slider paints its active track in the primary colour up to the handle, which
-  CSS can only do when --range-pct says where the handle is).
+  with the things only a script can know: the main nav -- the sparkles logo, the constellation of
+  options it branches out and the three pinned affordances that constellation adopts, which is the
+  long section at the bottom of this file -- and how full each slider is (the M3 slider paints its
+  active track in the primary colour up to the handle, which CSS can only do when --range-pct says
+  where the handle is).
 
   Nothing in here keeps score, routes a visitor, or writes to the shared state document except
   the sky a visitor asks it to seed, which it does through the persona: the shell's job is to be
@@ -109,8 +112,61 @@
   something else in its place, which asks the same question without wearing the warning.
 
   The modal is one <dialog>, built the first time something asks and reused after that, so the
-  browser supplies the backdrop, the focus trap and Escape. The focus starts on cancel and comes
-  back to the control that opened it however the question is answered.
+  browser supplies the focus trap and Escape. The focus starts on cancel and comes back to the
+  control that opened it however the question is answered, and the page behind it goes under the
+  shared lightbox below.
+
+  ---------------------------------------------------------------------------------------------
+  One lightbox, shared
+
+  Everything on this site that floats over the whole page opens the same way, because it opens
+  through the same component: the constellation the sparkles logo branches out, the persona sheet
+  the avatar opens (js/persona.js), and the "are you sure?" modal above. Issue #70 asked for that
+  in as many words -- the logo's lightbox was the effect the site wanted everywhere, and the
+  persona's, a bare <dialog> with a flat backdrop, was weak -- so the nav's own veil, inert page
+  and held frame loop were lifted out of the nav and made the one lightbox, here, where every
+  other shared component of the shell already lives.
+
+      var box = window.interestingSite.lightbox({
+        name: 'persona',          // what <html data-lightbox> says while this one is up
+        keep: sheetElement,       // the one child of <body> the veil leaves in front of it
+        onPress: closeSheet       // a press on the veil, which is a way of saying "not this"
+      });
+      box.up();                   // the veil rises
+      box.up('state');            // the same veil, now saying it holds something else
+      box.down();                 // and the page comes back exactly as it was
+
+  Raising one does four things, and a caller gets all four or none:
+    the veil    one div the shell writes (#lightbox-veil), hidden until something raises it and
+                painted by _sass/_lightbox.scss: the page dimmed, blurred, desaturated and faded
+                under. A press on it goes to whatever is on top, because the thing in front of
+                the veil is the only thing that knows how to put itself away.
+    aside       every other child of <body> is made inert and hidden from a screen reader, so
+                nothing behind the veil can be reached by pointer or by keyboard. Anything already
+                inert or already hidden for its own reasons is left exactly as it is -- the consent
+                library hides its own markup that way -- and only what this put aside is brought
+                back. Each one is marked data-lightbox-aside, which is also what the stylesheet
+                pauses the CSS animations of; the one left in front is marked
+                data-lightbox-front, which is what lifts it over the veil.
+    hold        the page's motion. Every animated page here runs its own frame loop -- a world's
+                canvas, the feed's cards -- and CSS can pause an animation but not a loop, so the
+                loop is held: a frame asked for while a lightbox is up is kept and run when the
+                last one comes down. Nothing is dropped and no page has to know.
+    the state   <html data-lightbox='<name>'>, for the stylesheet. Written only when it changes,
+                so a caller that renames its box while it is up -- the nav, handing the whole
+                lightbox on to the state interface (issue #66) -- never clears it in between.
+
+  They nest, because one of them opens over another: "seed a small sky" in the persona sheet asks
+  the shared question, and the question has to leave the sheet in front of the veil and hand it
+  back when it is answered. So the boxes are a stack and the top of it is what the page is
+  arranged around -- up() and down() are idempotent, and up() on a box already up re-applies the
+  arrangement, which is how something drawn while a lightbox is up gets put behind it, and how one
+  caller renames its own box rather than dropping it and raising another.
+
+  A native <dialog> opened with showModal() keeps its own backdrop press, focus trap and Escape:
+  those are the browser's and better than anything this could write. What it does not have is the
+  veil, and that is the whole of what it borrows. The nav is not a dialog, so it brings its own
+  Escape and its own focus trap (see the bottom of this file).
 */
 (function () {
   'use strict';
@@ -282,6 +338,212 @@
     return powered;
   }
 
+  /* ---- the lightbox ------------------------------------------------------------------------ */
+  /* One veil, one component, three things that open through it -- see "One lightbox, shared" in
+     the header comment and the README section "The lightbox". This used to be the nav's own, built
+     by hand when the sparkles logo was pressed; issue #70 asked for the same effect everywhere, so
+     it lives up here with the rest of the shell's shared components and the nav is one of its three
+     callers. */
+
+  var VEIL_ID = 'lightbox-veil';
+  var ASIDE = 'data-lightbox-aside'; // what this put aside, and so what it may give back
+  var FRONT = 'data-lightbox-front'; // the one child of <body> the veil leaves in front of it
+
+  var veil = null; // the one veil, found the first time something is raised
+  var raised = []; // the lightboxes up now, in the order they went up: the last of them is on top
+  var watchingTheBody = false;
+
+  /* ---- the page's frame loop, held while a lightbox is up ---------------------------------- */
+
+  var frameHeld = false;
+  var frameQueue = []; // [{ id, fn }], the frames asked for while a lightbox is up
+  var frameId = 0; // counts down, so a held handle can never be mistaken for a real one
+  var nativeFrame = window.requestAnimationFrame;
+  var nativeCancel = window.cancelAnimationFrame;
+  // A safety valve: if something asks for frames in a way holding cannot survive, let go of them
+  // all rather than grow without end.
+  var MAX_HELD_FRAMES = 240;
+
+  function flushFrames() {
+    var waiting = frameQueue;
+    frameQueue = [];
+    var now = window.performance && window.performance.now
+      ? window.performance.now() : new Date().getTime();
+    for (var i = 0; i < waiting.length; i++) {
+      try {
+        waiting[i].fn(now);
+      } catch (e) {
+        /* a page's own loop, and not this one's to repair */
+      }
+    }
+  }
+
+  function hold(on) {
+    if (!nativeFrame || on === frameHeld) return;
+    frameHeld = on;
+    if (!on) flushFrames();
+  }
+
+  // Installed the first time anything is raised, so a visitor who never opens one runs on untouched
+  // globals, and a pass-through whenever nothing is being held.
+  function installHold() {
+    if (!nativeFrame || window.requestAnimationFrame !== nativeFrame) return;
+    window.requestAnimationFrame = function (fn) {
+      if (!frameHeld || typeof fn !== 'function') return nativeFrame.call(window, fn);
+      if (frameQueue.length >= MAX_HELD_FRAMES) {
+        hold(false);
+        return nativeFrame.call(window, fn);
+      }
+      frameId -= 1;
+      frameQueue.push({ id: frameId, fn: fn });
+      return frameId;
+    };
+    window.cancelAnimationFrame = function (id) {
+      if (id < 0) {
+        for (var i = 0; i < frameQueue.length; i++) {
+          if (frameQueue[i].id === id) {
+            frameQueue.splice(i, 1);
+            return;
+          }
+        }
+        return;
+      }
+      if (nativeCancel) nativeCancel.call(window, id);
+    };
+  }
+
+  /* ---- the page, put aside ----------------------------------------------------------------- */
+
+  /* Everything but what is open, put aside while it is: inert, so no pointer and no Tab reaches
+     it, and hidden from a screen reader, so what is in front of the veil is all there is to read.
+     Anything already inert or already hidden for its own reasons is left exactly as it is -- the
+     consent library hides its own markup that way -- and only what this put aside is brought
+     back. */
+  function giveBack(node) {
+    if (!node.hasAttribute(ASIDE)) return;
+    node.removeAttribute('inert');
+    node.removeAttribute('aria-hidden');
+    node.removeAttribute(ASIDE);
+  }
+
+  function putBehind(node) {
+    if (node.hasAttribute('inert') || node.hasAttribute('aria-hidden')) return;
+    node.setAttribute('inert', '');
+    node.setAttribute('aria-hidden', 'true');
+    node.setAttribute(ASIDE, '');
+  }
+
+  function aside(keep) {
+    var kids = document.body ? document.body.children : [];
+    for (var i = 0; i < kids.length; i++) {
+      var node = kids[i];
+      if (node === veil) continue; // the veil is the one thing in front that is not what is open
+      if (keep && node === keep) {
+        // What is open: live, and lifted over the veil. It may have been put behind by the
+        // lightbox underneath this one, in which case it is given back first.
+        giveBack(node);
+        node.setAttribute(FRONT, '');
+      } else {
+        node.removeAttribute(FRONT);
+        if (keep) putBehind(node);
+        else giveBack(node);
+      }
+    }
+  }
+
+  /* The child of <body> an element sits in, which is the granularity the page is put aside at:
+     a caller names the thing it opened and this finds the piece of the body that holds it. */
+  function bodyChild(node) {
+    var body = document.body;
+    if (!body) return null;
+    while (node && node.parentNode && node.parentNode !== body) node = node.parentNode;
+    return node && node.parentNode === body ? node : null;
+  }
+
+  /* ---- up and down ------------------------------------------------------------------------- */
+
+  /* The page, arranged around the top of the stack: one lightbox, one over another, or none. Every
+     change goes through here rather than through the callers, so a box that opens over another and
+     closes again leaves the one underneath exactly as it was. */
+  function arrange() {
+    var top = raised.length ? raised[raised.length - 1] : null;
+    if (!veil) veil = document.getElementById(VEIL_ID);
+    if (top) {
+      installHold();
+      aside(top.keep);
+      hold(true);
+      if (veil) veil.hidden = false;
+      // Written only when it says something new, never cleared and set again: a box renamed while
+      // it is up (the state interface, below) leaves every rule keyed on a lightbox being up
+      // matched throughout, which is what "zero jitter" asks for (issue #66).
+      if (html.getAttribute('data-lightbox') !== top.name) {
+        html.setAttribute('data-lightbox', top.name);
+      }
+    } else {
+      html.removeAttribute('data-lightbox');
+      if (veil) veil.hidden = true;
+      hold(false);
+      aside(null);
+    }
+  }
+
+  /* Something drawn while a lightbox is up belongs behind it. Each of the three affordances the
+     constellation adopts is drawn by a deferred script, and the consent banner's only once the
+     library beside it has loaded, so a child of <body> may arrive at any moment -- including while
+     the persona sheet is open, which is why this is the lightbox's business and not the nav's. */
+  function watchTheBody() {
+    if (watchingTheBody || !window.MutationObserver || !document.body) return;
+    watchingTheBody = true;
+    new MutationObserver(function () {
+      if (raised.length) arrange();
+    }).observe(document.body, { childList: true });
+  }
+
+  function lightbox(options) {
+    var opts = options || {};
+    var named = String(opts.name || 'lightbox'); // what it is called unless a caller says otherwise
+    var box = {
+      name: named,
+      keep: null,
+      onPress: typeof opts.onPress === 'function' ? opts.onPress : null
+    };
+
+    // up(name) renames the box as it raises it, which is how one caller hands the whole lightbox
+    // on to something else of its own without dropping it: the nav raises 'nav' and then 'state'
+    // over the same veil (issue #66). Raised with no name again it goes back to the one it was
+    // built with, so the next press starts where the last one did.
+    function up(name) {
+      box.name = name ? String(name) : named;
+      // Resolved on every press rather than once: the sheet a caller names may be built, moved or
+      // replaced long after it asked for its lightbox.
+      box.keep = bodyChild(opts.keep || null);
+      if (raised.indexOf(box) === -1) raised.push(box);
+      watchTheBody();
+      arrange();
+    }
+
+    function down() {
+      var at = raised.indexOf(box);
+      if (at !== -1) raised.splice(at, 1);
+      arrange();
+    }
+
+    return { up: up, down: down, name: named };
+  }
+
+  /* A press on the veil is a press on the page behind it, which is a way of saying "not this". It
+     goes to whatever is on top: the thing in front of the veil is the only thing that knows how to
+     put itself away. Watched once, at the start, because the veil is the shell's own markup. */
+  function watchTheVeil() {
+    veil = document.getElementById(VEIL_ID);
+    if (!veil) return;
+    veil.hidden = true; // whatever the markup said: nothing is open yet
+    veil.addEventListener('click', function () {
+      var top = raised.length ? raised[raised.length - 1] : null;
+      if (top && top.onPress) top.onPress();
+    });
+  }
+
   /* ---- caution before a destructive action ------------------------------------------------- */
   /* One warning treatment, one modal, one question -- see the header comment and the README
      section "Destructive-caution axiom". No page writes its own confirmation, and nothing on the
@@ -290,6 +552,7 @@
 
   var sure = null; // the one modal, built the first time something asks and reused after that
   var asking = null; // the question now on screen: who asked it, and what to do with the answer
+  var sureBox = null; // the lightbox it is asked in, the same one the logo and the sheet open
 
   function buildAreYouSure() {
     var host = document.createElement('dialog');
@@ -321,7 +584,9 @@
     host.addEventListener('close', function () { settle(false); });
     // A press on the backdrop, which is what a dialog owes anyone who opened it by mistake. The
     // dialog element is the target for the backdrop as well as its own padding, so the press has
-    // to land outside the box itself.
+    // to land outside the box itself. (The shared veil is behind the top layer, so while the
+    // browser has showModal() it never sees this press; onPress below is for the browser that
+    // has not, where the box is an ordinary element over the veil.)
     host.addEventListener('click', function (ev) {
       if (ev.target !== host) return;
       var box = host.getBoundingClientRect();
@@ -343,6 +608,11 @@
     if (sure.host.open && typeof sure.host.close === 'function') sure.host.close();
     else sure.host.removeAttribute('open');
     sure.host.classList.remove('are-you-sure-fallback');
+    // The lightbox comes down before the focus moves and before the answer is acted on: the control
+    // the focus goes back to was behind the veil and inert a moment ago, and what onConfirm does
+    // next has to find a live page -- the same reason the nav's close() does not wait for a task of
+    // its own.
+    if (sureBox) sureBox.down();
     var back = answered.opener;
     if (back && typeof back.focus === 'function') back.focus();
     if (yes) answered.onConfirm();
@@ -355,7 +625,14 @@
     var onCancel = typeof opts.onCancel === 'function' ? opts.onCancel : function () {};
     var what = String(opts.what || '').trim() || 'throw this away';
     if (asking) settle(false); // one question at a time, and an unanswered one means no
-    if (!sure) sure = buildAreYouSure();
+    if (!sure) {
+      sure = buildAreYouSure();
+      sureBox = lightbox({
+        name: 'are-you-sure',
+        keep: sure.host,
+        onPress: function () { settle(false); }
+      });
+    }
     sure.title.textContent = 'are you sure you want to ' + what + '?';
     sure.note.textContent = opts.detail || '';
     sure.note.hidden = !opts.detail;
@@ -365,14 +642,16 @@
       onCancel: onCancel,
       opener: opts.opener || document.activeElement
     };
-    // The nav's lightbox may have put this dialog aside with the rest of the body -- it is a child
-    // of it, built the first time anything asks, which may well be before the menu was ever
-    // opened -- and the state interface asks from inside that lightbox now (issue #66). A modal
-    // dialog inerts the page by itself, so the marks come off here rather than being worked
-    // around there: a question nobody can answer is worse than no question. aside() gives back
-    // only what it took, so nothing of its bookkeeping is disturbed by this.
-    sure.host.removeAttribute('inert');
-    sure.host.removeAttribute('aria-hidden');
+    // The page goes under the veil first, so the question is asked over a page that is already
+    // dimmed, blurred, stilled and out of reach. Asked from inside the persona sheet, this is the
+    // second lightbox up: the stack leaves the sheet in front of the veil until it is answered.
+    // Raising it is also what wakes this dialog up: it is a child of the body, built the first
+    // time anything asks, so a lightbox already up will have put it aside with the rest of the
+    // page long before -- and the state interface asks from inside the logo's lightbox now
+    // (issue #66). Naming it as the one thing to leave in front is what takes those marks off
+    // again, here, where every other caller's would be taken off too. A question nobody can
+    // answer is worse than no question.
+    if (sureBox) sureBox.up();
     if (typeof sure.host.showModal === 'function') {
       sure.host.showModal();
     } else {
@@ -463,7 +742,7 @@
   /* The main nav: the sparkles logo in the upper left, and the constellation it opens.
 
      The markup is in _includes/layout.njk and the look is in _sass/_nav.scss. What is left for a
-     script is the five things neither of those can do:
+     script is the four things neither of those can do:
 
        place()   where the stars go. Only something that can count the options knows that, and the
                  set changes with the visitor's state, so the geometry is worked out here and
@@ -472,14 +751,12 @@
                  the left edge in even steps, each pushed out sideways by its own amount so the
                  set reads as a scatter rather than a list, and the second orbit takes a column of
                  its own as soon as there is room for one.
-       aside()   the lightbox. The veil dims and blurs everything behind the constellation and
-                 takes the press that closes it again (that much is markup and Sass); here every
-                 other child of the body is made inert and hidden from a screen reader, so nothing
-                 behind the veil can be reached by pointer or by keyboard while it is up.
-       hold()    the page's motion. Every animated page on this site runs its own frame loop -- a
-                 world's canvas, the feed's cards -- and CSS can pause an animation but not a
-                 loop, so the loop is held: a frame asked for while the constellation is open is
-                 kept and run when it closes. Nothing is dropped and no page has to know.
+       navBox    the lightbox, which is no longer the nav's own: the veil, the inert page and the
+                 held frame loop are the shared component above, and the nav is one of its three
+                 callers (issue #70). All this section does with it is raise it on every press,
+                 rename it where it stands when the state interface takes it over, and take it
+                 down again, naming the constellation as the one thing to leave in front of the
+                 veil.
        shape()   the options that come and go. The world a reading opens onto is only there once
                  something has been read, and "change this site", "cookies" and "state" are only
                  there while the files that own them have drawn their own controls -- which this
@@ -495,7 +772,8 @@
                  veil that is already up, and closing the panel closes the lightbox with it and
                  gives the visitor back the page. Nothing the lightbox is made of -- the veil, the
                  held frame loop, the inert page, <html data-lightbox> -- is torn down and raised
-                 again in between, which is what "zero jitter" asks for.
+                 again in between, which is what "zero jitter" asks for: the one box is renamed
+                 rather than dropped.
 
      Pressing the logo never navigates. The threshold is the home icon in the near orbit, which is
      what issue #54 asks for, and it is also what lets the logo be a <details> summary -- so the
@@ -526,89 +804,7 @@
   var CADRE_WAIT_MS = 15000; // how long to watch for the pinned controls before giving up
 
   var nav = null;
-
-  /* ---- the page's frame loop, held while the lightbox is up -------------------------------- */
-
-  var frameHeld = false;
-  var frameQueue = []; // [{ id, fn }], the frames asked for while the constellation is open
-  var frameId = 0; // counts down, so a held handle can never be mistaken for a real one
-  var nativeFrame = window.requestAnimationFrame;
-  var nativeCancel = window.cancelAnimationFrame;
-  // A safety valve: if something asks for frames in a way holding cannot survive, let go of them
-  // all rather than grow without end.
-  var MAX_HELD_FRAMES = 240;
-
-  function flushFrames() {
-    var waiting = frameQueue;
-    frameQueue = [];
-    var now = window.performance && window.performance.now
-      ? window.performance.now() : new Date().getTime();
-    for (var i = 0; i < waiting.length; i++) {
-      try {
-        waiting[i].fn(now);
-      } catch (e) {
-        /* a page's own loop, and not this one's to repair */
-      }
-    }
-  }
-
-  function hold(on) {
-    if (!nativeFrame || on === frameHeld) return;
-    frameHeld = on;
-    if (!on) flushFrames();
-  }
-
-  // Installed on the first press of the logo, so a visitor who never opens it runs on untouched
-  // globals, and a pass-through whenever nothing is being held.
-  function installHold() {
-    if (!nativeFrame || window.requestAnimationFrame !== nativeFrame) return;
-    window.requestAnimationFrame = function (fn) {
-      if (!frameHeld || typeof fn !== 'function') return nativeFrame.call(window, fn);
-      if (frameQueue.length >= MAX_HELD_FRAMES) {
-        hold(false);
-        return nativeFrame.call(window, fn);
-      }
-      frameId -= 1;
-      frameQueue.push({ id: frameId, fn: fn });
-      return frameId;
-    };
-    window.cancelAnimationFrame = function (id) {
-      if (id < 0) {
-        for (var i = 0; i < frameQueue.length; i++) {
-          if (frameQueue[i].id === id) {
-            frameQueue.splice(i, 1);
-            return;
-          }
-        }
-        return;
-      }
-      if (nativeCancel) nativeCancel.call(window, id);
-    };
-  }
-
-  /* ---- the lightbox ----------------------------------------------------------------------- */
-
-  /* Everything but the constellation, put aside while it is open: inert, so no pointer and no
-     Tab reaches it, and hidden from a screen reader, so the menu is all there is to read. Anything
-     already inert or already hidden for its own reasons is left exactly as it is -- the consent
-     library hides its own markup that way -- and only what this put aside is brought back. */
-  function aside(on) {
-    var kids = document.body ? document.body.children : [];
-    for (var i = 0; i < kids.length; i++) {
-      var node = kids[i];
-      if (node === nav.host) continue;
-      if (on) {
-        if (node.hasAttribute('inert') || node.hasAttribute('aria-hidden')) continue;
-        node.setAttribute('inert', '');
-        node.setAttribute('aria-hidden', 'true');
-        node.setAttribute('data-nav-aside', '');
-      } else if (node.hasAttribute('data-nav-aside')) {
-        node.removeAttribute('inert');
-        node.removeAttribute('aria-hidden');
-        node.removeAttribute('data-nav-aside');
-      }
-    }
-  }
+  var navBox = null; // the shared lightbox, raised on every press of the logo
 
   /* ---- where the stars go ----------------------------------------------------------------- */
 
@@ -793,17 +989,16 @@
 
   /* ---- opening and closing ---------------------------------------------------------------- */
 
-  /* The lightbox, up and down. Idempotent on purpose, because two things call it: the <details>
-     element's own toggle event, and close() below -- a browser fires `toggle` in a task of its
-     own, which is a moment too late for anything that has to happen before the next line runs. */
-  function lightbox(on) {
+  /* The constellation, out and away. Idempotent on purpose, because two things call it: the
+     <details> element's own toggle event, and close() below -- a browser fires `toggle` in a task
+     of its own, which is a moment too late for anything that has to happen before the next line
+     runs. The lightbox is the shared one, so the veil, the inert page, the paused animations and
+     the held frame loop are one call rather than four. */
+  function branch(on) {
     nav.logo.setAttribute('aria-expanded', on ? 'true' : 'false');
     if (on) {
-      installHold();
       shape();
-      aside(true);
-      hold(true);
-      html.setAttribute('data-lightbox', 'nav');
+      navBox.up();
       // The branch starts over on every press: a browser that keeps a closed <details> rendered
       // would otherwise have run the animation once and left it there.
       nav.sky.classList.remove('is-branching');
@@ -811,11 +1006,9 @@
       nav.sky.classList.add('is-branching');
     } else {
       // Whatever the lightbox was holding goes with it: the state interface back to its corner,
-      // the constellation back on screen for the next press.
+      // the constellation back on screen for the next press, and then the one box itself.
       stateModal(false);
-      html.removeAttribute('data-lightbox');
-      hold(false);
-      aside(false);
+      navBox.down();
       nav.sky.classList.remove('is-branching');
     }
   }
@@ -825,7 +1018,7 @@
      on the next line has to find the page live, not inert. */
   function close(focusLogo) {
     if (nav.host.open) nav.host.open = false;
-    lightbox(false);
+    branch(false);
     if (focusLogo && typeof nav.logo.focus === 'function') nav.logo.focus();
   }
 
@@ -864,9 +1057,10 @@
         return false;
       }
       stateHosted = release;
-      // The attribute is set, never cleared and set again: every rule keyed on the lightbox being
-      // up stays matched through the swap, so nothing behind the veil so much as blinks.
-      html.setAttribute('data-lightbox', 'state');
+      // The same box, renamed where it stands: <html data-lightbox> goes from 'nav' straight to
+      // 'state' without ever being removed, so every rule keyed on the lightbox being up stays
+      // matched through the swap and nothing behind the veil so much as blinks.
+      navBox.up('state');
       nav.sky.hidden = true;
       nav.sky.classList.remove('is-branching');
       whenThePanelCloses(menu.panel, function () {
@@ -935,7 +1129,6 @@
     nav = {
       host: host,
       logo: document.getElementById('sparknav-logo'),
-      veil: document.getElementById('sparknav-veil'),
       sky: host.querySelector('.sparknav-sky'),
       orbits: host.querySelectorAll('.sparknav-orbit'),
       reading: document.getElementById('sparknav-reading'),
@@ -958,15 +1151,20 @@
       return;
     }
 
+    // The one lightbox the site shares, with the constellation as the thing it leaves in front of
+    // the veil. The persona sheet and the shared question open through the same component, which is
+    // what makes the three of them the same effect (issue #70).
+    navBox = lightbox({
+      name: 'nav',
+      keep: nav.host,
+      // A press on the veil is a press on the page behind it, which is a way of saying "not this".
+      onPress: function () { close(true); }
+    });
+
     nav.host.addEventListener('toggle', function () {
-      lightbox(nav.host.open);
+      branch(nav.host.open);
     });
     nav.logo.setAttribute('aria-expanded', nav.host.open ? 'true' : 'false');
-
-    // A press on the veil is a press on the page behind it, which is a way of saying "not this".
-    nav.veil.addEventListener('click', function () {
-      close(true);
-    });
 
     // A destination closes the menu on its way out, so a link to the page the visitor is already
     // on does not leave the constellation hanging open over it.
@@ -1053,8 +1251,8 @@
           && document.querySelector(CORNER_STATE) === nav.stateCorner
           && document.querySelector(CORNER_STEER) === nav.steerCorner) return;
       shape();
-      // Something drawn while the lightbox is up belongs behind it.
-      if (nav.host.open) aside(true);
+      // What to do about one of them drawn while a lightbox is up -- put it behind the veil -- is
+      // the lightbox's own business, and watchTheBody above is where it is done.
       if (nav.cookiesCorner && nav.stateCorner && nav.steerCorner) watch.disconnect();
     });
     watch.observe(document.body, { childList: true, subtree: true });
@@ -1067,6 +1265,7 @@
     unlock: unlock,
     destructive: destructive,
     areYouSure: areYouSure,
+    lightbox: lightbox,
     seedSky: seedSky,
     holdsSky: holdsSky,
     root: root,
@@ -1075,6 +1274,7 @@
 
   function start() {
     retireOldKeys();
+    watchTheVeil();
     buildNav();
     watchRanges();
   }

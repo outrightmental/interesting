@@ -4294,7 +4294,7 @@ class NavTest(unittest.TestCase):
     # The ids the three pieces agree on: the shell writes them, js/site.js finds them, and the
     # harness builds the same tree. A rename that touched only one of the three would leave the
     # nav quietly inert, which is exactly what this catches.
-    IDS = ["sparknav", "sparknav-logo", "sparknav-veil", "sparknav-modal",
+    IDS = ["sparknav", "sparknav-logo", "lightbox-veil", "sparknav-modal",
            "sparknav-reading", "sparknav-reading-go", "sparknav-reading-label",
            "sparknav-participate", "sparknav-participate-open",
            "sparknav-cookies", "sparknav-cookies-open", "sparknav-state", "sparknav-state-open",
@@ -4308,7 +4308,7 @@ class NavTest(unittest.TestCase):
     FLOATS = {
         ".skip-link": "off the top of the screen until a keyboard focuses it",
         ".sparknav": "the sparkles logo, upper left",
-        ".sparknav-veil": "the lightbox, only while the constellation is open",
+        ".lightbox-veil": "the one shared lightbox's veil, only while something is open",
         ".sparknav-modal": "the middle of the lightbox, only while it holds the state interface",
         ".persona": "the persona, upper right",
         ".persona-sheet-fallback[open]": "the persona's sheet, only while it is open",
@@ -4424,7 +4424,7 @@ class NavTest(unittest.TestCase):
         # The title is clipped to nothing and faded out, never display:none, so the logo keeps its
         # accessible name whether or not a pointer is over it.
         css = self.source["_sass/_nav.scss"]
-        fade = css[css.index(".sparknav-name {"):css.index("// ---- the lightbox")]
+        fade = css[css.index(".sparknav-name {"):css.index("// ---- the state interface")]
         self.assertIn("max-width: 0", fade)
         self.assertIn("opacity: 0", fade)
         self.assertNotIn("display: none", fade)
@@ -4504,9 +4504,13 @@ class NavTest(unittest.TestCase):
         css = self.source["_sass/_nav.scss"]
         self.assertIn("prefers-reduced-motion: reduce", css)
         calm = css[css.index("prefers-reduced-motion: reduce"):]
-        for still in [".sparknav-name", ".sparknav-veil", ".sparknav-node"]:
+        for still in [".sparknav-name", ".sparknav-node"]:
             with self.subTest(still=still):
                 self.assertIn(still, calm)
+        # The veil's own fade answers for itself, where the veil now lives (see LightboxTest).
+        veil = self.source["_sass/_lightbox.scss"]
+        self.assertIn("prefers-reduced-motion: reduce", veil)
+        self.assertIn(".lightbox-veil", veil[veil.index("prefers-reduced-motion: reduce"):])
         # And the tap target every chip carries, which no layout may shrink below.
         self.assertGreaterEqual(len(re.findall(r"min-height: 44px", css)), 2)
 
@@ -4545,13 +4549,19 @@ class NavTest(unittest.TestCase):
         self.assertIn("present(host)", harness, "the harness has to stand in for it")
 
     def test_the_lightbox_dims_blurs_and_stills_the_page_behind_it(self):
-        css = self.source["_sass/_nav.scss"]
-        veil = css[css.index(".sparknav-veil {"):css.index("@keyframes sparknav-veil")]
+        # Read off _lightbox.scss rather than _nav.scss: the veil the logo raises is the one the
+        # whole site shares now (issue #70), and the nav holds no paint of its own for it.
+        css = self.source["_sass/_lightbox.scss"]
+        veil = css[css.index(".lightbox-veil {"):css.index("@keyframes lightbox-veil")]
         self.assertIn("position: fixed", veil)
         self.assertIn("inset: 0", veil)
         self.assertIn("backdrop-filter: blur(", veil)
         self.assertRegex(veil, r"background: color-mix\(")
         self.assertIn("animation-play-state: paused", css)
+        # And the nav's own veil is gone, markup, paint and keyframes alike: there is one.
+        for rel, content in sorted(self.source.items()):
+            with self.subTest(rel=rel):
+                self.assertNotIn("sparknav-veil", content)
 
     # ---- what the logo does when it is pressed -----------------------------------------------
 
@@ -4713,8 +4723,12 @@ class NavTest(unittest.TestCase):
         self.assertIsNone(seen["question"]["ariaHidden"])
         self.assertGreaterEqual(seen["question"]["focusedCancel"], 1,
                                 "the focus starts on cancel, as it does everywhere")
-        # And the interface that asked it is untouched behind the question.
-        self.assertEqual(seen["stillUp"]["lightbox"], "state")
+        # And the interface that asked it is untouched behind the question: the question is the
+        # second lightbox up over the same veil, which never drops, so the panel is still hosted
+        # where it was and <html data-lightbox> names the box on top rather than going empty.
+        self.assertEqual(seen["stillUp"]["lightbox"], "are-you-sure")
+        self.assertTrue(seen["stillUp"]["veil"], "over the same veil, which never came down")
+        self.assertEqual(seen["stillUp"]["panelHost"], "sparknav-modal")
         self.assertFalse(seen["stillUp"]["panelHidden"])
 
     def test_a_keyboard_reaches_all_of_the_state_interface_and_stays_inside_it(self):
@@ -4774,6 +4788,7 @@ class NavTest(unittest.TestCase):
         seen = self.seen()["whenItOpens"]
         self.assertEqual(seen["open"]["lightbox"], "nav")
         self.assertEqual(seen["open"]["expanded"], "true")
+        self.assertTrue(seen["open"]["veil"], "the shared veil is what is raised")
         self.assertTrue(seen["open"]["branching"], "the constellation branches out on every press")
         aside = seen["open"]["aside"]
         # Everything behind the veil: inert, so no pointer and no Tab reaches it, and hidden from a
@@ -4784,6 +4799,8 @@ class NavTest(unittest.TestCase):
                 self.assertTrue(aside[behind]["inert"], f"{behind} is still reachable")
                 self.assertEqual(aside[behind]["ariaHidden"], "true")
         self.assertFalse(aside["sparknav"]["inert"], "the menu is the one thing still live")
+        self.assertTrue(aside["sparknav"]["front"], "and the one thing left in front of the veil")
+        self.assertFalse(aside["lightbox-veil"]["inert"], "the veil itself takes the press")
         # What was already hidden for its own reasons is not this one's to mark or to give back.
         self.assertFalse(aside["cc-main"]["marked"])
         self.assertEqual(aside["cc-main"]["ariaHidden"], "true")
@@ -4796,11 +4813,13 @@ class NavTest(unittest.TestCase):
         self.assertEqual(seen["ranOnClose"], 1, "a held frame is run, not dropped")
         self.assertIsNone(seen["closed"]["lightbox"])
         self.assertEqual(seen["closed"]["expanded"], "false")
+        self.assertFalse(seen["closed"]["veil"], "and the veil comes down with it")
         self.assertFalse(seen["closed"]["branching"])
         for name, state in seen["closed"]["aside"].items():
             with self.subTest(element=name):
                 self.assertFalse(state["inert"])
                 self.assertFalse(state["marked"])
+                self.assertFalse(state["front"], "and nothing is left lifted over a veil that is down")
                 # The consent library's own markup stays hidden, because it was never this one's.
                 self.assertEqual(state["ariaHidden"], "true" if name == "cc-main" else None)
 
@@ -4809,8 +4828,11 @@ class NavTest(unittest.TestCase):
         self.assertFalse(seen["escape"]["open"])
         self.assertIsNone(seen["escape"]["lightbox"])
         self.assertEqual(seen["escape"]["focused"], 1, "the focus goes back to the logo")
+        self.assertTrue(seen["veil"]["raised"], "the press has to land on a veil that was up")
         self.assertFalse(seen["veil"]["open"])
         self.assertIsNone(seen["veil"]["lightbox"])
+        self.assertTrue(seen["veil"]["down"], "and the veil goes down with the constellation")
+        self.assertEqual(seen["veil"]["focused"], 1, "the focus goes back to the logo either way")
 
     def test_a_keyboard_stays_inside_the_constellation(self):
         seen = self.seen()["whenTabReachesTheEnd"]
@@ -4866,19 +4888,18 @@ class NavTest(unittest.TestCase):
                 self.assertTrue(crossed, "no ray crosses a chip here, so the layers prove nothing")
                 self.assertTrue([pair for pair in crossed if pair[0]["order"] > pair[1]["order"]],
                                 "no ray reaches an option drawn after the chip it crosses")
-        # The layers, read off the sheet a browser is served: the veil, then every ray, then every
-        # chip, then the logo the rays leave from.
+        # The layers, read off the sheet a browser is served: every ray, then every chip, then the
+        # logo the rays leave from. All of it inside the one layer the shared lightbox lifts the
+        # whole mark into, which is why the veil is not among them any more (see LightboxTest).
         sheet = Stylesheet(self.site["css/site.css"], 1440, 900)
         layers = {}
-        for part, selector in [("veil", ".sparknav-veil"),
-                               ("ray", "html[data-nav=live] .sparknav-ray"),
+        for part, selector in [("ray", "html[data-nav=live] .sparknav-ray"),
                                ("chip", "html[data-nav=live] .sparknav-node"),
                                ("logo", ".sparknav-logo")]:
             found = sheet.value(selector, "z-index")
             self.assertIsNotNone(found, f"{selector} declares no layer of its own")
             layers[part] = int(found)
-        self.assertLess(layers["veil"], layers["ray"], "a ray is above the lightbox's veil")
-        self.assertLess(layers["ray"], layers["chip"], "and below every chip, whatever the order")
+        self.assertLess(layers["ray"], layers["chip"], "a ray is below every chip, whatever the order")
         self.assertLess(layers["chip"], layers["logo"], "and the whole scatter is below the logo")
         # Which only holds while an option is not a stacking context of its own: one that was would
         # group its own ray with its own chip and carry the pair up over an earlier option again.
@@ -4916,6 +4937,300 @@ class NavTest(unittest.TestCase):
         self.assertIsNone(seen["lightbox"])
         self.assertEqual(seen["nav"], "live")
         self.assertGreaterEqual(seen["observers"], 1, "the rest of the shell still ran")
+
+
+class LightboxTest(unittest.TestCase):
+    """One lightbox, shared between the nav, the persona sheet and the confirmation (issue #70).
+
+    "the lightbox effect for the main nav (top left logo) is amazing!! the lightbox effect for the
+    persona should be identical; they should share a common lightbox component. the current persona
+    lightbox is weak." That was the whole of the note. The nav's veil, its inert page and its held
+    frame loop were built by hand inside the nav, and the persona sheet was a bare <dialog> with a
+    flat `::backdrop` and none of the rest.
+
+    The architectural decision the issue asked for -- "make a proper architectural decision about
+    where the shared component lives, then federate and document it" -- is
+    window.interestingSite.lightbox() in js/site.js, painted by _sass/_lightbox.scss, with one
+    #lightbox-veil in the shell. js/site.js is where every other shared component of the shell
+    already lives, every page already loads it, and it is already loaded after js/persona.js and
+    before anything builds, which is the one ordering constraint a new file would have had to
+    reproduce. The decision is written down in three places a reader will actually be standing in:
+    the header comment of js/site.js, the README section "The lightbox", and the prompt every run
+    of make_interesting.py is given.
+
+    Two halves, checked two ways, as with NavTest: what the shell and the stylesheets say is read
+    off the source and the built site, and what the three callers do is behaviour, so
+    lightbox_harness.mjs loads the real js/site.js and js/persona.js into one stub browser and
+    drives each of them.
+    """
+
+    # The ids the shell writes, the scripts find and the harness stands in for.
+    IDS = ["lightbox-veil", "sparknav", "persona-sheet", "persona-open", "persona-close"]
+    # What "identical" means, as four things a stub browser can watch: the same veil element up,
+    # every other child of <body> put behind it, the one thing open left in front, and the page's
+    # frame loop held. Issue #70's third answer -- "yes" -- is the fourth of these.
+    EVERY_CALLER = ["whenTheLogoOpens", "whenTheSheetOpens"]
+
+    # The real site is read and built once for the whole class, and the harness run once, for the
+    # reason RealSiteTest gives: a build is a whole Node run, and every test below only reads.
+    built = None
+    observed = None
+
+    def setUp(self):
+        self.repo = Path(mi.__file__).resolve().parents[2]
+        site = self.repo / "site"
+        if not site.is_dir():
+            self.skipTest(f"no site directory at {site}")
+        needs_the_build()
+        if LightboxTest.built is None:
+            with mock.patch.object(mi, "SITE_DIR", site):
+                source = dict(mi.read_site())
+                LightboxTest.built = (source, mi.build_site(source))
+        self.source, self.site = LightboxTest.built
+
+    def seen(self):
+        """What the stub browser saw the two real files do, built once and shared by the tests."""
+        needs_node(self)
+        if LightboxTest.observed is None:
+            harness = Path(mi.__file__).resolve().parent / "lightbox_harness.mjs"
+            scripts = [self.repo / "site" / "js" / "site.js",
+                       self.repo / "site" / "js" / "persona.js"]
+            if not harness.is_file() or not all(script.is_file() for script in scripts):
+                self.skipTest("no lightbox harness to run")
+            run = subprocess.run([mi.NODE_BIN, str(harness)] + [str(s) for s in scripts],
+                                 capture_output=True, text=True, timeout=120)
+            self.assertEqual(run.returncode, 0, f"the harness failed: {run.stderr[-2000:]}")
+            LightboxTest.observed = json.loads(run.stdout)
+        for name, got in LightboxTest.observed.items():
+            self.assertTrue(got["ok"], f"the {name} scenario did not run: {got.get('error')}")
+        return {name: got["result"] for name, got in LightboxTest.observed.items()}
+
+    # ---- where the component lives, and that it is the only one ------------------------------
+
+    def test_the_component_lives_in_the_one_shared_script_and_is_offered_by_name(self):
+        helper = self.source[mi.DESTRUCTIVE_SCRIPT]  # js/site.js: the shell's shared components
+        for part in ["window.interestingSite = {", "lightbox: lightbox,",
+                     "function lightbox(options)", "One lightbox, shared"]:
+            with self.subTest(part=part):
+                self.assertIn(part, helper)
+        # And it is documented where a reader of the shell would be standing, in all three places.
+        self.assertIn("window.interestingSite.lightbox", self.source["_includes/layout.njk"])
+        readme = (self.repo / "README.md").read_text(encoding="utf-8")
+        self.assertIn("### The lightbox", readme)
+        self.assertIn("window.interestingSite.lightbox", readme)
+        prompt = mi.build_prompt([("index.html", "<h1>hi</h1>")])
+        self.assertIn("window.interestingSite.lightbox(", prompt)
+        self.assertIn(f"{mi.SASS_DIR}/_lightbox.scss", prompt)
+
+    def test_the_paint_is_written_once_and_reaches_every_page(self):
+        partial = self.source[f"{mi.SASS_DIR}/_lightbox.scss"]
+        for rule in [".lightbox-veil", "@keyframes lightbox-veil", "[data-lightbox-front]",
+                     "[data-lightbox-aside]"]:
+            with self.subTest(rule=rule):
+                self.assertIn(rule, partial)
+        # Through the one stylesheet every page links, like every other shared partial.
+        self.assertIn("@use 'lightbox'", self.source["css/site.scss"])
+        self.assertIn(".lightbox-veil{", self.site[mi.SHARED_STYLESHEET])
+        # One blur, one dim, one fade, in one file: the two dialogs paint nothing behind themselves.
+        for rel in [f"{mi.SASS_DIR}/_persona.scss", f"{mi.SASS_DIR}/_controls.scss"]:
+            with self.subTest(rel=rel):
+                sheet = self.source[rel]
+                self.assertEqual(sheet.count("::backdrop"), 1, "one backdrop rule, and it is empty")
+                backdrop = sheet[sheet.index("::backdrop {"):]
+                backdrop = backdrop[:backdrop.index("}")]
+                self.assertIn("background: transparent", backdrop,
+                              "the shared veil is what dims the page behind a dialog")
+        # And the veil's own blur is named in exactly one place in the whole site.
+        blurred = sorted(rel for rel, content in self.source.items()
+                         if rel.endswith((".scss", ".css")) and "saturate(70%)" in content)
+        self.assertEqual(blurred, [f"{mi.SASS_DIR}/_lightbox.scss"])
+
+    def test_the_veil_goes_over_either_mark_and_under_the_skip_link(self):
+        """The layers, read off the stylesheet a browser is served (there is no browser here).
+
+        The whole claim of one shared lightbox rests on this: the veil has to sit over *both* marks,
+        because either one of them opens it and the other has to go under it, and the one that is
+        open has to be lifted back over the veil. The skip link stays above everything, as its own
+        comment in _nav.scss says.
+        """
+        css = Stylesheet(self.site[mi.SHARED_STYLESHEET], 1280, 900)
+        layer = lambda selector: css.px(css.value(selector, "z-index"), ":root")  # noqa: E731
+        veil = layer(".lightbox-veil")
+        front = layer("html [data-lightbox-front]")
+        self.assertGreater(veil, layer(".sparknav"), "the logo goes under the veil the sheet raises")
+        self.assertGreater(veil, layer(".persona"), "and the avatar under the one the logo raises")
+        self.assertGreater(front, veil, "and whichever one is open comes back over it")
+        self.assertGreater(layer(".skip-link"), front, "the skip link is above whatever is open")
+        # The two fallback boxes, for a browser with no dialog.showModal(): in front of the veil,
+        # and the question in front of the sheet, because a control in the sheet is what asks it.
+        self.assertEqual(layer(".persona-sheet-fallback[open]"), front)
+        self.assertGreater(layer(".are-you-sure-fallback[open]"), front)
+
+    def test_every_page_carries_the_one_veil_and_nothing_raises_it_without_a_script(self):
+        for page in sorted(mi.html_pages(self.site)):
+            with self.subTest(page=page):
+                self.assertIn("<div class='lightbox-veil' id='lightbox-veil' hidden></div>",
+                              self.site[page])
+                self.assertEqual(self.site[page].count("id='lightbox-veil'"), 1, "exactly one")
+        self.assertGreater(len(mi.html_pages(self.site)), 1, "the check is worth nothing on one page")
+
+    def test_the_shell_the_scripts_and_the_harness_agree_on_every_id(self):
+        shell = self.source["_includes/layout.njk"]
+        scripts = self.source["js/site.js"] + self.source["js/persona.js"]
+        harness = (Path(mi.__file__).resolve().parent / "lightbox_harness.mjs").read_text()
+        for name in self.IDS:
+            with self.subTest(id=name):
+                quoted = "['\"]" + re.escape(name) + "['\"]"
+                self.assertIn(f"id='{name}'", shell, "the shell has to write it")
+                self.assertRegex(scripts, quoted, "a script has to look for it")
+                self.assertRegex(harness, quoted, "the harness has to stand in for it")
+
+    # ---- what the three callers do -----------------------------------------------------------
+
+    def test_nothing_is_under_a_veil_until_something_raises_one(self):
+        seen = self.seen()["atRest"]
+        self.assertIsNone(seen["look"]["name"])
+        self.assertFalse(seen["look"]["veil"])
+        self.assertEqual(seen["frameRan"], 1, "the page's frame loop runs untouched")
+        for name, state in seen["look"]["body"].items():
+            with self.subTest(element=name):
+                self.assertFalse(state["marked"])
+                self.assertFalse(state["front"])
+                self.assertFalse(state["inert"])
+
+    def test_the_logo_and_the_persona_open_the_very_same_lightbox(self):
+        # The issue itself, in one assertion: the same veil element, the whole of the rest of the
+        # page behind it, and exactly one thing in front -- whichever of the two was pressed.
+        seen = self.seen()["theSameLightboxEitherWay"]
+        self.assertEqual(seen["nav"]["veilId"], "lightbox-veil")
+        self.assertEqual(seen["persona"]["veilId"], seen["nav"]["veilId"])
+        self.assertTrue(seen["nav"]["veil"] and seen["persona"]["veil"])
+        self.assertEqual(seen["nav"]["front"], ["sparknav"])
+        self.assertEqual(seen["persona"]["front"], ["persona-sheet"])
+        # Each one puts the other away, which is what makes the two marks one piece of chrome: the
+        # avatar goes behind the veil the logo raises, and the logo behind the veil the sheet does.
+        self.assertIn("persona", seen["nav"]["behind"])
+        self.assertIn("sparknav", seen["persona"]["behind"])
+        # And everything else on the page is behind it either way, the same list either way.
+        shared = {"main-content", "page", "skip-link", "persona"}
+        for side in ("nav", "persona"):
+            with self.subTest(side=side):
+                self.assertTrue(shared.issubset(set(seen[side]["behind"]) | {"persona"}))
+
+    def test_each_caller_dims_holds_and_puts_aside_the_same_way(self):
+        for scenario in self.EVERY_CALLER:
+            seen = self.seen()[scenario]
+            with self.subTest(scenario=scenario):
+                open_ = seen["open"]["look"]
+                self.assertTrue(open_["veil"], "the veil is up")
+                self.assertIn(open_["name"], ("nav", "persona"))
+                front = [name for name, state in open_["body"].items() if state["front"]]
+                self.assertEqual(len(front), 1, "one thing in front of the veil, and one only")
+                for name, state in open_["body"].items():
+                    if name == front[0] or name == "lightbox-veil":
+                        continue
+                    with self.subTest(element=name):
+                        self.assertTrue(state["inert"], f"{name} is still reachable behind the veil")
+                        self.assertEqual(state["ariaHidden"], "true")
+                        self.assertTrue(state["marked"], "and marked, so it can be given back")
+                # Issue #70's third answer, for the persona as much as for the nav: yes, the page's
+                # requestAnimationFrame loop is held while it is open.
+                self.assertEqual(seen["open"]["frameRan"], 0, "a frame ran behind the veil")
+                # And the page comes back exactly as it was, with the held frame run and not dropped.
+                closed = seen["closed"]["look"]
+                self.assertIsNone(closed["name"])
+                self.assertFalse(closed["veil"])
+                self.assertEqual(seen["closed"]["frameRan"], 1)
+                for name, state in closed["body"].items():
+                    with self.subTest(element=name):
+                        self.assertFalse(state["inert"])
+                        self.assertIsNone(state["ariaHidden"])
+                        self.assertFalse(state["marked"])
+                        self.assertFalse(state["front"])
+
+    def test_the_sheet_really_opens_and_closes_around_it(self):
+        # The veil is worth nothing if the sheet it is behind never opened: the same scenario has
+        # to show the dialog open while the lightbox is up and shut when it comes down.
+        seen = self.seen()["whenTheSheetOpens"]
+        self.assertTrue(seen["open"]["sheetOpen"])
+        self.assertEqual(seen["open"]["look"]["name"], "persona")
+        self.assertFalse(seen["closed"]["sheetOpen"])
+
+    def test_the_question_asked_over_the_sheet_leaves_the_sheet_where_it_was(self):
+        # The one case that only exists because they are shared: "seed a small sky" over a placed
+        # sky asks the shared question, so one lightbox opens over another. The veil never drops,
+        # the frame loop stays held, and answering hands the sheet back to the front.
+        seen = self.seen()["whenTheQuestionIsAskedOverTheSheet"]
+        self.assertEqual(seen["sheetUp"]["name"], "persona")
+        self.assertTrue(seen["sheetUp"]["body"]["persona-sheet"]["front"])
+
+        asked = seen["asked"]["look"]
+        self.assertEqual(asked["name"], "are-you-sure", "the question is what is up now")
+        self.assertTrue(asked["veil"], "and the veil never flickers between the two")
+        self.assertTrue(asked["body"]["are-you-sure"]["front"])
+        self.assertTrue(asked["body"]["persona-sheet"]["inert"], "the sheet is behind the question")
+        self.assertFalse(asked["body"]["persona-sheet"]["front"])
+        self.assertEqual(seen["asked"]["frameRan"], 0, "and the loop stays held across the two")
+        self.assertIn("seed a fresh sky", seen["asked"]["question"])
+
+        answered = seen["answered"]["look"]
+        self.assertEqual(answered["name"], "persona", "the sheet's own lightbox is back on top")
+        self.assertTrue(answered["veil"])
+        self.assertTrue(answered["body"]["persona-sheet"]["front"], "and the sheet is live again")
+        self.assertFalse(answered["body"]["persona-sheet"]["inert"])
+        self.assertEqual(seen["answered"]["frameRan"], 0, "with the page still behind the veil")
+        self.assertIn("Kept as it was", seen["answered"]["status"], "and the answer was no")
+
+        # Then closing the sheet gives the whole page back: nothing is left under a stale veil.
+        self.assertIsNone(seen["closed"]["name"])
+        self.assertFalse(seen["closed"]["veil"])
+        for name, state in seen["closed"]["body"].items():
+            with self.subTest(element=name):
+                self.assertFalse(state["inert"])
+                self.assertFalse(state["front"])
+
+    def test_the_question_asked_from_a_page_raises_the_same_veil(self):
+        # The fifth answer of the issue -- "if that makes sense, yes" -- for the ordinary case: a
+        # control on a page presses, and the question is asked over the same dimmed, held page.
+        seen = self.seen()["whenTheQuestionIsAskedFromAPage"]
+        self.assertEqual(seen["asked"]["look"]["name"], "are-you-sure")
+        self.assertTrue(seen["asked"]["look"]["veil"])
+        self.assertTrue(seen["asked"]["look"]["body"]["are-you-sure"]["front"])
+        self.assertEqual(seen["asked"]["frameRan"], 0)
+        self.assertEqual(seen["said"], "yes", "the confirm button still confirms")
+        self.assertIsNone(seen["answered"]["look"]["name"])
+        self.assertFalse(seen["answered"]["look"]["veil"])
+        self.assertEqual(seen["answered"]["frameRan"], 1)
+        # The control the question was asked from was inert a moment ago, so the lightbox has to
+        # come down before the focus goes back to it (WCAG 2.4.3 Focus Order).
+        self.assertEqual(seen["focused"], 1)
+
+    def test_a_press_on_the_veil_dismisses_whatever_is_on_top(self):
+        seen = self.seen()["whenTheVeilIsPressed"]
+        for side in ("nav", "persona"):
+            with self.subTest(side=side):
+                self.assertFalse(seen[side]["open"], "the thing in front put itself away")
+                self.assertIsNone(seen[side]["look"]["name"])
+                self.assertFalse(seen[side]["look"]["veil"])
+
+    def test_something_drawn_while_a_lightbox_is_up_goes_behind_it(self):
+        # The three affordances the constellation adopts arrive from deferred scripts, and one may
+        # arrive while the persona sheet is open, where the nav is watching nothing. That is the
+        # lightbox's business now, so the lightbox watches the body itself.
+        seen = self.seen()["whenSomethingArrivesLate"]
+        self.assertTrue(seen["inert"], "a control drawn behind the veil is still reachable")
+        self.assertEqual(seen["ariaHidden"], "true")
+        self.assertEqual(seen["look"]["name"], "persona", "and the sheet is still the one up")
+        self.assertTrue(seen["look"]["body"]["persona-sheet"]["front"])
+
+    def test_a_site_whose_shared_component_has_gone_still_opens_the_sheet(self):
+        # The same bargain NavTest makes about a shell with no nav: the persona borrows a veil from
+        # js/site.js, and a half-rewritten js/site.js must not be able to take the sheet with it.
+        seen = self.seen()["withoutTheSharedComponent"]
+        self.assertTrue(seen["opened"], "the sheet still opens")
+        self.assertTrue(seen["closed"], "and still closes")
+        self.assertFalse(seen["veil"], "with no veil behind it, which is the only thing lost")
+        self.assertIsNone(seen["lightbox"])
 
 
 class RealSiteTest(unittest.TestCase):
@@ -5387,17 +5702,14 @@ class RealSiteTest(unittest.TestCase):
 
     def test_every_page_ends_in_the_feed(self):
         # The feed is the one index of every world, written once in the shell, and every page
-        # carries it as plain markup -- the site map and the mood atlas included. Those two were
-        # the exception while each listed every world itself; those lists are retired and both
-        # pages send a visitor to the cards below instead, which is what makes the feed the only
-        # index the site has. The site map leans on it for more than that: the reachability axiom
-        # asks that every page be listed there, and the world pages are listed by these cards.
-        # Once per page, too -- a page writing a second grid of its own would be the duplication
-        # coming back.
+        # carries it as plain markup -- the site map and the mood atlas included. The two of them
+        # used to be the exceptions, because each listed every world itself; those duplicate lists
+        # were retired and both pages send a visitor to the cards below instead ("choose a link
+        # here or a world card below"), so the feed is the one list of worlds on every page there
+        # is and nothing in the shell has to know which page it is on.
         for page in sorted(mi.html_pages(self.site)):
             with self.subTest(page=page):
-                self.assertEqual(self.site[page].count("id='feed-grid'"), 1,
-                                 "the one index of every world is written once per page")
+                self.assertIn("id='feed-grid'", self.site[page])
                 self.assertIn("js/feed.js", self.site[page])
 
     def test_the_query_is_never_a_gate(self):

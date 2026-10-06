@@ -1,9 +1,10 @@
 {#-
-  The feed: every world as a card, shown after <main> on every page, the site map and the mood
-  atlas included -- each of those carried a world list of its own once, and points a visitor at
-  the cards here instead now. It is the one index of worlds the site has, and _data/worlds.json
-  is the one place the list and every world's name are kept: a world is added, renamed or retired
-  there, and this include, the site map and the mood atlas all follow.
+  The feed: every world as a card, shown after <main> on every page. It is the one index of worlds
+  the site has, and _data/worlds.json is the one place the list and every world's name are kept: a
+  world is added, renamed or retired there, and this include, the site map and the mood atlas all
+  follow. The site map and the mood atlas used to be the two pages without it, because each listed
+  every world itself; those duplicate lists are gone and both pages point at the cards below
+  instead, so the shell writes this on every page and has to know nothing about which page it is.
 
   One flat list, no groups, and no caption: the grid speaks for itself, so its heading is written
   for screen readers only and nothing is said about how many worlds there are or what to do with

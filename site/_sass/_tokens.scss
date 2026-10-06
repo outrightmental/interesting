@@ -113,6 +113,12 @@
   --nav-inset: 0.75rem;
   --nav-h: 64px;
   --fold-peek: clamp(3rem, 5vh, 5rem);
+  // The lightbox's two layers (_lightbox.scss): the veil the whole page goes behind, and the one
+  // thing it leaves in front of it. Above the logo's 50 and the persona's 45, so either mark goes
+  // under the veil when the other one opens, and below the skip link's 60, which stays reachable
+  // whatever is open. Named here because four files have to agree on them.
+  --layer-veil: 55;
+  --layer-front: 56;
 }
 
 // A wide screen gets a wider page, so a world's stage can grow with it.
