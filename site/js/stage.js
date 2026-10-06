@@ -94,7 +94,10 @@
       window.interestingStage           (only on a page that has the stage)
         .open(file, seed, options)   open the named world's piece for `seed` on this stage;
                                      options.push=false keeps the URL, options.scroll=true
-                                     brings the stage into view
+                                     brings the stage into view, options.seeds={bg,bg2,accent,
+                                     accent2} is the palette the site takes on for the piece --
+                                     the pressed card's own, so the site matches the card
+                                     (js/feed.js hands it over; see feature() below)
         .next()                      finish nothing, open the next card from the feed's stack
         .skip()                      leave the current piece without ceremony and open the next
         .current()                   { file, seed } or null
@@ -104,7 +107,8 @@
   The URL carries the piece: `world.html#<seed>` is this piece, shareable, and the back button
   walks back through the pieces a visitor finished (a skipped one is replaced, not kept).
   Opening a card from another world moves the address to that world's page without a load: a
-  page is wherever the stage is.
+  page is wherever the stage is -- and so is the site's colour, which follows the piece on the
+  stage for as long as it is there (see feature(), and the precedence in _sass/_mood.scss).
 
   Nothing here reaches for the browser's storage. The sky is read through the persona, the next
   card through the feed, and nothing is written but the address.
@@ -190,6 +194,133 @@ function worldOf(file) {
   return WORLDS.find((w) => w.file === file) || null;
 }
 
+/* ---- the site's theme follows what is on the stage ------------------------------------------ */
+
+/*
+  The site features the activity on the stage, and the colour of the site says so (issue #61):
+  pick a card out of the feed and the page it opens becomes that card's colour, so the theme a
+  visitor arrives in is the theme they pressed.
+
+  Two halves, which are the two halves a card in the feed already has:
+
+    - the world's mood, as an attribute -- :root[data-featured], written last of the three on :root
+      in _sass/_mood.scss, so a featured activity outranks both the page's own world and the
+      visitor's reading. The reading is the site's standing skin; a piece is what the site wears
+      while that piece is on the stage, and goHome() takes the attribute off again, so one card
+      never re-skins the site for good.
+    - the card's own configuration, as the four seeds inline on :root -- the palette js/variant.js
+      derived for that one card inside its world's mood, handed over by js/feed.js
+      (options.seeds). Inline wins over every rule, exactly as it does on the card itself, so the
+      site matches the card that was picked and not merely its world.
+
+  --fg and --muted are not touched here, any more than a card's configuration touches them: they
+  are what holds the site's text at 4.5:1 over all fifteen palettes.
+*/
+
+// The four names a palette is (_sass/_mood.scss, js/variant.js), and no others.
+const SEEDS = ['bg', 'bg2', 'accent', 'accent2'];
+const GRAY = '#808080'; // the neutral the theme dips through, so one colour clears before the next
+const DIP_MS = 140; // the quick fade out to that neutral
+const RISE_MS = 420; // the fade from it into the colour of the card just pressed
+
+let featured = null; // the palette the site is wearing for the activity on the stage, once landed
+let fading = 0; // the crossfade in flight, so two picks in a row never fight over the seeds
+
+function readSeeds(node) {
+  const style = getComputedStyle(node);
+  const out = {};
+  for (const name of SEEDS) out[name] = style.getPropertyValue('--' + name).trim() || FALLBACK[name];
+  return out;
+}
+
+function writeSeeds(seeds) {
+  for (const name of SEEDS) document.documentElement.style.setProperty('--' + name, seeds[name]);
+}
+
+// The seeds come off again, so the rules in _sass/_mood.scss own the palette once more.
+function clearSeeds() {
+  for (const name of SEEDS) document.documentElement.style.removeProperty('--' + name);
+}
+
+// The four of `seeds` that are there, and nothing else a caller put on the object.
+function someSeeds(seeds) {
+  const out = {};
+  if (seeds) {
+    for (const name of SEEDS) {
+      const value = typeof seeds[name] === 'string' ? seeds[name].trim() : '';
+      if (value) out[name] = value;
+    }
+  }
+  return out;
+}
+
+/* The site becomes `to` from wherever it is now, by way of a neutral grey, and lands exactly on
+   it (issue #61) -- a quick fade out to the neutral so the colour it was leaves cleanly, then a
+   fuller fade from the neutral into the colour that was asked for, so the theme shifts through a
+   settled middle rather than smearing one palette straight over another. A visitor who asked for
+   less motion gets the change and not the shift. */
+function crossfade(from, to, done) {
+  if (fading) cancelAnimationFrame(fading);
+  fading = 0;
+  // Nothing to shift: one world's own palette opening on its own page, most of the time.
+  if (calm.matches || typeof requestAnimationFrame !== 'function'
+      || SEEDS.every((name) => from[name] === to[name])) {
+    writeSeeds(to);
+    if (done) done();
+    return;
+  }
+  // This turn's paint is still the colour the site was: the shift starts from there.
+  writeSeeds(from);
+  const startedAt = performance.now();
+  const step = (now) => {
+    const elapsed = now - startedAt;
+    const at = {};
+    if (elapsed < DIP_MS) {
+      // Fading out to the neutral grey.
+      const t = Math.max(0, elapsed / DIP_MS);
+      for (const name of SEEDS) at[name] = mix(from[name], GRAY, t);
+    } else {
+      // Rising from the neutral grey into the new theme, landing exactly on it.
+      const t = Math.min(1, (elapsed - DIP_MS) / RISE_MS);
+      for (const name of SEEDS) at[name] = t < 1 ? mix(GRAY, to[name], t) : to[name];
+    }
+    writeSeeds(at);
+    if (elapsed < DIP_MS + RISE_MS) {
+      fading = requestAnimationFrame(step);
+      return;
+    }
+    fading = 0;
+    if (done) done();
+  };
+  fading = requestAnimationFrame(step);
+}
+
+/* The site features `mood`, in `seeds` when the card that was pressed handed its own palette over.
+   Hands back the palette the site is landing in, which is what the piece is painted in: a piece
+   never reads a colour the crossfade is only passing through. */
+function feature(mood, seeds) {
+  const root = document.documentElement;
+  const from = readSeeds(root);
+  clearSeeds(); // so the attribute below, and not the last piece's seeds, says what the site is
+  if (mood) root.dataset.featured = mood;
+  else delete root.dataset.featured;
+  const to = Object.assign(readSeeds(root), someSeeds(seeds));
+  featured = to;
+  crossfade(from, to);
+  return to;
+}
+
+// Nothing is featured any more: the page's own world, or the visitor's reading, whichever
+// _sass/_mood.scss gives the page once the attribute is off it.
+function unfeature() {
+  const root = document.documentElement;
+  const from = readSeeds(root);
+  featured = null;
+  clearSeeds();
+  delete root.dataset.featured;
+  crossfade(from, readSeeds(root), clearSeeds);
+}
+
 const modules = new Map();
 const readsSky = new Map(); // module id -> needsSky, once the module has loaded
 
@@ -235,12 +366,13 @@ const ui = stage ? {
   gate: null // the element the unlock helper powers down, one per unpowered open
 } : null;
 
-// What the page said before any piece opened: the threshold goes back to it.
+// What the page said before any piece opened: the threshold goes back to it. The page's own
+// palette is not kept here, because the stage no longer overwrites it: <html data-world> stays
+// what the layout wrote, and a featured activity is a palette of its own above it (see feature()).
 const home = stage ? {
   name: ui.world.textContent,
   line: ui.title.textContent,
-  title: document.title,
-  world: document.documentElement.dataset.world || ''
+  title: document.title
 } : null;
 
 let current = null; // the piece on stage, and everything the stage knows about it
@@ -307,7 +439,8 @@ async function open(file, seed, options) {
   const probe = document.getElementById('persona-probe');
   if (probe && !probe.hidden) probe.hidden = true;
 
-  document.documentElement.dataset.world = world.mood;
+  // The site features this activity: its world's palette, as the card that was pressed wore it.
+  feature(world.mood, opts.seeds);
   if (ui.world) ui.world.textContent = world.name;
   document.title = world.name + ' · interesting';
   if (opts.push !== false) {
@@ -377,7 +510,9 @@ function makeEnv(seed, world, stars) {
     int: (a, b) => a + Math.floor(rnd() * (b - a + 1)),
     chance: (p) => rnd() < p,
     stars,
-    colors: readColors(stage),
+    // The stage's own colours, with the featured palette's four seeds over them: the piece is
+    // painted in the colour the site is landing in, never in one the crossfade is passing through.
+    colors: Object.assign(readColors(stage), featured || {}),
     mix,
     alpha,
     reduced: calm.matches,
@@ -907,6 +1042,9 @@ async function next(options) {
   const taken = feed && typeof feed.take === 'function' ? feed.take(fit, avoid) : null;
   let file = taken && worldOf(taken.file) ? taken.file : null;
   let seed = taken ? taken.seed : newSeed();
+  // The next card off the stack is a card too: the site takes its colour as it arrives, the same
+  // way it takes the colour of one a visitor pressed. A world picked at random below has none.
+  const seeds = file && taken ? taken.seeds : null;
   if (!file) {
     const pool = WORLDS.filter((w) => w.file !== avoid && (!fit || fit(w.file)));
     const world = pool.length ? pool[Math.floor(Math.random() * pool.length)] : WORLDS[0];
@@ -914,7 +1052,7 @@ async function next(options) {
     file = world.file;
   }
   if (extra.first) firstPiece = { file, seed };
-  open(file, seed, Object.assign({ arriving: true }, extra));
+  open(file, seed, Object.assign({ arriving: true, seeds }, extra));
 }
 
 // Take the piece on stage apart, completely. Every instantiation starts from an empty stage, so
@@ -959,8 +1097,9 @@ function goHome() {
   ui.title.textContent = home.line;
   if (ui.read) ui.read.hidden = true;
   document.title = home.title;
-  if (home.world) document.documentElement.dataset.world = home.world;
-  else delete document.documentElement.dataset.world;
+  // Nothing is featured now, so the site goes back to its own colour: the page's own world, or
+  // the visitor's reading over it.
+  unfeature();
   setMode('quiet');
   try {
     window.dispatchEvent(new CustomEvent('stage:home'));
