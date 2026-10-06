@@ -10,8 +10,8 @@ iterate a more interesting website
 
 - **`/site`** — the website, in source form. Everything anyone edits — a person or the hourly AI —
   lives here, and nothing else does: the pages, the shared layout and partials, the Sass, the feed
-  with its one module per world and the configuration a repeated card wears
-  (see [The feature and the feed](#the-feature-and-the-feed)), the three
+  with its one module per world and the configuration a content piece wears as a card and again as
+  the feature it opens as (see [The feature and the feed](#the-feature-and-the-feed)), the three
   shared files behind the analytics tag (see [Analytics axiom](#analytics-axiom)), the one behind
   the local-state store (see [Local state axiom](#local-state-axiom)), the one behind the mood
   flow (see [Mood axiom](#mood-axiom)), the one behind a visitor's way of steering the site (see
@@ -349,11 +349,13 @@ itself.
   comes from [`site/js/modules/`](site/js/modules), one ES module per world named for its file:
   `paint(ctx, w, h, env)` draws the card, `spark(env)` makes one thing for the feed to deal — a
   coinage, a specimen, a rule with its bits, a core sample, an omen, a forecast, a mantra — with or
-  without a picture, `animate()` is optional and never runs for a visitor who asked for less
-  motion, and `needsSky` marks the eight that read the persona's stars. `piece(env)` makes the piece the stage plays when the card is opened
+  without a picture and with `of` saying what the card is of, `animate()` is optional and never runs
+  for a visitor who asked for less motion, and `needsSky` marks the eight that read the persona's
+  stars. `piece(env)` makes the piece the stage plays when the card is opened
   (see [Completion axiom](#completion-axiom)), and every world's module has one, by law. `env` carries a seeded
-  random source, the stars, the card's own colours and the helpers to mix them, so a card paints
-  the same picture every time and a different one from its neighbour.
+  random source, the stars, the card's own colours and the helpers to mix them, and the card's
+  configuration and content, so a card paints the same picture every time, a different one from
+  its neighbour, and the feature it opens as is that same card.
 - **A repeat is configured, not reprinted.** The feed deals without end, so every world comes round
   again and again, and a repeat used to differ only in whatever its module did with a fresh seed —
   same palette, same frame, four of the worlds drawing from the stars alone and so repeating one
@@ -369,6 +371,28 @@ itself.
   the repeats that vary; `--fg` and `--muted` are never configured, and the ground's ceiling is set
   where the contrast the accessibility axiom asks for runs out, which `CardVariantTest` measures
   over all fifteen palettes rather than taking on trust.
+- **A card and the feature it opens as are one piece.** This is an axiom of the site, in the same
+  spirit as the configuration above: *every content piece is procedurally configured, and that
+  configuration is the same whether the piece appears as a card in the feed or as the feature it
+  opens as* (issue [#80](https://github.com/outrightmental/interesting/issues/80)). It was not:
+  pressing a card handed the stage the file, the seed and the four palette seeds and nothing else,
+  so the feature was titled by the world's own one-line description from
+  [`site/_data/worlds.json`](site/_data/worlds.json) — the same line for every card of that
+  world, which is the generic text every card fell back to. The whole configuration travels now:
+  `js/feed.js` reads what a card is showing and hands it over with the card's variant, through
+  both the press and the next card off the stack, and `js/stage.js` revives it
+  (`variant.revive`), features the card's palette, frames the scene by the same `stretch` that
+  framed the card, writes the card's own title and line while the module loads, and hands the
+  module `env.variant` and `env.card` — so a world's `piece(env)` is made from the two things its
+  card was made from. A spark says what its card is *of* on its spec (`of`: the rule number, the
+  coinage, the star it was drawn from — the module's own data, handed straight back), and every
+  world's piece opens on that rather than rolling another: press *rule 110* and the bench runs
+  rule 110. A piece nobody pressed — a direct visit to `world.html#<seed>`, or a world picked at
+  random when the stack runs dry — is configured from its seed, which is where a card's
+  configuration comes from too, and the stage derives the card that configuration would have
+  dealt. The piece harness holds every world to it: a piece that is the same piece whichever of
+  its world's cards it was opened from is refused, and the stage harness holds the stage to
+  titling a feature from the card rather than from the world's line.
 - **It follows the persona.** The world the visitor's reading opens onto is moved to the front and
   badged *for you*, and follows the reading as it changes. With no sky yet, a card that reads the
   sky paints a veiled ghost of itself, and one unpowered card is dealt early carrying the shared
@@ -1152,7 +1176,9 @@ iteration, stated in the prompt and held to in code.
   where a visitor goes to pick a world of their own. The one place the way on lights early is a
   stage with nothing to finish — a piece waiting on a sky, a world whose module is missing —
   because a stage is never a dead end.
-- **The piece contract.** A world's module exports `piece(env)` beside `paint` and `spark`, and
+- **The piece contract.** A world's module exports `piece(env)` beside `paint` and `spark`, and is
+  handed the same configuration both halves of it are — `env.variant`, and `env.card` for the card
+  this piece was opened from (see [The feature and the feed](#the-feature-and-the-feed)) — and
   returns `{ title, brief, aspect, steps, start, apply, frame, tap, end }`: two to five knobs
   (`steps`), each `{ id, ask, kind, … }` of a kind the stage renders — `choice` (two to four
   options), `toggle`, `range`, `press`, `hold`, `tap`, `wait` — and the piece is finished when
@@ -1193,24 +1219,32 @@ iteration, stated in the prompt and held to in code.
   code (a quality gate, not a security boundary: the site's source is public). Every seed is then
   played a second time with its knobs reached in a seeded order rather than down the page, and the
   first seed is played through again from the top, which has to come out exactly as it did the
-  first time. The harness is not in `/site`, so a run cannot soften it.
+  first time. The first seed is then played three times more, for the alignment axiom (see
+  [The feature and the feed](#the-feature-and-the-feed)): under a configuration away from the
+  no-op one, as the card that configuration deals it, and as a card another seed was dealt. All
+  three have to finish — a sky can change under a card, so a piece reads the one it is handed
+  defensively — and the last two have to be different pieces, because what a feature is follows
+  from the card it was opened from. The harness is not in `/site`, so a run cannot soften it.
 - **The stage, played too.** A piece can be flawless and the stage still leave the visitor playing
   it with no way to finish, because the knob the piece offered is not a knob the stage will take —
   which is what issue #60 was.
   [`.github/scripts/stage_harness.mjs`](.github/scripts/stage_harness.mjs) runs the real
   `js/stage.js` against a stub browser: the elements `_includes/stage.njk` writes, a clock the
   scenario steps by hand so a 1.8-second hold costs nothing, a canvas that records nothing, and a
-  feed that deals the worlds it is told to. Four scenarios: a world played, another played, and the
+  feed that deals the worlds it is told to. Six scenarios: a world played, another played, and the
   first dealt again, each round finishing, sitting out six seconds of its own clock to prove the
   stage does not see itself out, and then opening the next when the way on is pressed; a slider used
   where it stands, which must count; a knob nobody touched, which must stay unset *and* be named,
-  with the way on still dim over it; and a piece abandoned with a hold still pressed down, after
-  which nothing of it may be on the stage or still running.
+  with the way on still dim over it; a hold held past the fill, which must be set by the bar filling
+  and not by the release (issue #74); a piece abandoned with a hold still pressed down, after which
+  nothing of it may be on the stage or still running; and a card pressed, which must open as that
+  card — its own title and line while the module loads, its configuration on the piece's `env`, its
+  stretch on the scene's frame, and never the world's generic line (issue #80).
   `StageTest` plays purpose-built pieces through it and `RealSiteTest` plays the site as committed;
   like the piece harness it is outside `/site`, so a run cannot soften it. Deliberately, it holds
   the site as committed rather than refusing a plan: it drives the stage through the stage's own
   elements, and those are a run's to rewrite, so gating plans on it would pin markup the silo leaves
-  open. The prompt says so, and says to keep all four true when rewriting the stage.
+  open. The prompt says so, and says to keep all seven true when rewriting the stage.
 - **Held to in code.** `check_completion` in
   [`.github/scripts/make_interesting.py`](.github/scripts/make_interesting.py) reads the one list
   of worlds off the built home page (the `#site-worlds` JSON the layout writes from
@@ -1220,9 +1254,11 @@ iteration, stated in the prompt and held to in code.
   set a knob, a knob of a kind the stage does not render, a piece that
   does not finish within twelve taps and forty-five seconds of simulated play, one that is not
   the same for the same seed (a piece is an address), one that does not finish the same way with its
-  knobs reached in another order or played a second time, or one that is the same for every seed
-  (the river is of pieces that differ). Only what the run itself breaks is refused, as with every
-  other axiom, so a run can repair a world that is already stuck; and a plan that drops the list
+  knobs reached in another order or played a second time, one that is the same for every seed
+  (the river is of pieces that differ), or one that is the same piece whichever of its world's
+  cards it was opened from (the alignment axiom: a feature is the card that was pressed). Only what
+  the run itself breaks is refused, as with every other axiom, so a run can repair a world that is
+  already stuck; and a plan that drops the list
   of worlds is refused outright, because the stage would have nothing to open.
 - **Re-thought, not wrapped.** The worlds' old interactive pages were the material: what a page
   let a visitor do became the knobs, what it showed became the scene, what it said became the

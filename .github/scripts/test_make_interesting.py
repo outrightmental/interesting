@@ -2460,6 +2460,46 @@ class CardVariantTest(unittest.TestCase):
                 self.assertEqual(mod["threw"], [])
                 self.assertGreater(mod["calls"]["plain"], 3, "this world barely draws anything")
 
+    # ---- the configuration a piece opens with ----
+
+    def test_the_configuration_a_card_hands_over_arrives_as_it_left(self):
+        # The alignment axiom (issue #80): a card and the feature it opens as are one content piece,
+        # procedurally configured once, so the configuration a card was wearing has to survive the
+        # hand-over to the stage exactly. A round trip through what js/feed.js passes and
+        # js/stage.js revives is the same seven dials, and the plain configuration stays plain --
+        # the card the template wrote opens as plainly as it was dealt.
+        plain = self.seen["revived"]["plain"]
+        self.assertTrue(plain["plain"])
+        self.assertEqual(plain, self.seen["plain"])
+        for case in self.seen["revived"]["cases"]:
+            with self.subTest(seed=case["seed"]):
+                self.assertEqual(case["roundTrip"], case["rolled"],
+                                 "a configuration handed to the stage is not the one the card wore")
+
+    def test_a_piece_nobody_pressed_wears_what_a_card_of_its_seed_would(self):
+        # Open question 3 of the issue, answered: a piece with no card behind it -- a direct visit to
+        # world.html#<seed>, or a world picked at random when the feed's stack has run dry -- is
+        # configured from its seed, which is where a card's configuration comes from too. So the
+        # address carries the configuration, and nothing has to guess at one. Anything unreadable is
+        # rolled from the seed the same way rather than half-believed.
+        for case in self.seen["revived"]["cases"]:
+            with self.subTest(seed=case["seed"]):
+                self.assertEqual(case["fromNothing"], case["rolled"])
+                self.assertEqual(case["fromJunk"], case["rolled"])
+
+    def test_no_dial_arrives_outside_its_own_range(self):
+        # The ranges every other part of the site assumes -- the contrast guards above, the frame
+        # limits below -- hold for a configuration that came over the boundary as well as for one
+        # rolled here, because a caller of window.interestingStage.open can pass anything.
+        for case in self.seen["revived"]["cases"]:
+            clamped = case["clamped"]
+            with self.subTest(seed=case["seed"]):
+                self.assertFalse(clamped["plain"])
+                for name in self.seen["dials"]:
+                    low, high = self.seen["ranges"][name]
+                    self.assertGreaterEqual(clamped[name], low, f"--{name} arrived under its range")
+                    self.assertLessEqual(clamped[name], high, f"--{name} arrived over its range")
+
     def test_every_world_reads_the_configuration(self):
         # A module that ignored it would still be configured -- its colours and its frame are the
         # feed's to set -- but it would draw the same picture twice at the same size, which is the
@@ -3707,14 +3747,47 @@ HOLD_PIECE = """    let holds = 0;
 
 
 def stage_site(toy=None, other=None):
-    """A site the stage harness can play: the one list of worlds, js/stage.js as committed, and a
-    module for each world. The stage itself is never a fixture -- the point is to run the real one."""
+    """A site the stage harness can play: the one list of worlds, js/stage.js and the configuration
+    it imports as committed, and a module for each world. Neither of those two is ever a fixture --
+    the point is to run the real ones."""
     return {
         "index.html": world_list("toy.html", "other.html"),
         mi.STAGE_SCRIPT: (mi.REPO_ROOT / "site" / mi.STAGE_SCRIPT).read_text(encoding="utf-8"),
+        mi.VARIANT_SCRIPT: (mi.REPO_ROOT / "site" / mi.VARIANT_SCRIPT).read_text(encoding="utf-8"),
         "js/modules/toy.js": piece_module(toy or SLIDER_PIECE, "toy"),
         "js/modules/other.js": piece_module(other or FINISHING_PIECE, "other"),
     }
+
+
+# A piece that says what the stage handed it, so the harness can read it back off the stage: the
+# configuration on env.variant and the card on env.card (the alignment axiom, issue #80).
+CARRIED_PIECE = """    const v = env.variant || {};
+    const card = env.card || {};
+    return {
+      title: 'of ' + (card.title || 'no card') + ' at ' + (v.stretch == null ? 'no stretch' : Number(v.stretch).toFixed(2)),
+      brief: 'of: ' + ((card.of && card.of.token) || 'nothing') + '; showing: ' + (card.quote || 'nothing')
+        + '; density: ' + (v.density == null ? 'none' : Number(v.density).toFixed(2)),
+      aspect: '4 / 3',
+      steps: [
+        { id: 'a', ask: 'one thing', kind: 'toggle' },
+        { id: 'b', ask: 'and another', kind: 'toggle' }
+      ],
+      start(ctx) { ctx.g.fillRect(0, 0, ctx.w, ctx.h); }
+    };"""
+
+
+def card_module(piece_js, world="toy"):
+    """A world's module whose cards differ by seed -- so the alignment axiom (issue #80) has two
+    cards to tell apart -- with `piece_js` as its piece()."""
+    return ("export default {\n  id: '" + world + "',\n  paint() {},\n"
+            "  spark(env) { const n = env.int(1, 999); return { title: 'card ' + n, text: 'one of many', of: { n } }; },\n"
+            "  piece(env) {\n" + piece_js + "\n  }\n};\n")
+
+
+# The same piece, of the card it was opened from: a feature is the card that was pressed.
+OF_ITS_CARD_PIECE = FINISHING_PIECE.replace(
+    "title: n + ' turns of the toy'",
+    "title: (env.card && env.card.of ? 'turning card ' + env.card.of.n : n + ' turns of the toy')")
 
 
 # A piece that finishes itself on arrival, before its visitor has set anything.
@@ -3785,7 +3858,13 @@ class CompletionAxiomTest(SiteDirTestCase):
                      "a knob nobody set is named rather than silently holding the piece shut",
                      "a hold knob is set the moment its bar fills rather than when the visitor lets go",
                      "a finished piece stays on the stage with the way on lit",
-                     "leaves nothing of itself on the stage or still running"]:
+                     "leaves nothing of itself on the stage or still running",
+                     # Issue #80: a piece is the card it was opened from, which the same two
+                     # harnesses hold it to, so a run writing a piece is told as much.
+                     "A piece is also the card it was opened from",
+                     "piece(env) reads env.card",
+                     "the same piece whichever of its world's cards it was opened from",
+                     "a card pressed opens as that card"]:
             with self.subTest(rule=rule):
                 self.assertIn(rule, rules)
         self.assertIn(f"{mi.PIECE_MIN_STEPS} to {mi.PIECE_MAX_STEPS} knobs", rules)
@@ -3823,7 +3902,7 @@ class CompletionAxiomTest(SiteDirTestCase):
         self.module.write_text(piece_module(ENDLESS_PIECE))
         missing = mi.worlds_without_a_finish(dict(mi.read_site()))
         self.assertEqual(list(missing), ["toy.html"])
-        self.assertIn("cannot be finished", missing["toy.html"])
+        self.assertIn("the harness refused", missing["toy.html"])
         self.assertIn('"settle" was not set', missing["toy.html"])
 
     def test_the_same_seed_must_make_the_same_piece(self):
@@ -3840,6 +3919,25 @@ class CompletionAxiomTest(SiteDirTestCase):
         self.module.write_text(piece_module(SAME_PIECE))
         missing = mi.worlds_without_a_finish(dict(mi.read_site()))
         self.assertIn("every seed makes the same piece", missing.get("toy.html", ""))
+
+    def test_a_piece_must_be_of_the_card_it_was_opened_from(self):
+        # The alignment axiom (issue #80): a card and the feature it opens as are one content piece,
+        # procedurally configured once. A module whose cards all differ and whose piece ignores them
+        # opens the same feature whichever card a visitor pressed, which is the bug the axiom keeps
+        # out, so the harness refuses it; the same piece made of its card is accepted.
+        self.module.write_text(card_module(FINISHING_PIECE))
+        missing = mi.worlds_without_a_finish(dict(mi.read_site()))
+        self.assertIn("whichever card it was opened from", missing.get("toy.html", ""))
+        self.module.write_text(card_module(OF_ITS_CARD_PIECE))
+        self.assertEqual(mi.worlds_without_a_finish(dict(mi.read_site())), {})
+
+    def test_a_world_whose_cards_are_all_alike_is_not_held_to_the_alignment(self):
+        # The law needs two cards to tell apart. A module that deals the same content for every
+        # seed -- the fixtures above, whose spark makes nothing at all -- has no card for its piece
+        # to be of, so it is judged on its finishing alone rather than failing a check that could
+        # not be made.
+        self.module.write_text(piece_module(FINISHING_PIECE))
+        self.assertEqual(mi.worlds_without_a_finish(dict(mi.read_site())), {})
 
     def test_a_piece_has_at_most_the_knobs_the_stage_renders(self):
         self.module.write_text(piece_module(LONG_PIECE))
@@ -3927,11 +4025,12 @@ class StageTest(unittest.TestCase):
     slider the stage only marked set when its value changed, so a visitor content with where it
     already stood set every other knob, watched the finale run, and waited on a piece that had no
     way left to finish. These tests run the real js/stage.js, through the elements stage.njk writes
-    and a clock they step by hand, and hold it to six things: a world played twice over plays the
+    and a clock they step by hand, and hold it to seven things: a world played twice over plays the
     second time like the first, a finished piece waits for the visitor rather than seeing itself
     out, a slider used where it stands counts as used, a knob nobody set is named rather than left
-    a mystery, a hold knob is set the moment its bar fills rather than when the visitor lets go,
-    and a piece that is over leaves nothing of itself behind.
+    a mystery, a hold knob is set the moment its bar fills rather than when the visitor lets go, a
+    piece that is over leaves nothing of itself behind, and the feature a card opens as is the card
+    that was pressed rather than the world's generic line (issue #80).
     """
 
     @classmethod
@@ -4070,6 +4169,44 @@ class StageTest(unittest.TestCase):
         # end, which is the job "skip this one" used to do before the way on took it over.
         self.assertEqual(left["mode"], "empty")
         self.assertTrue(left["nextLit"], "a world with nothing to play offered no way on")
+
+    def test_a_feature_is_the_card_that_was_pressed(self):
+        # The alignment axiom (issue #80). A card is a seed, the configuration rolled from it and
+        # the content its world's module made for the two; all of that is handed over when the card
+        # is pressed, and this is the stage's side of the bargain. CARRIED_PIECE writes what it was
+        # handed into its own title and line, so what reached piece(env) can be read back off the
+        # stage rather than taken on trust.
+        result = self.scenario("carried", toy=CARRIED_PIECE)
+        card = result["card"]
+        # While the module loads, what the card was showing stands. The world's one-line
+        # description is not written at all: it is the same line for every card of that world, and
+        # writing it here is exactly the bug -- every card of a world opened the same generic page.
+        self.assertEqual(result["loading"]["title"], card["title"])
+        self.assertEqual(result["loading"]["brief"], card["quote"])
+        self.assertNotEqual(result["loading"]["title"], result["world"]["what"])
+        # Then the piece names itself, from the card and the configuration it was handed: both
+        # reached piece(env), and the module's own note about what its card is of came back whole.
+        self.assertTrue(result["playable"], "the piece never became playable")
+        self.assertIn(card["title"], result["opened"]["title"], "the card never reached the piece")
+        self.assertIn("1.14", result["opened"]["title"], "the configuration never reached the piece")
+        self.assertIn(card["of"]["token"], result["opened"]["brief"], "the card's own note was dropped")
+        self.assertIn(card["quote"], result["opened"]["brief"])
+        self.assertIn("1.21", result["opened"]["brief"], "the configuration's dials never arrived")
+        # The scene is framed as the card's picture was: the piece's own ratio, stretched by the
+        # same dial that stretched the card's frame in the feed.
+        self.assertNotEqual(result["opened"]["aspect"], "4 / 3", "the scene kept its plain frame")
+        self.assertAlmostEqual(float(result["opened"]["aspect"]), (4 / 3) * 1.14, places=2)
+        # A world with no module at all -- the other place the generic line used to be written.
+        self.assertEqual(result["missingLoading"]["title"], card["title"])
+        self.assertEqual(result["missing"]["title"], card["title"])
+        self.assertNotEqual(result["missing"]["title"], result["world"]["what"])
+        # And a piece nobody pressed: the stage configures it from the seed, so a direct visit to
+        # world.html#<seed> wears what a card of that seed would have worn.
+        self.assertTrue(result["barePlayable"])
+        self.assertIn("no card", result["bare"]["title"], "this fixture's world deals no cards")
+        self.assertNotIn("no stretch", result["bare"]["title"],
+                         "a piece nobody pressed was handed no configuration at all")
+        self.assertNotEqual(result["bare"]["aspect"], "4 / 3")
 
     def test_a_missing_harness_is_the_toolchain_and_not_the_model(self):
         with tempfile.TemporaryDirectory() as empty:
@@ -5289,8 +5426,9 @@ class RealSiteTest(unittest.TestCase):
         # because nothing advances by itself any more (issue #78) -- open the next; a slider a
         # visitor leaves where it stands has to count as used; a knob nobody set has to be named
         # rather than silently holding the piece shut; a hold has to be set when its bar fills
-        # rather than when the visitor lets go (issue #74); and a piece that is over has to leave
-        # nothing running.
+        # rather than when the visitor lets go (issue #74); a piece that is over has to leave
+        # nothing running; and a card pressed has to open as that card rather than as the world's
+        # generic line (issue #80).
         needs_the_stage_harness(self)
         worlds = mi.listed_worlds(self.site)
         self.assertGreaterEqual(len(worlds), 10, "the check is worth nothing on a few worlds")
@@ -5331,6 +5469,27 @@ class RealSiteTest(unittest.TestCase):
         self.assertEqual(torn["waiting"], 0, "the stage left a timer running after the piece")
         self.assertEqual(torn["look"]["knobs"], [])
         self.assertEqual(torn["look"]["sceneLabel"], "the scene")
+        # And the alignment axiom on the site as committed (issue #80): a card pressed opens a
+        # feature that is that card. While the world's module loads, and on a world with no piece
+        # at all, what stands is the card's own title -- never the world's one-line description,
+        # which is the same line for every card of it.
+        carried = report["carried"]["result"]
+        card = carried["card"]
+        for when in ["loading", "missingLoading", "missing"]:
+            with self.subTest(when=when):
+                self.assertEqual(carried[when]["title"], card["title"],
+                                 "the stage wrote something other than the card that was pressed")
+                self.assertNotEqual(carried[when]["title"], carried["world"]["what"])
+        self.assertEqual(carried["loading"]["brief"], card["quote"], "the card's own line was dropped")
+        self.assertTrue(carried["playable"], "a card pressed opened no piece")
+        self.assertTrue(carried["barePlayable"], "a piece nobody pressed opened nothing")
+        # The scene is framed by the configuration the card was wearing, inside the limits no frame
+        # on this site leaves (js/variant.js, ASPECT_LIMITS).
+        for when in ["opened", "bare"]:
+            with self.subTest(when=when):
+                ratio = float(carried[when]["aspect"])
+                self.assertGreaterEqual(ratio, 0.6)
+                self.assertLessEqual(ratio, 1.9)
 
     def test_a_finished_piece_hands_the_visitor_the_way_on(self):
         # Issue #78: nothing moves on by itself, so every piece ends on one mark the visitor
@@ -5605,6 +5764,48 @@ class RealSiteTest(unittest.TestCase):
         self.assertRegex(feed, r"seeds: palette\(card, m\)",
                          "the next card off the stack hands the stage no palette")
 
+    def test_the_feature_a_card_opens_as_is_that_card(self):
+        # The alignment axiom (issue #80): every content piece on this site is procedurally
+        # configured, and that configuration is the same whether the piece appears as a card in the
+        # feed or as the feature it opens as. It was not: the card handed the stage its file, its
+        # seed and its four palette seeds, and nothing else, so the feature was titled by the
+        # world's one-line description -- the same line for every card of that world, which is the
+        # generic text the cards fell back to. Three things make it true, and each is checked where
+        # it lives; the stage harness plays the rest (the "carried" scenario).
+        #
+        # One: the whole configuration leaves the feed with the card, both for a card a visitor
+        # pressed and for the next one off the stack when a piece ends.
+        feed = self.source["js/feed.js"]
+        self.assertRegex(feed, r"interestingStage\.open\(file, seed, \{[^}]*\bvariant\b[^}]*\bcard\b",
+                         "a pressed card hands the stage neither its configuration nor its content")
+        self.assertRegex(feed, r"variant: m\.variant, card: shown\(m\)",
+                         "the next card off the stack hands the stage no configuration")
+        self.assertIn("function shown(m)", feed, "nothing reads what a card is showing")
+        # Two: the stage exposes both on the env it hands a world's module, the way the feed does
+        # on a card's, and frames the scene by the same stretch the card's frame was stretched by.
+        stage = self.source[mi.STAGE_SCRIPT]
+        env = stage.split("function makeEnv(", 1)[1].split("\n}", 1)[0]
+        self.assertIn("variant: variant || PLAIN", env, "a piece is handed no configuration")
+        self.assertIn("card: card || null", env, "a piece is handed no card")
+        self.assertIn("revive(opts.variant, seed)", stage,
+                      "the stage does not revive the configuration a card handed it")
+        self.assertIn("framed(piece.aspect", stage, "the scene is not framed as the card was")
+        self.assertIn("from './variant.js'", stage,
+                      "the stage keeps a configuration of its own rather than the site's one file")
+        # Three: the world's one line is never a feature's title. It is the one thing every card of
+        # a world says, so writing it while a module loads, or when a world has no piece, is exactly
+        # the bug: the card's own title stands there instead (heading() in the stage).
+        self.assertNotIn("world.what", stage, "the stage still writes the world's generic line")
+        self.assertIn("function heading(world, card)", stage, "nothing writes the card's own title")
+        # And every world's module says what its cards are of, so its piece can open on that very
+        # thing rather than rolling another (the piece harness holds each one to it).
+        for rel, text in sorted(self.source.items()):
+            if not rel.startswith("js/modules/"):
+                continue
+            with self.subTest(module=rel):
+                self.assertIn("env.card", text, "this world's piece ignores the card it opens from")
+                self.assertRegex(text, r"\bof: \{", "this world's cards say nothing about what they are of")
+
     # The viewport the screenshot on issue #65 was taken at -- a 14-inch MacBook Pro is 1512 CSS
     # pixels wide, and about 850 tall with the browser's own chrome off the top of it -- and three
     # more desktops: a laptop, a large monitor, and a tall screen where the width runs out first.
@@ -5613,6 +5814,12 @@ class RealSiteTest(unittest.TestCase):
     # Every aspect ratio a world writes its pieces in. The squarer ones are the whole of issue #65:
     # a piece narrower than the column it was given is what left a band of empty page behind.
     PIECE_ASPECTS = ["16 / 9", "16 / 10", "5 / 3", "4 / 3", "1 / 1", "4 / 5", "3 / 4"]
+
+    # And the frames the stage can write over those: a piece's own ratio, stretched by the
+    # configuration the card it opened from was wearing (the alignment axiom, issue #80). That
+    # arrives as a bare number rather than "a / b", and js/variant.js clamps it to ASPECT_LIMITS,
+    # so the two limits are the squarest and the widest scene the stage can ask the sheet for.
+    STRETCHED = ["0.6", "1.9"]
 
     def test_the_stage_fills_the_real_estate_the_first_screen_has(self):
         # Issue #65: on the wish constellation, whose pieces are 4/3, a band of empty page sat
@@ -5647,9 +5854,8 @@ class RealSiteTest(unittest.TestCase):
             heading = sheet.px(sheet.var("--stage-head", ".stage"), ".stage")
             gap = sheet.px(sheet.var("--stage-gap", ".stage-body"), ".stage-body", column)
             knobs = sheet.px(sheet.var("--stage-knobs", ".stage-body"), ".stage-body", column)
-            for aspect in self.PIECE_ASPECTS:
-                across, down = (float(side) for side in aspect.split("/"))
-                ratio = across / down
+            for aspect in self.PIECE_ASPECTS + self.STRETCHED:
+                ratio = eval_ratio(aspect)
                 # What js/stage.js writes onto the scene for the piece it has opened.
                 given = {"--piece-ratio": f"{ratio:.4f}", "--piece-aspect": aspect}
                 budget = sheet.px(sheet.var("--stage-h", ".stage-body"), ".stage-body", column, given)
@@ -5682,14 +5888,14 @@ class RealSiteTest(unittest.TestCase):
         self.assertGreater(phone.px(phone.var("--stage-keep", ".stage"), ".stage"), 0,
                            "nothing is kept back for the knobs under the scene")
         narrow = 390 - 2 * phone.px(phone.var("--gutter", ":root"), ":root")
-        for aspect in self.PIECE_ASPECTS:
-            across, down = (float(side) for side in aspect.split("/"))
-            given = {"--piece-ratio": f"{across / down:.4f}", "--piece-aspect": aspect}
+        for aspect in self.PIECE_ASPECTS + self.STRETCHED:
+            ratio = eval_ratio(aspect)
+            given = {"--piece-ratio": f"{ratio:.4f}", "--piece-aspect": aspect}
             capped = phone.px(phone.value(".stage-scene", "max-width"), ".stage-scene", narrow, given)
             budget = phone.px(phone.var("--stage-h", ".stage-scene"), ".stage-scene", narrow, given)
             with self.subTest(phone=aspect):
                 self.assertGreater(min(narrow, capped), 0, "the scene has no width on a phone")
-                self.assertLessEqual(min(narrow, capped) / (across / down), budget + 1,
+                self.assertLessEqual(min(narrow, capped) / ratio, budget + 1,
                                      "a piece on a phone is taller than the first screen leaves it")
         # Second: the heading the scene is measured against is the real one. The sheet can only guess
         # at it (one line at the widest type scale), and a title that wraps has to be paid for by the

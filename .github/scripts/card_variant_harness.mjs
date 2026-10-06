@@ -15,6 +15,10 @@
  *     from the same seed, in the same colours, under two configurations, and the drawing calls have
  *     to differ.
  *
+ * A third thing is observed here since issue #80: what a configuration comes back as once it has
+ * crossed the boundary from a card to the piece it opens as (V.revive), which is the one place the
+ * site answers "what configuration is this piece of?" -- including for a piece nobody pressed.
+ *
  * The third argument is the fifteen mood palettes, read out of _sass/_mood.scss by the caller, so
  * the colour a configuration derives can be checked against the palette it was derived from rather
  * than against a copy of it kept here.
@@ -144,6 +148,28 @@ const observed = {
   unreadableFrame: V.aspect("not a ratio", V.roll(SEEDS[0])),
   lights: SEEDS.slice(0, 40).map((seed) => V.light(V.roll(seed))),
   plainLight: V.light(V.PLAIN),
+};
+
+/* ---- the configuration a piece opens with ----------------------------------------------------- */
+
+// A card hands its configuration to the stage when it is pressed, and a piece opened from an
+// address has none to be handed, so variant.revive is the one place either answer is given
+// (issue #80). What it does with a configuration that has crossed that boundary is observed here:
+// the plain one stays plain, a rolled one comes back as itself, every dial is clamped into its own
+// range, and anything unreadable is rolled from the seed instead.
+observed.revived = {
+  plain: V.revive(V.PLAIN, SEEDS[0]),
+  cases: SEEDS.slice(0, 20).map((seed) => {
+    const rolled = V.roll(seed);
+    return {
+      seed,
+      rolled,
+      roundTrip: V.revive(JSON.parse(JSON.stringify(rolled)), seed),
+      fromNothing: V.revive(null, seed),
+      fromJunk: V.revive({ plain: false, trade: "wide", lift: null }, seed),
+      clamped: V.revive({ plain: false, trade: 40, lift: -9, wash: 99, density: -1, scale: 50, turn: 7, stretch: 99 }, seed),
+    };
+  }),
 };
 
 /* ---- what it does to colour ------------------------------------------------------------------ */
