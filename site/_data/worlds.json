@@ -29,7 +29,7 @@
     { "file": "machine-shop.html", "name": "the machine shop", "orientation": "cold and clear", "mood": "analytic", "aspect": "3 / 4",
       "what": "Run a rule on a tape, or change one cell in a matching pair, predict the difference, and reveal their futures in three bursts." },
     { "file": "kinetic-floor.html", "name": "the kinetic floor", "orientation": "wound tight", "mood": "restless", "aspect": "16 / 10",
-      "what": "Shove blocks, flip gravity, choose what they are made of, and finish with the floor's damage report." },
+      "what": "Shove blocks, flip gravity, or make one domino taller, predict whether the fall crosses a gap, and tip the first one to find out." },
     { "file": "loam.html", "name": "loam", "orientation": "low and slow", "mood": "rooted", "aspect": "4 / 5",
       "what": "Set soil grit, plant and water, turn the bed, and finish on a core reading from what grew below." },
     { "file": "word-kiln.html", "name": "the word kiln", "orientation": "full of half-sentences", "mood": "verbal", "aspect": "5 / 4",
