@@ -3,7 +3,8 @@
   and nothing else, so what a visitor opens is never a fixed page: it is a piece, generated on the
   spot by the world's module (js/modules/<world>.js, piece()) from a seed, run here by js/stage.js,
   and when it is finished -- every piece can be finished, by law (see the README, "Completion
-  axiom") -- it vanishes and the next card in the feed's stack opens in its place.
+  axiom") -- it plays its ceremony and lights the way on in the lower right, which is what the
+  visitor presses to vanish it and open the next card in the feed's stack in its place.
 
   Set before including:
     stageWorld   the world's file without ".html" ("quiet-room"); the piece opened on arrival
@@ -17,8 +18,8 @@
                  this address"); stageLine is the line under the page's name before a piece is on
 
   What is written here is what a visitor without scripting gets: the world's name, its one line
-  of purpose, and the feed below (the piece's parts are hidden until a piece is on). The heading
-  outline is the page's (h1), then the piece's (h2), then the feed's.
+  of purpose, and the feed below (the piece's parts, and the way on, are out of the way until a
+  piece is on). The heading outline is the page's (h1), then the piece's (h2), then the feed's.
 -#}
 {%- set stageEntry = null -%}
 {%- for world in worlds.worlds %}{% if world.file == stageWorld + '.html' %}{% set stageEntry = world %}{% endif %}{% endfor -%}
@@ -60,8 +61,9 @@
         <p class='stage-status' id='stage-status' aria-live='polite'></p>
         <p class='stage-wanted' id='stage-wanted' aria-live='polite' hidden></p>
         <div class='stage-foot'>
+          {#- Kept even when it is empty: the dots sit at the right of this row, and they stay
+              there whether or not the threshold's own button is standing opposite them. -#}
           <div class='stage-foot-actions'>
-            <button type='button' class='btn-text' id='stage-skip' hidden>skip this one</button>
 {%- if threshold %}
             <button type='button' class='btn-text' id='stage-again' hidden>ask another way</button>
 {%- endif %}
@@ -71,4 +73,12 @@
       </div>
     </div>
   </div>
+  {#- The way on, pinned in the lower right of the viewport: dim for the whole piece and lit the
+      moment it is finished, so nothing moves on until the visitor says so (issue #78). Outside
+      #stage-inner on purpose -- the vanish transforms that box, and a transformed ancestor is
+      what a fixed child would be positioned against -- so this mark holds still in the same
+      corner whatever the piece's shape, however many knobs it has, and whichever piece is on. -#}
+  <button type='button' class='stage-next' id='stage-next' aria-label='the next piece' disabled>
+    <svg class='icon' viewBox='0 0 24 24' aria-hidden='true' focusable='false'><path d='M6.41 6L5 7.41 9.58 12 5 16.59 6.41 18l6-6zm6.59 0l-1.41 1.41L16.17 12l-4.58 4.59L13 18l6-6z'/></svg>
+  </button>
 </main>
