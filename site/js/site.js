@@ -951,9 +951,10 @@
 
     nav.cookiesOpen.addEventListener('click', function () {
       // The constellation gets out of the way first, and the focus goes to the logo rather than
-      // to the chip it is taking with it: both dialogs are the corner affordances' own, drawn
-      // where their own files draw them, and the consent library hands the focus back to whatever
-      // had it when its dialog opened.
+      // to the chip it is taking with it: this dialog is the consent library's own, drawn where
+      // its own file draws it, and that library hands the focus back to whatever had it when the
+      // dialog opened. ("state" is the other way about -- see stateModal above -- because it is
+      // this site's own interface rather than a vendored library's.)
       close(true);
       if (nav.cookiesCorner) nav.cookiesCorner.click();
     });
