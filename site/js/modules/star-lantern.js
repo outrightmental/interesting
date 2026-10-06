@@ -1,11 +1,54 @@
 /* The lantern ritual: the persona's stars as lanterns. As a card, one of them is lit (paint,
-   spark); as a piece, a few are kindled in an order the visitor chooses and let rise on a wind
-   they set. See js/feed.js for what a module is and js/stage.js for what a piece is. */
+   spark); as a piece, a few are kindled in an order the visitor chooses and sent off by the rite
+   the seed picked. See js/feed.js for what a module is and js/stage.js for what a piece is.
+
+   The rite is not the same twice: the seed chooses which orders are offered, which dial sits
+   between the kindling and the finale, how long the finale is held, and where the lanterns go
+   when they are let go. The knobs are a chain -- order, then kindling, then the dial, then the
+   release -- so the finale is the last thing a visitor can reach and never the first. */
 
 const ORDERS = [
   { label: 'left to right', value: 'x' },
   { label: 'low to high', value: 'y' },
-  { label: 'nearest first', value: 'near' }
+  { label: 'nearest first', value: 'near' },
+  { label: 'the longest wish first', value: 'long' }
+];
+
+// The dial between the kindling and the finale: one knob, two quite different things to set.
+const DIALS = [
+  { id: 'wind', ask: 'the wind', low: 'still', high: 'gusting', value: 30, brief: 'set the wind' },
+  { id: 'glow', ask: 'how hard they burn', low: 'embers', high: 'blazing', value: 55, brief: 'set how hard they burn' }
+];
+
+// What letting go does, and what the piece is called for doing it.
+const RITES = [
+  {
+    id: 'rise',
+    going: 'rising',
+    ask: 'let them rise',
+    label: 'hold to release',
+    brief: 'hold to let them rise',
+    title: (need, all) => (need === all ? 'light every lantern and let it rise' : 'light ' + need + ' lanterns and let them rise'),
+    close: (need, all) => (need === all ? 'all of them, up and away' : need + ' lanterns, up and away')
+  },
+  {
+    id: 'drift',
+    going: 'away downwind',
+    ask: 'send them downwind',
+    label: 'hold to let go',
+    brief: 'hold to send them downwind',
+    title: (need, all) => (need === all ? 'light every lantern and send it downwind' : 'send ' + need + ' lanterns downwind'),
+    close: (need, all) => (need === all ? 'all of them, out over the dark' : need + ' lanterns, out over the dark')
+  },
+  {
+    id: 'spiral',
+    going: 'turning as they climb',
+    ask: 'wind them up and away',
+    label: 'hold until they lift',
+    brief: 'hold until they spiral up',
+    title: (need, all) => (need === all ? 'light every lantern and wind it up' : 'wind ' + need + ' lanterns up and away'),
+    close: (need, all) => (need === all ? 'all of them, turning as they go' : need + ' lanterns, turning as they go')
+  }
 ];
 
 function lantern(ctx, env, x, y, lit, glow) {
@@ -14,7 +57,7 @@ function lantern(ctx, env, x, y, lit, glow) {
   const lh = 14;
   if (lit) {
     const halo = ctx.createRadialGradient(x, y, 0, x, y, 34 * glow);
-    halo.addColorStop(0, env.alpha(c.accent2, 0.55));
+    halo.addColorStop(0, env.alpha(c.accent2, Math.min(0.85, 0.3 + glow * 0.25)));
     halo.addColorStop(1, env.alpha(c.accent2, 0));
     ctx.fillStyle = halo;
     ctx.fillRect(x - 34 * glow, y - 34 * glow, 68 * glow, 68 * glow);
@@ -53,11 +96,34 @@ function lanterns(ctx, w, h, env, litIndex, t) {
   });
 }
 
+// Where a lantern has got to, once it has been let go: the rite decides.
+function flight(rite, s, i, h) {
+  if (!s.rise) return { dx: 0, dy: 0 };
+  const r = s.rise;
+  const far = (h + 80) * (0.6 + (i % 3) * 0.2);
+  if (rite === 'drift') return { dx: r * (50 + s.wind * 280) * (1 + (i % 2) * 0.4), dy: -r * far * 0.7 };
+  if (rite === 'spiral') return { dx: Math.sin(r * 7 + i * 1.7) * (20 + s.wind * 40) * r, dy: -r * r * far };
+  return { dx: 0, dy: -r * r * far };
+}
+
 function piece(env) {
   const n = env.stars.length;
   if (!n) return null;
   const need = Math.min(n, env.int(3, 5));
-  const s = { order: 'near', lit: [], wind: 0.3, rise: 0, t: 0, last: null };
+  const rite = env.pick(RITES);
+  const dial = env.pick(DIALS);
+  const hold = env.int(1200, 2400);
+  // Two or three of the orders, in a seeded order of their own: which ways in are offered is part
+  // of what makes one lantern night different from the next.
+  const pool = ORDERS.slice();
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(env.rnd() * (i + 1));
+    const held = pool[i];
+    pool[i] = pool[j];
+    pool[j] = held;
+  }
+  const orders = pool.slice(0, env.int(2, 3));
+  const s = { order: orders[0].value, lit: [], wind: 0.3, glow: 0.55, rise: 0, t: 0, last: null };
   function points(c) {
     return c.points(c.w, c.h, 18);
   }
@@ -66,6 +132,7 @@ function piece(env) {
     if (!unlit.length) return -1;
     if (s.order === 'x') return unlit.sort((a, b) => pts[a].x - pts[b].x)[0];
     if (s.order === 'y') return unlit.sort((a, b) => pts[b].y - pts[a].y)[0];
+    if (s.order === 'long') return unlit.sort((a, b) => String(pts[b].text || '').length - String(pts[a].text || '').length)[0];
     return unlit.sort((a, b) => {
       const da = (pts[a].x - x) ** 2 + (pts[a].y - y) ** 2;
       const db = (pts[b].x - x) ** 2 + (pts[b].y - y) ** 2;
@@ -73,25 +140,29 @@ function piece(env) {
     })[0];
   }
   return {
-    title: need === n ? 'light every lantern' : 'light ' + need + ' lanterns',
-    brief: 'Choose the order, tap the sky to kindle the lanterns one by one, set the wind, and hold to let them rise.',
+    title: rite.title(need, n),
+    brief: 'Choose the order, tap the sky to kindle each lantern, ' + dial.brief + ', and ' + rite.brief + '.',
     aspect: '16 / 10',
+    // A chain, on purpose: the release is the rite's last gesture, so it waits on the dial, which
+    // waits on the kindling, which waits on the order. No knob of this piece can be reached
+    // before the one the brief puts in front of it, and none is left behind when the finale runs.
     steps: [
-      { id: 'order', ask: 'which lights first', kind: 'choice', options: ORDERS },
+      { id: 'order', ask: 'which lights first', kind: 'choice', options: orders },
       { id: 'kindle', ask: need === 1 ? 'tap the sky once' : 'tap the sky ' + need + ' times', kind: 'tap', label: 'kindle one for me', after: 'order' },
-      { id: 'wind', ask: 'the wind', kind: 'range', min: 0, max: 100, step: 1, value: 30, low: 'still', high: 'gusting' },
-      { id: 'release', ask: 'let them rise', kind: 'hold', ms: 1800, label: 'hold to release', after: 'kindle' }
+      { id: dial.id, ask: dial.ask, kind: 'range', min: 0, max: 100, step: 1, value: dial.value, low: dial.low, high: dial.high, after: 'kindle' },
+      { id: 'release', ask: rite.ask, kind: 'hold', ms: hold, label: rite.label, after: dial.id }
     ],
     start(c) {
       sky(c.g, c.w, c.h, c);
-      points(c).forEach((p) => lantern(c.g, c, p.x, p.y, false, 1));
+      points(c).forEach((p) => lantern(c.g, c, p.x, p.y, false, 0.3 + s.glow * 0.9));
     },
     apply(id, value, c) {
       if (id === 'order') s.order = String(value);
       if (id === 'wind') s.wind = Math.max(0, Math.min(1, Number(value) / 100));
+      if (id === 'glow') s.glow = Math.max(0, Math.min(1, Number(value) / 100));
       if (id === 'release') {
         s.rise = 0.001;
-        c.status('rising');
+        c.status(rite.going);
       }
     },
     tap(x, y, c) {
@@ -110,16 +181,17 @@ function piece(env) {
       if (s.rise) s.rise = Math.min(1, s.rise + dt * 0.5);
       sky(c.g, c.w, c.h, c);
       const pts = points(c);
+      const burn = 0.3 + s.glow * 0.9;
       pts.forEach((p, i) => {
         const lit = s.lit.indexOf(i) !== -1;
         const bob = Math.sin(s.t * (0.6 + s.wind * 1.6) + i * 1.1) * (2 + s.wind * 9);
         const sway = Math.sin(s.t * (0.4 + s.wind) + i) * s.wind * 10;
-        const up = lit && s.rise ? s.rise * s.rise * (c.h + 80) * (0.6 + (i % 3) * 0.2) : 0;
-        lantern(c.g, c, p.x + sway, p.y + bob - up, lit, lit && s.rise ? 1 + s.rise : 1);
+        const gone = lit ? flight(rite.id, s, i, c.h) : { dx: 0, dy: 0 };
+        lantern(c.g, c, p.x + sway + gone.dx, p.y + bob + gone.dy, lit, lit && s.rise ? burn * (1 + s.rise) : burn);
       });
     },
     end(c) {
-      c.status(need === n ? 'all of them, up and away' : need + ' lanterns, up and away');
+      c.status(rite.close(need, n));
     }
   };
 }
