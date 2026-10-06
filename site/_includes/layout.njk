@@ -128,9 +128,13 @@
   else -- "change this site" (js/participate.js), "cookies" (js/analytics.js) and "state"
   (js/state.js): js/site.js hides the control each file pinned over the page and forwards the
   constellation's option to it, so there is still exactly one new-issue link, one cookies dialog
-  and one state menu, and no fixed file is edited to do it. Nothing of the site's is left floating
-  at an edge of the viewport either, the bottom one included: at rest the whole of the navigation
-  is the two marks in the top corners (issue #64).
+  and one state menu, and no fixed file is edited to do it. Two of them hand the visitor straight
+  on to somebody else's control, with the lightbox out of the way first; "state" keeps the
+  lightbox, the constellation giving way so js/state.js's own panel can be hosted in
+  #sparknav-modal, the middle of the veil that is already up, until the visitor closes it and the
+  lightbox goes down with it (issue #66). Nothing of the site's is left floating at an edge of the
+  viewport either, the bottom one included: at rest the whole of the navigation is the two marks
+  in the top corners (issue #64).
 
   The page's own world, when it has one, is named on <html data-world> so _sass/_mood.scss gives
   the page that world's palette; a visitor's reading lands on <html data-mood> and wins over it,
@@ -291,6 +295,11 @@
 {%- endfor %}
       </ul>
     </nav>
+    {#- Where the state interface goes when "state" is picked: the constellation gives way to it
+        and the veil behind it never comes down (issue #66). Empty, and hidden, until then --
+        js/state.js owns that panel and js/site.js asks for it; the shell only holds the middle of
+        the screen open for it. -#}
+    <div class='sparknav-modal' id='sparknav-modal' hidden></div>
   </details>
   {#- The persona, floating in the upper right: the only other navigation on the site, and the
       portrait alone -- nothing is ever put beside it (issue #64). What a visitor with scripting

@@ -56,6 +56,7 @@ class Element {
   constructor(tag) {
     this.tagName = String(tag).toUpperCase();
     this.attributes = {};
+    this.writes = []; // every attribute write this element has seen, in order
     this.children = [];
     this.parentNode = null;
     this.listeners = {};
@@ -153,8 +154,12 @@ class Element {
     return true;
   }
 
+  /* Every write is kept, in order, with null for a removal: it is the only way to see what did
+     *not* happen in between two states -- the lightbox going down and up again while the state
+     interface takes the constellation's place, say, which is the flicker issue #66 forbids. */
   setAttribute(name, value) {
     this.attributes[name] = String(value);
+    this.writes.push({ name, value: String(value) });
   }
 
   getAttribute(name) {
@@ -163,15 +168,27 @@ class Element {
 
   removeAttribute(name) {
     delete this.attributes[name];
+    this.writes.push({ name, value: null });
   }
 
   hasAttribute(name) {
     return name in this.attributes;
   }
 
+  /* A node has one parent, so appending something that already has one moves it -- which is how
+     the state interface gets from the corner js/state.js built it in to the middle of the
+     lightbox and back again. */
   appendChild(child) {
+    if (child.parentNode) child.parentNode.removeChild(child);
     child.parentNode = this;
     this.children.push(child);
+    return child;
+  }
+
+  removeChild(child) {
+    const at = this.children.indexOf(child);
+    if (at !== -1) this.children.splice(at, 1);
+    child.parentNode = null;
     return child;
   }
 
@@ -286,6 +303,10 @@ function makeDocument({ page = "quiet-room.html", viewport = { width: 1280, heig
   sky.appendChild(near);
   sky.appendChild(far);
   host.appendChild(sky);
+  // Where the shell holds the middle of the lightbox open for the state interface, empty until the
+  // option is picked, exactly as _includes/layout.njk writes it.
+  host.appendChild(make("div", { class: "sparknav-modal", id: "sparknav-modal", hidden: "" },
+                        { width: 1000, height: 600 }));
   body.appendChild(host);
 
   body.appendChild(make("div", { class: "persona", id: "persona" }));
@@ -417,6 +438,42 @@ function toggle(context, open) {
   id(context, "sparknav").open = open;
 }
 
+/** What js/state.js offers a shell that would rather host its panel than press its button:
+ *  window.interestingState.menu, as "Presented somewhere else" in that file describes it. The
+ *  panel is moved into the host, marked, filled and shown; the function that comes back closes it
+ *  and puts it where it was built. LocalStateStoreTest holds the real one to this. */
+function stateMenuStub(panel) {
+  let home = null;
+  const menu = {
+    panel,
+    openedOnScreen: null,
+    present(host) {
+      if (!host || typeof host.appendChild !== "function") return null;
+      if (!home) home = panel.parentNode;
+      host.appendChild(panel);
+      panel.setAttribute("data-site-meta-presented", "");
+      panel.setAttribute("aria-modal", "true");
+      panel.hidden = false;
+      // The real file puts the focus in the document's text as it opens, which only lands if the
+      // host it was moved into is already on screen. Whether it was is worth reporting: a hidden
+      // box takes no focus, and nothing would say so.
+      const field = panel.querySelector("textarea");
+      if (field) {
+        menu.openedOnScreen = !!(field.offsetWidth || field.offsetHeight);
+        field.focus();
+      }
+      return () => {
+        panel.hidden = true;
+        panel.removeAttribute("data-site-meta-presented");
+        panel.removeAttribute("aria-modal");
+        if (home) home.appendChild(panel);
+        home = null;
+      };
+    },
+  };
+  return menu;
+}
+
 /** Everything the fixed files pin over the page, by the selectors js/site.js finds them with. */
 const PINNED = {
   cookies: ".site-consent-link", // js/analytics.js, bottom-left
@@ -424,8 +481,10 @@ const PINNED = {
   steer: ".site-steer", // js/participate.js, the middle of the bottom edge
 };
 
-/** Those three, drawn after the page has loaded, as their own deferred files draw them. */
-function drawCorners(context, { cookies = true, state = true, steer = true } = {}) {
+/** Those three, drawn after the page has loaded, as their own deferred files draw them. The state
+ *  menu arrives with its panel and with the offer to be hosted elsewhere; `hosted: false` is the
+ *  store that makes no such offer, which the constellation has to fall back from. */
+function drawCorners(context, { cookies = true, state = true, steer = true, hosted = true } = {}) {
   if (cookies) {
     context.document.body.appendChild(
       make("button", { class: "site-consent-link", "aria-label": "Change cookie preferences" }, CHIP));
@@ -433,9 +492,21 @@ function drawCorners(context, { cookies = true, state = true, steer = true } = {
   if (state) {
     const root = make("div", { class: "site-meta" });
     root.appendChild(make("button", { class: "site-meta-open", "aria-expanded": "false" }, CHIP));
-    root.appendChild(make("div", { class: "site-meta-panel", id: "site-meta-panel",
-                                   role: "dialog", hidden: "" }));
+    // As much of the panel as a keyboard walks: the text box holding the document, and the four
+    // controls under it.
+    const panel = make("div", { class: "site-meta-panel", id: "site-meta-panel",
+                                role: "dialog", hidden: "" });
+    panel.appendChild(make("textarea", { id: "site-meta-json" }, { width: 400, height: 150 }));
+    const actions = make("div", { class: "site-meta-actions" });
+    for (const word of ["copy", "replace mine", "clear", "close"]) {
+      const button = make("button", { type: "button" }, CHIP);
+      button.textContent = word;
+      actions.appendChild(button);
+    }
+    panel.appendChild(actions);
+    root.appendChild(panel);
     context.document.body.appendChild(root);
+    if (hosted) context.window.interestingState.menu = stateMenuStub(panel);
   }
   if (steer) {
     const link = make("a", {
@@ -449,6 +520,31 @@ function drawCorners(context, { cookies = true, state = true, steer = true } = {
     el.ownerDocument = context.document;
   }
   mutated(context);
+}
+
+/** The state interface as the shell left it: where it is, whether it is open, and what the
+ *  lightbox around it is doing. */
+function stateInterface(context) {
+  const panel = context.document.querySelector(".site-meta-panel");
+  const sky = id(context, "sparknav").querySelector(".sparknav-sky");
+  const seen = lightbox(context);
+  const veil = id(context, "sparknav-veil");
+  return {
+    lightbox: seen.lightbox,
+    open: id(context, "sparknav").open,
+    // Still the same veil, still where it was: it is never taken down and raised again.
+    veil: !!veil && veil.parentNode === id(context, "sparknav"),
+    sky: sky.hidden,
+    branching: seen.branching,
+    modal: id(context, "sparknav-modal").hidden,
+    panelHidden: panel.hidden,
+    panelHost: panel.parentNode ? panel.parentNode.getAttribute("id") || panel.parentNode.className : null,
+    presented: panel.hasAttribute("data-site-meta-presented"),
+    ariaModal: panel.getAttribute("aria-modal"),
+    corner: context.document.querySelector(".site-meta-open").clicks,
+    focusedLogo: id(context, "sparknav-logo").focused,
+    aside: seen.aside,
+  };
 }
 
 /** What one option looks like from the outside: whether it is in the orbit, where its chip sits,
@@ -748,25 +844,149 @@ const scenarios = {
       corner: context.document.querySelector(".site-consent-link").clicks,
       open: id(context, "sparknav").open,
     };
+    /* And the state interface, which is the same panel js/state.js built and never a copy of it,
+       hosted in the lightbox rather than opened from the corner (issue #66). */
     toggle(context, true);
     id(context, "sparknav-state-open").click();
-    const state = {
-      corner: context.document.querySelector(".site-meta-open").clicks,
-      open: id(context, "sparknav").open,
-      focusedLogo: id(context, "sparknav-logo").focused,
+    return { steer, cookies, state: stateInterface(context) };
+  },
+
+  /* The state interface takes the lightbox over: the constellation gives way to it and not one
+     thing the lightbox is made of comes down in between (issue #66). Then it closes itself, the
+     way its own "close" button does, and the lightbox goes with it. */
+  whenTheStateInterfaceTakesOver() {
+    const context = load({ kept: ["constellation"] });
+    drawCorners(context);
+    toggle(context, true);
+    const held = [];
+    context.window.requestAnimationFrame((now) => held.push(now)); // the page's loop, held
+    const before = stateInterface(context);
+    id(context, "sparknav-state-open").click();
+    const taken = {
+      ...stateInterface(context),
+      ranWhileOpen: held.length,
+      openedOnScreen: context.window.interestingState.menu.openedOnScreen,
     };
-    /* And what happens when that menu closes again: it hands the focus back to its own button,
-       which the shell has hidden, so the logo takes it instead. */
+
     const panel = context.document.querySelector(".site-meta-panel");
-    panel.hidden = false;
+    panel.hidden = true; // what the panel's own "close" does, and nothing else of it is touched
+    mutated(context);
+    return {
+      before,
+      taken,
+      closed: { ...stateInterface(context), ranOnClose: held.length },
+      // What <html data-lightbox> was written across the whole of it: 'nav' when the logo was
+      // pressed, 'state' when the interface took over, and gone when it closed. A null in the
+      // middle of that would be the lightbox coming down and going up again, which is the
+      // flicker issue #66 forbids.
+      lightboxWrites: context.document.documentElement.writes
+        .filter((write) => write.name === "data-lightbox").map((write) => write.value),
+    };
+  },
+
+  /* Escape and a press on the dimmed page around it close the state interface, and with it the
+     lightbox: there is no way back to the constellation. */
+  whenTheStateInterfaceIsDismissed() {
+    const escape = load();
+    drawCorners(escape);
+    toggle(escape, true);
+    id(escape, "sparknav-state-open").click();
+    fireDocument(escape, "keydown", { key: "Escape" });
+
+    const pressed = load();
+    drawCorners(pressed);
+    toggle(pressed, true);
+    id(pressed, "sparknav-state-open").click();
+    id(pressed, "sparknav-modal").click(); // the host itself, which is the page around the panel
+
+    /* A question floating over the state interface answers Escape itself: dismissing "are you
+       sure you want to clear everything?" is not dismissing the interface that asked it. */
+    const asking = load();
+    drawCorners(asking);
+    toggle(asking, true);
+    id(asking, "sparknav-state-open").click();
+    asking.window.interestingSite.areYouSure({
+      what: "clear everything this site has kept in your browser",
+      onConfirm: () => {},
+    });
+    fireDocument(asking, "keydown", { key: "Escape" });
+
+    return {
+      escape: stateInterface(escape),
+      pressed: stateInterface(pressed),
+      whileAsking: stateInterface(asking),
+    };
+  },
+
+  /* The state interface's own "clear" asks the shared question, from inside the lightbox. That
+     dialog is a child of the body, built the first time anything on the page asks, so the lightbox
+     may well have put it aside before the menu was ever opened -- and a question nobody can
+     answer is worse than no question. */
+  whenTheStateInterfaceAsksAQuestion() {
+    const context = load();
+    drawCorners(context);
+    // Something on the page asks first, which is what builds the dialog and leaves it there.
+    context.window.interestingSite.areYouSure({ what: "clear your omens", onConfirm: () => {} });
+    fireDocument(context, "keydown", { key: "Escape" });
+    toggle(context, true);
+    const putAside = lightbox(context).aside["are-you-sure"];
+    id(context, "sparknav-state-open").click();
+    context.window.interestingSite.areYouSure({
+      what: "clear everything this site has kept in your browser",
+      onConfirm: () => {},
+    });
+    const dialog = context.document.querySelector(".are-you-sure");
+    return {
+      putAside,
+      question: {
+        open: dialog.hasAttribute("open"),
+        inert: dialog.hasAttribute("inert"),
+        ariaHidden: dialog.getAttribute("aria-hidden"),
+        focusedCancel: dialog.querySelector(".are-you-sure-no").focused,
+      },
+      // And the interface that asked it is still there behind the question, unmoved.
+      stillUp: stateInterface(context),
+    };
+  },
+
+  /* A keyboard stays inside the state interface while it is up, and reaches all of it: the text
+     box holding the document is as much of the modal as the buttons under it. */
+  whenTabReachesTheEndOfTheStateInterface() {
+    const context = load();
+    drawCorners(context);
+    toggle(context, true);
+    id(context, "sparknav-state-open").click();
+    const inside = id(context, "sparknav")
+      .querySelectorAll("summary, a[href], button:not([disabled]), textarea:not([disabled])")
+      .filter((el) => el.offsetWidth || el.offsetHeight);
+    const last = inside[inside.length - 1];
+    const logo = id(context, "sparknav-logo");
+    context.document.activeElement = last;
+    const forward = fireDocument(context, "keydown", { key: "Tab" });
+    const wrappedTo = context.document.activeElement === logo;
+    return {
+      reachable: inside.map((el) => el.tagName.toLowerCase() + (el.textContent ? ":" + el.textContent : "")),
+      forward: { prevented: forward.defaultPrevented, toTheLogo: wrappedTo },
+    };
+  },
+
+  /* A store too old to offer its panel, or a run that broke the asking: the option falls back to
+     what it did before issue #66 -- the lightbox gets out of the way and the corner button is
+     pressed -- and the logo still takes the focus back when that menu closes. */
+  withoutAHostedStateInterface() {
+    const context = load();
+    drawCorners(context, { hosted: false });
+    toggle(context, true);
+    id(context, "sparknav-state-open").click();
+    const fallen = stateInterface(context);
+    const panel = context.document.querySelector(".site-meta-panel");
+    panel.hidden = false; // the corner menu, opening where its own file pinned it
     mutated(context);
     const whileOpen = id(context, "sparknav-logo").focused;
     panel.hidden = true;
     mutated(context);
     return {
-      steer,
-      cookies,
-      state,
+      fallen,
       focus: { whileOpen, afterClose: id(context, "sparknav-logo").focused },
     };
   },
