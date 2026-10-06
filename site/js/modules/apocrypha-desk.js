@@ -1,9 +1,9 @@
 /* The apocrypha desk: a catalogue of objects that were never real, dealt one at a time. As a card
    it is one specimen with its catalogue number, provenance and assessment (paint, spark); as a
-   piece it is the desk itself: a specimen to name, wear, lie to and stamp into the drawer, or a
-   drawer of specimens to cross-reference and file together. Nothing here is a real object, a real
-   collection or a real claim about the world. See js/feed.js for what a module is and js/stage.js
-   for what a piece is. */
+   piece it is a specimen to name, wear, lie to and stamp into the drawer, a drawer of specimens
+   to cross-reference, or a solid with two different silhouettes to turn and catalogue. Nothing
+   here is a real object, a real collection or a real claim about the world. See js/feed.js for
+   what a module is and js/stage.js for what a piece is. */
 
 const MATERIALS = ['brass', 'horn', 'bakelite', 'tin', 'bone', 'blue glass', 'wax', 'pewter', 'felt', 'cedar',
   'slate', 'ivory-coloured celluloid'];
@@ -629,12 +629,265 @@ function crossReference(env) {
   };
 }
 
+/* ---- piece three: one solid, two silhouettes ------------------------------------------------ */
+
+const VIEWS = [
+  { name: 'key', kind: 'key' },
+  { name: 'bell', kind: 'bell' },
+  { name: 'reel', kind: 'spool' },
+  { name: 'hinge', kind: 'block' }
+];
+
+function turns(env) {
+  return env.seed % 5 === 0;
+}
+
+function profile(kind, x, y) {
+  if (kind === 'key') {
+    const ring = x * x + (y + 0.55) ** 2;
+    return (ring <= 0.45 ** 2 && ring >= 0.2 ** 2)
+      || (Math.abs(x) <= 0.1 && y >= -0.3)
+      || (x >= 0.08 && x <= 0.48 && y >= 0.4 && y <= 0.58)
+      || (x >= 0.08 && x <= 0.34 && y >= 0.76 && y <= 0.94);
+  }
+  if (kind === 'bell') {
+    return (Math.abs(x) <= 0.14 && y <= -0.6)
+      || (y >= -0.75 && Math.abs(x) <= (y >= 0.75 ? 0.94 : 0.18 + (y + 0.75) * 0.4));
+  }
+  if (kind === 'spool') return Math.abs(x) <= (Math.abs(y) >= 0.65 ? 0.88 : 0.31);
+  return Math.abs(x) <= 0.84
+    && (Math.abs(x) - 0.46) ** 2 + (Math.abs(y) - 0.45) ** 2 >= 0.17 ** 2;
+}
+
+function profileRuns(kind, y) {
+  const columns = 13;
+  const runs = [];
+  let start = -1;
+  for (let i = 0; i <= columns; i++) {
+    const occupied = i < columns && profile(kind, -1 + (i + 0.5) * 2 / columns, y);
+    if (occupied && start < 0) start = i;
+    if (!occupied && start >= 0) {
+      runs.push([-1 + start * 2 / columns, -1 + i * 2 / columns]);
+      start = -1;
+    }
+  }
+  return runs;
+}
+
+// Intersect perpendicular extrusions of the two profiles. Every horizontal row of each profile
+// has material, so the resulting solid reproduces both silhouettes, not a crossfade between them.
+function twoViewMesh(front, side) {
+  const faces = [];
+  const layers = 17;
+  function face(normal, points) {
+    faces.push({ normal, points });
+  }
+  for (let row = 0; row < layers; row++) {
+    const y0 = -1 + row * 2 / layers;
+    const y1 = -1 + (row + 1) * 2 / layers;
+    const y = (y0 + y1) / 2;
+    for (const [x0, x1] of profileRuns(front.kind, y)) {
+      for (const [z0, z1] of profileRuns(side.kind, y)) {
+        face([0, 0, 1], [[x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1]]);
+        face([0, 0, -1], [[x1, y0, z0], [x0, y0, z0], [x0, y1, z0], [x1, y1, z0]]);
+        face([1, 0, 0], [[x1, y0, z1], [x1, y0, z0], [x1, y1, z0], [x1, y1, z1]]);
+        face([-1, 0, 0], [[x0, y0, z0], [x0, y0, z1], [x0, y1, z1], [x0, y1, z0]]);
+        face([0, -1, 0], [[x0, y0, z0], [x1, y0, z0], [x1, y0, z1], [x0, y0, z1]]);
+        face([0, 1, 0], [[x0, y1, z1], [x1, y1, z1], [x1, y1, z0], [x0, y1, z0]]);
+      }
+    }
+  }
+  return faces;
+}
+
+function turningPlan(env) {
+  const front = env.pick(VIEWS);
+  const side = env.pick(VIEWS.filter((v) => v !== front));
+  const guesses = [side].concat(some(env, VIEWS.filter((v) => v !== side), 2));
+  for (let i = guesses.length - 1; i > 0; i--) {
+    const j = env.int(0, i);
+    [guesses[i], guesses[j]] = [guesses[j], guesses[i]];
+  }
+  return {
+    front, side,
+    guesses: guesses.map((v) => ({ label: 'a ' + v.name, value: v.name })),
+    materials: some(env, MATERIALS, 3).map((m) => ({ label: m, value: m })),
+    number: catalogue(env),
+    look: scenery(env),
+    mesh: twoViewMesh(front, side)
+  };
+}
+
+function turningTitle(plan) {
+  return 'a ' + plan.front.name + ' seen two ways';
+}
+
+function solid(g, c, mesh, angle, x, y, r, material) {
+  const cos = Math.cos(angle);
+  const sin = Math.sin(angle);
+  const tilt = Math.sin(angle * 2) * 0.14;
+  const base = tone(c, material, 0);
+  const visible = [];
+  for (const face of mesh) {
+    const [nx, ny, nz] = face.normal;
+    const facing = -nx * sin + nz * cos - ny * tilt;
+    if (facing <= 0.00001) continue;
+    let depth = 0;
+    const points = face.points.map(([px, py, pz]) => {
+      const rx = px * cos + pz * sin;
+      const rz = -px * sin + pz * cos;
+      depth += (rz - py * tilt) / face.points.length;
+      return [rx, py + rz * tilt];
+    });
+    visible.push({ points, depth, light: clamp(0.38 + facing * 0.5 + Math.max(0, -ny) * 0.12) });
+  }
+  visible.sort((a, b) => a.depth - b.depth);
+  g.save();
+  g.translate(x, y);
+  g.lineWidth = Math.max(0.4, r * 0.008);
+  g.lineJoin = 'round';
+  for (const face of visible) {
+    g.fillStyle = c.mix(c.colors.bg2, base, face.light);
+    g.strokeStyle = c.alpha(c.colors.fg, 0.12);
+    g.beginPath();
+    face.points.forEach((p, i) => i ? g.lineTo(p[0] * r, p[1] * r) : g.moveTo(p[0] * r, p[1] * r));
+    g.closePath();
+    g.fill();
+    g.stroke();
+  }
+  g.restore();
+}
+
+function turningDesk(g, w, h, c, plan, s, variant) {
+  const k = c.colors;
+  const look = plan.look;
+  const u = Math.min(w, h);
+  deskTop(g, w, h, c, look.rows.slice(0, Math.max(8, Math.round(look.rows.length * variant.density))));
+  drawer(g, w, h, c, 0);
+  const r = Math.min(h * 0.32, w * 0.15) * variant.scale;
+  g.fillStyle = c.alpha(k.bg, 0.65);
+  g.beginPath();
+  g.ellipse(w * 0.27, h * 0.79, r * 1.25, r * 0.16, 0, 0, Math.PI * 2);
+  g.fill();
+  solid(g, c, plan.mesh, s.angle, w * 0.27, h * 0.43, r, s.material);
+  const view = s.angle < 0.12 ? 'front view' : s.angle > Math.PI / 2 - 0.12 ? 'side view' : 'between views';
+  write(g, view, w * 0.27, h * 0.79, Math.max(9, u * 0.032), k.fg, 'center', 500);
+
+  const cw = w * 0.42;
+  const ch = Math.min(h * 0.68, cw * 1.05);
+  const margin = Math.min(10, cw * 0.06);
+  const fs = Math.max(9, Math.min(u * 0.032, ch * 0.075));
+  const lines = [];
+  const add = (text, color) => wrap(g, text, fs, cw - margin * 2).forEach((line) => lines.push({ text: line, color }));
+  add('front: a ' + plan.front.name, k.fg);
+  add('material: ' + (s.material || 'not chosen'), k.muted);
+  add('expected: ' + (s.guess ? 'a ' + s.guess : 'not chosen'), k.muted);
+  if (s.revealed || s.angle > Math.PI / 2 - 0.12) add('side: a ' + plan.side.name, k.accent2);
+  if (s.revealed) add('one solid. two silhouettes.', k.fg);
+  const rows = Math.max(6, lines.length + 1);
+  const pitch = ch / rows;
+  const size = Math.min(fs, pitch * 0.7);
+  g.save();
+  g.translate(w * 0.73, h * 0.45);
+  g.rotate(look.tilt);
+  card(g, c, cw, ch, 0.25, look.spots, 0, rows);
+  write(g, plan.number, -cw / 2 + margin, -ch / 2 + pitch * 0.5, size, k.accent2, 'left', 700);
+  lines.forEach((line, i) => write(g, line.text, -cw / 2 + margin, -ch / 2 + pitch * (i + 1.5), size, line.color, 'left', 500));
+  if (s.stamped) {
+    g.strokeStyle = c.alpha(k.accent2, 0.85);
+    g.lineWidth = 1.5;
+    g.strokeRect(-cw / 2 + margin * 0.5, -ch / 2 + pitch * 0.08, cw - margin, pitch * 0.84);
+  }
+  g.restore();
+}
+
+function turningPreview(g, w, h, env, plan) {
+  const v = env.variant;
+  turningDesk(g, w, h, env, plan, {
+    angle: (0.08 + v.turn * 0.84) * Math.PI / 2,
+    material: plan.materials[0].value,
+    guess: '', stamped: false, revealed: false
+  }, v);
+}
+
+function turningSpecimen(env) {
+  const plan = turningPlan(env);
+  const composition = { density: 1, scale: 1 };
+  const s = { angle: 0, target: 0, material: '', guess: '', stamped: false, revealed: false };
+  function draw(c) {
+    turningDesk(c.g, c.w, c.h, c, plan, s, composition);
+  }
+  return {
+    title: turningTitle(plan),
+    brief: 'Choose a material, guess this ' + plan.front.name + "'s side view, turn the solid, and stamp your finding. The finished card reveals both silhouettes; any guess works.",
+    aspect: '4 / 3',
+    steps: [
+      { id: 'material', ask: 'what it is made of', kind: 'choice', options: plan.materials },
+      { id: 'guess', ask: 'what shape is it from the side?', kind: 'choice', options: plan.guesses },
+      { id: 'turn', ask: 'turn it from front to side', kind: 'range', min: 0, max: 90, step: 1, value: 0, low: 'front', high: 'side' },
+      { id: 'stamp', ask: 'stamp your finding', kind: 'press', count: 1, label: 'stamp the finding' }
+    ],
+    start(c) {
+      c.status('Specimen ' + plan.number + ': a ' + plan.front.name + ' from the front. The side view has not been named.');
+      draw(c);
+    },
+    apply(id, value, c) {
+      if (c.done) return;
+      if (id === 'material') {
+        s.material = String(value);
+        c.status('Made of ' + s.material + '. Its shape stays strange.');
+      }
+      if (id === 'guess') {
+        s.guess = String(value);
+        c.status('Your prediction: a ' + s.guess + ' from the side. You can still turn it and change your mind.');
+      }
+      if (id === 'turn') {
+        const degrees = Math.max(0, Math.min(90, Number(value)));
+        s.target = degrees * Math.PI / 180;
+        if (c.reduced) s.angle = s.target;
+        c.status('Turned to ' + degrees + ' degrees. ' + (degrees === 0
+          ? 'From the front: a ' + plan.front.name + '.'
+          : degrees === 90 ? 'From the side: a ' + plan.side.name + '. Nothing was swapped.'
+            : 'The same solid is turning; its edges are giving the other shape away.'));
+      }
+      if (id === 'stamp') {
+        s.stamped = true;
+        c.status('The stamp is on the card. Your choices and the turn can still be changed.');
+      }
+      draw(c);
+    },
+    frame(t, dt, c) {
+      s.angle = c.reduced ? s.target : s.angle + (s.target - s.angle) * Math.min(1, dt * 8);
+      if (Math.abs(s.target - s.angle) < 0.0001) s.angle = s.target;
+      draw(c);
+    },
+    end(c) {
+      s.revealed = true;
+      s.angle = s.target = Math.PI / 2;
+      draw(c);
+      c.status('Front: a ' + plan.front.name + '. Side: a ' + plan.side.name + '. '
+        + (s.guess === plan.side.name ? 'You called it. ' : 'You expected a ' + s.guess + '. ')
+        + 'One ' + s.material + ' solid, seen two ways. Filed as ' + plan.number + '; the desk keeps no copy.');
+    }
+  };
+}
+
 export default {
   id: 'apocrypha-desk',
   paint(ctx, w, h, env) {
-    desk(ctx, w, h, env);
+    if (turns(env)) turningPreview(ctx, w, h, env, turningPlan(env));
+    else desk(ctx, w, h, env);
   },
   spark(env) {
+    if (turns(env)) {
+      const plan = turningPlan(env);
+      return {
+        title: turningTitle(plan),
+        text: 'A ' + plan.front.name + ' from the front. What will it be from the side? Turn one solid, make a prediction, and stamp the finding.',
+        aspect: '4 / 3',
+        paint: (ctx, w, h, e) => turningPreview(ctx, w, h, e, plan)
+      };
+    }
     const number = 'APC-' + env.int(1000, 9999) + '-' + env.pick('abcdefghk'.split(''));
     return {
       overline: number,
@@ -644,6 +897,7 @@ export default {
     };
   },
   piece(env) {
+    if (turns(env)) return turningSpecimen(env);
     return env.chance(0.55) ? accession(env) : crossReference(env);
   }
 };

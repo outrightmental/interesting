@@ -27,7 +27,7 @@
     { "file": "orbital-weaver.html", "name": "the orbital weaver", "orientation": "after symmetry", "mood": "geometric", "aspect": "1 / 1",
       "what": "Tune symmetry and spin, ripple the weave by touch, and close on a geometry mantra from your stars." },
     { "file": "machine-shop.html", "name": "the machine shop", "orientation": "cold and clear", "mood": "analytic", "aspect": "3 / 4",
-      "what": "Pick a starting tape, tune one automaton rule, run it, and read what changed at the bit level." },
+      "what": "Run a rule on a tape, or change one cell in a matching pair, predict the difference, and reveal their futures in three bursts." },
     { "file": "kinetic-floor.html", "name": "the kinetic floor", "orientation": "wound tight", "mood": "restless", "aspect": "16 / 10",
       "what": "Shove blocks, flip gravity, choose what they are made of, and finish with the floor's damage report." },
     { "file": "loam.html", "name": "loam", "orientation": "low and slow", "mood": "rooted", "aspect": "4 / 5",
