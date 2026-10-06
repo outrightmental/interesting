@@ -22,10 +22,14 @@
   Anyone who has used an app knows the shape. Floating in the upper right of every page sits the
   persona the way an account sits in an app's own corner -- opposite the sparkles logo, and the
   only other navigation the site has: a round portrait of the sky, which is the button that opens
-  the sheet, and
-  a visitor with no persona yet sees that portrait ring dashed and the button filled and beckoning,
-  because setting one up is the first thing to do. One sentence on where things stand is written
-  beside it for screen readers and never takes space. The sheet is a dialog floating over whatever
+  the sheet, and nothing else at all. A visitor with no persona yet sees that portrait ring dashed
+  and the button filled and beckoning, because setting one up is the first thing to do. One
+  sentence on where things stand is written beside it for screen readers and never takes space.
+  Nothing is ever put next to the portrait: a second mark floating in that corner would be a third
+  piece of navigation, and there are two (issue #64). The world a reading opens onto is an option
+  in the constellation the sparkles logo opens instead, named for that world (js/site.js).
+
+  The sheet is a dialog floating over whatever
   page is open, with two sections: the constellation, where stars are placed, dragged and read, and
   the orientation, where the site asks its sideways question and says what it read. A world open
   underneath follows every change as it is made (see onSky below and window.interestingSite.unlock
@@ -341,13 +345,6 @@
     var label = list.length || isRead ? 'open persona' : 'set up persona';
     if (card.label) card.label.textContent = label;
     else card.open.textContent = label;
-    if (isRead && !askingInCard) {
-      card.go.hidden = false;
-      card.go.href = root + r.orientation.world;
-      card.go.textContent = 'go to ' + r.orientation.worldName;
-    } else {
-      card.go.hidden = true;
-    }
 
     if (card.portrait) {
       var size = card.portraitSize;
@@ -369,9 +366,10 @@
     refresh();
     t.mount(card.probe, {
       onAnswer: function () {
+        // The avatar: the one control in this corner, and so the one place the focus can land
+        // (the world the answer opens onto is waiting in the constellation and in the feed).
         stopAskingInCard();
-        if (!card.go.hidden) card.go.focus();
-        else card.open.focus();
+        card.open.focus();
       },
       onSkip: function () {
         stopAskingInCard();
@@ -398,16 +396,14 @@
     card = {
       host: host,
       text: document.getElementById('persona-text'),
-      actions: host.querySelector('.persona-actions'),
       open: document.getElementById('persona-open'),
       label: host.querySelector('.persona-label'),
-      go: document.getElementById('persona-go'),
       // The question's host: the threshold lends one in its own feature; other pages have none,
       // and ask inside the sheet instead.
       probe: document.getElementById('persona-probe'),
       portrait: document.getElementById('persona-portrait')
     };
-    if (!card.text || !card.open || !card.go || !card.actions) {
+    if (!card.text || !card.open) {
       card = null;
       return;
     }

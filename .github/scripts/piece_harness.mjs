@@ -15,7 +15,13 @@
   seeded points for a tap knob, and runs frames for a wait knob -- and then it says whether the
   piece finished. Every seed is played with a sky of five stars; one seed is also played the way
   the stage plays a module that does not read the sky (with none) or one that does (with a
-  single star), so a piece is held to the skies the stage can hand it.
+  single star), so a piece is held to the skies the stage can hand it. Every seed is then played
+  again with its knobs reached in a seeded order rather than down the page, and the first seed is
+  played through from the top a second time, which has to come out exactly as the first.
+
+  The stage harness beside this one (stage_harness.mjs) plays the other half of the axiom: the
+  knobs through js/stage.js's own controls, which is where a knob can turn out to be one the
+  visitor cannot actually set.
 
   A module fails when:
     - piece(env) throws, or returns nothing, or returns something with no title or no steps;
@@ -29,6 +35,12 @@
       itself on arrival;
     - the same seed does not make the same piece (same title, brief and knobs), because a piece
       is an address a visitor can come back to or send to someone;
+    - the same seed played a second time through the same module does not make the same piece or
+      does not play out the same way, because a module keeps nothing between instantiations: a
+      visitor meets a world more than once and the second piece is the first one all over again;
+    - a piece can only be finished with its knobs set down the page, because nothing makes a
+      visitor work in that order and one who does not would be left holding a toy that will not
+      finish;
     - every seed makes the same piece, because the river is of pieces that differ;
     - the piece does not finish within MAX_TAPS taps of its scene and MAX_SECONDS of simulated
       time once every knob is set, or start/apply/frame/tap/end throws;
@@ -62,7 +74,11 @@ export const MIN_STEPS = 2;
 export const MAX_STEPS = 5;
 export const MAX_TAPS = 12;
 export const MAX_SECONDS = 45;
-export const MODULE_TIMEOUT_MS = 20000;
+// Real time, per module, for all fourteen of its plays: six seeds, one sky, six orders and the
+// replay. Twenty seconds was ample for seven plays and is thin for fourteen -- the busiest module
+// here takes eight on a quick machine -- and a runner that is twice as slow should still be judging
+// pieces rather than reporting timeouts.
+export const MODULE_TIMEOUT_MS = 45000;
 const FRAME = 1 / 30;
 const SETTLE = 0.5; // seconds of frames run after each knob, as a visitor pauses between them
 const KINDS = ['choice', 'toggle', 'range', 'press', 'hold', 'tap', 'wait'];
@@ -216,7 +232,7 @@ function shapeProblems(piece) {
 export function play(mod, seed, options) {
   const opts = options || {};
   const stars = opts.stars || STARS;
-  const out = { seed, stars: stars.length, ok: false, problems: [], taps: 0, seconds: 0, title: '', steps: 0, signature: '' };
+  const out = { seed, stars: stars.length, label: opts.label || '', ok: false, problems: [], taps: 0, seconds: 0, title: '', steps: 0, signature: '' };
   let piece;
   try {
     piece = mod.piece(makeEnv(seed, stars));
@@ -310,6 +326,21 @@ export function play(mod, seed, options) {
   function unlocked(s) {
     return !s.step.after || (state.get(s.step.after) || { set: true }).set;
   }
+  // The order a visitor meets the knobs in. Written order by default, because that is the order
+  // the stage lays them out; seeded with `shuffle`, because nothing makes a visitor work down the
+  // page -- they reach for whatever the piece has just drawn their eye to, and a piece that can
+  // only be finished from the top down is a piece some visitor cannot finish.
+  function reach() {
+    const list = Array.from(state.values());
+    if (!opts.shuffle) return list;
+    for (let i = list.length - 1; i > 0; i--) {
+      const j = Math.floor(driver() * (i + 1));
+      const held = list[i];
+      list[i] = list[j];
+      list[j] = held;
+    }
+    return list;
+  }
 
   try {
     // Where each slider starts is known to the piece from the first frame, as on the stage.
@@ -325,7 +356,7 @@ export function play(mod, seed, options) {
     let moved = true;
     while (!completed && moved && time < MAX_SECONDS) {
       moved = false;
-      for (const s of state.values()) {
+      for (const s of reach()) {
         if (s.set || !unlocked(s)) continue;
         const step = s.step;
         switch (step.kind) {
@@ -410,9 +441,10 @@ export function play(mod, seed, options) {
   return out;
 }
 
-// Judge one module, already imported: every seed with the five stars, and the first seed again
-// with the sky the stage may hand it (none for a module that does not read the sky, one star for
-// one that does).
+// Judge one module, already imported: every seed with the five stars, the first seed again with
+// the sky the stage may hand it (none for a module that does not read the sky, one star for one
+// that does), every seed once more with its knobs reached in a seeded order, and the first seed
+// played through from the top a second time.
 export function judgeModule(mod, seeds) {
   const report = { hasPiece: false, ok: false, problems: [], runs: [] };
   if (!mod || typeof mod.piece !== 'function') {
@@ -429,10 +461,38 @@ export function judgeModule(mod, seeds) {
   if (report.runs.every((r) => r.ok) && signatures.size < 2) {
     report.problems.push('every seed makes the same piece (' + JSON.stringify(report.runs[0].title) + '); the river is of pieces that differ');
   }
+  const first = report.runs[0];
   const sky = mod.needsSky ? ONE_STAR : [];
-  const skyRun = play(mod, seeds[0], { stars: sky });
+  const skyRun = play(mod, seeds[0], { stars: sky, label: sky.length ? 'one star' : 'no stars' });
   report.runs.push(skyRun);
   for (const p of skyRun.problems) report.problems.push('seed ' + seeds[0] + ' with ' + (sky.length ? 'one star' : 'no stars') + ': ' + p);
+
+  // Reached in another order. Nothing makes a visitor work down the page: they set the knob the
+  // scene has just drawn their eye to, and a piece that is only finishable from the top down
+  // leaves someone holding a finished-looking toy that will not finish (issue #60).
+  for (const seed of seeds) {
+    const run = play(mod, seed, { shuffle: true, label: 'another order' });
+    report.runs.push(run);
+    for (const p of run.problems) report.problems.push('seed ' + seed + ', its knobs reached in another order: ' + p);
+  }
+
+  // Played again, through the module that has already made a piece in this session. A visitor
+  // meets a world more than once -- the feed deals it again, the river comes round -- and the
+  // second piece has to be the first one all over again, not whatever the first one left behind.
+  // Same piece, same play, same end: this run is the one that catches a module keeping state
+  // outside piece(env) (issue #60).
+  const replay = play(mod, seeds[0], { label: 'played again' });
+  report.runs.push(replay);
+  for (const p of replay.problems) report.problems.push('seed ' + seeds[0] + ' played a second time: ' + p);
+  if (first && first.ok && replay.ok) {
+    if (replay.signature !== first.signature) {
+      report.problems.push('seed ' + seeds[0] + ' played a second time makes a different piece; a module keeps nothing between instantiations');
+    } else if (replay.taps !== first.taps || replay.seconds !== first.seconds) {
+      report.problems.push('seed ' + seeds[0] + ' played a second time does not play out the same (' + first.taps + ' taps, '
+        + first.seconds + 's, then ' + replay.taps + ' taps, ' + replay.seconds + 's); a module keeps nothing between instantiations');
+    }
+  }
+
   report.ok = report.runs.every((r) => r.ok) && !report.problems.length;
   for (const r of report.runs) delete r.signature;
   return report;
@@ -537,7 +597,7 @@ async function main(argv) {
   } else {
     for (const m of modules) {
       const mark = m.hasPiece ? (m.ok ? 'ok  ' : 'FAIL') : 'none';
-      const runs = m.runs.map((r) => (r.ok ? '' : '!') + JSON.stringify(r.title || '?') + ' (' + r.steps + ' knobs, ' + r.taps + ' taps, ' + r.seconds + 's' + (r.stars !== 5 ? ', ' + r.stars + ' stars' : '') + ')').join(', ');
+      const runs = m.runs.map((r) => (r.ok ? '' : '!') + JSON.stringify(r.title || '?') + ' (' + r.steps + ' knobs, ' + r.taps + ' taps, ' + r.seconds + 's' + (r.stars !== 5 ? ', ' + r.stars + ' stars' : '') + (r.label ? ', ' + r.label : '') + ')').join(', ');
       process.stdout.write(mark + '  ' + m.id + (runs ? ': ' + runs : '') + '\n');
       for (const p of m.problems) process.stdout.write('      - ' + p + '\n');
     }

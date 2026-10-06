@@ -69,7 +69,7 @@
   position: fixed;
   top: var(--nav-inset);
   left: var(--nav-inset);
-  z-index: 50; // above the page, the persona and the three corner affordances
+  z-index: 50; // above the page, the persona and anything a fixed file has pinned over it
   max-width: calc(100% - 2 * var(--nav-inset));
 }
 

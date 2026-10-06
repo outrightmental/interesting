@@ -157,14 +157,18 @@ slab per page, small-caps labels, pill borders on everything, a footer index two
 This is not the sort of website that uses conventional navigation (issue #54). The top app bar is
 gone — the sticky blurred surface, its scroll lift, its row of destinations — and what is left is
 two marks floating over the page: the sparkles **logo** in the upper left, and the **persona** in
-the upper right. Nothing else is chrome.
+the upper right. Nothing else is chrome. Two, exactly: a *go to <world>* link floated beside the
+persona and a *steer the site* button held the middle of the bottom edge for a while after that
+first pass, and both are gone (issue #64) — the first because the constellation already carried the
+same destination, the second adopted into the far orbit beside *cookies* and *state*.
 
 - **At rest, one mark.** A tonal pill with the sparkles in it, blurred so it reads over any
   world's palette. Roll over it, or give it the focus, and the site's name fades in beside it —
   quick and tight, clipped to nothing rather than hidden, so the logo keeps its accessible name
   either way.
 - **On press, a lightbox.** The page goes behind a veil that dims it, blurs it, takes the press
-  that closes it again, and sits over the three corner affordances as well as the content. Behind
+  that closes it again, and sits over everything a fixed file has pinned to the page as well as
+  over the content, hidden though all three of those now are. Behind
   it everything is made `inert` and hidden from a screen reader, its CSS animation is paused, and
   its frame loop is **held**: `js/site.js` keeps the `requestAnimationFrame` callbacks a page asks
   for while the menu is open and runs them when it closes, because CSS can pause an animation but
@@ -181,36 +185,33 @@ the upper right. Nothing else is chrome.
 - **The near orbit is where to go, the far orbit is the apparatus.** Near: the three destinations
   from [`site/_data/worlds.json`](site/_data/worlds.json) — *the threshold* (the home icon, which
   is how a visitor gets home now that pressing the logo no longer navigates), *the mood atlas*,
-  *site map* — plus the world a reading opens onto, once there is one. Far: *cookies*, *state*,
-  *privacy* and *terms*.
+  *site map* — plus the world a reading opens onto, once there is one. Far: *change this site*,
+  *cookies*, *state*, *privacy* and *terms*.
 - **Things come and go with the state.** The reading's world appears when the mood flow has read
   something and goes when it is forgotten; on that world itself the option says the world's name
   and is marked *you are here* rather than offering a trip to where the visitor already is, as the
   feed's own card does. *cookies* is there only on a copy of the site that has a measurement ID
   and so draws a consent banner. *state* says how much there is to carry away — *state · 3 kept*.
   And the option for the page a visitor is on carries `aria-current='page'` wherever it appears.
-- **Two options are adopted, not copied.** *cookies* and *state* belong to `js/analytics.js` and
-  `js/state.js`, which are fixed files no run may write (see [Analytics
-  axiom](#analytics-axiom) and [Local state axiom](#local-state-axiom)). So the shell does it from
-  outside: it waits for each corner button to be drawn and hides it where its own file pinned it.
-  *cookies* then presses that same button, with the lightbox out of the way first, because what it
-  opens is the consent library's own dialog. One cookies dialog, one state menu, neither fixed
-  file touched — and `RealSiteTest` still holds every other file of the site to naming neither of
-  them.
-- **…and *state* keeps the lightbox** (issue #66). It is the one option that is neither a place to
-  go nor somebody else's dialog: it is a thing to do, and it gets the screen while it is being
-  done. So the lightbox is not dropped for it. The constellation is put away, the panel
-  `js/state.js` built is **moved** into `#sparknav-modal` — the middle of the veil that is already
-  up — and dressed as a modal by that file's own styles: wider, taller, with room to read the
-  document and paste one in. Nothing the lightbox is made of is torn down and raised again in
-  between: `<html data-lightbox>` goes from `nav` straight to `state` without ever being removed,
-  so the veil, the held frame loop and the inert page behind it never so much as blink. There is
-  no way back to the constellation — Escape, the panel's own *close* and a press on the dimmed
-  page around it all close the modal, and the lightbox goes down with it, which is what "return to
-  the site" means. The asking is the shell's and the panel is the fixed file's, that way round on
-  purpose: a store that offers no panel, or a run that breaks the asking, leaves the corner menu
-  exactly as it always was, so nothing a run writes can leave a visitor without a way to their own
-  state.
+- **Three options are adopted, not copied.** *change this site*, *cookies* and *state* belong to
+  `js/participate.js`, `js/analytics.js` and `js/state.js`, which are fixed files no run may write
+  (see [Participation axiom](#participation-axiom), [Analytics axiom](#analytics-axiom) and [Local
+  state axiom](#local-state-axiom)). So the shell does it from outside: it waits for each control
+  to be drawn, hides it where its own file pinned it, and presses that same control from the
+  constellation. One new-issue link, one cookies dialog, one state menu, no fixed file touched —
+  and `RealSiteTest` still holds every other file of the site to naming none of them.
+- **Which is what makes the two-item rule true.** At rest nothing floats over a page but the logo
+  and the persona: nothing at the bottom edge, nothing beside either mark. `NavTest` holds both
+  halves of it (issue #64) — the site's own stylesheets pin a closed list of things, every one of
+  them one of the two marks, a part of one, or an overlay only up while something is open; and the
+  nav harness confirms that all three pinned controls are hidden where their files put them while
+  the page is at rest, with every one of them still one press of the logo away.
+- **The invitation leads off the site, and says so.** *change this site* is the one option in the
+  constellation whose destination is not a page of this site. It presses the link
+  `js/participate.js` drew, so the destination, the new tab and the query that shapes the issue are
+  all still that file's; its accessible name carries the whole of the invitation — that this site
+  is a continuously evolving work-in-progress art experiment, that the option opens a new issue
+  where a visitor says what it should become next, and that it opens in a new tab.
 - **It is a `<details>`.** The logo is the `<summary>`, so the disclosure, the keyboard handling
   and the no-script fallback are the browser's own: with scripting switched off the same chips
   cascade under the logo as plain links, staggered into a staircase where the script has said what
@@ -512,11 +513,12 @@ and shown on every page.
   shape is understood on sight, and it takes no room from the page's feature: with no persona yet
   the portrait ring is dashed and the button, *set up persona*, is filled and beckoning, the one
   lit control on the page, so the first thing to do is the first thing seen. Once there is a
-  persona the portrait alone remains, its label *open persona* read by a screen reader; the one
-  sentence on where things stand is written beside it for screen readers only; and once a reading
-  exists a *go to* link to the world it opens onto sits beside the avatar on a screen wide enough
-  for it (on a phone the feed's first card carries the same suggestion, and the logo's
-  constellation carries it at any size).
+  persona the portrait alone remains, its label *open persona* read by a screen reader, and the one
+  sentence on where things stand is written beside it for screen readers only. Nothing else is ever
+  put in that corner: a *go to <world>* link used to sit beside the avatar on a wide screen, which
+  made two floating items of one corner and a third piece of navigation on the site, and the world
+  a reading opens onto is an option in the logo's constellation instead, where it already was
+  (issue #64). On a phone the feed's first card carries the same suggestion, as it always has.
 - **The sheet.** The button opens a `<dialog>` floating over whatever page is open, with two
   sections. *Constellation* is the sky editor: tap the sky to place a star, drag one to move it,
   tap one to read its thought and remove it, or drop one, seed a small sky, or clear the sky — by
@@ -694,9 +696,10 @@ iteration process rather than a one-off tidy-up.
   nobody loses a sky to the change.
 - **The meta menu.** *state*, an option in the logo's constellation (see [The logo and the
   constellation](#the-logo-and-the-constellation)): the button `js/state.js` pins to the
-  bottom-right corner is hidden there and the option offered in the nav beside *cookies* instead,
-  so the only thing left on the bottom edge is the *steer the site* button of the [participation
-  axiom](#participation-axiom). It opens a panel holding the whole document as
+  bottom-right corner is still what the site presses, but the shell hides it there and offers it
+  in the nav beside *cookies* and the *change this site* of the [participation
+  axiom](#participation-axiom) instead, so nothing is left on the bottom edge at all. It opens a
+  panel holding the whole document as
   text: copy it out, paste one in and press *replace mine*, or *clear*. Import **replaces** rather
   than merges, for reproducibility — the sky it opens is the sky it came from — and clearing asks
   first. Both reload the page
@@ -813,11 +816,14 @@ it stands.
 
 ### Participation axiom
 
-Every page carries a **prominent, always-visible way for the person looking at the site to say what
-it should become**: one press of *steer the site*, pinned to the middle of the bottom edge, and they
-are on a new issue of this repository with the form already chosen and the page they came from
-already filled in. Like the six above it, it is an invariant of the iteration rather than a one-off
-addition — and it is the only one that is about the reader rather than about the site.
+Every page carries a **way for the person looking at the site to say what it should become**: one
+press of *change this site*, in the far orbit of the logo's constellation, and they are on a new
+issue of this repository with the form already chosen and the page they came from already filled
+in. The link behind it is the one `js/participate.js` pins to the middle of the bottom edge; the
+shell hides it there and presses it from the constellation (issue #64), so the invitation is one
+press from every page without a third thing floating over any of them. Like the six above it, it is
+an invariant of the iteration rather than a one-off addition — and it is the only one that is about
+the reader rather than about the site.
 
 - **Why it is an axiom and not a nicety.** A site rewritten continuously by a model is steered by
   whoever can reach the model, and the only standing channel from a visitor back to the people and
@@ -833,19 +839,16 @@ addition — and it is the only one that is about the reader rather than about t
   local-state document, in and out). Each injects its own styles rather than reading a stylesheet,
   each is fixed to the device boundary rather than placed in page content, and none of them is a
   page's to restyle, reproduce or reword. That is what makes them reliable: whatever the page
-  around them has become, they answer. *steer the site* keeps the bottom edge and is the prominent
-  member — full strength, a 44px target, an icon that says the verb — because the other two answer
-  a question a visitor occasionally has while this one is an invitation. It still reserves 9.5rem
-  of the bottom edge for its neighbours, in `rem` so that enlarging the text enlarges the room it
-  leaves them. The other two are **adopted** rather than copied: the shell hides the corner buttons
-  `js/analytics.js` and `js/state.js` draw for themselves and offers *cookies* and *state* in the
-  logo's constellation (see [The logo and the
-  constellation](#the-logo-and-the-constellation)), pressing the consent banner's own button and
-  hosting the state menu's own panel in the lightbox — one cookies dialog and one state menu on the
-  site, with neither fixed file restyled or reworded to arrange it. *state* is the one of the three
-  that is not a corner affordance at all any more once it is open: it is a modal in the middle of
-  the screen, because what it holds is a document to read, copy and paste rather than a question to
-  answer in passing.
+  around them has become, they answer. Each of the three pins itself over the page where its own
+  file says — *cookies* bottom-left, *steer the site* in the middle of the bottom edge, *state*
+  bottom-right — and all three are **adopted** rather than copied: the shell hides the control each
+  fixed file drew for itself and offers *change this site*, *cookies* and *state* in the logo's
+  constellation, which presses those very controls (see [The logo and the
+  constellation](#the-logo-and-the-constellation)) — one new-issue link, one cookies dialog and one
+  state menu on the site, with no fixed file edited to arrange it. The invitation is still the
+  prominent member of the three, now by where it sits in the orbit rather than by holding an edge
+  of the viewport to itself: it comes first in the far orbit, because the other two answer a
+  question a visitor occasionally has while this one asks something of them.
 - **Responsive and accessible, like everything else here.** An accessible name that says where the
   link goes and that it opens a new tab, with the visible words inside it (WCAG 2.5.3 Label in
   Name); its own `:focus-visible` ring, because pages of this site are free to take the browser's
@@ -869,11 +872,13 @@ addition — and it is the only one that is about the reader rather than about t
   form is here to save someone the trouble of inventing a shape, never to insist on one — the same
   bargain the mood axiom's question makes. The two labels the forms ask for are owned in code, with
   the repository itself, in [`infra/issue-labels.tf`](infra/issue-labels.tf).
-- **Stated in the prompt.** The `Rules:` block names the exact line, says the button and its
-  wording are not a run's to change, to restyle or to reproduce, names the three affordances so
-  that a run leaves the bottom edge to them, and says how the shell adopts two of them into the
-  main nav so that a run never draws a second *cookies* or *state* control of its own. A page inviting a visitor to steer
-  the site in its own prose is welcome, and is not a substitute for the line.
+- **Stated in the prompt.** The `Rules:` block names the exact line, says the link and its wording
+  are not a run's to change, to restyle or to reproduce, names the three affordances, and says how
+  the shell adopts all three of them into the main nav so that a run never draws a second
+  new-issue, *cookies* or *state* control of its own — and that it pins nothing of its own to an
+  edge of the viewport, which is the two-item rule of issue #54 stated where the axiom whose
+  affordance used to be the exception to it can be read. A page inviting a visitor to steer the
+  site in its own prose is welcome, and is not a substitute for the line.
 - **Held to in code.** `check_participate` in
   [`.github/scripts/make_interesting.py`](.github/scripts/make_interesting.py) refuses a plan that
   leaves a page without the line. As with the other eight, only what the run itself breaks is
@@ -999,7 +1004,12 @@ iteration, stated in the prompt and held to in code.
   dots for progress, one text button that skips, and the ceremony — a done mark over the scene, a
   burst in the world's palette and a short chime, the piece scaling away and the next arriving
   from below; for a visitor who asked for less motion there is no burst and no transition, only
-  the mark and the next piece. The threshold is the same stage in
+  the mark and the next piece. The scene fills the real estate the first screen has (issue #65): it
+  is as tall as the viewport leaves once the nav's room, `<main>`'s padding, the heading — measured,
+  because a title that wraps takes two lines — and the margin that lets the feed peek are off it,
+  and as wide as that height allows at the piece's own aspect ratio, which is also the width of its
+  column, so the knobs take every pixel it cannot use and no empty band is left across the middle of
+  the page. The threshold is the same stage in
   its asking state. The URL carries the piece (`quiet-room.html#<seed>`), so a piece can be sent
   to someone and the back button walks back through what was finished; opening a card of another
   world moves the address to that world's page without a load, because a page is wherever the
@@ -1020,6 +1030,21 @@ iteration, stated in the prompt and held to in code.
   knob's bar; `frame(t, dt, ctx)` counts `t` from the piece's start, and `auto: false` lets a
   piece call `complete()` itself. A module is self-contained: it imports nothing. `js/stage.js`
   documents all of it at the top.
+- **Settable, in any order, and sayable.** Every knob has to be one the visitor it is put in front
+  of can actually set, and a piece has to be finishable whatever order they reach its knobs in:
+  nothing makes anyone work down the page. The way that fails is quiet — the visitor sets the last
+  knob they can see, the scene answers, and the piece does not finish, because it is waiting on one
+  further up that never looked unfinished — so the stage names what is still to set under the
+  piece's own live line. A slider is the case that taught this (issue
+  [#60](https://github.com/outrightmental/interesting/issues/60)): it opens with an answer already
+  on it, which is why `ctx.value(id)` is the piece's from the first frame, so pressing it and
+  letting go where it stands is giving that answer and the stage takes it as set.
+- **One instantiation, then nothing.** A piece is its turn on the stage and no part of it outlives
+  that turn. The stage has one teardown, and it takes the whole piece apart — the frame loop, the
+  ceremony's timers, a ticker under a hold still pressed down, the knobs, the lines, the dots, the
+  mark, the scene and its shape — so a world that comes round again opens on an empty stage and
+  plays exactly as it did the first time. A module keeps nothing outside `piece(env)` for the same
+  reason.
 - **Pure, so it can be played anywhere.** A piece is drawing and arithmetic on what the stage
   hands it and never reaches for the document, the window or the browser's storage. That is what
   lets [`.github/scripts/piece_harness.mjs`](.github/scripts/piece_harness.mjs) play every piece
@@ -1031,8 +1056,25 @@ iteration, stated in the prompt and held to in code.
   in a worker of its own with a time limit, an empty environment and no clock, no `Math.random`
   and no timers, so a piece that reaches for any of them fails; the run itself starts under
   Node's permission model with a scrubbed environment, because the modules are model-written
-  code (a quality gate, not a security boundary: the site's source is public). The harness is
-  not in `/site`, so a run cannot soften it.
+  code (a quality gate, not a security boundary: the site's source is public). Every seed is then
+  played a second time with its knobs reached in a seeded order rather than down the page, and the
+  first seed is played through again from the top, which has to come out exactly as it did the
+  first time. The harness is not in `/site`, so a run cannot soften it.
+- **The stage, played too.** A piece can be flawless and the stage still leave the visitor playing
+  it with no way to finish, because the knob the piece offered is not a knob the stage will take —
+  which is what issue #60 was.
+  [`.github/scripts/stage_harness.mjs`](.github/scripts/stage_harness.mjs) runs the real
+  `js/stage.js` against a stub browser: the elements `_includes/stage.njk` writes, a clock the
+  scenario steps by hand so a 1.8-second hold costs nothing, a canvas that records nothing, and a
+  feed that deals the worlds it is told to. Four scenarios: a world played, another played, and the
+  first dealt again, each round finishing and opening the next; a slider used where it stands, which
+  must count; a knob nobody touched, which must stay unset *and* be named; and a piece abandoned
+  with a hold still pressed down, after which nothing of it may be on the stage or still running.
+  `StageTest` plays purpose-built pieces through it and `RealSiteTest` plays the site as committed;
+  like the piece harness it is outside `/site`, so a run cannot soften it. Deliberately, it holds
+  the site as committed rather than refusing a plan: it drives the stage through the stage's own
+  elements, and those are a run's to rewrite, so gating plans on it would pin markup the silo leaves
+  open. The prompt says so, and says to keep all four true when rewriting the stage.
 - **Held to in code.** `check_completion` in
   [`.github/scripts/make_interesting.py`](.github/scripts/make_interesting.py) reads the one list
   of worlds off the built home page (the `#site-worlds` JSON the layout writes from
@@ -1041,7 +1083,8 @@ iteration, stated in the prompt and held to in code.
   one with fewer than two knobs or more than five, one that finishes itself before its visitor has
   set a knob, a knob of a kind the stage does not render, a piece that
   does not finish within twelve taps and forty-five seconds of simulated play, one that is not
-  the same for the same seed (a piece is an address), or one that is the same for every seed
+  the same for the same seed (a piece is an address), one that does not finish the same way with its
+  knobs reached in another order or played a second time, or one that is the same for every seed
   (the river is of pieces that differ). Only what the run itself breaks is refused, as with every
   other axiom, so a run can repair a world that is already stuck; and a plan that drops the list
   of worlds is refused outright, because the stage would have nothing to open.
@@ -1052,11 +1095,12 @@ iteration, stated in the prompt and held to in code.
 - **What is deliberately not checked**: whether a piece is a good toy, whether its knobs are the
   right knobs, and whether its finish feels like one. No code could judge that; the prompt asks
   for it, names the old pages as the material, and says a second shape of piece for a world is
-  as good a change as a new world.
+  as good a change as a new world. The stage is checked, but on the committed site rather than on a
+  plan, for the reason given above.
 - **True of the site as committed**: `RealSiteTest` builds `/site` and plays every world's piece
-  to its end on every pull request and before every deploy, checks that every world page is the
-  stage and that the threshold hosts the question on it, and checks that the limits the prompt
-  states are the harness's own.
+  to its end on every pull request and before every deploy, plays the stage itself through the four
+  scenarios above, checks that every world page is the stage and that the threshold hosts the
+  question on it, and checks that the limits the prompt states are the harness's own.
 
 ### Silo
 

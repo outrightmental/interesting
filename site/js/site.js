@@ -19,10 +19,11 @@
                                                       under the names pages used before it existed
 
   Pieces of the shell live here as well, because the shell is markup and Sass and needs a hand
-  with the things only a script can know: the main nav -- the sparkles logo, the lightbox it opens
-  and the constellation of options it branches out, which is the long section at the bottom of
-  this file -- and how full each slider is (the M3 slider paints its active track in the primary
-  colour up to the handle, which CSS can only do when --range-pct says where the handle is).
+  with the things only a script can know: the main nav -- the sparkles logo, the lightbox it
+  opens, the constellation of options it branches out and the three pinned affordances that
+  constellation adopts, which is the long section at the bottom of this file -- and how full each
+  slider is (the M3 slider paints its active track in the primary colour up to the handle, which
+  CSS can only do when --range-pct says where the handle is).
 
   Nothing in here keeps score, routes a visitor, or writes to the shared state document except
   the sky a visitor asks it to seed, which it does through the persona: the shell's job is to be
@@ -480,30 +481,25 @@
                  loop, so the loop is held: a frame asked for while the constellation is open is
                  kept and run when it closes. Nothing is dropped and no page has to know.
        shape()   the options that come and go. The world a reading opens onto is only there once
-                 something has been read, and "cookies" and "state" are only there while the files
-                 that own them have drawn their own buttons -- which this then hides, and answers
-                 for on the constellation's behalf. js/analytics.js and js/state.js are fixed files
-                 (see FIXED_FILES in .github/scripts/make_interesting.py) and neither is edited
-                 for any of it: the shell adopts what they drew instead.
-       stateModal()
-                 the state interface, taking the lightbox over (issue #66). "state" is the one
-                 option that is not a destination and not someone else's dialog: it is a thing to
-                 do, here, with the whole screen. So the lightbox does not come down for it. The
-                 constellation gives way, js/state.js's own panel is moved into the middle of the
-                 veil that is already up, and closing the panel closes the lightbox with it and
-                 gives the visitor back the page. Nothing the lightbox is made of -- the veil, the
-                 held frame loop, the inert page, <html data-lightbox> -- is torn down and raised
-                 again in between, which is what "zero jitter" asks for.
+                 something has been read, and "change this site", "cookies" and "state" are only
+                 there while the files that own them have drawn their own controls -- which this
+                 then hides, and presses on the constellation's behalf. js/participate.js,
+                 js/analytics.js and js/state.js are fixed files (see FIXED_FILES in
+                 .github/scripts/make_interesting.py) and none of them is edited for any of it:
+                 the shell adopts what they drew instead.
 
      Pressing the logo never navigates. The threshold is the home icon in the near orbit, which is
      what issue #54 asks for, and it is also what lets the logo be a <details> summary -- so the
      disclosure, the keyboard handling and the no-script fallback are the browser's own. */
 
-  // The two buttons the fixed files pin to the corners, which the constellation adopts. Named
-  // here, and nowhere else in the site's own files: the shell may find them, hide them and press
-  // them, and nothing may restyle them or reproduce their words.
+  // The three controls the fixed files pin over the page, every one of which the constellation
+  // adopts (issue #64): nothing of this site's floats at an edge of the viewport but the logo and
+  // the persona, so each of these is hidden where its own file put it and offered as an option
+  // instead. Named here, and nowhere else in the site's own files: the shell may find them, hide
+  // them and press them, and nothing may restyle them or reproduce their words.
   var CORNER_COOKIES = '.site-consent-link'; // js/analytics.js draws it, bottom-left
   var CORNER_STATE = '.site-meta-open'; // js/state.js draws it, bottom-right
+  var CORNER_STEER = '.site-steer'; // js/participate.js draws it, bottom-centre
   var STATE_PANEL = 'site-meta-panel'; // and the panel that button opens, which it names
 
   var STAR_STEP = 56; // the drop from one star to the next, in CSS pixels
@@ -516,7 +512,7 @@
   // so a constellation looks scattered however many stars are in it.
   var STAR_SCATTER = [0, 0.78, 0.26, 1.12, 0.52, 1.3, 0.12, 0.94, 0.66, 1.18];
   var TWO_COLUMN_WIDTH = 600; // the narrowest viewport that gets a column per orbit
-  var CADRE_WAIT_MS = 15000; // how long to watch for the corner buttons before giving up
+  var CADRE_WAIT_MS = 15000; // how long to watch for the pinned controls before giving up
 
   var nav = null;
 
@@ -727,19 +723,36 @@
     return read.orientation;
   }
 
-  /* The two corner affordances, adopted. Each one is hidden where its own file pinned it and
-     offered in the constellation instead, so there is still exactly one cookies dialog and one
-     state menu on the site -- and the option is only there while the button is, which is why a
-     copy of the site with no measurement id (and so no consent banner) simply has no cookies
-     option. Neither file is edited for any of it: the constellation presses the consent banner's
-     own button, and asks js/state.js for its own panel (see stateModal below). */
+  /* One of them, put away where its own file pinned it. The hidden attribute says what is meant,
+     and the one inline declaration beside it is what makes it true: each of these files injects
+     the styles for its own control, and a `display` of its own in an author stylesheet outranks
+     the `display: none` the attribute leans on -- `.site-steer` sets `display: inline-flex`, so
+     the attribute alone would leave it sitting on the bottom edge. Inline is the narrowest place
+     to say it and the only one nothing can outrank; nothing else about how the control looks is
+     touched, and it is left whole in every other way, which is what lets the constellation press
+     it. */
+  function putAway(control) {
+    if (!control) return;
+    control.hidden = true;
+    if (control.style && control.style.setProperty) control.style.setProperty('display', 'none');
+  }
+
+  /* The three pinned affordances, adopted. Each one is put away where its own file pinned it and
+     offered in the constellation instead, so there is still exactly one new-issue link, one
+     cookies dialog and one state menu on the site -- and the option is only there while the
+     control is, which is why a copy of the site with no measurement id (and so no consent banner)
+     simply has no cookies option. The files behind them are never edited: the constellation
+     presses what they drew. */
   function adopt() {
     nav.cookiesCorner = document.querySelector(CORNER_COOKIES);
     nav.stateCorner = document.querySelector(CORNER_STATE);
-    if (nav.cookiesCorner) nav.cookiesCorner.hidden = true;
-    if (nav.stateCorner) nav.stateCorner.hidden = true;
+    nav.steerCorner = document.querySelector(CORNER_STEER);
+    putAway(nav.cookiesCorner);
+    putAway(nav.stateCorner);
+    putAway(nav.steerCorner);
     nav.cookies.hidden = !nav.cookiesCorner;
     nav.state.hidden = !nav.stateCorner;
+    nav.participate.hidden = !nav.steerCorner;
   }
 
   function shape() {
@@ -917,6 +930,8 @@
       reading: document.getElementById('sparknav-reading'),
       readingGo: document.getElementById('sparknav-reading-go'),
       readingLabel: document.getElementById('sparknav-reading-label'),
+      participate: document.getElementById('sparknav-participate'),
+      participateOpen: document.getElementById('sparknav-participate-open'),
       cookies: document.getElementById('sparknav-cookies'),
       cookiesOpen: document.getElementById('sparknav-cookies-open'),
       state: document.getElementById('sparknav-state'),
@@ -926,7 +941,8 @@
       // written without it still has the corner menu to fall back on.
       modal: document.getElementById('sparknav-modal')
     };
-    if (!nav.logo || !nav.sky || !nav.orbits.length || !nav.cookiesOpen || !nav.stateOpen) {
+    if (!nav.logo || !nav.sky || !nav.orbits.length
+        || !nav.participateOpen || !nav.cookiesOpen || !nav.stateOpen) {
       nav = null;
       return;
     }
@@ -973,13 +989,15 @@
       nav.stateCorner.click();
     });
 
-    // A press on the dimmed page around the state interface is a press on the page: the same
-    // "not this" the veil takes, which the host covers while it is up.
-    if (nav.modal) {
-      nav.modal.addEventListener('click', function (event) {
-        if (event.target === nav.modal) close(true);
-      });
-    }
+    /* The invitation, which is a link rather than a dialog: the constellation gets out of the way
+       and then presses the one js/participate.js drew, so the destination, the new tab and the
+       query that shapes the issue are all still that file's and nothing of them is reproduced
+       here. The press carries the visitor's own activation with it, which is what lets the new tab
+       open. */
+    nav.participateOpen.addEventListener('click', function () {
+      close(true);
+      if (nav.steerCorner) nav.steerCorner.click();
+    });
 
     document.addEventListener('keydown', function (event) {
       if (!nav.host.open) return;
@@ -994,7 +1012,7 @@
     });
 
     // The set of options follows the state: a reading taken or forgotten anywhere on the page, and
-    // the two corner buttons, which arrive whenever the files that draw them are ready.
+    // the three pinned controls, which arrive whenever the files that draw them are ready.
     window.addEventListener('threshold:reading', shape);
     window.addEventListener('persona:sky', shape);
     window.addEventListener('resize', place);
@@ -1002,20 +1020,23 @@
     shape();
   }
 
-  /* The consent banner draws its button only once the library beside it has loaded, so the
-     constellation cannot simply look once. It watches until both corner buttons have been adopted,
-     and gives up after a while: on a copy of the site with no measurement id the cookies button
-     never arrives at all, and nothing should wait for it forever. */
+  /* Each of the three is drawn by a deferred script, and the consent banner's only once the
+     library beside it has loaded, so the constellation cannot simply look once. It watches until
+     all three have been adopted, and gives up after a while: on a copy of the site with no
+     measurement id the cookies button never arrives at all, and nothing should wait for it
+     forever. */
   function watchForCorners() {
     if (!window.MutationObserver || !document.body) return;
     var watch = new MutationObserver(function () {
       // Every page of this site mutates while it is read -- the feed deals cards without end --
-      // so the work only happens when one of the two buttons has actually come or gone.
+      // so the work only happens when one of the three has actually come or gone.
       if (document.querySelector(CORNER_COOKIES) === nav.cookiesCorner
-          && document.querySelector(CORNER_STATE) === nav.stateCorner) return;
+          && document.querySelector(CORNER_STATE) === nav.stateCorner
+          && document.querySelector(CORNER_STEER) === nav.steerCorner) return;
       shape();
-      if (nav.host.open) aside(true); // a button drawn while the lightbox is up belongs behind it
-      if (nav.cookiesCorner && nav.stateCorner) watch.disconnect();
+      // Something drawn while the lightbox is up belongs behind it.
+      if (nav.host.open) aside(true);
+      if (nav.cookiesCorner && nav.stateCorner && nav.steerCorner) watch.disconnect();
     });
     watch.observe(document.body, { childList: true, subtree: true });
     window.setTimeout(function () {

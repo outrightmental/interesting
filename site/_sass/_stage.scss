@@ -3,9 +3,13 @@
 // piece's parts laid out inside: the heading (the world, the piece's title, its one line), the
 // scene beside the knobs, the progress dots and the one text button that skips.
 //
-// The scene is sized the way a world's stage was: as wide as its column allows, or as wide as
-// the height left under the heading allows at the piece's own aspect ratio (--piece-ratio, set
-// by js/stage.js), whichever is less, so the feature fills the first screen and the feed peeks.
+// The scene fills the real estate the first screen has (issue #65): as tall as the viewport leaves
+// once the nav's room, main's own padding, the heading and the margin that lets the feed peek are
+// taken off it, and as wide as that height allows at the piece's own aspect ratio (--piece-ratio,
+// set by js/stage.js) -- never wider, though, than the row can spare the knobs. That width is the
+// scene's column as well, so no empty band can open between the scene and the knobs when a piece is
+// squarer than the column it was handed; the knobs take every pixel left over, up to the width a
+// rail of controls still reads at.
 //
 // The knobs are M3 controls: a choice is a row of tonal buttons that fill when pressed, a toggle
 // a tonal button that fills when on, a range the M3 slider, a press and a hold one big button
@@ -21,6 +25,25 @@
 
 .stage {
   overflow: hidden;
+  // What the first screen owes to everything that is not the scene: the room the floating nav
+  // leaves at the top and main's own padding above and below the feature (1rem and 2rem, see
+  // _panel.scss), the margin that lets the feed peek over the fold, the heading with the gap under
+  // it, and the room the knobs need when they stack under the scene instead of standing beside it.
+  // js/stage.js measures the heading onto --stage-head, because a title that wraps takes two lines
+  // and the scene, not the feed's peek, should pay for it; the figure here is one line at the widest
+  // scale, which stands until the script has measured and is all a page without scripting needs,
+  // since the scene waits out of sight there until a piece is on.
+  --stage-head: 7.5rem;
+  --stage-keep: 0rem;
+  --stage-floor: 16rem;
+  --stage-reserve: calc(var(--nav-h) + 3rem + var(--fold-peek) + var(--stage-head) + var(--stage-keep));
+  --stage-h: max(var(--stage-floor), calc(100vh - var(--stage-reserve)));
+}
+
+@supports (height: 100svh) {
+  .stage {
+    --stage-h: max(var(--stage-floor), calc(100svh - var(--stage-reserve)));
+  }
 }
 
 .stage-burst {
@@ -159,17 +182,24 @@
 }
 
 .stage-body {
+  --stage-gap: 1.5rem;
+  --stage-knobs: 300px; // the knobs' own: the room the scene never takes, and the floor of their column
+  // The scene's column is the scene: as wide as --stage-h allows at the piece's own ratio, and
+  // never wider than the row can spare the knobs. Nothing is left over inside it to read as a gap.
+  --stage-scene: min(calc(100% - var(--stage-gap) - var(--stage-knobs)), calc(var(--stage-h) * var(--piece-ratio, 1.7778)));
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(300px, 420px);
-  gap: 1.5rem;
+  grid-template-columns: var(--stage-scene) minmax(var(--stage-knobs), 1fr);
+  gap: var(--stage-gap);
   align-items: start;
   transition: opacity var(--md-sys-motion-duration-short) var(--md-sys-motion-easing-standard);
 }
 
 .stage-scene {
-  --stage-h: max(16rem, calc(100vh - var(--nav-h) - 19rem));
   position: relative;
-  width: min(100%, calc(var(--stage-h) * var(--piece-ratio, 1.7778)));
+  // Its column is already that wide beside the knobs; the cap is what keeps a tall piece in the
+  // first screen under 900px, where the knobs are below it and the column is the whole width.
+  width: 100%;
+  max-width: calc(var(--stage-h) * var(--piece-ratio, 1.7778));
   aspect-ratio: var(--piece-aspect, 16 / 9);
   justify-self: start;
   border-radius: var(--md-sys-shape-corner-large);
@@ -181,12 +211,6 @@
 // of its own, and it is removed with the piece.
 .stage-gate {
   display: none;
-}
-
-@supports (height: 100svh) {
-  .stage-scene {
-    --stage-h: max(16rem, calc(100svh - var(--nav-h) - 19rem));
-  }
 }
 
 .stage-canvas {
@@ -203,6 +227,9 @@
   display: grid;
   gap: 0.75rem;
   align-content: start;
+  // The rail takes the width left beside the scene, which a square or upright piece leaves plenty
+  // of, and stops where a knob stops reading as one control rather than a banner.
+  max-width: 34rem;
 }
 
 .stage-knobs {
@@ -347,6 +374,15 @@
   @include type.scale(body-medium);
 }
 
+// What is left to set, under the piece's own live line: the dots say how many, this says which.
+// It is only ever on while a piece is part-way through, so finishing the last knob on the page
+// and finding the piece still waiting is answered on the spot rather than looking like a fault.
+.stage-wanted {
+  margin: 0;
+  color: var(--md-sys-color-secondary);
+  @include type.scale(label-large);
+}
+
 .stage-foot {
   display: flex;
   align-items: center;
@@ -483,20 +519,20 @@
 }
 
 @media (max-width: 900px) {
+  // One column: the knobs are under the scene rather than beside it, so the scene keeps room for
+  // them, and it may be a little shorter before it is not worth showing at all.
+  .stage {
+    --stage-keep: 4rem;
+    --stage-floor: 14rem;
+  }
+
   .stage-body {
+    --stage-gap: 1rem;
     grid-template-columns: 1fr;
-    gap: 1rem;
   }
 
-  .stage-scene {
-    --stage-h: max(14rem, calc(100vh - var(--nav-h) - 22rem));
-    width: min(100%, calc(var(--stage-h) * var(--piece-ratio, 1.7778)));
-  }
-
-  @supports (height: 100svh) {
-    .stage-scene {
-      --stage-h: max(14rem, calc(100svh - var(--nav-h) - 22rem));
-    }
+  .stage-side {
+    max-width: none;
   }
 }
 
