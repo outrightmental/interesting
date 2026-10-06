@@ -1,54 +1,54 @@
 {
   "wayIn": [
     { "file": "index.html", "name": "the threshold", "gloss": "where it asks", "icon": "home",
-      "what": "Start here: answer one sideways question for a suggested first world, or skip and jump straight into any world card." },
+      "what": "Start here: answer one sideways question for a first world, or skip and open any world card below." },
     { "file": "moods.html", "name": "the mood atlas", "gloss": "how it asks, and every answer", "icon": "explore",
-      "what": "Try every question style, see what each one reads, and launch directly into the matching world from one place." },
+      "what": "Try every question style, see what each reading means, and jump straight to the matching world." },
     { "file": "sitemap.html", "name": "site map", "gloss": "every page, described", "icon": "map",
-      "what": "Scan the full site in one pass, with one plain line on what each page is and what to do first." }
+      "what": "Scan every page in one pass, with one plain line on what to do first on each." }
   ],
   "worlds": [
     { "file": "quiet-room.html", "name": "the quiet room", "orientation": "banked low", "mood": "tender", "aspect": "1 / 1",
-      "what": "Follow one breathing ring, lower the dimmer, and set one burden down before moving on." },
+      "what": "Set a breathing pace, dim the room, and finish by setting one thing down before the next piece opens." },
     { "file": "wish-constellation.html", "name": "the wish constellation", "orientation": "looking up", "mood": "cosmic", "aspect": "4 / 5",
-      "what": "Open your persona sky at full scale: ask for a reading, catch meteors, play chimes, orbit it, and mint a postcard." },
+      "what": "Read your saved sky as a map, catch comet thoughts, or turn it once around and mint a postcard." },
     { "file": "constellation-diary.html", "name": "the diary", "orientation": "in the long look", "mood": "brooding", "aspect": "4 / 3",
-      "what": "Turn your persona sky into a logbook entry sealed in wax, or call its thoughts back one by one in the order they came." },
+      "what": "Choose an entry shape, seal a sky record in wax, and finish with one line worth carrying onward." },
     { "file": "constellation-echo.html", "name": "the echo chamber", "orientation": "ears first", "mood": "attentive", "aspect": "1 / 1",
-      "what": "Pulse your persona sky into drifting echoes, pick one to hear its thought, then print an echo weather bulletin." },
+      "what": "Pulse your sky into echoes, hear their thoughts one by one, and print the echo weather when it settles." },
     { "file": "pulse-choir.html", "name": "the pulse choir", "orientation": "counting in echoes", "mood": "metrical", "aspect": "4 / 3",
-      "what": "Turn your persona sky into a looping choir, conduct by tempo and muting, then print a constellation score." },
+      "what": "Set tempo, mute and reshuffle voices, then finish on a score printed from your sky." },
     { "file": "star-lantern.html", "name": "the lantern ritual", "orientation": "wants a rite", "mood": "ceremonial", "aspect": "3 / 4",
-      "what": "Kindle stars from your persona sky as lanterns in the order you choose, set the wind, and hold to let them rise." },
+      "what": "Choose a lighting order, kindle lanterns from your stars, set the wind, and release them to rise." },
     { "file": "wish-terrarium.html", "name": "the terrarium", "orientation": "minding something", "mood": "tending", "aspect": "4 / 5",
-      "what": "Grow each star from your persona sky into a swaying plant, tap stems for thoughts, and ask for a greenhouse forecast." },
+      "what": "Grow your sky under glass: water stems, read a forecast, or regrow the whole bed in a new order." },
     { "file": "constellation-weather.html", "name": "the weather lab", "orientation": "weather coming", "mood": "tempestuous", "aspect": "16 / 10",
-      "what": "Map your persona sky as pressure systems, launch probes into microclimates, and print a forecast from the live field." },
+      "what": "Map your sky as pressure and fronts, probe microclimates, and finish on a forecast from the live field." },
     { "file": "orbital-weaver.html", "name": "the orbital weaver", "orientation": "after symmetry", "mood": "geometric", "aspect": "1 / 1",
-      "what": "Mirror your persona sky into a rotating mandala, tune symmetry, ripple it by touch, and print a geometry mantra." },
+      "what": "Tune symmetry and spin, ripple the weave by touch, and close on a geometry mantra." },
     { "file": "machine-shop.html", "name": "the machine shop", "orientation": "cold and clear", "mood": "analytic", "aspect": "3 / 4",
-      "what": "Run any elementary cellular automaton rule, flip bits live, and watch tiny changes rewrite the whole machine." },
+      "what": "Pick a tape, tune one automaton rule, run it, and read what changed at the bit level." },
     { "file": "kinetic-floor.html", "name": "the kinetic floor", "orientation": "wound tight", "mood": "restless", "aspect": "16 / 10",
-      "what": "A floor of blocks: shove them, flip the gravity, choose what they are made of, and wind up the kicker." },
+      "what": "Shove blocks, flip gravity, choose material and bounce, then finish with a damage report." },
     { "file": "loam.html", "name": "loam", "orientation": "low and slow", "mood": "rooted", "aspect": "4 / 5",
-      "what": "Plant into soil cross-sections, water and turn the ground, and watch roots route around grit and stone." },
+      "what": "Set soil grit, plant and water, turn the bed, and finish on a core reading from what grew." },
     { "file": "word-kiln.html", "name": "the word kiln", "orientation": "full of half-sentences", "mood": "verbal", "aspect": "5 / 4",
-      "what": "Feed a word into the fire and pull out a coined term with its own invented definition and citation." },
+      "what": "Feed words into heat, pull out coined terms with meanings, and let the batch cool on the shelf." },
     { "file": "apocrypha-desk.html", "name": "the apocrypha desk", "orientation": "magpie", "mood": "curious", "aspect": "4 / 5",
-      "what": "A desk of dubious objects: accession a specimen or cross-reference the drawer, and fill in the index card." },
+      "what": "Accession impossible specimens, cross-reference the drawer, and file one doubtful truth." },
     { "file": "sky-archive.html", "name": "the archive oracle", "orientation": "asking elsewhere", "mood": "divinatory", "aspect": "1 / 1",
-      "what": "Spin your persona sky under a wheel of runes for an omen, forge a sigil the archive keeps, or read your stars one by one." }
+      "what": "Turn your sky under a wheel, draw an omen, forge a sigil, and stamp the reading into the archive." }
   ],
   "finePrint": [
     { "file": "privacy.html", "name": "privacy", "gloss": "what is kept, and where", "icon": "shield",
-      "what": "Read the whole bargain on one page: what stays in your browser, what the counter counts, and what you can take back." },
+      "what": "Read exactly what stays in your browser, what cookies can count, and how to clear everything." },
     { "file": "terms.html", "name": "terms", "gloss": "the deal, in plain words", "icon": "page",
-      "what": "The short version of using a site that rewrites itself: play with everything, keep what you make, expect no promises." }
+      "what": "Read the plain bargain: play freely, keep what you make, and expect no warranty." }
   ],
   "edges": [
     { "file": "error.html", "name": "lost in space", "gloss": "the 404 page",
-      "what": "Miss a page and you still land in the river: whatever comes next opens here, and every world is below." },
+      "what": "Miss a page and you still land in the river: the next piece opens here, with every world below." },
     { "file": "sitemap.xml", "name": "sitemap.xml", "gloss": "machine-readable",
-      "what": "Get the same page list in XML, with relative paths so the site works under any publish path." }
+      "what": "Get the same page list in XML, with relative paths that work under any publish path." }
   ]
 }
