@@ -36,6 +36,8 @@
       "what": "Feed words into heat, pull out coined terms with meanings, and let the batch cool on the shelf." },
     { "file": "apocrypha-desk.html", "name": "the apocrypha desk", "orientation": "magpie", "mood": "curious", "aspect": "4 / 5",
       "what": "Accession impossible specimens, cross-reference the drawer, and file one doubtful truth." },
+    { "file": "shadow-theatre.html", "name": "the shadow theatre", "orientation": "magpie", "mood": "curious", "aspect": "4 / 3",
+      "what": "Choose paper cutouts, move the lamp and change their shadows; raise the curtain to see what appears." },
     { "file": "sky-archive.html", "name": "the archive oracle", "orientation": "asking elsewhere", "mood": "divinatory", "aspect": "1 / 1",
       "what": "Turn your sky under a wheel, draw an omen, forge a sigil, and stamp the reading into the archive." }
   ],
