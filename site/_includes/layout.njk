@@ -57,16 +57,18 @@
                  the threshold is the home icon in the near orbit.
                  The near orbit is where the site's destinations are -- the threshold, the mood
                  atlas, site map, and the world a reading opens onto once there is one -- and the
-                 far orbit is the apparatus: "cookies", "state", privacy, terms.
+                 far orbit is the apparatus: "change this site", "cookies", "state", privacy,
+                 terms.
     the persona  the one thing a visitor configures here, shown the way an app shows its account:
                  a round portrait of their sky floating in the upper right, which opens the sheet
                  (js/persona.js). With no persona yet the portrait ring is dashed and the button
                  reads "set up persona", filled and beckoning, so the first thing to do is the
-                 first thing seen; once a reading exists a "go to" link to the world it opens
-                 onto sits beside it. The one sentence on where things stand is written for
-                 screen readers and never takes space. On the threshold the sideways question is
-                 asked in the page's own feature (index.html hosts #persona-probe), never in the
-                 chrome.
+                 first thing seen. Nothing is ever put beside it: the portrait is the whole of
+                 that corner (issue #64), and the world a reading opens onto is an option in the
+                 constellation rather than a second mark floating next to the avatar. The one
+                 sentence on where things stand is written for screen readers and never takes
+                 space. On the threshold the sideways question is asked in the page's own feature
+                 (index.html hosts #persona-probe), never in the chrome.
     the feed     every world as a card, in a masonry grid that keeps going as a visitor scrolls
                  (_includes/worlds.njk, from _data/worlds.json, and js/feed.js with one module per
                  world in js/modules/). It has no caption: the grid speaks for itself. The cards
@@ -86,9 +88,9 @@
     js/state.js      the one local-state document every page reads and writes through, and the
                      meta menu that exports it (STATE_TAG and check_state).
     js/participate.js
-                     the one way a visitor can steer this site: the prominent button in the middle
-                     of the bottom edge that opens a pre-shaped new issue (PARTICIPATE_TAG and
-                     check_participate).
+                     the one way a visitor can say what this site should become: a link to a
+                     pre-shaped new issue on this repository, which the shell adopts into the
+                     constellation as "change this site" (PARTICIPATE_TAG and check_participate).
     js/persona.js    the persona: the sky several worlds read, kept and changed in one place, plus
                      the avatar and the sheet above. Not deferred, so a page's own script can read
                      window.interestingPersona.stars() while the body is parsed.
@@ -99,7 +101,7 @@
                      saved state away a warning button and guards every press of it with the one
                      "are you sure you want to ______?" modal (see the README,
                      "Destructive-caution axiom"), plus the main nav -- the logo's lightbox, the
-                     options that come and go with the state, and the two corner affordances it
+                     options that come and go with the state, and the three pinned affordances it
                      adopts -- and the slider fill. Not deferred either,
                      both because a page's own script may call it and because it marks the
                      document as scripted before the body is drawn, and after the persona it
@@ -120,13 +122,15 @@
   instead, so a run may rewrite the flow but never delete it. The other four are ordinary site
   source.
 
-  Three corner affordances those fixed files draw are a cadre of their own, outside this site's
-  visual language and outside what any page may restyle or reword. "steer the site" keeps the
-  bottom edge, and nothing of the site's goes there. The other two -- "cookies" and "state" -- are
-  adopted by the shell into the far orbit of the constellation, where a visitor finds them with
-  everything else: js/site.js hides the two buttons their own files pin to the corners and forwards
-  the constellation's options to them, so there is still exactly one cookies dialog and one state
-  menu, and neither fixed file is edited to do it.
+  Three affordances those fixed files pin over the page are a cadre of their own, outside this
+  site's visual language and outside what any page may restyle or reword. All three are adopted by
+  the shell into the far orbit of the constellation, where a visitor finds them with everything
+  else -- "change this site" (js/participate.js), "cookies" (js/analytics.js) and "state"
+  (js/state.js): js/site.js hides the control each file pinned over the page and forwards the
+  constellation's option to it, so there is still exactly one new-issue link, one cookies dialog
+  and one state menu, and no fixed file is edited to do it. Nothing of the site's is left floating
+  at an edge of the viewport either, the bottom one included: at rest the whole of the navigation
+  is the two marks in the top corners (issue #64).
 
   The page's own world, when it has one, is named on <html data-world> so _sass/_mood.scss gives
   the page that world's palette; a visitor's reading lands on <html data-mood> and wins over it.
@@ -146,7 +150,8 @@
   'shield': 'M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z',
   'page': 'M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z',
   'tune': 'M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z',
-  'swap': 'M16 17.01V10h-2v7.01h-3L15 21l4-3.99h-3zM9 3L5 6.99h3V14h2V6.99h3L9 3z'
+  'swap': 'M16 17.01V10h-2v7.01h-3L15 21l4-3.99h-3zM9 3L5 6.99h3V14h2V6.99h3L9 3z',
+  'edit': 'M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34a.9959.9959 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z'
 } %}
 <!DOCTYPE html>
 <html lang='en' data-page='{{ here }}'{% if thisWorld %} data-world='{{ thisWorld.mood }}'{% endif %}{% if siteRoot %} data-root='{{ siteRoot }}'{% endif %}>
@@ -187,8 +192,8 @@
   <!-- The one local-state store every page reads and writes through, and its meta menu; see
        js/state.js. Not deferred: a page's own script runs before any deferred one does. -->
   <script src='js/state.js'></script>
-  <!-- The one way a visitor can steer this site: the button in the middle of the bottom edge that
-       opens a pre-shaped new issue; see js/participate.js. -->
+  <!-- The one way a visitor can say what this site should become: the link to a pre-shaped new
+       issue that js/site.js adopts into the constellation as "change this site". -->
   <script src='js/participate.js' defer></script>
   <!-- The persona: the sky several worlds read, and the avatar and sheet it is set up in; see
        js/persona.js. Not deferred either, for the same reason, and after the store it writes
@@ -245,9 +250,20 @@
         </li>
       </ul>
       <ul class='sparknav-orbit sparknav-far' id='sparknav-far'>
-        {#- The two adopted affordances. Each is in the orbit only while the file that owns it has
-            drawn its own button, which js/site.js then hides and presses on this one's behalf --
-            js/analytics.js and js/state.js are fixed files and are never edited for this. -#}
+        {#- The three adopted affordances. Each is in the orbit only while the file that owns it has
+            drawn its own control, which js/site.js then hides and presses on this one's behalf --
+            js/participate.js, js/analytics.js and js/state.js are fixed files and are never edited
+            for this. The invitation comes first: it is the one option here that asks something of a
+            visitor instead of answering a question they already had, and it is the only navigation
+            on the site that leads off it, which is what the accessible name says and the new tab
+            is for. -#}
+        <li class='sparknav-option' id='sparknav-participate' hidden>
+          <span class='sparknav-ray' aria-hidden='true'></span>
+          <button type='button' class='sparknav-node' id='sparknav-participate-open' aria-label='Change this site: this whole site is a continuously evolving work-in-progress art experiment, and this opens a new issue on its repository where you say what it should become next. Opens in a new tab.'>
+            <svg class='icon' viewBox='0 0 24 24' aria-hidden='true' focusable='false'><path d='{{ icons.edit }}'/></svg>
+            <span class='sparknav-label'>change this site</span>
+          </button>
+        </li>
         <li class='sparknav-option' id='sparknav-cookies' hidden>
           <span class='sparknav-ray' aria-hidden='true'></span>
           <button type='button' class='sparknav-node' id='sparknav-cookies-open' aria-haspopup='dialog'>
@@ -274,18 +290,16 @@
       </ul>
     </nav>
   </details>
-  {#- The persona, floating in the upper right: the only other navigation on the site. What a
-      visitor with scripting switched off gets is written here and claims nothing; js/persona.js
-      rewrites the sentence, draws the portrait and un-hides the two controls. -#}
+  {#- The persona, floating in the upper right: the only other navigation on the site, and the
+      portrait alone -- nothing is ever put beside it (issue #64). What a visitor with scripting
+      switched off gets is written here and claims nothing; js/persona.js rewrites the sentence,
+      draws the portrait and un-hides the avatar. -#}
   <div class='persona' id='persona' data-state='empty' data-sky='none' data-reading='none' data-asking='false'>
     <p class='persona-text visually-hidden' id='persona-text'>No persona yet.</p>
-    <div class='persona-actions'>
-      <a class='action persona-go' id='persona-go' href='{{ siteRoot }}moods.html' hidden>go to your world</a>
-      <button type='button' class='persona-avatar' id='persona-open' aria-haspopup='dialog' aria-controls='persona-sheet' aria-describedby='persona-text' hidden>
-        <span class='persona-portrait' aria-hidden='true'><canvas id='persona-portrait' width='40' height='40'></canvas></span>
-        <span class='persona-label'>set up persona</span>
-      </button>
-    </div>
+    <button type='button' class='persona-avatar' id='persona-open' aria-haspopup='dialog' aria-controls='persona-sheet' aria-describedby='persona-text' hidden>
+      <span class='persona-portrait' aria-hidden='true'><canvas id='persona-portrait' width='40' height='40'></canvas></span>
+      <span class='persona-label'>set up persona</span>
+    </button>
   </div>
   <div id='main-content' tabindex='-1'>{{ content | safe }}</div>
 {%- if not (here == 'sitemap.html' or here == 'moods.html') %}
