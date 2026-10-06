@@ -1,4 +1,4 @@
-{# Front matter: title names the page; description describes it, or defaults to the world's description in _data/worlds.json. error.html uses inlineStyles and siteRoot because it can be served at an arbitrary missing path. A page supplies its main; the layout supplies navigation, persona and feed. #}
+{# Front matter: title names the page; description describes it, or defaults to the world's description in _data/worlds.json. error.html uses inlineStyles and siteRoot because it can be served at an arbitrary missing path. A page supplies its main; the layout supplies navigation, persona and feed. siteRoot renders empty on every page that does not set it, so one block below serves both cases. #}
 {%- set here = (page.filePathStem | replace('/', '')) + '.html' if page else '' %}
 {%- set thisWorld = null %}
 {%- for world in worlds.worlds %}{% if world.file == here %}{% set thisWorld = world %}{% endif %}{% endfor %}
@@ -29,12 +29,11 @@
 {%- if inlineStyles %}
   <style>{{ 'site' | css | safe }}{{ stylesheet | css | safe }}</style>
 {%- else %}
-  <link rel='stylesheet' href='css/site.css'>
+  <link rel='stylesheet' href='{{ siteRoot }}css/site.css'>
 {%- if stylesheet %}
-  <link rel='stylesheet' href='css/{{ stylesheet }}.css'>
+  <link rel='stylesheet' href='{{ siteRoot }}css/{{ stylesheet }}.css'>
 {%- endif %}
 {%- endif %}
-{%- if siteRoot %}
   <script src='{{ siteRoot }}js/analytics.js' defer></script>
   <script src='{{ siteRoot }}js/state.js'></script>
   <script src='{{ siteRoot }}js/participate.js' defer></script>
@@ -43,16 +42,6 @@
   <script src='{{ siteRoot }}js/threshold.js' defer></script>
   <script src='{{ siteRoot }}js/feed.js' type='module'></script>
   <script src='{{ siteRoot }}js/stage.js' type='module'></script>
-{%- else %}
-  <script src='js/analytics.js' defer></script>
-  <script src='js/state.js'></script>
-  <script src='js/participate.js' defer></script>
-  <script src='js/persona.js'></script>
-  <script src='js/site.js'></script>
-  <script src='js/threshold.js' defer></script>
-  <script src='js/feed.js' type='module'></script>
-  <script src='js/stage.js' type='module'></script>
-{%- endif %}
 </head>
 <body>
   <a class='skip-link' href='#main-content'>skip to main content</a>
