@@ -326,6 +326,65 @@ def effort_flags(effort):
     return ["--reasoning-effort", effort] if effort else []
 
 
+# How much the model is asked for room to write in one answer, in tokens (issue #77). A run that
+# rewrites half the site writes a long answer, and an answer that runs past the model's output
+# limit is cut off mid-run and thrown away, so the budget is asked for as large as every model in
+# the pool can be expected to grant: 64k output tokens, roughly a quarter of a megabyte of JSON,
+# which is the cap the current flagships carry. The MAX_OUTPUT_TOKENS repository variable
+# overrides it, and "none" (or 0) asks for nothing, leaving every model at its own default.
+#
+# Copilot CLI 1.0.91 -- the pinned version, whose flags this silo relies on -- has no flag for it.
+# The only maximum-output control it reads is COPILOT_PROVIDER_MAX_OUTPUT_TOKENS, which binds the
+# cap on a custom-provider route (BYOK, or a GHES proxy) and is ignored on GitHub's own model
+# routing, where the cap comes from the model catalog; the rest of the CLI's output-token machinery
+# (`clientOptions.maxOutputTokens`, `capabilities.limits.max_output_tokens`) is reachable only
+# through its SDK session API, not from the command line. So the budget is asked for the two ways
+# the pinned CLI allows: the environment variable it does read (see run_copilot), and the prompt,
+# which names the budget so a model on GitHub's routing can shape an answer that fits inside it
+# rather than discovering the limit halfway through (see build_prompt). Should the pin move to a
+# CLI that grants more, raising the number here is the only change needed.
+#
+# An answer that runs past it even so is not lost either: the CLI carries a cut-off answer on in a
+# second turn, and extract_answer puts the pieces back together. Only an answer that cannot be put
+# back together is refused, and then the run retries with another model, as it always did.
+DEFAULT_MAX_OUTPUT_TOKENS = 64_000
+# Roughly how many bytes a token of JSON runs to, used only to say the budget in the units the
+# rest of the prompt speaks: files are measured there in KB, not in tokens.
+BYTES_PER_TOKEN = 4
+
+
+def max_output_tokens():
+    """The output budget to ask for, in tokens: MAX_OUTPUT_TOKENS if set, else the default.
+
+    0 means ask for nothing: the CLI is told no budget and the prompt names none, leaving every
+    model at whatever its own output limit happens to be. "none" and "0" both mean that.
+    """
+    asked = (os.environ.get("MAX_OUTPUT_TOKENS") or "").strip().lower()
+    if not asked:
+        return DEFAULT_MAX_OUTPUT_TOKENS
+    if asked == "none":
+        return 0
+    if asked.isdigit():
+        return int(asked)  # "0" asks for none, like "none"
+    print(f"::warning::MAX_OUTPUT_TOKENS {one_line(asked, 40)!r} is not a whole number of tokens "
+          f"or \"none\"; using {DEFAULT_MAX_OUTPUT_TOKENS}.")
+    return DEFAULT_MAX_OUTPUT_TOKENS
+
+
+def output_budget_env(budget):
+    """The environment the CLI reads the output budget from, or nothing for 0."""
+    return {"COPILOT_PROVIDER_MAX_OUTPUT_TOKENS": str(budget)} if budget else {}
+
+
+def budget_note(budget):
+    """How the prompt names `budget`: in tokens and in the KB the rest of the prompt counts in."""
+    if not budget:
+        return ""
+    return (f", for which this run asks up to {budget:,} tokens -- about "
+            f"{budget * BYTES_PER_TOKEN // 1000} KB of JSON, all of your files together, or your "
+            "own limit if that is lower")
+
+
 # A heavy model at near-maximum effort reads a prompt the size of the whole site and may write
 # back most of it, and it is given the time that takes: a quarter of an hour, where eight minutes
 # used to do. The workflow's job timeout allows for three such attempts.
@@ -1750,9 +1809,16 @@ def split_for_prompt(files):
     return sorted(shown, key=prompt_order), sorted(omitted)
 
 
-def build_prompt(shown, omitted=(), kind=INTERESTING_RUN):
+def build_prompt(shown, omitted=(), kind=INTERESTING_RUN, budget=None):
     """The whole prompt for a run of this kind: the standards every run is held to, then what this
-    kind of run does (grow the site, or consolidate it), then the axioms and the site itself."""
+    kind of run does (grow the site, or consolidate it), then the axioms and the site itself.
+
+    `budget` is the output budget the run asks for, in tokens (max_output_tokens() unless given);
+    0 leaves it unnamed. The prompt says it out loud so the model can size the answer to fit, which
+    is the only way the budget reaches a model on GitHub's own routing (see
+    DEFAULT_MAX_OUTPUT_TOKENS)."""
+    if budget is None:
+        budget = max_output_tokens()
     mission = mission_of(kind)
     consolidating = kind == CONSOLIDATION_RUN
     system = (
@@ -2169,8 +2235,10 @@ def build_prompt(shown, omitted=(), kind=INTERESTING_RUN):
         f"- Keep each file small (at most {MAX_FILE_BYTES // 1000} KB); return the COMPLETE new "
         "content of every file you change.\n"
         f"- At most {MAX_CHANGES} files per run, and keep the whole answer inside your output "
-        "limit: an answer that is cut off is discarded. A federation too large for one answer is "
-        "better carried out in coherent stages, one per run, than attempted all at once.\n\n"
+        f"limit{budget_note(budget)}. Decide how much to rewrite from that budget before you "
+        "start writing, and spend it: an answer that is cut off is pieced back together where it "
+        "can be, and discarded where it cannot. A federation too large for one answer is better "
+        "carried out in coherent stages, one per run, than attempted all at once.\n\n"
         "Respond with ONLY a JSON object, no prose and no markdown fences, shaped as:\n"
         '{"summary": "one sentence describing this change", '
         '"files": [{"path": "index.html", "content": "<full file content>"}], '
@@ -2293,32 +2361,41 @@ MODEL_UNAVAILABLE = re.compile(
 EFFORT_REFUSED = re.compile(r"reasoning|effort", re.I)
 
 
-def call_model(model, prompt, effort=None):
+def call_model(model, prompt, effort=None, budget=None):
     """Ask one model for its answer through the Copilot CLI and return the text.
 
     `effort` is the reasoning effort to ask for (reasoning_effort() unless given); "" asks for
     none. A model that refuses the level is asked once more without it, and that is the one
     retry: a second refusal is the model's failure like any other.
+
+    `budget` is the maximum output to ask for in tokens (max_output_tokens() unless given); 0 asks
+    for none. It is resolved once here, so a retry asks for the same room to write as the first
+    call did.
     """
     if effort is None:
         effort = reasoning_effort()
+    if budget is None:
+        budget = max_output_tokens()
     try:
-        return run_copilot(model, prompt, effort)
+        return run_copilot(model, prompt, effort, budget)
     except EffortRefused as err:
         if not effort:
             raise ModelError(str(err)) from None
         print(f"::notice::{model} did not take reasoning effort {effort} ({one_line(err, 200)}); "
               "asking again without it.")
         try:
-            return run_copilot(model, prompt, "")
+            return run_copilot(model, prompt, "", budget)
         except EffortRefused as again:
             raise ModelError(str(again)) from None
 
 
-def run_copilot(model, prompt, effort):
+def run_copilot(model, prompt, effort, budget=0):
     """One call to the Copilot CLI: the model's answer, or the error classified."""
     cmd = [COPILOT_BIN, "--model", model, *effort_flags(effort), *COPILOT_FLAGS]
-    env = dict(os.environ, NO_COLOR="1", COPILOT_AUTO_UPDATE="false")
+    # The output budget travels in the environment rather than in argv: the pinned CLI has no flag
+    # for it (see DEFAULT_MAX_OUTPUT_TOKENS). Passing it is free where it is ignored, so there is
+    # nothing to omit and nothing to retry without.
+    env = dict(os.environ, NO_COLOR="1", COPILOT_AUTO_UPDATE="false", **output_budget_env(budget))
     with tempfile.TemporaryDirectory(prefix="copilot-silo-") as empty_dir:
         try:
             proc = subprocess.Popen(
@@ -2419,14 +2496,61 @@ def extract_answer(events, model):
                    if e.get("type") in ("assistant.message", "session.tools_updated")} - {None, ""}
     if answered_by - {model}:
         raise ModelError(f"answered by {', '.join(sorted(map(str, answered_by)))} instead of {model}")
-    if sum(e.get("type") == "assistant.turn_start" for e in events) > 1:
-        # The CLI continues a cut-off answer in a new turn, and only the last piece is reported.
-        raise ModelError("the answer ran past the model's output limit")
     answers = [event_data(e).get("content") for e in events if e.get("type") == "assistant.message"]
     answers = [a for a in answers if isinstance(a, str) and a.strip()]
     if not answers:
         raise ModelError("empty response")
+    if sum(e.get("type") == "assistant.turn_start" for e in events) > 1:
+        # More than one turn means the answer did not fit: the CLI carries a cut-off answer on in
+        # a new turn. The piece of each turn is the message it ended on, as a lone turn's answer is
+        # its last message (below) -- so an earlier draft inside a turn is not glued onto the front.
+        return rejoin_answer(last_message_per_turn(events), model)
     return answers[-1]
+
+
+def last_message_per_turn(events):
+    """The non-empty assistant.message each turn ended on, in order: the pieces of a cut-off
+    answer. Joining these rather than every message keeps the rejoin per turn, not per message."""
+    pieces, current = [], None
+    for event in events:
+        kind = event.get("type")
+        if kind == "assistant.turn_start":
+            if current is not None:
+                pieces.append(current)
+            current = None
+        elif kind == "assistant.message":
+            content = event_data(event).get("content")
+            if isinstance(content, str) and content.strip():
+                current = content
+    if current is not None:
+        pieces.append(current)
+    return pieces
+
+
+def rejoin_answer(pieces, model):
+    """One whole answer out of the pieces of an answer that ran past the model's output limit.
+
+    The run asks for as much room to write as the CLI allows (see DEFAULT_MAX_OUTPUT_TOKENS) and
+    tells the model how much that is, but an answer can still run past it, and then the whole
+    answer is there in pieces rather than gone: joined in order and with no separator, because a
+    continuation resumes exactly where the model stopped. A model that started the answer over
+    instead of carrying it on leaves pieces that do not join, and then its last piece is the whole
+    answer. Whichever of the two reads as a plan is the answer.
+
+    An answer that reads as a plan neither way really was lost, and is refused as it always was:
+    the run then tries another model, which is the backstop and not the first line of defence.
+    """
+    candidates = {"".join(pieces): "the pieces it reported join into one",
+                  pieces[-1]: "its last piece is a whole answer"}
+    for candidate, how in candidates.items():
+        try:
+            parse_response(candidate)
+        except (ValueError, RecursionError):
+            continue
+        print(f"::notice::{model} ran past its output limit, but {how}: the answer was put back "
+              f"together from the {len(pieces)} pieces the CLI reported, rather than discarded.")
+        return candidate
+    raise ModelError("the answer ran past the model's output limit")
 
 
 def parse_response(text):
@@ -2611,7 +2735,10 @@ def main():
     kind = run_kind()
     mission = mission_of(kind)
     shown, omitted = split_for_prompt(read_site())
-    prompt = build_prompt(shown, omitted, kind)
+    # Resolved once for the whole run: the prompt names the budget and every call asks for it, so
+    # the answer the model plans for is the answer the CLI is told to allow.
+    budget = max_output_tokens()
+    prompt = build_prompt(shown, omitted, kind, budget)
     candidates = pick_candidates()
     requested = bool((os.environ.get("MODEL") or "").strip())  # named by hand, not drawn from the pool
     attempts, unavailable, tried = 0, [], set()
@@ -2634,7 +2761,7 @@ def main():
         tried.add(model)
         attempts += 1  # counted up front, so every path below that asks again is bounded
         try:
-            plan = parse_response(call_model(model, prompt))
+            plan = parse_response(call_model(model, prompt, budget=budget))
             ops = validate_plan(plan, unseen=omitted)
         except ModelUnavailable as err:
             attempts -= 1  # no model was asked, so this does not count as an attempt
