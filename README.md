@@ -988,6 +988,21 @@ iteration, stated in the prompt and held to in code.
   knob's bar; `frame(t, dt, ctx)` counts `t` from the piece's start, and `auto: false` lets a
   piece call `complete()` itself. A module is self-contained: it imports nothing. `js/stage.js`
   documents all of it at the top.
+- **Settable, in any order, and sayable.** Every knob has to be one the visitor it is put in front
+  of can actually set, and a piece has to be finishable whatever order they reach its knobs in:
+  nothing makes anyone work down the page. The way that fails is quiet — the visitor sets the last
+  knob they can see, the scene answers, and the piece does not finish, because it is waiting on one
+  further up that never looked unfinished — so the stage names what is still to set under the
+  piece's own live line. A slider is the case that taught this (issue
+  [#60](https://github.com/outrightmental/interesting/issues/60)): it opens with an answer already
+  on it, which is why `ctx.value(id)` is the piece's from the first frame, so pressing it and
+  letting go where it stands is giving that answer and the stage takes it as set.
+- **One instantiation, then nothing.** A piece is its turn on the stage and no part of it outlives
+  that turn. The stage has one teardown, and it takes the whole piece apart — the frame loop, the
+  ceremony's timers, a ticker under a hold still pressed down, the knobs, the lines, the dots, the
+  mark, the scene and its shape — so a world that comes round again opens on an empty stage and
+  plays exactly as it did the first time. A module keeps nothing outside `piece(env)` for the same
+  reason.
 - **Pure, so it can be played anywhere.** A piece is drawing and arithmetic on what the stage
   hands it and never reaches for the document, the window or the browser's storage. That is what
   lets [`.github/scripts/piece_harness.mjs`](.github/scripts/piece_harness.mjs) play every piece
@@ -999,8 +1014,25 @@ iteration, stated in the prompt and held to in code.
   in a worker of its own with a time limit, an empty environment and no clock, no `Math.random`
   and no timers, so a piece that reaches for any of them fails; the run itself starts under
   Node's permission model with a scrubbed environment, because the modules are model-written
-  code (a quality gate, not a security boundary: the site's source is public). The harness is
-  not in `/site`, so a run cannot soften it.
+  code (a quality gate, not a security boundary: the site's source is public). Every seed is then
+  played a second time with its knobs reached in a seeded order rather than down the page, and the
+  first seed is played through again from the top, which has to come out exactly as it did the
+  first time. The harness is not in `/site`, so a run cannot soften it.
+- **The stage, played too.** A piece can be flawless and the stage still leave the visitor playing
+  it with no way to finish, because the knob the piece offered is not a knob the stage will take —
+  which is what issue #60 was.
+  [`.github/scripts/stage_harness.mjs`](.github/scripts/stage_harness.mjs) runs the real
+  `js/stage.js` against a stub browser: the elements `_includes/stage.njk` writes, a clock the
+  scenario steps by hand so a 1.8-second hold costs nothing, a canvas that records nothing, and a
+  feed that deals the worlds it is told to. Four scenarios: a world played, another played, and the
+  first dealt again, each round finishing and opening the next; a slider used where it stands, which
+  must count; a knob nobody touched, which must stay unset *and* be named; and a piece abandoned
+  with a hold still pressed down, after which nothing of it may be on the stage or still running.
+  `StageTest` plays purpose-built pieces through it and `RealSiteTest` plays the site as committed;
+  like the piece harness it is outside `/site`, so a run cannot soften it. Deliberately, it holds
+  the site as committed rather than refusing a plan: it drives the stage through the stage's own
+  elements, and those are a run's to rewrite, so gating plans on it would pin markup the silo leaves
+  open. The prompt says so, and says to keep all four true when rewriting the stage.
 - **Held to in code.** `check_completion` in
   [`.github/scripts/make_interesting.py`](.github/scripts/make_interesting.py) reads the one list
   of worlds off the built home page (the `#site-worlds` JSON the layout writes from
@@ -1009,7 +1041,8 @@ iteration, stated in the prompt and held to in code.
   one with fewer than two knobs or more than five, one that finishes itself before its visitor has
   set a knob, a knob of a kind the stage does not render, a piece that
   does not finish within twelve taps and forty-five seconds of simulated play, one that is not
-  the same for the same seed (a piece is an address), or one that is the same for every seed
+  the same for the same seed (a piece is an address), one that does not finish the same way with its
+  knobs reached in another order or played a second time, or one that is the same for every seed
   (the river is of pieces that differ). Only what the run itself breaks is refused, as with every
   other axiom, so a run can repair a world that is already stuck; and a plan that drops the list
   of worlds is refused outright, because the stage would have nothing to open.
@@ -1020,11 +1053,12 @@ iteration, stated in the prompt and held to in code.
 - **What is deliberately not checked**: whether a piece is a good toy, whether its knobs are the
   right knobs, and whether its finish feels like one. No code could judge that; the prompt asks
   for it, names the old pages as the material, and says a second shape of piece for a world is
-  as good a change as a new world.
+  as good a change as a new world. The stage is checked, but on the committed site rather than on a
+  plan, for the reason given above.
 - **True of the site as committed**: `RealSiteTest` builds `/site` and plays every world's piece
-  to its end on every pull request and before every deploy, checks that every world page is the
-  stage and that the threshold hosts the question on it, and checks that the limits the prompt
-  states are the harness's own.
+  to its end on every pull request and before every deploy, plays the stage itself through the four
+  scenarios above, checks that every world page is the stage and that the threshold hosts the
+  question on it, and checks that the limits the prompt states are the harness's own.
 
 ### Silo
 
