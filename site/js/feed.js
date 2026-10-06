@@ -1,4 +1,4 @@
-/* The shared feed. _includes/worlds.njk supplies one plain link per world; this module paints those cards, deals pieces between them, and hands a selected card to js/stage.js. A world module exports paint, optional animate, spark and piece. Card env carries seed, seeded rnd/pick/int/chance, stars, colors, world and variant; a repeat gets a fresh variant from js/variant.js. */
+/* The shared feed. _includes/worlds.njk supplies one plain link per world; this module paints those cards, deals pieces between them, and hands a selected card to js/stage.js. A world module exports paint, optional animate, spark and piece. Card env carries seed, seeded rnd/pick/int/chance, stars, colors, world and variant; a repeat gets a fresh variant from js/variant.js. A pressed card hands its whole configuration to the stage -- its seed, the variant rolled from it, the four palette seeds it wears and the content it was showing (palette() and shown() below; open() and take() handing them over) -- so the feature is the card that was pressed rather than a generic page of its world (issue #80). A spark may put `of` on its spec, the module's own note about what its card is of; the stage hands it straight back as env.card.of. */
 import { roll, PLAIN, recolor, aspect, light, mulberry32, hash, mix, alpha } from './variant.js';
 
 const persona = window.interestingPersona;
@@ -97,6 +97,40 @@ function palette(card, m) {
   const seeds = {};
   for (const name of SEEDS) seeds[name] = colors[name];
   return seeds;
+}
+
+/* What a card is showing, as content: it travels with the card to the stage and is the feature's own
+   title and line there (issue #80). A spark card shows the spec its module made for the card's seed
+   and variant, `of` and all; a world card shows its world's orientation, name and line, which is
+   the one thing every card of that world says, so the feature it opens has to be titled by its
+   piece. Nothing is invented or re-rolled here: this is the card as the visitor last saw it. */
+function shown(m) {
+  if (!m || !m.world) return null;
+  const spec = m.spec;
+  if (spec) {
+    return {
+      kind: 'spark',
+      overline: spec.overline || m.world.name,
+      title: spec.title || m.world.name,
+      quote: spec.quote || '',
+      text: spec.text || '',
+      mono: spec.mono || '',
+      cite: spec.cite || '',
+      aspect: spec.aspect || m.world.aspect,
+      of: spec.of || null
+    };
+  }
+  return {
+    kind: 'world',
+    overline: m.world.orientation,
+    title: m.world.name,
+    quote: '',
+    text: m.world.what,
+    mono: '',
+    cite: '',
+    aspect: m.world.aspect,
+    of: null
+  };
 }
 
 const WORLDS = grid ? Array.from(grid.querySelectorAll('.card-world')).map((card) => {
@@ -488,7 +522,8 @@ function take(fit, avoid) {
     || playable.find(okay) || playable[0];
   if (!card) return null;
   const m = meta.get(card);
-  const taken = { file: m.world.file, seed: m.seed, kind: m.kind, seeds: palette(card, m) };
+  const taken = { file: m.world.file, seed: m.seed, kind: m.kind, seeds: palette(card, m),
+    variant: m.variant, card: shown(m) };
   consume(card);
   return taken;
 }
@@ -503,8 +538,13 @@ function openFromCard(ev) {
   const seeds = palette(card, m);
   const file = m.world.file;
   const seed = m.seed;
+  // The rest of what the card is, read before it leaves: its configuration and the content it was
+  // showing. The stage frames, paints and titles the feature from these and hands them to the
+  // world's module on env, so what opens is the piece that was pressed (issue #80).
+  const variant = m.variant;
+  const was = shown(m);
   consume(card);
-  window.interestingStage.open(file, seed, { arriving: true, scroll: true, seeds });
+  window.interestingStage.open(file, seed, { arriving: true, scroll: true, seeds, variant, card: was });
 }
 
 const order = shuffle(WORLDS.slice(), mulberry32(salt));

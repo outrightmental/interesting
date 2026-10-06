@@ -1,21 +1,29 @@
 /*
-  A card's variant: its randomized configuration, which is what makes the second appearance of a
-  world in the feed a different card rather than a reprint of the first.
+  A content piece's variant: its randomized configuration, which is what makes the second
+  appearance of a world in the feed a different card rather than a reprint of the first -- and what
+  makes the feature a card opens as recognisably the card that was pressed.
 
   js/feed.js deals endlessly -- every world comes round again and again as a visitor scrolls -- and
   a repeat used to differ only in whatever its module happened to do with a fresh seed. The palette
   was the world's one palette, the frame was the world's one aspect ratio, and nothing else about
   the card moved at all. This file is what else there is.
 
+  One configuration, both appearances. Every content piece on this site is procedurally configured,
+  and the configuration is the same whether the piece is a card in the feed or the feature a visitor
+  opened it as (issue #80): js/feed.js rolls it for a card, hands it to the stage with the card, and
+  js/stage.js paints, frames and titles the feature from that same configuration. Nothing here is
+  the feed's alone.
+
   It is arithmetic over a seed and nothing more: it reaches for no browser, imports nothing, and is
   tested on its own (.github/scripts/card_variant_harness.mjs drives it,
   CardVariantTest in .github/scripts/test_make_interesting.py makes the assertions).
 
-      import { roll, PLAIN, recolor, aspect, light } from './variant.js';
+      import { roll, revive, PLAIN, recolor, aspect, light } from './variant.js';
 
       const v = roll(seed);                  // the variant: seven dials
-      const seeds = recolor(moodSeeds, v);   // the card's four palette seeds, re-derived by it
-      const ratio = aspect('4 / 5', v);      // the card's frame, stretched by it
+      const seeds = recolor(moodSeeds, v);   // the piece's four palette seeds, re-derived by it
+      const ratio = aspect('4 / 5', v);      // its frame, stretched by it
+      const same = revive(handedOver, seed); // the configuration a card handed over, made safe
 
   The seven dials, three of colour and four of composition (DIALS below holds the range of each):
 
@@ -169,6 +177,30 @@ export function roll(seed) {
   };
 }
 
+/* The configuration a piece opens with, which is the configuration its card was wearing.
+
+   A card's variant is rolled from the card's own seed and from nothing else (roll above), so the
+   configuration is a function of the seed: it travels in the address a piece is at, and a piece
+   opened with no card behind it -- a direct visit to `world.html#<seed>`, or a world picked at
+   random when the feed's stack has run dry -- wears what a card of that seed would have worn. That
+   is the alignment axiom's answer for a piece nobody pressed (issue #80).
+
+   This is the other half: a configuration handed across a boundary (js/feed.js to js/stage.js, or
+   a caller of window.interestingStage.open) made safe. The plain variant stays plain, every dial
+   is clamped into its own range, and anything unreadable is rolled from the seed instead -- so the
+   stage always has one configuration, inside the ranges every other part of the site assumes. */
+export function revive(v, seed) {
+  if (!v || typeof v !== 'object') return roll(seed);
+  if (v.plain) return PLAIN;
+  const out = { seed: (Number(v.seed) >>> 0) || (seed >>> 0), plain: false };
+  for (const name of Object.keys(DIALS)) {
+    const value = Number(v[name]);
+    if (!isFinite(value)) return roll(seed);
+    out[name] = Math.min(DIALS[name][1], Math.max(DIALS[name][0], value));
+  }
+  return out;
+}
+
 /* The four palette seeds a variant gives a card, from the four its own world's mood gives it.
 
    --fg and --muted are deliberately not among them: they are what holds the text on a card at
@@ -202,7 +234,9 @@ export function ratioOf(aspect) {
 // card in the masonry becomes a letterbox or a column.
 export const ASPECT_LIMITS = [0.6, 1.9];
 
-/* The aspect ratio a card's picture is drawn in: its world's own, stretched by the variant. */
+/* The aspect ratio a piece's picture is drawn in: its world's own, stretched by the variant. The
+   frame of a card in the feed (js/feed.js) and of the scene the same configuration opens as on the
+   stage (js/stage.js), so what a visitor pressed and what they land on are the same shape. */
 export function aspect(ratio, v) {
   const r = ratioOf(ratio);
   if (!r || !v || v.stretch === 1) return ratio;

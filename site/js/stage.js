@@ -16,6 +16,25 @@
   hands it the next card.
 
   ---------------------------------------------------------------------------------------------
+  The alignment axiom: the feature is the card that was pressed
+
+  Every content piece on this site is procedurally configured, and that configuration is the same
+  whether the piece appears as a card in the feed or as the feature it opens as (issue #80). A card
+  is a seed, the variant rolled from it (js/variant.js) and the content its world's module made for
+  the two; all of that travels with the card to this file -- open(file, seed, { variant, card }) --
+  and nothing is re-rolled on arrival. So the feature wears the card's palette (feature()), is
+  framed by the card's own stretch (begin()), is titled by what the card was showing (heading()),
+  and hands the module the same configuration on env, which is how a piece can be the very thing a
+  visitor pressed rather than another item from the same world.
+
+  The world's one-line description is never a feature's title. It is the same line for every card of
+  that world, so writing it while a module loads, or when a world has no piece, was exactly the
+  generic text the cards fell back to; the card's own title stands there instead. A piece opened with
+  no card behind it -- a direct visit to `world.html#<seed>`, or a world picked at random when the
+  stack has run dry -- is given the configuration that seed would have dealt (variant.revive) and the
+  card that configuration would have made (sparkOf), so the axiom holds with no feed in the story.
+
+  ---------------------------------------------------------------------------------------------
   The piece contract -- what a world's module (js/modules/<world>.js) exports as piece(env)
 
       piece(env) {
@@ -75,6 +94,19 @@
   hold still pressed down, the knobs, the lines, the dots, the mark, the scene and its shape -- so
   every piece opens on an empty stage however many times its world has come round before.
 
+  env, what piece() is handed, and the same configuration js/feed.js hands paint() and spark():
+    { seed, rnd(), pick(list), int(a, b), chance(p), hash(text), stars, points(w, h, pad),
+      colors, mix(a, b, t), alpha(c, a), reduced, world: { file, name, orientation },
+      variant, card }. variant is the configuration this piece is of (js/variant.js):
+    variant.density is how much of itself to draw, variant.scale how large, variant.turn where to
+    start, and the stage has already framed the scene by variant.stretch and painted the site in
+    the colours the three colour dials derived. card is the content the card was showing when it
+    was pressed -- { kind, overline, title, quote, text, mono, cite, aspect, of } -- so a piece
+    can open on the very thing a visitor pressed: card.of is whatever the module's own spark()
+    put there for it (a rule number, a coinage, the star it was drawn from), handed straight back.
+    A piece reads card when it has one and rolls its own subject when it is null, and either way
+    the same seed makes the same piece.
+
   ctx, the same object for the whole piece:
     canvas, g (its 2d context), w, h (CSS pixels; the context is already scaled for the screen),
     colors { bg, bg2, accent, accent2, fg, muted } in the world's palette, rnd() (seeded: the
@@ -99,10 +131,13 @@
       window.interestingStage           (only on a page that has the stage)
         .open(file, seed, options)   open the named world's piece for `seed` on this stage;
                                      options.push=false keeps the URL, options.scroll=true
-                                     brings the stage into view, options.seeds={bg,bg2,accent,
-                                     accent2} is the palette the site takes on for the piece --
-                                     the pressed card's own, so the site matches the card
-                                     (js/feed.js hands it over; see feature() below)
+                                     brings the stage into view, and the rest of the options are
+                                     the pressed card's configuration, which js/feed.js hands over
+                                     whole (see the alignment axiom above): options.seeds={bg,bg2,
+                                     accent,accent2} is the palette the site takes on for the
+                                     piece, options.variant the seven dials the card was wearing,
+                                     options.card the content it was showing. Any of them left out
+                                     is derived from the seed instead, never guessed at
         .next()                      finish nothing, open the next card from the feed's stack
         .current()                   { file, seed } or null
       events on window: 'stage:open' { file, seed }, 'stage:complete' { file, seed },
@@ -119,6 +154,8 @@
   Nothing here reaches for the browser's storage. The sky is read through the persona, the next
   card through the feed, and nothing is written but the address.
 */
+
+import { PLAIN, revive, aspect as framed, mulberry32, hash, mix, alpha } from './variant.js';
 
 const root = document.documentElement.getAttribute('data-root') || '';
 const stage = document.getElementById('stage');
@@ -150,39 +187,6 @@ function el(tag, className, text) {
 
 function hidden(text) {
   return el('span', 'visually-hidden', text);
-}
-
-function mulberry32(a) {
-  return function () {
-    a |= 0;
-    a = (a + 0x6D2B79F5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-function toRgb(value) {
-  const v = String(value || '').trim();
-  if (v[0] === '#') {
-    let hex = v.slice(1);
-    if (hex.length === 3) hex = hex.split('').map((c) => c + c).join('');
-    const n = parseInt(hex.slice(0, 6), 16);
-    return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
-  }
-  const m = v.match(/[\d.]+/g);
-  return m && m.length >= 3 ? m.slice(0, 3).map(Number) : [160, 170, 200];
-}
-
-function mix(a, b, t) {
-  const A = toRgb(a);
-  const B = toRgb(b);
-  return 'rgb(' + A.map((v, i) => Math.round(v + (B[i] - v) * t)).join(',') + ')';
-}
-
-function alpha(c, a) {
-  const [r, g, b] = toRgb(c);
-  return 'rgba(' + r + ',' + g + ',' + b + ',' + a + ')';
 }
 
 function readColors(node) {
@@ -342,10 +346,12 @@ function loadModule(id) {
   return modules.get(id);
 }
 
+/* A frame as a number: '16 / 9' is 1.7778, and a bare number -- which is what variant.aspect() gives
+   back for a frame it has stretched -- is itself. 16/9 for anything unreadable. */
 function aspectRatio(aspect) {
-  const m = String(aspect || '').match(/([\d.]+)\s*\/\s*([\d.]+)/);
-  if (!m) return 16 / 9;
-  const r = Number(m[1]) / Number(m[2]);
+  const text = String(aspect == null ? '' : aspect).trim();
+  const m = text.match(/^([\d.]+)\s*\/\s*([\d.]+)$/);
+  const r = m ? Number(m[1]) / Number(m[2]) : Number(text);
   return r > 0 && isFinite(r) ? r : 16 / 9;
 }
 
@@ -442,6 +448,10 @@ async function open(file, seed, options) {
   close();
   const token = {};
   pending = token;
+  // The configuration this piece is of: the pressed card's seven dials, or -- for a piece nobody
+  // pressed -- the ones that seed would have dealt (the alignment axiom above).
+  const variant = revive(opts.variant, seed);
+  let card = cardOf(opts.card);
 
   // A card pressed while the threshold is asking answers the question another way: by leaving.
   const probe = document.getElementById('persona-probe');
@@ -460,32 +470,40 @@ async function open(file, seed, options) {
   }
   if (opts.scroll) window.scrollTo({ top: 0, behavior: calm.matches ? 'auto' : 'smooth' });
   setMode('loading');
-  // close() above left the stage empty: the world's own line is all there is to write until the
-  // module lands and begin() draws the piece.
-  ui.title.textContent = world.what || world.name;
+  // close() above left the stage empty: what the card was showing stands until the module lands and
+  // begin() draws the piece. The world's one line is never written here -- it is the same line for
+  // every card of the world, which is the generic text a pressed card used to fall back to.
+  heading(world, card);
   if (ui.read && !opts.keepRead) ui.read.hidden = true;
 
   const mod = await loadModule(world.id);
   if (pending !== token) return false;
+  const stars = persona ? persona.stars() : [];
+  if (!card) {
+    // No card behind this piece: the one this configuration would have dealt, so a feature opened
+    // from an address is titled by the same arithmetic as one opened from the feed.
+    card = sparkOf(mod, seed, world, variant, stars);
+    if (card) heading(world, card);
+  }
   if (!mod || typeof mod.piece !== 'function') {
-    // A world without a piece (the law forbids it, but a stage never breaks): the world's own
-    // line, and the way on.
+    // A world without a piece (the law forbids it, but a stage never breaks): what the card said,
+    // and the way on.
     empty(opts);
     return false;
   }
-  const stars = persona ? persona.stars() : [];
+  const opened = { world, mod, seed, token, opts, variant, card };
   if (mod.needsSky && !stars.length && site && typeof site.unlock === 'function') {
-    gate(world, mod, seed, token, opts);
+    gate(opened);
     return true;
   }
-  begin(world, mod, seed, token, opts);
+  begin(opened);
   return true;
 }
 
 // Powered down, never broken: the piece needs a sky, and the one button that seeds it is the
 // whole of what the stage says about that. The helper powers down a throwaway element of this
 // open's own, so a later piece is never dimmed by a sky cleared after this one is gone.
-function gate(world, mod, seed, token, opts) {
+function gate(opened) {
   setMode('unpowered');
   // Nothing to finish until there is a sky, so the way on is lit from the start: a visitor who
   // does not want to seed one is never held here. The focus stays on the heading, which is where
@@ -497,12 +515,12 @@ function gate(world, mod, seed, token, opts) {
   let begun = false;
   site.unlock(host, {
     onReady() {
-      if (pending !== token || begun) return;
+      if (pending !== opened.token || begun) return;
       begun = true;
-      begin(world, mod, seed, token, opts);
+      begin(opened);
     }
   });
-  if (opts.focus !== false) ui.title.focus({ preventScroll: true });
+  if (opened.opts.focus !== false) ui.title.focus({ preventScroll: true });
 }
 
 function empty(opts) {
@@ -512,7 +530,54 @@ function empty(opts) {
   if (!opts || opts.focus !== false) ui.title.focus({ preventScroll: true });
 }
 
-function makeEnv(seed, world, stars) {
+/* ---- the card a piece is of ------------------------------------------------------------------ */
+
+/* The content a card was showing, as the stage keeps it: the plain strings js/feed.js reads off the
+   card it hands over (shown() there), or a spec a module's own spark() just made, which is the same
+   shape. `of` rides along untouched -- it is the module's own note to itself about what the card is
+   of, and nothing here reads it. Null for a card with nothing to say, so the heading falls back to
+   the world's name rather than to an empty line. */
+function cardOf(spec) {
+  if (!spec || typeof spec !== 'object') return null;
+  const line = (value) => (typeof value === 'string' ? value : '');
+  const out = {
+    kind: line(spec.kind) || 'spark',
+    overline: line(spec.overline),
+    title: line(spec.title),
+    quote: line(spec.quote),
+    text: line(spec.text),
+    mono: line(spec.mono),
+    cite: line(spec.cite),
+    aspect: line(spec.aspect),
+    of: spec.of || null
+  };
+  return out.title || out.quote || out.text || out.mono ? out : null;
+}
+
+/* The card a seed and a configuration would have been dealt, for a piece nobody pressed: the
+   module's own spark() for that very configuration, which is what js/feed.js would have put on the
+   card. So a direct visit to `world.html#<seed>`, a world picked at random when the stack has run
+   dry, and a reading opening onto a world all land on a feature titled by the same arithmetic as a
+   card of it, and the alignment axiom holds with no feed in the story (issue #80). */
+function sparkOf(mod, seed, world, variant, stars) {
+  if (!mod || typeof mod.spark !== 'function') return null;
+  try {
+    return cardOf(mod.spark(makeEnv(seed, world, stars, variant, null)));
+  } catch (e) {
+    return null; /* a world with nothing to say for this seed: its own name stands */
+  }
+}
+
+/* The feature's heading, from the card this piece is of: the card's own title, and the line it was
+   showing under it. The world's one-line description is deliberately not among the fallbacks -- it
+   is the same line for every card of the world, and a visitor who pressed one has read it already;
+   the world's name stands in when there is no card or it has no title. */
+function heading(world, card) {
+  ui.title.textContent = (card && card.title) || world.name;
+  ui.brief.textContent = (card && (card.quote || card.text || card.mono)) || '';
+}
+
+function makeEnv(seed, world, stars, variant, card) {
   const rnd = mulberry32(seed);
   return {
     seed,
@@ -520,14 +585,23 @@ function makeEnv(seed, world, stars) {
     pick: (list) => list[Math.floor(rnd() * list.length)],
     int: (a, b) => a + Math.floor(rnd() * (b - a + 1)),
     chance: (p) => rnd() < p,
+    hash,
     stars,
+    points(w, h, pad) {
+      const p = pad || 0;
+      return stars.map((s) => ({ x: p + (s.x / 100) * (w - p * 2), y: p + (s.y / 100) * (h - p * 2), text: s.text }));
+    },
     // The stage's own colours, with the featured palette's four seeds over them: the piece is
     // painted in the colour the site is landing in, never in one the crossfade is passing through.
     colors: Object.assign(readColors(stage), featured || {}),
     mix,
     alpha,
     reduced: calm.matches,
-    world: { file: world.file, name: world.name, orientation: world.orientation }
+    world: { file: world.file, name: world.name, orientation: world.orientation },
+    // The configuration the card was wearing, and the content it was showing: the piece is made
+    // from the same two things the card was, which is the whole of the alignment axiom above.
+    variant: variant || PLAIN,
+    card: card || null
   };
 }
 
@@ -543,9 +617,10 @@ function normalizeSteps(steps) {
   return out;
 }
 
-function begin(world, mod, seed, token, opts) {
+function begin(opened) {
+  const { world, mod, seed, token, opts, variant, card } = opened;
   const stars = persona ? persona.stars() : [];
-  const env = makeEnv(seed, world, stars);
+  const env = makeEnv(seed, world, stars, variant, card);
   let piece = null;
   try {
     piece = mod.piece(env);
@@ -563,7 +638,7 @@ function begin(world, mod, seed, token, opts) {
   }
 
   current = {
-    world, mod, seed, piece, token, env,
+    world, mod, seed, piece, token, env, variant, card,
     steps,
     state: new Map(steps.map((s) => [s.id, { step: s, set: false, value: undefined, knob: null }])),
     completed: false,
@@ -572,11 +647,18 @@ function begin(world, mod, seed, token, opts) {
     ctx: null
   };
 
-  ui.title.textContent = piece.title || world.name;
-  ui.brief.textContent = piece.brief || '';
-  ui.canvas.setAttribute('aria-label', 'the scene: ' + (piece.title || world.name));
-  const ratio = aspectRatio(piece.aspect);
-  ui.scene.style.setProperty('--piece-aspect', piece.aspect || '16 / 9');
+  // The piece names itself, and what it was pressed as stands under it: a piece made from this
+  // card has named the card's own thing, and one that has nothing to say falls back to the card
+  // rather than to the world's one line (issue #80).
+  const named = piece.title || (card && card.title) || world.name;
+  ui.title.textContent = named;
+  ui.brief.textContent = piece.brief || (card && (card.quote || card.text || card.mono)) || '';
+  ui.canvas.setAttribute('aria-label', 'the scene: ' + named);
+  // Framed as the card was: the piece's own ratio, stretched by the dial that stretched the card's
+  // frame in the feed, so what a visitor pressed and what they land on are the same shape.
+  const shape = framed(piece.aspect || '16 / 9', variant);
+  const ratio = aspectRatio(shape);
+  ui.scene.style.setProperty('--piece-aspect', shape);
   ui.scene.style.setProperty('--piece-ratio', ratio.toFixed(4));
   renderKnobs();
   renderProgress();
@@ -624,10 +706,7 @@ function makeCtx(env) {
     int: env.int,
     chance: env.chance,
     stars: env.stars,
-    points(w, h, pad) {
-      const p = pad || 0;
-      return env.stars.map((s) => ({ x: p + (s.x / 100) * (w - p * 2), y: p + (s.y / 100) * (h - p * 2), text: s.text }));
-    },
+    points: env.points, // the same stars in the same places the card's env puts them
     mix,
     alpha,
     reduced: calm.matches,
@@ -1120,9 +1199,12 @@ async function next(options) {
   const taken = feed && typeof feed.take === 'function' ? feed.take(fit, avoid) : null;
   let file = taken && worldOf(taken.file) ? taken.file : null;
   let seed = taken ? taken.seed : newSeed();
-  // The next card off the stack is a card too: the site takes its colour as it arrives, the same
-  // way it takes the colour of one a visitor pressed. A world picked at random below has none.
+  // The next card off the stack is a card too: its whole configuration arrives with it, the same
+  // way a pressed card's does, so the piece that opens is that card and not a generic turn of its
+  // world. A world picked at random below has no card, and open() derives one from its seed.
   const seeds = file && taken ? taken.seeds : null;
+  const variant = file && taken ? taken.variant : null;
+  const card = file && taken ? taken.card : null;
   if (!file) {
     const pool = WORLDS.filter((w) => w.file !== avoid && (!fit || fit(w.file)));
     const world = pool.length ? pool[Math.floor(Math.random() * pool.length)] : WORLDS[0];
@@ -1130,7 +1212,7 @@ async function next(options) {
     file = world.file;
   }
   if (extra.first) firstPiece = { file, seed };
-  open(file, seed, Object.assign({ arriving: true, seeds }, extra));
+  open(file, seed, Object.assign({ arriving: true, seeds, variant, card }, extra));
 }
 
 // Take the piece on stage apart, completely. Every instantiation starts from an empty stage, so
@@ -1378,7 +1460,10 @@ function start() {
       // A piece that reads the sky is made from it: a changed sky is a new piece -- unless the
       // visitor has already begun this one, whose progress is theirs to keep.
       if (current && current.mod && current.mod.needsSky && !current.completed && !current.touched) {
-        open(current.world.file, current.seed, { push: false, focus: false });
+        // The same card, remade under the new sky: the configuration it opened with goes back in,
+        // so a piece re-made for a sky is still the card that was pressed.
+        open(current.world.file, current.seed,
+          { push: false, focus: false, variant: current.variant, card: current.card });
       }
     });
   }
