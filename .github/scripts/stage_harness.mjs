@@ -32,6 +32,10 @@
                       finish -- a knob nobody set is not set -- but the stage must say which knob
                       it is still waiting on, so this is a visitor who knows what to do next and
                       not one staring at a finished-looking toy.
+    holdFilled        Work down a piece's knobs until a hold is reachable, press it, and never let
+                      go. The bar fills and the stage must take the knob there and then -- holding
+                      is the answer and the release is not part of it -- and the release, when it
+                      finally comes, must change nothing (issue #74).
     teardown          Open a piece, work down its knobs until a hold is reachable, press that one
                       and keep pressing, then open a world whose module is not there. Nothing of
                       the first piece may be left on the stage and nothing of it may still be
@@ -45,10 +49,10 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { Worker, isMainThread, parentPort, workerData } from 'node:worker_threads';
 
-const SCENARIOS = ['rounds', 'sliderUsed', 'sliderUntouched', 'teardown'];
+const SCENARIOS = ['rounds', 'sliderUsed', 'sliderUntouched', 'holdFilled', 'teardown'];
 const SCENARIO_TIMEOUT_MS = 20000;
 const MISSING_WORLD = 'stage-harness-nowhere.html'; // a world with no module, for the teardown
-const SLIDER_SEEDS = [4242, 101, 99991, 7]; // tried in turn until a piece with a slider turns up
+const SEEDS = [4242, 101, 99991, 7]; // tried in turn until a piece with the knob wanted turns up
 const STARS = [
   { x: 18, y: 30, text: 'a window left open' },
   { x: 52, y: 22, text: 'the sound of a kettle' },
@@ -601,7 +605,7 @@ async function slider(stageDir, worlds, deal, clock, how) {
   let ranges = [];
   // A few seeds each, because which knobs a piece has is the seed's to decide: one seed per world
   // would let a site full of sliders report none.
-  for (const at of SLIDER_SEEDS) {
+  for (const at of SEEDS) {
     for (const file of tries) {
       api.open(file, at, { arriving: true });
       if (!(await waitForPiece(page, clock))) continue;
@@ -633,6 +637,78 @@ async function slider(stageDir, worlds, deal, clock, how) {
   };
 }
 
+/* The knobs worked down until a hold is reachable: a hold is often behind a gate, so getting to one
+   is playing the piece as far as it. Returns the hold's knob, or null if this piece has none a
+   visitor can get to. Both the hold scenarios go through here. */
+async function reachHold(page, clock) {
+  for (let pass = 0; pass < knobsOn(page).length + 2; pass++) {
+    let moved = false;
+    for (const knob of knobsOn(page)) {
+      if (isSet(knob) || isLocked(knob)) continue;
+      if (knob.dataset.kind === 'hold') return knob;
+      await setKnob(page, clock, knob, 'move');
+      if (isSet(knob)) moved = true;
+    }
+    if (!moved) break;
+  }
+  return null;
+}
+
+/* A hold pressed and never let go. Which world has a hold on it, and behind which gate, is the
+   seed's to decide, so one is looked for rather than assumed -- the way the slider is -- and the
+   scenario says so when it found none, rather than going quietly vacuous. */
+async function holdFilled(stageDir, worlds, deal, clock) {
+  const page = await load(stageDir, worlds, clock);
+  page.win.interestingFeed = { take: () => null, consume() {} };
+  const api = page.win.interestingStage;
+  const tries = [deal[0].file].concat(worlds.map((world) => world.file));
+  for (const at of SEEDS) {
+    for (const file of tries) {
+      api.open(file, at, { arriving: true });
+      if (!(await waitForPiece(page, clock))) continue;
+      const knob = await reachHold(page, clock);
+      if (knob) return keepHolding(page, clock, file, at, knob);
+    }
+  }
+  return { playable: false, world: '', seed: 0, held: '', look: look(page) };
+}
+
+/* One hold, pressed and held: what the stage did while the bar filled, what it did going on past
+   the fill, and what the release changed. The three have to read the same -- the knob set, the bar
+   full, and nothing about letting go early -- because the fill is what sets the knob and the
+   release is a finger coming off a knob already set.
+
+   Held down with the keyboard, which is the way into a hold nothing else here takes: a space held
+   has to fill the bar exactly as a finger does, and the keyup that eventually comes has to be as
+   much of a no-op as the pointerup. setKnob's pointer hold is played by every other scenario. */
+async function keepHolding(page, clock, world, seed, knob) {
+  const button = knob.querySelector('button');
+  const status = page.doc.getElementById('stage-status');
+  const state = () => ({
+    set: isSet(knob),
+    pct: knob.css.get('--knob-pct') || '',
+    status: status.textContent,
+    completes: page.events.filter((e) => e.type === 'stage:complete').length
+  });
+  page.events.length = 0;
+  button.dispatchEvent({ type: 'keydown', key: ' ' });
+  // Time, and nothing else: no keyup, no pointerup, no second press. Whether the knob is set is
+  // the stage's answer on its own account.
+  let waited = 0;
+  for (let i = 0; i < 400 && !isSet(knob); i++) {
+    await clock.advance(50);
+    waited += 50;
+  }
+  const filled = state();
+  // Held on well past the fill, but inside the ceremony's linger, so the knobs a finished piece
+  // started saying goodbye to are still there to be read.
+  await clock.advance(300);
+  const kept = state();
+  button.dispatchEvent({ type: 'keyup', key: ' ' });
+  await clock.advance(120);
+  return { playable: true, world, seed, held: knob.dataset.id, waited, filled, kept, after: state() };
+}
+
 // A piece part-played, a hold still pressed down, and then a world with no module at all.
 async function teardown(stageDir, worlds, deal, clock) {
   const nowhere = { file: MISSING_WORLD, name: 'nowhere', orientation: 'lost', mood: 'tender', what: 'No module lives here.' };
@@ -643,21 +719,13 @@ async function teardown(stageDir, worlds, deal, clock) {
   if (!(await waitForPiece(page, clock))) return { playable: false, look: look(page) };
   // Work down the knobs until a hold is reachable, and then press it and keep pressing: a hold
   // still down when the piece goes is the clearest thing a stage can leave running behind it.
+  // Kept short of the fill, which would set the knob and leave the piece with nothing to tear down.
+  const knob = await reachHold(page, clock);
   let held = '';
-  for (let pass = 0; pass < knobsOn(page).length + 2 && !held; pass++) {
-    let moved = false;
-    for (const knob of knobsOn(page)) {
-      if (isSet(knob) || isLocked(knob)) continue;
-      if (knob.dataset.kind === 'hold') {
-        knob.querySelector('button').dispatchEvent({ type: 'pointerdown' });
-        await clock.advance(200);
-        held = knob.dataset.id;
-        break;
-      }
-      await setKnob(page, clock, knob, 'move');
-      if (isSet(knob)) moved = true;
-    }
-    if (!moved) break;
+  if (knob) {
+    knob.querySelector('button').dispatchEvent({ type: 'pointerdown' });
+    await clock.advance(200);
+    held = knob.dataset.id;
   }
   const playing = look(page);
   const whilePlaying = clock.waiting;
@@ -671,6 +739,7 @@ async function runScenario(name, stageDir, worlds, deal) {
   if (name === 'rounds') return rounds(stageDir, worlds, deal, clock);
   if (name === 'sliderUsed') return slider(stageDir, worlds, deal, clock, 'use');
   if (name === 'sliderUntouched') return slider(stageDir, worlds, deal, clock, 'leave');
+  if (name === 'holdFilled') return holdFilled(stageDir, worlds, deal, clock);
   if (name === 'teardown') return teardown(stageDir, worlds, deal, clock);
   throw new Error('no scenario named ' + name);
 }
