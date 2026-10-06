@@ -1153,6 +1153,17 @@ Flash tier.
   flag). A model with no effort dial is asked once more without the flag rather than lost to the
   run, and because the answer takes longer at that effort, a model has a quarter of an hour to
   answer (`MODEL_TIMEOUT_SECONDS`) and the job an hour for its three attempts.
+- **As much room to write as the CLI can ask for.** A run that re-federates half the site writes a
+  long answer, and an answer that runs past the model's output limit used to be thrown away. Every
+  call now asks for 64,000 output tokens — about a quarter of a megabyte of JSON
+  (`DEFAULT_MAX_OUTPUT_TOKENS`), overridable with the repository variable `MAX_OUTPUT_TOKENS`
+  (`none` asks for nothing) — and the prompt says that number out loud, so the model sizes the
+  answer to fit before it starts writing. Copilot CLI 1.0.91 has no flag for a maximum output, so
+  the budget travels in `COPILOT_PROVIDER_MAX_OUTPUT_TOKENS`, the one variable it reads for one; on
+  GitHub's own model routing the cap comes from Copilot's model catalog and the prompt is what
+  carries the budget. An answer that runs past the limit even so is no longer lost: the CLI carries
+  a cut-off answer on in a second turn, and the script puts the pieces back together, falling back
+  to rejecting the answer and retrying with another model only when they cannot be rejoined.
 - **Small models are never picked at random.** Besides not being on the list, any model whose id
   contains a small or mid-tier name is refused: `haiku` and `sonnet`, and their equivalents at
   other providers such as `mini`, `nano`, `luna`, `terra`, `flash`, `lite`, `small`, `medium`,
