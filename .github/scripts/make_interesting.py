@@ -1504,6 +1504,9 @@ PIECE_MAX_STEPS = 5
 PIECE_MAX_TAPS = 12
 PIECE_MAX_SECONDS = 45
 STAGE_SCRIPT = "js/stage.js"
+# The configuration a card and the feature it opens as share (issue #80): js/stage.js imports it,
+# so it travels with the stage into the stage harness's temporary site.
+VARIANT_SCRIPT = "js/variant.js"
 STAGE_INCLUDE = "_includes/stage.njk"
 MODULES_DIR = "js/modules/"
 # The one list of worlds the layout writes into every page for the scripts, as JSON in a script
@@ -1635,6 +1638,11 @@ def run_stage_harness(site, deal=()):
         # repository supports, exactly as run_piece_harness does for the modules alone.
         (root / "package.json").write_text('{"type":"module"}\n', encoding="utf-8")
         (root / "stage.js").write_text(stage, encoding="utf-8", newline="")
+        # The stage imports the configuration a card and its feature share, so that file goes with
+        # it; a site without one is played with whatever the stage can do on its own.
+        variant = site.get(VARIANT_SCRIPT)
+        if variant is not None:
+            (root / PurePosixPath(VARIANT_SCRIPT).name).write_text(variant, encoding="utf-8", newline="")
         for rel, content in modules.items():
             (moddir / PurePosixPath(rel).name).write_text(content, encoding="utf-8", newline="")
         # The same care as the piece harness: the site is model-written code, so the run gets an
@@ -1679,7 +1687,10 @@ def worlds_without_a_finish(site):
             missing[world] = f"has a module, {module_of(world)}, that exports no piece()"
         elif not entry.get("ok"):
             problems = entry.get("problems") or ["its piece does not finish"]
-            missing[world] = f"has a piece that cannot be finished ({problems[0]})"
+            # The harness refuses a piece that cannot be finished and a piece that is the same
+            # whichever of its world's cards it was opened from (the alignment axiom, issue #80).
+            # Both are reported here, in the harness's own words, so a run is told which it was.
+            missing[world] = f"has a piece the harness refused ({problems[0]})"
     return missing
 
 
@@ -1878,7 +1889,19 @@ def build_prompt(shown, omitted=(), kind=INTERESTING_RUN):
         "its frame, and env.variant.density, env.variant.scale and env.variant.turn for the "
         "picture -- so a repeat looks like a different card rather than a reprint. A module reads "
         "those three; the card the template wrote carries the configuration that changes nothing, "
-        "so a world still leads with its own palette.\n"
+        "so a world still leads with its own palette. That configuration is the piece's as much as "
+        "the card's, and the alignment is an axiom of this site: every content piece is "
+        "procedurally configured, and the configuration is the same whether the piece appears as a "
+        "card in the feed or as the feature it opens as. Pressing a card hands the stage the "
+        "card's seed, its variant, its four palette seeds and the content it was showing, and the "
+        "stage hands a module env.variant and env.card, frames the scene by the same stretch and "
+        "titles the feature from the card -- so a visitor lands on the very thing they pressed. A "
+        "spark says what its card is of on its spec (`of`: the rule number, the coinage, the star "
+        "it was drawn from -- the module's own data, which the stage hands straight back as "
+        "env.card.of), and piece(env) opens on that rather than rolling another. A world's "
+        "one-line description from the list is never a feature's title: it is the same line for "
+        "every card of that world, which is what made every card of it open the same generic "
+        "page.\n"
         "- \"js/persona.js\" is the persona: the one thing a visitor configures here, shown as the "
         "avatar floating in the upper right of every page and set up in the sheet that avatar "
         "opens, the way an app shows its account. It holds the sky that several worlds read -- "
@@ -2133,7 +2156,14 @@ def build_prompt(shown, omitted=(), kind=INTERESTING_RUN):
         "keeps nothing between them: all its state lives inside piece(env), so a world the feed "
         "deals a second time plays exactly as it did the first. "
         "frame's t is seconds since the piece started. The same seed "
-        "makes the same piece and different seeds make different pieces. A piece is pure drawing "
+        "makes the same piece and different seeds make different pieces. A piece is also the card "
+        "it was opened from: the stage hands it the pressed card's configuration on env.variant "
+        "and the content that card was showing on env.card, so piece(env) reads env.card and opens "
+        "on the very thing a visitor pressed -- its card's rule, its coinage, its star -- and rolls "
+        "a subject of its own only when there is no card (env.card is null). A piece that is the "
+        "same piece whichever of its world's cards it was opened from is refused, because then "
+        "pressing two different cards of one world would open the same feature twice. A piece "
+        "reads the card it is handed defensively, since a sky can change under one. A piece is pure drawing "
         "and arithmetic on what the stage hands it (ctx: the canvas and its 2d context, the size, "
         "the world's colours, a seeded random source, the stars, status(), progress()) and never "
         "reaches for the document, the window, the clock, Math.random or the browser's storage; "
@@ -2148,15 +2178,18 @@ def build_prompt(shown, omitted=(), kind=INTERESTING_RUN):
         "world without a module, without a piece, with a piece that does not finish within "
         f"{PIECE_MAX_TAPS} taps and {PIECE_MAX_SECONDS} seconds of play, that is not the same for the "
         "same seed, whose knobs reached in another order or played a second time do not finish the "
-        "same way, or that is the same for every seed, is refused. The stage itself is held to the "
+        "same way, that is the same for every seed, or that is the same piece whichever of its "
+        "world's cards it was opened from, is refused. The stage itself is held to the "
         f"same axiom, by a second harness that runs \"{STAGE_SCRIPT}\" against a stub browser "
         f"(\"{STAGE_HARNESS_REL}\", which a run cannot change): a world dealt twice in one session "
         "plays the second time like the first, a slider a visitor leaves where it stands counts as "
         "set, a knob nobody set is named rather than silently holding the piece shut, a hold knob is "
-        "set the moment its bar fills rather than when the visitor lets go, and a piece that is over "
-        "leaves nothing of itself on the stage or still running. That one is checked on "
+        "set the moment its bar fills rather than when the visitor lets go, a piece that is over "
+        "leaves nothing of itself on the stage or still running, and a card pressed opens as that "
+        "card -- its title, its line, its configuration -- rather than as the world's one line. "
+        "That one is checked on "
         "the site as committed rather than on a plan, because it reads the stage's own elements and "
-        "those are yours to rewrite -- so if you rewrite the stage, keep all five true.\n"
+        "those are yours to rewrite -- so if you rewrite the stage, keep all six true.\n"
         "- Leave the site working at the end of the run. If you extract something into a shared "
         "file, or merge or delete a page, update every page that refers to it in the same run: "
         "never leave a link, a stylesheet, a script, a layout or an @use pointing at something "

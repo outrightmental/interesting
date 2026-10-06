@@ -19,6 +19,12 @@
   What is written here is what a visitor without scripting gets: the world's name, its one line
   of purpose, and the feed below (the piece's parts are hidden until a piece is on). The heading
   outline is the page's (h1), then the piece's (h2), then the feed's.
+
+  That one line of purpose is the page's own, before anything is on the stage, and the threshold
+  goes back to it. It is never a feature's title: a piece that opens says what the card it opened
+  from said, and then what the piece itself is called -- the same line for every card of a world
+  is exactly the generic text a pressed card used to fall back to (js/stage.js, the alignment
+  axiom).
 -#}
 {%- set stageEntry = null -%}
 {%- for world in worlds.worlds %}{% if world.file == stageWorld + '.html' %}{% set stageEntry = world %}{% endif %}{% endfor -%}

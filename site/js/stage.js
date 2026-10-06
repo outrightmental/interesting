@@ -510,6 +510,13 @@ function gate(opened) {
     onReady() {
       if (pending !== opened.token || begun) return;
       begun = true;
+      // There is a sky now, so a world that reads one can deal a card at last: a piece opened with
+      // none behind it is still of the card its configuration makes (the alignment axiom above).
+      if (!opened.card) {
+        opened.card = sparkOf(opened.mod, opened.seed, opened.world, opened.variant,
+          persona ? persona.stars() : []);
+        if (opened.card) heading(opened.world, opened.card);
+      }
       begin(opened);
     }
   });

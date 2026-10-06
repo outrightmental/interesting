@@ -40,6 +40,14 @@
                       and keep pressing, then open a world whose module is not there. Nothing of
                       the first piece may be left on the stage and nothing of it may still be
                       running.
+    carried           The alignment axiom (issue #80). Open a piece the way js/feed.js opens one
+                      from a pressed card -- with the card's configuration and the content it was
+                      showing -- and report what the stage did with them: what the heading said
+                      while the module was still loading, what it said once the piece began, what
+                      shape the scene was framed in, and what the piece saw on its env. Then the
+                      same card on a world with no module at all, which is where the stage used to
+                      fall back on the world's one line, and then a piece opened with no card at
+                      all, which the stage has to configure from the seed instead.
 
   Every scenario reports what it observed and makes no judgements: StageTest in
   test_make_interesting.py makes the assertions, as ParticipateButtonTest does for the button.
@@ -49,7 +57,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { Worker, isMainThread, parentPort, workerData } from 'node:worker_threads';
 
-const SCENARIOS = ['rounds', 'sliderUsed', 'sliderUntouched', 'holdFilled', 'teardown'];
+const SCENARIOS = ['rounds', 'sliderUsed', 'sliderUntouched', 'holdFilled', 'teardown', 'carried'];
 const SCENARIO_TIMEOUT_MS = 20000;
 const MISSING_WORLD = 'stage-harness-nowhere.html'; // a world with no module, for the teardown
 const SEEDS = [4242, 101, 99991, 7]; // tried in turn until a piece with the knob wanted turns up
@@ -535,6 +543,8 @@ function look(page) {
     title: by('stage-title').textContent,
     status: by('stage-status').textContent,
     wanted: by('stage-wanted').hidden ? '' : by('stage-wanted').textContent,
+    brief: by('stage-brief').textContent,
+    world: by('stage-world').textContent,
     knobs: knobsOn(page).map((knob) => ({ id: knob.dataset.id, kind: knob.dataset.kind, set: isSet(knob) })),
     dots: by('stage-progress').querySelectorAll('.stage-dot').length,
     doneShown: !by('stage-done').hidden,
@@ -734,6 +744,53 @@ async function teardown(stageDir, worlds, deal, clock) {
   return { playable: true, held, playing, whilePlaying, waiting: clock.waiting, current: api.current(), look: look(page) };
 }
 
+/* The card js/feed.js hands over, and the configuration it was wearing: the shape of what a pressed
+   card carries to the stage (shown() and openFromCard() there, and variant.roll's seven dials). */
+const PRESSED_CARD = {
+  kind: 'spark',
+  overline: 'one card of this world',
+  title: 'the card that was pressed',
+  quote: 'what the card was showing',
+  text: 'the line under it',
+  mono: '',
+  cite: '',
+  aspect: '4 / 3',
+  of: { token: 'the card that was pressed' }
+};
+const PRESSED_VARIANT = { plain: false, trade: 0.86, lift: 0.62, wash: 0.31, density: 1.21, scale: 0.91, turn: 0.74, stretch: 1.14 };
+
+/* A card pressed, and what the stage made of it. Every reading is the stage's own answer; StageTest
+   and RealSiteTest make the assertions. */
+async function carried(stageDir, worlds, deal, clock) {
+  const nowhere = { file: MISSING_WORLD, name: 'nowhere', orientation: 'lost', mood: 'tender', what: 'No module lives here.' };
+  const page = await load(stageDir, worlds.concat([nowhere]), clock);
+  page.win.interestingFeed = { take: () => null, consume() {} };
+  const api = page.win.interestingStage;
+  const world = worlds.find((w) => w.file === deal[0].file) || worlds[0];
+  const card = JSON.parse(JSON.stringify(PRESSED_CARD));
+  const out = { card, world: { file: world.file, name: world.name, what: world.what } };
+
+  // open() writes the heading before it awaits the module, so this is what a visitor sees while
+  // the world is still loading -- the moment the generic line used to be written.
+  api.open(deal[0].file, deal[0].seed, { arriving: true, variant: PRESSED_VARIANT, card });
+  out.loading = look(page);
+  out.playable = await waitForPiece(page, clock);
+  out.opened = look(page);
+
+  // The same card on a world with no module: what the stage says when there is no piece to open.
+  api.open(MISSING_WORLD, 97, { push: false, variant: PRESSED_VARIANT, card });
+  out.missingLoading = look(page);
+  await clock.advance(3000);
+  out.missing = look(page);
+
+  // And a piece nobody pressed: the stage has the seed and nothing else, so it configures the
+  // piece from that and derives the card the configuration would have dealt.
+  api.open(deal[0].file, deal[0].seed, { arriving: true });
+  out.barePlayable = await waitForPiece(page, clock);
+  out.bare = look(page);
+  return out;
+}
+
 async function runScenario(name, stageDir, worlds, deal) {
   const clock = makeClock();
   if (name === 'rounds') return rounds(stageDir, worlds, deal, clock);
@@ -741,6 +798,7 @@ async function runScenario(name, stageDir, worlds, deal) {
   if (name === 'sliderUntouched') return slider(stageDir, worlds, deal, clock, 'leave');
   if (name === 'holdFilled') return holdFilled(stageDir, worlds, deal, clock);
   if (name === 'teardown') return teardown(stageDir, worlds, deal, clock);
+  if (name === 'carried') return carried(stageDir, worlds, deal, clock);
   throw new Error('no scenario named ' + name);
 }
 
