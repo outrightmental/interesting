@@ -51,11 +51,12 @@ Nine axioms stand over every run, each stated in the prompt and held to in code:
     takes the mood flow off a page, that lets the library of query mechanisms
     fall below MIN_MOOD_PROBES, or that asks a visitor to report their own mood.
   - Every page loads js/participate.js, the one line that brings the site the
-    prominent button on the bottom edge of every page that sends a visitor to a
-    pre-shaped new issue on this repository. check_participate() refuses a plan
-    that would leave a page without it, and the file behind it is fixed like the
-    analytics and state ones: a visitor's way of saying what this site should
-    become is not a run's to reword, move or drop.
+    link that sends a visitor to a pre-shaped new issue on this repository --
+    which the shared shell adopts into the logo's constellation as "change this
+    site". check_participate() refuses a plan that would leave a page without
+    it, and the file behind it is fixed like the analytics and state ones: a
+    visitor's way of saying what this site should become is not a run's to
+    reword, move or drop.
   - Caution before a destructive action is a law of the site rather than a page's
     own choice. Any control that throws a visitor's saved state away reads as a
     warning button, and every press of one opens the one shared modal that names
@@ -305,11 +306,18 @@ STATE_SCRIPT = "js/state.js"
 STATE_TAG = f"<script src='{STATE_SCRIPT}'></script>"
 STATE_FILES = {STATE_SCRIPT}
 # The line every page carries for the participation axiom (issue #43), and the one file behind it.
-# js/participate.js draws the third and most prominent of the three affordances pinned to the
-# bottom edge of every page -- "cookies" bottom-left, "steer the site" bottom-centre, "state"
+# js/participate.js draws one of the three affordances the fixed files pin over the page -- this
+# one takes the middle of the bottom edge, "cookies" the bottom-left corner and "state" the
 # bottom-right -- and it is the only one that answers to the person reading the site rather than to
 # the model writing it: one press opens a pre-shaped new issue on this repository, with the issue
 # form already chosen and the page they were on already filled in.
+#
+# Where a visitor finds it is the shell's business and not this file's. The whole of the site's
+# navigation is two marks floating in the top corners (issue #54), so js/site.js hides all three of
+# those pinned controls and offers each one as an option in the logo's constellation instead --
+# "change this site" for this one (issue #64). What is held here is the line, the file, and the one
+# link it draws; which chip presses that link is the shell's to arrange, and the fixed file is
+# never edited either way.
 #
 # Fixed for the same reason the state file is, only more so. Every other word on this site is a
 # run's to rewrite, which is exactly why the way to say something about it cannot be: a run that
@@ -1913,9 +1921,10 @@ def build_prompt(shown, omitted=()):
         "the analytics files: it is not shown to you, you may not write or delete it, and the very "
         "small meta menu it puts in the corner of every page -- where a visitor copies that "
         "document out, pastes someone else's in, or clears it -- is not yours to change or to "
-        "restyle. Leave room for it: it sits in the bottom-right corner, opposite the consent "
-        "banner's button in the bottom-left, with the participation button of the axiom below "
-        "between the two.\n"
+        "restyle. You need leave it no room: the shared shell hides the button it pins to the "
+        "bottom-right corner and offers \"state\" as an option in the logo's constellation "
+        "instead, beside the consent banner's \"cookies\" and the participation axiom's "
+        "\"change this site\" below.\n"
         "- AXIOM, every run: nothing on the site is tied to an update frequency. This site "
         "iterates continuously. It runs no nightly experiment and publishes no daily or hourly "
         "edition, so no page may say or imply that it does: never write \"Tonight's experiment\", "
@@ -1962,26 +1971,35 @@ def build_prompt(shown, omitted=()):
         f"in the <head> of a page brings it:\n    {PARTICIPATE_TAG}\n"
         "Keep that line on every page you rewrite, exactly as it is, and put it on every page you "
         "add (a page in a sub-folder uses the matching relative src, such as "
-        f"\"../{PARTICIPATE_SCRIPT}\"). It draws the prominent button in the middle of the bottom "
-        "edge of every page -- \"steer the site\" -- which sends whoever is reading to a new issue "
-        "on this repository, with the issue form already chosen and the page they were on already "
-        f"filled in. {PARTICIPATE_SCRIPT} is fixed like the analytics files and the local-state "
+        f"\"../{PARTICIPATE_SCRIPT}\"). It draws one link -- \"steer the site\" -- which it pins "
+        "to the middle of the bottom edge of every page, and which sends whoever is reading to a "
+        "new issue on this repository, with the issue form already chosen and the page they were "
+        "on already filled in. The shared shell hides that link where this file pinned it and "
+        "offers it in the logo's constellation as \"change this site\" (see the cadre below), so "
+        f"what a visitor presses is always the one link this file drew. {PARTICIPATE_SCRIPT} is "
+        "fixed like the analytics files and the local-state "
         "store: it is not shown to you, you may not write or delete it, and neither the button nor "
         "its wording is yours to change, to restyle or to reproduce. It is the one thing on this "
         "site that answers to the person reading it rather than to you, which is why no run may "
         "touch it: every other word here is yours to rewrite, so the way to say something about "
         "that cannot be. A plan that leaves a page of the site without the line is refused, and "
         "this too is checked on the built site. Three affordances belong to the fixed files and to "
-        "no page -- the consent banner's \"cookies\" button, this \"steer the site\" button in the "
-        "middle of the bottom edge, and the local-state \"state\" menu. Leave the bottom edge to "
-        "them: nothing of yours goes there, and nothing of yours restyles them, reproduces them or "
-        "rewords them. The shared shell adopts two of them into the main nav rather than copying "
-        "them: \"js/site.js\" hides the corner buttons that js/analytics.js and js/state.js draw "
-        "for themselves and offers \"cookies\" and \"state\" in the logo's constellation, which "
-        "presses those same buttons -- so there is still exactly one of each on the site and "
-        "neither fixed file is touched. Keep it that way: never draw a second cookies or state "
-        "control of your own. Inviting a visitor to steer the site in a page's own prose is "
-        "welcome, and is not a substitute for the line.\n"
+        "no page -- this \"steer the site\" link, the consent banner's \"cookies\" button and "
+        "the local-state \"state\" menu -- and each of them pins itself over the page where its "
+        "own file says. Nothing of yours restyles them, reproduces them or rewords them. The "
+        "shared shell adopts all three into the main nav rather than copying them: \"js/site.js\" "
+        "hides the control that js/participate.js, js/analytics.js and js/state.js each pinned "
+        "over the page, and offers \"change this site\", \"cookies\" and \"state\" in the "
+        "logo's constellation, which presses those same controls -- so there is still exactly one "
+        "of each on the site and no fixed file is touched. The words on those three options are "
+        "the shell's own and are already written: leave them as they are too. That is also what "
+        "keeps the two-item "
+        "rule true: at rest the only things floating over a page are the sparkles logo in the top "
+        "left and the persona in the top right, nothing floats at the bottom edge, and nothing "
+        "floats beside either mark. Keep it that way: never draw a second new-issue, cookies or "
+        "state control of your own, and pin nothing of yours to an edge of the viewport. Inviting "
+        "a visitor to steer the site in a page's own prose is welcome, and is not a substitute for "
+        "the line.\n"
         "- AXIOM, every run: caution before a destructive action is a law of the site and not a "
         "page's own choice. Any control that throws a visitor's saved state away reads as a "
         f"warning button -- class=\"{WARNING_CLASS}\" -- and every press of one opens the one "

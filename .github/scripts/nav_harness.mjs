@@ -4,10 +4,10 @@
  *
  * The nav is the whole of this site's navigation now (issue #54): the sparkles logo in the upper
  * left, the lightbox it opens, and the constellation of options it branches out -- including the
- * two corner affordances it adopts from js/analytics.js and js/state.js, which are fixed files
- * the shell may hide and press but never edit. All of that is behaviour rather than markup, so it
- * is worth testing rather than only reading, the way the local-state store and the "steer the
- * site" button beside it are.
+ * three affordances it adopts from js/participate.js, js/analytics.js and js/state.js, which are
+ * fixed files the shell may hide and press but never edit (issue #64). All of that is behaviour
+ * rather than markup, so it is worth testing rather than only reading, the way the local-state
+ * store and the new-issue link beside it are.
  *
  *   node nav_harness.mjs path/to/site/js/site.js
  *
@@ -130,7 +130,13 @@ class Element {
   }
 
   /* A box only where the page would have one: nothing hidden is laid out, and nothing inside
-     something hidden is either, which is how the nav tells a shown option from a put-away one. */
+     something hidden is either, which is how the nav tells a shown option from a put-away one.
+
+     One wrinkle, and it is the real one. The hidden attribute works through the UA stylesheet's
+     `display: none`, so an element whose own file gives it a `display` in an author stylesheet
+     ignores the attribute entirely -- which is exactly the shape of the three affordances the
+     shell adopts: `.site-steer` is `display: inline-flex`. `ownDisplay` says an element is one of
+     those, and only an inline `display: none` puts one away (see putAway in js/site.js). */
   get offsetHeight() {
     return this.laidOut() ? this.height : 0;
   }
@@ -140,7 +146,10 @@ class Element {
   }
 
   laidOut() {
-    for (let node = this; node; node = node.parentNode) if (node.hidden) return false;
+    for (let node = this; node; node = node.parentNode) {
+      if (node.properties.display === "none") return false;
+      if (node.hidden && !node.ownDisplay) return false;
+    }
     return true;
   }
 
@@ -266,6 +275,8 @@ function makeDocument({ page = "quiet-room.html", viewport = { width: 1280, heig
   option(near, { id: "sparknav-reading", nodeId: "sparknav-reading-go",
                  labelId: "sparknav-reading-label", label: "your world", href: "moods.html",
                  hidden: true });
+  option(far, { id: "sparknav-participate", tag: "button", nodeId: "sparknav-participate-open",
+                label: "change this site", hidden: true });
   option(far, { id: "sparknav-cookies", tag: "button", nodeId: "sparknav-cookies-open",
                 label: "cookies", hidden: true });
   option(far, { id: "sparknav-state", tag: "button", nodeId: "sparknav-state-open",
@@ -406,8 +417,15 @@ function toggle(context, open) {
   id(context, "sparknav").open = open;
 }
 
-/** The two buttons the fixed files pin to the corners, drawn after the page has loaded. */
-function drawCorners(context, { cookies = true, state = true } = {}) {
+/** Everything the fixed files pin over the page, by the selectors js/site.js finds them with. */
+const PINNED = {
+  cookies: ".site-consent-link", // js/analytics.js, bottom-left
+  state: ".site-meta-open", // js/state.js, bottom-right
+  steer: ".site-steer", // js/participate.js, the middle of the bottom edge
+};
+
+/** Those three, drawn after the page has loaded, as their own deferred files draw them. */
+function drawCorners(context, { cookies = true, state = true, steer = true } = {}) {
   if (cookies) {
     context.document.body.appendChild(
       make("button", { class: "site-consent-link", "aria-label": "Change cookie preferences" }, CHIP));
@@ -418,6 +436,14 @@ function drawCorners(context, { cookies = true, state = true } = {}) {
     root.appendChild(make("div", { class: "site-meta-panel", id: "site-meta-panel",
                                    role: "dialog", hidden: "" }));
     context.document.body.appendChild(root);
+  }
+  if (steer) {
+    const link = make("a", {
+      class: "site-steer", href: "https://github.com/outrightmental/interesting/issues/new",
+      target: "_blank", rel: "noopener noreferrer", "aria-label": "Steer the site",
+    }, CHIP);
+    link.ownDisplay = true; // js/participate.js gives it `display: inline-flex`
+    context.document.body.appendChild(link);
   }
   for (const el of context.document.documentElement.descendants()) {
     el.ownerDocument = context.document;
@@ -480,24 +506,32 @@ const scenarios = {
       lightbox: context.document.documentElement.getAttribute("data-lightbox"),
       options: constellation(context).map((star) => star.label),
       reading: id(context, "sparknav-reading").hidden,
+      participate: id(context, "sparknav-participate").hidden,
       cookies: id(context, "sparknav-cookies").hidden,
       state: id(context, "sparknav-state").hidden,
     };
   },
 
-  /* The two corner affordances arrive late -- the consent banner only draws its button once the
-     library beside it has loaded -- and are adopted: hidden where they were pinned, offered in the
-     orbit instead, and the state option says how much there is to carry away. */
+  /* The three pinned affordances arrive late -- every one of them is drawn by a deferred script,
+     and the consent banner's only once the library beside it has loaded -- and are adopted: hidden
+     where their own files put them, offered in the orbit instead, and the state option says how
+     much there is to carry away. */
   whenTheCornersArrive() {
     const context = load({ kept: ["constellation", "omens", "capsules"] });
     const before = {
+      participate: id(context, "sparknav-participate").hidden,
       cookies: id(context, "sparknav-cookies").hidden,
       state: id(context, "sparknav-state").hidden,
     };
     drawCorners(context);
+    const put = (selector) => {
+      const el = context.document.querySelector(selector);
+      return el.hidden && el.properties.display === "none";
+    };
     const corners = {
-      cookies: context.document.querySelector(".site-consent-link").hidden,
-      state: context.document.querySelector(".site-meta-open").hidden,
+      cookies: put(".site-consent-link"),
+      state: put(".site-meta-open"),
+      steer: put(".site-steer"),
       panel: context.document.querySelector(".site-meta-panel").hidden,
     };
     return {
@@ -506,6 +540,33 @@ const scenarios = {
       options: constellation(context).map((star) => star.label),
       stateLabel: id(context, "sparknav-state-label").textContent,
       watching: context.observers.filter((observer) => !observer.stopped).length,
+    };
+  },
+
+  /* The regression issue #64 is about. At rest the only chrome floating over a page is the
+     sparkles logo in the top left and the persona in the top right: everything the fixed files
+     pinned over the page is hidden where they pinned it, the shell adds nothing of its own to the
+     body, and the constellation is what carries all three instead. (Which of the things the body
+     holds is fixed-positioned is the stylesheet's business, so NavTest reads that off the Sass;
+     this is the half a stub browser can see.) */
+  whatFloatsAtRest() {
+    const context = load({ kept: ["constellation"] });
+    const bodyBefore = context.document.body.children.length;
+    drawCorners(context);
+    const pinned = {};
+    for (const [name, selector] of Object.entries(PINNED)) {
+      const el = context.document.querySelector(selector);
+      // Both halves of being put away: the attribute, and the one declaration that outranks the
+      // `display` the control's own file gave it (see putAway in js/site.js).
+      pinned[name] = { drawn: !!el, laidOut: !!el && el.laidOut(),
+                       display: (el && el.properties.display) || null };
+    }
+    return {
+      pinned,
+      // Three elements arrived, every one of them a fixed file's own: the shell drew none.
+      addedToTheBody: context.document.body.children.length - bodyBefore - 3,
+      options: constellation(context).map((star) => star.label),
+      lightbox: context.document.documentElement.getAttribute("data-lightbox"),
     };
   },
 
@@ -518,6 +579,7 @@ const scenarios = {
       options: constellation(context).map((star) => star.label),
       cookies: id(context, "sparknav-cookies").hidden,
       state: id(context, "sparknav-state").hidden,
+      participate: id(context, "sparknav-participate").hidden,
     };
   },
 
@@ -656,11 +718,23 @@ const scenarios = {
     return { open: id(context, "sparknav").open, lightbox: lightbox(context).lightbox };
   },
 
-  /* The two adopted options press the buttons their own files drew, rather than doing any of it
-     themselves: one cookies dialog and one state menu on the site, wherever they are opened from. */
+  /* The three adopted options press the controls their own files drew, rather than doing any of
+     it themselves: one new-issue link, one cookies dialog and one state menu on the site, wherever
+     they are opened from. */
   whenAnAdoptedOptionIsPressed() {
     const context = load();
     drawCorners(context);
+    toggle(context, true);
+    id(context, "sparknav-participate-open").click();
+    const steer = {
+      corner: context.document.querySelector(".site-steer").clicks,
+      href: context.document.querySelector(".site-steer").getAttribute("href"),
+      target: context.document.querySelector(".site-steer").getAttribute("target"),
+      open: id(context, "sparknav").open,
+      // The link was put aside with the rest of the page while the lightbox was up, so the press
+      // has to find it live again -- an inert element answers no click at all.
+      inert: context.document.querySelector(".site-steer").hasAttribute("inert"),
+    };
     toggle(context, true);
     id(context, "sparknav-cookies-open").click();
     const cookies = {
@@ -683,6 +757,7 @@ const scenarios = {
     panel.hidden = true;
     mutated(context);
     return {
+      steer,
       cookies,
       state,
       focus: { whileOpen, afterClose: id(context, "sparknav-logo").focused },

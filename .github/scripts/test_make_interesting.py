@@ -2388,8 +2388,9 @@ class MoodAxiomTest(SiteDirTestCase):
 
 
 class ParticipationAxiomTest(SiteDirTestCase):
-    """Issue #43: every page carries a visitor's way of steering the site -- one prominent button,
-    pinned to the bottom edge, that opens a pre-shaped new issue on this repository.
+    """Issue #43: every page carries a visitor's way of steering the site -- one link to a
+    pre-shaped new issue on this repository, which the shared shell offers in the constellation the
+    sparkles logo opens (issue #64).
 
     The seventh axiom, and the one that is about the person reading the site rather than about the
     site: a site rewritten continuously by a model is steered by whoever can reach the model, so
@@ -2426,28 +2427,36 @@ class ParticipationAxiomTest(SiteDirTestCase):
             with self.subTest(rule=rule):
                 self.assertIn(rule, rules)
 
-    def test_the_prompt_leaves_the_bottom_edge_and_the_cadre_alone(self):
+    def test_the_prompt_leaves_the_cadre_and_every_edge_of_the_viewport_alone(self):
         # The three are a cadre of their own -- each injects its own styles, none is a page's to
         # restyle -- so a run has to be told what they are as well as that they exist. The header's
         # pulse once arrived as <p class='site-meta'> and was torn out of the header by the state
         # menu's own `position: fixed`; this is the half of that lesson the prompt can carry.
         rules = self.prompt()
-        for where in ["\"steer the site\" button in the "
-                      "middle of the bottom edge",
-                      "Leave the bottom edge to them",
-                      "nothing of yours restyles them, reproduces them or "
-                      "rewords them"]:
+        for where in ["this \"steer the site\" link, the consent banner's \"cookies\" button "
+                      "and the local-state \"state\" menu",
+                      "pin nothing of yours to an edge of the viewport",
+                      "Nothing of yours restyles them, reproduces them or "
+                      "rewords them",
+                      "The words on those three options are the shell's own and are already "
+                      "written"]:
             with self.subTest(where=where):
                 self.assertIn(where, rules)
 
-    def test_the_prompt_says_how_two_of_them_reach_the_main_nav(self):
-        # Issue #54 pulled "cookies" and "state" into the logo's constellation, which a run has to
-        # know two things about: the shell adopts the buttons those fixed files drew rather than
-        # copying them, and so a second control of either is never the thing to add.
+    def test_the_prompt_says_how_all_three_of_them_reach_the_main_nav(self):
+        # Issue #54 pulled "cookies" and "state" into the logo's constellation and issue #64 the
+        # invitation with them, which a run has to know two things about: the shell adopts what
+        # those fixed files drew rather than copying it, and so a second control of any of the
+        # three is never the thing to add. The two-item rule is stated here as well, because this
+        # is the axiom whose own affordance used to be the exception to it.
         rules = self.prompt()
-        for rule in ["adopts two of them into the main nav rather than copying",
-                     "hides the corner buttons that js/analytics.js and js/state.js draw",
-                     "never draw a second cookies or state control of your own"]:
+        for rule in ["adopts all three into the main nav rather than copying",
+                     "hides the control that js/participate.js, js/analytics.js and js/state.js "
+                     "each pinned over the page",
+                     "never draw a second new-issue, cookies or state control of your own",
+                     "the only things floating over a page are the sparkles logo in the top left "
+                     "and the persona in the top right",
+                     "nothing floats at the bottom edge"]:
             with self.subTest(rule=rule):
                 self.assertIn(rule, rules)
 
@@ -3610,7 +3619,9 @@ class NavTest(unittest.TestCase):
     "This is not the sort of website that uses conventional navigation." The top app bar is gone,
     and the whole of the site's navigation is two marks floating over the page -- the logo in the
     upper left, which says the site's name on rollover and opens a lightbox with the options
-    branching out of it, and the persona in the upper right.
+    branching out of it, and the persona in the upper right. Two, exactly: a "go to <world>" link
+    beside the persona and a button pinned to the bottom edge both outlived the first pass at this
+    and are gone (issue #64), and the options they stood for are in the constellation.
 
     Two halves, checked two ways. What the shell writes is read off the built site, because that is
     the site a visitor gets and the one the axioms are about: every option is in the markup, so
@@ -3624,11 +3635,23 @@ class NavTest(unittest.TestCase):
     # nav quietly inert, which is exactly what this catches.
     IDS = ["sparknav", "sparknav-logo", "sparknav-veil",
            "sparknav-reading", "sparknav-reading-go", "sparknav-reading-label",
+           "sparknav-participate", "sparknav-participate-open",
            "sparknav-cookies", "sparknav-cookies-open", "sparknav-state", "sparknav-state-open",
            "sparknav-state-label"]
     # And the two the script never names, because it takes the orbits as it finds them: however
     # many the shell writes, in the order it writes them.
     ORBITS = ["sparknav-near", "sparknav-far"]
+    # Everything the site's own stylesheets pin over the page, and why each one is allowed to be
+    # there: one of the two marks, a part of one of them, or shown only while something is open.
+    # Nothing may join this list without being one of those things (issue #64).
+    FLOATS = {
+        ".skip-link": "off the top of the screen until a keyboard focuses it",
+        ".sparknav": "the sparkles logo, upper left",
+        ".sparknav-veil": "the lightbox, only while the constellation is open",
+        ".persona": "the persona, upper right",
+        ".persona-sheet-fallback[open]": "the persona's sheet, only while it is open",
+        ".are-you-sure-fallback[open]": "the shared confirmation, only while it is asked",
+    }
 
     built = None
     observed = None
@@ -3663,6 +3686,26 @@ class NavTest(unittest.TestCase):
     def pages(self):
         return sorted(mi.html_pages(self.site))
 
+    def floated(self):
+        """Every selector in the site's own stylesheets that pins something over the page.
+
+        Read off the Sass rather than the built CSS because the Sass is where a rule is written and
+        where the comment explaining it sits; FIXED_FILES are left out, the three affordances they
+        pin being theirs to place and the shell's to hide (see RealSiteTest).
+        """
+        found = {}
+        for rel, content in sorted(self.source.items()):
+            if rel in mi.FIXED_FILES or not rel.endswith((".scss", ".css")):
+                continue
+            lines = content.splitlines()
+            for i, line in enumerate(lines):
+                if not re.match(r"\s*position:\s*fixed\b", line):
+                    continue
+                selector = next((lines[j].rstrip()[:-1].strip() for j in range(i - 1, -1, -1)
+                                 if lines[j].rstrip().endswith("{")), line.strip())
+                found.setdefault(selector, []).append(rel)
+        return found
+
     # ---- what the shell writes ---------------------------------------------------------------
 
     def test_no_page_has_a_top_app_bar_any_more(self):
@@ -3680,6 +3723,23 @@ class NavTest(unittest.TestCase):
                 self.assertIn("<details class='sparknav' id='sparknav'>", self.site[page])
                 self.assertIn("class='persona' id='persona'", self.site[page])
         self.assertGreater(len(self.pages()), 1, "the check is worth nothing on one page")
+
+    def test_the_persona_is_the_portrait_and_nothing_beside_it(self):
+        # The upper-right corner is one control, the avatar. A "go to <world>" link used to sit
+        # beside it, which made a second floating item of that corner on any screen wide enough
+        # for it; the world a reading opens onto is an option in the constellation instead, where
+        # it already was, so nothing of it was lost in taking it out of the chrome (issue #64).
+        for page in self.pages():
+            with self.subTest(page=page):
+                corner = self.site[page]
+                corner = corner[corner.index("<div class='persona'"):]
+                corner = corner[:corner.index("</div>")]
+                self.assertEqual(corner.count("<button"), 1, "one control in that corner")
+                self.assertNotIn("<a ", corner, "and no link floating beside it")
+        # And nothing of the old link is left in the shell, its stylesheet or its script.
+        for rel in ["_includes/layout.njk", "_sass/_persona.scss", "js/persona.js"]:
+            with self.subTest(rel=rel):
+                self.assertNotIn("persona-go", self.source[rel])
 
     def test_the_logo_is_a_disclosure_that_says_the_sites_name(self):
         shell = self.source["_includes/layout.njk"]
@@ -3730,7 +3790,8 @@ class NavTest(unittest.TestCase):
         # markup, hidden, and js/site.js is what brings each one out.
         nav = self.site["moods.html"]
         nav = nav[nav.index("<details class='sparknav'"):nav.index("</details>")]
-        for option in ["sparknav-reading", "sparknav-cookies", "sparknav-state"]:
+        for option in ["sparknav-reading", "sparknav-participate", "sparknav-cookies",
+                       "sparknav-state"]:
             with self.subTest(option=option):
                 self.assertRegex(nav, rf"id='{option}' hidden>")
 
@@ -3804,27 +3865,66 @@ class NavTest(unittest.TestCase):
         self.assertIsNone(seen["lightbox"])
         self.assertEqual(seen["options"],
                          ["the threshold", "the mood atlas", "site map", "privacy", "terms"])
-        for away in ("reading", "cookies", "state"):
+        for away in ("reading", "participate", "cookies", "state"):
             with self.subTest(option=away):
                 self.assertTrue(seen[away], "nothing has happened yet, so it is not in the orbit")
 
-    def test_the_corner_affordances_are_adopted_rather_than_copied(self):
-        # The heart of the constraint: js/analytics.js and js/state.js are fixed files, so the
-        # shell hides the buttons they pin to the corners and presses those same buttons from the
-        # constellation -- there is still exactly one cookies dialog and one state menu.
+    def test_nothing_but_the_logo_and_the_persona_floats_over_a_page(self):
+        # The regression issue #64 is about, in both halves. What the site's own stylesheets pin
+        # over the page is a closed list -- the two marks, the parts of them, and the overlays that
+        # are only up while something is open -- and everything the fixed files pin is hidden where
+        # they pinned it and offered in the constellation instead, so at rest a visitor sees two
+        # things floating and no more.
+        floats = self.floated()
+        self.assertEqual(sorted(floats), sorted(self.FLOATS),
+                         f"the list of things pinned over the page has changed: {floats}")
+        seen = self.seen()["whatFloatsAtRest"]
+        for name, state in sorted(seen["pinned"].items()):
+            with self.subTest(pinned=name):
+                self.assertTrue(state["drawn"], "the harness has to draw it to prove anything")
+                self.assertFalse(state["laidOut"], f"{name} is still laid out over the page")
+                # The attribute alone is not enough, and that is not a detail: each of these files
+                # injects the styles for its own control, and js/participate.js gives its link
+                # `display: inline-flex`, which outranks the `display: none` the hidden attribute
+                # leans on. The inline declaration beside the attribute is what actually puts it
+                # away -- without it, "steer the site" would still be on the bottom edge.
+                self.assertEqual(state["display"], "none", f"{name} is hidden in name only")
+        self.assertEqual(seen["addedToTheBody"], 0, "the shell floats nothing of its own either")
+        self.assertIsNone(seen["lightbox"], "and all of that is true with the page at rest")
+        # Hidden, not gone: every one of the three is one press of the logo away.
+        for option in ["change this site", "cookies", "state · 1 kept"]:
+            with self.subTest(option=option):
+                self.assertIn(option, seen["options"])
+
+    def test_the_pinned_affordances_are_adopted_rather_than_copied(self):
+        # The heart of the constraint: js/participate.js, js/analytics.js and js/state.js are fixed
+        # files, so the shell hides the controls they pin over the page and presses those same
+        # controls from the constellation -- there is still exactly one new-issue link, one cookies
+        # dialog and one state menu.
         seen = self.seen()["whenTheCornersArrive"]
-        self.assertTrue(seen["before"]["cookies"], "offered nothing before the button was drawn")
-        self.assertTrue(seen["before"]["state"])
-        self.assertTrue(seen["corners"]["cookies"], "the corner button is hidden where it was")
-        self.assertTrue(seen["corners"]["state"])
-        self.assertTrue(seen["corners"]["panel"], "and its panel is left alone, closed")
+        for away in ("participate", "cookies", "state"):
+            with self.subTest(option=away):
+                self.assertTrue(seen["before"][away], "offered nothing before it was drawn")
+        for pinned in ("steer", "cookies", "state"):
+            with self.subTest(pinned=pinned):
+                self.assertTrue(seen["corners"][pinned],
+                                "put away where its own file pinned it, attribute and display")
+        self.assertTrue(seen["corners"]["panel"], "and the state panel is left alone, closed")
+        self.assertIn("change this site", seen["options"])
         self.assertIn("cookies", seen["options"])
         self.assertIn("state · 3 kept", seen["options"])
         pressed = self.seen()["whenAnAdoptedOptionIsPressed"]
         self.assertEqual(pressed["cookies"]["corner"], 1, "it pressed the banner's own button")
         self.assertEqual(pressed["state"]["corner"], 1, "and the state menu's own button")
-        self.assertFalse(pressed["cookies"]["open"], "and closed the lightbox out of the way")
-        self.assertFalse(pressed["state"]["open"])
+        self.assertEqual(pressed["steer"]["corner"], 1, "and the link js/participate.js drew")
+        # Which is the whole of how the invitation works: its destination, its new tab and the
+        # query that shapes the issue are that file's, and none of them is reproduced in the shell.
+        self.assertEqual(pressed["steer"]["target"], "_blank")
+        self.assertIn("/issues/new", pressed["steer"]["href"])
+        self.assertFalse(pressed["steer"]["inert"], "the lightbox has to let go of it first")
+        for name in ("steer", "cookies", "state"):
+            with self.subTest(pressed=name):
+                self.assertFalse(pressed[name]["open"], "it closed the lightbox out of the way")
         # Hiding a button means its own dialog cannot hand the focus back to it, so the logo takes
         # it: on the way out, and again when the state menu closes (WCAG 2.4.3 Focus Order).
         self.assertGreaterEqual(pressed["state"]["focusedLogo"], 1)
@@ -3838,6 +3938,7 @@ class NavTest(unittest.TestCase):
         self.assertNotIn("cookies", seen["options"])
         self.assertTrue(seen["cookies"])
         self.assertFalse(seen["state"], "the state menu is always there")
+        self.assertFalse(seen["participate"], "and so is the way to say what the site should be")
 
     def test_the_state_option_says_how_much_there_is_to_carry_away(self):
         self.assertEqual(self.seen()["withNothingKept"]["stateLabel"], "state")
@@ -3866,7 +3967,8 @@ class NavTest(unittest.TestCase):
         aside = seen["open"]["aside"]
         # Everything behind the veil: inert, so no pointer and no Tab reaches it, and hidden from a
         # screen reader, so the menu is all there is to read. The nav itself is left alone.
-        for behind in ["main-content", "page", "persona", "site-consent-link", "site-meta"]:
+        for behind in ["main-content", "page", "persona", "site-consent-link", "site-meta",
+                       "site-steer"]:
             with self.subTest(behind=behind):
                 self.assertTrue(aside[behind]["inert"], f"{behind} is still reachable")
                 self.assertEqual(aside[behind]["ariaHidden"], "true")
@@ -4153,14 +4255,14 @@ class RealSiteTest(unittest.TestCase):
         self.assertEqual(mi.pages_asking_to_self_report(self.site), {})
 
     # The one file of the site's own that may name one of those classes, and the one thing it may
-    # do with it: the shared shell finds the two corner buttons it adopts into the main nav, hides
-    # them where their own files pinned them, and presses them from the logo's constellation
-    # (issue #54). Nothing else may take those names.
-    ADOPTS_TWO = "js/site.js"
+    # do with it: the shared shell finds all three of the controls the fixed files pin over the
+    # page, hides them where their own files put them, and presses them from the logo's
+    # constellation (issues #54 and #64). Nothing else may take those names.
+    ADOPTS_THREE = "js/site.js"
 
     def test_the_site_leaves_the_corner_affordances_their_own_class_names(self):
         # js/state.js draws the export/import menu and js/participate.js the "steer the site"
-        # button, each injecting the styles for its own, and the prompt says in as many words that
+        # link, each injecting the styles for its own, and the prompt says in as many words that
         # neither is the site's to restyle. Every name they use is site-meta* or site-steer*, so a
         # template or stylesheet of the site's own that mentions one is either restyling them or
         # colliding with them. That is not hypothetical: the header's pulse arrived as
@@ -4175,20 +4277,20 @@ class RealSiteTest(unittest.TestCase):
                                     rf"|class(?:Name)?\s*[=:]\s*'[^']*\b{prefix}\b"
                                     rf"|class(?:Name)?\s*[=:]\s*\"[^\"]*\b{prefix}\b")
                 claiming = sorted(rel for rel, content in self.source.items()
-                                  if rel not in mi.FIXED_FILES and rel != self.ADOPTS_TWO
+                                  if rel not in mi.FIXED_FILES and rel != self.ADOPTS_THREE
                                   and theirs.search(content))
                 self.assertEqual(claiming, [])
 
-    def test_the_shell_may_find_the_two_it_adopts_and_nothing_more(self):
+    def test_the_shell_may_find_the_three_it_adopts_and_nothing_more(self):
         # What the one exception above is allowed to be: a selector in a string, used to find the
-        # button and press it. Not a class written onto anything of the shell's own, not a rule in
-        # a stylesheet, and never the one affordance that is nobody's to touch -- "steer the site"
-        # keeps the bottom edge and is not adopted.
-        shell = self.source[self.ADOPTS_TWO]
+        # control its own file pinned over the page, hide it there and press it from the
+        # constellation. Not a class written onto anything of the shell's own, and not a rule in a
+        # stylesheet: the look of all three stays entirely theirs.
+        shell = self.source[self.ADOPTS_THREE]
         self.assertIn("'.site-meta-open'", shell, "the state menu's own button, to press it")
-        self.assertIn("'.site-consent-link'", shell, "and the consent banner's")
+        self.assertIn("'.site-consent-link'", shell, "the consent banner's")
+        self.assertIn("'.site-steer'", shell, "and the link js/participate.js draws")
         self.assertNotRegex(shell, r"class(?:Name)?\s*[=:]\s*['\"][^'\"]*\bsite-(?:meta|steer)\b")
-        self.assertNotIn(".site-steer", shell)
 
     def test_every_orientation_opens_onto_a_real_world_and_not_all_of_them_are_sky(self):
         # The whole point of the issue: a visitor who does not respond to stars still arrives
