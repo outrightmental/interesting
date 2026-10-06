@@ -1,4 +1,9 @@
-/* Paper cutouts and the shadows they cast. Each piece keeps its own light, marks and curtain. */
+/* Paper cutouts and the shadows they cast. Each piece keeps its own light, marks and curtain.
+
+   A card and the feature it opens as are one night at the theatre: the spark puts the cutouts it
+   has cut and where its lamp stands on its spec as `of`, and the piece opens with those very
+   cutouts to choose from and the lamp where the card left it -- so pressing a card in the feed
+   opens the theatre that was set up on it, not another one. */
 
 const FORMS = ['moth', 'owl', 'fish', 'hare'];
 const PLACES = [
@@ -28,6 +33,19 @@ function plan(env) {
 
 function isDuet(env) {
   return (env.seed & 1) === 1;
+}
+
+// The card this piece was opened from, in the theatre's own terms: the three cutouts it had cut
+// and where its lamp stood, or null for a piece nobody pressed (js/stage.js hands the card over as
+// env.card.of). Three is what a night is cut from: two of them pair off and the third is the
+// choice, so a card that says anything else is no card this piece can be of.
+function pressed(env) {
+  const was = env.card && env.card.of;
+  const list = was && Array.isArray(was.forms) ? was.forms : [];
+  const forms = list.filter((form, i) => FORMS.indexOf(form) >= 0 && list.indexOf(form) === i);
+  if (forms.length !== 3) return null;
+  const lamp = Number(was.lamp);
+  return { forms, lamp: isFinite(lamp) ? Math.max(0, Math.min(100, Math.round(lamp))) : 50 };
 }
 
 function outline(g, form) {
@@ -205,19 +223,23 @@ function scene(g, w, h, c, s, variant, duet) {
   inscription(g, w, h, c, s.finalLine, s.final);
 }
 
-function firstPiece(env, p) {
+function firstPiece(env, p, was) {
+  // The cutouts on the bench and where the lamp stands: the card's, when a card was pressed, so
+  // the feature opens as that very card rather than as another night this seed could have had.
+  const options = was ? was.forms : p.options;
+  const lamp = was ? was.lamp : p.lamp;
   const s = {
-    form: p.options[0], lamp: p.lamp / 100, angle: p.angle,
+    form: options[0], lamp: lamp / 100, angle: p.angle,
     holes: [], cues: [], raised: false, final: 0, finalLine: ''
   };
   const draw = (c) => scene(c.g, c.w, c.h, c, s, PLAIN, false);
   return {
-    title: 'the ' + p.options[0] + ' behind the curtain',
+    title: 'the ' + options[0] + ' behind the curtain',
     brief: 'Choose a paper cutout, move the lamp, tap anywhere to pierce the shadow ' + p.holes + ' times, and raise the curtain to see what appears.',
     aspect: '4 / 3',
     steps: [
-      { id: 'cutout', ask: 'the paper cutout', kind: 'choice', options: p.options.map((form) => ({ label: 'the ' + form, value: form })) },
-      { id: 'lamp', ask: 'where the lamp stands', kind: 'range', min: 0, max: 100, step: 1, value: p.lamp, low: 'left', high: 'right' },
+      { id: 'cutout', ask: 'the paper cutout', kind: 'choice', options: options.map((form) => ({ label: 'the ' + form, value: form })) },
+      { id: 'lamp', ask: 'where the lamp stands', kind: 'range', min: 0, max: 100, step: 1, value: lamp, low: 'left', high: 'right' },
       { id: 'pierce', ask: 'pierce the shadow ' + p.holes + ' times', kind: 'tap', label: 'pierce it for me', after: 'cutout' },
       { id: 'curtain', ask: 'raise the curtain', kind: 'press', count: 1, label: 'raise the curtain' }
     ],
@@ -262,16 +284,20 @@ function firstPiece(env, p) {
   };
 }
 
-function secondPiece(env, p) {
-  const pairings = [[p.options[0], p.options[1]], [p.options[0], p.options[2]], [p.options[1], p.options[2]]];
+function secondPiece(env, p, was) {
+  // As above: the card's three cutouts pair off, and its lamp is where this night starts.
+  const options = was ? was.forms : p.options;
+  const lamp = was ? was.lamp : p.lamp;
+  const pairings = [[options[0], options[1]], [options[0], options[2]], [options[1], options[2]]];
   const s = {
-    pair: pairings[0], lamp: p.lamp / 100, overlap: 0.5, reverse: false,
+    pair: pairings[0], lamp: lamp / 100, overlap: 0.5, reverse: false,
     angle: p.angle, holes: [], cues: [], raised: false, final: 0, finalLine: ''
   };
   const draw = (c) => scene(c.g, c.w, c.h, c, s, PLAIN, true);
   return {
     title: 'two cutouts, one shadow',
-    brief: 'Choose two paper figures, slide their shadows together, swap which stands forward, tap anywhere to place ' + p.cues + ' pools of light, and hold to raise the curtain.',
+    brief: 'Choose two paper figures, slide their shadows together, swap which stands forward, tap anywhere to place ' + p.cues + ' pools of light, and hold to raise the curtain.'
+      + (was ? ' The lamp stands at ' + lamp + ', where your card left it.' : ''),
     aspect: '4 / 3',
     steps: [
       { id: 'pair', ask: 'which two paper figures', kind: 'choice', options: pairings.map((pair, i) => ({ label: 'the ' + pair[0] + ' and the ' + pair[1], value: i })) },
@@ -344,16 +370,23 @@ export default {
     const p = plan(env);
     const duet = isDuet(env);
     return {
-      title: 'the shadow theatre',
+      // What a card says is what was cut for this night and where the lamp was set for it, so two
+      // cards of this world read as two nights rather than as one world's standing line.
+      title: duet ? 'the ' + p.options[0] + ' and the ' + p.options[1] : 'the ' + p.options[0] + ' behind the curtain',
       text: duet
         ? 'Two cutouts share the light. Slide their shadows together and discover what they cast.'
         : 'Pierce a paper shadow, move the lamp and see what waits behind the curtain.',
+      mono: 'cut tonight  ' + p.options.join(', ') + '\nlamp         ' + p.lamp + ' from the left',
       aspect: '4 / 3',
-      paint: (g, w, h, cardEnv) => picture(g, w, h, cardEnv, p, duet)
+      paint: (g, w, h, cardEnv) => picture(g, w, h, cardEnv, p, duet),
+      // What this card is of, for the feature it opens as: the cutouts it has cut and where its
+      // lamp stands.
+      of: { forms: p.options, lamp: p.lamp }
     };
   },
   piece(env) {
     const p = plan(env);
-    return isDuet(env) ? secondPiece(env, p) : firstPiece(env, p);
+    const was = pressed(env);
+    return isDuet(env) ? secondPiece(env, p, was) : firstPiece(env, p, was);
   }
 };

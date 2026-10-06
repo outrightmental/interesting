@@ -56,6 +56,7 @@
 </head>
 <body>
   <a class='skip-link' href='#main-content'>skip to main content</a>
+  {# The one veil everything that floats over the page is raised behind: the constellation, the persona sheet and the are-you-sure modal all open through window.interestingSite.lightbox() in js/site.js, painted by _sass/_lightbox.scss. Markup here because the shell is markup, and hidden until something raises it, so a visitor with no script gets no dimming they could not dismiss. #}
   <div class='lightbox-veil' id='lightbox-veil' hidden></div>
   <details class='sparknav' id='sparknav'>
     <summary class='sparknav-logo' id='sparknav-logo' aria-label='interesting: the site menu'>
