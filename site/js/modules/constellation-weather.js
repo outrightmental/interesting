@@ -519,7 +519,8 @@ function passing(env) {
   const s = Object.assign(blank(env.pick([0, 2, 21, 23]), null), { dir, pair, kt, sweep: 0, passed: false, where: '', hint: true });
   const span = a === b ? 'over “' + a.text + '”' : 'between “' + a.text + '” and “' + b.text + '”';
   return {
-    title: 'a front out of the ' + DIRS[(idx + 4) % 8],
+    // The front the card forecast, named in the title: pressing a warm front opens a warm front.
+    title: (was ? was.kind.label : 'a front') + ' out of the ' + DIRS[(idx + 4) % 8],
     brief: 'Name the front that forms ' + (a === b ? 'over your star' : 'between your two farthest stars') + ', set the wind, and watch it cross the map toward the ' + DIRS[idx] + '; once it has passed, hold the barometer steady and the air settles behind it.'
       + (was ? ' Your card called it ' + was.kind.label + ', and it is first on the dial.' : ''),
     aspect: '16 / 10',
