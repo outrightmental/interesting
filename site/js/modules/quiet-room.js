@@ -1,6 +1,7 @@
 /* The quiet room: a ring that breathes, a dimmer, and one thing to put down. As a card it is the
-   ring (paint, spark); as a piece it is a few breaths at your pace, or one thing set down and
-   left down. See js/feed.js for what a module is and js/stage.js for what a piece is. */
+   ring (paint, spark); as a piece it is a few breaths at your pace, one thing set down and
+   left down, or a rain-fogged window you clear and settle. See js/feed.js for what a module is
+   and js/stage.js for what a piece is. */
 
 const BURDENS = [
   'the unread thing', 'the half-finished message', 'the thing you said in 2014',
@@ -11,10 +12,15 @@ const BURDENS = [
   'the argument you keep winning in the shower'
 ];
 
-const WORDS = ['in — hold — out', 'nothing is required of you here', 'the door is shut and the room is lit low',
+const WORDS = ['in - hold - out', 'nothing is required of you here', 'the door is shut and the room is lit low',
   'no score, no streak, no next thing', 'held, and then let go'];
 
 const PACES = [{ label: 'quick', value: 6 }, { label: 'slow', value: 8 }, { label: 'slower', value: 10 }];
+const PANES = [
+  { label: 'clear glass', value: 'clear' },
+  { label: 'rain streaks', value: 'rain' },
+  { label: 'fogged glass', value: 'fog' }
+];
 
 // The room, out to `swell` and dimmed by `dim`. `scale` is how large the ring is drawn: the card's
 // own, from the configuration it was dealt, and one for the piece, which is the room itself.
@@ -140,7 +146,126 @@ function putDown(env) {
       caption(c.g, c.w, c.h, c, s.chosen, (s.held ? 0.35 : 0.8) * (1 - s.release));
     },
     end(c) {
-      c.status(s.chosen + ' — down, and left down');
+      c.status(s.chosen + ' - down, and left down');
+    }
+  };
+}
+
+// A rain-fogged window watched and settled: pick the pane, set the wind, trace the glass, wipe,
+// and let the room close around it.
+function windowWatch(env) {
+  const taps = env.int(2, 4);
+  const wipes = env.int(1, 2);
+  const s = { pane: 'clear', gust: 0.35, traced: 0, wiped: 0, t: 0, fog: 0.22, release: 0, rings: [] };
+
+  function draw(c) {
+    room(c.g, c.w, c.h, c, 0.28 + (c.reduced ? 0 : Math.sin(s.t * 0.8) * 0.05), 0.08 + s.release * 0.78);
+    const g = c.g;
+    const w = c.w;
+    const h = c.h;
+    const left = w * 0.16;
+    const top = h * 0.18;
+    const ww = w * 0.68;
+    const hh = h * 0.52;
+
+    g.fillStyle = 'rgba(0, 0, 0, 0.24)';
+    g.fillRect(left, top, ww, hh);
+    g.strokeStyle = c.alpha(c.colors.fg, 0.44);
+    g.lineWidth = 2;
+    g.strokeRect(left, top, ww, hh);
+
+    const rain = s.pane === 'rain' ? 22 : s.pane === 'fog' ? 14 : 8;
+    const drift = (0.2 + s.gust * 0.8) * (c.reduced ? 0.2 : 1);
+    for (let i = 0; i < rain; i++) {
+      const x = left + (((i * 0.6180339 + s.t * drift * (0.12 + (i % 3) * 0.05)) % 1) * ww);
+      const y = top + (((i * 0.241 + s.t * (0.28 + s.gust * 0.42)) % 1) * hh);
+      const len = hh * (0.03 + (i % 5) * 0.01);
+      g.strokeStyle = c.alpha(c.colors.accent2, 0.16 + (i % 4) * 0.07);
+      g.lineWidth = 1;
+      g.beginPath();
+      g.moveTo(x, y);
+      g.lineTo(x - 2 - s.gust * 8, y + len);
+      g.stroke();
+    }
+
+    const fog = Math.max(0, Math.min(1, s.fog));
+    if (s.pane === 'fog' || fog > 0) {
+      g.fillStyle = 'rgba(220, 236, 255, ' + (0.08 + fog * 0.26) + ')';
+      g.fillRect(left, top, ww, hh);
+    }
+
+    for (let i = s.rings.length - 1; i >= 0; i--) {
+      const r = s.rings[i];
+      r.a -= 0.03;
+      if (r.a <= 0) {
+        s.rings.splice(i, 1);
+        continue;
+      }
+      g.strokeStyle = c.alpha(c.colors.accent2, r.a * 0.8);
+      g.lineWidth = 1.4;
+      g.beginPath();
+      g.arc(r.x, r.y, 5 + (1 - r.a) * 26, 0, Math.PI * 2);
+      g.stroke();
+    }
+
+    if (s.release > 0) {
+      caption(g, w, h, c, 'the pane clears, and the room settles', s.release * 0.9);
+    }
+  }
+
+  return {
+    title: 'the window watch',
+    brief: 'Pick the pane and the wind, trace the glass ' + (taps === 1 ? 'once' : taps + ' times') + ', wipe it ' + (wipes === 1 ? 'once' : 'twice') + ', and let the room settle around what clears.',
+    aspect: '16 / 9',
+    steps: [
+      { id: 'pane', ask: 'the pane', kind: 'choice', options: PANES },
+      { id: 'wind', ask: 'the wind at the frame', kind: 'range', min: 0, max: 100, step: 1, value: 35, low: 'still', high: 'gusting' },
+      { id: 'trace', ask: 'trace the glass ' + (taps === 1 ? 'once' : taps + ' times'), kind: 'tap', label: 'trace one for me', after: 'pane' },
+      { id: 'wipe', ask: 'wipe it ' + (wipes === 1 ? 'once' : 'twice'), kind: 'press', count: wipes, label: 'wipe', after: 'trace' }
+    ],
+    start(c) {
+      draw(c);
+    },
+    apply(id, value, c) {
+      if (id === 'pane') {
+        s.pane = String(value);
+        if (s.pane === 'clear') {
+          s.fog = 0.05;
+          c.status('clear pane: almost nothing between you and the night');
+        } else if (s.pane === 'rain') {
+          s.fog = 0.14;
+          c.status('rain streaks: the room answers in lines');
+        } else {
+          s.fog = 0.34;
+          c.status('fogged glass: draw a path through it');
+        }
+      }
+      if (id === 'wind') {
+        s.gust = Math.max(0, Math.min(1, Number(value) / 100));
+        c.status(s.gust < 0.25 ? 'still frame, slow drips' : s.gust < 0.65 ? 'a small draught along the pane' : 'the frame hums with gusts');
+      }
+      if (id === 'wipe') {
+        s.wiped = Number(value) || s.wiped + 1;
+        s.fog = Math.max(0, s.fog - 0.18);
+        c.status(s.wiped >= wipes ? 'wiped clean enough' : 'wiped once; a little more');
+      }
+    },
+    tap(x, y, c) {
+      if (c.done) return;
+      s.traced += 1;
+      s.rings.push({ x: x * c.w, y: y * c.h, a: 1 });
+      s.fog = Math.max(0, s.fog - 0.08);
+      c.progress('trace', Math.min(1, s.traced / taps));
+      c.status(s.traced >= taps ? 'enough traced; you can wipe and settle it' : (taps - s.traced) + ' more to trace');
+      if (s.traced >= taps) c.satisfy('trace');
+    },
+    frame(t, dt, c) {
+      s.t += dt;
+      if (c.done) s.release = Math.min(1, s.release + dt * 1.1);
+      draw(c);
+    },
+    end(c) {
+      c.status('the pane is settled, and the room is quiet again');
     }
   };
 }
@@ -174,6 +299,9 @@ export default {
     };
   },
   piece(env) {
-    return env.chance(0.5) ? breaths(env) : putDown(env);
+    const roll = env.rnd();
+    if (roll < 0.34) return breaths(env);
+    if (roll < 0.67) return putDown(env);
+    return windowWatch(env);
   }
 };
