@@ -267,8 +267,15 @@ a.action.warning:focus-visible {
 // --------------------------------------------------------------------------------------------
 // The one "are you sure you want to ______?" modal, opened by every press of a control above the
 // threshold and by nothing else. The second half of the law, and the half that does its work
-// after a press. It is a <dialog>, so the browser supplies the backdrop, the focus trap and
-// Escape; js/site.js returns the focus to the control that opened it.
+// after a press. It is a <dialog>, so the focus trap and Escape are the browser's; js/site.js
+// returns the focus to the control that opened it.
+//
+// The page behind it goes under the one veil the whole site shares, the same one the sparkles logo
+// and the persona sheet open through (_lightbox.scss, and window.interestingSite.lightbox in
+// js/site.js): the question is asked over a page that is dimmed, blurred, stilled and inert, which
+// is as true of a question asked from inside the persona sheet as of one asked from a page's own
+// control -- the lightboxes nest, so the sheet stays in front of the veil while the question is up
+// and comes back to the front when it is answered (issue #70).
 //
 // An M3 dialog, as the persona sheet is (_persona.scss), and narrower: it holds a question, a
 // line about what the question costs, and two buttons.
@@ -300,18 +307,21 @@ a.action.warning:focus-visible {
   align-content: start;
 }
 
+// Nothing of its own behind it: the shared veil dims and blurs the page, and a backdrop painted
+// here would sit over that veil in the top layer and flatten it (issue #70).
 .are-you-sure::backdrop {
-  background: rgba(0, 0, 0, 0.4);
+  background: transparent;
 }
 
 // A browser without dialog.showModal() gets the same box pinned over the page, as the persona
-// sheet does, and above it: the sheet's own controls are among the ones that ask.
+// sheet does, and one layer above it: the sheet's own controls are among the ones that ask, and in
+// that browser the two boxes are ordinary elements that have to be told which is in front.
 .are-you-sure-fallback[open] {
   position: fixed;
   top: 1rem;
   left: 50%;
   transform: translateX(-50%);
-  z-index: 40;
+  z-index: calc(var(--layer-front) + 1);
 }
 
 // The question itself, with the caller's words in the blank. Not an <h2>: it is written by script

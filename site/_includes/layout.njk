@@ -56,12 +56,13 @@
 </head>
 <body>
   <a class='skip-link' href='#main-content'>skip to main content</a>
+  {# The one veil the whole site goes behind: window.interestingSite.lightbox() in js/site.js raises it, _sass/_lightbox.scss paints it, and the sparkles logo's constellation, the persona sheet and the "are you sure?" modal all open through it (issue #70). Hidden until a script raises it, so a visitor with none gets no dimming they could not dismiss. #}
+  <div class='lightbox-veil' id='lightbox-veil' hidden></div>
   <details class='sparknav' id='sparknav'>
     <summary class='sparknav-logo' id='sparknav-logo' aria-label='interesting: the site menu'>
       <svg class='icon sparknav-spark' viewBox='0 0 24 24' aria-hidden='true' focusable='false'><path d='{{ icons.spark }}'/></svg>
       <span class='sparknav-name'>interesting</span>
     </summary>
-    <div class='sparknav-veil' id='sparknav-veil'></div>
     <nav class='sparknav-sky' aria-label='Site'>
       <ul class='sparknav-orbit sparknav-near' id='sparknav-near'>
 {%- for link in worlds.wayIn %}
@@ -100,7 +101,7 @@
           <span class='sparknav-ray' aria-hidden='true'></span>
           <button type='button' class='sparknav-node' id='sparknav-state-open' aria-haspopup='dialog'>
             <svg class='icon' viewBox='0 0 24 24' aria-hidden='true' focusable='false'><path d='{{ icons.swap }}'/></svg>
-            <span class='sparknav-label'>state</span>
+            <span class='sparknav-label' id='sparknav-state-label'>state</span>
           </button>
         </li>
 {%- for link in worlds.finePrint %}

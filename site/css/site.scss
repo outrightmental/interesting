@@ -6,6 +6,9 @@
 
 @use 'tokens';
 @use 'base';
+// The one lightbox the logo, the persona and the shared confirmation all open through, before the
+// three files that lean on it (issue #70).
+@use 'lightbox';
 @use 'nav';
 @use 'mood';
 @use 'panel';

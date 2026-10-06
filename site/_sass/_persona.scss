@@ -8,7 +8,12 @@
 // that opens the sheet. With no persona yet the ring is dashed and the button is filled, with its
 // label showing, so the first thing to do on the site is the first thing a visitor's eye lands on;
 // after that it is the portrait alone, and the label is for screen readers. The sheet is an M3
-// basic dialog.
+// basic dialog, and it opens inside the one lightbox the whole site shares (_lightbox.scss, and
+// window.interestingSite.lightbox in js/site.js): the same veil, the same blur, the same fade, the
+// same held frame loop and the same inert page as the logo's constellation, which is what issue
+// #70 asked for -- "the lightbox effect for the persona should be identical". The dialog keeps its
+// own backdrop press, focus trap and Escape, which are the browser's; it owns no paint of its own
+// behind itself.
 //
 // One button and nothing beside it. There used to be a "go to <world>" link next to the portrait,
 // which made a second floating item of this corner on a wide screen and a third piece of
@@ -23,7 +28,7 @@
   position: fixed;
   top: var(--nav-inset);
   right: var(--nav-inset);
-  z-index: 45; // above the page, below the lightbox the logo's constellation lays over everything
+  z-index: 45; // above the page, below the veil either mark's lightbox lays over everything
   display: flex;
   align-items: center;
   flex: none;
@@ -167,17 +172,22 @@
   align-content: start;
 }
 
+// Nothing of its own behind it: the shared veil is what dims and blurs the page while the sheet is
+// open, and a backdrop painted here would sit on top of that veil in the top layer and flatten it
+// (issue #70). Spelled out rather than left out, because a browser's own default is a dim of its
+// own.
 .persona-sheet::backdrop {
-  background: rgba(0, 0, 0, 0.4);
+  background: transparent;
 }
 
-// A browser without dialog.showModal() gets the sheet as an ordinary box pinned over the page.
+// A browser without dialog.showModal() gets the sheet as an ordinary box pinned over the page, in
+// front of the shared veil rather than behind it.
 .persona-sheet-fallback[open] {
   position: fixed;
   top: 1rem;
   left: 50%;
   transform: translateX(-50%);
-  z-index: 30;
+  z-index: var(--layer-front);
 }
 
 .persona-sheet-head {
