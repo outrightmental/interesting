@@ -162,6 +162,136 @@ def page(body="<p>a page</p>", title="a page", lang="en",
 NEW_PAGE = page(title="new")
 
 
+class Stylesheet:
+    """A built stylesheet, read the way a viewport of a given size reads it.
+
+    Enough of the cascade to settle a question of layout from the sheet a browser is served rather
+    than from the Sass it was compiled out of: which rules apply at this viewport, which declaration
+    of a property wins among them, and what a length in one comes to in pixels. Custom properties
+    resolve by inheritance down the stage's own nesting, so --nav-h on :root and --stage-h on .stage
+    reach .stage-scene the way a browser takes them there, and `given` stands in for what a script
+    sets on an element inline (js/stage.js sets --piece-ratio from the piece's own aspect).
+    """
+
+    # The nesting a declaration inherits down, from the root to the scene (_includes/stage.njk).
+    LINEAGE = [":root", "main", ".stage", ".stage-inner", ".stage-body", ".stage-scene"]
+
+    def __init__(self, css, width, height, root=16.0):
+        self.width, self.height, self.root = float(width), float(height), float(root)
+        self.rules = self._flatten(css.replace("\ufeff", ""))  # the sheet is served with a byte-order mark
+
+    # ---- the cascade, as far as a layout needs it ----------------------------------------------
+
+    @staticmethod
+    def blocks(text):
+        """(prelude, body) for every block at this level of a compressed stylesheet, in order."""
+        found, start, i = [], 0, 0
+        while i < len(text):
+            if text[i] != "{":
+                i += 1
+                continue
+            depth, j = 1, i + 1
+            while j < len(text) and depth:
+                depth += {"{": 1, "}": -1}.get(text[j], 0)
+                j += 1
+            found.append((text[start:i].strip(), text[i + 1:j - 1]))
+            start = i = j
+        return found
+
+    def _flatten(self, text):
+        rules = []
+        for prelude, body in self.blocks(text):
+            if prelude.startswith("@media"):
+                if self._matches(prelude):
+                    rules += self._flatten(body)
+            elif prelude.startswith("@supports"):
+                rules += self._flatten(body)  # every unit and function the site asks after exists
+            elif prelude.startswith("@"):
+                continue  # keyframes and the like: no layout is read off one
+            else:
+                rules += [(one.strip(), body) for one in prelude.split(",")]
+        return rules
+
+    def _matches(self, prelude):
+        """Whether this viewport reads a media query. Only the features the site's own sheets ask
+        about are understood, and a query asking after anything else is treated as not matching, so
+        a new kind of query can never quietly turn a check of a layout into a check of nothing."""
+        asked = re.findall(r"\(\s*([a-z-]+)\s*:\s*([^)]+?)\s*\)", prelude)
+        if not asked or " or " in prelude:
+            return False
+        for feature, asks in asked:
+            if feature not in ("min-width", "max-width", "min-height", "max-height"):
+                return False
+            have = self.width if feature.endswith("width") else self.height
+            want = float(re.sub(r"[a-z]+$", "", asks))  # the sheets write every breakpoint in px
+            if (have < want) if feature.startswith("min") else (have > want):
+                return False
+        return True
+
+    def value(self, selector, prop):
+        """What `prop` is left with on `selector`: the last declaration of it, which is how a browser
+        settles rules of one specificity. None if nothing this viewport reads declares it."""
+        found = None
+        for one, declarations in self.rules:
+            if one != selector:
+                continue
+            for declaration in declarations.split(";"):
+                name, _, value = declaration.partition(":")
+                if name.strip() == prop:
+                    found = value.strip()
+        return found
+
+    def var(self, name, at):
+        """What a custom property inherits down to the element `at` of the stage's nesting."""
+        for selector in reversed(self.LINEAGE[:self.LINEAGE.index(at) + 1]):
+            found = self.value(selector, name)
+            if found is not None:
+                return found
+        return None
+
+    # ---- and the arithmetic in one -------------------------------------------------------------
+
+    @staticmethod
+    def parts(value):
+        """A shorthand's components, split on the spaces that are not inside brackets."""
+        found, depth, token = [], 0, ""
+        for ch in value:
+            depth += {"(": 1, ")": -1}.get(ch, 0)
+            if ch.isspace() and not depth:
+                found, token = found + [token] if token else found, ""
+            else:
+                token += ch
+        return found + ([token] if token else [])
+
+    def px(self, value, at, percent=None, given=None):
+        """A length in pixels: calc(), min(), max() and clamp() over px, rem, vh, svh, vw and
+        percentages of `percent`, with every var() in it resolved as read on the element `at`."""
+        expr = value
+        for _ in range(12):  # a custom property may be written out of others, as --stage-h is
+            def one(found):
+                name, fallback = found.group(1), found.group(2)
+                known = (given or {}).get(name)
+                if known is None:
+                    known = self.var(name, at)
+                if known is None:
+                    known = fallback
+                assert known is not None, f"nothing gives {name} a value"
+                return known
+            grown = re.sub(r"var\(\s*(--[\w-]+)\s*(?:,\s*([^(),]*))?\)", one, expr)
+            if grown == expr:
+                break
+            expr = grown
+        assert "var(" not in expr, expr
+        for unit, scale in (("rem", self.root), ("svh", self.height / 100), ("dvh", self.height / 100),
+                            ("vh", self.height / 100), ("vw", self.width / 100), ("px", 1.0)):
+            expr = re.sub(r"(\d*\.?\d+)" + unit + r"\b",
+                          lambda found, scale=scale: repr(float(found.group(1)) * scale), expr)
+        expr = re.sub(r"(\d*\.?\d+)%", lambda found: repr(float(found.group(1)) * (percent or 0) / 100), expr)
+        return float(eval(expr.replace("calc", ""), {"__builtins__": {}},  # noqa: S307 -- the site's own sheet
+                          {"min": min, "max": max,
+                           "clamp": lambda low, value, high: max(low, min(value, high))}))
+
+
 class SiteDirTestCase(unittest.TestCase):
     """Points the script at a throwaway /site so no test touches the real one.
 
@@ -4374,6 +4504,101 @@ class RealSiteTest(unittest.TestCase):
                          "a pressed card hands the stage no palette")
         self.assertRegex(feed, r"seeds: palette\(card, m\)",
                          "the next card off the stack hands the stage no palette")
+
+    # The viewport the screenshot on issue #65 was taken at -- a 14-inch MacBook Pro is 1512 CSS
+    # pixels wide, and about 850 tall with the browser's own chrome off the top of it -- and three
+    # more desktops: a laptop, a large monitor, and a tall screen where the width runs out first.
+    DESKTOPS = [(1512, 850), (1280, 800), (1920, 1080), (1512, 1200)]
+
+    # Every aspect ratio a world writes its pieces in. The squarer ones are the whole of issue #65:
+    # a piece narrower than the column it was given is what left a band of empty page behind.
+    PIECE_ASPECTS = ["16 / 9", "16 / 10", "5 / 3", "4 / 3", "1 / 1", "4 / 5", "3 / 4"]
+
+    def test_the_stage_fills_the_real_estate_the_first_screen_has(self):
+        # Issue #65: on the wish constellation, whose pieces are 4/3, a band of empty page sat
+        # between the scene and the knobs. Two things left it there. The scene was as wide as its
+        # own height allowed at the piece's ratio but pinned to the start of a column sized 1fr, so
+        # whatever that column had over was nobody's; and the height it was allowed came off a flat
+        # 19rem guess at everything above and below it, about 90px more than the first screen owes.
+        #
+        # Both are checked here against the built stylesheet rather than the Sass, because the
+        # cascade that settles them is the one a browser is served (Stylesheet reads that cascade).
+        # First, that the ratios above are the ones the worlds are actually written in, so this is a
+        # check of the site and not of a list that has drifted away from it.
+        written = set(re.findall(r"aspect:\s*\'([^\']+)\'", "".join(
+            text for rel, text in self.source.items() if rel.startswith("js/modules/"))))
+        self.assertTrue(written, "no piece names an aspect ratio: the ratios below check nothing")
+        self.assertEqual(written - set(self.PIECE_ASPECTS), set(), "a ratio no case here covers")
+        for width, height in self.DESKTOPS:
+            sheet = Stylesheet(self.site["css/site.css"], width, height)
+            # The scene's column is the scene's own width, and the knobs take every pixel of the row
+            # it does not: without the 1fr it would be the knobs' turn to leave the band.
+            tracks = Stylesheet.parts(sheet.value(".stage-body", "grid-template-columns"))
+            self.assertEqual(tracks[0], "var(--stage-scene)", "the scene's column is not the scene")
+            self.assertTrue(tracks[-1].endswith("1fr)"), f"the knobs take no slack: {tracks}")
+            self.assertEqual(sheet.value(".stage-scene", "width"), "100%",
+                             "the scene does not fill the column it was given")
+            # main's own centred column (_panel.scss), and the first screen less the feed's peek.
+            column = min(sheet.px(sheet.var("--page-max", ":root"), ":root"), width - 2 * sheet.px(
+                sheet.var("--gutter", ":root"), ":root"))
+            padding = Stylesheet.parts(sheet.value("main", "padding"))
+            above, below = sheet.px(padding[0], "main"), sheet.px(padding[2], "main")
+            first_screen = sheet.px(sheet.value("main", "min-height"), "main")
+            heading = sheet.px(sheet.var("--stage-head", ".stage"), ".stage")
+            gap = sheet.px(sheet.var("--stage-gap", ".stage-body"), ".stage-body", column)
+            knobs = sheet.px(sheet.var("--stage-knobs", ".stage-body"), ".stage-body", column)
+            for aspect in self.PIECE_ASPECTS:
+                across, down = (float(side) for side in aspect.split("/"))
+                ratio = across / down
+                # What js/stage.js writes onto the scene for the piece it has opened.
+                given = {"--piece-ratio": f"{ratio:.4f}", "--piece-aspect": aspect}
+                budget = sheet.px(sheet.var("--stage-h", ".stage-body"), ".stage-body", column, given)
+                scene = sheet.px(tracks[0], ".stage-body", column, given)
+                with self.subTest(viewport=(width, height), aspect=aspect):
+                    # The scene is as large as the first screen lets it be: as wide as its own height
+                    # allows at this ratio, or as wide as the row can spare the knobs, and no less.
+                    self.assertAlmostEqual(scene, min(budget * ratio, column - gap - knobs), delta=1,
+                                           msg="the scene is not using the room it has")
+                    # The knobs keep a column of their own whatever the scene takes.
+                    self.assertGreaterEqual(column - scene - gap, knobs - 1, "the knobs are squeezed out")
+                    # And the feature ends exactly above the fold: the heading, the scene and
+                    # main's own padding are the whole of it, and what is left of the first screen is
+                    # the peek the feed gets (_feed.scss, --fold-peek). A piece whose height is what
+                    # ran out reaches that line, which is what "fills the real estate" comes to --
+                    # the 19rem guess stopped about 90px short of it -- and nothing ever crosses it.
+                    feature = above + heading + scene / ratio + below
+                    self.assertLessEqual(feature, first_screen + 1,
+                                         "the feature outgrew the first screen: the feed stops peeking")
+                    if scene > budget * ratio - 1:
+                        self.assertGreaterEqual(feature, first_screen - 1,
+                                                "the scene stops short of the fold with room to spare")
+        # Under 900px the knobs stack under the scene instead of standing beside it: one column, a
+        # rail nothing caps because it is the whole width, room kept back for the knobs now that they
+        # are below the scene, and the scene capped by the height it may have rather than sized by its
+        # column -- so a piece upright enough still cannot run past the first screen on a phone.
+        phone = Stylesheet(self.site["css/site.css"], 390, 844)
+        self.assertEqual(phone.value(".stage-body", "grid-template-columns"), "1fr")
+        self.assertEqual(phone.value(".stage-side", "max-width"), "none")
+        self.assertGreater(phone.px(phone.var("--stage-keep", ".stage"), ".stage"), 0,
+                           "nothing is kept back for the knobs under the scene")
+        narrow = 390 - 2 * phone.px(phone.var("--gutter", ":root"), ":root")
+        for aspect in self.PIECE_ASPECTS:
+            across, down = (float(side) for side in aspect.split("/"))
+            given = {"--piece-ratio": f"{across / down:.4f}", "--piece-aspect": aspect}
+            capped = phone.px(phone.value(".stage-scene", "max-width"), ".stage-scene", narrow, given)
+            budget = phone.px(phone.var("--stage-h", ".stage-scene"), ".stage-scene", narrow, given)
+            with self.subTest(phone=aspect):
+                self.assertGreater(min(narrow, capped), 0, "the scene has no width on a phone")
+                self.assertLessEqual(min(narrow, capped) / (across / down), budget + 1,
+                                     "a piece on a phone is taller than the first screen leaves it")
+        # Second: the heading the scene is measured against is the real one. The sheet can only guess
+        # at it (one line at the widest type scale), and a title that wraps has to be paid for by the
+        # scene rather than by the feed's peek, so the stage measures it onto --stage-head itself.
+        stage_js = self.source[mi.STAGE_SCRIPT]
+        self.assertIn("setProperty('--stage-head'", stage_js, "nothing measures the heading")
+        self.assertIn("ui.head.offsetHeight", stage_js, "the heading is measured through a transform")
+        self.assertIn("observe(ui.head)", stage_js, "a heading that changes shape is never measured again")
+        self.assertIn("id='stage-head'", self.source[mi.STAGE_INCLUDE], "the heading cannot be found")
 
     def test_every_page_but_the_two_lists_ends_in_the_feed(self):
         # The feed is the one index of every world, written once in the shell: every page carries
