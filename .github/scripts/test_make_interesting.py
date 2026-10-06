@@ -4027,6 +4027,31 @@ class BuildPipelineTest(unittest.TestCase):
         self.assertEqual(len(ops), 1)
 
 
+def ray_crosses_chip(star, chip):
+    """Whether `star`'s ray passes across `chip`'s pill on its way out from the logo.
+
+    The ray is the line from the logo's heart to the middle of its own chip's left edge, which is
+    what _sass/_nav.scss draws from the --mx, --my, --len and --a js/site.js writes; nav_harness.mjs
+    reports both ends and every chip's box. A segment against a rectangle and nothing more: the
+    stretch of the ray inside the chip's left-and-right edges, narrowed to the stretch inside its
+    top-and-bottom ones, is not empty. Touching is not crossing, so a ray that only grazes a corner
+    -- or that ends on an edge, as every ray does on its own chip -- does not count.
+    """
+    x0, y0 = star["heartX"], star["heartY"]
+    x1, y1 = star["x"], star["y"] + star["height"] / 2
+    enter, leave = 0.0, 1.0
+    for start, delta, low, high in ((x0, x1 - x0, chip["x"], chip["x"] + chip["width"]),
+                                    (y0, y1 - y0, chip["y"], chip["y"] + chip["height"])):
+        if not delta:
+            if not low <= start <= high:
+                return False  # parallel to this pair of edges, and outside them
+            continue
+        first, second = (low - start) / delta, (high - start) / delta
+        enter = max(enter, min(first, second))
+        leave = min(leave, max(first, second))
+    return enter < leave
+
+
 class NavTest(unittest.TestCase):
     """The main nav: the sparkles logo, and the constellation it opens (issue #54).
 
@@ -4599,6 +4624,52 @@ class NavTest(unittest.TestCase):
                         self.assertTrue(abs(one["y"] - other["y"]) >= 44
                                         or abs(one["x"] - other["x"]) >= 150,
                                         f"{one['label']} and {other['label']} overlap")
+
+    def test_no_ray_is_ever_drawn_over_an_option(self):
+        # Issue #72: "the lines of the main nav constellation should never appear over the options".
+        # Two halves, because neither on its own would catch it. The geometry says the rule is
+        # needed at all: on every shape of screen there are rays that run clear across other
+        # options' chips -- the far column's rays over the near column's chips where there are two
+        # columns, and a lower star's ray over the chips above it where there is one -- and some of
+        # those rays belong to an option drawn after the chip they cross, which is the case equal
+        # stacking paints the wrong way round. The stylesheet says the rule is kept: every ray is in
+        # a layer strictly below every chip, so a ray crossing a chip passes behind its pill.
+        for shape, seen in self.seen()["whereTheStarsLand"].items():
+            stars = seen["stars"]
+            crossed = [(one, other) for one in stars for other in stars
+                       if one["order"] != other["order"] and ray_crosses_chip(one, other)]
+            with self.subTest(shape=shape):
+                self.assertTrue(crossed, "no ray crosses a chip here, so the layers prove nothing")
+                self.assertTrue([pair for pair in crossed if pair[0]["order"] > pair[1]["order"]],
+                                "no ray reaches an option drawn after the chip it crosses")
+        # The layers, read off the sheet a browser is served: the veil, then every ray, then every
+        # chip, then the logo the rays leave from.
+        sheet = Stylesheet(self.site["css/site.css"], 1440, 900)
+        layers = {}
+        for part, selector in [("veil", ".sparknav-veil"),
+                               ("ray", "html[data-nav=live] .sparknav-ray"),
+                               ("chip", "html[data-nav=live] .sparknav-node"),
+                               ("logo", ".sparknav-logo")]:
+            found = sheet.value(selector, "z-index")
+            self.assertIsNotNone(found, f"{selector} declares no layer of its own")
+            layers[part] = int(found)
+        self.assertLess(layers["veil"], layers["ray"], "a ray is above the lightbox's veil")
+        self.assertLess(layers["ray"], layers["chip"], "and below every chip, whatever the order")
+        self.assertLess(layers["chip"], layers["logo"], "and the whole scatter is below the logo")
+        # Which only holds while an option is not a stacking context of its own: one that was would
+        # group its own ray with its own chip and carry the pair up over an earlier option again.
+        # The branch animates the chip and the ray, each already in a layer, and never the option.
+        grouping = ["z-index", "opacity", "transform", "filter", "backdrop-filter", "isolation",
+                    "mix-blend-mode", "will-change", "contain", "perspective", "animation"]
+        for selector, declarations in sheet.rules:
+            # The option itself, however it was reached: the last compound of the selector, which is
+            # whatever follows the final descendant, child or sibling combinator in it.
+            if not re.search(r"\.sparknav-option(?![\w-])", re.split(r"[\s>+~]+", selector)[-1]):
+                continue
+            for declaration in declarations.split(";"):
+                name = declaration.partition(":")[0].strip()
+                with self.subTest(rule=selector, declaration=name):
+                    self.assertNotIn(name, grouping, "this makes a stacking context of the option")
 
     def test_a_viewport_too_short_for_a_constellation_gets_the_cascade(self):
         # The one layout that can always fit, because it scrolls: an option below the fold of a
