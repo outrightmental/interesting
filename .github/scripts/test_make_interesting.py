@@ -438,6 +438,62 @@ class ExtractAnswerTest(unittest.TestCase):
         with self.assertRaisesRegex(mi.ModelError, "output limit"):
             mi.extract_answer(parsed, "m")
 
+    def continued(self, *pieces):
+        """The events of an answer the model wrote across one turn per piece."""
+        lines = []
+        for turn, piece in enumerate(pieces):
+            lines.append(event("assistant.turn_start", turnId=str(turn)))
+            lines.append(event("assistant.message", content=piece))
+        return events(*lines)
+
+    def test_an_answer_carried_on_past_the_output_limit_is_put_back_together(self):
+        # What the failing run threw away (issue #77): the answer did not fit in one turn, the CLI
+        # carried it on in a second, and both pieces are there to be joined. No separator: a
+        # continuation resumes exactly where the model stopped, which can be mid-token.
+        whole = '{"summary": "a long answer", "files": [{"path": "a.html", "content": "<p>x</p>"}]}'
+        for cut in range(1, len(whole)):
+            with self.subTest(cut=cut), mock.patch("builtins.print") as printed:
+                parsed = self.continued(whole[:cut], whole[cut:])
+                self.assertEqual(mi.extract_answer(parsed, "m"), whole)
+                self.assertIn("m ran past its output limit", printed.call_args.args[0])
+        self.assertEqual(mi.parse_response(whole)["summary"], "a long answer")
+
+    def test_a_model_that_started_the_answer_over_keeps_its_last_piece(self):
+        # The other way a model can answer across turns: not carrying the cut-off answer on but
+        # writing a fresh one. Joining those two would be nonsense, so the whole piece wins.
+        parsed = self.continued('{"summary": "cut off half way th', '{"summary": "all over again"}')
+        with mock.patch("builtins.print"):
+            self.assertEqual(mi.extract_answer(parsed, "m"), '{"summary": "all over again"}')
+
+    def test_pieces_that_do_not_make_an_answer_either_way_are_still_refused(self):
+        # The backstop is unchanged: an answer that cannot be put back together is the model's
+        # failure, and the run goes to another model.
+        for pieces in [('{"summary": "cut off half way th', 'rough, and cut off aga'),
+                       ("prose, not a plan", "more prose")]:
+            with self.subTest(pieces=pieces), self.assertRaisesRegex(mi.ModelError, "output limit"):
+                mi.extract_answer(self.continued(*pieces), "m")
+
+    def test_a_single_turn_still_reports_only_its_last_message(self):
+        # The joining is for turns, not for messages: inside one turn the last message is the
+        # answer, as it always was, and an earlier draft of it is not glued onto the front.
+        parsed = events(event("assistant.turn_start", turnId="0"),
+                        event("assistant.message", content='{"summary": "first thought"}'),
+                        event("assistant.message", content='{"summary": "second thought"}'))
+        self.assertEqual(mi.extract_answer(parsed, "m"), '{"summary": "second thought"}')
+
+    def test_across_turns_each_turn_contributes_only_the_message_it_ended_on(self):
+        # The same rule holds across turns: a turn that drafted before writing the piece it ended
+        # on contributes only that last piece, so a stray draft is not joined into the answer.
+        whole = '{"summary": "a long answer", "files": [{"path": "a.html", "content": "<p>x</p>"}]}'
+        cut = len(whole) // 2
+        parsed = events(event("assistant.turn_start", turnId="0"),
+                        event("assistant.message", content="let me think about this first"),
+                        event("assistant.message", content=whole[:cut]),
+                        event("assistant.turn_start", turnId="1"),
+                        event("assistant.message", content=whole[cut:]))
+        with mock.patch("builtins.print"):
+            self.assertEqual(mi.extract_answer(parsed, "m"), whole)
+
 
 class ValidatePlanTest(SiteDirTestCase):
     def test_accepts_writes_and_deletes(self):
@@ -1033,6 +1089,85 @@ class ReasoningEffortTest(unittest.TestCase):
         with self.assertRaises(mi.ModelUnavailable):
             mi.call_model("model-a", "p", effort="xhigh")
         self.assertEqual(len(fake.calls()), 1)
+
+
+class MaxOutputTokensTest(unittest.TestCase):
+    """Take big gulps: every call also asks for as much room to write as the CLI can be told to
+    allow, and says how much that is in the prompt, so an answer is sized to fit in one turn
+    instead of being cut off mid-run (issue #77)."""
+
+    def budget(self, value=""):
+        with mock.patch.dict(os.environ, {"MAX_OUTPUT_TOKENS": value}), mock.patch("builtins.print") as printed:
+            return mi.max_output_tokens(), " ".join(str(call.args[0]) for call in printed.call_args_list)
+
+    def test_the_default_is_a_whole_turn_of_the_heaviest_models(self):
+        # 64k output tokens: what the flagships in the pool grant, and far more than the answer
+        # that was lost needed. Comfortably more than one file's worth, so the budget is about how
+        # many files a run rewrites rather than about whether any one of them fits.
+        self.assertEqual(mi.DEFAULT_MAX_OUTPUT_TOKENS, 64_000)
+        self.assertGreater(mi.DEFAULT_MAX_OUTPUT_TOKENS * mi.BYTES_PER_TOKEN, 4 * mi.MAX_FILE_BYTES)
+        self.assertEqual(self.budget(), (64_000, ""))
+        self.assertEqual(self.budget("  "), (64_000, ""))
+
+    def test_the_variable_overrides_it(self):
+        self.assertEqual(self.budget("200000"), (200_000, ""))
+        self.assertEqual(self.budget(" 96000 "), (96_000, ""))
+        self.assertEqual(self.budget("none"), (0, ""))
+        self.assertEqual(self.budget("0"), (0, ""))
+
+    def test_a_value_that_is_not_a_number_falls_back_with_a_warning(self):
+        for value in ["as much as possible", "64k", "-1", "64_000", "1.5e5"]:
+            with self.subTest(value=value):
+                budget, log = self.budget(value)
+                self.assertEqual(budget, 64_000)
+                self.assertIn("is not a whole number of tokens or \"none\"; using 64000", log)
+
+    def test_the_budget_reaches_the_cli_through_the_variable_it_reads(self):
+        # Copilot CLI 1.0.91 has no flag for a maximum output, so the budget travels in the one
+        # environment variable it does read for one, and never as an invented flag: a flag the CLI
+        # does not know would fail every call outright.
+        fake = FakeCopilot(self, "say('hello')")
+        with mock.patch.dict(os.environ, {"MAX_OUTPUT_TOKENS": ""}):
+            os.environ.pop("COPILOT_PROVIDER_MAX_OUTPUT_TOKENS", None)  # nothing is inherited
+            self.assertEqual(mi.call_model("model-a", "p"), "hello")
+            self.assertEqual(mi.call_model("model-a", "p", budget=123_000), "hello")
+            self.assertEqual(mi.call_model("model-a", "p", budget=0), "hello")
+        by_default, by_hand, none = fake.calls()
+        self.assertEqual(by_default["env"]["COPILOT_PROVIDER_MAX_OUTPUT_TOKENS"], "64000")
+        self.assertEqual(by_hand["env"]["COPILOT_PROVIDER_MAX_OUTPUT_TOKENS"], "123000")
+        self.assertIsNone(none["env"]["COPILOT_PROVIDER_MAX_OUTPUT_TOKENS"])
+        for call in fake.calls():
+            self.assertFalse([arg for arg in call["args"] if "token" in arg],
+                             "no output-budget flag is passed to the pinned CLI, which has none")
+
+    def test_the_retry_without_the_effort_flag_asks_for_the_same_room(self):
+        refusal = "Error: reasoning effort xhigh is not available for this model"
+        fake = FakeCopilot(self, f"""
+            if '--reasoning-effort' in ARGS:
+                sys.stderr.write({refusal!r}); sys.exit(1)
+            say('hello')""")
+        with mock.patch("builtins.print"):
+            self.assertEqual(mi.call_model("model-a", "p", effort="xhigh", budget=99_000), "hello")
+        first, second = fake.calls()
+        self.assertEqual(first["env"]["COPILOT_PROVIDER_MAX_OUTPUT_TOKENS"], "99000")
+        self.assertEqual(second["env"]["COPILOT_PROVIDER_MAX_OUTPUT_TOKENS"], "99000")
+
+    def test_the_prompt_names_the_budget_so_the_model_can_size_the_answer(self):
+        prompt = mi.build_prompt([("index.html", "<h1>x</h1>")], budget=64_000)
+        self.assertIn("keep the whole answer inside your output limit, for which this run asks up "
+                      "to 64,000 tokens -- about 256 KB of JSON, all of your files together, or "
+                      "your own limit if that is lower.", prompt)
+        bigger = mi.build_prompt([("index.html", "<h1>x</h1>")], budget=200_000)
+        self.assertIn("up to 200,000 tokens -- about 800 KB of JSON", bigger)
+        # Asked for nothing, the prompt claims nothing: it still says to stay inside the limit.
+        unnamed = mi.build_prompt([("index.html", "<h1>x</h1>")], budget=0)
+        self.assertIn("keep the whole answer inside your output limit.", unnamed)
+        self.assertNotIn("asks up to", unnamed)
+
+    def test_the_workflow_exposes_the_override(self):
+        workflow = (mi.REPO_ROOT / ".github" / "workflows" / "make-interesting.yml").read_text()
+        self.assertIn("MAX_OUTPUT_TOKENS: ${{ vars.MAX_OUTPUT_TOKENS }}", workflow)
+        self.assertIn("REASONING_EFFORT: ${{ vars.REASONING_EFFORT }}", workflow)
 
 
 class HeaviestModelsTest(unittest.TestCase):
@@ -5946,9 +6081,12 @@ class FakeCopilot:
             "PROMPT = sys.stdin.read()\n"
             "ARGS = sys.argv[1:]\n"
             "MODEL = ARGS[ARGS.index('--model') + 1]\n"
+            # Only the variables the silo sets itself: nothing that could hold a token is logged.
+            "WATCHED = ('NO_COLOR', 'COPILOT_AUTO_UPDATE', 'COPILOT_PROVIDER_MAX_OUTPUT_TOKENS')\n"
             "with open(LOG, 'a') as fh:\n"
             "    fh.write(json.dumps({'args': ARGS, 'prompt': PROMPT, 'cwd': os.getcwd(),\n"
-            "                         'listing': os.listdir('.')}) + '\\n')\n"
+            "                         'listing': os.listdir('.'),\n"
+            "                         'env': {k: os.environ.get(k) for k in WATCHED}}) + '\\n')\n"
             "def say(text):\n"
             "    print(json.dumps({'type': 'assistant.message', 'data': {'content': text}}))\n"
             + textwrap.dedent(body)
@@ -6144,6 +6282,32 @@ class MainTest(SiteDirTestCase):
         self.assertIn(model, mi.MODELS)
         self.assertEqual(read_outputs(output), {"model": model, "summary": "Added a clock.",
                                                 "kind": "interesting", "headline": "Make the website more interesting"})
+
+    def test_the_whole_run_asks_for_one_output_budget(self):
+        # The prompt's number and the CLI's number are the same number, resolved once for the run:
+        # a prompt promising more room than the call asks for would invite exactly the cut-off
+        # answer this is meant to prevent (issue #77).
+        fake = FakeCopilot(self, f"say({GOOD_PLAN!r})")
+        self.run_main({"MAX_OUTPUT_TOKENS": "111000"})
+        (call,) = fake.calls()
+        self.assertEqual(call["env"]["COPILOT_PROVIDER_MAX_OUTPUT_TOKENS"], "111000")
+        self.assertIn("111,000 tokens", call["prompt"])
+
+    def test_a_run_recovers_an_answer_that_ran_past_the_output_limit(self):
+        # The answer the failing run lost: cut off mid-JSON and carried on in a second turn. It is
+        # put back together and applied, by the one model asked, rather than thrown away.
+        half = len(GOOD_PLAN) // 2
+        fake = FakeCopilot(self, f"""
+            print(json.dumps({{'type': 'assistant.turn_start', 'data': {{'turnId': '0'}}}}))
+            say({GOOD_PLAN[:half]!r})
+            print(json.dumps({{'type': 'assistant.turn_start', 'data': {{'turnId': '1'}}}}))
+            say({GOOD_PLAN[half:]!r})
+        """)
+        output = self.run_main()
+        self.assertEqual(len(fake.calls()), 1, "the recovered answer costs no further attempt")
+        self.assertEqual((self.site / "clock.html").read_text(), CLOCK_PAGE)
+        self.assertEqual(read_outputs(output)["summary"], "Added a clock.")
+        self.assertTrue([line for line in self.printed if "ran past its output limit" in line])
 
     def test_the_run_number_picks_the_kind_and_the_kind_names_the_commit(self):
         fake = FakeCopilot(self, f"say({GOOD_PLAN!r})")

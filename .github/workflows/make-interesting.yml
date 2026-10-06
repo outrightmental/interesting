@@ -141,6 +141,11 @@ jobs:
           # Optional override of the reasoning effort every model is asked for (default xhigh, one
           # below max): none, minimal, low, medium, high, xhigh or max.
           REASONING_EFFORT: ${{ vars.REASONING_EFFORT }}
+          # Optional override of how much room to write every model is asked for, in output tokens
+          # (default 64000, about a quarter of a megabyte of JSON): a positive whole number, or
+          # "none" to leave every model at its own default. Raise it when the models in the pool
+          # grant more; an answer that runs past it is pieced back together where it can be.
+          MAX_OUTPUT_TOKENS: ${{ vars.MAX_OUTPUT_TOKENS }}
           RUN_NUMBER: ${{ github.run_number }}
           RUN_KIND: ${{ inputs.kind }}
         run: python3 .github/scripts/make_interesting.py
