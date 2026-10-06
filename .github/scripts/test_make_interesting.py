@@ -481,6 +481,19 @@ class ExtractAnswerTest(unittest.TestCase):
                         event("assistant.message", content='{"summary": "second thought"}'))
         self.assertEqual(mi.extract_answer(parsed, "m"), '{"summary": "second thought"}')
 
+    def test_across_turns_each_turn_contributes_only_the_message_it_ended_on(self):
+        # The same rule holds across turns: a turn that drafted before writing the piece it ended
+        # on contributes only that last piece, so a stray draft is not joined into the answer.
+        whole = '{"summary": "a long answer", "files": [{"path": "a.html", "content": "<p>x</p>"}]}'
+        cut = len(whole) // 2
+        parsed = events(event("assistant.turn_start", turnId="0"),
+                        event("assistant.message", content="let me think about this first"),
+                        event("assistant.message", content=whole[:cut]),
+                        event("assistant.turn_start", turnId="1"),
+                        event("assistant.message", content=whole[cut:]))
+        with mock.patch("builtins.print"):
+            self.assertEqual(mi.extract_answer(parsed, "m"), whole)
+
 
 class ValidatePlanTest(SiteDirTestCase):
     def test_accepts_writes_and_deletes(self):

@@ -2496,9 +2496,29 @@ def extract_answer(events, model):
         raise ModelError("empty response")
     if sum(e.get("type") == "assistant.turn_start" for e in events) > 1:
         # More than one turn means the answer did not fit: the CLI carries a cut-off answer on in
-        # a new turn, and each turn reports its own piece.
-        return rejoin_answer(answers, model)
+        # a new turn. The piece of each turn is the message it ended on, as a lone turn's answer is
+        # its last message (below) -- so an earlier draft inside a turn is not glued onto the front.
+        return rejoin_answer(last_message_per_turn(events), model)
     return answers[-1]
+
+
+def last_message_per_turn(events):
+    """The non-empty assistant.message each turn ended on, in order: the pieces of a cut-off
+    answer. Joining these rather than every message keeps the rejoin per turn, not per message."""
+    pieces, current = [], None
+    for event in events:
+        kind = event.get("type")
+        if kind == "assistant.turn_start":
+            if current is not None:
+                pieces.append(current)
+            current = None
+        elif kind == "assistant.message":
+            content = event_data(event).get("content")
+            if isinstance(content, str) and content.strip():
+                current = content
+    if current is not None:
+        pieces.append(current)
+    return pieces
 
 
 def rejoin_answer(pieces, model):
