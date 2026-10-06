@@ -3646,6 +3646,23 @@ SLIDER_PIECE = """    const n = env.int(2, 4);
     };"""
 
 
+# A piece whose first knob is a hold, with a plain toggle after it so filling the hold does not end the
+# piece and the ceremony never writes over what the piece said. Its apply() counts the holds onto the
+# status line -- the one thing a piece can say that the harness reads back -- so a release that set
+# the knob a second time would be written there for the law to find (issue #74).
+HOLD_PIECE = """    let holds = 0;
+    return {
+      title: 'one long hold',
+      brief: 'Hold it until the bar fills, then turn the other thing.',
+      steps: [
+        { id: 'seal', ask: 'hold to seal', kind: 'hold', ms: 900, label: 'hold to seal' },
+        { id: 'after', ask: 'and then this', kind: 'toggle' }
+      ],
+      start(ctx) { ctx.g.fillRect(0, 0, ctx.w, ctx.h); },
+      apply(id, value, ctx) { if (id === 'seal') ctx.status('held ' + (holds += 1) + ' time(s)'); }
+    };"""
+
+
 def stage_site(toy=None, other=None):
     """A site the stage harness can play: the one list of worlds, js/stage.js as committed, and a
     module for each world. The stage itself is never a fixture -- the point is to run the real one."""
@@ -3721,6 +3738,7 @@ class CompletionAxiomTest(SiteDirTestCase):
                      mi.STAGE_HARNESS_REL,
                      "a slider a visitor leaves where it stands counts as set",
                      "a knob nobody set is named rather than silently holding the piece shut",
+                     "a hold knob is set the moment its bar fills rather than when the visitor lets go",
                      "leaves nothing of itself on the stage or still running"]:
             with self.subTest(rule=rule):
                 self.assertIn(rule, rules)
@@ -3863,9 +3881,10 @@ class StageTest(unittest.TestCase):
     slider the stage only marked set when its value changed, so a visitor content with where it
     already stood set every other knob, watched the finale run, and waited on a piece that had no
     way left to finish. These tests run the real js/stage.js, through the elements stage.njk writes
-    and a clock they step by hand, and hold it to four things: a world played twice over plays the
+    and a clock they step by hand, and hold it to five things: a world played twice over plays the
     second time like the first, a slider used where it stands counts as used, a knob nobody set is
-    named rather than left a mystery, and a piece that is over leaves nothing of itself behind.
+    named rather than left a mystery, a hold knob is set the moment its bar fills rather than when
+    the visitor lets go, and a piece that is over leaves nothing of itself behind.
     """
 
     @classmethod
@@ -3921,6 +3940,39 @@ class StageTest(unittest.TestCase):
         self.assertTrue(result["wanted"], "the stage said nothing about the knob it was waiting on")
         self.assertIn("the pace", result["wanted"])
         self.assertNotIn("done", result["modes"])
+
+    def test_a_hold_is_set_when_its_bar_fills_and_not_when_the_visitor_lets_go(self):
+        # Issue #74: the holding is the answer, so a visitor who presses the knob, watches the bar
+        # fill and keeps on holding has set it -- the piece carries on under their finger -- and the
+        # bar stays full for as long as they hold it. Here the hold is the piece's last knob, so
+        # filling it finishes the piece: the whole flow runs off the fill and not off the release.
+        result = self.scenario("holdFilled")
+        self.assertTrue(result["playable"], "no world the harness tried had a hold on it")
+        self.assertTrue(result["held"], "the check is worth nothing without a hold")
+        self.assertGreater(result["waited"], 0, "the knob was set before the bar had any filling to do")
+        self.assertTrue(result["filled"]["set"], "the bar filled and the stage waited for the release")
+        for when in ["filled", "kept", "after"]:
+            with self.subTest(when=when):
+                self.assertTrue(result[when]["set"], "the knob stopped being set")
+                self.assertEqual(result[when]["pct"], "100%", "the bar did not stay full")
+                self.assertNotIn("let go early", result[when]["status"])
+                self.assertEqual(result[when]["completes"], 1, "the piece finished other than once")
+
+    def test_letting_go_of_a_hold_already_set_does_nothing_at_all(self):
+        # The other half: the release. HOLD_PIECE's apply() writes how many times the knob has been
+        # applied onto the status line, and its second knob keeps the piece from finishing, so what
+        # the stage did is readable right through the hold and out the other side. Letting go of a
+        # knob that is already set must not apply it again, must not say "let go early", and must
+        # not empty the bar it filled.
+        result = self.scenario("holdFilled", toy=HOLD_PIECE)
+        self.assertEqual(result["held"], "seal")
+        self.assertTrue(result["filled"]["set"], "the bar filled and the stage waited for the release")
+        for when in ["filled", "kept", "after"]:
+            with self.subTest(when=when):
+                self.assertEqual(result[when]["status"], "held 1 time(s)")
+                self.assertEqual(result[when]["pct"], "100%")
+                self.assertTrue(result[when]["set"])
+                self.assertEqual(result[when]["completes"], 0, "a piece with a knob nobody set finished")
 
     def test_a_piece_leaves_nothing_on_the_stage_or_running_behind_it(self):
         # "Components should completely reset between instantiations." A piece part-played, with a
@@ -4117,6 +4169,31 @@ class BuildPipelineTest(unittest.TestCase):
         with mock.patch("builtins.print"):
             ops = mi.validate_plan({"files": [{"path": "css/site.scss", "content": "body { color: red; }\n"}]})
         self.assertEqual(len(ops), 1)
+
+
+def ray_crosses_chip(star, chip):
+    """Whether `star`'s ray passes across `chip`'s pill on its way out from the logo.
+
+    The ray is the line from the logo's heart to the middle of its own chip's left edge, which is
+    what _sass/_nav.scss draws from the --mx, --my, --len and --a js/site.js writes; nav_harness.mjs
+    reports both ends and every chip's box. A segment against a rectangle and nothing more: the
+    stretch of the ray inside the chip's left-and-right edges, narrowed to the stretch inside its
+    top-and-bottom ones, is not empty. Touching is not crossing, so a ray that only grazes a corner
+    -- or that ends on an edge, as every ray does on its own chip -- does not count.
+    """
+    x0, y0 = star["heartX"], star["heartY"]
+    x1, y1 = star["x"], star["y"] + star["height"] / 2
+    enter, leave = 0.0, 1.0
+    for start, delta, low, high in ((x0, x1 - x0, chip["x"], chip["x"] + chip["width"]),
+                                    (y0, y1 - y0, chip["y"], chip["y"] + chip["height"])):
+        if not delta:
+            if not low <= start <= high:
+                return False  # parallel to this pair of edges, and outside them
+            continue
+        first, second = (low - start) / delta, (high - start) / delta
+        enter = max(enter, min(first, second))
+        leave = min(leave, max(first, second))
+    return enter < leave
 
 
 class NavTest(unittest.TestCase):
@@ -4544,6 +4621,52 @@ class NavTest(unittest.TestCase):
                                         or abs(one["x"] - other["x"]) >= 150,
                                         f"{one['label']} and {other['label']} overlap")
 
+    def test_no_ray_is_ever_drawn_over_an_option(self):
+        # Issue #72: "the lines of the main nav constellation should never appear over the options".
+        # Two halves, because neither on its own would catch it. The geometry says the rule is
+        # needed at all: on every shape of screen there are rays that run clear across other
+        # options' chips -- the far column's rays over the near column's chips where there are two
+        # columns, and a lower star's ray over the chips above it where there is one -- and some of
+        # those rays belong to an option drawn after the chip they cross, which is the case equal
+        # stacking paints the wrong way round. The stylesheet says the rule is kept: every ray is in
+        # a layer strictly below every chip, so a ray crossing a chip passes behind its pill.
+        for shape, seen in self.seen()["whereTheStarsLand"].items():
+            stars = seen["stars"]
+            crossed = [(one, other) for one in stars for other in stars
+                       if one["order"] != other["order"] and ray_crosses_chip(one, other)]
+            with self.subTest(shape=shape):
+                self.assertTrue(crossed, "no ray crosses a chip here, so the layers prove nothing")
+                self.assertTrue([pair for pair in crossed if pair[0]["order"] > pair[1]["order"]],
+                                "no ray reaches an option drawn after the chip it crosses")
+        # The layers, read off the sheet a browser is served: the veil, then every ray, then every
+        # chip, then the logo the rays leave from.
+        sheet = Stylesheet(self.site["css/site.css"], 1440, 900)
+        layers = {}
+        for part, selector in [("veil", ".sparknav-veil"),
+                               ("ray", "html[data-nav=live] .sparknav-ray"),
+                               ("chip", "html[data-nav=live] .sparknav-node"),
+                               ("logo", ".sparknav-logo")]:
+            found = sheet.value(selector, "z-index")
+            self.assertIsNotNone(found, f"{selector} declares no layer of its own")
+            layers[part] = int(found)
+        self.assertLess(layers["veil"], layers["ray"], "a ray is above the lightbox's veil")
+        self.assertLess(layers["ray"], layers["chip"], "and below every chip, whatever the order")
+        self.assertLess(layers["chip"], layers["logo"], "and the whole scatter is below the logo")
+        # Which only holds while an option is not a stacking context of its own: one that was would
+        # group its own ray with its own chip and carry the pair up over an earlier option again.
+        # The branch animates the chip and the ray, each already in a layer, and never the option.
+        grouping = ["z-index", "opacity", "transform", "filter", "backdrop-filter", "isolation",
+                    "mix-blend-mode", "will-change", "contain", "perspective", "animation"]
+        for selector, declarations in sheet.rules:
+            # The option itself, however it was reached: the last compound of the selector, which is
+            # whatever follows the final descendant, child or sibling combinator in it.
+            if not re.search(r"\.sparknav-option(?![\w-])", re.split(r"[\s>+~]+", selector)[-1]):
+                continue
+            for declaration in declarations.split(";"):
+                name = declaration.partition(":")[0].strip()
+                with self.subTest(rule=selector, declaration=name):
+                    self.assertNotIn(name, grouping, "this makes a stacking context of the option")
+
     def test_a_viewport_too_short_for_a_constellation_gets_the_cascade(self):
         # The one layout that can always fit, because it scrolls: an option below the fold of a
         # fixed constellation would be one nothing could reach (WCAG 1.4.10 Reflow).
@@ -4621,7 +4744,8 @@ class RealSiteTest(unittest.TestCase):
         # run through a stub browser (issue #60). A world is dealt, another is played, the first is
         # dealt again, and every round has to finish and open the next; a slider a visitor leaves
         # where it stands has to count as used; a knob nobody set has to be named rather than
-        # silently holding the piece shut; and a piece that is over has to leave nothing running.
+        # silently holding the piece shut; a hold has to be set when its bar fills rather than when
+        # the visitor lets go (issue #74); and a piece that is over has to leave nothing running.
         needs_the_stage_harness(self)
         worlds = mi.listed_worlds(self.site)
         self.assertGreaterEqual(len(worlds), 10, "the check is worth nothing on a few worlds")
@@ -4642,6 +4766,17 @@ class RealSiteTest(unittest.TestCase):
         left = report["sliderUntouched"]["result"]
         self.assertFalse(left["finished"], "a piece finished with a knob nobody set")
         self.assertTrue(left["wanted"], "the stage said nothing about the knob it was waiting on")
+        filled = report["holdFilled"]["result"]
+        self.assertTrue(filled["held"], "no world the stage opened had a hold knob to check")
+        self.assertTrue(filled["filled"]["set"],
+                        f"{filled['world']}: a hold's bar filled and the stage waited for the release")
+        for when in ["filled", "kept", "after"]:
+            with self.subTest(when=when):
+                self.assertTrue(filled[when]["set"], f"{filled['world']}: the hold stopped being set")
+                self.assertEqual(filled[when]["pct"], "100%", f"{filled['world']}: the bar did not stay full")
+                self.assertNotIn("let go early", filled[when]["status"])
+        self.assertEqual(filled["after"]["completes"], filled["filled"]["completes"],
+                         f"{filled['world']}: letting go of a hold already set did something of its own")
         torn = report["teardown"]["result"]
         self.assertEqual(torn["waiting"], 0, "the stage left a timer running after the piece")
         self.assertEqual(torn["look"]["knobs"], [])

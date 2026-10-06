@@ -1,7 +1,9 @@
 __pycache__/
 
 # The build toolchain for /site. package-lock.json is committed on purpose: `npm ci` needs it.
-node_modules/
+# No trailing slash, so a `node_modules` symlink (a worktree points one at a sibling checkout) is
+# ignored too and cannot be committed by accident.
+node_modules
 # The built site. `npm run build` writes to a throwaway temp folder outside the repository, so
 # there is normally nothing to ignore here; these are the paths a local build is likely to use by
 # hand, and a built copy of the site must never be committed.
