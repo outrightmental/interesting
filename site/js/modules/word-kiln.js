@@ -6,6 +6,15 @@
    original letter; the reveal changes their order, spaces and punctuation, never their inventory.
    See js/feed.js for what a module is and js/stage.js for what a piece is. */
 
+// The card this piece was opened from, in the kiln's own terms: { word, pos }, or null for a piece
+// nobody pressed (js/stage.js hands it over as env.card.of). A card and the feature it opens as are
+// one coinage: the spark puts the word it coined on its spec as `of`, and fired()/kilnLoad() fire
+// that word rather than another, so pressing a coinage in the feed opens the kiln on it (issue #80).
+function pressed(env) {
+  const was = env.card && env.card.of;
+  return was && typeof was.word === 'string' && was.word ? was : null;
+}
+
 const HEADS = ['umb', 'thal', 'quer', 'mor', 'vell', 'glim', 'sorr', 'brack', 'fulm', 'nim', 'osk', 'twil',
   'harr', 'pell', 'dru', 'calv', 'wist', 'lorn', 'skell', 'murr'];
 const MIDS = ['er', 'ow', 'ish', 'ine', 'ast', 'ul', 'en', 'ar', 'o', 'i'];
