@@ -1,19 +1,10 @@
 /* The word kiln: put a word in the fire and a coinage comes out, with a definition and a citation
    that never existed. As a card it is the kiln's mouth and one coinage (paint, spark); as a piece
-   it is a word off the shelf, fired at a heat you set and left to cool, or a kiln-load of new
-   words pulled out of the fire one tap at a time. See js/feed.js for what a module is and
-   js/stage.js for what a piece is.
-
-   A card and the feature it opens as are one coinage: the spark puts the word it coined on its
-   spec as `of`, and the piece fires that word rather than another, so pressing a coinage in the
-   feed opens the kiln on it. */
-
-// The card this piece was opened from, in the kiln's own terms: { word, pos }, or null for a piece
-// nobody pressed (js/stage.js hands it over as env.card.of).
-function pressed(env) {
-  const was = env.card && env.card.of;
-  return was && typeof was.word === 'string' && was.word ? was : null;
-}
+   it is a word off the shelf, fired at a heat you set and left to cool, a kiln-load of new
+   words pulled out of the fire one tap at a time, or a real phrase cast into its anagram.
+   Letter castings share a seeded plan between their card and piece. Each moving tile keeps its
+   original letter; the reveal changes their order, spaces and punctuation, never their inventory.
+   See js/feed.js for what a module is and js/stage.js for what a piece is. */
 
 const HEADS = ['umb', 'thal', 'quer', 'mor', 'vell', 'glim', 'sorr', 'brack', 'fulm', 'nim', 'osk', 'twil',
   'harr', 'pell', 'dru', 'calv', 'wist', 'lorn', 'skell', 'murr'];
@@ -597,9 +588,267 @@ function wordWidth(g, word, wordPx) {
   return width;
 }
 
+/* ---- the same letters, cast into another phrase ------------------------------------------- */
+
+const CASTINGS = [
+  { from: 'the eyes', to: 'they see', other: ['eyes open', 'see the sky'] },
+  { from: 'schoolmaster', to: 'the classroom', other: ['school matters', 'classroom lesson'] },
+  { from: 'moon starer', to: 'astronomer', other: ['star watcher', 'a moon reader'] },
+  { from: 'eleven plus two', to: 'twelve plus one', other: ['twenty plus one', 'two times seven'] },
+  { from: 'the morse code', to: 'here come dots', other: ['dots and dashes', 'a secret message'] },
+  { from: 'a decimal point', to: "i'm a dot in place", other: ['one tiny number', 'a point in space'] },
+  { from: 'the countryside', to: 'no city dust here', other: ['quiet country air', 'a house in the trees'] },
+  { from: 'conversation', to: 'voices rant on', other: ['one voice answers', 'a chorus of voices'] },
+  { from: 'rail safety', to: 'fairy tales', other: ['safer railways', 'a safe railway'] },
+  { from: 'a gentleman', to: 'elegant man', other: ['a gentle manner', 'the patient man'] },
+  { from: 'dormitory', to: 'dirty room', other: ['a tidy bedroom', 'room to dream'] },
+  { from: 'debit card', to: 'bad credit', other: ['credit due', 'card reader'] }
+];
+const CASTING_VIEW = { density: 1, scale: 1, turn: 0 };
+
+function dealsCasting(env) {
+  return (env.seed >>> 0) % 4 === 1;
+}
+
+function lettersOf(text) {
+  return text.replace(/[^a-z]/g, '').split('');
+}
+
+function castingPlan(env) {
+  const pair = env.pick(CASTINGS);
+  const source = lettersOf(pair.from);
+  const target = lettersOf(pair.to);
+  const unused = source.slice();
+  if (source.length !== target.length) throw new Error('Unequal letter counts in casting: ' + pair.from);
+  const destinations = target.map((letter) => {
+    const at = unused.indexOf(letter);
+    if (at < 0) throw new Error('Unmatched letter in casting: ' + pair.from + ' / ' + pair.to);
+    unused[at] = null;
+    return at;
+  });
+  const guesses = [pair.to].concat(pair.other);
+  for (let i = guesses.length - 1; i > 0; i--) {
+    const j = env.int(0, i);
+    [guesses[i], guesses[j]] = [guesses[j], guesses[i]];
+  }
+  return {
+    from: pair.from,
+    to: pair.to,
+    heat: env.pick([25, 50, 75]),
+    options: guesses.map((text) => ({ label: text, value: text })),
+    letters: source.map((letter, i) => ({
+      letter, target: destinations.indexOf(i),
+      angle: i / source.length * Math.PI * 2 + (env.rnd() - 0.5) * 0.3,
+      radius: 0.65 + env.rnd() * 0.4,
+      turns: (i % 2 ? -1 : 1) * (1 + env.rnd() * 0.65)
+    })),
+    embers: Array.from({ length: 24 }, () => ({ x: env.rnd(), y: env.rnd(), size: 0.5 + env.rnd() }))
+  };
+}
+
+function castingTitle(plan) {
+  return '"' + plan.from + '", cast another way';
+}
+
+function castingEase(value) {
+  const t = Math.max(0, Math.min(1, value));
+  return t * t * (3 - 2 * t);
+}
+
+function rackUnits(text) {
+  return text.split('').reduce((sum, ch) => sum + (/[a-z]/.test(ch) ? 1.12 : ch === ' ' ? 0.5 : 0.38), 0);
+}
+
+function letterRack(text, w, y, size) {
+  let x = (w - rackUnits(text) * size) / 2;
+  const letters = [];
+  const punctuation = [];
+  for (const ch of text) {
+    const width = (/[a-z]/.test(ch) ? 1.12 : ch === ' ' ? 0.5 : 0.38) * size;
+    const point = { x: x + width / 2, y, text: ch };
+    if (/[a-z]/.test(ch)) letters.push(point);
+    else if (ch !== ' ') punctuation.push(point);
+    x += width;
+  }
+  return { letters, punctuation };
+}
+
+function castingScene(g, w, h, c, plan, s, variant) {
+  const k = c.colors;
+  const v = variant || CASTING_VIEW;
+  const m = Math.min(w, h);
+  const radius = m * 0.19 * v.scale;
+  const cx = w / 2;
+  const cy = h * 0.48;
+  const phase = s.poured ? s.phase : 0;
+  const cooled = castingEase((phase - 0.67) / 0.33);
+  kiln(g, w, h, c, s.heat, { cx, cy, r: radius, lit: 1 - cooled * 0.82, still: true });
+
+  for (let i = 0; i < Math.round(plan.embers.length * v.density); i++) {
+    const e = plan.embers[i % plan.embers.length];
+    const drift = c.reduced ? 0 : phase * (0.4 + s.heat * 0.6) + v.turn;
+    const x = cx + (e.x - 0.5) * radius * 2;
+    const y = cy - ((e.y + drift + i * 0.03) % 1) * radius * 1.6;
+    g.fillStyle = c.alpha(k.accent2, (0.15 + s.heat * 0.4) * (1 - cooled));
+    g.beginPath();
+    g.arc(x, y, e.size * v.scale, 0, Math.PI * 2);
+    g.fill();
+  }
+
+  const units = Math.max(rackUnits(plan.from), rackUnits(plan.to));
+  const size = Math.min(h * 0.085 * v.scale, w * 0.9 / units);
+  const before = letterRack(plan.from, w, h * 0.19, size);
+  const after = letterRack(plan.to, w, h * 0.79, size);
+  g.strokeStyle = c.alpha(k.muted, 0.65);
+  g.lineWidth = 1;
+  for (const rack of [before, after]) {
+    for (const p of rack.letters) {
+      g.strokeRect(p.x - size / 2, p.y - size * 0.6, size, size * 1.2);
+    }
+  }
+
+  font(g, Math.max(10, m * 0.035), '500');
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.fillStyle = k.fg;
+  g.fillText('before', cx, h * 0.07);
+  g.fillText(s.settled ? 'after' : 'the second phrase', cx, h * 0.67);
+
+  for (let i = 0; i < plan.letters.length; i++) {
+    const tile = plan.letters[i];
+    const from = before.letters[i];
+    const to = after.letters[tile.target];
+    const orbitR = radius * tile.radius * (0.65 + s.heat * 0.35);
+    const startAngle = tile.angle + v.turn * Math.PI * 2;
+    const endAngle = startAngle + tile.turns * Math.PI * 2;
+    let x = from.x;
+    let y = from.y;
+    let tilt = 0;
+    if (phase > 0 && phase < 0.23) {
+      const f = castingEase(phase / 0.23);
+      x += (cx + Math.cos(startAngle) * orbitR - x) * f;
+      y += (cy + Math.sin(startAngle) * orbitR * 0.68 - y) * f;
+    } else if (phase >= 0.23 && phase < 0.67) {
+      const f = (phase - 0.23) / 0.44;
+      const angle = startAngle + tile.turns * Math.PI * 2 * f;
+      x = cx + Math.cos(angle) * orbitR;
+      y = cy + Math.sin(angle) * orbitR * 0.68;
+      tilt = Math.sin(f * Math.PI * 2 + tile.angle) * 0.16;
+    } else if (phase >= 0.67) {
+      const f = castingEase((phase - 0.67) / 0.33);
+      const ox = cx + Math.cos(endAngle) * orbitR;
+      const oy = cy + Math.sin(endAngle) * orbitR * 0.68;
+      x = ox + (to.x - ox) * f;
+      y = oy + (to.y - oy) * f;
+    }
+    g.save();
+    g.translate(x, y);
+    g.rotate(tilt);
+    g.fillStyle = c.mix(k.bg2, i % 2 ? k.accent : k.accent2, 0.13);
+    g.fillRect(-size / 2, -size * 0.6, size, size * 1.2);
+    g.strokeStyle = c.mix(k.accent, k.accent2, i / Math.max(1, plan.letters.length - 1));
+    g.strokeRect(-size / 2, -size * 0.6, size, size * 1.2);
+    font(g, size * 0.78, '600');
+    g.fillStyle = k.fg;
+    g.fillText(tile.letter, 0, 0);
+    g.restore();
+  }
+  font(g, size * 0.78, '600');
+  g.fillStyle = k.fg;
+  if (!s.poured) for (const p of before.punctuation) g.fillText(p.text, p.x, p.y);
+  if (s.settled) for (const p of after.punctuation) g.fillText(p.text, p.x, p.y);
+
+  font(g, Math.max(10, m * 0.035), '500');
+  g.fillStyle = k.fg;
+  const line = s.settled ? 'same letters, another meaning'
+    : s.poured ? 'no letters added; no letters lost' : 'a second phrase is hidden in these letters';
+  wrap(g, line, w * 0.9).forEach((text, i) => g.fillText(text, cx, h * 0.92 + i * m * 0.045));
+}
+
+function castingPreview(g, w, h, env, plan) {
+  const v = env.variant;
+  castingScene(g, w, h, env, plan, {
+    heat: plan.heat / 100, poured: true, phase: 0.28 + v.turn * 0.35, settled: false
+  }, v);
+}
+
+function letterCasting(env) {
+  const plan = castingPlan(env);
+  const s = { heat: plan.heat / 100, guess: '', poured: false, phase: 0, settled: false, said: 0 };
+  function draw(c) {
+    castingScene(c.g, c.w, c.h, c, plan, s);
+  }
+  function finding() {
+    return '"' + plan.from + '" became "' + plan.to + '". The same ' + plan.letters.length + ' letters, in a different order.';
+  }
+  return {
+    title: castingTitle(plan),
+    brief: 'Predict the phrase hidden inside "' + plan.from + '", set the heat, and pour the letters; watch each one travel into its new place. Any prediction works, and no letter is added or lost.',
+    aspect: '4 / 3',
+    steps: [
+      { id: 'guess', ask: 'what will these letters become?', kind: 'choice', options: plan.options },
+      { id: 'heat', ask: 'the heat: hotter letters travel faster', kind: 'range', min: 0, max: 100, step: 1, value: plan.heat, low: 'warm', high: 'white' },
+      { id: 'cast', ask: 'cast the same letters another way', kind: 'press', count: 1, label: 'pour the letters' },
+      { id: 'cool', ask: 'watch the letters find their places', kind: 'wait', after: 'cast' }
+    ],
+    start(c) {
+      c.status('"' + plan.from + '" is on the upper shelf. A second phrase is hidden in exactly these letters.');
+      draw(c);
+    },
+    apply(id, value, c) {
+      if (c.done) return;
+      if (id === 'guess') {
+        s.guess = String(value);
+        c.status('Your prediction: "' + s.guess + '". ' + (s.settled ? finding()
+          : s.poured ? 'The letters are already moving.' : 'Pour the letters when you want to find out.'));
+      }
+      if (id === 'heat') {
+        s.heat = Math.max(0, Math.min(1, Number(value) / 100));
+        c.status(HEAT[band(s.heat * 100)] + ' heat. ' + (s.settled ? 'The cast is already cool.'
+          : s.heat < 0.34 ? 'A slow swirl through the fire.' : s.heat < 0.67 ? 'The letters travel at a steady pace.' : 'A quick swirl, then into the mould.'));
+      }
+      if (id === 'cast' && !s.poured) {
+        s.poured = true;
+        c.status('The letters are leaving "' + plan.from + '". None are being added.');
+      }
+      draw(c);
+    },
+    frame(t, dt, c) {
+      if (s.poured && !s.settled && !c.done) {
+        s.phase = c.reduced ? 1 : Math.min(1, s.phase + dt / (7 - s.heat * 4));
+        c.progress('cool', s.phase);
+        if (s.phase >= 1) {
+          s.settled = true;
+          c.status(finding());
+          c.satisfy('cool');
+        } else if (s.phase >= 0.67 && s.said < 2) {
+          s.said = 2;
+          c.status('The letters are finding their new places.');
+        } else if (s.phase >= 0.23 && s.said < 1) {
+          s.said = 1;
+          c.status('The spaces have melted. All ' + plan.letters.length + ' letters are circling the fire.');
+        }
+      }
+      draw(c);
+    },
+    end(c) {
+      s.poured = true;
+      s.phase = 1;
+      s.settled = true;
+      draw(c);
+      c.status(finding() + ' ' + (s.guess === plan.to ? 'You called it.' : 'You expected "' + s.guess + '"; the letters went another way.')
+        + ' The spaces and punctuation can change; the letters cannot.');
+    }
+  };
+}
+
 export default {
   id: 'word-kiln',
   paint(ctx, w, h, env) {
+    if (dealsCasting(env)) {
+      castingPreview(ctx, w, h, env, castingPlan(env));
+      return;
+    }
     const v = env.variant;
     // The mouth where the configuration put it, as wide as it asks, with as many sparks over it.
     kiln(ctx, w, h, env, env.rnd(), {
@@ -609,6 +858,15 @@ export default {
     });
   },
   spark(env) {
+    if (dealsCasting(env)) {
+      const plan = castingPlan(env);
+      return {
+        title: castingTitle(plan),
+        text: 'A second phrase is hiding in "' + plan.from + '". Predict it, set the heat, and watch the same ' + plan.letters.length + ' letters take new places.',
+        aspect: '4 / 3',
+        paint: (ctx, w, h, e) => castingPreview(ctx, w, h, e, plan)
+      };
+    }
     const pos = env.pick(POS);
     const word = coin(env);
     return {
@@ -621,6 +879,7 @@ export default {
     };
   },
   piece(env) {
+    if (dealsCasting(env)) return letterCasting(env);
     return env.chance(0.55) ? fired(env) : kilnLoad(env);
   }
 };
