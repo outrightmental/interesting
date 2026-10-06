@@ -431,18 +431,20 @@ function isLocked(knob) {
   return knob.classList.contains('is-locked');
 }
 
-/* One knob, set the way a visitor would. `slider` says what to do with a range knob: 'move' drags
-   it, 'use' presses it where it stands without moving it, 'leave' does not touch it at all. */
+/* One knob, worked the way a visitor would work it -- through the stage's own control, which is
+   the whole point of this harness. Whether the stage then marks the knob set is the stage's
+   answer and the caller reads it off the knob. `slider` says what to do with a range knob: 'move'
+   drags it, 'use' presses it where it stands without moving it, 'leave' leaves it alone. */
 async function setKnob(page, clock, knob, slider) {
   const kind = knob.dataset.kind;
   const fire = (node, type, extra) => node.dispatchEvent(Object.assign({ type }, extra || {}));
   if (kind === 'choice' || kind === 'toggle') {
     fire(knob.querySelector('button'), 'click');
     await clock.advance(120);
-    return true;
+    return;
   }
   if (kind === 'range') {
-    if (slider === 'leave') return false;
+    if (slider === 'leave') return;
     const input = knob.querySelector('input');
     if (slider === 'move') {
       const min = Number(input.min);
@@ -456,7 +458,7 @@ async function setKnob(page, clock, knob, slider) {
       fire(input, 'pointerup');
     }
     await clock.advance(120);
-    return true;
+    return;
   }
   if (kind === 'press') {
     const button = knob.querySelector('button');
@@ -464,7 +466,7 @@ async function setKnob(page, clock, knob, slider) {
       fire(button, 'click');
       await clock.advance(80);
     }
-    return true;
+    return;
   }
   if (kind === 'hold') {
     const button = knob.querySelector('button');
@@ -473,7 +475,7 @@ async function setKnob(page, clock, knob, slider) {
     for (let i = 0; i < 400 && knob.css.get('--knob-pct') !== '100.0%'; i++) await clock.advance(50);
     fire(button, 'pointerup');
     await clock.advance(120);
-    return true;
+    return;
   }
   if (kind === 'tap') {
     const canvas = page.doc.getElementById('stage-canvas');
@@ -481,13 +483,12 @@ async function setKnob(page, clock, knob, slider) {
       fire(canvas, 'pointerdown', { clientX: 60 + i * 37, clientY: 50 + i * 29 });
       await clock.advance(220);
     }
-    return true;
+    return;
   }
   if (kind === 'wait') {
     for (let i = 0; i < 120 && !isSet(knob); i++) await clock.advance(500);
-    return true;
+    return;
   }
-  return false;
 }
 
 // Wait for a piece to be on the stage and playable.
