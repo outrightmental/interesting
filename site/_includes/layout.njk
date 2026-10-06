@@ -1,149 +1,4 @@
-{#-
-  The shell every page of the site is built into. A page supplies its own <main> and nothing else:
-  the doctype, the head, the stylesheet links, the logo and the constellation it opens, the persona
-  floating opposite it, the feed of every world and the persona sheet are written once, here.
-
-  This is not the sort of website that uses conventional navigation (issue #54). There is no app
-  bar: two things float over the page and they are the whole of the navigation -- the sparkles logo
-  in the upper left, which says the site's name on rollover and opens a constellation of options on
-  tap, and the persona in the upper right, itself a small constellation.
-
-  The visual language is Material Design 3 (m3.material.io): one tonal colour scheme derived from a
-  few seed colours (_sass/_tokens.scss), the M3 type scale, the M3 shape scale, state layers on
-  everything that can be pressed, and tonal surfaces instead of borders. The components the shell
-  is made of are the M3 ones -- a floating button and the tonal chips it opens, a basic dialog for
-  the sheet, and cards in a masonry feed -- so the whole site reads as one system.
-
-  Front matter a page may set:
-    title       the page's name, the same words every link to it uses (see _data/worlds.json):
-                every page sets it, index.html included ("the threshold"), and " · interesting"
-                is appended to it in the <title>.
-    description the <meta name='description'>: one plain sentence a search result or a shared
-                link shows, omitted when absent.
-    stylesheet  a name in css/: "quiet-room" links css/quiet-room.css after the shared
-                css/site.css, so the page's own rules win over the shared ones. Omit it for a page
-                that needs none.
-    inlineStyles
-                write the styles into the page instead of linking them. Only error.html needs it:
-                CloudFront returns that page for any 404, at whatever path was asked for, so a
-                relative <link> next to it would be a guess.
-    siteRoot    the site's root as a path, for the same page and the same reason: with it set
-                to "/", every shared script and link is written from the root, so a visitor who
-                lands on the 404 page at /some/deep/path still gets the scripts and can leave.
-                It is the one place the site names where it is served from: "/" is right for
-                makeitmoreinteresting.com, and a copy served under a sub-path sets that sub-path
-                here instead ("/interesting/"). Every other page leaves it out and keeps
-                relative links, so they work under any sub-path unchanged.
-
-  What a page is: its <main> is the feature. It is unbordered, it fills the first screen (the
-  viewport less the room the floating nav leaves and a margin, so the feed peeks above the fold --
-  nothing sits above it any more, and it keeps the room the two floating marks need clear at the
-  top), its background is the page's own palette bleeding to the viewport's edges, and its content
-  sits in a centred column (every direct child of <main> lands in that column; see
-  _sass/_panel.scss). A world page's <main> is the stage (_includes/stage.njk): a piece of that
-  world, generated from a seed, played and finished there, and replaced by the next card from the
-  feed. A page sets nothing about navigation: the logo, the persona and the feed are the whole of
-  the shared chrome, and they are the same on every page.
-
-  The shared chrome, and why it is this size:
-    the logo     a sparkles mark in the upper left, floating over the page, and nothing else at
-                 rest. Rolling over it (or focusing it) fades the site's name in beside it,
-                 quickly and tightly; pressing it turns the page into a lightbox -- dimmed,
-                 blurred, its animation held and its controls inert -- and branches the options
-                 out from the logo as a constellation (_sass/_nav.scss for the geometry,
-                 js/site.js for the lightbox and the options that come and go). It is a <details>
-                 element, so with scripting switched off it is still a disclosure a visitor can
-                 open, and its options are plain links either way. Pressing it never navigates:
-                 the threshold is the home icon in the near orbit.
-                 The near orbit is where the site's destinations are -- the threshold, the mood
-                 atlas, site map, and the world a reading opens onto once there is one -- and the
-                 far orbit is the apparatus: "change this site", "cookies", "state", privacy,
-                 terms.
-    the persona  the one thing a visitor configures here, shown the way an app shows its account:
-                 a round portrait of their sky floating in the upper right, which opens the sheet
-                 (js/persona.js). With no persona yet the portrait ring is dashed and the button
-                 reads "set up persona", filled and beckoning, so the first thing to do is the
-                 first thing seen. Nothing is ever put beside it: the portrait is the whole of
-                 that corner (issue #64), and the world a reading opens onto is an option in the
-                 constellation rather than a second mark floating next to the avatar. The one
-                 sentence on where things stand is written for screen readers and never takes
-                 space. On the threshold the sideways question is asked in the page's own feature
-                 (index.html hosts #persona-probe), never in the chrome.
-    the feed     every world as a card, in a masonry grid that keeps going as a visitor scrolls
-                 (_includes/worlds.njk, from _data/worlds.json, and js/feed.js with one module per
-                 world in js/modules/). It has no caption: the grid speaks for itself. The cards
-                 the template writes are plain links, so index.html's own markup links every
-                 world and the reachability axiom holds with scripting off; the script lays them
-                 out as columns, paints each one, and deals more between them without end.
-                 sitemap.html and moods.html list every page themselves, so they are the two
-                 pages without it.
-    the sheet    the persona's dialog, written after everything else and shown only when opened:
-                 the constellation (stars placed, dragged and read) and the orientation (the
-                 question, and what it read). Its headings come after the page's own, so the
-                 heading outline a screen reader walks stays in order.
-
-  Eight shared lines in the <head>:
-    js/analytics.js  the Google Analytics tag and the consent banner that gates it (see
-                     ANALYTICS_TAG and check_analytics in .github/scripts/make_interesting.py).
-    js/state.js      the one local-state document every page reads and writes through, and the
-                     meta menu that exports it (STATE_TAG and check_state).
-    js/participate.js
-                     the one way a visitor can say what this site should become: a link to a
-                     pre-shaped new issue on this repository, which the shell adopts into the
-                     constellation as "change this site" (PARTICIPATE_TAG and check_participate).
-    js/persona.js    the persona: the sky several worlds read, kept and changed in one place, plus
-                     the avatar and the sheet above. Not deferred, so a page's own script can read
-                     window.interestingPersona.stars() while the body is parsed.
-    js/site.js       the shared helpers a page can call: window.interestingSite.unlock(), which
-                     renders a part that needs a saved sky as powered down with the one button
-                     that powers it (see the README, "Powered down, never broken"), and
-                     window.interestingSite.destructive(), which makes a control that throws
-                     saved state away a warning button and guards every press of it with the one
-                     "are you sure you want to ______?" modal (see the README,
-                     "Destructive-caution axiom"), plus the main nav -- the logo's lightbox, the
-                     options that come and go with the state, and the three pinned affordances it
-                     adopts -- and the slider fill. Not deferred either,
-                     both because a page's own script may call it and because it marks the
-                     document as scripted before the body is drawn, and after the persona it
-                     reads from.
-    js/threshold.js  the mood flow's engine: the orientations, the library of query mechanisms,
-                     the clock and time-zone signals and the partly-remembered reading. The
-                     threshold's feature and the persona sheet are where it is seen (MOOD_TAG and
-                     check_mood).
-    js/feed.js       the feed: lays the world cards out as columns, paints them through the
-                     modules in js/modules/, keeps dealing cards as the visitor scrolls, and
-                     hands the stage the next card (window.interestingFeed.take). An ES module,
-                     so it loads each world's module only when a card of it is near.
-    js/stage.js      the stage: runs a piece in a page's feature -- the knobs, the progress, the
-                     finish, the vanish, the next -- and documents the piece contract every
-                     world's module meets (see the README, "Completion axiom").
-  Four of them may never be dropped: a built page missing the analytics, state, participation or
-  mood line is refused. The files behind the first three are fixed; js/threshold.js is protected
-  instead, so a run may rewrite the flow but never delete it. The other four are ordinary site
-  source.
-
-  Three affordances those fixed files pin over the page are a cadre of their own, outside this
-  site's visual language and outside what any page may restyle or reword. All three are adopted by
-  the shell into the far orbit of the constellation, where a visitor finds them with everything
-  else -- "change this site" (js/participate.js), "cookies" (js/analytics.js) and "state"
-  (js/state.js): js/site.js hides the control each file pinned over the page and forwards the
-  constellation's option to it, so there is still exactly one new-issue link, one cookies dialog
-  and one state menu, and no fixed file is edited to do it. Two of them hand the visitor straight
-  on to somebody else's control, with the lightbox out of the way first; "state" keeps the
-  lightbox, the constellation giving way so js/state.js's own panel can be hosted in
-  #sparknav-modal, the middle of the veil that is already up, until the visitor closes it and the
-  lightbox goes down with it (issue #66). Nothing of the site's is left floating at an edge of the
-  viewport either, the bottom one included: at rest the whole of the navigation is the two marks
-  in the top corners (issue #64).
-
-  The page's own world, when it has one, is named on <html data-world> so _sass/_mood.scss gives
-  the page that world's palette; a visitor's reading lands on <html data-mood> and wins over it,
-  and the activity on the stage lands on <html data-featured> (js/stage.js) and wins over both for
-  as long as its piece is there, so the site wears the colour of the card a visitor picked.
-
-  Links are relative, like every link in the site: it has no fixed domain and may be served under
-  a sub-path, so "css/site.css" and not "/css/site.css".
--#}
+{# Front matter: title and description name and describe the page; stylesheet adds a page-specific CSS file. error.html alone uses inlineStyles and siteRoot because it can be served at an arbitrary missing path. A page supplies its own main; this layout supplies the shared navigation, persona and feed. #}
 {%- set here = (page.filePathStem | replace('/', '')) + '.html' if page else '' %}
 {%- set thisWorld = null %}
 {%- for world in worlds.worlds %}{% if world.file == here %}{% set thisWorld = world %}{% endif %}{% endfor %}
@@ -167,8 +22,6 @@
   <meta name='color-scheme' content='dark'>
   <title>{% if title %}{{ title }} · {% endif %}interesting</title>
   <link rel='icon' href='{{ siteRoot }}favicon.svg' type='image/svg+xml'>
-  {#- The one list of worlds, for the scripts that open pieces and deal cards: the same list the
-      feed, the site map and the mood atlas are rendered from. -#}
   <script type='application/json' id='site-worlds'>{{ worlds.worlds | dump | safe }}</script>
 {%- if description %}
   <meta name='description' content='{{ description }}'>
@@ -182,8 +35,6 @@
 {%- endif %}
 {%- endif %}
 {%- if siteRoot %}
-  {#- The 404 page is served at any missing path, so its scripts are named from the site's root;
-      see the note on siteRoot above. The eight lines are the same eight as below. -#}
   <script src='{{ siteRoot }}js/analytics.js' defer></script>
   <script src='{{ siteRoot }}js/state.js'></script>
   <script src='{{ siteRoot }}js/participate.js' defer></script>
@@ -193,46 +44,23 @@
   <script src='{{ siteRoot }}js/feed.js' type='module'></script>
   <script src='{{ siteRoot }}js/stage.js' type='module'></script>
 {%- else %}
-  <!-- Analytics and the cookie consent banner that gates it; see js/analytics.js. -->
   <script src='js/analytics.js' defer></script>
-  <!-- The one local-state store every page reads and writes through, and its meta menu; see
-       js/state.js. Not deferred: a page's own script runs before any deferred one does. -->
   <script src='js/state.js'></script>
-  <!-- The one way a visitor can say what this site should become: the link to a pre-shaped new
-       issue that js/site.js adopts into the constellation as "change this site". -->
   <script src='js/participate.js' defer></script>
-  <!-- The persona: the sky several worlds read, and the avatar and sheet it is set up in; see
-       js/persona.js. Not deferred either, for the same reason, and after the store it writes
-       through. -->
   <script src='js/persona.js'></script>
-  <!-- The shared helpers; see js/site.js. After the persona, whose sky its unlock helper reads. -->
   <script src='js/site.js'></script>
-  <!-- The mood flow's engine: ask before offering; see js/threshold.js. Deferred, and so after
-       js/state.js, which is what it keeps its reading in. -->
   <script src='js/threshold.js' defer></script>
-  <!-- The feed; see js/feed.js. A module script runs deferred too, after the flow it reads. -->
   <script src='js/feed.js' type='module'></script>
-  <!-- The stage, where a piece is played and finished; see js/stage.js. After the feed it draws
-       the next card from. -->
   <script src='js/stage.js' type='module'></script>
 {%- endif %}
 </head>
 <body>
   <a class='skip-link' href='#main-content'>skip to main content</a>
-  {#- The main nav: the logo, and the constellation it opens. A <details>, so the disclosure is
-      the browser's own -- operable by keyboard, and still an open-and-close affordance with
-      scripting switched off, where the options lay out as a cascade under the logo instead of a
-      constellation around it. js/site.js adds the lightbox, the stagger, and the options that
-      come and go with the state; _sass/_nav.scss places them. Every option is written here, so
-      index.html's own markup leads to every page of the site and the reachability axiom holds
-      with no script at all. -#}
   <details class='sparknav' id='sparknav'>
     <summary class='sparknav-logo' id='sparknav-logo' aria-label='interesting: the site menu'>
       <svg class='icon sparknav-spark' viewBox='0 0 24 24' aria-hidden='true' focusable='false'><path d='{{ icons.spark }}'/></svg>
       <span class='sparknav-name'>interesting</span>
     </summary>
-    {#- The lightbox: it dims and blurs everything behind it, and takes the press that closes the
-        constellation again. js/site.js holds the page's motion and makes it inert to match. -#}
     <div class='sparknav-veil' id='sparknav-veil'></div>
     <nav class='sparknav-sky' aria-label='Site'>
       <ul class='sparknav-orbit sparknav-near' id='sparknav-near'>
@@ -245,27 +73,18 @@
           </a>
         </li>
 {%- endfor %}
-        {#- The world a reading opens onto: in the orbit only once something has been read, and
-            named for that world (js/site.js, from window.threshold). -#}
         <li class='sparknav-option' id='sparknav-reading' hidden>
           <span class='sparknav-ray' aria-hidden='true'></span>
           <a class='sparknav-node' id='sparknav-reading-go' href='{{ siteRoot }}moods.html'>
             <svg class='icon' viewBox='0 0 24 24' aria-hidden='true' focusable='false'><path d='{{ icons.star }}'/></svg>
-            <span class='sparknav-label' id='sparknav-reading-label'>your world</span>
+            <span class='sparknav-label' id='sparknav-reading-label'>the mood atlas</span>
           </a>
         </li>
       </ul>
       <ul class='sparknav-orbit sparknav-far' id='sparknav-far'>
-        {#- The three adopted affordances. Each is in the orbit only while the file that owns it has
-            drawn its own control, which js/site.js then hides and presses on this one's behalf --
-            js/participate.js, js/analytics.js and js/state.js are fixed files and are never edited
-            for this. The invitation comes first: it is the one option here that asks something of a
-            visitor instead of answering a question they already had, and it is the only navigation
-            on the site that leads off it, which is what the accessible name says and the new tab
-            is for. -#}
         <li class='sparknav-option' id='sparknav-participate' hidden>
           <span class='sparknav-ray' aria-hidden='true'></span>
-          <button type='button' class='sparknav-node' id='sparknav-participate-open' aria-label='Change this site: this whole site is a continuously evolving work-in-progress art experiment, and this opens a new issue on its repository where you say what it should become next. Opens in a new tab.'>
+          <button type='button' class='sparknav-node' id='sparknav-participate-open'>
             <svg class='icon' viewBox='0 0 24 24' aria-hidden='true' focusable='false'><path d='{{ icons.edit }}'/></svg>
             <span class='sparknav-label'>change this site</span>
           </button>
@@ -281,7 +100,7 @@
           <span class='sparknav-ray' aria-hidden='true'></span>
           <button type='button' class='sparknav-node' id='sparknav-state-open' aria-haspopup='dialog'>
             <svg class='icon' viewBox='0 0 24 24' aria-hidden='true' focusable='false'><path d='{{ icons.swap }}'/></svg>
-            <span class='sparknav-label' id='sparknav-state-label'>state</span>
+            <span class='sparknav-label'>state</span>
           </button>
         </li>
 {%- for link in worlds.finePrint %}
@@ -295,16 +114,8 @@
 {%- endfor %}
       </ul>
     </nav>
-    {#- Where the state interface goes when "state" is picked: the constellation gives way to it
-        and the veil behind it never comes down (issue #66). Empty, and hidden, until then --
-        js/state.js owns that panel and js/site.js asks for it; the shell only holds the middle of
-        the screen open for it. -#}
     <div class='sparknav-modal' id='sparknav-modal' hidden></div>
   </details>
-  {#- The persona, floating in the upper right: the only other navigation on the site, and the
-      portrait alone -- nothing is ever put beside it (issue #64). What a visitor with scripting
-      switched off gets is written here and claims nothing; js/persona.js rewrites the sentence,
-      draws the portrait and un-hides the avatar. -#}
   <div class='persona' id='persona' data-state='empty' data-sky='none' data-reading='none' data-asking='false'>
     <p class='persona-text visually-hidden' id='persona-text'>No persona yet.</p>
     <button type='button' class='persona-avatar' id='persona-open' aria-haspopup='dialog' aria-controls='persona-sheet' aria-describedby='persona-text' hidden>
@@ -313,13 +124,9 @@
     </button>
   </div>
   <div id='main-content' tabindex='-1'>{{ content | safe }}</div>
-{%- if not (here == 'sitemap.html' or here == 'moods.html') %}
   <div class='page'>
 {% include 'worlds.njk' %}
   </div>
-{%- endif %}
-  {#- The persona sheet: closed until the avatar opens it, and floating over the page when it does.
-      Written last so its headings follow the page's own. -#}
   <dialog class='persona-sheet' id='persona-sheet' aria-labelledby='persona-sheet-title'>
     <div class='persona-sheet-head'>
       <h2 id='persona-sheet-title' class='persona-sheet-title'>your persona</h2>
@@ -344,10 +151,10 @@
       <div class='controls persona-reading-actions'>
         <button id='persona-ask' type='button'>ask me</button>
         <button id='persona-forget' type='button' class='warning' hidden>forget my reading</button>
-        <a class='action' id='persona-reading-go' href='{{ siteRoot }}moods.html' hidden>go to that world</a>
+        <a class='action' id='persona-reading-go' href='{{ siteRoot }}moods.html' hidden>the mood atlas</a>
       </div>
       <div class='persona-probe' id='persona-sheet-probe' hidden></div>
-      <p class='panel-note'>It never asks you to describe yourself, and it never asks the same way twice. <a href='{{ siteRoot }}moods.html'>The mood atlas</a> shows every way it asks and every answer it can arrive at.</p>
+      <p class='panel-note'>It never asks you to describe yourself, and it never asks the same way twice. <a href='{{ siteRoot }}moods.html'>the mood atlas</a> shows every way it asks and every answer it can arrive at.</p>
     </section>
   </dialog>
 </body>

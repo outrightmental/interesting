@@ -1,6 +1,3 @@
-// The mood atlas: the apparatus shown rather than hidden. What it has read, how it asks, and the
-// fifteen answers, each a world.
-
 @use 'type';
 @use 'list-page';
 
@@ -21,42 +18,17 @@
   @include type.scale(body-small);
 }
 
-.atlas-status {
-  margin: 0.6rem 0 0;
-}
-
-.atlas-alternates {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.45rem;
-  margin-top: 0.55rem;
-}
-
-.atlas-alternates a {
-  min-height: 40px;
-  padding: 0.35rem 0.85rem;
-  border-radius: var(--md-sys-shape-corner-full);
-  background: var(--md-sys-color-secondary-container);
-  color: var(--md-sys-color-on-secondary-container);
-  text-decoration: none;
-  @include type.scale(label-large);
-}
-
 .atlas-probe {
   margin-top: 1rem;
   padding-top: 1rem;
   border-top: 1px solid var(--md-sys-color-outline-variant);
 }
 
-// Two lists of M3 list items: a mechanism with a trailing text button, and a world with the
-// orientation that opens it and what that orientation wants.
-.mechanisms,
-.orientations {
+.mechanisms {
   @extend .list-stack;
 }
 
-.mechanisms li,
-.orientations li {
+.mechanisms li {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -65,8 +37,7 @@
   @include type.scale(body-medium);
 }
 
-.mechanisms li.is-active,
-.orientations li.is-picked {
+.mechanisms li.is-active {
   box-shadow: inset 0 0 0 2px var(--md-sys-color-primary);
 }
 
@@ -82,35 +53,8 @@
 }
 
 .mechanisms button {
-  min-height: 40px;
+  min-height: 44px;
   padding: 0.25rem 0.75rem;
   background: transparent;
   color: var(--md-sys-color-primary);
-}
-
-.orientations a {
-  display: inline-block;
-  min-width: 10rem;
-  padding: 0.15rem 0;
-  color: var(--md-sys-color-primary);
-  text-decoration: none;
-  @include type.scale(title-small);
-}
-
-.orientations a:hover {
-  text-decoration: underline;
-}
-
-.orientations strong {
-  color: var(--md-sys-color-tertiary);
-  @include type.scale(label-large);
-}
-
-.orientations .pull {
-  flex: 1 1 14rem;
-  color: var(--md-sys-color-on-surface-variant);
-}
-
-.orientations .pull:empty {
-  display: none;
 }

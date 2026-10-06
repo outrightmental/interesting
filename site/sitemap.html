@@ -1,59 +1,28 @@
 ---
 layout: layout.njk
 title: site map
-description: 'Every page of interesting with a line on what it is: the way in, every world, and the edges.'
+description: 'The way in, the edges and every world, with a link to each page.'
 stylesheet: sitemap
 ---
-{#-
-  The one page where every page has a sentence. The names and the sentences come from
-  _data/worlds.json, the one list the site keeps, so a world added or renamed there appears here
-  in the same change. This page lists every world itself, which is why the shared feed after
-  <main> is left off it (see _includes/layout.njk).
--#}
-  <main class='list-page-main'>
-    <h1>site map</h1>
-    <p class='page-purpose'>Use this page to scan every part of the site in one pass, then jump straight to the page you want to open next.</p>
-    <p class='section-note'>All of it is one continuously evolving work-in-progress art experiment: a machine rewrites these pages as the site goes along, so this is a snapshot of the site rather than a catalogue of it, and a world you meet here may well play differently the next time you open it. If you want a hand in what it becomes, the sparkles logo opens <em>change this site</em>, which takes you to a new issue on the repository where you say so.</p>
-
-    <h2 class='section-title'>the way in</h2>
-    <ul class='pages list-grid'>
+<main class='list-page-main'>
+  <h1>site map</h1>
+  <p class='page-purpose'>Use this page to find any part of the site; choose a link here or a world card below.</p>
+  <h2 class='section-title'>the way in</h2>
+  <ul class='pages list-grid'>
 {%- for p in worlds.wayIn %}
-      <li>
-        <a href='{{ p.file }}'>{{ p.name }}</a> <span class='gloss'>{{ p.gloss }}</span>
-        <p>{{ p.what }}</p>
-      </li>
+    <li><a href='{{ p.file }}'>{{ p.name }}</a> <span class='gloss'>{{ p.gloss }}</span><p>{{ p.what }}</p></li>
 {%- endfor %}
-    </ul>
-
-    <h2 class='section-title'>every world</h2>
-    <p class='section-note'>{{ worlds.worlds.length | words | capitalize }} worlds and no default. After each name is who the site would send there. Several of them read the stars of your persona, each its own way, and any of those can seed a sky to begin with.</p>
-    <ul class='pages list-grid'>
-{%- for p in worlds.worlds %}
-      <li data-mood='{{ p.mood }}'>
-        <a href='{{ p.file }}'>{{ p.name }}</a> <span class='gloss'>{{ p.orientation }}</span>
-        <p>{{ p.what }}</p>
-      </li>
-{%- endfor %}
-    </ul>
-
-    <h2 class='section-title'>the fine print</h2>
-    <p class='section-note'>Both of these are options in the menu the sparkles logo opens, beside <em>change this site</em>, <em>cookies</em> and <em>state</em>.</p>
-    <ul class='pages'>
+  </ul>
+  <h2 class='section-title'>the fine print</h2>
+  <ul class='pages'>
 {%- for p in worlds.finePrint %}
-      <li>
-        <a href='{{ p.file }}'>{{ p.name }}</a> <span class='gloss'>{{ p.gloss }}</span>
-        <p>{{ p.what }}</p>
-      </li>
+    <li><a href='{{ p.file }}'>{{ p.name }}</a> <span class='gloss'>{{ p.gloss }}</span><p>{{ p.what }}</p></li>
 {%- endfor %}
-    </ul>
-
-    <h2 class='section-title'>the edges</h2>
-    <ul class='pages list-grid'>
+  </ul>
+  <h2 class='section-title'>the edges</h2>
+  <ul class='pages list-grid'>
 {%- for p in worlds.edges %}
-      <li>
-        <a href='{{ p.file }}'>{{ p.name }}</a> <span class='gloss'>{{ p.gloss }}</span>
-        <p>{{ p.what }}</p>
-      </li>
+    <li><a href='{{ p.file }}'>{{ p.name }}</a> <span class='gloss'>{{ p.gloss }}</span><p>{{ p.what }}</p></li>
 {%- endfor %}
-    </ul>
-  </main>
+  </ul>
+</main>

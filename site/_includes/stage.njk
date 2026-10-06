@@ -1,31 +1,3 @@
-{#-
-  The stage: the feature of every world page, and of the threshold. A world page is this include
-  and nothing else, so what a visitor opens is never a fixed page: it is a piece, generated on the
-  spot by the world's module (js/modules/<world>.js, piece()) from a seed, run here by js/stage.js,
-  and when it is finished -- every piece can be finished, by law (see the README, "Completion
-  axiom") -- it vanishes and the next card in the feed's stack opens in its place.
-
-  Set before including:
-    stageWorld   the world's file without ".html" ("quiet-room"); the piece opened on arrival
-                 is this world's, unless the URL's hash names another
-    threshold    true on index.html only: the stage asks the sideways question first (the
-                 persona mounts it in #persona-probe, which lives here), and opens the world the
-                 answer picks
-    stageRandom  true on a page of no world (error.html): the stage opens whatever the feed
-                 deals first
-    stageRead    one short line over the title, for such a page to say what it is ("no page at
-                 this address"); stageLine is the line under the page's name before a piece is on
-
-  What is written here is what a visitor without scripting gets: the world's name, its one line
-  of purpose, and the feed below (the piece's parts are hidden until a piece is on). The heading
-  outline is the page's (h1), then the piece's (h2), then the feed's.
-
-  That one line of purpose is the page's own, before anything is on the stage, and the threshold
-  goes back to it. It is never a feature's title: a piece that opens says what the card it opened
-  from said, and then what the piece itself is called -- the same line for every card of a world
-  is exactly the generic text a pressed card used to fall back to (js/stage.js, the alignment
-  axiom).
--#}
 {%- set stageEntry = null -%}
 {%- for world in worlds.worlds %}{% if world.file == stageWorld + '.html' %}{% set stageEntry = world %}{% endif %}{% endfor -%}
 <main class='stage{% if threshold %} stage-threshold{% endif %}' id='stage' data-mode='{% if threshold %}quiet{% else %}idle{% endif %}'{% if stageEntry %} data-stage-world='{{ stageWorld }}'{% endif %}{% if threshold %} data-threshold='true'{% endif %}{% if stageRandom %} data-stage-random='true'{% endif %}>
@@ -35,7 +7,7 @@
       <h1 class='stage-world' id='stage-world'>{{ stageEntry.name if stageEntry else title }}</h1>
 {%- if threshold %}
       <p class='stage-read' id='stage-read' hidden></p>
-      <h2 class='stage-title' id='stage-title' tabindex='-1'>One sideways question, and a world to start in.</h2>
+      <h2 class='stage-title' id='stage-title' tabindex='-1'>Answer one question about a door, a stone or a mark to open a world you can play and finish, or choose a world below.</h2>
 {%- else %}
 {%- if stageRead %}
       <p class='stage-read' id='stage-read'>{{ stageRead }}</p>
