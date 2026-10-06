@@ -149,14 +149,18 @@ slab per page, small-caps labels, pill borders on everything, a footer index two
 This is not the sort of website that uses conventional navigation (issue #54). The top app bar is
 gone — the sticky blurred surface, its scroll lift, its row of destinations — and what is left is
 two marks floating over the page: the sparkles **logo** in the upper left, and the **persona** in
-the upper right. Nothing else is chrome.
+the upper right. Nothing else is chrome. Two, exactly: a *go to <world>* link floated beside the
+persona and a *steer the site* button held the middle of the bottom edge for a while after that
+first pass, and both are gone (issue #64) — the first because the constellation already carried the
+same destination, the second adopted into the far orbit beside *cookies* and *state*.
 
 - **At rest, one mark.** A tonal pill with the sparkles in it, blurred so it reads over any
   world's palette. Roll over it, or give it the focus, and the site's name fades in beside it —
   quick and tight, clipped to nothing rather than hidden, so the logo keeps its accessible name
   either way.
 - **On press, a lightbox.** The page goes behind a veil that dims it, blurs it, takes the press
-  that closes it again, and sits over the three corner affordances as well as the content. Behind
+  that closes it again, and sits over everything a fixed file has pinned to the page as well as
+  over the content, hidden though all three of those now are. Behind
   it everything is made `inert` and hidden from a screen reader, its CSS animation is paused, and
   its frame loop is **held**: `js/site.js` keeps the `requestAnimationFrame` callbacks a page asks
   for while the menu is open and runs them when it closes, because CSS can pause an animation but
@@ -173,21 +177,33 @@ the upper right. Nothing else is chrome.
 - **The near orbit is where to go, the far orbit is the apparatus.** Near: the three destinations
   from [`site/_data/worlds.json`](site/_data/worlds.json) — *the threshold* (the home icon, which
   is how a visitor gets home now that pressing the logo no longer navigates), *the mood atlas*,
-  *site map* — plus the world a reading opens onto, once there is one. Far: *cookies*, *state*,
-  *privacy* and *terms*.
+  *site map* — plus the world a reading opens onto, once there is one. Far: *change this site*,
+  *cookies*, *state*, *privacy* and *terms*.
 - **Things come and go with the state.** The reading's world appears when the mood flow has read
   something and goes when it is forgotten; on that world itself the option says the world's name
   and is marked *you are here* rather than offering a trip to where the visitor already is, as the
   feed's own card does. *cookies* is there only on a copy of the site that has a measurement ID
   and so draws a consent banner. *state* says how much there is to carry away — *state · 3 kept*.
   And the option for the page a visitor is on carries `aria-current='page'` wherever it appears.
-- **Two options are adopted, not copied.** *cookies* and *state* belong to `js/analytics.js` and
-  `js/state.js`, which are fixed files no run may write (see [Analytics
-  axiom](#analytics-axiom) and [Local state axiom](#local-state-axiom)). So the shell does it from
-  outside: it waits for each corner button to be drawn, hides it where its own file pinned it, and
-  presses that same button from the constellation. One cookies dialog, one state menu, neither
-  fixed file touched — and `RealSiteTest` still holds every other file of the site to naming
-  neither of them.
+- **Three options are adopted, not copied.** *change this site*, *cookies* and *state* belong to
+  `js/participate.js`, `js/analytics.js` and `js/state.js`, which are fixed files no run may write
+  (see [Participation axiom](#participation-axiom), [Analytics axiom](#analytics-axiom) and [Local
+  state axiom](#local-state-axiom)). So the shell does it from outside: it waits for each control
+  to be drawn, hides it where its own file pinned it, and presses that same control from the
+  constellation. One new-issue link, one cookies dialog, one state menu, no fixed file touched —
+  and `RealSiteTest` still holds every other file of the site to naming none of them.
+- **Which is what makes the two-item rule true.** At rest nothing floats over a page but the logo
+  and the persona: nothing at the bottom edge, nothing beside either mark. `NavTest` holds both
+  halves of it (issue #64) — the site's own stylesheets pin a closed list of things, every one of
+  them one of the two marks, a part of one, or an overlay only up while something is open; and the
+  nav harness confirms that all three pinned controls are hidden where their files put them while
+  the page is at rest, with every one of them still one press of the logo away.
+- **The invitation leads off the site, and says so.** *change this site* is the one option in the
+  constellation whose destination is not a page of this site. It presses the link
+  `js/participate.js` drew, so the destination, the new tab and the query that shapes the issue are
+  all still that file's; its accessible name carries the whole of the invitation — that this site
+  is a continuously evolving work-in-progress art experiment, that the option opens a new issue
+  where a visitor says what it should become next, and that it opens in a new tab.
 - **It is a `<details>`.** The logo is the `<summary>`, so the disclosure, the keyboard handling
   and the no-script fallback are the browser's own: with scripting switched off the same chips
   cascade under the logo as plain links, staggered into a staircase where the script has said what
@@ -489,11 +505,12 @@ and shown on every page.
   shape is understood on sight, and it takes no room from the page's feature: with no persona yet
   the portrait ring is dashed and the button, *set up persona*, is filled and beckoning, the one
   lit control on the page, so the first thing to do is the first thing seen. Once there is a
-  persona the portrait alone remains, its label *open persona* read by a screen reader; the one
-  sentence on where things stand is written beside it for screen readers only; and once a reading
-  exists a *go to* link to the world it opens onto sits beside the avatar on a screen wide enough
-  for it (on a phone the feed's first card carries the same suggestion, and the logo's
-  constellation carries it at any size).
+  persona the portrait alone remains, its label *open persona* read by a screen reader, and the one
+  sentence on where things stand is written beside it for screen readers only. Nothing else is ever
+  put in that corner: a *go to <world>* link used to sit beside the avatar on a wide screen, which
+  made two floating items of one corner and a third piece of navigation on the site, and the world
+  a reading opens onto is an option in the logo's constellation instead, where it already was
+  (issue #64). On a phone the feed's first card carries the same suggestion, as it always has.
 - **The sheet.** The button opens a `<dialog>` floating over whatever page is open, with two
   sections. *Constellation* is the sky editor: tap the sky to place a star, drag one to move it,
   tap one to read its thought and remove it, or drop one, seed a small sky, or clear the sky — by
@@ -672,9 +689,9 @@ iteration process rather than a one-off tidy-up.
 - **The meta menu.** *state*, an option in the logo's constellation (see [The logo and the
   constellation](#the-logo-and-the-constellation)): the button `js/state.js` pins to the
   bottom-right corner is still what the site presses, but the shell hides it there and offers it
-  in the nav beside *cookies* instead, so the only thing left on the bottom edge is the *steer the
-  site* button of the [participation axiom](#participation-axiom). It opens a panel holding the
-  whole document as
+  in the nav beside *cookies* and the *change this site* of the [participation
+  axiom](#participation-axiom) instead, so nothing is left on the bottom edge at all. It opens a
+  panel holding the whole document as
   text: copy it out, paste one in and press *replace mine*, or *clear*. Import **replaces** rather
   than merges, for reproducibility — the sky it opens is the sky it came from — and clearing asks
   first. Both reload the page
@@ -778,11 +795,14 @@ it stands.
 
 ### Participation axiom
 
-Every page carries a **prominent, always-visible way for the person looking at the site to say what
-it should become**: one press of *steer the site*, pinned to the middle of the bottom edge, and they
-are on a new issue of this repository with the form already chosen and the page they came from
-already filled in. Like the six above it, it is an invariant of the iteration rather than a one-off
-addition — and it is the only one that is about the reader rather than about the site.
+Every page carries a **way for the person looking at the site to say what it should become**: one
+press of *change this site*, in the far orbit of the logo's constellation, and they are on a new
+issue of this repository with the form already chosen and the page they came from already filled
+in. The link behind it is the one `js/participate.js` pins to the middle of the bottom edge; the
+shell hides it there and presses it from the constellation (issue #64), so the invitation is one
+press from every page without a third thing floating over any of them. Like the six above it, it is
+an invariant of the iteration rather than a one-off addition — and it is the only one that is about
+the reader rather than about the site.
 
 - **Why it is an axiom and not a nicety.** A site rewritten continuously by a model is steered by
   whoever can reach the model, and the only standing channel from a visitor back to the people and
@@ -798,15 +818,16 @@ addition — and it is the only one that is about the reader rather than about t
   local-state document, in and out). Each injects its own styles rather than reading a stylesheet,
   each is fixed to the device boundary rather than placed in page content, and none of them is a
   page's to restyle, reproduce or reword. That is what makes them reliable: whatever the page
-  around them has become, they answer. *steer the site* keeps the bottom edge and is the prominent
-  member — full strength, a 44px target, an icon that says the verb — because the other two answer
-  a question a visitor occasionally has while this one is an invitation. It still reserves 9.5rem
-  of the bottom edge for its neighbours, in `rem` so that enlarging the text enlarges the room it
-  leaves them. The other two are **adopted** rather than copied: the shell hides the corner buttons
-  `js/analytics.js` and `js/state.js` draw for themselves and offers *cookies* and *state* in the
-  logo's constellation, which presses those very buttons (see [The logo and the
-  constellation](#the-logo-and-the-constellation)) — one cookies dialog and one state menu on the
-  site, with neither fixed file edited to arrange it.
+  around them has become, they answer. Each of the three pins itself over the page where its own
+  file says — *cookies* bottom-left, *steer the site* in the middle of the bottom edge, *state*
+  bottom-right — and all three are **adopted** rather than copied: the shell hides the control each
+  fixed file drew for itself and offers *change this site*, *cookies* and *state* in the logo's
+  constellation, which presses those very controls (see [The logo and the
+  constellation](#the-logo-and-the-constellation)) — one new-issue link, one cookies dialog and one
+  state menu on the site, with no fixed file edited to arrange it. The invitation is still the
+  prominent member of the three, now by where it sits in the orbit rather than by holding an edge
+  of the viewport to itself: it comes first in the far orbit, because the other two answer a
+  question a visitor occasionally has while this one asks something of them.
 - **Responsive and accessible, like everything else here.** An accessible name that says where the
   link goes and that it opens a new tab, with the visible words inside it (WCAG 2.5.3 Label in
   Name); its own `:focus-visible` ring, because pages of this site are free to take the browser's
@@ -830,11 +851,13 @@ addition — and it is the only one that is about the reader rather than about t
   form is here to save someone the trouble of inventing a shape, never to insist on one — the same
   bargain the mood axiom's question makes. The two labels the forms ask for are owned in code, with
   the repository itself, in [`infra/issue-labels.tf`](infra/issue-labels.tf).
-- **Stated in the prompt.** The `Rules:` block names the exact line, says the button and its
-  wording are not a run's to change, to restyle or to reproduce, names the three affordances so
-  that a run leaves the bottom edge to them, and says how the shell adopts two of them into the
-  main nav so that a run never draws a second *cookies* or *state* control of its own. A page inviting a visitor to steer
-  the site in its own prose is welcome, and is not a substitute for the line.
+- **Stated in the prompt.** The `Rules:` block names the exact line, says the link and its wording
+  are not a run's to change, to restyle or to reproduce, names the three affordances, and says how
+  the shell adopts all three of them into the main nav so that a run never draws a second
+  new-issue, *cookies* or *state* control of its own — and that it pins nothing of its own to an
+  edge of the viewport, which is the two-item rule of issue #54 stated where the axiom whose
+  affordance used to be the exception to it can be read. A page inviting a visitor to steer the
+  site in its own prose is welcome, and is not a substitute for the line.
 - **Held to in code.** `check_participate` in
   [`.github/scripts/make_interesting.py`](.github/scripts/make_interesting.py) refuses a plan that
   leaves a page without the line. As with the other eight, only what the run itself breaks is
