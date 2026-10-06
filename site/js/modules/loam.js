@@ -1,7 +1,24 @@
 /* Loam: a cutaway of soil with roots finding their way round the stones. As a card it is the
    cutaway and a core sample (paint, spark); as a piece it is a bed to plant, water and watch until
    the shoots come up, or a bed with things in it already, turned over and cored. See js/feed.js
-   for what a module is and js/stage.js for what a piece is. */
+   for what a module is and js/stage.js for what a piece is.
+
+   A card and the feature it opens as are one bed: the spark puts the core sample's depths on its
+   spec as `of`, and the piece opens on the soil that core came out of -- the stones where the card
+   found them, and the depth the roots reached in its title. */
+
+// The card this piece was opened from, in the bed's own terms: the core sample it was showing,
+// in centimetres, or null for a piece nobody pressed (js/stage.js hands it over as env.card.of).
+function pressed(env) {
+  const was = env.card && env.card.of;
+  return was && typeof was.stone === 'number' && typeof was.through === 'number' ? was : null;
+}
+
+// The grit of the bed a core came out of: stones near the surface are a gritty soil that drains
+// fast, stones deep under the loam a heavy one. So the piece lays its stones where the card did.
+function gritOf(was) {
+  return Math.max(10, Math.min(90, Math.round(100 - was.stone * 2)));
+}
 
 const LINES = [
   'Planted over gravel, so it went sideways for a while first.',
@@ -490,15 +507,17 @@ function coreSample(g, w, h, c, s) {
 // Sowing: set the grit, put a few named things in the ground, water them, and watch the roots find
 // a way down; the shoots come up when they have.
 function sow(env) {
+  const was = pressed(env);
   const n = env.int(2, 4);
   const names = listNames(env, n);
-  const grit = env.int(15, 75);
+  const grit = was ? gritOf(was) : env.int(15, 75);
   const waters = env.int(2, 4);
   const byName = env.chance(0.5);
   const s = fresh(grit);
   s.since = -1;
   return {
-    title: byName ? 'plant ' + join(names) : WORDS[n] + ' things in the ground',
+    title: was ? 'plant ' + join(names) + ' down to ' + was.through + ' cm'
+      : byName ? 'plant ' + join(names) : WORDS[n] + ' things in the ground',
     brief: 'Set the grit, tap the soil to plant ' + join(names) + ', water them, and watch the roots find a way down; the shoots come up when they have.',
     aspect: '4 / 3',
     steps: [
@@ -561,11 +580,12 @@ function sow(env) {
 // Turning: a bed with things in it already, turned over a couple of times so they start again,
 // rained on or not, and cored; the reading comes up with the core.
 function turnOver(env) {
+  const was = pressed(env);
   const names = listNames(env, env.int(2, 3));
   const turns = env.int(2, 3);
   const holdMs = env.pick([1500, 2000, 2500]);
   const times = turns === 2 ? 'twice' : 'three times';
-  const s = fresh(45);
+  const s = fresh(was ? gritOf(was) : 45);
   function replant(c) {
     s.roots = [];
     s.tips = [];
@@ -574,7 +594,8 @@ function turnOver(env) {
     names.forEach((name, i) => plant(s, c.w * ((i + 0.5) / names.length) + (c.rnd() - 0.5) * c.w * 0.18, name));
   }
   return {
-    title: 'turn the soil ' + times,
+    title: was ? 'turn the soil ' + times + ', over the stones at ' + was.stone + ' cm'
+      : 'turn the soil ' + times,
     brief: 'Pick the tilth, turn ' + join(names) + ' over ' + times + ' and watch them start again, let it rain or not, and hold to take a core sample; the reading comes up with it.',
     aspect: '4 / 3',
     steps: [
@@ -638,7 +659,9 @@ export default {
       mono: 'topsoil   0–' + a + ' cm\nloam     ' + a + '–' + b + ' cm\nstones   at ' + stone + ' cm\nroots    found a way at ' + through + ' cm',
       text: env.pick(LINES),
       aspect: '4 / 5',
-      paint: soil
+      paint: soil,
+      // What this card is of, for the piece it opens as: the bed these depths were cored from.
+      of: { a, b, stone, through }
     };
   },
   piece(env) {

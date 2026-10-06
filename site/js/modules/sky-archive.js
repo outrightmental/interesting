@@ -2,7 +2,19 @@
    wheel with one star's rune lit (paint, spark). As a piece it is the wheel wound and let go for
    an omen, a sigil struck and quenched, or a few stars read one by one; whichever it is, the
    reading is stamped into the archive at the end. See js/feed.js for what a module is and
-   js/stage.js for what a piece is. */
+   js/stage.js for what a piece is.
+
+   A card and the feature it opens as are one omen: the spark puts the star it drew and the rune it
+   drew on its spec as `of`, and the piece puts that rune on the wheel, under the alphabet it was
+   written in -- so pressing an omen in the feed opens the wheel it came off. */
+
+// The card this piece was opened from, in the archive's own terms: the star it was drawn from and
+// the rune it gave, or null for a piece nobody pressed (js/stage.js hands it over as env.card.of).
+function pressed(env) {
+  const was = env.card && env.card.of;
+  const rune = was && Array.isArray(was.rune) && was.rune.length === 3 ? was.rune : null;
+  return rune ? { star: typeof was.star === 'string' ? was.star : '', rune } : null;
+}
 
 const RUNES = [
   ['ᚠ', 'fehu', 'what you have, and could carry'],
@@ -314,9 +326,12 @@ function wheel(ctx, w, h, env, lit) {
 }
 
 // Three of the four alphabets, in an order of their own, with eight runes drawn for the rune set.
-function alphabets(env) {
+function alphabets(env, was) {
   const pool = ALPHABETS.slice();
   const chosen = [];
+  // The alphabet the card's omen was written in goes on the rim first, when this piece was opened
+  // from one, so the wheel a visitor turns is the wheel their rune came off (ALPHABETS[0]).
+  if (was) chosen.push(pool.splice(0, 1)[0]);
   while (chosen.length < 3) chosen.push(pool.splice(env.int(0, pool.length - 1), 1)[0]);
   const sets = {};
   chosen.forEach((a) => {
@@ -325,6 +340,13 @@ function alphabets(env) {
       const runes = RUNES.slice();
       sets[a.value] = [];
       while (sets[a.value].length < 8) sets[a.value].push(runes.splice(env.int(0, runes.length - 1), 1)[0]);
+      // And the card's own rune is on it, in the first place, rather than left to chance.
+      if (was) {
+        const at = sets[a.value].findIndex((r) => r[1] === was.rune[1] && r[0] === was.rune[0]);
+        if (at >= 0) sets[a.value].splice(at, 1);
+        else sets[a.value].pop();
+        sets[a.value].unshift(was.rune);
+      }
     }
   });
   return { options: chosen.map((a) => ({ label: a.label, value: a.value })), sets };
@@ -332,9 +354,11 @@ function alphabets(env) {
 
 // The wheel wound and let go; the glyph it rests under is the omen.
 function spin(env) {
-  const { options, sets } = alphabets(env);
+  const was = pressed(env);
+  const { options, sets } = alphabets(env, was);
   const holdMs = env.pick([900, 1300, 1800]);
-  const turn0 = env.int(0, 71) * 5;
+  // The sky starts turned the way the card had it, when this piece was opened from one.
+  const turn0 = (was ? hash(was.star + '|' + was.rune[1]) % 72 : env.int(0, 71)) * 5;
   const opener = env.pick(OPENERS);
   const counsel = env.pick(COUNSEL);
   const title = env.pick(['spin for an omen', 'one spin, one omen', 'wind the wheel and ask']);
@@ -354,7 +378,8 @@ function spin(env) {
   }
   return {
     title,
-    brief: 'Pick the alphabet on the rim, turn the sky beneath it, then wind the wheel and let it go: the glyph it rests under is the omen, and the omen is stamped into the archive.',
+    brief: 'Pick the alphabet on the rim, turn the sky beneath it, then wind the wheel and let it go: the glyph it rests under is the omen, and the omen is stamped into the archive.'
+      + (was ? ' Your ' + was.rune[0] + ' ' + was.rune[1] + ' is on the rim, where the card left it.' : ''),
     aspect: '1 / 1',
     steps: [
       { id: 'alphabet', ask: 'the alphabet on the rim', kind: 'choice', options },
@@ -416,7 +441,8 @@ function spin(env) {
 // A sigil struck from the sky: each strike heats the wheel and lights more of the rim; quenched,
 // it cools and holds.
 function forge(env) {
-  const { options, sets } = alphabets(env);
+  const was = pressed(env);
+  const { options, sets } = alphabets(env, was);
   const strikes = env.int(3, 5);
   const quenchMs = env.pick([1000, 1500]);
   const reach0 = env.pick([24, 34, 44]);
@@ -433,7 +459,8 @@ function forge(env) {
   }
   return {
     title,
-    brief: 'Pick the alphabet, set how far the stars reach for each other, strike the sigil ' + NUM[strikes] + ' times and quench it; it cools, and the archive keeps it.',
+    brief: 'Pick the alphabet, set how far the stars reach for each other, strike the sigil ' + NUM[strikes] + ' times and quench it; it cools, and the archive keeps it.'
+      + (was ? ' It is struck from your ' + was.rune[0] + ' ' + was.rune[1] + '.' : ''),
     aspect: '1 / 1',
     steps: [
       { id: 'alphabet', ask: 'the alphabet on the rim', kind: 'choice', options },
@@ -488,6 +515,7 @@ function forge(env) {
 
 // A few stars read one by one: each tapped star gives up its rune, and the reading is stamped.
 function read(env) {
+  const was = pressed(env);
   const n = env.stars.length;
   const need = Math.min(n, env.int(2, 4));
   const lamp0 = env.pick([45, 60, 75]);
@@ -497,9 +525,10 @@ function read(env) {
   }
   return {
     title: need === 1 ? 'read the one star' : 'read ' + NUM[need] + ' stars',
-    brief: need === 1
+    brief: (need === 1
       ? 'Tap the one star and it gives up its rune; set the lamp, then stamp the reading into the archive.'
-      : 'Tap ' + NUM[need] + ' stars and each gives up its rune; set the lamp, join them if you like, and stamp the reading into the archive.',
+      : 'Tap ' + NUM[need] + ' stars and each gives up its rune; set the lamp, join them if you like, and stamp the reading into the archive.')
+      + (was && was.star ? ' The one that said "' + was.star + '" gave your card its ' + was.rune[0] + ' ' + was.rune[1] + '.' : ''),
     aspect: '1 / 1',
     steps: [
       { id: 'draw', ask: 'tap ' + NUM[need] + (need === 1 ? ' star' : ' stars'), kind: 'tap', label: 'draw one for me' },
@@ -577,7 +606,9 @@ export default {
       quote: rune[0] + ' ' + rune[1] + ' — ' + rune[2],
       text: 'Drawn from the star that said "' + star.text + '". Spin the wheel on its page for the next.',
       aspect: '1 / 1',
-      paint: (ctx, w, h, e) => wheel(ctx, w, h, e, rune)
+      paint: (ctx, w, h, e) => wheel(ctx, w, h, e, rune),
+      // What this card is of, for the piece it opens as: the star it was drawn from, and its rune.
+      of: { star: star.text, rune }
     };
   },
   piece(env) {

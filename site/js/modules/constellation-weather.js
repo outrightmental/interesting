@@ -2,7 +2,29 @@
    the map, a front between the two farthest stars and a forecast (paint, spark); as a piece it
    is probes launched into the field and a bulletin printed over it, or a front named on those
    two stars, blown across the map and let pass. See js/feed.js for what a module is and
-   js/stage.js for what a piece is. */
+   js/stage.js for what a piece is.
+
+   A card and the feature it opens as are one forecast: the spark puts the front it forecast, the
+   way it was moving, the wind and the visibility on its spec as `of`, and the piece opens the map
+   at that forecast -- the card's front first on the dial, its wind on the gauge. */
+
+// The card this piece was opened from, in the lab's own terms: the forecast it printed, or null for
+// a piece nobody pressed (js/stage.js hands the card over as env.card.of).
+function pressed(env) {
+  const was = env.card && env.card.of;
+  const kind = was && KINDS.find((k) => k.value === was.kind);
+  if (!kind) return null;
+  return {
+    kind,
+    moving: DIRS.indexOf(was.moving) >= 0 ? was.moving : '',
+    wind: Math.max(0, WINDS.indexOf(was.wind)),
+    vis: VIS.indexOf(was.vis) >= 0 ? was.vis : ''
+  };
+}
+
+// The wind a card's own forecast implies, in knots: the five words the lab speaks of wind, read
+// back as the gauge the piece opens on.
+const KNOTS = [5, 10, 18, 26, 34];
 
 const KINDS = [
   { label: 'a warm front', value: 'warm' },
@@ -369,16 +391,20 @@ function bulletin(c, s) {
 
 // Probes into the field at an hour of your choosing, and a forecast printed from what they read.
 function probing(env) {
+  const was = pressed(env);
   const need = env.int(2, 4);
   const hour = env.int(0, 23);
   const word = NUM[need - 2];
-  const s = Object.assign(blank(hour, null), { gust: env.int(0, 10), opener: env.pick(OPENERS), insight: env.pick(INSIGHTS), advisory: env.pick(ADVISORIES), launched: 0 });
+  // The gust the card's own wind implies, so the field a visitor lands on is the field it read.
+  const gust = was ? clamp(Math.round(KNOTS[was.wind] / 3.4), 0, 10) : env.int(0, 10);
+  const s = Object.assign(blank(hour, null), { gust, opener: env.pick(OPENERS), insight: env.pick(INSIGHTS), advisory: env.pick(ADVISORIES), launched: 0 });
   const compose = () => {
     if (s.lines && s.c) s.lines = bulletin(s.c, s);
   };
   return {
     title: env.chance(0.5) ? word + ' probes into the field' : word + ' probes and a forecast',
-    brief: 'Set the hour, tap the map to launch ' + word + ' probes into the microclimates round your stars, call the rain or hold it off, and print the forecast; the bulletin prints itself over the map.',
+    brief: 'Set the hour, tap the map to launch ' + word + ' probes into the microclimates round your stars, call the rain or hold it off, and print the forecast; the bulletin prints itself over the map.'
+      + (was ? ' Your card had ' + was.kind.label + (was.moving ? ' moving ' + was.moving : '') + '.' : ''),
     aspect: '16 / 10',
     steps: [
       { id: 'hour', ask: 'the forecast hour', kind: 'range', min: 0, max: 23, step: 1, value: hour, low: '00:00', high: '23:00' },
@@ -467,6 +493,7 @@ function course(c, s) {
 
 // A front named on the two farthest stars, blown across the map by a wind you set, and let pass.
 function passing(env) {
+  const was = pressed(env);
   const stars = env.stars.slice(0, 40);
   const pair = farthest(stars.map((q) => ({ x: q.x * 1.6, y: q.y })));
   const a = stars[pair[0]];
@@ -479,14 +506,23 @@ function passing(env) {
   const options = [];
   const count = env.int(3, 4);
   while (options.length < count) options.push(pool.splice(env.int(0, pool.length - 1), 1)[0]);
+  // The front the card forecast is the first one offered, and the wind and visibility are its own.
+  if (was) {
+    const at = options.findIndex((k) => k.value === was.kind.value);
+    if (at >= 0) options.unshift(options.splice(at, 1)[0]);
+    else options.unshift(was.kind);
+    options.length = Math.min(options.length, 4);
+  }
   const ms = env.pick([1500, 2000, 2500]);
-  const kt = env.int(6, 30);
-  const vis = env.pick(VIS);
+  const kt = was ? clamp(KNOTS[was.wind], 6, 30) : env.int(6, 30);
+  const vis = was && was.vis ? was.vis : env.pick(VIS);
   const s = Object.assign(blank(env.pick([0, 2, 21, 23]), null), { dir, pair, kt, sweep: 0, passed: false, where: '', hint: true });
   const span = a === b ? 'over “' + a.text + '”' : 'between “' + a.text + '” and “' + b.text + '”';
   return {
-    title: 'a front out of the ' + DIRS[(idx + 4) % 8],
-    brief: 'Name the front that forms ' + (a === b ? 'over your star' : 'between your two farthest stars') + ', set the wind, and watch it cross the map toward the ' + DIRS[idx] + '; once it has passed, hold the barometer steady and the air settles behind it.',
+    // The front the card forecast, named in the title: pressing a warm front opens a warm front.
+    title: (was ? was.kind.label : 'a front') + ' out of the ' + DIRS[(idx + 4) % 8],
+    brief: 'Name the front that forms ' + (a === b ? 'over your star' : 'between your two farthest stars') + ', set the wind, and watch it cross the map toward the ' + DIRS[idx] + '; once it has passed, hold the barometer steady and the air settles behind it.'
+      + (was ? ' Your card called it ' + was.kind.label + ', and it is first on the dial.' : ''),
     aspect: '16 / 10',
     steps: [
       { id: 'front', ask: 'what kind of front', kind: 'choice', options },
@@ -565,15 +601,20 @@ export default {
     cx /= stars.length;
     const where = cx < 40 ? 'west' : cx > 60 ? 'east' : 'middle';
     const kind = env.pick(KINDS);
+    const moving = env.pick(DIRS);
+    const wind = env.pick(WINDS);
+    const vis = env.pick(VIS);
     return {
       title: 'forecast',
       mono: 'pressure: ' + (highs > stars.length / 2 ? 'high' : 'low') + ' over the ' + where
-        + '\nfront: ' + kind.label + ', moving ' + env.pick(DIRS)
-        + '\nwind: ' + env.pick(WINDS)
-        + '\nvisibility: ' + env.pick(VIS),
+        + '\nfront: ' + kind.label + ', moving ' + moving
+        + '\nwind: ' + wind
+        + '\nvisibility: ' + vis,
       text: env.pick(LINES),
       aspect: '16 / 10',
-      paint: (ctx, w, h, e) => map(ctx, w, h, e, kind.value, e.variant)
+      paint: (ctx, w, h, e) => map(ctx, w, h, e, kind.value, e.variant),
+      // What this card is of, for the piece it opens as: the forecast it printed.
+      of: { kind: kind.value, moving, wind, vis }
     };
   },
   piece(env) {

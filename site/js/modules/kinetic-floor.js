@@ -3,7 +3,44 @@
    it is a floor to kick into a riot, a kicker to wind up and let fly, a heap to let settle against
    whichever wall is down, or a domino-gap experiment to configure, predict and tip. The domino
    toy passes a push on when a falling domino reaches the next upright; it models reach, not
-   impact energy. See js/feed.js for what a module is and js/stage.js for what a piece is. */
+   impact energy. See js/feed.js for what a module is and js/stage.js for what a piece is.
+
+   A card and the feature it opens as are one floor: the spark puts what the card is of on its spec
+   as `of` -- the blocks it counted and which way was down, or the whole domino chain it stood up --
+   and the piece opens that floor, the same heap with gravity where the card had it, or the very
+   chain the card previewed. */
+
+// The card this piece was opened from, in the floor's own terms: the domino chain it previewed, or
+// how many blocks it counted, which way was down and the damage report it printed, or null for a
+// piece nobody pressed (js/stage.js hands the card over as env.card.of).
+function pressed(env) {
+  const was = env.card && env.card.of;
+  if (!was) return null;
+  if (was.chain && Array.isArray(was.chain.heights)) return { chain: was.chain };
+  const blocks = Number(was.blocks);
+  if (!isFinite(blocks)) return null;
+  const read = (value, fallback) => (isFinite(Number(value)) ? Number(value) : fallback);
+  return {
+    blocks: Math.max(6, Math.min(28, Math.round(blocks))),
+    flipped: !!was.flipped,
+    impacts: read(was.impacts, 0),
+    fastest: read(was.fastest, 60)
+  };
+}
+
+// The heap the card counted, for the three shapes made of blocks. A card that stood up dominoes
+// counted no blocks, so a floor opened from one spawns the heap it would have spawned unpressed.
+function counted(env) {
+  const was = pressed(env);
+  return was && !was.chain ? was : null;
+}
+
+// The bounce a card's own damage report implies: the floor that recorded the fastest block is the
+// springiest one, so a piece opens with its dial where the card's figures put it.
+function bounceFrom(was, low, high) {
+  const at = Math.round(((was.fastest - 60) / 1340) * 100);
+  return Math.max(low, Math.min(high, at));
+}
 
 const LINES = [
   'Shove something. Nothing here is fragile.',
@@ -340,11 +377,13 @@ function summary(r) {
 // Shape one: the riot. Drop a few, turn the gravity over if you must, kick everything three times
 // without stopping, and the floor stops being polite.
 function riot(env) {
+  const was = counted(env);
   const kicks = env.chance(0.7) ? 3 : 4;
   const word = kicks === 3 ? 'three' : 'four';
   const drops = env.int(3, 6);
-  const start = env.int(6, 14);
-  const bounce = env.int(35, 90);
+  // The floor the card counted, gravity where the card had it.
+  const start = was ? was.blocks : env.int(6, 14);
+  const bounce = was ? bounceFrom(was, 35, 90) : env.int(35, 90);
   const title = env.pick(['kick everything ' + word + ' times', word + ' kicks without stopping']);
   let r = null;
   let dropped = 0;
@@ -354,12 +393,14 @@ function riot(env) {
     if (r) return r;
     r = rig(c);
     r.s.e = 0.25 + (bounce / 100) * 0.7;
+    if (was && was.flipped) r.s.down = 'u';
     r.spawn(start);
     return r;
   };
   return {
     title,
-    brief: 'Set the bounce, drop ' + drops + ' blocks where you tap, turn the gravity over if you must, and kick everything ' + word + ' times without stopping; nothing here is fragile, and the damage is tallied when the riot is called.',
+    brief: 'Set the bounce, drop ' + drops + ' blocks where you tap, turn the gravity over if you must, and kick everything ' + word + ' times without stopping; nothing here is fragile, and the damage is tallied when the riot is called.'
+      + (was ? ' It opens on the ' + start + ' blocks your card counted' + (was.flipped ? ', gravity already over.' : '.') : ''),
     aspect: '16 / 10',
     steps: [
       { id: 'bounce', ask: 'the bounce', kind: 'range', min: 0, max: 100, step: 1, value: bounce, low: 'lead', high: 'rubber' },
@@ -417,9 +458,11 @@ function riot(env) {
 
 // Shape two: the kicker. Choose the stuff, aim, shove a few by hand, then wind up and let fly.
 function kicker(env) {
+  const was = counted(env);
   const shoves = env.int(4, 7);
-  const start = env.int(8, 16);
-  const aim = env.int(-45, 45);
+  const start = was ? was.blocks : env.int(8, 16);
+  // The kicker points where the card's impacts were: its own tally, read as an angle.
+  const aim = was ? Math.max(-45, Math.min(45, Math.round(was.impacts - 70))) : env.int(-45, 45);
   const ms = env.pick([1200, 1600, 2200]);
   const title = env.pick(['shove ' + shoves + ' blocks, then let fly', shoves + ' shoves, a wind-up and a kicker']);
   let r = null;
@@ -433,7 +476,8 @@ function kicker(env) {
   };
   return {
     title,
-    brief: 'Choose what the blocks are made of, aim the kicker, shove ' + shoves + ' of them by hand, then hold to wind the kicker up and let go; everything on the floor leaves it.',
+    brief: 'Choose what the blocks are made of, aim the kicker, shove ' + shoves + ' of them by hand, then hold to wind the kicker up and let go; everything on the floor leaves it.'
+      + (was ? ' The ' + start + ' blocks your card counted are already on it.' : ''),
     aspect: '16 / 10',
     steps: [
       { id: 'weight', ask: 'what the blocks are made of', kind: 'choice', options: WEIGHTS },
@@ -488,10 +532,17 @@ function kicker(env) {
 // Shape three: the heap. Choose which way is down, set the bounce, let it all settle against
 // that wall, then sweep.
 function heap(env) {
-  const n = env.int(14, 28);
+  const was = counted(env);
+  // The heap the card counted, and the wall it was against: a visitor who pressed a heap of
+  // nineteen blocks with the gravity over opens exactly that heap.
+  const n = was ? was.blocks : env.int(14, 28);
   const skip = env.int(0, 3);
   const options = DOWNS.filter((d, i) => i !== skip);
-  const bounce = env.int(20, 80);
+  if (was && was.flipped) {
+    const at = options.findIndex((d) => d.value === 'u');
+    if (at >= 0) options.unshift(options.splice(at, 1)[0]);
+  }
+  const bounce = was ? bounceFrom(was, 20, 80) : env.int(20, 80);
   const title = env.pick(['a heap of ' + n + ' blocks', n + ' blocks and a new down']);
   let r = null;
   let turned = false;
@@ -503,6 +554,7 @@ function heap(env) {
     if (r) return r;
     r = rig(c);
     r.s.e = 0.25 + (bounce / 100) * 0.7;
+    if (was && was.flipped) r.s.down = 'u';
     r.spawn(n);
     return r;
   };
@@ -737,10 +789,16 @@ function dominoPreview(g, w, h, env, spec) {
 }
 
 function dominoPiece(env) {
-  const spec = dominoPlan(env);
+  const was = pressed(env);
+  // The chain the card stood up, exactly as it previewed it, so a visitor who pressed eleven
+  // dominoes with a gap four along tips those very eleven. A card that counted blocks instead
+  // lends its damage report to the gap: the floor that recorded the fastest block opens on the
+  // widest one.
+  const spec = was && was.chain ? was.chain : dominoPlan(env);
+  const gap = was && !was.chain ? 5 + Math.round(bounceFrom(was, 0, 100) * 1.4) : spec.gap;
   const s = {
-    gap: spec.gap, height: 1, prediction: '', pushed: false, time: 0,
-    waited: false, said: '', chain: dominoChain(spec, spec.gap, 1)
+    gap, height: 1, prediction: '', pushed: false, time: 0,
+    waited: false, said: '', chain: dominoChain(spec, gap, 1)
   };
   function draw(c) {
     dominoScene(c.g, c.w, c.h, c, spec, s.chain, s.time, s.pushed, DOMINO_VIEW);
@@ -766,10 +824,11 @@ function dominoPiece(env) {
   }
   return {
     title: dominoTitle(spec),
-    brief: 'Set the marked gap and the height of domino ' + (spec.gapAt + 1) + ', predict whether the push will cross, then tip the first domino and watch. Any prediction works; in this toy, reaching the next domino carries the push on.',
+    brief: 'Set the marked gap and the height of domino ' + (spec.gapAt + 1) + ', predict whether the push will cross, then tip the first domino and watch. Any prediction works; in this toy, reaching the next domino carries the push on.'
+      + (was && was.chain ? ' These are the ' + spec.n + ' dominoes your card stood up.' : ''),
     aspect: '16 / 10',
     steps: [
-      { id: 'gap', ask: 'gap width, as a percentage of ordinary height', kind: 'range', min: 5, max: 145, step: 1, value: spec.gap, low: '5%', high: '145%' },
+      { id: 'gap', ask: 'gap width, as a percentage of ordinary height', kind: 'range', min: 5, max: 145, step: 1, value: gap, low: '5%', high: '145%' },
       { id: 'height', ask: 'domino ' + (spec.gapAt + 1) + ', just before the gap', kind: 'choice', options: DOMINO_HEIGHTS },
       { id: 'prediction', ask: 'will the push cross the gap?', kind: 'choice', options: DOMINO_GUESSES },
       { id: 'tip', ask: 'tip the first domino', kind: 'press', count: 1, label: 'tip and watch' },
@@ -847,7 +906,9 @@ export default {
         title: dominoTitle(spec),
         text: 'One gap interrupts the chain. Make the striped domino taller, predict whether the push will cross, and tip the first one to find out.',
         aspect: '16 / 10',
-        paint: (ctx, w, h, e) => dominoPreview(ctx, w, h, e, spec)
+        paint: (ctx, w, h, e) => dominoPreview(ctx, w, h, e, spec),
+        // What this card is of, for the piece it opens as: the chain it stood up.
+        of: { chain: spec }
       };
     }
     const flipped = env.chance(0.3);
@@ -860,7 +921,10 @@ export default {
       mono: 'impacts: ' + impacts + '\nfastest block: ' + fastest + ' px/s\ntotal distance shoved: ' + metres + ' m',
       text: env.pick(LINES),
       aspect: '16 / 10',
-      paint: (ctx, w, h, e) => floor(ctx, w, h, e, flipped)
+      paint: (ctx, w, h, e) => floor(ctx, w, h, e, flipped),
+      // What this card is of, for the piece it opens as: its heap, which way was down, and the
+      // damage report the piece opens its dials on.
+      of: { blocks, flipped, impacts, fastest }
     };
   },
   piece

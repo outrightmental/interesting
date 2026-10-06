@@ -1,7 +1,21 @@
 /* The quiet room: a ring that breathes, a dimmer, and one thing to put down. As a card it is the
    ring (paint, spark); as a piece it is a few breaths at your pace, one thing set down and
    left down, or a rain-fogged window you clear and settle. See js/feed.js for what a module is
-   and js/stage.js for what a piece is. */
+   and js/stage.js for what a piece is.
+
+   A card and the feature it opens as are one quiet: the spark puts what it was carrying, or the
+   word it was saying, on its spec as `of`, and whichever shape the piece takes it is about that --
+   the thing the card named is the thing the room sets down, traces or shelves. */
+
+// The card this piece was opened from, in the room's own terms: the burden it was carrying or the
+// word it was saying, or null for a piece nobody pressed (js/stage.js, env.card.of).
+function pressed(env) {
+  const was = env.card && env.card.of;
+  if (!was) return null;
+  const burden = typeof was.burden === 'string' ? was.burden : '';
+  const word = typeof was.word === 'string' ? was.word : '';
+  return burden || word ? { burden, word } : null;
+}
 
 const BURDENS = [
   'the unread thing', 'the half-finished message', 'the thing you said in 2014',
@@ -82,11 +96,14 @@ function caption(ctx, w, h, env, text, a) {
 
 // A few breaths at a pace the visitor sets; the room goes dark when they are done.
 function breaths(env) {
+  const was = pressed(env);
   const count = env.int(2, 3);
   const s = { pace: 0, dim: 0.4, phase: 0, done: 0, finished: false, fade: 0 };
   return {
     title: count + ' breaths at your pace',
-    brief: 'Set the pace and the light, then follow the ring ' + (count === 2 ? 'twice' : 'three times') + '. The room goes dark on its own when you are done.',
+    brief: 'Set the pace and the light, then follow the ring ' + (count === 2 ? 'twice' : 'three times') + '. The room goes dark on its own when you are done.'
+      + (was && was.burden ? ' The ring holds ' + was.burden + ' while you breathe.' : '')
+      + (was && was.word ? ' The room says: ' + was.word + '.' : ''),
     aspect: '16 / 9',
     steps: [
       { id: 'pace', ask: 'the pace of a breath', kind: 'choice', options: PACES },
@@ -127,6 +144,7 @@ function breaths(env) {
 
 // One thing chosen, held for a moment, and let go with a sigh; it stays down.
 function putDown(env) {
+  const was = pressed(env);
   const pool = BURDENS.slice();
   const options = [];
   while (options.length < 3) {
@@ -134,11 +152,18 @@ function putDown(env) {
     options.push({ label: pool[i], value: pool[i] });
     pool.splice(i, 1);
   }
+  // What the card was carrying is the first thing offered: a visitor who pressed it came to put
+  // that down, not to choose again from scratch.
+  if (was && was.burden && options.every((o) => o.value !== was.burden)) {
+    options.unshift({ label: was.burden, value: was.burden });
+  }
   const holdMs = env.pick([1500, 2000, 2500]);
   const s = { chosen: '', held: false, sighed: false, swell: 0.4, release: 0 };
   return {
     title: 'one thing to put down',
-    brief: 'Choose what you are carrying, hold it for a moment, and let it go with one long sigh. It stays down.',
+    brief: 'Choose what you are carrying, hold it for a moment, and let it go with one long sigh. It stays down.'
+      + (was && was.burden ? ' ' + was.burden[0].toUpperCase() + was.burden.slice(1) + ' is the first one offered.' : '')
+      + (was && was.word ? ' The room says: ' + was.word + '.' : ''),
     aspect: '16 / 9',
     steps: [
       { id: 'weight', ask: 'what you are carrying', kind: 'choice', options },
@@ -175,6 +200,7 @@ function putDown(env) {
 // A rain-fogged window watched and settled: pick the pane, set the wind, trace the glass, wipe,
 // and let the room close around it.
 function windowWatch(env) {
+  const was = pressed(env);
   const taps = env.int(2, 4);
   const wipes = env.int(1, 2);
   const s = { pane: 'clear', gust: 0.35, traced: 0, wiped: 0, t: 0, fog: 0.22, release: 0, rings: [] };
@@ -236,7 +262,9 @@ function windowWatch(env) {
 
   return {
     title: 'the window watch',
-    brief: 'Pick the pane and the wind, trace the glass ' + (taps === 1 ? 'once' : taps + ' times') + ', wipe it ' + (wipes === 1 ? 'once' : 'twice') + ', and let the room settle around what clears.',
+    brief: 'Pick the pane and the wind, trace the glass ' + (taps === 1 ? 'once' : taps + ' times') + ', wipe it ' + (wipes === 1 ? 'once' : 'twice') + ', and let the room settle around what clears.'
+      + (was && was.burden ? ' Trace ' + was.burden + ' on the glass, and wipe that away too.' : '')
+      + (was && was.word ? ' The glass says: ' + was.word + '.' : ''),
     aspect: '16 / 9',
     steps: [
       { id: 'pane', ask: 'the pane', kind: 'choice', options: PANES },
@@ -293,6 +321,7 @@ function windowWatch(env) {
 
 // Three keepsakes set onto a shelf, latched, and left to settle.
 function shelfRitual(env) {
+  const was = pressed(env);
   const pool = KEEPSAKES.slice();
   const picks = [];
   while (picks.length < 4) {
@@ -300,6 +329,9 @@ function shelfRitual(env) {
     picks.push(pool[i]);
     pool.splice(i, 1);
   }
+  // What the card was carrying goes on the shelf first: the room shelves the thing a visitor
+  // pressed, among the keepsakes it had out already.
+  if (was && was.burden) picks.unshift(was.burden);
   const keep = env.int(2, 3);
   const holdMs = env.pick([1400, 1800, 2200]);
   const settleFor = env.pick([3.5, 4.5, 5.5]);
@@ -394,7 +426,9 @@ function shelfRitual(env) {
 
   return {
     title: 'the shelf ritual',
-    brief: 'Set the lamp, tap the shelf to place ' + (keep === 2 ? 'two keepsakes' : 'three keepsakes') + ', hold to latch it, then let the room settle around what stays.',
+    brief: 'Set the lamp, tap the shelf to place ' + (keep === 2 ? 'two keepsakes' : 'three keepsakes') + ', hold to latch it, then let the room settle around what stays.'
+      + (was && was.burden ? ' ' + was.burden[0].toUpperCase() + was.burden.slice(1) + ' is the first one up.' : '')
+      + (was && was.word ? ' The lamp is low: ' + was.word + '.' : ''),
     aspect: '16 / 9',
     steps: [
       { id: 'light', ask: 'the lamp', kind: 'choice', options: LIGHTS },
@@ -462,18 +496,24 @@ export default {
   spark(env) {
     if (env.chance(0.6)) {
       const dim = 0.1 + env.rnd() * 0.35;
+      const burden = env.pick(BURDENS);
       return {
         title: 'one thing to put down',
-        quote: env.pick(BURDENS),
+        quote: burden,
         text: 'Set it down here and leave it down. Nothing in the quiet room keeps score.',
         aspect: '5 / 3',
-        paint: (ctx, w, h, e) => room(ctx, w, h, e, 0.3, dim, e.variant.scale)
+        paint: (ctx, w, h, e) => room(ctx, w, h, e, 0.3, dim, e.variant.scale),
+        // What this card is of, for the piece it opens as: the thing it is carrying.
+        of: { burden }
       };
     }
+    const word = env.pick(WORDS);
     return {
       title: 'six out, six back',
-      quote: env.pick(WORDS),
-      text: 'A breath to follow, or not. The ring takes six seconds out and six back, and holds while you hold.'
+      quote: word,
+      text: 'A breath to follow, or not. The ring takes six seconds out and six back, and holds while you hold.',
+      // What this card is of: the word the room was saying.
+      of: { word }
     };
   },
   piece(env) {
