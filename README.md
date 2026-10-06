@@ -192,10 +192,25 @@ the upper right. Nothing else is chrome.
 - **Two options are adopted, not copied.** *cookies* and *state* belong to `js/analytics.js` and
   `js/state.js`, which are fixed files no run may write (see [Analytics
   axiom](#analytics-axiom) and [Local state axiom](#local-state-axiom)). So the shell does it from
-  outside: it waits for each corner button to be drawn, hides it where its own file pinned it, and
-  presses that same button from the constellation. One cookies dialog, one state menu, neither
-  fixed file touched — and `RealSiteTest` still holds every other file of the site to naming
-  neither of them.
+  outside: it waits for each corner button to be drawn and hides it where its own file pinned it.
+  *cookies* then presses that same button, with the lightbox out of the way first, because what it
+  opens is the consent library's own dialog. One cookies dialog, one state menu, neither fixed
+  file touched — and `RealSiteTest` still holds every other file of the site to naming neither of
+  them.
+- **…and *state* keeps the lightbox** (issue #66). It is the one option that is neither a place to
+  go nor somebody else's dialog: it is a thing to do, and it gets the screen while it is being
+  done. So the lightbox is not dropped for it. The constellation is put away, the panel
+  `js/state.js` built is **moved** into `#sparknav-modal` — the middle of the veil that is already
+  up — and dressed as a modal by that file's own styles: wider, taller, with room to read the
+  document and paste one in. Nothing the lightbox is made of is torn down and raised again in
+  between: `<html data-lightbox>` goes from `nav` straight to `state` without ever being removed,
+  so the veil, the held frame loop and the inert page behind it never so much as blink. There is
+  no way back to the constellation — Escape, the panel's own *close* and a press on the dimmed
+  page around it all close the modal, and the lightbox goes down with it, which is what "return to
+  the site" means. The asking is the shell's and the panel is the fixed file's, that way round on
+  purpose: a store that offers no panel, or a run that breaks the asking, leaves the corner menu
+  exactly as it always was, so nothing a run writes can leave a visitor without a way to their own
+  state.
 - **It is a `<details>`.** The logo is the `<summary>`, so the disclosure, the keyboard handling
   and the no-script fallback are the browser's own: with scripting switched off the same chips
   cascade under the logo as plain links, staggered into a staircase where the script has said what
@@ -679,10 +694,9 @@ iteration process rather than a one-off tidy-up.
   nobody loses a sky to the change.
 - **The meta menu.** *state*, an option in the logo's constellation (see [The logo and the
   constellation](#the-logo-and-the-constellation)): the button `js/state.js` pins to the
-  bottom-right corner is still what the site presses, but the shell hides it there and offers it
-  in the nav beside *cookies* instead, so the only thing left on the bottom edge is the *steer the
-  site* button of the [participation axiom](#participation-axiom). It opens a panel holding the
-  whole document as
+  bottom-right corner is hidden there and the option offered in the nav beside *cookies* instead,
+  so the only thing left on the bottom edge is the *steer the site* button of the [participation
+  axiom](#participation-axiom). It opens a panel holding the whole document as
   text: copy it out, paste one in and press *replace mine*, or *clear*. Import **replaces** rather
   than merges, for reproducibility — the sky it opens is the sky it came from — and clearing asks
   first. Both reload the page
@@ -691,6 +705,16 @@ iteration process rather than a one-off tidy-up.
   message. The panel is keyboard-operable, closes on Escape with the focus returned, carries its
   own focus ring and 44px controls because the pages are free to restyle their own, and fits a
   320px screen.
+- **Where that panel opens** (issue #66): in the middle of the lightbox the constellation was just
+  in, not in the corner it is built in. `window.interestingState.menu.present(host)` is the one
+  thing this file offers a shell — it moves the panel into the host, dresses it as a modal with
+  its own styles and opens it, and hands back a function that closes it and puts it where it was.
+  So the state interface takes up the whole screen and the visitor's whole attention while they
+  are in it, and closing it puts them back on the page. Its contents, its words and its reload
+  after an import or a clear are exactly as they were; only the framing changed. The offer is the
+  fixed file's and the asking is the shell's, which is what makes it safe: the corner menu still
+  works on its own, so a run that rewrites `js/site.js` badly cannot take a visitor's way to
+  their own state away.
 - **Stated in the prompt.** The `Rules:` block names the exact line, shows the three calls a page
   needs, names the keys the site keeps, and says that no page may touch `localStorage` or
   `sessionStorage` itself — nor any shared script it loads, which is why `js/threshold.js` keeps
@@ -815,9 +839,13 @@ addition — and it is the only one that is about the reader rather than about t
   of the bottom edge for its neighbours, in `rem` so that enlarging the text enlarges the room it
   leaves them. The other two are **adopted** rather than copied: the shell hides the corner buttons
   `js/analytics.js` and `js/state.js` draw for themselves and offers *cookies* and *state* in the
-  logo's constellation, which presses those very buttons (see [The logo and the
-  constellation](#the-logo-and-the-constellation)) — one cookies dialog and one state menu on the
-  site, with neither fixed file edited to arrange it.
+  logo's constellation (see [The logo and the
+  constellation](#the-logo-and-the-constellation)), pressing the consent banner's own button and
+  hosting the state menu's own panel in the lightbox — one cookies dialog and one state menu on the
+  site, with neither fixed file restyled or reworded to arrange it. *state* is the one of the three
+  that is not a corner affordance at all any more once it is open: it is a modal in the middle of
+  the screen, because what it holds is a document to read, copy and paste rather than a question to
+  answer in passing.
 - **Responsive and accessible, like everything else here.** An accessible name that says where the
   link goes and that it opens a new tab, with the visible words inside it (WCAG 2.5.3 Label in
   Name); its own `:focus-visible` ring, because pages of this site are free to take the browser's
@@ -909,7 +937,11 @@ to type and no second press. *Don't overdo it.*
   who got here by mistake should be a key away from is the one that changes nothing, and it comes
   back to the control that opened it however the question is answered. A press on the backdrop
   dismisses it, the buttons are 44px and wrap, and the box fits a 320px screen. Nothing in it
-  animates, so there is no motion to answer for.
+  animates, so there is no motion to answer for. It is also woken up before it is shown: the
+  dialog is a child of the body, built the first time anything asks, so the nav's lightbox may
+  have made it `inert` with the rest of the page long before — and since the state interface asks
+  from inside that lightbox now (issue #66), the marks come off at ask time. A question nobody can
+  answer is worse than no question.
 - **The meta menu adopts it too.** [`site/js/state.js`](site/js/state.js) is in `FIXED_FILES`, is
   never shown to a model and deliberately carries its own inline styles — and its *clear* still
   goes through the shared component, because a visitor should meet the same question there as in a
