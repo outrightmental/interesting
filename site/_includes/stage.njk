@@ -25,7 +25,7 @@
 <main class='stage{% if threshold %} stage-threshold{% endif %}' id='stage' data-mode='{% if threshold %}quiet{% else %}idle{% endif %}'{% if stageEntry %} data-stage-world='{{ stageWorld }}'{% endif %}{% if threshold %} data-threshold='true'{% endif %}{% if stageRandom %} data-stage-random='true'{% endif %}>
   <canvas class='stage-burst' id='stage-burst' aria-hidden='true'></canvas>
   <div class='stage-inner' id='stage-inner'>
-    <div class='stage-head'>
+    <div class='stage-head' id='stage-head'>
       <h1 class='stage-world' id='stage-world'>{{ stageEntry.name if stageEntry else title }}</h1>
 {%- if threshold %}
       <p class='stage-read' id='stage-read' hidden></p>

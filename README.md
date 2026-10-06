@@ -967,7 +967,12 @@ iteration, stated in the prompt and held to in code.
   dots for progress, one text button that skips, and the ceremony — a done mark over the scene, a
   burst in the world's palette and a short chime, the piece scaling away and the next arriving
   from below; for a visitor who asked for less motion there is no burst and no transition, only
-  the mark and the next piece. The threshold is the same stage in
+  the mark and the next piece. The scene fills the real estate the first screen has (issue #65): it
+  is as tall as the viewport leaves once the nav's room, `<main>`'s padding, the heading — measured,
+  because a title that wraps takes two lines — and the margin that lets the feed peek are off it,
+  and as wide as that height allows at the piece's own aspect ratio, which is also the width of its
+  column, so the knobs take every pixel it cannot use and no empty band is left across the middle of
+  the page. The threshold is the same stage in
   its asking state. The URL carries the piece (`quiet-room.html#<seed>`), so a piece can be sent
   to someone and the back button walks back through what was finished; opening a card of another
   world moves the address to that world's page without a load, because a page is wherever the
