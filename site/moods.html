@@ -1,246 +1,160 @@
 ---
 layout: layout.njk
 title: the mood atlas
-description: 'How this site reads a visitor without asking them to describe themselves: every way it has of asking, every answer it can arrive at, and the world each one opens.'
+description: 'See the questions this site can ask, try one, and follow its reading to a world.'
 stylesheet: moods
 ---
-{#-
-  The apparatus, shown rather than hidden: what the site has read, how it asks, and every answer
-  it can arrive at. The orientations and the worlds come from _data/worlds.json, the one list the site
-  keeps; js/threshold.js supplies the mechanisms and the pull of each orientation once scripting
-  runs. This page lists every world itself, which is why the shared feed after <main> is left
-  off it (see _includes/layout.njk).
--#}
-  <main class='list-page-main'>
-    <h1>the mood atlas</h1>
-    <p class='page-purpose'>This page shows how the site asks its sideways question and what each answer opens; try a mechanism, read what it sees, then jump to the matching world.</p>
+<main class='list-page-main'>
+  <h1>the mood atlas</h1>
+  <p class='page-purpose'>See how a sideways question points to a world: try any way of asking below, then open its answer or choose a world card.</p>
+  <section class='atlas-state panel' aria-labelledby='state-heading'>
+    <h2 id='state-heading' class='panel-title'>what it has read</h2>
+    <p id='current' class='current'>Nothing read yet. Every world is on offer.</p>
+    <p id='signal-line' class='signal-line'></p>
+    <div class='controls'>
+      <button id='requery' type='button'>ask me another way</button>
+      <button id='forget' type='button' class='warning'>forget my reading</button>
+      <a class='action' id='current-world' href='index.html' hidden>the threshold</a>
+    </div>
+    <p id='atlas-status' class='panel-status' aria-live='polite'>Try any way of asking, or choose a world card.</p>
+    <div id='atlas-probe' class='atlas-probe' hidden></div>
+  </section>
+  <h2 class='section-title'>how it asks</h2>
+  <p class='section-note'>The questions are about choices and actions: doors, stones, taps, holds, marks and lines. Choose one to try it.</p>
+  <ul id='mechanisms' class='mechanisms list-stack'>
+    <li>Questions need scripting. The world cards below are links either way.</li>
+  </ul>
+</main>
+<script>
+(function () {
+  function start() {
+    var api = window.threshold;
+    if (!api) return;
+    var current = document.getElementById('current');
+    var signals = document.getElementById('signal-line');
+    var worldLink = document.getElementById('current-world');
+    var requery = document.getElementById('requery');
+    var forget = document.getElementById('forget');
+    var host = document.getElementById('atlas-probe');
+    var list = document.getElementById('mechanisms');
+    var status = document.getElementById('atlas-status');
+    var rows = Object.create(null);
+    var tried = [];
 
-    <section class='atlas-state panel' aria-labelledby='state-heading'>
-      <h2 id='state-heading' class='panel-title'>what it has read</h2>
-      <p id='current' class='current'>Nothing read yet. Every world is on offer.</p>
-      <p id='signal-line' class='signal-line'></p>
-      <p id='alternates-heading' class='signal-line' hidden>Other worlds close to this reading:</p>
-      <div id='alternates' class='atlas-alternates' hidden></div>
-      <div class='controls'>
-        <button id='requery' type='button'>ask me another way</button>
-        <button id='forget' type='button' class='warning'>forget my reading</button>
-        <a class='action' id='current-world' href='index.html' hidden>the threshold</a>
-      </div>
-      <p id='atlas-status' class='panel-status'>Try any mechanism, or jump straight to a world.</p>
-      <div id='atlas-probe' class='atlas-probe' hidden></div>
-    </section>
+    function showReading(reading) {
+      var o = reading && reading.orientation;
+      current.textContent = api.describe(reading);
+      var hasAnswer = !!(o && reading.source && reading.source !== 'signals');
+      worldLink.hidden = !hasAnswer;
+      if (hasAnswer) {
+        worldLink.href = o.world;
+        worldLink.textContent = o.worldName;
+      }
+    }
 
-    <h2 class='section-title'>how it asks</h2>
-    <p class='section-note'>It asks about choices and actions in the world around you: doors, stones, taps, holds, marks and lines. Pick any mechanism below to run it now.</p>
-    <ul id='mechanisms' class='mechanisms list-stack'>
-      <li>The mechanisms are listed here once scripting is available. Without it, nothing is lost: every world below is a plain link.</li>
-    </ul>
+    function showSignals() {
+      var s = api.signals();
+      signals.textContent = 'It also reads the clock: it is ' + s.part + ' where you are'
+        + (s.zone ? ' (' + s.zone + ')' : '') + '. '
+        + (s.sinceLast === null ? 'This is your first visit on this machine.' : 'You were ' + s.sinceText + '.');
+    }
 
-    <h2 class='section-title'>every answer, and its world</h2>
-    <p class='section-note'>{{ worlds.worlds.length | words | capitalize }} frames of mind, each with one world behind it. Nothing in this list is the default, and the site would rather you overrule it than take its word.</p>
-    <ul class='orientations list-stack'>
-{%- for world in worlds.worlds %}
-      <li data-world='{{ world.file }}' data-mood='{{ world.mood }}'><a href='{{ world.file }}'>{{ world.name }}</a> <strong>{{ world.orientation }}</strong> <span class='pull'></span></li>
-{%- endfor %}
-    </ul>
-  </main>
+    function active(id) {
+      Object.keys(rows).forEach(function (key) {
+        rows[key].classList.toggle('is-active', key === id);
+      });
+    }
 
-  <script>
-    (function () {
-      function start() {
-        var api = window.threshold;
-        var currentEl = document.getElementById('current');
-        var signalEl = document.getElementById('signal-line');
-        var worldLink = document.getElementById('current-world');
-        var alternatesHeading = document.getElementById('alternates-heading');
-        var alternatesEl = document.getElementById('alternates');
-        var requeryBtn = document.getElementById('requery');
-        var forgetBtn = document.getElementById('forget');
-        var probeHost = document.getElementById('atlas-probe');
-        var list = document.getElementById('mechanisms');
-        var statusEl = document.getElementById('atlas-status');
-        if (!api) return;
+    function note(probe) {
+      if (!probe) return;
+      var name = probe.name || probe.probe;
+      if (name && tried.indexOf(name) === -1) {
+        tried.push(name);
+        if (tried.length > 6) tried.shift();
+      }
+      status.textContent = tried.length ? 'Tried here: ' + tried.join(' · ') : 'Try any way of asking, or choose a world card.';
+    }
 
-        var tried = [];
-        var mechanismRows = Object.create(null);
-
-        function worldLabel(orientation) {
-          if (!orientation) return '';
-          return orientation.worldName || orientation.name || orientation.world || '';
+    function run(id) {
+      host.hidden = false;
+      var mounted = api.mount(host, {
+        probe: id,
+        onAnswer: function (reading, probe) {
+          host.textContent = '';
+          host.hidden = true;
+          active('');
+          note(probe);
+          showReading(reading);
+          showSignals();
+          requery.focus();
+        },
+        onSkip: function (probe) {
+          host.textContent = '';
+          host.hidden = true;
+          active('');
+          note(probe);
+          status.textContent = 'Skipped. Choose another way, or open a world card.';
+          requery.focus();
         }
+      });
+      if (!mounted) {
+        host.hidden = true;
+        status.textContent = 'That question could not open. Choose a world card instead.';
+        return;
+      }
+      active(mounted.probe);
+      note(mounted);
+      host.scrollIntoView({ behavior: api.reducedMotion() ? 'auto' : 'smooth', block: 'nearest' });
+      var first = host.querySelector('button, input, [tabindex]');
+      if (first) first.focus({ preventScroll: true });
+    }
 
-        function updateTried() {
-          if (!statusEl) return;
-          if (!tried.length) {
-            statusEl.textContent = 'Try any mechanism, or jump straight to a world.';
-            return;
-          }
-          statusEl.textContent = 'Tried this visit: ' + tried.join(' · ');
-        }
+    list.textContent = '';
+    api.probes().forEach(function (probe) {
+      var item = document.createElement('li');
+      item.setAttribute('data-probe', probe.probe);
+      rows[probe.probe] = item;
+      var name = document.createElement('span');
+      name.className = 'mechanism-name';
+      name.textContent = probe.name || probe.probe;
+      var ask = document.createElement('span');
+      ask.className = 'mechanism-ask';
+      ask.textContent = probe.ask;
+      var button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = 'ask this way';
+      button.setAttribute('aria-label', 'ask by ' + name.textContent);
+      button.addEventListener('click', function () { run(probe.probe); });
+      item.appendChild(name);
+      item.appendChild(ask);
+      item.appendChild(button);
+      list.appendChild(item);
+    });
 
-        function noteProbe(probe) {
-          if (!probe) return;
-          var name = probe.name || probe.probe;
-          if (!name || tried.indexOf(name) !== -1) return;
-          tried.push(name);
-          if (tried.length > 6) tried.shift();
-          updateTried();
-        }
-
-        function setActiveProbe(id) {
-          Object.keys(mechanismRows).forEach(function (probeId) {
-            mechanismRows[probeId].classList.toggle('is-active', probeId === id);
-          });
-        }
-
-        function highlightWorld(reading) {
-          var rows = document.querySelectorAll('.orientations li[data-world]');
-          rows.forEach(function (row) { row.classList.remove('is-picked'); });
-          var o = reading && reading.orientation;
-          var read = !!(o && reading.source && reading.source !== 'signals');
-          if (!read) return;
-          var picked = document.querySelector('.orientations li[data-world="' + o.world + '"]');
-          if (picked) picked.classList.add('is-picked');
-        }
-
-        function showAlternates(reading) {
-          alternatesEl.textContent = '';
-          var o = reading && reading.orientation;
-          var read = !!(o && reading.source && reading.source !== 'signals');
-          if (!read || !reading.alternates || !reading.alternates.length) {
-            alternatesEl.hidden = true;
-            alternatesHeading.hidden = true;
-            return;
-          }
-          var shown = 0;
-          reading.alternates.forEach(function (alt) {
-            if (!alt || !alt.world || alt.world === o.world) return;
-            var a = document.createElement('a');
-            a.href = alt.world;
-            a.textContent = worldLabel(alt);
-            alternatesEl.appendChild(a);
-            shown += 1;
-          });
-          alternatesEl.hidden = shown === 0;
-          alternatesHeading.hidden = shown === 0;
-        }
-
-        function showReading(reading) {
-          var o = reading && reading.orientation;
-          currentEl.textContent = api.describe(reading);
-          showAlternates(reading);
-          highlightWorld(reading);
-          if (!o || !reading.source || reading.source === 'signals') {
-            worldLink.hidden = true;
-            return;
-          }
-          worldLink.hidden = false;
-          worldLink.href = o.world;
-          worldLink.textContent = worldLabel(o);
-        }
-
-        function showSignals() {
-          var s = api.signals();
-          signalEl.textContent = 'It also reads the clock: it is ' + s.part + ' where you are'
-            + (s.zone ? ' (' + s.zone + ')' : '') + '. '
-            + (s.sinceLast === null ? 'This is your first visit on this machine.'
-              : 'You were ' + s.sinceText + '.');
-        }
-
-        function run(probeId) {
-          probeHost.hidden = false;
-          var mounted = api.mount(probeHost, {
-            probe: probeId,
-            onAnswer: function (reading, probe) {
-              probeHost.textContent = '';
-              probeHost.hidden = true;
-              setActiveProbe('');
-              noteProbe(probe);
-              showReading(reading);
-              showSignals();
-              requeryBtn.focus();
-            },
-            onSkip: function (probe) {
-              probeHost.textContent = '';
-              probeHost.hidden = true;
-              setActiveProbe('');
-              noteProbe(probe);
-              if (statusEl) statusEl.textContent = 'Skipped. Choose another way, or open a world directly.';
-              requeryBtn.focus();
-            }
-          });
-
-          if (mounted) {
-            setActiveProbe(mounted.probe || '');
-            noteProbe(mounted);
-          }
-
-          probeHost.scrollIntoView({ behavior: api.reducedMotion() ? 'auto' : 'smooth', block: 'nearest' });
-          var first = probeHost.querySelector('button, input, [tabindex]');
-          if (first) first.focus({ preventScroll: true });
-        }
-
-        list.textContent = '';
-        api.probes().forEach(function (probe) {
-          var item = document.createElement('li');
-          item.setAttribute('data-probe', probe.probe);
-          mechanismRows[probe.probe] = item;
-
-          var name = document.createElement('span');
-          name.className = 'mechanism-name';
-          name.textContent = probe.name || probe.probe;
-
-          var ask = document.createElement('span');
-          ask.className = 'mechanism-ask';
-          ask.textContent = probe.ask;
-
-          var button = document.createElement('button');
-          button.type = 'button';
-          button.textContent = 'ask this way';
-          button.setAttribute('aria-label', 'ask by ' + (probe.name || probe.probe));
-          button.addEventListener('click', function () { run(probe.probe); });
-
-          item.appendChild(name);
-          item.appendChild(ask);
-          item.appendChild(button);
-          list.appendChild(item);
-        });
-
-        api.orientations().forEach(function (o) {
-          var row = document.querySelector('.orientations li[data-world="' + o.world + '"] .pull');
-          if (row) row.textContent = o.pull;
-        });
-
-        requeryBtn.addEventListener('click', function () { run(null); });
-
-        window.interestingSite.destructive(forgetBtn, {
-          what: 'forget what this site has read about you',
-          detail: 'The orientation it arrived at would go, and the palette the site is wearing '
-            + 'with it. What you left in the worlds stays. It asks again whenever you like.',
-          onConfirm: function () {
-            api.forget();
-            showReading(null);
-            showSignals();
-            currentEl.textContent = 'The reading is forgotten. What you left in the worlds stays until you clear it from the state menu, bottom right.';
-            if (statusEl) statusEl.textContent = 'Reading forgotten. Ask another way when you want.';
-            setActiveProbe('');
-          },
-          onCancel: function () { showReading(api.reading()); }
-        });
-
-        window.addEventListener('threshold:reading', function () {
-          if (probeHost.hidden) showReading(api.reading());
-        });
-
-        updateTried();
+    requery.addEventListener('click', function () { run(null); });
+    window.interestingSite.destructive(forget, {
+      what: 'forget what this site has read about you',
+      detail: 'The orientation it arrived at would go. What you left in the worlds stays.',
+      when: function () {
+        var reading = api.reading();
+        return !!(reading && reading.orientation && reading.source !== 'signals');
+      },
+      onConfirm: function () {
+        api.forget();
         showReading(api.reading());
         showSignals();
-      }
-
-      if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', start);
-      } else {
-        start();
-      }
-    })();
-  </script>
+        active('');
+        status.textContent = 'Nothing read yet. Ask another way whenever you like.';
+      },
+      onCancel: function () { showReading(api.reading()); }
+    });
+    window.addEventListener('threshold:reading', function () {
+      if (host.hidden) showReading(api.reading());
+    });
+    showReading(api.reading());
+    showSignals();
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
+  else start();
+})();
+</script>
