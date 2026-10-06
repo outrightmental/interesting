@@ -2,12 +2,12 @@
 <!--
   Every page of the site, in the order the site map page lists them.
 
-  The <loc> values are relative paths, like every other link in /site: this site has no fixed
+  The <loc> values are relative paths, like every other link between pages: this site has no fixed
   domain and is served under a sub-path, so a hard-coded origin here would be wrong for every fork
   and for every local copy.
 
   Axiom: all of the content stays reachable from the root, through the navigation and through this
-  file. A page added to /site is listed here in the same change.
+  file. A page added to the site is listed here in the same change.
 -->
 <urlset xmlns='http://www.sitemaps.org/schemas/sitemap/0.9'>
   <url><loc>index.html</loc></url>

@@ -1,10 +1,6 @@
 ---
 layout: layout.njk
 title: the kinetic floor
-description: 'A floor of blocks and dominoes: shove a heap, flip gravity, or make one domino taller and predict whether a fall crosses a gap.'
 ---
-{#- the kinetic floor: a stage (_includes/stage.njk, js/stage.js) on which js/modules/kinetic-floor.js makes a piece
-    of this world from a seed, played, finished and followed by the next. The world's card half and
-    its piece live in the module; the page is this. -#}
 {%- set stageWorld = 'kinetic-floor' -%}
 {% include 'stage.njk' %}
