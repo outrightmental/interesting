@@ -473,8 +473,10 @@ async function setKnob(page, clock, knob, slider) {
   if (kind === 'hold') {
     const button = knob.querySelector('button');
     fire(button, 'pointerdown');
-    // The ticker says how far the hold has got; let go when it is full, and never wait forever.
-    for (let i = 0; i < 400 && knob.css.get('--knob-pct') !== '100.0%'; i++) await clock.advance(50);
+    // The bar sets the knob the moment it fills, so keep holding until the stage says it is set --
+    // and never wait forever. The let-go after that is a visitor taking their finger off a knob
+    // that is already set, which has to change nothing at all (issue #74).
+    for (let i = 0; i < 400 && !isSet(knob); i++) await clock.advance(50);
     fire(button, 'pointerup');
     await clock.advance(120);
     return;

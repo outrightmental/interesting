@@ -46,7 +46,9 @@
              a slider already has an answer on it and leaving it where it is is giving that answer;
              ctx.value(id) is where it starts from the first frame on
     press    one big button pressed `count` times (label); apply(id, n) each press, set at count
-    hold     one big button held for `ms` (label); apply(id, heldMs) when let go after long enough
+    hold     one big button held for `ms` (label); apply(id, heldMs) the moment the bar fills,
+             with no wait for the release: the holding is the answer, so letting go after that
+             changes nothing and letting go before it is a hold that did not count
     tap      the scene itself, tapped: the piece's tap() decides, and calls ctx.satisfy(id)
              when the knob is set (ctx.progress(id, 0..1) shows how close). A tap anywhere must
              count, since the stage adds a button for anyone who cannot tap the scene, which
@@ -877,33 +879,51 @@ const KNOBS = {
     b.type = 'button';
     let started = 0;
     let ticker = null;
+    let fired = false; // this press has already filled the bar and set the knob
+    const halt = () => {
+      if (ticker) ticker();
+      ticker = null;
+    };
     function down() {
       if (started || b.disabled) return;
       started = performance.now();
+      fired = false;
       b.classList.add('is-held');
       b.setAttribute('aria-pressed', 'true');
       // Registered, so a hold still down when the piece goes -- a finger that never lifts, a knob
       // disabled under it -- leaves no ticker running against a knob that is no longer anywhere.
-      ticker = ticking(() => {
-        knob.style.setProperty('--knob-pct', Math.min(100, ((performance.now() - started) / ms) * 100).toFixed(1) + '%');
-      }, 50);
+      ticker = ticking(paint, 50);
     }
+    // The bar, and the knob the moment the bar is full: the holding is the answer and the letting
+    // go is not part of it, so a visitor who watches it fill and keeps holding has already set the
+    // knob and the piece carries on under their finger (issue #74).
+    function paint() {
+      const held = performance.now() - started;
+      if (held >= ms) {
+        fill(held);
+        return;
+      }
+      knob.style.setProperty('--knob-pct', ((held / ms) * 100).toFixed(1) + '%');
+    }
+    function fill(held) {
+      fired = true;
+      halt(); // there is nothing left to paint: the bar stays full under the finger
+      knob.style.setProperty('--knob-pct', '100%');
+      apply(step.id, held);
+      markSet(step.id, held, 'knob');
+    }
+    // Letting go. After the bar filled this is nothing at all -- the knob is set, and setting it
+    // twice over or saying it was let go early would both be lies. Before it, it is a hold that
+    // did not last, and the bar goes back to where it started.
     function up() {
       if (!started) return;
-      const held = performance.now() - started;
       started = 0;
-      if (ticker) ticker();
-      ticker = null;
+      halt();
       b.classList.remove('is-held');
       b.setAttribute('aria-pressed', 'false');
-      if (held >= ms) {
-        knob.style.setProperty('--knob-pct', '100%');
-        apply(step.id, held);
-        markSet(step.id, held, 'knob');
-      } else {
-        knob.style.setProperty('--knob-pct', '0%');
-        ui.status.textContent = 'let go early; hold it longer';
-      }
+      if (fired) return;
+      knob.style.setProperty('--knob-pct', '0%');
+      ui.status.textContent = 'let go early; hold it longer';
     }
     b.addEventListener('pointerdown', (ev) => {
       ev.preventDefault();
