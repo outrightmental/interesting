@@ -1,18 +1,24 @@
-// The persona: the avatar in the top bar on every page, and the sheet it opens. Both are drawn
-// by js/persona.js into the markup _includes/layout.njk writes; see that file for what a persona
-// is and why it sits where it does.
+// The persona: the avatar floating in the upper right of every page, and the sheet it opens. Both
+// are drawn by js/persona.js into the markup _includes/layout.njk writes; see that file for what a
+// persona is and why it sits where it does.
 //
-// The avatar is the grammar every app uses for the account: a round portrait of the sky at the
-// end of the bar, which is the button that opens the sheet. With no persona yet the ring is
-// dashed and the button is filled, with its label showing, so the first thing to do on the site
-// is the first thing a visitor's eye lands on; after that it is the portrait alone, and the label
-// is for screen readers. The sheet is an M3 basic dialog.
+// It is the only navigation on the site besides the sparkles logo opposite it (_nav.scss), and
+// like the logo it floats over the page's own feature rather than sitting in a bar. The avatar is
+// the grammar every app uses for the account: a round portrait of the sky, which is the button
+// that opens the sheet. With no persona yet the ring is dashed and the button is filled, with its
+// label showing, so the first thing to do on the site is the first thing a visitor's eye lands on;
+// after that it is the portrait alone, and the label is for screen readers. The sheet is an M3
+// basic dialog.
 
 @use 'type';
 
-// ---- the avatar in the bar ---------------------------------------------------------------
+// ---- the avatar, floating in the corner --------------------------------------------------
 
 .persona {
+  position: fixed;
+  top: var(--nav-inset);
+  right: var(--nav-inset);
+  z-index: 45; // above the page, below the lightbox the logo's constellation lays over everything
   display: flex;
   align-items: center;
   flex: none;
@@ -26,9 +32,12 @@
 
 .persona-avatar {
   gap: 0.6rem;
-  min-height: 40px;
-  padding: 0;
-  background: transparent;
+  min-height: 44px;
+  padding: 0 0.2rem;
+  background: color-mix(in oklab, var(--md-sys-color-surface-container-high) 84%, transparent);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow: var(--md-sys-elevation-level2);
   color: var(--md-sys-color-on-surface-variant);
 }
 
@@ -123,10 +132,12 @@ html[data-page='index.html'] .persona-go {
 }
 
 a.action.persona-go {
-  background: transparent;
-  box-shadow: none;
-  min-height: 40px;
-  padding: 0.25rem 0.75rem;
+  background: color-mix(in oklab, var(--md-sys-color-surface-container-high) 84%, transparent);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow: var(--md-sys-elevation-level2);
+  min-height: 44px;
+  padding: 0.25rem 0.9rem;
   white-space: nowrap;
 }
 

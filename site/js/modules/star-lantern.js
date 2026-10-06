@@ -51,16 +51,20 @@ const RITES = [
   }
 ];
 
-function lantern(ctx, env, x, y, lit, glow) {
+// One lantern, `size` across as a multiple of the size it hangs at on the page: a card's own, from
+// the configuration it was dealt, and one for the piece, where the lanterns are the ritual itself.
+function lantern(ctx, env, x, y, lit, glow, size) {
   const c = env.colors;
-  const lw = 10;
-  const lh = 14;
+  const k = size || 1;
+  const lw = 10 * k;
+  const lh = 14 * k;
   if (lit) {
-    const halo = ctx.createRadialGradient(x, y, 0, x, y, 34 * glow);
-    halo.addColorStop(0, env.alpha(c.accent2, Math.min(0.85, 0.3 + glow * 0.25)));
+    const reach = 34 * glow * k;
+    const halo = ctx.createRadialGradient(x, y, 0, x, y, reach);
+    halo.addColorStop(0, env.alpha(c.accent2, 0.55));
     halo.addColorStop(1, env.alpha(c.accent2, 0));
     ctx.fillStyle = halo;
-    ctx.fillRect(x - 34 * glow, y - 34 * glow, 68 * glow, 68 * glow);
+    ctx.fillRect(x - reach, y - reach, reach * 2, reach * 2);
   }
   // The string.
   ctx.strokeStyle = env.alpha(c.muted, 0.35);
@@ -88,11 +92,14 @@ function sky(ctx, w, h, env) {
   ctx.fillRect(0, 0, w, h);
 }
 
+// The card: the sky, and a lantern at every star, hanging as large and as high as the configuration
+// the card was dealt asks for.
 function lanterns(ctx, w, h, env, litIndex, t) {
+  const v = env.variant;
   sky(ctx, w, h, env);
   env.points(w, h, 18).forEach((p, i) => {
-    const bob = t ? Math.sin(t * 0.8 + i * 1.1) * 3 : 0;
-    lantern(ctx, env, p.x, p.y + bob, i === litIndex, 1);
+    const bob = Math.sin((t || 0) * 0.8 + i * 1.1 + v.turn * Math.PI * 2) * 3;
+    lantern(ctx, env, p.x, p.y + bob, i === litIndex, 1, v.scale);
   });
 }
 

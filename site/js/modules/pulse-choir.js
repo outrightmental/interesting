@@ -7,7 +7,10 @@ var WAVES = ['sine', 'triangle', 'saw', 'square'];
 var SCALE = [0, 3, 5, 7, 10, 12, 15, 17, 19];
 var NOTES = ['A', 'C', 'D', 'E', 'G', 'A', 'C', 'D', 'E'];
 
-function field(ctx, w, h, env, voices, t, flash) {
+// The choir field. `reach` is how far a voice hears its neighbours, as a multiple of the distance
+// the choir is written at: a card's own, from the configuration it was dealt, and one for the
+// piece, where the field is the choir itself.
+function field(ctx, w, h, env, voices, t, flash, reach) {
   var c = env.colors;
   var grad = ctx.createLinearGradient(0, 0, 0, h);
   grad.addColorStop(0, c.bg2);
@@ -23,7 +26,7 @@ function field(ctx, w, h, env, voices, t, flash) {
     ctx.arc(sx, sy, 1.1, 0, Math.PI * 2);
     ctx.fill();
   }
-  var maxD = Math.min(w, h) * 0.3;
+  var maxD = Math.min(w, h) * 0.3 * (reach || 1);
   var maxD2 = maxD * maxD;
   for (var a = 0; a < voices.length; a++) {
     for (var b = a + 1; b < voices.length; b++) {
@@ -66,12 +69,18 @@ function field(ctx, w, h, env, voices, t, flash) {
   }
 }
 
-// The card's picture: every star a voice, pulsing in turn.
+// The card's picture: every star a voice, pulsing in turn. The configuration the card was dealt says
+// how many of them are singing, how hard they pulse and how far each hears its neighbours, and
+// where in the loop the card caught the choir.
 function drawChoir(ctx, w, h, env, t) {
-  var voices = env.points(w, h, 14).map(function (p, i) {
-    return { x: p.x, y: p.y, muted: false, pulse: Math.max(0, Math.sin((t || 0) * 2 + i * 0.9)) * 0.4 };
+  var cfg = env.variant;
+  var at = (t || 0) + cfg.turn * 6;
+  var pts = env.points(w, h, 14);
+  var singing = Math.max(1, Math.round(pts.length * cfg.density));
+  var voices = pts.map(function (p, i) {
+    return { x: p.x, y: p.y, muted: i >= singing, pulse: Math.max(0, Math.sin(at * 2 + i * 0.9)) * 0.4 * cfg.scale };
   });
-  field(ctx, w, h, env, voices, t || 0, 0);
+  field(ctx, w, h, env, voices, at, 0, cfg.scale);
 }
 
 function summary(stars) {

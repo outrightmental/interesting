@@ -261,12 +261,15 @@ function scene(g, w, h, c, F, P, look, t, s) {
   }
 }
 
-// The card's field: the echoes drifting on the spot.
+// The card's field: the echoes drifting on the spot -- as many of them, and as far out from the
+// middle of the chamber, as the configuration the card was dealt asks for.
 function echoes(ctx, w, h, env, t) {
-  const F = field(env.stars);
+  const v = env.variant;
+  const F = field(env.stars).slice(0, Math.max(1, Math.round(env.stars.length * v.density)));
   F.forEach((e, i) => {
-    e.x += Math.sin(t * 0.5 + i * 1.7) * 0.012;
-    e.y += Math.cos(t * 0.4 + i * 2.3) * 0.012;
+    e.x = 0.5 + (e.x - 0.5) * v.scale + Math.sin(t * 0.5 + i * 1.7) * 0.012;
+    e.y = 0.5 + (e.y - 0.5) * v.scale + Math.cos(t * 0.4 + i * 2.3) * 0.012;
+    e.size *= v.scale;
   });
   scene(ctx, w, h, env, F, [], 'midnight', t, null);
 }
@@ -497,10 +500,10 @@ export default {
   id: 'constellation-echo',
   needsSky: true,
   paint(ctx, w, h, env) {
-    echoes(ctx, w, h, env, env.rnd() * 10);
+    echoes(ctx, w, h, env, env.variant.turn * 12 + env.rnd() * 10);
   },
   animate(ctx, w, h, env, t) {
-    echoes(ctx, w, h, env, t);
+    echoes(ctx, w, h, env, t + env.variant.turn * 12);
   },
   spark(env) {
     const stars = env.stars;
