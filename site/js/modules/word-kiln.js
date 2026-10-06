@@ -2,7 +2,18 @@
    that never existed. As a card it is the kiln's mouth and one coinage (paint, spark); as a piece
    it is a word off the shelf, fired at a heat you set and left to cool, or a kiln-load of new
    words pulled out of the fire one tap at a time. See js/feed.js for what a module is and
-   js/stage.js for what a piece is. */
+   js/stage.js for what a piece is.
+
+   A card and the feature it opens as are one coinage: the spark puts the word it coined on its
+   spec as `of`, and the piece fires that word rather than another, so pressing a coinage in the
+   feed opens the kiln on it. */
+
+// The card this piece was opened from, in the kiln's own terms: { word, pos }, or null for a piece
+// nobody pressed (js/stage.js hands it over as env.card.of).
+function pressed(env) {
+  const was = env.card && env.card.of;
+  return was && typeof was.word === 'string' && was.word ? was : null;
+}
 
 const HEADS = ['umb', 'thal', 'quer', 'mor', 'vell', 'glim', 'sorr', 'brack', 'fulm', 'nim', 'osk', 'twil',
   'harr', 'pell', 'dru', 'calv', 'wist', 'lorn', 'skell', 'murr'];
@@ -259,6 +270,7 @@ function heatLine(b, notes) {
 /* ---- one word off the shelf, fired and left to cool ---------------------------------------- */
 
 function fired(env) {
+  const was = pressed(env);
   const pool = SHELF.slice();
   const options = [];
   while (options.length < 3) {
@@ -266,6 +278,9 @@ function fired(env) {
     options.push({ label: pool[i], value: pool[i] });
     pool.splice(i, 1);
   }
+  // The coinage the card was showing goes on the shelf, first and already named in the title: a
+  // visitor who pressed a word is here to put that word back in the fire.
+  if (was) options.unshift({ label: was.word, value: was.word });
   const count = env.int(2, 4);
   const heat0 = env.pick([20, 50, 80]);
   // Every coinage this piece can hand back, so the same address fires the same words.
@@ -290,8 +305,11 @@ function fired(env) {
     flash: 0, fin: 0, sparks: [], acc: 0 };
   const names = options.map((o) => o.value);
   const piece = {
-    title: names[0] + ', ' + names[1] + ' or ' + names[2] + ': into the fire',
-    brief: 'Take a word off the shelf, set the heat and fire it ' + TIMES[count] + '; what comes out is a coinage with a definition and a citation that never existed, and you let it cool.',
+    title: was ? was.word + ' back into the fire'
+      : names[0] + ', ' + names[1] + ' or ' + names[2] + ': into the fire',
+    brief: (was ? 'Your coinage is on the shelf with three plainer words. Take one, set the heat and fire it '
+      : 'Take a word off the shelf, set the heat and fire it ')
+      + TIMES[count] + '; what comes out is a coinage with a definition and a citation that never existed, and you let it cool.',
     aspect: '4 / 3',
     steps: [
       { id: 'word', ask: 'a word to fire', kind: 'choice', options },
@@ -416,6 +434,7 @@ function fired(env) {
 /* ---- a kiln-load of new words, pulled one tap at a time and set with the door shut ----------- */
 
 function kilnLoad(env) {
+  const was = pressed(env);
   const need = env.int(3, 4);
   const heat0 = env.pick([20, 50, 80]);
   const bookIndex = env.int(0, BOOKS.length - 1);
@@ -429,6 +448,9 @@ function kilnLoad(env) {
     for (let i = 0; i < need; i++) list.push(coinAt(env, b));
     return list;
   });
+  // The coinage the card was showing is the first one out of this load, at any heat: the word a
+  // visitor pressed is the word the kiln hands back first.
+  if (was) for (const list of words) list[0] = was.word;
   const defs = {};
   for (const k of KINDS) {
     const pool = DEFS[k.value].slice();
@@ -441,8 +463,11 @@ function kilnLoad(env) {
     return k ? k.label : 'words';
   }
   const piece = {
-    title: NUM[need] + ' words for ' + BOOKS[bookIndex],
-    brief: 'Pick the kind of word and the heat, tap the fire ' + TIMES[need] + ' to pull a coinage out each time, and hold the door shut to set them; they cool on the shelf with their meanings.',
+    title: was ? was.word + ' and ' + NUM[need - 1] + ' more for ' + BOOKS[bookIndex]
+      : NUM[need] + ' words for ' + BOOKS[bookIndex],
+    brief: (was ? 'Your coinage comes out first. Pick the kind of word and the heat, tap the fire '
+      : 'Pick the kind of word and the heat, tap the fire ')
+      + TIMES[need] + ' to pull a coinage out each time, and hold the door shut to set them; they cool on the shelf with their meanings.',
     aspect: '4 / 3',
     steps: [
       { id: 'kind', ask: 'what kind of word it makes', kind: 'choice', options: KINDS },
@@ -590,7 +615,9 @@ export default {
       title: word,
       text: '(' + pos + ') ' + env.pick(DEFS[pos]) + '.',
       cite: '— ' + env.pick(AUTHORS) + ', ' + env.pick(WORKS) + ', p. ' + env.int(3, 412)
-        + '. Neither the word nor the book exists.'
+        + '. Neither the word nor the book exists.',
+      // What this card is of, for the piece it opens as: the coinage itself.
+      of: { word, pos }
     };
   },
   piece(env) {

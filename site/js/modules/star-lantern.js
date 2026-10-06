@@ -6,7 +6,26 @@
    The release is not the same twice: the seed chooses which orders are offered, which dial sits
    between the kindling and the finale, how long the finale is held, and where the lanterns go
    when they are let go. The knobs are a chain -- order, then kindling, then the dial, then the
-   release -- so the finale is the last thing a visitor can reach and never the first. */
+   release -- so the finale is the last thing a visitor can reach and never the first.
+
+   A card and the feature it opens as are one lantern night: the spark puts the lantern it lit on
+   its spec as `of`, and the piece begins at that lantern -- pressing a kindled wish in the feed
+   opens the rite that kindles it first. */
+
+// Which lantern the card this piece was opened from had lit, in the sky as it stands now: the star
+// that said the same thing, or the place it was at if the sky has moved under it. Null for a piece
+// nobody pressed (js/stage.js hands the card over as env.card.of).
+function pressed(env) {
+  const was = env.card && env.card.of;
+  const stars = env.stars || [];
+  if (!was || !stars.length) return null;
+  let at = typeof was.star === 'string' && was.star ? stars.findIndex((st) => st.text === was.star) : -1;
+  if (at < 0) {
+    const i = Number(was.at);
+    at = isFinite(i) ? Math.max(0, Math.min(stars.length - 1, Math.round(i))) : -1;
+  }
+  return at < 0 ? null : { at, text: stars[at].text || '' };
+}
 
 const ORDERS = [
   { label: 'left to right', value: 'x' },
@@ -106,9 +125,12 @@ function lanterns(ctx, w, h, env, litIndex, t) {
 }
 
 // Which lantern is next, for every order both shapes can offer.
-function nextByOrder(pts, lit, order, x, y) {
+function nextByOrder(pts, lit, order, x, y, first) {
   const unlit = pts.map((p, i) => i).filter((i) => lit.indexOf(i) === -1);
   if (!unlit.length) return -1;
+  // The lantern the card had lit goes first, while it is still unlit; after that this order is
+  // the nearest one, which is where the rite carries on from.
+  if (order === 'card' && first >= 0 && unlit.indexOf(first) !== -1) return first;
   if (order === 'x') return unlit.sort((a, b) => pts[a].x - pts[b].x)[0];
   if (order === 'y') return unlit.sort((a, b) => pts[b].y - pts[a].y)[0];
   if (order === 'long') return unlit.sort((a, b) => String(pts[b].text || '').length - String(pts[a].text || '').length)[0];
@@ -131,6 +153,7 @@ function flight(rite, s, i, h) {
 
 // Shape one: kindle a few and send them off by the rite the seed picked.
 function releasePiece(env) {
+  const was = pressed(env);
   const n = env.stars.length;
   const need = Math.min(n, env.int(3, 5));
   const rite = env.pick(RITES);
@@ -146,16 +169,19 @@ function releasePiece(env) {
     pool[j] = held;
   }
   const orders = pool.slice(0, env.int(2, 3));
+  // The lantern the card had lit is the first way in, when this piece was opened from a card.
+  if (was) orders.unshift({ label: 'the one on your card', value: 'card' });
   const s = { order: orders[0].value, lit: [], wind: 0.3, glow: 0.55, rise: 0, t: 0, last: null };
   function points(c) {
     return c.points(c.w, c.h, 18);
   }
   function nextIndex(pts, x, y) {
-    return nextByOrder(pts, s.lit, s.order, x, y);
+    return nextByOrder(pts, s.lit, s.order, x, y, was ? was.at : -1);
   }
   return {
     title: rite.title(need, n),
-    brief: 'Choose the order, tap the sky to kindle each lantern, ' + dial.brief + ', and ' + rite.brief + '.',
+    brief: 'Choose the order, tap the sky to kindle each lantern, ' + dial.brief + ', and ' + rite.brief + '.'
+      + (was && was.text ? ' The one your card lit said "' + was.text + '".' : ''),
     aspect: '16 / 10',
     // A chain, on purpose: the release is the rite's last gesture, so it waits on the dial, which
     // waits on the kindling, which waits on the order. No knob of this piece can be reached
@@ -212,10 +238,13 @@ function releasePiece(env) {
 
 // Shape two: light by sequence, watch the lit set braid itself, then release.
 function braidPiece(env) {
+  const was = pressed(env);
   const n = env.stars.length;
   const need = Math.min(n, env.int(3, 5));
   const settleFor = env.pick([3, 4, 5]);
-  const s = { order: 'x', lit: [], wind: 0.28, weave: 0, rise: 0, t: 0, pivot: null };
+  // A braid begins at the lantern the card had lit, and spreads from there by nearness.
+  const s = { order: was ? 'near' : 'x', lit: [], wind: 0.28, weave: 0, rise: 0, t: 0,
+    pivot: was ? was.at : null };
 
   function points(c) {
     return c.points(c.w, c.h, 18);
@@ -248,7 +277,8 @@ function braidPiece(env) {
 
   return {
     title: need === n ? 'braid every lantern' : 'braid ' + need + ' lanterns',
-    brief: 'Choose the lighting order, set the wind, light the next lantern each press, then watch the lit set braid itself before they rise.',
+    brief: 'Choose the lighting order, set the wind, light the next lantern each press, then watch the lit set braid itself before they rise.'
+      + (was && was.text ? ' It is anchored on the one your card lit, which said "' + was.text + '".' : ''),
     aspect: '16 / 10',
     steps: [
       { id: 'order', ask: 'which lantern anchors first', kind: 'choice', options: ORDERS },
@@ -326,7 +356,9 @@ export default {
       quote: env.stars[i].text,
       text: 'One lantern at a time. This one is lit; the other ' + (env.stars.length - 1) + ' wait for you.',
       aspect: '3 / 4',
-      paint: (ctx, w, h, e) => lanterns(ctx, w, h, e, i, 0)
+      paint: (ctx, w, h, e) => lanterns(ctx, w, h, e, i, 0),
+      // What this card is of, for the piece it opens as: the lantern it has lit.
+      of: { star: env.stars[i].text, at: i }
     };
   },
   piece(env) {

@@ -2,7 +2,21 @@
    tapes one cell apart (paint, spark); as a piece it is a tape to choose, a rule to tune and a
    run button, or a controlled comparison whose last row the visitor predicts. Both shapes use
    the same wrapped tape and rule arithmetic. See js/feed.js for what a module is and
-   js/stage.js for what a piece is. */
+   js/stage.js for what a piece is.
+
+   A card and the feature it opens as are one experiment: a spark puts the rule it ran, or the whole
+   comparison it set up, on its spec as `of`, and the piece takes the bench from there -- so pressing
+   rule 110 in the feed opens rule 110 on the bench, and pressing a comparison opens that comparison
+   rather than another. The shape follows the card too: a comparison card never opens the bench. */
+
+// The card this piece was opened from, in the shop's own terms: { rule, noisy } for a rule card,
+// { spec } for a comparison card, or null for a piece nobody pressed (js/stage.js, env.card.of).
+function pressed(env) {
+  const was = env.card && env.card.of;
+  if (!was) return null;
+  if (was.spec && Array.isArray(was.spec.rules) && was.spec.initial) return was;
+  return typeof was.rule === 'number' ? was : null;
+}
 
 const LIVELY = [30, 45, 54, 60, 73, 90, 105, 110, 124, 126, 137, 150, 182, 193];
 
@@ -119,12 +133,14 @@ function bench(g, w, h, c, s) {
   }
 }
 
-function benchPiece(env) {
-  const rule = pickRule(env);
+function benchPiece(env, was) {
+  // The rule the card was showing, and the tape it was running: the bench opens on the card's own
+  // experiment, and only rolls one of its own for a piece nobody pressed.
+  const rule = was && typeof was.rule === 'number' ? was.rule : pickRule(env);
   const runs = env.int(2, 3);
   const perRun = env.pick([60, 90, 120]);
   const seedRnd = env.rnd;
-  const s = { rule, tape: 'one', cols: 96, history: [], pending: 0, flash: 0, ran: 0 };
+  const s = { rule, tape: was && was.noisy ? 'noise' : 'one', cols: 96, history: [], pending: 0, flash: 0, ran: 0 };
   function reset(c) {
     s.cols = Math.max(32, Math.round((c.w || 400) / 4));
     s.history = [firstRow(s.cols, s.tape, seedRnd)];
@@ -314,8 +330,9 @@ function comparisonPreview(g, w, h, env, spec) {
   drawComparison(g, w, h, env, spec, history, spec.rules[0], fault, shown, v.scale);
 }
 
-function comparisonPiece(env) {
-  const spec = experiment(env);
+function comparisonPiece(env, carried) {
+  // The comparison the card set up, cell for cell, or a fresh one for a piece nobody pressed.
+  const spec = carried || experiment(env);
   let rule = spec.rules[0];
   let fault = null;
   let prediction = '';
@@ -412,7 +429,9 @@ export default {
         title: experimentTitle(spec),
         text: 'One starting cell changes in the lower copy. Will the tapes meet again, carry one scar, or grow into different patterns?',
         aspect: '4 / 3',
-        paint: (ctx, w, h, e) => comparisonPreview(ctx, w, h, e, spec)
+        paint: (ctx, w, h, e) => comparisonPreview(ctx, w, h, e, spec),
+        // What this card is of, for the piece it opens as: the whole experiment, cell for cell.
+        of: { spec }
       };
     }
     const rule = pickRule(env);
@@ -422,10 +441,16 @@ export default {
       mono: bits(rule),
       text: describe(rule) + (noisy ? ' Run here from a noisy seed.' : ' Run here from one live cell.'),
       aspect: '3 / 4',
-      paint: (ctx, w, h, e) => run(ctx, w, h, e, rule, noisy)
+      paint: (ctx, w, h, e) => run(ctx, w, h, e, rule, noisy),
+      // What this card is of: the rule, and the tape it was running from.
+      of: { rule, noisy }
     };
   },
   piece(env) {
+    // The shape is the card's: a comparison card opens its comparison, a rule card opens its rule
+    // on the bench, and a piece nobody pressed falls back to what the seed says.
+    const was = pressed(env);
+    if (was) return was.spec ? comparisonPiece(env, was.spec) : benchPiece(env, was);
     return compares(env) ? comparisonPiece(env) : benchPiece(env);
   }
 };
