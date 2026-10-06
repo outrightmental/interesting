@@ -814,6 +814,10 @@
     body.appendChild(button);
   }
 
+  // The stage's hold knob is set the moment its bar fills, without waiting for the release
+  // (issue #74); this one cannot be, and that is no inconsistency. There is no bar here and no
+  // length to reach: how long the press lasted is the whole answer, and the answer is only
+  // there once the press is over.
   function holdProbe(probe, body, trace, answer, finish) {
     var started = 0;
     var ticker = null;
