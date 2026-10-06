@@ -3511,6 +3511,23 @@ SLIDER_PIECE = """    const n = env.int(2, 4);
     };"""
 
 
+# A piece whose first knob is a hold, with a plain toggle after it so filling the hold does not end the
+# piece and the ceremony never writes over what the piece said. Its apply() counts the holds onto the
+# status line -- the one thing a piece can say that the harness reads back -- so a release that set
+# the knob a second time would be written there for the law to find (issue #74).
+HOLD_PIECE = """    let holds = 0;
+    return {
+      title: 'one long hold',
+      brief: 'Hold it until the bar fills, then turn the other thing.',
+      steps: [
+        { id: 'seal', ask: 'hold to seal', kind: 'hold', ms: 900, label: 'hold to seal' },
+        { id: 'after', ask: 'and then this', kind: 'toggle' }
+      ],
+      start(ctx) { ctx.g.fillRect(0, 0, ctx.w, ctx.h); },
+      apply(id, value, ctx) { if (id === 'seal') ctx.status('held ' + (holds += 1) + ' time(s)'); }
+    };"""
+
+
 def stage_site(toy=None, other=None):
     """A site the stage harness can play: the one list of worlds, js/stage.js as committed, and a
     module for each world. The stage itself is never a fixture -- the point is to run the real one."""
@@ -3586,6 +3603,7 @@ class CompletionAxiomTest(SiteDirTestCase):
                      mi.STAGE_HARNESS_REL,
                      "a slider a visitor leaves where it stands counts as set",
                      "a knob nobody set is named rather than silently holding the piece shut",
+                     "a hold knob is set the moment its bar fills rather than when the visitor lets go",
                      "leaves nothing of itself on the stage or still running"]:
             with self.subTest(rule=rule):
                 self.assertIn(rule, rules)
@@ -3728,9 +3746,10 @@ class StageTest(unittest.TestCase):
     slider the stage only marked set when its value changed, so a visitor content with where it
     already stood set every other knob, watched the finale run, and waited on a piece that had no
     way left to finish. These tests run the real js/stage.js, through the elements stage.njk writes
-    and a clock they step by hand, and hold it to four things: a world played twice over plays the
+    and a clock they step by hand, and hold it to five things: a world played twice over plays the
     second time like the first, a slider used where it stands counts as used, a knob nobody set is
-    named rather than left a mystery, and a piece that is over leaves nothing of itself behind.
+    named rather than left a mystery, a hold knob is set the moment its bar fills rather than when
+    the visitor lets go, and a piece that is over leaves nothing of itself behind.
     """
 
     @classmethod
@@ -3786,6 +3805,39 @@ class StageTest(unittest.TestCase):
         self.assertTrue(result["wanted"], "the stage said nothing about the knob it was waiting on")
         self.assertIn("the pace", result["wanted"])
         self.assertNotIn("done", result["modes"])
+
+    def test_a_hold_is_set_when_its_bar_fills_and_not_when_the_visitor_lets_go(self):
+        # Issue #74: the holding is the answer, so a visitor who presses the knob, watches the bar
+        # fill and keeps on holding has set it -- the piece carries on under their finger -- and the
+        # bar stays full for as long as they hold it. Here the hold is the piece's last knob, so
+        # filling it finishes the piece: the whole flow runs off the fill and not off the release.
+        result = self.scenario("holdFilled")
+        self.assertTrue(result["playable"], "no world the harness tried had a hold on it")
+        self.assertTrue(result["held"], "the check is worth nothing without a hold")
+        self.assertGreater(result["waited"], 0, "the knob was set before the bar had any filling to do")
+        self.assertTrue(result["filled"]["set"], "the bar filled and the stage waited for the release")
+        for when in ["filled", "kept", "after"]:
+            with self.subTest(when=when):
+                self.assertTrue(result[when]["set"], "the knob stopped being set")
+                self.assertEqual(result[when]["pct"], "100%", "the bar did not stay full")
+                self.assertNotIn("let go early", result[when]["status"])
+                self.assertEqual(result[when]["completes"], 1, "the piece finished other than once")
+
+    def test_letting_go_of_a_hold_already_set_does_nothing_at_all(self):
+        # The other half: the release. HOLD_PIECE's apply() writes how many times the knob has been
+        # applied onto the status line, and its second knob keeps the piece from finishing, so what
+        # the stage did is readable right through the hold and out the other side. Letting go of a
+        # knob that is already set must not apply it again, must not say "let go early", and must
+        # not empty the bar it filled.
+        result = self.scenario("holdFilled", toy=HOLD_PIECE)
+        self.assertEqual(result["held"], "seal")
+        self.assertTrue(result["filled"]["set"], "the bar filled and the stage waited for the release")
+        for when in ["filled", "kept", "after"]:
+            with self.subTest(when=when):
+                self.assertEqual(result[when]["status"], "held 1 time(s)")
+                self.assertEqual(result[when]["pct"], "100%")
+                self.assertTrue(result[when]["set"])
+                self.assertEqual(result[when]["completes"], 0, "a piece with a knob nobody set finished")
 
     def test_a_piece_leaves_nothing_on_the_stage_or_running_behind_it(self):
         # "Components should completely reset between instantiations." A piece part-played, with a
@@ -4557,7 +4609,8 @@ class RealSiteTest(unittest.TestCase):
         # run through a stub browser (issue #60). A world is dealt, another is played, the first is
         # dealt again, and every round has to finish and open the next; a slider a visitor leaves
         # where it stands has to count as used; a knob nobody set has to be named rather than
-        # silently holding the piece shut; and a piece that is over has to leave nothing running.
+        # silently holding the piece shut; a hold has to be set when its bar fills rather than when
+        # the visitor lets go (issue #74); and a piece that is over has to leave nothing running.
         needs_the_stage_harness(self)
         worlds = mi.listed_worlds(self.site)
         self.assertGreaterEqual(len(worlds), 10, "the check is worth nothing on a few worlds")
@@ -4578,6 +4631,17 @@ class RealSiteTest(unittest.TestCase):
         left = report["sliderUntouched"]["result"]
         self.assertFalse(left["finished"], "a piece finished with a knob nobody set")
         self.assertTrue(left["wanted"], "the stage said nothing about the knob it was waiting on")
+        filled = report["holdFilled"]["result"]
+        self.assertTrue(filled["held"], "no world the stage opened had a hold knob to check")
+        self.assertTrue(filled["filled"]["set"],
+                        f"{filled['world']}: a hold's bar filled and the stage waited for the release")
+        for when in ["filled", "kept", "after"]:
+            with self.subTest(when=when):
+                self.assertTrue(filled[when]["set"], f"{filled['world']}: the hold stopped being set")
+                self.assertEqual(filled[when]["pct"], "100%", f"{filled['world']}: the bar did not stay full")
+                self.assertNotIn("let go early", filled[when]["status"])
+        self.assertEqual(filled["after"]["completes"], filled["filled"]["completes"],
+                         f"{filled['world']}: letting go of a hold already set did something of its own")
         torn = report["teardown"]["result"]
         self.assertEqual(torn["waiting"], 0, "the stage left a timer running after the piece")
         self.assertEqual(torn["look"]["knobs"], [])
