@@ -347,6 +347,7 @@ function aspectRatio(aspect) {
 
 const ui = stage ? {
   inner: document.getElementById('stage-inner'),
+  head: document.getElementById('stage-head'),
   world: document.getElementById('stage-world'),
   read: document.getElementById('stage-read'),
   title: document.getElementById('stage-title'),
@@ -376,6 +377,7 @@ const home = stage ? {
 } : null;
 
 let current = null; // the piece on stage, and everything the stage knows about it
+let lastWidth = 0; // the scene's width at the last reflow, so a resize that changes nothing is free
 let pending = null; // the token of the open() in flight, so a slow module cannot land late
 let frameHandle = 0;
 let lastFrame = 0;
@@ -574,6 +576,7 @@ function begin(world, mod, seed, token, opts) {
   // The scene has a size only once the stage is in a mode that shows it.
   setMode(opts && opts.arriving && !calm.matches ? 'arriving' : 'live');
   current.ctx = makeCtx(env);
+  sizeHead(); // this piece's title and line are written: the scene's room is whatever they left
   sizeScene();
   try {
     if (typeof piece.start === 'function') piece.start(current.ctx);
@@ -643,9 +646,38 @@ function makeCtx(env) {
   };
 }
 
+/* The room the heading takes out of the first screen, which is room the scene cannot have: its own
+   height and the gap under it, onto --stage-head for _stage.scss (which only guesses at one line of
+   it). Measured rather than assumed, because a title that wraps is taller, and the scene is what
+   should give up the difference -- not the margin that lets the feed peek over the fold. offsetHeight
+   and not a rect, so the ceremony's scaling of the stage's inner never reads as a shorter heading. */
+function sizeHead() {
+  if (!ui.head || !ui.inner) return;
+  const gap = parseFloat(window.getComputedStyle(ui.inner).rowGap);
+  const h = ui.head.offsetHeight + (isFinite(gap) ? gap : 0);
+  if (h > 0) stage.style.setProperty('--stage-head', Math.round(h) + 'px');
+}
+
+/* The scene at a new size: the stage's own height budget, then the canvas, then the piece. */
+function reflow() {
+  sizeHead();
+  if (!current) return;
+  if (Math.abs(ui.scene.getBoundingClientRect().width - lastWidth) < 1) return;
+  sizeScene();
+  // A piece that draws only in start() draws again at the new size.
+  if (typeof current.piece.frame !== 'function' && typeof current.piece.start === 'function') {
+    try {
+      current.piece.start(current.ctx);
+    } catch (e) {
+      /* nothing more to do */
+    }
+  }
+}
+
 function sizeScene() {
   if (!current || !current.ctx) return;
   const box = ui.scene.getBoundingClientRect();
+  lastWidth = box.width; // whatever follows, the scene has been sized at this width
   const w = Math.max(1, Math.round(box.width));
   const h = Math.max(1, Math.round(box.height));
   const dpr = Math.min(2, window.devicePixelRatio || 1);
@@ -1275,22 +1307,11 @@ function start() {
   const random = stage.dataset.stageRandom === 'true';
 
   ui.skip.addEventListener('click', skip);
-  let lastWidth = 0;
-  window.addEventListener('resize', () => {
-    if (!current) return;
-    const w = ui.scene.getBoundingClientRect().width;
-    if (Math.abs(w - lastWidth) < 1) return;
-    lastWidth = w;
-    sizeScene();
-    // A piece that draws only in start() draws again at the new size.
-    if (typeof current.piece.frame !== 'function' && typeof current.piece.start === 'function') {
-      try {
-        current.piece.start(current.ctx);
-      } catch (e) {
-        /* nothing more to do */
-      }
-    }
-  });
+  window.addEventListener('resize', reflow);
+  // The heading changes shape without the window doing anything -- a longer title, a font that
+  // arrives late, a mode that puts the ask up instead -- and the scene is sized against it.
+  if (window.ResizeObserver && ui.head) new window.ResizeObserver(reflow).observe(ui.head);
+  sizeHead();
   window.addEventListener('popstate', (ev) => {
     const s = ev.state && ev.state.world ? ev.state : parseHash();
     if (s && s.world && worldOf(s.world)) {
