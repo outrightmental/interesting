@@ -2,7 +2,32 @@
    offsets of two striped screens. Cards and pieces select the same shape from their seed. The
    loom closes into a mantra; the screens expose real moire bands through their overlap, with a
    prediction and a print of the visitor's settings. See js/feed.js for what a module is and
-   js/stage.js for what a piece is. */
+   js/stage.js for what a piece is.
+
+   A card and the feature it opens as are one weave (the alignment axiom, issue #80): the spark
+   puts what its card is of on the spec -- the symmetry it was woven at and the mantra it was
+   saying, or the whole plan of the two screens it previewed -- and the piece opens at that very
+   symmetry, printing those words, or sets up those very screens. */
+
+// The card this piece was opened from, in the weaver's own terms: the screens it previewed, or the
+// symmetry the loom was woven at and the mantra it was saying, or null for a piece nobody pressed
+// (js/stage.js hands the card over as env.card.of).
+function pressed(env) {
+  const was = env.card && env.card.of;
+  if (!was) return null;
+  if (was.screens && typeof was.screens === 'object') return { screens: was.screens };
+  const spokes = Number(was.spokes);
+  if (!isFinite(spokes)) return null;
+  const said = Array.isArray(was.words) ? was.words.filter((text) => typeof text === 'string' && text) : [];
+  return { spokes: Math.max(3, Math.min(12, Math.round(spokes))), words: said };
+}
+
+// The mandala the card was woven as, for the three shapes made of threads. A card that stood two
+// screens up wove no mandala, so a loom opened from one opens as it would have unpressed.
+function woven(env) {
+  const was = pressed(env);
+  return was && !was.screens ? was : null;
+}
 
 const NUMBERS = ['', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve'];
 
@@ -382,7 +407,7 @@ function run(s, dt, c) {
 
 // A few ripples tapped into the weave, each one waking a star's words, then the mantra printed.
 function ripples(env) {
-  const was = pressed(env);
+  const was = woven(env);
   const count = env.int(3, 5);
   const spokes = was ? was.spokes : env.int(4, 9);
   const turn = env.pick([0.24, 0.4, -0.3]);
@@ -426,7 +451,7 @@ function ripples(env) {
 
 // The symmetry dial turned up a notch at a time, then the weave held until the pattern closes.
 function dial(env) {
-  const was = pressed(env);
+  const was = woven(env);
   const base = env.int(3, 5);
   // The dial turns up to the symmetry the card was woven at, when it came from one.
   const notches = was ? Math.max(2, Math.min(7, was.spokes - base)) : env.int(3, 6);
@@ -474,7 +499,7 @@ function dial(env) {
 
 // The loom left to wind down: tune it, then watch the pattern close and say its words.
 function rest(env) {
-  const was = pressed(env);
+  const was = woven(env);
   const spokes = was ? was.spokes : env.int(3, 12);
   const secs = env.pick([6, 8, 10]);
   const title = env.pick(['the loom at rest', 'the weave winds down', 'let the pattern close']);
@@ -553,6 +578,28 @@ function screenPlan(env) {
     spacing: env.pick([96, 98, 100, 102, 104]),
     number: env.int(100, 999),
     title: env.pick(['two screens, one hidden pattern', 'a large pattern from small lines', 'a sky between two screens'])
+  };
+}
+
+// The screens a card previewed, read back defensively: a card travels through the feed and the
+// address bar to get here (js/stage.js), so every number is checked, and anything a card did not
+// carry falls back to the plan this seed would have made on its own.
+function screensOf(was, env) {
+  const plan = screenPlan(env);
+  const had = was && was.screens;
+  if (!had) return plan;
+  const num = (value, lo, hi, fallback) => {
+    const n = Number(value);
+    return isFinite(n) ? Math.max(lo, Math.min(hi, n)) : fallback;
+  };
+  return {
+    lower: num(had.lower, 0, 1, plan.lower),
+    upper: num(had.upper, 0, 1, plan.upper),
+    lines: Math.round(num(had.lines, 20, 60, plan.lines)),
+    tilt: num(had.tilt, -12, 12, plan.tilt),
+    spacing: num(had.spacing, 94, 106, plan.spacing),
+    number: Math.round(num(had.number, 100, 999, plan.number)),
+    title: typeof had.title === 'string' && had.title ? had.title : plan.title
   };
 }
 
@@ -682,7 +729,9 @@ function screenPreview(g, w, h, env, plan) {
 }
 
 function screenPiece(env) {
-  const plan = screenPlan(env);
+  // The very screens the card previewed, so a visitor who pressed "a sky between two screens" sets
+  // up those screens and prints that number.
+  const plan = screensOf(pressed(env), env);
   const s = {
     tilt: plan.tilt, ratio: plan.spacing / 100, x: 0, y: 0,
     tuned: false, slid: false, guess: '', finished: false
@@ -787,7 +836,9 @@ export default {
         title: plan.title,
         text: 'Two fine grids hide a much larger pattern. Tilt one by a few degrees, predict where the bands run, and slide the screens together to find out.',
         aspect: '4 / 3',
-        paint: (ctx, w, h, e) => screenPreview(ctx, w, h, e, plan)
+        paint: (ctx, w, h, e) => screenPreview(ctx, w, h, e, plan),
+        // What this card is of, for the piece it opens as: the two screens it stood up.
+        of: { screens: plan }
       };
     }
     const k = env.int(3, 12);
