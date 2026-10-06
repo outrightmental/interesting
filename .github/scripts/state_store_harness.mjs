@@ -41,13 +41,14 @@ function makeStorage(initial = {}, { broken = false } = {}) {
   return stub;
 }
 
-/** The handful of DOM an element needs to be built, named, nested and clicked. */
+/** The handful of DOM an element needs to be built, named, nested, moved and clicked. */
 function makeElement(tag) {
   const el = {
     tagName: tag,
     className: "",
     attributes: {},
     children: [],
+    parentNode: null,
     listeners: {},
     focused: 0,
     selected: 0,
@@ -57,8 +58,26 @@ function makeElement(tag) {
     getAttribute(name) {
       return name in this.attributes ? this.attributes[name] : null;
     },
+    hasAttribute(name) {
+      return name in this.attributes;
+    },
+    removeAttribute(name) {
+      delete this.attributes[name];
+    },
+    /* A node has one parent, so appending something that already has one moves it: that is how the
+       panel gets from the corner it was built in to a host that asked for it, and back. */
     appendChild(child) {
+      if (child.parentNode && typeof child.parentNode.removeChild === "function") {
+        child.parentNode.removeChild(child);
+      }
+      child.parentNode = this;
       this.children.push(child);
+      return child;
+    },
+    removeChild(child) {
+      const at = this.children.indexOf(child);
+      if (at !== -1) this.children.splice(at, 1);
+      child.parentNode = null;
       return child;
     },
     addEventListener(type, handler) {
@@ -192,6 +211,10 @@ function click(element) {
 
 function press(window, key) {
   for (const handler of window.document.listeners.keydown || []) handler({ key });
+}
+
+function pointer(window, target) {
+  for (const handler of window.document.listeners.pointerdown || []) handler({ target });
 }
 
 function described(menu) {
@@ -567,6 +590,82 @@ const scenarios = {
       note: menu.note.textContent,
       reloads: window.location.reloads,
       imported: state.get("omens", []),
+    };
+  },
+
+  /* The shell asking for the panel rather than pressing the button (issue #66): the one panel this
+     file built is moved into the host, dressed as a modal and opened, and the function that comes
+     back closes it and puts it exactly where it was. Everything else about it is untouched --
+     the same contents, the same words, the same ways of closing. */
+  presentedInAHost() {
+    const storage = makeStorage();
+    const { window, state } = load(storage);
+    state.set("constellation", SKY);
+    const menu = menuOf(window);
+    const host = makeElement("div");
+    const elsewhere = makeElement("div"); // something on the page that is not the panel
+
+    const offered = {
+      menu: !!state.menu,
+      samePanel: !!state.menu && state.menu.panel === menu.panel,
+      present: !!state.menu && typeof state.menu.present,
+      // Nowhere to put it is not somewhere to put it: the shell is told so and can fall back.
+      withoutAHost: state.menu.present(null),
+    };
+
+    const release = state.menu.present(host);
+    const presented = {
+      release: typeof release,
+      inHost: host.children.includes(menu.panel),
+      leftTheCorner: menu.root.children.includes(menu.panel),
+      panelHidden: menu.panel.hidden,
+      dressed: menu.panel.getAttribute("data-site-meta-presented"),
+      ariaModal: menu.panel.getAttribute("aria-modal"),
+      openExpanded: menu.open.getAttribute("aria-expanded"),
+      filled: JSON.parse(menu.field.value).values.constellation,
+      focusedField: menu.field.focused > 0,
+      note: menu.note.textContent,
+      buttons: Object.keys(menu.buttons),
+    };
+
+    // A press inside the panel is not a press on the page, wherever the panel is being held: the
+    // corner it was built in is no longer where it is.
+    pointer(window, menu.field);
+    const afterPressingInside = menu.panel.hidden;
+    // A press anywhere else still closes it, and so does Escape.
+    pointer(window, elsewhere);
+    const afterPressingOutside = menu.panel.hidden;
+    state.menu.present(host);
+    press(window, "Escape");
+    const afterEscape = menu.panel.hidden;
+
+    // And the shell handing it back, which is what it does when its lightbox comes down.
+    state.menu.present(host);
+    release();
+    const given = {
+      panelHidden: menu.panel.hidden,
+      home: menu.root.children.includes(menu.panel),
+      inHost: host.children.includes(menu.panel),
+      dressed: menu.panel.getAttribute("data-site-meta-presented"),
+      ariaModal: menu.panel.getAttribute("aria-modal"),
+      openExpanded: menu.open.getAttribute("aria-expanded"),
+    };
+    // Given back twice is given back once: the corner is not a place a panel can be twice.
+    release();
+    return {
+      offered,
+      presented,
+      afterPressingInside,
+      afterPressingOutside,
+      afterEscape,
+      given,
+      stillHome: menu.root.children.filter((child) => child === menu.panel).length,
+      // The corner button is still the corner button: nothing about hosting it elsewhere takes
+      // the menu away from a page whose shell never asks.
+      cornerStillOpensIt: (() => {
+        click(menu.open);
+        return { panelHidden: menu.panel.hidden, home: menu.root.children.includes(menu.panel) };
+      })(),
     };
   },
 
