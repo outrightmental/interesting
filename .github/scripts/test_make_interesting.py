@@ -5799,9 +5799,16 @@ class RealSiteTest(unittest.TestCase):
                       "the stage keeps a configuration of its own rather than the site's one file")
         # Three: the world's one line is never a feature's title. It is the one thing every card of
         # a world says, so writing it while a module loads, or when a world has no piece, is exactly
-        # the bug: the card's own title stands there instead (heading() in the stage).
-        self.assertNotIn("world.what", stage, "the stage still writes the world's generic line")
+        # the bug: the card's own title stands there instead (heading() in the stage). The line keeps
+        # its one honest use -- a page with no card to speak for it, which says the same thing in its
+        # quiet state -- so what is checked is every line that writes the title.
         self.assertIn("function heading(world, card)", stage, "nothing writes the card's own title")
+        titles = [line for line in stage.splitlines() if "ui.title.textContent =" in line]
+        self.assertTrue(titles, "nothing on the stage writes a title at all")
+        for line in titles:
+            with self.subTest(line=line.strip()):
+                self.assertNotIn("world.what", line,
+                                 "the stage still titles a feature with the world's generic line")
         # And every world's module says what its cards are of, so its piece can open on that very
         # thing rather than rolling another (the piece harness holds each one to it).
         for rel, text in sorted(self.source.items()):

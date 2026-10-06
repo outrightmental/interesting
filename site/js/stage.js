@@ -586,12 +586,16 @@ function sparkOf(mod, seed, world, variant, stars) {
 }
 
 /* The feature's heading, from the card this piece is of: the card's own title, and the line it was
-   showing under it. The world's one-line description is deliberately not among the fallbacks -- it
-   is the same line for every card of the world, and a visitor who pressed one has read it already;
-   the world's name stands in when there is no card or it has no title. */
+   showing under it. The world's one-line description is never the title -- it is the same line for
+   every card of the world, and a visitor who pressed one has read it already; the world's name
+   stands in when a card has no title of its own.
+
+   With no card at all -- a world that reads the sky, asked for one before there is a sky to deal a
+   card from -- the page speaks for itself instead, with the world's own line under its name, which
+   is what it says in its quiet state too. */
 function heading(world, card) {
   ui.title.textContent = (card && card.title) || world.name;
-  ui.brief.textContent = (card && (card.quote || card.text || card.mono)) || '';
+  ui.brief.textContent = card ? (card.quote || card.text || card.mono || '') : (world.what || '');
 }
 
 function makeEnv(seed, world, stars, variant, card) {
