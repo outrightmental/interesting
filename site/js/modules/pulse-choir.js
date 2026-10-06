@@ -1,7 +1,11 @@
 /* The pulse choir: the persona's stars as voices in a looping choir. As a card it is the choir
    field with one printed score (paint, spark); as a piece it is a choir to conduct -- a tempo, a
    few voices muted by touch, a reshuffle, and a run of bars, or a score printed from the whole
-   sky. See js/feed.js for what a module is and js/stage.js for what a piece is. */
+   sky. See js/feed.js for what a module is and js/stage.js for what a piece is.
+
+   A card and the feature it opens as are one score: the spark puts the tempo it was printed at and
+   the voice it led with on its spec as `of`, and the piece opens the choir at that tempo, leading
+   on that voice -- so pressing a score in the feed opens the choir that printed it. */
 
 var WAVES = ['sine', 'triangle', 'saw', 'square'];
 var SCALE = [0, 3, 5, 7, 10, 12, 15, 17, 19];
@@ -123,14 +127,26 @@ function label(ctx, w, h, env, lines, y, size, align) {
   for (var i = 0; i < lines.length; i++) ctx.fillText(lines[i], align === 'center' ? w / 2 : 12, y + i * size * 1.35);
 }
 
-// What a piece keeps of the choir: the voices, their sway and the beat.
-function choir(c, env) {
+// The card this piece was opened from, in the choir's own terms: the tempo it was printed at and
+// which voice it led with, or null for a piece nobody pressed (js/stage.js, env.card.of).
+function pressed(env) {
+  var was = env.card && env.card.of;
+  var tempo = was ? Number(was.tempo) : NaN;
+  if (!isFinite(tempo)) return null;
+  var at = WAVES.indexOf(was.wave);
+  return { tempo: Math.max(48, Math.min(160, Math.round(tempo))), lead: at < 0 ? 0 : at };
+}
+
+// What a piece keeps of the choir: the voices, their sway and the beat. `lead` is the voice the
+// card led with, so the first singer of this choir is the one a visitor pressed.
+function choir(c, env, lead) {
   var pts = c.points(c.w, c.h, 14);
+  var from = lead || 0;
   return pts.map(function (p, i) {
     return {
       star: c.stars[i], home: p, x: p.x, y: p.y, index: i,
       phase: (i * 0.73) % (Math.PI * 2), sway: 0.5 + ((i % 7) * 0.11), pulse: 0, muted: false,
-      wave: WAVES[i % 4], note: noteOf(c.stars[i])
+      wave: WAVES[(i + from) % 4], note: noteOf(c.stars[i])
     };
   });
 }
@@ -208,23 +224,27 @@ function scoreLines(s, c) {
 // Conduct: set the tempo, mute a few voices by touch, reshuffle once or twice, and let the
 // choir run a few bars; the score of what it became is printed at the end.
 function conduct(env) {
+  var was = pressed(env);
   var n = env.stars.length;
   var toMute = Math.min(n, env.int(1, 3));
   var shuffles = env.int(1, 2);
   var bars = env.int(2, 3);
-  var s = { voices: [], tempo: 92, running: false, beatAt: 0, step: 0, bars: 0, flash: 0, muted: 0, done: false, print: 0, t: 0 };
+  // The tempo the card's score was printed at: the choir opens where the card left it.
+  var tempo0 = was ? was.tempo : 92;
+  var s = { voices: [], tempo: tempo0, running: false, beatAt: 0, step: 0, bars: 0, flash: 0, muted: 0, done: false, print: 0, t: 0 };
   return {
-    title: 'conduct ' + (bars === 2 ? 'two' : 'three') + ' bars',
+    title: was ? 'conduct ' + (bars === 2 ? 'two' : 'three') + ' bars at ' + tempo0
+      : 'conduct ' + (bars === 2 ? 'two' : 'three') + ' bars',
     brief: 'Set the tempo, tap ' + (toMute === 1 ? 'one voice' : toMute + ' voices') + ' to mute them, reshuffle the phrasing, and let the choir run ' + (bars === 2 ? 'two' : 'three') + ' bars; its score is printed when it has.',
     aspect: '4 / 3',
     steps: [
-      { id: 'tempo', ask: 'the tempo', kind: 'range', min: 48, max: 160, step: 1, value: 92, low: 'slow', high: 'quick' },
+      { id: 'tempo', ask: 'the tempo', kind: 'range', min: 48, max: 160, step: 1, value: tempo0, low: 'slow', high: 'quick' },
       { id: 'mute', ask: 'tap ' + (toMute === 1 ? 'one voice' : toMute + ' voices') + ' to mute them', kind: 'tap', label: 'mute one for me' },
       { id: 'shuffle', ask: 'reshuffle the phrasing', kind: 'press', count: shuffles, label: 'reshuffle' },
       { id: 'run', ask: 'let it run ' + (bars === 2 ? 'two' : 'three') + ' bars', kind: 'wait', after: 'tempo' }
     ],
     start: function (c) {
-      s.voices = choir(c, env);
+      s.voices = choir(c, env, was ? was.lead : 0);
       field(c.g, c.w, c.h, c, s.voices, 0, 0);
       c.status(n + (n === 1 ? ' voice' : ' voices') + ', waiting on a tempo');
     },
@@ -260,7 +280,7 @@ function conduct(env) {
     },
     frame: function (t, dt, c) {
       s.t = t;
-      if (!s.voices.length) s.voices = choir(c, env);
+      if (!s.voices.length) s.voices = choir(c, env, was ? was.lead : 0);
       advance(s, c, dt, t);
       if (s.running && !s.done) {
         c.progress('run', Math.min(1, s.bars / bars));
@@ -291,6 +311,7 @@ function conduct(env) {
 // Print: choose which voices sing, set the tempo, start the loop with a hold, and print the
 // score of the whole sky.
 function printScore(env) {
+  var was = pressed(env);
   var n = env.stars.length;
   var picks = [
     { label: 'every voice', value: 'all' },
@@ -305,7 +326,8 @@ function printScore(env) {
     picks.splice(i, 1);
   }
   var holdMs = env.pick([1500, 2000]);
-  var s = { voices: [], tempo: 92, running: false, beatAt: 0, step: 0, bars: 0, flash: 0, printed: false, print: 0, pick: '' };
+  var tempo0 = was ? was.tempo : 92;
+  var s = { voices: [], tempo: tempo0, running: false, beatAt: 0, step: 0, bars: 0, flash: 0, printed: false, print: 0, pick: '' };
   function applyPick(c) {
     for (var i = 0; i < s.voices.length; i++) {
       var v = s.voices[i];
@@ -315,16 +337,17 @@ function printScore(env) {
   }
   return {
     title: n === 1 ? 'one voice, one score' : 'a score for ' + n + ' voices',
-    brief: 'Choose which voices sing and how fast, hold to start the loop, and print the score of your sky.',
+    brief: 'Choose which voices sing and how fast, hold to start the loop, and print the score of your sky.'
+      + (was ? ' It opens at ' + tempo0 + ', where your card printed it.' : ''),
     aspect: '4 / 3',
     steps: [
       { id: 'who', ask: 'which voices sing', kind: 'choice', options: options },
-      { id: 'tempo', ask: 'the tempo', kind: 'range', min: 48, max: 160, step: 1, value: 92, low: 'slow', high: 'quick' },
+      { id: 'tempo', ask: 'the tempo', kind: 'range', min: 48, max: 160, step: 1, value: tempo0, low: 'slow', high: 'quick' },
       { id: 'start', ask: 'start the loop', kind: 'hold', ms: holdMs, label: 'hold to start', after: 'who' },
       { id: 'print', ask: 'print the score', kind: 'press', count: 1, label: 'print score', after: 'start' }
     ],
     start: function (c) {
-      s.voices = choir(c, env);
+      s.voices = choir(c, env, was ? was.lead : 0);
       field(c.g, c.w, c.h, c, s.voices, 0, 0);
       c.status(n + (n === 1 ? ' voice' : ' voices') + ' in the field');
     },
@@ -351,7 +374,7 @@ function printScore(env) {
       }
     },
     frame: function (t, dt, c) {
-      if (!s.voices.length) s.voices = choir(c, env);
+      if (!s.voices.length) s.voices = choir(c, env, was ? was.lead : 0);
       advance(s, c, dt, t);
       if (s.printed) s.print = Math.min(1, s.print + dt * 1.4);
       field(c.g, c.w, c.h, c, s.voices, t, s.flash);
@@ -384,12 +407,17 @@ export default {
   spark: function (env) {
     if (!env.stars.length) return null;
     var s = summary(env.stars);
+    var tempo = env.int(52, 152);
+    var wave = env.pick(WAVES);
     return {
       title: 'pulse choir score',
-      mono: env.stars.length + ' voices\nfield ' + zoneOf(s) + '\nspread ' + spreadWord(s),
+      mono: env.stars.length + ' voices\ntempo ' + tempo + ' · leading ' + wave
+        + '\nfield ' + zoneOf(s) + '\nspread ' + spreadWord(s),
       text: 'Your saved stars become a looping choir you can conduct by tempo and muting.',
       aspect: '4 / 3',
-      paint: drawChoir
+      paint: drawChoir,
+      // What this card is of, for the piece it opens as: the tempo it printed, and its first voice.
+      of: { tempo: tempo, wave: wave }
     };
   },
   piece: function (env) {

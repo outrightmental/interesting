@@ -1,7 +1,36 @@
 /* The terrarium: the persona's stars grown into plants under glass. As a card it is the glasshouse
    and a greenhouse forecast (paint, spark); as a piece it is a watering round, a forecast read off
    the glass, or the whole bed regrown. See js/feed.js for what a module is and js/stage.js for
-   what a piece is. */
+   what a piece is.
+
+   A card and the feature it opens as are one glasshouse: the spark puts the forecast it printed on
+   its spec as `of` -- its heading, its humidity, its light and its wind -- and the piece opens the
+   glass at exactly that reading, under the heading the card was wearing. */
+
+// The card this piece was opened from, in the glasshouse's own terms: the forecast it printed, or
+// null for a piece nobody pressed (js/stage.js hands it over as env.card.of).
+function pressed(env) {
+  const was = env.card && env.card.of;
+  if (!was) return null;
+  const humidity = Number(was.humidity);
+  const light = LIGHT.indexOf(was.light);
+  return {
+    opener: typeof was.opener === 'string' ? was.opener : '',
+    humidity: isFinite(humidity) ? Math.max(55, Math.min(96, Math.round(humidity))) : 0,
+    light: light >= 0 ? light : -1,
+    wind: WIND.indexOf(was.wind)
+  };
+}
+
+// The light a card was printed under, offered first: the glass opens at the reading the card gave.
+function lightsFrom(env, was, count) {
+  const out = pickLights(env, count);
+  if (!was || was.light < 0) return out;
+  const at = out.findIndex((o) => o.value === was.light);
+  if (at >= 0) out.unshift(out.splice(at, 1)[0]);
+  else out.unshift({ label: LIGHT[was.light], value: was.light });
+  return out.slice(0, Math.max(count, 3));
+}
 
 const LIGHT = ['low and green', 'bright through the glass', 'dappled', 'thin, from the north'];
 const WIND = ['none; the glass is shut', 'a draught from the vent', 'the fan, on low'];
@@ -352,11 +381,12 @@ function glasshouse(ctx, w, h, env, t) {
 
 // A watering round: light and vent set, a few stems tapped and heard, and the glass misted shut.
 function watering(env) {
+  const was = pressed(env);
   const n = env.stars.length;
   const need = Math.min(n, env.int(3, 5));
-  const lights = pickLights(env, 3);
+  const lights = lightsFrom(env, was, 3);
   const ms = env.pick([1500, 2000, 2500]);
-  const vent0 = env.pick([20, 35, 50]);
+  const vent0 = was && was.wind >= 0 ? [10, 45, 80][was.wind] : env.pick([20, 35, 50]);
   const s = fresh(env.stars, env.int(1, 9999));
   s.wind = vent0 / 100;
   let misted = false;
@@ -366,7 +396,8 @@ function watering(env) {
   return {
     title: one ? 'water the one stem' : need === n ? 'water every stem' : 'water ' + WORDS[need] + ' stems',
     brief: 'Set the light and the vent, tap ' + (one ? 'the one stem to water it and hear what it remembers' : (need === n ? 'each stem' : WORDS[need] + ' stems') + ' to water them and hear what they remember')
-      + ', then hold to mist the glass; the terrarium fogs over and ' + (n === 1 ? 'the stem drinks.' : 'the stems drink.'),
+      + ', then hold to mist the glass; the terrarium fogs over and ' + (n === 1 ? 'the stem drinks.' : 'the stems drink.')
+      + (was && was.opener ? ' The glass is set as your ' + was.opener + ' left it.' : ''),
     aspect: '16 / 10',
     steps: [
       { id: 'light', ask: 'the light', kind: 'choice', options: lights },
@@ -431,12 +462,15 @@ function watering(env) {
 
 // A forecast: humidity, light and wind set, three readings taken off the glass, and a stamp.
 function forecast(env) {
+  const was = pressed(env);
   const n = env.stars.length;
-  const opener = env.pick(OPENERS);
+  // The heading the card was printed under is this forecast's own: a visitor who pressed a
+  // greenhouse bulletin opens the bulletin, at the humidity and the light it was read at.
+  const opener = was && was.opener ? was.opener : env.pick(OPENERS);
   const mid = env.pick(MIDS);
   const closer = env.pick(CLOSERS);
-  const lights = pickLights(env, 3);
-  const hum0 = env.int(58, 92);
+  const lights = lightsFrom(env, was, 3);
+  const hum0 = was && was.humidity ? Math.max(58, Math.min(92, was.humidity)) : env.int(58, 92);
   const r = reading(env.stars);
   const s = fresh(env.stars, env.int(1, 9999));
   s.gauge = true;
@@ -507,6 +541,7 @@ function forecast(env) {
 // The bed regrown: an order to come up in, the moss if you dare, a few regrowings, and the wait
 // while the new stems come up.
 function regrow(env) {
+  const was = pressed(env);
   const n = env.stars.length;
   const times = env.int(2, 4);
   const twice = times === 2 ? 'twice' : WORDS[times] + ' times';
@@ -530,7 +565,8 @@ function regrow(env) {
   }
   return {
     title: env.pick(['regrow the terrarium', 'same stars, new stems']),
-    brief: 'Choose how the stems come up, regrow the bed ' + twice + ' from the same stars, switch the moss on if you dare, and watch the new stems come up and bloom.',
+    brief: 'Choose how the stems come up, regrow the bed ' + twice + ' from the same stars, switch the moss on if you dare, and watch the new stems come up and bloom.'
+      + (was && was.opener ? ' The bed is the one your ' + was.opener + ' was read off.' : ''),
     aspect: '16 / 10',
     steps: [
       { id: 'order', ask: 'how they come up', kind: 'choice', options: ORDERS },
@@ -594,13 +630,19 @@ export default {
   },
   spark(env) {
     if (!env.stars.length) return null;
+    const opener = env.pick(OPENERS);
+    const humidity = env.int(55, 96);
+    const light = env.pick(LIGHT);
+    const wind = env.pick(WIND);
     return {
-      title: 'greenhouse forecast',
-      mono: 'humidity: ' + env.int(55, 96) + '%\nlight: ' + env.pick(LIGHT) + '\nwind: ' + env.pick(WIND)
+      title: opener,
+      mono: 'humidity: ' + humidity + '%\nlight: ' + light + '\nwind: ' + wind
         + '\nthe tall one says: ' + tallest(env.stars).text,
       text: env.stars.length + ' plant' + (env.stars.length === 1 ? '' : 's') + ' under glass, each grown from a star. Open it to water a stem and hear its thought.',
       aspect: '4 / 5',
-      paint: (ctx, w, h, e) => glasshouse(ctx, w, h, e, 0)
+      paint: (ctx, w, h, e) => glasshouse(ctx, w, h, e, 0),
+      // What this card is of, for the piece it opens as: the reading it printed.
+      of: { opener, humidity, light, wind }
     };
   },
   piece(env) {

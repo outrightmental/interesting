@@ -1,7 +1,21 @@
 /* The wish constellation: the persona's stars as a live sky. As a card it is the sky with a
    reading under it (paint, spark); as a piece it is that sky asked for a reading and minted as a
    postcard, a meteor shower to catch comet memos from, or the whole sky set orbiting for one
-   full turn. See js/feed.js for what a module is and js/stage.js for what a piece is. */
+   full turn. See js/feed.js for what a module is and js/stage.js for what a piece is.
+
+   A card and the feature it opens as are one reading: the spark puts the star it read and the line
+   it gave on its spec as `of`, and the piece carries both -- the reading starts at that star, and
+   the line comes back in the postcard or on the first comet. */
+
+// The card this piece was opened from, in the sky's own terms: the star it read and the line it
+// gave, or null for a piece nobody pressed (js/stage.js hands it over as env.card.of).
+function pressed(env) {
+  const was = env.card && env.card.of;
+  if (!was) return null;
+  const star = typeof was.star === 'string' ? was.star : '';
+  const line = typeof was.oracle === 'string' ? was.oracle : '';
+  return star || line ? { star, line } : null;
+}
 
 const PAD = 12;
 
@@ -328,6 +342,7 @@ function readStar(c, s, x, y) {
 // Ask the sky: a lens to read it through, a depth to listen at, a few askings, and a stillness
 // in which the reading settles into a named postcard.
 function oracle(env, dust) {
+  const was = pressed(env);
   const n = env.stars.length;
   const lenses = pickN(env, LENSES, 3);
   const asks = env.int(2, 4);
@@ -342,11 +357,13 @@ function oracle(env, dust) {
   const stamp = n + ' star' + (n === 1 ? '' : 's') + ' · ' + (m.spread < 12 ? 'tight and intentional' : m.spread < 24 ? 'balanced and exploratory' : 'wide and adventurous');
   const s = base(dust);
   s.band = 0;
-  s.caption = '';
-  let closer = CLOSERS[c0];
+  // The line the card gave is the one the reading opens on, when this piece was opened from one.
+  s.caption = was ? was.line : '';
+  let closer = was && was.line ? was.line : CLOSERS[c0];
   return {
     title: 'ask the sky ' + TIMES[asks],
-    brief: 'Choose how to read your ' + n + ' star' + (n === 1 ? '' : 's') + ' and how far to listen, ask ' + TIMES[asks] + ', then hold still while the reading settles into a postcard.',
+    brief: 'Choose how to read your ' + n + ' star' + (n === 1 ? '' : 's') + ' and how far to listen, ask ' + TIMES[asks] + ', then hold still while the reading settles into a postcard.'
+      + (was && was.star ? ' Your card read the one that said "' + was.star + '".' : ''),
     aspect: '4 / 3',
     steps: [
       { id: 'lens', ask: 'how to read it', kind: 'choice', options: lenses },
@@ -403,9 +420,12 @@ function oracle(env, dust) {
 // Catch meteors: a side for them to come from, a wind, and the sky tapped to catch a few; each
 // one caught lands where you tapped, carrying a comet memo, and joins the constellation.
 function shower(env, dust) {
+  const was = pressed(env);
   const need = env.int(2, 4);
   const sides = pickN(env, SIDES, 3);
   const memos = pickN(env, COMETS, need);
+  // The first memo caught is the line the card gave: a visitor who pressed a reading catches it.
+  if (was && was.line) memos[0] = was.line;
   const s = base(dust);
   s.side = sides[0].value;
   s.wind = 0.4;
@@ -426,7 +446,8 @@ function shower(env, dust) {
   }
   return {
     title: 'catch ' + COUNT[need] + ' meteors',
-    brief: 'Choose where the meteors come from and how the wind blows, then tap the sky to catch ' + COUNT[need] + '; each one lands where you tap with a comet memo, and they join your stars when you are done.',
+    brief: 'Choose where the meteors come from and how the wind blows, then tap the sky to catch ' + COUNT[need] + '; each one lands where you tap with a comet memo, and they join your stars when you are done.'
+      + (was && was.line ? ' The first one carries your card\'s line.' : ''),
     aspect: '4 / 3',
     steps: [
       { id: 'from', ask: 'where they come from', kind: 'choice', options: sides },
@@ -500,6 +521,7 @@ function shower(env, dust) {
 // One full turn: a way for the stars to turn around the middle of the sky, a speed, the chime
 // if you like, and the turn watched through; the stars go back to their places at the end.
 function orbit(env, dust) {
+  const was = pressed(env);
   const spins = pickN(env, SPINS, env.int(2, 3));
   const title = env.pick(['one full turn of the sky', 'set the sky orbiting', 'the sky, once around']);
   const s = base(dust);
@@ -528,7 +550,8 @@ function orbit(env, dust) {
   };
   return {
     title,
-    brief: 'Choose which way your stars turn and how fast, ring the chime if you like, and watch one full turn; they go back to their places when it is done.',
+    brief: 'Choose which way your stars turn and how fast, ring the chime if you like, and watch one full turn; they go back to their places when it is done.'
+      + (was && was.star ? ' The one your card read said "' + was.star + '"; it comes round too.' : ''),
     aspect: '4 / 3',
     steps: [
       { id: 'spin', ask: 'which way they turn', kind: 'choice', options: spins },
@@ -613,12 +636,15 @@ export default {
   spark(env) {
     if (!env.stars.length) return null;
     const star = env.pick(env.stars);
+    const line = env.pick(ORACLE);
     return {
       title: 'a reading from your sky',
       quote: 'the sky says: ' + star.text,
-      text: env.stars.length + ' star' + (env.stars.length === 1 ? '' : 's') + ', ' + shape(env.stars) + '. ' + env.pick(ORACLE),
+      text: env.stars.length + ' star' + (env.stars.length === 1 ? '' : 's') + ', ' + shape(env.stars) + '. ' + line,
       aspect: '4 / 3',
-      paint: (ctx, w, h, e) => sky(ctx, w, h, e, 0)
+      paint: (ctx, w, h, e) => sky(ctx, w, h, e, 0),
+      // What this card is of, for the piece it opens as: the star it read, and the line it gave.
+      of: { star: star.text, oracle: line }
     };
   },
   piece

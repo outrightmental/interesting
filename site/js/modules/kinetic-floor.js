@@ -1,7 +1,34 @@
 /* The kinetic floor: heavy blocks, a lot of them, nothing breakable. As a card it is a heap of
    blocks and the damage report (paint, spark); as a piece it is a floor to kick into a riot, a
    kicker to wind up and let fly, or a heap to let settle against whichever wall is down. See
-   js/feed.js for what a module is and js/stage.js for what a piece is. */
+   js/feed.js for what a module is and js/stage.js for what a piece is.
+
+   A card and the feature it opens as are one floor: the spark puts the blocks it counted, and which
+   way was down, on its spec as `of`, and the piece opens that floor -- the same heap, gravity where
+   the card had it. */
+
+// The card this piece was opened from, in the floor's own terms: how many blocks it counted, which
+// way was down, and the damage report it printed, or null for a piece nobody pressed (js/stage.js
+// hands the card over as env.card.of).
+function pressed(env) {
+  const was = env.card && env.card.of;
+  const blocks = was ? Number(was.blocks) : NaN;
+  if (!isFinite(blocks)) return null;
+  const read = (value, fallback) => (isFinite(Number(value)) ? Number(value) : fallback);
+  return {
+    blocks: Math.max(6, Math.min(28, Math.round(blocks))),
+    flipped: !!was.flipped,
+    impacts: read(was.impacts, 0),
+    fastest: read(was.fastest, 60)
+  };
+}
+
+// The bounce a card's own damage report implies: the floor that recorded the fastest block is the
+// springiest one, so a piece opens with its dial where the card's figures put it.
+function bounceFrom(was, low, high) {
+  const at = Math.round(((was.fastest - 60) / 1340) * 100);
+  return Math.max(low, Math.min(high, at));
+}
 
 const LINES = [
   'Shove something. Nothing here is fragile.',
@@ -338,11 +365,13 @@ function summary(r) {
 // Shape one: the riot. Drop a few, turn the gravity over if you must, kick everything three times
 // without stopping, and the floor stops being polite.
 function riot(env) {
+  const was = pressed(env);
   const kicks = env.chance(0.7) ? 3 : 4;
   const word = kicks === 3 ? 'three' : 'four';
   const drops = env.int(3, 6);
-  const start = env.int(6, 14);
-  const bounce = env.int(35, 90);
+  // The floor the card counted, gravity where the card had it.
+  const start = was ? was.blocks : env.int(6, 14);
+  const bounce = was ? bounceFrom(was, 35, 90) : env.int(35, 90);
   const title = env.pick(['kick everything ' + word + ' times', word + ' kicks without stopping']);
   let r = null;
   let dropped = 0;
@@ -352,12 +381,14 @@ function riot(env) {
     if (r) return r;
     r = rig(c);
     r.s.e = 0.25 + (bounce / 100) * 0.7;
+    if (was && was.flipped) r.s.down = 'u';
     r.spawn(start);
     return r;
   };
   return {
     title,
-    brief: 'Set the bounce, drop ' + drops + ' blocks where you tap, turn the gravity over if you must, and kick everything ' + word + ' times without stopping; nothing here is fragile, and the damage is tallied when the riot is called.',
+    brief: 'Set the bounce, drop ' + drops + ' blocks where you tap, turn the gravity over if you must, and kick everything ' + word + ' times without stopping; nothing here is fragile, and the damage is tallied when the riot is called.'
+      + (was ? ' It opens on the ' + start + ' blocks your card counted' + (was.flipped ? ', gravity already over.' : '.') : ''),
     aspect: '16 / 10',
     steps: [
       { id: 'bounce', ask: 'the bounce', kind: 'range', min: 0, max: 100, step: 1, value: bounce, low: 'lead', high: 'rubber' },
@@ -415,9 +446,11 @@ function riot(env) {
 
 // Shape two: the kicker. Choose the stuff, aim, shove a few by hand, then wind up and let fly.
 function kicker(env) {
+  const was = pressed(env);
   const shoves = env.int(4, 7);
-  const start = env.int(8, 16);
-  const aim = env.int(-45, 45);
+  const start = was ? was.blocks : env.int(8, 16);
+  // The kicker points where the card's impacts were: its own tally, read as an angle.
+  const aim = was ? Math.max(-45, Math.min(45, Math.round(was.impacts - 70))) : env.int(-45, 45);
   const ms = env.pick([1200, 1600, 2200]);
   const title = env.pick(['shove ' + shoves + ' blocks, then let fly', shoves + ' shoves, a wind-up and a kicker']);
   let r = null;
@@ -431,7 +464,8 @@ function kicker(env) {
   };
   return {
     title,
-    brief: 'Choose what the blocks are made of, aim the kicker, shove ' + shoves + ' of them by hand, then hold to wind the kicker up and let go; everything on the floor leaves it.',
+    brief: 'Choose what the blocks are made of, aim the kicker, shove ' + shoves + ' of them by hand, then hold to wind the kicker up and let go; everything on the floor leaves it.'
+      + (was ? ' The ' + start + ' blocks your card counted are already on it.' : ''),
     aspect: '16 / 10',
     steps: [
       { id: 'weight', ask: 'what the blocks are made of', kind: 'choice', options: WEIGHTS },
@@ -486,10 +520,17 @@ function kicker(env) {
 // Shape three: the heap. Choose which way is down, set the bounce, let it all settle against
 // that wall, then sweep.
 function heap(env) {
-  const n = env.int(14, 28);
+  const was = pressed(env);
+  // The heap the card counted, and the wall it was against: a visitor who pressed a heap of
+  // nineteen blocks with the gravity over opens exactly that heap.
+  const n = was ? was.blocks : env.int(14, 28);
   const skip = env.int(0, 3);
   const options = DOWNS.filter((d, i) => i !== skip);
-  const bounce = env.int(20, 80);
+  if (was && was.flipped) {
+    const at = options.findIndex((d) => d.value === 'u');
+    if (at >= 0) options.unshift(options.splice(at, 1)[0]);
+  }
+  const bounce = was ? bounceFrom(was, 20, 80) : env.int(20, 80);
   const title = env.pick(['a heap of ' + n + ' blocks', n + ' blocks and a new down']);
   let r = null;
   let turned = false;
@@ -501,6 +542,7 @@ function heap(env) {
     if (r) return r;
     r = rig(c);
     r.s.e = 0.25 + (bounce / 100) * 0.7;
+    if (was && was.flipped) r.s.down = 'u';
     r.spawn(n);
     return r;
   };
@@ -587,7 +629,10 @@ export default {
       mono: 'impacts: ' + impacts + '\nfastest block: ' + fastest + ' px/s\ntotal distance shoved: ' + metres + ' m',
       text: env.pick(LINES),
       aspect: '16 / 10',
-      paint: (ctx, w, h, e) => floor(ctx, w, h, e, flipped)
+      paint: (ctx, w, h, e) => floor(ctx, w, h, e, flipped),
+      // What this card is of, for the piece it opens as: its heap, which way was down, and the
+      // damage report the piece opens its dials on.
+      of: { blocks, flipped, impacts, fastest }
     };
   },
   piece

@@ -1,7 +1,21 @@
 /* The echo chamber: the persona's stars as drifting echoes. As a card it is the field and an
    echo weather bulletin (paint, spark); as a piece it is a chamber to pulse, echoes to hear one
    thought at a time, harmonics to shuffle, or one echo to ring, with the bulletin printing over
-   the field at the end. See js/feed.js for what a module is and js/stage.js for what a piece is. */
+   the field at the end. See js/feed.js for what a module is and js/stage.js for what a piece is.
+
+   A card and the feature it opens as are one bulletin: the spark puts the three lines it printed on
+   its spec as `of`, and whichever shape the piece takes, the bulletin it prints at the end is the
+   one the card was showing -- so pressing a resonance report opens the chamber that wrote it. */
+
+// The card this piece was opened from, in the chamber's own terms: the bulletin it printed, or null
+// for a piece nobody pressed (js/stage.js hands the card over as env.card.of).
+function pressed(env) {
+  const was = env.card && env.card.of;
+  if (!was) return null;
+  const line = (value) => (typeof value === 'string' ? value : '');
+  const out = { opener: line(was.opener), mid: line(was.mid), closer: line(was.closer) };
+  return out.opener || out.mid || out.closer ? out : null;
+}
 
 const OPENERS = ['echo weather bulletin:', 'resonance report:', 'night acoustics memo:', 'field monitor:'];
 const MIDS = [
@@ -276,14 +290,19 @@ function echoes(ctx, w, h, env, t) {
 
 // What every shape of piece shares: the field, its pulses, the bulletin to print, the frame, and
 // a tap that pulses the field and hears the nearest echo.
-function chamber(env) {
+function chamber(env, was) {
   const stars = env.stars;
   const wx = summarize(stars);
   const F = field(stars);
   const P = [];
+  // The bulletin: the card's own, when this chamber was opened from one, so the reading that prints
+  // at the end is the reading a visitor pressed. The two middle lines are the field as it stands.
+  const opener = was && was.opener ? was.opener : env.pick(OPENERS).replace(':', '');
+  const mid = was && was.mid ? was.mid : env.pick(MIDS);
+  const closer = was && was.closer ? was.closer : env.pick(CLOSERS);
   const s = {
     drift: 0.4, look: 'midnight', paused: false, speed: 0.45, print: 0, read: 0, said: null, home: false, t: 0,
-    lines: [env.pick(OPENERS).replace(':', ''), (stars.length === 1 ? 'one echo, ' : stars.length + ' echoes, ') + wx.spread + ' spread', 'chamber ' + wx.zone + ', tone ' + wx.density, env.pick(MIDS), env.pick(CLOSERS)]
+    lines: [opener, (stars.length === 1 ? 'one echo, ' : stars.length + ' echoes, ') + wx.spread + ' spread', 'chamber ' + wx.zone + ', tone ' + wx.density, mid, closer]
   };
   return {
     F, P, s, wx,
@@ -316,7 +335,8 @@ function chamber(env) {
 // Hear the echoes: set the drift, tap close to each echo for its thought, pulse the centre, and
 // hold to read the weather.
 function listen(env) {
-  const ch = chamber(env);
+  const was = pressed(env);
+  const ch = chamber(env, was);
   const s = ch.s;
   const n = env.stars.length;
   const need = Math.min(n, env.int(3, 5));
@@ -328,7 +348,8 @@ function listen(env) {
   let heard = 0;
   return {
     title: earsFirst ? (need === n ? 'every echo, ears first' : need + ' echoes, ears first') : (need === n ? 'hear every echo' : 'hear ' + need + ' echoes'),
-    brief: 'Set how far the echoes wander, tap the field close to ' + (need === n ? 'each one to hear its thought' : need + ' of them to hear their thoughts') + ', pulse the chamber from the centre, and hold to read the echo weather; the bulletin prints when you are done.',
+    brief: 'Set how far the echoes wander, tap the field close to ' + (need === n ? 'each one to hear its thought' : need + ' of them to hear their thoughts') + ', pulse the chamber from the centre, and hold to read the echo weather; the bulletin prints when you are done.'
+      + (was && was.opener ? ' It is the ' + was.opener + ' your card was showing.' : ''),
     aspect: '1 / 1',
     steps: [
       { id: 'drift', ask: 'how far the echoes wander', kind: 'range', min: 0, max: 100, step: 1, value: from, low: 'hovering', high: 'restless' },
@@ -368,7 +389,8 @@ function listen(env) {
 // Shuffle the harmonics: choose how the chamber sounds, pause or free the drift, shuffle the
 // field a few times and let it settle; the weather prints when it is still.
 function shuffle(env) {
-  const ch = chamber(env);
+  const was = pressed(env);
+  const ch = chamber(env, was);
   const s = ch.s;
   const pool = LOOKS.slice();
   const options = [];
@@ -382,7 +404,8 @@ function shuffle(env) {
   let told = 0;
   return {
     title,
-    brief: 'Choose the harmonics, pause or free the drift, shuffle the field ' + times + ' and let it settle; the echo weather prints once it is still.',
+    brief: 'Choose the harmonics, pause or free the drift, shuffle the field ' + times + ' and let it settle; the echo weather prints once it is still.'
+      + (was && was.opener ? ' What prints is the ' + was.opener + ' your card was showing.' : ''),
     aspect: '1 / 1',
     steps: [
       { id: 'harmonics', ask: 'the harmonics', kind: 'choice', options },
@@ -443,7 +466,8 @@ function shuffle(env) {
 
 // Ring one echo: tap the one you want to hear, set its tone, and ring it; its thought prints.
 function ring(env) {
-  const ch = chamber(env);
+  const was = pressed(env);
+  const ch = chamber(env, was);
   const s = ch.s;
   const count = env.int(3, 5);
   const tone = env.pick([240, 360, 480]);
@@ -454,7 +478,8 @@ function ring(env) {
   s.look = toneLook(tone);
   return {
     title,
-    brief: 'Tap the echo you want to hear, set its tone, and ring it ' + count + ' times; its thought prints when the chamber is still again.',
+    brief: 'Tap the echo you want to hear, set its tone, and ring it ' + count + ' times; its thought prints when the chamber is still again.'
+      + (was && was.closer ? ' Your card signed off: ' + was.closer : ''),
     aspect: '1 / 1',
     steps: [
       { id: 'pick', ask: 'tap the echo you want to hear', kind: 'tap', label: 'pick one for me' },
@@ -509,12 +534,17 @@ export default {
     const stars = env.stars;
     if (!stars.length) return null;
     const wx = summarize(stars);
+    const opener = env.pick(OPENERS).replace(':', '');
+    const mid = env.pick(MIDS);
+    const closer = env.pick(CLOSERS);
     return {
-      title: env.pick(OPENERS).replace(':', ''),
+      title: opener,
       mono: stars.length + ' echoes, ' + wx.spread + ' spread\nchamber ' + wx.zone + ', tone ' + wx.density,
-      text: env.pick(MIDS) + ' ' + env.pick(CLOSERS),
+      text: mid + ' ' + closer,
       aspect: '1 / 1',
-      paint: (ctx, w, h, e) => echoes(ctx, w, h, e, e.rnd() * 10)
+      paint: (ctx, w, h, e) => echoes(ctx, w, h, e, e.rnd() * 10),
+      // What this card is of, for the piece it opens as: the bulletin it printed.
+      of: { opener, mid, closer }
     };
   },
   piece(env) {
