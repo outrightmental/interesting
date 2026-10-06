@@ -95,6 +95,20 @@ def stored(body):
     return f"<head>{mi.STATE_TAG}</head>\n<body>{body}</body>"
 
 
+def in_the_shell(tag):
+    """A pattern matching `tag` as the shared shell may write it, with or without siteRoot.
+
+    The axioms spell their lines out as a *page* carries them: mi.STATE_TAG and mi.PARTICIPATE_TAG
+    are what the built site is checked for, and what the prompt tells a run to keep, exactly as it
+    is. _includes/layout.njk is free to reach that through siteRoot instead -- which renders empty on
+    every page but error.html, served from an arbitrary missing path and so needing the absolute
+    form -- and it does. Either way one line in the template carries the axiom to every page, which
+    is the whole of what the tests below are about, so both forms match and neither is prescribed.
+    """
+    src, rest = tag.split("src='", 1)
+    return re.escape(src + "src='") + r"(\{\{ siteRoot \}\})?" + re.escape(rest)
+
+
 def steered(body):
     """A bare fragment that loads the shared participation script, and nothing more.
 
@@ -6077,7 +6091,7 @@ class RealSiteTest(unittest.TestCase):
         # The same bargain the analytics line makes: the axiom is about the built site, so one line
         # in the shell carries it to every page, and a run that drops it is refused for all of them
         # at once rather than page by page.
-        self.assertIn(mi.STATE_TAG, self.source["_includes/layout.njk"])
+        self.assertRegex(self.source["_includes/layout.njk"], in_the_shell(mi.STATE_TAG))
 
     def test_no_page_keeps_state_behind_the_stores_back(self):
         # Issue #31: one document and one way in and out of it. A page that parsed localStorage
@@ -6123,7 +6137,7 @@ class RealSiteTest(unittest.TestCase):
     def test_the_steering_line_is_written_once_in_the_shared_shell(self):
         # The same bargain the analytics and local-state lines make: one line in the shell carries
         # it to every page, so a run that drops it is refused for all of them at once.
-        self.assertIn(mi.PARTICIPATE_TAG, self.source["_includes/layout.njk"])
+        self.assertRegex(self.source["_includes/layout.njk"], in_the_shell(mi.PARTICIPATE_TAG))
 
     def test_the_way_in_is_out_of_every_runs_reach(self):
         # The heart of the issue: an affordance the AI never modifies. The same machinery the
