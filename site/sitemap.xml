@@ -1,14 +1,4 @@
 <?xml version='1.0' encoding='UTF-8'?>
-<!--
-  Every page of the site, in the order the site map page lists them.
-
-  The <loc> values are relative paths, like every other link between pages: this site has no fixed
-  domain and is served under a sub-path, so a hard-coded origin here would be wrong for every fork
-  and for every local copy.
-
-  Axiom: all of the content stays reachable from the root, through the navigation and through this
-  file. A page added to the site is listed here in the same change.
--->
 <urlset xmlns='http://www.sitemaps.org/schemas/sitemap/0.9'>
   <url><loc>index.html</loc></url>
   <url><loc>moods.html</loc></url>
@@ -25,7 +15,6 @@
   <url><loc>wish-constellation.html</loc></url>
   <url><loc>constellation-diary.html</loc></url>
   <url><loc>constellation-echo.html</loc></url>
-  <url><loc>pulse-choir.html</loc></url>
   <url><loc>constellation-weather.html</loc></url>
   <url><loc>orbital-weaver.html</loc></url>
   <url><loc>sky-archive.html</loc></url>
