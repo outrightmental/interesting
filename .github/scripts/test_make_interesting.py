@@ -4018,6 +4018,51 @@ class RealSiteTest(unittest.TestCase):
                 files.add(world["file"])
         self.assertLessEqual(self.worlds(), files, "the mood flow names no world the list does not")
 
+    def test_the_site_theme_follows_the_card_that_was_picked(self):
+        # Issue #61: pressing a card features that world's piece on the stage, so the site's own
+        # colour has to become that card's. It did not: a visitor with a reading kept the reading's
+        # palette whatever they pressed, because the reading is written after the page's own world
+        # in _mood.scss and nothing outranked either of them, while the card itself was painted in
+        # its world's colours -- the mismatch the issue reports. Four things make it true now, and
+        # each is checked where it lives rather than taken on trust.
+        #
+        # One: the precedence, read off the built stylesheet rather than the source, because equal
+        # specificity is settled by order and the order that settles it is the one a browser reads.
+        css = self.site["css/site.css"]
+        order = [css.find(f":root[data-{name}=tender]") for name in ("world", "mood", "featured")]
+        self.assertNotIn(-1, order, f"the three palettes on :root are not all in the stylesheet: {order}")
+        self.assertEqual(order, sorted(order),
+                         "a featured activity has to be written last to outrank the visitor's reading")
+        moods = set(re.findall(r"^\s+([a-z]+):\s*\(#", self.source[f"{mi.SASS_DIR}/_mood.scss"], re.M))
+        self.assertGreaterEqual(len(moods), 10)
+        for mood in sorted(moods):
+            # Every mood is featurable, or picking the card of a world that wears it changes nothing.
+            with self.subTest(mood=mood):
+                self.assertIn(f":root[data-featured={mood}]", css)
+        # Two: the stage features the world it opens, and stops featuring it on the way home -- so a
+        # piece is what the site wears while it is on the stage, and the reading has the site back
+        # after it, rather than one pressed card re-skinning the site for good.
+        stage = self.source[mi.STAGE_SCRIPT]
+        self.assertIn("feature(world.mood, opts.seeds)", stage, "the stage features no world")
+        self.assertIn("root.dataset.featured = mood", stage, "nothing writes the featured mood")
+        self.assertIn("delete root.dataset.featured", stage, "nothing stops being featured")
+        home = stage.split("function goHome() {", 1)[1].split("\n}", 1)[0]
+        self.assertIn("unfeature()", home, "going home leaves the last piece's palette on the site")
+        # Three: the four seeds and no more. --fg and --muted are what hold the site's text at
+        # 4.5:1 over all fifteen palettes, so a theme that follows a card may never carry them off.
+        self.assertIn("const SEEDS = ['bg', 'bg2', 'accent', 'accent2'];", stage)
+        for held in ("--fg", "--muted"):
+            with self.subTest(seed=held):
+                self.assertNotIn(f"setProperty('{held}'", stage)
+        # Four: it is the card's colour and not merely its world's. A card the feed dealt wears the
+        # four seeds its own configuration derived (js/variant.js), and those are what the stage is
+        # handed -- both for a card pressed and for the next one off the stack when a piece ends.
+        feed = self.source["js/feed.js"]
+        self.assertRegex(feed, r"interestingStage\.open\(file, seed, \{[^}]*\bseeds\b",
+                         "a pressed card hands the stage no palette")
+        self.assertRegex(feed, r"seeds: palette\(card, m\)",
+                         "the next card off the stack hands the stage no palette")
+
     def test_every_page_but_the_two_lists_ends_in_the_feed(self):
         # The feed is the one index of every world, written once in the shell: every page carries
         # it as plain markup, except the two that list every page themselves.

@@ -3,24 +3,39 @@
 // everywhere, and onto the mood atlas.
 //
 // Every palette is four seeds (see _tokens.scss), and the whole scheme follows from them: that is
-// the whole of the transmogrification. The seeds land in four places:
+// the whole of the transmogrification. The seeds land in four places -- three of them on :root, at
+// equal specificity, so the order they are written here is the order that settles them:
 //
-//   :root[data-world='x']   the page's own world (set by _includes/layout.njk from _data/worlds.json),
-//                           so a world page wears its world's palette by default;
-//   :root[data-mood='x']    the visitor's reading (set by js/threshold.js), which wins over the
-//                           page's own world because it is written after it here;
-//   [data-mood='x']         a card in the feed (_includes/worlds.njk), which wears its own world's
-//                           palette whatever the page around it wears, so the feed is a mosaic.
+//   :root[data-world='x']    the page's own world (set by _includes/layout.njk from
+//                            _data/worlds.json), so a world page wears its world's palette by
+//                            default;
+//   :root[data-mood='x']     the visitor's reading (set by js/threshold.js), which wins over the
+//                            page's own world because it is written after it here;
+//   :root[data-featured='x'] the activity on the stage (set by js/stage.js), which wins over both
+//                            because the site is featuring that activity: pick a card from the
+//                            feed and the site becomes that world's colour, whatever the reading
+//                            is. It is written last here, and that is the whole of the
+//                            precedence. The stage takes the attribute off again on the way home
+//                            (stage:home), so a reading is the site's standing skin and a piece
+//                            is only ever what the site is wearing while it is on the stage;
+//   [data-mood='x']          a card in the feed (_includes/worlds.njk), which wears its own
+//                            world's palette whatever the page around it wears, so the feed is a
+//                            mosaic.
 //
 // A page writes no colour of its own, so changing the attribute changes the site. A page that
 // wants to go further can hang its own rules off the same attribute.
 //
-// There is a fourth place, and it is the same four names again: a card the feed dealt carries a
+// There is a fifth place, and it is the same four names again: a card the feed dealt carries a
 // randomized configuration (js/variant.js), and js/feed.js writes the four seeds that configuration
 // derives -- from the ones the card's own mood gives it, below -- onto the card inline, which wins
 // over the rule here. So a repeat of a world is a different colour from the first card of it while
 // still wearing that world's mood, and --fg and --muted, the two that hold the text at 4.5:1, are
 // left alone by that as well.
+//
+// The stage uses that fifth place too, and for the same reason: the card a visitor pressed hands
+// its own four seeds over, js/stage.js writes them onto :root inline, and so the site matches the
+// card that was picked rather than merely its world. Inline there means the same thing it means on
+// a card -- the configuration wins over the mood it was derived inside.
 
 @use 'sass:list';
 @use 'type';
@@ -62,6 +77,15 @@ $moods: (
 @each $mood, $palette in $moods {
   :root[data-mood='#{$mood}'],
   [data-mood='#{$mood}'] {
+    @include seeds($palette);
+  }
+}
+
+// The activity on the stage, last of the three on :root, so the world a visitor just picked from
+// the feed outranks both the page's own world and the visitor's reading -- and only for as long as
+// its piece is on the stage (js/stage.js).
+@each $mood, $palette in $moods {
+  :root[data-featured='#{$mood}'] {
     @include seeds($palette);
   }
 }
