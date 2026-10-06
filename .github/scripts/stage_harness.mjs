@@ -46,6 +46,7 @@ import { Worker, isMainThread, parentPort, workerData } from 'node:worker_thread
 const SCENARIOS = ['rounds', 'sliderUsed', 'sliderUntouched', 'teardown'];
 const SCENARIO_TIMEOUT_MS = 20000;
 const MISSING_WORLD = 'stage-harness-nowhere.html'; // a world with no module, for the teardown
+const SLIDER_SEEDS = [4242, 101, 99991, 7]; // tried in turn until a piece with a slider turns up
 const STARS = [
   { x: 18, y: 30, text: 'a window left open' },
   { x: 52, y: 22, text: 'the sound of a kettle' },
@@ -591,17 +592,24 @@ async function slider(stageDir, worlds, deal, clock, how) {
   const api = page.win.interestingStage;
   const tries = [deal[0].file].concat(worlds.map((world) => world.file));
   let world = '';
+  let seed = 0;
   let ranges = [];
-  for (const file of tries) {
-    api.open(file, 4242, { arriving: true });
-    if (!(await waitForPiece(page, clock))) continue;
-    ranges = knobsOn(page).filter((knob) => knob.dataset.kind === 'range').map((knob) => knob.dataset.id);
-    if (ranges.length) {
-      world = file;
-      break;
+  // A few seeds each, because which knobs a piece has is the seed's to decide: one seed per world
+  // would let a site full of sliders report none.
+  for (const at of SLIDER_SEEDS) {
+    for (const file of tries) {
+      api.open(file, at, { arriving: true });
+      if (!(await waitForPiece(page, clock))) continue;
+      ranges = knobsOn(page).filter((knob) => knob.dataset.kind === 'range').map((knob) => knob.dataset.id);
+      if (ranges.length) {
+        world = file;
+        seed = at;
+        break;
+      }
     }
+    if (world) break;
   }
-  if (!world) return { playable: false, world: '', ranges: [], look: look(page) };
+  if (!world) return { playable: false, world: '', seed: 0, ranges: [], look: look(page) };
   page.events.length = 0;
   page.modes.length = 0;
   const unset = await playKnobs(page, clock, how);
@@ -610,6 +618,7 @@ async function slider(stageDir, worlds, deal, clock, how) {
   return {
     playable: true,
     world,
+    seed,
     ranges,
     unset,
     modes: page.modes.slice(),
