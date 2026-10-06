@@ -374,6 +374,15 @@
   @include type.scale(body-medium);
 }
 
+// What is left to set, under the piece's own live line: the dots say how many, this says which.
+// It is only ever on while a piece is part-way through, so finishing the last knob on the page
+// and finding the piece still waiting is answered on the spot rather than looking like a fault.
+.stage-wanted {
+  margin: 0;
+  color: var(--md-sys-color-secondary);
+  @include type.scale(label-large);
+}
+
 .stage-foot {
   display: flex;
   align-items: center;

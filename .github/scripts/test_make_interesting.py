@@ -2518,8 +2518,9 @@ class MoodAxiomTest(SiteDirTestCase):
 
 
 class ParticipationAxiomTest(SiteDirTestCase):
-    """Issue #43: every page carries a visitor's way of steering the site -- one prominent button,
-    pinned to the bottom edge, that opens a pre-shaped new issue on this repository.
+    """Issue #43: every page carries a visitor's way of steering the site -- one link to a
+    pre-shaped new issue on this repository, which the shared shell offers in the constellation the
+    sparkles logo opens (issue #64).
 
     The seventh axiom, and the one that is about the person reading the site rather than about the
     site: a site rewritten continuously by a model is steered by whoever can reach the model, so
@@ -2556,28 +2557,36 @@ class ParticipationAxiomTest(SiteDirTestCase):
             with self.subTest(rule=rule):
                 self.assertIn(rule, rules)
 
-    def test_the_prompt_leaves_the_bottom_edge_and_the_cadre_alone(self):
+    def test_the_prompt_leaves_the_cadre_and_every_edge_of_the_viewport_alone(self):
         # The three are a cadre of their own -- each injects its own styles, none is a page's to
         # restyle -- so a run has to be told what they are as well as that they exist. The header's
         # pulse once arrived as <p class='site-meta'> and was torn out of the header by the state
         # menu's own `position: fixed`; this is the half of that lesson the prompt can carry.
         rules = self.prompt()
-        for where in ["\"steer the site\" button in the "
-                      "middle of the bottom edge",
-                      "Leave the bottom edge to them",
-                      "nothing of yours restyles them, reproduces them or "
-                      "rewords them"]:
+        for where in ["this \"steer the site\" link, the consent banner's \"cookies\" button "
+                      "and the local-state \"state\" menu",
+                      "pin nothing of yours to an edge of the viewport",
+                      "Nothing of yours restyles them, reproduces them or "
+                      "rewords them",
+                      "The words on those three options are the shell's own and are already "
+                      "written"]:
             with self.subTest(where=where):
                 self.assertIn(where, rules)
 
-    def test_the_prompt_says_how_two_of_them_reach_the_main_nav(self):
-        # Issue #54 pulled "cookies" and "state" into the logo's constellation, which a run has to
-        # know two things about: the shell adopts the buttons those fixed files drew rather than
-        # copying them, and so a second control of either is never the thing to add.
+    def test_the_prompt_says_how_all_three_of_them_reach_the_main_nav(self):
+        # Issue #54 pulled "cookies" and "state" into the logo's constellation and issue #64 the
+        # invitation with them, which a run has to know two things about: the shell adopts what
+        # those fixed files drew rather than copying it, and so a second control of any of the
+        # three is never the thing to add. The two-item rule is stated here as well, because this
+        # is the axiom whose own affordance used to be the exception to it.
         rules = self.prompt()
-        for rule in ["adopts two of them into the main nav rather than copying",
-                     "hides the corner buttons that js/analytics.js and js/state.js draw",
-                     "never draw a second cookies or state control of your own"]:
+        for rule in ["adopts all three into the main nav rather than copying",
+                     "hides the control that js/participate.js, js/analytics.js and js/state.js "
+                     "each pinned over the page",
+                     "never draw a second new-issue, cookies or state control of your own",
+                     "the only things floating over a page are the sparkles logo in the top left "
+                     "and the persona in the top right",
+                     "nothing floats at the bottom edge"]:
             with self.subTest(rule=rule):
                 self.assertIn(rule, rules)
 
@@ -3149,6 +3158,31 @@ def needs_the_piece_harness(test):
         test.skipTest(f"Node cannot run the piece harness ({err})")
 
 
+_stage_harness_trouble = None  # "" once the harness has been seen to run, the reason it cannot if not
+
+
+def needs_the_stage_harness(test):
+    """Skip a test that runs js/stage.js through the stub browser when Node cannot run it.
+
+    The same bargain as needs_the_piece_harness: the harness runs under the permission model and in
+    worker threads, so an old Node cannot run it at all, and in CI that is a failure rather than a
+    skip -- a silent skip would quietly stop holding the stage to the axiom it is half of. The
+    answer is asked for once per run, because asking is a whole play of the stage.
+    """
+    global _stage_harness_trouble
+    if _stage_harness_trouble is None:
+        try:
+            mi.run_stage_harness(stage_site())
+            _stage_harness_trouble = ""
+        except mi.BuildToolchainError as err:
+            _stage_harness_trouble = str(err)
+    if not _stage_harness_trouble:
+        return
+    if os.environ.get("CI"):
+        test.fail(f"Node cannot run the stage harness in CI: {_stage_harness_trouble}")
+    test.skipTest(f"Node cannot run the stage harness ({_stage_harness_trouble})")
+
+
 def world_list(*worlds):
     """The #site-worlds JSON the layout writes into every page, listing `worlds` (page names)."""
     entries = [{"file": world, "name": world[:-5], "orientation": "o", "mood": "m", "aspect": "1 / 1", "what": "."}
@@ -3211,6 +3245,42 @@ ONE_KNOB_PIECE = """    return {
       steps: [{ id: 'flip', ask: 'flip it', kind: 'toggle' }]
     };"""
 
+# A piece shaped like the one issue #60 was reported on: a slider nobody is made to move, and the
+# piece's last gesture gated behind the knobs below it, so the last knob a visitor touches is not
+# the last knob the piece is waiting on.
+SLIDER_PIECE = """    const n = env.int(2, 4);
+    let settled = 0;
+    return {
+      title: n + ' turns at a pace',
+      brief: 'Set the pace, turn it, let it settle, and seal it.',
+      steps: [
+        { id: 'pace', ask: 'the pace', kind: 'range', min: 0, max: 100, step: 1, value: 40, low: 'slow', high: 'quick' },
+        { id: 'turn', ask: 'turn it', kind: 'press', count: n },
+        { id: 'settle', ask: 'let it settle', kind: 'wait', after: 'turn' },
+        { id: 'seal', ask: 'seal it', kind: 'hold', ms: 900, label: 'hold to seal', after: 'settle' }
+      ],
+      start(ctx) { ctx.g.fillRect(0, 0, ctx.w, ctx.h); },
+      frame(t, dt, ctx) {
+        if ((ctx.value('turn') || 0) >= n) {
+          settled += dt;
+          ctx.progress('settle', settled);
+          if (settled >= 1) ctx.satisfy('settle');
+        }
+      }
+    };"""
+
+
+def stage_site(toy=None, other=None):
+    """A site the stage harness can play: the one list of worlds, js/stage.js as committed, and a
+    module for each world. The stage itself is never a fixture -- the point is to run the real one."""
+    return {
+        "index.html": world_list("toy.html", "other.html"),
+        mi.STAGE_SCRIPT: (mi.REPO_ROOT / "site" / mi.STAGE_SCRIPT).read_text(encoding="utf-8"),
+        "js/modules/toy.js": piece_module(toy or SLIDER_PIECE, "toy"),
+        "js/modules/other.js": piece_module(other or FINISHING_PIECE, "other"),
+    }
+
+
 # A piece that finishes itself on arrival, before its visitor has set anything.
 SELF_FINISHING_PIECE = """    return {
       title: 'already done',
@@ -3265,11 +3335,24 @@ class CompletionAxiomTest(SiteDirTestCase):
                      "only a tap or a wait knob is the piece's to set",
                      "The world's old interactive page is the piece's material",
                      mi.PIECE_HARNESS_REL,
-                     f"within {mi.PIECE_MAX_TAPS} taps and {mi.PIECE_MAX_SECONDS} seconds of play"]:
+                     f"within {mi.PIECE_MAX_TAPS} taps and {mi.PIECE_MAX_SECONDS} seconds of play",
+                     # Issue #60: the half of the axiom the harness could not reach until there was
+                     # a harness for the stage, said in the prompt so a run writing a piece or
+                     # rewriting the stage knows it.
+                     "Every knob must be one its visitor can actually set",
+                     "finishable whatever order they reach its knobs in",
+                     "A piece is one instantiation and keeps nothing between them",
+                     mi.STAGE_HARNESS_REL,
+                     "a slider a visitor leaves where it stands counts as set",
+                     "a knob nobody set is named rather than silently holding the piece shut",
+                     "leaves nothing of itself on the stage or still running"]:
             with self.subTest(rule=rule):
                 self.assertIn(rule, rules)
         self.assertIn(f"{mi.PIECE_MIN_STEPS} to {mi.PIECE_MAX_STEPS} knobs", rules)
         self.assertIn("finished by its visitor, never by itself", rules)
+        # The prompt says which of the two harnesses refuses a plan and which holds the committed
+        # site, because a rule the code does not enforce must not be dressed up as one that does.
+        self.assertIn("checked on the site as committed rather than on a plan", rules)
 
     def test_the_prompt_tells_a_run_how_a_world_page_is_the_stage(self):
         prompt = mi.build_prompt([("index.html", "<h1>hi</h1>")])
@@ -3392,6 +3475,111 @@ class CompletionAxiomTest(SiteDirTestCase):
         with mock.patch.object(mi, "PIECE_HARNESS", self.root / "nowhere.mjs"):
             with self.assertRaises(mi.BuildToolchainError):
                 mi.worlds_without_a_finish(dict(mi.read_site()))
+
+
+class StageTest(unittest.TestCase):
+    """The stage a piece is played on, run against a stub browser (issue #60).
+
+    The completion axiom has two halves and the piece harness only ever reached one of them. A piece
+    can be flawless -- two to five knobs, a clear end, the same for the same seed -- and the stage
+    can still leave the visitor who is playing it with nothing to do and no way to finish, because
+    the knob the piece offered is not a knob the stage will take. That is what was reported: a
+    slider the stage only marked set when its value changed, so a visitor content with where it
+    already stood set every other knob, watched the finale run, and waited on a piece that had no
+    way left to finish. These tests run the real js/stage.js, through the elements stage.njk writes
+    and a clock they step by hand, and hold it to four things: a world played twice over plays the
+    second time like the first, a slider used where it stands counts as used, a knob nobody set is
+    named rather than left a mystery, and a piece that is over leaves nothing of itself behind.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.reports = {}
+
+    def report(self, deal=(), **pieces):
+        """The harness's report for this site and deal, played once per distinct scenario set."""
+        needs_the_stage_harness(self)
+        key = (tuple(sorted(pieces.items())), tuple(deal))
+        if key not in self.reports:
+            self.reports[key] = mi.run_stage_harness(stage_site(**pieces), deal=deal)
+        return self.reports[key]
+
+    def scenario(self, name, deal=(), **pieces):
+        got = self.report(deal=deal, **pieces)[name]
+        self.assertTrue(got.get("ok"), f"the {name} scenario did not run: {got.get('error')}")
+        return got["result"]
+
+    def test_a_world_played_again_plays_like_the_first_time(self):
+        # The replay the note asked for: one stage, one session, and a world dealt a second time
+        # after another has been played in between. Every round has to finish and open the next.
+        deal = ["toy.html", "other.html", "toy.html"]
+        result = self.scenario("rounds", deal=deal)
+        self.assertEqual(len(result["rounds"]), len(deal))
+        self.assertEqual([r["was"]["file"] for r in result["rounds"]], deal)
+        for played in result["rounds"]:
+            with self.subTest(world=played["was"]["file"], seed=played["was"]["seed"]):
+                self.assertTrue(played["playable"], "the piece never became playable")
+                self.assertEqual(played["unset"], [], "a knob the visitor worked was not set")
+                self.assertTrue(played["movedOn"], "the stage never opened the next piece")
+                self.assertEqual(played["modes"][-5:], ["done", "vanishing", "loading", "arriving", "live"])
+        self.assertEqual(result["completes"], len(deal))
+
+    def test_a_slider_the_visitor_leaves_where_it_is_still_counts_as_set(self):
+        # A slider opens with an answer already on it -- which is why ctx.value(id) is the piece's
+        # from the first frame -- so pressing it and letting go where it stands is an answer, and
+        # the piece it belongs to has to be finishable by someone who gives it.
+        result = self.scenario("sliderUsed")
+        self.assertTrue(result["playable"], "no world the harness tried had a slider on it")
+        self.assertTrue(result["ranges"], "the check is worth nothing without a slider")
+        self.assertEqual(result["unset"], [], "the slider was used and the stage did not take it")
+        self.assertTrue(result["finished"], "every knob was set and the piece never finished")
+
+    def test_a_knob_nobody_set_is_named_rather_than_left_a_mystery(self):
+        # The other way round: a knob genuinely untouched is genuinely unset, and the stage must not
+        # pretend otherwise -- but it must say which one, because the last knob on the page is often
+        # not the last one the piece is waiting on, and silence there reads as a piece that broke.
+        result = self.scenario("sliderUntouched")
+        self.assertTrue(result["playable"])
+        self.assertIn(result["ranges"][0], result["unset"])
+        self.assertFalse(result["finished"], "a piece finished with a knob nobody set")
+        self.assertTrue(result["wanted"], "the stage said nothing about the knob it was waiting on")
+        self.assertIn("the pace", result["wanted"])
+        self.assertNotIn("done", result["modes"])
+
+    def test_a_piece_leaves_nothing_on_the_stage_or_running_behind_it(self):
+        # "Components should completely reset between instantiations." A piece part-played, with a
+        # hold still pressed down under a finger that never lifts, and then another piece opened
+        # over it: nothing of the first may be on the stage and nothing of it may still be running.
+        result = self.scenario("teardown")
+        self.assertTrue(result["playable"])
+        self.assertTrue(result["held"], "the check is worth nothing without a hold left pressed")
+        self.assertGreater(result["whilePlaying"], 0, "the stage had nothing running while playing")
+        self.assertEqual(result["waiting"], 0, "the stage left a timer running after the piece")
+        self.assertIsNone(result["current"])
+        left = result["look"]
+        self.assertEqual(left["knobs"], [])
+        self.assertEqual(left["dots"], 0)
+        self.assertEqual(left["status"], "")
+        self.assertEqual(left["wanted"], "")
+        self.assertFalse(left["doneShown"])
+        self.assertEqual(left["sceneLabel"], "the scene", "the scene still answers to the piece that is gone")
+        self.assertEqual(left["aspect"], "", "the scene kept the shape of the piece that is gone")
+
+    def test_a_missing_harness_is_the_toolchain_and_not_the_model(self):
+        with tempfile.TemporaryDirectory() as empty:
+            with mock.patch.object(mi, "STAGE_HARNESS", Path(empty) / "nowhere.mjs"):
+                with self.assertRaises(mi.BuildToolchainError):
+                    mi.run_stage_harness(stage_site())
+
+    def test_a_site_without_a_stage_or_without_worlds_is_the_toolchain_saying_so(self):
+        without_stage = stage_site()
+        del without_stage[mi.STAGE_SCRIPT]
+        with self.assertRaises(mi.BuildToolchainError):
+            mi.run_stage_harness(without_stage)
+        without_worlds = stage_site()
+        without_worlds["index.html"] = "<h1>hi</h1>"
+        with self.assertRaises(mi.BuildToolchainError):
+            mi.run_stage_harness(without_worlds)
 
 
 class BuildPipelineTest(unittest.TestCase):
@@ -3561,7 +3749,9 @@ class NavTest(unittest.TestCase):
     "This is not the sort of website that uses conventional navigation." The top app bar is gone,
     and the whole of the site's navigation is two marks floating over the page -- the logo in the
     upper left, which says the site's name on rollover and opens a lightbox with the options
-    branching out of it, and the persona in the upper right.
+    branching out of it, and the persona in the upper right. Two, exactly: a "go to <world>" link
+    beside the persona and a button pinned to the bottom edge both outlived the first pass at this
+    and are gone (issue #64), and the options they stood for are in the constellation.
 
     Two halves, checked two ways. What the shell writes is read off the built site, because that is
     the site a visitor gets and the one the axioms are about: every option is in the markup, so
@@ -3575,11 +3765,23 @@ class NavTest(unittest.TestCase):
     # nav quietly inert, which is exactly what this catches.
     IDS = ["sparknav", "sparknav-logo", "sparknav-veil",
            "sparknav-reading", "sparknav-reading-go", "sparknav-reading-label",
+           "sparknav-participate", "sparknav-participate-open",
            "sparknav-cookies", "sparknav-cookies-open", "sparknav-state", "sparknav-state-open",
            "sparknav-state-label"]
     # And the two the script never names, because it takes the orbits as it finds them: however
     # many the shell writes, in the order it writes them.
     ORBITS = ["sparknav-near", "sparknav-far"]
+    # Everything the site's own stylesheets pin over the page, and why each one is allowed to be
+    # there: one of the two marks, a part of one of them, or shown only while something is open.
+    # Nothing may join this list without being one of those things (issue #64).
+    FLOATS = {
+        ".skip-link": "off the top of the screen until a keyboard focuses it",
+        ".sparknav": "the sparkles logo, upper left",
+        ".sparknav-veil": "the lightbox, only while the constellation is open",
+        ".persona": "the persona, upper right",
+        ".persona-sheet-fallback[open]": "the persona's sheet, only while it is open",
+        ".are-you-sure-fallback[open]": "the shared confirmation, only while it is asked",
+    }
 
     built = None
     observed = None
@@ -3614,6 +3816,26 @@ class NavTest(unittest.TestCase):
     def pages(self):
         return sorted(mi.html_pages(self.site))
 
+    def floated(self):
+        """Every selector in the site's own stylesheets that pins something over the page.
+
+        Read off the Sass rather than the built CSS because the Sass is where a rule is written and
+        where the comment explaining it sits; FIXED_FILES are left out, the three affordances they
+        pin being theirs to place and the shell's to hide (see RealSiteTest).
+        """
+        found = {}
+        for rel, content in sorted(self.source.items()):
+            if rel in mi.FIXED_FILES or not rel.endswith((".scss", ".css")):
+                continue
+            lines = content.splitlines()
+            for i, line in enumerate(lines):
+                if not re.match(r"\s*position:\s*fixed\b", line):
+                    continue
+                selector = next((lines[j].rstrip()[:-1].strip() for j in range(i - 1, -1, -1)
+                                 if lines[j].rstrip().endswith("{")), line.strip())
+                found.setdefault(selector, []).append(rel)
+        return found
+
     # ---- what the shell writes ---------------------------------------------------------------
 
     def test_no_page_has_a_top_app_bar_any_more(self):
@@ -3631,6 +3853,23 @@ class NavTest(unittest.TestCase):
                 self.assertIn("<details class='sparknav' id='sparknav'>", self.site[page])
                 self.assertIn("class='persona' id='persona'", self.site[page])
         self.assertGreater(len(self.pages()), 1, "the check is worth nothing on one page")
+
+    def test_the_persona_is_the_portrait_and_nothing_beside_it(self):
+        # The upper-right corner is one control, the avatar. A "go to <world>" link used to sit
+        # beside it, which made a second floating item of that corner on any screen wide enough
+        # for it; the world a reading opens onto is an option in the constellation instead, where
+        # it already was, so nothing of it was lost in taking it out of the chrome (issue #64).
+        for page in self.pages():
+            with self.subTest(page=page):
+                corner = self.site[page]
+                corner = corner[corner.index("<div class='persona'"):]
+                corner = corner[:corner.index("</div>")]
+                self.assertEqual(corner.count("<button"), 1, "one control in that corner")
+                self.assertNotIn("<a ", corner, "and no link floating beside it")
+        # And nothing of the old link is left in the shell, its stylesheet or its script.
+        for rel in ["_includes/layout.njk", "_sass/_persona.scss", "js/persona.js"]:
+            with self.subTest(rel=rel):
+                self.assertNotIn("persona-go", self.source[rel])
 
     def test_the_logo_is_a_disclosure_that_says_the_sites_name(self):
         shell = self.source["_includes/layout.njk"]
@@ -3681,7 +3920,8 @@ class NavTest(unittest.TestCase):
         # markup, hidden, and js/site.js is what brings each one out.
         nav = self.site["moods.html"]
         nav = nav[nav.index("<details class='sparknav'"):nav.index("</details>")]
-        for option in ["sparknav-reading", "sparknav-cookies", "sparknav-state"]:
+        for option in ["sparknav-reading", "sparknav-participate", "sparknav-cookies",
+                       "sparknav-state"]:
             with self.subTest(option=option):
                 self.assertRegex(nav, rf"id='{option}' hidden>")
 
@@ -3755,27 +3995,66 @@ class NavTest(unittest.TestCase):
         self.assertIsNone(seen["lightbox"])
         self.assertEqual(seen["options"],
                          ["the threshold", "the mood atlas", "site map", "privacy", "terms"])
-        for away in ("reading", "cookies", "state"):
+        for away in ("reading", "participate", "cookies", "state"):
             with self.subTest(option=away):
                 self.assertTrue(seen[away], "nothing has happened yet, so it is not in the orbit")
 
-    def test_the_corner_affordances_are_adopted_rather_than_copied(self):
-        # The heart of the constraint: js/analytics.js and js/state.js are fixed files, so the
-        # shell hides the buttons they pin to the corners and presses those same buttons from the
-        # constellation -- there is still exactly one cookies dialog and one state menu.
+    def test_nothing_but_the_logo_and_the_persona_floats_over_a_page(self):
+        # The regression issue #64 is about, in both halves. What the site's own stylesheets pin
+        # over the page is a closed list -- the two marks, the parts of them, and the overlays that
+        # are only up while something is open -- and everything the fixed files pin is hidden where
+        # they pinned it and offered in the constellation instead, so at rest a visitor sees two
+        # things floating and no more.
+        floats = self.floated()
+        self.assertEqual(sorted(floats), sorted(self.FLOATS),
+                         f"the list of things pinned over the page has changed: {floats}")
+        seen = self.seen()["whatFloatsAtRest"]
+        for name, state in sorted(seen["pinned"].items()):
+            with self.subTest(pinned=name):
+                self.assertTrue(state["drawn"], "the harness has to draw it to prove anything")
+                self.assertFalse(state["laidOut"], f"{name} is still laid out over the page")
+                # The attribute alone is not enough, and that is not a detail: each of these files
+                # injects the styles for its own control, and js/participate.js gives its link
+                # `display: inline-flex`, which outranks the `display: none` the hidden attribute
+                # leans on. The inline declaration beside the attribute is what actually puts it
+                # away -- without it, "steer the site" would still be on the bottom edge.
+                self.assertEqual(state["display"], "none", f"{name} is hidden in name only")
+        self.assertEqual(seen["addedToTheBody"], 0, "the shell floats nothing of its own either")
+        self.assertIsNone(seen["lightbox"], "and all of that is true with the page at rest")
+        # Hidden, not gone: every one of the three is one press of the logo away.
+        for option in ["change this site", "cookies", "state · 1 kept"]:
+            with self.subTest(option=option):
+                self.assertIn(option, seen["options"])
+
+    def test_the_pinned_affordances_are_adopted_rather_than_copied(self):
+        # The heart of the constraint: js/participate.js, js/analytics.js and js/state.js are fixed
+        # files, so the shell hides the controls they pin over the page and presses those same
+        # controls from the constellation -- there is still exactly one new-issue link, one cookies
+        # dialog and one state menu.
         seen = self.seen()["whenTheCornersArrive"]
-        self.assertTrue(seen["before"]["cookies"], "offered nothing before the button was drawn")
-        self.assertTrue(seen["before"]["state"])
-        self.assertTrue(seen["corners"]["cookies"], "the corner button is hidden where it was")
-        self.assertTrue(seen["corners"]["state"])
-        self.assertTrue(seen["corners"]["panel"], "and its panel is left alone, closed")
+        for away in ("participate", "cookies", "state"):
+            with self.subTest(option=away):
+                self.assertTrue(seen["before"][away], "offered nothing before it was drawn")
+        for pinned in ("steer", "cookies", "state"):
+            with self.subTest(pinned=pinned):
+                self.assertTrue(seen["corners"][pinned],
+                                "put away where its own file pinned it, attribute and display")
+        self.assertTrue(seen["corners"]["panel"], "and the state panel is left alone, closed")
+        self.assertIn("change this site", seen["options"])
         self.assertIn("cookies", seen["options"])
         self.assertIn("state · 3 kept", seen["options"])
         pressed = self.seen()["whenAnAdoptedOptionIsPressed"]
         self.assertEqual(pressed["cookies"]["corner"], 1, "it pressed the banner's own button")
         self.assertEqual(pressed["state"]["corner"], 1, "and the state menu's own button")
-        self.assertFalse(pressed["cookies"]["open"], "and closed the lightbox out of the way")
-        self.assertFalse(pressed["state"]["open"])
+        self.assertEqual(pressed["steer"]["corner"], 1, "and the link js/participate.js drew")
+        # Which is the whole of how the invitation works: its destination, its new tab and the
+        # query that shapes the issue are that file's, and none of them is reproduced in the shell.
+        self.assertEqual(pressed["steer"]["target"], "_blank")
+        self.assertIn("/issues/new", pressed["steer"]["href"])
+        self.assertFalse(pressed["steer"]["inert"], "the lightbox has to let go of it first")
+        for name in ("steer", "cookies", "state"):
+            with self.subTest(pressed=name):
+                self.assertFalse(pressed[name]["open"], "it closed the lightbox out of the way")
         # Hiding a button means its own dialog cannot hand the focus back to it, so the logo takes
         # it: on the way out, and again when the state menu closes (WCAG 2.4.3 Focus Order).
         self.assertGreaterEqual(pressed["state"]["focusedLogo"], 1)
@@ -3789,6 +4068,7 @@ class NavTest(unittest.TestCase):
         self.assertNotIn("cookies", seen["options"])
         self.assertTrue(seen["cookies"])
         self.assertFalse(seen["state"], "the state menu is always there")
+        self.assertFalse(seen["participate"], "and so is the way to say what the site should be")
 
     def test_the_state_option_says_how_much_there_is_to_carry_away(self):
         self.assertEqual(self.seen()["withNothingKept"]["stateLabel"], "state")
@@ -3817,7 +4097,8 @@ class NavTest(unittest.TestCase):
         aside = seen["open"]["aside"]
         # Everything behind the veil: inert, so no pointer and no Tab reaches it, and hidden from a
         # screen reader, so the menu is all there is to read. The nav itself is left alone.
-        for behind in ["main-content", "page", "persona", "site-consent-link", "site-meta"]:
+        for behind in ["main-content", "page", "persona", "site-consent-link", "site-meta",
+                       "site-steer"]:
             with self.subTest(behind=behind):
                 self.assertTrue(aside[behind]["inert"], f"{behind} is still reachable")
                 self.assertEqual(aside[behind]["ariaHidden"], "true")
@@ -3959,6 +4240,37 @@ class RealSiteTest(unittest.TestCase):
         self.assertGreaterEqual(len(worlds), 10, "the check is worth nothing on a few worlds")
         self.assertEqual(mi.worlds_without_a_finish(self.site), {})
 
+    def test_the_stage_plays_the_site_as_committed(self):
+        # The other half of the completion axiom, on the site as committed: the real js/stage.js,
+        # run through a stub browser (issue #60). A world is dealt, another is played, the first is
+        # dealt again, and every round has to finish and open the next; a slider a visitor leaves
+        # where it stands has to count as used; a knob nobody set has to be named rather than
+        # silently holding the piece shut; and a piece that is over has to leave nothing running.
+        needs_the_stage_harness(self)
+        worlds = mi.listed_worlds(self.site)
+        self.assertGreaterEqual(len(worlds), 10, "the check is worth nothing on a few worlds")
+        report = mi.run_stage_harness(self.site, deal=[worlds[0], worlds[1], worlds[0]])
+        for name, got in report.items():
+            self.assertTrue(got.get("ok"), f"the {name} scenario did not run: {got.get('error')}")
+        rounds = report["rounds"]["result"]
+        self.assertEqual([r["was"]["file"] for r in rounds["rounds"]], [worlds[0], worlds[1], worlds[0]])
+        for played in rounds["rounds"]:
+            with self.subTest(world=played["was"]["file"], seed=played["was"]["seed"]):
+                self.assertTrue(played["playable"])
+                self.assertEqual(played["unset"], [])
+                self.assertTrue(played["movedOn"], "the stage never opened the next piece")
+        used = report["sliderUsed"]["result"]
+        self.assertTrue(used["ranges"], "no world the stage opened had a slider to check")
+        self.assertEqual(used["unset"], [], f"{used['world']}: a slider used where it stood was not taken")
+        self.assertTrue(used["finished"], f"{used['world']}: every knob set and the piece never finished")
+        left = report["sliderUntouched"]["result"]
+        self.assertFalse(left["finished"], "a piece finished with a knob nobody set")
+        self.assertTrue(left["wanted"], "the stage said nothing about the knob it was waiting on")
+        torn = report["teardown"]["result"]
+        self.assertEqual(torn["waiting"], 0, "the stage left a timer running after the piece")
+        self.assertEqual(torn["look"]["knobs"], [])
+        self.assertEqual(torn["look"]["sceneLabel"], "the scene")
+
     def test_every_world_page_is_the_stage(self):
         # A world page is the stage and nothing else, so what a visitor opens is a piece, not a
         # fixed page; the threshold is the same stage in its asking state.
@@ -4073,14 +4385,14 @@ class RealSiteTest(unittest.TestCase):
         self.assertEqual(mi.pages_asking_to_self_report(self.site), {})
 
     # The one file of the site's own that may name one of those classes, and the one thing it may
-    # do with it: the shared shell finds the two corner buttons it adopts into the main nav, hides
-    # them where their own files pinned them, and presses them from the logo's constellation
-    # (issue #54). Nothing else may take those names.
-    ADOPTS_TWO = "js/site.js"
+    # do with it: the shared shell finds all three of the controls the fixed files pin over the
+    # page, hides them where their own files put them, and presses them from the logo's
+    # constellation (issues #54 and #64). Nothing else may take those names.
+    ADOPTS_THREE = "js/site.js"
 
     def test_the_site_leaves_the_corner_affordances_their_own_class_names(self):
         # js/state.js draws the export/import menu and js/participate.js the "steer the site"
-        # button, each injecting the styles for its own, and the prompt says in as many words that
+        # link, each injecting the styles for its own, and the prompt says in as many words that
         # neither is the site's to restyle. Every name they use is site-meta* or site-steer*, so a
         # template or stylesheet of the site's own that mentions one is either restyling them or
         # colliding with them. That is not hypothetical: the header's pulse arrived as
@@ -4095,20 +4407,20 @@ class RealSiteTest(unittest.TestCase):
                                     rf"|class(?:Name)?\s*[=:]\s*'[^']*\b{prefix}\b"
                                     rf"|class(?:Name)?\s*[=:]\s*\"[^\"]*\b{prefix}\b")
                 claiming = sorted(rel for rel, content in self.source.items()
-                                  if rel not in mi.FIXED_FILES and rel != self.ADOPTS_TWO
+                                  if rel not in mi.FIXED_FILES and rel != self.ADOPTS_THREE
                                   and theirs.search(content))
                 self.assertEqual(claiming, [])
 
-    def test_the_shell_may_find_the_two_it_adopts_and_nothing_more(self):
+    def test_the_shell_may_find_the_three_it_adopts_and_nothing_more(self):
         # What the one exception above is allowed to be: a selector in a string, used to find the
-        # button and press it. Not a class written onto anything of the shell's own, not a rule in
-        # a stylesheet, and never the one affordance that is nobody's to touch -- "steer the site"
-        # keeps the bottom edge and is not adopted.
-        shell = self.source[self.ADOPTS_TWO]
+        # control its own file pinned over the page, hide it there and press it from the
+        # constellation. Not a class written onto anything of the shell's own, and not a rule in a
+        # stylesheet: the look of all three stays entirely theirs.
+        shell = self.source[self.ADOPTS_THREE]
         self.assertIn("'.site-meta-open'", shell, "the state menu's own button, to press it")
-        self.assertIn("'.site-consent-link'", shell, "and the consent banner's")
+        self.assertIn("'.site-consent-link'", shell, "the consent banner's")
+        self.assertIn("'.site-steer'", shell, "and the link js/participate.js draws")
         self.assertNotRegex(shell, r"class(?:Name)?\s*[=:]\s*['\"][^'\"]*\bsite-(?:meta|steer)\b")
-        self.assertNotIn(".site-steer", shell)
 
     def test_every_orientation_opens_onto_a_real_world_and_not_all_of_them_are_sky(self):
         # The whole point of the issue: a visitor who does not respond to stars still arrives
