@@ -4741,6 +4741,26 @@ class RealSiteTest(unittest.TestCase):
         self.assertGreaterEqual(len(worlds), 10, "the check is worth nothing on a few worlds")
         self.assertEqual(mi.worlds_without_a_finish(self.site), {})
 
+    def test_every_world_opens_its_cards_as_its_features(self):
+        # The alignment axiom on the site as committed (issue #80): the piece harness plays each
+        # world's first seed as the card that configuration deals it and as a card another seed was
+        # dealt, and the two have to be different pieces -- a world that opened the same feature
+        # whichever of its cards was pressed is the bug the axiom keeps out. The law needs two cards
+        # to tell apart, so this asks for that too: a world whose spark deals every seed the same
+        # content would pass it vacuously, and would be a world whose cards do not vary either.
+        needs_the_piece_harness(self)
+        report = mi.run_piece_harness(self.site)
+        self.assertGreaterEqual(len(report), 10, "the check is worth nothing on a few worlds")
+        for world, entry in sorted(report.items()):
+            alignment = entry.get("alignment") or {}
+            with self.subTest(world=world):
+                self.assertTrue(alignment.get("hasSpark"), "this world deals no cards at all")
+                self.assertTrue(alignment.get("tested"),
+                                "this world deals every seed the same card, so nothing could be told apart")
+                self.assertTrue(alignment.get("follows"),
+                                f"this world opens the same feature whether its card said "
+                                f"{alignment.get('card')!r} or {alignment.get('other')!r}")
+
     def test_the_stage_plays_the_site_as_committed(self):
         # The other half of the completion axiom, on the site as committed: the real js/stage.js,
         # run through a stub browser (issue #60). A world is dealt, another is played, the first is
