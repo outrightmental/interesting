@@ -3763,7 +3763,7 @@ class NavTest(unittest.TestCase):
     # The ids the three pieces agree on: the shell writes them, js/site.js finds them, and the
     # harness builds the same tree. A rename that touched only one of the three would leave the
     # nav quietly inert, which is exactly what this catches.
-    IDS = ["sparknav", "sparknav-logo", "sparknav-veil",
+    IDS = ["sparknav", "sparknav-logo", "lightbox-veil",
            "sparknav-reading", "sparknav-reading-go", "sparknav-reading-label",
            "sparknav-participate", "sparknav-participate-open",
            "sparknav-cookies", "sparknav-cookies-open", "sparknav-state", "sparknav-state-open",
@@ -3777,7 +3777,7 @@ class NavTest(unittest.TestCase):
     FLOATS = {
         ".skip-link": "off the top of the screen until a keyboard focuses it",
         ".sparknav": "the sparkles logo, upper left",
-        ".sparknav-veil": "the lightbox, only while the constellation is open",
+        ".lightbox-veil": "the one shared lightbox's veil, only while something is open",
         ".persona": "the persona, upper right",
         ".persona-sheet-fallback[open]": "the persona's sheet, only while it is open",
         ".are-you-sure-fallback[open]": "the shared confirmation, only while it is asked",
@@ -3891,7 +3891,7 @@ class NavTest(unittest.TestCase):
         # The title is clipped to nothing and faded out, never display:none, so the logo keeps its
         # accessible name whether or not a pointer is over it.
         css = self.source["_sass/_nav.scss"]
-        fade = css[css.index(".sparknav-name {"):css.index("// ---- the lightbox")]
+        fade = css[css.index(".sparknav-name {"):css.index("// ---- the constellation")]
         self.assertIn("max-width: 0", fade)
         self.assertIn("opacity: 0", fade)
         self.assertNotIn("display: none", fade)
@@ -3971,20 +3971,30 @@ class NavTest(unittest.TestCase):
         css = self.source["_sass/_nav.scss"]
         self.assertIn("prefers-reduced-motion: reduce", css)
         calm = css[css.index("prefers-reduced-motion: reduce"):]
-        for still in [".sparknav-name", ".sparknav-veil", ".sparknav-node"]:
+        for still in [".sparknav-name", ".sparknav-node"]:
             with self.subTest(still=still):
                 self.assertIn(still, calm)
+        # The veil's own fade answers for itself, where the veil now lives (see LightboxTest).
+        veil = self.source["_sass/_lightbox.scss"]
+        self.assertIn("prefers-reduced-motion: reduce", veil)
+        self.assertIn(".lightbox-veil", veil[veil.index("prefers-reduced-motion: reduce"):])
         # And the tap target every chip carries, which no layout may shrink below.
         self.assertGreaterEqual(len(re.findall(r"min-height: 44px", css)), 2)
 
     def test_the_lightbox_dims_blurs_and_stills_the_page_behind_it(self):
-        css = self.source["_sass/_nav.scss"]
-        veil = css[css.index(".sparknav-veil {"):css.index("@keyframes sparknav-veil")]
+        # Read off _lightbox.scss rather than _nav.scss: the veil the logo raises is the one the
+        # whole site shares now (issue #70), and the nav holds no paint of its own for it.
+        css = self.source["_sass/_lightbox.scss"]
+        veil = css[css.index(".lightbox-veil {"):css.index("@keyframes lightbox-veil")]
         self.assertIn("position: fixed", veil)
         self.assertIn("inset: 0", veil)
         self.assertIn("backdrop-filter: blur(", veil)
         self.assertRegex(veil, r"background: color-mix\(")
         self.assertIn("animation-play-state: paused", css)
+        # And the nav's own veil is gone, markup, paint and keyframes alike: there is one.
+        for rel, content in sorted(self.source.items()):
+            with self.subTest(rel=rel):
+                self.assertNotIn("sparknav-veil", content)
 
     # ---- what the logo does when it is pressed -----------------------------------------------
 
@@ -4093,6 +4103,7 @@ class NavTest(unittest.TestCase):
         seen = self.seen()["whenItOpens"]
         self.assertEqual(seen["open"]["lightbox"], "nav")
         self.assertEqual(seen["open"]["expanded"], "true")
+        self.assertTrue(seen["open"]["veil"], "the shared veil is what is raised")
         self.assertTrue(seen["open"]["branching"], "the constellation branches out on every press")
         aside = seen["open"]["aside"]
         # Everything behind the veil: inert, so no pointer and no Tab reaches it, and hidden from a
@@ -4103,6 +4114,8 @@ class NavTest(unittest.TestCase):
                 self.assertTrue(aside[behind]["inert"], f"{behind} is still reachable")
                 self.assertEqual(aside[behind]["ariaHidden"], "true")
         self.assertFalse(aside["sparknav"]["inert"], "the menu is the one thing still live")
+        self.assertTrue(aside["sparknav"]["front"], "and the one thing left in front of the veil")
+        self.assertFalse(aside["lightbox-veil"]["inert"], "the veil itself takes the press")
         # What was already hidden for its own reasons is not this one's to mark or to give back.
         self.assertFalse(aside["cc-main"]["marked"])
         self.assertEqual(aside["cc-main"]["ariaHidden"], "true")
@@ -4115,11 +4128,13 @@ class NavTest(unittest.TestCase):
         self.assertEqual(seen["ranOnClose"], 1, "a held frame is run, not dropped")
         self.assertIsNone(seen["closed"]["lightbox"])
         self.assertEqual(seen["closed"]["expanded"], "false")
+        self.assertFalse(seen["closed"]["veil"], "and the veil comes down with it")
         self.assertFalse(seen["closed"]["branching"])
         for name, state in seen["closed"]["aside"].items():
             with self.subTest(element=name):
                 self.assertFalse(state["inert"])
                 self.assertFalse(state["marked"])
+                self.assertFalse(state["front"], "and nothing is left lifted over a veil that is down")
                 # The consent library's own markup stays hidden, because it was never this one's.
                 self.assertEqual(state["ariaHidden"], "true" if name == "cc-main" else None)
 
@@ -4128,8 +4143,11 @@ class NavTest(unittest.TestCase):
         self.assertFalse(seen["escape"]["open"])
         self.assertIsNone(seen["escape"]["lightbox"])
         self.assertEqual(seen["escape"]["focused"], 1, "the focus goes back to the logo")
+        self.assertTrue(seen["veil"]["raised"], "the press has to land on a veil that was up")
         self.assertFalse(seen["veil"]["open"])
         self.assertIsNone(seen["veil"]["lightbox"])
+        self.assertTrue(seen["veil"]["down"], "and the veil goes down with the constellation")
+        self.assertEqual(seen["veil"]["focused"], 1, "the focus goes back to the logo either way")
 
     def test_a_keyboard_stays_inside_the_constellation(self):
         seen = self.seen()["whenTabReachesTheEnd"]

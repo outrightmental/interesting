@@ -6,7 +6,10 @@
   This is not the sort of website that uses conventional navigation (issue #54). There is no app
   bar: two things float over the page and they are the whole of the navigation -- the sparkles logo
   in the upper left, which says the site's name on rollover and opens a constellation of options on
-  tap, and the persona in the upper right, itself a small constellation.
+  tap, and the persona in the upper right, itself a small constellation. Both open through the one
+  lightbox the site shares (#lightbox-veil below, _sass/_lightbox.scss and
+  window.interestingSite.lightbox in js/site.js), so whichever one a visitor presses, the page
+  behind it goes under the same veil (issue #70).
 
   The visual language is Material Design 3 (m3.material.io): one tonal colour scheme derived from a
   few seed colours (_sass/_tokens.scss), the M3 type scale, the M3 shape scale, state layers on
@@ -48,10 +51,10 @@
   The shared chrome, and why it is this size:
     the logo     a sparkles mark in the upper left, floating over the page, and nothing else at
                  rest. Rolling over it (or focusing it) fades the site's name in beside it,
-                 quickly and tightly; pressing it turns the page into a lightbox -- dimmed,
+                 quickly and tightly; pressing it raises the shared lightbox -- the page dimmed,
                  blurred, its animation held and its controls inert -- and branches the options
                  out from the logo as a constellation (_sass/_nav.scss for the geometry,
-                 js/site.js for the lightbox and the options that come and go). It is a <details>
+                 js/site.js for the options that come and go). It is a <details>
                  element, so with scripting switched off it is still a disclosure a visitor can
                  open, and its options are plain links either way. Pressing it never navigates:
                  the threshold is the home icon in the near orbit.
@@ -80,7 +83,8 @@
     the sheet    the persona's dialog, written after everything else and shown only when opened:
                  the constellation (stars placed, dragged and read) and the orientation (the
                  question, and what it read). Its headings come after the page's own, so the
-                 heading outline a screen reader walks stays in order.
+                 heading outline a screen reader walks stays in order. It opens inside the same
+                 lightbox the logo does, so the two feel like one effect rather than two.
 
   Eight shared lines in the <head>:
     js/analytics.js  the Google Analytics tag and the consent banner that gates it (see
@@ -96,16 +100,18 @@
                      window.interestingPersona.stars() while the body is parsed.
     js/site.js       the shared helpers a page can call: window.interestingSite.unlock(), which
                      renders a part that needs a saved sky as powered down with the one button
-                     that powers it (see the README, "Powered down, never broken"), and
+                     that powers it (see the README, "Powered down, never broken"),
                      window.interestingSite.destructive(), which makes a control that throws
                      saved state away a warning button and guards every press of it with the one
                      "are you sure you want to ______?" modal (see the README,
-                     "Destructive-caution axiom"), plus the main nav -- the logo's lightbox, the
-                     options that come and go with the state, and the three pinned affordances it
-                     adopts -- and the slider fill. Not deferred either,
-                     both because a page's own script may call it and because it marks the
-                     document as scripted before the body is drawn, and after the persona it
-                     reads from.
+                     "Destructive-caution axiom"), and window.interestingSite.lightbox(), the one
+                     lightbox everything that floats over the whole page opens through -- the
+                     constellation, the persona sheet and that modal alike (see the README, "The
+                     lightbox"), plus the main nav -- the options that come and go with the state,
+                     and the three pinned affordances it adopts -- and the slider fill. Not
+                     deferred either, both because a page's own script may call it and because it
+                     marks the document as scripted before the body is drawn, and after the persona
+                     it reads from.
     js/threshold.js  the mood flow's engine: the orientations, the library of query mechanisms,
                      the clock and time-zone signals and the partly-remembered reading. The
                      threshold's feature and the persona sheet are where it is seen (MOOD_TAG and
@@ -215,21 +221,26 @@
 </head>
 <body>
   <a class='skip-link' href='#main-content'>skip to main content</a>
+  {#- The one lightbox veil, for everything on this site that floats over the whole page: the
+      constellation the logo opens, the persona sheet, and the shared "are you sure?" modal. It
+      dims and blurs everything behind whatever is open and takes the press that means "not this";
+      window.interestingSite.lightbox in js/site.js raises it, holds the page's frame loop and
+      makes the rest of the body inert to match, and _sass/_lightbox.scss paints it. Hidden until
+      something raises it, so a visitor with no script gets no dimming they could not dismiss
+      (issue #70). -#}
+  <div class='lightbox-veil' id='lightbox-veil' hidden></div>
   {#- The main nav: the logo, and the constellation it opens. A <details>, so the disclosure is
       the browser's own -- operable by keyboard, and still an open-and-close affordance with
       scripting switched off, where the options lay out as a cascade under the logo instead of a
-      constellation around it. js/site.js adds the lightbox, the stagger, and the options that
-      come and go with the state; _sass/_nav.scss places them. Every option is written here, so
-      index.html's own markup leads to every page of the site and the reachability axiom holds
-      with no script at all. -#}
+      constellation around it. js/site.js opens the shared lightbox above, staggers the branch, and
+      settles the options that come and go with the state; _sass/_nav.scss places them. Every
+      option is written here, so index.html's own markup leads to every page of the site and the
+      reachability axiom holds with no script at all. -#}
   <details class='sparknav' id='sparknav'>
     <summary class='sparknav-logo' id='sparknav-logo' aria-label='interesting: the site menu'>
       <svg class='icon sparknav-spark' viewBox='0 0 24 24' aria-hidden='true' focusable='false'><path d='{{ icons.spark }}'/></svg>
       <span class='sparknav-name'>interesting</span>
     </summary>
-    {#- The lightbox: it dims and blurs everything behind it, and takes the press that closes the
-        constellation again. js/site.js holds the page's motion and makes it inert to match. -#}
-    <div class='sparknav-veil' id='sparknav-veil'></div>
     <nav class='sparknav-sky' aria-label='Site'>
       <ul class='sparknav-orbit sparknav-near' id='sparknav-near'>
 {%- for link in worlds.wayIn %}

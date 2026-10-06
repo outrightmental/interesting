@@ -9,6 +9,12 @@
  * rather than markup, so it is worth testing rather than only reading, the way the local-state
  * store and the new-issue link beside it are.
  *
+ * The lightbox the logo opens is no longer the nav's own: it is the one component the persona sheet
+ * and the shared "are you sure?" modal open through as well (issue #70). What this harness watches
+ * is the nav as one of its three callers -- the veil up, the page put aside, the frame loop held,
+ * the page given back. lightbox_harness.mjs drives the component itself, with all three callers in
+ * one document.
+ *
  *   node nav_harness.mjs path/to/site/js/site.js
  *
  * The stub is the handful of DOM the nav touches: a tree of elements that can be found by simple
@@ -254,6 +260,8 @@ function makeDocument({ page = "quiet-room.html", viewport = { width: 1280, heig
   html.appendChild(body);
 
   body.appendChild(make("a", { class: "skip-link", href: "#main-content" }, CHIP));
+  // The one veil the shell writes for the shared lightbox, hidden until something raises it.
+  body.appendChild(make("div", { class: "lightbox-veil", id: "lightbox-veil", hidden: "" }));
   if (!nav) {
     body.appendChild(make("div", { id: "main-content", tabindex: "-1" }));
     return finish(html, head, body, viewport);
@@ -264,7 +272,6 @@ function makeDocument({ page = "quiet-room.html", viewport = { width: 1280, heig
   logo.appendChild(make("svg", { class: "icon sparknav-spark" }));
   logo.appendChild(make("span", { class: "sparknav-name" }));
   host.appendChild(logo);
-  host.appendChild(make("div", { class: "sparknav-veil", id: "sparknav-veil" }));
   const sky = make("nav", { class: "sparknav-sky", "aria-label": "Site" });
   const near = make("ul", { class: "sparknav-orbit sparknav-near", id: "sparknav-near" });
   const far = make("ul", { class: "sparknav-orbit sparknav-far", id: "sparknav-far" });
@@ -474,8 +481,8 @@ function constellation(context) {
     .map(described).filter((star) => !star.hidden);
 }
 
-/** Everything the lightbox has to do at once: the attribute, what is put aside, what is left
- *  alone, and whether the page's frame loop is running. */
+/** Everything the lightbox has to do at once: the attribute, the veil, what is put aside, what is
+ *  left alone, what is left in front, and whether the page's frame loop is running. */
 function lightbox(context) {
   const html = context.document.documentElement;
   const aside = {};
@@ -483,12 +490,14 @@ function lightbox(context) {
     aside[child.getAttribute("id") || child.className] = {
       inert: child.hasAttribute("inert"),
       ariaHidden: child.getAttribute("aria-hidden"),
-      marked: child.hasAttribute("data-nav-aside"),
+      marked: child.hasAttribute("data-lightbox-aside"),
+      front: child.hasAttribute("data-lightbox-front"),
     };
   }
   return {
     lightbox: html.getAttribute("data-lightbox"),
     nav: html.getAttribute("data-nav"),
+    veil: !id(context, "lightbox-veil").hidden,
     expanded: id(context, "sparknav-logo").getAttribute("aria-expanded"),
     branching: id(context, "sparknav").querySelector(".sparknav-sky").classList.contains("is-branching"),
     aside,
@@ -677,11 +686,13 @@ const scenarios = {
     fireDocument(escape, "keydown", { key: "Escape" });
     const veiled = load();
     toggle(veiled, true);
-    id(veiled, "sparknav-veil").click();
+    const raised = lightbox(veiled).veil;
+    id(veiled, "lightbox-veil").click();
     return {
       escape: { open: id(escape, "sparknav").open, lightbox: lightbox(escape).lightbox,
                 focused: id(escape, "sparknav-logo").focused },
-      veil: { open: id(veiled, "sparknav").open, lightbox: lightbox(veiled).lightbox },
+      veil: { raised, open: id(veiled, "sparknav").open, lightbox: lightbox(veiled).lightbox,
+              down: !lightbox(veiled).veil, focused: id(veiled, "sparknav-logo").focused },
     };
   },
 

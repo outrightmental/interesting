@@ -12,8 +12,11 @@
 //   on rollover    the site's name fades in beside the mark, quickly and tightly, and fades out
 //                  again. Focus does the same thing, so a keyboard sees what a pointer sees.
 //   on press       the page becomes a lightbox -- dimmed, blurred, its animation held, its
-//                  controls inert (js/site.js) -- and the options branch out from the logo as a
-//                  constellation of chips, each on a ray back to the mark.
+//                  controls inert -- and the options branch out from the logo as a constellation of
+//                  chips, each on a ray back to the mark. The lightbox itself is not this file's:
+//                  it is the one the whole site shares (_lightbox.scss, and
+//                  window.interestingSite.lightbox in js/site.js), the same one the persona sheet
+//                  and the shared "are you sure?" modal open through (issue #70).
 //
 // Two layouts, and the <details> element does the work of switching between them:
 //   with scripting the options are placed by js/site.js, which is the only thing that knows how
@@ -69,13 +72,15 @@
   position: fixed;
   top: var(--nav-inset);
   left: var(--nav-inset);
-  z-index: 50; // above the page, the persona and anything a fixed file has pinned over it
+  // Above the page, the persona and anything a fixed file has pinned over it -- and lifted over the
+  // shared veil as well, by the data-lightbox-front the lightbox names it with while it is open.
+  z-index: 50;
   max-width: calc(100% - 2 * var(--nav-inset));
 }
 
 .sparknav-logo {
   position: relative;
-  z-index: 3; // above the veil the lightbox lays over everything else
+  z-index: 3; // above the chips, so a star placed close in never lands on the mark
   display: inline-flex;
   align-items: center;
   min-height: 44px;
@@ -133,41 +138,6 @@
   max-width: 9rem;
   margin-left: 0.45rem;
   opacity: 1;
-}
-
-// ---- the lightbox ------------------------------------------------------------------------
-
-// Everything behind the constellation at once: dimmed, blurred, and taking the press that closes
-// it again. js/site.js holds the page's frame loop and makes it inert while this is up.
-.sparknav-veil {
-  position: fixed;
-  inset: 0;
-  z-index: 1;
-  background: color-mix(in oklab, var(--md-sys-color-surface) 62%, transparent);
-  backdrop-filter: blur(9px) saturate(70%);
-  -webkit-backdrop-filter: blur(9px) saturate(70%);
-  animation: sparknav-veil var(--md-sys-motion-duration-medium) var(--md-sys-motion-easing-standard) both;
-}
-
-@keyframes sparknav-veil {
-  from {
-    opacity: 0;
-  }
-
-  to {
-    opacity: 1;
-  }
-}
-
-// A page's own animation stops while the constellation is open, so there is nothing moving behind
-// it. The frame loops a world's canvas runs are held by js/site.js, which CSS cannot reach.
-html[data-lightbox] #main-content,
-html[data-lightbox] #main-content *,
-html[data-lightbox] .page,
-html[data-lightbox] .page *,
-html[data-lightbox] .persona,
-html[data-lightbox] .persona * {
-  animation-play-state: paused;
 }
 
 // ---- the constellation -------------------------------------------------------------------
@@ -306,7 +276,7 @@ html[data-nav='live'] {
     position: absolute;
     top: 0;
     left: 0;
-    z-index: 2; // above the veil, which the sky itself is no longer positioned over
+    z-index: 2; // the sky itself is no longer positioned, so each star carries the layer
     width: 0;
     height: 0;
     margin: 0;
@@ -384,7 +354,6 @@ html[data-nav='live'] {
     transition: none;
   }
 
-  .sparknav-veil,
   html[data-nav='live'] .is-branching .sparknav-node,
   html[data-nav='live'] .is-branching .sparknav-ray {
     animation: none;
