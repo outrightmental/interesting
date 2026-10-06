@@ -151,7 +151,7 @@
   card through the feed, and nothing is written but the address.
 */
 
-import { PLAIN, revive, aspect as framed, mulberry32, hash, mix, alpha } from './variant.js';
+import { PLAIN, revive, recolor, aspect as framed, mulberry32, hash, mix, alpha } from './variant.js';
 
 const root = document.documentElement.getAttribute('data-root') || '';
 const stage = document.getElementById('stage');
@@ -301,16 +301,25 @@ function crossfade(from, to, done) {
   fading = requestAnimationFrame(step);
 }
 
-/* The site features `mood`, in `seeds` when the card that was pressed handed its own palette over.
+/* The site features `mood`, in `seeds` when the card that was pressed handed its own palette over,
+   and otherwise in the palette `variant` derives inside that mood -- so a piece nobody pressed
+   wears the colour a card of its seed would have worn, just as it wears that card's frame and its
+   picture (the alignment axiom above). Either way the four seeds are the configuration's, derived
+   by the one file that derives a card's (variant.recolor).
+
    Hands back the palette the site is landing in, which is what the piece is painted in: a piece
    never reads a colour the crossfade is only passing through. */
-function feature(mood, seeds) {
+function feature(mood, seeds, variant) {
   const root = document.documentElement;
   const from = readSeeds(root);
   clearSeeds(); // so the attribute below, and not the last piece's seeds, says what the site is
   if (mood) root.dataset.featured = mood;
   else delete root.dataset.featured;
-  const to = Object.assign(readSeeds(root), someSeeds(seeds));
+  const own = readSeeds(root); // this mood's own four, before any configuration
+  const handed = someSeeds(seeds);
+  const configured = Object.keys(handed).length || !variant || variant.plain
+    ? handed : someSeeds(recolor(own, variant));
+  const to = Object.assign(own, configured);
   featured = to;
   crossfade(from, to);
   return to;
@@ -453,8 +462,9 @@ async function open(file, seed, options) {
   const probe = document.getElementById('persona-probe');
   if (probe && !probe.hidden) probe.hidden = true;
 
-  // The site features this activity: its world's palette, as the card that was pressed wore it.
-  feature(world.mood, opts.seeds);
+  // The site features this activity: its world's palette, as the card that was pressed wore it --
+  // or as this configuration wears it, for a piece with no card behind it.
+  feature(world.mood, opts.seeds, variant);
   if (ui.world) ui.world.textContent = world.name;
   document.title = world.name + ' · interesting';
   if (opts.push !== false) {

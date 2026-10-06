@@ -5020,7 +5020,7 @@ class RealSiteTest(unittest.TestCase):
         # piece is what the site wears while it is on the stage, and the reading has the site back
         # after it, rather than one pressed card re-skinning the site for good.
         stage = self.source[mi.STAGE_SCRIPT]
-        self.assertIn("feature(world.mood, opts.seeds)", stage, "the stage features no world")
+        self.assertIn("feature(world.mood, opts.seeds, variant)", stage, "the stage features no world")
         self.assertIn("root.dataset.featured = mood", stage, "nothing writes the featured mood")
         self.assertIn("delete root.dataset.featured", stage, "nothing stops being featured")
         home = stage.split("function goHome() {", 1)[1].split("\n}", 1)[0]
@@ -5039,6 +5039,11 @@ class RealSiteTest(unittest.TestCase):
                          "a pressed card hands the stage no palette")
         self.assertRegex(feed, r"seeds: palette\(card, m\)",
                          "the next card off the stack hands the stage no palette")
+        # And a piece with no card behind it is painted in the palette its own configuration
+        # derives inside its mood, by the same arithmetic that derived the card's (issue #80), so
+        # the colour follows the configuration whether or not anything was pressed.
+        self.assertIn("someSeeds(recolor(own, variant))", stage,
+                      "a piece nobody pressed is not painted in the colour its configuration derives")
 
     def test_the_feature_a_card_opens_as_is_that_card(self):
         # The alignment axiom (issue #80): every content piece on this site is procedurally

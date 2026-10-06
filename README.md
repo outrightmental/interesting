@@ -318,8 +318,9 @@ itself.
   world's piece opens on that rather than rolling another: press *rule 110* and the bench runs
   rule 110. A piece nobody pressed — a direct visit to `world.html#<seed>`, or a world picked at
   random when the stack runs dry — is configured from its seed, which is where a card's
-  configuration comes from too, and the stage derives the card that configuration would have
-  dealt. The piece harness holds every world to it: a piece that is the same piece whichever of
+  configuration comes from too: the stage derives the card that configuration would have dealt,
+  and paints the site in the palette the configuration derives inside the world's mood, so the
+  address carries the whole of it. The piece harness holds every world to it: a piece that is the same piece whichever of
   its world's cards it was opened from is refused, and the stage harness holds the stage to
   titling a feature from the card rather than from the world's line.
 - **It follows the persona.** The world the visitor's reading opens onto is moved to the front and
