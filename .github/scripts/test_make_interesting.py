@@ -2701,6 +2701,31 @@ def needs_the_piece_harness(test):
         test.skipTest(f"Node cannot run the piece harness ({err})")
 
 
+_stage_harness_trouble = None  # "" once the harness has been seen to run, the reason it cannot if not
+
+
+def needs_the_stage_harness(test):
+    """Skip a test that runs js/stage.js through the stub browser when Node cannot run it.
+
+    The same bargain as needs_the_piece_harness: the harness runs under the permission model and in
+    worker threads, so an old Node cannot run it at all, and in CI that is a failure rather than a
+    skip -- a silent skip would quietly stop holding the stage to the axiom it is half of. The
+    answer is asked for once per run, because asking is a whole play of the stage.
+    """
+    global _stage_harness_trouble
+    if _stage_harness_trouble is None:
+        try:
+            mi.run_stage_harness(stage_site())
+            _stage_harness_trouble = ""
+        except mi.BuildToolchainError as err:
+            _stage_harness_trouble = str(err)
+    if not _stage_harness_trouble:
+        return
+    if os.environ.get("CI"):
+        test.fail(f"Node cannot run the stage harness in CI: {_stage_harness_trouble}")
+    test.skipTest(f"Node cannot run the stage harness ({_stage_harness_trouble})")
+
+
 def world_list(*worlds):
     """The #site-worlds JSON the layout writes into every page, listing `worlds` (page names)."""
     entries = [{"file": world, "name": world[:-5], "orientation": "o", "mood": "m", "aspect": "1 / 1", "what": "."}
@@ -2763,6 +2788,42 @@ ONE_KNOB_PIECE = """    return {
       steps: [{ id: 'flip', ask: 'flip it', kind: 'toggle' }]
     };"""
 
+# A piece shaped like the one issue #60 was reported on: a slider nobody is made to move, and the
+# piece's last gesture gated behind the knobs below it, so the last knob a visitor touches is not
+# the last knob the piece is waiting on.
+SLIDER_PIECE = """    const n = env.int(2, 4);
+    let settled = 0;
+    return {
+      title: n + ' turns at a pace',
+      brief: 'Set the pace, turn it, let it settle, and seal it.',
+      steps: [
+        { id: 'pace', ask: 'the pace', kind: 'range', min: 0, max: 100, step: 1, value: 40, low: 'slow', high: 'quick' },
+        { id: 'turn', ask: 'turn it', kind: 'press', count: n },
+        { id: 'settle', ask: 'let it settle', kind: 'wait', after: 'turn' },
+        { id: 'seal', ask: 'seal it', kind: 'hold', ms: 900, label: 'hold to seal', after: 'settle' }
+      ],
+      start(ctx) { ctx.g.fillRect(0, 0, ctx.w, ctx.h); },
+      frame(t, dt, ctx) {
+        if ((ctx.value('turn') || 0) >= n) {
+          settled += dt;
+          ctx.progress('settle', settled);
+          if (settled >= 1) ctx.satisfy('settle');
+        }
+      }
+    };"""
+
+
+def stage_site(toy=None, other=None):
+    """A site the stage harness can play: the one list of worlds, js/stage.js as committed, and a
+    module for each world. The stage itself is never a fixture -- the point is to run the real one."""
+    return {
+        "index.html": world_list("toy.html", "other.html"),
+        mi.STAGE_SCRIPT: (mi.REPO_ROOT / "site" / mi.STAGE_SCRIPT).read_text(encoding="utf-8"),
+        "js/modules/toy.js": piece_module(toy or SLIDER_PIECE, "toy"),
+        "js/modules/other.js": piece_module(other or FINISHING_PIECE, "other"),
+    }
+
+
 # A piece that finishes itself on arrival, before its visitor has set anything.
 SELF_FINISHING_PIECE = """    return {
       title: 'already done',
@@ -2817,11 +2878,24 @@ class CompletionAxiomTest(SiteDirTestCase):
                      "only a tap or a wait knob is the piece's to set",
                      "The world's old interactive page is the piece's material",
                      mi.PIECE_HARNESS_REL,
-                     f"within {mi.PIECE_MAX_TAPS} taps and {mi.PIECE_MAX_SECONDS} seconds of play"]:
+                     f"within {mi.PIECE_MAX_TAPS} taps and {mi.PIECE_MAX_SECONDS} seconds of play",
+                     # Issue #60: the half of the axiom the harness could not reach until there was
+                     # a harness for the stage, said in the prompt so a run writing a piece or
+                     # rewriting the stage knows it.
+                     "Every knob must be one its visitor can actually set",
+                     "finishable whatever order they reach its knobs in",
+                     "A piece is one instantiation and keeps nothing between them",
+                     mi.STAGE_HARNESS_REL,
+                     "a slider a visitor leaves where it stands counts as set",
+                     "a knob nobody set is named rather than silently holding the piece shut",
+                     "leaves nothing of itself on the stage or still running"]:
             with self.subTest(rule=rule):
                 self.assertIn(rule, rules)
         self.assertIn(f"{mi.PIECE_MIN_STEPS} to {mi.PIECE_MAX_STEPS} knobs", rules)
         self.assertIn("finished by its visitor, never by itself", rules)
+        # The prompt says which of the two harnesses refuses a plan and which holds the committed
+        # site, because a rule the code does not enforce must not be dressed up as one that does.
+        self.assertIn("checked on the site as committed rather than on a plan", rules)
 
     def test_the_prompt_tells_a_run_how_a_world_page_is_the_stage(self):
         prompt = mi.build_prompt([("index.html", "<h1>hi</h1>")])
@@ -2944,6 +3018,110 @@ class CompletionAxiomTest(SiteDirTestCase):
         with mock.patch.object(mi, "PIECE_HARNESS", self.root / "nowhere.mjs"):
             with self.assertRaises(mi.BuildToolchainError):
                 mi.worlds_without_a_finish(dict(mi.read_site()))
+
+
+class StageTest(unittest.TestCase):
+    """The stage a piece is played on, run against a stub browser (issue #60).
+
+    The completion axiom has two halves and the piece harness only ever reached one of them. A piece
+    can be flawless -- two to five knobs, a clear end, the same for the same seed -- and the stage
+    can still leave the visitor who is playing it with nothing to do and no way to finish, because
+    the knob the piece offered is not a knob the stage will take. That is what was reported: a
+    slider the stage only marked set when its value changed, so a visitor content with where it
+    already stood set every other knob, watched the finale run, and waited on a piece that had no
+    way left to finish. These tests run the real js/stage.js, through the elements stage.njk writes
+    and a clock they step by hand, and hold it to four things: a world played twice over plays the
+    second time like the first, a slider used where it stands counts as used, a knob nobody set is
+    named rather than left a mystery, and a piece that is over leaves nothing of itself behind.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.reports = {}
+
+    def report(self, deal=(), **pieces):
+        """The harness's report for this site and deal, played once per distinct scenario set."""
+        needs_the_stage_harness(self)
+        key = (tuple(sorted(pieces.items())), tuple(deal))
+        if key not in self.reports:
+            self.reports[key] = mi.run_stage_harness(stage_site(**pieces), deal=deal)
+        return self.reports[key]
+
+    def scenario(self, name, deal=(), **pieces):
+        got = self.report(deal=deal, **pieces)[name]
+        self.assertTrue(got.get("ok"), f"the {name} scenario did not run: {got.get('error')}")
+        return got["result"]
+
+    def test_a_world_played_again_plays_like_the_first_time(self):
+        # The replay the note asked for: one stage, one session, and a world dealt a second time
+        # after another has been played in between. Every round has to finish and open the next.
+        deal = ["toy.html", "other.html", "toy.html"]
+        result = self.scenario("rounds", deal=deal)
+        self.assertEqual(len(result["rounds"]), len(deal))
+        self.assertEqual([r["was"]["file"] for r in result["rounds"]], deal)
+        for played in result["rounds"]:
+            with self.subTest(world=played["was"]["file"], seed=played["was"]["seed"]):
+                self.assertTrue(played["playable"], "the piece never became playable")
+                self.assertEqual(played["unset"], [], "a knob the visitor worked was not set")
+                self.assertTrue(played["movedOn"], "the stage never opened the next piece")
+                self.assertEqual(played["modes"][-5:], ["done", "vanishing", "loading", "arriving", "live"])
+        self.assertEqual(result["completes"], len(deal))
+
+    def test_a_slider_the_visitor_leaves_where_it_is_still_counts_as_set(self):
+        # A slider opens with an answer already on it -- which is why ctx.value(id) is the piece's
+        # from the first frame -- so pressing it and letting go where it stands is an answer, and
+        # the piece it belongs to has to be finishable by someone who gives it.
+        result = self.scenario("sliderUsed")
+        self.assertTrue(result["playable"], "no world the harness tried had a slider on it")
+        self.assertTrue(result["ranges"], "the check is worth nothing without a slider")
+        self.assertEqual(result["unset"], [], "the slider was used and the stage did not take it")
+        self.assertTrue(result["finished"], "every knob was set and the piece never finished")
+
+    def test_a_knob_nobody_set_is_named_rather_than_left_a_mystery(self):
+        # The other way round: a knob genuinely untouched is genuinely unset, and the stage must not
+        # pretend otherwise -- but it must say which one, because the last knob on the page is often
+        # not the last one the piece is waiting on, and silence there reads as a piece that broke.
+        result = self.scenario("sliderUntouched")
+        self.assertTrue(result["playable"])
+        self.assertIn(result["ranges"][0], result["unset"])
+        self.assertFalse(result["finished"], "a piece finished with a knob nobody set")
+        self.assertTrue(result["wanted"], "the stage said nothing about the knob it was waiting on")
+        self.assertIn("the pace", result["wanted"])
+        self.assertNotIn("done", result["modes"])
+
+    def test_a_piece_leaves_nothing_on_the_stage_or_running_behind_it(self):
+        # "Components should completely reset between instantiations." A piece part-played, with a
+        # hold still pressed down under a finger that never lifts, and then another piece opened
+        # over it: nothing of the first may be on the stage and nothing of it may still be running.
+        result = self.scenario("teardown")
+        self.assertTrue(result["playable"])
+        self.assertTrue(result["held"], "the check is worth nothing without a hold left pressed")
+        self.assertGreater(result["whilePlaying"], 0, "the stage had nothing running while playing")
+        self.assertEqual(result["waiting"], 0, "the stage left a timer running after the piece")
+        self.assertIsNone(result["current"])
+        left = result["look"]
+        self.assertEqual(left["knobs"], [])
+        self.assertEqual(left["dots"], 0)
+        self.assertEqual(left["status"], "")
+        self.assertEqual(left["wanted"], "")
+        self.assertFalse(left["doneShown"])
+        self.assertEqual(left["sceneLabel"], "the scene", "the scene still answers to the piece that is gone")
+        self.assertEqual(left["aspect"], "", "the scene kept the shape of the piece that is gone")
+
+    def test_a_missing_harness_is_the_toolchain_and_not_the_model(self):
+        with mock.patch.object(mi, "STAGE_HARNESS", Path(tempfile.gettempdir()) / "nowhere.mjs"):
+            with self.assertRaises(mi.BuildToolchainError):
+                mi.run_stage_harness(stage_site())
+
+    def test_a_site_without_a_stage_or_without_worlds_is_the_toolchain_saying_so(self):
+        without_stage = stage_site()
+        del without_stage[mi.STAGE_SCRIPT]
+        with self.assertRaises(mi.BuildToolchainError):
+            mi.run_stage_harness(without_stage)
+        without_worlds = stage_site()
+        without_worlds["index.html"] = "<h1>hi</h1>"
+        with self.assertRaises(mi.BuildToolchainError):
+            mi.run_stage_harness(without_worlds)
 
 
 class BuildPipelineTest(unittest.TestCase):
@@ -3155,6 +3333,37 @@ class RealSiteTest(unittest.TestCase):
         worlds = mi.listed_worlds(self.site)
         self.assertGreaterEqual(len(worlds), 10, "the check is worth nothing on a few worlds")
         self.assertEqual(mi.worlds_without_a_finish(self.site), {})
+
+    def test_the_stage_plays_the_site_as_committed(self):
+        # The other half of the completion axiom, on the site as committed: the real js/stage.js,
+        # run through a stub browser (issue #60). A world is dealt, another is played, the first is
+        # dealt again, and every round has to finish and open the next; a slider a visitor leaves
+        # where it stands has to count as used; a knob nobody set has to be named rather than
+        # silently holding the piece shut; and a piece that is over has to leave nothing running.
+        needs_the_stage_harness(self)
+        worlds = mi.listed_worlds(self.site)
+        self.assertGreaterEqual(len(worlds), 10, "the check is worth nothing on a few worlds")
+        report = mi.run_stage_harness(self.site, deal=[worlds[0], worlds[1], worlds[0]])
+        for name, got in report.items():
+            self.assertTrue(got.get("ok"), f"the {name} scenario did not run: {got.get('error')}")
+        rounds = report["rounds"]["result"]
+        self.assertEqual([r["was"]["file"] for r in rounds["rounds"]], [worlds[0], worlds[1], worlds[0]])
+        for played in rounds["rounds"]:
+            with self.subTest(world=played["was"]["file"], seed=played["was"]["seed"]):
+                self.assertTrue(played["playable"])
+                self.assertEqual(played["unset"], [])
+                self.assertTrue(played["movedOn"], "the stage never opened the next piece")
+        used = report["sliderUsed"]["result"]
+        self.assertTrue(used["ranges"], "no world the stage opened had a slider to check")
+        self.assertEqual(used["unset"], [], f"{used['world']}: a slider used where it stood was not taken")
+        self.assertTrue(used["finished"], f"{used['world']}: every knob set and the piece never finished")
+        left = report["sliderUntouched"]["result"]
+        self.assertFalse(left["finished"], "a piece finished with a knob nobody set")
+        self.assertTrue(left["wanted"], "the stage said nothing about the knob it was waiting on")
+        torn = report["teardown"]["result"]
+        self.assertEqual(torn["waiting"], 0, "the stage left a timer running after the piece")
+        self.assertEqual(torn["look"]["knobs"], [])
+        self.assertEqual(torn["look"]["sceneLabel"], "the scene")
 
     def test_every_world_page_is_the_stage(self):
         # A world page is the stage and nothing else, so what a visitor opens is a piece, not a
