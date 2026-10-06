@@ -1,64 +1,16 @@
-/*
-  The mood flow: this site asks before it offers.
-
-  One line in the <head> of a page carries all of it, written once in _includes/layout.njk:
-
-      <script src='js/threshold.js' defer></script>
-
-  Not everyone likes stars. The target of interest is the whole population, so no page may put
-  particular content in front of a visitor on the assumption that they want it. This file is how
-  the site finds out first (issue #30):
-
-    - ORIENTATIONS is the set of mental orientations the site distinguishes between, and the world
-      each one opens onto. Several are the sky pages this site grew up as; the rest are not sky at
-      all. Nothing here is the default.
-    - PROBES is the library of query mechanisms. None of them asks a visitor to report their own
-      state: they ask about a door, a stone, a pocket, a tempo, a stroke, a dial. A visitor gets a
-      different one on every arrival -- the last few are remembered precisely so they are not
-      repeated -- and adding a new mechanism to this array is the most interesting change anyone
-      can make to this file.
-    - The clock and the time zone are read as well, so an arrival in the small hours from the far
-      side of the world starts from a different place than one at midday.
-    - What is learned is only partly remembered: the drift below decays with the time since the
-      last visit, and the fresh answer always outweighs it. Every arrival at the threshold is
-      queried again; every other page invites, one press away.
-
-  This file is the engine; the persona card every page carries (js/persona.js) is where the flow
-  is seen, so it is ongoing rather than a gate at the front door. On the threshold (index.html) the
-  card asks on arrival, inline, when arrival() below says so; on every other page the question
-  waits inside the persona sheet, one press away, so a visitor who followed a link to a world meets
-  that world first. Any page can ask again, in a new way, through mount(), and the whole site
-  re-skins itself around the answer through the data-mood attribute (see _sass/_mood.scss). The
-  mood atlas (moods.html) runs any mechanism on demand, shows the clock and the gap since the last
-  visit, and can forget.
-
-  What is remembered is kept in the site's one local-state document, under "threshold", through
-  window.interestingState -- like every page of this site, this file never reaches for the
-  browser's storage itself, so a visitor can export and carry their reading away with the rest of
-  their state (see js/state.js, and pages_touching_storage in make_interesting.py).
-
-  The AI iteration may rewrite any page of this site, so the line above is an axiom of every run:
-  see MOOD_SCRIPT, PROBE_DECLARATION and check_mood in .github/scripts/make_interesting.py. This
-  file is protected -- it may be rewritten, never deleted -- because every page leans on it.
-*/
+/* The mood flow asks a sideways question before suggesting a world. The threshold hosts the question in its stage; elsewhere it is available through the persona and the mood atlas. Readings live in the shared state document. */
 (function () {
   'use strict';
 
   var store = window.interestingState;
-  // '' everywhere but the 404 page, which is served at any missing path and names the site's
-  // root so the links this file writes still lead somewhere (see siteRoot in layout.njk).
   var root = document.documentElement.getAttribute('data-root') || '';
-  var READING = 'threshold'; // this file's one name inside the shared local-state document
-  var RECENT = 6; // how many mechanisms back still counts as "the same way twice"
-  var HALF_LIFE_H = 30; // a remembered reading fades to half its pull in this many hours
-  var ANSWER_PULL = 3; // the fresh answer outweighs memory and signal, on every arrival
+  var READING = 'threshold';
+  var RECENT = 6;
+  var HALF_LIFE_H = 30;
+  var ANSWER_PULL = 3;
   var SIGNAL_PULL = 1;
-  // A gap this long before a page view makes it a fresh arrival, which is what the persona card asks
-  // on. Clicking from one page to the next is the same arrival; coming back later is a new one.
   var ARRIVAL_GAP_MS = 30 * 60 * 1000;
 
-  /* The orientations the site distinguishes between, and the world each opens onto. The list is
-     meant to grow: a new world belongs here beside its page, and nothing else has to change. */
   var ORIENTATIONS = [
     { id: 'tender', name: 'banked low', pull: 'wants less asked of it',
       world: 'quiet-room.html', worldName: 'the quiet room' },
@@ -92,11 +44,6 @@
       world: 'pulse-choir.html', worldName: 'the pulse choir' }
   ];
 
-  /* The query mechanisms. Each carries a `probe` id, which is the handle the framework counts,
-     and a `name`, which is what the mood atlas shows a visitor instead of the id
-     (see PROBE_DECLARATION in .github/scripts/make_interesting.py): the site is held to keeping a
-     wide library of them, and a run that invents another is doing the most interesting work there
-     is to do here. The rule every one of them obeys: ask about the world, never about the self. */
   var PROBES = [
     {
       probe: 'doorway', name: 'four doors', kind: 'choice',
@@ -364,6 +311,21 @@
       jagged: { tempestuous: 3, restless: 1 }
     },
     {
+      probe: 'lit-windows', name: 'the lit windows', kind: 'windows',
+      ask: 'A building has nine dark windows. Light any three; the shape they make opens a world.',
+      windows: [
+        { label: 'upper left', weights: { cosmic: 3, brooding: 1 } },
+        { label: 'upper middle', weights: { attentive: 3, metrical: 1 } },
+        { label: 'upper right', weights: { tempestuous: 3, restless: 1 } },
+        { label: 'middle left', weights: { verbal: 3, curious: 1 } },
+        { label: 'centre', weights: { divinatory: 3, ceremonial: 1 } },
+        { label: 'middle right', weights: { analytic: 3, geometric: 1 } },
+        { label: 'lower left', weights: { rooted: 3, tender: 1 } },
+        { label: 'lower middle', weights: { tending: 3, tender: 1 } },
+        { label: 'lower right', weights: { restless: 3, geometric: 1 } }
+      ]
+    },
+    {
       probe: 'dial', name: 'the dial', kind: 'slider',
       ask: 'Set the room. The dial does not say what it does.',
       low: 'frost on the inside of the glass',
@@ -382,8 +344,6 @@
     return !!(calm && calm.matches);
   }
 
-  /* ---- what is partly remembered -------------------------------------------------------- */
-
   function load() {
     var blank = { visits: 0, last: null, drift: {}, recent: [], orientation: null };
     var parsed = store.get(READING, blank);
@@ -398,16 +358,12 @@
   }
 
   function save(next) {
-    // false means the browser would store nothing, so this reading lasts only as long as the page:
-    // a visitor with storage switched off still gets queried, just never remembered.
     store.set(READING, next);
   }
 
   var state = load();
   var sinceLast = state.last ? Math.max(0, Date.now() - state.last) : null;
 
-  /* How much of the remembered drift survives this arrival: half of it per HALF_LIFE_H. Partly
-     remembered, never wholly -- and a fresh answer outweighs whatever is left of it. */
   function memoryPull() {
     if (sinceLast === null) return 0;
     return Math.pow(0.5, (sinceLast / 3600000) / HALF_LIFE_H);
@@ -429,8 +385,6 @@
   function plural(n, word) {
     return n + ' ' + word + (n === 1 ? '' : 's');
   }
-
-  /* ---- the signals that are not a question ---------------------------------------------- */
 
   var PARTS = [
     { until: 5, part: 'the small hours', weights: { cosmic: 2, brooding: 2, tender: 1, divinatory: 1 } },
@@ -486,15 +440,10 @@
     var out = {};
     add(out, s.weights, 1);
     add(out, REGIONS[s.region] || {}, 1);
-    // Far from the prime meridian, with the arithmetic that implies: a long way around from where
-    // this site's clock thinks it is.
     if (Math.abs(s.offset) >= 7) add(out, { cosmic: 1, curious: 1 }, 1);
-    // A return after a long gap is treated as a visitor worth re-reading from scratch.
     if (sinceLast !== null && sinceLast > 14 * 86400000) add(out, { curious: 2, restless: 1 }, 1);
     return out;
   }
-
-  /* ---- scoring --------------------------------------------------------------------------- */
 
   function add(into, weights, factor) {
     for (var id in weights) {
@@ -504,24 +453,12 @@
     return into;
   }
 
-  function strongest(scores) {
-    var best = null;
-    for (var i = 0; i < ORIENTATIONS.length; i++) {
-      var id = ORIENTATIONS[i].id;
-      if (scores[id] && (best === null || scores[id] > scores[best])) best = id;
-    }
-    return best;
-  }
-
   function ranked(scores) {
     var list = ORIENTATIONS.filter(function (o) { return scores[o.id]; });
     list.sort(function (a, b) { return scores[b.id] - scores[a.id]; });
     return list;
   }
 
-  /* The reading: the fresh answer first, then whatever the clock and the zone suggest, then what
-     is left of the last visit. `answer` may be null, which is what a visitor who has not been
-     queried yet looks like. */
   function readingFor(answer) {
     var s = signals();
     var scores = {};
@@ -534,13 +471,9 @@
       alternates: order.slice(1, 4),
       scores: scores,
       signals: s,
-      // Where the reading came from, which is worth saying out loud: a reading taken from the
-      // clock alone is a guess the site has not earned yet, and should not be dressed up as one.
       source: answer ? 'answer' : 'signals'
     };
   }
-
-  /* ---- the site re-skins itself ---------------------------------------------------------- */
 
   function transmogrify(orientation) {
     var root = document.documentElement;
@@ -554,12 +487,10 @@
     try {
       window.dispatchEvent(new CustomEvent('threshold:reading', { detail: detail }));
     } catch (e) {
-      /* older browsers get the attribute and nothing else, which is most of the effect */
+      /* Older browsers still receive the palette attribute. */
     }
   }
 
-  // The answer given on this page, if any, so every part of the page reports it as "read just now"
-  // rather than as a reading carried over from memory.
   var lastAnswered = null;
 
   function record(answer) {
@@ -577,17 +508,12 @@
     return reading;
   }
 
-  /* A mechanism counts as used the moment it is put in front of someone, answered or not. That is
-     what makes "never the same way twice" true of a visitor who ignores the question as well as
-     one who answers it. */
   function noteProbe(id) {
     if (state.recent[state.recent.length - 1] === id) return;
     state.recent = state.recent.concat([id]).slice(-RECENT);
     save({ visits: state.visits, last: state.last, drift: state.drift,
            recent: state.recent, orientation: state.orientation });
   }
-
-  /* ---- choosing a mechanism -------------------------------------------------------------- */
 
   function nextProbe() {
     var fresh = PROBES.filter(function (p) { return state.recent.indexOf(p.probe) === -1; });
@@ -602,8 +528,6 @@
     for (var i = 0; i < PROBES.length; i++) if (PROBES[i].probe === id) return PROBES[i];
     return null;
   }
-
-  /* ---- rendering a query ----------------------------------------------------------------- */
 
   function el(tag, className, text) {
     var node = document.createElement(tag);
@@ -632,14 +556,10 @@
     var trace = el('p', 'probe-trace');
     trace.setAttribute('aria-live', 'polite');
     frame.appendChild(trace);
-    // Values that tick -- the seconds of a press, the samples of a line -- are shown here and not
-    // in the live trace, so a screen reader is not read a stopwatch.
     var meter = el('p', 'probe-trace probe-meter');
     meter.setAttribute('aria-hidden', 'true');
     frame.appendChild(meter);
     trace.meter = meter;
-    // Every mechanism can be declined. Skipping records nothing: the question still counts as
-    // asked, so it is not asked the same way next time, and the reading is whatever it was.
     var skip = el('button', 'probe-option probe-skip', 'skip this');
     skip.type = 'button';
     skip.addEventListener('click', function () {
@@ -661,7 +581,7 @@
 
     var kinds = {
       choice: choiceProbe, sequence: sequenceProbe, tap: tapProbe, hold: holdProbe,
-      place: placeProbe, draw: drawProbe, slider: sliderProbe
+      place: placeProbe, draw: drawProbe, windows: windowsProbe, slider: sliderProbe
     };
     (kinds[probe.kind] || choiceProbe)(probe, body, trace, answer, finish);
     return probe;
@@ -727,18 +647,15 @@
 
     function redraw() {
       body.textContent = '';
-
       if (picked.length) {
-        var order = picked.map(function (item) { return item.label; }).join(' \u2192 ');
+        var order = picked.map(function (item) { return item.label; }).join(' → ');
         body.appendChild(el('p', 'probe-step', 'bench order: ' + order));
       }
-
       var options = remaining();
       if (picked.length < target && options.length) {
         var group = el('div', 'probe-options');
         group.setAttribute('role', 'group');
         group.setAttribute('aria-label', 'objects to place');
-
         options.forEach(function (item) {
           var button = el('button', 'probe-option');
           button.type = 'button';
@@ -755,13 +672,10 @@
           });
           group.appendChild(button);
         });
-
         body.appendChild(group);
       }
-
       var left = target - picked.length;
       body.appendChild(el('p', 'probe-count', left > 0 ? (left + ' to place') : 'reading order'));
-
       var controls = el('div', 'controls');
       var undo = el('button', 'probe-option probe-undo', 'undo last');
       undo.type = 'button';
@@ -773,7 +687,6 @@
         redraw();
       });
       controls.appendChild(undo);
-
       var reset = el('button', 'probe-option probe-undo', 'start over');
       reset.type = 'button';
       reset.disabled = picked.length === 0;
@@ -814,10 +727,6 @@
     body.appendChild(button);
   }
 
-  // The stage's hold knob is set the moment its bar fills, without waiting for the release
-  // (issue #74); this one cannot be, and that is no inconsistency. There is no bar here and no
-  // length to reach: how long the press lasted is the whole answer, and the answer is only
-  // there once the press is over.
   function holdProbe(probe, body, trace, answer, finish) {
     var started = 0;
     var ticker = null;
@@ -847,8 +756,6 @@
     button.addEventListener('pointerdown', down);
     button.addEventListener('pointerup', up);
     button.addEventListener('pointerleave', up);
-    // A finger that drifts into a scroll cancels the press: stop counting and say so, rather
-    // than leaving a timer running under a button that will never finish.
     button.addEventListener('pointercancel', function () {
       if (!started) return;
       started = 0;
@@ -857,7 +764,6 @@
       if (trace.meter) trace.meter.textContent = '';
       trace.textContent = 'let go early; press again';
     });
-    // A keyboard holds too: keydown repeats while the key is down, keyup ends it.
     button.addEventListener('keydown', function (ev) {
       if (ev.key === ' ' || ev.key === 'Enter') { ev.preventDefault(); down(); }
     });
@@ -877,7 +783,6 @@
 
   function placeProbe(probe, body, trace, answer, finish) {
     var field = el('div', 'probe-field');
-    // application: a screen reader in browse mode passes the arrow keys through to the field.
     field.setAttribute('role', 'application');
     field.setAttribute('aria-label', 'a field to place one mark in: the arrow keys move the mark, enter leaves it there');
     field.tabIndex = 0;
@@ -935,7 +840,6 @@
     pad.width = 520;
     pad.height = 180;
     pad.tabIndex = 0;
-    // application, like the placement field, so the arrow keys reach the pad in browse mode too.
     pad.setAttribute('role', 'application');
     pad.setAttribute('aria-label', 'a pad to draw one line on: the arrow keys draw, enter finishes');
     var ctx = pad.getContext('2d');
@@ -972,7 +876,6 @@
       drawing = false;
       score();
     });
-    // A keyboard draws too: each arrow adds a stroke in that direction, enter lifts the hand.
     pad.addEventListener('keydown', function (ev) {
       var moves = { ArrowLeft: [-24, 0], ArrowRight: [24, 0], ArrowUp: [0, -24], ArrowDown: [0, 24] };
       if (moves[ev.key]) {
@@ -1017,13 +920,67 @@
     body.appendChild(el('p', 'probe-count', 'draw with a finger, a mouse, or the arrow keys'));
   }
 
+  function windowsProbe(probe, body, trace, answer, finish) {
+    var selected = [];
+    var field = el('div', 'probe-windows');
+    field.setAttribute('role', 'group');
+    field.setAttribute('aria-label', 'Nine windows. Light three in any order.');
+    probe.windows.forEach(function (tile, index) {
+      var button = el('button', 'probe-window');
+      button.type = 'button';
+      button.setAttribute('aria-label', tile.label + ' window');
+      button.setAttribute('aria-pressed', 'false');
+      var pane = el('span', 'probe-window-pane');
+      pane.setAttribute('aria-hidden', 'true');
+      button.appendChild(pane);
+      button.addEventListener('click', function () {
+        var at = selected.indexOf(index);
+        if (at !== -1) {
+          selected.splice(at, 1);
+          button.setAttribute('aria-pressed', 'false');
+        } else {
+          selected.push(index);
+          button.setAttribute('aria-pressed', 'true');
+        }
+        if (selected.length < 3) {
+          trace.textContent = selected.length ? selected.length + ' lit; ' + (3 - selected.length) + ' to go.' : 'All windows dark again. Light any three.';
+          return;
+        }
+        selected.forEach(function (i) { add(answer, probe.windows[i].weights, 1); });
+        var xs = selected.map(function (i) { return i % 3; });
+        var ys = selected.map(function (i) { return Math.floor(i / 3); });
+        if (selected.indexOf(4) !== -1 &&
+            ((selected.indexOf(0) !== -1 && selected.indexOf(8) !== -1) ||
+             (selected.indexOf(2) !== -1 && selected.indexOf(6) !== -1))) {
+          add(answer, { divinatory: 3, ceremonial: 2, cosmic: 1 }, 1);
+        } else if (xs.every(function (x) { return x === xs[0]; })) {
+          add(answer, { geometric: 3, analytic: 2, metrical: 1 }, 1);
+        } else if (ys.every(function (y) { return y === ys[0]; })) {
+          add(answer, { metrical: 3, attentive: 2, restless: 1 }, 1);
+        } else if (Math.max.apply(null, xs) - Math.min.apply(null, xs) <= 1 &&
+                   Math.max.apply(null, ys) - Math.min.apply(null, ys) <= 1) {
+          add(answer, { tender: 3, tending: 2, rooted: 1 }, 1);
+        } else if (xs.filter(function (x, i) { return xs.indexOf(x) === i; }).length === 3 &&
+                   ys.filter(function (y, i) { return ys.indexOf(y) === i; }).length === 3) {
+          add(answer, { curious: 3, verbal: 2, tempestuous: 1 }, 1);
+        } else {
+          add(answer, { brooding: 2, cosmic: 1, curious: 1 }, 1);
+        }
+        finish();
+      });
+      field.appendChild(button);
+    });
+    body.appendChild(field);
+    body.appendChild(el('p', 'probe-count', 'Tap a lit window to close it before lighting the third.'));
+  }
+
   function sliderProbe(probe, body, trace, answer, finish) {
     var wrap = el('div', 'probe-dial');
     var input = document.createElement('input');
     input.type = 'range';
     input.min = '0';
     input.max = '100';
-    input.value = String(20 + Math.floor(Math.random() * 61)); // never starts in the same place
+    input.value = String(20 + Math.floor(Math.random() * 61));
     input.id = 'probe-dial-' + probe.probe;
     var label = el('label', 'probe-dial-label', 'the dial starts somewhere random; put it where the room should be');
     label.setAttribute('for', input.id);
@@ -1048,12 +1005,6 @@
     body.appendChild(done);
   }
 
-  /* ---- what the persona shows ----------------------------------------------------------- */
-
-  /* What the persona card says about a reading, in words a stranger can use. A reading the visitor
-     gave, or one carried over from an earlier answer, is said; the clock's own guess is not
-     dressed up as a reading, because a site that asks before it offers does not offer first. The
-     one note about a browser that keeps nothing is the persona's to add, once, so it is not here. */
   function describe(reading) {
     var o = reading && reading.orientation;
     if (!o || !reading.source || reading.source === 'signals') {
@@ -1074,23 +1025,13 @@
       : readingFor(null);
   }
 
-  /* Whether this page view is an arrival at the threshold, which the site asks on: a first visit,
-     a return after ARRIVAL_GAP_MS, or nothing read yet, because asking is what that page is for.
-     Clicking from one page to the next is the same arrival; coming back later is a new one.
-     "Arrival" is read off the gap the shared document already records rather than a session key
-     of its own, because no page of this site touches the browser's storage directly. The persona
-     card (js/persona.js) asks, inline, when this says so. */
   function arrival() {
     var threshold = document.documentElement.getAttribute('data-page') === 'index.html';
     var arrived = sinceLast === null || sinceLast > ARRIVAL_GAP_MS;
     return threshold && (arrived || !state.orientation);
   }
 
-  /* ---- start ------------------------------------------------------------------------------ */
-
   state.visits += 1;
-  // sinceLast already holds the gap before this arrival, so the stored timestamp can move to now:
-  // what the next visit wants to know is how long it has been since this one.
   state.last = Date.now();
   transmogrify(state.orientation ? ORIENTATION_BY_ID[state.orientation] : null);
   save({ visits: state.visits, last: state.last, drift: state.drift,
