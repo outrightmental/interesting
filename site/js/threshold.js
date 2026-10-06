@@ -41,7 +41,7 @@
     { id: 'geometric', name: 'after symmetry', pull: 'wants a pattern to close',
       world: 'orbital-weaver.html', worldName: 'the orbital weaver' },
     { id: 'metrical', name: 'counting in echoes', pull: 'wants a pulse to keep time with',
-      world: 'constellation-echo.html', worldName: 'the echo chamber' }
+      world: 'pulse-loom.html', worldName: 'the pulse loom' }
   ];
 
   var PROBES = [
