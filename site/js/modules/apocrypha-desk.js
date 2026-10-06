@@ -939,7 +939,12 @@ export default {
         title: turningTitle(plan),
         text: 'A ' + plan.front.name + ' from the front. What will it be from the side? Turn one solid, make a prediction, and stamp the finding.',
         aspect: '4 / 3',
-        paint: (ctx, w, h, e) => turningPreview(ctx, w, h, e, plan)
+        paint: (ctx, w, h, e) => turningPreview(ctx, w, h, e, plan),
+        // What this card is of, for the piece it opens as: the very solid it previewed, so pressing
+        // it opens the desk turning that solid rather than a fresh one of this seed (turningSpecimen
+        // reads was.plan). Without it a visitor who pressed "a hinge seen two ways" could land on a
+        // key, and two turning cards of this world would open the same solid (issue #80).
+        of: { plan }
       };
     }
     const number = 'APC-' + env.int(1000, 9999) + '-' + env.pick('abcdefghk'.split(''));
