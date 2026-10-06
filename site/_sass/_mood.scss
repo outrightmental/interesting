@@ -40,8 +40,6 @@
 @use 'sass:list';
 @use 'type';
 
-// orientation -> (bg, bg2, accent, accent2), the four that carry a mood. --fg and --muted are left
-// alone on purpose: they are what keeps text at 4.5:1 against every one of these.
 $moods: (
   tender: (#140d13, #46293c, #ffc6d6, #ffe4c8),
   restless: (#0a1210, #1a5040, #7cffc4, #fff2a6),
@@ -67,7 +65,6 @@ $moods: (
   --accent2: #{list.nth($palette, 4)};
 }
 
-// The page's own world first, so the visitor's reading below outranks it at equal specificity.
 @each $mood, $palette in $moods {
   :root[data-world='#{$mood}'] {
     @include seeds($palette);
@@ -81,16 +78,11 @@ $moods: (
   }
 }
 
-// The activity on the stage, last of the three on :root, so the world a visitor just picked from
-// the feed outranks both the page's own world and the visitor's reading -- and only for as long as
-// its piece is on the stage (js/stage.js).
 @each $mood, $palette in $moods {
   :root[data-featured='#{$mood}'] {
     @include seeds($palette);
   }
 }
-
-// ---- a query, wherever it is rendered ----------------------------------------------------------
 
 .probe {
   display: grid;
@@ -115,8 +107,6 @@ $moods: (
   gap: 0.5rem;
 }
 
-// An answer: a filled card the visitor presses, in the highest container tone so it stands off
-// the card it sits in.
 .probe-option {
   flex-direction: column;
   align-items: flex-start;
@@ -141,8 +131,6 @@ $moods: (
   @include type.scale(body-small);
 }
 
-// The skip sits last in every mechanism, as a text button, quieter than the answers; undo and
-// start over the same.
 .probe-skip,
 .probe-undo {
   width: auto;
@@ -164,7 +152,6 @@ $moods: (
   min-height: 72px;
   border-radius: var(--md-sys-shape-corner-medium);
   @include type.scale(title-medium);
-  // A long press on a phone must not select text or open a menu: the press is the answer.
   touch-action: none;
   user-select: none;
   -webkit-user-select: none;
@@ -217,6 +204,70 @@ $moods: (
   box-shadow: 0 0 14px var(--md-sys-color-primary);
 }
 
+.probe-windows {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem;
+  width: min(100%, 19rem);
+  padding: 0.75rem;
+  border-radius: var(--md-sys-shape-corner-large);
+  background: var(--md-sys-color-surface-container-lowest);
+}
+
+.probe-window {
+  min-width: 0;
+  min-height: 44px;
+  aspect-ratio: 1;
+  padding: 0.35rem;
+  border-radius: var(--md-sys-shape-corner-small);
+  background: var(--md-sys-color-surface-container-high);
+  color: var(--md-sys-color-on-surface);
+}
+
+.probe-window-pane {
+  position: relative;
+  display: block;
+  width: 70%;
+  max-width: 3.4rem;
+  aspect-ratio: 4 / 5;
+  border: 2px solid var(--md-sys-color-outline);
+  border-radius: var(--md-sys-shape-corner-extra-small);
+  background: var(--md-sys-color-surface-dim);
+}
+
+.probe-window-pane::before,
+.probe-window-pane::after {
+  content: '';
+  position: absolute;
+  background: var(--md-sys-color-outline);
+}
+
+.probe-window-pane::before {
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+}
+
+.probe-window-pane::after {
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 1px;
+}
+
+.probe-window[aria-pressed='true'] {
+  background: var(--md-sys-color-primary-container);
+  color: var(--md-sys-color-on-primary-container);
+  box-shadow: inset 0 0 0 2px var(--md-sys-color-primary);
+}
+
+.probe-window[aria-pressed='true'] .probe-window-pane {
+  border-color: var(--md-sys-color-tertiary);
+  background: radial-gradient(circle, var(--md-sys-color-tertiary), var(--md-sys-color-tertiary-container));
+  box-shadow: 0 0 18px var(--md-sys-color-tertiary-container);
+}
+
 .probe-pad {
   width: 100%;
   height: auto;
@@ -247,7 +298,8 @@ $moods: (
 
 @media (prefers-reduced-motion: reduce) {
   .probe-option,
-  .probe-big {
+  .probe-big,
+  .probe-window {
     transition: none;
   }
 }
