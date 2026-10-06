@@ -31,10 +31,14 @@
       finished the stage takes the next card from the top of the feed
       (window.interestingFeed.take), so the feed is the stack of what comes next. Without the
       stage a card is the plain link it was written as.
-    - A card hands its colour over as it goes: the four seeds it is wearing -- its world's mood as
-      its own configuration derived them -- travel with it to the stage, which re-skins the site in
-      them (palette() below, and feature() in js/stage.js), so the page a visitor lands on matches
-      the card they pressed rather than keeping the palette the page had.
+    - A card hands its whole configuration over as it goes, because the feature it opens as is the
+      same content piece as the card and not a generic page of its world (issue #80): its seed, the
+      variant rolled from that seed, the four palette seeds it is wearing -- its world's mood as its
+      own configuration derived them -- and the content it was showing (palette() and shown() below,
+      open() and take() handing them to js/stage.js). The stage re-skins the site in those seeds,
+      frames the scene by the same stretch, titles the feature from the card's own content, and
+      hands the configuration to the world's module on env, so the piece is painted and named by the
+      arithmetic that painted and named the card.
     - The 'you are here' card follows the stage: when a piece of another world opens, the badge
       moves to that world's card, so the feed always says where the visitor is. feed:ready is
       dispatched on window once the API is there.
@@ -49,7 +53,7 @@
         animate(ctx, w, h, env, t) {},   // optional: redraw per frame while visible; never called
                                          // when the visitor has asked for less motion
         spark(env) {                     // a thing the world made, or null for none right now
-          return { title, text, quote, mono, cite, overline, aspect, paint };
+          return { title, text, quote, mono, cite, overline, aspect, paint, of };
         }                                // aspect ('4 / 3') and paint() give the spark a picture
       };
 
@@ -60,6 +64,13 @@
   configuration (js/variant.js): variant.density is how much of itself to draw, variant.scale how
   large, variant.turn where to start. A module that reads none of them still varies, because its
   colours have been configured for it already; one that reads them varies in shape as well.
+
+  `of` on a spark is the thing the card is of, in the module's own terms -- the rule number, the
+  coinage, the star it was drawn from -- and it is the module writing a note to itself: the stage
+  hands it straight back as env.card.of when the card is opened as a feature, so the module's
+  piece() opens on exactly the thing its card was showing rather than rolling another (issue #80).
+  It is plain data of the module's own shape, never read by anything else, and a module that has no
+  use for it leaves it out.
 
   Nothing here reaches for the browser's storage: the sky is read through window.interestingPersona
   and the reading through window.threshold, and nothing is written at all.
@@ -195,6 +206,46 @@ function palette(card, m) {
   const seeds = {};
   for (const name of SEEDS) seeds[name] = colors[name];
   return seeds;
+}
+
+/* What a card is showing, as content: the thing a visitor pressed, which travels with the card to
+   the stage and is the feature's own title and line there (issue #80).
+
+   A spark card is showing what its world's module made for its seed and configuration -- the spec
+   sparkBody() wrote into it, `of` and all (see the contract at the top) -- so that spec is the
+   content, exactly as it stands on the card. A world card is showing the world's own orientation,
+   name and line, which is the one thing every card of that world says, so that is its content and
+   the feature it opens has to be titled by its piece rather than by it.
+
+   Nothing is invented here and nothing is re-rolled: this is a reading of the card as the visitor
+   last saw it, which is what "the feature is the card you pressed" has to mean. */
+function shown(m) {
+  if (!m || !m.world) return null;
+  const spec = m.spec;
+  if (spec) {
+    return {
+      kind: 'spark',
+      overline: spec.overline || m.world.name,
+      title: spec.title || m.world.name,
+      quote: spec.quote || '',
+      text: spec.text || '',
+      mono: spec.mono || '',
+      cite: spec.cite || '',
+      aspect: spec.aspect || m.world.aspect,
+      of: spec.of || null
+    };
+  }
+  return {
+    kind: 'world',
+    overline: m.world.orientation,
+    title: m.world.name,
+    quote: '',
+    text: m.world.what,
+    mono: '',
+    cite: '',
+    aspect: m.world.aspect,
+    of: null
+  };
 }
 
 /* ---- the worlds, read off the cards the template wrote --------------------------------------- */
@@ -679,8 +730,9 @@ function consume(card) {
 
 // The next piece: the first card in feed order that is a world's -- of another world than
 // `avoid`, the one just played, when there is one, and one that `fit` accepts by file, when
-// given -- taken out of the feed. Its palette goes with it, so the site takes the colour of the
-// card that arrives on the stage as well as of the one a visitor pressed.
+// given -- taken out of the feed. Its whole configuration goes with it, palette and all, so the
+// piece that arrives on the stage is the card that was dealt here, exactly as the one a visitor
+// pressed is (see openFromCard and shown below).
 function take(fit, avoid) {
   const playable = cards.filter((c) => {
     const m = meta.get(c);
@@ -692,7 +744,8 @@ function take(fit, avoid) {
     || playable[0];
   if (!card) return null;
   const m = meta.get(card);
-  const taken = { file: m.world.file, seed: m.seed, kind: m.kind, seeds: palette(card, m) };
+  const taken = { file: m.world.file, seed: m.seed, kind: m.kind, seeds: palette(card, m),
+    variant: m.variant, card: shown(m) };
   consume(card);
   return taken;
 }
@@ -712,8 +765,13 @@ function openFromCard(ev) {
   // The card's own four seeds, read before it leaves: the site features this activity in the
   // colour the card was wearing, so the page a visitor lands on matches the card they pressed.
   const seeds = palette(card, m);
+  // And the rest of what the card is: its configuration, and the content it was showing. The stage
+  // frames, paints and titles the feature from these, and hands them to the world's module on env,
+  // so what opens is the piece the visitor pressed and not the world's generic line (issue #80).
+  const variant = m.variant;
+  const was = shown(m);
   consume(card);
-  window.interestingStage.open(file, seed, { arriving: true, scroll: true, seeds });
+  window.interestingStage.open(file, seed, { arriving: true, scroll: true, seeds, variant, card: was });
 }
 
 /* ---- dealing -------------------------------------------------------------------------------- */
