@@ -9,10 +9,11 @@
 
   The piece harness beside this one plays a module's piece the way the stage would; this one plays
   the stage itself. They answer different questions. A piece can be perfectly finishable and the
-  stage still leave a visitor stuck -- which is what issue #60 was: the lantern's slider could not
-  be set by anyone content with where it already stood, so a visitor who set every other knob,
-  watched the finale run, and waited, waited on a piece that was never going to finish. No law
-  reached that, because no law had ever run js/stage.js.
+  stage still leave a visitor stuck -- which is what issue #60 was: a slider could not be set by
+  anyone content with where it already stood, so a visitor who set every other knob, watched the
+  finale run, and waited, waited on a piece that was never going to finish. It was reported on the
+  lantern and it was never the lantern's: the same dead end was reachable in the quiet room and the
+  machine shop. No law caught any of it, because no law had ever run js/stage.js.
 
   What the stub is: a document of the elements _includes/stage.njk writes, a window with a virtual
   clock (every timer, interval and animation frame the stage asks for is scheduled against it and
@@ -31,9 +32,10 @@
                       finish -- a knob nobody set is not set -- but the stage must say which knob
                       it is still waiting on, so this is a visitor who knows what to do next and
                       not one staring at a finished-looking toy.
-    teardown          Open a piece, set a knob, leave a hold pressed down, then open a world whose
-                      module is not there. Nothing of the first piece may be left on the stage and
-                      nothing of it may still be running.
+    teardown          Open a piece, work down its knobs until a hold is reachable, press that one
+                      and keep pressing, then open a world whose module is not there. Nothing of
+                      the first piece may be left on the stage and nothing of it may still be
+                      running.
 
   Every scenario reports what it observed and makes no judgements: StageTest in
   test_make_interesting.py makes the assertions, as ParticipateButtonTest does for the button.
@@ -692,7 +694,18 @@ function inWorker(scenario, stageDir, worlds, deal) {
       worker.terminate().catch(() => {});
       resolve(message);
     };
-    const worker = new Worker(new URL(import.meta.url), { workerData: { scenario, stageDir, worlds, deal } });
+    // The report is this run's stdout, and a module or a stage is model-written code that may say
+    // something on its own account; piped away, a stray console.log cannot turn the report into
+    // something its caller cannot parse. The environment is empty for the same reason as the piece
+    // harness: the scenario needs nothing from it.
+    const worker = new Worker(new URL(import.meta.url), {
+      workerData: { scenario, stageDir, worlds, deal },
+      env: {},
+      stdout: true,
+      stderr: true
+    });
+    worker.stdout.on('data', () => {});
+    worker.stderr.on('data', () => {});
     const timer = setTimeout(() => finish({ ok: false, error: 'the scenario did not finish within '
       + SCENARIO_TIMEOUT_MS / 1000 + ' seconds of real time' }), SCENARIO_TIMEOUT_MS);
     worker.on('message', finish);

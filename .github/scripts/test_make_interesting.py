@@ -3109,9 +3109,10 @@ class StageTest(unittest.TestCase):
         self.assertEqual(left["aspect"], "", "the scene kept the shape of the piece that is gone")
 
     def test_a_missing_harness_is_the_toolchain_and_not_the_model(self):
-        with mock.patch.object(mi, "STAGE_HARNESS", Path(tempfile.gettempdir()) / "nowhere.mjs"):
-            with self.assertRaises(mi.BuildToolchainError):
-                mi.run_stage_harness(stage_site())
+        with tempfile.TemporaryDirectory() as empty:
+            with mock.patch.object(mi, "STAGE_HARNESS", Path(empty) / "nowhere.mjs"):
+                with self.assertRaises(mi.BuildToolchainError):
+                    mi.run_stage_harness(stage_site())
 
     def test_a_site_without_a_stage_or_without_worlds_is_the_toolchain_saying_so(self):
         without_stage = stage_site()
