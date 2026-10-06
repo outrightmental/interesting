@@ -8,9 +8,12 @@
   A page's feature is not a fixed page any more. It is a piece: a small, procedurally generated,
   randomly configured item with a few knobs and a clear end -- a fidget toy with levers on it --
   made on the spot by a world's module from a seed. The visitor sets the knobs, the piece is
-  finished, it vanishes with some ceremony, and the next card in the feed's stack opens in its
-  place, so one piece follows another without end. _includes/stage.njk writes the stage; this
-  file runs it; js/feed.js hands it the next card.
+  finished, it plays its ceremony -- and then it waits. The stage never moves on by itself
+  (issue #78): the ceremony ends by lighting the way on, one mark pinned in the lower right of
+  the screen for every piece, and the press of that is what vanishes the piece and opens the next
+  card in the feed's stack in its place. So one piece follows another without end, and it is the
+  visitor who says when. _includes/stage.njk writes the stage; this file runs it; js/feed.js
+  hands it the next card.
 
   ---------------------------------------------------------------------------------------------
   The alignment axiom: the feature is the card that was pressed
@@ -136,13 +139,14 @@
                                      options.card the content it was showing. Any of them left out
                                      is derived from the seed instead, never guessed at
         .next()                      finish nothing, open the next card from the feed's stack
-        .skip()                      leave the current piece without ceremony and open the next
         .current()                   { file, seed } or null
       events on window: 'stage:open' { file, seed }, 'stage:complete' { file, seed },
       'stage:home' (the threshold's own state, on going back)
 
   The URL carries the piece: `world.html#<seed>` is this piece, shareable, and the back button
-  walks back through the pieces a visitor finished (a skipped one is replaced, not kept).
+  walks back through the pieces a visitor finished (one left without finishing -- the way on
+  pressed over a piece that needed a sky, or over a world with nothing to play -- is replaced,
+  not kept).
   Opening a card from another world moves the address to that world's page without a load: a
   page is wherever the stage is -- and so is the site's colour, which follows the piece on the
   stage for as long as it is there (see feature(), and the precedence in _sass/_mood.scss).
@@ -378,7 +382,7 @@ const ui = stage ? {
   progress: document.getElementById('stage-progress'),
   done: document.getElementById('stage-done'),
   doneText: document.getElementById('stage-done-text'),
-  skip: document.getElementById('stage-skip'),
+  onward: document.getElementById('stage-next'),
   again: document.getElementById('stage-again'),
   burst: document.getElementById('stage-burst'),
   gate: null // the element the unlock helper powers down, one per unpowered open
@@ -511,7 +515,10 @@ async function open(file, seed, options) {
 // open's own, so a later piece is never dimmed by a sky cleared after this one is gone.
 function gate(opened) {
   setMode('unpowered');
-  ui.skip.hidden = false;
+  // Nothing to finish until there is a sky, so the way on is lit from the start: a visitor who
+  // does not want to seed one is never held here. The focus stays on the heading, which is where
+  // the piece would have put it.
+  lightTheWayOn(false);
   const host = el('div', 'stage-gate');
   ui.body.insertBefore(host, ui.scene);
   ui.gate = host;
@@ -535,7 +542,7 @@ function gate(opened) {
 
 function empty(opts) {
   ui.brief.textContent = 'Nothing to finish here yet.';
-  ui.skip.hidden = false;
+  lightTheWayOn(false); // nothing to finish, so the way on is the whole of what this offers
   setMode('empty');
   if (!opts || opts.focus !== false) ui.title.focus({ preventScroll: true });
 }
@@ -676,7 +683,11 @@ function begin(opened) {
   ui.scene.style.setProperty('--piece-ratio', ratio.toFixed(4));
   renderKnobs();
   renderProgress();
-  ui.skip.hidden = false;
+  // Dim for the whole piece, lit only when it is finished (issue #78). begin() is reached both
+  // through open()/close(), which dims it, and straight from a gate's onReady once a sky is
+  // seeded, where it was lit so the visitor could pass the seeding by -- so the piece itself has
+  // to put it back to dim, or a sky-gated world would start live with the way on still lit.
+  dimTheWayOn();
 
   // The scene has a size only once the stage is in a mode that shows it.
   setMode(opts && opts.arriving && !calm.matches ? 'arriving' : 'live');
@@ -1123,7 +1134,6 @@ function finish() {
   }
   renderProgress();
   for (const control of ui.knobs.querySelectorAll('button, input')) control.disabled = true;
-  ui.skip.hidden = true;
   // The piece's own closing line, if it writes one in end(), stands; this is the default.
   ui.status.textContent = c.piece.title ? 'finished: ' + c.piece.title : 'finished';
   try {
@@ -1146,31 +1156,47 @@ function finish() {
   } catch (e) {
     /* no event, no matter */
   }
+  // The ceremony lingers, and then the way on lights up and the stage stops. What used to happen
+  // here was the departure itself, on a timer; a finished piece is the visitor's to sit with for
+  // as long as they like now, and the press is what sends it away (issue #78).
   const token = c.token;
-  const linger = calm.matches ? 500 : 1200;
   later(() => {
     if (!current || current.token !== token) return;
-    setMode('vanishing');
-    later(() => {
-      if (!current || current.token !== token) return;
-      next();
-    }, calm.matches ? 120 : 520);
-  }, linger);
+    lightTheWayOn(true);
+  }, calm.matches ? 500 : 1200);
 }
 
-// Leave without ceremony. A skipped piece is replaced in the history, so going back walks
-// through what was finished and not what was passed over.
-function skip() {
-  if (!current) {
-    next({ replace: true });
-    return;
-  }
-  const token = current.token;
+/* ---- the way on ----------------------------------------------------------------------------- */
+
+// Lit: there is somewhere to go. `disabled` is the whole of the state -- the stylesheet dims it,
+// fills it and raises it off that one flag -- so there is nothing here to fall out of step with
+// what the visitor sees. A finished piece also hands it the keyboard, so the way on is one key
+// away from the knob that finished the piece; the stage's other lit moments (a piece waiting on a
+// sky, a world with nothing to play) leave the focus on the heading, where they already put it.
+function lightTheWayOn(focus) {
+  if (!ui.onward) return;
+  ui.onward.disabled = false;
+  if (focus) ui.onward.focus({ preventScroll: true });
+}
+
+function dimTheWayOn() {
+  if (ui.onward) ui.onward.disabled = true;
+}
+
+// The way on, pressed: the piece scales away and the next card opens in its place -- exactly what
+// the timer in finish() used to do on the visitor's behalf. A piece nobody finished is replaced in
+// the history rather than kept, so the back button walks back through what was finished and not
+// what was passed over.
+function goOn() {
+  if (!ui.onward || ui.onward.disabled) return;
+  dimTheWayOn(); // one press is one piece: a second one cannot overtake the first
+  const finished = !!(current && current.completed);
+  const piece = current; // null where there was nothing to finish: a missing module, or a gate
   setMode('vanishing');
   later(() => {
-    if (!current || current.token !== token) return;
-    next({ replace: true });
-  }, calm.matches ? 60 : 420);
+    if (current !== piece) return; // something else took the stage while this one was leaving
+    next(finished ? {} : { replace: true });
+  }, calm.matches ? 120 : 520);
 }
 
 async function next(options) {
@@ -1242,7 +1268,7 @@ function close() {
   }
   ui.doneText.textContent = 'done';
   ui.done.hidden = true;
-  ui.skip.hidden = true;
+  dimTheWayOn();
 }
 
 // The threshold's own state, back from a piece: what the page said before anything opened.
@@ -1429,7 +1455,7 @@ function start() {
   const threshold = stage.dataset.threshold === 'true';
   const random = stage.dataset.stageRandom === 'true';
 
-  ui.skip.addEventListener('click', skip);
+  if (ui.onward) ui.onward.addEventListener('click', goOn);
   window.addEventListener('resize', reflow);
   // The heading changes shape without the window doing anything -- a longer title, a font that
   // arrives late, a mode that puts the ask up instead -- and the scene is sized against it.
@@ -1482,7 +1508,6 @@ if (stage) {
   window.interestingStage = {
     open,
     next,
-    skip,
     current: () => (current ? { file: current.world.file, seed: current.seed } : null),
     worlds: () => WORLDS.slice()
   };

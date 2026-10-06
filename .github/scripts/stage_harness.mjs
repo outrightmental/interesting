@@ -26,6 +26,10 @@
     rounds            Play piece after piece through one stage, with the deal bringing a world
                       round again. Every round must finish and open the next: a world played
                       before has to play like the first time (the replay half of issue #60).
+                      Nothing moves on by itself any more (issue #78), so each round waits out
+                      six seconds -- long past the linger the stage used to depart on -- to see
+                      that the piece it finished is still there, and then presses the way on in
+                      the lower right, which is what opens the next.
     sliderUsed        Play every knob, and use the slider without moving it -- the visitor is
                       happy where it is. The piece must still finish.
     sliderUntouched   Play every knob but the slider, and never touch it. The piece must not
@@ -178,6 +182,14 @@ function stubContext(canvas) {
   });
 }
 
+// What the stage last gave the keyboard to. A browser has document.activeElement; this is the one
+// thing the scenarios need out of it, which is whether a finished piece handed the way on the focus.
+let focused = null;
+
+function focusedId() {
+  return focused ? focused.getAttribute('id') || '' : '';
+}
+
 class Node {
   constructor(tag) {
     this.tagName = String(tag).toUpperCase();
@@ -306,7 +318,9 @@ class Node {
     return true;
   }
 
-  focus() {}
+  focus() {
+    focused = this;
+  }
 
   getBoundingClientRect() {
     return this.box;
@@ -365,9 +379,10 @@ function makePage(worlds, clock) {
   const wanted = make('p', 'stage-wanted', side);
   wanted.hidden = true;
   const foot = make('div', null, side, 'stage-foot');
-  const actions = make('div', null, foot, 'stage-foot-actions');
-  make('button', 'stage-skip', actions).hidden = true;
+  make('div', null, foot, 'stage-foot-actions');
   make('div', 'stage-progress', foot);
+  // The way on, outside the inner the vanish transforms, and dim until the stage lights it.
+  make('button', 'stage-next', stage, 'stage-next').disabled = true;
 
   const events = [];
   const modes = [];
@@ -548,7 +563,8 @@ function look(page) {
     knobs: knobsOn(page).map((knob) => ({ id: knob.dataset.id, kind: knob.dataset.kind, set: isSet(knob) })),
     dots: by('stage-progress').querySelectorAll('.stage-dot').length,
     doneShown: !by('stage-done').hidden,
-    skipShown: !by('stage-skip').hidden,
+    nextLit: !by('stage-next').disabled,
+    focused: focusedId(),
     sceneLabel: by('stage-canvas').getAttribute('aria-label'),
     aspect: by('stage-scene').css.get('--piece-aspect') || ''
   };
@@ -562,6 +578,28 @@ async function load(stageDir, worlds, clock) {
   // The stage loads every module 1.5 seconds in, to learn which read the sky; let it.
   await clock.advance(2000);
   return page;
+}
+
+/* The way on, waited for and pressed -- which is the whole of how one piece is left for the next
+   now (issue #78). The six seconds first: the stage used to depart on a linger of 1.2 of them, so a
+   stage that moves on by itself is caught here rather than mistaken for a press that worked. Then
+   what the ceremony left behind is read off -- whether the mark lit, and what has the keyboard --
+   and the mark is pressed, the way a visitor presses it. Reports what it saw and judges none of it;
+   a mark that never lit is not pressed and says so. */
+async function pressOnward(page, clock, was) {
+  const api = page.win.interestingStage;
+  const button = page.doc.getElementById('stage-next');
+  const elsewhere = () => {
+    const now = api.current();
+    return !!(now && was && (now.file !== was.file || now.seed !== was.seed));
+  };
+  await clock.advance(6000);
+  const seen = { movedOnByItself: elsewhere(), lit: !button.disabled, focused: focusedId() };
+  if (button.disabled) return Object.assign({ pressed: false, movedOn: seen.movedOnByItself }, seen);
+  button.dispatchEvent({ type: 'click' });
+  for (let i = 0; i < 100 && !elsewhere(); i++) await clock.advance(200);
+  await clock.advance(700); // and the arrival settles, so the round ends on a piece that is live
+  return Object.assign({ pressed: true, movedOn: elsewhere() }, seen);
 }
 
 // Piece after piece through one stage, with the deal bringing a world round again.
@@ -585,16 +623,20 @@ async function rounds(stageDir, worlds, deal, clock) {
     page.modes.length = 0;
     const unset = await playKnobs(page, clock, 'move');
     const finished = look(page);
-    await clock.advance(6000); // the ceremony lingers, vanishes and opens the next
-    const now = api.current();
+    const onward = await pressOnward(page, clock, was);
     report.push({
       playable: true,
       was,
       unset,
       modes: page.modes.slice(),
       wantedWhilePlaying: finished.wanted,
-      movedOn: !!(now && was && (now.file !== was.file || now.seed !== was.seed)),
-      now,
+      litWhilePlaying: finished.nextLit,
+      movedOnByItself: onward.movedOnByItself,
+      litWhenFinished: onward.lit,
+      focusedWhenFinished: onward.focused,
+      pressed: onward.pressed,
+      movedOn: onward.movedOn,
+      now: api.current(),
       look: look(page)
     });
   }
@@ -710,8 +752,8 @@ async function keepHolding(page, clock, world, seed, knob) {
     waited += 50;
   }
   const filled = state();
-  // Held on well past the fill, but inside the ceremony's linger, so the knobs a finished piece
-  // started saying goodbye to are still there to be read.
+  // Held on well past the fill. A finished piece stays on the stage until the way on is pressed,
+  // so the knobs are there to be read whenever this looks.
   await clock.advance(300);
   const kept = state();
   button.dispatchEvent({ type: 'keyup', key: ' ' });

@@ -3835,7 +3835,9 @@ class CompletionAxiomTest(SiteDirTestCase):
         rules = self.rules()
         for rule in ["AXIOM, every run: every world is a piece a visitor can finish",
                      "a fidget toy with a few levers and knobs on it",
-                     "vanishes with some ceremony and the next card in the feed opens in its place",
+                     "it plays its ceremony and lights up the way on",
+                     "the stage never moves on by itself",
+                     "opens the next card in the feed in its place",
                      "every listed world's module exports piece(env)",
                      mi.STAGE_SCRIPT,
                      "choice (two to four options), toggle, range, press, hold, tap, wait",
@@ -3855,13 +3857,8 @@ class CompletionAxiomTest(SiteDirTestCase):
                      "a slider a visitor leaves where it stands counts as set",
                      "a knob nobody set is named rather than silently holding the piece shut",
                      "a hold knob is set the moment its bar fills rather than when the visitor lets go",
-                     "leaves nothing of itself on the stage or still running",
-                     # Issue #80: a piece is the card it was opened from, which the same two
-                     # harnesses hold it to, so a run writing a piece is told as much.
-                     "A piece is also the card it was opened from",
-                     "piece(env) reads env.card",
-                     "the same piece whichever of its world's cards it was opened from",
-                     "a card pressed opens as that card"]:
+                     "a finished piece stays on the stage with the way on lit",
+                     "leaves nothing of itself on the stage or still running"]:
             with self.subTest(rule=rule):
                 self.assertIn(rule, rules)
         self.assertIn(f"{mi.PIECE_MIN_STEPS} to {mi.PIECE_MAX_STEPS} knobs", rules)
@@ -4028,10 +4025,10 @@ class StageTest(unittest.TestCase):
     already stood set every other knob, watched the finale run, and waited on a piece that had no
     way left to finish. These tests run the real js/stage.js, through the elements stage.njk writes
     and a clock they step by hand, and hold it to six things: a world played twice over plays the
-    second time like the first, a slider used where it stands counts as used, a knob nobody set is
-    named rather than left a mystery, a hold knob is set the moment its bar fills rather than when
-    the visitor lets go, a piece that is over leaves nothing of itself behind, and the feature a
-    card opens as is the card that was pressed rather than the world's generic line (issue #80).
+    second time like the first, a finished piece waits for the visitor rather than seeing itself
+    out, a slider used where it stands counts as used, a knob nobody set is named rather than left
+    a mystery, a hold knob is set the moment its bar fills rather than when the visitor lets go,
+    and a piece that is over leaves nothing of itself behind.
     """
 
     @classmethod
@@ -4066,6 +4063,26 @@ class StageTest(unittest.TestCase):
                 self.assertEqual(played["modes"][-5:], ["done", "vanishing", "loading", "arriving", "live"])
         self.assertEqual(result["completes"], len(deal))
 
+    def test_a_finished_piece_waits_for_the_visitor_rather_than_showing_itself_out(self):
+        # Issue #78: the stage used to see itself out on a timer -- the ceremony, a linger of a
+        # second or so, and the next piece whether anyone was ready for it or not. Now the ceremony
+        # ends by lighting the way on in the lower right and the stage stops there. Each round of
+        # the scenario waits six seconds of its own clock, five times that linger, and the piece it
+        # finished is still on the stage; what moves the stage on is the press and nothing else.
+        deal = ["toy.html", "other.html", "toy.html"]
+        for played in self.scenario("rounds", deal=deal)["rounds"]:
+            with self.subTest(world=played["was"]["file"], seed=played["was"]["seed"]):
+                self.assertFalse(played["litWhilePlaying"], "the way on was lit before the piece was over")
+                self.assertFalse(played["movedOnByItself"],
+                                 "the stage opened the next piece with nobody pressing anything")
+                self.assertTrue(played["litWhenFinished"], "the ceremony ended and the way on never lit")
+                # And it takes the keyboard, so the visitor who finished the piece with a key can
+                # go on with one: a mark pinned in a corner is no use to someone who cannot see it.
+                self.assertEqual(played["focusedWhenFinished"], "stage-next",
+                                 "the way on lit and the keyboard was left wherever it was")
+                self.assertTrue(played["pressed"], "there was nothing lit to press")
+                self.assertTrue(played["movedOn"], "the way on was pressed and nothing followed")
+
     def test_a_slider_the_visitor_leaves_where_it_is_still_counts_as_set(self):
         # A slider opens with an answer already on it -- which is why ctx.value(id) is the piece's
         # from the first frame -- so pressing it and letting go where it stands is an answer, and
@@ -4075,6 +4092,9 @@ class StageTest(unittest.TestCase):
         self.assertTrue(result["ranges"], "the check is worth nothing without a slider")
         self.assertEqual(result["unset"], [], "the slider was used and the stage did not take it")
         self.assertTrue(result["finished"], "every knob was set and the piece never finished")
+        # And it is still there to look at: nothing takes a finished piece away but the way on.
+        self.assertEqual(result["look"]["mode"], "done", "the finished piece did not stay on the stage")
+        self.assertTrue(result["look"]["nextLit"], "the finished piece offered no way on")
 
     def test_a_knob_nobody_set_is_named_rather_than_left_a_mystery(self):
         # The other way round: a knob genuinely untouched is genuinely unset, and the stage must not
@@ -4087,6 +4107,9 @@ class StageTest(unittest.TestCase):
         self.assertTrue(result["wanted"], "the stage said nothing about the knob it was waiting on")
         self.assertIn("the pace", result["wanted"])
         self.assertNotIn("done", result["modes"])
+        # The way on is there the whole time and dim the whole time: an unfinished piece is not a
+        # piece to be let out of, and the mark that says so never moves (issue #78).
+        self.assertFalse(result["look"]["nextLit"], "the way on lit over a piece nobody had finished")
 
     def test_a_hold_is_set_when_its_bar_fills_and_not_when_the_visitor_lets_go(self):
         # Issue #74: the holding is the answer, so a visitor who presses the knob, watches the bar
@@ -4139,6 +4162,11 @@ class StageTest(unittest.TestCase):
         self.assertFalse(left["doneShown"])
         self.assertEqual(left["sceneLabel"], "the scene", "the scene still answers to the piece that is gone")
         self.assertEqual(left["aspect"], "", "the scene kept the shape of the piece that is gone")
+        # The way on is the one thing that is lit rather than torn down, because the world opened
+        # over the first piece has nothing to play: a stage with nothing to finish is never a dead
+        # end, which is the job "skip this one" used to do before the way on took it over.
+        self.assertEqual(left["mode"], "empty")
+        self.assertTrue(left["nextLit"], "a world with nothing to play offered no way on")
 
     def test_a_feature_is_the_card_that_was_pressed(self):
         # The alignment axiom (issue #80). A card is a seed, the configuration rolled from it and
@@ -4420,6 +4448,7 @@ class NavTest(unittest.TestCase):
         ".persona": "the persona, upper right",
         ".persona-sheet-fallback[open]": "the persona's sheet, only while it is open",
         ".are-you-sure-fallback[open]": "the shared confirmation, only while it is asked",
+        ".stage-next": "the stage's way on, only on a page with a stage and only while a piece is on it",
     }
 
     built = None
@@ -4684,10 +4713,11 @@ class NavTest(unittest.TestCase):
 
     def test_nothing_but_the_logo_and_the_persona_floats_over_a_page(self):
         # The regression issue #64 is about, in both halves. What the site's own stylesheets pin
-        # over the page is a closed list -- the two marks, the parts of them, and the overlays that
-        # are only up while something is open -- and everything the fixed files pin is hidden where
-        # they pinned it and offered in the constellation instead, so at rest a visitor sees two
-        # things floating and no more.
+        # over the page is a closed list -- the two marks, the parts of them, the overlays that are
+        # only up while something is open, and the stage's own way on, which a page without a stage
+        # does not have at all -- and everything the fixed files pin is hidden where they pinned it
+        # and offered in the constellation instead, so at rest a visitor sees two things floating
+        # and no more.
         floats = self.floated()
         self.assertEqual(sorted(floats), sorted(self.FLOATS),
                          f"the list of things pinned over the page has changed: {floats}")
@@ -5410,11 +5440,12 @@ class RealSiteTest(unittest.TestCase):
     def test_the_stage_plays_the_site_as_committed(self):
         # The other half of the completion axiom, on the site as committed: the real js/stage.js,
         # run through a stub browser (issue #60). A world is dealt, another is played, the first is
-        # dealt again, and every round has to finish and open the next; a slider a visitor leaves
-        # where it stands has to count as used; a knob nobody set has to be named rather than
-        # silently holding the piece shut; a hold has to be set when its bar fills rather than when
-        # the visitor lets go (issue #74); a piece that is over has to leave nothing running; and a
-        # card pressed has to open as that card rather than as the world's generic line (issue #80).
+        # dealt again, and every round has to finish and -- once the visitor presses the way on,
+        # because nothing advances by itself any more (issue #78) -- open the next; a slider a
+        # visitor leaves where it stands has to count as used; a knob nobody set has to be named
+        # rather than silently holding the piece shut; a hold has to be set when its bar fills
+        # rather than when the visitor lets go (issue #74); and a piece that is over has to leave
+        # nothing running.
         needs_the_stage_harness(self)
         worlds = mi.listed_worlds(self.site)
         self.assertGreaterEqual(len(worlds), 10, "the check is worth nothing on a few worlds")
@@ -5427,7 +5458,12 @@ class RealSiteTest(unittest.TestCase):
             with self.subTest(world=played["was"]["file"], seed=played["was"]["seed"]):
                 self.assertTrue(played["playable"])
                 self.assertEqual(played["unset"], [])
-                self.assertTrue(played["movedOn"], "the stage never opened the next piece")
+                self.assertFalse(played["movedOnByItself"],
+                                 "the stage opened the next piece with nobody pressing anything")
+                self.assertTrue(played["litWhenFinished"], "the ceremony ended and the way on never lit")
+                self.assertEqual(played["focusedWhenFinished"], "stage-next",
+                                 "the way on lit and the keyboard was left wherever it was")
+                self.assertTrue(played["movedOn"], "the way on was pressed and nothing followed")
         used = report["sliderUsed"]["result"]
         self.assertTrue(used["ranges"], "no world the stage opened had a slider to check")
         self.assertEqual(used["unset"], [], f"{used['world']}: a slider used where it stood was not taken")
@@ -5471,6 +5507,45 @@ class RealSiteTest(unittest.TestCase):
                 ratio = float(carried[when]["aspect"])
                 self.assertGreaterEqual(ratio, 0.6)
                 self.assertLessEqual(ratio, 1.9)
+
+    def test_a_finished_piece_hands_the_visitor_the_way_on(self):
+        # Issue #78: nothing moves on by itself, so every piece ends on one mark the visitor
+        # presses. Four things make that trustworthy, and all four are read off the site as
+        # committed. It is in the stage's own markup, so every world page and the threshold have
+        # it, and it starts out dim; it is not inside #stage-inner, whose transform during the
+        # vanish is what a fixed child would be positioned against, so it cannot drift as the
+        # piece scales away; the stylesheet pins it to one corner of the viewport rather than
+        # laying it out with the knobs, so it is in the same place whatever shape the piece is;
+        # and "skip this one" is gone from the whole site, the feed being where a visitor goes
+        # for a world of their own choosing.
+        stage = self.source[mi.STAGE_INCLUDE]
+        self.assertIn("id='stage-next'", stage, "the stage writes no way on")
+        mark = stage[stage.index("<button type='button' class='stage-next'"):]
+        mark = mark[:mark.index("</button>")]
+        self.assertIn("disabled", mark, "the way on starts out lit")
+        self.assertIn("aria-label=", mark, "a mark with no words needs a name")
+        self.assertNotIn(">Next<", mark, "the mark is a double caret, not a word")
+        inner = stage[stage.index("<div class='stage-inner'"):stage.index("id='stage-next'")]
+        self.assertEqual(inner.count("<div"), inner.count("</div>"),
+                         "the way on is inside #stage-inner, which the vanish transforms")
+        css = self.source[f"{mi.SASS_DIR}/_stage.scss"]
+        pinned = css[css.index(".stage-next {"):]
+        pinned = pinned[:pinned.index("}")]
+        for rule in ["position: fixed", "right: var(--nav-inset)", "bottom: var(--nav-inset)"]:
+            with self.subTest(rule=rule):
+                self.assertIn(rule, pinned, "the way on is not pinned to the lower right")
+        for rel, content in sorted(self.source.items()):
+            if rel.endswith((".html", ".njk", ".scss", ".js")) and rel not in mi.FIXED_FILES:
+                with self.subTest(rel=rel):
+                    self.assertNotIn("stage-skip", content, "'skip this one' is still here")
+                    self.assertNotIn("skip this one", content, "'skip this one' is still here")
+        # And the stage runs it: lit when the ceremony is over, and dim again with every teardown.
+        script = self.source[mi.STAGE_SCRIPT]
+        self.assertIn("lightTheWayOn(true)", script, "nothing lights the way on when a piece is over")
+        self.assertIn("dimTheWayOn()", script, "nothing dims it again")
+        self.assertIn("ui.onward.focus(", script, "the way on never takes the keyboard")
+        finish = script.split("function finish() {", 1)[1].split("\n}", 1)[0]
+        self.assertNotIn("next()", finish, "the stage still shows itself out when a piece is finished")
 
     def test_every_world_page_is_the_stage(self):
         # A world page is the stage and nothing else, so what a visitor opens is a piece, not a
