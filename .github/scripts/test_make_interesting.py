@@ -2008,6 +2008,49 @@ class LocalStateStoreTest(unittest.TestCase):
         self.assertEqual(alone["cleared"]["confirmed"], 1)
         self.assertEqual(alone["cleared"]["keys"], [], "and saying yes clears it")
 
+    def test_the_menu_lends_its_panel_to_a_shell_that_has_a_better_place_for_it(self):
+        # Issue #66: the state interface belongs in a modal in the middle of the screen, and the
+        # shell has the lightbox to put it in. So this file offers the panel rather than the shell
+        # reproducing it -- one state menu on the site, wherever it is being held -- and offers it
+        # as a request it can refuse, because this is the fixed file and js/site.js is not.
+        seen = self.seen["presentedInAHost"]
+        offered, presented = seen["offered"], seen["presented"]
+        self.assertTrue(offered["menu"], "the menu is reachable from the one global")
+        self.assertTrue(offered["samePanel"], "and it is the panel this file built")
+        self.assertEqual(offered["present"], "function")
+        self.assertIsNone(offered["withoutAHost"], "nowhere to put it is not somewhere")
+        self.assertEqual(presented["release"], "function", "and a way to give it back")
+        self.assertTrue(presented["inHost"], "the panel is moved into the host")
+        self.assertFalse(presented["leftTheCorner"], "and is no longer in the corner")
+        self.assertFalse(presented["panelHidden"], "it is opened, not merely moved")
+        self.assertEqual(presented["dressed"], "",
+                         "and dressed as a modal, by this file's own styles")
+        self.assertEqual(presented["ariaModal"], "true", "WCAG 4.1.2: it says it is one")
+        self.assertEqual(presented["openExpanded"], "true")
+        self.assertEqual(presented["filled"], self.SKY, "with the whole document ready to copy")
+        self.assertTrue(presented["focusedField"], "and the text box has the focus")
+        self.assertEqual(presented["buttons"], ["copy", "replace mine", "clear", "close"],
+                         "the same contents and the same words: only the framing changed")
+        # The ways out are the ways out wherever it is being held -- and a press inside the panel
+        # is not one of them, which it would have been while "outside" meant "outside the corner".
+        self.assertFalse(seen["afterPressingInside"], "a press in the panel closed it")
+        self.assertTrue(seen["afterPressingOutside"])
+        self.assertTrue(seen["afterEscape"])
+        # Handed back: closed, undressed, and exactly where it was built.
+        given = seen["given"]
+        self.assertTrue(given["panelHidden"])
+        self.assertTrue(given["home"], "back in the corner it came from")
+        self.assertFalse(given["inHost"])
+        self.assertIsNone(given["dressed"])
+        self.assertIsNone(given["ariaModal"])
+        self.assertEqual(given["openExpanded"], "false")
+        self.assertEqual(seen["stillHome"], 1, "and there once, however often it is handed back")
+        # And the corner menu is still the corner menu, which is the whole point of the panel
+        # being lent rather than taken: a shell that never asks leaves a visitor a way to their
+        # own state, and no run can write that away.
+        self.assertFalse(seen["cornerStillOpensIt"]["panelHidden"])
+        self.assertTrue(seen["cornerStillOpensIt"]["home"])
+
     def test_a_browser_that_stores_nothing_says_so_when_the_menu_opens(self):
         self.assertIn("stores nothing", self.seen["menuWithoutStorage"]["note"])
 
@@ -4218,7 +4261,7 @@ class NavTest(unittest.TestCase):
     # The ids the three pieces agree on: the shell writes them, js/site.js finds them, and the
     # harness builds the same tree. A rename that touched only one of the three would leave the
     # nav quietly inert, which is exactly what this catches.
-    IDS = ["sparknav", "sparknav-logo", "sparknav-veil",
+    IDS = ["sparknav", "sparknav-logo", "sparknav-veil", "sparknav-modal",
            "sparknav-reading", "sparknav-reading-go", "sparknav-reading-label",
            "sparknav-participate", "sparknav-participate-open",
            "sparknav-cookies", "sparknav-cookies-open", "sparknav-state", "sparknav-state-open",
@@ -4233,6 +4276,7 @@ class NavTest(unittest.TestCase):
         ".skip-link": "off the top of the screen until a keyboard focuses it",
         ".sparknav": "the sparkles logo, upper left",
         ".sparknav-veil": "the lightbox, only while the constellation is open",
+        ".sparknav-modal": "the middle of the lightbox, only while it holds the state interface",
         ".persona": "the persona, upper right",
         ".persona-sheet-fallback[open]": "the persona's sheet, only while it is open",
         ".are-you-sure-fallback[open]": "the shared confirmation, only while it is asked",
@@ -4432,6 +4476,40 @@ class NavTest(unittest.TestCase):
         # And the tap target every chip carries, which no layout may shrink below.
         self.assertGreaterEqual(len(re.findall(r"min-height: 44px", css)), 2)
 
+    def test_every_page_holds_the_middle_of_the_lightbox_open_for_the_state_interface(self):
+        # Issue #66: the state interface is a modal inside the lightbox, so the shell writes the
+        # box it is hosted in -- inside the <details>, so the veil, the inert page and the focus
+        # trap are the ones already up, and hidden until the option is picked.
+        for page in self.pages():
+            with self.subTest(page=page):
+                nav = self.site[page]
+                nav = nav[nav.index("<details class='sparknav'"):nav.index("</details>")]
+                self.assertIn("<div class='sparknav-modal' id='sparknav-modal' hidden></div>", nav)
+        css = self.source["_sass/_nav.scss"]
+        box = css[css.index(".sparknav-modal {"):css.index(".sparknav-modal[hidden]")]
+        self.assertIn("position: fixed", box)
+        self.assertIn("inset: 0", box)
+        self.assertIn("place-items: center", box, "it centres what it holds")
+        self.assertIn("overflow: auto", box, "a viewport too short for it scrolls")
+        self.assertIn("display: none", css[css.index(".sparknav-modal[hidden]"):],
+                      "a hidden grid is still a grid")
+        # And the constellation it replaces is put away by the same attribute, over both layouts.
+        self.assertIn("html[data-nav] .sparknav-sky[hidden]", css)
+
+    def test_the_shell_asks_the_state_menu_for_its_panel_by_the_one_agreed_name(self):
+        # The contract across the fixed file and the shell: js/state.js offers
+        # window.interestingState.menu.present(host) and js/site.js is what asks. A rename on
+        # either side would leave the option falling back to the corner menu for ever, which is
+        # exactly the quiet regression the ids check catches for the markup.
+        offered = self.source[mi.STATE_SCRIPT]
+        self.assertIn("window.interestingState.menu = { panel: panel, present: present };", offered)
+        shell = self.source["js/site.js"]
+        self.assertIn("store.menu", shell, "the shell has to ask the store it already holds")
+        self.assertIn("typeof menu.present === 'function'", shell, "and check before it does")
+        self.assertIn("menu.present(nav.modal)", shell)
+        harness = (Path(mi.__file__).resolve().parent / "nav_harness.mjs").read_text()
+        self.assertIn("present(host)", harness, "the harness has to stand in for it")
+
     def test_the_lightbox_dims_blurs_and_stills_the_page_behind_it(self):
         css = self.source["_sass/_nav.scss"]
         veil = css[css.index(".sparknav-veil {"):css.index("@keyframes sparknav-veil")]
@@ -4500,21 +4578,134 @@ class NavTest(unittest.TestCase):
         self.assertIn("state · 3 kept", seen["options"])
         pressed = self.seen()["whenAnAdoptedOptionIsPressed"]
         self.assertEqual(pressed["cookies"]["corner"], 1, "it pressed the banner's own button")
-        self.assertEqual(pressed["state"]["corner"], 1, "and the state menu's own button")
         self.assertEqual(pressed["steer"]["corner"], 1, "and the link js/participate.js drew")
         # Which is the whole of how the invitation works: its destination, its new tab and the
         # query that shapes the issue are that file's, and none of them is reproduced in the shell.
         self.assertEqual(pressed["steer"]["target"], "_blank")
         self.assertIn("/issues/new", pressed["steer"]["href"])
         self.assertFalse(pressed["steer"]["inert"], "the lightbox has to let go of it first")
-        for name in ("steer", "cookies", "state"):
+        for name in ("steer", "cookies"):
             with self.subTest(pressed=name):
                 self.assertFalse(pressed[name]["open"], "it closed the lightbox out of the way")
-        # Hiding a button means its own dialog cannot hand the focus back to it, so the logo takes
-        # it: on the way out, and again when the state menu closes (WCAG 2.4.3 Focus Order).
-        self.assertGreaterEqual(pressed["state"]["focusedLogo"], 1)
-        self.assertEqual(pressed["focus"]["afterClose"], pressed["focus"]["whileOpen"] + 1,
-                         "the logo takes the focus back when the menu closes, and not before")
+        # The three are answered for differently, because two of them hand the visitor to a dialog
+        # of somebody else's and the third is a thing to do here (issue #66): the state menu's own
+        # panel -- the very element it built, never a copy of it -- is hosted in the lightbox,
+        # which stays up around it rather than getting out of its way.
+        self.assertTrue(pressed["state"]["open"], "the lightbox keeps the state interface")
+        self.assertEqual(pressed["state"]["panelHost"], "sparknav-modal")
+        self.assertEqual(pressed["state"]["corner"], 0, "its button is not pressed any more")
+        self.assertFalse(pressed["state"]["panelHidden"])
+
+    def test_the_state_interface_takes_the_lightbox_over_without_dropping_it(self):
+        # Issue #66, steps 2 and 3: the constellation gives way to the state interface and the
+        # lightbox around it is not torn down and raised again -- "zero jitter/glitch/flicker".
+        seen = self.seen()["whenTheStateInterfaceTakesOver"]
+        before, taken = seen["before"], seen["taken"]
+        self.assertEqual(before["lightbox"], "nav")
+        self.assertFalse(before["sky"], "the constellation is what the lightbox holds first")
+        self.assertTrue(before["modal"], "and nothing is hosted yet")
+        # The swap: one attribute write, never a removal in between, so every rule keyed on the
+        # lightbox being up stays matched throughout.
+        writes = seen["lightboxWrites"]
+        self.assertEqual(writes[:writes.index(None)] if None in writes else writes,
+                         ["nav", "state"], "the lightbox came down between the two")
+        self.assertEqual(taken["lightbox"], "state")
+        self.assertTrue(taken["open"], "the <details> never closed")
+        self.assertTrue(taken["veil"], "and the veil is the same veil, still up")
+        self.assertTrue(taken["sky"], "the constellation is put away")
+        self.assertFalse(taken["modal"], "and the middle of the lightbox is holding the panel")
+        self.assertEqual(taken["panelHost"], "sparknav-modal")
+        self.assertFalse(taken["panelHidden"], "opened, rather than merely moved")
+        self.assertTrue(taken["presented"], "dressed as a modal by its own file")
+        self.assertEqual(taken["ariaModal"], "true", "and announced as one")
+        self.assertTrue(taken["openedOnScreen"],
+                        "the host was still hidden when the panel opened in it, so the focus it "
+                        "puts in its own text landed nowhere")
+        # Everything else about the lightbox carries on exactly as it was.
+        self.assertEqual(taken["ranWhileOpen"], 0, "the page's frame loop is still held")
+        for behind in ["main-content", "page", "persona", "site-meta"]:
+            with self.subTest(behind=behind):
+                self.assertTrue(taken["aside"][behind]["inert"], f"{behind} came back to life")
+                self.assertEqual(taken["aside"][behind]["ariaHidden"], "true")
+        self.assertFalse(taken["aside"]["sparknav"]["inert"],
+                         "and the menu hosting it is the one live thing")
+
+    def test_closing_the_state_interface_closes_the_lightbox_and_gives_the_page_back(self):
+        # Step 4: there is no way back to the constellation. Closing the panel -- by its own
+        # "close", which is all the shell sees -- returns the visitor to the page.
+        closed = self.seen()["whenTheStateInterfaceTakesOver"]["closed"]
+        self.assertIsNone(closed["lightbox"])
+        self.assertFalse(closed["open"], "the <details> closed with it")
+        self.assertTrue(closed["modal"], "the host is empty and put away again")
+        self.assertFalse(closed["sky"], "and the constellation is there for the next press")
+        self.assertEqual(closed["panelHost"], "site-meta",
+                         "the panel is back in the corner its own file built it in")
+        self.assertFalse(closed["presented"], "and undressed")
+        self.assertIsNone(closed["ariaModal"])
+        self.assertTrue(closed["panelHidden"])
+        self.assertEqual(closed["ranOnClose"], 1, "a held frame is run, not dropped")
+        self.assertEqual(closed["focusedLogo"], 1, "the focus comes back to the logo")
+        for name, state in closed["aside"].items():
+            with self.subTest(element=name):
+                self.assertFalse(state["inert"])
+                self.assertEqual(state["ariaHidden"], "true" if name == "cc-main" else None)
+
+    def test_escape_and_a_press_outside_the_state_interface_close_it(self):
+        seen = self.seen()["whenTheStateInterfaceIsDismissed"]
+        for how in ("escape", "pressed"):
+            with self.subTest(how=how):
+                self.assertIsNone(seen[how]["lightbox"], "the lightbox goes with the modal")
+                self.assertFalse(seen[how]["open"])
+                self.assertTrue(seen[how]["panelHidden"])
+                self.assertEqual(seen[how]["panelHost"], "site-meta")
+                self.assertEqual(seen[how]["focusedLogo"], 1)
+        # But a question floating over it answers Escape itself: dismissing "are you sure you want
+        # to clear everything?" is not dismissing the interface that asked it.
+        asking = seen["whileAsking"]
+        self.assertEqual(asking["lightbox"], "state")
+        self.assertFalse(asking["panelHidden"])
+        self.assertEqual(asking["panelHost"], "sparknav-modal")
+
+    def test_the_state_interfaces_own_question_can_still_be_answered(self):
+        # Its "clear" opens the shared "are you sure you want to ______?" dialog, and now it opens
+        # it from inside the lightbox. That dialog is a child of the body, built the first time
+        # anything on the page asks, so the lightbox may have put it aside long before -- and an
+        # unanswerable question is worse than no question (see the destructive-caution axiom).
+        seen = self.seen()["whenTheStateInterfaceAsksAQuestion"]
+        self.assertTrue(seen["putAside"]["inert"], "the lightbox did put it aside, as it should")
+        self.assertTrue(seen["question"]["open"])
+        self.assertFalse(seen["question"]["inert"], "and the question came back to life to be asked")
+        self.assertIsNone(seen["question"]["ariaHidden"])
+        self.assertGreaterEqual(seen["question"]["focusedCancel"], 1,
+                                "the focus starts on cancel, as it does everywhere")
+        # And the interface that asked it is untouched behind the question.
+        self.assertEqual(seen["stillUp"]["lightbox"], "state")
+        self.assertFalse(seen["stillUp"]["panelHidden"])
+
+    def test_a_keyboard_reaches_all_of_the_state_interface_and_stays_inside_it(self):
+        # The page behind is inert, so the wrap at either end is what keeps a keyboard in the
+        # modal -- and the text box holding the document is as much of it as the buttons.
+        seen = self.seen()["whenTabReachesTheEndOfTheStateInterface"]
+        self.assertEqual(seen["reachable"][0], "summary", "the logo is still the way out")
+        self.assertIn("textarea", seen["reachable"])
+        for control in ["button:copy", "button:replace mine", "button:clear", "button:close"]:
+            with self.subTest(control=control):
+                self.assertIn(control, seen["reachable"])
+        self.assertTrue(seen["forward"]["prevented"])
+        self.assertTrue(seen["forward"]["toTheLogo"], "Tab wraps to the start of the menu")
+
+    def test_the_state_option_falls_back_to_the_corner_menu_with_nothing_to_host_it(self):
+        # js/state.js is the fixed file and js/site.js is a run's to rewrite, so the asking is the
+        # shell's and the answer is the store's: a store that offers no panel leaves the behaviour
+        # the constellation had before issue #66, which is a menu that still opens.
+        seen = self.seen()["withoutAHostedStateInterface"]
+        self.assertIsNone(seen["fallen"]["lightbox"], "the lightbox gets out of the way instead")
+        self.assertFalse(seen["fallen"]["open"])
+        self.assertEqual(seen["fallen"]["corner"], 1, "and the corner button is pressed")
+        self.assertEqual(seen["fallen"]["panelHost"], "site-meta")
+        # Hiding that button means its own menu cannot hand the focus back to it, so the logo takes
+        # it when the menu closes, and not before (WCAG 2.4.3 Focus Order).
+        self.assertEqual(seen["focus"]["afterClose"], seen["focus"]["whileOpen"] + 1)
 
     def test_an_affordance_that_was_never_drawn_is_not_offered(self):
         # A copy of the site with no measurement id draws no consent button, so there is nothing to

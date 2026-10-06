@@ -1,34 +1,9 @@
 /* The kinetic floor: heavy blocks, a lot of them, nothing breakable. As a card it is a heap of
-   blocks and the damage report (paint, spark); as a piece it is a floor to kick into a riot, a
-   kicker to wind up and let fly, or a heap to let settle against whichever wall is down. See
-   js/feed.js for what a module is and js/stage.js for what a piece is.
-
-   A card and the feature it opens as are one floor: the spark puts the blocks it counted, and which
-   way was down, on its spec as `of`, and the piece opens that floor -- the same heap, gravity where
-   the card had it. */
-
-// The card this piece was opened from, in the floor's own terms: how many blocks it counted, which
-// way was down, and the damage report it printed, or null for a piece nobody pressed (js/stage.js
-// hands the card over as env.card.of).
-function pressed(env) {
-  const was = env.card && env.card.of;
-  const blocks = was ? Number(was.blocks) : NaN;
-  if (!isFinite(blocks)) return null;
-  const read = (value, fallback) => (isFinite(Number(value)) ? Number(value) : fallback);
-  return {
-    blocks: Math.max(6, Math.min(28, Math.round(blocks))),
-    flipped: !!was.flipped,
-    impacts: read(was.impacts, 0),
-    fastest: read(was.fastest, 60)
-  };
-}
-
-// The bounce a card's own damage report implies: the floor that recorded the fastest block is the
-// springiest one, so a piece opens with its dial where the card's figures put it.
-function bounceFrom(was, low, high) {
-  const at = Math.round(((was.fastest - 60) / 1340) * 100);
-  return Math.max(low, Math.min(high, at));
-}
+   blocks and the damage report, or a domino chain with one marked gap (paint, spark); as a piece
+   it is a floor to kick into a riot, a kicker to wind up and let fly, a heap to let settle against
+   whichever wall is down, or a domino-gap experiment to configure, predict and tip. The domino
+   toy passes a push on when a falling domino reaches the next upright; it models reach, not
+   impact energy. See js/feed.js for what a module is and js/stage.js for what a piece is. */
 
 const LINES = [
   'Shove something. Nothing here is fragile.',
@@ -608,7 +583,268 @@ function heap(env) {
   };
 }
 
+const DOMINO_HEIGHTS = [
+  { label: 'ordinary', value: 1 },
+  { label: 'a little taller', value: 1.3 },
+  { label: 'double height', value: 2 }
+];
+const DOMINO_GUESSES = [
+  { label: 'stops at the gap', value: 'stop' },
+  { label: 'crosses the gap', value: 'cross' }
+];
+const DOMINO_VIEW = { density: 1, scale: 1 };
+
+function dealsDominoes(env) {
+  return env.seed % 3 === 0;
+}
+
+function dominoPlan(env) {
+  const n = env.int(8, 12);
+  return {
+    n,
+    gapAt: env.int(2, n - 4),
+    gap: env.pick([40, 75, 105, 135]),
+    thickness: 0.12,
+    fall: env.pick([0.48, 0.56, 0.64]),
+    heights: Array.from({ length: n }, () => 0.9 + env.rnd() * 0.2),
+    gaps: Array.from({ length: n - 1 }, () => 0.24 + env.rnd() * 0.1)
+  };
+}
+
+function dominoTitle(spec) {
+  return spec.n + ' dominoes, one gap';
+}
+
+function dominoChain(spec, gap, height) {
+  const nodes = spec.heights.map((h, i) => ({
+    x: 0, height: h * (i === spec.gapAt ? height : 1), at: null
+  }));
+  const gaps = spec.gaps.slice();
+  gaps[spec.gapAt] = spec.heights[spec.gapAt] * gap / 100;
+  for (let i = 1; i < nodes.length; i++) {
+    nodes[i].x = nodes[i - 1].x + spec.thickness + gaps[i - 1];
+  }
+  nodes[0].at = 0;
+  let fallen = 1;
+  for (let i = 0; i < nodes.length - 1; i++) {
+    const a = nodes[i];
+    const b = nodes[i + 1];
+    if (gaps[i] >= a.height) break;
+    // The falling edge must reach the next upright and meet it below its top. With angle
+    // proportional to time squared, this gives the instant that passes the push on.
+    const angle = Math.max(Math.asin(gaps[i] / a.height), Math.atan2(gaps[i], b.height));
+    b.at = a.at + spec.fall * Math.sqrt(angle / (Math.PI / 2));
+    fallen += 1;
+  }
+  return {
+    nodes, gaps, fallen,
+    crossed: nodes[spec.gapAt + 1].at !== null,
+    duration: nodes[fallen - 1].at + spec.fall + 0.25
+  };
+}
+
+function dominoOutcome(spec, chain) {
+  return chain.crossed
+    ? 'All ' + spec.n + ' fell. The push crossed the gap.'
+    : chain.fallen + ' fell and ' + (spec.n - chain.fallen) + ' still stand. The push stopped at the gap.';
+}
+
+function dominoScene(g, w, h, c, spec, chain, time, pushed, v) {
+  const k = c.colors;
+  const pad = Math.min(w, h) * 0.06;
+  const last = chain.nodes[spec.n - 1];
+  const span = last.x + last.height + spec.thickness;
+  const tallest = Math.max(...chain.nodes.map((d) => d.height));
+  const u = Math.min((w - pad * 2) * Math.min(1, 0.9 * v.scale) / span, h * 0.6 / tallest);
+  const left = (w - span * u) / 2;
+  const floorY = h * 0.73;
+  const size = Math.max(10, Math.round(Math.min(w, h) * 0.045));
+  const grad = g.createLinearGradient(0, 0, 0, h);
+  grad.addColorStop(0, k.bg2);
+  grad.addColorStop(1, k.bg);
+  g.fillStyle = grad;
+  g.fillRect(0, 0, w, h);
+  g.fillStyle = c.mix(k.bg2, k.muted, 0.2);
+  g.fillRect(left - u * 0.12, floorY, (span + 0.24) * u, u * 0.12);
+  g.strokeStyle = k.muted;
+  g.lineWidth = 1;
+  g.beginPath();
+  g.moveTo(left - u * 0.12, floorY);
+  g.lineTo(left + (span + 0.12) * u, floorY);
+  g.stroke();
+
+  const bridge = chain.nodes[spec.gapAt];
+  const bx = left + bridge.x * u;
+  const reach = bridge.height * u;
+  const dots = Math.max(6, Math.round(12 * v.density));
+  g.fillStyle = c.alpha(k.accent2, 0.65);
+  for (let i = 0; i <= dots; i++) {
+    const a = -Math.PI / 2 + i / dots * Math.PI / 2;
+    g.beginPath();
+    g.arc(bx + Math.cos(a) * reach, floorY + Math.sin(a) * reach, Math.max(0.7, u * 0.012), 0, Math.PI * 2);
+    g.fill();
+  }
+
+  for (let i = chain.nodes.length - 1; i >= 0; i--) {
+    const d = chain.nodes[i];
+    const f = !pushed || d.at === null ? 0 : Math.max(0, Math.min(1, (time - d.at) / spec.fall));
+    const angle = f * f * Math.PI / 2;
+    const x = left + d.x * u;
+    const bw = spec.thickness * u;
+    const bh = d.height * u;
+    const cx = x - bw / 2 * Math.cos(angle) + bh / 2 * Math.sin(angle);
+    const cy = floorY - bw / 2 * Math.sin(angle) - bh / 2 * Math.cos(angle);
+    block(g, cx, cy, bw, bh, angle, i === spec.gapAt ? k.accent2 : c.mix(k.bg2, k.accent, 0.8), c.alpha(k.fg, 0.85));
+    if (i === spec.gapAt) {
+      g.save();
+      g.translate(x, floorY);
+      g.rotate(angle);
+      g.strokeStyle = k.bg;
+      g.lineWidth = Math.max(1, u * 0.018);
+      g.beginPath();
+      for (let j = 1; j <= 4; j++) {
+        g.moveTo(-bw * 0.85, -bh * j / 5);
+        g.lineTo(-bw * 0.15, -bh * j / 5);
+      }
+      g.stroke();
+      g.restore();
+    }
+  }
+
+  g.font = '500 ' + size + 'px system-ui, sans-serif';
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.fillStyle = k.fg;
+  chain.nodes.forEach((d, i) => {
+    g.fillText(String(i + 1), left + (d.x - spec.thickness / 2) * u, floorY + u * 0.28);
+  });
+  const gapEnd = left + (chain.nodes[spec.gapAt + 1].x - spec.thickness) * u;
+  const y = floorY + u * 0.52;
+  g.strokeStyle = k.accent2;
+  g.lineWidth = 1.5;
+  g.beginPath();
+  g.moveTo(bx, y - u * 0.08);
+  g.lineTo(bx, y);
+  g.lineTo(gapEnd, y);
+  g.lineTo(gapEnd, y - u * 0.08);
+  g.stroke();
+  g.fillStyle = k.accent2;
+  g.fillText('gap', (bx + gapEnd) / 2, Math.min(h - size, y + size));
+
+  if (!pushed) {
+    const x = left + chain.nodes[0].x * u;
+    const y0 = Math.max(size, floorY - chain.nodes[0].height * u - u * 0.25);
+    g.strokeStyle = k.fg;
+    g.beginPath();
+    g.moveTo(x - u * 0.1, y0);
+    g.lineTo(x + u * 0.45, y0);
+    g.moveTo(x + u * 0.3, y0 - u * 0.1);
+    g.lineTo(x + u * 0.45, y0);
+    g.lineTo(x + u * 0.3, y0 + u * 0.1);
+    g.stroke();
+  }
+}
+
+function dominoPreview(g, w, h, env, spec) {
+  const chain = dominoChain(spec, spec.gap, 1);
+  const v = env.variant;
+  dominoScene(g, w, h, env, spec, chain, chain.duration * v.turn, v.turn > 0, v);
+}
+
+function dominoPiece(env) {
+  const spec = dominoPlan(env);
+  const s = {
+    gap: spec.gap, height: 1, prediction: '', pushed: false, time: 0,
+    waited: false, said: '', chain: dominoChain(spec, spec.gap, 1)
+  };
+  function draw(c) {
+    dominoScene(c.g, c.w, c.h, c, spec, s.chain, s.time, s.pushed, DOMINO_VIEW);
+  }
+  function phase() {
+    if (!s.pushed) return { id: 'standing', text: 'Everything stands. The dotted arc shows how far the striped domino can reach.' };
+    if (s.time >= s.chain.duration) return { id: 'finished', text: dominoOutcome(spec, s.chain) };
+    const at = s.chain.nodes[spec.gapAt].at;
+    if (s.chain.crossed && s.time >= s.chain.nodes[spec.gapAt + 1].at) {
+      return { id: 'crossed', text: 'Across the gap. The push is travelling through the other side.' };
+    }
+    if (!s.chain.crossed && s.time >= at + spec.fall) {
+      return { id: 'stopped', text: dominoOutcome(spec, s.chain) };
+    }
+    return s.time >= at
+      ? { id: 'gap', text: 'The striped domino is falling toward the gap.' }
+      : { id: 'approaching', text: 'The push is travelling toward the striped domino.' };
+  }
+  function say(c, lead) {
+    const p = phase();
+    s.said = p.id;
+    c.status((lead ? lead + ' ' : '') + p.text);
+  }
+  return {
+    title: dominoTitle(spec),
+    brief: 'Set the marked gap and the height of domino ' + (spec.gapAt + 1) + ', predict whether the push will cross, then tip the first domino and watch. Any prediction works; in this toy, reaching the next domino carries the push on.',
+    aspect: '16 / 10',
+    steps: [
+      { id: 'gap', ask: 'gap width, as a percentage of ordinary height', kind: 'range', min: 5, max: 145, step: 1, value: spec.gap, low: '5%', high: '145%' },
+      { id: 'height', ask: 'domino ' + (spec.gapAt + 1) + ', just before the gap', kind: 'choice', options: DOMINO_HEIGHTS },
+      { id: 'prediction', ask: 'will the push cross the gap?', kind: 'choice', options: DOMINO_GUESSES },
+      { id: 'tip', ask: 'tip the first domino', kind: 'press', count: 1, label: 'tip and watch' },
+      { id: 'watch', ask: 'watch the chain finish', kind: 'wait', after: 'tip' }
+    ],
+    start(c) {
+      say(c);
+      draw(c);
+    },
+    apply(id, value, c) {
+      if (c.done) return;
+      if (id === 'gap') {
+        s.gap = Math.max(5, Math.min(145, Math.round(Number(value))));
+        s.chain = dominoChain(spec, s.gap, s.height);
+        say(c, 'Gap: ' + s.gap + '% of ordinary height.');
+      }
+      if (id === 'height') {
+        s.height = Number(value);
+        s.chain = dominoChain(spec, s.gap, s.height);
+        say(c, 'The striped domino reaches ' + Math.round(s.height * 100) + '% of ordinary height.');
+      }
+      if (id === 'prediction') {
+        s.prediction = String(value);
+        say(c, 'Your prediction: ' + (s.prediction === 'cross' ? 'across the gap.' : 'stopped at the gap.'));
+      }
+      if (id === 'tip') {
+        s.pushed = true;
+        s.time = c.reduced ? s.chain.duration : 0;
+        say(c);
+      }
+      draw(c);
+    },
+    frame(t, dt, c) {
+      if (s.pushed && !c.done) {
+        s.time = c.reduced ? s.chain.duration : Math.min(s.chain.duration, s.time + dt);
+        c.progress('watch', s.waited ? 1 : s.time / s.chain.duration);
+        if (phase().id !== s.said) say(c);
+        if (!s.waited && s.time >= s.chain.duration) {
+          s.waited = true;
+          c.satisfy('watch');
+        }
+      }
+      draw(c);
+    },
+    end(c) {
+      // Rebuilding at the current settings preserves every knob, even when a visitor changes
+      // the gap or height after watching. The final drawing and finding use those same settings.
+      s.chain = dominoChain(spec, s.gap, s.height);
+      s.pushed = true;
+      s.time = s.chain.duration;
+      draw(c);
+      const called = s.prediction === (s.chain.crossed ? 'cross' : 'stop');
+      c.status(dominoOutcome(spec, s.chain) + ' Gap ' + s.gap + '%, reach ' + Math.round(s.height * 100)
+        + '% of ordinary height. ' + (called ? 'You called it.' : 'You expected it to ' + (s.prediction === 'cross' ? 'cross.' : 'stop.')));
+    }
+  };
+}
+
 function piece(env) {
+  if (dealsDominoes(env)) return dominoPiece(env);
   if (env.chance(0.4)) return riot(env);
   return env.chance(0.55) ? kicker(env) : heap(env);
 }
@@ -616,9 +852,19 @@ function piece(env) {
 export default {
   id: 'kinetic-floor',
   paint(ctx, w, h, env) {
-    floor(ctx, w, h, env, env.chance(0.25));
+    if (dealsDominoes(env)) dominoPreview(ctx, w, h, env, dominoPlan(env));
+    else floor(ctx, w, h, env, env.chance(0.25));
   },
   spark(env) {
+    if (dealsDominoes(env)) {
+      const spec = dominoPlan(env);
+      return {
+        title: dominoTitle(spec),
+        text: 'One gap interrupts the chain. Make the striped domino taller, predict whether the push will cross, and tip the first one to find out.',
+        aspect: '16 / 10',
+        paint: (ctx, w, h, e) => dominoPreview(ctx, w, h, e, spec)
+      };
+    }
     const flipped = env.chance(0.3);
     const blocks = env.int(7, 24);
     const impacts = env.int(0, 140);

@@ -214,9 +214,25 @@ same destination, the second adopted into the far orbit beside *cookies* and *st
   `js/participate.js`, `js/analytics.js` and `js/state.js`, which are fixed files no run may write
   (see [Participation axiom](#participation-axiom), [Analytics axiom](#analytics-axiom) and [Local
   state axiom](#local-state-axiom)). So the shell does it from outside: it waits for each control
-  to be drawn, hides it where its own file pinned it, and presses that same control from the
-  constellation. One new-issue link, one cookies dialog, one state menu, no fixed file touched —
-  and `RealSiteTest` still holds every other file of the site to naming none of them.
+  to be drawn and hides it where its own file pinned it. *change this site* and *cookies* then
+  press that same control, with the lightbox out of the way first, because what they open is
+  somebody else's — a new tab and the consent library's own dialog. One new-issue link, one
+  cookies dialog, one state menu, no fixed file touched — and `RealSiteTest` still holds every
+  other file of the site to naming none of them.
+- **…and *state* keeps the lightbox** (issue #66). It is the one option that is neither a place to
+  go nor somebody else's dialog: it is a thing to do, and it gets the screen while it is being
+  done. So the lightbox is not dropped for it. The constellation is put away, the panel
+  `js/state.js` built is **moved** into `#sparknav-modal` — the middle of the veil that is already
+  up — and dressed as a modal by that file's own styles: wider, taller, with room to read the
+  document and paste one in. Nothing the lightbox is made of is torn down and raised again in
+  between: `<html data-lightbox>` goes from `nav` straight to `state` without ever being removed,
+  so the veil, the held frame loop and the inert page behind it never so much as blink. There is
+  no way back to the constellation — Escape, the panel's own *close* and a press on the dimmed
+  page around it all close the modal, and the lightbox goes down with it, which is what "return to
+  the site" means. The asking is the shell's and the panel is the fixed file's, that way round on
+  purpose: a store that offers no panel, or a run that breaks the asking, leaves the corner menu
+  exactly as it always was, so nothing a run writes can leave a visitor without a way to their own
+  state.
 - **Which is what makes the two-item rule true.** At rest nothing floats over a page but the logo
   and the persona: nothing at the bottom edge, nothing beside either mark. `NavTest` holds both
   halves of it (issue #64) — the site's own stylesheets pin a closed list of things, every one of
@@ -756,18 +772,27 @@ iteration process rather than a one-off tidy-up.
   nobody loses a sky to the change.
 - **The meta menu.** *state*, an option in the logo's constellation (see [The logo and the
   constellation](#the-logo-and-the-constellation)): the button `js/state.js` pins to the
-  bottom-right corner is still what the site presses, but the shell hides it there and offers it
-  in the nav beside *cookies* and the *change this site* of the [participation
-  axiom](#participation-axiom) instead, so nothing is left on the bottom edge at all. It opens a
-  panel holding the whole document as
-  text: copy it out, paste one in and press *replace mine*, or *clear*. Import **replaces** rather
-  than merges, for reproducibility — the sky it opens is the sky it came from — and clearing asks
-  first. Both reload the page
-  afterwards, which is the simplest honest way to show a state every page reads at load time.
+  bottom-right corner is hidden there and the option offered in the nav beside *cookies* and the
+  *change this site* of the [participation axiom](#participation-axiom) instead, so nothing is
+  left on the bottom edge at all. It opens a panel holding the whole document as text: copy it
+  out, paste one in and press *replace mine*, or *clear*. Import **replaces** rather than merges,
+  for reproducibility — the sky it opens is the sky it came from — and clearing asks first. Both
+  reload the page afterwards, which is the simplest honest way to show a state every page reads at
+  load time.
   Export and import are copy-paste rather than file download, so sharing is a paste into any
   message. The panel is keyboard-operable, closes on Escape with the focus returned, carries its
   own focus ring and 44px controls because the pages are free to restyle their own, and fits a
   320px screen.
+- **Where that panel opens** (issue #66): in the middle of the lightbox the constellation was just
+  in, not in the corner it is built in. `window.interestingState.menu.present(host)` is the one
+  thing this file offers a shell — it moves the panel into the host, dresses it as a modal with
+  its own styles and opens it, and hands back a function that closes it and puts it where it was.
+  So the state interface takes up the whole screen and the visitor's whole attention while they
+  are in it, and closing it puts them back on the page. Its contents, its words and its reload
+  after an import or a clear are exactly as they were; only the framing changed. The offer is the
+  fixed file's and the asking is the shell's, which is what makes it safe: the corner menu still
+  works on its own, so a run that rewrites `js/site.js` badly cannot take a visitor's way to
+  their own state away.
 - **Stated in the prompt.** The `Rules:` block names the exact line, shows the three calls a page
   needs, names the keys the site keeps, and says that no page may touch `localStorage` or
   `sessionStorage` itself — nor any shared script it loads, which is why `js/threshold.js` keeps
@@ -893,12 +918,16 @@ the reader rather than about the site.
   file says — *cookies* bottom-left, *steer the site* in the middle of the bottom edge, *state*
   bottom-right — and all three are **adopted** rather than copied: the shell hides the control each
   fixed file drew for itself and offers *change this site*, *cookies* and *state* in the logo's
-  constellation, which presses those very controls (see [The logo and the
-  constellation](#the-logo-and-the-constellation)) — one new-issue link, one cookies dialog and one
-  state menu on the site, with no fixed file edited to arrange it. The invitation is still the
-  prominent member of the three, now by where it sits in the orbit rather than by holding an edge
-  of the viewport to itself: it comes first in the far orbit, because the other two answer a
-  question a visitor occasionally has while this one asks something of them.
+  constellation (see [The logo and the constellation](#the-logo-and-the-constellation)), pressing
+  the link and the button the first two drew and hosting the state menu's own panel in the
+  lightbox — one new-issue link, one cookies dialog and one state menu on the site, with no fixed
+  file restyled or reworded to arrange it. *state* is the one of the three that is not a corner
+  affordance at all any more once it is open: it is a modal in the middle of the screen, because
+  what it holds is a document to read, copy and paste rather than a question to answer in passing.
+  The invitation is still the prominent member of the three, now by where it sits in the orbit
+  rather than by holding an edge of the viewport to itself: it comes first in the far orbit,
+  because the other two answer a question a visitor occasionally has while this one asks something
+  of them.
 - **Responsive and accessible, like everything else here.** An accessible name that says where the
   link goes and that it opens a new tab, with the visible words inside it (WCAG 2.5.3 Label in
   Name); its own `:focus-visible` ring, because pages of this site are free to take the browser's
@@ -992,7 +1021,11 @@ to type and no second press. *Don't overdo it.*
   who got here by mistake should be a key away from is the one that changes nothing, and it comes
   back to the control that opened it however the question is answered. A press on the backdrop
   dismisses it, the buttons are 44px and wrap, and the box fits a 320px screen. Nothing in it
-  animates, so there is no motion to answer for.
+  animates, so there is no motion to answer for. It is also woken up before it is shown: the
+  dialog is a child of the body, built the first time anything asks, so the nav's lightbox may
+  have made it `inert` with the rest of the page long before — and since the state interface asks
+  from inside that lightbox now (issue #66), the marks come off at ask time. A question nobody can
+  answer is worse than no question.
 - **The meta menu adopts it too.** [`site/js/state.js`](site/js/state.js) is in `FIXED_FILES`, is
   never shown to a model and deliberately carries its own inline styles — and its *clear* still
   goes through the shared component, because a visitor should meet the same question there as in a
