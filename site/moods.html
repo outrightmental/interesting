@@ -19,11 +19,14 @@ stylesheet: moods
       <h2 id='state-heading' class='panel-title'>what it has read</h2>
       <p id='current' class='current'>Nothing read yet. Every world is on offer.</p>
       <p id='signal-line' class='signal-line'></p>
+      <p id='alternates-heading' class='signal-line' hidden>Other worlds close to this reading:</p>
+      <div id='alternates' class='atlas-alternates' hidden></div>
       <div class='controls'>
         <button id='requery' type='button'>ask me another way</button>
         <button id='forget' type='button' class='warning'>forget my reading</button>
         <a class='action' id='current-world' href='index.html' hidden>the threshold</a>
       </div>
+      <p id='atlas-status' class='panel-status'>Try any mechanism, or jump straight to a world.</p>
       <div id='atlas-probe' class='atlas-probe' hidden></div>
     </section>
 
@@ -49,22 +52,91 @@ stylesheet: moods
         var currentEl = document.getElementById('current');
         var signalEl = document.getElementById('signal-line');
         var worldLink = document.getElementById('current-world');
+        var alternatesHeading = document.getElementById('alternates-heading');
+        var alternatesEl = document.getElementById('alternates');
         var requeryBtn = document.getElementById('requery');
         var forgetBtn = document.getElementById('forget');
         var probeHost = document.getElementById('atlas-probe');
         var list = document.getElementById('mechanisms');
+        var statusEl = document.getElementById('atlas-status');
         if (!api) return;
+
+        var tried = [];
+        var mechanismRows = Object.create(null);
+
+        function worldLabel(orientation) {
+          if (!orientation) return '';
+          return orientation.worldName || orientation.name || orientation.world || '';
+        }
+
+        function updateTried() {
+          if (!statusEl) return;
+          if (!tried.length) {
+            statusEl.textContent = 'Try any mechanism, or jump straight to a world.';
+            return;
+          }
+          statusEl.textContent = 'Tried this visit: ' + tried.join(' · ');
+        }
+
+        function noteProbe(probe) {
+          if (!probe) return;
+          var name = probe.name || probe.probe;
+          if (!name || tried.indexOf(name) !== -1) return;
+          tried.push(name);
+          if (tried.length > 6) tried.shift();
+          updateTried();
+        }
+
+        function setActiveProbe(id) {
+          Object.keys(mechanismRows).forEach(function (probeId) {
+            mechanismRows[probeId].classList.toggle('is-active', probeId === id);
+          });
+        }
+
+        function highlightWorld(reading) {
+          var rows = document.querySelectorAll('.orientations li[data-world]');
+          rows.forEach(function (row) { row.classList.remove('is-picked'); });
+          var o = reading && reading.orientation;
+          var read = !!(o && reading.source && reading.source !== 'signals');
+          if (!read) return;
+          var picked = document.querySelector('.orientations li[data-world="' + o.world + '"]');
+          if (picked) picked.classList.add('is-picked');
+        }
+
+        function showAlternates(reading) {
+          alternatesEl.textContent = '';
+          var o = reading && reading.orientation;
+          var read = !!(o && reading.source && reading.source !== 'signals');
+          if (!read || !reading.alternates || !reading.alternates.length) {
+            alternatesEl.hidden = true;
+            alternatesHeading.hidden = true;
+            return;
+          }
+          var shown = 0;
+          reading.alternates.forEach(function (alt) {
+            if (!alt || !alt.world || alt.world === o.world) return;
+            var a = document.createElement('a');
+            a.href = alt.world;
+            a.textContent = worldLabel(alt);
+            alternatesEl.appendChild(a);
+            shown += 1;
+          });
+          alternatesEl.hidden = shown === 0;
+          alternatesHeading.hidden = shown === 0;
+        }
 
         function showReading(reading) {
           var o = reading && reading.orientation;
           currentEl.textContent = api.describe(reading);
+          showAlternates(reading);
+          highlightWorld(reading);
           if (!o || !reading.source || reading.source === 'signals') {
             worldLink.hidden = true;
             return;
           }
           worldLink.hidden = false;
           worldLink.href = o.world;
-          worldLink.textContent = o.worldName;
+          worldLink.textContent = worldLabel(o);
         }
 
         function showSignals() {
@@ -77,24 +149,33 @@ stylesheet: moods
 
         function run(probeId) {
           probeHost.hidden = false;
-          api.mount(probeHost, {
+          var mounted = api.mount(probeHost, {
             probe: probeId,
-            onAnswer: function (reading) {
+            onAnswer: function (reading, probe) {
               probeHost.textContent = '';
               probeHost.hidden = true;
+              setActiveProbe('');
+              noteProbe(probe);
               showReading(reading);
               showSignals();
               requeryBtn.focus();
             },
-            onSkip: function () {
+            onSkip: function (probe) {
               probeHost.textContent = '';
               probeHost.hidden = true;
+              setActiveProbe('');
+              noteProbe(probe);
+              if (statusEl) statusEl.textContent = 'Skipped. Choose another way, or open a world directly.';
               requeryBtn.focus();
             }
           });
+
+          if (mounted) {
+            setActiveProbe(mounted.probe || '');
+            noteProbe(mounted);
+          }
+
           probeHost.scrollIntoView({ behavior: api.reducedMotion() ? 'auto' : 'smooth', block: 'nearest' });
-          // The question opens above the list it was chosen from; focus goes to it, so the next Tab
-          // answers it rather than moving on down the list.
           var first = probeHost.querySelector('button, input, [tabindex]');
           if (first) first.focus({ preventScroll: true });
         }
@@ -102,24 +183,29 @@ stylesheet: moods
         list.textContent = '';
         api.probes().forEach(function (probe) {
           var item = document.createElement('li');
+          item.setAttribute('data-probe', probe.probe);
+          mechanismRows[probe.probe] = item;
+
           var name = document.createElement('span');
           name.className = 'mechanism-name';
           name.textContent = probe.name || probe.probe;
+
           var ask = document.createElement('span');
           ask.className = 'mechanism-ask';
           ask.textContent = probe.ask;
+
           var button = document.createElement('button');
           button.type = 'button';
-          button.textContent = 'try this one';
-          button.setAttribute('aria-label', 'try ' + (probe.name || probe.probe));
+          button.textContent = 'ask this way';
+          button.setAttribute('aria-label', 'ask by ' + (probe.name || probe.probe));
           button.addEventListener('click', function () { run(probe.probe); });
+
           item.appendChild(name);
           item.appendChild(ask);
           item.appendChild(button);
           list.appendChild(item);
         });
 
-        // The pull of each orientation, under the world it opens onto.
         api.orientations().forEach(function (o) {
           var row = document.querySelector('.orientations li[data-world="' + o.world + '"] .pull');
           if (row) row.textContent = o.pull;
@@ -127,10 +213,6 @@ stylesheet: moods
 
         requeryBtn.addEventListener('click', function () { run(null); });
 
-        // Above the threshold: the whole reading goes and nothing takes its place, so the control
-        // is a warning button guarded by the one shared "are you sure you want to ______?" modal
-        // (window.interestingSite.destructive in js/site.js). The class is in the markup too, so
-        // it reads as a warning before any script runs.
         window.interestingSite.destructive(forgetBtn, {
           what: 'forget what this site has read about you',
           detail: 'The orientation it arrived at would go, and the palette the site is wearing '
@@ -140,6 +222,8 @@ stylesheet: moods
             showReading(null);
             showSignals();
             currentEl.textContent = 'The reading is forgotten. What you left in the worlds stays until you clear it from the state menu, bottom right.';
+            if (statusEl) statusEl.textContent = 'Reading forgotten. Ask another way when you want.';
+            setActiveProbe('');
           },
           onCancel: function () { showReading(api.reading()); }
         });
@@ -148,6 +232,7 @@ stylesheet: moods
           if (probeHost.hidden) showReading(api.reading());
         });
 
+        updateTried();
         showReading(api.reading());
         showSignals();
       }
