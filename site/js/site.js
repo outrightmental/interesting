@@ -487,6 +487,15 @@
                  js/analytics.js and js/state.js are fixed files (see FIXED_FILES in
                  .github/scripts/make_interesting.py) and none of them is edited for any of it:
                  the shell adopts what they drew instead.
+       stateModal()
+                 the state interface, taking the lightbox over (issue #66). "state" is the one
+                 option that is not a destination and not someone else's dialog: it is a thing to
+                 do, here, with the whole screen. So the lightbox does not come down for it. The
+                 constellation gives way, js/state.js's own panel is moved into the middle of the
+                 veil that is already up, and closing the panel closes the lightbox with it and
+                 gives the visitor back the page. Nothing the lightbox is made of -- the veil, the
+                 held frame loop, the inert page, <html data-lightbox> -- is torn down and raised
+                 again in between, which is what "zero jitter" asks for.
 
      Pressing the logo never navigates. The threshold is the home icon in the near orbit, which is
      what issue #54 asks for, and it is also what lets the logo be a <details> summary -- so the
@@ -496,7 +505,9 @@
   // adopts (issue #64): nothing of this site's floats at an edge of the viewport but the logo and
   // the persona, so each of these is hidden where its own file put it and offered as an option
   // instead. Named here, and nowhere else in the site's own files: the shell may find them, hide
-  // them and press them, and nothing may restyle them or reproduce their words.
+  // them, press them and -- for the state menu, which asks to be hosted rather than opened where
+  // it was pinned (see stateModal below) -- borrow the panel one of them built, and nothing may
+  // restyle them or reproduce their words.
   var CORNER_COOKIES = '.site-consent-link'; // js/analytics.js draws it, bottom-left
   var CORNER_STATE = '.site-meta-open'; // js/state.js draws it, bottom-right
   var CORNER_STEER = '.site-steer'; // js/participate.js draws it, bottom-centre
@@ -988,6 +999,14 @@
       });
       nav.stateCorner.click();
     });
+
+    // A press on the dimmed page around the state interface is a press on the page: the same
+    // "not this" the veil takes, which the host covers while it is up.
+    if (nav.modal) {
+      nav.modal.addEventListener('click', function (event) {
+        if (event.target === nav.modal) close(true);
+      });
+    }
 
     /* The invitation, which is a link rather than a dialog: the constellation gets out of the way
        and then presses the one js/participate.js drew, so the destination, the new tab and the

@@ -438,6 +438,42 @@ function toggle(context, open) {
   id(context, "sparknav").open = open;
 }
 
+/** What js/state.js offers a shell that would rather host its panel than press its button:
+ *  window.interestingState.menu, as "Presented somewhere else" in that file describes it. The
+ *  panel is moved into the host, marked, filled and shown; the function that comes back closes it
+ *  and puts it where it was built. LocalStateStoreTest holds the real one to this. */
+function stateMenuStub(panel) {
+  let home = null;
+  const menu = {
+    panel,
+    openedOnScreen: null,
+    present(host) {
+      if (!host || typeof host.appendChild !== "function") return null;
+      if (!home) home = panel.parentNode;
+      host.appendChild(panel);
+      panel.setAttribute("data-site-meta-presented", "");
+      panel.setAttribute("aria-modal", "true");
+      panel.hidden = false;
+      // The real file puts the focus in the document's text as it opens, which only lands if the
+      // host it was moved into is already on screen. Whether it was is worth reporting: a hidden
+      // box takes no focus, and nothing would say so.
+      const field = panel.querySelector("textarea");
+      if (field) {
+        menu.openedOnScreen = !!(field.offsetWidth || field.offsetHeight);
+        field.focus();
+      }
+      return () => {
+        panel.hidden = true;
+        panel.removeAttribute("data-site-meta-presented");
+        panel.removeAttribute("aria-modal");
+        if (home) home.appendChild(panel);
+        home = null;
+      };
+    },
+  };
+  return menu;
+}
+
 /** Everything the fixed files pin over the page, by the selectors js/site.js finds them with. */
 const PINNED = {
   cookies: ".site-consent-link", // js/analytics.js, bottom-left
@@ -445,8 +481,10 @@ const PINNED = {
   steer: ".site-steer", // js/participate.js, the middle of the bottom edge
 };
 
-/** Those three, drawn after the page has loaded, as their own deferred files draw them. */
-function drawCorners(context, { cookies = true, state = true, steer = true } = {}) {
+/** Those three, drawn after the page has loaded, as their own deferred files draw them. The state
+ *  menu arrives with its panel and with the offer to be hosted elsewhere; `hosted: false` is the
+ *  store that makes no such offer, which the constellation has to fall back from. */
+function drawCorners(context, { cookies = true, state = true, steer = true, hosted = true } = {}) {
   if (cookies) {
     context.document.body.appendChild(
       make("button", { class: "site-consent-link", "aria-label": "Change cookie preferences" }, CHIP));
@@ -803,7 +841,7 @@ const scenarios = {
        hosted in the lightbox rather than opened from the corner (issue #66). */
     toggle(context, true);
     id(context, "sparknav-state-open").click();
-    return { cookies, state: stateInterface(context) };
+    return { steer, cookies, state: stateInterface(context) };
   },
 
   /* The state interface takes the lightbox over: the constellation gives way to it and not one
@@ -941,9 +979,7 @@ const scenarios = {
     panel.hidden = true;
     mutated(context);
     return {
-      steer,
-      cookies,
-      state,
+      fallen,
       focus: { whileOpen, afterClose: id(context, "sparknav-logo").focused },
     };
   },
