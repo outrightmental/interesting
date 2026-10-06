@@ -1,0 +1,65 @@
+// The lightbox: the one veil the whole site goes behind, and the two layers it sorts a page into.
+// The paint lives here and the behaviour in js/site.js, which is where the reasoning is written
+// (window.interestingSite.lightbox, and the README section "The lightbox").
+//
+// Three things open through it, and they look the same because they are the same component: the
+// constellation the sparkles logo branches out (_nav.scss), the persona sheet the avatar opens
+// (_persona.scss), and the "are you sure you want to ______?" modal every destructive control is
+// guarded by (_controls.scss). Before issue #70 only the first of them had any of this -- the veil
+// was the nav's own element, written into the nav's own markup and painted in the nav's own
+// partial -- and the other two had a flat `::backdrop` and nothing else: no blur, no fade, no held
+// frame loop. The verdict in the note that became that issue was that the persona's lightbox was
+// weak. There is one lightbox now, and whatever opens inside it gets the whole effect.
+//
+// What this file does: dims the page, blurs it, desaturates it, fades in, and takes the press that
+// means "not this". What the script does on top of it: makes every other child of <body> inert and
+// hidden from a screen reader, marks each one it put aside with data-lightbox-aside, names the one
+// it left in front with data-lightbox-front, holds the page's requestAnimationFrame loop, and
+// writes <html data-lightbox='nav'> (or 'persona', or 'are-you-sure') for the rules below.
+
+// Everything behind whatever is open, at once. The div is one line of _includes/layout.njk, hidden
+// until something raises it, so a visitor with no script at all gets no veil and no dimming they
+// could not dismiss.
+.lightbox-veil {
+  position: fixed;
+  inset: 0;
+  z-index: var(--layer-veil);
+  background: color-mix(in oklab, var(--md-sys-color-surface) 62%, transparent);
+  backdrop-filter: blur(9px) saturate(70%);
+  -webkit-backdrop-filter: blur(9px) saturate(70%);
+  animation: lightbox-veil var(--md-sys-motion-duration-medium) var(--md-sys-motion-easing-standard) both;
+}
+
+@keyframes lightbox-veil {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+// The one thing the veil leaves in front of it, named by the script on whichever child of <body>
+// holds what is open. A native <dialog> opened with showModal() is in the top layer and needs none
+// of this; the logo's constellation and the two fallback boxes (for a browser with no showModal)
+// do. The leading `html` is there to outrank the one class those elements already carry.
+html [data-lightbox-front] {
+  z-index: var(--layer-front);
+}
+
+// A page's own animation stops while a lightbox is up, so there is nothing moving behind the veil.
+// Said of exactly what the script put aside, so what is stilled is exactly what is unreachable:
+// the constellation still branches out, and the sheet in front of the veil still moves. CSS can
+// pause an animation but not a frame loop, which is why js/site.js holds the loop as well.
+html[data-lightbox] [data-lightbox-aside],
+html[data-lightbox] [data-lightbox-aside] * {
+  animation-play-state: paused;
+}
+
+// Less motion: the veil is there or it is not.
+@media (prefers-reduced-motion: reduce) {
+  .lightbox-veil {
+    animation: none;
+  }
+}
