@@ -22,6 +22,27 @@ const PANES = [
   { label: 'fogged glass', value: 'fog' }
 ];
 
+const KEEPSAKES = [
+  'a brass key',
+  'a folded note',
+  'a smooth stone',
+  'a spool of blue thread',
+  'a ticket stub',
+  'a tiny bell',
+  'a dry sprig of rosemary',
+  'a snapped pencil',
+  'a blank matchbook',
+  'a shell with a crack in it',
+  'a coin from nowhere',
+  'a wooden bead'
+];
+
+const LIGHTS = [
+  { label: 'lamp low', value: 0.68 },
+  { label: 'half light', value: 0.46 },
+  { label: 'just enough to see', value: 0.28 }
+];
+
 // The room, out to `swell` and dimmed by `dim`. `scale` is how large the ring is drawn: the card's
 // own, from the configuration it was dealt, and one for the piece, which is the room itself.
 function room(ctx, w, h, env, swell, dim, scale) {
@@ -270,6 +291,163 @@ function windowWatch(env) {
   };
 }
 
+// Three keepsakes set onto a shelf, latched, and left to settle.
+function shelfRitual(env) {
+  const pool = KEEPSAKES.slice();
+  const picks = [];
+  while (picks.length < 4) {
+    const i = env.int(0, pool.length - 1);
+    picks.push(pool[i]);
+    pool.splice(i, 1);
+  }
+  const keep = env.int(2, 3);
+  const holdMs = env.pick([1400, 1800, 2200]);
+  const settleFor = env.pick([3.5, 4.5, 5.5]);
+  const s = {
+    dim: 0.52,
+    t: 0,
+    slots: [{ x: 0.24, item: null }, { x: 0.5, item: null }, { x: 0.76, item: null }],
+    queue: picks.slice(),
+    latched: false,
+    settled: 0,
+    release: 0,
+    glow: 0,
+    lightWord: 'lamp low'
+  };
+
+  function listPlaced() {
+    return s.slots.filter((q) => q.item).map((q) => q.item);
+  }
+
+  function nextSlot(px) {
+    const open = s.slots.filter((q) => !q.item);
+    if (!open.length) return null;
+    let best = open[0];
+    let bd = Math.abs(open[0].x - px);
+    for (const q of open) {
+      const d = Math.abs(q.x - px);
+      if (d < bd) {
+        bd = d;
+        best = q;
+      }
+    }
+    return best;
+  }
+
+  function draw(c) {
+    room(c.g, c.w, c.h, c, 0.2 + Math.sin(s.t * 0.6) * 0.03, s.dim + s.release * 0.35);
+    const g = c.g;
+    const w = c.w;
+    const h = c.h;
+    const shelfY = h * 0.62;
+    const shelfH = h * 0.12;
+
+    g.fillStyle = c.alpha(c.colors.bg2, 0.55);
+    g.fillRect(w * 0.14, shelfY - shelfH * 0.65, w * 0.72, shelfH * 0.58);
+    g.fillStyle = c.alpha(c.colors.muted, 0.34);
+    g.fillRect(w * 0.14, shelfY, w * 0.72, shelfH * 0.1);
+
+    for (let i = 0; i < s.slots.length; i++) {
+      const slot = s.slots[i];
+      const x = w * slot.x;
+      const y = shelfY - shelfH * 0.22;
+      g.strokeStyle = c.alpha(c.colors.accent, 0.22);
+      g.lineWidth = 1;
+      g.beginPath();
+      g.arc(x, y + shelfH * 0.06, Math.min(w, h) * 0.03, 0, Math.PI * 2);
+      g.stroke();
+
+      if (!slot.item) continue;
+      const lit = 0.35 + s.glow * 0.45;
+      g.fillStyle = c.alpha(c.colors.accent2, lit * 0.16);
+      g.beginPath();
+      g.ellipse(x, y - shelfH * 0.05, Math.min(w, h) * 0.055, Math.min(w, h) * 0.03, 0, 0, Math.PI * 2);
+      g.fill();
+
+      g.fillStyle = c.alpha(c.colors.fg, 0.92);
+      g.font = '500 ' + Math.max(11, Math.round(Math.min(w, h) * 0.03)) + 'px system-ui, sans-serif';
+      g.textAlign = 'center';
+      g.textBaseline = 'bottom';
+      g.fillText(slot.item, x, y - shelfH * 0.1);
+    }
+
+    const latchX = w * 0.86;
+    const latchY = shelfY - shelfH * 0.27;
+    g.strokeStyle = c.alpha(c.colors.accent2, 0.7 + s.glow * 0.2);
+    g.lineWidth = 2;
+    g.beginPath();
+    g.moveTo(latchX - 16, latchY);
+    g.lineTo(latchX + (s.latched ? 9 : 2), latchY);
+    g.stroke();
+    g.beginPath();
+    g.arc(latchX + 11, latchY, 5.5, 0, Math.PI * 2);
+    g.stroke();
+
+    if (s.settled > 0) {
+      g.fillStyle = c.alpha(c.colors.fg, Math.min(0.9, s.settled));
+      g.font = '500 ' + Math.max(12, Math.round(Math.min(w, h) * 0.042)) + 'px system-ui, sans-serif';
+      g.textAlign = 'center';
+      g.textBaseline = 'middle';
+      g.fillText('kept, then left still', w / 2, h * 0.85);
+    }
+  }
+
+  return {
+    title: 'the shelf ritual',
+    brief: 'Set the lamp, tap the shelf to place ' + (keep === 2 ? 'two keepsakes' : 'three keepsakes') + ', hold to latch it, then let the room settle around what stays.',
+    aspect: '16 / 9',
+    steps: [
+      { id: 'light', ask: 'the lamp', kind: 'choice', options: LIGHTS },
+      { id: 'place', ask: 'tap the shelf to place ' + (keep === 2 ? 'two keepsakes' : 'three keepsakes'), kind: 'tap', label: 'place one for me', after: 'light' },
+      { id: 'latch', ask: 'latch the shelf', kind: 'hold', ms: holdMs, label: 'hold to latch', after: 'place' },
+      { id: 'settle', ask: 'let the room settle', kind: 'wait', after: 'latch' }
+    ],
+    start(c) {
+      draw(c);
+      c.status('the shelf is empty');
+    },
+    apply(id, value, c) {
+      if (id === 'light') {
+        s.dim = Math.max(0.2, Math.min(0.85, Number(value) || 0.52));
+        const match = LIGHTS.find((x) => x.value === Number(value));
+        s.lightWord = match ? match.label : 'lamp low';
+        c.status(s.lightWord);
+      }
+      if (id === 'latch') {
+        s.latched = true;
+        s.glow = 1;
+        c.status('latched. now leave it still.');
+      }
+    },
+    tap(x, y, c) {
+      if (c.done || s.latched) return;
+      const slot = nextSlot(x);
+      if (!slot || !s.queue.length) return;
+      slot.item = s.queue.shift();
+      s.glow = 1;
+      const placed = listPlaced();
+      c.progress('place', Math.min(1, placed.length / keep));
+      c.status('placed: ' + slot.item);
+      if (placed.length >= keep) c.satisfy('place');
+    },
+    frame(t, dt, c) {
+      s.t += dt;
+      s.glow = Math.max(0, s.glow - dt * 1.6);
+      if (s.latched && !c.done) {
+        s.settled = Math.min(settleFor, s.settled + dt);
+        c.progress('settle', Math.min(1, s.settled / settleFor));
+        if (s.settled >= settleFor) c.satisfy('settle');
+      }
+      if (c.done) s.release = Math.min(1, s.release + dt * 0.9);
+      draw(c);
+    },
+    end(c) {
+      const placed = listPlaced();
+      c.status((placed.length ? placed.join(' - ') : 'nothing') + ' kept, latched, and left still');
+    }
+  };
+}
+
 export default {
   id: 'quiet-room',
   paint(ctx, w, h, env) {
@@ -300,8 +478,9 @@ export default {
   },
   piece(env) {
     const roll = env.rnd();
-    if (roll < 0.34) return breaths(env);
-    if (roll < 0.67) return putDown(env);
-    return windowWatch(env);
+    if (roll < 0.27) return breaths(env);
+    if (roll < 0.54) return putDown(env);
+    if (roll < 0.78) return windowWatch(env);
+    return shelfRitual(env);
   }
 };
