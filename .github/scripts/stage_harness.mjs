@@ -63,7 +63,7 @@ import { Worker, isMainThread, parentPort, workerData } from 'node:worker_thread
 
 const SCENARIOS = ['rounds', 'sliderUsed', 'sliderUntouched', 'holdFilled', 'teardown', 'carried'];
 const SCENARIO_TIMEOUT_MS = 20000;
-const MISSING_WORLD = 'stage-harness-nowhere.html'; // a world with no module, for the teardown
+const MISSING_WORLD = 'stage-harness-nowhere.html'; // a world with no module: the teardown and the card
 const SEEDS = [4242, 101, 99991, 7]; // tried in turn until a piece with the knob wanted turns up
 const STARS = [
   { x: 18, y: 30, text: 'a window left open' },
