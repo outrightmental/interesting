@@ -2,7 +2,22 @@
    same family for its card and piece. Listening, shuffling and ringing finish in a bulletin;
    conducting and printing finish in a score. Both families share the sky summary, nearest-point
    lookup and background. Every piece keeps its own progress and voices. See js/feed.js for the
-   card contract and js/stage.js for the piece contract. */
+   card contract and js/stage.js for the piece contract.
+
+   A card and the feature it opens as are one reading, in whichever family the seed selected: the
+   bulletin spark puts its three printed lines on its spec as `of`, and the score spark the tempo it
+   printed at and the voice it led with. The piece opens on those, so pressing a resonance report
+   opens the chamber that wrote it and pressing a score opens the choir that printed it. */
+
+// The card a bulletin piece was opened from, in the chamber's own terms: the bulletin it printed, or
+// null for a piece nobody pressed (js/stage.js hands the card over as env.card.of).
+function pressedBulletin(env) {
+  const was = env.card && env.card.of;
+  if (!was) return null;
+  const line = (value) => (typeof value === 'string' ? value : '');
+  const out = { opener: line(was.opener), mid: line(was.mid), closer: line(was.closer) };
+  return out.opener || out.mid || out.closer ? out : null;
+}
 
 const OPENERS = ['echo weather bulletin:', 'resonance report:', 'night acoustics memo:', 'field monitor:'];
 const MIDS = [
@@ -271,14 +286,21 @@ function echoes(ctx, w, h, env, t) {
   scene(ctx, w, h, env, F, [], 'midnight', t, null);
 }
 
-function chamber(env) {
+// What every shape of bulletin piece shares: the field, its pulses, the bulletin to print, the
+// frame, and a tap that pulses the field and hears the nearest echo.
+function chamber(env, was) {
   const stars = env.stars;
   const wx = summarize(stars);
   const F = echoField(stars);
   const P = [];
+  // The bulletin: the card's own, when this chamber was opened from one, so the reading that prints
+  // at the end is the reading a visitor pressed. The two middle lines are the field as it stands.
+  const opener = was && was.opener ? was.opener : env.pick(OPENERS).replace(':', '');
+  const mid = was && was.mid ? was.mid : env.pick(MIDS);
+  const closer = was && was.closer ? was.closer : env.pick(CLOSERS);
   const s = {
     drift: 0.4, look: 'midnight', paused: false, speed: 0.45, print: 0, read: 0, said: null, home: false, t: 0,
-    lines: [env.pick(OPENERS).replace(':', ''), (stars.length === 1 ? 'one echo, ' : stars.length + ' echoes, ') + wx.spread + ' spread', 'chamber ' + wx.zone + ', tone ' + wx.density, env.pick(MIDS), env.pick(CLOSERS)]
+    lines: [opener, (stars.length === 1 ? 'one echo, ' : stars.length + ' echoes, ') + wx.spread + ' spread', 'chamber ' + wx.zone + ', tone ' + wx.density, mid, closer]
   };
   return {
     F, P, s, wx,
@@ -309,7 +331,8 @@ function chamber(env) {
 }
 
 function listen(env) {
-  const ch = chamber(env);
+  const was = pressedBulletin(env);
+  const ch = chamber(env, was);
   const s = ch.s;
   const n = env.stars.length;
   const need = Math.min(n, env.int(3, 5));
@@ -321,7 +344,8 @@ function listen(env) {
   let heard = 0;
   return {
     title: earsFirst ? (need === n ? 'every echo, ears first' : need + ' echoes, ears first') : (need === n ? 'hear every echo' : 'hear ' + need + ' echoes'),
-    brief: 'Set how far the echoes wander, tap the field close to ' + (need === n ? 'each one to hear its thought' : need + ' of them to hear their thoughts') + ', pulse the chamber from the centre, and hold to read the echo weather; the bulletin prints when you are done.',
+    brief: 'Set how far the echoes wander, tap the field close to ' + (need === n ? 'each one to hear its thought' : need + ' of them to hear their thoughts') + ', pulse the chamber from the centre, and hold to read the echo weather; the bulletin prints when you are done.'
+      + (was && was.opener ? ' It is the ' + was.opener + ' your card was showing.' : ''),
     aspect: '1 / 1',
     steps: [
       { id: 'drift', ask: 'how far the echoes wander', kind: 'range', min: 0, max: 100, step: 1, value: from, low: 'hovering', high: 'restless' },
@@ -359,7 +383,8 @@ function listen(env) {
 }
 
 function shuffle(env) {
-  const ch = chamber(env);
+  const was = pressedBulletin(env);
+  const ch = chamber(env, was);
   const s = ch.s;
   const pool = LOOKS.slice();
   const options = [];
@@ -373,7 +398,8 @@ function shuffle(env) {
   let told = 0;
   return {
     title,
-    brief: 'Choose the harmonics, pause or free the drift, shuffle the field ' + times + ' and let it settle; the echo weather prints once it is still.',
+    brief: 'Choose the harmonics, pause or free the drift, shuffle the field ' + times + ' and let it settle; the echo weather prints once it is still.'
+      + (was && was.opener ? ' What prints is the ' + was.opener + ' your card was showing.' : ''),
     aspect: '1 / 1',
     steps: [
       { id: 'harmonics', ask: 'the harmonics', kind: 'choice', options },
@@ -433,7 +459,8 @@ function shuffle(env) {
 }
 
 function ring(env) {
-  const ch = chamber(env);
+  const was = pressedBulletin(env);
+  const ch = chamber(env, was);
   const s = ch.s;
   const count = env.int(3, 5);
   const tone = env.pick([240, 360, 480]);
@@ -444,7 +471,8 @@ function ring(env) {
   s.look = toneLook(tone);
   return {
     title,
-    brief: 'Tap the echo you want to hear, set its tone, and ring it ' + count + ' times; its thought prints when the chamber is still again.',
+    brief: 'Tap the echo you want to hear, set its tone, and ring it ' + count + ' times; its thought prints when the chamber is still again.'
+      + (was && was.closer ? ' Your card signed off: ' + was.closer : ''),
     aspect: '1 / 1',
     steps: [
       { id: 'pick', ask: 'tap the echo you want to hear', kind: 'tap', label: 'pick one for me' },
@@ -565,11 +593,24 @@ function label(ctx, w, env, lines, y, size, align) {
   for (let i = 0; i < lines.length; i++) ctx.fillText(lines[i], align === 'center' ? w / 2 : 12, y + i * size * 1.35);
 }
 
-function choir(c) {
+// The card a score piece was opened from, in the choir's own terms: the tempo it was printed at and
+// which voice it led with, or null for a piece nobody pressed.
+function pressedScore(env) {
+  const was = env.card && env.card.of;
+  const tempo = was ? Number(was.tempo) : NaN;
+  if (!isFinite(tempo)) return null;
+  const at = WAVES.indexOf(was.wave);
+  return { tempo: Math.max(48, Math.min(160, Math.round(tempo))), lead: at < 0 ? 0 : at };
+}
+
+// The voices of a choir. `lead` is the voice the card led with, so the first singer of this choir
+// is the one a visitor pressed.
+function choir(c, lead) {
+  const from = lead || 0;
   return c.points(c.w, c.h, 14).map((p, i) => ({
     star: c.stars[i], home: p, x: p.x, y: p.y,
     phase: (i * 0.73) % (Math.PI * 2), sway: 0.5 + (i % 7) * 0.11,
-    pulse: 0, muted: false, wave: WAVES[i % 4], note: noteOf(c.stars[i])
+    pulse: 0, muted: false, wave: WAVES[(i + from) % 4], note: noteOf(c.stars[i])
   }));
 }
 
@@ -635,23 +676,27 @@ function printChoir(c, s, size) {
 }
 
 function conduct(env) {
+  const was = pressedScore(env);
   const n = env.stars.length;
   const toMute = Math.min(n, env.int(1, 3));
   const shuffles = env.int(1, 2);
   const bars = env.int(2, 3);
-  const s = { voices: [], tempo: 92, running: false, beatAt: 0, step: 0, bars: 0, flash: 0, muted: 0, barsPlayed: false, print: 0 };
+  // The tempo the card's score was printed at: the choir opens where the card left it.
+  const tempo0 = was ? was.tempo : 92;
+  const s = { voices: [], tempo: tempo0, running: false, beatAt: 0, step: 0, bars: 0, flash: 0, muted: 0, barsPlayed: false, print: 0 };
   return {
-    title: 'conduct ' + (bars === 2 ? 'two' : 'three') + ' bars',
+    title: was ? 'conduct ' + (bars === 2 ? 'two' : 'three') + ' bars at ' + tempo0
+      : 'conduct ' + (bars === 2 ? 'two' : 'three') + ' bars',
     brief: 'Set the tempo, tap ' + (toMute === 1 ? 'one voice' : toMute + ' voices') + ' to mute them, reshuffle the phrasing, and let the choir run ' + (bars === 2 ? 'two' : 'three') + ' bars; its score is printed when it has.',
     aspect: '4 / 3',
     steps: [
-      { id: 'tempo', ask: 'the tempo', kind: 'range', min: 48, max: 160, step: 1, value: 92, low: 'slow', high: 'quick' },
+      { id: 'tempo', ask: 'the tempo', kind: 'range', min: 48, max: 160, step: 1, value: tempo0, low: 'slow', high: 'quick' },
       { id: 'mute', ask: 'tap ' + (toMute === 1 ? 'one voice' : toMute + ' voices') + ' to mute them', kind: 'tap', label: 'mute one for me' },
       { id: 'shuffle', ask: 'reshuffle the phrasing', kind: 'press', count: shuffles, label: 'reshuffle' },
       { id: 'run', ask: 'let it run ' + (bars === 2 ? 'two' : 'three') + ' bars', kind: 'wait', after: 'tempo' }
     ],
     start(c) {
-      s.voices = choir(c);
+      s.voices = choir(c, was ? was.lead : 0);
       choirField(c.g, c.w, c.h, c, s.voices, 0, 0);
       c.status(n + (n === 1 ? ' voice' : ' voices') + ', waiting on a tempo');
     },
@@ -709,6 +754,7 @@ function conduct(env) {
 }
 
 function printScore(env) {
+  const was = pressedScore(env);
   const n = env.stars.length;
   const picks = [
     { label: 'every voice', value: 'all' },
@@ -719,7 +765,8 @@ function printScore(env) {
   const options = [];
   while (options.length < 3) options.push(picks.splice(env.int(0, picks.length - 1), 1)[0]);
   const holdMs = env.pick([1500, 2000]);
-  const s = { voices: [], tempo: 92, running: false, beatAt: 0, step: 0, bars: 0, flash: 0, printed: false, print: 0, pick: '' };
+  const tempo0 = was ? was.tempo : 92;
+  const s = { voices: [], tempo: tempo0, running: false, beatAt: 0, step: 0, bars: 0, flash: 0, printed: false, print: 0, pick: '' };
   function applyPick() {
     s.voices.forEach((v, i) => {
       v.muted = s.pick === 'high' ? v.star.y > 50 : s.pick === 'low' ? v.star.y <= 50 : s.pick === 'odd' ? i % 2 === 1 : false;
@@ -728,16 +775,17 @@ function printScore(env) {
   }
   return {
     title: n === 1 ? 'one voice, one score' : 'a score for ' + n + ' voices',
-    brief: 'Choose which voices sing and how fast, hold to start the loop, and print the score of your sky.',
+    brief: 'Choose which voices sing and how fast, hold to start the loop, and print the score of your sky.'
+      + (was ? ' It opens at ' + tempo0 + ', where your card printed it.' : ''),
     aspect: '4 / 3',
     steps: [
       { id: 'who', ask: 'which voices sing', kind: 'choice', options },
-      { id: 'tempo', ask: 'the tempo', kind: 'range', min: 48, max: 160, step: 1, value: 92, low: 'slow', high: 'quick' },
+      { id: 'tempo', ask: 'the tempo', kind: 'range', min: 48, max: 160, step: 1, value: tempo0, low: 'slow', high: 'quick' },
       { id: 'start', ask: 'start the loop', kind: 'hold', ms: holdMs, label: 'hold to start', after: 'who' },
       { id: 'print', ask: 'print the score', kind: 'press', count: 1, label: 'print score', after: 'start' }
     ],
     start(c) {
-      s.voices = choir(c);
+      s.voices = choir(c, was ? was.lead : 0);
       choirField(c.g, c.w, c.h, c, s.voices, 0, 0);
       c.status(n + (n === 1 ? ' voice' : ' voices') + ' in the field');
     },
@@ -793,20 +841,30 @@ export default {
     if (!stars.length) return null;
     const sky = summarize(stars);
     if (isChoir(env)) {
+      const tempo = env.int(52, 152);
+      const wave = env.pick(WAVES);
       return {
         title: 'pulse choir score',
-        mono: stars.length + ' voices\nfield ' + sky.zone + '\nspread ' + sky.spread,
+        mono: stars.length + ' voices\ntempo ' + tempo + ' \u00b7 leading ' + wave
+          + '\nfield ' + sky.zone + '\nspread ' + sky.spread,
         text: 'Your saved stars become a looping choir you can conduct by tempo and muting.',
         aspect: '4 / 3',
-        paint: drawChoir
+        paint: drawChoir,
+        // What this card is of, for the piece it opens as: the tempo it printed, and its first voice.
+        of: { tempo, wave }
       };
     }
+    const opener = env.pick(OPENERS).replace(':', '');
+    const mid = env.pick(MIDS);
+    const closer = env.pick(CLOSERS);
     return {
-      title: env.pick(OPENERS).replace(':', ''),
+      title: opener,
       mono: stars.length + ' echoes, ' + sky.spread + ' spread\nchamber ' + sky.zone + ', tone ' + sky.density,
-      text: env.pick(MIDS) + ' ' + env.pick(CLOSERS),
+      text: mid + ' ' + closer,
       aspect: '1 / 1',
-      paint: (ctx, w, h, e) => echoes(ctx, w, h, e, e.rnd() * 10)
+      paint: (ctx, w, h, e) => echoes(ctx, w, h, e, e.rnd() * 10),
+      // What this card is of, for the piece it opens as: the bulletin it printed.
+      of: { opener, mid, closer }
     };
   },
   piece(env) {

@@ -2,7 +2,20 @@
    one mark per star (paint, spark). As a piece it is one of two things: an entry written a line
    at a time from where the stars sit and sealed with the whole sky pressed into the wax, or the
    stars called back one by one in the order they came and written up under a watch of the
-   visitor's choosing. See js/feed.js for what a module is and js/stage.js for what a piece is. */
+   visitor's choosing. See js/feed.js for what a module is and js/stage.js for what a piece is.
+
+   A card and the feature it opens as are one entry: the spark puts its number and the star it was
+   written from on its spec as `of`, and the piece carries the number onto the page it writes and
+   opens from the same star. */
+
+// The card this piece was opened from, in the logbook's own terms: the entry number it was and the
+// star it was written from, or null for a piece nobody pressed (js/stage.js, env.card.of).
+function pressed(env) {
+  const was = env.card && env.card.of;
+  const number = was ? Number(was.entry) : NaN;
+  if (!isFinite(number)) return null;
+  return { entry: Math.max(1, Math.round(number)), star: typeof was.star === 'string' ? was.star : '' };
+}
 
 const INKS = [
   { label: 'night', value: 'accent' },
@@ -298,6 +311,7 @@ function logbook(ctx, w, h, env) {
 // An entry written a line at a time from where the stars sit, then sealed; the sky goes into
 // the wax when it is done.
 function entry(env) {
+  const was = pressed(env);
   const inks = three(env, INKS);
   const count = env.int(3, 4);
   const holdMs = env.pick([1500, 2000, 2500]);
@@ -310,7 +324,7 @@ function entry(env) {
     if (!s.lines) {
       const sum = summary(c.stars);
       const n = c.stars.length;
-      s.title = entryTitle(c.stars);
+      s.title = (was ? 'entry ' + was.entry + ', ' : '') + entryTitle(c.stars);
       const all = [
         opener + ' ' + s.title,
         n + (n === 1 ? ' star' : ' stars') + ', centred at ' + sum.cx.toFixed(0) + ' / ' + sum.cy.toFixed(0) + ', ' + spreadWord(sum.spread) + '.',
@@ -352,8 +366,10 @@ function entry(env) {
     if (s.sealed) seal(c.g, c, sx, sy, r, 0.5 + f * 0.5);
   }
   return {
-    title: count === 4 ? 'four lines in the logbook' : 'a three-line entry',
-    brief: 'Choose the ink and how far the sky drifts, write the entry a line at a time, and hold to seal it; the stars go into the wax when you are done.',
+    title: was ? 'entry ' + was.entry + ', in ' + (count === 4 ? 'four lines' : 'three lines')
+      : count === 4 ? 'four lines in the logbook' : 'a three-line entry',
+    brief: 'Choose the ink and how far the sky drifts, write the entry a line at a time, and hold to seal it; the stars go into the wax when you are done.'
+      + (was && was.star ? ' It is the entry your card began, from the star that said "' + was.star + '".' : ''),
     aspect: '4 / 3',
     steps: [
       { id: 'ink', ask: 'the ink', kind: 'choice', options: inks },
@@ -397,6 +413,7 @@ function entry(env) {
 // The stars called back one by one in the order they came, under a watch of the visitor's
 // choosing, with a hum under it if they like; the whole constellation lights when all are back.
 function replay(env) {
+  const was = pressed(env);
   const n = env.stars.length;
   const watches = three(env, WATCHES);
   const batch = Math.ceil(n / env.int(3, 5));
@@ -441,8 +458,9 @@ function replay(env) {
     rows(c, fr, step, shown, (i) => (f > 0 && i === 0 ? c.alpha(gold, 0.95) : c.alpha(c.colors.fg, 0.85)));
   }
   return {
-    title,
-    brief: 'Pick the watch, set the drift, let the sky hum if you like, and tap it to call each thought back in the order it came; the whole constellation lights when they are all back.',
+    title: was ? title + ', from entry ' + was.entry : title,
+    brief: 'Pick the watch, set the drift, let the sky hum if you like, and tap it to call each thought back in the order it came; the whole constellation lights when they are all back.'
+      + (was && was.star ? ' Your card stopped at the one that said "' + was.star + '".' : ''),
     aspect: '4 / 3',
     steps: [
       { id: 'watch', ask: 'which watch to log it under', kind: 'choice', options: watches },
@@ -517,12 +535,15 @@ export default {
     const star = env.pick(env.stars);
     const other = nearest(env.stars, star);
     const relation = other ? 'nearest the one that said "' + other.text + '"' : 'alone in the whole sky';
+    const number = env.hash(star.text + star.x) % 400 + 1;
     return {
-      title: 'entry ' + (env.hash(star.text + star.x) % 400 + 1),
+      title: 'entry ' + number,
       quote: 'The star that said "' + star.text + '" sits ' + where(star) + ', ' + relation + '.',
       text: 'Written from where it sits. Move it in your persona and the entry changes.',
       aspect: '4 / 3',
-      paint: logbook
+      paint: logbook,
+      // What this card is of, for the piece it opens as: its number, and the star it was written from.
+      of: { entry: number, star: star.text }
     };
   },
   piece(env) {

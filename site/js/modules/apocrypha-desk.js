@@ -3,7 +3,41 @@
    piece it is a specimen to name, wear, lie to and stamp into the drawer, a drawer of specimens
    to cross-reference, or a solid with two different silhouettes to turn and catalogue. Nothing
    here is a real object, a real collection or a real claim about the world. See js/feed.js for
-   what a module is and js/stage.js for what a piece is. */
+   what a module is and js/stage.js for what a piece is.
+
+   A card and the feature it opens as are one specimen: the spark puts what it catalogued on its
+   spec as `of` -- the number, the object, its provenance and its assessment, or the whole turning
+   plan -- and the piece has that specimen on the desk, so pressing a catalogue entry in the feed
+   opens the desk with that entry on it. */
+
+// The card this piece was opened from, in the desk's own terms: the specimen it catalogued, or the
+// turning plan it previewed, or null for a piece nobody pressed (js/stage.js, env.card.of).
+function pressed(env) {
+  const was = env.card && env.card.of;
+  if (!was) return null;
+  if (was.plan && was.plan.front && was.plan.mesh) return { plan: was.plan };
+  const text = (value) => (typeof value === 'string' ? value : '');
+  const object = text(was.object);
+  return object ? {
+    number: text(was.number),
+    material: text(was.material),
+    object,
+    qualifier: text(was.qualifier),
+    provenance: text(was.provenance),
+    verdict: text(was.verdict)
+  } : null;
+}
+
+// The three materials a piece offers, with the one the card named first: a specimen is made of
+// what its card said it was made of.
+function materialsFrom(env, material) {
+  const options = some(env, MATERIALS, 3).map((m) => ({ label: m, value: m }));
+  if (!material) return options;
+  const at = options.findIndex((o) => o.value === material);
+  if (at >= 0) options.unshift(options.splice(at, 1)[0]);
+  else options.unshift({ label: material, value: material });
+  return options.slice(0, 4);
+}
 
 const MATERIALS = ['brass', 'horn', 'bakelite', 'tin', 'bone', 'blue glass', 'wax', 'pewter', 'felt', 'cedar',
   'slate', 'ivory-coloured celluloid'];
@@ -297,13 +331,17 @@ function desk(ctx, w, h, env) {
 /* ---- piece one: accession a specimen -------------------------------------------------------- */
 
 function accession(env) {
-  const object = env.pick(OBJECTS);
-  const qualifier = env.pick(QUALIFIERS);
-  const options = some(env, MATERIALS, 3).map((m) => ({ label: m, value: m }));
+  const was = pressed(env);
+  const had = was && !was.plan ? was : null;
+  // The specimen the card catalogued is the one on the desk: its object, its qualifier, its
+  // number, its provenance and its assessment, with the material it named first on the dial.
+  const object = had && OBJECTS.indexOf(had.object) >= 0 ? had.object : env.pick(OBJECTS);
+  const qualifier = had && had.qualifier ? had.qualifier : env.pick(QUALIFIERS);
+  const options = materialsFrom(env, had ? had.material : '');
   const count = env.int(2, 3);
-  const number = catalogue(env);
+  const number = had && had.number ? had.number : catalogue(env);
   const place = env.pick(PLACES);
-  const verdict = env.pick(VERDICTS);
+  const verdict = had && had.verdict ? had.verdict : env.pick(VERDICTS);
   const look = scenery(env);
   const kind = KINDS[object] || 'disc';
   const times = count === 2 ? 'twice' : 'three times';
@@ -426,6 +464,8 @@ function accession(env) {
 /* ---- piece two: cross-reference the drawer -------------------------------------------------- */
 
 function crossReference(env) {
+  const was = pressed(env);
+  const had = was && !was.plan ? was : null;
   const n = env.int(4, 6);
   const need = env.int(2, 3);
   const links = some(env, LINKS, 3);
@@ -447,6 +487,12 @@ function crossReference(env) {
       hr: (env.rnd() - 0.5) * 0.7,
       gr: (env.rnd() - 0.5) * 0.1
     });
+  }
+  // The specimen the card catalogued is already in the drawer, first in it.
+  if (had && items.length) {
+    items[0].number = had.number || items[0].number;
+    items[0].name = ((had.material ? had.material + ' ' : '') + had.object).trim();
+    items[0].kind = KINDS[had.object] || items[0].kind;
   }
   const s = { spread: 0.5, link: links[0], chosen: false, picks: [], lift: 0, file: 0, t: 0 };
   function place(c, it) {
@@ -566,7 +612,8 @@ function crossReference(env) {
   }
   return {
     title: need === 2 ? 'cross-reference the drawer' : 'three of a kind in the drawer',
-    brief: 'The drawer holds ' + n + ' specimens with nothing in common: lay them out, choose what ties them, tap ' + (need === 2 ? 'two' : 'three') + ' of them, and hold to file them together.',
+    brief: 'The drawer holds ' + n + ' specimens with nothing in common: lay them out, choose what ties them, tap ' + (need === 2 ? 'two' : 'three') + ' of them, and hold to file them together.'
+      + (had ? ' Yours, ' + items[0].number + ', is in there.' : ''),
     aspect: '4 / 3',
     steps: [
       { id: 'spread', ask: 'how the drawer is laid out', kind: 'range', min: 0, max: 100, step: 1, value: 50, low: 'heaped', high: 'in rows' },
@@ -811,7 +858,14 @@ function turningPreview(g, w, h, env, plan) {
 }
 
 function turningSpecimen(env) {
-  const plan = turningPlan(env);
+  const was = pressed(env);
+  // The solid the card previewed, exactly as it previewed it; a card of a catalogued specimen
+  // instead lends its number and its material to a fresh plan.
+  const plan = was && was.plan ? was.plan : turningPlan(env);
+  if (was && !was.plan) {
+    plan.number = was.number || plan.number;
+    plan.materials = materialsFrom(env, was.material);
+  }
   const composition = { density: 1, scale: 1 };
   const s = { angle: 0, target: 0, material: '', guess: '', stamped: false, revealed: false };
   function draw(c) {
@@ -889,11 +943,18 @@ export default {
       };
     }
     const number = 'APC-' + env.int(1000, 9999) + '-' + env.pick('abcdefghk'.split(''));
+    const material = env.pick(MATERIALS);
+    const object = env.pick(OBJECTS);
+    const qualifier = env.pick(QUALIFIERS);
+    const provenance = env.pick(PROVENANCE);
+    const verdict = env.pick(VERDICTS);
     return {
       overline: number,
-      title: 'a ' + env.pick(MATERIALS) + ' ' + env.pick(OBJECTS) + ' ' + env.pick(QUALIFIERS),
-      text: 'provenance: ' + env.pick(PROVENANCE) + '.',
-      cite: 'assessment: ' + env.pick(VERDICTS) + '.'
+      title: 'a ' + material + ' ' + object + ' ' + qualifier,
+      text: 'provenance: ' + provenance + '.',
+      cite: 'assessment: ' + verdict + '.',
+      // What this card is of, for the piece it opens as: the specimen it catalogued.
+      of: { number, material, object, qualifier, provenance, verdict }
     };
   },
   piece(env) {
