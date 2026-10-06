@@ -1,22 +1,8 @@
-/* The orbital weaver: the persona's stars mirrored into a slow mandala. As a card it is the
-   weave, with a mantra woven from what the stars say (paint, spark); as a piece it is the loom
-   itself: a symmetry dial, a spin, a weave to ripple by touch, and a geometry mantra that prints
-   when the pattern closes. See js/feed.js for what a module is and js/stage.js for what a piece
-   is.
-
-   A card and the feature it opens as are one weave: the spark puts its symmetry and its mantra on
-   its spec as `of`, and the loom opens at that symmetry and prints that mantra, so pressing a
-   mantra in the feed opens the loom that was saying it. */
-
-// The card this piece was opened from, in the loom's own terms: the symmetry it was woven at and
-// the mantra it was saying, or null for a piece nobody pressed (js/stage.js, env.card.of).
-function pressed(env) {
-  const was = env.card && env.card.of;
-  const spokes = was ? Number(was.spokes) : NaN;
-  if (!isFinite(spokes)) return null;
-  const said = Array.isArray(was.words) ? was.words.filter((text) => typeof text === 'string' && text) : [];
-  return { spokes: Math.max(3, Math.min(12, Math.round(spokes))), words: said };
-}
+/* The orbital weaver: the persona's stars mirrored into a slow mandala, or read as the starting
+   offsets of two striped screens. Cards and pieces select the same shape from their seed. The
+   loom closes into a mantra; the screens expose real moire bands through their overlap, with a
+   prediction and a print of the visitor's settings. See js/feed.js for what a module is and
+   js/stage.js for what a piece is. */
 
 const NUMBERS = ['', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve'];
 
@@ -543,8 +529,240 @@ function rest(env) {
   };
 }
 
+/* ---- two striped screens ------------------------------------------------------------------- */
+
+const SCREEN_GUESSES = [
+  { label: 'upright bands', value: 'upright' },
+  { label: 'bands across the screen', value: 'across' },
+  { label: 'slanted bands', value: 'slanted' },
+  { label: 'no broad bands', value: 'none' }
+];
+
+function showsScreens(env) {
+  return (env.seed & 1) === 1;
+}
+
+function screenPlan(env) {
+  const n = env.stars.length || 1;
+  const lower = env.stars.reduce((sum, star) => sum + star.x / 100, 0) / n;
+  const upper = env.stars.reduce((sum, star) => sum + star.y / 100, 0) / n;
+  return {
+    lower, upper,
+    lines: env.int(34, 44) + env.stars.length % 5,
+    tilt: env.pick([-8, -4, -2, 2, 4, 8]),
+    spacing: env.pick([96, 98, 100, 102, 104]),
+    number: env.int(100, 999),
+    title: env.pick(['two screens, one hidden pattern', 'a large pattern from small lines', 'a sky between two screens'])
+  };
+}
+
+// The broad bands follow the difference between the two spatial-frequency vectors. Their
+// direction and spacing are measured from the same tilt and pitch that draw the actual masks.
+function screenBeat(tilt, ratio) {
+  const a = tilt * Math.PI / 180;
+  const dx = 1 - Math.cos(a) / ratio;
+  const dy = -Math.sin(a) / ratio;
+  const length = Math.hypot(dx, dy);
+  if (length < 1e-8) return { direction: 'none', repeat: 0 };
+  const angle = ((Math.atan2(dx, -dy) * 180 / Math.PI) % 180 + 180) % 180;
+  const direction = Math.abs(angle - 90) <= 15 ? 'upright'
+    : angle <= 15 || angle >= 165 ? 'across' : 'slanted';
+  return { direction, repeat: 1 / length };
+}
+
+function bandLine(plan, s) {
+  const b = screenBeat(s.tilt, s.ratio);
+  if (b.direction === 'none') {
+    return 'The fine lines have the same direction and spacing. There are no broad bands; sliding only changes how much light gets through.';
+  }
+  return 'The broad bands run ' + b.direction + '. One broad band spans about '
+    + Number(b.repeat.toFixed(1)) + ' fine-line spacings.'
+    + (b.repeat > plan.lines ? ' Only part of one fits in this screen.' : '');
+}
+
+function screenBoxes(w, h) {
+  const m = Math.min(w, h);
+  const pad = m * 0.05;
+  const size = Math.max(11, Math.min(16, Math.round(m * 0.035)));
+  const width = w - pad * 2;
+  const top = pad + size * 1.5;
+  const sampleH = h * 0.18;
+  const bothY = top + sampleH + pad + size * 1.5;
+  return {
+    pad, size,
+    lower: { x: pad, y: top, w: (width - pad) / 2, h: sampleH },
+    upper: { x: pad + (width + pad) / 2, y: top, w: (width - pad) / 2, h: sampleH },
+    both: { x: pad, y: bothY, w: width, h: Math.max(1, h - bothY - pad - size * 1.5) }
+  };
+}
+
+function screenStripes(g, box, pitch, angle, phase, duty, color) {
+  const reach = Math.hypot(box.w, box.h);
+  const offset = ((phase % 1) + 1) % 1 * pitch;
+  g.save();
+  g.beginPath();
+  g.rect(box.x, box.y, box.w, box.h);
+  g.clip();
+  g.translate(box.x + box.w / 2, box.y + box.h / 2);
+  g.rotate(angle);
+  g.fillStyle = color;
+  for (let x = -Math.ceil(reach / pitch) * pitch + offset; x <= reach; x += pitch) {
+    g.fillRect(x, -reach, pitch * duty, reach * 2);
+  }
+  g.restore();
+}
+
+function screenScene(g, w, h, c, plan, s, variant) {
+  const box = screenBoxes(w, h);
+  const k = c.colors;
+  const scale = variant ? variant.scale : 1;
+  const density = variant ? variant.density : 1;
+  const turn = variant ? variant.turn : 0;
+  const pitch = box.both.w / plan.lines * scale;
+  const duty = Math.max(0.32, Math.min(0.64, 0.48 * density));
+  const angle = s.tilt * Math.PI / 180;
+  const upperPhase = plan.upper + turn + (s.x * Math.cos(angle) + s.y * Math.sin(angle)) / s.ratio;
+  const lowerLight = c.mix(k.accent, k.fg, 0.35);
+  const upperLight = c.mix(k.accent2, k.fg, 0.35);
+  g.save();
+  const background = g.createLinearGradient(0, 0, 0, h);
+  background.addColorStop(0, k.bg2);
+  background.addColorStop(1, k.bg);
+  g.fillStyle = background;
+  g.fillRect(0, 0, w, h);
+
+  g.fillStyle = k.bg;
+  g.fillRect(box.lower.x, box.lower.y, box.lower.w, box.lower.h);
+  screenStripes(g, box.lower, pitch, 0, plan.lower, duty, lowerLight);
+  g.fillStyle = upperLight;
+  g.fillRect(box.upper.x, box.upper.y, box.upper.w, box.upper.h);
+  screenStripes(g, box.upper, pitch * s.ratio, angle, upperPhase, duty, k.bg);
+
+  g.fillStyle = k.bg;
+  g.fillRect(box.both.x, box.both.y, box.both.w, box.both.h);
+  screenStripes(g, box.both, pitch, 0, plan.lower, duty, lowerLight);
+  if (s.slid) {
+    // Only narrow stripes are drawn. The large bands emerge when the second screen covers the
+    // first; there is no separately painted envelope or replacement picture.
+    screenStripes(g, box.both, pitch * s.ratio, angle, upperPhase, duty, k.bg);
+  }
+
+  g.strokeStyle = c.alpha(k.muted, 0.7);
+  g.lineWidth = 1;
+  for (const panel of [box.lower, box.upper, box.both]) {
+    g.strokeRect(panel.x, panel.y, panel.w, panel.h);
+  }
+  if (s.finished) {
+    g.strokeStyle = k.accent2;
+    g.lineWidth = 2;
+    g.strokeRect(box.both.x, box.both.y, box.both.w, box.both.h);
+  }
+  g.font = '500 ' + box.size + 'px system-ui, sans-serif';
+  g.textAlign = 'left';
+  g.textBaseline = 'bottom';
+  g.fillStyle = k.fg;
+  g.fillText('lower screen', box.lower.x, box.lower.y - box.size * 0.35);
+  g.fillText('upper screen', box.upper.x, box.upper.y - box.size * 0.35);
+  g.fillText(s.slid ? 'both together' : 'lower screen alone', box.both.x, box.both.y - box.size * 0.35);
+  const footer = s.finished ? 'print ' + plan.number
+    : s.slid ? s.tilt + ' degrees / ' + Number((s.ratio * 100).toFixed(2)) + '% spacing'
+      : 'tap to lay the screens together';
+  g.fillStyle = s.finished ? k.accent2 : k.fg;
+  g.fillText(footer, box.pad, h - box.pad * 0.35);
+  g.restore();
+}
+
+function screenPreview(g, w, h, env, plan) {
+  const v = env.variant;
+  screenScene(g, w, h, env, plan, {
+    tilt: plan.tilt + v.turn * 4,
+    ratio: plan.spacing / 100,
+    x: 0, y: 0, slid: true, finished: false
+  }, v);
+}
+
+function screenPiece(env) {
+  const plan = screenPlan(env);
+  const s = {
+    tilt: plan.tilt, ratio: plan.spacing / 100, x: 0, y: 0,
+    tuned: false, slid: false, guess: '', finished: false
+  };
+  function paint(c) {
+    screenScene(c.g, c.w, c.h, c, plan, s);
+  }
+  function setting(c, line) {
+    c.status(line + ' ' + (s.slid ? bandLine(plan, s) : 'The two screens are still apart.'));
+  }
+  return {
+    title: plan.title,
+    brief: 'Set the tilt and spacing of two striped screens, predict the bands they will make, tap to lay one over the other, then print the overlap; tiny changes can make a much larger pattern.',
+    aspect: '4 / 3',
+    steps: [
+      { id: 'tilt', ask: 'upper-screen tilt, in degrees', kind: 'range', min: -12, max: 12, step: 0.25, value: plan.tilt, low: '-12', high: '+12' },
+      { id: 'spacing', ask: 'upper-screen spacing, compared with the lower screen', kind: 'range', min: 94, max: 106, step: 0.25, value: plan.spacing, low: '94%', high: '106%' },
+      { id: 'guess', ask: 'which broad bands will the overlap make?', kind: 'choice', options: SCREEN_GUESSES },
+      { id: 'slide', ask: 'tap anywhere to lay the screens together and slide the upper one', kind: 'tap', label: 'slide it for me', after: 'tilt' },
+      { id: 'print', ask: 'print this overlap', kind: 'press', count: 1, label: 'print the overlap', after: 'slide' }
+    ],
+    start(c) {
+      c.status('Your stars set the screens\' starting offsets. The small windows show each screen separately; the large window holds only the lower one until you tap.');
+      paint(c);
+    },
+    apply(id, value, c) {
+      if (c.done) return;
+      if (id === 'tilt') {
+        s.tilt = Math.max(-12, Math.min(12, Number(value)));
+        s.tuned = true;
+        setting(c, 'Upper-screen tilt: ' + s.tilt + ' degrees.');
+      }
+      if (id === 'spacing') {
+        s.ratio = Math.max(94, Math.min(106, Number(value))) / 100;
+        setting(c, 'Upper-screen spacing: ' + Number((s.ratio * 100).toFixed(2)) + '% of the lower screen.');
+      }
+      if (id === 'guess') {
+        s.guess = String(value);
+        const prediction = SCREEN_GUESSES.find((option) => option.value === s.guess);
+        c.status('Your prediction: ' + prediction.label + '. '
+          + (s.slid ? 'You can still change the overlap.' : 'Set the tilt, then tap to lay the screens together.'));
+      }
+      if (id === 'print') {
+        c.status('You have asked for the print. Any remaining choices still shape the overlap.');
+      }
+      paint(c);
+    },
+    tap(x, y, c) {
+      if (c.done) return;
+      if (!s.tuned) {
+        c.status('Set the tilt first; then anywhere on the scene slides the upper screen.');
+        return;
+      }
+      s.x = (x - 0.5) * 10;
+      s.y = (y - 0.5) * 10;
+      s.slid = true;
+      c.progress('slide', 1);
+      c.status(bandLine(plan, s) + ' The upper screen has moved; tilt and spacing still work.');
+      c.satisfy('slide');
+      paint(c);
+    },
+    frame(t, dt, c) {
+      paint(c);
+    },
+    end(c) {
+      s.finished = true;
+      const b = screenBeat(s.tilt, s.ratio);
+      const prediction = SCREEN_GUESSES.find((option) => option.value === s.guess);
+      paint(c);
+      c.status('Print ' + plan.number + '. ' + bandLine(plan, s)
+        + ' Your prediction: ' + prediction.label + '. '
+        + (s.guess === b.direction ? 'You called it.' : 'The overlap chose a different direction.')
+        + ' Both screens contain only fine stripes; the broad pattern belongs to their overlap.');
+    }
+  };
+}
+
 function piece(env) {
   if (!env.stars || !env.stars.length) return null;
+  if (showsScreens(env)) return screenPiece(env);
   if (env.chance(0.4)) return ripples(env);
   return env.chance(0.58) ? dial(env) : rest(env);
 }
@@ -553,14 +771,25 @@ export default {
   id: 'orbital-weaver',
   needsSky: true,
   paint(ctx, w, h, env) {
-    weave(ctx, w, h, env, Math.max(3, Math.round(env.int(4, 9) * env.variant.density)), 0);
+    if (showsScreens(env)) screenPreview(ctx, w, h, env, screenPlan(env));
+    else weave(ctx, w, h, env, Math.max(3, Math.round(env.int(4, 9) * env.variant.density)), 0);
   },
   animate(ctx, w, h, env, t) {
+    if (showsScreens(env)) return;
     const spokes = 4 + Math.floor(env.seed % 6);
     weave(ctx, w, h, env, spokes, t);
   },
   spark(env) {
     if (!env.stars.length) return null;
+    if (showsScreens(env)) {
+      const plan = screenPlan(env);
+      return {
+        title: plan.title,
+        text: 'Two fine grids hide a much larger pattern. Tilt one by a few degrees, predict where the bands run, and slide the screens together to find out.',
+        aspect: '4 / 3',
+        paint: (ctx, w, h, e) => screenPreview(ctx, w, h, e, plan)
+      };
+    }
     const k = env.int(3, 12);
     const mantra = words(env, 3);
     return {
