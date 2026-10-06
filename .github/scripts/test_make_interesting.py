@@ -3927,7 +3927,12 @@ class CompletionAxiomTest(SiteDirTestCase):
         # out, so the harness refuses it; the same piece made of its card is accepted.
         self.module.write_text(card_module(FINISHING_PIECE))
         missing = mi.worlds_without_a_finish(dict(mi.read_site()))
-        self.assertIn("whichever card it was opened from", missing.get("toy.html", ""))
+        refused = missing.get("toy.html", "")
+        # The harness's own words, which name the two cards it told apart rather than saying only
+        # that it told them apart: a run reading this has to be able to see which pair it was.
+        self.assertIn("the piece is the same piece", refused)
+        self.assertIn("whether it is opened from", refused)
+        self.assertIn("piece(env) has to read env.card", refused)
         self.module.write_text(card_module(OF_ITS_CARD_PIECE))
         self.assertEqual(mi.worlds_without_a_finish(dict(mi.read_site())), {})
 
