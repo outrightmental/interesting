@@ -87,6 +87,27 @@
   rewrite -- no longer offers the component. The menu asks either way.
 
   ---------------------------------------------------------------------------------------------
+  Presented somewhere else
+
+  The corner button and the panel it opens are what this file draws on its own, and what a visitor
+  gets if nothing else is there. The shell adopts the button into the logo's constellation, and
+  when that option is picked it asks for the panel itself rather than pressing the button:
+
+      var release = window.interestingState.menu.present(host);   // null if it cannot be hosted
+      window.interestingState.menu.panel                          // the panel, to watch it close
+
+  The panel is moved into `host`, dressed as a modal -- laid out by the host rather than pinned to
+  the corner, and roomy, because there it has the whole screen to spread out in -- and opened.
+  `release()` closes it and puts it back where it was built. Nothing else about it changes: the
+  same contents, the same words, the same reload after an import or a clear.
+
+  That is what issue #66 asks for: the lightbox the shell has already raised stays up, the
+  constellation gives way to this panel inside it, and closing the panel closes the lightbox with
+  it. The arrangement is this way round -- the shell asks, this file moves -- because this file is
+  the fixed one. A shell that stops asking leaves a corner menu that still works, so no run can
+  leave a visitor without a way to their own state.
+
+  ---------------------------------------------------------------------------------------------
   Out of reach
 
   The AI iteration may rewrite any page of this site, so the line above is an axiom of every
@@ -409,7 +430,34 @@
     '.site-meta-open:focus-visible, .site-meta-panel button:focus-visible,',
     '.site-meta-panel textarea:focus-visible {',
     '  outline: 2px solid #8db8ff; outline-offset: 2px;',
-    '}'
+    '}',
+    /* Presented by the shell (see "Presented somewhere else" above): the host places it, so the
+       corner pinning goes -- and since the host is the middle of the screen, the panel takes the
+       room it has there. The same panel, spread out: a document a visitor can actually read, a box
+       they can actually paste into, and nothing about it in any hurry. Last in this sheet so it
+       wins over the corner placement above, and silent about `display` so [hidden] still hides it.
+       These rules are here rather than in the shell's stylesheet for the reason all of them are:
+       an hourly run owns that stylesheet, and the one way to a visitor's own state does not
+       become unreadable because a run reworked the nav. */
+    '.site-meta-panel[data-site-meta-presented] {',
+    '  position: static; right: auto; bottom: auto;',
+    '  width: min(46rem, calc(100vw - 2rem)); max-height: calc(100vh - 7rem);',
+    '  padding: 1.15rem 1.25rem 1rem; border-radius: 0.8rem;',
+    '  font-size: 0.86rem; line-height: 1.55;',
+    '  box-shadow: 0 1rem 3rem rgba(0, 0, 0, 0.66);',
+    '}',
+    '.site-meta-panel[data-site-meta-presented] p { margin: 0 0 0.75rem; }',
+    '.site-meta-panel[data-site-meta-presented] label { margin: 0 0 0.4rem; }',
+    '.site-meta-panel[data-site-meta-presented] textarea {',
+    '  min-height: min(18rem, 42vh); padding: 0.7rem; font-size: 0.78rem; line-height: 1.5;',
+    '}',
+    '.site-meta-panel[data-site-meta-presented] .site-meta-actions {',
+    '  gap: 0.5rem; margin-top: 0.85rem;',
+    '}',
+    '.site-meta-panel[data-site-meta-presented] .site-meta-actions button {',
+    '  flex: 0 1 auto; padding: 0.4rem 1.2rem; font-size: 0.8rem;',
+    '}',
+    '.site-meta-panel[data-site-meta-presented] .site-meta-note { margin-top: 0.75rem; }'
   ].join('\n');
 
   /* The shared destructive-control component, in js/site.js: the one warning treatment and the one
@@ -633,15 +681,51 @@
 
     /* Escape closes it, and a press anywhere else on the page does too, which is what a popup
        owes anyone who opened it by mistake. Neither reaches inside a dialog floating over the
-       page: an Escape there is the dialog's own, and a press there is not a press on the page. */
+       page: an Escape there is the dialog's own, and a press there is not a press on the page.
+       "Anywhere else" means outside the panel as well as outside the corner it was built in: a
+       shell hosting the panel elsewhere (below) has moved it out of that corner, and a press on
+       the panel is the one press that is certainly not a press on the page. */
     window.document.addEventListener('keydown', function (event) {
       if (panel.hidden || insideADialog(event.target)) return;
       if (event.key === 'Escape' || event.key === 'Esc') hide(true);
     });
     window.document.addEventListener('pointerdown', function (event) {
       if (panel.hidden || insideADialog(event.target)) return;
-      if (!root.contains(event.target)) hide(false);
+      if (!root.contains(event.target) && !panel.contains(event.target)) hide(false);
     });
+
+    /* Hosted somewhere else, for the shell that has a better place for this than the corner: see
+       "Presented somewhere else" in the header. The panel is moved, dressed as a modal and opened;
+       the function that comes back closes it and puts it where it was built. Nothing here knows
+       what the host is for -- a lightbox, in js/site.js, as of issue #66 -- and nothing here waits
+       on it: a shell that never asks leaves the corner menu exactly as it has always been. */
+    var presented = null; // where the panel came from, while something else is holding it
+
+    function present(host) {
+      if (!host || typeof host.appendChild !== 'function') return null;
+      // Where it was built, kept from the first press: the panel is the last thing in its own root,
+      // so putting it back there is putting it back exactly.
+      if (!presented) presented = { parent: panel.parentNode };
+      host.appendChild(panel); // a node has one parent, so this is also a move out of the corner
+      panel.setAttribute('data-site-meta-presented', '');
+      // Everything behind a host like this is inert, which is what a modal means to a screen
+      // reader. The host arranges that; the panel says it.
+      panel.setAttribute('aria-modal', 'true');
+      show();
+      return giveItBack;
+    }
+
+    function giveItBack() {
+      if (!presented) return;
+      var came = presented.parent;
+      presented = null;
+      hide(false); // the focus is the host's to place: it knows what it is giving the page back to
+      panel.removeAttribute('data-site-meta-presented');
+      panel.removeAttribute('aria-modal');
+      if (came && typeof came.appendChild === 'function') came.appendChild(panel);
+    }
+
+    window.interestingState.menu = { panel: panel, present: present };
 
     window.document.body.appendChild(root);
   }
