@@ -580,6 +580,11 @@ function begin(world, mod, seed, token, opts) {
   ui.scene.style.setProperty('--piece-ratio', ratio.toFixed(4));
   renderKnobs();
   renderProgress();
+  // Dim for the whole piece, lit only when it is finished (issue #78). begin() is reached both
+  // through open()/close(), which dims it, and straight from a gate's onReady once a sky is
+  // seeded, where it was lit so the visitor could pass the seeding by -- so the piece itself has
+  // to put it back to dim, or a sky-gated world would start live with the way on still lit.
+  dimTheWayOn();
 
   // The scene has a size only once the stage is in a mode that shows it.
   setMode(opts && opts.arriving && !calm.matches ? 'arriving' : 'live');
