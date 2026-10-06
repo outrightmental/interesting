@@ -99,6 +99,46 @@ function palette(card, m) {
   return seeds;
 }
 
+/* What a card is showing, as content: the thing a visitor pressed, which travels with the card to
+   the stage and is the feature's own title and line there (issue #80).
+
+   A spark card is showing what its world's module made for its seed and configuration -- the spec
+   sparkBody() wrote into it, `of` and all (see the contract at the top) -- so that spec is the
+   content, exactly as it stands on the card. A world card is showing the world's own orientation,
+   name and line, which is the one thing every card of that world says, so that is its content and
+   the feature it opens has to be titled by its piece rather than by it.
+
+   Nothing is invented here and nothing is re-rolled: this is a reading of the card as the visitor
+   last saw it, which is what "the feature is the card you pressed" has to mean. */
+function shown(m) {
+  if (!m || !m.world) return null;
+  const spec = m.spec;
+  if (spec) {
+    return {
+      kind: 'spark',
+      overline: spec.overline || m.world.name,
+      title: spec.title || m.world.name,
+      quote: spec.quote || '',
+      text: spec.text || '',
+      mono: spec.mono || '',
+      cite: spec.cite || '',
+      aspect: spec.aspect || m.world.aspect,
+      of: spec.of || null
+    };
+  }
+  return {
+    kind: 'world',
+    overline: m.world.orientation,
+    title: m.world.name,
+    quote: '',
+    text: m.world.what,
+    mono: '',
+    cite: '',
+    aspect: m.world.aspect,
+    of: null
+  };
+}
+
 const WORLDS = grid ? Array.from(grid.querySelectorAll('.card-world')).map((card) => {
   const media = card.querySelector('.card-media');
   const text = card.querySelector('.card-text');
@@ -504,6 +544,11 @@ function openFromCard(ev) {
   const seeds = palette(card, m);
   const file = m.world.file;
   const seed = m.seed;
+  // And the rest of what the card is: its configuration, and the content it was showing. The stage
+  // frames, paints and titles the feature from these, and hands them to the world's module on env,
+  // so what opens is the piece the visitor pressed and not the world's generic line (issue #80).
+  const variant = m.variant;
+  const was = shown(m);
   consume(card);
   window.interestingStage.open(file, seed, { arriving: true, scroll: true, seeds, variant, card: was });
 }
