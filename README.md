@@ -40,22 +40,31 @@ iterate a more interesting website
   CloudFront is the only publisher: the site used to be served from GitHub Pages as well, which
   is retired.
 - **Hourly AI iteration** — [`.github/workflows/make-interesting.yml`](.github/workflows/make-interesting.yml)
-  runs every hour (or manually via *Run workflow*). It picks a random model from
-  [GitHub Copilot](https://docs.github.com/copilot), reached through the
-  [Copilot CLI](https://docs.github.com/copilot/how-tos/copilot-cli) and billed to a GitHub Copilot
-  subscription (see [Setup](#setup)), gives it the mission **"make the website more interesting as a
-  coherent whole"** — where *interesting* means user engagement time, and nothing else (see
+  runs every hour (or manually via *Run workflow*). It picks one of the heaviest models
+  [GitHub Copilot](https://docs.github.com/copilot) offers, reached through the
+  [Copilot CLI](https://docs.github.com/copilot/how-tos/copilot-cli) at near-maximum reasoning
+  effort and billed to a GitHub Copilot subscription (see [Setup](#setup)), gives it the run's
+  mission — where *interesting* means user engagement time, and nothing else (see
   [Engagement-time axiom](#engagement-time-axiom)) —
   and commits the result to `main`; the pipeline above then tests and deploys it. Models the
   account cannot use are skipped. A model
   that returns an unusable answer is replaced by another random model, or asked again if no other
   is left, for up to three attempts per run.
+- **Runs alternate** — an odd-numbered run is a *growing* run, with the mission **"make the
+  website more interesting as a single coherent whole"**, and an even-numbered run is a
+  *consolidating* run, with the mission **"consolidate, federate, refactor and clean up the website
+  into a single coherent whole"**, which adds nothing. The workflow's run number decides (`n % 2`),
+  the manual form can name a kind outright, and the commit message says which it was: it opens
+  with *Make the website more interesting* or *Consolidate the website* (see
+  [One single experience](#one-single-experience)).
 - **One run at a time** — a run that starts while an earlier run of the workflow is still going
   skips itself and finishes green without doing anything, so there is never more than one
   iteration in flight. (To retry a failed run use *Run workflow*: *Re-run failed jobs* does not
   repeat the check, so it waits for the current run instead of skipping.)
-- **Only flagship models** — the random pick draws from a list of large, top-tier models (see
-  [Which models](#which-models)); small and mid-tier models are never picked.
+- **Only the heaviest models, thinking hard** — the random pick draws from a short list of the
+  heaviest models Copilot offers, the top of each provider's current line, and every one is asked
+  for near-maximum reasoning effort (see [Which models](#which-models)); older flagships, lighter
+  siblings and small and mid-tier models are never picked.
 
 ### Building the site
 
@@ -423,27 +432,44 @@ for a while, which is exactly why it has to be ruled out by name.
   same site. That pass is the first half of every run, with nothing to decide about it; what the run
   does is the second half and follows from what it saw. It used to be a suggestion ("begin every run
   by taking a moment"), which is a different instruction.
-- **Re-federating is the normal work of a run**, not one of two options. `RE-FEDERATE,
-  AGGRESSIVELY` asks every run to leave the site more of a single piece than it found it: lift the
+- **Runs alternate between growing and consolidating.** The prompt used to ask every run for
+  both — re-federate aggressively, and add something only as the exception — and a run told to do
+  both arrived at neither: it added a page and tidied a stylesheet, and the consolidation that was
+  overdue stayed overdue. Now each kind gets a whole run. `run_kind()` in
+  [`.github/scripts/make_interesting.py`](.github/scripts/make_interesting.py) reads the workflow's
+  run number: odd is a growing run, even is a consolidating run (`n % 2`), and the manual *Run
+  workflow* form can name either kind outright. The two differ in one block of the system prompt,
+  between `ENVISION THE WHOLE FIRST` and `LEGIBLE TO A STRANGER`; everything else — the mission,
+  the measure, the look at the whole, the holds, the axioms — is the same for both. A run the guard
+  skips, or one that fails, still takes a number, so two runs of one kind can occasionally land in
+  a row: the alternation is a rhythm, not an invariant.
+- **A consolidating run re-federates, aggressively, and adds nothing.** `THIS RUN CONSOLIDATES THE
+  SITE` rules out a new page, world, piece, query mechanism or feature, and `RE-FEDERATE,
+  AGGRESSIVELY` asks the run to leave the site more of a single piece than it found it: lift the
   markup, styles and behaviour the pages repeat into the shared files
   ([`site/_includes`](site/_includes), [`site/_sass`](site/_sass), `css/site.scss`, a shared
   `js/site.js`), give every page the same header and navigation, settle on one visual language and
   hold every page to it. The prompt asks for the consolidation that is overdue rather than the one
   that is merely easy, and asks a run not to leave a near-duplicate standing because no single page
-  is to blame for it.
+  is to blame for it. `REFACTOR AND CLEAN UP` adds the rest of the cleanup: dead code, unused
+  styles, partials nothing includes, one name per thing, and undoing drift from the legibility
+  holds — with the rule that what a visitor can do stays what it is, except where a merge or a
+  retirement takes a near-duplicate away on purpose.
 - **It reaches the pages themselves.** Merging pages that overlap and retiring the ones that no
   longer earn their place is part of re-federating, not a separate licence: the site is better as
   fewer pages that belong together than as more that do not. The reachability axiom is what keeps
   that safe — a page a run retires comes out of the navigation and the sitemap in the same run, or
   the plan is refused — and a run whose entire change is a deletion has always been accepted.
-- **Adding is the exception, and it arrives federated.** A site that already holds together gets
-  more interesting by growing, so `ADD something` is still there: new content, a new page, an
-  interactive toy, a hidden easter egg, a new way of querying a visitor's orientation, a new world
-  for an orientation that has none ([Mood axiom](#mood-axiom)). But it is no longer the equal first
-  option, and it is never a way around the paragraph above. Whatever a run adds arrives inside the
-  shared layout, in the one visual language, wired into the one navigation, sharing the styles and
-  behaviour it has in common with the rest, in that same run. A page that stands apart leaves the
-  site less of a whole however good that page is on its own.
+- **A growing run adds, and what it adds arrives federated.** `THIS RUN GROWS THE SITE` asks for
+  the one change that most lengthens a visitor's stay and none of the tidying, which belongs to the
+  run that follows: `ADD something` — new content, a new world for an orientation that has none, a
+  second shape of piece for a world, a new way of querying a visitor's orientation
+  ([Mood axiom](#mood-axiom)), an interactive toy, a hidden easter egg — or deepen what is there.
+  Whatever a run adds arrives inside the shared layout, in the one visual language, wired into the
+  one navigation, sharing the styles and behaviour it has in common with the rest, in that same
+  run, and nothing it adds may repeat what a shared file already does. A page that stands apart
+  leaves the site less of a whole however good that page is on its own, so a growing run is held
+  to the whole as firmly as a consolidating one.
 - **Aggressive, not reckless.** The answer limit has not moved, so a federation too large for one
   answer is staged across runs rather than half done: the prompt says so, and the rule that a run
   leaves the site working — every link, stylesheet, script, layout and `@use` still pointing at
@@ -454,7 +480,8 @@ for a while, which is exactly why it has to be ruled out by name.
   line of the system prompt, again where the run chooses what to do, and again in the last line
   before the answer, so the aim is in hand while the choice is open and still in hand when it is
   made. `MISSION` carries it too: "make the website more interesting as a **single** coherent
-  whole".
+  whole" — and so does `CONSOLIDATION_MISSION`, the consolidating run's: "consolidate, federate,
+  refactor and clean up the website into a **single** coherent whole".
 - **Not a coded axiom, on purpose.** No check could settle whether a site reads as one
   experience, in the way `check_reachability` settles whether a page is orphaned, so this is a
   standard stated to the model and nothing else — the same reasoning that leaves the
@@ -1170,11 +1197,21 @@ files (see [One single experience](#one-single-experience)).
 
 ### Which models
 
-The random pick only ever draws from large, flagship models, listed as `MODELS` in
-[`.github/scripts/make_interesting.py`](.github/scripts/make_interesting.py). Today they come from
-Anthropic (Fable, Opus), OpenAI (Sol, Astra, GPT-5.5, GPT-5.3-Codex) and Moonshot (Kimi K3). Google
-has no model in the pool, because Copilot only offers the Gemini Flash tier.
+The random pick only ever draws from the heaviest models Copilot offers, listed as `MODELS` in
+[`.github/scripts/make_interesting.py`](.github/scripts/make_interesting.py): the top of each
+provider's current line, and nothing older or lighter. Today they are Anthropic's Fable 5.1,
+Fable 5 and Opus 5.5, OpenAI's GPT-6.1 Sol, GPT-6 Sol and GPT-6 Astra, and Moonshot's Kimi K3.
+Flagships of an earlier generation (Opus 5, Opus 4.8, GPT-5.6 Sol), the general-purpose model a
+tier down (GPT-5.5) and the coding-tuned sibling (GPT-5.3-Codex) used to be in the pool and are
+deliberately out of it. Google has no model in the pool, because Copilot only offers the Gemini
+Flash tier.
 
+- **Near-maximum reasoning effort, every call.** Every model is asked for `--reasoning-effort
+  xhigh`, one step below the CLI's `max` on its scale of `none`, `minimal`, `low`, `medium`,
+  `high`, `xhigh`, `max`. The repository variable `REASONING_EFFORT` overrides it (`none` sends no
+  flag). A model with no effort dial is asked once more without the flag rather than lost to the
+  run, and because the answer takes longer at that effort, a model has a quarter of an hour to
+  answer (`MODEL_TIMEOUT_SECONDS`) and the job an hour for its three attempts.
 - **Small models are never picked at random.** Besides not being on the list, any model whose id
   contains a small or mid-tier name is refused: `haiku` and `sonnet`, and their equivalents at
   other providers such as `mini`, `nano`, `luna`, `terra`, `flash`, `lite`, `small`, `medium`,
@@ -1182,8 +1219,9 @@ has no model in the pool, because Copilot only offers the Gemini Flash tier.
   also keeps out speed-tuned variants of flagships such as `claude-opus-4.8-fast`.
 - **Changing the pool** needs no code change: set the repository variable `MODEL_POOL` to a
   comma-separated list of Copilot model ids. Models recognised as small or mid-tier are still
-  refused. List flagships only, though: the rule works on names, so it cannot judge an unknown id
-  that is only a version number. The ones known today, such as `gpt-5.4`, are refused by id.
+  refused. List the heaviest only, though: the rule works on names, so it cannot judge an unknown
+  id that is only a version number, and it cannot tell an older flagship from the current one. The
+  non-flagships known today, such as `gpt-5.4`, are refused by id.
 - **Naming a model yourself**, through the *Run workflow* form, is not a random pick: the model is
   used as asked, with a warning in the log if it is not a flagship.
 - Models that Copilot has retired or that the account cannot use are skipped automatically.
@@ -1212,13 +1250,17 @@ has no model in the pool, because Copilot only offers the Gemini Flash tier.
     **Copilot Requests**. Usage is billed to that user's Copilot plan. When this secret exists it
     is used instead of the workflow's own token.
 - The hourly schedule makes about 720 model calls a month, more when answers have to be asked
-  for again. They are billed as Copilot AI credits to whoever pays (see the two routes above), from
-  the same allowance as that account's other Copilot use.
+  for again, and each one goes to one of the heaviest models at near-maximum reasoning effort, so
+  each costs more than a call at a model's default effort would. They are billed as Copilot AI
+  credits to whoever pays (see the two routes above), from the same allowance as that account's
+  other Copilot use.
 - Which models can be picked depends on who pays. The workflow's own token is only offered the
   models of the organization's Copilot plan and model policy: on 2026-10-02, for an organization
   with the policy enabled but no Copilot seats, that was `gpt-5.3-codex` alone, so every "random"
-  pick landed on it. A personal token is offered every model of that user's plan. The run log
-  names the models it tried that the account could not use.
+  pick landed on it — and that model is no longer in the pool, so such an organization now needs
+  seats, a personal token, or a `MODEL_POOL` of its own before any run can land. A personal token
+  is offered every model of that user's plan. The run log names the models it tried that the
+  account could not use.
 
 ### Development
 

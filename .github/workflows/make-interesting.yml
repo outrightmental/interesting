@@ -6,9 +6,18 @@ on:
   workflow_dispatch:
     inputs:
       model:
-        description: "GitHub Copilot model ID to use (leave blank to pick a flagship model at random)"
+        description: "GitHub Copilot model ID to use (leave blank to pick one of the heaviest models at random)"
         required: false
         default: ""
+      kind:
+        description: "Kind of run: grow the site, or consolidate it (auto alternates by run number: odd grows, even consolidates)"
+        required: false
+        type: choice
+        default: auto
+        options:
+          - auto
+          - interesting
+          - consolidate
 
 permissions: {}
 
@@ -74,7 +83,10 @@ jobs:
       group: make-interesting
       cancel-in-progress: false
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # Room for three attempts at a quarter of an hour each (MODEL_TIMEOUT_SECONDS in the script),
+    # plus a build of the site after every answer. A run that outlasts the hour makes the next
+    # scheduled run skip itself (the guard above), which is the intended way to wait.
+    timeout-minutes: 60
     permissions:
       contents: write # commit changes to /site
       copilot-requests: write # call GitHub Copilot with the workflow's own token
@@ -110,7 +122,10 @@ jobs:
       - name: Install the build toolchain
         run: npm ci --ignore-scripts
 
-      - name: Ask a random AI model to make the website more interesting
+      # Which kind of run this is -- a growing run or a consolidating run -- follows from the run
+      # number: odd grows the site, even consolidates it, unless the manual "kind" input names one.
+      # The model is one of the heaviest Copilot offers, at near-maximum reasoning effort.
+      - name: Ask one of the heaviest AI models to work on the website
         id: ai
         env:
           # A fine-grained PAT with the "Copilot Requests" permission, if one is configured (billed
@@ -123,6 +138,11 @@ jobs:
           # List flagship models only: ids recognised as small or mid-tier are refused, but an
           # unknown id that is only a version number cannot be judged and is used as listed.
           MODEL_POOL: ${{ vars.MODEL_POOL }}
+          # Optional override of the reasoning effort every model is asked for (default xhigh, one
+          # below max): none, minimal, low, medium, high, xhigh or max.
+          REASONING_EFFORT: ${{ vars.REASONING_EFFORT }}
+          RUN_NUMBER: ${{ github.run_number }}
+          RUN_KIND: ${{ inputs.kind }}
         run: python3 .github/scripts/make_interesting.py
 
       - name: Ensure only /site was modified
@@ -142,6 +162,10 @@ jobs:
         env:
           MODEL: ${{ steps.ai.outputs.model }}
           SUMMARY: ${{ steps.ai.outputs.summary }}
+          # "Make the website more interesting" on a growing run, "Consolidate the website" on a
+          # consolidating one: the script names the kind, so the commit log shows which was which.
+          HEADLINE: ${{ steps.ai.outputs.headline }}
+          KIND: ${{ steps.ai.outputs.kind }}
           GITHUB_TOKEN: ${{ github.token }}
         run: |
           git add -A -- site
@@ -151,7 +175,7 @@ jobs:
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -m "Make the website more interesting: ${SUMMARY}" -m "Model: ${MODEL}"
+          git commit -m "${HEADLINE}: ${SUMMARY}" -m "Model: ${MODEL}" -m "Run: ${KIND}"
           # The branch may have moved while the model was thinking: rebase the commit and try again.
           # The token is given to this one command; it was never written into the checkout.
           remote="https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
@@ -172,7 +196,8 @@ jobs:
             exit 1
           fi
           {
-            echo "### Made the website more interesting"
+            echo "### ${HEADLINE}"
+            echo "- **Run:** \`${KIND}\`"
             echo "- **Model:** \`${MODEL}\`"
             echo "- **Change:** \`${SUMMARY}\`"
           } >> "$GITHUB_STEP_SUMMARY"

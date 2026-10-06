@@ -622,10 +622,12 @@ class BuildPromptTest(SiteDirTestCase):
 
 class WholeSiteReviewTest(unittest.TestCase):
     """Issue #16: every run begins by weighing the site as a whole, and federating what is already
-    there is a successful run in its own right, not a lesser outcome than adding a page."""
+    there is a successful run in its own right, not a lesser outcome than adding a page. Now that
+    runs alternate (AlternatingRunsTest), the federating is the consolidating run's whole work and
+    the adding is the growing run's; the weighing is both runs'."""
 
-    def prompt(self, omitted=()):
-        return mi.build_prompt([("index.html", "<h1>hi</h1>")], omitted)
+    def prompt(self, omitted=(), kind=mi.INTERESTING_RUN):
+        return mi.build_prompt([("index.html", "<h1>hi</h1>")], omitted, kind)
 
     def test_the_mission_string_itself_carries_the_holistic_aim(self):
         # Issue #16, question 4: the mission string itself should change, not only the surrounding
@@ -635,17 +637,20 @@ class WholeSiteReviewTest(unittest.TestCase):
         self.assertIn("coherent whole", mi.MISSION)
 
     def test_every_run_is_asked_to_weigh_the_site_as_a_whole_first(self):
-        prompt = self.prompt()
-        self.assertIn("Every run begins this way", prompt)
-        self.assertIn("look at the site as a whole", prompt)
-        self.assertLess(prompt.index("site as a whole"), prompt.index("ADD something"),
-                        "the review has to come before the choice of change")
+        for kind, choice in [(mi.INTERESTING_RUN, "ADD something"), (mi.CONSOLIDATION_RUN, "RE-FEDERATE")]:
+            with self.subTest(kind=kind):
+                prompt = self.prompt(kind=kind)
+                self.assertIn("Every run begins this way", prompt)
+                self.assertIn("look at the site as a whole", prompt)
+                self.assertLess(prompt.index("site as a whole"), prompt.index(choice),
+                                "the review has to come before the choice of change")
 
     def test_federation_is_offered_as_concretely_as_adding(self):
-        prompt = self.prompt().lower()
-        self.assertIn("add something", prompt)
+        # The growing run is told what to add; the consolidating run is told what to federate, by
+        # the source paths a run actually writes and the built path a page links (issue #36).
+        self.assertIn("add something", self.prompt().lower())
+        prompt = self.prompt(kind=mi.CONSOLIDATION_RUN).lower()
         self.assertIn("federate", prompt)
-        # The source paths a run actually writes, and the built path a page links (issue #36).
         for move in ["shared files", "css/site.scss", "css/site.css", "js/site.js",
                      "header and navigation", "visual language", "merge pages that overlap",
                      "retire"]:
@@ -653,18 +658,24 @@ class WholeSiteReviewTest(unittest.TestCase):
                 self.assertIn(move, prompt)
 
     def test_a_run_that_only_federates_is_called_a_success(self):
-        # validate_plan() has always accepted a plan that only deletes; now the prompt invites one.
-        prompt = self.prompt()
+        # validate_plan() has always accepted a plan that only deletes; the consolidating run's
+        # prompt invites one, and both kinds are told that deleting is accepted.
+        prompt = self.prompt(kind=mi.CONSOLIDATION_RUN)
         self.assertIn("complete and successful run", prompt)
         self.assertIn("only deleting", prompt)
-        self.assertIn("only deletes is accepted", prompt)
-        self.assertIn("do not add for the sake of adding", prompt)
+        for kind in mi.RUN_KINDS:
+            with self.subTest(kind=kind):
+                prompt = self.prompt(kind=kind)
+                self.assertIn("only deletes is accepted", prompt)
+                self.assertIn("do not add for the sake of adding", prompt)
 
     def test_a_federation_may_not_leave_the_site_half_done(self):
-        prompt = self.prompt()
-        self.assertIn("Leave the site working at the end of the run", prompt)
-        self.assertIn("update every page that refers to it in the same run", prompt)
-        self.assertIn("coherent stages", prompt)  # a federation too big for one answer
+        for kind in mi.RUN_KINDS:
+            with self.subTest(kind=kind):
+                prompt = self.prompt(kind=kind)
+                self.assertIn("Leave the site working at the end of the run", prompt)
+                self.assertIn("update every page that refers to it in the same run", prompt)
+                self.assertIn("coherent stages", prompt)  # a federation too big for one answer
 
     def test_the_silo_rules_survive_the_new_guidance(self):
         prompt = self.prompt(["hidden.html"])
@@ -697,60 +708,71 @@ class WholeSiteReviewTest(unittest.TestCase):
 
 
 class SingleExperienceTest(SiteDirTestCase):
-    """Issue #36: every run is told, every single time, to envision the site as one whole and then
-    re-federate it aggressively, so what is published is one functioning excellent experience and
-    not a pile of pages that happen to share a domain.
+    """Issue #36: every run is told, every single time, to envision the site as one whole, so what
+    is published is one functioning excellent experience and not a pile of pages that happen to
+    share a domain.
 
-    Issue #16 made the holistic pass a habit and federation a permitted outcome. This is the
-    stronger version: the pass is unconditional, re-federating is the default work of a run, and
-    adding is the exception that still has to arrive federated."""
+    Issue #16 made the holistic pass a habit and federation a permitted outcome; issue #36 made
+    the pass unconditional, re-federating the default work of a run, and adding the exception that
+    still had to arrive federated. Runs now alternate (AlternatingRunsTest): the pass is still
+    unconditional and the same for both kinds, re-federating aggressively is the whole of a
+    consolidating run, and what a growing run adds still has to arrive federated."""
 
-    def prompt(self, omitted=()):
-        return mi.build_prompt([("index.html", "<h1>hi</h1>")], omitted)
+    def prompt(self, omitted=(), kind=mi.INTERESTING_RUN):
+        return mi.build_prompt([("index.html", "<h1>hi</h1>")], omitted, kind)
+
+    def consolidating(self, omitted=()):
+        return self.prompt(omitted, mi.CONSOLIDATION_RUN)
 
     def test_the_whole_is_named_as_its_own_standard(self):
         # Spelled out here rather than imported, so rewording WHOLE into something that no longer
         # asks for one single experience fails this test instead of passing quietly. Issue #36,
-        # question 2: MISSION carries the word "single" too, since it is the line read at both ends.
+        # question 2: MISSION carries the word "single" too, since it is the line read at both
+        # ends -- and so does the consolidating run's mission, read at the same two ends.
         self.assertEqual(mi.WHOLE, "a single functioning excellent experience")
         self.assertIn("single coherent whole", mi.MISSION)
+        self.assertIn("single coherent whole", mi.CONSOLIDATION_MISSION)
         self.assertTrue(mi.MISSION.startswith("make the website more interesting"))
 
     def test_every_run_envisions_the_whole_before_it_chooses_anything(self):
-        prompt = self.prompt()
-        self.assertIn("ENVISION THE WHOLE FIRST", prompt)
-        for insistence in ["Every run begins this way", "with no exceptions",
-                           "before you choose anything"]:
-            with self.subTest(insistence=insistence):
-                self.assertIn(insistence, prompt)
-        # The pass comes before either kind of change and before the Rules block, so a run holds
-        # the aim while the choice is still open rather than as a constraint on a settled one.
-        for later in ["RE-FEDERATE", "ADD something", "Rules:"]:
-            with self.subTest(later=later):
-                self.assertLess(prompt.index("ENVISION THE WHOLE FIRST"), prompt.index(later))
+        for kind, choice in [(mi.INTERESTING_RUN, "ADD something"), (mi.CONSOLIDATION_RUN, "RE-FEDERATE")]:
+            prompt = self.prompt(kind=kind)
+            self.assertIn("ENVISION THE WHOLE FIRST", prompt)
+            for insistence in ["Every run begins this way", "with no exceptions",
+                               "before you choose anything"]:
+                with self.subTest(kind=kind, insistence=insistence):
+                    self.assertIn(insistence, prompt)
+            # The pass comes before the kind's own block and before the Rules block, so a run holds
+            # the aim while the choice is still open rather than as a constraint on a settled one.
+            for later in [choice, "Rules:"]:
+                with self.subTest(kind=kind, later=later):
+                    self.assertLess(prompt.index("ENVISION THE WHOLE FIRST"), prompt.index(later))
 
     def test_the_one_experience_is_spelled_out_rather_than_gestured_at(self):
-        envision = self.prompt()
-        envision = envision[envision.index("ENVISION THE WHOLE FIRST"):envision.index("RE-FEDERATE")]
-        for through_line in ["one navigation", "one visual language", "one through-line"]:
-            with self.subTest(through_line=through_line):
-                self.assertIn(through_line, envision)
-        self.assertIn(mi.WHOLE, envision)
+        for kind, block in [(mi.INTERESTING_RUN, "THIS RUN GROWS"), (mi.CONSOLIDATION_RUN, "THIS RUN CONSOLIDATES")]:
+            envision = self.prompt(kind=kind)
+            envision = envision[envision.index("ENVISION THE WHOLE FIRST"):envision.index(block)]
+            for through_line in ["one navigation", "one visual language", "one through-line"]:
+                with self.subTest(kind=kind, through_line=through_line):
+                    self.assertIn(through_line, envision)
+            self.assertIn(mi.WHOLE, envision)
 
-    def test_re_federating_is_the_normal_work_of_a_run(self):
-        # Issue #36, question 1: not "federating is also welcome" but "this is what a run does".
-        prompt = self.prompt()
+    def test_re_federating_is_the_whole_work_of_a_consolidating_run(self):
+        # Issue #36, question 1, as the alternation keeps it: not "federating is also welcome" but
+        # "this is what the run does" -- and on a consolidating run, all it does.
+        prompt = self.consolidating()
         self.assertIn("RE-FEDERATE, AGGRESSIVELY", prompt)
-        for posture in ["the normal work of a run, not an alternative to it",
-                        "every run should leave the site more of a single piece than it found it",
+        for posture in ["Leave the site more of a single piece than you found it",
+                        "It adds nothing",
                         "Be aggressive about it",
                         "the consolidation that is overdue rather than the one that is merely easy"]:
             with self.subTest(posture=posture):
                 self.assertIn(posture, prompt)
+        self.assertNotIn("ADD something", prompt)
 
     def test_re_federating_names_every_shared_file_it_reaches(self):
-        federate = self.prompt()
-        federate = federate[federate.index("RE-FEDERATE"):federate.index("ADD something")]
+        federate = self.consolidating()
+        federate = federate[federate.index("RE-FEDERATE"):federate.index("REFACTOR AND CLEAN UP")]
         for target in [f"{mi.INCLUDES_DIR}/", f"{mi.SASS_DIR}/", "css/site.scss", "css/site.css",
                        "js/site.js"]:
             with self.subTest(target=target):
@@ -762,42 +784,54 @@ class SingleExperienceTest(SiteDirTestCase):
 
     def test_re_federating_reaches_as_far_as_merging_and_retiring_pages(self):
         # Issue #36, question 4: yes -- the pages themselves, not only the markup they share.
-        federate = self.prompt()
-        federate = federate[federate.index("RE-FEDERATE"):federate.index("ADD something")]
+        federate = self.consolidating()
+        federate = federate[federate.index("RE-FEDERATE"):federate.index("REFACTOR AND CLEAN UP")]
         self.assertIn("Merge pages that overlap", federate)
         self.assertIn("retire the ones that no longer earn their place", federate)
         self.assertIn("fewer pages that belong together than as more that do not", federate)
 
-    def test_adding_is_the_exception_and_arrives_already_federated(self):
+    def test_what_a_growing_run_adds_arrives_already_federated(self):
         add = self.prompt()
-        add = add[add.index("ADD something"):add.index("How the site is built")]
-        self.assertIn("the exception rather than the default", add)
-        self.assertIn("never a way around the paragraph above", add)
+        add = add[add.index("ADD something"):add.index("LEGIBLE TO A STRANGER")]
         self.assertIn("arrives already federated, in the same run", add)
         self.assertIn("A page that stands apart leaves the site less of a whole", add)
+        self.assertIn("held to the whole as firmly as a consolidating one", add)
+        self.assertIn("nothing you add may repeat what a shared file already does", self.prompt())
 
     def test_the_aim_is_in_hand_at_both_ends_of_the_run(self):
         # The restatement pattern this repository uses for its standards (see EngagementTimeTest):
         # stated before a run chooses what to do, and again in the line it reads last.
-        prompt = self.prompt()
-        self.assertGreaterEqual(prompt.count(mi.WHOLE), 2)
-        self.assertLess(prompt.index(mi.WHOLE), prompt.index("Rules:"))
-        last = prompt[prompt.index(f"This run's mission: {mi.MISSION}"):]
-        self.assertIn(f"Envision all of the above as {mi.WHOLE}", last)
+        for kind in mi.RUN_KINDS:
+            with self.subTest(kind=kind):
+                prompt = self.prompt(kind=kind)
+                self.assertGreaterEqual(prompt.count(mi.WHOLE), 2)
+                self.assertLess(prompt.index(mi.WHOLE), prompt.index("Rules:"))
+                last = prompt[prompt.index(f"This run's mission: {mi.mission_of(kind)}"):]
+                self.assertIn(f"Envision all of the above as {mi.WHOLE}", last)
+        last = self.consolidating()
+        last = last[last.index("This run's mission:"):]
         self.assertIn("re-federate what is already there, aggressively", last)
+        self.assertIn("and add nothing", last)
+        last = self.prompt()
+        last = last[last.index("This run's mission:"):]
         self.assertIn("add something new only as part of the same whole", last)
+        self.assertIn("leave the consolidating to the run that follows", last)
 
     def test_a_federation_the_run_cannot_finish_is_carried_on_by_the_next(self):
         # Aggressive, not reckless: the answer limit has not moved, so the way to be aggressive
         # about something too big for one answer is to stage it, never to leave it half done.
-        prompt = self.prompt()
-        self.assertIn("coherent stages", prompt)
-        self.assertIn("Leave the site working at the end of the run", prompt)
+        for kind in mi.RUN_KINDS:
+            with self.subTest(kind=kind):
+                prompt = self.prompt(kind=kind)
+                self.assertIn("coherent stages", prompt)
+                self.assertIn("Leave the site working at the end of the run", prompt)
 
     def test_the_files_a_run_cannot_see_still_count_as_part_of_the_whole(self):
-        prompt = self.prompt(["hidden.html"])
-        self.assertIn("count them as part of the piece when you weigh the site as a whole", prompt)
-        self.assertIn("carried on by a later run", prompt)
+        for kind in mi.RUN_KINDS:
+            with self.subTest(kind=kind):
+                prompt = self.prompt(["hidden.html"], kind)
+                self.assertIn("count them as part of the piece when you weigh the site as a whole", prompt)
+                self.assertIn("carried on by a later run", prompt)
 
     def test_the_aim_is_a_stated_standard_and_not_a_coded_axiom(self):
         # Issue #36, question 3: prompt-only. No check could settle whether a site reads as one
@@ -819,6 +853,213 @@ class SingleExperienceTest(SiteDirTestCase):
         self.assertEqual(sorted(t.name for _, t, _ in ops), ["sitemap.xml", "stranger.html"])
         self.assertEqual(sorted(name for name in dir(mi) if name.startswith("check_")),
                          CODED_AXIOMS)
+
+
+
+
+class AlternatingRunsTest(unittest.TestCase):
+    """Runs alternate: an odd-numbered run grows the site and an even-numbered run consolidates
+    it, and each kind gets a whole answer to itself. The kind follows from the workflow's run
+    number (`n % 2`), the manual input can name one, and the prompt, the console line, the
+    summary's fallback and the commit headline all follow the kind."""
+
+    def prompt(self, kind):
+        return mi.build_prompt([("index.html", "<h1>hi</h1>")], (), kind)
+
+    def kind(self, **env):
+        with mock.patch.dict(os.environ, {"RUN_KIND": "", "RUN_NUMBER": "", **env}):
+            with mock.patch("builtins.print") as printed:
+                return mi.run_kind(), " ".join(str(call.args[0]) for call in printed.call_args_list)
+
+    def test_odd_runs_grow_and_even_runs_consolidate(self):
+        for number in range(1, 11):
+            with self.subTest(number=number):
+                expected = mi.INTERESTING_RUN if number % 2 else mi.CONSOLIDATION_RUN
+                self.assertEqual(self.kind(RUN_NUMBER=str(number)), (expected, ""))
+
+    def test_a_kind_named_by_hand_wins_over_the_run_number(self):
+        self.assertEqual(self.kind(RUN_KIND="consolidate", RUN_NUMBER="7"), (mi.CONSOLIDATION_RUN, ""))
+        self.assertEqual(self.kind(RUN_KIND=" Interesting ", RUN_NUMBER="8"), (mi.INTERESTING_RUN, ""))
+        # The form's default: decide by the number, and say nothing about it.
+        self.assertEqual(self.kind(RUN_KIND="auto", RUN_NUMBER="8"), (mi.CONSOLIDATION_RUN, ""))
+
+    def test_an_unknown_kind_is_warned_about_and_the_number_decides(self):
+        kind, log = self.kind(RUN_KIND="tidy", RUN_NUMBER="8")
+        self.assertEqual(kind, mi.CONSOLIDATION_RUN)
+        self.assertIn("'tidy' is not one of interesting, consolidate", log)
+
+    def test_a_run_with_neither_grows_the_site(self):
+        self.assertEqual(self.kind(), (mi.INTERESTING_RUN, ""))
+        self.assertEqual(self.kind(RUN_NUMBER="not a number"), (mi.INTERESTING_RUN, ""))
+
+    def test_the_two_kinds_differ_in_one_block_of_the_prompt(self):
+        growing, consolidating = self.prompt(mi.INTERESTING_RUN), self.prompt(mi.CONSOLIDATION_RUN)
+        # Everything from the look at the whole up to the kind's own block is the same...
+        self.assertEqual(growing[growing.index("ENVISION"):growing.index("THIS RUN")],
+                         consolidating[consolidating.index("ENVISION"):consolidating.index("THIS RUN")])
+        # ...and so is everything from the legibility holds to the line read last: the holds, the
+        # build, the nine axioms and the format are not the kind's to vary.
+        holds = "LEGIBLE TO A STRANGER. Everything above"  # the heading, not the block's mention of it
+        self.assertEqual(growing[growing.index(holds):growing.index("This run's mission")],
+                         consolidating[consolidating.index(holds):consolidating.index("This run's mission")])
+        self.assertEqual(growing.count("AXIOM, every run"), consolidating.count("AXIOM, every run"))
+        self.assertEqual(growing.count("AXIOM, every run"), len(CODED_AXIOMS))
+
+    def test_a_growing_run_is_told_to_add_and_not_to_tidy(self):
+        prompt = self.prompt(mi.INTERESTING_RUN)
+        for line in ["THIS RUN GROWS THE SITE", "this is the growing run", "ADD something",
+                     "none of it on tidying", "belongs to the run that follows this one",
+                     "one change that gives a visitor a reason to keep going is the run",
+                     "leave the consolidating to the run that follows"]:
+            with self.subTest(line=line):
+                self.assertIn(line, prompt)
+        for absent in ["THIS RUN CONSOLIDATES", "RE-FEDERATE, AGGRESSIVELY", "REFACTOR AND CLEAN UP"]:
+            with self.subTest(absent=absent):
+                self.assertNotIn(absent, prompt)
+
+    def test_a_consolidating_run_is_told_to_add_nothing(self):
+        prompt = self.prompt(mi.CONSOLIDATION_RUN)
+        for line in ["THIS RUN CONSOLIDATES THE SITE", "this is the consolidating run", "It adds nothing",
+                     "no new page, no new world, no new piece, no new query mechanism, no new feature",
+                     "RE-FEDERATE, AGGRESSIVELY", "REFACTOR AND CLEAN UP",
+                     "a consolidation that changes behaviour by accident is a regression, not a cleanup",
+                     "It needs no new page alongside it, and must have none", "and add nothing"]:
+            with self.subTest(line=line):
+                self.assertIn(line, prompt)
+        for absent in ["THIS RUN GROWS", "ADD something"]:
+            with self.subTest(absent=absent):
+                self.assertNotIn(absent, prompt)
+
+    def test_the_mission_follows_the_kind_at_both_ends(self):
+        self.assertEqual(mi.mission_of(mi.INTERESTING_RUN), mi.MISSION)
+        self.assertEqual(mi.mission_of(mi.CONSOLIDATION_RUN), mi.CONSOLIDATION_MISSION)
+        self.assertNotEqual(mi.MISSION, mi.CONSOLIDATION_MISSION)
+        for word in ["consolidate", "federate", "refactor", "clean up"]:
+            with self.subTest(word=word):
+                self.assertIn(word, mi.CONSOLIDATION_MISSION)
+        for kind in mi.RUN_KINDS:
+            with self.subTest(kind=kind):
+                prompt = self.prompt(kind)
+                self.assertIn(f"Your mission this run: {mi.mission_of(kind)}", prompt)
+                self.assertIn(f"This run's mission: {mi.mission_of(kind)}, measured in {mi.INTERESTING}", prompt)
+
+    def test_the_summary_falls_back_to_the_mission_of_the_kind(self):
+        self.assertEqual(mi.clean_summary("", mi.CONSOLIDATION_MISSION), mi.CONSOLIDATION_MISSION)
+        self.assertEqual(mi.clean_summary(None), mi.MISSION)
+
+    def test_the_headline_opens_the_commit_message(self):
+        # The growing run keeps the prefix every AI commit used to carry, so `git log` reads on
+        # unchanged; the consolidating run gets its own. The workflow reads both from the script.
+        self.assertEqual(mi.HEADLINES[mi.INTERESTING_RUN], "Make the website more interesting")
+        self.assertEqual(mi.HEADLINES[mi.CONSOLIDATION_RUN], "Consolidate the website")
+        workflow = (mi.REPO_ROOT / ".github" / "workflows" / "make-interesting.yml").read_text()
+        self.assertIn('git commit -m "${HEADLINE}: ${SUMMARY}"', workflow)
+        self.assertNotIn('"Make the website more interesting: ${SUMMARY}"', workflow)
+        self.assertIn("HEADLINE: ${{ steps.ai.outputs.headline }}", workflow)
+        self.assertIn("RUN_NUMBER: ${{ github.run_number }}", workflow)
+        self.assertIn("RUN_KIND: ${{ inputs.kind }}", workflow)
+        # The workflow's name is what deploy.yml listens for, and the kind does not change it.
+        self.assertIn("name: Make the website more interesting\n", workflow)
+
+
+class ReasoningEffortTest(unittest.TestCase):
+    """Take big gulps: every call goes to one of the heaviest models at near-maximum reasoning
+    effort, and a model that has no dial for it is still asked, once more without the flag."""
+
+    def effort(self, value=""):
+        with mock.patch.dict(os.environ, {"REASONING_EFFORT": value}), mock.patch("builtins.print") as printed:
+            return mi.reasoning_effort(), " ".join(str(call.args[0]) for call in printed.call_args_list)
+
+    def test_the_default_is_one_step_below_max(self):
+        self.assertEqual(mi.DEFAULT_REASONING_EFFORT, "xhigh")
+        self.assertEqual(mi.REASONING_EFFORT_LEVELS[-1], "max")
+        self.assertEqual(mi.REASONING_EFFORT_LEVELS.index("xhigh"), len(mi.REASONING_EFFORT_LEVELS) - 2)
+        self.assertEqual(self.effort(), ("xhigh", ""))
+        self.assertEqual(self.effort("  "), ("xhigh", ""))
+
+    def test_the_variable_overrides_it(self):
+        self.assertEqual(self.effort("max"), ("max", ""))
+        self.assertEqual(self.effort(" High "), ("high", ""))
+        self.assertEqual(self.effort("none"), ("", ""))
+        self.assertEqual(mi.effort_flags(""), [])
+        self.assertEqual(mi.effort_flags("max"), ["--reasoning-effort", "max"])
+
+    def test_an_unknown_level_falls_back_with_a_warning(self):
+        effort, log = self.effort("enormous")
+        self.assertEqual(effort, "xhigh")
+        self.assertIn("'enormous' is not one of none, minimal, low, medium, high, xhigh, max; using xhigh", log)
+
+    def test_the_flag_reaches_the_cli_ahead_of_the_lockdown_flags(self):
+        fake = FakeCopilot(self, "say('hello')")
+        with mock.patch.dict(os.environ, {"REASONING_EFFORT": ""}):
+            self.assertEqual(mi.call_model("model-a", "p"), "hello")
+        self.assertEqual(mi.call_model("model-a", "p", effort="max"), "hello")
+        self.assertEqual(mi.call_model("model-a", "p", effort=""), "hello")
+        by_default, by_hand, none = [call["args"] for call in fake.calls()]
+        self.assertEqual(by_default, ["--model", "model-a", "--reasoning-effort", "xhigh", *mi.COPILOT_FLAGS])
+        self.assertEqual(by_hand, ["--model", "model-a", "--reasoning-effort", "max", *mi.COPILOT_FLAGS])
+        self.assertEqual(none, ["--model", "model-a", *mi.COPILOT_FLAGS])
+
+    REFUSAL = "Error: reasoning effort xhigh is not available for this model"
+
+    def test_a_model_without_a_dial_is_asked_again_without_the_flag(self):
+        fake = FakeCopilot(self, f"""
+            if '--reasoning-effort' in ARGS:
+                sys.stderr.write({self.REFUSAL!r}); sys.exit(1)
+            say('hello without the dial')""")
+        with mock.patch("builtins.print") as printed:
+            self.assertEqual(mi.call_model("model-a", "p", effort="xhigh"), "hello without the dial")
+        first, second = [call["args"] for call in fake.calls()]
+        self.assertIn("--reasoning-effort", first)
+        self.assertNotIn("--reasoning-effort", second)
+        self.assertIn("model-a did not take reasoning effort xhigh", printed.call_args.args[0])
+
+    def test_a_second_refusal_is_the_models_failure_like_any_other(self):
+        fake = FakeCopilot(self, f"sys.stderr.write({self.REFUSAL!r}); sys.exit(1)")
+        with mock.patch("builtins.print"), self.assertRaisesRegex(mi.ModelError, "reasoning effort"):
+            mi.call_model("model-a", "p", effort="xhigh")
+        self.assertEqual(len(fake.calls()), 2, "one retry without the flag, and no more")
+
+    def test_no_retry_when_no_effort_was_asked_for(self):
+        fake = FakeCopilot(self, f"sys.stderr.write({self.REFUSAL!r}); sys.exit(1)")
+        with self.assertRaises(mi.ModelError):
+            mi.call_model("model-a", "p", effort="")
+        self.assertEqual(len(fake.calls()), 1)
+
+    def test_an_unavailable_model_is_still_unavailable(self):
+        # The retry is for the flag, not the model: a model the account cannot use is skipped at
+        # once, as before, and costs no second call.
+        fake = FakeCopilot(self, "sys.stderr.write('Error: model-a is not available'); sys.exit(1)")
+        with self.assertRaises(mi.ModelUnavailable):
+            mi.call_model("model-a", "p", effort="xhigh")
+        self.assertEqual(len(fake.calls()), 1)
+
+
+class HeaviestModelsTest(unittest.TestCase):
+    """Take big gulps: only the heaviest models -- the top of each provider's current line as
+    Copilot offers it -- and nothing older or lighter, however much of a flagship it once was."""
+
+    HEAVIEST = ["claude-fable-5.1", "claude-fable-5", "claude-opus-5.5",
+                "gpt-6.1-sol", "gpt-6-sol", "gpt-6-astra", "kimi-k3"]
+    OUT_OF_THE_POOL = ["claude-opus-5", "claude-opus-4.8", "gpt-5.6-sol", "gpt-5.5", "gpt-5.3-codex"]
+
+    def test_the_pool_is_exactly_the_heaviest(self):
+        # Spelled out rather than derived, so adding a lighter model back fails here rather than
+        # passing quietly through the name rule, which cannot tell an older flagship from the
+        # current one.
+        self.assertEqual(mi.MODELS, self.HEAVIEST)
+
+    def test_older_and_lighter_flagships_are_out_by_omission_not_by_name(self):
+        for model in self.OUT_OF_THE_POOL:
+            with self.subTest(model=model):
+                self.assertNotIn(model, mi.MODELS)
+                self.assertFalse(mi.is_small_model(model), "a flagship of an earlier generation is not small")
+
+    def test_a_heavy_answer_is_given_the_time_it_takes(self):
+        self.assertEqual(mi.MODEL_TIMEOUT_SECONDS, 900)
+        workflow = (mi.REPO_ROOT / ".github" / "workflows" / "make-interesting.yml").read_text()
+        minutes = int(re.search(r"timeout-minutes: (\d+)\n    permissions:\n      contents: write", workflow).group(1))
+        self.assertGreaterEqual(minutes * 60, mi.MAX_ATTEMPTS * mi.MODEL_TIMEOUT_SECONDS + 3 * mi.BUILD_TIMEOUT_SECONDS)
 
 
 class BuildPipelinePromptTest(unittest.TestCase):
@@ -847,7 +1088,7 @@ class BuildPipelinePromptTest(unittest.TestCase):
     def test_federating_may_now_reach_the_layout_and_the_shared_sass(self):
         # "Full creative opportunity within its silo": the shared files are part of what a run may
         # federate, not a fixed frame around what it may.
-        federate = self.prompt()
+        federate = mi.build_prompt([("index.html", "<h1>hi</h1>")], (), mi.CONSOLIDATION_RUN)
         federate = federate[federate.index("FEDERATE"):federate.index("How the site is built")]
         self.assertIn(mi.INCLUDES_DIR, federate)
         self.assertIn(mi.SASS_DIR, federate)
@@ -5400,7 +5641,8 @@ class FakeCopilot:
 class CallModelTest(unittest.TestCase):
     def test_runs_copilot_locked_down_in_an_empty_directory(self):
         fake = FakeCopilot(self, "say('hello ' + MODEL)")
-        self.assertEqual(mi.call_model("model-a", "the prompt"), "hello model-a")
+        with mock.patch.dict(os.environ, {"REASONING_EFFORT": ""}):
+            self.assertEqual(mi.call_model("model-a", "the prompt"), "hello model-a")
         (call,) = fake.calls()
         self.assertEqual(call["prompt"], "the prompt")
         self.assertEqual(call["listing"], [])
@@ -5408,7 +5650,8 @@ class CallModelTest(unittest.TestCase):
         self.assertFalse(Path(call["cwd"]).exists(), "the silo directory is removed afterwards")
         args = call["args"]
         self.assertEqual(args[:2], ["--model", "model-a"])
-        self.assertEqual(args[2:], mi.COPILOT_FLAGS)
+        self.assertEqual(args[2:4], ["--reasoning-effort", mi.DEFAULT_REASONING_EFFORT])
+        self.assertEqual(args[4:], mi.COPILOT_FLAGS)
 
     def test_flags_keep_the_model_tool_less_and_the_output_parseable(self):
         flags = mi.COPILOT_FLAGS
@@ -5554,7 +5797,7 @@ GOOD_PLAN = json.dumps({
 class MainTest(SiteDirTestCase):
     def run_main(self, env=None):
         out = self.root / "github_output"
-        full_env = {"GITHUB_OUTPUT": str(out), "MODEL": "", "MODEL_POOL": ""}
+        full_env = {"GITHUB_OUTPUT": str(out), "MODEL": "", "MODEL_POOL": "", "RUN_KIND": "", "RUN_NUMBER": ""}
         full_env.update(env or {})
         self.printed = []
         with mock.patch.dict(os.environ, full_env):
@@ -5570,7 +5813,21 @@ class MainTest(SiteDirTestCase):
         (call,) = fake.calls()
         model = call["args"][1]
         self.assertIn(model, mi.MODELS)
-        self.assertEqual(read_outputs(output), {"model": model, "summary": "Added a clock."})
+        self.assertEqual(read_outputs(output), {"model": model, "summary": "Added a clock.",
+                                                "kind": "interesting", "headline": "Make the website more interesting"})
+
+    def test_the_run_number_picks_the_kind_and_the_kind_names_the_commit(self):
+        fake = FakeCopilot(self, f"say({GOOD_PLAN!r})")
+        output = self.run_main({"RUN_NUMBER": "8"})
+        (call,) = fake.calls()
+        self.assertIn("THIS RUN CONSOLIDATES THE SITE", call["prompt"])
+        self.assertNotIn("ADD something", call["prompt"])
+        outputs = read_outputs(output)
+        self.assertEqual((outputs["kind"], outputs["headline"]), ("consolidate", "Consolidate the website"))
+        self.assertTrue([line for line in self.printed if line.startswith(f"Mission: {mi.CONSOLIDATION_MISSION} (consolidate run)")])
+        output = self.run_main({"RUN_NUMBER": "9"})
+        self.assertIn("THIS RUN GROWS THE SITE", fake.calls()[-1]["prompt"])
+        self.assertEqual(read_outputs(output)["headline"], "Make the website more interesting")
 
     def test_falls_back_to_another_model(self):
         fake = FakeCopilot(self, f"""

@@ -1,18 +1,22 @@
 #!/usr/bin/env python3
-"""Make the website more interesting.
+"""Make the website more interesting: one run grows it, the next consolidates it.
 
-Picks a random model from GitHub Copilot, shows it the current contents of the
-/site folder, and asks it to make the website more interesting.
+Picks one of the heaviest models GitHub Copilot offers, at near-maximum reasoning
+effort, shows it the current contents of the /site folder, and asks it to work on
+the website. Runs alternate between two kinds (run_kind()): an odd-numbered run
+makes the site more interesting, and an even-numbered run adds nothing and
+instead consolidates, federates, refactors and cleans up what is there.
 
-Every run starts the same way, unconditionally: the model is told to envision the
-site as one experience -- one navigation, one visual language, one through-line --
-before it chooses anything. WHOLE names what that experience has to be, and
-re-federating the site aggressively is then the normal work of a run: consolidate
-repeated markup, styles and behaviour into the shared files, unify navigation and
-visual language across every page, merge or retire pages that overlap. Adding
-something new is the exception rather than the default, and whatever a run adds
-arrives federated in the same run. So the site is made more interesting by
-becoming one piece and not only by growing.
+Every run of either kind starts the same way, unconditionally: the model is told
+to envision the site as one experience -- one navigation, one visual language,
+one through-line -- before it chooses anything. WHOLE names what that experience
+has to be. A growing run then makes the one change that most lengthens a
+visitor's stay, and whatever it adds arrives federated in the same run. A
+consolidating run lifts repeated markup, styles and behaviour into the shared
+files, unifies navigation and visual language across every page, merges or
+retires pages that overlap, and removes what has stopped earning its place. So
+the site is made more interesting by becoming one piece and not only by growing,
+and each kind of run gets a whole answer to itself.
 
 "Interesting" is not left to a model's taste: INTERESTING names the measure, and
 it is user engagement time. The site is more interesting when a person stays
@@ -151,12 +155,72 @@ INTERESTING = ("how long a person stays engaged -- how much they want to keep go
 LEGIBLE = ("legible to a stranger -- a first-time visitor on a phone can tell what the site is, what "
            "any page is for, what to do on it and where to go next, without being told twice")
 
+# The two kinds of run, which alternate: a run either grows the site or consolidates it, never
+# both in one answer. An odd-numbered run makes the site more interesting and an even-numbered
+# run consolidates, federates, refactors and cleans up. The number is the workflow's own
+# (github.run_number, passed in as RUN_NUMBER), so which kind a run was is visible in the run's
+# name, and `n % 2` is the whole of the rule. RUN_KIND names a kind outright (the workflow's
+# manual "kind" input), and a run with neither -- the script run by hand -- grows the site.
+#
+# Why alternate rather than ask every run for both, as the prompt used to: a run told to federate
+# aggressively and to add something arrives at neither. It adds a page and tidies a stylesheet,
+# and the consolidation that is overdue stays overdue. Giving each kind the whole of a run lets
+# the growing run spend its answer on the change that most lengthens a visitor's stay, and the
+# consolidating run spend its answer on the merge that touches forty files, with nothing new to
+# make room for. A run the guard skips, or one that fails, still takes a number, so two runs of
+# one kind can occasionally land in a row; the alternation is a rhythm, not an invariant.
+INTERESTING_RUN = "interesting"
+CONSOLIDATION_RUN = "consolidate"
+RUN_KINDS = (INTERESTING_RUN, CONSOLIDATION_RUN)
+
+# What a consolidating run serves, in every place MISSION serves a growing run: the opening of the
+# prompt, the line it reads last, the console line and clean_summary's fallback.
+CONSOLIDATION_MISSION = ("consolidate, federate, refactor and clean up the website into a single "
+                         "coherent whole")
+
+# The first words of the commit message and of the run summary, by kind: what a reader of
+# `git log` sees before the model's own sentence. The workflow reads them from the "headline"
+# output rather than carrying a prefix of its own.
+HEADLINES = {
+    INTERESTING_RUN: "Make the website more interesting",
+    CONSOLIDATION_RUN: "Consolidate the website",
+}
+
+
+def mission_of(kind):
+    """The mission a run of this kind serves."""
+    return CONSOLIDATION_MISSION if kind == CONSOLIDATION_RUN else MISSION
+
+
+def run_kind():
+    """Which kind of run this is.
+
+    RUN_KIND, if it names one, wins: it is a person's choice through the workflow's manual input.
+    Otherwise the parity of RUN_NUMBER decides -- odd grows the site, even consolidates it -- and
+    a run with neither is a growing run.
+    """
+    named = (os.environ.get("RUN_KIND") or "").strip().lower()
+    if named in RUN_KINDS:
+        return named
+    if named and named != "auto":
+        print(f"::warning::RUN_KIND {one_line(named, 60)!r} is not one of {', '.join(RUN_KINDS)}; "
+              "deciding by run number instead.")
+    number = (os.environ.get("RUN_NUMBER") or "").strip()
+    if number.isdigit():
+        return CONSOLIDATION_RUN if int(number) % 2 == 0 else INTERESTING_RUN
+    return INTERESTING_RUN
+
 COPILOT_BIN = os.environ.get("COPILOT_BIN", "copilot")
 
-# The models a random pick may draw from: only large, flagship models, as of 2026-10-02. These are
-# the flagships GitHub Copilot CLI offers through `--model`, which today come from Anthropic,
-# OpenAI and Moonshot. Small and mid-tier models are deliberately absent, and is_small_model()
-# below refuses the ones it can recognise even if one is added.
+# The models a random pick may draw from: only the heaviest models, as of 2026-10-06. These are
+# the top of each provider's current line as GitHub Copilot CLI offers it through `--model`, and
+# nothing older or lighter: Anthropic's Fable and the Opus beneath it, the Sol and Astra lines of
+# OpenAI's GPT-6, and Moonshot's Kimi K3. Every run goes to one of them at near-maximum reasoning
+# effort (see REASONING_EFFORT below): the heaviest model there is, thinking as hard as it can
+# short of the limit, and nothing less. So flagships of an earlier generation (claude-opus-5,
+# claude-opus-4.8, gpt-5.6-sol), the general-purpose model a tier down (gpt-5.5) and the
+# coding-tuned sibling (gpt-5.3-codex) are deliberately absent, and small and mid-tier models
+# always were: is_small_model() below refuses the ones it can recognise even if one is added.
 # Copilot retires models often: an id the account can no longer use is skipped at run time
 # without costing an attempt, so a stale entry here is harmless. The list can be replaced without
 # a code change by setting the MODEL_POOL repository variable (comma-separated ids).
@@ -167,14 +231,9 @@ MODELS = [
     "claude-fable-5.1",
     "claude-fable-5",
     "claude-opus-5.5",
-    "claude-opus-5",
-    "claude-opus-4.8",
     "gpt-6.1-sol",
     "gpt-6-sol",
     "gpt-6-astra",
-    "gpt-5.6-sol",
-    "gpt-5.5",
-    "gpt-5.3-codex",
     "kimi-k3",
 ]
 
@@ -238,7 +297,39 @@ COPILOT_FLAGS = [
     "--deny-tool=url",
     "--secret-env-vars=COPILOT_GITHUB_TOKEN,GH_TOKEN,GITHUB_TOKEN",
 ]
-MODEL_TIMEOUT_SECONDS = 480
+
+# How hard the model is asked to think. Every run goes to one of the heaviest models at
+# near-maximum reasoning effort: "xhigh", one step below the CLI's "max", on the scale Copilot CLI
+# 1.0.91 accepts through `--reasoning-effort`. The REASONING_EFFORT repository variable overrides
+# it, and "none" sends no flag at all, leaving the model at its own default. Not every model has
+# an effort dial, and the CLI's wording for one that does not is not known here, so call_model()
+# asks once more without the flag when the CLI's error names the effort or the reasoning: a heavy
+# model without a dial is still the heavy model, and the run should not lose it over the flag.
+REASONING_EFFORT_LEVELS = ("none", "minimal", "low", "medium", "high", "xhigh", "max")
+DEFAULT_REASONING_EFFORT = "xhigh"
+
+
+def reasoning_effort():
+    """The effort level to ask for: REASONING_EFFORT if set, else the default; "" for none."""
+    level = (os.environ.get("REASONING_EFFORT") or "").strip().lower() or DEFAULT_REASONING_EFFORT
+    if level == "none":
+        return ""
+    if level not in REASONING_EFFORT_LEVELS:
+        print(f"::warning::REASONING_EFFORT {one_line(level, 40)!r} is not one of "
+              f"{', '.join(REASONING_EFFORT_LEVELS)}; using {DEFAULT_REASONING_EFFORT}.")
+        return DEFAULT_REASONING_EFFORT
+    return level
+
+
+def effort_flags(effort):
+    """The CLI flags that ask for `effort`, or none for ""."""
+    return ["--reasoning-effort", effort] if effort else []
+
+
+# A heavy model at near-maximum effort reads a prompt the size of the whole site and may write
+# back most of it, and it is given the time that takes: a quarter of an hour, where eight minutes
+# used to do. The workflow's job timeout allows for three such attempts.
+MODEL_TIMEOUT_SECONDS = 900
 
 AUTH_HELP = (
     "GitHub Copilot refused the request, so no model can run.\n"
@@ -367,6 +458,10 @@ class BuildToolchainError(Exception):
 
 class ModelError(Exception):
     """This model could not produce an answer; another model may still work."""
+
+
+class EffortRefused(ModelError):
+    """The CLI refused the reasoning effort asked for, not the model: worth asking again without it."""
 
 
 class ModelUnavailable(ModelError):
@@ -1655,10 +1750,14 @@ def split_for_prompt(files):
     return sorted(shown, key=prompt_order), sorted(omitted)
 
 
-def build_prompt(shown, omitted=()):
+def build_prompt(shown, omitted=(), kind=INTERESTING_RUN):
+    """The whole prompt for a run of this kind: the standards every run is held to, then what this
+    kind of run does (grow the site, or consolidate it), then the axioms and the site itself."""
+    mission = mission_of(kind)
+    consolidating = kind == CONSOLIDATION_RUN
     system = (
         "You are the autonomous curator of a static website served from S3 behind a CDN. "
-        f"Your mission, every single run: {MISSION}. What all of it has to add up to is {WHOLE} -- "
+        f"Your mission this run: {mission}. What all of it has to add up to is {WHOLE} -- "
         "not a set of pages that happen to share a domain.\n\n"
         f"\"Interesting\" means one thing here, and it is the standard every change is held to: "
         f"{INTERESTING}. User engagement time is the measure. So judge a change by whether it "
@@ -1675,34 +1774,7 @@ def build_prompt(shown, omitted=()):
         "now. That look at the site as a whole is the first half of every run. What you do is the "
         f"second half, and it follows from what you saw, because the site has to become {WHOLE} "
         "and not a collection of individually decent pages.\n\n"
-        "RE-FEDERATE, AGGRESSIVELY. This is the normal work of a run, not an alternative to it: "
-        "every run should leave the site more of a single piece than it found it. Lift markup, "
-        "styles and behaviour that the pages repeat into the shared files -- the layout and "
-        f"partials in \"{INCLUDES_DIR}/\", a Sass partial in \"{SASS_DIR}/\", the shared "
-        "stylesheet \"css/site.scss\" that every page links as \"css/site.css\", a shared "
-        "script such as \"js/site.js\" -- and use them from every page that needs them. Give "
-        "every page the same header and navigation, so the whole site is reachable from anywhere. "
-        "Settle on one visual language and hold every page to it: palette, type, spacing, motion. "
-        "Merge pages that overlap, and retire the ones that no longer earn their place: the site "
-        "is better as fewer pages that belong together than as more that do not. Simplify, repair "
-        "or remove what has stopped working. Be aggressive about it -- take on the consolidation "
-        "that is overdue rather than the one that is merely easy, and do not leave a "
-        "near-duplicate standing because no single page is to blame for it.\n\n"
-        "ADD something -- new content, a new page, an interactive toy, better visuals, a hidden "
-        "easter egg, a new way of querying a visitor's orientation, or a new world for an "
-        "orientation that has none -- when a site that already holds together is what the whole "
-        "needs next, because then it gets more interesting by growing. Adding is never a way "
-        "around the paragraph above, though, and it is the exception rather than the default: "
-        "whatever you add arrives already federated, in the same run, inside the shared layout, "
-        "in the one visual language, wired into the one navigation, sharing the styles and "
-        "behaviour it has in common with the rest. A page that stands apart leaves the site less "
-        "of a whole, however good that page is on its own.\n\n"
-        "A run whose entire change is a holistic improvement -- consolidating, unifying, merging, "
-        "or only deleting -- is a complete and successful run. It needs no new page alongside it. "
-        "The site becomes more interesting by becoming a single coherent whole, not only by "
-        "growing, so do not add for the sake of adding: when the site is repetitive, scattered or "
-        "inconsistent, re-federating it is the more interesting change. Either way, build on what "
-        "is already there rather than starting over.\n\n"
+        + (consolidation_block() if consolidating else growth_block()) +
         f"LEGIBLE TO A STRANGER. Everything above is held to one more standard, which no check can "
         f"judge and the prompt therefore has to: the site is {LEGIBLE}. Confusion spends "
         "engagement time as surely as boredom does, so hold every change to these six, and undo "
@@ -2136,15 +2208,91 @@ def build_prompt(shown, omitted=()):
             "is shown each run, so a federation that has to reach one of those can be carried on "
             "by a later run."
         )
+    if consolidating:
+        then = ("make the one change that brings it closest to being that: re-federate what is "
+                "already there, aggressively, refactor and clean up, and add nothing")
+    else:
+        then = ("make the one change that gives a visitor the most reason to stay and keep going: "
+                "add something new only as part of the same whole, already federated, and leave "
+                "the consolidating to the run that follows")
     user += (
-        f"\n\nThis run's mission: {MISSION}, measured in {INTERESTING}. Envision all of the above "
-        f"as {WHOLE} -- one navigation, one visual language, one through-line -- and then make the "
-        "one change that brings it closest to being that: re-federate what is already there, "
-        f"aggressively, and add something new only as part of the same whole. Keep it {LEGIBLE}: one "
-        "name per page, one way to do each thing, content before chrome, and never a dead end. "
-        "Respond with the JSON object only."
+        f"\n\nThis run's mission: {mission}, measured in {INTERESTING}. Envision all of the above "
+        f"as {WHOLE} -- one navigation, one visual language, one through-line -- and then {then}. "
+        f"Keep it {LEGIBLE}: one name per page, one way to do each thing, content before chrome, "
+        "and never a dead end. Respond with the JSON object only."
     )
     return system + "\n\n" + user
+
+
+# The two kinds of run differ in one block of the system prompt, between ENVISION THE WHOLE FIRST
+# and LEGIBLE TO A STRANGER: what the run does, now that it has looked. Everything before it (the
+# mission, the measure, the look at the whole) and everything after it (the legibility holds, the
+# build, the axioms, the format) is the same for both.
+
+ALTERNATION = ("Runs alternate: one makes the site more interesting and the next consolidates it, "
+               "and this is the ")
+
+
+def growth_block():
+    """What a growing run does: add the one thing that most lengthens a visitor's stay, federated."""
+    return (
+        f"THIS RUN GROWS THE SITE. {ALTERNATION}growing run. Spend the whole of this answer on the "
+        "one change that most lengthens a visitor's stay, and none of it on tidying: the "
+        "consolidation that is overdue belongs to the run that follows this one, which adds "
+        "nothing and lifts, merges and retires instead. Leave that run no more to do than you "
+        "found, though: nothing you add may repeat what a shared file already does, and a change "
+        "that needs a shared file changed makes that change rather than copying the shared "
+        "thing.\n\n"
+        "ADD something -- new content, a new world for an orientation that has none, a second "
+        "shape of piece for a world that has one, a new way of querying a visitor's orientation, "
+        "an interactive toy, better visuals, a hidden easter egg -- or deepen what is already "
+        "there, so a world a visitor finishes in one go holds them for three. Whatever you add "
+        "arrives already federated, in the same run: inside the shared layout, in the one visual "
+        "language, wired into the one navigation, sharing the styles and behaviour it has in "
+        "common with the rest. A page that stands apart leaves the site less of a whole, however "
+        "good that page is on its own, so a growing run is held to the whole as firmly as a "
+        "consolidating one. Build on what is already there rather than starting over, and do not "
+        "add for the sake of adding: one change that gives a visitor a reason to keep going is "
+        "the run, and a second page beside it is not.\n\n"
+    )
+
+
+def consolidation_block():
+    """What a consolidating run does: re-federate, refactor and clean up, and add nothing."""
+    return (
+        f"THIS RUN CONSOLIDATES THE SITE. {ALTERNATION}consolidating run. It adds nothing: no new "
+        "page, no new world, no new piece, no new query mechanism, no new feature, and no new "
+        "copy that is not the plainer form of copy already there. The whole of this answer is "
+        "consolidation, federation, refactoring and cleanup, and the measure above is served by "
+        "that all the same: a site that holds together is one a visitor keeps exploring, and the "
+        "growing run that follows this one builds on what this run leaves.\n\n"
+        "RE-FEDERATE, AGGRESSIVELY. Leave the site more of a single piece than you found it. Lift "
+        "markup, styles and behaviour that the pages repeat into the shared files -- the layout "
+        f"and partials in \"{INCLUDES_DIR}/\", a Sass partial in \"{SASS_DIR}/\", the shared "
+        "stylesheet \"css/site.scss\" that every page links as \"css/site.css\", a shared "
+        "script such as \"js/site.js\" -- and use them from every page that needs them. Give "
+        "every page the same header and navigation, so the whole site is reachable from anywhere. "
+        "Settle on one visual language and hold every page to it: palette, type, spacing, motion. "
+        "Merge pages that overlap, and retire the ones that no longer earn their place: the site "
+        "is better as fewer pages that belong together than as more that do not. Be aggressive "
+        "about it -- take on the consolidation that is overdue rather than the one that is merely "
+        "easy, and do not leave a near-duplicate standing because no single page is to blame for "
+        "it.\n\n"
+        "REFACTOR AND CLEAN UP. Simplify, repair or remove what has stopped working. Take out dead "
+        "code, styles nothing uses, partials nothing includes, variables nothing reads, and "
+        "comments that describe what is no longer there. Give each thing one name and use it "
+        "everywhere. Undo the drift from the six holds under LEGIBLE TO A STRANGER below: a "
+        "second control beside the first, a caption on the feed, a term used as if self-evident. "
+        "What a visitor can do stays what it is, except where a merge or a retirement takes a "
+        "near-duplicate away on purpose: a consolidation that changes behaviour by accident is a "
+        "regression, not a cleanup.\n\n"
+        "A run whose entire change is a holistic improvement -- consolidating, unifying, merging, "
+        "refactoring, or only deleting -- is a complete and successful run. It needs no new page "
+        "alongside it, and must have none. The site becomes more interesting by becoming a single "
+        "coherent whole, not only by growing, so do not add for the sake of adding: when the site "
+        "is repetitive, scattered or inconsistent, re-federating it is the more interesting "
+        "change. Build on what is already there rather than starting over.\n\n"
+    )
 
 
 AUTH_FAILURE = re.compile(r"authentication failed|no authentication information|access denied by policy", re.I)
@@ -2153,11 +2301,37 @@ AUTH_FAILURE = re.compile(r"authentication failed|no authentication information|
 MODEL_UNAVAILABLE = re.compile(
     r"is not available|is not accessible via|in interactive mode to enable this model"
     r"|requires enablement|disabled by your organization", re.I)
+# What the CLI might say when a model has no dial for the reasoning effort asked of it. The exact
+# wording is not known, so this reads any error that names the effort or the reasoning as that:
+# the cost of a false match is one more call to the same model, without the flag.
+EFFORT_REFUSED = re.compile(r"reasoning|effort", re.I)
 
 
-def call_model(model, prompt):
-    """Ask one model for its answer through the Copilot CLI and return the text."""
-    cmd = [COPILOT_BIN, "--model", model, *COPILOT_FLAGS]
+def call_model(model, prompt, effort=None):
+    """Ask one model for its answer through the Copilot CLI and return the text.
+
+    `effort` is the reasoning effort to ask for (reasoning_effort() unless given); "" asks for
+    none. A model that refuses the level is asked once more without it, and that is the one
+    retry: a second refusal is the model's failure like any other.
+    """
+    if effort is None:
+        effort = reasoning_effort()
+    try:
+        return run_copilot(model, prompt, effort)
+    except EffortRefused as err:
+        if not effort:
+            raise ModelError(str(err)) from None
+        print(f"::notice::{model} did not take reasoning effort {effort} ({one_line(err, 200)}); "
+              "asking again without it.")
+        try:
+            return run_copilot(model, prompt, "")
+        except EffortRefused as again:
+            raise ModelError(str(again)) from None
+
+
+def run_copilot(model, prompt, effort):
+    """One call to the Copilot CLI: the model's answer, or the error classified."""
+    cmd = [COPILOT_BIN, "--model", model, *effort_flags(effort), *COPILOT_FLAGS]
     env = dict(os.environ, NO_COLOR="1", COPILOT_AUTO_UPDATE="false")
     with tempfile.TemporaryDirectory(prefix="copilot-silo-") as empty_dir:
         try:
@@ -2199,6 +2373,10 @@ def call_model(model, prompt):
     if errors or proc.returncode != 0:
         if AUTH_FAILURE.search(problem) or any(error.startswith("authentication") for error in errors):
             raise CopilotAuthError(problem)
+        # Before the unavailable check: "effort xhigh is not available for this model" is about
+        # the flag, not the model, and the model is worth asking again without it.
+        if EFFORT_REFUSED.search(problem):
+            raise EffortRefused(problem[:300])
         if MODEL_UNAVAILABLE.search(problem):
             raise ModelUnavailable(problem[:300])
         raise ModelError(f"copilot exited with status {proc.returncode}: {(problem or stdout.strip())[:500]}")
@@ -2426,7 +2604,7 @@ def one_line(text, limit):
     return " ".join(str(text).split())[:limit]
 
 
-def clean_summary(text):
+def clean_summary(text, fallback=MISSION):
     """The model's summary as one plain line that is safe in a commit message and in Markdown.
 
     Only letters, digits, spaces and plain punctuation survive. That drops "#" and "@" (GitHub acts
@@ -2436,7 +2614,7 @@ def clean_summary(text):
     lines = str(text or "").strip().splitlines()
     first = re.sub(r"[^\w .,;:!?'\"()+%&=-]", "", lines[0] if lines else "")
     first = re.sub(r"(?i)(gh)-(?=\d)", r"\1 ", first)
-    return " ".join(first.split())[:200] or MISSION
+    return " ".join(first.split())[:200] or fallback
 
 
 def main():
@@ -2444,8 +2622,10 @@ def main():
         sys.exit(f"site directory not found: {SITE_DIR}")
     require_build_toolchain()
 
+    kind = run_kind()
+    mission = mission_of(kind)
     shown, omitted = split_for_prompt(read_site())
-    prompt = build_prompt(shown, omitted)
+    prompt = build_prompt(shown, omitted, kind)
     candidates = pick_candidates()
     requested = bool((os.environ.get("MODEL") or "").strip())  # named by hand, not drawn from the pool
     attempts, unavailable, tried = 0, [], set()
@@ -2464,7 +2644,7 @@ def main():
     queue, answering = list(candidates), []
     while queue and attempts < MAX_ATTEMPTS:
         model = queue.pop(0)
-        print(f"Mission: {MISSION}\nModel:   {model}", flush=True)
+        print(f"Mission: {mission} ({kind} run)\nModel:   {model}", flush=True)
         tried.add(model)
         attempts += 1  # counted up front, so every path below that asks again is bounded
         try:
@@ -2492,10 +2672,12 @@ def main():
             except OSError as err:
                 # The site may be half written, so stop here: the workflow only commits after success.
                 sys.exit(f"Could not apply the change from {model}: {one_line(err, 300)}")
-            summary = clean_summary(plan.get("summary"))
+            summary = clean_summary(plan.get("summary"), mission)
             print(f"Summary: {summary}")
             set_output("model", model)
             set_output("summary", summary)
+            set_output("kind", kind)
+            set_output("headline", HEADLINES[kind])
             report_unavailable()
             return
         if not queue:
