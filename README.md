@@ -506,9 +506,10 @@ saying where to go next, and the home page explained none of its own words.
 - **The shell it left behind.** The main nav is the sparkles logo in the upper left and the
   constellation it opens (see [The logo and the constellation](#the-logo-and-the-constellation)),
   with the persona floating opposite it (see [Persona](#persona)); a page's `<main>` is its
-  feature and fills the first screen; every page but the site map and the mood atlas (which list
-  every page themselves) ends with the feed, the one index of every world, which has no caption
-  (see [The feature and the feed](#the-feature-and-the-feed)). That is the whole of the shared
+  feature and fills the first screen; every page ends with the feed, the one index of every world,
+  which has no caption (see [The feature and the feed](#the-feature-and-the-feed)) -- the site map
+  and the mood atlas included, each of which carried a world list of its own until the feed became
+  the only one, and sends a visitor to the cards below instead. That is the whole of the shared
   chrome, written once in [`site/_includes/layout.njk`](site/_includes/layout.njk), and a page
   sets nothing about navigation: no footer lists, no notes, no includes. A run is asked to keep
   it that size.

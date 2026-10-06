@@ -5385,16 +5385,20 @@ class RealSiteTest(unittest.TestCase):
         self.assertIn("observe(ui.head)", stage_js, "a heading that changes shape is never measured again")
         self.assertIn("id='stage-head'", self.source[mi.STAGE_INCLUDE], "the heading cannot be found")
 
-    def test_every_page_but_the_two_lists_ends_in_the_feed(self):
-        # The feed is the one index of every world, written once in the shell: every page carries
-        # it as plain markup, except the two that list every page themselves.
+    def test_every_page_ends_in_the_feed(self):
+        # The feed is the one index of every world, written once in the shell, and every page
+        # carries it as plain markup -- the site map and the mood atlas included. Those two were
+        # the exception while each listed every world itself; those lists are retired and both
+        # pages send a visitor to the cards below instead, which is what makes the feed the only
+        # index the site has. The site map leans on it for more than that: the reachability axiom
+        # asks that every page be listed there, and the world pages are listed by these cards.
+        # Once per page, too -- a page writing a second grid of its own would be the duplication
+        # coming back.
         for page in sorted(mi.html_pages(self.site)):
             with self.subTest(page=page):
-                if page in ("sitemap.html", "moods.html"):
-                    self.assertNotIn("id='feed-grid'", self.site[page])
-                else:
-                    self.assertIn("id='feed-grid'", self.site[page])
-                    self.assertIn("js/feed.js", self.site[page])
+                self.assertEqual(self.site[page].count("id='feed-grid'"), 1,
+                                 "the one index of every world is written once per page")
+                self.assertIn("js/feed.js", self.site[page])
 
     def test_the_query_is_never_a_gate(self):
         # references_from reads the threshold's own markup and not the scripts it loads, so this
