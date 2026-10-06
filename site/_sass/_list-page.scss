@@ -1,7 +1,4 @@
-// Shared structure for list-first pages (the mood atlas and the site map):
-// one centered reading column, one plain purpose line, section headings and
-// reusable list wrappers that render each row as the same filled card.
-
+// The mood atlas and site map share a reading column and filled list cards.
 @use 'type';
 
 .list-page-main {
@@ -37,9 +34,7 @@
   display: grid;
 }
 
-.list-stack {
-  gap: 0.5rem;
-}
+.list-stack { gap: 0.5rem; }
 
 .list-grid {
   grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr));
@@ -51,4 +46,79 @@
   padding: 0.9rem 1rem 1rem;
   border-radius: var(--md-sys-shape-corner-large);
   background: var(--md-sys-color-surface-container);
+}
+
+.atlas-state { margin: 0 0 1.25rem; }
+
+.current {
+  margin: 0.5rem 0 0;
+  color: var(--md-sys-color-on-surface);
+  @include type.scale(body-large);
+}
+
+.signal-line {
+  margin: 0.5rem 0 0;
+  color: var(--md-sys-color-on-surface-variant);
+  font-family: type.$mono;
+  @include type.scale(body-small);
+}
+
+.atlas-probe {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--md-sys-color-outline-variant);
+}
+
+.mechanisms { @extend .list-stack; }
+
+.mechanisms li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  color: var(--md-sys-color-on-surface);
+  @include type.scale(body-medium);
+}
+
+.mechanisms li.is-active { box-shadow: inset 0 0 0 2px var(--md-sys-color-primary); }
+
+.mechanism-name {
+  min-width: 9rem;
+  color: var(--md-sys-color-on-surface);
+  @include type.scale(title-small);
+}
+
+.mechanism-ask {
+  flex: 1 1 18rem;
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.mechanisms button {
+  min-height: 44px;
+  padding: 0.25rem 0.75rem;
+  background: transparent;
+  color: var(--md-sys-color-primary);
+}
+
+.pages { @extend .list-grid; }
+
+.pages a {
+  display: inline-block;
+  min-height: 24px;
+  color: var(--md-sys-color-primary);
+  text-decoration: none;
+  @include type.scale(title-medium);
+}
+
+.pages a:hover { text-decoration: underline; }
+
+.pages .gloss {
+  color: var(--md-sys-color-on-surface-variant);
+  @include type.scale(label-medium);
+}
+
+.pages p {
+  margin: 0.35rem 0 0;
+  color: var(--md-sys-color-on-surface-variant);
+  @include type.scale(body-medium);
 }

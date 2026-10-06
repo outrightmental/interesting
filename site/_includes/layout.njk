@@ -1,4 +1,4 @@
-{# Front matter: title and description name and describe the page; stylesheet adds a page-specific CSS file. error.html alone uses inlineStyles and siteRoot because it can be served at an arbitrary missing path. A page supplies its own main; this layout supplies the shared navigation, persona and feed. #}
+{# Front matter: title names the page; description describes it, or defaults to the world's description in _data/worlds.json. error.html uses inlineStyles and siteRoot because it can be served at an arbitrary missing path. A page supplies its main; the layout supplies navigation, persona and feed. #}
 {%- set here = (page.filePathStem | replace('/', '')) + '.html' if page else '' %}
 {%- set thisWorld = null %}
 {%- for world in worlds.worlds %}{% if world.file == here %}{% set thisWorld = world %}{% endif %}{% endfor %}
@@ -23,8 +23,8 @@
   <title>{% if title %}{{ title }} · {% endif %}interesting</title>
   <link rel='icon' href='{{ siteRoot }}favicon.svg' type='image/svg+xml'>
   <script type='application/json' id='site-worlds'>{{ worlds.worlds | dump | safe }}</script>
-{%- if description %}
-  <meta name='description' content='{{ description }}'>
+{%- if description or thisWorld %}
+  <meta name='description' content='{{ description if description else thisWorld.what }}'>
 {%- endif %}
 {%- if inlineStyles %}
   <style>{{ 'site' | css | safe }}{{ stylesheet | css | safe }}</style>
@@ -56,7 +56,6 @@
 </head>
 <body>
   <a class='skip-link' href='#main-content'>skip to main content</a>
-  {# The one veil the whole site goes behind: window.interestingSite.lightbox() in js/site.js raises it, _sass/_lightbox.scss paints it, and the sparkles logo's constellation, the persona sheet and the "are you sure?" modal all open through it (issue #70). Hidden until a script raises it, so a visitor with none gets no dimming they could not dismiss. #}
   <div class='lightbox-veil' id='lightbox-veil' hidden></div>
   <details class='sparknav' id='sparknav'>
     <summary class='sparknav-logo' id='sparknav-logo' aria-label='interesting: the site menu'>
