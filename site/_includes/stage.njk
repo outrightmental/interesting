@@ -38,8 +38,9 @@
         <p class='stage-status' id='stage-status' aria-live='polite'></p>
         <p class='stage-wanted' id='stage-wanted' aria-live='polite' hidden></p>
         <div class='stage-foot'>
+          {#- Kept even when it is empty: the dots sit at the right of this row, and they stay
+              there whether or not the threshold's own button is standing opposite them. -#}
           <div class='stage-foot-actions'>
-            <button type='button' class='btn-text' id='stage-skip' hidden>skip this one</button>
 {%- if threshold %}
             <button type='button' class='btn-text' id='stage-again' hidden>ask another way</button>
 {%- endif %}
@@ -49,4 +50,12 @@
       </div>
     </div>
   </div>
+  {#- The way on, pinned in the lower right of the viewport: dim for the whole piece and lit the
+      moment it is finished, so nothing moves on until the visitor says so (issue #78). Outside
+      #stage-inner on purpose -- the vanish transforms that box, and a transformed ancestor is
+      what a fixed child would be positioned against -- so this mark holds still in the same
+      corner whatever the piece's shape, however many knobs it has, and whichever piece is on. -#}
+  <button type='button' class='stage-next' id='stage-next' aria-label='the next piece' disabled>
+    <svg class='icon' viewBox='0 0 24 24' aria-hidden='true' focusable='false'><path d='M6.41 6L5 7.41 9.58 12 5 16.59 6.41 18l6-6zm6.59 0l-1.41 1.41L16.17 12l-4.58 4.59L13 18l6-6z'/></svg>
+  </button>
 </main>
