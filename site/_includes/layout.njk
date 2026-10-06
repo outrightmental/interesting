@@ -124,9 +124,12 @@
   visual language and outside what any page may restyle or reword. "steer the site" keeps the
   bottom edge, and nothing of the site's goes there. The other two -- "cookies" and "state" -- are
   adopted by the shell into the far orbit of the constellation, where a visitor finds them with
-  everything else: js/site.js hides the two buttons their own files pin to the corners and forwards
-  the constellation's options to them, so there is still exactly one cookies dialog and one state
-  menu, and neither fixed file is edited to do it.
+  everything else: js/site.js hides the two buttons their own files pin to the corners and answers
+  for them from the constellation, so there is still exactly one cookies dialog and one state
+  menu, and neither fixed file is edited to do it. "cookies" opens the consent library's own
+  dialog, with the lightbox out of the way first. "state" keeps the lightbox: the constellation
+  gives way and js/state.js's panel is hosted in #sparknav-modal, the middle of the veil that is
+  already up, until the visitor closes it and the lightbox goes down with it (issue #66).
 
   The page's own world, when it has one, is named on <html data-world> so _sass/_mood.scss gives
   the page that world's palette; a visitor's reading lands on <html data-mood> and wins over it,
@@ -275,6 +278,11 @@
 {%- endfor %}
       </ul>
     </nav>
+    {#- Where the state interface goes when "state" is picked: the constellation gives way to it
+        and the veil behind it never comes down (issue #66). Empty, and hidden, until then --
+        js/state.js owns that panel and js/site.js asks for it; the shell only holds the middle of
+        the screen open for it. -#}
+    <div class='sparknav-modal' id='sparknav-modal' hidden></div>
   </details>
   {#- The persona, floating in the upper right: the only other navigation on the site. What a
       visitor with scripting switched off gets is written here and claims nothing; js/persona.js

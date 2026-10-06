@@ -364,6 +364,14 @@
       onCancel: onCancel,
       opener: opts.opener || document.activeElement
     };
+    // The nav's lightbox may have put this dialog aside with the rest of the body -- it is a child
+    // of it, built the first time anything asks, which may well be before the menu was ever
+    // opened -- and the state interface asks from inside that lightbox now (issue #66). A modal
+    // dialog inerts the page by itself, so the marks come off here rather than being worked
+    // around there: a question nobody can answer is worse than no question. aside() gives back
+    // only what it took, so nothing of its bookkeeping is disturbed by this.
+    sure.host.removeAttribute('inert');
+    sure.host.removeAttribute('aria-hidden');
     if (typeof sure.host.showModal === 'function') {
       sure.host.showModal();
     } else {
@@ -454,7 +462,7 @@
   /* The main nav: the sparkles logo in the upper left, and the constellation it opens.
 
      The markup is in _includes/layout.njk and the look is in _sass/_nav.scss. What is left for a
-     script is the four things neither of those can do:
+     script is the five things neither of those can do:
 
        place()   where the stars go. Only something that can count the options knows that, and the
                  set changes with the visitor's state, so the geometry is worked out here and
@@ -473,10 +481,19 @@
                  kept and run when it closes. Nothing is dropped and no page has to know.
        shape()   the options that come and go. The world a reading opens onto is only there once
                  something has been read, and "cookies" and "state" are only there while the files
-                 that own them have drawn their own buttons -- which this then hides, and presses
-                 on the constellation's behalf. js/analytics.js and js/state.js are fixed files
+                 that own them have drawn their own buttons -- which this then hides, and answers
+                 for on the constellation's behalf. js/analytics.js and js/state.js are fixed files
                  (see FIXED_FILES in .github/scripts/make_interesting.py) and neither is edited
                  for any of it: the shell adopts what they drew instead.
+       stateModal()
+                 the state interface, taking the lightbox over (issue #66). "state" is the one
+                 option that is not a destination and not someone else's dialog: it is a thing to
+                 do, here, with the whole screen. So the lightbox does not come down for it. The
+                 constellation gives way, js/state.js's own panel is moved into the middle of the
+                 veil that is already up, and closing the panel closes the lightbox with it and
+                 gives the visitor back the page. Nothing the lightbox is made of -- the veil, the
+                 held frame loop, the inert page, <html data-lightbox> -- is torn down and raised
+                 again in between, which is what "zero jitter" asks for.
 
      Pressing the logo never navigates. The threshold is the home icon in the near orbit, which is
      what issue #54 asks for, and it is also what lets the logo be a <details> summary -- so the
@@ -628,7 +645,9 @@
   }
 
   function place() {
-    if (!nav) return;
+    // Nothing to place while the state interface has the lightbox: the constellation is not on
+    // screen to be measured, and it is shaped again on the next press either way.
+    if (!nav || nav.sky.hidden) return;
     var mid = Math.max(18, Math.round(nav.logo.offsetHeight / 2));
     var groups = [];
     var widths = [];
@@ -712,7 +731,8 @@
      offered in the constellation instead, so there is still exactly one cookies dialog and one
      state menu on the site -- and the option is only there while the button is, which is why a
      copy of the site with no measurement id (and so no consent banner) simply has no cookies
-     option. The files behind them are never edited: the constellation presses their buttons. */
+     option. Neither file is edited for any of it: the constellation presses the consent banner's
+     own button, and asks js/state.js for its own panel (see stateModal below). */
   function adopt() {
     nav.cookiesCorner = document.querySelector(CORNER_COOKIES);
     nav.stateCorner = document.querySelector(CORNER_STATE);
@@ -766,6 +786,9 @@
       void nav.sky.offsetWidth;
       nav.sky.classList.add('is-branching');
     } else {
+      // Whatever the lightbox was holding goes with it: the state interface back to its corner,
+      // the constellation back on screen for the next press.
+      stateModal(false);
       html.removeAttribute('data-lightbox');
       hold(false);
       aside(false);
@@ -782,22 +805,84 @@
     if (focusLogo && typeof nav.logo.focus === 'function') nav.logo.focus();
   }
 
-  /* The state menu hands the focus back to its own button when it closes -- the one the shell has
-     hidden, where a keyboard would land nowhere -- so the logo takes it instead, as soon as the
-     panel is away. Nothing of the menu is touched to arrange it; this only watches. */
-  function giveTheLogoTheFocusBack(panel) {
+  /* ---- the state interface, taking the lightbox over -------------------------------------- */
+
+  /* "state" is the one option in the constellation that is neither a destination nor somebody
+     else's dialog: it is a thing to do, and issue #66 asks for it to have the screen while it is
+     being done. So the lightbox stays exactly as it is -- veil up, page inert and still, frame
+     loop held -- the constellation gives way, and js/state.js's own panel is moved into the middle
+     of it. There is no way back to the constellation: closing the panel closes the lightbox, which
+     is what "return to the site" means.
+
+     The panel is the fixed file's, and asking for it is all that happens here (see "Presented
+     somewhere else" in js/state.js). A store too old to offer one, or a shell written without the
+     host to put it in, falls back to what the constellation did before: get out of the way and
+     press the corner button -- which is what stateModal(true) saying false means. Taking it down
+     tidies up either way, because an empty host left on screen is an invisible layer over the
+     page. */
+  var stateHosted = null; // the function that gives the panel back, while it is being hosted
+
+  function hostedStateMenu() {
+    var menu = store && store.menu;
+    return menu && typeof menu.present === 'function' ? menu : null;
+  }
+
+  function stateModal(on) {
+    if (on) {
+      var menu = hostedStateMenu();
+      if (!nav.modal || !menu) return false;
+      // The host is on screen before the panel arrives in it, because nothing inside a hidden box
+      // can take the focus and the panel puts the focus in its own text as it opens.
+      nav.modal.hidden = false;
+      var release = menu.present(nav.modal);
+      if (!release) {
+        nav.modal.hidden = true;
+        return false;
+      }
+      stateHosted = release;
+      // The attribute is set, never cleared and set again: every rule keyed on the lightbox being
+      // up stays matched through the swap, so nothing behind the veil so much as blinks.
+      html.setAttribute('data-lightbox', 'state');
+      nav.sky.hidden = true;
+      nav.sky.classList.remove('is-branching');
+      whenThePanelCloses(menu.panel, function () {
+        // However it closed -- its own "close", Escape, a press on the dimmed page around it --
+        // the lightbox goes down with it and the visitor is back where they were.
+        if (stateHosted) close(true);
+      });
+      return true;
+    }
+    if (stateHosted) {
+      var giveItBack = stateHosted;
+      stateHosted = null; // first, so the watcher above knows this close is not a visitor's
+      giveItBack();
+    }
+    // Put away whether anything was being hosted or not: an empty host left on screen would be an
+    // invisible layer over the page, swallowing every press on it.
+    if (nav.modal) nav.modal.hidden = true;
+    nav.sky.hidden = false;
+  }
+
+  /* The state interface closes itself, in all the ways a dialog can be closed, and hands the focus
+     back to its own button -- the one the shell has hidden, where a keyboard would land nowhere.
+     So the shell watches the panel's `hidden` attribute and answers for the closing. Nothing of
+     the menu is touched to arrange it; this only watches. */
+  function whenThePanelCloses(panel, then) {
     if (!panel || !window.MutationObserver) return;
     var watch = new MutationObserver(function () {
       if (!panel.hidden) return;
       watch.disconnect();
-      if (typeof nav.logo.focus === 'function') nav.logo.focus();
+      then();
     });
     watch.observe(panel, { attributes: true, attributeFilter: ['hidden'] });
   }
 
-  // The chips, the logo included, in the order a Tab walks them.
+  // The chips, the logo included, in the order a Tab walks them -- and the state interface's own
+  // controls while it is the thing the lightbox is holding, its text box included, because a
+  // keyboard trapped in a modal has to be able to reach all of it.
   function navFocusable() {
-    var all = nav.host.querySelectorAll('summary, a[href], button:not([disabled])');
+    var all = nav.host.querySelectorAll(
+      'summary, a[href], button:not([disabled]), textarea:not([disabled])');
     var reachable = [];
     for (var i = 0; i < all.length; i++) {
       if (all[i].offsetWidth || all[i].offsetHeight) reachable.push(all[i]);
@@ -836,7 +921,10 @@
       cookiesOpen: document.getElementById('sparknav-cookies-open'),
       state: document.getElementById('sparknav-state'),
       stateOpen: document.getElementById('sparknav-state-open'),
-      stateLabel: document.getElementById('sparknav-state-label')
+      stateLabel: document.getElementById('sparknav-state-label'),
+      // Where the state interface is hosted, in the middle of the lightbox. Not required: a shell
+      // written without it still has the corner menu to fall back on.
+      modal: document.getElementById('sparknav-modal')
     };
     if (!nav.logo || !nav.sky || !nav.orbits.length || !nav.cookiesOpen || !nav.stateOpen) {
       nav = null;
@@ -871,15 +959,33 @@
     });
 
     nav.stateOpen.addEventListener('click', function () {
+      // The lightbox is not dropped and raised again: it stays up, and the state interface takes
+      // the constellation's place inside it (issue #66).
+      if (stateModal(true)) return;
+      // Nothing to host it with, so the corner menu, as it was before: out of the way first,
+      // because a panel pinned to a live page has to find the page live.
       close(true);
       if (!nav.stateCorner) return;
-      giveTheLogoTheFocusBack(document.getElementById(STATE_PANEL));
+      whenThePanelCloses(document.getElementById(STATE_PANEL), function () {
+        if (typeof nav.logo.focus === 'function') nav.logo.focus();
+      });
       nav.stateCorner.click();
     });
+
+    // A press on the dimmed page around the state interface is a press on the page: the same
+    // "not this" the veil takes, which the host covers while it is up.
+    if (nav.modal) {
+      nav.modal.addEventListener('click', function (event) {
+        if (event.target === nav.modal) close(true);
+      });
+    }
 
     document.addEventListener('keydown', function (event) {
       if (!nav.host.open) return;
       if (event.key === 'Escape' || event.key === 'Esc') {
+        // A question floating over the lightbox answers Escape itself: dismissing "are you sure
+        // you want to clear everything?" is not dismissing the interface that asked it.
+        if (asking) return;
         close(true);
         return;
       }

@@ -170,11 +170,60 @@ html[data-lightbox] .persona * {
   animation-play-state: paused;
 }
 
+// ---- the state interface, hosted in the lightbox -----------------------------------------
+
+// "state" is the one option that is a thing to do rather than a place to go, so it gets the
+// lightbox rather than dropping it (issue #66): the constellation gives way, and js/site.js moves
+// the panel js/state.js owns into this box. The veil behind it never comes down, which is what
+// makes the swap continuous -- nothing here raises a lightbox of its own.
+//
+// The box is the whole viewport, over the veil and under the logo, and it centres whatever is in
+// it. The panel brings its own size and its own paint with it, from the fixed file: a stylesheet
+// an hourly run owns may frame the state interface but can never make it unreadable. The top
+// padding is what keeps the panel clear of the logo on a small screen, and the overflow is for a
+// viewport too short for it, where the box scrolls rather than cropping it.
+.sparknav-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 2; // over the veil, under the logo, which stays pressable and closes the whole thing
+  display: grid;
+  place-items: center;
+  padding: calc(var(--nav-inset) + 3.5rem) 1rem 1.5rem;
+  overflow: auto;
+  overscroll-behavior: contain;
+  animation: sparknav-modal var(--md-sys-motion-duration-medium) var(--md-sys-motion-easing-standard) both;
+}
+
+// Said outright, because a hidden box with `display: grid` on it is a box that is still there.
+.sparknav-modal[hidden] {
+  display: none;
+}
+
+// It arrives where the constellation was, rather than from nowhere: the veil is already up, so
+// this is the only thing that moves.
+@keyframes sparknav-modal {
+  from {
+    opacity: 0;
+    transform: translateY(0.6rem);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
 // ---- the constellation -------------------------------------------------------------------
 
 .sparknav-sky {
   position: relative;
   z-index: 2;
+}
+
+// A sky put away for the state interface is put away, in both layouts: each of them says
+// `display` on this element, so the rule that hides it has to outweigh them both.
+html[data-nav] .sparknav-sky[hidden] {
+  display: none;
 }
 
 .sparknav-orbit {
@@ -385,6 +434,7 @@ html[data-nav='live'] {
   }
 
   .sparknav-veil,
+  .sparknav-modal,
   html[data-nav='live'] .is-branching .sparknav-node,
   html[data-nav='live'] .is-branching .sparknav-ray {
     animation: none;
