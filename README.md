@@ -234,9 +234,11 @@ same destination, the second adopted into the far orbit beside *cookies* and *st
 - **Which is what makes the two-item rule true.** At rest nothing floats over a page but the logo
   and the persona: nothing at the bottom edge, nothing beside either mark. `NavTest` holds both
   halves of it (issue #64) — the site's own stylesheets pin a closed list of things, every one of
-  them one of the two marks, a part of one, or an overlay only up while something is open; and the
-  nav harness confirms that all three pinned controls are hidden where their files put them while
-  the page is at rest, with every one of them still one press of the logo away.
+  them one of the two marks, a part of one, an overlay only up while something is open, or the
+  stage's own way on, which exists only on a page that is a stage and only while a piece is on it
+  (issue #78); and the nav harness confirms that all three pinned controls are hidden where their
+  files put them while the page is at rest, with every one of them still one press of the logo
+  away.
 - **The invitation leads off the site, and says so.** *change this site* is the one option in the
   constellation whose destination is not a page of this site. It presses the link
   `js/participate.js` drew, so the destination, the new tab and the query that shapes the issue are
@@ -1108,20 +1110,21 @@ Every world is a piece a visitor can finish. A world's page is not fixed content
 and what a visitor opens there is a **piece**: a small, randomly configured item — think of a
 fidget toy with a few levers and knobs on it — generated on the spot by the world's module from a
 seed, with a clear flow that asks them to make a few choices and finish, expediently. When it is
-finished the whole piece vanishes with some ceremony and the next card in the feed opens in its
-place, so one piece follows another without end and no two are quite the same. A "content page"
-does not discretely exist: it exists as a procedural generation, and the feed that keeps dealing
-is the river of pieces coming up the pipe. Like the eight above, this is an invariant of the
+finished it plays its ceremony and lights up the way on — one mark, in the lower right of the
+screen — and there it stays: nothing moves on by itself, and the press of that mark is what
+vanishes the whole piece and opens the next card in the feed in its place, so one piece follows
+another without end and no two are quite the same. A "content page" does not discretely exist: it
+exists as a procedural generation, and the feed that keeps dealing is the river of pieces coming
+up the pipe. Like the eight above, this is an invariant of the
 iteration, stated in the prompt and held to in code.
 
 - **The stage.** [`site/_includes/stage.njk`](site/_includes/stage.njk) is every world page's
   `<main>` — a world page is front matter and two lines that include it — and
   [`site/js/stage.js`](site/js/stage.js), one shared line in the `<head>`, runs it: the world's
   name over the piece's title and its one line, the scene (a canvas) beside the knobs, a row of
-  dots for progress, one text button that skips, and the ceremony — a done mark over the scene, a
-  burst in the world's palette and a short chime, the piece scaling away and the next arriving
-  from below; for a visitor who asked for less motion there is no burst and no transition, only
-  the mark and the next piece. The scene fills the real estate the first screen has (issue #65): it
+  dots for progress, and the ceremony — a done mark over the scene, a burst in the world's palette
+  and a short chime; for a visitor who asked for less motion there is no burst and no transition,
+  only the mark. The scene fills the real estate the first screen has (issue #65): it
   is as tall as the viewport leaves once the nav's room, `<main>`'s padding, the heading — measured,
   because a title that wraps takes two lines — and the margin that lets the feed peek are off it,
   and as wide as that height allows at the piece's own aspect ratio, which is also the width of its
@@ -1135,6 +1138,20 @@ iteration, stated in the prompt and held to in code.
   page's world and the visitor's reading (see [Material Design 3](#material-design-3)) — so
   picking a card out of the feed shifts the site to match the card that was picked, and going home
   gives the reading the site back.
+- **The way on** (issue
+  [#78](https://github.com/outrightmental/interesting/issues/78)). The ceremony used to end in a
+  departure: a linger of a second or so, and then the stage saw itself out whether the visitor was
+  ready or not. What it ends on now is one mark pinned in the lower right of the viewport — a
+  double caret, dim for the whole piece and lit the moment it is over — and the stage stops there.
+  Pressing it is what scales the piece away and brings the next in from below, so a finished piece
+  is the visitor's to sit with for as long as they like. It takes the keyboard as it lights, so
+  whoever finished the piece with a key can go on with one. And it never moves between pieces,
+  because it is pinned to the screen rather than laid out with the knobs, and written outside the
+  box the vanish transforms — a transformed ancestor being what a fixed child would be positioned
+  against. A *skip this one* button used to sit under the knobs; it is gone, the feed below being
+  where a visitor goes to pick a world of their own. The one place the way on lights early is a
+  stage with nothing to finish — a piece waiting on a sky, a world whose module is missing —
+  because a stage is never a dead end.
 - **The piece contract.** A world's module exports `piece(env)` beside `paint` and `spark`, and
   returns `{ title, brief, aspect, steps, start, apply, frame, tap, end }`: two to five knobs
   (`steps`), each `{ id, ask, kind, … }` of a kind the stage renders — `choice` (two to four
@@ -1184,9 +1201,11 @@ iteration, stated in the prompt and held to in code.
   `js/stage.js` against a stub browser: the elements `_includes/stage.njk` writes, a clock the
   scenario steps by hand so a 1.8-second hold costs nothing, a canvas that records nothing, and a
   feed that deals the worlds it is told to. Four scenarios: a world played, another played, and the
-  first dealt again, each round finishing and opening the next; a slider used where it stands, which
-  must count; a knob nobody touched, which must stay unset *and* be named; and a piece abandoned
-  with a hold still pressed down, after which nothing of it may be on the stage or still running.
+  first dealt again, each round finishing, sitting out six seconds of its own clock to prove the
+  stage does not see itself out, and then opening the next when the way on is pressed; a slider used
+  where it stands, which must count; a knob nobody touched, which must stay unset *and* be named,
+  with the way on still dim over it; and a piece abandoned with a hold still pressed down, after
+  which nothing of it may be on the stage or still running.
   `StageTest` plays purpose-built pieces through it and `RealSiteTest` plays the site as committed;
   like the piece harness it is outside `/site`, so a run cannot soften it. Deliberately, it holds
   the site as committed rather than refusing a plan: it drives the stage through the stage's own

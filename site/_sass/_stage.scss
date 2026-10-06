@@ -1,7 +1,8 @@
 // The stage (_includes/stage.njk, js/stage.js): a page's feature, where a piece is played,
 // finished and replaced. It is the feature every page is (see _panel.scss for main), with the
 // piece's parts laid out inside: the heading (the world, the piece's title, its one line), the
-// scene beside the knobs, the progress dots and the one text button that skips.
+// scene beside the knobs and the progress dots -- and, pinned in the lower right of the viewport
+// rather than laid out with any of that, the one mark that is the way on.
 //
 // The scene fills the real estate the first screen has (issue #65): as tall as the viewport leaves
 // once the nav's room, main's own padding, the heading and the margin that lets the feed peek are
@@ -17,8 +18,9 @@
 // bar the piece fills. A knob that is set gets a check mark; a knob gated on another is dimmed
 // until it opens.
 //
-// The ceremony: when the piece is finished, the done mark pops over the scene, the burst canvas
-// over the whole stage carries the particles, and the stage's inner scales away; the next piece
+// The ceremony: when the piece is finished, the done mark pops over the scene and the burst canvas
+// over the whole stage carries the particles. Then the way on lights up and nothing else happens
+// until it is pressed (issue #78), at which point the stage's inner scales away and the next piece
 // arrives from a little below. All of it stops still for a visitor who asked for less motion.
 
 @use 'type';
@@ -395,7 +397,9 @@
   gap: 0.4rem;
 }
 
-// The actions sit at the left, clear of the state menu's button in the corner of every page.
+// The actions sit at the left, clear of the state menu's button in the corner of every page. On a
+// world page there are none -- the way on is the whole of what a finished piece offers -- and the
+// box is kept empty so the dots opposite it keep the right-hand end of the row either way.
 .stage-foot-actions {
   display: flex;
   flex-wrap: wrap;
@@ -472,6 +476,64 @@
   }
 }
 
+// ---- the way on ---------------------------------------------------------------------------
+
+// One mark, in the same corner of the screen for every piece: the stage does not move on by
+// itself any more (issue #78), so the press that opens the next card has to be somewhere a
+// visitor can always find it -- and "somewhere" has to be the same place whatever the piece's
+// aspect ratio, however many knobs it has and however far down the page they run.
+//
+// So it is pinned to the viewport rather than laid out in the stage, and it is written outside
+// #stage-inner, whose transform during the vanish would otherwise be what a fixed child is
+// positioned against. It is the one thing the stage pins over a page, and it is only there at
+// all on a page that has a stage with something on it: before a piece is on, the rules below
+// take it away entirely, the way they take the piece's other parts away.
+//
+// Dim for the whole piece and lit when it is over: `disabled` is the state, so the dimming is the
+// same treatment every disabled control on the site wears (_controls.scss), a keyboard cannot
+// reach it before there is anywhere to go, and js/stage.js has one flag to set rather than a
+// class to keep in step with it.
+.stage-next {
+  position: fixed;
+  right: var(--nav-inset);
+  bottom: var(--nav-inset);
+  // Above the page and above anything a fixed file pinned to the bottom edge (js/participate.js,
+  // js/analytics.js and js/state.js pin theirs at 19, 20 and 21, hidden though the shell keeps
+  // them), and below every overlay: the lightbox's veil comes down over this as it does over
+  // everything else.
+  z-index: 22;
+  width: 64px;
+  height: 64px;
+  min-height: 64px;
+  padding: 0;
+}
+
+.stage-next .icon {
+  width: 32px;
+  height: 32px;
+}
+
+// Lit: the one filled control on the screen, raised off the page, with the mark stepping forward
+// the way the done mark pops over the scene.
+.stage-next:enabled {
+  background: var(--md-sys-color-primary);
+  color: var(--md-sys-color-on-primary);
+  box-shadow: var(--md-sys-elevation-level3);
+  animation: stage-pop 520ms var(--md-sys-motion-easing-emphasized) both;
+}
+
+.stage-next:enabled:focus-visible {
+  outline-color: var(--md-sys-color-on-surface);
+}
+
+// Before a piece is on -- the threshold waiting or asking, a world page without scripting -- there
+// is nowhere for it to go, so it is not there.
+.stage[data-mode='idle'] .stage-next,
+.stage[data-mode='quiet'] .stage-next,
+.stage[data-mode='asking'] .stage-next {
+  display: none;
+}
+
 // The question, asked large on the threshold: the ask at headline size, the answers as the big
 // filled cards the mood flow renders, laid across the width on a wide screen.
 .threshold-probe {
@@ -534,6 +596,19 @@
   .stage-side {
     max-width: none;
   }
+
+  // A little smaller where the screen is: the knobs stack under the scene here, so the mark has
+  // less room to stand clear of what it is pinned over.
+  .stage-next {
+    width: 56px;
+    height: 56px;
+    min-height: 56px;
+  }
+
+  .stage-next .icon {
+    width: 28px;
+    height: 28px;
+  }
 }
 
 // A short viewport (a laptop at 768 or 800 tall): the knobs close up so the feed still peeks.
@@ -585,7 +660,8 @@
 
   .stage[data-mode='arriving'] .stage-inner,
   .stage-done-mark,
-  .stage-done-text {
+  .stage-done-text,
+  .stage-next:enabled {
     animation: none;
   }
 }

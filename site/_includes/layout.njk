@@ -56,6 +56,7 @@
 </head>
 <body>
   <a class='skip-link' href='#main-content'>skip to main content</a>
+  {# The one veil the whole site goes behind: window.interestingSite.lightbox() in js/site.js raises it, _sass/_lightbox.scss paints it, and the sparkles logo's constellation, the persona sheet and the "are you sure?" modal all open through it (issue #70). Hidden until a script raises it, so a visitor with none gets no dimming they could not dismiss. #}
   <div class='lightbox-veil' id='lightbox-veil' hidden></div>
   <details class='sparknav' id='sparknav'>
     <summary class='sparknav-logo' id='sparknav-logo' aria-label='interesting: the site menu'>
