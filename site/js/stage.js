@@ -42,8 +42,9 @@
     choice   2-4 options; the stage calls apply(id, option.value) and marks the knob set
     toggle   one button, on or off (off unless `value` is true); apply(id, boolean)
     range    a slider: min, max, step, value, low, high (the words at the ends); apply(id, number)
-             on every move, set on the first release; ctx.value(id) is where it starts from the
-             first frame on
+             on every move, set the first time the visitor lets go of it -- moved or not, because
+             a slider already has an answer on it and leaving it where it is is giving that answer;
+             ctx.value(id) is where it starts from the first frame on
     press    one big button pressed `count` times (label); apply(id, n) each press, set at count
     hold     one big button held for `ms` (label); apply(id, heldMs) when let go after long enough
     tap      the scene itself, tapped: the piece's tap() decides, and calls ctx.satisfy(id)
@@ -57,6 +58,17 @@
   `after: '<id>'` is disabled until that knob is set. Every knob stays live after it is set -- a
   toy is for fidgeting with -- and the piece is finished when all are set (or, with auto: false,
   when it calls ctx.complete()).
+
+  Every knob has to be settable by the visitor it is put in front of, and the stage has to say
+  which ones are not set yet. A knob nobody can satisfy is a piece nobody can finish, and the way
+  that goes wrong is quiet: the visitor sets the last knob on the page, the scene answers, and
+  nothing happens, because the piece is waiting on one further up that never looked unfinished.
+  The line under the live line names what is left, for exactly that (issue #60).
+
+  A piece is one instantiation and nothing of it outlives its turn. close() is the one teardown
+  and it takes the whole piece apart -- the frame loop, the ceremony's timers, a ticker under a
+  hold still pressed down, the knobs, the lines, the dots, the mark, the scene and its shape -- so
+  every piece opens on an empty stage however many times its world has come round before.
 
   ctx, the same object for the whole piece:
     canvas, g (its 2d context), w, h (CSS pixels; the context is already scaled for the screen),
@@ -82,7 +94,10 @@
       window.interestingStage           (only on a page that has the stage)
         .open(file, seed, options)   open the named world's piece for `seed` on this stage;
                                      options.push=false keeps the URL, options.scroll=true
-                                     brings the stage into view
+                                     brings the stage into view, options.seeds={bg,bg2,accent,
+                                     accent2} is the palette the site takes on for the piece --
+                                     the pressed card's own, so the site matches the card
+                                     (js/feed.js hands it over; see feature() below)
         .next()                      finish nothing, open the next card from the feed's stack
         .skip()                      leave the current piece without ceremony and open the next
         .current()                   { file, seed } or null
@@ -92,7 +107,8 @@
   The URL carries the piece: `world.html#<seed>` is this piece, shareable, and the back button
   walks back through the pieces a visitor finished (a skipped one is replaced, not kept).
   Opening a card from another world moves the address to that world's page without a load: a
-  page is wherever the stage is.
+  page is wherever the stage is -- and so is the site's colour, which follows the piece on the
+  stage for as long as it is there (see feature(), and the precedence in _sass/_mood.scss).
 
   Nothing here reaches for the browser's storage. The sky is read through the persona, the next
   card through the feed, and nothing is written but the address.
@@ -178,6 +194,133 @@ function worldOf(file) {
   return WORLDS.find((w) => w.file === file) || null;
 }
 
+/* ---- the site's theme follows what is on the stage ------------------------------------------ */
+
+/*
+  The site features the activity on the stage, and the colour of the site says so (issue #61):
+  pick a card out of the feed and the page it opens becomes that card's colour, so the theme a
+  visitor arrives in is the theme they pressed.
+
+  Two halves, which are the two halves a card in the feed already has:
+
+    - the world's mood, as an attribute -- :root[data-featured], written last of the three on :root
+      in _sass/_mood.scss, so a featured activity outranks both the page's own world and the
+      visitor's reading. The reading is the site's standing skin; a piece is what the site wears
+      while that piece is on the stage, and goHome() takes the attribute off again, so one card
+      never re-skins the site for good.
+    - the card's own configuration, as the four seeds inline on :root -- the palette js/variant.js
+      derived for that one card inside its world's mood, handed over by js/feed.js
+      (options.seeds). Inline wins over every rule, exactly as it does on the card itself, so the
+      site matches the card that was picked and not merely its world.
+
+  --fg and --muted are not touched here, any more than a card's configuration touches them: they
+  are what holds the site's text at 4.5:1 over all fifteen palettes.
+*/
+
+// The four names a palette is (_sass/_mood.scss, js/variant.js), and no others.
+const SEEDS = ['bg', 'bg2', 'accent', 'accent2'];
+const GRAY = '#808080'; // the neutral the theme dips through, so one colour clears before the next
+const DIP_MS = 140; // the quick fade out to that neutral
+const RISE_MS = 420; // the fade from it into the colour of the card just pressed
+
+let featured = null; // the palette the site is wearing for the activity on the stage, once landed
+let fading = 0; // the crossfade in flight, so two picks in a row never fight over the seeds
+
+function readSeeds(node) {
+  const style = getComputedStyle(node);
+  const out = {};
+  for (const name of SEEDS) out[name] = style.getPropertyValue('--' + name).trim() || FALLBACK[name];
+  return out;
+}
+
+function writeSeeds(seeds) {
+  for (const name of SEEDS) document.documentElement.style.setProperty('--' + name, seeds[name]);
+}
+
+// The seeds come off again, so the rules in _sass/_mood.scss own the palette once more.
+function clearSeeds() {
+  for (const name of SEEDS) document.documentElement.style.removeProperty('--' + name);
+}
+
+// The four of `seeds` that are there, and nothing else a caller put on the object.
+function someSeeds(seeds) {
+  const out = {};
+  if (seeds) {
+    for (const name of SEEDS) {
+      const value = typeof seeds[name] === 'string' ? seeds[name].trim() : '';
+      if (value) out[name] = value;
+    }
+  }
+  return out;
+}
+
+/* The site becomes `to` from wherever it is now, by way of a neutral grey, and lands exactly on
+   it (issue #61) -- a quick fade out to the neutral so the colour it was leaves cleanly, then a
+   fuller fade from the neutral into the colour that was asked for, so the theme shifts through a
+   settled middle rather than smearing one palette straight over another. A visitor who asked for
+   less motion gets the change and not the shift. */
+function crossfade(from, to, done) {
+  if (fading) cancelAnimationFrame(fading);
+  fading = 0;
+  // Nothing to shift: one world's own palette opening on its own page, most of the time.
+  if (calm.matches || typeof requestAnimationFrame !== 'function'
+      || SEEDS.every((name) => from[name] === to[name])) {
+    writeSeeds(to);
+    if (done) done();
+    return;
+  }
+  // This turn's paint is still the colour the site was: the shift starts from there.
+  writeSeeds(from);
+  const startedAt = performance.now();
+  const step = (now) => {
+    const elapsed = now - startedAt;
+    const at = {};
+    if (elapsed < DIP_MS) {
+      // Fading out to the neutral grey.
+      const t = Math.max(0, elapsed / DIP_MS);
+      for (const name of SEEDS) at[name] = mix(from[name], GRAY, t);
+    } else {
+      // Rising from the neutral grey into the new theme, landing exactly on it.
+      const t = Math.min(1, (elapsed - DIP_MS) / RISE_MS);
+      for (const name of SEEDS) at[name] = t < 1 ? mix(GRAY, to[name], t) : to[name];
+    }
+    writeSeeds(at);
+    if (elapsed < DIP_MS + RISE_MS) {
+      fading = requestAnimationFrame(step);
+      return;
+    }
+    fading = 0;
+    if (done) done();
+  };
+  fading = requestAnimationFrame(step);
+}
+
+/* The site features `mood`, in `seeds` when the card that was pressed handed its own palette over.
+   Hands back the palette the site is landing in, which is what the piece is painted in: a piece
+   never reads a colour the crossfade is only passing through. */
+function feature(mood, seeds) {
+  const root = document.documentElement;
+  const from = readSeeds(root);
+  clearSeeds(); // so the attribute below, and not the last piece's seeds, says what the site is
+  if (mood) root.dataset.featured = mood;
+  else delete root.dataset.featured;
+  const to = Object.assign(readSeeds(root), someSeeds(seeds));
+  featured = to;
+  crossfade(from, to);
+  return to;
+}
+
+// Nothing is featured any more: the page's own world, or the visitor's reading, whichever
+// _sass/_mood.scss gives the page once the attribute is off it.
+function unfeature() {
+  const root = document.documentElement;
+  const from = readSeeds(root);
+  featured = null;
+  clearSeeds();
+  delete root.dataset.featured;
+  crossfade(from, readSeeds(root), clearSeeds);
+}
+
 const modules = new Map();
 const readsSky = new Map(); // module id -> needsSky, once the module has loaded
 
@@ -213,6 +356,7 @@ const ui = stage ? {
   canvas: document.getElementById('stage-canvas'),
   knobs: document.getElementById('stage-knobs'),
   status: document.getElementById('stage-status'),
+  wanted: document.getElementById('stage-wanted'),
   progress: document.getElementById('stage-progress'),
   done: document.getElementById('stage-done'),
   doneText: document.getElementById('stage-done-text'),
@@ -222,12 +366,13 @@ const ui = stage ? {
   gate: null // the element the unlock helper powers down, one per unpowered open
 } : null;
 
-// What the page said before any piece opened: the threshold goes back to it.
+// What the page said before any piece opened: the threshold goes back to it. The page's own
+// palette is not kept here, because the stage no longer overwrites it: <html data-world> stays
+// what the layout wrote, and a featured activity is a palette of its own above it (see feature()).
 const home = stage ? {
   name: ui.world.textContent,
   line: ui.title.textContent,
-  title: document.title,
-  world: document.documentElement.dataset.world || ''
+  title: document.title
 } : null;
 
 let current = null; // the piece on stage, and everything the stage knows about it
@@ -236,6 +381,43 @@ let frameHandle = 0;
 let lastFrame = 0;
 let firstPiece = null; // on a page of no world (the 404): the piece that opened on arrival
 const altRnd = mulberry32(newSeed()); // for the 'tap for me' button, apart from the piece's own
+
+// Everything the stage has running for the piece on stage: the ceremony's timers, a hold knob's
+// ticker, the frame loop. A piece is an instantiation and nothing of it may outlive its turn, so
+// each is registered here with the one call that stops it and close() stops the lot. The token
+// guards further down stay as they are -- a callback that has already fired cannot be unfired --
+// but nothing now depends on them to notice that its piece is gone.
+const running = new Set();
+
+function later(fn, ms) {
+  let handle = 0;
+  const stop = () => {
+    running.delete(stop);
+    window.clearTimeout(handle);
+  };
+  handle = window.setTimeout(() => {
+    running.delete(stop);
+    fn();
+  }, ms);
+  running.add(stop);
+  return stop;
+}
+
+function ticking(fn, ms) {
+  let handle = 0;
+  const stop = () => {
+    running.delete(stop);
+    window.clearInterval(handle);
+  };
+  handle = window.setInterval(fn, ms);
+  running.add(stop);
+  return stop;
+}
+
+function stopRunning() {
+  for (const stop of Array.from(running)) stop();
+  running.clear();
+}
 
 function setMode(mode) {
   stage.dataset.mode = mode;
@@ -257,7 +439,8 @@ async function open(file, seed, options) {
   const probe = document.getElementById('persona-probe');
   if (probe && !probe.hidden) probe.hidden = true;
 
-  document.documentElement.dataset.world = world.mood;
+  // The site features this activity: its world's palette, as the card that was pressed wore it.
+  feature(world.mood, opts.seeds);
   if (ui.world) ui.world.textContent = world.name;
   document.title = world.name + ' · interesting';
   if (opts.push !== false) {
@@ -269,13 +452,9 @@ async function open(file, seed, options) {
   }
   if (opts.scroll) window.scrollTo({ top: 0, behavior: calm.matches ? 'auto' : 'smooth' });
   setMode('loading');
+  // close() above left the stage empty: the world's own line is all there is to write until the
+  // module lands and begin() draws the piece.
   ui.title.textContent = world.what || world.name;
-  ui.brief.textContent = '';
-  ui.knobs.textContent = '';
-  ui.progress.textContent = '';
-  ui.status.textContent = '';
-  ui.done.hidden = true;
-  ui.skip.hidden = true;
   if (ui.read && !opts.keepRead) ui.read.hidden = true;
 
   const mod = await loadModule(world.id);
@@ -331,7 +510,9 @@ function makeEnv(seed, world, stars) {
     int: (a, b) => a + Math.floor(rnd() * (b - a + 1)),
     chance: (p) => rnd() < p,
     stars,
-    colors: readColors(stage),
+    // The stage's own colours, with the featured palette's four seeds over them: the piece is
+    // painted in the colour the site is landing in, never in one the crossfade is passing through.
+    colors: Object.assign(readColors(stage), featured || {}),
     mix,
     alpha,
     reduced: calm.matches,
@@ -400,7 +581,7 @@ function begin(world, mod, seed, token, opts) {
     /* a piece that cannot start still has its knobs; the frame loop guards itself */
   }
   if (opts && opts.arriving) {
-    window.setTimeout(() => {
+    later(() => {
       if (current && current.token === token && stage.dataset.mode === 'arriving') setMode('live');
     }, 600);
   }
@@ -518,6 +699,9 @@ function markSet(id, value, by) {
   if (!c) return;
   const s = c.state.get(id);
   if (!s) return;
+  // A knob the visitor set is the visitor having touched the piece, whatever else setting it did.
+  // apply() is the usual way that is learnt, and a slider left where it stands never reaches it.
+  if (by === 'knob') c.touched = true;
   if (value !== undefined) s.value = value;
   if (!s.set) {
     s.set = true;
@@ -551,12 +735,31 @@ function tapsOpen() {
 function renderProgress() {
   ui.progress.textContent = '';
   let set = 0;
+  const left = [];
   for (const s of current.state.values()) {
     if (s.set) set += 1;
+    else left.push(s.step.ask || s.step.id);
     ui.progress.appendChild(el('span', 'stage-dot' + (s.set ? ' is-set' : '')));
   }
   ui.progress.appendChild(hidden(set + ' of ' + current.state.size + ' set'));
+  // What is left, said out loud. A knob may be set in any order, and the one at the bottom of the
+  // page is often not the last one a visitor has to touch -- a piece can gate its finale on an
+  // earlier knob and leave an ungated one above it untouched. Without this line, setting the
+  // bottom knob, watching the scene answer, and having the piece not finish reads as a piece that
+  // broke rather than as one with a knob still waiting (issue #60).
+  // Two are named, more are counted, because the stranded knob is always among the last one or two
+  // left -- the visitor has done everything else by then -- and a list of five is noise.
+  if (ui.wanted) {
+    const say = set > 0 && left.length > 0;
+    ui.wanted.textContent = !say ? ''
+      : left.length <= 2 ? 'still to set: ' + left.join(' and ')
+        : 'still to set: ' + left[0] + ', and ' + (left.length - 1) + ' more';
+    ui.wanted.hidden = !say;
+  }
 }
+
+// The keys that work a slider: a keyup on one of them is the visitor having used it.
+const SLIDER_KEYS = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'PageUp', 'PageDown'];
 
 const KNOBS = {
   choice(step, knob, askId) {
@@ -602,7 +805,18 @@ const KNOBS = {
     input.value = String(step.value == null ? (Number(input.min) + Number(input.max)) / 2 : step.value);
     input.setAttribute('aria-labelledby', askId);
     input.addEventListener('input', () => apply(step.id, Number(input.value)));
-    input.addEventListener('change', () => markSet(step.id, Number(input.value), 'knob'));
+    // Set when the visitor has used the slider, whether or not they moved it. A slider already
+    // has an answer on it when the piece opens -- that is why ctx.value(id) is the piece's from
+    // the first frame -- so leaving it where it is is giving that answer, and 'change' alone never
+    // fires for one: the knob could not be set at all, and a piece whose other knobs were all set
+    // would never finish (issue #60). Only marked, not applied: the piece hears about a value
+    // through apply() when it changes, and an unmoved slider has not changed.
+    const used = () => markSet(step.id, Number(input.value), 'knob');
+    input.addEventListener('change', used);
+    input.addEventListener('pointerup', used);
+    input.addEventListener('keyup', (ev) => {
+      if (SLIDER_KEYS.indexOf(ev.key) !== -1) used();
+    });
     row.appendChild(input);
     if (step.high) row.appendChild(el('span', 'knob-end', step.high));
     knob.appendChild(row);
@@ -630,13 +844,15 @@ const KNOBS = {
     const b = el('button', 'knob-big knob-hold', step.label || 'press and hold');
     b.type = 'button';
     let started = 0;
-    let ticker = 0;
+    let ticker = null;
     function down() {
       if (started || b.disabled) return;
       started = performance.now();
       b.classList.add('is-held');
       b.setAttribute('aria-pressed', 'true');
-      ticker = window.setInterval(() => {
+      // Registered, so a hold still down when the piece goes -- a finger that never lifts, a knob
+      // disabled under it -- leaves no ticker running against a knob that is no longer anywhere.
+      ticker = ticking(() => {
         knob.style.setProperty('--knob-pct', Math.min(100, ((performance.now() - started) / ms) * 100).toFixed(1) + '%');
       }, 50);
     }
@@ -644,7 +860,8 @@ const KNOBS = {
       if (!started) return;
       const held = performance.now() - started;
       started = 0;
-      window.clearInterval(ticker);
+      if (ticker) ticker();
+      ticker = null;
       b.classList.remove('is-held');
       b.setAttribute('aria-pressed', 'false');
       if (held >= ms) {
@@ -779,10 +996,10 @@ function finish() {
   }
   const token = c.token;
   const linger = calm.matches ? 500 : 1200;
-  window.setTimeout(() => {
+  later(() => {
     if (!current || current.token !== token) return;
     setMode('vanishing');
-    window.setTimeout(() => {
+    later(() => {
       if (!current || current.token !== token) return;
       next();
     }, calm.matches ? 120 : 520);
@@ -798,7 +1015,7 @@ function skip() {
   }
   const token = current.token;
   setMode('vanishing');
-  window.setTimeout(() => {
+  later(() => {
     if (!current || current.token !== token) return;
     next({ replace: true });
   }, calm.matches ? 60 : 420);
@@ -825,6 +1042,9 @@ async function next(options) {
   const taken = feed && typeof feed.take === 'function' ? feed.take(fit, avoid) : null;
   let file = taken && worldOf(taken.file) ? taken.file : null;
   let seed = taken ? taken.seed : newSeed();
+  // The next card off the stack is a card too: the site takes its colour as it arrives, the same
+  // way it takes the colour of one a visitor pressed. A world picked at random below has none.
+  const seeds = file && taken ? taken.seeds : null;
   if (!file) {
     const pool = WORLDS.filter((w) => w.file !== avoid && (!fit || fit(w.file)));
     const world = pool.length ? pool[Math.floor(Math.random() * pool.length)] : WORLDS[0];
@@ -832,22 +1052,42 @@ async function next(options) {
     file = world.file;
   }
   if (extra.first) firstPiece = { file, seed };
-  open(file, seed, Object.assign({ arriving: true }, extra));
+  open(file, seed, Object.assign({ arriving: true, seeds }, extra));
 }
 
+// Take the piece on stage apart, completely. Every instantiation starts from an empty stage, so
+// this is the one teardown and it leaves nothing of the last piece behind: no timer of its
+// ceremony, no ticker under a knob still held, no frame loop, no knob, no line, no dot, no mark,
+// and no scene. Everything open() goes on to write is cleared here too, so a close() that opens
+// nothing after it -- the threshold going back, the question coming up -- is just as clean.
 function close() {
   pending = null;
-  if (current) {
-    const g = current.ctx && current.ctx.g;
-    if (g) g.clearRect(0, 0, ui.canvas.width, ui.canvas.height);
-    current = null;
-  }
+  stopRunning();
+  if (frameHandle) cancelAnimationFrame(frameHandle);
+  frameHandle = 0;
+  lastFrame = 0;
+  current = null;
   if (ui.gate) {
     ui.gate.remove();
     ui.gate = null;
   }
   for (const box of ui.body.querySelectorAll('.unlock')) box.remove();
+  const g = ui.canvas.getContext('2d');
+  if (g) g.clearRect(0, 0, ui.canvas.width, ui.canvas.height);
+  ui.canvas.setAttribute('aria-label', 'the scene');
+  ui.scene.style.removeProperty('--piece-aspect');
+  ui.scene.style.removeProperty('--piece-ratio');
+  ui.brief.textContent = '';
+  ui.knobs.textContent = '';
+  ui.status.textContent = '';
+  ui.progress.textContent = '';
+  if (ui.wanted) {
+    ui.wanted.textContent = '';
+    ui.wanted.hidden = true;
+  }
+  ui.doneText.textContent = 'done';
   ui.done.hidden = true;
+  ui.skip.hidden = true;
 }
 
 // The threshold's own state, back from a piece: what the page said before anything opened.
@@ -855,11 +1095,11 @@ function goHome() {
   close();
   ui.world.textContent = home.name;
   ui.title.textContent = home.line;
-  ui.brief.textContent = '';
   if (ui.read) ui.read.hidden = true;
   document.title = home.title;
-  if (home.world) document.documentElement.dataset.world = home.world;
-  else delete document.documentElement.dataset.world;
+  // Nothing is featured now, so the site goes back to its own colour: the page's own world, or
+  // the visitor's reading over it.
+  unfeature();
   setMode('quiet');
   try {
     window.dispatchEvent(new CustomEvent('stage:home'));

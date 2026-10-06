@@ -31,6 +31,10 @@
       finished the stage takes the next card from the top of the feed
       (window.interestingFeed.take), so the feed is the stack of what comes next. Without the
       stage a card is the plain link it was written as.
+    - A card hands its colour over as it goes: the four seeds it is wearing -- its world's mood as
+      its own configuration derived them -- travel with it to the stage, which re-skins the site in
+      them (palette() below, and feature() in js/stage.js), so the page a visitor lands on matches
+      the card they pressed rather than keeping the palette the page had.
     - The 'you are here' card follows the stage: when a piece of another world opens, the badge
       moves to that world's card, so the feed always says where the visitor is. feed:ready is
       dispatched on window once the API is there.
@@ -174,6 +178,23 @@ function tint(card, m) {
   const seeds = recolor(m.base, m.variant);
   for (const name of SEEDS) card.style.setProperty('--' + name, seeds[name]);
   card.style.setProperty('--card-light', light(m.variant));
+}
+
+/* The four seeds a card is actually wearing: its world's mood, as its own configuration derived
+   them inside it.
+
+   This is what the site's theme follows when a card leaves the feed for the stage (issue #61): the
+   stage is handed these four and paints the page in them, so the site becomes the colour of the
+   card that was picked and not merely of its world. tint() runs first, because a card the visitor
+   has not scrolled to has never been painted and so has never had its configuration written onto
+   it; a plain card, whose configuration changes nothing, simply reads its mood's own four. */
+function palette(card, m) {
+  if (!card || !card.isConnected) return null;
+  tint(card, m);
+  const colors = readColors(card);
+  const seeds = {};
+  for (const name of SEEDS) seeds[name] = colors[name];
+  return seeds;
 }
 
 /* ---- the worlds, read off the cards the template wrote --------------------------------------- */
@@ -658,7 +679,8 @@ function consume(card) {
 
 // The next piece: the first card in feed order that is a world's -- of another world than
 // `avoid`, the one just played, when there is one, and one that `fit` accepts by file, when
-// given -- taken out of the feed.
+// given -- taken out of the feed. Its palette goes with it, so the site takes the colour of the
+// card that arrives on the stage as well as of the one a visitor pressed.
 function take(fit, avoid) {
   const playable = cards.filter((c) => {
     const m = meta.get(c);
@@ -670,7 +692,7 @@ function take(fit, avoid) {
     || playable[0];
   if (!card) return null;
   const m = meta.get(card);
-  const taken = { file: m.world.file, seed: m.seed, kind: m.kind };
+  const taken = { file: m.world.file, seed: m.seed, kind: m.kind, seeds: palette(card, m) };
   consume(card);
   return taken;
 }
@@ -687,8 +709,11 @@ function openFromCard(ev) {
   ev.preventDefault();
   const file = m.world.file;
   const seed = m.seed;
+  // The card's own four seeds, read before it leaves: the site features this activity in the
+  // colour the card was wearing, so the page a visitor lands on matches the card they pressed.
+  const seeds = palette(card, m);
   consume(card);
-  window.interestingStage.open(file, seed, { arriving: true, scroll: true });
+  window.interestingStage.open(file, seed, { arriving: true, scroll: true, seeds });
 }
 
 /* ---- dealing -------------------------------------------------------------------------------- */

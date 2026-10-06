@@ -1403,7 +1403,7 @@ def check_destructive(before, after):
 # the prompt; RealSiteTest checks that the two agree.
 PIECE_HARNESS_REL = ".github/scripts/piece_harness.mjs"
 PIECE_HARNESS = REPO_ROOT / PIECE_HARNESS_REL
-PIECE_TIMEOUT_SECONDS = 120
+PIECE_TIMEOUT_SECONDS = 240  # every module, every play, sequentially: see MODULE_TIMEOUT_MS in the harness
 PIECE_MIN_STEPS = 2
 PIECE_MAX_STEPS = 5
 PIECE_MAX_TAPS = 12
@@ -1417,12 +1417,12 @@ WORLD_LIST_ID = "site-worlds"
 WORLD_LIST = re.compile(r"<script[^>]*\bid=['\"]" + WORLD_LIST_ID + r"['\"][^>]*>(.*?)</script>", re.S | re.I)
 
 
-def listed_worlds(site):
-    """The worlds the built `site` lists for its scripts, as [page, ...], read off the home page.
+def world_entries(site):
+    """The layout's #site-worlds JSON of the built `site`, as the entries its scripts read.
 
-    The list is the layout's #site-worlds JSON, rendered from _data/worlds.json, so what the stage
-    can open and what the check requires a piece of are the same list. A site without the list has
-    no worlds in this sense, and the check has nothing to say about it.
+    The list is rendered from _data/worlds.json, so what the stage can open and what the checks
+    require a piece of are the same list. A site without the list has no worlds in this sense, and
+    the checks have nothing to say about it.
     """
     found = WORLD_LIST.search(site.get(HOME_PAGE) or "")
     if not found:
@@ -1433,9 +1433,12 @@ def listed_worlds(site):
         return []
     if not isinstance(data, list):
         return []
-    return [entry["file"] for entry in data
-            if isinstance(entry, dict) and isinstance(entry.get("file"), str)
-            and entry["file"].endswith(PAGE_SUFFIX)]
+    return [entry for entry in data if isinstance(entry, dict) and isinstance(entry.get("file"), str)]
+
+
+def listed_worlds(site):
+    """The worlds the built `site` lists for its scripts, as [page, ...], read off the home page."""
+    return [entry["file"] for entry in world_entries(site) if entry["file"].endswith(PAGE_SUFFIX)]
 
 
 def module_of(world):
@@ -1496,6 +1499,69 @@ def run_piece_harness(site):
                                       + one_line(played.stderr or played.stdout or "nothing", 500))
         return {entry["id"]: entry for entry in report.get("modules", [])
                 if isinstance(entry, dict) and isinstance(entry.get("id"), str)}
+
+
+# The stage is the completion axiom's other half. Every world's piece is played on it, and a piece
+# that finishes perfectly on its own can still leave a visitor stuck if the stage will not take one
+# of its knobs: issue #60 was a slider nobody could set by leaving it where it already stood, which
+# the piece harness could never see because it sets a range knob by fiat rather than through the
+# stage's own control. The harness below runs js/stage.js against a stub browser -- a document of
+# the elements _includes/stage.njk writes and a clock a scenario steps by hand -- and reports what
+# the stage did; StageTest and RealSiteTest make the assertions.
+STAGE_HARNESS_REL = ".github/scripts/stage_harness.mjs"
+STAGE_HARNESS = REPO_ROOT / STAGE_HARNESS_REL
+STAGE_TIMEOUT_SECONDS = 180
+
+
+def run_stage_harness(site, deal=()):
+    """Play the stage of `site` through the harness, as the harness's own JSON report.
+
+    `deal` is the worlds the stub feed hands over in order, which is how a world is brought round
+    twice in one session; with none given the harness deals the first world, the second, and the
+    first again. Raises BuildToolchainError if the harness, the stage or Node cannot be run, which
+    is nobody's answer to give.
+    """
+    stage = site.get(STAGE_SCRIPT)
+    if stage is None:
+        raise BuildToolchainError(f"the site has no {STAGE_SCRIPT}")
+    entries = world_entries(site)
+    if not entries:
+        raise BuildToolchainError(f"the site lists no worlds (no #{WORLD_LIST_ID} on {HOME_PAGE})")
+    if not STAGE_HARNESS.is_file():
+        raise BuildToolchainError(f"no stage harness at {STAGE_HARNESS}")
+    modules = {rel: content for rel, content in site.items()
+               if rel.startswith(MODULES_DIR) and rel.endswith(".js")
+               and "/" not in rel[len(MODULES_DIR):]}
+    with tempfile.TemporaryDirectory(prefix="stage-") as work:
+        root = Path(work) / "js"
+        moddir = root / "modules"
+        moddir.mkdir(parents=True)
+        # The stage and the modules are ES modules; a package.json marks them so on every Node the
+        # repository supports, exactly as run_piece_harness does for the modules alone.
+        (root / "package.json").write_text('{"type":"module"}\n', encoding="utf-8")
+        (root / "stage.js").write_text(stage, encoding="utf-8", newline="")
+        for rel, content in modules.items():
+            (moddir / PurePosixPath(rel).name).write_text(content, encoding="utf-8", newline="")
+        # The same care as the piece harness: the site is model-written code, so the run gets an
+        # empty environment and only the reads it needs. It writes no file at all, only stdout.
+        cmd = [NODE_BIN, "--experimental-permission", f"--allow-fs-read={STAGE_HARNESS.parent}",
+               f"--allow-fs-read={work}", "--allow-worker", str(STAGE_HARNESS),
+               "--stage", str(root), "--worlds", json.dumps(entries)]
+        if deal:
+            cmd += ["--deal", ",".join(deal)]
+        env = {"PATH": os.environ.get("PATH", ""), "HOME": work, "LANG": "C.UTF-8", "NODE_NO_WARNINGS": "1"}
+        try:
+            played = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace",
+                                    cwd=work, env=env, timeout=STAGE_TIMEOUT_SECONDS)
+        except FileNotFoundError:
+            raise BuildToolchainError(f"the stage harness needs Node, which was not found ({NODE_BIN!r})") from None
+        except subprocess.TimeoutExpired:
+            raise BuildToolchainError(f"the stage did not finish within {STAGE_TIMEOUT_SECONDS}s of real time") from None
+        try:
+            return json.loads(played.stdout)
+        except ValueError:
+            raise BuildToolchainError("the stage harness gave no report: "
+                                      + one_line(played.stderr or played.stdout or "nothing", 500))
 
 
 def worlds_without_a_finish(site):
@@ -1988,7 +2054,13 @@ def build_prompt(shown, omitted=()):
         "for me' button and the check tap at random points; only a tap or a wait knob is the "
         "piece's to set, and never before the visitor has set something), or, with auto: false, "
         "when it calls ctx.complete() -- and it is finished by its visitor, never by itself "
-        "before they have set a knob. frame's t is seconds since the piece started. The same seed "
+        "before they have set a knob. Every knob must be one its visitor can actually set, and a "
+        "piece must be finishable whatever order they reach its knobs in: nothing makes anyone "
+        "work down the page, and a piece that only finishes from the top down leaves someone "
+        "holding a finished-looking toy that will not finish. A piece is one instantiation and "
+        "keeps nothing between them: all its state lives inside piece(env), so a world the feed "
+        "deals a second time plays exactly as it did the first. "
+        "frame's t is seconds since the piece started. The same seed "
         "makes the same piece and different seeds make different pieces. A piece is pure drawing "
         "and arithmetic on what the stage hands it (ctx: the canvas and its 2d context, the size, "
         "the world's colours, a seeded random source, the stars, status(), progress()) and never "
@@ -2003,7 +2075,15 @@ def build_prompt(shown, omitted=()):
         f"browser (\"{PIECE_HARNESS_REL}\", which a run cannot change): a plan that leaves a listed "
         "world without a module, without a piece, with a piece that does not finish within "
         f"{PIECE_MAX_TAPS} taps and {PIECE_MAX_SECONDS} seconds of play, that is not the same for the "
-        "same seed, or that is the same for every seed, is refused.\n"
+        "same seed, whose knobs reached in another order or played a second time do not finish the "
+        "same way, or that is the same for every seed, is refused. The stage itself is held to the "
+        f"same axiom, by a second harness that runs \"{STAGE_SCRIPT}\" against a stub browser "
+        f"(\"{STAGE_HARNESS_REL}\", which a run cannot change): a world dealt twice in one session "
+        "plays the second time like the first, a slider a visitor leaves where it stands counts as "
+        "set, a knob nobody set is named rather than silently holding the piece shut, and a piece "
+        "that is over leaves nothing of itself on the stage or still running. That one is checked on "
+        "the site as committed rather than on a plan, because it reads the stage's own elements and "
+        "those are yours to rewrite -- so if you rewrite the stage, keep all four true.\n"
         "- Leave the site working at the end of the run. If you extract something into a shared "
         "file, or merge or delete a page, update every page that refers to it in the same run: "
         "never leave a link, a stylesheet, a script, a layout or an @use pointing at something "

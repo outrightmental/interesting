@@ -133,7 +133,9 @@
   is the two marks in the top corners (issue #64).
 
   The page's own world, when it has one, is named on <html data-world> so _sass/_mood.scss gives
-  the page that world's palette; a visitor's reading lands on <html data-mood> and wins over it.
+  the page that world's palette; a visitor's reading lands on <html data-mood> and wins over it,
+  and the activity on the stage lands on <html data-featured> (js/stage.js) and wins over both for
+  as long as its piece is there, so the site wears the colour of the card a visitor picked.
 
   Links are relative, like every link in the site: it has no fixed domain and may be served under
   a sub-path, so "css/site.css" and not "/css/site.css".
