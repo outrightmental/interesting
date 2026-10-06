@@ -5617,16 +5617,17 @@ class RealSiteTest(unittest.TestCase):
         self.assertIn("observe(ui.head)", stage_js, "a heading that changes shape is never measured again")
         self.assertIn("id='stage-head'", self.source[mi.STAGE_INCLUDE], "the heading cannot be found")
 
-    def test_every_page_but_the_two_lists_ends_in_the_feed(self):
-        # The feed is the one index of every world, written once in the shell: every page carries
-        # it as plain markup, except the two that list every page themselves.
+    def test_every_page_ends_in_the_feed(self):
+        # The feed is the one index of every world, written once in the shell, and every page
+        # carries it as plain markup -- the site map and the mood atlas included. The two of them
+        # used to be the exceptions, because each listed every world itself; those duplicate lists
+        # were retired and both pages send a visitor to the cards below instead ("choose a link
+        # here or a world card below"), so the feed is the one list of worlds on every page there
+        # is and nothing in the shell has to know which page it is on.
         for page in sorted(mi.html_pages(self.site)):
             with self.subTest(page=page):
-                if page in ("sitemap.html", "moods.html"):
-                    self.assertNotIn("id='feed-grid'", self.site[page])
-                else:
-                    self.assertIn("id='feed-grid'", self.site[page])
-                    self.assertIn("js/feed.js", self.site[page])
+                self.assertIn("id='feed-grid'", self.site[page])
+                self.assertIn("js/feed.js", self.site[page])
 
     def test_the_query_is_never_a_gate(self):
         # references_from reads the threshold's own markup and not the scripts it loads, so this
