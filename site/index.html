@@ -1,15 +1,8 @@
 ---
 layout: layout.njk
 title: the threshold
-description: 'A continuously evolving work-in-progress art experiment: small interactive worlds, from a quiet room and a machine shop to a sky you fill with wishes, each one a piece to finish, one after another without end. One short sideways question picks the first to open; every world is a card if you would rather choose.'
+description: 'Answer one question about a door, a stone or a mark to open a world you can play and finish, or choose a world below.'
 ---
-{#-
-  The threshold: the way in, and the page that is the question. Its feature is the stage
-  (_includes/stage.njk, js/stage.js) in its asking state: the sideways question is asked here on
-  arrival (js/persona.js mounts it in #persona-probe, which the stage hosts), and once answered
-  the stage opens a piece of the world the answer opens onto, finished and followed by the next
-  like any other. Nothing is explained that the feed below does not show.
--#}
 {%- set threshold = true -%}
 {%- set stageWorld = '' -%}
 {% include 'stage.njk' %}
