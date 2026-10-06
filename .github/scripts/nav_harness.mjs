@@ -451,7 +451,10 @@ function drawCorners(context, { cookies = true, state = true, steer = true } = {
   mutated(context);
 }
 
-/** What one option looks like from the outside: whether it is in the orbit, and where. */
+/** What one option looks like from the outside: whether it is in the orbit, where its chip sits,
+ *  and the ray that reaches it. The box is the chip's own (x, y, width, height) and the ray is the
+ *  line from the logo's heart (heartX, heartY) out to it, which is what tells whether a ray
+ *  crosses another option's chip on its way -- the question issue #72 is about. */
 function described(li) {
   const node = li.querySelector(".sparknav-node");
   return {
@@ -463,8 +466,12 @@ function described(li) {
     current: node.getAttribute("aria-current"),
     x: Number.parseFloat(li.properties["--x"]),
     y: Number.parseFloat(li.properties["--y"]),
+    width: node.offsetWidth,
+    height: node.offsetHeight,
     len: Number.parseFloat(li.properties["--len"]),
     angle: Number.parseFloat(li.properties["--a"]),
+    heartX: Number.parseFloat(li.properties["--mx"]),
+    heartY: Number.parseFloat(li.properties["--my"]),
     order: Number.parseInt(li.properties["--k"], 10),
   };
 }
@@ -766,7 +773,8 @@ const scenarios = {
 
   /* Where the stars land, on the three shapes of screen the site meets. Every chip is 44px tall,
      so two stars in a column may never be closer than that, and nothing may be placed off the
-     left edge of the viewport. */
+     left edge of the viewport. Each star also carries its own box and the ray that reaches it,
+     so the assertions can work out which chips a ray crosses on its way (issue #72). */
   whereTheStarsLand() {
     const shapes = {};
     for (const [name, viewport] of Object.entries({
