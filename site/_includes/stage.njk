@@ -1,6 +1,7 @@
+{%- set stageFile = (stageWorld + '.html') if stageWorld else ((page.filePathStem | replace('/', '')) + '.html') -%}
 {%- set stageEntry = null -%}
-{%- for world in worlds.worlds %}{% if world.file == stageWorld + '.html' %}{% set stageEntry = world %}{% endif %}{% endfor -%}
-<main class='stage{% if threshold %} stage-threshold{% endif %}' id='stage' data-mode='{% if threshold %}quiet{% else %}idle{% endif %}'{% if stageEntry %} data-stage-world='{{ stageWorld }}'{% endif %}{% if threshold %} data-threshold='true'{% endif %}{% if stageRandom %} data-stage-random='true'{% endif %}>
+{%- for world in worlds.worlds %}{% if world.file == stageFile %}{% set stageEntry = world %}{% endif %}{% endfor -%}
+<main class='stage{% if threshold %} stage-threshold{% endif %}' id='stage' data-mode='{% if threshold %}quiet{% else %}idle{% endif %}'{% if stageEntry %} data-stage-world='{{ stageEntry.file | replace('.html', '') }}'{% endif %}{% if threshold %} data-threshold='true'{% endif %}{% if stageRandom %} data-stage-random='true'{% endif %}>
   <canvas class='stage-burst' id='stage-burst' aria-hidden='true'></canvas>
   <div class='stage-inner' id='stage-inner'>
     <div class='stage-head' id='stage-head'>
