@@ -1,86 +1,4 @@
-/*
-  The persona: the one thing a visitor configures on this site, and the card every page shows it on.
-
-  One line in the <head> of a page carries all of it, written once in _includes/layout.njk:
-
-      <script src='js/persona.js'></script>
-
-  Not deferred, like js/state.js and js/site.js before it: a page's own <script> runs while the body
-  is parsed, and a world that reads the sky reads the persona's stars from there. The card and the sheet
-  are built on DOMContentLoaded, which is after every deferred script has run, so the orientation
-  panel can lean on js/threshold.js.
-
-  ---------------------------------------------------------------------------------------------
-  What a persona is
-
-  Two things, and every world reads from them: a small sky of stars the visitor places, which the
-  worlds that read the sky each reinterpret, and the reading the mood flow has taken of them,
-  which is what the site offers a world from. The sky used to be placed on the wish constellation
-  page and nowhere else, which made one world of eighteen the configuration screen for the rest.
-  It is a persona now: configured in one place, shown in one place, and read everywhere.
-
-  Anyone who has used an app knows the shape. Floating in the upper right of every page sits the
-  persona the way an account sits in an app's own corner -- opposite the sparkles logo, and the
-  only other navigation the site has: a round portrait of the sky, which is the button that opens
-  the sheet, and nothing else at all. A visitor with no persona yet sees that portrait ring dashed
-  and the button filled and beckoning, because setting one up is the first thing to do. One
-  sentence on where things stand is written beside it for screen readers and never takes space.
-  Nothing is ever put next to the portrait: a second mark floating in that corner would be a third
-  piece of navigation, and there are two (issue #64). The world a reading opens onto is an option
-  in the constellation the sparkles logo opens instead, named for that world (js/site.js).
-
-  The sheet is a dialog floating over whatever
-  page is open, with two sections: the constellation, where stars are placed, dragged and read, and
-  the orientation, where the site asks its sideways question and says what it read. A world open
-  underneath follows every change as it is made (see onSky below and window.interestingSite.unlock
-  in js/site.js).
-
-  It opens inside the one lightbox the whole site shares -- window.interestingSite.lightbox() in
-  js/site.js -- so the page behind it is dimmed, blurred, desaturated, faded under, made inert and
-  hidden from a screen reader, its CSS animation paused and its frame loop held, exactly as it is
-  behind the constellation the sparkles logo opens. That is what issue #70 asked for in as many
-  words: "the lightbox effect for the persona should be identical; they should share a common
-  lightbox component". Before it, this was a bare <dialog> with a flat backdrop and none of the
-  rest. The dialog is still a dialog, so the focus trap, the Escape and the press on the backdrop
-  are the browser's own and nothing here reimplements them; the veil behind it is the only thing it
-  borrows, and the shared "are you sure?" modal a control in here opens stacks on top of it
-  (js/site.js again).
-
-  The threshold asks on arrival in its own feature: index.html hosts #persona-probe in its <main>,
-  and the question is mounted there, inline, so it is never a dialog in the way and never cramped
-  into the corner. On every other page the question is one press away inside the sheet, which asks of
-  its own accord when nothing has been read yet.
-
-  ---------------------------------------------------------------------------------------------
-  What a page can call
-
-      window.interestingPersona
-        .key                 'constellation': the name the sky is kept under in the shared store
-        .maxStars            how many stars a sky holds (120)
-        .stars()             the saved sky, cleaned: [{ x, y, text }] in a 0-100 space, or []
-        .read()              { status, value } straight from the store, for a page that wants to
-                             say why there is nothing ('missing', 'unreadable', 'unavailable')
-        .holds(value)        is this value a sky? a non-empty array with at least one valid star
-        .seedSky(count)      a fresh small random sky, as a value: nothing is written
-        .thought()           one random thought, the words a placed star carries
-        .setStars(stars, how)  write a whole sky; true if the browser kept it
-        .addStar(star)       add one; the oldest goes when the sky is full
-        .seed()              write a seeded sky over whatever is there
-        .clear()             forget the sky
-        .onSky(fn)           fn(stars, how, kept) after every change, from this page or the sheet;
-                             how is 'seeded', 'placed', 'added', 'moved', 'removed' or 'cleared'.
-                             Returns a function that unsubscribes. The same news is dispatched on
-                             window as a 'persona:sky' CustomEvent, detail { stars, how, kept }
-        .open(section)       open the sheet, on 'sky' (default) or 'reading', inside the shared
-                             lightbox
-        .close()
-        .ask()               put the sideways question in #persona-probe, where the threshold asks
-        .refresh()           redraw the card; called for you after every change and reading
-
-  Nothing here reaches for the browser's storage: every read and write goes through
-  window.interestingState, like everything else the site remembers, so a persona exports and travels
-  with the rest of a visitor's state through the menu in the corner.
-*/
+/* The persona: one saved sky and one reading, configured in the sheet opened by the avatar. */
 (function () {
   'use strict';
 
@@ -90,9 +8,6 @@
   var MAX_STARS = 120;
   var SEED_COUNT = 7;
   var DRAG_SUPPRESS_MS = 250;
-
-  // What a star says when a world reads it out. Short, lowercase, the site's own voice: a placed
-  // star and a seeded one draw from the same list, so a sky reads the same however it was made.
   var THOUGHTS = [
     'a door left ajar', 'the kettle, just off the boil', 'rain arriving sideways',
     'a lamp in a window across the way', 'an unanswered letter, kept', 'moss on the north side',
@@ -103,72 +18,40 @@
     'a question that bends the room', 'room left for surprise', 'a quiet day, still progress',
     'the edge where ideas hatch', 'curiosity used as a compass', 'breathe, then build'
   ];
-
-  // What the card says while its question is open: what the question is for, and that nothing
-  // depends on it.
   var ASKING_TEXT = 'Before it offers anything, this site asks one sideways question. Whatever '
     + 'you answer picks a world to suggest; every world stays open below either way.';
 
-  /* ---- the sky ---------------------------------------------------------------------------- */
-
-  function clamp(value, min, max) {
-    return Math.max(min, Math.min(max, value));
-  }
-
+  function clamp(value, min, max) { return Math.max(min, Math.min(max, value)); }
   function validStar(s) {
     return !!s && typeof s === 'object' && typeof s.x === 'number' && typeof s.y === 'number'
       && isFinite(s.x) && isFinite(s.y) && typeof s.text === 'string';
   }
-
   function cleanStar(s) {
-    return {
-      x: Number(clamp(s.x, 1, 99).toFixed(2)),
-      y: Number(clamp(s.y, 1, 99).toFixed(2)),
-      text: String(s.text).slice(0, 160)
-    };
+    return { x: Number(clamp(s.x, 1, 99).toFixed(2)),
+      y: Number(clamp(s.y, 1, 99).toFixed(2)), text: String(s.text).slice(0, 160) };
   }
-
   function clean(value) {
     if (!Array.isArray(value)) return [];
     return value.filter(validStar).slice(0, MAX_STARS).map(cleanStar);
   }
-
-  function holds(value) {
-    return Array.isArray(value) && value.some(validStar);
-  }
-
-  function thought() {
-    return THOUGHTS[Math.floor(Math.random() * THOUGHTS.length)];
-  }
-
-  /* A fresh sky: `count` stars spread around the middle of the field rather than clumped, in the
-     0-100 space every sky world reads. */
+  function holds(value) { return Array.isArray(value) && value.some(validStar); }
+  function thought() { return THOUGHTS[Math.floor(Math.random() * THOUGHTS.length)]; }
   function seedSky(count) {
     var n = Math.max(1, Math.min(MAX_STARS, count || SEED_COUNT));
     var list = [];
     var start = Math.floor(Math.random() * THOUGHTS.length);
     for (var i = 0; i < n; i++) {
-      var angle = (i / n) * Math.PI * 2 + (Math.random() - 0.5) * 0.8;
+      var angle = i / n * Math.PI * 2 + (Math.random() - 0.5) * 0.8;
       var radius = 14 + Math.random() * 24;
-      list.push({
-        x: Number(clamp(50 + Math.cos(angle) * radius, 8, 92).toFixed(2)),
+      list.push({ x: Number(clamp(50 + Math.cos(angle) * radius, 8, 92).toFixed(2)),
         y: Number(clamp(48 + Math.sin(angle) * radius * 0.8, 12, 86).toFixed(2)),
-        text: THOUGHTS[(start + i) % THOUGHTS.length]
-      });
+        text: THOUGHTS[(start + i) % THOUGHTS.length] });
     }
     return list;
   }
-
-  function read() {
-    return store ? store.read(SKY, []) : { status: 'unavailable', value: [] };
-  }
-
-  function stars() {
-    return clean(read().value);
-  }
-
+  function read() { return store ? store.read(SKY, []) : { status: 'unavailable', value: [] }; }
+  function stars() { return clean(read().value); }
   var listeners = [];
-
   function onSky(fn) {
     if (typeof fn !== 'function') return function () {};
     listeners.push(fn);
@@ -178,23 +61,16 @@
       }
     };
   }
-
   function announce(list, how, kept) {
     for (var i = 0; i < listeners.length; i++) {
-      try {
-        listeners[i](list.slice(), how, kept);
-      } catch (e) {
-        /* one page's listener failing is that page's problem, not the next listener's */
-      }
+      try { listeners[i](list.slice(), how, kept); }
+      catch (e) { console.error('A sky listener failed', e); }
     }
-    try {
-      window.dispatchEvent(new CustomEvent('persona:sky', { detail: { stars: list.slice(), how: how, kept: kept } }));
-    } catch (e) {
-      /* older browsers get the listeners and nothing else */
-    }
+    window.dispatchEvent(new CustomEvent('persona:sky', {
+      detail: { stars: list.slice(), how: how, kept: kept }
+    }));
     refresh();
   }
-
   function setStars(next, how) {
     var list = clean(next);
     var kept = false;
@@ -202,7 +78,6 @@
     announce(list, how || 'placed', kept);
     return kept;
   }
-
   function addStar(star) {
     if (!validStar(star)) return false;
     var list = stars();
@@ -210,37 +85,19 @@
     list.push(cleanStar(star));
     return setStars(list, 'added');
   }
-
-  function seed() {
-    return setStars(seedSky(), 'seeded');
-  }
-
-  function clear() {
-    return setStars([], 'cleared');
-  }
-
-  /* ---- drawing ---------------------------------------------------------------------------- */
-
+  function seed() { return setStars(seedSky(), 'seeded'); }
+  function clear() { return setStars([], 'cleared'); }
   function cssColour(name, fallback) {
-    try {
-      var value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-      return value || fallback;
-    } catch (e) {
-      return fallback;
-    }
+    var value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    return value || fallback;
   }
-
-  /* Stars and the links between near ones, in a box of `w` by `h` CSS pixels, with `pad` kept
-     clear at the edges. The portrait and the sheet's sky are the same drawing at two sizes. */
   function drawSky(ctx, list, w, h, pad, dotRadius, lineWidth) {
     var points = list.map(function (s) {
-      return { x: pad + (s.x / 100) * (w - pad * 2), y: pad + (s.y / 100) * (h - pad * 2) };
+      return { x: pad + s.x / 100 * (w - pad * 2), y: pad + s.y / 100 * (h - pad * 2) };
     });
-    var maxDistance = Math.min(w, h) * 0.3;
-    var maxDistanceSq = maxDistance * maxDistance;
+    var maxDistanceSq = Math.pow(Math.min(w, h) * 0.3, 2);
     var used = Object.create(null);
     var accent = cssColour('--accent', '#9fcbff');
-
     ctx.lineWidth = lineWidth;
     ctx.lineCap = 'round';
     for (var i = 0; i < points.length; i++) {
@@ -275,7 +132,6 @@
       ctx.fill();
     }
   }
-
   function sizeCanvas(canvas, w, h) {
     var dpr = window.devicePixelRatio || 1;
     canvas.width = Math.max(1, Math.round(w * dpr));
@@ -287,47 +143,27 @@
     return ctx;
   }
 
-  /* ---- the avatar in the corner (still "the card" below: it is the persona's card, wherever it
-     sits) */
-
-  var card = null; // the elements of the card, once found
-  var sheet = null; // the elements of the sheet, once found
+  var card = null;
+  var sheet = null;
   var askingInCard = false;
-
   function reading() {
     var t = window.threshold;
-    if (!t || typeof t.reading !== 'function') return null;
-    try {
-      return t.reading();
-    } catch (e) {
-      return null;
-    }
+    return t && typeof t.reading === 'function' ? t.reading() : null;
   }
-
-  function readOf(r) {
-    return !!(r && r.orientation && r.source && r.source !== 'signals');
-  }
-
+  function readOf(r) { return !!(r && r.orientation && r.source && r.source !== 'signals'); }
   function describeReading(r) {
     var t = window.threshold;
-    if (!t || typeof t.describe !== 'function') return '';
-    return t.describe(r);
+    return t && typeof t.describe === 'function' ? t.describe(r) : '';
   }
-
   function keptClause() {
     return store && store.persistent === false
-      ? ' This browser keeps nothing between visits, so your persona lasts for this page.'
-      : '';
+      ? ' This browser keeps nothing between visits, so your persona lasts for this page.' : '';
   }
-
   function describeSky(saved, list) {
     if (list.length) return list.length + ' star' + (list.length === 1 ? '' : 's') + ' in your sky.';
     if (saved.status === 'unreadable') return 'What this browser kept of your sky cannot be read, so it starts fresh.';
     return 'No stars yet.';
   }
-
-  /* The card's one sentence. With nothing placed and nothing read it explains what a persona is,
-     once, where a visitor first meets the word; after that it says where things stand. */
   function cardText(saved, list, r) {
     if (askingInCard) return ASKING_TEXT;
     if (!list.length && !readOf(r) && saved.status !== 'unreadable') {
@@ -337,38 +173,29 @@
     }
     return describeSky(saved, list) + ' ' + describeReading(r) + keptClause();
   }
-
   function refresh() {
     if (!card) return;
     var saved = read();
     var list = clean(saved.value);
     var r = reading();
     var isRead = readOf(r);
-
     var sentence = cardText(saved, list, r);
-    if (card.text.textContent !== sentence) card.text.textContent = sentence; // a live region: say it once
+    if (card.text.textContent !== sentence) card.text.textContent = sentence;
     card.host.setAttribute('data-state', askingInCard ? 'asking' : (!list.length && !isRead ? 'empty' : 'ready'));
     card.host.setAttribute('data-reading', !isRead ? 'none' : (r.source === 'answer' ? 'answered' : 'carried'));
     card.host.setAttribute('data-asking', askingInCard ? 'true' : 'false');
     card.host.setAttribute('data-sky', list.length ? 'set' : 'none');
     card.open.hidden = false;
-    // The button's label: visible while there is no persona, where it is the one lit control on
-    // the page, and read by a screen reader after that (the stylesheet hides it).
     var label = list.length || isRead ? 'open persona' : 'set up persona';
     if (card.label) card.label.textContent = label;
     else card.open.textContent = label;
-
     if (card.portrait) {
       var size = card.portraitSize;
       var ctx = sizeCanvas(card.portrait, size, size);
       if (ctx && list.length) drawSky(ctx, list, size, size, size * 0.15, size * 0.032, size * 0.018);
     }
-
     if (sheet && sheet.host.open) renderSheet();
   }
-
-  /* The sideways question, asked in the host the threshold lends: on arrival, and whenever that
-     page asks for it. The avatar in the corner stays where it is throughout. */
   function askInCard() {
     var t = window.threshold;
     if (!card || !card.probe || !t || typeof t.mount !== 'function' || askingInCard) return;
@@ -377,21 +204,12 @@
     card.probe.hidden = false;
     refresh();
     t.mount(card.probe, {
-      onAnswer: function () {
-        // The avatar: the one control in this corner, and so the one place the focus can land
-        // (the world the answer opens onto is waiting in the constellation and in the feed).
-        stopAskingInCard();
-        card.open.focus();
-      },
-      onSkip: function () {
-        stopAskingInCard();
-        card.open.focus();
-      }
+      onAnswer: function () { stopAskingInCard(); card.open.focus(); },
+      onSkip: function () { stopAskingInCard(); card.open.focus(); }
     });
     var first = card.probe.querySelector('button, input, [tabindex]');
     if (first && typeof first.focus === 'function') first.focus();
   }
-
   function stopAskingInCard() {
     if (!askingInCard) return;
     askingInCard = false;
@@ -401,95 +219,63 @@
     }
     refresh();
   }
-
   function buildCard() {
     var host = document.getElementById('persona');
     if (!host) return;
     card = {
-      host: host,
-      text: document.getElementById('persona-text'),
-      open: document.getElementById('persona-open'),
-      label: host.querySelector('.persona-label'),
-      // The question's host: the threshold lends one in its own feature; other pages have none,
-      // and ask inside the sheet instead.
-      probe: document.getElementById('persona-probe'),
-      portrait: document.getElementById('persona-portrait')
+      host: host, text: document.getElementById('persona-text'),
+      open: document.getElementById('persona-open'), label: host.querySelector('.persona-label'),
+      probe: document.getElementById('persona-probe'), portrait: document.getElementById('persona-portrait')
     };
-    if (!card.text || !card.open) {
-      card = null;
-      return;
-    }
-    card.portraitSize = (card.portrait && Number(card.portrait.getAttribute('width'))) || 40;
-    card.open.addEventListener('click', function () {
-      openSheet('sky', card.open);
-    });
-    // Live only from here on: the sentence written as the page loads is the page's, not news.
+    if (!card.text || !card.open) { card = null; return; }
+    card.portraitSize = card.portrait && Number(card.portrait.getAttribute('width')) || 40;
+    card.open.addEventListener('click', function () { openSheet('sky', card.open); });
     card.text.setAttribute('aria-live', 'polite');
     refresh();
   }
 
-  /* ---- the sheet -------------------------------------------------------------------------- */
-
-  var fieldStars = []; // the sky as the sheet shows it: the saved stars, each with its element
+  var fieldStars = [];
   var selected = -1;
   var activeDrag = null;
   var suppressClickUntil = 0;
   var openedBy = null;
   var askingInSheet = false;
   var moveTimer = null;
-  var sheetBox = null; // the shared lightbox the sheet floats in (js/site.js), or null without it
-
-  function sheetStatus(text) {
-    if (sheet && sheet.status) sheet.status.textContent = text;
-  }
-
+  var sheetBox = null;
+  function sheetStatus(text) { if (sheet && sheet.status) sheet.status.textContent = text; }
   function fieldIntro(list) {
     if (!list.length) return 'No stars yet. Tap the sky to place the first, or seed a small sky and drag it into a shape.';
     return list.length + ' star' + (list.length === 1 ? '' : 's') + '. Tap the sky to add one, drag a star to move it, tap one to read its thought.';
   }
-
   function keptNote(kept) {
     return kept || !store || store.persistent ? '' : ' Kept for this page only: this browser stores nothing between visits.';
   }
-
   function placeElement(star) {
     if (!star.el) return;
     star.el.style.left = star.x + '%';
     star.el.style.top = star.y + '%';
   }
-
   function drawField() {
     if (!sheet || !sheet.field || !sheet.canvas) return;
     var box = sheet.field.getBoundingClientRect();
     if (!box.width || !box.height) return;
     var ctx = sizeCanvas(sheet.canvas, box.width, box.height);
-    if (!ctx) return;
-    drawSky(ctx, fieldStars, box.width, box.height, 0, 0, 1.1);
+    if (ctx) drawSky(ctx, fieldStars, box.width, box.height, 0, 0, 1.1);
   }
-
   function select(index) {
     selected = index;
     for (var i = 0; i < fieldStars.length; i++) {
       if (fieldStars[i].el) fieldStars[i].el.classList.toggle('selected', i === index);
     }
     if (sheet.remove) sheet.remove.hidden = index < 0;
-    if (index >= 0) {
-      sheetStatus('✦ ' + fieldStars[index].text + ' (' + (index + 1) + ' of ' + fieldStars.length + ')');
-    }
+    if (index >= 0) sheetStatus('✦ ' + fieldStars[index].text + ' (' + (index + 1) + ' of ' + fieldStars.length + ')');
   }
-
   function pointInField(clientX, clientY) {
     var box = sheet.field.getBoundingClientRect();
-    return {
-      x: clamp(((clientX - box.left) / (box.width || 1)) * 100, 1, 99),
-      y: clamp(((clientY - box.top) / (box.height || 1)) * 100, 1, 99)
-    };
+    return { x: clamp((clientX - box.left) / (box.width || 1) * 100, 1, 99),
+      y: clamp((clientY - box.top) / (box.height || 1) * 100, 1, 99) };
   }
-
-  function serialize() {
-    return fieldStars.map(function (s) { return { x: s.x, y: s.y, text: s.text }; });
-  }
-
+  function serialize() { return fieldStars.map(function (s) { return { x: s.x, y: s.y, text: s.text }; }); }
   function createStarElement(star, index) {
     var el = document.createElement('button');
     el.type = 'button';
@@ -497,27 +283,21 @@
     el.setAttribute('aria-label', 'star: ' + star.text + '. Arrow keys move it, delete removes it.');
     star.el = el;
     placeElement(star);
-
     el.addEventListener('click', function (ev) {
       ev.stopPropagation();
       if (Date.now() < suppressClickUntil) return;
       select(index);
     });
-
     el.addEventListener('pointerdown', function (ev) {
       ev.preventDefault();
       ev.stopPropagation();
       activeDrag = { index: index, pointerId: ev.pointerId, moved: false };
       if (el.setPointerCapture) {
-        try {
-          el.setPointerCapture(ev.pointerId);
-        } catch (e) {
-          /* a pointer that cannot be captured still drags, less smoothly */
-        }
+        try { el.setPointerCapture(ev.pointerId); }
+        catch (e) { console.error('Could not hold the star while dragging', e); }
       }
       el.classList.add('dragging');
     });
-
     el.addEventListener('keydown', function (ev) {
       var step = ev.shiftKey ? 6 : 2;
       var moves = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] };
@@ -528,8 +308,6 @@
         placeElement(star);
         drawField();
         select(index);
-        // One write for a run of key presses, so holding an arrow is not a hundred writes. The
-        // write redraws the sky from the store, so focus goes to the new button at the same place.
         window.clearTimeout(moveTimer);
         moveTimer = window.setTimeout(function () {
           setStars(serialize(), 'moved');
@@ -541,30 +319,21 @@
         removeStar(index);
       }
     });
-
     sheet.field.appendChild(el);
   }
-
   function renderField() {
     if (!sheet || !sheet.field) return;
-    for (var i = 0; i < fieldStars.length; i++) {
-      if (fieldStars[i].el) fieldStars[i].el.remove();
-    }
+    for (var i = 0; i < fieldStars.length; i++) if (fieldStars[i].el) fieldStars[i].el.remove();
     activeDrag = null;
     var saved = read();
-    fieldStars = clean(saved.value).map(function (s) {
-      return { x: s.x, y: s.y, text: s.text, el: null };
-    });
+    fieldStars = clean(saved.value).map(function (s) { return { x: s.x, y: s.y, text: s.text, el: null }; });
     for (var j = 0; j < fieldStars.length; j++) createStarElement(fieldStars[j], j);
     select(-1);
     drawField();
-    if (saved.status === 'unreadable') {
-      sheetStatus('What this browser kept of your sky cannot be read, so it starts fresh. Tap the sky to place a star.');
-    } else {
-      sheetStatus(fieldIntro(fieldStars) + keptNote(true));
-    }
+    sheetStatus(saved.status === 'unreadable'
+      ? 'What this browser kept of your sky cannot be read, so it starts fresh. Tap the sky to place a star.'
+      : fieldIntro(fieldStars) + keptNote(true));
   }
-
   function removeStar(index) {
     if (index < 0 || index >= fieldStars.length) return;
     var gone = fieldStars[index].text;
@@ -576,7 +345,6 @@
     if (next) next.focus();
     else if (sheet.drop) sheet.drop.focus();
   }
-
   function endDrag(pointerId) {
     if (!activeDrag || activeDrag.pointerId !== pointerId) return;
     var drag = activeDrag;
@@ -585,11 +353,8 @@
     if (star && star.el) {
       star.el.classList.remove('dragging');
       if (star.el.releasePointerCapture) {
-        try {
-          star.el.releasePointerCapture(pointerId);
-        } catch (e) {
-          /* already released */
-        }
+        try { star.el.releasePointerCapture(pointerId); }
+        catch (e) { console.error('Could not release the dragged star', e); }
       }
     }
     if (drag.moved) {
@@ -598,7 +363,6 @@
       sheetStatus('Moved. ' + fieldIntro(fieldStars) + keptNote(kept));
     }
   }
-
   function renderReading() {
     if (!sheet || !sheet.reading) return;
     var r = reading();
@@ -614,13 +378,10 @@
       if (isRead && !askingInSheet) {
         sheet.readingGo.hidden = false;
         sheet.readingGo.href = root + r.orientation.world;
-        sheet.readingGo.textContent = 'go to ' + r.orientation.worldName;
-      } else {
-        sheet.readingGo.hidden = true;
-      }
+        sheet.readingGo.textContent = r.orientation.worldName;
+      } else sheet.readingGo.hidden = true;
     }
   }
-
   function askInSheet(focusFirst) {
     var t = window.threshold;
     if (!sheet || !sheet.probe || !t || typeof t.mount !== 'function' || askingInSheet) return;
@@ -634,60 +395,36 @@
         if (sheet.readingGo && !sheet.readingGo.hidden) sheet.readingGo.focus();
         else if (sheet.ask) sheet.ask.focus();
       },
-      onSkip: function () {
-        stopAskingInSheet();
-        if (sheet.ask) sheet.ask.focus();
-      }
+      onSkip: function () { stopAskingInSheet(); if (sheet.ask) sheet.ask.focus(); }
     });
     if (focusFirst) {
       var first = sheet.probe.querySelector('button, input, [tabindex]');
       if (first && typeof first.focus === 'function') first.focus();
     }
   }
-
   function stopAskingInSheet() {
     askingInSheet = false;
-    if (sheet && sheet.probe) {
-      sheet.probe.textContent = '';
-      sheet.probe.hidden = true;
-    }
+    if (sheet && sheet.probe) { sheet.probe.textContent = ''; sheet.probe.hidden = true; }
     renderReading();
   }
-
-  function renderSheet() {
-    renderField();
-    renderReading();
-  }
-
+  function renderSheet() { renderField(); renderReading(); }
   function openSheet(section, opener) {
     if (!sheet) return;
     openedBy = opener || document.activeElement;
     stopAskingInCard();
     if (!sheet.host.open) {
-      // The veil first, so the page is already under it when the sheet arrives over the top.
       if (sheetBox) sheetBox.up();
-      if (typeof sheet.host.showModal === 'function') {
-        sheet.host.showModal();
-      } else {
-        sheet.host.setAttribute('open', '');
-        sheet.host.classList.add('persona-sheet-fallback');
-      }
+      if (typeof sheet.host.showModal === 'function') sheet.host.showModal();
+      else { sheet.host.setAttribute('open', ''); sheet.host.classList.add('persona-sheet-fallback'); }
     }
     renderSheet();
-    // The sheet asks of its own accord when nothing has been read yet: setting up a persona is
-    // placing a sky and answering one question, and the question should not need finding.
     if (!readOf(reading())) askInSheet(section === 'reading');
     var target = section === 'reading'
       ? (askingInSheet ? sheet.probe.querySelector('button, input, [tabindex]') : sheet.ask)
       : (sheet.field.querySelector('.persona-star') || sheet.drop);
     if (target && typeof target.focus === 'function') target.focus();
-    try {
-      sheet.host.scrollTop = 0;
-    } catch (e) {
-      /* nothing to scroll */
-    }
+    sheet.host.scrollTop = 0;
   }
-
   function closeSheet() {
     if (!sheet) return;
     if (sheet.host.open) {
@@ -696,15 +433,10 @@
     }
     onSheetClosed();
   }
-
   function onSheetClosed() {
     if (askingInSheet) stopAskingInSheet();
     activeDrag = null;
     sheet.host.classList.remove('persona-sheet-fallback');
-    // The page comes back -- live, un-dimmed, its frame loop running again -- before the card is
-    // redrawn and before the focus goes anywhere, because the control the focus returns to was
-    // inert a moment ago. Idempotent, which matters: a dialog closed by the browser raises 'close'
-    // and closeSheet() calls this itself.
     if (sheetBox) sheetBox.down();
     refresh();
     var back = openedBy;
@@ -712,56 +444,30 @@
     if (back && typeof back.focus === 'function' && document.contains(back)) back.focus();
     else if (card && card.open) card.open.focus();
   }
-
   function buildSheet() {
     var host = document.getElementById('persona-sheet');
     if (!host) return;
     sheet = {
-      host: host,
-      close: document.getElementById('persona-close'),
-      field: document.getElementById('persona-sky'),
-      canvas: host.querySelector('.persona-sky-canvas'),
-      drop: document.getElementById('persona-drop'),
-      seed: document.getElementById('persona-seed'),
-      remove: document.getElementById('persona-remove'),
-      clear: document.getElementById('persona-clear'),
-      status: document.getElementById('persona-sky-status'),
-      reading: document.getElementById('persona-reading'),
-      ask: document.getElementById('persona-ask'),
-      forget: document.getElementById('persona-forget'),
-      readingGo: document.getElementById('persona-reading-go'),
+      host: host, close: document.getElementById('persona-close'), field: document.getElementById('persona-sky'),
+      canvas: host.querySelector('.persona-sky-canvas'), drop: document.getElementById('persona-drop'),
+      seed: document.getElementById('persona-seed'), remove: document.getElementById('persona-remove'),
+      clear: document.getElementById('persona-clear'), status: document.getElementById('persona-sky-status'),
+      reading: document.getElementById('persona-reading'), ask: document.getElementById('persona-ask'),
+      forget: document.getElementById('persona-forget'), readingGo: document.getElementById('persona-reading-go'),
       probe: document.getElementById('persona-sheet-probe')
     };
-    if (!sheet.field) {
-      sheet = null;
-      return;
-    }
-
-    /* The one lightbox the site shares, with the sheet as the thing it leaves in front of the
-       veil (issue #70). Guarded rather than assumed: a half-rewritten js/site.js must not be able
-       to take the persona down with it, and a sheet with no veil behind it is still a sheet. */
+    if (!sheet.field) { sheet = null; return; }
     var shell = window.interestingSite;
     if (shell && typeof shell.lightbox === 'function') {
       sheetBox = shell.lightbox({ name: 'persona', keep: host, onPress: closeSheet });
     }
-
     if (sheet.close) sheet.close.addEventListener('click', closeSheet);
     host.addEventListener('close', onSheetClosed);
-    host.addEventListener('cancel', function () {
-      /* Escape: the browser closes it, and 'close' follows */
-    });
-    // A press on the backdrop closes it, which is what a dialog owes anyone who opened it by
-    // mistake. The dialog element is the target for the backdrop as well as its own padding, so
-    // the press has to be outside the box itself.
     host.addEventListener('click', function (ev) {
       if (ev.target !== host) return;
       var box = host.getBoundingClientRect();
-      if (ev.clientX < box.left || ev.clientX > box.right || ev.clientY < box.top || ev.clientY > box.bottom) {
-        closeSheet();
-      }
+      if (ev.clientX < box.left || ev.clientX > box.right || ev.clientY < box.top || ev.clientY > box.bottom) closeSheet();
     });
-
-    // A tap on the open sky places a star where the finger is.
     sheet.field.addEventListener('click', function (ev) {
       if (Date.now() < suppressClickUntil) return;
       if (ev.target !== sheet.field && ev.target !== sheet.canvas) return;
@@ -772,7 +478,6 @@
       var last = sheet.field.querySelector('.persona-star:last-of-type');
       if (last) select(fieldStars.length - 1);
     });
-
     document.addEventListener('pointermove', function (ev) {
       if (!activeDrag || activeDrag.pointerId !== ev.pointerId) return;
       var star = fieldStars[activeDrag.index];
@@ -786,139 +491,80 @@
     });
     document.addEventListener('pointerup', function (ev) { endDrag(ev.pointerId); });
     document.addEventListener('pointercancel', function (ev) { endDrag(ev.pointerId); });
-
-    if (sheet.drop) {
-      sheet.drop.addEventListener('click', function () {
-        var words = thought();
-        var kept = addStar({
-          x: 50 + (Math.random() - 0.5) * 30,
-          y: 50 + (Math.random() - 0.5) * 30,
-          text: words
-        });
-        sheetStatus('✦ ' + words + ' Drag it where it belongs.' + keptNote(kept));
-        select(fieldStars.length - 1);
-      });
-    }
+    if (sheet.drop) sheet.drop.addEventListener('click', function () {
+      var words = thought();
+      var kept = addStar({ x: 50 + (Math.random() - 0.5) * 30,
+        y: 50 + (Math.random() - 0.5) * 30, text: words });
+      sheetStatus('✦ ' + words + ' Drag it where it belongs.' + keptNote(kept));
+      select(fieldStars.length - 1);
+    });
     function seedTheSky() {
       var kept = seed();
       sheetStatus('Seeded ' + fieldStars.length + ' stars. Drag them into a shape, or tap the sky for more.' + keptNote(kept));
       var first = sheet.field.querySelector('.persona-star');
       if (first) first.focus();
     }
-
-    if (sheet.seed) {
-      sheet.seed.addEventListener('click', function () {
-        if (!fieldStars.length) {
-          seedTheSky();
-          return;
-        }
-        // At the threshold rather than above it: the placed sky goes, but a sky arrives in its
-        // place, so it asks the same question through the same shared modal and wears no warning.
-        // The one button that gets a visitor started must not read as a danger. See "Caution
-        // before a destructive action" in js/site.js.
-        window.interestingSite.areYouSure({
-          what: 'seed a fresh sky over the one you have placed',
-          detail: 'The ' + fieldStars.length + ' star' + (fieldStars.length === 1 ? '' : 's')
-            + ' you placed would go, and ' + SEED_COUNT + ' new ones would take their place.',
-          confirm: 'seed a fresh sky',
-          opener: sheet.seed,
-          onConfirm: seedTheSky,
-          onCancel: function () { sheetStatus('Kept as it was.'); }
-        });
-      });
-    }
-    if (sheet.remove) {
-      sheet.remove.addEventListener('click', function () {
-        if (selected >= 0) removeStar(selected);
-      });
-    }
-    // Above the threshold: the whole sky goes and nothing takes its place, so it is a warning
-    // button guarded by the one modal (window.interestingSite.destructive in js/site.js). The
-    // class is in the markup as well, so the control reads as a warning before any script runs.
-    if (sheet.clear) {
-      window.interestingSite.destructive(sheet.clear, {
-        what: 'clear your constellation',
-        detail: function () {
-          return 'The ' + fieldStars.length + ' star' + (fieldStars.length === 1 ? '' : 's')
-            + ' you placed would go, and every world that reads it would read nothing until you '
-            + 'place more.';
-        },
-        when: function () { return fieldStars.length > 0; },
-        onConfirm: function () {
-          if (!fieldStars.length) {
-            sheetStatus('The sky is already empty.');
-            return;
-          }
-          var kept = clear();
-          sheetStatus('Cleared. ' + fieldIntro(fieldStars) + keptNote(kept));
-          if (sheet.drop) sheet.drop.focus();
-        },
+    if (sheet.seed) sheet.seed.addEventListener('click', function () {
+      if (!fieldStars.length) { seedTheSky(); return; }
+      window.interestingSite.areYouSure({
+        what: 'seed a fresh sky over the one you have placed',
+        detail: 'The ' + fieldStars.length + ' star' + (fieldStars.length === 1 ? '' : 's')
+          + ' you placed would go, and ' + SEED_COUNT + ' new ones would take their place.',
+        confirm: 'seed a fresh sky', opener: sheet.seed, onConfirm: seedTheSky,
         onCancel: function () { sheetStatus('Kept as it was.'); }
       });
-    }
-    if (sheet.ask) sheet.ask.addEventListener('click', function () { askInSheet(true); });
-    // Above the threshold too: the whole reading goes, and the site has to ask all over again.
-    if (sheet.forget) {
-      window.interestingSite.destructive(sheet.forget, {
-        what: 'forget what this site has read about you',
-        detail: 'The orientation it arrived at would go, and the palette the site is wearing with '
-          + 'it. Your stars stay. It asks again whenever you like.',
-        onConfirm: function () {
-          var t = window.threshold;
-          if (t && typeof t.forget === 'function') t.forget();
-          renderReading();
-          refresh();
-          if (sheet.reading) sheet.reading.textContent = 'The reading is forgotten. Your stars stay.';
-          if (sheet.ask) sheet.ask.focus();
-        },
-        onCancel: renderReading
-      });
-    }
-
-    window.addEventListener('resize', function () {
-      if (sheet.host.open) drawField();
     });
+    if (sheet.remove) sheet.remove.addEventListener('click', function () {
+      if (selected >= 0) removeStar(selected);
+    });
+    if (sheet.clear) window.interestingSite.destructive(sheet.clear, {
+      what: 'clear your constellation',
+      detail: function () {
+        return 'The ' + fieldStars.length + ' star' + (fieldStars.length === 1 ? '' : 's')
+          + ' you placed would go, and every world that reads it would read nothing until you place more.';
+      },
+      when: function () { return fieldStars.length > 0; },
+      onConfirm: function () {
+        if (!fieldStars.length) { sheetStatus('The sky is already empty.'); return; }
+        var kept = clear();
+        sheetStatus('Cleared. ' + fieldIntro(fieldStars) + keptNote(kept));
+        if (sheet.drop) sheet.drop.focus();
+      },
+      onCancel: function () { sheetStatus('Kept as it was.'); }
+    });
+    if (sheet.ask) sheet.ask.addEventListener('click', function () { askInSheet(true); });
+    if (sheet.forget) window.interestingSite.destructive(sheet.forget, {
+      what: 'forget what this site has read about you',
+      detail: 'The orientation it arrived at would go, and the palette the site is wearing with it. Your stars stay. It asks again whenever you like.',
+      onConfirm: function () {
+        var t = window.threshold;
+        if (t && typeof t.forget === 'function') t.forget();
+        renderReading();
+        refresh();
+        if (sheet.reading) sheet.reading.textContent = 'The reading is forgotten. Your stars stay.';
+        if (sheet.ask) sheet.ask.focus();
+      },
+      onCancel: renderReading
+    });
+    window.addEventListener('resize', function () { if (sheet.host.open) drawField(); });
   }
-
-  /* ---- start ------------------------------------------------------------------------------ */
-
   function start() {
     buildCard();
     buildSheet();
-    // A reading taken anywhere -- the sheet, the card, the mood atlas -- is the card's to report.
     window.addEventListener('threshold:reading', function () {
       if (!askingInCard) refresh();
       if (sheet && sheet.host.open && !askingInSheet) renderReading();
     });
-    // The threshold asks unprompted, in its own feature: on arrival, and whenever nothing has been
-    // read yet, because asking is what that page is for. Every other page keeps the question one
-    // press away, inside the sheet.
     var t = window.threshold;
     if (t && typeof t.arrival === 'function' && t.arrival()) askInCard();
   }
-
   window.interestingPersona = {
-    key: SKY,
-    maxStars: MAX_STARS,
-    stars: stars,
-    read: read,
-    holds: holds,
-    seedSky: seedSky,
-    thought: thought,
-    setStars: setStars,
-    addStar: addStar,
-    seed: seed,
-    clear: clear,
-    onSky: onSky,
+    key: SKY, maxStars: MAX_STARS, stars: stars, read: read, holds: holds,
+    seedSky: seedSky, thought: thought, setStars: setStars, addStar: addStar,
+    seed: seed, clear: clear, onSky: onSky,
     open: function (section) { openSheet(section || 'sky', null); },
-    close: closeSheet,
-    ask: askInCard,
-    refresh: refresh
+    close: closeSheet, ask: askInCard, refresh: refresh
   };
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', start);
-  } else {
-    start();
-  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
+  else start();
 })();

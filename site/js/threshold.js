@@ -12,111 +12,82 @@
   var ARRIVAL_GAP_MS = 30 * 60 * 1000;
 
   var ORIENTATIONS = [
-    { id: 'tender', name: 'banked low', pull: 'wants less asked of it',
-      world: 'quiet-room.html', worldName: 'the quiet room' },
-    { id: 'restless', name: 'wound tight', pull: 'wants to shove something and watch it go',
-      world: 'kinetic-floor.html', worldName: 'the kinetic floor' },
-    { id: 'analytic', name: 'cold and clear', pull: 'wants a mechanism to take apart',
-      world: 'machine-shop.html', worldName: 'the machine shop' },
-    { id: 'rooted', name: 'low and slow', pull: 'wants something that grows downward',
-      world: 'loam.html', worldName: 'loam' },
-    { id: 'verbal', name: 'full of half-sentences', pull: 'wants words put in the fire',
-      world: 'word-kiln.html', worldName: 'the word kiln' },
-    { id: 'curious', name: 'magpie', pull: 'wants a strange specimen in a drawer',
-      world: 'apocrypha-desk.html', worldName: 'the apocrypha desk' },
-    { id: 'cosmic', name: 'looking up', pull: 'wants distance and scale',
-      world: 'wish-constellation.html', worldName: 'the wish constellation' },
-    { id: 'ceremonial', name: 'wants a rite', pull: 'wants to light something on purpose',
-      world: 'star-lantern.html', worldName: 'the lantern ritual' },
-    { id: 'brooding', name: 'in the long look', pull: 'wants to re-read its own record',
-      world: 'constellation-diary.html', worldName: 'the diary' },
-    { id: 'tempestuous', name: 'weather coming', pull: 'wants pressure, front and squall',
-      world: 'constellation-weather.html', worldName: 'the weather lab' },
-    { id: 'attentive', name: 'ears first', pull: 'wants to listen to something decay',
-      world: 'constellation-echo.html', worldName: 'the echo chamber' },
-    { id: 'tending', name: 'minding something', pull: 'wants a living thing to keep',
-      world: 'wish-terrarium.html', worldName: 'the terrarium' },
-    { id: 'divinatory', name: 'asking elsewhere', pull: 'wants an answer it did not author',
-      world: 'sky-archive.html', worldName: 'the archive oracle' },
-    { id: 'geometric', name: 'after symmetry', pull: 'wants a pattern to close',
-      world: 'orbital-weaver.html', worldName: 'the orbital weaver' },
-    { id: 'metrical', name: 'counting in echoes', pull: 'wants a pulse to keep time with',
-      world: 'pulse-loom.html', worldName: 'the pulse loom' }
+    { id: 'tender', name: 'banked low', pull: 'wants less asked of it', world: 'quiet-room.html' },
+    { id: 'restless', name: 'wound tight', pull: 'wants to shove something and watch it go', world: 'kinetic-floor.html' },
+    { id: 'analytic', name: 'cold and clear', pull: 'wants a mechanism to take apart', world: 'machine-shop.html' },
+    { id: 'rooted', name: 'low and slow', pull: 'wants something that grows downward', world: 'loam.html' },
+    { id: 'verbal', name: 'full of half-sentences', pull: 'wants words put in the fire', world: 'word-kiln.html' },
+    { id: 'curious', name: 'magpie', pull: 'wants a strange specimen in a drawer', world: 'apocrypha-desk.html' },
+    { id: 'cosmic', name: 'looking up', pull: 'wants distance and scale', world: 'wish-constellation.html' },
+    { id: 'ceremonial', name: 'wants a rite', pull: 'wants to light something on purpose', world: 'star-lantern.html' },
+    { id: 'brooding', name: 'in the long look', pull: 'wants to re-read its own record', world: 'constellation-diary.html' },
+    { id: 'tempestuous', name: 'weather coming', pull: 'wants pressure, front and squall', world: 'constellation-weather.html' },
+    { id: 'attentive', name: 'ears first', pull: 'wants to listen to something decay', world: 'constellation-echo.html' },
+    { id: 'tending', name: 'minding something', pull: 'wants a living thing to keep', world: 'wish-terrarium.html' },
+    { id: 'divinatory', name: 'asking elsewhere', pull: 'wants an answer it did not author', world: 'sky-archive.html' },
+    { id: 'geometric', name: 'after symmetry', pull: 'wants a pattern to close', world: 'orbital-weaver.html' },
+    { id: 'metrical', name: 'counting in echoes', pull: 'wants a pulse to keep time with', world: 'pulse-loom.html' }
   ];
+
+  var worldData = document.getElementById('site-worlds');
+  var worldList = worldData ? JSON.parse(worldData.textContent) : [];
+  ORIENTATIONS.forEach(function (orientation) {
+    var world = worldList.find(function (entry) { return entry.file === orientation.world; });
+    if (!world) throw new Error('Missing world in the shared list: ' + orientation.world);
+    orientation.worldName = world.name;
+  });
 
   var PROBES = [
     {
       probe: 'doorway', name: 'four doors', kind: 'choice',
       ask: 'Four doors, all unlocked. One of them is already ajar, and it is not the one you want.',
       options: [
-        { label: 'the one with a draught under it', detail: 'cold air, and a sound like far-off traffic',
-          weights: { cosmic: 3, restless: 2, tempestuous: 2 } },
-        { label: 'the one that smells of wet soil', detail: 'something is growing on the other side',
-          weights: { rooted: 3, tending: 2, tender: 1 } },
-        { label: 'the one with a light under it', detail: 'someone left a lamp on and a page half-turned',
-          weights: { verbal: 3, brooding: 2, curious: 1 } },
-        { label: 'the one that hums', detail: 'a machine behind it, running without supervision',
-          weights: { analytic: 3, geometric: 2, metrical: 2, attentive: 1 } }
+        { label: 'the one with a draught under it', detail: 'cold air, and a sound like far-off traffic', weights: { cosmic: 3, restless: 2, tempestuous: 2 } },
+        { label: 'the one that smells of wet soil', detail: 'something is growing on the other side', weights: { rooted: 3, tending: 2, tender: 1 } },
+        { label: 'the one with a light under it', detail: 'someone left a lamp on and a page half-turned', weights: { verbal: 3, brooding: 2, curious: 1 } },
+        { label: 'the one that hums', detail: 'a machine behind it, running without supervision', weights: { analytic: 3, geometric: 2, metrical: 2, attentive: 1 } }
       ]
     },
     {
       probe: 'pocket', name: 'one object for the pocket', kind: 'choice',
       ask: 'You are going out. One object fits in the pocket. The rest stay on the table.',
       options: [
-        { label: 'a short crowbar', detail: 'nothing in particular to open yet',
-          weights: { restless: 3, tempestuous: 2, analytic: 1 } },
-        { label: 'a folding magnifier', detail: 'scratched, 10x, slightly loose',
-          weights: { curious: 3, analytic: 2, attentive: 1 } },
-        { label: 'a square of blanket', detail: 'cut from something older, kept for no reason',
-          weights: { tender: 3, rooted: 2, tending: 1 } },
-        { label: 'a pocket notebook', detail: 'two thirds used, the pencil lost',
-          weights: { verbal: 3, brooding: 2, curious: 1 } },
-        { label: 'a small brass bell', detail: 'it only rings when you mean it to',
-          weights: { ceremonial: 3, attentive: 2, divinatory: 1 } }
+        { label: 'a short crowbar', detail: 'nothing in particular to open yet', weights: { restless: 3, tempestuous: 2, analytic: 1 } },
+        { label: 'a folding magnifier', detail: 'scratched, 10x, slightly loose', weights: { curious: 3, analytic: 2, attentive: 1 } },
+        { label: 'a square of blanket', detail: 'cut from something older, kept for no reason', weights: { tender: 3, rooted: 2, tending: 1 } },
+        { label: 'a pocket notebook', detail: 'two thirds used, the pencil lost', weights: { verbal: 3, brooding: 2, curious: 1 } },
+        { label: 'a small brass bell', detail: 'it only rings when you mean it to', weights: { ceremonial: 3, attentive: 2, divinatory: 1 } }
       ]
     },
     {
       probe: 'window', name: 'the window', kind: 'choice',
       ask: 'There is one window in this room and you get to decide what is behind it.',
       options: [
-        { label: 'a flat black sky, no cloud', detail: 'and whatever is up there, up there',
-          weights: { cosmic: 3, brooding: 2, geometric: 1 } },
-        { label: 'weather arriving sideways', detail: 'the glass is already wet',
-          weights: { tempestuous: 3, restless: 2, attentive: 1 } },
-        { label: 'a courtyard with one tree in it', detail: 'the tree is doing fine',
-          weights: { rooted: 3, tending: 2, tender: 2 } },
-        { label: 'a lit workshop across the way', detail: 'someone is still in there, making something',
-          weights: { analytic: 3, verbal: 1, curious: 2 } }
+        { label: 'a flat black sky, no cloud', detail: 'and whatever is up there, up there', weights: { cosmic: 3, brooding: 2, geometric: 1 } },
+        { label: 'weather arriving sideways', detail: 'the glass is already wet', weights: { tempestuous: 3, restless: 2, attentive: 1 } },
+        { label: 'a courtyard with one tree in it', detail: 'the tree is doing fine', weights: { rooted: 3, tending: 2, tender: 2 } },
+        { label: 'a lit workshop across the way', detail: 'someone is still in there, making something', weights: { analytic: 3, verbal: 1, curious: 2 } }
       ]
     },
     {
       probe: 'stone', name: 'four stones', kind: 'choice',
       ask: 'Four stones on a shelf. Pick one up -- you will be carrying it for a while.',
       options: [
-        { label: 'the heavy one', detail: 'river-smoothed, cold, two hands',
-          weights: { rooted: 3, brooding: 2, tender: 1 } },
-        { label: 'the sharp one', detail: 'freshly broken, one edge still bright',
-          weights: { restless: 3, analytic: 2, tempestuous: 1 } },
-        { label: 'the pierced one', detail: 'a hole worn clean through by water',
-          weights: { divinatory: 3, curious: 2, ceremonial: 2 } },
-        { label: 'the one with a fossil in it', detail: 'a coil, pressed flat, very old',
-          weights: { curious: 3, brooding: 2, geometric: 1 } }
+        { label: 'the heavy one', detail: 'river-smoothed, cold, two hands', weights: { rooted: 3, brooding: 2, tender: 1 } },
+        { label: 'the sharp one', detail: 'freshly broken, one edge still bright', weights: { restless: 3, analytic: 2, tempestuous: 1 } },
+        { label: 'the pierced one', detail: 'a hole worn clean through by water', weights: { divinatory: 3, curious: 2, ceremonial: 2 } },
+        { label: 'the one with a fossil in it', detail: 'a coil, pressed flat, very old', weights: { curious: 3, brooding: 2, geometric: 1 } }
       ]
     },
     {
       probe: 'misfit', name: 'the odd one out', kind: 'choice',
       ask: 'Five things are on the table. Four of them belong together. Take away the one that does not.',
       options: [
-        { label: 'a tuning fork', detail: 'because the others are silent',
-          weights: { attentive: 3, metrical: 2, ceremonial: 1, analytic: 1 } },
-        { label: 'a pressed leaf', detail: 'because the others were made',
-          weights: { rooted: 3, tending: 2 } },
-        { label: 'a six-sided die', detail: 'because the others are not asking anything',
-          weights: { divinatory: 3, curious: 1, restless: 1 } },
-        { label: 'a torn ticket stub', detail: 'because the others have no date on them',
-          weights: { brooding: 3, verbal: 2 } },
-        { label: 'a hexagonal nut', detail: 'because the others are not part of anything',
-          weights: { analytic: 3, geometric: 2 } }
+        { label: 'a tuning fork', detail: 'because the others are silent', weights: { attentive: 3, metrical: 2, ceremonial: 1, analytic: 1 } },
+        { label: 'a pressed leaf', detail: 'because the others were made', weights: { rooted: 3, tending: 2 } },
+        { label: 'a six-sided die', detail: 'because the others are not asking anything', weights: { divinatory: 3, curious: 1, restless: 1 } },
+        { label: 'a torn ticket stub', detail: 'because the others have no date on them', weights: { brooding: 3, verbal: 2 } },
+        { label: 'a hexagonal nut', detail: 'because the others are not part of anything', weights: { analytic: 3, geometric: 2 } }
       ]
     },
     {
@@ -124,42 +95,10 @@
       ask: 'A workbench, four objects. Take three, in order: the one nearest the door first, the one nearest the window last.',
       take: 3,
       items: [
-        {
-          label: 'a warm mug',
-          detail: 'still steaming',
-          slots: [
-            { tender: 2, rooted: 1 },
-            { attentive: 1, verbal: 1 },
-            { ceremonial: 1, brooding: 1 }
-          ]
-        },
-        {
-          label: 'a brass compass',
-          detail: 'needle wandering, then settling',
-          slots: [
-            { analytic: 2, geometric: 1 },
-            { curious: 2, divinatory: 1 },
-            { cosmic: 2, restless: 1 }
-          ]
-        },
-        {
-          label: 'a hand bell',
-          detail: 'wrapped in cloth',
-          slots: [
-            { ceremonial: 2, attentive: 1 },
-            { divinatory: 2, verbal: 1 },
-            { tempestuous: 2, restless: 1 }
-          ]
-        },
-        {
-          label: 'a packet of seeds',
-          detail: 'label smudged',
-          slots: [
-            { tending: 2, rooted: 2 },
-            { tender: 1, curious: 1 },
-            { cosmic: 1, brooding: 1 }
-          ]
-        }
+        { label: 'a warm mug', detail: 'still steaming', slots: [{ tender: 2, rooted: 1 }, { attentive: 1, verbal: 1 }, { ceremonial: 1, brooding: 1 }] },
+        { label: 'a brass compass', detail: 'needle wandering, then settling', slots: [{ analytic: 2, geometric: 1 }, { curious: 2, divinatory: 1 }, { cosmic: 2, restless: 1 }] },
+        { label: 'a hand bell', detail: 'wrapped in cloth', slots: [{ ceremonial: 2, attentive: 1 }, { divinatory: 2, verbal: 1 }, { tempestuous: 2, restless: 1 }] },
+        { label: 'a packet of seeds', detail: 'label smudged', slots: [{ tending: 2, rooted: 2 }, { tender: 1, curious: 1 }, { cosmic: 1, brooding: 1 }] }
       ]
     },
     {
@@ -167,51 +106,11 @@
       ask: 'Five jars on a shelf. Pull three forward, in order: the first is what you trust, the last is what you open first.',
       take: 3,
       items: [
-        {
-          label: 'the jar of nails',
-          detail: 'sorted by length, labelled in pencil',
-          slots: [
-            { analytic: 2, geometric: 1 },
-            { restless: 1, tempestuous: 1 },
-            { analytic: 1, verbal: 1 }
-          ]
-        },
-        {
-          label: 'the jar of rainwater',
-          detail: 'clear, with one willow leaf',
-          slots: [
-            { attentive: 2, cosmic: 1 },
-            { divinatory: 2, brooding: 1 },
-            { attentive: 1, tender: 1 }
-          ]
-        },
-        {
-          label: 'the jar of match stubs',
-          detail: 'burnt ends and one unstruck head',
-          slots: [
-            { ceremonial: 2, restless: 1 },
-            { tempestuous: 2, verbal: 1 },
-            { ceremonial: 1, curious: 1 }
-          ]
-        },
-        {
-          label: 'the jar of sea glass',
-          detail: 'frosted green and cloudy white',
-          slots: [
-            { curious: 2, cosmic: 1 },
-            { brooding: 2, attentive: 1 },
-            { curious: 1, geometric: 1 }
-          ]
-        },
-        {
-          label: 'the jar of seed pods',
-          detail: 'light as paper, still rattling',
-          slots: [
-            { rooted: 2, tending: 2 },
-            { tender: 2, rooted: 1 },
-            { tending: 1, divinatory: 1 }
-          ]
-        }
+        { label: 'the jar of nails', detail: 'sorted by length, labelled in pencil', slots: [{ analytic: 2, geometric: 1 }, { restless: 1, tempestuous: 1 }, { analytic: 1, verbal: 1 }] },
+        { label: 'the jar of rainwater', detail: 'clear, with one willow leaf', slots: [{ attentive: 2, cosmic: 1 }, { divinatory: 2, brooding: 1 }, { attentive: 1, tender: 1 }] },
+        { label: 'the jar of match stubs', detail: 'burnt ends and one unstruck head', slots: [{ ceremonial: 2, restless: 1 }, { tempestuous: 2, verbal: 1 }, { ceremonial: 1, curious: 1 }] },
+        { label: 'the jar of sea glass', detail: 'frosted green and cloudy white', slots: [{ curious: 2, cosmic: 1 }, { brooding: 2, attentive: 1 }, { curious: 1, geometric: 1 }] },
+        { label: 'the jar of seed pods', detail: 'light as paper, still rattling', slots: [{ rooted: 2, tending: 2 }, { tender: 2, rooted: 1 }, { tending: 1, divinatory: 1 }] }
       ]
     },
     {
@@ -219,22 +118,16 @@
       ask: 'Three landings, and no going back up. Pick a way down.',
       steps: [
         { ask: 'First landing. Two corridors.', options: [
-          { label: 'the one that gets narrower', detail: 'and warmer',
-            weights: { tender: 2, brooding: 2, rooted: 1 } },
-          { label: 'the one that opens out', detail: 'and gets colder',
-            weights: { cosmic: 2, restless: 2, tempestuous: 1 } }
+          { label: 'the one that gets narrower', detail: 'and warmer', weights: { tender: 2, brooding: 2, rooted: 1 } },
+          { label: 'the one that opens out', detail: 'and gets colder', weights: { cosmic: 2, restless: 2, tempestuous: 1 } }
         ] },
         { ask: 'Second landing. Something is on the floor.', options: [
-          { label: 'step over it', detail: 'you have somewhere to be',
-            weights: { restless: 2, analytic: 1, geometric: 1 } },
-          { label: 'crouch down and look', detail: 'you did not have anywhere to be',
-            weights: { curious: 2, attentive: 1, tending: 1 } }
+          { label: 'step over it', detail: 'you have somewhere to be', weights: { restless: 2, analytic: 1, geometric: 1 } },
+          { label: 'crouch down and look', detail: 'you did not have anywhere to be', weights: { curious: 2, attentive: 1, tending: 1 } }
         ] },
         { ask: 'Third landing. A door, and a window beside it.', options: [
-          { label: 'the door', detail: 'it is a door, after all',
-            weights: { ceremonial: 2, verbal: 1, analytic: 1 } },
-          { label: 'the window', detail: 'it is only one floor down',
-            weights: { divinatory: 2, cosmic: 1, restless: 1 } }
+          { label: 'the door', detail: 'it is a door, after all', weights: { ceremonial: 2, verbal: 1, analytic: 1 } },
+          { label: 'the window', detail: 'it is only one floor down', weights: { divinatory: 2, cosmic: 1, restless: 1 } }
         ] }
       ]
     },
@@ -266,8 +159,7 @@
     },
     {
       probe: 'tempo', name: 'five taps', kind: 'tap',
-      ask: 'Tap this five times, at whatever rate feels like the rate.',
-      label: 'tap',
+      ask: 'Tap this five times, at whatever rate feels like the rate.', label: 'tap',
       buckets: [
         { under: 220, weights: { restless: 3, tempestuous: 2, verbal: 1 } },
         { under: 420, weights: { metrical: 3, analytic: 2, geometric: 2, curious: 2 } },
@@ -279,8 +171,7 @@
     },
     {
       probe: 'hold', name: 'press and hold', kind: 'hold',
-      ask: 'Press this and keep pressing. Let go when it has been enough.',
-      label: 'press and hold',
+      ask: 'Press this and keep pressing. Let go when it has been enough.', label: 'press and hold',
       buckets: [
         { under: 500, weights: { restless: 3, analytic: 1 } },
         { under: 1500, weights: { curious: 2, verbal: 2, geometric: 1 } },
@@ -293,21 +184,16 @@
       probe: 'placement', name: 'one mark', kind: 'place',
       ask: 'One mark, anywhere in the field. There is no wrong place and no second go.',
       corners: {
-        topLeft: { cosmic: 3, brooding: 1 },
-        topRight: { tempestuous: 3, restless: 1 },
-        bottomLeft: { rooted: 3, tender: 1 },
-        bottomRight: { analytic: 2, geometric: 2 }
+        topLeft: { cosmic: 3, brooding: 1 }, topRight: { tempestuous: 3, restless: 1 },
+        bottomLeft: { rooted: 3, tender: 1 }, bottomRight: { analytic: 2, geometric: 2 }
       },
-      centre: { divinatory: 2, attentive: 1 },
-      edge: { curious: 2, verbal: 1 }
+      centre: { divinatory: 2, attentive: 1 }, edge: { curious: 2, verbal: 1 }
     },
     {
       probe: 'stroke', name: 'one line', kind: 'draw',
       ask: 'Draw one line across this. Any line. Lift your hand when it is done.',
-      short: { tender: 2, analytic: 1 },
-      long: { restless: 2, tempestuous: 1 },
-      straight: { geometric: 3, analytic: 1 },
-      curved: { tending: 2, verbal: 2, attentive: 1 },
+      short: { tender: 2, analytic: 1 }, long: { restless: 2, tempestuous: 1 },
+      straight: { geometric: 3, analytic: 1 }, curved: { tending: 2, verbal: 2, attentive: 1 },
       jagged: { tempestuous: 3, restless: 1 }
     },
     {
@@ -328,8 +214,7 @@
     {
       probe: 'dial', name: 'the dial', kind: 'slider',
       ask: 'Set the room. The dial does not say what it does.',
-      low: 'frost on the inside of the glass',
-      high: 'a kettle just off the boil',
+      low: 'frost on the inside of the glass', high: 'a kettle just off the boil',
       cold: { cosmic: 3, geometric: 2, analytic: 2, brooding: 1 },
       warm: { tender: 3, rooted: 2, tending: 2, ceremonial: 1 }
     }
@@ -337,12 +222,8 @@
 
   var ORIENTATION_BY_ID = {};
   for (var oi = 0; oi < ORIENTATIONS.length; oi++) ORIENTATION_BY_ID[ORIENTATIONS[oi].id] = ORIENTATIONS[oi];
-
   var calm = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
-
-  function reducedMotion() {
-    return !!(calm && calm.matches);
-  }
+  function reducedMotion() { return !!(calm && calm.matches); }
 
   function load() {
     var blank = { visits: 0, last: null, drift: {}, recent: [], orientation: null };
@@ -357,18 +238,14 @@
     };
   }
 
-  function save(next) {
-    store.set(READING, next);
-  }
-
+  function save(next) { store.set(READING, next); }
   var state = load();
   var sinceLast = state.last ? Math.max(0, Date.now() - state.last) : null;
-
   function memoryPull() {
     if (sinceLast === null) return 0;
     return Math.pow(0.5, (sinceLast / 3600000) / HALF_LIFE_H);
   }
-
+  function plural(n, word) { return n + ' ' + word + (n === 1 ? '' : 's'); }
   function sinceText() {
     if (sinceLast === null) return 'first arrival on this machine';
     var minutes = Math.round(sinceLast / 60000);
@@ -382,10 +259,6 @@
     return 'last here ' + plural(Math.round(days / 30), 'month') + ' ago';
   }
 
-  function plural(n, word) {
-    return n + ' ' + word + (n === 1 ? '' : 's');
-  }
-
   var PARTS = [
     { until: 5, part: 'the small hours', weights: { cosmic: 2, brooding: 2, tender: 1, divinatory: 1 } },
     { until: 8, part: 'first light', weights: { rooted: 2, tender: 2, tending: 1 } },
@@ -395,16 +268,11 @@
     { until: 21, part: 'dusk', weights: { ceremonial: 2, attentive: 2, brooding: 1 } },
     { until: 24, part: 'the night', weights: { cosmic: 2, tempestuous: 1, attentive: 1, ceremonial: 1 } }
   ];
-
   var REGIONS = {
-    America: { restless: 1, verbal: 1 },
-    Europe: { brooding: 1, analytic: 1 },
-    Africa: { rooted: 1, ceremonial: 1 },
-    Asia: { geometric: 1, attentive: 1 },
-    Australia: { tempestuous: 1, curious: 1 },
-    Pacific: { cosmic: 1, tending: 1 },
-    Atlantic: { tempestuous: 1, divinatory: 1 },
-    Indian: { tending: 1, divinatory: 1 },
+    America: { restless: 1, verbal: 1 }, Europe: { brooding: 1, analytic: 1 },
+    Africa: { rooted: 1, ceremonial: 1 }, Asia: { geometric: 1, attentive: 1 },
+    Australia: { tempestuous: 1, curious: 1 }, Pacific: { cosmic: 1, tending: 1 },
+    Atlantic: { tempestuous: 1, divinatory: 1 }, Indian: { tending: 1, divinatory: 1 },
     Antarctica: { cosmic: 2, tender: 1 }
   };
 
@@ -412,12 +280,8 @@
     var now = new Date();
     var hour = now.getHours();
     var zone = '';
-    try {
-      zone = (Intl.DateTimeFormat().resolvedOptions().timeZone || '');
-    } catch (e) {
-      zone = '';
-    }
-    var offset = -now.getTimezoneOffset() / 60;
+    try { zone = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; }
+    catch (e) { zone = ''; }
     var slot = PARTS[0];
     for (var i = 0; i < PARTS.length; i++) {
       if (hour < PARTS[i].until) { slot = PARTS[i]; break; }
@@ -425,17 +289,18 @@
     return {
       hour: hour,
       clock: String(hour).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0'),
-      zone: zone,
-      region: zone.split('/')[0] || '',
-      offset: offset,
-      part: slot.part,
-      weights: slot.weights,
-      visits: state.visits,
-      sinceLast: sinceLast,
-      sinceText: sinceText()
+      zone: zone, region: zone.split('/')[0] || '', offset: -now.getTimezoneOffset() / 60,
+      part: slot.part, weights: slot.weights, visits: state.visits,
+      sinceLast: sinceLast, sinceText: sinceText()
     };
   }
-
+  function add(into, weights, factor) {
+    for (var id in weights) {
+      if (!Object.prototype.hasOwnProperty.call(weights, id) || !ORIENTATION_BY_ID[id]) continue;
+      into[id] = (into[id] || 0) + weights[id] * factor;
+    }
+    return into;
+  }
   function signalWeights(s) {
     var out = {};
     add(out, s.weights, 1);
@@ -444,21 +309,11 @@
     if (sinceLast !== null && sinceLast > 14 * 86400000) add(out, { curious: 2, restless: 1 }, 1);
     return out;
   }
-
-  function add(into, weights, factor) {
-    for (var id in weights) {
-      if (!Object.prototype.hasOwnProperty.call(weights, id) || !ORIENTATION_BY_ID[id]) continue;
-      into[id] = (into[id] || 0) + weights[id] * factor;
-    }
-    return into;
-  }
-
   function ranked(scores) {
     var list = ORIENTATIONS.filter(function (o) { return scores[o.id]; });
     list.sort(function (a, b) { return scores[b.id] - scores[a.id]; });
     return list;
   }
-
   function readingFor(answer) {
     var s = signals();
     var scores = {};
@@ -468,31 +323,22 @@
     var order = ranked(scores);
     return {
       orientation: order[0] ? ORIENTATION_BY_ID[order[0].id] : null,
-      alternates: order.slice(1, 4),
-      scores: scores,
-      signals: s,
+      alternates: order.slice(1, 4), scores: scores, signals: s,
       source: answer ? 'answer' : 'signals'
     };
   }
-
   function transmogrify(orientation) {
     var root = document.documentElement;
-    if (orientation) {
-      root.setAttribute('data-mood', orientation.id);
-    } else {
-      root.removeAttribute('data-mood');
-    }
+    if (orientation) root.setAttribute('data-mood', orientation.id);
+    else root.removeAttribute('data-mood');
     root.setAttribute('data-visit', state.visits > 1 ? 'returning' : 'first');
-    var detail = { orientation: orientation ? orientation.id : null };
     try {
-      window.dispatchEvent(new CustomEvent('threshold:reading', { detail: detail }));
-    } catch (e) {
-      /* Older browsers still receive the palette attribute. */
-    }
+      window.dispatchEvent(new CustomEvent('threshold:reading', {
+        detail: { orientation: orientation ? orientation.id : null }
+      }));
+    } catch (e) { /* Older browsers still receive the palette attribute. */ }
   }
-
   var lastAnswered = null;
-
   function record(answer) {
     var reading = readingFor(answer);
     var drift = {};
@@ -502,19 +348,17 @@
     state.orientation = reading.orientation ? reading.orientation.id : null;
     state.last = Date.now();
     save({ visits: state.visits, last: state.last, drift: state.drift,
-           recent: state.recent, orientation: state.orientation });
+      recent: state.recent, orientation: state.orientation });
     lastAnswered = reading.orientation ? reading : null;
     transmogrify(reading.orientation);
     return reading;
   }
-
   function noteProbe(id) {
     if (state.recent[state.recent.length - 1] === id) return;
     state.recent = state.recent.concat([id]).slice(-RECENT);
     save({ visits: state.visits, last: state.last, drift: state.drift,
-           recent: state.recent, orientation: state.orientation });
+      recent: state.recent, orientation: state.orientation });
   }
-
   function nextProbe() {
     var fresh = PROBES.filter(function (p) { return state.recent.indexOf(p.probe) === -1; });
     var pool = fresh.length ? fresh : PROBES.filter(function (p) {
@@ -523,19 +367,16 @@
     if (!pool.length) pool = PROBES;
     return pool[Math.floor(Math.random() * pool.length)];
   }
-
   function probeById(id) {
     for (var i = 0; i < PROBES.length; i++) if (PROBES[i].probe === id) return PROBES[i];
     return null;
   }
-
   function el(tag, className, text) {
     var node = document.createElement(tag);
     if (className) node.className = className;
     if (text !== undefined && text !== null) node.textContent = text;
     return node;
   }
-
   function mount(host, options) {
     if (!host) return null;
     var opts = options || {};
@@ -544,7 +385,6 @@
     noteProbe(probe.probe);
     host.textContent = '';
     host.setAttribute('data-probe', probe.probe);
-
     var answer = {};
     var frame = el('div', 'probe');
     var ask = el('p', 'probe-ask', probe.ask);
@@ -568,7 +408,6 @@
     });
     frame.appendChild(skip);
     host.appendChild(frame);
-
     var answered = false;
     function finish() {
       if (answered) return;
@@ -578,7 +417,6 @@
       trace.textContent = '';
       if (typeof opts.onAnswer === 'function') opts.onAnswer(reading, probe);
     }
-
     var kinds = {
       choice: choiceProbe, sequence: sequenceProbe, tap: tapProbe, hold: holdProbe,
       place: placeProbe, draw: drawProbe, windows: windowsProbe, slider: sliderProbe
@@ -586,7 +424,6 @@
     (kinds[probe.kind] || choiceProbe)(probe, body, trace, answer, finish);
     return probe;
   }
-
   function choiceProbe(probe, body, trace, answer, finish) {
     var steps = probe.steps || [{ ask: null, options: probe.options }];
     var index = 0;
@@ -616,40 +453,30 @@
         group.appendChild(button);
       });
       body.appendChild(group);
-      if (steps.length > 1) {
-        body.appendChild(el('p', 'probe-count', (probe.quick ? 'pair ' : '') + (index + 1) + ' of ' + steps.length));
-      }
+      if (steps.length > 1) body.appendChild(el('p', 'probe-count',
+        (probe.quick ? 'pair ' : '') + (index + 1) + ' of ' + steps.length));
       var first = group.querySelector('button');
       if (first && index > 0) first.focus();
     }
     step();
   }
-
   function sequenceProbe(probe, body, trace, answer, finish) {
     var items = Array.isArray(probe.items) ? probe.items.slice() : [];
     var target = Math.max(1, Math.min(items.length, probe.take || items.length));
     var picked = [];
-
-    function remaining() {
-      return items.filter(function (item) {
-        return picked.indexOf(item) === -1;
-      });
-    }
-
+    function remaining() { return items.filter(function (item) { return picked.indexOf(item) === -1; }); }
     function scoreAndFinish() {
       for (var i = 0; i < picked.length; i++) {
-        var item = picked[i];
-        if (!item.slots || !item.slots[i]) continue;
-        add(answer, item.slots[i], 1);
+        if (picked[i].slots && picked[i].slots[i]) add(answer, picked[i].slots[i], 1);
       }
       finish();
     }
-
     function redraw() {
       body.textContent = '';
       if (picked.length) {
-        var order = picked.map(function (item) { return item.label; }).join(' → ');
-        body.appendChild(el('p', 'probe-step', 'bench order: ' + order));
+        body.appendChild(el('p', 'probe-step', 'chosen order: ' + picked.map(function (item) {
+          return item.label;
+        }).join(' → ')));
       }
       var options = remaining();
       if (picked.length < target && options.length) {
@@ -664,18 +491,15 @@
           button.addEventListener('click', function () {
             picked.push(item);
             trace.textContent = 'placed: ' + item.label;
-            if (picked.length >= target) {
-              scoreAndFinish();
-              return;
-            }
-            redraw();
+            if (picked.length >= target) scoreAndFinish();
+            else redraw();
           });
           group.appendChild(button);
         });
         body.appendChild(group);
       }
       var left = target - picked.length;
-      body.appendChild(el('p', 'probe-count', left > 0 ? (left + ' to place') : 'reading order'));
+      body.appendChild(el('p', 'probe-count', left > 0 ? left + ' to place' : 'reading order'));
       var controls = el('div', 'controls');
       var undo = el('button', 'probe-option probe-undo', 'undo last');
       undo.type = 'button';
@@ -692,16 +516,14 @@
       reset.disabled = picked.length === 0;
       reset.addEventListener('click', function () {
         picked = [];
-        trace.textContent = 'order cleared';
+        trace.textContent = 'order reset';
         redraw();
       });
       controls.appendChild(reset);
       body.appendChild(controls);
     }
-
     redraw();
   }
-
   function tapProbe(probe, body, trace, answer, finish) {
     var taps = [];
     var button = el('button', 'probe-big');
@@ -726,7 +548,6 @@
     });
     body.appendChild(button);
   }
-
   function holdProbe(probe, body, trace, answer, finish) {
     var started = 0;
     var ticker = null;
@@ -773,14 +594,12 @@
     body.appendChild(button);
     body.appendChild(el('p', 'probe-count', 'the length of the press is the whole answer'));
   }
-
   function bucket(buckets, value, answer) {
     for (var i = 0; i < buckets.length; i++) {
       if (value < buckets[i].under) { add(answer, buckets[i].weights, 1); return; }
     }
     add(answer, buckets[buckets.length - 1].weights, 1);
   }
-
   function placeProbe(probe, body, trace, answer, finish) {
     var field = el('div', 'probe-field');
     field.setAttribute('role', 'application');
@@ -790,12 +609,13 @@
     mark.hidden = true;
     field.appendChild(mark);
     var cursor = { x: 0.5, y: 0.5 };
+    var placed = false;
     function place(x, y) {
       cursor.x = Math.min(1, Math.max(0, x));
       cursor.y = Math.min(1, Math.max(0, y));
       mark.hidden = false;
-      mark.style.left = (cursor.x * 100) + '%';
-      mark.style.top = (cursor.y * 100) + '%';
+      mark.style.left = cursor.x * 100 + '%';
+      mark.style.top = cursor.y * 100 + '%';
       var c = probe.corners;
       add(answer, c.topLeft, (1 - cursor.x) * (1 - cursor.y));
       add(answer, c.topRight, cursor.x * (1 - cursor.y));
@@ -808,7 +628,6 @@
       placed = true;
       finish();
     }
-    var placed = false;
     field.addEventListener('click', function (ev) {
       if (placed) return;
       var box = field.getBoundingClientRect();
@@ -823,8 +642,8 @@
         cursor.x = Math.min(1, Math.max(0, cursor.x + moves[ev.key][0]));
         cursor.y = Math.min(1, Math.max(0, cursor.y + moves[ev.key][1]));
         mark.hidden = false;
-        mark.style.left = (cursor.x * 100) + '%';
-        mark.style.top = (cursor.y * 100) + '%';
+        mark.style.left = cursor.x * 100 + '%';
+        mark.style.top = cursor.y * 100 + '%';
         trace.textContent = 'arrow keys move the mark, enter leaves it there';
       } else if (ev.key === 'Enter' || ev.key === ' ') {
         ev.preventDefault();
@@ -834,7 +653,6 @@
     body.appendChild(field);
     body.appendChild(el('p', 'probe-count', 'tap or click anywhere in the field, or move the mark with the arrow keys and press enter'));
   }
-
   function drawProbe(probe, body, trace, answer, finish) {
     var pad = el('canvas', 'probe-pad');
     pad.width = 520;
@@ -848,7 +666,7 @@
     function at(ev) {
       var box = pad.getBoundingClientRect();
       return { x: (ev.clientX - box.left) / box.width * pad.width,
-               y: (ev.clientY - box.top) / box.height * pad.height };
+        y: (ev.clientY - box.top) / box.height * pad.height };
     }
     function paint() {
       ctx.clearRect(0, 0, pad.width, pad.height);
@@ -882,7 +700,7 @@
         ev.preventDefault();
         var last = points.length ? points[points.length - 1] : { x: 40, y: pad.height / 2 };
         points.push({ x: Math.min(pad.width, Math.max(0, last.x + moves[ev.key][0])),
-                      y: Math.min(pad.height, Math.max(0, last.y + moves[ev.key][1])) });
+          y: Math.min(pad.height, Math.max(0, last.y + moves[ev.key][1])) });
         paint();
         if (trace.meter) trace.meter.textContent = points.length + ' samples';
         if (points.length === 1) trace.textContent = 'the arrow keys draw; enter finishes the line';
@@ -903,12 +721,12 @@
           var px = points[i - 1].x - points[i - 2].x;
           var py = points[i - 1].y - points[i - 2].y;
           var cross = Math.abs(px * dy - py * dx);
-          var scale = (Math.sqrt(px * px + py * py) * Math.sqrt(dx * dx + dy * dy)) || 1;
+          var scale = Math.sqrt(px * px + py * py) * Math.sqrt(dx * dx + dy * dy) || 1;
           turn += cross / scale;
         }
       }
       var span = Math.sqrt(Math.pow(points[points.length - 1].x - points[0].x, 2)
-                         + Math.pow(points[points.length - 1].y - points[0].y, 2));
+        + Math.pow(points[points.length - 1].y - points[0].y, 2));
       var wander = length / (span || 1);
       add(answer, length < pad.width * 0.4 ? probe.short : probe.long, 1);
       if (wander < 1.08) add(answer, probe.straight, 1);
@@ -919,7 +737,6 @@
     body.appendChild(pad);
     body.appendChild(el('p', 'probe-count', 'draw with a finger, a mouse, or the arrow keys'));
   }
-
   function windowsProbe(probe, body, trace, answer, finish) {
     var selected = [];
     var field = el('div', 'probe-windows');
@@ -950,8 +767,8 @@
         var xs = selected.map(function (i) { return i % 3; });
         var ys = selected.map(function (i) { return Math.floor(i / 3); });
         if (selected.indexOf(4) !== -1 &&
-            ((selected.indexOf(0) !== -1 && selected.indexOf(8) !== -1) ||
-             (selected.indexOf(2) !== -1 && selected.indexOf(6) !== -1))) {
+          ((selected.indexOf(0) !== -1 && selected.indexOf(8) !== -1) ||
+           (selected.indexOf(2) !== -1 && selected.indexOf(6) !== -1))) {
           add(answer, { divinatory: 3, ceremonial: 2, cosmic: 1 }, 1);
         } else if (xs.every(function (x) { return x === xs[0]; })) {
           add(answer, { geometric: 3, analytic: 2, metrical: 1 }, 1);
@@ -963,9 +780,7 @@
         } else if (xs.filter(function (x, i) { return xs.indexOf(x) === i; }).length === 3 &&
                    ys.filter(function (y, i) { return ys.indexOf(y) === i; }).length === 3) {
           add(answer, { curious: 3, verbal: 2, tempestuous: 1 }, 1);
-        } else {
-          add(answer, { brooding: 2, cosmic: 1, curious: 1 }, 1);
-        }
+        } else add(answer, { brooding: 2, cosmic: 1, curious: 1 }, 1);
         finish();
       });
       field.appendChild(button);
@@ -973,7 +788,6 @@
     body.appendChild(field);
     body.appendChild(el('p', 'probe-count', 'Tap a lit window to close it before lighting the third.'));
   }
-
   function sliderProbe(probe, body, trace, answer, finish) {
     var wrap = el('div', 'probe-dial');
     var input = document.createElement('input');
@@ -990,9 +804,7 @@
     wrap.appendChild(el('span', 'probe-dial-end', probe.high));
     var done = el('button', 'probe-option probe-undo', 'leave it there');
     done.type = 'button';
-    input.addEventListener('input', function () {
-      trace.textContent = 'the dial is somewhere it was not';
-    });
+    input.addEventListener('input', function () { trace.textContent = 'the dial is somewhere it was not'; });
     done.addEventListener('click', function () {
       var warmth = Number(input.value) / 100;
       add(answer, probe.cold, 1 - warmth);
@@ -1004,51 +816,38 @@
     body.appendChild(wrap);
     body.appendChild(done);
   }
-
   function describe(reading) {
     var o = reading && reading.orientation;
     if (!o || !reading.source || reading.source === 'signals') {
-      return 'Nothing read yet. Answer one sideways question and the site suggests a world to '
-        + 'start in, or take any world you like.';
+      return 'Nothing read yet. Answer one sideways question and the site suggests a world to start in, or take any world you like.';
     }
     var line = o.name + ' — ' + o.pull + '. That opens onto ' + o.worldName + '.';
     if (reading.source === 'answer') return 'Read just now as ' + line;
     return 'Carried over from your last answer: ' + line;
   }
-
   function currentReading() {
-    if (lastAnswered && state.orientation && lastAnswered.orientation.id === state.orientation) {
-      return lastAnswered;
-    }
+    if (lastAnswered && state.orientation && lastAnswered.orientation.id === state.orientation) return lastAnswered;
     return state.orientation
       ? { orientation: ORIENTATION_BY_ID[state.orientation], source: 'memory', signals: signals() }
       : readingFor(null);
   }
-
   function arrival() {
     var threshold = document.documentElement.getAttribute('data-page') === 'index.html';
     var arrived = sinceLast === null || sinceLast > ARRIVAL_GAP_MS;
     return threshold && (arrived || !state.orientation);
   }
-
   state.visits += 1;
   state.last = Date.now();
   transmogrify(state.orientation ? ORIENTATION_BY_ID[state.orientation] : null);
   save({ visits: state.visits, last: state.last, drift: state.drift,
-         recent: state.recent, orientation: state.orientation });
-
+    recent: state.recent, orientation: state.orientation });
   window.threshold = {
     orientations: function () { return ORIENTATIONS.slice(); },
     orientation: function (id) { return ORIENTATION_BY_ID[id] || null; },
-    probes: function () {
-      return PROBES.map(function (p) {
-        return { probe: p.probe, name: p.name || p.probe, kind: p.kind, ask: p.ask };
-      });
-    },
-    signals: signals,
-    reading: currentReading,
-    describe: describe,
-    mount: mount,
+    probes: function () { return PROBES.map(function (p) {
+      return { probe: p.probe, name: p.name || p.probe, kind: p.kind, ask: p.ask };
+    }); },
+    signals: signals, reading: currentReading, describe: describe, mount: mount,
     arrival: arrival,
     ask: function () { if (window.interestingPersona) window.interestingPersona.ask(); },
     reducedMotion: reducedMotion,
