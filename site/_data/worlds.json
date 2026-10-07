@@ -38,6 +38,8 @@
       "what": "Set the grit, plant and water, then take a core sample of the roots below." },
     { "file": "word-kiln.html", "name": "the word kiln", "orientation": "full of half-sentences", "mood": "verbal", "aspect": "5 / 4",
       "what": "Feed words into the kiln, draw out new terms, and let the batch cool." },
+    { "file": "cipher-cabinet.html", "name": "the cipher cabinet", "orientation": "full of half-sentences", "mood": "verbal", "aspect": "4 / 3",
+      "what": "Decode notes from a shifting house by turning a letter wheel, asking for a one-letter hint, and lifting the shutter." },
     { "file": "apocrypha-desk.html", "name": "the apocrypha desk", "orientation": "magpie", "mood": "curious", "aspect": "4 / 5",
       "what": "Name an impossible specimen, compare it with the drawer, or turn it to see another side." },
     { "file": "shadow-theatre.html", "name": "the shadow theatre", "orientation": "magpie", "mood": "curious", "aspect": "4 / 3",
