@@ -212,6 +212,19 @@
       ]
     },
     {
+      probe: 'hanging-bowls', name: 'the hanging balance', kind: 'balance',
+      ask: 'Seven brass weights and three hanging bowls. Press a bowl to give it a weight; divide all seven, then leave them hanging.',
+      total: 7,
+      bowls: [
+        { label: 'the key bowl', place: 'left', weights: { analytic: 3, geometric: 2, restless: 1, curious: 1 } },
+        { label: 'the shell bowl', place: 'middle', weights: { attentive: 3, cosmic: 2, brooding: 1, divinatory: 1 } },
+        { label: 'the seed bowl', place: 'right', weights: { tending: 3, rooted: 2, tender: 1, ceremonial: 1, verbal: 1 } }
+      ],
+      even: { geometric: 3, metrical: 2, tender: 1 },
+      spare: { curious: 2, tempestuous: 1, verbal: 1 },
+      gathered: { ceremonial: 2, divinatory: 2, restless: 1 }
+    },
+    {
       probe: 'dial', name: 'the dial', kind: 'slider',
       ask: 'Set the room. The dial does not say what it does.',
       low: 'frost on the inside of the glass', high: 'a kettle just off the boil',
@@ -419,7 +432,8 @@
     }
     var kinds = {
       choice: choiceProbe, sequence: sequenceProbe, tap: tapProbe, hold: holdProbe,
-      place: placeProbe, draw: drawProbe, windows: windowsProbe, slider: sliderProbe
+      place: placeProbe, draw: drawProbe, windows: windowsProbe, balance: balanceProbe,
+      slider: sliderProbe
     };
     (kinds[probe.kind] || choiceProbe)(probe, body, trace, answer, finish);
     return probe;
@@ -787,6 +801,154 @@
     });
     body.appendChild(field);
     body.appendChild(el('p', 'probe-count', 'Tap a lit window to close it before lighting the third.'));
+  }
+  // The final division is the answer, not the order of presses. Undo never leaves a reading behind.
+  function balanceProbe(probe, body, trace, answer, finish) {
+    var counts = probe.bowls.map(function () { return 0; });
+    var placed = [];
+    var submitted = false;
+    var picture = el('canvas', 'probe-pad');
+    picture.width = 600;
+    picture.height = 240;
+    picture.setAttribute('aria-hidden', 'true');
+    picture.style.cursor = 'default';
+    picture.style.touchAction = 'auto';
+    var g = picture.getContext('2d');
+    picture.hidden = !g;
+    body.appendChild(picture);
+    var group = el('div', 'probe-options');
+    group.setAttribute('role', 'group');
+    group.setAttribute('aria-label', 'Give the seven weights to these bowls');
+    var buttons = [];
+    var details = [];
+    probe.bowls.forEach(function (bowl, index) {
+      var button = el('button', 'probe-option');
+      button.type = 'button';
+      button.appendChild(el('span', 'probe-option-label', bowl.label));
+      var detail = el('span', 'probe-option-detail');
+      button.appendChild(detail);
+      button.addEventListener('click', function () {
+        if (submitted || placed.length >= probe.total) return;
+        counts[index] += 1;
+        placed.push(index);
+        redraw();
+      });
+      buttons.push(button);
+      details.push(detail);
+      group.appendChild(button);
+    });
+    body.appendChild(group);
+    var controls = el('div', 'controls');
+    var undo = el('button', 'btn-text', 'undo last weight');
+    undo.type = 'button';
+    undo.addEventListener('click', function () {
+      if (submitted || !placed.length) return;
+      counts[placed.pop()] -= 1;
+      redraw();
+    });
+    var leave = el('button', 'btn-filled', 'leave them hanging');
+    leave.type = 'button';
+    leave.addEventListener('click', function () {
+      if (submitted || placed.length !== probe.total) return;
+      submitted = true;
+      probe.bowls.forEach(function (bowl, index) {
+        add(answer, bowl.weights, counts[index] / probe.total);
+      });
+      var most = Math.max.apply(null, counts);
+      var least = Math.min.apply(null, counts);
+      if (most - least <= 1) add(answer, probe.even, 1);
+      else if (most === probe.total) add(answer, probe.gathered, 1);
+      else if (least === 0) add(answer, probe.spare, 1);
+      redraw();
+      finish();
+    });
+    controls.appendChild(undo);
+    controls.appendChild(leave);
+    body.appendChild(controls);
+
+    function paint() {
+      if (!g) return;
+      var style = window.getComputedStyle(body);
+      var primary = style.getPropertyValue('--md-sys-color-primary').trim();
+      var brass = style.getPropertyValue('--md-sys-color-tertiary').trim();
+      var ink = style.getPropertyValue('--md-sys-color-on-surface').trim();
+      var ground = style.getPropertyValue('--md-sys-color-surface-dim').trim();
+      var w = picture.width;
+      var h = picture.height;
+      var tilt = (counts[0] - counts[2]) * h * 0.012;
+      var beamY = function (x) { return h * 0.2 - (x - w / 2) / (w * 0.4) * tilt; };
+      g.fillStyle = ground;
+      g.fillRect(0, 0, w, h);
+      g.lineCap = 'round';
+      g.lineJoin = 'round';
+      g.lineWidth = 2;
+      g.strokeStyle = ink;
+      g.beginPath();
+      g.moveTo(w * 0.48, h * 0.07);
+      g.lineTo(w * 0.5, h * 0.2);
+      g.lineTo(w * 0.52, h * 0.07);
+      g.stroke();
+      g.strokeStyle = primary;
+      g.beginPath();
+      g.moveTo(w * 0.08, beamY(w * 0.08));
+      g.lineTo(w * 0.92, beamY(w * 0.92));
+      g.stroke();
+      counts.forEach(function (count, index) {
+        var x = w * (0.18 + index * 0.32);
+        var y = h * (0.64 + count * 0.018);
+        var bw = w * 0.18;
+        var bh = h * 0.16;
+        g.strokeStyle = ink;
+        g.lineWidth = 1.5;
+        g.beginPath();
+        g.moveTo(x, beamY(x));
+        g.lineTo(x, y - h * 0.06);
+        g.lineTo(x - bw / 2, y);
+        g.moveTo(x, y - h * 0.06);
+        g.lineTo(x + bw / 2, y);
+        g.stroke();
+        g.strokeStyle = primary;
+        g.lineWidth = 2.5;
+        g.beginPath();
+        g.moveTo(x - bw / 2, y);
+        g.quadraticCurveTo(x, y + bh * 2, x + bw / 2, y);
+        g.lineTo(x - bw / 2, y);
+        g.stroke();
+        g.fillStyle = brass;
+        var radius = h * 0.018;
+        for (var i = 0; i < count; i++) {
+          g.beginPath();
+          g.arc(x + (i % 3 - 1) * radius * 3,
+            y + bh - (Math.floor(i / 3) + 1) * radius * 2.5,
+            radius, 0, Math.PI * 2);
+          g.fill();
+        }
+      });
+      g.fillStyle = brass;
+      for (var i = placed.length; i < probe.total; i++) {
+        g.beginPath();
+        g.arc(w / 2 + (i - placed.length - (probe.total - placed.length - 1) / 2) * h * 0.055,
+          h * 0.92, h * 0.018, 0, Math.PI * 2);
+        g.fill();
+      }
+    }
+    function redraw() {
+      var left = probe.total - placed.length;
+      buttons.forEach(function (button, index) {
+        var bowl = probe.bowls[index];
+        details[index].textContent = bowl.place + ' bowl: ' + plural(counts[index], 'weight');
+        button.setAttribute('aria-label', 'Give one weight to ' + bowl.label + '; ' + plural(counts[index], 'weight') + ' inside');
+        button.disabled = submitted || left === 0;
+      });
+      undo.disabled = submitted || placed.length === 0;
+      leave.disabled = submitted || left !== 0;
+      trace.textContent = counts.map(function (count, index) {
+        return probe.bowls[index].label + ': ' + count;
+      }).join('; ') + '. ' + (left ? plural(left, 'weight') + ' left to place.'
+        : 'All seven hang. Leave them here, or undo a weight to change the balance.');
+      paint();
+    }
+    redraw();
   }
   function sliderProbe(probe, body, trace, answer, finish) {
     var wrap = el('div', 'probe-dial');
