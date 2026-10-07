@@ -84,9 +84,10 @@ jobs:
       cancel-in-progress: false
     runs-on: ubuntu-latest
     # Room for three attempts at a quarter of an hour each (MODEL_TIMEOUT_SECONDS in the script),
-    # plus a build of the site after every answer. A run that outlasts the hour makes the next
-    # scheduled run skip itself (the guard above), which is the intended way to wait.
-    timeout-minutes: 60
+    # plus a build of the site after every answer and a run of the tests on every answer that holds
+    # to the axioms (TESTS_TIMEOUT_SECONDS). A run that outlasts the hour makes the next scheduled
+    # run skip itself (the guard above), which is the intended way to wait.
+    timeout-minutes: 80
     permissions:
       contents: write # commit changes to /site
       copilot-requests: write # call GitHub Copilot with the workflow's own token
@@ -124,7 +125,9 @@ jobs:
 
       # Which kind of run this is -- a growing run or a consolidating run -- follows from the run
       # number: odd grows the site, even consolidates it, unless the manual "kind" input names one.
-      # The model is one of the heaviest Copilot offers, at near-maximum reasoning effort.
+      # The model is one of the heaviest Copilot offers, at near-maximum reasoning effort. An answer
+      # is only written once it passes test.yml's own tests, so what this leaves behind is a change
+      # the deploy pipeline will accept.
       - name: Ask one of the heaviest AI models to work on the website
         id: ai
         env:
@@ -181,6 +184,8 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git commit -m "${HEADLINE}: ${SUMMARY}" -m "Model: ${MODEL}" -m "Run: ${KIND}"
+          # The tree the script ran test.yml's tests on, before it wrote the change.
+          tested="$(git rev-parse 'HEAD^{tree}')"
           # The branch may have moved while the model was thinking: rebase the commit and try again.
           # The token is given to this one command; it was never written into the checkout.
           remote="https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
@@ -194,6 +199,16 @@ jobs:
             if ! git pull --rebase origin "${GITHUB_REF_NAME}"; then
               git rebase --abort || true
               break
+            fi
+            # Rebased onto commits the script never saw, the change is a tree nobody has tested, and
+            # pushing it could still block every deploy. test.yml's own command decides again, run
+            # with nothing of this step's environment but PATH, HOME and CI -- so not the token.
+            if [ "$(git rev-parse 'HEAD^{tree}')" != "$tested" ]; then
+              if ! env -i PATH="$PATH" HOME="$HOME" CI="${CI:-}" python3 -m unittest discover -s .github/scripts -v; then
+                echo "::error::Rebased onto the latest ${GITHUB_REF_NAME}, the change fails the tests, so it was not pushed."
+                break
+              fi
+              tested="$(git rev-parse 'HEAD^{tree}')"
             fi
           done
           if [ "$pushed" != true ]; then

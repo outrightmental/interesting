@@ -49,7 +49,10 @@ iterate a more interesting website
   and commits the result to `main`; the pipeline above then tests and deploys it. Models the
   account cannot use are skipped. A model
   that returns an unusable answer is replaced by another random model, or asked again if no other
-  is left, for up to three attempts per run.
+  is left, for up to three attempts per run. An answer is only written once it passes the very
+  tests the pipeline runs (test.yml's own command, on a copy of the repository with the change
+  applied), and if `main` moves on before the push the rebased commit is tested again, so the run
+  never pushes a commit that would block the deploy.
 - **Runs alternate** — an odd-numbered run is a *growing* run, with the mission **"make the
   website more interesting as a single coherent whole"**, and an even-numbered run is a
   *consolidating* run, with the mission **"consolidate, federate, refactor and clean up the website
