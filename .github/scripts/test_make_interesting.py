@@ -1208,7 +1208,9 @@ class HeaviestModelsTest(unittest.TestCase):
         self.assertEqual(mi.MODEL_TIMEOUT_SECONDS, 900)
         workflow = (mi.REPO_ROOT / ".github" / "workflows" / "make-interesting.yml").read_text()
         minutes = int(re.search(r"timeout-minutes: (\d+)\n    permissions:\n      contents: write", workflow).group(1))
-        self.assertGreaterEqual(minutes * 60, mi.MAX_ATTEMPTS * mi.MODEL_TIMEOUT_SECONDS + 3 * mi.BUILD_TIMEOUT_SECONDS)
+        # Every answer may also be held to the whole suite before it is written (require_passing_tests).
+        self.assertGreaterEqual(minutes * 60, mi.MAX_ATTEMPTS * (mi.MODEL_TIMEOUT_SECONDS + mi.TESTS_TIMEOUT_SECONDS)
+                                + 3 * mi.BUILD_TIMEOUT_SECONDS)
 
 
 class BuildPipelinePromptTest(unittest.TestCase):
@@ -6605,6 +6607,14 @@ GOOD_PLAN = json.dumps({
 
 
 class MainTest(SiteDirTestCase):
+    def setUp(self):
+        super().setUp()
+        # The gate runs this whole suite; DeployGateTest holds it to that, and here it lets every
+        # answer through, as the identity build does.
+        patcher = mock.patch.object(mi, "require_passing_tests")
+        self.require_passing_tests = patcher.start()
+        self.addCleanup(patcher.stop)
+
     def run_main(self, env=None):
         out = self.root / "github_output"
         full_env = {"GITHUB_OUTPUT": str(out), "MODEL": "", "MODEL_POOL": "", "RUN_KIND": "", "RUN_NUMBER": ""}
@@ -6823,6 +6833,39 @@ class MainTest(SiteDirTestCase):
         self.assertIn("COPILOT_GITHUB_TOKEN", str(caught.exception))
         self.assertEqual(len(fake.calls()), 1, "no point trying other models")
 
+    def test_an_answer_the_tests_refuse_is_not_written_and_the_next_model_is_asked(self):
+        # The gate comes after the axioms and before anything is written: an answer that holds to
+        # all nine but fails the tests every deploy waits on is refused like any other, and the
+        # run goes on to the next model rather than pushing a commit that blocks the deploy.
+        fake = FakeCopilot(self, f"say({GOOD_PLAN!r})")
+        refusal = "the tests every deploy waits on fail with this change: RealSiteTest.test_x (AssertionError: no)"
+        written = []
+
+        def gate(ops):
+            written.append((self.site / "clock.html").exists())
+            if len(written) == 1:
+                raise mi.RejectedChange(refusal)
+
+        self.require_passing_tests.side_effect = gate
+        output = self.run_main()
+        self.assertEqual(written, [False, False], "the gate ran after the change was written")
+        calls = fake.calls()
+        self.assertEqual(len(calls), 2)
+        self.assertIn(f"::warning::{calls[0]['args'][1]} failed: {refusal}", self.printed)
+        self.assertEqual(read_outputs(output)["model"], calls[1]["args"][1])
+        (ops,) = self.require_passing_tests.call_args.args
+        self.assertIn(("write", self.site / "clock.html", CLOCK_PAGE), ops)
+        self.assertEqual((self.site / "clock.html").read_text(), CLOCK_PAGE)
+
+    def test_a_run_whose_every_answer_the_tests_refuse_writes_nothing(self):
+        fake = FakeCopilot(self, f"say({GOOD_PLAN!r})")
+        self.require_passing_tests.side_effect = mi.RejectedChange("the tests every deploy waits on fail")
+        with self.assertRaises(SystemExit) as caught:
+            self.run_main()
+        self.assertIn("No model produced a usable change", str(caught.exception))
+        self.assertEqual(len(fake.calls()), mi.MAX_ATTEMPTS)
+        self.assertEqual(sorted(p.name for p in self.site.iterdir()), ["error.html", "index.html"])
+
     def test_rejected_plan_is_not_applied_even_in_part(self):
         evil = json.dumps({"summary": "x", "files": [{"path": "fine.html", "content": "x"},
                                                      {"path": "../pwned.html", "content": "x"}],
@@ -6833,6 +6876,174 @@ class MainTest(SiteDirTestCase):
         self.assertEqual(len(fake.calls()), mi.MAX_ATTEMPTS, "the model was really asked")
         self.assertFalse((self.root / "pwned.html").exists())
         self.assertEqual(sorted(p.name for p in self.site.iterdir()), ["error.html", "index.html"])
+
+
+class DeployGateTest(unittest.TestCase):
+    """No answer is written that fails the tests every deploy waits on.
+
+    The gate is run for real here, on a repository of its own: a site and a suite of four tests
+    about it, standing in for this one, whose suite would take the gate a whole run of this file.
+    """
+
+    REPO = Path(mi.__file__).resolve().parents[2]  # the real one, for the workflows
+
+    FAKE_SUITE = '''
+        import os
+        import time
+        import unittest
+        from pathlib import Path
+
+        ROOT = Path(__file__).resolve().parents[2]
+
+
+        class FakeSiteTest(unittest.TestCase):
+            def test_the_home_page_is_whole(self):
+                page = (ROOT / "site" / "index.html").read_text()
+                if "slow" in page:
+                    time.sleep(60)
+                self.assertNotIn("broken", page, page)
+
+            def test_the_retired_page_is_gone(self):
+                self.assertFalse((ROOT / "site" / "retired.html").exists())
+
+            def test_the_suite_runs_on_the_tree_as_committed(self):
+                self.assertFalse((ROOT / ".git").exists())
+                self.assertTrue((ROOT / "node_modules" / "eleventy").is_dir())
+
+            def test_nothing_of_the_run_reaches_the_suite(self):
+                self.assertEqual(os.environ.get("CI"), "from-the-runner")
+                for name in ["COPILOT_GITHUB_TOKEN", "GITHUB_TOKEN", "GITHUB_OUTPUT", "MODEL"]:
+                    self.assertNotIn(name, os.environ)
+    '''
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.root = Path(tmp.name).resolve() / "repository"
+        self.site = self.root / "site"
+        scripts = self.root / ".github" / "scripts"
+        scripts.mkdir(parents=True)
+        (scripts / "test_fake_site.py").write_text(textwrap.dedent(self.FAKE_SUITE))
+        self.site.mkdir()
+        (self.site / "index.html").write_text("<h1>home</h1>")
+        (self.site / "retired.html").write_text("<h1>retired</h1>")
+        (self.root / ".git").mkdir()
+        (self.root / ".git" / "HEAD").write_text("ref: refs/heads/main\n")
+        (self.root / "node_modules" / "eleventy").mkdir(parents=True)
+        for name, value in [("REPO_ROOT", self.root), ("SITE_DIR", self.site)]:
+            patcher = mock.patch.object(mi, name, value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        # What the workflow's step holds while the script runs, none of which the suite may see.
+        env = mock.patch.dict(os.environ, {"COPILOT_GITHUB_TOKEN": "secret", "GITHUB_TOKEN": "secret",
+                                           "GITHUB_OUTPUT": str(self.root / "output"), "MODEL": "model-a",
+                                           "CI": "from-the-runner"})
+        env.start()
+        self.addCleanup(env.stop)
+        os.environ.pop(mi.INSIDE_THE_GATE, None)  # this file may itself be the suite a gate is running
+        self.printed = []
+        printer = mock.patch("builtins.print", lambda *args, **kwargs: self.printed.append(" ".join(map(str, args))))
+        printer.start()
+        self.addCleanup(printer.stop)
+
+    def untouched(self):
+        self.assertEqual((self.site / "index.html").read_text(), "<h1>home</h1>")
+        self.assertTrue((self.site / "retired.html").is_file())
+
+    def test_a_change_that_passes_the_suite_is_let_through_without_being_written(self):
+        mi.require_passing_tests([("write", self.site / "index.html", "<h1>home, again</h1>"),
+                        ("delete", self.site / "retired.html", None)])
+        self.untouched()
+        self.assertEqual(self.printed, [])
+
+    def test_a_change_that_fails_the_suite_is_refused_naming_every_test_it_fails(self):
+        with self.assertRaises(mi.RejectedChange) as caught:
+            mi.require_passing_tests([("write", self.site / "index.html", "<h1>broken</h1>")])
+        refusal = str(caught.exception)
+        self.assertIn("(test.yml) fail with this change: FakeSiteTest.test_the_home_page_is_whole, "
+                      "FakeSiteTest.test_the_retired_page_is_gone "
+                      "(AssertionError: 'broken' unexpectedly found", refusal)
+        self.assertNotIn("test_nothing_of_the_run_reaches_the_suite", refusal)
+        self.assertNotIn("test_the_suite_runs_on_the_tree_as_committed", refusal)
+        self.untouched()
+
+    def test_the_log_shows_the_failures_and_obeys_none_of_what_they_quote(self):
+        # The model writes what a failing assertion quotes, so a line of it can look like a
+        # workflow command; the runner is told to ignore commands until the report is over.
+        with self.assertRaises(mi.RejectedChange):
+            mi.require_passing_tests([("write", self.site / "index.html", "broken\n::error::forged by the page")])
+        (log,) = self.printed
+        lines = log.splitlines()
+        self.assertEqual(lines[0], "::group::The tests this change fails")
+        self.assertTrue(lines[1].startswith("::stop-commands::"))
+        token = lines[1][len("::stop-commands::"):]
+        self.assertGreaterEqual(len(token), 32)
+        self.assertEqual(lines[-2:], [f"::{token}::", "::endgroup::"])
+        forged = lines.index("::error::forged by the page")
+        self.assertTrue(1 < forged < len(lines) - 2)
+        self.assertIn("FAIL: test_the_home_page_is_whole", log)
+
+    def test_a_suite_that_does_not_finish_in_time_refuses_the_change(self):
+        with mock.patch.object(mi, "TESTS_TIMEOUT_SECONDS", 3):
+            with self.assertRaises(mi.RejectedChange) as caught:
+                mi.require_passing_tests([("write", self.site / "index.html", "slow")])
+        self.assertIn("did not finish within 3s", str(caught.exception))
+        self.untouched()
+
+    def test_the_suite_the_gate_runs_does_not_run_it_again(self):
+        # A test that reaches main() inside the gate's own suite would otherwise start that suite
+        # again inside itself, and again inside that.
+        with mock.patch.dict(os.environ, {mi.INSIDE_THE_GATE: "1"}):
+            with mock.patch.object(mi.subprocess, "Popen", side_effect=AssertionError("the suite was started")):
+                mi.require_passing_tests([("write", self.site / "index.html", "<h1>broken</h1>")])
+
+    def test_failures_are_named_by_class_and_test_on_every_python(self):
+        report = textwrap.dedent("""\
+            test_a (suite.SomeTest.test_a) ... FAIL
+            ======================================================================
+            FAIL: test_a (suite.SomeTest.test_a) (world='x')
+            What the test checks, from its docstring.
+            ----------------------------------------------------------------------
+            Traceback (most recent call last):
+              File "suite.py", line 3, in test_a
+                self.assertEqual(1, 2)
+            AssertionError: 1 != 2
+
+            ======================================================================
+            FAIL: test_a (suite.SomeTest.test_a) (world='y')
+            ======================================================================
+            ERROR: test_b (suite.OtherTest)
+            ======================================================================
+            ERROR: setUpClass (suite.RealSiteTest)
+            ----------------------------------------------------------------------
+            Ran 3 tests in 0.1s
+
+            FAILED (failures=2, errors=2)
+        """)
+        self.assertEqual(mi.failing_tests(report),
+                         ["SomeTest.test_a", "OtherTest.test_b", "RealSiteTest.setUpClass"])
+        self.assertEqual(mi.first_failure(report), "AssertionError: 1 != 2")
+        self.assertEqual(mi.first_failure("Traceback ...\nSyntaxError: bad\n"), "SyntaxError: bad")
+
+    def test_the_gate_runs_test_yml_s_own_command(self):
+        test = (self.REPO / ".github" / "workflows" / "test.yml").read_text()
+        self.assertIn("run: python3 " + " ".join(mi.TEST_COMMAND) + "\n", test)
+        self.assertEqual(mi.TEST_COMMAND[mi.TEST_COMMAND.index("-s") + 1], mi.TESTS_DIR)
+        self.assertEqual(Path(mi.__file__).resolve().parent, self.REPO / mi.TESTS_DIR)
+
+    def test_a_rebased_change_is_tested_again_before_it_is_pushed(self):
+        # The script tested the change on the main it started from. If main has moved by the time
+        # of the push, the rebased commit is a tree nobody has tested, and the workflow runs the
+        # same command on it inside the push loop -- with no token in reach.
+        workflow = (self.REPO / ".github" / "workflows" / "make-interesting.yml").read_text()
+        step = workflow[workflow.index("- name: Commit and push"):]
+        loop = step[step.index("for attempt in"):step.index("\n          done\n")]
+        rebase = loop.index("git pull --rebase")
+        retest = loop.index("python3 " + " ".join(mi.TEST_COMMAND) + "; then")
+        self.assertLess(rebase, retest)
+        self.assertIn("break", loop[retest:], "a change that fails once rebased is still pushed")
+        given = re.search(r"env -i ((?:\w+=\S+ )+)python3", loop).group(1)
+        self.assertLessEqual(set(re.findall(r"(\w+)=", given)), set(mi.TEST_ENVIRONMENT))
 
 
 class ScriptSmokeTest(unittest.TestCase):

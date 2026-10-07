@@ -80,6 +80,13 @@ Nine axioms stand over every run, each stated in the prompt and held to in code:
 The files behind the analytics, state and participation axioms (FIXED_FILES) are
 never shown to a model and are refused outright as a write or a delete.
 
+An answer that holds to all nine is then held to the repository's own tests, the
+ones deploy.yml runs before every deploy: require_passing_tests() runs test.yml's
+command on a copy of the repository with the change applied, and refuses the
+answer if any test fails. A refused answer is never written, and if main moves on
+before the push, the workflow runs the tests again on the rebased commit, so the
+hourly run cannot push a commit that blocks the deploy.
+
 The model is reached through the GitHub Copilot CLI (`copilot`), which bills the
 GitHub Copilot subscription behind the token in COPILOT_GITHUB_TOKEN. (GitHub
 Models, which this script originally called, was retired on 2026-07-30.)
@@ -2711,6 +2718,120 @@ def validate_plan(plan, unseen=()):
     return ops
 
 
+# The tests every deploy waits on. deploy.yml runs test.yml on each commit that lands on main and
+# publishes nothing until it passes, and the nine axioms are only part of what it checks:
+# RealSiteTest holds the site as committed to much more besides (the shell's shared lines, the
+# stage's markup, what every module says its cards are of). On 2026-10-06 the hourly run twice
+# pushed a commit that had passed every check in validate_plan and failed those tests, and every
+# deploy after it was blocked until a person repaired main. So an answer that has passed the axioms
+# is then held to the whole suite, run with test.yml's own command on a copy of the repository with
+# the change applied, and one that fails it is refused like any other: nothing is written to /site,
+# and the next model is asked. The suite is run rather than restated here, because a second copy of
+# it would drift from the first.
+TESTS_DIR = ".github/scripts"
+TEST_COMMAND = ["-m", "unittest", "discover", "-s", TESTS_DIR, "-v"]  # after `python3`, as in test.yml
+# test.yml gives its whole job ten minutes, setup and the infrastructure checks included, so a suite
+# that needs longer than this would time out there as well.
+TESTS_TIMEOUT_SECONDS = 480
+# All the suite is given of this run's environment: where the tools are, and CI, under which a test
+# that cannot find the toolchain fails instead of skipping, as it does in test.yml. Nothing that
+# could hold a token, and none of this run's settings, which the tests do not expect to find set.
+TEST_ENVIRONMENT = ("PATH", "HOME", "LANG", "LC_ALL", "TMPDIR", "CI", "NODE_BIN")
+# Set for the suite the gate runs. A test that reaches main() inside it must not start the suite
+# again inside itself.
+INSIDE_THE_GATE = "MAKE_INTERESTING_TESTING"
+# How a failing test is named in unittest's report: "FAIL: test_x (module.Class.test_x)", with the
+# class alone on Pythons before 3.11, and "ERROR: setUpClass (module.Class)" for a class that
+# could not even start.
+FAILED_TEST = re.compile(r"^(?:FAIL|ERROR): (\w+) \(([\w.]+)\)", re.M)
+UNITTEST_RULE = "=" * 70  # opens each failure in the report
+
+
+def copy_repository(root):
+    """Copy the repository to `root` as it would be committed: everything but .git, node_modules
+    (linked, not copied) and the bytecode Python leaves behind, with SITE_DIR as its /site."""
+    def skip(folder, names):
+        skipped = {"__pycache__"}
+        if Path(folder).resolve() == REPO_ROOT:
+            skipped |= {".git", "node_modules", "site"}
+        return skipped & set(names)
+
+    shutil.copytree(REPO_ROOT, root, symlinks=True, ignore=skip)
+    shutil.copytree(SITE_DIR, root / "site", symlinks=True, ignore=skip)
+    if (REPO_ROOT / "node_modules").exists():
+        (root / "node_modules").symlink_to(REPO_ROOT / "node_modules", target_is_directory=True)
+
+
+def failing_tests(report):
+    """The tests unittest's `report` says failed, as ["Class.test_name", ...] in report order."""
+    named = []
+    for test, where in FAILED_TEST.findall(report):
+        parts = where.split(".")
+        owner = parts[-2] if parts[-1] == test and len(parts) > 1 else parts[-1]
+        if f"{owner}.{test}" not in named:
+            named.append(f"{owner}.{test}")
+    return named
+
+
+def first_failure(report):
+    """The exception line of the first failure in unittest's `report`, or its last line if none."""
+    found = FAILED_TEST.search(report)
+    if found:
+        # Past the rule under the test's name (and its docstring, if it has one), the traceback,
+        # whose first unindented line after "Traceback" is the exception.
+        traceback = report[found.end():].split(UNITTEST_RULE.replace("=", "-"), 1)[-1]
+        for line in traceback.splitlines():
+            if line and not line[0].isspace() and not line.startswith("Traceback"):
+                return line
+    lines = [line for line in report.splitlines() if line.strip()]
+    return lines[-1] if lines else "the tests failed and said nothing"
+
+
+def require_passing_tests(ops):
+    """Raise RejectedChange if the repository's tests fail once `ops` are applied.
+
+    The suite runs on a copy, so /site is untouched whatever it finds, and in a process given only
+    TEST_ENVIRONMENT: the tests run the site's own scripts, which a model wrote.
+    """
+    if os.environ.get(INSIDE_THE_GATE):
+        return
+    with tempfile.TemporaryDirectory(prefix="tested-") as work:
+        root = Path(work) / "repository"
+        copy_repository(root)
+        for action, target, content in ops:
+            path = root / "site" / target.relative_to(SITE_DIR)
+            if action == "write":
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(content)
+            elif path.is_file():
+                path.unlink()
+        env = {name: os.environ[name] for name in TEST_ENVIRONMENT if name in os.environ}
+        env[INSIDE_THE_GATE] = "1"
+        proc = subprocess.Popen([sys.executable, *TEST_COMMAND], stdout=subprocess.PIPE,
+                                stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace",
+                                cwd=root, env=env, start_new_session=True)
+        try:
+            report, _ = proc.communicate(timeout=TESTS_TIMEOUT_SECONDS)
+        except subprocess.TimeoutExpired:
+            stop_process_group(proc)
+            raise RejectedChange(f"the tests did not finish within {TESTS_TIMEOUT_SECONDS}s with this "
+                                 "change, so test.yml would time out and block every deploy") from None
+        except BaseException:
+            stop_process_group(proc)  # interrupted: leave nothing running
+            raise
+    if proc.returncode == 0:
+        return
+    # Every failure in full, for whoever reads the log. The model wrote what they quote, so the
+    # runner is told to take none of it as a workflow command.
+    details = report[report.find(UNITTEST_RULE):] if UNITTEST_RULE in report else report
+    token = uuid.uuid4().hex
+    print(f"::group::The tests this change fails\n::stop-commands::{token}\n{details.rstrip()}\n"
+          f"::{token}::\n::endgroup::")
+    failed = ", ".join(failing_tests(report)) or f"status {proc.returncode}"
+    raise RejectedChange(f"the tests every deploy waits on (test.yml) fail with this change: {failed} "
+                         f"({first_failure(report)})")
+
+
 def apply_ops(ops):
     for action, target, content in ops:
         rel = target.relative_to(SITE_DIR).as_posix()
@@ -2815,6 +2936,8 @@ def main():
         try:
             plan = parse_response(call_model(model, prompt, budget=budget))
             ops = validate_plan(plan, unseen=omitted)
+            print("The change holds to every axiom; running the tests every deploy waits on.", flush=True)
+            require_passing_tests(ops)
         except ModelUnavailable as err:
             attempts -= 1  # no model was asked, so this does not count as an attempt
             more = ", trying another model" if queue or answering else ""
