@@ -156,7 +156,7 @@
 // The box is the whole viewport and it centres whatever is in it. It is a layer inside the mark
 // itself, which the shared lightbox lifts over the veil whole (_lightbox.scss), so this only has
 // to sort itself against the constellation it replaces and the logo above them both. The panel
-// brings its own size and its own paint with it, from the fixed file: a stylesheet an hourly run
+// brings its own size and its own paint with it, from the fixed file: a stylesheet the site
 // owns may frame the state interface but can never make it unreadable. The top padding is what
 // keeps the panel clear of the logo on a small screen, and the overflow is for a viewport too
 // short for it, where the box scrolls rather than cropping it.

@@ -376,7 +376,7 @@ export default {
       text: duet
         ? 'Two cutouts share the light. Slide their shadows together and discover what they cast.'
         : 'Pierce a paper shadow, move the lamp and see what waits behind the curtain.',
-      mono: 'cut tonight  ' + p.options.join(', ') + '\nlamp         ' + p.lamp + ' from the left',
+      mono: 'cutouts  ' + p.options.join(', ') + '\nlamp     ' + p.lamp + ' from the left',
       aspect: '4 / 3',
       paint: (g, w, h, cardEnv) => picture(g, w, h, cardEnv, p, duet),
       // What this card is of, for the feature it opens as: the cutouts it has cut and where its
