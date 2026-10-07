@@ -1,8 +1,7 @@
-/* The shared feed. _includes/worlds.njk supplies one plain link per world; this module paints those cards, deals pieces between them, and hands a selected card to js/stage.js. A world module exports paint, optional animate, spark and piece. Card env carries seed, seeded rnd/pick/int/chance, stars, colors, world and variant; a repeat gets a fresh variant from js/variant.js. A pressed card hands its whole configuration to the stage -- its seed, the variant rolled from it, the four palette seeds it wears and the content it was showing (palette() and shown() below; open() and take() handing them over) -- so the feature is the card that was pressed rather than a generic page of its world (issue #80). A spark may put `of` on its spec, the module's own note about what its card is of; the stage hands it straight back as env.card.of. */
+/* The shared feed. _includes/worlds.njk supplies one plain link per world; this module paints those cards, deals pieces between them, and hands a selected card to js/stage.js. Card env carries seed, seeded rnd/pick/int/chance, stars, colors, world and variant. A pressed card hands its seed, variant, palette and displayed content to the stage, including the module's own `of` value. */
 import { roll, PLAIN, recolor, aspect, light, mulberry32, hash, mix, alpha } from './variant.js';
 
 const persona = window.interestingPersona;
-const site = window.interestingSite;
 const root = document.documentElement.getAttribute('data-root') || '';
 const here = document.documentElement.getAttribute('data-page') || '';
 const calm = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : { matches: false };
@@ -99,11 +98,6 @@ function palette(card, m) {
   return seeds;
 }
 
-/* What a card is showing, as content: it travels with the card to the stage and is the feature's own
-   title and line there (issue #80). A spark card shows the spec its module made for the card's seed
-   and variant, `of` and all; a world card shows its world's orientation, name and line, which is
-   the one thing every card of that world says, so the feature it opens has to be titled by its
-   piece. Nothing is invented or re-rolled here: this is the card as the visitor last saw it. */
 function shown(m) {
   if (!m || !m.world) return null;
   const spec = m.spec;
@@ -201,29 +195,6 @@ function paintUnpowered(ctx, w, h, env) {
   }
 }
 
-function paintSky(ctx, w, h, env) {
-  paintFallback(ctx, w, h, env);
-  const pts = env.points(w, h, 14);
-  ctx.lineWidth = 1;
-  for (let i = 0; i < pts.length; i++) {
-    for (let j = i + 1; j < pts.length; j++) {
-      const d = Math.hypot(pts[j].x - pts[i].x, pts[j].y - pts[i].y);
-      if (d > Math.min(w, h) * 0.32 * env.variant.scale) continue;
-      ctx.strokeStyle = alpha(env.colors.accent, 0.5 - d / Math.min(w, h) * 0.9);
-      ctx.beginPath();
-      ctx.moveTo(pts[i].x, pts[i].y);
-      ctx.lineTo(pts[j].x, pts[j].y);
-      ctx.stroke();
-    }
-  }
-  for (const p of pts) {
-    ctx.fillStyle = alpha(env.colors.fg, 0.95);
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, 1.8 * env.variant.scale, 0, Math.PI * 2);
-    ctx.fill();
-  }
-}
-
 async function paint(card) {
   const m = meta.get(card);
   if (!m || !m.canvas || !card.isConnected) return;
@@ -238,10 +209,6 @@ async function paint(card) {
   if (!ctx) return;
   const env = makeEnv(card, m.seed, m.world, m.variant);
   Object.assign(m, { ctx, w, h, env, painted: true, dirty: false, animate: null });
-  if (m.sky) {
-    paintSky(ctx, w, h, env);
-    return;
-  }
   if (mod && mod.needsSky && !env.stars.length) {
     const ghost = makeEnv(card, m.seed, m.world, m.variant, ghostSky(m.seed, env.variant));
     if (typeof mod.paint === 'function') mod.paint(ctx, w, h, ghost);
@@ -460,41 +427,6 @@ function reroll(card) {
   relayout();
 }
 
-function unlockCard() {
-  const card = el('article', 'card card-unlock card-enter');
-  const stack = el('div', 'card-stack');
-  const picture = media('16 / 10');
-  stack.appendChild(picture.box);
-  const body = el('div', 'card-body');
-  body.appendChild(el('p', 'card-overline', 'your sky'));
-  const text = el('p', 'card-text');
-  text.hidden = true;
-  body.appendChild(text);
-  stack.appendChild(body);
-  card.appendChild(stack);
-  meta.set(card, { kind: 'unlock', sky: true, seed: newSeed(), variant: PLAIN, canvas: picture.canvas, world: null });
-  if (site && typeof site.unlock === 'function') {
-    site.unlock(picture.box, {
-      onReady(stars) {
-        const n = Array.isArray(stars) ? stars.length : 0;
-        text.textContent = n + ' star' + (n === 1 ? '' : 's') + '. Open your persona to move them.';
-        text.hidden = false;
-        const m = meta.get(card);
-        if (m) {
-          m.dirty = true;
-          if (m.visible) paint(card);
-        }
-        relayout();
-      },
-      onPowerDown() {
-        text.hidden = true;
-        relayout();
-      }
-    });
-  }
-  return card;
-}
-
 function consume(card) {
   const at = cards.indexOf(card);
   if (at < 0) return;
@@ -538,9 +470,6 @@ function openFromCard(ev) {
   const seeds = palette(card, m);
   const file = m.world.file;
   const seed = m.seed;
-  // The rest of what the card is, read before it leaves: its configuration and the content it was
-  // showing. The stage frames, paints and titles the feature from these and hands them to the
-  // world's module on env, so what opens is the piece that was pressed (issue #80).
   const variant = m.variant;
   const was = shown(m);
   consume(card);
@@ -551,7 +480,6 @@ const order = shuffle(WORLDS.slice(), mulberry32(salt));
 let cursor = 0;
 let dealt = 0;
 let busy = false;
-let unlockDealt = false;
 function nextWorld() {
   if (!order.length) return null;
   const world = order[cursor % order.length];
@@ -562,10 +490,6 @@ function nextWorld() {
 async function buildNext() {
   dealt += 1;
   const skyReady = skyStars().length > 0;
-  if (!unlockDealt && !skyReady && dealt === 2 && persona) {
-    unlockDealt = true;
-    return unlockCard();
-  }
   if (dealt % 4 === 0) {
     const world = nextWorld();
     return world ? worldCard(world, newSeed()) : null;
@@ -671,7 +595,7 @@ function start() {
   window.addEventListener('persona:sky', () => {
     for (const card of cards) {
       const m = meta.get(card);
-      if (!m || !(m.sky || m.id && modules.has(m.id) && m.painted)) continue;
+      if (!m || !(m.id && modules.has(m.id) && m.painted)) continue;
       m.dirty = true;
       if (m.visible) paint(card);
     }
