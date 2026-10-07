@@ -5849,13 +5849,15 @@ class RealSiteTest(unittest.TestCase):
                 self.assertNotIn("world.what", line,
                                  "the stage still titles a feature with the world's generic line")
         # And every world's module says what its cards are of, so its piece can open on that very
-        # thing rather than rolling another (the piece harness holds each one to it).
+        # thing rather than rolling another (the piece harness holds each one to it). `of` may be
+        # written out as an object or be the plan the card was dealt from (`of: p`, as the pulse
+        # loom and the gravity well hand theirs over): what it holds is the harness's to judge.
         for rel, text in sorted(self.source.items()):
             if not rel.startswith("js/modules/"):
                 continue
             with self.subTest(module=rel):
                 self.assertIn("env.card", text, "this world's piece ignores the card it opens from")
-                self.assertRegex(text, r"\bof: \{", "this world's cards say nothing about what they are of")
+                self.assertRegex(text, r"\bof:\s*[\w{]", "this world's cards say nothing about what they are of")
 
     # The viewport the screenshot on issue #65 was taken at -- a 14-inch MacBook Pro is 1512 CSS
     # pixels wide, and about 850 tall with the browser's own chrome off the top of it -- and three
