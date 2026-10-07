@@ -1,3 +1,6 @@
+/* Light through slits, or through crossed polarizing filters. Each shape carries its subject
+   from card to piece; a carried subject takes precedence over the seed's choice of shape. */
+
 const SLITS = [
   { label: 'both slits open', value: 'two' },
   { label: 'cover one slit', value: 'one' }
@@ -37,6 +40,14 @@ function setup(env) {
     u: env.rnd(), x: env.rnd(), jitter: env.rnd()
   }));
   return { subject, marks };
+}
+
+function background(g, w, h, env) {
+  const ground = g.createLinearGradient(0, 0, w, h);
+  ground.addColorStop(0, env.colors.bg2);
+  ground.addColorStop(1, env.colors.bg);
+  g.fillStyle = ground;
+  g.fillRect(0, 0, w, h);
 }
 
 function profile(p, state, variant) {
@@ -81,11 +92,7 @@ function scene(g, w, h, env, p, state, marks) {
   const middle = h * 0.5;
   const sourceX = w * (0.13 + (v.turn - 0.5) * 0.035);
   const distribution = profile(p, state, v);
-  const ground = g.createLinearGradient(0, 0, w, h);
-  ground.addColorStop(0, c.bg2);
-  ground.addColorStop(1, c.bg);
-  g.fillStyle = ground;
-  g.fillRect(0, 0, w, h);
+  background(g, w, h, env);
 
   g.fillStyle = env.mix(c.bg, c.bg2, 0.55);
   g.fillRect(screenX, screenTop, screenW, screenH);
@@ -147,7 +154,7 @@ function scene(g, w, h, env, p, state, marks) {
   g.fill();
 }
 
-function piece(env) {
+function slitPiece(env) {
   const made = setup(env);
   const p = carried(env) || made.subject;
   const v = env.variant || PLAIN;
@@ -221,15 +228,338 @@ function piece(env) {
   };
 }
 
+const FILTER_PLACES = [
+  { label: 'set it aside', value: 'aside' },
+  { label: 'before both', value: 'before' },
+  { label: 'between them', value: 'between' },
+  { label: 'after both', value: 'after' }
+];
+const FILTER_BRIEF = 'Two crossed filters stop the light. Move a third filter, turn it, and compare all four placements to find out whether another barrier can brighten the screen.';
+
+function dealsFilters(env) {
+  return (env.seed >>> 0) % 3 === 2;
+}
+
+function filterPlan(env) {
+  return {
+    family: 'crossed-filters',
+    number: env.int(101, 999),
+    axis: env.int(0, 11) * 15,
+    turn: env.pick([20, 30, 40, 50, 60, 70])
+  };
+}
+
+function carriedFilters(env) {
+  const p = env.card && env.card.of;
+  if (!p || p.family !== 'crossed-filters'
+      || !Number.isInteger(p.number) || p.number < 101 || p.number > 999
+      || !Number.isInteger(p.axis) || p.axis < 0 || p.axis > 165 || p.axis % 15 !== 0
+      || !Number.isInteger(p.turn) || p.turn < 0 || p.turn > 90) return null;
+  return { family: p.family, number: p.number, axis: p.axis, turn: p.turn };
+}
+
+function filterTitle(p) {
+  return 'filter set ' + p.number + ': the bright barrier';
+}
+
+function filterState(p) {
+  return { place: 'aside', turn: p.turn, comparing: false, compared: false, phase: 0 };
+}
+
+// Unpolarized light loses half at the first ideal polarizer. Each subsequent one passes
+// cos(angle difference)^2. In the middle this is 0.5*cos(turn)^2*sin(turn)^2, at most 1/8.
+function filterTrain(turn, place) {
+  const plates = [
+    { id: 'first', x: 0.34, axis: 0 },
+    { id: 'second', x: 0.66, axis: 90 }
+  ];
+  if (place !== 'aside') {
+    const x = { before: 0.18, between: 0.5, after: 0.82 }[place];
+    plates.push({ id: 'loose', x, axis: turn });
+  }
+  plates.sort((a, b) => a.x - b.x);
+  let light = 1;
+  let previous = null;
+  for (const plate of plates) {
+    light *= previous === null ? 0.5 : Math.cos((plate.axis - previous) * Math.PI / 180) ** 2;
+    if (light < 1e-10) light = 0;
+    plate.light = light;
+    previous = plate.axis;
+  }
+  return { plates, light };
+}
+
+function percent(light) {
+  if (light > 0 && light < 0.001) return (light * 100).toFixed(2) + '%';
+  return Math.round(light * 1000) / 10 + '%';
+}
+
+function filterReading(s) {
+  const where = s.place === 'aside' ? 'set aside' : s.place + ' the crossed pair';
+  return 'Loose filter ' + where + ', turned ' + s.turn + ' degrees from the first. '
+    + percent(filterTrain(s.turn, s.place).light) + ' of the incoming light reaches the screen.';
+}
+
+function comparisonReading(turn) {
+  return 'At ' + turn + ' degrees: ' + FILTER_PLACES.map((place) =>
+    place.value + ' ' + percent(filterTrain(turn, place.value).light)).join('; ') + '.';
+}
+
+function filterBeam(g, x1, x2, y, h, light, env, variant) {
+  if (light === 0) {
+    g.strokeStyle = env.alpha(env.colors.muted, 0.45);
+    g.lineWidth = 1;
+    g.setLineDash([3, 5]);
+    g.beginPath();
+    g.moveTo(x1, y);
+    g.lineTo(x2, y);
+    g.stroke();
+    g.setLineDash([]);
+    return;
+  }
+  const band = h * 0.048 * variant.scale;
+  g.fillStyle = env.alpha(env.colors.accent2, 0.03 + light * 0.14);
+  g.fillRect(x1, y - band / 2, x2 - x1, band);
+  const rays = Math.max(3, Math.round(5 * variant.density));
+  g.strokeStyle = env.alpha(env.colors.accent2, 0.12 + Math.sqrt(light) * 0.78);
+  g.lineWidth = Math.max(0.7, Math.min(2, h * 0.006));
+  g.beginPath();
+  for (let i = 0; i < rays; i++) {
+    const at = y + (i / (rays - 1) - 0.5) * band;
+    g.moveTo(x1, at);
+    g.lineTo(x2, at);
+  }
+  g.stroke();
+}
+
+function filterPlate(g, x, y, radius, axis, loose, env, variant) {
+  const c = env.colors;
+  g.save();
+  g.translate(x, y);
+  g.beginPath();
+  g.arc(0, 0, radius, 0, Math.PI * 2);
+  g.fillStyle = env.mix(c.bg, c.bg2, 0.7);
+  g.fill();
+  g.save();
+  g.clip();
+  g.rotate(axis * Math.PI / 180);
+  g.strokeStyle = loose ? c.accent2 : c.accent;
+  g.lineWidth = Math.max(1, radius * 0.055);
+  const lines = Math.max(4, Math.round(7 * variant.density));
+  g.beginPath();
+  for (let i = 0; i <= lines; i++) {
+    const at = (i / lines * 2 - 1) * radius;
+    g.moveTo(at, -radius);
+    g.lineTo(at, radius);
+  }
+  g.stroke();
+  g.restore();
+  g.strokeStyle = c.fg;
+  g.lineWidth = Math.max(1, radius * 0.055);
+  g.beginPath();
+  g.arc(0, 0, radius, 0, Math.PI * 2);
+  g.stroke();
+  if (loose) {
+    g.strokeStyle = c.accent2;
+    g.beginPath();
+    g.arc(0, 0, radius * 1.13, 0, Math.PI * 2);
+    g.moveTo(0, -radius * 1.13);
+    g.lineTo(0, -radius * 1.35);
+    g.stroke();
+  }
+  g.restore();
+}
+
+function filterScreen(g, x, y, w, h, light, env) {
+  const c = env.colors;
+  g.fillStyle = light > 0 ? env.mix(c.bg, c.accent2, Math.min(1, Math.sqrt(light) * 1.8)) : c.bg;
+  g.fillRect(x, y, w, h);
+  g.strokeStyle = c.muted;
+  g.lineWidth = 1;
+  g.strokeRect(x, y, w, h);
+  if (light === 0) {
+    g.strokeStyle = env.alpha(c.fg, 0.6);
+    g.beginPath();
+    g.moveTo(x + w * 0.25, y + h * 0.25);
+    g.lineTo(x + w * 0.75, y + h * 0.75);
+    g.moveTo(x + w * 0.75, y + h * 0.25);
+    g.lineTo(x + w * 0.25, y + h * 0.75);
+    g.stroke();
+  }
+}
+
+function filterScene(g, w, h, env, p, s) {
+  const c = env.colors;
+  const v = env.variant || PLAIN;
+  const train = filterTrain(s.turn, s.place);
+  const y = h * 0.3;
+  const radius = Math.min(w * 0.051, h * 0.095) * v.scale;
+  const size = Math.max(10, Math.min(18, Math.round(Math.min(w, h) * 0.038)));
+  const axis = p.axis + v.turn * 180;
+  g.save();
+  background(g, w, h, env);
+  let from = w * 0.045;
+  let light = 1;
+  for (const plate of train.plates) {
+    filterBeam(g, from, plate.x * w, y, h, light, env, v);
+    from = plate.x * w;
+    light = plate.light;
+  }
+  filterBeam(g, from, w * 0.93, y, h, light, env, v);
+  g.fillStyle = c.fg;
+  g.beginPath();
+  g.arc(w * 0.045, y, Math.max(2, radius * 0.22), 0, Math.PI * 2);
+  g.fill();
+  filterScreen(g, w * 0.93, y - h * 0.13, w * 0.025, h * 0.26, train.light, env);
+
+  g.font = '500 ' + size + 'px system-ui, sans-serif';
+  g.textBaseline = 'middle';
+  g.fillStyle = c.fg;
+  g.textAlign = 'left';
+  g.fillText('in: 100%', w * 0.04, h * 0.075);
+  g.textAlign = 'right';
+  g.fillText('screen: ' + percent(train.light), w * 0.96, h * 0.075);
+  g.textAlign = 'center';
+  for (const plate of train.plates) {
+    filterPlate(g, plate.x * w, y, radius, axis + plate.axis, plate.id === 'loose', env, v);
+    g.fillStyle = c.fg;
+    g.fillText(plate.id, plate.x * w, y + radius + size * 1.25);
+  }
+  if (s.place === 'aside') {
+    const spareY = h * 0.54;
+    filterPlate(g, w * 0.5, spareY, radius, axis + s.turn, true, env, v);
+    g.fillStyle = c.fg;
+    g.fillText('loose: ' + s.turn + ' degrees', w * 0.5, spareY + radius + size * 1.25);
+  } else {
+    g.fillStyle = c.fg;
+    g.fillText('loose: ' + s.turn + ' degrees from the first', w * 0.5, h * 0.62);
+  }
+
+  if (s.comparing) {
+    const read = Math.floor(s.phase * FILTER_PLACES.length);
+    FILTER_PLACES.forEach((place, i) => {
+      const x = w * (0.06 + (i + 0.5) * 0.22);
+      g.fillStyle = c.fg;
+      g.fillText(place.value, x, h * 0.77);
+      if (i < read) {
+        const result = filterTrain(s.turn, place.value).light;
+        filterScreen(g, x - w * 0.06, h * 0.81, w * 0.12, h * 0.06, result, env);
+        g.fillStyle = c.fg;
+        g.fillText(percent(result), x, h * 0.925);
+      } else {
+        g.fillStyle = c.muted;
+        g.fillText('not read', x, h * 0.925);
+      }
+      if (place.value === s.place) {
+        g.strokeStyle = c.accent2;
+        g.lineWidth = 2;
+        g.beginPath();
+        g.moveTo(x - w * 0.065, h * 0.975);
+        g.lineTo(x + w * 0.065, h * 0.975);
+        g.stroke();
+      }
+    });
+  }
+  g.restore();
+}
+
+function filterPreview(g, w, h, env, p) {
+  filterScene(g, w, h, env, p, filterState(p));
+}
+
+function filterPiece(env, carriedPlan) {
+  const p = carriedPlan || filterPlan(env);
+  const s = filterState(p);
+  const draw = (c) => filterScene(c.g, c.w, c.h, env, p, s);
+  return {
+    title: filterTitle(p),
+    brief: FILTER_BRIEF,
+    aspect: '4 / 3',
+    steps: [
+      { id: 'place', ask: 'where the loose filter goes', kind: 'choice', options: FILTER_PLACES },
+      { id: 'turn', ask: 'turn the loose filter relative to the first', kind: 'range', min: 0, max: 90, step: 1, value: p.turn, low: '0 degrees', high: '90 degrees' },
+      { id: 'compare', ask: 'compare all four placements', kind: 'press', count: 1, label: 'compare all four' },
+      { id: 'read', ask: 'watch the four screens appear', kind: 'wait', after: 'compare' }
+    ],
+    start(c) {
+      c.status('The fixed filters have lines at right angles. The double-rimmed one is yours to move. ' + filterReading(s));
+      draw(c);
+    },
+    apply(id, value, c) {
+      if (c.done) return;
+      if (id === 'place') {
+        if (!FILTER_PLACES.some((place) => place.value === value)) {
+          c.status('Choose one of the four places for the loose filter.');
+          return;
+        }
+        s.place = value;
+        c.status(filterReading(s));
+      }
+      if (id === 'turn') {
+        const turn = Number(value);
+        if (!Number.isFinite(turn)) {
+          c.status('Set the loose filter between 0 and 90 degrees.');
+          return;
+        }
+        s.turn = Math.max(0, Math.min(90, Math.round(turn)));
+        c.status(filterReading(s) + (s.compared ? ' ' + comparisonReading(s.turn) : ''));
+      }
+      if (id === 'compare') {
+        s.comparing = true;
+        c.status(s.compared ? comparisonReading(s.turn) : 'Comparing the light in all four placements.');
+      }
+      draw(c);
+    },
+    frame(t, dt, c) {
+      if (s.comparing && !s.compared) {
+        s.phase = c.reduced ? 1 : Math.min(1, s.phase + Math.max(0, dt) / 2.4);
+        c.progress('read', s.phase);
+        if (s.phase >= 1) {
+          s.compared = true;
+          c.status(comparisonReading(s.turn) + ' The screens follow any settings you still change.');
+          c.satisfy('read');
+        }
+      }
+      draw(c);
+    },
+    end(c) {
+      s.comparing = true;
+      s.compared = true;
+      s.phase = 1;
+      const middle = filterTrain(s.turn, 'between').light;
+      c.status(filterReading(s) + ' ' + comparisonReading(s.turn) + ' '
+        + (middle > 0 ? 'Only the middle placement passes light at this turn. '
+          : 'This turn leaves all four screens dark. ')
+        + 'Each filter passes light along its own lines. In the gap, the extra filter gives some light a direction the last filter can pass. At 45 degrees, 12.5% of the incoming light gets through; at 0 or 90 degrees, none does. Before or after the pair, the crossed filters still block it.');
+      draw(c);
+    }
+  };
+}
+
 export default {
   id: 'light-table',
   needsSky: false,
   paint(g, w, h, env) {
+    if (dealsFilters(env)) {
+      filterPreview(g, w, h, env, filterPlan(env));
+      return;
+    }
     const made = setup(env);
     scene(g, w, h, env, made.subject,
       { slits: 'two', gap: made.subject.gap, shown: 0, preview: true, finished: false }, made.marks);
   },
   spark(env) {
+    if (dealsFilters(env)) {
+      const p = filterPlan(env);
+      return {
+        title: filterTitle(p),
+        text: FILTER_BRIEF,
+        mono: 'loose filter: ' + p.turn + ' degrees from the first',
+        aspect: '4 / 3',
+        paint: (g, w, h, cardEnv) => filterPreview(g, w, h, cardEnv, p),
+        of: p
+      };
+    }
     const p = plan(env);
     return {
       title: title(p),
@@ -243,5 +573,10 @@ export default {
       of: p
     };
   },
-  piece
+  piece(env) {
+    const filters = carriedFilters(env);
+    if (filters) return filterPiece(env, filters);
+    if (carried(env)) return slitPiece(env);
+    return dealsFilters(env) ? filterPiece(env) : slitPiece(env);
+  }
 };

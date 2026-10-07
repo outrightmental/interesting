@@ -31,7 +31,7 @@
     { "file": "machine-shop.html", "name": "the machine shop", "orientation": "cold and clear", "mood": "analytic", "aspect": "3 / 4",
       "what": "Run a rule across a tape, or change one cell and compare two tapes." },
     { "file": "light-table.html", "name": "the light table", "orientation": "cold and clear", "mood": "analytic", "aspect": "4 / 3",
-      "what": "Send specks of light through one or two slits, move the openings and watch a pattern appear on the screen." },
+      "what": "Send specks through slits, or move and turn a third filter to discover how an extra barrier can brighten the screen." },
     { "file": "kinetic-floor.html", "name": "the kinetic floor", "orientation": "wound tight", "mood": "restless", "aspect": "16 / 10",
       "what": "Shove blocks, flip gravity, or set off dominoes to test a prediction." },
     { "file": "loam.html", "name": "loam", "orientation": "low and slow", "mood": "rooted", "aspect": "4 / 5",
