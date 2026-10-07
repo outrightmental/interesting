@@ -1,33 +1,5 @@
-{#-
-  The stage: the feature of every world page, and of the threshold. A world page is this include
-  and nothing else, so what a visitor opens is never a fixed page: it is a piece, generated on the
-  spot by the world's module (js/modules/<world>.js, piece()) from a seed, run here by js/stage.js,
-  and when it is finished -- every piece can be finished, by law (see the README, "Completion
-  axiom") -- it vanishes and the next card in the feed's stack opens in its place.
-
-  Set before including:
-    stageWorld   the world's file without ".html" ("quiet-room"), which every world page names
-                 explicitly; the page's own file stands in when it is unset. The piece opened on
-                 arrival is that world's, unless the URL's hash names another
-    threshold    true on index.html only: the stage asks the sideways question first (the
-                 persona mounts it in #persona-probe, which lives here), and opens the world the
-                 answer picks
-    stageRandom  true on a page of no world (error.html): the stage opens whatever the feed
-                 deals first
-    stageRead    one short line over the title, for such a page to say what it is ("no page at
-                 this address"); stageLine is the line under the page's name before a piece is on
-
-  What is written here is what a visitor without scripting gets: the world's name, its one line
-  of purpose, and the feed below (the piece's parts are hidden until a piece is on). The heading
-  outline is the page's (h1), then the piece's (h2), then the feed's.
-
-  That one line of purpose is the page's own, before anything is on the stage, and the threshold
-  goes back to it. It is never a feature's title: a piece that opens says what the card it opened
-  from said, and then what the piece itself is called -- the same line for every card of a world
-  is exactly the generic text a pressed card used to fall back to (js/stage.js, the alignment
-  axiom).
--#}
-{%- set stageFile = (stageWorld + '.html') if stageWorld else ((page.filePathStem | replace('/', '')) + '.html') -%}
+{# World pages take their identity and first line from their path and worlds.worlds. The threshold asks here; the 404 uses stageRead and stageLine. #}
+{%- set stageFile = (page.filePathStem | replace('/', '')) + '.html' -%}
 {%- set stageEntry = null -%}
 {%- for world in worlds.worlds %}{% if world.file == stageFile %}{% set stageEntry = world %}{% endif %}{% endfor -%}
 <main class='stage{% if threshold %} stage-threshold{% endif %}' id='stage' data-mode='{% if threshold %}quiet{% else %}idle{% endif %}'{% if stageEntry %} data-stage-world='{{ stageEntry.file | replace('.html', '') }}'{% endif %}{% if threshold %} data-threshold='true'{% endif %}{% if stageRandom %} data-stage-random='true'{% endif %}>
@@ -37,7 +9,7 @@
       <h1 class='stage-world' id='stage-world'>{{ stageEntry.name if stageEntry else title }}</h1>
 {%- if threshold %}
       <p class='stage-read' id='stage-read' hidden></p>
-      <h2 class='stage-title' id='stage-title' tabindex='-1'>Answer one question about a door, a stone or a mark to open a world you can play and finish, or choose a world below.</h2>
+      <h2 class='stage-title' id='stage-title' tabindex='-1'>{{ description }}</h2>
 {%- else %}
 {%- if stageRead %}
       <p class='stage-read' id='stage-read'>{{ stageRead }}</p>
@@ -68,8 +40,6 @@
         <p class='stage-status' id='stage-status' aria-live='polite'></p>
         <p class='stage-wanted' id='stage-wanted' aria-live='polite' hidden></p>
         <div class='stage-foot'>
-          {#- Kept even when it is empty: the dots sit at the right of this row, and they stay
-              there whether or not the threshold's own button is standing opposite them. -#}
           <div class='stage-foot-actions'>
 {%- if threshold %}
             <button type='button' class='btn-text' id='stage-again' hidden>ask another way</button>
@@ -80,11 +50,6 @@
       </div>
     </div>
   </div>
-  {#- The way on, pinned in the lower right of the viewport: dim for the whole piece and lit the
-      moment it is finished, so nothing moves on until the visitor says so (issue #78). Outside
-      #stage-inner on purpose -- the vanish transforms that box, and a transformed ancestor is
-      what a fixed child would be positioned against -- so this mark holds still in the same
-      corner whatever the piece's shape, however many knobs it has, and whichever piece is on. -#}
   <button type='button' class='stage-next' id='stage-next' aria-label='the next piece' disabled>
     <svg class='icon' viewBox='0 0 24 24' aria-hidden='true' focusable='false'><path d='M6.41 6L5 7.41 9.58 12 5 16.59 6.41 18l6-6zm6.59 0l-1.41 1.41L16.17 12l-4.58 4.59L13 18l6-6z'/></svg>
   </button>
