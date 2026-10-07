@@ -39,7 +39,7 @@
     { "file": "apocrypha-desk.html", "name": "the apocrypha desk", "orientation": "magpie", "mood": "curious", "aspect": "4 / 5",
       "what": "Name an impossible specimen, compare it with the drawer, or turn it to see another side." },
     { "file": "shadow-theatre.html", "name": "the shadow theatre", "orientation": "magpie", "mood": "curious", "aspect": "4 / 3",
-      "what": "Choose paper cutouts, move the lamp, pierce their shadows, then raise the curtain." },
+      "what": "Play with paper cutouts, or move the lamp around one carved solid that casts a circle, a square and a triangle." },
     { "file": "sky-archive.html", "name": "the archive oracle", "orientation": "asking elsewhere", "mood": "divinatory", "aspect": "1 / 1",
       "what": "Turn your sky under a wheel, draw an omen, forge a sigil, and stamp the reading." }
   ],

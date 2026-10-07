@@ -1,9 +1,10 @@
 /* Paper cutouts and the shadows they cast. Each piece keeps its own light, marks and curtain.
+   A third shape projects a carved cylinder: its circular end, square side and triangular cut
+   belong to one solid. Shadows are convex hulls of its projected vertices, not swapped pictures.
 
    A card and the feature it opens as are one night at the theatre: the spark puts the cutouts it
-   has cut and where its lamp stands on its spec as `of`, and the piece opens with those very
-   cutouts to choose from and the lamp where the card left it -- so pressing a card in the feed
-   opens the theatre that was set up on it, not another one. */
+   has cut and where its lamp stands on its spec as `of`, or carries the whole carved-solid plan,
+   and the piece opens with that same subject and configuration. */
 
 const FORMS = ['moth', 'owl', 'fish', 'hare'];
 const PLACES = [
@@ -360,13 +361,408 @@ function picture(g, w, h, env, p, duet) {
   scene(g, w, h, env, s, env.variant || PLAIN, duet);
 }
 
+const SOLID_VIEWS = [
+  { value: 'above', label: 'overhead', shape: 'circle', direction: [0, 0, 1] },
+  { value: 'left', label: 'from the left', shape: 'square', direction: [1, 0, 0] },
+  { value: 'front', label: 'from the front', shape: 'triangle', direction: [0, -1, 0] }
+];
+const SOLID_GUESSES = [
+  { label: 'a circle', value: 'circle' },
+  { label: 'a square', value: 'square' },
+  { label: 'a triangle', value: 'triangle' },
+  { label: 'something in between', value: 'between' }
+];
+
+function dealsSolid(env) {
+  return (env.seed >>> 0) % 3 === 0;
+}
+
+function solidPlan(env) {
+  const view = env.pick(SOLID_VIEWS).value;
+  const rest = SOLID_VIEWS.map((v) => v.value).filter((v) => v !== view);
+  if (env.chance(0.5)) rest.reverse();
+  return {
+    family: 'carved-solid',
+    number: env.int(100, 999),
+    view,
+    views: [view].concat(rest),
+    facets: env.pick([32, 40, 48]),
+    flipped: env.chance(0.5),
+    camera: env.int(28, 62),
+    duration: env.pick([2.4, 3.2, 4])
+  };
+}
+
+function carriedSolid(env) {
+  const p = env.card && env.card.of;
+  const views = SOLID_VIEWS.map((v) => v.value);
+  if (!p || p.family !== 'carved-solid'
+      || !Number.isInteger(p.number) || p.number < 100 || p.number > 999
+      || !views.includes(p.view)
+      || !Array.isArray(p.views) || p.views.length !== 3
+      || p.views[0] !== p.view || new Set(p.views).size !== 3
+      || !p.views.every((v) => views.includes(v))
+      || !Number.isInteger(p.facets) || p.facets < 24 || p.facets > 64 || p.facets % 4 !== 0
+      || typeof p.flipped !== 'boolean'
+      || !Number.isFinite(p.camera) || p.camera < 28 || p.camera > 62
+      || !Number.isFinite(p.duration) || p.duration < 2 || p.duration > 5) return null;
+  return p;
+}
+
+function solidTitle(p) {
+  return 'solid ' + p.number + ': three different shadows';
+}
+
+// Intersect x*x + y*y <= 1 with 2*abs(x)-1 <= z <= 1. Projecting along z gives
+// the circle, along y the triangle, and along x the square. Cardinal vertices stay exact.
+function solidMesh(p, variant) {
+  const n = 4 * Math.max(6, Math.min(20, Math.round(p.facets * variant.density / 4)));
+  const top = [];
+  const bottom = [];
+  const sign = p.flipped ? -1 : 1;
+  for (let i = 0; i < n; i++) {
+    const a = i / n * Math.PI * 2;
+    const x = Math.cos(a);
+    const y = Math.sin(a);
+    top.push([x, y, sign]);
+    bottom.push([x, y, sign * (2 * Math.abs(x) - 1)]);
+  }
+  const faces = [top];
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n;
+    faces.push([top[i], top[j], bottom[j], bottom[i]]);
+  }
+  const east = [];
+  const west = [];
+  for (let i = 3 * n / 4; i <= 5 * n / 4; i++) east.push(bottom[i % n]);
+  for (let i = n / 4; i <= 3 * n / 4; i++) west.push(bottom[i]);
+  faces.push(east, west);
+  return { vertices: top.concat(bottom), faces };
+}
+
+function tiltSolid(point, degrees) {
+  const a = degrees * Math.PI / 180;
+  const cos = Math.cos(a);
+  const sin = Math.sin(a);
+  return [point[0] * cos + point[2] * sin, point[1], point[2] * cos - point[0] * sin];
+}
+
+function shadowPoint(point, view) {
+  if (view === 'above') return { x: point[0], y: -point[1] };
+  if (view === 'left') return { x: point[1], y: -point[2] };
+  return { x: point[0], y: -point[2] };
+}
+
+function shadowHull(points) {
+  const sorted = points.slice().sort((a, b) => a.x - b.x || a.y - b.y);
+  const unique = sorted.filter((p, i) => i === 0
+    || Math.abs(p.x - sorted[i - 1].x) > 1e-9 || Math.abs(p.y - sorted[i - 1].y) > 1e-9);
+  const cross = (a, b, c) => (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+  const lower = [];
+  const upper = [];
+  for (const p of unique) {
+    while (lower.length > 1 && cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 1e-9) lower.pop();
+    lower.push(p);
+  }
+  for (let i = unique.length - 1; i >= 0; i--) {
+    const p = unique[i];
+    while (upper.length > 1 && cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 1e-9) upper.pop();
+    upper.push(p);
+  }
+  lower.pop();
+  upper.pop();
+  return lower.concat(upper);
+}
+
+function solidNormal(face) {
+  const a = face[0];
+  let normal = null;
+  for (let i = 1; i < face.length - 1; i++) {
+    const u = face[i].map((v, k) => v - a[k]);
+    const v = face[i + 1].map((v, k) => v - a[k]);
+    const n = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]];
+    const length = Math.hypot(...n);
+    if (length > 1e-9) {
+      normal = n.map((value) => value / length);
+      break;
+    }
+  }
+  if (!normal) return null;
+  const centre = [0, 1, 2].map((k) => face.reduce((sum, p) => sum + p[k], 0) / face.length);
+  if (normal.reduce((sum, value, k) => sum + value * centre[k], 0) < 0) normal = normal.map((v) => -v);
+  return { normal, centre };
+}
+
+function solidCamera(yaw) {
+  const a = yaw;
+  const elevation = Math.PI * 0.19;
+  const ca = Math.cos(a);
+  const sa = Math.sin(a);
+  const ce = Math.cos(elevation);
+  const se = Math.sin(elevation);
+  return {
+    direction: [sa * ce, ca * ce, se],
+    project(p) {
+      const depth = p[0] * sa + p[1] * ca;
+      return { x: p[0] * ca - p[1] * sa, y: depth * se - p[2] * ce, depth: depth * ce + p[2] * se };
+    }
+  };
+}
+
+function solidPath(g, points) {
+  g.beginPath();
+  points.forEach((p, i) => i ? g.lineTo(p.x, p.y) : g.moveTo(p.x, p.y));
+  g.closePath();
+}
+
+function solidObject(g, w, h, c, p, s, mesh, variant) {
+  const col = c.colors;
+  const camera = solidCamera(p.camera * Math.PI / 180 + variant.turn * Math.PI * 2);
+  const lamp = SOLID_VIEWS.find((v) => v.value === s.view);
+  const cx = w * 0.22;
+  const cy = h * 0.47;
+  const size = Math.min(w * 0.4, h * 0.72) * 0.23 * variant.scale;
+  const project = (point) => {
+    const at = camera.project(point);
+    return { x: cx + at.x * size, y: cy + at.y * size, depth: at.depth };
+  };
+  const faces = mesh.faces.map((face) => {
+    const tilted = face.map((point) => tiltSolid(point, s.tilt));
+    const surface = solidNormal(tilted);
+    if (!surface) return null;
+    const facing = surface.normal.reduce((sum, v, k) => sum + v * camera.direction[k], 0);
+    if (facing <= 1e-9) return null;
+    return {
+      points: tilted.map(project),
+      depth: camera.project(surface.centre).depth,
+      light: Math.max(0, surface.normal.reduce((sum, v, k) => sum + v * lamp.direction[k], 0))
+    };
+  }).filter(Boolean).sort((a, b) => a.depth - b.depth);
+  for (const face of faces) {
+    solidPath(g, face.points);
+    g.fillStyle = c.mix(col.bg2, col.accent, 0.18 + face.light * 0.58);
+    g.fill();
+    g.strokeStyle = c.alpha(col.fg, 0.32);
+    g.lineWidth = Math.max(0.6, variant.density);
+    g.stroke();
+  }
+  const source = project(lamp.direction.map((v) => v * 2.3));
+  source.x = Math.max(w * 0.035, Math.min(w * 0.405, source.x));
+  source.y = Math.max(h * 0.22, Math.min(h * 0.73, source.y));
+  g.strokeStyle = c.alpha(col.accent2, 0.65);
+  g.lineWidth = 1.5;
+  g.beginPath();
+  g.moveTo(source.x, source.y);
+  g.lineTo(source.x + (cx - source.x) * 0.58, source.y + (cy - source.y) * 0.58);
+  g.stroke();
+  g.fillStyle = col.accent2;
+  g.beginPath();
+  g.arc(source.x, source.y, Math.max(2, Math.min(w, h) * 0.012), 0, Math.PI * 2);
+  g.fill();
+}
+
+function traceShadow(g, points, fraction) {
+  const lengths = points.map((p, i) => {
+    const next = points[(i + 1) % points.length];
+    return Math.hypot(next.x - p.x, next.y - p.y);
+  });
+  let left = lengths.reduce((sum, n) => sum + n, 0) * fraction;
+  g.beginPath();
+  g.moveTo(points[0].x, points[0].y);
+  for (let i = 0; i < points.length && left > 0; i++) {
+    const p = points[i];
+    const next = points[(i + 1) % points.length];
+    const f = Math.min(1, left / (lengths[i] || 1));
+    g.lineTo(p.x + (next.x - p.x) * f, p.y + (next.y - p.y) * f);
+    left -= lengths[i];
+  }
+  g.stroke();
+}
+
+function solidScene(g, w, h, c, p, s, variant) {
+  const v = variant || PLAIN;
+  const col = c.colors;
+  const m = Math.min(w, h);
+  const mesh = solidMesh(p, v);
+  const background = g.createLinearGradient(0, 0, w, h);
+  background.addColorStop(0, col.bg2);
+  background.addColorStop(1, col.bg);
+  g.fillStyle = background;
+  g.fillRect(0, 0, w, h);
+  solidObject(g, w, h, c, p, s, mesh, v);
+
+  const wall = { x: w * 0.44, y: h * 0.2, w: w * 0.51, h: h * 0.59 };
+  const size = Math.min(wall.w, wall.h) * 0.29 * v.scale;
+  const hull = shadowHull(mesh.vertices.map((point) => shadowPoint(tiltSolid(point, s.tilt), s.view)));
+  const points = hull.map((point) => ({
+    x: wall.x + wall.w / 2 + point.x * size,
+    y: wall.y + wall.h / 2 + point.y * size
+  }));
+  g.save();
+  g.beginPath();
+  g.rect(wall.x, wall.y, wall.w, wall.h);
+  g.clip();
+  g.fillStyle = c.mix(col.bg2, col.accent2, 0.7);
+  g.fillRect(wall.x, wall.y, wall.w, wall.h);
+  solidPath(g, points);
+  g.fillStyle = col.bg;
+  g.fill();
+  if (s.raised) {
+    g.strokeStyle = col.bg;
+    g.lineWidth = Math.max(1.5, m * 0.009 * v.density);
+    traceShadow(g, points, s.phase);
+  }
+  const peek = 0.14 + v.turn * 0.08;
+  const open = s.raised ? peek + (1 - peek) * s.phase : peek;
+  const edge = wall.y + wall.h * (1 - open);
+  g.fillStyle = c.mix(col.bg2, col.bg, 0.42);
+  g.fillRect(wall.x, wall.y, wall.w, edge - wall.y);
+  const folds = Math.max(4, Math.round(8 * v.density));
+  g.strokeStyle = c.alpha(col.accent, 0.25);
+  g.lineWidth = 1;
+  g.beginPath();
+  for (let i = 1; i < folds; i++) {
+    const x = wall.x + wall.w * i / folds;
+    g.moveTo(x, wall.y);
+    g.lineTo(x, edge);
+  }
+  g.stroke();
+  g.strokeStyle = col.accent2;
+  g.lineWidth = 2;
+  g.beginPath();
+  g.moveTo(wall.x, edge);
+  g.lineTo(wall.x + wall.w, edge);
+  g.stroke();
+  g.restore();
+  g.strokeStyle = c.alpha(col.fg, 0.6);
+  g.lineWidth = 1;
+  g.strokeRect(wall.x, wall.y, wall.w, wall.h);
+  const textSize = Math.max(10, Math.min(20, Math.round(m * 0.04)));
+  g.font = '500 ' + textSize + 'px system-ui, sans-serif';
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.fillStyle = col.fg;
+  g.fillText('the solid', w * 0.22, h * 0.12);
+  g.fillText('its shadow', wall.x + wall.w / 2, h * 0.12);
+  inscription(g, w, h, c, s.finished ? 'one solid: circle, square, triangle' : 'solid ' + p.number, 1);
+}
+
+function solidShape(s) {
+  // Rotation about y only rotates the triangle within the front projection; the other
+  // two silhouettes lose their exact circle or square as soon as the solid is tilted.
+  if (s.view === 'front') return 'triangle';
+  return Math.abs(s.tilt) < 0.001 ? SOLID_VIEWS.find((v) => v.value === s.view).shape : 'between';
+}
+
+function solidFinding(s) {
+  const shape = solidShape(s);
+  return shape === 'between' ? 'The tilted shadow has a rounded outline between the simple shapes.'
+    : 'The shadow is a ' + shape + '.';
+}
+
+function solidSetting(s) {
+  const lamp = SOLID_VIEWS.find((v) => v.value === s.view);
+  return 'Lamp ' + lamp.label + '; tilt ' + s.tilt + ' degrees. ';
+}
+
+function solidPreview(g, w, h, env, p) {
+  solidScene(g, w, h, env, p, {
+    view: p.view, tilt: 0, raised: false, phase: 0, finished: false
+  }, env.variant || PLAIN);
+}
+
+function solidPiece(env, carried) {
+  const p = carried || solidPlan(env);
+  const s = { view: p.view, tilt: 0, guess: '', raised: false, elapsed: 0, phase: 0, traced: false, finished: false };
+  const draw = (c) => solidScene(c.g, c.w, c.h, c, p, s, env.variant || PLAIN);
+  function setting(c) {
+    c.status(solidSetting(s) + (s.traced ? solidFinding(s) : 'The curtain covers most of the shadow.'));
+  }
+  return {
+    title: solidTitle(p),
+    brief: 'Move the lamp, tilt this carved cylinder, predict its shadow and raise the curtain. You can try all three lamp positions before making your prediction; any prediction works, and the object never changes.',
+    aspect: '4 / 3',
+    steps: [
+      { id: 'lamp', ask: 'where the light comes from', kind: 'choice', options: p.views.map((value) => ({ label: SOLID_VIEWS.find((v) => v.value === value).label, value })) },
+      { id: 'tilt', ask: 'tilt the solid; zero is straight on', kind: 'range', min: -30, max: 30, step: 1, value: 0, low: '-30 degrees', high: '+30 degrees' },
+      { id: 'guess', ask: 'what outline will this lamp reveal?', kind: 'choice', options: SOLID_GUESSES },
+      { id: 'curtain', ask: 'raise the curtain', kind: 'press', count: 1, label: 'raise the curtain' },
+      { id: 'trace', ask: 'watch the light draw the outline', kind: 'wait', after: 'curtain' }
+    ],
+    start(c) {
+      c.status('Solid ' + p.number + ' has one round end and two sloping cuts at the other. The curtain leaves a sliver of its shadow. ' + solidSetting(s));
+      draw(c);
+    },
+    apply(id, value, c) {
+      if (c.done) return;
+      if (id === 'lamp') {
+        if (p.views.includes(value)) s.view = value;
+        setting(c);
+      }
+      if (id === 'tilt') {
+        const n = Number(value);
+        if (Number.isFinite(n)) s.tilt = Math.max(-30, Math.min(30, Math.round(n)));
+        setting(c);
+      }
+      if (id === 'guess') {
+        const prediction = SOLID_GUESSES.find((g) => g.value === value);
+        if (prediction) {
+          s.guess = prediction.value;
+          c.status('You predict ' + prediction.label + '. ' + (s.traced ? solidFinding(s) : 'The same solid is still behind the curtain.'));
+        }
+      }
+      if (id === 'curtain' && !s.raised) {
+        s.raised = true;
+        c.status(c.reduced ? 'The curtain is raised without movement.' : 'The curtain is rising. The light is drawing this solid, not another one.');
+      }
+      draw(c);
+    },
+    frame(t, dt, c) {
+      if (s.raised && !s.traced) {
+        s.elapsed = c.reduced ? p.duration : Math.min(p.duration, s.elapsed + dt);
+        s.phase = s.elapsed / p.duration;
+        c.progress('trace', s.phase);
+        if (s.elapsed >= p.duration) {
+          s.traced = true;
+          c.status(solidSetting(s) + solidFinding(s) + ' The lamp and tilt still work while you have choices left.');
+          c.satisfy('trace');
+        }
+      }
+      draw(c);
+    },
+    end(c) {
+      s.raised = true;
+      s.traced = true;
+      s.phase = 1;
+      s.finished = true;
+      const prediction = SOLID_GUESSES.find((g) => g.value === s.guess);
+      const verdict = s.guess === solidShape(s) ? 'You called it.' : 'You predicted ' + (prediction ? prediction.label : 'another outline') + '.';
+      c.status(solidSetting(s) + solidFinding(s) + ' ' + verdict
+        + ' One round end and two sloping cuts make all three straight-on shadows: circle, square and triangle. Tilting changes the outline; no object was swapped.');
+      draw(c);
+    }
+  };
+}
+
 export default {
   id: 'shadow-theatre',
   needsSky: false,
   paint(g, w, h, env) {
-    picture(g, w, h, env, plan(env), isDuet(env));
+    if (dealsSolid(env)) solidPreview(g, w, h, env, solidPlan(env));
+    else picture(g, w, h, env, plan(env), isDuet(env));
   },
   spark(env) {
+    if (dealsSolid(env)) {
+      const p = solidPlan(env);
+      return {
+        title: solidTitle(p),
+        text: 'This carved cylinder can cast a circle, a square and a triangle. Change the lamp, predict the outline and lift the curtain; the object never changes.',
+        mono: 'lamp  ' + SOLID_VIEWS.find((v) => v.value === p.view).label + '\ntilt  0 degrees',
+        aspect: '4 / 3',
+        paint: (g, w, h, cardEnv) => solidPreview(g, w, h, cardEnv, p),
+        of: p
+      };
+    }
     const p = plan(env);
     const duet = isDuet(env);
     return {
@@ -385,8 +781,10 @@ export default {
     };
   },
   piece(env) {
-    const p = plan(env);
+    const solid = carriedSolid(env);
     const was = pressed(env);
+    if (solid || (!was && dealsSolid(env))) return solidPiece(env, solid);
+    const p = plan(env);
     return isDuet(env) ? secondPiece(env, p, was) : firstPiece(env, p, was);
   }
 };
