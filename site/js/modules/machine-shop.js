@@ -1,13 +1,12 @@
-/* The machine shop: elementary cellular automata on a bench. As a card it is a rule or two
-   tapes one cell apart (paint, spark); as a piece it is a tape to choose, a rule to tune and a
-   run button, or a controlled comparison whose last row the visitor predicts. Both shapes use
-   the same wrapped tape and rule arithmetic. See js/feed.js for what a module is and
-   js/stage.js for what a piece is.
+/* The machine shop: elementary cellular automata on a bench. Cards and pieces share a rule,
+   a comparison of two tapes one cell apart, or a picture scrambled by a reversible two-sheet
+   machine. All three use the same wrapped tape and rule arithmetic. The reversible machine
+   keeps two consecutive sheets, not a history; lifting its companion tests what that costs.
+   See js/feed.js for the card contract and js/stage.js for the piece contract.
 
-   A card and the feature it opens as are one experiment: a spark puts the rule it ran, or the whole
-   comparison it set up, on its spec as `of`, and the piece takes the bench from there -- so pressing
-   rule 110 in the feed opens rule 110 on the bench, and pressing a comparison opens that comparison
-   rather than another. The shape follows the card too: a comparison card never opens the bench. */
+   A spark puts its exact subject on `of`. The piece follows that subject and its family before
+   consulting the seed, so a comparison stays a comparison and a mixed picture opens at the
+   very same mix. Every piece owns its choices, sheets and progress. */
 
 // The card this piece was opened from, in the shop's own terms: { rule, noisy } for a rule card,
 // { spec } for a comparison card, or null for a piece nobody pressed (js/stage.js, env.card.of).
@@ -415,14 +414,332 @@ function comparisonPiece(env, carried) {
   };
 }
 
+const INK_MARKS = ['key', 'moth', 'leaf', 'hourglass'];
+const INK_RULES = [30, 45, 90, 110, 150];
+const INK_SIZES = [21, 25, 29];
+const INK_COMPANIONS = [
+  { label: 'keep both sheets', value: 'keep' },
+  { label: 'lift the companion away', value: 'lift' }
+];
+const INK_VIEW = { density: 1, scale: 1, turn: 0 };
+const INK_BRIEF = 'Run a scrambled picture backwards: choose a rule and depth, keep or lift its companion sheet, then reverse the machine. The companion is the step before the picture.';
+
+function dealsInk(env) {
+  return (env.seed >>> 0) % 3 === 2;
+}
+
+function markImage(cols, mark, detail) {
+  const image = [];
+  for (let row = 0; row < cols; row++) {
+    for (let column = 0; column < cols; column++) {
+      const x = (column - (cols - 1) / 2) / (cols / 2);
+      const y = (row - (cols - 1) / 2) / (cols / 2);
+      let ink;
+      if (mark === 'key') {
+        const ring = Math.hypot(x, y + 0.38);
+        ink = (ring < 0.34 && ring > 0.16)
+          || (Math.abs(x) < 0.09 && y > -0.1 && y < 0.8)
+          || (x > 0 && x < 0.28 + detail * 0.045
+            && ((y > 0.33 && y < 0.48) || (y > 0.65 && y < 0.8)));
+      } else if (mark === 'moth') {
+        const upper = ((Math.abs(x) - 0.36) / 0.43) ** 2 + ((y + 0.22) / 0.37) ** 2 < 1;
+        const lower = ((Math.abs(x) - 0.26) / 0.31) ** 2 + ((y - 0.3) / 0.33) ** 2 < 1;
+        const eye = Math.hypot(Math.abs(x) - 0.4, y + 0.24) < 0.065 + detail * 0.02;
+        ink = ((upper || lower) && !eye) || (Math.abs(x) < 0.07 && Math.abs(y) < 0.7);
+      } else if (mark === 'leaf') {
+        const blade = ((x + y * 0.28) / (0.4 + detail * 0.025)) ** 2 + (y / 0.8) ** 2 < 1;
+        const vein = Math.abs(x + y * 0.28) < 0.035 && y > -0.5 && y < 0.53;
+        ink = blade && !vein;
+      } else {
+        const edge = 0.08 + Math.abs(y) * (0.64 + detail * 0.025);
+        ink = Math.abs(y) < 0.77 && (Math.abs(x) < edge
+          || (Math.abs(y) > 0.65 && Math.abs(x) < 0.66));
+      }
+      image.push(ink ? 1 : 0);
+    }
+  }
+  return image;
+}
+
+function inkPlan(env) {
+  const mark = env.pick(INK_MARKS);
+  const cols = env.pick(INK_SIZES);
+  const pool = INK_RULES.slice();
+  const rules = [];
+  while (rules.length < 3) rules.push(pool.splice(env.int(0, pool.length - 1), 1)[0]);
+  return {
+    family: 'rewind', mark, cols, rules,
+    number: env.int(100, 999),
+    turns: env.pick([12, 16, 20, 24, 28, 32]),
+    ink: markImage(cols, mark, env.int(0, 2))
+  };
+}
+
+function carriedInk(env) {
+  const p = env.card && env.card.of;
+  if (!p || p.family !== 'rewind' || !INK_MARKS.includes(p.mark)
+      || !Number.isInteger(p.number) || p.number < 100 || p.number > 999
+      || !INK_SIZES.includes(p.cols)
+      || !Number.isInteger(p.turns) || p.turns < 8 || p.turns > 40 || p.turns % 4 !== 0
+      || !Array.isArray(p.rules) || p.rules.length !== 3
+      || new Set(p.rules).size !== 3 || !p.rules.every((rule) => INK_RULES.includes(rule))
+      || !Array.isArray(p.ink) || p.ink.length !== p.cols * p.cols
+      || !p.ink.every((bit) => bit === 0 || bit === 1)) return null;
+  return p;
+}
+
+function inkTitle(p) {
+  return p.mark + ' ' + p.number + ', mixed ' + p.turns + ' turns';
+}
+
+// Read the square as one wrapped tape. Forward: (A, B) -> (F(A) XOR B, A).
+// Backward: (A, B) -> (B, F(B) XOR A). Applying XOR twice cancels it exactly.
+function inkStep(pair, rule, backwards) {
+  const anchor = backwards ? pair.before : pair.now;
+  const other = backwards ? pair.now : pair.before;
+  const changed = nextRow(anchor, rule);
+  for (let i = 0; i < changed.length; i++) changed[i] ^= other[i];
+  return backwards ? { now: anchor, before: changed } : { now: changed, before: anchor };
+}
+
+function mixedInk(p, rule, turns) {
+  let pair = { now: Uint8Array.from(p.ink), before: new Uint8Array(p.ink.length) };
+  for (let i = 0; i < turns; i++) pair = inkStep(pair, rule, false);
+  return pair;
+}
+
+function inkDifference(p, pair) {
+  let count = 0;
+  for (let i = 0; i < p.ink.length; i++) count += p.ink[i] ^ pair.now[i];
+  return count;
+}
+
+function inkSheet(g, c, p, bits, x, y, side, color, original, variant) {
+  const cell = side / p.cols;
+  const inset = cell * Math.min(0.18, 0.07 / variant.density);
+  g.save();
+  g.translate(x, y);
+  g.rotate(Math.floor(variant.turn * 4) * Math.PI / 2);
+  g.fillStyle = c.colors.bg;
+  g.fillRect(-side / 2, -side / 2, side, side);
+  for (let i = 0; i < bits.length; i++) {
+    const left = -side / 2 + (i % p.cols) * cell;
+    const top = -side / 2 + Math.floor(i / p.cols) * cell;
+    if (bits[i]) {
+      g.fillStyle = color;
+      g.fillRect(left + inset, top + inset, cell - inset * 2, cell - inset * 2);
+    }
+    if (original && bits[i] !== original[i]) {
+      g.fillStyle = c.alpha(c.colors.accent2, 0.25);
+      g.fillRect(left, top, cell, cell);
+      g.strokeStyle = c.colors.accent2;
+      g.lineWidth = Math.max(0.6, Math.min(1.5, cell * 0.2));
+      g.beginPath();
+      g.moveTo(left + cell * 0.2, top + cell * 0.8);
+      g.lineTo(left + cell * 0.8, top + cell * 0.2);
+      g.stroke();
+    }
+  }
+  g.strokeStyle = c.alpha(c.colors.fg, 0.6);
+  g.lineWidth = 1;
+  g.strokeRect(-side / 2, -side / 2, side, side);
+  g.restore();
+}
+
+function inkScene(g, w, h, c, p, s, variant) {
+  const v = variant || INK_VIEW;
+  const col = c.colors;
+  const side = Math.min(w * 0.41, h * 0.57) * Math.min(1.05, v.scale);
+  const y = h * 0.46;
+  const size = Math.max(10, Math.min(18, Math.round(Math.min(w, h) * 0.04)));
+  g.save();
+  const background = g.createLinearGradient(0, 0, w, h);
+  background.addColorStop(0, col.bg2);
+  background.addColorStop(1, col.bg);
+  g.fillStyle = background;
+  g.fillRect(0, 0, w, h);
+  inkSheet(g, c, p, s.pair.now, w * 0.255, y, side, col.accent,
+    s.watched ? p.ink : null, v);
+  inkSheet(g, c, p, s.watched ? p.ink : s.pair.before, w * 0.745, y, side,
+    s.watched ? col.accent : col.accent2, null, v);
+
+  g.font = '500 ' + size + 'px system-ui, sans-serif';
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.fillStyle = col.fg;
+  g.fillText(s.watched ? 'rewound ink' : 'ink', w * 0.255, h * 0.105, w * 0.43);
+  g.fillText(s.watched ? 'starting mark' : 'companion', w * 0.745, h * 0.105, w * 0.43);
+  g.fillStyle = col.accent2;
+  const remaining = s.turns - s.back;
+  const count = s.watched ? inkDifference(p, s.pair) : 0;
+  const line = s.watched ? (count ? count + ' squares differ' : 'every square returned')
+    : s.running ? 'rewinding: ' + remaining + ' turns left'
+      : 'rule ' + s.rule + ', mixed ' + s.turns + ' turns';
+  g.fillText(line, w / 2, h * 0.83, w * 0.9);
+  g.fillStyle = col.fg;
+  g.fillText(s.watched ? (count ? 'slashes mark the differences' : 'the same ' + p.mark + ', square for square')
+    : s.companion === 'lift' ? 'the companion has been lifted away' : 'two sheets, no trail of earlier pictures',
+  w / 2, h * 0.935, w * 0.9);
+  g.restore();
+}
+
+function inkPreview(g, w, h, env, p) {
+  inkScene(g, w, h, env, p, {
+    rule: p.rules[0], turns: p.turns, companion: 'keep', back: 0,
+    running: false, watched: false, pair: mixedInk(p, p.rules[0], p.turns)
+  }, env.variant || INK_VIEW);
+}
+
+function inkPiece(env, carried) {
+  const p = carried || inkPlan(env);
+  const s = {
+    rule: p.rules[0], turns: p.turns, companion: 'keep', pair: null,
+    back: 0, elapsed: 0, running: false, watched: false, halfway: false
+  };
+  const duration = () => 2.6 + s.turns * 0.075;
+  const draw = (c) => inkScene(c.g, c.w, c.h, c, p, s, env.variant || INK_VIEW);
+  function rewindTo(target) {
+    while (s.back < target) {
+      s.pair = inkStep(s.pair, s.rule, true);
+      s.back += 1;
+    }
+  }
+  function rebuild(c) {
+    s.pair = mixedInk(p, s.rule, s.turns);
+    if (s.companion === 'lift') s.pair.before = new Uint8Array(p.ink.length);
+    s.back = 0;
+    s.elapsed = 0;
+    s.halfway = false;
+    // A finished wait stays finished: late choices recompute the full result, not a new gate.
+    if (s.watched) {
+      rewindTo(s.turns);
+      s.elapsed = duration();
+    } else if (c && s.running) c.progress('rewind', 0);
+  }
+  function result() {
+    const count = inkDifference(p, s.pair);
+    return count === 0 ? 'Every square of the ' + p.mark + ' returned.'
+      : count + ' of ' + p.ink.length + ' squares differ from the starting ' + p.mark + '.';
+  }
+  function setting(c, line) {
+    rebuild(c);
+    c.status(line + ' ' + (s.watched ? result()
+      : s.running ? 'The rewind starts from this new mix.' : 'Run backwards to see what comes home.'));
+    draw(c);
+  }
+  rebuild();
+  return {
+    title: inkTitle(p),
+    brief: INK_BRIEF,
+    aspect: '4 / 3',
+    steps: [
+      { id: 'rule', ask: 'the rule used to mix and unmix', kind: 'choice', options: p.rules.map((value) => ({ label: 'rule ' + value, value })) },
+      { id: 'depth', ask: 'how many turns to mix', kind: 'range', min: 8, max: 40, step: 4, value: p.turns, low: '8 turns', high: '40 turns' },
+      { id: 'companion', ask: 'what the machine gets to remember', kind: 'choice', options: INK_COMPANIONS },
+      { id: 'reverse', ask: 'reverse the machine', kind: 'press', count: 1, label: 'run backwards' },
+      { id: 'rewind', ask: 'watch the machine rewind', kind: 'wait', after: 'reverse' }
+    ],
+    start(c) {
+      c.status('A ' + p.mark + ' was mixed ' + s.turns + ' turns with rule ' + s.rule
+        + '. The left sheet is its scrambled ink; the right is the step before it. Keep both or lift the companion, then run backwards.');
+      draw(c);
+    },
+    apply(id, value, c) {
+      if (c.done) return;
+      if (id === 'rule') {
+        const rule = Number(value);
+        if (!p.rules.includes(rule)) {
+          c.status('Choose one of the three rules for this mix.');
+          return;
+        }
+        s.rule = rule;
+        setting(c, 'The same ' + p.mark + ' is now mixed with rule ' + rule + '.');
+      }
+      if (id === 'depth') {
+        const turns = Number(value);
+        if (!Number.isFinite(turns)) {
+          c.status('Set the mixing depth between 8 and 40 turns.');
+          return;
+        }
+        s.turns = Math.max(8, Math.min(40, Math.round(turns / 4) * 4));
+        setting(c, 'Mixed ' + s.turns + ' turns, starting from the same ' + p.mark + '.');
+      }
+      if (id === 'companion') {
+        if (!INK_COMPANIONS.some((option) => option.value === value)) {
+          c.status('Keep both sheets or lift the companion away.');
+          return;
+        }
+        s.companion = value;
+        setting(c, value === 'keep'
+          ? 'Both sheets are in place. The companion holds the previous step.'
+          : 'The companion is lifted away. A blank sheet takes its place.');
+      }
+      if (id === 'reverse') {
+        if (s.running || s.watched) {
+          c.status(s.watched ? result() : 'The machine is already running backwards.');
+          return;
+        }
+        s.running = true;
+        c.status(c.reduced ? 'The rewind will appear without movement.'
+          : 'Running backwards. Each pair of sheets makes the pair before it; no earlier picture is fetched.');
+        draw(c);
+      }
+    },
+    frame(t, dt, c) {
+      if (s.running && !s.watched) {
+        const seconds = duration();
+        s.elapsed = c.reduced ? seconds : Math.min(seconds, s.elapsed + Math.max(0, dt));
+        const fraction = s.elapsed / seconds;
+        rewindTo(fraction >= 1 ? s.turns : Math.floor(s.turns * fraction));
+        c.progress('rewind', fraction);
+        if (!s.halfway && fraction >= 0.5 && fraction < 1) {
+          s.halfway = true;
+          c.status('Halfway back. There are still only two sheets in the machine.');
+        }
+        if (fraction >= 1) {
+          s.watched = true;
+          s.running = false;
+          c.status(result() + ' The right sheet now shows the starting mark for comparison. Any choices still waiting can change the result.');
+          c.satisfy('rewind');
+        }
+      }
+      draw(c);
+    },
+    end(c) {
+      rewindTo(s.turns);
+      s.running = false;
+      s.watched = true;
+      const count = inkDifference(p, s.pair);
+      const explanation = s.companion === 'keep'
+        ? 'Both sheets were enough: each backward step used only the two latest sheets, not a saved trail.'
+        : count ? 'Lifting the companion lost information. The same rule ran backwards, but it could not recover the same picture.'
+          : 'This mix still recovered the visible picture with a blank companion. That coincidence need not survive another rule or depth.';
+      c.status(result() + ' ' + explanation + ' The right sheet shows the original for comparison.');
+      draw(c);
+    }
+  };
+}
+
 export default {
   id: 'machine-shop',
   needsSky: false,
   paint(ctx, w, h, env) {
-    if (compares(env)) comparisonPreview(ctx, w, h, env, experiment(env));
+    if (dealsInk(env)) inkPreview(ctx, w, h, env, inkPlan(env));
+    else if (compares(env)) comparisonPreview(ctx, w, h, env, experiment(env));
     else run(ctx, w, h, env, pickRule(env), env.chance(0.3));
   },
   spark(env) {
+    if (dealsInk(env)) {
+      const p = inkPlan(env);
+      return {
+        title: inkTitle(p),
+        text: INK_BRIEF,
+        mono: 'rule ' + p.rules[0] + '\n' + p.cols + ' by ' + p.cols + ' squares\ntwo sheets, ready to rewind',
+        aspect: '4 / 3',
+        paint: (ctx, w, h, e) => inkPreview(ctx, w, h, e, p),
+        of: p
+      };
+    }
     if (compares(env)) {
       const spec = experiment(env);
       return {
@@ -447,10 +764,11 @@ export default {
     };
   },
   piece(env) {
-    // The shape is the card's: a comparison card opens its comparison, a rule card opens its rule
-    // on the bench, and a piece nobody pressed falls back to what the seed says.
+    const ink = carriedInk(env);
+    if (ink) return inkPiece(env, ink);
     const was = pressed(env);
     if (was) return was.spec ? comparisonPiece(env, was.spec) : benchPiece(env, was);
+    if (dealsInk(env)) return inkPiece(env);
     return compares(env) ? comparisonPiece(env) : benchPiece(env);
   }
 };
