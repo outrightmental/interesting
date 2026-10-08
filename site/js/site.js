@@ -801,7 +801,6 @@
   // so a constellation looks scattered however many stars are in it.
   var STAR_SCATTER = [0, 0.78, 0.26, 1.12, 0.52, 1.3, 0.12, 0.94, 0.66, 1.18];
   var TWO_COLUMN_WIDTH = 600; // the narrowest viewport that gets a column per orbit
-  var CADRE_WAIT_MS = 15000; // how long to watch for the pinned controls before giving up
 
   var nav = null;
   var navBox = null; // the shared lightbox, raised on every press of the logo
@@ -812,18 +811,23 @@
     var all = orbit.querySelectorAll('.sparknav-option');
     var shown = [];
     for (var i = 0; i < all.length; i++) {
-      if (!all[i].hidden) shown.push(all[i]);
+      if (all[i].hidden) continue;
+      var node = all[i].querySelector('.sparknav-node');
+      shown.push({
+        element: all[i],
+        width: node ? node.offsetWidth : 0,
+        height: (node && node.offsetHeight) || STAR_STEP_MIN
+      });
     }
     return shown;
   }
 
   // One star: the chip at (x, y), and the ray from the logo's heart to the middle of its left edge.
   function star(option, x, y, mid, order) {
-    var node = option.querySelector('.sparknav-node');
-    var middle = y + ((node && node.offsetHeight) || STAR_STEP_MIN) / 2;
+    var middle = y + option.height / 2;
     var dx = x - mid;
     var dy = middle - mid;
-    var style = option.style;
+    var style = option.element.style;
     style.setProperty('--x', Math.round(x) + 'px');
     style.setProperty('--y', Math.round(y) + 'px');
     style.setProperty('--mx', mid + 'px');
@@ -841,8 +845,7 @@
   function widestIn(options) {
     var widest = 0;
     for (var i = 0; i < options.length; i++) {
-      var node = options[i].querySelector('.sparknav-node');
-      if (node) widest = Math.max(widest, node.offsetWidth);
+      widest = Math.max(widest, options[i].width);
     }
     return widest;
   }
@@ -851,36 +854,41 @@
     // Nothing to place while the state interface has the lightbox: the constellation is not on
     // screen to be measured, and it is shaped again on the next press either way.
     if (!nav || nav.sky.hidden) return;
-    var mid = Math.max(18, Math.round(nav.logo.offsetHeight / 2));
+    var logoHeight = nav.logo.offsetHeight || STAR_STEP_MIN;
+    var mid = Math.max(18, Math.round(logoHeight / 2));
     var groups = [];
     var widths = [];
+    var height = 0;
     var counted = 0;
     for (var g = 0; g < nav.orbits.length; g++) {
       var shown = shownOptions(nav.orbits[g]);
       if (shown.length) {
         groups.push(shown);
         widths.push(widestIn(shown));
+        for (var s = 0; s < shown.length; s++) height = Math.max(height, shown[s].height);
         counted += shown.length;
       }
     }
     if (!groups.length) return;
-    var top = mid + 22; // clear of the logo itself
+    var top = logoHeight + 8;
     var room = Math.max(120, (window.innerHeight || 700) - top - 60);
+    var minStep = Math.max(STAR_STEP_MIN, height + 4);
     var wide = (window.innerWidth || 1024) >= TWO_COLUMN_WIDTH;
     // A column per orbit as soon as the screen is wide enough for one -- and also when one column
     // would not fit the viewport, where the columns are the only thing that makes it fit.
-    var columns = groups.length > 1 && (wide || room < counted * STAR_STEP_MIN) ? groups.length : 1;
+    var columns = groups.length > 1 && (wide || room < counted * minStep) ? groups.length : 1;
     // Where each column starts: after the widest chip of the one before it, so a long label
     // ("go to the apocrypha desk") cannot land on top of the column beside it.
+    var spread = Math.max.apply(null, STAR_SCATTER) * STAR_SPREAD;
     var lefts = [STAR_EDGE];
     for (g = 1; g < groups.length; g++) {
       lefts.push(lefts[g - 1]
-        + Math.max(STAR_COLUMN, widths[g - 1] + STAR_SPREAD + STAR_GUTTER));
+        + Math.max(STAR_COLUMN, widths[g - 1] + spread + STAR_GUTTER));
     }
     // And one column after all, if the last of them would run off the right-hand edge.
     var last = groups.length - 1;
     if (columns > 1 && widths[last]
-        && lefts[last] + STAR_SPREAD + widths[last] + 16 > (window.innerWidth || 1024)) {
+        && lefts[last] + spread + widths[last] + 16 > (window.innerWidth || 1024)) {
       columns = 1;
     }
     // The longest column decides the step, so every orbit falls at the same rhythm.
@@ -890,7 +898,7 @@
       for (g = 0; g < groups.length; g++) longest = Math.max(longest, groups[g].length);
     }
     var step = longest > 1
-      ? Math.max(STAR_STEP_MIN, Math.min(STAR_STEP, room / (longest - 1))) : STAR_STEP;
+      ? Math.max(minStep, Math.min(STAR_STEP, (room - height) / (longest - 1))) : STAR_STEP;
     var order = 0;
     var y = top;
     var deepest = top;
@@ -903,14 +911,14 @@
       for (var i = 0; i < groups[g].length; i++, order++) {
         star(groups[g][i], x0 + STAR_SCATTER[order % STAR_SCATTER.length] * STAR_SPREAD,
           y + i * step, mid, order);
-        deepest = Math.max(deepest, y + i * step);
+        deepest = Math.max(deepest, y + i * step + groups[g][i].height);
       }
       if (columns === 1) y += groups[g].length * step; // the next orbit carries on below
     }
     // And if the lowest star would still be below the fold -- a very short viewport, or a very
     // long list of options -- the cascade is what fits: the stylesheet's other layout, a list
     // under the logo that scrolls, which is also what the markup is without a script at all.
-    var fits = deepest + STAR_STEP_MIN + mid + 16 <= (window.innerHeight || 700);
+    var fits = deepest + mid + 16 <= (window.innerHeight || 700);
     html.setAttribute('data-nav', fits ? 'live' : 'cascade');
   }
 
@@ -959,9 +967,12 @@
 
   function shape() {
     if (!nav) return;
+    // The stage's page name follows the address, including a piece waiting for a sky.
+    var heading = document.getElementById('stage-world');
+    var page = html.getAttribute('data-page');
     var world = readingWorld();
     if (world && world.world && nav.readingGo) {
-      var here = html.getAttribute('data-page') === world.world;
+      var here = heading ? heading.textContent === world.worldName : page === world.world;
       nav.readingGo.href = root + world.world;
       // On the world itself the option says where the visitor is, rather than offering them a
       // trip to where they already are.
@@ -973,6 +984,16 @@
       nav.reading.hidden = true;
     }
     adopt();
+    var destinations = nav.sky.querySelectorAll('a[href]');
+    for (var i = 0; i < destinations.length; i++) {
+      var destination = destinations[i];
+      if (destination === nav.readingGo) continue;
+      var label = destination.querySelector('.sparknav-label');
+      var current = heading && label ? label.textContent === heading.textContent
+        : destination.getAttribute('href') === root + page;
+      if (current) destination.setAttribute('aria-current', 'page');
+      else destination.removeAttribute('aria-current');
+    }
     // How much of the visitor's own there is to carry away, which is the one thing about the state
     // worth saying before it is opened.
     if (nav.stateLabel) {
@@ -1095,10 +1116,17 @@
   // keyboard trapped in a modal has to be able to reach all of it.
   function navFocusable() {
     var all = nav.host.querySelectorAll(
-      'summary, a[href], button:not([disabled]), textarea:not([disabled])');
+      'summary, a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex="0"]');
     var reachable = [];
     for (var i = 0; i < all.length; i++) {
-      if (all[i].offsetWidth || all[i].offsetHeight) reachable.push(all[i]);
+      var tab = all[i].getAttribute('tabindex');
+      if (all[i].disabled || (tab !== null && Number(tab) < 0)) continue;
+      var visible = !!(all[i].offsetWidth || all[i].offsetHeight);
+      for (var parent = all[i]; visible && parent && parent !== nav.host; parent = parent.parentNode) {
+        if (parent.hidden || parent.hasAttribute('inert')
+            || parent.getAttribute('aria-hidden') === 'true') visible = false;
+      }
+      if (visible) reachable.push(all[i]);
     }
     return reachable;
   }
@@ -1109,7 +1137,10 @@
     if (!stars.length) return;
     var first = stars[0];
     var last = stars[stars.length - 1];
-    if (event.shiftKey && document.activeElement === first) {
+    if (stars.indexOf(document.activeElement) === -1) {
+      (event.shiftKey ? last : first).focus();
+      event.preventDefault();
+    } else if (event.shiftKey && document.activeElement === first) {
       last.focus();
       event.preventDefault();
     } else if (!event.shiftKey && document.activeElement === last) {
@@ -1212,31 +1243,30 @@
     });
 
     document.addEventListener('keydown', function (event) {
-      if (!nav.host.open) return;
+      if (!nav.host.open || asking) return;
+      var top = raised.length ? raised[raised.length - 1] : null;
+      // A nested lightbox owns its keyboard until it hands the constellation back.
+      if (!top || top.keep !== nav.host) return;
       if (event.key === 'Escape' || event.key === 'Esc') {
-        // A question floating over the lightbox answers Escape itself: dismissing "are you sure
-        // you want to clear everything?" is not dismissing the interface that asked it.
-        if (asking) return;
         close(true);
         return;
       }
       keepFocusInside(event);
     });
 
-    // The set of options follows the state: a reading taken or forgotten anywhere on the page, and
-    // the three pinned controls, which arrive whenever the files that draw them are ready.
+    // The options follow the reading and adopted controls; page markers follow the stage too.
     window.addEventListener('threshold:reading', shape);
     window.addEventListener('persona:sky', shape);
+    window.addEventListener('stage:open', shape);
+    window.addEventListener('stage:home', shape);
     window.addEventListener('resize', place);
     watchForCorners();
     shape();
   }
 
-  /* Each of the three is drawn by a deferred script, and the consent banner's only once the
-     library beside it has loaded, so the constellation cannot simply look once. It watches until
-     all three have been adopted, and gives up after a while: on a copy of the site with no
-     measurement id the cookies button never arrives at all, and nothing should wait for it
-     forever. */
+  /* Deferred controls can arrive, be replaced or disappear for as long as the page stays open.
+     Keep watching their presence, not a deadline: a late consent control still belongs in the
+     constellation, and an option must disappear when the control it presses does. */
   function watchForCorners() {
     if (!window.MutationObserver || !document.body) return;
     var watch = new MutationObserver(function () {
@@ -1248,12 +1278,8 @@
       shape();
       // What to do about one of them drawn while a lightbox is up -- put it behind the veil -- is
       // the lightbox's own business, and watchTheBody above is where it is done.
-      if (nav.cookiesCorner && nav.stateCorner && nav.steerCorner) watch.disconnect();
     });
     watch.observe(document.body, { childList: true, subtree: true });
-    window.setTimeout(function () {
-      watch.disconnect();
-    }, CADRE_WAIT_MS);
   }
 
   window.interestingSite = {

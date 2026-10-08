@@ -215,6 +215,8 @@ html[data-nav] .sparknav-sky[hidden] {
   position: relative;
   isolation: isolate;
   display: inline-flex;
+  width: max-content;
+  max-width: calc(100vw - 2 * var(--nav-inset) - 48px);
   align-items: center;
   justify-content: flex-start;
   gap: 0.5rem;
@@ -272,7 +274,9 @@ html[data-nav] .sparknav-sky[hidden] {
 }
 
 .sparknav-label {
-  white-space: nowrap;
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 // The page the visitor is already on, marked the way the feed marks its own card.
@@ -303,6 +307,7 @@ html[data-nav] .sparknav-sky[hidden] {
 
 .sparknav-orbit {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 0.35rem;
   justify-items: start;
 }
@@ -311,6 +316,11 @@ html[data-nav] .sparknav-sky[hidden] {
 // flush left where nothing has, which is the markup on its own.
 .sparknav-orbit .sparknav-option {
   margin-left: calc(var(--k, 0) * 0.5rem);
+  max-width: calc(100% - var(--k, 0) * 0.5rem);
+}
+
+html:not([data-nav='live']) .sparknav-node {
+  max-width: 100%;
 }
 
 // The scatter: the script has placed every star, so each option is absolute, each chip sits where
