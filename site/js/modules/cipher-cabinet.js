@@ -26,7 +26,7 @@ const NOTES = [
   'THE EXIT IS WHERE YOU STARTED'
 ];
 
-const INVITATION = 'Decode a note from a house whose rooms move: turn the letter wheel, try both reading directions, tap for a one-letter hint, then lift the shutter to check it.';
+const INVITATION = 'Decode a note from a house whose rooms move: turn the letter wheel until the commonest letter reads E, try both reading directions, tap for a one-letter hint, then lift the shutter to check it.';
 const PLAIN = { density: 1, scale: 1, turn: 0 };
 
 function plan(env) {
@@ -70,7 +70,15 @@ function reading(p, state) {
 }
 
 function blank() {
-  return { shift: 0, reverse: false, pin: -1, shutter: false, reveal: false, open: 0, time: 0 };
+  return { shift: 0, reverse: false, pin: -1, shutter: false, reveal: false, open: 0, time: 0, turns: 0 };
+}
+
+// The letters of a line, commonest first: what a code-breaker counts before touching the wheel.
+function tally(text) {
+  const counts = {};
+  for (const ch of text) if (ch >= 'A' && ch <= 'Z') counts[ch] = (counts[ch] || 0) + 1;
+  return Object.keys(counts).sort((a, b) => counts[b] - counts[a] || a.localeCompare(b))
+    .map((ch) => ({ letter: ch, count: counts[ch] }));
 }
 
 function rows(text, limit) {
@@ -133,8 +141,9 @@ function scene(g, w, h, c, p, state, variant, time) {
   writeRows(g, received, w / 2, h * 0.21, w * 0.88, size);
 
   const glow = c.reduced ? 0.5 : (1 + Math.sin(time * 1.7)) / 2;
-  g.strokeStyle = c.alpha(colors.accent2, 0.45 + glow * 0.3);
-  g.lineWidth = Math.max(1, radius * 0.065);
+  const solved = !state.reveal && reading(p, state) === NOTES[p.note];
+  g.strokeStyle = solved ? colors.accent2 : c.alpha(colors.accent2, 0.45 + glow * 0.3);
+  g.lineWidth = Math.max(1, radius * (solved ? 0.1 : 0.065));
   g.beginPath();
   g.arc(w / 2, middle, radius, 0, Math.PI * 2);
   g.stroke();
@@ -153,6 +162,30 @@ function scene(g, w, h, c, p, state, variant, time) {
   g.font = '500 ' + small + 'px ui-monospace, monospace';
   g.fillText(state.reverse ? '<<' : '>>', w / 2, middle + size * 0.53);
 
+  // The letter ledger beside the wheel: the commonest received letters, and what each one reads
+  // as at this turn. The tallest bar nearly always wants to be E, which is the wheel's whole trick.
+  const ledger = tally(received).slice(0, Math.max(3, Math.min(5, Math.floor(radius * 2 / (small * 1.1)))));
+  const column = Math.max(small * 2.5, w / 2 - radius * 1.42 - w * 0.06);
+  const barMax = Math.max(1, column - small * 2.2);
+  const rowGap = Math.min(small * 1.4, radius * 2 / ledger.length);
+  ledger.forEach((entry, i) => {
+    const y = middle + (i - (ledger.length - 1) / 2) * rowGap;
+    const len = barMax * entry.count / ledger[0].count;
+    const reads = turn(entry.letter, -state.shift);
+    const lit = reads === 'E';
+    g.textAlign = 'left';
+    g.fillStyle = colors.fg;
+    g.fillText(entry.letter, w * 0.06, y);
+    g.fillStyle = c.alpha(colors.accent, 0.5);
+    g.fillRect(w * 0.06 + small * 1.3, y - small * 0.2, len, small * 0.4);
+    g.fillStyle = c.alpha(lit ? colors.accent2 : colors.accent, lit ? 0.85 : 0.5);
+    g.fillRect(w * 0.94 - small * 1.3 - len, y - small * 0.2, len, small * 0.4);
+    g.textAlign = 'right';
+    g.fillStyle = lit ? colors.accent2 : colors.fg;
+    g.fillText(reads, w * 0.94, y);
+  });
+  g.textAlign = 'center';
+
   if (!state.reveal && state.pin >= 0) {
     const unturned = turn(received, -p.key);
     g.fillStyle = colors.accent2;
@@ -160,10 +193,10 @@ function scene(g, w, h, c, p, state, variant, time) {
   }
   g.textAlign = 'left';
   g.fillStyle = colors.accent2;
-  g.fillText(state.reveal ? 'THE NOTE' : 'YOUR READING', w * 0.06, h * 0.765);
+  g.fillText(state.reveal ? 'THE NOTE' : solved ? 'YOUR READING / CLEAR' : 'YOUR READING', w * 0.06, h * 0.765);
   g.textAlign = 'center';
   g.font = '600 ' + size + 'px ui-monospace, monospace';
-  g.fillStyle = state.reveal ? colors.accent2 : colors.fg;
+  g.fillStyle = state.reveal || solved ? colors.accent2 : colors.fg;
   if (state.reveal) {
     g.fillStyle = c.alpha(colors.accent2, state.open * 0.12);
     g.fillRect(0, h * 0.73, w, h * 0.27);
@@ -179,6 +212,7 @@ function wheelPiece(env) {
   const p = carried(env) || plan(env);
   const state = blank();
   const received = locked(p);
+  const clear = () => reading(p, state) === NOTES[p.note];
   const draw = (c) => scene(c.g, c.w, c.h, c, p, state, env.variant, state.time);
   return {
     title: 'letter ' + p.case,
@@ -194,7 +228,7 @@ function wheelPiece(env) {
       { id: 'shutter', ask: 'lift the shutter', kind: 'press', count: 1, label: 'lift the shutter' }
     ],
     start(c) {
-      c.status('The received line is ' + received + '. Turn the wheel, choose a direction, or tap for a one-letter hint.');
+      c.status('The received line is ' + received + '. The bars beside the wheel count its commonest letters, and the tallest usually wants to read E. Turn the wheel, choose a direction, or tap for a one-letter hint.');
       draw(c);
     },
     apply(id, value, c) {
@@ -205,7 +239,7 @@ function wheelPiece(env) {
           return;
         }
         state.reverse = value === 'reverse';
-        c.status('Reading ' + (state.reverse ? 'right to left' : 'left to right') + ': ' + reading(p, state) + '.');
+        c.status('Reading ' + (state.reverse ? 'right to left' : 'left to right') + ': ' + reading(p, state) + (clear() ? '. That is the note; the shutter will only confirm it.' : '.'));
       }
       if (id === 'wheel') {
         const position = Number(value);
@@ -213,8 +247,10 @@ function wheelPiece(env) {
           c.status('Set the wheel between 0 and 25 turns.');
           return;
         }
-        state.shift = Math.max(0, Math.min(25, Math.round(position)));
-        c.status('At ' + state.shift + ' turns, the lower line reads ' + reading(p, state) + '.');
+        const next = Math.max(0, Math.min(25, Math.round(position)));
+        if (next !== state.shift) state.turns += 1;
+        state.shift = next;
+        c.status('At ' + state.shift + ' turns, the lower line reads ' + reading(p, state) + (clear() ? '. That is the note; the shutter will only confirm it.' : '.'));
       }
       if (id === 'shutter') {
         state.shutter = true;
@@ -244,8 +280,8 @@ function wheelPiece(env) {
       state.reveal = true;
       if (c.reduced) state.open = 1;
       const found = state.shift === p.key && state.reverse === p.mirror;
-      c.status('The note reads: ' + NOTES[p.note] + '. ' + (found ? 'You found the reading.'
-        : 'It opens at ' + p.key + ' turns, read ' + (p.mirror ? 'right to left' : 'left to right') + '.'));
+      c.status('The note reads: ' + NOTES[p.note] + '. ' + (found ? 'You found the reading after ' + state.turns + (state.turns === 1 ? ' nudge' : ' nudges') + ' of the wheel.'
+        : 'It opens at ' + p.key + ' turns, read ' + (p.mirror ? 'right to left' : 'left to right') + '. The tallest bar was E all along.'));
       draw(c);
     }
   };

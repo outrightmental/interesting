@@ -40,6 +40,7 @@ const MIDS = ['Roots prefer tiny momentum over perfect timing.', 'The next bloom
 const CLOSERS = ['Water one small idea before sleep.', 'Prune one distraction, keep one promise.',
   'Share a rough sprout instead of waiting for a tree.', 'Move one star, then regrow this garden.'];
 const ORDERS = [{ label: 'left to right', value: 'x' }, { label: 'shortest first', value: 'short' }, { label: 'tallest first', value: 'tall' }];
+const SPREADS = [{ label: 'compact', value: 'compact' }, { label: 'balanced', value: 'balanced' }, { label: 'wild', value: 'wild' }];
 const WORDS = ['no', 'one', 'two', 'three', 'four', 'five'];
 const TAU = Math.PI * 2;
 
@@ -475,21 +476,23 @@ function forecast(env) {
   const s = fresh(env.stars, env.int(1, 9999));
   s.gauge = true;
   s.stampText = r.spread;
-  const stats = n + ' plant' + (n === 1 ? '' : 's') + ', ' + r.spread + ' spread, bed ' + r.zone + ', canopy ' + r.density + '.';
+  const stats = n + ' plant' + (n === 1 ? '' : 's') + ', bed ' + r.zone + ', canopy ' + r.density + '.';
   let hum = hum0;
   let read = 0;
+  let guess = '';
   let paused = false;
   let jolt = 0;
   const damp = () => (hum - 55) / 41;
   const SAID = ['', 'reading one: the shape of the bed', 'reading two: the weather under glass', 'reading three: what the roots advise'];
   return {
     title: opener,
-    brief: 'Set the humidity and the light, pause the wind if you like, and take three readings; the glass prints a forecast from the shape of your sky and stamps it.',
+    brief: 'Set the humidity and the light, pause the wind if you like, call the spread of the bed by eye, and take three readings; the glass prints a forecast from the shape of your sky and stamps it with the true spread.',
     aspect: '16 / 10',
     steps: [
       { id: 'humidity', ask: 'the humidity', kind: 'range', min: 55, max: 96, step: 1, value: hum0, low: 'dry', high: 'dripping' },
       { id: 'light', ask: 'the light', kind: 'choice', options: lights },
       { id: 'wind', ask: 'the wind', kind: 'toggle', label: 'pause the wind' },
+      { id: 'guess', ask: 'how are the stems spread? look at the bed', kind: 'choice', options: SPREADS },
       { id: 'read', ask: 'take three readings', kind: 'press', count: 3, label: 'take a reading', after: 'humidity' }
     ],
     start(c) {
@@ -509,6 +512,10 @@ function forecast(env) {
       if (id === 'wind') {
         paused = !!value;
         c.status(paused ? 'wind paused. the terrarium is holding its breath' : 'wind resumed. the stems sway again');
+      }
+      if (id === 'guess') {
+        guess = String(value);
+        c.status('your call: a ' + guess + ' spread. the stamp settles it');
       }
       if (id === 'read') {
         read = Math.min(3, Number(value) || 0);
@@ -533,7 +540,9 @@ function forecast(env) {
     },
     end(c) {
       for (const p of s.plants) p.bud = 1;
-      c.status('forecast prepared from the shape of your sky, and stamped: ' + r.spread);
+      const called = guess === r.spread;
+      c.status('forecast stamped: a ' + r.spread + ' spread' + (called ? ', as you called it' : guess ? ', not the ' + guess + ' one you called' : '') + '. '
+        + (r.spread === 'compact' ? 'the stems huddle together' : r.spread === 'wild' ? 'the stems scatter to the glass' : 'the stems keep an even distance'));
     }
   };
 }
