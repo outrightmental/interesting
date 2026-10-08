@@ -6145,7 +6145,8 @@ class RealSiteTest(unittest.TestCase):
                 self.assertTrue(seen["doneShown"], f"{live['world']}: nothing said the piece was done")
                 self.assertFalse(seen["doneOverScene"],
                                  f"{live['world']}: the done mark is laid over the piece's own picture")
-                self.assertEqual(seen["dots"], len(live["atDone"]["knobs"]),
+                # One dot per knob the check waits for: an optional hint is not a dot.
+                self.assertEqual(seen["dots"], sum(1 for knob in live["atDone"]["knobs"] if not knob.get("optional")),
                                  f"{live['world']}: the dots went away with the finish")
         self.assertTrue(live["reworked"], f"{live['world']}: no knob on this piece could be worked again")
         self.assertEqual(live["current"]["file"], live["world"], "the stage left the finished piece")
@@ -6180,17 +6181,20 @@ class RealSiteTest(unittest.TestCase):
         self.assertEqual(puzzle["afterRight"]["doneText"], "solved")
         self.assertIn("solved on try 2", puzzle["afterRight"]["tries"])
         self.assertTrue(puzzle["onward"]["movedOn"], f"{puzzle['world']}: the way on was pressed and nothing followed")
+        # A hold is a toy's gesture and no puzzle on the site needs one now, so the hold scenario
+        # may well find no hold to press; StageTest holds the stage to it with pieces of its own.
+        # Where a world does deal one, the rules of issue #74 still apply to it.
         filled = report["holdFilled"]["result"]
-        self.assertTrue(filled["held"], "no world the stage opened had a hold knob to check")
-        self.assertTrue(filled["filled"]["set"],
-                        f"{filled['world']}: a hold's bar filled and the stage waited for the release")
-        for when in ["filled", "kept", "after"]:
-            with self.subTest(when=when):
-                self.assertTrue(filled[when]["set"], f"{filled['world']}: the hold stopped being set")
-                self.assertEqual(filled[when]["pct"], "100%", f"{filled['world']}: the bar did not stay full")
-                self.assertNotIn("let go early", filled[when]["status"])
-        self.assertEqual(filled["after"]["completes"], filled["filled"]["completes"],
-                         f"{filled['world']}: letting go of a hold already set did something of its own")
+        if filled["held"]:
+            self.assertTrue(filled["filled"]["set"],
+                            f"{filled['world']}: a hold's bar filled and the stage waited for the release")
+            for when in ["filled", "kept", "after"]:
+                with self.subTest(when=when):
+                    self.assertTrue(filled[when]["set"], f"{filled['world']}: the hold stopped being set")
+                    self.assertEqual(filled[when]["pct"], "100%", f"{filled['world']}: the bar did not stay full")
+                    self.assertNotIn("let go early", filled[when]["status"])
+            self.assertEqual(filled["after"]["completes"], filled["filled"]["completes"],
+                             f"{filled['world']}: letting go of a hold already set did something of its own")
         torn = report["teardown"]["result"]
         self.assertEqual(torn["waiting"], 0, "the stage left a timer running after the piece")
         self.assertEqual(torn["look"]["knobs"], [])

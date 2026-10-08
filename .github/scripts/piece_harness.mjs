@@ -1083,8 +1083,13 @@ if (!isMainThread && workerData && workerData.harness === 'piece') {
     parentPort.postMessage({ hasPiece: true, ok: false, problems: ['the harness failed in the worker: ' + (err && err.message || err)], runs: [] });
   });
 } else if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  main(process.argv.slice(2)).then((code) => process.exit(code), (err) => {
+  // The exit code is set rather than exited on: process.exit() can cut a report off mid-pipe
+  // before stdout has drained (a report of twenty worlds runs past 64 KB), and the workers are
+  // already terminated, so the loop ends on its own.
+  main(process.argv.slice(2)).then((code) => {
+    process.exitCode = code;
+  }, (err) => {
     process.stderr.write(String(err && err.stack || err) + '\n');
-    process.exit(2);
+    process.exitCode = 2;
   });
 }

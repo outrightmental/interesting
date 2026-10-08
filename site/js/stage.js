@@ -949,8 +949,11 @@ function renderKnobs() {
     const knob = el('div', 'knob');
     knob.dataset.id = step.id;
     knob.dataset.kind = step.kind;
+    if (step.optional === true) knob.dataset.optional = 'true'; // a helper the check does not wait for
     const ask = el('p', 'knob-ask', step.ask || step.id);
     ask.id = 'knob-ask-' + step.id;
+    // A helper the check does not wait for says so, so nobody wonders whether they must use it.
+    if (step.optional === true) ask.appendChild(el('span', 'knob-optional', ' \u00b7 optional'));
     knob.appendChild(ask);
     const render = KNOBS[step.kind] || KNOBS.choice;
     render(step, knob, ask.id);
@@ -1109,7 +1112,9 @@ function renderProgress() {
   let set = 0;
   const left = [];
   let asked = 0;
+  let begun = false; // has the visitor set anything at all, a hint included?
   for (const s of current.state.values()) {
+    if (s.set) begun = true;
     if (s.step.optional === true) continue; // a helper the check does not wait for is not a dot
     asked += 1;
     if (s.set) set += 1;
@@ -1125,7 +1130,7 @@ function renderProgress() {
   // Two are named, more are counted, because the stranded knob is always among the last one or two
   // left -- the visitor has done everything else by then -- and a list of five is noise.
   if (ui.wanted) {
-    const say = set > 0 && left.length > 0;
+    const say = begun && left.length > 0;
     ui.wanted.textContent = !say ? ''
       : left.length <= 2 ? 'still to set: ' + left.join(' and ')
         : 'still to set: ' + left[0] + ', and ' + (left.length - 1) + ' more';
@@ -1142,6 +1147,7 @@ const KNOBS = {
     group.setAttribute('role', 'group');
     group.setAttribute('aria-labelledby', askId);
     const options = Array.isArray(step.options) ? step.options.slice(0, 4) : [];
+    const buttons = [];
     options.forEach((option) => {
       const b = el('button', null, option.label == null ? String(option.value) : option.label);
       b.type = 'button';
@@ -1152,8 +1158,13 @@ const KNOBS = {
         apply(step.id, option.value);
         markSet(step.id, option.value, 'knob');
       });
+      buttons.push([option.value, b]);
       group.appendChild(b);
     });
+    // The scene as the control (ctx.set): the pressed option follows the value.
+    current.state.get(step.id).update = (v) => {
+      for (const [value, b] of buttons) b.setAttribute('aria-pressed', value === v ? 'true' : 'false');
+    };
     knob.appendChild(group);
   },
   toggle(step, knob) {
@@ -1167,6 +1178,10 @@ const KNOBS = {
       apply(step.id, on);
       markSet(step.id, on, 'knob');
     });
+    current.state.get(step.id).update = (v) => {
+      on = !!v;
+      b.setAttribute('aria-pressed', on ? 'true' : 'false');
+    };
     knob.appendChild(b);
   },
   range(step, knob, askId) {
@@ -1197,6 +1212,12 @@ const KNOBS = {
     knob.appendChild(row);
     // The scene knows where the slider starts before anything moves (ctx.value), unasked.
     current.state.get(step.id).value = Number(input.value);
+    current.state.get(step.id).update = (v) => {
+      input.value = String(v);
+      const min = Number(input.min);
+      const max = Number(input.max);
+      if (max > min) input.style.setProperty('--range-pct', (((Number(input.value) - min) / (max - min)) * 100).toFixed(2) + '%');
+    };
   },
   // An exact count: a stepper with a field, for an answer that is a number rather than a feel.
   // Stepped or typed into is used; where it stands is an answer already, so the first step or

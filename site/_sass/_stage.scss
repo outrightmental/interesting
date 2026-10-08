@@ -296,6 +296,16 @@
   @include type.scale(title-small);
 }
 
+// A helper the check does not wait for -- a hint, a second look -- says so beside its ask.
+.knob-optional {
+  color: var(--md-sys-color-on-surface-variant);
+  @include type.scale(label-medium);
+}
+
+.knob[data-optional='true'] {
+  background: var(--md-sys-color-surface-container-low);
+}
+
 // The check mark a set knob earns, in the top right corner.
 .knob-mark {
   position: absolute;
