@@ -1,4 +1,28 @@
-/* The shared feed. _includes/worlds.njk supplies one plain link per world; this module paints those cards, deals pieces between them, and hands a selected card to js/stage.js. Card env carries seed, seeded rnd/pick/int/chance, stars, colors, world and variant. A pressed card hands its seed, variant, palette and displayed content to the stage, including the module's own `of` value. */
+/* The shared feed. _includes/worlds.njk supplies one plain link per world; this module paints those cards, deals pieces between them, and hands a selected card to js/stage.js. Card env carries seed, seeded rnd/pick/int/chance, stars, colors, world and variant. A pressed card hands its seed, variant, palette and displayed content to the stage, including the module's own `of` value.
+
+   What a world's module owes a card, and what a card owes it back (issue #92):
+
+     paint(ctx, w, h, env)       Draw the still card, once. This is where the card's puzzle is
+                                 dealt: env.rnd and the pick/int/chance built on it are a seeded
+                                 stream, and paint is the one pass over the canvas that may spend
+                                 it. A module that deals a plan should keep it with the env it was
+                                 dealt from -- a WeakMap keyed on env -- so the next pass gets the
+                                 same card and not another one.
+     animate(ctx, w, h, env, t)  Redraw the card in motion, about thirty times a second, and be a
+                                 pure function of (w, h, env, t): same arguments, same drawing,
+                                 however many times it is called. env is the very same object paint
+                                 was handed, stream and all, and that stream is already spent, so
+                                 drawing from env.rnd here deals a different puzzle every frame --
+                                 which is a card re-rolling itself thirty times a second, not an
+                                 ambient picture. `t` is seconds since this card was painted,
+                                 starting at zero, so animate(ctx, w, h, env, 0) draws exactly the
+                                 picture paint left behind and the motion carries on from it rather
+                                 than cutting into some arbitrary phase of a page-long clock; a
+                                 repaint (a resize, a new sky) starts the count again. Return false
+                                 to say that nothing on this card moves, and the loop lets it go.
+
+   .github/scripts/card_variant_harness.mjs holds every module to this, and CardVariantTest in
+   test_make_interesting.py makes the assertions. */
 import { roll, PLAIN, recolor, aspect, light, mulberry32, hash, mix, alpha } from './variant.js';
 
 const persona = window.interestingPersona;
@@ -208,7 +232,7 @@ async function paint(card) {
   const ctx = sizeCanvas(m.canvas, w, h);
   if (!ctx) return;
   const env = makeEnv(card, m.seed, m.world, m.variant);
-  Object.assign(m, { ctx, w, h, env, painted: true, dirty: false, animate: null });
+  Object.assign(m, { ctx, w, h, env, painted: true, dirty: false, animate: null, at: performance.now() });
   if (mod && mod.needsSky && !env.stars.length) {
     const ghost = makeEnv(card, m.seed, m.world, m.variant, ghostSky(m.seed, env.variant));
     if (typeof mod.paint === 'function') mod.paint(ctx, w, h, ghost);
@@ -246,7 +270,15 @@ function frame(now) {
         continue;
       }
       try {
-        m.animate(m.ctx, m.w, m.h, m.env, now / 1000);
+        // Seconds since this card was painted, not since the page opened: the first frame is t = 0,
+        // which is the still picture already on the canvas, so the motion starts where it stands.
+        // A frame's timestamp can precede the performance.now() read paint took: never negative.
+        // A module that says nothing moves is let go rather than asked again.
+        const t = Math.max(0, (now - m.at) / 1000);
+        if (m.animate(m.ctx, m.w, m.h, m.env, t) === false) {
+          m.animate = null;
+          active.delete(card);
+        }
       } catch (error) {
         console.error('Could not animate a world card', error);
         m.animate = null;
