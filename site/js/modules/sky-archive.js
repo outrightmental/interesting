@@ -12,12 +12,15 @@
                             word's letters in order. Say how many notches, and which way. The stars
                             are placed from the word and the turn, and the same count the other way
                             round is made to read nothing. A wrong check says whether the count is
-                            off, or fits one way round, and no more.
+                            off, or fits one way round, and no more; asking the archive which way
+                            it turns costs a hint.
      which omens hold       A sky of five to seven stars, a ring, a horizon band and a hand's-width
                             scale, and four omens, each a claim that can be checked against the sky.
                             Pick the ones that hold. The sky is rolled until one to three of the
                             four hold and no star sits on an edge that would make a claim a matter
-                            of opinion. A wrong check says how many of the picked hold, and no more.
+                            of opinion; some seeds roll a crowded sky of eight or nine stars. A wrong
+                            check says how many of the picked hold, and no more; ringing the two
+                            brightest costs a hint, and a solve reads a line from the archive.
 
    The sky a visitor brings may be one star or many: it is drawn behind the wheel for colour, and
    nothing of the puzzle depends on it. The plan is rolled from the seed, carried whole on the
@@ -244,7 +247,8 @@ function wheelScene(g, w, h, c, p, s, variant) {
     g.lineTo(edge.x, edge.y);
     g.stroke();
     g.setLineDash([]);
-    glow(g, c, star.x, star.y, R * 0.12, col.accent2, lit ? 0.7 : 0.45);
+    const breathe = s.t ? 0.12 * Math.sin(s.t * 1.8 + k * 2.1) : 0;
+    glow(g, c, star.x, star.y, R * 0.12, col.accent2, (lit ? 0.7 : 0.45) + breathe);
     g.fillStyle = col.accent2;
     g.beginPath();
     g.arc(star.x, star.y, Math.max(2.5, R * 0.03), 0, Math.PI * 2);
@@ -265,7 +269,8 @@ function wheelScene(g, w, h, c, p, s, variant) {
   write(g, p.word.split('').join('  '), cx, h * 0.045 + fs * 1.3, fs * 1.4, col.accent2, 'center', 700);
   write(g, 'no ' + p.dropped[0] + ', no ' + p.dropped[1] + ' on the rim', w * 0.03, h * 0.96, fs * 0.8, c.alpha(col.muted, 0.8), 'left', 500);
   write(g, 'clockwise', tip.x + R * 0.1, tip.y - R * 0.02, fs * 0.8, c.alpha(col.muted, 0.9), 'left', 500);
-  write(g, s.spin >= 1 ? notches(p.t) + ' ' + wayWord(p.cw) : 'the wheel is seized: say how it must turn', w * 0.97, h * 0.96, fs * 0.8, s.spin >= 1 ? col.accent2 : c.alpha(col.muted, 0.8), 'right', 500);
+  const foot = s.spin >= 1 ? notches(p.t) + ' ' + wayWord(p.cw) : s.told ? 'the archive says: ' + wayWord(p.cw) : 'the wheel is seized: say how it must turn';
+  write(g, foot, w * 0.97, h * 0.96, fs * 0.8, s.spin >= 1 || s.told ? col.accent2 : c.alpha(col.muted, 0.8), 'right', 500);
 }
 
 function wheelPreview(g, w, h, env, p) {
@@ -273,7 +278,7 @@ function wheelPreview(g, w, h, env, p) {
 }
 
 function wheelPiece(env, p) {
-  const s = { angle: 0, spin: 0 };
+  const s = { angle: 0, spin: 0, t: 0, told: false };
   const draw = (c) => wheelScene(c.g, c.w, c.h, c, p, s, env.variant);
   return {
     title: wheelTitle(p),
@@ -286,7 +291,8 @@ function wheelPiece(env, p) {
       { id: 'way', ask: 'which way round', kind: 'choice', options: [
         { label: 'clockwise', value: 'cw' },
         { label: 'counterclockwise', value: 'ccw' }
-      ] }
+      ] },
+      { id: 'ask', ask: 'which way the wheel turns', kind: 'press', count: 1, label: 'ask the archive', optional: true }
     ],
     solution: { count: p.t, way: p.cw ? 'cw' : 'ccw' },
     check(c) {
@@ -310,9 +316,17 @@ function wheelPiece(env, p) {
         c.status(Number.isInteger(n) && n >= 1 ? notches(n) + ', you say' : 'a count of notches');
       }
       if (id === 'way') c.status(value === 'cw' ? 'clockwise, you say' : 'counterclockwise, you say');
+      if (id === 'ask') {
+        if (!s.told) {
+          s.told = true;
+          c.hint();
+        }
+        c.status('the archive says the wheel turns ' + wayWord(p.cw) + '; the count is yours to find');
+      }
       draw(c);
     },
     frame(t, dt, c) {
+      if (!c.reduced) s.t += dt;
       if (c.done) {
         s.spin = c.reduced ? 1 : Math.min(1, s.spin + dt * 0.7);
         s.angle = ease(s.spin) * p.t * (Math.PI * 2 / NOTCHES) * (p.cw ? 1 : -1);
@@ -331,6 +345,16 @@ const RING = { x: 0.5, y: 0.44, r: 0.2 };
 const BAND = 0.8; // the horizon band's top edge, as a fraction of the sky's height
 const HAND = 0.22; // a hand's width, as a fraction of the sky's width
 const MARGIN = 0.035;
+// What the archive reads once the omens are judged: one line, chosen by the sky, in the site's voice.
+const READINGS = [
+  'what you asked elsewhere was already answered here',
+  'the sky kept its word; keep yours',
+  'a small thing holds; let the large one go',
+  'what is true of the stars is true of the asking',
+  'the hand that measured is the hand that is read',
+  'nothing moved while you looked, and that was the answer',
+  'the brightest is not the nearest; the nearest is enough'
+];
 
 // Each omen family has two readings, one the other's opposite; a sky gets one claim per family.
 const FAMILIES = [
@@ -408,7 +432,7 @@ const FALLBACK = {
 
 function omensPlan(env) {
   for (let attempt = 0; attempt < 60; attempt++) {
-    const n = env.int(5, 7);
+    const n = env.chance(0.3) ? env.int(8, 9) : env.int(5, 7);
     const levels = some(env, [1, 2, 3, 4, 5, 6, 7, 8, 9], n);
     const pts = [];
     for (let i = 0; i < n && pts.length === i; i++) {
@@ -426,7 +450,7 @@ function omensPlan(env) {
 function carriedOmens(env) {
   const p = env.card && env.card.of;
   if (!p || p.kind !== 'omens') return null;
-  if (!Array.isArray(p.pts) || p.pts.length < 5 || p.pts.length > 7) return null;
+  if (!Array.isArray(p.pts) || p.pts.length < 5 || p.pts.length > 9) return null;
   const okPt = (q) => q && typeof q === 'object' && Number.isFinite(q.x) && Number.isFinite(q.y) && q.x > 0 && q.x < 1 && q.y > 0 && q.y < 1 && Number.isInteger(q.b) && q.b >= 1 && q.b <= 9;
   if (!p.pts.every(okPt) || new Set(p.pts.map((q) => q.b)).size !== p.pts.length) return null;
   const pts = p.pts.map((q) => ({ x: q.x, y: q.y, b: q.b }));
@@ -509,12 +533,26 @@ function omensScene(g, w, h, c, p, s, variant) {
   const unit = Math.min(f.sw, f.sh);
   p.pts.forEach((q) => {
     const r = unit * (0.006 + q.b * 0.0024);
-    glow(g, c, X(q.x), Y(q.y), r * 5, col.accent2, 0.25 + q.b * 0.05);
+    const breathe = s.t ? 0.08 * Math.sin(s.t * 1.6 + q.b * 1.7) : 0;
+    glow(g, c, X(q.x), Y(q.y), r * 5, col.accent2, 0.25 + q.b * 0.05 + breathe);
     g.fillStyle = c.mix(col.fg, col.accent2, q.b / 9);
     g.beginPath();
     g.arc(X(q.x), Y(q.y), r, 0, Math.PI * 2);
     g.fill();
   });
+  // The hint, once asked for: the two brightest, ringed and named.
+  if (s.marked) {
+    g.strokeStyle = c.alpha(col.accent2, 0.9);
+    g.lineWidth = 1.2;
+    g.setLineDash([3, 3]);
+    byBrightness(p.pts).slice(0, 2).forEach((q, k) => {
+      g.beginPath();
+      g.arc(X(q.x), Y(q.y), unit * 0.05, 0, Math.PI * 2);
+      g.stroke();
+      write(g, k ? 'second brightest' : 'brightest', X(q.x), Y(q.y) - unit * 0.07, fs * 0.75, col.accent2, 'center', 500);
+    });
+    g.setLineDash([]);
+  }
   // The four omens, as cards under the sky; a picked one is marked, and the ones that hold are
   // shown once the puzzle is solved.
   const top = f.y + f.sh + h * 0.03;
@@ -543,7 +581,7 @@ function omensPreview(g, w, h, env, p) {
 }
 
 function omensPiece(env, p) {
-  const s = { picked: [], reveal: false };
+  const s = { picked: [], reveal: false, marked: false, t: 0 };
   const draw = (c) => omensScene(c.g, c.w, c.h, c, p, s, env.variant);
   return {
     title: omensTitle(p),
@@ -553,7 +591,7 @@ function omensPiece(env, p) {
     checkLabel: 'read the omens',
     steps: [
       { id: 'hold', ask: 'the omens that hold', kind: 'pick', items: p.claims.map((id, i) => ({ label: 'omen ' + (i + 1), value: i })) },
-      { id: 'second', ask: 'a second look at the sky', kind: 'press', count: 1, label: 'look again', optional: true }
+      { id: 'second', ask: 'the two brightest stars, ringed', kind: 'press', count: 1, label: 'ring the brightest', optional: true }
     ],
     solution: { hold: p.truth.slice() },
     check(c) {
@@ -578,15 +616,23 @@ function omensPiece(env, p) {
         s.picked = Array.isArray(value) ? value.map(Number) : [];
         c.status(s.picked.length ? 'picked: ' + s.picked.map((i) => 'omen ' + (i + 1)).join(', ') : 'nothing picked yet');
       }
-      if (id === 'second') c.status('the sky holds still; the ring, the band and the hand\'s width are the measure');
+      if (id === 'second') {
+        if (!s.marked) {
+          s.marked = true;
+          c.hint();
+        }
+        c.status('the two brightest are ringed; the ring, the band and the hand\'s width are the measure');
+      }
       draw(c);
     },
     frame(t, dt, c) {
+      if (!c.reduced) s.t += dt;
       draw(c);
     },
     end(c) {
       s.reveal = true;
-      c.status('the omens that hold: ' + p.truth.map((i) => 'omen ' + (i + 1)).join(', ') + '; archived');
+      const line = READINGS[(p.truth.length * 3 + p.truth[0] + p.pts.length) % READINGS.length];
+      c.status('the omens that hold: ' + p.truth.map((i) => 'omen ' + (i + 1)).join(', ') + '. the archive reads: ' + line);
       draw(c);
     }
   };
