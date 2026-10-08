@@ -1,6 +1,6 @@
-/* Two shapes in the pendulum hall: a rack tuned to gather and scatter, and a pair whose
-   spring can carry a swing between them. Cards carry their exact subject into the piece.
-   Both share the hall's drawing ground; each piece owns its choices and elapsed time. */
+/* Three shapes in the pendulum hall: a rack tuned to gather and scatter, a pair whose
+   spring can carry a swing between them, and crossing shadows that draw a path.
+   Cards carry their exact subject into the piece. Each owns its choices and elapsed time. */
 
 const GUESSES = [
   { label: 'swing as one rank', value: 'together' },
@@ -151,8 +151,18 @@ function preview(g, w, h, env, p) {
   scene(g, w, h, env, p, { d: p.d, swing: p.swing / 100, released: v.turn > 0.03, time: v.turn * p.breath }, v);
 }
 
+function rackFinding(p, s) {
+  const correct = s.d === 2 ? 'together' : 'ranks';
+  const chosen = GUESSES.find((o) => o.value === s.guess);
+  return 'At half-breath the row ' + (s.d === 2
+    ? 'swung as one rank: two beats apart puts neighbours a whole swing apart, which is no gap at all.'
+    : 'split into two opposite ranks: one beat apart puts neighbours half a swing apart.')
+    + ' ' + (s.guess === correct ? 'You called it.' : 'You predicted it would ' + (chosen ? chosen.label : 'do something else') + '.')
+    + ' At the full breath every count came home together.';
+}
+
 function rackPiece(env, p) {
-  const s = { d: p.d, swing: p.swing / 100, guess: '', released: false, time: 0, said: 0, watched: false };
+  const s = { d: p.d, swing: p.swing / 100, guess: '', released: false, playing: false, time: 0, said: 0, watched: false };
   const draw = (c) => scene(c.g, c.w, c.h, c, p, s, env.variant || PLAIN);
   return {
     title: rackTitle(p),
@@ -170,7 +180,6 @@ function rackPiece(env, p) {
       draw(c);
     },
     apply(id, value, c) {
-      if (c.done) return;
       if (id === 'step') {
         const d = Number(value);
         if (d !== 1 && d !== 2) {
@@ -198,16 +207,20 @@ function rackPiece(env, p) {
         s.guess = pick.value;
         c.status('Your prediction: at half-breath the row will ' + pick.label + '. You can retune before and after releasing.');
       }
-      if (id === 'release' && !s.released) {
+      if (id === 'release') {
         s.released = true;
+        s.playing = true;
         s.time = 0;
         s.said = 0;
         c.status(c.reduced ? 'Released. The breath appears without movement.' : 'Released together. Watch the wave run down the row.');
+      } else if (c.done && !s.playing) {
+        s.time = p.breath / 2;
+        c.status(rackFinding(p, s));
       }
       draw(c);
     },
     frame(t, dt, c) {
-      if (s.released && !c.done) {
+      if (s.released && s.playing) {
         s.time = c.reduced ? p.breath : Math.min(p.breath, s.time + Math.max(0, dt));
         const f = s.time / p.breath;
         if (!s.watched) c.progress('watch', f);
@@ -219,26 +232,25 @@ function rackPiece(env, p) {
           s.said = 2;
           c.status(s.d === 2 ? 'Half-breath: the whole row swings as one rank again.' : 'Half-breath: the row has split into two opposite ranks.');
         }
-        if (f >= 1 && !s.watched) {
-          s.watched = true;
-          c.satisfy('watch');
-          c.status('One full breath: every pendulum came home together. Choices still waiting can change the finding.');
+        if (f >= 1) {
+          s.playing = false;
+          if (!s.watched) {
+            s.watched = true;
+            c.satisfy('watch');
+          }
+          c.status(c.done ? rackFinding(p, s)
+            : 'One full breath: every pendulum came home together. Choices still waiting can change the finding.');
         }
       }
       draw(c);
     },
     end(c) {
       s.released = true;
+      s.playing = false;
       s.watched = true;
       s.time = p.breath;
       draw(c);
-      const correct = s.d === 2 ? 'together' : 'ranks';
-      const chosen = GUESSES.find((o) => o.value === s.guess);
-      c.status('At half-breath the row ' + (s.d === 2
-        ? 'swung as one rank: two beats apart puts neighbours a whole swing apart, which is no gap at all.'
-        : 'split into two opposite ranks: one beat apart puts neighbours half a swing apart.')
-        + ' ' + (s.guess === correct ? 'You called it.' : 'You predicted it would ' + (chosen ? chosen.label : 'do something else') + '.')
-        + ' Nothing held them in step but the tuning, and at the full breath every count came back to one.');
+      c.status(rackFinding(p, s));
     }
   };
 }
@@ -300,7 +312,7 @@ function tradeTitle(p) {
 
 function tradeState(p) {
   return {
-    link: p.link, pattern: p.pattern, guess: '', released: false,
+    link: p.link, pattern: p.pattern, guess: '', released: false, playing: false,
     time: 0, halfway: false, watched: false
   };
 }
@@ -509,6 +521,14 @@ function tradeFinding(s) {
   return 'Halfway, the first rested and the second had its whole swing. Then the swing came back. No extra push was added after release: the spring passed the motion along.';
 }
 
+function tradeVerdict(s) {
+  const prediction = TRADE_GUESSES.find((o) => o.value === s.guess);
+  if (!prediction) return tradeFinding(s) + ' Make your prediction to compare.';
+  return tradeFinding(s) + ' '
+    + (s.guess === tradeOutcome(s) ? 'You called it.' : 'You predicted ' + prediction.label + '.')
+    + ' The lines show swing size, not the position of a bob. The drawing assumes small swings and no friction.';
+}
+
 function tradePiece(env, p) {
   const s = tradeState(p);
   const draw = (c) => tradeScene(c.g, c.w, c.h, c, p, s, env.variant || PLAIN);
@@ -516,7 +536,7 @@ function tradePiece(env, p) {
     const start = STARTS.find((o) => o.value === s.pattern);
     c.status((s.released ? 'The picture redraws the same release with this setting. ' : '')
       + (s.link === 'joined' ? 'Spring joined; ' : 'No spring; ')
-      + start.label + '.' + (s.watched ? ' ' + tradeFinding(s) : ''));
+      + start.label + '.' + (s.watched && !s.playing ? ' ' + tradeVerdict(s) : ''));
   }
   return {
     title: tradeTitle(p),
@@ -536,7 +556,6 @@ function tradePiece(env, p) {
       draw(c);
     },
     apply(id, value, c) {
-      if (c.done) return;
       if (id === 'link') {
         if (!LINKS.some((o) => o.value === value)) {
           c.status('Join the spring or leave the two pendulums separate.');
@@ -561,10 +580,13 @@ function tradePiece(env, p) {
         }
         s.guess = prediction.value;
         c.status('You predict ' + prediction.label + '. '
-          + (s.watched ? tradeFinding(s) : 'Any prediction works.'));
+          + (s.watched && !s.playing ? tradeVerdict(s) : 'Watch what the spring passes along.'));
       }
-      if (id === 'release' && !s.released) {
+      if (id === 'release') {
         s.released = true;
+        s.playing = true;
+        s.time = 0;
+        s.halfway = false;
         c.status(c.reduced
           ? 'The breath will appear without movement; the lines below keep the path of both swing sizes.'
           : 'Released, with no further pushes. Follow the two swing sizes below the pendulums.');
@@ -572,10 +594,10 @@ function tradePiece(env, p) {
       draw(c);
     },
     frame(t, dt, c) {
-      if (s.released && !s.watched) {
+      if (s.released && s.playing) {
         s.time = c.reduced ? p.breath : Math.min(p.breath, s.time + Math.max(0, dt));
         const f = s.time / p.breath;
-        c.progress('watch', f);
+        if (!s.watched) c.progress('watch', f);
         if (!s.halfway && f >= 0.5 && f < 1) {
           s.halfway = true;
           c.status(tradeOutcome(s) === 'trade'
@@ -583,9 +605,13 @@ function tradePiece(env, p) {
             : 'Halfway through: both have kept their original swing sizes. The next half follows the same starts.');
         }
         if (f >= 1) {
-          s.watched = true;
-          c.satisfy('watch');
-          if (!c.done) c.status('One breath has played. ' + tradeFinding(s)
+          s.playing = false;
+          if (!s.watched) {
+            s.watched = true;
+            c.satisfy('watch');
+          }
+          if (c.done) c.status(tradeVerdict(s));
+          else c.status('One breath has played. ' + tradeFinding(s)
             + ' Any choices still waiting can change the finding.');
         }
       }
@@ -593,14 +619,300 @@ function tradePiece(env, p) {
     },
     end(c) {
       s.released = true;
+      s.playing = false;
       s.watched = true;
       s.time = p.breath;
-      const prediction = TRADE_GUESSES.find((o) => o.value === s.guess);
-      c.status(tradeFinding(s) + ' '
-        + (s.guess === tradeOutcome(s) ? 'You called it.'
-          : 'You predicted ' + (prediction ? prediction.label : 'another ending') + '.')
-        + ' The lines show swing size, not the position of a bob. The drawing assumes small swings and no friction.');
+      c.status(tradeVerdict(s));
       draw(c);
+    }
+  };
+}
+
+const CROSS_COUNTS = [
+  { label: '2 across, 3 down', value: 0, across: 2, down: 3 },
+  { label: '2 across, 4 down', value: 1, across: 2, down: 4 },
+  { label: '3 across, 4 down', value: 2, across: 3, down: 4 },
+  { label: '4 across, 6 down', value: 3, across: 4, down: 6 }
+];
+const CROSS_LEADS = [
+  { label: 'release together', value: 0, phase: 0 },
+  { label: 'downward a sixth-swing ahead', value: 1, phase: 1 / 6 },
+  { label: 'downward a third-swing ahead', value: 2, phase: 1 / 3 }
+];
+const CROSS_GUESSES = [
+  { label: 'yes, the rest retraces it', value: 'half' },
+  { label: 'no, the rest draws new ground', value: 'full' }
+];
+
+function dealsCross(env) {
+  return (env.seed >>> 0) % 4 === 2;
+}
+
+function crossPlan(env) {
+  const seed = env.seed >>> 0;
+  const rack = plan(env);
+  const pick = (k, m) => (Math.imul(seed ^ (seed >>> k), 2654435761) >>> 0) % m;
+  return {
+    family: 'crossed-shadows', number: rack.number,
+    pair: pick(6, CROSS_COUNTS.length), headstart: pick(9, CROSS_LEADS.length),
+    breath: rack.breath - 3
+  };
+}
+
+function carriedCross(env) {
+  const p = env.card && env.card.of;
+  if (!p || p.family !== 'crossed-shadows'
+      || !Number.isInteger(p.number) || p.number < 100 || p.number > 999
+      || !Number.isInteger(p.pair) || p.pair < 0 || p.pair >= CROSS_COUNTS.length
+      || !Number.isInteger(p.headstart) || p.headstart < 0 || p.headstart >= CROSS_LEADS.length
+      || !Number.isInteger(p.breath) || p.breath < 4 || p.breath > 6) return null;
+  return { family: p.family, number: p.number, pair: p.pair, headstart: p.headstart, breath: p.breath };
+}
+
+function crossTitle(p) {
+  const counts = CROSS_COUNTS[p.pair];
+  return 'trace ' + p.number + ': ' + counts.across + ' against ' + counts.down;
+}
+
+function crossState(p) {
+  return { pair: p.pair, headstart: p.headstart, guess: '', released: false,
+    playing: false, watched: false, halfway: false, time: 0 };
+}
+
+function crossCloses(s) {
+  const counts = CROSS_COUNTS[s.pair];
+  return counts.across % 2 === 0 && counts.down % 2 === 0;
+}
+
+function crossPosition(s, fraction) {
+  const counts = CROSS_COUNTS[s.pair];
+  return {
+    x: Math.cos(2 * Math.PI * counts.across * fraction),
+    y: Math.cos(2 * Math.PI * (counts.down * fraction + CROSS_LEADS[s.headstart].phase))
+  };
+}
+
+function crossScene(g, w, h, c, p, s, variant) {
+  const v = variant || PLAIN;
+  const col = c.colors;
+  const m = Math.min(w, h);
+  const side = Math.min(w * 0.36, h * 0.37) * Math.min(1.1, v.scale);
+  const cx = w * (0.55 + v.turn * 0.04);
+  const cy = h * 0.51;
+  const fraction = s.released ? Math.min(1, s.time / p.breath) : 0;
+  const at = (f) => {
+    const point = crossPosition(s, f);
+    return { x: cx + point.x * side, y: cy + point.y * side };
+  };
+  const samples = Math.max(130, Math.round(240 * v.density));
+  const spot = at(fraction);
+  const start = at(0);
+  const middle = at(0.5);
+  hallBackground(g, w, h, c, v);
+  g.save();
+  g.fillStyle = c.alpha(col.bg, 0.42);
+  g.fillRect(cx - side * 1.13, cy - side * 1.13, side * 2.26, side * 2.26);
+  g.strokeStyle = c.alpha(col.fg, 0.35);
+  g.lineWidth = 1;
+  g.strokeRect(cx - side * 1.13, cy - side * 1.13, side * 2.26, side * 2.26);
+
+  g.strokeStyle = c.alpha(col.accent, 0.23);
+  g.lineWidth = 1;
+  g.setLineDash([2, 5]);
+  g.beginPath();
+  for (let i = 0; i <= samples; i++) {
+    const point = at(i / samples);
+    if (i) g.lineTo(point.x, point.y);
+    else g.moveTo(point.x, point.y);
+  }
+  g.stroke();
+  g.setLineDash([]);
+  const trace = (from, to, color, width) => {
+    if (to <= from) return;
+    const n = Math.max(1, Math.ceil((to - from) * samples));
+    g.strokeStyle = color;
+    g.lineWidth = width;
+    g.beginPath();
+    for (let i = 0; i <= n; i++) {
+      const point = at(from + (to - from) * i / n);
+      if (i) g.lineTo(point.x, point.y);
+      else g.moveTo(point.x, point.y);
+    }
+    g.stroke();
+  };
+  if (s.released) {
+    trace(0, Math.min(0.5, fraction), col.accent, Math.max(1.5, m * 0.009 * v.scale));
+    trace(0.5, fraction, col.accent2, Math.max(1, m * 0.005 * v.scale));
+  }
+
+  g.strokeStyle = c.alpha(col.fg, 0.4);
+  g.setLineDash([3, 6]);
+  g.beginPath();
+  g.moveTo(spot.x, h * 0.17);
+  g.lineTo(spot.x, spot.y);
+  g.moveTo(w * 0.16, spot.y);
+  g.lineTo(spot.x, spot.y);
+  g.stroke();
+  g.setLineDash([]);
+  g.lineWidth = Math.max(1, m * 0.005);
+  g.beginPath();
+  g.moveTo(cx, h * 0.07);
+  g.lineTo(spot.x, h * 0.17);
+  g.moveTo(w * 0.07, cy);
+  g.lineTo(w * 0.16, spot.y);
+  g.stroke();
+  for (const [point, color] of [
+    [{ x: spot.x, y: h * 0.17 }, col.accent],
+    [{ x: w * 0.16, y: spot.y }, col.accent2]
+  ]) {
+    g.fillStyle = color;
+    g.beginPath();
+    g.arc(point.x, point.y, Math.max(2.5, m * 0.013), 0, Math.PI * 2);
+    g.fill();
+  }
+  g.strokeStyle = col.accent;
+  g.lineWidth = Math.max(1, m * 0.006);
+  g.beginPath();
+  g.arc(start.x, start.y, Math.max(4, m * 0.02), 0, Math.PI * 2);
+  g.stroke();
+  if (fraction >= 0.5) {
+    g.strokeStyle = col.accent2;
+    g.beginPath();
+    g.arc(middle.x, middle.y, Math.max(7, m * 0.035), 0, Math.PI * 2);
+    g.stroke();
+  }
+  const glow = g.createRadialGradient(spot.x, spot.y, 0, spot.x, spot.y, Math.max(8, m * 0.055));
+  glow.addColorStop(0, c.alpha(col.accent2, 0.5));
+  glow.addColorStop(1, c.alpha(col.accent2, 0));
+  g.fillStyle = glow;
+  g.fillRect(spot.x - m * 0.06, spot.y - m * 0.06, m * 0.12, m * 0.12);
+  g.fillStyle = col.fg;
+  g.beginPath();
+  g.arc(spot.x, spot.y, Math.max(2, m * 0.008), 0, Math.PI * 2);
+  g.fill();
+
+  const counts = CROSS_COUNTS[s.pair];
+  g.font = '500 ' + Math.max(10, Math.min(18, Math.round(m * 0.04))) + 'px system-ui, sans-serif';
+  g.textBaseline = 'middle';
+  g.fillStyle = col.fg;
+  g.textAlign = 'left';
+  g.fillText('across ' + counts.across, w * 0.05, h * 0.065, w * 0.38);
+  g.textAlign = 'right';
+  g.fillText('down ' + counts.down, w * 0.95, h * 0.065, w * 0.38);
+  g.textAlign = 'center';
+  g.fillText(!s.released ? 'ready at the starting mark'
+    : fraction >= 1 ? 'the full breath comes home'
+      : fraction >= 0.5 ? 'the second half is writing' : 'the first half is writing',
+  w / 2, h * 0.94, w * 0.9);
+  g.restore();
+}
+
+function crossPreview(g, w, h, env, p) {
+  crossScene(g, w, h, env, p, crossState(p), env.variant || PLAIN);
+}
+
+function crossFinding(s) {
+  const closes = crossCloses(s);
+  const prediction = CROSS_GUESSES.find((o) => o.value === s.guess);
+  return (closes
+    ? 'Halfway, both pendulums had made an even number of swings. The spot returned to its starting mark moving the same way, so the second half traced the first again.'
+    : 'Halfway, an odd count put at least one shadow on the opposite side. The second half drew new ground before both pendulums came home.')
+    + ' ' + (!prediction ? 'Make your prediction to compare.'
+      : s.guess === (closes ? 'half' : 'full') ? 'You called it.' : 'You predicted ' + prediction.label + '.');
+}
+
+function crossPiece(env, p) {
+  const s = crossState(p);
+  const draw = (c) => crossScene(c.g, c.w, c.h, c, p, s, env.variant || PLAIN);
+  function setting(c, line) {
+    c.status(line + (s.watched && !s.playing ? ' ' + crossFinding(s)
+      : ' The faint line hints at the path; release them to find out about halfway.'));
+  }
+  return {
+    title: crossTitle(p),
+    brief: 'Two pendulums sweep across and down; their crossing shadows write on the floor. Set their counts and head start, predict whether the second half retraces the first, then release them.',
+    aspect: '16 / 10',
+    steps: [
+      { id: 'counts', ask: 'swings across and down in one breath', kind: 'choice', options: leading(CROSS_COUNTS, p.pair) },
+      { id: 'headstart', ask: 'the downward shadow\'s head start', kind: 'choice', options: leading(CROSS_LEADS, p.headstart) },
+      { id: 'guess', ask: 'by halfway, has the whole path been drawn?', kind: 'choice', options: CROSS_GUESSES },
+      { id: 'release', ask: 'release both pendulums', kind: 'press', count: 1, label: 'release the shadows' },
+      { id: 'watch', ask: 'watch the line close', kind: 'wait', after: 'release' }
+    ],
+    start(c) {
+      const counts = CROSS_COUNTS[s.pair];
+      c.status('The bright point is where the two shadows cross. Across counts ' + counts.across
+        + ' swings per breath; down counts ' + counts.down + '. The faint line is the path they could draw.');
+      draw(c);
+    },
+    apply(id, value, c) {
+      if (id === 'counts') {
+        const pair = Number(value);
+        if (!Number.isInteger(pair) || !CROSS_COUNTS[pair]) {
+          c.status('Choose how many swings go across and down.');
+          return;
+        }
+        s.pair = pair;
+        setting(c, CROSS_COUNTS[pair].label + ' in one breath.');
+      }
+      if (id === 'headstart') {
+        const headstart = Number(value);
+        if (!Number.isInteger(headstart) || !CROSS_LEADS[headstart]) {
+          c.status('Choose when the downward shadow starts.');
+          return;
+        }
+        s.headstart = headstart;
+        setting(c, CROSS_LEADS[headstart].label + '.');
+      }
+      if (id === 'guess') {
+        const prediction = CROSS_GUESSES.find((o) => o.value === value);
+        if (!prediction) {
+          c.status('Predict whether the second half retraces the first.');
+          return;
+        }
+        s.guess = prediction.value;
+        setting(c, 'Your prediction: ' + prediction.label + '.');
+      }
+      if (id === 'release') {
+        s.released = true;
+        s.playing = true;
+        s.time = 0;
+        s.halfway = false;
+        c.status(c.reduced ? 'Released. The complete line appears without movement.'
+          : 'Released. Blue draws the first half; amber follows the second. Watch where they meet.');
+      }
+      draw(c);
+    },
+    frame(t, dt, c) {
+      if (s.playing) {
+        s.time = c.reduced ? p.breath : Math.min(p.breath, s.time + Math.max(0, dt));
+        const fraction = s.time / p.breath;
+        if (!s.watched) c.progress('watch', fraction);
+        if (!s.halfway && fraction >= 0.5 && fraction < 1) {
+          s.halfway = true;
+          c.status(crossCloses(s)
+            ? 'Halfway: the amber mark lies over the blue start. Watch the line retrace itself.'
+            : 'Halfway: the amber mark is elsewhere. There is more of this path to draw.');
+        }
+        if (fraction >= 1) {
+          s.playing = false;
+          if (!s.watched) {
+            s.watched = true;
+            c.satisfy('watch');
+          }
+          c.status(c.done ? crossFinding(s)
+            : 'The full breath came home. Set any choice still waiting to compare your prediction.');
+        }
+      }
+      draw(c);
+    },
+    end(c) {
+      s.released = true;
+      s.playing = false;
+      s.watched = true;
+      s.time = p.breath;
+      draw(c);
+      c.status(crossFinding(s) + ' Change a count or the head start to see a different line; release to watch it written again.');
     }
   };
 }
@@ -609,11 +921,24 @@ export default {
   id: 'pendulum-hall',
   needsSky: false,
   paint(g, w, h, env) {
-    if (dealsTrade(env)) tradePreview(g, w, h, env, tradePlan(env));
+    if (dealsCross(env)) crossPreview(g, w, h, env, crossPlan(env));
+    else if (dealsTrade(env)) tradePreview(g, w, h, env, tradePlan(env));
     else preview(g, w, h, env, plan(env));
   },
   animate(g, w, h, env, t) {
     const v = env.variant || PLAIN;
+    if (dealsCross(env)) {
+      const p = crossPlan(env);
+      if (env.reduced) {
+        crossPreview(g, w, h, env, p);
+        return;
+      }
+      const s = crossState(p);
+      s.released = true;
+      s.time = (t * 0.65 + v.turn * p.breath) % p.breath;
+      crossScene(g, w, h, env, p, s, v);
+      return;
+    }
     if (dealsTrade(env)) {
       const p = tradePlan(env);
       if (env.reduced) {
@@ -630,6 +955,18 @@ export default {
     scene(g, w, h, env, p, { d: p.d, swing: p.swing / 100, released: true, time: (t * 0.5 + v.turn * p.breath) % p.breath }, v);
   },
   spark(env) {
+    if (dealsCross(env)) {
+      const p = crossPlan(env);
+      const counts = CROSS_COUNTS[p.pair];
+      return {
+        title: crossTitle(p),
+        text: 'Two crossing shadows draw one line. Predict whether the second half retraces the first, then release the pendulums and watch.',
+        mono: 'across ' + counts.across + ' swings / down ' + counts.down + ' swings; ' + CROSS_LEADS[p.headstart].label,
+        aspect: '16 / 10',
+        paint: (g, w, h, cardEnv) => crossPreview(g, w, h, cardEnv, p),
+        of: p
+      };
+    }
     if (dealsTrade(env)) {
       const p = tradePlan(env);
       return {
@@ -655,10 +992,13 @@ export default {
     };
   },
   piece(env) {
+    const crossing = carriedCross(env);
+    if (crossing) return crossPiece(env, crossing);
     const pair = carriedTrade(env);
     if (pair) return tradePiece(env, pair);
     const rack = carried(env);
     if (rack) return rackPiece(env, rack);
+    if (dealsCross(env)) return crossPiece(env, crossPlan(env));
     return dealsTrade(env) ? tradePiece(env, tradePlan(env)) : rackPiece(env, plan(env));
   }
 };
