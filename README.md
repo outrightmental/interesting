@@ -1499,7 +1499,13 @@ gesture they make at it.
   a piece taken away under it. `StageTest` plays `LIVE_PIECE` through it, which counts the taps it
   is told about onto its own live line, so a press the stage answered can be told apart from one it
   passed on; `RealSiteTest` plays the site as committed and holds what can be held of any world's
-  piece without knowing which piece it is.
+  piece without knowing which piece it is. On the committed site that is the press while a module
+  loads, which has nothing to reach whatever the module turns out to be. No puzzle on the site uses
+  a `tap` knob at present, and none gates a knob behind another with `after:`, so there the
+  scenario may find no locked tap knob to press at all — the same as the hold scenario finding no
+  hold, and held the same way: where a world does deal one the rules apply to it, and `StageTest`
+  holds the stage to it with a piece of its own meanwhile. Demanding one of the site would pin a
+  knob kind the silo leaves open.
 - **Stated in the prompt, and not a coded axiom.** Like the continued-interaction axiom, it lives
   in the completion axiom's block of the system prompt in
   [`.github/scripts/make_interesting.py`](.github/scripts/make_interesting.py) and is held on the

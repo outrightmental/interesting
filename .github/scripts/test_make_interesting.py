@@ -6259,14 +6259,23 @@ class RealSiteTest(unittest.TestCase):
         self.assertEqual(torn["look"]["sceneLabel"], "the scene")
         # Every press on the scene does something (issue #89), on the site as committed. What can be
         # held of any world's piece without knowing which piece it is, is held: a press while a
-        # module is still loading and a press on a tap knob still locked behind another have nothing
-        # to reach, so the stage has to answer them itself -- and answering costs nothing, so no knob
-        # is set and no piece is finished by one. A piece with no tap knob is left to its module:
-        # whether it writes a tap() anyway is not visible from out here, and either answer is good.
+        # module is still loading has nothing to reach whatever that module turns out to be, so the
+        # stage is what has to answer it -- and answering costs nothing, so no knob is set and no
+        # piece is finished by one. The same goes for the press with less motion asked for, which is
+        # read off while a module loads for exactly that reason.
+        #
+        # The other two presses depend on what a module wrote, so neither is demanded here. A tap
+        # knob is a kind no puzzle on the site uses at present -- no module writes `kind: 'tap'`,
+        # and none gates a knob behind another with `after:` -- so the scenario may well find no
+        # locked tap knob to press, just as the hold scenario above may find no hold; StageTest
+        # holds the stage to both with pieces of its own, and where a world does gate one the rules
+        # still apply to it. Demanding one here would pin a knob kind the silo leaves open, which is
+        # the one thing this harness is careful not to do. And a piece with no tap knob is left to
+        # its module either way: whether it writes a tap() anyway is not visible from out here, so a
+        # mark and no mark are both right.
         pressed = report["pressAnswered"]["result"]
         self.assertEqual(pressed["loadingMode"], "loading", "the press never landed while a module was loading")
-        self.assertIsNotNone(pressed["locked"], "no world the stage opened gated a tap knob behind another")
-        for when in ["loading", "locked", "calm"]:
+        for when in ["loading", "calm"] + (["locked"] if pressed["locked"] else []):
             with self.subTest(when=when):
                 seen = pressed[when]
                 self.assertTrue(seen["answered"], "the stage swallowed a press it had nothing to do with")
@@ -6275,8 +6284,11 @@ class RealSiteTest(unittest.TestCase):
                 self.assertTrue(seen["silent"], "the acknowledgement is copy rather than a mark")
                 self.assertEqual(seen["set"], seen["setWas"], "a press the piece never saw set a knob")
                 self.assertEqual(seen["finished"], 0, "a press the piece never saw finished the piece")
-        self.assertFalse(pressed["opened"]["answered"],
-                         "the stage answered over a press its piece's own tap() took")
+        if pressed["locked"]:
+            # And with that gate opened the press is the piece's again: whatever its own tap() makes
+            # of it, the stage adds nothing on top of the piece's answer.
+            self.assertFalse(pressed["opened"]["answered"],
+                             "the stage answered over a press its piece's own tap() took")
         self.assertTrue(pressed["calm"]["still"],
                         "the acknowledgement moves for a visitor who asked it not to")
         self.assertFalse(pressed["loading"]["still"], "the acknowledgement never moves for anyone")
