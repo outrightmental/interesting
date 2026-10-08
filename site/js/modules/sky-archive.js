@@ -42,6 +42,17 @@ const COMMON = new Set(('ACE ACT ADD AGE AGO AID AIM AIR ALE ALL AND ANT ANY APE
   + 'SUE SUM SUN TAB TAG TAN TAP TAR TAX TEA TEN THE THY TIE TIN TIP TOE TON TOP TOW TOY TRY TUB TUG TWO URN USE VAN VAT VET VIA VIE VOW WAD '
   + 'WAG WAR WAS WAX WAY WEB WED WET WHO WHY WIG WIN WIT WOE WON WRY YAK YAM YAP YES YET YEW YOU ZAP ZIP ZOO').split(' '));
 
+/* How hard the visitor asked for their puzzles. The persona keeps one difficulty for the whole
+   site (js/persona.js) and js/stage.js hands it to a piece on env.difficulty, 1 (gentle) to 5
+   (fierce); a card's env carries none, so the middle of the dial stands in. A level buys `helps`
+   -- how many things a piece will show when it is asked -- and `margin`, how far out a measured
+   answer may be and still count. Read inside piece() only: the subject is the seed's. */
+function asked(env) {
+  const said = env && env.difficulty ? Number(env.difficulty.level) : NaN;
+  const level = Number.isFinite(said) ? Math.max(1, Math.min(5, Math.round(said))) : 3;
+  return { level, helps: 6 - level, margin: Math.max(0, 3 - level) };
+}
+
 /* ---- shared drawing ------------------------------------------------------------------------- */
 
 function mod(n, m) {
@@ -273,6 +284,9 @@ function wheelPreview(g, w, h, env, p) {
 }
 
 function wheelPiece(env, p) {
+  // The count is notches read off a rim, so it is a measured answer: the difficulty says how many
+  // notches out it may be and still turn the lock.
+  const margin = asked(env).margin;
   const s = { angle: 0, spin: 0 };
   const draw = (c) => wheelScene(c.g, c.w, c.h, c, p, s, env.variant);
   return {
@@ -295,6 +309,11 @@ function wheelPiece(env, p) {
       if (!Number.isInteger(n) || n < 1 || n > 23) return { solved: false, say: 'the count has to be one to twenty-three' };
       const read = reading(p, n, cw);
       if (read === p.word) return { solved: true, say: notches(n) + ' ' + wayWord(cw) + ': the stars read ' + p.word };
+      // Within the margin the difficulty allows, the wheel is taken as turned to the setting that
+      // reads: the stars are a notch or two wide of their letters and the lock still gives.
+      if (cw === !!p.cw && Math.abs(n - p.t) <= margin) {
+        return { solved: true, say: notches(p.t) + ' ' + wayWord(!!p.cw) + ': the stars read ' + p.word };
+      }
       if (reading(p, n, !cw) === p.word) return { solved: false, say: 'the count fits one way round; the direction is off' };
       let land = 0;
       for (let k = 0; k < 3; k++) if (read[k] === p.word[k]) land += 1;
@@ -543,7 +562,8 @@ function omensPreview(g, w, h, env, p) {
 }
 
 function omensPiece(env, p) {
-  const s = { picked: [], reveal: false };
+  const helps = asked(env).helps;
+  const s = { picked: [], reveal: false, read: [] };
   const draw = (c) => omensScene(c.g, c.w, c.h, c, p, s, env.variant);
   return {
     title: omensTitle(p),
@@ -553,7 +573,7 @@ function omensPiece(env, p) {
     checkLabel: 'read the omens',
     steps: [
       { id: 'hold', ask: 'the omens that hold', kind: 'pick', items: p.claims.map((id, i) => ({ label: 'omen ' + (i + 1), value: i })) },
-      { id: 'second', ask: 'a second look at the sky', kind: 'press', count: 1, label: 'look again', optional: true }
+      { id: 'second', ask: 'one omen read for you', kind: 'press', count: 1, label: 'read one for me', optional: true }
     ],
     solution: { hold: p.truth.slice() },
     check(c) {
@@ -578,7 +598,24 @@ function omensPiece(env, p) {
         s.picked = Array.isArray(value) ? value.map(Number) : [];
         c.status(s.picked.length ? 'picked: ' + s.picked.map((i) => 'omen ' + (i + 1)).join(', ') : 'nothing picked yet');
       }
-      if (id === 'second') c.status('the sky holds still; the ring, the band and the hand\'s width are the measure');
+      if (id === 'second') {
+        // The archive will read an omen against its own sky for you -- as many as the difficulty
+        // allows, the ones you have called wrongly first.
+        const order = p.claims.map((id2, i) => i);
+        const next = s.read.length < helps
+          ? (order.find((i) => !s.read.includes(i) && s.picked.includes(i) !== p.truth.includes(i))
+            || order.find((i) => !s.read.includes(i)))
+          : undefined;
+        if (next !== undefined) {
+          s.read.push(next);
+          c.hint();
+          c.status('omen ' + (next + 1) + (p.truth.includes(next) ? ' holds against the sky' : ' does not hold'));
+        } else if (s.read.length >= helps) {
+          c.status('that is all the archive will read at this difficulty; the ring, the band and the hand\'s width are the measure');
+        } else {
+          c.status('every omen has been read; the ones that hold are the ones to pick');
+        }
+      }
       draw(c);
     },
     frame(t, dt, c) {

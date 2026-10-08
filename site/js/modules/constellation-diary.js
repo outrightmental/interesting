@@ -34,6 +34,17 @@ const LEAD = 1.2;
 const FLASH = 0.6;
 const SLOT = 0.95;
 
+/* How hard the visitor asked for their puzzles. The persona keeps one difficulty for the whole
+   site (js/persona.js) and js/stage.js hands it to a piece on env.difficulty, 1 (gentle) to 5
+   (fierce); a card's env carries none, so the middle of the dial stands in. A level buys `helps`
+   -- how many things a piece will show when it is asked -- and `margin`, how far out a measured
+   answer may be and still count. Read inside piece() only: the subject is the seed's. */
+function asked(env) {
+  const said = env && env.difficulty ? Number(env.difficulty.level) : NaN;
+  const level = Number.isFinite(said) ? Math.max(1, Math.min(5, Math.round(said))) : 3;
+  return { level, helps: 6 - level, margin: Math.max(0, 3 - level) };
+}
+
 /* ---- shared arithmetic ---------------------------------------------------------------------- */
 
 function dials(env) {
@@ -274,7 +285,8 @@ function recallPreview(g, w, h, env, plan, t) {
 function recallPiece(env, plan) {
   const n = plan.points.length;
   const v = dials(env);
-  const s = { t: 0, from: 0, fade: 0, order: range(n), taps: [] };
+  const helps = asked(env).helps;
+  const s = { t: 0, from: 0, fade: 0, order: range(n), taps: [], replays: 0 };
   const draw = (c) => recallScene(c.g, c.w, c.h, c, plan, s, v);
   const inPlace = (order) => order.filter((item, i) => item === plan.seq[i]).length;
   return {
@@ -308,9 +320,16 @@ function recallPiece(env, plan) {
         c.status('called back: ' + s.order.map((i) => LETTERS[i]).join(', '));
       }
       if (id === 'again') {
-        s.from = s.t;
-        c.hint();
-        c.status('once more: watch the sky');
+        // How many times the watch is replayed is what the dial buys: five at gentle, one at
+        // fierce, and a sky that has run its allowance says so rather than quietly doing nothing.
+        if (s.replays < helps) {
+          s.replays += 1;
+          s.from = s.t;
+          c.hint();
+          c.status('once more: watch the sky' + (s.replays >= helps ? ' (the last showing at this difficulty)' : ''));
+        } else {
+          c.status('the sky has shown itself as often as this difficulty allows; the order is yours');
+        }
       }
       draw(c);
     },
@@ -618,6 +637,7 @@ function linesPiece(env, plan) {
   const n = plan.points.length;
   const count = plan.claims.length;
   const v = dials(env);
+  const helps = asked(env).helps;
   const s = { fade: 0, lit: -1, picked: [], vouched: [] };
   const draw = (c) => linesScene(c.g, c.w, c.h, c, plan, s, v);
   return {
@@ -651,12 +671,15 @@ function linesPiece(env, plan) {
         c.status(s.picked.length ? 'marked false: ' + s.picked.map((i) => 'line ' + (i + 1)).join(' and ') : 'no line marked yet');
       }
       if (id === 'hint') {
-        const next = range(count).find((i) => !plan.lies.includes(i) && !s.vouched.includes(i) && !s.picked.includes(i))
-          || range(count).find((i) => !plan.lies.includes(i) && !s.vouched.includes(i));
+        const next = s.vouched.length >= helps ? undefined
+          : (range(count).find((i) => !plan.lies.includes(i) && !s.vouched.includes(i) && !s.picked.includes(i))
+            || range(count).find((i) => !plan.lies.includes(i) && !s.vouched.includes(i)));
         if (next !== undefined) {
           s.vouched.push(next);
           c.hint();
           c.status('line ' + (next + 1) + ' holds: ' + claimText(plan.claims[next]));
+        } else if (s.vouched.length >= helps) {
+          c.status('that is all the diary will vouch for at this difficulty; read the rest against the sky');
         } else {
           c.status('every true line has been vouched for; the two left are the false ones');
         }
