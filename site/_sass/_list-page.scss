@@ -6,13 +6,6 @@
   align-content: start;
 }
 
-.page-purpose {
-  margin: 0 0 1.25rem;
-  max-width: 68ch;
-  color: var(--md-sys-color-on-surface);
-  @include type.scale(body-large);
-}
-
 .section-title {
   margin: 1.5rem 0 0.5rem;
   color: var(--md-sys-color-on-surface);

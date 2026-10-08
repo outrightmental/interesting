@@ -6,7 +6,6 @@
 // are classes a page or the shell may add:
 //
 //   .btn-filled    the one action on a page that matters most (the unlock button, "set up persona")
-//   .btn-tonal     the default, named for completeness
 //   .btn-outlined  what a.action is
 //   .btn-text      the quietest: "close", "ask another way", a card's "another"
 //   .warning       the one warm variant, in M3's error family: a control that throws a visitor's
@@ -86,12 +85,6 @@ a.action:focus-visible::after {
 button:active::after,
 a.action:active::after {
   opacity: var(--md-sys-state-pressed-opacity);
-}
-
-button:focus-visible,
-a.action:focus-visible {
-  outline: 3px solid var(--md-sys-color-primary);
-  outline-offset: 2px;
 }
 
 .btn-filled,
@@ -260,11 +253,6 @@ select {
   color: var(--md-sys-color-on-surface);
   font-family: inherit;
   @include type.scale(label-large);
-}
-
-select:focus-visible {
-  outline: 3px solid var(--md-sys-color-primary);
-  outline-offset: 2px;
 }
 
 // A text field, outlined (the word kiln's). The label sits above it in the page's own markup.

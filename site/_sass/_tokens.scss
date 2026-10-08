@@ -55,10 +55,6 @@
   --md-sys-color-inverse-on-surface: var(--bg);
   --md-sys-color-scrim: #000;
   --md-sys-color-shadow: #000;
-  // The two names older page stylesheets still read: the outer border of a control, and the
-  // translucent slab a page over a full-screen canvas sits on.
-  --line: var(--md-sys-color-outline-variant);
-  --panel: color-mix(in oklab, var(--md-sys-color-surface-container-low) 88%, transparent);
 }
 
 :root {
@@ -71,7 +67,6 @@
   --accent2: #ffe7ab;
   --fg: #e6eaf5;
   --muted: #b7c0da;
-  --good: #bdfed8;
   --warn: #ffd4b0;
 
   // Shape scale (m3.material.io/styles/shape).

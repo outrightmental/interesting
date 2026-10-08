@@ -178,10 +178,7 @@
   padding: 0 0.5rem 0.5rem;
 }
 .card-actions button {
-  min-height: 44px;
-  padding: 0.25rem 0.75rem;
-  background: transparent;
-  color: var(--md-sys-color-primary);
+  padding-block: 0.25rem;
 }
 .card-enter { animation: card-in var(--md-sys-motion-duration-long) var(--md-sys-motion-easing-emphasized) both; }
 @keyframes card-in {

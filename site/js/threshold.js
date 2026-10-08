@@ -488,7 +488,7 @@
     meter.setAttribute('aria-hidden', 'true');
     frame.appendChild(meter);
     trace.meter = meter;
-    var skip = el('button', 'probe-option probe-skip', 'skip this');
+    var skip = el('button', 'probe-option probe-skip', 'skip the question');
     skip.type = 'button';
     skip.addEventListener('click', function () {
       host.textContent = '';

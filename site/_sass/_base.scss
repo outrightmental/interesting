@@ -77,10 +77,13 @@ a {
   text-underline-offset: 0.15em;
 }
 
-.tagline {
+// The one plain line of purpose under a page's heading: what the page is and what to do on it.
+// One rule, two names, until every page says .tagline.
+.tagline,
+.page-purpose {
   margin: 0.5rem 0 1.25rem;
-  max-width: 64ch;
-  color: var(--md-sys-color-on-surface-variant);
+  max-width: 68ch;
+  color: var(--md-sys-color-on-surface);
   @include type.scale(body-large);
 }
 

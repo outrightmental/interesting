@@ -193,12 +193,6 @@ $moods: (
   cursor: crosshair;
 }
 
-.probe-field:focus-visible,
-.probe-pad:focus-visible {
-  outline: 3px solid var(--md-sys-color-primary);
-  outline-offset: 2px;
-}
-
 .probe-mark {
   position: absolute;
   width: 14px;
