@@ -7476,7 +7476,7 @@ class MainTest(SiteDirTestCase):
                 sys.exit(1)
             say({GOOD_PLAN!r})
         """)
-        with mock.patch.object(mi.time, "sleep") as slept:
+        with mock.patch.object(mi, "pause_before_retry") as slept:
             output = self.run_main({"MODEL": "only-model"})
         self.assertEqual([c["args"][1] for c in fake.calls()], ["only-model", "only-model"])
         self.assertEqual(read_outputs(output)["model"], "only-model")
@@ -7494,7 +7494,7 @@ class MainTest(SiteDirTestCase):
                 sys.exit(1)
             say({GOOD_PLAN!r})
         """)
-        with mock.patch.object(mi.time, "sleep") as slept:
+        with mock.patch.object(mi, "pause_before_retry") as slept:
             self.run_main({"MODEL": "only-model"})
         self.assertEqual(len(fake.calls()), 2)
         slept.assert_not_called()
@@ -7507,7 +7507,7 @@ class MainTest(SiteDirTestCase):
             say({GOOD_PLAN!r})
         """)
         with mock.patch.object(mi, "RUN_BUDGET_SECONDS", mi.MIN_CALL_SECONDS + 10), \
-                mock.patch.object(mi.time, "sleep") as slept:
+                mock.patch.object(mi, "pause_before_retry") as slept:
             self.run_main({"MODEL": "only-model"})
         self.assertEqual(len(fake.calls()), 2)
         (pause,) = slept.call_args.args
@@ -7552,7 +7552,7 @@ class MainTest(SiteDirTestCase):
                 sys.stderr.write('Error: rate limit exceeded'); sys.exit(1)
             say({GOOD_PLAN!r})
         """)
-        with mock.patch.object(mi.time, "sleep"):
+        with mock.patch.object(mi, "pause_before_retry"):
             self.run_main()
         calls = fake.calls()
         self.assertEqual(len(calls), mi.REPAIR_ROUNDS + 2)

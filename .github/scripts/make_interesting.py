@@ -3278,6 +3278,13 @@ TRANSIENT_ERROR = re.compile(
 RETRY_PAUSE_SECONDS = 30
 
 
+def pause_before_retry(seconds):
+    """Wait `seconds` before asking a model again after a transient CLI failure (see main). A seam
+    of its own rather than a bare time.sleep, so a test can watch for the retry pause without also
+    catching the brief sleeps subprocess uses while it waits for the CLI to exit."""
+    time.sleep(seconds)
+
+
 def call_model(model, prompt, effort=None, budget=None, timeout=None):
     """Ask one model for its answer through the Copilot CLI and return the text.
 
@@ -4005,7 +4012,7 @@ def main():
                         if pause > 0:
                             print(f"::notice::That reads as a passing failure; waiting {pause:g}s "
                                   "before asking again.")
-                            time.sleep(pause)
+                            pause_before_retry(pause)
                 elif isinstance(err, RejectedChange):
                     details = "\n\n".join(part for part in (err.details, strayed_note(plan)) if part)
                     feedback = repair_feedback(answer, reason, details, plan_digest(plan))
