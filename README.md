@@ -1141,7 +1141,8 @@ and what a visitor opens there is a **piece**: a small, randomly configured item
 fidget toy with a few levers and knobs on it — generated on the spot by the world's module from a
 seed, with a clear flow that asks them to make a few choices and finish, expediently. When it is
 finished it plays its ceremony and lights up the way on — one mark, in the lower right of the
-screen — and there it stays: nothing moves on by itself, and the press of that mark is what
+screen — and there it stays, still playable: nothing moves on by itself, nothing goes inert (see
+[Continued-interaction axiom](#continued-interaction-axiom)), and the press of that mark is what
 vanishes the whole piece and opens the next card in the feed in its place, so one piece follows
 another without end and no two are quite the same. A "content page" does not discretely exist: it
 exists as a procedural generation, and the feed that keeps dealing is the river of pieces coming
@@ -1152,9 +1153,10 @@ iteration, stated in the prompt and held to in code.
   `<main>` — a world page is front matter and two lines that include it — and
   [`site/js/stage.js`](site/js/stage.js), one shared line in the `<head>`, runs it: the world's
   name over the piece's title and its one line, the scene (a canvas) beside the knobs, a row of
-  dots for progress, and the ceremony — a done mark over the scene, a burst in the world's palette
-  and a short chime; for a visitor who asked for less motion there is no burst and no transition,
-  only the mark. The scene fills the real estate the first screen has (issue #65): it
+  dots for progress, and the ceremony — a done chip at the end of that row of dots, a burst in the
+  world's palette and a short chime; for a visitor who asked for less motion there is no burst and
+  no transition, only the chip. Nothing of the ceremony is laid over the scene and nothing of it
+  closes the piece down (see [Continued-interaction axiom](#continued-interaction-axiom)). The scene fills the real estate the first screen has (issue #65): it
   is as tall as the viewport leaves once the nav's room, `<main>`'s padding, the heading — measured,
   because a title that wraps takes two lines — and the margin that lets the feed peek are off it,
   and as wide as that height allows at the piece's own aspect ratio, which is also the width of its
@@ -1190,8 +1192,8 @@ iteration, stated in the prompt and held to in code.
   options), `toggle`, `range`, `press`, `hold`, `tap`, `wait` — and the piece is finished when
   every knob is set (the stage sets a choice, toggle, range, press or hold itself; a tap or a
   wait knob is set by the piece, through `ctx.satisfy`), or when it calls `ctx.complete()`. A
-  knob may wait on another (`after`), and every knob stays live once set: a toy is for fidgeting
-  with. `ctx` is the canvas and its context, the size, the world's colours, a seeded random
+  knob may wait on another (`after`), and every knob stays live once set — and stays live once the
+  whole piece is finished: a toy is for fidgeting with. `ctx` is the canvas and its context, the size, the world's colours, a seeded random
   source, the persona's stars, and `status()` and `progress()` for the one live line and the
   knob's bar; `frame(t, dt, ctx)` counts `t` from the piece's start, and `auto: false` lets a
   piece call `complete()` itself. A module is self-contained: it imports nothing. `js/stage.js`
@@ -1206,7 +1208,8 @@ iteration, stated in the prompt and held to in code.
   on it, which is why `ctx.value(id)` is the piece's from the first frame, so pressing it and
   letting go where it stands is giving that answer and the stage takes it as set.
 - **One instantiation, then nothing.** A piece is its turn on the stage and no part of it outlives
-  that turn. The stage has one teardown, and it takes the whole piece apart — the frame loop, the
+  that turn — and that turn runs to the press of the way on, not to the finish. The stage has one
+  teardown, and it takes the whole piece apart — the frame loop, the
   ceremony's timers, a ticker under a hold still pressed down, the knobs, the lines, the dots, the
   mark, the scene and its shape — so a world that comes round again opens on an empty stage and
   plays exactly as it did the first time. A module keeps nothing outside `piece(env)` for the same
@@ -1237,9 +1240,11 @@ iteration, stated in the prompt and held to in code.
   [`.github/scripts/stage_harness.mjs`](.github/scripts/stage_harness.mjs) runs the real
   `js/stage.js` against a stub browser: the elements `_includes/stage.njk` writes, a clock the
   scenario steps by hand so a 1.8-second hold costs nothing, a canvas that records nothing, and a
-  feed that deals the worlds it is told to. Six scenarios: a world played, another played, and the
+  feed that deals the worlds it is told to. Seven scenarios: a world played, another played, and the
   first dealt again, each round finishing, sitting out six seconds of its own clock to prove the
-  stage does not see itself out, and then opening the next when the way on is pressed; a slider used
+  stage does not see itself out, and then opening the next when the way on is pressed; a piece
+  played out and then played *on* with, which must still be drawing, still take its knobs and still
+  take a tap on its scene (issue #86); a slider used
   where it stands, which must count; a knob nobody touched, which must stay unset *and* be named,
   with the way on still dim over it; a hold held past the fill, which must be set by the bar filling
   and not by the release (issue #74); a piece abandoned with a hold still pressed down, after which
@@ -1250,7 +1255,7 @@ iteration, stated in the prompt and held to in code.
   like the piece harness it is outside `/site`, so a run cannot soften it. Deliberately, it holds
   the site as committed rather than refusing a plan: it drives the stage through the stage's own
   elements, and those are a run's to rewrite, so gating plans on it would pin markup the silo leaves
-  open. The prompt says so, and says to keep all seven true when rewriting the stage.
+  open. The prompt says so, and says to keep all eight true when rewriting the stage.
 - **Held to in code.** `check_completion` in
   [`.github/scripts/make_interesting.py`](.github/scripts/make_interesting.py) reads the one list
   of worlds off the built home page (the `#site-worlds` JSON the layout writes from
@@ -1276,9 +1281,71 @@ iteration, stated in the prompt and held to in code.
   as good a change as a new world. The stage is checked, but on the committed site rather than on a
   plan, for the reason given above.
 - **True of the site as committed**: `RealSiteTest` builds `/site` and plays every world's piece
-  to its end on every pull request and before every deploy, plays the stage itself through the four
+  to its end on every pull request and before every deploy, plays the stage itself through the seven
   scenarios above, checks that every world page is the stage and that the threshold hosts the
   question on it, and checks that the limits the prompt states are the harness's own.
+
+### Continued-interaction axiom
+
+**A piece of content should not End just because it is Done.** Finishing is a report, not a closing
+time. The [Completion axiom](#completion-axiom) above says every piece has a clear end; this says
+what that end is allowed to cost, which is nothing: a piece makes itself available for continued
+interaction **as long as the visitor is still interested**, and the mark that says it is done stays
+out of the way of the content it is reporting on.
+
+- **The stage holds to it.** `finish()` in [`site/js/stage.js`](site/js/stage.js) plays the
+  ceremony, says *done* beside the progress dots and lights the way on — and takes nothing away.
+  The frame loop keeps drawing, a tap on the scene still reaches the piece's `tap()`, every knob
+  stays enabled and can be set again (including one that was gated behind another, since every gate
+  stands open once everything is set), and the piece keeps hearing `apply()` for all of it. There is
+  no timeout, no fade-out, no inert state and no teardown in between: `close()` is the one teardown
+  and the only thing that reaches it is the next piece actually opening, which only the press of the
+  way on can do (issue [#78](https://github.com/outrightmental/interesting/issues/78)). One line
+  used to undo all of that — the knobs were disabled in `finish()` — so the moment a visitor solved
+  the toy it went dead under their hands, under a mark that said the stage was waiting for them.
+- **Done reports, once.** The ceremony plays a single time: one `stage:complete`, one chime, one
+  burst, however much fidgeting follows. Still playable is not still finishing, so a visitor who
+  keeps turning the knobs changes the piece without re-staging its finish, and a run reading the
+  event count is reading one piece finished once.
+- **The mark stays off the picture.** The done mark used to be a 64px filled disc and a *done* pill
+  pinned over the scene's lower-right corner, taking a corner of every piece and sitting on top of
+  the piece's own finale. It is a small chip now, laid out at the end of the row of progress dots in
+  the rail beside the scene: the dots say how many knobs are set and the chip says that they all
+  are, so the report lives where the progress was already reported and the scene is left whole.
+  A finished piece's picture is still the content, and nothing that reports on content gets to sit
+  on it. The burst is the one thing that still crosses the scene, and it is transient and clears
+  itself.
+- **Covered where the stage is covered.** The `afterDone` scenario in
+  [`.github/scripts/stage_harness.mjs`](.github/scripts/stage_harness.mjs) plays a piece out, sits
+  on it for six seconds the way the rounds do, and then goes on using it: it reads back whether the
+  frames are still drawing a second later, whether a knob worked again reaches the piece, whether a
+  tap on the scene reaches it, whether anything was torn down, where the done mark is in the tree,
+  and how many times the ceremony played. `StageTest` plays a purpose-built piece through it that
+  writes those counts onto its own live line, so what reaches a finished piece is read off the stage
+  rather than taken on trust; `RealSiteTest` plays the site as committed, and holds the markup and
+  the stylesheet to keeping the mark out of the scene.
+- **Stated in the prompt, and not a coded axiom.** The axiom is in the completion axiom's block of
+  the system prompt in
+  [`.github/scripts/make_interesting.py`](.github/scripts/make_interesting.py), where the stage's
+  own behaviour is already described, and it is held on the committed site by the harness rather
+  than by a `check_` function refusing a plan — for the same reason the rest of the stage is: the
+  harness drives the stage through the stage's own elements, and those are a run's to rewrite, so
+  gating plans on it would pin markup the [Silo](#silo) leaves open. There are still nine coded
+  axioms (see [One single experience](#one-single-experience)), and the prompt says plainly which
+  half of the completion axiom refuses a plan and which holds the committed site, because a rule
+  the code does not enforce must not be dressed up as one that does.
+- **Site-wide, not only the stage's.** The stage is where the axiom had something to fix and where
+  it is held in code, but it is stated for any piece of content. What it forbids anywhere is a piece
+  that answers a visitor by shutting: a timeout, a fade-out, an inert state, or copy that defers
+  them to another day — which the [Engagement-time axiom](#engagement-time-axiom) already refuses
+  in so many words. The rest of the site is already built this way, and the shape of it is worth
+  naming so later work keeps it: the persona sheet's ask reads *ask another way* once a reading has
+  been taken rather than going away (`js/persona.js`), the threshold offers the same beside its
+  piece, every knob of the mood flow's star field can be moved again and *leave it there* is a
+  choice rather than a lock (`js/threshold.js`), and the feed's stack refills as it is drawn down
+  (`js/feed.js`), so the river has no end to arrive at. A card pressed does leave the stack — but
+  that is the card *becoming* the feature, which is the [alignment
+  axiom](#the-feature-and-the-feed), not a door closing.
 
 ### Silo
 
