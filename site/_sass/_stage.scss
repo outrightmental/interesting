@@ -18,10 +18,17 @@
 // bar the piece fills. A knob that is set gets a check mark; a knob gated on another is dimmed
 // until it opens.
 //
-// The ceremony: when the piece is finished, the done mark pops over the scene and the burst canvas
-// over the whole stage carries the particles. Then the way on lights up and nothing else happens
-// until it is pressed (issue #78), at which point the stage's inner scales away and the next piece
-// arrives from a little below. All of it stops still for a visitor who asked for less motion.
+// The ceremony: when the piece is finished, the done chip appears at the end of the dots' row and
+// the burst canvas over the whole stage carries the particles, which clear themselves. Then the way
+// on lights up and nothing else happens until it is pressed (issue #78), at which point the stage's
+// inner scales away and the next piece arrives from a little below. All of it stops still for a
+// visitor who asked for less motion.
+//
+// Nothing of the ceremony is laid over the scene, and nothing of it closes the piece down: Done is
+// not the End (issue #86). The done mark used to be a 64px disc and a pill pinned in the scene's
+// lower-right corner, over the piece's own finale, and the knobs went inert under it. A finished
+// piece is still a toy, so the picture stays whole and every control stays live; what the ceremony
+// changes is the report beside the dots and the one mark in the corner of the screen.
 
 @use 'type';
 
@@ -397,6 +404,14 @@
   gap: 0.4rem;
 }
 
+// The right-hand end of the row: the dots that say how much of the piece is set, with the chip that
+// says it is all set standing beside them once it is.
+.stage-foot-end {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
 // The actions sit at the left, clear of the state menu's button in the corner of every page. On a
 // world page there are none -- the way on is the whole of what a finished piece offers -- and the
 // box is kept empty so the dots opposite it keep the right-hand end of the row either way.
@@ -419,44 +434,42 @@
   background: var(--md-sys-color-primary);
 }
 
-// The done mark, in the scene's corner, so the piece's own finale stays in view under it.
+// Done, said where the progress is already said: one chip at the end of the dots' row, the last dot
+// filled and then this (issue #86). It is laid out with the rail rather than positioned over
+// anything, so there is no corner of the picture it can take and nothing of the piece's finale it
+// can stand on -- and the piece under it is still live, which is the whole point of moving it here.
+// The scene it used to cover is the content; a mark that reports on content does not sit on it.
 .stage-done {
-  position: absolute;
-  inset: 0;
-  z-index: 2;
   display: flex;
-  align-items: flex-end;
-  justify-content: flex-end;
-  gap: 0.6rem;
-  padding: 1rem;
-  pointer-events: none;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0;
+  padding: 0.2rem 0.65rem 0.2rem 0.25rem;
+  border-radius: var(--md-sys-shape-corner-full);
+  background: var(--md-sys-color-secondary-container);
+  color: var(--md-sys-color-on-secondary-container);
+  animation: stage-pop 420ms var(--md-sys-motion-easing-emphasized) both;
 }
 
+// The same check mark a set knob earns, at the same size: the dots say how many knobs are set and
+// this says that they all are, so it reads as the row's last word rather than as a second ceremony.
 .stage-done-mark {
   display: grid;
   place-items: center;
-  width: 64px;
-  height: 64px;
+  width: 22px;
+  height: 22px;
   border-radius: var(--md-sys-shape-corner-full);
   background: var(--md-sys-color-primary);
   color: var(--md-sys-color-on-primary);
-  box-shadow: var(--md-sys-elevation-level3);
-  animation: stage-pop 520ms var(--md-sys-motion-easing-emphasized) both;
 }
 
 .stage-done-mark .icon {
-  width: 40px;
-  height: 40px;
+  width: 16px;
+  height: 16px;
 }
 
 .stage-done-text {
-  margin: 0;
-  padding: 0.35rem 0.8rem;
-  border-radius: var(--md-sys-shape-corner-full);
-  background: color-mix(in oklab, var(--md-sys-color-surface) 80%, transparent);
-  color: var(--md-sys-color-on-surface);
-  @include type.scale(title-medium);
-  animation: stage-pop 520ms 120ms var(--md-sys-motion-easing-emphasized) both;
+  @include type.scale(label-large);
 }
 
 @keyframes stage-pop {
@@ -659,8 +672,7 @@
   }
 
   .stage[data-mode='arriving'] .stage-inner,
-  .stage-done-mark,
-  .stage-done-text,
+  .stage-done,
   .stage-next:enabled {
     animation: none;
   }

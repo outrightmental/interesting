@@ -30,10 +30,6 @@
     <div class='stage-body' id='stage-body'>
       <div class='stage-scene' id='stage-scene'>
         <canvas class='stage-canvas' id='stage-canvas' role='img' aria-label='the scene'></canvas>
-        <div class='stage-done' id='stage-done' hidden>
-          <span class='stage-done-mark' aria-hidden='true'><svg class='icon' viewBox='0 0 24 24' focusable='false'><path d='M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z'/></svg></span>
-          <p class='stage-done-text' id='stage-done-text'>done</p>
-        </div>
       </div>
       <div class='stage-side'>
         <div class='stage-knobs' id='stage-knobs'></div>
@@ -45,7 +41,15 @@
             <button type='button' class='btn-text' id='stage-again' hidden>ask another way</button>
 {%- endif %}
           </div>
-          <div class='stage-progress' id='stage-progress'></div>
+          {# Done is reported here, beside the dots, and never over the scene: a piece that is Done has
+             not Ended, so the picture stays the visitor's to go on playing with (issue #86). #}
+          <div class='stage-foot-end'>
+            <p class='stage-done' id='stage-done' hidden>
+              <span class='stage-done-mark' aria-hidden='true'><svg class='icon' viewBox='0 0 24 24' focusable='false'><path d='M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z'/></svg></span>
+              <span class='stage-done-text' id='stage-done-text'>done</span>
+            </p>
+            <div class='stage-progress' id='stage-progress'></div>
+          </div>
         </div>
       </div>
     </div>

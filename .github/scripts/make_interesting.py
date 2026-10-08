@@ -79,6 +79,10 @@ Nine axioms stand over every run, each stated in the prompt and held to in code:
     check_completion() plays every listed world's piece to its end without a
     browser (.github/scripts/piece_harness.mjs) and refuses a plan that leaves a
     world without a module, without a piece, or with one that cannot be finished.
+    A piece being Done is not a piece Ending, though: it stays playable, with the
+    done mark clear of its picture, until the visitor presses the way on. That
+    half is stated in the prompt and held on the committed site by the stage
+    harness, not by a check that refuses a plan.
 
 The files behind the analytics, state and participation axioms (FIXED_FILES) are
 never shown to a model and are refused outright as a write or a delete.
@@ -1884,6 +1888,13 @@ def check_destructive(before, after):
 # harness below plays every piece to its end without a browser, the way the stage would, and
 # check_completion() holds every plan to it. The limits are the harness's own, repeated here for
 # the prompt; RealSiteTest checks that the two agree.
+#
+# Its other half, which no check refuses a plan for: a piece of content does not End just because it
+# is Done (issue #86). The ceremony reports completion and lights the way on and takes nothing away
+# -- the frames keep drawing, the knobs stay settable, a tap still reaches the piece -- and the done
+# mark reports from beside the progress dots rather than from over the scene. The prompt states it
+# and the stage harness holds the committed site to it, for the same reason the rest of the stage is
+# held that way: it is read off the stage's own elements, which are a run's to rewrite.
 PIECE_HARNESS_REL = ".github/scripts/piece_harness.mjs"
 PIECE_HARNESS = REPO_ROOT / PIECE_HARNESS_REL
 PIECE_TIMEOUT_SECONDS = 240  # every module, every play, sequentially: see MODULE_TIMEOUT_MS in the harness
@@ -2576,7 +2587,28 @@ def build_prompt(shown, omitted=(), run=None, budget=None, feedback=""):
         "piece -- and waits: the stage never moves on by itself, and that press is what vanishes "
         "the whole piece and opens the next card in the feed in its place, so one piece follows "
         "another without end and no two are quite the same; the river of cards is the river of "
-        f"pieces. Concretely: every listed world's module exports piece(env), and \"{STAGE_SCRIPT}\" "
+        "pieces. And a piece of content does not End just because it is Done -- this one holds "
+        "site-wide, and the stage is where it is read off. Finishing is a report, not a closing "
+        "time: a piece makes itself available for continued interaction as long as the visitor is "
+        "still interested in it. So the ceremony takes nothing away. The frame loop keeps drawing, "
+        "a tap on the scene still reaches the piece's tap(), every knob stays enabled and can be "
+        "set again -- a gate behind another knob included, since every gate stands open once "
+        "everything is set -- and the piece keeps hearing apply() for all of it; there is no "
+        "timeout, no fade-out, no inert state and no teardown in between, and nothing of the piece "
+        "is taken apart until the next one is actually opened. The ceremony itself runs once for "
+        "all that fidgeting: one ceremony, one chime, one 'stage:complete'. Keep the done mark out "
+        "of the way of the content, too -- it reports beside the progress dots, laid out with the "
+        "rail, never laid over the scene: a finished piece's picture is still the content and a "
+        "mark that reports on content does not sit on it, take a corner of it or cover the piece's "
+        "own finale. Write a piece's end() for a scene its visitor may keep playing with rather "
+        "than for a scene about to be taken away. This holds for any piece of content you write, "
+        "not only a world's piece: what it forbids anywhere is content that answers a visitor by "
+        "shutting -- a timeout, a fade-out, an inert state, or copy that defers them to another "
+        "day. The rest of the site is already built this way and has to stay that way: a reading "
+        "can be re-taken (the ask reads \"ask another way\" once one is), a star of the question "
+        "can be moved again, and the feed's stack refills as it is drawn down, so there is no end "
+        "to arrive at. "
+        f"Concretely: every listed world's module exports piece(env), and \"{STAGE_SCRIPT}\" "
         "documents the contract and runs it. A piece is { title, brief, aspect, steps, start(ctx), "
         f"apply(id, value, ctx), frame(t, dt, ctx), tap(x, y, ctx), end(ctx) }}: {PIECE_MIN_STEPS} to "
         f"{PIECE_MAX_STEPS} knobs (steps), each {{ id, ask, kind, ... }} of a kind the stage renders -- "
@@ -2623,11 +2655,14 @@ def build_prompt(shown, omitted=(), run=None, budget=None, feedback=""):
         "set, a knob nobody set is named rather than silently holding the piece shut, a hold knob is "
         "set the moment its bar fills rather than when the visitor lets go, a finished piece stays "
         "on the stage with the way on lit and the keyboard on it rather than showing itself out, "
-        "a piece that is over leaves nothing of itself on the stage or still running, and a card "
+        "a finished piece is still fully playable (its frames still drawing, its knobs still "
+        "settable, a tap still reaching it, the done mark clear of its scene, and the ceremony "
+        "played once through all of it), a piece that is over leaves nothing of itself on the "
+        "stage or still running, and a card "
         "pressed opens as that card -- its title, its line, its configuration -- rather than as "
         "the world's one line. That one is checked on the site as committed rather than on a plan, "
         "because it reads the stage's own elements and those are yours to rewrite -- so if you "
-        "rewrite the stage, keep all seven true.\n"
+        "rewrite the stage, keep all eight true.\n"
         "- Leave the site working at the end of the run. If you extract something into a shared "
         "file, or merge or delete a page, update every page that refers to it in the same run: "
         "never leave a link, a stylesheet, a script, a layout or an @use pointing at something "
