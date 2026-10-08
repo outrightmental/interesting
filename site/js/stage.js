@@ -291,7 +291,7 @@
   site keeps, so it exports with the rest.
 */
 
-import { PLAIN, revive, recolor, aspect as framed, mulberry32, hash, mix, alpha } from './variant.js';
+import { PLAIN, revive, recolor, aspect as framed, ratioOf, mulberry32, hash, mix, alpha } from './variant.js';
 
 const root = document.documentElement.getAttribute('data-root') || '';
 const stage = document.getElementById('stage');
@@ -493,12 +493,10 @@ function loadModule(id) {
 }
 
 /* A frame as a number: '16 / 9' is 1.7778, and a bare number -- which is what variant.aspect() gives
-   back for a frame it has stretched -- is itself. 16/9 for anything unreadable. */
+   back for a frame it has stretched -- is itself. The arithmetic is variant.ratioOf, the one reader
+   of aspect ratios the site has; 16/9 stands in for anything unreadable. */
 function aspectRatio(aspect) {
-  const text = String(aspect == null ? '' : aspect).trim();
-  const m = text.match(/^([\d.]+)\s*\/\s*([\d.]+)$/);
-  const r = m ? Number(m[1]) / Number(m[2]) : Number(text);
-  return r > 0 && isFinite(r) ? r : 16 / 9;
+  return ratioOf(aspect) || 16 / 9;
 }
 
 /* ---- the stage's parts --------------------------------------------------------------------- */
@@ -2056,7 +2054,9 @@ function thresholdStart() {
   function render() {
     const asking = !!(probe && !probe.hidden);
     if (asking) {
-      if (current || pending) close();
+      // Through goHome(), not a bare close(): the piece that was on takes its name, its line and
+      // its featured palette with it, so the question is asked on the threshold's own ground.
+      if (current || pending) goHome();
       setMode('asking');
       wasAsking = true;
       return;

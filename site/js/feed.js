@@ -429,11 +429,11 @@ function sparkCard(world, mod, seed) {
   meta.set(card, { kind: 'spark', world, id: world.id, seed, variant, canvas, spec, mod });
   return card;
 }
-function reroll(card) {
+function reroll(card, keepSeed) {
   const m = meta.get(card);
   if (!m || !m.mod) return;
-  const seed = newSeed();
-  const variant = roll(seed);
+  const seed = keepSeed === true ? m.seed : newSeed();
+  const variant = keepSeed === true ? m.variant : roll(seed);
   let spec;
   try {
     spec = m.mod.spark(makeEnv(card, seed, m.world, variant));
@@ -626,13 +626,26 @@ function start() {
       if (isHere) (card.querySelector('.card-media') || card).appendChild(el('span', 'card-badge', 'you are here'));
     }
   });
-  window.addEventListener('persona:sky', () => {
-    for (const card of cards) {
-      const m = meta.get(card);
-      if (!m || !(m.id && modules.has(m.id) && m.painted)) continue;
-      m.dirty = true;
-      if (m.visible) paint(card);
-    }
+  let skyPending = false;
+  if (persona && typeof persona.onSky === 'function') persona.onSky(() => {
+    if (skyPending) return;
+    skyPending = true;
+    // The shared lightbox holds this frame until the sheet closes, so a drag reads once.
+    requestAnimationFrame(() => {
+      skyPending = false;
+      const ready = skyStars().length > 0;
+      for (const card of cards) {
+        const m = meta.get(card);
+        if (m && m.mod && m.mod.needsSky && ready) {
+          // New words, same configuration: the displayed content and its `of` travel together.
+          reroll(card, true);
+          continue;
+        }
+        if (!m || !(m.id && modules.has(m.id) && m.painted)) continue;
+        m.dirty = true;
+        if (m.visible) paint(card);
+      }
+    });
   });
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden) for (const card of active) activate(card);

@@ -126,6 +126,9 @@
 }
 
 .card-current { box-shadow: var(--md-sys-elevation-level2); }
+// The card a fresh reading points at (js/feed.js, suggest()): lifted like the current one, so the
+// "for you" badge sits on a card that stands forward of the mosaic.
+.card-suggested { box-shadow: var(--md-sys-elevation-level2); }
 .card-current .card-badge {
   background: var(--md-sys-color-secondary-container);
   color: var(--md-sys-color-on-secondary-container);

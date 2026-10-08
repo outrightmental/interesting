@@ -285,6 +285,12 @@
 
   function save(next) { store.set(READING, next); }
   var state = load();
+  // The one writer: everything the threshold keeps goes through here, so the shape of the
+  // reading's record is written once.
+  function persist() {
+    save({ visits: state.visits, last: state.last, drift: state.drift,
+      recent: state.recent, orientation: state.orientation });
+  }
   var sinceLast = state.last ? Math.max(0, Date.now() - state.last) : null;
   function memoryPull() {
     if (sinceLast === null) return 0;
@@ -376,7 +382,6 @@
     var root = document.documentElement;
     if (orientation) root.setAttribute('data-mood', orientation.id);
     else root.removeAttribute('data-mood');
-    root.setAttribute('data-visit', state.visits > 1 ? 'returning' : 'first');
     try {
       window.dispatchEvent(new CustomEvent('threshold:reading', {
         detail: { orientation: orientation ? orientation.id : null }
@@ -392,8 +397,7 @@
     state.drift = drift;
     state.orientation = reading.orientation ? reading.orientation.id : null;
     state.last = Date.now();
-    save({ visits: state.visits, last: state.last, drift: state.drift,
-      recent: state.recent, orientation: state.orientation });
+    persist();
     lastAnswered = reading.orientation ? reading : null;
     transmogrify(reading.orientation);
     return reading;
@@ -401,8 +405,7 @@
   function noteProbe(id) {
     if (state.recent[state.recent.length - 1] === id) return;
     state.recent = state.recent.concat([id]).slice(-RECENT);
-    save({ visits: state.visits, last: state.last, drift: state.drift,
-      recent: state.recent, orientation: state.orientation });
+    persist();
   }
   function nextProbe() {
     var fresh = PROBES.filter(function (p) { return state.recent.indexOf(p.probe) === -1; });
@@ -1254,8 +1257,7 @@
   state.visits += 1;
   state.last = Date.now();
   transmogrify(state.orientation ? ORIENTATION_BY_ID[state.orientation] : null);
-  save({ visits: state.visits, last: state.last, drift: state.drift,
-    recent: state.recent, orientation: state.orientation });
+  persist();
   var wayControl = document.getElementById('threshold-way');
   if (wayControl) PROBES.forEach(function (probe) {
     var option = document.createElement('option');
