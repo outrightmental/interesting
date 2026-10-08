@@ -18,8 +18,10 @@
                                  starting at zero, so animate(ctx, w, h, env, 0) draws exactly the
                                  picture paint left behind and the motion carries on from it rather
                                  than cutting into some arbitrary phase of a page-long clock; a
-                                 repaint (a resize, a new sky) starts the count again. Return false
-                                 to say that nothing on this card moves, and the loop lets it go.
+                                 repaint (a resize, a new sky) starts the count again. This is the
+                                 same reading of time js/stage.js hands a piece's frame(t, dt, ctx),
+                                 counted from when that piece opened. Return false to say that
+                                 nothing on this card moves, and the loop lets it go.
 
    .github/scripts/card_variant_harness.mjs holds every module to this, and CardVariantTest in
    test_make_interesting.py makes the assertions. */
