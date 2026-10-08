@@ -19,11 +19,18 @@
  *
  *   node lightbox_harness.mjs path/to/site/js/site.js path/to/site/js/persona.js
  *
+ * It also drives what the persona does on the way out of the same sheet (issue #94): the mark it
+ * hands over as it closes, which leaves the control that was just set and flies to the portrait in
+ * the corner. That belongs here rather than in a harness of its own, because the hand-off is the
+ * other side of this close -- it waits for the veil to come down and must not be left stilled
+ * behind a veil that goes up again -- and because this is the one stub browser that runs the real
+ * js/persona.js. PersonaHandOffTest makes those assertions.
+ *
  * LightboxTest in test_make_interesting.py makes every assertion below; the harness only observes.
  * The stub is deliberately the same shape as nav_harness.mjs's -- a tree that can be found by
  * simple selectors, attributes, events that bubble, and a frame loop that can be counted -- with
  * the handful of things the persona also touches: a canvas that draws nothing, a box for the sky,
- * and the timers the sheet uses.
+ * the timers the sheet uses, an event with a detail, and the one media query it reads.
  */
 
 import { readFileSync } from "node:fs";
@@ -360,13 +367,26 @@ function makeDocument() {
   return document_;
 }
 
+/** An event with a detail, which is how the persona announces a sky it has just written. */
+class StubCustomEvent {
+  constructor(type, options = {}) {
+    this.type = String(type);
+    this.detail = options.detail;
+  }
+}
+
 /** Both files in one context, in the order _includes/layout.njk loads them: the persona first,
- *  because js/site.js reads its sky, and the two of them before anything presses anything. */
-function load({ stars = [], kept = [] } = {}) {
+ *  because js/site.js reads its sky, and the two of them before anything presses anything.
+ *
+ *  `calm` is the one media query either file keeps -- (prefers-reduced-motion: reduce) -- read once
+ *  when the file is evaluated and kept, so `matches` is a getter over a flag here rather than a
+ *  value, exactly as a browser's own list changes under a running page. */
+function load({ stars = [], kept = [], calm = false } = {}) {
   const document_ = makeDocument();
   const frames = { ran: 0 };
   const observers = [];
   const timers = [];
+  const motion = { calm };
   let sky = stars.slice();
   const window_ = {
     document: document_,
@@ -395,11 +415,17 @@ function load({ stars = [], kept = [] } = {}) {
     dispatchEvent() {
       return true;
     },
+    matchMedia: () => ({ get matches() { return motion.calm; }, addEventListener() {} }),
     setTimeout(fn, ms) {
-      timers.push({ fn, ms });
+      timers.push({ fn, ms, cleared: false });
       return timers.length;
     },
-    clearTimeout() {},
+    // Cleared rather than ignored: a mark taken away early must not be taken away twice when a
+    // scenario runs the clock out (runTimers below).
+    clearTimeout(id) {
+      const timer = timers[id - 1];
+      if (timer) timer.cleared = true;
+    },
     setInterval() {
       return 0;
     },
@@ -434,13 +460,14 @@ function load({ stars = [], kept = [] } = {}) {
     performance: window_.performance,
     requestAnimationFrame: window_.requestAnimationFrame,
     MutationObserver: window_.MutationObserver,
+    CustomEvent: StubCustomEvent,
   };
   const context = vm.createContext(globals);
   // The persona before the shared helpers, as the shell loads them: js/site.js reads the sky.
   vm.runInContext(personaSource, context);
   vm.runInContext(siteSource, context);
   ready(document_);
-  return { window: window_, document: document_, frames, observers, timers };
+  return { window: window_, document: document_, frames, observers, timers, motion };
 }
 
 /** The document finished parsing: both files build their halves of the shell here. */
@@ -495,6 +522,42 @@ function openTheLogo(context, open) {
 
 function openTheSheet(context) {
   id(context, "persona-open").click();
+}
+
+/** An event on the window, the way the threshold says it has read a visitor: the persona listens
+ *  there, and a reading is one of the settings it hands over as it closes. */
+function fireWindow(context, type) {
+  for (const handler of (context.window.listeners[type] || []).slice()) handler({ type });
+}
+
+/** The clock run out: every timer still waiting, in the order it was asked for. */
+function runTimers(context) {
+  for (const timer of context.timers.slice()) {
+    if (!timer.cleared) timer.fn();
+  }
+}
+
+/** The mark the persona hands over as it closes (issue #94): what it is, where it lands in the
+ *  corner, where it flew in from, and whether it moved at all. Read out of .persona, which is where
+ *  it is drawn -- nothing new is pinned over the page for it, so the count of <body>'s children
+ *  comes back too. */
+function handedOver(context) {
+  const corner = id(context, "persona");
+  const marks = corner ? corner.querySelectorAll(".persona-flight") : [];
+  const mark = marks[0] || null;
+  return {
+    marks: marks.length,
+    bodyChildren: context.document.body.children.length,
+    mark: mark && {
+      glyph: mark.textContent,
+      kind: mark.getAttribute("data-mark"),
+      ariaHidden: mark.getAttribute("aria-hidden"),
+      still: mark.classList.contains("is-still"),
+      lands: { left: mark.properties.left || null, top: mark.properties.top || null },
+      flight: { x: mark.properties["--persona-flight-x"] || null,
+                y: mark.properties["--persona-flight-y"] || null },
+    },
+  };
 }
 
 const STARS = [{ x: 30, y: 40, text: "a door left ajar" }, { x: 60, y: 55, text: "the long way home" }];
@@ -665,6 +728,73 @@ const scenarios = {
     return { opened, closed: !sheet.open,
              veil: !document_.getElementById("lightbox-veil").hidden,
              lightbox: document_.documentElement.getAttribute("data-lightbox") };
+  },
+
+  /* Issue #94: a visitor sets the constellation and the sheet closes on it, so the thing they just
+     set is handed over -- one mark leaving the sky they placed it in and flying to the portrait in
+     the corner, with the veil coming down rather than against it, and gone again a moment later.
+     Nothing of it is pinned over the page: it is drawn inside .persona, where the portrait is. */
+  whenSomethingIsSetAndTheSheetCloses() {
+    const context = load({ stars: STARS });
+    openTheSheet(context);
+    id(context, "persona-drop").click(); // a star dropped in the sheet: the constellation is set
+    const open = handedOver(context);
+    id(context, "persona-close").click();
+    const handed = handedOver(context);
+    const seen = look(context);
+    runTimers(context);
+    return { open, handed, closed: { veil: seen.veil, lightbox: seen.name },
+             frameRan: askForAFrame(context), swept: handedOver(context) };
+  },
+
+  /* A visit that set nothing has nothing to point at, so nothing flies. */
+  whenNothingIsSetAndTheSheetCloses() {
+    const context = load({ stars: STARS });
+    openTheSheet(context);
+    id(context, "persona-close").click();
+    return { handed: handedOver(context) };
+  },
+
+  /* The reading is a setting of the persona as much as the sky is, and it carries its own mark: the
+     same flight, a different glyph, so what went home says which of the settings it was. */
+  whenTheReadingIsSetAndTheSheetCloses() {
+    const context = load({ stars: STARS });
+    openTheSheet(context);
+    fireWindow(context, "threshold:reading"); // the threshold has read the visitor
+    id(context, "persona-close").click();
+    return { handed: handedOver(context) };
+  },
+
+  /* Less motion asked for: the result without the movement. The mark is laid on the portrait rather
+     than flown to it -- no offset to travel, the stylesheet's is-still -- and taken away again. */
+  whenLessMotionIsAskedFor() {
+    const context = load({ stars: STARS, calm: true });
+    openTheSheet(context);
+    id(context, "persona-drop").click();
+    id(context, "persona-close").click();
+    const handed = handedOver(context);
+    runTimers(context);
+    return { handed, swept: handedOver(context) };
+  },
+
+  /* A sky written while the persona is shut -- a world seeding one to power itself up, a meteor a
+     page caught -- is not something a visitor just did in a menu they are watching close. */
+  whenTheSkyIsSetFromAPage() {
+    const context = load({ stars: [] });
+    context.window.interestingPersona.setStars(STARS, "seeded");
+    return { handed: handedOver(context), sheetOpen: id(context, "persona-sheet").open };
+  },
+
+  /* The sheet opened again while a mark is still in the air takes it away: a mark held still behind
+     the veil for as long as a visitor keeps the sheet open is not an animation, it is a leftover. */
+  whenTheSheetOpensOverAMarkInTheAir() {
+    const context = load({ stars: STARS });
+    openTheSheet(context);
+    id(context, "persona-drop").click();
+    id(context, "persona-close").click();
+    const flying = handedOver(context);
+    openTheSheet(context);
+    return { flying, reopened: handedOver(context), look: look(context) };
   },
 };
 

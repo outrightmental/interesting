@@ -6238,6 +6238,195 @@ class LightboxTest(unittest.TestCase):
         self.assertIsNone(seen["lightbox"])
 
 
+class PersonaHandOffTest(unittest.TestCase):
+    """What the persona hands over as it closes (issue #94).
+
+    "after setting the persona constellation or persona difficulty or persona mood, there ought to
+    be an animation when the persona menu closes that indicates to a user, 'that thing i just
+    obtained/configured lives there in that menu'". The sheet used to shut and leave nothing at all
+    between what a visitor had just set and the avatar in the corner that keeps it.
+
+    It is handed over now: one small mark leaves the control that was set, flies across the page to
+    the portrait, sinks into it and blooms a ring around it as it lands. The three questions the
+    issue left open are answered in js/persona.js, and each answer is asserted here -- only when
+    something was set, one mark for the last thing set, and each setting carrying its own glyph, so
+    a third setting (the difficulty of issue #93) is one more line of the table and not a second
+    animation.
+
+    Two halves, checked two ways, as everywhere else in the shell: the paint and the pairing between
+    the durations the script counts and the ones the stylesheet animates are read off the source, and
+    what the persona does is behaviour, so lightbox_harness.mjs drives the real js/persona.js
+    through a close that set something, a close that set nothing, a reading, a sky written from a
+    page while the sheet was shut, and a visitor who asked for less motion.
+    """
+
+    # The glyph each setting sends home, which is the whole of how the mark says which one it was.
+    MARKS = {"sky": "✦", "reading": "◐"}
+
+    built = None
+    observed = None
+
+    def setUp(self):
+        self.repo = Path(mi.__file__).resolve().parents[2]
+        site = self.repo / "site"
+        if not site.is_dir():
+            self.skipTest(f"no site directory at {site}")
+        needs_the_build()
+        if PersonaHandOffTest.built is None:
+            with mock.patch.object(mi, "SITE_DIR", site):
+                source = dict(mi.read_site())
+                PersonaHandOffTest.built = (source, mi.build_site(source))
+        self.source, self.site = PersonaHandOffTest.built
+
+    def seen(self):
+        """What the stub browser saw the real js/persona.js do, run once for the whole class."""
+        needs_node(self)
+        if PersonaHandOffTest.observed is None:
+            harness = Path(mi.__file__).resolve().parent / "lightbox_harness.mjs"
+            scripts = [self.repo / "site" / "js" / "site.js",
+                       self.repo / "site" / "js" / "persona.js"]
+            if not harness.is_file() or not all(script.is_file() for script in scripts):
+                self.skipTest("no lightbox harness to run")
+            run = subprocess.run([mi.NODE_BIN, str(harness)] + [str(s) for s in scripts],
+                                 capture_output=True, text=True, timeout=120)
+            self.assertEqual(run.returncode, 0, f"the harness failed: {run.stderr[-2000:]}")
+            PersonaHandOffTest.observed = json.loads(run.stdout)
+        for name, got in PersonaHandOffTest.observed.items():
+            self.assertTrue(got["ok"], f"the {name} scenario did not run: {got.get('error')}")
+        return {name: got["result"] for name, got in PersonaHandOffTest.observed.items()}
+
+    # ---- what is drawn, and where it is painted ----------------------------------------------
+
+    def test_the_mark_is_drawn_by_the_persona_and_painted_with_the_persona(self):
+        script = self.source[mi.PERSONA_SCRIPT]
+        table = "var MARKS = {{ sky: '{sky}', reading: '{reading}' }};".format(**self.MARKS)
+        for part in ["function handOff()", "function noteSet(kind, node)",
+                     "mark.className = 'persona-flight'", "mark.setAttribute('data-mark'",
+                     "mark.setAttribute('aria-hidden', 'true')",
+                     "mark.classList.add('is-still')",
+                     "noteSet('sky', sheet.field)", "noteSet('reading'", table]:
+            with self.subTest(part=part):
+                self.assertIn(part, script)
+        # The query is read once, and only ever behind the guard: js/persona.js is loaded without
+        # defer in the <head> of every page and runs against stub browsers that offer no matchMedia.
+        self.assertIn("window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)')",
+                      script)
+        css = self.source[f"{mi.SASS_DIR}/_persona.scss"]
+        for rule in [".persona-flight {", ".persona-flight::after {",
+                     "@keyframes persona-flight {", "@keyframes persona-flight-ring {",
+                     ".persona-flight.is-still {"]:
+            with self.subTest(rule=rule):
+                self.assertIn(rule, css)
+        mark = css[css.index(".persona-flight {"):]
+        mark = mark[:mark.index("}")]
+        self.assertIn("position: absolute", mark)
+        self.assertNotIn("position: fixed", mark,
+                         "the mark is drawn in the corner the avatar floats in, not pinned itself")
+        self.assertIn("pointer-events: none", mark, "the avatar under it is what a press reaches")
+        # Held still rather than animated for a visitor who asked for less motion, said twice: in
+        # the class the script writes off the query, and for a page whose script never read it.
+        still = css[css.index(".persona-flight.is-still {"):]
+        self.assertIn("animation: none", still[:still.index("}")])
+        calm = css[css.index("@media (prefers-reduced-motion: reduce)"):]
+        self.assertIn(".persona-flight", calm)
+        self.assertIn("animation: none", calm[calm.index(".persona-flight"):])
+        # The sky's mark is the same star the empty portrait wears, so the two are one vocabulary.
+        self.assertIn("content: '\\2726'", css)
+        # And it reaches every page through the one stylesheet every page links.
+        self.assertIn(".persona-flight{", self.site[mi.SHARED_STYLESHEET])
+
+    def test_the_flight_the_script_counts_is_the_one_the_stylesheet_animates(self):
+        # The mark is taken away by a timer and animated by the stylesheet, so the two numbers have
+        # to be the same number: a shorter timer cuts the landing off, a longer one leaves a mark
+        # sitting on the portrait after it has finished arriving.
+        script = self.source[mi.PERSONA_SCRIPT]
+        flight = int(re.search(r"var FLIGHT_MS = (\d+);", script)[1])
+        still = int(re.search(r"var STILL_MS = (\d+);", script)[1])
+        css = self.source[f"{mi.SASS_DIR}/_persona.scss"]
+        mark = css[css.index(".persona-flight {"):]
+        self.assertIn(f"animation: persona-flight {flight}ms", mark[:mark.index("}")])
+        ring = css[css.index(".persona-flight::after {"):]
+        ring = ring[:ring.index("}")]
+        timing = re.search(r"animation: persona-flight-ring (\d+)ms[^;]*?(\d+)ms", ring)
+        self.assertIsNotNone(timing, "the ring is not timed in milliseconds")
+        length, delay = int(timing[1]), int(timing[2])
+        self.assertLessEqual(delay + length, flight,
+                             "the ring blooms after the mark has been taken away")
+        self.assertGreater(delay, flight // 2, "the ring blooms before the mark has landed")
+        self.assertLess(still, flight, "a mark that does not move is held, not held for a flight")
+
+    # ---- what the persona does as it closes --------------------------------------------------
+
+    def test_what_was_just_set_goes_home_to_the_portrait(self):
+        seen = self.seen()["whenSomethingIsSetAndTheSheetCloses"]
+        self.assertEqual(seen["open"]["marks"], 0, "something flew while the sheet was still open")
+        self.assertEqual(seen["handed"]["marks"], 1, "one mark, for the one thing set")
+        mark = seen["handed"]["mark"]
+        self.assertEqual(mark["kind"], "sky")
+        self.assertEqual(mark["glyph"], self.MARKS["sky"])
+        self.assertEqual(mark["ariaHidden"], "true",
+                         "the one sentence beside the avatar is what is read, not the picture of it")
+        self.assertFalse(mark["still"], "the flight is the flight when less motion was not asked for")
+        # It lands on the portrait and comes in from the middle of the sky it was placed in. In the
+        # stub the corner and the portrait share the origin, and the sky a star is dropped in is 400
+        # by 200 there, so the mark lands at 0,0 of the corner and flies in from 200,100 of it.
+        self.assertEqual(mark["lands"], {"left": "0px", "top": "0px"})
+        self.assertEqual(mark["flight"], {"x": "200px", "y": "100px"})
+        # With the veil coming down rather than against it: the page is given back first and the
+        # frame loop with it, so the mark crosses a page the visitor has back rather than a dimmed
+        # one it would be stilled behind.
+        self.assertFalse(seen["closed"]["veil"])
+        self.assertIsNone(seen["closed"]["lightbox"])
+        self.assertEqual(seen["frameRan"], 1)
+        # Nothing new is pinned over the page for it -- it is drawn inside .persona, where the
+        # portrait it is flying to already is (the closed list NavTest holds).
+        self.assertEqual(seen["handed"]["bodyChildren"],
+                         self.seen()["whenNothingIsSetAndTheSheetCloses"]["handed"]["bodyChildren"])
+        # And it is taken away again when it has landed, leaving the corner as it found it.
+        self.assertEqual(seen["swept"]["marks"], 0)
+
+    def test_a_close_that_set_nothing_hands_nothing_over(self):
+        # A flourish on every close is one a visitor stops reading, and a close that changed nothing
+        # has nothing to point at.
+        self.assertEqual(self.seen()["whenNothingIsSetAndTheSheetCloses"]["handed"]["marks"], 0)
+        # Nor does a sky written while the persona is shut: a world seeding one to power itself up,
+        # or a meteor a page caught, is not something a visitor just did in a menu they are watching.
+        apart = self.seen()["whenTheSkyIsSetFromAPage"]
+        self.assertFalse(apart["sheetOpen"])
+        self.assertEqual(apart["handed"]["marks"], 0)
+
+    def test_each_setting_carries_its_own_mark(self):
+        sky = self.seen()["whenSomethingIsSetAndTheSheetCloses"]["handed"]["mark"]
+        reading = self.seen()["whenTheReadingIsSetAndTheSheetCloses"]["handed"]["mark"]
+        self.assertEqual(reading["kind"], "reading")
+        self.assertEqual(reading["glyph"], self.MARKS["reading"])
+        self.assertNotEqual(reading["glyph"], sky["glyph"],
+                            "one glyph for two settings says nothing about which one went home")
+        # Same flight either way: one animation, as many marks as the persona has settings.
+        self.assertFalse(reading["still"])
+        self.assertEqual(reading["lands"], sky["lands"], "both land on the portrait")
+        self.assertIn("var MARKS = {", self.source[mi.PERSONA_SCRIPT],
+                      "a third setting should be one more line of a table, not a second animation")
+
+    def test_less_motion_gets_the_result_without_the_movement(self):
+        seen = self.seen()["whenLessMotionIsAskedFor"]
+        mark = seen["handed"]["mark"]
+        self.assertTrue(mark["still"], "the mark still flies for a visitor who asked for less of it")
+        self.assertEqual(mark["flight"], {"x": None, "y": None},
+                         "and it is still handed an offset to travel")
+        self.assertEqual(mark["lands"], {"left": "0px", "top": "0px"},
+                         "the result is the mark on the portrait, where the flight would have ended")
+        self.assertEqual(seen["swept"]["marks"], 0, "held, and then taken away again")
+
+    def test_a_mark_still_in_the_air_is_never_left_behind_the_veil(self):
+        # The sheet opened again a moment after it closed: the mark goes rather than hanging in the
+        # corner, stilled with the rest of the page behind the veil for as long as the sheet is open.
+        seen = self.seen()["whenTheSheetOpensOverAMarkInTheAir"]
+        self.assertEqual(seen["flying"]["marks"], 1)
+        self.assertEqual(seen["reopened"]["marks"], 0)
+        self.assertEqual(seen["look"]["name"], "persona", "and the sheet is open over where it was")
+
+
 class RealSiteTest(unittest.TestCase):
     """The site in this repository obeys all nine axioms: every page is reachable from the root,
     every page carries the analytics tag and consent banner, every page is responsive and
