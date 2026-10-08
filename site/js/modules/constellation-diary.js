@@ -835,6 +835,7 @@ function driftPreview(g, w, h, env, plan) {
 function driftPiece(env, plan) {
   const n = plan.points.length;
   const v = dials(env);
+  const helps = asked(env).helps;
   const way = driftWay(plan);
   const s = { fade: 0, picked: -1, half: null };
   const draw = (c) => driftScene(c.g, c.w, c.h, c, plan, s, v);
@@ -848,8 +849,9 @@ function driftPiece(env, plan) {
     steps: [
       { id: 'star', ask: 'the star that drifted: choose it here, or tap it on either sky', kind: 'pick', count: 1, items: range(n).map((i) => ({ label: 'star ' + LETTERS[i], value: i })) },
       { id: 'way', ask: 'the way it went', kind: 'choice', options: WAYS },
-      { id: 'half', ask: 'which half of the sky holds the one that moved', kind: 'press', count: 1, label: 'narrow it down', optional: true }
-    ],
+      // The watch has one thing to say, so a fierce difficulty does not offer to say it.
+      helps > 1 ? { id: 'half', ask: 'which half of the sky holds the one that moved', kind: 'press', count: 1, label: 'narrow it down', optional: true } : null
+    ].filter(Boolean),
     solution: { star: [plan.star], way },
     check(c) {
       const picked = c.value('star');
