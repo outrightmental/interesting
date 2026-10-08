@@ -15,13 +15,13 @@
  *     from the same seed, in the same colours, under two configurations, and the drawing calls have
  *     to differ.
  *
- * A fourth, since issue #92: what a card does once it is moving. `animate` is called about thirty
- * times a second with the very same env every time, so it is held to being a function of (w, h,
- * env, t) and nothing else -- see `moving` below, and js/feed.js for the contract itself.
- *
  * A third thing is observed here since issue #80: what a configuration comes back as once it has
  * crossed the boundary from a card to the piece it opens as (V.revive), which is the one place the
  * site answers "what configuration is this piece of?" -- including for a piece nobody pressed.
+ *
+ * A fourth, since issue #92: what a card does once it is moving. `animate` is called about thirty
+ * times a second with the very same env every time, so it is held to being a function of (w, h,
+ * env, t) and nothing else -- see `moving` below, and js/feed.js for the contract itself.
  *
  * The third argument is the fifteen mood palettes, read out of _sass/_mood.scss by the caller, so
  * the colour a configuration derives can be checked against the palette it was derived from rather
@@ -179,7 +179,8 @@ function moving(mod, seed, variant, times) {
                   steady: true, frame: 0, moved: 0 };
     for (const t of times) {
       const here = at(t).log;
-      if (at(t).log.join("\n") !== here.join("\n")) out.steady = false;
+      const again = at(t).log; // the same card, at the same moment, a second time
+      if (again.join("\n") !== here.join("\n")) out.steady = false;
       out.frame = Math.max(out.frame, apart(here, at(t + 1 / 30).log));
       out.moved = Math.max(out.moved, apart(here, at(t + 2.5).log));
     }
