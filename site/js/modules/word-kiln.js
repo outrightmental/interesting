@@ -453,7 +453,10 @@ function ladderScene(g, w, h, env, plan, s, variant) {
     g.textAlign = 'right';
     g.textBaseline = 'middle';
     g.fillStyle = env.alpha(c.muted, 0.9);
-    g.fillText(k === 0 ? 'start' : k === 3 ? 'end' : k === 1 ? 'first rung' : 'second rung', railX[0] - small * 0.6, y);
+    // The rung's name beside the rail, or the short form where a narrow scene leaves it no room.
+    const name = k === 0 ? 'start' : k === 3 ? 'end' : k === 1 ? 'first rung' : 'second rung';
+    const fits = railX[0] - small * 0.6 - g.measureText(name).width >= small * 0.4;
+    g.fillText(fits ? name : (k === 1 ? 'rung 1' : k === 2 ? 'rung 2' : name), railX[0] - small * 0.6, y);
   }
   caption(g, env, w, h, s.phase >= 1 ? 'one letter a step; the book holds every rung' : s.line, h * 0.86, env.alpha(c.muted, 0.9), small);
 }
