@@ -680,6 +680,16 @@ by hand.
 - **The background action is the visitor's action.** The seeded sky is written under
   `constellation` like any other and overwrites what was there (question 4), so every sky world,
   the state menu and an exported document all see the same thing.
+- **The other half: offer what is merely set** (issue
+  [#93](https://github.com/outrightmental/interesting/issues/93)). A dependency that always holds
+  a value is never missing, so nothing waits on it. The persona's **difficulty** is one: every
+  piece on the site is dealt at it, and the middle of the dial stands until a visitor moves it. A
+  piece that powered itself down behind that slider would be the *never broken* half of the axiom
+  broken — every puzzle on the site dimmed behind a control nobody had been asked to touch — so
+  the component is made at the setting that stands and the control is offered *in place* instead:
+  `window.interestingSite.difficulty(host)` (the persona's own `tuner`), which
+  [`site/js/stage.js`](site/js/stage.js) mounts at the foot of the rail beside every piece it
+  deals. The rule is the one sentence: **power down what is missing; offer what is merely set.**
 
 ### Persona
 
@@ -687,10 +697,12 @@ The sky that several worlds read is a visitor's configuration of this site, and 
 it was configured on one world of eighteen, the wish constellation, which made that page the
 settings screen for the rest and left the rest pointing at it. It is a **persona** now — the term
 interaction design uses for the configured self a system addresses — kept and changed in one place
-and shown on every page.
+and shown on every page. It carries three settings: the **constellation** several worlds read, the
+**reading** the mood flow has taken, and the **difficulty** every puzzle on the site is dealt at.
 
 - **One module.** [`site/js/persona.js`](site/js/persona.js) owns the sky as data (the key, the
-  validation, the seeding, the thoughts a star carries, every write) and as interface. Every page
+  validation, the seeding, the thoughts a star carries, every write) and as interface, and the
+  difficulty the same way (the key, the five stops, the default, every write). Every page
   loads it from the shared shell, without `defer`, so a world can read
   `window.interestingPersona.stars()` while its body is parsed and follow changes with
   `window.interestingPersona.onSky(fn)`. The eight sky worlds read the sky; none of them places a
@@ -720,7 +732,24 @@ and shown on every page.
   *Orientation* is the mood flow's home: it says what was read, asks the sideways question
   (`js/threshold.js` supplies the mechanism through `window.threshold.mount`) and forgets on
   request. When nothing has been read yet the sheet asks of its own accord on opening, so setting
-  up a persona is placing a sky and answering one question, in one place.
+  up a persona is placing a sky, answering one question and choosing a difficulty, in one place.
+- **The difficulty** (issue
+  [#93](https://github.com/outrightmental/interesting/issues/93)). The third section of the sheet,
+  named as plainly as the constellation is: one slider in the site's M3 slider grammar
+  (`input[type=range]` in a `.row`, `_sass/_controls.scss`), *gentle* at one end and *fierce* at
+  the other, five stops, the middle one standing until a visitor moves it. It is kept under
+  `difficulty` in the one local-state document, so it exports with the rest of a persona, and it
+  is read by the stage and handed to every world's `piece(env)` on `env.difficulty` — so one
+  setting changes the puzzles across the whole site (see
+  [Completion axiom](#completion-axiom) for what a level changes and the law that holds every
+  world to it at every stop). `window.interestingPersona.tuner(host)` renders that one control
+  wherever a part depends on the setting, which is why the same slider stands at the foot of the
+  stage's rail beside the piece it is dealing: a setting is settable where it is met, and moving
+  it there deals the piece again at the same seed (see [Powered down, never
+  broken](#powered-down-never-broken) for why nothing is powered down over it). The sentence
+  beside the avatar says which setting stands, as it says how many stars are in the sky. Clearing
+  the sky leaves it alone — it is a setting, not content — and the state menu's *clear*, which
+  takes the whole document, puts it back to the middle of the dial.
 - **Where the question is asked.** The threshold still asks on arrival, inline and never in the
   chrome: `index.html` hosts `#persona-probe` in its own `<main>`, so the question is that page's
   feature, asked large, and it is never a dialog in a visitor's way; the mood axiom's *never a
@@ -865,12 +894,14 @@ iteration process rather than a one-off tidy-up.
   under one key, `interesting_state_v1`, as a self-describing envelope — `format`, `version`,
   `saved` and a `values` object — rather than a key per page with a parse and a `try`/`catch` per
   page to match. `values` holds the site's own page state and only that: the names today are
-  `constellation` (the home sky every other page reinterprets), `puzzles` (the stage's tally of
+  `constellation` (the home sky every other page reinterprets), `difficulty` (how hard the visitor
+  asked for their puzzles, 1 to 5), `puzzles` (the stage's tally of
   solves, with the tries and hints they took), `capsules` and `omens`. The cookie-consent choice
   is not in there, because it belongs to the consent banner, which keeps it itself. The shared
-  shell writes three names and no more: `threshold`, the mood flow's reading, `constellation`,
+  shell writes four names and no more: `threshold`, the mood flow's reading, `constellation`,
   which the persona writes when a visitor places a star or asks a powered-down world to seed a
-  sky, and `puzzles`, which the stage writes when a puzzle is solved; the nine names the
+  sky, `difficulty`, which the persona writes when a visitor moves the slider in the sheet or
+  beside a piece, and `puzzles`, which the stage writes when a puzzle is solved; the nine names the
   shell's retired games once kept (`constellation-relay` and its kin) are taken out of a visitor's
   document on load, so an export stays an honest account of what the site keeps.
 - **One way in and out.** `window.interestingState` owns the parsing, the defaults and every
@@ -1276,6 +1307,33 @@ invariant of the iteration, stated in the prompt and held to in code.
   and the knob's bar, `value()`, `set()`, `hint()`, `tries` and `hints`; `frame(t, dt, ctx)`
   counts `t` from the piece's start. A module is self-contained: it imports nothing.
   `js/stage.js` documents all of it at the top.
+- **One difficulty, every puzzle** (issue
+  [#93](https://github.com/outrightmental/interesting/issues/93)). The persona keeps one setting
+  for the whole site and the stage hands it to every piece on `env.difficulty` —
+  `{ level, of, name }`, where `level` is 1 (*gentle*) to 5 (*fierce*) and the middle of the dial
+  stands until a visitor moves it (see [Persona](#persona)). One rule in every world, so a visitor
+  learns the dial once rather than twenty times:
+  - **the help.** A piece's helper knob — the hint, the second look, the replay, the spring the
+    hall tries for you — gives `6 − level` turns of it: five at *gentle*, three in the middle, one
+    at *fierce*. Never none, because a knob that does nothing is no knob; a helper that has run its
+    allowance says so on the live line rather than going quiet; and a world gives as much of that
+    allowance as it has to give, so a puzzle with two things to show moves less across the dial
+    than one with five. Where a helper only ever had one thing to say, the dial's last move is to
+    withhold it at *fierce*, which it does only where the piece has knobs enough to spare it.
+  - **the margin.** Where the answer is a number read off a scale — a distance in spans, an hour
+    off a 24-hour dial, notches round a rim, a water table in centimetres — it may be `3 − level`
+    steps out and still count: two at *gentle*, one at *mild*, exactly on the mark from the middle
+    up. A count, an order, a word, or a target the scene itself decides (a probe through a ring, a
+    crossing timed by the apparatus) has no margin to give, and that world moves on the help alone.
+
+  It never changes the subject. The plan a piece is of is rolled from the seed and carried on the
+  card's `of`, which is what keeps a card and the feature it opens as one thing (see [The feature
+  and the feed](#the-feature-and-the-feed)) — so `paint()` and `spark()` are handed no difficulty
+  at all, the feed's cards are the same river at any setting, and a module reads `env.difficulty`
+  inside `piece()` and nowhere else, defensively, through a small helper of its own (`asked(env)`
+  in every module), because a card's `env` has none. Moving the slider on the stage deals the same
+  seed again with the same card: the subject a visitor pressed stays the subject and only how hard
+  it is asked moves.
 - **Settable, in any order, and sayable.** Every knob has to be one the visitor it is put in front
   of can actually set, and a piece has to be finishable whatever order they reach its knobs in:
   nothing makes anyone work down the page. The way that fails is quiet — the visitor sets the last
@@ -1318,7 +1376,11 @@ invariant of the iteration, stated in the prompt and held to in code.
   that configuration deals it, and as a card another seed was dealt. All three have to solve — a
   sky can change under a card, so a piece reads the one it is handed defensively — and the last
   two have to be different pieces, because what a feature is follows from the card it was opened
-  from. The harness is not in `/site`, so a run cannot soften it.
+  from. Then the dial: the first seed is played at every one of the five stops — its own solution,
+  which has to solve, and every answer wrong, which may not — and at the two ends it is played as
+  the card it was dealt as too, because a piece follows its card whatever the setting. A setting
+  that leaves a world unsolvable, or that a wrong answer solves, is refused like any other. The
+  harness is not in `/site`, so a run cannot soften it.
 - **The stage, played too.** A piece can be flawless and the stage still leave the visitor playing
   it with no way to check, because the knob the piece offered is not a knob the stage will take —
   which is what issue #60 was.
@@ -1327,7 +1389,7 @@ invariant of the iteration, stated in the prompt and held to in code.
   scenario steps by hand so a 1.8-second hold costs nothing, a canvas that records nothing, and a
   feed that deals the worlds it is told to. It plays every piece the way a visitor who knows the
   answer would — the helpers worked, the answers set to the module's own solution, read by asking
-  the module for the very piece the stage opened — and presses the check. Nine scenarios: a world
+  the module for the very piece the stage opened — and presses the check. Ten scenarios: a world
   played, another played, and the first dealt again, each round solving, sitting out six seconds
   of its own clock to prove the stage does not see itself out, and then opening the next when the
   way on is pressed; every answer set wrong and checked, which must be refused, counted, said on
@@ -1340,14 +1402,17 @@ invariant of the iteration, stated in the prompt and held to in code.
   the bar filling and not by the release (issue #74); a piece abandoned with a hold still pressed
   down, after which nothing of it may be on the stage or still running; a press on the scene the
   piece has nothing to do with, which the stage must answer itself and must not advance anything by
-  (issue #89); and a card pressed, which
+  (issue #89); a card pressed, which
   must open as that card — its own title and line while the module loads, its configuration on the
-  piece's `env`, its stretch on the scene's frame, and never the world's generic line (issue #80).
+  piece's `env`, its stretch on the scene's frame, and never the world's generic line (issue #80);
+  and the persona's difficulty slider, which the stage must ask the persona for in the rail's own
+  host and which, moved, must deal the same world and the same seed again as the piece the module
+  makes at the new setting, still playable to a solve (issue #93).
   `StageTest` plays purpose-built pieces through it and `RealSiteTest` plays the site as committed;
   like the piece harness it is outside `/site`, so a run cannot soften it. Deliberately, it holds
   the site as committed rather than refusing a plan: it drives the stage through the stage's own
   elements, and those are a run's to rewrite, so gating plans on it would pin markup the silo leaves
-  open. The prompt says so, and says to keep all ten true when rewriting the stage.
+  open. The prompt says so, and says to keep all eleven true when rewriting the stage.
 - **Held to in code.** `check_completion` in
   [`.github/scripts/make_interesting.py`](.github/scripts/make_interesting.py) reads the one list
   of worlds off the built home page (the `#site-worlds` JSON the layout writes from
@@ -1360,8 +1425,9 @@ invariant of the iteration, stated in the prompt and held to in code.
   check within twelve taps and forty-five seconds of simulated play, one that is not the same for
   the same seed (a piece is an address), one that does not solve the same way with its knobs
   reached in another order or played a second time, one that is the same for every seed (the
-  river is of pieces that differ), or one that is the same piece whichever of its world's cards
-  it was opened from (the alignment axiom: a feature is the card that was pressed). Only what the
+  river is of pieces that differ), one that is the same piece whichever of its world's cards
+  it was opened from (the alignment axiom: a feature is the card that was pressed), or one that
+  stops being a solvable puzzle at any stop of the difficulty dial. Only what the
   run itself breaks is refused, as with every other axiom, so a run can repair a world that is
   already stuck; and a plan that drops the list of worlds is refused outright, because the stage
   would have nothing to open.
@@ -1376,8 +1442,9 @@ invariant of the iteration, stated in the prompt and held to in code.
   on the committed site rather than on a plan, for the reason given above.
 - **True of the site as committed**: `RealSiteTest` builds `/site` and plays every world's piece
   through the law on every pull request and before every deploy, plays the stage itself through the
-  nine scenarios above, checks that every world page is the stage and that the threshold hosts the
-  question on it, and checks that the limits the prompt states are the harness's own.
+  ten scenarios above, checks that every world page is the stage and that the threshold hosts the
+  question on it, checks that every world's module reads `env.difficulty` inside its pieces, and
+  checks that the limits the prompt states are the harness's own.
 
 ### Continued-interaction axiom
 
