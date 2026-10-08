@@ -4396,6 +4396,18 @@ class CompletionAxiomTest(SiteDirTestCase):
                      "Keep the done mark out of the way of the content",
                      "never laid over the scene",
                      "a solved piece is still fully playable",
+                     # Issue #89: unresponsiveness is uninteresting, said to the run that writes
+                     # the pieces and to the run that rewrites the stage, and held by the same
+                     # stage harness. The rejection is the stage's and the knobs are the piece's,
+                     # so the prompt says both where the mark lives and what it may never do.
+                     "every press on the main canvas of an activity must do something",
+                     "unresponsiveness is uninteresting",
+                     "the smallest acknowledgement there is",
+                     "rejectTap()",
+                     ".stage-reject",
+                     "a rejection never satisfies or advances a knob",
+                     "refuses it inside tap()",
+                     "a press the piece has nothing to do with is answered by the stage",
                      # Issue #80: a piece is the card it was opened from, which the same two
                      # harnesses hold it to, so a run writing a piece is told as much.
                      "A piece is also the card it was opened from",
@@ -4571,13 +4583,14 @@ class StageTest(unittest.TestCase):
     slider the stage only marked set when its value changed, so a visitor content with where it
     already stood set every other knob, watched the finale run, and waited on a piece that had no
     way left to finish. These tests run the real js/stage.js, through the elements stage.njk writes
-    and a clock they step by hand, and hold it to eight things: a world played twice over plays the
+    and a clock they step by hand, and hold it to nine things: a world played twice over plays the
     second time like the first, a finished piece waits for the visitor rather than seeing itself
     out, a finished piece is still a piece to play with rather than a picture of one (issue #86), a
     slider used where it stands counts as used, a knob nobody set is named rather than left
     a mystery, a hold knob is set the moment its bar fills rather than when the visitor lets go, a
-    piece that is over leaves nothing of itself behind, and the feature a card opens as is the card
-    that was pressed rather than the world's generic line (issue #80).
+    piece that is over leaves nothing of itself behind, every press on the scene does something even
+    where the piece has nothing to do with it (issue #89), and the feature a card opens as is the
+    card that was pressed rather than the world's generic line (issue #80).
     """
 
     @classmethod
@@ -4822,6 +4835,50 @@ class StageTest(unittest.TestCase):
         # end, which is the job "skip this one" used to do before the way on took it over.
         self.assertEqual(left["mode"], "empty")
         self.assertTrue(left["nextLit"], "a world with nothing to play offered no way on")
+
+    def test_every_press_on_the_scene_does_something(self):
+        # Issue #89: unresponsiveness is uninteresting. A press on the picture that lands on nothing
+        # at all is the one answer this site does not give, so where the piece has nothing to do
+        # with the tap -- no tap() of its own, every tap knob still locked behind another, no piece
+        # on the stage yet at all -- the stage answers for it with one small mark at the point
+        # pressed. LIVE_PIECE counts the taps it is told about onto its own live line, so a press
+        # the stage answered can be told apart from one it passed on to the piece.
+        result = self.scenario("pressAnswered", toy=LIVE_PIECE)
+        self.assertEqual(result["loadingMode"], "loading", "the press never landed while a module was loading")
+        self.assertTrue(result["playable"], "the piece never became playable")
+        self.assertIsNotNone(result["locked"], "no piece the harness tried had a tap knob behind a gate")
+        self.assertIsNotNone(result["noTapKnob"], "no piece the harness tried was without a tap knob")
+        for when in ["loading", "locked", "noTapKnob", "calm"]:
+            with self.subTest(when=when):
+                seen = result[when]
+                self.assertTrue(seen["answered"], "the stage swallowed a press it had nothing to do with")
+                # At the point pressed -- 211 across the stub scene's 640, 133 down its 400 -- and
+                # inside the scene, which is the only place a press on the scene can be answered.
+                self.assertEqual(seen["at"], {"left": "32.97%", "top": "33.25%"})
+                self.assertTrue(seen["inScene"], "the acknowledgement was not laid in the scene")
+                # Tiny: over before it is in the way, with nothing to say to a screen reader that
+                # the scene's own label does not already say.
+                self.assertTrue(seen["gone"], "the acknowledgement stayed on the scene")
+                self.assertTrue(seen["silent"], "the acknowledgement is copy rather than a mark")
+                # And it satisfies nothing: a rejection is not a knob set, a dot filled or a finish.
+                self.assertEqual(seen["set"], seen["setWas"], "a press the piece never saw set a knob")
+                self.assertEqual(seen["finished"], 0, "a press the piece never saw finished the piece")
+        # The locked press never reached the piece at all: LIVE_PIECE has been told of no taps.
+        self.assertEqual(result["locked"]["knob"], "touch")
+        self.assertIn("taps 0", result["locked"]["status"], "a tap knob still locked let the press through")
+        # With the gate open the press is the piece's again, and the stage adds nothing on top of
+        # the piece's own answer: this half of the contract the axiom does not touch.
+        self.assertFalse(result["opened"]["locked"], "the gate never opened")
+        self.assertFalse(result["opened"]["answered"], "the stage answered over a press the piece took")
+        self.assertIn("taps 1", result["opened"]["status"], "the press never reached the piece")
+        # Less motion asked for: the mark is held still rather than rippling open, the way the
+        # theme's crossfade lands without the shift and the ceremony's burst does not run at all.
+        self.assertTrue(result["calm"]["still"], "the acknowledgement moves for a visitor who asked it not to")
+        self.assertFalse(result["loading"]["still"], "the acknowledgement never moves for anyone")
+        # And nothing of a press outlives the piece it landed on, like every other part of it.
+        self.assertEqual(result["beforeClose"], 1, "the press left nothing to be taken away")
+        self.assertEqual(result["afterClose"], 0, "a press outlived the piece it landed on")
+        self.assertEqual(result["waiting"], 0, "the stage left a timer running for a press")
 
     def test_a_feature_is_the_card_that_was_pressed(self):
         # The alignment axiom (issue #80). A card is a seed, the configuration rolled from it and
@@ -6101,8 +6158,9 @@ class RealSiteTest(unittest.TestCase):
         # rather than silently holding the piece shut; a hold has to be set when its bar fills
         # rather than when the visitor lets go (issue #74); a finished piece has to stay fully
         # playable, with the done mark clear of its picture (issue #86); a piece that is over has
-        # to leave nothing running; and a card pressed has to open as that card rather than as the
-        # world's generic line (issue #80).
+        # to leave nothing running; a press the piece has nothing to do with has to be answered by
+        # the stage rather than swallowed (issue #89); and a card pressed has to open as that card
+        # rather than as the world's generic line (issue #80).
         needs_the_stage_harness(self)
         worlds = mi.listed_worlds(self.site)
         self.assertGreaterEqual(len(worlds), 10, "the check is worth nothing on a few worlds")
@@ -6199,6 +6257,30 @@ class RealSiteTest(unittest.TestCase):
         self.assertEqual(torn["waiting"], 0, "the stage left a timer running after the piece")
         self.assertEqual(torn["look"]["knobs"], [])
         self.assertEqual(torn["look"]["sceneLabel"], "the scene")
+        # Every press on the scene does something (issue #89), on the site as committed. What can be
+        # held of any world's piece without knowing which piece it is, is held: a press while a
+        # module is still loading and a press on a tap knob still locked behind another have nothing
+        # to reach, so the stage has to answer them itself -- and answering costs nothing, so no knob
+        # is set and no piece is finished by one. A piece with no tap knob is left to its module:
+        # whether it writes a tap() anyway is not visible from out here, and either answer is good.
+        pressed = report["pressAnswered"]["result"]
+        self.assertEqual(pressed["loadingMode"], "loading", "the press never landed while a module was loading")
+        self.assertIsNotNone(pressed["locked"], "no world the stage opened gated a tap knob behind another")
+        for when in ["loading", "locked", "calm"]:
+            with self.subTest(when=when):
+                seen = pressed[when]
+                self.assertTrue(seen["answered"], "the stage swallowed a press it had nothing to do with")
+                self.assertTrue(seen["inScene"], "the acknowledgement was not laid in the scene")
+                self.assertTrue(seen["gone"], "the acknowledgement stayed on the scene")
+                self.assertTrue(seen["silent"], "the acknowledgement is copy rather than a mark")
+                self.assertEqual(seen["set"], seen["setWas"], "a press the piece never saw set a knob")
+                self.assertEqual(seen["finished"], 0, "a press the piece never saw finished the piece")
+        self.assertFalse(pressed["opened"]["answered"],
+                         "the stage answered over a press its piece's own tap() took")
+        self.assertTrue(pressed["calm"]["still"],
+                        "the acknowledgement moves for a visitor who asked it not to")
+        self.assertFalse(pressed["loading"]["still"], "the acknowledgement never moves for anyone")
+        self.assertEqual(pressed["afterClose"], 0, "a press outlived the piece it landed on")
         # And the alignment axiom on the site as committed (issue #80): a card pressed opens a
         # feature that is that card. While the world's module loads, and on a world with no piece
         # at all, what stands is the card's own title -- never the world's one-line description,
