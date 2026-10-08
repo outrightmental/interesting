@@ -1,9 +1,8 @@
-/* The mood flow asks a sideways question before suggesting a world. The threshold hosts the question in its stage; elsewhere it is available through the persona and the mood atlas. Readings live in the shared state document. */
+/* The mood flow asks a sideways question before suggesting a world. The threshold hosts the question in its stage, the persona's ask leads there from every other page, and the mood atlas shows where each reading leads. Readings live in the shared state document. */
 (function () {
   'use strict';
 
   var store = window.interestingState;
-  var root = document.documentElement.getAttribute('data-root') || '';
   var READING = 'threshold';
   var RECENT = 6;
   var HALF_LIFE_H = 30;

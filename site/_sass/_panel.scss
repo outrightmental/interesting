@@ -14,12 +14,9 @@
 //                   heading outline a screen reader walks stays real
 //   .panel-label    the same for an h3 inside a panel, label-large in the variant colour
 //   .panel-note     one explanatory line in the variant colour
-//   .panel-status   a line a script writes into (a page's #status is one), in the tertiary colour
-//   .panel-foot     the closing row of a panel
+//   .panel-status   a line a script writes into, in the tertiary colour
 //   .prose          a page that is words: one readable measure, headings and paragraphs spaced,
 //                   for the pages that explain rather than play (privacy.html, terms.html)
-//   .chips          a list of chip links (M3 assist chips); .chips-tall puts a sub-label under each
-//   .controls--stack  the buttons of a row go full width on a phone
 
 @use 'type';
 
@@ -82,20 +79,6 @@ main {
   color: var(--good);
 }
 
-.panel-foot {
-  margin: 0.75rem 0 0;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.5rem;
-  color: var(--md-sys-color-on-surface-variant);
-  @include type.scale(label-large);
-}
-
-.panel-foot a {
-  color: var(--md-sys-color-primary);
-}
-
 // A page that is words rather than a toy: one measure narrow enough to read, the M3 type scale
 // for its headings, and space between its paragraphs. The feature still fills the first screen and
 // still wears the page's palette; this only sets the column of text inside it.
@@ -125,85 +108,4 @@ main {
   color: var(--md-sys-color-on-surface);
 }
 
-// A chip: M3's assist chip, a small-cornered outlined pill with a label inside.
-.chips {
-  list-style: none;
-  margin: 0.5rem 0 0;
-  padding: 0;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
 
-.chips a {
-  position: relative;
-  isolation: isolate;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 40px;
-  padding: 0.35rem 1rem;
-  border-radius: var(--md-sys-shape-corner-small);
-  box-shadow: inset 0 0 0 1px var(--md-sys-color-outline);
-  color: var(--md-sys-color-on-surface);
-  text-decoration: none;
-  @include type.scale(label-large);
-}
-
-.chips a::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  border-radius: inherit;
-  background: currentColor;
-  opacity: 0;
-  pointer-events: none;
-}
-
-.chips a:hover::after {
-  opacity: var(--md-sys-state-hover-opacity);
-}
-
-.chips a[aria-current='page'] {
-  box-shadow: none;
-  background: var(--md-sys-color-secondary-container);
-  color: var(--md-sys-color-on-secondary-container);
-}
-
-.chips-tall a {
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0.1rem;
-  padding: 0.5rem 1rem;
-}
-
-.chips-tall a span {
-  color: var(--md-sys-color-on-surface-variant);
-  @include type.scale(label-medium);
-}
-
-// The lines a page writes into inside its panel: the status line, and the readout under it.
-.panel #status,
-.panel .status {
-  margin: 0.5rem 0 0;
-  min-height: 1.5em;
-  color: var(--md-sys-color-tertiary);
-  @include type.scale(body-medium);
-}
-
-// A plain paragraph of a page's own prose inside its panel.
-.panel > p:not([class]) {
-  color: var(--md-sys-color-on-surface);
-  @include type.scale(body-medium);
-}
-
-@media (max-width: 620px) {
-  .controls--stack {
-    flex-direction: column;
-  }
-
-  .controls--stack > * {
-    width: 100%;
-  }
-}

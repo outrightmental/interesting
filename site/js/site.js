@@ -730,8 +730,8 @@
     document.addEventListener('input', function (ev) {
       if (ev.target && ev.target.type === 'range') fillRange(ev.target);
     });
-    // A button may move a slider without an input event (the 404 page's scan does), and a
-    // mechanism may put a new one on the page: either way, everything is re-read on the next frame.
+    // A piece may move a slider without an input event (ctx.set, from a tap on the scene), and a
+    // new piece puts new ones on the page: either way, everything is re-read on the next frame.
     document.addEventListener('click', fillSoon);
     if (window.MutationObserver) {
       new MutationObserver(fillSoon).observe(document.body, { childList: true, subtree: true });

@@ -13,7 +13,7 @@ description: 'Every page of the site in one pass: the way in, the fine print, th
 {%- endfor %}
   </ul>
   <h2 class='section-title'>the fine print</h2>
-  <ul class='pages'>
+  <ul class='pages list-grid'>
 {%- for p in worlds.finePrint %}
     <li><a href='{{ p.file }}'>{{ p.name }}</a> <span class='gloss'>{{ p.gloss }}</span><p>{{ p.what }}</p></li>
 {%- endfor %}

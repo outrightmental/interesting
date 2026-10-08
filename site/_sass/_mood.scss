@@ -1,6 +1,5 @@
 // The mood flow, as it looks: the fifteen palettes the site re-skins itself with, and the query
-// mechanisms it renders -- into the persona card on the threshold, into the persona sheet
-// everywhere, and onto the mood atlas.
+// mechanisms js/threshold.js renders into the threshold's own feature (#persona-probe).
 //
 // Every palette is four seeds (see _tokens.scss), and the whole scheme follows from them: that is
 // the whole of the transmogrification. The seeds land in four places -- three of them on :root, at

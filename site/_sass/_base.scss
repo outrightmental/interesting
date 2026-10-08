@@ -84,12 +84,6 @@ a {
   @include type.scale(body-large);
 }
 
-.hint {
-  margin: 0.75rem 0 0;
-  color: var(--md-sys-color-on-surface-variant);
-  @include type.scale(body-small);
-}
-
 // The one focus indicator, M3's: a ring in the primary colour, offset from the thing it rings.
 :focus-visible {
   outline: 3px solid var(--md-sys-color-primary);
