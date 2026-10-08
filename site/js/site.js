@@ -6,6 +6,14 @@
       window.interestingSite.unlock(host, options)   a part that needs something the browser does
                                                       not hold yet, rendered as powered down with
                                                       the one button that powers it (see below)
+      window.interestingSite.difficulty(host, options)
+                                                      the persona's difficulty slider, rendered
+                                                      wherever a part depends on the setting: the
+                                                      persona's own (js/persona.js), offered here
+                                                      beside unlock() because the two answer the
+                                                      same axiom -- a dependency is settable where
+                                                      it is met. It needs no powering down: the
+                                                      setting always holds a value
       window.interestingSite.destructive(control, options)
                                                       a control that throws a visitor's saved state
                                                       away: the one warning treatment and the one
@@ -73,6 +81,13 @@
   unlock box is put in front of the host, so the button is the first thing in reading order. The
   axiom applies when the prerequisite cannot be kept, too: a browser that stores nothing still
   gets the button, and the sky it seeds lasts for the page.
+
+  The other half of the same axiom is a dependency that is already met: the persona's difficulty
+  (issue #93) always holds a value, so a part that reads it is never powered down -- it is dealt
+  at the setting that stands, and the slider that changes it is offered in place instead, through
+  difficulty(host, options) above. Powering every puzzle on the site down behind a slider nobody
+  had been asked to touch is the "never broken" half of the axiom broken, so the rule is: power
+  down what is missing, offer what is merely set.
 
   ---------------------------------------------------------------------------------------------
   Caution before a destructive action
@@ -1283,15 +1298,26 @@
     watch.observe(document.body, { childList: true, subtree: true });
   }
 
+  /* The persona's difficulty slider, wherever a part depends on it. The persona owns the setting
+     and draws the control (js/persona.js); this is the shell offering it under the name a part
+     already reaches for, beside unlock(). Unlike unlock() there is nothing to power down -- the
+     setting always holds a value -- so this only renders, and hands back the release. */
+  function difficulty(host, options) {
+    if (!persona || typeof persona.tuner !== 'function') return function () {};
+    return persona.tuner(host, options);
+  }
+
   window.interestingSite = {
     unlock: unlock,
+    difficulty: difficulty,
     destructive: destructive,
     areYouSure: areYouSure,
     lightbox: lightbox,
     seedSky: seedSky,
     holdsSky: holdsSky,
     root: root,
-    skyKey: SKY
+    skyKey: SKY,
+    difficultyKey: 'difficulty'
   };
 
   function start() {
