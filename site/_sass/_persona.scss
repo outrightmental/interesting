@@ -37,6 +37,7 @@
 .persona-avatar {
   gap: 0.6rem;
   min-height: 44px;
+  min-width: 44px;
   padding: 0 0.2rem;
   background: color-mix(in oklab, var(--md-sys-color-surface-container-high) 84%, transparent);
   backdrop-filter: blur(14px);
@@ -317,7 +318,7 @@
 }
 
 .persona-close {
-  min-height: 40px;
+  min-height: 44px;
 }
 
 .persona-sheet-intro {
@@ -375,18 +376,38 @@
   @include type.scale(title-small);
 }
 
+.persona-star-words {
+  display: grid;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.persona-star-words label {
+  color: var(--md-sys-color-on-surface-variant);
+  @include type.scale(label-large);
+}
+
+.persona-star-words button {
+  justify-self: start;
+}
+
+.persona-star-words .panel-note {
+  overflow-wrap: anywhere;
+}
+
 .persona-star {
+  --star-light: radial-gradient(circle, var(--md-sys-color-on-surface) 0 2px, var(--md-sys-color-primary) 3px, transparent calc(7px * var(--star-gleam, 1)));
   position: absolute;
-  width: 14px;
-  height: 14px;
-  min-height: 0;
-  margin: -7px 0 0 -7px;
+  width: 44px;
+  height: 44px;
+  min-height: 44px;
+  margin: -22px 0 0 -22px;
   padding: 0;
   border: 0;
   border-radius: 50%;
   display: block;
-  background: radial-gradient(circle at 35% 35%, #fff 0 20%, #d4e4ff 45%, #86a9ff 70%, transparent 73%);
-  box-shadow: 0 0 13px rgba(145, 188, 255, 0.85);
+  background: var(--star-light);
+  box-shadow: none;
   cursor: grab;
   touch-action: none;
   user-select: none;
@@ -399,27 +420,28 @@
   display: none;
 }
 
-// An invisible halo makes each star a 44px touch target.
+// Each star keeps a 44px touch target around its small light.
 .persona-star::before {
   content: '';
   position: absolute;
-  inset: -15px;
+  inset: 0;
   border-radius: 50%;
 }
 
 .persona-star:hover {
-  background: radial-gradient(circle at 35% 35%, #fff 0 20%, #d4e4ff 45%, #86a9ff 70%, transparent 73%);
-  box-shadow: 0 0 16px rgba(180, 215, 255, 0.95);
+  background: var(--star-light);
+  box-shadow: inset 0 0 0 1px var(--md-sys-color-primary);
 }
 
 .persona-star.dragging {
   cursor: grabbing;
   transform: scale(1.25);
-  box-shadow: 0 0 18px rgba(180, 215, 255, 0.95);
+  box-shadow: inset 0 0 0 2px var(--md-sys-color-primary);
 }
 
 .persona-star.selected {
-  box-shadow: 0 0 0 2px var(--md-sys-color-tertiary), 0 0 14px color-mix(in oklab, var(--md-sys-color-tertiary) 70%, transparent);
+  background: var(--star-light);
+  box-shadow: inset 0 0 0 2px var(--md-sys-color-tertiary), 0 0 14px color-mix(in oklab, var(--md-sys-color-tertiary) 70%, transparent);
 }
 
 .persona-star:focus-visible {

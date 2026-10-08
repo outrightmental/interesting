@@ -11,7 +11,7 @@
                              Say the hour the front reaches the station, past midnight if it must,
                              and which side it comes from. A wrong check says only that the hour
                              is off, or that the side is right.
-     the pressure map        Five stations with their pressure readings. The wind blows from the
+     the pressure map        Five stations (six on a crowded map) with their readings. The wind blows from the
                              highest toward the lowest. Name the station it blows toward, the way
                              it blows by the compass, and the difference in pressure between the
                              two. A wrong check says which part is off and no more.
@@ -26,7 +26,8 @@ const GR = 12; // squares down
 const STRIP = 3.2; // the instrument strip under the map, in squares
 const KM = 10; // kilometres in a square
 const SIDES = ['north', 'east', 'south', 'west'];
-const LETTERS = ['A', 'B', 'C', 'D', 'E'];
+const LETTERS = ['A', 'B', 'C', 'D', 'E', 'F'];
+const COUNT = ['', 'one', 'two', 'three', 'four', 'five', 'six'];
 const SPEEDS = [10, 20, 30, 40, 50, 60];
 const PLAIN = { density: 1, scale: 1, turn: 0 };
 const TAU = Math.PI * 2;
@@ -454,13 +455,13 @@ function windWay(stations) {
 }
 
 function pressureOk(p) {
-  if (!p || p.kind !== 'pressure' || !Array.isArray(p.stations) || p.stations.length !== 5) return false;
+  if (!p || p.kind !== 'pressure' || !Array.isArray(p.stations) || p.stations.length < 5 || p.stations.length > 6) return false;
   const st = p.stations;
   if (!st.every((q) => q && Number.isInteger(q.c) && Number.isInteger(q.r) && Number.isInteger(q.p)
     && q.c >= 2 && q.c <= GC - 2 && q.r >= 2 && q.r <= GR - 2 && q.p >= 980 && q.p <= 1040)) return false;
-  if (new Set(st.map((q) => q.p)).size !== 5) return false;
-  for (let i = 0; i < 5; i++) {
-    for (let j = i + 1; j < 5; j++) {
+  if (new Set(st.map((q) => q.p)).size !== st.length) return false;
+  for (let i = 0; i < st.length; i++) {
+    for (let j = i + 1; j < st.length; j++) {
       if (Math.max(Math.abs(st[i].c - st[j].c), Math.abs(st[i].r - st[j].r)) < 3) return false;
     }
   }
@@ -472,10 +473,12 @@ function pressureOk(p) {
   return a.p - b.p >= 8;
 }
 
+// Most maps read five stations; a crowded one reads six.
 function pressurePlan(env) {
-  for (let guard = 0; guard < 200; guard++) {
+  const n = env.chance(0.35) ? 6 : 5;
+  for (let guard = 0; guard < 300; guard++) {
     const stations = [];
-    for (let i = 0; i < 5; i++) stations.push({ c: env.int(2, GC - 2), r: env.int(2, GR - 2), p: env.int(980, 1040) });
+    for (let i = 0; i < n; i++) stations.push({ c: env.int(2, GC - 2), r: env.int(2, GR - 2), p: env.int(980, 1040) });
     const plan = { kind: 'pressure', stations };
     if (pressureOk(plan)) return plan;
   }
@@ -488,8 +491,8 @@ function carriedPressure(env) {
   return { kind: 'pressure', stations: p.stations.map((q) => ({ c: q.c, r: q.r, p: q.p })) };
 }
 
-function pressureTitle() {
-  return 'the pressure map: five stations';
+function pressureTitle(plan) {
+  return plan.stations.length === 6 ? 'the crowded map: six stations' : 'the pressure map: five stations';
 }
 
 function drawPressure(g, w, h, env, plan, s, variant) {
@@ -565,8 +568,8 @@ function pressurePiece(env, plan) {
   const s = { t: 0, toward: -1, way: '', gap: null, hinted: -1, blow: 0, lines: null, rise: 0 };
   const draw = (c) => drawPressure(c.g, c.w, c.h, c, plan, s, env.variant);
   return {
-    title: pressureTitle(),
-    brief: 'A reading taken from five stations, each reporting its pressure. The wind blows from the station reading highest toward the one reading lowest, and the compass in the corner has north at the top. Name the way it blows by whichever axis it mostly follows.',
+    title: pressureTitle(plan),
+    brief: 'A reading taken from ' + COUNT[st.length] + ' stations, each reporting its pressure. The wind blows from the station reading highest toward the one reading lowest, and the compass in the corner has north at the top. Name the way it blows by whichever axis it mostly follows.',
     goal: 'Name the station the wind blows toward, the way it blows, and the pressure difference between the two.',
     aspect: '4 / 3',
     checkLabel: 'log the wind',
@@ -591,7 +594,7 @@ function pressurePiece(env, plan) {
       return { solved: false, say: parts.join('; ') };
     },
     start(c) {
-      c.status('five readings; the wind blows from the highest to the lowest');
+      c.status(COUNT[st.length] + ' readings; the wind blows from the highest to the lowest');
       draw(c);
     },
     apply(id, value, c) {
@@ -636,25 +639,39 @@ function pressurePiece(env, plan) {
 
 /* ---- the module ----------------------------------------------------------------------------- */
 
-function dealsFront(env) {
-  return env.chance(0.55);
+// Which of the two this card is, and its plan, dealt once from the env's seeded stream and kept
+// with that env. Every pass over one card -- the still picture and then every animated frame --
+// asks here, so they are all the same card; dealing per frame instead would re-roll the whole
+// puzzle thirty times a second (issue #92, and js/feed.js on what animate owes a card).
+const dealt = new WeakMap();
+function deal(env) {
+  let got = dealt.get(env);
+  if (!got) {
+    const front = env.chance(0.55);
+    got = { front, plan: front ? frontPlan(env) : pressurePlan(env) };
+    dealt.set(env, got);
+  }
+  return got;
 }
 
 export default {
   id: 'constellation-weather',
   needsSky: true,
   paint(g, w, h, env) {
-    if (dealsFront(env)) frontPreview(g, w, h, env, frontPlan(env), env.variant.turn * 6);
-    else pressurePreview(g, w, h, env, pressurePlan(env), env.variant.turn * 6);
+    const d = deal(env);
+    if (d.front) frontPreview(g, w, h, env, d.plan, env.variant.turn * 6);
+    else pressurePreview(g, w, h, env, d.plan, env.variant.turn * 6);
   },
   animate(g, w, h, env, t) {
-    if (dealsFront(env)) frontPreview(g, w, h, env, frontPlan(env), t + env.variant.turn * 6);
-    else pressurePreview(g, w, h, env, pressurePlan(env), t + env.variant.turn * 6);
+    const d = deal(env);
+    if (d.front) frontPreview(g, w, h, env, d.plan, t + env.variant.turn * 6);
+    else pressurePreview(g, w, h, env, d.plan, t + env.variant.turn * 6);
   },
   spark(env) {
     if (!env.stars.length) return null;
-    if (dealsFront(env)) {
-      const plan = frontPlan(env);
+    const d = deal(env);
+    if (d.front) {
+      const plan = d.plan;
       return {
         title: frontTitle(plan),
         mono: 'now ' + fmt(plan.now) + '\nfront: ' + plan.squares + ' squares out, ' + plan.speed + ' km/h\n1 square = ' + KM + ' km',
@@ -664,11 +681,11 @@ export default {
         of: plan
       };
     }
-    const plan = pressurePlan(env);
+    const plan = d.plan;
     return {
-      title: pressureTitle(),
+      title: pressureTitle(plan),
       mono: plan.stations.map((q, i) => LETTERS[i] + ': ' + q.p + ' hPa').join('\n'),
-      text: 'Five stations, five readings. The wind blows from the highest to the lowest. Say where it goes, which way, and by how much.',
+      text: (plan.stations.length === 6 ? 'Six stations, six readings.' : 'Five stations, five readings.') + ' The wind blows from the highest to the lowest. Say where it goes, which way, and by how much.',
       aspect: '4 / 3',
       paint: (g, w, h, cardEnv) => pressurePreview(g, w, h, cardEnv, plan, cardEnv.variant.turn * 6),
       of: plan
@@ -679,6 +696,7 @@ export default {
     if (front) return frontPiece(env, front);
     const pressure = carriedPressure(env);
     if (pressure) return pressurePiece(env, pressure);
-    return dealsFront(env) ? frontPiece(env, frontPlan(env)) : pressurePiece(env, pressurePlan(env));
+    const d = deal(env);
+    return d.front ? frontPiece(env, d.plan) : pressurePiece(env, d.plan);
   }
 };

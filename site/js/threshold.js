@@ -1,9 +1,8 @@
-/* The mood flow asks a sideways question before suggesting a world. The threshold hosts the question in its stage; elsewhere it is available through the persona and the mood atlas. Readings live in the shared state document. */
+/* The mood flow asks a sideways question before suggesting a world. The threshold hosts the question in its stage, the persona's ask leads there from every other page, and the mood atlas shows where each reading leads. Readings live in the shared state document. */
 (function () {
   'use strict';
 
   var store = window.interestingState;
-  var root = document.documentElement.getAttribute('data-root') || '';
   var READING = 'threshold';
   var RECENT = 6;
   var HALF_LIFE_H = 30;
@@ -246,6 +245,23 @@
       waited: { attentive: 1, brooding: 1 },
       kindled: { ceremonial: 2, tending: 1, curious: 1 },
       hurried: { restless: 3, tempestuous: 1, verbal: 1 }
+    },
+    {
+      probe: 'key-ring', name: 'seven keys', kind: 'keys',
+      ask: 'A locked door, and seven keys on a ring. Any of them turns the lock. Weigh as many as you like in your hand; the one you try is the answer.',
+      keys: [
+        { label: 'the iron key', detail: 'heavy, cold, and older than the door', weights: { rooted: 3, tender: 1 } },
+        { label: 'the clockwork key', detail: 'square-shanked, made for winding something', weights: { metrical: 3, analytic: 2, geometric: 1 } },
+        { label: 'the glass key', detail: 'you can see the wards of the lock through it', weights: { divinatory: 3, cosmic: 1 } },
+        { label: 'the bent key', detail: 'bent once and straightened; it still turns', weights: { restless: 3, tempestuous: 2 } },
+        { label: 'the small bright key', detail: 'for a diary, or a music box', weights: { tender: 2, brooding: 2, verbal: 1 } },
+        { label: 'the skeleton key', detail: 'opens many doors and belongs to none', weights: { curious: 3, cosmic: 2 } },
+        { label: 'the wooden key', detail: 'carved from memory, to copy one that was lost', weights: { tending: 3, ceremonial: 2, verbal: 1 } }
+      ],
+      first: { restless: 2, divinatory: 1 },
+      few: { attentive: 2, analytic: 1 },
+      many: { brooding: 2, curious: 1 },
+      all: { ceremonial: 2, metrical: 1 }
     }
   ];
 
@@ -269,6 +285,12 @@
 
   function save(next) { store.set(READING, next); }
   var state = load();
+  // The one writer: everything the threshold keeps goes through here, so the shape of the
+  // reading's record is written once.
+  function persist() {
+    save({ visits: state.visits, last: state.last, drift: state.drift,
+      recent: state.recent, orientation: state.orientation });
+  }
   var sinceLast = state.last ? Math.max(0, Date.now() - state.last) : null;
   function memoryPull() {
     if (sinceLast === null) return 0;
@@ -360,7 +382,6 @@
     var root = document.documentElement;
     if (orientation) root.setAttribute('data-mood', orientation.id);
     else root.removeAttribute('data-mood');
-    root.setAttribute('data-visit', state.visits > 1 ? 'returning' : 'first');
     try {
       window.dispatchEvent(new CustomEvent('threshold:reading', {
         detail: { orientation: orientation ? orientation.id : null }
@@ -376,8 +397,7 @@
     state.drift = drift;
     state.orientation = reading.orientation ? reading.orientation.id : null;
     state.last = Date.now();
-    save({ visits: state.visits, last: state.last, drift: state.drift,
-      recent: state.recent, orientation: state.orientation });
+    persist();
     lastAnswered = reading.orientation ? reading : null;
     transmogrify(reading.orientation);
     return reading;
@@ -385,8 +405,7 @@
   function noteProbe(id) {
     if (state.recent[state.recent.length - 1] === id) return;
     state.recent = state.recent.concat([id]).slice(-RECENT);
-    save({ visits: state.visits, last: state.last, drift: state.drift,
-      recent: state.recent, orientation: state.orientation });
+    persist();
   }
   function nextProbe() {
     var fresh = PROBES.filter(function (p) { return state.recent.indexOf(p.probe) === -1; });
@@ -466,7 +485,7 @@
     var kinds = {
       choice: choiceProbe, sequence: sequenceProbe, tap: tapProbe, hold: holdProbe,
       place: placeProbe, draw: drawProbe, windows: windowsProbe, balance: balanceProbe,
-      slider: sliderProbe, sky: skyProbe
+      slider: sliderProbe, sky: skyProbe, keys: keysProbe
     };
     (kinds[probe.kind] || choiceProbe)(probe, body, trace, answer, finish);
     return probe;
@@ -983,6 +1002,54 @@
     }
     redraw();
   }
+  // Seven keys, one lock. A first press on a key weighs it in the hand and reads its one line; a
+  // second press on the same key tries it in the lock. The key tried is most of the answer, and
+  // how many were weighed before trying is the rest. Nothing is hidden that matters: any key
+  // turns, so the weighing is curiosity made visible, never a puzzle.
+  function keysProbe(probe, body, trace, answer, finish) {
+    var weighed = [];
+    var held = -1;
+    var done = false;
+    var group = el('div', 'probe-options probe-keys');
+    group.setAttribute('role', 'group');
+    group.setAttribute('aria-label', 'seven keys on a ring');
+    var buttons = [];
+    probe.keys.forEach(function (key, index) {
+      var button = el('button', 'probe-option');
+      button.type = 'button';
+      button.setAttribute('aria-pressed', 'false');
+      button.appendChild(el('span', 'probe-option-label', key.label));
+      var detail = el('span', 'probe-option-detail', key.detail);
+      detail.hidden = true;
+      button.appendChild(detail);
+      button.addEventListener('click', function () {
+        if (done) return;
+        if (held === index) {
+          done = true;
+          add(answer, key.weights, 1);
+          var others = weighed.length - 1;
+          if (others === 0) add(answer, probe.first, 1);
+          else if (others >= probe.keys.length - 1) add(answer, probe.all, 1);
+          else if (others <= 2) add(answer, probe.few, 1);
+          else add(answer, probe.many, 1);
+          for (var i = 0; i < buttons.length; i++) buttons[i].disabled = true;
+          trace.textContent = key.label + ' turns in the lock';
+          finish();
+          return;
+        }
+        held = index;
+        if (weighed.indexOf(index) === -1) weighed.push(index);
+        for (var j = 0; j < buttons.length; j++) buttons[j].setAttribute('aria-pressed', 'false');
+        button.setAttribute('aria-pressed', 'true');
+        detail.hidden = false;
+        trace.textContent = key.label + ': ' + key.detail + '. Press it again to try it in the lock.';
+      });
+      buttons.push(button);
+      group.appendChild(button);
+    });
+    body.appendChild(group);
+    body.appendChild(el('p', 'probe-count', 'a first press weighs a key in your hand; a second press on the same key tries it in the lock'));
+  }
   function sliderProbe(probe, body, trace, answer, finish) {
     var wrap = el('div', 'probe-dial');
     var input = document.createElement('input');
@@ -1190,8 +1257,7 @@
   state.visits += 1;
   state.last = Date.now();
   transmogrify(state.orientation ? ORIENTATION_BY_ID[state.orientation] : null);
-  save({ visits: state.visits, last: state.last, drift: state.drift,
-    recent: state.recent, orientation: state.orientation });
+  persist();
   var wayControl = document.getElementById('threshold-way');
   if (wayControl) PROBES.forEach(function (probe) {
     var option = document.createElement('option');

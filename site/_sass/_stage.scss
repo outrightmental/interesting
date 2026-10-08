@@ -682,7 +682,7 @@
   gap: 0.6rem;
 }
 
-// The actions sit at the left, clear of the state menu's button in the corner of every page. On a
+// The actions sit at the left: on the threshold, the one that asks another way. On a
 // world page there are none -- the way on is the whole of what a finished piece offers -- and the
 // box is kept empty so the dots opposite it keep the right-hand end of the row either way.
 .stage-foot-actions {
@@ -693,9 +693,7 @@
 }
 
 .stage-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: var(--md-sys-shape-corner-full);
+  // Its size and its diamond are the seal's (_rite.scss); this is only its colour.
   background: var(--md-sys-color-outline-variant);
   transition: background-color var(--md-sys-motion-duration-short) var(--md-sys-motion-easing-standard);
 }

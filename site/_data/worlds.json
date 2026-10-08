@@ -9,7 +9,7 @@
   ],
   "worlds": [
     { "file": "quiet-room.html", "name": "the quiet room", "orientation": "banked low", "mood": "tender", "aspect": "1 / 1",
-      "what": "Keep a vigil in a dim room: put every lamp out, or set the keepsakes on the shelf in the one order the clues allow." },
+      "what": "Keep a vigil in a dim room: put every lamp out, order the keepsakes from clues, or find which two switches changed the lamps." },
     { "file": "wish-constellation.html", "name": "the wish constellation", "orientation": "looking up", "mood": "cosmic", "aspect": "4 / 5",
       "what": "Read your own sky: order a postcard's lights by depth from how they shift, or spot which turned sky is yours." },
     { "file": "gravity-well.html", "name": "the gravity well", "orientation": "looking up", "mood": "cosmic", "aspect": "16 / 10",
@@ -37,7 +37,7 @@
     { "file": "kinetic-floor.html", "name": "the kinetic floor", "orientation": "wound tight", "mood": "restless", "aspect": "16 / 10",
       "what": "Set the floor in motion: say which domino lanes cross their gaps, or find the point where a loaded plank balances." },
     { "file": "loam.html", "name": "loam", "orientation": "low and slow", "mood": "rooted", "aspect": "4 / 5",
-      "what": "Read a soil core for the depth of the water table, or blend two bags of earth to the mix the bed asks for." },
+      "what": "Read a soil core, blend two bags of earth for a bed, or follow a root through the layers to its exit." },
     { "file": "word-kiln.html", "name": "the word kiln", "orientation": "full of half-sentences", "mood": "verbal", "aspect": "5 / 4",
       "what": "Fire scrambled letters into one true word, or climb a word ladder one letter at a time." },
     { "file": "cipher-cabinet.html", "name": "the cipher cabinet", "orientation": "full of half-sentences", "mood": "verbal", "aspect": "4 / 3",

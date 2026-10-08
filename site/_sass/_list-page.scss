@@ -64,8 +64,6 @@
   @include type.scale(body-small);
 }
 
-.orientations { @extend .list-stack; }
-
 .orientations li {
   display: flex;
   flex-wrap: wrap;
@@ -91,8 +89,6 @@
 .orientations a {
   @include type.scale(title-small);
 }
-
-.pages { @extend .list-grid; }
 
 .pages a {
   display: inline-block;

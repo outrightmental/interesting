@@ -122,12 +122,18 @@
       <h2 id='persona-sheet-title' class='persona-sheet-title'>your persona</h2>
       <button type='button' class='persona-close btn-text' id='persona-close'>close</button>
     </div>
-    <p class='panel-note persona-sheet-intro'>Your persona is a small sky you place star by star, and a reading taken from one sideways answer. Several worlds read the same stars, each its own way, and the reading suggests a world. Both stay in this browser.</p>
+    <p class='panel-note persona-sheet-intro'>Your persona is a sky of thoughts you can change and a reading from one sideways answer. Several puzzles use your sky, each its own way; the reading suggests where to begin.</p>
     <section class='persona-section' aria-labelledby='persona-sky-title'>
       <h3 id='persona-sky-title' class='panel-label'>constellation</h3>
-      <p class='panel-note'>Tap the sky to place a star, drag a star to move it, tap one to read its thought. The shape you make earns the sky a name, and several worlds read this one sky, each its own way.</p>
+      <p class='panel-note'>Tap the sky to add a star. Choose a star to change its words; drag it or use its arrow keys to move it. The sky takes a new name as its shape changes.</p>
       <div class='persona-sky' id='persona-sky'><canvas class='persona-sky-canvas' aria-hidden='true'></canvas></div>
       <p class='persona-sky-name' id='persona-sky-name' hidden></p>
+      <form class='persona-star-words' id='persona-star-words' hidden>
+        <label for='persona-star-thought'>what this star carries (up to 160 characters)</label>
+        <input id='persona-star-thought' type='text' maxlength='160' required autocomplete='off'>
+        <button type='submit'>keep these words</button>
+        <p class='panel-note' id='persona-star-neighbor' aria-live='polite'></p>
+      </form>
       <div class='controls'>
         <button id='persona-drop' type='button'>drop a star</button>
         <button id='persona-seed' type='button'>seed a small sky</button>
@@ -145,7 +151,7 @@
         <a class='action' id='persona-reading-go' href='{{ siteRoot }}moods.html' hidden>the mood atlas</a>
       </div>
       <div class='persona-probe' id='persona-sheet-probe' hidden></div>
-      <p class='panel-note'>A question about an object or a mark leads to one suggested world. <a href='{{ siteRoot }}moods.html'>the mood atlas</a> shows where each reading can lead.</p>
+      <p class='panel-note'>Your stars do not change this reading. A puzzle you have begun keeps its clues when you change the sky. <a href='{{ siteRoot }}moods.html'>the mood atlas</a> shows where each reading can lead.</p>
     </section>
   </dialog>
 </body>

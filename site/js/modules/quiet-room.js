@@ -1,9 +1,9 @@
 /* The quiet room: a ring that breathes, a dim room of lamps, and a shelf with a few keepsakes on
-   it. As a card it is the ring (paint, animate) or one of the two puzzles below (spark); as a
+   it. As a card it is the ring (paint, animate) or one of the three puzzles below (spark); as a
    piece it is one of those puzzles, and the card it was opened from says which. See js/feed.js
    for what a module is and js/stage.js for what a piece is.
 
-   Two puzzles, both deduction:
+   Three puzzles, each read from what happens in the room:
 
      the dark room   Lights Out. A square of lamps, some lit; pressing one flips it and its four
                      neighbours. Put every lamp out. The room is made by pressing lamps in a dark
@@ -14,6 +14,9 @@
                      few clues say how they stand -- left of, next to, at an end, two apart. The
                      clues are drawn from the true order and pruned until exactly one order fits
                      them all. A wrong check says how many stand in the right place and no more.
+     the second look Two views of nine lamps, before and after someone pressed exactly two
+                     switches. Find those switches and the row where most lamps changed. The
+                     same neighbour-flipping rule applies; the views are on screen together.
 
    A card and the feature it opens as are one puzzle: the spark puts the whole puzzle on its spec
    as `of` -- the lamps that were pressed, the shelf's order and clues -- and piece(env) opens on
@@ -628,26 +631,249 @@ function shelfPiece(env, plan) {
   };
 }
 
+/* ---- the second look: two presses between two views ----------------------------------------- */
+
+function changedRow(pressed) {
+  const flipped = litBy(pressed, 3);
+  const counts = [0, 1, 2].map((row) => flipped.slice(row * 3, row * 3 + 3).reduce((sum, lamp) => sum + lamp, 0));
+  const most = Math.max(...counts);
+  return counts.indexOf(most) === counts.lastIndexOf(most) ? counts.indexOf(most) : -1;
+}
+
+function secondLookPlan(env) {
+  const before = new Array(9).fill(0);
+  const available = Array.from({ length: 9 }, (_, i) => i);
+  const lit = env.int(3, 6);
+  for (let i = 0; i < lit; i++) before[available.splice(env.int(0, available.length - 1), 1)[0]] = 1;
+  const pairs = [];
+  for (let a = 0; a < 9; a++) {
+    for (let b = a + 1; b < 9; b++) {
+      if (changedRow([a, b]) !== -1) pairs.push([a, b]);
+    }
+  }
+  return { kind: 'second-look', before, pressed: env.pick(pairs) };
+}
+
+function carriedSecondLook(env) {
+  const p = env.card && env.card.of;
+  if (!p || p.kind !== 'second-look' || !Array.isArray(p.before) || p.before.length !== 9) return null;
+  if (!p.before.every((lamp) => lamp === 0 || lamp === 1)) return null;
+  const lit = p.before.filter(Boolean).length;
+  if (lit < 3 || lit > 6) return null;
+  if (!Array.isArray(p.pressed) || p.pressed.length !== 2 || !p.pressed.every((i) => Number.isInteger(i) && i >= 0 && i < 9)) return null;
+  if (p.pressed[0] >= p.pressed[1] || changedRow(p.pressed) === -1) return null;
+  return { kind: 'second-look', before: p.before.slice(), pressed: p.pressed.slice() };
+}
+
+function secondLookAfter(plan) {
+  const flipped = litBy(plan.pressed, 3);
+  return plan.before.map((lamp, i) => lamp ^ flipped[i]);
+}
+
+function secondLookRows(lamps) {
+  return [0, 1, 2].map((row) => 'row ' + (row + 1) + ': '
+    + lamps.slice(row * 3, row * 3 + 3).map((lamp) => lamp ? 'lit' : 'dark').join(', ')).join('; ');
+}
+
+function secondLookTitle(plan) {
+  return 'the second look: ' + plan.before.filter(Boolean).length + ' lamps first';
+}
+
+function secondLookGeometry(w, h) {
+  const side = Math.min(w * 0.39, h * 0.64);
+  return { side, cell: side / 3, lefts: [w * 0.07, w * 0.54], top: h * 0.19 };
+}
+
+function drawSecondLook(g, w, h, env, plan, s, variant) {
+  const c = env.colors;
+  const v = variant || { density: 1, scale: 1, turn: 0 };
+  const geo = secondLookGeometry(w, h);
+  const after = secondLookAfter(plan);
+  const changed = litBy(plan.pressed, 3);
+  floor(g, w, h, env, 0);
+  [plan.before, after].forEach((lamps, view) => {
+    const left = geo.lefts[view];
+    g.fillStyle = env.alpha(c.bg2, 0.35);
+    g.fillRect(left, geo.top, geo.side, geo.side);
+    g.strokeStyle = env.alpha(c.muted, 0.6);
+    g.lineWidth = 1;
+    g.strokeRect(left, geo.top, geo.side, geo.side);
+    g.fillStyle = c.fg;
+    g.font = '500 ' + Math.max(11, Math.round(geo.cell * 0.27)) + 'px system-ui, sans-serif';
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.fillText(view ? 'after' : 'before', left + geo.side / 2, geo.top * 0.58);
+    for (let i = 0; i < 9; i++) {
+      const row = Math.floor(i / 3);
+      const x = left + (i % 3 + 0.5) * geo.cell;
+      const y = geo.top + (row + 0.5) * geo.cell;
+      const r = geo.cell * 0.23 * v.scale;
+      if (lamps[i]) {
+        const glow = g.createRadialGradient(x, y, r * 0.3, x, y, r * 1.9);
+        glow.addColorStop(0, env.alpha(c.accent2, 0.45));
+        glow.addColorStop(1, env.alpha(c.accent2, 0));
+        g.fillStyle = glow;
+        g.beginPath();
+        g.arc(x, y, r * 1.9, 0, Math.PI * 2);
+        g.fill();
+      }
+      g.fillStyle = lamps[i] ? c.accent2 : env.alpha(c.muted, 0.28);
+      g.beginPath();
+      g.arc(x, y, r, 0, Math.PI * 2);
+      g.fill();
+      g.strokeStyle = env.alpha(lamps[i] ? c.accent2 : c.muted, lamps[i] ? 0.9 : 0.6);
+      g.lineWidth = 1.5;
+      g.stroke();
+      if (view === 0 && s.picked.includes(i) || view === 1 && s.reveal && changed[i]) {
+        g.strokeStyle = c.accent;
+        g.lineWidth = 2;
+        g.beginPath();
+        g.arc(x, y, r * 1.4, 0, Math.PI * 2);
+        g.stroke();
+      }
+    }
+    if (view === 0 && s.hintRow !== null) {
+      g.strokeStyle = c.accent;
+      g.lineWidth = 2;
+      g.setLineDash([4, 4]);
+      g.strokeRect(left + 3, geo.top + s.hintRow * geo.cell + 3, geo.side - 6, geo.cell - 6);
+      g.setLineDash([]);
+    }
+    g.strokeStyle = env.alpha(c.muted, 0.2 + 0.1 * v.density);
+    g.strokeRect(left - 3, geo.top - 3, geo.side + 6, geo.side + 6);
+  });
+  caption(g, w, h, env, s.reveal ? 'changed lamps ringed' : 'each press flips its neighbours', h * 0.91, 0.9);
+}
+
+function secondLookPreview(g, w, h, env, plan) {
+  drawSecondLook(g, w, h, env, plan, { picked: [], hintRow: null, reveal: false }, env.variant);
+}
+
+function secondLookPiece(env, plan) {
+  const after = secondLookAfter(plan);
+  const row = changedRow(plan.pressed);
+  const changed = litBy(plan.pressed, 3).filter(Boolean).length;
+  const rows = ['top', 'middle', 'bottom'];
+  const s = { picked: [], hintRow: null, reveal: false };
+  const draw = (c) => drawSecondLook(c.g, c.w, c.h, c, plan, s, env.variant);
+  return {
+    title: secondLookTitle(plan),
+    brief: 'Two views of the same nine lamps. Someone pressed exactly two switches between the first and second view. Each press flips that lamp and its neighbours above, below, left and right; a lamp flipped twice stays as it was. Before: ' + secondLookRows(plan.before) + '. After: ' + secondLookRows(after) + '.',
+    goal: 'Find the two switches pressed and the row where the most lamps changed.',
+    aspect: '4 / 3',
+    checkLabel: 'check both views',
+    steps: [
+      { id: 'switches', ask: 'the two switches pressed: choose here or tap them in the first view', kind: 'pick', count: 2,
+        items: Array.from({ length: 9 }, (_, i) => ({ label: 'row ' + (Math.floor(i / 3) + 1) + ', column ' + (i % 3 + 1), value: i })) },
+      { id: 'row', ask: 'row with the most changed lamps', kind: 'choice', options: rows.map((label, i) => ({ label, value: i })) },
+      { id: 'hint', ask: 'the row of one pressed switch', kind: 'press', count: 1, label: 'narrow the search', optional: true }
+    ],
+    solution: { switches: plan.pressed.slice(), row },
+    check(c) {
+      const chosen = c.value('switches');
+      const valid = Array.isArray(chosen) && chosen.length === 2 && new Set(chosen).size === 2
+        && chosen.every((i) => Number.isInteger(i) && i >= 0 && i < 9);
+      const result = valid ? litBy(chosen, 3).map((flip, i) => plan.before[i] ^ flip) : plan.before;
+      const matches = result.filter((lamp, i) => lamp === after[i]).length;
+      const rowRight = c.value('row') === row;
+      return { solved: valid && matches === 9 && rowRight,
+        say: valid && matches === 9 && rowRight ? 'both views agree: ' + rows[row] + ' row changed most'
+          : matches + ' of nine lamps match the second view; the row choice ' + (rowRight ? 'fits' : 'does not fit') };
+    },
+    start(c) {
+      c.status('compare the lamps before and after the two presses');
+      draw(c);
+    },
+    apply(id, value, c) {
+      if (id === 'switches') {
+        s.picked = Array.isArray(value) ? value.slice() : [];
+        c.status(s.picked.length + ' of two switches marked');
+      }
+      if (id === 'row') c.status('you say the ' + rows[value] + ' row changed most');
+      if (id === 'hint') {
+        if (s.hintRow === null) {
+          s.hintRow = Math.floor(plan.pressed[0] / 3);
+          c.hint();
+        }
+        c.status('one of the pressed switches is in the ' + rows[s.hintRow] + ' row');
+      }
+      draw(c);
+    },
+    tap(x, y, c) {
+      const geo = secondLookGeometry(c.w, c.h);
+      const px = x * c.w;
+      const py = y * c.h;
+      for (let view = 0; view < 2; view++) {
+        const col = Math.floor((px - geo.lefts[view]) / geo.cell);
+        const rowAt = Math.floor((py - geo.top) / geo.cell);
+        if (col < 0 || col >= 3 || rowAt < 0 || rowAt >= 3) continue;
+        const i = rowAt * 3 + col;
+        if (view === 1) {
+          c.status('row ' + (rowAt + 1) + ', column ' + (col + 1) + ': ' + (plan.before[i] ? 'lit' : 'dark')
+            + ' before, ' + (after[i] ? 'lit' : 'dark') + ' after');
+          return;
+        }
+        if (s.picked.includes(i)) {
+          c.status('that switch is already marked; choose another');
+          return;
+        }
+        if (s.picked.length === 2) s.picked.shift();
+        s.picked.push(i);
+        if (s.picked.length === 2) c.set('switches', s.picked.slice().sort((a, b) => a - b));
+        c.status(s.picked.length + ' of two switches marked in the first view');
+        draw(c);
+        return;
+      }
+      c.status('tap a lamp in the first view to mark a switch, or compare it with the second view');
+    },
+    frame(t, dt, c) {
+      draw(c);
+    },
+    end(c) {
+      s.reveal = true;
+      c.status('two presses changed ' + changed + ' lamps; the ' + rows[row] + ' row changed most');
+      draw(c);
+    }
+  };
+}
+
 /* ---- the module ----------------------------------------------------------------------------- */
 
 function dealsLamps(env) {
   return env.chance(0.5);
 }
 
+function dealt(env) {
+  const lamps = dealsLamps(env);
+  return ((Math.imul(env.seed >>> 0, 0x9e3779b1) >>> 29) & 3) === 3 ? 'second-look' : lamps ? 'lamps' : 'shelf';
+}
+
+// How far the room is through its breath, t seconds after this card was painted: twelve seconds to
+// a breath, entered at the point the configuration puts this card at, so that no two rooms on the
+// screen swell together. breath(v, 0) is where the still card stands, so the motion carries on from
+// the picture already on the canvas rather than jumping to another part of the breath (issue #92;
+// js/feed.js has the contract animate is held to).
+function breath(v, t) {
+  const phase = (t / 12 + v.turn) % 1;
+  return (1 - Math.cos(phase * Math.PI * 2)) / 2;
+}
+
 export default {
   id: 'quiet-room',
   needsSky: false,
   paint(ctx, w, h, env) {
-    // The breath caught where the configuration caught it, at the size it asks for.
-    room(ctx, w, h, env, 0.32 + env.variant.turn * 0.36, 0, env.variant.scale);
+    // The breath caught where the configuration caught it, at the size it asks for: the animation
+    // below, stopped at zero.
+    room(ctx, w, h, env, breath(env.variant, 0), 0, env.variant.scale);
   },
+  // `t` is seconds since the card was painted, and nothing here is drawn from the env's seeded
+  // stream, so the same t always gives the same room.
   animate(ctx, w, h, env, t) {
-    const phase = ((t % 12) / 12 + env.variant.turn) % 1;
-    const swell = (1 - Math.cos(phase * Math.PI * 2)) / 2;
-    room(ctx, w, h, env, swell, 0, env.variant.scale);
+    room(ctx, w, h, env, breath(env.variant, t), 0, env.variant.scale);
   },
   spark(env) {
-    if (dealsLamps(env)) {
+    const kind = dealt(env);
+    if (kind === 'lamps') {
       const plan = lampsPlan(env);
       const count = litBy(plan.presses, plan.n).filter(Boolean).length;
       return {
@@ -656,6 +882,17 @@ export default {
         text: 'A lamp pressed flips itself and its four neighbours. Find the presses that leave the room dark.',
         aspect: '1 / 1',
         paint: (g, w, h, cardEnv) => lampsPreview(g, w, h, cardEnv, plan),
+        of: plan
+      };
+    }
+    if (kind === 'second-look') {
+      const plan = secondLookPlan(env);
+      return {
+        title: secondLookTitle(plan),
+        quote: 'nine lamps, two views, two presses between them',
+        text: 'Compare the lamps before and after. Find the two switches pressed and the row with the most changes.',
+        aspect: '4 / 3',
+        paint: (g, w, h, cardEnv) => secondLookPreview(g, w, h, cardEnv, plan),
         of: plan
       };
     }
@@ -676,6 +913,10 @@ export default {
     if (lamps) return lampsPiece(env, lamps);
     const shelf = carriedShelf(env);
     if (shelf) return shelfPiece(env, shelf);
-    return dealsLamps(env) ? lampsPiece(env, lampsPlan(env)) : shelfPiece(env, shelfPlan(env));
+    const secondLook = carriedSecondLook(env);
+    if (secondLook) return secondLookPiece(env, secondLook);
+    const kind = dealt(env);
+    return kind === 'lamps' ? lampsPiece(env, lampsPlan(env))
+      : kind === 'shelf' ? shelfPiece(env, shelfPlan(env)) : secondLookPiece(env, secondLookPlan(env));
   }
 };

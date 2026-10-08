@@ -2916,6 +2916,105 @@ class CardVariantTest(unittest.TestCase):
                 self.assertEqual(mod["threw"], [])
                 self.assertGreater(mod["calls"]["plain"], 3, "this world barely draws anything")
 
+    # ---- what a card in motion does ----
+
+    # The loosest the frame-to-frame guard below can be and still be worth having. A frame of the
+    # feed's loop is a step in a picture, not a new picture: over the configurations and seeds the
+    # harness follows, the most any world moves in one frame is about 0.27 of its drawing, and a
+    # world left re-dealing its puzzle per frame moves 0.40 or more. The number sits between the
+    # two, with the headroom on the side of the worlds that behave. What it is here to catch is a
+    # world that is a perfectly steady function of t and still races -- `t` multiplied hard enough
+    # that a card flickers. Re-dealing is caught earlier and more plainly, by the sealed stream.
+    MOST_A_FRAME_MAY_MOVE = 0.35
+
+    def motions(self, mod):
+        """Every card of one world the harness followed in motion: the three opposite
+        configurations and sixty rolled seeds, as one flat list."""
+        motion = mod.get("motion")
+        self.assertIsNotNone(motion, "this world exports animate but was never followed in motion")
+        return [card for name, card in motion.items() if name != "rolled"] + motion["rolled"]
+
+    def animated(self):
+        """The worlds whose cards move at all, as (name, module). A world with no `animate` is not
+        held to any of this: its card is a still picture and that is a whole answer."""
+        found = [(name, mod) for name, mod in sorted(self.seen["modules"].items()) if mod.get("motion")]
+        self.assertGreaterEqual(len(found), 5, "no world's card moves any more")
+        return found
+
+    def test_a_card_in_motion_never_deals_itself_another_puzzle(self):
+        # The whole of issue #92. js/feed.js paints a card once and then hands the module's
+        # `animate` the very same env about thirty times a second -- and that env carries the card's
+        # seeded stream, which paint has already spent. A module that deals its plan inside
+        # `animate` therefore deals a different puzzle every frame: not an ambient picture but a card
+        # re-rolling itself thirty times a second, which is what "animation run completely amok" was.
+        # The harness seals the spent stream off after paint, so a module that reaches for it throws
+        # here instead of flickering in front of a visitor.
+        for name, mod in self.animated():
+            with self.subTest(module=name):
+                for card in self.motions(mod):
+                    self.assertIsNone(card.get("threw"), f"{name}: {card.get('threw')}")
+
+    def test_the_same_card_at_the_same_moment_is_the_same_drawing(self):
+        # Said directly, and without relying on the seal above to catch it: `animate` is a function
+        # of (w, h, env, t). Called twice over with everything the same, it has to draw the same
+        # thing, because the loop's own clock is the only thing that moves between two frames.
+        for name, mod in self.animated():
+            with self.subTest(module=name):
+                for card in self.motions(mod):
+                    if card.get("still"):
+                        continue
+                    self.assertTrue(card["steady"], "this card draws something else at the same t")
+
+    def test_motion_begins_at_the_picture_the_still_card_left(self):
+        # The contract js/feed.js settles on: `t` is seconds since this card was painted, so the
+        # first frame is t = 0, and t = 0 is the picture already on the canvas. Before this, the loop
+        # passed seconds since the page opened, so a card painted after a long scroll cut straight
+        # into an arbitrary phase of its own motion -- a visible jolt the moment it started moving,
+        # on top of the re-dealing above.
+        for name, mod in self.animated():
+            with self.subTest(module=name):
+                for card in self.motions(mod):
+                    if card.get("still"):
+                        continue
+                    self.assertTrue(card["seam"],
+                                    "this card jumps between its still picture and its first frame")
+
+    def test_a_card_that_says_nothing_moves_draws_nothing(self):
+        # The other half of that contract: a module may answer false to mean that this card is a
+        # printed thing with no motion in it -- the cipher cabinet's grille, the weaver's moire
+        # screens -- and the loop lets it go rather than asking thirty times a second for a picture
+        # that never changes. Saying so and then drawing anyway would leave the card's last frame
+        # on the canvas instead of the still picture paint made.
+        said = 0
+        for name, mod in self.animated():
+            with self.subTest(module=name):
+                for card in self.motions(mod):
+                    if not card.get("still"):
+                        continue
+                    said += 1
+                    self.assertEqual(card["drew"], 0, "this card says nothing moves and then draws")
+        # And some card somewhere does answer false, so the branch above is exercised rather than
+        # being a path nothing in the site takes.
+        self.assertGreater(said, 0, "nothing ever answers false, so that half of the contract is untested")
+
+    def test_one_frame_is_a_step_in_a_picture_and_not_a_new_picture(self):
+        # The symptom a visitor reported, measured rather than read: a card whose canvas "churns,
+        # flickers or races". However a world chooses to move, a thirtieth of a second may only move
+        # a little of its drawing, and two and a half seconds has to move something -- a card that
+        # never changes at all should have said so by answering false instead.
+        for name, mod in self.animated():
+            with self.subTest(module=name):
+                for card in self.motions(mod):
+                    if card.get("still"):
+                        continue
+                    self.assertLessEqual(card["frame"], self.MOST_A_FRAME_MAY_MOVE,
+                                         "this card redraws itself from frame to frame")
+                    self.assertGreater(card["moved"], 0,
+                                       "this card moves not at all, and never said so")
+                    self.assertGreaterEqual(card["moved"], card["frame"] * 0.5,
+                                            "a frame of this card changes more than twice what two "
+                                            "and a half seconds of it does")
+
     # ---- the configuration a piece opens with ----
 
     def test_the_configuration_a_card_hands_over_arrives_as_it_left(self):

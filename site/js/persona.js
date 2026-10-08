@@ -1,4 +1,6 @@
-/* The persona: one saved sky and one reading, configured in the sheet opened by the avatar. */
+/* The persona: one saved sky and one reading, configured in the sheet opened by the avatar.
+   A star's editable words give it a glint in both the portrait and the sheet. Sky cards follow
+   those words without changing their seed; a puzzle already begun keeps its clues. */
 (function () {
   'use strict';
 
@@ -36,6 +38,11 @@
   }
   function holds(value) { return Array.isArray(value) && value.some(validStar); }
   function thought() { return THOUGHTS[Math.floor(Math.random() * THOUGHTS.length)]; }
+  function starGleam(text) {
+    var code = 0;
+    for (var i = 0; i < text.length; i++) code = (code * 31 + text.charCodeAt(i)) >>> 0;
+    return 0.9 + (code % 4) * 0.15;
+  }
   function seedSky(count) {
     var n = Math.max(1, Math.min(MAX_STARS, count || SEED_COUNT));
     var list = [];
@@ -206,7 +213,7 @@
     for (var p = 0; p < points.length; p++) {
       ctx.beginPath();
       ctx.fillStyle = 'rgba(236, 244, 255, 0.96)';
-      ctx.arc(points[p].x, points[p].y, dotRadius, 0, Math.PI * 2);
+      ctx.arc(points[p].x, points[p].y, dotRadius * starGleam(list[p].text), 0, Math.PI * 2);
       ctx.fill();
     }
   }
@@ -432,16 +439,35 @@
   var sheetBox = null;
   function sheetStatus(text) { if (sheet && sheet.status) sheet.status.textContent = text; }
   function fieldIntro(list) {
-    if (!list.length) return 'No stars yet. Tap the sky to place the first, or seed a small sky and drag it into a shape.';
-    return list.length + ' star' + (list.length === 1 ? '' : 's') + '. Tap the sky to add one, drag a star to reshape and rename the sky, tap one to read its thought.';
+    if (!list.length) return 'No stars yet. Seed a small sky or drop a star to begin.';
+    return list.length + ' star' + (list.length === 1 ? ' is' : 's are') + ' placed. The cards that read this sky follow your changes.';
+  }
+  function renderNeighbor() {
+    if (!sheet || !sheet.neighbor || selected < 0 || !fieldStars[selected]) return;
+    var box = sheet.field.getBoundingClientRect();
+    var w = Math.max(1, box.width - 44);
+    var h = Math.max(1, box.height - 44);
+    var near = -1;
+    var best = Infinity;
+    for (var i = 0; i < fieldStars.length; i++) {
+      if (i === selected) continue;
+      var dx = (fieldStars[i].x - fieldStars[selected].x) * w;
+      var dy = (fieldStars[i].y - fieldStars[selected].y) * h;
+      var distance = dx * dx + dy * dy;
+      if (distance < best) { best = distance; near = i; }
+    }
+    var line = near < 0 ? 'Place another star to see which thought is closest.'
+      : 'Closest star: "' + fieldStars[near].text + '". Move this star to bring a different thought closer.';
+    if (sheet.neighbor.textContent !== line) sheet.neighbor.textContent = line;
   }
   function keptNote(kept) {
     return kept || !store || store.persistent ? '' : ' Kept for this page only: this browser stores nothing between visits.';
   }
   function placeElement(star) {
     if (!star.el) return;
-    star.el.style.left = star.x + '%';
-    star.el.style.top = star.y + '%';
+    star.el.style.left = 'calc(22px + ' + star.x + '% - ' + (star.x * 0.44).toFixed(2) + 'px)';
+    star.el.style.top = 'calc(22px + ' + star.y + '% - ' + (star.y * 0.44).toFixed(2) + 'px)';
+    star.el.style.setProperty('--star-gleam', String(starGleam(star.text)));
   }
   // The name under the field follows each move, including a drag.
   function renderName() {
@@ -457,33 +483,46 @@
   }
   function drawField() {
     renderName();
+    renderNeighbor();
     if (!sheet || !sheet.field || !sheet.canvas) return;
     var box = sheet.field.getBoundingClientRect();
     if (!box.width || !box.height) return;
     var ctx = sizeCanvas(sheet.canvas, box.width, box.height);
-    if (ctx) drawSky(ctx, fieldStars, box.width, box.height, 0, 0, 1.1);
+    if (ctx) drawSky(ctx, fieldStars, box.width, box.height, 22, 0, 1.1);
   }
   function select(index) {
+    var changed = selected !== index;
     selected = index;
     for (var i = 0; i < fieldStars.length; i++) {
-      if (fieldStars[i].el) fieldStars[i].el.classList.toggle('selected', i === index);
+      if (fieldStars[i].el) {
+        fieldStars[i].el.classList.toggle('selected', i === index);
+        fieldStars[i].el.setAttribute('aria-pressed', i === index ? 'true' : 'false');
+      }
     }
     if (sheet.remove) sheet.remove.hidden = index < 0;
-    if (index >= 0) sheetStatus('✦ ' + fieldStars[index].text + ' (' + (index + 1) + ' of ' + fieldStars.length + ')');
+    if (sheet.wordsForm) sheet.wordsForm.hidden = index < 0;
+    if (index >= 0) {
+      if (changed && sheet.words) sheet.words.value = fieldStars[index].text;
+      renderNeighbor();
+      sheetStatus('✦ ' + fieldStars[index].text + ' (' + (index + 1) + ' of ' + fieldStars.length + ')');
+    }
   }
   function pointInField(clientX, clientY) {
     var box = sheet.field.getBoundingClientRect();
-    return { x: clamp((clientX - box.left) / (box.width || 1) * 100, 1, 99),
-      y: clamp((clientY - box.top) / (box.height || 1) * 100, 1, 99) };
+    return { x: clamp((clientX - box.left - 22) / Math.max(1, box.width - 44) * 100, 1, 99),
+      y: clamp((clientY - box.top - 22) / Math.max(1, box.height - 44) * 100, 1, 99) };
   }
   function serialize() { return fieldStars.map(function (s) { return { x: s.x, y: s.y, text: s.text }; }); }
+  function starLabel(star) { return 'star: ' + star.text + '. Arrow keys move it.'; }
   function createStarElement(star, index) {
     var el = document.createElement('button');
     el.type = 'button';
     el.className = 'persona-star';
-    el.setAttribute('aria-label', 'star: ' + star.text + '. Arrow keys move it, delete removes it.');
+    el.setAttribute('aria-label', starLabel(star));
+    el.setAttribute('aria-pressed', 'false');
     star.el = el;
     placeElement(star);
+    el.addEventListener('focus', function () { select(index); });
     el.addEventListener('click', function (ev) {
       ev.stopPropagation();
       if (Date.now() < suppressClickUntil) return;
@@ -628,6 +667,9 @@
       seed: document.getElementById('persona-seed'), remove: document.getElementById('persona-remove'),
       clear: document.getElementById('persona-clear'), status: document.getElementById('persona-sky-status'),
       name: document.getElementById('persona-sky-name'),
+      wordsForm: document.getElementById('persona-star-words'),
+      words: document.getElementById('persona-star-thought'),
+      neighbor: document.getElementById('persona-star-neighbor'),
       reading: document.getElementById('persona-reading'), ask: document.getElementById('persona-ask'),
       forget: document.getElementById('persona-forget'), readingGo: document.getElementById('persona-reading-go')
     };
@@ -652,7 +694,7 @@
         return;
       }
       if (ev.key !== 'Tab') return;
-      var controls = host.querySelectorAll('button, a[href]');
+      var controls = host.querySelectorAll('button, a[href], input:not([disabled])');
       var reachable = [];
       for (var i = 0; i < controls.length; i++) {
         var control = controls[i];
@@ -725,6 +767,27 @@
         confirm: 'seed a fresh sky', opener: sheet.seed, onConfirm: seedTheSky,
         onCancel: function () { sheetStatus('Kept as it was.'); }
       });
+    });
+    if (sheet.wordsForm && sheet.words) sheet.wordsForm.addEventListener('submit', function (ev) {
+      ev.preventDefault();
+      if (selected < 0 || !fieldStars[selected]) {
+        sheetStatus('Choose a star to give it words.');
+        return;
+      }
+      var words = sheet.words.value.trim();
+      if (!words) {
+        sheetStatus('Write a thought before keeping it.');
+        sheet.words.focus();
+        return;
+      }
+      var star = fieldStars[selected];
+      star.text = words.slice(0, 160);
+      sheet.words.value = star.text;
+      if (star.el) star.el.setAttribute('aria-label', starLabel(star));
+      placeElement(star);
+      var kept = setStars(serialize(), 'worded');
+      renderNeighbor();
+      sheetStatus('This star now carries: "' + star.text + '". The cards that read your sky follow these words.' + keptNote(kept));
     });
     if (sheet.remove) sheet.remove.addEventListener('click', function () {
       if (selected >= 0) removeStar(selected);

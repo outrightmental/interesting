@@ -1,6 +1,5 @@
 // The mood flow, as it looks: the fifteen palettes the site re-skins itself with, and the query
-// mechanisms it renders -- into the persona card on the threshold, into the persona sheet
-// everywhere, and onto the mood atlas.
+// mechanisms js/threshold.js renders into the threshold's own feature (#persona-probe).
 //
 // Every palette is four seeds (see _tokens.scss), and the whole scheme follows from them: that is
 // the whole of the transmogrification. The seeds land in four places -- three of them on :root, at
@@ -300,6 +299,20 @@ $moods: (
 .probe-dial-end {
   color: var(--md-sys-color-tertiary);
   @include type.scale(body-small);
+}
+
+// The key weighed in the hand (the seven-keys question): held until a second press tries it in
+// the lock. Specific enough to keep its tone on the threshold, where the big-card rules in
+// _stage.scss would otherwise repaint the option's ground.
+.probe-options.probe-keys .probe-option[aria-pressed='true']:not(.probe-skip) {
+  background: var(--md-sys-color-primary-container);
+  color: var(--md-sys-color-on-primary-container);
+  box-shadow: inset 0 0 0 2px var(--md-sys-color-primary);
+}
+
+.probe-options.probe-keys .probe-option[aria-pressed='true'] .probe-option-label,
+.probe-options.probe-keys .probe-option[aria-pressed='true'] .probe-option-detail {
+  color: inherit;
 }
 
 @media (prefers-reduced-motion: reduce) {
