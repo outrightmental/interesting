@@ -33,6 +33,17 @@ const WAYS = [
   { label: 'standing still', value: 'still' }
 ];
 
+/* How hard the visitor asked for their puzzles. The persona keeps one difficulty for the whole
+   site (js/persona.js) and js/stage.js hands it to a piece on env.difficulty, 1 (gentle) to 5
+   (fierce); a card's env carries none, so the middle of the dial stands in. A level buys `helps`
+   -- how many things a piece will show when it is asked -- and `margin`, how far out a measured
+   answer may be and still count. Read inside piece() only: the subject is the seed's. */
+function asked(env) {
+  const said = env && env.difficulty ? Number(env.difficulty.level) : NaN;
+  const level = Number.isFinite(said) ? Math.max(1, Math.min(5, Math.round(said))) : 3;
+  return { level, helps: 6 - level, margin: Math.max(0, 3 - level) };
+}
+
 function gcd(a, b) {
   while (b) [a, b] = [b, a % b];
   return a;
@@ -232,6 +243,7 @@ function crossPreview(g, w, h, env, plan) {
 }
 
 function crossPiece(env, plan) {
+  const helps = asked(env).helps;
   const hits = crossingsOf(plan);
   const s = crossBlank();
   const draw = (c) => drawCross(c.g, c.w, c.h, c, plan, s, env.variant);
@@ -265,11 +277,13 @@ function crossPiece(env, plan) {
       if (id === 'count') c.status(Math.round(Number(value)) + ' crossings, you say');
       if (id === 'first') c.status('the first on beat ' + Math.round(Number(value)) + ', you say');
       if (id === 'hint') {
-        const next = hits.slice().reverse().find((i) => !s.lit.includes(i));
+        const next = s.lit.length < helps ? hits.slice().reverse().find((i) => !s.lit.includes(i)) : undefined;
         if (next !== undefined) {
           s.lit.push(next);
           c.hint();
           c.status('both drums strike on beat ' + (next + 1));
+        } else if (s.lit.length >= helps) {
+          c.status('that is all the loom will light at this difficulty; read the rest off the beats');
         } else {
           c.status('every crossing is lit; count them, and read the first');
         }
@@ -460,7 +474,7 @@ function drawWheel(g, w, h, c, plan, s, variant) {
 }
 
 function wheelBlank() {
-  return { spin: 0, index: 0, taken: 0, run: -1, reveal: false, told: '' };
+  return { spin: 0, index: 0, taken: 0, run: -1, reveal: false, told: '', shown: 0 };
 }
 
 function wheelPreview(g, w, h, env, plan) {
@@ -470,6 +484,7 @@ function wheelPreview(g, w, h, env, plan) {
 function wheelPiece(env, plan) {
   const way = seeming(plan);
   const back = returnAfter(plan);
+  const helps = asked(env).helps;
   const s = wheelBlank();
   const interval = 0.45;
   const roll = Math.min(24, back * 2 + 2);
@@ -508,14 +523,22 @@ function wheelPiece(env, plan) {
       if (id === 'seem') c.status('you expect the pictures to ' + (value === 'still' ? 'stand still' : 'seem to go ' + wayLabel(value)));
       if (id === 'back') c.status('a tooth back where it began after ' + Math.round(Number(value)) + ' pictures, you say');
       if (id === 'hint') {
-        if (!s.told) {
-          const whole = Math.floor(plan.n / plan.p);
-          const rest = plan.n % plan.p;
-          s.told = 'between pictures: ' + (whole ? whole + ' whole ' + (whole === 1 ? 'tooth' : 'teeth') + (rest ? ' and ' : '') : '') + (rest ? rest + '/' + plan.p + ' of a tooth' : '');
+        // Two things the lamp will tell you, in this order, and the difficulty says how many of
+        // them it tells: the step between pictures, and then which way the wheel seems to go.
+        const whole = Math.floor(plan.n / plan.p);
+        const rest = plan.n % plan.p;
+        const step = 'between pictures: ' + (whole ? whole + ' whole ' + (whole === 1 ? 'tooth' : 'teeth') + (rest ? ' and ' : '') : '') + (rest ? rest + '/' + plan.p + ' of a tooth' : '');
+        const shows = [step + '; identical teeth hide whole teeth',
+          'the pictures ' + (way === 'still' ? 'stand still' : 'seem to go ' + wayLabel(way))];
+        if (s.shown < Math.min(shows.length, helps)) {
+          s.told = shows[s.shown];
+          s.shown += 1;
           c.hint();
-          c.status(s.told + '; identical teeth hide whole teeth');
+          c.status(s.told);
+        } else if (s.shown >= helps) {
+          c.status('that is all the lamp will tell at this difficulty: ' + s.told);
         } else {
-          c.status('that is the one hint: ' + s.told);
+          c.status('the lamp has told what it has: ' + s.told);
         }
       }
       draw(c);

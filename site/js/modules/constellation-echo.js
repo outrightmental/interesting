@@ -35,6 +35,17 @@ const PLAIN = { density: 1, scale: 1, turn: 0 };
 const RATIO = 1.2;
 const TAU = Math.PI * 2;
 
+/* How hard the visitor asked for their puzzles. The persona keeps one difficulty for the whole
+   site (js/persona.js) and js/stage.js hands it to a piece on env.difficulty, 1 (gentle) to 5
+   (fierce); a card's env carries none, so the middle of the dial stands in. A level buys `helps`
+   -- how many things a piece will show when it is asked -- and `margin`, how far out a measured
+   answer may be and still count. Read inside piece() only: the subject is the seed's. */
+function asked(env) {
+  const said = env && env.difficulty ? Number(env.difficulty.level) : NaN;
+  const level = Number.isFinite(said) ? Math.max(1, Math.min(5, Math.round(said))) : 3;
+  return { level, helps: 6 - level, margin: Math.max(0, 3 - level) };
+}
+
 /* ---- shared ground ------------------------------------------------------------------------- */
 
 function background(g, w, h, c) {
@@ -308,6 +319,7 @@ function echoPreview(g, w, h, env, plan, t) {
 
 function echoPiece(env, plan) {
   const n = plan.stars.length;
+  const helps = asked(env).helps;
   const order = byDistance(plan);
   const far = dist(plan.stars[order[order.length - 1]], plan.source);
   const s = echoBlank(plan);
@@ -350,11 +362,15 @@ function echoPiece(env, plan) {
         c.status('first back to last: ' + s.order.map((i) => LETTERS[i]).join(', '));
       }
       if (id === 'hint') {
-        const next = order.find((i) => !s.hinted.includes(i) && s.order.indexOf(i) !== order.indexOf(i));
+        const next = s.hinted.length < helps
+          ? order.find((i) => !s.hinted.includes(i) && s.order.indexOf(i) !== order.indexOf(i))
+          : undefined;
         if (next !== undefined) {
           s.hinted.push(next);
           c.hint();
           c.status('star ' + LETTERS[next] + ' comes back ' + ORDINAL[order.indexOf(next)]);
+        } else if (s.hinted.length >= helps) {
+          c.status('that is all the chamber will show at this difficulty; the rest is yours');
         } else {
           c.status('every star you have placed wrongly has been shown; the rest is yours');
         }
@@ -548,6 +564,7 @@ function chordPreview(g, w, h, env, plan, t) {
 }
 
 function chordPiece(env, plan) {
+  const helps = asked(env).helps;
   const voices = plan.voices;
   const meet = lcmOf(voices);
   const s = chordBlank();
@@ -602,11 +619,14 @@ function chordPiece(env, plan) {
         if (Number.isFinite(b)) c.status('together again on beat ' + Math.round(b) + ', you say');
       }
       if (id === 'hint') {
-        const next = reveal.find((p) => !s.shown[p]);
+        const given = reveal.filter((p) => s.shown[p]).length;
+        const next = given < helps ? reveal.find((p) => !s.shown[p]) : undefined;
         if (next !== undefined) {
           s.shown[next] = voices.includes(next) ? 'on' : 'off';
           c.hint();
           c.status('the voice on ' + EVERY[next] + ' is ' + (s.shown[next] === 'on' ? 'sounding' : 'silent'));
+        } else if (given >= helps) {
+          c.status('that is all the chamber will show at this difficulty; read the rest off the strip');
         } else {
           c.status('every voice has been shown; the meeting beat is yours to work out');
         }

@@ -30,6 +30,17 @@ const PLAIN = { density: 1, scale: 1, turn: 0 };
 const APEX_RULES = [30, 45, 54, 73, 126, 182];
 const APEX_PARITY = [105, 150];
 
+/* How hard the visitor asked for their puzzles. The persona keeps one difficulty for the whole
+   site (js/persona.js) and js/stage.js hands it to a piece on env.difficulty, 1 (gentle) to 5
+   (fierce); a card's env carries none, so the middle of the dial stands in. A level buys `helps`
+   -- how many things a piece will show when it is asked -- and `margin`, how far out a measured
+   answer may be and still count. Read inside piece() only: the subject is the seed's. */
+function asked(env) {
+  const said = env && env.difficulty ? Number(env.difficulty.level) : NaN;
+  const level = Number.isFinite(said) ? Math.max(1, Math.min(5, Math.round(said))) : 3;
+  return { level, helps: 6 - level, margin: Math.max(0, 3 - level) };
+}
+
 /* ---- the tape arithmetic -------------------------------------------------------------------- */
 
 function hoodOf(row, x) {
@@ -264,6 +275,7 @@ function nextPreview(g, w, h, env, plan) {
 }
 
 function nextPiece(env, plan) {
+  const helps = asked(env).helps;
   const width = plan.width;
   const depth = plan.depth || 1;
   const shown = 5 - depth;
@@ -308,12 +320,16 @@ function nextPiece(env, plan) {
       }
       if (id === 'hint') {
         const next = [];
-        for (let i = 0; i < cells; i++) if (!s.shown.includes(i)) next.push(i);
+        if (s.shown.length < helps) {
+          for (let i = 0; i < cells; i++) if (!s.shown.includes(i)) next.push(i);
+        }
         if (next.length) {
           const i = next[Math.floor(next.length / 2)];
           s.shown.push(i);
           c.hint();
           c.status('cell ' + ((i % width) + 1) + ' of row ' + rowName(i) + ' is ' + (answer[i] ? 'lit' : 'dark'));
+        } else if (s.shown.length >= helps) {
+          c.status('that is all the bench will show at this difficulty; run the rule yourself');
         } else {
           c.status('every hidden cell is marked on the bench');
         }
@@ -471,6 +487,7 @@ function apexPreview(g, w, h, env, plan) {
 }
 
 function apexPiece(env, plan) {
+  const helps = asked(env).helps;
   const hist = apexHistory(plan);
   const last = hist.diffs[plan.rows].length;
   const s = { marked: [], pointed: false };
@@ -515,12 +532,14 @@ function apexPiece(env, plan) {
         const mid = Math.ceil(plan.rows / 2);
         for (let r = mid; r < plan.rows; r++) order.push(r);
         for (let r = mid - 1; r > 1; r--) order.push(r);
-        const next = order.find((r) => !s.marked.includes(r));
+        const next = s.marked.length < helps ? order.find((r) => !s.marked.includes(r)) : undefined;
         if (next) {
           s.marked.push(next);
           c.hint();
           const n = hist.diffs[next].length;
           c.status('row ' + next + ' is marked on the second tape: ' + (n === 1 ? 'one cell differs' : WORDS[n] + ' cells differ') + ' there');
+        } else if (s.marked.length >= helps) {
+          c.status('that is all the bench will mark at this difficulty; the rest is yours');
         } else {
           c.status('every row between the first and the last is marked; the rest is yours');
         }

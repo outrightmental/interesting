@@ -12,15 +12,18 @@
                             word's letters in order. Say how many notches, and which way. The stars
                             are placed from the word and the turn, and the same count the other way
                             round is made to read nothing. A wrong check says whether the count is
-                            off, or fits one way round, and no more; asking the archive which way
-                            it turns costs a hint.
+                            off, or fits one way round, and no more, though a gentle difficulty
+                            takes a count a notch or two out; asking the archive which way it turns
+                            costs a hint, and the fiercest setting does not offer to say it.
      which omens hold       A sky of five to seven stars, a ring, a horizon band and a hand's-width
                             scale, and four omens, each a claim that can be checked against the sky.
                             Pick the ones that hold. The sky is rolled until one to three of the
                             four hold and no star sits on an edge that would make a claim a matter
                             of opinion; some seeds roll a crowded sky of eight or nine stars. A wrong
-                            check says how many of the picked hold, and no more; ringing the two
-                            brightest costs a hint, and a solve reads a line from the archive.
+                            check says how many of the picked hold, and no more; the archive will
+                            ring the two brightest and then read omens against its own sky, as many
+                            turns of it as the difficulty allows and each at the price of a hint,
+                            and a solve reads a line from the archive.
 
    The sky a visitor brings may be one star or many: it is drawn behind the wheel for colour, and
    nothing of the puzzle depends on it. The plan is rolled from the seed, carried whole on the
@@ -44,6 +47,17 @@ const COMMON = new Set(('ACE ACT ADD AGE AGO AID AIM AIR ALE ALL AND ANT ANY APE
   + 'ROW RUB RUG RUM RUN RUT RYE SAD SAG SAP SAT SAW SAY SEA SET SEW SHE SHY SIN SIP SIR SIT SIX SKI SKY SLY SOB SOD SON SOW SOY SPA SPY SUB '
   + 'SUE SUM SUN TAB TAG TAN TAP TAR TAX TEA TEN THE THY TIE TIN TIP TOE TON TOP TOW TOY TRY TUB TUG TWO URN USE VAN VAT VET VIA VIE VOW WAD '
   + 'WAG WAR WAS WAX WAY WEB WED WET WHO WHY WIG WIN WIT WOE WON WRY YAK YAM YAP YES YET YEW YOU ZAP ZIP ZOO').split(' '));
+
+/* How hard the visitor asked for their puzzles. The persona keeps one difficulty for the whole
+   site (js/persona.js) and js/stage.js hands it to a piece on env.difficulty, 1 (gentle) to 5
+   (fierce); a card's env carries none, so the middle of the dial stands in. A level buys `helps`
+   -- how many things a piece will show when it is asked -- and `margin`, how far out a measured
+   answer may be and still count. Read inside piece() only: the subject is the seed's. */
+function asked(env) {
+  const said = env && env.difficulty ? Number(env.difficulty.level) : NaN;
+  const level = Number.isFinite(said) ? Math.max(1, Math.min(5, Math.round(said))) : 3;
+  return { level, helps: 6 - level, margin: Math.max(0, 3 - level) };
+}
 
 /* ---- shared drawing ------------------------------------------------------------------------- */
 
@@ -278,6 +292,9 @@ function wheelPreview(g, w, h, env, p) {
 }
 
 function wheelPiece(env, p) {
+  // The count is notches read off a rim, so it is a measured answer: the difficulty says how many
+  // notches out it may be and still turn the lock.
+  const { helps, margin } = asked(env);
   const s = { angle: 0, spin: 0, t: 0, told: false };
   const draw = (c) => wheelScene(c.g, c.w, c.h, c, p, s, env.variant);
   return {
@@ -292,8 +309,9 @@ function wheelPiece(env, p) {
         { label: 'clockwise', value: 'cw' },
         { label: 'counterclockwise', value: 'ccw' }
       ] },
-      { id: 'ask', ask: 'which way the wheel turns', kind: 'press', count: 1, label: 'ask the archive', optional: true }
-    ],
+      // The archive has one thing to say here, so a fierce difficulty does not offer to say it.
+      helps > 1 ? { id: 'ask', ask: 'which way the wheel turns', kind: 'press', count: 1, label: 'ask the archive', optional: true } : null
+    ].filter(Boolean),
     solution: { count: p.t, way: p.cw ? 'cw' : 'ccw' },
     check(c) {
       const n = Number(c.value('count'));
@@ -301,6 +319,11 @@ function wheelPiece(env, p) {
       if (!Number.isInteger(n) || n < 1 || n > 23) return { solved: false, say: 'the count has to be one to twenty-three' };
       const read = reading(p, n, cw);
       if (read === p.word) return { solved: true, say: notches(n) + ' ' + wayWord(cw) + ': the stars read ' + p.word };
+      // Within the margin the difficulty allows, the wheel is taken as turned to the setting that
+      // reads: the stars are a notch or two wide of their letters and the lock still gives.
+      if (cw === !!p.cw && Math.abs(n - p.t) <= margin) {
+        return { solved: true, say: notches(p.t) + ' ' + wayWord(!!p.cw) + ': the stars read ' + p.word };
+      }
       if (reading(p, n, !cw) === p.word) return { solved: false, say: 'the count fits one way round; the direction is off' };
       let land = 0;
       for (let k = 0; k < 3; k++) if (read[k] === p.word[k]) land += 1;
@@ -553,8 +576,8 @@ function omensScene(g, w, h, c, p, s, variant) {
     });
     g.setLineDash([]);
   }
-  // The four omens, as cards under the sky; a picked one is marked, and the ones that hold are
-  // shown once the puzzle is solved.
+  // The four omens, as cards under the sky; a picked one is marked, and whether an omen holds is
+  // written on it once the archive has read it, or once the puzzle is solved.
   const top = f.y + f.sh + h * 0.03;
   const gap = w * 0.015;
   const cw = (f.sw - gap * 3) / 4;
@@ -562,7 +585,8 @@ function omensScene(g, w, h, c, p, s, variant) {
   p.claims.forEach((id, i) => {
     const x = f.x + i * (cw + gap);
     const picked = s.picked.includes(i);
-    const holds = s.reveal && p.truth.includes(i);
+    const settled = s.reveal || (s.read || []).includes(i);
+    const holds = settled && p.truth.includes(i);
     g.fillStyle = c.alpha(col.bg, 0.6);
     g.beginPath();
     g.roundRect(x, top, cw, ch, fs * 0.5);
@@ -570,7 +594,7 @@ function omensScene(g, w, h, c, p, s, variant) {
     g.strokeStyle = picked ? c.alpha(col.accent2, 0.95) : c.alpha(col.muted, 0.4);
     g.lineWidth = picked ? 2 : 1;
     g.stroke();
-    write(g, 'omen ' + (i + 1) + (holds ? ': holds' : s.reveal ? ': does not hold' : ''), x + fs * 0.6, top + fs, fs * 0.85, holds ? col.accent2 : s.reveal ? c.alpha(col.muted, 0.9) : col.accent2, 'left', 700);
+    write(g, 'omen ' + (i + 1) + (holds ? ': holds' : settled ? ': does not hold' : ''), x + fs * 0.6, top + fs, fs * 0.85, holds ? col.accent2 : settled ? c.alpha(col.muted, 0.9) : col.accent2, 'left', 700);
     const lines = wrap(g, CLAIMS[id].text, fs * 0.9, cw - fs * 1.2);
     lines.slice(0, 4).forEach((line, k) => write(g, line, x + fs * 0.6, top + fs * 2.3 + k * fs * 1.2, fs * 0.9, c.alpha(col.fg, 0.9), 'left', 500));
   });
@@ -581,7 +605,8 @@ function omensPreview(g, w, h, env, p) {
 }
 
 function omensPiece(env, p) {
-  const s = { picked: [], reveal: false, marked: false, t: 0 };
+  const helps = asked(env).helps;
+  const s = { picked: [], reveal: false, marked: false, read: [], t: 0 };
   const draw = (c) => omensScene(c.g, c.w, c.h, c, p, s, env.variant);
   return {
     title: omensTitle(p),
@@ -591,7 +616,7 @@ function omensPiece(env, p) {
     checkLabel: 'read the omens',
     steps: [
       { id: 'hold', ask: 'the omens that hold', kind: 'pick', items: p.claims.map((id, i) => ({ label: 'omen ' + (i + 1), value: i })) },
-      { id: 'second', ask: 'the two brightest stars, ringed', kind: 'press', count: 1, label: 'ring the brightest', optional: true }
+      { id: 'second', ask: 'the sky read for you: the brightest ringed, then the omens', kind: 'press', count: 1, label: 'read the sky to me', optional: true }
     ],
     solution: { hold: p.truth.slice() },
     check(c) {
@@ -617,11 +642,26 @@ function omensPiece(env, p) {
         c.status(s.picked.length ? 'picked: ' + s.picked.map((i) => 'omen ' + (i + 1)).join(', ') : 'nothing picked yet');
       }
       if (id === 'second') {
+        // One knob, spent down the difficulty's allowance: the first turn of it rings the two
+        // brightest, and every turn after that reads one omen against the archive's own sky --
+        // the ones called wrongly first. At the fiercest setting the ring is the whole allowance.
+        const spent = (s.marked ? 1 : 0) + s.read.length;
+        const unread = p.claims.map((id2, i) => i).filter((i) => !s.read.includes(i));
+        const miscalled = unread.filter((i) => s.picked.includes(i) !== p.truth.includes(i));
         if (!s.marked) {
           s.marked = true;
           c.hint();
+          c.status('the two brightest are ringed; the ring, the band and the hand\'s width are the measure');
+        } else if (spent >= helps) {
+          c.status('that is all the archive will read at this difficulty; the ring, the band and the hand\'s width are the measure');
+        } else if (unread.length) {
+          const next = miscalled.length ? miscalled[0] : unread[0];
+          s.read.push(next);
+          c.hint();
+          c.status('omen ' + (next + 1) + (p.truth.includes(next) ? ' holds against the sky' : ' does not hold'));
+        } else {
+          c.status('every omen has been read; the ones that hold are the ones to pick');
         }
-        c.status('the two brightest are ringed; the ring, the band and the hand\'s width are the measure');
       }
       draw(c);
     },

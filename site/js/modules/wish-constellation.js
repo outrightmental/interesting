@@ -30,6 +30,17 @@ const PLAIN = { density: 1, scale: 1, turn: 0 };
 const SHIFT_NEAR = 26;
 const SHIFT_FAR = 4;
 
+/* How hard the visitor asked for their puzzles. The persona keeps one difficulty for the whole
+   site (js/persona.js) and js/stage.js hands it to a piece on env.difficulty, 1 (gentle) to 5
+   (fierce); a card's env carries none, so the middle of the dial stands in. A level buys `helps`
+   -- how many things a piece will show when it is asked -- and `margin`, how far out a measured
+   answer may be and still count. Read inside piece() only: the subject is the seed's. */
+function asked(env) {
+  const said = env && env.difficulty ? Number(env.difficulty.level) : NaN;
+  const level = Number.isFinite(said) ? Math.max(1, Math.min(5, Math.round(said))) : 3;
+  return { level, helps: 6 - level, margin: Math.max(0, 3 - level) };
+}
+
 /* ---- shared arithmetic ---------------------------------------------------------------------- */
 
 function dials(env) {
@@ -283,6 +294,7 @@ function postcardPreview(g, w, h, env, plan, t) {
 }
 
 function postcardPiece(env, plan) {
+  const helps = asked(env).helps;
   const n = plan.points.length;
   const v = dials(env);
   const answer = postcardOrder(plan);
@@ -320,11 +332,15 @@ function postcardPiece(env, plan) {
         c.status('nearest to farthest: ' + s.order.map((i) => LETTERS[i]).join(', '));
       }
       if (id === 'hint') {
-        const next = answer.find((i) => !s.hinted.includes(i) && s.order.indexOf(i) !== answer.indexOf(i));
+        const next = s.hinted.length < helps
+          ? answer.find((i) => !s.hinted.includes(i) && s.order.indexOf(i) !== answer.indexOf(i))
+          : undefined;
         if (next !== undefined) {
           s.hinted.push(next);
           c.hint();
           c.status('light ' + LETTERS[next] + ' is the ' + PLACE[plan.ranks[next]]);
+        } else if (s.hinted.length >= helps) {
+          c.status('that is all the sky will show at this difficulty; the rest is yours');
         } else {
           c.status('every light you have placed wrongly has been shown; the rest is yours');
         }
@@ -581,6 +597,7 @@ function whichPreview(g, w, h, env, plan, t) {
 }
 
 function whichPiece(env, plan) {
+  const helps = asked(env).helps;
   const n = plan.points.length;
   const v = dials(env);
   const s = { t: 0, choice: -1, turns: 1, mirror: false, hinted: [], fade: 0, live: true };
@@ -628,11 +645,14 @@ function whichPiece(env, plan) {
         c.status(s.mirror ? 'flipped left for right, then turned' : 'turned, never flipped');
       }
       if (id === 'hint') {
-        const next = range(4).find((k) => k !== plan.which && !s.hinted.includes(k));
+        const next = s.hinted.length < helps
+          ? range(4).find((k) => k !== plan.which && !s.hinted.includes(k)) : undefined;
         if (next !== undefined) {
           s.hinted.push(next);
           c.hint();
           c.status('sky ' + SKIES[next] + ' is a decoy: a light or two of it is off');
+        } else if (s.hinted.length >= helps) {
+          c.status('that is all the sky will mark at this difficulty; read the rest against your own');
         } else {
           c.status('every decoy is marked; the sky left is yours, and its turn is still to find');
         }
