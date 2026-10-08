@@ -194,6 +194,9 @@
     }
     var kept = false;
     if (store) kept = list.length ? store.set(SKY, list) : store.remove(SKY);
+    // Placed, moved, seeded, removed or cleared: the constellation was set, and if it was set in
+    // the sheet it is handed over when the sheet closes (the hand-off, below).
+    if (sheet && sheet.host.open) noteSet('sky', sheet.field);
     announce(list, how || 'placed', kept);
     return kept;
   }
@@ -466,13 +469,16 @@
     card.probe.hidden = false;
     refresh();
     t.mount(card.probe, {
-      onAnswer: function () { stopAskingInCard(); card.open.focus(); },
-      onSkip: function () { stopAskingInCard(); card.open.focus(); }
+      onAnswer: function () { stopAskingInCard(true); card.open.focus(); },
+      onSkip: function () { stopAskingInCard(true); card.open.focus(); }
     });
     var first = card.probe.querySelector('button, input, [tabindex]');
     if (first && typeof first.focus === 'function') first.focus();
   }
-  function stopAskingInCard() {
+  // `closing` says the question is going away because it was finished, which is the persona closing
+  // and the moment the hand-off below belongs to. Without it the question is only being put aside,
+  // as openSheet does when the sheet opens over it, and nothing is being handed anywhere.
+  function stopAskingInCard(closing) {
     if (!askingInCard) return;
     askingInCard = false;
     if (card && card.probe) {
@@ -480,6 +486,7 @@
       card.probe.hidden = true;
     }
     refresh();
+    if (closing) handOff();
   }
   function buildCard() {
     var host = document.getElementById('persona');
@@ -494,6 +501,107 @@
     card.open.addEventListener('click', function () { openSheet('sky', card.open); });
     card.text.setAttribute('aria-live', 'polite');
     refresh();
+  }
+
+  /* ---- the hand-off: what was just set, going home to the avatar --------------------------- */
+
+  /* A visitor sets something in the persona, the persona closes, and nothing says where the thing
+     they just set now lives. So it is handed over on the way out: one small mark leaves the control
+     that was set, flies across the page to the portrait in the corner, sinks into it and blooms a
+     ring around it as it lands. That is the whole sentence the animation says -- "that thing you
+     just configured lives there, in that menu" (issue #94) -- and it is said in the one place a
+     visitor is looking at the moment they would otherwise lose it.
+
+     Three decisions the issue left open, and the answers written here:
+       Only when something was set. A close that changed nothing has nothing to point at, and a
+       flourish on every close is one a visitor stops reading by the third time.
+       One mark, for the last thing set. The sentence is singular, and two marks racing in would be
+       noise rather than an answer.
+       Each setting carries its own mark. The same flight, its own glyph: the sky sends a star and
+       the reading sends the half-lit disc the palette it dresses the site in is read off. A third
+       setting -- the difficulty of issue #93 -- is one more line of MARKS and one more noteSet().
+
+     Where it is drawn, and when. The mark is a child of the avatar's own corner (.persona), so it
+     needs no layer of its own, it lands wherever the portrait happens to be at whatever size, and
+     if a visitor opens the logo while it is still in the air it goes still with everything else
+     behind the veil, which is the site's own law about the lightbox rather than an exception to it.
+     It flies once the sheet is closed and the veil is down -- with the veil coming down and not
+     against it -- so it crosses a page the visitor has back. It takes no press and says nothing to
+     a screen reader: the one sentence beside the avatar already says where things stand, and this
+     is the picture of it.
+
+     A visitor who asked for less motion gets the result without the movement: the mark is laid on
+     the portrait, held there, and taken away again. That is what the stage's own small mark does
+     with the same query (.stage-reject and its is-still), and the class is written here off the
+     query so the script and _sass/_persona.scss cannot fall out of step. */
+  var MARKS = { sky: '✦', reading: '◐' }; // the glyph each setting sends home
+  var FLIGHT_MS = 520; // the flight, as long as _sass/_persona.scss animates it for
+  var STILL_MS = 260; // how long the mark is simply held on the portrait instead, with less motion
+  var calmer = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
+  var carried = null; // { kind, from }: what was set while the persona was open, and where from
+  var flightTimer = null;
+  var flying = null; // the one mark in the air, so a second close never leaves the first behind
+
+  function stillness() { return !!(calmer && calmer.matches); }
+
+  /* Where a mark leaves from: the middle of the control that was set, in the viewport, measured
+     while it is still on screen. The sheet is shut by the time the mark flies and a shut dialog has
+     no box to ask, so this is read when the setting is made and not when it is handed over. The
+     middle of the screen for a control with no box to measure, so the flight is never a mark that
+     merely appears on the portrait with nothing said about where it came from. */
+  function leavesFrom(node) {
+    var box = node && typeof node.getBoundingClientRect === 'function'
+      ? node.getBoundingClientRect() : null;
+    if (box && (box.width || box.height)) {
+      return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
+    }
+    return { x: (window.innerWidth || 0) / 2, y: (window.innerHeight || 0) / 2 };
+  }
+
+  /* One of the persona's settings was just set, there. Only ever called while the persona is open:
+     a star a world's own meteor adds, or a sky seeded to power a page up, is not something a
+     visitor just did in a menu they are watching close. */
+  function noteSet(kind, node) {
+    if (!MARKS[kind]) return;
+    carried = { kind: kind, from: leavesFrom(node) };
+  }
+
+  function sweep() {
+    window.clearTimeout(flightTimer);
+    flightTimer = null;
+    if (flying) flying.remove();
+    flying = null;
+  }
+
+  /* The persona is closing: whatever was set while it was open goes home to the portrait. */
+  function handOff() {
+    var set = carried;
+    carried = null;
+    if (!set || !card || !card.open || !card.portrait) return;
+    var seat = card.portrait.parentNode || card.portrait; // the round frame the sky is drawn in
+    var corner = card.host.getBoundingClientRect();
+    var home = seat.getBoundingClientRect();
+    var x = home.left + home.width / 2;
+    var y = home.top + home.height / 2;
+    var still = stillness();
+    var mark = document.createElement('span');
+    mark.className = 'persona-flight';
+    mark.setAttribute('aria-hidden', 'true');
+    mark.setAttribute('data-mark', set.kind);
+    mark.textContent = MARKS[set.kind];
+    // Placed where it lands rather than where it starts: the mark is the portrait's, and the whole
+    // of the flight is one transform away from the place it belongs.
+    mark.style.setProperty('left', Math.round(x - corner.left) + 'px');
+    mark.style.setProperty('top', Math.round(y - corner.top) + 'px');
+    if (still) mark.classList.add('is-still');
+    else {
+      mark.style.setProperty('--persona-flight-x', Math.round(set.from.x - x) + 'px');
+      mark.style.setProperty('--persona-flight-y', Math.round(set.from.y - y) + 'px');
+    }
+    sweep();
+    flying = mark;
+    card.host.appendChild(mark);
+    flightTimer = window.setTimeout(sweep, still ? STILL_MS : FLIGHT_MS);
   }
 
   var fieldStars = [];
@@ -686,6 +794,10 @@
     stopAskingInCard();
     if (!sheet.host.open) {
       openedBy = opener || document.activeElement || (card && card.open);
+      // A fresh visit: only what is set from here on is handed over on the way out, and a mark
+      // still in the air from the last visit is taken away rather than stilled behind the veil.
+      carried = null;
+      sweep();
       if (sheetBox) sheetBox.up();
       if (typeof sheet.host.showModal === 'function') sheet.host.showModal();
       else { sheet.host.setAttribute('open', ''); sheet.host.classList.add('persona-sheet-fallback'); }
@@ -718,6 +830,9 @@
     openedBy = null;
     if (back && typeof back.focus === 'function' && document.contains(back)) back.focus();
     else if (card && card.open) card.open.focus();
+    // Last of all, and after the veil has gone: the mark crosses a page the visitor has back, and
+    // nothing about the focus coming home waits on an animation.
+    handOff();
   }
   function buildSheet() {
     var host = document.getElementById('persona-sheet');
@@ -897,6 +1012,11 @@
     buildCard();
     buildSheet();
     window.addEventListener('threshold:reading', function () {
+      // The reading is a setting of the persona like the sky is, so it is noted here while the
+      // persona is still open and the control that set it still has a box to fly from: the question
+      // in the card where it was answered, or the sheet's own line where it was forgotten.
+      if (askingInCard) noteSet('reading', card ? card.probe : null);
+      else if (sheet && sheet.host.open) noteSet('reading', sheet.reading);
       if (!askingInCard) refresh();
       if (sheet && sheet.host.open) renderReading();
     });

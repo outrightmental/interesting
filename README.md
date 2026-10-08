@@ -835,24 +835,24 @@ and shown on every page. It carries three settings: the **constellation** severa
   *Orientation* is the mood flow's home: it says what was read, asks the sideways question
   (`js/threshold.js` supplies the mechanism through `window.threshold.mount`) and forgets on
   request. When nothing has been read yet the sheet asks of its own accord on opening, so setting
-  up a persona is placing a sky, answering one question and choosing a difficulty, in one place.
-- **The difficulty** (issue
-  [#93](https://github.com/outrightmental/interesting/issues/93)). The third section of the sheet,
-  named as plainly as the constellation is: one slider in the site's M3 slider grammar
-  (`input[type=range]` in a `.row`, `_sass/_controls.scss`), *gentle* at one end and *fierce* at
-  the other, five stops, the middle one standing until a visitor moves it. It is kept under
-  `difficulty` in the one local-state document, so it exports with the rest of a persona, and it
-  is read by the stage and handed to every world's `piece(env)` on `env.difficulty` — so one
-  setting changes the puzzles across the whole site (see
-  [Completion axiom](#completion-axiom) for what a level changes and the law that holds every
-  world to it at every stop). `window.interestingPersona.tuner(host)` renders that one control
-  wherever a part depends on the setting, which is why the same slider stands at the foot of the
-  stage's rail beside the piece it is dealing: a setting is settable where it is met, and moving
-  it there deals the piece again at the same seed (see [Powered down, never
-  broken](#powered-down-never-broken) for why nothing is powered down over it). The sentence
-  beside the avatar says which setting stands, as it says how many stars are in the sky. Clearing
-  the sky leaves it alone — it is a setting, not content — and the state menu's *clear*, which
-  takes the whole document, puts it back to the middle of the dial.
+  up a persona is placing a sky and answering one question, in one place.
+- **What was just set is handed over on the way out.** A visitor set something, the persona closed,
+  and nothing connected what they had just done to the avatar in the corner that now keeps it. So
+  the persona hands it over as it closes: one small mark leaves the control that was set, flies
+  across the page to the portrait, sinks into it and blooms a ring around it as it lands — *that
+  thing you just configured lives there, in that menu* (issue #94). The three questions the note
+  left open are answered in `site/js/persona.js`, beside the code: **only when something was set**,
+  because a close that changed nothing has nothing to point at and a flourish on every close is one
+  a visitor stops reading; **one mark, for the last thing set**, because the sentence is singular;
+  and **each setting carries its own glyph** — the sky sends a star, the reading sends the half-lit
+  disc the palette it dresses the site in is read off, and a difficulty slider (#93) would be one
+  more line of the same table rather than a second animation. The mark is drawn inside `.persona`,
+  so it needs no layer of its own, lands wherever the portrait happens to be, and is stilled with
+  the rest of that corner if a lightbox goes up while it is still in the air; it flies once the veil
+  is down, with the veil rather than against it; and it says nothing to a screen reader, the one
+  sentence beside the avatar already saying where things stand. A visitor who asked for less motion
+  gets the result without the movement — the mark laid on the portrait, held, and taken away again,
+  the same answer the stage's own small mark gives the same query.
 - **Where the question is asked.** The threshold still asks on arrival, inline and never in the
   chrome: `index.html` hosts `#persona-probe` in its own `<main>`, so the question is that page's
   feature, asked large, and it is never a dialog in a visitor's way; the mood axiom's *never a
