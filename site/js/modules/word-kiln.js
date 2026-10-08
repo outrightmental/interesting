@@ -1,894 +1,576 @@
-/* The word kiln: put a word in the fire and a coinage comes out, with a definition and a citation
-   that never existed. As a card it is the kiln's mouth and one coinage (paint, spark); as a piece
-   it is a word off the shelf, fired at a heat you set and left to cool, a kiln-load of new
-   words pulled out of the fire one tap at a time, or a real phrase cast into its anagram.
-   Letter castings share a seeded plan between their card and piece. Each moving tile keeps its
-   original letter; the reveal changes their order, spaces and punctuation, never their inventory.
-   See js/feed.js for what a module is and js/stage.js for what a piece is. */
+/* The word kiln: letters go into the fire and a word comes out. As a card it is one of the two
+   puzzles below (paint, spark); as a piece it is that puzzle, and the card it was opened from says
+   which. See js/feed.js for what a module is and js/stage.js for what a piece is.
 
-// The card this piece was opened from, in the kiln's own terms: { word, pos }, or null for a piece
-// nobody pressed (js/stage.js hands it over as env.card.of). A card and the feature it opens as are
-// one coinage: the spark puts the word it coined on its spec as `of`, and fired()/kilnLoad() fire
-// that word rather than another, so pressing a coinage in the feed opens the kiln on it (issue #80).
-function pressed(env) {
-  const was = env.card && env.card.of;
-  return was && typeof was.word === 'string' && was.word ? was : null;
+   Two puzzles, both deduction, both answered out of the kiln's own book of plain words:
+
+     the anagram   Five to seven letters on tiles over the mouth of the kiln. Fired, they come out
+                   as one common word. Any word in the book that uses exactly these tiles is
+                   accepted; a wrong check says how many tiles stand where the kiln's own word has
+                   them, or that the word is not in the book, and no more. The hints, at a price,
+                   are the first letter and then the last.
+     the ladder    A word ladder from one four-letter word to another in exactly three steps, one
+                   letter changed at a step, every rung a word in the book. The two middle rungs
+                   are the answer, and any pair that makes a true ladder is accepted. A wrong
+                   check says which step fails and never which word would mend it. The hints, at
+                   a price, are which letter one way up changes at each step.
+
+   A card and the feature it opens as are one firing: the spark puts the whole plan on its spec
+   as `of` -- the word and the order its tiles were dealt in, or the four rungs -- and piece(env)
+   opens on that rather than rolling another. */
+
+// The kiln's book: plain words of five, six and seven letters, the anagrams are drawn from and
+// checked against. Lowercase, common, nobody's name.
+const BOOK = ('angel angle baker brake break beard bread below elbow canoe ocean cause sauce charm march cheap '
+  + 'peach cloud could crate react trace dusty study early layer earth heart horse shore least steal '
+  + 'slate stale tales lemon melon night thing stone notes tones onset nerve never north thorn spare '
+  + 'spear pears parse share shear smile miles limes swing wings paste tapes cabin dream field flame '
+  + 'fruit glass globe grape guard honey house juice light magic money music pearl piano plant sugar '
+  + 'sweet table teach tiger truck tulip voice water whale wheel witch world youth listen silent '
+  + 'enlist tinsel garden danger gander rescue secure master stream forest foster softer silver '
+  + 'sliver drawer reward redraw resist sister solemn remote basket bottle bridge candle carpet '
+  + 'castle cheese cherry circle copper cradle dinner engine fabric finger hammer island jacket '
+  + 'jungle kettle kitten ladder letter magnet marble market meadow mirror needle orange pebble '
+  + 'pencil pepper pillow planet pocket potato puzzle rabbit ribbon rocket saddle sailor salmon '
+  + 'school shadow spider spring string summer sunset temple ticket timber tongue tunnel turtle '
+  + 'valley velvet violin walnut winter yellow allergy gallery largely altered related another '
+  + 'balance blanket bracket cabinet captain chimney cottage country curtain diamond feather freedom '
+  + 'harvest history holiday journey kingdom kitchen thicken lantern leather library machine mineral '
+  + 'mustard notices section nothing octopus orchard painter pertain repaint pattern penguin picture '
+  + 'pioneer plaster present serpent problem quarter rainbow satchel scatter shelter silence station '
+  + 'strange teacher thunder trouble village vinegar whisper').split(' ');
+// The rungs: four-letter words a ladder may stand on, well enough connected that a walk of three
+// steps leaves any of them.
+const RUNGS = ('bake ball band bare bear beat bend bent best bind bold bond bore cake call came cane cape care '
+  + 'case cast cave cold cord core dare date deal dear dent dine fade fail fall fame fare fast fate '
+  + 'file fill find fine fire fold fond food ford fore gale game gate gave gear gold good hail hall '
+  + 'hare heal hear heat hide hill hire hold hole hood lace lake land lane last late lend line link '
+  + 'made mail make male mane mare mast mate meal meat mend mile mill mind mine mold mole more nail '
+  + 'name near neat nest nine pace page pail pale pane past pear pile pill pine pink pole pore race '
+  + 'rage rail rake rare rate real rent rest rice ride rink ripe rise rode role rope rose safe sage '
+  + 'sail sale same sand sane save seal seat send sent side sink sold sole sore tail take tale tall '
+  + 'tame tape tear tend tent test tide tile till time tire vast vest vine wade wage wake wall wand '
+  + 'wave wear went west wide will wind wine wink wire wise wood word wore work worm worn year').split(' ');
+const IN_BOOK = new Set(BOOK);
+const IN_RUNGS = new Set(RUNGS);
+const PLAIN = { density: 1, scale: 1, turn: 0 };
+const WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven'];
+
+function clean(value) {
+  return String(value == null ? '' : value).toLowerCase().replace(/[^a-z]/g, '');
 }
 
-const HEADS = ['umb', 'thal', 'quer', 'mor', 'vell', 'glim', 'sorr', 'brack', 'fulm', 'nim', 'osk', 'twil',
-  'harr', 'pell', 'dru', 'calv', 'wist', 'lorn', 'skell', 'murr'];
-const MIDS = ['er', 'ow', 'ish', 'ine', 'ast', 'ul', 'en', 'ar', 'o', 'i'];
-const TAILS = ['ment', 'ling', 'wick', 'ance', 'th', 'ry', 'some', 'fast', 'wise', 'hood', 'kin', 'age', 'ure'];
-const POS = ['n.', 'n.', 'n.', 'v.', 'adj.'];
-
-const DEFS = {
-  'n.': [
-    'the warmth left in a chair someone has just got up from',
-    'the small debt owed to a tab left open',
-    'the pause before a kettle makes up its mind',
-    'a path familiar in one direction only',
-    'the exact weight of a thing you meant to return',
-    'the quiet after a door you did not hear close',
-    'a word that arrives two stairs after the conversation',
-    'the part of a map that is only true on paper',
-    'the second, smaller surprise inside a surprise',
-    'the courage particular to the first sentence'
-  ],
-  'v.': [
-    'to lose a thought by reaching for it',
-    'to tidy a room by moving the mess one room over',
-    'to agree with someone slightly before they have finished',
-    'to walk back for the thing, then forget the thing',
-    'to warm a plan by talking about it instead of doing it',
-    'to hold a note a beat longer than the song wants'
-  ],
-  'adj.': [
-    'of a silence, friendly',
-    'of a plan, ruined by being said aloud',
-    'slightly too tall for the room it is in',
-    'of a word, right in the mouth and wrong on the page',
-    'glad in the manner of a dog with a found stick'
-  ]
-};
-
-const AUTHORS = ['E. Varrow', 'H. Quillfeather', 'M. Oates-Lind', 'the Pemberly glossary', 'an anonymous marginal note',
-  'T. Ashgrove', 'L. Marrowbone', 'the Second Kiln Circular'];
-const WORKS = ['A Dictionary of Rooms', 'The Lesser Almanac', 'Notes Toward a Grammar of Weather',
-  'Field Guide to the Unsaid', 'The Kiln Book, second firing', 'Glossary of a House at Night'];
-const BOOKS = ['a dictionary of rooms', 'the lesser almanac', 'a grammar of weather', 'the field guide to the unsaid',
-  'the kiln book, second firing', 'the glossary of a house at night'];
-
-// The shelf by the door, and what the fire does to a word taken off it.
-const SHELF = ['lantern', 'gravel', 'hinge', 'fathom', 'bramble', 'quarry', 'kettle', 'moss',
-  'ledger', 'thistle', 'anvil', 'marrow', 'cipher', 'harbour', 'spindle', 'furrow'];
-const PREFIX = ['un', 'mis', 'over', 'inter', 'sub', 'pre', 'counter', 'trans', 'fore', 'out'];
-const SUFFIX = ['ward', 'some', 'ling', 'craft', 'wise', 'fast', 'let', 'ish', 'most', 'hood'];
-const SENSE = ['the particular silence that follows', 'a small debt owed to', 'the habit of returning to',
-  'the useful part of', 'the residue left by', 'a deliberate misreading of',
-  'the hour at which one stops pretending about', 'the shape a room takes around'];
-const FIELD = ['dialect', 'trade usage', 'obsolete', 'nautical', 'regional', 'cant', 'bookbinding', 'masonry',
-  'falconry', 'printing'];
-const CITE = ['attested once, in a margin', 'recorded by a clerk who misheard it', 'in use among people who would deny it',
-  'found on a crate, never since', 'spoken only indoors', 'last written down by someone leaving'];
-
-const KINDS = [{ label: 'nouns', value: 'n.' }, { label: 'verbs', value: 'v.' }, { label: 'adjectives', value: 'adj.' }];
-const HEAT = ['warm', 'hot', 'white'];
-const FATE = ['the word comes out with a handle on it', 'the word comes out spliced to another',
-  'higher heat breaks the word up more'];
-const SHAPE = ['long words, in no hurry', 'shorter words, the tails burned off', 'two words fused into one'];
-const TIMES = ['', 'once', 'twice', 'three times', 'four times'];
-const NUM = ['', 'one', 'two', 'three', 'four', 'five'];
-
-function tidy(word) {
-  return word.replace(/(.)\1\1/g, '$1$1');
+function sorted(word) {
+  return word.split('').sort().join('');
 }
 
-function reverse(text) {
-  return text.split('').reverse().join('');
+function diff(a, b) {
+  let d = 0;
+  for (let i = 0; i < 4; i++) if (a[i] !== b[i]) d += 1;
+  return d;
 }
 
-// The three heats of a 0..100 dial: warm, hot and white.
-function band(heat) {
-  return heat < 34 ? 0 : heat < 67 ? 1 : 2;
+function neighbours(word) {
+  return RUNGS.filter((w) => diff(w, word) === 1);
 }
 
-function coin(env) {
-  let word = env.pick(HEADS) + env.pick(MIDS) + env.pick(TAILS);
-  if (env.chance(0.3)) word = env.pick(HEADS) + env.pick(TAILS);
-  return tidy(word);
-}
-
-// A new coinage at a heat: whole when warm, the tail burned off when hot, two heads fused at white.
-function coinAt(env, b) {
-  if (b === 0) return coin(env);
-  if (b === 1) return tidy(env.pick(HEADS) + env.pick(TAILS));
-  const head = env.pick(HEADS);
-  let other = env.pick(HEADS);
-  if (other === head) other = HEADS[(HEADS.indexOf(head) + 7) % HEADS.length];
-  return tidy(head + other);
-}
-
-// What the fire does to a word off the shelf: an affix when warm, a splice when hot, a melt at white.
-function forge(env, word, b) {
-  if (b === 0) return env.chance(0.5) ? env.pick(PREFIX) + word : word + env.pick(SUFFIX);
-  if (b === 1) {
-    return tidy(env.chance(0.5)
-      ? word.slice(0, Math.max(2, Math.ceil(word.length / 2))) + reverse(word).slice(0, 3)
-      : word.slice(0, 3) + env.pick(SHELF).slice(-4));
-  }
-  const bare = word.replace(/[aeiou]/g, '');
-  return tidy(env.chance(0.5) ? bare + 'a' + word.slice(-2) : reverse(word).slice(0, Math.ceil(word.length / 2)) + env.pick(TAILS));
-}
-
-/* The kiln's mouth and its ember. `o` is where it sits and how it is drawn: the piece places its
-   own mouth and holds the sparks still, and a card passes the configuration it was dealt --
-   `o.sparks` being how many of them rise. */
-function kiln(ctx, w, h, env, heat, o) {
-  const c = env.colors;
-  const cx = o && o.cx != null ? o.cx : w / 2;
-  const cy = o && o.cy != null ? o.cy : h * 0.52;
-  const r = o && o.r ? o.r : Math.min(w, h) * 0.26;
-  const lit = o && o.lit != null ? o.lit : 1;
-  const g = ctx.createRadialGradient(cx, cy + r * 0.7, 0, cx, cy + r * 0.7, Math.max(w, h) * 0.8);
-  g.addColorStop(0, env.mix(c.bg, c.accent, 0.18 * (0.3 + 0.7 * lit)));
-  g.addColorStop(1, c.bg);
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, w, h);
-  // The mouth.
-  ctx.fillStyle = env.mix(c.bg, '#000', 0.4);
-  ctx.beginPath();
-  ctx.ellipse(cx, cy, r, r * 0.92, 0, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.strokeStyle = env.alpha(c.accent, 0.25 + 0.15 * lit);
-  ctx.lineWidth = 2;
-  ctx.stroke();
-  // The ember.
-  const e = ctx.createRadialGradient(cx, cy + r * 0.2, 0, cx, cy + r * 0.2, r * 0.8);
-  e.addColorStop(0, env.alpha(c.accent2, (0.55 + heat * 0.45) * lit));
-  e.addColorStop(0.4, env.alpha(c.accent, (0.35 + heat * 0.4) * lit));
-  e.addColorStop(1, env.alpha(c.accent, 0));
-  ctx.fillStyle = e;
-  ctx.beginPath();
-  ctx.ellipse(cx, cy, r * 0.95, r * 0.88, 0, 0, Math.PI * 2);
-  ctx.fill();
-  if (o && o.still) return;
-  // Sparks rising, for the card.
-  const sparks = (6 + heat * 10) * (o && o.sparks ? o.sparks : 1);
-  for (let i = 0; i < sparks; i++) {
-    ctx.fillStyle = env.alpha(c.accent2, 0.2 + env.rnd() * 0.6);
-    ctx.beginPath();
-    ctx.arc(cx + (env.rnd() - 0.5) * r * 1.4, cy - r * 0.6 - env.rnd() * h * 0.35, 0.8 + env.rnd() * 1.2, 0, Math.PI * 2);
-    ctx.fill();
-  }
-}
-
-/* ---- the piece's scene: a mouth on the left, a column on the right, sparks in between ------ */
-
-function mouthOf(c) {
-  return { cx: c.w * 0.27, cy: c.h * 0.44, r: Math.min(c.w, c.h) * 0.23 };
-}
-
-function px(c, k, floor) {
-  return Math.max(floor, Math.round(Math.min(c.w, c.h) * k));
-}
-
-function font(g, size, style) {
-  g.font = (style || '400') + ' ' + size + 'px system-ui, sans-serif';
-}
-
-function wrap(g, text, width, most) {
-  const lines = [];
-  let line = '';
-  for (const word of String(text).split(' ')) {
-    const test = line ? line + ' ' + word : word;
-    if (line && g.measureText(test).width > width) {
-      lines.push(line);
-      line = word;
-    } else line = test;
-  }
-  if (line) lines.push(line);
-  if (most && lines.length > most) {
-    lines.length = most;
-    lines[most - 1] = lines[most - 1].replace(/,?\s+\S*$/, '') + '…';
-  }
-  return lines;
-}
-
-function burst(c, s, m, n, speed) {
-  for (let i = 0; i < n && s.sparks.length < 160; i++) {
-    const a = c.rnd() * Math.PI * 2;
-    const v = m.r * (0.4 + c.rnd() * speed);
-    s.sparks.push({ x: m.cx + (c.rnd() - 0.5) * m.r, y: m.cy - m.r * 0.1 + c.rnd() * m.r * 0.3,
-      vx: Math.cos(a) * v * 0.6, vy: -Math.abs(Math.sin(a)) * v - m.r * 0.5, life: 0.6 + c.rnd() * 1.1, age: 0,
-      size: 0.8 + c.rnd() * 1.5 });
-  }
-}
-
-function sparks(g, c, s, dt, m, rate) {
-  s.acc = Math.min(3, s.acc + dt * rate);
-  while (s.acc >= 1 && s.sparks.length < 160) {
-    s.acc -= 1;
-    s.sparks.push({ x: m.cx + (c.rnd() - 0.5) * m.r * 1.2, y: m.cy - m.r * 0.2 + c.rnd() * m.r * 0.5,
-      vx: (c.rnd() - 0.5) * m.r * 0.3, vy: -(m.r * 0.6 + c.rnd() * m.r * 1.2), life: 0.7 + c.rnd() * 1.2, age: 0,
-      size: 0.7 + c.rnd() * 1.3 });
-  }
-  for (let i = s.sparks.length - 1; i >= 0; i--) {
-    const p = s.sparks[i];
-    p.age += dt;
-    if (p.age >= p.life) {
-      s.sparks.splice(i, 1);
-      continue;
-    }
-    p.x += p.vx * dt;
-    p.y += p.vy * dt;
-    p.vy *= 1 - dt * 0.5;
-    const a = 1 - p.age / p.life;
-    g.fillStyle = c.alpha(c.colors.accent2, 0.1 + a * 0.7);
-    g.beginPath();
-    g.arc(p.x, p.y, p.size * (0.4 + a * 0.6), 0, Math.PI * 2);
-    g.fill();
-  }
-}
-
-// The kiln, its sparks, the flash of a firing and the word under the mouth; the column is the
-// shape's own.
-function scene(c, s, dt, t, lit, label, labelTone) {
-  const g = c.g;
-  const m = mouthOf(c);
-  const flicker = c.reduced ? 0 : Math.sin(t * 7) * 0.04 + Math.sin(t * 3.1) * 0.03;
-  kiln(g, c.w, c.h, c, Math.max(0, Math.min(1, s.heat + flicker)), { cx: m.cx, cy: m.cy, r: m.r, lit, still: true });
-  sparks(g, c, s, dt, m, lit * (3 + s.heat * 25) * (c.reduced ? 0.3 : 1));
-  if (s.flash > 0) {
-    g.fillStyle = c.alpha(c.colors.accent2, s.flash * 0.18);
-    g.fillRect(0, 0, c.w, c.h);
-  }
-  font(g, px(c, 0.055, 13), '500');
-  g.textAlign = 'center';
-  g.textBaseline = 'middle';
-  g.fillStyle = c.mix(c.colors.accent2, c.colors.muted, labelTone);
-  g.fillText(label, m.cx, m.cy + m.r * 0.92 + px(c, 0.07, 16));
-  return m;
-}
-
-// A line or two stamped along the foot of the scene (lines split on a newline).
-function stamp(c, text, a) {
-  if (a <= 0) return;
-  const g = c.g;
-  const size = px(c, 0.034, 10);
-  const lines = String(text).split('\n');
-  font(g, size, 'italic 400');
-  g.textAlign = 'center';
-  g.textBaseline = 'alphabetic';
-  g.fillStyle = c.alpha(c.colors.muted, Math.min(1, a));
-  lines.forEach((line, i) => g.fillText(line, c.w / 2, c.h * 0.95 - (lines.length - 1 - i) * size * 1.3));
-}
-
-function heatLine(b, notes) {
-  return 'heat ' + (b + 1) + ', ' + HEAT[b] + ': ' + notes[b];
-}
-
-/* ---- one word off the shelf, fired and left to cool ---------------------------------------- */
-
-function fired(env) {
-  const was = pressed(env);
-  const pool = SHELF.slice();
-  const options = [];
-  while (options.length < 3) {
-    const i = env.int(0, pool.length - 1);
-    options.push({ label: pool[i], value: pool[i] });
-    pool.splice(i, 1);
-  }
-  // The coinage the card was showing goes on the shelf, first and already named in the title: a
-  // visitor who pressed a word is here to put that word back in the fire.
-  if (was) options.unshift({ label: was.word, value: was.word });
-  const count = env.int(2, 4);
-  const heat0 = env.pick([20, 50, 80]);
-  // Every coinage this piece can hand back, so the same address fires the same words.
-  const forged = options.map((o) => [0, 1, 2].map((b) => {
-    const list = [];
-    for (let n = 0; n < count; n++) {
-      let made = forge(env, o.value, b);
-      if (made === o.value || list.indexOf(made) !== -1) made = forge(env, o.value, b);
-      list.push(made);
-    }
-    return list;
-  }));
-  const fields = [];
-  const senses = [];
-  const cites = [];
-  for (let n = 0; n < count; n++) {
-    fields.push(env.pick(FIELD));
-    senses.push(env.pick(SENSE));
-    cites.push(env.pick(CITE));
-  }
-  const s = { word: '', wi: 0, heat: heat0 / 100, fired: 0, entry: null, log: [], cool: -1, coolFor: 4, drop: 1,
-    flash: 0, fin: 0, sparks: [], acc: 0 };
-  const names = options.map((o) => o.value);
-  const piece = {
-    title: was ? was.word + ' back into the fire'
-      : names[0] + ', ' + names[1] + ' or ' + names[2] + ': into the fire',
-    brief: (was ? 'Your coinage is on the shelf with three plainer words. Take one, set the heat and fire it '
-      : 'Take a word off the shelf, set the heat and fire it ')
-      + TIMES[count] + '; what comes out is a coinage with a definition and a citation that never existed, and you let it cool.',
-    aspect: '4 / 3',
-    steps: [
-      { id: 'word', ask: 'a word to fire', kind: 'choice', options },
-      { id: 'heat', ask: 'the heat', kind: 'range', min: 0, max: 100, step: 1, value: heat0, low: 'warm', high: 'white' },
-      { id: 'fire', ask: 'fire it ' + TIMES[count], kind: 'press', count, label: 'fire it', after: 'word' },
-      { id: 'cool', ask: 'let it cool', kind: 'wait', after: 'fire' }
-    ],
-    start(c) {
-      c.status('the kiln is still warm from the last firing');
-      piece.frame(0, 0, c);
-    },
-    apply(id, value, c) {
-      if (id === 'word') {
-        s.word = String(value);
-        s.wi = Math.max(0, names.indexOf(s.word));
-        s.drop = 1;
-        c.status('"' + s.word + '" is off the shelf and waiting by the door');
-      }
-      if (id === 'heat') {
-        s.heat = Math.max(0, Math.min(1, Number(value) / 100));
-        c.status(heatLine(band(Number(value)), FATE));
-      }
-      if (id === 'fire' && !c.done) {
-        if (!s.word) s.word = names[0];
-        const b = band(s.heat * 100);
-        const n = (Math.max(1, Number(value) || 1) - 1) % count;
-        if (s.entry) s.log.unshift(s.entry.made);
-        s.log.length = Math.min(s.log.length, 3);
-        s.entry = { made: forged[s.wi][b][n], field: fields[n], sense: senses[n], cite: cites[n], heat: b + 1, word: s.word };
-        s.fired += 1;
-        s.flash = 1;
-        s.drop = 0.001;
-        s.coolFor = 3 + b;
-        s.cool = s.fired >= count ? 0 : -1;
-        burst(c, s, mouthOf(c), 18 + b * 10, 1.2 + b * 0.5);
-        c.status('"' + s.word + '" went in and "' + s.entry.made + '" came out' + (s.cool >= 0 ? '. let it cool.' : ''));
-      }
-    },
-    frame(t, dt, c) {
-      s.flash = Math.max(0, s.flash - dt * 2.5);
-      if (s.drop < 1) s.drop = Math.min(1, s.drop + dt * 2);
-      if (s.cool >= 0 && s.cool < 1 && !c.done) {
-        s.cool = Math.min(1, s.cool + dt / s.coolFor);
-        c.progress('cool', s.cool);
-        if (s.cool >= 1) {
-          c.status('"' + s.entry.made + '" has cooled and set');
-          c.satisfy('cool');
-        }
-      }
-      if (c.done) s.fin = Math.min(1, s.fin + dt);
-      const cooled = s.cool < 0 ? 0 : s.cool;
-      const lit = (1 - cooled * 0.9) * (1 - s.fin * 0.8);
-      const label = s.fin > 0.5 ? 'cold' : s.entry ? s.entry.made : 'warm';
-      const m = scene(c, s, dt, t, lit, label, Math.max(cooled, s.fin));
-      const g = c.g;
-      // The word by the door, dropping into the mouth when fired.
-      if (s.word) {
-        const y = m.cy - m.r * 1.3 + (s.drop < 1 ? s.drop * m.r * 1.1 : 0);
-        font(g, px(c, 0.05, 12), '500');
-        g.textAlign = 'center';
-        g.textBaseline = 'middle';
-        g.fillStyle = c.alpha(c.colors.fg, s.drop < 1 ? 1 - s.drop : s.entry ? 0.55 : 1);
-        g.fillText(s.word, m.cx, y);
-      }
-      // The column: the entry as it stands, printing as it cools.
-      const x0 = c.w * 0.5;
-      const width = c.w * 0.46;
-      let y = c.h * 0.14;
-      g.textAlign = 'left';
-      g.textBaseline = 'alphabetic';
-      if (!s.entry) {
-        font(g, px(c, 0.042, 11), 'italic 400');
-        g.fillStyle = c.alpha(c.colors.muted, 0.8);
-        g.fillText('nothing fired yet', x0, y + px(c, 0.042, 11));
-        return;
-      }
-      const big = px(c, 0.075, 16);
-      const small = px(c, 0.038, 10);
-      y += big;
-      font(g, big, '600');
-      g.fillStyle = c.mix(c.colors.accent2, c.colors.fg, cooled);
-      g.fillText(s.entry.made, x0, y);
-      y += small * 1.6;
-      font(g, small, '400');
-      g.fillStyle = c.alpha(c.colors.muted, 0.9);
-      g.fillText('[' + s.entry.field + ', heat ' + s.entry.heat + ']', x0, y);
-      if (cooled > 0.3) {
-        y += small * 1.9;
-        font(g, px(c, 0.044, 11), '400');
-        g.fillStyle = c.alpha(c.colors.fg, Math.min(1, (cooled - 0.3) * 4));
-        for (const line of wrap(g, 'n. ' + s.entry.sense + ' ' + s.entry.word + '.', width, 3)) {
-          g.fillText(line, x0, y);
-          y += px(c, 0.044, 11) * 1.35;
-        }
-      }
-      if (cooled > 0.65) {
-        y += small * 0.6;
-        font(g, small, 'italic 400');
-        g.fillStyle = c.alpha(c.colors.muted, Math.min(1, (cooled - 0.65) * 4));
-        for (const line of wrap(g, s.entry.cite + '.', width, 2)) {
-          g.fillText(line, x0, y);
-          y += small * 1.35;
-        }
-      }
-      if (s.log.length) {
-        y += small * 1.4;
-        font(g, small, '400');
-        g.fillStyle = c.alpha(c.colors.muted, 0.55);
-        g.fillText(wrap(g, 'earlier: ' + s.log.join(', '), width, 1)[0], x0, y);
-      }
-      stamp(c, 'it is a kiln, not a dictionary', s.fin * 1.5);
-    },
-    end(c) {
-      c.status('cooled, swept and shelved: "' + (s.entry ? s.entry.made : s.word) + '". it is a kiln, not a dictionary.');
-      s.fin = Math.max(s.fin, 0.01);
-      piece.frame(0, 0, c);
-    }
-  };
-  return piece;
-}
-
-/* ---- a kiln-load of new words, pulled one tap at a time and set with the door shut ----------- */
-
-function kilnLoad(env) {
-  const was = pressed(env);
-  const need = env.int(3, 4);
-  const heat0 = env.pick([20, 50, 80]);
-  const bookIndex = env.int(0, BOOKS.length - 1);
-  const author = env.pick(AUTHORS);
-  const page = env.int(3, 412);
-  const holdMs = env.pick([1500, 2000, 2500]);
-  // Every word and meaning this piece can pull, by heat and by kind, so the same address makes
-  // the same kiln-load.
-  const words = [0, 1, 2].map((b) => {
-    const list = [];
-    for (let i = 0; i < need; i++) list.push(coinAt(env, b));
-    return list;
-  });
-  // The coinage the card was showing is the first one out of this load, at any heat: the word a
-  // visitor pressed is the word the kiln hands back first.
-  if (was) for (const list of words) list[0] = was.word;
-  const defs = {};
-  for (const k of KINDS) {
-    const pool = DEFS[k.value].slice();
-    defs[k.value] = [];
-    for (let i = 0; i < need; i++) defs[k.value].push(pool.splice(env.int(0, pool.length - 1), 1)[0]);
-  }
-  const s = { kind: '', heat: heat0 / 100, pulled: [], shut: false, flash: 0, fin: 0, sparks: [], acc: 0, ripple: null };
-  function kindLabel() {
-    const k = KINDS.find((x) => x.value === s.kind);
-    return k ? k.label : 'words';
-  }
-  const piece = {
-    title: was ? was.word + ' and ' + NUM[need - 1] + ' more for ' + BOOKS[bookIndex]
-      : NUM[need] + ' words for ' + BOOKS[bookIndex],
-    brief: (was ? 'Your coinage comes out first. Pick the kind of word and the heat, tap the fire '
-      : 'Pick the kind of word and the heat, tap the fire ')
-      + TIMES[need] + ' to pull a coinage out each time, and hold the door shut to set them; they cool on the shelf with their meanings.',
-    aspect: '4 / 3',
-    steps: [
-      { id: 'kind', ask: 'what kind of word it makes', kind: 'choice', options: KINDS },
-      { id: 'heat', ask: 'the heat', kind: 'range', min: 0, max: 100, step: 1, value: heat0, low: 'warm', high: 'white' },
-      { id: 'pull', ask: 'tap the fire ' + TIMES[need], kind: 'tap', label: 'pull one for me', after: 'kind' },
-      { id: 'shut', ask: 'hold the door shut to set them', kind: 'hold', ms: holdMs, label: 'hold the door', after: 'pull' }
-    ],
-    start(c) {
-      c.status('the kiln is warm. tap the fire and see what comes out');
-      piece.frame(0, 0, c);
-    },
-    apply(id, value, c) {
-      if (id === 'kind') {
-        s.kind = String(value);
-        c.status('set to make ' + kindLabel() + ' at ' + HEAT[band(s.heat * 100)] + ' heat');
-      }
-      if (id === 'heat') {
-        s.heat = Math.max(0, Math.min(1, Number(value) / 100));
-        c.status(heatLine(band(Number(value)), SHAPE));
-      }
-      if (id === 'shut' && !s.shut) {
-        s.shut = true;
-        s.flash = 1;
-        burst(c, s, mouthOf(c), 40, 2.2);
-        c.status('the door is shut and the fire has the last word');
-      }
-    },
-    tap(x, y, c) {
-      if (c.done || s.shut) return;
-      s.ripple = { x: x * c.w, y: y * c.h, age: 0 };
-      if (s.pulled.length >= need) {
-        c.status('the shelf is full; shut the door');
-        return;
-      }
-      if (!s.kind) s.kind = KINDS[0].value;
-      const b = band(s.heat * 100);
-      const i = s.pulled.length;
-      const entry = { word: words[b][i], pos: s.kind, def: defs[s.kind][i], age: 0 };
-      s.pulled.push(entry);
-      s.flash = 0.8;
-      burst(c, s, mouthOf(c), 14 + b * 8, 1 + b * 0.5);
-      c.progress('pull', s.pulled.length / need);
-      c.status('"' + entry.word + '" (' + entry.pos + ') ' + entry.def);
-      if (s.pulled.length >= need) c.satisfy('pull');
-    },
-    frame(t, dt, c) {
-      s.flash = Math.max(0, s.flash - dt * 2.5);
-      for (const p of s.pulled) p.age += dt;
-      if (s.ripple) s.ripple.age += dt;
-      if (c.done) s.fin = Math.min(1, s.fin + dt * 0.9);
-      const lit = s.shut ? Math.max(0.1, 1 - s.fin * 0.9) : 1;
-      const last = s.pulled.length ? s.pulled[s.pulled.length - 1].word : 'warm';
-      const m = scene(c, s, dt, t, lit, s.fin > 0.6 ? 'cold' : last, s.fin);
-      const g = c.g;
-      if (s.ripple && s.ripple.age < 0.6) {
-        const a = 1 - s.ripple.age / 0.6;
-        g.strokeStyle = c.alpha(c.colors.accent2, a * 0.6);
-        g.lineWidth = 1.5;
-        g.beginPath();
-        g.arc(s.ripple.x, s.ripple.y, m.r * 0.15 + (1 - a) * m.r * 0.4, 0, Math.PI * 2);
-        g.stroke();
-      }
-      // The shelf: a heading, then one slot per word, with room under each for its meaning.
-      const x0 = c.w * 0.5;
-      const width = c.w * 0.46;
-      const wordPx = px(c, 0.055, 13);
-      const defPx = px(c, 0.04, 10);
-      let y = c.h * 0.08;
-      g.textAlign = 'left';
-      g.textBaseline = 'alphabetic';
-      font(g, defPx, 'italic 400');
-      g.fillStyle = c.alpha(c.colors.muted, 0.8);
-      g.fillText(s.kind ? kindLabel() + ' at ' + HEAT[band(s.heat * 100)] + ' heat' : 'nothing pulled yet', x0, y + defPx);
-      y += defPx * 2.2;
-      g.strokeStyle = c.alpha(c.colors.muted, 0.35);
-      g.lineWidth = 1;
-      g.beginPath();
-      g.moveTo(x0, y);
-      g.lineTo(x0 + width, y);
-      g.stroke();
-      // One slot per word, with two lines under each for its meaning, fitted above the stamp.
-      const ideal = wordPx * 1.35 + defPx * 2.5 + defPx * 0.5;
-      const room = c.h * 0.85 - y - wordPx * 1.2 - defPx * 2.5;
-      const pitch = need > 1 ? Math.min(ideal, room / (need - 1)) : ideal;
-      s.pulled.forEach((p, i) => {
-        const k = Math.min(1, p.age * 1.6);
-        const e = 1 - (1 - k) * (1 - k);
-        const slotY = y + i * pitch + wordPx * 1.2;
-        const wx = m.cx + (x0 - m.cx) * e;
-        const wy = m.cy + (slotY - m.cy) * e;
-        font(g, wordPx, '600');
-        g.textAlign = e < 1 ? 'center' : 'left';
-        g.fillStyle = c.mix(c.colors.accent2, c.colors.fg, s.fin);
-        g.fillText(p.word, wx, wy);
-        if (e >= 1) {
-          font(g, defPx, 'italic 400');
-          g.fillStyle = c.alpha(c.colors.muted, 0.8);
-          g.fillText('(' + p.pos + ')', x0 + wordWidth(g, p.word, wordPx) + defPx * 0.5, wy);
-          if (s.fin > 0) {
-            font(g, defPx, '400');
-            g.fillStyle = c.alpha(c.colors.fg, Math.min(1, s.fin * 1.5));
-            let dy = wy + defPx * 1.3;
-            for (const line of wrap(g, p.def, width, 2)) {
-              g.fillText(line, x0, dy);
-              dy += defPx * 1.2;
-            }
-          }
-        }
-      });
-      stamp(c, 'cited by ' + author + ', p. ' + page + '.\nneither the words nor the book exist.', s.fin * 1.5);
-    },
-    end(c) {
-      c.status(NUM[need] + ' words that were never in any dictionary, cooling on the shelf');
-      s.fin = Math.max(s.fin, 0.01);
-      piece.frame(0, 0, c);
-    }
-  };
-  return piece;
-}
-
-// The width of a word in the word font, measured while another font is set.
-function wordWidth(g, word, wordPx) {
-  const keep = g.font;
-  font(g, wordPx, '600');
-  const width = g.measureText(word).width;
-  g.font = keep;
-  return width;
-}
-
-/* ---- the same letters, cast into another phrase ------------------------------------------- */
-
-const CASTINGS = [
-  { from: 'the eyes', to: 'they see', other: ['eyes open', 'see the sky'] },
-  { from: 'schoolmaster', to: 'the classroom', other: ['school matters', 'classroom lesson'] },
-  { from: 'moon starer', to: 'astronomer', other: ['star watcher', 'a moon reader'] },
-  { from: 'eleven plus two', to: 'twelve plus one', other: ['twenty plus one', 'two times seven'] },
-  { from: 'the morse code', to: 'here come dots', other: ['dots and dashes', 'a secret message'] },
-  { from: 'a decimal point', to: "i'm a dot in place", other: ['one tiny number', 'a point in space'] },
-  { from: 'the countryside', to: 'no city dust here', other: ['quiet country air', 'a house in the trees'] },
-  { from: 'conversation', to: 'voices rant on', other: ['one voice answers', 'a chorus of voices'] },
-  { from: 'rail safety', to: 'fairy tales', other: ['safer railways', 'a safe railway'] },
-  { from: 'a gentleman', to: 'elegant man', other: ['a gentle manner', 'the patient man'] },
-  { from: 'dormitory', to: 'dirty room', other: ['a tidy bedroom', 'room to dream'] },
-  { from: 'debit card', to: 'bad credit', other: ['credit due', 'card reader'] }
-];
-const CASTING_VIEW = { density: 1, scale: 1, turn: 0 };
-
-function dealsCasting(env) {
-  return (env.seed >>> 0) % 4 === 1;
-}
-
-function lettersOf(text) {
-  return text.replace(/[^a-z]/g, '').split('');
-}
-
-function castingPlan(env) {
-  const pair = env.pick(CASTINGS);
-  const source = lettersOf(pair.from);
-  const target = lettersOf(pair.to);
-  const unused = source.slice();
-  if (source.length !== target.length) throw new Error('Unequal letter counts in casting: ' + pair.from);
-  const destinations = target.map((letter) => {
-    const at = unused.indexOf(letter);
-    if (at < 0) throw new Error('Unmatched letter in casting: ' + pair.from + ' / ' + pair.to);
-    unused[at] = null;
-    return at;
-  });
-  const guesses = [pair.to].concat(pair.other);
-  for (let i = guesses.length - 1; i > 0; i--) {
-    const j = env.int(0, i);
-    [guesses[i], guesses[j]] = [guesses[j], guesses[i]];
-  }
-  return {
-    from: pair.from,
-    to: pair.to,
-    heat: env.pick([25, 50, 75]),
-    options: guesses.map((text) => ({ label: text, value: text })),
-    letters: source.map((letter, i) => ({
-      letter, target: destinations.indexOf(i),
-      angle: i / source.length * Math.PI * 2 + (env.rnd() - 0.5) * 0.3,
-      radius: 0.65 + env.rnd() * 0.4,
-      turns: (i % 2 ? -1 : 1) * (1 + env.rnd() * 0.65)
-    })),
-    embers: Array.from({ length: 24 }, () => ({ x: env.rnd(), y: env.rnd(), size: 0.5 + env.rnd() }))
-  };
-}
-
-function castingTitle(plan) {
-  return '"' + plan.from + '", cast another way';
-}
-
-function castingEase(value) {
+function ease(value) {
   const t = Math.max(0, Math.min(1, value));
   return t * t * (3 - 2 * t);
 }
 
-function rackUnits(text) {
-  return text.split('').reduce((sum, ch) => sum + (/[a-z]/.test(ch) ? 1.12 : ch === ' ' ? 0.5 : 0.38), 0);
+/* ---- the kiln's mouth and its ember -------------------------------------------------------- */
+
+function kiln(g, w, h, env, heat, o) {
+  const c = env.colors;
+  const cx = o.cx;
+  const cy = o.cy;
+  const r = o.r;
+  const lit = o.lit == null ? 1 : o.lit;
+  const ground = g.createRadialGradient(cx, cy + r * 0.7, 0, cx, cy + r * 0.7, Math.max(w, h) * 0.8);
+  ground.addColorStop(0, env.mix(c.bg, c.accent, 0.18 * (0.3 + 0.7 * lit)));
+  ground.addColorStop(1, c.bg);
+  g.fillStyle = ground;
+  g.fillRect(0, 0, w, h);
+  g.fillStyle = env.mix(c.bg, '#000', 0.4);
+  g.beginPath();
+  g.ellipse(cx, cy, r, r * 0.92, 0, 0, Math.PI * 2);
+  g.fill();
+  g.strokeStyle = env.alpha(c.accent, 0.25 + 0.15 * lit);
+  g.lineWidth = 2;
+  g.stroke();
+  const ember = g.createRadialGradient(cx, cy + r * 0.2, 0, cx, cy + r * 0.2, r * 0.8);
+  ember.addColorStop(0, env.alpha(c.accent2, (0.55 + heat * 0.45) * lit));
+  ember.addColorStop(0.4, env.alpha(c.accent, (0.35 + heat * 0.4) * lit));
+  ember.addColorStop(1, env.alpha(c.accent, 0));
+  g.fillStyle = ember;
+  g.beginPath();
+  g.ellipse(cx, cy, r * 0.95, r * 0.88, 0, 0, Math.PI * 2);
+  g.fill();
 }
 
-function letterRack(text, w, y, size) {
-  let x = (w - rackUnits(text) * size) / 2;
-  const letters = [];
-  const punctuation = [];
-  for (const ch of text) {
-    const width = (/[a-z]/.test(ch) ? 1.12 : ch === ' ' ? 0.5 : 0.38) * size;
-    const point = { x: x + width / 2, y, text: ch };
-    if (/[a-z]/.test(ch)) letters.push(point);
-    else if (ch !== ' ') punctuation.push(point);
-    x += width;
-  }
-  return { letters, punctuation };
-}
-
-function castingScene(g, w, h, c, plan, s, variant) {
-  const k = c.colors;
-  const v = variant || CASTING_VIEW;
-  const m = Math.min(w, h);
-  const radius = m * 0.19 * v.scale;
-  const cx = w / 2;
-  const cy = h * 0.48;
-  const phase = s.poured ? s.phase : 0;
-  const cooled = castingEase((phase - 0.67) / 0.33);
-  kiln(g, w, h, c, s.heat, { cx, cy, r: radius, lit: 1 - cooled * 0.82, still: true });
-
-  for (let i = 0; i < Math.round(plan.embers.length * v.density); i++) {
-    const e = plan.embers[i % plan.embers.length];
-    const drift = c.reduced ? 0 : phase * (0.4 + s.heat * 0.6) + v.turn;
-    const x = cx + (e.x - 0.5) * radius * 2;
-    const y = cy - ((e.y + drift + i * 0.03) % 1) * radius * 1.6;
-    g.fillStyle = c.alpha(k.accent2, (0.15 + s.heat * 0.4) * (1 - cooled));
+// Embers over the mouth, laid by a fixed sequence: as many as the configuration asks, drifting
+// where it says, and rising with the finale.
+function embers(g, env, cx, cy, r, v, phase, lit) {
+  const c = env.colors;
+  const count = Math.round(18 * v.density);
+  for (let i = 0; i < count; i++) {
+    const x = cx + (((i * 0.6180339 + 0.13) % 1) - 0.5) * r * 2.2;
+    const y = cy - r * 0.4 - ((i * 0.7548777 + v.turn + phase * 0.6) % 1) * r * 1.8;
+    g.fillStyle = env.alpha(c.accent2, (0.12 + ((i * 0.41) % 1) * 0.35) * lit);
     g.beginPath();
-    g.arc(x, y, e.size * v.scale, 0, Math.PI * 2);
+    g.arc(x, y, (0.6 + ((i * 0.37) % 1)) * v.scale, 0, Math.PI * 2);
     g.fill();
   }
+}
 
-  const units = Math.max(rackUnits(plan.from), rackUnits(plan.to));
-  const size = Math.min(h * 0.085 * v.scale, w * 0.9 / units);
-  const before = letterRack(plan.from, w, h * 0.19, size);
-  const after = letterRack(plan.to, w, h * 0.79, size);
-  g.strokeStyle = c.alpha(k.muted, 0.65);
+function font(g, size, weight) {
+  g.font = (weight || '500') + ' ' + size + 'px system-ui, sans-serif';
+}
+
+function px(c, w, h, k, floor) {
+  return Math.max(floor, Math.round(Math.min(w, h) * k));
+}
+
+function tile(g, env, x, y, size, letter, lit, tilt) {
+  const c = env.colors;
+  g.save();
+  g.translate(x, y);
+  g.rotate(tilt || 0);
+  g.fillStyle = env.mix(c.bg2, c.accent2, 0.13 + lit * 0.5);
+  g.fillRect(-size / 2, -size * 0.6, size, size * 1.2);
+  g.strokeStyle = lit > 0.5 ? c.accent2 : env.alpha(c.accent, 0.8);
   g.lineWidth = 1;
-  for (const rack of [before, after]) {
-    for (const p of rack.letters) {
-      g.strokeRect(p.x - size / 2, p.y - size * 0.6, size, size * 1.2);
-    }
+  g.strokeRect(-size / 2, -size * 0.6, size, size * 1.2);
+  if (letter) {
+    font(g, size * 0.78, '600');
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.fillStyle = lit > 0.5 ? c.bg : c.fg;
+    g.fillText(letter, 0, 0);
   }
+  g.restore();
+}
 
-  font(g, Math.max(10, m * 0.035), '500');
+function slot(g, env, x, y, size, letter) {
+  const c = env.colors;
+  g.strokeStyle = env.alpha(c.muted, 0.6);
+  g.lineWidth = 1;
+  g.setLineDash([3, 3]);
+  g.strokeRect(x - size / 2, y - size * 0.6, size, size * 1.2);
+  g.setLineDash([]);
+  if (letter) {
+    font(g, size * 0.78, '600');
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.fillStyle = c.fg;
+    g.fillText(letter, x, y);
+  }
+}
+
+function caption(g, env, w, h, text, y, tone, size) {
+  font(g, size, '500');
   g.textAlign = 'center';
   g.textBaseline = 'middle';
-  g.fillStyle = k.fg;
-  g.fillText('before', cx, h * 0.07);
-  g.fillText(s.settled ? 'after' : 'the second phrase', cx, h * 0.67);
+  g.fillStyle = tone;
+  g.fillText(text, w / 2, y);
+}
 
-  for (let i = 0; i < plan.letters.length; i++) {
-    const tile = plan.letters[i];
-    const from = before.letters[i];
-    const to = after.letters[tile.target];
-    const orbitR = radius * tile.radius * (0.65 + s.heat * 0.35);
-    const startAngle = tile.angle + v.turn * Math.PI * 2;
-    const endAngle = startAngle + tile.turns * Math.PI * 2;
-    let x = from.x;
-    let y = from.y;
-    let tilt = 0;
-    if (phase > 0 && phase < 0.23) {
-      const f = castingEase(phase / 0.23);
-      x += (cx + Math.cos(startAngle) * orbitR - x) * f;
-      y += (cy + Math.sin(startAngle) * orbitR * 0.68 - y) * f;
-    } else if (phase >= 0.23 && phase < 0.67) {
-      const f = (phase - 0.23) / 0.44;
-      const angle = startAngle + tile.turns * Math.PI * 2 * f;
-      x = cx + Math.cos(angle) * orbitR;
-      y = cy + Math.sin(angle) * orbitR * 0.68;
-      tilt = Math.sin(f * Math.PI * 2 + tile.angle) * 0.16;
-    } else if (phase >= 0.67) {
-      const f = castingEase((phase - 0.67) / 0.33);
-      const ox = cx + Math.cos(endAngle) * orbitR;
-      const oy = cy + Math.sin(endAngle) * orbitR * 0.68;
-      x = ox + (to.x - ox) * f;
-      y = oy + (to.y - oy) * f;
+/* ---- the anagram ---------------------------------------------------------------------------- */
+
+function shuffled(word, env) {
+  const t = word.split('');
+  for (let i = t.length - 1; i > 0; i--) {
+    const j = env.int(0, i);
+    [t[i], t[j]] = [t[j], t[i]];
+  }
+  return t.join('');
+}
+
+function anagramPlan(env) {
+  for (let attempt = 0; attempt < 30; attempt++) {
+    const word = env.pick(BOOK);
+    const tiles = shuffled(word, env);
+    if (tiles !== word && !IN_BOOK.has(tiles)) return { kind: 'anagram', word, tiles };
+  }
+  return { kind: 'anagram', word: 'stone', tiles: 'tsnoe' };
+}
+
+function carriedAnagram(env) {
+  const p = env.card && env.card.of;
+  if (!p || p.kind !== 'anagram' || typeof p.word !== 'string' || typeof p.tiles !== 'string') return null;
+  const word = clean(p.word);
+  const tiles = clean(p.tiles);
+  if (!IN_BOOK.has(word) || tiles.length !== word.length || sorted(tiles) !== sorted(word) || IN_BOOK.has(tiles)) return null;
+  return { kind: 'anagram', word, tiles };
+}
+
+function anagramTitle(plan) {
+  return 'the anagram: ' + WORDS[plan.tiles.length] + ' tiles';
+}
+
+// Which slot of the fired word each tile goes to: the first unused tile with that letter.
+function slotsFor(tiles, word) {
+  const used = new Array(tiles.length).fill(false);
+  const slots = new Array(tiles.length).fill(0);
+  for (let k = 0; k < word.length; k++) {
+    for (let i = 0; i < tiles.length; i++) {
+      if (!used[i] && tiles[i] === word[k]) {
+        used[i] = true;
+        slots[i] = k;
+        break;
+      }
     }
-    g.save();
-    g.translate(x, y);
-    g.rotate(tilt);
-    g.fillStyle = c.mix(k.bg2, i % 2 ? k.accent : k.accent2, 0.13);
-    g.fillRect(-size / 2, -size * 0.6, size, size * 1.2);
-    g.strokeStyle = c.mix(k.accent, k.accent2, i / Math.max(1, plan.letters.length - 1));
-    g.strokeRect(-size / 2, -size * 0.6, size, size * 1.2);
-    font(g, size * 0.78, '600');
-    g.fillStyle = k.fg;
-    g.fillText(tile.letter, 0, 0);
-    g.restore();
   }
-  font(g, size * 0.78, '600');
-  g.fillStyle = k.fg;
-  if (!s.poured) for (const p of before.punctuation) g.fillText(p.text, p.x, p.y);
-  if (s.settled) for (const p of after.punctuation) g.fillText(p.text, p.x, p.y);
-
-  font(g, Math.max(10, m * 0.035), '500');
-  g.fillStyle = k.fg;
-  const line = s.settled ? 'same letters, another meaning'
-    : s.poured ? 'no letters added; no letters lost' : 'a second phrase is hidden in these letters';
-  wrap(g, line, w * 0.9).forEach((text, i) => g.fillText(text, cx, h * 0.92 + i * m * 0.045));
+  return slots;
 }
 
-function castingPreview(g, w, h, env, plan) {
-  const v = env.variant;
-  castingScene(g, w, h, env, plan, {
-    heat: plan.heat / 100, poured: true, phase: 0.28 + v.turn * 0.35, settled: false
-  }, v);
+function anagramScene(g, w, h, env, plan, s, variant) {
+  const v = variant || PLAIN;
+  const c = env.colors;
+  const n = plan.tiles.length;
+  const cx = w / 2;
+  const cy = h * 0.72;
+  const r = Math.min(w, h) * 0.2 * v.scale;
+  const cooled = s.phase > 0.4 ? ease((s.phase - 0.4) / 0.6) : 0;
+  kiln(g, w, h, env, s.heat, { cx, cy, r, lit: 1 - cooled * 0.7 });
+  embers(g, env, cx, cy, r, v, s.phase, 1 - cooled * 0.8);
+  const size = Math.min(h * 0.13 * v.scale, (w * 0.84) / n / 1.15);
+  const rackY = h * 0.2;
+  const slotY = h * 0.44;
+  const small = px(env, w, h, 0.036, 10);
+  const place = (k, y) => cx + (k - (n - 1) / 2) * size * 1.15;
+  caption(g, env, w, h, s.phase > 0 ? 'fired' : 'in the kiln', rackY - size * 1.0, env.alpha(c.muted, 0.9), small);
+  if (s.phase === 0) {
+    // The slots the word is typed into, and the hints over them.
+    for (let k = 0; k < n; k++) {
+      slot(g, env, place(k, slotY), slotY, size * 0.8, s.guess[k] || '');
+      const shown = (k === 0 && s.hints >= 1) || (k === n - 1 && s.hints >= 2);
+      if (shown) {
+        font(g, small, '500');
+        g.textAlign = 'center';
+        g.textBaseline = 'middle';
+        g.fillStyle = c.accent2;
+        g.fillText(plan.word[k], place(k, slotY), slotY - size * 0.8);
+      }
+    }
+  }
+  for (let i = 0; i < n; i++) {
+    let x = place(i, rackY);
+    let y = rackY;
+    let tilt = 0;
+    let lit = 0;
+    if (s.phase > 0) {
+      const to = s.slots ? place(s.slots[i], slotY) : x;
+      if (s.phase < 0.4) {
+        const f = ease(s.phase / 0.4);
+        x += (cx + (i - (n - 1) / 2) * r * 0.3 - x) * f;
+        y += (cy - y) * f;
+        tilt = f * (i % 2 ? -1 : 1) * 1.2;
+        lit = f;
+      } else {
+        const f = ease((s.phase - 0.4) / 0.6);
+        x = cx + (i - (n - 1) / 2) * r * 0.3 + (to - (cx + (i - (n - 1) / 2) * r * 0.3)) * f;
+        y = cy + (slotY - cy) * f;
+        tilt = (1 - f) * (i % 2 ? -1 : 1) * 1.2;
+        lit = 1;
+      }
+    }
+    tile(g, env, x, y, size, plan.tiles[i], lit, tilt);
+  }
+  caption(g, env, w, h, s.phase >= 1 ? 'it is a kiln, not a dictionary' : s.line, h * 0.95, env.alpha(c.muted, 0.9), small);
 }
 
-function letterCasting(env) {
-  const plan = castingPlan(env);
-  const s = { heat: plan.heat / 100, guess: '', poured: false, phase: 0, settled: false, said: 0 };
-  function draw(c) {
-    castingScene(c.g, c.w, c.h, c, plan, s);
-  }
-  function finding() {
-    return '"' + plan.from + '" became "' + plan.to + '". The same ' + plan.letters.length + ' letters, in a different order.';
+function anagramPreview(g, w, h, env, plan) {
+  const v = env.variant || PLAIN;
+  anagramScene(g, w, h, env, plan, { heat: 0.4 + v.turn * 0.4, phase: 0, guess: '', hints: 0, slots: null, line: 'one common word; the book decides' }, v);
+}
+
+function anagramPiece(env, plan) {
+  const n = plan.tiles.length;
+  const s = { heat: 0.5, phase: 0, guess: '', hints: 0, slots: null, fired: '', line: 'tap nothing; type the word and check it', t: 0 };
+  const draw = (c) => anagramScene(c.g, c.w, c.h, c, plan, s, env.variant);
+  function right(typed) {
+    let count = 0;
+    for (let i = 0; i < n && i < typed.length; i++) if (typed[i] === plan.word[i]) count += 1;
+    return count;
   }
   return {
-    title: castingTitle(plan),
-    brief: 'Predict the phrase hidden inside "' + plan.from + '", set the heat, and pour the letters; watch each one travel into its new place. Any prediction works, and no letter is added or lost.',
+    title: anagramTitle(plan),
+    brief: WORDS[n][0].toUpperCase() + WORDS[n].slice(1) + ' tiles sit over the mouth of the kiln. Fired, they come out as one common word, and the kiln keeps a book of plain words to check it against. Any word in the book that uses exactly these tiles will do.',
+    goal: 'Find the word these tiles fire into.',
     aspect: '4 / 3',
+    checkLabel: 'fire it',
     steps: [
-      { id: 'guess', ask: 'what will these letters become?', kind: 'choice', options: plan.options },
-      { id: 'heat', ask: 'the heat: hotter letters travel faster', kind: 'range', min: 0, max: 100, step: 1, value: plan.heat, low: 'warm', high: 'white' },
-      { id: 'cast', ask: 'cast the same letters another way', kind: 'press', count: 1, label: 'pour the letters' },
-      { id: 'cool', ask: 'watch the letters find their places', kind: 'wait', after: 'cast' }
+      { id: 'word', ask: 'the word the tiles fire into', kind: 'word', length: n, placeholder: '_'.repeat(n), upper: false },
+      { id: 'hint', ask: 'the first letter, then the last', kind: 'press', count: 1, label: 'show a letter', optional: true }
     ],
+    solution: { word: plan.word },
+    check(c) {
+      const typed = clean(c.value('word'));
+      if (typed.length !== n || sorted(typed) !== sorted(plan.tiles)) {
+        return { solved: false, say: typed.length !== n ? 'the kiln holds ' + WORDS[n] + ' tiles, no more and no fewer' : 'those are not the tiles in the kiln' };
+      }
+      if (!IN_BOOK.has(typed)) {
+        const k = right(typed);
+        return { solved: false, say: 'that is not a word in the kiln\'s book; ' + (k === 0 ? 'no tile stands in the right place' : k === 1 ? 'one tile stands in the right place' : WORDS[k] + ' tiles stand in the right place') };
+      }
+      return { solved: true, say: 'fired: ' + typed + (typed === plan.word ? '' : '. the kiln had ' + plan.word + ' in mind, and both are in the book') };
+    },
     start(c) {
-      c.status('"' + plan.from + '" is on the upper shelf. A second phrase is hidden in exactly these letters.');
+      c.status(WORDS[n] + ' tiles in the kiln');
       draw(c);
     },
     apply(id, value, c) {
-      if (c.done) return;
-      if (id === 'guess') {
-        s.guess = String(value);
-        c.status('Your prediction: "' + s.guess + '". ' + (s.settled ? finding()
-          : s.poured ? 'The letters are already moving.' : 'Pour the letters when you want to find out.'));
+      if (id === 'word') {
+        s.guess = clean(value).slice(0, n);
+        c.status(s.guess ? s.guess + ', not yet fired' : 'nothing typed yet');
       }
-      if (id === 'heat') {
-        s.heat = Math.max(0, Math.min(1, Number(value) / 100));
-        c.status(HEAT[band(s.heat * 100)] + ' heat. ' + (s.settled ? 'The cast is already cool.'
-          : s.heat < 0.34 ? 'A slow swirl through the fire.' : s.heat < 0.67 ? 'The letters travel at a steady pace.' : 'A quick swirl, then into the mould.'));
-      }
-      if (id === 'cast' && !s.poured) {
-        s.poured = true;
-        c.status('The letters are leaving "' + plan.from + '". None are being added.');
+      if (id === 'hint') {
+        if (s.hints < 2) {
+          s.hints += 1;
+          c.hint();
+          c.status(s.hints === 1 ? 'the word starts with ' + plan.word[0] : 'and it ends with ' + plan.word[n - 1]);
+        } else c.status('both ends are shown; the middle is yours');
       }
       draw(c);
     },
     frame(t, dt, c) {
-      if (s.poured && !s.settled && !c.done) {
-        s.phase = c.reduced ? 1 : Math.min(1, s.phase + dt / (7 - s.heat * 4));
-        c.progress('cool', s.phase);
-        if (s.phase >= 1) {
-          s.settled = true;
-          c.status(finding());
-          c.satisfy('cool');
-        } else if (s.phase >= 0.67 && s.said < 2) {
-          s.said = 2;
-          c.status('The letters are finding their new places.');
-        } else if (s.phase >= 0.23 && s.said < 1) {
-          s.said = 1;
-          c.status('The spaces have melted. All ' + plan.letters.length + ' letters are circling the fire.');
-        }
-      }
+      s.t += dt;
+      if (!c.reduced) s.heat = 0.5 + Math.sin(s.t * 3.1) * 0.05 + Math.sin(s.t * 7) * 0.04;
+      if (c.done) s.phase = Math.min(1, s.phase + dt / (c.reduced ? 0.5 : 3.2));
       draw(c);
     },
     end(c) {
-      s.poured = true;
-      s.phase = 1;
-      s.settled = true;
-      draw(c);
-      c.status(finding() + ' ' + (s.guess === plan.to ? 'You called it.' : 'You expected "' + s.guess + '"; the letters went another way.')
-        + ' The spaces and punctuation can change; the letters cannot.');
+      s.fired = clean(c.value('word')) || plan.word;
+      if (sorted(s.fired) !== sorted(plan.tiles)) s.fired = plan.word;
+      s.slots = slotsFor(plan.tiles, s.fired);
+      c.status('fired: ' + s.fired + '. it is a kiln, not a dictionary.');
     }
   };
 }
 
+/* ---- the ladder ------------------------------------------------------------------------------ */
+
+function ladderPlan(env) {
+  for (let attempt = 0; attempt < 80; attempt++) {
+    const a = env.pick(RUNGS);
+    const n1 = neighbours(a);
+    if (!n1.length) continue;
+    const w1 = env.pick(n1);
+    const n2 = neighbours(w1).filter((w) => w !== a);
+    if (!n2.length) continue;
+    const w2 = env.pick(n2);
+    const n3 = neighbours(w2).filter((w) => w !== a && w !== w1);
+    if (!n3.length) continue;
+    const b = env.pick(n3);
+    // A real climb, if one is to be had: the two ends more than a step apart.
+    if (diff(a, b) < 2 && attempt < 40) continue;
+    return { kind: 'ladder', rungs: [a, w1, w2, b] };
+  }
+  return { kind: 'ladder', rungs: ['cold', 'cord', 'core', 'care'] };
+}
+
+function validLadder(rungs) {
+  if (!Array.isArray(rungs) || rungs.length !== 4) return false;
+  if (!rungs.every((w) => typeof w === 'string' && IN_RUNGS.has(w))) return false;
+  if (new Set(rungs).size !== 4) return false;
+  for (let i = 0; i < 3; i++) if (diff(rungs[i], rungs[i + 1]) !== 1) return false;
+  return true;
+}
+
+function carriedLadder(env) {
+  const p = env.card && env.card.of;
+  if (!p || p.kind !== 'ladder' || !Array.isArray(p.rungs)) return null;
+  const rungs = p.rungs.map((w) => clean(w));
+  return validLadder(rungs) ? { kind: 'ladder', rungs } : null;
+}
+
+function ladderTitle(plan) {
+  return 'the ladder: ' + plan.rungs[0] + ' to ' + plan.rungs[3];
+}
+
+function changedAt(a, b) {
+  for (let i = 0; i < 4; i++) if (a[i] !== b[i]) return i;
+  return -1;
+}
+
+function ladderScene(g, w, h, env, plan, s, variant) {
+  const v = variant || PLAIN;
+  const c = env.colors;
+  const m = Math.min(w, h);
+  const cx = w / 2;
+  const r = m * 0.24 * v.scale;
+  kiln(g, w, h, env, 0.6, { cx, cy: h * 0.92, r, lit: 0.6 + s.lit * 0.4 });
+  embers(g, env, cx, h * 0.92, r, v, s.phase, 0.7 + s.lit * 0.3);
+  const small = px(env, w, h, 0.036, 10);
+  const size = Math.min((w * 0.5) / 4 / 1.1, h * 0.1 * v.scale);
+  const railX = [cx - w * 0.3, cx + w * 0.3];
+  g.strokeStyle = env.alpha(c.muted, 0.7);
+  g.lineWidth = Math.max(2, m * 0.012);
+  g.beginPath();
+  for (const x of railX) {
+    g.moveTo(x, h * 0.08);
+    g.lineTo(x, h * 0.8);
+  }
+  g.stroke();
+  // The rungs, bottom to top: the start, the two the visitor fills, the end.
+  const words = [plan.rungs[0], s.first, s.second, plan.rungs[3]];
+  const fixed = [true, false, false, true];
+  for (let k = 0; k < 4; k++) {
+    const y = h * (0.71 - k * 0.19);
+    g.strokeStyle = env.alpha(c.muted, 0.7);
+    g.lineWidth = Math.max(2, m * 0.01);
+    g.beginPath();
+    g.moveTo(railX[0], y);
+    g.lineTo(railX[1], y);
+    g.stroke();
+    const lit = s.phase > 0 ? ease((s.phase * 4 - k) / 1.2) : 0;
+    for (let i = 0; i < 4; i++) {
+      const x = cx + (i - 1.5) * size * 1.1;
+      const letter = words[k][i] || '';
+      if (fixed[k] || s.phase > 0) {
+        // At the finale the letter each step changed glows.
+        const below = k > 0 ? words[k - 1] : null;
+        const changed = s.phase > 0 && below && below.length === 4 && below[i] !== words[k][i];
+        tile(g, env, x, y, size, letter, changed ? lit : lit * 0.4, 0);
+      } else slot(g, env, x, y, size, letter);
+      // A hint: the letter one way up changes at this step, marked on the rung below it.
+      if (k < 3 && s.hints > k && s.phase === 0) {
+        const at = changedAt(plan.rungs[k], plan.rungs[k + 1]);
+        if (at === i) {
+          g.fillStyle = c.accent2;
+          g.beginPath();
+          g.moveTo(x, y - size * 0.75);
+          g.lineTo(x - size * 0.18, y - size * 0.95);
+          g.lineTo(x + size * 0.18, y - size * 0.95);
+          g.closePath();
+          g.fill();
+        }
+      }
+    }
+    font(g, small, '500');
+    g.textAlign = 'right';
+    g.textBaseline = 'middle';
+    g.fillStyle = env.alpha(c.muted, 0.9);
+    g.fillText(k === 0 ? 'start' : k === 3 ? 'end' : k === 1 ? 'first rung' : 'second rung', railX[0] - small * 0.6, y);
+  }
+  caption(g, env, w, h, s.phase >= 1 ? 'one letter a step; the book holds every rung' : s.line, h * 0.86, env.alpha(c.muted, 0.9), small);
+}
+
+function ladderPreview(g, w, h, env, plan) {
+  ladderScene(g, w, h, env, plan, { first: '', second: '', hints: 0, phase: 0, lit: 0, line: 'three steps, one letter each' }, env.variant);
+}
+
+function ladderPiece(env, plan) {
+  const a = plan.rungs[0];
+  const b = plan.rungs[3];
+  const s = { first: '', second: '', hints: 0, phase: 0, lit: 0, line: 'change one letter a step; every rung a word' };
+  const draw = (c) => ladderScene(c.g, c.w, c.h, c, plan, s, env.variant);
+  return {
+    title: ladderTitle(plan),
+    brief: 'A word ladder from ' + a + ' to ' + b + ' in exactly three steps. Each step changes one letter and keeps the other three where they are, and every rung is a word in the kiln\'s book. Any two middle rungs that make a true ladder will do.',
+    goal: 'Fill the two middle rungs so that each step changes one letter and every rung is a word.',
+    aspect: '3 / 4',
+    checkLabel: 'climb it',
+    steps: [
+      { id: 'first', ask: 'the first rung, one letter from ' + a, kind: 'word', length: 4, placeholder: '____', upper: false },
+      { id: 'second', ask: 'the second rung, one letter from ' + b, kind: 'word', length: 4, placeholder: '____', upper: false },
+      { id: 'hint', ask: 'which letter changes, one way up', kind: 'press', count: 1, label: 'show a step', optional: true }
+    ],
+    solution: { first: plan.rungs[1], second: plan.rungs[2] },
+    check(c) {
+      const f = clean(c.value('first'));
+      const g2 = clean(c.value('second'));
+      const problems = [];
+      if (!IN_RUNGS.has(f)) problems.push('the first rung is not a word in the kiln\'s book');
+      if (!IN_RUNGS.has(g2)) problems.push('the second rung is not a word in the kiln\'s book');
+      if (f.length === 4 && diff(a, f) !== 1) problems.push('the first rung is not one letter from the start');
+      if (f.length === 4 && g2.length === 4 && diff(f, g2) !== 1) problems.push('the two rungs are not one letter apart');
+      if (g2.length === 4 && diff(g2, b) !== 1) problems.push('the second rung is not one letter from the end');
+      if (new Set([a, f, g2, b]).size !== 4) problems.push('a rung repeats a word already on the ladder');
+      if (problems.length) return { solved: false, say: problems.slice(0, 2).join('; ') };
+      return { solved: true, say: a + ', ' + f + ', ' + g2 + ', ' + b + ': the ladder holds' };
+    },
+    start(c) {
+      c.status(a + ' to ' + b + ' in three steps');
+      draw(c);
+    },
+    apply(id, value, c) {
+      if (id === 'first') {
+        s.first = clean(value).slice(0, 4);
+        c.status(s.first ? 'first rung: ' + s.first : 'nothing on the first rung yet');
+      }
+      if (id === 'second') {
+        s.second = clean(value).slice(0, 4);
+        c.status(s.second ? 'second rung: ' + s.second : 'nothing on the second rung yet');
+      }
+      if (id === 'hint') {
+        if (s.hints < 3) {
+          const at = changedAt(plan.rungs[s.hints], plan.rungs[s.hints + 1]) + 1;
+          s.hints += 1;
+          c.hint();
+          c.status((s.hints === 1 ? 'one way up: the first step changes letter ' : s.hints === 2 ? 'then the second step changes letter ' : 'and the last step changes letter ') + at);
+        } else c.status('every step has been shown; the words are yours');
+      }
+      draw(c);
+    },
+    frame(t, dt, c) {
+      if (c.done) {
+        s.phase = Math.min(1, s.phase + dt / (c.reduced ? 0.5 : 2.5));
+        s.lit = Math.min(1, s.lit + dt);
+      }
+      draw(c);
+    },
+    end(c) {
+      s.first = clean(c.value('first')) || plan.rungs[1];
+      s.second = clean(c.value('second')) || plan.rungs[2];
+      c.status('the ladder holds: ' + [a, s.first, s.second, b].join(', ') + '. one letter a step, and every rung in the book.');
+    }
+  };
+}
+
+/* ---- the module ----------------------------------------------------------------------------- */
+
+function deal(env) {
+  return env.chance(0.5) ? anagramPlan(env) : ladderPlan(env);
+}
+
 export default {
   id: 'word-kiln',
-  paint(ctx, w, h, env) {
-    if (dealsCasting(env)) {
-      castingPreview(ctx, w, h, env, castingPlan(env));
-      return;
-    }
-    const v = env.variant;
-    // The mouth where the configuration put it, as wide as it asks, with as many sparks over it.
-    kiln(ctx, w, h, env, env.rnd(), {
-      cy: h * (0.44 + v.turn * 0.16),
-      r: Math.min(w, h) * 0.26 * v.scale,
-      sparks: v.density
-    });
+  needsSky: false,
+  paint(g, w, h, env) {
+    const plan = deal(env);
+    if (plan.kind === 'anagram') anagramPreview(g, w, h, env, plan);
+    else ladderPreview(g, w, h, env, plan);
   },
   spark(env) {
-    if (dealsCasting(env)) {
-      const plan = castingPlan(env);
+    const plan = deal(env);
+    if (plan.kind === 'anagram') {
       return {
-        title: castingTitle(plan),
-        text: 'A second phrase is hiding in "' + plan.from + '". Predict it, set the heat, and watch the same ' + plan.letters.length + ' letters take new places.',
+        title: anagramTitle(plan),
+        mono: plan.tiles.split('').join('  '),
+        text: WORDS[plan.tiles.length][0].toUpperCase() + WORDS[plan.tiles.length].slice(1) + ' letters in the kiln. They fire into one common word, and any word in the book that uses exactly these will do.',
         aspect: '4 / 3',
-        paint: (ctx, w, h, e) => castingPreview(ctx, w, h, e, plan)
+        paint: (g, w, h, cardEnv) => anagramPreview(g, w, h, cardEnv, plan),
+        of: plan
       };
     }
-    const pos = env.pick(POS);
-    const word = coin(env);
     return {
-      title: word,
-      text: '(' + pos + ') ' + env.pick(DEFS[pos]) + '.',
-      cite: '— ' + env.pick(AUTHORS) + ', ' + env.pick(WORKS) + ', p. ' + env.int(3, 412)
-        + '. Neither the word nor the book exists.',
-      // What this card is of, for the piece it opens as: the coinage itself.
-      of: { word, pos }
+      title: ladderTitle(plan),
+      mono: plan.rungs[0] + '\n....\n....\n' + plan.rungs[3],
+      text: 'Three steps, one letter changed at each, every rung a word in the kiln\'s book. Fill the two middle rungs.',
+      aspect: '3 / 4',
+      paint: (g, w, h, cardEnv) => ladderPreview(g, w, h, cardEnv, plan),
+      of: plan
     };
   },
   piece(env) {
-    if (dealsCasting(env)) return letterCasting(env);
-    return env.chance(0.55) ? fired(env) : kilnLoad(env);
+    const anagram = carriedAnagram(env);
+    if (anagram) return anagramPiece(env, anagram);
+    const ladder = carriedLadder(env);
+    if (ladder) return ladderPiece(env, ladder);
+    const plan = deal(env);
+    return plan.kind === 'anagram' ? anagramPiece(env, plan) : ladderPiece(env, plan);
   }
 };
