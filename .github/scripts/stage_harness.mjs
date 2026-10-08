@@ -444,8 +444,9 @@ function makePage(worlds, clock) {
   // here rather than a value, exactly as a browser's own list changes under a running page.
   const motion = { calm: false };
   // The persona's difficulty, as this page holds it: the middle of the dial until a scenario moves
-  // it, and `hosts` the elements the stage asked for the slider in.
-  const tuned = { level: MIDDLE_DIFFICULTY.level, hosts: [], note: '', set: () => {} };
+  // it, `hosts` the elements the stage asked for the slider in, and `listeners` whatever the stage
+  // registered through onDifficulty so a change reaches it however it was made.
+  const tuned = { level: MIDDLE_DIFFICULTY.level, hosts: [], note: '', listeners: [], set: () => {} };
   const calmQuery = { get matches() { return motion.calm; }, addEventListener() {} };
   const win = {
     document: doc,
@@ -476,14 +477,22 @@ function makePage(worlds, clock) {
       onSky: () => () => {},
       // The difficulty the persona keeps for the whole site, as js/stage.js reads it and hands it
       // to a piece on env.difficulty. A scenario moves it through `tuned.set(level)`, which is
-      // what the real slider's onChange does, and reads off what the stage did about it.
+      // what the real control does -- it writes the setting and tells everyone who follows it,
+      // through onDifficulty, which is how a change made anywhere (the sheet, or the slider beside
+      // the piece) reaches the stage -- and reads off what the stage did about it.
       difficulty: () => difficultyAt(tuned.level),
+      onDifficulty(fn) {
+        if (typeof fn === 'function') tuned.listeners.push(fn);
+        return () => {};
+      },
       tuner(host, options) {
         tuned.hosts.push(host && host.getAttribute ? host.getAttribute('id') || '' : '');
         tuned.note = (options && options.note) || '';
         tuned.set = (level) => {
           tuned.level = Math.max(1, Math.min(5, Math.round(Number(level)) || 3));
-          if (options && typeof options.onChange === 'function') options.onChange(difficultyAt(tuned.level), true);
+          const now = difficultyAt(tuned.level);
+          for (const fn of tuned.listeners.slice()) fn(now, true);
+          if (options && typeof options.onChange === 'function') options.onChange(now, true);
         };
         return () => {};
       }
