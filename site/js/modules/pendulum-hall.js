@@ -192,7 +192,7 @@ function drawRack(g, w, h, c, plan, s, variant) {
   // The ruler of beats along the foot, the stated beat marked, the replay's beat on it.
   const left = w * 0.08;
   const right = w * 0.92;
-  const rulerY = h * 0.9;
+  const rulerY = h * 0.91;
   g.strokeStyle = c.alpha(col.muted, 0.5);
   g.lineWidth = 1;
   g.beginPath();
@@ -220,8 +220,8 @@ function drawRack(g, w, h, c, plan, s, variant) {
     g.beginPath();
     g.arc(bx, rulerY, Math.max(2, size * 0.2), 0, TAU);
     g.fill();
-    text(g, c, 'beat ' + Math.floor(s.beat), w / 2, h * 0.79, small, c.alpha(col.fg, 0.85));
-  } else text(g, c, 'all through the centre at beat 0, heading right', w / 2, h * 0.79, small, c.alpha(col.fg, 0.75));
+    text(g, c, 'beat ' + Math.floor(s.beat), w / 2, h * 0.805, small, c.alpha(col.fg, 0.85));
+  } else text(g, c, 'all through the centre at beat 0, heading right', w / 2, h * 0.805, small, c.alpha(col.fg, 0.75), 'center', w * 0.9);
 }
 
 function rackBlank() {
@@ -499,7 +499,7 @@ function drawSpring(g, w, h, c, plan, s, variant) {
   text(g, c, 'first: ' + Math.round(motion.firstReach * 100) + '%', pivots[0], h * 0.62, size, c.alpha(col.fg, 0.9));
   text(g, c, 'second: ' + Math.round(motion.secondReach * 100) + '%', pivots[1], h * 0.62, size, c.alpha(col.fg, 0.9));
   text(g, c, 'spring at ' + k + ' of 100', w / 2, h * 0.055, size, c.alpha(col.fg, 0.9));
-  text(g, c, 'one breath is ' + plan.breath + ' seconds; alone, each swings once in ' + OWN, w / 2, h * 0.68, Math.max(8, size * 0.85), c.alpha(col.muted, 0.95), 'center', w * 0.9);
+  text(g, c, 'one breath is ' + plan.breath + ' seconds; alone, each swings once in ' + OWN, w / 2, h * 0.655, Math.max(8, size * 0.85), c.alpha(col.muted, 0.95), 'center', w * 0.9);
   springRuler(g, w, h, c, plan, s, v, size);
 }
 

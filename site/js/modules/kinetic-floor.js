@@ -83,7 +83,7 @@ function lanesPlan(env) {
     for (let i = 0; i < 4; i++) {
       const h = env.int(4, 10);
       const over = env.chance(0.5);
-      // Clear of the edge by more than five per cent either way: 0.74 of the height or under
+      // Well away from the edge, by more than five per cent either way: 0.74 of the height or under
       // crosses, 0.86 or over stops.
       const lo = over ? Math.max(1, Math.ceil(h * 0.3)) : Math.ceil(h * 0.86);
       const hi = over ? Math.floor(h * 0.74) : Math.floor(h * 1.3);

@@ -59,12 +59,13 @@ function lint(g, w, h, c, v) {
   }
 }
 
-function text(g, c, line, x, y, size, color, align, weight) {
-  g.font = (weight || '500') + ' ' + size + 'px system-ui, sans-serif';
+function text(g, c, line, x, y, size, color, align, width) {
+  g.font = '500 ' + size + 'px system-ui, sans-serif';
   g.textAlign = align || 'center';
   g.textBaseline = 'middle';
   g.fillStyle = color || c.colors.fg;
-  g.fillText(line, x, y);
+  if (width) g.fillText(line, x, y, width);
+  else g.fillText(line, x, y);
 }
 
 function thread(g, c, from, to, color, strength, width) {
@@ -408,8 +409,8 @@ function drawWheel(g, w, h, c, plan, s, variant) {
   g.moveTo(w / 2, h * 0.16);
   g.lineTo(w / 2, h * 0.72);
   g.stroke();
-  text(g, c, 'the wheel: ' + plan.n + ' teeth', left, h * 0.09, size, col.fg);
-  text(g, c, 'the pictures: ' + plan.p + ' per turn', right, h * 0.09, size, col.fg);
+  text(g, c, 'the wheel: ' + plan.n + ' teeth', left, h * 0.09, size, col.fg, 'center', panel);
+  text(g, c, 'the pictures: ' + plan.p + ' per turn', right, h * 0.09, size, col.fg, 'center', panel);
   const phase = v.turn * TAU;
   wheel(g, c, left, cy, radius, plan.n, phase + s.spin, col.accent, 0.95);
   rotationArrow(g, c, left, cy, radius * 1.13, false, col.accent);
@@ -435,9 +436,9 @@ function drawWheel(g, w, h, c, plan, s, variant) {
       g.stroke();
     } else rotationArrow(g, c, right, cy, radius * 1.3, way === 'ccw', col.accent2);
   }
-  text(g, c, 'turns clockwise', left, h * 0.7, small, c.alpha(col.fg, 0.85));
-  text(g, c, s.taken ? 'picture ' + s.taken : 'the first picture; ' + plan.p + ' to a turn', right, h * 0.7, small, c.alpha(col.fg, 0.85));
-  if (s.told) text(g, c, s.told, w / 2, h * 0.77, small, col.accent2);
+  text(g, c, 'turns clockwise', left, h * 0.7, small, c.alpha(col.fg, 0.85), 'center', panel);
+  text(g, c, s.taken ? 'picture ' + s.taken : 'the first picture; ' + plan.p + ' to a turn', right, h * 0.7, small, c.alpha(col.fg, 0.85), 'center', panel);
+  if (s.told) text(g, c, s.told, w / 2, h * 0.77, small, col.accent2, 'center', w * 0.9);
   // The strip of pictures taken, the latest at the right.
   const slots = Math.max(3, Math.min(6, Math.round(4 * v.density)));
   const gap = w * 0.018;

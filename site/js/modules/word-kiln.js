@@ -21,38 +21,36 @@
 
 // The kiln's book: plain words of five, six and seven letters, the anagrams are drawn from and
 // checked against. Lowercase, common, nobody's name.
-const BOOK = ('angel angle baker brake break beard bread below elbow canoe ocean cause sauce charm march '
-  + 'cheap peach cloud could crate react trace dusty study early layer earth heart horse shore least steal '
-  + 'slate stale tales lemon melon night thing stone notes tones onset nerve never north thorn spare spear '
-  + 'pears parse share shear smile miles limes swing wings paste tapes bench candy chess cabin climb crown '
-  + 'dance dream field flame flour fruit giant glass globe glove grain grape guard honey house ivory juice '
-  + 'knife light magic medal metal money music novel pearl piano plant proud quiet quilt river robin sugar '
-  + 'sweet table teach tiger tooth torch truck tulip voice wagon water whale wheat wheel witch world youth '
-  + 'listen silent enlist tinsel garden danger gander rescue secure master stream forest foster softer '
-  + 'silver sliver drawer reward redraw resist sister solemn remote anchor basket bottle bridge bucket '
-  + 'button candle carpet castle cellar cheese cherry circle copper cotton cradle dinner dollar engine '
-  + 'fabric finger hammer honest island jacket jungle kettle kitten ladder letter lizard magnet marble '
-  + 'market meadow mirror needle orange oyster pebble pencil pepper pillow planet pocket potato puzzle '
-  + 'rabbit ribbon rocket saddle sailor salmon school shadow shovel spider sponge spring string summer '
-  + 'sunset temple ticket timber tongue tunnel turtle valley velvet violin walnut window winter yellow '
-  + 'allergy gallery largely altered related another balance blanket bracket cabinet captain chimney '
-  + 'compass cottage country crystal curtain diamond dolphin feather fortune freedom furnace glacier '
+const BOOK = ('angel angle baker brake break beard bread below elbow canoe ocean cause sauce charm march cheap '
+  + 'peach cloud could crate react trace dusty study early layer earth heart horse shore least steal '
+  + 'slate stale tales lemon melon night thing stone notes tones onset nerve never north thorn spare '
+  + 'spear pears parse share shear smile miles limes swing wings paste tapes cabin dream field flame '
+  + 'fruit glass globe grape guard honey house juice light magic money music pearl piano plant sugar '
+  + 'sweet table teach tiger truck tulip voice water whale wheel witch world youth listen silent '
+  + 'enlist tinsel garden danger gander rescue secure master stream forest foster softer silver '
+  + 'sliver drawer reward redraw resist sister solemn remote basket bottle bridge candle carpet '
+  + 'castle cheese cherry circle copper cradle dinner engine fabric finger hammer island jacket '
+  + 'jungle kettle kitten ladder letter magnet marble market meadow mirror needle orange pebble '
+  + 'pencil pepper pillow planet pocket potato puzzle rabbit ribbon rocket saddle sailor salmon '
+  + 'school shadow spider spring string summer sunset temple ticket timber tongue tunnel turtle '
+  + 'valley velvet violin walnut winter yellow allergy gallery largely altered related another '
+  + 'balance blanket bracket cabinet captain chimney cottage country curtain diamond feather freedom '
   + 'harvest history holiday journey kingdom kitchen thicken lantern leather library machine mineral '
   + 'mustard notices section nothing octopus orchard painter pertain repaint pattern penguin picture '
   + 'pioneer plaster present serpent problem quarter rainbow satchel scatter shelter silence station '
   + 'strange teacher thunder trouble village vinegar whisper').split(' ');
 // The rungs: four-letter words a ladder may stand on, well enough connected that a walk of three
 // steps leaves any of them.
-const RUNGS = ('bake ball band bare bear beat bend bent best bind bold bond bore cake call came cane cape '
-  + 'care case cast cave cold cord core dare date deal dear dent dine fade fail fall fame fare fast fate '
-  + 'file fill find fine fire fold fond food ford fore gale game gate gave gear gold good hail hall hare '
-  + 'heal hear heat hide hill hire hold hole hood lace lake land lane last late lend line link made mail '
-  + 'make male mane mare mast mate meal meat mend mile mill mind mine mold mole mood more nail name near '
-  + 'neat nest nine pace page pail pale pane past pear pile pill pine pink pole pore race rage rail rake '
-  + 'rare rate real rent rest rice ride rink ripe rise rode role rope rose safe sage sail sale same sand '
-  + 'sane save seal seat send sent side sink sold sole sore tail take tale tall tame tape tear tend tent '
-  + 'test tide tile till time tire vast vest vine wade wage wake wall wand wave wear went west wide will '
-  + 'wind wine wink wire wise wood word wore work worm worn year').split(' ');
+const RUNGS = ('bake ball band bare bear beat bend bent best bind bold bond bore cake call came cane cape care '
+  + 'case cast cave cold cord core dare date deal dear dent dine fade fail fall fame fare fast fate '
+  + 'file fill find fine fire fold fond food ford fore gale game gate gave gear gold good hail hall '
+  + 'hare heal hear heat hide hill hire hold hole hood lace lake land lane last late lend line link '
+  + 'made mail make male mane mare mast mate meal meat mend mile mill mind mine mold mole more nail '
+  + 'name near neat nest nine pace page pail pale pane past pear pile pill pine pink pole pore race '
+  + 'rage rail rake rare rate real rent rest rice ride rink ripe rise rode role rope rose safe sage '
+  + 'sail sale same sand sane save seal seat send sent side sink sold sole sore tail take tale tall '
+  + 'tame tape tear tend tent test tide tile till time tire vast vest vine wade wage wake wall wand '
+  + 'wave wear went west wide will wind wine wink wire wise wood word wore work worm worn year').split(' ');
 const IN_BOOK = new Set(BOOK);
 const IN_RUNGS = new Set(RUNGS);
 const PLAIN = { density: 1, scale: 1, turn: 0 };
@@ -501,11 +499,11 @@ function ladderPiece(env, plan) {
     apply(id, value, c) {
       if (id === 'first') {
         s.first = clean(value).slice(0, 4);
-        c.status(s.first ? 'first rung: ' + s.first : 'the first rung is empty');
+        c.status(s.first ? 'first rung: ' + s.first : 'nothing on the first rung yet');
       }
       if (id === 'second') {
         s.second = clean(value).slice(0, 4);
-        c.status(s.second ? 'second rung: ' + s.second : 'the second rung is empty');
+        c.status(s.second ? 'second rung: ' + s.second : 'nothing on the second rung yet');
       }
       if (id === 'hint') {
         if (s.hints < 3) {
