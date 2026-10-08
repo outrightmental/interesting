@@ -301,6 +301,20 @@ $moods: (
   @include type.scale(body-small);
 }
 
+// The key weighed in the hand (the seven-keys question): held until a second press tries it in
+// the lock. Specific enough to keep its tone on the threshold, where the big-card rules in
+// _stage.scss would otherwise repaint the option's ground.
+.probe-options.probe-keys .probe-option[aria-pressed='true']:not(.probe-skip) {
+  background: var(--md-sys-color-primary-container);
+  color: var(--md-sys-color-on-primary-container);
+  box-shadow: inset 0 0 0 2px var(--md-sys-color-primary);
+}
+
+.probe-options.probe-keys .probe-option[aria-pressed='true'] .probe-option-label,
+.probe-options.probe-keys .probe-option[aria-pressed='true'] .probe-option-detail {
+  color: inherit;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .probe-option,
   .probe-big,
