@@ -2,7 +2,7 @@
    the two puzzles below (paint, spark); as a piece it is that puzzle, and the card it was opened
    from says which. See js/feed.js for what a module is and js/stage.js for what a piece is.
 
-   Two puzzles, both deduction, read off a drawing to scale:
+   Three puzzles, read off a drawing or followed through the ground:
 
      the core   A core cut from the bed and drawn to scale: four to six layers, each with its
                 thickness in centimetres written beside it, one of them a band of stones, and a
@@ -17,6 +17,9 @@
                 whole number) and say whether the blend drains faster or slower than bag A: a
                 sandier soil drains faster. A wrong check says sandier or less sandy than the
                 bed wants, and no more.
+     the route  A root enters a four-column bed. Each cell sends it down-left, straight down or
+                down-right into the next layer. Follow it to its exit and count its left turns.
+                A look halfway costs a hint; a wrong check says how many readings fit.
 
    A card and the feature it opens as are one bed: the spark puts the whole plan on its spec as
    `of` -- the layers, the band and the water line, or the two bags and the bed -- and piece(env)
@@ -25,6 +28,7 @@
 const PLAIN = { density: 1, scale: 1, turn: 0 };
 const WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven'];
 const KINDS = ['topsoil', 'loam', 'silt', 'clay', 'sand', 'peat'];
+const COLUMNS = ['A', 'B', 'C', 'D'];
 const LINES = [
   'The interesting part was always underground.',
   'Roots take the path of least resistance, so the stones matter.',
@@ -488,10 +492,164 @@ function mixPiece(env, plan) {
   };
 }
 
+/* ---- the route: follow a root through the layers -------------------------------------------- */
+
+function routePlan(env) {
+  const n = env.int(4, 6);
+  const start = env.int(1, 3);
+  const arrows = [];
+  for (let row = 0; row < n; row++) {
+    for (let col = 0; col < 4; col++) {
+      const ways = col === 0 ? [0, 1] : col === 3 ? [-1, 0] : [-1, 0, 1];
+      arrows.push(row === 0 && col === start ? -1 : env.pick(ways));
+    }
+  }
+  return { kind: 'route', n, start, arrows };
+}
+
+function carriedRoute(env) {
+  const p = env.card && env.card.of;
+  if (!p || p.kind !== 'route' || !Number.isInteger(p.n) || p.n < 4 || p.n > 6) return null;
+  if (!Number.isInteger(p.start) || p.start < 1 || p.start > 3) return null;
+  if (!Array.isArray(p.arrows) || p.arrows.length !== p.n * 4 || p.arrows[p.start] !== -1) return null;
+  if (!p.arrows.every((way, i) => Number.isInteger(way) && way >= -1 && way <= 1 && i % 4 + way >= 0 && i % 4 + way < 4)) return null;
+  return { kind: 'route', n: p.n, start: p.start, arrows: p.arrows.slice() };
+}
+
+function routePath(plan) {
+  const path = [plan.start];
+  for (let row = 0; row < plan.n; row++) path.push(path[row] + plan.arrows[row * 4 + path[row]]);
+  return path;
+}
+
+function routeRows(plan) {
+  return Array.from({ length: plan.n }, (_, row) => 'row ' + (row + 1) + ': '
+    + plan.arrows.slice(row * 4, row * 4 + 4).map((way) => ['L', 'D', 'R'][way + 1]).join(' ')).join('; ');
+}
+
+function routeTitle(plan) {
+  return 'the root path: ' + plan.n + ' layers';
+}
+
+function drawRoute(g, w, h, env, plan, s, variant) {
+  const v = variant || PLAIN;
+  const c = env.colors;
+  const top = h * 0.2;
+  const left = w * 0.15;
+  const cell = w * 0.7 / 4;
+  const layer = h * 0.6 / plan.n;
+  const size = Math.max(10, Math.min(15, Math.round(Math.min(w, h) * 0.035)));
+  sky(g, w, h, env, top, s.grow);
+  write(g, 'root enters at ' + COLUMNS[plan.start], w / 2, top * 0.48, size, c.accent2);
+  for (let col = 0; col < 4; col++) write(g, COLUMNS[col], left + (col + 0.5) * cell, top - size * 0.55, size, c.fg);
+  for (let row = 0; row < plan.n; row++) {
+    write(g, String(row + 1), left - size * 0.8, top + (row + 0.5) * layer, size, c.muted, 'right');
+    for (let col = 0; col < 4; col++) {
+      const x = left + col * cell;
+      const y = top + row * layer;
+      const way = plan.arrows[row * 4 + col];
+      g.fillStyle = layerTone(env, row % (KINDS.length - 1) + 1);
+      g.fillRect(x, y, cell, layer);
+      flecks(g, env, x, y, cell, layer, Math.round(4 * v.density), row * 4 + col, 0.17);
+      stone(g, env, x + cell * 0.5, y + layer * 0.5, Math.min(cell, layer) * 0.22, v.turn, 0.32);
+      g.strokeStyle = env.alpha(c.fg, 0.45);
+      g.lineWidth = 1;
+      g.strokeRect(x, y, cell, layer);
+      write(g, ['L', 'D', 'R'][way + 1], x + cell * 0.5, y + layer * 0.5,
+        Math.max(12, Math.min(24, cell * 0.36 * v.scale)), c.accent2, 'center', '600');
+      if (s.inspect === row * 4 + col || s.hintRow !== null && row === s.hintRow + 1 && col === s.path[row]) {
+        g.strokeStyle = c.accent;
+        g.lineWidth = 2.5;
+        g.strokeRect(x + 3, y + 3, cell - 6, layer - 6);
+      }
+    }
+  }
+  if (s.grow > 0) {
+    g.strokeStyle = env.alpha(c.accent2, 0.9);
+    g.lineWidth = 2.5;
+    g.lineCap = 'round';
+    g.beginPath();
+    g.moveTo(left + (s.path[0] + 0.72) * cell, top);
+    for (let row = 0; row < Math.ceil(plan.n * s.grow); row++) {
+      g.lineTo(left + (s.path[row + 1] + 0.72) * cell, top + (row + 1) * layer);
+    }
+    g.stroke();
+  }
+  write(g, 'L: left   D: down   R: right', w / 2, h * 0.91, size, c.fg);
+}
+
+function routePreview(g, w, h, env, plan) {
+  drawRoute(g, w, h, env, plan, { path: routePath(plan), inspect: -1, hintRow: null, grow: 0 }, env.variant);
+}
+
+function routePiece(env, plan) {
+  const path = routePath(plan);
+  const exit = COLUMNS[path[plan.n]];
+  const lefts = path.slice(0, plan.n).filter((col, row) => plan.arrows[row * 4 + col] === -1).length;
+  const s = { path, inspect: -1, hintRow: null, grow: 0 };
+  const draw = (c) => drawRoute(c.g, c.w, c.h, c, plan, s, env.variant);
+  return {
+    title: routeTitle(plan),
+    brief: 'Follow the root from column ' + COLUMNS[plan.start] + ' through the rows from top to bottom. In each cell, L sends it one column left in the next row, D sends it straight down, and R sends it one column right. No arrow leaves the bed. Columns run A to D from left to right. ' + routeRows(plan) + '.',
+    goal: 'Name the column where the root leaves the bed and count the L arrows on its path.',
+    aspect: '4 / 5',
+    checkLabel: 'check the path',
+    steps: [
+      { id: 'exit', ask: 'column where the root leaves', kind: 'choice', options: COLUMNS.map((label) => ({ label, value: label })) },
+      { id: 'lefts', ask: 'left turns along the path', kind: 'number', min: 0, max: plan.n, step: 1, unit: 'turns' },
+      { id: 'hint', ask: 'one point halfway along the path', kind: 'press', count: 1, label: 'look halfway', optional: true }
+    ],
+    solution: { exit, lefts },
+    check(c) {
+      const right = Number(c.value('exit') === exit) + Number(Number(c.value('lefts')) === lefts);
+      return { solved: right === 2, say: right === 2
+        ? 'the root leaves at ' + exit + ' after ' + lefts + ' left turn' + (lefts === 1 ? '' : 's')
+        : right === 1 ? 'one of the two readings follows the arrows; check the other'
+          : 'neither reading follows the arrows yet' };
+    },
+    start(c) {
+      c.status('start at ' + COLUMNS[plan.start] + ' and follow one arrow per row');
+      draw(c);
+    },
+    apply(id, value, c) {
+      if (id === 'exit') c.status('you say the root leaves at ' + value);
+      if (id === 'lefts') c.status('you counted ' + value + ' left turns');
+      if (id === 'hint') {
+        if (s.hintRow === null) {
+          s.hintRow = Math.floor(plan.n / 2) - 1;
+          c.hint();
+        }
+        c.status('after row ' + (s.hintRow + 1) + ', the root enters column ' + COLUMNS[path[s.hintRow + 1]]);
+      }
+      draw(c);
+    },
+    tap(x, y, c) {
+      const col = Math.floor((x * c.w - c.w * 0.15) / (c.w * 0.7 / 4));
+      const row = Math.floor((y * c.h - c.h * 0.2) / (c.h * 0.6 / plan.n));
+      if (col < 0 || col >= 4 || row < 0 || row >= plan.n) {
+        c.status('tap an arrow in the bed to read it');
+        return;
+      }
+      s.inspect = row * 4 + col;
+      c.status('row ' + (row + 1) + ', column ' + COLUMNS[col] + ': '
+        + ['left', 'down', 'right'][plan.arrows[s.inspect] + 1]);
+      draw(c);
+    },
+    frame(t, dt, c) {
+      if (c.done) s.grow = c.reduced ? 1 : Math.min(1, s.grow + dt * 0.7);
+      draw(c);
+    },
+    end(c) {
+      c.status('the root found its way to ' + exit + ' through ' + plan.n + ' layers');
+    }
+  };
+}
+
 /* ---- the module ----------------------------------------------------------------------------- */
 
 function deal(env) {
-  return env.chance(0.5) ? corePlan(env) : mixPlan(env);
+  const roll = env.rnd();
+  return roll < 0.34 ? corePlan(env) : roll < 0.68 ? mixPlan(env) : routePlan(env);
 }
 
 export default {
@@ -500,7 +658,8 @@ export default {
   paint(g, w, h, env) {
     const plan = deal(env);
     if (plan.kind === 'core') corePreview(g, w, h, env, plan);
-    else mixPreview(g, w, h, env, plan);
+    else if (plan.kind === 'mix') mixPreview(g, w, h, env, plan);
+    else routePreview(g, w, h, env, plan);
   },
   spark(env) {
     const plan = deal(env);
@@ -511,6 +670,16 @@ export default {
         text: 'A reading of the ground, drawn to scale. Say how deep the water stands, and how many layers a root passes through before the stones.',
         aspect: '4 / 5',
         paint: (g, w, h, cardEnv) => corePreview(g, w, h, cardEnv, plan),
+        of: plan
+      };
+    }
+    if (plan.kind === 'route') {
+      return {
+        title: routeTitle(plan),
+        mono: 'root enters at ' + COLUMNS[plan.start] + '\n' + routeRows(plan),
+        text: 'Follow L, D and R through the bed. Name the exit column and count the left turns.',
+        aspect: '4 / 5',
+        paint: (g, w, h, cardEnv) => routePreview(g, w, h, cardEnv, plan),
         of: plan
       };
     }
@@ -529,7 +698,10 @@ export default {
     if (core) return corePiece(env, core);
     const mix = carriedMix(env);
     if (mix) return mixPiece(env, mix);
+    const route = carriedRoute(env);
+    if (route) return routePiece(env, route);
     const plan = deal(env);
-    return plan.kind === 'core' ? corePiece(env, plan) : mixPiece(env, plan);
+    return plan.kind === 'core' ? corePiece(env, plan)
+      : plan.kind === 'mix' ? mixPiece(env, plan) : routePiece(env, plan);
   }
 };
