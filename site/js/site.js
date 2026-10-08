@@ -920,12 +920,7 @@
   function readingWorld() {
     var flow = window.threshold;
     if (!flow || typeof flow.reading !== 'function') return null;
-    var read = null;
-    try {
-      read = flow.reading();
-    } catch (e) {
-      return null;
-    }
+    var read = flow.reading();
     if (!read || !read.orientation || !read.source || read.source === 'signals') return null;
     return read.orientation;
   }

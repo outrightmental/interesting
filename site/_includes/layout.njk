@@ -122,7 +122,7 @@
       <h2 id='persona-sheet-title' class='persona-sheet-title'>your persona</h2>
       <button type='button' class='persona-close btn-text' id='persona-close'>close</button>
     </div>
-    <p class='panel-note persona-sheet-intro'>A small sky of stars you place, and what the site has read of you. Every world reads from both, and both stay in this browser.</p>
+    <p class='panel-note persona-sheet-intro'>A small sky of stars you place, and a reading from your answer. Several worlds read the same stars, and the site suggests one from the reading. Both stay in this browser.</p>
     <section class='persona-section' aria-labelledby='persona-sky-title'>
       <h3 id='persona-sky-title' class='panel-label'>constellation</h3>
       <p class='panel-note'>Tap the sky to place a star, drag a star to move it, tap one to read its thought. Several worlds read this one sky, each its own way.</p>
@@ -136,15 +136,15 @@
       <p class='panel-status' id='persona-sky-status' aria-live='polite'></p>
     </section>
     <section class='persona-section' aria-labelledby='persona-reading-title'>
-      <h3 id='persona-reading-title' class='panel-label'>orientation</h3>
+      <h3 id='persona-reading-title' class='panel-label'>reading</h3>
       <p class='panel-status' id='persona-reading'></p>
       <div class='controls persona-reading-actions'>
-        <button id='persona-ask' type='button'>ask me</button>
+        <a class='action' id='persona-ask' href='{{ siteRoot }}index.html'>the threshold</a>
         <button id='persona-forget' type='button' class='warning' hidden>forget my reading</button>
         <a class='action' id='persona-reading-go' href='{{ siteRoot }}moods.html' hidden>the mood atlas</a>
       </div>
       <div class='persona-probe' id='persona-sheet-probe' hidden></div>
-      <p class='panel-note'>It never asks you to describe yourself, and it never asks the same way twice. <a href='{{ siteRoot }}moods.html'>the mood atlas</a> shows every way it asks and every answer it can arrive at.</p>
+      <p class='panel-note'>A question about an object or a mark leads to one suggested world. <a href='{{ siteRoot }}moods.html'>the mood atlas</a> shows where each reading can lead.</p>
     </section>
   </dialog>
 </body>

@@ -1,27 +1,21 @@
 ---
 layout: layout.njk
 title: the mood atlas
-description: 'See the questions this site can ask, try one, and follow its reading to a world.'
+description: 'See where a reading can lead, then follow its suggested world or choose any world card.'
 ---
 <main class='list-page-main'>
   <h1>the mood atlas</h1>
-  <p class='page-purpose'>See how a sideways question points to a world: try any way of asking below, then open its answer or choose a world card.</p>
+  <p class='page-purpose'>See what a reading can suggest. Answer a question at <a href='index.html'>the threshold</a>, or choose any world card below.</p>
   <section class='atlas-state panel' aria-labelledby='state-heading'>
-    <h2 id='state-heading' class='panel-title'>what it has read</h2>
+    <h2 id='state-heading' class='panel-title'>your reading</h2>
     <p id='current' class='current'>Nothing read yet. Every world is on offer.</p>
     <p id='signal-line' class='signal-line'></p>
-    <div class='controls'>
-      <button id='requery' type='button'>ask me another way</button>
-      <button id='forget' type='button' class='warning'>forget my reading</button>
-      <a class='action' id='current-world' href='index.html' hidden>the threshold</a>
-    </div>
-    <p id='atlas-status' class='panel-status' aria-live='polite'>Try any way of asking, or choose a world card.</p>
-    <div id='atlas-probe' class='atlas-probe' hidden></div>
+    <a class='action' id='current-world' href='index.html' hidden>the threshold</a>
   </section>
-  <h2 class='section-title'>how it asks</h2>
-  <p class='section-note'>The questions are about choices and actions: doors, stones, taps, holds, marks, lines and a sky going dark. Choose one to try it.</p>
-  <ul id='mechanisms' class='mechanisms list-stack'>
-    <li>Questions need scripting. The world cards below are links either way.</li>
+  <h2 class='section-title'>where a reading can lead</h2>
+  <p class='section-note'>An orientation is the name this site gives a reading of your answer. It suggests one world; you can choose any of them.</p>
+  <ul id='orientations' class='orientations list-stack'>
+    <li>Without scripting, choose a world card below.</li>
   </ul>
 </main>
 <script>
@@ -32,13 +26,7 @@ description: 'See the questions this site can ask, try one, and follow its readi
     var current = document.getElementById('current');
     var signals = document.getElementById('signal-line');
     var worldLink = document.getElementById('current-world');
-    var requery = document.getElementById('requery');
-    var forget = document.getElementById('forget');
-    var host = document.getElementById('atlas-probe');
-    var list = document.getElementById('mechanisms');
-    var status = document.getElementById('atlas-status');
-    var rows = Object.create(null);
-    var tried = [];
+    var list = document.getElementById('orientations');
 
     function showReading(reading) {
       var o = reading && reading.orientation;
@@ -53,103 +41,28 @@ description: 'See the questions this site can ask, try one, and follow its readi
 
     function showSignals() {
       var s = api.signals();
-      signals.textContent = 'It also reads the clock: it is ' + s.part + ' where you are'
-        + (s.zone ? ' (' + s.zone + ')' : '') + '. '
-        + (s.sinceLast === null ? 'This is your first visit on this machine.' : 'You were ' + s.sinceText + '.');
-    }
-
-    function active(id) {
-      Object.keys(rows).forEach(function (key) {
-        rows[key].classList.toggle('is-active', key === id);
-      });
-    }
-
-    function note(probe) {
-      if (!probe) return;
-      var name = probe.name || probe.probe;
-      if (name && tried.indexOf(name) === -1) {
-        tried.push(name);
-        if (tried.length > 6) tried.shift();
-      }
-      status.textContent = tried.length ? 'Tried here: ' + tried.join(' · ') : 'Try any way of asking, or choose a world card.';
-    }
-
-    function run(id) {
-      host.hidden = false;
-      var mounted = api.mount(host, {
-        probe: id,
-        onAnswer: function (reading, probe) {
-          host.textContent = '';
-          host.hidden = true;
-          active('');
-          note(probe);
-          showReading(reading);
-          showSignals();
-          requery.focus();
-        },
-        onSkip: function (probe) {
-          host.textContent = '';
-          host.hidden = true;
-          active('');
-          note(probe);
-          status.textContent = 'Skipped. Choose another way, or open a world card.';
-          requery.focus();
-        }
-      });
-      if (!mounted) {
-        host.hidden = true;
-        status.textContent = 'That question could not open. Choose a world card instead.';
-        return;
-      }
-      active(mounted.probe);
-      note(mounted);
-      host.scrollIntoView({ behavior: api.reducedMotion() ? 'auto' : 'smooth', block: 'nearest' });
-      var first = host.querySelector('button, input, [tabindex]');
-      if (first) first.focus({ preventScroll: true });
+      signals.textContent = 'It is ' + s.part + ' where you are'
+        + (s.zone ? ' (' + s.zone + ')' : '') + '; the time can change a suggestion.';
     }
 
     list.textContent = '';
-    api.probes().forEach(function (probe) {
+    api.orientations().forEach(function (orientation) {
       var item = document.createElement('li');
-      item.setAttribute('data-probe', probe.probe);
-      rows[probe.probe] = item;
-      var name = document.createElement('span');
-      name.className = 'mechanism-name';
-      name.textContent = probe.name || probe.probe;
-      var ask = document.createElement('span');
-      ask.className = 'mechanism-ask';
-      ask.textContent = probe.ask;
-      var button = document.createElement('button');
-      button.type = 'button';
-      button.textContent = 'ask this way';
-      button.setAttribute('aria-label', 'ask by ' + name.textContent);
-      button.addEventListener('click', function () { run(probe.probe); });
+      var name = document.createElement('h3');
+      name.className = 'orientation-name';
+      name.textContent = orientation.name;
+      var pull = document.createElement('p');
+      pull.className = 'orientation-pull';
+      pull.textContent = orientation.pull;
+      var world = document.createElement('a');
+      world.href = orientation.world;
+      world.textContent = orientation.worldName;
       item.appendChild(name);
-      item.appendChild(ask);
-      item.appendChild(button);
+      item.appendChild(pull);
+      item.appendChild(world);
       list.appendChild(item);
     });
-
-    requery.addEventListener('click', function () { run(null); });
-    window.interestingSite.destructive(forget, {
-      what: 'forget what this site has read about you',
-      detail: 'The orientation it arrived at would go. What you left in the worlds stays.',
-      when: function () {
-        var reading = api.reading();
-        return !!(reading && reading.orientation && reading.source !== 'signals');
-      },
-      onConfirm: function () {
-        api.forget();
-        showReading(api.reading());
-        showSignals();
-        active('');
-        status.textContent = 'Nothing read yet. Ask another way whenever you like.';
-      },
-      onCancel: function () { showReading(api.reading()); }
-    });
-    window.addEventListener('threshold:reading', function () {
-      if (host.hidden) showReading(api.reading());
-    });
+    window.addEventListener('threshold:reading', function () { showReading(api.reading()); });
     showReading(api.reading());
     showSignals();
   }
