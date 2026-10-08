@@ -343,7 +343,7 @@ function wheelPiece(env) {
   const draw = (c) => wheelScene(c.g, c.w, c.h, c, p, state, env.variant, state.time);
   return {
     title: wheelTitle(p),
-    brief: 'The note was shifted some way round the alphabet, and the house sometimes writes a line backwards first. The wheel shows which letter stands for which at the setting you choose; it never reads the note for you. The bars beside it count the line\'s commonest letters, and the tallest nearly always wants to read E. One word of the note is underlined.',
+    brief: 'A working of the wheel. The note was shifted some way round the alphabet, and the house sometimes writes a line backwards first. The wheel shows which letter stands for which at the setting you choose; it never reads the note for you. The bars beside it count the line\'s commonest letters, and the tallest nearly always wants to read E. One word of the note is underlined.',
     goal: 'Find the wheel setting and the reading direction, and read the underlined word.',
     aspect: '4 / 3',
     checkLabel: 'try the lock',
@@ -368,7 +368,7 @@ function wheelPiece(env) {
       if (!wordRight) parts.push(right === 0 ? 'no letter of the word is in its place' : (right === 1 ? 'one letter of the word is right' : WORDS[Math.min(right, 10)] + ' letters of the word are right'));
       if (!shiftRight && !wayRight) parts.push('the wheel and the direction are both off');
       else if (!shiftRight) parts.push('the wheel is not at the setting that opens it');
-      else if (!wayRight) parts.push('the direction is wrong');
+      else if (!wayRight) parts.push('the line is read the wrong way round');
       return { solved: false, say: parts.join('; ') };
     },
     start(c) {
@@ -660,7 +660,7 @@ function grillePiece(env, carriedPlan) {
   const draw = (c) => grilleScene(c.g, c.w, c.h, c, p, board, s, env.variant);
   return {
     title: grilleTitle(p),
-    brief: 'Thirty-six letters and a nine-hole key. From one notch, turned one way, the key\'s four views read the note out nine letters at a time, left to right and then down; from any other they read noise. The strips below the board follow the route you set.',
+    brief: 'One key, turned four ways. Thirty-six letters and a nine-hole key. From one notch, turned one way, the key\'s four views read the note out nine letters at a time, left to right and then down; from any other they read noise. The strips below the board follow the route you set.',
     goal: 'Find the starting notch and the turn, and read the note\'s first word.',
     aspect: '1 / 1',
     checkLabel: 'try the key',
@@ -755,7 +755,7 @@ export default {
       const p = grillePlan(env);
       return {
         title: grilleTitle(p),
-        text: 'One notch and one turn read the note out through the key; the others read noise. Find the route and the note\'s first word.',
+        text: 'One notch and one turn read the note out through the key; every other route reads noise. Find the route and the note\'s first word.',
         mono: '36 squares / 9 holes / 4 views',
         aspect: '1 / 1',
         paint: (g, w, h, cardEnv) => grillePreview(g, w, h, cardEnv, p),
@@ -766,7 +766,7 @@ export default {
     return {
       title: wheelTitle(p),
       mono: locked(p),
-      text: 'A note shifted round the alphabet, maybe written backwards first. Count its commonest letters to find the setting, then read the underlined word through the wheel.',
+      text: 'A locked note, shifted round the alphabet and maybe written backwards first. Count its commonest letters to find the setting, then read the underlined word through the wheel.',
       aspect: '4 / 3',
       paint: (g, w, h, cardEnv) => wheelScene(g, w, h, cardEnv, p, blank(), cardEnv.variant, 0),
       of: p

@@ -245,7 +245,7 @@ function rackPiece(env, plan) {
   const name = (i) => 'the ' + plan.periods[i] + '-beat pendulum';
   return {
     title: rackTitle(plan),
-    brief: WORDS[n][0].toUpperCase() + WORDS[n].slice(1) + ' pendulums hang from one bar, their periods written under them. '
+    brief: 'A vigil kept in beats. ' + WORDS[n][0].toUpperCase() + WORDS[n].slice(1) + ' pendulums hang from one bar, their periods written under them. '
       + 'At beat 0 all of them swing through the centre to the right together. One whose period is P beats comes back through the centre heading right every P beats.',
     goal: 'Name the first beat when all of them come through the centre heading right together, and pick the ones that do at beat ' + plan.at + '.',
     aspect: '16 / 10',
@@ -265,7 +265,7 @@ function rackPiece(env, plan) {
       const meetRight = beat === meet;
       s.to = Number.isFinite(beat) ? Math.max(0, Math.min(60, beat)) : 0;
       s.beat = 0;
-      if (meetRight && pickRight) return { solved: true, say: 'all through together at beat ' + meet + '; ' + through.map(name).join(' and ') + ' at beat ' + plan.at };
+      if (meetRight && pickRight) return { solved: true, say: 'the vigil holds: all through together at beat ' + meet + '; ' + through.map(name).join(' and ') + ' at beat ' + plan.at };
       const parts = [];
       if (!meetRight) {
         const together = Number.isFinite(beat) && beat >= 1 ? throughAt(plan.periods, beat).length : 0;
@@ -523,8 +523,8 @@ function springPiece(env, plan) {
   const breathsOf = (tau) => (tau / plan.breath).toFixed(1);
   return {
     title: springTitle(plan),
-    brief: 'Two pendulums of the same length, joined by a spring. Only the first is let go, from the side; the spring hands the swing across until the first hangs still and the second has all of it. '
-      + 'A stiffer spring hands it across at a different pace. One breath is ' + plan.breath + ' seconds. Each check runs the pair and leaves its mark on the ruler.',
+    brief: 'The rite of the handed swing. Two pendulums of the same length, joined by a spring. Only the first is let go, from the side; the spring hands the swing across until the first hangs still and the second has all of it. '
+      + 'A stiffer spring hands it across at a different pace. One breath is ' + plan.breath + ' seconds. Each check lets the pair go and leaves its mark on the ruler.',
     goal: 'Set the spring so the swing crosses to the second pendulum in ' + WORDS[plan.breaths] + ' breaths, and say what a ' + plan.ask + ' spring would do.',
     aspect: '16 / 10',
     checkLabel: 'let go',
@@ -542,7 +542,7 @@ function springPiece(env, plan) {
       s.replay = { k, t: 0 };
       s.loop = false;
       const took = 'crosses in ' + breathsOf(tau) + ' breaths';
-      if (onMark && thenRight) return { solved: true, say: took + ': on the mark' };
+      if (onMark && thenRight) return { solved: true, say: took + ': on the mark, the swing handed whole' };
       const parts = [onMark ? took + ': on the mark' : took + (tau < sol.target ? ', too soon' : ', too late')];
       if (!thenRight) parts.push('and the ' + plan.ask + ' spring would not do that');
       return { solved: false, say: parts.join('; ') };
@@ -611,7 +611,7 @@ export default {
       const plan = springPlan(env);
       return {
         title: springTitle(plan),
-        text: 'Two pendulums and one spring. Set the spring so the swing crosses from the first to the second in ' + WORDS[plan.breaths] + ' breaths, then say what a ' + plan.ask + ' spring would do.',
+        text: 'Two pendulums, one spring, one swing to hand across. Set the spring so the swing crosses from the first to the second in ' + WORDS[plan.breaths] + ' breaths, then say what a ' + plan.ask + ' spring would do.',
         mono: 'breath   ' + plan.breath + ' seconds\ncross in ' + plan.breaths + ' breaths\nalone    one swing in ' + OWN + ' seconds',
         aspect: '16 / 10',
         paint: (g, w, h, cardEnv) => springPreview(g, w, h, cardEnv, plan),
@@ -621,7 +621,7 @@ export default {
     const plan = rackPlan(env);
     return {
       title: rackTitle(plan),
-      text: 'Set swinging together at beat 0: when do all of them come through the centre together again, and which are through at beat ' + plan.at + '?',
+      text: 'A vigil in beats. Set swinging together at beat 0: when do all of them come through the centre together again, and which are through at beat ' + plan.at + '?',
       mono: 'periods  ' + plan.periods.join(', ') + ' beats\nasked    beat ' + plan.at,
       aspect: '16 / 10',
       paint: (g, w, h, cardEnv) => rackPreview(g, w, h, cardEnv, plan),

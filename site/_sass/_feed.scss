@@ -108,10 +108,14 @@
   @include type.scale(label-medium);
 }
 
+// A card's name is one of the rite's words and wears the serif (README: "Ritual axiom"); the line
+// under it, which says what to do, stays in the sans.
 .card-title {
   margin: 0;
   color: var(--md-sys-color-on-surface);
-  @include type.scale(title-medium);
+  @include type.scale(title-large);
+  @include type.rite;
+  font-size: 1.15rem;
   overflow-wrap: anywhere;
 }
 

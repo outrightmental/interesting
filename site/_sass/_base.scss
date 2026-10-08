@@ -39,10 +39,12 @@ body {
   padding: 0 0 3.5rem;
 }
 
+// A page's heading is one of the rite's words, so it wears the serif (type.rite); the overline a
+// world page writes its name as (.stage-world, _stage.scss) is a label and keeps the sans.
 h1 {
   margin: 0;
   @include type.scale(headline-large);
-  letter-spacing: -0.01em;
+  @include type.rite;
 }
 
 @media (min-width: 840px) {

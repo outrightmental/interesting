@@ -44,3 +44,17 @@ $scale: (
 // The font stacks. Roboto is M3's default and lands wherever it is installed; nothing is fetched.
 $sans: Roboto, 'Helvetica Neue', system-ui, -apple-system, 'Segoe UI', sans-serif;
 $mono: 'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
+
+// The rite's face (README: "Ritual axiom"): the one serif on the site, worn by the words that carry
+// the atmosphere -- a page's heading, a piece's title, a card's name, the persona sheet's title, the
+// question the threshold asks -- and never by a control, a knob's ask, a brief, a goal or a status
+// line, which stay in $sans. So the atmosphere and the instruction can be told apart by the face
+// they are set in, and a word in the serif is never one a visitor has to act on. A system stack,
+// like $sans: nothing is fetched. Include it after the scale, which sets the weight it overrides.
+$rite: 'Iowan Old Style', 'Palatino Linotype', Palatino, 'Book Antiqua', Georgia, 'Times New Roman', serif;
+
+@mixin rite {
+  font-family: $rite;
+  font-weight: 400;
+  letter-spacing: -0.005em;
+}
