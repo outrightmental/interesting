@@ -2175,18 +2175,22 @@ function start() {
   }, 1500);
   /* Settable where it is a dependency (issue #93): every piece this stage deals is made at the
      persona's difficulty, so the one slider that sets it stands beside the piece as well as in the
-     sheet. Moving it deals this piece again -- the same seed and the same card, so the subject the
-     visitor pressed stays the subject and only how hard it is asked moves. A piece is never
-     powered down over it: the setting always holds a value, and the alternative would be every
-     puzzle on the site dimmed behind a slider nobody had been asked to touch yet. */
+     sheet. A piece is never powered down over it: the setting always holds a value, and the
+     alternative would be every puzzle on the site dimmed behind a slider nobody had been asked to
+     touch yet. */
   if (ui.tune && persona && typeof persona.tuner === 'function') {
-    persona.tuner(ui.tune, {
-      note: 'Every piece on this site is dealt at this setting.',
-      onChange() {
-        if (!current) return;
-        open(current.world.file, current.seed,
-          { push: false, focus: false, variant: current.variant, card: current.card });
-      }
+    persona.tuner(ui.tune, { note: 'Every piece on this site is dealt at this setting.' });
+  }
+  if (persona && typeof persona.onDifficulty === 'function') {
+    // Deal this piece again whenever the setting changes -- the same seed and the same card, so
+    // the subject the visitor pressed stays the subject and only how hard it is asked moves. The
+    // re-deal hangs off the persona's own change rather than this slider's, so moving the setting
+    // in the persona sheet changes the piece on the stage just as moving the slider beside it
+    // does: one setting, every puzzle on the site, settable wherever it is met.
+    persona.onDifficulty(() => {
+      if (!current) return;
+      open(current.world.file, current.seed,
+        { push: false, focus: false, variant: current.variant, card: current.card });
     });
   }
   if (persona && typeof persona.onSky === 'function') {
