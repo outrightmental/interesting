@@ -1220,7 +1220,9 @@ invariant of the iteration, stated in the prompt and held to in code.
   dots for progress, and the ceremony — a done chip at the end of that row of dots, a burst in the
   world's palette and a short chime; for a visitor who asked for less motion there is no burst and
   no transition, only the chip. Nothing of the ceremony is laid over the scene and nothing of it
-  closes the piece down (see [Continued-interaction axiom](#continued-interaction-axiom)). The scene fills the real estate the first screen has (issue #65): it
+  closes the piece down (see [Continued-interaction axiom](#continued-interaction-axiom)), and every
+  press on the scene is answered — by the piece's own `tap()`, or by the stage itself where the piece
+  has nothing to do with it (see [Responsiveness axiom](#responsiveness-axiom)). The scene fills the real estate the first screen has (issue #65): it
   is as tall as the viewport leaves once the nav's room, `<main>`'s padding, the heading — measured,
   because a title that wraps takes two lines — and the margin that lets the feed peek are off it,
   and as wide as that height allows at the piece's own aspect ratio, which is also the width of its
@@ -1325,7 +1327,7 @@ invariant of the iteration, stated in the prompt and held to in code.
   scenario steps by hand so a 1.8-second hold costs nothing, a canvas that records nothing, and a
   feed that deals the worlds it is told to. It plays every piece the way a visitor who knows the
   answer would — the helpers worked, the answers set to the module's own solution, read by asking
-  the module for the very piece the stage opened — and presses the check. Eight scenarios: a world
+  the module for the very piece the stage opened — and presses the check. Nine scenarios: a world
   played, another played, and the first dealt again, each round solving, sitting out six seconds
   of its own clock to prove the stage does not see itself out, and then opening the next when the
   way on is pressed; every answer set wrong and checked, which must be refused, counted, said on
@@ -1336,14 +1338,16 @@ invariant of the iteration, stated in the prompt and held to in code.
   have the check offered; a knob nobody touched, which must stay unset *and* be named, with the
   check withheld and the way on still dim over it; a hold held past the fill, which must be set by
   the bar filling and not by the release (issue #74); a piece abandoned with a hold still pressed
-  down, after which nothing of it may be on the stage or still running; and a card pressed, which
+  down, after which nothing of it may be on the stage or still running; a press on the scene the
+  piece has nothing to do with, which the stage must answer itself and must not advance anything by
+  (issue #89); and a card pressed, which
   must open as that card — its own title and line while the module loads, its configuration on the
   piece's `env`, its stretch on the scene's frame, and never the world's generic line (issue #80).
   `StageTest` plays purpose-built pieces through it and `RealSiteTest` plays the site as committed;
   like the piece harness it is outside `/site`, so a run cannot soften it. Deliberately, it holds
   the site as committed rather than refusing a plan: it drives the stage through the stage's own
   elements, and those are a run's to rewrite, so gating plans on it would pin markup the silo leaves
-  open. The prompt says so, and says to keep all nine true when rewriting the stage.
+  open. The prompt says so, and says to keep all ten true when rewriting the stage.
 - **Held to in code.** `check_completion` in
   [`.github/scripts/make_interesting.py`](.github/scripts/make_interesting.py) reads the one list
   of worlds off the built home page (the `#site-worlds` JSON the layout writes from
@@ -1372,7 +1376,7 @@ invariant of the iteration, stated in the prompt and held to in code.
   on the committed site rather than on a plan, for the reason given above.
 - **True of the site as committed**: `RealSiteTest` builds `/site` and plays every world's piece
   through the law on every pull request and before every deploy, plays the stage itself through the
-  eight scenarios above, checks that every world page is the stage and that the threshold hosts the
+  nine scenarios above, checks that every world page is the stage and that the threshold hosts the
   question on it, and checks that the limits the prompt states are the harness's own.
 
 ### Continued-interaction axiom
@@ -1435,7 +1439,81 @@ out of the way of the content it is reporting on.
   choice rather than a lock (`js/threshold.js`), and the feed's stack refills as it is drawn down
   (`js/feed.js`), so the river has no end to arrive at. A card pressed does leave the stack — but
   that is the card *becoming* the feature, which is the [alignment
-  axiom](#the-feature-and-the-feed), not a door closing.
+  axiom](#the-feature-and-the-feed), not a door closing. The other half of answering a visitor is
+  answering them *now*, which is the [Responsiveness axiom](#responsiveness-axiom) below.
+
+### Responsiveness axiom
+
+**Every press on the main canvas of an activity must do something, even if it is a tiny rejection
+effect — unresponsiveness is uninteresting.** A press on the picture is a visitor asking the piece a
+question, and an answer of nothing at all is the one answer this site does not give. The
+[Continued-interaction axiom](#continued-interaction-axiom) above says a piece stays available as
+long as the visitor is interested; this says what *available* owes them, which is an answer to every
+gesture they make at it.
+
+- **The piece answers most presses; the stage answers the rest.** A press on the scene reaches the
+  piece's own `tap()`, and what the piece draws, satisfies or moves is the answer. Where the piece
+  has nothing to do with the press — no `tap()` of its own, every `tap` knob still locked behind
+  another, a `tap()` that threw — and in the stage's own non-live moments, where there is no piece
+  to reach at all (a module still loading), `rejectTap()` in
+  [`site/js/stage.js`](site/js/stage.js) answers for it: one `.stage-reject` mark laid in the scene
+  at the point pressed, which opens, fades and is gone a fifth of a second later. The stage used to
+  return from that handler and do nothing whatever, and most of the time it is a module with no
+  `tap()` that the press was landing on, so pressing the picture of a world that does not read
+  taps was simply dead. The handler asks nothing at all about the stage's mode, so every state the
+  scene is on the screen in is covered by the one rule; the states it is *not* on the screen in — a
+  piece waiting on a sky, a world with nothing to play, the threshold quiet or asking — hide it
+  outright in `_sass/_stage.scss`, so there is no picture there to press and nothing to answer, and
+  what each of those offers instead is the one button that seeds a sky or the way on, already lit
+  (see [Powered down, never broken](#powered-down-never-broken)).
+- **Tiny, and mute.** Not a dialog, not a message, not a shake of the frame: a hairline ring in the
+  muted ink the rail's text is written in, in neither accent, because the accents are the colours
+  the pieces answer in. It takes no press of its own, says nothing to a screen reader beyond what
+  the scene's label already says, and makes no sound — the chime belongs to the finish, and a site
+  that clicked at every press is a site nobody could play in a quiet room. The brief is only that
+  a press is *visibly received*; receiving it must not interrupt a piece a visitor is in the middle
+  of, and must not be mistakable for the piece's own answer.
+- **It respects less motion, like every other motion of the stage.** `calm.matches` — the
+  `prefers-reduced-motion` query the stage already keeps, and `ctx.reduced` as a piece sees it —
+  puts `is-still` on the mark, so it is held still and taken away again rather than rippling open.
+  The change and not the shift, which is what the theme's crossfade does with the same query and
+  why the ceremony's burst does not run at all. `_sass/_stage.scss` holds the same answer behind
+  the media query, so a page whose script never read it behaves the same way.
+- **It never advances anything.** A rejection is not a knob set, a dot filled, a progress bar moved
+  or a piece finished, and it never reaches the piece: a `tap` knob is satisfied by the piece's own
+  `tap()` and by nothing else, which is the piece contract exactly as it was. A piece that wants to
+  refuse one particular press refuses it itself, inside `tap()`, where it can say why — the stage
+  cannot tell a tap the piece considered and declined from one it acted on, and guessing would lay
+  the stage's mark on top of the piece's own answer.
+- **Nothing of a press outlives its piece.** The mark is taken away on a timer registered like
+  every other timer of the stage's, and `close()` sweeps whatever is still there, so a press
+  answered a moment before the next piece opens leaves nothing behind — the same bargain as the
+  [Completion axiom](#completion-axiom)'s one teardown.
+- **Covered where the stage is covered.** The `pressAnswered` scenario in
+  [`.github/scripts/stage_harness.mjs`](.github/scripts/stage_harness.mjs) presses the scene where
+  the press has nothing to reach — while a module is loading, on a `tap` knob still locked, on a
+  piece with no `tap` knob at all — and reads back whether the stage answered, where it put the
+  mark, whether it was gone again, whether it said anything, and whether any knob, dot or finish
+  moved for it. Then the same press with the gate open, where the press is the piece's again and
+  the stage must add nothing of its own; the same press with less motion asked for; and a press on
+  a piece taken away under it. `StageTest` plays `LIVE_PIECE` through it, which counts the taps it
+  is told about onto its own live line, so a press the stage answered can be told apart from one it
+  passed on; `RealSiteTest` plays the site as committed and holds what can be held of any world's
+  piece without knowing which piece it is.
+- **Stated in the prompt, and not a coded axiom.** Like the continued-interaction axiom, it lives
+  in the completion axiom's block of the system prompt in
+  [`.github/scripts/make_interesting.py`](.github/scripts/make_interesting.py) and is held on the
+  committed site by the harness rather than by a `check_` function refusing a plan — the harness
+  drives the stage through the stage's own elements, and those are a run's to rewrite. There are
+  still nine coded axioms (see [One single experience](#one-single-experience)).
+- **Site-wide, not only the stage's.** The stage is where it had something to fix and where it is
+  held in code, but it is stated for any picture a visitor can press. A piece with no `tap` knob is
+  still free to write a `tap()` and answer presses itself — several worlds do — and that is the
+  axiom being kept, not avoided.
+- **What is deliberately not checked**: whether a press the piece *did* receive was answered well,
+  or at all. The stage hands the gesture over and cannot see what the piece made of it, so a piece
+  that takes a tap and sits there is the prompt's business and not the harness's; the one thing code
+  can settle is that the gesture is never dropped on the floor before the piece sees it.
 
 ### Silo
 
