@@ -614,6 +614,7 @@ function routePreview(g, w, h, env, plan) {
 }
 
 function routePiece(env, plan) {
+  const helps = asked(env).helps;
   const path = routePath(plan);
   const exit = COLUMNS[path[plan.n]];
   const lefts = path.slice(0, plan.n).filter((col, row) => plan.arrows[row * 4 + col] === -1).length;
@@ -628,8 +629,9 @@ function routePiece(env, plan) {
     steps: [
       { id: 'exit', ask: 'column where the root leaves', kind: 'choice', options: COLUMNS.map((label) => ({ label, value: label })) },
       { id: 'lefts', ask: 'left turns along the path', kind: 'number', min: 0, max: plan.n, step: 1, unit: 'turns' },
-      { id: 'hint', ask: 'one point halfway along the path', kind: 'press', count: 1, label: 'look halfway', optional: true }
-    ],
+      // The bed has one thing to say, so a fierce difficulty does not offer to say it.
+      helps > 1 ? { id: 'hint', ask: 'one point halfway along the path', kind: 'press', count: 1, label: 'look halfway', optional: true } : null
+    ].filter(Boolean),
     solution: { exit, lefts },
     check(c) {
       const right = Number(c.value('exit') === exit) + Number(Number(c.value('lefts')) === lefts);

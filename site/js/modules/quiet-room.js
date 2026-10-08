@@ -770,6 +770,7 @@ function secondLookPreview(g, w, h, env, plan) {
 }
 
 function secondLookPiece(env, plan) {
+  const helps = asked(env).helps;
   const after = secondLookAfter(plan);
   const row = changedRow(plan.pressed);
   const changed = litBy(plan.pressed, 3).filter(Boolean).length;
@@ -786,8 +787,9 @@ function secondLookPiece(env, plan) {
       { id: 'switches', ask: 'the two switches pressed: choose here or tap them in the first view', kind: 'pick', count: 2,
         items: Array.from({ length: 9 }, (_, i) => ({ label: 'row ' + (Math.floor(i / 3) + 1) + ', column ' + (i % 3 + 1), value: i })) },
       { id: 'row', ask: 'row with the most changed lamps', kind: 'choice', options: rows.map((label, i) => ({ label, value: i })) },
-      { id: 'hint', ask: 'the row of one pressed switch', kind: 'press', count: 1, label: 'narrow the search', optional: true }
-    ],
+      // One thing to say -- the row one switch is in -- so a fierce difficulty does not offer to say it.
+      helps > 1 ? { id: 'hint', ask: 'the row of one pressed switch', kind: 'press', count: 1, label: 'narrow the search', optional: true } : null
+    ].filter(Boolean),
     solution: { switches: plan.pressed.slice(), row },
     check(c) {
       const chosen = c.value('switches');
