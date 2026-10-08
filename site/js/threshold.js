@@ -423,8 +423,11 @@
   function mount(host, options) {
     if (!host) return null;
     var opts = options || {};
-    var probe = opts.probe ? probeById(opts.probe) : nextProbe();
+    var selector = host.id === 'persona-probe' ? document.getElementById('threshold-way') : null;
+    var requested = opts.probe || (selector && selector.value);
+    var probe = requested ? probeById(requested) : nextProbe();
     if (!probe) return null;
+    if (selector) selector.value = '';
     noteProbe(probe.probe);
     host.textContent = '';
     host.setAttribute('data-probe', probe.probe);
@@ -1189,6 +1192,13 @@
   transmogrify(state.orientation ? ORIENTATION_BY_ID[state.orientation] : null);
   save({ visits: state.visits, last: state.last, drift: state.drift,
     recent: state.recent, orientation: state.orientation });
+  var wayControl = document.getElementById('threshold-way');
+  if (wayControl) PROBES.forEach(function (probe) {
+    var option = document.createElement('option');
+    option.value = probe.probe;
+    option.textContent = probe.name;
+    wayControl.appendChild(option);
+  });
   window.threshold = {
     orientations: function () { return ORIENTATIONS.slice(); },
     orientation: function (id) { return ORIENTATION_BY_ID[id] || null; },

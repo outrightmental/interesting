@@ -239,7 +239,6 @@
   var activeDrag = null;
   var suppressClickUntil = 0;
   var openedBy = null;
-  var askingInSheet = false;
   var moveTimer = null;
   var sheetBox = null;
   function sheetStatus(text) { if (sheet && sheet.status) sheet.status.textContent = text; }
@@ -367,45 +366,15 @@
     if (!sheet || !sheet.reading) return;
     var r = reading();
     var isRead = readOf(r);
-    var t = window.threshold;
     sheet.reading.textContent = describeReading(r) + keptClause();
-    if (sheet.ask) {
-      sheet.ask.textContent = isRead ? 'ask another way' : 'ask me';
-      sheet.ask.hidden = askingInSheet || !t;
-    }
-    if (sheet.forget) sheet.forget.hidden = askingInSheet || !isRead;
+    if (sheet.forget) sheet.forget.hidden = !isRead;
     if (sheet.readingGo) {
-      if (isRead && !askingInSheet) {
+      if (isRead) {
         sheet.readingGo.hidden = false;
         sheet.readingGo.href = root + r.orientation.world;
         sheet.readingGo.textContent = r.orientation.worldName;
       } else sheet.readingGo.hidden = true;
     }
-  }
-  function askInSheet(focusFirst) {
-    var t = window.threshold;
-    if (!sheet || !sheet.probe || !t || typeof t.mount !== 'function' || askingInSheet) return;
-    stopAskingInCard();
-    askingInSheet = true;
-    sheet.probe.hidden = false;
-    renderReading();
-    t.mount(sheet.probe, {
-      onAnswer: function () {
-        stopAskingInSheet();
-        if (sheet.readingGo && !sheet.readingGo.hidden) sheet.readingGo.focus();
-        else if (sheet.ask) sheet.ask.focus();
-      },
-      onSkip: function () { stopAskingInSheet(); if (sheet.ask) sheet.ask.focus(); }
-    });
-    if (focusFirst) {
-      var first = sheet.probe.querySelector('button, input, [tabindex]');
-      if (first && typeof first.focus === 'function') first.focus();
-    }
-  }
-  function stopAskingInSheet() {
-    askingInSheet = false;
-    if (sheet && sheet.probe) { sheet.probe.textContent = ''; sheet.probe.hidden = true; }
-    renderReading();
   }
   function renderSheet() { renderField(); renderReading(); }
   function openSheet(section, opener) {
@@ -418,9 +387,7 @@
       else { sheet.host.setAttribute('open', ''); sheet.host.classList.add('persona-sheet-fallback'); }
     }
     renderSheet();
-    if (!readOf(reading())) askInSheet(section === 'reading');
-    var target = section === 'reading'
-      ? (askingInSheet ? sheet.probe.querySelector('button, input, [tabindex]') : sheet.ask)
+    var target = section === 'reading' ? sheet.ask
       : (sheet.field.querySelector('.persona-star') || sheet.drop);
     if (target && typeof target.focus === 'function') target.focus();
     sheet.host.scrollTop = 0;
@@ -434,7 +401,6 @@
     onSheetClosed();
   }
   function onSheetClosed() {
-    if (askingInSheet) stopAskingInSheet();
     activeDrag = null;
     sheet.host.classList.remove('persona-sheet-fallback');
     if (sheetBox) sheetBox.down();
@@ -453,8 +419,7 @@
       seed: document.getElementById('persona-seed'), remove: document.getElementById('persona-remove'),
       clear: document.getElementById('persona-clear'), status: document.getElementById('persona-sky-status'),
       reading: document.getElementById('persona-reading'), ask: document.getElementById('persona-ask'),
-      forget: document.getElementById('persona-forget'), readingGo: document.getElementById('persona-reading-go'),
-      probe: document.getElementById('persona-sheet-probe')
+      forget: document.getElementById('persona-forget'), readingGo: document.getElementById('persona-reading-go')
     };
     if (!sheet.field) { sheet = null; return; }
     var shell = window.interestingSite;
@@ -532,7 +497,12 @@
       },
       onCancel: function () { sheetStatus('Kept as it was.'); }
     });
-    if (sheet.ask) sheet.ask.addEventListener('click', function () { askInSheet(true); });
+    if (sheet.ask) sheet.ask.addEventListener('click', function (ev) {
+      if (!card || !card.probe) return;
+      ev.preventDefault();
+      closeSheet();
+      askInCard();
+    });
     if (sheet.forget) window.interestingSite.destructive(sheet.forget, {
       what: 'forget what this site has read about you',
       detail: 'The orientation it arrived at would go, and the palette the site is wearing with it. Your stars stay. It asks again whenever you like.',
@@ -553,7 +523,7 @@
     buildSheet();
     window.addEventListener('threshold:reading', function () {
       if (!askingInCard) refresh();
-      if (sheet && sheet.host.open && !askingInSheet) renderReading();
+      if (sheet && sheet.host.open) renderReading();
     });
     var t = window.threshold;
     if (t && typeof t.arrival === 'function' && t.arrival()) askInCard();
@@ -563,7 +533,12 @@
     seedSky: seedSky, thought: thought, setStars: setStars, addStar: addStar,
     seed: seed, clear: clear, onSky: onSky,
     open: function (section) { openSheet(section || 'sky', null); },
-    close: closeSheet, ask: askInCard, refresh: refresh
+    close: closeSheet,
+    ask: function () {
+      if (card && card.probe) askInCard();
+      else window.location.assign(root + 'index.html');
+    },
+    refresh: refresh
   };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
   else start();

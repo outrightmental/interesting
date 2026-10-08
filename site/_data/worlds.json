@@ -2,8 +2,8 @@
   "wayIn": [
     { "file": "index.html", "name": "the threshold", "gloss": "where it asks", "icon": "home",
       "what": "Start here: answer one question about a door, a stone or a mark to open a world you can play, or choose a world below." },
-    { "file": "moods.html", "name": "the mood atlas", "gloss": "how it asks, and every answer", "icon": "explore",
-      "what": "Try each question style, see what each reading points to, and jump straight into that world." },
+    { "file": "moods.html", "name": "the mood atlas", "gloss": "where a reading can lead", "icon": "explore",
+      "what": "See what each reading points to, then follow the suggested world or any world card." },
     { "file": "sitemap.html", "name": "site map", "gloss": "every page, described", "icon": "map",
       "what": "Scan every page in one pass, with one plain line on what to do first on each." }
   ],
