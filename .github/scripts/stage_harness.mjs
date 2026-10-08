@@ -30,6 +30,12 @@
                       six seconds -- long past the linger the stage used to depart on -- to see
                       that the piece it finished is still there, and then presses the way on in
                       the lower right, which is what opens the next.
+    afterDone         Play a piece to its finish and then go on playing with it. Done is not the
+                      End (issue #86): six seconds after the ceremony the frames must still be
+                      drawing, the knobs must still be enabled and settable again, a tap must still
+                      reach the piece, nothing may have been torn down -- and the ceremony must have
+                      played once through all of it. Also where the done mark's place in the tree is
+                      read off: a mark inside the scene is a mark over the content.
     sliderUsed        Play every knob, and use the slider without moving it -- the visitor is
                       happy where it is. The piece must still finish.
     sliderUntouched   Play every knob but the slider, and never touch it. The piece must not
@@ -61,7 +67,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { Worker, isMainThread, parentPort, workerData } from 'node:worker_threads';
 
-const SCENARIOS = ['rounds', 'sliderUsed', 'sliderUntouched', 'holdFilled', 'teardown', 'carried'];
+const SCENARIOS = ['rounds', 'afterDone', 'sliderUsed', 'sliderUntouched', 'holdFilled', 'teardown', 'carried'];
 const SCENARIO_TIMEOUT_MS = 20000;
 const MISSING_WORLD = 'stage-harness-nowhere.html'; // a world with no module: the teardown and the card
 const SEEDS = [4242, 101, 99991, 7]; // tried in turn until a piece with the knob wanted turns up
@@ -370,9 +376,6 @@ function makePage(worlds, clock) {
   const sbody = make('div', 'stage-body', inner);
   const scene = make('div', 'stage-scene', sbody);
   make('canvas', 'stage-canvas', scene).setAttribute('aria-label', 'the scene');
-  const done = make('div', 'stage-done', scene);
-  done.hidden = true;
-  make('p', 'stage-done-text', done).textContent = 'done';
   const side = make('div', null, sbody, 'stage-side');
   make('div', 'stage-knobs', side);
   make('p', 'stage-status', side);
@@ -380,12 +383,20 @@ function makePage(worlds, clock) {
   wanted.hidden = true;
   const foot = make('div', null, side, 'stage-foot');
   make('div', null, foot, 'stage-foot-actions');
-  make('div', 'stage-progress', foot);
+  // The done mark reports from the end of the dots' row and never from over the scene (issue #86),
+  // so it is written here, inside the rail, the way _includes/stage.njk writes it. Where it is in
+  // the tree is one of the things look() reads back: a mark laid over the picture is the bug.
+  const end = make('div', null, foot, 'stage-foot-end');
+  const done = make('p', 'stage-done', end);
+  done.hidden = true;
+  make('span', 'stage-done-text', done).textContent = 'done';
+  make('div', 'stage-progress', end);
   // The way on, outside the inner the vanish transforms, and dim until the stage lights it.
   make('button', 'stage-next', stage, 'stage-next').disabled = true;
 
   const events = [];
   const modes = [];
+  const drawn = { frames: 0 };
   const win = {
     document: doc,
     innerHeight: 800,
@@ -431,7 +442,13 @@ function makePage(worlds, clock) {
   globalThis.history = { pushState() {}, replaceState() {} };
   globalThis.location = { hash: '' };
   globalThis.performance = { now: () => clock.now };
-  globalThis.requestAnimationFrame = (fn) => clock.set(fn, 16);
+  // Every animation frame the stage is given is counted, because a frame loop that is still
+  // running is most of what "the piece is still live" means and there is nothing else to read it
+  // off (issue #86). The id is the clock's own, so cancelAnimationFrame still reaches it.
+  globalThis.requestAnimationFrame = (fn) => clock.set((now) => {
+    drawn.frames += 1;
+    fn(now);
+  }, 16);
   globalThis.cancelAnimationFrame = (id) => clock.clear(id);
   globalThis.getComputedStyle = () => ({ getPropertyValue: () => '' });
   globalThis.CustomEvent = class CustomEvent {
@@ -441,7 +458,7 @@ function makePage(worlds, clock) {
     }
   };
 
-  return { doc, win, stage, events, modes };
+  return { doc, win, stage, events, modes, frames: () => drawn.frames };
 }
 
 /* ---- playing the stage --------------------------------------------------------------------- */
@@ -551,6 +568,12 @@ async function playKnobs(page, clock, slider) {
   return knobsOn(page).filter((knob) => !isSet(knob)).map((knob) => knob.dataset.id);
 }
 
+// Whether `node` is inside `box`: the done mark laid over the scene is a mark over the content.
+function within(node, box) {
+  for (let at = node; at; at = at.parentNode) if (at === box) return true;
+  return false;
+}
+
 function look(page) {
   const by = (id) => page.doc.getElementById(id);
   return {
@@ -560,9 +583,14 @@ function look(page) {
     wanted: by('stage-wanted').hidden ? '' : by('stage-wanted').textContent,
     brief: by('stage-brief').textContent,
     world: by('stage-world').textContent,
-    knobs: knobsOn(page).map((knob) => ({ id: knob.dataset.id, kind: knob.dataset.kind, set: isSet(knob) })),
+    // `live` is whether every control on the knob is still enabled, which is what a finished piece
+    // being still playable looks like from outside (issue #86). A knob with no control of its own
+    // -- a wait, whose bar the piece fills -- is live vacuously.
+    knobs: knobsOn(page).map((knob) => ({ id: knob.dataset.id, kind: knob.dataset.kind, set: isSet(knob),
+                                          live: knob.querySelectorAll('button, input').every((c) => !c.disabled) })),
     dots: by('stage-progress').querySelectorAll('.stage-dot').length,
     doneShown: !by('stage-done').hidden,
+    doneOverScene: within(by('stage-done'), by('stage-scene')),
     nextLit: !by('stage-next').disabled,
     focused: focusedId(),
     sceneLabel: by('stage-canvas').getAttribute('aria-label'),
@@ -642,6 +670,71 @@ async function rounds(stageDir, worlds, deal, clock) {
   }
   return { rounds: report, completes: page.events.filter((e) => e.type === 'stage:complete').length,
            opens: page.events.filter((e) => e.type === 'stage:open').length };
+}
+
+// The kinds of knob a visitor can work a second time: everything but the two the piece sets itself.
+const RESETTABLE = ['choice', 'toggle', 'range', 'press', 'hold'];
+
+/* A piece played to its finish, and then played on with. Done is not the End (issue #86): finishing
+   reports completion and lights the way on, and takes nothing away. So this plays a piece out, sits
+   on it for six seconds the way the rounds do, and then goes on using it -- a knob worked a second
+   time, a tap on the scene -- reading off the stage at every step whether any of it still works.
+
+   Nothing here judges; the readings are what the assertions are made from. `later` and
+   `drawing` are a second apart with nobody touching anything, so a frame count that moved between
+   them is the piece's own loop still drawing (the burst's frames are long spent by then). `afterKnob`
+   and `afterTap` are the stage still carrying a visitor's gestures to a piece it has already
+   finished. And `completes` says the ceremony played once for all of that: a finished piece being
+   playable is not a piece that finishes over and over. */
+async function afterDone(stageDir, worlds, deal, clock) {
+  const page = await load(stageDir, worlds, clock);
+  let dealt = 1;
+  page.win.interestingFeed = {
+    take: () => (dealt < deal.length ? deal[dealt++] : null),
+    consume() {}
+  };
+  const api = page.win.interestingStage;
+  const snap = () => Object.assign({
+    frames: page.frames(),
+    completes: page.events.filter((e) => e.type === 'stage:complete').length,
+    opens: page.events.filter((e) => e.type === 'stage:open').length
+  }, look(page));
+
+  api.open(deal[0].file, deal[0].seed, { arriving: true });
+  if (!(await waitForPiece(page, clock))) return { playable: false, world: '', seed: 0, look: look(page) };
+  const was = api.current();
+  page.events.length = 0;
+  const unset = await playKnobs(page, clock, 'move');
+  const out = { playable: true, world: was.file, seed: was.seed, unset, atDone: snap() };
+
+  // Six seconds of nobody doing anything, and then one more: the stage must not have packed up in
+  // either of them, and the second is where the frames are counted.
+  await clock.advance(6000);
+  out.later = snap();
+  await clock.advance(1000);
+  out.drawing = snap();
+
+  // A knob worked again, long after the piece was over. Which knob is the piece's to decide, so one
+  // is looked for rather than assumed, and the scenario says when it found none to work.
+  const again = knobsOn(page).find((knob) => RESETTABLE.indexOf(knob.dataset.kind) !== -1) || null;
+  out.reworked = again ? again.dataset.id : '';
+  out.reworkedKind = again ? again.dataset.kind : '';
+  if (again) await setKnob(page, clock, again, 'move');
+  await clock.advance(400);
+  out.afterKnob = snap();
+
+  // And the scene tapped, which is the other half of a toy: a piece with no tap() of its own hears
+  // nothing, and the stage still has to carry the gesture as far as the piece.
+  const canvas = page.doc.getElementById('stage-canvas');
+  canvas.dispatchEvent({ type: 'pointerdown', clientX: 211, clientY: 133 });
+  await clock.advance(400);
+  out.afterTap = snap();
+
+  // Nothing of the piece was torn down, and the way on is still the one thing that takes it away.
+  out.running = clock.waiting;
+  out.current = api.current();
+  out.onward = await pressOnward(page, clock, was);
+  return out;
 }
 
 // One piece with a slider on it, played with the slider either used where it stands or never
@@ -836,6 +929,7 @@ async function carried(stageDir, worlds, deal, clock) {
 async function runScenario(name, stageDir, worlds, deal) {
   const clock = makeClock();
   if (name === 'rounds') return rounds(stageDir, worlds, deal, clock);
+  if (name === 'afterDone') return afterDone(stageDir, worlds, deal, clock);
   if (name === 'sliderUsed') return slider(stageDir, worlds, deal, clock, 'use');
   if (name === 'sliderUntouched') return slider(stageDir, worlds, deal, clock, 'leave');
   if (name === 'holdFilled') return holdFilled(stageDir, worlds, deal, clock);
