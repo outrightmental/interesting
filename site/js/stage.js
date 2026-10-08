@@ -5,15 +5,42 @@
 
       <script src='js/stage.js' type='module'></script>
 
-  A page's feature is not a fixed page any more. It is a piece: a small, procedurally generated,
-  randomly configured item with a few knobs and a clear end -- a fidget toy with levers on it --
-  made on the spot by a world's module from a seed. The visitor sets the knobs, the piece is
-  finished, it plays its ceremony -- and then it waits. The stage never moves on by itself
-  (issue #78): the ceremony ends by lighting the way on, one mark pinned in the lower right of
-  the screen for every piece, and the press of that is what vanishes the piece and opens the next
-  card in the feed's stack in its place. So one piece follows another without end, and it is the
-  visitor who says when. _includes/stage.njk writes the stage; this file runs it; js/feed.js
-  hands it the next card.
+  A page's feature is not a fixed page any more. It is a piece, and every piece is a puzzle: a
+  small, procedurally generated problem with a stated goal, a few controls to answer it with, and
+  one way to find out whether the answer is right -- made on the spot by a world's module from a
+  seed. The visitor studies the scene, sets their answer on the knobs, and presses *check*; the
+  stage asks the piece whether that answer solves it, and only a solved answer finishes the piece.
+  A wrong answer costs a try, says so, and leaves everything exactly as it was, so the visitor can
+  think again. When the puzzle is solved it plays its ceremony -- and then it waits. The stage
+  never moves on by itself (issue #78): the ceremony ends by lighting the way on, one mark pinned
+  in the lower right of the screen for every piece, and the press of that is what vanishes the
+  piece and opens the next card in the feed's stack in its place. So one puzzle follows another
+  without end, and it is the visitor who says when. _includes/stage.njk writes the stage; this
+  file runs it; js/feed.js hands it the next card.
+
+  ---------------------------------------------------------------------------------------------
+  The puzzle axiom: every piece is a legitimate puzzle
+
+  A fidget toy finishes when its levers have been pulled; a puzzle finishes when it is solved, and
+  that is the whole difference. Every piece on this site is held to what makes a puzzle legitimate:
+
+    - a goal, stated in one line (`goal`), that says what counts as solved;
+    - the information needed to solve it, in the scene and the brief -- deduction, not guessing;
+    - an answer the visitor commits to on the knobs and checks with one press, so a wrong answer
+      is a try spent and not a hint handed over knob by knob;
+    - a verifier (`check(ctx)`) that says whether the answer solves it, and a solution the piece
+      knows (`solution`) that the law can prove solves it -- and prove that every wrong answer
+      does not;
+    - and every declared answer load-bearing: change any one of them and the puzzle is no longer
+      solved.
+
+  Two families of piece live inside that. A *deduction* puzzle puts everything on the screen and
+  asks for an answer (a cipher to read, an order to find, a count to make, the odd one out). An
+  *experiment* puzzle asks for a setting and runs the apparatus when the answer is checked (aim
+  the probe through the ring, tune the spring so the swing crosses in three breaths): its
+  check() computes the run deterministically and its frame() replays it, so a try is a run. In
+  both, a wrong check gives feedback and never the answer, and a hint is the piece's to offer,
+  at a price it reports through ctx.hint().
 
   ---------------------------------------------------------------------------------------------
   The continued-interaction axiom: Done is not the End
@@ -57,16 +84,21 @@
 
       piece(env) {
         return {
-          title: 'three breaths at your pace',     // the piece's name, in the site's voice
-          brief: 'Set the pace and follow three breaths; the room goes dark when you are done.',
-          aspect: '16 / 9',                         // the scene's shape (optional)
-          auto: true,                               // finished when every knob is set (default);
-                                                    // false: the piece calls ctx.complete() itself
+          title: 'the dark room',                   // the puzzle's name, in the site's voice
+          brief: 'Press a lamp and it flips itself and its four neighbours.',   // the rules
+          goal: 'Put every lamp out.',              // one line: what counts as solved (required)
+          aspect: '1 / 1',                          // the scene's shape (optional)
+          checkLabel: 'check the room',             // the word on the check button (optional)
           steps: [                                  // the knobs, 2 to 5 of them, in order
-            { id: 'pace', ask: 'the pace', kind: 'choice',
-              options: [{ label: 'slow', value: 12 }, { label: 'slower', value: 16 }] },
-            { id: 'breathe', ask: 'follow three breaths', kind: 'wait', after: 'pace' }
+            { id: 'lamps', ask: 'the lamps', kind: 'grid', rows: 4, cols: 4 },
+            { id: 'hint', ask: 'one lamp shown', kind: 'press', count: 1, label: 'show one' }
           ],
+          solution: { lamps: [1, 0, 0, 1, ...] },   // for every answer knob, the value that solves
+                                                    // it (required; see below)
+          check(ctx) {                              // the verifier (required): read the answer off
+            const dark = ...;                       // ctx.value(id) and say whether it solves
+            return { solved: dark, say: dark ? 'every lamp is out' : 'three lamps still burn' };
+          },
           start(ctx) {},                            // the scene is ready to draw on (called again
                                                     // after a resize if the piece has no frame)
           frame(t, dt, ctx) {},                     // one frame (optional); t is seconds since the
@@ -74,49 +106,88 @@
           apply(id, value, ctx) {},                 // a knob was set (the stage sets it)
           tap(x, y, ctx) {},                        // the scene was tapped, x and y in 0..1
                                                     // (optional; a 'tap' knob needs it)
-          end(ctx) {}                               // the finale, once, when the piece is finished;
+          end(ctx) {}                               // the finale, once, when the puzzle is solved;
                                                     // the piece plays on after it (optional)
         };
       }
 
-  Knob kinds, and who satisfies them:
-    choice   2-4 options; the stage calls apply(id, option.value) and marks the knob set
+  Knob kinds. An *answer* knob is one named in `solution`; the rest are helpers (a hint, a run,
+  a view to switch), and a piece may use any kind for either, except that press, hold and wait are
+  never answers. Every knob is the visitor's to set; what the stage reads back is ctx.value(id).
+    choice   2-4 options; apply(id, option.value)
     toggle   one button, on or off (off unless `value` is true); apply(id, boolean)
     range    a slider: min, max, step, value, low, high (the words at the ends); apply(id, number)
-             on every move, set the first time the visitor lets go of it -- moved or not, because
-             a slider already has an answer on it and leaving it where it is is giving that answer;
-             ctx.value(id) is where it starts from the first frame on
+             on every move, set the first time the visitor lets go of it -- moved or not, because a
+             slider already has an answer on it; ctx.value(id) is where it starts from the first
+             frame on. In `solution` a range may be { value, near }: any value within `near` of
+             it solves, which is how an experiment names a target with a tolerance
+    number   an exact count: min, max, step, value, unit; a stepper with a field, set the first
+             time it is stepped or typed into; apply(id, number)
+    word     a short typed answer: length (the most letters), placeholder, upper (true to
+             capitalise as typed); set once something is typed; apply(id, string). The verifier
+             compares how it likes (case, spaces); solution gives the string
+    order    items ({ label, value }) the visitor arranges with up and down; value is the array
+             of item values in their current order, set at the first move; solution gives the
+             array that solves
+    pick     items ({ label, value }) with `count` to choose; value is the array of chosen item
+             values in item order, set once exactly `count` are chosen (any number, if `count` is
+             left out); solution gives the array
+    grid     rows x cols cells of `states` states (2 unless given) the visitor cycles by pressing;
+             value is the flat row-major array of cell states (from `value` if given, else all 0),
+             set at the first press; `labels` names the states for a screen reader; solution gives
+             the array
     press    one big button pressed `count` times (label); apply(id, n) each press, set at count
-    hold     one big button held for `ms` (label); apply(id, heldMs) the moment the bar fills,
-             with no wait for the release: the holding is the answer, so letting go after that
-             changes nothing and letting go before it is a hold that did not count
-    tap      the scene itself, tapped: the piece's tap() decides, and calls ctx.satisfy(id)
-             when the knob is set (ctx.progress(id, 0..1) shows how close). A tap anywhere must
-             count, since the stage adds a button for anyone who cannot tap the scene, which
-             calls tap() at a random point, and the law taps at random points too.
+    hold     one big button held for `ms` (label); apply(id, heldMs) the moment the bar fills
+    tap      the scene itself, tapped: the piece's tap() decides, and calls ctx.satisfy(id) when
+             the knob is set (ctx.progress(id, 0..1) shows how close). A tap answer's solution is
+             { taps: [{ x, y }, ...], wrong: [{ x, y }, ...] } -- the points that solve it, in
+             order, and points that do not -- because only the piece knows where its targets are.
+             The stage adds a 'tap for me' button for anyone who cannot tap the scene, which taps
+             at a random point, so a tap knob with a *location* answer is one a piece should pair
+             with a knob of another kind, or turn into a grid or a pick
     wait     a timed phase the piece runs in frame(): it calls ctx.progress(id, 0..1) and
              ctx.satisfy(id) when done
   Only a tap or a wait knob is the piece's to set, and never before the visitor has set
-  something themselves: a piece is finished by the person playing it. A knob with
-  `after: '<id>'` is disabled until that knob is set. Every knob stays live after it is set -- a
-  toy is for fidgeting with -- and the piece is finished when all are set (or, with auto: false,
-  when it calls ctx.complete()). Every knob stays live after the piece is finished, too, which is
-  the axiom above: apply() carries on being called, tap() carries on being reached, and frame()
-  carries on being drawn, until the visitor presses the way on. A piece's finale is written for a
-  scene its visitor may keep playing with, not for a scene about to be taken away.
+  something themselves. A knob with `after: '<id>'` is disabled until that knob is set. A knob
+  with `optional: true` is a helper the check does not wait for -- a hint, a second look -- so a
+  one-answer puzzle can offer one without forcing it; it is never an answer. Every knob stays
+  live once set, and stays live once the puzzle is solved -- a solved puzzle is still the
+  visitor's to play with -- but the ceremony plays once.
+
+  The check. The stage renders one filled *check* button under the knobs, enabled once every
+  knob is set, and a press of it is a try: the stage calls check(ctx) and the piece answers
+  { solved, say }. Solved finishes the piece (ceremony, the done chip reading *solved*, the way on
+  lit); not solved writes `say` -- or 'not yet' -- on the live line, counts the try, and changes
+  nothing else. A piece never finishes itself: there is no complete() and no auto, and a tap or a
+  wait knob being set is one more knob set, not a finish. ctx.tries is how many checks there have
+  been and ctx.hints how many hints the piece has reported with ctx.hint(); the stage shows both.
+
+  The solution. `solution` names every answer knob and the value that solves it; the law sets the
+  knobs to it and presses check, and a piece that does not solve on its own solution is refused.
+  It then sets every answer wrong at once, and each answer wrong on its own with the rest right,
+  and a piece that is solved by any of those is refused too, because a declared answer that does
+  not matter is a knob that is not an answer. A wrong value is the other option, the opposite
+  toggle, the far end of a range or a number, the string with its last letter changed, the order
+  with its first two swapped, the pick with one chosen swapped for one not, the grid with one
+  cell cycled, the tap at the piece's own `wrong` points. So design the answer so that those are
+  wrong: a range whose far end also solves is a target with no edge.
+
+  ctx.set(id, value) is for a piece whose scene is the control: a tap on a cell of a grid drawn
+  on the canvas, an item dragged into order. It may only be called from tap(), it writes the
+  value onto the knob (the rail follows), and it counts as the visitor setting that knob.
 
   Every knob has to be settable by the visitor it is put in front of, and the stage has to say
-  which ones are not set yet. A knob nobody can satisfy is a piece nobody can finish, and the way
+  which ones are not set yet. A knob nobody can satisfy is a puzzle nobody can check, and the way
   that goes wrong is quiet: the visitor sets the last knob on the page, the scene answers, and
-  nothing happens, because the piece is waiting on one further up that never looked unfinished.
+  nothing happens, because the check is waiting on one further up that never looked unfinished.
   The line under the live line names what is left, for exactly that (issue #60).
 
   A piece is one instantiation and nothing of it outlives its turn. close() is the one teardown
   and it takes the whole piece apart -- the frame loop, the ceremony's timers, a ticker under a
-  hold still pressed down, the knobs, the lines, the dots, the mark, the scene and its shape -- so
-  every piece opens on an empty stage however many times its world has come round before. Its turn
-  runs to the press of the way on and not to the finish: nothing is torn down while the visitor is
-  still playing, however long ago they finished.
+  hold still pressed down, the knobs, the check, the lines, the dots, the mark, the scene and its
+  shape -- so every piece opens on an empty stage however many times its world has come round
+  before. Its turn runs to the press of the way on and not to the solve: nothing is torn down
+  while the visitor is still playing, however long ago they solved it.
 
   env, what piece() is handed, and the same configuration js/feed.js hands paint() and spark():
     { seed, rnd(), pick(list), int(a, b), chance(p), hash(text), stars, points(w, h, pad),
@@ -127,27 +198,31 @@
     the colours the three colour dials derived. card is the content the card was showing when it
     was pressed -- { kind, overline, title, quote, text, mono, cite, aspect, of } -- so a piece
     can open on the very thing a visitor pressed: card.of is whatever the module's own spark()
-    put there for it (a rule number, a coinage, the star it was drawn from), handed straight back.
-    A piece reads card when it has one and rolls its own subject when it is null, and either way
-    the same seed makes the same piece.
+    put there for it (a puzzle's case number, its word, the star it was drawn from), handed
+    straight back. A piece reads card when it has one and rolls its own subject when it is null,
+    and either way the same seed makes the same piece.
 
   ctx, the same object for the whole piece:
     canvas, g (its 2d context), w, h (CSS pixels; the context is already scaled for the screen),
     colors { bg, bg2, accent, accent2, fg, muted } in the world's palette, rnd() (seeded: the
     same seed makes the same piece), pick(list), int(a, b), chance(p), stars, points(w, h, pad),
     mix(a, b, t), alpha(c, a), reduced (less motion asked for), satisfy(id, value), progress(id,
-    fraction), status(text) (one live line under the knobs), value(id), done, elapsed (seconds),
-    complete().
+    fraction), status(text) (one live line under the knobs), value(id), set(id, value) (from
+    tap() only), hint() (one hint given), tries, hints, done (solved), elapsed (seconds).
 
-  The law: every world's piece must finish. .github/scripts/piece_harness.mjs drives each
-  module's piece through its knobs with a stub canvas, in a worker with no document, no clock
-  and no Math.random, and refuses one that does not complete expediently (two to five knobs,
-  under forty-five seconds of simulated time), that sets its own knobs before the visitor has
-  touched it, that is not the same piece for the same seed, or that is the same piece for every
-  seed. The AI run's check_completion holds every plan to it, and RealSiteTest holds the site as
-  committed. A piece is pure drawing and arithmetic on ctx: it never reaches for the document,
-  the window, the clock or the browser's storage, and a module is self-contained (it imports
-  nothing), which is also what lets the harness run it.
+  The law: every world's piece must be a puzzle that solves. .github/scripts/piece_harness.mjs
+  drives each module's piece through its knobs with a stub canvas, in a worker with no document,
+  no clock and no Math.random: it sets the helpers the way a visitor would and the answers to the
+  piece's own solution and presses check, which has to solve; then every answer wrong, and each
+  answer wrong alone, none of which may solve. It refuses a piece with no goal, no check or no
+  solution, one that solves before its visitor has set anything, one with fewer than two knobs or
+  more than five, one that is not the same for the same seed or the same for every seed, one
+  whose knobs reached in another order do not solve the same way, and one that is the same piece
+  whichever of its world's cards it was opened from. The AI run's check_completion holds every
+  plan to it, and RealSiteTest holds the site as committed. A piece is pure drawing and
+  arithmetic on ctx: it never reaches for the document, the window, the clock or the browser's
+  storage, and a module is self-contained (it imports nothing), which is also what lets the
+  harness run it.
 
   ---------------------------------------------------------------------------------------------
   What a page can call
@@ -176,7 +251,9 @@
   stage for as long as it is there (see feature(), and the precedence in _sass/_mood.scss).
 
   Nothing here reaches for the browser's storage. The sky is read through the persona, the next
-  card through the feed, and nothing is written but the address.
+  card through the feed, and the one thing written besides the address is the tally of solves --
+  `puzzles` in the local-state document, through window.interestingState like everything else the
+  site keeps, so it exports with the rest.
 */
 
 import { PLAIN, revive, recolor, aspect as framed, mulberry32, hash, mix, alpha } from './variant.js';
@@ -185,10 +262,11 @@ const root = document.documentElement.getAttribute('data-root') || '';
 const stage = document.getElementById('stage');
 const persona = window.interestingPersona;
 const site = window.interestingSite;
+const store = window.interestingState; // the one local-state store: the tally of solves is kept there
 const calm = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : { matches: false };
 
 const MAX_STEPS = 5;
-const KINDS = ['choice', 'toggle', 'range', 'press', 'hold', 'tap', 'wait'];
+const KINDS = ['choice', 'toggle', 'range', 'number', 'word', 'order', 'pick', 'grid', 'press', 'hold', 'tap', 'wait'];
 const FALLBACK = { bg: '#0d1020', bg2: '#1c2a4e', accent: '#9fcbff', accent2: '#ffe7ab', fg: '#e6eaf5', muted: '#b7c0da' };
 
 const WORLDS = (() => {
@@ -397,10 +475,14 @@ const ui = stage ? {
   read: document.getElementById('stage-read'),
   title: document.getElementById('stage-title'),
   brief: document.getElementById('stage-brief'),
+  goal: document.getElementById('stage-goal'),
+  goalText: document.getElementById('stage-goal-text'),
   body: document.getElementById('stage-body'),
   scene: document.getElementById('stage-scene'),
   canvas: document.getElementById('stage-canvas'),
   knobs: document.getElementById('stage-knobs'),
+  check: document.getElementById('stage-check'),
+  tries: document.getElementById('stage-tries'),
   status: document.getElementById('stage-status'),
   wanted: document.getElementById('stage-wanted'),
   progress: document.getElementById('stage-progress'),
@@ -565,7 +647,7 @@ function gate(opened) {
 }
 
 function empty(opts) {
-  ui.brief.textContent = 'Nothing to finish here yet.';
+  ui.brief.textContent = 'Nothing to solve here yet.';
   lightTheWayOn(false); // nothing to finish, so the way on is the whole of what this offers
   setMode('empty');
   if (!opts || opts.focus !== false) ui.title.focus({ preventScroll: true });
@@ -688,6 +770,10 @@ function begin(opened) {
     state: new Map(steps.map((s) => [s.id, { step: s, set: false, value: undefined, knob: null }])),
     completed: false,
     touched: false,
+    tries: 0, // checks pressed: a wrong answer costs one, and the solve is reported on one
+    hints: 0, // hints the piece has given, through ctx.hint()
+    tally: null, // the tally across puzzles, once this one is solved
+    inTap: false, // whether the piece's tap() is running, which is the one time ctx.set() counts
     startedAt: performance.now(),
     ctx: null
   };
@@ -698,6 +784,11 @@ function begin(opened) {
   const named = piece.title || (card && card.title) || world.name;
   ui.title.textContent = named;
   ui.brief.textContent = piece.brief || (card && (card.quote || card.text || card.mono)) || '';
+  // The goal, in one line under the rules: what counts as solved. A puzzle without one is a toy,
+  // so the line is only ever hidden for a piece that has not said.
+  const goal = typeof piece.goal === 'string' ? piece.goal.trim() : '';
+  if (ui.goalText) ui.goalText.textContent = goal;
+  if (ui.goal) ui.goal.hidden = !goal;
   ui.canvas.setAttribute('aria-label', 'the scene: ' + named);
   // Framed as the card was: the piece's own ratio, stretched by the dial that stretched the card's
   // frame in the feed, so what a visitor pressed and what they land on are the same shape.
@@ -707,6 +798,8 @@ function begin(opened) {
   ui.scene.style.setProperty('--piece-ratio', ratio.toFixed(4));
   renderKnobs();
   renderProgress();
+  renderCheck();
+  renderTries();
   // Dim for the whole piece, lit only when it is finished (issue #78). begin() is reached both
   // through open()/close(), which dims it, and straight from a gate's onReady once a sky is
   // seeded, where it was lit so the visitor could pass the seeding by -- so the piece itself has
@@ -771,14 +864,34 @@ function makeCtx(env) {
       const s = c.state.get(id);
       return s ? s.value : undefined;
     },
+    // A piece whose scene is the control writes the knob from tap(): a cell of a grid drawn on
+    // the canvas, an item dragged into order. Only from tap(), because that is the visitor's own
+    // gesture; the rail follows the value, and the knob counts as set by the visitor.
+    set(id, value) {
+      if (!c.inTap) return false;
+      const s = c.state.get(id);
+      if (!s) return false;
+      s.value = value;
+      if (typeof s.update === 'function') s.update(value);
+      markSet(id, value, 'knob');
+      return true;
+    },
+    // One hint given, at the piece's own price: the stage counts them beside the tries.
+    hint() {
+      c.hints += 1;
+      renderTries();
+    },
+    get tries() {
+      return c.tries;
+    },
+    get hints() {
+      return c.hints;
+    },
     get done() {
       return c.completed;
     },
     get elapsed() {
       return (performance.now() - c.startedAt) / 1000;
-    },
-    complete() {
-      finish();
     }
   };
 }
@@ -854,6 +967,8 @@ function apply(id, value) {
   const c = current;
   if (!c) return;
   c.touched = true;
+  // A knob changed after a wrong check: the verdict was about the answer that was, not this one.
+  if (stage.dataset.verdict === 'wrong') delete stage.dataset.verdict;
   const s = c.state.get(id);
   if (s) s.value = value;
   try {
@@ -880,9 +995,97 @@ function markSet(id, value, by) {
     }
     renderProgress();
     updateGates();
-    const all = Array.from(c.state.values()).every((x) => x.set);
-    if (all && c.piece.auto !== false) finish();
+    // Every knob set is an answer ready to check, and nothing more: a puzzle is finished by a
+    // check that solves it, never by its knobs having all been touched.
+    renderCheck();
   }
+}
+
+/* The check button: enabled once every knob is set, because a check with an answer missing is a
+   try spent on nothing. Its word is the piece's own, and after a solve it offers one more look. */
+function renderCheck() {
+  const c = current;
+  if (!c || !ui.check) return;
+  const all = Array.from(c.state.values()).every((s) => s.set || s.step.optional === true);
+  ui.check.disabled = !all;
+  ui.check.textContent = c.completed ? 'check again' : (typeof c.piece.checkLabel === 'string' && c.piece.checkLabel.trim() ? c.piece.checkLabel.trim() : 'check');
+}
+
+/* The score line beside the check: how many tries so far, or which try solved it, how many hints
+   the piece gave, and -- once solved -- how many puzzles this browser has solved in all. Hidden
+   until there is something to say. */
+function renderTries() {
+  const c = current;
+  if (!c || !ui.tries) return;
+  const parts = [];
+  if (c.completed) parts.push(c.tries <= 1 ? 'solved first try' : 'solved on try ' + c.tries);
+  else if (c.tries) parts.push(c.tries === 1 ? 'one try so far' : c.tries + ' tries so far');
+  if (c.hints) parts.push(c.hints === 1 ? 'one hint' : c.hints + ' hints');
+  if (c.completed && c.tally && c.tally.solved > 1) parts.push(c.tally.solved + ' solved so far');
+  ui.tries.textContent = parts.join(' \u00b7 ');
+  ui.tries.hidden = !parts.length;
+}
+
+/* The tally across puzzles: how many this browser has solved, with the tries and hints they took,
+   kept under `puzzles` in the one local-state document (js/state.js) like everything else the site
+   remembers, so it exports and travels with the rest of a visitor's state. Nothing here reaches for
+   the browser's storage: the store owns that. Null where there is no store to keep it. */
+function tally(c) {
+  if (!store || typeof store.get !== 'function' || typeof store.set !== 'function') return null;
+  let kept = null;
+  try {
+    kept = store.get('puzzles', null);
+  } catch (e) {
+    kept = null;
+  }
+  if (!kept || typeof kept !== 'object') kept = {};
+  const next = {
+    solved: (Number(kept.solved) || 0) + 1,
+    tries: (Number(kept.tries) || 0) + c.tries,
+    hints: (Number(kept.hints) || 0) + c.hints
+  };
+  try {
+    store.set('puzzles', next);
+  } catch (e) {
+    /* kept for the page at least */
+  }
+  return next;
+}
+
+/* The check, pressed: the one way a puzzle is finished. The piece is asked whether the answer on
+   the knobs solves it; a solve runs the ceremony, and a wrong answer costs a try, says so on the
+   live line and changes nothing else -- the knobs keep the answer that was given, so the visitor
+   can see what they said and think again. After a solve a check is fidgeting: the verdict is said
+   and the ceremony does not play twice. */
+function judge() {
+  const c = current;
+  if (!c || !ui.check || ui.check.disabled) return;
+  c.touched = true;
+  let verdict = null;
+  try {
+    verdict = typeof c.piece.check === 'function' ? c.piece.check(c.ctx) : { solved: true };
+  } catch (e) {
+    verdict = null; /* a verifier that throws has not said yes */
+  }
+  const solved = !!(verdict && verdict.solved);
+  const say = verdict && typeof verdict.say === 'string' ? verdict.say.trim() : '';
+  if (c.completed) {
+    ui.status.textContent = say || (solved ? 'still solved' : 'not solved like that; the puzzle is done either way');
+    return;
+  }
+  c.tries += 1;
+  stage.dataset.verdict = solved ? 'solved' : 'wrong';
+  try {
+    window.dispatchEvent(new CustomEvent('stage:check', { detail: { file: c.world.file, seed: c.seed, solved, tries: c.tries } }));
+  } catch (e) {
+    /* no event, no matter */
+  }
+  if (solved) {
+    finish(say);
+    return;
+  }
+  ui.status.textContent = say || 'not yet';
+  renderTries();
 }
 
 function updateGates() {
@@ -905,12 +1108,15 @@ function renderProgress() {
   ui.progress.textContent = '';
   let set = 0;
   const left = [];
+  let asked = 0;
   for (const s of current.state.values()) {
+    if (s.step.optional === true) continue; // a helper the check does not wait for is not a dot
+    asked += 1;
     if (s.set) set += 1;
     else left.push(s.step.ask || s.step.id);
     ui.progress.appendChild(el('span', 'stage-dot' + (s.set ? ' is-set' : '')));
   }
-  ui.progress.appendChild(hidden(set + ' of ' + current.state.size + ' set'));
+  ui.progress.appendChild(hidden(set + ' of ' + asked + ' set'));
   // What is left, said out loud. A knob may be set in any order, and the one at the bottom of the
   // page is often not the last one a visitor has to touch -- a piece can gate its finale on an
   // earlier knob and leave an ungated one above it untouched. Without this line, setting the
@@ -991,6 +1197,268 @@ const KNOBS = {
     knob.appendChild(row);
     // The scene knows where the slider starts before anything moves (ctx.value), unasked.
     current.state.get(step.id).value = Number(input.value);
+  },
+  // An exact count: a stepper with a field, for an answer that is a number rather than a feel.
+  // Stepped or typed into is used; where it stands is an answer already, so the first step or
+  // the first change is what sets it, as with a slider.
+  number(step, knob, askId) {
+    const min = Number(step.min == null ? 0 : step.min);
+    const max = Number(step.max == null ? 100 : step.max);
+    const inc = Number(step.step == null ? 1 : step.step) || 1;
+    const clamp = (v) => {
+      const n = Number(v);
+      if (!isFinite(n)) return min;
+      return Math.min(max, Math.max(min, min + Math.round((n - min) / inc) * inc));
+    };
+    const row = el('div', 'knob-number');
+    const less = el('button', 'knob-step', '−');
+    less.type = 'button';
+    less.setAttribute('aria-label', 'one less');
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.className = 'knob-count';
+    input.min = String(min);
+    input.max = String(max);
+    input.step = String(inc);
+    input.value = String(step.value == null ? min : clamp(step.value));
+    input.setAttribute('inputmode', 'numeric');
+    input.setAttribute('aria-labelledby', askId);
+    const more = el('button', 'knob-step', '+');
+    more.type = 'button';
+    more.setAttribute('aria-label', 'one more');
+    const state = current.state.get(step.id);
+    state.value = Number(input.value);
+    const give = (v) => {
+      const n = clamp(v);
+      input.value = String(n);
+      apply(step.id, n);
+      markSet(step.id, n, 'knob');
+    };
+    less.addEventListener('click', () => give(Number(input.value) - inc));
+    more.addEventListener('click', () => give(Number(input.value) + inc));
+    input.addEventListener('change', () => give(input.value));
+    input.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Enter') {
+        ev.preventDefault();
+        give(input.value);
+      }
+    });
+    state.update = (v) => {
+      input.value = String(clamp(v));
+    };
+    row.appendChild(less);
+    row.appendChild(input);
+    row.appendChild(more);
+    if (step.unit) row.appendChild(el('span', 'knob-end', String(step.unit)));
+    knob.appendChild(row);
+  },
+  // A short typed answer: a word, a code, a name. Set once something has been typed; Enter in
+  // the field presses the check, because that is what Enter means in a puzzle.
+  word(step, knob, askId) {
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'knob-word' + (step.upper === false ? '' : ' is-upper');
+    input.autocomplete = 'off';
+    input.spellcheck = false;
+    input.setAttribute('autocapitalize', step.upper === false ? 'off' : 'characters');
+    input.setAttribute('autocorrect', 'off');
+    if (step.length) input.maxLength = Math.max(1, Number(step.length) || 1);
+    if (step.placeholder) input.placeholder = String(step.placeholder);
+    input.setAttribute('aria-labelledby', askId);
+    const state = current.state.get(step.id);
+    state.value = '';
+    const read = () => (step.upper === false ? input.value.trim() : input.value.trim().toUpperCase());
+    const give = () => {
+      const v = read();
+      apply(step.id, v);
+      if (v) markSet(step.id, v, 'knob');
+    };
+    input.addEventListener('input', give);
+    input.addEventListener('change', give);
+    input.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Enter') {
+        ev.preventDefault();
+        give();
+        if (ui.check && !ui.check.disabled) judge();
+      }
+    });
+    state.update = (v) => {
+      input.value = v == null ? '' : String(v);
+    };
+    knob.appendChild(input);
+  },
+  // Items to put in order, with up and down beside each. Any move is the visitor giving an order
+  // -- a move at an end that goes nowhere included -- and "keep this order" says the order it
+  // opened in is the answer, the way a slider left where it stands is one.
+  order(step, knob, askId) {
+    const items = (Array.isArray(step.items) ? step.items : []).slice(0, 8).filter((i) => i && typeof i === 'object');
+    const list = el('ol', 'knob-order');
+    list.setAttribute('aria-labelledby', askId);
+    let values = Array.isArray(step.value) && step.value.length === items.length
+      && step.value.every((v) => items.some((i) => i.value === v)) ? step.value.slice() : items.map((i) => i.value);
+    const state = current.state.get(step.id);
+    state.value = values.slice();
+    const labelOf = (v) => {
+      const item = items.find((i) => i.value === v);
+      return item && item.label != null ? String(item.label) : String(v);
+    };
+    function give() {
+      const v = values.slice();
+      apply(step.id, v);
+      markSet(step.id, v, 'knob');
+    }
+    function move(i, d, refocus) {
+      const j = i + d;
+      if (j >= 0 && j < values.length) {
+        const held = values[i];
+        values[i] = values[j];
+        values[j] = held;
+        draw();
+        const row = list.children[j];
+        const again = row && row.querySelectorAll('button')[refocus];
+        if (again && typeof again.focus === 'function') again.focus();
+      }
+      give();
+    }
+    function draw() {
+      list.textContent = '';
+      values.forEach((v, i) => {
+        const row = el('li', 'knob-order-item');
+        row.appendChild(el('span', 'knob-order-label', labelOf(v)));
+        const up = el('button', 'knob-order-move', '▲');
+        up.type = 'button';
+        up.setAttribute('aria-label', 'move ' + labelOf(v) + ' up');
+        up.addEventListener('click', () => move(i, -1, 0));
+        const down = el('button', 'knob-order-move', '▼');
+        down.type = 'button';
+        down.setAttribute('aria-label', 'move ' + labelOf(v) + ' down');
+        down.addEventListener('click', () => move(i, 1, 1));
+        row.appendChild(up);
+        row.appendChild(down);
+        list.appendChild(row);
+      });
+    }
+    state.update = (v) => {
+      if (Array.isArray(v) && v.length === values.length) {
+        values = v.slice();
+        draw();
+      }
+    };
+    draw();
+    knob.appendChild(list);
+    const keep = el('button', 'btn-text knob-alt', 'keep this order');
+    keep.type = 'button';
+    keep.addEventListener('click', give);
+    knob.appendChild(keep);
+  },
+  // Some of these, chosen: chips that press in. With `count` the knob is set once exactly that
+  // many are chosen, and one more press swaps the earliest choice for the new one; without it,
+  // any number is an answer.
+  pick(step, knob, askId) {
+    const items = (Array.isArray(step.items) ? step.items : []).slice(0, 12).filter((i) => i && typeof i === 'object');
+    const count = step.count == null ? 0 : Math.max(1, Math.min(items.length, Number(step.count) || 0));
+    const group = el('div', 'segmented knob-pick');
+    group.setAttribute('role', 'group');
+    group.setAttribute('aria-labelledby', askId);
+    const chosen = new Set((Array.isArray(step.value) ? step.value : []).filter((v) => items.some((i) => i.value === v)));
+    const state = current.state.get(step.id);
+    const current_ = () => items.filter((i) => chosen.has(i.value)).map((i) => i.value);
+    state.value = current_();
+    const buttons = new Map();
+    function paint() {
+      for (const [v, b] of buttons) b.setAttribute('aria-pressed', chosen.has(v) ? 'true' : 'false');
+    }
+    function give() {
+      const v = current_();
+      apply(step.id, v);
+      if (!count || v.length === count) markSet(step.id, v, 'knob');
+    }
+    items.forEach((item) => {
+      const b = el('button', null, item.label == null ? String(item.value) : String(item.label));
+      b.type = 'button';
+      b.setAttribute('aria-pressed', chosen.has(item.value) ? 'true' : 'false');
+      b.addEventListener('click', () => {
+        if (chosen.has(item.value)) {
+          chosen.delete(item.value);
+        } else {
+          if (count && chosen.size >= count) chosen.delete(chosen.values().next().value);
+          chosen.add(item.value);
+        }
+        paint();
+        give();
+      });
+      buttons.set(item.value, b);
+      group.appendChild(b);
+    });
+    state.update = (v) => {
+      chosen.clear();
+      (Array.isArray(v) ? v : []).forEach((x) => chosen.add(x));
+      paint();
+    };
+    knob.appendChild(group);
+    if (count) knob.appendChild(el('p', 'knob-note', 'choose ' + count));
+  },
+  // A grid of cells the visitor cycles through their states, row by row. The arrow keys walk the
+  // cells; each is named for a screen reader by where it is and what it shows.
+  grid(step, knob, askId) {
+    const rows = Math.max(1, Math.min(10, Number(step.rows) || 3));
+    const cols = Math.max(1, Math.min(10, Number(step.cols) || 3));
+    const states = Math.max(2, Math.min(6, Number(step.states) || 2));
+    const labels = Array.isArray(step.labels) ? step.labels : [];
+    const n = rows * cols;
+    const norm = (v) => (((Number(v) | 0) % states) + states) % states;
+    let cells = Array.isArray(step.value) && step.value.length === n ? step.value.map(norm) : new Array(n).fill(0);
+    const state = current.state.get(step.id);
+    state.value = cells.slice();
+    const table = el('div', 'knob-grid');
+    table.setAttribute('role', 'group');
+    table.setAttribute('aria-labelledby', askId);
+    table.style.setProperty('--grid-cols', String(cols));
+    const buttons = [];
+    const name = (i) => 'row ' + (Math.floor(i / cols) + 1) + ', column ' + ((i % cols) + 1) + ': '
+      + (labels[cells[i]] != null ? String(labels[cells[i]]) : (states === 2 ? (cells[i] ? 'on' : 'off') : 'state ' + cells[i]));
+    function paint() {
+      buttons.forEach((b, i) => {
+        b.dataset.state = String(cells[i]);
+        b.setAttribute('aria-label', name(i));
+        if (states === 2) b.setAttribute('aria-pressed', cells[i] ? 'true' : 'false');
+        b.textContent = states > 2 && cells[i] ? String(cells[i]) : '';
+      });
+    }
+    for (let i = 0; i < n; i++) {
+      const b = el('button', 'knob-cell');
+      b.type = 'button';
+      b.addEventListener('click', () => {
+        cells[i] = (cells[i] + 1) % states;
+        paint();
+        const v = cells.slice();
+        apply(step.id, v);
+        markSet(step.id, v, 'knob');
+      });
+      buttons.push(b);
+      table.appendChild(b);
+    }
+    table.addEventListener('keydown', (ev) => {
+      const at = document.activeElement ? buttons.indexOf(document.activeElement) : -1;
+      if (at < 0) return;
+      let to = -1;
+      if (ev.key === 'ArrowRight') to = at + 1;
+      else if (ev.key === 'ArrowLeft') to = at - 1;
+      else if (ev.key === 'ArrowDown') to = at + cols;
+      else if (ev.key === 'ArrowUp') to = at - cols;
+      if (to >= 0 && to < n) {
+        ev.preventDefault();
+        buttons[to].focus();
+      }
+    });
+    state.update = (v) => {
+      if (Array.isArray(v) && v.length === n) {
+        cells = v.map(norm);
+        paint();
+      }
+    };
+    paint();
+    knob.appendChild(table);
   },
   press(step, knob) {
     const count = Math.max(1, Math.min(12, Number(step.count) || 3));
@@ -1092,11 +1560,13 @@ const KNOBS = {
       // As live as the scene it stands in for, after the piece is finished as well (issue #86).
       if (!current || typeof current.piece.tap !== 'function') return;
       current.touched = true;
+      current.inTap = true;
       try {
         current.piece.tap(0.2 + altRnd() * 0.6, 0.2 + altRnd() * 0.6, current.ctx);
       } catch (e) {
         /* the piece's tap failing is the piece's own problem */
       }
+      current.inTap = false;
     });
     knob.appendChild(b);
   },
@@ -1139,11 +1609,13 @@ if (ui) {
     const r = ui.canvas.getBoundingClientRect();
     if (!r.width || !r.height) return;
     c.touched = true;
+    c.inTap = true;
     try {
       c.piece.tap((ev.clientX - r.left) / r.width, (ev.clientY - r.top) / r.height, c.ctx);
     } catch (e) {
       /* the piece's tap failing is the piece's own problem */
     }
+    c.inTap = false;
   });
 }
 
@@ -1161,7 +1633,7 @@ if (ui) {
    'stage:complete' or re-light anything -- one piece is finished once -- and markSet() sees to that
    by only reaching here when a knob goes from unset to set. What a re-set knob does reach is the
    piece's own apply(), which is where fidgeting with a finished toy belongs. */
-function finish() {
+function finish(say) {
   const c = current;
   if (!c || c.completed) return;
   c.completed = true;
@@ -1175,15 +1647,19 @@ function finish() {
   // Every knob is set, so every gate stands open: a knob that was waiting on another is now one
   // more thing to play with rather than one more thing dimmed out.
   updateGates();
-  // The piece's own closing line, if it writes one in end(), stands; this is the default.
-  ui.status.textContent = c.piece.title ? 'finished: ' + c.piece.title : 'finished';
+  // What the verifier said on the solve, or the default; the piece's own closing line, if it
+  // writes one in end(), stands over both.
+  ui.status.textContent = say || (c.piece.title ? 'solved: ' + c.piece.title : 'solved');
+  c.tally = tally(c);
+  renderTries();
+  renderCheck();
   try {
     if (typeof c.piece.end === 'function') c.piece.end(c.ctx);
   } catch (e) {
     /* the finale is optional */
   }
   setMode('done');
-  ui.doneText.textContent = 'done';
+  ui.doneText.textContent = 'solved';
   ui.done.hidden = false;
   // The finale is on the scene, which on a phone may be above the knob that finished it. The done
   // mark is not: it reports from the end of the dots' row in the rail, clear of the picture.
@@ -1302,7 +1778,18 @@ function close() {
   ui.scene.style.removeProperty('--piece-aspect');
   ui.scene.style.removeProperty('--piece-ratio');
   ui.brief.textContent = '';
+  if (ui.goalText) ui.goalText.textContent = '';
+  if (ui.goal) ui.goal.hidden = true;
   ui.knobs.textContent = '';
+  if (ui.check) {
+    ui.check.disabled = true;
+    ui.check.textContent = 'check';
+  }
+  if (ui.tries) {
+    ui.tries.textContent = '';
+    ui.tries.hidden = true;
+  }
+  delete stage.dataset.verdict;
   ui.status.textContent = '';
   ui.progress.textContent = '';
   if (ui.wanted) {
@@ -1499,6 +1986,7 @@ function start() {
   const random = stage.dataset.stageRandom === 'true';
 
   if (ui.onward) ui.onward.addEventListener('click', goOn);
+  if (ui.check) ui.check.addEventListener('click', judge);
   window.addEventListener('resize', reflow);
   // The heading changes shape without the window doing anything -- a longer title, a font that
   // arrives late, a mode that puts the ask up instead -- and the scene is sized against it.

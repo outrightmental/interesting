@@ -334,7 +334,7 @@ itself.
   the room they need clear at the top. Every direct child of `<main>` lands in one centred column
   (`_panel.scss`), so a page writes its content straight into `<main>`. A world page's `<main>` is
   the stage ([`site/_includes/stage.njk`](site/_includes/stage.njk),
-  [`site/js/stage.js`](site/js/stage.js)): a piece of that world, played and finished there and
+  [`site/js/stage.js`](site/js/stage.js)): a puzzle of that world, played and solved there and
   followed by the next; see [Completion axiom](#completion-axiom). The threshold's feature is the
   same stage in its asking state: the sideways question itself, asked large on arrival, and once
   answered a piece of the world the reading opens onto.
@@ -865,11 +865,12 @@ iteration process rather than a one-off tidy-up.
   under one key, `interesting_state_v1`, as a self-describing envelope — `format`, `version`,
   `saved` and a `values` object — rather than a key per page with a parse and a `try`/`catch` per
   page to match. `values` holds the site's own page state and only that: the names today are
-  `constellation` (the home sky every other page reinterprets), `capsules` and `omens`. The
-  cookie-consent choice is not in there, because it belongs to the consent banner, which keeps it
-  itself. The shared shell writes two names and no more: `threshold`, the mood flow's reading, and
-  `constellation`, which the persona writes when a visitor places a star or asks a powered-down
-  world to seed a sky; the nine names the
+  `constellation` (the home sky every other page reinterprets), `puzzles` (the stage's tally of
+  solves, with the tries and hints they took), `capsules` and `omens`. The cookie-consent choice
+  is not in there, because it belongs to the consent banner, which keeps it itself. The shared
+  shell writes three names and no more: `threshold`, the mood flow's reading, `constellation`,
+  which the persona writes when a visitor places a star or asks a powered-down world to seed a
+  sky, and `puzzles`, which the stage writes when a puzzle is solved; the nine names the
   shell's retired games once kept (`constellation-relay` and its kin) are taken out of a visitor's
   document on load, so an export stays an honest account of what the site keeps.
 - **One way in and out.** `window.interestingState` owns the parsing, the defaults and every
@@ -1190,18 +1191,27 @@ to type and no second press. *Don't overdo it.*
 
 ### Completion axiom
 
-Every world is a piece a visitor can finish. A world's page is not fixed content but a **stage**,
-and what a visitor opens there is a **piece**: a small, randomly configured item — think of a
-fidget toy with a few levers and knobs on it — generated on the spot by the world's module from a
-seed, with a clear flow that asks them to make a few choices and finish, expediently. When it is
-finished it plays its ceremony and lights up the way on — one mark, in the lower right of the
-screen — and there it stays, still playable: nothing moves on by itself, nothing goes inert (see
+Every world is a puzzle a visitor can solve. A world's page is not fixed content but a **stage**,
+and what a visitor opens there is a **piece**, and every piece is a **legitimate puzzle**: a small,
+procedurally generated problem made on the spot by the world's module from a seed, with a goal
+stated in one line, the information needed to solve it on the scene, a few knobs to answer it on,
+a *check* that says whether the answer solves it, and a solution the piece itself knows. A fidget
+toy finishes when its levers have been pulled; a puzzle finishes when it is solved, and nothing
+else finishes it: a wrong answer costs a try and says so, and a right one plays its ceremony and
+lights up the way on — one mark, in the lower right of the screen — and there it stays, still
+playable: nothing moves on by itself, nothing goes inert (see
 [Continued-interaction axiom](#continued-interaction-axiom)), and the press of that mark is what
-vanishes the whole piece and opens the next card in the feed in its place, so one piece follows
+vanishes the whole piece and opens the next card in the feed in its place, so one puzzle follows
 another without end and no two are quite the same. A "content page" does not discretely exist: it
 exists as a procedural generation, and the feed that keeps dealing is the river of pieces coming
-up the pipe. Like the eight above, this is an invariant of the
-iteration, stated in the prompt and held to in code.
+up the pipe. Two families live inside that. A *deduction* puzzle puts everything on the screen and
+asks for an answer — a cipher to read, an order to find, a count to make, the odd one out. An
+*experiment* puzzle asks for a setting and runs the apparatus when the answer is checked — aim the
+probe through the ring, tune the spring so the swing crosses in three breaths — so a try is a run.
+In both, a wrong check gives measured feedback and never the answer, the answer space is wide
+enough that guessing is a poor strategy, and every puzzle is generated from its solution, so it
+is always solvable and unique where its kind expects that. Like the eight above, this is an
+invariant of the iteration, stated in the prompt and held to in code.
 
 - **The stage.** [`site/_includes/stage.njk`](site/_includes/stage.njk) is every world page's
   `<main>` — a world page is front matter and two lines that include it — and
@@ -1241,17 +1251,29 @@ iteration, stated in the prompt and held to in code.
 - **The piece contract.** A world's module exports `piece(env)` beside `paint` and `spark`, and is
   handed the same configuration both halves of it are — `env.variant`, and `env.card` for the card
   this piece was opened from (see [The feature and the feed](#the-feature-and-the-feed)) — and
-  returns `{ title, brief, aspect, steps, start, apply, frame, tap, end }`: two to five knobs
-  (`steps`), each `{ id, ask, kind, … }` of a kind the stage renders — `choice` (two to four
-  options), `toggle`, `range`, `press`, `hold`, `tap`, `wait` — and the piece is finished when
-  every knob is set (the stage sets a choice, toggle, range, press or hold itself; a tap or a
-  wait knob is set by the piece, through `ctx.satisfy`), or when it calls `ctx.complete()`. A
-  knob may wait on another (`after`), and every knob stays live once set — and stays live once the
-  whole piece is finished: a toy is for fidgeting with. `ctx` is the canvas and its context, the size, the world's colours, a seeded random
-  source, the persona's stars, and `status()` and `progress()` for the one live line and the
-  knob's bar; `frame(t, dt, ctx)` counts `t` from the piece's start, and `auto: false` lets a
-  piece call `complete()` itself. A module is self-contained: it imports nothing. `js/stage.js`
-  documents all of it at the top.
+  returns `{ title, brief, goal, aspect, checkLabel, steps, solution, check, start, apply, frame,
+  tap, end }`: two to five knobs (`steps`), each `{ id, ask, kind, … }` of a kind the stage renders
+  — `choice` (two to four options), `toggle`, `range`, `number`, `word`, `order`, `pick`, `grid`,
+  `press`, `hold`, `tap`, `wait` — a `goal` in one line, a `solution` naming every *answer* knob
+  and the value that solves it, and a `check(ctx)` that reads the answer off `ctx.value(id)` and
+  says `{ solved, say }`. A press, a hold or a wait is never an answer; a knob with
+  `optional: true` is a helper the check does not wait for — a hint, at a price it reports through
+  `ctx.hint()` — and never an answer either; a range or a number answer may be `{ value, near }`
+  to name a target with a tolerance; a tap answer's solution is `{ taps, wrong }`, the points that
+  solve it and points that do not, and a tap knob is set by any taps while `check()` judges where
+  they landed. The piece is finished by a check that solves it and by nothing else: the stage
+  renders one filled *check* button under the knobs, enabled once every knob is set, a press of
+  it is a try, a wrong answer costs the try, says `say` on the live line and changes nothing else,
+  and a solved one plays the ceremony with the done chip reading *solved* and the score beside it
+  (*solved on try 2 · one hint*). A knob may wait on another (`after`), only a tap or a wait knob
+  is the piece's to set (`ctx.satisfy`, never before the visitor has set something), `ctx.set(id,
+  value)` writes a knob from `tap()` alone for a scene that is the control, and every knob stays
+  live once set — and stays live once the puzzle is solved: a solved puzzle is still the
+  visitor's to play with. `ctx` is the canvas and its context, the size, the world's colours, a
+  seeded random source, the persona's stars, `status()` and `progress()` for the one live line
+  and the knob's bar, `value()`, `set()`, `hint()`, `tries` and `hints`; `frame(t, dt, ctx)`
+  counts `t` from the piece's start. A module is self-contained: it imports nothing.
+  `js/stage.js` documents all of it at the top.
 - **Settable, in any order, and sayable.** Every knob has to be one the visitor it is put in front
   of can actually set, and a piece has to be finishable whatever order they reach its knobs in:
   nothing makes anyone work down the page. The way that fails is quiet — the visitor sets the last
@@ -1271,10 +1293,10 @@ iteration, stated in the prompt and held to in code.
 - **Pure, so it can be played anywhere.** A piece is drawing and arithmetic on what the stage
   hands it and never reaches for the document, the window or the browser's storage. That is what
   lets [`.github/scripts/piece_harness.mjs`](.github/scripts/piece_harness.mjs) play every piece
-  to its end in Node, with no browser: it asks each module for a piece for each of six seeds and
-  sets the knobs the way the stage would — a choice at one of its options, a range at a point on
-  it, a press pressed its count, a hold held its time, the scene tapped at seeded points for a
-  tap knob, frames run for a wait knob — and reports whether the piece finished; one seed is also
+  through the law in Node, with no browser. It asks each module for a piece for each of six seeds
+  and sets the knobs the way the stage would — the helpers any old way (a choice at one of its
+  options, a press pressed its count, a hold held its time, frames run for a wait), the answers to
+  the piece's own `solution` — and presses the check, which has to solve it; one seed is also
   played with the sky the stage may hand the module (none, or a single star). Each module plays
   in a worker of its own with a time limit, an empty environment and no clock, no `Math.random`
   and no timers, so a piece that reaches for any of them fails; the run itself starts under
@@ -1282,61 +1304,75 @@ iteration, stated in the prompt and held to in code.
   code (a quality gate, not a security boundary: the site's source is public). Every seed is then
   played a second time with its knobs reached in a seeded order rather than down the page, and the
   first seed is played through again from the top, which has to come out exactly as it did the
-  first time. The first seed is then played three times more, for the alignment axiom (see
-  [The feature and the feed](#the-feature-and-the-feed)): under a configuration away from the
-  no-op one, as the card that configuration deals it, and as a card another seed was dealt. All
-  three have to finish — a sky can change under a card, so a piece reads the one it is handed
-  defensively — and the last two have to be different pieces, because what a feature is follows
-  from the card it was opened from. The harness is not in `/site`, so a run cannot soften it.
+  first time. Then the other half of legitimacy: every seed is played with every answer wrong at
+  once, once more per answer with that one wrong and the rest right (so every declared answer is
+  load-bearing), and — where every answer knob opens on a value — with the answers left exactly as
+  they opened, and none of those checks may say solved. A wrong value is the other option, the
+  opposite toggle, the far end of a range or a number, the word with its last letter changed, the
+  order with its first two swapped, the pick with one chosen swapped for one not, the grid with
+  one cell cycled, and the piece's own `wrong` points for a tap. The first seed is then played
+  three times more, for the alignment axiom (see [The feature and the
+  feed](#the-feature-and-the-feed)): under a configuration away from the no-op one, as the card
+  that configuration deals it, and as a card another seed was dealt. All three have to solve — a
+  sky can change under a card, so a piece reads the one it is handed defensively — and the last
+  two have to be different pieces, because what a feature is follows from the card it was opened
+  from. The harness is not in `/site`, so a run cannot soften it.
 - **The stage, played too.** A piece can be flawless and the stage still leave the visitor playing
-  it with no way to finish, because the knob the piece offered is not a knob the stage will take —
+  it with no way to check, because the knob the piece offered is not a knob the stage will take —
   which is what issue #60 was.
   [`.github/scripts/stage_harness.mjs`](.github/scripts/stage_harness.mjs) runs the real
   `js/stage.js` against a stub browser: the elements `_includes/stage.njk` writes, a clock the
   scenario steps by hand so a 1.8-second hold costs nothing, a canvas that records nothing, and a
-  feed that deals the worlds it is told to. Seven scenarios: a world played, another played, and the
-  first dealt again, each round finishing, sitting out six seconds of its own clock to prove the
-  stage does not see itself out, and then opening the next when the way on is pressed; a piece
-  played out and then played *on* with, which must still be drawing, still take its knobs and still
-  take a tap on its scene (issue #86); a slider used
-  where it stands, which must count; a knob nobody touched, which must stay unset *and* be named,
-  with the way on still dim over it; a hold held past the fill, which must be set by the bar filling
-  and not by the release (issue #74); a piece abandoned with a hold still pressed down, after which
-  nothing of it may be on the stage or still running; and a card pressed, which must open as that
-  card — its own title and line while the module loads, its configuration on the piece's `env`, its
-  stretch on the scene's frame, and never the world's generic line (issue #80).
+  feed that deals the worlds it is told to. It plays every piece the way a visitor who knows the
+  answer would — the helpers worked, the answers set to the module's own solution, read by asking
+  the module for the very piece the stage opened — and presses the check. Eight scenarios: a world
+  played, another played, and the first dealt again, each round solving, sitting out six seconds
+  of its own clock to prove the stage does not see itself out, and then opening the next when the
+  way on is pressed; every answer set wrong and checked, which must be refused, counted, said on
+  the live line and leave every knob live and the piece unfinished, and then set right and
+  checked, which must solve it on the second try with the done chip reading *solved*; a piece
+  solved and then played *on* with, which must still be drawing, still take its knobs and still
+  take a tap on its scene (issue #86); a slider used where it stands, which must count as set and
+  have the check offered; a knob nobody touched, which must stay unset *and* be named, with the
+  check withheld and the way on still dim over it; a hold held past the fill, which must be set by
+  the bar filling and not by the release (issue #74); a piece abandoned with a hold still pressed
+  down, after which nothing of it may be on the stage or still running; and a card pressed, which
+  must open as that card — its own title and line while the module loads, its configuration on the
+  piece's `env`, its stretch on the scene's frame, and never the world's generic line (issue #80).
   `StageTest` plays purpose-built pieces through it and `RealSiteTest` plays the site as committed;
   like the piece harness it is outside `/site`, so a run cannot soften it. Deliberately, it holds
   the site as committed rather than refusing a plan: it drives the stage through the stage's own
   elements, and those are a run's to rewrite, so gating plans on it would pin markup the silo leaves
-  open. The prompt says so, and says to keep all eight true when rewriting the stage.
+  open. The prompt says so, and says to keep all nine true when rewriting the stage.
 - **Held to in code.** `check_completion` in
   [`.github/scripts/make_interesting.py`](.github/scripts/make_interesting.py) reads the one list
   of worlds off the built home page (the `#site-worlds` JSON the layout writes from
   `_data/worlds.json`, which the stage opens pieces from too) and refuses a plan that leaves a
-  listed world without a module, without a `piece()`, or with a piece the harness cannot finish:
-  one with fewer than two knobs or more than five, one that finishes itself before its visitor has
-  set a knob, a knob of a kind the stage does not render, a piece that
-  does not finish within twelve taps and forty-five seconds of simulated play, one that is not
-  the same for the same seed (a piece is an address), one that does not finish the same way with its
-  knobs reached in another order or played a second time, one that is the same for every seed
-  (the river is of pieces that differ), or one that is the same piece whichever of its world's
-  cards it was opened from (the alignment axiom: a feature is the card that was pressed). Only what
-  the run itself breaks is refused, as with every other axiom, so a run can repair a world that is
-  already stuck; and a plan that drops the list
-  of worlds is refused outright, because the stage would have nothing to open.
+  listed world without a module, without a `piece()`, or with a piece the harness refuses: one
+  with no goal, no `check()` or no `solution`, one with fewer than two knobs or more than five,
+  one whose own solution does not solve it, one that a wrong answer solves (every answer wrong at
+  once, any one answer wrong alone, or the answers left as they opened), a knob of a kind the
+  stage does not render, a solution a knob cannot be set to, a piece that does not come to its
+  check within twelve taps and forty-five seconds of simulated play, one that is not the same for
+  the same seed (a piece is an address), one that does not solve the same way with its knobs
+  reached in another order or played a second time, one that is the same for every seed (the
+  river is of pieces that differ), or one that is the same piece whichever of its world's cards
+  it was opened from (the alignment axiom: a feature is the card that was pressed). Only what the
+  run itself breaks is refused, as with every other axiom, so a run can repair a world that is
+  already stuck; and a plan that drops the list of worlds is refused outright, because the stage
+  would have nothing to open.
 - **Re-thought, not wrapped.** The worlds' old interactive pages were the material: what a page
   let a visitor do became the knobs, what it showed became the scene, what it said became the
   title and the line under it. The pages themselves are gone; a world has no stylesheet of its
   own any more, because its scene is drawn rather than styled.
-- **What is deliberately not checked**: whether a piece is a good toy, whether its knobs are the
-  right knobs, and whether its finish feels like one. No code could judge that; the prompt asks
-  for it, names the old pages as the material, and says a second shape of piece for a world is
-  as good a change as a new world. The stage is checked, but on the committed site rather than on a
-  plan, for the reason given above.
+- **What is deliberately not checked**: whether a puzzle is a good puzzle, whether its clues are
+  the right clues, whether its feedback is well judged, and whether its solve feels like one. No
+  code could judge that; the prompt asks for it, names the old pages as the material, and says a
+  second shape of puzzle for a world is as good a change as a new world. The stage is checked, but
+  on the committed site rather than on a plan, for the reason given above.
 - **True of the site as committed**: `RealSiteTest` builds `/site` and plays every world's piece
-  to its end on every pull request and before every deploy, plays the stage itself through the seven
-  scenarios above, checks that every world page is the stage and that the threshold hosts the
+  through the law on every pull request and before every deploy, plays the stage itself through the
+  eight scenarios above, checks that every world page is the stage and that the threshold hosts the
   question on it, and checks that the limits the prompt states are the harness's own.
 
 ### Continued-interaction axiom
@@ -1348,7 +1384,7 @@ interaction **as long as the visitor is still interested**, and the mark that sa
 out of the way of the content it is reporting on.
 
 - **The stage holds to it.** `finish()` in [`site/js/stage.js`](site/js/stage.js) plays the
-  ceremony, says *done* beside the progress dots and lights the way on — and takes nothing away.
+  ceremony, says *solved* beside the progress dots and lights the way on — and takes nothing away.
   The frame loop keeps drawing, a tap on the scene still reaches the piece's `tap()`, every knob
   stays enabled and can be set again (including one that was gated behind another, since every gate
   stands open once everything is set), and the piece keeps hearing `apply()` for all of it. There is

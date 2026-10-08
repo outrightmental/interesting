@@ -21,15 +21,25 @@
   records nothing, a persona with a sky of five stars, and a feed that deals the worlds it was
   told to. Nothing here is a browser; it is the handful of objects the stage touches.
 
+  Every piece is a puzzle now, finished by a check that solves it and by nothing else, so every
+  scenario that plays a piece out plays it the way a visitor who knows the answer would: the
+  helper knobs worked, the answer knobs set to the module's own solution -- read by asking the
+  module for the same piece the stage opened, with the same seed, configuration, card and sky --
+  and then the check pressed. What the stage does with that press is the stage's own answer.
+
   The scenarios, each in a worker thread of its own so one stage is one page's worth of state:
 
     rounds            Play piece after piece through one stage, with the deal bringing a world
-                      round again. Every round must finish and open the next: a world played
+                      round again. Every round must solve and open the next: a world played
                       before has to play like the first time (the replay half of issue #60).
                       Nothing moves on by itself any more (issue #78), so each round waits out
                       six seconds -- long past the linger the stage used to depart on -- to see
-                      that the piece it finished is still there, and then presses the way on in
+                      that the piece it solved is still there, and then presses the way on in
                       the lower right, which is what opens the next.
+    wrongThenRight    The puzzle half. Open a piece, work its helpers, set every answer wrong and
+                      press check: the stage must say so, count the try, leave every knob live and
+                      the piece unfinished, and light nothing. Then set the answers right and
+                      check again: solved, on the second try, with the done chip saying so.
     afterDone         Play a piece to its finish and then go on playing with it. Done is not the
                       End (issue #86): six seconds after the ceremony the frames must still be
                       drawing, the knobs must still be enabled and settable again, a tap must still
@@ -37,7 +47,8 @@
                       played once through all of it. Also where the done mark's place in the tree is
                       read off: a mark inside the scene is a mark over the content.
     sliderUsed        Play every knob, and use the slider without moving it -- the visitor is
-                      happy where it is. The piece must still finish.
+                      happy where it is. The stage must take the slider as set and offer the
+                      check, and the check pressed must give a verdict.
     sliderUntouched   Play every knob but the slider, and never touch it. The piece must not
                       finish -- a knob nobody set is not set -- but the stage must say which knob
                       it is still waiting on, so this is a visitor who knows what to do next and
@@ -67,7 +78,9 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { Worker, isMainThread, parentPort, workerData } from 'node:worker_threads';
 
-const SCENARIOS = ['rounds', 'afterDone', 'sliderUsed', 'sliderUntouched', 'holdFilled', 'teardown', 'carried'];
+import { wrongFor } from './piece_harness.mjs';
+
+const SCENARIOS = ['rounds', 'wrongThenRight', 'afterDone', 'sliderUsed', 'sliderUntouched', 'holdFilled', 'teardown', 'carried'];
 const SCENARIO_TIMEOUT_MS = 20000;
 const MISSING_WORLD = 'stage-harness-nowhere.html'; // a world with no module: the teardown and the card
 const SEEDS = [4242, 101, 99991, 7]; // tried in turn until a piece with the knob wanted turns up
@@ -373,11 +386,20 @@ function makePage(worlds, clock) {
   make('h1', 'stage-world', head).textContent = 'a world';
   make('h2', 'stage-title', head).textContent = 'what this world is for';
   make('p', 'stage-brief', head);
+  const goal = make('p', 'stage-goal', head);
+  goal.hidden = true;
+  make('span', 'stage-goal-text', goal);
   const sbody = make('div', 'stage-body', inner);
   const scene = make('div', 'stage-scene', sbody);
   make('canvas', 'stage-canvas', scene).setAttribute('aria-label', 'the scene');
   const side = make('div', null, sbody, 'stage-side');
   make('div', 'stage-knobs', side);
+  // The check and the score beside it, as _includes/stage.njk writes them: the one way a puzzle
+  // is finished, dim until every knob is set.
+  const checkRow = make('div', null, side, 'stage-check-row');
+  make('button', 'stage-check', checkRow, 'btn-filled stage-check').disabled = true;
+  const tries = make('p', 'stage-tries', checkRow);
+  tries.hidden = true;
   make('p', 'stage-status', side);
   const wanted = make('p', 'stage-wanted', side);
   wanted.hidden = true;
@@ -480,19 +502,39 @@ function isLocked(knob) {
 /* One knob, worked the way a visitor would work it -- through the stage's own control, which is
    the whole point of this harness. Whether the stage then marks the knob set is the stage's
    answer and the caller reads it off the knob. `slider` says what to do with a range knob: 'move'
-   drags it, 'use' presses it where it stands without moving it, 'leave' leaves it alone. */
-async function setKnob(page, clock, knob, slider) {
+   drags it, 'use' presses it where it stands without moving it, 'leave' leaves it alone. `want`
+   is what an answer knob is to be set to -- the module's own solution, or a wrong answer -- with
+   `step` the knob as the piece declared it, which is where an option's value or an item's place
+   is known; with no `want` the knob is worked any old way, as a helper is. */
+async function setKnob(page, clock, knob, slider, want, step) {
   const kind = knob.dataset.kind;
   const fire = (node, type, extra) => node.dispatchEvent(Object.assign({ type }, extra || {}));
-  if (kind === 'choice' || kind === 'toggle') {
-    fire(knob.querySelector('button'), 'click');
+  const answer = want !== undefined && step;
+  if (kind === 'choice') {
+    const buttons = knob.querySelectorAll('button');
+    const at = answer ? Math.max(0, step.options.findIndex((o) => o && o.value === want)) : 0;
+    fire(buttons[at] || buttons[0], 'click');
     await clock.advance(120);
+    return;
+  }
+  if (kind === 'toggle') {
+    const button = knob.querySelector('button');
+    fire(button, 'click');
+    await clock.advance(120);
+    if (answer && (button.getAttribute('aria-pressed') === 'true') !== !!want) {
+      fire(button, 'click');
+      await clock.advance(120);
+    }
     return;
   }
   if (kind === 'range') {
     if (slider === 'leave') return;
     const input = knob.querySelector('input');
-    if (slider === 'move') {
+    if (answer) {
+      input.value = String(want && typeof want === 'object' ? want.value : want);
+      fire(input, 'input');
+      fire(input, 'change');
+    } else if (slider === 'move') {
       const min = Number(input.min);
       const max = Number(input.max);
       input.value = String(Math.round(min + (max - min) * 0.75));
@@ -502,6 +544,94 @@ async function setKnob(page, clock, knob, slider) {
       // Pressed and let go where it already stood: no 'change' event, because nothing changed.
       fire(input, 'pointerdown');
       fire(input, 'pointerup');
+    }
+    await clock.advance(120);
+    return;
+  }
+  if (kind === 'number') {
+    const input = knob.querySelector('input');
+    if (answer) {
+      input.value = String(want && typeof want === 'object' ? want.value : want);
+      fire(input, 'change');
+    } else {
+      fire(knob.querySelectorAll('button')[1], 'click'); // one more, as a visitor would
+    }
+    await clock.advance(120);
+    return;
+  }
+  if (kind === 'word') {
+    const input = knob.querySelector('input');
+    input.value = answer ? String(want) : 'A';
+    fire(input, 'input');
+    await clock.advance(120);
+    return;
+  }
+  if (kind === 'order') {
+    // The rows are rebuilt on every move, so the order is tracked here and each move is one press
+    // of the up button on the row that has to rise: a selection sort, the way a visitor does it.
+    const labels = () => knob.querySelectorAll('.knob-order-label').map((node) => node.textContent);
+    const items = step ? step.items : [];
+    const current = () => labels().map((label) => {
+      const item = items.find((i) => String(i.label == null ? i.value : i.label) === label);
+      return item ? item.value : label;
+    });
+    if (answer && Array.isArray(want)) {
+      for (let t = 0; t < want.length; t++) {
+        let at = current().indexOf(want[t]);
+        for (let guard = 0; at > t && guard < 16; guard++) {
+          const row = knob.querySelectorAll('.knob-order-item')[at];
+          fire(row.querySelectorAll('button')[0], 'click');
+          await clock.advance(60);
+          at = current().indexOf(want[t]);
+        }
+      }
+      if (current().every((v, i) => v === want[i]) && !isSet(knob)) {
+        const keep = knob.querySelectorAll('button').find((b) => b.textContent === 'keep this order');
+        if (keep) fire(keep, 'click');
+      }
+    } else {
+      const rows = knob.querySelectorAll('.knob-order-item');
+      const last = rows[rows.length - 1];
+      if (last) fire(last.querySelectorAll('button')[0], 'click'); // the last one up a step
+    }
+    await clock.advance(120);
+    return;
+  }
+  if (kind === 'pick') {
+    const buttons = knob.querySelectorAll('.knob-pick button');
+    const items = step ? step.items : [];
+    if (answer && Array.isArray(want)) {
+      for (const value of want) {
+        const at = items.findIndex((i) => i && i.value === value);
+        if (at >= 0 && buttons[at] && buttons[at].getAttribute('aria-pressed') !== 'true') {
+          fire(buttons[at], 'click');
+          await clock.advance(60);
+        }
+      }
+    } else {
+      const count = step && step.count ? Number(step.count) : 1;
+      for (let i = 0; i < Math.max(1, count) && buttons[i]; i++) {
+        fire(buttons[i], 'click');
+        await clock.advance(60);
+      }
+    }
+    await clock.advance(120);
+    return;
+  }
+  if (kind === 'grid') {
+    const cells = knob.querySelectorAll('.knob-cell');
+    const states = step ? Math.max(2, Math.min(6, Number(step.states) || 2)) : 2;
+    if (answer && Array.isArray(want)) {
+      for (let i = 0; i < cells.length && i < want.length; i++) {
+        const now = Number(cells[i].dataset.state) || 0;
+        const presses = ((want[i] - now) % states + states) % states;
+        for (let n = 0; n < presses; n++) {
+          fire(cells[i], 'click');
+          await clock.advance(40);
+        }
+      }
+    } else if (cells[0]) {
+      fire(cells[0], 'click');
     }
     await clock.advance(120);
     return;
@@ -527,6 +657,15 @@ async function setKnob(page, clock, knob, slider) {
   }
   if (kind === 'tap') {
     const canvas = page.doc.getElementById('stage-canvas');
+    const box = canvas.getBoundingClientRect();
+    const points = answer && want && Array.isArray(want.taps) ? want.taps : (answer && Array.isArray(want) ? want : null);
+    if (points) {
+      for (let i = 0; i < points.length && i < MAX_TAPS && !isSet(knob); i++) {
+        fire(canvas, 'pointerdown', { clientX: box.left + Number(points[i].x) * box.width, clientY: box.top + Number(points[i].y) * box.height });
+        await clock.advance(220);
+      }
+      return;
+    }
     for (let i = 0; i < MAX_TAPS && !isSet(knob); i++) {
       fire(canvas, 'pointerdown', { clientX: 60 + i * 37, clientY: 50 + i * 29 });
       await clock.advance(220);
@@ -554,18 +693,31 @@ async function waitForPiece(page, clock) {
    them. A pass that sets nothing ends it, and the passes are bounded: a knob the visitor works
    and the stage does not mark set is exactly what this harness is here to report, not to wait on.
    Returns what was left unset. */
-async function playKnobs(page, clock, slider) {
+async function playKnobs(page, clock, slider, answers) {
   const passes = knobsOn(page).length + 2;
+  const a = answers || { values: {}, steps: {} };
   for (let pass = 0; pass < passes; pass++) {
     let moved = false;
     for (const knob of knobsOn(page)) {
       if (isSet(knob) || isLocked(knob)) continue;
-      await setKnob(page, clock, knob, slider);
+      const id = knob.dataset.id;
+      await setKnob(page, clock, knob, slider, a.values[id], a.steps[id]);
       if (isSet(knob)) moved = true;
     }
     if (!moved) break;
   }
-  return knobsOn(page).filter((knob) => !isSet(knob)).map((knob) => knob.dataset.id);
+  // An optional knob -- a hint -- is one the check does not wait for, so it is not reported unset.
+  return knobsOn(page).filter((knob) => !isSet(knob) && !(a.steps[knob.dataset.id] && a.steps[knob.dataset.id].optional === true)).map((knob) => knob.dataset.id);
+}
+
+/* The check, pressed, if the stage offers it. Reports whether it could be, and what the stage
+   said; judges nothing. */
+async function pressCheck(page, clock) {
+  const button = page.doc.getElementById('stage-check');
+  if (!button || button.disabled) return { pressed: false };
+  button.dispatchEvent({ type: 'click' });
+  await clock.advance(300);
+  return { pressed: true };
 }
 
 // Whether `node` is inside `box`: the done mark laid over the scene is a mark over the content.
@@ -578,6 +730,12 @@ function look(page) {
   const by = (id) => page.doc.getElementById(id);
   return {
     mode: page.stage.dataset.mode,
+    verdict: page.stage.dataset.verdict || '',
+    goal: by('stage-goal') && !by('stage-goal').hidden ? by('stage-goal-text').textContent : '',
+    checkEnabled: !!(by('stage-check') && !by('stage-check').disabled),
+    checkLabel: by('stage-check') ? by('stage-check').textContent : '',
+    tries: by('stage-tries') && !by('stage-tries').hidden ? by('stage-tries').textContent : '',
+    doneText: by('stage-done-text') ? by('stage-done-text').textContent : '',
     title: by('stage-title').textContent,
     status: by('stage-status').textContent,
     wanted: by('stage-wanted').hidden ? '' : by('stage-wanted').textContent,
@@ -596,6 +754,98 @@ function look(page) {
     sceneLabel: by('stage-canvas').getAttribute('aria-label'),
     aspect: by('stage-scene').css.get('--piece-aspect') || ''
   };
+}
+
+/* ---- the answer the piece knows ---------------------------------------------------------------- */
+
+/* The same env js/stage.js makes for a piece, less the document -- the seeded source, the sky, the
+   fallback colours, the configuration and the card -- so the module can be asked for the very piece
+   the stage opened and its solution read off it. */
+function hash(text) {
+  let h = 2166136261;
+  for (let i = 0; i < text.length; i++) {
+    h ^= text.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+function envFor(V, seed, world, stars, variant, card) {
+  const rnd = V.mulberry32(seed);
+  return {
+    seed,
+    rnd,
+    pick: (list) => list[Math.floor(rnd() * list.length)],
+    int: (a, b) => a + Math.floor(rnd() * (b - a + 1)),
+    chance: (p) => rnd() < p,
+    hash,
+    stars,
+    points(w, h, pad) {
+      const p = pad || 0;
+      return stars.map((s) => ({ x: p + (s.x / 100) * (w - p * 2), y: p + (s.y / 100) * (h - p * 2), text: s.text }));
+    },
+    colors: { bg: '#0d1020', bg2: '#1c2a4e', accent: '#9fcbff', accent2: '#ffe7ab', fg: '#e6eaf5', muted: '#b7c0da' },
+    mix: V.mix,
+    alpha: V.alpha,
+    reduced: false,
+    world: { file: world.file, name: world.name, orientation: world.orientation },
+    variant: variant || V.PLAIN,
+    card: card || null
+  };
+}
+
+// The card as the stage keeps it (cardOf there): the plain strings, and `of` untouched.
+function cardOf(spec) {
+  if (!spec || typeof spec !== 'object') return null;
+  const line = (value) => (typeof value === 'string' ? value : '');
+  const out = {
+    kind: line(spec.kind) || 'spark', overline: line(spec.overline), title: line(spec.title), quote: line(spec.quote),
+    text: line(spec.text), mono: line(spec.mono), cite: line(spec.cite), aspect: line(spec.aspect), of: spec.of || null
+  };
+  return out.title || out.quote || out.text || out.mono ? out : null;
+}
+
+/* What the piece the stage opened for (file, seed) with these options knows: its solution and its
+   knobs, as { values: { id: solution }, steps: { id: step } }, or empty if the module cannot be
+   asked. Opened the way open() opens it: the configuration revived from the seed, the card the
+   feed pressed or the one the configuration deals, the stub persona's sky. */
+async function answersFor(stageDir, worlds, file, seed, options) {
+  const empty = { values: {}, steps: {}, piece: null };
+  const world = worlds.find((w) => w.file === file);
+  if (!world) return empty;
+  try {
+    const V = await import(pathToFileURL(path.join(stageDir, 'variant.js')).href);
+    const mod = (await import(pathToFileURL(path.join(stageDir, 'modules', file.replace(/\.html$/, '') + '.js')).href)).default;
+    if (!mod || typeof mod.piece !== 'function') return empty;
+    const opts = options || {};
+    const variant = V.revive(opts.variant, seed);
+    const stars = STARS.map((star) => Object.assign({}, star));
+    let card = cardOf(opts.card);
+    if (!card && typeof mod.spark === 'function') {
+      try {
+        card = cardOf(mod.spark(envFor(V, seed, world, stars, variant, null)));
+      } catch (e) {
+        card = null;
+      }
+    }
+    const piece = mod.piece(envFor(V, seed, world, stars, variant, card));
+    const steps = {};
+    for (const step of piece.steps || []) if (step && step.id) steps[step.id] = step;
+    const values = Object.assign({}, piece.solution || {});
+    return { values, steps, piece };
+  } catch (e) {
+    return empty;
+  }
+}
+
+/* The same, with every answer wrong: the piece harness's own idea of a wrong value. */
+function wrongAnswers(answers) {
+  const values = {};
+  for (const id of Object.keys(answers.values)) {
+    const step = answers.steps[id];
+    values[id] = step ? wrongFor(step, answers.values[id]) : answers.values[id];
+  }
+  return { values, steps: answers.steps, piece: answers.piece };
 }
 
 /* ---- the scenarios ------------------------------------------------------------------------- */
@@ -649,13 +899,23 @@ async function rounds(stageDir, worlds, deal, clock) {
     }
     const was = api.current();
     page.modes.length = 0;
-    const unset = await playKnobs(page, clock, 'move');
+    // Every round's piece is opened from its seed alone -- the first by open(), the rest by the
+    // stub feed's deal, which carries no card -- so the stage configures each from the seed.
+    const answers = await answersFor(stageDir, worlds, was.file, was.seed, {});
+    const unset = await playKnobs(page, clock, 'move', answers);
+    const offered = look(page);
+    const check = await pressCheck(page, clock);
     const finished = look(page);
     const onward = await pressOnward(page, clock, was);
     report.push({
       playable: true,
       was,
       unset,
+      checkOffered: offered.checkEnabled,
+      checked: check.pressed,
+      solved: finished.mode === 'done',
+      tries: finished.tries,
+      doneText: finished.doneText,
       modes: page.modes.slice(),
       wantedWhilePlaying: finished.wanted,
       litWhilePlaying: finished.nextLit,
@@ -673,7 +933,7 @@ async function rounds(stageDir, worlds, deal, clock) {
 }
 
 // The kinds of knob a visitor can work a second time: everything but the two the piece sets itself.
-const RESETTABLE = ['choice', 'toggle', 'range', 'press', 'hold'];
+const RESETTABLE = ['choice', 'toggle', 'range', 'number', 'word', 'order', 'pick', 'grid', 'press', 'hold'];
 
 /* A piece played to its finish, and then played on with. Done is not the End (issue #86): finishing
    reports completion and lights the way on, and takes nothing away. So this plays a piece out, sits
@@ -704,8 +964,10 @@ async function afterDone(stageDir, worlds, deal, clock) {
   if (!(await waitForPiece(page, clock))) return { playable: false, world: '', seed: 0, look: look(page) };
   const was = api.current();
   page.events.length = 0;
-  const unset = await playKnobs(page, clock, 'move');
-  const out = { playable: true, world: was.file, seed: was.seed, unset, atDone: snap() };
+  const answers = await answersFor(stageDir, worlds, was.file, was.seed, {});
+  const unset = await playKnobs(page, clock, 'move', answers);
+  const check = await pressCheck(page, clock);
+  const out = { playable: true, world: was.file, seed: was.seed, unset, checked: check.pressed, atDone: snap() };
 
   // Six seconds of nobody doing anything, and then one more: the stage must not have packed up in
   // either of them, and the second is where the frames are counted.
@@ -766,7 +1028,12 @@ async function slider(stageDir, worlds, deal, clock, how) {
   if (!world) return { playable: false, world: '', seed: 0, ranges: [], look: look(page) };
   page.events.length = 0;
   page.modes.length = 0;
-  const unset = await playKnobs(page, clock, how);
+  // Every other knob the way a visitor who knows the answer sets it; the slider as `how` says.
+  const answers = await answersFor(stageDir, worlds, world, seed, {});
+  for (const id of ranges) delete answers.values[id];
+  const unset = await playKnobs(page, clock, how, answers);
+  const offered = look(page);
+  const check = await pressCheck(page, clock);
   const settled = look(page);
   await clock.advance(6000);
   return {
@@ -775,6 +1042,10 @@ async function slider(stageDir, worlds, deal, clock, how) {
     seed,
     ranges,
     unset,
+    checkOffered: offered.checkEnabled,
+    checked: check.pressed,
+    // A verdict was given: the stage either solved the piece or said why not.
+    judged: check.pressed && (settled.mode === 'done' || !!settled.tries),
     modes: page.modes.slice(),
     wanted: settled.wanted,
     finished: page.events.some((e) => e.type === 'stage:complete'),
@@ -785,13 +1056,14 @@ async function slider(stageDir, worlds, deal, clock, how) {
 /* The knobs worked down until a hold is reachable: a hold is often behind a gate, so getting to one
    is playing the piece as far as it. Returns the hold's knob, or null if this piece has none a
    visitor can get to. Both the hold scenarios go through here. */
-async function reachHold(page, clock) {
+async function reachHold(page, clock, answers) {
+  const a = answers || { values: {}, steps: {} };
   for (let pass = 0; pass < knobsOn(page).length + 2; pass++) {
     let moved = false;
     for (const knob of knobsOn(page)) {
       if (isSet(knob) || isLocked(knob)) continue;
       if (knob.dataset.kind === 'hold') return knob;
-      await setKnob(page, clock, knob, 'move');
+      await setKnob(page, clock, knob, 'move', a.values[knob.dataset.id], a.steps[knob.dataset.id]);
       if (isSet(knob)) moved = true;
     }
     if (!moved) break;
@@ -811,7 +1083,7 @@ async function holdFilled(stageDir, worlds, deal, clock) {
     for (const file of tries) {
       api.open(file, at, { arriving: true });
       if (!(await waitForPiece(page, clock))) continue;
-      const knob = await reachHold(page, clock);
+      const knob = await reachHold(page, clock, await answersFor(stageDir, worlds, file, at, {}));
       if (knob) return keepHolding(page, clock, file, at, knob);
     }
   }
@@ -833,7 +1105,8 @@ async function keepHolding(page, clock, world, seed, knob) {
     set: isSet(knob),
     pct: knob.css.get('--knob-pct') || '',
     status: status.textContent,
-    completes: page.events.filter((e) => e.type === 'stage:complete').length
+    completes: page.events.filter((e) => e.type === 'stage:complete').length,
+    checkEnabled: look(page).checkEnabled
   });
   page.events.length = 0;
   button.dispatchEvent({ type: 'keydown', key: ' ' });
@@ -865,7 +1138,7 @@ async function teardown(stageDir, worlds, deal, clock) {
   // Work down the knobs until a hold is reachable, and then press it and keep pressing: a hold
   // still down when the piece goes is the clearest thing a stage can leave running behind it.
   // Kept short of the fill, which would set the knob and leave the piece with nothing to tear down.
-  const knob = await reachHold(page, clock);
+  const knob = await reachHold(page, clock, await answersFor(stageDir, worlds, deal[0].file, deal[0].seed, {}));
   let held = '';
   if (knob) {
     knob.querySelector('button').dispatchEvent({ type: 'pointerdown' });
@@ -926,9 +1199,48 @@ async function carried(stageDir, worlds, deal, clock) {
   return out;
 }
 
+/* A wrong answer checked, then the right one: the puzzle half of the stage. Every reading is the
+   stage's own; StageTest and RealSiteTest make the assertions. */
+async function wrongThenRight(stageDir, worlds, deal, clock) {
+  const page = await load(stageDir, worlds, clock);
+  page.win.interestingFeed = { take: () => null, consume() {} };
+  const api = page.win.interestingStage;
+  api.open(deal[0].file, deal[0].seed, { arriving: true });
+  if (!(await waitForPiece(page, clock))) return { playable: false, world: '', seed: 0, look: look(page) };
+  const was = api.current();
+  page.events.length = 0;
+  const answers = await answersFor(stageDir, worlds, was.file, was.seed, {});
+  const out = { playable: true, world: was.file, seed: was.seed, answers: Object.keys(answers.values), opened: look(page) };
+  // Every answer wrong, and the check pressed.
+  const unset = await playKnobs(page, clock, 'move', wrongAnswers(answers));
+  out.unset = unset;
+  out.beforeCheck = look(page);
+  out.wrongChecked = (await pressCheck(page, clock)).pressed;
+  out.afterWrong = Object.assign({
+    completes: page.events.filter((e) => e.type === 'stage:complete').length,
+    checks: page.events.filter((e) => e.type === 'stage:check').map((e) => e.detail)
+  }, look(page));
+  await clock.advance(2000);
+  out.laterWrong = Object.assign({ completes: page.events.filter((e) => e.type === 'stage:complete').length }, look(page));
+  // Then the right answer on the same knobs -- they are still live -- and the check again.
+  for (const knob of knobsOn(page)) {
+    const id = knob.dataset.id;
+    if (answers.values[id] === undefined) continue;
+    await setKnob(page, clock, knob, 'move', answers.values[id], answers.steps[id]);
+  }
+  out.rightChecked = (await pressCheck(page, clock)).pressed;
+  out.afterRight = Object.assign({
+    completes: page.events.filter((e) => e.type === 'stage:complete').length,
+    checks: page.events.filter((e) => e.type === 'stage:check').map((e) => e.detail)
+  }, look(page));
+  out.onward = await pressOnward(page, clock, was);
+  return out;
+}
+
 async function runScenario(name, stageDir, worlds, deal) {
   const clock = makeClock();
   if (name === 'rounds') return rounds(stageDir, worlds, deal, clock);
+  if (name === 'wrongThenRight') return wrongThenRight(stageDir, worlds, deal, clock);
   if (name === 'afterDone') return afterDone(stageDir, worlds, deal, clock);
   if (name === 'sliderUsed') return slider(stageDir, worlds, deal, clock, 'use');
   if (name === 'sliderUntouched') return slider(stageDir, worlds, deal, clock, 'leave');
@@ -964,7 +1276,7 @@ function inWorker(scenario, stageDir, worlds, deal) {
     // something its caller cannot parse. The environment is empty for the same reason as the piece
     // harness: the scenario needs nothing from it.
     const worker = new Worker(new URL(import.meta.url), {
-      workerData: { scenario, stageDir, worlds, deal },
+      workerData: { harness: 'stage', scenario, stageDir, worlds, deal },
       env: {},
       stdout: true,
       stderr: true
@@ -1010,7 +1322,7 @@ async function main(argv) {
   return Object.values(report).every((r) => r && r.ok) ? 0 : 1;
 }
 
-if (!isMainThread) {
+if (!isMainThread && workerData && workerData.harness === 'stage') {
   workerMain().catch((err) => parentPort.postMessage({ ok: false, error: String((err && err.stack) || err) }));
 } else if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   main(process.argv.slice(2)).then((code) => process.exit(code), (err) => {
