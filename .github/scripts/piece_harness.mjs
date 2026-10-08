@@ -33,10 +33,11 @@
   Then the dial. The persona keeps one difficulty for the whole site (issue #93) and js/stage.js
   hands it to a piece on env.difficulty, 1 (gentle) to 5 (fierce), so a piece is a puzzle at five
   settings rather than one: what a level buys is less help and, where an answer is a measurement,
-  a narrower margin. The first seed is played at every stop of the dial -- its own solution, which
-  has to solve, and every answer wrong, which may not -- and at the two ends it is played as the
-  card it was dealt as too, because a piece follows its card whatever the setting. A card's own
-  env carries no difficulty at all, which is how the plan a piece is of stays the seed's.
+  a narrower margin. Every stop is played -- a seed of its own at each, so a world of two shapes
+  does not meet the dial in only one of them -- with its own solution, which has to solve, and
+  with every answer wrong, which may not; and at the two ends the first seed is played as the card
+  it was dealt as, because a piece follows its card whatever the setting. A card's own env carries
+  no difficulty at all, which is how the plan a piece is of stays the seed's.
 
   The first seed is then played three times more, for the alignment axiom (issue #80). A card and
   the feature it opens as are one content piece, procedurally configured once: the stage hands the
@@ -114,8 +115,8 @@ export const MAX_SECONDS = 45;
 // Real time, per module, for all of its plays: six seeds solved, one sky, six orders, the replay,
 // the wrong answers (one all-wrong, one per answer knob, and the opening values) for every seed,
 // the three the alignment axiom adds (configured, as its own card, as another card), and the
-// eleven the difficulty adds (the first seed solved and wrong at each of the five stops of the
-// dial, and its own card at the two ends). A runner that is twice as slow as a quick machine
+// twelve the difficulty adds (a seed solved and wrong at each of the five stops of the dial, and
+// the first seed's own card at the two ends). A runner that is twice as slow as a quick machine
 // should still be judging pieces rather than reporting timeouts.
 export const MODULE_TIMEOUT_MS = 150000;
 const FRAME = 1 / 30;
@@ -997,24 +998,27 @@ export function judgeModule(mod, seeds) {
      every answer wrong may not. A world whose help or whose margin moves with the dial is the
      point of the setting; a world that opens an unsolvable puzzle at one end of it is the bug.
 
-     The first seed carries this, at every stop, and at the two ends it is also played as the card
-     it was dealt as, because a piece follows its card whatever the setting: the subject is the
-     seed's and the difficulty is only how hard it is asked. */
+     A stop takes a seed of its own rather than all five taking the first, because a world may
+     deal more than one shape of puzzle and which shape a seed opens is the seed's: five stops on
+     one seed would leave the other shapes unplayed at four of them. The first seed is also played
+     at the two ends as the card it was dealt as, because a piece follows its card whatever the
+     setting: the subject is the seed's and the difficulty is only how hard it is asked. */
   for (let level = 1; level <= DIFFICULTY_NAMES.length; level += 1) {
     const difficulty = difficultyAt(level);
-    const at = ' at difficulty ' + difficulty.name;
-    if (level !== MIDDLE_DIFFICULTY.level) {
-      const run = play(mod, seeds[0], { difficulty, label: difficulty.name });
-      report.runs.push(run);
-      for (const p of run.problems) report.problems.push('seed ' + seeds[0] + at + ': ' + p);
-    }
-    const wrong = play(mod, seeds[0], { difficulty, answers: 'wrong', expect: false, label: difficulty.name + ', every answer wrong' });
+    const seed = seeds[(level - 1) % seeds.length];
+    const at = 'seed ' + seed + ' at difficulty ' + difficulty.name;
+    const run = play(mod, seed, { difficulty, label: difficulty.name });
+    report.runs.push(run);
+    for (const p of run.problems) report.problems.push(at + ': ' + p);
+    const wrong = play(mod, seed, { difficulty, answers: 'wrong', expect: false, label: difficulty.name + ', every answer wrong' });
     report.runs.push(wrong);
-    for (const p of wrong.problems) report.problems.push('seed ' + seeds[0] + at + ' with every answer wrong: ' + p);
+    for (const p of wrong.problems) report.problems.push(at + ' with every answer wrong: ' + p);
     if (own && (level === 1 || level === DIFFICULTY_NAMES.length)) {
       const card = play(mod, seeds[0], { variant: CONFIGURED, card: own, difficulty, label: difficulty.name + ', as its card' });
       report.runs.push(card);
-      for (const p of card.problems) report.problems.push('seed ' + seeds[0] + at + ', opened as its own card: ' + p);
+      for (const p of card.problems) {
+        report.problems.push('seed ' + seeds[0] + ' at difficulty ' + difficulty.name + ', opened as its own card: ' + p);
+      }
     }
   }
 
