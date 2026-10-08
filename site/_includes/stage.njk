@@ -17,6 +17,9 @@
       <h2 class='stage-title' id='stage-title' tabindex='-1'>{{ stageLine if stageLine else (stageEntry.what if stageEntry else '') }}</h2>
 {%- endif %}
       <p class='stage-brief' id='stage-brief'></p>
+      {# The goal: one line that says what counts as solved. A puzzle without one is a toy, so js/stage.js
+         shows it for every piece that states one and hides it only while nothing is on. #}
+      <p class='stage-goal' id='stage-goal' hidden><span class='stage-goal-word'>the goal</span> <span class='stage-goal-text' id='stage-goal-text'></span></p>
     </div>
 {%- if threshold %}
     <div class='stage-ask' id='stage-ask'>
@@ -35,6 +38,12 @@
       </div>
       <div class='stage-side'>
         <div class='stage-knobs' id='stage-knobs'></div>
+        {# The check: the one way a puzzle is finished. Enabled once every knob is set; a press is a try,
+           and the line beside it keeps the score (js/stage.js, judge()). #}
+        <div class='stage-check-row'>
+          <button type='button' class='btn-filled stage-check' id='stage-check' disabled>check</button>
+          <p class='stage-tries' id='stage-tries' aria-live='polite' hidden></p>
+        </div>
         <p class='stage-status' id='stage-status' aria-live='polite'></p>
         <p class='stage-wanted' id='stage-wanted' aria-live='polite' hidden></p>
         <div class='stage-foot'>

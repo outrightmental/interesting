@@ -1,112 +1,52 @@
 /* The apocrypha desk: a catalogue of objects that were never real, dealt one at a time. As a card
-   it is one specimen with its catalogue number, provenance and assessment (paint, spark); as a
-   piece it is a specimen to name, wear, lie to and stamp into the drawer, a drawer of specimens
-   to cross-reference, or a solid with two different silhouettes to turn and catalogue. Nothing
-   here is a real object, a real collection or a real claim about the world. See js/feed.js for
-   what a module is and js/stage.js for what a piece is.
+   it is a cabinet of four drawers with a card of clues beside it, or a drawer of six specimens
+   with a rule pinned to it (paint, spark); as a piece it is one of the two puzzles below, and the
+   card it was opened from says which. Nothing here is a real object, a real collection or a real
+   claim about the world. See js/feed.js for what a module is and js/stage.js for what a piece is.
 
-   A card and the feature it opens as are one specimen: the spark puts what it catalogued on its
-   spec as `of` -- the number, the object, its provenance and its assessment, or the whole turning
-   plan -- and the piece has that specimen on the desk, so pressing a catalogue entry in the feed
-   opens the desk with that entry on it. */
+   Three puzzles, all deduction:
 
-// The card this piece was opened from, in the desk's own terms: the specimen it catalogued, or the
-// turning plan it previewed, or null for a piece nobody pressed (js/stage.js, env.card.of).
-function pressed(env) {
-  const was = env.card && env.card.of;
-  if (!was) return null;
-  if (was.plan && was.plan.front && was.plan.mesh) return { plan: was.plan };
-  const text = (value) => (typeof value === 'string' ? value : '');
-  const object = text(was.object);
-  return object ? {
-    number: text(was.number),
-    material: text(was.material),
-    object,
-    qualifier: text(was.qualifier),
-    provenance: text(was.provenance),
-    verdict: text(was.verdict)
-  } : null;
-}
+     the drawer       Four specimens go into four drawers, top to bottom, and a card of clues says
+                      how: above, right below, not at the top, two drawers between. The clues are
+                      drawn from the true order and pruned until exactly one order fits them (all
+                      twenty-four orders are tried). A wrong check says how many stand in the
+                      right drawer and no more; a hint, at a price, shows one specimen its drawer.
+     the odd one out  Six specimens, each with a body, some legs and a marking, and one rule pinned
+                      to the drawer that five of them keep. Find the one that breaks it and say
+                      which of its features the rule disputes. The six are rolled until no rule of
+                      the same family that four of them would witness singles out another one. A
+                      wrong check says whether the specimen is right, and no more.
+     the forged number
+                      Five catalogue cards and the rule a true number keeps (its last digit is the
+                      last digit of the sum of its first three). One card breaks it: find it and
+                      say the digit it should end in. A wrong check says whether the card is right.
 
-// The three materials a piece offers, with the one the card named first: a specimen is made of
-// what its card said it was made of.
-function materialsFrom(env, material) {
-  const options = some(env, MATERIALS, 3).map((m) => ({ label: m, value: m }));
-  if (!material) return options;
-  const at = options.findIndex((o) => o.value === material);
-  if (at >= 0) options.unshift(options.splice(at, 1)[0]);
-  else options.unshift({ label: material, value: material });
-  return options.slice(0, 4);
-}
+   A card and the feature it opens as are one puzzle: the spark puts the whole plan on its spec as
+   `of` -- the specimens, the order, the clues; the six and the rule; the five numbers -- and
+   piece(env) opens on that rather than rolling another. */
 
-const MATERIALS = ['brass', 'horn', 'bakelite', 'tin', 'bone', 'blue glass', 'wax', 'pewter', 'felt', 'cedar',
-  'slate', 'ivory-coloured celluloid'];
-const OBJECTS = ['key', 'compass', 'whistle', 'thimble', 'spoon', 'lens', 'bell', 'button', 'hinge', 'reel',
-  'ticket punch', 'stamp', 'hourglass', 'tuning peg', 'latch'];
-const QUALIFIERS = [
-  'for a door that was never hung',
-  'that points at the last place you were happy',
-  'audible only to the person it is meant for',
-  'worn smooth by a hand that is not on record',
-  'from a railway with no stations',
-  'made to measure a distance that was later abolished',
-  'engraved with a date that did not occur',
-  'that fits a lock in a house nobody can find',
-  'for sealing letters that were never sent',
-  'said to warm slightly when lied to'
-];
-const PROVENANCE = [
-  'found in the lining of a coat, unlisted',
-  'bought at a sale of effects, lot 41, no further detail',
-  'left on a bench at a station in the fog',
-  'passed down with the wrong story attached',
-  'recovered from a drawer that was supposed to be empty',
-  'sent anonymously, postage due',
-  'traded for a smaller object of the same kind'
-];
-const VERDICTS = [
-  'almost certainly never existed',
-  'existed briefly, then was described out of existence',
-  'exists only in this description',
-  'a forgery of a thing that was itself a forgery',
-  'authenticity unverifiable; charm considerable',
-  'genuine, in the sense that this card is genuine'
-];
-const PLACES = ['a house clearance', 'the back of a theatre', 'a flooded archive', 'a shipbreaker’s yard',
-  'a disused telephone exchange', 'a bequest', 'the gap behind a bookcase', 'a lot bought unseen',
-  'a skip outside a surveyor’s office'];
-const LINKS = [
-  { label: 'the same hand', text: 'were accessioned on the same afternoon by the same hand' },
-  { label: 'a shared serial', text: 'share a serial sequence that belongs to neither of them' },
-  { label: 'the same paragraph', text: 'are described in the same paragraph of a catalogue nobody has produced' },
-  { label: 'they fit together', text: 'fit together, which neither of them should' },
-  { label: 'both withdrawn once', text: 'were both withdrawn once and both reinstated without comment' },
-  { label: 'the same scratch', text: 'carry the same scratch in the same place' }
-];
-const WEAR = [
-  'shows no wear at all, which is the strangest thing about it',
-  'light wear, consistent with being looked at and put back',
-  'the wear pattern suggests constant use by someone left-handed',
-  'worn smooth by a hand that is not on record'
+const PLAIN = { density: 1, scale: 1, turn: 0 };
+const WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven'];
+const DRAWERS = ['top', 'second', 'third', 'bottom'];
+const SPECIMENS = [
+  { name: 'key', kind: 'key' },
+  { name: 'bell', kind: 'bell' },
+  { name: 'reel', kind: 'spool' },
+  { name: 'hinge', kind: 'block' },
+  { name: 'whistle', kind: 'tube' },
+  { name: 'lens', kind: 'disc' }
 ];
 const LETTERS = 'ABCDEFGHJKLMNPQRSTVWXYZ';
-// Which silhouette each object is drawn as; anything unlisted is a disc.
-const KINDS = { key: 'key', latch: 'key', whistle: 'tube', 'tuning peg': 'tube', spoon: 'tube', bell: 'bell',
-  reel: 'spool', thimble: 'spool', hourglass: 'spool', hinge: 'block', stamp: 'block', 'ticket punch': 'block' };
 
-/* ---- the drawing: desk, drawer, card, specimen ---------------------------------------------- */
+/* ---- the drawing: desk, card, specimen ----------------------------------------------------- */
 
 function ease(t) {
   t = Math.max(0, Math.min(1, t));
   return t * t * (3 - 2 * t);
 }
 
-function clamp(v) {
-  return Math.max(0, Math.min(1, v));
-}
-
 function catalogue(env) {
-  return env.pick(LETTERS.split('')) + env.pick(LETTERS.split('')) + '-' + env.int(1000, 9999) + '.' + env.int(10, 99);
+  return env.pick(LETTERS.split('')) + env.pick(LETTERS.split('')) + '-' + env.int(1000, 9999);
 }
 
 function some(env, list, n) {
@@ -116,45 +56,33 @@ function some(env, list, n) {
   return out;
 }
 
-// What the desk looks like for one piece: the grain's rows, the card's foxing, the specimen's
-// scratches and the tilt everything lies at.
+function shuffled(env, list) {
+  const out = list.slice();
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = env.int(0, i);
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
+
+// What the desk looks like for one piece: the grain's rows, the card's foxing and the tilt
+// everything lies at. Cosmetic, and rolled from the seed rather than carried on the card.
 function scenery(env) {
   const rows = [];
   for (let i = 0; i < 64; i++) rows.push(0.25 + env.rnd() * 0.2);
   const spots = [];
   for (let i = 0; i < 14; i++) spots.push({ x: env.rnd(), y: env.rnd(), r: 1 + env.rnd() * 3 });
-  const scratches = [];
-  for (let i = 0; i < 16; i++) {
-    const a = env.rnd() * Math.PI;
-    scratches.push({ x: (env.rnd() - 0.5) * 1.6, y: (env.rnd() - 0.5) * 1.8, dx: Math.cos(a) * 0.5, dy: Math.sin(a) * 0.5 });
-  }
-  return { rows, spots, scratches, tilt: (env.rnd() - 0.5) * 0.12 };
+  return { rows, spots, tilt: (env.rnd() - 0.5) * 0.08 };
 }
 
-function deskTop(g, w, h, c, rows) {
+function deskTop(g, w, h, c, rows, density) {
   g.fillStyle = c.mix(c.colors.bg, c.colors.bg2, 0.3);
   g.fillRect(0, 0, w, h);
-  for (let i = 0; i < rows.length; i++) {
-    g.fillStyle = c.alpha(c.colors.bg2, rows[i]);
-    g.fillRect(0, Math.round((i / rows.length) * h), w, 1);
+  const n = Math.max(8, Math.round(rows.length * (density || 1)));
+  for (let i = 0; i < n; i++) {
+    g.fillStyle = c.alpha(c.colors.bg2, rows[i % rows.length]);
+    g.fillRect(0, Math.round((i / n) * h), w, 1);
   }
-}
-
-// The drawer front along the bottom of the desk; `open` (0..1) slides it out and shows the slot.
-function drawer(g, w, h, c, open) {
-  const k = c.colors;
-  const top = h * 0.86;
-  const drop = open * h * 0.07;
-  if (open > 0) {
-    g.fillStyle = c.alpha(k.bg, 0.85 * open);
-    g.fillRect(w * 0.06, top - drop * 0.4, w * 0.88, drop * 1.4);
-  }
-  g.fillStyle = c.mix(k.bg, k.bg2, 0.55);
-  g.fillRect(0, top + drop, w, h);
-  g.fillStyle = c.alpha(k.fg, 0.08);
-  g.fillRect(0, top + drop, w, 1);
-  g.fillStyle = c.alpha(k.accent2, 0.55);
-  g.fillRect(w / 2 - 18, top + drop + (h - top) * 0.5 - 2, 36, 4);
 }
 
 function write(g, str, x, y, size, color, align, weight) {
@@ -180,13 +108,13 @@ function wrap(g, str, size, maxW) {
   return lines;
 }
 
-// An index card, ruled, with its centre at the origin: `age` yellows and foxes it, `lift` deepens
-// its shadow, `rows` is how many rules it is ruled for (the first rule is the red one).
-function card(g, c, cw, ch, age, spots, lift, rows) {
+// An index card, ruled, with its centre at the origin: `age` yellows and foxes it, `rows` is how
+// many rules it is ruled for (the first rule is the red one).
+function card(g, c, cw, ch, age, spots, rows) {
   const k = c.colors;
   g.shadowColor = 'rgba(0,0,0,0.5)';
-  g.shadowBlur = 8 + lift * 14;
-  g.shadowOffsetY = 3 + lift * 6;
+  g.shadowBlur = 10;
+  g.shadowOffsetY = 4;
   g.fillStyle = c.mix(c.mix(k.bg, k.fg, 0.08), k.accent2, age * 0.14);
   g.fillRect(-cw / 2, -ch / 2, cw, ch);
   g.shadowColor = 'transparent';
@@ -219,7 +147,7 @@ function ring(g, x, y, r, hole) {
   g.arc(x, y, r, 0, Math.PI * 2, !!hole);
 }
 
-// The specimen's silhouette as one path around the origin, `r` across; holes wind the other way.
+// A specimen's silhouette as one path around the origin, `r` across; holes wind the other way.
 function outline(g, kind, r) {
   g.beginPath();
   if (kind === 'key') {
@@ -254,716 +182,800 @@ function outline(g, kind, r) {
   }
 }
 
-// What a material looks like in this palette; `warm` is how far it has warmed from being lied to.
-function tone(c, material, warm) {
-  const k = c.colors;
-  const m = String(material || '');
-  let base;
-  if (!m) base = c.mix(k.bg2, k.muted, 0.3);
-  else if (/glass/.test(m)) base = c.mix(k.accent, k.bg2, 0.25);
-  else if (/brass|tin|pewter|steel|lead/.test(m)) base = c.mix(k.accent2, k.muted, 0.5);
-  else if (/horn|bone|ivory/.test(m)) base = c.mix(k.fg, k.accent2, 0.4);
-  else if (/cedar|oak|wood|cork/.test(m)) base = c.mix(k.bg2, k.accent2, 0.45);
-  else if (/slate/.test(m)) base = c.mix(k.bg2, k.muted, 0.45);
-  else base = c.mix(k.accent, k.accent2, 0.5);
-  return warm ? c.mix(base, k.accent2, warm * 0.65) : base;
-}
-
-// The specimen at the origin: its glow if warmed, its body, and `n` of its scratches, clipped to it.
-function specimen(g, c, kind, r, fill, scratches, n, warm) {
-  const k = c.colors;
-  if (warm > 0.01) {
-    const glow = g.createRadialGradient(0, 0, r * 0.3, 0, 0, r * 2.4);
-    glow.addColorStop(0, c.alpha(k.accent2, 0.5 * warm));
-    glow.addColorStop(1, c.alpha(k.accent2, 0));
-    g.fillStyle = glow;
-    g.fillRect(-r * 2.4, -r * 2.4, r * 4.8, r * 4.8);
-  }
+// The specimen at the origin: its body in `fill`, with a soft shadow under it.
+function specimen(g, c, kind, r, fill) {
   g.shadowColor = 'rgba(0,0,0,0.45)';
-  g.shadowBlur = 10;
-  g.shadowOffsetY = 4;
+  g.shadowBlur = 8;
+  g.shadowOffsetY = 3;
   outline(g, kind, r);
   g.fillStyle = fill;
   g.fill();
   g.shadowColor = 'transparent';
   g.shadowBlur = 0;
   g.shadowOffsetY = 0;
-  g.strokeStyle = c.alpha(k.fg, 0.3);
+  g.strokeStyle = c.alpha(c.colors.fg, 0.3);
   g.lineWidth = 1;
   g.stroke();
-  if (n > 0 && scratches) {
-    g.save();
-    outline(g, kind, r);
-    g.clip();
-    g.strokeStyle = c.alpha(k.bg, 0.6);
-    g.beginPath();
-    for (let i = 0; i < n && i < scratches.length; i++) {
-      const s = scratches[i];
-      g.moveTo(s.x * r, s.y * r);
-      g.lineTo((s.x + s.dx) * r, (s.y + s.dy) * r);
-    }
-    g.stroke();
-    g.restore();
+}
+
+/* ---- the drawer: an order from clues ------------------------------------------------------- */
+
+// A clue about which drawer a specimen is in. `a` and `b` are item indices; `order` lists the
+// items top to bottom, so a lower position number is a higher drawer.
+function holds(clue, order) {
+  const at = (item) => order.indexOf(item);
+  const n = order.length;
+  switch (clue.t) {
+    case 'above': return at(clue.a) < at(clue.b);
+    case 'notTop': return at(clue.a) !== 0;
+    case 'notBottom': return at(clue.a) !== n - 1;
+    case 'rightBelow': return at(clue.a) === at(clue.b) + 1;
+    case 'between': return Math.abs(at(clue.a) - at(clue.b)) === clue.d;
+    case 'next': return Math.abs(at(clue.a) - at(clue.b)) === 1;
+    case 'notNext': return Math.abs(at(clue.a) - at(clue.b)) > 1;
+    case 'end': return at(clue.a) === 0 || at(clue.a) === n - 1;
+    case 'slot': return at(clue.a) === clue.k;
+    default: return false;
   }
 }
 
-// The card half: the desk, one card askew, a specimen's silhouette and its catalogue mark. The
-// configuration the card was dealt says how much of the grain shows, how large the index card lies
-// on the desk and how far askew it is.
-function desk(ctx, w, h, env) {
-  const v = env.variant;
-  const look = scenery(env);
-  deskTop(ctx, w, h, env, look.rows.slice(0, Math.max(8, Math.round(look.rows.length * v.density))));
-  const cw = Math.min(w * 0.92, w * 0.72 * v.scale);
-  const ch = Math.min(h * 0.62, cw * 0.62);
-  ctx.save();
-  ctx.translate(w / 2, h / 2);
-  ctx.rotate(look.tilt + (v.turn - 0.5) * 0.11);
-  card(ctx, env, cw, ch, 0.3, look.spots, 0, Math.max(4, Math.round(6 * v.density)));
-  ctx.save();
-  ctx.translate(-cw * 0.32, ch * 0.12);
-  specimen(ctx, env, KINDS[env.pick(OBJECTS)] || 'disc', ch * 0.17, env.alpha(env.colors.accent, 0.55), look.scratches, 5, 0);
-  ctx.restore();
-  write(ctx, 'APC-' + env.int(1000, 9999), -cw / 2 + 12, -ch / 2 + ch / 12, Math.max(9, ch * 0.09), env.alpha(env.colors.accent2, 0.85), 'left', 600);
-  ctx.restore();
+function clueText(clue, names) {
+  const a = 'the ' + names[clue.a];
+  const b = clue.b == null ? '' : 'the ' + names[clue.b];
+  switch (clue.t) {
+    case 'above': return a + ' is somewhere above ' + b;
+    case 'notTop': return a + ' is not in the top drawer';
+    case 'notBottom': return a + ' is not in the bottom drawer';
+    case 'rightBelow': return a + ' is right below ' + b;
+    case 'between': return (clue.d === 2 ? 'one drawer lies' : 'two drawers lie') + ' between ' + a + ' and ' + b;
+    case 'next': return a + ' and ' + b + ' are in neighbouring drawers';
+    case 'notNext': return a + ' and ' + b + ' are not in neighbouring drawers';
+    case 'end': return a + ' is in the top drawer or the bottom one';
+    case 'slot': return a + ' is in the ' + DRAWERS[clue.k] + ' drawer';
+    default: return '';
+  }
 }
 
-/* ---- piece one: accession a specimen -------------------------------------------------------- */
+function permutations(n) {
+  const out = [];
+  const used = new Array(n).fill(false);
+  const cur = [];
+  (function walk() {
+    if (cur.length === n) {
+      out.push(cur.slice());
+      return;
+    }
+    for (let i = 0; i < n; i++) {
+      if (used[i]) continue;
+      used[i] = true;
+      cur.push(i);
+      walk();
+      cur.pop();
+      used[i] = false;
+    }
+  })();
+  return out;
+}
 
-function accession(env) {
-  const was = pressed(env);
-  const had = was && !was.plan ? was : null;
-  // The specimen the card catalogued is the one on the desk: its object, its qualifier, its
-  // number, its provenance and its assessment, with the material it named first on the dial.
-  const object = had && OBJECTS.indexOf(had.object) >= 0 ? had.object : env.pick(OBJECTS);
-  const qualifier = had && had.qualifier ? had.qualifier : env.pick(QUALIFIERS);
-  const options = materialsFrom(env, had ? had.material : '');
-  const count = env.int(2, 3);
-  const number = had && had.number ? had.number : catalogue(env);
-  const place = env.pick(PLACES);
-  const verdict = had && had.verdict ? had.verdict : env.pick(VERDICTS);
-  const look = scenery(env);
-  const kind = KINDS[object] || 'disc';
-  const times = count === 2 ? 'twice' : 'three times';
-  const s = { material: '', wear: 0.3, lie: false, warm: 0, stamps: 0, pop: 0, file: 0, t: 0 };
-  function printed() {
-    return { number: s.stamps >= 1, place: s.stamps >= (count === 3 ? 2 : 1), verdict: s.stamps >= count };
+function fits(clues, perms) {
+  return perms.filter((p) => clues.every((clue) => holds(clue, p)));
+}
+
+// Every true clue about `order`, which the plan draws from.
+function trueClues(order) {
+  const n = order.length;
+  const out = [];
+  for (let a = 0; a < n; a++) {
+    const pa = order.indexOf(a);
+    if (pa !== 0) out.push({ t: 'notTop', a });
+    if (pa !== n - 1) out.push({ t: 'notBottom', a });
+    if (pa === 0 || pa === n - 1) out.push({ t: 'end', a });
+    out.push({ t: 'slot', a, k: pa });
+    for (let b = 0; b < n; b++) {
+      if (a === b) continue;
+      const pb = order.indexOf(b);
+      if (pa < pb) out.push({ t: 'above', a, b });
+      if (pa === pb + 1) out.push({ t: 'rightBelow', a, b });
+      if (a < b && Math.abs(pa - pb) === 1) out.push({ t: 'next', a, b });
+      if (a < b && Math.abs(pa - pb) >= 2) {
+        out.push({ t: 'between', a, b, d: Math.abs(pa - pb) });
+        out.push({ t: 'notNext', a, b });
+      }
+    }
   }
-  function draw(c) {
-    const g = c.g;
-    const w = c.w;
-    const h = c.h;
-    const k = c.colors;
-    const u = Math.min(w, h);
-    const f = ease(s.file);
-    deskTop(g, w, h, c, look.rows);
-    drawer(g, w, h, c, Math.sin(f * Math.PI));
-    // The specimen, on the left, warming if it is being lied to.
-    const r = u * 0.16;
-    const warm = s.warm * (1 - f);
-    g.save();
-    g.translate(w * 0.25 + f * w * 0.25, h * 0.44 + f * h * 0.5);
-    g.rotate(look.tilt * 0.5 + (c.reduced ? 0 : Math.sin(s.t * 0.7) * 0.01) + s.pop * 0.03);
-    g.scale(1 - f * 0.7, 1 - f * 0.7);
-    g.globalAlpha = 1 - f;
-    specimen(g, c, kind, r, tone(c, s.material, warm), look.scratches, Math.round(s.wear * look.scratches.length), warm);
-    g.restore();
-    // The card, on the right, printed a line at a time as the stamps land.
-    const cw = w * 0.48;
-    const ch = Math.min(h * 0.62, cw * 0.8);
-    const m = Math.min(10, cw * 0.06);
-    const fs = Math.max(9, Math.min(u * 0.034, ch / 6 * 0.62));
-    const on = printed();
-    const lines = [];
-    const name = (s.material ? s.material + ' ' : 'a ') + object;
-    wrap(g, name, fs, cw - m * 2 - 4).forEach((l) => lines.push({ text: l, color: k.fg, weight: 600 }));
-    wrap(g, qualifier, fs, cw - m * 2 - 4).forEach((l) => lines.push({ text: l, color: c.alpha(k.fg, 0.8), weight: 500 }));
-    if (on.place) wrap(g, 'came out of ' + place + '. no prior record.', fs, cw - m * 2 - 4).forEach((l) => lines.push({ text: l, color: k.muted, weight: 500 }));
-    if (on.verdict) wrap(g, 'assessment: ' + verdict, fs, cw - m * 2 - 4).forEach((l) => lines.push({ text: l, color: k.accent, weight: 700 }));
-    const rows = Math.max(6, lines.length + 1);
-    const rh = ch / rows;
-    g.save();
-    g.translate(w * 0.67 - f * w * 0.17, h * 0.45 + f * h * 0.5);
-    g.rotate(look.tilt + s.pop * 0.02);
-    g.scale(1 - f * 0.6, 1 - f * 0.6);
-    g.globalAlpha = 1 - f;
-    card(g, c, cw, ch, s.wear, look.spots, s.pop, rows);
-    const size = Math.min(fs, rh * 0.62);
-    if (on.number) {
-      write(g, number, -cw / 2 + m + 4, -ch / 2 + rh * 0.5, size, k.accent2, 'left', 700);
-      g.strokeStyle = c.alpha(k.accent2, 0.7);
-      g.lineWidth = 1.5;
-      g.strokeRect(-cw / 2 + m, -ch / 2 + rh * 0.12, g.measureText(number).width + 8, rh * 0.76);
-    } else write(g, '— — —', -cw / 2 + m + 4, -ch / 2 + rh * 0.5, size, c.alpha(k.muted, 0.5), 'left', 500);
-    lines.forEach((l, i) => write(g, l.text, -cw / 2 + m + 2, -ch / 2 + rh * (i + 1.5), size, l.color, 'left', l.weight));
-    if (s.pop > 0) {
-      g.fillStyle = c.alpha(k.accent2, s.pop * 0.18);
-      g.fillRect(-cw / 2, -ch / 2, cw, ch);
+  return out;
+}
+
+// The weight a clue carries in the draw: the vaguer kinds first, so the puzzle leans on reasoning
+// rather than on being told where a thing is.
+function clueWeight(clue) {
+  return clue.t === 'slot' ? 1 : clue.t === 'end' || clue.t === 'notTop' || clue.t === 'notBottom' ? 2 : 4;
+}
+
+// Clues for `order`, drawn by weight until exactly one order fits and pruned of any that can go.
+function drawClues(env, order, perms) {
+  const candidates = trueClues(order);
+  let clues = [];
+  for (let guard = 0; guard < 40 && fits(clues, perms).length !== 1 && candidates.length; guard++) {
+    const total = candidates.reduce((sum, clue) => sum + clueWeight(clue), 0);
+    let roll = env.rnd() * total;
+    let at = 0;
+    for (let i = 0; i < candidates.length; i++) {
+      roll -= clueWeight(candidates[i]);
+      if (roll <= 0) {
+        at = i;
+        break;
+      }
     }
+    const clue = candidates.splice(at, 1)[0];
+    if (fits(clues.concat([clue]), perms).length < fits(clues, perms).length) clues.push(clue);
+  }
+  for (let i = clues.length - 1; i >= 0; i--) {
+    const without = clues.slice(0, i).concat(clues.slice(i + 1));
+    if (fits(without, perms).length === 1) clues = without;
+  }
+  return clues;
+}
+
+function drawerPlan(env) {
+  const n = 4;
+  const items = some(env, [0, 1, 2, 3, 4, 5], n);
+  const order = shuffled(env, [0, 1, 2, 3]);
+  const perms = permutations(n);
+  let clues = null;
+  // At most five clues: a card has only so many lines, so a draw that needs more is drawn again.
+  for (let attempt = 0; attempt < 12 && !clues; attempt++) {
+    const drawn = drawClues(env, order, perms);
+    if (drawn.length <= 5 && fits(drawn, perms).length === 1) clues = drawn;
+  }
+  if (!clues) clues = [0, 1, 2].map((a) => ({ t: 'slot', a, k: order.indexOf(a) }));
+  // An opening order that is not the answer, so the cabinet asks something.
+  let start = shuffled(env, order);
+  for (let guard = 0; guard < 10 && start.every((v, i) => v === order[i]); guard++) start = shuffled(env, order);
+  if (start.every((v, i) => v === order[i])) start = order.slice().reverse();
+  return { kind: 'drawer', number: catalogue(env), items, order, clues, start };
+}
+
+function carriedDrawer(env) {
+  const p = env.card && env.card.of;
+  if (!p || p.kind !== 'drawer') return null;
+  const n = 4;
+  if (!Array.isArray(p.items) || p.items.length !== n) return null;
+  if (!p.items.every((i) => Number.isInteger(i) && i >= 0 && i < SPECIMENS.length) || new Set(p.items).size !== n) return null;
+  const isPerm = (list) => Array.isArray(list) && list.length === n && list.every((v) => Number.isInteger(v) && v >= 0 && v < n) && new Set(list).size === n;
+  if (!isPerm(p.order) || !isPerm(p.start) || p.start.every((v, i) => v === p.order[i])) return null;
+  if (!Array.isArray(p.clues) || !p.clues.length || p.clues.length > 5) return null;
+  const pair = ['above', 'rightBelow', 'between', 'next', 'notNext'];
+  const okClue = (c) => c && typeof c === 'object' && ['above', 'notTop', 'notBottom', 'rightBelow', 'between', 'next', 'notNext', 'end', 'slot'].includes(c.t)
+    && Number.isInteger(c.a) && c.a >= 0 && c.a < n
+    && (!pair.includes(c.t) || (Number.isInteger(c.b) && c.b >= 0 && c.b < n && c.b !== c.a))
+    && (c.t !== 'between' || (Number.isInteger(c.d) && c.d >= 2 && c.d < n))
+    && (c.t !== 'slot' || (Number.isInteger(c.k) && c.k >= 0 && c.k < n));
+  if (!p.clues.every(okClue)) return null;
+  const clues = p.clues.map((c) => ({ t: c.t, a: c.a, b: c.b, d: c.d, k: c.k }));
+  const only = fits(clues, permutations(n));
+  if (only.length !== 1 || !only[0].every((v, i) => v === p.order[i])) return null;
+  const number = typeof p.number === 'string' && /^[A-Z]{2}-\d{4}$/.test(p.number) ? p.number : 'XX-0000';
+  return { kind: 'drawer', number, items: p.items.slice(), order: p.order.slice(), clues, start: p.start.slice() };
+}
+
+function drawerTitle(plan) {
+  return 'the drawer: four specimens, ' + WORDS[plan.clues.length] + (plan.clues.length === 1 ? ' clue' : ' clues');
+}
+
+function drawerGeometry(w, h, scale) {
+  const cw = Math.min(w * 0.4, h * 0.56) * scale;
+  const ch = h * 0.72 * scale;
+  return { x: w * 0.06, y: h * 0.5 - ch / 2, cw, ch, slot: ch / 4 };
+}
+
+function drawCabinet(g, w, h, env, plan, s, look, variant) {
+  const v = variant || PLAIN;
+  const k = env.colors;
+  const names = plan.items.map((i) => SPECIMENS[i].name);
+  const geo = drawerGeometry(w, h, v.scale);
+  deskTop(g, w, h, env, look.rows, v.density);
+  // The cabinet: four drawer fronts, top to bottom, with the specimen each holds just now.
+  g.fillStyle = env.mix(k.bg, k.bg2, 0.8);
+  g.fillRect(geo.x - geo.cw * 0.04, geo.y - geo.slot * 0.12, geo.cw * 1.08, geo.ch + geo.slot * 0.24);
+  const size = Math.max(9, Math.min(16, geo.slot * 0.26));
+  for (let slot = 0; slot < 4; slot++) {
+    const y = geo.y + slot * geo.slot;
+    const item = s.order[slot];
+    g.fillStyle = env.mix(k.bg2, k.accent2, 0.12 + slot * 0.03);
+    g.fillRect(geo.x, y + geo.slot * 0.04, geo.cw, geo.slot * 0.92);
+    g.fillStyle = env.alpha(k.fg, 0.08);
+    g.fillRect(geo.x, y + geo.slot * 0.04, geo.cw, 1);
+    g.fillStyle = env.alpha(k.accent2, 0.6);
+    g.fillRect(geo.x + geo.cw * 0.78, y + geo.slot * 0.5 - 2, geo.cw * 0.12, 4);
+    g.save();
+    g.translate(geo.x + geo.cw * 0.17, y + geo.slot * 0.5);
+    specimen(g, env, SPECIMENS[plan.items[item]].kind, geo.slot * 0.3, env.alpha(k.accent, 0.6));
     g.restore();
-    if (f > 0.5) {
-      // What the desk keeps once the drawer has shut: the number, and the line about it.
-      const a = clamp((f - 0.5) * 2.5);
-      const big = Math.max(9, u * 0.04);
-      write(g, number, w / 2, h * 0.36, big, c.alpha(k.accent2, a), 'center', 700);
-      write(g, 'accessioned. the desk keeps no copy.', w / 2, h * 0.36 + big * 1.6, big * 0.8, c.alpha(k.fg, a * 0.85), 'center', 500);
-    }
+    write(g, 'the ' + names[item], geo.x + geo.cw * 0.34, y + geo.slot * 0.42, size, k.fg, 'left', 600);
+    write(g, DRAWERS[slot], geo.x + geo.cw * 0.34, y + geo.slot * 0.68, size * 0.8, env.alpha(k.muted, 0.8), 'left', 500);
+  }
+  // A hinted specimen gets a dashed mark on the drawer it belongs in.
+  for (const item of s.hinted) {
+    const slot = plan.order.indexOf(item);
+    const y = geo.y + slot * geo.slot;
+    g.strokeStyle = env.alpha(k.accent2, 0.95);
+    g.lineWidth = 2;
+    g.setLineDash([5, 4]);
+    g.strokeRect(geo.x + 3, y + geo.slot * 0.08, geo.cw - 6, geo.slot * 0.84);
+    g.setLineDash([]);
+    write(g, 'the ' + names[item] + ' goes here', geo.x + geo.cw - 6, y + geo.slot * 0.88, size * 0.75, k.accent2, 'right', 600);
+  }
+  // The card of clues, beside the cabinet.
+  const cx = w * 0.72 + (v.turn - 0.5) * w * 0.03;
+  const cw = w * 0.46;
+  const ch = Math.min(h * 0.64, cw * 0.72);
+  const fs = Math.max(9, Math.min(15, Math.min(w, h) * 0.032));
+  g.save();
+  g.translate(cx, h * 0.5);
+  g.rotate(look.tilt + (v.turn - 0.5) * 0.06);
+  const m = Math.min(10, cw * 0.06);
+  const lines = [];
+  plan.clues.forEach((clue, i) => wrap(g, clueText(clue, names), fs, cw - m * 2 - fs * 1.4).forEach((l, j) => lines.push({ text: l, first: j === 0, n: i + 1 })));
+  const rows = Math.max(6, lines.length + 2);
+  card(g, env, cw, ch, 0.3, look.spots, rows);
+  const rh = ch / rows;
+  const fsz = Math.min(fs, rh * 0.66);
+  write(g, plan.number + ' / the drawer', -cw / 2 + m + 2, -ch / 2 + rh * 0.5, fsz, k.accent2, 'left', 700);
+  lines.forEach((l, i) => {
+    if (l.first) write(g, l.n + '.', -cw / 2 + m + 2, -ch / 2 + rh * (i + 1.5), fsz, k.accent2, 'left', 600);
+    write(g, l.text, -cw / 2 + m + 2 + fsz * 1.3, -ch / 2 + rh * (i + 1.5), fsz, k.fg, 'left', 500);
+  });
+  g.restore();
+  if (s.fade > 0) {
+    g.fillStyle = env.alpha(k.accent2, ease(s.fade) * 0.1);
+    g.fillRect(0, 0, w, h);
+  }
+}
+
+function drawerPreview(g, w, h, env, plan) {
+  drawCabinet(g, w, h, env, plan, { order: plan.start.slice(), hinted: [], fade: 0 }, scenery(env), env.variant);
+}
+
+function drawerPiece(env, plan) {
+  const names = plan.items.map((i) => SPECIMENS[i].name);
+  const look = scenery(env);
+  const s = { order: plan.start.slice(), hinted: [], fade: 0 };
+  const draw = (c) => drawCabinet(c.g, c.w, c.h, c, plan, s, look, env.variant);
+  function right() {
+    let n = 0;
+    for (let i = 0; i < 4; i++) if (s.order[i] === plan.order[i]) n += 1;
+    return n;
   }
   return {
-    title: 'accession the ' + object,
-    brief: 'A ' + object + ' ' + qualifier + ' is on the desk: say what it is made of and how worn it is, tell it a lie if you like, then stamp its card ' + times + ' to file it in the drawer.',
+    title: drawerTitle(plan),
+    brief: 'Four specimens go into the four drawers of the cabinet, top to bottom, and the card beside it says how. Exactly one arrangement fits every line on the card.',
+    goal: 'Put each specimen in the one drawer the card allows.',
     aspect: '4 / 3',
+    checkLabel: 'check the cabinet',
     steps: [
-      { id: 'material', ask: 'what it is made of', kind: 'choice', options },
-      { id: 'wear', ask: 'how worn it is', kind: 'range', min: 0, max: 100, step: 1, value: 30, low: 'mint', high: 'ruined' },
-      { id: 'lie', ask: 'tell it a lie', kind: 'toggle' },
-      { id: 'stamp', ask: 'stamp the card ' + times, kind: 'press', count, label: 'stamp', after: 'material' }
+      { id: 'order', ask: 'the specimens, top drawer to bottom', kind: 'order', items: plan.items.map((i, at) => ({ label: 'the ' + SPECIMENS[i].name, value: at })), value: plan.start.slice() },
+      { id: 'hint', ask: 'one specimen shown its drawer', kind: 'press', count: 1, label: 'show me one', optional: true }
     ],
+    solution: { order: plan.order.slice() },
+    check(c) {
+      const n = right();
+      return {
+        solved: n === 4,
+        say: n === 4 ? 'every specimen is in the drawer the card allows'
+          : (n === 0 ? 'none of the four is in the right drawer yet' : WORDS[n] + ' of four in the right drawer')
+      };
+    },
     start(c) {
-      c.status('specimen ' + number + ' is on the desk, as yet unnamed.');
+      c.status(WORDS[plan.clues.length] + (plan.clues.length === 1 ? ' clue' : ' clues') + ' on the card');
       draw(c);
     },
     apply(id, value, c) {
-      if (id === 'material') {
-        s.material = String(value);
-        c.status('a ' + s.material + ' ' + object + ' ' + qualifier + '.');
+      if (id === 'order' && Array.isArray(value) && value.length === 4) {
+        s.order = value.map(Number);
+        c.status('top to bottom: ' + s.order.map((i) => names[i]).join(', '));
       }
-      if (id === 'wear') {
-        s.wear = clamp(Number(value) / 100);
-        c.status(WEAR[s.wear < 0.1 ? 0 : s.wear < 0.45 ? 1 : s.wear < 0.8 ? 2 : 3] + '.');
-      }
-      if (id === 'lie') {
-        s.lie = !!value;
-        c.status(s.lie ? 'it has warmed slightly.' : 'it has cooled. it believes you.');
-      }
-      if (id === 'stamp') {
-        const before = printed();
-        s.stamps = Math.min(count, Math.max(s.stamps + 1, Number(value) || 0));
-        s.pop = 1;
-        const now = printed();
-        if (now.verdict && !before.verdict) c.status('assessment: ' + verdict + '.');
-        else if (now.number && !before.number) c.status('numbered ' + number + (now.place ? ', out of ' + place + '. no prior record.' : '. nothing else is on record yet.'));
-        else if (now.place && !before.place) c.status('provenance: came out of ' + place + '. no prior record.');
-        else c.status('stamped again, for luck.');
-      }
-    },
-    frame(t, dt, c) {
-      s.t += dt;
-      s.warm += ((s.lie ? 1 : 0) - s.warm) * Math.min(1, dt * 2);
-      s.pop = Math.max(0, s.pop - dt * 3);
-      // The stage lingers about a second after the finish, so the filing takes one.
-      if (c.done) s.file = Math.min(1, s.file + dt * (c.reduced ? 2 : 1));
-      draw(c);
-    },
-    end(c) {
-      c.status('accessioned ' + number + ': ' + verdict + '. filed in the drawer, which keeps no copy.');
-    }
-  };
-}
-
-/* ---- piece two: cross-reference the drawer -------------------------------------------------- */
-
-function crossReference(env) {
-  const was = pressed(env);
-  const had = was && !was.plan ? was : null;
-  const n = env.int(4, 6);
-  const need = env.int(2, 3);
-  const links = some(env, LINKS, 3);
-  const holdMs = env.pick([1200, 1600, 2000]);
-  const look = scenery(env);
-  const items = [];
-  for (let i = 0; i < n; i++) {
-    const cols = n <= 4 ? 2 : 3;
-    const rows = Math.ceil(n / cols);
-    const object = env.pick(OBJECTS);
-    items.push({
-      number: catalogue(env),
-      name: env.pick(MATERIALS) + ' ' + object,
-      kind: KINDS[object] || 'disc',
-      gx: 0.1 + 0.8 * ((i % cols) + 0.5) / cols + (env.rnd() - 0.5) * 0.04,
-      gy: 0.16 + 0.6 * (Math.floor(i / cols) + 0.5) / rows + (env.rnd() - 0.5) * 0.04,
-      hx: 0.5 + (env.rnd() - 0.5) * 0.14,
-      hy: 0.45 + (env.rnd() - 0.5) * 0.14,
-      hr: (env.rnd() - 0.5) * 0.7,
-      gr: (env.rnd() - 0.5) * 0.1
-    });
-  }
-  // The specimen the card catalogued is already in the drawer, first in it.
-  if (had && items.length) {
-    items[0].number = had.number || items[0].number;
-    items[0].name = ((had.material ? had.material + ' ' : '') + had.object).trim();
-    items[0].kind = KINDS[had.object] || items[0].kind;
-  }
-  const s = { spread: 0.5, link: links[0], chosen: false, picks: [], lift: 0, file: 0, t: 0 };
-  function place(c, it) {
-    const f = ease(s.file);
-    const i = s.picks.indexOf(it);
-    const gather = ease(Math.min(1, f * 2));
-    const sink = ease(Math.max(0, f * 2 - 1));
-    let x = (it.hx + (it.gx - it.hx) * s.spread) * c.w;
-    let y = (it.hy + (it.gy - it.hy) * s.spread) * c.h;
-    let rot = it.hr + (it.gr - it.hr) * s.spread;
-    let a = 1;
-    if (i >= 0) {
-      x += (c.w * 0.5 + i * 6 - x) * gather;
-      y += (c.h * 0.42 + i * 5 - y) * gather;
-      rot *= 1 - gather;
-      y += sink * c.h * 0.5;
-      a = 1 - sink;
-    } else {
-      y += f * c.h;
-      a = 1 - f;
-    }
-    return { x, y, rot, a };
-  }
-  function thread(g, c, a, b, style) {
-    const k = c.colors;
-    g.save();
-    g.lineCap = 'round';
-    g.strokeStyle = style === 2 ? k.muted : k.accent2;
-    g.lineWidth = style === 3 ? 3 : 1.5;
-    if (style === 1) g.setLineDash([8, 6]);
-    if (style === 4) g.setLineDash([2, 7]);
-    g.beginPath();
-    if (style === 0) {
-      const dx = b.x - a.x;
-      const dy = b.y - a.y;
-      const len = Math.max(1, Math.hypot(dx, dy));
-      g.moveTo(a.x, a.y);
-      for (let i = 1; i <= 24; i++) {
-        const t = i / 24;
-        const wob = Math.sin(t * Math.PI * 6 + s.t * 2) * 4;
-        g.lineTo(a.x + dx * t - dy / len * wob, a.y + dy * t + dx / len * wob);
-      }
-    } else {
-      g.moveTo(a.x, a.y);
-      g.quadraticCurveTo((a.x + b.x) / 2, (a.y + b.y) / 2 + 18, b.x, b.y);
-    }
-    g.stroke();
-    if (style === 2) {
-      g.beginPath();
-      g.moveTo(a.x, a.y + 4);
-      g.quadraticCurveTo((a.x + b.x) / 2, (a.y + b.y) / 2 + 22, b.x, b.y + 4);
-      g.stroke();
-    }
-    if (style === 5) {
-      g.lineWidth = 2;
-      for (const p of [a, b]) {
-        g.beginPath();
-        g.moveTo(p.x - 7, p.y - 5);
-        g.lineTo(p.x + 7, p.y + 5);
-        g.stroke();
-      }
-    }
-    g.restore();
-  }
-  function draw(c) {
-    const g = c.g;
-    const w = c.w;
-    const h = c.h;
-    const k = c.colors;
-    const u = Math.min(w, h);
-    const f = ease(s.file);
-    deskTop(g, w, h, c, look.rows);
-    drawer(g, w, h, c, Math.sin(clamp((f - 0.3) / 0.7) * Math.PI));
-    const cw = w * 0.22;
-    const ch = cw * 0.64;
-    const fs = Math.max(9, Math.min(u * 0.028, ch / 4 * 0.6));
-    const order = items.filter((it) => s.picks.indexOf(it) === -1).concat(s.picks);
-    const at = new Map(order.map((it) => [it, place(c, it)]));
-    for (const it of order) {
-      const p = at.get(it);
-      const picked = s.picks.indexOf(it) !== -1;
-      if (p.a <= 0.01) continue;
-      g.save();
-      g.globalAlpha = p.a;
-      g.translate(p.x, p.y);
-      g.rotate(p.rot);
-      card(g, c, cw, ch, 0.2, null, picked ? s.lift : 0, 4);
-      if (picked) {
-        g.strokeStyle = c.alpha(k.accent2, 0.5 + s.lift * 0.4);
-        g.lineWidth = 2;
-        g.strokeRect(-cw / 2, -ch / 2, cw, ch);
-      }
-      write(g, it.number, -cw / 2 + 6, -ch / 2 + ch / 8, fs, k.accent2, 'left', 700);
-      wrap(g, it.name, fs, cw - 12).slice(0, 2).forEach((l, i) => write(g, l, -cw / 2 + 6, -ch / 2 + ch * (i + 1.5) / 4, fs, k.fg, 'left', 500));
-      g.save();
-      g.translate(cw * 0.36, ch * 0.36);
-      specimen(g, c, it.kind, ch * 0.12, c.alpha(k.accent, 0.5), null, 0, 0);
-      g.restore();
-      g.restore();
-    }
-    const style = LINKS.indexOf(s.link);
-    g.globalAlpha = 1 - ease(Math.min(1, f * 2));
-    // A length of the chosen thread lies on the desk until it is strung between two cards.
-    if (s.chosen && s.picks.length < 2) thread(g, c, { x: w * 0.72, y: h * 0.76 }, { x: w * 0.92, y: h * 0.76 }, style);
-    for (let i = 1; i < s.picks.length; i++) thread(g, c, at.get(s.picks[i - 1]), at.get(s.picks[i]), style);
-    g.globalAlpha = 1;
-    if (f > 0.3) {
-      // The finding, printed on the desk where the drawer was.
-      const a = clamp((f - 0.3) * 2.5);
-      const size = Math.max(9, u * 0.034);
-      const names = s.picks.map((it) => it.number).join(' · ');
-      write(g, names, w / 2, h * 0.2, size, c.alpha(k.accent2, a), 'center', 700);
-      wrap(g, 'these ' + (s.picks.length === 2 ? 'two ' : 'three ') + s.link.text + '.', size, w * 0.8).forEach((l, i) => {
-        write(g, l, w / 2, h * 0.2 + size * 1.5 * (i + 1), size, c.alpha(k.fg, a), 'center', 500);
-      });
-    }
-  }
-  return {
-    title: need === 2 ? 'cross-reference the drawer' : 'three of a kind in the drawer',
-    brief: 'The drawer holds ' + n + ' specimens with nothing in common: lay them out, choose what ties them, tap ' + (need === 2 ? 'two' : 'three') + ' of them, and hold to file them together.'
-      + (had ? ' Yours, ' + items[0].number + ', is in there.' : ''),
-    aspect: '4 / 3',
-    steps: [
-      { id: 'spread', ask: 'how the drawer is laid out', kind: 'range', min: 0, max: 100, step: 1, value: 50, low: 'heaped', high: 'in rows' },
-      { id: 'thread', ask: 'what ties them', kind: 'choice', options: links.map((l) => ({ label: l.label, value: LINKS.indexOf(l) })) },
-      { id: 'pair', ask: 'tap ' + (need === 2 ? 'two' : 'three') + ' specimens', kind: 'tap', label: 'lift one for me', after: 'thread' },
-      { id: 'file', ask: 'file them together', kind: 'hold', ms: holdMs, label: 'hold to file', after: 'pair' }
-    ],
-    start(c) {
-      c.status('the drawer holds ' + n + '. nothing has been cross-referenced.');
-      draw(c);
-    },
-    apply(id, value, c) {
-      if (id === 'spread') {
-        s.spread = clamp(Number(value) / 100);
-        c.status(s.spread < 0.3 ? 'heaped, as a drawer is.' : s.spread < 0.75 ? 'laid out, more or less.' : 'laid out in rows, which they resent.');
-      }
-      if (id === 'thread') {
-        s.link = LINKS[Number(value)] || links[0];
-        s.chosen = true;
-        c.status('the claim: they ' + s.link.text + '.');
-      }
-      if (id === 'file') {
-        s.file = Math.max(s.file, 0.001);
-        c.status('filing.');
-      }
-    },
-    tap(x, y, c) {
-      if (s.picks.length >= need || s.file) return;
-      let best = null;
-      let bd = Infinity;
-      for (const it of items) {
-        if (s.picks.indexOf(it) !== -1) continue;
-        const p = place(c, it);
-        const d = (p.x - x * c.w) ** 2 + (p.y - y * c.h) ** 2;
-        if (d < bd) {
-          bd = d;
-          best = it;
+      if (id === 'hint') {
+        const next = plan.order.find((item) => !s.hinted.includes(item) && s.order.indexOf(item) !== plan.order.indexOf(item));
+        if (next !== undefined) {
+          s.hinted.push(next);
+          c.hint();
+          c.status('the ' + names[next] + ' belongs in the ' + DRAWERS[plan.order.indexOf(next)] + ' drawer');
+        } else {
+          c.status('every specimen out of place has been shown its drawer; the rest is yours');
         }
       }
-      if (!best) return;
-      s.picks.push(best);
-      s.lift = 1;
-      c.progress('pair', s.picks.length / need);
-      const names = s.picks.map((it) => it.number);
-      if (s.picks.length === 1) c.status(names[0] + ' lifted. cross-referencing needs at least two specimens.');
-      else if (s.picks.length < need) c.status(names.join(' against ') + '; one more.');
-      else c.status(names.slice(0, -1).join(', ') + ' and ' + names[names.length - 1] + ' ' + s.link.text + '.');
-      if (s.picks.length >= need) c.satisfy('pair');
+      draw(c);
     },
     frame(t, dt, c) {
-      s.t += dt;
-      s.lift = Math.max(0.35, s.lift - dt * 1.5);
-      if (c.done) s.file = Math.min(1, s.file + dt * (c.reduced ? 2 : 1));
+      if (c.done) s.fade = Math.min(1, s.fade + dt * 0.8);
       draw(c);
     },
     end(c) {
-      const names = s.picks.map((it) => it.number);
-      c.status(names.slice(0, -1).join(', ') + ' and ' + names[names.length - 1] + ' ' + s.link.text + '. filed together; none of it exists.');
+      c.status(plan.number + ': ' + s.order.map((i) => names[i]).join(' over ') + '. filed; none of it exists');
     }
   };
 }
 
-/* ---- piece three: one solid, two silhouettes ------------------------------------------------ */
+/* ---- the odd one out: one rule, six specimens ---------------------------------------------- */
 
-const VIEWS = [
-  { name: 'key', kind: 'key' },
-  { name: 'bell', kind: 'bell' },
-  { name: 'reel', kind: 'spool' },
-  { name: 'hinge', kind: 'block' }
+const ATTRS = ['body', 'legs', 'marking'];
+const VALUES = { body: ['round', 'long', 'square'], legs: [2, 4, 6], marking: ['striped', 'spotted', 'plain'] };
+const FEATURES = [
+  { label: 'its body', value: 'body' },
+  { label: 'its legs', value: 'legs' },
+  { label: 'its marking', value: 'marking' }
 ];
 
-function turns(env) {
-  return env.seed % 5 === 0;
+function subject(attr, val) {
+  return attr === 'legs' ? WORDS[val] + '-legged one' : val + ' one';
 }
 
-function profile(kind, x, y) {
-  if (kind === 'key') {
-    const ring = x * x + (y + 0.55) ** 2;
-    return (ring <= 0.45 ** 2 && ring >= 0.2 ** 2)
-      || (Math.abs(x) <= 0.1 && y >= -0.3)
-      || (x >= 0.08 && x <= 0.48 && y >= 0.4 && y <= 0.58)
-      || (x >= 0.08 && x <= 0.34 && y >= 0.76 && y <= 0.94);
-  }
-  if (kind === 'bell') {
-    return (Math.abs(x) <= 0.14 && y <= -0.6)
-      || (y >= -0.75 && Math.abs(x) <= (y >= 0.75 ? 0.94 : 0.18 + (y + 0.75) * 0.4));
-  }
-  if (kind === 'spool') return Math.abs(x) <= (Math.abs(y) >= 0.65 ? 0.88 : 0.31);
-  return Math.abs(x) <= 0.84
-    && (Math.abs(x) - 0.46) ** 2 + (Math.abs(y) - 0.45) ** 2 >= 0.17 ** 2;
+function predicate(attr, val) {
+  return attr === 'legs' ? 'has ' + WORDS[val] + ' legs' : 'is ' + val;
 }
 
-function profileRuns(kind, y) {
-  const columns = 13;
-  const runs = [];
-  let start = -1;
-  for (let i = 0; i <= columns; i++) {
-    const occupied = i < columns && profile(kind, -1 + (i + 0.5) * 2 / columns, y);
-    if (occupied && start < 0) start = i;
-    if (!occupied && start >= 0) {
-      runs.push([-1 + start * 2 / columns, -1 + i * 2 / columns]);
-      start = -1;
-    }
-  }
-  return runs;
+function ruleText(r) {
+  return (r.neg ? 'no ' : 'every ') + subject(r.ifAttr, r.ifVal) + ' ' + predicate(r.thenAttr, r.thenVal);
 }
 
-// Intersect perpendicular extrusions of the two profiles. Every horizontal row of each profile
-// has material, so the resulting solid reproduces both silhouettes, not a crossfade between them.
-function twoViewMesh(front, side) {
-  const faces = [];
-  const layers = 17;
-  function face(normal, points) {
-    faces.push({ normal, points });
-  }
-  for (let row = 0; row < layers; row++) {
-    const y0 = -1 + row * 2 / layers;
-    const y1 = -1 + (row + 1) * 2 / layers;
-    const y = (y0 + y1) / 2;
-    for (const [x0, x1] of profileRuns(front.kind, y)) {
-      for (const [z0, z1] of profileRuns(side.kind, y)) {
-        face([0, 0, 1], [[x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1]]);
-        face([0, 0, -1], [[x1, y0, z0], [x0, y0, z0], [x0, y1, z0], [x1, y1, z0]]);
-        face([1, 0, 0], [[x1, y0, z1], [x1, y0, z0], [x1, y1, z0], [x1, y1, z1]]);
-        face([-1, 0, 0], [[x0, y0, z0], [x0, y0, z1], [x0, y1, z1], [x0, y1, z0]]);
-        face([0, -1, 0], [[x0, y0, z0], [x1, y0, z0], [x1, y0, z1], [x0, y0, z1]]);
-        face([0, 1, 0], [[x0, y1, z1], [x1, y1, z1], [x1, y1, z0], [x0, y1, z0]]);
+function breaks(r, spec) {
+  return spec[r.ifAttr] === r.ifVal && (r.neg ? spec[r.thenAttr] === r.thenVal : spec[r.thenAttr] !== r.thenVal);
+}
+
+function allRules() {
+  const out = [];
+  for (const ifAttr of ATTRS) {
+    for (const ifVal of VALUES[ifAttr]) {
+      for (const thenAttr of ATTRS) {
+        if (thenAttr === ifAttr) continue;
+        for (const thenVal of VALUES[thenAttr]) {
+          out.push({ ifAttr, ifVal, thenAttr, thenVal, neg: false });
+          out.push({ ifAttr, ifVal, thenAttr, thenVal, neg: true });
+        }
       }
     }
   }
-  return faces;
+  return out;
 }
 
-function turningPlan(env) {
-  const front = env.pick(VIEWS);
-  const side = env.pick(VIEWS.filter((v) => v !== front));
-  const guesses = [side].concat(some(env, VIEWS.filter((v) => v !== side), 2));
-  for (let i = guesses.length - 1; i > 0; i--) {
-    const j = env.int(0, i);
-    [guesses[i], guesses[j]] = [guesses[j], guesses[i]];
+function allSpecs() {
+  const out = [];
+  for (const body of VALUES.body) for (const legs of VALUES.legs) for (const marking of VALUES.marking) out.push({ body, legs, marking });
+  return out;
+}
+
+function sameRule(a, b) {
+  return a.ifAttr === b.ifAttr && a.ifVal === b.ifVal && a.thenAttr === b.thenAttr && a.thenVal === b.thenVal && a.neg === b.neg;
+}
+
+// Does the drawer single out exactly the specimen at `odd` under `rule`, and no other specimen
+// under any rule of the family that four or more of the six would witness?
+function oddHolds(rule, specs, odd) {
+  const broke = specs.map((s, i) => (breaks(rule, s) ? i : -1)).filter((i) => i >= 0);
+  if (broke.length !== 1 || broke[0] !== odd) return false;
+  if (specs.filter((s) => s[rule.ifAttr] === rule.ifVal).length < 3) return false;
+  for (const r of allRules()) {
+    if (sameRule(r, rule)) continue;
+    if (specs.filter((s) => s[r.ifAttr] === r.ifVal).length < 4) continue;
+    const other = specs.map((s, i) => (breaks(r, s) ? i : -1)).filter((i) => i >= 0);
+    if (other.length === 1 && other[0] !== odd) return false;
   }
-  return {
-    front, side,
-    guesses: guesses.map((v) => ({ label: 'a ' + v.name, value: v.name })),
-    materials: some(env, MATERIALS, 3).map((m) => ({ label: m, value: m })),
-    number: catalogue(env),
-    look: scenery(env),
-    mesh: twoViewMesh(front, side)
-  };
+  return true;
 }
 
-function turningTitle(plan) {
-  return 'a ' + plan.front.name + ' seen two ways';
-}
-
-function solid(g, c, mesh, angle, x, y, r, material) {
-  const cos = Math.cos(angle);
-  const sin = Math.sin(angle);
-  const tilt = Math.sin(angle * 2) * 0.14;
-  const base = tone(c, material, 0);
-  const visible = [];
-  for (const face of mesh) {
-    const [nx, ny, nz] = face.normal;
-    const facing = -nx * sin + nz * cos - ny * tilt;
-    if (facing <= 0.00001) continue;
-    let depth = 0;
-    const points = face.points.map(([px, py, pz]) => {
-      const rx = px * cos + pz * sin;
-      const rz = -px * sin + pz * cos;
-      depth += (rz - py * tilt) / face.points.length;
-      return [rx, py + rz * tilt];
-    });
-    visible.push({ points, depth, light: clamp(0.38 + facing * 0.5 + Math.max(0, -ny) * 0.12) });
+function oddPlan(env) {
+  const rules = allRules();
+  const all = allSpecs();
+  let last = null;
+  for (let attempt = 0; attempt < 60; attempt++) {
+    const rule = rules[env.int(0, rules.length - 1)];
+    const keepers = all.filter((s) => s[rule.ifAttr] === rule.ifVal && !breaks(rule, s));
+    const others = all.filter((s) => s[rule.ifAttr] !== rule.ifVal);
+    const breakers = all.filter((s) => breaks(rule, s));
+    // Five that keep the rule, at least two of them of the kind the rule names, and the one that
+    // breaks it slipped in among them.
+    const hold = env.int(2, 3);
+    const specs = shuffled(env, some(env, keepers, hold).concat(some(env, others, 5 - hold)));
+    const odd = env.int(0, 5);
+    specs.splice(odd, 0, env.pick(breakers));
+    last = { kind: 'odd', number: catalogue(env), rule: Object.assign({}, rule), specs, odd };
+    if (oddHolds(rule, specs, odd)) return last;
   }
-  visible.sort((a, b) => a.depth - b.depth);
-  g.save();
-  g.translate(x, y);
-  g.lineWidth = Math.max(0.4, r * 0.008);
-  g.lineJoin = 'round';
-  for (const face of visible) {
-    g.fillStyle = c.mix(c.colors.bg2, base, face.light);
-    g.strokeStyle = c.alpha(c.colors.fg, 0.12);
-    g.beginPath();
-    face.points.forEach((p, i) => i ? g.lineTo(p[0] * r, p[1] * r) : g.moveTo(p[0] * r, p[1] * r));
-    g.closePath();
-    g.fill();
-    g.stroke();
-  }
-  g.restore();
+  return last;
 }
 
-function turningDesk(g, w, h, c, plan, s, variant) {
-  const k = c.colors;
-  const look = plan.look;
-  const u = Math.min(w, h);
-  deskTop(g, w, h, c, look.rows.slice(0, Math.max(8, Math.round(look.rows.length * variant.density))));
-  drawer(g, w, h, c, 0);
-  const r = Math.min(h * 0.32, w * 0.15) * variant.scale;
-  g.fillStyle = c.alpha(k.bg, 0.65);
+function carriedOdd(env) {
+  const p = env.card && env.card.of;
+  if (!p || p.kind !== 'odd' || !p.rule || typeof p.rule !== 'object') return null;
+  const r = p.rule;
+  if (!ATTRS.includes(r.ifAttr) || !ATTRS.includes(r.thenAttr) || r.ifAttr === r.thenAttr) return null;
+  if (!VALUES[r.ifAttr].includes(r.ifVal) || !VALUES[r.thenAttr].includes(r.thenVal) || typeof r.neg !== 'boolean') return null;
+  const rule = { ifAttr: r.ifAttr, ifVal: r.ifVal, thenAttr: r.thenAttr, thenVal: r.thenVal, neg: r.neg };
+  if (!Array.isArray(p.specs) || p.specs.length !== 6) return null;
+  const okSpec = (s) => s && typeof s === 'object' && ATTRS.every((a) => VALUES[a].includes(s[a]));
+  if (!p.specs.every(okSpec)) return null;
+  const specs = p.specs.map((s) => ({ body: s.body, legs: s.legs, marking: s.marking }));
+  if (new Set(specs.map((s) => s.body + '|' + s.legs + '|' + s.marking)).size !== 6) return null;
+  if (!Number.isInteger(p.odd) || p.odd < 0 || p.odd > 5) return null;
+  const broke = specs.map((s, i) => (breaks(rule, s) ? i : -1)).filter((i) => i >= 0);
+  if (broke.length !== 1 || broke[0] !== p.odd) return null;
+  const number = typeof p.number === 'string' && /^[A-Z]{2}-\d{4}$/.test(p.number) ? p.number : 'XX-0000';
+  return { kind: 'odd', number, rule, specs, odd: p.odd };
+}
+
+function oddTitle(plan) {
+  return 'the odd one out: ' + ruleText(plan.rule);
+}
+
+function describe(spec) {
+  return 'a ' + spec.marking + ', ' + spec.body + ' one with ' + WORDS[spec.legs] + ' legs';
+}
+
+// A specimen's body as a path around the origin, `r` across.
+function bodyPath(g, body, r) {
   g.beginPath();
-  g.ellipse(w * 0.27, h * 0.79, r * 1.25, r * 0.16, 0, 0, Math.PI * 2);
-  g.fill();
-  solid(g, c, plan.mesh, s.angle, w * 0.27, h * 0.43, r, s.material);
-  const view = s.angle < 0.12 ? 'front view' : s.angle > Math.PI / 2 - 0.12 ? 'side view' : 'between views';
-  write(g, view, w * 0.27, h * 0.79, Math.max(9, u * 0.032), k.fg, 'center', 500);
+  if (body === 'round') g.arc(0, 0, r, 0, Math.PI * 2);
+  else if (body === 'long') g.ellipse(0, 0, r * 0.55, r * 1.2, 0, 0, Math.PI * 2);
+  else g.rect(-r * 0.9, -r * 0.9, r * 1.8, r * 1.8);
+}
 
-  const cw = w * 0.42;
-  const ch = Math.min(h * 0.68, cw * 1.05);
-  const margin = Math.min(10, cw * 0.06);
-  const fs = Math.max(9, Math.min(u * 0.032, ch * 0.075));
-  const lines = [];
-  const add = (text, color) => wrap(g, text, fs, cw - margin * 2).forEach((line) => lines.push({ text: line, color }));
-  add('front: a ' + plan.front.name, k.fg);
-  add('material: ' + (s.material || 'not chosen'), k.muted);
-  add('expected: ' + (s.guess ? 'a ' + s.guess : 'not chosen'), k.muted);
-  if (s.revealed || s.angle > Math.PI / 2 - 0.12) add('side: a ' + plan.side.name, k.accent2);
-  if (s.revealed) add('one solid. two silhouettes.', k.fg);
-  const rows = Math.max(6, lines.length + 1);
-  const pitch = ch / rows;
-  const size = Math.min(fs, pitch * 0.7);
-  g.save();
-  g.translate(w * 0.73, h * 0.45);
-  g.rotate(look.tilt);
-  card(g, c, cw, ch, 0.25, look.spots, 0, rows);
-  write(g, plan.number, -cw / 2 + margin, -ch / 2 + pitch * 0.5, size, k.accent2, 'left', 700);
-  lines.forEach((line, i) => write(g, line.text, -cw / 2 + margin, -ch / 2 + pitch * (i + 1.5), size, line.color, 'left', 500));
-  if (s.stamped) {
-    g.strokeStyle = c.alpha(k.accent2, 0.85);
-    g.lineWidth = 1.5;
-    g.strokeRect(-cw / 2 + margin * 0.5, -ch / 2 + pitch * 0.08, cw - margin, pitch * 0.84);
+// A specimen of the six: its body, its marking clipped to it, its legs beneath.
+function creature(g, c, spec, r) {
+  const k = c.colors;
+  const foot = spec.body === 'long' ? r * 1.2 : r * 0.9;
+  g.strokeStyle = c.alpha(k.fg, 0.8);
+  g.lineWidth = Math.max(1, r * 0.09);
+  g.lineCap = 'round';
+  g.beginPath();
+  for (let i = 0; i < spec.legs; i++) {
+    const x = (i - (spec.legs - 1) / 2) * r * 0.42;
+    g.moveTo(x, foot - r * 0.1);
+    g.lineTo(x, foot + r * 0.5);
   }
+  g.stroke();
+  g.shadowColor = 'rgba(0,0,0,0.4)';
+  g.shadowBlur = 6;
+  g.shadowOffsetY = 2;
+  bodyPath(g, spec.body, r);
+  g.fillStyle = c.mix(k.bg2, k.accent, 0.55);
+  g.fill();
+  g.shadowColor = 'transparent';
+  g.shadowBlur = 0;
+  g.shadowOffsetY = 0;
+  if (spec.marking !== 'plain') {
+    g.save();
+    bodyPath(g, spec.body, r);
+    g.clip();
+    g.fillStyle = c.alpha(k.accent2, 0.85);
+    if (spec.marking === 'striped') {
+      for (let x = -r * 1.1; x <= r * 1.1; x += r * 0.4) g.fillRect(x, -r * 1.3, r * 0.16, r * 2.6);
+    } else {
+      for (let y = -r * 1.05; y <= r * 1.1; y += r * 0.5) {
+        for (let x = -r * 0.95; x <= r * 1; x += r * 0.5) {
+          g.beginPath();
+          g.arc(x + (Math.round(y / (r * 0.5)) % 2 ? r * 0.25 : 0), y, r * 0.11, 0, Math.PI * 2);
+          g.fill();
+        }
+      }
+    }
+    g.restore();
+  }
+  bodyPath(g, spec.body, r);
+  g.strokeStyle = c.alpha(k.fg, 0.55);
+  g.lineWidth = 1;
+  g.stroke();
+}
+
+function trayGeometry(w, h, scale) {
+  const tw = w * 0.86 * Math.min(1, scale);
+  const th = h * 0.54 * Math.min(1, scale);
+  return { x: w / 2 - tw / 2, y: h * 0.06, tw, th, cw: tw / 3, ch: th / 2 };
+}
+
+function drawTray(g, w, h, env, plan, s, look, variant) {
+  const v = variant || PLAIN;
+  const k = env.colors;
+  const geo = trayGeometry(w, h, v.scale);
+  deskTop(g, w, h, env, look.rows, v.density);
+  // The drawer, pulled out and seen from above, with the six laid in it.
+  g.fillStyle = env.mix(k.bg, k.bg2, 0.9);
+  g.beginPath();
+  g.roundRect(geo.x - 6, geo.y - 6, geo.tw + 12, geo.th + 12, 6);
+  g.fill();
+  g.fillStyle = env.mix(k.bg, k.bg2, 0.45);
+  g.fillRect(geo.x, geo.y, geo.tw, geo.th);
+  g.fillStyle = env.alpha(k.bg, 0.5);
+  g.fillRect(geo.x, geo.y, geo.tw, geo.th * 0.06);
+  const r = Math.min(geo.cw, geo.ch) * 0.19;
+  const size = Math.max(9, Math.min(15, r * 0.55));
+  plan.specs.forEach((spec, i) => {
+    const cx = geo.x + (i % 3 + 0.5) * geo.cw + (v.turn - 0.5) * geo.cw * 0.06;
+    const cy = geo.y + (Math.floor(i / 3) + 0.42) * geo.ch;
+    if (s.pick === i) {
+      g.strokeStyle = env.alpha(k.accent2, 0.9);
+      g.lineWidth = 2;
+      g.setLineDash([5, 4]);
+      g.strokeRect(cx - geo.cw * 0.44, cy - geo.ch * 0.38, geo.cw * 0.88, geo.ch * 0.84);
+      g.setLineDash([]);
+    }
+    g.save();
+    g.translate(cx, cy);
+    creature(g, env, spec, r);
+    g.restore();
+    write(g, String(i + 1), cx, cy + geo.ch * 0.4, size, k.accent2, 'center', 700);
+  });
+  // The rule, pinned to the drawer on an index card.
+  const cw = w * 0.76;
+  const ch = h * 0.24;
+  const fs = Math.max(9, Math.min(16, Math.min(w, h) * 0.036));
+  g.save();
+  g.translate(w / 2 + (v.turn - 0.5) * w * 0.02, h * 0.81);
+  g.rotate(look.tilt * 0.6 + (v.turn - 0.5) * 0.04);
+  card(g, env, cw, ch, 0.25, look.spots, 3);
+  const m = Math.min(10, cw * 0.06);
+  write(g, plan.number + ' / the rule of this drawer', -cw / 2 + m + 2, -ch / 2 + ch / 6, fs * 0.85, k.accent2, 'left', 700);
+  write(g, ruleText(plan.rule), -cw / 2 + m + 2, -ch / 2 + ch / 2, fs, k.fg, 'left', 600);
+  write(g, s.reveal ? 'specimen ' + (plan.odd + 1) + ' does not: ' + describe(plan.specs[plan.odd]) : 'five of the six keep it; one does not',
+    -cw / 2 + m + 2, -ch / 2 + ch * 5 / 6, fs * 0.85, s.reveal ? k.accent : k.muted, 'left', 500);
   g.restore();
 }
 
-function turningPreview(g, w, h, env, plan) {
-  const v = env.variant;
-  turningDesk(g, w, h, env, plan, {
-    angle: (0.08 + v.turn * 0.84) * Math.PI / 2,
-    material: plan.materials[0].value,
-    guess: '', stamped: false, revealed: false
-  }, v);
+function oddPreview(g, w, h, env, plan) {
+  drawTray(g, w, h, env, plan, { pick: -1, reveal: false }, scenery(env), env.variant);
 }
 
-function turningSpecimen(env) {
-  const was = pressed(env);
-  // The solid the card previewed, exactly as it previewed it; a card of a catalogued specimen
-  // instead lends its number and its material to a fresh plan.
-  const plan = was && was.plan ? was.plan : turningPlan(env);
-  if (was && !was.plan) {
-    plan.number = was.number || plan.number;
-    plan.materials = materialsFrom(env, was.material);
-  }
-  const composition = { density: 1, scale: 1 };
-  const s = { angle: 0, target: 0, material: '', guess: '', stamped: false, revealed: false };
-  function draw(c) {
-    turningDesk(c.g, c.w, c.h, c, plan, s, composition);
-  }
+function oddPiece(env, plan) {
+  const look = scenery(env);
+  const s = { pick: -1, reveal: false };
+  const draw = (c) => drawTray(c.g, c.w, c.h, c, plan, s, look, env.variant);
+  const feature = FEATURES.find((f) => f.value === plan.rule.thenAttr);
   return {
-    title: turningTitle(plan),
-    brief: 'Choose a material, guess this ' + plan.front.name + "'s side view, turn the solid, and stamp your finding. The finished card reveals both silhouettes; any guess works.",
+    title: oddTitle(plan),
+    brief: 'Six specimens lie in the drawer, each with a body, some legs and a marking, and a rule is pinned to it: it names a kind of specimen by one feature and says what that kind must, or must not, have. Five of the six keep the rule. One is of the kind it names and fails on the second feature.',
+    goal: 'Find the one that breaks the rule, and name the feature it fails on.',
     aspect: '4 / 3',
+    checkLabel: 'check the drawer',
     steps: [
-      { id: 'material', ask: 'what it is made of', kind: 'choice', options: plan.materials },
-      { id: 'guess', ask: 'what shape is it from the side?', kind: 'choice', options: plan.guesses },
-      { id: 'turn', ask: 'turn it from front to side', kind: 'range', min: 0, max: 90, step: 1, value: 0, low: 'front', high: 'side' },
-      { id: 'stamp', ask: 'stamp your finding', kind: 'press', count: 1, label: 'stamp the finding' }
+      { id: 'pick', ask: 'the one that breaks the rule', kind: 'pick', count: 1, items: plan.specs.map((spec, i) => ({ label: 'specimen ' + (i + 1), value: i })) },
+      { id: 'choice', ask: 'the feature it fails on', kind: 'choice', options: FEATURES }
     ],
+    solution: { pick: [plan.odd], choice: plan.rule.thenAttr },
+    check(c) {
+      const picked = Array.isArray(c.value('pick')) ? c.value('pick').map(Number) : [];
+      const specRight = picked.length === 1 && picked[0] === plan.odd;
+      const featureRight = c.value('choice') === plan.rule.thenAttr;
+      if (specRight && featureRight) return { solved: true, say: 'specimen ' + (plan.odd + 1) + ' breaks the rule on ' + feature.label };
+      if (specRight) return { solved: false, say: 'the specimen is right; the feature is off' };
+      return { solved: false, say: picked.length === 1 ? 'specimen ' + (picked[0] + 1) + ' keeps the rule' : 'pick one specimen' };
+    },
     start(c) {
-      c.status('Specimen ' + plan.number + ': a ' + plan.front.name + ' from the front. The side view has not been named.');
+      c.status('the rule: ' + ruleText(plan.rule));
       draw(c);
     },
     apply(id, value, c) {
-      if (c.done) return;
-      if (id === 'material') {
-        s.material = String(value);
-        c.status('Made of ' + s.material + '. Its shape stays strange.');
+      if (id === 'pick') {
+        const picked = Array.isArray(value) ? value.map(Number) : [];
+        s.pick = picked.length === 1 ? picked[0] : -1;
+        if (s.pick >= 0) c.status('specimen ' + (s.pick + 1) + ': ' + describe(plan.specs[s.pick]));
       }
-      if (id === 'guess') {
-        s.guess = String(value);
-        c.status('Your prediction: a ' + s.guess + ' from the side. You can still turn it and change your mind.');
-      }
-      if (id === 'turn') {
-        const degrees = Math.max(0, Math.min(90, Number(value)));
-        s.target = degrees * Math.PI / 180;
-        if (c.reduced) s.angle = s.target;
-        c.status('Turned to ' + degrees + ' degrees. ' + (degrees === 0
-          ? 'From the front: a ' + plan.front.name + '.'
-          : degrees === 90 ? 'From the side: a ' + plan.side.name + '. Nothing was swapped.'
-            : 'The same solid is turning; its edges are giving the other shape away.'));
-      }
-      if (id === 'stamp') {
-        s.stamped = true;
-        c.status('The stamp is on the card. Your choices and the turn can still be changed.');
+      if (id === 'choice') {
+        const f = FEATURES.find((o) => o.value === value);
+        if (f) c.status('the rule disputes ' + f.label + ', you say');
       }
       draw(c);
     },
     frame(t, dt, c) {
-      s.angle = c.reduced ? s.target : s.angle + (s.target - s.angle) * Math.min(1, dt * 8);
-      if (Math.abs(s.target - s.angle) < 0.0001) s.angle = s.target;
       draw(c);
     },
     end(c) {
-      s.revealed = true;
-      s.angle = s.target = Math.PI / 2;
+      s.reveal = true;
+      c.status('specimen ' + (plan.odd + 1) + ' is ' + describe(plan.specs[plan.odd]) + ', which the rule does not allow. filed; none of it exists');
       draw(c);
-      c.status('Front: a ' + plan.front.name + '. Side: a ' + plan.side.name + '. '
-        + (s.guess === plan.side.name ? 'You called it. ' : 'You expected a ' + s.guess + '. ')
-        + 'One ' + s.material + ' solid, seen two ways. Filed as ' + plan.number + '; the desk keeps no copy.');
     }
   };
+}
+
+/* ---- the forged number: one check digit wrong ---------------------------------------------- */
+
+function checkDigit(number) {
+  return (Number(number[0]) + Number(number[1]) + Number(number[2])) % 10;
+}
+
+function forgedPlan(env) {
+  for (let attempt = 0; attempt < 40; attempt++) {
+    const numbers = [];
+    while (numbers.length < 5) {
+      const head = String(env.int(100, 999));
+      const number = head + checkDigit(head);
+      if (!numbers.includes(number)) numbers.push(number);
+    }
+    const odd = env.int(0, 4);
+    const digit = checkDigit(numbers[odd]);
+    const wrong = (digit + env.int(1, 9)) % 10;
+    const forged = numbers[odd].slice(0, 3) + wrong;
+    if (numbers.includes(forged)) continue;
+    numbers[odd] = forged;
+    return { kind: 'forged', numbers, odd, digit };
+  }
+  return { kind: 'forged', numbers: ['1012', '2035', '3107', '4116', '5207'], odd: 2, digit: checkDigit('310') };
+}
+
+function carriedForged(env) {
+  const p = env.card && env.card.of;
+  if (!p || p.kind !== 'forged') return null;
+  if (!Array.isArray(p.numbers) || p.numbers.length !== 5 || !p.numbers.every((n) => typeof n === 'string' && /^[1-9]\d{3}$/.test(n))) return null;
+  if (new Set(p.numbers).size !== 5 || !Number.isInteger(p.odd) || p.odd < 0 || p.odd > 4) return null;
+  const broken = p.numbers.map((n, i) => (Number(n[3]) !== checkDigit(n) ? i : -1)).filter((i) => i >= 0);
+  if (broken.length !== 1 || broken[0] !== p.odd || p.digit !== checkDigit(p.numbers[p.odd])) return null;
+  return { kind: 'forged', numbers: p.numbers.slice(), odd: p.odd, digit: p.digit };
+}
+
+function forgedTitle(plan) {
+  return 'the forged number: five cards, one wrong';
+}
+
+function drawFan(g, w, h, env, plan, s, look, variant) {
+  const v = variant || PLAIN;
+  const k = env.colors;
+  deskTop(g, w, h, env, look.rows, v.density);
+  const cw = Math.min(w * 0.3, h * 0.42) * v.scale;
+  const ch = cw * 0.62;
+  const fs = Math.max(9, Math.min(18, cw * 0.14));
+  // Five cards fanned across the desk, each with its number, the picked one lifted.
+  plan.numbers.forEach((number, i) => {
+    const x = w * (0.16 + 0.17 * i) + (v.turn - 0.5) * w * 0.03;
+    const y = h * (0.3 + (i % 2) * 0.18);
+    g.save();
+    g.translate(x, y);
+    g.rotate(look.tilt + (i - 2) * 0.06 + (v.turn - 0.5) * 0.05);
+    card(g, env, cw, ch, 0.25, i === 2 ? look.spots : null, 4);
+    if (s.pick === i) {
+      g.strokeStyle = env.alpha(k.accent2, 0.95);
+      g.lineWidth = 2;
+      g.setLineDash([5, 4]);
+      g.strokeRect(-cw / 2 + 3, -ch / 2 + 3, cw - 6, ch - 6);
+      g.setLineDash([]);
+    }
+    const m = Math.min(10, cw * 0.06);
+    write(g, 'card ' + (i + 1), -cw / 2 + m + 2, -ch / 2 + ch / 8, fs * 0.65, env.alpha(k.muted, 0.9), 'left', 500);
+    write(g, 'APC-' + number, -cw / 2 + m + 2, -ch / 2 + ch * 0.5, fs, s.reveal && i === plan.odd ? k.accent : k.accent2, 'left', 700);
+    if (s.reveal && i === plan.odd) write(g, 'should end in ' + plan.digit, -cw / 2 + m + 2, -ch / 2 + ch * 0.8, fs * 0.65, k.accent, 'left', 600);
+    g.restore();
+  });
+  // The rule, on a slip along the bottom of the desk.
+  const sw = w * 0.84;
+  const sh = h * 0.24;
+  const rs = Math.max(9, Math.min(15, Math.min(w, h) * 0.034));
+  const m = Math.min(10, sw * 0.06);
+  const lines = [{ text: 'the rule of the desk', color: k.accent2, weight: 700 }];
+  wrap(g, 'a true number ends in the last digit of the sum of its first three digits', rs, sw - m * 2 - 4).forEach((l) => lines.push({ text: l, color: k.fg, weight: 500 }));
+  wrap(g, 'so 4172 is true: 4 + 1 + 7 = 12, and it ends in 2. one card on the desk is forged', rs, sw - m * 2 - 4).forEach((l) => lines.push({ text: l, color: k.muted, weight: 500 }));
+  const rows = lines.length;
+  const rh = sh / rows;
+  g.save();
+  g.translate(w / 2, h * 0.86);
+  g.rotate(-look.tilt * 0.5);
+  card(g, env, sw, sh, 0.1, null, rows);
+  lines.forEach((l, i) => write(g, l.text, -sw / 2 + m + 2, -sh / 2 + rh * (i + 0.5), Math.min(rs, rh * 0.66), l.color, 'left', l.weight));
+  g.restore();
+}
+
+function forgedPreview(g, w, h, env, plan) {
+  drawFan(g, w, h, env, plan, { pick: -1, reveal: false }, scenery(env), env.variant);
+}
+
+function forgedPiece(env, plan) {
+  const look = scenery(env);
+  const s = { pick: -1, reveal: false };
+  const draw = (c) => drawFan(c.g, c.w, c.h, c, plan, s, look, env.variant);
+  return {
+    title: forgedTitle(plan),
+    brief: 'Five catalogue cards lie on the desk, each with a four-figure number, and the slip under them gives the rule a true number keeps: it ends in the last digit of the sum of its first three. Four of the cards keep it. One was written by someone who did not know the rule.',
+    goal: 'Find the forged card, and say which digit it should end in.',
+    aspect: '4 / 3',
+    checkLabel: 'check the cards',
+    steps: [
+      { id: 'pick', ask: 'the forged card', kind: 'pick', count: 1, items: plan.numbers.map((n, i) => ({ label: 'card ' + (i + 1) + ': APC-' + n, value: i })) },
+      { id: 'digit', ask: 'the digit it should end in', kind: 'number', min: 0, max: 9, step: 1, value: 0 }
+    ],
+    solution: { pick: [plan.odd], digit: plan.digit },
+    check(c) {
+      const picked = Array.isArray(c.value('pick')) ? c.value('pick').map(Number) : [];
+      const cardRight = picked.length === 1 && picked[0] === plan.odd;
+      const digitRight = Number(c.value('digit')) === plan.digit;
+      if (cardRight && digitRight) return { solved: true, say: 'APC-' + plan.numbers[plan.odd] + ' is the forgery; it should end in ' + plan.digit };
+      if (cardRight) return { solved: false, say: 'the card is right; the digit is off' };
+      return { solved: false, say: picked.length === 1 ? 'APC-' + plan.numbers[picked[0]] + ' keeps the rule' : 'pick one card' };
+    },
+    start(c) {
+      c.status('five numbers, one rule, one forgery');
+      draw(c);
+    },
+    apply(id, value, c) {
+      if (id === 'pick') {
+        const picked = Array.isArray(value) ? value.map(Number) : [];
+        s.pick = picked.length === 1 ? picked[0] : -1;
+        if (s.pick >= 0) c.status('card ' + (s.pick + 1) + ', APC-' + plan.numbers[s.pick] + ', you say');
+      }
+      if (id === 'digit') c.status('it should end in ' + Number(value) + ', you say');
+      draw(c);
+    },
+    frame(t, dt, c) {
+      draw(c);
+    },
+    end(c) {
+      s.reveal = true;
+      c.status('APC-' + plan.numbers[plan.odd] + ' should end in ' + plan.digit + '. struck from the catalogue, which never had it');
+      draw(c);
+    }
+  };
+}
+
+/* ---- the module ----------------------------------------------------------------------------- */
+
+// Which of the three the seed deals: the drawer, the odd one out, or the forged number.
+function deal(env) {
+  const roll = env.rnd();
+  return roll < 0.4 ? 'drawer' : roll < 0.75 ? 'odd' : 'forged';
 }
 
 export default {
   id: 'apocrypha-desk',
-  paint(ctx, w, h, env) {
-    if (turns(env)) turningPreview(ctx, w, h, env, turningPlan(env));
-    else desk(ctx, w, h, env);
+  needsSky: false,
+  paint(g, w, h, env) {
+    const kind = deal(env);
+    if (kind === 'drawer') drawerPreview(g, w, h, env, drawerPlan(env));
+    else if (kind === 'odd') oddPreview(g, w, h, env, oddPlan(env));
+    else forgedPreview(g, w, h, env, forgedPlan(env));
   },
   spark(env) {
-    if (turns(env)) {
-      const plan = turningPlan(env);
+    const kind = deal(env);
+    if (kind === 'forged') {
+      const plan = forgedPlan(env);
       return {
-        title: turningTitle(plan),
-        text: 'A ' + plan.front.name + ' from the front. What will it be from the side? Turn one solid, make a prediction, and stamp the finding.',
+        overline: 'APC-' + plan.numbers[0] + ' and four more',
+        title: forgedTitle(plan),
+        text: 'Five catalogue numbers, and the rule a true one keeps. One card was written by someone who did not know it. Find it, and say the digit it should end in.',
         aspect: '4 / 3',
-        paint: (ctx, w, h, e) => turningPreview(ctx, w, h, e, plan),
-        // What this card is of, for the piece it opens as: the very solid it previewed, so pressing
-        // it opens the desk turning that solid rather than a fresh one of this seed (turningSpecimen
-        // reads was.plan). Without it a visitor who pressed "a hinge seen two ways" could land on a
-        // key, and two turning cards of this world would open the same solid (issue #80).
-        of: { plan }
+        paint: (g, w, h, cardEnv) => forgedPreview(g, w, h, cardEnv, plan),
+        of: plan
       };
     }
-    const number = 'APC-' + env.int(1000, 9999) + '-' + env.pick('abcdefghk'.split(''));
-    const material = env.pick(MATERIALS);
-    const object = env.pick(OBJECTS);
-    const qualifier = env.pick(QUALIFIERS);
-    const provenance = env.pick(PROVENANCE);
-    const verdict = env.pick(VERDICTS);
+    if (kind === 'drawer') {
+      const plan = drawerPlan(env);
+      const names = plan.items.map((i) => SPECIMENS[i].name);
+      return {
+        overline: plan.number,
+        title: drawerTitle(plan),
+        quote: clueText(plan.clues[0], names),
+        text: (plan.clues.length === 1 ? 'That is the one clue.' : WORDS[plan.clues.length - 1][0].toUpperCase() + WORDS[plan.clues.length - 1].slice(1) + ' more wait on the card.')
+          + ' Put the four specimens in the one order of drawers that fits them all.',
+        aspect: '4 / 3',
+        paint: (g, w, h, cardEnv) => drawerPreview(g, w, h, cardEnv, plan),
+        of: plan
+      };
+    }
+    const plan = oddPlan(env);
     return {
-      overline: number,
-      title: 'a ' + material + ' ' + object + ' ' + qualifier,
-      text: 'provenance: ' + provenance + '.',
-      cite: 'assessment: ' + verdict + '.',
-      // What this card is of, for the piece it opens as: the specimen it catalogued.
-      of: { number, material, object, qualifier, provenance, verdict }
+      overline: plan.number,
+      title: oddTitle(plan),
+      text: 'Six specimens in a drawer and one rule pinned to it. Five keep the rule; find the one that breaks it, and say which of its features the rule disputes.',
+      aspect: '4 / 3',
+      paint: (g, w, h, cardEnv) => oddPreview(g, w, h, cardEnv, plan),
+      of: plan
     };
   },
   piece(env) {
-    if (turns(env)) return turningSpecimen(env);
-    return env.chance(0.55) ? accession(env) : crossReference(env);
+    const drawer = carriedDrawer(env);
+    if (drawer) return drawerPiece(env, drawer);
+    const odd = carriedOdd(env);
+    if (odd) return oddPiece(env, odd);
+    const forged = carriedForged(env);
+    if (forged) return forgedPiece(env, forged);
+    const kind = deal(env);
+    if (kind === 'drawer') return drawerPiece(env, drawerPlan(env));
+    if (kind === 'odd') return oddPiece(env, oddPlan(env));
+    return forgedPiece(env, forgedPlan(env));
   }
 };

@@ -1,670 +1,535 @@
-/* Loam: a cutaway of soil with roots finding their way round the stones. As a card it is the
-   cutaway and a core sample (paint, spark); as a piece it is a bed to plant, water and watch until
-   the shoots come up, or a bed with things in it already, turned over and cored. See js/feed.js
-   for what a module is and js/stage.js for what a piece is.
+/* Loam: a cutaway of soil with roots finding their way round the stones. As a card it is one of
+   the two puzzles below (paint, spark); as a piece it is that puzzle, and the card it was opened
+   from says which. See js/feed.js for what a module is and js/stage.js for what a piece is.
 
-   A card and the feature it opens as are one bed: the spark puts the core sample's depths on its
-   spec as `of`, and the piece opens on the soil that core came out of -- the stones where the card
-   found them, and the depth the roots reached in its title. */
+   Two puzzles, both deduction, read off a drawing to scale:
 
-// The card this piece was opened from, in the bed's own terms: the core sample it was showing,
-// in centimetres, or null for a piece nobody pressed (js/stage.js hands it over as env.card.of).
-function pressed(env) {
-  const was = env.card && env.card.of;
-  return was && typeof was.stone === 'number' && typeof was.through === 'number' ? was : null;
-}
+     the core   A core cut from the bed and drawn to scale: four to six layers, each with its
+                thickness in centimetres written beside it, one of them a band of stones, and a
+                wavy line at a layer boundary where the water stands. Read how deep the water
+                table is (the layers above it, added up) and how many layers a root passes
+                through before it meets the stones. A wrong check says deeper or shallower,
+                sooner or later, and no more; solved, a root goes down and the water rises to
+                its line.
+     the mix    Two bags of soil with their sand shares written on, and a bed that wants a share
+                between them. Mixing a parts of A with 10 - a parts of B gives the mean of the
+                two shares, weighted by the parts. Find a (the bed's share is chosen so a is a
+                whole number) and say whether the blend drains faster or slower than bag A: a
+                sandier soil drains faster. A wrong check says sandier or less sandy than the
+                bed wants, and no more.
 
-// The grit of the bed a core came out of: stones near the surface are a gritty soil that drains
-// fast, stones deep under the loam a heavy one. So the piece lays its stones where the card did.
-function gritOf(was) {
-  return Math.max(10, Math.min(90, Math.round(100 - was.stone * 2)));
-}
+   A card and the feature it opens as are one bed: the spark puts the whole plan on its spec as
+   `of` -- the layers, the band and the water line, or the two bags and the bed -- and piece(env)
+   opens on that rather than rolling another. */
 
+const PLAIN = { density: 1, scale: 1, turn: 0 };
+const WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven'];
+const KINDS = ['topsoil', 'loam', 'silt', 'clay', 'sand', 'peat'];
 const LINES = [
-  'Planted over gravel, so it went sideways for a while first.',
   'The interesting part was always underground.',
   'Roots take the path of least resistance, so the stones matter.',
-  'Water it and the roots hurry; turn the soil and they start again.'
+  'Planted over gravel, so it went sideways for a while first.',
+  'Water finds its level, and then it stays there.'
+];
+const DRAINS = [
+  { label: 'drains faster than A', value: 'faster' },
+  { label: 'drains slower than A', value: 'slower' }
 ];
 
-const NAMES = ['vetch', 'comfrey', 'chicory', 'yarrow', 'burdock', 'sorrel', 'tansy', 'mallow',
-  'plantain', 'fescue', 'clover', 'dock'];
-const WORDS = ['no', 'one', 'two', 'three', 'four', 'five'];
-const TILTHS = [
-  { label: 'heavy, slow to drain', value: 12 },
-  { label: 'balanced loam', value: 45 },
-  { label: 'gritty, drains fast', value: 85 }
-];
-const TILTH_SAID = {
-  12: 'Heavy, slow to drain. Few stones, and the roots take their time.',
-  45: 'Balanced loam. The textbook stuff.',
-  85: 'Gritty, drains fast. Stones everywhere, so the roots go round.'
-};
-const TURNED = [
-  'Turned over. Everything that was down there is down there differently now.',
-  'Turned again. The stones have moved; the roots start from nothing, which they do not mind.',
-  'Turned a third time. The soil is getting used to it.'
-];
+/* ---- shared drawing ------------------------------------------------------------------------ */
 
-/* ---- the card ------------------------------------------------------------------------------ */
+function font(g, size, weight) {
+  g.font = (weight || '500') + ' ' + size + 'px system-ui, sans-serif';
+}
 
-function soil(ctx, w, h, env) {
+function write(g, text, x, y, size, tone, align, weight) {
+  font(g, size, weight);
+  g.textAlign = align || 'center';
+  g.textBaseline = 'middle';
+  g.fillStyle = tone;
+  g.fillText(text, x, y);
+}
+
+// The ground and the dark above it, as the old cutaway laid them.
+function sky(g, w, h, env, top, lift) {
   const c = env.colors;
-  const v = env.variant;
-  const top = h * (0.09 + v.turn * 0.1 + env.rnd() * 0.06);
-  ctx.fillStyle = env.mix(c.bg, c.bg2, 0.25);
-  ctx.fillRect(0, 0, w, h);
-  ctx.fillStyle = env.mix(c.bg, '#000', 0.35);
-  ctx.fillRect(0, 0, w, top);
-  // Grit, as flecks.
-  for (let i = 0, grit = Math.round(160 * v.density); i < grit; i++) {
-    ctx.fillStyle = env.alpha(c.accent, 0.05 + env.rnd() * 0.12);
-    ctx.fillRect(env.rnd() * w, top + env.rnd() * (h - top), 1.5, 1.5);
-  }
-  // Stones.
-  const stones = [];
-  const count = Math.max(2, Math.round(env.int(4, 9) * v.density));
-  for (let i = 0; i < count; i++) {
-    const s = { x: env.rnd() * w, y: top + h * 0.1 + env.rnd() * (h - top - h * 0.2), r: (4 + env.rnd() * Math.min(w, h) * 0.06) * v.scale };
-    stones.push(s);
-    ctx.fillStyle = env.alpha(c.muted, 0.2);
-    ctx.beginPath();
-    ctx.ellipse(s.x, s.y, s.r * 1.3, s.r * 0.8, env.rnd() * 0.6, 0, Math.PI * 2);
-    ctx.fill();
-  }
-  // Roots: wandering walks down from the surface, deflected by the stones, branching now and then.
-  const systems = env.int(2, 4);
-  ctx.lineCap = 'round';
-  for (let s = 0; s < systems; s++) {
-    const startX = w * (0.15 + env.rnd() * 0.7);
-    const stems = [{ x: startX, y: top, width: 2.2, drift: 0 }];
-    let steps = 0;
-    while (stems.length && steps < 900) {
-      steps++;
-      const r = stems[Math.floor(env.rnd() * stems.length)];
-      let nx = r.x + (env.rnd() - 0.5) * 4 + r.drift;
-      let ny = r.y + 1.5 + env.rnd() * 2.5;
-      for (const st of stones) {
-        if (Math.hypot(nx - st.x, (ny - st.y) * 1.6) < st.r * 1.3) {
-          r.drift = nx < st.x ? -1.4 : 1.4;
-          nx = r.x + r.drift * 2;
-          ny = r.y + 0.6;
-        }
-      }
-      r.drift *= 0.9;
-      ctx.strokeStyle = env.alpha(c.accent2, 0.55 + Math.min(0.4, r.width * 0.15));
-      ctx.lineWidth = r.width;
-      ctx.beginPath();
-      ctx.moveTo(r.x, r.y);
-      ctx.lineTo(nx, ny);
-      ctx.stroke();
-      r.x = nx;
-      r.y = ny;
-      r.width *= 0.995;
-      if (env.rnd() < 0.045 && stems.length < 7 && r.width > 0.7) {
-        stems.push({ x: r.x, y: r.y, width: r.width * 0.6, drift: (env.rnd() - 0.5) * 3 });
-      }
-      if (r.y > h - 4 || r.width < 0.4 || nx < 0 || nx > w) stems.splice(stems.indexOf(r), 1);
-    }
-    // The shoot above ground.
-    ctx.strokeStyle = env.alpha(c.accent2, 0.9);
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(startX, top);
-    ctx.lineTo(startX + (env.rnd() - 0.5) * 6, top - 8 - env.rnd() * 10);
-    ctx.stroke();
-  }
-}
-
-/* ---- the bed: a living cutaway the pieces share -------------------------------------------- */
-
-function listNames(env, n) {
-  const pool = NAMES.slice();
-  const out = [];
-  while (out.length < n) out.push(pool.splice(env.int(0, pool.length - 1), 1)[0]);
-  return out;
-}
-
-function join(names) {
-  return names.length < 2 ? names.join('') : names.slice(0, -1).join(', ') + ' and ' + names[names.length - 1];
-}
-
-function tilthOf(grit) {
-  return grit < 30 ? 'heavy, slow to drain' : grit < 65 ? 'balanced loam' : 'gritty, drains fast';
-}
-
-function fresh(grit) {
-  return { grit, top: 0, stones: [], flecks: [], roots: [], tips: [], plants: [], moisture: 0.5, deepest: 0,
-    said: 0, quiet: 0, flash: 0, splash: 0, rain: false, shoot: 0, dawn: 0, core: 0, coreX: 0, reading: null, t: 0 };
-}
-
-// A knob speaking marks the moment, so the soil's own remarks wait until the line has been read.
-function say(s, c, text) {
-  s.quiet = s.t;
-  c.status(text);
-}
-
-// Depth in centimetres: the whole cutaway is forty of them.
-function cm(s, y, h) {
-  return Math.max(0, ((y - s.top) / (h - s.top)) * 40);
-}
-
-// More grit, more stones, and smaller ones; heavy clay has a few big ones. The flecks are laid
-// once with the stones so the grit does not shimmer from frame to frame.
-function layStones(s, w, h, rnd) {
-  s.top = h * 0.14;
-  const m = Math.min(w, h);
-  const count = Math.max(3, Math.round((6 + s.grit * 0.26) * ((w * h) / 256000)));
-  s.stones = [];
-  for (let i = 0; i < count; i++) {
-    s.stones.push({ x: w * 0.02 + rnd() * w * 0.96, y: s.top + h * 0.07 + rnd() * (h - s.top - h * 0.1),
-      r: m * (0.012 + rnd() * 0.03) * (1.2 - s.grit / 200), tilt: rnd() * 0.8 - 0.4 });
-  }
-  s.flecks = [];
-  for (let i = 0; i < 140; i++) s.flecks.push({ x: rnd() * w, y: s.top + rnd() * (h - s.top), a: 1 + Math.floor(rnd() * 3) });
-}
-
-function blocked(s, x, y) {
-  for (const st of s.stones) {
-    const dx = x - st.x;
-    const dy = (y - st.y) * 1.25;
-    if (dx * dx + dy * dy < st.r * st.r) return st;
-  }
-  return null;
-}
-
-function plant(s, x, name) {
-  const k = s.plants.length;
-  s.plants.push({ name, x, k });
-  s.tips.push({ x, y: s.top, lx: x, ly: s.top, angle: Math.PI / 2, width: 3, life: 1, k });
-}
-
-// The roots grow: a tip steps, goes round a stone rather than through it (that is the whole
-// character of a root), lays a segment every few pixels, thins, and now and then branches, more
-// readily in wet soil. Returns the first stone met this frame, if any.
-function grow(s, dt, w, h, c) {
-  const soilH = h - s.top;
-  const speed = soilH * 0.12 * (0.5 + Math.min(1.4, s.moisture)) * (0.7 + s.grit / 160) * (c.reduced ? 0.6 : 1);
-  const seg = soilH * 0.012;
-  const next = [];
-  let hit = null;
-  for (const tip of s.tips) {
-    if (tip.life <= 0 || tip.width < 0.6 || tip.y > h - 4) continue;
-    const step = speed * dt;
-    const nx = tip.x + Math.cos(tip.angle) * step;
-    const ny = tip.y + Math.sin(tip.angle) * step;
-    const stone = blocked(s, nx, ny);
-    if (stone) {
-      if (blocked(s, tip.x, tip.y)) continue; // a stone laid over it since: that root ends there
-      // Round it rather than through it, and the tip keeps its place in `next`: that is how a root
-      // planted over gravel goes sideways for a long while before it finds a way down. It ages
-      // while it does, so one walled in on every side gives up after half a second instead of
-      // standing there alive and still for as long as the piece lasts.
-      tip.stuck = (tip.stuck || 0) + 1;
-      if (tip.stuck > 30) continue;
-      tip.angle += (nx < stone.x ? -1 : 1) * 0.55;
-      tip.life -= dt * 0.012;
-      hit = hit || stone;
-      next.push(tip);
-      continue;
-    }
-    tip.stuck = 0;
-    if (nx < 3 || nx > w - 3) tip.angle = Math.PI - tip.angle;
-    else if (ny < s.top + 1) tip.angle = Math.PI / 2;
-    else {
-      tip.x = nx;
-      tip.y = ny;
-    }
-    if (Math.hypot(tip.x - tip.lx, tip.y - tip.ly) >= seg) {
-      if (s.roots.length < 4000) s.roots.push({ x1: tip.lx, y1: tip.ly, x2: tip.x, y2: tip.y, w: tip.width, k: tip.k });
-      tip.lx = tip.x;
-      tip.ly = tip.y;
-      if (tip.y > s.deepest) s.deepest = tip.y;
-    }
-    tip.angle += (c.rnd() - 0.5) * 0.44 + (Math.PI / 2 - tip.angle) * 0.04;
-    tip.width -= dt * 0.2;
-    tip.life -= dt * 0.012;
-    next.push(tip);
-    if (tip.width > 1.1 && next.length < 48 && c.rnd() < dt * 1.4 * Math.min(1.4, s.moisture)) {
-      next.push({ x: tip.x, y: tip.y, lx: tip.x, ly: tip.y, angle: tip.angle + (c.rnd() - 0.5) * 1.8,
-        width: tip.width * 0.64, life: tip.life * 0.8, k: tip.k });
-    }
-  }
-  s.tips = next;
-  return hit;
-}
-
-// One frame of soil: the water drains (faster through grit), the rain tops it up, the roots grow,
-// and the soil says something the first time a root meets a stone and the first time one is ten
-// centimetres down, once whatever a knob said has had its moment.
-function tick(s, dt, c) {
-  dt = Math.min(0.1, dt);
-  s.t += dt;
-  s.moisture = Math.max(0.12, s.moisture - dt * (0.006 + (s.grit / 100) * 0.02));
-  if (s.rain) s.moisture = Math.min(1.6, s.moisture + dt * 0.35);
-  const hit = grow(s, dt, c.w, c.h, c);
-  s.flash = Math.max(0, s.flash - dt * 2);
-  s.splash = Math.max(0, s.splash - dt * 1.2);
-  if (c.done || s.t - s.quiet < 2.5) return;
-  if (hit && !(s.said & 1)) {
-    s.said |= 1;
-    say(s, c, 'Met a stone at ' + Math.round(cm(s, hit.y, c.h)) + ' cm and went sideways for a while first. ' + LINES[2]);
-  } else if (!(s.said & 2) && cm(s, s.deepest, c.h) >= 10) {
-    s.said |= 2;
-    say(s, c, 'Ten centimetres down. ' + LINES[1]);
-  }
-}
-
-function water(s, c) {
-  s.moisture = Math.min(1.6, s.moisture + 0.45);
-  s.splash = 1;
-  const pct = Math.round(s.moisture * 60);
-  say(s, c, pct > 90 ? 'Watered again. Field capacity was a while ago; this is a puddle.' : 'Watered. Moisture at ' + pct + ' per cent of field capacity.');
-}
-
-// Everything the corer's barrel at `x` passes through: the stones it has to come down beside, and
-// whose roots cross it and how deep they got. Both are counted the way coreSample() below draws
-// them, so the reading is of the column the visitor can see it was taken from and nothing in it is
-// invented -- which also means no two cores along the transect read alike.
-function coreAt(s, x, cw) {
-  const core = { stones: 0, firstStone: 0, plants: 0, deepest: 0 };
-  for (const st of s.stones) {
-    const gap = Math.max(0, Math.abs(st.x - x) - cw / 2);
-    if (gap >= st.r) continue;
-    const top = st.y - Math.sqrt(st.r * st.r - gap * gap); // where the barrel first meets it
-    if (!core.stones || top < core.firstStone) core.firstStone = top;
-    core.stones++;
-  }
-  const seen = [];
-  for (const r of s.roots) {
-    if (Math.abs(r.x1 - x) >= cw / 2 || !s.plants[r.k]) continue;
-    if (seen.indexOf(r.k) < 0) seen.push(r.k);
-    core.deepest = Math.max(core.deepest, r.y1, r.y2);
-  }
-  core.plants = seen.length;
-  return core;
-}
-
-// The closing sentence follows the core, so bare soil, a line that missed the roots and a deep
-// system each read differently. Without a core -- at the finish of a bed that was never cored --
-// it is the age of the whole system, as it was.
-function verdictOf(s, d, core) {
-  if (core && !s.roots.length) {
-    return core.stones
-      ? 'Nothing in the ground yet, and ' + (core.stones === 1 ? 'a stone' : core.stones + ' stones')
-        + ' in the way of whatever goes in.'
-      : 'Nothing in the ground yet. Clean soil the whole way down this line.';
-  }
-  if (core && !core.plants) return 'No roots down this line. They are going round something, elsewhere.';
-  return d < 4 ? 'Early. Nothing to judge yet, and nothing wrong with that.'
-    : d < 16 ? 'Established. The system is wider than it is deep, which is normal.'
-      : 'Deep. Whatever is up top is the smaller half of this.';
-}
-
-function reading(s, h, core) {
-  const d = cm(s, s.deepest, h);
-  const lines = ['core sample', 'depth reached  ' + d.toFixed(1) + ' cm', 'living tips  ' + s.tips.length,
-    'laid down  ' + s.roots.length + ' segments', 'tilth  ' + tilthOf(s.grit), 'moisture  ' + Math.round(s.moisture * 60) + '%'];
-  // What this core in particular came down through, which is the half that changes press to press.
-  if (core) {
-    lines.push('stones  ' + (core.stones
-      ? core.stones + ', first at ' + Math.round(cm(s, core.firstStone, h)) + ' cm' : 'none in this core'));
-    lines.push('roots  ' + (core.plants
-      ? core.plants + ' of ' + s.plants.length + ', deepest at ' + Math.round(cm(s, core.deepest, h)) + ' cm'
-      : 'none in this core'));
-  }
-  return { d, verdict: verdictOf(s, d, core), lines };
-}
-
-// A core is cut somewhere rather than nowhere: the column is drawn up out of the ground with the
-// stones and roots it passed through, and its reading printed beside it.
-function takeCore(s, c) {
-  const again = !!s.reading;
-  let best = s.plants.length ? s.plants[0].x : c.w / 2;
-  let deep = -1;
-  for (const r of s.roots) {
-    if (r.y2 > deep && s.plants[r.k]) {
-      deep = r.y2;
-      best = s.plants[r.k].x;
-    }
-  }
-  const cw = Math.min(c.w, c.h) * 0.09;
-  // The first core goes under the deepest roots. A second is taken a step across the plot, so a
-  // run of them reads the whole width instead of cutting the one hole over and reading it back
-  // unchanged: the point of a core is the soil it is cut from. The step is not a clean fraction of
-  // the width, so a long run keeps finding new ground rather than walking the same few columns.
-  const span = c.w - 2 * cw;
-  const step = span / 3.5 + (c.rnd() - 0.5) * cw;
-  s.coreX = again ? cw + ((s.coreX - cw + step + span) % span) : Math.max(cw, Math.min(c.w - cw, best));
-  s.reading = reading(s, c.h, coreAt(s, s.coreX, cw));
-  s.core = 0.001;
-  say(s, c, again ? 'Another core, a step across the plot. The first hole had already closed.'
-    : 'Core taken. The hole closes itself.');
-}
-
-function bed(g, w, h, c, s) {
-  const col = c.colors;
-  const top = s.top;
-  const m = Math.min(w, h);
-  const wet = Math.min(1, s.moisture / 1.2);
-  g.fillStyle = col.bg;
+  g.fillStyle = env.mix(c.bg, c.bg2, 0.25);
   g.fillRect(0, 0, w, h);
-  // Nothing above the line but dark, and the rain when it rains; it lightens at the finish.
-  g.fillStyle = 'rgba(0,0,0,' + (0.35 - Math.max(s.shoot, s.dawn) * 0.22) + ')';
+  g.fillStyle = 'rgba(0,0,0,' + (0.35 - (lift || 0) * 0.2).toFixed(3) + ')';
   g.fillRect(0, 0, w, top);
-  if (s.rain) {
-    g.strokeStyle = c.alpha(col.accent, 0.35);
-    g.lineWidth = 1;
-    g.beginPath();
-    for (let i = 0; i < 60; i++) {
-      const x = ((i * 0.618034) % 1) * w;
-      const y = ((s.t * (c.reduced ? 40 : 300) + i * 53) % (top + 12)) - 12;
-      g.moveTo(x, y);
-      g.lineTo(x - m * 0.004, y + m * 0.03);
-    }
-    g.stroke();
-  }
-  const ground = g.createLinearGradient(0, top, 0, h);
-  ground.addColorStop(0, c.mix(c.mix(col.bg2, col.accent2, 0.2), col.bg, 0.15 + wet * 0.45));
-  ground.addColorStop(1, c.mix(col.bg, col.bg2, 0.3));
-  g.fillStyle = ground;
-  g.fillRect(0, top, w, h - top);
-  for (let a = 1; a <= 3; a++) {
-    g.fillStyle = c.alpha(col.accent, 0.05 * a);
-    for (const f of s.flecks) if (f.a === a) g.fillRect(f.x, f.y, 1.5, 1.5);
-  }
-  if (s.splash > 0) {
-    g.fillStyle = c.alpha(col.accent, s.splash * 0.18);
-    g.fillRect(0, top, w, (h - top) * 0.35 * (1.3 - s.splash));
-  }
-  g.strokeStyle = c.alpha(col.accent2, 0.5);
+  g.strokeStyle = env.alpha(c.accent2, 0.5);
   g.lineWidth = 1;
   g.beginPath();
   g.moveTo(0, top);
   g.lineTo(w, top);
   g.stroke();
-  g.fillStyle = c.alpha(col.muted, 0.32);
-  for (const st of s.stones) {
-    g.beginPath();
-    g.ellipse(st.x, st.y, st.r * 1.25, st.r * 0.8, st.tilt, 0, Math.PI * 2);
-    g.fill();
+}
+
+// The tone of a soil by its sand share: dark loam at none, pale grit at all of it.
+function soilTone(env, share) {
+  const c = env.colors;
+  return env.mix(env.mix(c.bg2, c.accent2, 0.35), env.mix(c.fg, c.accent2, 0.45), share / 100);
+}
+
+// Grit, as flecks, laid by a fixed sequence so it never shimmers from frame to frame.
+function flecks(g, env, x, y, w, h, count, salt, a) {
+  g.fillStyle = env.alpha(env.colors.accent, a);
+  for (let i = 0; i < count; i++) {
+    const fx = x + ((i * 0.6180339 + salt * 0.37) % 1) * w;
+    const fy = y + ((i * 0.7548777 + salt * 0.19) % 1) * h;
+    g.fillRect(fx, fy, 1.5, 1.5);
   }
-  // The roots, one path per plant and thickness, so a frame is a few strokes and not thousands.
-  g.lineCap = 'round';
-  const paths = [];
-  for (const r of s.roots) {
-    const key = r.k * 4 + (r.w < 0.9 ? 0 : r.w < 1.5 ? 1 : r.w < 2.3 ? 2 : 3);
-    (paths[key] || (paths[key] = [])).push(r);
+}
+
+function stone(g, env, x, y, r, tilt, a) {
+  g.fillStyle = env.alpha(env.colors.muted, a);
+  g.beginPath();
+  g.ellipse(x, y, r * 1.3, r * 0.8, tilt, 0, Math.PI * 2);
+  g.fill();
+}
+
+/* ---- the core: layers, a band of stones, a water line -------------------------------------- */
+
+function corePlan(env) {
+  const n = env.int(4, 6);
+  const layers = [];
+  const kinds = [];
+  for (let i = 0; i < n; i++) {
+    layers.push(env.int(6, 28));
+    kinds.push(i === 0 ? 0 : env.int(1, KINDS.length - 1));
   }
-  paths.forEach((list, key) => {
-    g.strokeStyle = c.alpha(c.mix(col.accent2, col.accent, ((key >> 2) % 3) * 0.3), 0.55 + wet * 0.35);
-    g.lineWidth = [0.7, 1.2, 1.9, 2.8][key % 4];
-    g.beginPath();
-    for (const r of list) {
-      g.moveTo(r.x1, r.y1);
-      g.lineTo(r.x2, r.y2);
+  return { kind: 'core', layers, kinds, band: env.int(1, n - 2), water: env.int(1, n - 1) };
+}
+
+function carriedCore(env) {
+  const p = env.card && env.card.of;
+  if (!p || p.kind !== 'core' || !Array.isArray(p.layers) || !Array.isArray(p.kinds)) return null;
+  const n = p.layers.length;
+  if (n < 4 || n > 6 || p.kinds.length !== n) return null;
+  const layers = p.layers.map(Number);
+  const kinds = p.kinds.map(Number);
+  if (!layers.every((t) => Number.isInteger(t) && t >= 3 && t <= 40)) return null;
+  if (!kinds.every((k) => Number.isInteger(k) && k >= 0 && k < KINDS.length)) return null;
+  const band = Number(p.band);
+  const water = Number(p.water);
+  if (!Number.isInteger(band) || band < 1 || band > n - 2) return null;
+  if (!Number.isInteger(water) || water < 1 || water > n - 1) return null;
+  return { kind: 'core', layers, kinds, band, water };
+}
+
+function totalOf(plan) {
+  return plan.layers.reduce((sum, t) => sum + t, 0);
+}
+
+function waterDepth(plan) {
+  let depth = 0;
+  for (let i = 0; i < plan.water; i++) depth += plan.layers[i];
+  return depth;
+}
+
+function coreTitle(plan) {
+  return 'the core: ' + WORDS[plan.layers.length] + ' layers';
+}
+
+function coreGeometry(w, h, plan) {
+  const top = h * 0.12;
+  const bottom = h * 0.9;
+  return { top, bottom, left: w * 0.24, right: w * 0.76, scale: (bottom - top) / totalOf(plan) };
+}
+
+function layerTone(env, k) {
+  const c = env.colors;
+  switch (k) {
+    case 0: return env.mix(c.bg2, c.accent2, 0.3);
+    case 1: return env.mix(env.mix(c.bg2, c.accent2, 0.2), c.bg, 0.25);
+    case 2: return env.mix(c.bg2, c.muted, 0.3);
+    case 3: return env.mix(c.bg2, c.accent, 0.22);
+    case 4: return env.mix(c.bg2, c.fg, 0.3);
+    default: return env.mix(c.bg, c.bg2, 0.6);
+  }
+}
+
+function drawCore(g, w, h, env, plan, s, variant) {
+  const v = variant || PLAIN;
+  const c = env.colors;
+  const geo = coreGeometry(w, h, plan);
+  const m = Math.min(w, h);
+  const size = Math.max(10, Math.min(14, Math.round(m * 0.036)));
+  const small = Math.max(9, size - 2);
+  sky(g, w, h, env, geo.top, s.lift);
+  write(g, 'surface', w * 0.5, geo.top - size * 0.9, small, env.alpha(c.muted, 0.9));
+  const colW = geo.right - geo.left;
+  let y = geo.top;
+  const depth = waterDepth(plan);
+  plan.layers.forEach((t, i) => {
+    const lh = t * geo.scale;
+    const stones = i === plan.band;
+    g.fillStyle = stones ? env.mix(c.bg, c.bg2, 0.5) : layerTone(env, plan.kinds[i]);
+    g.fillRect(geo.left, y, colW, lh);
+    flecks(g, env, geo.left, y, colW, lh, Math.round((8 + t * 1.4) * v.density), i, 0.14);
+    if (stones) {
+      const count = Math.max(4, Math.round((5 + colW / 24) * v.density));
+      for (let j = 0; j < count; j++) {
+        const sx = geo.left + colW * 0.06 + ((j * 0.6180339 + 0.11) % 1) * colW * 0.88;
+        const sy = y + lh * 0.2 + ((j * 0.7548777 + 0.41) % 1) * lh * 0.6;
+        stone(g, env, sx, sy, Math.min(lh * 0.3, m * (0.012 + ((j * 0.37) % 1) * 0.02) * v.scale), ((j * 0.53) % 1) * 0.8 - 0.4, 0.5);
+      }
     }
-    g.stroke();
-  });
-  g.fillStyle = c.alpha(col.fg, 0.7);
-  for (const tip of s.tips) {
+    g.strokeStyle = env.alpha(c.bg, 0.6);
+    g.lineWidth = 1;
     g.beginPath();
-    g.arc(tip.x, tip.y, 1.2, 0, Math.PI * 2);
-    g.fill();
+    g.moveTo(geo.left, y + lh);
+    g.lineTo(geo.right, y + lh);
+    g.stroke();
+    // Its name to the left, its thickness to the right.
+    write(g, stones ? 'stones' : KINDS[plan.kinds[i]], geo.left - size * 0.6, y + lh / 2, small, stones ? c.accent2 : env.alpha(c.fg, 0.85), 'right');
+    write(g, t + ' cm', geo.right + size * 0.6, y + lh / 2, small, env.alpha(c.fg, 0.95), 'left');
+    y += lh;
+  });
+  // The water, risen to its line at the finale.
+  const wy = geo.top + depth * geo.scale;
+  if (s.fill > 0) {
+    const from = geo.bottom - (geo.bottom - wy) * s.fill;
+    g.fillStyle = env.alpha(c.accent, 0.28);
+    g.fillRect(geo.left, from, colW, geo.bottom - from);
   }
-  // A marker at the surface for each thing in the ground; the shoots come up at the finale.
-  const size = Math.max(10, Math.round(m * 0.032));
-  g.font = '500 ' + size + 'px system-ui, sans-serif';
-  g.textAlign = 'center';
-  g.textBaseline = 'bottom';
-  const up = 1 - (1 - s.shoot) * (1 - s.shoot);
-  const reach = Math.max(m * 0.04, top - size * 1.8); // as tall as the sky allows, the name still above it
-  for (const p of s.plants) {
-    const stem = m * 0.02 + up * (reach - m * 0.02);
-    g.strokeStyle = c.alpha(c.mix(col.accent2, col.accent, 0.3 * up), 0.9);
+  // The water line, wavy, at a layer boundary.
+  g.strokeStyle = c.accent;
+  g.lineWidth = 2;
+  g.beginPath();
+  const amp = Math.max(1.5, m * 0.006);
+  for (let x = geo.left - size * 0.4; x <= geo.right + size * 0.4; x += 3) {
+    const yy = wy + Math.sin((x / m) * 40 + v.turn * Math.PI * 2 + (s.ripple || 0)) * amp;
+    if (x === geo.left - size * 0.4) g.moveTo(x, yy);
+    else g.lineTo(x, yy);
+  }
+  g.stroke();
+  write(g, 'water', geo.left + colW * 0.5, wy - small * 0.8, small, c.accent);
+  // The column's edges.
+  g.strokeStyle = env.alpha(c.fg, 0.35);
+  g.lineWidth = 1;
+  g.strokeRect(geo.left, geo.top, colW, geo.bottom - geo.top);
+  // The root, at the finale: down from the surface and round the stones.
+  if (s.root && s.grow > 0) {
+    const n = Math.max(2, Math.round(s.root.length * s.grow));
+    g.strokeStyle = env.alpha(c.accent2, 0.9);
+    g.lineCap = 'round';
+    g.lineWidth = 2.2;
+    g.beginPath();
+    g.moveTo(s.root[0].x, s.root[0].y);
+    for (let i = 1; i < n; i++) g.lineTo(s.root[i].x, s.root[i].y);
+    g.stroke();
+    g.strokeStyle = env.alpha(c.accent2, 0.9);
     g.lineWidth = 2;
     g.beginPath();
-    g.moveTo(p.x, top);
-    g.lineTo(p.x + Math.sin(p.k) * stem * 0.15, top - stem);
+    g.moveTo(s.root[0].x, geo.top);
+    g.lineTo(s.root[0].x + 3, geo.top - m * 0.04 * Math.min(1, s.grow * 2));
     g.stroke();
-    if (up > 0.3) {
-      g.fillStyle = c.alpha(c.mix(col.accent, col.accent2, 0.4), 0.9);
-      for (const f of [0.55, 0.8]) {
-        g.beginPath();
-        g.ellipse(p.x + (f > 0.6 ? -1 : 1) * stem * 0.09, top - stem * f, stem * 0.1 * up, stem * 0.04 * up, (f > 0.6 ? -1 : 1) * 0.6, 0, Math.PI * 2);
-        g.fill();
-      }
-    }
-    g.fillStyle = c.alpha(col.fg, 0.55 + up * 0.35);
-    g.fillText(p.name, Math.max(size * 2.6, Math.min(w - size * 2.6, p.x)), top - stem - size * 0.3);
   }
-  if (s.flash > 0) {
-    g.fillStyle = c.alpha(col.accent2, s.flash * 0.22);
-    g.fillRect(0, top, w, h - top);
-  }
-  if (s.core > 0) coreSample(g, w, h, c, s);
+  write(g, s.caption, w / 2, h * 0.955, small, env.alpha(c.muted, 0.9));
 }
 
-function coreSample(g, w, h, c, s) {
-  const col = c.colors;
-  const m = Math.min(w, h);
-  const lift = 1 - (1 - s.core) * (1 - s.core);
-  const cw = m * 0.09;
-  const soilH = h - s.top;
-  const x = s.coreX;
-  const left = x - cw / 2;
-  // The hole, closing itself.
-  g.fillStyle = 'rgba(0,0,0,' + (0.4 * lift * (1 - lift * 0.5)).toFixed(3) + ')';
-  g.fillRect(left, s.top, cw, soilH);
-  // The core, drawn up out of the ground with its stones and roots in it.
-  const rise = lift * soilH * 0.6;
-  const y0 = s.top - rise;
+function corePreview(g, w, h, env, plan) {
+  drawCore(g, w, h, env, plan, { fill: 0, grow: 0, lift: 0, root: null, caption: 'how deep is the water? how many layers to the stones?' }, env.variant);
+}
+
+function corePiece(env, plan) {
+  const n = plan.layers.length;
+  const total = totalOf(plan);
+  const depth = waterDepth(plan);
+  const s = { fill: 0, grow: 0, lift: 0, root: null, ripple: 0, caption: 'drawn to scale; the thicknesses are written' };
+  const draw = (c) => drawCore(c.g, c.w, c.h, c, plan, s, env.variant);
+  return {
+    title: coreTitle(plan),
+    brief: 'A core from the bed, drawn to scale: ' + WORDS[n] + ' layers, each with its thickness in centimetres written beside it. One layer is a band of stones. The wavy line is where the water stands. The band is a layer of its own and is not one a root passes through.',
+    goal: 'Read how deep the water table stands and how many layers a root passes through before it meets the stones.',
+    aspect: '4 / 5',
+    checkLabel: 'read the core',
+    steps: [
+      { id: 'water', ask: 'the water table, below the surface', kind: 'number', min: 0, max: total, step: 1, unit: 'cm' },
+      { id: 'layers', ask: 'layers a root passes through before the stones', kind: 'number', min: 0, max: n, step: 1, unit: 'layers' }
+    ],
+    solution: { water: depth, layers: plan.band },
+    check(c) {
+      const water = Math.round(Number(c.value('water')));
+      const layers = Math.round(Number(c.value('layers')));
+      const waterRight = water === depth;
+      const layersRight = layers === plan.band;
+      if (waterRight && layersRight) {
+        return { solved: true, say: 'the core reads true: water at ' + depth + ' cm, stones under ' + WORDS[plan.band] + ' layer' + (plan.band === 1 ? '' : 's') };
+      }
+      const parts = [];
+      if (!waterRight) parts.push(water < depth ? 'the water stands deeper than that' : 'the water stands shallower than that');
+      else parts.push('the water is read right');
+      if (!layersRight) parts.push(layers < plan.band ? 'a root goes through more layers than that before the stones' : 'a root meets the stones sooner than that');
+      return { solved: false, say: parts.join('; ') };
+    },
+    start(c) {
+      c.status(LINES[0]);
+      draw(c);
+    },
+    apply(id, value, c) {
+      if (id === 'water') c.status('water at ' + Math.round(Number(value)) + ' cm, you say');
+      if (id === 'layers') c.status(Math.round(Number(value)) + ' layers to the stones, you say');
+      draw(c);
+    },
+    frame(t, dt, c) {
+      if (c.done) {
+        s.fill = Math.min(1, s.fill + dt * 0.5);
+        s.grow = Math.min(1, s.grow + dt * 0.35);
+        s.lift = Math.min(1, s.lift + dt * 0.5);
+        if (!c.reduced) s.ripple += dt * 2;
+      }
+      draw(c);
+    },
+    end(c) {
+      // The root: down to the band, then sideways along it, because that is what roots do.
+      const geo = coreGeometry(c.w, c.h, plan);
+      let bandTop = geo.top;
+      for (let i = 0; i < plan.band; i++) bandTop += plan.layers[i] * geo.scale;
+      const path = [];
+      let x = c.w * (0.42 + c.rnd() * 0.16);
+      let y = geo.top;
+      const step = Math.max(3, geo.scale * 2);
+      while (y < bandTop - step) {
+        path.push({ x, y });
+        x += (c.rnd() - 0.5) * step * 1.2;
+        y += step * (0.7 + c.rnd() * 0.6);
+      }
+      const drift = x < c.w / 2 ? -1 : 1;
+      for (let i = 0; i < 14; i++) {
+        path.push({ x, y });
+        x += drift * step * (0.8 + c.rnd() * 0.6);
+        y += (c.rnd() - 0.3) * step * 0.5;
+        if (x < geo.left + 4 || x > geo.right - 4) break;
+      }
+      s.root = path;
+      s.caption = 'water at ' + depth + ' cm; the root went sideways at the stones';
+      c.status('Read right. The root meets the stones and goes sideways for a while first. ' + LINES[1]);
+    }
+  };
+}
+
+/* ---- the mix: two bags and a bed ----------------------------------------------------------- */
+
+function shareOf(a, b, parts) {
+  return (parts * a + (10 - parts) * b) / 10;
+}
+
+function mixPlan(env) {
+  for (let attempt = 0; attempt < 80; attempt++) {
+    const a = env.int(2, 18) * 5;
+    const b = env.int(2, 18) * 5;
+    if (Math.abs(a - b) < 30) continue;
+    const parts = env.int(1, 9);
+    if (!Number.isInteger(shareOf(a, b, parts))) continue;
+    return { kind: 'mix', a, b, parts };
+  }
+  return { kind: 'mix', a: 20, b: 80, parts: 6 };
+}
+
+function carriedMix(env) {
+  const p = env.card && env.card.of;
+  if (!p || p.kind !== 'mix') return null;
+  const a = Number(p.a);
+  const b = Number(p.b);
+  const parts = Number(p.parts);
+  if (![a, b, parts].every(Number.isInteger)) return null;
+  if (a < 5 || a > 95 || b < 5 || b > 95 || Math.abs(a - b) < 20) return null;
+  if (parts < 1 || parts > 9 || !Number.isInteger(shareOf(a, b, parts))) return null;
+  return { kind: 'mix', a, b, parts };
+}
+
+function mixTitle(plan) {
+  return 'the mix: ' + plan.a + ' and ' + plan.b + ' per cent sand';
+}
+
+function bag(g, env, x, y, r, share, name, tilt, density, size) {
+  const c = env.colors;
   g.save();
+  g.translate(x, y);
+  g.rotate(tilt);
+  g.fillStyle = soilTone(env, share);
   g.beginPath();
-  g.roundRect(left, y0, cw, soilH, cw * 0.25);
-  g.clip();
-  const grad = g.createLinearGradient(0, y0, 0, y0 + soilH);
-  grad.addColorStop(0, c.mix(col.bg2, col.accent2, 0.3));
-  grad.addColorStop(0.25, c.mix(col.bg2, col.accent2, 0.12));
-  grad.addColorStop(1, col.bg2);
-  g.fillStyle = grad;
-  g.fillRect(left, y0, cw, soilH);
-  g.fillStyle = c.alpha(col.muted, 0.5);
-  for (const st of s.stones) {
-    if (Math.abs(st.x - x) >= cw / 2 + st.r) continue;
-    g.beginPath();
-    g.ellipse(st.x, st.y - rise, st.r * 1.25, st.r * 0.8, st.tilt, 0, Math.PI * 2);
-    g.fill();
-  }
-  g.strokeStyle = c.alpha(col.accent2, 0.9);
-  g.lineWidth = 1.4;
-  g.beginPath();
-  for (const r of s.roots) {
-    if (Math.abs(r.x1 - x) >= cw / 2) continue;
-    g.moveTo(r.x1, r.y1 - rise);
-    g.lineTo(r.x2, r.y2 - rise);
-  }
-  g.stroke();
-  g.restore();
-  g.strokeStyle = c.alpha(col.fg, 0.6 * lift);
+  g.roundRect(-r, -r * 0.8, r * 2, r * 1.7, r * 0.3);
+  g.fill();
+  flecks(g, env, -r * 0.9, -r * 0.7, r * 1.8, r * 1.5, Math.round((6 + share * 0.5) * density), share, 0.35);
+  g.strokeStyle = env.alpha(c.fg, 0.45);
   g.lineWidth = 1;
   g.beginPath();
-  g.roundRect(left, y0, cw, soilH, cw * 0.25);
+  g.roundRect(-r, -r * 0.8, r * 2, r * 1.7, r * 0.3);
   g.stroke();
-  // The reading, printed beside it on whichever side has the room.
-  const size = Math.max(11, Math.round(m * 0.034));
-  g.font = '500 ' + size + 'px system-ui, sans-serif';
-  g.textBaseline = 'top';
-  const toRight = x < w / 2;
-  g.textAlign = toRight ? 'left' : 'right';
-  const tx = toRight ? left + cw + size : left - size;
-  g.fillStyle = c.alpha(col.fg, lift);
-  s.reading.lines.forEach((line, i) => g.fillText(line, tx, Math.max(size * 0.6, y0) + i * size * 1.35));
+  // The tied neck.
+  g.fillStyle = env.alpha(c.muted, 0.6);
+  g.beginPath();
+  g.ellipse(0, -r * 0.82, r * 0.45, r * 0.16, 0, 0, Math.PI * 2);
+  g.fill();
+  write(g, name, 0, 0, Math.round(r * 0.8), c.bg, 'center', '600');
+  g.restore();
+  write(g, share + '% sand', x, y + r * 1.15 + size * 0.8, size, env.alpha(c.fg, 0.95));
 }
 
-/* ---- the pieces ------------------------------------------------------------------------------ */
-
-// Sowing: set the grit, put a few named things in the ground, water them, and watch the roots find
-// a way down; the shoots come up when they have.
-function sow(env) {
-  const was = pressed(env);
-  const n = env.int(2, 4);
-  const names = listNames(env, n);
-  const grit = was ? gritOf(was) : env.int(15, 75);
-  const waters = env.int(2, 4);
-  const byName = env.chance(0.5);
-  const s = fresh(grit);
-  s.since = -1;
-  return {
-    title: was ? 'plant ' + join(names) + ' down to ' + was.through + ' cm'
-      : byName ? 'plant ' + join(names) : WORDS[n] + ' things in the ground',
-    brief: 'Set the grit, tap the soil to plant ' + join(names) + ', water them, and watch the roots find a way down; the shoots come up when they have.',
-    aspect: '4 / 3',
-    steps: [
-      { id: 'grit', ask: 'the grit', kind: 'range', min: 0, max: 100, step: 1, value: grit, low: 'heavy clay', high: 'gravel' },
-      { id: 'plant', ask: 'tap the soil to plant ' + WORDS[n], kind: 'tap', label: 'plant one for me' },
-      { id: 'water', ask: 'water it ' + (waters === 2 ? 'twice' : WORDS[waters] + ' times'), kind: 'press', count: waters, label: 'water it' },
-      { id: 'settle', ask: 'let the roots find a way down', kind: 'wait', after: 'plant' }
-    ],
-    start(c) {
-      layStones(s, c.w, c.h, c.rnd);
-      say(s, c, 'Bare soil, ' + (s.grit < 30 ? 'heavy and slow to drain' : 'well drained') + ', nothing in it yet.');
-      bed(c.g, c.w, c.h, c, s);
-    },
-    apply(id, value, c) {
-      if (id === 'grit') {
-        s.grit = Math.max(0, Math.min(100, Math.round(Number(value)))) || 0;
-        layStones(s, c.w, c.h, c.rnd);
-        say(s, c, 'Grit at ' + s.grit + '. The stones are somewhere else now.');
-      }
-      if (id === 'water') water(s, c);
-    },
-    tap(x, y, c) {
-      if (s.plants.length >= n + 3) return;
-      const px = Math.max(c.w * 0.04, Math.min(c.w * 0.96, x * c.w));
-      const spare = NAMES.filter((x) => !s.plants.some((p) => p.name === x));
-      const name = s.plants.length < n ? names[s.plants.length] : c.pick(spare.length ? spare : NAMES);
-      plant(s, px, name);
-      if (s.plants.length > n) {
-        say(s, c, 'Planted ' + name + ' as well. Nobody said stop.');
-        return;
-      }
-      c.progress('plant', s.plants.length / n);
-      say(s, c, 'Planted ' + name + ' at ' + Math.round((px / c.w) * 100) + ' across. It will take its time.');
-      if (s.plants.length === n) {
-        c.satisfy('plant');
-        s.since = 0;
-      }
-    },
-    frame(t, dt, c) {
-      tick(s, dt, c);
-      if (s.since >= 0 && !s.settled) {
-        s.since += dt;
-        const depth = cm(s, s.deepest, c.h) / 20;
-        const p = Math.max(s.since / 12, Math.min(1, depth) * Math.min(1, s.since / 5));
-        c.progress('settle', Math.min(1, p));
-        if (p >= 1) {
-          s.settled = true;
-          c.satisfy('settle');
-        }
-      }
-      if (c.done) s.shoot = Math.min(1, s.shoot + dt / 1.2);
-      bed(c.g, c.w, c.h, c, s);
-    },
-    end(c) {
-      c.status('The shoots are up. ' + reading(s, c.h).verdict);
-    }
-  };
-}
-
-// Turning: a bed with things in it already, turned over a couple of times so they start again,
-// rained on or not, and cored; the reading comes up with the core.
-function turnOver(env) {
-  const was = pressed(env);
-  const names = listNames(env, env.int(2, 3));
-  const turns = env.int(2, 3);
-  const holdMs = env.pick([1500, 2000, 2500]);
-  const times = turns === 2 ? 'twice' : 'three times';
-  const s = fresh(was ? gritOf(was) : 45);
-  function replant(c) {
-    s.roots = [];
-    s.tips = [];
-    s.plants = [];
-    s.deepest = s.top;
-    names.forEach((name, i) => plant(s, c.w * ((i + 0.5) / names.length) + (c.rnd() - 0.5) * c.w * 0.18, name));
+function drawMix(g, w, h, env, plan, s, variant) {
+  const v = variant || PLAIN;
+  const c = env.colors;
+  const m = Math.min(w, h);
+  const size = Math.max(10, Math.min(14, Math.round(m * 0.036)));
+  const small = Math.max(9, size - 2);
+  const target = shareOf(plan.a, plan.b, plan.parts);
+  sky(g, w, h, env, h * 0.62, s.lift);
+  const r = m * 0.13 * Math.min(1.1, Math.max(0.9, v.scale));
+  const tilt = (v.turn - 0.5) * 0.12;
+  bag(g, env, w * 0.27, h * 0.17, r, plan.a, 'A', tilt, v.density, small);
+  bag(g, env, w * 0.73, h * 0.17, r, plan.b, 'B', -tilt, v.density, small);
+  write(g, 'a parts of A with 10 - a parts of B', w / 2, h * 0.38, small, env.alpha(c.muted, 0.95));
+  // Ten cups, the first `parts` of them from bag A.
+  const cupW = (w * 0.76) / 10;
+  const cupH = m * 0.05;
+  const cy = h * 0.45;
+  for (let i = 0; i < 10; i++) {
+    const x = w * 0.12 + i * cupW;
+    const fromA = s.parts != null && i < s.parts;
+    g.fillStyle = s.parts == null ? env.alpha(c.muted, 0.12) : soilTone(env, fromA ? plan.a : plan.b);
+    g.fillRect(x + cupW * 0.08, cy, cupW * 0.84, cupH);
+    g.strokeStyle = env.alpha(c.fg, 0.4);
+    g.lineWidth = 1;
+    g.strokeRect(x + cupW * 0.08, cy, cupW * 0.84, cupH);
+    if (s.parts != null) write(g, fromA ? 'A' : 'B', x + cupW / 2, cy + cupH / 2, Math.max(8, Math.round(cupH * 0.55)), c.bg, 'center', '600');
   }
+  write(g, s.parts == null ? 'how many of the ten from A?' : 'a = ' + s.parts, w / 2, cy + cupH + small * 1.1, small, env.alpha(c.fg, 0.9));
+  // The bed, which wants its share and takes the blend at the finale.
+  const bx = w * 0.14;
+  const by = h * 0.62;
+  const bw = w * 0.72;
+  const bh = h * 0.28;
+  write(g, 'the bed wants ' + target + '% sand', w / 2, by - small * 1.1, size, c.accent2);
+  if (s.blend >= 0) {
+    g.fillStyle = soilTone(env, s.blend);
+    g.fillRect(bx, by, bw, bh);
+    flecks(g, env, bx, by, bw, bh, Math.round((20 + s.blend * 0.8) * v.density), 7, 0.3);
+    // The water, draining through it: faster the sandier it is.
+    const level = Math.max(0, 1 - s.drained);
+    g.fillStyle = env.alpha(c.accent, 0.3);
+    g.fillRect(bx, by, bw, bh * 0.5 * level);
+  } else {
+    g.fillStyle = env.mix(c.bg, c.bg2, 0.6);
+    g.fillRect(bx, by, bw, bh);
+    flecks(g, env, bx, by, bw, bh, Math.round(16 * v.density), 7, 0.12);
+    write(g, '?', w / 2, by + bh / 2, size * 2, env.alpha(c.muted, 0.5), 'center', '600');
+  }
+  g.strokeStyle = env.alpha(c.fg, 0.4);
+  g.lineWidth = 1;
+  g.strokeRect(bx, by, bw, bh);
+  write(g, s.caption, w / 2, h * 0.955, small, env.alpha(c.muted, 0.9));
+}
+
+function mixPreview(g, w, h, env, plan) {
+  const v = env.variant || PLAIN;
+  drawMix(g, w, h, env, plan, { parts: Math.round(v.turn * 10), blend: -1, drained: 0, lift: 0, caption: 'a sandier soil drains faster' }, v);
+}
+
+function mixPiece(env, plan) {
+  const target = shareOf(plan.a, plan.b, plan.parts);
+  const drains = plan.b > plan.a ? 'faster' : 'slower';
+  const s = { parts: null, blend: -1, drained: 0, lift: 0, caption: 'a sandier soil drains faster' };
+  const draw = (c) => drawMix(c.g, c.w, c.h, c, plan, s, env.variant);
   return {
-    title: was ? 'turn the soil ' + times + ', over the stones at ' + was.stone + ' cm'
-      : 'turn the soil ' + times,
-    brief: 'Pick the tilth, turn ' + join(names) + ' over ' + times + ' and watch them start again, let it rain or not, and hold to take a core sample; the reading comes up with it.',
-    aspect: '4 / 3',
+    title: mixTitle(plan),
+    brief: 'Two bags of soil. Bag A is ' + plan.a + '% sand and bag B is ' + plan.b + '%; the bed wants ' + target + '%. Mixing a parts of A with 10 - a parts of B makes a soil whose sand share is the two shares averaged, weighted by the parts. A sandier soil drains faster.',
+    goal: 'Find the parts of A in ten that give the bed the share it wants, and say whether that blend drains faster or slower than bag A.',
+    aspect: '4 / 5',
+    checkLabel: 'mix it',
     steps: [
-      { id: 'tilth', ask: 'the tilth', kind: 'choice', options: TILTHS },
-      { id: 'turn', ask: 'turn the soil ' + times, kind: 'press', count: turns, label: 'turn the soil' },
-      { id: 'rain', ask: 'let it rain', kind: 'toggle' },
-      { id: 'sample', ask: 'take a core sample', kind: 'hold', ms: holdMs, label: 'hold to take a core', after: 'turn' }
+      { id: 'parts', ask: 'parts of A, in ten', kind: 'number', min: 0, max: 10, step: 1, unit: 'of 10' },
+      { id: 'drains', ask: 'against bag A, the blend', kind: 'choice', options: DRAINS }
     ],
+    solution: { parts: plan.parts, drains },
+    check(c) {
+      const p = Math.round(Number(c.value('parts')));
+      const partsRight = p === plan.parts;
+      const drainsRight = c.value('drains') === drains;
+      if (partsRight && drainsRight) {
+        return { solved: true, say: 'a = ' + plan.parts + ': the blend is ' + target + '% sand, and it drains ' + drains + ' than bag A' };
+      }
+      const share = shareOf(plan.a, plan.b, Math.max(0, Math.min(10, p)));
+      const parts = [];
+      if (!partsRight) parts.push(share > target ? 'that blend is sandier than the bed wants' : 'that blend is less sandy than the bed wants');
+      else parts.push('the parts are right');
+      if (!drainsRight) parts.push('it drains the other way from what you said');
+      return { solved: false, say: parts.join('; ') };
+    },
     start(c) {
-      layStones(s, c.w, c.h, c.rnd);
-      replant(c);
-      for (let i = 0; i < 120; i++) grow(s, 1 / 30, c.w, c.h, c);
-      s.said = 3;
-      const who = join(names);
-      say(s, c, who[0].toUpperCase() + who.slice(1) + ' are in this soil already. ' + LINES[3]);
-      bed(c.g, c.w, c.h, c, s);
+      c.status('bag A is ' + plan.a + '% sand, bag B is ' + plan.b + '%; the bed wants ' + target + '%');
+      draw(c);
     },
     apply(id, value, c) {
-      if (id === 'tilth') {
-        s.grit = Number(value) || 45;
-        layStones(s, c.w, c.h, c.rnd);
-        say(s, c, TILTH_SAID[s.grit] || tilthOf(s.grit));
+      if (id === 'parts') {
+        const p = Math.round(Number(value));
+        s.parts = Number.isFinite(p) ? Math.max(0, Math.min(10, p)) : 0;
+        c.status(s.parts + ' of the ten from bag A, ' + (10 - s.parts) + ' from bag B');
       }
-      if (id === 'turn') {
-        layStones(s, c.w, c.h, c.rnd);
-        replant(c);
-        s.flash = 1;
-        s.said = 0;
-        say(s, c, TURNED[Math.min(TURNED.length - 1, Number(value) - 1)] || TURNED[0]);
-      }
-      if (id === 'rain') {
-        s.rain = !!value;
-        say(s, c, s.rain ? 'Rain. The soil darkens and the roots hurry.' : 'Rain stopped. The soil keeps what it caught, for a while.');
-      }
-      if (id === 'sample') takeCore(s, c);
+      if (id === 'drains') c.status('you say it drains ' + value + ' than bag A');
+      draw(c);
     },
     frame(t, dt, c) {
-      tick(s, dt, c);
-      if (s.core > 0) s.core = Math.min(1, s.core + dt / 1.1);
-      if (c.done) s.dawn = Math.min(1, s.dawn + dt / 1.2);
-      bed(c.g, c.w, c.h, c, s);
+      if (c.done) {
+        s.lift = Math.min(1, s.lift + dt * 0.5);
+        // The water goes through in about four seconds at pure sand, slower the less sand there is.
+        s.drained = Math.min(1, s.drained + dt * (0.08 + target / 100 * 0.22) * (c.reduced ? 3 : 1));
+      }
+      draw(c);
     },
     end(c) {
-      c.status('Core taken. ' + (s.reading ? s.reading.verdict : LINES[1]));
+      s.blend = target;
+      s.parts = s.parts == null ? plan.parts : s.parts;
+      s.caption = target + '% sand: it drains ' + drains + ' than bag A';
+      c.status('Mixed and watered. ' + LINES[3]);
     }
   };
+}
+
+/* ---- the module ----------------------------------------------------------------------------- */
+
+function deal(env) {
+  return env.chance(0.5) ? corePlan(env) : mixPlan(env);
 }
 
 export default {
   id: 'loam',
-  paint(ctx, w, h, env) {
-    soil(ctx, w, h, env);
+  needsSky: false,
+  paint(g, w, h, env) {
+    const plan = deal(env);
+    if (plan.kind === 'core') corePreview(g, w, h, env, plan);
+    else mixPreview(g, w, h, env, plan);
   },
   spark(env) {
-    const a = env.int(6, 16);
-    const b = a + env.int(10, 24);
-    const stone = b + env.int(1, 9);
-    const through = stone + env.int(3, 14);
+    const plan = deal(env);
+    if (plan.kind === 'core') {
+      return {
+        title: coreTitle(plan),
+        mono: plan.layers.map((t, i) => (i === plan.band ? 'stones' : KINDS[plan.kinds[i]]).padEnd(8) + ' ' + t + ' cm').join('\n'),
+        text: 'Drawn to scale. Read how deep the water stands, and how many layers a root passes through before the stones.',
+        aspect: '4 / 5',
+        paint: (g, w, h, cardEnv) => corePreview(g, w, h, cardEnv, plan),
+        of: plan
+      };
+    }
+    const target = shareOf(plan.a, plan.b, plan.parts);
     return {
-      title: 'core sample',
-      mono: 'topsoil   0–' + a + ' cm\nloam     ' + a + '–' + b + ' cm\nstones   at ' + stone + ' cm\nroots    found a way at ' + through + ' cm',
-      text: env.pick(LINES),
+      title: mixTitle(plan),
+      mono: 'bag A    ' + plan.a + '% sand\nbag B    ' + plan.b + '% sand\nthe bed  ' + target + '%',
+      text: 'Mix a parts of A with 10 - a parts of B. Find a, and say whether the blend drains faster or slower than A.',
       aspect: '4 / 5',
-      paint: soil,
-      // What this card is of, for the piece it opens as: the bed these depths were cored from.
-      of: { a, b, stone, through }
+      paint: (g, w, h, cardEnv) => mixPreview(g, w, h, cardEnv, plan),
+      of: plan
     };
   },
   piece(env) {
-    return env.chance(0.5) ? sow(env) : turnOver(env);
+    const core = carriedCore(env);
+    if (core) return corePiece(env, core);
+    const mix = carriedMix(env);
+    if (mix) return mixPiece(env, mix);
+    const plan = deal(env);
+    return plan.kind === 'core' ? corePiece(env, plan) : mixPiece(env, plan);
   }
 };

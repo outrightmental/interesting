@@ -1,774 +1,558 @@
-/* The machine shop: elementary cellular automata on a bench. Cards and pieces share a rule,
-   a comparison of two tapes one cell apart, or a picture scrambled by a reversible two-sheet
-   machine. All three use the same wrapped tape and rule arithmetic. The reversible machine
-   keeps two consecutive sheets, not a history; lifting its companion tests what that costs.
-   See js/feed.js for the card contract and js/stage.js for the piece contract.
+/* The machine shop: elementary cellular automata on a bench, read as puzzles. Every tape is a row
+   of cells that wraps round at its ends, and every cell of the next row is set by the three cells
+   above it -- itself and its two neighbours -- according to one of the 256 rules. As a card it is
+   one of the two puzzles below, drawn as it stands (paint, spark); as a piece it is that puzzle,
+   and the card it was opened from says which. See js/feed.js for what a module is and js/stage.js
+   for what a piece is.
 
-   A spark puts its exact subject on `of`. The piece follows that subject and its family before
-   consulting the seed, so a comparison stays a comparison and a mixed picture opens at the
-   very same mix. Every piece owns its choices, sheets and progress. */
+   Two puzzles, both deduction:
 
-// The card this piece was opened from, in the shop's own terms: { rule, noisy } for a rule card,
-// { spec } for a comparison card, or null for a piece nobody pressed (js/stage.js, env.card.of).
-function pressed(env) {
-  const was = env.card && env.card.of;
-  if (!was) return null;
-  if (was.spec && Array.isArray(was.spec.rules) && was.spec.initial) return was;
-  return typeof was.rule === 'number' ? was : null;
-}
+     the next row       A hidden rule ran a tape for four rows. Every one of the eight patterns of
+                        three appears somewhere in the first three rows, so the rule can be read
+                        off the rows entirely; write row five. The scene is the control: tap a
+                        cell of row five to light it. A wrong check says how many cells are right.
+     the changed cell   Two tapes ran one stated rule from one first row, except that one cell of
+                        the second tape's first row was flipped. The first rows are hidden and the
+                        next few shown. The flip reaches exactly the three cells under it in row
+                        one, so the difference has an apex; find its column, and count the cells
+                        that differ in the last row. A wrong check says which of the two is off.
 
-const LIVELY = [30, 45, 54, 60, 73, 90, 105, 110, 124, 126, 137, 150, 182, 193];
+   A card and the feature it opens as are one puzzle: the spark puts the whole plan on its spec as
+   `of` -- the rule, the first row, the flip -- and piece(env) opens on that rather than rolling
+   another. */
 
-const KNOWN = {
-  0: 'Cannot be bothered.',
-  30: 'Looks random. Is not. One live cell, and this.',
-  45: 'Chaotic, left-leaning, and in no hurry.',
-  54: 'Gliders in a lattice, if you wait for them.',
-  60: 'Half a Sierpinski triangle, leaning on the wall.',
-  73: 'Walls and wells: the live cells fence themselves in.',
-  90: 'A Sierpinski triangle, every time, from one live cell.',
-  105: 'A twin of 150 with the lights inverted.',
-  110: 'Class four: this one can compute anything, given a long enough tape.',
-  124: 'Rule 110 in a mirror.',
-  126: 'A thicker Sierpinski, like 90 drawn with a marker.',
-  150: 'Additive: two triangles interfering.',
-  184: 'Traffic. The cells are cars, and they jam.',
-  204: 'The identity: whatever you give it, forever.',
-  255: 'Everything, at once, forever.'
-};
+const WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve'];
+const PLAIN = { density: 1, scale: 1, turn: 0 };
+// The rules the changed cell is run under: ones whose flip usually reaches all three cells under
+// it. 105 and 150 always do (every cell is the parity of the three above), so they are rarer.
+const APEX_RULES = [30, 45, 54, 73, 126, 182];
+const APEX_PARITY = [105, 150];
 
-const TAPES = [
-  { label: 'one live cell', value: 'one' },
-  { label: 'a noisy tape', value: 'noise' },
-  { label: 'two cells apart', value: 'pair' }
-];
+/* ---- the tape arithmetic -------------------------------------------------------------------- */
 
-function describe(rule) {
-  if (KNOWN[rule]) return KNOWN[rule];
-  let set = 0;
-  for (let b = 0; b < 8; b++) if (rule & (1 << b)) set++;
-  if (set <= 2) return 'A quiet rule: most neighbourhoods go dark.';
-  if (set >= 6) return 'A busy rule: most neighbourhoods light up.';
-  return 'A middling rule. Nudge it one bit and watch what changes.';
-}
-
-// The eight neighbourhoods and the bit each one gives, four to a row so the table fits a card
-// two columns wide on a phone.
-function bits(rule) {
-  const rows = [];
-  for (const group of [[7, 6, 5, 4], [3, 2, 1, 0]]) {
-    rows.push(group.map((n) => n.toString(2).padStart(3, '0')).join(' '));
-    rows.push(group.map((n) => ' ' + ((rule >> n) & 1) + ' ').join(' '));
-  }
-  return rows.join('\n');
-}
-
-function pickRule(env) {
-  return env.chance(0.7) ? env.pick(LIVELY) : env.int(1, 254);
-}
-
-function firstRow(cols, tape, rnd) {
-  const row = new Uint8Array(cols);
-  if (tape === 'noise') for (let i = 0; i < cols; i++) row[i] = rnd() < 0.3 ? 1 : 0;
-  else if (tape === 'pair') {
-    row[Math.floor(cols * 0.35)] = 1;
-    row[Math.floor(cols * 0.65)] = 1;
-  } else row[cols >> 1] = 1;
-  return row;
+function hoodOf(row, x) {
+  const n = row.length;
+  return (row[(x + n - 1) % n] << 2) | (row[x] << 1) | row[(x + 1) % n];
 }
 
 function nextRow(row, rule) {
-  const cols = row.length;
-  const next = new Uint8Array(cols);
-  for (let x = 0; x < cols; x++) {
-    const l = row[(x + cols - 1) % cols];
-    const r = row[(x + 1) % cols];
-    next[x] = (rule >> ((l << 2) | (row[x] << 1) | r)) & 1;
-  }
-  return next;
+  const out = new Array(row.length);
+  for (let x = 0; x < row.length; x++) out[x] = (rule >> hoodOf(row, x)) & 1;
+  return out;
 }
 
-// The card: the rule run from the top of the picture down. The configuration the card was dealt
-// sets how large a cell is and which column the tape starts from, so the same rule runs as a
-// different pattern.
-function run(ctx, w, h, env, rule, noisy) {
-  const c = env.colors;
-  const v = env.variant;
-  ctx.fillStyle = c.bg;
-  ctx.fillRect(0, 0, w, h);
-  const cols = Math.max(16, Math.round(w / (3 * v.scale)));
-  const size = w / cols;
-  const rows = Math.ceil(h / size);
-  const first = firstRow(cols, noisy ? 'noise' : 'one', env.rnd);
-  const shift = Math.round(v.turn * cols) % cols;
-  let row = new Uint8Array(cols);
-  for (let x = 0; x < cols; x++) row[x] = first[(x + shift) % cols];
-  ctx.fillStyle = env.alpha(c.accent, 0.9);
-  for (let y = 0; y < rows; y++) {
-    for (let x = 0; x < cols; x++) {
-      if (row[x]) ctx.fillRect(x * size, y * size, size + 0.3, size + 0.3);
-    }
-    row = nextRow(row, rule);
-  }
+// rows[0] is `start`; rows[r] is r steps on.
+function runRows(start, rule, count) {
+  const rows = [start.slice()];
+  for (let r = 1; r <= count; r++) rows.push(nextRow(rows[r - 1], rule));
+  return rows;
 }
 
-// The bench: a tape of rows that scrolls up as the rule runs, drawn from the history kept in `s`.
-function bench(g, w, h, c, s) {
-  g.fillStyle = c.colors.bg;
+function randomRow(env, n) {
+  const row = [];
+  for (let i = 0; i < n; i++) row.push(env.chance(0.5) ? 1 : 0);
+  return row;
+}
+
+function differing(a, b) {
+  const out = [];
+  for (let x = 0; x < a.length; x++) if (a[x] !== b[x]) out.push(x);
+  return out;
+}
+
+function isBits(list, n) {
+  return Array.isArray(list) && list.length === n && list.every((v) => v === 0 || v === 1);
+}
+
+function clamp(v, lo, hi) {
+  return Math.max(lo, Math.min(hi, v));
+}
+
+/* ---- shared drawing ------------------------------------------------------------------------- */
+
+function background(g, w, h, env) {
+  const ground = g.createLinearGradient(0, 0, w, h);
+  ground.addColorStop(0, env.colors.bg2);
+  ground.addColorStop(1, env.colors.bg);
+  g.fillStyle = ground;
   g.fillRect(0, 0, w, h);
-  const size = w / s.cols;
-  const rows = s.history.length;
-  const top = h - rows * size;
-  g.fillStyle = c.alpha(c.colors.accent, 0.9);
-  for (let y = 0; y < rows; y++) {
-    const row = s.history[y];
-    for (let x = 0; x < s.cols; x++) {
-      if (row[x]) g.fillRect(x * size, top + y * size, size + 0.3, size + 0.3);
-    }
-  }
-  if (s.flash > 0) {
-    g.fillStyle = c.alpha(c.colors.accent2, s.flash * 0.25);
-    g.fillRect(0, 0, w, h);
+}
+
+// The bench's faint grain: a few marks whose phase is the configuration's turn and whose number
+// is its density.
+function grain(g, w, h, env, v) {
+  g.fillStyle = env.alpha(env.colors.accent, 0.12);
+  for (let i = 0, count = Math.max(6, Math.round(22 * v.density)); i < count; i++) {
+    const x = ((i * 0.6180339 + v.turn * 0.37) % 1) * w;
+    const y = ((i * 0.7548777 + v.turn * 0.11) % 1) * h;
+    g.fillRect(x, y, 1, 1);
   }
 }
 
-function benchPiece(env, was) {
-  // The rule the card was showing, and the tape it was running: the bench opens on the card's own
-  // experiment, and only rolls one of its own for a piece nobody pressed.
-  const rule = was && typeof was.rule === 'number' ? was.rule : pickRule(env);
-  const runs = env.int(2, 3);
-  const perRun = env.pick([60, 90, 120]);
-  const seedRnd = env.rnd;
-  const s = { rule, tape: was && was.noisy ? 'noise' : 'one', cols: 96, history: [], pending: 0, flash: 0, ran: 0 };
-  function reset(c) {
-    s.cols = Math.max(32, Math.round((c.w || 400) / 4));
-    s.history = [firstRow(s.cols, s.tape, seedRnd)];
-    s.pending = Math.min(perRun, Math.ceil((c.h || 300) / ((c.w || 400) / s.cols)) >> 1);
+// One cell of a tape. `inset` leaves the grain of the bench between cells.
+function cell(g, env, x, y, size, lit, inset, tone) {
+  const c = env.colors;
+  g.fillStyle = lit ? (tone || env.alpha(c.accent, 0.92)) : env.alpha(c.muted, 0.1);
+  g.fillRect(x + inset, y + inset, size - inset * 2, size - inset * 2);
+}
+
+// The eight patterns of three and what the rule makes of each, or a question mark where the rule
+// is still to be read. Patterns run 111 down to 000, as the rule's binary digits do.
+function glyphTable(g, env, x0, y, span, rule, v) {
+  const c = env.colors;
+  const each = span / 8;
+  const mini = Math.min(each / 4.2, span * 0.03);
+  const inset = mini * clamp(0.1 / v.density, 0.05, 0.16);
+  g.font = '500 ' + Math.max(8, Math.round(mini * 1.3)) + 'px system-ui, sans-serif';
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  for (let i = 0; i < 8; i++) {
+    const hood = 7 - i;
+    const cx = x0 + each * (i + 0.5);
+    for (let b = 0; b < 3; b++) {
+      const bit = (hood >> (2 - b)) & 1;
+      cell(g, env, cx + (b - 1.5) * mini, y, mini, bit, inset);
+    }
+    if (rule === null) {
+      g.fillStyle = env.alpha(c.accent2, 0.9);
+      g.fillText('?', cx, y + mini * 2.1);
+    } else {
+      const out = (rule >> hood) & 1;
+      cell(g, env, cx - mini / 2, y + mini * 1.5, mini, out, inset, env.alpha(c.accent2, 0.95));
+      if (!out) {
+        g.strokeStyle = env.alpha(c.muted, 0.5);
+        g.lineWidth = 1;
+        g.strokeRect(cx - mini / 2 + inset, y + mini * 1.5 + inset, mini - inset * 2, mini - inset * 2);
+      }
+    }
+  }
+}
+
+function label(g, env, text, x, y, size, align, tone) {
+  g.font = '500 ' + size + 'px system-ui, sans-serif';
+  g.textAlign = align || 'left';
+  g.textBaseline = 'middle';
+  g.fillStyle = tone || env.colors.fg;
+  g.fillText(text, x, y);
+}
+
+/* ---- the next row --------------------------------------------------------------------------- */
+
+// Every pattern row four uses is one that rows one to three already showed with its outcome.
+function readable(rows, width) {
+  const seen = new Set();
+  for (let r = 0; r < 3; r++) for (let x = 0; x < width; x++) seen.add(hoodOf(rows[r], x));
+  let all = true;
+  for (let x = 0; x < width; x++) if (!seen.has(hoodOf(rows[3], x))) all = false;
+  return { all, complete: seen.size === 8 };
+}
+
+// The stage's grid knob is ten cells wide at most, so this tape is nine or ten cells.
+function nextPlan(env) {
+  const number = env.int(100, 999);
+  const width = env.int(9, 10);
+  let fallback = null;
+  for (let attempt = 0; attempt < 400; attempt++) {
+    const rule = env.int(1, 254);
+    const start = randomRow(env, width);
+    const rows = runRows(start, rule, 4);
+    const moves = rows.some((row, i) => i > 0 && differing(row, rows[i - 1]).length);
+    if (!rows[4].some(Boolean) || !moves) continue;
+    const read = readable(rows, width);
+    if (read.complete) return { kind: 'next', number, width, rule, start };
+    if (read.all && !fallback) fallback = { kind: 'next', number, width, rule, start };
+  }
+  return fallback || { kind: 'next', number, width, rule: 30, start: new Array(width).fill(0).map((v, i) => (i === 3 ? 1 : 0)) };
+}
+
+function carriedNext(env) {
+  const p = env.card && env.card.of;
+  if (!p || p.kind !== 'next') return null;
+  if (!Number.isInteger(p.number) || p.number < 100 || p.number > 999) return null;
+  if (!Number.isInteger(p.width) || p.width < 9 || p.width > 10) return null;
+  if (!Number.isInteger(p.rule) || p.rule < 0 || p.rule > 255) return null;
+  if (!isBits(p.start, p.width)) return null;
+  const rows = runRows(p.start, p.rule, 4);
+  if (!rows[4].some(Boolean) || !readable(rows, p.width).all) return null;
+  return { kind: 'next', number: p.number, width: p.width, rule: p.rule, start: p.start.slice() };
+}
+
+function nextTitle(plan) {
+  return 'tape ' + plan.number + ': the next row';
+}
+
+function nextGeometry(w, h, width, v) {
+  const scale = clamp(v.scale, 0.88, 1.08);
+  const labelW = Math.max(14, Math.min(w, h) * 0.06);
+  const size = Math.min((w * 0.86 - labelW) / width, (h * 0.56) / 5.6) * scale;
+  return { size, left: (w - size * width + labelW) / 2, top: h * 0.1, gap: size * 0.6, labelW };
+}
+
+// `s` is the scene's state: the visitor's row five, the cells a hint has shown, whether the rule
+// is out (solved).
+function drawNext(g, w, h, env, plan, s, variant) {
+  const v = variant || PLAIN;
+  const c = env.colors;
+  const geo = nextGeometry(w, h, plan.width, v);
+  const rows = runRows(plan.start, plan.rule, 4);
+  const inset = geo.size * clamp(0.09 / v.density, 0.05, 0.14);
+  const small = Math.max(9, Math.min(15, Math.round(Math.min(w, h) * 0.036)));
+  background(g, w, h, env);
+  grain(g, w, h, env, v);
+  // Rows one to four, as the rule made them.
+  for (let r = 0; r < 4; r++) {
+    const y = geo.top + r * geo.size;
+    label(g, env, String(r + 1), geo.left - geo.labelW * 0.5, y + geo.size / 2, small, 'center', env.alpha(c.muted, 0.9));
+    for (let x = 0; x < plan.width; x++) cell(g, env, geo.left + x * geo.size, y, geo.size, rows[r][x], inset);
+  }
+  // Row five: the visitor's, outlined, lit where they have lit it.
+  const y5 = geo.top + 4 * geo.size + geo.gap;
+  label(g, env, '5', geo.left - geo.labelW * 0.5, y5 + geo.size / 2, small, 'center', c.accent2);
+  for (let x = 0; x < plan.width; x++) {
+    const x0 = geo.left + x * geo.size;
+    const lit = !!s.row[x];
+    cell(g, env, x0, y5, geo.size, lit, inset, env.alpha(c.accent2, 0.95));
+    g.strokeStyle = env.alpha(lit ? c.accent2 : c.muted, lit ? 0.9 : 0.55);
+    g.lineWidth = 1;
+    g.strokeRect(x0 + inset, y5 + inset, geo.size - inset * 2, geo.size - inset * 2);
+    if (s.shown.includes(x)) {
+      // A hinted cell: a small mark under it, lit or dark as the rule has it.
+      const want = rows[4][x];
+      g.fillStyle = want ? c.accent2 : env.alpha(c.muted, 0.7);
+      g.beginPath();
+      g.arc(x0 + geo.size / 2, y5 + geo.size + Math.max(3, geo.size * 0.18), Math.max(1.5, geo.size * 0.08), 0, Math.PI * 2);
+      g.fill();
+      if (!want) {
+        g.strokeStyle = env.alpha(c.muted, 0.9);
+        g.beginPath();
+        g.arc(x0 + geo.size / 2, y5 + geo.size + Math.max(3, geo.size * 0.18), Math.max(2.5, geo.size * 0.13), 0, Math.PI * 2);
+        g.stroke();
+      }
+    }
+  }
+  // The frame of the bench, and the table of patterns under it.
+  g.strokeStyle = env.alpha(c.muted, 0.25);
+  g.lineWidth = 1;
+  g.strokeRect(geo.left - inset, geo.top - inset, geo.size * plan.width + inset * 2, geo.size * 4 + inset * 2);
+  const tableY = y5 + geo.size + Math.max(h * 0.06, geo.size * 0.7);
+  glyphTable(g, env, w * 0.06, tableY, w * 0.88, s.open ? plan.rule : null, v);
+  label(g, env, s.open ? 'rule ' + plan.rule : 'the rule, pattern by pattern', w * 0.5, Math.min(h * 0.97, tableY + geo.size * 1.9), small, 'center', env.alpha(c.muted, 0.85));
+}
+
+function nextPreview(g, w, h, env, plan) {
+  drawNext(g, w, h, env, plan, { row: new Array(plan.width).fill(0), shown: [], open: false }, env.variant);
+}
+
+function nextPiece(env, plan) {
+  const width = plan.width;
+  const rows = runRows(plan.start, plan.rule, 4);
+  const answer = rows[4].slice();
+  const s = { row: new Array(width).fill(0), shown: [], open: false };
+  const draw = (c) => drawNext(c.g, c.w, c.h, c, plan, s, env.variant);
+  function right() {
+    let n = 0;
+    for (let x = 0; x < width; x++) if ((s.row[x] ? 1 : 0) === answer[x]) n += 1;
+    return n;
   }
   return {
-    title: 'rule ' + rule + ' on the bench',
-    brief: describe(rule) + ' Pick a tape, tune the rule, and run it ' + (runs === 2 ? 'twice' : 'three times') + '; the bench is cleared when you are done.',
-    aspect: '16 / 10',
+    title: nextTitle(plan),
+    brief: 'Each cell of a row is set by the three cells above it, itself and its two neighbours, and the tape wraps round at its ends. One hidden rule made rows two, three and four, and every one of the eight patterns of three appears somewhere in rows one to three, so the rule can be read off the bench.',
+    goal: 'Write row five.',
+    aspect: '4 / 3',
+    checkLabel: 'check the row',
     steps: [
-      { id: 'tape', ask: 'the starting tape', kind: 'choice', options: TAPES },
-      { id: 'rule', ask: 'the rule', kind: 'range', min: 1, max: 254, step: 1, value: rule, low: '1', high: '254' },
-      { id: 'run', ask: 'run the tape', kind: 'press', count: runs, label: 'run', after: 'tape' }
+      { id: 'row', ask: 'row five: tap its cells on the bench, or mark them here', kind: 'grid', rows: 1, cols: width, states: 2, labels: ['dark', 'lit'] },
+      { id: 'hint', ask: 'one cell of row five', kind: 'press', count: 1, label: 'show one cell', optional: true }
     ],
+    solution: { row: answer },
+    check(c) {
+      const n = right();
+      if (n === width) return { solved: true, say: 'row five is right; the rule was ' + plan.rule };
+      return { solved: false, say: (n === 1 ? 'one cell' : WORDS[n] + ' cells') + ' of ' + WORDS[width] + ' ' + (n === 1 ? 'is' : 'are') + ' right' };
+    },
     start(c) {
-      reset(c);
-      bench(c.g, c.w, c.h, c, s);
+      c.status('tap a cell of row five to light it');
+      draw(c);
     },
     apply(id, value, c) {
-      if (id === 'tape') {
-        s.tape = String(value);
-        reset(c);
+      if (id === 'row' && Array.isArray(value) && value.length === width) {
+        s.row = value.map((v) => (v ? 1 : 0));
+        const lit = s.row.filter(Boolean).length;
+        c.status('row five: ' + (lit === 1 ? 'one cell lit' : WORDS[Math.min(12, lit)] + ' cells lit'));
       }
-      if (id === 'rule') {
-        s.rule = Math.max(0, Math.min(255, Math.round(Number(value)))) || 0;
-        c.status('rule ' + s.rule + ': ' + describe(s.rule));
+      if (id === 'hint') {
+        const next = [];
+        for (let x = 0; x < width; x++) if (!s.shown.includes(x)) next.push(x);
+        if (next.length) {
+          const x = next[Math.floor(next.length / 2)];
+          s.shown.push(x);
+          c.hint();
+          c.status('cell ' + (x + 1) + ' of row five is ' + (answer[x] ? 'lit' : 'dark'));
+        } else {
+          c.status('every cell of row five is marked under the bench');
+        }
       }
-      if (id === 'run') {
-        s.ran += 1;
-        s.pending += perRun;
-        s.flash = 1;
-        c.status(s.ran < runs ? 'running' : 'the tape is through');
+      draw(c);
+    },
+    tap(x, y, c) {
+      const geo = nextGeometry(c.w, c.h, width, env.variant || PLAIN);
+      const y5 = geo.top + 4 * geo.size + geo.gap;
+      const col = Math.floor((x * c.w - geo.left) / geo.size);
+      const py = y * c.h;
+      if (col < 0 || col >= width || py < y5 - geo.size * 0.4 || py > y5 + geo.size * 1.4) {
+        c.status('row five is the outlined row; tap a cell of it');
+        return;
       }
+      const next = s.row.slice();
+      next[col] = next[col] ? 0 : 1;
+      s.row = next;
+      c.set('row', next.slice());
+      c.status('cell ' + (col + 1) + ' of row five ' + (next[col] ? 'lit' : 'dark'));
+      draw(c);
     },
     frame(t, dt, c) {
-      const size = c.w / s.cols;
-      const keep = Math.ceil(c.h / size);
-      const step = Math.min(s.pending, Math.max(1, Math.round(dt * 90)));
-      for (let i = 0; i < step && s.pending > 0; i++) {
-        s.history.push(nextRow(s.history[s.history.length - 1], s.rule));
-        s.pending -= 1;
-      }
-      while (s.history.length > keep) s.history.shift();
-      s.flash = Math.max(0, s.flash - dt * 2);
-      if (c.done) s.pending = Math.max(s.pending, 1);
-      bench(c.g, c.w, c.h, c, s);
+      draw(c);
     },
     end(c) {
-      c.status('rule ' + s.rule + ', ' + bits(s.rule).split('\n')[1].replace(/\s+/g, ' ').trim() + ' ' + bits(s.rule).split('\n')[3].replace(/\s+/g, ' ').trim());
+      s.open = true;
+      c.status('rule ' + plan.rule + ': the table under the bench is filled in');
+      draw(c);
     }
   };
 }
 
-const FORECASTS = [
-  { label: 'none', value: 'none' },
-  { label: '1 to 4', value: 'few' },
-  { label: '5 or more', value: 'many' }
-];
+/* ---- the changed cell ----------------------------------------------------------------------- */
 
-// Select the same shape for the card and its piece without advancing the bench's random stream.
-function compares(env) {
-  return (env.seed & 1) === 1;
+// The two tapes' rows and where they differ, row by row.
+function apexHistory(plan) {
+  const flipped = plan.start.slice();
+  flipped[plan.flip] ^= 1;
+  const a = runRows(plan.start, plan.rule, plan.rows);
+  const b = runRows(flipped, plan.rule, plan.rows);
+  return { a, b, diffs: a.map((row, r) => differing(row, b[r])) };
 }
 
-function experiment(env) {
-  const rules = [env.pick([0, 184, 204]), env.pick([60, 90, 150]), env.pick([30, 45, 54, 110])];
-  for (let i = rules.length - 1; i > 0; i--) {
-    const j = env.int(0, i);
-    [rules[i], rules[j]] = [rules[j], rules[i]];
+// The flip reaches exactly the three cells under it in row one, so the apex can be read.
+function apexSound(plan) {
+  const hist = apexHistory(plan);
+  const n = plan.width;
+  const want = [(plan.flip + n - 1) % n, plan.flip, (plan.flip + 1) % n].sort((p, q) => p - q);
+  const first = hist.diffs[1];
+  const cone = first.length === 3 && first.every((x, i) => x === want[i]);
+  return cone && hist.diffs[plan.rows].length >= 1;
+}
+
+function apexPlan(env) {
+  const number = env.int(100, 999);
+  const width = env.int(10, 12);
+  const rows = env.int(4, 7);
+  let plan = null;
+  for (let attempt = 0; attempt < 400; attempt++) {
+    const rule = env.chance(0.18) ? env.pick(APEX_PARITY) : env.pick(APEX_RULES);
+    plan = { kind: 'apex', number, width, rows, rule, start: randomRow(env, width), flip: env.int(0, width - 1) };
+    if (apexSound(plan)) return plan;
   }
-  const tape = env.pick(TAPES);
-  const cols = env.pick([49, 57, 65]);
-  const chunk = env.pick([5, 7, 9]);
-  return {
-    rules, cols, chunk, rows: chunk * 4, tape: tape.label,
-    initial: firstRow(cols, tape.value, env.rnd),
-    fault: env.int(0, cols - 1)
-  };
+  return plan;
 }
 
-function experimentTitle(spec) {
-  return 'one cell apart, ' + spec.rows + ' rows later';
+function carriedApex(env) {
+  const p = env.card && env.card.of;
+  if (!p || p.kind !== 'apex') return null;
+  if (!Number.isInteger(p.number) || p.number < 100 || p.number > 999) return null;
+  if (!Number.isInteger(p.width) || p.width < 10 || p.width > 12) return null;
+  if (!Number.isInteger(p.rows) || p.rows < 4 || p.rows > 7) return null;
+  if (!Number.isInteger(p.rule) || p.rule < 0 || p.rule > 255) return null;
+  if (!Number.isInteger(p.flip) || p.flip < 0 || p.flip >= p.width) return null;
+  if (!isBits(p.start, p.width)) return null;
+  const plan = { kind: 'apex', number: p.number, width: p.width, rows: p.rows, rule: p.rule, start: p.start.slice(), flip: p.flip };
+  return apexSound(plan) ? plan : null;
 }
 
-function differenceHistory(spec, rule, fault) {
-  const upper = [spec.initial.slice()];
-  const lower = [spec.initial.slice()];
-  if (fault !== null) lower[0][fault] ^= 1;
-  for (let row = 1; row <= spec.rows; row++) {
-    upper.push(nextRow(upper[row - 1], rule));
-    lower.push(nextRow(lower[row - 1], rule));
-  }
-  const counts = [];
-  let changes = 0;
-  let firstSame = null;
-  for (let row = 0; row <= spec.rows; row++) {
-    let count = 0;
-    for (let x = 0; x < spec.cols; x++) count += upper[row][x] ^ lower[row][x];
-    counts.push(count);
-    changes += count;
-    if (fault !== null && row > 0 && count === 0 && firstSame === null) firstSame = row;
-  }
-  return { upper, lower, counts, changes, firstSame };
+function apexTitle(plan) {
+  return 'tape ' + plan.number + ': the changed cell';
 }
 
-function comparisonGeometry(w, h, scale) {
-  const pad = Math.max(8, Math.min(w, h) * 0.04);
-  const width = Math.max(1, Math.min(w - pad * 2, w * 0.86 * scale));
-  const gap = Math.max(12, h * 0.05);
-  const panel = Math.max(1, (h - pad * 2 - gap) / 2);
-  const label = Math.max(20, Math.min(w, h) * 0.07);
-  return { left: (w - width) / 2, width, pad, gap, panel, label, grid: Math.max(1, panel - label) };
+function apexGeometry(w, h, plan, v) {
+  const scale = clamp(v.scale, 0.88, 1.08);
+  const gap = w * 0.06;
+  const labelW = Math.max(12, Math.min(w, h) * 0.05);
+  const size = Math.min((w * 0.9 - gap - labelW * 2) / (2 * plan.width), (h * 0.56) / (plan.rows + 1)) * scale;
+  const tapeW = size * plan.width;
+  const total = tapeW * 2 + gap + labelW * 2;
+  const left1 = (w - total) / 2 + labelW;
+  return { size, left: [left1, left1 + tapeW + gap + labelW], top: h * 0.3, labelW, tapeW };
 }
 
-function drawComparison(g, w, h, c, spec, history, rule, fault, shown, scale) {
-  const box = comparisonGeometry(w, h, scale);
-  const last = Math.max(0, Math.min(spec.rows, Math.floor(shown)));
-  const dx = box.width / spec.cols;
-  const dy = box.grid / (spec.rows + 1);
-  const inset = Math.min(0.7, dx * 0.1, dy * 0.1);
-  const k = c.colors;
-  g.save();
-  g.fillStyle = k.bg;
-  g.fillRect(0, 0, w, h);
-  g.font = '500 ' + Math.max(11, Math.round(Math.min(w, h) * 0.034)) + 'px system-ui, sans-serif';
-  g.textBaseline = 'top';
-  for (let panel = 0; panel < 2; panel++) {
-    const top = box.pad + panel * (box.panel + box.gap);
-    const gridTop = top + box.label;
-    const rows = panel ? history.lower : history.upper;
-    g.fillStyle = k.fg;
-    g.textAlign = 'left';
-    const name = panel === 0 ? 'original' : fault === null
-      ? (w < 250 ? 'copy' : 'matching copy')
-      : (w < 250 ? 'changed' : 'one cell changed');
-    g.fillText(name, box.left, top);
-    g.textAlign = 'right';
-    g.fillText(panel ? history.counts[last] + ' differ' : 'rule ' + rule, box.left + box.width, top);
-    g.fillStyle = c.mix(k.bg, k.bg2, 0.25);
-    g.fillRect(box.left, gridTop, box.width, box.grid);
-    for (let row = 0; row <= last; row++) {
-      const y = gridTop + row * dy;
-      for (let x = 0; x < spec.cols; x++) {
-        const left = box.left + x * dx;
-        if (rows[row][x]) {
-          g.fillStyle = c.alpha(k.accent, 0.9);
-          g.fillRect(left + inset, y + inset, dx - inset, dy - inset);
-        }
-        if (panel && history.upper[row][x] !== history.lower[row][x]) {
-          // A slash marks both gained and missing cells, independently of their colour.
-          g.fillStyle = c.alpha(k.accent2, 0.25);
-          g.fillRect(left, y, dx, dy);
-          g.strokeStyle = k.accent2;
-          g.lineWidth = Math.max(0.6, Math.min(1.5, dy * 0.2));
-          g.beginPath();
-          g.moveTo(left + inset, y + dy - inset);
-          g.lineTo(left + dx - inset, y + inset);
-          g.stroke();
+// `s`: the rows whose differences are marked, whether the flip is pointed out (solved).
+function drawApex(g, w, h, env, plan, s, variant) {
+  const v = variant || PLAIN;
+  const c = env.colors;
+  const geo = apexGeometry(w, h, plan, v);
+  const hist = apexHistory(plan);
+  const inset = geo.size * clamp(0.09 / v.density, 0.05, 0.14);
+  const small = Math.max(9, Math.min(15, Math.round(Math.min(w, h) * 0.036)));
+  background(g, w, h, env);
+  grain(g, w, h, env, v);
+  label(g, env, 'rule ' + plan.rule, w * 0.5, h * 0.06, small + 2, 'center', c.accent2);
+  glyphTable(g, env, w * 0.08, h * 0.1, w * 0.84, plan.rule, v);
+  for (let tape = 0; tape < 2; tape++) {
+    const left = geo.left[tape];
+    const rows = tape ? hist.b : hist.a;
+    label(g, env, tape ? 'the second tape' : 'the first tape', left + geo.tapeW / 2, geo.top - geo.size * 0.8, small, 'center');
+    // The hidden first row: an outline and nothing in it.
+    g.setLineDash([3, 3]);
+    g.strokeStyle = env.alpha(c.muted, 0.5);
+    g.lineWidth = 1;
+    g.strokeRect(left + inset, geo.top + inset, geo.tapeW - inset * 2, geo.size - inset * 2);
+    g.setLineDash([]);
+    if (tape === 0) label(g, env, '?', left - geo.labelW * 0.5, geo.top + geo.size / 2, small, 'center', env.alpha(c.muted, 0.9));
+    for (let r = 1; r <= plan.rows; r++) {
+      const y = geo.top + r * geo.size;
+      if (tape === 0) label(g, env, String(r), left - geo.labelW * 0.5, y + geo.size / 2, small, 'center', env.alpha(c.muted, 0.9));
+      for (let x = 0; x < plan.width; x++) {
+        cell(g, env, left + x * geo.size, y, geo.size, rows[r][x], inset);
+        if (tape === 1 && s.marked.includes(r) && hist.diffs[r].includes(x)) {
+          g.strokeStyle = c.accent2;
+          g.lineWidth = Math.max(1, geo.size * 0.07);
+          g.strokeRect(left + x * geo.size + inset, y + inset, geo.size - inset * 2, geo.size - inset * 2);
         }
       }
     }
-    g.strokeStyle = c.alpha(k.muted, 0.55);
+    g.strokeStyle = env.alpha(c.muted, 0.25);
     g.lineWidth = 1;
-    g.beginPath();
-    g.moveTo(box.left, gridTop + (last + 1) * dy);
-    g.lineTo(box.left + box.width, gridTop + (last + 1) * dy);
-    g.stroke();
-    if (panel && fault !== null) {
-      const x = box.left + (fault + 0.5) * dx;
-      g.fillStyle = k.accent2;
+    g.strokeRect(left - inset, geo.top - inset, geo.tapeW + inset * 2, geo.size * (plan.rows + 1) + inset * 2);
+    // Column numbers, every one on a wide bench and every other on a card.
+    const every = geo.size > 16 ? 1 : 2;
+    for (let x = 0; x < plan.width; x += every) {
+      label(g, env, String(x + 1), left + (x + 0.5) * geo.size, geo.top + (plan.rows + 1) * geo.size + small * 0.9, Math.max(8, small - 2), 'center', env.alpha(c.muted, 0.8));
+    }
+    if (tape === 1 && s.pointed) {
+      const x = left + (plan.flip + 0.5) * geo.size;
+      g.fillStyle = c.accent2;
       g.beginPath();
-      g.moveTo(x, gridTop - 1);
-      g.lineTo(x - 4, gridTop - 7);
-      g.lineTo(x + 4, gridTop - 7);
+      g.moveTo(x, geo.top + geo.size * 0.25);
+      g.lineTo(x - geo.size * 0.22, geo.top + geo.size * 0.75);
+      g.lineTo(x + geo.size * 0.22, geo.top + geo.size * 0.75);
       g.closePath();
       g.fill();
     }
   }
-  g.restore();
 }
 
-function comparisonPreview(g, w, h, env, spec) {
-  const v = env.variant;
-  const fault = (spec.fault + Math.round(v.turn * (spec.cols - 1))) % spec.cols;
-  const history = differenceHistory(spec, spec.rules[0], fault);
-  const shown = Math.max(spec.chunk, Math.min(spec.rows, Math.round(spec.rows * v.density)));
-  drawComparison(g, w, h, env, spec, history, spec.rules[0], fault, shown, v.scale);
+function apexPreview(g, w, h, env, plan) {
+  drawApex(g, w, h, env, plan, { marked: [], pointed: false }, env.variant);
 }
 
-function comparisonPiece(env, carried) {
-  // The comparison the card set up, cell for cell, or a fresh one for a piece nobody pressed.
-  const spec = carried || experiment(env);
-  let rule = spec.rules[0];
-  let fault = null;
-  let prediction = '';
-  let bursts = 0;
-  let target = spec.chunk;
-  let shown = target;
-  let history = differenceHistory(spec, rule, fault);
-
-  function paint(c) {
-    drawComparison(c.g, c.w, c.h, c, spec, history, rule, fault, shown, 1);
-  }
-
-  function readout(row) {
-    if (fault === null) return 'At row ' + row + ', the tapes still match; no cell has been changed.';
-    const n = history.counts[row];
-    return 'At row ' + row + ', ' + n + ' of ' + spec.cols + ' cells differ.'
-      + (n === 0 ? ' They became identical at row ' + history.firstSame + '.' : '');
-  }
-
-  // Recompute from the unchanged input, retaining the revealed depth. Changing a rule or a cell
-  // after growing is the same experiment as changing it before growing; no knob loses its work.
-  function rebuild() {
-    history = differenceHistory(spec, rule, fault);
-  }
-
+function apexPiece(env, plan) {
+  const hist = apexHistory(plan);
+  const last = hist.diffs[plan.rows].length;
+  const s = { marked: [], pointed: false };
+  const draw = (c) => drawApex(c.g, c.w, c.h, c, plan, s, env.variant);
   return {
-    title: experimentTitle(spec),
-    brief: 'Choose a rule for two matching tapes, tap to change one starting cell in the lower tape, make a prediction, and grow both in three bursts. Their edges join.',
-    aspect: '4 / 3',
+    title: apexTitle(plan),
+    brief: 'Two tapes ran rule ' + plan.rule + ', drawn at the top pattern by pattern, from one first row -- except that one cell of the second tape\'s first row was flipped. The first rows are hidden; the ' + WORDS[plan.rows] + ' rows after them are shown. A change in a row reaches only the cell under it and the two beside that in the next, and the tape wraps round.',
+    goal: 'Find the column of the flipped cell, and count the cells that differ in row ' + plan.rows + '.',
+    aspect: '16 / 10',
+    checkLabel: 'check the tapes',
     steps: [
-      { id: 'rule', ask: 'the rule both tapes obey', kind: 'choice', options: spec.rules.map((value) => ({ label: 'rule ' + value, value })) },
-      { id: 'fault', ask: 'tap anywhere to choose the changed cell', kind: 'tap', label: 'change one cell for me' },
-      { id: 'prediction', ask: 'how many cells will differ in row ' + spec.rows + '?', kind: 'choice', options: FORECASTS },
-      { id: 'grow', ask: 'grow both tapes to row ' + spec.rows, kind: 'press', count: 3, label: 'grow ' + spec.chunk + ' rows' }
+      { id: 'column', ask: 'the column of the flipped cell', kind: 'number', min: 1, max: plan.width, step: 1, unit: 'column' },
+      { id: 'differ', ask: 'how many cells differ in row ' + plan.rows, kind: 'number', min: 0, max: plan.width, step: 1, unit: 'cells' },
+      { id: 'hint', ask: 'the differences in one row, marked', kind: 'press', count: 1, label: 'mark one row', optional: true }
     ],
+    solution: { column: plan.flip + 1, differ: last },
+    check(c) {
+      const colRight = Number(c.value('column')) === plan.flip + 1;
+      const countRight = Number(c.value('differ')) === last;
+      if (colRight && countRight) {
+        return { solved: true, say: 'column ' + (plan.flip + 1) + ' was flipped, and ' + (last === 1 ? 'one cell differs' : WORDS[last] + ' cells differ') + ' in row ' + plan.rows };
+      }
+      if (!colRight && !countRight) return { solved: false, say: 'the column and the count are both off' };
+      return { solved: false, say: colRight ? 'the column is right; the count is off' : 'the count is right; the column is off' };
+    },
     start(c) {
-      paint(c);
-      c.status('Starting tape: ' + spec.tape + '. The first ' + spec.chunk + ' rows match. Slashed squares will mark differences in the lower tape.');
-    },
-    apply(id, value, c) {
-      if (id === 'rule') {
-        rule = Number(value);
-        rebuild();
-        c.status('Both tapes use rule ' + rule + '. ' + describe(rule) + ' ' + readout(Math.floor(shown)));
-      }
-      if (id === 'prediction') {
-        prediction = FORECASTS.find((p) => p.value === value).label;
-        c.status('You expect ' + prediction + ' cells to differ in row ' + spec.rows + '.');
-      }
-      if (id === 'grow') {
-        bursts = Math.min(3, Math.max(bursts, Number(value)));
-        target = (bursts + 1) * spec.chunk;
-        if (c.reduced) shown = target;
-        c.status(shown < target ? 'Growing both tapes to row ' + target + '.' : readout(target));
-      }
-      paint(c);
-    },
-    tap(x, y, c) {
-      if (c.done) return;
-      const box = comparisonGeometry(c.w, c.h, 1);
-      fault = Math.max(0, Math.min(spec.cols - 1, Math.floor(((x * c.w - box.left) / box.width) * spec.cols)));
-      rebuild();
-      paint(c);
-      c.progress('fault', 1);
-      c.status('Starting cell ' + (fault + 1) + ' changed from ' + spec.initial[fault] + ' to ' + (1 - spec.initial[fault]) + '. ' + readout(Math.floor(shown)));
-      c.satisfy('fault');
-    },
-    frame(t, dt, c) {
-      if (shown < target) {
-        shown = c.reduced ? target : Math.min(target, shown + dt * 20);
-        if (shown === target && !c.done) c.status(readout(target));
-      }
-      paint(c);
-    },
-    end(c) {
-      shown = target = spec.rows;
-      paint(c);
-      c.status(readout(spec.rows) + ' ' + history.changes + ' differing squares across the full history. You expected ' + prediction + ' cells in the last row.');
-    }
-  };
-}
-
-const INK_MARKS = ['key', 'moth', 'leaf', 'hourglass'];
-const INK_RULES = [30, 45, 90, 110, 150];
-const INK_SIZES = [21, 25, 29];
-const INK_COMPANIONS = [
-  { label: 'keep both sheets', value: 'keep' },
-  { label: 'lift the companion away', value: 'lift' }
-];
-const INK_VIEW = { density: 1, scale: 1, turn: 0 };
-const INK_BRIEF = 'Run a scrambled picture backwards: choose a rule and depth, keep or lift its companion sheet, then reverse the machine. The companion is the step before the picture.';
-
-function dealsInk(env) {
-  return (env.seed >>> 0) % 3 === 2;
-}
-
-function markImage(cols, mark, detail) {
-  const image = [];
-  for (let row = 0; row < cols; row++) {
-    for (let column = 0; column < cols; column++) {
-      const x = (column - (cols - 1) / 2) / (cols / 2);
-      const y = (row - (cols - 1) / 2) / (cols / 2);
-      let ink;
-      if (mark === 'key') {
-        const ring = Math.hypot(x, y + 0.38);
-        ink = (ring < 0.34 && ring > 0.16)
-          || (Math.abs(x) < 0.09 && y > -0.1 && y < 0.8)
-          || (x > 0 && x < 0.28 + detail * 0.045
-            && ((y > 0.33 && y < 0.48) || (y > 0.65 && y < 0.8)));
-      } else if (mark === 'moth') {
-        const upper = ((Math.abs(x) - 0.36) / 0.43) ** 2 + ((y + 0.22) / 0.37) ** 2 < 1;
-        const lower = ((Math.abs(x) - 0.26) / 0.31) ** 2 + ((y - 0.3) / 0.33) ** 2 < 1;
-        const eye = Math.hypot(Math.abs(x) - 0.4, y + 0.24) < 0.065 + detail * 0.02;
-        ink = ((upper || lower) && !eye) || (Math.abs(x) < 0.07 && Math.abs(y) < 0.7);
-      } else if (mark === 'leaf') {
-        const blade = ((x + y * 0.28) / (0.4 + detail * 0.025)) ** 2 + (y / 0.8) ** 2 < 1;
-        const vein = Math.abs(x + y * 0.28) < 0.035 && y > -0.5 && y < 0.53;
-        ink = blade && !vein;
-      } else {
-        const edge = 0.08 + Math.abs(y) * (0.64 + detail * 0.025);
-        ink = Math.abs(y) < 0.77 && (Math.abs(x) < edge
-          || (Math.abs(y) > 0.65 && Math.abs(x) < 0.66));
-      }
-      image.push(ink ? 1 : 0);
-    }
-  }
-  return image;
-}
-
-function inkPlan(env) {
-  const mark = env.pick(INK_MARKS);
-  const cols = env.pick(INK_SIZES);
-  const pool = INK_RULES.slice();
-  const rules = [];
-  while (rules.length < 3) rules.push(pool.splice(env.int(0, pool.length - 1), 1)[0]);
-  return {
-    family: 'rewind', mark, cols, rules,
-    number: env.int(100, 999),
-    turns: env.pick([12, 16, 20, 24, 28, 32]),
-    ink: markImage(cols, mark, env.int(0, 2))
-  };
-}
-
-function carriedInk(env) {
-  const p = env.card && env.card.of;
-  if (!p || p.family !== 'rewind' || !INK_MARKS.includes(p.mark)
-      || !Number.isInteger(p.number) || p.number < 100 || p.number > 999
-      || !INK_SIZES.includes(p.cols)
-      || !Number.isInteger(p.turns) || p.turns < 8 || p.turns > 40 || p.turns % 4 !== 0
-      || !Array.isArray(p.rules) || p.rules.length !== 3
-      || new Set(p.rules).size !== 3 || !p.rules.every((rule) => INK_RULES.includes(rule))
-      || !Array.isArray(p.ink) || p.ink.length !== p.cols * p.cols
-      || !p.ink.every((bit) => bit === 0 || bit === 1)) return null;
-  return p;
-}
-
-function inkTitle(p) {
-  return p.mark + ' ' + p.number + ', mixed ' + p.turns + ' turns';
-}
-
-// Read the square as one wrapped tape. Forward: (A, B) -> (F(A) XOR B, A).
-// Backward: (A, B) -> (B, F(B) XOR A). Applying XOR twice cancels it exactly.
-function inkStep(pair, rule, backwards) {
-  const anchor = backwards ? pair.before : pair.now;
-  const other = backwards ? pair.now : pair.before;
-  const changed = nextRow(anchor, rule);
-  for (let i = 0; i < changed.length; i++) changed[i] ^= other[i];
-  return backwards ? { now: anchor, before: changed } : { now: changed, before: anchor };
-}
-
-function mixedInk(p, rule, turns) {
-  let pair = { now: Uint8Array.from(p.ink), before: new Uint8Array(p.ink.length) };
-  for (let i = 0; i < turns; i++) pair = inkStep(pair, rule, false);
-  return pair;
-}
-
-function inkDifference(p, pair) {
-  let count = 0;
-  for (let i = 0; i < p.ink.length; i++) count += p.ink[i] ^ pair.now[i];
-  return count;
-}
-
-function inkSheet(g, c, p, bits, x, y, side, color, original, variant) {
-  const cell = side / p.cols;
-  const inset = cell * Math.min(0.18, 0.07 / variant.density);
-  g.save();
-  g.translate(x, y);
-  g.rotate(Math.floor(variant.turn * 4) * Math.PI / 2);
-  g.fillStyle = c.colors.bg;
-  g.fillRect(-side / 2, -side / 2, side, side);
-  for (let i = 0; i < bits.length; i++) {
-    const left = -side / 2 + (i % p.cols) * cell;
-    const top = -side / 2 + Math.floor(i / p.cols) * cell;
-    if (bits[i]) {
-      g.fillStyle = color;
-      g.fillRect(left + inset, top + inset, cell - inset * 2, cell - inset * 2);
-    }
-    if (original && bits[i] !== original[i]) {
-      g.fillStyle = c.alpha(c.colors.accent2, 0.25);
-      g.fillRect(left, top, cell, cell);
-      g.strokeStyle = c.colors.accent2;
-      g.lineWidth = Math.max(0.6, Math.min(1.5, cell * 0.2));
-      g.beginPath();
-      g.moveTo(left + cell * 0.2, top + cell * 0.8);
-      g.lineTo(left + cell * 0.8, top + cell * 0.2);
-      g.stroke();
-    }
-  }
-  g.strokeStyle = c.alpha(c.colors.fg, 0.6);
-  g.lineWidth = 1;
-  g.strokeRect(-side / 2, -side / 2, side, side);
-  g.restore();
-}
-
-function inkScene(g, w, h, c, p, s, variant) {
-  const v = variant || INK_VIEW;
-  const col = c.colors;
-  const side = Math.min(w * 0.41, h * 0.57) * Math.min(1.05, v.scale);
-  const y = h * 0.46;
-  const size = Math.max(10, Math.min(18, Math.round(Math.min(w, h) * 0.04)));
-  g.save();
-  const background = g.createLinearGradient(0, 0, w, h);
-  background.addColorStop(0, col.bg2);
-  background.addColorStop(1, col.bg);
-  g.fillStyle = background;
-  g.fillRect(0, 0, w, h);
-  inkSheet(g, c, p, s.pair.now, w * 0.255, y, side, col.accent,
-    s.watched ? p.ink : null, v);
-  inkSheet(g, c, p, s.watched ? p.ink : s.pair.before, w * 0.745, y, side,
-    s.watched ? col.accent : col.accent2, null, v);
-
-  g.font = '500 ' + size + 'px system-ui, sans-serif';
-  g.textAlign = 'center';
-  g.textBaseline = 'middle';
-  g.fillStyle = col.fg;
-  g.fillText(s.watched ? 'rewound ink' : 'ink', w * 0.255, h * 0.105, w * 0.43);
-  g.fillText(s.watched ? 'starting mark' : 'companion', w * 0.745, h * 0.105, w * 0.43);
-  g.fillStyle = col.accent2;
-  const remaining = s.turns - s.back;
-  const count = s.watched ? inkDifference(p, s.pair) : 0;
-  const line = s.watched ? (count ? count + ' squares differ' : 'every square returned')
-    : s.running ? 'rewinding: ' + remaining + ' turns left'
-      : 'rule ' + s.rule + ', mixed ' + s.turns + ' turns';
-  g.fillText(line, w / 2, h * 0.83, w * 0.9);
-  g.fillStyle = col.fg;
-  g.fillText(s.watched ? (count ? 'slashes mark the differences' : 'the same ' + p.mark + ', square for square')
-    : s.companion === 'lift' ? 'the companion has been lifted away' : 'two sheets, no trail of earlier pictures',
-  w / 2, h * 0.935, w * 0.9);
-  g.restore();
-}
-
-function inkPreview(g, w, h, env, p) {
-  inkScene(g, w, h, env, p, {
-    rule: p.rules[0], turns: p.turns, companion: 'keep', back: 0,
-    running: false, watched: false, pair: mixedInk(p, p.rules[0], p.turns)
-  }, env.variant || INK_VIEW);
-}
-
-function inkPiece(env, carried) {
-  const p = carried || inkPlan(env);
-  const s = {
-    rule: p.rules[0], turns: p.turns, companion: 'keep', pair: null,
-    back: 0, elapsed: 0, running: false, watched: false, halfway: false
-  };
-  const duration = () => 2.6 + s.turns * 0.075;
-  const draw = (c) => inkScene(c.g, c.w, c.h, c, p, s, env.variant || INK_VIEW);
-  function rewindTo(target) {
-    while (s.back < target) {
-      s.pair = inkStep(s.pair, s.rule, true);
-      s.back += 1;
-    }
-  }
-  function rebuild(c) {
-    s.pair = mixedInk(p, s.rule, s.turns);
-    if (s.companion === 'lift') s.pair.before = new Uint8Array(p.ink.length);
-    s.back = 0;
-    s.elapsed = 0;
-    s.halfway = false;
-    // A finished wait stays finished: late choices recompute the full result, not a new gate.
-    if (s.watched) {
-      rewindTo(s.turns);
-      s.elapsed = duration();
-    } else if (c && s.running) c.progress('rewind', 0);
-  }
-  function result() {
-    const count = inkDifference(p, s.pair);
-    return count === 0 ? 'Every square of the ' + p.mark + ' returned.'
-      : count + ' of ' + p.ink.length + ' squares differ from the starting ' + p.mark + '.';
-  }
-  function setting(c, line) {
-    rebuild(c);
-    c.status(line + ' ' + (s.watched ? result()
-      : s.running ? 'The rewind starts from this new mix.' : 'Run backwards to see what comes home.'));
-    draw(c);
-  }
-  rebuild();
-  return {
-    title: inkTitle(p),
-    brief: INK_BRIEF,
-    aspect: '4 / 3',
-    steps: [
-      { id: 'rule', ask: 'the rule used to mix and unmix', kind: 'choice', options: p.rules.map((value) => ({ label: 'rule ' + value, value })) },
-      { id: 'depth', ask: 'how many turns to mix', kind: 'range', min: 8, max: 40, step: 4, value: p.turns, low: '8 turns', high: '40 turns' },
-      { id: 'companion', ask: 'what the machine gets to remember', kind: 'choice', options: INK_COMPANIONS },
-      { id: 'reverse', ask: 'reverse the machine', kind: 'press', count: 1, label: 'run backwards' },
-      { id: 'rewind', ask: 'watch the machine rewind', kind: 'wait', after: 'reverse' }
-    ],
-    start(c) {
-      c.status('A ' + p.mark + ' was mixed ' + s.turns + ' turns with rule ' + s.rule
-        + '. The left sheet is its scrambled ink; the right is the step before it. Keep both or lift the companion, then run backwards.');
+      c.status('compare the two tapes row by row');
       draw(c);
     },
     apply(id, value, c) {
-      if (c.done) return;
-      if (id === 'rule') {
-        const rule = Number(value);
-        if (!p.rules.includes(rule)) {
-          c.status('Choose one of the three rules for this mix.');
-          return;
-        }
-        s.rule = rule;
-        setting(c, 'The same ' + p.mark + ' is now mixed with rule ' + rule + '.');
+      if (id === 'column') {
+        const col = Math.round(Number(value));
+        if (Number.isFinite(col)) c.status('the flipped cell, you say, is in column ' + clamp(col, 1, plan.width));
       }
-      if (id === 'depth') {
-        const turns = Number(value);
-        if (!Number.isFinite(turns)) {
-          c.status('Set the mixing depth between 8 and 40 turns.');
-          return;
-        }
-        s.turns = Math.max(8, Math.min(40, Math.round(turns / 4) * 4));
-        setting(c, 'Mixed ' + s.turns + ' turns, starting from the same ' + p.mark + '.');
+      if (id === 'differ') {
+        const n = Math.round(Number(value));
+        if (Number.isFinite(n)) c.status(clamp(n, 0, plan.width) + ' of ' + plan.width + ' cells differ in row ' + plan.rows + ', you say');
       }
-      if (id === 'companion') {
-        if (!INK_COMPANIONS.some((option) => option.value === value)) {
-          c.status('Keep both sheets or lift the companion away.');
-          return;
+      if (id === 'hint') {
+        // Rows between the first and the last, the middle one first.
+        const order = [];
+        const mid = Math.ceil(plan.rows / 2);
+        for (let r = mid; r < plan.rows; r++) order.push(r);
+        for (let r = mid - 1; r > 1; r--) order.push(r);
+        const next = order.find((r) => !s.marked.includes(r));
+        if (next) {
+          s.marked.push(next);
+          c.hint();
+          const n = hist.diffs[next].length;
+          c.status('row ' + next + ' is marked on the second tape: ' + (n === 1 ? 'one cell differs' : WORDS[n] + ' cells differ') + ' there');
+        } else {
+          c.status('every row between the first and the last is marked; the rest is yours');
         }
-        s.companion = value;
-        setting(c, value === 'keep'
-          ? 'Both sheets are in place. The companion holds the previous step.'
-          : 'The companion is lifted away. A blank sheet takes its place.');
       }
-      if (id === 'reverse') {
-        if (s.running || s.watched) {
-          c.status(s.watched ? result() : 'The machine is already running backwards.');
-          return;
-        }
-        s.running = true;
-        c.status(c.reduced ? 'The rewind will appear without movement.'
-          : 'Running backwards. Each pair of sheets makes the pair before it; no earlier picture is fetched.');
-        draw(c);
-      }
+      draw(c);
     },
     frame(t, dt, c) {
-      if (s.running && !s.watched) {
-        const seconds = duration();
-        s.elapsed = c.reduced ? seconds : Math.min(seconds, s.elapsed + Math.max(0, dt));
-        const fraction = s.elapsed / seconds;
-        rewindTo(fraction >= 1 ? s.turns : Math.floor(s.turns * fraction));
-        c.progress('rewind', fraction);
-        if (!s.halfway && fraction >= 0.5 && fraction < 1) {
-          s.halfway = true;
-          c.status('Halfway back. There are still only two sheets in the machine.');
-        }
-        if (fraction >= 1) {
-          s.watched = true;
-          s.running = false;
-          c.status(result() + ' The right sheet now shows the starting mark for comparison. Any choices still waiting can change the result.');
-          c.satisfy('rewind');
-        }
-      }
       draw(c);
     },
     end(c) {
-      rewindTo(s.turns);
-      s.running = false;
-      s.watched = true;
-      const count = inkDifference(p, s.pair);
-      const explanation = s.companion === 'keep'
-        ? 'Both sheets were enough: each backward step used only the two latest sheets, not a saved trail.'
-        : count ? 'Lifting the companion lost information. The same rule ran backwards, but it could not recover the same picture.'
-          : 'This mix still recovered the visible picture with a blank companion. That coincidence need not survive another rule or depth.';
-      c.status(result() + ' ' + explanation + ' The right sheet shows the original for comparison.');
+      s.pointed = true;
+      for (let r = 1; r <= plan.rows; r++) if (!s.marked.includes(r)) s.marked.push(r);
+      c.status('the flip in column ' + (plan.flip + 1) + ' spread to ' + (last === 1 ? 'one cell' : WORDS[last] + ' cells') + ' by row ' + plan.rows + '; every difference is marked');
       draw(c);
     }
   };
+}
+
+/* ---- the module ----------------------------------------------------------------------------- */
+
+// Which puzzle a seed is dealt, from the seed alone so that paint, spark and piece agree.
+function dealsApex(env) {
+  return (((Math.imul(env.seed >>> 0, 0x9E3779B1) >>> 0) >>> 3) & 1) === 1;
 }
 
 export default {
   id: 'machine-shop',
   needsSky: false,
-  paint(ctx, w, h, env) {
-    if (dealsInk(env)) inkPreview(ctx, w, h, env, inkPlan(env));
-    else if (compares(env)) comparisonPreview(ctx, w, h, env, experiment(env));
-    else run(ctx, w, h, env, pickRule(env), env.chance(0.3));
+  paint(g, w, h, env) {
+    if (dealsApex(env)) apexPreview(g, w, h, env, apexPlan(env));
+    else nextPreview(g, w, h, env, nextPlan(env));
   },
   spark(env) {
-    if (dealsInk(env)) {
-      const p = inkPlan(env);
+    if (dealsApex(env)) {
+      const plan = apexPlan(env);
       return {
-        title: inkTitle(p),
-        text: INK_BRIEF,
-        mono: 'rule ' + p.rules[0] + '\n' + p.cols + ' by ' + p.cols + ' squares\ntwo sheets, ready to rewind',
-        aspect: '4 / 3',
-        paint: (ctx, w, h, e) => inkPreview(ctx, w, h, e, p),
-        of: p
+        title: apexTitle(plan),
+        text: 'Two tapes under rule ' + plan.rule + ', one cell apart at the start. Find the column that was flipped and count what it changed by row ' + plan.rows + '.',
+        mono: plan.width + ' cells / ' + plan.rows + ' rows shown',
+        aspect: '16 / 10',
+        paint: (ctx, cw, ch, cardEnv) => apexPreview(ctx, cw, ch, cardEnv, plan),
+        of: plan
       };
     }
-    if (compares(env)) {
-      const spec = experiment(env);
-      return {
-        title: experimentTitle(spec),
-        text: 'One starting cell changes in the lower copy. Will the tapes meet again, carry one scar, or grow into different patterns?',
-        aspect: '4 / 3',
-        paint: (ctx, w, h, e) => comparisonPreview(ctx, w, h, e, spec),
-        // What this card is of, for the piece it opens as: the whole experiment, cell for cell.
-        of: { spec }
-      };
-    }
-    const rule = pickRule(env);
-    const noisy = env.chance(0.35);
+    const plan = nextPlan(env);
     return {
-      title: 'rule ' + rule,
-      mono: bits(rule),
-      text: describe(rule) + (noisy ? ' Run here from a noisy seed.' : ' Run here from one live cell.'),
-      aspect: '3 / 4',
-      paint: (ctx, w, h, e) => run(ctx, w, h, e, rule, noisy),
-      // What this card is of: the rule, and the tape it was running from.
-      of: { rule, noisy }
+      title: nextTitle(plan),
+      text: 'Four rows of one hidden rule, with every pattern of three on show. Read the rule off the bench and write the fifth row.',
+      mono: plan.width + ' cells / rule ?',
+      aspect: '4 / 3',
+      paint: (ctx, cw, ch, cardEnv) => nextPreview(ctx, cw, ch, cardEnv, plan),
+      of: plan
     };
   },
   piece(env) {
-    const ink = carriedInk(env);
-    if (ink) return inkPiece(env, ink);
-    const was = pressed(env);
-    if (was) return was.spec ? comparisonPiece(env, was.spec) : benchPiece(env, was);
-    if (dealsInk(env)) return inkPiece(env);
-    return compares(env) ? comparisonPiece(env) : benchPiece(env);
+    const apex = carriedApex(env);
+    if (apex) return apexPiece(env, apex);
+    const next = carriedNext(env);
+    if (next) return nextPiece(env, next);
+    return dealsApex(env) ? apexPiece(env, apexPlan(env)) : nextPiece(env, nextPlan(env));
   }
 };

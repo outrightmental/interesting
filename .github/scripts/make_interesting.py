@@ -72,13 +72,15 @@ Nine axioms stand over every run, each stated in the prompt and held to in code:
     leaves a control whose own words say it discards saved state without the
     warning treatment, or that writes a confirmation of its own with
     window.confirm.
-  - Every world is a piece a visitor can finish. A world's page is not fixed
+  - Every world is a puzzle a visitor can solve. A world's page is not fixed
     content but a stage (js/stage.js) on which its module makes a small,
-    randomly configured piece from a seed -- a few knobs, a clear end -- which
-    vanishes when finished and is followed by the next card from the feed.
-    check_completion() plays every listed world's piece to its end without a
-    browser (.github/scripts/piece_harness.mjs) and refuses a plan that leaves a
-    world without a module, without a piece, or with one that cannot be finished.
+    randomly configured piece from a seed -- a goal, a few knobs to answer it
+    on, a check and a solution -- which is finished only by a check that solves
+    it, and is then followed by the next card from the feed.
+    check_completion() plays every listed world's piece without a browser
+    (.github/scripts/piece_harness.mjs): its solution has to solve it and every
+    wrong answer has to fail, and a plan that leaves a world without a module,
+    without a piece, or with one that is not such a puzzle is refused.
     A piece being Done is not a piece Ending, though: it stays playable, with the
     done mark clear of its picture, until the visitor presses the way on. That
     half is stated in the prompt and held on the committed site by the stage
@@ -1880,14 +1882,16 @@ def check_destructive(before, after):
 
 
 # ------------------------------------------------------------------------------------------------
-# The completion axiom. Every world is a piece a visitor can finish: a world's page is a stage
-# (js/stage.js, _includes/stage.njk) on which the world's module (js/modules/<world>.js) makes a
-# small, randomly configured piece from a seed -- a title, a line, PIECE_MIN_STEPS to PIECE_MAX_STEPS
-# knobs and a clear end -- which vanishes with some ceremony when it is finished and is followed by the next card
-# from the feed, so one piece follows another without end. The prompt states the contract; the
-# harness below plays every piece to its end without a browser, the way the stage would, and
-# check_completion() holds every plan to it. The limits are the harness's own, repeated here for
-# the prompt; RealSiteTest checks that the two agree.
+# The completion axiom, which is the puzzle axiom. Every world is a puzzle a visitor can solve: a
+# world's page is a stage (js/stage.js, _includes/stage.njk) on which the world's module
+# (js/modules/<world>.js) makes a small, randomly configured piece from a seed -- a title, a line,
+# a goal, PIECE_MIN_STEPS to PIECE_MAX_STEPS knobs, a check and a solution -- which is finished by
+# a check that solves it and by nothing else, plays its ceremony, and is followed by the next card
+# from the feed, so one puzzle follows another without end. The prompt states the contract; the
+# harness below plays every piece without a browser, the way the stage would -- its solution has
+# to solve it, every wrong answer has to fail -- and check_completion() holds every plan to it.
+# The limits are the harness's own, repeated here for the prompt; RealSiteTest checks that the two
+# agree.
 #
 # Its other half, which no check refuses a plan for: a piece of content does not End just because it
 # is Done (issue #86). The ceremony reports completion and lights the way on and takes nothing away
@@ -2072,11 +2076,12 @@ def run_stage_harness(site, deal=()):
 
 
 def worlds_without_a_finish(site):
-    """The listed worlds of `site` a visitor cannot finish, as {page: why}.
+    """The listed worlds of `site` a visitor cannot solve, as {page: why}.
 
-    A world is finished through its module: one that has no module, whose module exports no
-    piece(), or whose piece the harness could not play to its end is a world a visitor opens and
-    cannot complete, which is what the axiom forbids.
+    A world is solved through its module: one that has no module, whose module exports no
+    piece(), or whose piece the harness could not play to a solve -- or could solve with a wrong
+    answer -- is a world a visitor opens and cannot legitimately finish, which is what the axiom
+    forbids.
     """
     worlds = listed_worlds(site)
     if not worlds:
@@ -2115,7 +2120,7 @@ def check_completion(before, after):
     was = worlds_without_a_finish(before)
     for world, why in sorted(worlds_without_a_finish(after).items()):
         if world not in was:
-            raise RejectedChange(f"every world must be a piece a visitor can finish: {world} {why}")
+            raise RejectedChange(f"every world must be a puzzle a visitor can solve: {world} {why}")
 
 
 def apply_to(site, ops):
@@ -2374,9 +2379,10 @@ def build_prompt(shown, omitted=(), run=None, budget=None, feedback=""):
         "is the stage: the page "
         f"is nothing but front matter and {{% set stageWorld = 'thing' %}}{{% include "
         f"'stage.njk' %}}, and \"{STAGE_INCLUDE}\" with \"{STAGE_SCRIPT}\" (styled by "
-        "_sass/_stage.scss) does the rest -- the world's name, the piece's title and line, the "
-        "scene beside the knobs, the progress, the finish, and the one mark pinned in the lower "
-        "right that the visitor presses to vanish the piece and open the next. The "
+        "_sass/_stage.scss) does the rest -- the world's name, the piece's title, line and goal, the "
+        "scene beside the knobs, the check and the score beside it, the progress, the solve, and "
+        "the one mark pinned in the lower right that the visitor presses to vanish the piece and "
+        "open the next. The "
         "threshold's feature is the same stage in its asking state: the question itself, and once "
         "answered a piece of the world the reading opens onto.\n"
         "So one new world is four edits: \"thing.html\", which is front matter naming the layout "
@@ -2453,7 +2459,8 @@ def build_prompt(shown, omitted=(), run=None, budget=None, feedback=""):
         "                                                  // visitor in the page's own words\n"
         "The store owns the parsing, the defaults and every failure path, so a page needs no "
         "try/catch and no JSON.parse of its own. The names the site keeps today are "
-        "\"constellation\" (the sky several pages reinterpret), \"capsules\", \"omens\", "
+        "\"constellation\" (the sky several pages reinterpret), \"puzzles\" (the stage's tally of "
+        "solves, which only the stage writes), \"capsules\", \"omens\", "
         "\"threshold\" (what the mood flow has read about this visitor), \"kiln\", \"loam\", "
         f"\"quiet-room\" and \"apocrypha\"; to keep something new, pick a name and set it. "
         f"{STATE_SCRIPT} is fixed like "
@@ -2578,16 +2585,22 @@ def build_prompt(shown, omitted=(), run=None, budget=None, feedback=""):
         "and it is below the threshold. And window.confirm is refused outright, anywhere in a page "
         "or a script it loads: a browser dialog cannot say which of a visitor's things is about to "
         "go, and a question that reads differently on every page is not a safety switch.\n"
-        "- AXIOM, every run: every world is a piece a visitor can finish. A world's page is not "
-        "fixed content but a stage, and what a visitor opens there is a piece: a small, randomly "
-        "configured item -- think of a fidget toy with a few levers and knobs on it -- generated "
-        "on the spot by the world's module from a seed, with a clear flow that asks them to make a "
-        "few choices and finish, expediently. When it is finished it plays its ceremony and lights "
-        "up the way on -- one mark pinned in the lower right of the screen, dim for the whole "
-        "piece -- and waits: the stage never moves on by itself, and that press is what vanishes "
-        "the whole piece and opens the next card in the feed in its place, so one piece follows "
-        "another without end and no two are quite the same; the river of cards is the river of "
-        "pieces. And a piece of content does not End just because it is Done -- this one holds "
+        "- AXIOM, every run: every world is a puzzle a visitor can solve. A world's page is not "
+        "fixed content but a stage, and what a visitor opens there is a piece, and every piece is "
+        "a legitimate puzzle: a small, procedurally generated problem made on the spot by the "
+        "world's module from a seed, with a goal stated in one line, the information needed to "
+        "solve it on the scene, a few knobs to answer it on, a check that says whether the answer "
+        "solves it, and a solution the piece itself knows. A fidget toy finishes when its levers "
+        "have been pulled; a puzzle finishes when it is solved, and nothing else finishes it. The "
+        "stage renders one filled check button under the knobs, enabled once every knob is set, "
+        "and a press of it is a try: the stage calls check(ctx) and the piece answers { solved, "
+        "say }. Solved plays its ceremony and lights up the way on -- one mark pinned in the lower "
+        "right of the screen, dim for the whole piece -- and waits: the stage never moves on by "
+        "itself, and that press is what vanishes the whole piece and opens the next card in the "
+        "feed in its place, so one puzzle follows another without end and no two are quite the "
+        "same; the river of cards is the river of pieces. Not solved writes `say` on the live "
+        "line, counts the try, and changes nothing else, so the visitor can think again. And a "
+        "piece of content does not End just because it is Done -- this one holds "
         "site-wide, and the stage is where it is read off. Finishing is a report, not a closing "
         "time: a piece makes itself available for continued interaction as long as the visitor is "
         "still interested in it. So the ceremony takes nothing away. The frame loop keeps drawing, "
@@ -2598,7 +2611,7 @@ def build_prompt(shown, omitted=(), run=None, budget=None, feedback=""):
         "is taken apart until the next one is actually opened. The ceremony itself runs once for "
         "all that fidgeting: one ceremony, one chime, one 'stage:complete'. Keep the done mark out "
         "of the way of the content, too -- it reports beside the progress dots, laid out with the "
-        "rail, never laid over the scene: a finished piece's picture is still the content and a "
+        "rail, never laid over the scene: a solved piece's picture is still the content and a "
         "mark that reports on content does not sit on it, take a corner of it or cover the piece's "
         "own finale. Write a piece's end() for a scene its visitor may keep playing with rather "
         "than for a scene about to be taken away. This holds for any piece of content you write, "
@@ -2609,60 +2622,81 @@ def build_prompt(shown, omitted=(), run=None, budget=None, feedback=""):
         "can be moved again, and the feed's stack refills as it is drawn down, so there is no end "
         "to arrive at. "
         f"Concretely: every listed world's module exports piece(env), and \"{STAGE_SCRIPT}\" "
-        "documents the contract and runs it. A piece is { title, brief, aspect, steps, start(ctx), "
-        f"apply(id, value, ctx), frame(t, dt, ctx), tap(x, y, ctx), end(ctx) }}: {PIECE_MIN_STEPS} to "
+        "documents the contract and runs it. A piece is { title, brief, goal, aspect, checkLabel, "
+        "steps, solution, check(ctx), start(ctx), apply(id, value, ctx), frame(t, dt, ctx), "
+        f"tap(x, y, ctx), end(ctx) }}: {PIECE_MIN_STEPS} to "
         f"{PIECE_MAX_STEPS} knobs (steps), each {{ id, ask, kind, ... }} of a kind the stage renders -- "
-        "choice (two to four options), toggle, range, press, hold, tap, wait -- and it is finished "
-        "when every knob is set (a tap or a wait knob is set by the piece itself, through "
-        "ctx.satisfy(id); a tap anywhere on the scene must count, because the stage's own 'tap "
-        "for me' button and the check tap at random points; only a tap or a wait knob is the "
-        "piece's to set, and never before the visitor has set something), or, with auto: false, "
-        "when it calls ctx.complete() -- and it is finished by its visitor, never by itself "
-        "before they have set a knob. Every knob must be one its visitor can actually set, and a "
-        "piece must be finishable whatever order they reach its knobs in: nothing makes anyone "
-        "work down the page, and a piece that only finishes from the top down leaves someone "
-        "holding a finished-looking toy that will not finish. A piece is one instantiation and "
+        "choice (two to four options), toggle, range, number, word, order, pick, grid, press, "
+        "hold, tap, wait -- and `solution` names every answer knob and the value that solves it. "
+        "A press, a hold or a wait is never an answer; a knob with optional: true is a helper the "
+        "check does not wait for -- a hint that calls ctx.hint(), a second look -- and is never "
+        "an answer either; a range or a number answer may be { value, near } to name a target "
+        "with a tolerance; a tap answer's solution is { taps, wrong }, the points that solve it "
+        "and points that do not, and a tap knob is set by any taps while check() judges where "
+        "they landed (the stage's own 'tap for me' button and the check tap at random points). "
+        "A piece is finished by a check that solves it and by nothing else: there is no auto and "
+        "no complete(); only a tap or a wait knob is the piece's to set, through ctx.satisfy(id), "
+        "and never before the visitor has set something; ctx.set(id, value) writes a knob from "
+        "tap() alone, for a scene that is the control. What makes it legitimate, and what the law "
+        "holds it to: the solution, set on the knobs and checked, solves it; every answer wrong "
+        "at once does not; each answer wrong on its own with the rest right does not, because "
+        "every declared answer is load-bearing; the answers left exactly as they opened do not, "
+        "because a puzzle that opens solved is no puzzle; a wrong check gives measured feedback "
+        "(\"two of five in the right place\") and never the answer; the information needed is on "
+        "the scene, so it is deduction and not guessing; and the answer space is wide enough that "
+        "guessing is a poor strategy -- never a lone two-to-four-option choice as the whole "
+        "answer. Every knob must be one its visitor can actually set, and a "
+        "piece must be solvable whatever order they reach its knobs in: nothing makes anyone "
+        "work down the page, and a piece that only solves from the top down leaves someone "
+        "holding an answer that will not check. A piece is one instantiation and "
         "keeps nothing between them: all its state lives inside piece(env), so a world the feed "
         "deals a second time plays exactly as it did the first. "
         "frame's t is seconds since the piece started. The same seed "
         "makes the same piece and different seeds make different pieces. A piece is also the card "
         "it was opened from: the stage hands it the pressed card's configuration on env.variant "
         "and the content that card was showing on env.card, so piece(env) reads env.card and opens "
-        "on the very thing a visitor pressed -- its card's rule, its coinage, its star -- and rolls "
-        "a subject of its own only when there is no card (env.card is null). A piece that is the "
-        "same piece whichever of its world's cards it was opened from is refused, because then "
+        "on the very thing a visitor pressed -- its card's puzzle, its word, its star -- and rolls "
+        "a subject of its own only when there is no card (env.card is null); a spark's `of` "
+        "carries the whole plan the piece needs to rebuild that puzzle exactly. A piece that is "
+        "the same piece whichever of its world's cards it was opened from is refused, because then "
         "pressing two different cards of one world would open the same feature twice. A piece "
         "reads the card it is handed defensively, since a sky can change under one. A piece is pure drawing "
         "and arithmetic on what the stage hands it (ctx: the canvas and its 2d context, the size, "
-        "the world's colours, a seeded random source, the stars, status(), progress()) and never "
+        "the world's colours, a seeded random source, the stars, status(), progress(), value(), "
+        "hint(), tries, hints) and never "
         "reaches for the document, the window, the clock, Math.random or the browser's storage; "
         "a module imports nothing and is self-contained. The "
-        "world's old interactive page is the piece's material, and re-thinking a world as a piece "
+        "world's old interactive page is the piece's material, and re-thinking a world as a puzzle "
         "is the normal work of a run: what it let a visitor do becomes the knobs, what it showed "
-        "becomes the scene, what it said becomes the title and the one line under it, in the "
-        "site's own voice. Make the pieces differ as much as they can, between worlds and between "
-        "seeds of one world: a second shape of piece for a world is as good a change as a new "
-        "world. This is checked on the built site by playing every piece to its end without a "
-        f"browser (\"{PIECE_HARNESS_REL}\", which a run cannot change): a plan that leaves a listed "
-        "world without a module, without a piece, with a piece that does not finish within "
-        f"{PIECE_MAX_TAPS} taps and {PIECE_MAX_SECONDS} seconds of play, that is not the same for the "
-        "same seed, whose knobs reached in another order or played a second time do not finish the "
-        "same way, that is the same for every seed, or that is the same piece whichever of its "
-        "world's cards it was opened from, is refused. The stage itself is held to the "
-        f"same axiom, by a second harness that runs \"{STAGE_SCRIPT}\" against a stub browser "
-        f"(\"{STAGE_HARNESS_REL}\", which a run cannot change): a world dealt twice in one session "
-        "plays the second time like the first, a slider a visitor leaves where it stands counts as "
-        "set, a knob nobody set is named rather than silently holding the piece shut, a hold knob is "
-        "set the moment its bar fills rather than when the visitor lets go, a finished piece stays "
-        "on the stage with the way on lit and the keyboard on it rather than showing itself out, "
-        "a finished piece is still fully playable (its frames still drawing, its knobs still "
-        "settable, a tap still reaching it, the done mark clear of its scene, and the ceremony "
-        "played once through all of it), a piece that is over leaves nothing of itself on the "
-        "stage or still running, and a card "
-        "pressed opens as that card -- its title, its line, its configuration -- rather than as "
-        "the world's one line. That one is checked on the site as committed rather than on a plan, "
-        "because it reads the stage's own elements and those are yours to rewrite -- so if you "
-        "rewrite the stage, keep all eight true.\n"
+        "becomes the scene and the clues, what it said becomes the title, the line and the goal, in "
+        "the site's own voice. Make the puzzles differ as much as they can, between worlds and "
+        "between seeds of one world -- a harder size for some seeds, two or three shapes of puzzle "
+        "per world -- and generate every puzzle from its solution, so it is always solvable, and "
+        "unique where its kind expects that: a second shape of puzzle for a world is as good a "
+        "change as a new world. This is checked on the built site by playing every piece "
+        f"without a browser (\"{PIECE_HARNESS_REL}\", which a run cannot change): a plan that "
+        "leaves a listed world without a module, without a piece, without a goal, a check() or a "
+        "solution, with a piece its own solution does not solve or a wrong answer does, that does "
+        f"not come to its check within {PIECE_MAX_TAPS} taps and {PIECE_MAX_SECONDS} seconds of "
+        "play, that is not the same for the same seed, whose knobs reached in another order or "
+        "played a second time do not solve the same way, that is the same for every seed, or that "
+        "is the same piece whichever of its world's cards it was opened from, is refused. The "
+        f"stage itself is held to the same axiom, by a second harness that runs \"{STAGE_SCRIPT}\" "
+        f"against a stub browser (\"{STAGE_HARNESS_REL}\", which a run cannot change): a world "
+        "dealt twice in one session plays the second time like the first, a wrong answer checked "
+        "is refused and counted and leaves every knob live and the piece unfinished, and the right "
+        "answer checked after it solves on the second try, a slider a visitor leaves where it "
+        "stands counts as set and the check is offered, a knob nobody set is named rather than "
+        "silently holding the check shut, a hold knob is set the moment its bar fills rather than "
+        "when the visitor lets go, a solved piece stays on the stage with the way on lit and the "
+        "keyboard on it rather than showing itself out, a solved piece is still fully playable "
+        "(its frames still drawing, its knobs still settable, a tap still reaching it, the done "
+        "mark clear of its scene, and the ceremony played once through all of it), a piece that "
+        "is over leaves nothing of itself on the stage or still running, and a card pressed opens "
+        "as that card -- its title, its line, its configuration -- rather than as the world's one "
+        "line. That one is checked on the site as committed rather than on a plan, because it "
+        "reads the stage's own elements and those are yours to rewrite -- so if you rewrite the "
+        "stage, keep all nine true.\n"
         "- Leave the site working at the end of the run. If you extract something into a shared "
         "file, or merge or delete a page, update every page that refers to it in the same run: "
         "never leave a link, a stylesheet, a script, a layout or an @use pointing at something "
@@ -2840,11 +2874,12 @@ def work_block(run):
         return (
             heading + bag_note(run) + items_note(run) +
             f"Make {it} more interesting, measured as above, so a world a visitor finishes in one "
-            "go holds them for three: a second shape of piece beside the first, more that differs "
-            "between seeds and between cards, a scene that rewards looking, knobs that ask for a "
-            "prediction and then show its answer, a finish worth reaching, a title and a line in "
-            "the site's own voice, something to discover on the third go that was not there on the "
-            f"first. Deepen what is there rather than starting over, and build on {their} own "
+            "go holds them for three: a second shape of puzzle beside the first, more that differs "
+            "between seeds and between cards, a scene that rewards looking, a harder size for the "
+            "seed that rolls it, a hint worth its price, measured feedback on a wrong check that "
+            "gives nothing away, a solve worth reaching, a title and a line in the site's own "
+            "voice, something to discover on the third go that was not there on the first. "
+            f"Deepen what is there rather than starting over, and build on {their} own "
             f"material. Work inside {their} own files: {their} module, {their} page, {their} line "
             f"in \"{WORLDS_DATA}\", and where the enhancement needs them {their} orientation in "
             f"{MOOD_SCRIPT} and {their} palette in {MOOD_SHEET}. The shell -- {SHELL_FILES} -- is "
@@ -2859,8 +2894,9 @@ def work_block(run):
             + items_note(run) +
             "It adds nothing: no new world, no new page, no new piece, no new knob, no new "
             "feature, and no new copy that is not the plainer form of copy already there. Fix what "
-            "is broken first -- a knob a visitor cannot set, a piece that does not finish from "
-            "every order its knobs are reached in or plays differently the second time, a scene "
+            "is broken first -- a knob a visitor cannot set, a puzzle that does not solve from "
+            "every order its knobs are reached in or plays differently the second time, a check "
+            "that says yes to a wrong answer or gives the answer away, a scene "
             "that overflows or stalls, a card that opens as the wrong piece or as the world's one "
             "line, a status line that lies, a sky read without checking it is there, a finish that "
             "does not light the way on -- then clean up: dead code, a helper written twice, state "
@@ -3084,13 +3120,24 @@ ITEM_PINS = (
     "For a world. Its module exports { id, needsSky, paint(ctx, w, h, env), animate(ctx, w, h, "
     "env, t), spark(env), piece(env) }, imports nothing, and contains the text env.card, "
     "env.variant and an `of:` on each spark's spec; every aspect it writes is one of 16 / 9, "
-    "16 / 10, 5 / 3, 4 / 3, 1 / 1, 4 / 5 or 3 / 4; piece(env) returns { title, brief, aspect, "
-    f"steps, start, apply, frame, tap, end }} with {PIECE_MIN_STEPS} to {PIECE_MAX_STEPS} knobs of "
-    "distinct ids, each a choice (two to four options), toggle, range, press, hold, tap or wait, "
-    "an `after` naming an earlier knob; the same seed makes the same piece and different seeds "
-    "different ones, a replay plays out the same, it finishes from any order of its knobs within "
-    f"{PIECE_MAX_TAPS} taps and {PIECE_MAX_SECONDS} seconds, with no star unless needsSky, "
-    "ctx.satisfy only for a tap or a wait knob and only after the visitor has set something, and "
+    "16 / 10, 5 / 3, 4 / 3, 1 / 1, 4 / 5 or 3 / 4; piece(env) returns { title, brief, goal, "
+    f"aspect, checkLabel, steps, solution, check, start, apply, frame, tap, end }} with "
+    f"{PIECE_MIN_STEPS} to {PIECE_MAX_STEPS} knobs of "
+    "distinct ids, each a choice (two to four options), toggle, range, number, word, order (two "
+    "to eight items), pick (two to twelve items), grid (one to ten each way), press, hold, tap "
+    "or wait, an `after` naming an earlier knob, optional: true only on a helper; a non-empty "
+    "goal; check(ctx) returning { solved, say }; solution naming every answer knob (never a "
+    "press, a hold, a wait or an optional knob) with a value the knob can be set to -- an option "
+    "it has, true or false, a number on its range with any `near` under half the range and the "
+    "far end failing, a word no longer than its field, an order of its items, some but not all "
+    "of a pick's items (exactly `count` of them), the grid's cell states, a tap's { taps, wrong "
+    "} points; the same seed makes the same piece and different seeds "
+    "different ones, a replay plays out the same, it comes to its check from any order of its "
+    f"knobs within {PIECE_MAX_TAPS} taps and {PIECE_MAX_SECONDS} seconds, with no star unless "
+    "needsSky, the solution solves it and every answer wrong, each answer wrong alone and the "
+    "answers as they opened do not, check() answers the same when pressed twice, "
+    "ctx.satisfy only for a tap or a wait knob and only after the visitor has set something, "
+    "ctx.set only inside tap(), no auto and no complete(), and "
     "opened on its own card it differs from itself opened on another's; spark(env) differs "
     "between seeds; nothing in the module reaches document, window, Math.random, Date, "
     "performance, a timer, fetch or storage, which throw in the harness even at import; paint, "
@@ -3116,7 +3163,11 @@ FRAMEWORK_PINS = (
     f"_persona.scss and in _controls.scss, the one saturate(70%)), and so does what a world is "
     "held to (the module contract the harnesses play). " + SHELL_SCRIPT_PINS +
     f"In \"{STAGE_SCRIPT}\": \"lightTheWayOn(true)\", \"dimTheWayOn()\", \"ui.onward.focus(\", "
-    "\"function finish() {\" with no next() in its body, \"feature(world.mood, opts.seeds, "
+    "\"function finish(say) {\" with no next() and no disabled = true in its body, "
+    "\"function judge() {\" as the one caller of finish(), \"function renderCheck() {\", "
+    "\"function renderTries() {\", a check button enabled only once every non-optional knob is "
+    "set, a try counted per press of it, the stage:check event, the done chip reading solved, "
+    "\"feature(world.mood, opts.seeds, "
     "variant)\", \"root.dataset.featured = mood\", \"delete root.dataset.featured\", "
     "\"function goHome() {\" with unfeature() in its body, \"const SEEDS = ['bg', 'bg2', "
     "'accent', 'accent2'];\", \"someSeeds(recolor(own, variant))\" and never "
@@ -3126,7 +3177,8 @@ FRAMEWORK_PINS = (
     "that sets ui.title.textContent, \"setProperty('--stage-head'\", \"ui.head.offsetHeight\" and "
     "\"observe(ui.head)\"; it imports only ./variant.js and the modules; its ids stay (stage, "
     "stage-burst, stage-inner, stage-world, stage-title, stage-brief, stage-body, stage-scene, "
-    "stage-canvas, stage-done, stage-done-text, stage-knobs, stage-status, stage-wanted, "
+    "stage-canvas, stage-done, stage-done-text, stage-knobs, stage-check, stage-tries, stage-goal, "
+    "stage-goal-text, stage-status, stage-wanted, "
     "stage-progress, stage-next, stage-head, site-worlds) and so do the knob classes is-set and "
     "is-locked, the .stage-dot progress, the modes done, vanishing, loading, arriving and live, "
     "the stage:complete event, the way on disabled until 1.2s after a finish and then focused, "
@@ -3134,6 +3186,8 @@ FRAMEWORK_PINS = (
     "with no document.body or document.querySelector). "
     f"In \"{STAGE_INCLUDE}\": id='stage-next' as a <button type='button' class='stage-next' "
     "with disabled and aria-label= and never the text Next, outside #stage-inner; id='stage-head'; "
+    "id='stage-goal' with id='stage-goal-text' in the head; id='stage-check' as a disabled "
+    "<button type='button' in the rail with id='stage-tries' beside it; "
     "data-stage-world on every world page; data-threshold='true' and id='persona-probe' on "
     "index.html. In \"js/feed.js\": \"function shown(m)\", \"seeds: palette(card, m)\", "
     "\"variant: m.variant, card: shown(m)\" and interestingStage.open(file, seed, { ... seeds "
