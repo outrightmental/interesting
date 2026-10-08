@@ -2855,8 +2855,11 @@ PERSONA_IS = (
     f"lightbox in \"{SITE_SCRIPT}\", which also carries the sky helpers pages used before the "
     "persona existed (seedSky, holdsSky, skyKey) and the unlock helper a world powers itself up "
     "with; the threshold's sideways question is asked in that page's <main> (#persona-probe), "
-    "never in the chrome; and every world that reads the sky reads it through "
-    "window.interestingPersona and follows it through onSky or the unlock helper. "
+    "never in the chrome; whatever a visitor sets is handed over as the persona closes, one small "
+    "mark of its own leaving the control that was set and flying into the portrait, so a visitor is "
+    "shown where the thing they just configured now lives (issue #94); and every world that reads "
+    "the sky reads it through window.interestingPersona and follows it through onSky or the unlock "
+    "helper. "
 )
 FRAMEWORK_IS = (
     f"The framework is the layout (\"{LAYOUT}\"), the stage (\"{STAGE_SCRIPT}\", "
@@ -3065,8 +3068,9 @@ STUB_BROWSER_LIMITS = (
     "comma-separated compound selectors (a tag, #id, .class, [attr], [attr=v], :not([attr]); "
     "nothing with a space, > or +), and window.interestingPersona is undefined; "
     f"\"{LIGHTBOX_HARNESS_REL}\" adds classList.toggle, getBoundingClientRect, remove(), "
-    "document.contains, dispatchEvent and clearTimeout but still has no CustomEvent, "
-    f"getComputedStyle, console, matchMedia or showModal, and evaluates \"{PERSONA_SCRIPT}\" "
+    "document.contains, dispatchEvent, clearTimeout, CustomEvent and a matchMedia whose one list a "
+    "scenario can turn on, but still has no getComputedStyle, console or showModal, and evaluates "
+    f"\"{PERSONA_SCRIPT}\" "
     f"before \"{SITE_SCRIPT}\", so persona.js must not touch window.interestingSite before "
     "DOMContentLoaded. Keep to what the committed scripts already use. "
 )
@@ -3128,14 +3132,24 @@ PERSONA_PINS = (
     "DOMContentLoaded or start and never before, and still opening and closing when no lightbox "
     "function exists at all; #persona-seed asking window.interestingSite.areYouSure with a what "
     "that contains \"seed a fresh sky\", and #persona-sky-status saying \"Kept as it was\" when "
-    "that is declined; and the open, close, render and refresh paths reaching for no "
-    "CustomEvent, getComputedStyle, console or matchMedia. " + SHELL_SCRIPT_PINS +
+    "that is declined; the hand-off of issue #94 -- \"function handOff()\" and \"function "
+    "noteSet(kind, node)\", a MARKS table of one glyph per setting (the sky's and the reading's), "
+    "FLIGHT_MS and STILL_MS, noteSet called only while the sheet is open or the question is being "
+    "answered, handOff only as the persona closes, the .persona-flight mark appended to #persona "
+    "with aria-hidden='true', data-mark, its left and top and --persona-flight-x and -y set "
+    "through style.setProperty, the is-still it writes on it for a matchMedia read only through "
+    "\"window.matchMedia ?\", and a window.setTimeout that takes the mark away again; and the "
+    "open, close, render and refresh paths reaching for no getComputedStyle or console. " + SHELL_SCRIPT_PINS +
     f"In \"{SASS_DIR}/_persona.scss\": ::backdrop exactly once, comments included, with "
     "background: transparent inside it; .persona and .persona-sheet-fallback[open] (written as "
     "one flat selector line) the only rules that set position: fixed, among the eight the whole "
     "Sass may have (.skip-link, .sparknav, .lightbox-veil, .sparknav-modal, .persona, "
     ".persona-sheet-fallback[open], .are-you-sure-fallback[open], .stage-next); .persona below "
-    "the veil and the fallback at the front layer. " + STUB_BROWSER_LIMITS
+    "the veil and the fallback at the front layer; \".persona-flight {\" as a position: absolute "
+    "mark with pointer-events: none inside .persona and never pinned itself, animated by "
+    "\"@keyframes persona-flight\" for exactly the FLIGHT_MS the script counts with "
+    "\"@keyframes persona-flight-ring\" landing inside it, and held still by "
+    "\".persona-flight.is-still\" and under prefers-reduced-motion. " + STUB_BROWSER_LIMITS
 )
 ITEM_PINS = (
     "For a world. Its module exports { id, needsSky, paint(ctx, w, h, env), animate(ctx, w, h, "

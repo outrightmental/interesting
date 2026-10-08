@@ -721,6 +721,23 @@ and shown on every page.
   (`js/threshold.js` supplies the mechanism through `window.threshold.mount`) and forgets on
   request. When nothing has been read yet the sheet asks of its own accord on opening, so setting
   up a persona is placing a sky and answering one question, in one place.
+- **What was just set is handed over on the way out.** A visitor set something, the persona closed,
+  and nothing connected what they had just done to the avatar in the corner that now keeps it. So
+  the persona hands it over as it closes: one small mark leaves the control that was set, flies
+  across the page to the portrait, sinks into it and blooms a ring around it as it lands — *that
+  thing you just configured lives there, in that menu* (issue #94). The three questions the note
+  left open are answered in `site/js/persona.js`, beside the code: **only when something was set**,
+  because a close that changed nothing has nothing to point at and a flourish on every close is one
+  a visitor stops reading; **one mark, for the last thing set**, because the sentence is singular;
+  and **each setting carries its own glyph** — the sky sends a star, the reading sends the half-lit
+  disc the palette it dresses the site in is read off, and a difficulty slider (#93) would be one
+  more line of the same table rather than a second animation. The mark is drawn inside `.persona`,
+  so it needs no layer of its own, lands wherever the portrait happens to be, and is stilled with
+  the rest of that corner if a lightbox goes up while it is still in the air; it flies once the veil
+  is down, with the veil rather than against it; and it says nothing to a screen reader, the one
+  sentence beside the avatar already saying where things stand. A visitor who asked for less motion
+  gets the result without the movement — the mark laid on the portrait, held, and taken away again,
+  the same answer the stage's own small mark gives the same query.
 - **Where the question is asked.** The threshold still asks on arrival, inline and never in the
   chrome: `index.html` hosts `#persona-probe` in its own `<main>`, so the question is that page's
   feature, asked large, and it is never a dialog in a visitor's way; the mood axiom's *never a
