@@ -16,7 +16,8 @@
 .section-title {
   margin: 1.5rem 0 0.5rem;
   color: var(--md-sys-color-on-surface);
-  @include type.scale(title-medium);
+  @include type.scale(title-large);
+  @include type.rite;
 }
 
 .section-note {
@@ -77,7 +78,9 @@
 .orientation-name {
   min-width: 9rem;
   color: var(--md-sys-color-on-surface);
-  @include type.scale(title-small);
+  @include type.scale(title-medium);
+  @include type.rite;
+  font-size: 1.1rem;
 }
 
 .orientation-pull {
@@ -96,7 +99,9 @@
   min-height: 24px;
   color: var(--md-sys-color-primary);
   text-decoration: none;
-  @include type.scale(title-medium);
+  @include type.scale(title-large);
+  @include type.rite;
+  font-size: 1.2rem;
 }
 
 .pages a:hover { text-decoration: underline; }

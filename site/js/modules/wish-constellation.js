@@ -291,7 +291,7 @@ function postcardPiece(env, plan) {
   const inPlace = (order) => order.filter((item, i) => item === answer[i]).length;
   return {
     title: postcardTitle(plan),
-    brief: 'Two views of the same ' + WORDS[n] + ' lights, from a left eye and a right eye a step apart. The nearer a light is, the farther it shifts between the views; the farthest barely moves. Nothing else about them changes.',
+    brief: 'A reading by two eyes. Two views of the same ' + WORDS[n] + ' lights, from a left eye and a right eye a step apart. The nearer a light is, the farther it shifts between the views; the farthest barely moves. Nothing else about them changes.',
     goal: 'Put the lights in order from nearest to farthest.',
     aspect: '4 / 3',
     checkLabel: 'check the postcard',
@@ -307,7 +307,7 @@ function postcardPiece(env, plan) {
       return {
         solved: k === n,
         say: k === n ? 'every light in its place: the postcard has depth'
-          : k === 0 ? 'none of them stands in the right place yet' : WORDS[k] + ' of ' + WORDS[n] + ' in the right place'
+          : k === 0 ? 'none of them stands at its true depth yet' : WORDS[k] + ' of ' + WORDS[n] + ' at the right depth'
       };
     },
     start(c) {
@@ -369,7 +369,7 @@ function postcardPiece(env, plan) {
       draw(c);
     },
     end(c) {
-      c.status('minted: postcard ' + plan.number + '. light ' + LETTERS[answer[0]] + ' is nearest and light ' + LETTERS[answer[n - 1]] + ' farthest; the lines show how far each one shifted');
+      c.status('sealed: postcard ' + plan.number + '. light ' + LETTERS[answer[0]] + ' is nearest and light ' + LETTERS[answer[n - 1]] + ' farthest; the lines show how far each one shifted');
     }
   };
 }
@@ -486,7 +486,7 @@ function carriedWhich(env) {
 }
 
 function whichTitle(plan) {
-  return 'sky ' + plan.number + ': which one is yours';
+  return 'sky ' + plan.number + ': which sigil is yours';
 }
 
 function turnsWord(turns) {
@@ -587,7 +587,7 @@ function whichPiece(env, plan) {
   const draw = (c) => whichScene(c.g, c.w, c.h, c, plan, s, v);
   return {
     title: whichTitle(plan),
-    brief: 'One of the four small skies is your ' + WORDS[n] + ' lights, turned clockwise by one, two or three quarter turns -- and perhaps flipped left for right before it was turned. The other three are near misses: the same lights, with a few nudged out of place.',
+    brief: 'Your sigil, turned. One of the four small skies is your ' + WORDS[n] + ' lights, turned clockwise by one, two or three quarter turns -- and perhaps flipped left for right before it was turned. The other three are near misses: the same lights, with a few nudged out of place.',
     goal: 'Say which sky is yours, how many quarter turns it was given, and whether it was flipped.',
     aspect: '4 / 3',
     checkLabel: 'check the skies',
@@ -605,7 +605,7 @@ function whichPiece(env, plan) {
       if (sky && turns && mirror) return { solved: true, say: 'sky ' + SKIES[plan.which] + ' is yours: ' + turnsWord(plan.turns) + (plan.mirror ? ', flipped first' : '') };
       return {
         solved: false,
-        say: [sky ? 'the sky is right' : 'that sky is not yours', turns ? 'the turn is right' : 'the turn is off', mirror ? 'the flip is right' : 'the flip is off'].join('; ')
+        say: [sky ? 'the sky holds' : 'that sky is not yours', turns ? 'the turn holds' : 'the turn is off', mirror ? 'the flip holds' : 'the flip is off'].join('; ')
       };
     },
     start(c) {
@@ -696,7 +696,7 @@ export default {
       const plan = d.plan;
       return {
         title: postcardTitle(plan),
-        quote: WORDS[plan.points.length] + ' lights, two views',
+        quote: WORDS[plan.points.length] + ' lights, two eyes, one depth',
         text: 'A light shifts between the views by more the nearer it is. Put them in order, nearest to farthest.',
         aspect: '4 / 3',
         paint: (g, w, h, cardEnv) => postcardPreview(g, w, h, cardEnv, plan, 0),
@@ -706,7 +706,7 @@ export default {
     const plan = d.plan;
     return {
       title: whichTitle(plan),
-      quote: 'four skies, one of them yours',
+      quote: 'four skies; one is your sigil, turned',
       text: 'Your ' + WORDS[plan.points.length] + ' lights, turned and maybe flipped, among three near misses. Say which sky, how far it turned and whether it was flipped.',
       aspect: '4 / 3',
       paint: (g, w, h, cardEnv) => whichPreview(g, w, h, cardEnv, plan, 0),

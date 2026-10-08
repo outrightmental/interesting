@@ -61,6 +61,39 @@
   changes the piece without re-staging the finish.
 
   ---------------------------------------------------------------------------------------------
+  The responsiveness axiom: every press on the scene does something
+
+  Unresponsiveness is uninteresting (issue #89). A press on the picture is a visitor asking the
+  piece a question, and an answer of nothing at all is the one answer this site does not give.
+  Most of the time the piece answers: the press reaches its tap(), and what it draws, satisfies or
+  moves is the answer. The rest of the time the stage answers for it, with the smallest
+  acknowledgement there is -- one small mark at the point pressed, a fifth of a second, gone
+  (rejectTap()). That is a press received and nothing here, which is a different thing from
+  silence.
+
+  When the stage answers rather than the piece: a piece with no tap() of its own, a piece whose
+  every tap knob is still locked behind another, a piece whose tap() threw -- and the stage's own
+  non-live moments, a module still loading or a piece on its way out, where there is no piece to
+  reach at all. The handler asks nothing about the mode, so every state the scene is on the screen
+  in is covered by the one rule; the states it is not on the screen in -- unpowered, empty, and the
+  threshold quiet or asking -- hide the scene in _sass/_stage.scss and offer the button that seeds
+  a sky, or the way on, already lit. Nothing else about the contract moves: a piece that handles
+  the tap goes on handling it, a tap knob is satisfied by the piece's own tap() and by nothing
+  else, and the mark never satisfies a knob, advances the progress, finishes a piece or reaches the
+  piece at all.
+
+  It is deliberately tiny, and deliberately mute. Not a dialog, not a line of copy, not a shake of
+  the whole frame: nothing that interrupts a piece a visitor is in the middle of, and nothing that
+  could be mistaken for the piece itself answering. No sound either -- the chime belongs to the
+  finish, and a site that clicked at every press is a site nobody can play in a quiet room. A
+  visitor who asked for less motion gets the mark held still and taken away again rather than the
+  ripple, which is what the theme's crossfade and the ceremony's burst do with the same query.
+
+  A piece that wants to refuse one particular press refuses it itself, inside tap(): the stage
+  cannot tell a tap the piece considered and declined from one it acted on, and guessing would put
+  the stage's mark on top of the piece's own answer.
+
+  ---------------------------------------------------------------------------------------------
   The alignment axiom: the feature is the card that was pressed
 
   Every content piece on this site is procedurally configured, and that configuration is the same
@@ -105,7 +138,9 @@
                                                     // piece started, dt since the last frame
           apply(id, value, ctx) {},                 // a knob was set (the stage sets it)
           tap(x, y, ctx) {},                        // the scene was tapped, x and y in 0..1
-                                                    // (optional; a 'tap' knob needs it)
+                                                    // (optional; a 'tap' knob needs it. A press
+                                                    // this never reaches is answered by the stage
+                                                    // -- the responsiveness axiom above)
           end(ctx) {}                               // the finale, once, when the puzzle is solved;
                                                     // the piece plays on after it (optional)
         };
@@ -472,6 +507,7 @@ const ui = stage ? {
   inner: document.getElementById('stage-inner'),
   head: document.getElementById('stage-head'),
   world: document.getElementById('stage-world'),
+  sigil: document.getElementById('stage-sigil'), // the working's number: the seed, beside the name
   read: document.getElementById('stage-read'),
   title: document.getElementById('stage-title'),
   brief: document.getElementById('stage-brief'),
@@ -783,6 +819,12 @@ function begin(opened) {
   // rather than to the world's one line (issue #80).
   const named = piece.title || (card && card.title) || world.name;
   ui.title.textContent = named;
+  // The sigil: the working's number beside the world's name, which is the seed in this piece's own
+  // address -- so the one piece of numerology on the site is also the way to send a piece to someone.
+  if (ui.sigil) {
+    ui.sigil.textContent = 'working ' + seed;
+    ui.sigil.hidden = false;
+  }
   ui.brief.textContent = piece.brief || (card && (card.quote || card.text || card.mono)) || '';
   // The goal, in one line under the rules: what counts as solved. A puzzle without one is a toy,
   // so the line is only ever hidden for a piece that has not said.
@@ -1621,20 +1663,65 @@ function frame(now) {
   frameHandle = requestAnimationFrame(frame);
 }
 
+/* ---- every press on the scene is answered -------------------------------------------------- */
+
+/* The tiny rejection of the responsiveness axiom above (issue #89): one mark at the point pressed,
+   laid in the scene over the canvas, and taken away again a fifth of a second later. The press is
+   visibly received and nothing else about the piece is touched -- no knob, no progress, no status
+   line, no sound, and nothing the piece can see.
+
+   The mark is written here rather than drawn on the canvas on purpose: the canvas belongs to the
+   piece, which may be mid-frame and is about to paint over anything the stage put there. It takes
+   no press of its own and says nothing to a screen reader -- it is the picture answering a touch,
+   and a visitor who cannot see it is told nothing by it that the scene's label does not already
+   say. _sass/_stage.scss animates it, and holds it still for a visitor who asked for less motion;
+   `is-still` is that same answer in the stage's own hand, so the law can read which one played. */
+const REJECT_MS = 240; // how long the mark stays, whether it moves or not
+
+function rejectTap(x, y) {
+  if (!ui || !ui.scene) return;
+  const mark = el('span', 'stage-reject');
+  mark.setAttribute('aria-hidden', 'true');
+  if (calm.matches) mark.classList.add('is-still');
+  mark.style.setProperty('left', (x * 100).toFixed(2) + '%');
+  mark.style.setProperty('top', (y * 100).toFixed(2) + '%');
+  ui.scene.appendChild(mark);
+  // Registered like every other timer of the stage's, so a mark pressed out of a piece on its way
+  // out goes with it rather than outliving it; close() sweeps whatever is still there.
+  later(() => mark.remove(), REJECT_MS);
+}
+
+// Where the press landed in the scene, as a fraction of it: 0..1, and the middle for a pointer
+// that arrived without coordinates, so a press is never answered at a corner it was nowhere near.
+function pressedAt(value, from, size) {
+  const f = (Number(value) - from) / size;
+  return isFinite(f) ? Math.max(0, Math.min(1, f)) : 0.5;
+}
+
 if (ui) {
   // A tap on the scene, finished or not: a piece that is over is still a piece to play with
-  // (issue #86), so nothing here asks whether it is done.
+  // (issue #86), so nothing here asks whether it is done. And the press is answered either way:
+  // the piece's own tap() where there is one to reach, and the stage's small mark where there is
+  // not, because a press that lands on nothing at all is the one thing the scene may not do
+  // (issue #89).
   ui.canvas.addEventListener('pointerdown', (ev) => {
-    const c = current;
-    if (!c || typeof c.piece.tap !== 'function' || !tapsOpen()) return;
     const r = ui.canvas.getBoundingClientRect();
-    if (!r.width || !r.height) return;
+    if (!r.width || !r.height) return; // the scene is not on the screen: there was nothing to press
+    const x = pressedAt(ev.clientX, r.left, r.width);
+    const y = pressedAt(ev.clientY, r.top, r.height);
+    const c = current;
+    if (!c || typeof c.piece.tap !== 'function' || !tapsOpen()) {
+      rejectTap(x, y);
+      return;
+    }
     c.touched = true;
     c.inTap = true;
     try {
-      c.piece.tap((ev.clientX - r.left) / r.width, (ev.clientY - r.top) / r.height, c.ctx);
+      c.piece.tap(x, y, c.ctx);
     } catch (e) {
-      /* the piece's tap failing is the piece's own problem */
+      // The piece's tap failing is the piece's own problem, but the press is still the visitor's:
+      // a tap() that threw answered nothing, so the stage answers in its place.
+      rejectTap(x, y);
     }
     c.inTap = false;
   });
@@ -1793,11 +1880,18 @@ function close() {
     ui.gate = null;
   }
   for (const box of ui.body.querySelectorAll('.unlock')) box.remove();
+  // A press answered a moment ago, whose mark had not yet timed out: stopRunning() above cleared
+  // the timer that would have taken it away, so it comes away with the rest of the piece.
+  for (const mark of ui.scene.querySelectorAll('.stage-reject')) mark.remove();
   const g = ui.canvas.getContext('2d');
   if (g) g.clearRect(0, 0, ui.canvas.width, ui.canvas.height);
   ui.canvas.setAttribute('aria-label', 'the scene');
   ui.scene.style.removeProperty('--piece-aspect');
   ui.scene.style.removeProperty('--piece-ratio');
+  if (ui.sigil) {
+    ui.sigil.textContent = '';
+    ui.sigil.hidden = true;
+  }
   ui.brief.textContent = '';
   if (ui.goalText) ui.goalText.textContent = '';
   if (ui.goal) ui.goal.hidden = true;

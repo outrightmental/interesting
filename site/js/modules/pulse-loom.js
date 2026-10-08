@@ -237,7 +237,7 @@ function crossPiece(env, plan) {
   const draw = (c) => drawCross(c.g, c.w, c.h, c, plan, s, env.variant);
   return {
     title: crossTitle(plan),
-    brief: 'Two drums round one loop of ' + plan.L + ' beats, beat 1 at the top. The outer drum plays its ' + plan.a + '-beat bar over and over from beat 1; '
+    brief: 'Strung on the loom: two drums round one loop of ' + plan.L + ' beats, beat 1 at the top. The outer drum plays its ' + plan.a + '-beat bar over and over from beat 1; '
       + 'the inner plays its ' + plan.b + '-beat bar from beat ' + (plan.shift + 1) + '. Every strike is on its ring: the outer drum on the outer ring, the inner on the inner.',
     goal: 'Count the beats on which both drums strike, and name the first of them.',
     aspect: '1 / 1',
@@ -251,10 +251,10 @@ function crossPiece(env, plan) {
     check(c) {
       const countRight = Number(c.value('count')) === hits.length;
       const firstRight = Number(c.value('first')) === hits[0] + 1;
-      if (countRight && firstRight) return { solved: true, say: WORDS[hits.length] + ' crossings, the first on beat ' + (hits[0] + 1) };
+      if (countRight && firstRight) return { solved: true, say: 'the loom reads true: ' + (hits.length === 1 ? 'one crossing' : WORDS[hits.length] + ' crossings') + ', the first on beat ' + (hits[0] + 1) };
       return {
         solved: false,
-        say: !countRight && !firstRight ? 'the count and the first beat are both off' : (!countRight ? 'the count is off' : 'the first beat is off')
+        say: !countRight && !firstRight ? 'the count and the first beat are both off' : (!countRight ? 'the first beat holds; the count is off' : 'the count holds; the first beat is off')
       };
     },
     start(c) {
@@ -476,12 +476,12 @@ function wheelPiece(env, plan) {
   const draw = (c) => drawWheel(c.g, c.w, c.h, c, plan, s, env.variant);
   return {
     title: wheelTitle(plan),
-    brief: 'The wheel has ' + plan.n + ' identical teeth and turns clockwise, never the other way. A camera takes ' + plan.p
+    brief: 'The old omen of the turning wheel. The wheel has ' + plan.n + ' identical teeth and turns clockwise, never the other way. A camera takes ' + plan.p
       + ' pictures in one turn, so between pictures the wheel moves 1/' + plan.p + ' of a turn: ' + plan.n + '/' + plan.p
       + ' of a tooth. The pictures are shown one after another.',
     goal: 'Say which way the pictures seem to turn, and after how many pictures a tooth is back where it began.',
     aspect: '4 / 3',
-    checkLabel: 'run the pictures',
+    checkLabel: 'take the pictures',
     steps: [
       { id: 'seem', ask: 'which way the pictures seem to turn', kind: 'choice', options: WAYS },
       { id: 'back', ask: 'after how many pictures a tooth is back where it began', kind: 'number', min: 1, max: 20, step: 1, unit: 'pictures' },
@@ -494,10 +494,10 @@ function wheelPiece(env, plan) {
       s.run = 0;
       s.index = 0;
       s.taken = 1;
-      if (seemRight && backRight) return { solved: true, say: 'the pictures ' + (way === 'still' ? 'stand still' : 'seem to go ' + wayLabel(way)) + ', and a tooth is back after ' + back };
+      if (seemRight && backRight) return { solved: true, say: 'the omen reads: the pictures ' + (way === 'still' ? 'stand still' : 'seem to go ' + wayLabel(way)) + ', and a tooth is back after ' + back };
       return {
         solved: false,
-        say: !seemRight && !backRight ? 'the direction and the return count are both off' : (!seemRight ? 'the pictures do not seem to go that way' : 'the return count is off')
+        say: !seemRight && !backRight ? 'the direction and the return count are both off' : (!seemRight ? 'the return count holds; the pictures do not seem to go that way' : 'the way is right; the return count is off')
       };
     },
     start(c) {
@@ -534,7 +534,7 @@ function wheelPiece(env, plan) {
     end(c) {
       s.reveal = true;
       s.run = 0;
-      c.status('the pictures keep running: ' + (way === 'still' ? 'every one the same' : 'seeming to go ' + wayLabel(way)) + ', a tooth home every ' + back);
+      c.status('the pictures go on: ' + (way === 'still' ? 'every one the same' : 'seeming to go ' + wayLabel(way)) + ', a tooth home every ' + back);
       draw(c);
     }
   };
@@ -558,7 +558,7 @@ export default {
       const plan = wheelPlan(env);
       return {
         title: wheelTitle(plan),
-        text: 'The wheel only ever turns clockwise. Which way will its pictures seem to go, and when does a tooth look home again?',
+        text: 'An old omen: the wheel only ever turns clockwise. Which way will its pictures seem to go, and when does a tooth look home again?',
         mono: 'one tooth      1/' + plan.n + ' of a turn\none picture    1/' + plan.p + ' of a turn',
         aspect: '4 / 3',
         paint: (g, w, h, cardEnv) => wheelPreview(g, w, h, cardEnv, plan),
@@ -568,7 +568,7 @@ export default {
     const plan = crossPlan(env);
     return {
       title: crossTitle(plan),
-      text: 'Two drums round one loop. Count the beats they strike together, and name the first.',
+      text: 'Two drums strung round one loop. Count the beats they strike together, and name the first.',
       mono: 'outer  ' + plan.a + '-beat bar from beat 1\ninner  ' + plan.b + '-beat bar from beat ' + (plan.shift + 1) + '\nloop   ' + plan.L + ' beats',
       aspect: '1 / 1',
       paint: (g, w, h, cardEnv) => crossPreview(g, w, h, cardEnv, plan),

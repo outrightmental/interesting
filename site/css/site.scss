@@ -11,3 +11,5 @@
 @use 'feed';
 @use 'stage';
 @use 'list-page';
+// The ornament of the rite, last: it dresses the partials above and must land after them.
+@use 'rite';

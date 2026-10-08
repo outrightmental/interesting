@@ -404,7 +404,7 @@ function waterPiece(env, plan) {
   }
   return {
     title: waterTitle(plan),
-    brief: capital(WORDS[n]) + ' plants wait under glass at midnight, each tagged with one rule, and the glass shows what the rules are judged by: a soil meter under every plant, the lamp, the vent, and a drop beside any plant watered last time. The tags: '
+    brief: 'A tending rite, kept to the letter. ' + capital(WORDS[n]) + ' plants wait under glass at midnight, each tagged with one rule, and the glass shows what the rules are judged by: a soil meter under every plant, the lamp, the vent, and a drop beside any plant watered last time. The tags: '
       + kinds.map((r) => RULES[r].tag + ' (' + RULES[r].rule + ')').join('; ') + '. Judge them left to right.',
     goal: 'Mark every plant that gets water, and none that stays dry.',
     aspect: '16 / 10',
@@ -420,9 +420,9 @@ function waterPiece(env, plan) {
       const dry = chosen.filter((i) => !got[i]).length;
       const solved = right === answer.length && dry === 0;
       let say;
-      if (solved) say = (answer.length === 1 ? 'one plant drinks' : WORDS[answer.length] + ' plants drink') + ', and the rest stay dry';
-      else if (!right) say = 'none of the right plants yet' + (dry ? ', and ' + WORDS[dry] + ' that should stay dry' : '');
-      else say = WORDS[right] + ' of the right plants' + (dry ? ', and ' + WORDS[dry] + ' that should stay dry' : '');
+      if (solved) say = 'the round is kept: ' + (answer.length === 1 ? 'one plant drinks' : WORDS[answer.length] + ' plants drink') + ', and the rest stay dry';
+      else if (!right) say = 'none of the right plants is marked yet' + (dry ? ', and ' + WORDS[dry] + ' marked that should stay dry' : '');
+      else say = WORDS[right] + ' of the right plants marked' + (dry ? ', and ' + WORDS[dry] + ' marked that should stay dry' : '');
       return { solved, say };
     },
     start(c) {
@@ -566,7 +566,7 @@ function agePiece(env, plan) {
   }
   return {
     title: ageTitle(),
-    brief: 'Four stems under glass. Each tag gives how many leaves that stem grows in a week, and its leaves are drawn and counted. A stem that grows three leaves a week and carries twelve has grown for four weeks. Set the order on the rail, or tap a stem to move it up one place.',
+    brief: 'A reading of the leaves. Four stems under glass. Each tag gives how many leaves that stem grows in a week, and its leaves are drawn and counted. A stem that grows three leaves a week and carries twelve has grown for four weeks. Set the order on the rail, or tap a stem to move it up one place.',
     goal: 'Put the stems oldest to youngest, and say how many weeks the oldest has grown.',
     aspect: '16 / 10',
     checkLabel: 'check the bed',
@@ -582,7 +582,7 @@ function agePiece(env, plan) {
       for (let i = 0; i < 4; i++) if (cur[i] === order[i]) right += 1;
       const weeks = Math.round(Number(c.value('oldest')));
       const ageRight = weeks === oldest;
-      if (right === 4 && ageRight) return { solved: true, say: 'oldest to youngest: ' + named(order) + '; stem ' + LETTERS[order[0]] + ' has grown ' + oldest + ' weeks' };
+      if (right === 4 && ageRight) return { solved: true, say: 'the leaves read true, oldest to youngest: ' + named(order) + '; stem ' + LETTERS[order[0]] + ' has grown ' + oldest + ' weeks' };
       const parts = [];
       parts.push(right === 4 ? 'the order is right' : right === 0 ? 'none of the stems is in the right place yet' : WORDS[right] + ' of four in the right place');
       if (!ageRight) parts.push(weeks < oldest ? 'the oldest is older than that' : 'the oldest is younger than that');
@@ -692,7 +692,7 @@ export default {
     return {
       title: ageTitle(),
       mono: LETTERS.map((l, i) => l + ': ' + plan.leaves[i] + ' leaves, ' + plan.rates[i] + ' a week').join('\n'),
-      text: 'Four stems, four rates of growth. Which came up first, and how many weeks ago?',
+      text: 'A reading of the leaves: four stems, four rates of growth. Which came up first, and how many weeks ago?',
       aspect: '16 / 10',
       paint: (g, w, h, cardEnv) => agePreview(g, w, h, cardEnv, plan, cardEnv.variant.turn * 5),
       of: plan

@@ -1170,7 +1170,7 @@
   function describe(reading) {
     var o = reading && reading.orientation;
     if (!o || !reading.source || reading.source === 'signals') {
-      return 'Nothing read yet. Answer one sideways question and the site suggests a world to start in, or take any world you like.';
+      return 'No reading yet. Answer one sideways question and the site suggests a world to begin in, or take any world you like.';
     }
     var line = o.name + ' — ' + o.pull + '. That opens onto ' + o.worldName + '.';
     if (reading.source === 'answer') return 'Read just now as ' + line;

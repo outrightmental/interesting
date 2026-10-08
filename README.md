@@ -129,7 +129,10 @@ npm run build -- --out ./build      # or pick the folder yourself
 
 The site's one visual language is [Material Design 3](https://m3.material.io/), and it is written
 once, in [`site/_sass`](site/_sass). It replaced a look that had grown by accretion — a frosted
-slab per page, small-caps labels, pill borders on everything, a footer index two groups deep.
+slab per page, small-caps labels, pill borders on everything, a footer index two groups deep. Worn
+over it is the one thing M3 does not supply, the atmosphere: the [ritual axiom](#ritual-axiom)'s
+serif for the rite's words and its rings, seals and sigil, which dress the M3 parts without
+replacing one of them.
 
 - **One tonal scheme, derived.** `_tokens.scss` works the way M3's dynamic colour works: four
   seeds (`--bg`, `--bg2`, `--accent`, `--accent2`) and every colour role derived from them with
@@ -161,8 +164,14 @@ slab per page, small-caps labels, pill borders on everything, a footer index two
   M3 slider with its 16px track and 4px handle (`js/site.js` keeps `--range-pct` on each one so
   the active track can fill to the handle). Every pressable thing carries a state layer, and the one focus indicator
   is a 3px primary ring.
-- **No font is fetched.** Roboto is M3's default and is used where it is installed; nothing is
-  loaded from a third party, which is the analytics axiom's rule for the site's own code too.
+- **One serif, for the rite's words.** The [ritual axiom](#ritual-axiom) sets the words that
+  carry the atmosphere — a heading, a piece's title, a card's name, the question — in a serif,
+  `type.rite`, and leaves everything a visitor acts on in M3's sans, so the two can be told apart
+  by their face. The ornament that goes with it (rings, seals, the sigil) is one partial,
+  `_rite.scss`, drawn behind and beside the content and never over it.
+- **No font is fetched.** Roboto is M3's default and is used where it is installed, and the serif
+  is a system stack (Iowan Old Style, Palatino, Book Antiqua, Georgia) for the same reason; nothing
+  is loaded from a third party, which is the analytics axiom's rule for the site's own code too.
 - **One build fix came with it.** Compressed Sass opens with a byte-order mark when a sheet holds
   a non-ASCII character, and inside the one page that inlines its styles (`error.html`) that mark
   glued itself to the first selector, which the browser then dropped — the whole `:root` block.
@@ -668,6 +677,81 @@ saying where to go next, and the home page explained none of its own words.
   point at the cards below instead. That is the whole of the shared chrome, written once in
   [`site/_includes/layout.njk`](site/_includes/layout.njk), and a page sets nothing about
   navigation: no footer lists, no notes, no includes. A run is asked to keep it that size.
+
+### Ritual axiom
+
+Engagement time says how good the site has to be, *One single experience* what shape it has to be
+in and *Legible to a stranger* what it has to read like. This says what it has to **feel** like:
+**an esoteric magical ritual**. The arrival is a rite, the question is a divination, a piece is a
+working, a solve is a seal, the feed is the deck, and the whole site is dressed that way — in its
+names, its ornament, its ceremony and the face its words are set in. And the axiom is as much about
+the limit as the feel, because a site told to feel esoteric drifts, left to itself, towards riddles
+in place of instructions and ceremony in place of play: **esoteric is a vibe, never a veil.** The
+mystery is all in the dressing. Nothing a visitor needs to know is ever deliberately obscured, every
+puzzle stands on its own legs, and the rite is fun first and never tiresome.
+
+- **Four holds**, each one a thing a change can be checked against:
+  - **Esoteric is a vibe, never a veil.** Instructions, goals, labels and feedback are plain words a
+    stranger reads once. A control says its plain verb — *check*, *skip the question*, *seed a sky
+    to begin* — a goal says what counts as solved, and a wrong answer is told what the piece saw,
+    never the answer and never a riddle. Nothing is written to be decoded before it can be read, no
+    lore is needed to play, and a destructive control keeps its plain name: *clear the sky* stays
+    *clear the sky*, which is also what keeps the [destructive-caution
+    axiom](#destructive-caution-axiom)'s sweep of words honest.
+  - **The puzzle stands on its own legs.** A piece is solvable from what is on the scene and in its
+    brief, and the dressing carries no information the puzzle needs and hides none it gives. A
+    world's name, a piece's title and a card's line may be as arcane as they like; its rules and
+    its goal may not. The [completion axiom](#completion-axiom) holds the mechanics of that (a
+    stated goal, a solution the law can prove); this holds the words around them.
+  - **Fun first, never tiresome.** No gate, no incantation to type, no waiting, no step that exists
+    only for atmosphere, no ceremony longer than a breath. A flourish that costs a visitor time,
+    clarity or a laugh is cut, however handsome it is — the same reasoning the [engagement-time
+    axiom](#engagement-time-axiom) applies to copy that defers a visitor.
+  - **The ornament gives way.** Rings, seals and sigils sit behind and beside the content, never
+    on it; they hold still for a visitor who asked for less motion; every control keeps its 44px
+    target and its contrast. The ornament never floats over a page at rest, so the two-item rule
+    of the [constellation](#the-logo-and-the-constellation) is untouched.
+- **The typographic rule is how the limit is made visible.** The rite's words — a page's `<h1>`,
+  a piece's title, a card's name, the persona sheet's title, the question the threshold asks, a
+  section heading — are set in one serif face, `type.rite` in
+  [`site/_sass/_type.scss`](site/_sass/_type.scss), a system stack (Iowan Old Style, Palatino,
+  Book Antiqua, Georgia) that fetches nothing, as M3's Roboto fetches nothing. Everything that
+  tells a visitor what to do — a button, a knob's ask, a brief, a goal, a status line, a chip in
+  the constellation — stays in the sans. So the atmosphere and the instruction can be told apart
+  by the face they are set in, on every page, and a word in the serif is never one a visitor has
+  to act on. `RealSiteTest` holds the stylesheets to that: the headings include the mixin, the
+  controls inherit the sans and never include it.
+- **The ornament is one partial.** [`site/_sass/_rite.scss`](site/_sass/_rite.scss) is the
+  rings, the seals and the sigil, written once and reached by every page through `css/site.scss`:
+  the two faint circles a feature is drawn inside (the stage and the two list pages alike), the
+  plate a scene and a card are framed as, the circle the constellation is cast in when the logo
+  opens, the ring behind the persona's sky, the diamond seals the progress dots became and the
+  seal the done chip wears, and the **sigil** — one small line beside the world's name that gives
+  a working its number, which is the seed in the piece's own address, so the one piece of ritual
+  numerology on the site is also the one way to send a piece to someone. Every ring is drawn with
+  `pointer-events: none` behind or beside the content, nothing in the partial is
+  `position: fixed`, and the one slow rotation in it stops under `prefers-reduced-motion`.
+- **Stated in the prompt.** `RITUAL` names the standard beside `WHOLE`, `INTERESTING` and
+  `LEGIBLE` in [`.github/scripts/make_interesting.py`](.github/scripts/make_interesting.py), and
+  the system prompt spells out the four holds under `RITUAL, NOT RIDDLE`, after the legibility
+  holds it leans on and before the `Rules:` block, so it is in hand while a run is still choosing,
+  and again in the line a run reads last: *the rite in the frame, the instruction in the sentence,
+  and no riddle where a rule should be.*
+- **Deliberately not held to in code.** No check could judge whether a page feels like a rite, or
+  whether a flourish cost a visitor a moment of clarity, so the prompt is where this standard
+  lives, exactly as `WHOLE`, `INTERESTING` and `LEGIBLE` do: it is not among the nine coded axioms,
+  and `RitualStandardTest` holds the prompt to the standard the way `LegibilityStandardTest` does.
+  The one half a stylesheet can be read for — the serif on the rite's words, the sans on the
+  controls, the ornament held still — `RealSiteTest` reads off the site as committed.
+- **What it changed on the site as committed.** The threshold asks as a rite begins, the stage
+  frames a working inside its circle and numbers it, the done chip is a seal and the dots are
+  seals too, the feed's cards are plates, the constellation is cast in a circle, the pages that
+  explain (the site map, the mood atlas, privacy, terms, the 404) open in the same voice, and every
+  world's pieces and cards were passed over for the same register — with every goal still one
+  plain line, every `say` still saying what the piece saw, and every control still named by its
+  verb. The module copy was the largest part of the pass and the most constrained: the piece
+  harness played every world's pieces through the law before and after, and refused any wording
+  that changed what a piece is.
 
 ### Powered down, never broken
 
@@ -1239,7 +1323,9 @@ invariant of the iteration, stated in the prompt and held to in code.
   dots for progress, and the ceremony — a done chip at the end of that row of dots, a burst in the
   world's palette and a short chime; for a visitor who asked for less motion there is no burst and
   no transition, only the chip. Nothing of the ceremony is laid over the scene and nothing of it
-  closes the piece down (see [Continued-interaction axiom](#continued-interaction-axiom)). The scene fills the real estate the first screen has (issue #65): it
+  closes the piece down (see [Continued-interaction axiom](#continued-interaction-axiom)), and every
+  press on the scene is answered — by the piece's own `tap()`, or by the stage itself where the piece
+  has nothing to do with it (see [Responsiveness axiom](#responsiveness-axiom)). The scene fills the real estate the first screen has (issue #65): it
   is as tall as the viewport leaves once the nav's room, `<main>`'s padding, the heading — measured,
   because a title that wraps takes two lines — and the margin that lets the feed peek are off it,
   and as wide as that height allows at the piece's own aspect ratio, which is also the width of its
@@ -1344,7 +1430,7 @@ invariant of the iteration, stated in the prompt and held to in code.
   scenario steps by hand so a 1.8-second hold costs nothing, a canvas that records nothing, and a
   feed that deals the worlds it is told to. It plays every piece the way a visitor who knows the
   answer would — the helpers worked, the answers set to the module's own solution, read by asking
-  the module for the very piece the stage opened — and presses the check. Eight scenarios: a world
+  the module for the very piece the stage opened — and presses the check. Nine scenarios: a world
   played, another played, and the first dealt again, each round solving, sitting out six seconds
   of its own clock to prove the stage does not see itself out, and then opening the next when the
   way on is pressed; every answer set wrong and checked, which must be refused, counted, said on
@@ -1355,14 +1441,16 @@ invariant of the iteration, stated in the prompt and held to in code.
   have the check offered; a knob nobody touched, which must stay unset *and* be named, with the
   check withheld and the way on still dim over it; a hold held past the fill, which must be set by
   the bar filling and not by the release (issue #74); a piece abandoned with a hold still pressed
-  down, after which nothing of it may be on the stage or still running; and a card pressed, which
+  down, after which nothing of it may be on the stage or still running; a press on the scene the
+  piece has nothing to do with, which the stage must answer itself and must not advance anything by
+  (issue #89); and a card pressed, which
   must open as that card — its own title and line while the module loads, its configuration on the
   piece's `env`, its stretch on the scene's frame, and never the world's generic line (issue #80).
   `StageTest` plays purpose-built pieces through it and `RealSiteTest` plays the site as committed;
   like the piece harness it is outside `/site`, so a run cannot soften it. Deliberately, it holds
   the site as committed rather than refusing a plan: it drives the stage through the stage's own
   elements, and those are a run's to rewrite, so gating plans on it would pin markup the silo leaves
-  open. The prompt says so, and says to keep all nine true when rewriting the stage.
+  open. The prompt says so, and says to keep all ten true when rewriting the stage.
 - **Held to in code.** `check_completion` in
   [`.github/scripts/make_interesting.py`](.github/scripts/make_interesting.py) reads the one list
   of worlds off the built home page (the `#site-worlds` JSON the layout writes from
@@ -1391,7 +1479,7 @@ invariant of the iteration, stated in the prompt and held to in code.
   on the committed site rather than on a plan, for the reason given above.
 - **True of the site as committed**: `RealSiteTest` builds `/site` and plays every world's piece
   through the law on every pull request and before every deploy, plays the stage itself through the
-  eight scenarios above, checks that every world page is the stage and that the threshold hosts the
+  nine scenarios above, checks that every world page is the stage and that the threshold hosts the
   question on it, and checks that the limits the prompt states are the harness's own.
 
 ### Continued-interaction axiom
@@ -1454,7 +1542,87 @@ out of the way of the content it is reporting on.
   choice rather than a lock (`js/threshold.js`), and the feed's stack refills as it is drawn down
   (`js/feed.js`), so the river has no end to arrive at. A card pressed does leave the stack — but
   that is the card *becoming* the feature, which is the [alignment
-  axiom](#the-feature-and-the-feed), not a door closing.
+  axiom](#the-feature-and-the-feed), not a door closing. The other half of answering a visitor is
+  answering them *now*, which is the [Responsiveness axiom](#responsiveness-axiom) below.
+
+### Responsiveness axiom
+
+**Every press on the main canvas of an activity must do something, even if it is a tiny rejection
+effect — unresponsiveness is uninteresting.** A press on the picture is a visitor asking the piece a
+question, and an answer of nothing at all is the one answer this site does not give. The
+[Continued-interaction axiom](#continued-interaction-axiom) above says a piece stays available as
+long as the visitor is interested; this says what *available* owes them, which is an answer to every
+gesture they make at it.
+
+- **The piece answers most presses; the stage answers the rest.** A press on the scene reaches the
+  piece's own `tap()`, and what the piece draws, satisfies or moves is the answer. Where the piece
+  has nothing to do with the press — no `tap()` of its own, every `tap` knob still locked behind
+  another, a `tap()` that threw — and in the stage's own non-live moments, where there is no piece
+  to reach at all (a module still loading), `rejectTap()` in
+  [`site/js/stage.js`](site/js/stage.js) answers for it: one `.stage-reject` mark laid in the scene
+  at the point pressed, which opens, fades and is gone a fifth of a second later. The stage used to
+  return from that handler and do nothing whatever, and most of the time it is a module with no
+  `tap()` that the press was landing on, so pressing the picture of a world that does not read
+  taps was simply dead. The handler asks nothing at all about the stage's mode, so every state the
+  scene is on the screen in is covered by the one rule; the states it is *not* on the screen in — a
+  piece waiting on a sky, a world with nothing to play, the threshold quiet or asking — hide it
+  outright in `_sass/_stage.scss`, so there is no picture there to press and nothing to answer, and
+  what each of those offers instead is the one button that seeds a sky or the way on, already lit
+  (see [Powered down, never broken](#powered-down-never-broken)).
+- **Tiny, and mute.** Not a dialog, not a message, not a shake of the frame: a hairline ring in the
+  muted ink the rail's text is written in, in neither accent, because the accents are the colours
+  the pieces answer in. It takes no press of its own, says nothing to a screen reader beyond what
+  the scene's label already says, and makes no sound — the chime belongs to the finish, and a site
+  that clicked at every press is a site nobody could play in a quiet room. The brief is only that
+  a press is *visibly received*; receiving it must not interrupt a piece a visitor is in the middle
+  of, and must not be mistakable for the piece's own answer.
+- **It respects less motion, like every other motion of the stage.** `calm.matches` — the
+  `prefers-reduced-motion` query the stage already keeps, and `ctx.reduced` as a piece sees it —
+  puts `is-still` on the mark, so it is held still and taken away again rather than rippling open.
+  The change and not the shift, which is what the theme's crossfade does with the same query and
+  why the ceremony's burst does not run at all. `_sass/_stage.scss` holds the same answer behind
+  the media query, so a page whose script never read it behaves the same way.
+- **It never advances anything.** A rejection is not a knob set, a dot filled, a progress bar moved
+  or a piece finished, and it never reaches the piece: a `tap` knob is satisfied by the piece's own
+  `tap()` and by nothing else, which is the piece contract exactly as it was. A piece that wants to
+  refuse one particular press refuses it itself, inside `tap()`, where it can say why — the stage
+  cannot tell a tap the piece considered and declined from one it acted on, and guessing would lay
+  the stage's mark on top of the piece's own answer.
+- **Nothing of a press outlives its piece.** The mark is taken away on a timer registered like
+  every other timer of the stage's, and `close()` sweeps whatever is still there, so a press
+  answered a moment before the next piece opens leaves nothing behind — the same bargain as the
+  [Completion axiom](#completion-axiom)'s one teardown.
+- **Covered where the stage is covered.** The `pressAnswered` scenario in
+  [`.github/scripts/stage_harness.mjs`](.github/scripts/stage_harness.mjs) presses the scene where
+  the press has nothing to reach — while a module is loading, on a `tap` knob still locked, on a
+  piece with no `tap` knob at all — and reads back whether the stage answered, where it put the
+  mark, whether it was gone again, whether it said anything, and whether any knob, dot or finish
+  moved for it. Then the same press with the gate open, where the press is the piece's again and
+  the stage must add nothing of its own; the same press with less motion asked for; and a press on
+  a piece taken away under it. `StageTest` plays `LIVE_PIECE` through it, which counts the taps it
+  is told about onto its own live line, so a press the stage answered can be told apart from one it
+  passed on; `RealSiteTest` plays the site as committed and holds what can be held of any world's
+  piece without knowing which piece it is. On the committed site that is the press while a module
+  loads, which has nothing to reach whatever the module turns out to be. No puzzle on the site uses
+  a `tap` knob at present, and none gates a knob behind another with `after:`, so there the
+  scenario may find no locked tap knob to press at all — the same as the hold scenario finding no
+  hold, and held the same way: where a world does deal one the rules apply to it, and `StageTest`
+  holds the stage to it with a piece of its own meanwhile. Demanding one of the site would pin a
+  knob kind the silo leaves open.
+- **Stated in the prompt, and not a coded axiom.** Like the continued-interaction axiom, it lives
+  in the completion axiom's block of the system prompt in
+  [`.github/scripts/make_interesting.py`](.github/scripts/make_interesting.py) and is held on the
+  committed site by the harness rather than by a `check_` function refusing a plan — the harness
+  drives the stage through the stage's own elements, and those are a run's to rewrite. There are
+  still nine coded axioms (see [One single experience](#one-single-experience)).
+- **Site-wide, not only the stage's.** The stage is where it had something to fix and where it is
+  held in code, but it is stated for any picture a visitor can press. A piece with no `tap` knob is
+  still free to write a `tap()` and answer presses itself — several worlds do — and that is the
+  axiom being kept, not avoided.
+- **What is deliberately not checked**: whether a press the piece *did* receive was answered well,
+  or at all. The stage hands the gesture over and cannot see what the piece made of it, so a piece
+  that takes a tap and sits there is the prompt's business and not the harness's; the one thing code
+  can settle is that the gesture is never dropped on the floor before the piece sees it.
 
 ### Silo
 

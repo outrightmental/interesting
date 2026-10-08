@@ -89,10 +89,13 @@ $moods: (
   gap: 0.75rem;
 }
 
+// The question is one of the rite's words wherever it is asked -- here in the sheet, and large on
+// the threshold (_stage.scss) -- so it wears the serif; its options' details and its skip stay sans.
 .probe-ask {
   margin: 0;
   color: var(--md-sys-color-on-surface);
-  @include type.scale(title-medium);
+  @include type.scale(title-large);
+  @include type.rite;
 }
 
 .probe-step {
@@ -121,9 +124,12 @@ $moods: (
   text-align: left;
 }
 
+// The thing offered -- a door, a stone, a jar -- is one of the rite's words and wears the serif;
+// the detail under it, and the question's own skip, stay in the sans.
 .probe-option-label {
   color: var(--md-sys-color-on-surface);
-  @include type.scale(body-large);
+  @include type.scale(title-medium);
+  @include type.rite;
 }
 
 .probe-option-detail {

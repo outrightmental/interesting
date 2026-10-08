@@ -3197,6 +3197,65 @@ class LegibilityStandardTest(unittest.TestCase):
         self.assertNotIn("check_legible", CODED_AXIOMS)
 
 
+class RitualStandardTest(unittest.TestCase):
+    """The ritual axiom: everything on the site feels like an esoteric magical ritual, and the
+    mystery is all in the dressing -- the information is never obscured, the puzzles stand on
+    their own legs, and the rite is fun first and never tiresome. A standard stated to the model,
+    like WHOLE, INTERESTING and LEGIBLE, because no check could judge whether a page feels like a
+    rite or whether a flourish cost a visitor a moment of clarity; so these tests hold the prompt,
+    and RealSiteTest holds the one half of it a stylesheet can be read for (the rite's words in
+    the serif, the instructions in the sans, and the ornament held still for less motion)."""
+
+    def prompt(self):
+        return mi.build_prompt([("index.html", "<h1>hi</h1>")])
+
+    def test_the_standard_names_the_rite_and_its_limit(self):
+        # Spelled out here rather than imported, so rewording RITUAL into something that drops
+        # either half -- the feel, or the limit on it -- fails this test instead of passing quietly.
+        self.assertIn("esoteric magical ritual", mi.RITUAL)
+        for limit in ["is ever obscured", "stands on its own legs", "fun first", "never tiresome"]:
+            with self.subTest(limit=limit):
+                self.assertIn(limit, mi.RITUAL)
+
+    def test_the_standard_is_stated_before_the_rules_and_after_the_choice(self):
+        prompt = self.prompt()
+        self.assertIn("RITUAL, NOT RIDDLE", prompt)
+        self.assertIn(mi.RITUAL, prompt)
+        self.assertLess(prompt.index("THIS RUN "), prompt.index("RITUAL, NOT RIDDLE"))
+        # After the legibility holds, which it leans on, and before the Rules.
+        self.assertLess(prompt.index("LEGIBLE TO A STRANGER"), prompt.index("RITUAL, NOT RIDDLE"))
+        self.assertLess(prompt.index("RITUAL, NOT RIDDLE"), prompt.index("Rules:"))
+
+    def test_the_four_holds_are_each_named(self):
+        prompt = self.prompt()
+        for hold in ["Esoteric is a vibe, never a veil", "The puzzle stands on its own legs",
+                     "Fun first, never tiresome", "The ornament gives way"]:
+            with self.subTest(hold=hold):
+                self.assertIn(hold, prompt)
+        # The limit is concrete: a control keeps its plain verb, a goal says what counts as solved,
+        # a wrong answer is told what the piece saw, and the typographic rule names its mixin.
+        for concrete in ["A control says its plain verb", "a goal says what counts as solved",
+                         "never the answer and never a riddle", "no incantation to type",
+                         "no ceremony longer than a breath", "type.rite", "what to do "
+                         "is set in the sans"]:
+            with self.subTest(concrete=concrete):
+                self.assertIn(concrete, prompt)
+
+    def test_the_standard_is_in_hand_at_the_end_of_the_run_too(self):
+        prompt = self.prompt()
+        last = prompt[prompt.index(f"This run's mission: {mi.mission_of(mi.Run(mi.DEFAULT_MODE))}"):]
+        self.assertIn(f"Keep it {mi.RITUAL}", last)
+        self.assertIn("no riddle where a rule should be", last)
+
+    def test_the_standard_is_stated_and_not_a_check(self):
+        # The same reasoning WHOLE, INTERESTING and LEGIBLE are left uncoded for: no check could
+        # tell a rite from a riddle, so the standard lives in the prompt and the list of coded
+        # axioms does not grow for it.
+        self.assertEqual(sorted(name for name in dir(mi) if name.startswith("check_")),
+                         CODED_AXIOMS)
+        self.assertNotIn("check_ritual", CODED_AXIOMS)
+
+
 class CadenceAxiomTest(SiteDirTestCase):
     """Issue #32: no page ties the site to an update frequency. The site iterates continuously, so
     the fourth axiom stands beside the other three -- stated in the prompt, held to by
@@ -4495,6 +4554,18 @@ class CompletionAxiomTest(SiteDirTestCase):
                      "Keep the done mark out of the way of the content",
                      "never laid over the scene",
                      "a solved piece is still fully playable",
+                     # Issue #89: unresponsiveness is uninteresting, said to the run that writes
+                     # the pieces and to the run that rewrites the stage, and held by the same
+                     # stage harness. The rejection is the stage's and the knobs are the piece's,
+                     # so the prompt says both where the mark lives and what it may never do.
+                     "every press on the main canvas of an activity must do something",
+                     "unresponsiveness is uninteresting",
+                     "the smallest acknowledgement there is",
+                     "rejectTap()",
+                     ".stage-reject",
+                     "a rejection never satisfies or advances a knob",
+                     "refuses it inside tap()",
+                     "a press the piece has nothing to do with is answered by the stage",
                      # Issue #80: a piece is the card it was opened from, which the same two
                      # harnesses hold it to, so a run writing a piece is told as much.
                      "A piece is also the card it was opened from",
@@ -4670,13 +4741,14 @@ class StageTest(unittest.TestCase):
     slider the stage only marked set when its value changed, so a visitor content with where it
     already stood set every other knob, watched the finale run, and waited on a piece that had no
     way left to finish. These tests run the real js/stage.js, through the elements stage.njk writes
-    and a clock they step by hand, and hold it to eight things: a world played twice over plays the
+    and a clock they step by hand, and hold it to nine things: a world played twice over plays the
     second time like the first, a finished piece waits for the visitor rather than seeing itself
     out, a finished piece is still a piece to play with rather than a picture of one (issue #86), a
     slider used where it stands counts as used, a knob nobody set is named rather than left
     a mystery, a hold knob is set the moment its bar fills rather than when the visitor lets go, a
-    piece that is over leaves nothing of itself behind, and the feature a card opens as is the card
-    that was pressed rather than the world's generic line (issue #80).
+    piece that is over leaves nothing of itself behind, every press on the scene does something even
+    where the piece has nothing to do with it (issue #89), and the feature a card opens as is the
+    card that was pressed rather than the world's generic line (issue #80).
     """
 
     @classmethod
@@ -4921,6 +4993,50 @@ class StageTest(unittest.TestCase):
         # end, which is the job "skip this one" used to do before the way on took it over.
         self.assertEqual(left["mode"], "empty")
         self.assertTrue(left["nextLit"], "a world with nothing to play offered no way on")
+
+    def test_every_press_on_the_scene_does_something(self):
+        # Issue #89: unresponsiveness is uninteresting. A press on the picture that lands on nothing
+        # at all is the one answer this site does not give, so where the piece has nothing to do
+        # with the tap -- no tap() of its own, every tap knob still locked behind another, no piece
+        # on the stage yet at all -- the stage answers for it with one small mark at the point
+        # pressed. LIVE_PIECE counts the taps it is told about onto its own live line, so a press
+        # the stage answered can be told apart from one it passed on to the piece.
+        result = self.scenario("pressAnswered", toy=LIVE_PIECE)
+        self.assertEqual(result["loadingMode"], "loading", "the press never landed while a module was loading")
+        self.assertTrue(result["playable"], "the piece never became playable")
+        self.assertIsNotNone(result["locked"], "no piece the harness tried had a tap knob behind a gate")
+        self.assertIsNotNone(result["noTapKnob"], "no piece the harness tried was without a tap knob")
+        for when in ["loading", "locked", "noTapKnob", "calm"]:
+            with self.subTest(when=when):
+                seen = result[when]
+                self.assertTrue(seen["answered"], "the stage swallowed a press it had nothing to do with")
+                # At the point pressed -- 211 across the stub scene's 640, 133 down its 400 -- and
+                # inside the scene, which is the only place a press on the scene can be answered.
+                self.assertEqual(seen["at"], {"left": "32.97%", "top": "33.25%"})
+                self.assertTrue(seen["inScene"], "the acknowledgement was not laid in the scene")
+                # Tiny: over before it is in the way, with nothing to say to a screen reader that
+                # the scene's own label does not already say.
+                self.assertTrue(seen["gone"], "the acknowledgement stayed on the scene")
+                self.assertTrue(seen["silent"], "the acknowledgement is copy rather than a mark")
+                # And it satisfies nothing: a rejection is not a knob set, a dot filled or a finish.
+                self.assertEqual(seen["set"], seen["setWas"], "a press the piece never saw set a knob")
+                self.assertEqual(seen["finished"], 0, "a press the piece never saw finished the piece")
+        # The locked press never reached the piece at all: LIVE_PIECE has been told of no taps.
+        self.assertEqual(result["locked"]["knob"], "touch")
+        self.assertIn("taps 0", result["locked"]["status"], "a tap knob still locked let the press through")
+        # With the gate open the press is the piece's again, and the stage adds nothing on top of
+        # the piece's own answer: this half of the contract the axiom does not touch.
+        self.assertFalse(result["opened"]["locked"], "the gate never opened")
+        self.assertFalse(result["opened"]["answered"], "the stage answered over a press the piece took")
+        self.assertIn("taps 1", result["opened"]["status"], "the press never reached the piece")
+        # Less motion asked for: the mark is held still rather than rippling open, the way the
+        # theme's crossfade lands without the shift and the ceremony's burst does not run at all.
+        self.assertTrue(result["calm"]["still"], "the acknowledgement moves for a visitor who asked it not to")
+        self.assertFalse(result["loading"]["still"], "the acknowledgement never moves for anyone")
+        # And nothing of a press outlives the piece it landed on, like every other part of it.
+        self.assertEqual(result["beforeClose"], 1, "the press left nothing to be taken away")
+        self.assertEqual(result["afterClose"], 0, "a press outlived the piece it landed on")
+        self.assertEqual(result["waiting"], 0, "the stage left a timer running for a press")
 
     def test_a_feature_is_the_card_that_was_pressed(self):
         # The alignment axiom (issue #80). A card is a seed, the configuration rolled from it and
@@ -6163,6 +6279,40 @@ class RealSiteTest(unittest.TestCase):
         self.assertEqual(mi.unreachable_pages(self.site), {})
         self.assertGreater(len(mi.html_pages(self.site)), 1, "the check is worth nothing on one page")
 
+    def test_the_rites_words_wear_the_serif_and_the_instructions_the_sans(self):
+        # The ritual axiom's one readable half (RitualStandardTest holds the prompt to the rest).
+        # The rite's words -- a heading, a piece's title, a card's name, the question -- are set in
+        # the one serif face _type.scss declares, and every control stays in the sans it inherits,
+        # so a visitor can tell the atmosphere from the instruction by the face it is set in. The
+        # ornament the pages share lives in one partial, every page links it through css/site.css,
+        # and it holds still for a visitor who asked for less motion.
+        types = self.source[f"{mi.SASS_DIR}/_type.scss"]
+        self.assertIn("$rite:", types, "no serif face is declared for the rite's words")
+        self.assertIn("@mixin rite", types, "the rite's face is not offered as a mixin")
+        for rel, selector in [(f"{mi.SASS_DIR}/_stage.scss", ".stage-title {"),
+                              (f"{mi.SASS_DIR}/_feed.scss", ".card-title {"),
+                              (f"{mi.SASS_DIR}/_persona.scss", ".persona-sheet-title {"),
+                              (f"{mi.SASS_DIR}/_base.scss", "h1 {")]:
+            with self.subTest(rel=rel, selector=selector):
+                css = self.source[rel]
+                rule = css[css.index(selector):]
+                rule = rule[:rule.index("}")]
+                self.assertIn("@include type.rite", rule, f"{selector} is not set in the rite's face")
+        controls = self.source[f"{mi.SASS_DIR}/_controls.scss"]
+        buttons = controls[controls.index("button,\na.action {"):]
+        buttons = buttons[:buttons.index("}")]
+        self.assertIn("font-family: inherit", buttons, "a control no longer inherits the sans")
+        self.assertNotIn("type.rite", controls, "a control is set in the rite's face")
+        ornament = self.source[f"{mi.SASS_DIR}/_rite.scss"]
+        self.assertIn("@use 'rite';", self.source["css/site.scss"], "the ornament is not shared")
+        self.assertIn("prefers-reduced-motion: reduce", ornament)
+        self.assertIn("animation: none", ornament[ornament.index("prefers-reduced-motion: reduce"):])
+        self.assertNotRegex(ornament, r"(?m)^\s*position:\s*fixed\b", "the ornament floats over the page")
+        self.assertIn("pointer-events: none", ornament, "the ornament takes a press meant for content")
+        built = self.site["css/site.css"]
+        self.assertIn("Iowan Old Style", built, "the built stylesheet carries no serif stack")
+        self.assertIn(".stage-sigil", built, "the piece's sigil is not styled")
+
     def test_every_world_is_a_piece_a_visitor_can_finish(self):
         # The completion axiom, on the site as committed: every world the layout lists has a module
         # with a piece, and the harness plays every one of them to its end for every seed it tries.
@@ -6200,8 +6350,9 @@ class RealSiteTest(unittest.TestCase):
         # rather than silently holding the piece shut; a hold has to be set when its bar fills
         # rather than when the visitor lets go (issue #74); a finished piece has to stay fully
         # playable, with the done mark clear of its picture (issue #86); a piece that is over has
-        # to leave nothing running; and a card pressed has to open as that card rather than as the
-        # world's generic line (issue #80).
+        # to leave nothing running; a press the piece has nothing to do with has to be answered by
+        # the stage rather than swallowed (issue #89); and a card pressed has to open as that card
+        # rather than as the world's generic line (issue #80).
         needs_the_stage_harness(self)
         worlds = mi.listed_worlds(self.site)
         self.assertGreaterEqual(len(worlds), 10, "the check is worth nothing on a few worlds")
@@ -6298,6 +6449,42 @@ class RealSiteTest(unittest.TestCase):
         self.assertEqual(torn["waiting"], 0, "the stage left a timer running after the piece")
         self.assertEqual(torn["look"]["knobs"], [])
         self.assertEqual(torn["look"]["sceneLabel"], "the scene")
+        # Every press on the scene does something (issue #89), on the site as committed. What can be
+        # held of any world's piece without knowing which piece it is, is held: a press while a
+        # module is still loading has nothing to reach whatever that module turns out to be, so the
+        # stage is what has to answer it -- and answering costs nothing, so no knob is set and no
+        # piece is finished by one. The same goes for the press with less motion asked for, which is
+        # read off while a module loads for exactly that reason.
+        #
+        # The other two presses depend on what a module wrote, so neither is demanded here. A tap
+        # knob is a kind no puzzle on the site uses at present -- no module writes `kind: 'tap'`,
+        # and none gates a knob behind another with `after:` -- so the scenario may well find no
+        # locked tap knob to press, just as the hold scenario above may find no hold; StageTest
+        # holds the stage to both with pieces of its own, and where a world does gate one the rules
+        # still apply to it. Demanding one here would pin a knob kind the silo leaves open, which is
+        # the one thing this harness is careful not to do. And a piece with no tap knob is left to
+        # its module either way: whether it writes a tap() anyway is not visible from out here, so a
+        # mark and no mark are both right.
+        pressed = report["pressAnswered"]["result"]
+        self.assertEqual(pressed["loadingMode"], "loading", "the press never landed while a module was loading")
+        for when in ["loading", "calm"] + (["locked"] if pressed["locked"] else []):
+            with self.subTest(when=when):
+                seen = pressed[when]
+                self.assertTrue(seen["answered"], "the stage swallowed a press it had nothing to do with")
+                self.assertTrue(seen["inScene"], "the acknowledgement was not laid in the scene")
+                self.assertTrue(seen["gone"], "the acknowledgement stayed on the scene")
+                self.assertTrue(seen["silent"], "the acknowledgement is copy rather than a mark")
+                self.assertEqual(seen["set"], seen["setWas"], "a press the piece never saw set a knob")
+                self.assertEqual(seen["finished"], 0, "a press the piece never saw finished the piece")
+        if pressed["locked"]:
+            # And with that gate opened the press is the piece's again: whatever its own tap() makes
+            # of it, the stage adds nothing on top of the piece's answer.
+            self.assertFalse(pressed["opened"]["answered"],
+                             "the stage answered over a press its piece's own tap() took")
+        self.assertTrue(pressed["calm"]["still"],
+                        "the acknowledgement moves for a visitor who asked it not to")
+        self.assertFalse(pressed["loading"]["still"], "the acknowledgement never moves for anyone")
+        self.assertEqual(pressed["afterClose"], 0, "a press outlived the piece it landed on")
         # And the alignment axiom on the site as committed (issue #80): a card pressed opens a
         # feature that is that card. While the world's module loads, and on a world with no piece
         # at all, what stands is the card's own title -- never the world's one-line description,

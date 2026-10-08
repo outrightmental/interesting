@@ -368,7 +368,7 @@ function frontPiece(env, plan) {
   const draw = (c) => drawFront(c.g, c.w, c.h, c, plan, s, env.variant);
   return {
     title: frontTitle(plan),
-    brief: 'A front is coming in toward the station along the wind, at the speed written beside it. One square of the grid is ten kilometres; the scale bar says so. The dial runs the whole day round, 0 at the top being midnight, and its hand stands at the hour now.',
+    brief: 'The station keeps its vigil. A front is coming in toward the station along the wind, at the speed written beside it. One square of the grid is ten kilometres; the scale bar says so. The dial goes the whole day round, 0 at the top being midnight, and its hand stands at the hour now.',
     goal: 'Say the hour the front reaches the station, and which side it comes from.',
     aspect: '4 / 3',
     checkLabel: 'log the forecast',
@@ -382,7 +382,7 @@ function frontPiece(env, plan) {
       const hour = Math.round(Number(c.value('hour')));
       const hourRight = hour === arrives;
       const sideRight = c.value('side') === plan.side;
-      if (hourRight && sideRight) return { solved: true, say: 'logged: the front arrives from the ' + plan.side + ' at ' + fmt(arrives) };
+      if (hourRight && sideRight) return { solved: true, say: 'entered in the ledger: the front arrives from the ' + plan.side + ' at ' + fmt(arrives) };
       const parts = [];
       if (!hourRight) parts.push('the hour is off');
       parts.push(sideRight ? 'the side is right' : 'the side is off');
@@ -423,7 +423,7 @@ function frontPiece(env, plan) {
       draw(c);
     },
     end(c) {
-      s.lines = ['front log', 'from the ' + plan.side + ', ' + plan.squares * KM + ' km at ' + plan.speed + ' km/h', 'arrived ' + fmt(arrives) + (plan.now + hours >= 24 ? ', past midnight' : '')];
+      s.lines = ['front ledger', 'from the ' + plan.side + ', ' + plan.squares * KM + ' km at ' + plan.speed + ' km/h', 'arrived ' + fmt(arrives) + (plan.now + hours >= 24 ? ', past midnight' : '')];
       c.status('the front comes in from the ' + plan.side + ' and reaches the station at ' + fmt(arrives));
     }
   };
@@ -537,7 +537,7 @@ function drawPressure(g, w, h, env, plan, s, variant) {
   if (s.toward >= 0) said.push('toward ' + LETTERS[s.toward]);
   if (s.way) said.push('blowing ' + s.way);
   if (s.gap != null) said.push(s.gap + ' hPa between');
-  write(g, said.length ? 'you say: ' + said.join(', ') : 'readings in hPa; the wind runs high to low', geo.x(0.2), cy, size, 'left', env.alpha(said.length ? c.accent : c.fg, 0.9));
+  write(g, said.length ? 'you say: ' + said.join(', ') : 'readings in hPa; the wind blows high to low', geo.x(0.2), cy, size, 'left', env.alpha(said.length ? c.accent : c.fg, 0.9));
   // The wind drawn in, once the puzzle is solved: from the highest to the lowest.
   if (s.blow > 0) {
     const a = st[highest(st)];
@@ -566,7 +566,7 @@ function pressurePiece(env, plan) {
   const draw = (c) => drawPressure(c.g, c.w, c.h, c, plan, s, env.variant);
   return {
     title: pressureTitle(),
-    brief: 'Five stations report their pressure. The wind blows from the station reading highest toward the one reading lowest, and the compass in the corner has north at the top. Name the way it blows by whichever axis it mostly follows.',
+    brief: 'A reading taken from five stations, each reporting its pressure. The wind blows from the station reading highest toward the one reading lowest, and the compass in the corner has north at the top. Name the way it blows by whichever axis it mostly follows.',
     goal: 'Name the station the wind blows toward, the way it blows, and the pressure difference between the two.',
     aspect: '4 / 3',
     checkLabel: 'log the wind',
@@ -583,7 +583,7 @@ function pressurePiece(env, plan) {
       const wayRight = c.value('way') === way;
       const n = Math.round(Number(c.value('gap')));
       const gapRight = n === gap;
-      if (towardRight && wayRight && gapRight) return { solved: true, say: 'logged: ' + gap + ' hPa from station ' + LETTERS[hi] + ' to station ' + LETTERS[lo] + ', blowing ' + way };
+      if (towardRight && wayRight && gapRight) return { solved: true, say: 'entered in the ledger: ' + gap + ' hPa from station ' + LETTERS[hi] + ' to station ' + LETTERS[lo] + ', blowing ' + way };
       const parts = [];
       parts.push(towardRight ? 'the station is right' : 'the wind does not blow toward that station');
       if (!wayRight) parts.push('the way is off');
@@ -591,7 +591,7 @@ function pressurePiece(env, plan) {
       return { solved: false, say: parts.join('; ') };
     },
     start(c) {
-      c.status('five readings; the wind runs from the highest to the lowest');
+      c.status('five readings; the wind blows from the highest to the lowest');
       draw(c);
     },
     apply(id, value, c) {
@@ -628,8 +628,8 @@ function pressurePiece(env, plan) {
       draw(c);
     },
     end(c) {
-      s.lines = ['wind log', 'from station ' + LETTERS[hi] + ' (' + st[hi].p + ' hPa) to station ' + LETTERS[lo] + ' (' + st[lo].p + ' hPa)', 'blowing ' + way + ', ' + gap + ' hPa between them'];
-      c.status('the wind runs ' + way + ' from station ' + LETTERS[hi] + ' to station ' + LETTERS[lo] + ', ' + gap + ' hPa between them');
+      s.lines = ['wind ledger', 'from station ' + LETTERS[hi] + ' (' + st[hi].p + ' hPa) to station ' + LETTERS[lo] + ' (' + st[lo].p + ' hPa)', 'blowing ' + way + ', ' + gap + ' hPa between them'];
+      c.status('the wind blows ' + way + ' from station ' + LETTERS[hi] + ' to station ' + LETTERS[lo] + ', ' + gap + ' hPa between them');
     }
   };
 }
@@ -672,7 +672,7 @@ export default {
       return {
         title: frontTitle(plan),
         mono: 'now ' + fmt(plan.now) + '\nfront: ' + plan.squares + ' squares out, ' + plan.speed + ' km/h\n1 square = ' + KM + ' km',
-        text: 'A front is coming in along the wind. Read the map and the dial, and say when it reaches the station, and from which side.',
+        text: 'An omen on the map: a front is coming in along the wind. Read the map and the dial, and say when it reaches the station, and from which side.',
         aspect: '4 / 3',
         paint: (g, w, h, cardEnv) => frontPreview(g, w, h, cardEnv, plan, cardEnv.variant.turn * 6),
         of: plan
@@ -682,7 +682,7 @@ export default {
     return {
       title: pressureTitle(),
       mono: plan.stations.map((q, i) => LETTERS[i] + ': ' + q.p + ' hPa').join('\n'),
-      text: 'The wind blows from the highest reading to the lowest. Say where it goes, which way, and by how much.',
+      text: 'Five stations, five readings. The wind blows from the highest to the lowest. Say where it goes, which way, and by how much.',
       aspect: '4 / 3',
       paint: (g, w, h, cardEnv) => pressurePreview(g, w, h, cardEnv, plan, cardEnv.variant.turn * 6),
       of: plan
