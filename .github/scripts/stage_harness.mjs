@@ -745,6 +745,7 @@ function look(page) {
     // being still playable looks like from outside (issue #86). A knob with no control of its own
     // -- a wait, whose bar the piece fills -- is live vacuously.
     knobs: knobsOn(page).map((knob) => ({ id: knob.dataset.id, kind: knob.dataset.kind, set: isSet(knob),
+                                          optional: knob.dataset.optional === 'true',
                                           live: knob.querySelectorAll('button, input').every((c) => !c.disabled) })),
     dots: by('stage-progress').querySelectorAll('.stage-dot').length,
     doneShown: !by('stage-done').hidden,
@@ -1325,8 +1326,12 @@ async function main(argv) {
 if (!isMainThread && workerData && workerData.harness === 'stage') {
   workerMain().catch((err) => parentPort.postMessage({ ok: false, error: String((err && err.stack) || err) }));
 } else if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  main(process.argv.slice(2)).then((code) => process.exit(code), (err) => {
+  // The exit code is set rather than exited on: process.exit() can cut a report off mid-pipe
+  // before stdout has drained, and the workers are already terminated, so the loop ends on its own.
+  main(process.argv.slice(2)).then((code) => {
+    process.exitCode = code;
+  }, (err) => {
     process.stderr.write(String((err && err.stack) || err) + '\n');
-    process.exit(2);
+    process.exitCode = 2;
   });
 }
