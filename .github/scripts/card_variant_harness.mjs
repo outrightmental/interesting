@@ -146,8 +146,13 @@ function apart(a, b) {
  *
  *  What comes back: whether the module said nothing moves; whether animating at t = 0 drew the
  *  picture paint left behind; whether the same t twice drew the same thing; and how far the drawing
- *  travels over one frame of the loop against how far it travels over two and a half seconds. */
-function moving(mod, seed, variant) {
+ *  travels over one frame of the loop against how far it travels over two and a half seconds.
+ *
+ *  `times` is which moments in a card's life to look at. Every one of them costs four drawings, so
+ *  the three opposite configurations are followed right through CLOCK and the sixty rolled seeds
+ *  are looked at twice: a module that deals inside `animate` gives itself away at the first moment,
+ *  and what the long tail of seeds is for is the branch a particular seed happens to deal. */
+function moving(mod, seed, variant, times) {
   const env = makeEnv(seed, variant);
   const still = makeContext();
   try {
@@ -172,9 +177,7 @@ function moving(mod, seed, variant) {
     if (first.said === false) return { still: true, drew: first.log.length };
     const out = { still: false, seam: first.log.join("\n") === still.log.join("\n"),
                   steady: true, frame: 0, moved: 0 };
-    // Nought, a few seconds in, past the twelve-second breath the slowest of these loops on, and
-    // ten minutes in: a card the feed painted before the visitor scrolled a long way.
-    for (const t of [0, 1.7, 4.5, 11.9, 37, 611.5]) {
+    for (const t of times) {
       const here = at(t).log;
       if (at(t).log.join("\n") !== here.join("\n")) out.steady = false;
       out.frame = Math.max(out.frame, apart(here, at(t + 1 / 30).log));
@@ -272,6 +275,11 @@ const CORNERS = {
   high: { plain: false, trade: 1, lift: V.DIALS.lift[1], wash: V.DIALS.wash[1], density: V.DIALS.density[1], scale: V.DIALS.scale[1], turn: 0.97, stretch: V.DIALS.stretch[1] },
 };
 
+// The moments in a card's life the motion above is observed at: the frame it was painted on, a few
+// seconds in, past the twelve-second breath the slowest of these loops on, and ten minutes in --
+// a card the feed painted before the visitor scrolled a long way.
+const CLOCK = [0, 1.7, 4.5, 11.9, 37, 611.5];
+
 observed.modules = {};
 for (const file of readdirSync(modulesDir).filter((name) => name.endsWith(".js")).sort()) {
   const mod = (await import(pathToFileURL(path.join(modulesDir, file)).href)).default;
@@ -293,8 +301,9 @@ for (const file of readdirSync(modulesDir).filter((name) => name.endsWith(".js")
   // A card in motion, followed the way the feed drives it rather than animated once from nothing.
   if (typeof mod.animate === "function") {
     out.motion = {};
-    for (const [name, variant] of Object.entries(CORNERS)) out.motion[name] = moving(mod, seed, variant);
-    out.motion.rolled = SEEDS.slice(0, 60).map((s) => Object.assign({ seed: s }, moving(mod, s, V.roll(s))));
+    for (const [name, variant] of Object.entries(CORNERS)) out.motion[name] = moving(mod, seed, variant, CLOCK);
+    out.motion.rolled = SEEDS.slice(0, 60).map((s) =>
+      Object.assign({ seed: s }, moving(mod, s, V.roll(s), [CLOCK[0], CLOCK[2]])));
   }
   // Every configuration a seed could roll, painted: nothing may throw anywhere in the ranges.
   for (const s of SEEDS.slice(0, 60)) {
