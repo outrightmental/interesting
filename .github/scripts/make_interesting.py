@@ -87,6 +87,19 @@ answer if any test fails. A refused answer is never written, and if main moves o
 before the push, the workflow runs the tests again on the rebased commit, so the
 hourly run cannot push a commit that blocks the deploy.
 
+A refused answer is not the end of the model's turn, though. The model is shown
+its own answer and the refusal -- the failing tests by name and message, the edit
+that matched nowhere, the axiom the change broke -- and asked for the whole plan
+again with that put right, up to REPAIR_ROUNDS times, before the run moves on to
+another model (see repair_feedback and main). The change itself travels as edits
+wherever it can: a file that exists is changed by quoting the passages that change
+(apply_edits), and only a new file, or one rewritten end to end, is sent whole. That
+is what keeps an answer inside a model's output limit and inside the quarter of an
+hour it has to write it, which is where most of a day's runs were being lost. A
+run that loses an answer to the limit or to the clock all the same asks the rest of
+its calls to think one step less hard (lower_effort), and no call is started past
+the run's own deadline (RUN_BUDGET_SECONDS), so the hourly cadence holds.
+
 The model is reached through the GitHub Copilot CLI (`copilot`), which bills the
 GitHub Copilot subscription behind the token in COPILOT_GITHUB_TOKEN. (GitHub
 Models, which this script originally called, was retired on 2026-07-30.)
@@ -108,6 +121,7 @@ import signal
 import subprocess
 import sys
 import tempfile
+import time
 import uuid
 from html.parser import HTMLParser
 from pathlib import Path, PurePosixPath
@@ -333,6 +347,25 @@ def effort_flags(effort):
     return ["--reasoning-effort", effort] if effort else []
 
 
+# The least a run steps the reasoning effort down to (lower_effort). A run starts every call at the
+# effort asked for above; once an answer has run past the model's output limit or the clock, the
+# rest of that run's calls are asked for one step less, and so on down to this. Why: on 2026-10-07
+# three runs in five were lost to exactly those two failures, at xhigh, by the heaviest models in
+# the pool, and an answer that never arrives has no quality to weigh. The step is per run, never
+# remembered, so every run still opens at the effort the repository asks for.
+LOWEST_FALLBACK_EFFORT = "medium"
+
+
+def lower_effort(effort):
+    """One step less reasoning than `effort`, never below LOWEST_FALLBACK_EFFORT; "" (no flag)
+    and a level already at or under the floor stay as they are."""
+    if effort not in REASONING_EFFORT_LEVELS:
+        return effort
+    floor = REASONING_EFFORT_LEVELS.index(LOWEST_FALLBACK_EFFORT)
+    at = REASONING_EFFORT_LEVELS.index(effort)
+    return effort if at <= floor else REASONING_EFFORT_LEVELS[at - 1]
+
+
 # How much the model is asked for room to write in one answer, in tokens (issue #77). A run that
 # rewrites half the site writes a long answer, and an answer that runs past the model's output
 # limit is cut off mid-run and thrown away, so the budget is asked for as large as every model in
@@ -394,8 +427,39 @@ def budget_note(budget):
 
 # A heavy model at near-maximum effort reads a prompt the size of the whole site and may write
 # back most of it, and it is given the time that takes: a quarter of an hour, where eight minutes
-# used to do. The workflow's job timeout allows for three such attempts.
+# used to do. A call started late in the run gets what is left of the run's budget below instead.
 MODEL_TIMEOUT_SECONDS = 900
+
+# How long a run gives itself for asking models, counted from the start of main(). No call starts
+# once this much has passed, and a call started near the end is given only what is left (see
+# MIN_CALL_SECONDS). The workflow runs hourly and a run that outlasts the hour makes the next one
+# skip itself (the guard job in make-interesting.yml), so a run that keeps asking costs the run
+# after it; and the job's own timeout-minutes is a hard stop that would throw away whatever the
+# last call was writing. Fifty minutes leaves the last answer its build, its harnesses and the
+# tests every deploy waits on (together up to a quarter of an hour: BUILD_TIMEOUT_SECONDS,
+# PIECE_TIMEOUT_SECONDS, STAGE_TIMEOUT_SECONDS and TESTS_TIMEOUT_SECONDS), and the push, inside
+# the job's eighty.
+RUN_BUDGET_SECONDS = 50 * 60
+# No call is started with less than this left. The quickest usable answer a heavy model has
+# given to a prompt the size of this site took about four minutes, so a call with less than
+# five is a call whose answer cannot arrive.
+MIN_CALL_SECONDS = 5 * 60
+
+# How many times one model is asked to repair its own refused answer before the run moves on to
+# the next model. A refusal is specific -- the tests it failed by name and message, the edit that
+# matched nowhere, the page it orphaned -- and the model that wrote the answer is the one that
+# can put it right with the least change, where a fresh model starts over from nothing and
+# runs into something else. Two rounds: the first fixes what was named, and the second is for
+# what the fix uncovered. A model whose answer did not arrive in time is not asked again (see
+# ModelTimeout); one whose answer ran past its output limit is, for a smaller one.
+REPAIR_ROUNDS = 2
+# How much of a refused answer is shown back to its model, in characters. Past this, only what
+# the answer said it did and which files it touched are shown, with the refusal, and the model
+# is asked for a smaller answer: a prompt is not the place to carry a quarter of a megabyte
+# twice, and an answer that size was the problem in the first place.
+PRIOR_ANSWER_LIMIT = 120_000
+# How much of a refusal's detail -- the failing tests, one paragraph each -- is shown back.
+REFUSAL_DETAIL_LIMIT = 12_000
 
 AUTH_HELP = (
     "GitHub Copilot refused the request, so no model can run.\n"
@@ -511,7 +575,12 @@ BUILD_TIMEOUT_SECONDS = 180
 
 
 class RejectedChange(Exception):
-    pass
+    """A plan that is not applied. `details` is what there is to show the model beyond the one-line
+    reason when it is asked to repair the answer: the failing tests' report, for instance."""
+
+    def __init__(self, message, details=""):
+        super().__init__(message)
+        self.details = details
 
 
 class BuildError(Exception):
@@ -524,6 +593,15 @@ class BuildToolchainError(Exception):
 
 class ModelError(Exception):
     """This model could not produce an answer; another model may still work."""
+
+
+class ModelTimeout(ModelError):
+    """No answer arrived in the time the call had. The next model is asked instead of this one
+    again: a model that is still writing after a quarter of an hour is not one more round away."""
+
+
+class AnswerCutOff(ModelError):
+    """The answer ran past the model's output limit and could not be put back together."""
 
 
 class EffortRefused(ModelError):
@@ -1827,14 +1905,18 @@ def split_for_prompt(files):
     return sorted(shown, key=prompt_order), sorted(omitted)
 
 
-def build_prompt(shown, omitted=(), kind=INTERESTING_RUN, budget=None):
+def build_prompt(shown, omitted=(), kind=INTERESTING_RUN, budget=None, feedback=""):
     """The whole prompt for a run of this kind: the standards every run is held to, then what this
     kind of run does (grow the site, or consolidate it), then the axioms and the site itself.
 
     `budget` is the output budget the run asks for, in tokens (max_output_tokens() unless given);
     0 leaves it unnamed. The prompt says it out loud so the model can size the answer to fit, which
     is the only way the budget reaches a model on GitHub's own routing (see
-    DEFAULT_MAX_OUTPUT_TOKENS)."""
+    DEFAULT_MAX_OUTPUT_TOKENS).
+
+    `feedback` is what this run has already learned, if anything, written for the model that is
+    asked now (repair_feedback, lesson_feedback): it goes after the site and before the line the
+    model reads last, so the site it answers about is always the site as committed."""
     if budget is None:
         budget = max_output_tokens()
     mission = mission_of(kind)
@@ -2291,22 +2373,38 @@ def build_prompt(shown, omitted=(), kind=INTERESTING_RUN, budget=None):
         "file, or merge or delete a page, update every page that refers to it in the same run: "
         "never leave a link, a stylesheet, a script, a layout or an @use pointing at something "
         "that is not there.\n"
-        f"- Keep each file small (at most {MAX_FILE_BYTES // 1000} KB); return the COMPLETE new "
-        "content of every file you change.\n"
-        f"- At most {MAX_CHANGES} files per run, and keep the whole answer inside your output "
-        f"limit{budget_note(budget)}. Decide how much to rewrite from that budget before you "
-        "start writing, and spend it: an answer that is cut off is pieced back together where it "
-        "can be, and discarded where it cannot. A federation too large for one answer is better "
-        "carried out in coherent stages, one per run, than attempted all at once.\n\n"
+        f"- A file you send whole is at most {MAX_FILE_BYTES // 1000} KB. A file that already exists "
+        "is changed by edits (the format below), which carry only the passages that change and "
+        "can take a file past that size; send the COMPLETE new content only of a file that is "
+        "new or rewritten from its first line to its last.\n"
+        f"- At most {MAX_CHANGES} files per run, and keep the whole answer well inside your output "
+        f"limit{budget_note(budget)}: aim for a quarter of it and never pass half, because an "
+        "answer that runs past the limit is pieced back together where it can be and discarded "
+        "where it cannot, and the time it took is gone either way. Edits are how an answer stays "
+        "small: a passage sent as an edit costs what the passage weighs, where a file sent whole "
+        "costs the whole file. Decide how much to change from that budget before you start "
+        "writing. A federation too large for one answer is better carried out in coherent "
+        "stages, one per run, than attempted all at once.\n\n"
         "Respond with ONLY a JSON object, no prose and no markdown fences, shaped as:\n"
         '{"summary": "one sentence describing this change", '
-        '"files": [{"path": "index.html", "content": "<full file content>"}], '
+        '"files": [{"path": "js/modules/thing.js", "content": "<the whole file>"}, '
+        '{"path": "_data/worlds.json", "edits": [{"find": "<a passage of the file as shown above>", '
+        '"replace": "<what takes its place>"}]}], '
         '"delete": ["old-page.html"]}\n'
+        "A file entry carries either \"content\" -- the COMPLETE new content, for a file that is "
+        "new or rewritten from its first line to its last -- or \"edits\", for a file that exists: "
+        "a list of replacements applied in order, each quoting a passage of the file exactly as "
+        "shown above (\"find\") and what takes its place (\"replace\"). Each \"find\" has to "
+        "occur exactly once in the file, so quote enough of it -- a few whole lines -- to be "
+        "unmistakable; an edit that matches nowhere or in two places refuses the whole answer. To "
+        "insert, find the line before and replace it with itself followed by the new lines; to "
+        "take a passage out, replace it with \"\". Prefer edits for every file that already "
+        "exists, and send a file whole only when it is new or when most of it changes.\n"
         "Either list may be empty or absent as long as the other has something in it: a plan that "
         "only deletes is accepted and applied like any other.\n"
-        "It must be valid JSON, or it is discarded. Inside each \"content\" string write every "
-        "line break as \\n, every double quote as \\\" and every backslash as \\\\ (so a "
-        "JavaScript '\\n' or \\d becomes '\\\\n' or \\\\d)."
+        "It must be valid JSON, or it is discarded. Inside every string -- \"content\", \"find\" "
+        "and \"replace\" alike -- write every line break as \\n, every double quote as \\\" and "
+        "every backslash as \\\\ (so a JavaScript '\\n' or \\d becomes '\\\\n' or \\\\d)."
     )
     parts = [f"=== {rel} ===\n{content}" for rel, content in shown]
     total = len(shown) + len(omitted)
@@ -2321,6 +2419,8 @@ def build_prompt(shown, omitted=(), kind=INTERESTING_RUN, budget=None):
             "is shown each run, so a federation that has to reach one of those can be carried on "
             "by a later run."
         )
+    if feedback:
+        user += "\n\n" + feedback
     if consolidating:
         then = ("make the one change that brings it closest to being that: re-federate what is "
                 "already there, aggressively, refactor and clean up, and add nothing")
@@ -2399,6 +2499,20 @@ def consolidation_block():
         "What a visitor can do stays what it is, except where a merge or a retirement takes a "
         "near-duplicate away on purpose: a consolidation that changes behaviour by accident is a "
         "regression, not a cleanup.\n\n"
+        "WHAT THE DEPLOY'S TESTS HOLD IN PLACE. An answer is only written once it passes the tests "
+        "every deploy waits on, and those tests read the shared shell as committed, by name: the "
+        "ids, classes and data attributes the layout writes (sparknav-*, lightbox-veil, "
+        "persona-*, stage-*), the names js/site.js exports on window.interestingSite (lightbox, "
+        "destructive, areYouSure, unlock), the rule blocks and the section comments of "
+        f"{SASS_DIR}/_nav.scss, _lightbox.scss, _stage.scss, _persona.scss and _controls.scss, "
+        "the three lists of _data/worlds.json, and the pages index.html, moods.html, "
+        "sitemap.html, privacy.html, terms.html and error.html. Consolidate around the shell, "
+        "not through it: change those files by edits that leave every id, name, class, section "
+        "and file where it is, never rewrite one of them whole or merge two of them, and never "
+        "retire one of those pages. A consolidation that renames or removes any of it is refused "
+        "by the tests and has to be undone, and the run is spent undoing it. The pages, the "
+        "modules in js/modules/ and the page stylesheets are where the overdue consolidation "
+        "is.\n\n"
         "A run whose entire change is a holistic improvement -- consolidating, unifying, merging, "
         "refactoring, or only deleting -- is a complete and successful run. It needs no new page "
         "alongside it, and must have none. The site becomes more interesting by becoming a single "
@@ -2406,6 +2520,70 @@ def consolidation_block():
         "is repetitive, scattered or inconsistent, re-federating it is the more interesting "
         "change. Build on what is already there rather than starting over.\n\n"
     )
+
+
+def repair_feedback(answer, reason, details="", digest=""):
+    """The block a model reads when it is asked again after its own answer was refused (see main):
+    what it answered, why that was refused, and what to do about it -- answer again, whole, with
+    the refusal put right and the rest kept. The site in the prompt around it is the site as
+    committed, the same one it was shown the first time, so an answer is always a plan against
+    that site and never a patch on its own earlier draft, and the composition of two plans is
+    nothing this script has to get right.
+
+    `answer` is the text of the refused answer, or None if none arrived whole (cut off at the
+    model's output limit); `reason` is the refusal in one line, `details` what else there is to
+    show of it (the failing tests, from failure_digest), and `digest` what the answer said it did
+    and which files it touched, for when the answer is too long to show back (PRIOR_ANSWER_LIMIT).
+    """
+    lines = ["YOUR PREVIOUS ANSWER WAS REFUSED. This run has asked you once already, and what you "
+             "answered was not written. The site shown above is unchanged: it is the site as "
+             "committed, and the plan you answer with now is a whole plan against it, not a patch "
+             "on your earlier answer."]
+    smaller = ("Answer again, much smaller: edits rather than whole files, fewer files, one coherent "
+               "stage of the change rather than all of it, and no more than a quarter of your "
+               "output limit.")
+    if answer is None:
+        lines.append(f"What went wrong: {reason}. Nothing of that answer survived, so it cannot be "
+                     f"shown back to you. {smaller}")
+        return "\n\n".join(lines)
+    lines.append(f"Why it was refused: {reason}.")
+    if details:
+        lines.append("The details:\n" + details)
+    if len(answer) > PRIOR_ANSWER_LIMIT:
+        lines.append(f"Your answer was too long to show back to you ({len(answer):,} characters)"
+                     + (f"; it said: {digest}" if digest else "") + f". {smaller} Put right what the "
+                     "refusal names, and keep the rest of what you meant to do.")
+        return "\n\n".join(lines)
+    lines.append("Your answer was:\n" + answer)
+    lines.append("Answer again with the whole plan, revised: keep every part of it the refusal does "
+                 "not name, change what it does, and nothing else. If the refusal names something "
+                 "you removed, renamed or rewrote, put it back exactly as the site above shows it; "
+                 "if it names something you added, correct it or take it out; if it names an edit "
+                 "that matched nowhere or in two places, quote the passage as the file shows it, "
+                 "with enough around it to be unmistakable; if it names a test, the test's name "
+                 "says what the site is held to, and its message says how your answer fell short.")
+    return "\n\n".join(lines)
+
+
+def plan_digest(plan):
+    """What a plan said it did and which files it touched, in a line: what stands in for the plan
+    itself when it is too long to show back (repair_feedback)."""
+    files = plan.get("files") if isinstance(plan.get("files"), list) else []
+    deletes = plan.get("delete") if isinstance(plan.get("delete"), list) else []
+    touched = [str(entry.get("path")) for entry in files if isinstance(entry, dict)]
+    touched += [str(raw) for raw in deletes]
+    return f"{one_line(plan.get('summary') or '', 200)!r}, touching {one_line(', '.join(touched), 1000)}"
+
+
+def lesson_feedback(reason):
+    """The block a model reads when another model was asked before it this run and failed: the one
+    line of what went wrong, which is worth a sentence even to a model that starts over, because
+    it says what the checks and the deploy's tests hold to in practice, on this site, now."""
+    return ("EARLIER THIS RUN. Another model was asked first and its answer was refused: "
+            f"{reason}. Nothing of it was written, and the site above is the site as committed. "
+            "Do not repeat that: keep the answer well inside your output limit -- edits rather "
+            "than whole files, and one coherent stage rather than everything -- and leave what "
+            "the deploy's tests hold in place where it is.")
 
 
 AUTH_FAILURE = re.compile(r"authentication failed|no authentication information|access denied by policy", re.I)
@@ -2420,7 +2598,7 @@ MODEL_UNAVAILABLE = re.compile(
 EFFORT_REFUSED = re.compile(r"reasoning|effort", re.I)
 
 
-def call_model(model, prompt, effort=None, budget=None):
+def call_model(model, prompt, effort=None, budget=None, timeout=None):
     """Ask one model for its answer through the Copilot CLI and return the text.
 
     `effort` is the reasoning effort to ask for (reasoning_effort() unless given); "" asks for
@@ -2430,26 +2608,33 @@ def call_model(model, prompt, effort=None, budget=None):
     `budget` is the maximum output to ask for in tokens (max_output_tokens() unless given); 0 asks
     for none. It is resolved once here, so a retry asks for the same room to write as the first
     call did.
+
+    `timeout` is how long to wait for the answer, in seconds (MODEL_TIMEOUT_SECONDS unless
+    given): the run passes what is left of its own budget when that is less.
     """
     if effort is None:
         effort = reasoning_effort()
     if budget is None:
         budget = max_output_tokens()
+    if timeout is None:
+        timeout = MODEL_TIMEOUT_SECONDS
     try:
-        return run_copilot(model, prompt, effort, budget)
+        return run_copilot(model, prompt, effort, budget, timeout)
     except EffortRefused as err:
         if not effort:
             raise ModelError(str(err)) from None
         print(f"::notice::{model} did not take reasoning effort {effort} ({one_line(err, 200)}); "
               "asking again without it.")
         try:
-            return run_copilot(model, prompt, "", budget)
+            return run_copilot(model, prompt, "", budget, timeout)
         except EffortRefused as again:
             raise ModelError(str(again)) from None
 
 
-def run_copilot(model, prompt, effort, budget=0):
+def run_copilot(model, prompt, effort, budget=0, timeout=None):
     """One call to the Copilot CLI: the model's answer, or the error classified."""
+    if timeout is None:
+        timeout = MODEL_TIMEOUT_SECONDS
     cmd = [COPILOT_BIN, "--model", model, *effort_flags(effort), *COPILOT_FLAGS]
     # The output budget travels in the environment rather than in argv: the pinned CLI has no flag
     # for it (see DEFAULT_MAX_OUTPUT_TOKENS). Passing it is free where it is ignored, so there is
@@ -2474,7 +2659,7 @@ def run_copilot(model, prompt, effort, budget=0):
         timed_out = False
         try:
             # The prompt goes over stdin: it is far too long for argv.
-            stdout, stderr = proc.communicate(prompt, timeout=MODEL_TIMEOUT_SECONDS)
+            stdout, stderr = proc.communicate(prompt, timeout=timeout)
         except subprocess.TimeoutExpired:
             timed_out = True
             stdout, stderr = stop_process_group(proc)  # keep what it printed: it is checked below
@@ -2486,7 +2671,7 @@ def run_copilot(model, prompt, effort, budget=0):
     # CLI then succeeded, failed or hung.
     refuse_tool_use(events)
     if timed_out:
-        raise ModelError(f"no answer within {MODEL_TIMEOUT_SECONDS}s")
+        raise ModelTimeout(f"no answer within {timeout:g}s")
     # Before the session starts, errors are plain text on stderr; after, they are session.error
     # events. Only that text is classified: stdout also carries the model's own words, and a page
     # that says "this page is not available" is not a Copilot error.
@@ -2609,7 +2794,7 @@ def rejoin_answer(pieces, model):
         print(f"::notice::{model} ran past its output limit, but {how}: the answer was put back "
               f"together from the {len(pieces)} pieces the CLI reported, rather than discarded.")
         return candidate
-    raise ModelError("the answer ran past the model's output limit")
+    raise AnswerCutOff("the answer ran past the model's output limit")
 
 
 def parse_response(text):
@@ -2621,6 +2806,80 @@ def parse_response(text):
     if not isinstance(plan, dict):
         raise ValueError("model response is not a JSON object")
     return plan
+
+
+def find_passage(text, passage):
+    """Every place `passage` occurs in `text`, as (start, end) spans: character for character if it
+    occurs that way anywhere, else line for line with the spaces at line ends and in the
+    indentation forgiven, which are what a model most often misremembers of a file it was shown.
+    The forgiving match hands back the span of the file's own lines, so what replaces it takes
+    the place of whole lines and the file's line endings around it stand."""
+    spans, start = [], 0
+    while passage:
+        at = text.find(passage, start)
+        if at == -1:
+            break
+        spans.append((at, at + len(passage)))
+        start = at + len(passage)
+    if spans:
+        return spans
+    wanted = [line.strip() for line in passage.split("\n")]
+    while wanted and not wanted[0]:
+        wanted.pop(0)
+    while wanted and not wanted[-1]:
+        wanted.pop()
+    if not wanted:
+        return []
+    lines, offsets, at = text.split("\n"), [], 0
+    for line in lines:
+        offsets.append(at)
+        at += len(line) + 1
+    stripped = [line.strip() for line in lines]
+    for i in range(len(lines) - len(wanted) + 1):
+        if stripped[i:i + len(wanted)] == wanted:
+            last = i + len(wanted) - 1
+            spans.append((offsets[i], offsets[last] + len(lines[last])))
+    return spans
+
+
+def apply_edits(rel, text, edits):
+    """The content of `rel` once `edits` are applied to `text`, in order, or raise RejectedChange.
+
+    An edit is {"find": passage, "replace": passage}: the find text gives way to the replace text,
+    and has to occur exactly once in the file as it stands when the edit's turn comes (see
+    find_passage for how far a mismatch of whitespace is forgiven). An edit that matches nowhere,
+    or in more than one place, refuses the whole answer, naming the file and the passage so the
+    model can be asked again (repair_feedback): an edit landed in the wrong place would be a
+    change nobody asked for, and a plan is applied whole or not at all.
+
+    This is what lets an answer stay small (issue #77 by another road): a file that exists costs
+    the answer only the passages that change, where sending it whole cost the whole file, and the
+    files that outgrew MAX_FILE_BYTES -- the shell's own scripts -- are within a run's reach again.
+    """
+    if not isinstance(edits, list) or not edits:
+        raise RejectedChange(f"invalid edits for {rel}: \"edits\" is a non-empty list of "
+                             "{\"find\": ..., \"replace\": ...}")
+    for number, edit in enumerate(edits, 1):
+        if (not isinstance(edit, dict) or not isinstance(edit.get("find"), str)
+                or not isinstance(edit.get("replace"), str)):
+            raise RejectedChange(f"invalid edit {number} of {rel}: an edit is "
+                                 "{\"find\": ..., \"replace\": ...}, both strings")
+        find, replacement = edit["find"], edit["replace"]
+        if not find.strip():
+            raise RejectedChange(f"edit {number} of {rel} finds nothing: \"find\" has to quote a "
+                                 "passage of the file")
+        if len(replacement.encode()) > MAX_FILE_BYTES:
+            raise RejectedChange(f"edit {number} of {rel} is too large")
+        spans = find_passage(text, find)
+        if not spans:
+            raise RejectedChange(f"edit {number} of {rel} matches nowhere: the file has no passage "
+                                 f"reading {one_line(find, 80)!r}, so quote it as the file shows it")
+        if len(spans) > 1:
+            raise RejectedChange(f"edit {number} of {rel} is ambiguous: {one_line(find, 80)!r} occurs "
+                                 f"{len(spans)} times, so quote more of the file around it")
+        start, end = spans[0]
+        text = text[:start] + replacement + text[end:]
+    return text
 
 
 # Control characters that never belong in a web page. Finding one means the model's JSON escaping
@@ -2653,19 +2912,13 @@ def validate_plan(plan, unseen=()):
         raise RejectedChange("model proposed no changes")
     if len(files) + len(deletes) > MAX_CHANGES:
         raise RejectedChange(f"too many changes (max {MAX_CHANGES})")
+    before = dict(read_site())
     ops = []
     for entry in files:
-        if not isinstance(entry, dict) or not isinstance(entry.get("content"), str):
+        if not isinstance(entry, dict):
             raise RejectedChange(f"invalid file entry: {entry!r:.200}")
         target = safe_site_path(entry.get("path"))
         rel = target.relative_to(SITE_DIR).as_posix()
-        content = entry["content"]
-        if len(content.encode()) > MAX_FILE_BYTES:
-            raise RejectedChange(f"file too large: {rel}")
-        if STRAY_CONTROL_CHARACTER.search(content):
-            raise RejectedChange(f"control character in the content of {rel} (broken JSON escaping?)")
-        if rel in PROTECTED_FILES and not content.strip():
-            raise RejectedChange(f"refusing to empty {rel}")
         if rel in FIXED_FILES:
             raise RejectedChange(f"refusing to rewrite {rel}: the fixed files carry the analytics "
                                  "tag, the consent banner, the local-state store with its meta "
@@ -2675,6 +2928,28 @@ def validate_plan(plan, unseen=()):
             raise RejectedChange(f"refusing to overwrite {rel}: its content was not shown to the model")
         if target.is_dir():
             raise RejectedChange(f"{rel} is a folder")
+        # A file arrives whole, as "content", or as "edits" to the file as it is (apply_edits):
+        # the one way to change a file bigger than MAX_FILE_BYTES, and the cheap way to change
+        # any file that exists.
+        edits = entry.get("edits")
+        if edits is not None and "content" in entry:
+            raise RejectedChange(f"{rel} is sent both whole and as edits: send one or the other")
+        if edits is not None:
+            if rel not in before:
+                raise RejectedChange(f"cannot edit {rel}: there is no such file, and a new file is "
+                                     "sent whole as \"content\"")
+            content = apply_edits(rel, before[rel], edits)
+        elif isinstance(entry.get("content"), str):
+            content = entry["content"]
+            if len(content.encode()) > MAX_FILE_BYTES:
+                raise RejectedChange(f"file too large: {rel} (a file that exists is changed by edits, "
+                                     "which have no such limit)")
+        else:
+            raise RejectedChange(f"invalid file entry: {entry!r:.200}")
+        if STRAY_CONTROL_CHARACTER.search(content):
+            raise RejectedChange(f"control character in the content of {rel} (broken JSON escaping?)")
+        if rel in PROTECTED_FILES and not content.strip():
+            raise RejectedChange(f"refusing to empty {rel}")
         ops.append(("write", target, content))
     written = {target for _, target, _ in ops}
     for target in written:
@@ -2691,7 +2966,6 @@ def validate_plan(plan, unseen=()):
         if rel in unseen:
             raise RejectedChange(f"refusing to delete {rel}: its content was not shown to the model")
         ops.append(("delete", target, None))
-    before = dict(read_site())
     try:
         built_after = build_site(apply_to(before, ops))
     except BuildError as err:
@@ -2773,6 +3047,34 @@ def failing_tests(report):
     return named
 
 
+def failure_digest(report, limit=REFUSAL_DETAIL_LIMIT):
+    """The failures in unittest's `report`, one short paragraph each -- the test's name, its
+    docstring if it has one, and the exception line -- within `limit` characters in all. What a
+    model is shown when it is asked to repair the answer: the names say what each test holds
+    the site to, and the exception says how the answer fell short of it."""
+    dashes = UNITTEST_RULE.replace("=", "-")
+    if "\n" + dashes in report:
+        report = report[:report.rfind("\n" + dashes)]  # the trailer: "Ran N tests", "FAILED (...)"
+    paragraphs = []
+    for block in report.split(UNITTEST_RULE)[1:]:
+        lines = block.strip("\n").splitlines()
+        if not lines or not FAILED_TEST.match(lines[0].strip()):
+            continue
+        paragraph, i = [lines[0].strip()], 1
+        doc = []
+        while i < len(lines) and lines[i].strip() != dashes:
+            doc.append(lines[i].strip())
+            i += 1
+        if doc:
+            paragraph.append(one_line(" ".join(doc), 300))
+        for line in lines[i + 1:]:
+            if line and not line[0].isspace() and not line.startswith("Traceback"):
+                paragraph.append(one_line(line, 400))
+                break
+        paragraphs.append("\n".join(paragraph))
+    return "\n\n".join(paragraphs)[:limit]
+
+
 def first_failure(report):
     """The exception line of the first failure in unittest's `report`, or its last line if none."""
     found = FAILED_TEST.search(report)
@@ -2829,7 +3131,7 @@ def require_passing_tests(ops):
           f"::{token}::\n::endgroup::")
     failed = ", ".join(failing_tests(report)) or f"status {proc.returncode}"
     raise RejectedChange(f"the tests every deploy waits on (test.yml) fail with this change: {failed} "
-                         f"({first_failure(report)})")
+                         f"({first_failure(report)})", details=failure_digest(report))
 
 
 def apply_ops(ops):
@@ -2904,6 +3206,10 @@ def main():
     if not SITE_DIR.is_dir():
         sys.exit(f"site directory not found: {SITE_DIR}")
     require_build_toolchain()
+    started = time.monotonic()
+
+    def time_left():
+        return RUN_BUDGET_SECONDS - (time.monotonic() - started)
 
     kind = run_kind()
     mission = mission_of(kind)
@@ -2911,10 +3217,13 @@ def main():
     # Resolved once for the whole run: the prompt names the budget and every call asks for it, so
     # the answer the model plans for is the answer the CLI is told to allow.
     budget = max_output_tokens()
-    prompt = build_prompt(shown, omitted, kind, budget)
+    # Resolved once too, and stepped down within the run after an answer is lost to the output
+    # limit or the clock (lower_effort): the next call, whoever answers it, thinks a step less hard.
+    effort = reasoning_effort()
     candidates = pick_candidates()
     requested = bool((os.environ.get("MODEL") or "").strip())  # named by hand, not drawn from the pool
     attempts, unavailable, tried = 0, [], set()
+    lesson = ""  # the last refusal this run, told to the next model asked
 
     def report_unavailable():
         # Worth saying out loud: when most of the pool is off limits, the pick is hardly random.
@@ -2927,47 +3236,92 @@ def main():
                 f"{pool}See Setup in the README."
             )
 
+    def step_down():
+        # An answer that never arrived has no quality to weigh: the rest of the run asks for one
+        # step less reasoning, which is the one dial this script has on how long an answer takes.
+        nonlocal effort
+        lowered = lower_effort(effort)
+        if lowered != effort:
+            print(f"::notice::Reasoning effort {effort} -> {lowered} for the rest of this run.")
+            effort = lowered
+
     queue, answering = list(candidates), []
     while queue and attempts < MAX_ATTEMPTS:
+        if time_left() < MIN_CALL_SECONDS:
+            print(f"::warning::Out of time: the run's {RUN_BUDGET_SECONDS // 60} minutes for asking "
+                  "models are spent, so no more model is asked.")
+            break
         model = queue.pop(0)
-        print(f"Mission: {mission} ({kind} run)\nModel:   {model}", flush=True)
         tried.add(model)
         attempts += 1  # counted up front, so every path below that asks again is bounded
-        try:
-            plan = parse_response(call_model(model, prompt, budget=budget))
-            ops = validate_plan(plan, unseen=omitted)
-            print("The change holds to every axiom; running the tests every deploy waits on.", flush=True)
-            require_passing_tests(ops)
-        except ModelUnavailable as err:
-            attempts -= 1  # no model was asked, so this does not count as an attempt
-            more = ", trying another model" if queue or answering else ""
-            print(f"{model} is not available{more}: {one_line(err, 200)}")
-            unavailable.append(model)
-        except CopilotAuthError as err:
-            print(f"::error::GitHub Copilot authentication failed: {one_line(err, 300)}")
-            sys.exit(AUTH_HELP)
-        except SiloBreach as err:
-            sys.exit(f"Stopping without applying anything: {err}. The Copilot CLI flags no longer disable every tool.")
-        except BuildToolchainError as err:
-            # Not this model's fault and not the next one's either: nothing can be checked.
-            sys.exit(f"Stopping without applying anything: the build could not be run ({err}).")
-        except (ModelError, ValueError, RecursionError, RejectedChange) as err:
-            answering.append(model)
-            print(f"::warning::{model} failed: {one_line(err, 500)}")
-        else:
+        feedback = lesson_feedback(lesson) if lesson else ""
+        repairs = 0
+        # The same model is asked again, with its refused answer and the refusal, up to
+        # REPAIR_ROUNDS times (see repair_feedback); then the next model is asked.
+        while True:
+            rounds = f" (repair {repairs} of {REPAIR_ROUNDS})" if repairs else ""
+            print(f"Mission: {mission} ({kind} run)\nModel:   {model}{rounds}\n"
+                  f"Effort:  {effort or 'the model' + chr(39) + 's own'}", flush=True)
+            prompt = build_prompt(shown, omitted, kind, budget, feedback)
+            answer = plan = None
             try:
-                apply_ops(ops)
-            except OSError as err:
-                # The site may be half written, so stop here: the workflow only commits after success.
-                sys.exit(f"Could not apply the change from {model}: {one_line(err, 300)}")
-            summary = clean_summary(plan.get("summary"), mission)
-            print(f"Summary: {summary}")
-            set_output("model", model)
-            set_output("summary", summary)
-            set_output("kind", kind)
-            set_output("headline", HEADLINES[kind])
-            report_unavailable()
-            return
+                answer = call_model(model, prompt, effort=effort, budget=budget,
+                                    timeout=min(MODEL_TIMEOUT_SECONDS, max(time_left(), 1)))
+                plan = parse_response(answer)
+                ops = validate_plan(plan, unseen=omitted)
+                print("The change holds to every axiom; running the tests every deploy waits on.", flush=True)
+                require_passing_tests(ops)
+            except ModelUnavailable as err:
+                attempts -= 1  # no model was asked, so this does not count as an attempt
+                more = ", trying another model" if queue or answering else ""
+                print(f"{model} is not available{more}: {one_line(err, 200)}")
+                unavailable.append(model)
+                break
+            except CopilotAuthError as err:
+                print(f"::error::GitHub Copilot authentication failed: {one_line(err, 300)}")
+                sys.exit(AUTH_HELP)
+            except SiloBreach as err:
+                sys.exit(f"Stopping without applying anything: {err}. The Copilot CLI flags no longer disable every tool.")
+            except BuildToolchainError as err:
+                # Not this model's fault and not the next one's either: nothing can be checked.
+                sys.exit(f"Stopping without applying anything: the build could not be run ({err}).")
+            except (ModelError, ValueError, RecursionError, RejectedChange) as err:
+                if not repairs:
+                    answering.append(model)
+                reason = one_line(err, 500)
+                if not isinstance(err, (ModelError, RejectedChange)):
+                    reason = f"the answer was not one JSON object ({reason})"
+                print(f"::warning::{model} failed: {reason}")
+                if not isinstance(err, ModelError) or isinstance(err, (ModelTimeout, AnswerCutOff)):
+                    lesson = reason  # about the answer, so worth a line to the next model; a CLI failure is not
+                if isinstance(err, (ModelTimeout, AnswerCutOff)):
+                    step_down()
+                if isinstance(err, ModelTimeout) or repairs >= REPAIR_ROUNDS or time_left() < MIN_CALL_SECONDS:
+                    break
+                repairs += 1
+                if isinstance(err, AnswerCutOff):
+                    feedback = repair_feedback(None, reason)
+                elif isinstance(err, ModelError):
+                    feedback = ""  # the CLI failed, not the model: the same question, once more
+                elif isinstance(err, RejectedChange):
+                    feedback = repair_feedback(answer, reason, err.details, plan_digest(plan))
+                else:
+                    feedback = repair_feedback(answer, reason)
+                continue
+            else:
+                try:
+                    apply_ops(ops)
+                except OSError as err:
+                    # The site may be half written, so stop here: the workflow only commits after success.
+                    sys.exit(f"Could not apply the change from {model}: {one_line(err, 300)}")
+                summary = clean_summary(plan.get("summary"), mission)
+                print(f"Summary: {summary}")
+                set_output("model", model)
+                set_output("summary", summary)
+                set_output("kind", kind)
+                set_output("headline", HEADLINES[kind])
+                report_unavailable()
+                return
         if not queue:
             # Every model has had a turn. With attempts left, ask again the ones that can answer:
             # a model does not give the same answer twice.

@@ -47,12 +47,14 @@ iterate a more interesting website
   mission — where *interesting* means user engagement time, and nothing else (see
   [Engagement-time axiom](#engagement-time-axiom)) —
   and commits the result to `main`; the pipeline above then tests and deploys it. Models the
-  account cannot use are skipped. A model
-  that returns an unusable answer is replaced by another random model, or asked again if no other
-  is left, for up to three attempts per run. An answer is only written once it passes the very
-  tests the pipeline runs (test.yml's own command, on a copy of the repository with the change
-  applied), and if `main` moves on before the push the rebased commit is tested again, so the run
-  never pushes a commit that would block the deploy.
+  account cannot use are skipped. An answer is only written once it passes the very tests the
+  pipeline runs (test.yml's own command, on a copy of the repository with the change applied).
+  An answer that is refused — by one of the checks, by the build or by those tests — is shown
+  back to the model that wrote it, with the refusal, and that model is asked for the plan again,
+  up to two repairs, before another random model is asked (or the same one again, if no other is
+  left): up to three models per run, inside the fifty minutes the run gives itself for asking.
+  If `main` moves on before the push the rebased commit is tested again, so the run never pushes
+  a commit that would block the deploy.
 - **Runs alternate** — an odd-numbered run is a *growing* run, with the mission **"make the
   website more interesting as a single coherent whole"**, and an even-numbered run is a
   *consolidating* run, with the mission **"consolidate, federate, refactor and clean up the website
@@ -1286,15 +1288,17 @@ out of, because a run told to re-federate the site aggressively cannot do it wit
 files (see [One single experience](#one-single-experience)).
 
 1. The model has no tools or shell: the Copilot CLI runs in an empty directory with every tool
-   disabled, so the model only returns JSON describing files to write/delete. If the model ever
-   manages to use a tool, the run stops and nothing is applied.
+   disabled, so the model only returns JSON describing files to write, edit or delete. If the
+   model ever manages to use a tool, the run stops and nothing is applied.
 2. [`.github/scripts/make_interesting.py`](.github/scripts/make_interesting.py) rejects any path
    that is absolute, contains `..`/hidden segments or anything but lowercase letters, digits, `.`,
    `_` and `-`, resolves outside `/site` (including via symlinks) or has a non-static file type.
    It never deletes `index.html`, `error.html`, `sitemap.xml` or `js/threshold.js`, never writes or
    deletes the four fixed files — the three behind the analytics tag and the one behind the local-state store and its
    meta menu — never touches a file the model was not shown, and applies an answer whole or not at
-   all.
+   all. A file that exists is changed by edits — the passages that change, quoted, and what takes
+   their place — and an edit that matches nowhere in the file, or in two places, refuses the whole
+   answer rather than landing anywhere else.
 3. The workflow fails if anything outside `/site` changed, and only stages `site/` for commit. The
    repository's token is not in the checkout while the model's answer is processed. The model's
    one-line summary is stripped to plain text before it reaches the commit message.
@@ -1315,7 +1319,13 @@ Flash tier.
   `high`, `xhigh`, `max`. The repository variable `REASONING_EFFORT` overrides it (`none` sends no
   flag). A model with no effort dial is asked once more without the flag rather than lost to the
   run, and because the answer takes longer at that effort, a model has a quarter of an hour to
-  answer (`MODEL_TIMEOUT_SECONDS`) and the job an hour for its three attempts.
+  answer (`MODEL_TIMEOUT_SECONDS`). The run gives itself fifty minutes for asking in all
+  (`RUN_BUDGET_SECONDS`): no call starts past that, and a call started near it gets only what is
+  left, so the hourly cadence holds whatever the models do. An answer lost to the output limit or
+  to the clock steps the effort down one notch for the rest of that run (`lower_effort`, never
+  below `medium`), because an answer that never arrives has no quality to weigh: on 2026-10-07
+  three runs in five were lost exactly that way, at `xhigh`, by the heaviest models in the pool.
+  Every run still opens at the effort the repository asks for.
 - **As much room to write as the CLI can ask for.** A run that re-federates half the site writes a
   long answer, and an answer that runs past the model's output limit used to be thrown away. Every
   call now asks for 64,000 output tokens — about a quarter of a megabyte of JSON
@@ -1325,8 +1335,24 @@ Flash tier.
   the budget travels in `COPILOT_PROVIDER_MAX_OUTPUT_TOKENS`, the one variable it reads for one; on
   GitHub's own model routing the cap comes from Copilot's model catalog and the prompt is what
   carries the budget. An answer that runs past the limit even so is no longer lost: the CLI carries
-  a cut-off answer on in a second turn, and the script puts the pieces back together, falling back
-  to rejecting the answer and retrying with another model only when they cannot be rejoined.
+  a cut-off answer on in a second turn, and the script puts the pieces back together; when they
+  cannot be rejoined, the same model is asked once more, for a smaller answer. The prompt asks for
+  a quarter of the budget rather than all of it, and says how to stay that small: **edits**. A
+  file that already exists is changed by quoting the passages that change and what takes their
+  place (`apply_edits`), applied in order, each passage required to occur exactly once in the
+  file (trailing spaces and indentation forgiven); only a new file, or one rewritten end to end,
+  is sent whole. So an answer costs what changes rather than what it touches, and the shell's own
+  scripts, which outgrew the 50 KB a whole file is held to, are within a run's reach again.
+- **A refused answer is repaired before another model is asked.** A refusal is specific — the
+  tests the change fails, by name and message; the edit that matched nowhere; the page it
+  orphaned — and the model that wrote the answer is the one that can put it right with the least
+  change. So it is shown its answer and the refusal (`repair_feedback`) and asked for the whole
+  plan again, against the site as committed, up to `REPAIR_ROUNDS` (two) times; only then is the
+  next model asked, told in a line what the last one got wrong. A model whose answer did not
+  arrive in time is not asked again: a model still writing after a quarter of an hour is not one
+  more round away. Consolidating runs are also told, in the prompt, which files and names the
+  deploy's tests hold in place — the shell's ids, exports, section comments and pages — because
+  that is what their answers were being refused for.
 - **Small models are never picked at random.** Besides not being on the list, any model whose id
   contains a small or mid-tier name is refused: `haiku` and `sonnet`, and their equivalents at
   other providers such as `mini`, `nano`, `luna`, `terra`, `flash`, `lite`, `small`, `medium`,
