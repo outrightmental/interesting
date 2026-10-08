@@ -50,6 +50,17 @@ const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 const PLAIN = { density: 1, scale: 1, turn: 0 };
 const WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
 
+/* How hard the visitor asked for their puzzles. The persona keeps one difficulty for the whole
+   site (js/persona.js) and js/stage.js hands it to a piece on env.difficulty, 1 (gentle) to 5
+   (fierce); a card's env carries none, so the middle of the dial stands in. A level buys `helps`
+   -- how many things a piece will show when it is asked -- and `margin`, how far out a measured
+   answer may be and still count. Read inside piece() only: the subject is the seed's. */
+function asked(env) {
+  const said = env && env.difficulty ? Number(env.difficulty.level) : NaN;
+  const level = Number.isFinite(said) ? Math.max(1, Math.min(5, Math.round(said))) : 3;
+  return { level, helps: 6 - level, margin: Math.max(0, 3 - level) };
+}
+
 /* ---- shared arithmetic ---------------------------------------------------------------------- */
 
 function turn(text, amount) {
@@ -336,6 +347,7 @@ function wheelScene(g, w, h, c, p, state, variant, time) {
 
 function wheelPiece(env) {
   const p = carried(env) || plan(env);
+  const helps = asked(env).helps;
   const state = blank();
   const note = NOTES[p.note];
   const word = keyWordOf(note);
@@ -390,12 +402,16 @@ function wheelPiece(env) {
       }
       if (id === 'hint') {
         const next = [];
-        for (let i = 0; i < word.length; i++) if (!state.hints.includes(i)) next.push(i);
+        if (state.hints.length < helps) {
+          for (let i = 0; i < word.length; i++) if (!state.hints.includes(i)) next.push(i);
+        }
         if (next.length) {
           const i = next[Math.floor(next.length / 2)];
           state.hints.push(i);
           c.hint();
           c.status('letter ' + (i + 1) + ' of the word is ' + word[i]);
+        } else if (state.hints.length >= helps) {
+          c.status('that is all the cabinet will show at this difficulty; the wheel setting follows from any one letter');
         } else {
           c.status('every letter of the word is shown; the wheel setting follows from any one of them');
         }
@@ -653,6 +669,7 @@ function grillePreview(g, w, h, env, p) {
 
 function grillePiece(env, carriedPlan) {
   const p = carriedPlan || grillePlan(env);
+  const helps = Math.min(2, asked(env).helps);
   const board = grilleBoard(p);
   const s = grilleBlank();
   const note = NOTES[p.note];
@@ -709,10 +726,12 @@ function grillePiece(env, carriedPlan) {
       }
       if (id === 'word') s.guess = cleaned(value);
       if (id === 'hint') {
-        if (s.hints < 2) {
+        if (s.hints < helps) {
           s.hints += 1;
           c.hint();
           c.status(s.hints === 1 ? 'the key starts at the ' + NOTCHES[p.start].label : 'and it turns ' + turningWord(p.direction));
+        } else if (helps < 2) {
+          c.status('that is all the cabinet will show at this difficulty; read the four views and type the first word');
         } else {
           c.status('both hints are shown; read the four views and type the first word');
         }

@@ -56,6 +56,17 @@ const IN_RUNGS = new Set(RUNGS);
 const PLAIN = { density: 1, scale: 1, turn: 0 };
 const WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven'];
 
+/* How hard the visitor asked for their puzzles. The persona keeps one difficulty for the whole
+   site (js/persona.js) and js/stage.js hands it to a piece on env.difficulty, 1 (gentle) to 5
+   (fierce); a card's env carries none, so the middle of the dial stands in. A level buys `helps`
+   -- how many things a piece will show when it is asked -- and `margin`, how far out a measured
+   answer may be and still count. Read inside piece() only: the subject is the seed's. */
+function asked(env) {
+  const said = env && env.difficulty ? Number(env.difficulty.level) : NaN;
+  const level = Number.isFinite(said) ? Math.max(1, Math.min(5, Math.round(said))) : 3;
+  return { level, helps: 6 - level, margin: Math.max(0, 3 - level) };
+}
+
 function clean(value) {
   return String(value == null ? '' : value).toLowerCase().replace(/[^a-z]/g, '');
 }
@@ -287,6 +298,7 @@ function anagramPreview(g, w, h, env, plan) {
 }
 
 function anagramPiece(env, plan) {
+  const helps = Math.min(2, asked(env).helps);
   const n = plan.tiles.length;
   const s = { heat: 0.5, phase: 0, guess: '', hints: 0, slots: null, fired: '', line: 'tap nothing; type the word and check it', t: 0 };
   const draw = (c) => anagramScene(c.g, c.w, c.h, c, plan, s, env.variant);
@@ -327,10 +339,12 @@ function anagramPiece(env, plan) {
         c.status(s.guess ? s.guess + ', not yet fired' : 'nothing typed yet');
       }
       if (id === 'hint') {
-        if (s.hints < 2) {
+        if (s.hints < helps) {
           s.hints += 1;
           c.hint();
           c.status(s.hints === 1 ? 'the word starts with ' + plan.word[0] : 'and it ends with ' + plan.word[n - 1]);
+        } else if (helps < 2) {
+          c.status('that is all the kiln will show at this difficulty; the rest is yours');
         } else c.status('both ends are shown; the middle is yours');
       }
       draw(c);
@@ -466,6 +480,7 @@ function ladderPreview(g, w, h, env, plan) {
 }
 
 function ladderPiece(env, plan) {
+  const helps = Math.min(3, asked(env).helps);
   const a = plan.rungs[0];
   const b = plan.rungs[3];
   const s = { first: '', second: '', hints: 0, phase: 0, lit: 0, line: 'change one letter a step; every rung a word' };
@@ -509,11 +524,13 @@ function ladderPiece(env, plan) {
         c.status(s.second ? 'second rung: ' + s.second : 'nothing on the second rung yet');
       }
       if (id === 'hint') {
-        if (s.hints < 3) {
+        if (s.hints < helps) {
           const at = changedAt(plan.rungs[s.hints], plan.rungs[s.hints + 1]) + 1;
           s.hints += 1;
           c.hint();
           c.status((s.hints === 1 ? 'one way up: the first step changes letter ' : s.hints === 2 ? 'then the second step changes letter ' : 'and the last step changes letter ') + at);
+        } else if (s.hints >= helps) {
+          c.status('that is all the kiln will show at this difficulty; the words are yours');
         } else c.status('every step has been shown; the words are yours');
       }
       draw(c);
