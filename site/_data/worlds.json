@@ -21,7 +21,7 @@
     { "file": "pulse-loom.html", "name": "the pulse loom", "orientation": "counting in echoes", "mood": "metrical", "aspect": "1 / 1",
       "what": "Weave two beat patterns, or watch how pictures of a clockwise wheel can seem to turn backwards." },
     { "file": "pendulum-hall.html", "name": "the pendulum hall", "orientation": "counting in echoes", "mood": "metrical", "aspect": "16 / 10",
-      "what": "Release a row of pendulums tuned one beat apart, predict the half-breath pattern, and watch them fall back into step." },
+      "what": "Release a row of pendulums tuned a beat apart, or link a pair with a spring and predict whether they pass a swing between them." },
     { "file": "star-lantern.html", "name": "the lantern ritual", "orientation": "wants a rite", "mood": "ceremonial", "aspect": "3 / 4",
       "what": "Light stars as lanterns in an order you choose, then let them rise." },
     { "file": "wish-terrarium.html", "name": "the terrarium", "orientation": "minding something", "mood": "tending", "aspect": "4 / 5",
