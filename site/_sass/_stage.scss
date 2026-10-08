@@ -28,6 +28,11 @@
 // inner scales away and the next piece arrives from a little below. All of it stops still for a
 // visitor who asked for less motion.
 //
+// Every press on the scene does something (issue #89). The piece answers most of them; the ones it
+// has nothing to do with the stage answers itself, with .stage-reject -- one small ring at the
+// point pressed, which opens, fades and is gone. Unresponsiveness is uninteresting, and a press
+// that lands on nothing is the one thing the picture may not do.
+//
 // Nothing of the ceremony is laid over the scene, and nothing of it closes the piece down: Done is
 // not the End (issue #86). The done mark used to be a 64px disc and a pill pinned in the scene's
 // lower-right corner, over the piece's own finale, and the knobs went inert under it. A finished
@@ -253,6 +258,47 @@
   display: block;
   touch-action: manipulation; // a tap reaches the piece; a swipe still scrolls the page
   cursor: pointer;
+}
+
+// Every press on the scene does something (issue #89): unresponsiveness is uninteresting. Where
+// the press has nothing to reach -- a piece with no tap() of its own, a tap knob still locked
+// behind another, a module still loading -- js/stage.js answers for the piece with this and
+// nothing else: one ring at the point pressed, opening and fading out, and gone a fifth of a
+// second later. It is the smallest acknowledgement there is, and that is the whole of the brief:
+// a press that lands on nothing must still be visibly received, and receiving it must not
+// interrupt a piece a visitor is in the middle of or read as the piece's own answer. So it is a
+// hairline ring in the muted ink the rail's own text is written in, not a flash, not a shake of
+// the frame, and not in either accent -- those are the colours the pieces answer in.
+.stage-reject {
+  position: absolute;
+  z-index: 2; // over the canvas, under the burst (which is pinned over the whole stage at 3)
+  width: 2.5rem;
+  height: 2.5rem;
+  margin: -1.25rem 0 0 -1.25rem; // centred on the point pressed, which is its left and top
+  border: 2px solid var(--md-sys-color-on-surface-variant);
+  border-radius: var(--md-sys-shape-corner-full);
+  pointer-events: none; // the next press goes to the scene, as every press does
+  animation: stage-reject 240ms var(--md-sys-motion-easing-standard) both;
+}
+
+// Less motion asked for: the mark is the change, held still and then taken away, the way the
+// theme's crossfade lands on its colour without the shift and the ceremony's burst does not run
+// at all. js/stage.js writes the class off the same query, so the two cannot fall out of step.
+.stage-reject.is-still {
+  animation: none;
+  opacity: 0.7;
+}
+
+@keyframes stage-reject {
+  from {
+    opacity: 0.8;
+    transform: scale(0.5);
+  }
+
+  to {
+    opacity: 0;
+    transform: scale(1);
+  }
 }
 
 .stage-side {
@@ -893,5 +939,11 @@
   .stage[data-verdict='wrong'] .stage-check-row,
   .stage-next:enabled {
     animation: none;
+  }
+
+  // The same answer as .is-still above, for a page whose script never read the query.
+  .stage-reject {
+    animation: none;
+    opacity: 0.7;
   }
 }
