@@ -1,0 +1,210 @@
+// The ornament of the rite (README: "Ritual axiom"): the circle a feature is drawn inside, the
+// plate a scene and a card are framed as, the circle the constellation is cast in when the logo
+// opens, the ring behind the persona's sky, the seals the progress dots became, the seal the done
+// chip wears, and the sigil that numbers a working. Written once and reached by every page through
+// css/site.scss, after every partial it dresses.
+//
+// All of it is paint behind or beside the content, and none of it is a control. Every ring is
+// pointer-events: none, so a press lands on the content it is drawn behind; nothing here is
+// pinned to the viewport, so the two-item rule of _nav.scss stands and at rest nothing floats over
+// a page but the logo and the persona; and the one slow turn in it stops under prefers-reduced-motion,
+// because an ornament that moves for a visitor who asked for stillness is an ornament that has
+// stopped giving way. The rite's words wear type.rite and what to do stays in the sans: that half
+// of the axiom lives where the type does, in _type.scss and the partials that set each heading.
+//
+// The colours are the roles every mood derives (_tokens.scss), so the rings take the page's palette
+// -- the world's, the reading's, or the featured piece's -- and nothing here names a colour.
+
+@use 'type';
+
+// ---- the circle a feature is drawn inside ------------------------------------------------
+// Two faint rings off the right-hand side of the feature: the solid one in the primary and the
+// dashed one in the tertiary, turning once in two minutes. They sit on the stage, the two list
+// pages and the two pages of prose -- every <main> there is -- as pseudo-elements, which an
+// absolutely positioned child keeps out of the grid main lays its children in, and the feature's
+// own overflow clips what falls off the edge, so a ring can never widen a phone's page.
+.stage,
+.list-page-main,
+.prose-main {
+  overflow: hidden;
+}
+
+.stage::before,
+.stage::after,
+.list-page-main::before,
+.list-page-main::after,
+.prose-main::before,
+.prose-main::after {
+  content: '';
+  position: absolute;
+  z-index: 0; // under .stage-inner (1), the burst (3) and the way on; the list pages lift their own children above it below
+  border-radius: var(--md-sys-shape-corner-full);
+  pointer-events: none;
+}
+
+.stage::before,
+.list-page-main::before,
+.prose-main::before {
+  top: 4vh;
+  right: -24vmin;
+  width: 78vmin;
+  height: 78vmin;
+  border: 1px solid color-mix(in oklab, var(--md-sys-color-primary) 22%, transparent);
+}
+
+.stage::after,
+.list-page-main::after,
+.prose-main::after {
+  top: calc(4vh + 9vmin);
+  right: -15vmin;
+  width: 60vmin;
+  height: 60vmin;
+  border: 1px dashed color-mix(in oklab, var(--md-sys-color-tertiary) 26%, transparent);
+  animation: rite-turn 120s linear infinite;
+}
+
+// The list pages and the prose pages lay their children out in flow, which a positioned ring at 0
+// would paint over; lifting the children a layer puts the circle behind the words.
+.list-page-main > *,
+.prose-main > * {
+  position: relative;
+  z-index: 1;
+}
+
+@keyframes rite-turn {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+// ---- the plate ---------------------------------------------------------------------------
+// A hairline inside the edge of a scene and of a card's picture, so each reads as a plate from a
+// deck rather than a bare rectangle. Over the canvas and under everything that answers a press:
+// the stage's rejection mark is at 2, and the card's own state layer at 1 is the link's, not the
+// picture's.
+.stage-scene::after,
+.card-media::after {
+  content: '';
+  position: absolute;
+  inset: 6px;
+  z-index: 1;
+  border: 1px solid color-mix(in oklab, var(--md-sys-color-primary) 16%, transparent);
+  border-radius: calc(var(--md-sys-shape-corner-large) - 5px);
+  pointer-events: none;
+}
+
+.card-media::after {
+  border-radius: 0; // a card's picture is square-cornered at the bottom, where its body begins
+  border-top-left-radius: calc(var(--md-sys-shape-corner-large) - 5px);
+  border-top-right-radius: calc(var(--md-sys-shape-corner-large) - 5px);
+}
+
+// ---- the seals ---------------------------------------------------------------------------
+// The progress dots are small seals: a diamond for every knob, lit as it is set. The done chip at
+// the end of their row wears a seal of its own, a ring of light in the primary -- still laid out
+// with the rail and never over the scene (the continued-interaction axiom, _stage.scss).
+.stage-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  transform: rotate(45deg);
+}
+
+.stage-dot.is-set {
+  box-shadow: 0 0 8px color-mix(in oklab, var(--md-sys-color-primary) 55%, transparent);
+}
+
+.stage-done {
+  box-shadow:
+    0 0 0 1px color-mix(in oklab, var(--md-sys-color-primary) 45%, transparent),
+    0 0 16px color-mix(in oklab, var(--md-sys-color-primary) 30%, transparent);
+}
+
+// ---- the sigil ---------------------------------------------------------------------------
+// One small line beside the world's name that gives a working its number. The number is the seed
+// in the piece's own address (world.html#<seed>), so the one piece of numerology on the site is
+// also the one way to send a piece to someone; js/stage.js writes it when a piece begins and takes
+// it away with the piece. The head is a grid, and this takes the column beside the name.
+.stage-head {
+  grid-template-columns: auto minmax(0, 1fr);
+}
+
+.stage-head > * {
+  grid-column: 1 / -1;
+}
+
+.stage-world {
+  grid-column: 1;
+}
+
+.stage-sigil {
+  grid-column: 2;
+  align-self: center;
+  justify-self: start;
+  margin: 0;
+  color: var(--md-sys-color-on-surface-variant);
+  font-family: type.$mono;
+  letter-spacing: 0.1em;
+  @include type.scale(label-medium);
+}
+
+// The glyph in front of it is paint: read as nothing by a screen reader that honours the alternative
+// text, and skipped by one that does not, because the word before the number is the sigil's own.
+.stage-sigil::before {
+  content: '\2726  ' / '';
+  color: var(--md-sys-color-tertiary);
+}
+
+// ---- the circle the constellation is cast in -----------------------------------------------
+// When the logo opens, two rings are drawn from the logo's heart behind the scatter, so the
+// constellation reads as a circle cast from the mark. They live inside the mark's own layer, under
+// every ray (2) and every chip (3), and only while the mark is open and the script has placed a
+// constellation; the cascade a visitor without scripting gets is a list and needs no circle.
+html[data-nav='live'] .sparknav[open]::before,
+html[data-nav='live'] .sparknav[open]::after {
+  content: '';
+  position: absolute;
+  top: 22px;
+  left: 22px;
+  z-index: 1;
+  border-radius: var(--md-sys-shape-corner-full);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+html[data-nav='live'] .sparknav[open]::before {
+  width: 76vmin;
+  height: 76vmin;
+  border: 1px solid color-mix(in oklab, var(--md-sys-color-primary) 20%, transparent);
+}
+
+html[data-nav='live'] .sparknav[open]::after {
+  width: 52vmin;
+  height: 52vmin;
+  border: 1px dashed color-mix(in oklab, var(--md-sys-color-tertiary) 24%, transparent);
+}
+
+// ---- the ring behind the persona's sky ----------------------------------------------------
+// Behind the stars a visitor places, so the sky reads as a sky being cast: under the canvas that
+// draws the lines between stars and under every star, which are positioned after it in the tree.
+.persona-sky::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 70%;
+  aspect-ratio: 1;
+  border-radius: var(--md-sys-shape-corner-full);
+  border: 1px dashed color-mix(in oklab, var(--md-sys-color-primary) 22%, transparent);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+// Less motion asked for: every ring is where it is, and nothing turns.
+@media (prefers-reduced-motion: reduce) {
+  .stage::after,
+  .list-page-main::after,
+  .prose-main::after {
+    animation: none;
+  }
+}

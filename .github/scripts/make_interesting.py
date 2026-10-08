@@ -189,6 +189,26 @@ INTERESTING = ("how long a person stays engaged -- how much they want to keep go
 LEGIBLE = ("legible to a stranger -- a first-time visitor on a phone can tell what the site is, what "
            "any page is for, what to do on it and where to go next, without being told twice")
 
+# What the site has to feel like. MISSION names the aim, INTERESTING the measure, WHOLE the shape
+# and LEGIBLE the test a stranger puts it to; this names the atmosphere, and the one limit on it:
+# everything on the site feels like an esoteric magical ritual -- the arrival is a rite, the
+# question is a divination, a piece is a working, a solve is a seal, the feed is the deck -- and
+# the mystery is all in the dressing. Esoteric is a vibe, never a veil: nothing a visitor needs to
+# know is ever obscured, every puzzle stands on its own legs, and the rite is fun first and never
+# tiresome. A site told to feel esoteric drifts, left to itself, towards riddles in place of
+# instructions and ceremony in place of play, which is why the limit is stated in the same breath
+# as the feel.
+#
+# Like WHOLE, INTERESTING and LEGIBLE it is a standard stated to the model rather than one held to
+# in code: no check can settle whether a page feels like a rite, or whether a flourish has cost a
+# visitor a moment of clarity. It is stated before a run chooses what to do and again in the line
+# it reads last, with the four holds a run can check its own change against (see RITUAL, NOT
+# RIDDLE in build_prompt). The README section "Ritual axiom" is the long form.
+RITUAL = ("an esoteric magical ritual -- every arrival, question, piece, solve and card feels like "
+          "a small rite, and the mystery is all in the dressing: nothing a visitor needs to know "
+          "is ever obscured, every puzzle stands on its own legs, and the rite is fun first and "
+          "never tiresome")
+
 # What a run does is drawn from a bag of marbles, the mechanism xj music uses to choose among
 # memes (docs.xjmusic.com/making-xj-music/memes): every mode puts as many marbles in the bag as
 # its weight says, one marble is drawn at random, and the mode it belongs to is the run's. A mode
@@ -2247,6 +2267,29 @@ def build_prompt(shown, omitted=(), run=None, budget=None, feedback=""):
         "line says what is true now; nothing reads 'loading' or ends in an ellipsis unless "
         "something is loading, and nothing that scripting fills is written as if it already had.\n"
         "- Never a dead end: see POWERED DOWN, NEVER BROKEN.\n\n"
+        f"RITUAL, NOT RIDDLE. The site feels like {RITUAL}. The vibe lives in the frame -- the "
+        "names, the ornament, the ceremony, the serif the rite's words are set in -- and never in "
+        "the content, so hold every change to these four, and undo what already breaks them:\n"
+        "- Esoteric is a vibe, never a veil: instructions, goals, labels and feedback are plain "
+        "words a stranger reads once. A control says its plain verb (check, skip the question, "
+        "seed a sky to begin); a goal says what counts as solved; a wrong answer is told what the "
+        "piece saw, never the answer and never a riddle. Nothing is written to be decoded before "
+        "it can be read, no lore is needed to play, and a destructive control keeps its plain "
+        "name (\"clear the sky\" stays \"clear the sky\").\n"
+        "- The puzzle stands on its own legs: a piece is solvable from what is on the scene and in "
+        "its brief, and the dressing carries no information the puzzle needs and hides none it "
+        "gives. A world's name, a piece's title and a card's line may be as arcane as you like; "
+        "its rules and its goal may not.\n"
+        "- Fun first, never tiresome: no gate, no incantation to type, no waiting, no step that "
+        "exists only for atmosphere, no ceremony longer than a breath. A flourish that costs a "
+        "visitor time, clarity or a laugh is cut, however handsome it is.\n"
+        "- The ornament gives way: rings, seals and sigils sit behind and beside the content, never "
+        "on it; they hold still for a visitor who asked for less motion; every control keeps its "
+        "44px target and its contrast. The rite's words -- a world's name, a piece's title, the "
+        "question, a heading -- are set in the serif _type.scss gives them (type.rite); what to do "
+        "is set in the sans. A change that makes the site feel more like a rite without taking one "
+        "bit of clarity away is a good change; one that trades clarity for mystery fails this "
+        "standard even though no check can see it.\n\n"
         "POWERED DOWN, NEVER BROKEN. Where a component depends on something the visitor has not "
         "done yet -- a saved sky, a kept list, storage this browser does not offer -- its only "
         "announcement of that is the solution, in place: the component presents as unpowered, not "
@@ -2290,7 +2333,10 @@ def build_prompt(shown, omitted=(), run=None, budget=None, feedback=""):
         "- The one visual language is Material Design 3 (m3.material.io), written once in "
         f"\"{SASS_DIR}/\": the tokens in _tokens.scss (every M3 colour role derived with "
         "color-mix() from four seeds, --bg, --bg2, --accent and --accent2; the shape scale; the "
-        "motion scheme; the elevation levels), the type scale as a mixin in _type.scss, and the "
+        "motion scheme; the elevation levels), the type scale as a mixin in _type.scss -- with "
+        "type.rite, the one serif face the rite's words wear over M3's sans (see RITUAL, NOT "
+        "RIDDLE above), and the ornament partial _rite.scss, the rings, seals and sigils every "
+        "page shares -- and the "
         "components -- the floating logo and the chips of its constellation, the tonal, filled, "
         "outlined and text buttons, the chips, "
         "the slider, the text field, the sheet a page sits on, the filled card, the dialog, the "
@@ -2775,7 +2821,8 @@ def build_prompt(shown, omitted=(), run=None, budget=None, feedback=""):
         f"as {WHOLE} -- one navigation, one visual language, one through-line -- and then "
         f"{then_clause(run)}. "
         f"Keep it {LEGIBLE}: one name per page, one way to do each thing, content before chrome, "
-        "and never a dead end. Respond with the JSON object only."
+        f"and never a dead end. Keep it {RITUAL}: the rite in the frame, the instruction in the "
+        "sentence, and no riddle where a rule should be. Respond with the JSON object only."
     )
     return system + "\n\n" + user
 
@@ -3250,7 +3297,15 @@ FRAMEWORK_PINS = (
     "mount, forget, arrival, probes, signals and reducedMotion and the threshold:reading event. "
     "The pages index.html, moods.html (with its <button id='forget' type='button' "
     "class='warning'>forget my reading</button>), sitemap.html, privacy.html, terms.html and "
-    "error.html stay, and stay listed and linked. " + STUB_BROWSER_LIMITS
+    "error.html stay, and stay listed and linked. The ritual axiom's readable half: "
+    f"\"{SASS_DIR}/_type.scss\" declares $rite: and @mixin rite; the rules .stage-title {{ in "
+    "_stage.scss, .card-title { in _feed.scss, .persona-sheet-title { in _persona.scss and h1 { in "
+    "_base.scss each include type.rite, the button, a.action rule in _controls.scss keeps "
+    "font-family: inherit and that file never includes type.rite; "
+    f"\"{SASS_DIR}/_rite.scss\" is @use'd from css/site.scss with single quotes, holds no "
+    "position: fixed, says pointer-events: none, and answers prefers-reduced-motion: reduce "
+    "with animation: none; the built css/site.css names the serif stack and styles .stage-sigil, "
+    f"which \"{STAGE_INCLUDE}\" writes as id='stage-sigil' in the head. " + STUB_BROWSER_LIMITS
 )
 HELD_IN_PLACE = {"item": ITEM_PINS, "nav": NAV_PINS, "persona": PERSONA_PINS, "overall": FRAMEWORK_PINS}
 

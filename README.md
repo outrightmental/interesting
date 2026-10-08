@@ -129,7 +129,10 @@ npm run build -- --out ./build      # or pick the folder yourself
 
 The site's one visual language is [Material Design 3](https://m3.material.io/), and it is written
 once, in [`site/_sass`](site/_sass). It replaced a look that had grown by accretion — a frosted
-slab per page, small-caps labels, pill borders on everything, a footer index two groups deep.
+slab per page, small-caps labels, pill borders on everything, a footer index two groups deep. Worn
+over it is the one thing M3 does not supply, the atmosphere: the [ritual axiom](#ritual-axiom)'s
+serif for the rite's words and its rings, seals and sigil, which dress the M3 parts without
+replacing one of them.
 
 - **One tonal scheme, derived.** `_tokens.scss` works the way M3's dynamic colour works: four
   seeds (`--bg`, `--bg2`, `--accent`, `--accent2`) and every colour role derived from them with
@@ -161,8 +164,14 @@ slab per page, small-caps labels, pill borders on everything, a footer index two
   M3 slider with its 16px track and 4px handle (`js/site.js` keeps `--range-pct` on each one so
   the active track can fill to the handle). Every pressable thing carries a state layer, and the one focus indicator
   is a 3px primary ring.
-- **No font is fetched.** Roboto is M3's default and is used where it is installed; nothing is
-  loaded from a third party, which is the analytics axiom's rule for the site's own code too.
+- **One serif, for the rite's words.** The [ritual axiom](#ritual-axiom) sets the words that
+  carry the atmosphere — a heading, a piece's title, a card's name, the question — in a serif,
+  `type.rite`, and leaves everything a visitor acts on in M3's sans, so the two can be told apart
+  by their face. The ornament that goes with it (rings, seals, the sigil) is one partial,
+  `_rite.scss`, drawn behind and beside the content and never over it.
+- **No font is fetched.** Roboto is M3's default and is used where it is installed, and the serif
+  is a system stack (Iowan Old Style, Palatino, Book Antiqua, Georgia) for the same reason; nothing
+  is loaded from a third party, which is the analytics axiom's rule for the site's own code too.
 - **One build fix came with it.** Compressed Sass opens with a byte-order mark when a sheet holds
   a non-ASCII character, and inside the one page that inlines its styles (`error.html`) that mark
   glued itself to the first selector, which the browser then dropped — the whole `:root` block.
@@ -649,6 +658,81 @@ saying where to go next, and the home page explained none of its own words.
   point at the cards below instead. That is the whole of the shared chrome, written once in
   [`site/_includes/layout.njk`](site/_includes/layout.njk), and a page sets nothing about
   navigation: no footer lists, no notes, no includes. A run is asked to keep it that size.
+
+### Ritual axiom
+
+Engagement time says how good the site has to be, *One single experience* what shape it has to be
+in and *Legible to a stranger* what it has to read like. This says what it has to **feel** like:
+**an esoteric magical ritual**. The arrival is a rite, the question is a divination, a piece is a
+working, a solve is a seal, the feed is the deck, and the whole site is dressed that way — in its
+names, its ornament, its ceremony and the face its words are set in. And the axiom is as much about
+the limit as the feel, because a site told to feel esoteric drifts, left to itself, towards riddles
+in place of instructions and ceremony in place of play: **esoteric is a vibe, never a veil.** The
+mystery is all in the dressing. Nothing a visitor needs to know is ever deliberately obscured, every
+puzzle stands on its own legs, and the rite is fun first and never tiresome.
+
+- **Four holds**, each one a thing a change can be checked against:
+  - **Esoteric is a vibe, never a veil.** Instructions, goals, labels and feedback are plain words a
+    stranger reads once. A control says its plain verb — *check*, *skip the question*, *seed a sky
+    to begin* — a goal says what counts as solved, and a wrong answer is told what the piece saw,
+    never the answer and never a riddle. Nothing is written to be decoded before it can be read, no
+    lore is needed to play, and a destructive control keeps its plain name: *clear the sky* stays
+    *clear the sky*, which is also what keeps the [destructive-caution
+    axiom](#destructive-caution-axiom)'s sweep of words honest.
+  - **The puzzle stands on its own legs.** A piece is solvable from what is on the scene and in its
+    brief, and the dressing carries no information the puzzle needs and hides none it gives. A
+    world's name, a piece's title and a card's line may be as arcane as they like; its rules and
+    its goal may not. The [completion axiom](#completion-axiom) holds the mechanics of that (a
+    stated goal, a solution the law can prove); this holds the words around them.
+  - **Fun first, never tiresome.** No gate, no incantation to type, no waiting, no step that exists
+    only for atmosphere, no ceremony longer than a breath. A flourish that costs a visitor time,
+    clarity or a laugh is cut, however handsome it is — the same reasoning the [engagement-time
+    axiom](#engagement-time-axiom) applies to copy that defers a visitor.
+  - **The ornament gives way.** Rings, seals and sigils sit behind and beside the content, never
+    on it; they hold still for a visitor who asked for less motion; every control keeps its 44px
+    target and its contrast. The ornament never floats over a page at rest, so the two-item rule
+    of the [constellation](#the-logo-and-the-constellation) is untouched.
+- **The typographic rule is how the limit is made visible.** The rite's words — a page's `<h1>`,
+  a piece's title, a card's name, the persona sheet's title, the question the threshold asks, a
+  section heading — are set in one serif face, `type.rite` in
+  [`site/_sass/_type.scss`](site/_sass/_type.scss), a system stack (Iowan Old Style, Palatino,
+  Book Antiqua, Georgia) that fetches nothing, as M3's Roboto fetches nothing. Everything that
+  tells a visitor what to do — a button, a knob's ask, a brief, a goal, a status line, a chip in
+  the constellation — stays in the sans. So the atmosphere and the instruction can be told apart
+  by the face they are set in, on every page, and a word in the serif is never one a visitor has
+  to act on. `RealSiteTest` holds the stylesheets to that: the headings include the mixin, the
+  controls inherit the sans and never include it.
+- **The ornament is one partial.** [`site/_sass/_rite.scss`](site/_sass/_rite.scss) is the
+  rings, the seals and the sigil, written once and reached by every page through `css/site.scss`:
+  the two faint circles a feature is drawn inside (the stage and the two list pages alike), the
+  plate a scene and a card are framed as, the circle the constellation is cast in when the logo
+  opens, the ring behind the persona's sky, the diamond seals the progress dots became and the
+  seal the done chip wears, and the **sigil** — one small line beside the world's name that gives
+  a working its number, which is the seed in the piece's own address, so the one piece of ritual
+  numerology on the site is also the one way to send a piece to someone. Every ring is drawn with
+  `pointer-events: none` behind or beside the content, nothing in the partial is
+  `position: fixed`, and the one slow rotation in it stops under `prefers-reduced-motion`.
+- **Stated in the prompt.** `RITUAL` names the standard beside `WHOLE`, `INTERESTING` and
+  `LEGIBLE` in [`.github/scripts/make_interesting.py`](.github/scripts/make_interesting.py), and
+  the system prompt spells out the four holds under `RITUAL, NOT RIDDLE`, after the legibility
+  holds it leans on and before the `Rules:` block, so it is in hand while a run is still choosing,
+  and again in the line a run reads last: *the rite in the frame, the instruction in the sentence,
+  and no riddle where a rule should be.*
+- **Deliberately not held to in code.** No check could judge whether a page feels like a rite, or
+  whether a flourish cost a visitor a moment of clarity, so the prompt is where this standard
+  lives, exactly as `WHOLE`, `INTERESTING` and `LEGIBLE` do: it is not among the nine coded axioms,
+  and `RitualStandardTest` holds the prompt to the standard the way `LegibilityStandardTest` does.
+  The one half a stylesheet can be read for — the serif on the rite's words, the sans on the
+  controls, the ornament held still — `RealSiteTest` reads off the site as committed.
+- **What it changed on the site as committed.** The threshold asks as a rite begins, the stage
+  frames a working inside its circle and numbers it, the done chip is a seal and the dots are
+  seals too, the feed's cards are plates, the constellation is cast in a circle, the pages that
+  explain (the site map, the mood atlas, privacy, terms, the 404) open in the same voice, and every
+  world's pieces and cards were passed over for the same register — with every goal still one
+  plain line, every `say` still saying what the piece saw, and every control still named by its
+  verb. The module copy was the largest part of the pass and the most constrained: the piece
+  harness played every world's pieces through the law before and after, and refused any wording
+  that changed what a piece is.
 
 ### Powered down, never broken
 

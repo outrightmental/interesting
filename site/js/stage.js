@@ -507,6 +507,7 @@ const ui = stage ? {
   inner: document.getElementById('stage-inner'),
   head: document.getElementById('stage-head'),
   world: document.getElementById('stage-world'),
+  sigil: document.getElementById('stage-sigil'), // the working's number: the seed, beside the name
   read: document.getElementById('stage-read'),
   title: document.getElementById('stage-title'),
   brief: document.getElementById('stage-brief'),
@@ -818,6 +819,12 @@ function begin(opened) {
   // rather than to the world's one line (issue #80).
   const named = piece.title || (card && card.title) || world.name;
   ui.title.textContent = named;
+  // The sigil: the working's number beside the world's name, which is the seed in this piece's own
+  // address -- so the one piece of numerology on the site is also the way to send a piece to someone.
+  if (ui.sigil) {
+    ui.sigil.textContent = 'working ' + seed;
+    ui.sigil.hidden = false;
+  }
   ui.brief.textContent = piece.brief || (card && (card.quote || card.text || card.mono)) || '';
   // The goal, in one line under the rules: what counts as solved. A puzzle without one is a toy,
   // so the line is only ever hidden for a piece that has not said.
@@ -1881,6 +1888,10 @@ function close() {
   ui.canvas.setAttribute('aria-label', 'the scene');
   ui.scene.style.removeProperty('--piece-aspect');
   ui.scene.style.removeProperty('--piece-ratio');
+  if (ui.sigil) {
+    ui.sigil.textContent = '';
+    ui.sigil.hidden = true;
+  }
   ui.brief.textContent = '';
   if (ui.goalText) ui.goalText.textContent = '';
   if (ui.goal) ui.goal.hidden = true;

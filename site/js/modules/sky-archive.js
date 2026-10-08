@@ -277,7 +277,7 @@ function wheelPiece(env, p) {
   const draw = (c) => wheelScene(c.g, c.w, c.h, c, p, s, env.variant);
   return {
     title: wheelTitle(p),
-    brief: 'Twenty-four letters round the rim, one notch apart, and three stars inside the wheel, each pointing along its spoke at one letter. The wheel is seized at the setting it kept since midnight. One turn of it, so many notches one way round, brings star 1, star 2 and star 3 onto the letters of the word the archive asks for, in order.',
+    brief: 'The archive asks, and the wheel answers. Twenty-four letters round the rim, one notch apart, and three stars inside the wheel, each pointing along its spoke at one letter. The wheel is seized at the setting it kept since midnight. One turn of it, so many notches one way round, brings star 1, star 2 and star 3 onto the letters of the word the archive asks for, in order.',
     goal: 'Say how many notches the wheel must turn, and which way, to read the word.',
     aspect: '1 / 1',
     checkLabel: 'turn the wheel',
@@ -547,7 +547,7 @@ function omensPiece(env, p) {
   const draw = (c) => omensScene(c.g, c.w, c.h, c, p, s, env.variant);
   return {
     title: omensTitle(p),
-    brief: 'The archive drew this sky at midnight and wrote four omens against it. Each omen is a claim about the stars as drawn: the ring, the meridian through its centre, the horizon band and the hand\'s width marked at the corner are the measure, and a larger star is a brighter one. Some of the omens hold; the rest do not.',
+    brief: 'A reading of the sky. The archive drew this sky at midnight and wrote four omens against it. Each omen is a claim about the stars as drawn: the ring, the meridian through its centre, the horizon band and the hand\'s width marked at the corner are the measure, and a larger star is a brighter one. Some of the omens hold; the rest do not.',
     goal: 'Pick every omen that holds, and none that does not.',
     aspect: '4 / 3',
     checkLabel: 'read the omens',
