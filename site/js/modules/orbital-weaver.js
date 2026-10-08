@@ -28,6 +28,17 @@ const WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eig
 const MIN_FOLDS = 3;
 const MAX_FOLDS = 12;
 
+/* How hard the visitor asked for their puzzles. The persona keeps one difficulty for the whole
+   site (js/persona.js) and js/stage.js hands it to a piece on env.difficulty, 1 (gentle) to 5
+   (fierce); a card's env carries none, so the middle of the dial stands in. A level buys `helps`
+   -- how many things a piece will show when it is asked -- and `margin`, how far out a measured
+   answer may be and still count. Read inside piece() only: the subject is the seed's. */
+function asked(env) {
+  const said = env && env.difficulty ? Number(env.difficulty.level) : NaN;
+  const level = Number.isFinite(said) ? Math.max(1, Math.min(5, Math.round(said))) : 3;
+  return { level, helps: 6 - level, margin: Math.max(0, 3 - level) };
+}
+
 function clamp(v, lo, hi) {
   return Math.max(lo, Math.min(hi, v));
 }
@@ -210,7 +221,15 @@ function foldsPreview(g, w, h, env, plan, t) {
 }
 
 function foldsPiece(env, plan) {
-  const s = { rot: 0, lit: false, open: false, t: 0 };
+  const helps = asked(env).helps;
+  // What the loom has to show, in the order it shows it: a lit arm, and then the hand of the
+  // weave. The difficulty says how many of them it will show (a fold count is a count, so there
+  // is no margin to widen here).
+  const shows = [
+    'one arm is lit: everything on it is one fold',
+    'the weave ' + (plan.mirrored ? 'shows both hands: every copy is laid with its mirror image' : 'is all of one hand: no copy is mirrored')
+  ];
+  const s = { rot: 0, lit: false, open: false, t: 0, shown: 0 };
   const draw = (c) => drawFolds(c.g, c.w, c.h, c, plan, s, env.variant, s.t);
   return {
     title: foldsTitle(plan),
@@ -242,12 +261,15 @@ function foldsPiece(env, plan) {
       }
       if (id === 'mirror') c.status(value ? 'mirrored, you say' : 'one hand, you say');
       if (id === 'hint') {
-        if (!s.lit) {
+        if (s.shown < Math.min(shows.length, helps)) {
+          c.status(shows[s.shown]);
+          s.shown += 1;
           s.lit = true;
           c.hint();
-          c.status('one arm is lit: everything on it is one fold');
+        } else if (s.shown >= helps) {
+          c.status('that is all the loom will show at this difficulty; the rest is counting');
         } else {
-          c.status('one arm is lit already; the rest is counting');
+          c.status('the loom has shown what it has; the rest is counting');
         }
       }
       draw(c);
@@ -373,7 +395,12 @@ function moirePreview(g, w, h, env, plan) {
 function moirePiece(env, plan) {
   const more = plan.second > plan.first;
   const apart = Math.abs(plan.first - plan.second);
-  const s = { open: false };
+  const helps = asked(env).helps;
+  const shows = [
+    more ? 'the second screen\'s lines sit closer together than the first\'s' : 'the second screen\'s lines sit farther apart than the first\'s',
+    'the print shows ' + WORDS[apart] + (apart === 1 ? ' broad band' : ' broad bands') + ' across it'
+  ];
+  const s = { open: false, shown: 0 };
   const draw = (c) => drawMoire(c.g, c.w, c.h, c, plan, s, env.variant);
   return {
     title: moireTitle(plan),
@@ -408,8 +435,15 @@ function moirePiece(env, plan) {
       }
       if (id === 'which') c.status(value === 'more' ? 'more lines than the first, you say' : 'fewer lines than the first, you say');
       if (id === 'hint') {
-        c.hint();
-        c.status(more ? 'the second screen\'s lines sit closer together than the first\'s' : 'the second screen\'s lines sit farther apart than the first\'s');
+        if (s.shown < Math.min(shows.length, helps)) {
+          c.status(shows[s.shown]);
+          s.shown += 1;
+          c.hint();
+        } else {
+          c.status(s.shown >= helps
+            ? 'that is all the press will show at this difficulty; count the bands yourself'
+            : 'the press has shown what it has; count the bands and read the difference');
+        }
       }
       draw(c);
     },

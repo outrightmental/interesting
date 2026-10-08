@@ -42,6 +42,17 @@ const EFFECTS = [
 ];
 const ANGLES = [0, 30, 45, 60, 90, 120, 135, 150];
 
+/* How hard the visitor asked for their puzzles. The persona keeps one difficulty for the whole
+   site (js/persona.js) and js/stage.js hands it to a piece on env.difficulty, 1 (gentle) to 5
+   (fierce); a card's env carries none, so the middle of the dial stands in. A level buys `helps`
+   -- how many things a piece will show when it is asked -- and `margin`, how far out a measured
+   answer may be and still count. Read inside piece() only: the subject is the seed's. */
+function asked(env) {
+  const said = env && env.difficulty ? Number(env.difficulty.level) : NaN;
+  const level = Number.isFinite(said) ? Math.max(1, Math.min(5, Math.round(said))) : 3;
+  return { level, helps: 6 - level, margin: Math.max(0, 3 - level) };
+}
+
 function clamp(v, lo, hi) {
   return Math.max(lo, Math.min(hi, v));
 }
@@ -240,6 +251,9 @@ function slitPreview(g, w, h, env, plan) {
 }
 
 function slitPiece(env, plan) {
+  // The spacing is read off a ruler, so it is a measured answer: the difficulty says how many
+  // hundredths of a millimetre out it may be and still be on the mark.
+  const margin = asked(env).margin;
   const spacing = spacingOf(plan.lambda, plan.length, plan.fringe);
   const full = Object.assign({ spacing }, plan);
   const change = CHANGES[plan.ask];
@@ -258,7 +272,7 @@ function slitPiece(env, plan) {
     solution: { spacing, change: change.does },
     check(c) {
       const guess = Number(c.value('spacing'));
-      const spacingRight = guess === spacing;
+      const spacingRight = Math.abs(guess - spacing) <= margin;
       const changeRight = c.value('change') === change.does;
       if (spacingRight && changeRight) return { solved: true, say: 'the slits are ' + (spacing / 100).toFixed(2) + ' mm apart, and ' + change.what + ' ' + EFFECTS.find((e) => e.value === change.does).label.replace('them', 'the fringes') };
       const near = Number.isFinite(guess) && Math.abs(guess - spacing) <= spacing * 0.1;
@@ -440,6 +454,7 @@ function filterPreview(g, w, h, env, plan) {
 }
 
 function filterPiece(env, plan) {
+  const { helps, margin } = asked(env);
   const best = bestOf(plan.angles);
   const s = { order: plan.start.slice(), named: null, open: false };
   const draw = (c) => drawFilters(c.g, c.w, c.h, c, plan, s, env.variant);
@@ -452,13 +467,16 @@ function filterPiece(env, plan) {
     steps: [
       { id: 'order', ask: 'the filters, lamp side first', kind: 'order', items: plan.angles.map((a) => ({ label: 'the ' + a + '° filter', value: a })), value: plan.start.slice() },
       { id: 'passes', ask: 'how much of the lamp\'s light gets through, to the nearest five per cent', kind: 'number', min: 0, max: 100, step: 5, unit: '%' },
-      { id: 'hint', ask: 'which filter goes in the middle', kind: 'press', count: 1, label: 'name the middle one', optional: true }
-    ],
+      // One thing to say, so a fierce difficulty does not offer to say it.
+      helps > 1 ? { id: 'hint', ask: 'which filter goes in the middle', kind: 'press', count: 1, label: 'name the middle one', optional: true } : null
+    ].filter(Boolean),
     solution: { order: best.order.slice(), passes: best.percent },
     check(c) {
       const order = c.value('order');
       const orderRight = isOrder(order, plan.angles) && order[1] === best.middle;
-      const passRight = Number(c.value('passes')) === best.percent;
+      // A reading to the nearest five per cent: the difficulty says how many of those steps out
+      // it may be.
+      const passRight = Math.abs(Number(c.value('passes')) - best.percent) <= margin * 5;
       if (orderRight && passRight) return { solved: true, say: 'with the ' + best.middle + '° filter in the middle, ' + Math.round(best.exact * 10) / 10 + '% of the light reaches the screen' };
       if (!orderRight && !passRight) return { solved: false, say: 'the order and the percentage are both off' };
       return { solved: false, say: orderRight ? 'the order is right; the percentage is off' : 'the percentage is right; the order is off' };

@@ -42,6 +42,17 @@ const PUSH = { min: 20, max: 100, open: 60 };
 const NEAR = { angle: 1, speed: 2 };
 const REPLAY = 3.2;
 
+/* How hard the visitor asked for their puzzles. The persona keeps one difficulty for the whole
+   site (js/persona.js) and js/stage.js hands it to a piece on env.difficulty, 1 (gentle) to 5
+   (fierce); a card's env carries none, so the middle of the dial stands in. A level buys `helps`
+   -- how many things a piece will show when it is asked -- and `margin`, how far out a measured
+   answer may be and still count. Read inside piece() only: the subject is the seed's. */
+function asked(env) {
+  const said = env && env.difficulty ? Number(env.difficulty.level) : NaN;
+  const level = Number.isFinite(said) ? Math.max(1, Math.min(5, Math.round(said))) : 3;
+  return { level, helps: 6 - level, margin: Math.max(0, 3 - level) };
+}
+
 function dials(env) {
   const v = env && env.variant;
   const num = (x, d) => (Number.isFinite(Number(x)) ? Number(x) : d);
@@ -354,7 +365,11 @@ function widths(d) {
 
 function slingPiece(env, p) {
   const v = dials(env);
+  const helps = asked(env).helps;
   const s = slingState(p);
+  // The ring is the verifier here -- a probe is through it or it is not -- so this puzzle has no
+  // margin to widen and moves on the help alone: how many times the last flight may be replayed.
+  let replays = 0;
   const draw = (c) => slingScene(c.g, c.w, c.h, c, p, s, v);
   const clampTo = (value, knob) => Math.max(knob.min, Math.min(knob.max, Math.round(Number(value)) || 0));
   return {
@@ -401,7 +416,10 @@ function slingPiece(env, p) {
         c.status('speed ' + s.speed + ' of 100');
       }
       if (id === 'again') {
-        if (s.flight) {
+        if (replays >= helps) {
+          c.status('the flight has been replayed as often as this difficulty allows; release another');
+        } else if (s.flight) {
+          replays += 1;
           s.clock = 0;
           s.fraction = c.reduced ? 1 : 0;
           c.status('the last flight, again: ' + s.verdict);
@@ -581,6 +599,7 @@ function moonsPreview(g, w, h, env, p) {
 
 function moonsPiece(env, p) {
   const v = dials(env);
+  const helps = asked(env).helps;
   const answer = moonsOrder(p);
   const s = { spin: 0, hinted: [], order: [0, 1, 2], laps: 1 };
   const draw = (c) => moonsScene(c.g, c.w, c.h, c, p, s, v);
@@ -594,8 +613,9 @@ function moonsPiece(env, p) {
     steps: [
       { id: 'order', ask: 'the moons, shortest period first', kind: 'order', items: [0, 1, 2].map((i) => ({ label: 'the ' + names[i] + ' moon', value: i })) },
       { id: 'laps', ask: 'laps of the innermost moon for one lap of the outermost', kind: 'number', min: 1, max: 9, step: 1, value: 1, unit: 'laps' },
-      { id: 'hint', ask: 'which moon has the shortest period', kind: 'press', count: 1, label: 'name it', optional: true }
-    ],
+      // One thing to say, so a fierce difficulty does not offer to say it.
+      helps > 1 ? { id: 'hint', ask: 'which moon has the shortest period', kind: 'press', count: 1, label: 'name it', optional: true } : null
+    ].filter(Boolean),
     solution: { order: answer.slice(), laps: p.k },
     check(c) {
       const value = c.value('order');

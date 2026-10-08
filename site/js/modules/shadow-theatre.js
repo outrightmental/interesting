@@ -76,6 +76,17 @@ const CHANGES = [
   { label: 'it stays the same', value: 'same' }
 ];
 
+/* How hard the visitor asked for their puzzles. The persona keeps one difficulty for the whole
+   site (js/persona.js) and js/stage.js hands it to a piece on env.difficulty, 1 (gentle) to 5
+   (fierce); a card's env carries none, so the middle of the dial stands in. A level buys `helps`
+   -- how many things a piece will show when it is asked -- and `margin`, how far out a measured
+   answer may be and still count. Read inside piece() only: the subject is the seed's. */
+function asked(env) {
+  const said = env && env.difficulty ? Number(env.difficulty.level) : NaN;
+  const level = Number.isFinite(said) ? Math.max(1, Math.min(5, Math.round(said))) : 3;
+  return { level, helps: 6 - level, margin: Math.max(0, 3 - level) };
+}
+
 /* ---- shared drawing ------------------------------------------------------------------------- */
 
 function some(env, list, n) {
@@ -320,6 +331,9 @@ function lampPreview(g, w, h, env, p) {
 }
 
 function lampPiece(env, p) {
+  // The distance is a length in spans off the drawing, so it is a measured answer: the difficulty
+  // says how many spans out it may be and still light the lamp.
+  const margin = asked(env).margin;
   const H = shadowHeight(p, p.d);
   const move = MOVES[p.move];
   const s = { tried: null, reveal: false };
@@ -338,7 +352,7 @@ function lampPiece(env, p) {
     solution: { distance: p.d, change: move.answer },
     check(c) {
       const d = Number(c.value('distance'));
-      const distanceRight = d === p.d;
+      const distanceRight = Math.abs(d - p.d) <= margin;
       const changeRight = c.value('change') === move.answer;
       if (distanceRight && changeRight) return { solved: true, say: 'the lamp is ' + spans(p.d) + ' behind the cutout, and the shadow ' + move.answer };
       const parts = [];
@@ -485,6 +499,7 @@ function matchPreview(g, w, h, env, p) {
 }
 
 function matchPiece(env, p) {
+  const helps = asked(env).helps;
   const names = p.items.map((i) => CUTOUTS[i].name);
   const solution = p.shadows.map((sh) => sh.cut);
   const s = { order: p.start.slice(), hinted: [], reveal: false };
@@ -522,11 +537,14 @@ function matchPiece(env, p) {
         c.status('shadows 1 to 4: ' + s.order.map((i) => names[i]).join(', '));
       }
       if (id === 'hint') {
-        const next = [0, 1, 2, 3].find((n) => !s.hinted.includes(n) && s.order[n] !== solution[n]);
+        const next = s.hinted.length < helps
+          ? [0, 1, 2, 3].find((n) => !s.hinted.includes(n) && s.order[n] !== solution[n]) : undefined;
         if (next !== undefined) {
           s.hinted.push(next);
           c.hint();
           c.status('shadow ' + (next + 1) + ' was cast by the ' + names[solution[next]]);
+        } else if (s.hinted.length >= helps) {
+          c.status('that is all the theatre will name at this difficulty; the rest is yours');
         } else {
           c.status('every shadow you have matched wrongly has been named; the rest is yours');
         }

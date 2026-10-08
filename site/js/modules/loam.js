@@ -36,6 +36,17 @@ const DRAINS = [
   { label: 'drains slower than A', value: 'slower' }
 ];
 
+/* How hard the visitor asked for their puzzles. The persona keeps one difficulty for the whole
+   site (js/persona.js) and js/stage.js hands it to a piece on env.difficulty, 1 (gentle) to 5
+   (fierce); a card's env carries none, so the middle of the dial stands in. A level buys `helps`
+   -- how many things a piece will show when it is asked -- and `margin`, how far out a measured
+   answer may be and still count. Read inside piece() only: the subject is the seed's. */
+function asked(env) {
+  const said = env && env.difficulty ? Number(env.difficulty.level) : NaN;
+  const level = Number.isFinite(said) ? Math.max(1, Math.min(5, Math.round(said))) : 3;
+  return { level, helps: 6 - level, margin: Math.max(0, 3 - level) };
+}
+
 /* ---- shared drawing ------------------------------------------------------------------------ */
 
 function font(g, size, weight) {
@@ -234,6 +245,9 @@ function corePreview(g, w, h, env, plan) {
 }
 
 function corePiece(env, plan) {
+  // The water table is read off a drawn scale, so it is a measured answer: the difficulty says
+  // how many centimetres out a reading may be. The layer count is a count, so it is exact.
+  const margin = asked(env).margin;
   const n = plan.layers.length;
   const total = totalOf(plan);
   const depth = waterDepth(plan);
@@ -253,7 +267,7 @@ function corePiece(env, plan) {
     check(c) {
       const water = Math.round(Number(c.value('water')));
       const layers = Math.round(Number(c.value('layers')));
-      const waterRight = water === depth;
+      const waterRight = Math.abs(water - depth) <= margin;
       const layersRight = layers === plan.band;
       if (waterRight && layersRight) {
         return { solved: true, say: 'the core reads true: water at ' + depth + ' cm, stones under ' + WORDS[plan.band] + ' layer' + (plan.band === 1 ? '' : 's') };
@@ -431,7 +445,11 @@ function mixPreview(g, w, h, env, plan) {
 function mixPiece(env, plan) {
   const target = shareOf(plan.a, plan.b, plan.parts);
   const drains = plan.b > plan.a ? 'faster' : 'slower';
-  const s = { parts: null, blend: -1, drained: 0, lift: 0, caption: 'a sandier soil drains faster' };
+  const helps = asked(env).helps;
+  // The blends the shed will rule out for you, from the ends inward: one per press, as many as
+  // the difficulty allows. A ruled-out blend is help, not the answer.
+  const rulings = [0, 10, 1, 9, 2, 8, 3, 7, 4, 6, 5].filter((k) => k !== plan.parts);
+  const s = { parts: null, blend: -1, drained: 0, lift: 0, ruled: [], caption: 'a sandier soil drains faster' };
   const draw = (c) => drawMix(c.g, c.w, c.h, c, plan, s, env.variant);
   return {
     title: mixTitle(plan),
@@ -441,7 +459,8 @@ function mixPiece(env, plan) {
     checkLabel: 'mix it',
     steps: [
       { id: 'parts', ask: 'parts of A, in ten', kind: 'number', min: 0, max: 10, step: 1, unit: 'of 10' },
-      { id: 'drains', ask: 'against bag A, the blend', kind: 'choice', options: DRAINS }
+      { id: 'drains', ask: 'against bag A, the blend', kind: 'choice', options: DRAINS },
+      { id: 'hint', ask: 'one blend ruled out', kind: 'press', count: 1, label: 'rule one out', optional: true }
     ],
     solution: { parts: plan.parts, drains },
     check(c) {
@@ -463,6 +482,18 @@ function mixPiece(env, plan) {
       draw(c);
     },
     apply(id, value, c) {
+      if (id === 'hint') {
+        const next = s.ruled.length < helps ? rulings.find((k) => !s.ruled.includes(k)) : undefined;
+        if (next !== undefined) {
+          s.ruled.push(next);
+          c.hint();
+          c.status('a = ' + next + ' makes ' + shareOf(plan.a, plan.b, next) + '% sand, and the bed wants ' + target + '%');
+        } else if (s.ruled.length >= helps) {
+          c.status('that is all the shed will rule out at this difficulty; average the two shares yourself');
+        } else {
+          c.status('every other blend has been ruled out; the one left is the one the bed wants');
+        }
+      }
       if (id === 'parts') {
         const p = Math.round(Number(value));
         s.parts = Number.isFinite(p) ? Math.max(0, Math.min(10, p)) : 0;

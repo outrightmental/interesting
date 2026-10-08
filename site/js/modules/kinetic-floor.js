@@ -31,6 +31,17 @@ const TIPS = [
   { label: 'stays level', value: 'level' }
 ];
 
+/* How hard the visitor asked for their puzzles. The persona keeps one difficulty for the whole
+   site (js/persona.js) and js/stage.js hands it to a piece on env.difficulty, 1 (gentle) to 5
+   (fierce); a card's env carries none, so the middle of the dial stands in. A level buys `helps`
+   -- how many things a piece will show when it is asked -- and `margin`, how far out a measured
+   answer may be and still count. Read inside piece() only: the subject is the seed's. */
+function asked(env) {
+  const said = env && env.difficulty ? Number(env.difficulty.level) : NaN;
+  const level = Number.isFinite(said) ? Math.max(1, Math.min(5, Math.round(said))) : 3;
+  return { level, helps: 6 - level, margin: Math.max(0, 3 - level) };
+}
+
 /* ---- shared drawing ------------------------------------------------------------------------ */
 
 function block(g, x, y, bw, bh, angle, fill, stroke) {
@@ -265,6 +276,7 @@ function lanesPreview(g, w, h, env, plan) {
 }
 
 function lanesPiece(env, plan) {
+  const helps = asked(env).helps;
   const truth = plan.lanes.map((l) => (crosses(l) ? 1 : 0));
   const s = { calls: [0, 0, 0, 0], touched: false, hinted: [], time: -1 };
   const draw = (c) => drawLanes(c.g, c.w, c.h, c, plan, s, env.variant);
@@ -303,12 +315,17 @@ function lanesPiece(env, plan) {
         c.status(callWords());
       }
       if (id === 'hint') {
-        let k = truth.findIndex((t, i) => !s.hinted.includes(i) && s.calls[i] !== t);
-        if (k < 0) k = truth.findIndex((t, i) => !s.hinted.includes(i));
+        let k = -1;
+        if (s.hinted.length < helps) {
+          k = truth.findIndex((t, i) => !s.hinted.includes(i) && s.calls[i] !== t);
+          if (k < 0) k = truth.findIndex((t, i) => !s.hinted.includes(i));
+        }
         if (k >= 0) {
           s.hinted.push(k);
           c.hint();
           c.status('lane ' + (k + 1) + (truth[k] ? ' crosses: its gap is under four fifths of its height' : ' stops: its gap is four fifths of its height or more'));
+        } else if (s.hinted.length >= helps) {
+          c.status('that is all the floor will call at this difficulty; the numbers are on the lanes');
         } else c.status('every lane has been shown');
       }
       draw(c);
@@ -466,6 +483,9 @@ function plankPreview(g, w, h, env, plan) {
 }
 
 function plankPiece(env, plan) {
+  // The pivot is a place on a ruler, so it is a measured answer: the difficulty says how many
+  // marks out it may be and still be called balanced.
+  const margin = asked(env).margin;
   const centre = centreOf(plan.blocks);
   const tip = centre < 10 ? 'left' : centre > 10 ? 'right' : 'level';
   const s = { pivot: 10, angle: 0, target: 0, clamped: true, lit: 0, caption: 'the clamp holds it level until you check' };
@@ -484,7 +504,7 @@ function plankPiece(env, plan) {
     solution: { pivot: centre, tip },
     check(c) {
       const p = Math.round(Number(c.value('pivot')));
-      const pivotRight = p === centre;
+      const pivotRight = Math.abs(p - centre) <= margin;
       const callRight = c.value('tip') === tip;
       s.clamped = false;
       if (pivotRight && callRight) {
