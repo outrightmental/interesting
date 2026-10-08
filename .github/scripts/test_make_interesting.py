@@ -3913,6 +3913,28 @@ HOLD_PIECE = """    let holds = 0;
     };"""
 
 
+# A piece that says what it is still being told, so a finished piece staying playable can be read
+# back off the stage (issue #86). Its frame() writes the counts onto the one live line a piece has,
+# so the harness can see the loop still drawing, the knob still reaching apply() and the scene still
+# reaching tap() long after the ceremony wrote "finished" over that same line.
+LIVE_PIECE = """    let frames = 0;
+    let turns = 0;
+    let taps = 0;
+    return {
+      title: 'a toy that keeps going',
+      brief: 'Turn it, then tap the scene. It is a toy before it is done and after.',
+      steps: [
+        { id: 'turn', ask: 'turn it', kind: 'choice',
+          options: [{ label: 'one way', value: 1 }, { label: 'the other way', value: 2 }] },
+        { id: 'touch', ask: 'tap the scene', kind: 'tap', after: 'turn' }
+      ],
+      start(ctx) { ctx.g.fillRect(0, 0, ctx.w, ctx.h); },
+      frame(t, dt, ctx) { frames += 1; ctx.status('frames ' + frames + '; turns ' + turns + '; taps ' + taps); },
+      apply(id, value, ctx) { if (id === 'turn') turns += 1; },
+      tap(x, y, ctx) { taps += 1; ctx.satisfy('touch'); }
+    };"""
+
+
 def stage_site(toy=None, other=None):
     """A site the stage harness can play: the one list of worlds, js/stage.js and the configuration
     it imports as committed, and a module for each world. Neither of those two is ever a fixture --
@@ -4026,6 +4048,16 @@ class CompletionAxiomTest(SiteDirTestCase):
                      "a hold knob is set the moment its bar fills rather than when the visitor lets go",
                      "a finished piece stays on the stage with the way on lit",
                      "leaves nothing of itself on the stage or still running",
+                     # Issue #86: Done is not the End, stated to the run that writes the pieces and
+                     # to the run that rewrites the stage, and held by the same stage harness.
+                     "a piece of content does not End just because it is Done",
+                     "as long as the visitor is still interested",
+                     "the ceremony takes nothing away",
+                     "every knob stays enabled and can be set again",
+                     "no timeout, no fade-out, no inert state and no teardown",
+                     "Keep the done mark out of the way of the content",
+                     "never laid over the scene",
+                     "a finished piece is still fully playable",
                      # Issue #80: a piece is the card it was opened from, which the same two
                      # harnesses hold it to, so a run writing a piece is told as much.
                      "A piece is also the card it was opened from",
@@ -4036,6 +4068,10 @@ class CompletionAxiomTest(SiteDirTestCase):
                 self.assertIn(rule, rules)
         self.assertIn(f"{mi.PIECE_MIN_STEPS} to {mi.PIECE_MAX_STEPS} knobs", rules)
         self.assertIn("finished by its visitor, never by itself", rules)
+        # The one piece of prose a doubled word would have hidden in: the ceremony's sentence runs
+        # straight into the contract's, and the axiom of issue #86 was spliced between them.
+        self.assertIn("the river of cards is the river of pieces.", rules)
+        self.assertNotIn("pieces. pieces.", rules)
         # The prompt says which of the two harnesses refuses a plan and which holds the committed
         # site, because a rule the code does not enforce must not be dressed up as one that does.
         self.assertIn("checked on the site as committed rather than on a plan", rules)
@@ -4197,9 +4233,10 @@ class StageTest(unittest.TestCase):
     slider the stage only marked set when its value changed, so a visitor content with where it
     already stood set every other knob, watched the finale run, and waited on a piece that had no
     way left to finish. These tests run the real js/stage.js, through the elements stage.njk writes
-    and a clock they step by hand, and hold it to seven things: a world played twice over plays the
+    and a clock they step by hand, and hold it to eight things: a world played twice over plays the
     second time like the first, a finished piece waits for the visitor rather than seeing itself
-    out, a slider used where it stands counts as used, a knob nobody set is named rather than left
+    out, a finished piece is still a piece to play with rather than a picture of one (issue #86), a
+    slider used where it stands counts as used, a knob nobody set is named rather than left
     a mystery, a hold knob is set the moment its bar fills rather than when the visitor lets go, a
     piece that is over leaves nothing of itself behind, and the feature a card opens as is the card
     that was pressed rather than the world's generic line (issue #80).
@@ -4256,6 +4293,61 @@ class StageTest(unittest.TestCase):
                                  "the way on lit and the keyboard was left wherever it was")
                 self.assertTrue(played["pressed"], "there was nothing lit to press")
                 self.assertTrue(played["movedOn"], "the way on was pressed and nothing followed")
+
+    def test_a_finished_piece_is_still_a_piece_to_play_with(self):
+        # Issue #86, site-wide: a piece of content does not End just because it is Done. The stage
+        # used to disable every knob in finish(), so the moment a visitor solved the toy it went
+        # dead under their hands -- under a mark that said the stage was waiting for them, and over
+        # a scene taps no longer reached. Now finishing reports and lights the way on and takes
+        # nothing away. LIVE_PIECE writes what it is still being told onto its live line, so what
+        # reaches a finished piece can be read off the stage rather than taken on trust.
+        result = self.scenario("afterDone", toy=LIVE_PIECE)
+        self.assertTrue(result["playable"], "the piece never became playable")
+        self.assertEqual(result["unset"], [], "a knob the visitor worked was not set")
+        self.assertEqual(result["atDone"]["mode"], "done", "the piece did not finish")
+        self.assertTrue(result["atDone"]["doneShown"], "nothing said the piece was done")
+        # Six seconds on, and a second after that, with nobody touching anything: the frame loop is
+        # still drawing (the burst's own frames are long spent by then) and nothing is disabled.
+        self.assertGreater(result["drawing"]["frames"], result["later"]["frames"],
+                           "the frame loop stopped when the piece finished")
+        for when in ["atDone", "later", "drawing", "afterKnob", "afterTap"]:
+            with self.subTest(when=when):
+                seen = result[when]
+                self.assertTrue(all(knob["live"] for knob in seen["knobs"]),
+                                "a knob went inert on a piece the visitor is still playing with")
+                self.assertTrue(all(knob["set"] for knob in seen["knobs"]))
+                self.assertEqual(seen["mode"], "done", "the stage left the piece's own mode")
+                self.assertEqual(seen["dots"], 2, "the dots went away with the finish")
+                self.assertEqual(seen["sceneLabel"], "the scene: a toy that keeps going",
+                                 "the scene stopped answering to the piece")
+                # And the ceremony played once for all of it: still playable is not still finishing.
+                self.assertEqual(seen["completes"], 1, "the piece finished other than once")
+        # A knob worked a second time long after the finish reaches the piece's own apply()...
+        self.assertEqual(result["reworked"], "turn")
+        self.assertIn("turns 2", result["afterKnob"]["status"], "a re-worked knob never reached the piece")
+        self.assertIn("taps 1", result["afterKnob"]["status"])
+        # ...and so does a tap on the scene, which the stage used to swallow once the piece was over.
+        self.assertIn("taps 2", result["afterTap"]["status"], "a tap never reached the finished piece")
+        # Nothing was torn down and nothing moved on: this is still the same piece, with the way on
+        # as the one thing that can take it away -- and it still does.
+        self.assertEqual(result["current"]["file"], result["world"])
+        self.assertEqual(result["current"]["seed"], result["seed"])
+        self.assertGreater(result["running"], 0, "the stage had nothing left running for a live piece")
+        self.assertTrue(result["onward"]["lit"], "the way on never lit over the finished piece")
+        self.assertFalse(result["onward"]["movedOnByItself"])
+        self.assertTrue(result["onward"]["movedOn"], "the way on was pressed and nothing followed")
+
+    def test_the_done_mark_is_clear_of_the_piece_it_reports_on(self):
+        # The other half of issue #86: the mark used to be a 64px disc and a pill laid over the
+        # scene's lower-right corner, on top of the piece's own finale. A finished piece's picture
+        # is still the content, so the report on it is laid out with the rail -- at the end of the
+        # dots' row, which is where the stage already says how much of the piece is set.
+        result = self.scenario("afterDone", toy=LIVE_PIECE)
+        for when in ["atDone", "later", "afterTap"]:
+            with self.subTest(when=when):
+                self.assertTrue(result[when]["doneShown"], "nothing said the piece was done")
+                self.assertFalse(result[when]["doneOverScene"],
+                                 "the done mark is inside the scene, over the picture it reports on")
 
     def test_a_slider_the_visitor_leaves_where_it_is_still_counts_as_set(self):
         # A slider opens with an answer already on it -- which is why ctx.value(id) is the piece's
@@ -5618,9 +5710,10 @@ class RealSiteTest(unittest.TestCase):
         # because nothing advances by itself any more (issue #78) -- open the next; a slider a
         # visitor leaves where it stands has to count as used; a knob nobody set has to be named
         # rather than silently holding the piece shut; a hold has to be set when its bar fills
-        # rather than when the visitor lets go (issue #74); a piece that is over has to leave
-        # nothing running; and a card pressed has to open as that card rather than as the world's
-        # generic line (issue #80).
+        # rather than when the visitor lets go (issue #74); a finished piece has to stay fully
+        # playable, with the done mark clear of its picture (issue #86); a piece that is over has
+        # to leave nothing running; and a card pressed has to open as that card rather than as the
+        # world's generic line (issue #80).
         needs_the_stage_harness(self)
         worlds = mi.listed_worlds(self.site)
         self.assertGreaterEqual(len(worlds), 10, "the check is worth nothing on a few worlds")
@@ -5639,6 +5732,33 @@ class RealSiteTest(unittest.TestCase):
                 self.assertEqual(played["focusedWhenFinished"], "stage-next",
                                  "the way on lit and the keyboard was left wherever it was")
                 self.assertTrue(played["movedOn"], "the way on was pressed and nothing followed")
+        # Done is not the End (issue #86), on the site as committed. What can be held of every
+        # world's piece without knowing which piece it is, is held: the frames still drawing a
+        # second after the ceremony is long over, every knob still enabled, nothing of the piece
+        # torn down, the done mark clear of the scene, the ceremony played once through all of it,
+        # and the way on still the one thing that takes the piece away.
+        live = report["afterDone"]["result"]
+        self.assertTrue(live["playable"], f"{live['world']}: the piece never became playable")
+        self.assertEqual(live["unset"], [], f"{live['world']}: a knob the visitor worked was not set")
+        self.assertEqual(live["atDone"]["mode"], "done", f"{live['world']}: the piece never finished")
+        self.assertGreater(live["drawing"]["frames"], live["later"]["frames"],
+                           f"{live['world']}: the frame loop stopped when the piece finished")
+        for when in ["atDone", "later", "drawing", "afterKnob", "afterTap"]:
+            with self.subTest(when=when):
+                seen = live[when]
+                self.assertTrue(all(knob["live"] for knob in seen["knobs"]),
+                                f"{live['world']}: a knob went inert on a finished piece")
+                self.assertEqual(seen["mode"], "done", f"{live['world']}: the stage left the piece's mode")
+                self.assertEqual(seen["completes"], 1, f"{live['world']}: the piece finished other than once")
+                self.assertTrue(seen["doneShown"], f"{live['world']}: nothing said the piece was done")
+                self.assertFalse(seen["doneOverScene"],
+                                 f"{live['world']}: the done mark is laid over the piece's own picture")
+                self.assertEqual(seen["dots"], len(live["atDone"]["knobs"]),
+                                 f"{live['world']}: the dots went away with the finish")
+        self.assertTrue(live["reworked"], f"{live['world']}: no knob on this piece could be worked again")
+        self.assertEqual(live["current"]["file"], live["world"], "the stage left the finished piece")
+        self.assertGreater(live["running"], 0, f"{live['world']}: nothing was left running for a live piece")
+        self.assertTrue(live["onward"]["movedOn"], f"{live['world']}: the way on was pressed and nothing followed")
         used = report["sliderUsed"]["result"]
         self.assertTrue(used["ranges"], "no world the stage opened had a slider to check")
         self.assertEqual(used["unset"], [], f"{used['world']}: a slider used where it stood was not taken")
@@ -5721,6 +5841,41 @@ class RealSiteTest(unittest.TestCase):
         self.assertIn("ui.onward.focus(", script, "the way on never takes the keyboard")
         finish = script.split("function finish() {", 1)[1].split("\n}", 1)[0]
         self.assertNotIn("next()", finish, "the stage still shows itself out when a piece is finished")
+
+    def test_a_finished_piece_is_not_a_finished_page(self):
+        # Issue #86, as a site-wide axiom: a piece of content does not End just because it is Done.
+        # The stage harness plays the whole of that on the committed site (afterDone); these are the
+        # two things it cannot see, because they are where the markup and the stylesheet put the
+        # done mark rather than what the stage then does with it.
+        #
+        # The mark is not in the scene. It was a 64px disc and a pill pinned over the scene's
+        # lower-right corner, on top of the piece's own finale and taking a corner of the picture;
+        # it reports from the end of the dots' row instead, where the stage already says how much
+        # of the piece is set, and it is laid out there rather than positioned over anything.
+        stage = self.source[mi.STAGE_INCLUDE]
+        self.assertIn("id='stage-done'", stage, "the stage says nothing when a piece is done")
+        scene = stage[stage.index("<div class='stage-scene'"):]
+        scene = scene[:scene.index("</div>")]
+        self.assertNotIn("stage-done", scene, "the done mark is inside the scene, over the content")
+        foot = stage[stage.index("class='stage-foot'"):]
+        for beside in ["id='stage-done'", "id='stage-progress'"]:
+            with self.subTest(beside=beside):
+                self.assertIn(beside, foot, "the done mark does not report beside the progress dots")
+        css = self.source[f"{mi.SASS_DIR}/_stage.scss"]
+        rule = css[css.index(".stage-done {"):]
+        rule = rule[:rule.index("}")]
+        for over in ["position: absolute", "position: fixed", "inset: 0", "z-index"]:
+            with self.subTest(over=over):
+                self.assertNotIn(over, rule, "the done mark is laid over the piece rather than beside it")
+        # And finishing takes nothing away: the knobs are not disabled, and a tap on the scene is
+        # not turned back, so the piece stays workable until the way on is actually pressed.
+        script = self.source[mi.STAGE_SCRIPT]
+        finish = script.split("function finish() {", 1)[1].split("\n}", 1)[0]
+        self.assertNotIn("disabled = true", finish, "finishing a piece puts its knobs out of action")
+        taps = script[script.index("ui.canvas.addEventListener('pointerdown'"):]
+        taps = taps[:taps.index("\n  });")]
+        self.assertNotIn("completed", taps, "a tap on the scene stops reaching a finished piece")
+        self.assertIn("tapsOpen()", taps, "nothing decides whether a tap reaches the piece")
 
     def test_every_world_page_is_the_stage(self):
         # A world page is the stage and nothing else, so what a visitor opens is a piece, not a

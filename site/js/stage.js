@@ -16,6 +16,24 @@
   hands it the next card.
 
   ---------------------------------------------------------------------------------------------
+  The continued-interaction axiom: Done is not the End
+
+  A piece of content does not End just because it is Done (issue #86). Finishing is a report, not a
+  closing time: finish() plays the ceremony, says so beside the progress dots and lights the way on,
+  and changes nothing whatever about how playable the piece is. The frame loop keeps running, a tap
+  on the scene still reaches tap(), every knob stays enabled and can be set again -- including one
+  that was gated behind another, since every gate stands open once everything is set -- and the
+  piece keeps hearing apply() for all of it. There is no timeout, no fade, no inert state and no
+  teardown in between; close() is the one teardown and the only thing that reaches it is the next
+  piece actually opening, which only the press of the way on can do.
+
+  Two things follow from that, and are deliberate. The done mark is laid out with the rail at the
+  end of the dots' row, not over the scene: a finished piece's picture is still the content, and
+  the report on it does not get to sit on top of it or take a corner of it. And the ceremony runs
+  exactly once -- one 'stage:complete', one chime, one burst -- so fidgeting with a finished toy
+  changes the piece without re-staging the finish.
+
+  ---------------------------------------------------------------------------------------------
   The alignment axiom: the feature is the card that was pressed
 
   Every content piece on this site is procedurally configured, and that configuration is the same
@@ -56,7 +74,8 @@
           apply(id, value, ctx) {},                 // a knob was set (the stage sets it)
           tap(x, y, ctx) {},                        // the scene was tapped, x and y in 0..1
                                                     // (optional; a 'tap' knob needs it)
-          end(ctx) {}                               // the last frame before the vanish (optional)
+          end(ctx) {}                               // the finale, once, when the piece is finished;
+                                                    // the piece plays on after it (optional)
         };
       }
 
@@ -81,7 +100,10 @@
   something themselves: a piece is finished by the person playing it. A knob with
   `after: '<id>'` is disabled until that knob is set. Every knob stays live after it is set -- a
   toy is for fidgeting with -- and the piece is finished when all are set (or, with auto: false,
-  when it calls ctx.complete()).
+  when it calls ctx.complete()). Every knob stays live after the piece is finished, too, which is
+  the axiom above: apply() carries on being called, tap() carries on being reached, and frame()
+  carries on being drawn, until the visitor presses the way on. A piece's finale is written for a
+  scene its visitor may keep playing with, not for a scene about to be taken away.
 
   Every knob has to be settable by the visitor it is put in front of, and the stage has to say
   which ones are not set yet. A knob nobody can satisfy is a piece nobody can finish, and the way
@@ -92,7 +114,9 @@
   A piece is one instantiation and nothing of it outlives its turn. close() is the one teardown
   and it takes the whole piece apart -- the frame loop, the ceremony's timers, a ticker under a
   hold still pressed down, the knobs, the lines, the dots, the mark, the scene and its shape -- so
-  every piece opens on an empty stage however many times its world has come round before.
+  every piece opens on an empty stage however many times its world has come round before. Its turn
+  runs to the press of the way on and not to the finish: nothing is torn down while the visitor is
+  still playing, however long ago they finished.
 
   env, what piece() is handed, and the same configuration js/feed.js hands paint() and spark():
     { seed, rnd(), pick(list), int(a, b), chance(p), hash(text), stars, points(w, h, pad),
@@ -1065,7 +1089,8 @@ const KNOBS = {
     const b = el('button', 'btn-text knob-alt', step.label || 'tap for me');
     b.type = 'button';
     b.addEventListener('click', () => {
-      if (!current || current.completed || typeof current.piece.tap !== 'function') return;
+      // As live as the scene it stands in for, after the piece is finished as well (issue #86).
+      if (!current || typeof current.piece.tap !== 'function') return;
       current.touched = true;
       try {
         current.piece.tap(0.2 + altRnd() * 0.6, 0.2 + altRnd() * 0.6, current.ctx);
@@ -1106,9 +1131,11 @@ function frame(now) {
 }
 
 if (ui) {
+  // A tap on the scene, finished or not: a piece that is over is still a piece to play with
+  // (issue #86), so nothing here asks whether it is done.
   ui.canvas.addEventListener('pointerdown', (ev) => {
     const c = current;
-    if (!c || c.completed || typeof c.piece.tap !== 'function' || !tapsOpen()) return;
+    if (!c || typeof c.piece.tap !== 'function' || !tapsOpen()) return;
     const r = ui.canvas.getBoundingClientRect();
     if (!r.width || !r.height) return;
     c.touched = true;
@@ -1122,6 +1149,18 @@ if (ui) {
 
 /* ---- finishing ----------------------------------------------------------------------------- */
 
+/* The piece is finished: the ceremony runs and the way on lights, and that is the whole of what
+   changes. Done is not the End (issue #86): the frame loop keeps running, the knobs stay enabled
+   and settable again, a tap still reaches tap(), and nothing of the piece is taken apart -- close()
+   is the one teardown and the only thing that reaches it is the next piece actually opening. The
+   knobs used to be disabled here, in one line, which turned a toy into a picture of a toy the
+   moment it was solved: a visitor still playing with the thing found it dead under their hands,
+   over a mark that said the stage was waiting for them.
+
+   It runs once. A knob re-set after this does not play a second ceremony, dispatch a second
+   'stage:complete' or re-light anything -- one piece is finished once -- and markSet() sees to that
+   by only reaching here when a knob goes from unset to set. What a re-set knob does reach is the
+   piece's own apply(), which is where fidgeting with a finished toy belongs. */
 function finish() {
   const c = current;
   if (!c || c.completed) return;
@@ -1133,7 +1172,9 @@ function finish() {
     }
   }
   renderProgress();
-  for (const control of ui.knobs.querySelectorAll('button, input')) control.disabled = true;
+  // Every knob is set, so every gate stands open: a knob that was waiting on another is now one
+  // more thing to play with rather than one more thing dimmed out.
+  updateGates();
   // The piece's own closing line, if it writes one in end(), stands; this is the default.
   ui.status.textContent = c.piece.title ? 'finished: ' + c.piece.title : 'finished';
   try {
@@ -1144,7 +1185,8 @@ function finish() {
   setMode('done');
   ui.doneText.textContent = 'done';
   ui.done.hidden = false;
-  // The ceremony is on the scene, which on a phone may be above the knob that finished it.
+  // The finale is on the scene, which on a phone may be above the knob that finished it. The done
+  // mark is not: it reports from the end of the dots' row in the rail, clear of the picture.
   const box = ui.scene.getBoundingClientRect();
   if (box.top < 0 || box.bottom > window.innerHeight) {
     ui.scene.scrollIntoView({ block: 'center', behavior: calm.matches ? 'auto' : 'smooth' });
@@ -1156,9 +1198,10 @@ function finish() {
   } catch (e) {
     /* no event, no matter */
   }
-  // The ceremony lingers, and then the way on lights up and the stage stops. What used to happen
-  // here was the departure itself, on a timer; a finished piece is the visitor's to sit with for
-  // as long as they like now, and the press is what sends it away (issue #78).
+  // The ceremony lingers, and then the way on lights up and the stage stops -- stops moving, not
+  // stops working. What used to happen here was the departure itself, on a timer; a finished piece
+  // is the visitor's to sit with, and go on playing with, for as long as they like now, and the
+  // press is what sends it away (issues #78 and #86).
   const token = c.token;
   later(() => {
     if (!current || current.token !== token) return;
