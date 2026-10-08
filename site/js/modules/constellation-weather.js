@@ -639,25 +639,39 @@ function pressurePiece(env, plan) {
 
 /* ---- the module ----------------------------------------------------------------------------- */
 
-function dealsFront(env) {
-  return env.chance(0.55);
+// Which of the two this card is, and its plan, dealt once from the env's seeded stream and kept
+// with that env. Every pass over one card -- the still picture and then every animated frame --
+// asks here, so they are all the same card; dealing per frame instead would re-roll the whole
+// puzzle thirty times a second (issue #92, and js/feed.js on what animate owes a card).
+const dealt = new WeakMap();
+function deal(env) {
+  let got = dealt.get(env);
+  if (!got) {
+    const front = env.chance(0.55);
+    got = { front, plan: front ? frontPlan(env) : pressurePlan(env) };
+    dealt.set(env, got);
+  }
+  return got;
 }
 
 export default {
   id: 'constellation-weather',
   needsSky: true,
   paint(g, w, h, env) {
-    if (dealsFront(env)) frontPreview(g, w, h, env, frontPlan(env), env.variant.turn * 6);
-    else pressurePreview(g, w, h, env, pressurePlan(env), env.variant.turn * 6);
+    const d = deal(env);
+    if (d.front) frontPreview(g, w, h, env, d.plan, env.variant.turn * 6);
+    else pressurePreview(g, w, h, env, d.plan, env.variant.turn * 6);
   },
   animate(g, w, h, env, t) {
-    if (dealsFront(env)) frontPreview(g, w, h, env, frontPlan(env), t + env.variant.turn * 6);
-    else pressurePreview(g, w, h, env, pressurePlan(env), t + env.variant.turn * 6);
+    const d = deal(env);
+    if (d.front) frontPreview(g, w, h, env, d.plan, t + env.variant.turn * 6);
+    else pressurePreview(g, w, h, env, d.plan, t + env.variant.turn * 6);
   },
   spark(env) {
     if (!env.stars.length) return null;
-    if (dealsFront(env)) {
-      const plan = frontPlan(env);
+    const d = deal(env);
+    if (d.front) {
+      const plan = d.plan;
       return {
         title: frontTitle(plan),
         mono: 'now ' + fmt(plan.now) + '\nfront: ' + plan.squares + ' squares out, ' + plan.speed + ' km/h\n1 square = ' + KM + ' km',
@@ -667,7 +681,7 @@ export default {
         of: plan
       };
     }
-    const plan = pressurePlan(env);
+    const plan = d.plan;
     return {
       title: pressureTitle(plan),
       mono: plan.stations.map((q, i) => LETTERS[i] + ': ' + q.p + ' hPa').join('\n'),
@@ -682,6 +696,7 @@ export default {
     if (front) return frontPiece(env, front);
     const pressure = carriedPressure(env);
     if (pressure) return pressurePiece(env, pressure);
-    return dealsFront(env) ? frontPiece(env, frontPlan(env)) : pressurePiece(env, pressurePlan(env));
+    const d = deal(env);
+    return d.front ? frontPiece(env, d.plan) : pressurePiece(env, d.plan);
   }
 };

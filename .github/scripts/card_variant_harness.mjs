@@ -19,6 +19,10 @@
  * crossed the boundary from a card to the piece it opens as (V.revive), which is the one place the
  * site answers "what configuration is this piece of?" -- including for a piece nobody pressed.
  *
+ * A fourth, since issue #92: what a card does once it is moving. `animate` is called about thirty
+ * times a second with the very same env every time, so it is held to being a function of (w, h,
+ * env, t) and nothing else -- see `moving` below, and js/feed.js for the contract itself.
+ *
  * The third argument is the fifteen mood palettes, read out of _sass/_mood.scss by the caller, so
  * the colour a configuration derives can be checked against the palette it was derived from rather
  * than against a copy of it kept here.
@@ -110,6 +114,82 @@ function makeEnv(seed, variant, colors) {
   };
 }
 
+/** How much of one drawing is not in the other, as a fraction of the two together: 0 is the same
+ *  picture twice, 1 is two pictures with no line in common. Lines are matched as a bag rather than
+ *  by position, so a drawing that has simply gained a stroke -- a swing's trail one segment longer
+ *  -- counts as the small change it is, and not as everything after it having moved. */
+function apart(a, b) {
+  const bag = new Map();
+  for (const line of a) bag.set(line, (bag.get(line) || 0) + 1);
+  let shared = 0;
+  for (const line of b) {
+    const held = bag.get(line) || 0;
+    if (held > 0) {
+      shared += 1;
+      bag.set(line, held - 1);
+    }
+  }
+  const total = a.length + b.length;
+  return total ? 1 - (2 * shared) / total : 0;
+}
+
+/** One card of `mod`, painted and then animated the way js/feed.js animates it, and what the
+ *  animation did (issue #92).
+ *
+ *  The feed paints a card once and then hands the module's `animate` the very same env on every
+ *  frame, about thirty times a second. That env carries the card's seeded stream, and paint has
+ *  already spent it, so a module that deals its plan inside `animate` deals a different puzzle every
+ *  frame: a card that re-rolls itself thirty times a second rather than an ambient picture. Calling
+ *  `animate` once with a fresh env -- which is all this harness used to do -- cannot see that, so
+ *  this follows the real sequence instead, and seals the spent stream off afterwards so that a
+ *  module reaching for it says so by throwing rather than by flickering.
+ *
+ *  What comes back: whether the module said nothing moves; whether animating at t = 0 drew the
+ *  picture paint left behind; whether the same t twice drew the same thing; and how far the drawing
+ *  travels over one frame of the loop against how far it travels over two and a half seconds.
+ *
+ *  `times` is which moments in a card's life to look at. Every one of them costs four drawings, so
+ *  the three opposite configurations are followed right through CLOCK and the sixty rolled seeds
+ *  are looked at twice: a module that deals inside `animate` gives itself away at the first moment,
+ *  and what the long tail of seeds is for is the branch a particular seed happens to deal. */
+function moving(mod, seed, variant, times) {
+  const env = makeEnv(seed, variant);
+  const still = makeContext();
+  try {
+    mod.paint(still, 320, 240, env);
+  } catch (e) {
+    return { threw: "paint: " + String(e && e.message ? e.message : e) };
+  }
+  const spent = () => {
+    throw new Error("animate drew from the card's spent seeded stream");
+  };
+  env.rnd = spent;
+  env.pick = spent;
+  env.int = spent;
+  env.chance = spent;
+  const at = (t) => {
+    const g = makeContext();
+    const said = mod.animate(g, 320, 240, env, t);
+    return { log: g.log, said };
+  };
+  try {
+    const first = at(0);
+    if (first.said === false) return { still: true, drew: first.log.length };
+    const out = { still: false, seam: first.log.join("\n") === still.log.join("\n"),
+                  steady: true, frame: 0, moved: 0 };
+    for (const t of times) {
+      const here = at(t).log;
+      const again = at(t).log; // the same card, at the same moment, a second time
+      if (again.join("\n") !== here.join("\n")) out.steady = false;
+      out.frame = Math.max(out.frame, apart(here, at(t + 1 / 30).log));
+      out.moved = Math.max(out.moved, apart(here, at(t + 2.5).log));
+    }
+    return out;
+  } catch (e) {
+    return { threw: "animate: " + String(e && e.message ? e.message : e) };
+  }
+}
+
 /** Paint `mod` once and hand back the drawing as one string, or the error it threw. */
 function draw(mod, seed, variant, how) {
   const ctx = makeContext();
@@ -196,6 +276,11 @@ const CORNERS = {
   high: { plain: false, trade: 1, lift: V.DIALS.lift[1], wash: V.DIALS.wash[1], density: V.DIALS.density[1], scale: V.DIALS.scale[1], turn: 0.97, stretch: V.DIALS.stretch[1] },
 };
 
+// The moments in a card's life the motion above is observed at: the frame it was painted on, a few
+// seconds in, past the twelve-second breath the slowest of these loops on, and ten minutes in --
+// a card the feed painted before the visitor scrolled a long way.
+const CLOCK = [0, 1.7, 4.5, 11.9, 37, 611.5];
+
 observed.modules = {};
 for (const file of readdirSync(modulesDir).filter((name) => name.endsWith(".js")).sort()) {
   const mod = (await import(pathToFileURL(path.join(modulesDir, file)).href)).default;
@@ -213,6 +298,13 @@ for (const file of readdirSync(modulesDir).filter((name) => name.endsWith(".js")
       if (moved.threw) out.threw.push(name + " animate: " + moved.threw);
       else out.drawings[name + ":animate"] = moved.drawing;
     }
+  }
+  // A card in motion, followed the way the feed drives it rather than animated once from nothing.
+  if (typeof mod.animate === "function") {
+    out.motion = {};
+    for (const [name, variant] of Object.entries(CORNERS)) out.motion[name] = moving(mod, seed, variant, CLOCK);
+    out.motion.rolled = SEEDS.slice(0, 60).map((s) =>
+      Object.assign({ seed: s }, moving(mod, s, V.roll(s), [CLOCK[0], CLOCK[2]])));
   }
   // Every configuration a seed could roll, painted: nothing may throw anywhere in the ranges.
   for (const s of SEEDS.slice(0, 60)) {
