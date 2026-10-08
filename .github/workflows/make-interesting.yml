@@ -83,10 +83,11 @@ jobs:
       group: make-interesting
       cancel-in-progress: false
     runs-on: ubuntu-latest
-    # Room for three attempts at a quarter of an hour each (MODEL_TIMEOUT_SECONDS in the script),
-    # plus a build of the site after every answer and a run of the tests on every answer that holds
-    # to the axioms (TESTS_TIMEOUT_SECONDS). A run that outlasts the hour makes the next scheduled
-    # run skip itself (the guard above), which is the intended way to wait.
+    # The script gives itself fifty minutes for asking models (RUN_BUDGET_SECONDS), at most a
+    # quarter of an hour per call (MODEL_TIMEOUT_SECONDS), and stops asking once that is spent; the
+    # rest is for the last answer's build and harnesses, the run of the tests on it
+    # (TESTS_TIMEOUT_SECONDS) and the push. A run that outlasts the hour even so makes the next
+    # scheduled run skip itself (the guard above), which is the intended way to wait.
     timeout-minutes: 80
     permissions:
       contents: write # commit changes to /site
@@ -127,7 +128,8 @@ jobs:
       # number: odd grows the site, even consolidates it, unless the manual "kind" input names one.
       # The model is one of the heaviest Copilot offers, at near-maximum reasoning effort. An answer
       # is only written once it passes test.yml's own tests, so what this leaves behind is a change
-      # the deploy pipeline will accept.
+      # the deploy pipeline will accept; an answer that is refused is shown back to its model for
+      # repair before another model is asked.
       - name: Ask one of the heaviest AI models to work on the website
         id: ai
         env:

@@ -573,6 +573,74 @@ class ValidatePlanTest(SiteDirTestCase):
     def test_the_prompt_has_room_for_both_fixed_pages_and_any_one_other_file(self):
         self.assertGreaterEqual(mi.PROMPT_BUDGET_CHARS, 3 * mi.MAX_FILE_BYTES)
 
+    def test_a_file_that_exists_may_be_changed_by_edits(self):
+        # The passages that change, in order, instead of the whole file: character for character
+        # where the model quoted the file faithfully, and line for line with the indentation and
+        # the spaces at line ends forgiven where it did not.
+        (self.site / "app.js").write_text("var a = 1;\nvar b = 2;\n  var c = 3;  \nvar d = 4;\n")
+        ops = mi.validate_plan({"files": [{"path": "app.js", "edits": [
+            {"find": "var b = 2;", "replace": "var b = 20;"},
+            {"find": "var c = 3;\nvar d = 4;", "replace": "var c = 30;\nvar d = 4;\nvar e = 5;"},
+            {"find": "var a = 1;\n", "replace": ""},
+        ]}]})
+        self.assertEqual(ops, [("write", self.site / "app.js", "var b = 20;\nvar c = 30;\nvar d = 4;\nvar e = 5;\n")])
+        with mock.patch("builtins.print"):
+            mi.apply_ops(ops)
+        self.assertEqual((self.site / "app.js").read_text(), "var b = 20;\nvar c = 30;\nvar d = 4;\nvar e = 5;\n")
+
+    def test_an_edit_that_matches_nowhere_or_twice_refuses_the_whole_answer(self):
+        # An edit landed in the wrong place would be a change nobody asked for, so the answer is
+        # refused and the refusal names the file and the passage, for the model to try again.
+        (self.site / "app.js").write_text("x = 1;\ny = 1;\nx = 1;\n")
+        cases = [
+            ([{"find": "z = 1;", "replace": "z = 2;"}], "edit 1 of app.js matches nowhere.*'z = 1;'"),
+            ([{"find": "x = 1;", "replace": "x = 2;"}], "edit 1 of app.js is ambiguous.*occurs 2 times"),
+            # The second edit is applied to the file as the first left it.
+            ([{"find": "y = 1;", "replace": "y = 2;"}, {"find": "y = 1;", "replace": "y = 3;"}],
+             "edit 2 of app.js matches nowhere"),
+        ]
+        for edits, why in cases:
+            with self.subTest(why=why), self.assertRaisesRegex(mi.RejectedChange, why):
+                mi.validate_plan({"files": [{"path": "app.js", "edits": edits}]})
+        self.assertEqual((self.site / "app.js").read_text(), "x = 1;\ny = 1;\nx = 1;\n")
+
+    def test_edits_are_held_to_the_same_rules_as_a_rewrite(self):
+        (self.site / "app.js").write_text("x = 1;\n")
+        (self.site / "unseen.js").write_text("u = 1;\n")
+        edit = [{"find": "x = 1;", "replace": "x = 2;"}]
+        bad = [
+            ({"files": [{"path": "app.js", "edits": edit, "content": "x = 2;\n"}]}, "one or the other"),
+            ({"files": [{"path": "new.js", "edits": edit}]}, "no such file"),
+            ({"files": [{"path": "app.js", "edits": []}]}, "non-empty list"),
+            ({"files": [{"path": "app.js", "edits": "x = 2;"}]}, "non-empty list"),
+            ({"files": [{"path": "app.js", "edits": [{"find": "x = 1;"}]}]}, "both strings"),
+            ({"files": [{"path": "app.js", "edits": [{"find": "  \n", "replace": "x"}]}]}, "finds nothing"),
+            ({"files": [{"path": "app.js", "edits": [{"find": "x = 1;", "replace": "s.match(/\x08\\d+\x08/g)"}]}]},
+             "control character"),
+            ({"files": [{"path": "app.js", "edits": [{"find": "x = 1;", "replace": "y" * (mi.MAX_FILE_BYTES + 1)}]}]},
+             "too large"),
+            ({"files": [{"path": "index.html", "edits": [{"find": "<h1>interesting</h1>", "replace": " "}]}]},
+             "refusing to empty"),
+            ({"files": [{"path": mi.STATE_SCRIPT, "edits": edit}]}, "refusing to rewrite"),
+            ({"files": [{"path": "unseen.js", "edits": [{"find": "u = 1;", "replace": "u = 2;"}]}]}, "not shown"),
+        ]
+        for plan, why in bad:
+            with self.subTest(why=why), self.assertRaisesRegex(mi.RejectedChange, why):
+                mi.validate_plan(plan, unseen=["unseen.js"])
+        self.assertEqual((self.site / "app.js").read_text(), "x = 1;\n")
+
+    def test_edits_reach_a_file_too_big_to_send_whole(self):
+        # The shell's own scripts outgrew MAX_FILE_BYTES, so no run could change them at all. By
+        # edits a run can, and an edited file may stand past the limit a whole file is held to:
+        # the limit is about runaway answers, and an edit's cost is the passage, not the file.
+        big = "// header\n" + "x();\n" * (mi.MAX_FILE_BYTES // 5)
+        self.assertGreater(len(big), mi.MAX_FILE_BYTES)
+        (self.site / "big.js").write_text(big)
+        ops = mi.validate_plan({"files": [{"path": "big.js", "edits": [{"find": "// header\n", "replace": "// header\ny();\n"}]}]})
+        self.assertEqual(ops[0][2], "// header\ny();\n" + "x();\n" * (mi.MAX_FILE_BYTES // 5))
+        with self.assertRaisesRegex(mi.RejectedChange, "too large.*changed by edits"):
+            mi.validate_plan({"files": [{"path": "big.js", "content": big + "y();\n"}]})
+
 
 class CleanSummaryTest(unittest.TestCase):
     def test_keeps_plain_sentences(self):
@@ -688,6 +756,69 @@ class BuildPromptTest(SiteDirTestCase):
         (self.site / "notes.bin").write_bytes(b"\x00\x01")
         (self.site / "link.html").symlink_to(self.site / "index.html")
         self.assertEqual([rel for rel, _ in mi.read_site()], ["error.html", "index.html"])
+
+    def test_the_format_offers_edits_beside_whole_files(self):
+        # What keeps an answer inside a model's output limit: a file that exists is changed by
+        # quoting the passages that change, and only a new file is sent whole.
+        prompt = mi.build_prompt([("index.html", "<h1>x</h1>")])
+        for fact in ['"edits"', '"find"', '"replace"', "occur exactly once",
+                     "Prefer edits for every file that already exists",
+                     "can take a file past that size", "aim for a quarter of it and never pass half",
+                     '"content", "find" and "replace" alike']:
+            with self.subTest(fact=fact):
+                self.assertIn(fact, prompt)
+        self.assertNotIn("spend it", prompt)
+
+    def test_feedback_comes_after_the_site_and_before_the_line_read_last(self):
+        plain = mi.build_prompt([("index.html", "<h1>x</h1>")])
+        self.assertNotIn("YOUR PREVIOUS ANSWER", plain)
+        feedback = mi.repair_feedback('{"summary": "s"}', "the tests fail")
+        told = mi.build_prompt([("index.html", "<h1>x</h1>")], feedback=feedback)
+        self.assertLess(told.index("=== index.html ==="), told.index("YOUR PREVIOUS ANSWER WAS REFUSED"))
+        self.assertLess(told.index("YOUR PREVIOUS ANSWER WAS REFUSED"), told.index("This run's mission:"))
+        self.assertEqual(told.replace("\n\n" + feedback, ""), plain, "nothing else about the prompt changes")
+
+
+class RepairFeedbackTest(unittest.TestCase):
+    """A refused answer is not the end of the model's turn: it is shown its answer and the refusal
+    and asked for the whole plan again (repair_feedback), and the next model, if it comes to that,
+    is told in a line what went wrong (lesson_feedback)."""
+
+    def test_a_refused_answer_is_shown_back_with_the_refusal_and_its_details(self):
+        text = mi.repair_feedback('{"summary": "s"}', "the tests fail: X", details="FAIL: test_x\nAssertionError: no")
+        for part in ["YOUR PREVIOUS ANSWER WAS REFUSED", "the site as committed",
+                     "Why it was refused: the tests fail: X.", "The details:\nFAIL: test_x\nAssertionError: no",
+                     'Your answer was:\n{"summary": "s"}', "Answer again with the whole plan, revised",
+                     "put it back exactly as the site above shows it"]:
+            with self.subTest(part=part):
+                self.assertIn(part, text)
+
+    def test_a_lost_answer_asks_for_a_smaller_one(self):
+        text = mi.repair_feedback(None, "the answer ran past the model's output limit")
+        self.assertIn("What went wrong: the answer ran past the model's output limit.", text)
+        self.assertIn("Nothing of that answer survived", text)
+        self.assertIn("Answer again, much smaller", text)
+        self.assertNotIn("Your answer was:", text)
+
+    def test_an_answer_past_the_limit_is_described_rather_than_shown(self):
+        with mock.patch.object(mi, "PRIOR_ANSWER_LIMIT", 10):
+            text = mi.repair_feedback('{"summary": "a long one"}', "the tests fail",
+                                      digest="'a long one', touching a.html")
+        self.assertIn("too long to show back to you (25 characters); it said: 'a long one', touching a.html.", text)
+        self.assertIn("Answer again, much smaller", text)
+        self.assertNotIn("Your answer was:", text)
+        self.assertNotIn('{"summary": "a long one"}', text)
+
+    def test_a_plan_is_digested_to_its_summary_and_the_files_it_touches(self):
+        plan = {"summary": "Added a clock.", "files": [{"path": "a.html", "content": "x"}, "junk"], "delete": ["b.html"]}
+        self.assertEqual(mi.plan_digest(plan), "'Added a clock.', touching a.html, b.html")
+        self.assertEqual(mi.plan_digest({"files": "a.html", "delete": None}), "'', touching ")
+
+    def test_the_lesson_for_the_next_model_is_one_line_of_what_went_wrong(self):
+        text = mi.lesson_feedback("no answer within 900s")
+        self.assertIn("EARLIER THIS RUN. Another model was asked first and its answer was refused: "
+                      "no answer within 900s.", text)
+        self.assertIn("the site above is the site as committed", text)
 
 
 class WholeSiteReviewTest(unittest.TestCase):
@@ -1096,6 +1227,18 @@ class ReasoningEffortTest(unittest.TestCase):
             mi.call_model("model-a", "p", effort="")
         self.assertEqual(len(fake.calls()), 1)
 
+    def test_a_lost_answer_steps_the_effort_down_one_notch_and_never_below_medium(self):
+        # The one dial the script has on how long an answer takes: after an answer runs past the
+        # output limit or the clock, the rest of the run thinks a step less hard (see main).
+        self.assertEqual(mi.LOWEST_FALLBACK_EFFORT, "medium")
+        self.assertEqual(mi.lower_effort("max"), "xhigh")
+        self.assertEqual(mi.lower_effort("xhigh"), "high")
+        self.assertEqual(mi.lower_effort("high"), "medium")
+        self.assertEqual(mi.lower_effort("medium"), "medium")
+        self.assertEqual(mi.lower_effort("low"), "low")
+        self.assertEqual(mi.lower_effort("minimal"), "minimal")
+        self.assertEqual(mi.lower_effort(""), "")
+
     def test_an_unavailable_model_is_still_unavailable(self):
         # The retry is for the flag, not the model: a model the account cannot use is skipped at
         # once, as before, and costs no second call.
@@ -1168,14 +1311,15 @@ class MaxOutputTokensTest(unittest.TestCase):
 
     def test_the_prompt_names_the_budget_so_the_model_can_size_the_answer(self):
         prompt = mi.build_prompt([("index.html", "<h1>x</h1>")], budget=64_000)
-        self.assertIn("keep the whole answer inside your output limit, for which this run asks up "
-                      "to 64,000 tokens -- about 256 KB of JSON, all of your files together, or "
-                      "your own limit if that is lower.", prompt)
+        self.assertIn("keep the whole answer well inside your output limit, for which this run asks "
+                      "up to 64,000 tokens -- about 256 KB of JSON, all of your files together, or "
+                      "your own limit if that is lower: aim for a quarter of it and never pass half",
+                      prompt)
         bigger = mi.build_prompt([("index.html", "<h1>x</h1>")], budget=200_000)
         self.assertIn("up to 200,000 tokens -- about 800 KB of JSON", bigger)
         # Asked for nothing, the prompt claims nothing: it still says to stay inside the limit.
         unnamed = mi.build_prompt([("index.html", "<h1>x</h1>")], budget=0)
-        self.assertIn("keep the whole answer inside your output limit.", unnamed)
+        self.assertIn("keep the whole answer well inside your output limit: aim for a quarter of it", unnamed)
         self.assertNotIn("asks up to", unnamed)
 
     def test_the_workflow_exposes_the_override(self):
@@ -1206,11 +1350,18 @@ class HeaviestModelsTest(unittest.TestCase):
 
     def test_a_heavy_answer_is_given_the_time_it_takes(self):
         self.assertEqual(mi.MODEL_TIMEOUT_SECONDS, 900)
+        # The run's own deadline has room for every attempt to take that long...
+        self.assertGreaterEqual(mi.RUN_BUDGET_SECONDS, mi.MAX_ATTEMPTS * mi.MODEL_TIMEOUT_SECONDS)
+        # ...and stays inside the hour, because a run that outlasts it costs the next run.
+        self.assertLessEqual(mi.RUN_BUDGET_SECONDS, 60 * 60)
+        self.assertGreater(mi.MIN_CALL_SECONDS, 0)
+        self.assertLess(mi.MIN_CALL_SECONDS, mi.MODEL_TIMEOUT_SECONDS)
         workflow = (mi.REPO_ROOT / ".github" / "workflows" / "make-interesting.yml").read_text()
         minutes = int(re.search(r"timeout-minutes: (\d+)\n    permissions:\n      contents: write", workflow).group(1))
-        # Every answer may also be held to the whole suite before it is written (require_passing_tests).
-        self.assertGreaterEqual(minutes * 60, mi.MAX_ATTEMPTS * (mi.MODEL_TIMEOUT_SECONDS + mi.TESTS_TIMEOUT_SECONDS)
-                                + 3 * mi.BUILD_TIMEOUT_SECONDS)
+        # The job fits the deadline and everything the last answer is held to after it: two builds
+        # and both harnesses (validate_plan), then the whole suite (require_passing_tests).
+        self.assertGreaterEqual(minutes * 60, mi.RUN_BUDGET_SECONDS + 2 * mi.BUILD_TIMEOUT_SECONDS
+                                + mi.PIECE_TIMEOUT_SECONDS + mi.STAGE_TIMEOUT_SECONDS + mi.TESTS_TIMEOUT_SECONDS)
 
 
 class BuildPipelinePromptTest(unittest.TestCase):
@@ -6590,6 +6741,15 @@ class CallModelTest(unittest.TestCase):
         with mock.patch.object(mi, "COPILOT_BIN", "/nonexistent/copilot"), self.assertRaises(SystemExit):
             mi.call_model("x", "p")
 
+    def test_the_run_can_give_a_call_less_time_than_the_usual(self):
+        # Near the run's deadline a call is given only what is left (see main), and a call that
+        # runs out of it is reported as a timeout, which is the one failure not worth a repair.
+        FakeCopilot(self, "import time; time.sleep(60)")
+        started = time.monotonic()
+        with self.assertRaisesRegex(mi.ModelTimeout, "no answer within 1.5s"):
+            mi.call_model("x", "p", timeout=1.5)
+        self.assertLess(time.monotonic() - started, 20)
+
 
 # A plan that respects every axiom. Reachability (issue #21): the page it adds is linked from the
 # home page and listed in the sitemap by the same answer, so nothing it leaves behind is orphaned.
@@ -6676,25 +6836,168 @@ class MainTest(SiteDirTestCase):
         self.assertEqual(read_outputs(output)["headline"], "Make the website more interesting")
 
     def test_falls_back_to_another_model(self):
+        # The first model asked never gives a usable answer, in its first round or in the repair
+        # rounds that follow; the second does. The rounds are a model's own, the attempts are the
+        # run's, and the second model is told in a line what the first got wrong.
         fake = FakeCopilot(self, f"""
-            if len(open(LOG).read().splitlines()) < 3:  # the first two models asked
+            first = json.loads(open(LOG).read().splitlines()[0])['args'][1]
+            if MODEL == first:
                 say('I would rather write prose than JSON.')
             else:
                 say({GOOD_PLAN!r})
         """)
         self.run_main()
         calls = fake.calls()
-        self.assertEqual(len(calls), mi.MAX_ATTEMPTS)
-        self.assertEqual(len({c["args"][1] for c in calls}), mi.MAX_ATTEMPTS, "each attempt uses a different model")
+        asked = [c["args"][1] for c in calls]
+        self.assertEqual(len(calls), mi.REPAIR_ROUNDS + 2)
+        self.assertEqual(asked[:-1], [asked[0]] * (mi.REPAIR_ROUNDS + 1), "the first model repairs its own answer")
+        self.assertNotEqual(asked[-1], asked[0], "then another model is asked")
         self.assertTrue((self.site / "clock.html").is_file())
+        self.assertNotIn("EARLIER THIS RUN", calls[0]["prompt"])
+        self.assertIn("EARLIER THIS RUN. Another model was asked first and its answer was refused: "
+                      "the answer was not one JSON object", calls[-1]["prompt"])
+        self.assertNotIn("YOUR PREVIOUS ANSWER", calls[-1]["prompt"])
 
     def test_gives_up_after_max_attempts_without_touching_the_site(self):
         fake = FakeCopilot(self, "say('nope')")
         with self.assertRaises(SystemExit) as caught:
             self.run_main()
         self.assertIn("No model produced a usable change", str(caught.exception))
-        self.assertEqual(len(fake.calls()), mi.MAX_ATTEMPTS)
+        self.assertEqual(len(fake.calls()), mi.MAX_ATTEMPTS * (1 + mi.REPAIR_ROUNDS))
+        self.assertEqual(len({c["args"][1] for c in fake.calls()}), mi.MAX_ATTEMPTS, "each attempt is a different model")
         self.assertEqual(sorted(p.name for p in self.site.iterdir()), ["error.html", "index.html"])
+
+    def test_a_refused_answer_is_repaired_by_its_own_model(self):
+        # What a refusal says is specific -- the test it failed, the edit that matched nowhere --
+        # and the model that wrote the answer is the one that can put it right with the least
+        # change. It is asked again with its answer and the refusal, up to REPAIR_ROUNDS times.
+        fake = FakeCopilot(self, f"say({GOOD_PLAN!r})")
+        self.require_passing_tests.side_effect = [mi.RejectedChange("the tests fail: A")] * mi.REPAIR_ROUNDS + [None]
+        output = self.run_main()
+        calls = fake.calls()
+        self.assertEqual(len(calls), mi.REPAIR_ROUNDS + 1)
+        self.assertEqual(len({c["args"][1] for c in calls}), 1, "the same model, every round")
+        for number, call in enumerate(calls[1:], 1):
+            with self.subTest(round=number):
+                self.assertIn("YOUR PREVIOUS ANSWER WAS REFUSED", call["prompt"])
+                self.assertIn("Why it was refused: the tests fail: A.", call["prompt"])
+                self.assertIn("Your answer was:\n" + GOOD_PLAN, call["prompt"])
+        self.assertNotIn("YOUR PREVIOUS ANSWER", calls[0]["prompt"])
+        self.assertEqual([line for line in self.printed if line.startswith("Mission:")][-1].count("repair"), 1)
+        self.assertIn(f"(repair {mi.REPAIR_ROUNDS} of {mi.REPAIR_ROUNDS})", "\n".join(self.printed))
+        self.assertEqual(read_outputs(output)["model"], calls[0]["args"][1])
+        self.assertTrue((self.site / "clock.html").is_file())
+
+    def test_after_the_repair_rounds_the_next_model_is_asked_with_the_lesson(self):
+        fake = FakeCopilot(self, f"say({GOOD_PLAN!r})")
+        self.require_passing_tests.side_effect = (
+            [mi.RejectedChange("the tests fail: A")] * (mi.REPAIR_ROUNDS + 1) + [None])
+        output = self.run_main()
+        asked = [c["args"][1] for c in fake.calls()]
+        self.assertEqual(len(asked), mi.REPAIR_ROUNDS + 2)
+        self.assertEqual(len(set(asked[:-1])), 1)
+        self.assertNotEqual(asked[-1], asked[0])
+        prompts = [c["prompt"] for c in fake.calls()]
+        self.assertTrue(all("YOUR PREVIOUS ANSWER WAS REFUSED" in prompt for prompt in prompts[1:-1]))
+        self.assertIn("EARLIER THIS RUN. Another model was asked first and its answer was refused: "
+                      "the tests fail: A.", prompts[-1])
+        self.assertNotIn("YOUR PREVIOUS ANSWER", prompts[-1])
+        self.assertEqual(read_outputs(output)["model"], asked[-1])
+
+    def test_an_answer_too_long_to_show_back_is_described_instead(self):
+        fake = FakeCopilot(self, f"say({GOOD_PLAN!r})")
+        self.require_passing_tests.side_effect = [mi.RejectedChange("the tests fail: A"), None]
+        with mock.patch.object(mi, "PRIOR_ANSWER_LIMIT", 100):
+            self.run_main()
+        second = fake.calls()[1]["prompt"]
+        self.assertIn("too long to show back to you", second)
+        self.assertIn("it said: 'Added a clock. Second line is dropped.', touching clock.html, index.html, "
+                      "sitemap.xml.", second)
+        self.assertNotIn(CLOCK_PAGE, second[second.index("YOUR PREVIOUS ANSWER"):])
+
+    def test_an_answer_that_is_not_json_is_shown_back_too(self):
+        fake = FakeCopilot(self, f"""
+            if len(open(LOG).read().splitlines()) < 2:
+                say('Here is my plan, in prose.')
+            else:
+                say({GOOD_PLAN!r})
+        """)
+        self.run_main()
+        first, second = fake.calls()
+        self.assertEqual(first["args"][1], second["args"][1])
+        self.assertIn("Why it was refused: the answer was not one JSON object (no JSON object in model response).",
+                      second["prompt"])
+        self.assertIn("Your answer was:\nHere is my plan, in prose.", second["prompt"])
+
+    def test_a_cut_off_answer_is_asked_for_again_smaller_and_with_less_effort(self):
+        # The pieces of a cut-off answer that cannot be rejoined: the same model is asked once
+        # more, told the answer was lost and to make this one smaller, and the rest of the run
+        # asks for one step less reasoning, which is the one dial there is on how long an answer
+        # takes. On 2026-10-07 this was the way three runs in five were lost.
+        fake = FakeCopilot(self, f"""
+            if len(open(LOG).read().splitlines()) < 2:
+                print(json.dumps({{'type': 'assistant.turn_start', 'data': {{'turnId': '0'}}}}))
+                say('{{"summary": "cut off half way th')
+                print(json.dumps({{'type': 'assistant.turn_start', 'data': {{'turnId': '1'}}}}))
+                say('rough, and cut off aga')
+            else:
+                say({GOOD_PLAN!r})
+        """)
+        with mock.patch.dict(os.environ, {"REASONING_EFFORT": ""}):
+            output = self.run_main()
+        first, second = fake.calls()
+        self.assertEqual(first["args"][1], second["args"][1], "the same model, asked again")
+        self.assertEqual(first["args"][2:4], ["--reasoning-effort", "xhigh"])
+        self.assertEqual(second["args"][2:4], ["--reasoning-effort", "high"])
+        self.assertNotIn("YOUR PREVIOUS ANSWER", first["prompt"])
+        self.assertIn("YOUR PREVIOUS ANSWER WAS REFUSED", second["prompt"])
+        self.assertIn("What went wrong: the answer ran past the model's output limit.", second["prompt"])
+        self.assertIn("Answer again, much smaller", second["prompt"])
+        self.assertTrue([line for line in self.printed if "Reasoning effort xhigh -> high" in line])
+        self.assertIn("\nEffort:  xhigh", "\n".join(self.printed))
+        self.assertIn("\nEffort:  high", "\n".join(self.printed))
+        self.assertEqual(read_outputs(output)["summary"], "Added a clock.")
+
+    def test_a_model_that_runs_out_of_time_is_replaced_rather_than_asked_again(self):
+        # A model still writing after its quarter of an hour is not one more round away: the next
+        # model is asked, told what happened, and asked for one step less reasoning.
+        fake = FakeCopilot(self, f"""
+            if len(open(LOG).read().splitlines()) < 2:
+                import time; time.sleep(60)
+            say({GOOD_PLAN!r})
+        """)
+        with mock.patch.object(mi, "MODEL_TIMEOUT_SECONDS", 1.5), mock.patch.dict(os.environ, {"REASONING_EFFORT": ""}):
+            output = self.run_main()
+        first, second = fake.calls()
+        self.assertNotEqual(first["args"][1], second["args"][1])
+        self.assertEqual(first["args"][2:4], ["--reasoning-effort", "xhigh"])
+        self.assertEqual(second["args"][2:4], ["--reasoning-effort", "high"])
+        self.assertIn("EARLIER THIS RUN. Another model was asked first and its answer was refused: "
+                      "no answer within 1.5s.", second["prompt"])
+        self.assertEqual(read_outputs(output)["model"], second["args"][1])
+
+    def test_no_call_starts_once_the_run_is_out_of_time(self):
+        # The run's own deadline: the hourly cadence holds whatever the models do, and a call that
+        # could not finish in what is left is not started.
+        fake = FakeCopilot(self, "import time; time.sleep(0.6); say('nope')")
+        with mock.patch.object(mi, "RUN_BUDGET_SECONDS", 1.0), mock.patch.object(mi, "MIN_CALL_SECONDS", 0.5):
+            with self.assertRaises(SystemExit) as caught:
+                self.run_main()
+        self.assertIn("No model produced a usable change", str(caught.exception))
+        self.assertEqual(len(fake.calls()), 1, "a second call would have started with less than MIN_CALL_SECONDS left")
+        self.assertTrue([line for line in self.printed if line.startswith("::warning::Out of time")])
+        self.assertEqual(sorted(p.name for p in self.site.iterdir()), ["error.html", "index.html"])
+
+    def test_a_call_near_the_deadline_gets_only_what_is_left(self):
+        # Rather than the usual quarter of an hour: the deadline is the deadline.
+        fake = FakeCopilot(self, "import time; time.sleep(60)")
+        started = time.monotonic()
+        with mock.patch.object(mi, "RUN_BUDGET_SECONDS", 1.5), mock.patch.object(mi, "MIN_CALL_SECONDS", 0.1):
+            with self.assertRaises(SystemExit):
+                self.run_main()
+        self.assertLess(time.monotonic() - started, 20)
+        self.assertEqual(len(fake.calls()), 1)
+        self.assertTrue([line for line in self.printed if "failed: no answer within" in line])
 
     def test_unavailable_models_are_skipped_without_using_an_attempt(self):
         # Every model but one is "retired"; the survivor must be reached however the pool is shuffled.
@@ -6762,19 +7065,21 @@ class MainTest(SiteDirTestCase):
         with self.assertRaises(SystemExit):
             self.run_main({"MODEL_POOL": "claude-haiku-4.5,big-a,gpt-5-mini,big-b,claude-sonnet-5,big-c,big-d"})
         asked = [c["args"][1] for c in fake.calls()]
-        self.assertEqual(len(asked), mi.MAX_ATTEMPTS)
+        self.assertEqual(len(asked), mi.MAX_ATTEMPTS * (1 + mi.REPAIR_ROUNDS))
         self.assertTrue(set(asked) <= {"big-a", "big-b", "big-c", "big-d"}, asked)
 
     def test_requested_model_is_the_only_one_tried(self):
         fake = FakeCopilot(self, "say('nope')")
         with self.assertRaises(SystemExit):
             self.run_main({"MODEL": " my-model "})
-        self.assertEqual([c["args"][1] for c in fake.calls()], ["my-model"] * mi.MAX_ATTEMPTS)
+        self.assertEqual([c["args"][1] for c in fake.calls()], ["my-model"] * (mi.MAX_ATTEMPTS * (1 + mi.REPAIR_ROUNDS)))
 
     def test_a_lone_available_model_is_asked_again_after_a_bad_answer(self):
         # The situation on an account that is offered a single model: everything else is skipped,
-        # and the one model that answers gets the remaining attempts.
-        survivor = mi.MODELS[0]
+        # and the one model that answers gets the remaining attempts. It is drawn last here so
+        # that every other model is found unavailable first; drawn first, it would repair its own
+        # answer before any other model was asked at all, which is also right.
+        survivor = mi.MODELS[-1]
         fake = FakeCopilot(self, f"""
             if MODEL != {survivor!r}:
                 sys.stderr.write('Error: Model "%s" from --model flag is not available.' % MODEL)
@@ -6782,7 +7087,8 @@ class MainTest(SiteDirTestCase):
             mine = [line for line in open(LOG).read().splitlines() if json.loads(line)['args'][1] == MODEL]
             say('not json' if len(mine) < 2 else {GOOD_PLAN!r})
         """)
-        output = self.run_main()
+        with mock.patch.object(mi.random, "sample", lambda pool, k: list(pool)):
+            output = self.run_main()
         asked = [c["args"][1] for c in fake.calls()]
         self.assertEqual(asked.count(survivor), 2)
         notice = [line for line in self.printed if line.startswith("::notice::")][-1]
@@ -6825,6 +7131,26 @@ class MainTest(SiteDirTestCase):
         output = self.run_main({"MODEL": "only-model"})
         self.assertEqual([c["args"][1] for c in fake.calls()], ["only-model", "only-model"])
         self.assertEqual(read_outputs(output)["model"], "only-model")
+        # The CLI failed, not the model: the same question is asked again, with nothing added.
+        self.assertNotIn("YOUR PREVIOUS ANSWER", fake.calls()[1]["prompt"])
+        self.assertNotIn("EARLIER THIS RUN", fake.calls()[1]["prompt"])
+
+    def test_a_cli_failure_is_no_lesson_for_the_next_model(self):
+        # What the next model is told is what the last one got wrong about the answer; a CLI that
+        # died is nothing the model did, so the next model is asked the plain question.
+        fake = FakeCopilot(self, f"""
+            first = json.loads(open(LOG).read().splitlines()[0])['args'][1]
+            if MODEL == first:
+                sys.stderr.write('Error: rate limit exceeded'); sys.exit(1)
+            say({GOOD_PLAN!r})
+        """)
+        self.run_main()
+        calls = fake.calls()
+        self.assertEqual(len(calls), mi.REPAIR_ROUNDS + 2)
+        self.assertNotEqual(calls[-1]["args"][1], calls[0]["args"][1])
+        for call in calls:
+            self.assertNotIn("EARLIER THIS RUN", call["prompt"])
+            self.assertNotIn("YOUR PREVIOUS ANSWER", call["prompt"])
 
     def test_auth_failure_stops_immediately_with_setup_help(self):
         fake = FakeCopilot(self, "sys.stderr.write('Error: Access denied by policy settings'); sys.exit(1)")
@@ -6833,10 +7159,11 @@ class MainTest(SiteDirTestCase):
         self.assertIn("COPILOT_GITHUB_TOKEN", str(caught.exception))
         self.assertEqual(len(fake.calls()), 1, "no point trying other models")
 
-    def test_an_answer_the_tests_refuse_is_not_written_and_the_next_model_is_asked(self):
+    def test_an_answer_the_tests_refuse_is_not_written_and_its_model_is_asked_to_repair_it(self):
         # The gate comes after the axioms and before anything is written: an answer that holds to
         # all nine but fails the tests every deploy waits on is refused like any other, and the
-        # run goes on to the next model rather than pushing a commit that blocks the deploy.
+        # model that wrote it is shown the answer and the failures and asked for the plan again,
+        # rather than the run pushing a commit that blocks the deploy or starting over.
         fake = FakeCopilot(self, f"say({GOOD_PLAN!r})")
         refusal = "the tests every deploy waits on fail with this change: RealSiteTest.test_x (AssertionError: no)"
         written = []
@@ -6844,14 +7171,22 @@ class MainTest(SiteDirTestCase):
         def gate(ops):
             written.append((self.site / "clock.html").exists())
             if len(written) == 1:
-                raise mi.RejectedChange(refusal)
+                raise mi.RejectedChange(refusal, details="FAIL: test_x (RealSiteTest.test_x)\nAssertionError: no")
 
         self.require_passing_tests.side_effect = gate
         output = self.run_main()
         self.assertEqual(written, [False, False], "the gate ran after the change was written")
         calls = fake.calls()
         self.assertEqual(len(calls), 2)
+        self.assertEqual(calls[0]["args"][1], calls[1]["args"][1], "the model that wrote the answer repairs it")
         self.assertIn(f"::warning::{calls[0]['args'][1]} failed: {refusal}", self.printed)
+        second = calls[1]["prompt"]
+        self.assertIn("YOUR PREVIOUS ANSWER WAS REFUSED", second)
+        self.assertIn(f"Why it was refused: {refusal}.", second)
+        self.assertIn("The details:\nFAIL: test_x (RealSiteTest.test_x)\nAssertionError: no", second)
+        self.assertIn("Your answer was:\n" + GOOD_PLAN, second)
+        self.assertLess(second.index("=== index.html ==="), second.index("YOUR PREVIOUS ANSWER"))
+        self.assertLess(second.index("YOUR PREVIOUS ANSWER"), second.index("This run's mission:"))
         self.assertEqual(read_outputs(output)["model"], calls[1]["args"][1])
         (ops,) = self.require_passing_tests.call_args.args
         self.assertIn(("write", self.site / "clock.html", CLOCK_PAGE), ops)
@@ -6863,7 +7198,7 @@ class MainTest(SiteDirTestCase):
         with self.assertRaises(SystemExit) as caught:
             self.run_main()
         self.assertIn("No model produced a usable change", str(caught.exception))
-        self.assertEqual(len(fake.calls()), mi.MAX_ATTEMPTS)
+        self.assertEqual(len(fake.calls()), mi.MAX_ATTEMPTS * (1 + mi.REPAIR_ROUNDS))
         self.assertEqual(sorted(p.name for p in self.site.iterdir()), ["error.html", "index.html"])
 
     def test_rejected_plan_is_not_applied_even_in_part(self):
@@ -6873,7 +7208,7 @@ class MainTest(SiteDirTestCase):
         fake = FakeCopilot(self, f"say({evil!r})")
         with self.assertRaises(SystemExit):
             self.run_main()
-        self.assertEqual(len(fake.calls()), mi.MAX_ATTEMPTS, "the model was really asked")
+        self.assertEqual(len(fake.calls()), mi.MAX_ATTEMPTS * (1 + mi.REPAIR_ROUNDS), "the model was really asked")
         self.assertFalse((self.root / "pwned.html").exists())
         self.assertEqual(sorted(p.name for p in self.site.iterdir()), ["error.html", "index.html"])
 
@@ -6965,6 +7300,15 @@ class DeployGateTest(unittest.TestCase):
                       "(AssertionError: 'broken' unexpectedly found", refusal)
         self.assertNotIn("test_nothing_of_the_run_reaches_the_suite", refusal)
         self.assertNotIn("test_the_suite_runs_on_the_tree_as_committed", refusal)
+        # What the model is shown when it is asked to repair the answer: every failure, as its
+        # name and its message, and nothing of the traceback.
+        details = caught.exception.details
+        self.assertIn("FAIL: test_the_home_page_is_whole (test_fake_site.FakeSiteTest.test_the_home_page_is_whole)\n"
+                      "AssertionError: 'broken' unexpectedly found in '<h1>broken</h1>'", details)
+        self.assertIn("FAIL: test_the_retired_page_is_gone (test_fake_site.FakeSiteTest.test_the_retired_page_is_gone)\n"
+                      "AssertionError: True is not false", details)
+        self.assertNotIn("Traceback", details)
+        self.assertNotIn("Ran 4 tests", details)
         self.untouched()
 
     def test_the_log_shows_the_failures_and_obeys_none_of_what_they_quote(self):
@@ -7023,6 +7367,17 @@ class DeployGateTest(unittest.TestCase):
         self.assertEqual(mi.failing_tests(report),
                          ["SomeTest.test_a", "OtherTest.test_b", "RealSiteTest.setUpClass"])
         self.assertEqual(mi.first_failure(report), "AssertionError: 1 != 2")
+        self.assertEqual(mi.failure_digest(report), textwrap.dedent("""\
+            FAIL: test_a (suite.SomeTest.test_a) (world='x')
+            What the test checks, from its docstring.
+            AssertionError: 1 != 2
+
+            FAIL: test_a (suite.SomeTest.test_a) (world='y')
+
+            ERROR: test_b (suite.OtherTest)
+
+            ERROR: setUpClass (suite.RealSiteTest)"""))
+        self.assertEqual(mi.failure_digest(report, limit=20), "FAIL: test_a (suite.")
         self.assertEqual(mi.first_failure("Traceback ...\nSyntaxError: bad\n"), "SyntaxError: bad")
 
     def test_the_gate_runs_test_yml_s_own_command(self):
