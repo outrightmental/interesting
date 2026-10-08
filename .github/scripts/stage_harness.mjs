@@ -70,6 +70,11 @@
                       the press is the piece's again and the stage must add nothing of its own;
                       the same press with less motion asked for; and a press on a piece that is
                       taken away under it, which may leave nothing behind.
+    difficultyMoved   The difficulty, settable where it is a dependency (issue #93). Open a piece,
+                      find the slider the stage asked the persona for at the foot of the rail, move
+                      it to the fiercest setting, and report what the stage did: the piece has to be
+                      dealt again at the same world and the same seed, it has to be the piece the
+                      module makes at the new setting, and it has to still play to its end.
     carried           The alignment axiom (issue #80). Open a piece the way js/feed.js opens one
                       from a pressed card -- with the card's configuration and the content it was
                       showing -- and report what the stage did with them: what the heading said
@@ -87,10 +92,10 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { Worker, isMainThread, parentPort, workerData } from 'node:worker_threads';
 
-import { wrongFor } from './piece_harness.mjs';
+import { wrongFor, difficultyAt, MIDDLE_DIFFICULTY } from './piece_harness.mjs';
 
 const SCENARIOS = ['rounds', 'wrongThenRight', 'afterDone', 'sliderUsed', 'sliderUntouched', 'holdFilled', 'teardown',
-                   'carried', 'pressAnswered'];
+                   'carried', 'pressAnswered', 'difficultyMoved'];
 const SCENARIO_TIMEOUT_MS = 20000;
 const MISSING_WORLD = 'stage-harness-nowhere.html'; // a world with no module: the teardown and the card
 const SEEDS = [4242, 101, 99991, 7]; // tried in turn until a piece with the knob wanted turns up
@@ -423,6 +428,11 @@ function makePage(worlds, clock) {
   done.hidden = true;
   make('span', 'stage-done-text', done).textContent = 'done';
   make('div', 'stage-progress', end);
+  // The host the difficulty slider is rendered into, at the foot of the rail, as _includes/
+  // stage.njk writes it: the setting every piece is dealt at, settable where it is a dependency
+  // (issue #93). The stub persona below renders nothing into it and only records that it was
+  // asked, because what is being read off here is what the stage does when the setting moves.
+  make('div', 'stage-difficulty', side, 'stage-difficulty');
   // The way on, outside the inner the vanish transforms, and dim until the stage lights it.
   make('button', 'stage-next', stage, 'stage-next').disabled = true;
 
@@ -433,6 +443,9 @@ function makePage(worlds, clock) {
   // reads matchMedia once and keeps the list it was handed, so `matches` is a getter over a flag
   // here rather than a value, exactly as a browser's own list changes under a running page.
   const motion = { calm: false };
+  // The persona's difficulty, as this page holds it: the middle of the dial until a scenario moves
+  // it, and `hosts` the elements the stage asked for the slider in.
+  const tuned = { level: MIDDLE_DIFFICULTY.level, hosts: [], note: '', set: () => {} };
   const calmQuery = { get matches() { return motion.calm; }, addEventListener() {} };
   const win = {
     document: doc,
@@ -460,7 +473,20 @@ function makePage(worlds, clock) {
     },
     interestingPersona: {
       stars: () => STARS.map((star) => Object.assign({}, star)),
-      onSky: () => () => {}
+      onSky: () => () => {},
+      // The difficulty the persona keeps for the whole site, as js/stage.js reads it and hands it
+      // to a piece on env.difficulty. A scenario moves it through `tuned.set(level)`, which is
+      // what the real slider's onChange does, and reads off what the stage did about it.
+      difficulty: () => difficultyAt(tuned.level),
+      tuner(host, options) {
+        tuned.hosts.push(host && host.getAttribute ? host.getAttribute('id') || '' : '');
+        tuned.note = (options && options.note) || '';
+        tuned.set = (level) => {
+          tuned.level = Math.max(1, Math.min(5, Math.round(Number(level)) || 3));
+          if (options && typeof options.onChange === 'function') options.onChange(difficultyAt(tuned.level), true);
+        };
+        return () => {};
+      }
     }
   };
 
@@ -496,7 +522,7 @@ function makePage(worlds, clock) {
   };
 
   return { doc, win, stage, events, modes, frames: () => drawn.frames,
-           calm: (on) => { motion.calm = !!on; } };
+           calm: (on) => { motion.calm = !!on; }, tuned };
 }
 
 /* ---- playing the stage --------------------------------------------------------------------- */
@@ -787,7 +813,7 @@ function hash(text) {
   return h >>> 0;
 }
 
-function envFor(V, seed, world, stars, variant, card) {
+function envFor(V, seed, world, stars, variant, card, difficulty) {
   const rnd = V.mulberry32(seed);
   return {
     seed,
@@ -807,7 +833,11 @@ function envFor(V, seed, world, stars, variant, card) {
     reduced: false,
     world: { file: world.file, name: world.name, orientation: world.orientation },
     variant: variant || V.PLAIN,
-    card: card || null
+    card: card || null,
+    // The difficulty the stage will hand this piece (issue #93): the stub persona's, so the piece
+    // the module is asked for is the very piece the stage opened. A card carries none, as in the
+    // browser, which is why sparkOf() below is handed nothing.
+    difficulty: difficulty || null
   };
 }
 
@@ -826,7 +856,7 @@ function cardOf(spec) {
    knobs, as { values: { id: solution }, steps: { id: step } }, or empty if the module cannot be
    asked. Opened the way open() opens it: the configuration revived from the seed, the card the
    feed pressed or the one the configuration deals, the stub persona's sky. */
-async function answersFor(stageDir, worlds, file, seed, options) {
+async function answersFor(stageDir, worlds, file, seed, options, difficulty) {
   const empty = { values: {}, steps: {}, piece: null };
   const world = worlds.find((w) => w.file === file);
   if (!world) return empty;
@@ -845,7 +875,7 @@ async function answersFor(stageDir, worlds, file, seed, options) {
         card = null;
       }
     }
-    const piece = mod.piece(envFor(V, seed, world, stars, variant, card));
+    const piece = mod.piece(envFor(V, seed, world, stars, variant, card, difficulty || MIDDLE_DIFFICULTY));
     const steps = {};
     for (const step of piece.steps || []) if (step && step.id) steps[step.id] = step;
     const values = Object.assign({}, piece.solution || {});
@@ -1387,6 +1417,49 @@ async function wrongThenRight(stageDir, worlds, deal, clock) {
   return out;
 }
 
+/* The difficulty, settable where it is a dependency (issue #93). Every piece this stage deals is
+   made at the persona's difficulty, so the stage asks the persona for the one slider in the host
+   _includes/stage.njk leaves at the foot of the rail, and moving it has to deal the piece again --
+   the same world and the same seed, because the subject a visitor pressed is still the subject and
+   only how hard it is asked has moved. Reports where the slider was asked for, what the piece was
+   before and after, and whether the piece the stage then opened is the piece the module makes at
+   the new setting; no judgements, as everywhere else here. */
+async function difficultyMoved(stageDir, worlds, deal, clock) {
+  const page = await load(stageDir, worlds, clock);
+  page.win.interestingFeed = { take: () => null, consume() {} };
+  const api = page.win.interestingStage;
+  const out = { hosts: page.tuned.hosts.slice(), note: page.tuned.note, level: page.tuned.level };
+  api.open(deal[0].file, deal[0].seed, { arriving: true });
+  if (!(await waitForPiece(page, clock))) return Object.assign(out, { playable: false });
+  out.playable = true;
+  const was = api.current();
+  out.was = was;
+  out.before = look(page);
+  // The piece as it opened, against the piece the module makes at the setting that stood: the
+  // stage has to be handing it the persona's difficulty and not a guess of its own.
+  const atFirst = await answersFor(stageDir, worlds, was.file, was.seed, {}, difficultyAt(out.level));
+  out.firstMatchesModule = out.before.knobs.map((k) => k.id).join(',')
+    === (atFirst.piece ? atFirst.piece.steps.map((s) => s.id).join(',') : '');
+  page.events.length = 0;
+  // The slider, moved to the fiercest setting the way the persona's own control moves it.
+  page.tuned.set(5);
+  out.moved = page.tuned.level;
+  const dealt = await waitForPiece(page, clock);
+  out.dealtAgain = dealt;
+  out.now = api.current();
+  out.after = look(page);
+  out.opens = page.events.filter((e) => e.type === 'stage:open').length;
+  const atFierce = await answersFor(stageDir, worlds, was.file, was.seed, {}, difficultyAt(5));
+  out.afterMatchesModule = out.after.knobs.map((k) => k.id).join(',')
+    === (atFierce.piece ? atFierce.piece.steps.map((s) => s.id).join(',') : '');
+  // And the piece dealt at the new setting is still a piece that plays to its end.
+  out.unset = await playKnobs(page, clock, 'move', atFierce);
+  out.checkOffered = look(page).checkEnabled;
+  out.checked = (await pressCheck(page, clock)).pressed;
+  out.solved = look(page).mode === 'done';
+  return out;
+}
+
 async function runScenario(name, stageDir, worlds, deal) {
   const clock = makeClock();
   if (name === 'rounds') return rounds(stageDir, worlds, deal, clock);
@@ -1398,6 +1471,7 @@ async function runScenario(name, stageDir, worlds, deal) {
   if (name === 'teardown') return teardown(stageDir, worlds, deal, clock);
   if (name === 'carried') return carried(stageDir, worlds, deal, clock);
   if (name === 'pressAnswered') return pressAnswered(stageDir, worlds, deal, clock);
+  if (name === 'difficultyMoved') return difficultyMoved(stageDir, worlds, deal, clock);
   throw new Error('no scenario named ' + name);
 }
 
