@@ -2919,10 +2919,12 @@ class CardVariantTest(unittest.TestCase):
     # ---- what a card in motion does ----
 
     # The loosest the frame-to-frame guard below can be and still be worth having. A frame of the
-    # feed's loop is a step in a picture, not a new picture: measured over the configurations and
-    # seeds the harness follows, the most any world moves in one frame is about 0.27 of its drawing,
-    # and every world that re-dealt its puzzle per frame before issue #92 moved 0.40 or more. The
-    # number sits between the two, with the headroom on the side of the worlds that behave.
+    # feed's loop is a step in a picture, not a new picture: over the configurations and seeds the
+    # harness follows, the most any world moves in one frame is about 0.27 of its drawing, and a
+    # world left re-dealing its puzzle per frame moves 0.40 or more. The number sits between the
+    # two, with the headroom on the side of the worlds that behave. What it is here to catch is a
+    # world that is a perfectly steady function of t and still races -- `t` multiplied hard enough
+    # that a card flickers. Re-dealing is caught earlier and more plainly, by the sealed stream.
     MOST_A_FRAME_MAY_MOVE = 0.35
 
     def motions(self, mod):
