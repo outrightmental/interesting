@@ -195,7 +195,8 @@
   function holdsSky(value) {
     if (persona) return persona.holds(value);
     return Array.isArray(value) && value.some(function (s) {
-      return !!s && typeof s.x === 'number' && typeof s.y === 'number' && typeof s.text === 'string';
+      return !!s && typeof s.x === 'number' && isFinite(s.x)
+        && typeof s.y === 'number' && isFinite(s.y) && typeof s.text === 'string';
     });
   }
 
@@ -322,8 +323,8 @@
       return false;
     }
 
-    // The sky follows the persona: placed, seeded or cleared in the sheet floating over this page,
-    // or by a meteor the page itself caught, the part powers up, reloads, or powers down to match.
+    // The sky follows changes made in the sheet or through the persona API: the part powers up,
+    // reloads, or powers down to match.
     if (isSky && persona) {
       persona.onSky(function (list, how, kept) {
         if (!host.parentNode) return;

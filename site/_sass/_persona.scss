@@ -63,6 +63,7 @@
   display: block;
   width: 40px;
   height: 40px;
+  color: var(--md-sys-color-primary);
 }
 
 .persona-label {
@@ -159,7 +160,7 @@
   }
 }
 
-// The question, wherever the persona mounts it (the threshold's feature, or the sheet).
+// The sideways question belongs to the threshold's feature.
 .persona-probe {
   margin-top: 0.5rem;
 }
@@ -266,6 +267,7 @@
   width: 100%;
   height: 100%;
   display: block;
+  color: var(--md-sys-color-primary);
   pointer-events: none;
 }
 
@@ -301,11 +303,11 @@
   display: none;
 }
 
-// A finger needs more than fourteen pixels to land on: an invisible halo takes the press.
+// An invisible halo makes each star a 44px touch target.
 .persona-star::before {
   content: '';
   position: absolute;
-  inset: -9px;
+  inset: -15px;
   border-radius: 50%;
 }
 

@@ -130,18 +130,29 @@
       }
     };
   }
+  function sameStars(a, b) {
+    return a.length === b.length && a.every(function (star, i) {
+      return star.x === b[i].x && star.y === b[i].y && star.text === b[i].text;
+    });
+  }
   function announce(list, how, kept) {
-    for (var i = 0; i < listeners.length; i++) {
-      try { listeners[i](list.slice(), how, kept); }
-      catch (e) { console.error('A sky listener failed', e); }
-    }
-    window.dispatchEvent(new CustomEvent('persona:sky', {
-      detail: { stars: list.slice(), how: how, kept: kept }
-    }));
     refresh();
+    listeners.slice().forEach(function (fn) { fn(list.slice(), how, kept); });
+    if (typeof window.CustomEvent === 'function' && typeof window.dispatchEvent === 'function') {
+      window.dispatchEvent(new window.CustomEvent('persona:sky', {
+        detail: { stars: list.slice(), how: how, kept: kept }
+      }));
+    }
   }
   function setStars(next, how) {
+    if (!Array.isArray(next) || !next.every(validStar)) {
+      throw new TypeError('A sky must be an array of stars.');
+    }
     var list = clean(next);
+    var saved = read();
+    if (saved.status !== 'unreadable' && sameStars(clean(saved.value), list)) {
+      return !!(store && saved.status === 'ok' && store.persistent !== false);
+    }
     var kept = false;
     if (store) kept = list.length ? store.set(SKY, list) : store.remove(SKY);
     announce(list, how || 'placed', kept);
@@ -156,17 +167,12 @@
   }
   function seed() { return setStars(seedSky(), 'seeded'); }
   function clear() { return setStars([], 'cleared'); }
-  function cssColour(name, fallback) {
-    var value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-    return value || fallback;
-  }
   function drawSky(ctx, list, w, h, pad, dotRadius, lineWidth) {
     var points = list.map(function (s) {
       return { x: pad + s.x / 100 * (w - pad * 2), y: pad + s.y / 100 * (h - pad * 2) };
     });
     var maxDistanceSq = Math.pow(Math.min(w, h) * 0.3, 2);
     var used = Object.create(null);
-    var accent = cssColour('--accent', '#9fcbff');
     ctx.lineWidth = lineWidth;
     ctx.lineCap = 'round';
     for (var i = 0; i < points.length; i++) {
@@ -186,7 +192,7 @@
         if (used[key]) continue;
         used[key] = true;
         ctx.globalAlpha = 0.14 + (1 - nearest[k].d2 / maxDistanceSq) * 0.5;
-        ctx.strokeStyle = accent;
+        ctx.strokeStyle = 'currentColor';
         ctx.beginPath();
         ctx.moveTo(points[a].x, points[a].y);
         ctx.lineTo(points[b].x, points[b].y);
@@ -266,7 +272,10 @@
       var ctx = sizeCanvas(card.portrait, size, size);
       if (ctx && list.length) drawSky(ctx, list, size, size, size * 0.15, size * 0.032, size * 0.018);
     }
-    if (sheet && sheet.host.open) renderSheet();
+    if (sheet && sheet.host.open) {
+      if (!sameStars(serialize(), list)) renderField();
+      renderReading();
+    }
   }
   function askInCard() {
     var t = window.threshold;
@@ -311,7 +320,7 @@
   var activeDrag = null;
   var suppressClickUntil = 0;
   var openedBy = null;
-  var moveTimer = null;
+  var sheetWasOpen = false;
   var sheetBox = null;
   function sheetStatus(text) { if (sheet && sheet.status) sheet.status.textContent = text; }
   function fieldIntro(list) {
@@ -326,12 +335,12 @@
     star.el.style.left = star.x + '%';
     star.el.style.top = star.y + '%';
   }
-  // The name under the field, renamed the moment a star crosses a boundary: the reason one drag
-  // is worth one more. Written on every redraw, dragging included, so the rename is live.
+  // The name under the field follows each move, including a drag.
   function renderName() {
     if (!sheet || !sheet.name) return;
-    var named = skyName(serialize());
-    sheet.name.textContent = named ? '✦ ' + named + ' — ' + skyRead(serialize()) : '';
+    var list = serialize();
+    var named = skyName(list);
+    sheet.name.textContent = named ? '✦ ' + named + ' — ' + skyRead(list) : '';
     sheet.name.hidden = !named;
   }
   function namedLine() {
@@ -376,6 +385,7 @@
       ev.preventDefault();
       ev.stopPropagation();
       activeDrag = { index: index, pointerId: ev.pointerId, moved: false };
+      select(index);
       if (el.setPointerCapture) {
         try { el.setPointerCapture(ev.pointerId); }
         catch (e) { console.error('Could not hold the star while dragging', e); }
@@ -390,14 +400,10 @@
         star.x = Number(clamp(star.x + moves[ev.key][0], 1, 99).toFixed(2));
         star.y = Number(clamp(star.y + moves[ev.key][1], 1, 99).toFixed(2));
         placeElement(star);
+        var kept = setStars(serialize(), 'moved');
         drawField();
         select(index);
-        window.clearTimeout(moveTimer);
-        moveTimer = window.setTimeout(function () {
-          setStars(serialize(), 'moved');
-          var again = fieldStars[index];
-          if (again && again.el) again.el.focus();
-        }, 300);
+        sheetStatus('Moved.' + namedLine() + keptNote(kept));
       } else if (ev.key === 'Delete' || ev.key === 'Backspace') {
         ev.preventDefault();
         removeStar(index);
@@ -464,12 +470,13 @@
   function renderSheet() { renderField(); renderReading(); }
   function openSheet(section, opener) {
     if (!sheet) return;
-    openedBy = opener || document.activeElement;
     stopAskingInCard();
     if (!sheet.host.open) {
+      openedBy = opener || document.activeElement || (card && card.open);
       if (sheetBox) sheetBox.up();
       if (typeof sheet.host.showModal === 'function') sheet.host.showModal();
       else { sheet.host.setAttribute('open', ''); sheet.host.classList.add('persona-sheet-fallback'); }
+      sheetWasOpen = true;
     }
     renderSheet();
     var target = section === 'reading' ? sheet.ask
@@ -486,6 +493,8 @@
     onSheetClosed();
   }
   function onSheetClosed() {
+    if (!sheet || !sheetWasOpen) return;
+    sheetWasOpen = false;
     activeDrag = null;
     sheet.host.classList.remove('persona-sheet-fallback');
     if (sheetBox) sheetBox.down();
@@ -519,6 +528,40 @@
       var box = host.getBoundingClientRect();
       if (ev.clientX < box.left || ev.clientX > box.right || ev.clientY < box.top || ev.clientY > box.bottom) closeSheet();
     });
+    document.addEventListener('keydown', function (ev) {
+      if (!host.open || typeof host.showModal === 'function'
+          || document.documentElement.getAttribute('data-lightbox') === 'are-you-sure') return;
+      if (ev.key === 'Escape' || ev.key === 'Esc') {
+        ev.preventDefault();
+        closeSheet();
+        return;
+      }
+      if (ev.key !== 'Tab') return;
+      var controls = host.querySelectorAll('button, a[href]');
+      var reachable = [];
+      for (var i = 0; i < controls.length; i++) {
+        var control = controls[i];
+        if (control.disabled) continue;
+        var visible = true;
+        for (var parent = control; parent && parent !== host; parent = parent.parentNode) {
+          if (parent.hidden) { visible = false; break; }
+        }
+        if (visible) reachable.push(control);
+      }
+      if (!reachable.length) return;
+      var first = reachable[0];
+      var last = reachable[reachable.length - 1];
+      if (reachable.indexOf(document.activeElement) === -1) {
+        (ev.shiftKey ? last : first).focus();
+        ev.preventDefault();
+      } else if (ev.shiftKey && document.activeElement === first) {
+        last.focus();
+        ev.preventDefault();
+      } else if (!ev.shiftKey && document.activeElement === last) {
+        first.focus();
+        ev.preventDefault();
+      }
+    });
     sheet.field.addEventListener('click', function (ev) {
       if (Date.now() < suppressClickUntil) return;
       if (ev.target !== sheet.field && ev.target !== sheet.canvas) return;
@@ -526,18 +569,21 @@
       var words = thought();
       var kept = addStar({ x: point.x, y: point.y, text: words });
       sheetStatus('✦ ' + words + namedLine() + keptNote(kept));
-      var last = sheet.field.querySelector('.persona-star:last-of-type');
-      if (last) select(fieldStars.length - 1);
+      select(fieldStars.length - 1);
     });
     document.addEventListener('pointermove', function (ev) {
       if (!activeDrag || activeDrag.pointerId !== ev.pointerId) return;
       var star = fieldStars[activeDrag.index];
       if (!star) return;
-      activeDrag.moved = true;
       var point = pointInField(ev.clientX, ev.clientY);
-      star.x = Number(point.x.toFixed(2));
-      star.y = Number(point.y.toFixed(2));
+      var x = Number(point.x.toFixed(2));
+      var y = Number(point.y.toFixed(2));
+      if (star.x === x && star.y === y) return;
+      activeDrag.moved = true;
+      star.x = x;
+      star.y = y;
       placeElement(star);
+      setStars(serialize(), 'moved');
       drawField();
     });
     document.addEventListener('pointerup', function (ev) { endDrag(ev.pointerId); });
