@@ -322,6 +322,15 @@
   gap: 0.6rem;
 }
 
+// The difficulty slider at the foot of the rail (issue #93): the setting every piece is dealt at,
+// offered where it is a dependency. It is not one of the piece's knobs -- it does not answer the
+// puzzle and it is not counted by the dots -- so it stands under them, divided off and quiet, in
+// the same grammar _controls.scss gives it in the persona sheet.
+.stage-difficulty {
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--md-sys-color-outline-variant);
+}
+
 .knob {
   --knob-pct: 0%;
   position: relative;
