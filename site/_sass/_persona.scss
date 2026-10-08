@@ -142,6 +142,102 @@
   }
 }
 
+// ---- the hand-off, as the persona closes -------------------------------------------------
+
+// What a visitor just set, going home to the portrait as the persona closes: one small mark that
+// leaves the control it was set on, crosses the page, sinks into the portrait and blooms a ring
+// around it as it lands. "That thing you just configured lives there, in that menu" (issue #94).
+// js/persona.js draws it, measures where it lands (left and top, inside this corner) and where it
+// came from (--persona-flight-x and -y, the offset from the portrait to the control that was set),
+// and takes it away again after the flight; the duration below is the FLIGHT_MS that file counts,
+// and the ring is timed to land inside it rather than be cut off by it.
+//
+// It is a child of .persona rather than a thing pinned over the page of its own: the corner is
+// already positioned, so the mark lands wherever the portrait is at whatever size, needs no layer
+// of its own, and -- should a lightbox go up while it is still in the air -- is stilled with the
+// rest of this corner by the rule in _lightbox.scss, which is the site's own law and not an
+// exception to it. It takes no press, and it says nothing to a screen reader: the one sentence
+// beside the avatar already says where things stand, and this is the picture of it.
+.persona-flight {
+  position: absolute;
+  z-index: 1; // over the avatar it is landing on, which is the only other thing in this corner
+  width: 2.25rem;
+  height: 2.25rem;
+  margin: -1.125rem 0 0 -1.125rem; // centred on the point the script measured, its left and top
+  display: grid;
+  place-items: center;
+  border-radius: var(--md-sys-shape-corner-full);
+  color: var(--md-sys-color-primary);
+  pointer-events: none; // the avatar under it is what a press reaches, as it always is
+  animation: persona-flight 520ms var(--md-sys-motion-easing-emphasized) both;
+  @include type.scale(title-medium);
+}
+
+// The reading arrives in the colour it dresses the site in; the sky in the starlight its own stars
+// are drawn with, so each mark looks like the setting it carries.
+.persona-flight[data-mark='sky'] {
+  color: var(--md-sys-color-on-surface);
+}
+
+// The ring that blooms around the portrait as the mark lands, which is the avatar answering for it:
+// it waits out the flight and then opens and fades, and it is gone with the mark it belongs to.
+.persona-flight::after {
+  content: '';
+  position: absolute;
+  inset: -0.3rem;
+  border: 2px solid currentColor;
+  border-radius: var(--md-sys-shape-corner-full);
+  opacity: 0;
+  animation: persona-flight-ring 180ms var(--md-sys-motion-easing-standard) 340ms both;
+}
+
+@keyframes persona-flight {
+  from {
+    opacity: 0;
+    transform: translate(var(--persona-flight-x, 0), var(--persona-flight-y, 0)) scale(1.5);
+  }
+
+  15% {
+    opacity: 1;
+  }
+
+  70% {
+    opacity: 1;
+    transform: translate(0, 0) scale(1);
+  }
+
+  to {
+    opacity: 0;
+    transform: translate(0, 0) scale(1);
+  }
+}
+
+@keyframes persona-flight-ring {
+  from {
+    opacity: 0.9;
+    transform: scale(0.72);
+  }
+
+  to {
+    opacity: 0;
+    transform: scale(1.35);
+  }
+}
+
+// Less motion asked for: the result without the movement. The mark is laid on the portrait, held
+// there and taken away again, the way the stage's own small mark answers the same query and the
+// theme's crossfade lands on its colour without the shift. js/persona.js writes this class off that
+// query, so the script and the stylesheet cannot fall out of step.
+.persona-flight.is-still {
+  animation: none;
+  opacity: 0.9;
+}
+
+.persona-flight.is-still::after {
+  animation: none;
+  opacity: 0.6;
+}
+
 // On a narrow screen the beckoning label goes and the portrait stands alone, because the corner
 // has the logo's own pill opposite it and two labels would meet in the middle.
 @media (max-width: 839px) {
@@ -352,5 +448,16 @@
   .persona-star,
   .persona-star.dragging {
     transition: none;
+  }
+
+  // The same answer as .is-still above, for a page whose script never read the query.
+  .persona-flight {
+    animation: none;
+    opacity: 0.9;
+  }
+
+  .persona-flight::after {
+    animation: none;
+    opacity: 0.6;
   }
 }
