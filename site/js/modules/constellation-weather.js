@@ -34,6 +34,17 @@ const TAU = Math.PI * 2;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const fmt = (hour) => (hour < 10 ? '0' : '') + hour + ':00';
 
+/* How hard the visitor asked for their puzzles. The persona keeps one difficulty for the whole
+   site (js/persona.js) and js/stage.js hands it to a piece on env.difficulty, 1 (gentle) to 5
+   (fierce); a card's env carries none, so the middle of the dial stands in. A level buys `helps`
+   -- how many things a piece will show when it is asked -- and `margin`, how far out a measured
+   answer may be and still count. Read inside piece() only: the subject is the seed's. */
+function asked(env) {
+  const said = env && env.difficulty ? Number(env.difficulty.level) : NaN;
+  const level = Number.isFinite(said) ? Math.max(1, Math.min(5, Math.round(said))) : 3;
+  return { level, helps: 6 - level, margin: Math.max(0, 3 - level) };
+}
+
 /* ---- drawing shared by both ---------------------------------------------------------------- */
 
 function write(g, text, x, y, size, align, tone, weight) {
@@ -364,6 +375,7 @@ function frontPreview(g, w, h, env, plan, t) {
 function frontPiece(env, plan) {
   const hours = frontHours(plan);
   const arrives = (plan.now + hours) % 24;
+  const { helps, margin } = asked(env);
   const s = { t: 0, sweep: 0, guess: null, side: '', hinted: false, rain: 0, lines: null, rise: 0 };
   const draw = (c) => drawFront(c.g, c.w, c.h, c, plan, s, env.variant);
   return {
@@ -375,12 +387,15 @@ function frontPiece(env, plan) {
     steps: [
       { id: 'hour', ask: 'the hour it arrives, on the 24-hour dial', kind: 'number', min: 0, max: 23, step: 1, value: 0, unit: 'h' },
       { id: 'side', ask: 'the side it comes from', kind: 'choice', options: SIDES.map((side) => ({ label: 'from the ' + side, value: side })) },
-      { id: 'hint', ask: 'how far out it is', kind: 'press', count: 1, label: 'show me', optional: true }
-    ],
+      // The station has one thing to say, so a fierce difficulty does not offer to say it.
+      helps > 1 ? { id: 'hint', ask: 'how far out it is', kind: 'press', count: 1, label: 'show me', optional: true } : null
+    ].filter(Boolean),
     solution: { hour: arrives, side: plan.side },
     check(c) {
       const hour = Math.round(Number(c.value('hour')));
-      const hourRight = hour === arrives;
+      // The hour is read off a dial, so it is a measured answer: the difficulty says how many
+      // hours out a reading may be and still be logged (none from the middle of the dial up).
+      const hourRight = Math.abs(hour - arrives) <= margin;
       const sideRight = c.value('side') === plan.side;
       if (hourRight && sideRight) return { solved: true, say: 'entered in the ledger: the front arrives from the ' + plan.side + ' at ' + fmt(arrives) };
       const parts = [];
@@ -557,6 +572,7 @@ function pressurePreview(g, w, h, env, plan, t) {
 }
 
 function pressurePiece(env, plan) {
+  const { helps, margin } = asked(env);
   const st = plan.stations;
   const hi = highest(st);
   const lo = lowest(st);
@@ -574,15 +590,16 @@ function pressurePiece(env, plan) {
       { id: 'toward', ask: 'the station the wind blows toward', kind: 'pick', count: 1, items: st.map((q, i) => ({ label: 'station ' + LETTERS[i], value: i })) },
       { id: 'way', ask: 'the way it blows', kind: 'choice', options: SIDES.map((side) => ({ label: side, value: side })) },
       { id: 'gap', ask: 'the pressure difference between the two', kind: 'number', min: 1, max: 60, step: 1, value: 1, unit: 'hPa' },
-      { id: 'hint', ask: 'the station it blows from', kind: 'press', count: 1, label: 'show me', optional: true }
-    ],
+      helps > 1 ? { id: 'hint', ask: 'the station it blows from', kind: 'press', count: 1, label: 'show me', optional: true } : null
+    ].filter(Boolean),
     solution: { toward: [lo], way, gap },
     check(c) {
       const toward = c.value('toward');
       const towardRight = Array.isArray(toward) && toward.length === 1 && Number(toward[0]) === lo;
       const wayRight = c.value('way') === way;
       const n = Math.round(Number(c.value('gap')));
-      const gapRight = n === gap;
+      // A difference read off five dials: the difficulty says how many hPa out it may be.
+      const gapRight = Math.abs(n - gap) <= margin;
       if (towardRight && wayRight && gapRight) return { solved: true, say: 'entered in the ledger: ' + gap + ' hPa from station ' + LETTERS[hi] + ' to station ' + LETTERS[lo] + ', blowing ' + way };
       const parts = [];
       parts.push(towardRight ? 'the station is right' : 'the wind does not blow toward that station');

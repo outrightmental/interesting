@@ -38,6 +38,17 @@ const SPECIMENS = [
 ];
 const LETTERS = 'ABCDEFGHJKLMNPQRSTVWXYZ';
 
+/* How hard the visitor asked for their puzzles. The persona keeps one difficulty for the whole
+   site (js/persona.js) and js/stage.js hands it to a piece on env.difficulty, 1 (gentle) to 5
+   (fierce); a card's env carries none, so the middle of the dial stands in. A level buys `helps`
+   -- how many things a piece will show when it is asked -- and `margin`, how far out a measured
+   answer may be and still count. Read inside piece() only: the subject is the seed's. */
+function asked(env) {
+  const said = env && env.difficulty ? Number(env.difficulty.level) : NaN;
+  const level = Number.isFinite(said) ? Math.max(1, Math.min(5, Math.round(said))) : 3;
+  return { level, helps: 6 - level, margin: Math.max(0, 3 - level) };
+}
+
 /* ---- the drawing: desk, card, specimen ----------------------------------------------------- */
 
 function ease(t) {
@@ -439,6 +450,7 @@ function drawerPreview(g, w, h, env, plan) {
 
 function drawerPiece(env, plan) {
   const names = plan.items.map((i) => SPECIMENS[i].name);
+  const helps = asked(env).helps;
   const look = scenery(env);
   const s = { order: plan.start.slice(), hinted: [], fade: 0 };
   const draw = (c) => drawCabinet(c.g, c.w, c.h, c, plan, s, look, env.variant);
@@ -476,11 +488,15 @@ function drawerPiece(env, plan) {
         c.status('top to bottom: ' + s.order.map((i) => names[i]).join(', '));
       }
       if (id === 'hint') {
-        const next = plan.order.find((item) => !s.hinted.includes(item) && s.order.indexOf(item) !== plan.order.indexOf(item));
+        const next = s.hinted.length < helps
+          ? plan.order.find((item) => !s.hinted.includes(item) && s.order.indexOf(item) !== plan.order.indexOf(item))
+          : undefined;
         if (next !== undefined) {
           s.hinted.push(next);
           c.hint();
           c.status('the ' + names[next] + ' belongs in the ' + DRAWERS[plan.order.indexOf(next)] + ' drawer');
+        } else if (s.hinted.length >= helps) {
+          c.status('that is all the cabinet will show at this difficulty; the rest is yours');
         } else {
           c.status('every specimen out of place has been shown its drawer; the rest is yours');
         }
@@ -727,7 +743,9 @@ function oddPreview(g, w, h, env, plan) {
 
 function oddPiece(env, plan) {
   const look = scenery(env);
-  const s = { pick: -1, reveal: false };
+  const helps = asked(env).helps;
+  const keepers = plan.specs.map((spec, i) => i).filter((i) => i !== plan.odd);
+  const s = { pick: -1, reveal: false, vouched: [] };
   const draw = (c) => drawTray(c.g, c.w, c.h, c, plan, s, look, env.variant);
   const feature = FEATURES.find((f) => f.value === plan.rule.thenAttr);
   return {
@@ -738,7 +756,8 @@ function oddPiece(env, plan) {
     checkLabel: 'check the drawer',
     steps: [
       { id: 'pick', ask: 'the one that breaks the rule', kind: 'pick', count: 1, items: plan.specs.map((spec, i) => ({ label: 'specimen ' + (i + 1), value: i })) },
-      { id: 'choice', ask: 'the feature it fails on', kind: 'choice', options: FEATURES }
+      { id: 'choice', ask: 'the feature it fails on', kind: 'choice', options: FEATURES },
+      { id: 'hint', ask: 'one specimen vouched for', kind: 'press', count: 1, label: 'vouch for one', optional: true }
     ],
     solution: { pick: [plan.odd], choice: plan.rule.thenAttr },
     check(c) {
@@ -762,6 +781,18 @@ function oddPiece(env, plan) {
       if (id === 'choice') {
         const f = FEATURES.find((o) => o.value === value);
         if (f) c.status('the rule disputes ' + f.label + ', you say');
+      }
+      if (id === 'hint') {
+        const next = s.vouched.length < helps ? keepers.find((i) => !s.vouched.includes(i)) : undefined;
+        if (next !== undefined) {
+          s.vouched.push(next);
+          c.hint();
+          c.status('specimen ' + (next + 1) + ' keeps the rule: ' + describe(plan.specs[next]));
+        } else if (s.vouched.length >= helps) {
+          c.status('that is all the drawer will vouch for at this difficulty; read the rest against the rule');
+        } else {
+          c.status('every specimen but one has been vouched for; the one left is the one that breaks it');
+        }
       }
       draw(c);
     },
@@ -867,7 +898,9 @@ function forgedPreview(g, w, h, env, plan) {
 
 function forgedPiece(env, plan) {
   const look = scenery(env);
-  const s = { pick: -1, reveal: false };
+  const helps = asked(env).helps;
+  const trueCards = plan.numbers.map((n, i) => i).filter((i) => i !== plan.odd);
+  const s = { pick: -1, reveal: false, vouched: [] };
   const draw = (c) => drawFan(c.g, c.w, c.h, c, plan, s, look, env.variant);
   return {
     title: forgedTitle(plan),
@@ -877,7 +910,8 @@ function forgedPiece(env, plan) {
     checkLabel: 'check the cards',
     steps: [
       { id: 'pick', ask: 'the forged card', kind: 'pick', count: 1, items: plan.numbers.map((n, i) => ({ label: 'card ' + (i + 1) + ': APC-' + n, value: i })) },
-      { id: 'digit', ask: 'the digit it should end in', kind: 'number', min: 0, max: 9, step: 1, value: 0 }
+      { id: 'digit', ask: 'the digit it should end in', kind: 'number', min: 0, max: 9, step: 1, value: 0 },
+      { id: 'hint', ask: 'one card vouched for', kind: 'press', count: 1, label: 'vouch for one', optional: true }
     ],
     solution: { pick: [plan.odd], digit: plan.digit },
     check(c) {
@@ -899,6 +933,18 @@ function forgedPiece(env, plan) {
         if (s.pick >= 0) c.status('card ' + (s.pick + 1) + ', APC-' + plan.numbers[s.pick] + ', you say');
       }
       if (id === 'digit') c.status('it should end in ' + Number(value) + ', you say');
+      if (id === 'hint') {
+        const next = s.vouched.length < helps ? trueCards.find((i) => !s.vouched.includes(i)) : undefined;
+        if (next !== undefined) {
+          s.vouched.push(next);
+          c.hint();
+          c.status('APC-' + plan.numbers[next] + ' keeps the rule: ' + plan.numbers[next].slice(0, 3).split('').join(' + ') + ' ends in ' + plan.numbers[next][3]);
+        } else if (s.vouched.length >= helps) {
+          c.status('that is all the desk will vouch for at this difficulty; add up the rest yourself');
+        } else {
+          c.status('every true card has been vouched for; the one left is the forgery');
+        }
+      }
       draw(c);
     },
     frame(t, dt, c) {

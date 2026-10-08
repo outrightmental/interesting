@@ -32,6 +32,17 @@ const BANDS = 4;
 const signed = (n) => (n > 0 ? '+' : '') + n;
 const capital = (text) => text[0].toUpperCase() + text.slice(1);
 
+/* How hard the visitor asked for their puzzles. The persona keeps one difficulty for the whole
+   site (js/persona.js) and js/stage.js hands it to a piece on env.difficulty, 1 (gentle) to 5
+   (fierce); a card's env carries none, so the middle of the dial stands in. A level buys `helps`
+   -- how many things a piece will show when it is asked -- and `margin`, how far out a measured
+   answer may be and still count. Read inside piece() only: the subject is the seed's. */
+function asked(env) {
+  const said = env && env.difficulty ? Number(env.difficulty.level) : NaN;
+  const level = Number.isFinite(said) ? Math.max(1, Math.min(5, Math.round(said))) : 3;
+  return { level, helps: 6 - level, margin: Math.max(0, 3 - level) };
+}
+
 /* ---- drawing shared by both ---------------------------------------------------------------- */
 
 function sky(g, w, h, env) {
@@ -336,6 +347,7 @@ function orderPreview(g, w, h, env, plan, t) {
 }
 
 function orderPiece(env, plan) {
+  const helps = asked(env).helps;
   const n = plan.n;
   const s = { order: plan.start.slice(), hinted: [], lift: new Array(n).fill(0), glow: new Array(n).fill(0), t: 0, gone: 0 };
   const draw = (c) => drawOrder(c.g, c.w, c.h, c, plan, s, env.variant);
@@ -376,11 +388,15 @@ function orderPiece(env, plan) {
         c.status('first to last: ' + named(s.order));
       }
       if (id === 'hint') {
-        const next = plan.order.find((i) => !s.hinted.includes(i) && s.order.indexOf(i) !== plan.order.indexOf(i));
+        const next = s.hinted.length < helps
+          ? plan.order.find((i) => !s.hinted.includes(i) && s.order.indexOf(i) !== plan.order.indexOf(i))
+          : undefined;
         if (next !== undefined) {
           s.hinted.push(next);
           c.hint();
           c.status('lantern ' + LETTERS[next] + ' rises ' + ORDINAL[plan.order.indexOf(next)]);
+        } else if (s.hinted.length >= helps) {
+          c.status('that is all the sky will show at this difficulty; the rest is yours');
         } else {
           c.status('every lantern out of place has been shown; the rest is yours');
         }
@@ -596,6 +612,7 @@ function driftPreview(g, w, h, env, plan, t) {
 }
 
 function driftPiece(env, plan) {
+  const helps = asked(env).helps;
   const total = driftTotal(plan.bands);
   const hard = strongest(plan.bands);
   const pos = positions(plan.bands);
@@ -611,7 +628,8 @@ function driftPiece(env, plan) {
     steps: [
       { id: 'drift', ask: 'its drift when it leaves the top, in columns (left is negative)', kind: 'number', min: -COLS, max: COLS, step: 1, value: 0, unit: 'columns' },
       { id: 'band', ask: 'the band that pushes hardest', kind: 'number', min: 1, max: BANDS, step: 1, value: 1 },
-      { id: 'hint', ask: 'where it is after the next band', kind: 'press', count: BANDS - 1, label: 'show me', optional: true }
+      // One press, one band shown, and the difficulty says how many bands the wind will show.
+      { id: 'hint', ask: 'where it is after the next band', kind: 'press', count: Math.max(1, Math.min(BANDS - 1, helps)), label: 'show me', optional: true }
     ],
     solution: { drift: total, band: hard },
     check(c) {
