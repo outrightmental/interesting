@@ -230,6 +230,22 @@
       low: 'frost on the inside of the glass', high: 'a kettle just off the boil',
       cold: { cosmic: 3, geometric: 2, analytic: 2, brooding: 1 },
       warm: { tender: 3, rooted: 2, tending: 2, ceremonial: 1 }
+    },
+    {
+      probe: 'nightfall', name: 'the stars coming out', kind: 'sky',
+      ask: 'The sky is going dark and the stars are coming out, one at a time. Say when there are enough.',
+      label: 'enough', hurry: 'hurry one along', full: 48,
+      buckets: [
+        { under: 4, weights: { tender: 3, brooding: 2, rooted: 1 } },
+        { under: 9, weights: { attentive: 3, divinatory: 2, geometric: 1 } },
+        { under: 16, weights: { analytic: 2, verbal: 2, curious: 1, tending: 1 } },
+        { under: 28, weights: { ceremonial: 2, cosmic: 2, metrical: 1, tending: 1 } },
+        { under: Infinity, weights: { cosmic: 3, tempestuous: 2, restless: 1 } }
+      ],
+      filled: { brooding: 2, cosmic: 1, tender: 1 },
+      waited: { attentive: 1, brooding: 1 },
+      kindled: { ceremonial: 2, tending: 1, curious: 1 },
+      hurried: { restless: 3, tempestuous: 1, verbal: 1 }
     }
   ];
 
@@ -390,6 +406,20 @@
     if (text !== undefined && text !== null) node.textContent = text;
     return node;
   }
+  // A CSS colour as [r, g, b]: the palette seeds are hex, and anything else falls back.
+  function rgbOf(value, fallback) {
+    var v = String(value || '').trim();
+    var m = v.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
+    if (!m) {
+      var nums = v.match(/[\d.]+/g);
+      if (nums && nums.length >= 3 && /^rgb/i.test(v)) return nums.slice(0, 3).map(Number);
+      return rgbOf(fallback, '#9fcbff');
+    }
+    var hex = m[1];
+    if (hex.length === 3) hex = hex.replace(/./g, function (c) { return c + c; });
+    var n = parseInt(hex, 16);
+    return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  }
   function mount(host, options) {
     if (!host) return null;
     var opts = options || {};
@@ -433,7 +463,7 @@
     var kinds = {
       choice: choiceProbe, sequence: sequenceProbe, tap: tapProbe, hold: holdProbe,
       place: placeProbe, draw: drawProbe, windows: windowsProbe, balance: balanceProbe,
-      slider: sliderProbe
+      slider: sliderProbe, sky: skyProbe
     };
     (kinds[probe.kind] || choiceProbe)(probe, body, trace, answer, finish);
     return probe;
@@ -977,6 +1007,162 @@
     });
     body.appendChild(wrap);
     body.appendChild(done);
+  }
+  // The stars come out one at a time, faster as the dusk deepens, and the answer is how many
+  // there are when the visitor says enough -- and how many of them they hurried out by hand. The
+  // sky fills on its own if they wait, but it never answers on its own: the press is theirs.
+  function skyProbe(probe, body, trace, answer, finish) {
+    var full = probe.full || 48;
+    var still = reducedMotion();
+    var sky = el('canvas', 'probe-pad');
+    sky.width = 600;
+    sky.height = 220;
+    sky.setAttribute('aria-hidden', 'true');
+    sky.style.cursor = 'pointer';
+    sky.style.touchAction = 'manipulation';
+    var g = sky.getContext('2d');
+    sky.hidden = !g;
+    body.appendChild(sky);
+    var controls = el('div', 'controls');
+    var enough = el('button', 'probe-big', probe.label);
+    enough.type = 'button';
+    var hurry = el('button', 'probe-option probe-undo', probe.hurry);
+    hurry.type = 'button';
+    controls.appendChild(enough);
+    controls.appendChild(hurry);
+    body.appendChild(controls);
+    body.appendChild(el('p', 'probe-count', 'there is no right number: tap the dark to hurry one along, or wait and the sky fills by itself'));
+    var style = window.getComputedStyle(body);
+    var tone = function (name, fallback) { return rgbOf(style.getPropertyValue(name), fallback); };
+    var night = tone('--bg', '#070a14');
+    var dusk = tone('--bg2', '#1c2a4e');
+    var cool = tone('--accent', '#9fcbff');
+    var warm = tone('--accent2', '#ffe7ab');
+    var stars = [];
+    var hurried = 0;
+    var stopped = false;
+    var due = 0;
+    function rgba(c, a) { return 'rgba(' + c[0] + ',' + c[1] + ',' + c[2] + ',' + Math.max(0, a).toFixed(3) + ')'; }
+    function blend(a, b, t) {
+      return [0, 1, 2].map(function (i) { return Math.round(a[i] + (b[i] - a[i]) * t); });
+    }
+    function pace(n) { return 160 + 900 * Math.pow(0.95, n); }
+    function count() {
+      if (!trace.meter) return;
+      trace.meter.textContent = stars.length ? stars.length + (stars.length === 1 ? ' star' : ' stars') : 'none out yet';
+    }
+    function appear(x, y, own) {
+      stars.push({ x: x, y: y, r: 0.9 + Math.random() * 1.5, phase: Math.random() * Math.PI * 2,
+        born: performance.now(), own: !!own });
+      count();
+      if (stars.length === 1) trace.textContent = 'the first one is out';
+      if (stars.length >= full) {
+        enough.textContent = 'that is all of them';
+        hurry.disabled = true;
+        trace.textContent = 'the sky is full';
+      }
+    }
+    function kindle(x, y) {
+      if (stopped || stars.length >= full) return;
+      appear(x, y, true);
+      hurried += 1;
+      if (stars.length < full) trace.textContent = hurried === 1 ? 'one hurried along' : hurried + ' hurried along';
+    }
+    function paint(now) {
+      if (!g) return;
+      var w = sky.width;
+      var h = sky.height;
+      var p = Math.min(1, stars.length / full);
+      var grad = g.createLinearGradient(0, 0, 0, h);
+      grad.addColorStop(0, rgba(blend(blend(dusk, warm, 0.22 * (1 - p)), night, 0.3 + p * 0.6), 1));
+      grad.addColorStop(1, rgba(blend(night, dusk, 0.2 * (1 - p)), 1));
+      g.fillStyle = grad;
+      g.fillRect(0, 0, w, h);
+      g.fillStyle = 'rgba(0,0,0,0.4)';
+      g.fillRect(0, h * 0.9, w, h * 0.1);
+      var reach = w * 0.2;
+      var i;
+      var j;
+      g.lineWidth = 1;
+      for (i = 0; i < stars.length; i++) {
+        var a = stars[i];
+        var near = -1;
+        var best = reach * reach;
+        for (j = 0; j < stars.length; j++) {
+          if (i === j) continue;
+          var dx = (stars[j].x - a.x) * w;
+          var dy = (stars[j].y - a.y) * h;
+          var d2 = dx * dx + dy * dy;
+          if (d2 < best) { best = d2; near = j; }
+        }
+        if (near < 0) continue;
+        var fade = still ? 1 : Math.min(1, (now - Math.max(a.born, stars[near].born)) / 900);
+        g.strokeStyle = rgba(cool, (0.08 + 0.2 * (1 - Math.sqrt(best) / reach)) * fade);
+        g.beginPath();
+        g.moveTo(a.x * w, a.y * h);
+        g.lineTo(stars[near].x * w, stars[near].y * h);
+        g.stroke();
+      }
+      for (i = 0; i < stars.length; i++) {
+        var s = stars[i];
+        var f = still ? 1 : Math.min(1, (now - s.born) / 700);
+        var tw = still ? 0.85 : 0.7 + 0.3 * Math.sin(now / 480 + s.phase);
+        var c = s.own ? warm : blend(cool, [255, 255, 255], 0.55);
+        var x = s.x * w;
+        var y = s.y * h;
+        var r = s.r * (0.8 + 0.4 * tw) * (0.4 + 0.6 * f);
+        g.fillStyle = rgba(c, 0.14 * f * tw);
+        g.beginPath();
+        g.arc(x, y, r * 4, 0, Math.PI * 2);
+        g.fill();
+        g.fillStyle = rgba(c, (0.6 + 0.4 * tw) * f);
+        g.beginPath();
+        g.arc(x, y, r, 0, Math.PI * 2);
+        g.fill();
+      }
+    }
+    // One star a frame at most, so a tab that was hidden for a while does not dump the sky at once;
+    // and nothing comes out while the page is set aside behind a lightbox.
+    function frame(now) {
+      if (!sky.isConnected) return;
+      var aside = sky.closest('[data-lightbox-aside]');
+      if (aside) due = 0;
+      else if (!stopped && stars.length < full) {
+        if (!due) due = now + 500;
+        else if (now >= due) {
+          appear(0.04 + Math.random() * 0.92, 0.05 + Math.random() * 0.78, false);
+          due = now + pace(stars.length);
+        }
+      }
+      paint(now);
+      if (stopped && still) return;
+      window.requestAnimationFrame(frame);
+    }
+    sky.addEventListener('click', function (ev) {
+      var box = sky.getBoundingClientRect();
+      if (!box.width || !box.height) return;
+      kindle(Math.min(0.97, Math.max(0.03, (ev.clientX - box.left) / box.width)),
+        Math.min(0.86, Math.max(0.04, (ev.clientY - box.top) / box.height)));
+    });
+    hurry.addEventListener('click', function () {
+      kindle(0.08 + Math.random() * 0.84, 0.08 + Math.random() * 0.72);
+    });
+    enough.addEventListener('click', function () {
+      if (stopped) return;
+      stopped = true;
+      var n = stars.length;
+      bucket(probe.buckets, n, answer);
+      if (n >= full) add(answer, probe.filled, 1);
+      if (!hurried) add(answer, probe.waited, 1);
+      else add(answer, hurried * 2 > n ? probe.hurried : probe.kindled, 1);
+      enough.disabled = true;
+      hurry.disabled = true;
+      sky.style.cursor = 'default';
+      if (trace.meter) trace.meter.textContent = '';
+      finish();
+    });
+    count();
+    window.requestAnimationFrame(frame);
   }
   function describe(reading) {
     var o = reading && reading.orientation;
