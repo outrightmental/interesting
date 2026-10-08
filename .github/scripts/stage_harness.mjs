@@ -50,6 +50,15 @@
                       and keep pressing, then open a world whose module is not there. Nothing of
                       the first piece may be left on the stage and nothing of it may still be
                       running.
+    pressAnswered     The responsiveness axiom (issue #89). Press the scene where the press has
+                      nothing to reach -- a module still loading, a tap knob still locked behind
+                      another, a piece with no tap knob at all -- and report whether the stage
+                      answered for the piece, and what it left behind. The press must be visibly
+                      received and must cost nothing else: no knob set, no progress, no finish,
+                      and nothing the piece can see. Then the same press with the gate open, where
+                      the press is the piece's again and the stage must add nothing of its own;
+                      the same press with less motion asked for; and a press on a piece that is
+                      taken away under it, which may leave nothing behind.
     carried           The alignment axiom (issue #80). Open a piece the way js/feed.js opens one
                       from a pressed card -- with the card's configuration and the content it was
                       showing -- and report what the stage did with them: what the heading said
@@ -67,7 +76,8 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { Worker, isMainThread, parentPort, workerData } from 'node:worker_threads';
 
-const SCENARIOS = ['rounds', 'afterDone', 'sliderUsed', 'sliderUntouched', 'holdFilled', 'teardown', 'carried'];
+const SCENARIOS = ['rounds', 'afterDone', 'sliderUsed', 'sliderUntouched', 'holdFilled', 'teardown', 'carried',
+                   'pressAnswered'];
 const SCENARIO_TIMEOUT_MS = 20000;
 const MISSING_WORLD = 'stage-harness-nowhere.html'; // a world with no module: the teardown and the card
 const SEEDS = [4242, 101, 99991, 7]; // tried in turn until a piece with the knob wanted turns up
@@ -397,6 +407,11 @@ function makePage(worlds, clock) {
   const events = [];
   const modes = [];
   const drawn = { frames: 0 };
+  // The one media query the stage keeps, and a scenario can turn it on part-way through: the stage
+  // reads matchMedia once and keeps the list it was handed, so `matches` is a getter over a flag
+  // here rather than a value, exactly as a browser's own list changes under a running page.
+  const motion = { calm: false };
+  const calmQuery = { get matches() { return motion.calm; }, addEventListener() {} };
   const win = {
     document: doc,
     innerHeight: 800,
@@ -405,7 +420,7 @@ function makePage(worlds, clock) {
     clearTimeout: (id) => clock.clear(id),
     setInterval: (fn, ms) => clock.every(fn, ms),
     clearInterval: (id) => clock.clear(id),
-    matchMedia: () => ({ matches: false, addEventListener() {} }),
+    matchMedia: () => calmQuery,
     scrollTo() {},
     handlers: new Map(),
     addEventListener(type, fn) {
@@ -458,7 +473,8 @@ function makePage(worlds, clock) {
     }
   };
 
-  return { doc, win, stage, events, modes, frames: () => drawn.frames };
+  return { doc, win, stage, events, modes, frames: () => drawn.frames,
+           calm: (on) => { motion.calm = !!on; } };
 }
 
 /* ---- playing the stage --------------------------------------------------------------------- */
@@ -879,6 +895,139 @@ async function teardown(stageDir, worlds, deal, clock) {
   return { playable: true, held, playing, whilePlaying, waiting: clock.waiting, current: api.current(), look: look(page) };
 }
 
+/* ---- every press on the scene is answered --------------------------------------------------- */
+
+const PRESS_AT = { clientX: 211, clientY: 133 }; // a point well inside the stub scene's 640x400 box
+
+function marksOn(page) {
+  return page.doc.getElementById('stage-scene').querySelectorAll('.stage-reject');
+}
+
+/* One press on the scene, and everything the stage did about it.
+
+   The mark and the knobs are read the instant the press lands and not a tick later: the stage takes
+   the mark away again a fifth of a second on, and anything a piece's own frame() does in between is
+   the piece playing rather than the press. So what a press cost is the difference across the one
+   synchronous gesture, and `gone` -- the mark not outstaying its welcome -- is what the clock is
+   advanced for. Judgements are StageTest's and RealSiteTest's. */
+async function pressScene(page, clock, where) {
+  const canvas = page.doc.getElementById('stage-canvas');
+  const scene = page.doc.getElementById('stage-scene');
+  const before = marksOn(page).length;
+  const finishes = () => page.events.filter((e) => e.type === 'stage:complete').length;
+  const whichSet = () => look(page).knobs.filter((knob) => knob.set).map((knob) => knob.id);
+  const was = { completes: finishes(), set: whichSet(), status: look(page).status };
+  canvas.dispatchEvent(Object.assign({ type: 'pointerdown' }, where || PRESS_AT));
+  const marks = marksOn(page);
+  const mark = marks.length > before ? marks[marks.length - 1] : null;
+  const seen = {
+    answered: !!mark,
+    // Where it was put, as the stage wrote it: a press is acknowledged at the point pressed, not
+    // at the middle of the scene or in a corner of it.
+    at: mark ? { left: mark.css.get('left') || '', top: mark.css.get('top') || '' } : null,
+    still: !!(mark && mark.classList.contains('is-still')),
+    inScene: !!(mark && within(mark, scene)),
+    silent: !!(mark && mark.getAttribute('aria-hidden') === 'true' && mark.textContent === ''),
+    set: whichSet(),
+    setWas: was.set,
+    finished: finishes() - was.completes
+  };
+  await clock.advance(400); // past the mark's own fifth of a second
+  const now = look(page);
+  return Object.assign(seen, {
+    gone: marksOn(page).length === before,
+    mode: now.mode,
+    // The live line a frame or two later, which is where a piece that counts its taps says so.
+    status: now.status,
+    statusMoved: now.status !== was.status,
+    dots: now.dots
+  });
+}
+
+/* Press the scene where the press has nothing to reach, and read off whether the stage answered
+   for the piece (issue #89). Unresponsiveness is uninteresting, and the stage used to be exactly
+   that in four places: while a module loaded, while every tap knob was still locked, on a piece
+   with no tap() of its own, and on a tap() that threw. The first three are pressed here. Which
+   world has a locked tap knob, and which has no tap knob at all, is the seed's to decide, so each
+   is looked for rather than assumed -- the way the slider and the hold are -- and the scenario
+   says plainly when it found none rather than going quietly vacuous. */
+async function pressAnswered(stageDir, worlds, deal, clock) {
+  const nowhere = { file: MISSING_WORLD, name: 'nowhere', orientation: 'lost', mood: 'tender', what: 'No module lives here.' };
+  const page = await load(stageDir, worlds.concat([nowhere]), clock);
+  page.win.interestingFeed = { take: () => null, consume() {} };
+  const api = page.win.interestingStage;
+  const tries = [deal[0].file].concat(worlds.map((world) => world.file));
+  const out = { loading: null, locked: null, opened: null, noTapKnob: null, calm: null };
+
+  // A module still loading: there is no piece on the stage at all, so nothing but the stage can
+  // answer. open() is awaited by nobody here, which is what catches the stage in that state.
+  api.open(deal[0].file, deal[0].seed, { arriving: true });
+  out.loadingMode = page.stage.dataset.mode;
+  out.loading = await pressScene(page, clock);
+  out.playable = await waitForPiece(page, clock);
+
+  // A tap knob still locked behind another knob: the stage withholds the press from the piece
+  // (tapsOpen()), so the stage is what has to answer it.
+  for (const at of SEEDS) {
+    for (const file of tries) {
+      api.open(file, at, { arriving: true });
+      if (!(await waitForPiece(page, clock))) continue;
+      const knob = knobsOn(page).find((k) => k.dataset.kind === 'tap');
+      if (!knob || !isLocked(knob)) continue;
+      out.locked = Object.assign({ world: file, seed: at, knob: knob.dataset.id },
+        await pressScene(page, clock));
+      // And then the same press with the gate open, which is the piece's again: whatever the piece
+      // makes of it, the stage adds nothing of its own on top of the piece's own answer.
+      for (let pass = 0; pass < knobsOn(page).length + 2 && isLocked(knob); pass++) {
+        let moved = false;
+        for (const other of knobsOn(page)) {
+          if (other === knob || isSet(other) || isLocked(other)) continue;
+          await setKnob(page, clock, other, 'move');
+          if (isSet(other)) moved = true;
+        }
+        if (!moved) break;
+      }
+      out.opened = Object.assign({ locked: isLocked(knob) }, await pressScene(page, clock));
+      break;
+    }
+    if (out.locked) break;
+  }
+
+  // A piece with no tap knob at all. Whether its module writes a tap() anyway is the module's own
+  // business and nothing out here can see it, so this reports what the stage did and judges none
+  // of it: the pieces StageTest plays through here have no tap(), and a mark is the only answer
+  // there is for them.
+  for (const at of SEEDS) {
+    for (const file of tries) {
+      api.open(file, at, { arriving: true });
+      if (!(await waitForPiece(page, clock))) continue;
+      if (knobsOn(page).some((k) => k.dataset.kind === 'tap')) continue;
+      out.noTapKnob = Object.assign({ world: file, seed: at }, await pressScene(page, clock));
+      break;
+    }
+    if (out.noTapKnob) break;
+  }
+
+  // The same press with less motion asked for: the mark is held still rather than rippling open,
+  // which is what the theme's crossfade and the ceremony's burst do with the same query. Read off
+  // a press the stage is bound to answer, so what is being read is the motion and nothing else.
+  page.calm(true);
+  api.open(deal[0].file, deal[0].seed + 1, { arriving: true });
+  out.calm = await pressScene(page, clock);
+  page.calm(false);
+
+  // And nothing of a press outlives the piece it landed on: a mark pressed out of a piece that is
+  // taken away under it comes away with the piece, like every other part of it.
+  api.open(deal[0].file, deal[0].seed + 2, { arriving: true });
+  page.doc.getElementById('stage-canvas').dispatchEvent(Object.assign({ type: 'pointerdown' }, PRESS_AT));
+  out.beforeClose = marksOn(page).length;
+  api.open(MISSING_WORLD, 7, { push: false });
+  out.afterClose = marksOn(page).length;
+  await clock.advance(3000);
+  out.waiting = clock.waiting;
+  return out;
+}
+
 /* The card js/feed.js hands over, and the configuration it was wearing: the shape of what a pressed
    card carries to the stage (shown() and openFromCard() there, and variant.roll's seven dials). */
 const PRESSED_CARD = {
@@ -935,6 +1084,7 @@ async function runScenario(name, stageDir, worlds, deal) {
   if (name === 'holdFilled') return holdFilled(stageDir, worlds, deal, clock);
   if (name === 'teardown') return teardown(stageDir, worlds, deal, clock);
   if (name === 'carried') return carried(stageDir, worlds, deal, clock);
+  if (name === 'pressAnswered') return pressAnswered(stageDir, worlds, deal, clock);
   throw new Error('no scenario named ' + name);
 }
 
