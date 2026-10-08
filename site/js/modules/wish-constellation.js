@@ -1,7 +1,8 @@
 /* The wish constellation: the persona's stars as a live sky. As a card it is the sky with a
    reading under it (paint, spark); as a piece it is that sky asked for a reading and minted as a
    postcard, a meteor shower to catch comet memos from, or the whole sky set orbiting for one
-   full turn. See js/feed.js for what a module is and js/stage.js for what a piece is.
+   full turn. A two-view postcard gives the stars invented depths to explore without moving the
+   saved sky. See js/feed.js for what a module is and js/stage.js for what a piece is.
 
    A card and the feature it opens as are one reading: the spark puts the star it read and the line
    it gave on its spec as `of`, and the piece carries both -- the reading starts at that star, and
@@ -617,8 +618,262 @@ function orbit(env, dust) {
   };
 }
 
+const PARALLAX_GUESSES = [
+  { label: 'the nearer lights', value: 'near' },
+  { label: 'the farther lights', value: 'far' },
+  { label: 'all move together', value: 'same' }
+];
+
+function dealsParallax(env) {
+  return (env.seed >>> 0) % 4 === 1;
+}
+
+function parallaxPlan(env) {
+  const salt = env.hash('parallax:' + (env.seed >>> 0)) >>> 0;
+  return {
+    family: 'parallax', number: 101 + salt % 899,
+    depth: 35 + (salt >>> 8) % 51,
+    step: ((salt >>> 14) & 1 ? -1 : 1) * [50, 65, 80][(salt >>> 16) % 3],
+    salt
+  };
+}
+
+function pressedParallax(env) {
+  const p = env.card && env.card.of;
+  if (!p || p.family !== 'parallax'
+      || !Number.isInteger(p.number) || p.number < 101 || p.number > 999
+      || !Number.isInteger(p.depth) || p.depth < 0 || p.depth > 100
+      || !Number.isInteger(p.step) || p.step < -100 || p.step > 100
+      || !Number.isInteger(p.salt) || p.salt < 0 || p.salt > 4294967295) return null;
+  return { family: p.family, number: p.number, depth: p.depth, step: p.step, salt: p.salt };
+}
+
+function parallaxTitle(p) {
+  return 'postcard ' + p.number + ': one step aside';
+}
+
+function parallaxField(env, p) {
+  if (!env.stars.length) return [];
+  const hashes = env.stars.map((s) => env.hash(p.salt + '|' + s.text + '|' + s.x + '|' + s.y) >>> 0);
+  const low = Math.min(...hashes);
+  const high = Math.max(...hashes);
+  return env.stars.map((s, i) => ({
+    x: s.x, y: s.y, text: s.text,
+    depth: high === low ? 0.5 : (hashes[i] - low) / (high - low)
+  }));
+}
+
+function parallaxDistance(point, s) {
+  return 1 + 3 * s.depth / 100 * point.depth;
+}
+
+// A lateral viewpoint change shifts a light inversely with its distance; the original view stays fixed.
+function parallaxShift(point, s, v) {
+  return -s.step / 100 * 0.15 * v.scale / parallaxDistance(point, s);
+}
+
+function parallaxPosition(point, s, v, aside) {
+  return {
+    x: 0.18 + point.x / 100 * 0.64 + (aside ? parallaxShift(point, s, v) : 0),
+    y: 0.1 + point.y / 100 * 0.8
+  };
+}
+
+function parallaxLayout(w, h) {
+  return { lefts: [w * 0.04, w * 0.52], width: w * 0.44, top: h * 0.16, height: h * 0.64 };
+}
+
+function parallaxMoves(field, s, v) {
+  let near = 0;
+  let far = Infinity;
+  for (const point of field) {
+    const move = Math.abs(parallaxShift(point, s, v)) * 100;
+    near = Math.max(near, move);
+    far = Math.min(far, move);
+  }
+  return { near, far: field.length ? far : 0 };
+}
+
+function parallaxScene(g, w, h, c, field, s, v) {
+  const box = parallaxLayout(w, h);
+  const size = Math.max(10, Math.min(18, Math.min(w, h) * 0.043));
+  const moves = parallaxMoves(field, s, v);
+  g.save();
+  backdrop(g, w, h, c);
+  g.fillStyle = c.alpha(c.colors.fg, 0.14);
+  for (let i = 0, count = Math.round(34 * v.density); i < count; i++) {
+    g.fillRect(((i * 0.618034 + v.turn * 0.37) % 1) * w,
+      ((i * 0.754878 + v.turn * 0.19) % 1) * h, v.scale, v.scale);
+  }
+  g.font = '500 ' + size + 'px system-ui, sans-serif';
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  box.lefts.forEach((left, pane) => {
+    g.fillStyle = c.colors.fg;
+    g.fillText(pane === 0 ? 'here' : 'one step aside', left + box.width / 2, h * 0.09, box.width);
+    g.fillStyle = c.alpha(c.colors.bg, 0.62);
+    g.fillRect(left, box.top, box.width, box.height);
+    g.strokeStyle = c.alpha(c.colors.muted, 0.7);
+    g.lineWidth = 1;
+    g.strokeRect(left, box.top, box.width, box.height);
+    g.save();
+    g.beginPath();
+    g.rect(left, box.top, box.width, box.height);
+    g.clip();
+    if (pane === 0 || s.open) {
+      field.forEach((point, i) => {
+        const q = parallaxPosition(point, s, v, pane === 1);
+        const x = left + q.x * box.width;
+        const y = box.top + q.y * box.height;
+        if (pane === 1) {
+          const original = parallaxPosition(point, s, v, false);
+          const ox = left + original.x * box.width;
+          g.strokeStyle = c.alpha(c.colors.muted, 0.65);
+          g.lineWidth = 1;
+          g.beginPath();
+          g.moveTo(ox, y);
+          g.lineTo(x, y);
+          g.stroke();
+          g.fillStyle = c.alpha(c.colors.fg, 0.5);
+          g.beginPath();
+          g.arc(ox, y, 1.4, 0, Math.PI * 2);
+          g.fill();
+        }
+        star(g, c, { x, y, hot: point.depth <= 0.5 }, 1, v.scale);
+        if (point.depth <= 0.5 || s.focus === i) {
+          g.strokeStyle = s.focus === i ? c.colors.fg : c.colors.accent2;
+          g.lineWidth = s.focus === i ? 1.8 : 1;
+          g.beginPath();
+          g.arc(x, y, (s.focus === i ? 8 : 4.5) * v.scale, 0, Math.PI * 2);
+          g.stroke();
+        }
+      });
+    } else {
+      g.fillStyle = c.colors.muted;
+      g.fillText('covered', left + box.width / 2, box.top + box.height / 2, box.width * 0.9);
+    }
+    g.restore();
+    g.fillStyle = c.colors.fg;
+    const footer = !s.open ? (field.length === 1 ? 'one light' : pane === 0 ? 'rings: nearer' : 'dots: farther')
+      : field.length === 1 ? (pane === 0 ? 'one light' : 'shift ' + moves.near.toFixed(1) + '%')
+        : (pane === 0 ? 'near ' + moves.near.toFixed(1) : 'far ' + moves.far.toFixed(1)) + '% shift';
+    g.fillText(footer, left + box.width / 2, h * 0.86, box.width);
+  });
+  g.fillStyle = c.colors.muted;
+  g.fillText('Same stars. Invented distances.', w / 2, h * 0.955, w * 0.92);
+  g.restore();
+}
+
+function parallaxPreview(g, w, h, env, p) {
+  parallaxScene(g, w, h, env, parallaxField(env, p),
+    { depth: p.depth, step: p.step, open: false, focus: -1 }, env.variant);
+}
+
+function parallax(env, carried) {
+  const p = carried || parallaxPlan(env);
+  const v = env.variant;
+  const field = parallaxField(env, p);
+  const single = field.length === 1;
+  const options = single ? [
+    { label: 'the same place', value: 'same' },
+    { label: 'a different place', value: 'different' }
+  ] : PARALLAX_GUESSES;
+  const s = { depth: p.depth, step: p.step, guess: '', open: false, focus: -1, read: false };
+  const draw = (c) => parallaxScene(c.g, c.w, c.h, c, field, s, v);
+  function finding() {
+    const moves = parallaxMoves(field, s, v);
+    const result = single ? (moves.near === 0 ? 'same' : 'different')
+      : Math.abs(moves.near - moves.far) < 0.000001 ? 'same' : 'near';
+    const prediction = options.find((option) => option.value === s.guess);
+    const measured = single ? 'The light shifts ' + moves.near.toFixed(1) + '% of the view. '
+      : 'Nearest: ' + moves.near.toFixed(1) + '% shift; farthest: ' + moves.far.toFixed(1) + '%. ';
+    const explanation = s.step === 0 ? 'No sideways step: the views match.'
+      : single ? 'Moving the viewpoint changes the picture, not your star.'
+        : result === 'same' ? 'These lights share a distance, so they shift together.'
+          : 'Nearby lights shift farther. Try one sheet: they travel together.';
+    return measured + explanation + (prediction ? s.guess === result ? ' You called it.'
+      : ' You predicted ' + prediction.label + '.' : '');
+  }
+  function say(c) {
+    const point = field[s.focus];
+    c.status(finding() + (point ? ' This light says: ' + (point.text || 'nothing yet')
+      + ' (invented distance ' + parallaxDistance(point, s).toFixed(2) + ').' : ''));
+  }
+  return {
+    title: parallaxTitle(p),
+    brief: 'Give your stars invented distances, predict what a step sideways changes, and tap anywhere to open the second view. Set the depth and step; follow a light in either picture to read its thought. Your saved sky stays put.',
+    aspect: '4 / 3',
+    steps: [
+      { id: 'guess', ask: single ? 'will the light occupy the same place in both views?' : 'which lights shift more between the views?', kind: 'choice', options },
+      { id: 'depth', ask: 'how deep the postcard goes', kind: 'range', min: 0, max: 100, step: 1, value: p.depth, low: 'one sheet', high: 'deep sky' },
+      { id: 'step', ask: 'move the viewpoint sideways', kind: 'range', min: -100, max: 100, step: 1, value: p.step, low: 'left', high: 'right' },
+      { id: 'look', ask: 'tap anywhere to open the second view and follow a light', kind: 'tap', label: 'open or follow a light for me', after: 'guess' }
+    ],
+    start(c) {
+      c.status('The second view is covered. Place a prediction, then open it. The distances are invented; the stars and their thoughts are yours.');
+      draw(c);
+    },
+    apply(id, value, c) {
+      if (id === 'guess') {
+        if (!options.some((option) => option.value === value)) {
+          c.status('Choose one of the predictions before opening the second view.');
+          return;
+        }
+        s.guess = value;
+        c.status('Prediction placed. Open the second view to compare.');
+      }
+      if (id === 'depth' || id === 'step') {
+        const number = Number(value);
+        if (!Number.isFinite(number)) {
+          c.status('Set the ' + (id === 'depth' ? 'depth' : 'sideways step') + ' with its slider.');
+          return;
+        }
+        s[id] = Math.max(id === 'depth' ? 0 : -100, Math.min(100, number));
+        c.status(id === 'depth' ? s.depth === 0 ? 'Every light sits on one sheet.'
+          : 'The lights have invented distances behind the postcard.'
+          : s.step === 0 ? 'The two viewpoints coincide.'
+            : 'The viewer steps ' + (s.step < 0 ? 'left; the lights shift right.' : 'right; the lights shift left.'));
+      }
+      if (s.open) say(c);
+      draw(c);
+    },
+    tap(x, y, c) {
+      if (!s.guess) {
+        c.status('Place a prediction before opening the second view.');
+        return;
+      }
+      s.open = true;
+      const box = parallaxLayout(c.w, c.h);
+      const pane = x < 0.5 ? 0 : 1;
+      let best = Infinity;
+      field.forEach((point, i) => {
+        const q = parallaxPosition(point, s, v, pane === 1);
+        const distance = (box.lefts[pane] + q.x * box.width - x * c.w) ** 2
+          + (box.top + q.y * box.height - y * c.h) ** 2;
+        if (distance < best) { best = distance; s.focus = i; }
+      });
+      say(c);
+      draw(c);
+      if (!s.read) {
+        s.read = true;
+        c.progress('look', 1);
+        c.satisfy('look');
+      }
+    },
+    frame(t, dt, c) {
+      draw(c);
+    },
+    end(c) {
+      say(c);
+      draw(c);
+    }
+  };
+}
+
 function piece(env) {
   if (!env.stars.length) return null;
+  const carried = pressedParallax(env);
+  if (carried || (!pressed(env) && dealsParallax(env))) return parallax(env, carried);
   const dust = dustOf(env.rnd, 60);
   if (env.chance(0.36)) return oracle(env, dust);
   return env.chance(0.5) ? shower(env, dust) : orbit(env, dust);
@@ -628,13 +883,25 @@ export default {
   id: 'wish-constellation',
   needsSky: true,
   paint(ctx, w, h, env) {
-    sky(ctx, w, h, env, 0);
+    if (dealsParallax(env)) parallaxPreview(ctx, w, h, env, parallaxPlan(env));
+    else sky(ctx, w, h, env, 0);
   },
   animate(ctx, w, h, env, t) {
-    sky(ctx, w, h, env, t + env.variant.turn * 6);
+    if (dealsParallax(env)) parallaxPreview(ctx, w, h, env, parallaxPlan(env));
+    else sky(ctx, w, h, env, t + env.variant.turn * 6);
   },
   spark(env) {
     if (!env.stars.length) return null;
+    if (dealsParallax(env)) {
+      const p = parallaxPlan(env);
+      return {
+        title: parallaxTitle(p),
+        text: 'Give these stars invented distances, predict what a sideways step does, then open the second view. The stars you saved stay put.',
+        aspect: '4 / 3',
+        paint: (ctx, w, h, e) => parallaxPreview(ctx, w, h, e, p),
+        of: p
+      };
+    }
     const star = env.pick(env.stars);
     const line = env.pick(ORACLE);
     return {

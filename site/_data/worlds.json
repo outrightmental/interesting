@@ -11,7 +11,7 @@
     { "file": "quiet-room.html", "name": "the quiet room", "orientation": "banked low", "mood": "tender", "aspect": "1 / 1",
       "what": "Set the pace of a breath, clear a window, or put one thing down and let the room settle." },
     { "file": "wish-constellation.html", "name": "the wish constellation", "orientation": "looking up", "mood": "cosmic", "aspect": "4 / 5",
-      "what": "Read your stars through a lens, catch comet memos, or turn the sky into a postcard." },
+      "what": "Read your stars through a lens, catch comet memos, turn the sky, or predict which lights shift in a postcard with invented depths." },
     { "file": "gravity-well.html", "name": "the gravity well", "orientation": "looking up", "mood": "cosmic", "aspect": "16 / 10",
       "what": "Aim a probe past a well, compare two nearly identical paths, or use a moving well to trade speed without firing an engine." },
     { "file": "constellation-diary.html", "name": "the diary", "orientation": "in the long look", "mood": "brooding", "aspect": "4 / 3",
