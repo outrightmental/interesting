@@ -38,6 +38,17 @@ const RULE_IDS = ['soil', 'lamp', 'twice', 'left', 'vent'];
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const capital = (text) => text[0].toUpperCase() + text.slice(1);
 
+/* How hard the visitor asked for their puzzles. The persona keeps one difficulty for the whole
+   site (js/persona.js) and js/stage.js hands it to a piece on env.difficulty, 1 (gentle) to 5
+   (fierce); a card's env carries none, so the middle of the dial stands in. A level buys `helps`
+   -- how many things a piece will show when it is asked -- and `margin`, how far out a measured
+   answer may be and still count. Read inside piece() only: the subject is the seed's. */
+function asked(env) {
+  const said = env && env.difficulty ? Number(env.difficulty.level) : NaN;
+  const level = Number.isFinite(said) ? Math.max(1, Math.min(5, Math.round(said))) : 3;
+  return { level, helps: 6 - level, margin: Math.max(0, 3 - level) };
+}
+
 /* ---- drawing shared by both ---------------------------------------------------------------- */
 
 function write(g, text, x, y, size, align, tone, weight) {
@@ -391,6 +402,7 @@ function waterPreview(g, w, h, env, plan, t) {
 }
 
 function waterPiece(env, plan) {
+  const helps = asked(env).helps;
   const n = plan.n;
   const got = watered(plan);
   const answer = [];
@@ -435,11 +447,15 @@ function waterPiece(env, plan) {
         c.status(s.chosen.length ? 'marked: ' + s.chosen.map((i) => 'plant ' + (i + 1)).join(', ') : 'nothing marked');
       }
       if (id === 'hint') {
-        const next = plan.rules.map((r, i) => i).find((i) => !s.hinted.includes(i) && s.chosen.includes(i) !== got[i]);
+        const next = s.hinted.length < helps
+          ? plan.rules.map((r, i) => i).find((i) => !s.hinted.includes(i) && s.chosen.includes(i) !== got[i])
+          : undefined;
         if (next !== undefined) {
           s.hinted.push(next);
           c.hint();
           c.status('plant ' + (next + 1) + (got[next] ? ' gets water' : ' stays dry'));
+        } else if (s.hinted.length >= helps) {
+          c.status('that is all the glass will show at this difficulty; the rest is yours');
         } else {
           c.status('every plant you have judged wrongly has been shown; the rest is yours');
         }
@@ -554,6 +570,7 @@ function agePreview(g, w, h, env, plan, t) {
 }
 
 function agePiece(env, plan) {
+  const helps = asked(env).helps;
   const order = ageOrder(plan);
   const a = ages(plan);
   const oldest = a[order[0]];
@@ -599,11 +616,13 @@ function agePiece(env, plan) {
       }
       if (id === 'oldest') c.status('you say the oldest has grown ' + Math.round(Number(value)) + ' weeks');
       if (id === 'hint') {
-        const next = order.find((i) => !s.hinted.includes(i));
+        const next = s.hinted.length < helps ? order.find((i) => !s.hinted.includes(i)) : undefined;
         if (next !== undefined) {
           s.hinted.push(next);
           c.hint();
           c.status('stem ' + LETTERS[next] + ' has grown ' + a[next] + (a[next] === 1 ? ' week' : ' weeks'));
+        } else if (s.hinted.length >= helps) {
+          c.status('that is all the glass will show at this difficulty; the rest is in the stems');
         } else {
           c.status('every stem\'s age is shown');
         }

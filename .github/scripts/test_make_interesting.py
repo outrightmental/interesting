@@ -4407,6 +4407,32 @@ LIVE_PIECE = """    let frames = 0;
     };"""
 
 
+# A piece made from the difficulty the stage handed it (issue #93): its title names the setting,
+# so what reached env.difficulty can be read straight off the stage, and it only offers its hint
+# below the fiercest stop of the dial -- the shape every world on the site uses, where the setting
+# buys help rather than changing the subject. The answer is the same at every setting, because the
+# dial is how hard a puzzle is asked and not which puzzle it is.
+DIFFICULTY_PIECE = """    const d = env.difficulty || {};
+    const level = Number(d.level) || 0;
+    const n = env.int(2, 4);
+    return {
+      title: 'the toy at ' + (d.name || 'nothing') + ' [' + level + ']',
+      brief: 'Turn it, then say how many turns it took.',
+      goal: 'Say how many turns it took.',
+      steps: [
+        { id: 'turn', ask: 'turn it', kind: 'press', count: n },
+        { id: 'count', ask: 'how many turns', kind: 'number', min: 1, max: 9, value: 1 },
+        level < 5 ? { id: 'hint', ask: 'the count shown', kind: 'press', count: 1, label: 'show me', optional: true } : null
+      ].filter(Boolean),
+      solution: { count: n },
+      check(ctx) {
+        const right = Number(ctx.value('count')) === n;
+        return { solved: right, say: right ? 'that is how many' : 'not that many' };
+      },
+      start(ctx) { ctx.g.fillRect(0, 0, ctx.w, ctx.h); }
+    };"""
+
+
 def stage_site(toy=None, other=None):
     """A site the stage harness can play: the one list of worlds, js/stage.js and the configuration
     it imports as committed, and a module for each world. Neither of those two is ever a fixture --
@@ -4571,7 +4597,14 @@ class CompletionAxiomTest(SiteDirTestCase):
                      "A piece is also the card it was opened from",
                      "piece(env) reads env.card",
                      "the same piece whichever of its world's cards it was opened from",
-                     "a card pressed opens as that card"]:
+                     "a card pressed opens as that card",
+                     # Issue #93: one difficulty for the whole site reaches every piece, with one
+                     # rule for what a level changes, so a run writing a piece is told as much.
+                     "made at the difficulty the visitor asked for",
+                     "env.difficulty",
+                     "6 - level turns of a piece's help",
+                     "paint() and spark() are handed no difficulty",
+                     "plays every piece at every stop of the dial"]:
             with self.subTest(rule=rule):
                 self.assertIn(rule, rules)
         self.assertIn(f"{mi.PIECE_MIN_STEPS} to {mi.PIECE_MAX_STEPS} knobs", rules)
@@ -4741,14 +4774,15 @@ class StageTest(unittest.TestCase):
     slider the stage only marked set when its value changed, so a visitor content with where it
     already stood set every other knob, watched the finale run, and waited on a piece that had no
     way left to finish. These tests run the real js/stage.js, through the elements stage.njk writes
-    and a clock they step by hand, and hold it to nine things: a world played twice over plays the
+    and a clock they step by hand, and hold it to ten things: a world played twice over plays the
     second time like the first, a finished piece waits for the visitor rather than seeing itself
     out, a finished piece is still a piece to play with rather than a picture of one (issue #86), a
     slider used where it stands counts as used, a knob nobody set is named rather than left
     a mystery, a hold knob is set the moment its bar fills rather than when the visitor lets go, a
     piece that is over leaves nothing of itself behind, every press on the scene does something even
-    where the piece has nothing to do with it (issue #89), and the feature a card opens as is the
-    card that was pressed rather than the world's generic line (issue #80).
+    where the piece has nothing to do with it (issue #89), the feature a card opens as is the
+    card that was pressed rather than the world's generic line (issue #80), and the persona's
+    difficulty is settable beside the piece it is a dependency of (issue #93).
     """
 
     @classmethod
@@ -4849,6 +4883,40 @@ class StageTest(unittest.TestCase):
         self.assertTrue(result["onward"]["lit"], "the way on never lit over the finished piece")
         self.assertFalse(result["onward"]["movedOnByItself"])
         self.assertTrue(result["onward"]["movedOn"], "the way on was pressed and nothing followed")
+
+    def test_the_difficulty_is_settable_beside_the_piece_that_depends_on_it(self):
+        # Issue #93. The persona keeps one difficulty for the whole site and the stage hands it to
+        # every piece on env.difficulty, which makes the stage a place the setting is a dependency
+        # -- so the stage asks the persona for the one slider and puts it in the rail's own host,
+        # beside the piece rather than only inside the sheet. Nothing is powered down over it: the
+        # setting always holds a value, unlike the sky, so a piece opens at the setting that stands
+        # and the slider is offered in place. Moving it deals the same seed again at the new
+        # setting, because the subject a visitor pressed is still the subject.
+        result = self.scenario("difficultyMoved", toy=DIFFICULTY_PIECE)
+        self.assertTrue(result["playable"], "the piece never became playable")
+        self.assertEqual(result["hosts"], ["stage-difficulty"],
+                         "the stage did not ask the persona for one slider in the rail's own host")
+        self.assertTrue(result["note"], "the slider stands beside the piece saying nothing about itself")
+        self.assertIn("[3]", result["before"]["title"],
+                      "the piece was made at something other than the persona's difficulty")
+        self.assertTrue(any(knob["id"] == "hint" for knob in result["before"]["knobs"]),
+                        "the piece the stage opened is not the one the module makes at that setting")
+        self.assertTrue(result["firstMatchesModule"])
+        # The slider moved to the fiercest setting, the way the persona's own control moves it.
+        self.assertEqual(result["moved"], 5)
+        self.assertTrue(result["dealtAgain"], "the setting moved and no piece was dealt again")
+        self.assertEqual(result["now"], result["was"],
+                         "a new setting opened a different piece instead of the same one, asked harder")
+        self.assertIn("[5]", result["after"]["title"], "the piece was dealt again at the old setting")
+        self.assertEqual(result["opens"], 1, "the setting moved once and more than one piece opened")
+        self.assertFalse(any(knob["id"] == "hint" for knob in result["after"]["knobs"]),
+                         "the fiercest setting still offered the help the gentler ones buy")
+        self.assertTrue(result["afterMatchesModule"])
+        # And the piece dealt at the new setting is a piece, not a wreck: still playable to a solve.
+        self.assertEqual(result["unset"], [], "a knob the visitor worked was not set at the new setting")
+        self.assertTrue(result["checkOffered"], "every knob was set at the new setting and no check was offered")
+        self.assertTrue(result["checked"], "the check could not be pressed at the new setting")
+        self.assertTrue(result["solved"], "the piece's own solution did not solve it at the new setting")
 
     def test_the_done_mark_is_clear_of_the_piece_it_reports_on(self):
         # The other half of issue #86: the mark used to be a 64px disc and a pill laid over the
@@ -6695,6 +6763,78 @@ class RealSiteTest(unittest.TestCase):
                 ratio = float(carried[when]["aspect"])
                 self.assertGreaterEqual(ratio, 0.6)
                 self.assertLessEqual(ratio, 1.9)
+
+    def test_the_persona_carries_one_difficulty_for_every_puzzle_on_the_site(self):
+        # Issue #93: a third setting beside the constellation and the reading, named as plainly as
+        # they are, kept in the one local-state document, and read by the stage and by every
+        # world's piece(env) -- so one slider changes the puzzles across the whole site. Read off
+        # the source as committed, because every part of it is a run's to rewrite and the parts
+        # have to keep agreeing: a key only the persona writes, a sheet section that names it, a
+        # control the stage mounts beside the piece, and a module that reads env.difficulty.
+        persona = self.source["js/persona.js"]
+        self.assertIn("'difficulty'", persona, "the persona keeps no difficulty")
+        self.assertIn("function tuner(", persona, "nothing renders the one difficulty control")
+        for call in ["difficulty: difficulty", "setDifficulty: setDifficulty",
+                     "onDifficulty: onDifficulty", "tuner: tuner"]:
+            with self.subTest(call=call):
+                self.assertIn(call, persona, "the persona does not offer the difficulty to a page")
+        # Through the one store like everything else the site keeps, so it exports with the rest.
+        self.assertRegex(persona, r"store\.set\(DIFFICULTY", "the difficulty goes round the state store")
+        self.assertEqual(mi.pages_touching_storage(self.site), {})
+        # Advertised as specifically as the constellation: its own section of the sheet, with a
+        # heading and a line of its own, and named in the sentence beside the avatar.
+        layout = self.source["_includes/layout.njk"]
+        self.assertIn("id='persona-difficulty-title'", layout, "the sheet has no difficulty section")
+        self.assertIn("id='persona-difficulty'", layout, "the sheet leaves the control nowhere to go")
+        self.assertIn("difficulty", self.site["index.html"], "no built page says the word to a visitor")
+        self.assertIn("describeDifficulty()", persona, "the persona card never says what the setting is")
+        # Settable where it is a dependency: the stage's own host, and the stage mounting the
+        # persona's control into it rather than drawing a second slider of its own.
+        self.assertIn("id='stage-difficulty'", self.source[mi.STAGE_INCLUDE],
+                      "the stage leaves the slider nowhere to stand beside the piece")
+        stage = self.source[mi.STAGE_SCRIPT]
+        self.assertIn("persona.tuner(ui.tune", stage, "the stage never offers the setting in place")
+        self.assertIn("difficulty: askedDifficulty()", stage, "a piece is not handed the difficulty")
+        # And every world reads it, inside piece() and nowhere else: a card carries no setting, so
+        # a module that rolled its plan from one would disagree with the card it was opened from.
+        modules = {rel: text for rel, text in self.source.items() if rel.startswith(mi.MODULES_DIR)}
+        self.assertGreaterEqual(len(modules), 10, "the check is worth nothing on a few worlds")
+        for rel, text in sorted(modules.items()):
+            with self.subTest(module=rel):
+                self.assertIn("env.difficulty", text, "this world's puzzles ignore the setting")
+                self.assertGreater(text.count("asked(env)"), 1,
+                                   "this world reads the setting nowhere in its pieces")
+
+    def test_the_difficulty_reaches_the_stage_of_the_site_as_committed(self):
+        # The other half, played: the real js/stage.js through the stub browser. The stage has to
+        # ask the persona for the slider in the rail's own host, and moving it has to deal the
+        # piece again -- the same world and the same seed, because the subject a visitor pressed
+        # is still the subject -- as the piece the module makes at the new setting, still solvable.
+        needs_the_stage_harness(self)
+        worlds = mi.listed_worlds(self.site)
+        self.assertGreaterEqual(len(worlds), 10, "the check is worth nothing on a few worlds")
+        report = mi.run_stage_harness(self.site, deal=[worlds[0], worlds[1], worlds[0]])
+        got = report["difficultyMoved"]
+        self.assertTrue(got.get("ok"), f"the difficultyMoved scenario did not run: {got.get('error')}")
+        moved = got["result"]
+        self.assertTrue(moved["playable"], "the piece never became playable")
+        self.assertEqual(moved["hosts"], ["stage-difficulty"],
+                         "the stage did not ask the persona for one slider in the rail's own host")
+        self.assertTrue(moved["note"], "the slider stands beside the piece saying nothing about itself")
+        self.assertTrue(moved["firstMatchesModule"],
+                        "the piece that opened is not the one the module makes at the setting that stood")
+        self.assertTrue(moved["dealtAgain"], "the setting moved and no piece was dealt again")
+        self.assertEqual(moved["now"], moved["was"],
+                         "a new setting opened a different piece instead of the same one, asked differently")
+        self.assertEqual(moved["opens"], 1, "the setting moved once and the stage opened more than one piece")
+        self.assertTrue(moved["afterMatchesModule"],
+                        "the piece dealt again is not the one the module makes at the new setting")
+        # And it is still a puzzle: whatever the dial does to a world, it may not leave one that
+        # cannot be finished. (The piece harness holds every world to that at every stop.)
+        self.assertEqual(moved["unset"], [], "a knob the visitor worked was not set at the new setting")
+        self.assertTrue(moved["checkOffered"], "every knob was set at the new setting and no check was offered")
+        self.assertTrue(moved["checked"], "the check could not be pressed at the new setting")
+        self.assertTrue(moved["solved"], "the module's own solution did not solve its piece at the new setting")
 
     def test_a_finished_piece_hands_the_visitor_the_way_on(self):
         # Issue #78: nothing moves on by itself, so every piece ends on one mark the visitor

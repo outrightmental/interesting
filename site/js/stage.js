@@ -227,7 +227,7 @@
   env, what piece() is handed, and the same configuration js/feed.js hands paint() and spark():
     { seed, rnd(), pick(list), int(a, b), chance(p), hash(text), stars, points(w, h, pad),
       colors, mix(a, b, t), alpha(c, a), reduced, world: { file, name, orientation },
-      variant, card }. variant is the configuration this piece is of (js/variant.js):
+      variant, card, difficulty }. variant is the configuration this piece is of (js/variant.js):
     variant.density is how much of itself to draw, variant.scale how large, variant.turn where to
     start, and the stage has already framed the scene by variant.stretch and painted the site in
     the colours the three colour dials derived. card is the content the card was showing when it
@@ -236,6 +236,38 @@
     put there for it (a puzzle's case number, its word, the star it was drawn from), handed
     straight back. A piece reads card when it has one and rolls its own subject when it is null,
     and either way the same seed makes the same piece.
+
+  ---------------------------------------------------------------------------------------------
+  The difficulty: one setting, every puzzle on the site
+
+  env.difficulty is how hard the visitor asked for their puzzles -- { level, of, name, says, set },
+  where level is 1 (gentle) to 5 (fierce) and the middle of the dial stands until a visitor moves
+  it. The persona keeps it (js/persona.js, under `difficulty` in the local-state document), the
+  persona sheet names it as plainly as the constellation, and the same slider stands on the stage
+  beside the piece, because a setting is settable wherever it is a dependency (issue #93). Moving
+  it deals this piece again at the same seed with the same card, so the subject a visitor pressed
+  stays the subject and only how hard it is asked moves. Nothing is powered down over it: unlike
+  the sky it always holds a value.
+
+  What a level changes is the same thing in every world, so a visitor learns the dial once:
+
+    the help      a piece's helper knob -- the hint, the second look, the replay -- gives
+                  6 - level turns of it: five at gentle, three at the middle, one at fierce.
+                  Never none, because a knob that does nothing is no knob, and as many of that
+                  allowance as the world has to give. A helper with only one thing to say is
+                  withheld at fierce instead, where the piece has knobs enough to spare it
+    the margin    an answer read off a scale -- a distance in spans, an hour on a 24-hour dial,
+                  notches round a rim, a water table in centimetres -- may be 3 - level steps out
+                  and still count: two at gentle, one at mild, exactly on the mark from the middle
+                  of the dial up. A count, an order, a word, or a target the scene itself decides
+                  (a probe through a ring, a crossing timed by the apparatus) has no margin to
+                  give, so those worlds move on the help alone
+
+  It never changes the subject. The plan a piece is of is rolled from the seed and carried on the
+  card's `of`, which is what keeps a card and the feature it opens as one thing (the alignment
+  axiom above) -- so paint() and spark() are handed no difficulty at all, the feed's cards are the
+  same river at any setting, and a module reads env.difficulty inside piece() and nowhere else.
+  A module reads it defensively, through a small helper of its own: a card's env has none.
 
   ctx, the same object for the whole piece:
     canvas, g (its 2d context), w, h (CSS pixels; the context is already scaled for the screen),
@@ -285,7 +317,8 @@
   page is wherever the stage is -- and so is the site's colour, which follows the piece on the
   stage for as long as it is there (see feature(), and the precedence in _sass/_mood.scss).
 
-  Nothing here reaches for the browser's storage. The sky is read through the persona, the next
+  Nothing here reaches for the browser's storage. The sky and the difficulty are read through the
+  persona, the next
   card through the feed, and the one thing written besides the address is the tally of solves --
   `puzzles` in the local-state document, through window.interestingState like everything else the
   site keeps, so it exports with the rest.
@@ -525,6 +558,7 @@ const ui = stage ? {
   onward: document.getElementById('stage-next'),
   again: document.getElementById('stage-again'),
   burst: document.getElementById('stage-burst'),
+  tune: document.getElementById('stage-difficulty'),
   gate: null // the element the unlock helper powers down, one per unpowered open
 } : null;
 
@@ -738,6 +772,20 @@ function heading(world, card) {
   ui.brief.textContent = card ? (card.quote || card.text || card.mono || '') : (world.what || '');
 }
 
+/* The difficulty the visitor has set, as a piece is handed it: the persona keeps the setting for
+   the whole site (js/persona.js), and a stage with no persona beside it deals at the middle of the
+   dial rather than at nothing, because a piece is never powered down waiting for one. */
+function askedDifficulty() {
+  if (persona && typeof persona.difficulty === 'function') {
+    try {
+      return persona.difficulty();
+    } catch (e) {
+      /* a persona that cannot say falls through to the middle of the dial */
+    }
+  }
+  return { level: 3, of: 5, name: 'fair', says: 'three hints, and a measured answer on the mark', set: false };
+}
+
 function makeEnv(seed, world, stars, variant, card) {
   const rnd = mulberry32(seed);
   return {
@@ -762,7 +810,10 @@ function makeEnv(seed, world, stars, variant, card) {
     // The configuration the card was wearing, and the content it was showing: the piece is made
     // from the same two things the card was, which is the whole of the alignment axiom above.
     variant: variant || PLAIN,
-    card: card || null
+    card: card || null,
+    // How hard the visitor asked for it (issue #93). The one setting, read here and nowhere else
+    // in this file, so every piece on the site is dealt at it.
+    difficulty: askedDifficulty()
   };
 }
 
@@ -2122,6 +2173,26 @@ function start() {
   window.setTimeout(() => {
     for (const w of WORLDS) loadModule(w.id);
   }, 1500);
+  /* Settable where it is a dependency (issue #93): every piece this stage deals is made at the
+     persona's difficulty, so the one slider that sets it stands beside the piece as well as in the
+     sheet. A piece is never powered down over it: the setting always holds a value, and the
+     alternative would be every puzzle on the site dimmed behind a slider nobody had been asked to
+     touch yet. */
+  if (ui.tune && persona && typeof persona.tuner === 'function') {
+    persona.tuner(ui.tune, { note: 'Every piece on this site is dealt at this setting.' });
+  }
+  if (persona && typeof persona.onDifficulty === 'function') {
+    // Deal this piece again whenever the setting changes -- the same seed and the same card, so
+    // the subject the visitor pressed stays the subject and only how hard it is asked moves. The
+    // re-deal hangs off the persona's own change rather than this slider's, so moving the setting
+    // in the persona sheet changes the piece on the stage just as moving the slider beside it
+    // does: one setting, every puzzle on the site, settable wherever it is met.
+    persona.onDifficulty(() => {
+      if (!current) return;
+      open(current.world.file, current.seed,
+        { push: false, focus: false, variant: current.variant, card: current.card });
+    });
+  }
   if (persona && typeof persona.onSky === 'function') {
     persona.onSky(() => {
       // A piece that reads the sky is made from it: a changed sky is a new piece -- unless the

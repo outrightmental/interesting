@@ -30,6 +30,15 @@
   open on a value (no choice, no empty word) is played once with them left exactly as they opened,
   which may not solve either: a puzzle that opens solved is no puzzle.
 
+  Then the dial. The persona keeps one difficulty for the whole site (issue #93) and js/stage.js
+  hands it to a piece on env.difficulty, 1 (gentle) to 5 (fierce), so a piece is a puzzle at five
+  settings rather than one: what a level buys is less help and, where an answer is a measurement,
+  a narrower margin. Every stop is played -- a seed of its own at each, so a world of two shapes
+  does not meet the dial in only one of them -- with its own solution, which has to solve, and
+  with every answer wrong, which may not; and at the two ends the first seed is played as the card
+  it was dealt as, because a piece follows its card whatever the setting. A card's own env carries
+  no difficulty at all, which is how the plan a piece is of stays the seed's.
+
   The first seed is then played three times more, for the alignment axiom (issue #80). A card and
   the feature it opens as are one content piece, procedurally configured once: the stage hands the
   piece the card's configuration on env.variant -- the seven dials of site/js/variant.js -- and the
@@ -105,10 +114,11 @@ export const MAX_TAPS = 12;
 export const MAX_SECONDS = 45;
 // Real time, per module, for all of its plays: six seeds solved, one sky, six orders, the replay,
 // the wrong answers (one all-wrong, one per answer knob, and the opening values) for every seed,
-// and the three the alignment axiom adds (configured, as its own card, as another card). A runner
-// that is twice as slow as a quick machine should still be judging pieces rather than reporting
-// timeouts.
-export const MODULE_TIMEOUT_MS = 90000;
+// the three the alignment axiom adds (configured, as its own card, as another card), and the
+// twelve the difficulty adds (a seed solved and wrong at each of the five stops of the dial, and
+// the first seed's own card at the two ends). A runner that is twice as slow as a quick machine
+// should still be judging pieces rather than reporting timeouts.
+export const MODULE_TIMEOUT_MS = 150000;
 const FRAME = 1 / 30;
 const SETTLE = 0.5; // seconds of frames run after each knob, as a visitor pauses between them
 const KINDS = ['choice', 'toggle', 'range', 'number', 'word', 'order', 'pick', 'grid', 'press', 'hold', 'tap', 'wait'];
@@ -135,6 +145,19 @@ const ONE_STAR = [STARS[1]];
 // nothing but the harness beside it, exactly as it imports nothing itself.
 const PLAIN_DIALS = { plain: true, trade: 0, lift: 0, wash: 0, density: 1, scale: 1, turn: 0, stretch: 1 };
 const CONFIGURED = { plain: false, trade: 0.86, lift: 0.62, wash: 0.31, density: 1.21, scale: 0.91, turn: 0.74, stretch: 1.14 };
+
+/* The persona's difficulty, which js/stage.js hands a piece on env.difficulty (issue #93): one
+   setting for the whole site, 1 (gentle) to 5 (fierce), and the middle of the dial where nobody
+   has moved it. Spelled out here rather than imported from js/persona.js, because a module is
+   played with nothing but the harness beside it. A piece has to be a legitimate puzzle at every
+   stop, which is what judgeModule plays below; a card carries no setting at all, so sparkOf()
+   hands none and a module reads the middle through a defensive helper of its own. */
+export const DIFFICULTY_NAMES = ['gentle', 'mild', 'fair', 'keen', 'fierce'];
+export function difficultyAt(level) {
+  const at = Math.max(1, Math.min(DIFFICULTY_NAMES.length, Math.round(Number(level)) || 3));
+  return { level: at, of: DIFFICULTY_NAMES.length, name: DIFFICULTY_NAMES[at - 1] };
+}
+export const MIDDLE_DIFFICULTY = difficultyAt(3);
 
 function mulberry32(a) {
   return function () {
@@ -179,9 +202,10 @@ function hash(text) {
 }
 
 // The same env js/stage.js makes, less the document: the seeded source, the sky, the world's
-// colours, the configuration this piece is of (`variant`) and the card it was opened from
-// (`card`, null for a piece nobody pressed).
-export function makeEnv(seed, stars, variant, card) {
+// colours, the configuration this piece is of (`variant`), the card it was opened from (`card`,
+// null for a piece nobody pressed) and the difficulty the visitor asked for (`difficulty`, null
+// for the card's own env, which carries no setting).
+export function makeEnv(seed, stars, variant, card, difficulty) {
   const rnd = mulberry32(seed);
   const list = stars || STARS;
   return {
@@ -202,7 +226,8 @@ export function makeEnv(seed, stars, variant, card) {
     reduced: false,
     world: { file: 'world.html', name: 'a world', orientation: 'an orientation' },
     variant: variant || PLAIN_DIALS,
-    card: card || null
+    card: card || null,
+    difficulty: difficulty || null
   };
 }
 
@@ -511,12 +536,15 @@ export function play(mod, seed, options) {
   // the caller asks for others, so every play below is one the stage could have opened.
   const variant = opts.variant || PLAIN_DIALS;
   const card = opts.card || null;
+  // The difficulty this play is at: the middle of the dial unless the caller names another, so
+  // every play below is one the stage could have opened.
+  const difficulty = opts.difficulty || MIDDLE_DIFFICULTY;
   const answers = opts.answers || 'solution';
   const expect = opts.expect == null ? true : !!opts.expect;
-  const out = { seed, stars: stars.length, label: opts.label || '', ok: false, solved: false, tries: 0, problems: [], taps: 0, seconds: 0, title: '', steps: 0, signature: '' };
+  const out = { seed, stars: stars.length, label: opts.label || '', difficulty: difficulty.level, ok: false, solved: false, tries: 0, problems: [], taps: 0, seconds: 0, title: '', steps: 0, signature: '' };
   let piece;
   try {
-    piece = mod.piece(makeEnv(seed, stars, variant, card));
+    piece = mod.piece(makeEnv(seed, stars, variant, card, difficulty));
   } catch (err) {
     out.problems.push('piece() threw: ' + (err && err.message || err));
     return out;
@@ -530,7 +558,7 @@ export function play(mod, seed, options) {
   out.steps = piece.steps.length;
   out.signature = signatureOf(piece);
   try {
-    const again = mod.piece(makeEnv(seed, stars, variant, card));
+    const again = mod.piece(makeEnv(seed, stars, variant, card, difficulty));
     if (signatureOf(again) !== out.signature) out.problems.push('the same seed does not make the same piece');
   } catch (err) {
     out.problems.push('piece() threw the second time: ' + (err && err.message || err));
@@ -547,7 +575,7 @@ export function play(mod, seed, options) {
   let inTap = false;
   let time = 0;
   let tries = 0;
-  const env = makeEnv(seed, stars, variant, card);
+  const env = makeEnv(seed, stars, variant, card, difficulty);
 
   // What each answer knob is to be set to in this play, and whether it can be at all.
   const wanted = new Map();
@@ -824,7 +852,7 @@ export function play(mod, seed, options) {
    leave the answers as they opened are only possible then. */
 function answersOf(mod, seed) {
   try {
-    const piece = mod.piece(makeEnv(seed, STARS, PLAIN_DIALS, null));
+    const piece = mod.piece(makeEnv(seed, STARS, PLAIN_DIALS, null, MIDDLE_DIFFICULTY));
     if (!piece || !piece.solution || !Array.isArray(piece.steps)) return { ids: [], opensSet: false };
     const ids = Object.keys(piece.solution).filter((id) => piece.steps.some((s) => s && s.id === id));
     const opensSet = ids.length > 0 && ids.every((id) => {
@@ -962,6 +990,36 @@ export function judgeModule(mod, seeds) {
     report.problems.push('the piece is the same piece (' + JSON.stringify(asCard.title) + ') whether it is opened from '
       + JSON.stringify(report.alignment.card) + ' or from ' + JSON.stringify(report.alignment.other)
       + '; a feature is the card that was pressed, so piece(env) has to read env.card');
+  }
+
+  /* The difficulty (issue #93). One setting the persona keeps for the whole site reaches every
+     piece on env.difficulty, so a piece is a puzzle at five settings rather than one, and the law
+     holds every one of them to the same thing: the piece's own solution has to solve it, and
+     every answer wrong may not. A world whose help or whose margin moves with the dial is the
+     point of the setting; a world that opens an unsolvable puzzle at one end of it is the bug.
+
+     A stop takes a seed of its own rather than all five taking the first, because a world may
+     deal more than one shape of puzzle and which shape a seed opens is the seed's: five stops on
+     one seed would leave the other shapes unplayed at four of them. The first seed is also played
+     at the two ends as the card it was dealt as, because a piece follows its card whatever the
+     setting: the subject is the seed's and the difficulty is only how hard it is asked. */
+  for (let level = 1; level <= DIFFICULTY_NAMES.length; level += 1) {
+    const difficulty = difficultyAt(level);
+    const seed = seeds[(level - 1) % seeds.length];
+    const at = 'seed ' + seed + ' at difficulty ' + difficulty.name;
+    const run = play(mod, seed, { difficulty, label: difficulty.name });
+    report.runs.push(run);
+    for (const p of run.problems) report.problems.push(at + ': ' + p);
+    const wrong = play(mod, seed, { difficulty, answers: 'wrong', expect: false, label: difficulty.name + ', every answer wrong' });
+    report.runs.push(wrong);
+    for (const p of wrong.problems) report.problems.push(at + ' with every answer wrong: ' + p);
+    if (own && (level === 1 || level === DIFFICULTY_NAMES.length)) {
+      const card = play(mod, seeds[0], { variant: CONFIGURED, card: own, difficulty, label: difficulty.name + ', as its card' });
+      report.runs.push(card);
+      for (const p of card.problems) {
+        report.problems.push('seed ' + seeds[0] + ' at difficulty ' + difficulty.name + ', opened as its own card: ' + p);
+      }
+    }
   }
 
   report.ok = report.runs.every((r) => r.ok) && !report.problems.length;

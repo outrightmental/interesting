@@ -44,6 +44,17 @@ const THEN = [
   { label: 'at the same time', value: 'same' }
 ];
 
+/* How hard the visitor asked for their puzzles. The persona keeps one difficulty for the whole
+   site (js/persona.js) and js/stage.js hands it to a piece on env.difficulty, 1 (gentle) to 5
+   (fierce); a card's env carries none, so the middle of the dial stands in. A level buys `helps`
+   -- how many things a piece will show when it is asked -- and `margin`, how far out a measured
+   answer may be and still count. Read inside piece() only: the subject is the seed's. */
+function asked(env) {
+  const said = env && env.difficulty ? Number(env.difficulty.level) : NaN;
+  const level = Number.isFinite(said) ? Math.max(1, Math.min(5, Math.round(said))) : 3;
+  return { level, helps: 6 - level, margin: Math.max(0, 3 - level) };
+}
+
 function gcd(a, b) {
   while (b) [a, b] = [b, a % b];
   return a;
@@ -236,6 +247,7 @@ function rackPreview(g, w, h, env, plan) {
 }
 
 function rackPiece(env, plan) {
+  const helps = asked(env).helps;
   const n = plan.periods.length;
   const meet = lcmOf(plan.periods);
   const through = throughAt(plan.periods, plan.at);
@@ -289,12 +301,15 @@ function rackPiece(env, plan) {
         c.status(s.picked.length ? 'at beat ' + plan.at + ': ' + s.picked.map(name).join(', ') : 'none picked for beat ' + plan.at);
       }
       if (id === 'hint') {
-        const next = plan.periods.findIndex((p, i) => !s.shown[i]);
+        const given = plan.periods.filter((p, i) => s.shown[i]).length;
+        const next = given < helps ? plan.periods.findIndex((p, i) => !s.shown[i]) : -1;
         if (next >= 0) {
           const yes = through.includes(next);
           s.shown[next] = yes ? 'through at ' + plan.at : 'not at ' + plan.at;
           c.hint();
           c.status('at beat ' + plan.at + ' ' + name(next) + (yes ? ' is coming through the centre heading right' : ' is not'));
+        } else if (given >= helps) {
+          c.status('that is all the hall will show at this difficulty; the periods are on the rack');
         } else {
           c.status('every pendulum at beat ' + plan.at + ' has been shown; the meeting beat is yours');
         }
@@ -515,6 +530,11 @@ function springPreview(g, w, h, env, plan) {
 }
 
 function springPiece(env, plan) {
+  const helps = asked(env).helps;
+  // The crossing itself is the verifier -- the pair runs and the ruler says -- so this puzzle has
+  // no margin to widen. What the difficulty buys is how many springs the hall will try for you,
+  // each one marked on the ruler beside your own runs.
+  const probes = [10, 30, 50, 70, 90];
   const sol = springSolution(plan.breath, plan.breaths);
   const then = plan.ask === 'stiffer' ? 'sooner' : 'later';
   const s = springBlank(plan);
@@ -530,7 +550,8 @@ function springPiece(env, plan) {
     checkLabel: 'let go',
     steps: [
       { id: 'spring', ask: 'how stiff the spring is', kind: 'range', min: 1, max: 100, step: 1, value: plan.open, low: 'soft', high: 'stiff' },
-      { id: 'then', ask: 'with a ' + plan.ask + ' spring than that, the swing crosses', kind: 'choice', options: THEN }
+      { id: 'then', ask: 'with a ' + plan.ask + ' spring than that, the swing crosses', kind: 'choice', options: THEN },
+      { id: 'hint', ask: 'one spring tried for you', kind: 'press', count: 1, label: 'try one for me', optional: true }
     ],
     solution: { spring: { value: sol.value, near: sol.near }, then },
     check(c) {
@@ -552,6 +573,20 @@ function springPiece(env, plan) {
       draw(c);
     },
     apply(id, value, c) {
+      if (id === 'hint') {
+        const tried = probes.filter((k) => s.runs.some((run) => run.k === k));
+        const next = tried.length < helps ? probes.find((k) => !s.runs.some((run) => run.k === k)) : undefined;
+        if (next !== undefined) {
+          const tau = crossTime(next);
+          s.runs.push({ k: next, tau });
+          c.hint();
+          c.status('a spring at ' + next + ' crosses in ' + breathsOf(tau) + ' breaths; its mark is on the ruler');
+        } else if (tried.length >= helps) {
+          c.status('that is all the hall will try at this difficulty; let go and read the ruler yourself');
+        } else {
+          c.status('the hall has tried every spring it offers; the rest is between the marks');
+        }
+      }
       if (id === 'spring') {
         const k = Number(value);
         if (Number.isFinite(k)) s.k = Math.max(1, Math.min(100, Math.round(k)));

@@ -55,6 +55,17 @@ const SHORT = {
 const ORDINAL = ['first', 'second', 'third', 'fourth', 'fifth'];
 const WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen'];
 
+/* How hard the visitor asked for their puzzles. The persona keeps one difficulty for the whole
+   site (js/persona.js) and js/stage.js hands it to a piece on env.difficulty, 1 (gentle) to 5
+   (fierce); a card's env carries none, so the middle of the dial stands in. A level buys `helps`
+   -- how many things a piece will show when it is asked -- and `margin`, how far out a measured
+   answer may be and still count. Read inside piece() only: the subject is the seed's. */
+function asked(env) {
+  const said = env && env.difficulty ? Number(env.difficulty.level) : NaN;
+  const level = Number.isFinite(said) ? Math.max(1, Math.min(5, Math.round(said))) : 3;
+  return { level, helps: 6 - level, margin: Math.max(0, 3 - level) };
+}
+
 /* ---- the room ------------------------------------------------------------------------------ */
 
 // The room, out to `swell` and dimmed by `dim`. `scale` is how large the ring is drawn: the card's
@@ -242,6 +253,7 @@ function lampsPreview(g, w, h, env, plan) {
 }
 
 function lampsPiece(env, plan) {
+  const helps = asked(env).helps;
   const n = plan.n;
   const N = n * n;
   const lit0 = litBy(plan.presses, n);
@@ -291,11 +303,14 @@ function lampsPiece(env, plan) {
         c.status(left === 0 ? 'the room looks dark; check it' : (left === 1 ? 'one lamp lit' : WORDS[left] + ' lamps lit'));
       }
       if (id === 'hint') {
-        const next = solution.findIndex((on, i) => on && !s.presses[i] && !s.hinted.includes(i));
+        const next = s.hinted.length < helps
+          ? solution.findIndex((on, i) => on && !s.presses[i] && !s.hinted.includes(i)) : -1;
         if (next >= 0) {
           s.hinted.push(next);
           c.hint();
           c.status('the lamp at ' + place(next) + ' needs pressing');
+        } else if (s.hinted.length >= helps) {
+          c.status('that is all the room will show at this difficulty; the rest is yours');
         } else {
           c.status('every lamp that needs pressing is pressed; look for one pressed that should not be');
         }
@@ -571,6 +586,7 @@ function shelfPreview(g, w, h, env, plan) {
 }
 
 function shelfPiece(env, plan) {
+  const helps = asked(env).helps;
   const n = plan.items.length;
   const names = plan.items.map((name) => SHORT[name] || name);
   const s = { order: plan.start.slice(), hinted: [], fade: 0 };
@@ -610,11 +626,15 @@ function shelfPiece(env, plan) {
         c.status('left to right: ' + s.order.map((i) => names[i]).join(', '));
       }
       if (id === 'hint') {
-        const next = plan.order.find((item) => !s.hinted.includes(item) && s.order.indexOf(item) !== plan.order.indexOf(item));
+        const next = s.hinted.length < helps
+          ? plan.order.find((item) => !s.hinted.includes(item) && s.order.indexOf(item) !== plan.order.indexOf(item))
+          : undefined;
         if (next !== undefined) {
           s.hinted.push(next);
           c.hint();
           c.status('the ' + names[next] + ' belongs ' + ORDINAL[plan.order.indexOf(next)] + ' from the left');
+        } else if (s.hinted.length >= helps) {
+          c.status('that is all the shelf will show at this difficulty; the rest is yours');
         } else {
           c.status('every keepsake you have placed wrongly has been shown; the rest is yours');
         }
@@ -750,6 +770,7 @@ function secondLookPreview(g, w, h, env, plan) {
 }
 
 function secondLookPiece(env, plan) {
+  const helps = asked(env).helps;
   const after = secondLookAfter(plan);
   const row = changedRow(plan.pressed);
   const changed = litBy(plan.pressed, 3).filter(Boolean).length;
@@ -766,8 +787,9 @@ function secondLookPiece(env, plan) {
       { id: 'switches', ask: 'the two switches pressed: choose here or tap them in the first view', kind: 'pick', count: 2,
         items: Array.from({ length: 9 }, (_, i) => ({ label: 'row ' + (Math.floor(i / 3) + 1) + ', column ' + (i % 3 + 1), value: i })) },
       { id: 'row', ask: 'row with the most changed lamps', kind: 'choice', options: rows.map((label, i) => ({ label, value: i })) },
-      { id: 'hint', ask: 'the row of one pressed switch', kind: 'press', count: 1, label: 'narrow the search', optional: true }
-    ],
+      // One thing to say -- the row one switch is in -- so a fierce difficulty does not offer to say it.
+      helps > 1 ? { id: 'hint', ask: 'the row of one pressed switch', kind: 'press', count: 1, label: 'narrow the search', optional: true } : null
+    ].filter(Boolean),
     solution: { switches: plan.pressed.slice(), row },
     check(c) {
       const chosen = c.value('switches');
