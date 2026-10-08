@@ -1,15 +1,47 @@
-/* The persona: one saved sky and one reading, configured in the sheet opened by the avatar.
+/* The persona: one saved sky, one reading and one difficulty, configured in the sheet opened by
+   the avatar.
+
+   Three settings, kept under three names in the one local-state document (js/state.js) and shown
+   as three sections of the one sheet:
+
+     constellation   the sky a visitor places, which several worlds read, each its own way
+     threshold       the reading the mood flow has taken, which suggests a world and dresses the
+                     site (js/threshold.js keeps that one; this file only shows it)
+     difficulty      how hard every puzzle on the site comes out, 1 (gentle) to 5 (fierce)
+
    A star's editable words give it a glint in both the portrait and the sheet. Sky cards follow
-   those words without changing their seed; a puzzle already begun keeps its clues. */
+   those words without changing their seed; a puzzle already begun keeps its clues.
+
+   The difficulty is advertised as specifically as the sky and settable from everywhere it is a
+   dependency (issue #93), which is every piece on the site: `tuner(host)` below renders the one
+   slider, the sheet puts it in its own section, and js/stage.js puts the same control on the
+   stage beside the piece it is dealing. Unlike the sky it always holds a value -- the middle of
+   the dial until a visitor moves it -- so nothing is ever powered down waiting for one: a piece
+   is dealt at the setting that stands and the slider is offered in place.
+*/
 (function () {
   'use strict';
 
   var store = window.interestingState;
   var root = document.documentElement.getAttribute('data-root') || '';
   var SKY = 'constellation';
+  var DIFFICULTY = 'difficulty';
   var MAX_STARS = 120;
   var SEED_COUNT = 7;
   var DRAG_SUPPRESS_MS = 250;
+  // The dial, gentle to fierce, and the middle of it as the setting nobody has touched. A level
+  // buys a piece 6 - level hints and a margin of 3 - level steps on a measured answer; the worlds'
+  // modules read that off env.difficulty and js/stage.js documents it with the rest of the
+  // contract. Five stops because a visitor can tell five apart and name them.
+  var LEVELS = ['gentle', 'mild', 'fair', 'keen', 'fierce'];
+  var DEFAULT_LEVEL = 3;
+  var LEVEL_SAYS = [
+    'five hints on a piece, and a measured answer may be two steps out',
+    'four hints, and a measured answer may be one step out',
+    'three hints, and a measured answer on the mark',
+    'two hints, and a measured answer on the mark',
+    'one hint, and a measured answer on the mark'
+  ];
   var THOUGHTS = [
     'a door left ajar', 'the kettle, just off the boil', 'rain arriving sideways',
     'a lamp in a window across the way', 'an unanswered letter, kept', 'moss on the north side',
@@ -174,6 +206,142 @@
   }
   function seed() { return setStars(seedSky(), 'seeded'); }
   function clear() { return setStars([], 'cleared'); }
+
+  /* ---- the difficulty, and the one control that sets it ------------------------------------ */
+
+  // A stored level, cleaned: an integer stop on the dial, or 0 for anything else.
+  function levelOf(value) {
+    var n = Math.round(Number(value));
+    return isFinite(n) && n >= 1 && n <= LEVELS.length ? n : 0;
+  }
+  function readDifficulty() {
+    var saved = store ? store.read(DIFFICULTY, DEFAULT_LEVEL) : { status: 'unavailable', value: DEFAULT_LEVEL };
+    var level = levelOf(saved.value);
+    // A document holding something the dial cannot be set to reads as unset rather than as broken:
+    // there is always a difficulty, so there is nothing to explain and nothing to repair.
+    return { status: level ? saved.status : (saved.status === 'ok' ? 'unreadable' : saved.status),
+      level: level || DEFAULT_LEVEL, set: !!level && saved.status === 'ok' };
+  }
+  /* The setting, as the stage hands it to a piece on env.difficulty and as the sheet shows it:
+     { level, of, name, says }. Always a value -- the middle of the dial until a visitor moves it
+     -- because nothing on this site waits on a difficulty to be set. */
+  function difficulty() {
+    var saved = readDifficulty();
+    return { level: saved.level, of: LEVELS.length, name: LEVELS[saved.level - 1],
+      says: LEVEL_SAYS[saved.level - 1], set: saved.set };
+  }
+  var tuned = [];
+  function onDifficulty(fn) {
+    if (typeof fn !== 'function') return function () {};
+    tuned.push(fn);
+    return function () {
+      for (var i = tuned.length - 1; i >= 0; i--) {
+        if (tuned[i] === fn) tuned.splice(i, 1);
+      }
+    };
+  }
+  function setDifficulty(level) {
+    var want = levelOf(level) || DEFAULT_LEVEL;
+    var kept = store ? store.set(DIFFICULTY, want) : false;
+    var now = difficulty();
+    for (var i = 0; i < tuned.length; i++) {
+      try { tuned[i](now, kept); }
+      catch (e) { console.error('A difficulty listener failed', e); }
+    }
+    window.dispatchEvent(new CustomEvent('persona:difficulty', { detail: { difficulty: now, kept: kept } }));
+    refresh();
+    return kept;
+  }
+  function describeDifficulty() {
+    var d = difficulty();
+    return 'Puzzles are set to ' + d.name + ': ' + d.says + '.';
+  }
+  function element(tag, className, text) {
+    var node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text) node.textContent = text;
+    return node;
+  }
+  var tunerCount = 0;
+  /* The one difficulty control, rendered into `host` wherever a part depends on the setting: the
+     sheet's own section, and the stage beside the piece it is dealing. The M3 slider the rest of
+     the site uses (input[type=range] in a .row, _sass/_controls.scss), named by a real <label>,
+     read out by name rather than by number (aria-valuetext) and operated by the keyboard the way
+     every slider on this site is -- the browser's own arrows, Home and End.
+
+     options, all optional: label (the words beside it), note (one line under it, for a host that
+     has not said what the setting is), onChange(difficulty, kept) once a new level is kept.
+     Hands back a function that takes the control away again. */
+  function tuner(host, options) {
+    if (!host || typeof host.appendChild !== 'function') return function () {};
+    var opts = options || {};
+    tunerCount += 1;
+    var id = 'difficulty-' + tunerCount;
+    host.textContent = '';
+    host.classList.add('difficulty');
+    var row = element('div', 'row difficulty-row');
+    var label = element('label', 'difficulty-label', opts.label || 'difficulty');
+    label.setAttribute('for', id);
+    var input = document.createElement('input');
+    input.type = 'range';
+    input.id = id;
+    input.className = 'difficulty-slider';
+    input.min = '1';
+    input.max = String(LEVELS.length);
+    input.step = '1';
+    var status = element('p', 'panel-status difficulty-status');
+    status.id = id + '-status';
+    status.setAttribute('aria-live', 'polite');
+    input.setAttribute('aria-describedby', status.id);
+    row.appendChild(label);
+    row.appendChild(element('span', 'difficulty-end', LEVELS[0]));
+    row.appendChild(input);
+    row.appendChild(element('span', 'difficulty-end', LEVELS[LEVELS.length - 1]));
+    host.appendChild(row);
+    if (opts.note) host.appendChild(element('p', 'panel-note difficulty-note', opts.note));
+    host.appendChild(status);
+
+    function paint(level) {
+      var at = levelOf(level) || DEFAULT_LEVEL;
+      input.value = String(at);
+      input.setAttribute('aria-valuetext', LEVELS[at - 1]);
+      // How full the track is: js/site.js keeps every slider on the site painted this way, and a
+      // slider drawn by a script is painted here so it is right on its first frame.
+      input.style.setProperty('--range-pct', ((at - 1) / (LEVELS.length - 1) * 100).toFixed(2) + '%');
+      return at;
+    }
+    function say(level, kept) {
+      var at = levelOf(level) || DEFAULT_LEVEL;
+      status.textContent = 'Puzzles are set to ' + LEVELS[at - 1] + ': ' + LEVEL_SAYS[at - 1] + '.'
+        + (kept === false ? ' Kept for this page only: this browser stores nothing between visits.' : '');
+    }
+    paint(difficulty().level);
+    say(difficulty().level, store && store.persistent ? undefined : false);
+    // Live while it is dragged, kept when it is let go: one write and one piece dealt again per
+    // setting, not one per pixel the handle crosses.
+    input.addEventListener('input', function () {
+      var at = paint(input.value);
+      say(at, undefined);
+    });
+    function keep() {
+      var at = levelOf(input.value) || DEFAULT_LEVEL;
+      if (at === difficulty().level) { say(at, store && store.persistent ? undefined : false); return; }
+      var kept = setDifficulty(at);
+      say(at, kept);
+      if (typeof opts.onChange === 'function') opts.onChange(difficulty(), kept);
+    }
+    input.addEventListener('change', keep);
+    var release = onDifficulty(function (now, kept) {
+      if (levelOf(input.value) === now.level) return; // this control's own change, already said
+      paint(now.level);
+      say(now.level, kept);
+    });
+    return function () {
+      release();
+      if (host.contains(row)) host.textContent = '';
+      host.classList.remove('difficulty');
+    };
+  }
   function drawSky(ctx, list, w, h, pad, dotRadius, lineWidth) {
     var points = list.map(function (s) {
       return { x: pad + s.x / 100 * (w - pad * 2), y: pad + s.y / 100 * (h - pad * 2) };
@@ -249,11 +417,16 @@
   function cardText(saved, list, r) {
     if (askingInCard) return ASKING_TEXT;
     if (!list.length && !readOf(r) && saved.status !== 'unreadable') {
-      return 'No persona yet. Yours is a small sky you place star by star and one sideways question '
-        + 'you answer: several worlds read the stars, each its own way, and the answer '
-        + 'picks a world to suggest. Set it up here, or take any world below.' + keptClause();
+      return 'No persona yet. Yours is a small sky you place star by star, one sideways question '
+        + 'you answer, and the difficulty every puzzle on this site is dealt at: several worlds '
+        + 'read the stars, each its own way, the answer picks a world to suggest, and the '
+        + 'difficulty says how much a piece will show you. ' + describeDifficulty()
+        + ' Set it up here, or take any world below.' + keptClause();
     }
-    return describeSky(saved, list) + ' ' + describeReading(r) + keptClause();
+    // Joined rather than concatenated: the reading says nothing at all until there is one, and
+    // two sentences with an empty one between them used to read with a gap in the middle.
+    return [describeSky(saved, list), describeReading(r), describeDifficulty()]
+      .filter(function (part) { return !!part; }).join(' ') + keptClause();
   }
   function refresh() {
     if (!card) return;
@@ -267,6 +440,7 @@
     card.host.setAttribute('data-reading', !isRead ? 'none' : (r.source === 'answer' ? 'answered' : 'carried'));
     card.host.setAttribute('data-asking', askingInCard ? 'true' : 'false');
     card.host.setAttribute('data-sky', list.length ? 'set' : 'none');
+    card.host.setAttribute('data-difficulty', difficulty().name);
     card.open.hidden = false;
     var label = list.length || isRead ? 'open persona' : 'set up persona';
     var named = list.length ? skyName(list) : '';
@@ -519,7 +693,9 @@
     }
     renderSheet();
     var target = section === 'reading' ? sheet.ask
-      : (sheet.field.querySelector('.persona-star') || sheet.drop);
+      : section === 'difficulty' ? (sheet.tune && sheet.tune.querySelector('input'))
+        : (sheet.field.querySelector('.persona-star') || sheet.drop);
+    if (!target) target = sheet.field.querySelector('.persona-star') || sheet.drop;
     if (target && typeof target.focus === 'function') target.focus();
     sheet.host.scrollTop = 0;
   }
@@ -556,9 +732,13 @@
       words: document.getElementById('persona-star-thought'),
       neighbor: document.getElementById('persona-star-neighbor'),
       reading: document.getElementById('persona-reading'), ask: document.getElementById('persona-ask'),
-      forget: document.getElementById('persona-forget'), readingGo: document.getElementById('persona-reading-go')
+      forget: document.getElementById('persona-forget'), readingGo: document.getElementById('persona-reading-go'),
+      tune: document.getElementById('persona-difficulty')
     };
     if (!sheet.field) { sheet = null; return; }
+    // The third setting, in its own section: the same control the stage puts beside a piece, so a
+    // visitor meets one slider wherever they meet the setting.
+    if (sheet.tune) tuner(sheet.tune, { label: 'difficulty' });
     var shell = window.interestingSite;
     if (shell && typeof shell.lightbox === 'function') {
       sheetBox = shell.lightbox({ name: 'persona', keep: host, onPress: closeSheet });
@@ -727,6 +907,11 @@
     key: SKY, maxStars: MAX_STARS, stars: stars, read: read, holds: holds,
     seedSky: seedSky, thought: thought, setStars: setStars, addStar: addStar,
     seed: seed, clear: clear, onSky: onSky, skyName: skyName, skyRead: skyRead,
+    // The difficulty, under the one name the local-state document keeps it by: what it is, how it
+    // is set, how to follow it, and the one control that sets it anywhere it is a dependency.
+    difficultyKey: DIFFICULTY, levels: LEVELS.slice(), defaultLevel: DEFAULT_LEVEL,
+    difficulty: difficulty, setDifficulty: setDifficulty, onDifficulty: onDifficulty,
+    describeDifficulty: describeDifficulty, tuner: tuner,
     open: function (section) { openSheet(section || 'sky', null); },
     close: closeSheet,
     ask: function () {
