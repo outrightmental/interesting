@@ -2993,7 +2993,9 @@ class CardVariantTest(unittest.TestCase):
                         continue
                     said += 1
                     self.assertEqual(card["drew"], 0, "this card says nothing moves and then draws")
-        self.assertGreater(said, 0, "no world's card is ever a still one")
+        # And some card somewhere does answer false, so the branch above is exercised rather than
+        # being a path nothing in the site takes.
+        self.assertGreater(said, 0, "nothing ever answers false, so that half of the contract is untested")
 
     def test_one_frame_is_a_step_in_a_picture_and_not_a_new_picture(self):
         # The symptom a visitor reported, measured rather than read: a card whose canvas "churns,
@@ -3010,7 +3012,8 @@ class CardVariantTest(unittest.TestCase):
                     self.assertGreater(card["moved"], 0,
                                        "this card moves not at all, and never said so")
                     self.assertGreaterEqual(card["moved"], card["frame"] * 0.5,
-                                            "this card moves further in a frame than in a breath")
+                                            "a frame of this card changes more than twice what two "
+                                            "and a half seconds of it does")
 
     # ---- the configuration a piece opens with ----
 
