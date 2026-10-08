@@ -214,17 +214,17 @@
     var n = Math.round(Number(value));
     return isFinite(n) && n >= 1 && n <= LEVELS.length ? n : 0;
   }
+  // The level the document holds, and whether the visitor has chosen it. Anything the dial cannot
+  // be set to reads as unchosen rather than as broken -- unlike the sky, there is always a
+  // difficulty, so there is nothing to explain to a visitor and nothing to repair.
   function readDifficulty() {
     var saved = store ? store.read(DIFFICULTY, DEFAULT_LEVEL) : { status: 'unavailable', value: DEFAULT_LEVEL };
-    var level = levelOf(saved.value);
-    // A document holding something the dial cannot be set to reads as unset rather than as broken:
-    // there is always a difficulty, so there is nothing to explain and nothing to repair.
-    return { status: level ? saved.status : (saved.status === 'ok' ? 'unreadable' : saved.status),
-      level: level || DEFAULT_LEVEL, set: !!level && saved.status === 'ok' };
+    var level = saved.status === 'ok' ? levelOf(saved.value) : 0;
+    return { level: level || DEFAULT_LEVEL, set: !!level };
   }
   /* The setting, as the stage hands it to a piece on env.difficulty and as the sheet shows it:
-     { level, of, name, says }. Always a value -- the middle of the dial until a visitor moves it
-     -- because nothing on this site waits on a difficulty to be set. */
+     { level, of, name, says, set }. Always a value -- the middle of the dial until a visitor moves
+     it -- because nothing on this site waits on a difficulty to be set. */
   function difficulty() {
     var saved = readDifficulty();
     return { level: saved.level, of: LEVELS.length, name: LEVELS[saved.level - 1],

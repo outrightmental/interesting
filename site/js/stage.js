@@ -253,11 +253,15 @@
 
     the help      a piece's helper knob -- the hint, the second look, the replay -- gives
                   6 - level turns of it: five at gentle, three at the middle, one at fierce.
-                  Never none, because a knob that does nothing is no knob
-    the margin    a measured answer -- a distance off a ruler, an hour off a clock, an angle --
-                  may be 3 - level steps out and still count: two at gentle, one at mild, exactly
-                  on the mark from the middle of the dial up. An answer that is a count, an order
-                  or a word has no margin to give, so those worlds move on the help alone
+                  Never none, because a knob that does nothing is no knob, and as many of that
+                  allowance as the world has to give. A helper with only one thing to say is
+                  withheld at fierce instead, where the piece has knobs enough to spare it
+    the margin    an answer read off a scale -- a distance in spans, an hour on a 24-hour dial,
+                  notches round a rim, a water table in centimetres -- may be 3 - level steps out
+                  and still count: two at gentle, one at mild, exactly on the mark from the middle
+                  of the dial up. A count, an order, a word, or a target the scene itself decides
+                  (a probe through a ring, a crossing timed by the apparatus) has no margin to
+                  give, so those worlds move on the help alone
 
   It never changes the subject. The plan a piece is of is rolled from the seed and carried on the
   card's `of`, which is what keeps a card and the feature it opens as one thing (the alignment
