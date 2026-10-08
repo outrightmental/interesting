@@ -366,12 +366,13 @@ itself.
   `paint(ctx, w, h, env)` draws the card, `spark(env)` makes one thing for the feed to deal — a
   coinage, a specimen, a rule with its bits, a core sample, an omen, a forecast, a mantra — with or
   without a picture and with `of` saying what the card is of, `animate(ctx, w, h, env, t)` is
-  optional, never runs for a visitor who asked for less motion, and is held to the contract below,
-  and `needsSky` marks the eight that read the persona's stars. `piece(env)` makes the piece the stage plays when the card is opened
-  (see [Completion axiom](#completion-axiom)), and every world's module has one, by law. `env` carries a seeded
-  random source, the stars, the card's own colours and the helpers to mix them, and the card's
-  configuration and content, so a card paints the same picture every time, a different one from
-  its neighbour, and the feature it opens as is that same card.
+  optional, never runs for a visitor who asked for less motion, and is held to the motion contract
+  below, and `needsSky` marks the eight that read the persona's stars. `piece(env)` makes the piece
+  the stage plays when the card is opened (see [Completion axiom](#completion-axiom)), and every
+  world's module has one, by law. `env` carries a seeded random source, the stars, the card's own
+  colours and the helpers to mix them, and the card's configuration and content, so a card paints
+  the same picture every time, a different one from its neighbour, and the feature it opens as is
+  that same card.
 - **A repeat is configured, not reprinted.** The feed deals without end, so every world comes round
   again and again, and a repeat used to differ only in whatever its module did with a fresh seed —
   same palette, same frame, four of the worlds drawing from the stars alone and so repeating one
@@ -392,19 +393,19 @@ itself.
   was allowed to do, and many of the worlds dealt their puzzle inside it — from `env.rnd`, which is
   a stateful seeded stream, with the same `env` handed back on every frame. So the card was redrawn
   as a *different* puzzle each frame: not a scene in motion but a card re-rolling itself thirty
-  times a second, which is what visitors saw as animation run amok
-  (issue [#92](https://github.com/outrightmental/interesting/issues/92)). The contract is written
-  at the top of [`site/js/feed.js`](site/js/feed.js) now: `paint` is the one pass that may spend the
-  card's seeded stream, and a module that deals a plan keeps it with the `env` it was dealt from, so
-  every later pass gets the same card; `animate` is a function of `(w, h, env, t)` and nothing else;
-  `t` is seconds since *this card* was painted rather than since the page opened, so the first frame
-  is `t = 0` and `t = 0` is the picture `paint` left behind — a card painted after a long scroll used
-  to cut straight into an arbitrary phase of its own motion; and a module may answer `false` to say
-  that nothing on this card moves — the cipher cabinet's grille, the weaver's moiré screens — and
-  the loop lets the card go rather than asking it again forever. `CardVariantTest` holds every world
-  to all four, over the three opposite configurations and sixty rolled seeds, by painting a card and
-  then animating the very same `env` the way the feed does, with that spent stream sealed off so a
-  module reaching for it throws instead of flickering.
+  times a second, which is what visitors saw as animation run amok (issue
+  [#92](https://github.com/outrightmental/interesting/issues/92)). The contract is written at the
+  top of [`site/js/feed.js`](site/js/feed.js) now: `paint` is the one pass that may spend the
+  card's seeded stream, and a module that deals a plan keeps it with the `env` it was dealt from,
+  so every later pass gets the same card; `animate` is a function of `(w, h, env, t)` and nothing
+  else; `t` is seconds since *this card* was painted rather than since the page opened, so the
+  first frame is `t = 0` and `t = 0` is the picture `paint` left behind — a card painted after a
+  long scroll used to cut straight into an arbitrary phase of its own motion; and a module may
+  answer `false` to say that nothing on this card moves — the cipher cabinet's grille, the weaver's
+  moiré screens — and the loop lets the card go rather than asking it again forever.
+  `CardVariantTest` holds every world to all four, over the three opposite configurations and sixty
+  rolled seeds, by painting a card and then animating the very same `env` the way the feed does,
+  with that spent stream sealed off so a module reaching for it throws instead of flickering.
 - **A card and the feature it opens as are one piece.** This is an axiom of the site, in the same
   spirit as the configuration above: *every content piece is procedurally configured, and that
   configuration is the same whether the piece appears as a card in the feed or as the feature it
