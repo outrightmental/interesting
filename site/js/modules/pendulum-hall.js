@@ -581,34 +581,48 @@ function springPiece(env, plan) {
 
 /* ---- the module ----------------------------------------------------------------------------- */
 
-function dealsSpring(env) {
-  return env.chance(0.4);
+// Which of the two experiments this card is, and its plan, dealt once from the env's seeded stream
+// and kept with that env. Every pass over one card -- the still picture and then every animated
+// frame -- asks here, so they are all the same card; dealing per frame instead would re-roll the
+// whole experiment thirty times a second (issue #92, and js/feed.js on what animate owes a card).
+const dealt = new WeakMap();
+function deal(env) {
+  let got = dealt.get(env);
+  if (!got) {
+    const spring = env.chance(0.4);
+    got = { spring, plan: spring ? springPlan(env) : rackPlan(env) };
+    dealt.set(env, got);
+  }
+  return got;
 }
 
 export default {
   id: 'pendulum-hall',
   needsSky: false,
   paint(g, w, h, env) {
-    if (dealsSpring(env)) springPreview(g, w, h, env, springPlan(env));
-    else rackPreview(g, w, h, env, rackPlan(env));
+    const d = deal(env);
+    if (d.spring) springPreview(g, w, h, env, d.plan);
+    else rackPreview(g, w, h, env, d.plan);
   },
   animate(g, w, h, env, t) {
     const v = env.variant || PLAIN;
-    if (dealsSpring(env)) {
-      const plan = springPlan(env);
+    const d = deal(env);
+    if (d.spring) {
+      const plan = d.plan;
       const s = springBlank(plan);
       s.replay = { k: plan.open, t: env.reduced ? v.turn * plan.breath * 2 : (t * 0.6 + v.turn * plan.breath * 2) % ((plan.breaths + 1.5) * plan.breath) };
       drawSpring(g, w, h, env, plan, s, v);
       return;
     }
-    const plan = rackPlan(env);
+    const plan = d.plan;
     const s = rackBlank();
     s.beat = env.reduced ? v.turn * 12 : (t * 1.5 + v.turn * 12) % 60;
     drawRack(g, w, h, env, plan, s, v);
   },
   spark(env) {
-    if (dealsSpring(env)) {
-      const plan = springPlan(env);
+    const d = deal(env);
+    if (d.spring) {
+      const plan = d.plan;
       return {
         title: springTitle(plan),
         text: 'Two pendulums and one spring. Set the spring so the swing crosses from the first to the second in ' + WORDS[plan.breaths] + ' breaths, then say what a ' + plan.ask + ' spring would do.',
@@ -618,7 +632,7 @@ export default {
         of: plan
       };
     }
-    const plan = rackPlan(env);
+    const plan = d.plan;
     return {
       title: rackTitle(plan),
       text: 'Set swinging together at beat 0: when do all of them come through the centre together again, and which are through at beat ' + plan.at + '?',
@@ -633,6 +647,7 @@ export default {
     if (pair) return springPiece(env, pair);
     const rack = carriedRack(env);
     if (rack) return rackPiece(env, rack);
-    return dealsSpring(env) ? springPiece(env, springPlan(env)) : rackPiece(env, rackPlan(env));
+    const d = deal(env);
+    return d.spring ? springPiece(env, d.plan) : rackPiece(env, d.plan);
   }
 };

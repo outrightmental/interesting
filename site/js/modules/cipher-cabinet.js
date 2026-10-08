@@ -747,7 +747,11 @@ export default {
     else wheelScene(g, w, h, env, plan(env), blank(), env.variant, 0);
   },
   animate(g, w, h, env, t) {
-    if (dealsGrille(env)) return;
+    // The grille is a printed card: nothing on it moves, so the loop can let it go. The wheel does
+    // turn, and both the branch above and plan() below are arithmetic over env.seed rather than
+    // draws from the env's seeded stream, so asking again every frame deals the same cabinet
+    // (issue #92; js/feed.js has the contract animate is held to).
+    if (dealsGrille(env)) return false;
     wheelScene(g, w, h, env, plan(env), blank(), env.variant, t);
   },
   spark(env) {

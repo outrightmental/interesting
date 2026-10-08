@@ -658,25 +658,42 @@ function whichPiece(env, plan) {
 
 /* ---- the module ----------------------------------------------------------------------------- */
 
-function dealsPostcard(env) {
-  return env.chance(0.5);
+// Which of the two this card is, and its plan, dealt once from the env's seeded stream and kept
+// with that env. Every pass over one card -- the still picture and then every animated frame --
+// asks here, so they are all the same card; dealing per frame instead would re-roll the whole
+// puzzle thirty times a second (issue #92, and js/feed.js on what animate owes a card).
+const dealt = new WeakMap();
+function deal(env) {
+  let got = dealt.get(env);
+  if (!got) {
+    const postcard = env.chance(0.5);
+    got = { postcard, plan: postcard ? postcardPlan(env) : whichPlan(env) };
+    dealt.set(env, got);
+  }
+  return got;
 }
+
+// Where the card's own motion stands when it is still, so animate picks the picture up at t = 0.
+const phaseOf = (env) => env.variant.turn * 6;
 
 export default {
   id: 'wish-constellation',
   needsSky: true,
   paint(g, w, h, env) {
-    if (dealsPostcard(env)) postcardPreview(g, w, h, env, postcardPlan(env), 0);
-    else whichPreview(g, w, h, env, whichPlan(env), 0);
+    const d = deal(env);
+    if (d.postcard) postcardPreview(g, w, h, env, d.plan, phaseOf(env));
+    else whichPreview(g, w, h, env, d.plan, phaseOf(env));
   },
   animate(g, w, h, env, t) {
-    const phase = t + env.variant.turn * 6;
-    if (dealsPostcard(env)) postcardPreview(g, w, h, env, postcardPlan(env), phase);
-    else whichPreview(g, w, h, env, whichPlan(env), phase);
+    const d = deal(env);
+    const phase = t + phaseOf(env);
+    if (d.postcard) postcardPreview(g, w, h, env, d.plan, phase);
+    else whichPreview(g, w, h, env, d.plan, phase);
   },
   spark(env) {
-    if (dealsPostcard(env)) {
-      const plan = postcardPlan(env);
+    const d = deal(env);
+    if (d.postcard) {
+      const plan = d.plan;
       return {
         title: postcardTitle(plan),
         quote: WORDS[plan.points.length] + ' lights, two views',
@@ -686,7 +703,7 @@ export default {
         of: plan
       };
     }
-    const plan = whichPlan(env);
+    const plan = d.plan;
     return {
       title: whichTitle(plan),
       quote: 'four skies, one of them yours',
@@ -701,6 +718,7 @@ export default {
     if (postcard) return postcardPiece(env, postcard);
     const which = carriedWhich(env);
     if (which) return whichPiece(env, which);
-    return dealsPostcard(env) ? postcardPiece(env, postcardPlan(env)) : whichPiece(env, whichPlan(env));
+    const d = deal(env);
+    return d.postcard ? postcardPiece(env, d.plan) : whichPiece(env, d.plan);
   }
 };
