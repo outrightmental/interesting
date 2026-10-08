@@ -262,6 +262,24 @@
       few: { attentive: 2, analytic: 1 },
       many: { brooding: 2, curious: 1 },
       all: { ceremonial: 2, metrical: 1 }
+    },
+    {
+      probe: 'knock', name: 'the knock', kind: 'knock',
+      ask: 'A door, and no one expecting you. Knock the way you would knock.',
+      label: 'knock', done: 'that is my knock',
+      buckets: [
+        { under: 2, weights: { brooding: 3, tender: 2, divinatory: 1 } },
+        { under: 3, weights: { analytic: 3, geometric: 2, attentive: 1 } },
+        { under: 4, weights: { ceremonial: 3, metrical: 2, verbal: 1 } },
+        { under: 6, weights: { curious: 2, tending: 2, rooted: 2, verbal: 1 } },
+        { under: Infinity, weights: { restless: 3, tempestuous: 2, cosmic: 1 } }
+      ],
+      even: { metrical: 2, geometric: 1, analytic: 1 },
+      swung: { curious: 2, verbal: 2, ceremonial: 1 },
+      quickening: { tempestuous: 2, restless: 1, cosmic: 1 },
+      slowing: { tender: 2, brooding: 1, rooted: 1 },
+      waited: { attentive: 2, brooding: 1, divinatory: 1 },
+      sudden: { restless: 2, tempestuous: 1, verbal: 1 }
     }
   ];
 
@@ -439,6 +457,11 @@
     var n = parseInt(hex, 16);
     return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
   }
+  // And back again: a CSS rgba() from one of those, and the blend of two of them.
+  function rgba(c, a) { return 'rgba(' + c[0] + ',' + c[1] + ',' + c[2] + ',' + Math.max(0, a).toFixed(3) + ')'; }
+  function blend(a, b, t) {
+    return [0, 1, 2].map(function (i) { return Math.round(a[i] + (b[i] - a[i]) * t); });
+  }
   function mount(host, options) {
     if (!host) return null;
     var opts = options || {};
@@ -485,7 +508,7 @@
     var kinds = {
       choice: choiceProbe, sequence: sequenceProbe, tap: tapProbe, hold: holdProbe,
       place: placeProbe, draw: drawProbe, windows: windowsProbe, balance: balanceProbe,
-      slider: sliderProbe, sky: skyProbe, keys: keysProbe
+      slider: sliderProbe, sky: skyProbe, keys: keysProbe, knock: knockProbe
     };
     (kinds[probe.kind] || choiceProbe)(probe, body, trace, answer, finish);
     return probe;
@@ -1112,10 +1135,6 @@
     var hurried = 0;
     var stopped = false;
     var due = 0;
-    function rgba(c, a) { return 'rgba(' + c[0] + ',' + c[1] + ',' + c[2] + ',' + Math.max(0, a).toFixed(3) + ')'; }
-    function blend(a, b, t) {
-      return [0, 1, 2].map(function (i) { return Math.round(a[i] + (b[i] - a[i]) * t); });
-    }
     function pace(n) { return 160 + 900 * Math.pow(0.95, n); }
     function count() {
       if (!trace.meter) return;
@@ -1233,6 +1252,195 @@
     });
     count();
     window.requestAnimationFrame(frame);
+  }
+  // A door, and however the visitor knocks on it. The count is most of the answer -- one knock, two,
+  // three, a handful, a volley -- and for a longer knock its rhythm is the rest: even, swung,
+  // quickening or slowing, and whether they knocked at once or stood a moment first. Each knock
+  // rings on the door and leaves its tick on the strip above it, spaced as it fell, so the knock is
+  // written where it can be read back. No knock is wrong, and the door never answers on its own:
+  // saying the knock is done is the visitor's press.
+  function knockProbe(probe, body, trace, answer, finish) {
+    var still = reducedMotion();
+    var KNOCKER = { x: 0.5, y: 0.42 };
+    var door = el('canvas', 'probe-pad');
+    door.width = 600;
+    door.height = 320;
+    door.setAttribute('aria-hidden', 'true');
+    door.style.cursor = 'pointer';
+    door.style.touchAction = 'manipulation';
+    var g = door.getContext('2d');
+    door.hidden = !g;
+    body.appendChild(door);
+    var controls = el('div', 'controls');
+    var knock = el('button', 'probe-big', probe.label);
+    knock.type = 'button';
+    var done = el('button', 'btn-filled', probe.done);
+    done.type = 'button';
+    done.disabled = true;
+    controls.appendChild(knock);
+    controls.appendChild(done);
+    body.appendChild(controls);
+    body.appendChild(el('p', 'probe-count', 'tap the door or press knock, once or as many times as you like, then say when the knock is done'));
+    var style = window.getComputedStyle(body);
+    var tone = function (name, fallback) { return rgbOf(style.getPropertyValue(name), fallback); };
+    var night = tone('--bg', '#070a14');
+    var dusk = tone('--bg2', '#1c2a4e');
+    var cool = tone('--accent', '#9fcbff');
+    var warm = tone('--accent2', '#ffe7ab');
+    var arrived = Date.now();
+    var knocks = [];
+    var stopped = false;
+    var running = false;
+    function pattern() {
+      var out = '\u00b7';
+      for (var i = 1; i < knocks.length; i++) {
+        var gap = knocks[i].at - knocks[i - 1].at;
+        out += (gap < 320 ? '' : gap < 900 ? ' ' : '   ') + '\u00b7';
+      }
+      return out;
+    }
+    function paint(now) {
+      if (!g) return;
+      var w = door.width;
+      var h = door.height;
+      var left = w * 0.31;
+      var right = w * 0.69;
+      var top = h * 0.16;
+      var bottom = h * 0.94;
+      var i;
+      var grad = g.createLinearGradient(0, 0, 0, h);
+      grad.addColorStop(0, rgba(blend(night, dusk, 0.55), 1));
+      grad.addColorStop(1, rgba(night, 1));
+      g.fillStyle = grad;
+      g.fillRect(0, 0, w, h);
+      g.fillStyle = 'rgba(0,0,0,0.35)';
+      g.fillRect(0, bottom, w, h - bottom);
+      // The door shudders under a fresh knock, unless the visitor asked for stillness.
+      var shake = 0;
+      if (!still) {
+        for (i = 0; i < knocks.length; i++) {
+          var age = (now - knocks[i].born) / 260;
+          if (age < 1) shake += Math.sin(age * Math.PI * 3) * (1 - age) * 3;
+        }
+      }
+      g.strokeStyle = rgba(cool, 0.35);
+      g.lineWidth = 3;
+      g.strokeRect(left - 5, top - 5, right - left + 10, bottom - top + 5);
+      g.save();
+      g.translate(shake, 0);
+      g.fillStyle = rgba(blend(night, warm, 0.14), 1);
+      g.fillRect(left, top, right - left, bottom - top);
+      var inset = (right - left) * 0.14;
+      g.strokeStyle = rgba(cool, 0.22);
+      g.lineWidth = 1.5;
+      g.strokeRect(left + inset, top + (bottom - top) * 0.07, right - left - inset * 2, (bottom - top) * 0.36);
+      g.strokeRect(left + inset, top + (bottom - top) * 0.52, right - left - inset * 2, (bottom - top) * 0.4);
+      var kx = KNOCKER.x * w;
+      var ky = KNOCKER.y * h;
+      g.strokeStyle = rgba(warm, 0.9);
+      g.lineWidth = 4;
+      g.beginPath();
+      g.arc(kx, ky + h * 0.03, h * 0.045, Math.PI * 0.15, Math.PI * 0.85);
+      g.stroke();
+      g.fillStyle = rgba(warm, 0.95);
+      g.beginPath();
+      g.arc(kx, ky, h * 0.014, 0, Math.PI * 2);
+      g.fill();
+      g.fillStyle = rgba(night, 0.9);
+      g.beginPath();
+      g.arc(left + (right - left) * 0.78, top + (bottom - top) * 0.5, h * 0.012, 0, Math.PI * 2);
+      g.fill();
+      g.restore();
+      // Each knock rings out from where it landed; with less motion the ring is simply there.
+      for (i = 0; i < knocks.length; i++) {
+        var life = (now - knocks[i].born) / 700;
+        if (life >= 1) continue;
+        g.strokeStyle = rgba(cool, still ? 0.5 : (1 - life) * 0.6);
+        g.lineWidth = 2;
+        g.beginPath();
+        g.arc(knocks[i].x, knocks[i].y, still ? h * 0.08 : h * 0.03 + life * h * 0.22, 0, Math.PI * 2);
+        g.stroke();
+      }
+      // The knock written down: one tick for each, spaced along the strip as they fell.
+      if (knocks.length) {
+        var span = knocks[knocks.length - 1].at - knocks[0].at;
+        var scale = Math.min(0.11, (w * 0.84) / Math.max(1, span));
+        g.strokeStyle = rgba(cool, 0.25);
+        g.lineWidth = 1;
+        g.beginPath();
+        g.moveTo(w * 0.08, h * 0.09);
+        g.lineTo(w * 0.92, h * 0.09);
+        g.stroke();
+        g.strokeStyle = rgba(warm, 0.9);
+        g.lineWidth = 2;
+        for (i = 0; i < knocks.length; i++) {
+          var x = w * 0.08 + (knocks[i].at - knocks[0].at) * scale;
+          g.beginPath();
+          g.moveTo(x, h * 0.05);
+          g.lineTo(x, h * 0.13);
+          g.stroke();
+        }
+      }
+    }
+    function frame(now) {
+      running = false;
+      if (!door.isConnected) return;
+      paint(now);
+      for (var i = 0; i < knocks.length; i++) {
+        if (now - knocks[i].born < 700) { kick(); return; }
+      }
+    }
+    function kick() {
+      if (running) return;
+      running = true;
+      window.requestAnimationFrame(frame);
+    }
+    function rap(fx, fy) {
+      if (stopped) return;
+      knocks.push({ at: Date.now(), born: performance.now(), x: fx * door.width, y: fy * door.height });
+      done.disabled = false;
+      trace.textContent = knocks.length === 1 ? 'one knock' : knocks.length + ' knocks';
+      if (trace.meter) trace.meter.textContent = pattern();
+      kick();
+    }
+    function sum(list) { return list.reduce(function (a, b) { return a + b; }, 0); }
+    door.addEventListener('click', function (ev) {
+      var box = door.getBoundingClientRect();
+      if (!box.width || !box.height) return;
+      rap(Math.min(1, Math.max(0, (ev.clientX - box.left) / box.width)),
+        Math.min(1, Math.max(0, (ev.clientY - box.top) / box.height)));
+    });
+    knock.addEventListener('click', function () { rap(KNOCKER.x, KNOCKER.y); });
+    done.addEventListener('click', function () {
+      if (stopped || !knocks.length) return;
+      stopped = true;
+      var n = knocks.length;
+      bucket(probe.buckets, n, answer);
+      var pause = knocks[0].at - arrived;
+      if (pause > 6000) add(answer, probe.waited, 1);
+      else if (pause < 1200) add(answer, probe.sudden, 1);
+      if (n >= 3) {
+        var gaps = [];
+        for (var i = 1; i < n; i++) gaps.push(knocks[i].at - knocks[i - 1].at);
+        var mean = sum(gaps) / gaps.length;
+        var spread = 0;
+        for (var j = 0; j < gaps.length; j++) spread += Math.abs(gaps[j] - mean);
+        spread /= gaps.length * (mean || 1);
+        var half = Math.floor(gaps.length / 2);
+        var early = sum(gaps.slice(0, half)) / half;
+        var late = sum(gaps.slice(gaps.length - half)) / half;
+        if (spread < 0.2) add(answer, probe.even, 1);
+        else if (late < early * 0.6) add(answer, probe.quickening, 1);
+        else if (late > early * 1.6) add(answer, probe.slowing, 1);
+        else add(answer, probe.swung, 1);
+      }
+      knock.disabled = true;
+      done.disabled = true;
+      door.style.cursor = 'default';
+      if (trace.meter) trace.meter.textContent = '';
+      finish();
+    });
+    paint(performance.now());
   }
   function describe(reading) {
     var o = reading && reading.orientation;
