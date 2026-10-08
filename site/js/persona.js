@@ -167,7 +167,7 @@
   function cardText(saved, list, r) {
     if (askingInCard) return ASKING_TEXT;
     if (!list.length && !readOf(r) && saved.status !== 'unreadable') {
-      return 'No persona yet. Yours is a small sky of stars you place and one sideways question '
+      return 'No persona yet. Yours is a small sky you place star by star and one sideways question '
         + 'you answer: several worlds read the stars, each its own way, and the answer '
         + 'picks a world to suggest. Set it up here, or take any world below.' + keptClause();
     }

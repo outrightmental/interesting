@@ -262,7 +262,7 @@ function recallScene(g, w, h, c, plan, s, v) {
   const step = page(g, w, h, fr.split, c, ink, fr.m, Math.max(3, Math.round(4 * v.density)));
   const lines = [OPENER + ' entry ' + plan.number];
   if (s.fade > 0) lines.push('in the order they came: ' + plan.seq.map((i) => LETTERS[i]).join(', '));
-  else lines.push(show.over ? 'they came out one at a time, and rested.' : s.t - s.from < LEAD ? 'the stars are coming out…' : 'one at a time…');
+  else lines.push(show.over ? 'they came out one at a time, and rested.' : s.t - s.from < LEAD ? 'the stars are coming out.' : 'one at a time.');
   if (s.order) lines.push('called back: ' + s.order.map((i) => LETTERS[i]).join(', '));
   rows(g, fr, step, lines, (i) => (i === 0 ? c.alpha(gold, 0.95) : c.alpha(c.colors.fg, 0.85)));
 }
@@ -279,7 +279,7 @@ function recallPiece(env, plan) {
   const inPlace = (order) => order.filter((item, i) => item === plan.seq[i]).length;
   return {
     title: recallTitle(plan),
-    brief: 'On the midnight watch, ' + WORDS[n] + ' stars come out one at a time, each for a moment, and then they rest. The sky plays once from the start.',
+    brief: 'A vigil of memory. On the midnight watch, ' + WORDS[n] + ' stars come out one at a time, each for a moment, and then they rest. The sky plays once from the start.',
     goal: 'Put the stars in the order they came out.',
     aspect: '4 / 3',
     checkLabel: 'check the entry',
@@ -295,7 +295,7 @@ function recallPiece(env, plan) {
       return {
         solved: k === n,
         say: k === n ? 'all ' + WORDS[n] + ' back, in the order they came'
-          : k === 0 ? 'none of them stands in the right place yet' : WORDS[k] + ' of ' + WORDS[n] + ' in the right place'
+          : k === 0 ? 'none of them is called back in its place yet' : WORDS[k] + ' of ' + WORDS[n] + ' called back in the right place'
       };
     },
     start(c) {
@@ -622,7 +622,7 @@ function linesPiece(env, plan) {
   const draw = (c) => linesScene(c.g, c.w, c.h, c, plan, s, v);
   return {
     title: linesTitle(plan),
-    brief: 'The sky is drawn with its meridian and its horizon, west on the left, and the logbook under it says ' + WORDS[count] + ' things about the ' + WORDS[n] + ' stars. Every line can be checked against the drawing. Exactly two are false.',
+    brief: 'A ledger to correct. The sky is drawn with its meridian and its horizon, west on the left, and the logbook under it says ' + WORDS[count] + ' things about the ' + WORDS[n] + ' stars. Every line can be checked against the drawing. Exactly two are false.',
     goal: 'Find the two false lines.',
     aspect: '4 / 3',
     checkLabel: 'check the log',

@@ -3098,6 +3098,65 @@ class LegibilityStandardTest(unittest.TestCase):
         self.assertNotIn("check_legible", CODED_AXIOMS)
 
 
+class RitualStandardTest(unittest.TestCase):
+    """The ritual axiom: everything on the site feels like an esoteric magical ritual, and the
+    mystery is all in the dressing -- the information is never obscured, the puzzles stand on
+    their own legs, and the rite is fun first and never tiresome. A standard stated to the model,
+    like WHOLE, INTERESTING and LEGIBLE, because no check could judge whether a page feels like a
+    rite or whether a flourish cost a visitor a moment of clarity; so these tests hold the prompt,
+    and RealSiteTest holds the one half of it a stylesheet can be read for (the rite's words in
+    the serif, the instructions in the sans, and the ornament held still for less motion)."""
+
+    def prompt(self):
+        return mi.build_prompt([("index.html", "<h1>hi</h1>")])
+
+    def test_the_standard_names_the_rite_and_its_limit(self):
+        # Spelled out here rather than imported, so rewording RITUAL into something that drops
+        # either half -- the feel, or the limit on it -- fails this test instead of passing quietly.
+        self.assertIn("esoteric magical ritual", mi.RITUAL)
+        for limit in ["is ever obscured", "stands on its own legs", "fun first", "never tiresome"]:
+            with self.subTest(limit=limit):
+                self.assertIn(limit, mi.RITUAL)
+
+    def test_the_standard_is_stated_before_the_rules_and_after_the_choice(self):
+        prompt = self.prompt()
+        self.assertIn("RITUAL, NOT RIDDLE", prompt)
+        self.assertIn(mi.RITUAL, prompt)
+        self.assertLess(prompt.index("THIS RUN "), prompt.index("RITUAL, NOT RIDDLE"))
+        # After the legibility holds, which it leans on, and before the Rules.
+        self.assertLess(prompt.index("LEGIBLE TO A STRANGER"), prompt.index("RITUAL, NOT RIDDLE"))
+        self.assertLess(prompt.index("RITUAL, NOT RIDDLE"), prompt.index("Rules:"))
+
+    def test_the_four_holds_are_each_named(self):
+        prompt = self.prompt()
+        for hold in ["Esoteric is a vibe, never a veil", "The puzzle stands on its own legs",
+                     "Fun first, never tiresome", "The ornament gives way"]:
+            with self.subTest(hold=hold):
+                self.assertIn(hold, prompt)
+        # The limit is concrete: a control keeps its plain verb, a goal says what counts as solved,
+        # a wrong answer is told what the piece saw, and the typographic rule names its mixin.
+        for concrete in ["A control says its plain verb", "a goal says what counts as solved",
+                         "never the answer and never a riddle", "no incantation to type",
+                         "no ceremony longer than a breath", "type.rite", "what to do "
+                         "is set in the sans"]:
+            with self.subTest(concrete=concrete):
+                self.assertIn(concrete, prompt)
+
+    def test_the_standard_is_in_hand_at_the_end_of_the_run_too(self):
+        prompt = self.prompt()
+        last = prompt[prompt.index(f"This run's mission: {mi.mission_of(mi.Run(mi.DEFAULT_MODE))}"):]
+        self.assertIn(f"Keep it {mi.RITUAL}", last)
+        self.assertIn("no riddle where a rule should be", last)
+
+    def test_the_standard_is_stated_and_not_a_check(self):
+        # The same reasoning WHOLE, INTERESTING and LEGIBLE are left uncoded for: no check could
+        # tell a rite from a riddle, so the standard lives in the prompt and the list of coded
+        # axioms does not grow for it.
+        self.assertEqual(sorted(name for name in dir(mi) if name.startswith("check_")),
+                         CODED_AXIOMS)
+        self.assertNotIn("check_ritual", CODED_AXIOMS)
+
+
 class CadenceAxiomTest(SiteDirTestCase):
     """Issue #32: no page ties the site to an update frequency. The site iterates continuously, so
     the fourth axiom stands beside the other three -- stated in the prompt, held to by
@@ -6120,6 +6179,40 @@ class RealSiteTest(unittest.TestCase):
     def test_every_page_is_reachable_from_the_root_and_listed_in_the_sitemap(self):
         self.assertEqual(mi.unreachable_pages(self.site), {})
         self.assertGreater(len(mi.html_pages(self.site)), 1, "the check is worth nothing on one page")
+
+    def test_the_rites_words_wear_the_serif_and_the_instructions_the_sans(self):
+        # The ritual axiom's one readable half (RitualStandardTest holds the prompt to the rest).
+        # The rite's words -- a heading, a piece's title, a card's name, the question -- are set in
+        # the one serif face _type.scss declares, and every control stays in the sans it inherits,
+        # so a visitor can tell the atmosphere from the instruction by the face it is set in. The
+        # ornament the pages share lives in one partial, every page links it through css/site.css,
+        # and it holds still for a visitor who asked for less motion.
+        types = self.source[f"{mi.SASS_DIR}/_type.scss"]
+        self.assertIn("$rite:", types, "no serif face is declared for the rite's words")
+        self.assertIn("@mixin rite", types, "the rite's face is not offered as a mixin")
+        for rel, selector in [(f"{mi.SASS_DIR}/_stage.scss", ".stage-title {"),
+                              (f"{mi.SASS_DIR}/_feed.scss", ".card-title {"),
+                              (f"{mi.SASS_DIR}/_persona.scss", ".persona-sheet-title {"),
+                              (f"{mi.SASS_DIR}/_base.scss", "h1 {")]:
+            with self.subTest(rel=rel, selector=selector):
+                css = self.source[rel]
+                rule = css[css.index(selector):]
+                rule = rule[:rule.index("}")]
+                self.assertIn("@include type.rite", rule, f"{selector} is not set in the rite's face")
+        controls = self.source[f"{mi.SASS_DIR}/_controls.scss"]
+        buttons = controls[controls.index("button,\na.action {"):]
+        buttons = buttons[:buttons.index("}")]
+        self.assertIn("font-family: inherit", buttons, "a control no longer inherits the sans")
+        self.assertNotIn("type.rite", controls, "a control is set in the rite's face")
+        ornament = self.source[f"{mi.SASS_DIR}/_rite.scss"]
+        self.assertIn("@use 'rite';", self.source["css/site.scss"], "the ornament is not shared")
+        self.assertIn("prefers-reduced-motion: reduce", ornament)
+        self.assertIn("animation: none", ornament[ornament.index("prefers-reduced-motion: reduce"):])
+        self.assertNotRegex(ornament, r"(?m)^\s*position:\s*fixed\b", "the ornament floats over the page")
+        self.assertIn("pointer-events: none", ornament, "the ornament takes a press meant for content")
+        built = self.site["css/site.css"]
+        self.assertIn("Iowan Old Style", built, "the built stylesheet carries no serif stack")
+        self.assertIn(".stage-sigil", built, "the piece's sigil is not styled")
 
     def test_every_world_is_a_piece_a_visitor_can_finish(self):
         # The completion axiom, on the site as committed: every world the layout lists has a module
