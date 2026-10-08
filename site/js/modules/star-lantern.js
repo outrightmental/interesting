@@ -695,9 +695,8 @@ export default {
   },
   spark(env) {
     if (!env.stars.length) return null;
-    const d = deal(env);
-    if (d.order) {
-      const plan = d.plan;
+    const { order, plan } = deal(env);
+    if (order) {
       return {
         title: orderTitle(plan),
         quote: clueText(plan.clues[0]),
@@ -708,7 +707,6 @@ export default {
         of: plan
       };
     }
-    const plan = d.plan;
     return {
       title: driftTitle(),
       mono: plan.bands.map((d, i) => 'band ' + (i + 1) + ': ' + (d === 0 ? 'still' : signed(d))).join('\n'),
