@@ -55,13 +55,15 @@ iterate a more interesting website
   left): up to three models per run, inside the fifty minutes the run gives itself for asking.
   If `main` moves on before the push the rebased commit is tested again, so the run never pushes
   a commit that would block the deploy.
-- **Runs alternate** — an odd-numbered run is a *growing* run, with the mission **"make the
-  website more interesting as a single coherent whole"**, and an even-numbered run is a
-  *consolidating* run, with the mission **"consolidate, federate, refactor and clean up the website
-  into a single coherent whole"**, which adds nothing. The workflow's run number decides (`n % 2`),
-  the manual form can name a kind outright, and the commit message says which it was: it opens
-  with *Make the website more interesting* or *Consolidate the website* (see
-  [One single experience](#one-single-experience)).
+- **Every run draws its mode from a bag of marbles** — a kind of work (*create*, *enhance* or
+  *consolidate*) on one area of the site (one world, the navigation, the persona, or the whole),
+  each mode with as many marbles in the bag as its weight says, so a third of all runs enhance one
+  world and a new world is the rarest run of all. A creating or enhancing run serves the mission
+  **"make the website more interesting as a single coherent whole"**; a consolidating run serves
+  **"consolidate, federate, refactor and clean up the website into a single coherent whole"** and
+  adds nothing. The manual form can name a mode outright, and the commit message says which it
+  was: it opens with *Enhance the quiet room*, *Consolidate the navigation*, *Create a world* and
+  so on (see [The bag of marbles](#the-bag-of-marbles)).
 - **One run at a time** — a run that starts while an earlier run of the workflow is still going
   skips itself and finishes green without doing anything, so there is never more than one
   iteration in flight. (To retry a failed run use *Run workflow*: *Re-run failed jobs* does not
@@ -491,48 +493,47 @@ for a while, which is exactly why it has to be ruled out by name.
   same site. That pass is the first half of every run, with nothing to decide about it; what the run
   does is the second half and follows from what it saw. It used to be a suggestion ("begin every run
   by taking a moment"), which is a different instruction.
-- **Runs alternate between growing and consolidating.** The prompt used to ask every run for
-  both — re-federate aggressively, and add something only as the exception — and a run told to do
-  both arrived at neither: it added a page and tidied a stylesheet, and the consolidation that was
-  overdue stayed overdue. Now each kind gets a whole run. `run_kind()` in
-  [`.github/scripts/make_interesting.py`](.github/scripts/make_interesting.py) reads the workflow's
-  run number: odd is a growing run, even is a consolidating run (`n % 2`), and the manual *Run
-  workflow* form can name either kind outright. The two differ in one block of the system prompt,
-  between `ENVISION THE WHOLE FIRST` and `LEGIBLE TO A STRANGER`; everything else — the mission,
-  the measure, the look at the whole, the holds, the axioms — is the same for both. A run the guard
-  skips, or one that fails, still takes a number, so two runs of one kind can occasionally land in
-  a row: the alternation is a rhythm, not an invariant.
-- **A consolidating run re-federates, aggressively, and adds nothing.** `THIS RUN CONSOLIDATES THE
-  SITE` rules out a new page, world, piece, query mechanism or feature, and `RE-FEDERATE,
-  AGGRESSIVELY` asks the run to leave the site more of a single piece than it found it: lift the
-  markup, styles and behaviour the pages repeat into the shared files
-  ([`site/_includes`](site/_includes), [`site/_sass`](site/_sass), `css/site.scss`, a shared
-  `js/site.js`), give every page the same header and navigation, settle on one visual language and
-  hold every page to it. The prompt asks for the consolidation that is overdue rather than the one
-  that is merely easy, and asks a run not to leave a near-duplicate standing because no single page
-  is to blame for it. `REFACTOR AND CLEAN UP` adds the rest of the cleanup: dead code, unused
-  styles, partials nothing includes, one name per thing, and undoing drift from the legibility
-  holds — with the rule that what a visitor can do stays what it is, except where a merge or a
-  retirement takes a near-duplicate away on purpose.
+- **Every run does one mode's work, drawn from a bag of marbles.** The prompt used to ask every
+  run for both — re-federate aggressively, and add something only as the exception — and a run
+  told to do both arrived at neither; then runs alternated, odd growing and even consolidating,
+  and a consolidating run told to re-federate the whole site wrote the largest possible answer
+  against the files the deploy's tests pin most tightly, and lost most of its runs to the output
+  limit, the clock or those tests. Now a run's mode is drawn from a bag
+  (see [The bag of marbles](#the-bag-of-marbles)): a kind of work on one area, a small, named piece
+  of work on a named set of files. The modes differ in one block of the system prompt, between
+  `ENVISION THE WHOLE FIRST` and `LEGIBLE TO A STRANGER`; everything else — the mission, the
+  measure, the look at the whole, the holds, the axioms — is the same for every mode.
+- **A consolidating mode cleans up, fixes, and adds nothing.** `It adds nothing` rules out a new
+  page, world, piece, knob, query mechanism or feature, and each consolidating mode names what to
+  fix first in its area (a knob a visitor cannot set, a star that lands on another, a sheet the
+  keyboard cannot leave) and what to clean up after (dead code, a helper written twice, a comment
+  that describes what is no longer there) — with the rule that what a visitor can do stays what it
+  is, except where a bug took it away or a merge takes a near-duplicate away on purpose.
+  `consolidate_overall` keeps the re-federating: `RE-FEDERATE` lifts the markup, styles and
+  behaviour the pages and the modules repeat into the shared files
+  ([`site/_includes`](site/_includes), [`site/_sass`](site/_sass), `css/site.scss`, `js/site.js`),
+  gives every page the same header and navigation and holds every page to one visual language;
+  `REFACTOR AND CLEAN UP` adds the rest; and the prompt asks for the consolidation that is overdue
+  rather than the one that is merely easy.
 - **It reaches the pages themselves.** Merging pages that overlap and retiring the ones that no
   longer earn their place is part of re-federating, not a separate licence: the site is better as
   fewer pages that belong together than as more that do not. The reachability axiom is what keeps
   that safe — a page a run retires comes out of the navigation and the sitemap in the same run, or
   the plan is refused — and a run whose entire change is a deletion has always been accepted.
-- **A growing run adds, and what it adds arrives federated.** `THIS RUN GROWS THE SITE` asks for
-  the one change that most lengthens a visitor's stay and none of the tidying, which belongs to the
-  run that follows: `ADD something` — new content, a new world for an orientation that has none, a
-  second shape of piece for a world, a new way of querying a visitor's orientation
-  ([Mood axiom](#mood-axiom)), an interactive toy, a hidden easter egg — or deepen what is there.
-  Whatever a run adds arrives inside the shared layout, in the one visual language, wired into the
-  one navigation, sharing the styles and behaviour it has in common with the rest, in that same
-  run, and nothing it adds may repeat what a shared file already does. A page that stands apart
-  leaves the site less of a whole however good that page is on its own, so a growing run is held
-  to the whole as firmly as a consolidating one.
-- **Aggressive, not reckless.** The answer limit has not moved, so a federation too large for one
-  answer is staged across runs rather than half done: the prompt says so, and the rule that a run
-  leaves the site working — every link, stylesheet, script, layout and `@use` still pointing at
-  something that is there — is unchanged.
+- **A creating or enhancing mode adds, and what it adds arrives federated.** `create_item` asks
+  for one new world — its page, its line in the world list, its module with its card and its
+  piece, its `<loc>` — and nothing else; the enhancing modes ask for the one change in their area
+  that most lengthens a visitor's stay (a second shape of piece for a world, a new way of querying
+  a visitor's orientation ([Mood axiom](#mood-axiom)), a constellation that reads better on a
+  phone) and none of the tidying, which belongs to the consolidating modes. Whatever a run adds
+  arrives inside the shared layout, in the one visual language, wired into the one navigation,
+  sharing the styles and behaviour it has in common with the rest, in that same run, and nothing
+  it adds may repeat what a shared file already does.
+- **Small, not reckless.** The answer limit has not moved, so a change too large for one answer is
+  staged across runs rather than half done: every mode's block ends in `SIZE`, which asks for
+  edits to the files the mode names and one coherent stage of anything bigger, and the rule that a
+  run leaves the site working — every link, stylesheet, script, layout and `@use` still pointing
+  at something that is there — is unchanged.
 - **Stated at both ends of the run**, the pattern this repository uses for every standard it holds a
   model to. `WHOLE` in
   [`.github/scripts/make_interesting.py`](.github/scripts/make_interesting.py) is named in the first
@@ -550,6 +551,59 @@ for a while, which is exactly why it has to be ruled out by name.
   list grew to eight when [Destructive-caution axiom](#destructive-caution-axiom) arrived and to
   nine with [Completion axiom](#completion-axiom), which is what tells a standard no check could
   judge apart from a law that can be held.
+
+### The bag of marbles
+
+What a run does is drawn at random from a bag of marbles, the mechanism
+[xj music uses to choose among memes](https://docs.xjmusic.com/making-xj-music/memes/): every mode
+puts as many marbles in the bag as its weight says, one marble is drawn, and the mode it belongs
+to is the run's. A mode is a kind of work — *create* a new one, *enhance* it (make it more
+interesting, measured as [engagement time](#engagement-time-axiom)), *consolidate* it (clean up
+its code and logic and fix its bugs, adding nothing) — on one area of the site: one *item* (a
+world: its page, its module and its line in `_data/worlds.json`), the *nav* (the navigation
+experience and the constellation inside the sparkles logo in the upper left), the *persona* (the
+configuration inside the button in the upper right, and the way the persona runs through the
+site), or the site *overall* (the site-wide experience and the framework beneath it).
+
+| Mode | Marbles | What the run does |
+|---|---|---|
+| `create_item` | 1 | add one new world, federated into the whole |
+| `enhance_item` | 14 | make one world (now and then two or three) more interesting |
+| `enhance_nav` | 5 | make getting around, and the constellation, more interesting |
+| `enhance_persona` | 4 | make configuring a persona, and its presence across the site, more interesting |
+| `enhance_overall` | 5 | one change to the site-wide experience or the framework |
+| `consolidate_item` | 4 | clean up one world's code and logic and fix its bugs |
+| `consolidate_nav` | 2 | clean up the navigation's code and logic and fix its bugs |
+| `consolidate_persona` | 3 | clean up the persona's code and logic and fix its bugs |
+| `consolidate_overall` | 4 | clean up the framework, re-federate, and fix bugs |
+
+- **Forty-two marbles, drawn once per run.** `MODE_MARBLES` in
+  [`.github/scripts/make_interesting.py`](.github/scripts/make_interesting.py) is the bag;
+  `chosen_mode()` draws from it, and the draw is remembered nowhere, so two runs of one mode can
+  land in a row. The manual *Run workflow* form can name a mode outright, or a kind of work
+  (`create`, `enhance`, `consolidate`) to draw among that work's modes only. The log says what was
+  drawn (`Mode: enhance_item (14 of 42 marbles; drawn: the quiet room)`), and the commit message
+  opens with it: *Enhance the quiet room*, *Consolidate the navigation*, *Create a world*.
+- **An item mode draws its world too.** The world — one, usually; sometimes two or three, from a
+  bag of its own — is drawn from `_data/worlds.json` by the script, not chosen by the model, and
+  the prompt names it with its page, its module and what it is like. Its files are shown first
+  and are never among the files the prompt has no room for, and the framework every world stands
+  on is always shown after them; what the prompt still has no room for rotates as before.
+- **Each mode's block names its files, and what the deploy's tests hold in place there.** The
+  block says what to do, what not to do, and which files are the mode's own (`js/site.js`,
+  `_sass/_nav.scss` and the layout's nav markup for the navigation; `js/persona.js`, the sheet and
+  `_sass/_persona.scss` for the persona; a world's module, page and line for an item), and then
+  `WHAT THE DEPLOY'S TESTS HOLD IN PLACE`: the ids the layout writes, the lines the shell's script
+  keeps to the character, the section comments the stylesheets are read by, the stub browsers'
+  limits in the harnesses — read off the tests themselves, because moving one of those is what
+  most refused answers were refused for. An answer that changes files outside its mode's own is
+  not refused for that alone, but when the tests refuse it, the repair round names those files
+  back to the model.
+- **Why a bag.** The weights say how the hours are spent, the rare modes still come round, and
+  every run is a small, named piece of work on a named set of files, which is what keeps an answer
+  inside a model's output limit and inside the hour: on 2026-10-07 and 2026-10-08 every
+  consolidating run of the old alternation failed, each to the output limit, the clock, or the
+  tests, while most growing runs landed.
 
 ### Legible to a stranger
 
@@ -1350,9 +1404,17 @@ Flash tier.
   plan again, against the site as committed, up to `REPAIR_ROUNDS` (two) times; only then is the
   next model asked, told in a line what the last one got wrong. A model whose answer did not
   arrive in time is not asked again: a model still writing after a quarter of an hour is not one
-  more round away. Consolidating runs are also told, in the prompt, which files and names the
-  deploy's tests hold in place — the shell's ids, exports, section comments and pages — because
-  that is what their answers were being refused for.
+  more round away. Every mode is also told, in the prompt, which files and names the deploy's
+  tests hold in place in its area — the shell's ids, exports, section comments and pages, the
+  module contract, the stub browsers' limits — because that is what answers were being refused
+  for (see [The bag of marbles](#the-bag-of-marbles)).
+- **A passing failure is waited out, and a fault in the checking costs a round.** A CLI that fails
+  with a rate limit, a gateway error or a dropped connection (`TRANSIENT_ERROR`) is asked again
+  after a pause (`RETRY_PAUSE_SECONDS`) rather than at once, never a pause that eats the time a
+  call needs; and an exception in the script's own checking — a build, a harness, a copy of the
+  repository — is written to the log in full and costs that model one round, like a CLI failure,
+  rather than ending the run with an answer in hand. The workflow retries its own network steps
+  the same way: the guard's API calls and the two `npm` installs each get three tries.
 - **Small models are never picked at random.** Besides not being on the list, any model whose id
   contains a small or mid-tier name is refused: `haiku` and `sonnet`, and their equivalents at
   other providers such as `mini`, `nano`, `luna`, `terra`, `flash`, `lite`, `small`, `medium`,
