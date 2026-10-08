@@ -14,7 +14,8 @@
      where it drifts     One lantern let go at the dotted column rises through four bands of wind,
                          each pushing it some columns left or right, drawn as arrows over a column
                          grid. Say how far it has drifted when it leaves the top, and which band
-                         pushes hardest. A wrong check says only which way to look.
+                         pushes hardest. A wrong check says only which way to look. Some seeds
+                         are the long ascent, through five bands.
 
    A card and the feature it opens as are one puzzle: the spark puts the whole plan on its spec as
    `of` -- the order and its clues, or the four bands -- and piece(env) opens on that rather than
@@ -444,7 +445,7 @@ function positions(bands) {
 }
 
 function driftOk(bands) {
-  if (!Array.isArray(bands) || bands.length !== BANDS) return false;
+  if (!Array.isArray(bands) || (bands.length !== BANDS && bands.length !== BANDS + 1)) return false;
   if (!bands.every((d) => Number.isInteger(d) && d >= -4 && d <= 4)) return false;
   const abs = bands.map(Math.abs);
   const top = Math.max.apply(null, abs);
@@ -453,10 +454,12 @@ function driftOk(bands) {
   return sum !== 0 && sum >= -COLS && sum <= COLS;
 }
 
+// Most seeds rise through four bands; some through five, the long ascent.
 function driftPlan(env) {
+  const n = env.chance(0.35) ? BANDS + 1 : BANDS;
   for (let guard = 0; guard < 200; guard++) {
     const bands = [];
-    for (let i = 0; i < BANDS; i++) bands.push(env.int(-4, 4));
+    for (let i = 0; i < n; i++) bands.push(env.int(-4, 4));
     if (driftOk(bands)) return { kind: 'drift', bands };
   }
   return { kind: 'drift', bands: [2, -1, 4, -2] };
@@ -468,17 +471,17 @@ function carriedDrift(env) {
   return { kind: 'drift', bands: p.bands.slice() };
 }
 
-function driftTitle() {
-  return 'where it drifts: ' + WORDS[BANDS] + ' bands of wind';
+function driftTitle(plan) {
+  return plan.bands.length > BANDS ? 'the long ascent: five bands of wind' : 'where it drifts: four bands of wind';
 }
 
-function driftGeometry(w, h) {
+function driftGeometry(w, h, n) {
   const span = w * 0.84;
   const left = (w - span) / 2;
   const cell = span / (COLS * 2 + 1);
   const top = h * 0.12;
   const bottom = h * 0.74;
-  return { left, span, cell, top, bottom, band: (bottom - top) / BANDS, x: (col) => left + (col + COLS + 0.5) * cell };
+  return { left, span, cell, top, bottom, band: (bottom - top) / (n || BANDS), x: (col) => left + (col + COLS + 0.5) * cell };
 }
 
 function arrow(g, x0, x1, y, head) {
@@ -498,7 +501,8 @@ function arrow(g, x0, x1, y, head) {
 function drawDrift(g, w, h, env, plan, s, variant) {
   const v = variant || PLAIN;
   const c = env.colors;
-  const geo = driftGeometry(w, h);
+  const nb = plan.bands.length;
+  const geo = driftGeometry(w, h, nb);
   const k = Math.max(0.6, Math.min(1.6, Math.min(w, h) / 320)) * v.scale;
   const small = Math.max(8, Math.min(13, Math.round(Math.min(w, h) * 0.034)));
   sky(g, w, h, env);
@@ -525,7 +529,7 @@ function drawDrift(g, w, h, env, plan, s, variant) {
   }
   // The bands, bottom to top: a strip, its number, and its push drawn from the dotted column.
   const pos = positions(plan.bands);
-  for (let b = 0; b < BANDS; b++) {
+  for (let b = 0; b < nb; b++) {
     const y0 = geo.bottom - (b + 1) * geo.band;
     const d = plan.bands[b];
     const chosen = s.band === b + 1;
@@ -561,9 +565,9 @@ function drawDrift(g, w, h, env, plan, s, variant) {
   let lx = geo.x(0);
   let ly = geo.bottom + geo.band * 0.42;
   if (s.flight > 0) {
-    const f = Math.min(s.flight, BANDS + 1.2);
-    const b = Math.min(BANDS - 1, Math.floor(f));
-    const col = f >= BANDS ? pos[BANDS] : pos[b] + (pos[b + 1] - pos[b]) * (f - b);
+    const f = Math.min(s.flight, nb + 1.2);
+    const b = Math.min(nb - 1, Math.floor(f));
+    const col = f >= nb ? pos[nb] : pos[b] + (pos[b + 1] - pos[b]) * (f - b);
     lx = geo.x(col);
     ly = geo.bottom - f * geo.band;
     g.strokeStyle = env.alpha(c.accent2, 0.5);
@@ -596,6 +600,7 @@ function driftPreview(g, w, h, env, plan, t) {
 }
 
 function driftPiece(env, plan) {
+  const nb = plan.bands.length;
   const total = driftTotal(plan.bands);
   const hard = strongest(plan.bands);
   const pos = positions(plan.bands);
@@ -603,15 +608,15 @@ function driftPiece(env, plan) {
   const draw = (c) => drawDrift(c.g, c.w, c.h, c, plan, s, env.variant);
   const leaves = (n) => 'column ' + signed(n) + ', ' + WORDS[Math.abs(n)] + (Math.abs(n) === 1 ? ' column ' : ' columns ') + (n < 0 ? 'left' : 'right') + ' of where it was let go';
   return {
-    title: driftTitle(),
-    brief: 'An offering to the wind: one lantern is let go at the dotted column and rises through four bands of wind. Each band pushes it the number of columns its arrow shows, left when the number is negative and right when it is positive, and the grid is there to count on.',
+    title: driftTitle(plan),
+    brief: 'An offering to the wind: one lantern is let go at the dotted column and rises through ' + WORDS[nb] + ' bands of wind. Each band pushes it the number of columns its arrow shows, left when the number is negative and right when it is positive, and the grid is there to count on.',
     goal: 'Say how many columns it has drifted when it leaves the top, and which band pushes hardest.',
     aspect: '4 / 3',
     checkLabel: 'let it go',
     steps: [
       { id: 'drift', ask: 'its drift when it leaves the top, in columns (left is negative)', kind: 'number', min: -COLS, max: COLS, step: 1, value: 0, unit: 'columns' },
-      { id: 'band', ask: 'the band that pushes hardest', kind: 'number', min: 1, max: BANDS, step: 1, value: 1 },
-      { id: 'hint', ask: 'where it is after the next band', kind: 'press', count: BANDS - 1, label: 'show me', optional: true }
+      { id: 'band', ask: 'the band that pushes hardest', kind: 'number', min: 1, max: nb, step: 1, value: 1 },
+      { id: 'hint', ask: 'where it is after the next band', kind: 'press', count: nb - 1, label: 'show me', optional: true }
     ],
     solution: { drift: total, band: hard },
     check(c) {
@@ -626,7 +631,7 @@ function driftPiece(env, plan) {
       return { solved: false, say: parts.join('; ') };
     },
     start(c) {
-      c.status('four bands, one lantern, the grid to count on');
+      c.status(WORDS[nb] + ' bands, one lantern, the grid to count on');
       draw(c);
     },
     apply(id, value, c) {
@@ -637,11 +642,11 @@ function driftPiece(env, plan) {
       }
       if (id === 'band') {
         const n = Math.round(Number(value));
-        s.band = Number.isFinite(n) ? Math.max(1, Math.min(BANDS, n)) : 0;
+        s.band = Number.isFinite(n) ? Math.max(1, Math.min(nb, n)) : 0;
         c.status('you say band ' + s.band + ' pushes hardest');
       }
       if (id === 'hint') {
-        const next = Math.max(1, Math.min(BANDS - 1, Math.round(Number(value)) || 1));
+        const next = Math.max(1, Math.min(nb - 1, Math.round(Number(value)) || 1));
         if (!s.hinted.includes(next)) {
           s.hinted.push(next);
           c.hint();
@@ -654,11 +659,11 @@ function driftPiece(env, plan) {
     },
     frame(t, dt, c) {
       s.t += dt;
-      if (c.done) s.flight = Math.min(BANDS + 3, s.flight + dt * 0.8);
+      if (c.done) s.flight = Math.min(nb + 3, s.flight + dt * 0.8);
       draw(c);
     },
     end(c) {
-      c.status('let go: it rises through the four bands and leaves at ' + signed(total));
+      c.status('let go: it rises through the ' + WORDS[nb] + ' bands and leaves at ' + signed(total));
     }
   };
 }
@@ -696,9 +701,9 @@ export default {
     }
     const plan = driftPlan(env);
     return {
-      title: driftTitle(),
+      title: driftTitle(plan),
       mono: plan.bands.map((d, i) => 'band ' + (i + 1) + ': ' + (d === 0 ? 'still' : signed(d))).join('\n'),
-      text: 'One lantern, lit and let go as an offering to four bands of wind. Say where it leaves the top, and which band pushes it hardest.',
+      text: 'One lantern, lit and let go as an offering to ' + WORDS[plan.bands.length] + ' bands of wind. Say where it leaves the top, and which band pushes it hardest.',
       aspect: '4 / 3',
       paint: (g, w, h, cardEnv) => driftPreview(g, w, h, cardEnv, plan, cardEnv.variant.turn * 4),
       of: plan

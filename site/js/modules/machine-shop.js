@@ -11,6 +11,8 @@
                         three appears somewhere in the first three rows, so the rule can be read
                         off the rows entirely; write row five. The scene is the control: tap a
                         cell of row five to light it. A wrong check says how many cells are right.
+                        Some seeds are the long recital: three rows shown, rows four and five to
+                        write.
      the changed cell   Two tapes ran one stated rule from one first row, except that one cell of
                         the second tape's first row was flipped. The first rows are hidden and the
                         next few shown. The flip reaches exactly the three cells under it in row
@@ -138,12 +140,14 @@ function label(g, env, text, x, y, size, align, tone) {
 
 /* ---- the next row --------------------------------------------------------------------------- */
 
-// Every pattern row four uses is one that rows one to three already showed with its outcome.
-function readable(rows, width) {
+// Every pattern the hidden rows are made from is one the shown rows already showed with its
+// outcome. `depth` is how many rows are hidden at the bottom: one (row five) or two (four and five).
+function readable(rows, width, depth) {
+  const shown = 5 - (depth || 1);
   const seen = new Set();
-  for (let r = 0; r < 3; r++) for (let x = 0; x < width; x++) seen.add(hoodOf(rows[r], x));
+  for (let r = 0; r < shown - 1; r++) for (let x = 0; x < width; x++) seen.add(hoodOf(rows[r], x));
   let all = true;
-  for (let x = 0; x < width; x++) if (!seen.has(hoodOf(rows[3], x))) all = false;
+  for (let r = shown - 1; r < 4; r++) for (let x = 0; x < width; x++) if (!seen.has(hoodOf(rows[r], x))) all = false;
   return { all, complete: seen.size === 8 };
 }
 
@@ -151,6 +155,7 @@ function readable(rows, width) {
 function nextPlan(env) {
   const number = env.int(100, 999);
   const width = env.int(9, 10);
+  const depth = env.chance(0.3) ? 2 : 1;
   let fallback = null;
   for (let attempt = 0; attempt < 400; attempt++) {
     const rule = env.int(1, 254);
@@ -158,9 +163,9 @@ function nextPlan(env) {
     const rows = runRows(start, rule, 4);
     const moves = rows.some((row, i) => i > 0 && differing(row, rows[i - 1]).length);
     if (!rows[4].some(Boolean) || !moves) continue;
-    const read = readable(rows, width);
-    if (read.complete) return { kind: 'next', number, width, rule, start };
-    if (read.all && !fallback) fallback = { kind: 'next', number, width, rule, start };
+    const read = readable(rows, width, depth);
+    if (read.complete) return { kind: 'next', number, width, depth, rule, start };
+    if (read.all && !fallback) fallback = { kind: 'next', number, width, depth, rule, start };
   }
   return fallback || { kind: 'next', number, width, rule: 30, start: new Array(width).fill(0).map((v, i) => (i === 3 ? 1 : 0)) };
 }
@@ -172,13 +177,20 @@ function carriedNext(env) {
   if (!Number.isInteger(p.width) || p.width < 9 || p.width > 10) return null;
   if (!Number.isInteger(p.rule) || p.rule < 0 || p.rule > 255) return null;
   if (!isBits(p.start, p.width)) return null;
+  const depth = p.depth === 2 ? 2 : 1;
   const rows = runRows(p.start, p.rule, 4);
-  if (!rows[4].some(Boolean) || !readable(rows, p.width).all) return null;
-  return { kind: 'next', number: p.number, width: p.width, rule: p.rule, start: p.start.slice() };
+  if (!rows[4].some(Boolean) || !readable(rows, p.width, depth).all) return null;
+  return { kind: 'next', number: p.number, width: p.width, depth, rule: p.rule, start: p.start.slice() };
+}
+
+const ROWNAME = ['one', 'two', 'three', 'four', 'five'];
+
+function count(n) {
+  return n <= 12 ? WORDS[n] : String(n);
 }
 
 function nextTitle(plan) {
-  return 'tape ' + plan.number + ': recite the next row';
+  return plan.depth === 2 ? 'tape ' + plan.number + ': the long recital' : 'tape ' + plan.number + ': recite the next row';
 }
 
 function nextGeometry(w, h, width, v) {
@@ -199,115 +211,130 @@ function drawNext(g, w, h, env, plan, s, variant) {
   const small = Math.max(9, Math.min(15, Math.round(Math.min(w, h) * 0.036)));
   background(g, w, h, env);
   grain(g, w, h, env, v);
-  // Rows one to four, as the rule made them.
-  for (let r = 0; r < 4; r++) {
+  const depth = plan.depth || 1;
+  const shown = 5 - depth;
+  const y0 = geo.top + shown * geo.size + geo.gap;
+  // The rows the rule is shown making.
+  for (let r = 0; r < shown; r++) {
     const y = geo.top + r * geo.size;
     label(g, env, String(r + 1), geo.left - geo.labelW * 0.5, y + geo.size / 2, small, 'center', env.alpha(c.muted, 0.9));
     for (let x = 0; x < plan.width; x++) cell(g, env, geo.left + x * geo.size, y, geo.size, rows[r][x], inset);
   }
-  // Row five: the visitor's, outlined, lit where they have lit it.
-  const y5 = geo.top + 4 * geo.size + geo.gap;
-  label(g, env, '5', geo.left - geo.labelW * 0.5, y5 + geo.size / 2, small, 'center', c.accent2);
+  // The hidden rows: the visitor's, outlined, lit where they have lit them.
+  for (let k = 0; k < depth; k++) {
+  const y5 = y0 + k * geo.size;
+  label(g, env, String(shown + k + 1), geo.left - geo.labelW * 0.5, y5 + geo.size / 2, small, 'center', c.accent2);
   for (let x = 0; x < plan.width; x++) {
     const x0 = geo.left + x * geo.size;
-    const lit = !!s.row[x];
+    const i = k * plan.width + x;
+    const lit = !!s.row[i];
     cell(g, env, x0, y5, geo.size, lit, inset, env.alpha(c.accent2, 0.95));
     g.strokeStyle = env.alpha(lit ? c.accent2 : c.muted, lit ? 0.9 : 0.55);
     g.lineWidth = 1;
     g.strokeRect(x0 + inset, y5 + inset, geo.size - inset * 2, geo.size - inset * 2);
-    if (s.shown.includes(x)) {
-      // A hinted cell: a small mark under it, lit or dark as the rule has it.
-      const want = rows[4][x];
+    if (s.shown.includes(i)) {
+      // A hinted cell: a small mark beside it -- above the first hidden row, under the second --
+      // lit or dark as the rule has it.
+      const want = rows[shown + k][x];
+      const my = k === 0 ? y5 - geo.gap / 2 : y5 + geo.size + Math.max(3, geo.size * 0.18);
       g.fillStyle = want ? c.accent2 : env.alpha(c.muted, 0.7);
       g.beginPath();
-      g.arc(x0 + geo.size / 2, y5 + geo.size + Math.max(3, geo.size * 0.18), Math.max(1.5, geo.size * 0.08), 0, Math.PI * 2);
+      g.arc(x0 + geo.size / 2, my, Math.max(1.5, geo.size * 0.08), 0, Math.PI * 2);
       g.fill();
       if (!want) {
         g.strokeStyle = env.alpha(c.muted, 0.9);
         g.beginPath();
-        g.arc(x0 + geo.size / 2, y5 + geo.size + Math.max(3, geo.size * 0.18), Math.max(2.5, geo.size * 0.13), 0, Math.PI * 2);
+        g.arc(x0 + geo.size / 2, my, Math.max(2.5, geo.size * 0.13), 0, Math.PI * 2);
         g.stroke();
       }
     }
   }
+  }
   // The frame of the bench, and the table of patterns under it.
   g.strokeStyle = env.alpha(c.muted, 0.25);
   g.lineWidth = 1;
-  g.strokeRect(geo.left - inset, geo.top - inset, geo.size * plan.width + inset * 2, geo.size * 4 + inset * 2);
-  const tableY = y5 + geo.size + Math.max(h * 0.06, geo.size * 0.7);
+  g.strokeRect(geo.left - inset, geo.top - inset, geo.size * plan.width + inset * 2, geo.size * shown + inset * 2);
+  const tableY = y0 + depth * geo.size + Math.max(h * 0.06, geo.size * 0.7);
   glyphTable(g, env, w * 0.06, tableY, w * 0.88, s.open ? plan.rule : null, v);
   label(g, env, s.open ? 'rule ' + plan.rule : 'the rule, pattern by pattern', w * 0.5, Math.min(h * 0.97, tableY + geo.size * 1.9), small, 'center', env.alpha(c.muted, 0.85));
 }
 
 function nextPreview(g, w, h, env, plan) {
-  drawNext(g, w, h, env, plan, { row: new Array(plan.width).fill(0), shown: [], open: false }, env.variant);
+  drawNext(g, w, h, env, plan, { row: new Array(plan.width * (plan.depth || 1)).fill(0), shown: [], open: false }, env.variant);
 }
 
 function nextPiece(env, plan) {
   const width = plan.width;
+  const depth = plan.depth || 1;
+  const shown = 5 - depth;
+  const cells = width * depth;
   const rows = runRows(plan.start, plan.rule, 4);
-  const answer = rows[4].slice();
-  const s = { row: new Array(width).fill(0), shown: [], open: false };
+  const answer = rows.slice(shown).reduce((all, row) => all.concat(row), []);
+  const s = { row: new Array(cells).fill(0), shown: [], open: false };
+  const rowName = (i) => ROWNAME[shown + Math.floor(i / width)];
   const draw = (c) => drawNext(c.g, c.w, c.h, c, plan, s, env.variant);
   function right() {
     let n = 0;
-    for (let x = 0; x < width; x++) if ((s.row[x] ? 1 : 0) === answer[x]) n += 1;
+    for (let i = 0; i < cells; i++) if ((s.row[i] ? 1 : 0) === answer[i]) n += 1;
     return n;
   }
   return {
     title: nextTitle(plan),
-    brief: 'The automaton keeps one liturgy: each cell of a row is set by the three cells above it, itself and its two neighbours, and the tape wraps round at its ends. One hidden rule made rows two, three and four, and every one of the eight patterns of three appears somewhere in rows one to three, so the rule can be read off the bench.',
-    goal: 'Write row five.',
+    brief: 'The automaton keeps one liturgy: each cell of a row is set by the three cells above it, itself and its two neighbours, and the tape wraps round at its ends. ' + (depth === 2
+      ? 'One hidden rule made rows two and three, and every one of the eight patterns of three appears somewhere in rows one and two, so the rule can be read off the bench and run on twice.'
+      : 'One hidden rule made rows two, three and four, and every one of the eight patterns of three appears somewhere in rows one to three, so the rule can be read off the bench.'),
+    goal: depth === 2 ? 'Write rows four and five.' : 'Write row five.',
     aspect: '4 / 3',
-    checkLabel: 'check the row',
+    checkLabel: depth === 2 ? 'check the rows' : 'check the row',
     steps: [
-      { id: 'row', ask: 'row five: tap its cells on the bench, or mark them here', kind: 'grid', rows: 1, cols: width, states: 2, labels: ['dark', 'lit'] },
-      { id: 'hint', ask: 'one cell of row five', kind: 'press', count: 1, label: 'show one cell', optional: true }
+      { id: 'row', ask: depth === 2 ? 'rows four and five: tap their cells on the bench, or mark them here' : 'row five: tap its cells on the bench, or mark them here', kind: 'grid', rows: depth, cols: width, states: 2, labels: ['dark', 'lit'] },
+      { id: 'hint', ask: depth === 2 ? 'one hidden cell' : 'one cell of row five', kind: 'press', count: 1, label: 'show one cell', optional: true }
     ],
     solution: { row: answer },
     check(c) {
       const n = right();
-      if (n === width) return { solved: true, say: 'the tape accepts row five; the rule was ' + plan.rule };
-      return { solved: false, say: (n === 1 ? 'one cell' : WORDS[n] + ' cells') + ' of ' + WORDS[width] + ' ' + (n === 1 ? 'is' : 'are') + ' right' };
+      if (n === cells) return { solved: true, say: 'the tape accepts ' + (depth === 2 ? 'rows four and five' : 'row five') + '; the rule was ' + plan.rule };
+      return { solved: false, say: (n === 1 ? 'one cell' : count(n) + ' cells') + ' of ' + count(cells) + ' ' + (n === 1 ? 'is' : 'are') + ' right' };
     },
     start(c) {
-      c.status('tap a cell of row five to light it');
+      c.status(depth === 2 ? 'two rows hidden: tap a cell of row four or five to light it' : 'tap a cell of row five to light it');
       draw(c);
     },
     apply(id, value, c) {
-      if (id === 'row' && Array.isArray(value) && value.length === width) {
+      if (id === 'row' && Array.isArray(value) && value.length === cells) {
         s.row = value.map((v) => (v ? 1 : 0));
         const lit = s.row.filter(Boolean).length;
-        c.status('row five: ' + (lit === 1 ? 'one cell lit' : WORDS[Math.min(12, lit)] + ' cells lit'));
+        c.status((depth === 2 ? 'the hidden rows: ' : 'row five: ') + (lit === 1 ? 'one cell lit' : count(lit) + ' cells lit'));
       }
       if (id === 'hint') {
         const next = [];
-        for (let x = 0; x < width; x++) if (!s.shown.includes(x)) next.push(x);
+        for (let i = 0; i < cells; i++) if (!s.shown.includes(i)) next.push(i);
         if (next.length) {
-          const x = next[Math.floor(next.length / 2)];
-          s.shown.push(x);
+          const i = next[Math.floor(next.length / 2)];
+          s.shown.push(i);
           c.hint();
-          c.status('cell ' + (x + 1) + ' of row five is ' + (answer[x] ? 'lit' : 'dark'));
+          c.status('cell ' + ((i % width) + 1) + ' of row ' + rowName(i) + ' is ' + (answer[i] ? 'lit' : 'dark'));
         } else {
-          c.status('every cell of row five is marked under the bench');
+          c.status('every hidden cell is marked on the bench');
         }
       }
       draw(c);
     },
     tap(x, y, c) {
       const geo = nextGeometry(c.w, c.h, width, env.variant || PLAIN);
-      const y5 = geo.top + 4 * geo.size + geo.gap;
+      const y0 = geo.top + shown * geo.size + geo.gap;
       const col = Math.floor((x * c.w - geo.left) / geo.size);
-      const py = y * c.h;
-      if (col < 0 || col >= width || py < y5 - geo.size * 0.4 || py > y5 + geo.size * 1.4) {
-        c.status('row five is the outlined row; tap a cell of it');
+      const rel = (y * c.h - y0) / geo.size;
+      if (col < 0 || col >= width || rel < -0.4 || rel > depth + 0.4) {
+        c.status((depth === 2 ? 'rows four and five are' : 'row five is') + ' outlined; tap a cell there');
         return;
       }
+      const i = clamp(Math.floor(rel), 0, depth - 1) * width + col;
       const next = s.row.slice();
-      next[col] = next[col] ? 0 : 1;
+      next[i] = next[i] ? 0 : 1;
       s.row = next;
       c.set('row', next.slice());
-      c.status('cell ' + (col + 1) + ' of row five ' + (next[col] ? 'lit' : 'dark'));
+      c.status('cell ' + (col + 1) + ' of row ' + rowName(i) + ' ' + (next[i] ? 'lit' : 'dark'));
       draw(c);
     },
     frame(t, dt, c) {
@@ -541,8 +568,10 @@ export default {
     const plan = nextPlan(env);
     return {
       title: nextTitle(plan),
-      text: 'Four rows of one hidden rule, every pattern of three on show. Read the rule off the bench and recite the fifth row.',
-      mono: plan.width + ' cells / rule ?',
+      text: plan.depth === 2
+        ? 'Three rows of one hidden rule, every pattern of three on show. Read the rule off the bench and run it on twice: recite rows four and five.'
+        : 'Four rows of one hidden rule, every pattern of three on show. Read the rule off the bench and recite the fifth row.',
+      mono: plan.width + ' cells / rule ?' + (plan.depth === 2 ? ' / two rows hidden' : ''),
       aspect: '4 / 3',
       paint: (ctx, cw, ch, cardEnv) => nextPreview(ctx, cw, ch, cardEnv, plan),
       of: plan
