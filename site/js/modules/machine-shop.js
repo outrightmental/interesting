@@ -189,7 +189,7 @@ function carriedNext(env) {
 }
 
 function nextTitle(plan) {
-  return 'tape ' + plan.number + ': the next row';
+  return 'tape ' + plan.number + ': recite the next row';
 }
 
 function nextGeometry(w, h, width, v) {
@@ -268,7 +268,7 @@ function nextPiece(env, plan) {
   }
   return {
     title: nextTitle(plan),
-    brief: 'Each cell of a row is set by the three cells above it, itself and its two neighbours, and the tape wraps round at its ends. One hidden rule made rows two, three and four, and every one of the eight patterns of three appears somewhere in rows one to three, so the rule can be read off the bench.',
+    brief: 'The automaton keeps one liturgy: each cell of a row is set by the three cells above it, itself and its two neighbours, and the tape wraps round at its ends. One hidden rule made rows two, three and four, and every one of the eight patterns of three appears somewhere in rows one to three, so the rule can be read off the bench.',
     goal: 'Write row five.',
     aspect: '4 / 3',
     checkLabel: 'check the row',
@@ -279,7 +279,7 @@ function nextPiece(env, plan) {
     solution: { row: answer },
     check(c) {
       const n = right();
-      if (n === width) return { solved: true, say: 'row five is right; the rule was ' + plan.rule };
+      if (n === width) return { solved: true, say: 'the tape accepts row five; the rule was ' + plan.rule };
       return { solved: false, say: (n === 1 ? 'one cell' : WORDS[n] + ' cells') + ' of ' + WORDS[width] + ' ' + (n === 1 ? 'is' : 'are') + ' right' };
     },
     start(c) {
@@ -467,7 +467,7 @@ function apexPiece(env, plan) {
   const draw = (c) => drawApex(c.g, c.w, c.h, c, plan, s, env.variant);
   return {
     title: apexTitle(plan),
-    brief: 'Two tapes ran rule ' + plan.rule + ', drawn at the top pattern by pattern, from one first row -- except that one cell of the second tape\'s first row was flipped. The first rows are hidden; the ' + WORDS[plan.rows] + ' rows after them are shown. A change in a row reaches only the cell under it and the two beside that in the next, and the tape wraps round.',
+    brief: 'Two tapes, one rite: both ran rule ' + plan.rule + ', drawn at the top pattern by pattern, from one first row -- except that one cell of the second tape\'s first row was flipped. The first rows are hidden; the ' + WORDS[plan.rows] + ' rows after them are shown. A change in a row reaches only the cell under it and the two beside that in the next, and the tape wraps round.',
     goal: 'Find the column of the flipped cell, and count the cells that differ in row ' + plan.rows + '.',
     aspect: '16 / 10',
     checkLabel: 'check the tapes',
@@ -481,9 +481,9 @@ function apexPiece(env, plan) {
       const colRight = Number(c.value('column')) === plan.flip + 1;
       const countRight = Number(c.value('differ')) === last;
       if (colRight && countRight) {
-        return { solved: true, say: 'column ' + (plan.flip + 1) + ' was flipped, and ' + (last === 1 ? 'one cell differs' : WORDS[last] + ' cells differ') + ' in row ' + plan.rows };
+        return { solved: true, say: 'the flip is found: column ' + (plan.flip + 1) + ' was flipped, and ' + (last === 1 ? 'one cell differs' : WORDS[last] + ' cells differ') + ' in row ' + plan.rows };
       }
-      if (!colRight && !countRight) return { solved: false, say: 'the column and the count are both off' };
+      if (!colRight && !countRight) return { solved: false, say: 'neither reading holds: the column and the count are both off' };
       return { solved: false, say: colRight ? 'the column is right; the count is off' : 'the count is right; the column is off' };
     },
     start(c) {
@@ -550,7 +550,7 @@ export default {
       const plan = apexPlan(env);
       return {
         title: apexTitle(plan),
-        text: 'Two tapes under rule ' + plan.rule + ', one cell apart at the start. Find the column that was flipped and count what it changed by row ' + plan.rows + '.',
+        text: 'Two tapes, one rite: rule ' + plan.rule + ', one cell apart at the start. Find the column that was flipped and count what it changed by row ' + plan.rows + '.',
         mono: plan.width + ' cells / ' + plan.rows + ' rows shown',
         aspect: '16 / 10',
         paint: (ctx, cw, ch, cardEnv) => apexPreview(ctx, cw, ch, cardEnv, plan),
@@ -560,7 +560,7 @@ export default {
     const plan = nextPlan(env);
     return {
       title: nextTitle(plan),
-      text: 'Four rows of one hidden rule, with every pattern of three on show. Read the rule off the bench and write the fifth row.',
+      text: 'Four rows of one hidden rule, every pattern of three on show. Read the rule off the bench and recite the fifth row.',
       mono: plan.width + ' cells / rule ?',
       aspect: '4 / 3',
       paint: (ctx, cw, ch, cardEnv) => nextPreview(ctx, cw, ch, cardEnv, plan),

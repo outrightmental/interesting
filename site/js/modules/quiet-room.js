@@ -170,7 +170,7 @@ function lampsTitle(plan) {
 
 function lampsBrief(plan) {
   const count = litBy(plan.presses, plan.n).filter(Boolean).length;
-  return 'Press a lamp and it flips itself and the lamps above, below, left and right of it. '
+  return 'A vigil to be put out. Press a lamp and it flips itself and the lamps above, below, left and right of it. '
     + (count === 1 ? 'One lamp is lit.' : WORDS[count][0].toUpperCase() + WORDS[count].slice(1) + ' lamps are lit.');
 }
 
@@ -493,7 +493,7 @@ function carriedShelf(env) {
 }
 
 function shelfTitle(plan) {
-  return 'the shelf: ' + WORDS[plan.items.length] + ' keepsakes';
+  return 'the shelf: ' + WORDS[plan.items.length] + ' keepsakes, one true order';
 }
 
 function shelfGeometry(w, h, n) {
@@ -595,7 +595,7 @@ function shelfPiece(env, plan) {
   }
   return {
     title: shelfTitle(plan),
-    brief: WORDS[n][0].toUpperCase() + WORDS[n].slice(1) + ' keepsakes stand on the shelf, left to right, and '
+    brief: 'A reading of the shelf. ' + WORDS[n][0].toUpperCase() + WORDS[n].slice(1) + ' keepsakes stand on it, left to right, and '
       + WORDS[plan.clues.length] + ' clues under it say how. Exactly one order fits them all.',
     goal: 'Put the keepsakes in the one order every clue allows.',
     aspect: '4 / 3',
@@ -610,7 +610,7 @@ function shelfPiece(env, plan) {
       return {
         solved: right === n,
         say: right === n ? 'every keepsake stands where the clues put it'
-          : (right === 0 ? 'none of them stands in the right place yet' : WORDS[right] + ' of ' + WORDS[n] + ' stand in the right place')
+          : (right === 0 ? 'no keepsake stands where the clues put it yet' : WORDS[right] + ' of ' + WORDS[n] + ' stand where the clues put them')
       };
     },
     start(c) {
@@ -672,7 +672,7 @@ export default {
       const count = litBy(plan.presses, plan.n).filter(Boolean).length;
       return {
         title: lampsTitle(plan),
-        quote: (count === 1 ? 'one lamp lit' : WORDS[count] + ' lamps lit') + '; put them all out',
+        quote: (count === 1 ? 'one lamp burns' : WORDS[count] + ' lamps burn') + '; put every one out',
         text: 'A lamp pressed flips itself and its four neighbours. Find the presses that leave the room dark.',
         aspect: '1 / 1',
         paint: (g, w, h, cardEnv) => lampsPreview(g, w, h, cardEnv, plan),
@@ -684,7 +684,7 @@ export default {
     return {
       title: shelfTitle(plan),
       quote: clueText(plan.clues[0], names),
-      text: (plan.clues.length === 1 ? 'That is the one clue.' : WORDS[plan.clues.length - 1][0].toUpperCase() + WORDS[plan.clues.length - 1].slice(1) + ' more clues wait on the shelf.')
+      text: (plan.clues.length === 1 ? 'That is the one clue.' : WORDS[plan.clues.length - 1][0].toUpperCase() + WORDS[plan.clues.length - 1].slice(1) + ' more clues wait under the shelf.')
         + ' Put the keepsakes in the one order that fits them all.',
       aspect: '4 / 3',
       paint: (g, w, h, cardEnv) => shelfPreview(g, w, h, cardEnv, plan),

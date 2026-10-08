@@ -287,8 +287,8 @@ function lanesPiece(env, plan) {
     return s.calls.map((v, i) => 'lane ' + (i + 1) + ' ' + (v ? 'crosses' : 'stops')).join(', ');
   }
   return {
-    title: 'will it cross: four lanes',
-    brief: 'Four lanes of dominoes, each with one gap. A falling domino reaches across a gap only when the gap is narrower than four fifths of its height. Every lane writes its domino height and its gap width, and both are drawn on the same grid. Tap a lane to change its call.',
+    title: 'will it cross: four lanes in procession',
+    brief: 'Four lanes of dominoes stand in procession, each with one gap. A falling domino reaches across a gap only when the gap is narrower than four fifths of its height. Every lane writes its domino height and its gap width, and both are drawn on the same grid. Tap a lane to change its call.',
     goal: 'Call every lane: does the push stop at the gap, or cross it?',
     aspect: '4 / 5',
     checkLabel: 'check the lanes',
@@ -301,7 +301,7 @@ function lanesPiece(env, plan) {
       const n = right();
       return {
         solved: n === 4,
-        say: n === 4 ? 'every lane is called right; the chains go over' : (n === 0 ? 'no lane is called right' : WORDS[n] + ' of four lanes right')
+        say: n === 4 ? 'every lane is called right; the chains go over' : (n === 0 ? 'no lane is called right; the push waits' : WORDS[n] + ' of four lanes called right; the push waits')
       };
     },
     start(c) {
@@ -401,7 +401,7 @@ function carriedPlank(env) {
 }
 
 function plankTitle(plan) {
-  return 'the balance point: ' + WORDS[plan.blocks.length] + ' blocks';
+  return 'the weighing: ' + WORDS[plan.blocks.length] + ' blocks, one pivot';
 }
 
 function plankGeometry(w, h) {
@@ -493,7 +493,7 @@ function plankPiece(env, plan) {
   const n = plan.blocks.length;
   return {
     title: plankTitle(plan),
-    brief: WORDS[n][0].toUpperCase() + WORDS[n].slice(1) + ' blocks stand on a weightless plank over a ruler from 0 to 20, each with its mass written on it and its place under it. A plank balances on a pivot when the masses times their distances from it come to the same on both sides. A clamp holds it level until you check; a wrong check lets it tip.',
+    brief: 'A weighing. ' + WORDS[n][0].toUpperCase() + WORDS[n].slice(1) + ' blocks stand on a weightless plank over a ruler from 0 to 20, each with its mass written on it and its place under it. A plank balances on a pivot when the masses times their distances from it come to the same on both sides. A clamp holds it level until you check; a wrong check lets it tip.',
     goal: 'Find the whole number where one pivot balances the plank, and say which way it tips with the pivot at 10.',
     aspect: '16 / 10',
     checkLabel: 'let go of the clamp',
@@ -510,7 +510,7 @@ function plankPiece(env, plan) {
       if (pivotRight && callRight) {
         s.target = 0;
         s.caption = 'balanced at ' + centre;
-        return { solved: true, say: 'balanced at ' + centre + '; with the pivot at 10 it ' + (tip === 'level' ? 'stays level' : 'tips to the ' + tip) };
+        return { solved: true, say: 'the weighing holds: balanced at ' + centre + '; with the pivot at 10 it ' + (tip === 'level' ? 'stays level' : 'tips to the ' + tip) };
       }
       const parts = [];
       if (!pivotRight) {
@@ -572,9 +572,9 @@ export default {
     const plan = deal(env);
     if (plan.kind === 'lanes') {
       return {
-        title: 'will it cross: four lanes',
+        title: 'will it cross: four lanes in procession',
         mono: plan.lanes.map((l, i) => 'lane ' + (i + 1) + '  height ' + l.h + '  gap ' + l.g).join('\n'),
-        text: 'A falling domino crosses a gap narrower than four fifths of its height. Call each lane: stops, or crosses.',
+        text: 'Four lanes in procession. A falling domino crosses a gap narrower than four fifths of its height. Call each lane: stops, or crosses.',
         aspect: '4 / 5',
         paint: (g, w, h, cardEnv) => lanesPreview(g, w, h, cardEnv, plan),
         of: plan
@@ -583,7 +583,7 @@ export default {
     return {
       title: plankTitle(plan),
       mono: plan.blocks.map((b) => 'mass ' + b.m + '  at ' + b.x).join('\n'),
-      text: 'A weightless plank over a ruler from 0 to 20. Find where one pivot balances it, and which way it tips from the middle.',
+      text: 'A weighing on a weightless plank over a ruler from 0 to 20. Find where one pivot balances it, and which way it tips from the middle.',
       aspect: '16 / 10',
       paint: (g, w, h, cardEnv) => plankPreview(g, w, h, cardEnv, plan),
       of: plan

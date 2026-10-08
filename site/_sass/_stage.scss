@@ -157,9 +157,13 @@
   max-width: 64rem;
 }
 
+// The world's name is the label over the piece, so it keeps the sans a label wears; the h1 rule in
+// _base.scss would otherwise hand it the rite's serif.
 .stage-world {
   margin: 0;
   color: var(--md-sys-color-primary);
+  font-family: type.$sans;
+  letter-spacing: 0.1px;
   @include type.scale(label-large);
 }
 
@@ -169,11 +173,14 @@
   @include type.scale(label-large);
 }
 
+// The piece's title is the rite's word on the stage, set in the serif; the brief, the goal and
+// every knob under it stay in the sans, so what the piece is called and what it asks are told apart
+// by their face (README: "Ritual axiom").
 .stage-title {
   margin: 0;
   color: var(--md-sys-color-on-surface);
-  letter-spacing: -0.01em;
   @include type.scale(headline-large);
+  @include type.rite;
 }
 
 @media (min-width: 840px) {
@@ -828,6 +835,7 @@
 .threshold-probe .probe-ask {
   max-width: 36ch;
   @include type.scale(headline-medium);
+  @include type.rite;
 }
 
 @media (min-width: 840px) {
@@ -848,7 +856,8 @@
 }
 
 .threshold-probe .probe-option-label {
-  @include type.scale(title-medium);
+  @include type.scale(title-large);
+  @include type.rite;
 }
 
 .threshold-probe .probe-option-detail {

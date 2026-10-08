@@ -1,19 +1,19 @@
 ---
 layout: layout.njk
 title: the mood atlas
-description: 'See where a reading can lead, then follow its suggested world or choose any world card.'
+description: 'A reading is what the site makes of your answer to one sideways question; see where every reading leads, then follow its world or any card.'
 ---
 <main class='list-page-main'>
   <h1>the mood atlas</h1>
-  <p class='page-purpose'>See what a reading can suggest. Answer a question at <a href='index.html'>the threshold</a>, or choose any world card below.</p>
+  <p class='page-purpose'>A reading is what this site makes of your answer to one sideways question, and each reading opens onto a world. Answer at <a href='index.html'>the threshold</a>, or choose any world card below.</p>
   <section class='atlas-state panel' aria-labelledby='state-heading'>
     <h2 id='state-heading' class='panel-title'>your reading</h2>
-    <p id='current' class='current'>Nothing read yet. Every world is on offer.</p>
+    <p id='current' class='current'>No reading yet. Every world is on offer.</p>
     <p id='signal-line' class='signal-line'></p>
     <a class='action' id='current-world' href='index.html' hidden>the threshold</a>
   </section>
   <h2 class='section-title'>where a reading can lead</h2>
-  <p class='section-note'>An orientation is the name this site gives a reading of your answer. It suggests one world; you can choose any of them.</p>
+  <p class='section-note'>An orientation is the name this site gives a reading. Each one opens onto the world it suggests, and every world stays yours to choose.</p>
   <ul id='orientations' class='orientations list-stack'>
     <li>Without scripting, choose a world card below.</li>
   </ul>
@@ -42,7 +42,7 @@ description: 'See where a reading can lead, then follow its suggested world or c
     function showSignals() {
       var s = api.signals();
       signals.textContent = 'It is ' + s.part + ' where you are'
-        + (s.zone ? ' (' + s.zone + ')' : '') + '; the time can change a suggestion.';
+        + (s.zone ? ' (' + s.zone + ')' : '') + '; the hour can tilt a suggestion.';
     }
 
     list.textContent = '';

@@ -341,7 +341,7 @@ function lampPiece(env, p) {
   const tenth = (n) => String(Math.round(n * 10) / 10);
   return {
     title: lampTitle(p),
-    brief: 'Seen from the side: a paper cutout ' + spans(p.h) + ' tall stands ' + spans(p.a) + ' from the wall, and a lamp on the floor somewhere behind it throws its shadow onto the wall, ' + spans(H) + ' tall. Light runs straight, so the shadow stands to the cutout as the lamp\'s distance from the wall stands to its distance from the cutout.',
+    brief: 'One lamp, lit on purpose. Seen from the side: a paper cutout ' + spans(p.h) + ' tall stands ' + spans(p.a) + ' from the wall, and a lamp on the floor somewhere behind it throws its shadow onto the wall, ' + spans(H) + ' tall. Light runs straight, so the shadow stands to the cutout as the lamp\'s distance from the wall stands to its distance from the cutout.',
     goal: 'Say how far behind the cutout the lamp stands, and what the shadow does when ' + move.text + '.',
     aspect: '16 / 10',
     checkLabel: 'light the lamp',
@@ -511,7 +511,7 @@ function matchPiece(env, p) {
   }
   return {
     title: matchTitle(p),
-    brief: 'Four paper cutouts stand on the bench and the lamp throws four shadows on the screen, each a cutout made larger by the factor written under it and leaned sideways by the lamp. The shadows are numbered in no particular order.',
+    brief: 'The lamp is lit and the screen is read. Four paper cutouts stand on the bench and the lamp throws four shadows on the screen, each a cutout made larger by the factor written under it and leaned sideways by the lamp. The shadows are numbered in no particular order.',
     goal: 'Say which cutout made shadow 1, 2, 3 and 4.',
     aspect: '4 / 3',
     checkLabel: 'check the screen',
@@ -524,7 +524,7 @@ function matchPiece(env, p) {
       const n = matched();
       return {
         solved: n === 4,
-        say: n === 4 ? 'every shadow has its cutout' : (n === 0 ? 'none of the four is matched yet' : WORDS[n] + ' of four matched')
+        say: n === 4 ? 'every shadow has its cutout' : (n === 0 ? 'no shadow has its cutout yet' : WORDS[n] + ' of four shadows ' + (n === 1 ? 'has' : 'have') + ' the right cutout')
       };
     },
     start(c) {

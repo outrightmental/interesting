@@ -123,7 +123,7 @@ function carriedFolds(env) {
 }
 
 function foldsTitle(plan) {
-  return 'weave ' + plan.number + ': count the folds';
+  return 'weave ' + plan.number + ': the folded sigil';
 }
 
 function loomGeometry(w, h, v) {
@@ -210,7 +210,7 @@ function drawFolds(g, w, h, env, plan, s, variant, t) {
   thread(g, key, env.alpha(c.fg, 0.14));
   g.fillStyle = c.fg;
   beads(g, key, bead);
-  label(g, env, 'the motif', bx + box * 0.5, by + box * 0.1, Math.max(8, size - 2), 'center', env.alpha(c.muted, 0.9));
+  label(g, env, 'the sigil', bx + box * 0.5, by + box * 0.1, Math.max(8, size - 2), 'center', env.alpha(c.muted, 0.9));
   if (s.open) {
     label(g, env, WORDS[plan.k] + ' folds' + (plan.mirrored ? ', mirrored' : ', one hand'), w - geo.m * 0.03, h - geo.m * 0.04, size, 'right', c.accent2);
   }
@@ -233,12 +233,12 @@ function foldsPiece(env, plan) {
   const draw = (c) => drawFolds(c.g, c.w, c.h, c, plan, s, env.variant, s.t);
   return {
     title: foldsTitle(plan),
-    brief: 'A motif of ' + WORDS[plan.motif.length] + ' joined points is laid on a midnight loom and turned about the centre a number of times: the folds. On some looms every copy is laid down with its mirror image as well, so the weave shows both hands. The motif, as laid once, is in the corner.',
+    brief: 'A working of the loom. A sigil of ' + WORDS[plan.motif.length] + ' joined points is laid on the midnight loom and turned about the centre a number of times: the folds. On some looms every copy is laid down with its mirror image as well, so the weave shows both hands. The sigil, as laid once, stands in the corner.',
     goal: 'Count the folds, and say whether the weave is mirrored.',
     aspect: '1 / 1',
     checkLabel: 'check the weave',
     steps: [
-      { id: 'folds', ask: 'how many times the motif is turned about the centre', kind: 'number', min: 2, max: MAX_FOLDS, step: 1, unit: 'folds' },
+      { id: 'folds', ask: 'how many times the sigil is turned about the centre', kind: 'number', min: 2, max: MAX_FOLDS, step: 1, unit: 'folds' },
       { id: 'mirror', ask: 'is every copy laid with its mirror image?', kind: 'toggle', label: 'mirrored' },
       { id: 'hint', ask: 'one arm, lit', kind: 'press', count: 1, label: 'light one arm', optional: true }
     ],
@@ -246,12 +246,12 @@ function foldsPiece(env, plan) {
     check(c) {
       const foldsRight = Number(c.value('folds')) === plan.k;
       const mirrorRight = !!c.value('mirror') === plan.mirrored;
-      if (foldsRight && mirrorRight) return { solved: true, say: WORDS[plan.k] + ' folds, ' + (plan.mirrored ? 'each with its mirror image' : 'all of one hand') };
-      if (!foldsRight && !mirrorRight) return { solved: false, say: 'the fold count and the mirror are both off' };
+      if (foldsRight && mirrorRight) return { solved: true, say: 'the weave closes: ' + WORDS[plan.k] + ' folds, ' + (plan.mirrored ? 'each with its mirror image' : 'all of one hand') };
+      if (!foldsRight && !mirrorRight) return { solved: false, say: 'the loom does not close: the fold count and the mirror are both off' };
       return { solved: false, say: foldsRight ? 'the fold count is right; the mirror is off' : 'the mirror is right; the fold count is off' };
     },
     start(c) {
-      c.status('the loom is still; the motif is in the corner');
+      c.status('the loom is still; the sigil waits in the corner');
       draw(c);
     },
     apply(id, value, c) {
@@ -308,7 +308,7 @@ function carriedMoire(env) {
 }
 
 function moireTitle(plan) {
-  return 'print ' + plan.number + ': the moiré';
+  return 'print ' + plan.number + ': the moiré seal';
 }
 
 function moireBoxes(w, h, v) {
@@ -404,7 +404,7 @@ function moirePiece(env, plan) {
   const draw = (c) => drawMoire(c.g, c.w, c.h, c, plan, s, env.variant);
   return {
     title: moireTitle(plan),
-    brief: 'Two screens of upright lines lie over each other: the first has ' + plan.first + ' lines across the width, the second a different count. Where their lines fall together and then apart, broad bands appear across the print, and there are as many bands as the two counts differ by.',
+    brief: 'The seal is two screens of upright lines laid over each other: the first has ' + plan.first + ' lines across the width, the second a different count. Where their lines fall together and then apart, broad bands appear across the print, and there are as many bands as the two counts differ by.',
     goal: 'Say how many lines the second screen has, and whether that is more or fewer than the first.',
     aspect: '4 / 3',
     checkLabel: 'check the print',
@@ -420,8 +420,8 @@ function moirePiece(env, plan) {
     check(c) {
       const countRight = Number(c.value('second')) === plan.second;
       const whichRight = c.value('which') === (more ? 'more' : 'fewer');
-      if (countRight && whichRight) return { solved: true, say: plan.second + ' lines, ' + WORDS[apart] + (apart === 1 ? ' band' : ' bands') + ' across the print' };
-      if (!countRight && !whichRight) return { solved: false, say: 'the count and the direction are both off' };
+      if (countRight && whichRight) return { solved: true, say: 'the seal reads: ' + plan.second + ' lines, ' + WORDS[apart] + (apart === 1 ? ' band' : ' bands') + ' across the print' };
+      if (!countRight && !whichRight) return { solved: false, say: 'the seal does not read: the count and the direction are both off' };
       return { solved: false, say: countRight ? 'the count is right; the direction is off' : 'the direction is right; the count is off' };
     },
     start(c) {
@@ -482,7 +482,7 @@ export default {
       const plan = moirePlan(env);
       return {
         title: moireTitle(plan),
-        text: 'One screen of ' + plan.first + ' thin lines, and a second laid over it. The broad bands in the print say how far apart the two counts are.',
+        text: 'Two screens pressed as one seal: the first of ' + plan.first + ' thin lines, the second laid over it. The broad bands in the print say how far apart the two counts are.',
         mono: plan.first + ' lines / ?',
         aspect: '4 / 3',
         paint: (ctx, cw, ch, cardEnv) => moirePreview(ctx, cw, ch, cardEnv, plan),
@@ -492,7 +492,7 @@ export default {
     const plan = foldsPlan(env);
     return {
       title: foldsTitle(plan),
-      text: 'One motif turned about the centre of a midnight loom, perhaps with its mirror image. Count the folds and say which.',
+      text: 'One sigil turned about the centre of the midnight loom, perhaps with its mirror image. Count the folds, and say whether the weave is mirrored.',
       mono: WORDS[plan.motif.length] + ' points / ? folds',
       aspect: '1 / 1',
       paint: (ctx, cw, ch, cardEnv) => foldsPreview(ctx, cw, ch, cardEnv, plan, 0),

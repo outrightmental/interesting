@@ -374,7 +374,7 @@ function slingPiece(env, p) {
   const clampTo = (value, knob) => Math.max(knob.min, Math.min(knob.max, Math.round(Number(value)) || 0));
   return {
     title: slingTitle(p),
-    brief: 'A probe leaves the pad at the left edge at the angle and the speed you set, and ' + p.name + ' bends its path the same way every time. Every check is a flight; the ring is where it has to pass.',
+    brief: 'A casting past the well. A probe leaves the pad at the left edge at the angle and the speed you set, and ' + p.name + ' bends its path the same way every time. Every check is a flight; the ring is where it has to pass.',
     goal: 'Find an angle and a speed that carry the probe through the ring.',
     aspect: '16 / 10',
     checkLabel: 'release the probe',
@@ -606,7 +606,7 @@ function moonsPiece(env, p) {
   const names = p.names.map((i) => FIRST[i]);
   return {
     title: moonsTitle(p),
-    brief: 'Three moons circle ' + p.name + ', drawn to scale: the ruler reads each orbit\'s radius and the bar is ten units. A moon\'s period grows as its radius to the three halves (the square of the period as the cube of the radius), and these three were chosen so that the innermost laps the outermost a whole number of times.',
+    brief: 'One law, read off a ruler. Three moons circle ' + p.name + ', drawn to scale: the ruler reads each orbit\'s radius and the bar is ten units. A moon\'s period grows as its radius to the three halves (the square of the period as the cube of the radius), and these three were chosen so that the innermost laps the outermost a whole number of times.',
     goal: 'Put the moons in order of period, shortest first, and say how many laps the innermost makes while the outermost makes one.',
     aspect: '16 / 10',
     checkLabel: 'check the orbits',
@@ -627,7 +627,7 @@ function moonsPiece(env, p) {
         return { solved: true, say: 'in step: the ' + names[answer[0]] + ' moon laps ' + WORDS[p.k] + ' times for one lap of the ' + names[answer[2]] + ' moon' };
       }
       const parts = [right === 3 ? 'the order holds' : right === 0 ? 'no moon stands in the right place' : WORDS[right] + ' of three in the right place'];
-      parts.push(off === 0 ? 'the count is right' : off === 1 ? 'the count is off by one' : 'the count is off by more than one');
+      parts.push(off === 0 ? 'the count holds' : off === 1 ? 'the count is off by one' : 'the count is off by more than one');
       return { solved: false, say: parts.join('; ') };
     },
     start(c) {

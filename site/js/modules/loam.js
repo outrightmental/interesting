@@ -139,7 +139,7 @@ function waterDepth(plan) {
 }
 
 function coreTitle(plan) {
-  return 'the core: ' + WORDS[plan.layers.length] + ' layers';
+  return 'a reading of the core: ' + WORDS[plan.layers.length] + ' layers';
 }
 
 function coreGeometry(w, h, plan) {
@@ -255,7 +255,7 @@ function corePiece(env, plan) {
   const draw = (c) => drawCore(c.g, c.w, c.h, c, plan, s, env.variant);
   return {
     title: coreTitle(plan),
-    brief: 'A core from the bed, drawn to scale: ' + WORDS[n] + ' layers, each with its thickness in centimetres written beside it. One layer is a band of stones. The wavy line is where the water stands. The band is a layer of its own and is not one a root passes through.',
+    brief: 'A reading of the ground. A core from the bed, drawn to scale: ' + WORDS[n] + ' layers, each with its thickness in centimetres written beside it. One layer is a band of stones. The wavy line is where the water stands. The band is a layer of its own and is not one a root passes through.',
     goal: 'Read how deep the water table stands and how many layers a root passes through before it meets the stones.',
     aspect: '4 / 5',
     checkLabel: 'read the core',
@@ -355,7 +355,7 @@ function carriedMix(env) {
 }
 
 function mixTitle(plan) {
-  return 'the mix: ' + plan.a + ' and ' + plan.b + ' per cent sand';
+  return 'the blend for the bed: ' + plan.a + ' and ' + plan.b + ' per cent sand';
 }
 
 function bag(g, env, x, y, r, share, name, tilt, density, size) {
@@ -453,7 +453,7 @@ function mixPiece(env, plan) {
   const draw = (c) => drawMix(c.g, c.w, c.h, c, plan, s, env.variant);
   return {
     title: mixTitle(plan),
-    brief: 'Two bags of soil. Bag A is ' + plan.a + '% sand and bag B is ' + plan.b + '%; the bed wants ' + target + '%. Mixing a parts of A with 10 - a parts of B makes a soil whose sand share is the two shares averaged, weighted by the parts. A sandier soil drains faster.',
+    brief: 'An offering for the bed, from two bags of soil. Bag A is ' + plan.a + '% sand and bag B is ' + plan.b + '%; the bed wants ' + target + '%. Mixing a parts of A with 10 - a parts of B makes a soil whose sand share is the two shares averaged, weighted by the parts. A sandier soil drains faster.',
     goal: 'Find the parts of A in ten that give the bed the share it wants, and say whether that blend drains faster or slower than bag A.',
     aspect: '4 / 5',
     checkLabel: 'mix it',
@@ -468,7 +468,7 @@ function mixPiece(env, plan) {
       const partsRight = p === plan.parts;
       const drainsRight = c.value('drains') === drains;
       if (partsRight && drainsRight) {
-        return { solved: true, say: 'a = ' + plan.parts + ': the blend is ' + target + '% sand, and it drains ' + drains + ' than bag A' };
+        return { solved: true, say: 'the bed takes it: a = ' + plan.parts + ', the blend is ' + target + '% sand, and it drains ' + drains + ' than bag A' };
       }
       const share = shareOf(plan.a, plan.b, Math.max(0, Math.min(10, p)));
       const parts = [];
@@ -539,7 +539,7 @@ export default {
       return {
         title: coreTitle(plan),
         mono: plan.layers.map((t, i) => (i === plan.band ? 'stones' : KINDS[plan.kinds[i]]).padEnd(8) + ' ' + t + ' cm').join('\n'),
-        text: 'Drawn to scale. Read how deep the water stands, and how many layers a root passes through before the stones.',
+        text: 'A reading of the ground, drawn to scale. Say how deep the water stands, and how many layers a root passes through before the stones.',
         aspect: '4 / 5',
         paint: (g, w, h, cardEnv) => corePreview(g, w, h, cardEnv, plan),
         of: plan
@@ -549,7 +549,7 @@ export default {
     return {
       title: mixTitle(plan),
       mono: 'bag A    ' + plan.a + '% sand\nbag B    ' + plan.b + '% sand\nthe bed  ' + target + '%',
-      text: 'Mix a parts of A with 10 - a parts of B. Find a, and say whether the blend drains faster or slower than A.',
+      text: 'An offering for the bed: a parts of A with 10 - a parts of B. Find a, and say whether the blend drains faster or slower than A.',
       aspect: '4 / 5',
       paint: (g, w, h, cardEnv) => mixPreview(g, w, h, cardEnv, plan),
       of: plan

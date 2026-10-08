@@ -358,7 +358,7 @@ function orderPiece(env, plan) {
   }
   return {
     title: orderTitle(plan),
-    brief: capital(WORDS[n]) + ' lettered lanterns rise one after another, and the ' + WORDS[plan.clues.length]
+    brief: 'The rite of the rising. ' + capital(WORDS[n]) + ' lettered lanterns rise one after another, and the ' + WORDS[plan.clues.length]
       + ' clues under the sky say how. Exactly one order fits them all. Set the order on the rail, or tap a lantern to move it up one place.',
     goal: 'Put the lanterns in the one order the clues allow, first to rise at the top.',
     aspect: '1 / 1',
@@ -374,8 +374,8 @@ function orderPiece(env, plan) {
       for (let i = 0; i < n; i++) if (cur[i] === plan.order[i]) right += 1;
       return {
         solved: right === n,
-        say: right === n ? 'that is the order: ' + named(plan.order)
-          : right === 0 ? 'none of them is in the right place yet' : WORDS[right] + ' of ' + WORDS[n] + ' in the right place'
+        say: right === n ? 'the order holds: ' + named(plan.order)
+          : right === 0 ? 'none of them hangs in the right place yet' : WORDS[right] + ' of ' + WORDS[n] + ' lanterns in the right place'
       };
     },
     start(c) {
@@ -604,7 +604,7 @@ function drawDrift(g, w, h, env, plan, s, variant) {
     g.strokeRect(gx - 6 * k, geo.top - 10 * k, 12 * k, 8 * k);
     g.setLineDash([]);
   }
-  write(g, 'it leaves the top at...', w / 2, h * 0.045, small, 'center', env.alpha(c.muted, 0.85));
+  write(g, 'where it leaves the top', w / 2, h * 0.045, small, 'center', env.alpha(c.muted, 0.85));
 }
 
 function driftPreview(g, w, h, env, plan, t) {
@@ -621,7 +621,7 @@ function driftPiece(env, plan) {
   const leaves = (n) => 'column ' + signed(n) + ', ' + WORDS[Math.abs(n)] + (Math.abs(n) === 1 ? ' column ' : ' columns ') + (n < 0 ? 'left' : 'right') + ' of where it was let go';
   return {
     title: driftTitle(),
-    brief: 'One lantern is let go at the dotted column and rises through four bands of wind. Each band pushes it the number of columns its arrow shows, left when the number is negative and right when it is positive, and the grid is there to count on.',
+    brief: 'An offering to the wind: one lantern is let go at the dotted column and rises through four bands of wind. Each band pushes it the number of columns its arrow shows, left when the number is negative and right when it is positive, and the grid is there to count on.',
     goal: 'Say how many columns it has drifted when it leaves the top, and which band pushes hardest.',
     aspect: '4 / 3',
     checkLabel: 'let it go',
@@ -716,7 +716,7 @@ export default {
     return {
       title: driftTitle(),
       mono: plan.bands.map((d, i) => 'band ' + (i + 1) + ': ' + (d === 0 ? 'still' : signed(d))).join('\n'),
-      text: 'One lantern let go under four bands of wind. Say where it leaves the top, and which band pushes it hardest.',
+      text: 'One lantern, lit and let go as an offering to four bands of wind. Say where it leaves the top, and which band pushes it hardest.',
       aspect: '4 / 3',
       paint: (g, w, h, cardEnv) => driftPreview(g, w, h, cardEnv, plan, cardEnv.variant.turn * 4),
       of: plan

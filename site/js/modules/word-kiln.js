@@ -217,7 +217,7 @@ function carriedAnagram(env) {
 }
 
 function anagramTitle(plan) {
-  return 'the anagram: ' + WORDS[plan.tiles.length] + ' tiles';
+  return 'the anagram: ' + WORDS[plan.tiles.length] + ' tiles, one firing';
 }
 
 // Which slot of the fired word each tile goes to: the first unused tile with that letter.
@@ -309,7 +309,7 @@ function anagramPiece(env, plan) {
   }
   return {
     title: anagramTitle(plan),
-    brief: WORDS[n][0].toUpperCase() + WORDS[n].slice(1) + ' tiles sit over the mouth of the kiln. Fired, they come out as one common word, and the kiln keeps a book of plain words to check it against. Any word in the book that uses exactly these tiles will do.',
+    brief: 'A small firing. ' + WORDS[n][0].toUpperCase() + WORDS[n].slice(1) + ' tiles sit over the mouth of the kiln; fired, they come out as one common word, and the kiln keeps a book of plain words to check it against. Any word in the book that uses exactly these tiles will do.',
     goal: 'Find the word these tiles fire into.',
     aspect: '4 / 3',
     checkLabel: 'fire it',
@@ -321,11 +321,11 @@ function anagramPiece(env, plan) {
     check(c) {
       const typed = clean(c.value('word'));
       if (typed.length !== n || sorted(typed) !== sorted(plan.tiles)) {
-        return { solved: false, say: typed.length !== n ? 'the kiln holds ' + WORDS[n] + ' tiles, no more and no fewer' : 'those are not the tiles in the kiln' };
+        return { solved: false, say: typed.length !== n ? 'the kiln holds ' + WORDS[n] + ' tiles, no more and no fewer' : 'those are not the tiles laid in the kiln' };
       }
       if (!IN_BOOK.has(typed)) {
         const k = right(typed);
-        return { solved: false, say: 'that is not a word in the kiln\'s book; ' + (k === 0 ? 'no tile stands in the right place' : k === 1 ? 'one tile stands in the right place' : WORDS[k] + ' tiles stand in the right place') };
+        return { solved: false, say: 'the kiln\'s book holds no such word; ' + (k === 0 ? 'no tile stands in the right place' : k === 1 ? 'one tile stands in the right place' : WORDS[k] + ' tiles stand in the right place') };
       }
       return { solved: true, say: 'fired: ' + typed + (typed === plan.word ? '' : '. the kiln had ' + plan.word + ' in mind, and both are in the book') };
     },
@@ -487,7 +487,7 @@ function ladderPiece(env, plan) {
   const draw = (c) => ladderScene(c.g, c.w, c.h, c, plan, s, env.variant);
   return {
     title: ladderTitle(plan),
-    brief: 'A word ladder from ' + a + ' to ' + b + ' in exactly three steps. Each step changes one letter and keeps the other three where they are, and every rung is a word in the kiln\'s book. Any two middle rungs that make a true ladder will do.',
+    brief: 'A small climb, by the book. A word ladder from ' + a + ' to ' + b + ' in exactly three steps. Each step changes one letter and keeps the other three where they are, and every rung is a word in the kiln\'s book. Any two middle rungs that make a true ladder will do.',
     goal: 'Fill the two middle rungs so that each step changes one letter and every rung is a word.',
     aspect: '3 / 4',
     checkLabel: 'climb it',
@@ -570,7 +570,7 @@ export default {
       return {
         title: anagramTitle(plan),
         mono: plan.tiles.split('').join('  '),
-        text: WORDS[plan.tiles.length][0].toUpperCase() + WORDS[plan.tiles.length].slice(1) + ' letters in the kiln. They fire into one common word, and any word in the book that uses exactly these will do.',
+        text: WORDS[plan.tiles.length][0].toUpperCase() + WORDS[plan.tiles.length].slice(1) + ' letters laid in the kiln for one firing. They come out as one common word, and any word in the book that uses exactly these will do.',
         aspect: '4 / 3',
         paint: (g, w, h, cardEnv) => anagramPreview(g, w, h, cardEnv, plan),
         of: plan
@@ -578,8 +578,8 @@ export default {
     }
     return {
       title: ladderTitle(plan),
-      mono: plan.rungs[0] + '\n....\n....\n' + plan.rungs[3],
-      text: 'Three steps, one letter changed at each, every rung a word in the kiln\'s book. Fill the two middle rungs.',
+      mono: plan.rungs[0] + '\n____\n____\n' + plan.rungs[3],
+      text: 'Three steps, one letter changed at each, every rung a word in the kiln\'s book. Fill the two middle rungs and the climb holds.',
       aspect: '3 / 4',
       paint: (g, w, h, cardEnv) => ladderPreview(g, w, h, cardEnv, plan),
       of: plan

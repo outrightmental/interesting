@@ -142,7 +142,7 @@ function carriedSlits(env) {
 }
 
 function slitTitle(plan) {
-  return 'lamp ' + plan.number + ': the slit spacing';
+  return 'lamp ' + plan.number + ': the slit spacing, by its fringes';
 }
 
 // The ruler's reach either side of the middle, in millimetres: four fringes.
@@ -261,7 +261,7 @@ function slitPiece(env, plan) {
   const draw = (c) => drawSlits(c.g, c.w, c.h, c, full, s, env.variant);
   return {
     title: slitTitle(plan),
-    brief: 'Light of wavelength ' + plan.lambda + ' nm passes two slits and lands on a screen ' + plan.length + ' mm away as bright and dark fringes. Neighbouring bright fringes are a wavelength times the distance, over the slit spacing, apart; the ruler beside the screen is in millimetres.',
+    brief: 'A lamp lit on purpose: light of wavelength ' + plan.lambda + ' nm passes two slits and lands on a screen ' + plan.length + ' mm away as bright and dark fringes. Neighbouring bright fringes are a wavelength times the distance, over the slit spacing, apart; the ruler beside the screen is in millimetres.',
     goal: 'Find the slit spacing, and say what ' + change.what + ' would do to the fringes.',
     aspect: '4 / 3',
     checkLabel: 'check the table',
@@ -274,7 +274,7 @@ function slitPiece(env, plan) {
       const guess = Number(c.value('spacing'));
       const spacingRight = Math.abs(guess - spacing) <= margin;
       const changeRight = c.value('change') === change.does;
-      if (spacingRight && changeRight) return { solved: true, say: 'the slits are ' + (spacing / 100).toFixed(2) + ' mm apart, and ' + change.what + ' ' + EFFECTS.find((e) => e.value === change.does).label.replace('them', 'the fringes') };
+      if (spacingRight && changeRight) return { solved: true, say: 'the table reads true: the slits are ' + (spacing / 100).toFixed(2) + ' mm apart, and ' + change.what + ' ' + EFFECTS.find((e) => e.value === change.does).label.replace('them', 'the fringes') };
       const near = Number.isFinite(guess) && Math.abs(guess - spacing) <= spacing * 0.1;
       const spacingWord = spacingRight ? 'the spacing is right' : near ? 'the spacing is close but not on the mark' : 'the spacing is off';
       const changeWord = changeRight ? 'the prediction is right' : 'the prediction is off';
@@ -460,7 +460,7 @@ function filterPiece(env, plan) {
   const draw = (c) => drawFilters(c.g, c.w, c.h, c, plan, s, env.variant);
   return {
     title: filterTitle(plan),
-    brief: 'Three polarising filters, at ' + plan.angles.join(', ') + ' degrees. The first one the light meets passes half of it whatever its angle; each one after passes cos² of the angle between it and the one before, and the table under the lamp has the values.',
+    brief: 'Three polarising filters, at ' + plan.angles.join(', ') + ' degrees, stand in a line between the lamp and the screen. The first one the light meets passes half of it whatever its angle; each one after passes cos² of the angle between it and the one before, and the table under the lamp has the values.',
     goal: 'Put the filters in the order that passes the most light, and say how much gets through.',
     aspect: '4 / 3',
     checkLabel: 'check the table',
@@ -477,8 +477,8 @@ function filterPiece(env, plan) {
       // A reading to the nearest five per cent: the difficulty says how many of those steps out
       // it may be.
       const passRight = Math.abs(Number(c.value('passes')) - best.percent) <= margin * 5;
-      if (orderRight && passRight) return { solved: true, say: 'with the ' + best.middle + '° filter in the middle, ' + Math.round(best.exact * 10) / 10 + '% of the light reaches the screen' };
-      if (!orderRight && !passRight) return { solved: false, say: 'the order and the percentage are both off' };
+      if (orderRight && passRight) return { solved: true, say: 'the screen lights: with the ' + best.middle + '° filter in the middle, ' + Math.round(best.exact * 10) / 10 + '% of the light reaches the screen' };
+      if (!orderRight && !passRight) return { solved: false, say: 'the screen stays dark: the order and the percentage are both off' };
       return { solved: false, say: orderRight ? 'the order is right; the percentage is off' : 'the percentage is right; the order is off' };
     },
     start(c) {
@@ -536,7 +536,7 @@ export default {
       const plan = filterPlan(env);
       return {
         title: filterTitle(plan),
-        text: 'Three polarising filters and one lamp. Find the order that passes the most light, and how much that is.',
+        text: 'Three polarising filters, one lamp, one screen. Find the order that passes the most light, and how much that is.',
         mono: plan.angles.map((a) => a + '°').join(' / '),
         aspect: '4 / 3',
         paint: (ctx, cw, ch, cardEnv) => filterPreview(ctx, cw, ch, cardEnv, plan),
@@ -546,7 +546,7 @@ export default {
     const plan = slitPlan(env);
     return {
       title: slitTitle(plan),
-      text: 'Fringes on a screen, a ruler beside them, and the lamp and distance written on the table. Find how far apart the slits are.',
+      text: 'A lamp lit on purpose: fringes on a screen, a ruler beside them, the wavelength and distance written on the table. Find how far apart the slits are.',
       mono: plan.lambda + ' nm / ' + plan.length + ' mm',
       aspect: '4 / 3',
       paint: (ctx, cw, ch, cardEnv) => slitPreview(ctx, cw, ch, cardEnv, plan),

@@ -7,6 +7,10 @@
   <div class='stage-inner' id='stage-inner'>
     <div class='stage-head' id='stage-head'>
       <h1 class='stage-world' id='stage-world'>{{ stageEntry.name if stageEntry else title }}</h1>
+      {# The sigil: the working's number, beside the world's name, which is the seed in the piece's own
+         address. js/stage.js writes it when a piece begins and takes it away with the piece; it is
+         hidden until then, so the threshold at rest and a page without scripting show none. #}
+      <p class='stage-sigil' id='stage-sigil' hidden></p>
 {%- if threshold %}
       <p class='stage-read' id='stage-read' hidden></p>
       <h2 class='stage-title' id='stage-title' tabindex='-1'>{{ description }}</h2>

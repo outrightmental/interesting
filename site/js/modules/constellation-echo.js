@@ -189,7 +189,7 @@ function carriedEcho(env) {
 }
 
 function echoTitle(plan) {
-  return 'the echo order: ' + WORDS[plan.stars.length] + ' stars';
+  return 'the echo order: ' + WORDS[plan.stars.length] + ' stars answer';
 }
 
 function echoGeometry(w, h) {
@@ -333,7 +333,7 @@ function echoPiece(env, plan) {
   }
   return {
     title: echoTitle(plan),
-    brief: 'A pulse leaves the bright mark and every star sends an echo back; the farther the star, the later its echo. '
+    brief: 'A calling, answered in turn. A pulse leaves the bright mark and every star sends an echo back; the farther the star, the later its echo. '
       + 'The rings round the mark are evenly spaced. Tap the stars in order on the scene, or arrange them on the rail.',
     goal: 'Put the stars in the order their echoes come back.',
     aspect: '1 / 1',
@@ -348,7 +348,7 @@ function echoPiece(env, plan) {
       return {
         solved: right === n,
         say: right === n ? 'every echo comes back in the order you set'
-          : (right === 0 ? 'none of them stands in the right place yet' : WORDS[right] + ' of ' + WORDS[n] + ' in the right place')
+          : (right === 0 ? 'none of them answers in the right place yet' : WORDS[right] + ' of ' + WORDS[n] + ' answering in the right place')
       };
     },
     start(c) {
@@ -577,7 +577,7 @@ function chordPiece(env, plan) {
   while (pool.length) reveal.push(pool.splice(env.int(0, pool.length - 1), 1)[0]);
   return {
     title: chordTitle(plan),
-    brief: 'Four voices sound in the midnight chamber, each on beat 0 and every period after: one every 2nd beat, one every 3rd, one every 4th, one every 5th. '
+    brief: 'Heard by count alone. Four voices sound in the midnight chamber, each on beat 0 and every period after: one every 2nd beat, one every 3rd, one every 4th, one every 5th. '
       + 'Some of them are sounding. The strip shows only the total of voices per beat, as stacked blocks.',
     goal: 'Say which voices are sounding, and on which beat after beat 0 they next all strike together.',
     aspect: '4 / 3',

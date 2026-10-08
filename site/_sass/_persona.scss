@@ -99,15 +99,30 @@
   font-size: 1rem;
 }
 
-// With a persona the portrait is enough; the label is read, not seen.
+// With a persona the portrait is enough at rest, and the label carries the sky's name -- what the
+// persona reads the arrangement as (js/persona.js, skyName). It fades in beside the portrait on
+// rollover and on focus, exactly as the site's name does beside the logo opposite it (_nav.scss),
+// so the two corners speak one language: hover either mark and it says who it is. Collapsed by
+// max-width rather than hidden, so the button keeps its name in the accessibility tree throughout.
 .persona:not([data-state='empty']) .persona-label {
-  position: absolute;
-  width: 1px;
-  height: 1px;
+  max-width: 0;
+  margin-left: -0.6rem; // the flex gap the collapsed label would otherwise hold open
+  margin-right: 0;
+  opacity: 0;
   overflow: hidden;
-  clip: rect(0 0 0 0);
-  clip-path: inset(50%);
   white-space: nowrap;
+  transition:
+    max-width var(--md-sys-motion-duration-short) var(--md-sys-motion-easing-standard),
+    margin var(--md-sys-motion-duration-short) var(--md-sys-motion-easing-standard),
+    opacity 110ms var(--md-sys-motion-easing-standard);
+}
+
+.persona:not([data-state='empty']) .persona-avatar:hover .persona-label,
+.persona:not([data-state='empty']) .persona-avatar:focus-visible .persona-label {
+  max-width: 13rem;
+  margin-left: 0;
+  margin-right: 0.5rem;
+  opacity: 1;
 }
 
 .persona[data-asking='true'] .persona-portrait {
@@ -201,6 +216,7 @@
   margin: 0;
   color: var(--md-sys-color-on-surface);
   @include type.scale(headline-small);
+  @include type.rite;
 }
 
 .persona-close {
@@ -252,6 +268,14 @@
   height: 100%;
   display: block;
   pointer-events: none;
+}
+
+// The sky's name, under the field: what the persona reads the arrangement as (js/persona.js,
+// skyName), renamed live as a star is dragged across a boundary.
+.persona-sky-name {
+  margin: 0;
+  color: var(--md-sys-color-tertiary);
+  @include type.scale(title-small);
 }
 
 .persona-star {
@@ -318,6 +342,10 @@
 @media (prefers-reduced-motion: reduce) {
   .persona[data-state='empty'] .persona-avatar {
     animation: none;
+  }
+
+  .persona-label {
+    transition: none;
   }
 
   .persona-star,
