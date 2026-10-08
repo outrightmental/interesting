@@ -870,17 +870,28 @@ function dealt(env) {
   return ((Math.imul(env.seed >>> 0, 0x9e3779b1) >>> 29) & 3) === 3 ? 'second-look' : lamps ? 'lamps' : 'shelf';
 }
 
+// How far the room is through its breath, t seconds after this card was painted: twelve seconds to
+// a breath, entered at the point the configuration puts this card at, so that no two rooms on the
+// screen swell together. breath(v, 0) is where the still card stands, so the motion carries on from
+// the picture already on the canvas rather than jumping to another part of the breath (issue #92;
+// js/feed.js has the contract animate is held to).
+function breath(v, t) {
+  const phase = (t / 12 + v.turn) % 1;
+  return (1 - Math.cos(phase * Math.PI * 2)) / 2;
+}
+
 export default {
   id: 'quiet-room',
   needsSky: false,
   paint(ctx, w, h, env) {
-    // The breath caught where the configuration caught it, at the size it asks for.
-    room(ctx, w, h, env, 0.32 + env.variant.turn * 0.36, 0, env.variant.scale);
+    // The breath caught where the configuration caught it, at the size it asks for: the animation
+    // below, stopped at zero.
+    room(ctx, w, h, env, breath(env.variant, 0), 0, env.variant.scale);
   },
+  // `t` is seconds since the card was painted, and nothing here is drawn from the env's seeded
+  // stream, so the same t always gives the same room.
   animate(ctx, w, h, env, t) {
-    const phase = ((t % 12) / 12 + env.variant.turn) % 1;
-    const swell = (1 - Math.cos(phase * Math.PI * 2)) / 2;
-    room(ctx, w, h, env, swell, 0, env.variant.scale);
+    room(ctx, w, h, env, breath(env.variant, t), 0, env.variant.scale);
   },
   spark(env) {
     const kind = dealt(env);

@@ -465,21 +465,40 @@ function dealsMoire(env) {
   return (((Math.imul(env.seed >>> 0, 0x9E3779B1) >>> 0) >>> 3) & 1) === 1;
 }
 
+// The plan, dealt once from the env's seeded stream and kept with that env. Which of the two this
+// card is comes off the seed above and so is free to ask twice, but the plan is not: every pass
+// over one card -- the still picture and then every animated frame -- has to get the same loom, and
+// dealing per frame would re-thread it thirty times a second (issue #92; js/feed.js has the
+// contract animate is held to).
+const dealt = new WeakMap();
+function deal(env) {
+  let got = dealt.get(env);
+  if (!got) {
+    const moire = dealsMoire(env);
+    got = { moire, plan: moire ? moirePlan(env) : foldsPlan(env) };
+    dealt.set(env, got);
+  }
+  return got;
+}
+
 export default {
   id: 'orbital-weaver',
   needsSky: true,
   paint(g, w, h, env) {
-    if (dealsMoire(env)) moirePreview(g, w, h, env, moirePlan(env));
-    else foldsPreview(g, w, h, env, foldsPlan(env), 0);
+    const d = deal(env);
+    if (d.moire) moirePreview(g, w, h, env, d.plan);
+    else foldsPreview(g, w, h, env, d.plan, 0);
   },
   animate(g, w, h, env, t) {
-    if (dealsMoire(env)) return;
-    const plan = foldsPlan(env);
-    drawFolds(g, w, h, env, plan, { rot: t * 0.05, lit: false, open: false }, env.variant, t);
+    const d = deal(env);
+    // The printed screens of the moire puzzle do not move: the still picture is the whole of it.
+    if (d.moire) return false;
+    drawFolds(g, w, h, env, d.plan, { rot: t * 0.05, lit: false, open: false }, env.variant, t);
   },
   spark(env) {
-    if (dealsMoire(env)) {
-      const plan = moirePlan(env);
+    const d = deal(env);
+    if (d.moire) {
+      const plan = d.plan;
       return {
         title: moireTitle(plan),
         text: 'Two screens pressed as one seal: the first of ' + plan.first + ' thin lines, the second laid over it. The broad bands in the print say how far apart the two counts are.',
@@ -489,7 +508,7 @@ export default {
         of: plan
       };
     }
-    const plan = foldsPlan(env);
+    const plan = d.plan;
     return {
       title: foldsTitle(plan),
       text: 'One sigil turned about the centre of the midnight loom, perhaps with its mirror image. Count the folds, and say whether the weave is mirrored.',
@@ -504,6 +523,7 @@ export default {
     if (folds) return foldsPiece(env, folds);
     const moire = carriedMoire(env);
     if (moire) return moirePiece(env, moire);
-    return dealsMoire(env) ? moirePiece(env, moirePlan(env)) : foldsPiece(env, foldsPlan(env));
+    const d = deal(env);
+    return d.moire ? moirePiece(env, d.plan) : foldsPiece(env, d.plan);
   }
 };

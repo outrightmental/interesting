@@ -665,25 +665,39 @@ function agePiece(env, plan) {
 
 /* ---- the module ----------------------------------------------------------------------------- */
 
-function dealsWater(env) {
-  return env.chance(0.55);
+// Which of the two this card is, and its plan, dealt once from the env's seeded stream and kept
+// with that env. Every pass over one card -- the still picture and then every animated frame --
+// asks here, so they are all the same card; dealing per frame instead would re-roll the whole
+// puzzle thirty times a second (issue #92, and js/feed.js on what animate owes a card).
+const dealt = new WeakMap();
+function deal(env) {
+  let got = dealt.get(env);
+  if (!got) {
+    const water = env.chance(0.55);
+    got = { water, plan: water ? waterPlan(env) : agePlan(env) };
+    dealt.set(env, got);
+  }
+  return got;
 }
 
 export default {
   id: 'wish-terrarium',
   needsSky: true,
   paint(g, w, h, env) {
-    if (dealsWater(env)) waterPreview(g, w, h, env, waterPlan(env), env.variant.turn * 5);
-    else agePreview(g, w, h, env, agePlan(env), env.variant.turn * 5);
+    const d = deal(env);
+    if (d.water) waterPreview(g, w, h, env, d.plan, env.variant.turn * 5);
+    else agePreview(g, w, h, env, d.plan, env.variant.turn * 5);
   },
   animate(g, w, h, env, t) {
-    if (dealsWater(env)) waterPreview(g, w, h, env, waterPlan(env), t + env.variant.turn * 5);
-    else agePreview(g, w, h, env, agePlan(env), t + env.variant.turn * 5);
+    const d = deal(env);
+    if (d.water) waterPreview(g, w, h, env, d.plan, t + env.variant.turn * 5);
+    else agePreview(g, w, h, env, d.plan, t + env.variant.turn * 5);
   },
   spark(env) {
     if (!env.stars.length) return null;
-    if (dealsWater(env)) {
-      const plan = waterPlan(env);
+    const d = deal(env);
+    if (d.water) {
+      const plan = d.plan;
       return {
         title: waterTitle(plan),
         mono: 'lamp ' + (plan.lamp ? 'on' : 'off') + ' / vent ' + (plan.vent ? 'open' : 'shut') + '\nsoil ' + plan.soil.join(' ') + '\ntags: ' + plan.rules.map((r) => RULES[r].tag).join('; '),
@@ -693,7 +707,7 @@ export default {
         of: plan
       };
     }
-    const plan = agePlan(env);
+    const plan = d.plan;
     return {
       title: ageTitle(),
       mono: LETTERS.map((l, i) => l + ': ' + plan.leaves[i] + ' leaves, ' + plan.rates[i] + ' a week').join('\n'),
@@ -708,6 +722,7 @@ export default {
     if (water) return waterPiece(env, water);
     const age = carriedAge(env);
     if (age) return agePiece(env, age);
-    return dealsWater(env) ? waterPiece(env, waterPlan(env)) : agePiece(env, agePlan(env));
+    const d = deal(env);
+    return d.water ? waterPiece(env, d.plan) : agePiece(env, d.plan);
   }
 };
