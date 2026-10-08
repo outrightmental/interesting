@@ -49,6 +49,75 @@
     }
     return list;
   }
+  // What the persona reads an arrangement of stars as: a name and a one-line read, derived from
+  // the geometry alone -- the count, the centre, the spread, the lean -- so moving one star can
+  // rename the whole sky. Pure arithmetic on the list, nothing of the browser's, so it is safe
+  // everywhere the refresh path runs.
+  var SKY_ADJ = {
+    high: ['high', 'risen', 'upper'],
+    low: ['low', 'deep', 'harboured'],
+    west: ['western', 'leaning', 'early'],
+    east: ['eastern', 'turning', 'late'],
+    mid: ['quiet', 'patient', 'even']
+  };
+  var SKY_NOUN = {
+    one: ['lone star', 'first lamp', 'single wish'],
+    two: ['gate of two', 'pair of lanterns', 'double knock'],
+    knot: ['knot', 'ember', 'hive', 'clasp'],
+    wide: ['river', 'bridge', 'shoreline', 'long road'],
+    tall: ['stair', 'tower', 'rainfall', 'ladder'],
+    scattered: ['archipelago', 'meadow', 'slow drift', 'orchard'],
+    ring: ['crown', 'flock', 'garden', 'harbour']
+  };
+  function skyTraits(list) {
+    var n = list.length;
+    if (!n) return null;
+    var cx = 0;
+    var cy = 0;
+    var i;
+    for (i = 0; i < n; i++) { cx += list[i].x; cy += list[i].y; }
+    cx /= n;
+    cy /= n;
+    var sx = 0;
+    var sy = 0;
+    var spread = 0;
+    var code = n;
+    for (i = 0; i < n; i++) {
+      var dx = list[i].x - cx;
+      var dy = list[i].y - cy;
+      sx += dx * dx;
+      sy += dy * dy;
+      spread += Math.sqrt(dx * dx + dy * dy);
+      code = (code * 31 + Math.round(list[i].x / 7) * 53 + Math.round(list[i].y / 7)) >>> 0;
+    }
+    return { n: n, cx: cx, cy: cy, sx: Math.sqrt(sx / n), sy: Math.sqrt(sy / n),
+      spread: spread / n, code: code };
+  }
+  function skyName(value) {
+    var list = clean(value === undefined ? stars() : value);
+    var t = skyTraits(list);
+    if (!t) return '';
+    if (t.n === 1) return 'the ' + SKY_NOUN.one[t.code % SKY_NOUN.one.length];
+    var adj = t.cy < 40 ? SKY_ADJ.high : t.cy > 60 ? SKY_ADJ.low
+      : t.cx < 40 ? SKY_ADJ.west : t.cx > 60 ? SKY_ADJ.east : SKY_ADJ.mid;
+    var noun = t.n === 2 ? SKY_NOUN.two
+      : t.spread < 15 ? SKY_NOUN.knot
+        : t.sx > t.sy * 1.6 ? SKY_NOUN.wide
+          : t.sy > t.sx * 1.6 ? SKY_NOUN.tall
+            : t.spread > 30 ? SKY_NOUN.scattered : SKY_NOUN.ring;
+    return 'the ' + adj[t.code % adj.length] + ' ' + noun[(t.code >> 3) % noun.length];
+  }
+  function skyRead(value) {
+    var list = clean(value === undefined ? stars() : value);
+    var t = skyTraits(list);
+    if (!t) return '';
+    var count = t.n === 1 ? 'one star' : t.n + ' stars';
+    var knit = t.spread < 15 ? 'close-knit' : t.spread > 30 ? 'flung wide' : 'evenly set';
+    var ns = t.cy < 40 ? 'north' : t.cy > 60 ? 'south' : '';
+    var ew = t.cx < 40 ? 'west' : t.cx > 60 ? 'east' : '';
+    var where = ns && ew ? ns + '-' + ew : (ns || ew);
+    return count + ', ' + knit + (where ? ', keeping to the ' + where : ', holding the middle of the sky');
+  }
   function read() { return store ? store.read(SKY, []) : { status: 'unavailable', value: [] }; }
   function stars() { return clean(read().value); }
   var listeners = [];
@@ -160,7 +229,7 @@
       ? ' This browser keeps nothing between visits, so your persona lasts for this page.' : '';
   }
   function describeSky(saved, list) {
-    if (list.length) return list.length + ' star' + (list.length === 1 ? '' : 's') + ' in your sky.';
+    if (list.length) return 'Your sky reads as ' + skyName(list) + ': ' + skyRead(list) + '.';
     if (saved.status === 'unreadable') return 'What this browser kept of your sky cannot be read, so it starts fresh.';
     return 'No stars yet.';
   }
@@ -187,8 +256,11 @@
     card.host.setAttribute('data-sky', list.length ? 'set' : 'none');
     card.open.hidden = false;
     var label = list.length || isRead ? 'open persona' : 'set up persona';
-    if (card.label) card.label.textContent = label;
-    else card.open.textContent = label;
+    var named = list.length ? skyName(list) : '';
+    if (card.label) card.label.textContent = named || label;
+    else card.open.textContent = named || label;
+    if (named) card.open.setAttribute('aria-label', label + ': ' + named);
+    else card.open.removeAttribute('aria-label');
     if (card.portrait) {
       var size = card.portraitSize;
       var ctx = sizeCanvas(card.portrait, size, size);
@@ -244,7 +316,7 @@
   function sheetStatus(text) { if (sheet && sheet.status) sheet.status.textContent = text; }
   function fieldIntro(list) {
     if (!list.length) return 'No stars yet. Tap the sky to place the first, or seed a small sky and drag it into a shape.';
-    return list.length + ' star' + (list.length === 1 ? '' : 's') + '. Tap the sky to add one, drag a star to move it, tap one to read its thought.';
+    return list.length + ' star' + (list.length === 1 ? '' : 's') + '. Tap the sky to add one, drag a star to reshape and rename the sky, tap one to read its thought.';
   }
   function keptNote(kept) {
     return kept || !store || store.persistent ? '' : ' Kept for this page only: this browser stores nothing between visits.';
@@ -254,7 +326,20 @@
     star.el.style.left = star.x + '%';
     star.el.style.top = star.y + '%';
   }
+  // The name under the field, renamed the moment a star crosses a boundary: the reason one drag
+  // is worth one more. Written on every redraw, dragging included, so the rename is live.
+  function renderName() {
+    if (!sheet || !sheet.name) return;
+    var named = skyName(serialize());
+    sheet.name.textContent = named ? '✦ ' + named + ' — ' + skyRead(serialize()) : '';
+    sheet.name.hidden = !named;
+  }
+  function namedLine() {
+    var named = skyName(serialize());
+    return named ? ' Your sky reads as ' + named + ' now.' : '';
+  }
   function drawField() {
+    renderName();
     if (!sheet || !sheet.field || !sheet.canvas) return;
     var box = sheet.field.getBoundingClientRect();
     if (!box.width || !box.height) return;
@@ -359,7 +444,7 @@
     if (drag.moved) {
       suppressClickUntil = Date.now() + DRAG_SUPPRESS_MS;
       var kept = setStars(serialize(), 'moved');
-      sheetStatus('Moved. ' + fieldIntro(fieldStars) + keptNote(kept));
+      sheetStatus('Moved.' + namedLine() + keptNote(kept));
     }
   }
   function renderReading() {
@@ -418,6 +503,7 @@
       canvas: host.querySelector('.persona-sky-canvas'), drop: document.getElementById('persona-drop'),
       seed: document.getElementById('persona-seed'), remove: document.getElementById('persona-remove'),
       clear: document.getElementById('persona-clear'), status: document.getElementById('persona-sky-status'),
+      name: document.getElementById('persona-sky-name'),
       reading: document.getElementById('persona-reading'), ask: document.getElementById('persona-ask'),
       forget: document.getElementById('persona-forget'), readingGo: document.getElementById('persona-reading-go')
     };
@@ -439,7 +525,7 @@
       var point = pointInField(ev.clientX, ev.clientY);
       var words = thought();
       var kept = addStar({ x: point.x, y: point.y, text: words });
-      sheetStatus('✦ ' + words + keptNote(kept));
+      sheetStatus('✦ ' + words + namedLine() + keptNote(kept));
       var last = sheet.field.querySelector('.persona-star:last-of-type');
       if (last) select(fieldStars.length - 1);
     });
@@ -460,12 +546,12 @@
       var words = thought();
       var kept = addStar({ x: 50 + (Math.random() - 0.5) * 30,
         y: 50 + (Math.random() - 0.5) * 30, text: words });
-      sheetStatus('✦ ' + words + ' Drag it where it belongs.' + keptNote(kept));
+      sheetStatus('✦ ' + words + namedLine() + ' Drag it where it belongs.' + keptNote(kept));
       select(fieldStars.length - 1);
     });
     function seedTheSky() {
       var kept = seed();
-      sheetStatus('Seeded ' + fieldStars.length + ' stars. Drag them into a shape, or tap the sky for more.' + keptNote(kept));
+      sheetStatus('Seeded ' + fieldStars.length + ' stars.' + namedLine() + ' Drag them into a shape, or tap the sky for more.' + keptNote(kept));
       var first = sheet.field.querySelector('.persona-star');
       if (first) first.focus();
     }
@@ -531,7 +617,7 @@
   window.interestingPersona = {
     key: SKY, maxStars: MAX_STARS, stars: stars, read: read, holds: holds,
     seedSky: seedSky, thought: thought, setStars: setStars, addStar: addStar,
-    seed: seed, clear: clear, onSky: onSky,
+    seed: seed, clear: clear, onSky: onSky, skyName: skyName, skyRead: skyRead,
     open: function (section) { openSheet(section || 'sky', null); },
     close: closeSheet,
     ask: function () {
