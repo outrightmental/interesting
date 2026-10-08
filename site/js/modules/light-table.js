@@ -1,5 +1,5 @@
-/* Light through slits, or through crossed polarizing filters. Each shape carries its subject
-   from card to piece; a carried subject takes precedence over the seed's choice of shape. */
+/* Light through slits, crossed polarizing filters, or a pinhole camera. Each shape carries
+   its subject from card to piece; a carried subject takes precedence over the seed's choice. */
 
 const SLITS = [
   { label: 'both slits open', value: 'two' },
@@ -536,12 +536,246 @@ function filterPiece(env, carriedPlan) {
   };
 }
 
+const CAMERA_SUBJECTS = ['arrow', 'candle', 'house'];
+const CAMERA_GUESSES = [
+  { label: 'upright', value: 'upright' },
+  { label: 'upside down', value: 'inverted' },
+  { label: 'sideways', value: 'sideways' }
+];
+
+function dealsCamera(env) {
+  return (env.seed >>> 0) % 3 === 1;
+}
+
+function cameraPlan(env) {
+  return {
+    family: 'pinhole-camera', number: env.int(101, 999),
+    subject: env.pick(CAMERA_SUBJECTS), aperture: env.int(4, 18),
+    distance: env.int(42, 78), hole: env.int(44, 56) / 100
+  };
+}
+
+function carriedCamera(env) {
+  const p = env.card && env.card.of;
+  if (!p || p.family !== 'pinhole-camera'
+      || !Number.isInteger(p.number) || p.number < 101 || p.number > 999
+      || !CAMERA_SUBJECTS.includes(p.subject)
+      || !Number.isInteger(p.aperture) || p.aperture < 2 || p.aperture > 24
+      || !Number.isInteger(p.distance) || p.distance < 35 || p.distance > 90
+      || typeof p.hole !== 'number' || !Number.isFinite(p.hole)
+      || p.hole < 0.43 || p.hole > 0.57) return null;
+  return { family: p.family, number: p.number, subject: p.subject,
+    aperture: p.aperture, distance: p.distance, hole: p.hole };
+}
+
+function cameraTitle(p) {
+  return 'camera ' + p.number + ': the ' + p.subject;
+}
+
+function cameraShape(g, env, subject, x, y, size, inverted, opacity) {
+  if (opacity <= 0) return;
+  g.save();
+  g.translate(x, y);
+  g.scale(inverted ? -size : size, inverted ? -size : size);
+  g.fillStyle = env.alpha(env.colors.accent2, opacity);
+  if (subject === 'arrow') {
+    g.fillRect(-0.2, -0.15, 0.4, 1.05);
+    g.beginPath();
+    g.moveTo(-0.86, -0.1);
+    g.lineTo(0, -0.98);
+    g.lineTo(0.86, -0.1);
+    g.closePath();
+    g.fill();
+  } else if (subject === 'candle') {
+    g.fillRect(-0.28, -0.15, 0.56, 1.05);
+    g.fillStyle = env.alpha(env.colors.fg, opacity);
+    g.beginPath();
+    g.ellipse(0, -0.65, 0.24, 0.33, 0, 0, Math.PI * 2);
+    g.fill();
+  } else {
+    g.fillRect(-0.66, -0.1, 1.32, 1);
+    g.beginPath();
+    g.moveTo(-0.9, -0.08);
+    g.lineTo(0, -0.95);
+    g.lineTo(0.9, -0.08);
+    g.closePath();
+    g.fill();
+    g.fillStyle = env.alpha(env.colors.bg, opacity);
+    g.fillRect(-0.17, 0.37, 0.34, 0.53);
+  }
+  g.restore();
+}
+
+function cameraScene(g, w, h, env, p, s) {
+  const col = env.colors;
+  const v = env.variant || PLAIN;
+  const sourceX = w * 0.15;
+  const sourceY = h * 0.49;
+  const holeX = w * 0.43;
+  const holeY = h * s.hole;
+  const screenX = w * (0.68 + (s.distance - 35) / 55 * 0.09);
+  const screenW = w * 0.96 - screenX;
+  const screenMiddle = screenX + screenW / 2;
+  const zoom = (screenMiddle - holeX) / (holeX - sourceX);
+  const imageY = holeY + (holeY - sourceY) * zoom;
+  const size = Math.min(w * 0.055, h * 0.09) * v.scale;
+  const screenTop = h * 0.13;
+  const screenH = h * 0.74;
+  g.save();
+  background(g, w, h, env);
+  g.fillStyle = env.alpha(col.fg, 0.12);
+  for (let i = 0, count = Math.round(18 * v.density); i < count; i++) {
+    g.fillRect(((i * 0.618034 + v.turn * 0.3) % 1) * w,
+      ((i * 0.754878 + v.turn * 0.17) % 1) * h, 1, 1);
+  }
+
+  g.lineWidth = Math.max(1, Math.min(w, h) * 0.004);
+  g.setLineDash(s.open ? [] : [3, 5]);
+  for (const edge of [-0.9, 0.9]) {
+    const fromY = sourceY + edge * size;
+    g.strokeStyle = env.alpha(edge < 0 ? col.accent2 : col.accent, s.open ? 0.48 * s.exposure : 0.32);
+    g.beginPath();
+    g.moveTo(sourceX, fromY);
+    g.lineTo(holeX, holeY);
+    if (s.open) g.lineTo(screenMiddle, holeY + (holeY - fromY) * zoom);
+    g.stroke();
+  }
+  g.setLineDash([]);
+
+  g.fillStyle = env.mix(col.bg, col.bg2, s.open ? 0.7 : 0.35);
+  g.fillRect(screenX, screenTop, screenW, screenH);
+  if (s.open) {
+    g.save();
+    g.beginPath();
+    g.rect(screenX, screenTop, screenW, screenH);
+    g.clip();
+    const halo = g.createRadialGradient(screenMiddle, imageY, 0, screenMiddle, imageY, screenW);
+    halo.addColorStop(0, env.alpha(col.accent2, s.exposure * 0.22));
+    halo.addColorStop(1, env.alpha(col.accent2, 0));
+    g.fillStyle = halo;
+    g.fillRect(screenX, screenTop, screenW, screenH);
+    const blur = (s.aperture - 2) / 22;
+    const brightness = Math.min(0.95, (0.22 + s.aperture / 24 * 0.7) / (0.65 + zoom * 0.25));
+    for (let i = -2; i <= 2; i++) {
+      const shift = i * blur * size * 0.18;
+      cameraShape(g, env, p.subject, screenMiddle + shift, imageY + shift * 0.7,
+        size * zoom, true, s.exposure * brightness * 0.12);
+    }
+    cameraShape(g, env, p.subject, screenMiddle, imageY, size * zoom, true,
+      s.exposure * brightness * (0.9 - blur * 0.35));
+    g.restore();
+  }
+  g.strokeStyle = env.alpha(col.fg, 0.7);
+  g.lineWidth = 1.5;
+  g.strokeRect(screenX, screenTop, screenW, screenH);
+
+  cameraShape(g, env, p.subject, sourceX, sourceY, size, false, 0.94);
+  g.fillStyle = col.accent;
+  g.fillRect(holeX - w * 0.009, h * 0.1, w * 0.018, h * 0.8);
+  g.fillStyle = col.bg;
+  g.beginPath();
+  g.arc(holeX, holeY, Math.max(2, size * (0.13 + s.aperture / 24 * 0.25)), 0, Math.PI * 2);
+  g.fill();
+  g.strokeStyle = s.placed ? col.accent2 : env.alpha(col.fg, 0.6);
+  g.lineWidth = 1.5;
+  g.beginPath();
+  g.arc(holeX, holeY, Math.max(4, size * 0.48), 0, Math.PI * 2);
+  g.stroke();
+
+  const fontSize = Math.max(10, Math.min(16, Math.round(Math.min(w, h) * 0.043)));
+  g.font = '500 ' + fontSize + 'px system-ui, sans-serif';
+  g.textBaseline = 'middle';
+  g.fillStyle = col.fg;
+  g.textAlign = 'center';
+  g.fillText('source', sourceX, h * 0.91, w * 0.25);
+  g.fillText('hole', holeX, h * 0.91, w * 0.2);
+  g.fillText(s.open ? 'lit screen' : 'covered', screenMiddle, h * 0.91, screenW);
+  g.restore();
+}
+
+function cameraPreview(g, w, h, env, p) {
+  cameraScene(g, w, h, env, p, {
+    aperture: p.aperture, distance: p.distance, hole: p.hole,
+    placed: false, open: false, exposure: 0
+  });
+}
+
+function cameraPiece(env, carriedPlan) {
+  const p = carriedPlan || cameraPlan(env);
+  const s = {
+    aperture: p.aperture, distance: p.distance, hole: p.hole,
+    placed: false, open: false, exposure: 0, guess: ''
+  };
+  const draw = (c) => cameraScene(c.g, c.w, c.h, env, p, s);
+  return {
+    title: cameraTitle(p),
+    brief: 'Predict which way the ' + p.subject + ' will face, adjust the hole and screen, tap anywhere to place the hole, then open the shutter and watch the image appear.',
+    aspect: '4 / 3',
+    steps: [
+      { id: 'guess', ask: 'which way will the image face?', kind: 'choice', options: CAMERA_GUESSES },
+      { id: 'aperture', ask: 'the size of the hole', kind: 'range', min: 2, max: 24, step: 1, value: p.aperture, low: 'tiny', high: 'wide' },
+      { id: 'distance', ask: 'how far back the screen sits', kind: 'range', min: 35, max: 90, step: 1, value: p.distance, low: 'near', high: 'far' },
+      { id: 'hole', ask: 'tap anywhere to place the hole at that height', kind: 'tap', label: 'place the hole for me' },
+      { id: 'open', ask: 'uncover the screen', kind: 'press', count: 1, label: 'open the shutter' }
+    ],
+    start(c) {
+      c.status('The screen is covered. Light from the ' + p.subject + ' reaches the hole.');
+      draw(c);
+    },
+    apply(id, value, c) {
+      if (id === 'guess') {
+        s.guess = String(value);
+        c.status('Prediction placed. The covered screen has not given anything away.');
+      }
+      if (id === 'aperture') {
+        s.aperture = Math.max(2, Math.min(24, Math.round(Number(value))));
+        c.status(s.aperture < 10 ? 'A small hole lets less light through.' : 'A larger hole lets more light through.');
+      }
+      if (id === 'distance') {
+        s.distance = Math.max(35, Math.min(90, Math.round(Number(value))));
+        c.status(s.distance < 60 ? 'The screen is closer to the hole.' : 'The screen is farther from the hole.');
+      }
+      if (id === 'open') {
+        s.open = true;
+        s.exposure = c.reduced ? 1 : 0.18;
+        c.status('The screen is uncovered. The image is coming into view.');
+      }
+      draw(c);
+    },
+    tap(x, y, c) {
+      if (c.done) return;
+      s.hole = 0.43 + Math.max(0, Math.min(1, y)) * 0.14;
+      s.placed = true;
+      c.progress('hole', 1);
+      c.status('Hole placed ' + (s.hole < 0.47 ? 'high' : s.hole > 0.53 ? 'low' : 'near the middle') + '.');
+      c.satisfy('hole');
+      draw(c);
+    },
+    frame(t, dt, c) {
+      if (s.open) s.exposure = c.reduced ? 1 : Math.min(1, s.exposure + Math.max(0, dt) * 0.8);
+      draw(c);
+    },
+    end(c) {
+      s.open = true;
+      s.exposure = c.reduced ? 1 : Math.max(s.exposure, 0.18);
+      draw(c);
+      c.status('The ' + p.subject + ' appears upside down: rays from its top and bottom cross at the hole. '
+        + (s.guess === 'inverted' ? 'You called it. ' : 'You predicted ' + (CAMERA_GUESSES.find((guess) => guess.value === s.guess) || CAMERA_GUESSES[0]).label + '. ')
+        + 'A wider hole brightens but softens the image; a farther screen makes it larger and dimmer.');
+    }
+  };
+}
+
 export default {
   id: 'light-table',
   needsSky: false,
   paint(g, w, h, env) {
     if (dealsFilters(env)) {
       filterPreview(g, w, h, env, filterPlan(env));
+      return;
+    }
+    if (dealsCamera(env)) {
+      cameraPreview(g, w, h, env, cameraPlan(env));
       return;
     }
     const made = setup(env);
@@ -557,6 +791,17 @@ export default {
         mono: 'loose filter: ' + p.turn + ' degrees from the first',
         aspect: '4 / 3',
         paint: (g, w, h, cardEnv) => filterPreview(g, w, h, cardEnv, p),
+        of: p
+      };
+    }
+    if (dealsCamera(env)) {
+      const p = cameraPlan(env);
+      return {
+        title: cameraTitle(p),
+        text: 'One ' + p.subject + ', one hole, one covered screen. Predict what the light will draw, then uncover it.',
+        mono: 'hole ' + p.aperture + '\nscreen ' + p.distance,
+        aspect: '4 / 3',
+        paint: (g, w, h, cardEnv) => cameraPreview(g, w, h, cardEnv, p),
         of: p
       };
     }
@@ -576,7 +821,10 @@ export default {
   piece(env) {
     const filters = carriedFilters(env);
     if (filters) return filterPiece(env, filters);
+    const camera = carriedCamera(env);
+    if (camera) return cameraPiece(env, camera);
     if (carried(env)) return slitPiece(env);
-    return dealsFilters(env) ? filterPiece(env) : slitPiece(env);
+    if (dealsFilters(env)) return filterPiece(env);
+    return dealsCamera(env) ? cameraPiece(env) : slitPiece(env);
   }
 };
