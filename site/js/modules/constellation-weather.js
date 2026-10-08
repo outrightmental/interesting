@@ -1,624 +1,674 @@
-/* The weather lab: the persona's stars as pressure systems on a synoptic map. As a card it is
-   the map, a front between the two farthest stars and a forecast (paint, spark); as a piece it
-   is probes launched into the field and a bulletin printed over it, or a front named on those
-   two stars, blown across the map and let pass. See js/feed.js for what a module is and
-   js/stage.js for what a piece is.
+/* The weather lab: a synoptic map under the persona's stars, and two puzzles read off it. As a
+   card it is the map the seed deals, drawn small (paint, spark); as a piece it is one of the two
+   puzzles below, and the card it was opened from says which. See js/feed.js for what a module is
+   and js/stage.js for what a piece is.
 
-   A card and the feature it opens as are one forecast: the spark puts the front it forecast, the
-   way it was moving, the wind and the visibility on its spec as `of`, and the piece opens the map
-   at that forecast -- the card's front first on the dial, its wind on the gauge. */
+   Two puzzles, both deduction:
 
-// The card this piece was opened from, in the lab's own terms: the forecast it printed, or null for
-// a piece nobody pressed (js/stage.js hands the card over as env.card.of).
-function pressed(env) {
-  const was = env.card && env.card.of;
-  const kind = was && KINDS.find((k) => k.value === was.kind);
-  if (!kind) return null;
-  return {
-    kind,
-    moving: DIRS.indexOf(was.moving) >= 0 ? was.moving : '',
-    wind: Math.max(0, WINDS.indexOf(was.wind)),
-    vis: VIS.indexOf(was.vis) >= 0 ? was.vis : ''
-  };
-}
+     when the front arrives  A station marked on a gridded map, a front some squares off on one
+                             side, moving toward it at a stated speed, and a clock showing the
+                             hour now. One square is ten kilometres, and the scale bar says so.
+                             Say the hour the front reaches the station, past midnight if it must,
+                             and which side it comes from. A wrong check says only that the hour
+                             is off, or that the side is right.
+     the pressure map        Five stations with their pressure readings. The wind blows from the
+                             highest toward the lowest. Name the station it blows toward, the way
+                             it blows by the compass, and the difference in pressure between the
+                             two. A wrong check says which part is off and no more.
 
-// The wind a card's own forecast implies, in knots: the five words the lab speaks of wind, read
-// back as the gauge the piece opens on.
-const KNOTS = [5, 10, 18, 26, 34];
+   A card and the feature it opens as are one puzzle: the spark puts the whole plan on its spec as
+   `of` -- the station, the front, the speed and the hour, or the five stations and their
+   readings -- and piece(env) opens on that rather than rolling another. The sky may be one star
+   or many; it only glints through the map, and the plan stands whatever the sky is now. */
 
-const KINDS = [
-  { label: 'a warm front', value: 'warm' },
-  { label: 'a cold front', value: 'cold' },
-  { label: 'an occluded front', value: 'occluded' },
-  { label: 'a stationary front', value: 'stationary' },
-  { label: 'a line of squalls', value: 'squalls' }
-];
-const FRONTS = KINDS.map((k) => k.label);
-const DIRS = ['north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west'];
-const WINDS = ['calm at the centre', 'light and variable', 'backing slowly', 'fresh from the west', 'gusting at the edges'];
-const VIS = ['good, then middling', 'poor in the gaps between stars', 'excellent above the cloud', 'moderate, with haze'];
-const READINGS = ['storm-leaning trough', 'wandering seam', 'calm mid-band', 'glowing high-pressure pocket'];
-const SHORT = ['trough', 'seam', 'mid-band', 'pocket'];
-const BANDS = ['the midnight bands', 'first light over the field', 'morning haze', 'afternoon convection', 'the evening gradient', 'the late bands'];
-const OPENERS = ['constellation synoptic:', 'midnight weather desk:', 'sky pattern bulletin:', 'starlit pressure report:'];
-const INSIGHTS = [
-  'A gentle front rewards tiny, consistent progress.',
-  'Conditions favor playful drafts over perfect plans.',
-  'Momentum improves when you start before certainty.',
-  'Visibility increases after one brave unfinished step.'
-];
-const ADVISORIES = [
-  'Carry one clear intention into the next hour.',
-  'Protect a short focus window and build inside it.',
-  'Share a rough version, then refine with feedback.',
-  'If stalled, shrink the task until movement returns.'
-];
-const LORE = 'Printable, if you print it. Nothing here will come true.';
-const LINES = [
-  'Tap the map on its page to launch a probe.',
-  'The front is your two farthest stars; everything else is weather.',
-  LORE,
-  'Pressure follows the stars. Move one and the map redraws.'
-];
-const NUM = ['two', 'three', 'four'];
+const GC = 20; // squares across
+const GR = 15; // squares down
+const KM = 10; // kilometres in a square
+const SIDES = ['north', 'east', 'south', 'west'];
+const LETTERS = ['A', 'B', 'C', 'D', 'E'];
+const SPEEDS = [10, 20, 30, 40, 50, 60];
+const PLAIN = { density: 1, scale: 1, turn: 0 };
+const TAU = Math.PI * 2;
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
-const fmt = (h) => (h < 10 ? '0' : '') + h + ':00';
-const region = (x, y) => (y < 50 ? 'north' : 'south') + '-' + (x < 50 ? 'west' : 'east');
-const unit = (w, h) => Math.min(w, h) / 100;
-const windOf = (kt) => WINDS[kt < 7 ? 0 : kt < 14 ? 1 : kt < 22 ? 2 : kt < 30 ? 3 : 4];
+const fmt = (hour) => (hour < 10 ? '0' : '') + hour + ':00';
 
-// Everything the scene draws from; a card draws it once, a piece carries it between frames.
-function blank(hour, front) {
-  return { t: 0, hour, wind: 0, still: 0, rain: false, drops: [], probes: [], flash: 0, front, off: 0, dir: 1, pair: null, clear: 0, veil: 0, lines: null, rise: 0, hint: false };
-}
+/* ---- drawing shared by both ---------------------------------------------------------------- */
 
-// The two farthest of a list of points, as indices.
-function farthest(pts) {
-  let a = 0;
-  let b = Math.min(1, pts.length - 1);
-  let far = -1;
-  for (let i = 0; i < pts.length; i++) {
-    for (let j = i + 1; j < pts.length; j++) {
-      const d = (pts[i].x - pts[j].x) ** 2 + (pts[i].y - pts[j].y) ** 2;
-      if (d > far) {
-        far = d;
-        a = i;
-        b = j;
-      }
-    }
-  }
-  return [a, b];
-}
-
-// The stars as pressure systems, the high ones highs. They drift with the hour and the wind.
-function systems(e, w, h, hour, t, wind, still) {
-  const amp = e.reduced ? 0 : 2.5 * unit(w, h) * (1 - still);
-  return e.points(w, h, 14).slice(0, 40).map((p, i) => {
-    const d = (i % 2 ? 1 : -1) * (0.15 + (i % 7) * 0.03) * (1 + wind * 4);
-    return {
-      i, text: p.text, high: p.y < h / 2, power: 0.6 + (1 - p.y / h) * 1.2,
-      x: p.x + Math.sin(hour * 0.28 + i * 0.9 + t * d) * amp,
-      y: p.y + Math.cos(hour * 0.24 + i * 0.7 + t * d * 0.8) * amp * 0.8
-    };
-  });
-}
-
-// The pressure at a point: the highs push it up, the lows pull it down.
-function field(sys, x, y, s2) {
-  let v = 0;
-  for (const q of sys) v += (q.high ? 1 : -1) * q.power * Math.exp(-((x - q.x) ** 2 + (y - q.y) ** 2) / s2);
-  return v;
-}
-
-function graticule(g, w, h, e) {
-  const step = Math.max(14, Math.round(Math.min(w, h) / 14));
-  g.strokeStyle = e.alpha(e.colors.muted, 0.12);
-  g.lineWidth = 1;
-  g.beginPath();
-  for (let x = step; x < w; x += step) {
-    g.moveTo(x + 0.5, 0);
-    g.lineTo(x + 0.5, h);
-  }
-  for (let y = step; y < h; y += step) {
-    g.moveTo(0, y + 0.5);
-    g.lineTo(w, y + 0.5);
-  }
-  g.stroke();
-}
-
-// The field as a coarse grid: warm where the pressure is high, cool where it is low.
-function pressure(g, w, h, e, sys, gain) {
-  const cols = 26;
-  const rows = Math.max(6, Math.round((cols * h) / w));
-  const cw = w / cols;
-  const rh = h / rows;
-  const s2 = (28 * unit(w, h)) ** 2;
-  for (let gy = 0; gy < rows; gy++) {
-    for (let gx = 0; gx < cols; gx++) {
-      const v = field(sys, (gx + 0.5) * cw, (gy + 0.5) * rh, s2);
-      g.fillStyle = e.alpha(v > 0 ? e.colors.accent2 : e.colors.accent, Math.min(0.4, Math.abs(v) * gain));
-      g.fillRect(gx * cw, gy * rh, cw + 1, rh + 1);
-    }
-  }
-}
-
-// Isobars round a system, stretched and laid flat as the wind rises, and its letter.
-function isobars(g, e, q, u, wind, fade) {
-  const rings = 3 + (q.i % 3);
-  const tilt = ((q.i * 0.7) % Math.PI) * (1 - wind);
-  g.lineWidth = 1;
-  for (let r = 1; r <= rings; r++) {
-    g.strokeStyle = e.alpha(q.high ? e.colors.accent2 : e.colors.accent, (0.42 - r * 0.08) * fade);
-    g.beginPath();
-    g.ellipse(q.x, q.y, r * 2.4 * u * (1 + wind * 0.8), r * 1.9 * u, tilt, 0, Math.PI * 2);
-    g.stroke();
-  }
-  g.fillStyle = e.alpha(e.colors.fg, 0.9);
-  g.font = '600 ' + Math.max(9, Math.round(2.6 * u)) + 'px system-ui, sans-serif';
-  g.textAlign = 'center';
+function write(g, text, x, y, size, align, tone, weight) {
+  g.fillStyle = tone;
+  g.font = (weight || '500') + ' ' + size + 'px system-ui, sans-serif';
+  g.textAlign = align || 'left';
   g.textBaseline = 'middle';
-  g.fillText(q.high ? 'H' : 'L', q.x, q.y);
+  g.fillText(text, x, y);
 }
 
-// The front, with the teeth of its kind: a segment between the two systems while it sits on them
-// (off 0), unfurling to a line across the whole map as it sets off, with the air it brought shaded
-// behind. One star alone gets a front lying east-west through it.
-function front(g, w, h, e, a, b, kind, off, dir, u) {
-  const c = e.colors;
-  const tone = (k) => (k === 'warm' ? c.accent2 : k === 'cold' ? c.accent : k === 'squalls' ? c.fg : e.mix(c.accent, c.accent2, 0.5));
-  const len = Math.hypot(b.x - a.x, b.y - a.y);
-  const tx = len ? (b.x - a.x) / len : 1;
-  const ty = len ? (b.y - a.y) / len : 0;
-  const nx = -ty * dir;
-  const ny = tx * dir;
-  const mx = (a.x + b.x) / 2 + nx * off;
-  const my = (a.y + b.y) / 2 + ny * off;
-  const R = Math.hypot(w, h);
-  const reach = off ? len / 2 + (R - len / 2) * Math.min(1, off / (6 * u)) : Math.max(len / 2, u);
-  if (off) {
-    g.save();
-    g.translate(mx, my);
-    g.rotate(Math.atan2(ny, nx));
-    g.fillStyle = e.alpha(tone(kind), 0.1);
-    g.fillRect(-R, -reach, R, 2 * reach);
-    g.restore();
-  }
-  g.strokeStyle = e.alpha(tone(kind), 0.8);
-  g.lineWidth = Math.max(1.5, u * 0.45);
-  g.beginPath();
-  g.moveTo(mx - tx * reach, my - ty * reach);
-  g.lineTo(mx + tx * reach, my + ty * reach);
-  g.stroke();
-  const gap = Math.max(10, 4.9 * u);
-  const tooth = 1.55 * u;
-  const n = Math.floor((reach - (off ? 0 : gap * 0.5)) / gap);
-  for (let k = -n; k <= n; k++) {
-    const x = mx + tx * k * gap;
-    const y = my + ty * k * gap;
-    if (x < -tooth || x > w + tooth || y < -tooth || y > h + tooth) continue;
-    const odd = (k + n) % 2;
-    const shape = kind === 'occluded' || kind === 'stationary' ? (odd ? 'cold' : 'warm') : kind;
-    const side = kind === 'stationary' && odd ? -1 : 1;
-    g.fillStyle = e.alpha(tone(shape), 0.85);
-    g.beginPath();
-    if (shape === 'warm') {
-      const phi = Math.atan2(ny * side, nx * side);
-      g.arc(x, y, tooth * 0.65, phi - Math.PI / 2, phi + Math.PI / 2);
-      g.fill();
-    } else if (shape === 'cold') {
-      g.moveTo(x - tx * tooth * 0.6, y - ty * tooth * 0.6);
-      g.lineTo(x + tx * tooth * 0.6, y + ty * tooth * 0.6);
-      g.lineTo(x + nx * side * tooth * 1.1, y + ny * side * tooth * 1.1);
-      g.fill();
-    } else {
-      g.moveTo(x - nx * tooth * 0.7, y - ny * tooth * 0.7);
-      g.lineTo(x + nx * tooth * 0.7, y + ny * tooth * 0.7);
-      g.stroke();
-    }
-  }
+// Where the grid sits: a margin for the numbers along the left and the bottom, and square squares.
+function mapGeometry(w, h) {
+  const padL = w * 0.05;
+  const padT = h * 0.03;
+  const sq = Math.min((w - padL - w * 0.02) / GC, (h - padT - h * 0.065) / GR);
+  return { sq, x: (c) => padL + c * sq, y: (r) => padT + r * sq, left: padL, top: padT, right: padL + GC * sq, bottom: padT + GR * sq };
 }
 
-// The probes with their rings, each tied to the system it read, and the rain.
-function markers(g, e, s, sys, u) {
-  const c = e.colors;
-  for (const p of s.probes) {
-    const q = sys[p.near];
-    g.strokeStyle = e.alpha(c.accent2, 0.35);
-    g.lineWidth = 1;
-    if (q) {
-      g.beginPath();
-      g.moveTo(p.x, p.y);
-      g.lineTo(q.x, q.y);
-      g.stroke();
-    }
-    g.fillStyle = e.alpha(c.accent2, 0.9);
+// The map's ground: the sky at the hour, the squares and their numbers, the stars as they stand
+// glinting through, and a drift of haze from the configuration.
+function ground(g, w, h, env, v, hour, t) {
+  const c = env.colors;
+  const geo = mapGeometry(w, h);
+  const day = (1 + Math.cos(((hour - 12) / 12) * Math.PI)) / 2;
+  const grad = g.createLinearGradient(0, 0, 0, h);
+  grad.addColorStop(0, env.mix(c.bg, c.accent2, day * 0.3));
+  grad.addColorStop(1, env.mix(c.bg2, c.accent, day * 0.15));
+  g.fillStyle = grad;
+  g.fillRect(0, 0, w, h);
+  g.fillStyle = env.alpha(c.fg, 0.35);
+  for (const p of env.points(w, h, 8)) {
     g.beginPath();
-    g.arc(p.x, p.y, 0.8 * u, 0, Math.PI * 2);
+    g.arc(p.x, p.y, 1.2 * v.scale, 0, TAU);
     g.fill();
-    if (p.life > 0) {
-      g.strokeStyle = e.alpha(c.accent2, p.life * 0.65);
-      g.lineWidth = 1.2;
-      g.beginPath();
-      g.arc(p.x, p.y, (1 - p.life) * 6 * u, 0, Math.PI * 2);
-      g.stroke();
-    }
   }
-  if (s.drops.length) {
-    const len = 2.2 * u;
-    const lean = -(0.2 + s.wind * 0.7) * len;
-    g.strokeStyle = e.alpha(c.accent, 0.55);
-    g.lineWidth = 1;
+  const haze = Math.max(2, Math.round(6 * v.density));
+  for (let i = 0; i < haze; i++) {
+    const x = ((i * 0.618 + 0.2 + v.turn * 0.31 + Math.sin((t || 0) * 0.2 + i) * 0.02) % 1) * w;
+    const y = ((i * 0.41 + 0.1 + v.turn * 0.17) % 1) * h;
+    const r = Math.min(w, h) * (0.08 + (i % 3) * 0.04) * v.scale;
+    const d = g.createRadialGradient(x, y, 0, x, y, r);
+    d.addColorStop(0, env.alpha(c.fg, 0.05));
+    d.addColorStop(1, env.alpha(c.fg, 0));
+    g.fillStyle = d;
+    g.fillRect(x - r, y - r, r * 2, r * 2);
+  }
+  g.lineWidth = 1;
+  for (let pass = 0; pass < 2; pass++) {
+    g.strokeStyle = env.alpha(c.muted, pass ? 0.3 : 0.12);
     g.beginPath();
-    for (const d of s.drops) {
-      g.moveTo(d.x, d.y);
-      g.lineTo(d.x + lean, d.y + len);
+    for (let col = 0; col <= GC; col++) {
+      if ((col % 5 === 0) !== !!pass) continue;
+      g.moveTo(geo.x(col), geo.top);
+      g.lineTo(geo.x(col), geo.bottom);
+    }
+    for (let row = 0; row <= GR; row++) {
+      if ((row % 5 === 0) !== !!pass) continue;
+      g.moveTo(geo.left, geo.y(row));
+      g.lineTo(geo.right, geo.y(row));
     }
     g.stroke();
   }
+  const small = Math.max(7, Math.min(11, Math.round(geo.sq * 0.5)));
+  for (let col = 0; col <= GC; col += 5) write(g, String(col), geo.x(col), geo.bottom + small * 0.9, small, 'center', env.alpha(c.muted, 0.8));
+  for (let row = 5; row <= GR; row += 5) write(g, String(row), geo.left - small * 0.4, geo.y(row), small, 'right', env.alpha(c.muted, 0.8));
+  return geo;
 }
 
-// A bulletin printed over the map: a slip that comes down from the top edge as its lines print.
-function slip(g, w, h, e, lines, rise, u) {
+// The scale bar: exactly one square long, so the grid can be trusted.
+function scaleBar(g, env, geo, x, y, size) {
+  const c = env.colors;
+  g.strokeStyle = env.alpha(c.fg, 0.9);
+  g.lineWidth = 2;
+  g.beginPath();
+  g.moveTo(x, y);
+  g.lineTo(x + geo.sq, y);
+  g.moveTo(x, y - 3);
+  g.lineTo(x, y + 3);
+  g.moveTo(x + geo.sq, y - 3);
+  g.lineTo(x + geo.sq, y + 3);
+  g.stroke();
+  write(g, '1 square = ' + KM + ' km', x + geo.sq + size * 0.5, y, size, 'left', env.alpha(c.fg, 0.9));
+}
+
+function arrow(g, x0, y0, x1, y1, head) {
+  const a = Math.atan2(y1 - y0, x1 - x0);
+  g.beginPath();
+  g.moveTo(x0, y0);
+  g.lineTo(x1, y1);
+  g.stroke();
+  g.beginPath();
+  g.moveTo(x1, y1);
+  g.lineTo(x1 - Math.cos(a - 0.5) * head, y1 - Math.sin(a - 0.5) * head);
+  g.lineTo(x1 - Math.cos(a + 0.5) * head, y1 - Math.sin(a + 0.5) * head);
+  g.closePath();
+  g.fill();
+}
+
+// A twenty-four hour dial: 0 at the top is midnight, 12 at the bottom is noon. One hand for the
+// hour now, and a fainter one for the hour the visitor has named, if they have.
+function clock(g, env, x, y, r, hour, guess, size) {
+  const c = env.colors;
+  g.fillStyle = env.alpha(c.bg, 0.75);
+  g.strokeStyle = env.alpha(c.fg, 0.6);
+  g.lineWidth = 1.2;
+  g.beginPath();
+  g.arc(x, y, r, 0, TAU);
+  g.fill();
+  g.stroke();
+  g.strokeStyle = env.alpha(c.fg, 0.5);
+  g.lineWidth = 1;
+  g.beginPath();
+  for (let i = 0; i < 24; i++) {
+    const a = (i / 24) * TAU - Math.PI / 2;
+    const inner = i % 6 === 0 ? 0.74 : 0.86;
+    g.moveTo(x + Math.cos(a) * r * inner, y + Math.sin(a) * r * inner);
+    g.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r);
+  }
+  g.stroke();
+  const hand = (hr, tone, width, len) => {
+    const a = (hr / 24) * TAU - Math.PI / 2;
+    g.strokeStyle = tone;
+    g.lineWidth = width;
+    g.beginPath();
+    g.moveTo(x, y);
+    g.lineTo(x + Math.cos(a) * r * len, y + Math.sin(a) * r * len);
+    g.stroke();
+  };
+  if (guess != null) hand(guess, env.alpha(c.accent, 0.8), 1.5, 0.6);
+  hand(hour, c.accent2, 2, 0.7);
+  g.fillStyle = c.accent2;
+  g.beginPath();
+  g.arc(x, y, 2, 0, TAU);
+  g.fill();
+  write(g, 'midnight', x, y - r - size * 0.7, size, 'center', env.alpha(c.muted, 0.9));
+  write(g, 'now ' + fmt(hour), x, y + r + size * 0.8, size, 'center', c.accent2, '600');
+}
+
+// A slip printed over the map once a puzzle is solved: it comes down from the top edge.
+function slip(g, w, h, env, lines, rise, size) {
   if (!lines || rise <= 0) return;
-  const font = (px) => '500 ' + px + 'px system-ui, sans-serif';
-  let size = Math.max(10, Math.round(3 * u));
-  g.font = font(size);
+  const c = env.colors;
+  g.font = '500 ' + size + 'px system-ui, sans-serif';
   let widest = 0;
   for (const l of lines) widest = Math.max(widest, g.measureText(l).width);
-  if (widest > w * 0.86) {
-    size = Math.max(9, Math.floor((size * w * 0.86) / widest));
-    g.font = font(size);
-    widest = w * 0.86;
-  }
   const lh = size * 1.5;
   const pad = size;
-  const bw = widest + pad * 2;
+  const bw = Math.min(w * 0.9, widest + pad * 2);
   const bh = lines.length * lh + pad * 2;
   const x = (w - bw) / 2;
   const y = -bh + rise * ((h - bh) / 2 + bh);
-  g.fillStyle = e.alpha(e.colors.bg, 0.9);
-  g.strokeStyle = e.alpha(e.colors.fg, 0.3);
+  g.fillStyle = env.alpha(c.bg, 0.92);
+  g.strokeStyle = env.alpha(c.fg, 0.3);
   g.lineWidth = 1;
   g.beginPath();
   g.roundRect(x, y, bw, bh, size * 0.5);
   g.fill();
   g.stroke();
-  g.textAlign = 'left';
-  g.textBaseline = 'middle';
-  lines.slice(0, Math.ceil(rise * lines.length)).forEach((l, i) => {
-    g.fillStyle = e.alpha(i === 0 ? e.colors.accent2 : i === lines.length - 1 ? e.colors.muted : e.colors.fg, 0.92);
-    g.fillText(l, x + pad, y + pad + lh * (i + 0.5));
-  });
+  lines.forEach((l, i) => write(g, l, x + pad, y + pad + lh * (i + 0.5), size, 'left', env.alpha(i === 0 ? c.accent2 : c.fg, 0.92)));
 }
 
-// The whole map, back to front. The stage never clears the canvas, so this paints all of it.
-function scene(g, w, h, e, s) {
-  const u = unit(w, h);
-  const c = e.colors;
-  const day = (1 + Math.cos(((s.hour - 12) / 12) * Math.PI)) / 2;
-  const grad = g.createLinearGradient(0, 0, 0, h);
-  grad.addColorStop(0, e.mix(c.bg, c.accent2, day * 0.3 + s.clear * 0.08));
-  grad.addColorStop(1, e.mix(c.bg2, c.accent, day * 0.15));
-  g.fillStyle = grad;
-  g.fillRect(0, 0, w, h);
-  graticule(g, w, h, e);
-  const sys = systems(e, w, h, s.hour, s.t, s.wind, s.still);
-  if (!s.pair) s.pair = farthest(sys);
-  const fade = 1 - s.clear * 0.75;
-  pressure(g, w, h, e, sys, (s.rain ? 0.22 : 0.3) * fade);
-  for (const q of sys) isobars(g, e, q, u, s.wind, fade);
-  const a = sys[s.pair[0]];
-  const b = sys[s.pair[1]];
-  if (s.front) front(g, w, h, e, a, b, s.front, s.off, s.dir, u);
-  else if (sys.length > 1 && s.hint) {
-    g.strokeStyle = e.alpha(c.fg, 0.3);
-    g.lineWidth = 1;
-    g.setLineDash([2 * u, 2 * u]);
+function station(g, env, x, y, r, letter, size) {
+  const c = env.colors;
+  g.fillStyle = env.alpha(c.bg, 0.85);
+  g.strokeStyle = c.accent2;
+  g.lineWidth = 1.5;
+  g.beginPath();
+  g.arc(x, y, r, 0, TAU);
+  g.fill();
+  g.stroke();
+  if (letter) write(g, letter, x, y + 0.5, size, 'center', c.fg, '700');
+  else {
+    g.fillStyle = c.accent2;
     g.beginPath();
-    g.moveTo(a.x, a.y);
-    g.lineTo(b.x, b.y);
+    g.arc(x, y, r * 0.35, 0, TAU);
+    g.fill();
+  }
+}
+
+/* ---- when the front arrives ---------------------------------------------------------------- */
+
+function frontHours(plan) {
+  return (plan.squares * KM) / plan.speed;
+}
+
+function frontOk(p) {
+  if (!p || p.kind !== 'front' || !SIDES.includes(p.side)) return false;
+  if (!Array.isArray(p.station) || p.station.length !== 2 || !p.station.every(Number.isInteger)) return false;
+  const [c, r] = p.station;
+  const d = p.squares;
+  if (!Number.isInteger(d) || d < 3 || d > 12 || !SPEEDS.includes(p.speed) || (d * KM) % p.speed !== 0) return false;
+  if (!Number.isInteger(p.now) || p.now < 0 || p.now > 23) return false;
+  if (c < 2 || c > GC - 2 || r < 2 || r > GR - 2) return false;
+  const line = p.side === 'north' ? r - d : p.side === 'south' ? r + d : p.side === 'west' ? c - d : c + d;
+  const limit = p.side === 'north' || p.side === 'south' ? GR : GC;
+  return line >= 1 && line <= limit - 1;
+}
+
+function frontPlan(env) {
+  for (let guard = 0; guard < 80; guard++) {
+    const side = env.pick(SIDES);
+    const squares = env.int(3, 12);
+    const speeds = SPEEDS.filter((v) => (squares * KM) % v === 0);
+    const speed = env.pick(speeds);
+    const vertical = side === 'north' || side === 'south';
+    const c = vertical ? env.int(3, GC - 3) : side === 'west' ? env.int(squares + 1, GC - 2) : env.int(2, GC - 1 - squares);
+    const r = !vertical ? env.int(3, GR - 3) : side === 'north' ? env.int(squares + 1, GR - 2) : env.int(2, GR - 1 - squares);
+    const plan = { kind: 'front', station: [c, r], side, squares, speed, now: env.int(0, 23) };
+    if (frontOk(plan)) return plan;
+  }
+  return { kind: 'front', station: [10, 11], side: 'north', squares: 6, speed: 20, now: 21 };
+}
+
+function carriedFront(env) {
+  const p = env.card && env.card.of;
+  if (!frontOk(p)) return null;
+  return { kind: 'front', station: p.station.slice(), side: p.side, squares: p.squares, speed: p.speed, now: p.now };
+}
+
+function frontTitle(plan) {
+  return 'when the front arrives: ' + plan.speed + ' km/h';
+}
+
+// The front line's row or column, and the unit step of the wind (from the front toward the
+// station), in squares.
+function frontLine(plan, sweep) {
+  const [c, r] = plan.station;
+  const d = plan.squares * (1 - (sweep || 0));
+  switch (plan.side) {
+    case 'north': return { vertical: false, at: r - d, dx: 0, dy: 1 };
+    case 'south': return { vertical: false, at: r + d, dx: 0, dy: -1 };
+    case 'west': return { vertical: true, at: c - d, dx: 1, dy: 0 };
+    default: return { vertical: true, at: c + d, dx: -1, dy: 0 };
+  }
+}
+
+function drawFront(g, w, h, env, plan, s, variant) {
+  const v = variant || PLAIN;
+  const c = env.colors;
+  const geo = ground(g, w, h, env, v, plan.now, s.t);
+  const size = Math.max(8, Math.min(13, Math.round(geo.sq * 0.6)));
+  const line = frontLine(plan, s.sweep);
+  const [sc, sr] = plan.station;
+  // The air the front brings, shaded behind it, and the front itself with its teeth toward the
+  // station.
+  const tone = c.accent;
+  g.fillStyle = env.alpha(tone, 0.1);
+  if (line.vertical) {
+    const x = geo.x(line.at);
+    if (line.dx > 0) g.fillRect(geo.left, geo.top, x - geo.left, geo.bottom - geo.top);
+    else g.fillRect(x, geo.top, geo.right - x, geo.bottom - geo.top);
+  } else {
+    const y = geo.y(line.at);
+    if (line.dy > 0) g.fillRect(geo.left, geo.top, geo.right - geo.left, y - geo.top);
+    else g.fillRect(geo.left, y, geo.right - geo.left, geo.bottom - y);
+  }
+  g.strokeStyle = env.alpha(tone, 0.9);
+  g.lineWidth = Math.max(1.5, geo.sq * 0.12);
+  g.beginPath();
+  if (line.vertical) {
+    g.moveTo(geo.x(line.at), geo.top);
+    g.lineTo(geo.x(line.at), geo.bottom);
+  } else {
+    g.moveTo(geo.left, geo.y(line.at));
+    g.lineTo(geo.right, geo.y(line.at));
+  }
+  g.stroke();
+  const tooth = geo.sq * 0.45;
+  g.fillStyle = env.alpha(tone, 0.9);
+  const along = line.vertical ? GR : GC;
+  for (let k = 1; k < along; k += 2) {
+    const px = line.vertical ? geo.x(line.at) : geo.x(k);
+    const py = line.vertical ? geo.y(k) : geo.y(line.at);
+    g.beginPath();
+    g.moveTo(px - line.dy * tooth * 0.6, py - line.dx * tooth * 0.6);
+    g.lineTo(px + line.dy * tooth * 0.6, py + line.dx * tooth * 0.6);
+    g.lineTo(px + line.dx * tooth, py + line.dy * tooth);
+    g.closePath();
+    g.fill();
+  }
+  // The wind: arrows from the front toward the station, as many as the configuration asks.
+  const arrows = Math.max(3, Math.round(5 * v.density));
+  g.strokeStyle = env.alpha(c.fg, 0.7);
+  g.fillStyle = env.alpha(c.fg, 0.7);
+  g.lineWidth = 1.2;
+  for (let i = 0; i < arrows; i++) {
+    const f = (i + 0.5) / arrows;
+    const base = line.vertical ? geo.y(f * GR) : geo.x(f * GC);
+    const x0 = line.vertical ? geo.x(line.at) + line.dx * geo.sq * 0.9 : base;
+    const y0 = line.vertical ? base : geo.y(line.at) + line.dy * geo.sq * 0.9;
+    arrow(g, x0, y0, x0 + line.dx * geo.sq * 1.2, y0 + line.dy * geo.sq * 1.2, geo.sq * 0.25);
+  }
+  const labelX = line.vertical ? geo.x(line.at) + line.dx * geo.sq * 2.6 : geo.x(1);
+  const labelY = line.vertical ? geo.y(GR - 1.2) : geo.y(line.at) + line.dy * geo.sq * 2.6;
+  write(g, 'front moving at ' + plan.speed + ' km/h', labelX, labelY, size, line.vertical && line.dx < 0 ? 'right' : 'left', c.fg, '600');
+  // The station, the scale bar, and the clock.
+  const sx = geo.x(sc);
+  const sy = geo.y(sr);
+  station(g, env, sx, sy, geo.sq * 0.35 * v.scale, '', size);
+  write(g, 'the station', sx + geo.sq * 0.55 * v.scale, sy - geo.sq * 0.5, size, sc > GC * 0.7 ? 'right' : 'left', c.accent2, '600');
+  scaleBar(g, env, geo, geo.x(1), geo.y(1), size);
+  const clockSide = sc < GC / 2 ? GC - 2.6 : 2.6;
+  const cr = geo.sq * 1.6 * v.scale;
+  clock(g, env, geo.x(clockSide), geo.y(GR - 3.2), cr, plan.now, s.guess, size);
+  if (s.side) write(g, 'from the ' + s.side + '?', sx, sy + geo.sq * 0.9, size, 'center', env.alpha(c.accent, 0.95));
+  if (s.hinted) write(g, plan.squares * KM + ' km out', sx, sy + geo.sq * (s.side ? 1.6 : 0.9), size, 'center', c.accent2, '600');
+  if (s.rain > 0) {
+    g.strokeStyle = env.alpha(c.accent, 0.5 * s.rain);
+    g.lineWidth = 1;
+    g.beginPath();
+    const n = Math.round(60 * s.rain);
+    for (let i = 0; i < n; i++) {
+      const x = ((i * 0.618034 + s.t * 0.05) % 1) * w;
+      const y = ((i * 0.754877 + s.t * 0.4) % 1) * h;
+      g.moveTo(x, y);
+      g.lineTo(x + line.dx * geo.sq * 0.3, y + line.dy * geo.sq * 0.3 + geo.sq * 0.3);
+    }
     g.stroke();
-    g.setLineDash([]);
   }
-  markers(g, e, s, sys, u);
-  if (s.veil > 0) {
-    g.fillStyle = e.alpha(c.bg, s.veil);
-    g.fillRect(0, 0, w, h);
-  }
-  slip(g, w, h, e, s.lines, s.rise, u);
-  if (s.flash > 0) {
-    g.fillStyle = e.alpha(c.accent2, s.flash * 0.18);
-    g.fillRect(0, 0, w, h);
-  }
-  return sys;
+  slip(g, w, h, env, s.lines, s.rise, size);
 }
 
-// One frame's worth of time: rings fade, rain falls and leans with the wind, the slip prints.
-function tick(s, dt, w, h, e) {
-  const u = unit(w, h);
-  s.t += dt;
-  s.flash = Math.max(0, s.flash - dt * 1.8);
-  for (const p of s.probes) p.life = Math.max(0, p.life - dt * 1.4);
-  if (s.rain && s.drops.length < w / 7) {
-    for (let i = 0; i < 4; i++) s.drops.push({ x: e.rnd() * w, y: -2 * u - e.rnd() * 14 * u, vy: (36 + e.rnd() * 26) * u });
-  }
-  const lean = -(0.2 + s.wind * 0.7);
-  for (let i = s.drops.length - 1; i >= 0; i--) {
-    const d = s.drops[i];
-    d.y += d.vy * dt;
-    d.x += d.vy * dt * lean;
-    if (d.y > h + 3 * u) s.drops.splice(i, 1);
-  }
-  if (s.lines) s.rise = Math.min(1, s.rise + dt * 1.4);
-  if (s.clear) s.clear = Math.min(1, s.clear + dt * 0.8);
+function frontPreview(g, w, h, env, plan, t) {
+  drawFront(g, w, h, env, plan, { t: t || 0, sweep: 0, guess: null, side: '', hinted: false, rain: 0, lines: null, rise: 0 }, env.variant);
 }
 
-// The card: the field as it stands, at the hour and in the wind the configuration `v` the card was
-// dealt chose, so a repeat is a different map of the same stars.
-function map(g, w, h, e, kind, v) {
-  const state = blank(2 + Math.round(v.turn * 20), kind || 'cold');
-  state.wind = clamp((v.density - 0.7) * 1.6, 0, 1);
-  state.t = v.turn * 6;
-  scene(g, w, h, e, state);
-}
-
-// The forecast, composed from the geometry of the stars and whatever the knobs say now.
-function bulletin(c, s) {
-  const st = c.stars;
-  const n = st.length || 1;
-  let cx = 0;
-  let cy = 0;
-  for (const q of st) {
-    cx += q.x / n;
-    cy += q.y / n;
-  }
-  let spread = 0;
-  for (const q of st) spread += Math.hypot(q.x - cx, q.y - cy) / n;
-  const rain = s.rain ? 98 : clamp(Math.round(spread * 2.4 + st.length * 1.7 + (s.hour > 17 ? 8 : 0) - 15), 5, 98);
-  const kt = clamp(Math.round(4 + spread * 0.9 + s.gust), 3, 36);
-  return [
-    s.opener,
-    'time ' + fmt(s.hour) + ' · region ' + region(cx, cy) + ' · field ' + (st.length < 6 ? 'quiet' : st.length < 16 ? 'steady' : 'busy'),
-    st.length + ' system' + (st.length === 1 ? '' : 's') + ' with ' + (spread < 12 ? 'compact' : spread < 24 ? 'balanced' : 'expansive') + ' spread',
-    'wind ' + kt + ' kt · rain chance ' + rain + '%' + (s.rain ? ' (it is raining)' : ''),
-    s.probes.length ? 'probes: ' + s.probes.map((p) => SHORT[p.reading]).join(', ') : 'no probes launched',
-    s.insight,
-    s.advisory,
-    LORE
-  ];
-}
-
-// Probes into the field at an hour of your choosing, and a forecast printed from what they read.
-function probing(env) {
-  const was = pressed(env);
-  const need = env.int(2, 4);
-  const hour = env.int(0, 23);
-  const word = NUM[need - 2];
-  // The gust the card's own wind implies, so the field a visitor lands on is the field it read.
-  const gust = was ? clamp(Math.round(KNOTS[was.wind] / 3.4), 0, 10) : env.int(0, 10);
-  const s = Object.assign(blank(hour, null), { gust, opener: env.pick(OPENERS), insight: env.pick(INSIGHTS), advisory: env.pick(ADVISORIES), launched: 0 });
-  const compose = () => {
-    if (s.lines && s.c) s.lines = bulletin(s.c, s);
-  };
+function frontPiece(env, plan) {
+  const hours = frontHours(plan);
+  const arrives = (plan.now + hours) % 24;
+  const s = { t: 0, sweep: 0, guess: null, side: '', hinted: false, rain: 0, lines: null, rise: 0 };
+  const draw = (c) => drawFront(c.g, c.w, c.h, c, plan, s, env.variant);
   return {
-    title: env.chance(0.5) ? word + ' probes into the field' : word + ' probes and a forecast',
-    brief: 'Set the hour, tap the map to launch ' + word + ' probes into the microclimates round your stars, call the rain or hold it off, and print the forecast; the bulletin prints itself over the map.'
-      + (was ? ' Your card had ' + was.kind.label + (was.moving ? ' moving ' + was.moving : '') + '.' : ''),
-    aspect: '16 / 10',
+    title: frontTitle(plan),
+    brief: 'A front is coming in toward the station along the wind, at the speed written beside it. One square of the grid is ten kilometres; the scale bar says so. The dial runs the whole day round, 0 at the top being midnight, and its hand stands at the hour now.',
+    goal: 'Say the hour the front reaches the station, and which side it comes from.',
+    aspect: '4 / 3',
+    checkLabel: 'log the forecast',
     steps: [
-      { id: 'hour', ask: 'the forecast hour', kind: 'range', min: 0, max: 23, step: 1, value: hour, low: '00:00', high: '23:00' },
-      { id: 'probe', ask: 'tap the map to launch ' + word + ' probes', kind: 'tap', label: 'launch one for me', after: 'hour' },
-      { id: 'rain', ask: 'the precipitation', kind: 'toggle', label: 'rain mode' },
-      { id: 'print', ask: 'print the forecast', kind: 'press', count: 1, label: 'print it', after: 'probe' }
+      { id: 'hour', ask: 'the hour it arrives, on the 24-hour dial', kind: 'number', min: 0, max: 23, step: 1, value: 0, unit: 'h' },
+      { id: 'side', ask: 'the side it comes from', kind: 'choice', options: SIDES.map((side) => ({ label: 'from the ' + side, value: side })) },
+      { id: 'hint', ask: 'how far out it is', kind: 'press', count: 1, label: 'show me', optional: true }
     ],
+    solution: { hour: arrives, side: plan.side },
+    check(c) {
+      const hour = Math.round(Number(c.value('hour')));
+      const hourRight = hour === arrives;
+      const sideRight = c.value('side') === plan.side;
+      if (hourRight && sideRight) return { solved: true, say: 'logged: the front arrives from the ' + plan.side + ' at ' + fmt(arrives) };
+      const parts = [];
+      if (!hourRight) parts.push('the hour is off');
+      parts.push(sideRight ? 'the side is right' : 'the side is off');
+      return { solved: false, say: parts.join('; ') };
+    },
     start(c) {
-      s.c = c;
-      scene(c.g, c.w, c.h, c, s);
+      c.status('now ' + fmt(plan.now) + '; the front is moving at ' + plan.speed + ' km/h');
+      draw(c);
     },
     apply(id, value, c) {
-      s.c = c;
       if (id === 'hour') {
-        s.hour = clamp(Math.round(Number(value)) || 0, 0, 23);
-        c.status(fmt(s.hour) + ' — ' + BANDS[Math.min(5, Math.floor((s.hour + 1) / 4))]);
+        const n = Math.round(Number(value));
+        s.guess = Number.isFinite(n) ? clamp(n, 0, 23) : null;
+        c.status('you say ' + fmt(s.guess));
       }
-      if (id === 'rain') {
-        s.rain = !!value;
-        c.status(s.rain ? 'Rain mode engaged. Pressure bands are precipitating.' : 'Rain mode paused. Clouds are holding.');
+      if (id === 'side') {
+        s.side = SIDES.includes(value) ? value : '';
+        c.status('you say it comes from the ' + s.side);
       }
-      if (id === 'print') {
-        s.lines = s.lines || [];
-        s.rise = 0;
-        s.flash = 1;
-        c.status('Forecast printed from your current constellation geometry.');
-      }
-      compose();
-    },
-    tap(x, y, c) {
-      const px = x * c.w;
-      const py = y * c.h;
-      const sys = systems(c, c.w, c.h, s.hour, s.t, 0, 0);
-      let near = 0;
-      let best = Infinity;
-      sys.forEach((q, i) => {
-        const d = (q.x - px) ** 2 + (q.y - py) ** 2;
-        if (d < best) {
-          best = d;
-          near = i;
+      if (id === 'hint') {
+        if (!s.hinted) {
+          s.hinted = true;
+          c.hint();
+          c.status('the front is ' + plan.squares * KM + ' km from the station');
+        } else {
+          c.status('the distance is shown; the speed and the clock are on the map');
         }
-      });
-      const v = field(sys, px, py, (28 * unit(c.w, c.h)) ** 2);
-      const reading = v > 0.65 ? 3 : v > 0.2 ? 2 : v > -0.2 ? 1 : 0;
-      const kt = clamp(Math.round(6 + Math.abs(v) * 18 + (s.hour % 5)), 4, 32);
-      s.probes.push({ x: px, y: py, near, life: 1, reading });
-      s.flash = Math.max(s.flash, 0.8);
-      s.launched += 1;
-      c.progress('probe', Math.min(1, s.launched / need));
-      c.status('probe ' + s.launched + ': ' + READINGS[reading] + ', wind ' + kt + ' kt — nearest memo: “' + (sys[near] ? sys[near].text : 'no nearby thought') + '”');
-      if (s.launched >= need) c.satisfy('probe');
-      compose();
+      }
+      draw(c);
     },
     frame(t, dt, c) {
-      tick(s, dt, c.w, c.h, c);
-      if (c.done) s.veil = Math.min(0.45, s.veil + dt * 0.5);
-      scene(c.g, c.w, c.h, c, s);
+      s.t += dt;
+      if (c.done) {
+        s.sweep = Math.min(1, s.sweep + dt * 0.25);
+        if (s.sweep >= 1) s.rain = Math.min(1, s.rain + dt * 0.6);
+        if (s.lines) s.rise = Math.min(1, s.rise + dt * 1.2);
+      }
+      draw(c);
     },
     end(c) {
-      s.c = c;
-      if (!s.lines) {
-        s.lines = [];
-        s.rise = 0;
-      }
-      compose();
-      s.flash = 1;
-      c.status(LORE);
+      s.lines = ['front log', 'from the ' + plan.side + ', ' + plan.squares * KM + ' km at ' + plan.speed + ' km/h', 'arrived ' + fmt(arrives) + (plan.now + hours >= 24 ? ', past midnight' : '')];
+      c.status('the front comes in from the ' + plan.side + ' and reaches the station at ' + fmt(arrives));
     }
   };
 }
 
-// The line the front travels: where it sits now, which way it goes, how far until it is off the map.
-function course(c, s) {
-  const pts = c.points(c.w, c.h, 14);
-  const a = pts[s.pair[0]];
-  const b = pts[s.pair[1]];
-  const len = Math.hypot(b.x - a.x, b.y - a.y);
-  const nx = len ? (-(b.y - a.y) / len) * s.dir : 0;
-  const ny = len ? ((b.x - a.x) / len) * s.dir : s.dir;
-  const mx = (a.x + b.x) / 2;
-  const my = (a.y + b.y) / 2;
-  let far = 0;
-  for (const [x, y] of [[0, 0], [c.w, 0], [0, c.h], [c.w, c.h]]) far = Math.max(far, (x - mx) * nx + (y - my) * ny);
-  return { mx, my, nx, ny, far: far + 4 * unit(c.w, c.h) };
+/* ---- the pressure map ---------------------------------------------------------------------- */
+
+function highest(stations) {
+  let best = 0;
+  stations.forEach((q, i) => { if (q.p > stations[best].p) best = i; });
+  return best;
 }
 
-// A front named on the two farthest stars, blown across the map by a wind you set, and let pass.
-function passing(env) {
-  const was = pressed(env);
-  const stars = env.stars.slice(0, 40);
-  const pair = farthest(stars.map((q) => ({ x: q.x * 1.6, y: q.y })));
-  const a = stars[pair[0]];
-  const b = stars[pair[1]];
-  const dir = env.chance(0.5) ? 1 : -1;
-  const dx = -(b.y - a.y) * dir;
-  const dy = (b.x - a.x) * 1.6 * dir;
-  const idx = ((Math.round(Math.atan2(dx, -dy) / (Math.PI / 4)) % 8) + 8) % 8;
-  const pool = KINDS.slice();
-  const options = [];
-  const count = env.int(3, 4);
-  while (options.length < count) options.push(pool.splice(env.int(0, pool.length - 1), 1)[0]);
-  // The front the card forecast is the first one offered, and the wind and visibility are its own.
-  if (was) {
-    const at = options.findIndex((k) => k.value === was.kind.value);
-    if (at >= 0) options.unshift(options.splice(at, 1)[0]);
-    else options.unshift(was.kind);
-    options.length = Math.min(options.length, 4);
+function lowest(stations) {
+  let best = 0;
+  stations.forEach((q, i) => { if (q.p < stations[best].p) best = i; });
+  return best;
+}
+
+// The way the wind blows, from the highest station toward the lowest, by the axis it mostly follows.
+function windWay(stations) {
+  const a = stations[highest(stations)];
+  const b = stations[lowest(stations)];
+  const dx = b.c - a.c;
+  const dy = b.r - a.r;
+  if (Math.abs(dx) > Math.abs(dy)) return dx > 0 ? 'east' : 'west';
+  return dy > 0 ? 'south' : 'north';
+}
+
+function pressureOk(p) {
+  if (!p || p.kind !== 'pressure' || !Array.isArray(p.stations) || p.stations.length !== 5) return false;
+  const st = p.stations;
+  if (!st.every((q) => q && Number.isInteger(q.c) && Number.isInteger(q.r) && Number.isInteger(q.p)
+    && q.c >= 2 && q.c <= GC - 2 && q.r >= 2 && q.r <= GR - 2 && q.p >= 980 && q.p <= 1040)) return false;
+  if (new Set(st.map((q) => q.p)).size !== 5) return false;
+  for (let i = 0; i < 5; i++) {
+    for (let j = i + 1; j < 5; j++) {
+      if (Math.max(Math.abs(st[i].c - st[j].c), Math.abs(st[i].r - st[j].r)) < 3) return false;
+    }
   }
-  const ms = env.pick([1500, 2000, 2500]);
-  const kt = was ? clamp(KNOTS[was.wind], 6, 30) : env.int(6, 30);
-  const vis = was && was.vis ? was.vis : env.pick(VIS);
-  const s = Object.assign(blank(env.pick([0, 2, 21, 23]), null), { dir, pair, kt, sweep: 0, passed: false, where: '', hint: true });
-  const span = a === b ? 'over “' + a.text + '”' : 'between “' + a.text + '” and “' + b.text + '”';
+  const a = st[highest(st)];
+  const b = st[lowest(st)];
+  const dx = Math.abs(b.c - a.c);
+  const dy = Math.abs(b.r - a.r);
+  if (!(dx >= 2 * dy + 1 || dy >= 2 * dx + 1)) return false;
+  return a.p - b.p >= 8;
+}
+
+function pressurePlan(env) {
+  for (let guard = 0; guard < 200; guard++) {
+    const stations = [];
+    for (let i = 0; i < 5; i++) stations.push({ c: env.int(2, GC - 2), r: env.int(2, GR - 2), p: env.int(980, 1040) });
+    const plan = { kind: 'pressure', stations };
+    if (pressureOk(plan)) return plan;
+  }
+  return { kind: 'pressure', stations: [{ c: 3, r: 4, p: 1024 }, { c: 15, r: 3, p: 1001 }, { c: 9, r: 8, p: 1012 }, { c: 4, r: 12, p: 1009 }, { c: 16, r: 11, p: 996 }] };
+}
+
+function carriedPressure(env) {
+  const p = env.card && env.card.of;
+  if (!pressureOk(p)) return null;
+  return { kind: 'pressure', stations: p.stations.map((q) => ({ c: q.c, r: q.r, p: q.p })) };
+}
+
+function pressureTitle() {
+  return 'the pressure map: five stations';
+}
+
+function drawPressure(g, w, h, env, plan, s, variant) {
+  const v = variant || PLAIN;
+  const c = env.colors;
+  const geo = ground(g, w, h, env, v, 21, s.t);
+  const size = Math.max(8, Math.min(13, Math.round(geo.sq * 0.6)));
+  const st = plan.stations;
+  const ranked = st.map((q, i) => i).sort((a, b) => st[a].p - st[b].p);
+  // Each station with its reading, ringed the more the higher its pressure stands.
+  st.forEach((q, i) => {
+    const x = geo.x(q.c);
+    const y = geo.y(q.r);
+    const rings = 1 + ranked.indexOf(i);
+    g.lineWidth = 1;
+    for (let k = 1; k <= rings; k++) {
+      g.strokeStyle = env.alpha(rings > 3 ? c.accent2 : c.accent, 0.4 - k * 0.06);
+      g.beginPath();
+      g.ellipse(x, y, geo.sq * (0.5 + k * 0.35) * v.scale, geo.sq * (0.4 + k * 0.28) * v.scale, (i * 0.7 + v.turn) % Math.PI, 0, TAU);
+      g.stroke();
+    }
+    station(g, env, x, y, geo.sq * 0.42 * v.scale, LETTERS[i], size);
+    const below = q.r > GR - 4;
+    write(g, q.p + ' hPa', x, y + (below ? -1 : 1) * geo.sq * 0.95, size, 'center', c.fg, '600');
+    if (s.toward === i) write(g, 'toward here?', x, y + (below ? -1 : 1) * geo.sq * 0.95 + (below ? -1 : 1) * size * 1.2, size, 'center', env.alpha(c.accent, 0.95));
+    if (s.hinted === i) write(g, 'the wind blows from here', x, y + (below ? -1 : 1) * geo.sq * 0.95 + (below ? -1 : 1) * size * 1.2, size, 'center', c.accent2, '600');
+  });
+  // The compass rose, so a way can be named.
+  const cx = geo.x(GC - 1.6);
+  const cy = geo.y(1.8);
+  const cr = geo.sq * 1.1 * v.scale;
+  g.strokeStyle = env.alpha(c.fg, 0.6);
+  g.lineWidth = 1;
+  g.beginPath();
+  g.moveTo(cx, cy - cr);
+  g.lineTo(cx, cy + cr);
+  g.moveTo(cx - cr, cy);
+  g.lineTo(cx + cr, cy);
+  g.stroke();
+  write(g, 'N', cx, cy - cr - size * 0.6, size, 'center', c.accent2, '700');
+  write(g, 'S', cx, cy + cr + size * 0.6, size, 'center', env.alpha(c.fg, 0.8));
+  write(g, 'E', cx + cr + size * 0.5, cy, size, 'center', env.alpha(c.fg, 0.8));
+  write(g, 'W', cx - cr - size * 0.5, cy, size, 'center', env.alpha(c.fg, 0.8));
+  if (s.way) write(g, 'blowing ' + s.way + '?', cx, cy + cr + size * 1.9, size, 'center', env.alpha(c.accent, 0.95));
+  // The wind drawn in, once the puzzle is solved: from the highest to the lowest.
+  if (s.blow > 0) {
+    const a = st[highest(st)];
+    const b = st[lowest(st)];
+    g.strokeStyle = env.alpha(c.accent2, 0.9);
+    g.fillStyle = env.alpha(c.accent2, 0.9);
+    g.lineWidth = Math.max(1.5, geo.sq * 0.1);
+    const x1 = geo.x(a.c) + (geo.x(b.c) - geo.x(a.c)) * s.blow;
+    const y1 = geo.y(a.r) + (geo.y(b.r) - geo.y(a.r)) * s.blow;
+    arrow(g, geo.x(a.c), geo.y(a.r), x1, y1, geo.sq * 0.4);
+  }
+  slip(g, w, h, env, s.lines, s.rise, size);
+}
+
+function pressurePreview(g, w, h, env, plan, t) {
+  drawPressure(g, w, h, env, plan, { t: t || 0, toward: -1, way: '', hinted: -1, blow: 0, lines: null, rise: 0 }, env.variant);
+}
+
+function pressurePiece(env, plan) {
+  const st = plan.stations;
+  const hi = highest(st);
+  const lo = lowest(st);
+  const way = windWay(st);
+  const gap = st[hi].p - st[lo].p;
+  const s = { t: 0, toward: -1, way: '', hinted: -1, blow: 0, lines: null, rise: 0 };
+  const draw = (c) => drawPressure(c.g, c.w, c.h, c, plan, s, env.variant);
   return {
-    // The front the card forecast, named in the title: pressing a warm front opens a warm front.
-    title: (was ? was.kind.label : 'a front') + ' out of the ' + DIRS[(idx + 4) % 8],
-    brief: 'Name the front that forms ' + (a === b ? 'over your star' : 'between your two farthest stars') + ', set the wind, and watch it cross the map toward the ' + DIRS[idx] + '; once it has passed, hold the barometer steady and the air settles behind it.'
-      + (was ? ' Your card called it ' + was.kind.label + ', and it is first on the dial.' : ''),
-    aspect: '16 / 10',
+    title: pressureTitle(),
+    brief: 'Five stations report their pressure. The wind blows from the station reading highest toward the one reading lowest, and the compass in the corner has north at the top. Name the way it blows by whichever axis it mostly follows.',
+    goal: 'Name the station the wind blows toward, the way it blows, and the pressure difference between the two.',
+    aspect: '4 / 3',
+    checkLabel: 'log the wind',
     steps: [
-      { id: 'front', ask: 'what kind of front', kind: 'choice', options },
-      { id: 'wind', ask: 'the wind', kind: 'range', min: 3, max: 36, step: 1, value: kt, low: 'calm', high: 'gale' },
-      { id: 'pass', ask: 'watch it cross the map', kind: 'wait', after: 'front' },
-      { id: 'steady', ask: 'steady the barometer', kind: 'hold', ms, label: 'hold the barometer', after: 'pass' }
+      { id: 'toward', ask: 'the station the wind blows toward', kind: 'pick', count: 1, items: st.map((q, i) => ({ label: 'station ' + LETTERS[i], value: i })) },
+      { id: 'way', ask: 'the way it blows', kind: 'choice', options: SIDES.map((side) => ({ label: side, value: side })) },
+      { id: 'gap', ask: 'the pressure difference between the two', kind: 'number', min: 1, max: 60, step: 1, value: 1, unit: 'hPa' },
+      { id: 'hint', ask: 'the station it blows from', kind: 'press', count: 1, label: 'show me', optional: true }
     ],
+    solution: { toward: [lo], way, gap },
+    check(c) {
+      const toward = c.value('toward');
+      const towardRight = Array.isArray(toward) && toward.length === 1 && Number(toward[0]) === lo;
+      const wayRight = c.value('way') === way;
+      const n = Math.round(Number(c.value('gap')));
+      const gapRight = n === gap;
+      if (towardRight && wayRight && gapRight) return { solved: true, say: 'logged: ' + gap + ' hPa from station ' + LETTERS[hi] + ' to station ' + LETTERS[lo] + ', blowing ' + way };
+      const parts = [];
+      parts.push(towardRight ? 'the station is right' : 'the wind does not blow toward that station');
+      if (!wayRight) parts.push('the way is off');
+      if (!gapRight) parts.push(n < gap ? 'the difference is larger than that' : 'the difference is smaller than that');
+      return { solved: false, say: parts.join('; ') };
+    },
     start(c) {
-      s.wind = (kt - 3) / 33;
-      scene(c.g, c.w, c.h, c, s);
+      c.status('five readings; the wind runs from the highest to the lowest');
+      draw(c);
     },
     apply(id, value, c) {
-      if (id === 'front') {
-        s.front = String(value);
-        s.rain = !s.passed && s.front !== 'warm' && s.front !== 'stationary';
-        const k = KINDS.find((o) => o.value === s.front) || KINDS[1];
-        c.status(k.label + ' forms ' + span + (s.rain ? ', and it is raining' : ''));
+      if (id === 'toward') {
+        s.toward = Array.isArray(value) && value.length ? Number(value[0]) : -1;
+        c.status(s.toward >= 0 ? 'you say it blows toward station ' + LETTERS[s.toward] : 'no station marked');
       }
-      if (id === 'wind') {
-        s.kt = clamp(Math.round(Number(value)) || 3, 3, 36);
-        s.wind = (s.kt - 3) / 33;
-        c.status('wind ' + s.kt + ' kt, ' + windOf(s.kt));
+      if (id === 'way') {
+        s.way = SIDES.includes(value) ? value : '';
+        c.status('you say it blows ' + s.way);
       }
-      if (id === 'steady') {
-        s.clear = s.clear || 0.001;
-        c.status('the glass is steady');
+      if (id === 'gap') c.status('you say the difference is ' + Math.round(Number(value)) + ' hPa');
+      if (id === 'hint') {
+        if (s.hinted < 0) {
+          s.hinted = hi;
+          c.hint();
+          c.status('the wind blows from station ' + LETTERS[hi] + ', the highest reading');
+        } else {
+          c.status('the station it blows from is shown; the lowest reading is where it goes');
+        }
       }
+      draw(c);
     },
     frame(t, dt, c) {
-      tick(s, dt, c.w, c.h, c);
-      if (s.front && !s.passed) {
-        s.sweep = Math.min(1, s.sweep + dt / (8 - s.wind * 5.5));
-        c.progress('pass', s.sweep);
-        const line = course(c, s);
-        s.off = s.sweep * line.far;
-        const where = region(((line.mx + line.nx * s.off) / c.w) * 100, ((line.my + line.ny * s.off) / c.h) * 100);
-        if (s.sweep > 0.15 && s.sweep < 1 && where !== s.where) {
-          s.where = where;
-          c.status('the front is over the ' + where);
-        }
-        if (s.sweep >= 1) {
-          s.passed = true;
-          s.rain = false;
-          c.satisfy('pass');
-          c.status('the front has passed; visibility ' + vis);
-        }
+      s.t += dt;
+      if (c.done) {
+        s.blow = Math.min(1, s.blow + dt * 0.5);
+        if (s.lines) s.rise = Math.min(1, s.rise + dt * 1.2);
       }
-      s.still = s.clear;
-      scene(c.g, c.w, c.h, c, s);
+      draw(c);
     },
     end(c) {
-      s.clear = s.clear || 0.001;
-      s.lines = ['the front has passed', 'behind it: ' + windOf(s.kt) + ' · visibility ' + vis, LORE];
-      s.rise = 0;
-      s.flash = 1;
-      c.status('behind the front: ' + windOf(s.kt) + '; visibility ' + vis);
+      s.lines = ['wind log', 'from station ' + LETTERS[hi] + ' (' + st[hi].p + ' hPa) to station ' + LETTERS[lo] + ' (' + st[lo].p + ' hPa)', 'blowing ' + way + ', ' + gap + ' hPa between them'];
+      c.status('the wind runs ' + way + ' from station ' + LETTERS[hi] + ' to station ' + LETTERS[lo] + ', ' + gap + ' hPa between them');
     }
   };
+}
+
+/* ---- the module ----------------------------------------------------------------------------- */
+
+function dealsFront(env) {
+  return env.chance(0.55);
 }
 
 export default {
   id: 'constellation-weather',
   needsSky: true,
-  paint(ctx, w, h, env) {
-    map(ctx, w, h, env, env.pick(KINDS).value, env.variant);
+  paint(g, w, h, env) {
+    if (dealsFront(env)) frontPreview(g, w, h, env, frontPlan(env), env.variant.turn * 6);
+    else pressurePreview(g, w, h, env, pressurePlan(env), env.variant.turn * 6);
+  },
+  animate(g, w, h, env, t) {
+    if (dealsFront(env)) frontPreview(g, w, h, env, frontPlan(env), t + env.variant.turn * 6);
+    else pressurePreview(g, w, h, env, pressurePlan(env), t + env.variant.turn * 6);
   },
   spark(env) {
-    const stars = env.stars;
-    if (!stars.length) return null;
-    let highs = 0;
-    let cx = 0;
-    for (const s of stars) {
-      if (s.y < 50) highs++;
-      cx += s.x;
+    if (!env.stars.length) return null;
+    if (dealsFront(env)) {
+      const plan = frontPlan(env);
+      return {
+        title: frontTitle(plan),
+        mono: 'now ' + fmt(plan.now) + '\nfront: ' + plan.squares + ' squares out, ' + plan.speed + ' km/h\n1 square = ' + KM + ' km',
+        text: 'A front is coming in along the wind. Read the map and the dial, and say when it reaches the station, and from which side.',
+        aspect: '4 / 3',
+        paint: (g, w, h, cardEnv) => frontPreview(g, w, h, cardEnv, plan, cardEnv.variant.turn * 6),
+        of: plan
+      };
     }
-    cx /= stars.length;
-    const where = cx < 40 ? 'west' : cx > 60 ? 'east' : 'middle';
-    const kind = env.pick(KINDS);
-    const moving = env.pick(DIRS);
-    const wind = env.pick(WINDS);
-    const vis = env.pick(VIS);
+    const plan = pressurePlan(env);
     return {
-      title: 'forecast',
-      mono: 'pressure: ' + (highs > stars.length / 2 ? 'high' : 'low') + ' over the ' + where
-        + '\nfront: ' + kind.label + ', moving ' + moving
-        + '\nwind: ' + wind
-        + '\nvisibility: ' + vis,
-      text: env.pick(LINES),
-      aspect: '16 / 10',
-      paint: (ctx, w, h, e) => map(ctx, w, h, e, kind.value, e.variant),
-      // What this card is of, for the piece it opens as: the forecast it printed.
-      of: { kind: kind.value, moving, wind, vis }
+      title: pressureTitle(),
+      mono: plan.stations.map((q, i) => LETTERS[i] + ': ' + q.p + ' hPa').join('\n'),
+      text: 'The wind blows from the highest reading to the lowest. Say where it goes, which way, and by how much.',
+      aspect: '4 / 3',
+      paint: (g, w, h, cardEnv) => pressurePreview(g, w, h, cardEnv, plan, cardEnv.variant.turn * 6),
+      of: plan
     };
   },
   piece(env) {
-    if (!env.stars.length) return null;
-    return env.chance(0.5) ? probing(env) : passing(env);
+    const front = carriedFront(env);
+    if (front) return frontPiece(env, front);
+    const pressure = carriedPressure(env);
+    if (pressure) return pressurePiece(env, pressure);
+    return dealsFront(env) ? frontPiece(env, frontPlan(env)) : pressurePiece(env, pressurePlan(env));
   }
 };

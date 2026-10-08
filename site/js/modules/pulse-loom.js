@@ -1,70 +1,70 @@
-/* Two repeating beat patterns become threads; a photographed wheel can seem to reverse.
-   Cards carry the exact plan their piece opens with. Both scenes share their card's composition
-   dials, and every piece keeps its own choices and progress. */
+/* The pulse loom: two beats that cross, and a wheel that only seems to turn back. As a card it is
+   one of the two puzzles below, drawn small (paint, spark); as a piece it is that puzzle, and the
+   card it was opened from says which. See js/feed.js for what a module is and js/stage.js for
+   what a piece is.
+
+   Two puzzles, both deduction, both solvable from what is drawn and nothing heard:
+
+     crossings       Two drums round one loop of L beats. The outer drum plays a bar of a beats over
+                     and over, the inner a bar of b beats, started a few beats late; each bar strikes
+                     on one or two of its beats, and every strike is drawn on its ring. Count the
+                     beats of the loop on which both strike, and name the first of them. A wrong
+                     check says which of the two is off and no more; a hint, at a price, lights one
+                     crossing from the far end.
+     the wagon wheel A wheel of n identical teeth turns clockwise while a camera takes p pictures
+                     per turn, so each picture catches the wheel n/p teeth on from the last. Say
+                     which way the pictures seem to turn and after how many pictures a tooth looks
+                     back where it began. The check runs the pictures; a wrong one says which answer
+                     is off and no more.
+
+   A card and the feature it opens as are one puzzle: the spark puts the whole plan on its spec as
+   `of` -- the drums, their bars and the shift, or the teeth and the pictures -- and piece(env)
+   opens on that rather than rolling another. */
+
 const TAU = Math.PI * 2;
-const GUESSES = [
-  { label: 'fewer than six', value: 'few' },
-  { label: 'six to eleven', value: 'middle' },
-  { label: 'twelve or more', value: 'many' }
+const PLAIN = { density: 1, scale: 1, turn: 0 };
+const WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve'];
+// Outer and inner bar lengths whose loop (two or three times their meeting) stays at 36 beats or
+// fewer, so the ring can still be read.
+const PAIRS = [[2, 3], [3, 4], [2, 5], [3, 5], [4, 6], [2, 7], [3, 6], [4, 8], [6, 9], [2, 9], [3, 9], [2, 4]];
+const WAYS = [
+  { label: 'clockwise', value: 'cw' },
+  { label: 'counterclockwise', value: 'ccw' },
+  { label: 'standing still', value: 'still' }
 ];
-const DIRECTIONS = [
-  { label: 'clockwise', value: 'forward' },
-  { label: 'backwards', value: 'backward' },
-  { label: 'standing still', value: 'still' },
-  { label: 'either way', value: 'either' }
-];
-
-function mask(env, length) {
-  const bits = Array.from({ length }, (_, i) => i === 0 || env.rnd() < 0.48 ? 1 : 0);
-  bits[env.int(1, length - 1)] = 1;
-  return bits;
-}
-
-function plan(env) {
-  const warp = env.int(3, 6);
-  const lengths = [3, 4, 5, 6, 7].filter((n) => n !== warp);
-  const wefts = [];
-  while (wefts.length < 3) {
-    const at = env.int(0, lengths.length - 1);
-    const beats = lengths.splice(at, 1)[0];
-    wefts.push({ beats, mask: mask(env, beats) });
-  }
-  return { warp, warpMask: mask(env, warp), wefts, shift: env.int(0, 6) };
-}
-
-function carried(env) {
-  const p = env.card && env.card.of;
-  const validMask = (bits, size) => Array.isArray(bits) && bits.length === size
-    && bits.every((bit) => bit === 0 || bit === 1);
-  if (!p || !Number.isInteger(p.warp) || p.warp < 3 || p.warp > 6
-      || !validMask(p.warpMask, p.warp) || !Array.isArray(p.wefts) || p.wefts.length !== 3
-      || !p.wefts.every((w) => w && Number.isInteger(w.beats) && w.beats >= 3
-        && w.beats <= 7 && w.beats !== p.warp && validMask(w.mask, w.beats))
-      || new Set(p.wefts.map((w) => w.beats)).size !== 3
-      || !Number.isInteger(p.shift) || p.shift < 0 || p.shift > 6) return null;
-  return p;
-}
 
 function gcd(a, b) {
   while (b) [a, b] = [b, a % b];
   return a;
 }
 
-function loopLength(a, b) {
+function lcm(a, b) {
   return a * b / gcd(a, b);
 }
 
-function crossingCount(p, weft, shift, pins) {
-  let total = 0;
-  for (let i = 0, n = loopLength(p.warp, weft.beats); i < n; i++) {
-    const at = (i + shift) % weft.beats;
-    if (p.warpMask[i % p.warp] && (weft.mask[at] || pins.includes(at))) total++;
-  }
-  return total;
+function ground(g, w, h, c) {
+  const grad = g.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, Math.max(w, h) * 0.72);
+  grad.addColorStop(0, c.colors.bg2);
+  grad.addColorStop(1, c.colors.bg);
+  g.fillStyle = grad;
+  g.fillRect(0, 0, w, h);
 }
 
-function category(n) {
-  return n < 6 ? 'few' : n < 12 ? 'middle' : 'many';
+// The loom's lint: specks placed by the configuration.
+function lint(g, w, h, c, v) {
+  const count = Math.max(8, Math.round(24 * v.density));
+  g.fillStyle = c.alpha(c.colors.accent, 0.12);
+  for (let i = 0; i < count; i++) {
+    g.fillRect(((i * 0.6180339 + v.turn * 0.41) % 1) * w, ((i * 0.7548777 + v.turn * 0.13) % 1) * h, 1.2, 1.2);
+  }
+}
+
+function text(g, c, line, x, y, size, color, align, weight) {
+  g.font = (weight || '500') + ' ' + size + 'px system-ui, sans-serif';
+  g.textAlign = align || 'center';
+  g.textBaseline = 'middle';
+  g.fillStyle = color || c.colors.fg;
+  g.fillText(line, x, y);
 }
 
 function thread(g, c, from, to, color, strength, width) {
@@ -76,193 +76,256 @@ function thread(g, c, from, to, color, strength, width) {
   g.stroke();
 }
 
-function scene(g, w, h, c, p, weft, shift, progress, marks, finished, variant) {
-  const v = variant || c.variant || { density: 1, scale: 1, turn: 0 };
-  const r = Math.min(w, h) * 0.37 * v.scale;
-  const cx = w / 2;
-  const cy = h / 2;
-  const turn = v.turn * TAU - Math.PI / 2;
-  const outer = r * 0.92;
-  const inner = r * 0.58;
-  const grad = g.createRadialGradient(cx, cy, 0, cx, cy, Math.max(w, h) * 0.72);
-  grad.addColorStop(0, c.colors.bg2);
-  grad.addColorStop(1, c.colors.bg);
-  g.fillStyle = grad;
-  g.fillRect(0, 0, w, h);
+/* ---- crossings ----------------------------------------------------------------------------- */
 
-  g.lineWidth = Math.max(1, r * 0.005);
-  g.strokeStyle = c.alpha(c.colors.muted, 0.58);
-  for (const radius of [outer, inner]) {
-    g.beginPath();
-    g.arc(cx, cy, radius, 0, TAU);
-    g.stroke();
-  }
-  for (let i = 0; i < p.warp; i++) {
-    const a = turn + i / p.warp * TAU;
-    const x = cx + Math.cos(a) * outer;
-    const y = cy + Math.sin(a) * outer;
-    g.fillStyle = p.warpMask[i] ? c.colors.accent : c.alpha(c.colors.muted, 0.65);
-    g.beginPath();
-    g.arc(x, y, Math.max(2, r * (p.warpMask[i] ? 0.018 : 0.011)), 0, TAU);
-    g.fill();
-  }
-  for (let i = 0; i < weft.beats; i++) {
-    const a = turn + i / weft.beats * TAU;
-    const x = cx + Math.cos(a) * inner;
-    const y = cy + Math.sin(a) * inner;
-    g.fillStyle = weft.mask[i] ? c.colors.accent2 : c.alpha(c.colors.muted, 0.65);
-    g.beginPath();
-    g.arc(x, y, Math.max(2, r * (weft.mask[i] ? 0.019 : 0.011)), 0, TAU);
-    g.fill();
-  }
-
-  const pins = marks.map((mark) => Math.min(weft.beats - 1, Math.floor(mark.x * weft.beats)));
-  const length = loopLength(p.warp, weft.beats);
-  const shown = Math.round(length * Math.max(0, Math.min(1, progress)));
-  for (let i = 0; i < length; i++) {
-    const at = (i + shift) % weft.beats;
-    const a = turn + i / p.warp * TAU;
-    const b = turn + (i + shift) / weft.beats * TAU;
-    const from = { x: cx + Math.cos(a) * outer, y: cy + Math.sin(a) * outer };
-    const to = { x: cx + Math.cos(b) * inner, y: cy + Math.sin(b) * inner };
-    const warpOn = !!p.warpMask[i % p.warp];
-    const weftOn = !!(weft.mask[at] || pins.includes(at));
-    if (!warpOn && !weftOn) continue;
-    const lit = i < shown;
-    const crossing = warpOn && weftOn;
-    const color = crossing ? c.colors.accent2 : warpOn ? c.colors.accent : c.colors.muted;
-    thread(g, c, from, to, color, lit ? 0.7 : 0.12, Math.max(0.8, r * (crossing ? 0.009 : 0.005) * v.density));
-    if (crossing && lit) {
-      g.fillStyle = c.alpha(c.colors.fg, finished ? 0.95 : 0.78);
-      g.beginPath();
-      g.arc((from.x + to.x) / 2, (from.y + to.y) / 2, Math.max(1.3, r * 0.009 * v.scale), 0, TAU);
-      g.fill();
-    }
-  }
-  marks.forEach((mark, i) => {
-    const slot = pins[i];
-    const a = turn + slot / weft.beats * TAU;
-    const x = cx + Math.cos(a) * inner;
-    const y = cy + Math.sin(a) * inner;
-    g.strokeStyle = c.alpha(c.colors.accent2, 0.65);
-    g.lineWidth = 1;
-    g.beginPath();
-    g.arc(x, y, Math.max(5, r * 0.04), 0, TAU);
-    g.stroke();
-  });
+// The beats of an n-beat bar a drum strikes on: the first, and sometimes one more.
+function strikes(env, n) {
+  const bar = [0];
+  if (n >= 3 && env.chance(0.45)) bar.push(env.int(1, n - 1));
+  return bar.sort((a, b) => a - b);
 }
 
-function weavingPiece(env, carriedPlan) {
-  const p = carriedPlan || plan(env);
-  const s = { weft: 0, shift: p.shift, guess: '', marks: [], elapsed: 0, finished: false };
-  const duration = 3 + p.warp * 0.28;
-  const current = () => p.wefts[s.weft];
-  const pins = () => s.marks.map((mark) => Math.min(current().beats - 1, Math.floor(mark.x * current().beats)));
-  const draw = (c) => scene(c.g, c.w, c.h, c, p, current(), s.shift,
-    c.reduced && s.marks.length === 2 ? 1 : s.marks.length === 2 ? s.elapsed / duration : 0.22,
-    s.marks, c.done, env.variant);
+function outerSounds(plan, i) {
+  return plan.outer.includes(i % plan.a);
+}
+
+function innerSounds(plan, i) {
+  return plan.inner.includes((((i - plan.shift) % plan.b) + plan.b) % plan.b);
+}
+
+function crossingsOf(plan) {
+  const out = [];
+  for (let i = 0; i < plan.L; i++) if (outerSounds(plan, i) && innerSounds(plan, i)) out.push(i);
+  return out;
+}
+
+function crossPlan(env) {
+  for (let attempt = 0; attempt < 30; attempt++) {
+    const pair = env.pick(PAIRS);
+    const a = pair[0];
+    const b = pair[1];
+    const meet = lcm(a, b);
+    const k = meet * 3 <= 36 ? env.pick([2, 3]) : 2;
+    const plan = { kind: 'cross', a, b, L: meet * k, shift: env.int(0, b - 1), outer: strikes(env, a), inner: strikes(env, b) };
+    const hits = crossingsOf(plan).length;
+    if (hits >= 1 && hits * 2 < plan.L) return plan;
+  }
+  return { kind: 'cross', a: 3, b: 4, L: 24, shift: 1, outer: [0], inner: [0] };
+}
+
+function carriedCross(env) {
+  const p = env.card && env.card.of;
+  if (!p || p.kind !== 'cross') return null;
+  const a = Number(p.a);
+  const b = Number(p.b);
+  const L = Number(p.L);
+  const shift = Number(p.shift);
+  if (!PAIRS.some((pair) => pair[0] === a && pair[1] === b)) return null;
+  if (!Number.isInteger(L) || L % lcm(a, b) !== 0 || L < 2 * lcm(a, b) || L > 36) return null;
+  if (!Number.isInteger(shift) || shift < 0 || shift >= b) return null;
+  const bar = (list, n) => Array.isArray(list) && list.length >= 1 && list.length <= 2
+    && list.every((v) => Number.isInteger(v) && v >= 0 && v < n) && new Set(list).size === list.length;
+  if (!bar(p.outer, a) || !bar(p.inner, b)) return null;
+  const plan = { kind: 'cross', a, b, L, shift, outer: p.outer.slice().sort((x, y) => x - y), inner: p.inner.slice().sort((x, y) => x - y) };
+  const hits = crossingsOf(plan).length;
+  if (hits < 1 || hits * 2 >= L) return null;
+  return plan;
+}
+
+function crossTitle(plan) {
+  return 'crossings: ' + plan.a + ' against ' + plan.b + ' round ' + plan.L;
+}
+
+function crossGeometry(w, h, v) {
+  const r = Math.min(w, h) * 0.38 * Math.min(1.12, Math.max(0.86, v.scale));
+  return { cx: w / 2, cy: h / 2, r, outer: r * 0.94, inner: r * 0.66 };
+}
+
+function beatAngle(i, L) {
+  return -Math.PI / 2 + i / L * TAU;
+}
+
+// The scene: the loop as two rings of beats, the outer drum's strikes on the outer ring and the
+// inner drum's on the inner, every beat ticked, a few numbered, and the bars written in the middle.
+function drawCross(g, w, h, c, plan, s, variant) {
+  const v = variant || PLAIN;
+  const col = c.colors;
+  const geo = crossGeometry(w, h, v);
+  const L = plan.L;
+  const size = Math.max(9, Math.min(16, Math.round(geo.r * 0.09)));
+  const small = Math.max(8, Math.round(size * 0.85));
+  ground(g, w, h, c);
+  lint(g, w, h, c, v);
+  g.lineWidth = Math.max(1, geo.r * 0.005);
+  g.strokeStyle = c.alpha(col.muted, 0.5);
+  for (const radius of [geo.outer, geo.inner]) {
+    g.beginPath();
+    g.arc(geo.cx, geo.cy, radius, 0, TAU);
+    g.stroke();
+  }
+  const every = L >= 24 ? 6 : 4;
+  for (let i = 0; i < L; i++) {
+    const a = beatAngle(i, L);
+    const cos = Math.cos(a);
+    const sin = Math.sin(a);
+    // The tick between the rings, so an alignment can be judged.
+    g.strokeStyle = c.alpha(col.muted, 0.22 + 0.12 * v.density);
+    g.lineWidth = 1;
+    g.beginPath();
+    g.moveTo(geo.cx + cos * geo.inner * 1.06, geo.cy + sin * geo.inner * 1.06);
+    g.lineTo(geo.cx + cos * geo.outer * 0.95, geo.cy + sin * geo.outer * 0.95);
+    g.stroke();
+    const on = outerSounds(plan, i);
+    g.fillStyle = on ? col.accent : c.alpha(col.muted, 0.5);
+    g.beginPath();
+    g.arc(geo.cx + cos * geo.outer, geo.cy + sin * geo.outer, Math.max(1.5, geo.r * (on ? 0.028 : 0.011)), 0, TAU);
+    g.fill();
+    const inOn = innerSounds(plan, i);
+    g.fillStyle = inOn ? col.accent2 : c.alpha(col.muted, 0.5);
+    g.beginPath();
+    g.arc(geo.cx + cos * geo.inner, geo.cy + sin * geo.inner, Math.max(1.5, geo.r * (inOn ? 0.028 : 0.011)), 0, TAU);
+    g.fill();
+    if (i === 0 || (i + 1) % every === 0) {
+      text(g, c, String(i + 1), geo.cx + cos * geo.outer * 1.12, geo.cy + sin * geo.outer * 1.12, small, c.alpha(col.fg, 0.85));
+    }
+  }
+  // The crossings that are shown: a thread between the two strikes, lit.
+  for (const i of s.lit) {
+    const a = beatAngle(i, L);
+    const from = { x: geo.cx + Math.cos(a) * geo.outer, y: geo.cy + Math.sin(a) * geo.outer };
+    const to = { x: geo.cx + Math.cos(a) * geo.inner, y: geo.cy + Math.sin(a) * geo.inner };
+    thread(g, c, from, to, col.accent2, 0.9, Math.max(1.5, geo.r * 0.014));
+    g.fillStyle = col.fg;
+    g.beginPath();
+    g.arc((from.x + to.x) / 2, (from.y + to.y) / 2, Math.max(2, geo.r * 0.02), 0, TAU);
+    g.fill();
+  }
+  // The bars, written in the middle: each drum's bar as a row of beats.
+  const rows = [
+    { name: 'outer', n: plan.a, bar: plan.outer, tone: col.accent, note: 'from beat 1' },
+    { name: 'inner', n: plan.b, bar: plan.inner, tone: col.accent2, note: plan.shift === 0 ? 'from beat 1' : 'from beat ' + (plan.shift + 1) }
+  ];
+  rows.forEach((row, k) => {
+    const y = geo.cy + (k - 0.5) * size * 2.4;
+    const cell = Math.min(size * 1.1, geo.inner * 1.2 / row.n);
+    const x0 = geo.cx - cell * row.n / 2;
+    text(g, c, row.name + ', ' + row.n + ' beats', geo.cx, y - size * 0.95, small, c.alpha(col.fg, 0.8));
+    for (let b = 0; b < row.n; b++) {
+      const on = row.bar.includes(b);
+      g.fillStyle = on ? row.tone : c.alpha(col.muted, 0.5);
+      g.beginPath();
+      g.arc(x0 + (b + 0.5) * cell, y, Math.max(1.5, cell * (on ? 0.3 : 0.14)), 0, TAU);
+      g.fill();
+    }
+    text(g, c, row.note, geo.cx, y + size * 0.9, small, c.alpha(col.muted, 0.9));
+  });
+  text(g, c, 'loop of ' + L, geo.cx, geo.cy + geo.inner * 0.72, small, c.alpha(col.fg, 0.75));
+}
+
+function crossBlank() {
+  return { lit: [] };
+}
+
+function crossPreview(g, w, h, env, plan) {
+  drawCross(g, w, h, env, plan, crossBlank(), env.variant);
+}
+
+function crossPiece(env, plan) {
+  const hits = crossingsOf(plan);
+  const s = crossBlank();
+  const draw = (c) => drawCross(c.g, c.w, c.h, c, plan, s, env.variant);
   return {
-    title: p.warp + ' against ' + p.wefts[0].beats + ': a woven rhythm',
-    brief: 'Choose the inner beat, shift it against the outer beat, predict how often both strike together, and tap twice to pin two beats. Watch the threads weave one complete loop.',
+    title: crossTitle(plan),
+    brief: 'Two drums round one loop of ' + plan.L + ' beats, beat 1 at the top. The outer drum plays its ' + plan.a + '-beat bar over and over from beat 1; '
+      + 'the inner plays its ' + plan.b + '-beat bar from beat ' + (plan.shift + 1) + '. Every strike is on its ring: the outer drum on the outer ring, the inner on the inner.',
+    goal: 'Count the beats on which both drums strike, and name the first of them.',
     aspect: '1 / 1',
+    checkLabel: 'check the loop',
     steps: [
-      { id: 'weft', ask: 'the inner beat', kind: 'choice', options: p.wefts.map((w, i) => ({ label: w.beats + ' beats', value: i })) },
-      { id: 'shift', ask: 'move the inner beat', kind: 'range', min: 0, max: 6, step: 1, value: p.shift, low: 'together', high: 'shifted' },
-      { id: 'guess', ask: 'how many crossings in one loop?', kind: 'choice', options: GUESSES },
-      { id: 'pin', ask: 'tap twice to pin two inner beats', kind: 'tap', label: 'pin one for me' },
-      { id: 'weave', ask: 'watch the loop weave', kind: 'wait', after: 'pin' }
+      { id: 'count', ask: 'how many beats of the loop both drums strike on', kind: 'number', min: 0, max: plan.L, step: 1, unit: 'beats' },
+      { id: 'first', ask: 'the first beat they strike together', kind: 'number', min: 1, max: plan.L, step: 1, unit: 'beat' },
+      { id: 'hint', ask: 'one crossing, lit', kind: 'press', count: 1, label: 'light one', optional: true }
     ],
+    solution: { count: hits.length, first: hits[0] + 1 },
+    check(c) {
+      const countRight = Number(c.value('count')) === hits.length;
+      const firstRight = Number(c.value('first')) === hits[0] + 1;
+      if (countRight && firstRight) return { solved: true, say: WORDS[hits.length] + ' crossings, the first on beat ' + (hits[0] + 1) };
+      return {
+        solved: false,
+        say: !countRight && !firstRight ? 'the count and the first beat are both off' : (!countRight ? 'the count is off' : 'the first beat is off')
+      };
+    },
     start(c) {
-      c.status('The outer beat has ' + p.warp + ' places. Two pins will start the loom.');
+      c.status('outer every ' + plan.a + ', inner every ' + plan.b + ', round ' + plan.L + ' beats');
       draw(c);
     },
     apply(id, value, c) {
-      if (id === 'weft') {
-        s.weft = Math.max(0, Math.min(2, Number(value)));
-        c.status(p.warp + ' outer beats against ' + current().beats + ' inner beats.');
-      }
-      if (id === 'shift') {
-        s.shift = Math.max(0, Math.min(6, Math.round(Number(value))));
-        c.status('The inner beat is shifted ' + s.shift + ' places.');
-      }
-      if (id === 'guess') {
-        s.guess = String(value);
-        c.status('Prediction: ' + (GUESSES.find((g) => g.value === s.guess) || GUESSES[0]).label + ' crossings.');
-      }
-      draw(c);
-    },
-    tap(x, y, c) {
-      if (c.done || s.marks.length >= 2) return;
-      s.marks.push({ x: Math.max(0, Math.min(0.999, x)), y: Math.max(0, Math.min(1, y)) });
-      c.progress('pin', s.marks.length / 2);
-      c.status(s.marks.length === 1 ? 'One beat pinned. Tap anywhere to pin the second.' : 'Two beats pinned. The loom is weaving.');
-      if (s.marks.length === 2) c.satisfy('pin');
-      draw(c);
-    },
-    frame(t, dt, c) {
-      if (s.marks.length === 2 && !s.finished) {
-        s.elapsed = c.reduced ? duration : Math.min(duration, s.elapsed + dt);
-        c.progress('weave', s.elapsed / duration);
-        if (s.elapsed >= duration) {
-          s.finished = true;
-          c.satisfy('weave');
+      if (id === 'count') c.status(Math.round(Number(value)) + ' crossings, you say');
+      if (id === 'first') c.status('the first on beat ' + Math.round(Number(value)) + ', you say');
+      if (id === 'hint') {
+        const next = hits.slice().reverse().find((i) => !s.lit.includes(i));
+        if (next !== undefined) {
+          s.lit.push(next);
+          c.hint();
+          c.status('both drums strike on beat ' + (next + 1));
+        } else {
+          c.status('every crossing is lit; count them, and read the first');
         }
       }
       draw(c);
     },
+    frame(t, dt, c) {
+      draw(c);
+    },
     end(c) {
-      const count = crossingCount(p, current(), s.shift, pins());
-      c.status(count + ' crossings in one loop. ' + (s.guess === category(count)
-        ? 'You called it.' : 'You predicted ' + (GUESSES.find((g) => g.value === s.guess) || GUESSES[0]).label + '.'));
+      s.lit = hits.slice();
+      c.status('the loop lit: ' + hits.map((i) => i + 1).join(', '));
       draw(c);
     }
   };
 }
 
-function isStrobe(env) {
-  return env.seed % 3 === 0;
+/* ---- the wagon wheel ----------------------------------------------------------------------- */
+
+function wheelPlan(env) {
+  for (let attempt = 0; attempt < 40; attempt++) {
+    const n = env.int(5, 12);
+    const p = env.chance(0.15) ? n : env.int(6, 20);
+    if (p < 6 || p > 20) continue;
+    if (2 * (n % p) === p) continue;
+    return { kind: 'wheel', n, p };
+  }
+  return { kind: 'wheel', n: 8, p: 7 };
 }
 
-function strobePlan(env) {
-  const pool = [8, 9, 10, 12, 14, 16];
-  const teeth = [];
-  while (teeth.length < 3) teeth.push(pool.splice(env.int(0, pool.length - 1), 1)[0]);
-  const pictures = Math.max(6, Math.min(20, teeth[0] + env.pick([-2, -1, 0, 1, 2])));
-  return {
-    family: 'strobe', teeth, pictures,
-    samples: env.int(12, 16), interval: env.pick([0.3, 0.34, 0.38])
-  };
-}
-
-function carriedStrobe(env) {
+function carriedWheel(env) {
   const p = env.card && env.card.of;
-  if (!p || p.family !== 'strobe' || !Array.isArray(p.teeth) || p.teeth.length !== 3
-      || !p.teeth.every((n) => Number.isInteger(n) && n >= 8 && n <= 16)
-      || new Set(p.teeth).size !== 3
-      || !Number.isInteger(p.pictures) || p.pictures < 6 || p.pictures > 20
-      || !Number.isInteger(p.samples) || p.samples < 12 || p.samples > 16
-      || !Number.isFinite(p.interval) || p.interval < 0.3 || p.interval > 0.38) return null;
-  return p;
+  if (!p || p.kind !== 'wheel') return null;
+  const n = Number(p.n);
+  const pictures = Number(p.p);
+  if (!Number.isInteger(n) || n < 5 || n > 12 || !Number.isInteger(pictures) || pictures < 6 || pictures > 20) return null;
+  if (2 * (n % pictures) === pictures) return null;
+  return { kind: 'wheel', n, p: pictures };
 }
 
-function strobeTitle(p) {
-  return p.teeth[0] + ' teeth, ' + p.pictures + ' pictures per turn';
+// Identical teeth hide whole teeth of movement; what the pictures show is the remainder, and a
+// remainder past half a tooth reads as a short step the other way.
+function seeming(plan) {
+  const r = plan.n % plan.p;
+  return r === 0 ? 'still' : 2 * r > plan.p ? 'ccw' : 'cw';
 }
 
-// Identical teeth hide whole tooth gaps. The remaining shortest jump is the apparent motion;
-// at half a gap, neither direction is more justified by the pictures.
-function apparent(teeth, pictures) {
-  const gaps = teeth / pictures;
-  const whole = Math.round(gaps);
-  const slip = gaps - whole;
-  const direction = Math.abs(slip) < 0.000001 ? 'still'
-    : Math.abs(Math.abs(slip) - 0.5) < 0.000001 ? 'either'
-      : slip < 0 ? 'backward' : 'forward';
-  return { whole, slip, direction };
+function returnAfter(plan) {
+  return plan.p / gcd(plan.n, plan.p);
 }
 
-function directionName(direction) {
-  return DIRECTIONS.find((d) => d.value === direction).label;
+function wayLabel(value) {
+  return WAYS.find((o) => o.value === value).label;
+}
+
+function wheelTitle(plan) {
+  return 'the wagon wheel: ' + plan.n + ' teeth, ' + plan.p + ' pictures';
 }
 
 function wheel(g, c, x, y, r, teeth, angle, color, strength) {
@@ -277,17 +340,14 @@ function wheel(g, c, x, y, r, teeth, angle, color, strength) {
   g.arc(0, 0, r * 0.17, 0, TAU);
   for (let i = 0; i < teeth; i++) {
     const a = i / teeth * TAU;
-    const cos = Math.cos(a);
-    const sin = Math.sin(a);
-    g.moveTo(cos * r * 0.17, sin * r * 0.17);
-    g.lineTo(cos * r * 0.88, sin * r * 0.88);
+    g.moveTo(Math.cos(a) * r * 0.17, Math.sin(a) * r * 0.17);
+    g.lineTo(Math.cos(a) * r * 0.88, Math.sin(a) * r * 0.88);
   }
   g.stroke();
   g.fillStyle = c.alpha(color, strength);
   for (let i = 0; i < teeth; i++) {
-    const a = i / teeth * TAU;
     g.save();
-    g.rotate(a);
+    g.rotate(i / teeth * TAU);
     g.fillRect(r * 0.83, -r * 0.035, r * 0.17, r * 0.07);
     g.restore();
   }
@@ -303,10 +363,8 @@ function rotationArrow(g, c, x, y, r, backward, color) {
   g.beginPath();
   for (let i = 0; i <= 24; i++) {
     const a = (start + span * i / 24) * sign;
-    const px = x + Math.cos(a) * r;
-    const py = y + Math.sin(a) * r;
-    if (i) g.lineTo(px, py);
-    else g.moveTo(px, py);
+    if (i) g.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r);
+    else g.moveTo(x + Math.cos(a) * r, y + Math.sin(a) * r);
   }
   g.stroke();
   const a = (start + span) * sign;
@@ -324,26 +382,10 @@ function rotationArrow(g, c, x, y, r, backward, color) {
   g.fill();
 }
 
-function strobeText(g, text, x, y, width, size, color) {
-  g.font = '500 ' + size + 'px system-ui, sans-serif';
-  g.textAlign = 'center';
-  g.textBaseline = 'middle';
-  g.fillStyle = color;
-  const lines = [];
-  let line = '';
-  for (const word of text.split(' ')) {
-    const next = line ? line + ' ' + word : word;
-    if (line && g.measureText(next).width > width) {
-      lines.push(line);
-      line = word;
-    } else line = next;
-  }
-  if (line) lines.push(line);
-  lines.forEach((row, i) => g.fillText(row, x, y + i * size * 1.2));
-}
-
-function strobeScene(g, w, h, c, p, s, variant) {
-  const v = variant || c.variant || { density: 1, scale: 1, turn: 0 };
+// The scene: the real wheel on the left, turning clockwise; the camera's pictures on the right,
+// with the p places round the rim where the wheel is caught; a strip of the pictures taken.
+function drawWheel(g, w, h, c, plan, s, variant) {
+  const v = variant || PLAIN;
   const col = c.colors;
   const m = Math.min(w, h);
   const pad = w * 0.045;
@@ -351,36 +393,38 @@ function strobeScene(g, w, h, c, p, s, variant) {
   const left = pad + panel / 2;
   const right = w - left;
   const cy = h * 0.4;
-  const radius = Math.min(panel * 0.35, h * 0.23) * v.scale;
-  const phase = v.turn * TAU;
-  const size = Math.max(9, Math.min(18, m * 0.042));
-  const result = apparent(s.teeth, s.pictures);
+  const radius = Math.min(panel * 0.35, h * 0.23) * Math.min(1.12, Math.max(0.86, v.scale));
+  const size = Math.max(9, Math.min(18, Math.round(m * 0.042)));
+  const small = Math.max(8, Math.round(size * 0.85));
   const grad = g.createLinearGradient(0, 0, w, h);
   grad.addColorStop(0, col.bg2);
   grad.addColorStop(1, col.bg);
   g.fillStyle = grad;
   g.fillRect(0, 0, w, h);
-
+  lint(g, w, h, c, v);
   g.strokeStyle = c.alpha(col.muted, 0.3);
   g.lineWidth = 1;
   g.beginPath();
   g.moveTo(w / 2, h * 0.16);
   g.lineTo(w / 2, h * 0.72);
   g.stroke();
-  strobeText(g, 'real', left, h * 0.09, panel, size, col.fg);
-  strobeText(g, 'pictures', right, h * 0.09, panel, size, col.fg);
-  wheel(g, c, left, cy, radius, s.teeth, phase + s.time / p.interval / s.pictures * TAU, col.accent, 0.95);
-  // Hold an actual sampled angle, not an invented reverse rotation. The matching teeth make
-  // these clockwise snapshots look like small backward jumps without any light blinking.
-  wheel(g, c, right, cy, radius, s.teeth, phase + s.index / s.pictures * TAU, col.accent2, 0.95);
+  text(g, c, 'the wheel: ' + plan.n + ' teeth', left, h * 0.09, size, col.fg);
+  text(g, c, 'the pictures: ' + plan.p + ' per turn', right, h * 0.09, size, col.fg);
+  const phase = v.turn * TAU;
+  wheel(g, c, left, cy, radius, plan.n, phase + s.spin, col.accent, 0.95);
   rotationArrow(g, c, left, cy, radius * 1.13, false, col.accent);
-  if (s.revealed) {
-    if (result.direction === 'forward' || result.direction === 'backward') {
-      rotationArrow(g, c, right, cy, radius * 1.13, result.direction === 'backward', col.accent2);
-    } else if (result.direction === 'either') {
-      rotationArrow(g, c, right, cy, radius * 1.13, false, col.accent2);
-      rotationArrow(g, c, right, cy, radius * 1.25, true, col.accent2);
-    } else {
+  // The p places round the rim: one picture per place, the wheel a pth of a turn on each time.
+  for (let i = 0; i < plan.p; i++) {
+    const a = -Math.PI / 2 + i / plan.p * TAU;
+    g.fillStyle = c.alpha(col.accent2, i === 0 ? 1 : 0.6);
+    g.beginPath();
+    g.arc(right + Math.cos(a) * radius * 1.16, cy + Math.sin(a) * radius * 1.16, Math.max(1.5, radius * (i === 0 ? 0.045 : 0.03)), 0, TAU);
+    g.fill();
+  }
+  wheel(g, c, right, cy, radius, plan.n, phase + s.index / plan.p * TAU, col.accent2, 0.95);
+  if (s.reveal) {
+    const way = seeming(plan);
+    if (way === 'still') {
       g.strokeStyle = col.accent2;
       g.lineWidth = Math.max(1, radius * 0.025);
       g.beginPath();
@@ -389,13 +433,12 @@ function strobeScene(g, w, h, c, p, s, variant) {
       g.moveTo(right + radius * 0.05, cy - radius * 0.12);
       g.lineTo(right + radius * 0.05, cy + radius * 0.12);
       g.stroke();
-    }
+    } else rotationArrow(g, c, right, cy, radius * 1.3, way === 'ccw', col.accent2);
   }
-  strobeText(g, 'clockwise', left, h * 0.7, panel, size, col.fg);
-  const caption = s.revealed ? directionName(result.direction)
-    : s.taken ? 'picture ' + s.taken + ' of ' + p.samples : 'one at a time';
-  strobeText(g, caption, right, h * 0.7, panel, size, col.fg);
-
+  text(g, c, 'turns clockwise', left, h * 0.7, small, c.alpha(col.fg, 0.85));
+  text(g, c, s.taken ? 'picture ' + s.taken : 'one picture, then ' + plan.p + ' more round the turn', right, h * 0.7, small, c.alpha(col.fg, 0.85));
+  if (s.told) text(g, c, s.told, w / 2, h * 0.77, small, col.accent2);
+  // The strip of pictures taken, the latest at the right.
   const slots = Math.max(3, Math.min(6, Math.round(4 * v.density)));
   const gap = w * 0.018;
   const sw = (w - pad * 2 - gap * (slots - 1)) / slots;
@@ -411,160 +454,131 @@ function strobeScene(g, w, h, c, p, s, variant) {
     g.strokeStyle = c.alpha(taken ? col.accent2 : col.muted, taken ? 0.65 : 0.3);
     g.lineWidth = 1;
     g.strokeRect(x, top, sw, sh);
-    if (taken) {
-      wheel(g, c, x + sw / 2, top + sh / 2, Math.min(sw, sh) * 0.39,
-        s.teeth, phase + shot / s.pictures * TAU, col.accent2, 0.8);
-    }
+    if (taken) wheel(g, c, x + sw / 2, top + sh / 2, Math.min(sw, sh) * 0.39, plan.n, phase + shot / plan.p * TAU, col.accent2, 0.8);
   }
 }
 
-function strobePreview(g, w, h, env, p) {
-  strobeScene(g, w, h, env, p, {
-    teeth: p.teeth[0], pictures: p.pictures, time: 0, index: 0, taken: 0, revealed: false
-  }, env.variant);
+function wheelBlank() {
+  return { spin: 0, index: 0, taken: 0, run: -1, reveal: false, told: '' };
 }
 
-function strobeFinding(teeth, pictures) {
-  const r = apparent(teeth, pictures);
-  const premise = 'The real wheel moved clockwise by 1/' + pictures + ' of a turn between pictures. ';
-  if (r.direction === 'still') {
-    return premise + 'That is exactly ' + r.whole + ' tooth gap' + (r.whole === 1 ? '' : 's')
-      + ', so identical teeth land in identical places. The pictures stand still.';
-  }
-  if (r.direction === 'either') {
-    return premise + 'The leftover jump is half a tooth gap. Either direction fits the pictures equally well.';
-  }
-  const fraction = (Math.abs(r.slip) * 100).toFixed(1).replace(/\.0$/, '');
-  return premise + 'Ignore ' + r.whole + ' whole tooth gap' + (r.whole === 1 ? '' : 's')
-    + ' and the pictures shift ' + fraction + '% of one gap '
-    + (r.direction === 'backward' ? 'backwards' : 'clockwise') + '. The real wheel never reversed.';
+function wheelPreview(g, w, h, env, plan) {
+  drawWheel(g, w, h, env, plan, wheelBlank(), env.variant);
 }
 
-function strobePiece(env, carriedPlan) {
-  const p = carriedPlan || strobePlan(env);
-  const duration = (p.samples - 1) * p.interval;
-  const s = {
-    teeth: p.teeth[0], pictures: p.pictures, guess: '', time: 0,
-    index: 0, taken: 0, running: false, waited: false, revealed: false, halfway: false
-  };
-  function draw(c) {
-    strobeScene(c.g, c.w, c.h, c, p, s, env.variant);
-  }
-  function setExposure() {
-    s.index = Math.min(p.samples - 1, Math.floor((s.time + 0.000001) / p.interval));
-    s.taken = s.index + 1;
-  }
+function wheelPiece(env, plan) {
+  const way = seeming(plan);
+  const back = returnAfter(plan);
+  const s = wheelBlank();
+  const interval = 0.45;
+  const roll = Math.min(24, back * 2 + 2);
+  const draw = (c) => drawWheel(c.g, c.w, c.h, c, plan, s, env.variant);
   return {
-    title: strobeTitle(p),
-    brief: 'The real wheel only turns clockwise. Choose its teeth and the number of pictures taken during one turn, predict what the pictures will seem to do, and play the ' + p.samples + '-picture roll. No lights blink: each picture stays visible until the next. Any prediction works.',
+    title: wheelTitle(plan),
+    brief: 'The wheel has ' + plan.n + ' identical teeth and turns clockwise, never the other way. A camera takes ' + plan.p
+      + ' pictures in one turn, so between pictures the wheel moves 1/' + plan.p + ' of a turn: ' + plan.n + '/' + plan.p
+      + ' of a tooth. The pictures are shown one after another.',
+    goal: 'Say which way the pictures seem to turn, and after how many pictures a tooth is back where it began.',
     aspect: '4 / 3',
+    checkLabel: 'run the pictures',
     steps: [
-      { id: 'teeth', ask: 'how many identical teeth', kind: 'choice', options: p.teeth.map((n) => ({ label: n + ' teeth', value: n })) },
-      { id: 'pictures', ask: 'pictures taken during one clockwise turn', kind: 'range', min: 6, max: 20, step: 1, value: p.pictures, low: '6 pictures', high: '20 pictures' },
-      { id: 'prediction', ask: 'which way will the pictures seem to turn?', kind: 'choice', options: DIRECTIONS },
-      { id: 'play', ask: 'play the picture roll', kind: 'press', count: 1, label: 'play the roll' },
-      { id: 'watch', ask: 'watch ' + p.samples + ' pictures', kind: 'wait', after: 'play' }
+      { id: 'seem', ask: 'which way the pictures seem to turn', kind: 'choice', options: WAYS },
+      { id: 'back', ask: 'after how many pictures a tooth is back where it began', kind: 'number', min: 1, max: 20, step: 1, unit: 'pictures' },
+      { id: 'hint', ask: 'how far the wheel moves between pictures', kind: 'press', count: 1, label: 'show me', optional: true }
     ],
+    solution: { seem: way, back },
+    check(c) {
+      const seemRight = c.value('seem') === way;
+      const backRight = Number(c.value('back')) === back;
+      s.run = 0;
+      s.index = 0;
+      s.taken = 1;
+      if (seemRight && backRight) return { solved: true, say: 'the pictures ' + (way === 'still' ? 'stand still' : 'seem to go ' + wayLabel(way)) + ', and a tooth is back after ' + back };
+      return {
+        solved: false,
+        say: !seemRight && !backRight ? 'the direction and the return count are both off' : (!seemRight ? 'the pictures do not seem to go that way' : 'the return count is off')
+      };
+    },
     start(c) {
-      c.status(s.teeth + ' identical teeth, ' + s.pictures + ' pictures per turn. The left wheel is real motion; the right wheel holds each picture.');
+      c.status(plan.n + ' teeth, ' + plan.p + ' pictures per turn');
       draw(c);
     },
     apply(id, value, c) {
-      if (c.done) return;
-      if (id === 'teeth') {
-        s.teeth = p.teeth.includes(Number(value)) ? Number(value) : p.teeth[0];
-        c.status(s.teeth + ' identical teeth. One tooth gap is 1/' + s.teeth + ' of a turn.');
-      }
-      if (id === 'pictures') {
-        s.pictures = Math.max(6, Math.min(20, Math.round(Number(value))));
-        c.status(s.pictures + ' pictures per turn. The wheel advances clockwise by 1/' + s.pictures + ' of a turn between pictures.');
-      }
-      if (id === 'prediction') {
-        s.guess = String(value);
-        c.status('You expect the pictures to look ' + directionName(s.guess) + '. You can still change your prediction.');
-      }
-      if (id === 'play') {
-        s.running = true;
-        s.time = 0;
-        s.index = 0;
-        s.taken = 1;
-        s.halfway = false;
-        c.status(c.reduced ? 'The picture roll will appear without movement.'
-          : 'The real wheel goes clockwise. Follow the right wheel between pictures.');
+      if (id === 'seem') c.status('you expect the pictures to ' + (value === 'still' ? 'stand still' : 'seem to go ' + wayLabel(value)));
+      if (id === 'back') c.status('a tooth back where it began after ' + Math.round(Number(value)) + ' pictures, you say');
+      if (id === 'hint') {
+        if (!s.told) {
+          const whole = Math.floor(plan.n / plan.p);
+          const rest = plan.n % plan.p;
+          s.told = 'between pictures: ' + (whole ? whole + ' whole ' + (whole === 1 ? 'tooth' : 'teeth') + (rest ? ' and ' : '') : '') + (rest ? rest + '/' + plan.p + ' of a tooth' : '');
+          c.hint();
+          c.status(s.told + '; identical teeth hide whole teeth');
+        } else {
+          c.status('that is the one hint: ' + s.told);
+        }
       }
       draw(c);
     },
     frame(t, dt, c) {
-      if (s.running && !c.done) {
-        s.time = c.reduced ? duration : Math.min(duration, s.time + dt);
-        setExposure();
-        if (!s.waited) c.progress('watch', s.time / duration);
-        if (!s.halfway && s.time >= duration / 2 && s.time < duration) {
-          s.halfway = true;
-          c.status('Half the roll has played. Both views are of the same clockwise wheel.');
-        }
-        if (s.time >= duration) {
-          s.running = false;
-          c.status('The ' + p.samples + ' pictures are on the roll. Your remaining choices can still change the finding.');
-          if (!s.waited) {
-            s.waited = true;
-            c.satisfy('watch');
-          }
-        }
+      s.spin += (c.reduced ? 0 : Math.max(0, dt)) * 0.35;
+      if (s.run >= 0) {
+        s.run += Math.max(0, dt);
+        const shot = Math.floor(s.run / interval);
+        if (c.done) s.index = shot % (back * 3 + 1);
+        else s.index = Math.min(roll, shot);
+        s.taken = s.index + 1;
       }
       draw(c);
     },
     end(c) {
-      s.running = false;
-      s.time = duration;
-      s.revealed = true;
-      setExposure();
-      const result = apparent(s.teeth, s.pictures);
-      c.status(strobeFinding(s.teeth, s.pictures) + ' '
-        + (s.guess === result.direction ? 'You called it.' : 'You expected ' + directionName(s.guess) + '.'));
+      s.reveal = true;
+      s.run = 0;
+      c.status('the pictures keep running: ' + (way === 'still' ? 'every one the same' : 'seeming to go ' + wayLabel(way)) + ', a tooth home every ' + back);
       draw(c);
     }
   };
+}
+
+/* ---- the module ----------------------------------------------------------------------------- */
+
+function dealsWheel(env) {
+  return env.chance(0.45);
 }
 
 export default {
   id: 'pulse-loom',
   needsSky: false,
   paint(g, w, h, env) {
-    if (isStrobe(env)) {
-      strobePreview(g, w, h, env, strobePlan(env));
-      return;
-    }
-    const p = plan(env);
-    scene(g, w, h, env, p, p.wefts[0], p.shift, 0.55, [], false);
+    if (dealsWheel(env)) wheelPreview(g, w, h, env, wheelPlan(env));
+    else crossPreview(g, w, h, env, crossPlan(env));
   },
   spark(env) {
-    if (isStrobe(env)) {
-      const p = strobePlan(env);
+    if (dealsWheel(env)) {
+      const plan = wheelPlan(env);
       return {
-        title: strobeTitle(p),
-        text: 'The real wheel only turns clockwise. Can its pictures stand still or seem to turn backwards? Choose the teeth, predict the direction, and play the roll.',
-        mono: 'one tooth gap  1/' + p.teeth[0] + ' of a turn\none picture    1/' + p.pictures + ' of a turn',
+        title: wheelTitle(plan),
+        text: 'The wheel only ever turns clockwise. Which way will its pictures seem to go, and when does a tooth look home again?',
+        mono: 'one tooth      1/' + plan.n + ' of a turn\none picture    1/' + plan.p + ' of a turn',
         aspect: '4 / 3',
-        paint: (g, w, h, e) => strobePreview(g, w, h, e, p),
-        of: p
+        paint: (g, w, h, cardEnv) => wheelPreview(g, w, h, cardEnv, plan),
+        of: plan
       };
     }
-    const p = plan(env);
+    const plan = crossPlan(env);
     return {
-      title: p.warp + ' against ' + p.wefts[0].beats,
-      text: 'Two repeating beats meet in unexpected places. Pin two more beats, predict the crossings, and watch one loop weave itself.',
-      mono: 'outer  ' + p.warpMask.join(' ') + '\ninner  ' + p.wefts[0].mask.join(' '),
+      title: crossTitle(plan),
+      text: 'Two drums round one loop. Count the beats they strike together, and name the first.',
+      mono: 'outer  ' + plan.a + '-beat bar from beat 1\ninner  ' + plan.b + '-beat bar from beat ' + (plan.shift + 1) + '\nloop   ' + plan.L + ' beats',
       aspect: '1 / 1',
-      paint: (g, w, h, e) => scene(g, w, h, e, p, p.wefts[0], p.shift, 0.55, [], false),
-      of: p
+      paint: (g, w, h, cardEnv) => crossPreview(g, w, h, cardEnv, plan),
+      of: plan
     };
   },
   piece(env) {
-    const photographed = carriedStrobe(env);
-    if (photographed) return strobePiece(env, photographed);
-    const woven = carried(env);
-    if (woven) return weavingPiece(env, woven);
-    return isStrobe(env) ? strobePiece(env) : weavingPiece(env);
+    const turning = carriedWheel(env);
+    if (turning) return wheelPiece(env, turning);
+    const crossing = carriedCross(env);
+    if (crossing) return crossPiece(env, crossing);
+    return dealsWheel(env) ? wheelPiece(env, wheelPlan(env)) : crossPiece(env, crossPlan(env));
   }
 };

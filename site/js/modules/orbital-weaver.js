@@ -1,857 +1,468 @@
-/* The orbital weaver: the persona's stars mirrored into a slow mandala, or read as the starting
-   offsets of two striped screens. Cards and pieces select the same shape from their seed. The
-   loom closes into a mantra; the screens expose real moire bands through their overlap, with a
-   prediction and a print of the visitor's settings. See js/feed.js for what a module is and
-   js/stage.js for what a piece is.
+/* The orbital weaver: a midnight loom under the persona's sky, read as puzzles. A small motif is
+   turned about the centre into a kaleidoscopic weave, or two screens of fine lines are laid over
+   each other and show their difference as broad bands. As a card it is one of the two puzzles
+   below, drawn as it stands (paint, animate, spark); as a piece it is that puzzle, and the card it
+   was opened from says which. See js/feed.js for what a module is and js/stage.js for what a piece
+   is.
 
-   A card and the feature it opens as are one weave (the alignment axiom, issue #80): the spark
-   puts what its card is of on the spec -- the symmetry it was woven at and the mantra it was
-   saying, or the whole plan of the two screens it previewed -- and the piece opens at that very
-   symmetry, printing those words, or sets up those very screens. */
+   Two puzzles, both deduction by looking:
 
-// The card this piece was opened from, in the weaver's own terms: the screens it previewed, or the
-// symmetry the loom was woven at and the mantra it was saying, or null for a piece nobody pressed
-// (js/stage.js hands the card over as env.card.of).
-function pressed(env) {
-  const was = env.card && env.card.of;
-  if (!was) return null;
-  if (was.screens && typeof was.screens === 'object') return { screens: was.screens };
-  const spokes = Number(was.spokes);
-  if (!isFinite(spokes)) return null;
-  const said = Array.isArray(was.words) ? was.words.filter((text) => typeof text === 'string' && text) : [];
-  return { spokes: Math.max(3, Math.min(12, Math.round(spokes))), words: said };
+     count the folds   A motif of three or four joined points is laid on the loom and turned about
+                       the centre some number of times -- the folds -- and on some looms every copy
+                       is laid down with its mirror image too, so the weave shows both hands. The
+                       motif as laid once stands in the corner. Count the folds and say whether the
+                       weave is mirrored. A wrong check says which of the two is off.
+     the moiré         A screen of thin upright lines, its count written on it, and a second screen
+                       with a hidden count laid over it; the overlap is drawn honestly, line by
+                       line, and shows as many broad bands as the two counts differ by. Say the
+                       second count and whether it is more or fewer. A wrong check says which of
+                       the two is off.
+
+   The sky colours the loom -- the stars are drawn behind it -- but never decides a puzzle: the
+   plan is made from the seed, serialised whole on the card's `of`, and piece(env) opens on that
+   rather than rolling another, whatever the sky is by then. One star or a hundred, the weave is
+   the same weave. */
+
+const PLAIN = { density: 1, scale: 1, turn: 0 };
+const WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve'];
+const MIN_FOLDS = 3;
+const MAX_FOLDS = 12;
+
+function clamp(v, lo, hi) {
+  return Math.max(lo, Math.min(hi, v));
 }
 
-// The mandala the card was woven as, for the three shapes made of threads. A card that stood two
-// screens up wove no mandala, so a loom opened from one opens as it would have unpressed.
-function woven(env) {
-  const was = pressed(env);
-  return was && !was.screens ? was : null;
-}
+/* ---- shared drawing ------------------------------------------------------------------------- */
 
-const NUMBERS = ['', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve'];
-
-const OPENERS = ['orbital mantra:', 'weave transmission:', 'midnight geometry note:', 'mandala field memo:'];
-const LINES = [
-  'start small; repetition turns sparks into structure.',
-  'play first, refine second, repeat until it sings.',
-  'momentum likes imperfect beginnings more than hesitation.',
-  'a tiny brave move reshapes the whole pattern.',
-  'commit to one clear action before the weave stops.',
-  'turn the symmetry dial one notch and read the weave again.',
-  'share one rough idea while it is still warm.',
-  'protect ten focused minutes and build inside them.'
-];
-
-const SPINS = [
-  { label: 'hovering', value: 0 },
-  { label: 'slow', value: 0.24 },
-  { label: 'quick', value: 0.7 },
-  { label: 'widdershins', value: -0.35 }
-];
-
-const TONES = [
-  { label: 'midnight tones', value: 'midnight' },
-  { label: 'prism weave', value: 'prism' },
-  { label: 'candlelight', value: 'candle' }
-];
-const TONE_WORDS = {
-  midnight: 'back to midnight tones',
-  prism: 'prism weave on: spectrum shifted',
-  candle: 'candlelight: the threads go warm'
-};
-
-function spinWord(v) {
-  if (!v) return 'spin paused: geometry is hovering';
-  if (v < 0) return 'the weave turns against the clock';
-  return v > 0.5 ? 'the weave is in a hurry' : 'spin resumed: the weave is in motion';
-}
-
-// A few of the stars' words, for a mantra.
-function words(env, k) {
-  const pool = env.stars.slice();
-  const out = [];
-  while (out.length < Math.min(k, pool.length)) {
-    const i = Math.floor(env.rnd() * pool.length);
-    out.push(pool.splice(i, 1)[0].text);
-  }
-  return out;
-}
-
-// The sky's geometry in the loom's terms: where its centre sits, how far it spreads, how bright.
-function geometry(stars) {
-  const n = stars.length || 1;
-  let cx = 0;
-  let cy = 0;
-  for (const s of stars) {
-    cx += s.x;
-    cy += s.y;
-  }
-  cx /= n;
-  cy /= n;
-  let spread = 0;
-  for (const s of stars) spread += Math.hypot(s.x - cx, s.y - cy);
-  spread /= n;
-  const zone = (cy < 50 ? 'north' : 'south') + '-' + (cx < 50 ? 'west' : 'east');
-  const width = spread < 12 ? 'compact' : spread < 24 ? 'balanced' : 'expansive';
-  const tone = stars.length < 6 ? 'quiet' : stars.length < 16 ? 'steady' : 'bright';
-  return stars.length + ' shard' + (stars.length === 1 ? '' : 's') + ' · ' + width + ' spread · ' + zone + ' chamber · ' + tone + ' tone';
-}
-
-/* ---- the card ------------------------------------------------------------------------------ */
-
-function weave(ctx, w, h, env, spokes, t) {
+function night(g, w, h, env) {
   const c = env.colors;
-  const v = env.variant;
-  const g = ctx.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, Math.max(w, h) * 0.7);
-  g.addColorStop(0, c.bg2);
-  g.addColorStop(1, c.bg);
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, w, h);
-  const cx = w / 2;
-  const cy = h / 2;
-  const R = Math.min(w, h) * 0.46 * v.scale;
-  const pts = env.stars.map((s) => ({ r: (Math.hypot(s.x - 50, s.y - 50) / 70) * R, a: Math.atan2(s.y - 50, s.x - 50) }));
-  pts.sort((p, q) => p.a - q.a);
-  ctx.lineWidth = 1;
-  ctx.lineJoin = 'round';
-  for (let k = 0; k < spokes; k++) {
-    const rot = (k / spokes) * Math.PI * 2 + t * 0.08 + v.turn * Math.PI * 2;
-    for (const mirror of [1, -1]) {
-      ctx.strokeStyle = env.alpha(k % 2 ? c.accent : c.accent2, 0.5);
-      ctx.beginPath();
-      pts.forEach((p, i) => {
-        const a = rot + p.a * mirror;
-        const x = cx + Math.cos(a) * p.r;
-        const y = cy + Math.sin(a) * p.r;
-        if (i) ctx.lineTo(x, y);
-        else ctx.moveTo(x, y);
-      });
-      ctx.closePath();
-      ctx.stroke();
-      for (const p of pts) {
-        const a = rot + p.a * mirror;
-        ctx.fillStyle = env.alpha(c.fg, 0.85);
-        ctx.beginPath();
-        ctx.arc(cx + Math.cos(a) * p.r, cy + Math.sin(a) * p.r, 1.5, 0, Math.PI * 2);
-        ctx.fill();
-      }
-    }
-  }
-  ctx.strokeStyle = env.alpha(c.accent, 0.25);
-  ctx.beginPath();
-  ctx.arc(cx, cy, R, 0, Math.PI * 2);
-  ctx.stroke();
-}
-
-/* ---- the loom ------------------------------------------------------------------------------ */
-
-// The loom: each star a shard in polar form about the centre, with a phase of its own, and
-// everything a piece turns: the spokes, the spin, the tones, how far the pattern has closed.
-function loom(env, spokes, was) {
-  const stars = env.stars.slice(0, 90);
-  return {
-    stars,
-    spokes,
-    t: 0,
-    rot: 0,
-    spin: 0,
-    tone: 'midnight',
-    close: 0,
-    ripples: [],
-    mantra: null,
-    said: 0,
-    shards: stars.map((st, i) => ({
-      r: Math.max(0.08, Math.min(1, Math.hypot(st.x - 50, st.y - 50) / 70)),
-      a: Math.atan2(st.y - 50, st.x - 50),
-      size: 1.6 + (i % 4) * 0.7,
-      phase: env.rnd() * Math.PI * 2,
-      energy: 0
-    })),
-    // The mantra the card was saying, when this loom was opened from one: the feature prints the
-    // very words a visitor pressed, and only picks its own for a piece nobody pressed.
-    words: was && was.words.length ? was.words.slice(0, 3) : words(env, 3),
-    opener: env.pick(OPENERS),
-    line: env.pick(LINES),
-    geo: geometry(stars)
-  };
-}
-
-// Where the weave sits: it shrinks and rises as the pattern closes, to leave room for the mantra.
-function frameOf(s, w, h) {
-  const m = Math.min(w, h);
-  return { cx: w / 2, cy: h * (0.5 - 0.14 * s.close), R: m * (0.42 - 0.14 * s.close), k: m / 340 };
-}
-
-// One shard's place on one arm of the weave, pulsing while the pattern is open and pulled
-// onto a common ring as it closes.
-function place(s, sh, arm, mirror, f, calm) {
-  const open = 1 - s.close;
-  const pulse = Math.sin(s.t * 2.1 + sh.phase) * 7 * f.k * open * (calm ? 0.3 : 1);
-  const wobble = Math.sin(s.t * 0.7 + sh.phase) * 0.05 * open;
-  const a = s.rot + (arm / s.spokes) * Math.PI * 2 + mirror * (sh.a + wobble);
-  const r = (sh.r * open + 0.78 * s.close) * f.R + pulse + sh.energy * 14 * f.k;
-  return { x: f.cx + Math.cos(a) * r, y: f.cy + Math.sin(a) * r };
-}
-
-// A shard's colour in the chosen tones: pale by midnight, shimmering under the prism, warm by candle.
-function shardTone(c, s, i) {
-  const col = c.colors;
-  if (s.tone === 'prism') return c.mix(col.accent, col.accent2, (Math.sin(s.t * 1.3 + i * 0.7) + 1) / 2);
-  if (s.tone === 'candle') return c.mix(col.accent2, col.fg, 0.3);
-  return col.fg;
-}
-
-function thread(c, s, arm, mirror) {
-  const col = c.colors;
-  if (s.tone === 'prism') {
-    const u = (Math.sin(s.t * 0.9 + arm * 0.9 + (mirror < 0 ? 1.7 : 0)) + 1) / 2;
-    return c.mix(c.mix(col.accent, col.accent2, u), col.fg, 0.3 * (1 - u));
-  }
-  if (s.tone === 'candle') return arm % 2 ? col.accent2 : c.mix(col.accent2, col.fg, 0.4);
-  return arm % 2 ? col.accent : col.accent2;
-}
-
-function wrap(g, text, maxW) {
-  const out = [];
-  let line = '';
-  for (const word of String(text).split(' ')) {
-    const trial = line ? line + ' ' + word : word;
-    if (line && g.measureText(trial).width > maxW) {
-      out.push(line);
-      line = word;
-    } else line = trial;
-  }
-  if (line) out.push(line);
-  return out;
-}
-
-// The words so far along the top while the pattern is open; the whole mantra under the weave
-// once it has closed.
-function print(g, w, h, c, s) {
-  const m = Math.min(w, h);
-  let fs = Math.max(11, Math.round(m * 0.034));
-  g.textAlign = 'center';
-  g.textBaseline = 'middle';
-  if (!s.mantra) {
-    if (!s.said) return;
-    const text = s.words.slice(0, s.said).join(' · ');
-    g.font = '500 ' + fs + 'px system-ui, sans-serif';
-    const wide = g.measureText(text).width;
-    if (wide > w * 0.9) {
-      fs = Math.max(Math.round(m * 0.026), Math.floor((fs * w * 0.9) / wide));
-      g.font = '500 ' + fs + 'px system-ui, sans-serif';
-    }
-    g.fillStyle = c.alpha(c.colors.fg, 0.8);
-    wrap(g, text, w * 0.9).forEach((row, i) => g.fillText(row, w / 2, m * 0.05 + i * fs * 1.35));
-    return;
-  }
-  g.font = '500 ' + fs + 'px system-ui, sans-serif';
-  const rows = [];
-  for (const line of s.mantra) for (const t of wrap(g, line.text, w * 0.9)) rows.push({ t, tone: line.tone });
-  let lh = fs * 1.4;
-  if (rows.length * lh > h * 0.3) {
-    fs = (fs * h * 0.3) / (rows.length * lh);
-    lh = fs * 1.4;
-    g.font = '500 ' + fs + 'px system-ui, sans-serif';
-  }
-  const a = Math.min(1, s.close * 1.5);
-  rows.forEach((row, i) => {
-    g.fillStyle = c.alpha(row.tone, a);
-    g.fillText(row.t, w / 2, h * 0.69 + i * lh);
-  });
-}
-
-function draw(g, w, h, c, s) {
-  const col = c.colors;
-  const f = frameOf(s, w, h);
-  const m = Math.min(w, h);
-  const drift = c.reduced ? 0.3 : 1;
-  const bg = g.createRadialGradient(f.cx, f.cy, 0, f.cx, f.cy, Math.max(w, h) * 0.7);
-  bg.addColorStop(0, col.bg2);
-  bg.addColorStop(1, col.bg);
+  const bg = g.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, Math.max(w, h) * 0.7);
+  bg.addColorStop(0, c.bg2);
+  bg.addColorStop(1, c.bg);
   g.fillStyle = bg;
   g.fillRect(0, 0, w, h);
-  // Dust, drifting.
-  for (let i = 0; i < 46; i++) {
-    g.fillStyle = c.alpha(col.muted, 0.08 + (i % 6) * 0.03);
+}
+
+// The persona's stars, faint behind the loom, and a little dust whose number is the
+// configuration's density and whose drift is its turn.
+function sky(g, w, h, env, v, t) {
+  const c = env.colors;
+  for (const s of env.stars || []) {
+    const x = Number(s && s.x);
+    const y = Number(s && s.y);
+    if (!isFinite(x) || !isFinite(y)) continue;
+    g.fillStyle = env.alpha(c.fg, 0.28);
     g.beginPath();
-    g.arc((i * 129.3 + s.t * 10 * drift) % w, (i * 83.7 + s.t * 6 * drift) % h, f.k, 0, Math.PI * 2);
+    g.arc((x / 100) * w, (y / 100) * h, 1.2, 0, Math.PI * 2);
     g.fill();
   }
-  // The arms: each a thread through every shard, mirrored, with the closing thread drawn in as
-  // the pattern closes; then the shards themselves, glowing where a ripple has reached them.
-  g.lineJoin = 'round';
-  for (let arm = 0; arm < s.spokes; arm++) {
-    for (const mirror of [1, -1]) {
-      const pts = s.shards.map((sh) => place(s, sh, arm, mirror, f, c.reduced));
-      g.lineWidth = 1 + s.close * 0.5;
-      g.strokeStyle = c.alpha(thread(c, s, arm, mirror), 0.3 + s.close * 0.45);
-      g.beginPath();
-      pts.forEach((p, i) => (i ? g.lineTo(p.x, p.y) : g.moveTo(p.x, p.y)));
-      g.stroke();
-      if (s.close > 0 && pts.length > 2) {
-        g.strokeStyle = c.alpha(col.accent2, s.close * 0.8);
-        g.beginPath();
-        g.moveTo(pts[pts.length - 1].x, pts[pts.length - 1].y);
-        g.lineTo(pts[0].x, pts[0].y);
-        g.stroke();
-      }
-      pts.forEach((p, i) => {
-        const sh = s.shards[i];
-        if (sh.energy > 0.02) {
-          g.fillStyle = c.alpha(col.accent2, 0.1 + sh.energy * 0.2);
-          g.beginPath();
-          g.arc(p.x, p.y, sh.size * (2.4 + sh.energy * 2.5) * f.k, 0, Math.PI * 2);
-          g.fill();
-        }
-        g.fillStyle = sh.energy > 0.2 ? col.accent2 : c.alpha(shardTone(c, s, i), 0.92);
-        g.beginPath();
-        g.arc(p.x, p.y, (sh.size * 0.8 + sh.energy) * f.k, 0, Math.PI * 2);
-        g.fill();
-      });
-    }
+  const count = Math.max(10, Math.round(36 * v.density));
+  for (let i = 0; i < count; i++) {
+    g.fillStyle = env.alpha(c.muted, 0.06 + (i % 5) * 0.025);
+    g.fillRect((i * 129.3 + v.turn * 97 + t * 9) % w, (i * 83.7 + v.turn * 41 + t * 5) % h, 1, 1);
   }
-  g.lineWidth = 1.35;
-  for (const r of s.ripples) {
-    g.strokeStyle = c.alpha(col.accent2, r.life * 0.5);
-    g.beginPath();
-    g.arc(r.x, r.y, r.r, 0, Math.PI * 2);
-    g.stroke();
-  }
-  g.lineWidth = 1 + s.close;
-  g.strokeStyle = c.alpha(col.accent, 0.25 + s.close * 0.6);
-  g.beginPath();
-  g.arc(f.cx, f.cy, f.R, 0, Math.PI * 2);
-  g.stroke();
-  if (s.close < 1) {
-    g.fillStyle = c.alpha(col.muted, 0.75 * (1 - s.close));
-    g.font = Math.max(10, Math.round(m * 0.03)) + 'px system-ui, sans-serif';
-    g.textAlign = 'left';
-    g.textBaseline = 'bottom';
-    g.fillText('shards ' + s.shards.length + ' · spokes ' + s.spokes + (s.spin ? ' · spin on' : ' · spin off'), m * 0.03, h - m * 0.03);
-  }
-  print(g, w, h, c, s);
 }
 
-function tick(s, dt, c) {
-  s.t += dt;
-  s.rot += dt * s.spin * (c.reduced ? 0.4 : 1) * (1 - s.close);
-  for (const sh of s.shards) sh.energy = Math.max(0, sh.energy - dt * 0.85);
-  const k = Math.min(c.w, c.h) / 340;
-  s.ripples = s.ripples.filter((r) => {
-    r.r += dt * 170 * k;
-    r.life -= dt * 0.75;
-    return r.life > 0;
-  });
+function label(g, env, text, x, y, size, align, tone) {
+  g.font = '500 ' + size + 'px system-ui, sans-serif';
+  g.textAlign = align || 'left';
+  g.textBaseline = 'middle';
+  g.fillStyle = tone || env.colors.fg;
+  g.fillText(text, x, y);
 }
 
-// A ripple from a point: every shard takes energy by how near its nearest copy is. Returns the
-// nearest shard.
-function ripple(s, c, x, y) {
-  const f = frameOf(s, c.w, c.h);
-  s.ripples.push({ x, y, r: 2, life: 1 });
-  let best = 0;
-  let bestD = Infinity;
-  s.shards.forEach((sh, i) => {
-    let d = Infinity;
-    for (let arm = 0; arm < s.spokes; arm++) {
-      for (const mirror of [1, -1]) {
-        const p = place(s, sh, arm, mirror, f, c.reduced);
-        d = Math.min(d, Math.hypot(p.x - x, p.y - y));
+/* ---- count the folds ------------------------------------------------------------------------ */
+
+// The motif: three or four points in polar form about the centre -- a radius in 0.22..0.95 of the
+// loom and an angle in 0.12..0.92 of the half-sector an arm may use -- all to one side of the
+// arm's axis, so the motif has a hand of its own, and spread enough to be read.
+function motifOf(env) {
+  const n = env.chance(0.5) ? 3 : 4;
+  for (let attempt = 0; attempt < 120; attempt++) {
+    const points = [];
+    for (let i = 0; i < n; i++) points.push([Math.round((0.22 + env.rnd() * 0.73) * 100) / 100, Math.round((0.12 + env.rnd() * 0.8) * 100) / 100]);
+    let apart = true;
+    for (let i = 0; i < n && apart; i++) {
+      for (let j = 0; j < i; j++) {
+        if (Math.abs(points[i][0] - points[j][0]) < 0.1 || Math.abs(points[i][1] - points[j][1]) < 0.12) apart = false;
       }
     }
-    sh.energy = Math.min(1.4, sh.energy + 0.9 / (1 + (d / f.k) * 0.03));
-    if (d < bestD) {
-      bestD = d;
-      best = i;
-    }
-  });
-  return best;
-}
-
-function tune(s, c, value) {
-  s.spokes = Math.max(3, Math.min(12, Math.round(Number(value)) || 3));
-  c.status('symmetry tuned to ' + s.spokes + ' spokes');
-}
-
-// The pattern closes and the mantra prints: the finale, from whichever knob brings it.
-function finale(s, c, status) {
-  if (!s.mantra) {
-    s.mantra = [
-      { text: s.opener, tone: c.colors.accent2 },
-      { text: s.words.join(' · '), tone: c.colors.fg },
-      { text: s.geo, tone: c.colors.muted },
-      { text: s.line, tone: c.colors.fg }
-    ];
-    ripple(s, c, c.w / 2, c.h / 2);
+    // The thread must not just march outward or inward: a turn back makes it a shape.
+    const zig = points.some((p, i) => i > 1 && (p[0] - points[i - 1][0]) * (points[i - 1][0] - points[i - 2][0]) < 0);
+    if (apart && zig) return points;
   }
-  s.close = Math.max(s.close, 0.001);
-  c.status(status);
+  return [[0.3, 0.2], [0.72, 0.85], [0.52, 0.45], [0.9, 0.3]].slice(0, n);
 }
 
-function open(s, c) {
-  c.status(s.stars.length + ' shard' + (s.stars.length === 1 ? '' : 's') + ' on the loom');
-  draw(c.g, c.w, c.h, c, s);
+function foldsPlan(env) {
+  return { kind: 'folds', number: env.int(100, 999), k: env.int(MIN_FOLDS, MAX_FOLDS), mirrored: env.chance(0.5), motif: motifOf(env) };
 }
 
-// The pattern closes as soon as the mantra is called for (print, or the hold let go), whether
-// or not every other knob has been set yet; the finish is the visitor's own lever.
-function run(s, dt, c) {
-  tick(s, dt, c);
-  if (c.done || s.mantra) s.close = Math.min(1, s.close + dt * 1.4);
-  draw(c.g, c.w, c.h, c, s);
+function carriedFolds(env) {
+  const p = env.card && env.card.of;
+  if (!p || p.kind !== 'folds') return null;
+  if (!Number.isInteger(p.number) || p.number < 100 || p.number > 999) return null;
+  if (!Number.isInteger(p.k) || p.k < MIN_FOLDS || p.k > MAX_FOLDS) return null;
+  if (typeof p.mirrored !== 'boolean') return null;
+  if (!Array.isArray(p.motif) || p.motif.length < 3 || p.motif.length > 4) return null;
+  const okPoint = (pt) => Array.isArray(pt) && pt.length === 2 && pt.every((v) => typeof v === 'number' && isFinite(v))
+    && pt[0] >= 0.15 && pt[0] <= 1 && pt[1] >= 0.05 && pt[1] <= 1;
+  if (!p.motif.every(okPoint)) return null;
+  return { kind: 'folds', number: p.number, k: p.k, mirrored: p.mirrored, motif: p.motif.map((pt) => [pt[0], pt[1]]) };
 }
 
-/* ---- the pieces ---------------------------------------------------------------------------- */
-
-// A few ripples tapped into the weave, each one waking a star's words, then the mantra printed.
-function ripples(env) {
-  const was = woven(env);
-  const count = env.int(3, 5);
-  const spokes = was ? was.spokes : env.int(4, 9);
-  const turn = env.pick([0.24, 0.4, -0.3]);
-  const s = loom(env, spokes, was);
-  let sent = 0;
-  const printed = 'a mantra, printed from your constellation geometry';
-  return {
-    title: was ? NUMBERS[count] + ' ripples into ' + NUMBERS[spokes] + '-fold symmetry'
-      : NUMBERS[count] + ' ripples into the weave',
-    brief: 'Tune the symmetry, start the spin if you like, tap the weave ' + NUMBERS[count] + ' times to ripple it, and print the mantra it has become.',
-    aspect: '1 / 1',
-    steps: [
-      { id: 'spokes', ask: 'symmetry spokes', kind: 'range', min: 3, max: 12, step: 1, value: spokes, low: 'three', high: 'twelve' },
-      { id: 'spin', ask: 'the spin', kind: 'toggle', label: 'spin the weave' },
-      { id: 'ripple', ask: 'tap the weave ' + NUMBERS[count] + ' times', kind: 'tap', label: 'ripple it for me', after: 'spokes' },
-      { id: 'print', ask: 'print the mantra', kind: 'press', count: 1, label: 'print mantra', after: 'ripple' }
-    ],
-    start: (c) => open(s, c),
-    apply(id, value, c) {
-      if (id === 'spokes') tune(s, c, value);
-      if (id === 'spin') {
-        s.spin = value ? turn : 0;
-        c.status(spinWord(s.spin));
-      }
-      if (id === 'print') finale(s, c, printed);
-    },
-    tap(x, y, c) {
-      const i = ripple(s, c, x * c.w, y * c.h);
-      sent += 1;
-      if (sent <= count) {
-        s.said = Math.min(s.words.length, sent);
-        c.progress('ripple', sent / count);
-        c.status('ripple ' + sent + ' of ' + count + ' — the weave says: ' + s.stars[i].text);
-        if (sent === count) c.satisfy('ripple');
-      } else c.status(sent % 2 ? 'ripple emitted into the weave' : 'the weave shivers, and holds');
-    },
-    frame: (t, dt, c) => run(s, dt, c),
-    end: (c) => finale(s, c, printed)
-  };
+function foldsTitle(plan) {
+  return 'weave ' + plan.number + ': count the folds';
 }
 
-// The symmetry dial turned up a notch at a time, then the weave held until the pattern closes.
-function dial(env) {
-  const was = woven(env);
-  const base = env.int(3, 5);
-  // The dial turns up to the symmetry the card was woven at, when it came from one.
-  const notches = was ? Math.max(2, Math.min(7, was.spokes - base)) : env.int(3, 6);
-  const final = base + notches;
-  const ms = env.pick([2000, 2500, 3000]);
-  const s = loom(env, base, was);
-  s.spin = 0.33;
-  return {
-    title: NUMBERS[final] + ' spokes and a mantra',
-    brief: 'Choose the tones, turn the dial up to ' + NUMBERS[final] + ' spokes, set the spin, and hold the weave until the pattern closes and prints its mantra.',
-    aspect: '1 / 1',
-    steps: [
-      { id: 'tones', ask: 'the tones', kind: 'choice', options: TONES },
-      { id: 'dial', ask: 'turn the dial ' + NUMBERS[notches] + ' notches', kind: 'press', count: notches, label: 'one notch' },
-      { id: 'spin', ask: 'the spin', kind: 'range', min: 0, max: 100, step: 1, value: 30, low: 'hovering', high: 'whirling' },
-      { id: 'close', ask: 'hold until the pattern closes', kind: 'hold', ms, label: 'hold the weave', after: 'dial' }
-    ],
-    start: (c) => open(s, c),
-    apply(id, value, c) {
-      if (id === 'tones') {
-        s.tone = String(value);
-        c.status(TONE_WORDS[s.tone] || s.tone);
-      }
-      if (id === 'dial') {
-        const n = Number(value) || 0;
-        tune(s, c, base + n);
-        s.said = Math.min(s.words.length, n);
-        if (n >= notches) c.status('the dial is all the way round: ' + s.spokes + ' spokes');
-      }
-      if (id === 'spin') {
-        const v = Math.max(0, Math.min(1, Number(value) / 100));
-        s.spin = v * 1.1;
-        c.status(v === 0 ? spinWord(0) : v < 0.4 ? 'a slow turn; the weave is in motion' : v < 0.75 ? 'the weave is in motion' : 'whirling');
-      }
-      if (id === 'close') finale(s, c, 'the pattern closes at ' + s.spokes + ' spokes');
-    },
-    tap(x, y, c) {
-      ripple(s, c, x * c.w, y * c.h);
-      c.status('ripple emitted into the weave');
-    },
-    frame: (t, dt, c) => run(s, dt, c),
-    end: (c) => finale(s, c, 'closed at ' + s.spokes + ' spokes; the mantra is printed')
-  };
-}
-
-// The loom left to wind down: tune it, then watch the pattern close and say its words.
-function rest(env) {
-  const was = woven(env);
-  const spokes = was ? was.spokes : env.int(3, 12);
-  const secs = env.pick([6, 8, 10]);
-  const title = env.pick(['the loom at rest', 'the weave winds down', 'let the pattern close']);
-  const s = loom(env, spokes, was);
-  s.spin = 0.24;
-  let waited = -1;
-  return {
-    title,
-    brief: 'Tune the symmetry, pick a spin, shift the spectrum if you like, and watch for ' + secs + ' seconds while the weave winds down, closes, and prints its mantra.',
-    aspect: '1 / 1',
-    steps: [
-      { id: 'spokes', ask: 'symmetry spokes', kind: 'range', min: 3, max: 12, step: 1, value: spokes, low: 'three', high: 'twelve' },
-      { id: 'prism', ask: 'the spectrum', kind: 'toggle', label: 'prism weave' },
-      { id: 'spin', ask: 'the spin', kind: 'choice', options: SPINS },
-      { id: 'close', ask: 'watch the pattern close', kind: 'wait', after: 'spokes' }
-    ],
-    start: (c) => open(s, c),
-    apply(id, value, c) {
-      if (id === 'spokes') {
-        tune(s, c, value);
-        if (waited < 0) waited = 0;
-      }
-      if (id === 'prism') {
-        s.tone = value ? 'prism' : 'midnight';
-        c.status(TONE_WORDS[s.tone]);
-      }
-      if (id === 'spin') {
-        s.spin = Number(value) || 0;
-        c.status(spinWord(s.spin));
-      }
-    },
-    tap(x, y, c) {
-      ripple(s, c, x * c.w, y * c.h);
-      c.status('ripple emitted into the weave');
-    },
-    frame(t, dt, c) {
-      if (waited >= 0 && waited < secs) {
-        waited = Math.min(secs, waited + dt);
-        const f = waited / secs;
-        s.close = Math.max(s.close, f * f);
-        const said = Math.min(s.words.length, Math.floor(f * (s.words.length + 1)));
-        if (said > s.said) {
-          s.said = said;
-          c.status('the weave says: ' + s.words[said - 1]);
-        }
-        c.progress('close', f);
-        if (waited >= secs) c.satisfy('close');
-      }
-      run(s, dt, c);
-    },
-    end: (c) => finale(s, c, 'the loom is at rest; the mantra is printed')
-  };
-}
-
-/* ---- two striped screens ------------------------------------------------------------------- */
-
-const SCREEN_GUESSES = [
-  { label: 'upright bands', value: 'upright' },
-  { label: 'bands across the screen', value: 'across' },
-  { label: 'slanted bands', value: 'slanted' },
-  { label: 'no broad bands', value: 'none' }
-];
-
-function showsScreens(env) {
-  return (env.seed & 1) === 1;
-}
-
-function screenPlan(env) {
-  const n = env.stars.length || 1;
-  const lower = env.stars.reduce((sum, star) => sum + star.x / 100, 0) / n;
-  const upper = env.stars.reduce((sum, star) => sum + star.y / 100, 0) / n;
-  return {
-    lower, upper,
-    lines: env.int(34, 44) + env.stars.length % 5,
-    tilt: env.pick([-8, -4, -2, 2, 4, 8]),
-    spacing: env.pick([96, 98, 100, 102, 104]),
-    number: env.int(100, 999),
-    title: env.pick(['two screens, one hidden pattern', 'a large pattern from small lines', 'a sky between two screens'])
-  };
-}
-
-// The screens a card previewed, read back defensively: a card travels through the feed and the
-// address bar to get here (js/stage.js), so every number is checked, and anything a card did not
-// carry falls back to the plan this seed would have made on its own.
-function screensOf(was, env) {
-  const plan = screenPlan(env);
-  const had = was && was.screens;
-  if (!had) return plan;
-  const num = (value, lo, hi, fallback) => {
-    const n = Number(value);
-    return isFinite(n) ? Math.max(lo, Math.min(hi, n)) : fallback;
-  };
-  return {
-    lower: num(had.lower, 0, 1, plan.lower),
-    upper: num(had.upper, 0, 1, plan.upper),
-    lines: Math.round(num(had.lines, 20, 60, plan.lines)),
-    tilt: num(had.tilt, -12, 12, plan.tilt),
-    spacing: num(had.spacing, 94, 106, plan.spacing),
-    number: Math.round(num(had.number, 100, 999, plan.number)),
-    title: typeof had.title === 'string' && had.title ? had.title : plan.title
-  };
-}
-
-// The broad bands follow the difference between the two spatial-frequency vectors. Their
-// direction and spacing are measured from the same tilt and pitch that draw the actual masks.
-function screenBeat(tilt, ratio) {
-  const a = tilt * Math.PI / 180;
-  const dx = 1 - Math.cos(a) / ratio;
-  const dy = -Math.sin(a) / ratio;
-  const length = Math.hypot(dx, dy);
-  if (length < 1e-8) return { direction: 'none', repeat: 0 };
-  const angle = ((Math.atan2(dx, -dy) * 180 / Math.PI) % 180 + 180) % 180;
-  const direction = Math.abs(angle - 90) <= 15 ? 'upright'
-    : angle <= 15 || angle >= 165 ? 'across' : 'slanted';
-  return { direction, repeat: 1 / length };
-}
-
-function bandLine(plan, s) {
-  const b = screenBeat(s.tilt, s.ratio);
-  if (b.direction === 'none') {
-    return 'The fine lines have the same direction and spacing. There are no broad bands; sliding only changes how much light gets through.';
-  }
-  return 'The broad bands run ' + b.direction + '. One broad band spans about '
-    + Number(b.repeat.toFixed(1)) + ' fine-line spacings.'
-    + (b.repeat > plan.lines ? ' Only part of one fits in this screen.' : '');
-}
-
-function screenBoxes(w, h) {
+function loomGeometry(w, h, v) {
   const m = Math.min(w, h);
-  const pad = m * 0.05;
-  const size = Math.max(11, Math.min(16, Math.round(m * 0.035)));
-  const width = w - pad * 2;
-  const top = pad + size * 1.5;
-  const sampleH = h * 0.18;
-  const bothY = top + sampleH + pad + size * 1.5;
-  return {
-    pad, size,
-    lower: { x: pad, y: top, w: (width - pad) / 2, h: sampleH },
-    upper: { x: pad + (width + pad) / 2, y: top, w: (width - pad) / 2, h: sampleH },
-    both: { x: pad, y: bothY, w: width, h: Math.max(1, h - bothY - pad - size * 1.5) }
-  };
+  return { cx: w / 2, cy: h / 2, R: m * 0.44 * clamp(v.scale, 0.86, 1.1), m };
 }
 
-function screenStripes(g, box, pitch, angle, phase, duty, color) {
-  const reach = Math.hypot(box.w, box.h);
-  const offset = ((phase % 1) + 1) % 1 * pitch;
-  g.save();
+// One copy of the motif: on arm `arm`, with its hand kept (sign 1) or mirrored (sign -1), about
+// (cx, cy) at radius R, the first arm's axis at `base`.
+function copyOf(plan, cx, cy, R, base, arm, sign) {
+  const step = (Math.PI * 2) / plan.k;
+  return plan.motif.map((pt) => {
+    const angle = base + arm * step + sign * pt[1] * step * 0.42;
+    return { x: cx + Math.cos(angle) * pt[0] * R, y: cy + Math.sin(angle) * pt[0] * R };
+  });
+}
+
+function thread(g, pts) {
   g.beginPath();
-  g.rect(box.x, box.y, box.w, box.h);
-  g.clip();
-  g.translate(box.x + box.w / 2, box.y + box.h / 2);
-  g.rotate(angle);
-  g.fillStyle = color;
-  for (let x = -Math.ceil(reach / pitch) * pitch + offset; x <= reach; x += pitch) {
-    g.fillRect(x, -reach, pitch * duty, reach * 2);
-  }
-  g.restore();
+  pts.forEach((p, i) => (i ? g.lineTo(p.x, p.y) : g.moveTo(p.x, p.y)));
+  g.stroke();
 }
 
-function screenScene(g, w, h, c, plan, s, variant) {
-  const box = screenBoxes(w, h);
-  const k = c.colors;
-  const scale = variant ? variant.scale : 1;
-  const density = variant ? variant.density : 1;
-  const turn = variant ? variant.turn : 0;
-  const pitch = box.both.w / plan.lines * scale;
-  const duty = Math.max(0.32, Math.min(0.64, 0.48 * density));
-  const angle = s.tilt * Math.PI / 180;
-  const upperPhase = plan.upper + turn + (s.x * Math.cos(angle) + s.y * Math.sin(angle)) / s.ratio;
-  const lowerLight = c.mix(k.accent, k.fg, 0.35);
-  const upperLight = c.mix(k.accent2, k.fg, 0.35);
-  g.save();
-  const background = g.createLinearGradient(0, 0, 0, h);
-  background.addColorStop(0, k.bg2);
-  background.addColorStop(1, k.bg);
-  g.fillStyle = background;
-  g.fillRect(0, 0, w, h);
-
-  g.fillStyle = k.bg;
-  g.fillRect(box.lower.x, box.lower.y, box.lower.w, box.lower.h);
-  screenStripes(g, box.lower, pitch, 0, plan.lower, duty, lowerLight);
-  g.fillStyle = upperLight;
-  g.fillRect(box.upper.x, box.upper.y, box.upper.w, box.upper.h);
-  screenStripes(g, box.upper, pitch * s.ratio, angle, upperPhase, duty, k.bg);
-
-  g.fillStyle = k.bg;
-  g.fillRect(box.both.x, box.both.y, box.both.w, box.both.h);
-  screenStripes(g, box.both, pitch, 0, plan.lower, duty, lowerLight);
-  if (s.slid) {
-    // Only narrow stripes are drawn. The large bands emerge when the second screen covers the
-    // first; there is no separately painted envelope or replacement picture.
-    screenStripes(g, box.both, pitch * s.ratio, angle, upperPhase, duty, k.bg);
+function beads(g, pts, r) {
+  for (const p of pts) {
+    g.beginPath();
+    g.arc(p.x, p.y, r, 0, Math.PI * 2);
+    g.fill();
   }
+}
 
-  g.strokeStyle = c.alpha(k.muted, 0.7);
+// `s`: the loom's rotation, whether one arm is lit (a hint), whether the answer is out.
+function drawFolds(g, w, h, env, plan, s, variant, t) {
+  const v = variant || PLAIN;
+  const c = env.colors;
+  const geo = loomGeometry(w, h, v);
+  const base = v.turn * Math.PI * 2 + s.rot;
+  const size = Math.max(9, Math.min(15, Math.round(geo.m * 0.036)));
+  const bead = Math.max(1.4, geo.m * 0.006);
+  night(g, w, h, env);
+  sky(g, w, h, env, v, t || 0);
+  g.lineJoin = 'round';
+  g.lineWidth = Math.max(1, geo.m * 0.003);
+  for (let arm = 0; arm < plan.k; arm++) {
+    const tone = arm % 2 ? c.accent : c.accent2;
+    const lit = s.lit && arm === 0;
+    for (const sign of plan.mirrored ? [1, -1] : [1]) {
+      const pts = copyOf(plan, geo.cx, geo.cy, geo.R, base, arm, sign);
+      if (lit) {
+        g.strokeStyle = env.alpha(c.fg, 0.35);
+        g.lineWidth = Math.max(4, geo.m * 0.016);
+        thread(g, pts);
+        g.lineWidth = Math.max(1, geo.m * 0.003);
+      }
+      g.strokeStyle = env.alpha(lit ? c.fg : tone, lit ? 1 : 0.78);
+      thread(g, pts);
+      g.fillStyle = env.alpha(lit ? c.fg : tone, 0.95);
+      beads(g, pts, bead);
+    }
+  }
+  g.strokeStyle = env.alpha(c.accent, 0.22);
   g.lineWidth = 1;
-  for (const panel of [box.lower, box.upper, box.both]) {
-    g.strokeRect(panel.x, panel.y, panel.w, panel.h);
+  g.beginPath();
+  g.arc(geo.cx, geo.cy, geo.R, 0, Math.PI * 2);
+  g.stroke();
+  // The motif as laid once, in the corner, its axis pointing up.
+  const box = geo.m * 0.2;
+  const bx = geo.m * 0.03;
+  const by = h - box - geo.m * 0.03;
+  g.fillStyle = env.alpha(c.bg, 0.55);
+  g.fillRect(bx, by, box, box);
+  g.strokeStyle = env.alpha(c.muted, 0.4);
+  g.strokeRect(bx, by, box, box);
+  const key = copyOf(plan, bx + box * 0.5, by + box * 0.56, box * 0.46, -Math.PI / 2, 0, 1);
+  g.strokeStyle = env.alpha(c.fg, 0.9);
+  g.lineWidth = 1;
+  thread(g, key);
+  g.fillStyle = c.fg;
+  beads(g, key, bead);
+  label(g, env, 'the motif', bx + box * 0.5, by + box * 0.1, Math.max(8, size - 2), 'center', env.alpha(c.muted, 0.9));
+  if (s.open) {
+    label(g, env, WORDS[plan.k] + ' folds' + (plan.mirrored ? ', mirrored' : ', one hand'), w - geo.m * 0.03, h - geo.m * 0.04, size, 'right', c.accent2);
   }
-  if (s.finished) {
-    g.strokeStyle = k.accent2;
-    g.lineWidth = 2;
-    g.strokeRect(box.both.x, box.both.y, box.both.w, box.both.h);
-  }
-  g.font = '500 ' + box.size + 'px system-ui, sans-serif';
-  g.textAlign = 'left';
-  g.textBaseline = 'bottom';
-  g.fillStyle = k.fg;
-  g.fillText('lower screen', box.lower.x, box.lower.y - box.size * 0.35);
-  g.fillText('upper screen', box.upper.x, box.upper.y - box.size * 0.35);
-  g.fillText(s.slid ? 'both together' : 'lower screen alone', box.both.x, box.both.y - box.size * 0.35);
-  const footer = s.finished ? 'print ' + plan.number
-    : s.slid ? s.tilt + ' degrees / ' + Number((s.ratio * 100).toFixed(2)) + '% spacing'
-      : 'tap to lay the screens together';
-  g.fillStyle = s.finished ? k.accent2 : k.fg;
-  g.fillText(footer, box.pad, h - box.pad * 0.35);
-  g.restore();
 }
 
-function screenPreview(g, w, h, env, plan) {
-  const v = env.variant;
-  screenScene(g, w, h, env, plan, {
-    tilt: plan.tilt + v.turn * 4,
-    ratio: plan.spacing / 100,
-    x: 0, y: 0, slid: true, finished: false
-  }, v);
+function foldsPreview(g, w, h, env, plan, t) {
+  drawFolds(g, w, h, env, plan, { rot: 0, lit: false, open: false }, env.variant, t || 0);
 }
 
-function screenPiece(env) {
-  // The very screens the card previewed, so a visitor who pressed "a sky between two screens" sets
-  // up those screens and prints that number.
-  const plan = screensOf(pressed(env), env);
-  const s = {
-    tilt: plan.tilt, ratio: plan.spacing / 100, x: 0, y: 0,
-    tuned: false, slid: false, guess: '', finished: false
-  };
-  function paint(c) {
-    screenScene(c.g, c.w, c.h, c, plan, s);
-  }
-  function setting(c, line) {
-    c.status(line + ' ' + (s.slid ? bandLine(plan, s) : 'The two screens are still apart.'));
-  }
+function foldsPiece(env, plan) {
+  const s = { rot: 0, lit: false, open: false, t: 0 };
+  const draw = (c) => drawFolds(c.g, c.w, c.h, c, plan, s, env.variant, s.t);
   return {
-    title: plan.title,
-    brief: 'Set the tilt and spacing of two striped screens, predict the bands they will make, tap to lay one over the other, then print the overlap; tiny changes can make a much larger pattern.',
-    aspect: '4 / 3',
+    title: foldsTitle(plan),
+    brief: 'A motif of ' + WORDS[plan.motif.length] + ' joined points is laid on a midnight loom and turned about the centre a number of times: the folds. On some looms every copy is laid down with its mirror image as well, so the weave shows both hands. The motif, as laid once, is in the corner.',
+    goal: 'Count the folds, and say whether the weave is mirrored.',
+    aspect: '1 / 1',
+    checkLabel: 'check the weave',
     steps: [
-      { id: 'tilt', ask: 'upper-screen tilt, in degrees', kind: 'range', min: -12, max: 12, step: 0.25, value: plan.tilt, low: '-12', high: '+12' },
-      { id: 'spacing', ask: 'upper-screen spacing, compared with the lower screen', kind: 'range', min: 94, max: 106, step: 0.25, value: plan.spacing, low: '94%', high: '106%' },
-      { id: 'guess', ask: 'which broad bands will the overlap make?', kind: 'choice', options: SCREEN_GUESSES },
-      { id: 'slide', ask: 'tap anywhere to lay the screens together and slide the upper one', kind: 'tap', label: 'slide it for me', after: 'tilt' },
-      { id: 'print', ask: 'print this overlap', kind: 'press', count: 1, label: 'print the overlap', after: 'slide' }
+      { id: 'folds', ask: 'how many times the motif is turned about the centre', kind: 'number', min: 2, max: MAX_FOLDS, step: 1, unit: 'folds' },
+      { id: 'mirror', ask: 'is every copy laid with its mirror image?', kind: 'toggle', label: 'mirrored' },
+      { id: 'hint', ask: 'one arm, lit', kind: 'press', count: 1, label: 'light one arm', optional: true }
     ],
+    solution: { folds: plan.k, mirror: plan.mirrored },
+    check(c) {
+      const foldsRight = Number(c.value('folds')) === plan.k;
+      const mirrorRight = !!c.value('mirror') === plan.mirrored;
+      if (foldsRight && mirrorRight) return { solved: true, say: WORDS[plan.k] + ' folds, ' + (plan.mirrored ? 'each with its mirror image' : 'all of one hand') };
+      if (!foldsRight && !mirrorRight) return { solved: false, say: 'the fold count and the mirror are both off' };
+      return { solved: false, say: foldsRight ? 'the fold count is right; the mirror is off' : 'the mirror is right; the fold count is off' };
+    },
     start(c) {
-      c.status('Your stars set the screens\' starting offsets. The small windows show each screen separately; the large window holds only the lower one until you tap.');
-      paint(c);
+      c.status('the loom is still; the motif is in the corner');
+      draw(c);
     },
     apply(id, value, c) {
-      if (c.done) return;
-      if (id === 'tilt') {
-        s.tilt = Math.max(-12, Math.min(12, Number(value)));
-        s.tuned = true;
-        setting(c, 'Upper-screen tilt: ' + s.tilt + ' degrees.');
+      if (id === 'folds') {
+        const n = Math.round(Number(value));
+        if (Number.isFinite(n)) c.status(clamp(n, 2, MAX_FOLDS) + ' folds, you say');
       }
-      if (id === 'spacing') {
-        s.ratio = Math.max(94, Math.min(106, Number(value))) / 100;
-        setting(c, 'Upper-screen spacing: ' + Number((s.ratio * 100).toFixed(2)) + '% of the lower screen.');
+      if (id === 'mirror') c.status(value ? 'mirrored, you say' : 'one hand, you say');
+      if (id === 'hint') {
+        if (!s.lit) {
+          s.lit = true;
+          c.hint();
+          c.status('one arm is lit: everything on it is one fold');
+        } else {
+          c.status('one arm is lit already; the rest is counting');
+        }
       }
-      if (id === 'guess') {
-        s.guess = String(value);
-        const prediction = SCREEN_GUESSES.find((option) => option.value === s.guess);
-        c.status('Your prediction: ' + prediction.label + '. '
-          + (s.slid ? 'You can still change the overlap.' : 'Set the tilt, then tap to lay the screens together.'));
-      }
-      if (id === 'print') {
-        c.status('You have asked for the print. Any remaining choices still shape the overlap.');
-      }
-      paint(c);
-    },
-    tap(x, y, c) {
-      if (c.done) return;
-      if (!s.tuned) {
-        c.status('Set the tilt first; then anywhere on the scene slides the upper screen.');
-        return;
-      }
-      s.x = (x - 0.5) * 10;
-      s.y = (y - 0.5) * 10;
-      s.slid = true;
-      c.progress('slide', 1);
-      c.status(bandLine(plan, s) + ' The upper screen has moved; tilt and spacing still work.');
-      c.satisfy('slide');
-      paint(c);
+      draw(c);
     },
     frame(t, dt, c) {
-      paint(c);
+      if (!c.reduced) s.t += dt;
+      if (c.done && !c.reduced) s.rot += dt * 0.12;
+      draw(c);
     },
     end(c) {
-      s.finished = true;
-      const b = screenBeat(s.tilt, s.ratio);
-      const prediction = SCREEN_GUESSES.find((option) => option.value === s.guess);
-      paint(c);
-      c.status('Print ' + plan.number + '. ' + bandLine(plan, s)
-        + ' Your prediction: ' + prediction.label + '. '
-        + (s.guess === b.direction ? 'You called it.' : 'The overlap chose a different direction.')
-        + ' Both screens contain only fine stripes; the broad pattern belongs to their overlap.');
+      s.open = true;
+      c.status('the weave turns: ' + WORDS[plan.k] + ' folds' + (plan.mirrored ? ', mirrored' : ''));
+      draw(c);
     }
   };
 }
 
-function piece(env) {
-  if (!env.stars || !env.stars.length) return null;
-  if (showsScreens(env)) return screenPiece(env);
-  if (env.chance(0.4)) return ripples(env);
-  return env.chance(0.58) ? dial(env) : rest(env);
+/* ---- the moiré ------------------------------------------------------------------------------ */
+
+function moirePlan(env) {
+  const first = env.int(8, 24);
+  const apart = env.int(1, 6);
+  const more = env.chance(0.5) || first - apart < 6;
+  return { kind: 'moire', number: env.int(100, 999), first, second: more ? first + apart : first - apart };
+}
+
+function carriedMoire(env) {
+  const p = env.card && env.card.of;
+  if (!p || p.kind !== 'moire') return null;
+  if (!Number.isInteger(p.number) || p.number < 100 || p.number > 999) return null;
+  if (!Number.isInteger(p.first) || p.first < 8 || p.first > 24) return null;
+  if (!Number.isInteger(p.second) || p.second < 6 || p.second > 30) return null;
+  const apart = Math.abs(p.first - p.second);
+  if (apart < 1 || apart > 6) return null;
+  return { kind: 'moire', number: p.number, first: p.first, second: p.second };
+}
+
+function moireTitle(plan) {
+  return 'print ' + plan.number + ': the moiré';
+}
+
+function moireBoxes(w, h, v) {
+  const pad = w * 0.06;
+  const width = (w - pad * 2) * clamp(v.scale, 0.86, 1);
+  const x = (w - width) / 2;
+  return {
+    pad,
+    alone: { x, y: h * 0.12, w: width, h: h * 0.15 },
+    both: { x, y: h * 0.38, w: width, h: h * 0.5 }
+  };
+}
+
+// The lines of one screen across a box: `n` of them, evenly spaced, slid along by `phase` of the
+// width and wrapped, every one crisp on a pixel.
+function screenLines(g, box, n, offset, phase, color) {
+  g.strokeStyle = color;
+  g.lineWidth = 1;
+  g.beginPath();
+  for (let i = 0; i < n; i++) {
+    const u = ((((i + offset) / n + phase) % 1) + 1) % 1;
+    const x = Math.round(box.x + u * box.w) + 0.5;
+    g.moveTo(x, box.y);
+    g.lineTo(x, box.y + box.h);
+  }
+  g.stroke();
+}
+
+// `s`: whether the bands are marked (the answer is out).
+function drawMoire(g, w, h, env, plan, s, variant) {
+  const v = variant || PLAIN;
+  const c = env.colors;
+  const boxes = moireBoxes(w, h, v);
+  const size = Math.max(9, Math.min(15, Math.round(Math.min(w, h) * 0.036)));
+  const phase = v.turn / plan.first;
+  const strength = clamp(0.6 * v.density, 0.5, 0.95);
+  const firstTone = env.alpha(env.mix(c.accent, c.fg, 0.35), strength);
+  const secondTone = env.alpha(c.accent2, strength);
+  night(g, w, h, env);
+  for (const box of [boxes.alone, boxes.both]) {
+    g.fillStyle = env.alpha(c.bg, 0.7);
+    g.fillRect(box.x, box.y, box.w, box.h);
+  }
+  screenLines(g, boxes.alone, plan.first, 0.5, phase, firstTone);
+  screenLines(g, boxes.both, plan.first, 0.5, phase, firstTone);
+  // The second screen sits half a pitch along, which centres its bands in the print.
+  screenLines(g, boxes.both, plan.second, 1, phase, secondTone);
+  if (s.open) {
+    const apart = Math.abs(plan.first - plan.second);
+    for (let j = 0; j < apart; j++) {
+      const x = boxes.both.x + ((j + 0.5) / apart) * boxes.both.w;
+      const span = boxes.both.w / apart;
+      const band = g.createLinearGradient(x - span / 2, 0, x + span / 2, 0);
+      band.addColorStop(0, env.alpha(c.accent2, 0));
+      band.addColorStop(0.5, env.alpha(c.accent2, 0.22));
+      band.addColorStop(1, env.alpha(c.accent2, 0));
+      g.fillStyle = band;
+      g.fillRect(x - span / 2, boxes.both.y, span, boxes.both.h);
+    }
+  }
+  g.strokeStyle = env.alpha(c.muted, 0.45);
+  g.lineWidth = 1;
+  for (const box of [boxes.alone, boxes.both]) {
+    g.beginPath();
+    g.moveTo(box.x, box.y);
+    g.lineTo(box.x + box.w, box.y);
+    g.moveTo(box.x, box.y + box.h);
+    g.lineTo(box.x + box.w, box.y + box.h);
+    g.stroke();
+  }
+  label(g, env, 'the first screen alone: ' + plan.first + ' lines', boxes.alone.x, boxes.alone.y - size * 0.9, size, 'left', env.mix(c.accent, c.fg, 0.35));
+  label(g, env, 'the second screen', boxes.both.x, boxes.both.y - size * 0.9, size, 'left', c.accent2);
+  label(g, env, ' laid over the first', boxes.both.x + g.measureText('the second screen').width, boxes.both.y - size * 0.9, size, 'left', env.alpha(c.fg, 0.9));
+  if (s.open) {
+    const apart = Math.abs(plan.first - plan.second);
+    label(g, env, WORDS[apart] + (apart === 1 ? ' band: ' : ' bands: ') + plan.second + ' lines on the second screen', w - boxes.pad, h * 0.95, size, 'right', c.accent2);
+  }
+}
+
+function moirePreview(g, w, h, env, plan) {
+  drawMoire(g, w, h, env, plan, { open: false }, env.variant);
+}
+
+function moirePiece(env, plan) {
+  const more = plan.second > plan.first;
+  const apart = Math.abs(plan.first - plan.second);
+  const s = { open: false };
+  const draw = (c) => drawMoire(c.g, c.w, c.h, c, plan, s, env.variant);
+  return {
+    title: moireTitle(plan),
+    brief: 'Two screens of thin upright lines lie over each other: the first has ' + plan.first + ' lines across the width, the second a different count. Where their lines fall together and then apart, broad bands appear across the print, and there are as many bands as the two counts differ by.',
+    goal: 'Say how many lines the second screen has, and whether that is more or fewer than the first.',
+    aspect: '4 / 3',
+    checkLabel: 'check the print',
+    steps: [
+      { id: 'second', ask: 'the lines on the second screen', kind: 'number', min: 4, max: 30, step: 1, unit: 'lines' },
+      { id: 'which', ask: 'the second screen has', kind: 'choice', options: [
+        { label: 'more lines than the first', value: 'more' },
+        { label: 'fewer lines than the first', value: 'fewer' }
+      ] },
+      { id: 'hint', ask: 'which screen is the finer', kind: 'press', count: 1, label: 'tell me which is finer', optional: true }
+    ],
+    solution: { second: plan.second, which: more ? 'more' : 'fewer' },
+    check(c) {
+      const countRight = Number(c.value('second')) === plan.second;
+      const whichRight = c.value('which') === (more ? 'more' : 'fewer');
+      if (countRight && whichRight) return { solved: true, say: plan.second + ' lines, ' + WORDS[apart] + (apart === 1 ? ' band' : ' bands') + ' across the print' };
+      if (!countRight && !whichRight) return { solved: false, say: 'the count and the direction are both off' };
+      return { solved: false, say: countRight ? 'the count is right; the direction is off' : 'the direction is right; the count is off' };
+    },
+    start(c) {
+      c.status('count the broad bands across the print');
+      draw(c);
+    },
+    apply(id, value, c) {
+      if (id === 'second') {
+        const n = Math.round(Number(value));
+        if (Number.isFinite(n)) c.status(clamp(n, 4, 30) + ' lines on the second screen, you say');
+      }
+      if (id === 'which') c.status(value === 'more' ? 'more lines than the first, you say' : 'fewer lines than the first, you say');
+      if (id === 'hint') {
+        c.hint();
+        c.status(more ? 'the second screen\'s lines sit closer together than the first\'s' : 'the second screen\'s lines sit farther apart than the first\'s');
+      }
+      draw(c);
+    },
+    frame(t, dt, c) {
+      draw(c);
+    },
+    end(c) {
+      s.open = true;
+      c.status(WORDS[apart] + (apart === 1 ? ' band' : ' bands') + ' from ' + plan.first + ' lines against ' + plan.second + '; the bands are lit on the print');
+      draw(c);
+    }
+  };
+}
+
+/* ---- the module ----------------------------------------------------------------------------- */
+
+// Which puzzle a seed is dealt, from the seed alone so that paint, spark and piece agree.
+function dealsMoire(env) {
+  return (((Math.imul(env.seed >>> 0, 0x9E3779B1) >>> 0) >>> 3) & 1) === 1;
 }
 
 export default {
   id: 'orbital-weaver',
   needsSky: true,
-  paint(ctx, w, h, env) {
-    if (showsScreens(env)) screenPreview(ctx, w, h, env, screenPlan(env));
-    else weave(ctx, w, h, env, Math.max(3, Math.round(env.int(4, 9) * env.variant.density)), 0);
+  paint(g, w, h, env) {
+    if (dealsMoire(env)) moirePreview(g, w, h, env, moirePlan(env));
+    else foldsPreview(g, w, h, env, foldsPlan(env), 0);
   },
-  animate(ctx, w, h, env, t) {
-    if (showsScreens(env)) return;
-    const spokes = 4 + Math.floor(env.seed % 6);
-    weave(ctx, w, h, env, spokes, t);
+  animate(g, w, h, env, t) {
+    if (dealsMoire(env)) return;
+    const plan = foldsPlan(env);
+    drawFolds(g, w, h, env, plan, { rot: t * 0.05, lit: false, open: false }, env.variant, t);
   },
   spark(env) {
-    if (!env.stars.length) return null;
-    if (showsScreens(env)) {
-      const plan = screenPlan(env);
+    if (dealsMoire(env)) {
+      const plan = moirePlan(env);
       return {
-        title: plan.title,
-        text: 'Two fine grids hide a much larger pattern. Tilt one by a few degrees, predict where the bands run, and slide the screens together to find out.',
+        title: moireTitle(plan),
+        text: 'One screen of ' + plan.first + ' thin lines, and a second laid over it. The broad bands in the print say how far apart the two counts are.',
+        mono: plan.first + ' lines / ?',
         aspect: '4 / 3',
-        paint: (ctx, w, h, e) => screenPreview(ctx, w, h, e, plan),
-        // What this card is of, for the piece it opens as: the two screens it stood up.
-        of: { screens: plan }
+        paint: (ctx, cw, ch, cardEnv) => moirePreview(ctx, cw, ch, cardEnv, plan),
+        of: plan
       };
     }
-    const k = env.int(3, 12);
-    const mantra = words(env, 3);
+    const plan = foldsPlan(env);
     return {
-      title: 'a mantra',
-      quote: mantra.join(' · '),
-      text: k + ' spokes of symmetry, ' + env.stars.length + ' star' + (env.stars.length === 1 ? '' : 's') + ' mirrored. Say it until the pattern closes.',
+      title: foldsTitle(plan),
+      text: 'One motif turned about the centre of a midnight loom, perhaps with its mirror image. Count the folds and say which.',
+      mono: WORDS[plan.motif.length] + ' points / ? folds',
       aspect: '1 / 1',
-      paint: (ctx, w, h, e) => weave(ctx, w, h, e, k, 0),
-      // What this card is of, for the piece it opens as: its symmetry and its mantra.
-      of: { spokes: k, words: mantra }
+      paint: (ctx, cw, ch, cardEnv) => foldsPreview(ctx, cw, ch, cardEnv, plan, 0),
+      of: plan
     };
   },
-  piece
+  piece(env) {
+    const folds = carriedFolds(env);
+    if (folds) return foldsPiece(env, folds);
+    const moire = carriedMoire(env);
+    if (moire) return moirePiece(env, moire);
+    return dealsMoire(env) ? moirePiece(env, moirePlan(env)) : foldsPiece(env, foldsPlan(env));
+  }
 };

@@ -1,98 +1,93 @@
-/* The wish constellation: the persona's stars as a live sky. As a card it is the sky with a
-   reading under it (paint, spark); as a piece it is that sky asked for a reading and minted as a
-   postcard, a meteor shower to catch comet memos from, or the whole sky set orbiting for one
-   full turn. A two-view postcard gives the stars invented depths to explore without moving the
-   saved sky. See js/feed.js for what a module is and js/stage.js for what a piece is.
+/* The wish constellation: the visitor's stars, set as puzzles. As a card it is one of the two
+   puzzles below painted small (paint, spark); as a piece it is that puzzle, and the card it was
+   opened from says which. See js/feed.js for what a module is and js/stage.js for what a piece is.
 
-   A card and the feature it opens as are one reading: the spark puts the star it read and the line
-   it gave on its spec as `of`, and the piece carries both -- the reading starts at that star, and
-   the line comes back in the postcard or on the first comet. */
+   Two puzzles, both deduction, both drawn from where the visitor's stars sit -- their places, never
+   their words -- and filled out with lights invented from the seed when the sky has too few, so a
+   sky of one star still makes a whole puzzle:
 
-// The card this piece was opened from, in the sky's own terms: the star it read and the line it
-// gave, or null for a piece nobody pressed (js/stage.js hands it over as env.card.of).
-function pressed(env) {
-  const was = env.card && env.card.of;
-  if (!was) return null;
-  const star = typeof was.star === 'string' ? was.star : '';
-  const line = typeof was.oracle === 'string' ? was.oracle : '';
-  return star || line ? { star, line } : null;
+     the postcard        Two views of the same lights, a left eye and a right eye a step apart. A
+                         light shifts between the views by more the nearer it is, so the order of
+                         the shifts is the order of the depths. Put the lights nearest to farthest.
+                         A wrong check says how many stand in the right place and no more; a hint,
+                         at a price, shows where one light stands.
+     which sky is yours  Four small skies. One is the visitor's pattern turned clockwise by one,
+                         two or three quarter turns, perhaps flipped left for right first; the other
+                         three are near misses, the same lights with a few nudged. Say which sky,
+                         how far it turned and whether it was flipped. A wrong check says which of
+                         the three parts hold and no more; a hint marks one decoy.
+
+   A card and the feature it opens as are one puzzle: the spark puts the whole plan on its spec as
+   `of` -- the lights, their depths, the four skies -- and piece(env) opens on that rather than
+   rolling another. */
+
+const WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
+const PLACE = ['nearest', 'second nearest', 'third nearest', 'fourth nearest', 'fifth nearest', 'sixth nearest'];
+const LETTERS = 'ABCDEFG';
+const SKIES = 'ABCD';
+const PLAIN = { density: 1, scale: 1, turn: 0 };
+// How far the nearest and the farthest light shift between the two views, in hundredths of a view.
+const SHIFT_NEAR = 26;
+const SHIFT_FAR = 4;
+
+/* ---- shared arithmetic ---------------------------------------------------------------------- */
+
+function dials(env) {
+  const v = env && env.variant;
+  const num = (x, d) => (Number.isFinite(Number(x)) ? Number(x) : d);
+  return v && typeof v === 'object' ? { density: num(v.density, 1), scale: num(v.scale, 1), turn: num(v.turn, 0) } : PLAIN;
 }
 
-const PAD = 12;
-
-const ORACLE = [
-  'Move one star and ask again.',
-  'Whatever is nearest the middle is the thing to do first.',
-  'The gap between the two farthest stars is the size of the next small experiment.',
-  'A sky this shape wants one more star, and not where you would put it.',
-  'Read it as a map, then walk the other way.',
-  'The dim ones are not less true.'
-];
-
-const OPENERS = ['the sky leans toward momentum', 'the sky hums with patient energy', 'the sky suggests a turning point',
-  'the sky maps a curious detour', 'the sky carries a brave undertone'];
-const CLOSERS = ['follow the smallest spark and let it grow', 'name one next step and begin before overthinking',
-  'protect your attention like it is lantern light', 'share a rough draft; feedback is part of flight',
-  'keep play in the process and precision will follow', 'make the next move tiny, clear, and kind'];
-const COMETS = ['momentum loves imperfect beginnings', 'aim for wonder, then refine', 'brave ideas arrive before permission',
-  'your future self votes for this attempt', 'let play lead; precision will catch up'];
-const FIRST = ['Lantern', 'Velvet', 'Copper', 'Quiet', 'Spiral', 'Silver', 'Saffron', 'Echo', 'Midnight', 'Bloom'];
-const SECOND = ['Harbor', 'Engine', 'Garden', 'Signal', 'Bridge', 'Compass', 'Archive', 'Drift', 'Choir', 'Voyage'];
-const COUNT = ['', 'one', 'two', 'three', 'four'];
-const TIMES = ['', 'once', 'twice', 'three times', 'four times'];
-
-const LENSES = [{ label: 'as a map', value: 'map' }, { label: 'as weather', value: 'weather' },
-  { label: 'as a melody', value: 'melody' }, { label: 'as a warning', value: 'warning' }];
-const SIDES = [{ label: 'from the west', value: 'w' }, { label: 'from the east', value: 'e' },
-  { label: 'from the north', value: 'n' }, { label: 'from anywhere', value: 'any' }];
-const SPINS = [{ label: 'sunwise', value: 1 }, { label: 'widdershins', value: -1 }, { label: 'in and out', value: 0 }];
-
-/* ---- reading the sky ----------------------------------------------------------------------- */
-
-function summary(stars) {
-  const n = stars.length || 1;
-  let cx = 0;
-  let cy = 0;
-  for (const s of stars) {
-    cx += s.x;
-    cy += s.y;
-  }
-  cx /= n;
-  cy /= n;
-  let spread = 0;
-  for (const s of stars) spread += Math.hypot(s.x - cx, s.y - cy);
-  return { cx, cy, spread: spread / n };
-}
-
-function shape(stars) {
-  if (stars.length < 3) return 'barely a sky yet';
-  const m = summary(stars);
-  const side = m.cx < 40 ? 'leaning west' : m.cx > 60 ? 'leaning east' : 'centred';
-  return (m.spread < 14 ? 'close-knit' : m.spread < 26 ? 'loosely gathered' : 'scattered wide') + ', ' + side;
-}
-
-// The postcard's name comes from the exact arrangement of the stars, as it did on the old page.
-function postcardName(stars, m) {
-  let h = 2166136261;
-  for (const s of stars) {
-    h = Math.imul(h ^ Math.round(s.x * 10), 16777619) >>> 0;
-    h = Math.imul(h ^ Math.round(s.y * 10), 16777619) >>> 0;
-    const t = String(s.text || '');
-    for (let i = 0; i < t.length; i++) h = Math.imul(h ^ t.charCodeAt(i), 16777619) >>> 0;
-  }
-  const region = (m.cy < 50 ? 'North' : 'South') + (m.cx < 50 ? 'West' : 'East');
-  const mood = m.spread < 12 ? 'Knot' : m.spread < 24 ? 'Field' : 'Trail';
-  return FIRST[h % FIRST.length] + ' ' + (stars.length < 4 ? 'Ember' : SECOND[(h >>> 3) % SECOND.length]) + ' of the ' + region + ' ' + mood;
-}
-
-function pickN(env, list, n) {
-  const pool = list.slice();
+function range(n) {
   const out = [];
-  while (out.length < n && pool.length) out.push(pool.splice(env.int(0, pool.length - 1), 1)[0]);
+  for (let i = 0; i < n; i++) out.push(i);
   return out;
 }
 
-/* ---- drawing ------------------------------------------------------------------------------- */
+function shuffled(env, list) {
+  const out = list.slice();
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = env.int(0, i);
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
+
+function isPerm(list, n) {
+  return Array.isArray(list) && list.length === n && list.every((v) => Number.isInteger(v) && v >= 0 && v < n) && new Set(list).size === n;
+}
+
+function okPoints(list, n0, n1) {
+  return Array.isArray(list) && list.length >= n0 && list.length <= n1
+    && list.every((p) => p && Number.isInteger(p.x) && Number.isInteger(p.y) && p.x >= 0 && p.x <= 100 && p.y >= 0 && p.y <= 100);
+}
+
+function copyPoints(list) {
+  return list.map((p) => ({ x: p.x, y: p.y }));
+}
+
+// n lights in a square of hundredths, each at least `gap` from the rest: the visitor's stars first,
+// by where they sit, then lights invented from the seed when the sky has too few.
+function gather(env, n, gap, box) {
+  const pts = [];
+  const far = (p) => pts.every((q) => Math.hypot(q.x - p.x, q.y - p.y) >= gap);
+  const into = (x, y) => ({ x: Math.round(box[0] + x / 100 * (box[1] - box[0])), y: Math.round(box[2] + y / 100 * (box[3] - box[2])) });
+  for (const s of (Array.isArray(env.stars) ? env.stars : [])) {
+    if (pts.length >= n) break;
+    const x = Number(s && s.x);
+    const y = Number(s && s.y);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+    const p = into(Math.max(0, Math.min(100, x)), Math.max(0, Math.min(100, y)));
+    if (far(p)) pts.push(p);
+  }
+  for (let guard = 0; pts.length < n; guard++) {
+    const p = into(env.rnd() * 100, env.rnd() * 100);
+    if (far(p) || guard > 300) pts.push(p);
+  }
+  return pts;
+}
+
+/* ---- drawing -------------------------------------------------------------------------------- */
 
 function backdrop(g, w, h, c) {
   const grad = g.createRadialGradient(w * 0.2, h * 0.1, 0, w * 0.2, h * 0.1, Math.max(w, h) * 1.1);
@@ -102,62 +97,19 @@ function backdrop(g, w, h, c) {
   g.fillRect(0, 0, w, h);
 }
 
-function dustOf(rnd, n) {
-  const out = [];
-  for (let i = 0; i < n; i++) out.push([rnd(), rnd(), 0.08 + rnd() * 0.2]);
-  return out;
-}
-
-function drawDust(g, w, h, c, dust, t) {
-  dust.forEach((d, i) => {
-    g.fillStyle = c.alpha(c.colors.fg, d[2] * (t ? 0.7 + 0.3 * Math.sin(t * 0.9 + i) : 1));
-    g.fillRect(d[0] * w, d[1] * h, 1, 1);
-  });
-}
-
-function centre(list) {
-  const m = { x: 0, y: 0 };
-  for (const p of list) {
-    m.x += p.x / list.length;
-    m.y += p.y / list.length;
+// Motes behind everything: as many as the configuration asks for, where its turn puts them.
+function dust(g, w, h, c, v) {
+  g.fillStyle = c.alpha(c.colors.fg, 0.16);
+  const count = Math.max(8, Math.round(36 * v.density));
+  for (let i = 0; i < count; i++) {
+    g.fillRect(((i * 0.618034 + v.turn * 0.37) % 1) * w, ((i * 0.754878 + v.turn * 0.19) % 1) * h, v.scale, v.scale);
   }
-  return m;
 }
 
-// Lines between the stars: 'map' joins each to its two nearest within reach, 'warning' joins
-// every pair within reach, 'weather' rings the middle, 'melody' strings them west to east.
-function links(g, w, h, c, pts, reach, mode, boost) {
-  const col = c.colors;
-  const R = Math.min(w, h) * reach;
+// Lines between lights: each joined to its two nearest within reach, brighter the nearer.
+function links(g, side, c, pts, reach, boost) {
+  const R = side * reach;
   g.lineWidth = 1;
-  if (mode === 'weather') {
-    const m = centre(pts);
-    for (let k = 1; k <= 4; k++) {
-      g.strokeStyle = c.alpha(col.accent, (0.5 - k * 0.1) * boost);
-      g.beginPath();
-      g.arc(m.x, m.y, R * k * 0.45, 0, Math.PI * 2);
-      g.stroke();
-    }
-    return;
-  }
-  if (mode === 'melody') {
-    const ys = pts.map((p) => p.y);
-    const top = Math.min(...ys);
-    const bot = Math.max(...ys);
-    g.strokeStyle = c.alpha(col.muted, 0.22 * boost);
-    for (let k = 0; k < 5; k++) {
-      const y = top + ((bot - top) * k) / 4;
-      g.beginPath();
-      g.moveTo(0, y);
-      g.lineTo(w, y);
-      g.stroke();
-    }
-    g.strokeStyle = c.alpha(col.accent, 0.6 * boost);
-    g.beginPath();
-    pts.slice().sort((a, b) => a.x - b.x).forEach((p, i) => (i ? g.lineTo(p.x, p.y) : g.moveTo(p.x, p.y)));
-    g.stroke();
-    return;
-  }
   for (let i = 0; i < pts.length; i++) {
     const near = [];
     for (let j = 0; j < pts.length; j++) {
@@ -166,9 +118,9 @@ function links(g, w, h, c, pts, reach, mode, boost) {
       if (d < R) near.push({ j, d });
     }
     near.sort((a, b) => a.d - b.d);
-    for (const n of (mode === 'warning' ? near : near.slice(0, 2))) {
+    for (const n of near.slice(0, 2)) {
       if (n.j < i) continue;
-      g.strokeStyle = c.alpha(mode === 'warning' ? col.accent2 : col.accent, (0.18 + (1 - n.d / R) * 0.5) * boost);
+      g.strokeStyle = c.alpha(c.colors.accent, (0.18 + (1 - n.d / R) * 0.5) * boost);
       g.beginPath();
       g.moveTo(pts[i].x, pts[i].y);
       g.lineTo(pts[n.j].x, pts[n.j].y);
@@ -191,728 +143,561 @@ function star(g, c, p, tw, glow) {
   g.beginPath();
   g.arc(p.x, p.y, 1.6 + 0.6 * tw, 0, Math.PI * 2);
   g.fill();
-  if (p.ping > 0) {
-    g.strokeStyle = c.alpha(c.colors.accent2, p.ping * 0.8);
-    g.lineWidth = 1.5;
-    g.beginPath();
-    g.arc(p.x, p.y, 6 + 16 * (1 - p.ping), 0, Math.PI * 2);
-    g.stroke();
-  }
 }
 
-function font(c, k, weight) {
-  return (weight || 500) + ' ' + Math.max(10, Math.round(Math.min(c.w, c.h) * k)) + 'px system-ui, sans-serif';
-}
-
-// A star's thought, written beside it: to its right, unless that would run off the edge.
-function label(c, p) {
-  const g = c.g;
-  const t = String(p.text || '');
-  const text = t.length > 40 ? t.slice(0, 39) + '…' : t;
-  g.font = font(c, 0.03);
-  g.textBaseline = 'middle';
-  const right = p.x + 10 + g.measureText(text).width > c.w - 4;
-  g.textAlign = right ? 'right' : 'left';
-  g.fillStyle = c.alpha(p.hot ? c.colors.accent2 : c.colors.fg, 0.8);
-  g.fillText(text, p.x + (right ? -10 : 10), p.y);
-}
-
-function caption(c, text, a, y) {
-  if (!text || a <= 0) return;
-  const g = c.g;
-  g.fillStyle = c.alpha(c.colors.fg, a);
-  g.font = font(c, 0.04);
-  g.textAlign = 'center';
-  g.textBaseline = 'middle';
-  g.fillText(text, c.w / 2, c.h * y);
-}
-
-// The postcard: a dark band rising from the foot of the sky with its name and its stamp.
-function postcard(c, k, name, sub) {
-  const g = c.g;
-  const bh = c.h * 0.2;
-  const y = c.h - bh * k;
-  const f = Math.min(c.w, c.h);
-  g.fillStyle = c.alpha(c.colors.bg, 0.78);
-  g.fillRect(0, y, c.w, bh);
-  g.strokeStyle = c.alpha(c.colors.accent2, 0.6 * k);
-  g.lineWidth = 1;
+function ring(g, c, x, y, a, r) {
+  g.strokeStyle = c.alpha(c.colors.accent2, a);
+  g.lineWidth = 1.5;
   g.beginPath();
-  g.moveTo(0, y);
-  g.lineTo(c.w, y);
+  g.arc(x, y, r, 0, Math.PI * 2);
   g.stroke();
-  g.textAlign = 'left';
-  g.textBaseline = 'middle';
-  g.fillStyle = c.alpha(c.colors.fg, k);
-  g.font = font(c, 0.05, 600);
-  g.fillText(name, f * 0.04, y + bh * 0.38);
-  g.fillStyle = c.alpha(c.colors.muted, k);
-  g.font = font(c, 0.032);
-  g.fillText(sub, f * 0.04, y + bh * 0.72);
 }
 
-function meteor(c, m, tail) {
-  const g = c.g;
-  const len = Math.hypot(m.vx, m.vy) || 1;
-  const hx = m.x * c.w;
-  const hy = m.y * c.h;
-  const tx = hx - (m.vx / len) * tail * c.w;
-  const ty = hy - (m.vy / len) * tail * c.w;
-  const grad = g.createLinearGradient(tx, ty, hx, hy);
-  grad.addColorStop(0, c.alpha(c.colors.accent2, 0));
-  grad.addColorStop(1, c.alpha(c.colors.accent2, 0.9));
-  g.strokeStyle = grad;
-  g.lineWidth = 2;
-  g.lineCap = 'round';
-  g.beginPath();
-  g.moveTo(tx, ty);
-  g.lineTo(hx, hy);
-  g.stroke();
-  g.fillStyle = c.colors.fg;
-  g.beginPath();
-  g.arc(hx, hy, 2.5, 0, Math.PI * 2);
-  g.fill();
+function font(g, size, weight) {
+  g.font = (weight || 500) + ' ' + Math.round(size) + 'px system-ui, sans-serif';
 }
 
-function ring(c, x, y, a, r) {
-  c.g.strokeStyle = c.alpha(c.colors.accent2, a);
-  c.g.lineWidth = 1.5;
-  c.g.beginPath();
-  c.g.arc(x, y, r, 0, Math.PI * 2);
-  c.g.stroke();
+/* ---- the postcard: nearest to farthest ------------------------------------------------------ */
+
+function shiftOf(rank, n) {
+  return SHIFT_NEAR - rank * (SHIFT_NEAR - SHIFT_FAR) / Math.max(1, n - 1);
 }
 
-// The card's sky: the stars, their nearest links, and dust -- as many motes, as far a reach between
-// two stars and as large a star as the configuration the card was dealt asks for.
-function sky(ctx, w, h, env, t) {
-  const v = env.variant;
-  backdrop(ctx, w, h, env);
-  drawDust(ctx, w, h, env, dustOf(env.rnd, Math.round(40 * v.density)), 0);
-  const pts = env.points(w, h, PAD);
-  links(ctx, w, h, env, pts, 0.34 * v.scale, 'map', 1);
-  pts.forEach((p, i) => star(ctx, env, p, t ? 0.75 + 0.25 * Math.sin(t * 1.7 + i * 1.3) : 1, v.scale));
+function postcardPlan(env) {
+  const n = env.int(4, 6);
+  const points = gather(env, n, 15, [30, 96, 10, 90]);
+  let ranks = shuffled(env, range(n));
+  for (let guard = 0; guard < 12 && ranks.every((r, i) => r === i); guard++) ranks = shuffled(env, range(n));
+  if (ranks.every((r, i) => r === i)) ranks.reverse();
+  return { kind: 'postcard', number: 101 + env.int(0, 898), points, ranks };
 }
 
-/* ---- the pieces ---------------------------------------------------------------------------- */
-
-function base(dust) {
-  return { dust, t: 0, tw: 1.7, reach: 0.34, glow: 1, boost: 1, mode: 'map', flash: 0, labels: false, extra: [], warp: null, hit: null };
-}
-
-// The stars as they stand in this piece: the persona's, any caught meteors, and the piece's warp.
-function pts(c, s) {
-  const list = c.points(c.w, c.h, PAD).concat(s.extra.map((e) => ({ x: e.x * c.w, y: e.y * c.h, text: e.text, hot: true })));
-  if (s.hit) {
-    s.hit.a -= 0.05;
-    if (s.hit.a <= 0) s.hit = null;
-    else if (list[s.hit.i]) list[s.hit.i].ping = s.hit.a;
-  }
-  return s.warp ? s.warp(list, c) : list;
-}
-
-function scene(c, s, list) {
-  const g = c.g;
-  backdrop(g, c.w, c.h, c);
-  drawDust(g, c.w, c.h, c, s.dust, c.reduced ? 0 : s.t);
-  links(g, c.w, c.h, c, list, s.reach, s.mode, s.boost);
-  list.forEach((p, i) => star(g, c, p, c.reduced ? 1 : 0.75 + 0.25 * Math.sin(s.t * s.tw + i * 1.3), s.glow));
-  if (s.labels) list.forEach((p) => label(c, p));
-  if (s.flash > 0) {
-    g.fillStyle = c.alpha(c.colors.accent2, s.flash * 0.22);
-    g.fillRect(0, 0, c.w, c.h);
-  }
-}
-
-// Tap a star to read its thought: the nearest one answers, and pings.
-function readStar(c, s, x, y) {
-  const list = pts(c, s);
-  let best = -1;
-  let bd = Infinity;
-  list.forEach((p, i) => {
-    const d = Math.hypot(p.x - x * c.w, p.y - y * c.h);
-    if (d < bd) {
-      bd = d;
-      best = i;
-    }
-  });
-  if (best < 0) return;
-  s.hit = { i: best, a: 1 };
-  c.status('this one says: ' + (list[best].text || 'nothing yet'));
-}
-
-// Ask the sky: a lens to read it through, a depth to listen at, a few askings, and a stillness
-// in which the reading settles into a named postcard.
-function oracle(env, dust) {
-  const was = pressed(env);
-  const n = env.stars.length;
-  const lenses = pickN(env, LENSES, 3);
-  const asks = env.int(2, 4);
-  const holdMs = env.pick([1200, 1600, 2000]);
-  const o0 = env.int(0, OPENERS.length - 1);
-  const c0 = env.int(0, CLOSERS.length - 1);
-  const m = summary(env.stars);
-  const name = postcardName(env.stars, m);
-  const size = n < 4 ? 'faint signal' : n < 12 ? 'steady chorus' : 'bright crowd';
-  const region = (m.cy < 50 ? 'northern' : 'southern') + '-' + (m.cx < 50 ? 'western' : 'eastern');
-  const density = m.spread < 12 ? 'tight' : m.spread < 24 ? 'balanced' : 'wide';
-  const stamp = n + ' star' + (n === 1 ? '' : 's') + ' · ' + (m.spread < 12 ? 'tight and intentional' : m.spread < 24 ? 'balanced and exploratory' : 'wide and adventurous');
-  const s = base(dust);
-  s.band = 0;
-  // The line the card gave is the one the reading opens on, when this piece was opened from one.
-  s.caption = was ? was.line : '';
-  let closer = was && was.line ? was.line : CLOSERS[c0];
-  return {
-    title: 'ask the sky ' + TIMES[asks],
-    brief: 'Choose how to read your ' + n + ' star' + (n === 1 ? '' : 's') + ' and how far to listen, ask ' + TIMES[asks] + ', then hold still while the reading settles into a postcard.'
-      + (was && was.star ? ' Your card read the one that said "' + was.star + '".' : ''),
-    aspect: '4 / 3',
-    steps: [
-      { id: 'lens', ask: 'how to read it', kind: 'choice', options: lenses },
-      { id: 'depth', ask: 'how far to listen', kind: 'range', min: 0, max: 100, step: 1, value: 40, low: 'a glance', high: 'a stare' },
-      { id: 'ask', ask: 'ask the sky', kind: 'press', count: asks, label: 'ask', after: 'lens' },
-      { id: 'settle', ask: 'hold still while it settles', kind: 'hold', ms: holdMs, label: 'hold still', after: 'ask' }
-    ],
-    start(c) {
-      scene(c, s, pts(c, s));
-    },
-    apply(id, v, c) {
-      if (id === 'lens') {
-        s.mode = String(v);
-        c.status(s.mode === 'map' ? 'as a map: read it, then walk the other way'
-          : s.mode === 'weather' ? 'as weather: rings around whatever is nearest the middle'
-            : s.mode === 'melody' ? 'as a melody: ' + n + ' note' + (n === 1 ? '' : 's') + ', west to east'
-              : 'as a warning: every star within reach is talking at once');
-      }
-      if (id === 'depth') {
-        const k = Math.max(0, Math.min(1, Number(v) / 100));
-        s.reach = 0.16 + k * 0.5;
-        s.glow = 0.7 + k * 1.1;
-        c.status(k < 0.34 ? 'a glance: only the nearest stars speak' : k < 0.67 ? 'a look: the sky gathers itself' : 'a stare: everything within reach joins in');
-      }
-      if (id === 'ask') {
-        const k = Number(v) || 0;
-        s.flash = 1;
-        closer = CLOSERS[(c0 + k * 2) % CLOSERS.length];
-        s.caption = closer;
-        c.status(OPENERS[(o0 + k) % OPENERS.length] + '; a ' + size + ' in the ' + region + ' sky, ' + density + '. ' + closer);
-      }
-      if (id === 'settle') c.status('settling');
-    },
-    tap(x, y, c) {
-      readStar(c, s, x, y);
-    },
-    frame(t, dt, c) {
-      s.t += dt;
-      s.flash = Math.max(0, s.flash - dt * 2);
-      if (c.done) {
-        s.band = Math.min(1, s.band + dt * 1.5);
-        s.boost = 1 + s.band * 0.5;
-      }
-      scene(c, s, pts(c, s));
-      caption(c, s.caption, 0.85, 0.9 - s.band * 0.2);
-      if (s.band > 0) postcard(c, s.band, name, stamp);
-    },
-    end(c) {
-      c.status('minted: ' + name + '. ' + closer);
-    }
-  };
-}
-
-// Catch meteors: a side for them to come from, a wind, and the sky tapped to catch a few; each
-// one caught lands where you tapped, carrying a comet memo, and joins the constellation.
-function shower(env, dust) {
-  const was = pressed(env);
-  const need = env.int(2, 4);
-  const sides = pickN(env, SIDES, 3);
-  const memos = pickN(env, COMETS, need);
-  // The first memo caught is the line the card gave: a visitor who pressed a reading catches it.
-  if (was && was.line) memos[0] = was.line;
-  const s = base(dust);
-  s.side = sides[0].value;
-  s.wind = 0.4;
-  s.m = null;
-  s.bursts = [];
-  s.rise = 0;
-  let caught = 0;
-  function spawn(c) {
-    const side = s.side === 'any' ? 'wen'[Math.floor(c.rnd() * 3)] : s.side;
-    const m = { x: 0.15 + c.rnd() * 0.7, y: -0.1, vx: (c.rnd() - 0.5) * 0.8, vy: 1 };
-    if (side !== 'n') {
-      m.x = side === 'w' ? -0.1 : 1.1;
-      m.y = 0.05 + c.rnd() * 0.5;
-      m.vx = side === 'w' ? 1 : -1;
-      m.vy = 0.3 + c.rnd() * 0.3;
-    }
-    s.m = m;
-  }
-  return {
-    title: 'catch ' + COUNT[need] + ' meteors',
-    brief: 'Choose where the meteors come from and how the wind blows, then tap the sky to catch ' + COUNT[need] + '; each one lands where you tap with a comet memo, and they join your stars when you are done.'
-      + (was && was.line ? ' The first one carries your card\'s line.' : ''),
-    aspect: '4 / 3',
-    steps: [
-      { id: 'from', ask: 'where they come from', kind: 'choice', options: sides },
-      { id: 'wind', ask: 'the wind', kind: 'range', min: 0, max: 100, step: 1, value: 40, low: 'still', high: 'a gale' },
-      { id: 'catch', ask: 'tap the sky to catch ' + COUNT[need], kind: 'tap', label: 'catch one for me', after: 'from' },
-      { id: 'thoughts', ask: 'the thoughts, written out', kind: 'toggle', label: 'write them out' }
-    ],
-    start(c) {
-      spawn(c);
-      scene(c, s, pts(c, s));
-    },
-    apply(id, v, c) {
-      if (id === 'from') {
-        s.side = String(v);
-        spawn(c);
-        c.status('the next one comes ' + (SIDES.find((o) => o.value === s.side) || SIDES[3]).label);
-      }
-      if (id === 'wind') {
-        s.wind = Math.max(0, Math.min(1, Number(v) / 100));
-        c.status(s.wind < 0.34 ? 'still air: slow meteors, easy to catch' : s.wind < 0.67 ? 'a breeze: they streak' : 'a gale: blink and they are gone');
-      }
-      if (id === 'thoughts') {
-        s.labels = !!v;
-        c.status(v ? 'every thought, written out' : 'the thoughts kept to themselves');
-      }
-    },
-    tap(x, y, c) {
-      if (c.done) return;
-      if (caught >= need || c.value('from') === undefined) {
-        readStar(c, s, x, y);
-        return;
-      }
-      const memo = memos[caught % memos.length];
-      caught += 1;
-      s.extra.push({ x, y, text: memo });
-      s.bursts.push({ x, y, a: 1 });
-      s.flash = 0.6;
-      spawn(c);
-      c.progress('catch', caught / need);
-      c.status('caught. comet memo: ' + memo);
-      if (caught >= need) c.satisfy('catch');
-    },
-    frame(t, dt, c) {
-      s.t += dt;
-      s.flash = Math.max(0, s.flash - dt * 2);
-      const m = s.m;
-      if (m && !c.done) {
-        const sp = (0.22 + s.wind * 0.65) * dt;
-        m.x += m.vx * sp;
-        m.y += m.vy * sp;
-        if (m.x < -0.15 || m.x > 1.15 || m.y > 1.15) spawn(c);
-      }
-      s.bursts = s.bursts.filter((b) => (b.a -= dt * 1.6) > 0);
-      if (c.done) {
-        s.rise = Math.min(1, s.rise + dt);
-        s.glow = 1 + s.rise * 0.8;
-        s.boost = 1 + s.rise * 0.6;
-      }
-      scene(c, s, pts(c, s));
-      if (m && !c.done) meteor(c, m, 0.05 + s.wind * 0.14);
-      for (const b of s.bursts) ring(c, b.x * c.w, b.y * c.h, b.a, (1 - b.a) * 40);
-      if (c.done) ring(c, c.w / 2, c.h / 2, (1 - s.rise) * 0.6, s.rise * Math.max(c.w, c.h) * 0.8);
-    },
-    end(c) {
-      s.labels = true;
-      c.status(COUNT[need] + ' comet memos have joined your sky');
-    }
-  };
-}
-
-// One full turn: a way for the stars to turn around the middle of the sky, a speed, the chime
-// if you like, and the turn watched through; the stars go back to their places at the end.
-function orbit(env, dust) {
-  const was = pressed(env);
-  const spins = pickN(env, SPINS, env.int(2, 3));
-  const title = env.pick(['one full turn of the sky', 'set the sky orbiting', 'the sky, once around']);
-  const s = base(dust);
-  s.spin = null;
-  s.ang = 0;
-  s.turned = 0;
-  s.speed = 0.35;
-  s.chime = false;
-  s.sweep = 0;
-  s.home = 0;
-  s.warp = (list, c) => {
-    if (s.spin === null) return list;
-    const m = centre(list);
-    const k = s.spin === 0 ? 1 + 0.4 * Math.sin(s.ang) : 1;
-    const a = s.spin * s.ang;
-    const cos = Math.cos(a);
-    const sin = Math.sin(a);
-    const back = s.home * s.home * (3 - 2 * s.home);
-    return list.map((p) => {
-      const dx = p.x - m.x;
-      const dy = p.y - m.y;
-      const x = m.x + (dx * cos - dy * sin) * k;
-      const y = m.y + (dx * sin + dy * cos) * k;
-      return Object.assign({}, p, { x: Math.max(PAD, Math.min(c.w - PAD, x + (p.x - x) * back)), y: Math.max(PAD, Math.min(c.h - PAD, y + (p.y - y) * back)) });
-    });
-  };
-  return {
-    title,
-    brief: 'Choose which way your stars turn and how fast, ring the chime if you like, and watch one full turn; they go back to their places when it is done.'
-      + (was && was.star ? ' The one your card read said "' + was.star + '"; it comes round too.' : ''),
-    aspect: '4 / 3',
-    steps: [
-      { id: 'spin', ask: 'which way they turn', kind: 'choice', options: spins },
-      { id: 'speed', ask: 'how fast', kind: 'range', min: 0, max: 100, step: 1, value: 35, low: 'a drift', high: 'a whirl' },
-      { id: 'chime', ask: 'the star chime', kind: 'toggle', label: 'play the chime' },
-      { id: 'turn', ask: 'one full turn', kind: 'wait', after: 'spin' }
-    ],
-    start(c) {
-      scene(c, s, pts(c, s));
-    },
-    apply(id, v, c) {
-      if (id === 'spin') {
-        s.spin = Number(v) || 0;
-        c.status(s.spin === 0 ? 'in and out: the sky breathes around its middle' : (s.spin > 0 ? 'sunwise' : 'widdershins') + ', around the middle of the sky');
-      }
-      if (id === 'speed') {
-        s.speed = Math.max(0, Math.min(1, Number(v) / 100));
-        s.tw = 1 + s.speed * 3;
-        c.status(s.speed < 0.34 ? 'a drift: a slow turn' : s.speed < 0.67 ? 'a steady turn' : 'a whirl: hold on to something');
-      }
-      if (id === 'chime') {
-        s.chime = !!v;
-        c.status(v ? 'playing your constellation from west to east' : 'the chime is stopped');
-      }
-    },
-    tap(x, y, c) {
-      readStar(c, s, x, y);
-    },
-    frame(t, dt, c) {
-      s.t += dt;
-      if (s.spin !== null && !c.done) {
-        const rate = (Math.PI * 2) / (12 - s.speed * 8);
-        s.ang += rate * dt;
-        s.turned += rate * dt;
-        c.progress('turn', Math.min(1, s.turned / (Math.PI * 2)));
-        if (s.turned >= Math.PI * 2) c.satisfy('turn');
-      }
-      if (c.done) {
-        s.home = Math.min(1, s.home + dt * 1.2);
-        s.boost = 1 + s.home * 0.5;
-      }
-      const list = pts(c, s);
-      const sx = s.sweep * c.w;
-      if (s.chime) {
-        s.sweep = (s.sweep + dt / 2.8) % 1;
-        list.forEach((p) => {
-          p.ping = Math.max(p.ping || 0, 1 - Math.abs(p.x - sx) / (c.w * 0.07));
-        });
-      }
-      scene(c, s, list);
-      if (s.chime) {
-        c.g.strokeStyle = c.alpha(c.colors.accent2, 0.25);
-        c.g.lineWidth = 1;
-        c.g.beginPath();
-        c.g.moveTo(sx, 0);
-        c.g.lineTo(sx, c.h);
-        c.g.stroke();
-      }
-    },
-    end(c) {
-      c.status('one turn, and the stars are back where you left them');
-    }
-  };
-}
-
-const PARALLAX_GUESSES = [
-  { label: 'the nearer lights', value: 'near' },
-  { label: 'the farther lights', value: 'far' },
-  { label: 'all move together', value: 'same' }
-];
-
-function dealsParallax(env) {
-  return (env.seed >>> 0) % 4 === 1;
-}
-
-function parallaxPlan(env) {
-  const salt = env.hash('parallax:' + (env.seed >>> 0)) >>> 0;
-  return {
-    family: 'parallax', number: 101 + salt % 899,
-    depth: 35 + (salt >>> 8) % 51,
-    step: ((salt >>> 14) & 1 ? -1 : 1) * [50, 65, 80][(salt >>> 16) % 3],
-    salt
-  };
-}
-
-function pressedParallax(env) {
+function carriedPostcard(env) {
   const p = env.card && env.card.of;
-  if (!p || p.family !== 'parallax'
-      || !Number.isInteger(p.number) || p.number < 101 || p.number > 999
-      || !Number.isInteger(p.depth) || p.depth < 0 || p.depth > 100
-      || !Number.isInteger(p.step) || p.step < -100 || p.step > 100
-      || !Number.isInteger(p.salt) || p.salt < 0 || p.salt > 4294967295) return null;
-  return { family: p.family, number: p.number, depth: p.depth, step: p.step, salt: p.salt };
+  if (!p || p.kind !== 'postcard' || !okPoints(p.points, 4, 6)) return null;
+  const n = p.points.length;
+  if (!isPerm(p.ranks, n) || p.ranks.every((r, i) => r === i)) return null;
+  if (!Number.isInteger(p.number) || p.number < 101 || p.number > 999) return null;
+  return { kind: 'postcard', number: p.number, points: copyPoints(p.points), ranks: p.ranks.slice() };
 }
 
-function parallaxTitle(p) {
-  return 'postcard ' + p.number + ': one step aside';
+// The lights nearest first: the order that solves the postcard.
+function postcardOrder(plan) {
+  return range(plan.points.length).sort((a, b) => plan.ranks[a] - plan.ranks[b]);
 }
 
-function parallaxField(env, p) {
-  if (!env.stars.length) return [];
-  const hashes = env.stars.map((s) => env.hash(p.salt + '|' + s.text + '|' + s.x + '|' + s.y) >>> 0);
-  const low = Math.min(...hashes);
-  const high = Math.max(...hashes);
-  return env.stars.map((s, i) => ({
-    x: s.x, y: s.y, text: s.text,
-    depth: high === low ? 0.5 : (hashes[i] - low) / (high - low)
-  }));
+function postcardTitle(plan) {
+  return 'postcard ' + plan.number + ': left eye, right eye';
 }
 
-function parallaxDistance(point, s) {
-  return 1 + 3 * s.depth / 100 * point.depth;
+function postcardLayout(w, h) {
+  return { lefts: [w * 0.04, w * 0.52], width: w * 0.44, top: h * 0.15, height: h * 0.62 };
 }
 
-// A lateral viewpoint change shifts a light inversely with its distance; the original view stays fixed.
-function parallaxShift(point, s, v) {
-  return -s.step / 100 * 0.15 * v.scale / parallaxDistance(point, s);
-}
-
-function parallaxPosition(point, s, v, aside) {
-  return {
-    x: 0.18 + point.x / 100 * 0.64 + (aside ? parallaxShift(point, s, v) : 0),
-    y: 0.1 + point.y / 100 * 0.8
-  };
-}
-
-function parallaxLayout(w, h) {
-  return { lefts: [w * 0.04, w * 0.52], width: w * 0.44, top: h * 0.16, height: h * 0.64 };
-}
-
-function parallaxMoves(field, s, v) {
-  let near = 0;
-  let far = Infinity;
-  for (const point of field) {
-    const move = Math.abs(parallaxShift(point, s, v)) * 100;
-    near = Math.max(near, move);
-    far = Math.min(far, move);
-  }
-  return { near, far: field.length ? far : 0 };
-}
-
-function parallaxScene(g, w, h, c, field, s, v) {
-  const box = parallaxLayout(w, h);
-  const size = Math.max(10, Math.min(18, Math.min(w, h) * 0.043));
-  const moves = parallaxMoves(field, s, v);
-  g.save();
+function postcardScene(g, w, h, c, plan, s, v) {
+  const box = postcardLayout(w, h);
+  const n = plan.points.length;
+  const size = Math.max(10, Math.min(18, Math.round(Math.min(w, h) * 0.04)));
+  const glow = v.scale * Math.max(0.55, Math.min(1, box.width / 300));
   backdrop(g, w, h, c);
-  g.fillStyle = c.alpha(c.colors.fg, 0.14);
-  for (let i = 0, count = Math.round(34 * v.density); i < count; i++) {
-    g.fillRect(((i * 0.618034 + v.turn * 0.37) % 1) * w,
-      ((i * 0.754878 + v.turn * 0.19) % 1) * h, v.scale, v.scale);
-  }
-  g.font = '500 ' + size + 'px system-ui, sans-serif';
-  g.textAlign = 'center';
+  dust(g, w, h, c, v);
   g.textBaseline = 'middle';
   box.lefts.forEach((left, pane) => {
-    g.fillStyle = c.colors.fg;
-    g.fillText(pane === 0 ? 'here' : 'one step aside', left + box.width / 2, h * 0.09, box.width);
-    g.fillStyle = c.alpha(c.colors.bg, 0.62);
+    font(g, size);
+    g.textAlign = 'center';
+    g.fillStyle = c.alpha(c.colors.fg, 0.85);
+    g.fillText(pane === 0 ? 'left eye' : 'right eye', left + box.width / 2, h * 0.085, box.width);
+    g.fillStyle = c.alpha(c.colors.bg, 0.55);
     g.fillRect(left, box.top, box.width, box.height);
     g.strokeStyle = c.alpha(c.colors.muted, 0.7);
     g.lineWidth = 1;
     g.strokeRect(left, box.top, box.width, box.height);
+    // Ticks along both edges, so a light's place can be read across the two views.
+    g.strokeStyle = c.alpha(c.colors.muted, 0.3);
+    g.beginPath();
+    for (let k = 1; k < 10; k++) {
+      const x = left + box.width * k / 10;
+      const tick = k % 5 ? 5 : 9;
+      g.moveTo(x, box.top);
+      g.lineTo(x, box.top + tick);
+      g.moveTo(x, box.top + box.height);
+      g.lineTo(x, box.top + box.height - tick);
+    }
+    g.stroke();
+    g.strokeStyle = c.alpha(c.colors.muted, 0.1);
+    g.beginPath();
+    for (let k = 1; k < 5; k++) {
+      const x = left + box.width * k / 5;
+      g.moveTo(x, box.top);
+      g.lineTo(x, box.top + box.height);
+    }
+    g.stroke();
     g.save();
     g.beginPath();
     g.rect(left, box.top, box.width, box.height);
     g.clip();
-    if (pane === 0 || s.open) {
-      field.forEach((point, i) => {
-        const q = parallaxPosition(point, s, v, pane === 1);
-        const x = left + q.x * box.width;
-        const y = box.top + q.y * box.height;
-        if (pane === 1) {
-          const original = parallaxPosition(point, s, v, false);
-          const ox = left + original.x * box.width;
-          g.strokeStyle = c.alpha(c.colors.muted, 0.65);
-          g.lineWidth = 1;
-          g.beginPath();
-          g.moveTo(ox, y);
-          g.lineTo(x, y);
-          g.stroke();
-          g.fillStyle = c.alpha(c.colors.fg, 0.5);
-          g.beginPath();
-          g.arc(ox, y, 1.4, 0, Math.PI * 2);
-          g.fill();
-        }
-        star(g, c, { x, y, hot: point.depth <= 0.5 }, 1, v.scale);
-        if (point.depth <= 0.5 || s.focus === i) {
-          g.strokeStyle = s.focus === i ? c.colors.fg : c.colors.accent2;
-          g.lineWidth = s.focus === i ? 1.8 : 1;
-          g.beginPath();
-          g.arc(x, y, (s.focus === i ? 8 : 4.5) * v.scale, 0, Math.PI * 2);
-          g.stroke();
-        }
-      });
-    } else {
-      g.fillStyle = c.colors.muted;
-      g.fillText('covered', left + box.width / 2, box.top + box.height / 2, box.width * 0.9);
-    }
+    plan.points.forEach((p, i) => {
+      const shift = pane === 1 ? shiftOf(plan.ranks[i], n) : 0;
+      const x = left + (p.x - shift) / 100 * box.width;
+      const y = box.top + p.y / 100 * box.height;
+      if (pane === 1 && s.fade > 0) {
+        // The finale: the shift itself, drawn as the line each light travelled.
+        g.strokeStyle = c.alpha(c.colors.accent2, 0.7 * s.fade);
+        g.lineWidth = 1;
+        g.beginPath();
+        g.moveTo(left + p.x / 100 * box.width, y);
+        g.lineTo(x, y);
+        g.stroke();
+      }
+      const tw = s.t ? 0.8 + 0.2 * Math.sin(s.t * 1.7 + i * 1.3) : 1;
+      star(g, c, { x, y, hot: s.lit === i }, tw, glow);
+      font(g, size * 0.9, 600);
+      g.textAlign = 'left';
+      g.fillStyle = c.alpha(s.lit === i ? c.colors.accent2 : c.colors.fg, 0.9);
+      g.fillText(LETTERS[i], x + size * 0.55, y - size * 0.6);
+      const tapped = s.taps ? s.taps.indexOf(i) : -1;
+      if (tapped >= 0) {
+        ring(g, c, x, y, 0.8, size * 0.6);
+        font(g, size * 0.7);
+        g.fillStyle = c.alpha(c.colors.accent2, 0.95);
+        g.fillText(String(tapped + 1), x + size * 0.55, y + size * 0.55);
+      } else if (s.hinted && s.hinted.includes(i)) {
+        ring(g, c, x, y, 0.9, size * 0.7);
+        font(g, size * 0.75);
+        g.fillStyle = c.alpha(c.colors.accent2, 0.95);
+        g.fillText(PLACE[plan.ranks[i]], x + size * 0.55, y + size * 0.6);
+      }
+    });
     g.restore();
-    g.fillStyle = c.colors.fg;
-    const footer = !s.open ? (field.length === 1 ? 'one light' : pane === 0 ? 'rings: nearer' : 'dots: farther')
-      : field.length === 1 ? (pane === 0 ? 'one light' : 'shift ' + moves.near.toFixed(1) + '%')
-        : (pane === 0 ? 'near ' + moves.near.toFixed(1) : 'far ' + moves.far.toFixed(1)) + '% shift';
-    g.fillText(footer, left + box.width / 2, h * 0.86, box.width);
   });
-  g.fillStyle = c.colors.muted;
-  g.fillText('Same stars. Invented distances.', w / 2, h * 0.955, w * 0.92);
-  g.restore();
+  font(g, size);
+  g.textAlign = 'center';
+  g.fillStyle = c.alpha(c.colors.fg, 0.8);
+  if (s.order) g.fillText('nearest to farthest: ' + s.order.map((i) => LETTERS[i]).join('  '), w / 2, h * 0.86, w * 0.9);
+  g.fillStyle = c.alpha(c.colors.muted, 0.85);
+  g.fillText('the same lights; the nearer, the farther it shifts', w / 2, h * 0.94, w * 0.92);
 }
 
-function parallaxPreview(g, w, h, env, p) {
-  parallaxScene(g, w, h, env, parallaxField(env, p),
-    { depth: p.depth, step: p.step, open: false, focus: -1 }, env.variant);
+function postcardPreview(g, w, h, env, plan, t) {
+  postcardScene(g, w, h, env, plan, { t, fade: 0, lit: -1 }, dials(env));
 }
 
-function parallax(env, carried) {
-  const p = carried || parallaxPlan(env);
-  const v = env.variant;
-  const field = parallaxField(env, p);
-  const single = field.length === 1;
-  const options = single ? [
-    { label: 'the same place', value: 'same' },
-    { label: 'a different place', value: 'different' }
-  ] : PARALLAX_GUESSES;
-  const s = { depth: p.depth, step: p.step, guess: '', open: false, focus: -1, read: false };
-  const draw = (c) => parallaxScene(c.g, c.w, c.h, c, field, s, v);
-  function finding() {
-    const moves = parallaxMoves(field, s, v);
-    const result = single ? (moves.near === 0 ? 'same' : 'different')
-      : Math.abs(moves.near - moves.far) < 0.000001 ? 'same' : 'near';
-    const prediction = options.find((option) => option.value === s.guess);
-    const measured = single ? 'The light shifts ' + moves.near.toFixed(1) + '% of the view. '
-      : 'Nearest: ' + moves.near.toFixed(1) + '% shift; farthest: ' + moves.far.toFixed(1) + '%. ';
-    const explanation = s.step === 0 ? 'No sideways step: the views match.'
-      : single ? 'Moving the viewpoint changes the picture, not your star.'
-        : result === 'same' ? 'These lights share a distance, so they shift together.'
-          : 'Nearby lights shift farther. Try one sheet: they travel together.';
-    return measured + explanation + (prediction ? s.guess === result ? ' You called it.'
-      : ' You predicted ' + prediction.label + '.' : '');
-  }
-  function say(c) {
-    const point = field[s.focus];
-    c.status(finding() + (point ? ' This light says: ' + (point.text || 'nothing yet')
-      + ' (invented distance ' + parallaxDistance(point, s).toFixed(2) + ').' : ''));
-  }
+function postcardPiece(env, plan) {
+  const n = plan.points.length;
+  const v = dials(env);
+  const answer = postcardOrder(plan);
+  const s = { t: 0, order: range(n), hinted: [], taps: [], fade: 0, lit: -1 };
+  const draw = (c) => postcardScene(c.g, c.w, c.h, c, plan, s, v);
+  const inPlace = (order) => order.filter((item, i) => item === answer[i]).length;
   return {
-    title: parallaxTitle(p),
-    brief: 'Give your stars invented distances, predict what a step sideways changes, and tap anywhere to open the second view. Set the depth and step; follow a light in either picture to read its thought. Your saved sky stays put.',
+    title: postcardTitle(plan),
+    brief: 'Two views of the same ' + WORDS[n] + ' lights, from a left eye and a right eye a step apart. The nearer a light is, the farther it shifts between the views; the farthest barely moves. Nothing else about them changes.',
+    goal: 'Put the lights in order from nearest to farthest.',
     aspect: '4 / 3',
+    checkLabel: 'check the postcard',
     steps: [
-      { id: 'guess', ask: single ? 'will the light occupy the same place in both views?' : 'which lights shift more between the views?', kind: 'choice', options },
-      { id: 'depth', ask: 'how deep the postcard goes', kind: 'range', min: 0, max: 100, step: 1, value: p.depth, low: 'one sheet', high: 'deep sky' },
-      { id: 'step', ask: 'move the viewpoint sideways', kind: 'range', min: -100, max: 100, step: 1, value: p.step, low: 'left', high: 'right' },
-      { id: 'look', ask: 'tap anywhere to open the second view and follow a light', kind: 'tap', label: 'open or follow a light for me', after: 'guess' }
+      { id: 'order', ask: 'the lights, nearest first: arrange them here, or tap them in that order', kind: 'order', items: range(n).map((i) => ({ label: 'light ' + LETTERS[i], value: i })) },
+      { id: 'hint', ask: 'where one light stands', kind: 'press', count: 1, label: 'show me one', optional: true }
     ],
+    solution: { order: answer.slice() },
+    check(c) {
+      const value = c.value('order');
+      const order = isPerm(value, n) ? value : s.order;
+      const k = inPlace(order);
+      return {
+        solved: k === n,
+        say: k === n ? 'every light in its place: the postcard has depth'
+          : k === 0 ? 'none of them stands in the right place yet' : WORDS[k] + ' of ' + WORDS[n] + ' in the right place'
+      };
+    },
     start(c) {
-      c.status('The second view is covered. Place a prediction, then open it. The distances are invented; the stars and their thoughts are yours.');
+      c.status('compare each light\'s place in the two views');
       draw(c);
     },
     apply(id, value, c) {
-      if (id === 'guess') {
-        if (!options.some((option) => option.value === value)) {
-          c.status('Choose one of the predictions before opening the second view.');
-          return;
-        }
-        s.guess = value;
-        c.status('Prediction placed. Open the second view to compare.');
+      if (id === 'order' && isPerm(value, n)) {
+        s.order = value.slice();
+        c.status('nearest to farthest: ' + s.order.map((i) => LETTERS[i]).join(', '));
       }
-      if (id === 'depth' || id === 'step') {
-        const number = Number(value);
-        if (!Number.isFinite(number)) {
-          c.status('Set the ' + (id === 'depth' ? 'depth' : 'sideways step') + ' with its slider.');
-          return;
+      if (id === 'hint') {
+        const next = answer.find((i) => !s.hinted.includes(i) && s.order.indexOf(i) !== answer.indexOf(i));
+        if (next !== undefined) {
+          s.hinted.push(next);
+          c.hint();
+          c.status('light ' + LETTERS[next] + ' is the ' + PLACE[plan.ranks[next]]);
+        } else {
+          c.status('every light you have placed wrongly has been shown; the rest is yours');
         }
-        s[id] = Math.max(id === 'depth' ? 0 : -100, Math.min(100, number));
-        c.status(id === 'depth' ? s.depth === 0 ? 'Every light sits on one sheet.'
-          : 'The lights have invented distances behind the postcard.'
-          : s.step === 0 ? 'The two viewpoints coincide.'
-            : 'The viewer steps ' + (s.step < 0 ? 'left; the lights shift right.' : 'right; the lights shift left.'));
       }
-      if (s.open) say(c);
       draw(c);
     },
     tap(x, y, c) {
-      if (!s.guess) {
-        c.status('Place a prediction before opening the second view.');
+      // Tap the lights nearest first, in either view; the order on the rail follows.
+      const box = postcardLayout(c.w, c.h);
+      const pane = x * c.w < box.lefts[1] ? 0 : 1;
+      let best = -1;
+      let bd = Infinity;
+      plan.points.forEach((p, i) => {
+        const shift = pane === 1 ? shiftOf(plan.ranks[i], n) : 0;
+        const d = Math.hypot(box.lefts[pane] + (p.x - shift) / 100 * box.width - x * c.w, box.top + p.y / 100 * box.height - y * c.h);
+        if (d < bd) {
+          bd = d;
+          best = i;
+        }
+      });
+      if (best < 0 || bd > Math.min(c.w, c.h) * 0.08) return;
+      s.lit = best;
+      if (s.taps.includes(best)) {
+        c.status('light ' + LETTERS[best] + ' is already in your order; keep going');
+        draw(c);
         return;
       }
-      s.open = true;
-      const box = parallaxLayout(c.w, c.h);
-      const pane = x < 0.5 ? 0 : 1;
-      let best = Infinity;
-      field.forEach((point, i) => {
-        const q = parallaxPosition(point, s, v, pane === 1);
-        const distance = (box.lefts[pane] + q.x * box.width - x * c.w) ** 2
-          + (box.top + q.y * box.height - y * c.h) ** 2;
-        if (distance < best) { best = distance; s.focus = i; }
-      });
-      say(c);
-      draw(c);
-      if (!s.read) {
-        s.read = true;
-        c.progress('look', 1);
-        c.satisfy('look');
+      s.taps.push(best);
+      if (s.taps.length === n) {
+        s.order = s.taps.slice();
+        s.taps = [];
+        c.set('order', s.order.slice());
+        c.status('nearest to farthest: ' + s.order.map((i) => LETTERS[i]).join(', ') + '; check it');
+      } else {
+        c.status('light ' + LETTERS[best] + ' is ' + PLACE[s.taps.length - 1] + '; tap the next');
       }
+      draw(c);
     },
     frame(t, dt, c) {
+      if (!c.reduced) s.t += dt;
+      if (c.done) s.fade = Math.min(1, s.fade + dt * (c.reduced ? 4 : 1));
       draw(c);
     },
     end(c) {
-      say(c);
-      draw(c);
+      c.status('minted: postcard ' + plan.number + '. light ' + LETTERS[answer[0]] + ' is nearest and light ' + LETTERS[answer[n - 1]] + ' farthest; the lines show how far each one shifted');
     }
   };
 }
 
-function piece(env) {
-  if (!env.stars.length) return null;
-  const carried = pressedParallax(env);
-  if (carried || (!pressed(env) && dealsParallax(env))) return parallax(env, carried);
-  const dust = dustOf(env.rnd, 60);
-  if (env.chance(0.36)) return oracle(env, dust);
-  return env.chance(0.5) ? shower(env, dust) : orbit(env, dust);
+/* ---- which sky is yours: turned, maybe flipped ---------------------------------------------- */
+
+// One light turned clockwise by `turns` quarter turns, after a flip left for right if `mirror`.
+function turnPoint(p, turns, mirror) {
+  let x = mirror ? 100 - p.x : p.x;
+  let y = p.y;
+  for (let i = 0; i < turns; i++) {
+    const nx = 100 - y;
+    y = x;
+    x = nx;
+  }
+  return { x, y };
+}
+
+function turned(points, turns, mirror) {
+  return points.map((p) => turnPoint(p, turns, mirror));
+}
+
+// The farthest any light of A has to travel to reach a light of B: nought when A lies on B.
+function setGap(A, B) {
+  let worst = 0;
+  for (const p of A) {
+    let best = Infinity;
+    for (const q of B) best = Math.min(best, Math.hypot(p.x - q.x, p.y - q.y));
+    worst = Math.max(worst, best);
+  }
+  return worst;
+}
+
+// Every way the pattern can lie: four turns, flipped or not.
+function images(points) {
+  const out = [];
+  for (let m = 0; m < 2; m++) for (let t = 0; t < 4; t++) out.push({ turns: t, mirror: m === 1, pts: turned(points, t, m === 1) });
+  return out;
+}
+
+function distinctImages(all) {
+  for (let a = 0; a < all.length; a++) {
+    for (let b = a + 1; b < all.length; b++) if (setGap(all[a].pts, all[b].pts) < 8) return false;
+  }
+  return true;
+}
+
+function spaced(pts, gap) {
+  return pts.every((p, i) => pts.every((q, j) => i === j || Math.hypot(p.x - q.x, p.y - q.y) >= gap));
+}
+
+function whichPlan(env) {
+  const n = env.int(5, 7);
+  const number = 101 + env.int(0, 898);
+  let last = null;
+  for (let attempt = 0; attempt < 40; attempt++) {
+    const points = gather(env, n, 14, [8, 92, 8, 92]);
+    const all = images(points);
+    if (!distinctImages(all)) continue;
+    const turns = env.int(1, 3);
+    const mirror = env.chance(0.5);
+    const which = env.int(0, 3);
+    const skies = [];
+    let ok = true;
+    let decoys = 0;
+    for (let k = 0; k < 4 && ok; k++) {
+      if (k === which) {
+        skies.push(turned(points, turns, mirror));
+        continue;
+      }
+      // A decoy: a few lights nudged, then laid like the true sky (the first) or any way at all.
+      let decoy = null;
+      for (let tries = 0; tries < 24 && !decoy; tries++) {
+        const moved = shuffled(env, range(n)).slice(0, n > 5 ? 3 : 2);
+        const nudged = points.map((p, i) => {
+          if (!moved.includes(i)) return { x: p.x, y: p.y };
+          const a = env.rnd() * Math.PI * 2;
+          const d = 10 + env.rnd() * 6;
+          return { x: Math.round(Math.max(4, Math.min(96, p.x + Math.cos(a) * d))), y: Math.round(Math.max(4, Math.min(96, p.y + Math.sin(a) * d))) };
+        });
+        const pts = decoys === 0 ? turned(nudged, turns, mirror) : turned(nudged, env.int(0, 3), env.chance(0.5));
+        if (spaced(pts, 7) && all.every((img) => setGap(pts, img.pts) >= 6)) decoy = pts;
+      }
+      if (!decoy) ok = false;
+      else {
+        skies.push(decoy);
+        decoys += 1;
+      }
+    }
+    last = { kind: 'which', number, points, turns, mirror, which, skies };
+    if (ok) return last;
+  }
+  return last;
+}
+
+function carriedWhich(env) {
+  const p = env.card && env.card.of;
+  if (!p || p.kind !== 'which' || !okPoints(p.points, 5, 7)) return null;
+  const n = p.points.length;
+  if (!Number.isInteger(p.number) || p.number < 101 || p.number > 999) return null;
+  if (![1, 2, 3].includes(p.turns) || typeof p.mirror !== 'boolean' || ![0, 1, 2, 3].includes(p.which)) return null;
+  if (!Array.isArray(p.skies) || p.skies.length !== 4 || !p.skies.every((sky) => okPoints(sky, n, n))) return null;
+  const all = images(p.points);
+  if (!distinctImages(all)) return null;
+  const truth = turned(p.points, p.turns, p.mirror);
+  if (setGap(p.skies[p.which], truth) > 0.5 || setGap(truth, p.skies[p.which]) > 0.5) return null;
+  for (let k = 0; k < 4; k++) {
+    if (k !== p.which && all.some((img) => setGap(p.skies[k], img.pts) < 6)) return null;
+  }
+  return { kind: 'which', number: p.number, points: copyPoints(p.points), turns: p.turns, mirror: p.mirror, which: p.which, skies: p.skies.map(copyPoints) };
+}
+
+function whichTitle(plan) {
+  return 'sky ' + plan.number + ': which one is yours';
+}
+
+function turnsWord(turns) {
+  return turns === 1 ? 'one quarter turn' : WORDS[turns] + ' quarter turns';
+}
+
+function whichLayout(w, h) {
+  const side = Math.min(h * 0.7, w * 0.46);
+  const left = w * 0.05;
+  const top = h * 0.15;
+  const x0 = left + side + w * 0.05;
+  const room = w * 0.95 - x0;
+  const gap = Math.max(6, room * 0.06);
+  const small = Math.min((room - gap) / 2, (side - gap) / 2);
+  const y0 = top + (side - (small * 2 + gap)) / 2;
+  const cells = [];
+  for (let k = 0; k < 4; k++) cells.push({ x: x0 + (k % 2) * (small + gap), y: y0 + Math.floor(k / 2) * (small + gap), side: small });
+  return { side, left, top, cells };
+}
+
+// One sky in a square: its frame, its lights and the lines between them.
+function skyBox(g, c, pts, x, y, side, v, opts) {
+  g.fillStyle = c.alpha(c.colors.bg, opts.dim ? 0.8 : 0.55);
+  g.fillRect(x, y, side, side);
+  g.strokeStyle = opts.border || c.alpha(c.colors.muted, 0.7);
+  g.lineWidth = opts.width || 1;
+  g.strokeRect(x, y, side, side);
+  const at = pts.map((p) => ({ x: x + p.x / 100 * side, y: y + p.y / 100 * side }));
+  const glow = v.scale * Math.max(0.45, Math.min(1, side / 260)) * (opts.dim ? 0.6 : 1);
+  links(g, side, c, at, 0.5, opts.dim ? 0.5 : 1);
+  at.forEach((p, i) => star(g, c, p, opts.tw ? 0.8 + 0.2 * Math.sin(opts.tw + i * 1.3) : 1, glow));
+  const size = Math.max(9, Math.min(16, Math.round(side * 0.11)));
+  if (opts.label) {
+    font(g, size, 600);
+    g.textAlign = 'left';
+    g.textBaseline = 'top';
+    g.fillStyle = opts.border || c.alpha(c.colors.fg, 0.9);
+    g.fillText(opts.label, x + size * 0.4, y + size * 0.3);
+  }
+  if (opts.note) {
+    font(g, size * 0.85);
+    g.textAlign = 'right';
+    g.textBaseline = 'bottom';
+    g.fillStyle = c.alpha(c.colors.accent2, 0.9);
+    g.fillText(opts.note, x + side - size * 0.4, y + side - size * 0.3);
+  }
+}
+
+function whichScene(g, w, h, c, plan, s, v) {
+  const lay = whichLayout(w, h);
+  const size = Math.max(10, Math.min(18, Math.round(Math.min(w, h) * 0.04)));
+  backdrop(g, w, h, c);
+  dust(g, w, h, c, v);
+  font(g, size);
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.fillStyle = c.alpha(c.colors.fg, 0.85);
+  g.fillText('your sky', lay.left + lay.side / 2, h * 0.085, lay.side);
+  const c0 = lay.cells[0];
+  const c1 = lay.cells[1];
+  g.fillText('four skies', c0.x + (c1.x + c1.side - c0.x) / 2, h * 0.085, c1.x + c1.side - c0.x);
+  // The reference, gliding to its turned place once the puzzle is solved.
+  const truth = turned(plan.points, plan.turns, plan.mirror);
+  const k = s.fade * s.fade * (3 - 2 * s.fade);
+  const ref = plan.points.map((p, i) => ({ x: p.x + (truth[i].x - p.x) * k, y: p.y + (truth[i].y - p.y) * k }));
+  skyBox(g, c, ref, lay.left, lay.top, lay.side, v, { tw: s.t, border: c.alpha(c.colors.accent, 0.8) });
+  plan.skies.forEach((sky, i) => {
+    const cell = lay.cells[i];
+    const chosen = s.choice === i;
+    const decoy = s.hinted && s.hinted.includes(i);
+    const found = s.fade > 0 && i === plan.which;
+    skyBox(g, c, sky, cell.x, cell.y, cell.side, v, {
+      label: SKIES[i], tw: s.t, dim: decoy, note: decoy ? 'decoy' : '',
+      border: found ? c.alpha(c.colors.accent2, 0.5 + 0.5 * s.fade) : chosen ? c.colors.accent2 : undefined,
+      width: chosen || found ? 2 : 1
+    });
+  });
+  font(g, size);
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  if (s.live) {
+    g.fillStyle = c.alpha(c.colors.fg, 0.8);
+    g.fillText((s.choice >= 0 ? 'sky ' + SKIES[s.choice] : 'no sky yet') + ', ' + turnsWord(s.turns) + (s.mirror ? ', flipped first' : ', not flipped'), w / 2, h * 0.9, w * 0.9);
+  } else {
+    g.fillStyle = c.alpha(c.colors.muted, 0.85);
+    g.fillText('one of the four is your sky, turned; the others are near misses', w / 2, h * 0.9, w * 0.92);
+  }
+}
+
+function whichPreview(g, w, h, env, plan, t) {
+  whichScene(g, w, h, env, plan, { t, fade: 0, choice: -1, live: false }, dials(env));
+}
+
+function whichPiece(env, plan) {
+  const n = plan.points.length;
+  const v = dials(env);
+  const s = { t: 0, choice: -1, turns: 1, mirror: false, hinted: [], fade: 0, live: true };
+  const draw = (c) => whichScene(c.g, c.w, c.h, c, plan, s, v);
+  return {
+    title: whichTitle(plan),
+    brief: 'One of the four small skies is your ' + WORDS[n] + ' lights, turned clockwise by one, two or three quarter turns -- and perhaps flipped left for right before it was turned. The other three are near misses: the same lights, with a few nudged out of place.',
+    goal: 'Say which sky is yours, how many quarter turns it was given, and whether it was flipped.',
+    aspect: '4 / 3',
+    checkLabel: 'check the skies',
+    steps: [
+      { id: 'sky', ask: 'which sky is yours', kind: 'choice', options: range(4).map((k) => ({ label: 'sky ' + SKIES[k], value: k })) },
+      { id: 'turns', ask: 'how far it was turned, clockwise', kind: 'number', min: 1, max: 3, step: 1, value: 1, unit: 'quarter turns' },
+      { id: 'mirror', ask: 'flipped left for right before the turn', kind: 'toggle', label: 'it was flipped' },
+      { id: 'hint', ask: 'one sky that is not yours', kind: 'press', count: 1, label: 'mark a decoy', optional: true }
+    ],
+    solution: { sky: plan.which, turns: plan.turns, mirror: plan.mirror },
+    check(c) {
+      const sky = Number(c.value('sky')) === plan.which;
+      const turns = Number(c.value('turns')) === plan.turns;
+      const mirror = !!c.value('mirror') === plan.mirror;
+      if (sky && turns && mirror) return { solved: true, say: 'sky ' + SKIES[plan.which] + ' is yours: ' + turnsWord(plan.turns) + (plan.mirror ? ', flipped first' : '') };
+      return {
+        solved: false,
+        say: [sky ? 'the sky is right' : 'that sky is not yours', turns ? 'the turn is right' : 'the turn is off', mirror ? 'the flip is right' : 'the flip is off'].join('; ')
+      };
+    },
+    start(c) {
+      c.status('four skies; one is yours, turned');
+      draw(c);
+    },
+    apply(id, value, c) {
+      if (id === 'sky') {
+        const k = Number(value);
+        if ([0, 1, 2, 3].includes(k)) s.choice = k;
+        c.status('sky ' + SKIES[s.choice] + '; now how far it turned, and whether it was flipped');
+      }
+      if (id === 'turns') {
+        const k = Math.round(Number(value));
+        if (k >= 1 && k <= 3) s.turns = k;
+        c.status(turnsWord(s.turns) + ' clockwise');
+      }
+      if (id === 'mirror') {
+        s.mirror = !!value;
+        c.status(s.mirror ? 'flipped left for right, then turned' : 'turned, never flipped');
+      }
+      if (id === 'hint') {
+        const next = range(4).find((k) => k !== plan.which && !s.hinted.includes(k));
+        if (next !== undefined) {
+          s.hinted.push(next);
+          c.hint();
+          c.status('sky ' + SKIES[next] + ' is a decoy: a light or two of it is off');
+        } else {
+          c.status('every decoy is marked; the sky left is yours, and its turn is still to find');
+        }
+      }
+      draw(c);
+    },
+    tap(x, y, c) {
+      const lay = whichLayout(c.w, c.h);
+      const k = lay.cells.findIndex((cell) => x * c.w >= cell.x && x * c.w <= cell.x + cell.side && y * c.h >= cell.y && y * c.h <= cell.y + cell.side);
+      if (k < 0) return;
+      c.status('sky ' + SKIES[k] + (s.hinted.includes(k) ? ', a decoy' : '; choose it on the rail if it is yours'));
+    },
+    frame(t, dt, c) {
+      if (!c.reduced) s.t += dt;
+      if (c.done) s.fade = Math.min(1, s.fade + dt * (c.reduced ? 4 : 0.8));
+      draw(c);
+    },
+    end(c) {
+      c.status('sky ' + SKIES[plan.which] + ' is yours, ' + turnsWord(plan.turns) + (plan.mirror ? ', flipped first' : '') + '; watch your sky turn to meet it');
+    }
+  };
+}
+
+/* ---- the module ----------------------------------------------------------------------------- */
+
+function dealsPostcard(env) {
+  return env.chance(0.5);
 }
 
 export default {
   id: 'wish-constellation',
   needsSky: true,
-  paint(ctx, w, h, env) {
-    if (dealsParallax(env)) parallaxPreview(ctx, w, h, env, parallaxPlan(env));
-    else sky(ctx, w, h, env, 0);
+  paint(g, w, h, env) {
+    if (dealsPostcard(env)) postcardPreview(g, w, h, env, postcardPlan(env), 0);
+    else whichPreview(g, w, h, env, whichPlan(env), 0);
   },
-  animate(ctx, w, h, env, t) {
-    if (dealsParallax(env)) parallaxPreview(ctx, w, h, env, parallaxPlan(env));
-    else sky(ctx, w, h, env, t + env.variant.turn * 6);
+  animate(g, w, h, env, t) {
+    const phase = t + env.variant.turn * 6;
+    if (dealsPostcard(env)) postcardPreview(g, w, h, env, postcardPlan(env), phase);
+    else whichPreview(g, w, h, env, whichPlan(env), phase);
   },
   spark(env) {
-    if (!env.stars.length) return null;
-    if (dealsParallax(env)) {
-      const p = parallaxPlan(env);
+    if (dealsPostcard(env)) {
+      const plan = postcardPlan(env);
       return {
-        title: parallaxTitle(p),
-        text: 'Give these stars invented distances, predict what a sideways step does, then open the second view. The stars you saved stay put.',
+        title: postcardTitle(plan),
+        quote: WORDS[plan.points.length] + ' lights, two views',
+        text: 'A light shifts between the views by more the nearer it is. Put them in order, nearest to farthest.',
         aspect: '4 / 3',
-        paint: (ctx, w, h, e) => parallaxPreview(ctx, w, h, e, p),
-        of: p
+        paint: (g, w, h, cardEnv) => postcardPreview(g, w, h, cardEnv, plan, 0),
+        of: plan
       };
     }
-    const star = env.pick(env.stars);
-    const line = env.pick(ORACLE);
+    const plan = whichPlan(env);
     return {
-      title: 'a reading from your sky',
-      quote: 'the sky says: ' + star.text,
-      text: env.stars.length + ' star' + (env.stars.length === 1 ? '' : 's') + ', ' + shape(env.stars) + '. ' + line,
+      title: whichTitle(plan),
+      quote: 'four skies, one of them yours',
+      text: 'Your ' + WORDS[plan.points.length] + ' lights, turned and maybe flipped, among three near misses. Say which sky, how far it turned and whether it was flipped.',
       aspect: '4 / 3',
-      paint: (ctx, w, h, e) => sky(ctx, w, h, e, 0),
-      // What this card is of, for the piece it opens as: the star it read, and the line it gave.
-      of: { star: star.text, oracle: line }
+      paint: (g, w, h, cardEnv) => whichPreview(g, w, h, cardEnv, plan, 0),
+      of: plan
     };
   },
-  piece
+  piece(env) {
+    const postcard = carriedPostcard(env);
+    if (postcard) return postcardPiece(env, postcard);
+    const which = carriedWhich(env);
+    if (which) return whichPiece(env, which);
+    return dealsPostcard(env) ? postcardPiece(env, postcardPlan(env)) : whichPiece(env, whichPlan(env));
+  }
 };

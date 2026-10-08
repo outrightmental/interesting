@@ -1,86 +1,41 @@
-/* The echo chamber: the persona's stars as drifting echoes or a choir. The seed selects the
-   same family for its card and piece. Listening, shuffling and ringing finish in a bulletin;
-   conducting and printing finish in a score. Both families share the sky summary, nearest-point
-   lookup and background. Every piece keeps its own progress and voices. See js/feed.js for the
-   card contract and js/stage.js for the piece contract.
+/* The echo chamber: a night room where a pulse goes out and the stars answer. As a card it is one
+   of the two puzzles below, drawn small (paint, animate, spark); as a piece it is that puzzle, and
+   the card it was opened from says which. See js/feed.js for what a module is and js/stage.js for
+   what a piece is.
 
-   A card and the feature it opens as are one reading, in whichever family the seed selected: the
-   bulletin spark puts its three printed lines on its spec as `of`, and the score spark the tempo it
-   printed at and the voice it led with. The piece opens on those, so pressing a resonance report
-   opens the chamber that wrote it and pressing a score opens the choir that printed it. */
+   Two puzzles, both deduction, both solvable from what is drawn and nothing heard:
 
-// The card a bulletin piece was opened from, in the chamber's own terms: the bulletin it printed, or
-// null for a piece nobody pressed (js/stage.js hands the card over as env.card.of).
-function pressedBulletin(env) {
-  const was = env.card && env.card.of;
-  if (!was) return null;
-  const line = (value) => (typeof value === 'string' ? value : '');
-  const out = { opener: line(was.opener), mid: line(was.mid), closer: line(was.closer) };
-  return out.opener || out.mid || out.closer ? out : null;
-}
+     the echo order    A marked point and four or five stars at clearly different distances from it
+                       (each at least a fifth farther than the last). A pulse leaves the mark and
+                       its echo comes back from each star after a time proportional to the star's
+                       distance. Put the stars in the order their echoes return. Faint rings round
+                       the mark make the distances judgeable; nothing is numbered. A wrong check
+                       says how many stand in the right place and no more; a hint, at a price,
+                       says where one star comes back.
+     the midnight chord  Four voices with periods of 2, 3, 4 and 5 beats, each sounding on beat 0 and
+                       every period after, over a strip of twelve beats. Some of them are sounding,
+                       and the scene shows only the total per beat, as stacked blocks, and the four
+                       voices' own beats. Say which voices are sounding and on which beat after
+                       beat 0 they next all strike together. The chord is drawn from its answer and
+                       checked for uniqueness against every other chord before it is dealt.
 
-const OPENERS = ['echo weather bulletin:', 'resonance report:', 'night acoustics memo:', 'field monitor:'];
-const MIDS = [
-  'The chamber favours momentum over perfection.',
-  'Small experiments are amplifying quickly in here.',
-  'The pattern suggests a brave draft is ready to leave the dock.',
-  'Playful focus is currently louder than hesitation.'
-];
-const CLOSERS = [
-  'Send one tiny signal before midnight.',
-  'Pulse the field twice and read again.',
-  'Name the next action in six words and do it.',
-  'Share one unfinished idea with someone kind.'
-];
-const LOOKS = [
-  { label: 'midnight tones', value: 'midnight' },
-  { label: 'prism', value: 'prism' },
-  { label: 'glass', value: 'glass' },
-  { label: 'low hum', value: 'hum' }
-];
-const LOOK_WORDS = {
-  midnight: 'midnight tones: the chamber as it usually sounds',
-  prism: 'prism: the echoes refract, and the colours will not sit still',
-  glass: 'glass: thin rings and clear tones',
-  hum: 'low hum: the echoes sink back into the walls'
-};
-const PULSE_WORDS = [
-  'centre pulse released; the echoes scatter and come back',
-  'another pulse; the chamber rings',
-  'the field is loud now, and the echoes are returning'
-];
-const SHUFFLE_WORDS = [
-  'harmonics reshuffled: same stars, new behaviour',
-  'reshuffled again; the field is louder',
-  'once more; nothing is lost, only rearranged',
-  'the chamber has lost count'
-];
-const WAVES = ['sine', 'triangle', 'saw', 'square'];
-const NOTES = ['A', 'C', 'D', 'E', 'G', 'A', 'C', 'D', 'E'];
-const PAD = 16;
+   The chamber reads the sky: the visitor's stars are the first candidates for the echo order's
+   points, and extra points are invented from the seed when the sky is thin (one star is enough).
+   Nothing depends on a star's text. A card and the feature it opens as are one puzzle: the spark
+   puts the whole plan on its spec as `of` -- the mark and the stars, or the chord's voices -- and
+   piece(env) opens on that rather than rolling another. */
 
-function isChoir(env) {
-  return (env.seed & 1) === 1;
-}
+const LETTERS = ['A', 'B', 'C', 'D', 'E'];
+const WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen'];
+const ORDINAL = ['first', 'second', 'third', 'fourth', 'fifth'];
+const PERIODS = [2, 3, 4, 5];
+const EVERY = { 2: 'every 2nd beat', 3: 'every 3rd beat', 4: 'every 4th beat', 5: 'every 5th beat' };
+const BEATS = 12;
+const PLAIN = { density: 1, scale: 1, turn: 0 };
+const RATIO = 1.2;
+const TAU = Math.PI * 2;
 
-function summarize(stars) {
-  let cx = 0;
-  let cy = 0;
-  for (const s of stars) {
-    cx += s.x;
-    cy += s.y;
-  }
-  cx /= stars.length || 1;
-  cy /= stars.length || 1;
-  let spread = 0;
-  for (const s of stars) spread += Math.hypot(s.x - cx, s.y - cy);
-  spread /= stars.length || 1;
-  return {
-    zone: (cy < 50 ? 'north' : 'south') + '-' + (cx < 50 ? 'west' : 'east'),
-    spread: spread < 12 ? 'compact' : spread < 24 ? 'balanced' : 'wide',
-    density: stars.length < 5 ? 'quiet' : stars.length < 14 ? 'steady' : 'crowded'
-  };
-}
+/* ---- shared ground ------------------------------------------------------------------------- */
 
 function background(g, w, h, c) {
   const grad = g.createLinearGradient(0, 0, 0, h);
@@ -90,786 +45,631 @@ function background(g, w, h, c) {
   g.fillRect(0, 0, w, h);
 }
 
-function nearest(points, x, y, unheardOnly) {
-  let best = -1;
-  let bestD = Infinity;
-  points.forEach((p, i) => {
-    const d = Math.hypot(p.x - x, p.y - y);
-    if ((!unheardOnly || !p.heard) && d < bestD) {
-      bestD = d;
-      best = i;
-    }
-  });
-  return { i: best, d: bestD };
-}
-
-function echoField(stars) {
-  return stars.map((s, i) => ({
-    hx: s.x / 100, hy: s.y / 100, x: s.x / 100, y: s.y / 100, vx: 0, vy: 0,
-    phase: i * 1.7, energy: 0, size: 1 + (i % 4) * 0.35,
-    tone: Math.round(180 + ((100 - s.y) / 100) * 480), text: s.text || '', heard: false
-  }));
-}
-
-function at(p, w, h) {
-  return { x: PAD + p.x * (w - PAD * 2), y: PAD + p.y * (h - PAD * 2) };
-}
-
-function pulse(F, P, x, y, strength) {
-  P.push({ x, y, r: 0, life: 1 });
-  for (const e of F) {
-    const dx = e.x - x;
-    const dy = e.y - y;
-    const d = Math.hypot(dx, dy) || 0.01;
-    const push = Math.max(0.01, Math.min(0.1, 0.003 / d)) * strength;
-    e.vx += (dx / d) * push;
-    e.vy += (dy / d) * push;
-    e.energy = Math.min(1.4, e.energy + 0.9 / (d * 6 + 1));
+// The chamber's dust: specks that drift with time and sit where the configuration puts them.
+function dust(g, w, h, c, v, t) {
+  const count = Math.max(10, Math.round(36 * v.density));
+  g.fillStyle = c.alpha(c.colors.muted, 0.14);
+  for (let i = 0; i < count; i++) {
+    g.fillRect((i * 127.3 + v.turn * 211 + t * 6) % w, (i * 79.7 + v.turn * 97 + t * 3) % h, 1.2, 1.2);
   }
 }
 
-// Pulses push each echo away; a spring brings it back to its star.
-function step(F, P, dt, drift, speed, home) {
-  F.forEach((e, i) => {
-    e.phase += dt * (0.6 + (i % 5) * 0.16);
-    const k = home ? 7 : 0.6;
-    const damp = home ? 4 : 0.5;
-    e.vx += ((e.hx - e.x) * k - e.vx * damp) * dt;
-    e.vy += ((e.hy - e.y) * k - e.vy * damp) * dt;
-    e.x += (e.vx + Math.cos(e.phase) * 0.06 * drift) * dt;
-    e.y += (e.vy + Math.sin(e.phase * 0.85) * 0.05 * drift) * dt;
-    if (e.x < 0.02 || e.x > 0.98) e.vx *= -1;
-    if (e.y < 0.02 || e.y > 0.98) e.vy *= -1;
-    e.x = Math.max(0.02, Math.min(0.98, e.x));
-    e.y = Math.max(0.02, Math.min(0.98, e.y));
-    e.energy = Math.max(0, e.energy - dt * 0.8);
-  });
-  for (let i = P.length - 1; i >= 0; i--) {
-    P[i].r += dt * speed;
-    P[i].life -= dt * 0.72;
-    if (P[i].life <= 0) P.splice(i, 1);
+// The visitor's own sky, faint, behind a scene that is not made of it.
+function skyDots(g, w, h, c, v) {
+  const pts = typeof c.points === 'function' ? c.points(w, h, 10) : [];
+  g.fillStyle = c.alpha(c.colors.fg, 0.16);
+  for (const p of pts) {
+    g.beginPath();
+    g.arc(p.x, p.y, Math.max(0.8, Math.min(w, h) * 0.004 * v.scale), 0, TAU);
+    g.fill();
   }
 }
 
-function toneLook(hz) {
-  return hz < 300 ? 'hum' : hz < 500 ? 'midnight' : 'glass';
-}
-
-function tint(c, look, i, t) {
-  const col = c.colors;
-  if (look === 'prism') return c.mix(col.accent, col.accent2, (Math.sin(i * 0.9 + t * 1.3) + 1) / 2);
-  if (look === 'glass') return c.mix(col.accent, col.fg, 0.5);
-  if (look === 'hum') return c.mix(col.accent, col.bg2, 0.35);
-  return col.accent;
-}
-
-function word(g, m, c, text, x, y, a, size) {
+function caption(g, w, c, text, x, y, a, size, align) {
   if (!text || a <= 0) return;
   g.fillStyle = c.alpha(c.colors.fg, a);
-  g.font = '500 ' + Math.max(11, Math.round(m * size)) + 'px system-ui, sans-serif';
-  g.textAlign = 'center';
+  g.font = '500 ' + size + 'px system-ui, sans-serif';
+  g.textAlign = align || 'center';
   g.textBaseline = 'middle';
   g.fillText(text, x, y);
 }
 
-function thought(g, w, h, c, text, p, a) {
-  if (!text || a <= 0) return;
-  const m = Math.min(w, h);
-  const size = Math.max(11, Math.round(m * 0.034));
-  const lead = size * 1.3;
-  g.font = '500 ' + size + 'px system-ui, sans-serif';
-  const lines = wrap(g, text, Math.min(w - 16, m * 0.62));
-  let width = 0;
-  for (const l of lines) width = Math.max(width, g.measureText(l).width);
-  const x = Math.max(8 + width / 2, Math.min(w - 8 - width / 2, p.x));
-  const block = (lines.length - 1) * lead;
-  let y = p.y > h * 0.5 ? p.y - m * 0.05 - block : p.y + m * 0.05;
-  y = Math.max(8 + size / 2, Math.min(h - 8 - size / 2 - block, y));
-  for (const l of lines) {
-    word(g, m, c, l, x, y, a, 0.034);
-    y += lead;
-  }
+function dist(a, b) {
+  return Math.hypot(a.x - b.x, a.y - b.y);
 }
 
-function wrap(g, text, width) {
-  const lines = [];
-  let line = '';
-  for (const t of String(text).split(' ')) {
-    const next = line ? line + ' ' + t : t;
-    if (line && g.measureText(next).width > width) {
-      lines.push(line);
-      line = t;
-    } else line = next;
-  }
-  if (line) lines.push(line);
-  return lines;
+function clamp(x, lo, hi) {
+  return Math.max(lo, Math.min(hi, x));
 }
 
-function scene(g, w, h, c, F, P, look, t, s) {
+function round3(x) {
+  return Math.round(x * 1000) / 1000;
+}
+
+function gcd(a, b) {
+  while (b) [a, b] = [b, a % b];
+  return a;
+}
+
+function lcmOf(list) {
+  return list.reduce((acc, p) => acc * p / gcd(acc, p), 1);
+}
+
+/* ---- the echo order ------------------------------------------------------------------------ */
+
+// Whether a point can join the stars: not too near the mark, not too far, clear of the others,
+// and at a distance from the mark that differs from every other star's by the ratio.
+function fitsEcho(p, source, chosen) {
+  const d = dist(p, source);
+  if (d < 0.1 || d > 0.62) return false;
+  for (const q of chosen) {
+    if (dist(p, q) < 0.09) return false;
+    const dq = dist(q, source);
+    if (Math.max(d, dq) < RATIO * Math.min(d, dq)) return false;
+  }
+  return true;
+}
+
+function byDistance(plan) {
+  return plan.stars.map((s, i) => i).sort((a, b) => dist(plan.stars[a], plan.source) - dist(plan.stars[b], plan.source));
+}
+
+function isIdentity(list) {
+  return list.every((v, i) => v === i);
+}
+
+function echoPlan(env) {
+  const n = env.chance(0.5) ? 5 : 4;
+  const source = { x: round3(0.3 + env.rnd() * 0.4), y: round3(0.32 + env.rnd() * 0.36) };
+  const candidates = [];
+  for (const s of (env.stars || [])) {
+    const x = Number(s && s.x);
+    const y = Number(s && s.y);
+    if (!isFinite(x) || !isFinite(y)) continue;
+    candidates.push({ x: round3(clamp(x / 100, 0.08, 0.92)), y: round3(clamp(y / 100, 0.1, 0.9)), sky: 1 });
+  }
+  for (let i = 0; i < 30; i++) candidates.push({ x: round3(0.08 + env.rnd() * 0.84), y: round3(0.1 + env.rnd() * 0.8), sky: 0 });
+  let chosen = [];
+  for (const p of candidates) {
+    if (chosen.length >= n) break;
+    if (fitsEcho(p, source, chosen)) chosen.push(p);
+  }
+  if (chosen.length < 4) {
+    // A sky and a seed that would not settle: a fixed spiral that always does.
+    source.x = 0.5;
+    source.y = 0.5;
+    chosen = [];
+    for (let i = 0; i < n; i++) {
+      const r = 0.12 * Math.pow(1.25, i);
+      const a = i * 2.4;
+      chosen.push({ x: round3(0.5 + Math.cos(a) * r), y: round3(0.5 + Math.sin(a) * r), sky: 0 });
+    }
+  }
+  // The letters: a shuffle of the stars that is not already the answer.
+  let stars = chosen.slice();
+  for (let guard = 0; guard < 10 && isIdentity(byDistance({ source, stars })); guard++) {
+    stars = [];
+    const rest = chosen.slice();
+    while (rest.length) stars.push(rest.splice(env.int(0, rest.length - 1), 1)[0]);
+  }
+  if (isIdentity(byDistance({ source, stars }))) stars.reverse();
+  return { kind: 'echo', source, stars };
+}
+
+function carriedEcho(env) {
+  const p = env.card && env.card.of;
+  if (!p || p.kind !== 'echo' || !p.source || !Array.isArray(p.stars)) return null;
+  const inFrame = (q) => q && typeof q === 'object' && isFinite(Number(q.x)) && isFinite(Number(q.y))
+    && Number(q.x) >= 0 && Number(q.x) <= 1 && Number(q.y) >= 0 && Number(q.y) <= 1;
+  if (!inFrame(p.source) || p.stars.length < 4 || p.stars.length > 5 || !p.stars.every(inFrame)) return null;
+  const source = { x: Number(p.source.x), y: Number(p.source.y) };
+  const stars = p.stars.map((s) => ({ x: Number(s.x), y: Number(s.y), sky: s.sky ? 1 : 0 }));
+  for (let i = 0; i < stars.length; i++) {
+    const di = dist(stars[i], source);
+    if (di < 0.05) return null;
+    for (let j = i + 1; j < stars.length; j++) {
+      const dj = dist(stars[j], source);
+      if (Math.max(di, dj) < 1.1 * Math.min(di, dj)) return null;
+    }
+  }
+  const plan = { kind: 'echo', source, stars };
+  if (isIdentity(byDistance(plan))) return null;
+  return plan;
+}
+
+function echoTitle(plan) {
+  return 'the echo order: ' + WORDS[plan.stars.length] + ' stars';
+}
+
+function echoGeometry(w, h) {
+  const side = Math.min(w, h);
+  return { side, x0: (w - side) / 2, y0: (h - side) / 2 };
+}
+
+// The scene. `s` is the live state: the visitor's order, the stars shown by hints, taps made on
+// the scene, the breath of the mark before a solve and the pulse that plays after one.
+function drawEcho(g, w, h, c, plan, s, variant, t) {
+  const v = variant || PLAIN;
   const col = c.colors;
-  const m = Math.min(w, h);
+  const geo = echoGeometry(w, h);
+  const at = (p) => ({ x: geo.x0 + p.x * geo.side, y: geo.y0 + p.y * geo.side });
+  const S = at(plan.source);
+  const order = byDistance(plan);
+  const far = dist(plan.stars[order[order.length - 1]], plan.source);
+  const size = Math.max(10, Math.round(geo.side * 0.045));
   background(g, w, h, c);
-  g.fillStyle = c.alpha(col.muted, 0.14);
-  const slide = c.reduced ? 0 : t;
-  for (let i = 0; i < 36; i++) g.fillRect((i * 127.3 + slide * 6) % w, (i * 79.7 + slide * 3) % h, 1.2, 1.2);
-  const pts = F.map((e) => at(e, w, h));
-  const maxD = m * 0.3;
-  const link = 1 + (s ? (s.print + s.read) * 1.3 : 0);
+  dust(g, w, h, c, v, c.reduced ? 0 : t);
+  skyDots(g, w, h, c, v);
+  // The rings: one every twentieth of the room, out past the farthest star, unnumbered.
+  const step = 0.05;
   g.lineWidth = 1;
-  for (let a = 0; a < pts.length; a++) {
-    for (let b = a + 1; b < pts.length; b++) {
-      const d = Math.hypot(pts[b].x - pts[a].x, pts[b].y - pts[a].y);
-      if (d > maxD) continue;
-      g.strokeStyle = c.alpha(col.accent, Math.min(0.9, (0.08 + (1 - d / maxD) * 0.35) * link));
-      g.beginPath();
-      g.moveTo(pts[a].x, pts[a].y);
-      g.lineTo(pts[b].x, pts[b].y);
-      g.stroke();
-    }
-  }
-  const rings = look === 'glass' ? 1 : look === 'prism' ? 4 : look === 'hum' ? 2 : 3;
-  pts.forEach((p, i) => {
-    const e = F[i];
-    const beat = 0.6 + Math.sin(t * 2 + e.phase) * 0.3;
-    const hue = tint(c, look, i, t);
-    const base = m * 0.007 * e.size;
-    g.fillStyle = c.alpha(hue, 0.12 + e.energy * 0.26);
+  for (let r = step; r <= far + step; r += step) {
+    g.strokeStyle = c.alpha(col.muted, 0.08 + 0.07 * v.density);
     g.beginPath();
-    g.arc(p.x, p.y, base * (2.4 + beat + e.energy * 2.8), 0, Math.PI * 2);
-    g.fill();
-    for (let r = 1; r <= rings; r++) {
-      g.strokeStyle = c.alpha(hue, (0.3 - r * 0.06) * beat);
-      g.beginPath();
-      g.arc(p.x, p.y, base + r * base * 2.2 * (beat + e.energy), 0, Math.PI * 2);
-      g.stroke();
-    }
-    g.fillStyle = c.alpha(e.energy > 0.18 ? col.accent2 : col.fg, 0.95);
-    g.beginPath();
-    g.arc(p.x, p.y, base * 0.9 + e.energy * 1.5, 0, Math.PI * 2);
-    g.fill();
-  });
-  g.lineWidth = 1.4;
-  for (const p of P) {
-    const q = at(p, w, h);
-    g.strokeStyle = c.alpha(col.accent2, p.life * 0.5);
-    g.beginPath();
-    g.arc(q.x, q.y, p.r * m, 0, Math.PI * 2);
+    g.arc(S.x, S.y, r * geo.side, 0, TAU);
     g.stroke();
   }
-  if (!s) return;
-  if (s.said && s.said.life > 0) thought(g, w, h, c, F[s.said.i].text, pts[s.said.i], Math.min(0.9, s.said.life) * (1 - s.print));
-  if (s.print > 0) {
-    g.fillStyle = c.alpha(col.bg, 0.6 * s.print);
-    g.fillRect(0, 0, w, h);
-    const size = Math.max(11, Math.round(m * 0.042));
-    const rows = [];
-    s.lines.forEach((line, i) => {
-      g.font = '500 ' + Math.max(11, Math.round(m * (i === 0 ? 0.052 : 0.042))) + 'px system-ui, sans-serif';
-      wrap(g, line, w * 0.84).forEach((r) => rows.push({ text: r, head: i === 0 }));
-    });
-    let y = h / 2 - ((rows.length - 1) * size * 1.5) / 2;
-    rows.forEach((r, i) => {
-      word(g, m, c, r.text, w / 2, y, Math.max(0, Math.min(1, s.print * (rows.length + 1) - i)), r.head ? 0.052 : 0.042);
-      y += size * 1.5;
-    });
+  // The pulse: a breath inside the first ring before a solve, the whole run after one.
+  const reach = s.pulse >= 0 ? s.pulse : -1;
+  if (reach >= 0) {
+    g.strokeStyle = c.alpha(col.accent2, 0.55);
+    g.lineWidth = 1.6;
+    g.beginPath();
+    g.arc(S.x, S.y, reach * geo.side, 0, TAU);
+    g.stroke();
+  } else {
+    const breath = c.reduced ? 0.5 : (t % 3) / 3;
+    g.strokeStyle = c.alpha(col.accent2, 0.4 * (1 - breath));
+    g.lineWidth = 1.2;
+    g.beginPath();
+    g.arc(S.x, S.y, (0.015 + 0.075 * breath) * geo.side * v.scale, 0, TAU);
+    g.stroke();
   }
-}
-
-function echoes(ctx, w, h, env, t) {
-  const v = env.variant;
-  const F = echoField(env.stars).slice(0, Math.max(1, Math.round(env.stars.length * v.density)));
-  F.forEach((e, i) => {
-    e.x = 0.5 + (e.x - 0.5) * v.scale + Math.sin(t * 0.5 + i * 1.7) * 0.012;
-    e.y = 0.5 + (e.y - 0.5) * v.scale + Math.cos(t * 0.4 + i * 2.3) * 0.012;
-    e.size *= v.scale;
+  // The mark the pulse leaves from.
+  const mr = Math.max(3, geo.side * 0.014 * v.scale);
+  const glow = g.createRadialGradient(S.x, S.y, mr * 0.4, S.x, S.y, mr * 4);
+  glow.addColorStop(0, c.alpha(col.accent2, 0.5));
+  glow.addColorStop(1, c.alpha(col.accent2, 0));
+  g.fillStyle = glow;
+  g.beginPath();
+  g.arc(S.x, S.y, mr * 4, 0, TAU);
+  g.fill();
+  g.fillStyle = col.accent2;
+  g.beginPath();
+  g.arc(S.x, S.y, mr, 0, TAU);
+  g.fill();
+  g.strokeStyle = c.alpha(col.accent2, 0.9);
+  g.lineWidth = 1.2;
+  g.beginPath();
+  g.arc(S.x, S.y, mr * 2.2, 0, TAU);
+  g.stroke();
+  // The stars, lettered; a star the pulse has reached is lit, and its echo rings back.
+  g.font = '600 ' + size + 'px system-ui, sans-serif';
+  g.textBaseline = 'middle';
+  plan.stars.forEach((star, i) => {
+    const p = at(star);
+    const d = dist(star, plan.source);
+    const lit = reach >= 0 && reach >= d;
+    const r = Math.max(2.5, geo.side * (0.011 + (star.sky ? 0.003 : 0)) * v.scale);
+    if (lit) {
+      const back = Math.min(1, (reach - d) / 0.08);
+      g.strokeStyle = c.alpha(col.accent2, 0.6 * (1 - back * 0.5));
+      g.lineWidth = 1.4;
+      g.beginPath();
+      g.arc(p.x, p.y, r + back * geo.side * 0.05, 0, TAU);
+      g.stroke();
+      g.fillStyle = c.alpha(col.accent2, 0.35);
+      g.beginPath();
+      g.arc(p.x, p.y, r * 2.6, 0, TAU);
+      g.fill();
+    }
+    g.fillStyle = lit ? col.accent2 : c.alpha(col.fg, 0.95);
+    g.beginPath();
+    g.arc(p.x, p.y, r, 0, TAU);
+    g.fill();
+    g.strokeStyle = c.alpha(col.accent, 0.5);
+    g.lineWidth = 1;
+    g.beginPath();
+    g.arc(p.x, p.y, r * 2, 0, TAU);
+    g.stroke();
+    const lx = p.x + (p.x > S.x ? 1 : -1) * r * 3.2;
+    g.fillStyle = c.alpha(col.fg, 0.92);
+    g.textAlign = p.x > S.x ? 'left' : 'right';
+    g.fillText(LETTERS[i], lx, p.y - r * 2.2);
+    if (s.hinted.includes(i)) {
+      g.strokeStyle = c.alpha(col.accent2, 0.9);
+      g.lineWidth = 1.5;
+      g.setLineDash([3, 3]);
+      g.beginPath();
+      g.arc(p.x, p.y, r * 3.4, 0, TAU);
+      g.stroke();
+      g.setLineDash([]);
+      g.fillStyle = col.accent2;
+      g.fillText(ORDINAL[order.indexOf(i)], lx, p.y + r * 2.4);
+    }
+    const tapped = s.taps.indexOf(i);
+    if (tapped >= 0) {
+      g.fillStyle = col.accent;
+      g.fillText(String(tapped + 1), lx, p.y + r * 2.4);
+    }
   });
-  scene(ctx, w, h, env, F, [], 'midnight', t, null);
+  // The order as it stands, written along the foot of the room.
+  const line = s.order ? s.order.map((i) => LETTERS[i]).join('  ') : '';
+  caption(g, w, c, line, w / 2, geo.y0 + geo.side * 0.955, 0.85, size);
 }
 
-// What every shape of bulletin piece shares: the field, its pulses, the bulletin to print, the
-// frame, and a tap that pulses the field and hears the nearest echo.
-function chamber(env, was) {
-  const stars = env.stars;
-  const wx = summarize(stars);
-  const F = echoField(stars);
-  const P = [];
-  // The bulletin: the card's own, when this chamber was opened from one, so the reading that prints
-  // at the end is the reading a visitor pressed. The two middle lines are the field as it stands.
-  const opener = was && was.opener ? was.opener : env.pick(OPENERS).replace(':', '');
-  const mid = was && was.mid ? was.mid : env.pick(MIDS);
-  const closer = was && was.closer ? was.closer : env.pick(CLOSERS);
-  const s = {
-    drift: 0.4, look: 'midnight', paused: false, speed: 0.45, print: 0, read: 0, said: null, home: false, t: 0,
-    lines: [opener, (stars.length === 1 ? 'one echo, ' : stars.length + ' echoes, ') + wx.spread + ' spread', 'chamber ' + wx.zone + ', tone ' + wx.density, mid, closer]
-  };
-  return {
-    F, P, s, wx,
-    run(t, dt, c) {
-      s.t += dt;
-      step(F, P, dt, s.paused ? 0 : s.drift * (c.reduced ? 0.4 : 1), s.speed, s.home);
-      if (s.home) s.print = Math.min(1, s.print + dt * 1.4);
-      s.read = Math.max(0, s.read - dt * 0.7);
-      if (s.said) s.said.life -= dt;
-      scene(c.g, c.w, c.h, c, F, P, s.look, s.t, s);
-    },
-    hear(x, y, unheardFirst) {
-      pulse(F, P, x, y, 0.8);
-      let near = unheardFirst ? nearest(F, x, y, true) : { i: -1 };
-      if (near.i < 0) near = nearest(F, x, y, false);
-      const e = F[near.i];
-      const fresh = !e.heard;
-      e.heard = true;
-      e.energy = 1.2;
-      s.said = { i: near.i, life: 3 };
-      return { i: near.i, e, fresh, far: near.d > 0.14 };
-    },
-    end(c) {
-      s.home = true;
-      c.status(s.lines[s.lines.length - 1]);
-    }
-  };
+function echoBlank(plan) {
+  return { order: null, hinted: [], taps: [], pulse: -1, played: 0 };
 }
 
-function listen(env) {
-  const was = pressedBulletin(env);
-  const ch = chamber(env, was);
-  const s = ch.s;
-  const n = env.stars.length;
-  const need = Math.min(n, env.int(3, 5));
-  const presses = env.int(2, 3);
-  const holdMs = env.pick([1500, 2000, 2500]);
-  const from = env.pick([25, 45, 65]);
-  const earsFirst = env.chance(0.5);
-  s.drift = from / 100;
-  let heard = 0;
+function echoPreview(g, w, h, env, plan, t) {
+  drawEcho(g, w, h, env, plan, echoBlank(plan), env.variant, t || 0);
+}
+
+function echoPiece(env, plan) {
+  const n = plan.stars.length;
+  const order = byDistance(plan);
+  const far = dist(plan.stars[order[order.length - 1]], plan.source);
+  const s = echoBlank(plan);
+  s.order = plan.stars.map((star, i) => i);
+  let time = 0;
+  const draw = (c) => drawEcho(c.g, c.w, c.h, c, plan, s, env.variant, time);
+  function rightPlaces() {
+    let right = 0;
+    for (let i = 0; i < n; i++) if (s.order[i] === order[i]) right += 1;
+    return right;
+  }
   return {
-    title: earsFirst ? (need === n ? 'every echo, ears first' : need + ' echoes, ears first') : (need === n ? 'hear every echo' : 'hear ' + need + ' echoes'),
-    brief: 'Set how far the echoes wander, tap the field close to ' + (need === n ? 'each one to hear its thought' : need + ' of them to hear their thoughts') + ', pulse the chamber from the centre, and hold to read the echo weather; the bulletin prints when you are done.'
-      + (was && was.opener ? ' It is the ' + was.opener + ' your card was showing.' : ''),
+    title: echoTitle(plan),
+    brief: 'A pulse leaves the bright mark and every star sends an echo back; the farther the star, the later its echo. '
+      + 'The rings round the mark are evenly spaced. Tap the stars in order on the scene, or arrange them on the rail.',
+    goal: 'Put the stars in the order their echoes come back.',
     aspect: '1 / 1',
+    checkLabel: 'send the pulse',
     steps: [
-      { id: 'drift', ask: 'how far the echoes wander', kind: 'range', min: 0, max: 100, step: 1, value: from, low: 'hovering', high: 'restless' },
-      { id: 'listen', ask: 'tap the field close to ' + need + ' echoes', kind: 'tap', label: 'hear one for me' },
-      { id: 'pulse', ask: 'pulse the chamber from the centre', kind: 'press', count: presses, label: 'pulse' },
-      { id: 'weather', ask: 'hold to read the echo weather', kind: 'hold', ms: holdMs, label: 'hold to read', after: 'listen' }
+      { id: 'order', ask: 'the stars, first echo back to last', kind: 'order', items: plan.stars.map((star, i) => ({ label: 'star ' + LETTERS[i], value: i })) },
+      { id: 'hint', ask: 'where one star comes back', kind: 'press', count: 1, label: 'show me one', optional: true }
     ],
+    solution: { order: order.slice() },
+    check(c) {
+      const right = rightPlaces();
+      return {
+        solved: right === n,
+        say: right === n ? 'every echo comes back in the order you set'
+          : (right === 0 ? 'none of them stands in the right place yet' : WORDS[right] + ' of ' + WORDS[n] + ' in the right place')
+      };
+    },
     start(c) {
-      ch.run(0, 0, c);
+      c.status('the mark, and ' + WORDS[n] + ' stars; tap them first echo to last');
+      draw(c);
     },
     apply(id, value, c) {
-      if (id === 'drift') {
-        s.drift = Math.max(0, Math.min(1, Number(value) / 100));
-        c.status(s.drift < 0.15 ? 'the echoes hover in place' : s.drift < 0.6 ? 'the echoes wander' : 'the echoes are restless');
+      if (id === 'order' && Array.isArray(value) && value.length === n) {
+        s.order = value.map(Number);
+        s.taps = [];
+        c.status('first back to last: ' + s.order.map((i) => LETTERS[i]).join(', '));
       }
-      if (id === 'pulse') {
-        pulse(ch.F, ch.P, 0.5, 0.5, 1.2);
-        c.status(PULSE_WORDS[Math.min(PULSE_WORDS.length, Number(value) || 1) - 1]);
-      }
-      if (id === 'weather') {
-        s.read = 1;
-        c.status('reading the field');
-      }
-    },
-    tap(x, y, c) {
-      const got = ch.hear(x, y, true);
-      if (got.fresh) heard += 1;
-      c.progress('listen', Math.min(1, heard / need));
-      c.status((got.far ? 'pulse into open space; the nearest echo answers: ' : '') + got.e.text + ' (' + got.e.tone + ' hz)');
-      if (heard >= need) c.satisfy('listen');
-    },
-    frame: ch.run,
-    end: ch.end
-  };
-}
-
-function shuffle(env) {
-  const was = pressedBulletin(env);
-  const ch = chamber(env, was);
-  const s = ch.s;
-  const pool = LOOKS.slice();
-  const options = [];
-  while (options.length < 3) options.push(pool.splice(env.int(0, pool.length - 1), 1)[0]);
-  const count = env.int(2, 4);
-  const settleFor = env.pick([4, 5, 6]);
-  const times = count === 2 ? 'twice' : count + ' times';
-  const title = env.pick(['shuffle the harmonics', 'same stars, new resonance', count + ' shuffles and a reading']);
-  let shuffled = 0;
-  let since = -1;
-  let told = 0;
-  return {
-    title,
-    brief: 'Choose the harmonics, pause or free the drift, shuffle the field ' + times + ' and let it settle; the echo weather prints once it is still.'
-      + (was && was.opener ? ' What prints is the ' + was.opener + ' your card was showing.' : ''),
-    aspect: '1 / 1',
-    steps: [
-      { id: 'harmonics', ask: 'the harmonics', kind: 'choice', options },
-      { id: 'drift', ask: 'hold the echoes still, or let them wander', kind: 'toggle', label: 'pause drift' },
-      { id: 'shuffle', ask: 'shuffle the harmonics ' + times, kind: 'press', count, label: 'shuffle', after: 'harmonics' },
-      { id: 'settle', ask: 'let the field settle', kind: 'wait', after: 'shuffle' }
-    ],
-    start(c) {
-      ch.run(0, 0, c);
-    },
-    apply(id, value, c) {
-      if (id === 'harmonics') {
-        s.look = String(value);
-        pulse(ch.F, ch.P, 0.5, 0.5, 0.3);
-        c.status(LOOK_WORDS[s.look] || s.look);
-      }
-      if (id === 'drift') {
-        s.paused = !!value;
-        c.status(s.paused ? 'drift paused; the echoes hover in place' : 'drift resumed; the echoes wander again');
-      }
-      if (id === 'shuffle') {
-        shuffled = Number(value) || shuffled + 1;
-        for (const e of ch.F) {
-          e.vx = (c.rnd() - 0.5) * 0.3;
-          e.vy = (c.rnd() - 0.5) * 0.25;
-          e.phase = c.rnd() * Math.PI * 2;
-          e.energy = Math.min(1.4, e.energy + 0.45);
+      if (id === 'hint') {
+        const next = order.find((i) => !s.hinted.includes(i) && s.order.indexOf(i) !== order.indexOf(i));
+        if (next !== undefined) {
+          s.hinted.push(next);
+          c.hint();
+          c.status('star ' + LETTERS[next] + ' comes back ' + ORDINAL[order.indexOf(next)]);
+        } else {
+          c.status('every star you have placed wrongly has been shown; the rest is yours');
         }
-        pulse(ch.F, ch.P, 0.2 + c.rnd() * 0.6, 0.2 + c.rnd() * 0.6, 0.6);
-        since = 0;
-        told = 0;
-        c.status(SHUFFLE_WORDS[Math.min(SHUFFLE_WORDS.length, shuffled) - 1]);
       }
+      draw(c);
     },
     tap(x, y, c) {
-      const got = ch.hear(x, y, false);
-      c.status(got.e.text + ' (' + got.e.tone + ' hz)');
+      const geo = echoGeometry(c.w, c.h);
+      const px = x * c.w;
+      const py = y * c.h;
+      let best = -1;
+      let bestD = geo.side * 0.07;
+      plan.stars.forEach((star, i) => {
+        const d = Math.hypot(geo.x0 + star.x * geo.side - px, geo.y0 + star.y * geo.side - py);
+        if (d < bestD) {
+          bestD = d;
+          best = i;
+        }
+      });
+      if (best < 0) {
+        s.taps = [];
+        c.status('tap a star to make it the next echo back');
+        draw(c);
+        return;
+      }
+      if (s.taps.includes(best)) s.taps = s.taps.slice(0, s.taps.indexOf(best));
+      s.taps.push(best);
+      if (s.taps.length === n) {
+        s.order = s.taps.slice();
+        c.set('order', s.taps.slice());
+        s.taps = [];
+        c.status('first back to last: ' + s.order.map((i) => LETTERS[i]).join(', ') + '; send the pulse');
+      } else {
+        c.status('star ' + LETTERS[best] + ' comes back ' + ORDINAL[s.taps.length - 1] + '; ' + WORDS[n - s.taps.length] + ' more to tap');
+      }
+      draw(c);
     },
     frame(t, dt, c) {
-      ch.run(t, dt, c);
-      if (c.done || since < 0 || shuffled < count) return;
-      since += dt;
-      const f = Math.min(1, since / settleFor);
-      c.progress('settle', f);
-      if (f > 0.4 && told < 1) {
-        told = 1;
-        c.status('the field is settling');
+      time += Math.max(0, dt);
+      if (c.done) {
+        s.played = (s.played + Math.max(0, dt) * 0.12) % (far + 0.3);
+        s.pulse = s.played;
       }
-      if (f > 0.8 && told < 2) {
-        told = 2;
-        c.status('nearly still');
-      }
-      if (f >= 1) c.satisfy('settle');
+      draw(c);
     },
-    end: ch.end
-  };
-}
-
-function ring(env) {
-  const was = pressedBulletin(env);
-  const ch = chamber(env, was);
-  const s = ch.s;
-  const count = env.int(3, 5);
-  const tone = env.pick([240, 360, 480]);
-  const title = env.pick(['one echo, rung', 'ring one thought', 'one of them, ' + count + ' times']);
-  let chosen = -1;
-  let rung = 0;
-  s.speed = 0.25 + (tone / 700) * 0.5;
-  s.look = toneLook(tone);
-  return {
-    title,
-    brief: 'Tap the echo you want to hear, set its tone, and ring it ' + count + ' times; its thought prints when the chamber is still again.'
-      + (was && was.closer ? ' Your card signed off: ' + was.closer : ''),
-    aspect: '1 / 1',
-    steps: [
-      { id: 'pick', ask: 'tap the echo you want to hear', kind: 'tap', label: 'pick one for me' },
-      { id: 'tone', ask: 'its tone', kind: 'range', min: 160, max: 700, step: 10, value: tone, low: 'low', high: 'high' },
-      { id: 'ring', ask: 'ring it ' + count + ' times', kind: 'press', count, label: 'ring', after: 'pick' }
-    ],
-    start(c) {
-      ch.run(0, 0, c);
-    },
-    apply(id, value, c) {
-      if (id === 'tone') {
-        const hz = Math.round(Number(value) / 10) * 10 || tone;
-        s.speed = 0.25 + (hz / 700) * 0.5;
-        s.look = toneLook(hz);
-        c.status(hz + ' hz: ' + (hz < 300 ? 'a low hum' : hz < 500 ? 'a middle tone' : 'glassy and quick'));
-      }
-      if (id === 'ring') {
-        rung = Number(value) || rung + 1;
-        const e = ch.F[Math.max(0, chosen)];
-        pulse(ch.F, ch.P, e.x, e.y, 1.4);
-        e.energy = 1.4;
-        c.status(rung >= count ? e.text + ', rung ' + count + ' times' : rung === 1 ? e.text + ' rings; the others scatter' : rung === 2 ? 'rung again; the chamber knows the tune now' : 'and again; ' + e.text + ' is the loudest thing in here');
-      }
-    },
-    tap(x, y, c) {
-      const got = ch.hear(x, y, false);
-      chosen = got.i;
-      s.said.life = 4;
-      s.lines = [got.e.text, 'an echo at ' + got.e.tone + ' hz, chamber ' + ch.wx.zone, 'The thought stays said.', s.lines[4]];
-      c.progress('pick', 1);
-      c.status((got.far ? 'from open space, the nearest echo answers: ' : 'chosen: ') + got.e.text);
-      c.satisfy('pick');
-    },
-    frame: ch.run,
     end(c) {
-      s.home = true;
-      c.status(chosen < 0 ? s.lines[4] : ch.F[chosen].text + ' — said, and left said');
+      s.pulse = 0;
+      s.played = 0;
+      c.status('the echoes come back ' + order.map((i) => LETTERS[i]).join(', ') + '; the pulse keeps going out');
+      draw(c);
     }
   };
 }
 
-function choirField(ctx, w, h, env, voices, t, flash, reach) {
-  const c = env.colors;
-  background(ctx, w, h, env);
-  for (let k = 0; k < 36; k++) {
-    const sx = (k * 129.1 + t * 9) % w;
-    const sy = (k * 81.4 + t * 6) % h;
-    ctx.beginPath();
-    ctx.fillStyle = env.alpha(c.fg, 0.05 + (k % 5) * 0.02);
-    ctx.arc(sx, sy, 1.1, 0, Math.PI * 2);
-    ctx.fill();
+/* ---- the midnight chord -------------------------------------------------------------------- */
+
+// The total per beat when `voices` (periods) sound: each on beat 0 and every period after.
+function sumsOf(voices) {
+  const bars = new Array(BEATS).fill(0);
+  for (const p of voices) for (let b = 0; b < BEATS; b += p) bars[b] += 1;
+  return bars;
+}
+
+// Whether no other set of voices makes the same bars: every non-empty subset is tried.
+function uniqueChord(voices) {
+  const want = sumsOf(voices).join('');
+  let hits = 0;
+  for (let mask = 1; mask < 16; mask++) {
+    const subset = PERIODS.filter((p, i) => mask & (1 << i));
+    if (sumsOf(subset).join('') === want) hits += 1;
   }
-  const maxD = Math.min(w, h) * 0.3 * (reach || 1);
-  const maxD2 = maxD * maxD;
-  for (let a = 0; a < voices.length; a++) {
-    for (let b = a + 1; b < voices.length; b++) {
-      const dx = voices[b].x - voices[a].x;
-      const dy = voices[b].y - voices[a].y;
-      const d2 = dx * dx + dy * dy;
-      if (d2 > maxD2) continue;
-      const quiet = voices[a].muted || voices[b].muted;
-      ctx.strokeStyle = env.alpha(c.accent, (0.08 + (1 - d2 / maxD2) * 0.3) * (quiet ? 0.4 : 1));
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(voices[a].x, voices[a].y);
-      ctx.lineTo(voices[b].x, voices[b].y);
-      ctx.stroke();
+  return hits === 1;
+}
+
+function chordPlan(env) {
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const count = env.int(1, 3);
+    const pool = PERIODS.slice();
+    const voices = [];
+    while (voices.length < count) voices.push(pool.splice(env.int(0, pool.length - 1), 1)[0]);
+    voices.sort((a, b) => a - b);
+    if (uniqueChord(voices)) return { kind: 'chord', voices };
+  }
+  return { kind: 'chord', voices: [2, 3] };
+}
+
+function carriedChord(env) {
+  const p = env.card && env.card.of;
+  if (!p || p.kind !== 'chord' || !Array.isArray(p.voices) || p.voices.length < 1 || p.voices.length > 3) return null;
+  const voices = p.voices.map(Number);
+  if (!voices.every((v) => PERIODS.includes(v)) || new Set(voices).size !== voices.length) return null;
+  voices.sort((a, b) => a - b);
+  if (!uniqueChord(voices)) return null;
+  return { kind: 'chord', voices };
+}
+
+function chordTitle(plan) {
+  const strikes = sumsOf(plan.voices).reduce((a, b) => a + b, 0);
+  return 'the midnight chord: ' + WORDS[strikes] + ' strikes';
+}
+
+function chordGeometry(w, h) {
+  const left = w * 0.3;
+  const right = w * 0.95;
+  return { left, right, col: (right - left) / BEATS, stripTop: h * 0.1, stripBottom: h * 0.5, rowTop: h * 0.6, rowGap: h * 0.095 };
+}
+
+// The scene: the strip of totals as stacked blocks, then the four voices' own beats.
+function drawChord(g, w, h, c, plan, s, variant, t) {
+  const v = variant || PLAIN;
+  const col = c.colors;
+  const geo = chordGeometry(w, h);
+  const bars = sumsOf(plan.voices);
+  const size = Math.max(9, Math.round(Math.min(w, h) * 0.04));
+  const small = Math.max(8, Math.round(size * 0.85));
+  background(g, w, h, c);
+  dust(g, w, h, c, v, c.reduced ? 0 : t);
+  skyDots(g, w, h, c, v);
+  const unit = (geo.stripBottom - geo.stripTop) / 4.6;
+  // The guides at one to four, so a stack can be read exactly.
+  g.lineWidth = 1;
+  for (let level = 1; level <= 4; level++) {
+    g.strokeStyle = c.alpha(col.muted, 0.1 + 0.08 * v.density);
+    g.beginPath();
+    g.moveTo(geo.left, geo.stripBottom - level * unit);
+    g.lineTo(geo.right, geo.stripBottom - level * unit);
+    g.stroke();
+  }
+  caption(g, w, c, 'total', geo.left - size * 0.6, geo.stripBottom - 2 * unit, 0.7, small, 'right');
+  const glow = c.reduced ? 0.5 : (1 + Math.sin(t * 1.5 + v.turn * TAU)) / 2;
+  const bw = geo.col * 0.6 * Math.min(1.15, Math.max(0.8, v.scale));
+  for (let b = 0; b < BEATS; b++) {
+    const x = geo.left + (b + 0.5) * geo.col;
+    for (let k = 0; k < bars[b]; k++) {
+      const y = geo.stripBottom - (k + 1) * unit;
+      g.fillStyle = c.alpha(col.accent, 0.55 + glow * 0.25);
+      g.fillRect(x - bw / 2, y + unit * 0.08, bw, unit * 0.84);
+      g.strokeStyle = c.alpha(col.accent2, 0.5);
+      g.strokeRect(x - bw / 2, y + unit * 0.08, bw, unit * 0.84);
     }
+    caption(g, w, c, String(b), x, geo.stripBottom + size * 0.8, 0.7, small);
   }
-  for (const v of voices) {
-    const glow = 5 + v.pulse * 12;
-    ctx.beginPath();
-    ctx.fillStyle = v.muted ? env.alpha(c.muted, 0.12 + v.pulse * 0.16) : env.alpha(c.accent2, 0.16 + v.pulse * 0.2);
-    ctx.arc(v.x, v.y, glow, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.beginPath();
-    ctx.fillStyle = v.muted ? env.alpha(c.muted, 0.9) : env.alpha(c.fg, 0.96);
-    ctx.arc(v.x, v.y, 2.2 + v.pulse * 1.2, 0, Math.PI * 2);
-    ctx.fill();
-    if (v.muted) {
-      ctx.strokeStyle = env.alpha(c.muted, 0.7);
-      ctx.lineWidth = 1.2;
-      ctx.beginPath();
-      ctx.moveTo(v.x - 5, v.y - 5);
-      ctx.lineTo(v.x + 5, v.y + 5);
-      ctx.stroke();
-    }
-  }
-  if (flash > 0) {
-    ctx.fillStyle = env.alpha(c.accent2, flash * 0.18);
-    ctx.fillRect(0, 0, w, h);
-  }
-}
-
-function drawChoir(ctx, w, h, env, t) {
-  const cfg = env.variant;
-  const time = (t || 0) + cfg.turn * 6;
-  const pts = env.points(w, h, 14);
-  const singing = Math.max(1, Math.round(pts.length * cfg.density));
-  const voices = pts.map((p, i) => ({
-    x: p.x, y: p.y, muted: i >= singing,
-    pulse: Math.max(0, Math.sin(time * 2 + i * 0.9)) * 0.4 * cfg.scale
-  }));
-  choirField(ctx, w, h, env, voices, time, 0, cfg.scale);
-}
-
-function noteOf(star) {
-  const degree = Math.max(0, Math.min(NOTES.length - 1, Math.floor((star.x / 100) * NOTES.length)));
-  const lift = Math.floor((100 - star.y) / 34);
-  return NOTES[degree] + (2 + lift);
-}
-
-function label(ctx, w, env, lines, y, size, align) {
-  ctx.fillStyle = env.alpha(env.colors.fg, 0.92);
-  ctx.font = '500 ' + size + 'px system-ui, sans-serif';
-  ctx.textAlign = align || 'left';
-  ctx.textBaseline = 'top';
-  for (let i = 0; i < lines.length; i++) ctx.fillText(lines[i], align === 'center' ? w / 2 : 12, y + i * size * 1.35);
-}
-
-// The card a score piece was opened from, in the choir's own terms: the tempo it was printed at and
-// which voice it led with, or null for a piece nobody pressed.
-function pressedScore(env) {
-  const was = env.card && env.card.of;
-  const tempo = was ? Number(was.tempo) : NaN;
-  if (!isFinite(tempo)) return null;
-  const at = WAVES.indexOf(was.wave);
-  return { tempo: Math.max(48, Math.min(160, Math.round(tempo))), lead: at < 0 ? 0 : at };
-}
-
-// The voices of a choir. `lead` is the voice the card led with, so the first singer of this choir
-// is the one a visitor pressed.
-function choir(c, lead) {
-  const from = lead || 0;
-  return c.points(c.w, c.h, 14).map((p, i) => ({
-    star: c.stars[i], home: p, x: p.x, y: p.y,
-    phase: (i * 0.73) % (Math.PI * 2), sway: 0.5 + (i % 7) * 0.11,
-    pulse: 0, muted: false, wave: WAVES[(i + from) % 4], note: noteOf(c.stars[i])
-  }));
-}
-
-function advance(s, c, dt, t) {
-  for (const v of s.voices) {
-    if (!c.reduced) v.phase += dt * (0.8 + v.sway * 0.35);
-    const swayX = c.reduced ? 0 : Math.cos(t * 0.9 + v.phase) * (2 + v.sway * 1.8);
-    const swayY = c.reduced ? 0 : Math.sin(t * 0.7 + v.phase) * (1.5 + v.sway * 1.2);
-    v.x = v.home.x + swayX;
-    v.y = v.home.y + swayY;
-    v.pulse = Math.max(0, v.pulse - dt * 1.8);
-  }
-  s.flash = Math.max(0, s.flash - dt * 1.8);
-  if (!s.running) return;
-  s.beatAt += dt;
-  const interval = 60 / s.tempo;
-  while (s.beatAt >= interval) {
-    s.beatAt -= interval;
-    const lane = s.step % 4;
-    let sounded = 0;
-    for (let j = 0; j < s.voices.length; j++) {
-      const voice = s.voices[j];
-      if (voice.muted) continue;
-      if (j % 4 === lane || j === s.step % s.voices.length) {
-        voice.pulse = 1;
-        sounded++;
+  g.strokeStyle = c.alpha(col.muted, 0.4);
+  g.beginPath();
+  g.moveTo(geo.left, geo.stripBottom);
+  g.lineTo(geo.right, geo.stripBottom);
+  g.stroke();
+  // The voices: each on its own row, its beats hollow until it is picked, lit when it is found.
+  PERIODS.forEach((p, row) => {
+    const y = geo.rowTop + row * geo.rowGap;
+    const picked = s.picked.includes(p);
+    const shown = s.shown[p];
+    const sounding = plan.voices.includes(p);
+    const tone = s.reveal && sounding ? col.accent2 : picked ? col.accent : col.muted;
+    caption(g, w, c, EVERY[p], geo.left - size * 0.6, y, 0.85, small, 'right');
+    g.lineWidth = 1.2;
+    for (let b = 0; b < BEATS; b += p) {
+      const x = geo.left + (b + 0.5) * geo.col;
+      const r = Math.max(2, geo.col * 0.2 * Math.min(1.15, Math.max(0.8, v.scale)));
+      if (picked || (s.reveal && sounding)) {
+        g.fillStyle = c.alpha(tone, 0.9);
+        g.beginPath();
+        g.arc(x, y, r, 0, TAU);
+        g.fill();
+      } else {
+        g.strokeStyle = c.alpha(tone, 0.7);
+        g.beginPath();
+        g.arc(x, y, r, 0, TAU);
+        g.stroke();
       }
     }
-    if (sounded) s.flash = 0.55;
-    s.step += 1;
-    if (s.step % 4 === 0) s.bars += 1;
-  }
-}
-
-function reshuffle(s, c) {
-  for (const v of s.voices) {
-    v.phase = c.rnd() * Math.PI * 2;
-    v.sway = 0.4 + c.rnd() * 1.1;
-    v.pulse = 0.5;
-  }
-  s.flash = 0.8;
-}
-
-function scoreLines(s, c) {
-  const muted = s.voices.filter((v) => v.muted).length;
-  const sky = summarize(c.stars);
-  const lines = ['pulse choir score', 'tempo ' + Math.round(s.tempo) + ' · voices ' + s.voices.length + ' · muted ' + muted,
-    'field ' + sky.zone + ' · spread ' + sky.spread];
-  s.voices.slice(0, 5).forEach((v, i) => {
-    const text = v.star.text.length > 34 ? v.star.text.slice(0, 33) + '…' : v.star.text;
-    lines.push((i + 1) + '. ' + v.note + ' ' + v.wave + (v.muted ? ' [muted]' : '') + ' — ' + text);
+    if (shown) {
+      const x = geo.right + size * 0.3;
+      g.fillStyle = col.accent2;
+      g.font = '600 ' + small + 'px system-ui, sans-serif';
+      g.textAlign = 'left';
+      g.textBaseline = 'middle';
+      g.fillText(shown === 'on' ? 'sounds' : 'silent', x, y);
+    }
   });
-  return lines;
+  g.fillStyle = c.alpha(col.muted, 0.2);
+  g.fillRect(geo.left, geo.rowTop - geo.rowGap * 0.6, geo.right - geo.left, 1);
 }
 
-function printChoir(c, s, size) {
-  if (s.print <= 0) return;
-  c.g.fillStyle = c.alpha(c.colors.bg, 0.78 * s.print);
-  c.g.fillRect(0, c.h * 0.42, c.w, c.h * 0.58);
-  c.g.globalAlpha = s.print;
-  label(c.g, c.w, c, scoreLines(s, c), c.h * 0.46, size, 'left');
-  c.g.globalAlpha = 1;
+function chordBlank() {
+  return { picked: [], shown: {}, reveal: false };
 }
 
-function conduct(env) {
-  const was = pressedScore(env);
-  const n = env.stars.length;
-  const toMute = Math.min(n, env.int(1, 3));
-  const shuffles = env.int(1, 2);
-  const bars = env.int(2, 3);
-  // The tempo the card's score was printed at: the choir opens where the card left it.
-  const tempo0 = was ? was.tempo : 92;
-  const s = { voices: [], tempo: tempo0, running: false, beatAt: 0, step: 0, bars: 0, flash: 0, muted: 0, barsPlayed: false, print: 0 };
+function chordPreview(g, w, h, env, plan, t) {
+  drawChord(g, w, h, env, plan, chordBlank(), env.variant, t || 0);
+}
+
+function chordPiece(env, plan) {
+  const voices = plan.voices;
+  const meet = lcmOf(voices);
+  const s = chordBlank();
+  let time = 0;
+  const draw = (c) => drawChord(c.g, c.w, c.h, c, plan, s, env.variant, time);
+  const named = (list) => list.map((p) => EVERY[p]).join(', ');
+  // The hints go through the voices in a seeded order, one per press.
+  const reveal = [];
+  const pool = PERIODS.slice();
+  while (pool.length) reveal.push(pool.splice(env.int(0, pool.length - 1), 1)[0]);
   return {
-    title: was ? 'conduct ' + (bars === 2 ? 'two' : 'three') + ' bars at ' + tempo0
-      : 'conduct ' + (bars === 2 ? 'two' : 'three') + ' bars',
-    brief: 'Set the tempo, tap ' + (toMute === 1 ? 'one voice' : toMute + ' voices') + ' to mute them, reshuffle the phrasing, and let the choir run ' + (bars === 2 ? 'two' : 'three') + ' bars; its score is printed when it has.',
+    title: chordTitle(plan),
+    brief: 'Four voices sound in the midnight chamber, each on beat 0 and every period after: one every 2nd beat, one every 3rd, one every 4th, one every 5th. '
+      + 'Some of them are sounding. The strip shows only the total of voices per beat, as stacked blocks.',
+    goal: 'Say which voices are sounding, and on which beat after beat 0 they next all strike together.',
     aspect: '4 / 3',
+    checkLabel: 'check the chord',
     steps: [
-      { id: 'tempo', ask: 'the tempo', kind: 'range', min: 48, max: 160, step: 1, value: tempo0, low: 'slow', high: 'quick' },
-      { id: 'mute', ask: 'tap ' + (toMute === 1 ? 'one voice' : toMute + ' voices') + ' to mute them', kind: 'tap', label: 'mute one for me' },
-      { id: 'shuffle', ask: 'reshuffle the phrasing', kind: 'press', count: shuffles, label: 'reshuffle' },
-      { id: 'run', ask: 'let it run ' + (bars === 2 ? 'two' : 'three') + ' bars', kind: 'wait', after: 'tempo' }
+      { id: 'voices', ask: 'the voices that are sounding', kind: 'pick', items: PERIODS.map((p) => ({ label: EVERY[p], value: p })) },
+      { id: 'meet', ask: 'the first beat after 0 on which every sounding voice strikes at once', kind: 'number', min: 2, max: 60, step: 1, unit: 'beat' },
+      { id: 'hint', ask: 'whether one voice is sounding', kind: 'press', count: 1, label: 'show me one', optional: true }
     ],
+    solution: { voices: voices.slice(), meet },
+    check(c) {
+      const chosen = Array.isArray(c.value('voices')) ? c.value('voices').map(Number) : [];
+      const right = chosen.filter((p) => voices.includes(p)).length;
+      const extra = chosen.length - right;
+      const missing = voices.length - right;
+      const pickRight = extra === 0 && missing === 0;
+      const meetRight = Number(c.value('meet')) === meet;
+      if (pickRight && meetRight) return { solved: true, say: 'the chord is ' + named(voices) + ', together again on beat ' + meet };
+      const parts = [];
+      if (!pickRight) {
+        if (right === 0) parts.push('none of the voices you picked is sounding');
+        else parts.push(WORDS[right] + ' of your picks ' + (right === 1 ? 'is' : 'are') + ' sounding' + (extra ? ', ' + WORDS[extra] + ' ' + (extra === 1 ? 'is' : 'are') + ' not' : ''));
+        if (!extra && missing) parts.push('a voice is still missing');
+      }
+      if (!meetRight) parts.push('the meeting beat is off');
+      return { solved: false, say: parts.join('; ') };
+    },
     start(c) {
-      s.voices = choir(c, was ? was.lead : 0);
-      choirField(c.g, c.w, c.h, c, s.voices, 0, 0);
-      c.status(n + (n === 1 ? ' voice' : ' voices') + ', waiting on a tempo');
+      c.status('twelve beats, four voices, one chord');
+      draw(c);
     },
     apply(id, value, c) {
-      if (id === 'tempo') {
-        s.tempo = Math.max(48, Math.min(160, Number(value) || 92));
-        if (!s.running) {
-          s.running = true;
-          s.bars = 0;
-          s.step = 0;
+      if (id === 'voices' && Array.isArray(value)) {
+        s.picked = value.map(Number).filter((p) => PERIODS.includes(p));
+        c.status(s.picked.length ? 'picked: ' + named(s.picked) : 'no voice picked');
+      }
+      if (id === 'meet') {
+        const b = Number(value);
+        if (Number.isFinite(b)) c.status('together again on beat ' + Math.round(b) + ', you say');
+      }
+      if (id === 'hint') {
+        const next = reveal.find((p) => !s.shown[p]);
+        if (next !== undefined) {
+          s.shown[next] = voices.includes(next) ? 'on' : 'off';
+          c.hint();
+          c.status('the voice on ' + EVERY[next] + ' is ' + (s.shown[next] === 'on' ? 'sounding' : 'silent'));
+        } else {
+          c.status('every voice has been shown; the meeting beat is yours to work out');
         }
-        c.status('tempo ' + Math.round(s.tempo) + ' bpm; the choir is running');
       }
-      if (id === 'shuffle') {
-        reshuffle(s, c);
-        c.status('voices reshuffled. same stars, fresh phrasing.');
-      }
-    },
-    tap(x, y, c) {
-      // Finishing the timed knob must not lock an unfinished mute knob.
-      if (c.done || s.muted >= toMute) return;
-      let near = s.voices[nearest(s.voices, x * c.w, y * c.h, false).i];
-      if (!near) return;
-      if (near.muted) {
-        near = s.voices.find((v) => !v.muted);
-        if (!near) return;
-      }
-      near.muted = true;
-      near.pulse = 1;
-      s.muted += 1;
-      c.progress('mute', s.muted / toMute);
-      c.status('muted: ' + near.star.text);
-      if (s.muted >= toMute) c.satisfy('mute');
+      draw(c);
     },
     frame(t, dt, c) {
-      advance(s, c, dt, t);
-      if (s.running && !s.barsPlayed) {
-        c.progress('run', Math.min(1, s.bars / bars));
-        if (s.bars >= bars) {
-          s.barsPlayed = true;
-          c.satisfy('run');
-        }
-      }
-      if (c.done) s.print = Math.min(1, s.print + dt * 1.4);
-      choirField(c.g, c.w, c.h, c, s.voices, t, s.flash);
-      const size = Math.max(11, Math.round(Math.min(c.w, c.h) * 0.032));
-      label(c.g, c.w, c, ['tempo ' + Math.round(s.tempo) + ' · bar ' + Math.min(bars, s.bars + (s.running ? 1 : 0)) + ' of ' + bars + ' · step ' + ((s.step % 16) + 1)], 10, size);
-      printChoir(c, s, size);
+      time += Math.max(0, dt);
+      draw(c);
     },
     end(c) {
-      s.running = false;
-      c.status('score printed: ' + s.voices.length + ' voices, ' + s.muted + ' muted, ' + Math.round(s.tempo) + ' bpm');
+      s.reveal = true;
+      c.status('the chord was ' + named(voices) + '; it strikes whole again on beat ' + meet);
+      draw(c);
     }
   };
 }
 
-function printScore(env) {
-  const was = pressedScore(env);
-  const n = env.stars.length;
-  const picks = [
-    { label: 'every voice', value: 'all' },
-    { label: 'the high ones', value: 'high' },
-    { label: 'the low ones', value: 'low' },
-    { label: 'every other one', value: 'odd' }
-  ];
-  const options = [];
-  while (options.length < 3) options.push(picks.splice(env.int(0, picks.length - 1), 1)[0]);
-  const holdMs = env.pick([1500, 2000]);
-  const tempo0 = was ? was.tempo : 92;
-  const s = { voices: [], tempo: tempo0, running: false, beatAt: 0, step: 0, bars: 0, flash: 0, printed: false, print: 0, pick: '' };
-  function applyPick() {
-    s.voices.forEach((v, i) => {
-      v.muted = s.pick === 'high' ? v.star.y > 50 : s.pick === 'low' ? v.star.y <= 50 : s.pick === 'odd' ? i % 2 === 1 : false;
-    });
-    if (s.voices.length === 1) s.voices[0].muted = false;
-  }
-  return {
-    title: n === 1 ? 'one voice, one score' : 'a score for ' + n + ' voices',
-    brief: 'Choose which voices sing and how fast, hold to start the loop, and print the score of your sky.'
-      + (was ? ' It opens at ' + tempo0 + ', where your card printed it.' : ''),
-    aspect: '4 / 3',
-    steps: [
-      { id: 'who', ask: 'which voices sing', kind: 'choice', options },
-      { id: 'tempo', ask: 'the tempo', kind: 'range', min: 48, max: 160, step: 1, value: tempo0, low: 'slow', high: 'quick' },
-      { id: 'start', ask: 'start the loop', kind: 'hold', ms: holdMs, label: 'hold to start', after: 'who' },
-      { id: 'print', ask: 'print the score', kind: 'press', count: 1, label: 'print score', after: 'start' }
-    ],
-    start(c) {
-      s.voices = choir(c, was ? was.lead : 0);
-      choirField(c.g, c.w, c.h, c, s.voices, 0, 0);
-      c.status(n + (n === 1 ? ' voice' : ' voices') + ' in the field');
-    },
-    apply(id, value, c) {
-      if (id === 'who') {
-        s.pick = String(value);
-        applyPick();
-        const singing = s.voices.filter((v) => !v.muted).length;
-        c.status(singing + (singing === 1 ? ' voice sings' : ' voices sing'));
-      }
-      if (id === 'tempo') {
-        s.tempo = Math.max(48, Math.min(160, Number(value) || 92));
-        c.status('tempo ' + Math.round(s.tempo) + ' bpm');
-      }
-      if (id === 'start') {
-        s.running = true;
-        s.beatAt = 0;
-        c.status('choir running');
-      }
-      if (id === 'print') {
-        s.printed = true;
-        s.flash = 0.8;
-      }
-    },
-    frame(t, dt, c) {
-      advance(s, c, dt, t);
-      if (s.printed) s.print = Math.min(1, s.print + dt * 1.4);
-      choirField(c.g, c.w, c.h, c, s.voices, t, s.flash);
-      const size = Math.max(11, Math.round(Math.min(c.w, c.h) * 0.032));
-      label(c.g, c.w, c, ['tempo ' + Math.round(s.tempo) + ' · ' + (s.running ? 'step ' + ((s.step % 16) + 1) : 'waiting')], 10, size);
-      printChoir(c, s, size);
-    },
-    end(c) {
-      const sky = summarize(c.stars);
-      c.status('score printed: field ' + sky.zone + ', spread ' + sky.spread);
-    }
-  };
+/* ---- the module ----------------------------------------------------------------------------- */
+
+function dealsEcho(env) {
+  return env.chance(0.5);
 }
 
 export default {
   id: 'constellation-echo',
   needsSky: true,
-  paint(ctx, w, h, env) {
-    if (isChoir(env)) drawChoir(ctx, w, h, env, env.rnd() * 10);
-    else echoes(ctx, w, h, env, env.variant.turn * 12 + env.rnd() * 10);
+  paint(g, w, h, env) {
+    if (dealsEcho(env)) echoPreview(g, w, h, env, echoPlan(env), env.variant.turn * 3);
+    else chordPreview(g, w, h, env, chordPlan(env), env.variant.turn * 4);
   },
-  animate(ctx, w, h, env, t) {
-    if (isChoir(env)) drawChoir(ctx, w, h, env, t);
-    else echoes(ctx, w, h, env, t + env.variant.turn * 12);
+  animate(g, w, h, env, t) {
+    if (dealsEcho(env)) echoPreview(g, w, h, env, echoPlan(env), t + env.variant.turn * 3);
+    else chordPreview(g, w, h, env, chordPlan(env), t + env.variant.turn * 4);
   },
   spark(env) {
-    const stars = env.stars;
-    if (!stars.length) return null;
-    const sky = summarize(stars);
-    if (isChoir(env)) {
-      const tempo = env.int(52, 152);
-      const wave = env.pick(WAVES);
+    if (dealsEcho(env)) {
+      const plan = echoPlan(env);
+      const order = byDistance(plan);
       return {
-        title: 'pulse choir score',
-        mono: stars.length + ' voices\ntempo ' + tempo + ' \u00b7 leading ' + wave
-          + '\nfield ' + sky.zone + '\nspread ' + sky.spread,
-        text: 'Your saved stars become a looping choir you can conduct by tempo and muting.',
-        aspect: '4 / 3',
-        paint: drawChoir,
-        // What this card is of, for the piece it opens as: the tempo it printed, and its first voice.
-        of: { tempo, wave }
+        title: echoTitle(plan),
+        quote: 'a pulse leaves the mark; star ' + LETTERS[order[0]] + ' answers first, or does it?',
+        text: 'Every star sends an echo back, the farther the later. Put the ' + WORDS[plan.stars.length] + ' stars in the order their echoes return.',
+        aspect: '1 / 1',
+        paint: (g, w, h, cardEnv) => echoPreview(g, w, h, cardEnv, plan, cardEnv.variant.turn * 3),
+        of: plan
       };
     }
-    const opener = env.pick(OPENERS).replace(':', '');
-    const mid = env.pick(MIDS);
-    const closer = env.pick(CLOSERS);
+    const plan = chordPlan(env);
     return {
-      title: opener,
-      mono: stars.length + ' echoes, ' + sky.spread + ' spread\nchamber ' + sky.zone + ', tone ' + sky.density,
-      text: mid + ' ' + closer,
-      aspect: '1 / 1',
-      paint: (ctx, w, h, e) => echoes(ctx, w, h, e, e.rnd() * 10),
-      // What this card is of, for the piece it opens as: the bulletin it printed.
-      of: { opener, mid, closer }
+      title: chordTitle(plan),
+      mono: 'beat   ' + sumsOf(plan.voices).map((n, i) => String(i).padStart(2, ' ')).join('') + '\ntotal  ' + sumsOf(plan.voices).map((n) => String(n).padStart(2, ' ')).join(''),
+      text: 'Four voices on periods of 2, 3, 4 and 5 beats; some are sounding. From the totals alone, say which, and when they next all strike together.',
+      aspect: '4 / 3',
+      paint: (g, w, h, cardEnv) => chordPreview(g, w, h, cardEnv, plan, cardEnv.variant.turn * 4),
+      of: plan
     };
   },
   piece(env) {
-    if (!env.stars || !env.stars.length) return null;
-    if (isChoir(env)) return env.chance(0.55) ? conduct(env) : printScore(env);
-    return env.chance(0.4) ? listen(env) : env.chance(0.58) ? shuffle(env) : ring(env);
+    const echo = carriedEcho(env);
+    if (echo) return echoPiece(env, echo);
+    const chord = carriedChord(env);
+    if (chord) return chordPiece(env, chord);
+    return dealsEcho(env) ? echoPiece(env, echoPlan(env)) : chordPiece(env, chordPlan(env));
   }
 };

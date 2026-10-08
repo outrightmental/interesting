@@ -1,46 +1,52 @@
-/* Light through slits, crossed polarizing filters, or a pinhole camera. Each shape carries
-   its subject from card to piece; a carried subject takes precedence over the seed's choice. */
+/* The light table: a lamp, a pair of slits and a screen, or a lamp and three polarising filters,
+   each read as a puzzle with its numbers on the table. As a card it is one of the two puzzles
+   below, drawn as it stands (paint, spark); as a piece it is that puzzle, and the card it was
+   opened from says which. See js/feed.js for what a module is and js/stage.js for what a piece
+   is.
 
-const SLITS = [
-  { label: 'both slits open', value: 'two' },
-  { label: 'cover one slit', value: 'one' }
-];
-const GUESSES = [
-  { label: 'bright and dark lanes', value: 'lanes' },
-  { label: 'one broad patch', value: 'patch' },
-  { label: 'marks scattered evenly', value: 'even' }
-];
+   Two puzzles, both deduction with a little arithmetic:
+
+     the slit spacing   Light of a stated wavelength passes two slits and lands on a screen a
+                        stated distance away as fringes, drawn over a millimetre ruler. The
+                        fringes are wavelength times distance over slit spacing apart, so the
+                        spacing follows from the ruler. The wavelength, distance and spacing are
+                        chosen so the fringe spacing is a whole number of millimetres. Say the
+                        spacing, and what one named change would do to the fringes.
+     the filter order   Three polarising filters at stated angles. The first passes half the
+                        lamp's light whatever its angle; each one after passes cos squared of the
+                        angle between it and the one before. Put them in the order that passes the
+                        most light, and say what fraction gets through, to the nearest five per
+                        cent. The angles are chosen so one middle filter beats the other two and
+                        the rounding is never in doubt; the two orders with that filter in the
+                        middle pass the same light, and the check accepts either.
+
+   A card and the feature it opens as are one puzzle: the spark puts the whole plan on its spec as
+   `of` -- the lamp, the distances, the angles -- and piece(env) opens on that rather than rolling
+   another. */
+
 const PLAIN = { density: 1, scale: 1, turn: 0 };
+const LAMBDAS = [400, 450, 500, 550, 600, 650, 700];
+const LENGTHS = [500, 600, 750, 800, 1000, 1200, 1500, 2000];
+const CHANGES = [
+  { what: 'moving the slits closer together', does: 'spread' },
+  { what: 'moving the slits farther apart', does: 'pack' },
+  { what: 'moving the screen farther away', does: 'spread' },
+  { what: 'moving the screen closer', does: 'pack' },
+  { what: 'using a longer wavelength', does: 'spread' },
+  { what: 'using a shorter wavelength', does: 'pack' }
+];
+const EFFECTS = [
+  { label: 'spreads them out', value: 'spread' },
+  { label: 'packs them closer', value: 'pack' },
+  { label: 'leaves them as they are', value: 'same' }
+];
+const ANGLES = [0, 30, 45, 60, 90, 120, 135, 150];
 
-function plan(env) {
-  return {
-    family: 'light-table',
-    number: env.int(101, 999),
-    wavelength: env.int(430, 680),
-    gap: env.int(28, 72)
-  };
+function clamp(v, lo, hi) {
+  return Math.max(lo, Math.min(hi, v));
 }
 
-function carried(env) {
-  const p = env.card && env.card.of;
-  if (!p || p.family !== 'light-table'
-      || !Number.isInteger(p.number) || p.number < 101 || p.number > 999
-      || !Number.isInteger(p.wavelength) || p.wavelength < 430 || p.wavelength > 680
-      || !Number.isInteger(p.gap) || p.gap < 28 || p.gap > 72) return null;
-  return p;
-}
-
-function title(p) {
-  return 'lamp ' + p.number + ': ' + p.wavelength + ' nm';
-}
-
-function setup(env) {
-  const subject = plan(env);
-  const marks = Array.from({ length: 480 }, () => ({
-    u: env.rnd(), x: env.rnd(), jitter: env.rnd()
-  }));
-  return { subject, marks };
-}
+/* ---- shared drawing ------------------------------------------------------------------------- */
 
 function background(g, w, h, env) {
   const ground = g.createLinearGradient(0, 0, w, h);
@@ -50,289 +56,295 @@ function background(g, w, h, env) {
   g.fillRect(0, 0, w, h);
 }
 
-function profile(p, state, variant) {
-  const values = [];
-  const cumulative = [];
-  const spread = 0.44 + (p.wavelength - 430) / 250 * 0.14;
-  const lanes = (2.6 + (state.gap - 28) / 44 * 2.4)
-    * 550 / p.wavelength * variant.scale;
-  let total = 0;
-  for (let i = 0; i < 160; i++) {
-    const z = (i + 0.5) / 80 - 1;
-    const envelope = Math.exp(-2.4 * (z / spread) ** 2);
-    const interference = state.slits === 'one' ? 1
-      : 0.02 + 0.98 * Math.cos(Math.PI * lanes * z) ** 2;
-    const value = envelope * interference;
-    values.push(value);
-    total += value;
-    cumulative.push(total);
+// Dust on the table: a few marks whose phase is the configuration's turn and whose number is its
+// density.
+function dust(g, w, h, env, v) {
+  g.fillStyle = env.alpha(env.colors.fg, 0.12);
+  for (let i = 0, count = Math.max(6, Math.round(20 * v.density)); i < count; i++) {
+    g.fillRect(((i * 0.6180339 + v.turn * 0.3) % 1) * w, ((i * 0.7548777 + v.turn * 0.17) % 1) * h, 1, 1);
   }
-  return { values, cumulative, total };
 }
 
-function binFor(cumulative, target) {
-  let lo = 0;
-  let hi = cumulative.length - 1;
-  while (lo < hi) {
-    const mid = (lo + hi) >> 1;
-    if (cumulative[mid] < target) lo = mid + 1;
-    else hi = mid;
-  }
-  return lo;
-}
-
-function scene(g, w, h, env, p, state, marks) {
-  const c = env.colors;
-  const v = env.variant || PLAIN;
-  const maskX = w * 0.38;
-  const screenX = w * 0.69;
-  const screenW = w * 0.23;
-  const screenTop = h * 0.11;
-  const screenH = h * 0.78;
-  const middle = h * 0.5;
-  const sourceX = w * (0.13 + (v.turn - 0.5) * 0.035);
-  const distribution = profile(p, state, v);
-  background(g, w, h, env);
-
-  g.fillStyle = env.mix(c.bg, c.bg2, 0.55);
-  g.fillRect(screenX, screenTop, screenW, screenH);
-  const rowH = screenH / distribution.values.length;
-  for (let i = 0; i < distribution.values.length; i++) {
-    const strength = state.preview ? 0.16 : state.finished ? 0.27
-      : state.shown > 0 ? 0.10 : 0.025;
-    g.fillStyle = env.alpha(c.accent, 0.02 + distribution.values[i] * strength);
-    g.fillRect(screenX, screenTop + i * rowH, screenW, rowH + 0.5);
-  }
-  g.strokeStyle = env.alpha(c.fg, 0.65);
-  g.lineWidth = 1.5;
-  g.strokeRect(screenX, screenTop, screenW, screenH);
-
-  const visible = Math.min(marks.length, Math.floor(state.shown));
-  const dot = Math.max(1.2, Math.min(w, h) * 0.005 * v.scale);
-  g.fillStyle = c.accent2;
-  for (let i = 0; i < visible; i++) {
-    const mark = marks[i];
-    const bin = binFor(distribution.cumulative, mark.u * distribution.total);
-    const x = screenX + screenW * (0.08 + mark.x * 0.84);
-    const y = screenTop + (bin + mark.jitter) * rowH;
-    g.fillRect(x, y, dot, dot);
-  }
-
-  const offset = state.gap * h * 0.00125;
-  const openings = state.slits === 'one' ? [middle] : [middle - offset, middle + offset];
-  const ringStep = Math.max(12, Math.min(w, h) * 0.075 / v.scale);
-  for (const y of openings) {
-    g.strokeStyle = env.alpha(c.accent2, 0.30);
-    g.lineWidth = 1;
-    g.beginPath();
-    g.moveTo(sourceX, middle);
-    g.lineTo(maskX, y);
-    g.stroke();
-    for (let radius = ringStep; radius < screenX - maskX; radius += ringStep) {
-      g.strokeStyle = env.alpha(c.accent, 0.10 + 0.06 * (1 - radius / (screenX - maskX)));
-      g.beginPath();
-      g.arc(maskX, y, radius, -Math.PI / 2, Math.PI / 2);
-      g.stroke();
-    }
-  }
-  const openingH = Math.max(3, h * 0.025);
-  let top = 0;
-  g.fillStyle = c.accent2;
-  for (const y of openings) {
-    g.fillRect(maskX - 2, top, 4, y - openingH / 2 - top);
-    top = y + openingH / 2;
-  }
-  g.fillRect(maskX - 2, top, 4, h - top);
-  const glow = g.createRadialGradient(sourceX, middle, 0, sourceX, middle, Math.min(w, h) * 0.12);
-  glow.addColorStop(0, env.alpha(c.accent2, 0.65));
-  glow.addColorStop(1, env.alpha(c.accent2, 0));
+function lamp(g, env, x, y, radius) {
+  const glow = g.createRadialGradient(x, y, 0, x, y, radius);
+  glow.addColorStop(0, env.alpha(env.colors.accent2, 0.6));
+  glow.addColorStop(1, env.alpha(env.colors.accent2, 0));
   g.fillStyle = glow;
-  g.fillRect(sourceX - w * 0.1, middle - h * 0.12, w * 0.2, h * 0.24);
-  g.fillStyle = c.fg;
+  g.fillRect(x - radius, y - radius, radius * 2, radius * 2);
+  g.fillStyle = env.colors.fg;
   g.beginPath();
-  g.arc(sourceX, middle, Math.max(2, Math.min(w, h) * 0.01), 0, Math.PI * 2);
+  g.arc(x, y, Math.max(2, radius * 0.09), 0, Math.PI * 2);
   g.fill();
 }
 
-function slitPiece(env) {
-  const made = setup(env);
-  const p = carried(env) || made.subject;
-  const v = env.variant || PLAIN;
-  const perBurst = Math.round(110 * v.density);
-  const state = {
-    slits: 'two', gap: p.gap, guess: '', shown: 0, target: 0,
-    preview: false, finished: false, developed: false
-  };
-  const draw = (c) => scene(c.g, c.w, c.h, env, p, state, made.marks);
+function label(g, env, text, x, y, size, align, tone) {
+  g.font = '500 ' + size + 'px system-ui, sans-serif';
+  g.textAlign = align || 'left';
+  g.textBaseline = 'middle';
+  g.fillStyle = tone || env.colors.fg;
+  g.fillText(text, x, y);
+}
+
+/* ---- the slit spacing ----------------------------------------------------------------------- */
+
+// The slit spacing in hundredths of a millimetre for a wavelength in nanometres, a distance in
+// millimetres and a fringe spacing in millimetres: d = lambda L / dy, or null when it is not a
+// whole number between 10 and 100.
+function spacingOf(lambda, length, fringe) {
+  const d = (lambda * length) / (fringe * 10000);
+  return Number.isInteger(d) && d >= 10 && d <= 100 ? d : null;
+}
+
+function slitCombos() {
+  const out = [];
+  for (const lambda of LAMBDAS) {
+    for (const length of LENGTHS) {
+      for (let fringe = 1; fringe <= 6; fringe++) if (spacingOf(lambda, length, fringe) !== null) out.push({ lambda, length, fringe });
+    }
+  }
+  return out;
+}
+
+function slitPlan(env) {
+  const combos = slitCombos();
+  const pick = combos[env.int(0, combos.length - 1)];
+  return { kind: 'slits', number: env.int(100, 999), lambda: pick.lambda, length: pick.length, fringe: pick.fringe, ask: env.int(0, CHANGES.length - 1) };
+}
+
+function carriedSlits(env) {
+  const p = env.card && env.card.of;
+  if (!p || p.kind !== 'slits') return null;
+  if (!Number.isInteger(p.number) || p.number < 100 || p.number > 999) return null;
+  if (!LAMBDAS.includes(p.lambda) || !LENGTHS.includes(p.length)) return null;
+  if (!Number.isInteger(p.fringe) || p.fringe < 1 || p.fringe > 6 || spacingOf(p.lambda, p.length, p.fringe) === null) return null;
+  if (!Number.isInteger(p.ask) || p.ask < 0 || p.ask >= CHANGES.length) return null;
+  return { kind: 'slits', number: p.number, lambda: p.lambda, length: p.length, fringe: p.fringe, ask: p.ask };
+}
+
+function slitTitle(plan) {
+  return 'lamp ' + plan.number + ': the slit spacing';
+}
+
+// The ruler's reach either side of the middle, in millimetres: four fringes.
+function reachOf(plan) {
+  return plan.fringe * 4;
+}
+
+function slitGeometry(w, h) {
   return {
-    title: title(p),
-    brief: 'This lamp sends light through a narrow screen. Choose one or two slits, move the openings, predict the pattern, then send three bursts and watch individual marks become a picture.',
+    sourceX: w * 0.1, maskX: w * 0.36, screenX: w * 0.7, screenW: w * 0.075,
+    rulerX: w * 0.79, top: h * 0.1, bottom: h * 0.88, middle: h * 0.49
+  };
+}
+
+// `s`: whether the answer is in (the spacing written on the mask).
+function drawSlits(g, w, h, env, plan, s, variant) {
+  const v = variant || PLAIN;
+  const c = env.colors;
+  const geo = slitGeometry(w, h);
+  const size = Math.max(9, Math.min(15, Math.round(Math.min(w, h) * 0.036)));
+  const reach = reachOf(plan);
+  const screenH = geo.bottom - geo.top;
+  const perMm = screenH / (reach * 2);
+  background(g, w, h, env);
+  dust(g, w, h, env, v);
+  // The lamp and its wavelength.
+  const sourceX = geo.sourceX + (v.turn - 0.5) * w * 0.03;
+  lamp(g, env, sourceX, geo.middle, Math.min(w, h) * 0.11 * v.scale);
+  label(g, env, plan.lambda + ' nm', sourceX, geo.middle + Math.min(w, h) * 0.12, size, 'center', c.accent2);
+  // The mask with its two slits, and the arcs that leave them.
+  const gap = Math.max(6, h * 0.05);
+  const openings = [geo.middle - gap / 2, geo.middle + gap / 2];
+  const ringStep = Math.max(8, (geo.screenX - geo.maskX) / (6 * v.density) / v.scale);
+  for (const y of openings) {
+    g.strokeStyle = env.alpha(c.accent2, 0.3);
+    g.lineWidth = 1;
+    g.beginPath();
+    g.moveTo(sourceX, geo.middle);
+    g.lineTo(geo.maskX, y);
+    g.stroke();
+    for (let r = ringStep; r < geo.screenX - geo.maskX; r += ringStep) {
+      g.strokeStyle = env.alpha(c.accent, 0.08 + 0.08 * (1 - r / (geo.screenX - geo.maskX)));
+      g.beginPath();
+      g.arc(geo.maskX, y, r, -Math.PI / 2, Math.PI / 2);
+      g.stroke();
+    }
+  }
+  const slitH = Math.max(2, h * 0.012);
+  g.fillStyle = c.accent2;
+  g.fillRect(geo.maskX - 2, geo.top, 4, openings[0] - slitH / 2 - geo.top);
+  g.fillRect(geo.maskX - 2, openings[0] + slitH / 2, 4, gap - slitH);
+  g.fillRect(geo.maskX - 2, openings[1] + slitH / 2, 4, geo.bottom - openings[1] - slitH / 2);
+  label(g, env, 'd ' + (s.open ? (plan.spacing / 100).toFixed(2) + ' mm' : '?'), geo.maskX, geo.top - size * 0.9, size, 'center', c.accent2);
+  // The distance to the screen.
+  const dimY = geo.bottom + size * 0.9;
+  g.strokeStyle = env.alpha(c.muted, 0.7);
+  g.lineWidth = 1;
+  g.beginPath();
+  g.moveTo(geo.maskX, dimY);
+  g.lineTo(geo.screenX, dimY);
+  g.moveTo(geo.maskX, dimY - 4);
+  g.lineTo(geo.maskX, dimY + 4);
+  g.moveTo(geo.screenX, dimY - 4);
+  g.lineTo(geo.screenX, dimY + 4);
+  g.stroke();
+  label(g, env, 'L ' + plan.length + ' mm', (geo.maskX + geo.screenX) / 2, dimY + size * 0.9, size, 'center', c.accent2);
+  // The screen: the fringes as the slits make them, cos squared of the height over the fringe
+  // spacing, under a soft envelope.
+  g.fillStyle = env.mix(c.bg, c.bg2, 0.5);
+  g.fillRect(geo.screenX, geo.top, geo.screenW, screenH);
+  const slices = 180;
+  const sliceH = screenH / slices;
+  for (let i = 0; i < slices; i++) {
+    const mm = ((i + 0.5) / slices - 0.5) * reach * 2;
+    const envelope = Math.exp(-0.9 * (mm / reach) ** 2);
+    const value = envelope * Math.cos((Math.PI * mm) / plan.fringe) ** 2;
+    g.fillStyle = env.alpha(c.accent2, 0.03 + value * 0.75);
+    g.fillRect(geo.screenX, geo.top + i * sliceH, geo.screenW, sliceH + 0.5);
+  }
+  g.strokeStyle = env.alpha(c.fg, 0.65);
+  g.lineWidth = 1.2;
+  g.strokeRect(geo.screenX, geo.top, geo.screenW, screenH);
+  // The ruler: a tick every millimetre, longer every five and ten, numbered where there is room.
+  const every = reach <= 4 ? 1 : reach <= 16 ? 5 : 10;
+  g.strokeStyle = env.alpha(c.fg, 0.8);
+  g.lineWidth = 1;
+  g.beginPath();
+  g.moveTo(geo.rulerX, geo.top);
+  g.lineTo(geo.rulerX, geo.bottom);
+  g.stroke();
+  const tickSize = Math.max(8, Math.min(13, Math.round(size * 0.85)));
+  for (let mm = -reach; mm <= reach; mm++) {
+    const y = geo.middle - mm * perMm;
+    const len = mm % 10 === 0 ? w * 0.03 : mm % 5 === 0 ? w * 0.02 : w * 0.011;
+    g.beginPath();
+    g.moveTo(geo.rulerX, y);
+    g.lineTo(geo.rulerX + len, y);
+    g.stroke();
+    if (mm % every === 0) label(g, env, String(mm), geo.rulerX + w * 0.04, y, tickSize, 'left', env.alpha(c.fg, 0.9));
+  }
+  label(g, env, 'mm', geo.rulerX + w * 0.02, geo.top - size * 0.9, size, 'left', env.alpha(c.muted, 0.9));
+}
+
+function slitPreview(g, w, h, env, plan) {
+  drawSlits(g, w, h, env, Object.assign({ spacing: spacingOf(plan.lambda, plan.length, plan.fringe) }, plan), { open: false }, env.variant);
+}
+
+function slitPiece(env, plan) {
+  const spacing = spacingOf(plan.lambda, plan.length, plan.fringe);
+  const full = Object.assign({ spacing }, plan);
+  const change = CHANGES[plan.ask];
+  const s = { open: false };
+  const draw = (c) => drawSlits(c.g, c.w, c.h, c, full, s, env.variant);
+  return {
+    title: slitTitle(plan),
+    brief: 'Light of wavelength ' + plan.lambda + ' nm passes two slits and lands on a screen ' + plan.length + ' mm away as bright and dark fringes. Neighbouring bright fringes are a wavelength times the distance, over the slit spacing, apart; the ruler beside the screen is in millimetres.',
+    goal: 'Find the slit spacing, and say what ' + change.what + ' would do to the fringes.',
     aspect: '4 / 3',
+    checkLabel: 'check the table',
     steps: [
-      { id: 'slits', ask: 'which openings let light through?', kind: 'choice', options: SLITS },
-      { id: 'gap', ask: 'the space between the openings', kind: 'range', min: 28, max: 72, step: 1, value: p.gap, low: 'close', high: 'far apart' },
-      { id: 'guess', ask: 'what will gather on the detector?', kind: 'choice', options: GUESSES },
-      { id: 'expose', ask: 'send three bursts of light', kind: 'press', count: 3, label: 'send a burst' },
-      { id: 'develop', ask: 'watch the last marks land', kind: 'wait', after: 'expose' }
+      { id: 'spacing', ask: 'the slit spacing, in hundredths of a millimetre', kind: 'number', min: 10, max: 100, step: 1, unit: '/100 mm' },
+      { id: 'change', ask: 'what ' + change.what + ' does to the fringes', kind: 'choice', options: EFFECTS }
     ],
+    solution: { spacing, change: change.does },
+    check(c) {
+      const guess = Number(c.value('spacing'));
+      const spacingRight = guess === spacing;
+      const changeRight = c.value('change') === change.does;
+      if (spacingRight && changeRight) return { solved: true, say: 'the slits are ' + (spacing / 100).toFixed(2) + ' mm apart, and ' + change.what + ' ' + EFFECTS.find((e) => e.value === change.does).label.replace('them', 'the fringes') };
+      const near = Number.isFinite(guess) && Math.abs(guess - spacing) <= spacing * 0.1;
+      const spacingWord = spacingRight ? 'the spacing is right' : near ? 'the spacing is close but not on the mark' : 'the spacing is off';
+      const changeWord = changeRight ? 'the prediction is right' : 'the prediction is off';
+      return { solved: false, say: spacingWord + '; ' + changeWord };
+    },
     start(c) {
-      c.status('The ' + p.wavelength + ' nm lamp is ready. Choose the openings, then send three bursts.');
+      c.status('read the fringe spacing off the ruler');
       draw(c);
     },
     apply(id, value, c) {
-      if (id === 'slits') {
-        state.slits = value === 'one' ? 'one' : 'two';
-        c.status(state.slits === 'one' ? 'One opening is covered.' : 'Both openings let light through.');
+      if (id === 'spacing') {
+        const n = Math.round(Number(value));
+        if (Number.isFinite(n)) c.status('slits ' + (clamp(n, 10, 100) / 100).toFixed(2) + ' mm apart, you say');
       }
-      if (id === 'gap') {
-        state.gap = Math.max(28, Math.min(72, Math.round(Number(value))));
-        c.status('The openings have moved. The detector follows the new arrangement.');
-      }
-      if (id === 'guess') {
-        state.guess = String(value);
-        c.status('Prediction placed. Send a burst to see the marks arrive.');
-      }
-      if (id === 'expose') {
-        state.target = Math.min(3, Number(value)) * perBurst;
-        c.status('Burst ' + value + ' of 3: marks are arriving on the detector.');
+      if (id === 'change') {
+        const effect = EFFECTS.find((e) => e.value === value);
+        if (effect) c.status(change.what + ' ' + effect.label.replace('them', 'the fringes') + ', you say');
       }
       draw(c);
     },
     frame(t, dt, c) {
-      if (state.shown < state.target) {
-        state.shown = c.reduced ? state.target
-          : Math.min(state.target, state.shown + Math.max(0, dt) * 240);
-      }
-      if (state.target === perBurst * 3 && !state.developed) {
-        c.progress('develop', state.shown / state.target);
-        if (state.shown >= state.target) {
-          state.developed = true;
-          c.satisfy('develop');
-          if (!c.done) c.status('All three bursts have landed. Set any choices still waiting.');
-        }
-      }
       draw(c);
     },
     end(c) {
-      state.finished = true;
-      state.shown = state.target;
+      s.open = true;
+      c.status((spacing / 100).toFixed(2) + ' mm between the slits: ' + plan.lambda + ' nm times ' + plan.length + ' mm over ' + plan.fringe + ' mm');
       draw(c);
-      const result = state.slits === 'two' ? 'lanes' : 'patch';
-      const finding = state.slits === 'two'
-        ? 'Two openings made bright and dark lanes, though each mark landed alone. A wider gap brings the lanes closer together.'
-        : 'With one opening covered, the dark lanes vanished: the marks gathered in a broad patch.';
-      const predicted = GUESSES.find((guess) => guess.value === state.guess);
-      c.status(finding + ' ' + (state.guess === result ? 'You called it.'
-        : 'You predicted ' + (predicted ? predicted.label : 'another pattern') + '.'));
     }
   };
 }
 
-const FILTER_PLACES = [
-  { label: 'set it aside', value: 'aside' },
-  { label: 'before both', value: 'before' },
-  { label: 'between them', value: 'between' },
-  { label: 'after both', value: 'after' }
-];
-const FILTER_BRIEF = 'Two crossed filters stop the light. Move a third filter, turn it, and compare all four placements to find out whether another barrier can brighten the screen.';
+/* ---- the filter order ----------------------------------------------------------------------- */
 
-function dealsFilters(env) {
-  return (env.seed >>> 0) % 3 === 2;
+function cos2(degrees) {
+  return Math.cos((degrees * Math.PI) / 180) ** 2;
+}
+
+// What passes three filters in the given order: half at the first, cos squared of each turn after.
+function passes(order) {
+  return 50 * cos2(order[0] - order[1]) * cos2(order[1] - order[2]);
+}
+
+// The filter that belongs in the middle, the order that puts it there, and the percentage to the
+// nearest five -- or null when two middles tie, or the true value sits within one of a rounding
+// boundary.
+function bestOf(angles) {
+  const trials = angles.map((middle) => {
+    const ends = angles.filter((a) => a !== middle);
+    return { middle, order: [ends[0], middle, ends[1]], exact: passes([ends[0], middle, ends[1]]) };
+  }).sort((p, q) => q.exact - p.exact);
+  if (trials[0].exact - trials[1].exact < 0.5) return null;
+  const best = trials[0];
+  const rounded = Math.round(best.exact / 5) * 5;
+  if (Math.abs((best.exact % 5) - 2.5) < 1 || rounded < 5) return null;
+  return { middle: best.middle, order: best.order, exact: best.exact, percent: rounded };
+}
+
+function isOrder(list, angles) {
+  return Array.isArray(list) && list.length === 3 && angles.every((a) => list.includes(a)) && new Set(list).size === 3;
 }
 
 function filterPlan(env) {
-  return {
-    family: 'crossed-filters',
-    number: env.int(101, 999),
-    axis: env.int(0, 11) * 15,
-    turn: env.pick([20, 30, 40, 50, 60, 70])
-  };
+  for (let attempt = 0; attempt < 200; attempt++) {
+    const pool = ANGLES.slice();
+    const angles = [];
+    while (angles.length < 3) angles.push(pool.splice(env.int(0, pool.length - 1), 1)[0]);
+    angles.sort((p, q) => p - q);
+    const best = bestOf(angles);
+    if (!best) continue;
+    // An opening order that is not an answer, so the table asks something.
+    const starts = [];
+    for (const a of angles) for (const b of angles) for (const c of angles) if (a !== b && b !== c && a !== c && b !== best.middle) starts.push([a, b, c]);
+    return { kind: 'filters', number: env.int(100, 999), angles, start: starts[env.int(0, starts.length - 1)] };
+  }
+  return { kind: 'filters', number: env.int(100, 999), angles: [0, 30, 45], start: [30, 0, 45] };
 }
 
 function carriedFilters(env) {
   const p = env.card && env.card.of;
-  if (!p || p.family !== 'crossed-filters'
-      || !Number.isInteger(p.number) || p.number < 101 || p.number > 999
-      || !Number.isInteger(p.axis) || p.axis < 0 || p.axis > 165 || p.axis % 15 !== 0
-      || !Number.isInteger(p.turn) || p.turn < 0 || p.turn > 90) return null;
-  return { family: p.family, number: p.number, axis: p.axis, turn: p.turn };
+  if (!p || p.kind !== 'filters') return null;
+  if (!Number.isInteger(p.number) || p.number < 100 || p.number > 999) return null;
+  if (!Array.isArray(p.angles) || p.angles.length !== 3 || !p.angles.every((a) => ANGLES.includes(a)) || new Set(p.angles).size !== 3) return null;
+  const angles = p.angles.slice().sort((a, b) => a - b);
+  const best = bestOf(angles);
+  if (!best || !isOrder(p.start, angles) || p.start[1] === best.middle) return null;
+  return { kind: 'filters', number: p.number, angles, start: p.start.slice() };
 }
 
-function filterTitle(p) {
-  return 'filter set ' + p.number + ': the bright barrier';
+function filterTitle(plan) {
+  return 'filter set ' + plan.number + ': ' + plan.angles.join(', ') + ' degrees';
 }
 
-function filterState(p) {
-  return { place: 'aside', turn: p.turn, comparing: false, compared: false, phase: 0 };
-}
-
-// Unpolarized light loses half at the first ideal polarizer. Each subsequent one passes
-// cos(angle difference)^2. In the middle this is 0.5*cos(turn)^2*sin(turn)^2, at most 1/8.
-function filterTrain(turn, place) {
-  const plates = [
-    { id: 'first', x: 0.34, axis: 0 },
-    { id: 'second', x: 0.66, axis: 90 }
-  ];
-  if (place !== 'aside') {
-    const x = { before: 0.18, between: 0.5, after: 0.82 }[place];
-    plates.push({ id: 'loose', x, axis: turn });
-  }
-  plates.sort((a, b) => a.x - b.x);
-  let light = 1;
-  let previous = null;
-  for (const plate of plates) {
-    light *= previous === null ? 0.5 : Math.cos((plate.axis - previous) * Math.PI / 180) ** 2;
-    if (light < 1e-10) light = 0;
-    plate.light = light;
-    previous = plate.axis;
-  }
-  return { plates, light };
-}
-
-function percent(light) {
-  if (light > 0 && light < 0.001) return (light * 100).toFixed(2) + '%';
-  return Math.round(light * 1000) / 10 + '%';
-}
-
-function filterReading(s) {
-  const where = s.place === 'aside' ? 'set aside' : s.place + ' the crossed pair';
-  return 'Loose filter ' + where + ', turned ' + s.turn + ' degrees from the first. '
-    + percent(filterTrain(s.turn, s.place).light) + ' of the incoming light reaches the screen.';
-}
-
-function comparisonReading(turn) {
-  return 'At ' + turn + ' degrees: ' + FILTER_PLACES.map((place) =>
-    place.value + ' ' + percent(filterTrain(turn, place.value).light)).join('; ') + '.';
-}
-
-function filterBeam(g, x1, x2, y, h, light, env, variant) {
-  if (light === 0) {
-    g.strokeStyle = env.alpha(env.colors.muted, 0.45);
-    g.lineWidth = 1;
-    g.setLineDash([3, 5]);
-    g.beginPath();
-    g.moveTo(x1, y);
-    g.lineTo(x2, y);
-    g.stroke();
-    g.setLineDash([]);
-    return;
-  }
-  const band = h * 0.048 * variant.scale;
-  g.fillStyle = env.alpha(env.colors.accent2, 0.03 + light * 0.14);
-  g.fillRect(x1, y - band / 2, x2 - x1, band);
-  const rays = Math.max(3, Math.round(5 * variant.density));
-  g.strokeStyle = env.alpha(env.colors.accent2, 0.12 + Math.sqrt(light) * 0.78);
-  g.lineWidth = Math.max(0.7, Math.min(2, h * 0.006));
-  g.beginPath();
-  for (let i = 0; i < rays; i++) {
-    const at = y + (i / (rays - 1) - 0.5) * band;
-    g.moveTo(x1, at);
-    g.lineTo(x2, at);
-  }
-  g.stroke();
-}
-
-function filterPlate(g, x, y, radius, axis, loose, env, variant) {
+function filterPlate(g, env, x, y, radius, angle, v) {
   const c = env.colors;
   g.save();
   g.translate(x, y);
@@ -342,489 +354,182 @@ function filterPlate(g, x, y, radius, axis, loose, env, variant) {
   g.fill();
   g.save();
   g.clip();
-  g.rotate(axis * Math.PI / 180);
-  g.strokeStyle = loose ? c.accent2 : c.accent;
-  g.lineWidth = Math.max(1, radius * 0.055);
-  const lines = Math.max(4, Math.round(7 * variant.density));
+  g.rotate((angle * Math.PI) / 180);
+  g.strokeStyle = c.accent;
+  g.lineWidth = Math.max(1, radius * 0.05);
+  const lines = Math.max(4, Math.round(7 * v.density));
   g.beginPath();
   for (let i = 0; i <= lines; i++) {
-    const at = (i / lines * 2 - 1) * radius;
+    const at = ((i / lines) * 2 - 1) * radius;
     g.moveTo(at, -radius);
     g.lineTo(at, radius);
   }
   g.stroke();
   g.restore();
   g.strokeStyle = c.fg;
-  g.lineWidth = Math.max(1, radius * 0.055);
+  g.lineWidth = Math.max(1, radius * 0.05);
   g.beginPath();
   g.arc(0, 0, radius, 0, Math.PI * 2);
   g.stroke();
-  if (loose) {
-    g.strokeStyle = c.accent2;
-    g.beginPath();
-    g.arc(0, 0, radius * 1.13, 0, Math.PI * 2);
-    g.moveTo(0, -radius * 1.13);
-    g.lineTo(0, -radius * 1.35);
-    g.stroke();
-  }
   g.restore();
 }
 
-function filterScreen(g, x, y, w, h, light, env) {
+// `s`: the order on the table, the middle a hint has named, and the light once the answer is in.
+function drawFilters(g, w, h, env, plan, s, variant) {
+  const v = variant || PLAIN;
   const c = env.colors;
-  g.fillStyle = light > 0 ? env.mix(c.bg, c.accent2, Math.min(1, Math.sqrt(light) * 1.8)) : c.bg;
-  g.fillRect(x, y, w, h);
-  g.strokeStyle = c.muted;
-  g.lineWidth = 1;
-  g.strokeRect(x, y, w, h);
-  if (light === 0) {
-    g.strokeStyle = env.alpha(c.fg, 0.6);
-    g.beginPath();
-    g.moveTo(x + w * 0.25, y + h * 0.25);
-    g.lineTo(x + w * 0.75, y + h * 0.75);
-    g.moveTo(x + w * 0.75, y + h * 0.25);
-    g.lineTo(x + w * 0.25, y + h * 0.75);
-    g.stroke();
-  }
-}
-
-function filterScene(g, w, h, env, p, s) {
-  const c = env.colors;
-  const v = env.variant || PLAIN;
-  const train = filterTrain(s.turn, s.place);
-  const y = h * 0.3;
-  const radius = Math.min(w * 0.051, h * 0.095) * v.scale;
-  const size = Math.max(10, Math.min(18, Math.round(Math.min(w, h) * 0.038)));
-  const axis = p.axis + v.turn * 180;
-  g.save();
+  const size = Math.max(9, Math.min(15, Math.round(Math.min(w, h) * 0.036)));
+  const y = h * 0.36;
+  const radius = Math.min(w * 0.07, h * 0.12) * v.scale;
+  const best = bestOf(plan.angles);
+  const light = s.open && best ? best.exact / 100 : null;
   background(g, w, h, env);
-  let from = w * 0.045;
-  let light = 1;
-  for (const plate of train.plates) {
-    filterBeam(g, from, plate.x * w, y, h, light, env, v);
-    from = plate.x * w;
-    light = plate.light;
+  dust(g, w, h, env, v);
+  label(g, env, 'filter set ' + plan.number, w * 0.5, h * 0.07, size, 'center', c.accent2);
+  // The beam, lamp to screen: the same faint band everywhere until the answer is in.
+  const band = h * 0.07;
+  const stops = [w * 0.07, w * 0.3, w * 0.5, w * 0.7, w * 0.9];
+  let strength = 1;
+  for (let i = 0; i < 4; i++) {
+    if (light !== null) strength = i === 0 ? 1 : i === 1 ? 0.5 : i === 2 ? 0.5 * cos2(s.order[0] - s.order[1]) : light;
+    g.fillStyle = env.alpha(c.accent2, light === null ? 0.08 : 0.04 + strength * 0.3);
+    g.fillRect(stops[i], y - band / 2, stops[i + 1] - stops[i], band);
   }
-  filterBeam(g, from, w * 0.93, y, h, light, env, v);
-  g.fillStyle = c.fg;
-  g.beginPath();
-  g.arc(w * 0.045, y, Math.max(2, radius * 0.22), 0, Math.PI * 2);
-  g.fill();
-  filterScreen(g, w * 0.93, y - h * 0.13, w * 0.025, h * 0.26, train.light, env);
-
-  g.font = '500 ' + size + 'px system-ui, sans-serif';
-  g.textBaseline = 'middle';
-  g.fillStyle = c.fg;
-  g.textAlign = 'left';
-  g.fillText('in: 100%', w * 0.04, h * 0.075);
-  g.textAlign = 'right';
-  g.fillText('screen: ' + percent(train.light), w * 0.96, h * 0.075);
-  g.textAlign = 'center';
-  for (const plate of train.plates) {
-    filterPlate(g, plate.x * w, y, radius, axis + plate.axis, plate.id === 'loose', env, v);
-    g.fillStyle = c.fg;
-    g.fillText(plate.id, plate.x * w, y + radius + size * 1.25);
+  lamp(g, env, w * 0.07, y, Math.min(w, h) * 0.1 * v.scale);
+  for (let i = 0; i < 3; i++) {
+    const x = w * (0.3 + i * 0.2);
+    filterPlate(g, env, x, y, radius, s.order[i], v);
+    label(g, env, s.order[i] + '°', x, y + radius + size * 1.1, size, 'center', s.named === s.order[i] ? c.accent2 : c.fg);
   }
-  if (s.place === 'aside') {
-    const spareY = h * 0.54;
-    filterPlate(g, w * 0.5, spareY, radius, axis + s.turn, true, env, v);
-    g.fillStyle = c.fg;
-    g.fillText('loose: ' + s.turn + ' degrees', w * 0.5, spareY + radius + size * 1.25);
-  } else {
-    g.fillStyle = c.fg;
-    g.fillText('loose: ' + s.turn + ' degrees from the first', w * 0.5, h * 0.62);
-  }
-
-  if (s.comparing) {
-    const read = Math.floor(s.phase * FILTER_PLACES.length);
-    FILTER_PLACES.forEach((place, i) => {
-      const x = w * (0.06 + (i + 0.5) * 0.22);
-      g.fillStyle = c.fg;
-      g.fillText(place.value, x, h * 0.77);
-      if (i < read) {
-        const result = filterTrain(s.turn, place.value).light;
-        filterScreen(g, x - w * 0.06, h * 0.81, w * 0.12, h * 0.06, result, env);
-        g.fillStyle = c.fg;
-        g.fillText(percent(result), x, h * 0.925);
-      } else {
-        g.fillStyle = c.muted;
-        g.fillText('not read', x, h * 0.925);
-      }
-      if (place.value === s.place) {
-        g.strokeStyle = c.accent2;
-        g.lineWidth = 2;
-        g.beginPath();
-        g.moveTo(x - w * 0.065, h * 0.975);
-        g.lineTo(x + w * 0.065, h * 0.975);
-        g.stroke();
-      }
-    });
-  }
-  g.restore();
-}
-
-function filterPreview(g, w, h, env, p) {
-  filterScene(g, w, h, env, p, filterState(p));
-}
-
-function filterPiece(env, carriedPlan) {
-  const p = carriedPlan || filterPlan(env);
-  const s = filterState(p);
-  const draw = (c) => filterScene(c.g, c.w, c.h, env, p, s);
-  return {
-    title: filterTitle(p),
-    brief: FILTER_BRIEF,
-    aspect: '4 / 3',
-    steps: [
-      { id: 'place', ask: 'where the loose filter goes', kind: 'choice', options: FILTER_PLACES },
-      { id: 'turn', ask: 'turn the loose filter relative to the first', kind: 'range', min: 0, max: 90, step: 1, value: p.turn, low: '0 degrees', high: '90 degrees' },
-      { id: 'compare', ask: 'compare all four placements', kind: 'press', count: 1, label: 'compare all four' },
-      { id: 'read', ask: 'watch the four screens appear', kind: 'wait', after: 'compare' }
-    ],
-    start(c) {
-      c.status('The fixed filters have lines at right angles. The double-rimmed one is yours to move. ' + filterReading(s));
-      draw(c);
-    },
-    apply(id, value, c) {
-      if (c.done) return;
-      if (id === 'place') {
-        if (!FILTER_PLACES.some((place) => place.value === value)) {
-          c.status('Choose one of the four places for the loose filter.');
-          return;
-        }
-        s.place = value;
-        c.status(filterReading(s));
-      }
-      if (id === 'turn') {
-        const turn = Number(value);
-        if (!Number.isFinite(turn)) {
-          c.status('Set the loose filter between 0 and 90 degrees.');
-          return;
-        }
-        s.turn = Math.max(0, Math.min(90, Math.round(turn)));
-        c.status(filterReading(s) + (s.compared ? ' ' + comparisonReading(s.turn) : ''));
-      }
-      if (id === 'compare') {
-        s.comparing = true;
-        c.status(s.compared ? comparisonReading(s.turn) : 'Comparing the light in all four placements.');
-      }
-      draw(c);
-    },
-    frame(t, dt, c) {
-      if (s.comparing && !s.compared) {
-        s.phase = c.reduced ? 1 : Math.min(1, s.phase + Math.max(0, dt) / 2.4);
-        c.progress('read', s.phase);
-        if (s.phase >= 1) {
-          s.compared = true;
-          c.status(comparisonReading(s.turn) + ' The screens follow any settings you still change.');
-          c.satisfy('read');
-        }
-      }
-      draw(c);
-    },
-    end(c) {
-      s.comparing = true;
-      s.compared = true;
-      s.phase = 1;
-      const middle = filterTrain(s.turn, 'between').light;
-      c.status(filterReading(s) + ' ' + comparisonReading(s.turn) + ' '
-        + (middle > 0 ? 'Only the middle placement passes light at this turn. '
-          : 'This turn leaves all four screens dark. ')
-        + 'Each filter passes light along its own lines. In the gap, the extra filter gives some light a direction the last filter can pass. At 45 degrees, 12.5% of the incoming light gets through; at 0 or 90 degrees, none does. Before or after the pair, the crossed filters still block it.');
-      draw(c);
-    }
-  };
-}
-
-const CAMERA_SUBJECTS = ['arrow', 'candle', 'house'];
-const CAMERA_GUESSES = [
-  { label: 'upright', value: 'upright' },
-  { label: 'upside down', value: 'inverted' },
-  { label: 'sideways', value: 'sideways' }
-];
-
-function dealsCamera(env) {
-  return (env.seed >>> 0) % 3 === 1;
-}
-
-function cameraPlan(env) {
-  return {
-    family: 'pinhole-camera', number: env.int(101, 999),
-    subject: env.pick(CAMERA_SUBJECTS), aperture: env.int(4, 18),
-    distance: env.int(42, 78), hole: env.int(44, 56) / 100
-  };
-}
-
-function carriedCamera(env) {
-  const p = env.card && env.card.of;
-  if (!p || p.family !== 'pinhole-camera'
-      || !Number.isInteger(p.number) || p.number < 101 || p.number > 999
-      || !CAMERA_SUBJECTS.includes(p.subject)
-      || !Number.isInteger(p.aperture) || p.aperture < 2 || p.aperture > 24
-      || !Number.isInteger(p.distance) || p.distance < 35 || p.distance > 90
-      || typeof p.hole !== 'number' || !Number.isFinite(p.hole)
-      || p.hole < 0.43 || p.hole > 0.57) return null;
-  return { family: p.family, number: p.number, subject: p.subject,
-    aperture: p.aperture, distance: p.distance, hole: p.hole };
-}
-
-function cameraTitle(p) {
-  return 'camera ' + p.number + ': the ' + p.subject;
-}
-
-function cameraShape(g, env, subject, x, y, size, inverted, opacity) {
-  if (opacity <= 0) return;
-  g.save();
-  g.translate(x, y);
-  g.scale(inverted ? -size : size, inverted ? -size : size);
-  g.fillStyle = env.alpha(env.colors.accent2, opacity);
-  if (subject === 'arrow') {
-    g.fillRect(-0.2, -0.15, 0.4, 1.05);
-    g.beginPath();
-    g.moveTo(-0.86, -0.1);
-    g.lineTo(0, -0.98);
-    g.lineTo(0.86, -0.1);
-    g.closePath();
-    g.fill();
-  } else if (subject === 'candle') {
-    g.fillRect(-0.28, -0.15, 0.56, 1.05);
-    g.fillStyle = env.alpha(env.colors.fg, opacity);
-    g.beginPath();
-    g.ellipse(0, -0.65, 0.24, 0.33, 0, 0, Math.PI * 2);
-    g.fill();
-  } else {
-    g.fillRect(-0.66, -0.1, 1.32, 1);
-    g.beginPath();
-    g.moveTo(-0.9, -0.08);
-    g.lineTo(0, -0.95);
-    g.lineTo(0.9, -0.08);
-    g.closePath();
-    g.fill();
-    g.fillStyle = env.alpha(env.colors.bg, opacity);
-    g.fillRect(-0.17, 0.37, 0.34, 0.53);
-  }
-  g.restore();
-}
-
-function cameraScene(g, w, h, env, p, s) {
-  const col = env.colors;
-  const v = env.variant || PLAIN;
-  const sourceX = w * 0.15;
-  const sourceY = h * 0.49;
-  const holeX = w * 0.43;
-  const holeY = h * s.hole;
-  const screenX = w * (0.68 + (s.distance - 35) / 55 * 0.09);
-  const screenW = w * 0.96 - screenX;
-  const screenMiddle = screenX + screenW / 2;
-  const zoom = (screenMiddle - holeX) / (holeX - sourceX);
-  const imageY = holeY + (holeY - sourceY) * zoom;
-  const size = Math.min(w * 0.055, h * 0.09) * v.scale;
-  const screenTop = h * 0.13;
-  const screenH = h * 0.74;
-  g.save();
-  background(g, w, h, env);
-  g.fillStyle = env.alpha(col.fg, 0.12);
-  for (let i = 0, count = Math.round(18 * v.density); i < count; i++) {
-    g.fillRect(((i * 0.618034 + v.turn * 0.3) % 1) * w,
-      ((i * 0.754878 + v.turn * 0.17) % 1) * h, 1, 1);
-  }
-
-  g.lineWidth = Math.max(1, Math.min(w, h) * 0.004);
-  g.setLineDash(s.open ? [] : [3, 5]);
-  for (const edge of [-0.9, 0.9]) {
-    const fromY = sourceY + edge * size;
-    g.strokeStyle = env.alpha(edge < 0 ? col.accent2 : col.accent, s.open ? 0.48 * s.exposure : 0.32);
-    g.beginPath();
-    g.moveTo(sourceX, fromY);
-    g.lineTo(holeX, holeY);
-    if (s.open) g.lineTo(screenMiddle, holeY + (holeY - fromY) * zoom);
-    g.stroke();
-  }
-  g.setLineDash([]);
-
-  g.fillStyle = env.mix(col.bg, col.bg2, s.open ? 0.7 : 0.35);
-  g.fillRect(screenX, screenTop, screenW, screenH);
-  if (s.open) {
-    g.save();
-    g.beginPath();
-    g.rect(screenX, screenTop, screenW, screenH);
-    g.clip();
-    const halo = g.createRadialGradient(screenMiddle, imageY, 0, screenMiddle, imageY, screenW);
-    halo.addColorStop(0, env.alpha(col.accent2, s.exposure * 0.22));
-    halo.addColorStop(1, env.alpha(col.accent2, 0));
-    g.fillStyle = halo;
-    g.fillRect(screenX, screenTop, screenW, screenH);
-    const blur = (s.aperture - 2) / 22;
-    const brightness = Math.min(0.95, (0.22 + s.aperture / 24 * 0.7) / (0.65 + zoom * 0.25));
-    for (let i = -2; i <= 2; i++) {
-      const shift = i * blur * size * 0.18;
-      cameraShape(g, env, p.subject, screenMiddle + shift, imageY + shift * 0.7,
-        size * zoom, true, s.exposure * brightness * 0.12);
-    }
-    cameraShape(g, env, p.subject, screenMiddle, imageY, size * zoom, true,
-      s.exposure * brightness * (0.9 - blur * 0.35));
-    g.restore();
-  }
-  g.strokeStyle = env.alpha(col.fg, 0.7);
-  g.lineWidth = 1.5;
-  g.strokeRect(screenX, screenTop, screenW, screenH);
-
-  cameraShape(g, env, p.subject, sourceX, sourceY, size, false, 0.94);
-  g.fillStyle = col.accent;
-  g.fillRect(holeX - w * 0.009, h * 0.1, w * 0.018, h * 0.8);
-  g.fillStyle = col.bg;
-  g.beginPath();
-  g.arc(holeX, holeY, Math.max(2, size * (0.13 + s.aperture / 24 * 0.25)), 0, Math.PI * 2);
-  g.fill();
-  g.strokeStyle = s.placed ? col.accent2 : env.alpha(col.fg, 0.6);
-  g.lineWidth = 1.5;
-  g.beginPath();
-  g.arc(holeX, holeY, Math.max(4, size * 0.48), 0, Math.PI * 2);
-  g.stroke();
-
-  const fontSize = Math.max(10, Math.min(16, Math.round(Math.min(w, h) * 0.043)));
-  g.font = '500 ' + fontSize + 'px system-ui, sans-serif';
-  g.textBaseline = 'middle';
-  g.fillStyle = col.fg;
-  g.textAlign = 'center';
-  g.fillText('source', sourceX, h * 0.91, w * 0.25);
-  g.fillText('hole', holeX, h * 0.91, w * 0.2);
-  g.fillText(s.open ? 'lit screen' : 'covered', screenMiddle, h * 0.91, screenW);
-  g.restore();
-}
-
-function cameraPreview(g, w, h, env, p) {
-  cameraScene(g, w, h, env, p, {
-    aperture: p.aperture, distance: p.distance, hole: p.hole,
-    placed: false, open: false, exposure: 0
+  // The screen: unread until the order is found.
+  const screenX = w * 0.9;
+  const screenH = h * 0.24;
+  g.fillStyle = light === null ? env.mix(c.bg, c.bg2, 0.5) : env.mix(c.bg, c.accent2, Math.min(1, Math.sqrt(light) * 1.4));
+  g.fillRect(screenX, y - screenH / 2, w * 0.03, screenH);
+  g.strokeStyle = env.alpha(c.fg, 0.65);
+  g.lineWidth = 1.2;
+  g.strokeRect(screenX, y - screenH / 2, w * 0.03, screenH);
+  label(g, env, light === null ? '?' : Math.round(light * 1000) / 10 + '%', screenX + w * 0.015, y + screenH / 2 + size, size, 'center', c.accent2);
+  label(g, env, 'lamp side', w * 0.3, y - radius - size * 1.2, Math.max(8, size - 2), 'center', env.alpha(c.muted, 0.9));
+  label(g, env, 'screen side', w * 0.7, y - radius - size * 1.2, Math.max(8, size - 2), 'center', env.alpha(c.muted, 0.9));
+  // The table of cos squared, so the arithmetic is on the table.
+  const rowY = h * 0.7;
+  const tiny = Math.max(8, size - 1);
+  label(g, env, 'the first filter passes half the lamp\'s light; each one after passes cos² of the turn from the one before', w * 0.5, rowY, tiny, 'center', env.alpha(c.fg, 0.9));
+  const pairs = [[0, '1'], [15, '0.93'], [30, '0.75'], [45, '0.50'], [60, '0.25'], [75, '0.07'], [90, '0']];
+  pairs.forEach((pair, i) => {
+    const x = w * (0.08 + (i + 0.5) * 0.12);
+    label(g, env, pair[0] + '°', x, rowY + tiny * 2, tiny, 'center', c.accent2);
+    label(g, env, pair[1], x, rowY + tiny * 3.3, tiny, 'center', c.fg);
   });
+  label(g, env, 'a turn past 90° reads as 180° less the turn: 120° as 60°, 135° as 45°, 150° as 30°', w * 0.5, rowY + tiny * 5, tiny, 'center', env.alpha(c.muted, 0.9));
 }
 
-function cameraPiece(env, carriedPlan) {
-  const p = carriedPlan || cameraPlan(env);
-  const s = {
-    aperture: p.aperture, distance: p.distance, hole: p.hole,
-    placed: false, open: false, exposure: 0, guess: ''
-  };
-  const draw = (c) => cameraScene(c.g, c.w, c.h, env, p, s);
+function filterPreview(g, w, h, env, plan) {
+  drawFilters(g, w, h, env, plan, { order: plan.start.slice(), named: null, open: false }, env.variant);
+}
+
+function filterPiece(env, plan) {
+  const best = bestOf(plan.angles);
+  const s = { order: plan.start.slice(), named: null, open: false };
+  const draw = (c) => drawFilters(c.g, c.w, c.h, c, plan, s, env.variant);
   return {
-    title: cameraTitle(p),
-    brief: 'Predict which way the ' + p.subject + ' will face, adjust the hole and screen, tap anywhere to place the hole, then open the shutter and watch the image appear.',
+    title: filterTitle(plan),
+    brief: 'Three polarising filters, at ' + plan.angles.join(', ') + ' degrees. The first one the light meets passes half of it whatever its angle; each one after passes cos² of the angle between it and the one before, and the table under the lamp has the values.',
+    goal: 'Put the filters in the order that passes the most light, and say how much gets through.',
     aspect: '4 / 3',
+    checkLabel: 'check the table',
     steps: [
-      { id: 'guess', ask: 'which way will the image face?', kind: 'choice', options: CAMERA_GUESSES },
-      { id: 'aperture', ask: 'the size of the hole', kind: 'range', min: 2, max: 24, step: 1, value: p.aperture, low: 'tiny', high: 'wide' },
-      { id: 'distance', ask: 'how far back the screen sits', kind: 'range', min: 35, max: 90, step: 1, value: p.distance, low: 'near', high: 'far' },
-      { id: 'hole', ask: 'tap anywhere to place the hole at that height', kind: 'tap', label: 'place the hole for me' },
-      { id: 'open', ask: 'uncover the screen', kind: 'press', count: 1, label: 'open the shutter' }
+      { id: 'order', ask: 'the filters, lamp side first', kind: 'order', items: plan.angles.map((a) => ({ label: 'the ' + a + '° filter', value: a })), value: plan.start.slice() },
+      { id: 'passes', ask: 'how much of the lamp\'s light gets through, to the nearest five per cent', kind: 'number', min: 0, max: 100, step: 5, unit: '%' },
+      { id: 'hint', ask: 'which filter goes in the middle', kind: 'press', count: 1, label: 'name the middle one', optional: true }
     ],
+    solution: { order: best.order.slice(), passes: best.percent },
+    check(c) {
+      const order = c.value('order');
+      const orderRight = isOrder(order, plan.angles) && order[1] === best.middle;
+      const passRight = Number(c.value('passes')) === best.percent;
+      if (orderRight && passRight) return { solved: true, say: 'with the ' + best.middle + '° filter in the middle, ' + Math.round(best.exact * 10) / 10 + '% of the light reaches the screen' };
+      if (!orderRight && !passRight) return { solved: false, say: 'the order and the percentage are both off' };
+      return { solved: false, say: orderRight ? 'the order is right; the percentage is off' : 'the percentage is right; the order is off' };
+    },
     start(c) {
-      c.status('The screen is covered. Light from the ' + p.subject + ' reaches the hole.');
+      c.status('the screen stays unread until the order is found');
       draw(c);
     },
     apply(id, value, c) {
-      if (id === 'guess') {
-        s.guess = String(value);
-        c.status('Prediction placed. The covered screen has not given anything away.');
+      if (id === 'order' && isOrder(value, plan.angles)) {
+        s.order = value.slice();
+        c.status('lamp, then ' + s.order.join('°, ') + '°, then the screen');
       }
-      if (id === 'aperture') {
-        s.aperture = Math.max(2, Math.min(24, Math.round(Number(value))));
-        c.status(s.aperture < 10 ? 'A small hole lets less light through.' : 'A larger hole lets more light through.');
+      if (id === 'passes') {
+        const n = Math.round(Number(value));
+        if (Number.isFinite(n)) c.status(clamp(n, 0, 100) + '% gets through, you say');
       }
-      if (id === 'distance') {
-        s.distance = Math.max(35, Math.min(90, Math.round(Number(value))));
-        c.status(s.distance < 60 ? 'The screen is closer to the hole.' : 'The screen is farther from the hole.');
+      if (id === 'hint') {
+        if (s.named === null) {
+          s.named = best.middle;
+          c.hint();
+          c.status('the ' + best.middle + '° filter goes in the middle');
+        } else {
+          c.status('the middle one is named; the ends can go either way round');
+        }
       }
-      if (id === 'open') {
-        s.open = true;
-        s.exposure = c.reduced ? 1 : 0.18;
-        c.status('The screen is uncovered. The image is coming into view.');
-      }
-      draw(c);
-    },
-    tap(x, y, c) {
-      if (c.done) return;
-      s.hole = 0.43 + Math.max(0, Math.min(1, y)) * 0.14;
-      s.placed = true;
-      c.progress('hole', 1);
-      c.status('Hole placed ' + (s.hole < 0.47 ? 'high' : s.hole > 0.53 ? 'low' : 'near the middle') + '.');
-      c.satisfy('hole');
       draw(c);
     },
     frame(t, dt, c) {
-      if (s.open) s.exposure = c.reduced ? 1 : Math.min(1, s.exposure + Math.max(0, dt) * 0.8);
       draw(c);
     },
     end(c) {
       s.open = true;
-      s.exposure = c.reduced ? 1 : Math.max(s.exposure, 0.18);
+      s.order = best.order.slice();
+      c.status('half, times ' + cos2(best.order[0] - best.order[1]).toFixed(2) + ', times ' + cos2(best.order[1] - best.order[2]).toFixed(2) + ': ' + Math.round(best.exact * 10) / 10 + '% reaches the screen');
       draw(c);
-      c.status('The ' + p.subject + ' appears upside down: rays from its top and bottom cross at the hole. '
-        + (s.guess === 'inverted' ? 'You called it. ' : 'You predicted ' + (CAMERA_GUESSES.find((guess) => guess.value === s.guess) || CAMERA_GUESSES[0]).label + '. ')
-        + 'A wider hole brightens but softens the image; a farther screen makes it larger and dimmer.');
     }
   };
+}
+
+/* ---- the module ----------------------------------------------------------------------------- */
+
+// Which puzzle a seed is dealt, from the seed alone so that paint, spark and piece agree.
+function dealsFilters(env) {
+  return (((Math.imul(env.seed >>> 0, 0x9E3779B1) >>> 0) >>> 3) & 1) === 1;
 }
 
 export default {
   id: 'light-table',
   needsSky: false,
   paint(g, w, h, env) {
-    if (dealsFilters(env)) {
-      filterPreview(g, w, h, env, filterPlan(env));
-      return;
-    }
-    if (dealsCamera(env)) {
-      cameraPreview(g, w, h, env, cameraPlan(env));
-      return;
-    }
-    const made = setup(env);
-    scene(g, w, h, env, made.subject,
-      { slits: 'two', gap: made.subject.gap, shown: 0, preview: true, finished: false }, made.marks);
+    if (dealsFilters(env)) filterPreview(g, w, h, env, filterPlan(env));
+    else slitPreview(g, w, h, env, slitPlan(env));
   },
   spark(env) {
     if (dealsFilters(env)) {
-      const p = filterPlan(env);
+      const plan = filterPlan(env);
       return {
-        title: filterTitle(p),
-        text: FILTER_BRIEF,
-        mono: 'loose filter: ' + p.turn + ' degrees from the first',
+        title: filterTitle(plan),
+        text: 'Three polarising filters and one lamp. Find the order that passes the most light, and how much that is.',
+        mono: plan.angles.map((a) => a + '°').join(' / '),
         aspect: '4 / 3',
-        paint: (g, w, h, cardEnv) => filterPreview(g, w, h, cardEnv, p),
-        of: p
+        paint: (ctx, cw, ch, cardEnv) => filterPreview(ctx, cw, ch, cardEnv, plan),
+        of: plan
       };
     }
-    if (dealsCamera(env)) {
-      const p = cameraPlan(env);
-      return {
-        title: cameraTitle(p),
-        text: 'One ' + p.subject + ', one hole, one covered screen. Predict what the light will draw, then uncover it.',
-        mono: 'hole ' + p.aperture + '\nscreen ' + p.distance,
-        aspect: '4 / 3',
-        paint: (g, w, h, cardEnv) => cameraPreview(g, w, h, cardEnv, p),
-        of: p
-      };
-    }
-    const p = plan(env);
+    const plan = slitPlan(env);
     return {
-      title: title(p),
-      text: 'One lamp, two narrow openings and a magnified detector. Cover an opening, predict what will gather, then send the light through.',
+      title: slitTitle(plan),
+      text: 'Fringes on a screen, a ruler beside them, and the lamp and distance written on the table. Find how far apart the slits are.',
+      mono: plan.lambda + ' nm / ' + plan.length + ' mm',
       aspect: '4 / 3',
-      paint: (g, w, h, cardEnv) => {
-        const made = setup(cardEnv);
-        scene(g, w, h, cardEnv, p,
-          { slits: 'two', gap: p.gap, shown: 0, preview: true, finished: false }, made.marks);
-      },
-      of: p
+      paint: (ctx, cw, ch, cardEnv) => slitPreview(ctx, cw, ch, cardEnv, plan),
+      of: plan
     };
   },
   piece(env) {
     const filters = carriedFilters(env);
     if (filters) return filterPiece(env, filters);
-    const camera = carriedCamera(env);
-    if (camera) return cameraPiece(env, camera);
-    if (carried(env)) return slitPiece(env);
-    if (dealsFilters(env)) return filterPiece(env);
-    return dealsCamera(env) ? cameraPiece(env) : slitPiece(env);
+    const slits = carriedSlits(env);
+    if (slits) return slitPiece(env, slits);
+    return dealsFilters(env) ? filterPiece(env, filterPlan(env)) : slitPiece(env, slitPlan(env));
   }
 };

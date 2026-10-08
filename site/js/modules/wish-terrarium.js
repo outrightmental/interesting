@@ -1,231 +1,51 @@
-/* The terrarium: the persona's stars grown into plants under glass. As a card it is the glasshouse
-   and a greenhouse forecast (paint, spark); as a piece it is a watering round, a forecast read off
-   the glass, or the whole bed regrown. See js/feed.js for what a module is and js/stage.js for
-   what a piece is.
+/* The terrarium: plants under glass, grown from the persona's stars, and two puzzles kept there.
+   As a card it is the puzzle the seed deals, drawn small through the glass (paint, spark); as a
+   piece it is one of the two puzzles below, and the card it was opened from says which. See
+   js/feed.js for what a module is and js/stage.js for what a piece is.
 
-   A card and the feature it opens as are one glasshouse: the spark puts the forecast it printed on
-   its spec as `of` -- its heading, its humidity, its light and its wind -- and the piece opens the
-   glass at exactly that reading, under the heading the card was wearing. */
+   Two puzzles, both deduction:
 
-// The card this piece was opened from, in the glasshouse's own terms: the forecast it printed, or
-// null for a piece nobody pressed (js/stage.js hands it over as env.card.of).
-function pressed(env) {
-  const was = env.card && env.card.of;
-  if (!was) return null;
-  const humidity = Number(was.humidity);
-  const light = LIGHT.indexOf(was.light);
-  return {
-    opener: typeof was.opener === 'string' ? was.opener : '',
-    humidity: isFinite(humidity) ? Math.max(55, Math.min(96, Math.round(humidity))) : 0,
-    light: light >= 0 ? light : -1,
-    wind: WIND.indexOf(was.wind)
-  };
-}
+     who gets water   Five or six plants in a row, each tagged with one rule -- soil below 3, lamp
+                      off, not twice running, if the left one is, vent open and soil below 4 --
+                      and the glass shows the readings every rule is judged by: a soil meter under
+                      each plant, the lamp, the vent, and a drop beside any plant watered last
+                      time. Mark the plants that get water. A wrong check says how many of the
+                      right plants are marked and how many marked should stay dry, and no more.
+     the oldest stem  Four stems, each tagged with how many leaves it grows in a week, each with
+                      its leaves drawn and counted. Age is leaves over rate, and the ages are
+                      whole weeks, all different. Put the stems oldest to youngest and say how old
+                      the oldest is.
 
-// The light a card was printed under, offered first: the glass opens at the reading the card gave.
-function lightsFrom(env, was, count) {
-  const out = pickLights(env, count);
-  if (!was || was.light < 0) return out;
-  const at = out.findIndex((o) => o.value === was.light);
-  if (at >= 0) out.unshift(out.splice(at, 1)[0]);
-  else out.unshift({ label: LIGHT[was.light], value: was.light });
-  return out.slice(0, Math.max(count, 3));
-}
+   A card and the feature it opens as are one puzzle: the spark puts the whole plan on its spec as
+   `of` -- the rules and readings, or the rates and leaf counts -- and piece(env) opens on that
+   rather than rolling another. The sky may be one star or many; it lights the glass, and the plan
+   stands whatever the sky is now. */
 
-const LIGHT = ['low and green', 'bright through the glass', 'dappled', 'thin, from the north'];
-const WIND = ['none; the glass is shut', 'a draught from the vent', 'the fan, on low'];
-const OPENERS = ['greenhouse bulletin', 'soil telemetry', 'midnight horticulture note', 'terrarium weather report'];
-const MIDS = ['Roots prefer tiny momentum over perfect timing.', 'The next bloom appears after one brave unfinished step.',
-  'Your best growth pattern is playful, then precise.', 'A gentle routine will outgrow a dramatic sprint.'];
-const CLOSERS = ['Water one small idea before sleep.', 'Prune one distraction, keep one promise.',
-  'Share a rough sprout instead of waiting for a tree.', 'Move one star, then regrow this garden.'];
-const ORDERS = [{ label: 'left to right', value: 'x' }, { label: 'shortest first', value: 'short' }, { label: 'tallest first', value: 'tall' }];
-const WORDS = ['no', 'one', 'two', 'three', 'four', 'five'];
+const WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve'];
+const LETTERS = ['A', 'B', 'C', 'D'];
+const RANKS = ['oldest', 'second', 'third', 'youngest'];
+const PLAIN = { density: 1, scale: 1, turn: 0 };
 const TAU = Math.PI * 2;
+const RULES = {
+  soil: { tag: 'soil below 3', rule: 'water it if its soil reads below 3' },
+  lamp: { tag: 'lamp off', rule: 'water it only while the lamp is off' },
+  twice: { tag: 'not twice running', rule: 'never water it two visits running, so not if it was watered last time' },
+  left: { tag: 'if the left one is', rule: 'water it if the plant to its left is watered' },
+  vent: { tag: 'vent open, soil below 4', rule: 'water it if the vent is open and its soil reads below 4' }
+};
+const RULE_IDS = ['soil', 'lamp', 'twice', 'left', 'vent'];
 
-// A plant's geometry has a small generator of its own, from the star it grows from and a salt,
-// so a stem looks the same every frame and a card needs no shared sequence to draw it.
-function sprout(star, i, salt) {
-  let s = (Math.round(star.x * 1000) ^ (Math.round(star.y * 1000) << 3) ^ Math.imul(i + 1, 2654435761) ^ Math.imul(salt, 40503)) >>> 0;
-  const rnd = () => ((s = (Math.imul(s, 1664525) + 1013904223) >>> 0) / 4294967296);
-  return { seg: 5 + Math.floor(rnd() * 5), bend: 0.35 + rnd() * 0.95, sway: 0.3 + rnd() * 1.2, phase: rnd() * TAU,
-    thick: 1.1 + rnd() * 1.7, leaf: 2.4 + rnd() * 2.1, every: 2 + Math.floor(rnd() * 2),
-    grow: 1, delay: 0, glow: 0, pulse: 0, wet: false, bloom: 0, bud: 0 };
-}
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const capital = (text) => text[0].toUpperCase() + text.slice(1);
 
-function fresh(stars, salt) {
-  return { t: 0, light: -1, wind: 0.4, fog: 0, moss: false, flash: 0, stamp: 0, stampText: '', needle: 0, gauge: false,
-    drops: [], lines: [], tips: [], plants: stars.map((star, i) => sprout(star, i, salt)) };
-}
+/* ---- drawing shared by both ---------------------------------------------------------------- */
 
-function reading(stars) {
-  const n = stars.length || 1;
-  let cx = 0;
-  let cy = 0;
-  let spread = 0;
-  for (const s of stars) {
-    cx += s.x / n;
-    cy += s.y / n;
-  }
-  for (const s of stars) spread += Math.hypot(s.x - cx, s.y - cy) / n;
-  return {
-    zone: (cy < 50 ? 'north' : 'south') + '-' + (cx < 50 ? 'west' : 'east'),
-    spread: spread < 12 ? 'compact' : spread < 24 ? 'balanced' : 'wild',
-    density: stars.length < 5 ? 'quiet' : stars.length < 14 ? 'steady' : 'lush'
-  };
-}
-
-function tallest(stars) {
-  let t = stars[0];
-  for (const s of stars) if (s.y < t.y) t = s;
-  return t;
-}
-
-function pickLights(env, count) {
-  const pool = LIGHT.map((label, value) => ({ label, value }));
-  const out = [];
-  while (out.length < count && pool.length) out.push(pool.splice(env.int(0, pool.length - 1), 1)[0]);
-  return out;
-}
-
-/* ---- drawing ------------------------------------------------------------------------------- */
-
-// The air in the glasshouse: its gradient by the light chosen, a shaft when it is bright,
-// drifting dapples when it is dappled, and a green cast in moss mode.
-function air(g, w, h, c, s) {
-  const col = c.colors;
-  const top = s.light === 1 ? c.mix(col.bg2, col.fg, 0.2) : s.light === 3 ? c.mix(col.bg2, col.accent, 0.15) : col.bg2;
-  const base = c.mix(col.bg, col.accent, (s.moss ? 0.12 : 0) + (s.light === 0 ? 0.07 : 0));
-  const grad = g.createLinearGradient(0, 0, 0, h);
-  grad.addColorStop(0, top);
-  if (s.light === 3) grad.addColorStop(0.3, base);
-  grad.addColorStop(1, base);
-  g.fillStyle = grad;
-  g.fillRect(0, 0, w, h);
-  if (s.light === 1) {
-    const shaft = g.createLinearGradient(w, 0, w * 0.3, h);
-    shaft.addColorStop(0, c.alpha(col.fg, 0.14));
-    shaft.addColorStop(1, c.alpha(col.fg, 0));
-    g.fillStyle = shaft;
-    g.fillRect(0, 0, w, h);
-  }
-  if (s.light === 2) {
-    const drift = c.reduced ? 0 : s.t;
-    for (let i = 0; i < 7; i++) {
-      const x = ((i * 0.618 + 0.1 + Math.sin(drift * 0.3 + i) * 0.04) % 1) * w;
-      const y = ((i * 0.38 + 0.05 + Math.cos(drift * 0.25 + i * 1.7) * 0.03) % 1) * h * 0.8;
-      const r = Math.min(w, h) * (0.08 + (i % 3) * 0.04);
-      const d = g.createRadialGradient(x, y, 0, x, y, r);
-      d.addColorStop(0, c.alpha(col.accent2, 0.11));
-      d.addColorStop(1, c.alpha(col.accent2, 0));
-      g.fillStyle = d;
-      g.fillRect(x - r, y - r, r * 2, r * 2);
-    }
-  }
-  // The soil: a black veil over the bed, with grit.
-  const soilY = h * 0.82;
-  g.fillStyle = 'rgba(0,0,0,0.3)';
-  g.fillRect(0, soilY, w, h - soilY);
-  for (let i = 0; i < 60; i++) {
-    g.fillStyle = c.alpha(col.accent2, 0.1 + ((i * 7) % 5) * 0.03);
-    g.fillRect(((i * 0.618034) % 1) * w, soilY + ((i * 0.754877) % 1) * (h - soilY), 1.5, 1.5);
-  }
-}
-
-// One stem, from the soil to its tip, leaning on the wind. Returns where its tip is.
-function stem(g, c, s, p, i, x, soilY, full, breeze, k) {
-  const col = c.colors;
-  const height = full * p.grow * (1 + (p.wet ? 0.1 : 0));
-  if (height < 1) return [x, soilY];
-  const tint = s.moss ? c.mix(col.accent, col.accent2, 0.5 + 0.5 * Math.sin(s.t * 2 + i * 1.3)) : col.accent;
-  const pts = [];
-  for (let j = 0; j <= p.seg; j++) {
-    const r = j / p.seg;
-    const sway = Math.sin(s.t * (0.8 + p.sway) + p.phase + r * 2.4) * p.bend * breeze * r * 22 * k
-      + Math.sin(s.t * 12 + i) * p.pulse * 2.5 * r * k;
-    pts.push([x + sway, soilY - r * height]);
-  }
-  g.strokeStyle = c.alpha(tint, Math.min(1, 0.55 + p.glow * 0.35 + (p.wet ? 0.1 : 0)));
-  g.lineWidth = (p.thick + p.pulse * 0.8) * k;
-  g.lineCap = 'round';
-  g.beginPath();
-  pts.forEach((q, j) => (j ? g.lineTo(q[0], q[1]) : g.moveTo(q[0], q[1])));
-  g.stroke();
-  for (let j = 1; j < pts.length - 1; j++) {
-    if (j % p.every) continue;
-    const dir = j % 2 ? -1 : 1;
-    const lw = p.leaf * k * (1 + p.pulse * 0.4) * (0.5 + 0.5 * p.grow);
-    g.fillStyle = c.alpha(tint, 0.35 + p.glow * 0.35);
-    g.beginPath();
-    g.ellipse(pts[j][0] + dir * lw, pts[j][1], lw * 1.6, lw * 0.7, dir * 0.6 + Math.sin(s.t * 1.2 + j) * 0.14, 0, TAU);
-    g.fill();
-  }
-  const tip = pts[pts.length - 1];
-  const halo = (3.6 + p.pulse * 7.5 + p.bloom * 6) * k;
-  g.fillStyle = c.alpha(col.accent2, 0.18 + p.glow * 0.3 + p.bloom * 0.15);
-  g.beginPath();
-  g.arc(tip[0], tip[1], halo, 0, TAU);
-  g.fill();
-  if (p.bloom > 0.02) {
-    const br = 4.5 * k * p.bloom;
-    g.fillStyle = c.alpha(col.accent2, 0.85 * p.bloom);
-    for (let q = 0; q < 5; q++) {
-      const a = (q / 5) * TAU + s.t * 0.3;
-      g.beginPath();
-      g.ellipse(tip[0] + Math.cos(a) * br, tip[1] + Math.sin(a) * br, br, br * 0.55, a, 0, TAU);
-      g.fill();
-    }
-  }
-  g.fillStyle = c.alpha(p.pulse > 0.2 ? col.accent2 : col.fg, 0.95);
-  g.beginPath();
-  g.arc(tip[0], tip[1], (1.6 + p.pulse * 1.1 + p.bloom * 1.5) * k, 0, TAU);
-  g.fill();
-  return tip;
-}
-
-// The glass itself: fog and its drips, the frame and glazing bars, a shine, and any flash.
-function pane(g, w, h, c, s) {
-  const col = c.colors;
-  if (s.fog > 0) {
-    const f = g.createLinearGradient(0, 0, 0, h);
-    f.addColorStop(0, c.alpha(col.fg, 0.24 * s.fog));
-    f.addColorStop(0.6, c.alpha(col.fg, 0.08 * s.fog));
-    f.addColorStop(1, c.alpha(col.fg, 0.03 * s.fog));
-    g.fillStyle = f;
-    g.fillRect(0, 0, w, h);
-    g.strokeStyle = c.alpha(col.fg, 0.35 * s.fog);
-    g.lineWidth = 1.2;
-    const n = Math.round(s.fog * 9);
-    for (let i = 0; i < n; i++) {
-      const x = ((i * 0.618034 + 0.07) % 1) * w;
-      const y = ((s.t * (0.03 + (i % 3) * 0.02) + i * 0.37) % 1) * h * 0.7;
-      g.beginPath();
-      g.moveTo(x, Math.max(0, y - 18 * s.fog));
-      g.lineTo(x, y);
-      g.stroke();
-    }
-  }
-  g.strokeStyle = c.alpha(col.fg, 0.35);
-  g.lineWidth = 2;
-  g.strokeRect(1, 1, w - 2, h - 2);
-  g.lineWidth = 1;
-  g.beginPath();
-  for (let x = w / 3; x < w - 1; x += w / 3) {
-    g.moveTo(x, 0);
-    g.lineTo(x, h);
-  }
-  g.moveTo(0, h * 0.3);
-  g.lineTo(w, h * 0.3);
-  g.stroke();
-  const shine = g.createLinearGradient(0, 0, w, h);
-  shine.addColorStop(0, c.alpha(col.fg, 0.08));
-  shine.addColorStop(0.5, c.alpha(col.fg, 0));
-  g.fillStyle = shine;
-  g.fillRect(0, 0, w, h);
-  if (s.flash > 0) {
-    g.fillStyle = c.alpha(col.accent2, s.flash * 0.18);
-    g.fillRect(0, 0, w, h);
-  }
+function write(g, text, x, y, size, align, tone, weight) {
+  g.fillStyle = tone;
+  g.font = (weight || '500') + ' ' + size + 'px system-ui, sans-serif';
+  g.textAlign = align || 'left';
+  g.textBaseline = 'middle';
+  g.fillText(text, x, y);
 }
 
 function wrap(g, text, max) {
@@ -242,412 +62,633 @@ function wrap(g, text, max) {
   return out;
 }
 
-// A label taped to the glass, for the forecast as it is read.
-function label(g, w, h, c, lines) {
-  if (!lines.length) return;
-  const size = Math.max(11, Math.round(Math.min(w, h) * 0.042));
-  const pad = size * 0.8;
-  const lh = size * 1.3;
-  const bw = w * 0.64;
-  g.font = '500 ' + size + 'px system-ui, sans-serif';
-  g.textAlign = 'left';
-  g.textBaseline = 'top';
-  const rows = [];
-  lines.forEach((l, i) => wrap(g, l, bw - pad * 2).forEach((r) => rows.push([r, i === 0])));
-  g.fillStyle = c.alpha(c.colors.bg, 0.62);
-  g.beginPath();
-  g.roundRect(pad, pad, bw, rows.length * lh + pad * 2, size * 0.4);
-  g.fill();
-  g.strokeStyle = c.alpha(c.colors.fg, 0.2);
-  g.lineWidth = 1;
-  g.stroke();
-  rows.forEach((r, i) => {
-    g.fillStyle = r[1] ? c.colors.accent2 : c.alpha(c.colors.fg, 0.85);
-    g.fillText(r[0], pad * 2, pad * 2 + i * lh);
-  });
-}
-
-// A hygrometer in the corner: its needle sits where the humidity is, and jumps at a reading.
-function gauge(g, w, h, c, s) {
-  const r = Math.min(w, h) * 0.08;
-  const x = w - r * 1.7;
-  const y = r * 1.7;
-  g.strokeStyle = c.alpha(c.colors.fg, 0.4);
-  g.lineWidth = 1.2;
-  g.beginPath();
-  g.arc(x, y, r, Math.PI * 0.75, Math.PI * 2.25);
-  g.stroke();
-  for (let i = 0; i <= 4; i++) {
-    const a = Math.PI * (0.75 + 1.5 * (i / 4));
-    g.beginPath();
-    g.moveTo(x + Math.cos(a) * r * 0.82, y + Math.sin(a) * r * 0.82);
-    g.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r);
-    g.stroke();
+// The air in the glasshouse: brighter under a lamp that is on, dappled by the configuration, with
+// the stars as they stand shining faintly through the top panes, and the soil along the bottom.
+function glass(g, w, h, env, v, lit, t) {
+  const c = env.colors;
+  const grad = g.createLinearGradient(0, 0, 0, h);
+  grad.addColorStop(0, lit ? env.mix(c.bg2, c.fg, 0.16) : c.bg2);
+  grad.addColorStop(1, env.mix(c.bg, c.accent, lit ? 0.04 : 0.09));
+  g.fillStyle = grad;
+  g.fillRect(0, 0, w, h);
+  if (lit) {
+    const shaft = g.createRadialGradient(w / 2, h * 0.07, 0, w / 2, h * 0.07, h * 0.9);
+    shaft.addColorStop(0, env.alpha(c.accent2, 0.16));
+    shaft.addColorStop(1, env.alpha(c.accent2, 0));
+    g.fillStyle = shaft;
+    g.fillRect(0, 0, w, h);
   }
-  const a = Math.PI * (0.75 + 1.5 * Math.max(0, Math.min(1, s.needle)));
-  g.strokeStyle = c.colors.accent2;
-  g.lineWidth = 2;
-  g.beginPath();
-  g.moveTo(x, y);
-  g.lineTo(x + Math.cos(a) * r * 0.78, y + Math.sin(a) * r * 0.78);
-  g.stroke();
-  g.fillStyle = c.colors.accent2;
-  g.beginPath();
-  g.arc(x, y, 2.5, 0, TAU);
-  g.fill();
-}
-
-// The stamp a finished forecast gets, pressed on at an angle.
-function stampAt(g, w, h, c, text, k) {
-  const r = Math.min(w, h) * 0.14 * (1.5 - 0.5 * k);
-  g.save();
-  g.translate(w * 0.8, h * 0.56);
-  g.rotate(-0.25);
-  g.strokeStyle = c.alpha(c.colors.accent2, 0.85 * k);
-  g.lineWidth = 3;
-  g.beginPath();
-  g.arc(0, 0, r, 0, TAU);
-  g.stroke();
-  g.lineWidth = 1;
-  g.beginPath();
-  g.arc(0, 0, r * 0.84, 0, TAU);
-  g.stroke();
-  g.fillStyle = c.alpha(c.colors.accent2, 0.9 * k);
-  g.font = '700 ' + Math.max(10, Math.round(r * 0.36)) + 'px system-ui, sans-serif';
-  g.textAlign = 'center';
-  g.textBaseline = 'middle';
-  g.fillText(text, 0, 0);
-  g.restore();
-}
-
-function scene(g, w, h, c, s) {
-  const soilY = h * 0.82;
-  const k = Math.max(0.7, Math.min(2, Math.min(w, h) / 340));
-  const breeze = s.wind * (0.6 + Math.sin(s.t * 0.6) * 0.3) * (c.reduced ? 0.3 : 1);
-  air(g, w, h, c, s);
-  s.tips = c.stars.map((star, i) => {
-    const p = s.plants[i] || (s.plants[i] = sprout(star, i, 0));
-    return stem(g, c, s, p, i, 14 + (star.x / 100) * (w - 28), soilY, ((100 - star.y) / 100) * (soilY - 16) * 0.85 + 10, breeze, k);
-  });
-  g.fillStyle = c.alpha(c.colors.fg, 0.85);
-  for (const d of s.drops) {
+  g.fillStyle = env.alpha(c.fg, 0.4);
+  for (const p of env.points(w, h, 10)) {
     g.beginPath();
-    g.ellipse(d.x, d.y, 2 * k, 3.2 * k, 0, 0, TAU);
+    g.arc(p.x, 4 + p.y * 0.22, 1.2 * v.scale, 0, TAU);
     g.fill();
   }
-  pane(g, w, h, c, s);
-  label(g, w, h, c, s.lines);
-  if (s.gauge) gauge(g, w, h, c, s);
-  if (s.stamp > 0) stampAt(g, w, h, c, s.stampText, s.stamp);
-}
-
-// What moves between frames: the wind's clock, the flash, each stem's growth, glow and bloom, and
-// the drops on their way down.
-function tick(s, dt) {
-  s.t += dt;
-  s.flash = Math.max(0, s.flash - dt * 1.7);
-  for (const p of s.plants) {
-    p.pulse = Math.max(0, p.pulse - dt * 1.6);
-    p.glow = Math.max(0, p.glow - dt * 0.9);
-    if (p.delay > 0) p.delay -= dt;
-    else p.grow = Math.min(1, p.grow + dt / 1.6);
-    p.bloom += (p.bud - p.bloom) * Math.min(1, dt * 2);
+  const n = Math.max(3, Math.round(7 * v.density));
+  for (let i = 0; i < n; i++) {
+    const x = ((i * 0.618 + 0.1 + v.turn * 0.23 + Math.sin((t || 0) * 0.3 + i) * 0.02) % 1) * w;
+    const y = ((i * 0.38 + 0.05 + v.turn * 0.1) % 1) * h * 0.55;
+    const r = Math.min(w, h) * (0.07 + (i % 3) * 0.03) * v.scale;
+    const d = g.createRadialGradient(x, y, 0, x, y, r);
+    d.addColorStop(0, env.alpha(c.accent2, 0.09));
+    d.addColorStop(1, env.alpha(c.accent2, 0));
+    g.fillStyle = d;
+    g.fillRect(x - r, y - r, r * 2, r * 2);
   }
-  s.drops = s.drops.filter((d) => {
-    d.y += dt * d.speed;
-    if (d.y < d.ty) return true;
-    const p = s.plants[d.i];
-    p.pulse = 1;
-    p.glow = 1;
-    return false;
-  });
+  const soilY = h * 0.64;
+  g.fillStyle = 'rgba(0,0,0,0.3)';
+  g.fillRect(0, soilY, w, h - soilY);
+  const grit = Math.round(40 * v.density);
+  for (let i = 0; i < grit; i++) {
+    g.fillStyle = env.alpha(c.accent2, 0.1 + ((i * 7) % 5) * 0.03);
+    g.fillRect(((i * 0.618034 + v.turn * 0.5) % 1) * w, soilY + ((i * 0.754877) % 1) * (h - soilY), 1.5, 1.5);
+  }
 }
 
-// The card: the terrarium as it stands, in the light and on the vent the configuration the card was
-// dealt chose, with as much fog on the glass as it asks for -- so a repeat is the same stems under
-// different weather.
-function glasshouse(ctx, w, h, env, t) {
-  const v = env.variant;
-  const s = fresh(env.stars, 7);
-  s.t = t + v.turn * 6;
-  s.wind = 0.15 + v.turn * 0.55;
-  s.light = Math.round(v.turn * 3);
-  s.fog = Math.max(0, (v.density - 1) * 0.55);
-  for (const p of s.plants) p.grow = v.scale;
-  scene(ctx, w, h, env, s);
+// The glass itself: fog and its drips, the frame and glazing bars, and a shine.
+function pane(g, w, h, env, fog, t) {
+  const c = env.colors;
+  if (fog > 0) {
+    const f = g.createLinearGradient(0, 0, 0, h);
+    f.addColorStop(0, env.alpha(c.fg, 0.24 * fog));
+    f.addColorStop(0.6, env.alpha(c.fg, 0.08 * fog));
+    f.addColorStop(1, env.alpha(c.fg, 0.03 * fog));
+    g.fillStyle = f;
+    g.fillRect(0, 0, w, h);
+    g.strokeStyle = env.alpha(c.fg, 0.35 * fog);
+    g.lineWidth = 1.2;
+    const n = Math.round(fog * 9);
+    for (let i = 0; i < n; i++) {
+      const x = ((i * 0.618034 + 0.07) % 1) * w;
+      const y = ((t * (0.03 + (i % 3) * 0.02) + i * 0.37) % 1) * h * 0.7;
+      g.beginPath();
+      g.moveTo(x, Math.max(0, y - 18 * fog));
+      g.lineTo(x, y);
+      g.stroke();
+    }
+  }
+  g.strokeStyle = env.alpha(c.fg, 0.35);
+  g.lineWidth = 2;
+  g.strokeRect(1, 1, w - 2, h - 2);
+  g.lineWidth = 1;
+  g.strokeStyle = env.alpha(c.fg, 0.18);
+  g.beginPath();
+  for (let x = w / 3; x < w - 1; x += w / 3) {
+    g.moveTo(x, 0);
+    g.lineTo(x, h);
+  }
+  g.moveTo(0, h * 0.3);
+  g.lineTo(w, h * 0.3);
+  g.stroke();
+  const shine = g.createLinearGradient(0, 0, w, h);
+  shine.addColorStop(0, env.alpha(c.fg, 0.08));
+  shine.addColorStop(0.5, env.alpha(c.fg, 0));
+  g.fillStyle = shine;
+  g.fillRect(0, 0, w, h);
 }
 
-/* ---- the pieces ---------------------------------------------------------------------------- */
+// One stem, `height` tall, with exactly `leaves` leaves along it, leaning with the breeze. Returns
+// where its tip is.
+function stem(g, env, x, soilY, height, leaves, t, k, phase, bend, glow, bloom) {
+  const c = env.colors;
+  const seg = 8;
+  const pts = [];
+  for (let j = 0; j <= seg; j++) {
+    const r = j / seg;
+    const sway = Math.sin(t * 0.9 + phase + r * 2.2) * bend * r * 7 * k + Math.sin(r * 3 + phase) * bend * 5 * k * r;
+    pts.push([x + sway, soilY - r * height]);
+  }
+  const at = (r) => {
+    const j = Math.min(seg - 1, Math.floor(r * seg));
+    const f = r * seg - j;
+    return [pts[j][0] + (pts[j + 1][0] - pts[j][0]) * f, pts[j][1] + (pts[j + 1][1] - pts[j][1]) * f];
+  };
+  g.strokeStyle = env.alpha(c.accent, 0.6 + glow * 0.35);
+  g.lineWidth = (1.4 + glow * 0.8) * k;
+  g.lineCap = 'round';
+  g.beginPath();
+  pts.forEach((q, j) => (j ? g.lineTo(q[0], q[1]) : g.moveTo(q[0], q[1])));
+  g.stroke();
+  const size = clamp((0.8 * height) / Math.max(1, leaves) * 0.55, 1.6 * k, 5 * k);
+  g.fillStyle = env.alpha(c.accent, 0.4 + glow * 0.35);
+  for (let i = 0; i < leaves; i++) {
+    const p = at(0.1 + (0.82 * (i + 0.5)) / leaves);
+    const dir = i % 2 ? -1 : 1;
+    g.beginPath();
+    g.ellipse(p[0] + dir * size * 1.2, p[1], size * 1.5, size * 0.65, dir * 0.5, 0, TAU);
+    g.fill();
+  }
+  const tip = pts[seg];
+  g.fillStyle = env.alpha(c.accent2, 0.2 + glow * 0.3 + bloom * 0.15);
+  g.beginPath();
+  g.arc(tip[0], tip[1], (3.5 + glow * 4 + bloom * 6) * k, 0, TAU);
+  g.fill();
+  if (bloom > 0.02) {
+    const br = 4.5 * k * bloom;
+    g.fillStyle = env.alpha(c.accent2, 0.85 * bloom);
+    for (let q = 0; q < 5; q++) {
+      const a = (q / 5) * TAU + t * 0.3;
+      g.beginPath();
+      g.ellipse(tip[0] + Math.cos(a) * br, tip[1] + Math.sin(a) * br, br, br * 0.55, a, 0, TAU);
+      g.fill();
+    }
+  }
+  g.fillStyle = env.alpha(c.fg, 0.95);
+  g.beginPath();
+  g.arc(tip[0], tip[1], (1.6 + bloom * 1.5) * k, 0, TAU);
+  g.fill();
+  return tip;
+}
 
-// A watering round: light and vent set, a few stems tapped and heard, and the glass misted shut.
-function watering(env) {
-  const was = pressed(env);
-  const n = env.stars.length;
-  const need = Math.min(n, env.int(3, 5));
-  const lights = lightsFrom(env, was, 3);
-  const ms = env.pick([1500, 2000, 2500]);
-  const vent0 = was && was.wind >= 0 ? [10, 45, 80][was.wind] : env.pick([20, 35, 50]);
-  const s = fresh(env.stars, env.int(1, 9999));
-  s.wind = vent0 / 100;
-  let misted = false;
-  const wet = () => s.plants.filter((p) => p.wet).length;
-  const one = need === 1;
-  const drink = (k) => (WORDS[k] || k) + (k === 1 ? ' stem drinks' : ' stems drink');
+// A small drop, point down.
+function drop(g, env, x, y, k, a) {
+  g.fillStyle = env.alpha(env.colors.fg, a);
+  g.beginPath();
+  g.moveTo(x, y - 4 * k);
+  g.quadraticCurveTo(x + 3.2 * k, y + 1.5 * k, x, y + 3.5 * k);
+  g.quadraticCurveTo(x - 3.2 * k, y + 1.5 * k, x, y - 4 * k);
+  g.fill();
+}
+
+// A lettered or numbered marker at the foot of a stem.
+function badge(g, env, x, y, text, k, size) {
+  const c = env.colors;
+  g.fillStyle = env.alpha(c.bg, 0.9);
+  g.strokeStyle = env.alpha(c.accent, 0.9);
+  g.lineWidth = 1;
+  g.beginPath();
+  g.arc(x, y, 6.5 * k, 0, TAU);
+  g.fill();
+  g.stroke();
+  write(g, text, x, y + 0.5, size, 'center', c.fg, '600');
+}
+
+function shuffled(env, n) {
+  const rest = [];
+  for (let i = 0; i < n; i++) rest.push(i);
+  const out = [];
+  while (rest.length) out.push(rest.splice(env.int(0, rest.length - 1), 1)[0]);
+  return out;
+}
+
+function startFor(env, order) {
+  const n = order.length;
+  let start = order.slice();
+  for (let guard = 0; guard < 10 && start.every((v, i) => v === order[i]); guard++) start = shuffled(env, n);
+  if (start.every((v, i) => v === order[i])) start = order.slice().reverse();
+  return start;
+}
+
+/* ---- who gets water ------------------------------------------------------------------------ */
+
+// Which plants the rules give water, judged left to right, so "if the left one is" has an answer.
+function watered(plan) {
+  const out = [];
+  for (let i = 0; i < plan.n; i++) {
+    const r = plan.rules[i];
+    let yes = false;
+    if (r === 'soil') yes = plan.soil[i] < 3;
+    else if (r === 'lamp') yes = !plan.lamp;
+    else if (r === 'twice') yes = !plan.last[i];
+    else if (r === 'left') yes = i > 0 && out[i - 1];
+    else if (r === 'vent') yes = !!plan.vent && plan.soil[i] < 4;
+    out.push(yes);
+  }
+  return out;
+}
+
+function waterOk(p) {
+  const n = Number(p && p.n);
+  if (n !== 5 && n !== 6) return false;
+  const list = (v, ok) => Array.isArray(v) && v.length === n && v.every(ok);
+  if (!list(p.rules, (r, i) => RULE_IDS.includes(r) && !(i === 0 && r === 'left'))) return false;
+  if (!list(p.soil, (v) => Number.isInteger(v) && v >= 1 && v <= 5)) return false;
+  if (!list(p.last, (v) => v === 0 || v === 1)) return false;
+  if ((p.lamp !== 0 && p.lamp !== 1) || (p.vent !== 0 && p.vent !== 1)) return false;
+  const count = watered(p).filter(Boolean).length;
+  return count >= 1 && count < n;
+}
+
+function waterPlan(env) {
+  const n = env.chance(0.5) ? 6 : 5;
+  for (let guard = 0; guard < 80; guard++) {
+    const rules = [];
+    const soil = [];
+    const last = [];
+    for (let i = 0; i < n; i++) {
+      rules.push(env.pick(i === 0 ? RULE_IDS.filter((r) => r !== 'left') : RULE_IDS));
+      soil.push(env.int(1, 5));
+      last.push(env.chance(0.45) ? 1 : 0);
+    }
+    const plan = { kind: 'water', n, rules, soil, last, lamp: env.chance(0.5) ? 1 : 0, vent: env.chance(0.5) ? 1 : 0 };
+    if (new Set(rules).size >= 3 && waterOk(plan)) return plan;
+  }
+  return { kind: 'water', n: 5, rules: ['soil', 'lamp', 'left', 'twice', 'vent'], soil: [2, 4, 3, 1, 3], last: [0, 1, 0, 1, 0], lamp: 1, vent: 1 };
+}
+
+function carriedWater(env) {
+  const p = env.card && env.card.of;
+  if (!p || p.kind !== 'water' || !waterOk(p)) return null;
+  return { kind: 'water', n: p.n, rules: p.rules.slice(), soil: p.soil.slice(), last: p.last.slice(), lamp: p.lamp, vent: p.vent };
+}
+
+function waterTitle(plan) {
+  return 'who gets water: ' + WORDS[plan.n] + ' plants';
+}
+
+function waterGeometry(w, h, n) {
+  const span = w * 0.9;
+  return { left: (w - span) / 2, cell: span / n, soilY: h * 0.64 };
+}
+
+function drawWater(g, w, h, env, plan, s, variant) {
+  const v = variant || PLAIN;
+  const c = env.colors;
+  const n = plan.n;
+  const geo = waterGeometry(w, h, n);
+  const k = clamp(Math.min(w, h) / 340, 0.6, 1.8) * v.scale;
+  const small = Math.max(8, Math.min(12, Math.round(Math.min(w, h) * 0.032)));
+  const tiny = Math.max(7, Math.min(11, Math.round(geo.cell * 0.16)));
+  glass(g, w, h, env, v, !!plan.lamp, s.t);
+  // The lamp, on its cord, and the vent in the top corner.
+  const lx = w * 0.5;
+  const ly = h * 0.075;
+  g.strokeStyle = env.alpha(c.muted, 0.5);
+  g.lineWidth = 1;
+  g.beginPath();
+  g.moveTo(lx, 0);
+  g.lineTo(lx, ly - 7 * k);
+  g.stroke();
+  if (plan.lamp) {
+    const halo = g.createRadialGradient(lx, ly, 0, lx, ly, 30 * k);
+    halo.addColorStop(0, env.alpha(c.accent2, 0.55));
+    halo.addColorStop(1, env.alpha(c.accent2, 0));
+    g.fillStyle = halo;
+    g.fillRect(lx - 30 * k, ly - 30 * k, 60 * k, 60 * k);
+    g.fillStyle = c.accent2;
+  } else {
+    g.fillStyle = env.alpha(c.muted, 0.25);
+  }
+  g.beginPath();
+  g.arc(lx, ly, 7 * k, 0, TAU);
+  g.fill();
+  g.strokeStyle = env.alpha(c.fg, 0.6);
+  g.stroke();
+  write(g, 'lamp ' + (plan.lamp ? 'on' : 'off'), lx + 12 * k, ly, small, 'left', env.alpha(c.fg, 0.9));
+  const vx = w * 0.9;
+  const vy = h * 0.075;
+  g.strokeStyle = env.alpha(c.fg, 0.7);
+  g.strokeRect(vx - 11 * k, vy - 7 * k, 22 * k, 14 * k);
+  g.beginPath();
+  for (let i = 0; i < 3; i++) {
+    const y = vy - 4 * k + i * 4 * k;
+    g.moveTo(vx - 8 * k, plan.vent ? y + 2 * k : y);
+    g.lineTo(vx + 8 * k, plan.vent ? y - 2 * k : y);
+  }
+  g.stroke();
+  write(g, 'vent ' + (plan.vent ? 'open' : 'shut'), vx - 14 * k, vy, small, 'right', env.alpha(c.fg, 0.9));
+  // The plants, each with its number, its meter, its mark and its tag.
+  const got = watered(plan);
+  for (let i = 0; i < n; i++) {
+    const x = geo.left + (i + 0.5) * geo.cell;
+    const height = (geo.soilY - h * 0.16) * (0.55 + 0.09 * ((i * 3 + plan.soil[i]) % 5));
+    const leaves = 4 + ((i * 5 + plan.soil[i]) % 4);
+    const chosen = s.chosen.includes(i);
+    const tip = stem(g, env, x, geo.soilY, height, leaves, s.t, k, i * 1.3 + v.turn * TAU, 0.5 + (i % 3) * 0.3, chosen ? 0.7 : 0, s.bloom[i] || 0);
+    if (chosen) {
+      for (let j = 0; j < 3; j++) drop(g, env, x + (j - 1) * 5 * k, tip[1] - (14 + ((s.t * 30 + j * 7 + i * 5) % 18)) * k, k * 0.8, 0.8);
+      g.strokeStyle = env.alpha(c.accent2, 0.8);
+      g.lineWidth = 1.2;
+      g.beginPath();
+      g.ellipse(x, geo.soilY, 11 * k, 3.5 * k, 0, 0, TAU);
+      g.stroke();
+    }
+    if (s.hinted.includes(i)) write(g, got[i] ? 'water it' : 'leave it dry', x, tip[1] - 12 * k, small, 'center', c.accent2, '600');
+    badge(g, env, x, geo.soilY, String(i + 1), k, small);
+    const my = geo.soilY + h * 0.065;
+    const bw = Math.min(geo.cell * 0.11, 9 * k);
+    const gap = bw * 0.3;
+    const x0 = x - (5 * bw + 4 * gap) / 2;
+    for (let j = 0; j < 5; j++) {
+      g.fillStyle = j < plan.soil[i] ? c.accent2 : env.alpha(c.muted, 0.25);
+      g.fillRect(x0 + j * (bw + gap), my - bw / 2, bw, bw);
+    }
+    write(g, 'soil ' + plan.soil[i], x, my + bw * 0.5 + tiny * 0.8, tiny, 'center', env.alpha(c.fg, 0.9));
+    if (plan.last[i]) {
+      drop(g, env, x - tiny * 1.6, geo.soilY + h * 0.165, k * 0.9, 0.9);
+      write(g, 'last time', x - tiny * 0.9, geo.soilY + h * 0.165, tiny, 'left', env.alpha(c.fg, 0.8));
+    }
+    g.font = '500 ' + tiny + 'px system-ui, sans-serif';
+    wrap(g, RULES[plan.rules[i]].tag, geo.cell * 0.95).forEach((line, j) => {
+      write(g, line, x, geo.soilY + h * 0.225 + j * tiny * 1.25, tiny, 'center', env.alpha(c.accent2, 0.95));
+    });
+  }
+  pane(g, w, h, env, s.fog, s.t);
+}
+
+function waterPreview(g, w, h, env, plan, t) {
+  drawWater(g, w, h, env, plan, { chosen: [], hinted: [], bloom: [], fog: 0, t: t || 0 }, env.variant);
+}
+
+function waterPiece(env, plan) {
+  const n = plan.n;
+  const got = watered(plan);
+  const answer = [];
+  for (let i = 0; i < n; i++) if (got[i]) answer.push(i);
+  const s = { chosen: [], hinted: [], bloom: new Array(n).fill(0), fog: 0, t: 0 };
+  const draw = (c) => drawWater(c.g, c.w, c.h, c, plan, s, env.variant);
+  const kinds = RULE_IDS.filter((r) => plan.rules.includes(r));
+  function chosenNow(c) {
+    const v = c.value('water');
+    return Array.isArray(v) ? v.map(Number).filter((i) => Number.isInteger(i) && i >= 0 && i < n) : s.chosen;
+  }
   return {
-    title: one ? 'water the one stem' : need === n ? 'water every stem' : 'water ' + WORDS[need] + ' stems',
-    brief: 'Set the light and the vent, tap ' + (one ? 'the one stem to water it and hear what it remembers' : (need === n ? 'each stem' : WORDS[need] + ' stems') + ' to water them and hear what they remember')
-      + ', then hold to mist the glass; the terrarium fogs over and ' + (n === 1 ? 'the stem drinks.' : 'the stems drink.')
-      + (was && was.opener ? ' The glass is set as your ' + was.opener + ' left it.' : ''),
+    title: waterTitle(plan),
+    brief: capital(WORDS[n]) + ' plants wait under glass at midnight, each tagged with one rule, and the glass shows what the rules are judged by: a soil meter under every plant, the lamp, the vent, and a drop beside any plant watered last time. The tags: '
+      + kinds.map((r) => RULES[r].tag + ' (' + RULES[r].rule + ')').join('; ') + '. Judge them left to right.',
+    goal: 'Mark every plant that gets water, and none that stays dry.',
     aspect: '16 / 10',
+    checkLabel: 'water them',
     steps: [
-      { id: 'light', ask: 'the light', kind: 'choice', options: lights },
-      { id: 'vent', ask: 'the vent', kind: 'range', min: 0, max: 100, step: 1, value: vent0, low: 'shut', high: 'fan on low' },
-      { id: 'water', ask: one ? 'tap the stem to water it' : 'tap ' + WORDS[need] + ' stems to water them', kind: 'tap', label: 'water one for me' },
-      { id: 'mist', ask: 'mist the glass', kind: 'hold', ms, label: 'hold to mist', after: 'water' }
+      { id: 'water', ask: 'the plants to water: tap them under the glass, or mark them here', kind: 'pick', items: plan.rules.map((r, i) => ({ label: 'plant ' + (i + 1) + ' (' + RULES[r].tag + ')', value: i })) },
+      { id: 'hint', ask: 'one plant judged', kind: 'press', count: 1, label: 'show me one', optional: true }
     ],
+    solution: { water: answer },
+    check(c) {
+      const chosen = chosenNow(c);
+      const right = chosen.filter((i) => got[i]).length;
+      const dry = chosen.filter((i) => !got[i]).length;
+      const solved = right === answer.length && dry === 0;
+      let say;
+      if (solved) say = (answer.length === 1 ? 'one plant drinks' : WORDS[answer.length] + ' plants drink') + ', and the rest stay dry';
+      else if (!right) say = 'none of the right plants yet' + (dry ? ', and ' + WORDS[dry] + ' that should stay dry' : '');
+      else say = WORDS[right] + ' of the right plants' + (dry ? ', and ' + WORDS[dry] + ' that should stay dry' : '');
+      return { solved, say };
+    },
     start(c) {
-      scene(c.g, c.w, c.h, c, s);
+      c.status('tap a plant to mark it for water');
+      draw(c);
     },
     apply(id, value, c) {
-      if (id === 'light') {
-        s.light = Number(value) || 0;
-        c.status('light: ' + LIGHT[s.light]);
+      if (id === 'water' && Array.isArray(value)) {
+        s.chosen = value.map(Number).filter((i) => Number.isInteger(i) && i >= 0 && i < n).sort((a, b) => a - b);
+        c.status(s.chosen.length ? 'marked: ' + s.chosen.map((i) => 'plant ' + (i + 1)).join(', ') : 'nothing marked');
       }
-      if (id === 'vent') {
-        s.wind = Math.max(0, Math.min(1, Number(value) / 100));
-        c.status(s.wind < 0.1 ? 'wind: ' + WIND[0] + '. the terrarium holds its breath' : s.wind < 0.6 ? 'wind: ' + WIND[1] : 'wind: ' + WIND[2] + '. the stems sway again');
+      if (id === 'hint') {
+        const next = plan.rules.map((r, i) => i).find((i) => !s.hinted.includes(i) && s.chosen.includes(i) !== got[i]);
+        if (next !== undefined) {
+          s.hinted.push(next);
+          c.hint();
+          c.status('plant ' + (next + 1) + (got[next] ? ' gets water' : ' stays dry'));
+        } else {
+          c.status('every plant you have judged wrongly has been shown; the rest is yours');
+        }
       }
-      if (id === 'mist') {
-        misted = true;
-        s.flash = 1;
-        c.status('misted: the glass fogs over and the drips start');
-      }
+      draw(c);
     },
     tap(x, y, c) {
-      if (c.done) return;
-      const px = x * c.w;
-      const py = y * c.h;
-      let best = -1;
-      let bd = Infinity;
-      c.stars.forEach((star, i) => {
-        if (s.plants[i].wet) return;
-        const tip = s.tips[i] || [14 + (star.x / 100) * (c.w - 28), c.h * 0.5];
-        const d = (tip[0] - px) ** 2 + ((tip[1] - py) * 0.4) ** 2;
-        if (d < bd) {
-          bd = d;
-          best = i;
-        }
-      });
-      if (best < 0) return;
-      const tip = s.tips[best] || [px, py];
-      s.plants[best].wet = true;
-      s.drops.push({ x: tip[0], y: 0, ty: tip[1], i: best, speed: c.h * 1.8 });
-      c.progress('water', Math.min(1, wet() / need));
-      const memory = c.stars[best].text || 'a stem with nothing to say yet';
-      s.lines = ['leaf memory', memory];
-      c.status('leaf memory: ' + memory);
-      if (wet() >= need) c.satisfy('water');
+      const geo = waterGeometry(c.w, c.h, n);
+      const col = Math.floor((x * c.w - geo.left) / geo.cell);
+      if (col < 0 || col >= n) return;
+      const next = s.chosen.includes(col) ? s.chosen.filter((i) => i !== col) : s.chosen.concat([col]).sort((a, b) => a - b);
+      s.chosen = next;
+      c.set('water', next.slice());
+      c.status('plant ' + (col + 1) + (next.includes(col) ? ' marked for water' : ' left dry'));
+      draw(c);
     },
     frame(t, dt, c) {
-      tick(s, dt);
-      if (misted) s.fog = Math.min(1, s.fog + dt * 0.8);
-      if (c.done) for (const p of s.plants) if (p.wet) p.bud = 1;
-      scene(c.g, c.w, c.h, c, s);
+      s.t += dt;
+      if (c.done) {
+        s.fog = Math.min(1, s.fog + dt * 0.5);
+        for (const i of answer) s.bloom[i] = Math.min(1, s.bloom[i] + dt * 0.8);
+      }
+      draw(c);
     },
     end(c) {
-      c.status('misted and shut: ' + drink(wet()) + ', and the glass holds its breath');
+      c.status('watered: ' + answer.map((i) => 'plant ' + (i + 1)).join(', ') + '; the glass fogs over and the rest stay dry');
     }
   };
 }
 
-// A forecast: humidity, light and wind set, three readings taken off the glass, and a stamp.
-function forecast(env) {
-  const was = pressed(env);
-  const n = env.stars.length;
-  // The heading the card was printed under is this forecast's own: a visitor who pressed a
-  // greenhouse bulletin opens the bulletin, at the humidity and the light it was read at.
-  const opener = was && was.opener ? was.opener : env.pick(OPENERS);
-  const mid = env.pick(MIDS);
-  const closer = env.pick(CLOSERS);
-  const lights = lightsFrom(env, was, 3);
-  const hum0 = was && was.humidity ? Math.max(58, Math.min(92, was.humidity)) : env.int(58, 92);
-  const r = reading(env.stars);
-  const s = fresh(env.stars, env.int(1, 9999));
-  s.gauge = true;
-  s.stampText = r.spread;
-  const stats = n + ' plant' + (n === 1 ? '' : 's') + ', ' + r.spread + ' spread, bed ' + r.zone + ', canopy ' + r.density + '.';
-  let hum = hum0;
-  let read = 0;
-  let paused = false;
-  let jolt = 0;
-  const damp = () => (hum - 55) / 41;
-  const SAID = ['', 'reading one: the shape of the bed', 'reading two: the weather under glass', 'reading three: what the roots advise'];
-  return {
-    title: opener,
-    brief: 'Set the humidity and the light, pause the wind if you like, and take three readings; the glass prints a forecast from the shape of your sky and stamps it.',
-    aspect: '16 / 10',
-    steps: [
-      { id: 'humidity', ask: 'the humidity', kind: 'range', min: 55, max: 96, step: 1, value: hum0, low: 'dry', high: 'dripping' },
-      { id: 'light', ask: 'the light', kind: 'choice', options: lights },
-      { id: 'wind', ask: 'the wind', kind: 'toggle', label: 'pause the wind' },
-      { id: 'read', ask: 'take three readings', kind: 'press', count: 3, label: 'take a reading', after: 'humidity' }
-    ],
-    start(c) {
-      s.fog = damp();
-      s.needle = damp();
-      scene(c.g, c.w, c.h, c, s);
-    },
-    apply(id, value, c) {
-      if (id === 'humidity') {
-        hum = Math.round(Math.max(55, Math.min(96, Number(value) || 55)));
-        c.status('humidity ' + hum + '%: ' + (hum < 65 ? 'the glass is clear' : hum < 80 ? 'the glass is sweating a little' : 'the glass is dripping'));
-      }
-      if (id === 'light') {
-        s.light = Number(value) || 0;
-        c.status('light: ' + LIGHT[s.light]);
-      }
-      if (id === 'wind') {
-        paused = !!value;
-        c.status(paused ? 'wind paused. the terrarium is holding its breath' : 'wind resumed. the stems sway again');
-      }
-      if (id === 'read') {
-        read = Math.min(3, Number(value) || 0);
-        jolt = 1;
-        s.flash = 0.7;
-        for (const p of s.plants) p.pulse = Math.max(p.pulse, 0.6);
-        c.status(SAID[read]);
-      }
-    },
-    frame(t, dt, c) {
-      tick(s, dt);
-      jolt = Math.max(0, jolt - dt * 1.5);
-      s.fog += (damp() - s.fog) * Math.min(1, dt * 3);
-      s.wind += ((paused ? 0 : 0.4) - s.wind) * Math.min(1, dt * 3);
-      s.needle += (damp() + Math.sin(s.t * 9) * jolt * 0.12 - s.needle) * Math.min(1, dt * 5);
-      s.lines = [];
-      if (read >= 1) s.lines.push(opener + ':', stats);
-      if (read >= 2) s.lines.push('humidity ' + hum + '%; light ' + (LIGHT[s.light] || 'not yet chosen') + '; wind ' + (paused ? WIND[0] : WIND[2]) + '.');
-      if (read >= 3) s.lines.push(mid, closer);
-      if (c.done) s.stamp = Math.min(1, s.stamp + dt * 1.8);
-      scene(c.g, c.w, c.h, c, s);
-    },
-    end(c) {
-      for (const p of s.plants) p.bud = 1;
-      c.status('forecast prepared from the shape of your sky, and stamped: ' + r.spread);
-    }
-  };
+/* ---- the oldest stem ----------------------------------------------------------------------- */
+
+function ages(plan) {
+  return plan.leaves.map((l, i) => l / plan.rates[i]);
 }
 
-// The bed regrown: an order to come up in, the moss if you dare, a few regrowings, and the wait
-// while the new stems come up.
-function regrow(env) {
-  const was = pressed(env);
-  const n = env.stars.length;
-  const times = env.int(2, 4);
-  const twice = times === 2 ? 'twice' : WORDS[times] + ' times';
-  let salt = env.int(1, 9999);
-  const s = fresh(env.stars, salt);
-  s.wind = 0.45;
-  let order = 'x';
-  let grown = 0;
-  let up = false;
-  function replant(c, reseed) {
-    if (reseed) s.plants = c.stars.map((star, i) => sprout(star, i, ++salt));
-    const idx = c.stars.map((star, i) => i);
-    if (order === 'x') idx.sort((a, b) => c.stars[a].x - c.stars[b].x);
-    else if (order === 'short') idx.sort((a, b) => c.stars[b].y - c.stars[a].y);
-    else idx.sort((a, b) => c.stars[a].y - c.stars[b].y);
-    idx.forEach((i, rank) => {
-      s.plants[i].grow = 0;
-      s.plants[i].delay = (rank / Math.max(1, n - 1)) * 1.4;
-    });
-    up = false;
+function ageOrder(plan) {
+  const a = ages(plan);
+  return [0, 1, 2, 3].sort((p, q) => a[q] - a[p]);
+}
+
+function ageOk(p) {
+  if (!p || p.kind !== 'age') return false;
+  const list = (v, ok) => Array.isArray(v) && v.length === 4 && v.every(ok);
+  if (!list(p.rates, (r) => Number.isInteger(r) && r >= 1 && r <= 4)) return false;
+  if (!list(p.leaves, (l, i) => Number.isInteger(l) && l >= 3 && l <= 24 && l % p.rates[i] === 0)) return false;
+  const a = ages(p);
+  if (new Set(a).size !== 4) return false;
+  const order = ageOrder(p);
+  const byLeaves = [0, 1, 2, 3].sort((x, y) => p.leaves[y] - p.leaves[x]);
+  if (order.every((v, i) => v === byLeaves[i])) return false;
+  return list(p.start, (v) => Number.isInteger(v) && v >= 0 && v < 4) && new Set(p.start).size === 4 && !p.start.every((v, i) => v === order[i]);
+}
+
+function agePlan(env) {
+  for (let guard = 0; guard < 80; guard++) {
+    const rates = [];
+    const leaves = [];
+    for (let i = 0; i < 4; i++) {
+      const r = env.int(1, 4);
+      rates.push(r);
+      leaves.push(r * env.int(Math.ceil(3 / r), Math.floor(24 / r)));
+    }
+    const plan = { kind: 'age', rates, leaves, start: [0, 1, 2, 3] };
+    if (new Set(ages(plan)).size !== 4 || Math.max.apply(null, ages(plan)) < 4) continue;
+    plan.start = startFor(env, ageOrder(plan));
+    if (ageOk(plan)) return plan;
+  }
+  return { kind: 'age', rates: [2, 4, 1, 3], leaves: [16, 20, 6, 21], start: [0, 1, 2, 3] };
+}
+
+function carriedAge(env) {
+  const p = env.card && env.card.of;
+  if (!ageOk(p)) return null;
+  return { kind: 'age', rates: p.rates.slice(), leaves: p.leaves.slice(), start: p.start.slice() };
+}
+
+function ageTitle() {
+  return 'the oldest stem: four under glass';
+}
+
+function ageGeometry(w, h) {
+  const span = w * 0.84;
+  return { left: (w - span) / 2, cell: span / 4, soilY: h * 0.64 };
+}
+
+function drawAge(g, w, h, env, plan, s, variant) {
+  const v = variant || PLAIN;
+  const c = env.colors;
+  const geo = ageGeometry(w, h);
+  const k = clamp(Math.min(w, h) / 340, 0.6, 1.8) * v.scale;
+  const small = Math.max(8, Math.min(12, Math.round(Math.min(w, h) * 0.032)));
+  const a = ages(plan);
+  glass(g, w, h, env, v, true, s.t);
+  write(g, 'oldest first, left to right as you set them', w / 2, h * 0.05, small, 'center', env.alpha(c.muted, 0.85));
+  for (let i = 0; i < 4; i++) {
+    const x = geo.left + (i + 0.5) * geo.cell;
+    const height = (geo.soilY - h * 0.14) * (0.32 + (0.66 * plan.leaves[i]) / 24);
+    const rank = s.order.indexOf(i);
+    const tip = stem(g, env, x, geo.soilY, height, plan.leaves[i], s.t, k, i * 1.3 + v.turn * TAU, 0.4 + (i % 3) * 0.25, 0, s.bloom[i] || 0);
+    write(g, plan.leaves[i] + ' leaves', x, tip[1] - 11 * k, small, 'center', env.alpha(c.fg, 0.9));
+    if (s.hinted.includes(i)) write(g, a[i] + (a[i] === 1 ? ' week' : ' weeks'), x, tip[1] - 11 * k - small * 1.3, small, 'center', c.accent2, '600');
+    badge(g, env, x, geo.soilY, LETTERS[i], k, small);
+    write(g, plan.rates[i] + (plan.rates[i] === 1 ? ' leaf a week' : ' leaves a week'), x, geo.soilY + h * 0.07, small, 'center', env.alpha(c.accent2, 0.95));
+    write(g, RANKS[rank], x, geo.soilY + h * 0.13, small, 'center', env.alpha(c.fg, 0.8));
+  }
+  pane(g, w, h, env, s.fog, s.t);
+}
+
+function agePreview(g, w, h, env, plan, t) {
+  drawAge(g, w, h, env, plan, { order: plan.start.slice(), hinted: [], bloom: [], fog: 0, t: t || 0 }, env.variant);
+}
+
+function agePiece(env, plan) {
+  const order = ageOrder(plan);
+  const a = ages(plan);
+  const oldest = a[order[0]];
+  const s = { order: plan.start.slice(), hinted: [], bloom: [0, 0, 0, 0], fog: 0, t: 0 };
+  const draw = (c) => drawAge(c.g, c.w, c.h, c, plan, s, env.variant);
+  const named = (list) => list.map((i) => LETTERS[i]).join(', ');
+  function current(c) {
+    const v = c.value('order');
+    return Array.isArray(v) && v.length === 4 ? v.map(Number) : s.order;
   }
   return {
-    title: env.pick(['regrow the terrarium', 'same stars, new stems']),
-    brief: 'Choose how the stems come up, regrow the bed ' + twice + ' from the same stars, switch the moss on if you dare, and watch the new stems come up and bloom.'
-      + (was && was.opener ? ' The bed is the one your ' + was.opener + ' was read off.' : ''),
+    title: ageTitle(),
+    brief: 'Four stems under glass. Each tag gives how many leaves that stem grows in a week, and its leaves are drawn and counted. A stem that grows three leaves a week and carries twelve has grown for four weeks. Set the order on the rail, or tap a stem to move it up one place.',
+    goal: 'Put the stems oldest to youngest, and say how many weeks the oldest has grown.',
     aspect: '16 / 10',
+    checkLabel: 'check the bed',
     steps: [
-      { id: 'order', ask: 'how they come up', kind: 'choice', options: ORDERS },
-      { id: 'moss', ask: 'the secret moss', kind: 'toggle', label: 'neon moss' },
-      { id: 'regrow', ask: 'regrow the bed ' + twice, kind: 'press', count: times, label: 'regrow', after: 'order' },
-      { id: 'grow', ask: 'watch them come up', kind: 'wait', after: 'regrow' }
+      { id: 'order', ask: 'the stems, oldest first', kind: 'order', items: LETTERS.map((l, i) => ({ label: 'stem ' + l, value: i })), value: plan.start.slice() },
+      { id: 'oldest', ask: 'how long the oldest has grown', kind: 'number', min: 1, max: 24, step: 1, value: 1, unit: 'weeks' },
+      { id: 'hint', ask: 'one stem\'s age', kind: 'press', count: 1, label: 'show me one', optional: true }
     ],
+    solution: { order: order.slice(), oldest },
+    check(c) {
+      const cur = current(c);
+      let right = 0;
+      for (let i = 0; i < 4; i++) if (cur[i] === order[i]) right += 1;
+      const weeks = Math.round(Number(c.value('oldest')));
+      const ageRight = weeks === oldest;
+      if (right === 4 && ageRight) return { solved: true, say: 'oldest to youngest: ' + named(order) + '; stem ' + LETTERS[order[0]] + ' has grown ' + oldest + ' weeks' };
+      const parts = [];
+      parts.push(right === 4 ? 'the order is right' : right === 0 ? 'none of the stems is in the right place yet' : WORDS[right] + ' of four in the right place');
+      if (!ageRight) parts.push(weeks < oldest ? 'the oldest is older than that' : 'the oldest is younger than that');
+      return { solved: false, say: parts.join('; ') };
+    },
     start(c) {
-      scene(c.g, c.w, c.h, c, s);
+      c.status('four tags, four counts; tap a stem to move it up');
+      draw(c);
     },
     apply(id, value, c) {
-      if (id === 'order') {
-        order = String(value);
-        replant(c, false);
-        c.status('they come up ' + (ORDERS.find((o) => o.value === order) || ORDERS[0]).label);
+      if (id === 'order' && Array.isArray(value) && value.length === 4) {
+        s.order = value.map(Number);
+        c.status('oldest first: ' + named(s.order));
       }
-      if (id === 'moss') {
-        s.moss = !!value;
-        s.flash = 1;
-        c.status(s.moss ? 'secret moss: the greenhouse shifts into neon bloom' : 'the moss dims; midnight glass again');
-      }
-      if (id === 'regrow') {
-        grown = Number(value) || 0;
-        replant(c, true);
-        s.flash = 1;
-        c.status('regrown: same stars, new stems' + (grown < times ? ' (' + (times - grown) + ' to go)' : ''));
-      }
-    },
-    frame(t, dt, c) {
-      tick(s, dt);
-      if (grown >= times && !up) {
-        let sum = 0;
-        for (const p of s.plants) sum += p.grow;
-        c.progress('grow', sum / Math.max(1, n));
-        if (sum >= n) {
-          up = true;
-          c.status('all up');
-          c.satisfy('grow');
+      if (id === 'oldest') c.status('you say the oldest has grown ' + Math.round(Number(value)) + ' weeks');
+      if (id === 'hint') {
+        const next = order.find((i) => !s.hinted.includes(i));
+        if (next !== undefined) {
+          s.hinted.push(next);
+          c.hint();
+          c.status('stem ' + LETTERS[next] + ' has grown ' + a[next] + (a[next] === 1 ? ' week' : ' weeks'));
+        } else {
+          c.status('every stem\'s age is shown');
         }
       }
-      if (c.done) {
-        s.wind += (0 - s.wind) * Math.min(1, dt * 1.5);
-        for (const p of s.plants) p.bud = 1;
+      draw(c);
+    },
+    tap(x, y, c) {
+      const geo = ageGeometry(c.w, c.h);
+      const col = Math.floor((x * c.w - geo.left) / geo.cell);
+      if (col < 0 || col >= 4) return;
+      const rank = s.order.indexOf(col);
+      const next = s.order.slice();
+      if (rank === 0) {
+        next.splice(0, 1);
+        next.push(col);
+      } else {
+        next[rank] = next[rank - 1];
+        next[rank - 1] = col;
       }
-      scene(c.g, c.w, c.h, c, s);
+      s.order = next;
+      c.set('order', next.slice());
+      c.status('stem ' + LETTERS[col] + ' is now ' + RANKS[next.indexOf(col)]);
+      draw(c);
+    },
+    frame(t, dt, c) {
+      s.t += dt;
+      if (c.done) {
+        s.fog = Math.min(0.5, s.fog + dt * 0.3);
+        order.forEach((i, rank) => {
+          s.bloom[i] = Math.min(1, s.bloom[i] + Math.max(0, dt * 0.9 - rank * 0.01));
+        });
+      }
+      draw(c);
     },
     end(c) {
-      c.status((WORDS[n] || n) + ' stem' + (n === 1 ? '' : 's') + ' up and in bloom; the tall one says: ' + tallest(c.stars).text);
+      c.status('stem ' + LETTERS[order[0]] + ' came up first, ' + oldest + ' weeks ago; the bed blooms oldest to youngest');
     }
   };
+}
+
+/* ---- the module ----------------------------------------------------------------------------- */
+
+function dealsWater(env) {
+  return env.chance(0.55);
 }
 
 export default {
   id: 'wish-terrarium',
   needsSky: true,
-  paint(ctx, w, h, env) {
-    glasshouse(ctx, w, h, env, 0);
+  paint(g, w, h, env) {
+    if (dealsWater(env)) waterPreview(g, w, h, env, waterPlan(env), env.variant.turn * 5);
+    else agePreview(g, w, h, env, agePlan(env), env.variant.turn * 5);
   },
-  animate(ctx, w, h, env, t) {
-    glasshouse(ctx, w, h, env, t);
+  animate(g, w, h, env, t) {
+    if (dealsWater(env)) waterPreview(g, w, h, env, waterPlan(env), t + env.variant.turn * 5);
+    else agePreview(g, w, h, env, agePlan(env), t + env.variant.turn * 5);
   },
   spark(env) {
     if (!env.stars.length) return null;
-    const opener = env.pick(OPENERS);
-    const humidity = env.int(55, 96);
-    const light = env.pick(LIGHT);
-    const wind = env.pick(WIND);
+    if (dealsWater(env)) {
+      const plan = waterPlan(env);
+      return {
+        title: waterTitle(plan),
+        mono: 'lamp ' + (plan.lamp ? 'on' : 'off') + ' / vent ' + (plan.vent ? 'open' : 'shut') + '\nsoil ' + plan.soil.join(' ') + '\ntags: ' + plan.rules.map((r) => RULES[r].tag).join('; '),
+        text: 'A midnight round under glass. Every plant wears one rule; the readings say which of them drink. Mark them.',
+        aspect: '16 / 10',
+        paint: (g, w, h, cardEnv) => waterPreview(g, w, h, cardEnv, plan, cardEnv.variant.turn * 5),
+        of: plan
+      };
+    }
+    const plan = agePlan(env);
     return {
-      title: opener,
-      mono: 'humidity: ' + humidity + '%\nlight: ' + light + '\nwind: ' + wind
-        + '\nthe tall one says: ' + tallest(env.stars).text,
-      text: env.stars.length + ' plant' + (env.stars.length === 1 ? '' : 's') + ' under glass, each grown from a star. Open it to water a stem and hear its thought.',
-      aspect: '4 / 5',
-      paint: (ctx, w, h, e) => glasshouse(ctx, w, h, e, 0),
-      // What this card is of, for the piece it opens as: the reading it printed.
-      of: { opener, humidity, light, wind }
+      title: ageTitle(),
+      mono: LETTERS.map((l, i) => l + ': ' + plan.leaves[i] + ' leaves, ' + plan.rates[i] + ' a week').join('\n'),
+      text: 'Four stems, four rates of growth. Which came up first, and how many weeks ago?',
+      aspect: '16 / 10',
+      paint: (g, w, h, cardEnv) => agePreview(g, w, h, cardEnv, plan, cardEnv.variant.turn * 5),
+      of: plan
     };
   },
   piece(env) {
-    if (!env.stars.length) return null;
-    const roll = env.rnd();
-    return roll < 0.38 ? watering(env) : roll < 0.72 ? forecast(env) : regrow(env);
+    const water = carriedWater(env);
+    if (water) return waterPiece(env, water);
+    const age = carriedAge(env);
+    if (age) return agePiece(env, age);
+    return dealsWater(env) ? waterPiece(env, waterPlan(env)) : agePiece(env, agePlan(env));
   }
 };

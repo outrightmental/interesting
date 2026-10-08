@@ -1,50 +1,56 @@
-/* Two shapes in the pendulum hall: a rack tuned to gather and scatter, and a pair whose
-   spring can carry a swing between them. Cards carry their exact subject into the piece.
-   Both share the hall's drawing ground; each piece owns its choices and elapsed time. */
+/* The pendulum hall: a rack that counts in beats, and a pair that lends a swing across a spring.
+   As a card it is one of the two puzzles below, drawn small (paint, animate, spark); as a piece it
+   is that puzzle, and the card it was opened from says which. See js/feed.js for what a module is
+   and js/stage.js for what a piece is.
 
-const GUESSES = [
-  { label: 'swing as one rank', value: 'together' },
-  { label: 'split into two opposite ranks', value: 'ranks' },
-  { label: 'scatter with no pattern', value: 'scatter' }
-];
-const TUNINGS = [
-  { label: 'one beat apart', value: 1 },
-  { label: 'two beats apart', value: 2 }
-];
+   Two puzzles, one deduction and one experiment:
+
+     when they meet again  Three or four pendulums on one bar, each with its period written under
+                           it and drawn as its length, all set swinging through the centre at beat
+                           0 to the right. One whose period is P beats comes back through the
+                           centre heading right every P beats. Name the first beat when all of
+                           them come through together again, and say which of them are coming
+                           through at a stated beat. A wrong check says how many come through
+                           together at the beat you named, and how many of your picks are right.
+     the spring            Two pendulums of the same length, joined by a spring whose stiffness the
+                           visitor sets. Only the first is let go from the side; the spring hands
+                           the swing across until the first hangs still and the second has all of
+                           it. The scene asks for the crossing in a stated number of breaths. A
+                           check runs the pair and says how long the crossing took and whether it
+                           was too soon or too late; the run is replayed and logged on the ruler,
+                           so each try is one more point on the curve.
+
+   A card and the feature it opens as are one puzzle: the spark puts the whole plan on its spec as
+   `of` -- the periods and the stated beat, or the breath, the target and the question -- and
+   piece(env) opens on that rather than rolling another. */
+
 const PLAIN = { density: 1, scale: 1, turn: 0 };
+const WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
+const ORDINAL = ['first', 'second', 'third', 'fourth'];
+const TAU = Math.PI * 2;
+// The spring pair's model: each pendulum alone swings once in OWN seconds. With the spring at
+// stiffness k the two normal modes have w1 (together, the spring never stretched) and
+// w2 = sqrt(w1^2 + 2 k C) (opposite); from a one-sided start the swing has crossed wholly to the
+// other pendulum after half a beat of the two, pi / (w2 - w1).
+const OWN = 2;
+const W1 = TAU / OWN;
+const COUPLE = 0.002;
+const C = COUPLE * W1 * W1;
+// Breath lengths and counts whose crossing time sits where the slider can hold it.
+const TARGETS = [[2, 4], [2, 5], [3, 3], [3, 4], [3, 5], [4, 2], [4, 3], [4, 4]];
+const THEN = [
+  { label: 'sooner', value: 'sooner' },
+  { label: 'later', value: 'later' },
+  { label: 'at the same time', value: 'same' }
+];
 
-// The plan is pure arithmetic on the seed, so a card's animate can rebuild it every frame without
-// touching the seeded stream the piece draws from.
-function plan(env) {
-  const seed = env.seed >>> 0;
-  const pick = (k, m) => (Math.imul(seed ^ (seed >>> k), 2654435761) >>> 0) % m;
-  return {
-    family: 'pendulum-rack',
-    number: 100 + (seed % 900),
-    n: 8 + pick(3, 5),
-    base: 4 + pick(7, 3),
-    d: pick(11, 2) ? 2 : 1,
-    swing: 40 + pick(13, 46),
-    breath: 7 + pick(17, 3)
-  };
+function gcd(a, b) {
+  while (b) [a, b] = [b, a % b];
+  return a;
 }
 
-// The card this piece was opened from, read defensively: the rack it previewed, or null for a
-// piece nobody pressed (js/stage.js hands the card over as env.card.of).
-function carried(env) {
-  const p = env.card && env.card.of;
-  if (!p || p.family !== 'pendulum-rack'
-      || !Number.isInteger(p.number) || p.number < 100 || p.number > 999
-      || !Number.isInteger(p.n) || p.n < 8 || p.n > 12
-      || !Number.isInteger(p.base) || p.base < 4 || p.base > 6
-      || (p.d !== 1 && p.d !== 2)
-      || !Number.isInteger(p.swing) || p.swing < 20 || p.swing > 100
-      || !Number.isInteger(p.breath) || p.breath < 7 || p.breath > 9) return null;
-  return { family: p.family, number: p.number, n: p.n, base: p.base, d: p.d, swing: p.swing, breath: p.breath };
-}
-
-function rackTitle(p) {
-  return 'rack ' + p.number + ': ' + p.n + ' pendulums';
+function lcmOf(list) {
+  return list.reduce((acc, p) => acc * p / gcd(acc, p), 1);
 }
 
 function hallBackground(g, w, h, c, v) {
@@ -60,291 +66,321 @@ function hallBackground(g, w, h, c, v) {
   }
 }
 
-// Released from the side, so every pendulum starts at its full swing: cosine, not sine. At the
-// half-breath, neighbours one beat apart sit half a swing apart (two opposite ranks) and two
-// beats apart sit a whole swing apart (one rank again); at the full breath all come home.
-function swingOf(p, s, i) {
-  if (!s.released) return 1;
-  return Math.cos(2 * Math.PI * (p.base + i * s.d) * (s.time / p.breath));
+function text(g, c, line, x, y, size, color, align, width) {
+  g.font = '500 ' + size + 'px system-ui, sans-serif';
+  g.textAlign = align || 'center';
+  g.textBaseline = 'middle';
+  g.fillStyle = color || c.colors.fg;
+  if (width) g.fillText(line, x, y, width);
+  else g.fillText(line, x, y);
 }
 
-function scene(g, w, h, c, p, s, variant) {
+function bar(g, c, w, barY, m) {
+  g.strokeStyle = c.alpha(c.colors.fg, 0.55);
+  g.lineWidth = Math.max(2, m * 0.012);
+  g.beginPath();
+  g.moveTo(w * 0.08, barY);
+  g.lineTo(w * 0.92, barY);
+  g.stroke();
+}
+
+function bob(g, c, pivot, barY, length, theta, radius, tone) {
+  const x = pivot + Math.sin(theta) * length;
+  const y = barY + Math.cos(theta) * length;
+  g.strokeStyle = c.alpha(c.colors.fg, 0.6);
+  g.lineWidth = Math.max(1, radius * 0.2);
+  g.beginPath();
+  g.moveTo(pivot, barY);
+  g.lineTo(x, y);
+  g.stroke();
+  g.fillStyle = c.alpha(tone, 0.2);
+  g.beginPath();
+  g.arc(x, y, radius * 1.9, 0, TAU);
+  g.fill();
+  g.fillStyle = tone;
+  g.beginPath();
+  g.arc(x, y, radius, 0, TAU);
+  g.fill();
+  return { x, y };
+}
+
+/* ---- when they meet again ------------------------------------------------------------------ */
+
+function rackPlan(env) {
+  const n = env.chance(0.5) ? 4 : 3;
+  const pool = [2, 3, 4, 5, 6];
+  const periods = [];
+  while (periods.length < n) periods.push(pool.splice(env.int(0, pool.length - 1), 1)[0]);
+  const meet = lcmOf(periods);
+  // The stated beat: one on which some of them, not none and not all, come through the centre.
+  const beats = [];
+  for (let t = 2; t <= Math.min(60, meet - 1); t++) {
+    const through = periods.filter((p) => t % p === 0).length;
+    if (through > 0 && through < n) beats.push(t);
+  }
+  return { kind: 'rack', number: 100 + env.int(0, 899), periods, at: beats.length ? env.pick(beats) : periods[0] };
+}
+
+function carriedRack(env) {
+  const p = env.card && env.card.of;
+  if (!p || p.kind !== 'rack' || !Array.isArray(p.periods) || p.periods.length < 3 || p.periods.length > 4) return null;
+  const periods = p.periods.map(Number);
+  if (!periods.every((q) => Number.isInteger(q) && q >= 2 && q <= 6) || new Set(periods).size !== periods.length) return null;
+  const number = Number(p.number);
+  const at = Number(p.at);
+  if (!Number.isInteger(number) || number < 100 || number > 999 || !Number.isInteger(at) || at < 1 || at > 60) return null;
+  const through = periods.filter((q) => at % q === 0).length;
+  if (through === 0 || through === periods.length) return null;
+  if (lcmOf(periods) > 60) return null;
+  return { kind: 'rack', number, periods, at };
+}
+
+function rackTitle(plan) {
+  return 'rack ' + plan.number + ': when they meet again';
+}
+
+function throughAt(periods, beat) {
+  return periods.map((p, i) => i).filter((i) => beat % periods[i] === 0);
+}
+
+// Each pendulum's angle at `beat`: set swinging through the centre to the right at beat 0.
+function rackAngle(period, beat) {
+  return Math.sin(TAU * beat / period);
+}
+
+function drawRack(g, w, h, c, plan, s, variant) {
   const v = variant || PLAIN;
   const col = c.colors;
+  const n = plan.periods.length;
+  const m = Math.min(w, h);
+  const size = Math.max(9, Math.min(17, Math.round(m * 0.045)));
+  const small = Math.max(8, Math.round(size * 0.85));
   hallBackground(g, w, h, c, v);
-
-  const n = p.n;
-  const barY = h * 0.12;
-  const left = w * 0.09;
-  const right = w * 0.91;
-  const gap = n > 1 ? (right - left) / (n - 1) : 0;
-  const Lmax = h * 0.68 * Math.min(1.08, v.scale);
-  const Lmin = Lmax * 0.55;
-  const amp = 0.14 + Math.max(0, Math.min(1, s.swing)) * 0.36;
-  const size = Math.max(10, Math.min(18, Math.round(Math.min(w, h) * 0.042)));
-
-  g.strokeStyle = c.alpha(col.fg, 0.55);
-  g.lineWidth = Math.max(2, h * 0.012);
-  g.beginPath();
-  g.moveTo(left - gap * 0.4, barY);
-  g.lineTo(right + gap * 0.4, barY);
-  g.stroke();
-
-  g.strokeStyle = c.alpha(col.muted, 0.22);
-  g.lineWidth = 1;
-  g.setLineDash([2, 6]);
-  g.beginPath();
-  for (let i = 0; i < n; i++) {
-    const x = left + i * gap;
-    g.moveTo(x, barY);
-    g.lineTo(x, barY + Lmax - (Lmax - Lmin) * (n > 1 ? i / (n - 1) : 0));
-  }
-  g.stroke();
-  g.setLineDash([]);
-
-  const bobs = [];
-  for (let i = 0; i < n; i++) {
-    const x = left + i * gap;
-    const len = Lmax - (Lmax - Lmin) * (n > 1 ? i / (n - 1) : 0);
-    const theta = amp * swingOf(p, s, i);
-    bobs.push({ px: x, x: x + Math.sin(theta) * len, y: barY + Math.cos(theta) * len });
-  }
-
-  g.strokeStyle = c.alpha(col.accent2, 0.55);
-  g.lineWidth = Math.max(1, Math.min(w, h) * 0.004 * v.density);
-  g.beginPath();
-  bobs.forEach((b, i) => (i ? g.lineTo(b.x, b.y) : g.moveTo(b.x, b.y)));
-  g.stroke();
-
-  const r = Math.max(3, Math.min(w, h) * 0.016 * Math.min(1.1, v.scale));
-  bobs.forEach((b, i) => {
-    g.strokeStyle = c.alpha(col.fg, 0.4);
-    g.lineWidth = 1;
-    g.beginPath();
-    g.moveTo(b.px, barY);
-    g.lineTo(b.x, b.y);
-    g.stroke();
+  const barY = h * 0.1;
+  const Lmax = h * 0.56 * Math.min(1.08, Math.max(0.88, v.scale));
+  const amp = 0.42;
+  bar(g, c, w, barY, m);
+  const pivots = plan.periods.map((p, i) => w * (0.2 + 0.6 * (n > 1 ? i / (n - 1) : 0.5)));
+  const r = Math.max(3, m * 0.018 * Math.min(1.1, v.scale));
+  plan.periods.forEach((p, i) => {
+    const length = Lmax * (0.42 + 0.58 * (p - 2) / 4);
     const tone = c.mix(col.accent, col.accent2, n > 1 ? i / (n - 1) : 0);
-    g.fillStyle = c.alpha(tone, 0.25);
+    // The centre line, the way home; dashed.
+    g.strokeStyle = c.alpha(col.muted, 0.3);
+    g.lineWidth = 1;
+    g.setLineDash([2, 5]);
     g.beginPath();
-    g.arc(b.x, b.y, r * 1.9, 0, Math.PI * 2);
-    g.fill();
-    g.fillStyle = tone;
-    g.beginPath();
-    g.arc(b.x, b.y, r, 0, Math.PI * 2);
-    g.fill();
+    g.moveTo(pivots[i], barY);
+    g.lineTo(pivots[i], barY + length + r * 2.5);
+    g.stroke();
+    g.setLineDash([]);
+    const theta = s.beat < 0 ? 0 : amp * rackAngle(p, s.beat);
+    bob(g, c, pivots[i], barY, length, theta, r, tone);
+    text(g, c, p + ' beats', pivots[i], barY + length + r * 4.2, small, c.alpha(col.fg, 0.9));
+    if (s.picked.includes(i)) text(g, c, 'picked', pivots[i], barY + length + r * 4.2 + small * 1.3, small, col.accent2);
+    if (s.shown[i]) text(g, c, s.shown[i], pivots[i], barY + length + r * 4.2 + small * (s.picked.includes(i) ? 2.6 : 1.3), small, col.accent);
   });
-
-  g.font = '500 ' + size + 'px system-ui, sans-serif';
-  g.textAlign = 'center';
-  g.textBaseline = 'middle';
-  g.fillStyle = col.fg;
-  const f = s.released ? Math.min(1, s.time / p.breath) : 0;
-  const line = !s.released ? 'held at the side, ready'
-    : f >= 1 ? 'one full breath: home together'
-      : 'breath ' + Math.round(f * 100) + '% through';
-  g.fillText(line, w / 2, h * 0.94, w * 0.9);
+  // The ruler of beats along the foot, the stated beat marked, the replay's beat on it.
+  const left = w * 0.08;
+  const right = w * 0.92;
+  const rulerY = h * 0.9;
+  g.strokeStyle = c.alpha(col.muted, 0.5);
+  g.lineWidth = 1;
+  g.beginPath();
+  g.moveTo(left, rulerY);
+  g.lineTo(right, rulerY);
+  for (let t = 0; t <= 60; t += 1) {
+    const x = left + (right - left) * t / 60;
+    g.moveTo(x, rulerY);
+    g.lineTo(x, rulerY - (t % 10 === 0 ? size * 0.5 : t % 5 === 0 ? size * 0.3 : size * 0.15));
+  }
+  g.stroke();
+  for (let t = 0; t <= 60; t += 10) text(g, c, String(t), left + (right - left) * t / 60, rulerY + small * 0.9, small, c.alpha(col.fg, 0.7));
+  const ax = left + (right - left) * plan.at / 60;
+  g.fillStyle = col.accent2;
+  g.beginPath();
+  g.moveTo(ax, rulerY - size * 0.7);
+  g.lineTo(ax - size * 0.3, rulerY - size * 1.2);
+  g.lineTo(ax + size * 0.3, rulerY - size * 1.2);
+  g.closePath();
+  g.fill();
+  text(g, c, 'beat ' + plan.at, ax, rulerY - size * 1.9, small, col.accent2);
+  if (s.beat >= 0) {
+    const bx = left + (right - left) * Math.min(60, s.beat) / 60;
+    g.fillStyle = col.fg;
+    g.beginPath();
+    g.arc(bx, rulerY, Math.max(2, size * 0.2), 0, TAU);
+    g.fill();
+    text(g, c, 'beat ' + Math.floor(s.beat), w / 2, h * 0.77, small, c.alpha(col.fg, 0.85));
+  } else text(g, c, 'all through the centre at beat 0, heading right', w / 2, h * 0.77, small, c.alpha(col.fg, 0.75));
 }
 
-function preview(g, w, h, env, p) {
+function rackBlank() {
+  return { beat: -1, picked: [], shown: {}, to: -1, loop: false };
+}
+
+function rackPreview(g, w, h, env, plan) {
   const v = env.variant || PLAIN;
-  scene(g, w, h, env, p, { d: p.d, swing: p.swing / 100, released: v.turn > 0.03, time: v.turn * p.breath }, v);
+  const s = rackBlank();
+  s.beat = v.turn * 12;
+  drawRack(g, w, h, env, plan, s, v);
 }
 
-function rackPiece(env, p) {
-  const s = { d: p.d, swing: p.swing / 100, guess: '', released: false, time: 0, said: 0, watched: false };
-  const draw = (c) => scene(c.g, c.w, c.h, c, p, s, env.variant || PLAIN);
+function rackPiece(env, plan) {
+  const n = plan.periods.length;
+  const meet = lcmOf(plan.periods);
+  const through = throughAt(plan.periods, plan.at);
+  const s = rackBlank();
+  const pace = 0.35;
+  const draw = (c) => drawRack(c.g, c.w, c.h, c, plan, s, env.variant || PLAIN);
+  const name = (i) => 'the ' + plan.periods[i] + '-beat pendulum';
   return {
-    title: rackTitle(p),
-    brief: 'A row of ' + p.n + ' pendulums, each tuned to swing a touch faster than the one before. Tune how far apart the neighbours run, set the swing, predict what the row does at half-breath, then release them together and watch one full breath. Any prediction works; the tuning alone makes and unmakes the pattern.',
+    title: rackTitle(plan),
+    brief: WORDS[n][0].toUpperCase() + WORDS[n].slice(1) + ' pendulums hang from one bar, their periods written under them. '
+      + 'At beat 0 all of them swing through the centre to the right together. One whose period is P beats comes back through the centre heading right every P beats.',
+    goal: 'Name the first beat when all of them come through the centre heading right together, and pick the ones that do at beat ' + plan.at + '.',
     aspect: '16 / 10',
+    checkLabel: 'count it out',
     steps: [
-      { id: 'step', ask: 'how the neighbours are tuned', kind: 'choice', options: TUNINGS },
-      { id: 'swing', ask: 'how wide they swing', kind: 'range', min: 20, max: 100, step: 1, value: p.swing, low: 'a whisper', high: 'full tilt' },
-      { id: 'guess', ask: 'at half-breath, the row will…?', kind: 'choice', options: GUESSES },
-      { id: 'release', ask: 'release them together', kind: 'press', count: 1, label: 'release the rack' },
-      { id: 'watch', ask: 'watch one full breath', kind: 'wait', after: 'release' }
+      { id: 'meet', ask: 'the first beat when all of them come through heading right together', kind: 'number', min: 1, max: 60, step: 1, unit: 'beat' },
+      { id: 'which', ask: 'the ones coming through heading right at beat ' + plan.at, kind: 'pick', items: plan.periods.map((p, i) => ({ label: ORDINAL[i] + ', ' + p + ' beats', value: i })) },
+      { id: 'hint', ask: 'one pendulum at beat ' + plan.at, kind: 'press', count: 1, label: 'show me one', optional: true }
     ],
+    solution: { meet, which: through.slice() },
+    check(c) {
+      const beat = Math.round(Number(c.value('meet')));
+      const chosen = Array.isArray(c.value('which')) ? c.value('which').map(Number) : [];
+      const right = chosen.filter((i) => through.includes(i)).length;
+      const extra = chosen.length - right;
+      const pickRight = extra === 0 && right === through.length;
+      const meetRight = beat === meet;
+      s.to = Number.isFinite(beat) ? Math.max(0, Math.min(60, beat)) : 0;
+      s.beat = 0;
+      if (meetRight && pickRight) return { solved: true, say: 'all through together at beat ' + meet + '; ' + through.map(name).join(' and ') + ' at beat ' + plan.at };
+      const parts = [];
+      if (!meetRight) {
+        const together = Number.isFinite(beat) && beat >= 1 ? throughAt(plan.periods, beat).length : 0;
+        parts.push(together === n ? 'at beat ' + beat + ' they do all come through, but not for the first time'
+          : 'at beat ' + beat + ' only ' + WORDS[together] + ' of the ' + WORDS[n] + ' come through heading right');
+      }
+      if (!pickRight) {
+        parts.push(right === 0 ? 'none of your picks is through the centre at beat ' + plan.at
+          : WORDS[right] + ' of your picks ' + (right === 1 ? 'is' : 'are') + ' right' + (extra ? ', ' + WORDS[extra] + ' ' + (extra === 1 ? 'is' : 'are') + ' not' : ', and one is missing'));
+      }
+      return { solved: false, say: parts.join('; ') };
+    },
     start(c) {
-      c.status('Rack ' + p.number + ': ' + p.n + ' pendulums hang from one bar, held aside at full swing. The slowest counts ' + p.base + ' swings to a breath; each neighbour counts a little more.');
+      c.status('rack ' + plan.number + ': ' + plan.periods.join(', ') + ' beats');
       draw(c);
     },
     apply(id, value, c) {
-      if (c.done) return;
-      if (id === 'step') {
-        const d = Number(value);
-        if (d !== 1 && d !== 2) {
-          c.status('Tune the neighbours one or two beats apart.');
-          return;
-        }
-        s.d = d;
-        c.status('Neighbours ' + (d === 1 ? 'one beat' : 'two beats') + ' apart: the slowest counts ' + p.base + ' to a breath, the fastest ' + (p.base + (p.n - 1) * d) + '. The half-breath pattern follows from that and nothing else.');
+      if (id === 'meet') c.status('all through together at beat ' + Math.round(Number(value)) + ', you say');
+      if (id === 'which' && Array.isArray(value)) {
+        s.picked = value.map(Number).filter((i) => Number.isInteger(i) && i >= 0 && i < n);
+        c.status(s.picked.length ? 'at beat ' + plan.at + ': ' + s.picked.map(name).join(', ') : 'none picked for beat ' + plan.at);
       }
-      if (id === 'swing') {
-        const k = Number(value);
-        if (!Number.isFinite(k)) {
-          c.status('Set the swing between 20 and 100.');
-          return;
+      if (id === 'hint') {
+        const next = plan.periods.findIndex((p, i) => !s.shown[i]);
+        if (next >= 0) {
+          const yes = through.includes(next);
+          s.shown[next] = yes ? 'through at ' + plan.at : 'not at ' + plan.at;
+          c.hint();
+          c.status('at beat ' + plan.at + ' ' + name(next) + (yes ? ' is coming through the centre heading right' : ' is not'));
+        } else {
+          c.status('every pendulum at beat ' + plan.at + ' has been shown; the meeting beat is yours');
         }
-        s.swing = Math.max(20, Math.min(100, Math.round(k))) / 100;
-        c.status(s.swing < 0.4 ? 'A whisper of a swing. The pattern is the same at any width.' : s.swing > 0.8 ? 'Full tilt. The pattern is the same at any width.' : 'A steady swing.');
-      }
-      if (id === 'guess') {
-        const pick = GUESSES.find((o) => o.value === value);
-        if (!pick) {
-          c.status('Choose what the row will do at half-breath.');
-          return;
-        }
-        s.guess = pick.value;
-        c.status('Your prediction: at half-breath the row will ' + pick.label + '. You can retune before and after releasing.');
-      }
-      if (id === 'release' && !s.released) {
-        s.released = true;
-        s.time = 0;
-        s.said = 0;
-        c.status(c.reduced ? 'Released. The breath appears without movement.' : 'Released together. Watch the wave run down the row.');
       }
       draw(c);
     },
     frame(t, dt, c) {
-      if (s.released && !c.done) {
-        s.time = c.reduced ? p.breath : Math.min(p.breath, s.time + Math.max(0, dt));
-        const f = s.time / p.breath;
-        if (!s.watched) c.progress('watch', f);
-        if (s.said < 1 && f >= 0.22 && f < 0.5) {
-          s.said = 1;
-          c.status('A wave is running down the row.');
-        }
-        if (s.said < 2 && f >= 0.5 && f < 1) {
-          s.said = 2;
-          c.status(s.d === 2 ? 'Half-breath: the whole row swings as one rank again.' : 'Half-breath: the row has split into two opposite ranks.');
-        }
-        if (f >= 1 && !s.watched) {
-          s.watched = true;
-          c.satisfy('watch');
-          c.status('One full breath: every pendulum came home together. Choices still waiting can change the finding.');
-        }
+      if (s.to >= 0) {
+        s.beat = Math.min(s.to, s.beat + Math.max(0, dt) / pace);
+        if (c.done && s.beat >= s.to) s.beat = 0;
       }
       draw(c);
     },
     end(c) {
-      s.released = true;
-      s.watched = true;
-      s.time = p.breath;
+      s.to = meet;
+      s.beat = 0;
+      c.status('the rack swings on, home together every ' + meet + ' beats');
       draw(c);
-      const correct = s.d === 2 ? 'together' : 'ranks';
-      const chosen = GUESSES.find((o) => o.value === s.guess);
-      c.status('At half-breath the row ' + (s.d === 2
-        ? 'swung as one rank: two beats apart puts neighbours a whole swing apart, which is no gap at all.'
-        : 'split into two opposite ranks: one beat apart puts neighbours half a swing apart.')
-        + ' ' + (s.guess === correct ? 'You called it.' : 'You predicted it would ' + (chosen ? chosen.label : 'do something else') + '.')
-        + ' Nothing held them in step but the tuning, and at the full breath every count came back to one.');
     }
   };
 }
 
-const LINKS = [
-  { label: 'join them with a spring', value: 'joined' },
-  { label: 'leave them separate', value: 'separate' }
-];
-const STARTS = [
-  { label: 'only the first, from the side', value: 'one' },
-  { label: 'both, from the same side', value: 'together' },
-  { label: 'both, from opposite sides', value: 'opposite' }
-];
-const TRADE_GUESSES = [
-  { label: 'the swing travels out and back', value: 'trade' },
-  { label: 'each keeps its own swing', value: 'keep' },
-  { label: 'both come to a stop', value: 'stop' }
-];
-const TRADE_BRIEF = 'Join two pendulums with a spring or leave them separate, choose how they start, predict whether the swing changes hands, then release them. Changing a setting redraws the same release while a choice waits. Any prediction works.';
+/* ---- the spring ---------------------------------------------------------------------------- */
 
-function dealsTrade(env) {
-  return (env.seed >>> 0) % 3 === 1;
+function crossTime(k) {
+  const w2 = Math.sqrt(W1 * W1 + 2 * Math.max(0, k) * C);
+  return Math.PI / (w2 - W1);
 }
 
-function tradePlan(env) {
-  const rack = plan(env);
-  const seed = env.seed >>> 0;
-  return {
-    family: 'swing-pair',
-    number: rack.number,
-    base: rack.base - 2,
-    swing: rack.swing,
-    breath: rack.breath + 2,
-    first: (seed >>> 4) & 1,
-    link: seed & 8 ? 'separate' : 'joined',
-    pattern: ['one', 'one', 'one', 'together', 'opposite'][seed % 5]
-  };
+// The stiffness that crosses in `target` seconds, with the slider's slack either way, or null
+// when the target is not one the slider can hold with both its ends missing.
+function springSolution(breath, breaths) {
+  const target = breath * breaths;
+  const tol = 0.1 * target;
+  const ok = [];
+  for (let k = 1; k <= 100; k++) if (Math.abs(crossTime(k) - target) <= tol) ok.push(k);
+  if (!ok.length || ok[0] <= 1 || ok[ok.length - 1] >= 100) return null;
+  const r = 1 + OWN / (2 * target);
+  let value = Math.round((r * r - 1) / (2 * COUPLE));
+  value = Math.max(ok[0], Math.min(ok[ok.length - 1], value));
+  const near = Math.min(value - ok[0], ok[ok.length - 1] - value);
+  if (near < 1) return null;
+  return { target, tol, value, near };
 }
 
-function carriedTrade(env) {
+function springPlan(env) {
+  for (let attempt = 0; attempt < 12; attempt++) {
+    const pair = env.pick(TARGETS);
+    if (!springSolution(pair[0], pair[1])) continue;
+    return { kind: 'spring', number: 100 + env.int(0, 899), breath: pair[0], breaths: pair[1], ask: env.chance(0.5) ? 'stiffer' : 'softer', open: env.int(4, 18) };
+  }
+  return { kind: 'spring', number: 500, breath: 3, breaths: 3, ask: 'stiffer', open: 10 };
+}
+
+function carriedSpring(env) {
   const p = env.card && env.card.of;
-  if (!p || p.family !== 'swing-pair'
-      || !Number.isInteger(p.number) || p.number < 100 || p.number > 999
-      || !Number.isInteger(p.base) || p.base < 2 || p.base > 4
-      || !Number.isInteger(p.swing) || p.swing < 40 || p.swing > 85
-      || !Number.isInteger(p.breath) || p.breath < 9 || p.breath > 11
-      || (p.first !== 0 && p.first !== 1)
-      || !LINKS.some((o) => o.value === p.link)
-      || !STARTS.some((o) => o.value === p.pattern)) return null;
+  if (!p || p.kind !== 'spring') return null;
+  const number = Number(p.number);
+  const breath = Number(p.breath);
+  const breaths = Number(p.breaths);
+  const open = Number(p.open);
+  if (!Number.isInteger(number) || number < 100 || number > 999) return null;
+  if (!TARGETS.some((pair) => pair[0] === breath && pair[1] === breaths)) return null;
+  if (p.ask !== 'stiffer' && p.ask !== 'softer') return null;
+  if (!Number.isInteger(open) || open < 1 || open > 100) return null;
+  const sol = springSolution(breath, breaths);
+  if (!sol || Math.abs(crossTime(open) - sol.target) <= sol.tol) return null;
+  return { kind: 'spring', number, breath, breaths, ask: p.ask, open };
+}
+
+function springTitle(plan) {
+  return 'pair ' + plan.number + ': cross in ' + WORDS[plan.breaths] + ' breaths';
+}
+
+// Where the two swings are `time` seconds after the first is let go, as fractions of the start.
+function springMotion(k, time) {
+  const w2 = Math.sqrt(W1 * W1 + 2 * Math.max(0, k) * C);
   return {
-    family: p.family, number: p.number, base: p.base, swing: p.swing,
-    breath: p.breath, first: p.first, link: p.link, pattern: p.pattern
+    first: (Math.cos(W1 * time) + Math.cos(w2 * time)) / 2,
+    second: (Math.cos(W1 * time) - Math.cos(w2 * time)) / 2,
+    firstReach: Math.abs(Math.cos((w2 - W1) * time / 2)),
+    secondReach: Math.abs(Math.sin((w2 - W1) * time / 2))
   };
 }
 
-function tradeTitle(p) {
-  return 'pair ' + p.number + ': a swing to lend';
-}
-
-function tradeState(p) {
-  return {
-    link: p.link, pattern: p.pattern, guess: '', released: false,
-    time: 0, halfway: false, watched: false
-  };
-}
-
-function leading(options, value) {
-  return options.filter((o) => o.value === value).concat(options.filter((o) => o.value !== value));
-}
-
-// Exact normal modes of two identical linear pendulums with a spring: the same-side mode
-// is unchanged, the opposite-side mode is faster. Their phase gap is pi at half-breath,
-// giving a complete handover from an isolated start, and 2*pi at the return.
-function tradeMotion(p, s, time) {
-  const f = s.released ? Math.max(0, time) / p.breath : 0;
-  const slow = 4 * Math.PI * p.base * f;
-  const fast = slow + (s.link === 'joined' ? 2 * Math.PI * f : 0);
-  if (s.pattern === 'together') {
-    const q = Math.cos(slow);
-    return { first: q, second: q, firstReach: 1, secondReach: 1 };
-  }
-  if (s.pattern === 'opposite') {
-    const q = Math.cos(fast);
-    return { first: q, second: -q, firstReach: 1, secondReach: 1 };
-  }
-  if (s.link === 'separate') {
-    return { first: Math.cos(slow), second: 0, firstReach: 1, secondReach: 0 };
-  }
-  return {
-    first: (Math.cos(slow) + Math.cos(fast)) / 2,
-    second: (Math.cos(slow) - Math.cos(fast)) / 2,
-    firstReach: Math.abs(Math.cos(Math.PI * f)),
-    secondReach: Math.abs(Math.sin(Math.PI * f))
-  };
-}
-
-function tradeSpring(g, c, a, b, radius, v) {
+function spring(g, c, a, b, radius, k, v) {
   const dx = b.x - a.x;
   const dy = b.y - a.y;
-  const length = Math.hypot(dx, dy);
+  const length = Math.hypot(dx, dy) || 1;
   const ux = dx / length;
   const uy = dy / length;
-  const coils = Math.max(6, Math.round(10 * v.density));
+  const coils = Math.max(4, Math.round((5 + k / 7) * v.density));
   const width = Math.min(radius * 0.8, length * 0.03);
   g.strokeStyle = c.colors.accent;
-  g.lineWidth = Math.max(1, radius * 0.16);
+  g.lineWidth = Math.max(1, radius * (0.1 + k / 500));
   g.beginPath();
   g.moveTo(a.x + ux * radius, a.y + uy * radius);
   for (let i = 0; i <= coils * 2; i++) {
@@ -356,309 +392,238 @@ function tradeSpring(g, c, a, b, radius, v) {
   g.stroke();
 }
 
-function tradeGraph(g, w, h, c, p, s, v, size) {
+// The ruler of breaths along the foot: the target line, past runs as marks, and the swing sizes
+// of the run being replayed traced over it.
+function springRuler(g, w, h, c, plan, s, v, size) {
   const col = c.colors;
   const left = w * 0.08;
   const right = w * 0.92;
-  const top = h * 0.77;
-  const bottom = h * 0.91;
-  const f = s.released ? Math.min(1, s.time / p.breath) : 0;
-  const samples = Math.max(32, Math.round(80 * v.density));
-  g.strokeStyle = c.alpha(col.muted, 0.35);
+  const top = h * 0.75;
+  const bottom = h * 0.9;
+  const span = (plan.breaths + 1.5) * plan.breath;
+  const xOf = (t) => left + (right - left) * Math.min(1, t / span);
+  g.strokeStyle = c.alpha(col.muted, 0.4);
   g.lineWidth = 1;
   g.beginPath();
   g.moveTo(left, top);
   g.lineTo(left, bottom);
   g.lineTo(right, bottom);
-  g.moveTo(w / 2, top);
-  g.lineTo(w / 2, bottom);
-  g.stroke();
-
-  for (const [key, color, dashed] of [
-    ['firstReach', col.accent2, false], ['secondReach', col.accent, true]
-  ]) {
-    g.strokeStyle = color;
-    g.lineWidth = dashed ? 1.5 : 2.5;
-    g.setLineDash(dashed ? [4, 3] : []);
-    g.beginPath();
-    const count = Math.ceil(samples * f);
-    for (let i = 0; i <= count; i++) {
-      const phase = Math.min(f, i / samples);
-      const reach = tradeMotion(p, s, phase * p.breath)[key];
-      const x = left + (right - left) * phase;
-      const y = bottom - (bottom - top) * reach;
-      if (i) g.lineTo(x, y);
-      else g.moveTo(x, y);
-    }
-    g.stroke();
-    g.setLineDash([]);
-    const reach = tradeMotion(p, s, f * p.breath)[key];
-    g.fillStyle = color;
-    g.beginPath();
-    g.arc(left + (right - left) * f, bottom - (bottom - top) * reach,
-      Math.max(2, size * 0.16), 0, Math.PI * 2);
-    g.fill();
+  for (let b = 1; b * plan.breath <= span; b++) {
+    g.moveTo(xOf(b * plan.breath), bottom);
+    g.lineTo(xOf(b * plan.breath), bottom + size * 0.4);
   }
-
-  g.font = '500 ' + size + 'px system-ui, sans-serif';
-  g.fillStyle = col.fg;
-  g.textAlign = 'center';
-  g.textBaseline = 'middle';
-  g.fillText('swing size', w / 2, h * 0.715, w * 0.8);
-  g.textAlign = 'left';
-  g.fillText('0', left, h * 0.97);
-  g.textAlign = 'center';
-  g.fillText('halfway', w / 2, h * 0.97, w * 0.35);
-  g.textAlign = 'right';
-  g.fillText(p.breath + ' s', right, h * 0.97);
+  g.stroke();
+  for (let b = 1; b * plan.breath <= span; b++) {
+    text(g, c, b === 1 ? 'one breath' : String(b), xOf(b * plan.breath), bottom + size * 1.1, Math.max(8, size * 0.85), c.alpha(col.fg, 0.7));
+  }
+  const tx = xOf(plan.breaths * plan.breath);
+  g.strokeStyle = c.alpha(col.accent2, 0.9);
+  g.setLineDash([4, 3]);
+  g.beginPath();
+  g.moveTo(tx, top - size * 0.3);
+  g.lineTo(tx, bottom);
+  g.stroke();
+  g.setLineDash([]);
+  text(g, c, 'cross here', tx, top - size * 0.9, Math.max(8, size * 0.85), col.accent2);
+  // Past runs: a mark at the crossing each stiffness made.
+  for (const run of s.runs) {
+    const x = xOf(Math.min(span, run.tau));
+    g.fillStyle = c.alpha(col.fg, 0.85);
+    g.beginPath();
+    g.moveTo(x, bottom);
+    g.lineTo(x - size * 0.25, bottom + size * 0.45);
+    g.lineTo(x + size * 0.25, bottom + size * 0.45);
+    g.closePath();
+    g.fill();
+    text(g, c, (run.tau > span ? '>' : '') + run.k, x, top + size * 0.5, Math.max(8, size * 0.8), c.alpha(col.fg, 0.8));
+  }
+  if (s.replay) {
+    const f = Math.min(span, s.replay.t);
+    const samples = Math.max(40, Math.round(90 * v.density));
+    for (const [key, color, dashed] of [['firstReach', col.accent2, false], ['secondReach', col.accent, true]]) {
+      g.strokeStyle = color;
+      g.lineWidth = dashed ? 1.5 : 2.2;
+      g.setLineDash(dashed ? [4, 3] : []);
+      g.beginPath();
+      const count = Math.ceil(samples * f / span);
+      for (let i = 0; i <= count; i++) {
+        const time = Math.min(f, i / samples * span);
+        const reach = springMotion(s.replay.k, time)[key];
+        if (i) g.lineTo(xOf(time), bottom - (bottom - top) * reach);
+        else g.moveTo(xOf(time), bottom - (bottom - top) * reach);
+      }
+      g.stroke();
+      g.setLineDash([]);
+    }
+  }
 }
 
-function tradeScene(g, w, h, c, p, s, variant) {
+function drawSpring(g, w, h, c, plan, s, variant) {
   const v = variant || PLAIN;
   const col = c.colors;
   const m = Math.min(w, h);
-  const size = Math.max(10, Math.min(18, Math.round(m * 0.04)));
-  const barY = h * (0.12 + v.turn * 0.015);
-  const length = Math.min(h * 0.42, w * 0.42) * Math.min(1.08, v.scale);
-  const amplitude = 0.13 + p.swing / 100 * 0.08;
-  const radius = Math.max(3, m * 0.026 * v.scale);
-  const motion = tradeMotion(p, s, s.time);
-  const values = p.first === 0 ? [motion.first, motion.second] : [motion.second, motion.first];
-  const bobs = values.map((q, i) => ({
-    pivot: w * (0.28 + i * 0.44),
-    x: w * (0.28 + i * 0.44) + Math.sin(amplitude * q) * length,
-    y: barY + Math.cos(amplitude * q) * length,
-    first: i === p.first
-  }));
-  g.save();
+  const size = Math.max(9, Math.min(17, Math.round(m * 0.04)));
+  const barY = h * 0.1;
+  const length = Math.min(h * 0.4, w * 0.4) * Math.min(1.08, Math.max(0.88, v.scale));
+  const amplitude = 0.2;
+  const radius = Math.max(3, m * 0.024 * v.scale);
   hallBackground(g, w, h, c, v);
-  g.lineCap = 'round';
-  g.lineJoin = 'round';
-  g.strokeStyle = c.alpha(col.fg, 0.6);
-  g.lineWidth = Math.max(2, m * 0.012);
-  g.beginPath();
-  g.moveTo(w * 0.1, barY);
-  g.lineTo(w * 0.9, barY);
-  g.stroke();
-
+  bar(g, c, w, barY, m);
+  const motion = s.replay ? springMotion(s.replay.k, s.replay.t) : { first: 1, second: 0, firstReach: 1, secondReach: 0 };
+  const pivots = [w * 0.3, w * 0.7];
   g.strokeStyle = c.alpha(col.muted, 0.3);
   g.lineWidth = 1;
   g.setLineDash([2, 5]);
-  for (const bob of bobs) {
+  for (const pivot of pivots) {
     g.beginPath();
-    g.moveTo(bob.pivot, barY);
-    g.lineTo(bob.pivot, barY + length);
-    g.stroke();
-    g.beginPath();
-    g.arc(bob.pivot, barY, length, Math.PI / 2 - amplitude, Math.PI / 2 + amplitude);
+    g.moveTo(pivot, barY);
+    g.lineTo(pivot, barY + length);
     g.stroke();
   }
   g.setLineDash([]);
-  if (s.link === 'joined') tradeSpring(g, c, bobs[0], bobs[1], radius, v);
-
-  for (const bob of bobs) {
-    const color = bob.first ? col.accent2 : col.accent;
-    g.strokeStyle = c.alpha(col.fg, 0.7);
-    g.lineWidth = Math.max(1.2, m * 0.005);
-    g.beginPath();
-    g.moveTo(bob.pivot, barY);
-    g.lineTo(bob.x, bob.y);
-    g.stroke();
-    g.fillStyle = c.alpha(color, 0.16);
-    g.beginPath();
-    g.arc(bob.x, bob.y, radius * 1.8, 0, Math.PI * 2);
-    g.fill();
-    g.fillStyle = color;
-    g.beginPath();
-    g.arc(bob.x, bob.y, radius, 0, Math.PI * 2);
-    g.fill();
-    g.font = '500 ' + size + 'px system-ui, sans-serif';
-    g.textAlign = 'center';
-    g.textBaseline = 'middle';
-    g.fillStyle = col.fg;
-    const reach = bob.first ? motion.firstReach : motion.secondReach;
-    g.fillText((bob.first ? 'first' : 'second') + ': ' + Math.round(reach * 100) + '%',
-      bob.pivot, h * 0.65, w * 0.42);
-  }
-  g.fillStyle = col.fg;
-  g.fillText(s.link === 'joined' ? 'spring joined' : 'separate pendulums', w / 2, h * 0.055, w * 0.9);
-  tradeGraph(g, w, h, c, p, s, v, size);
-  g.restore();
+  const k = s.k;
+  const a = { x: pivots[0] + Math.sin(amplitude * motion.first) * length, y: barY + Math.cos(amplitude * motion.first) * length };
+  const b = { x: pivots[1] + Math.sin(amplitude * motion.second) * length, y: barY + Math.cos(amplitude * motion.second) * length };
+  spring(g, c, a, b, radius, k, v);
+  bob(g, c, pivots[0], barY, length, amplitude * motion.first, radius, col.accent2);
+  bob(g, c, pivots[1], barY, length, amplitude * motion.second, radius, col.accent);
+  text(g, c, 'first: ' + Math.round(motion.firstReach * 100) + '%', pivots[0], h * 0.62, size, c.alpha(col.fg, 0.9));
+  text(g, c, 'second: ' + Math.round(motion.secondReach * 100) + '%', pivots[1], h * 0.62, size, c.alpha(col.fg, 0.9));
+  text(g, c, 'spring at ' + k + ' of 100', w / 2, h * 0.055, size, c.alpha(col.fg, 0.9));
+  text(g, c, 'one breath is ' + plan.breath + ' seconds; alone, each swings once in ' + OWN, w / 2, h * 0.68, Math.max(8, size * 0.85), c.alpha(col.muted, 0.95), 'center', w * 0.9);
+  springRuler(g, w, h, c, plan, s, v, size);
 }
 
-function tradePreview(g, w, h, env, p) {
-  tradeScene(g, w, h, env, p, tradeState(p), env.variant || PLAIN);
+function springBlank(plan) {
+  return { k: plan.open, runs: [], replay: null, loop: false };
 }
 
-function tradeOutcome(s) {
-  return s.link === 'joined' && s.pattern === 'one' ? 'trade' : 'keep';
+function springPreview(g, w, h, env, plan) {
+  const v = env.variant || PLAIN;
+  const s = springBlank(plan);
+  s.replay = { k: plan.open, t: v.turn * plan.breath * 2 };
+  drawSpring(g, w, h, env, plan, s, v);
 }
 
-function tradeFinding(s) {
-  if (s.link === 'separate') {
-    return s.pattern === 'one'
-      ? 'The first kept its swing and the second stayed still. Without the spring, there was no way for motion to pass across.'
-      : 'Both kept their original swing sizes. Without the spring, each moved on its own, even when their starts lined up.';
-  }
-  if (s.pattern === 'together') {
-    return 'Both kept the same swing size. Moving together never stretched their spring, so it had nothing to pass between them.';
-  }
-  if (s.pattern === 'opposite') {
-    return 'Both kept their swing size, but beat a little faster than they would apart. Opposite starts tug the spring on every swing.';
-  }
-  return 'Halfway, the first rested and the second had its whole swing. Then the swing came back. No extra push was added after release: the spring passed the motion along.';
-}
-
-function tradePiece(env, p) {
-  const s = tradeState(p);
-  const draw = (c) => tradeScene(c.g, c.w, c.h, c, p, s, env.variant || PLAIN);
-  function setting(c) {
-    const start = STARTS.find((o) => o.value === s.pattern);
-    c.status((s.released ? 'The picture redraws the same release with this setting. ' : '')
-      + (s.link === 'joined' ? 'Spring joined; ' : 'No spring; ')
-      + start.label + '.' + (s.watched ? ' ' + tradeFinding(s) : ''));
-  }
+function springPiece(env, plan) {
+  const sol = springSolution(plan.breath, plan.breaths);
+  const then = plan.ask === 'stiffer' ? 'sooner' : 'later';
+  const s = springBlank(plan);
+  const span = (plan.breaths + 1.5) * plan.breath;
+  const draw = (c) => drawSpring(c.g, c.w, c.h, c, plan, s, env.variant || PLAIN);
+  const breathsOf = (tau) => (tau / plan.breath).toFixed(1);
   return {
-    title: tradeTitle(p),
-    brief: TRADE_BRIEF,
+    title: springTitle(plan),
+    brief: 'Two pendulums of the same length, joined by a spring. Only the first is let go, from the side; the spring hands the swing across until the first hangs still and the second has all of it. '
+      + 'A stiffer spring hands it across at a different pace. One breath is ' + plan.breath + ' seconds. Each check runs the pair and leaves its mark on the ruler.',
+    goal: 'Set the spring so the swing crosses to the second pendulum in ' + WORDS[plan.breaths] + ' breaths, and say what a ' + plan.ask + ' spring would do.',
     aspect: '16 / 10',
+    checkLabel: 'let go',
     steps: [
-      { id: 'link', ask: 'can motion pass between them?', kind: 'choice', options: leading(LINKS, p.link) },
-      { id: 'start', ask: 'which pendulums start from the side?', kind: 'choice', options: leading(STARTS, p.pattern) },
-      { id: 'guess', ask: 'over one breath, what happens to the swing?', kind: 'choice', options: TRADE_GUESSES },
-      { id: 'release', ask: 'let go, with no further pushes', kind: 'press', count: 1, label: 'release the pair' },
-      { id: 'watch', ask: 'watch one breath, out and back', kind: 'wait', after: 'release' }
+      { id: 'spring', ask: 'how stiff the spring is', kind: 'range', min: 1, max: 100, step: 1, value: plan.open, low: 'soft', high: 'stiff' },
+      { id: 'then', ask: 'with a ' + plan.ask + ' spring than that, the swing crosses', kind: 'choice', options: THEN }
     ],
+    solution: { spring: { value: sol.value, near: sol.near }, then },
+    check(c) {
+      const k = Math.max(1, Math.min(100, Math.round(Number(c.value('spring')) || plan.open)));
+      const tau = crossTime(k);
+      const onMark = Math.abs(tau - sol.target) <= sol.tol;
+      const thenRight = c.value('then') === then;
+      if (!s.runs.some((run) => run.k === k)) s.runs.push({ k, tau });
+      s.replay = { k, t: 0 };
+      s.loop = false;
+      const took = 'crosses in ' + breathsOf(tau) + ' breaths';
+      if (onMark && thenRight) return { solved: true, say: took + ': on the mark' };
+      const parts = [onMark ? took + ': on the mark' : took + (tau < sol.target ? ', too soon' : ', too late')];
+      if (!thenRight) parts.push('and the ' + plan.ask + ' spring would not do that');
+      return { solved: false, say: parts.join('; ') };
+    },
     start(c) {
-      c.status('Two pendulums of the same length. The first is on the '
-        + (p.first === 0 ? 'left' : 'right')
-        + '. Choose their spring and starting positions, predict the swing, then release them. The solid line below follows the first; the dashed line follows the second.');
+      c.status('pair ' + plan.number + ': cross in ' + WORDS[plan.breaths] + ' breaths of ' + plan.breath + ' seconds');
       draw(c);
     },
     apply(id, value, c) {
-      if (c.done) return;
-      if (id === 'link') {
-        if (!LINKS.some((o) => o.value === value)) {
-          c.status('Join the spring or leave the two pendulums separate.');
-          return;
-        }
-        s.link = value;
-        setting(c);
+      if (id === 'spring') {
+        const k = Number(value);
+        if (Number.isFinite(k)) s.k = Math.max(1, Math.min(100, Math.round(k)));
+        c.status('spring at ' + s.k + (s.k < 20 ? ', soft' : s.k > 75 ? ', stiff' : '') + '; let go to see the crossing');
       }
-      if (id === 'start') {
-        if (!STARTS.some((o) => o.value === value)) {
-          c.status('Choose one pendulum, both together, or both from opposite sides.');
-          return;
-        }
-        s.pattern = value;
-        setting(c);
-      }
-      if (id === 'guess') {
-        const prediction = TRADE_GUESSES.find((o) => o.value === value);
-        if (!prediction) {
-          c.status('Predict whether the swing travels, stays with each pendulum, or stops.');
-          return;
-        }
-        s.guess = prediction.value;
-        c.status('You predict ' + prediction.label + '. '
-          + (s.watched ? tradeFinding(s) : 'Any prediction works.'));
-      }
-      if (id === 'release' && !s.released) {
-        s.released = true;
-        c.status(c.reduced
-          ? 'The breath will appear without movement; the lines below keep the path of both swing sizes.'
-          : 'Released, with no further pushes. Follow the two swing sizes below the pendulums.');
-      }
+      if (id === 'then') c.status('a ' + plan.ask + ' spring, you say, crosses ' + (value === 'same' ? 'at the same time' : value));
       draw(c);
     },
     frame(t, dt, c) {
-      if (s.released && !s.watched) {
-        s.time = c.reduced ? p.breath : Math.min(p.breath, s.time + Math.max(0, dt));
-        const f = s.time / p.breath;
-        c.progress('watch', f);
-        if (!s.halfway && f >= 0.5 && f < 1) {
-          s.halfway = true;
-          c.status(tradeOutcome(s) === 'trade'
-            ? 'At halfway, the first rested and the second took its swing. Watch the swing travel back.'
-            : 'Halfway through: both have kept their original swing sizes. The next half follows the same starts.');
-        }
-        if (f >= 1) {
-          s.watched = true;
-          c.satisfy('watch');
-          if (!c.done) c.status('One breath has played. ' + tradeFinding(s)
-            + ' Any choices still waiting can change the finding.');
+      if (s.replay) {
+        s.replay.t += Math.max(0, dt);
+        if (s.replay.t > span) {
+          if (s.loop) s.replay.t = 0;
+          else s.replay.t = span;
         }
       }
       draw(c);
     },
     end(c) {
-      s.released = true;
-      s.watched = true;
-      s.time = p.breath;
-      const prediction = TRADE_GUESSES.find((o) => o.value === s.guess);
-      c.status(tradeFinding(s) + ' '
-        + (s.guess === tradeOutcome(s) ? 'You called it.'
-          : 'You predicted ' + (prediction ? prediction.label : 'another ending') + '.')
-        + ' The lines show swing size, not the position of a bob. The drawing assumes small swings and no friction.');
+      s.loop = true;
+      s.replay = { k: s.replay ? s.replay.k : sol.value, t: 0 };
+      c.status('the swing crosses in ' + WORDS[plan.breaths] + ' breaths and comes back; the pair keeps trading it');
       draw(c);
     }
   };
+}
+
+/* ---- the module ----------------------------------------------------------------------------- */
+
+function dealsSpring(env) {
+  return env.chance(0.4);
 }
 
 export default {
   id: 'pendulum-hall',
   needsSky: false,
   paint(g, w, h, env) {
-    if (dealsTrade(env)) tradePreview(g, w, h, env, tradePlan(env));
-    else preview(g, w, h, env, plan(env));
+    if (dealsSpring(env)) springPreview(g, w, h, env, springPlan(env));
+    else rackPreview(g, w, h, env, rackPlan(env));
   },
   animate(g, w, h, env, t) {
     const v = env.variant || PLAIN;
-    if (dealsTrade(env)) {
-      const p = tradePlan(env);
-      if (env.reduced) {
-        tradePreview(g, w, h, env, p);
-        return;
-      }
-      const s = tradeState(p);
-      s.released = true;
-      s.time = (t * 0.65 + v.turn * p.breath) % p.breath;
-      tradeScene(g, w, h, env, p, s, v);
+    if (dealsSpring(env)) {
+      const plan = springPlan(env);
+      const s = springBlank(plan);
+      s.replay = { k: plan.open, t: env.reduced ? v.turn * plan.breath * 2 : (t * 0.6 + v.turn * plan.breath * 2) % ((plan.breaths + 1.5) * plan.breath) };
+      drawSpring(g, w, h, env, plan, s, v);
       return;
     }
-    const p = plan(env);
-    scene(g, w, h, env, p, { d: p.d, swing: p.swing / 100, released: true, time: (t * 0.5 + v.turn * p.breath) % p.breath }, v);
+    const plan = rackPlan(env);
+    const s = rackBlank();
+    s.beat = env.reduced ? v.turn * 12 : (t * 1.5 + v.turn * 12) % 60;
+    drawRack(g, w, h, env, plan, s, v);
   },
   spark(env) {
-    if (dealsTrade(env)) {
-      const p = tradePlan(env);
+    if (dealsSpring(env)) {
+      const plan = springPlan(env);
       return {
-        title: tradeTitle(p),
-        text: TRADE_BRIEF,
-        mono: 'spring  ' + (p.link === 'joined' ? 'joined' : 'set aside')
-          + '\nstart   ' + STARTS.find((o) => o.value === p.pattern).label
-          + '\nbreath  ' + p.breath + ' seconds',
+        title: springTitle(plan),
+        text: 'Two pendulums and one spring. Set the spring so the swing crosses from the first to the second in ' + WORDS[plan.breaths] + ' breaths, then say what a ' + plan.ask + ' spring would do.',
+        mono: 'breath   ' + plan.breath + ' seconds\ncross in ' + plan.breaths + ' breaths\nalone    one swing in ' + OWN + ' seconds',
         aspect: '16 / 10',
-        paint: (g, w, h, cardEnv) => tradePreview(g, w, h, cardEnv, p),
-        of: p
+        paint: (g, w, h, cardEnv) => springPreview(g, w, h, cardEnv, plan),
+        of: plan
       };
     }
-    const p = plan(env);
+    const plan = rackPlan(env);
     return {
-      title: rackTitle(p),
-      text: 'Released together, tuned slightly apart: will the row split into two opposite ranks at half-breath, or swing as one? Predict it, then let them go.',
-      mono: 'row of ' + p.n + '\nslowest  ' + p.base + ' swings a breath\nneighbours  ' + (p.d === 1 ? 'one beat' : 'two beats') + ' apart',
+      title: rackTitle(plan),
+      text: 'Set swinging together at beat 0: when do all of them come through the centre together again, and which are through at beat ' + plan.at + '?',
+      mono: 'periods  ' + plan.periods.join(', ') + ' beats\nasked    beat ' + plan.at,
       aspect: '16 / 10',
-      paint: (g, w, h, cardEnv) => preview(g, w, h, cardEnv, p),
-      // What this card is of, for the piece it opens as: the whole rack it previewed.
-      of: p
+      paint: (g, w, h, cardEnv) => rackPreview(g, w, h, cardEnv, plan),
+      of: plan
     };
   },
   piece(env) {
-    const pair = carriedTrade(env);
-    if (pair) return tradePiece(env, pair);
-    const rack = carried(env);
+    const pair = carriedSpring(env);
+    if (pair) return springPiece(env, pair);
+    const rack = carriedRack(env);
     if (rack) return rackPiece(env, rack);
-    return dealsTrade(env) ? tradePiece(env, tradePlan(env)) : rackPiece(env, plan(env));
+    return dealsSpring(env) ? springPiece(env, springPlan(env)) : rackPiece(env, rackPlan(env));
   }
 };

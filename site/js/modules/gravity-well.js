@@ -1,145 +1,84 @@
-/* Three flights: a probe past one well, a close pair past two wells, or an ideal gravity
-   assist past a uniformly moving well. Cards carry their exact subject into the piece.
-   The assist uses a gravitational hyperbola, not a drawn bend: changing viewpoint changes
-   only the coordinates, and its far-away speeds follow from the same trajectory. */
+/* The gravity well: one probe, one well, and the moons of a far planet. As a card it is one of the
+   two puzzles below painted small (paint, spark); as a piece it is that puzzle, and the card it was
+   opened from says which. See js/feed.js for what a module is and js/stage.js for what a piece is.
+
+   Two puzzles, one an experiment and one a deduction:
+
+     the slingshot   A well in the field and a ring somewhere past it. Set the launch angle and
+                     the speed, and every check is a flight: the probe is released from the left
+                     edge, the well bends its path the same way every time, and the check says
+                     whether the path went through the ring -- and if not, how many ring-widths
+                     it missed by and on which side. The ring is placed on a flight the puzzle
+                     flew first, so it can always be reached, and the far ends of both sliders
+                     are checked at the making to miss it.
+     the moons       Three moons on circular orbits round a planet, drawn to scale with a ruler
+                     and a scale bar. A moon's period grows as its radius to the three halves, so
+                     the outermost and the innermost orbit are in a whole-number step. Put the
+                     moons in order of period and say how many laps the innermost makes while the
+                     outermost makes one. A wrong check says how many moons stand in the right
+                     place and whether the count is off by one or by more.
+
+   A card and the feature it opens as are one puzzle: the spark puts the whole plan on its spec as
+   `of` -- the well, the ring, the solution it was flown from; the radii, the step, the moons --
+   and piece(env) opens on that rather than rolling another. */
 
 const FIRST = ['amber', 'opal', 'iron', 'cinder', 'glass', 'violet', 'salt', 'copper'];
 const SECOND = ['harbor', 'eye', 'throat', 'island', 'gate', 'heart', 'anchor', 'mirror'];
-const FLYBY_GUESSES = [
-  { label: 'strikes the well', value: 'impact' },
-  { label: 'escapes the field', value: 'escape' },
-  { label: 'stays nearby', value: 'near' }
-];
-const PAIR_GUESSES = [
-  { label: 'stay close', value: 'close' },
-  { label: 'part ways', value: 'split' }
-];
-const BALANCES = [
-  { label: 'upper well', value: 'upper' },
-  { label: 'even pull', value: 'even' },
-  { label: 'lower well', value: 'lower' }
-];
-const ASSIST_GUESSES = [
-  { label: 'comes out faster', value: 'faster' },
-  { label: 'comes out slower', value: 'slower' },
-  { label: 'keeps its speed', value: 'same' }
-];
-const ASSIST_VIEWS = [
-  { label: 'from the room', value: 'room' },
-  { label: 'from the well', value: 'well' }
-];
+const WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
 const PLAIN = { density: 1, scale: 1, turn: 0 };
-const DURATION = 4.5;
-const ASSIST_BRIEF = 'Set the well moving toward the probe, with it, or not at all. Choose a viewpoint, predict the probe\'s far-away speed in the room, then release it. The probe never fires its engine.';
 
-function plan(env) {
-  return {
-    family: (env.seed & 1) ? 'pair' : 'flyby',
-    number: (env.seed >>> 0) % 997 + 1,
-    name: 'the ' + env.pick(FIRST) + ' ' + env.pick(SECOND),
-    cx: 0.53 + (env.rnd() - 0.5) * 0.13,
-    cy: 0.5 + (env.rnd() - 0.5) * 0.11,
-    sy: 0.65 + (env.rnd() - 0.5) * 0.22,
-    mass: 0.044 + env.rnd() * 0.04,
-    speed: env.int(35, 70),
-    gap: 0.007 + env.rnd() * 0.014
-  };
+// The field the probe flies in: 1.6 wide and 1 high, the launch pad at its left edge.
+const FIELD_W = 1.6;
+const LAUNCH_X = 0.06;
+const WELL_R = 0.045;
+const RING_R = 0.045;
+const SOFT = 0.002;
+const DT = 0.02;
+const STEPS = 520;
+const AIM = { min: -60, max: 60, open: 0 };
+const PUSH = { min: 20, max: 100, open: 60 };
+// The tolerance each slider declares: every setting this close to the solution is flown at the
+// making and has to pass the ring too, so the declared tolerance is an honest one.
+const NEAR = { angle: 1, speed: 2 };
+const REPLAY = 3.2;
+
+function dials(env) {
+  const v = env && env.variant;
+  const num = (x, d) => (Number.isFinite(Number(x)) ? Number(x) : d);
+  return v && typeof v === 'object' ? { density: num(v.density, 1), scale: num(v.scale, 1), turn: num(v.turn, 0) } : PLAIN;
 }
 
-function carried(env) {
-  const p = env.card && env.card.of;
-  const between = (value, low, high) => typeof value === 'number' && Number.isFinite(value)
-    && value >= low && value <= high;
-  if (p && (p.family === 'flyby' || p.family === 'pair')
-      && Number.isInteger(p.number) && between(p.number, 1, 997)
-      && typeof p.name === 'string' && p.name.length > 0 && p.name.length < 80
-      && between(p.cx, 0.45, 0.61) && between(p.cy, 0.44, 0.56)
-      && between(p.sy, 0.53, 0.77) && between(p.mass, 0.044, 0.084)
-      && Number.isInteger(p.speed) && between(p.speed, 35, 70)
-      && between(p.gap, 0.007, 0.021)) return p;
-  return null;
+function r3(x) {
+  return Math.round(x * 1000) / 1000;
 }
 
-function title(p) {
-  return p.family === 'pair'
-    ? 'pair ' + p.number + ' at ' + p.name
-    : 'flight ' + p.number + ' past ' + p.name;
+function between(value, low, high) {
+  return typeof value === 'number' && Number.isFinite(value) && value >= low && value <= high;
 }
 
-function bodies(p, balance) {
-  if (p.family === 'flyby') return [{ x: p.cx, y: p.cy, mass: p.mass }];
-  return [
-    { x: p.cx, y: p.cy - 0.17, mass: p.mass * (balance === 'upper' ? 1.65 : balance === 'lower' ? 0.6 : 1) },
-    { x: p.cx, y: p.cy + 0.17, mass: p.mass * (balance === 'lower' ? 1.65 : balance === 'upper' ? 0.6 : 1) }
-  ];
-}
-
-function trace(p, state, offset) {
-  const wells = bodies(p, state.balance);
-  const start = { x: 0.1, y: p.sy + offset };
-  let dx = state.aim.x - start.x;
-  let dy = state.aim.y + offset - start.y;
-  const length = Math.hypot(dx, dy);
-  if (length < 0.001) { dx = 1; dy = 0; }
-  else { dx /= length; dy /= length; }
-  const speed = 0.2 + state.speed * 0.0055;
-  let x = start.x;
-  let y = start.y;
-  let vx = dx * speed;
-  let vy = dy * speed;
-  let closest = Infinity;
-  let outcome = 'near';
-  const points = [{ x, y }];
-  for (let i = 0; i < 340; i++) {
-    let ax = 0;
-    let ay = 0;
-    for (const well of wells) {
-      const wx = well.x - x;
-      const wy = well.y - y;
-      const r2 = wx * wx + wy * wy;
-      closest = Math.min(closest, Math.sqrt(r2));
-      if (r2 < 0.0022) {
-        outcome = 'impact';
-        break;
-      }
-      const pull = well.mass / Math.pow(r2 + 0.003, 1.5);
-      ax += wx * pull;
-      ay += wy * pull;
-    }
-    if (outcome === 'impact') break;
-    vx += ax * 0.028;
-    vy += ay * 0.028;
-    x += vx * 0.028;
-    y += vy * 0.028;
-    points.push({ x, y });
-    if (x < -0.28 || x > 1.28 || y < -0.28 || y > 1.28) {
-      outcome = 'escape';
-      break;
-    }
+function shuffled(env, list) {
+  const out = list.slice();
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = env.int(0, i);
+    [out[i], out[j]] = [out[j], out[i]];
   }
-  return { points, closest, outcome, last: points[points.length - 1] };
+  return out;
 }
 
-function paths(p, state) {
-  return p.family === 'pair'
-    ? [trace(p, state, -p.gap / 2), trace(p, state, p.gap / 2)]
-    : [trace(p, state, 0)];
+function isPerm(list, n) {
+  return Array.isArray(list) && list.length === n && list.every((v) => Number.isInteger(v) && v >= 0 && v < n) && new Set(list).size === n;
 }
 
-function point(w, h, x, y) {
-  const size = Math.min(w, h);
-  return { x: w / 2 + (x - 0.5) * size, y: h / 2 + (y - 0.5) * size };
-}
+/* ---- drawing shared by both ----------------------------------------------------------------- */
 
-function background(g, w, h, env, variant) {
+function background(g, w, h, env, v) {
   const col = env.colors;
-  const v = variant || env.variant || PLAIN;
   const glow = g.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, Math.max(w, h) * 0.75);
   glow.addColorStop(0, col.bg2);
   glow.addColorStop(1, col.bg);
   g.fillStyle = glow;
   g.fillRect(0, 0, w, h);
-  for (let i = 0, n = Math.round(85 * v.density); i < n; i++) {
+  for (let i = 0, n = Math.max(12, Math.round(85 * v.density)); i < n; i++) {
     const x = ((i * 0.61803398875 + v.turn * 0.23) % 1) * w;
     const y = ((i * 0.754877666 + v.turn * 0.17) % 1) * h;
     g.fillStyle = env.alpha(col.fg, 0.12 + (i % 4) * 0.06);
@@ -147,22 +86,25 @@ function background(g, w, h, env, variant) {
   }
 }
 
-function wellAt(g, env, x, y, radius) {
+// A body with a halo: the well, or the planet. `rings` draws the dashed field lines round it.
+function body(g, env, x, y, radius, halo, rings) {
   const col = env.colors;
-  const halo = g.createRadialGradient(x, y, radius * 0.3, x, y, radius * 5);
-  halo.addColorStop(0, env.alpha(col.accent2, 0.34));
-  halo.addColorStop(1, env.alpha(col.accent2, 0));
-  g.fillStyle = halo;
-  g.fillRect(x - radius * 5, y - radius * 5, radius * 10, radius * 10);
-  g.strokeStyle = env.alpha(col.accent, 0.3);
-  g.lineWidth = 1;
-  g.setLineDash([Math.max(2, radius * 0.16), Math.max(4, radius * 0.36)]);
-  for (const ring of [2.2, 3.7]) {
-    g.beginPath();
-    g.arc(x, y, radius * ring, 0, Math.PI * 2);
-    g.stroke();
+  const glow = g.createRadialGradient(x, y, radius * 0.3, x, y, radius * halo);
+  glow.addColorStop(0, env.alpha(col.accent2, 0.34));
+  glow.addColorStop(1, env.alpha(col.accent2, 0));
+  g.fillStyle = glow;
+  g.fillRect(x - radius * halo, y - radius * halo, radius * halo * 2, radius * halo * 2);
+  if (rings) {
+    g.strokeStyle = env.alpha(col.accent, 0.3);
+    g.lineWidth = 1;
+    g.setLineDash([Math.max(2, radius * 0.16), Math.max(4, radius * 0.36)]);
+    for (const ring of [2.2, 3.7]) {
+      g.beginPath();
+      g.arc(x, y, radius * ring, 0, Math.PI * 2);
+      g.stroke();
+    }
+    g.setLineDash([]);
   }
-  g.setLineDash([]);
   const surface = g.createRadialGradient(x - radius * 0.3, y - radius * 0.4, 0, x, y, radius);
   surface.addColorStop(0, col.fg);
   surface.addColorStop(0.22, col.accent2);
@@ -173,574 +115,576 @@ function wellAt(g, env, x, y, radius) {
   g.fill();
 }
 
-function draw(g, w, h, env, p, state, routes, fraction, finished) {
+function font(g, size, weight) {
+  g.font = (weight || 500) + ' ' + Math.round(size) + 'px system-ui, sans-serif';
+}
+
+/* ---- the slingshot -------------------------------------------------------------------------- */
+
+// One flight, the same every time: fixed steps, no clock. Positive angles aim up the screen.
+function fly(p, angle, speed) {
+  const rad = angle * Math.PI / 180;
+  const v = 0.3 + speed / 100 * 0.6;
+  let x = LAUNCH_X;
+  let y = p.sy;
+  let vx = v * Math.cos(rad);
+  let vy = -v * Math.sin(rad);
+  const pts = [{ x, y }];
+  let closest = Infinity;
+  let at = 0;
+  let outcome = 'flew';
+  for (let i = 1; i <= STEPS; i++) {
+    const dx = p.wx - x;
+    const dy = p.wy - y;
+    const r2 = dx * dx + dy * dy;
+    const r = Math.sqrt(r2);
+    if (r < closest) {
+      closest = r;
+      at = i - 1;
+    }
+    if (r < WELL_R) {
+      outcome = 'struck';
+      break;
+    }
+    const pull = p.mass / Math.pow(r2 + SOFT, 1.5) * DT;
+    vx += dx * pull;
+    vy += dy * pull;
+    x += vx * DT;
+    y += vy * DT;
+    pts.push({ x, y });
+    if (x > FIELD_W + 0.06 || x < -0.06 || y < -0.06 || y > 1.06) {
+      outcome = 'left';
+      break;
+    }
+  }
+  return { pts, closest, at, outcome };
+}
+
+// Where a flight came nearest the ring, and how near.
+function nearestTo(pts, rx, ry) {
+  let d = Infinity;
+  let i0 = 0;
+  pts.forEach((q, i) => {
+    const dd = Math.hypot(q.x - rx, q.y - ry);
+    if (dd < d) {
+      d = dd;
+      i0 = i;
+    }
+  });
+  return { d, i: i0 };
+}
+
+function through(p, angle, speed) {
+  return nearestTo(fly(p, angle, speed).pts, p.rx, p.ry).d <= RING_R;
+}
+
+function farEnd(value, knob) {
+  return value > (knob.min + knob.max) / 2 ? knob.min : knob.max;
+}
+
+// Whether a plan is a fair puzzle: the solution and everything within the declared tolerance pass
+// the ring; the far end of either slider, both far ends, and the sliders as they open all miss.
+function slingHolds(p) {
+  for (let da = -NEAR.angle; da <= NEAR.angle; da++) {
+    for (let ds = -NEAR.speed; ds <= NEAR.speed; ds++) if (!through(p, p.angle + da, p.speed + ds)) return false;
+  }
+  const fa = farEnd(p.angle, AIM);
+  const fs = farEnd(p.speed, PUSH);
+  return !through(p, fa, p.speed) && !through(p, p.angle, fs) && !through(p, fa, fs) && !through(p, AIM.open, PUSH.open);
+}
+
+function slingPlan(env) {
+  const number = 100 + env.int(0, 899);
+  const name = 'the ' + env.pick(FIRST) + ' ' + env.pick(SECOND);
+  let last = null;
+  for (let attempt = 0; attempt < 60; attempt++) {
+    const p = {
+      kind: 'sling', number, name,
+      sy: r3(0.28 + env.rnd() * 0.44), wx: r3(0.72 + env.rnd() * 0.22), wy: r3(0.38 + env.rnd() * 0.24),
+      mass: r3(0.04 + env.rnd() * 0.04), angle: env.int(-40, 40), speed: env.int(30, 85), rx: 0, ry: 0
+    };
+    const flight = fly(p, p.angle, p.speed);
+    if (flight.outcome === 'struck' || flight.closest < 0.08 || flight.closest > 0.32) continue;
+    // The ring goes on the flown path after the closest approach, well inside the field.
+    const spots = [];
+    for (let i = flight.at + 12; i < flight.pts.length - 4; i += 3) {
+      const q = flight.pts[i];
+      if (q.x > 0.12 && q.x < FIELD_W - 0.1 && q.y > 0.08 && q.y < 0.92
+          && Math.hypot(q.x - p.wx, q.y - p.wy) > 0.16 && Math.hypot(q.x - LAUNCH_X, q.y - p.sy) > 0.25) spots.push(q);
+    }
+    if (!spots.length) continue;
+    const spot = spots[env.int(0, spots.length - 1)];
+    p.rx = r3(spot.x);
+    p.ry = r3(spot.y);
+    last = p;
+    if (slingHolds(p)) return p;
+  }
+  return last || { kind: 'sling', number, name, sy: 0.5, wx: 0.82, wy: 0.5, mass: 0.06, angle: 10, speed: 60, rx: 1.3, ry: 0.3 };
+}
+
+function carriedSling(env) {
+  const p = env.card && env.card.of;
+  if (!p || p.kind !== 'sling' || !Number.isInteger(p.number) || p.number < 100 || p.number > 999) return null;
+  if (typeof p.name !== 'string' || !p.name || p.name.length > 40) return null;
+  if (!between(p.sy, 0.2, 0.8) || !between(p.wx, 0.6, 1.0) || !between(p.wy, 0.3, 0.7) || !between(p.mass, 0.03, 0.09)) return null;
+  if (!Number.isInteger(p.angle) || p.angle < AIM.min + NEAR.angle || p.angle > AIM.max - NEAR.angle) return null;
+  if (!Number.isInteger(p.speed) || p.speed < PUSH.min + NEAR.speed || p.speed > PUSH.max - NEAR.speed) return null;
+  if (!between(p.rx, 0, FIELD_W) || !between(p.ry, 0, 1)) return null;
+  const plan = { kind: 'sling', number: p.number, name: p.name, sy: p.sy, wx: p.wx, wy: p.wy, mass: p.mass, angle: p.angle, speed: p.speed, rx: p.rx, ry: p.ry };
+  return slingHolds(plan) ? plan : null;
+}
+
+function slingTitle(p) {
+  return 'flight ' + p.number + ' past ' + p.name + ': the ring';
+}
+
+// The field on the canvas, as large as fits, centred.
+function fieldMap(w, h) {
+  const k = Math.min(w / FIELD_W, h);
+  const ox = (w - FIELD_W * k) / 2;
+  const oy = (h - k) / 2;
+  return { k, at: (x, y) => ({ x: ox + x * k, y: oy + y * k }) };
+}
+
+function slingScene(g, w, h, env, p, s, v) {
   const col = env.colors;
-  const v = env.variant || PLAIN;
-  const size = Math.min(w, h);
+  const map = fieldMap(w, h);
+  const k = map.k;
   background(g, w, h, env, v);
-
-  for (const well of bodies(p, state.balance)) {
-    const at = point(w, h, well.x, well.y);
-    wellAt(g, env, at.x, at.y, size * 0.05 * v.scale);
+  const well = map.at(p.wx, p.wy);
+  body(g, env, well.x, well.y, k * WELL_R, 4 * v.scale, true);
+  // The ring.
+  const ring = map.at(p.rx, p.ry);
+  const pass = s.flight && s.pass && s.pass.d <= RING_R;
+  g.fillStyle = env.alpha(col.accent2, pass ? 0.18 + 0.1 * s.fade : 0.06);
+  g.beginPath();
+  g.arc(ring.x, ring.y, k * RING_R, 0, Math.PI * 2);
+  g.fill();
+  g.strokeStyle = env.alpha(col.accent2, pass ? 1 : 0.85);
+  g.lineWidth = Math.max(1.5, k * 0.006);
+  g.beginPath();
+  g.arc(ring.x, ring.y, k * RING_R, 0, Math.PI * 2);
+  g.stroke();
+  // The launch pad, with the angle marks round it and the aim as set.
+  const pad = map.at(LAUNCH_X, p.sy);
+  g.strokeStyle = env.alpha(col.muted, 0.5);
+  g.lineWidth = 1;
+  g.beginPath();
+  for (const deg of [-60, -30, 0, 30, 60]) {
+    const a = -deg * Math.PI / 180;
+    g.moveTo(pad.x + Math.cos(a) * k * 0.05, pad.y + Math.sin(a) * k * 0.05);
+    g.lineTo(pad.x + Math.cos(a) * k * (deg % 60 ? 0.065 : 0.08), pad.y + Math.sin(a) * k * (deg % 60 ? 0.065 : 0.08));
   }
-
-  const launch = point(w, h, 0.1, p.sy);
-  if (!state.fired) {
-    const target = point(w, h, state.aim.x, state.aim.y);
-    g.strokeStyle = env.alpha(col.fg, 0.38);
-    g.lineWidth = 1;
-    g.setLineDash([3, 6]);
-    g.beginPath();
-    g.moveTo(launch.x, launch.y);
-    g.lineTo(target.x, target.y);
-    g.stroke();
-    g.setLineDash([]);
-    g.strokeStyle = col.accent2;
-    g.beginPath();
-    g.arc(target.x, target.y, Math.max(6, size * 0.018), 0, Math.PI * 2);
-    g.stroke();
-  }
-
-  routes.forEach((route, index) => {
-    const color = index ? col.accent : col.accent2;
-    const until = Math.max(2, Math.min(route.points.length, Math.ceil(route.points.length * fraction)));
+  g.stroke();
+  const aim = -s.angle * Math.PI / 180;
+  const reach = k * (0.1 + s.speed / 100 * 0.22);
+  g.strokeStyle = env.alpha(col.fg, 0.45);
+  g.setLineDash([3, 6]);
+  g.beginPath();
+  g.moveTo(pad.x, pad.y);
+  g.lineTo(pad.x + Math.cos(aim) * reach, pad.y + Math.sin(aim) * reach);
+  g.stroke();
+  g.setLineDash([]);
+  g.fillStyle = col.fg;
+  g.beginPath();
+  g.arc(pad.x, pad.y, Math.max(2.5, k * 0.008), 0, Math.PI * 2);
+  g.fill();
+  // The last flight, replayed from its launch.
+  if (s.flight) {
+    const pts = s.flight.pts;
+    const until = Math.max(2, Math.min(pts.length, Math.ceil(pts.length * s.fraction)));
     g.lineCap = 'round';
     g.lineJoin = 'round';
-    if (index) g.setLineDash([Math.max(3, size * 0.012), Math.max(3, size * 0.01)]);
+    g.strokeStyle = env.alpha(col.accent2, pass ? 0.95 : 0.8);
+    g.lineWidth = Math.max(1.5, k * 0.006 * v.scale);
     g.beginPath();
     for (let i = 0; i < until; i++) {
-      const at = point(w, h, route.points[i].x, route.points[i].y);
+      const at = map.at(pts[i].x, pts[i].y);
       if (i) g.lineTo(at.x, at.y);
       else g.moveTo(at.x, at.y);
     }
-    g.strokeStyle = env.alpha(color, finished ? 0.88 : state.fired ? 0.75 : 0.42);
-    g.lineWidth = Math.max(1.5, size * (index ? 0.006 : 0.008) * v.scale);
     g.stroke();
-    g.setLineDash([]);
-    const last = route.points[until - 1];
-    const at = point(w, h, last.x, last.y);
-    g.fillStyle = env.alpha(color, 0.22);
+    const head = map.at(pts[until - 1].x, pts[until - 1].y);
+    g.fillStyle = env.alpha(col.accent2, 0.22);
     g.beginPath();
-    g.arc(at.x, at.y, Math.max(7, size * 0.023 * v.scale), 0, Math.PI * 2);
+    g.arc(head.x, head.y, Math.max(6, k * 0.02 * v.scale), 0, Math.PI * 2);
     g.fill();
     g.fillStyle = col.fg;
     g.beginPath();
-    g.arc(at.x, at.y, Math.max(2.5, size * 0.008 * v.scale), 0, Math.PI * 2);
+    g.arc(head.x, head.y, Math.max(2.5, k * 0.007 * v.scale), 0, Math.PI * 2);
     g.fill();
-  });
-  g.fillStyle = col.fg;
-  g.beginPath();
-  g.arc(launch.x, launch.y, Math.max(2, size * 0.007), 0, Math.PI * 2);
-  g.fill();
-}
-
-function preview(g, w, h, env, p) {
-  const state = { aim: { x: p.cx, y: p.cy - 0.12 }, speed: p.speed, balance: 'even', fired: false };
-  draw(g, w, h, env, p, state, paths(p, state), 0.27, false);
-}
-
-function finding(p, state, routes) {
-  const prediction = state.guess;
-  if (p.family === 'pair') {
-    const a = routes[0];
-    const b = routes[1];
-    const distance = Math.hypot(a.last.x - b.last.x, a.last.y - b.last.y);
-    const split = a.outcome !== b.outcome || distance > 0.16;
-    const result = split ? 'split' : 'close';
-    return 'The two paths ' + (split ? 'parted' : 'stayed close') + ', ending '
-      + Math.round(distance * 100) + ' marks apart. You predicted they would '
-      + (prediction === 'split' ? 'part ways' : 'stay close') + '. '
-      + (prediction === result ? 'You called it.' : 'Try another aim on the next pair.');
-  }
-  const route = routes[0];
-  const result = route.outcome;
-  const said = result === 'impact' ? 'The probe struck ' + p.name + '.'
-    : result === 'escape' ? 'The probe escaped the field.'
-      : 'The probe stayed near ' + p.name + ' for the whole flight.';
-  return said + ' Its closest pass was ' + Math.round(route.closest * 100)
-    + ' marks from a well. You predicted it would '
-    + (FLYBY_GUESSES.find((guess) => guess.value === prediction) || FLYBY_GUESSES[0]).label + '. '
-    + (prediction === result ? 'You called it.' : 'A small change in aim can change the ending.');
-}
-
-function launchPiece(env, carriedPlan) {
-  const p = carriedPlan || carried(env) || plan(env);
-  const pair = p.family === 'pair';
-  const state = {
-    aim: { x: p.cx, y: p.cy - 0.12 }, speed: p.speed, balance: 'even', guess: '',
-    fired: false, time: 0, watched: false, halfway: false
-  };
-  let routes = paths(p, state);
-  const show = (c) => draw(c.g, c.w, c.h, env, p, state, routes,
-    c.done ? 1 : state.fired ? Math.min(1, state.time / DURATION) : 0.27, c.done);
-  const recalculate = (c) => {
-    routes = paths(p, state);
-    if (state.fired && !state.watched) {
-      state.time = 0;
-      state.halfway = false;
-      c.progress('watch', 0);
+    if (s.fraction >= 1 && !pass && s.pass) {
+      // Where it came nearest the ring, marked.
+      const near = map.at(pts[s.pass.i].x, pts[s.pass.i].y);
+      g.strokeStyle = env.alpha(col.accent, 0.7);
+      g.lineWidth = 1;
+      g.setLineDash([2, 4]);
+      g.beginPath();
+      g.moveTo(near.x, near.y);
+      g.lineTo(ring.x, ring.y);
+      g.stroke();
+      g.setLineDash([]);
     }
-    show(c);
-  };
-  const steps = pair ? [
-    { id: 'balance', ask: 'which well pulls harder?', kind: 'choice', options: BALANCES },
-    { id: 'aim', ask: 'tap anywhere to aim two probes a hair apart', kind: 'tap', label: 'aim the pair for me' },
-    { id: 'guess', ask: 'will their paths stay close?', kind: 'choice', options: PAIR_GUESSES },
-    { id: 'fire', ask: 'release the pair', kind: 'press', count: 1, label: 'release both', after: 'aim' },
-    { id: 'watch', ask: 'watch both paths unfold', kind: 'wait', after: 'fire' }
-  ] : [
-    { id: 'aim', ask: 'tap anywhere to aim the probe', kind: 'tap', label: 'aim the probe for me' },
-    { id: 'speed', ask: 'launch speed', kind: 'range', min: 0, max: 100, step: 1, value: p.speed, low: 'gentle', high: 'fast' },
-    { id: 'guess', ask: 'where will the probe go?', kind: 'choice', options: FLYBY_GUESSES },
-    { id: 'fire', ask: 'release the probe', kind: 'press', count: 1, label: 'release probe', after: 'aim' },
-    { id: 'watch', ask: 'watch the flight unfold', kind: 'wait', after: 'fire' }
-  ];
-  return {
-    title: title(p),
-    brief: pair
-      ? 'Choose which well pulls harder, tap anywhere to aim two probes a hair apart, predict whether their paths split, then release them and watch.'
-      : 'Tap anywhere to aim a probe past ' + p.name + ', set its speed, predict where it goes, then release it and watch.',
-    aspect: '16 / 10',
-    steps,
-    start(c) {
-      c.status('The pale line shows the aim. Tap anywhere in the scene, or use the aim button.');
-      show(c);
-    },
-    apply(id, value, c) {
-      if (id === 'balance') {
-        state.balance = BALANCES.some((option) => option.value === value) ? value : 'even';
-        recalculate(c);
-        c.status((BALANCES.find((option) => option.value === state.balance) || BALANCES[1]).label + ' pulls harder.');
-      }
-      if (id === 'speed') {
-        state.speed = Math.max(0, Math.min(100, Number(value)));
-        recalculate(c);
-        c.status('Launch speed set to ' + Math.round(state.speed) + ' out of 100.');
-      }
-      if (id === 'guess') {
-        state.guess = String(value);
-        c.status('Prediction set. You can change it until the flight ends.');
-      }
-      if (id === 'fire') {
-        state.fired = true;
-        state.time = 0;
-        state.halfway = false;
-        c.status(pair ? 'Both probes are moving.' : 'The probe is moving.');
-        show(c);
-      }
-    },
-    tap(x, y, c) {
-      if (c.done) return;
-      const size = Math.min(c.w, c.h);
-      state.aim = {
-        x: Math.max(0, Math.min(1, 0.5 + (x - 0.5) * c.w / size)),
-        y: Math.max(0, Math.min(1, 0.5 + (y - 0.5) * c.h / size))
-      };
-      recalculate(c);
-      c.progress('aim', 1);
-      c.status('Aim set. The short trails hint at the bend; release to see the rest.');
-      c.satisfy('aim');
-    },
-    frame(t, dt, c) {
-      if (state.fired && !state.watched) {
-        state.time = Math.min(DURATION, state.time + (c.reduced ? DURATION : Math.max(0, dt)));
-        c.progress('watch', state.time / DURATION);
-        if (!state.halfway && state.time >= DURATION / 2 && state.time < DURATION) {
-          state.halfway = true;
-          c.status(pair ? 'The two paths are bending. Their endings are still ahead.' : 'The probe is rounding the well. Its ending is still ahead.');
-        }
-        if (state.time >= DURATION) {
-          state.watched = true;
-          c.satisfy('watch');
-          if (!c.done) c.status('The paths have finished. Set any choice still waiting to reveal the finding.');
-        }
-      }
-      show(c);
-    },
-    end(c) {
-      state.time = DURATION;
-      c.status(finding(p, state, routes));
-      show(c);
-    }
-  };
-}
-
-function dealsAssist(env) {
-  return (env.seed >>> 0) % 3 === 2;
-}
-
-function assistPlan(env) {
-  return {
-    family: 'assist',
-    number: (env.seed >>> 0) % 997 + 1,
-    name: 'the ' + env.pick(FIRST) + ' ' + env.pick(SECOND),
-    speed: 0.46 + env.rnd() * 0.24,
-    mass: 0.012 + env.rnd() * 0.01,
-    offset: 0.14 + env.rnd() * 0.22,
-    side: env.chance(0.5) ? 1 : -1,
-    travel: env.pick([-80, -55, -30, 30, 55, 80]),
-    duration: env.pick([3.6, 4.2, 4.8])
-  };
-}
-
-function carriedAssist(env) {
-  const p = env.card && env.card.of;
-  const between = (value, low, high) => typeof value === 'number' && Number.isFinite(value)
-    && value >= low && value <= high;
-  if (!p || p.family !== 'assist'
-      || !Number.isInteger(p.number) || !between(p.number, 1, 997)
-      || typeof p.name !== 'string' || !p.name.length || p.name.length >= 80
-      || !between(p.speed, 0.46, 0.7) || !between(p.mass, 0.012, 0.022)
-      || !between(p.offset, 0.14, 0.36) || (p.side !== 1 && p.side !== -1)
-      || !Number.isInteger(p.travel) || !between(p.travel, -100, 100)
-      || !between(p.duration, 3.6, 4.8)) return null;
-  return {
-    family: p.family, number: p.number, name: p.name, speed: p.speed,
-    mass: p.mass, offset: p.offset, side: p.side, travel: p.travel, duration: p.duration
-  };
-}
-
-function assistTitle(p) {
-  return 'assist ' + p.number + ' at ' + p.name;
-}
-
-function rate(value) {
-  return (value * 100).toFixed(2);
-}
-
-function motionName(velocity) {
-  return velocity < 0 ? 'toward the probe' : velocity > 0 ? 'with the probe' : 'standing still';
-}
-
-function assistState(p) {
-  return { travel: p.travel, view: 'room', guess: '', fired: false, time: 0, watched: false, halfway: false };
-}
-
-function assistOrbit(p, travel) {
-  const velocity = p.speed * 0.3 * travel / 100;
-  const relative = p.speed - velocity;
-  const a = p.mass / (relative * relative);
-  const k = p.offset / a;
-  const e = Math.hypot(1, k);
-  const clock = Math.sqrt(a * a * a / p.mass);
-  const limit = Math.acosh((1.35 / a + 1) / e);
-  const halfTime = clock * (e * Math.sinh(limit) - limit);
-  const points = [];
-
-  // Inbound velocity is horizontal. Rotating its far-away relative velocity by the
-  // hyperbola's deflection preserves its magnitude; adding the well's velocity need not.
-  const turn = 2 * Math.atan(1 / k);
-  const outX = velocity + relative * Math.cos(turn);
-  const outY = -p.side * relative * Math.sin(turn);
-  for (let i = 0; i <= 240; i++) {
-    const time = (i / 240 * 2 - 1) * halfTime;
-    let low = -limit;
-    let high = limit;
-    for (let iteration = 0; iteration < 28; iteration++) {
-      const middle = (low + high) / 2;
-      const at = clock * (e * Math.sinh(middle) - middle);
-      if (at < time) low = middle;
-      else high = middle;
-    }
-    const H = (low + high) / 2;
-    const sh = Math.sinh(H);
-    const ch = Math.cosh(H);
-    const rx = a * (e - ch + k * k * sh) / e;
-    const ry = p.side * a * k * (e - ch - sh) / e;
-    const timeSlope = clock * (e * ch - 1);
-    const ux = a * (-sh + k * k * ch) / e / timeSlope;
-    const uy = -p.side * a * k * (sh + ch) / e / timeSlope;
-    points.push({ rx, ry, x: rx + velocity * time, y: ry, well: velocity * time, ux, uy });
   }
-  return { points, velocity, relative, speedOut: Math.hypot(outX, outY) };
-}
-
-function assistMap(w, h, orbit, view) {
-  let left = Infinity;
-  let right = -Infinity;
-  let top = 0;
-  let bottom = 0;
-  for (const p of orbit.points) {
-    const x = view === 'well' ? p.rx : p.x;
-    const well = view === 'well' ? 0 : p.well;
-    left = Math.min(left, x, well);
-    right = Math.max(right, x, well);
-    top = Math.min(top, p.ry);
-    bottom = Math.max(bottom, p.ry);
-  }
-  const scale = Math.min(w * 0.88 / (right - left + 0.18), h * 0.59 / (bottom - top + 0.18));
-  return {
-    scale,
-    at(x, y) {
-      return { x: w / 2 + (x - (left + right) / 2) * scale,
-        y: h * 0.435 + (y - (top + bottom) / 2) * scale };
-    }
-  };
-}
-
-function arrow(g, env, at, dx, dy, length, color) {
-  const magnitude = Math.hypot(dx, dy);
-  if (!magnitude) return;
-  const ux = dx / magnitude;
-  const uy = dy / magnitude;
-  const end = { x: at.x + ux * length, y: at.y + uy * length };
-  const head = Math.max(3, length * 0.22);
-  g.strokeStyle = color;
-  g.lineWidth = 1.5;
-  g.beginPath();
-  g.moveTo(at.x, at.y);
-  g.lineTo(end.x, end.y);
-  g.stroke();
-  g.fillStyle = color;
-  g.beginPath();
-  g.moveTo(end.x, end.y);
-  g.lineTo(end.x - ux * head - uy * head * 0.55, end.y - uy * head + ux * head * 0.55);
-  g.lineTo(end.x - ux * head + uy * head * 0.55, end.y - uy * head - ux * head * 0.55);
-  g.closePath();
-  g.fill();
-}
-
-function assistScene(g, w, h, env, p, state, orbit, variant) {
-  const v = variant || PLAIN;
-  const col = env.colors;
-  const m = Math.min(w, h);
-  const map = assistMap(w, h, orbit, state.view);
-  const fraction = state.watched ? 1 : state.fired ? Math.min(1, state.time / p.duration) : 0;
-  const index = Math.min(orbit.points.length - 1, Math.round(fraction * (orbit.points.length - 1)));
-  const until = state.fired ? index + 1 : Math.round(orbit.points.length * 0.13);
-  const location = (point) => map.at(state.view === 'well' ? point.rx : point.x, point.ry);
-  g.save();
-  background(g, w, h, env, v);
-  g.lineCap = 'round';
-  g.lineJoin = 'round';
-
-  if (state.view === 'room' && orbit.velocity !== 0) {
-    const start = map.at(orbit.points[0].well, 0);
-    const finish = map.at(orbit.points[orbit.points.length - 1].well, 0);
-    g.strokeStyle = env.alpha(col.accent, 0.42);
-    g.lineWidth = 1;
-    g.setLineDash([3, 6]);
-    g.beginPath();
-    g.moveTo(start.x, start.y);
-    g.lineTo(finish.x, finish.y);
-    g.stroke();
-    g.setLineDash([]);
-  }
-
-  g.strokeStyle = env.alpha(col.accent2, state.fired ? 0.85 : 0.4);
-  g.lineWidth = Math.max(1.4, m * 0.006 * v.scale);
-  g.beginPath();
-  for (let i = 0; i < until; i++) {
-    const at = location(orbit.points[i]);
-    if (i) g.lineTo(at.x, at.y);
-    else g.moveTo(at.x, at.y);
-  }
-  g.stroke();
-  const spacing = Math.max(3, Math.round(12 / v.density));
-  g.fillStyle = env.alpha(col.accent2, 0.55);
-  for (let i = 0; i < until; i += spacing) {
-    const at = location(orbit.points[i]);
-    g.beginPath();
-    g.arc(at.x, at.y, Math.max(1, m * 0.004 * v.scale), 0, Math.PI * 2);
-    g.fill();
-  }
-
-  const current = orbit.points[index];
-  const well = map.at(state.view === 'well' ? 0 : current.well, 0);
-  wellAt(g, env, well.x, well.y, Math.max(2, map.scale * 0.016 * v.scale));
-  if (state.view === 'room' && orbit.velocity !== 0) {
-    arrow(g, env, well, orbit.velocity, 0, m * 0.095, col.accent);
-  }
-  const probe = location(current);
-  arrow(g, env, probe, current.ux + (state.view === 'room' ? orbit.velocity : 0),
-    current.uy, m * 0.075 * v.scale, col.accent2);
-  g.fillStyle = env.alpha(col.accent2, 0.24);
-  g.beginPath();
-  g.arc(probe.x, probe.y, Math.max(6, m * 0.025 * v.scale), 0, Math.PI * 2);
-  g.fill();
-  g.fillStyle = col.fg;
-  g.beginPath();
-  g.arc(probe.x, probe.y, Math.max(2, m * 0.008 * v.scale), 0, Math.PI * 2);
-  g.fill();
-
-  const size = Math.max(10, Math.min(18, Math.round(m * 0.043)));
-  g.font = '500 ' + size + 'px system-ui, sans-serif';
+  const size = Math.max(10, Math.min(17, Math.round(Math.min(w, h) * 0.042)));
+  font(g, size);
   g.textAlign = 'left';
   g.textBaseline = 'middle';
-  g.fillStyle = col.fg;
-  g.fillText(state.view === 'well' ? 'travelling with the well' : 'watching from the room', w * 0.05, h * 0.065, w * 0.9);
-  g.fillStyle = col.accent;
-  g.fillText('well: ' + motionName(orbit.velocity), w * 0.05, h * 0.13, w * 0.9);
-  g.fillStyle = env.alpha(col.bg, 0.88);
-  g.fillRect(0, h * 0.79, w, h * 0.21);
-  g.fillStyle = col.fg;
-  const after = state.watched ? rate(orbit.speedOut) : '?';
-  g.fillText('room, far before / after: ' + rate(p.speed) + ' / ' + after,
-    w * 0.05, h * 0.85, w * 0.9);
-  g.fillStyle = col.accent2;
-  g.fillText('well, far before / after: ' + rate(orbit.relative) + ' / '
-    + (state.watched ? rate(orbit.relative) : '?'), w * 0.05, h * 0.935, w * 0.9);
-  g.restore();
+  g.fillStyle = env.alpha(col.fg, 0.85);
+  g.fillText(p.name, w * 0.04, h * 0.07, w * 0.5);
+  g.textAlign = 'right';
+  g.fillStyle = env.alpha(col.accent2, 0.9);
+  g.fillText((s.angle > 0 ? '+' : '') + s.angle + '° · speed ' + s.speed, w * 0.96, h * 0.07, w * 0.5);
+  g.textAlign = 'center';
+  g.fillStyle = env.alpha(col.muted, 0.85);
+  g.fillText(s.flight ? s.verdict : 'the well bends every flight the same way; through the ring is the goal', w / 2, h * 0.94, w * 0.92);
 }
 
-function assistPreview(g, w, h, env, p) {
-  const state = assistState(p);
-  assistScene(g, w, h, env, p, state, assistOrbit(p, state.travel), env.variant);
+function slingState(p) {
+  return { angle: AIM.open, speed: PUSH.open, flight: null, pass: null, fraction: 0, clock: 0, verdict: '', fade: 0 };
 }
 
-function assistFinding(p, state, orbit) {
-  const difference = orbit.speedOut - p.speed;
-  const result = Math.abs(difference) < 1e-9 ? 'same' : difference > 0 ? 'faster' : 'slower';
-  const prediction = ASSIST_GUESSES.find((guess) => guess.value === state.guess);
-  const change = result === 'same' ? 'the same speed' : result;
-  return 'Far from ' + p.name + ', the probe enters at ' + rate(p.speed)
-    + ' and leaves at ' + rate(orbit.speedOut) + ' marks a second in the room: ' + change + '. '
-    + (state.guess === result ? 'You called it. ' : 'You predicted it ' + (prediction ? prediction.label : 'would leave differently') + '. ')
-    + 'Travelling with the well, it enters and leaves at ' + rate(orbit.relative) + ' marks a second. '
-    + (result === 'same' ? 'A still well turns the path without changing its far-away speed. Move the next well to see it trade speed.'
-      : 'The moving well trades energy with the probe. Change the direction of the next well to reverse the trade.')
-    + ' The probe never fired its engine.';
+function slingPreview(g, w, h, env, p) {
+  slingScene(g, w, h, env, p, slingState(p), dials(env));
 }
 
-function assistPiece(env, carriedPlan) {
-  const p = carriedPlan || assistPlan(env);
-  const state = assistState(p);
-  let orbit = assistOrbit(p, state.travel);
-  const draw = (c) => assistScene(c.g, c.w, c.h, c, p, state, orbit, env.variant);
+function widths(d) {
+  return (d / (RING_R * 2)).toFixed(1);
+}
+
+function slingPiece(env, p) {
+  const v = dials(env);
+  const s = slingState(p);
+  const draw = (c) => slingScene(c.g, c.w, c.h, c, p, s, v);
+  const clampTo = (value, knob) => Math.max(knob.min, Math.min(knob.max, Math.round(Number(value)) || 0));
   return {
-    title: assistTitle(p),
-    brief: ASSIST_BRIEF,
+    title: slingTitle(p),
+    brief: 'A probe leaves the pad at the left edge at the angle and the speed you set, and ' + p.name + ' bends its path the same way every time. Every check is a flight; the ring is where it has to pass.',
+    goal: 'Find an angle and a speed that carry the probe through the ring.',
     aspect: '16 / 10',
+    checkLabel: 'release the probe',
     steps: [
-      { id: 'motion', ask: 'how the well moves; the middle holds it still', kind: 'range', min: -100, max: 100, step: 5, value: p.travel, low: 'toward', high: 'with it' },
-      { id: 'view', ask: 'where to watch the same flight from', kind: 'choice', options: ASSIST_VIEWS },
-      { id: 'guess', ask: 'far away in the room, will the probe be faster?', kind: 'choice', options: ASSIST_GUESSES },
-      { id: 'release', ask: 'release the probe, with its engine off', kind: 'press', count: 1, label: 'release probe' },
-      { id: 'watch', ask: 'watch the flyby', kind: 'wait', after: 'release' }
+      { id: 'angle', ask: 'the launch angle', kind: 'range', min: AIM.min, max: AIM.max, step: 1, value: AIM.open, low: 'down', high: 'up' },
+      { id: 'speed', ask: 'the launch speed', kind: 'range', min: PUSH.min, max: PUSH.max, step: 1, value: PUSH.open, low: 'gentle', high: 'fast' },
+      { id: 'again', ask: 'see the last flight again', kind: 'press', count: 1, label: 'watch it again', optional: true }
     ],
+    solution: { angle: { value: p.angle, near: NEAR.angle }, speed: { value: p.speed, near: NEAR.speed } },
+    check(c) {
+      const angle = clampTo(c.value('angle'), AIM);
+      const speed = clampTo(c.value('speed'), PUSH);
+      const flight = fly(p, angle, speed);
+      const pass = nearestTo(flight.pts, p.rx, p.ry);
+      s.flight = flight;
+      s.pass = pass;
+      s.clock = 0;
+      s.fraction = c.reduced ? 1 : 0;
+      const solved = pass.d <= RING_R;
+      if (solved) s.verdict = 'through the ring at ' + (angle > 0 ? '+' : '') + angle + '°, speed ' + speed;
+      else if (flight.outcome === 'struck') s.verdict = 'the probe struck ' + p.name + ' before it reached the ring';
+      else {
+        const side = flight.pts[pass.i].y < p.ry ? 'above' : 'below';
+        s.verdict = 'missed: nearest ' + widths(pass.d) + ' ring-widths ' + side + ' the ring';
+      }
+      return { solved, say: s.verdict };
+    },
     start(c) {
-      c.status('The probe starts at ' + rate(p.speed) + ' marks a second in the room. Its approach passes '
-        + (p.offset * 100).toFixed(1) + ' marks ' + (p.side === 1 ? 'below' : 'above')
-        + ' the well\'s line. The gold arrow is the probe; the blue arrow is the well. Set motion, viewpoint and prediction, then release.');
+      c.status('set an angle and a speed, then release the probe');
       draw(c);
     },
     apply(id, value, c) {
-      if (c.done) return;
-      if (id === 'motion') {
-        const travel = Number(value);
-        if (!Number.isFinite(travel)) {
-          c.status('Set the well\'s motion between the two ends; the middle holds it still.');
-          return;
-        }
-        state.travel = Math.max(-100, Math.min(100, travel));
-        orbit = assistOrbit(p, state.travel);
-        if (state.fired && !state.watched) {
-          state.time = 0;
-          state.halfway = false;
-          c.progress('watch', 0);
-        }
-        c.status('The well is ' + motionName(orbit.velocity)
-          + (orbit.velocity ? ' at ' + rate(Math.abs(orbit.velocity)) + ' marks a second' : '')
-          + '. The probe still starts at ' + rate(p.speed) + ' in the room.'
-          + (state.watched ? ' The finished path and both readouts now show this setting.'
-            : state.fired ? ' The flight starts again with this motion.' : ' Release it to see the trade.'));
+      if (id === 'angle') {
+        s.angle = clampTo(value, AIM);
+        c.status('aimed ' + (s.angle === 0 ? 'straight across' : Math.abs(s.angle) + ' degrees ' + (s.angle > 0 ? 'up' : 'down')));
       }
-      if (id === 'view') {
-        if (!ASSIST_VIEWS.some((view) => view.value === value)) {
-          c.status('Choose the room or the travelling well as your viewpoint.');
-          return;
-        }
-        state.view = value;
-        c.status(value === 'well'
-          ? 'Travelling with the well, it stands still in the picture. This is the same flight; the room\'s before-and-after speeds remain below it.'
-          : 'From the room, the well can move as the probe passes. This is the same flight, seen from the other place.');
+      if (id === 'speed') {
+        s.speed = clampTo(value, PUSH);
+        c.status('speed ' + s.speed + ' of 100');
       }
-      if (id === 'guess') {
-        const prediction = ASSIST_GUESSES.find((guess) => guess.value === value);
-        if (!prediction) {
-          c.status('Predict faster, slower, or the same far-away speed in the room.');
-          return;
+      if (id === 'again') {
+        if (s.flight) {
+          s.clock = 0;
+          s.fraction = c.reduced ? 1 : 0;
+          c.status('the last flight, again: ' + s.verdict);
+        } else {
+          c.status('nothing has flown yet; release the probe first');
         }
-        state.guess = value;
-        c.status('You predict the probe ' + prediction.label + ' in the room. Any prediction works.');
-      }
-      if (id === 'release') {
-        if (state.fired) {
-          c.status('This probe is already released. You can still change the motion and viewpoint while a choice waits.');
-          return;
-        }
-        state.fired = true;
-        state.time = 0;
-        c.status(c.reduced ? 'The flyby will appear without movement.'
-          : 'Engine off. The probe and the well are moving; you can switch viewpoints during the flight.');
       }
       draw(c);
     },
     frame(t, dt, c) {
-      if (state.fired && !state.watched) {
-        state.time = c.reduced ? p.duration : Math.min(p.duration, state.time + Math.max(0, dt));
-        c.progress('watch', state.time / p.duration);
-        if (!state.halfway && state.time >= p.duration / 2 && state.time < p.duration) {
-          state.halfway = true;
-          c.status('The probe is rounding the well, without firing its engine. Both viewpoints follow this one flight.');
-        }
-        if (state.time >= p.duration) {
-          state.watched = true;
-          c.satisfy('watch');
-          if (!c.done) c.status('The flyby is over. Room speeds: ' + rate(p.speed) + ' before, '
-            + rate(orbit.speedOut) + ' after. With the well: ' + rate(orbit.relative)
-            + ' before and after. Any choices still waiting can change the view or the finding.');
+      if (s.flight && s.fraction < 1) {
+        s.clock += dt;
+        s.fraction = c.reduced ? 1 : Math.min(1, s.clock / REPLAY);
+      }
+      if (c.done) s.fade = Math.min(1, s.fade + dt);
+      draw(c);
+    },
+    end(c) {
+      c.status('through the ring. the probe flew on past ' + p.name + ' with its engine off the whole way');
+    }
+  };
+}
+
+/* ---- the moons ------------------------------------------------------------------------------ */
+
+function moonsPlan(env) {
+  const number = 100 + env.int(0, 899);
+  const name = 'the ' + env.pick(FIRST) + ' ' + env.pick(SECOND);
+  let last = null;
+  for (let attempt = 0; attempt < 40; attempt++) {
+    const k = env.int(2, 8);
+    const inner = env.int(10, 16);
+    const outer = Math.round(inner * Math.pow(k, 2 / 3));
+    if (Math.round(Math.pow(outer / inner, 1.5)) !== k || outer - inner < 6) continue;
+    const middle = env.int(inner + 3, outer - 3);
+    const names = shuffled(env, [0, 1, 2, 3, 4, 5, 6, 7]).slice(0, 3);
+    let listing = shuffled(env, [inner, middle, outer]);
+    for (let guard = 0; guard < 8 && listing[0] < listing[1] && listing[1] < listing[2]; guard++) listing = shuffled(env, [inner, middle, outer]);
+    if (listing[0] < listing[1] && listing[1] < listing[2]) listing = [outer, middle, inner];
+    const angles = [env.int(0, 359), env.int(0, 359), env.int(0, 359)];
+    last = { kind: 'moons', number, name, k, radii: listing, names, angles };
+    return last;
+  }
+  return { kind: 'moons', number, name, k: 4, radii: [32, 12, 20], names: [0, 6, 3], angles: [40, 200, 300] };
+}
+
+function carriedMoons(env) {
+  const p = env.card && env.card.of;
+  if (!p || p.kind !== 'moons' || !Number.isInteger(p.number) || p.number < 100 || p.number > 999) return null;
+  if (typeof p.name !== 'string' || !p.name || p.name.length > 40) return null;
+  if (!Number.isInteger(p.k) || p.k < 2 || p.k > 8) return null;
+  if (!Array.isArray(p.radii) || p.radii.length !== 3 || !p.radii.every((r) => Number.isInteger(r) && r >= 8 && r <= 70)) return null;
+  const sorted = p.radii.slice().sort((a, b) => a - b);
+  if (sorted[0] >= sorted[1] || sorted[1] >= sorted[2]) return null;
+  if (Math.round(Math.pow(sorted[2] / sorted[0], 1.5)) !== p.k) return null;
+  if (p.radii[0] < p.radii[1] && p.radii[1] < p.radii[2]) return null;
+  if (!Array.isArray(p.names) || p.names.length !== 3 || !p.names.every((i) => Number.isInteger(i) && i >= 0 && i < FIRST.length) || new Set(p.names).size !== 3) return null;
+  if (!Array.isArray(p.angles) || p.angles.length !== 3 || !p.angles.every((a) => Number.isInteger(a) && a >= 0 && a < 360)) return null;
+  return { kind: 'moons', number: p.number, name: p.name, k: p.k, radii: p.radii.slice(), names: p.names.slice(), angles: p.angles.slice() };
+}
+
+function moonsTitle(p) {
+  return 'the moons of ' + p.name;
+}
+
+// The moons shortest period first: the order that solves it.
+function moonsOrder(p) {
+  return [0, 1, 2].sort((a, b) => p.radii[a] - p.radii[b]);
+}
+
+function moonsScene(g, w, h, env, p, s, v) {
+  const col = env.colors;
+  background(g, w, h, env, v);
+  const cx = w * 0.46;
+  const cy = h * 0.5;
+  const outer = Math.max(...p.radii);
+  const R = Math.min(w * 0.3, h * 0.4);
+  const u = R / outer;
+  const size = Math.max(10, Math.min(16, Math.round(Math.min(w, h) * 0.04)));
+  // The orbits.
+  g.lineWidth = 1;
+  g.setLineDash([4, 5]);
+  p.radii.forEach((r) => {
+    g.strokeStyle = env.alpha(col.accent, 0.45);
+    g.beginPath();
+    g.arc(cx, cy, r * u, 0, Math.PI * 2);
+    g.stroke();
+  });
+  g.setLineDash([]);
+  body(g, env, cx, cy, Math.max(4, u * 2.4) * v.scale, 4, false);
+  // The ruler, out from the planet: a tick every two units, a number every ten, and each
+  // orbit's crossing marked with its reading.
+  const end = cx + outer * u * 1.1;
+  g.strokeStyle = env.alpha(col.muted, 0.6);
+  g.beginPath();
+  g.moveTo(cx, cy);
+  g.lineTo(end, cy);
+  for (let t = 2; t * u <= outer * u * 1.1; t += 2) {
+    const tall = t % 10 === 0 ? size * 0.5 : size * 0.22;
+    g.moveTo(cx + t * u, cy);
+    g.lineTo(cx + t * u, cy + tall);
+  }
+  g.stroke();
+  font(g, size * 0.72);
+  g.textAlign = 'center';
+  g.textBaseline = 'top';
+  g.fillStyle = env.alpha(col.muted, 0.9);
+  for (let t = 10; t * u <= outer * u * 1.1; t += 10) g.fillText(String(t), cx + t * u, cy + size * 0.6);
+  g.textBaseline = 'bottom';
+  p.radii.forEach((r) => {
+    g.strokeStyle = env.alpha(col.accent2, 0.9);
+    g.beginPath();
+    g.moveTo(cx + r * u, cy - size * 0.45);
+    g.lineTo(cx + r * u, cy);
+    g.stroke();
+    g.fillStyle = env.alpha(col.accent2, 0.95);
+    g.fillText(String(r), cx + r * u, cy - size * 0.5);
+  });
+  // The moons where they stand, named.
+  const order = moonsOrder(p);
+  p.radii.forEach((r, i) => {
+    const a = (p.angles[i] + (s.spin ? s.spin * 360 / (30 * Math.pow(r / outer, 1.5)) : 0)) * Math.PI / 180;
+    const x = cx + Math.cos(a) * r * u;
+    const y = cy + Math.sin(a) * r * u;
+    const rad = Math.max(3, u * 1.1) * v.scale;
+    const hot = s.hinted && s.hinted.includes(i);
+    const halo = g.createRadialGradient(x, y, 0, x, y, rad * 3);
+    halo.addColorStop(0, env.alpha(hot ? col.accent2 : col.accent, 0.45));
+    halo.addColorStop(1, env.alpha(col.accent, 0));
+    g.fillStyle = halo;
+    g.beginPath();
+    g.arc(x, y, rad * 3, 0, Math.PI * 2);
+    g.fill();
+    g.fillStyle = hot ? col.accent2 : col.fg;
+    g.beginPath();
+    g.arc(x, y, rad, 0, Math.PI * 2);
+    g.fill();
+    font(g, size * 0.85, 600);
+    g.textAlign = Math.cos(a) < 0 ? 'right' : 'left';
+    g.textBaseline = 'middle';
+    g.fillStyle = env.alpha(hot ? col.accent2 : col.fg, 0.9);
+    g.fillText(FIRST[p.names[i]] + (hot ? ', ' + ['shortest', 'middle', 'longest'][order.indexOf(i)] + ' period' : ''), x + (Math.cos(a) < 0 ? -1 : 1) * rad * 1.8, y - rad * 1.6);
+  });
+  // The scale bar, and the law.
+  const bar = 10 * u;
+  g.strokeStyle = env.alpha(col.fg, 0.8);
+  g.lineWidth = 1.5;
+  g.beginPath();
+  g.moveTo(w * 0.05, h * 0.9);
+  g.lineTo(w * 0.05 + bar, h * 0.9);
+  g.moveTo(w * 0.05, h * 0.9 - 4);
+  g.lineTo(w * 0.05, h * 0.9 + 4);
+  g.moveTo(w * 0.05 + bar, h * 0.9 - 4);
+  g.lineTo(w * 0.05 + bar, h * 0.9 + 4);
+  g.stroke();
+  font(g, size * 0.8);
+  g.textAlign = 'left';
+  g.textBaseline = 'bottom';
+  g.fillStyle = env.alpha(col.fg, 0.85);
+  g.fillText('ten units', w * 0.05, h * 0.9 - 5);
+  font(g, size);
+  g.textBaseline = 'middle';
+  g.fillText(moonsTitle(p), w * 0.04, h * 0.07, w * 0.6);
+  g.textAlign = 'right';
+  g.fillStyle = env.alpha(col.accent2, 0.9);
+  g.fillText('period ∝ radius³ᐟ²', w * 0.96, h * 0.07, w * 0.4);
+  g.textAlign = 'center';
+  g.fillStyle = env.alpha(col.muted, 0.85);
+  const foot = s.order ? 'shortest period first: ' + s.order.map((i) => FIRST[p.names[i]]).join(', ') + ' · ' + s.laps + (s.laps === 1 ? ' lap' : ' laps') + ' of the innermost for one of the outermost'
+    : 'three moons to scale; the inner one laps the outer a whole number of times';
+  g.fillText(foot, w / 2, h * 0.95, w * 0.92);
+}
+
+function moonsPreview(g, w, h, env, p) {
+  moonsScene(g, w, h, env, p, { spin: 0, hinted: [], order: null, laps: 1 }, dials(env));
+}
+
+function moonsPiece(env, p) {
+  const v = dials(env);
+  const answer = moonsOrder(p);
+  const s = { spin: 0, hinted: [], order: [0, 1, 2], laps: 1 };
+  const draw = (c) => moonsScene(c.g, c.w, c.h, c, p, s, v);
+  const names = p.names.map((i) => FIRST[i]);
+  return {
+    title: moonsTitle(p),
+    brief: 'Three moons circle ' + p.name + ', drawn to scale: the ruler reads each orbit\'s radius and the bar is ten units. A moon\'s period grows as its radius to the three halves (the square of the period as the cube of the radius), and these three were chosen so that the innermost laps the outermost a whole number of times.',
+    goal: 'Put the moons in order of period, shortest first, and say how many laps the innermost makes while the outermost makes one.',
+    aspect: '16 / 10',
+    checkLabel: 'check the orbits',
+    steps: [
+      { id: 'order', ask: 'the moons, shortest period first', kind: 'order', items: [0, 1, 2].map((i) => ({ label: 'the ' + names[i] + ' moon', value: i })) },
+      { id: 'laps', ask: 'laps of the innermost moon for one lap of the outermost', kind: 'number', min: 1, max: 9, step: 1, value: 1, unit: 'laps' },
+      { id: 'hint', ask: 'which moon has the shortest period', kind: 'press', count: 1, label: 'name it', optional: true }
+    ],
+    solution: { order: answer.slice(), laps: p.k },
+    check(c) {
+      const value = c.value('order');
+      const order = isPerm(value, 3) ? value : s.order;
+      const right = order.filter((m, i) => m === answer[i]).length;
+      const laps = Math.round(Number(c.value('laps')));
+      const off = Math.abs(laps - p.k);
+      if (right === 3 && off === 0) {
+        return { solved: true, say: 'in step: the ' + names[answer[0]] + ' moon laps ' + WORDS[p.k] + ' times for one lap of the ' + names[answer[2]] + ' moon' };
+      }
+      const parts = [right === 3 ? 'the order holds' : right === 0 ? 'no moon stands in the right place' : WORDS[right] + ' of three in the right place'];
+      parts.push(off === 0 ? 'the count is right' : off === 1 ? 'the count is off by one' : 'the count is off by more than one');
+      return { solved: false, say: parts.join('; ') };
+    },
+    start(c) {
+      c.status('read the radii off the ruler');
+      draw(c);
+    },
+    apply(id, value, c) {
+      if (id === 'order' && isPerm(value, 3)) {
+        s.order = value.slice();
+        c.status('shortest period first: ' + s.order.map((i) => names[i]).join(', '));
+      }
+      if (id === 'laps') {
+        const n = Math.round(Number(value));
+        if (n >= 1 && n <= 9) s.laps = n;
+        c.status(s.laps + (s.laps === 1 ? ' lap' : ' laps') + ' of the innermost for one of the outermost');
+      }
+      if (id === 'hint') {
+        if (!s.hinted.includes(answer[0])) {
+          s.hinted.push(answer[0]);
+          c.hint();
+          c.status('the ' + names[answer[0]] + ' moon has the shortest period: it rides the innermost orbit');
+        } else {
+          c.status('the ' + names[answer[0]] + ' moon is marked already; the count follows from the two radii');
         }
       }
       draw(c);
     },
-    end(c) {
-      state.fired = true;
-      state.watched = true;
-      state.time = p.duration;
-      c.status(assistFinding(p, state, orbit));
+    frame(t, dt, c) {
+      if (c.done && !c.reduced) s.spin += dt;
       draw(c);
+    },
+    end(c) {
+      c.status('the moons are in motion: watch the ' + names[answer[0]] + ' moon lap the ' + names[answer[2]] + ' moon ' + WORDS[p.k] + ' times');
     }
   };
+}
+
+/* ---- the module ----------------------------------------------------------------------------- */
+
+function dealsMoons(env) {
+  return env.chance(0.5);
 }
 
 export default {
   id: 'gravity-well',
   needsSky: false,
   paint(g, w, h, env) {
-    if (dealsAssist(env)) assistPreview(g, w, h, env, assistPlan(env));
-    else preview(g, w, h, env, plan(env));
+    if (dealsMoons(env)) moonsPreview(g, w, h, env, moonsPlan(env));
+    else slingPreview(g, w, h, env, slingPlan(env));
   },
   spark(env) {
-    if (dealsAssist(env)) {
-      const p = assistPlan(env);
-      const velocity = p.speed * 0.3 * p.travel / 100;
+    if (dealsMoons(env)) {
+      const p = moonsPlan(env);
       return {
-        title: assistTitle(p),
-        text: ASSIST_BRIEF,
-        mono: 'well: ' + motionName(velocity) + '\nprobe: ' + rate(p.speed)
-          + ' marks a second\napproach offset: ' + (p.offset * 100).toFixed(1) + ' marks',
+        title: moonsTitle(p),
+        text: 'Three moons drawn to scale. Order them by period and say how many laps the innermost makes for one of the outermost.',
+        mono: 'period ∝ radius³ᐟ²',
         aspect: '16 / 10',
-        paint: (g, w, h, cardEnv) => assistPreview(g, w, h, cardEnv, p),
+        paint: (g, w, h, cardEnv) => moonsPreview(g, w, h, cardEnv, p),
         of: p
       };
     }
-    const p = plan(env);
+    const p = slingPlan(env);
     return {
-      title: title(p),
-      text: p.family === 'pair'
-        ? 'Two probes leave almost together. Choose which well pulls harder and see whether their paths part.'
-        : 'One probe, one well. Aim, predict whether it strikes, escapes or stays, and watch the bend.',
+      title: slingTitle(p),
+      text: 'One well, one ring. Find the launch angle and speed that carry the probe through the ring; every check is a flight.',
+      mono: 'angle ' + AIM.min + '..' + AIM.max + ' · speed ' + PUSH.min + '..' + PUSH.max,
       aspect: '16 / 10',
-      paint: (g, w, h, e) => preview(g, w, h, e, p),
+      paint: (g, w, h, cardEnv) => slingPreview(g, w, h, cardEnv, p),
       of: p
     };
   },
   piece(env) {
-    const assist = carriedAssist(env);
-    if (assist) return assistPiece(env, assist);
-    const flight = carried(env);
-    if (flight) return launchPiece(env, flight);
-    return dealsAssist(env) ? assistPiece(env) : launchPiece(env);
+    const sling = carriedSling(env);
+    if (sling) return slingPiece(env, sling);
+    const moons = carriedMoons(env);
+    if (moons) return moonsPiece(env, moons);
+    return dealsMoons(env) ? moonsPiece(env, moonsPlan(env)) : slingPiece(env, slingPlan(env));
   }
 };
