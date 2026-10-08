@@ -19,16 +19,25 @@
         "saved": "2026-10-03T12:00:00.000Z",
         "values": {
           "constellation": [ { "x": 50, "y": 50, "text": "a wish" } ],
+          "threshold": { ... },
+          "difficulty": 3,
+          "puzzles": { ... },
           "capsules": [ ... ],
           "omens": [ ... ]
         }
       }
 
   Everything the site keeps in a visitor's browser is in "values", under one localStorage key
-  ("interesting_state_v1"), so a visitor can carry the whole of their sky somewhere else in one
-  copy-paste. The three names above are what the site stores today -- the home constellation every
-  page reinterprets, the diary's capsules and the archive's omens -- and a page that wants to keep
-  something new only has to pick a name and set it.
+  ("interesting_state_v1"), so a visitor can carry the whole of their persona somewhere else in one
+  copy-paste. The six names above are what the site stores today -- the home constellation every
+  page reinterprets, the reading the mood flow took, the difficulty every puzzle on the site is
+  dealt at (1 to 5, the persona's third setting, see js/persona.js), the stage's tally of solves,
+  the diary's capsules and the archive's omens -- and a page that wants to keep something new only
+  has to pick a name and set it.
+
+  Nothing in here is special-cased: the difficulty is one name in "values" like any other, which is
+  what makes it export, import and clear with the rest of a visitor's persona rather than needing a
+  control of its own.
 
   The cookie-consent choice is not in here: that belongs to the consent banner, which keeps it
   itself (see js/analytics.js).

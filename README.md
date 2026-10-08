@@ -1460,11 +1460,14 @@ invariant of the iteration, stated in the prompt and held to in code.
   that configuration deals it, and as a card another seed was dealt. All three have to solve — a
   sky can change under a card, so a piece reads the one it is handed defensively — and the last
   two have to be different pieces, because what a feature is follows from the card it was opened
-  from. Then the dial: the first seed is played at every one of the five stops — its own solution,
-  which has to solve, and every answer wrong, which may not — and at the two ends it is played as
-  the card it was dealt as too, because a piece follows its card whatever the setting. A setting
-  that leaves a world unsolvable, or that a wrong answer solves, is refused like any other. The
-  harness is not in `/site`, so a run cannot soften it.
+  from. Then the dial: every one of the five stops is played, each with a seed of its own — its own
+  solution, which has to solve, and every answer wrong, which may not. A stop takes its own seed
+  rather than all five taking the first because a world may deal more than one shape of puzzle and
+  which shape a seed opens is the seed's, so five stops on one seed would leave the other shapes
+  unplayed at four of them. The first seed is also played at the two ends as the card it was dealt
+  as, because a piece follows its card whatever the setting. A setting that leaves a world
+  unsolvable, or that a wrong answer solves, is refused like any other. The harness is not in
+  `/site`, so a run cannot soften it.
 - **The stage, played too.** A piece can be flawless and the stage still leave the visitor playing
   it with no way to check, because the knob the piece offered is not a knob the stage will take —
   which is what issue #60 was.
