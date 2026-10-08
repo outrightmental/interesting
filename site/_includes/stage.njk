@@ -66,6 +66,11 @@
             <div class='stage-progress' id='stage-progress'></div>
           </div>
         </div>
+        {# The difficulty every piece is dealt at, settable where it is a dependency (issue #93).
+           js/persona.js keeps the setting and renders the one slider into this host; js/stage.js
+           mounts it and deals this piece again whenever it moves, so the visitor does not have to
+           open the persona sheet to change their mind about the puzzle in front of them. #}
+        <div class='stage-difficulty' id='stage-difficulty'></div>
       </div>
     </div>
   </div>
