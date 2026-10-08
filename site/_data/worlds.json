@@ -15,7 +15,7 @@
     { "file": "gravity-well.html", "name": "the gravity well", "orientation": "looking up", "mood": "cosmic", "aspect": "16 / 10",
       "what": "Aim a probe through a ring past a well, or order three moons by their periods and count the orbits." },
     { "file": "constellation-diary.html", "name": "the diary", "orientation": "in the long look", "mood": "brooding", "aspect": "4 / 3",
-      "what": "Call the stars back in the order they flashed, or find the two false lines in a logbook entry." },
+      "what": "Call the stars back in the order they flashed, find the two false lines in a logbook entry, or spot which star drifted between two watches." },
     { "file": "constellation-echo.html", "name": "the echo chamber", "orientation": "ears first", "mood": "attentive", "aspect": "1 / 1",
       "what": "Order the stars by when their echoes return, or unmix a chord from the sum of its beats." },
     { "file": "pulse-loom.html", "name": "the pulse loom", "orientation": "counting in echoes", "mood": "metrical", "aspect": "1 / 1",
