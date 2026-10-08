@@ -379,9 +379,9 @@ function drawWater(g, w, h, env, plan, s, variant) {
       write(g, 'last time', x - tiny * 0.9, geo.soilY + h * 0.165, tiny, 'left', env.alpha(c.fg, 0.8));
     }
     g.font = '500 ' + tiny + 'px system-ui, sans-serif';
-    wrap(g, RULES[plan.rules[i]].tag, geo.cell * 0.95).forEach((line, j) => {
-      write(g, line, x, geo.soilY + h * 0.225 + j * tiny * 1.25, tiny, 'center', env.alpha(c.accent2, 0.95));
-    });
+    const lines = [];
+    for (const part of RULES[plan.rules[i]].tag.split(', ')) for (const line of wrap(g, part, geo.cell * 0.95)) lines.push(line);
+    lines.forEach((line, j) => write(g, line, x, geo.soilY + h * 0.225 + j * tiny * 1.25, tiny, 'center', env.alpha(c.accent2, 0.95)));
   }
   pane(g, w, h, env, s.fog, s.t);
 }

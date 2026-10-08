@@ -22,7 +22,8 @@
    or many; it only glints through the map, and the plan stands whatever the sky is now. */
 
 const GC = 20; // squares across
-const GR = 15; // squares down
+const GR = 12; // squares down
+const STRIP = 3.2; // the instrument strip under the map, in squares
 const KM = 10; // kilometres in a square
 const SIDES = ['north', 'east', 'south', 'west'];
 const LETTERS = ['A', 'B', 'C', 'D', 'E'];
@@ -43,12 +44,14 @@ function write(g, text, x, y, size, align, tone, weight) {
   g.fillText(text, x, y);
 }
 
-// Where the grid sits: a margin for the numbers along the left and the bottom, and square squares.
+// Where the grid sits: a margin for the numbers along the left, square squares, and the strip of
+// instruments under the map (the scale bar, the clock or the compass).
 function mapGeometry(w, h) {
   const padL = w * 0.05;
   const padT = h * 0.03;
-  const sq = Math.min((w - padL - w * 0.02) / GC, (h - padT - h * 0.065) / GR);
-  return { sq, x: (c) => padL + c * sq, y: (r) => padT + r * sq, left: padL, top: padT, right: padL + GC * sq, bottom: padT + GR * sq };
+  const sq = Math.min((w - padL - w * 0.02) / GC, (h - padT - h * 0.02) / (GR + STRIP));
+  const bottom = padT + GR * sq;
+  return { sq, x: (c) => padL + c * sq, y: (r) => padT + r * sq, left: padL, top: padT, right: padL + GC * sq, bottom, strip: bottom + sq * 2.05 };
 }
 
 // The map's ground: the sky at the hour, the squares and their numbers, the stars as they stand
@@ -132,7 +135,8 @@ function arrow(g, x0, y0, x1, y1, head) {
 }
 
 // A twenty-four hour dial: 0 at the top is midnight, 12 at the bottom is noon. One hand for the
-// hour now, and a fainter one for the hour the visitor has named, if they have.
+// hour now, and a fainter one for the hour the visitor has named, if they have; the hour now is
+// written beside it.
 function clock(g, env, x, y, r, hour, guess, size) {
   const c = env.colors;
   g.fillStyle = env.alpha(c.bg, 0.75);
@@ -167,8 +171,10 @@ function clock(g, env, x, y, r, hour, guess, size) {
   g.beginPath();
   g.arc(x, y, 2, 0, TAU);
   g.fill();
-  write(g, 'midnight', x, y - r - size * 0.7, size, 'center', env.alpha(c.muted, 0.9));
-  write(g, 'now ' + fmt(hour), x, y + r + size * 0.8, size, 'center', c.accent2, '600');
+  const digit = Math.max(6, Math.round(size * 0.7));
+  write(g, '0', x, y - r * 0.55, digit, 'center', env.alpha(c.fg, 0.8));
+  write(g, '12', x, y + r * 0.55, digit, 'center', env.alpha(c.fg, 0.8));
+  write(g, 'now ' + fmt(hour), x - r - size * 0.5, y, size, 'right', c.accent2, '600');
 }
 
 // A slip printed over the map once a puzzle is solved: it comes down from the top edge.
@@ -234,16 +240,16 @@ function frontOk(p) {
 function frontPlan(env) {
   for (let guard = 0; guard < 80; guard++) {
     const side = env.pick(SIDES);
-    const squares = env.int(3, 12);
+    const vertical = side === 'north' || side === 'south';
+    const squares = env.int(3, vertical ? GR - 3 : 12);
     const speeds = SPEEDS.filter((v) => (squares * KM) % v === 0);
     const speed = env.pick(speeds);
-    const vertical = side === 'north' || side === 'south';
     const c = vertical ? env.int(3, GC - 3) : side === 'west' ? env.int(squares + 1, GC - 2) : env.int(2, GC - 1 - squares);
     const r = !vertical ? env.int(3, GR - 3) : side === 'north' ? env.int(squares + 1, GR - 2) : env.int(2, GR - 1 - squares);
     const plan = { kind: 'front', station: [c, r], side, squares, speed, now: env.int(0, 23) };
     if (frontOk(plan)) return plan;
   }
-  return { kind: 'front', station: [10, 11], side: 'north', squares: 6, speed: 20, now: 21 };
+  return { kind: 'front', station: [10, 9], side: 'north', squares: 6, speed: 20, now: 21 };
 }
 
 function carriedFront(env) {
@@ -325,18 +331,14 @@ function drawFront(g, w, h, env, plan, s, variant) {
     const y0 = line.vertical ? base : geo.y(line.at) + line.dy * geo.sq * 0.9;
     arrow(g, x0, y0, x0 + line.dx * geo.sq * 1.2, y0 + line.dy * geo.sq * 1.2, geo.sq * 0.25);
   }
-  const labelX = line.vertical ? geo.x(line.at) + line.dx * geo.sq * 2.6 : geo.x(1);
-  const labelY = line.vertical ? geo.y(GR - 1.2) : geo.y(line.at) + line.dy * geo.sq * 2.6;
-  write(g, 'front moving at ' + plan.speed + ' km/h', labelX, labelY, size, line.vertical && line.dx < 0 ? 'right' : 'left', c.fg, '600');
-  // The station, the scale bar, and the clock.
+  // The station, and the instruments under the map: the scale bar, the speed, and the clock.
   const sx = geo.x(sc);
   const sy = geo.y(sr);
   station(g, env, sx, sy, geo.sq * 0.35 * v.scale, '', size);
-  write(g, 'the station', sx + geo.sq * 0.55 * v.scale, sy - geo.sq * 0.5, size, sc > GC * 0.7 ? 'right' : 'left', c.accent2, '600');
-  scaleBar(g, env, geo, geo.x(1), geo.y(1), size);
-  const clockSide = sc < GC / 2 ? GC - 2.6 : 2.6;
-  const cr = geo.sq * 1.6 * v.scale;
-  clock(g, env, geo.x(clockSide), geo.y(GR - 3.2), cr, plan.now, s.guess, size);
+  write(g, 'the station', sx + geo.sq * 0.55 * v.scale * (sc > GC * 0.7 ? -1 : 1), sy - geo.sq * 0.5, size, sc > GC * 0.7 ? 'right' : 'left', c.accent2, '600');
+  scaleBar(g, env, geo, geo.x(0.2), geo.strip, size);
+  write(g, 'moving at ' + plan.speed + ' km/h', geo.x(11), geo.strip, size, 'center', c.fg, '600');
+  clock(g, env, geo.x(GC - 1.2), geo.strip, Math.min(geo.sq * 1.1, geo.sq * v.scale), plan.now, s.guess, size);
   if (s.side) write(g, 'from the ' + s.side + '?', sx, sy + geo.sq * 0.9, size, 'center', env.alpha(c.accent, 0.95));
   if (s.hinted) write(g, plan.squares * KM + ' km out', sx, sy + geo.sq * (s.side ? 1.6 : 0.9), size, 'center', c.accent2, '600');
   if (s.rain > 0) {
@@ -506,7 +508,7 @@ function drawPressure(g, w, h, env, plan, s, variant) {
     for (let k = 1; k <= rings; k++) {
       g.strokeStyle = env.alpha(rings > 3 ? c.accent2 : c.accent, 0.4 - k * 0.06);
       g.beginPath();
-      g.ellipse(x, y, geo.sq * (0.5 + k * 0.35) * v.scale, geo.sq * (0.4 + k * 0.28) * v.scale, (i * 0.7 + v.turn) % Math.PI, 0, TAU);
+      g.ellipse(x, y, geo.sq * (0.5 + k * 0.24) * v.scale, geo.sq * (0.4 + k * 0.19) * v.scale, (i * 0.7 + v.turn) % Math.PI, 0, TAU);
       g.stroke();
     }
     station(g, env, x, y, geo.sq * 0.42 * v.scale, LETTERS[i], size);
@@ -515,10 +517,10 @@ function drawPressure(g, w, h, env, plan, s, variant) {
     if (s.toward === i) write(g, 'toward here?', x, y + (below ? -1 : 1) * geo.sq * 0.95 + (below ? -1 : 1) * size * 1.2, size, 'center', env.alpha(c.accent, 0.95));
     if (s.hinted === i) write(g, 'the wind blows from here', x, y + (below ? -1 : 1) * geo.sq * 0.95 + (below ? -1 : 1) * size * 1.2, size, 'center', c.accent2, '600');
   });
-  // The compass rose, so a way can be named.
-  const cx = geo.x(GC - 1.6);
-  const cy = geo.y(1.8);
-  const cr = geo.sq * 1.1 * v.scale;
+  // The compass rose under the map, so a way can be named, and the legend beside it.
+  const cx = geo.x(GC - 1.2);
+  const cy = geo.strip;
+  const cr = Math.min(geo.sq * 0.8, geo.sq * 0.75 * v.scale);
   g.strokeStyle = env.alpha(c.fg, 0.6);
   g.lineWidth = 1;
   g.beginPath();
@@ -527,11 +529,15 @@ function drawPressure(g, w, h, env, plan, s, variant) {
   g.moveTo(cx - cr, cy);
   g.lineTo(cx + cr, cy);
   g.stroke();
-  write(g, 'N', cx, cy - cr - size * 0.6, size, 'center', c.accent2, '700');
-  write(g, 'S', cx, cy + cr + size * 0.6, size, 'center', env.alpha(c.fg, 0.8));
+  write(g, 'N', cx, cy - cr - size * 0.55, size, 'center', c.accent2, '700');
+  write(g, 'S', cx, cy + cr + size * 0.55, size, 'center', env.alpha(c.fg, 0.8));
   write(g, 'E', cx + cr + size * 0.5, cy, size, 'center', env.alpha(c.fg, 0.8));
   write(g, 'W', cx - cr - size * 0.5, cy, size, 'center', env.alpha(c.fg, 0.8));
-  if (s.way) write(g, 'blowing ' + s.way + '?', cx, cy + cr + size * 1.9, size, 'center', env.alpha(c.accent, 0.95));
+  const said = [];
+  if (s.toward >= 0) said.push('toward ' + LETTERS[s.toward]);
+  if (s.way) said.push('blowing ' + s.way);
+  if (s.gap != null) said.push(s.gap + ' hPa between');
+  write(g, said.length ? 'you say: ' + said.join(', ') : 'readings in hPa; the wind runs high to low', geo.x(0.2), cy, size, 'left', env.alpha(said.length ? c.accent : c.fg, 0.9));
   // The wind drawn in, once the puzzle is solved: from the highest to the lowest.
   if (s.blow > 0) {
     const a = st[highest(st)];
@@ -547,7 +553,7 @@ function drawPressure(g, w, h, env, plan, s, variant) {
 }
 
 function pressurePreview(g, w, h, env, plan, t) {
-  drawPressure(g, w, h, env, plan, { t: t || 0, toward: -1, way: '', hinted: -1, blow: 0, lines: null, rise: 0 }, env.variant);
+  drawPressure(g, w, h, env, plan, { t: t || 0, toward: -1, way: '', gap: null, hinted: -1, blow: 0, lines: null, rise: 0 }, env.variant);
 }
 
 function pressurePiece(env, plan) {
@@ -556,7 +562,7 @@ function pressurePiece(env, plan) {
   const lo = lowest(st);
   const way = windWay(st);
   const gap = st[hi].p - st[lo].p;
-  const s = { t: 0, toward: -1, way: '', hinted: -1, blow: 0, lines: null, rise: 0 };
+  const s = { t: 0, toward: -1, way: '', gap: null, hinted: -1, blow: 0, lines: null, rise: 0 };
   const draw = (c) => drawPressure(c.g, c.w, c.h, c, plan, s, env.variant);
   return {
     title: pressureTitle(),
@@ -597,7 +603,11 @@ function pressurePiece(env, plan) {
         s.way = SIDES.includes(value) ? value : '';
         c.status('you say it blows ' + s.way);
       }
-      if (id === 'gap') c.status('you say the difference is ' + Math.round(Number(value)) + ' hPa');
+      if (id === 'gap') {
+        const n = Math.round(Number(value));
+        s.gap = Number.isFinite(n) ? clamp(n, 1, 60) : null;
+        c.status('you say the difference is ' + s.gap + ' hPa');
+      }
       if (id === 'hint') {
         if (s.hinted < 0) {
           s.hinted = hi;

@@ -130,9 +130,16 @@ function copyOf(plan, cx, cy, R, base, arm, sign) {
   });
 }
 
-function thread(g, pts) {
+// One copy of the motif as a shard: its points joined in order and closed, filled faintly and
+// stroked, so the hand of the shape can be read.
+function thread(g, pts, fill) {
   g.beginPath();
   pts.forEach((p, i) => (i ? g.lineTo(p.x, p.y) : g.moveTo(p.x, p.y)));
+  g.closePath();
+  if (fill) {
+    g.fillStyle = fill;
+    g.fill();
+  }
   g.stroke();
 }
 
@@ -164,11 +171,11 @@ function drawFolds(g, w, h, env, plan, s, variant, t) {
       if (lit) {
         g.strokeStyle = env.alpha(c.fg, 0.35);
         g.lineWidth = Math.max(4, geo.m * 0.016);
-        thread(g, pts);
+        thread(g, pts, null);
         g.lineWidth = Math.max(1, geo.m * 0.003);
       }
-      g.strokeStyle = env.alpha(lit ? c.fg : tone, lit ? 1 : 0.78);
-      thread(g, pts);
+      g.strokeStyle = env.alpha(lit ? c.fg : tone, lit ? 1 : 0.8);
+      thread(g, pts, env.alpha(lit ? c.fg : tone, lit ? 0.3 : 0.14));
       g.fillStyle = env.alpha(lit ? c.fg : tone, 0.95);
       beads(g, pts, bead);
     }
@@ -189,7 +196,7 @@ function drawFolds(g, w, h, env, plan, s, variant, t) {
   const key = copyOf(plan, bx + box * 0.5, by + box * 0.56, box * 0.46, -Math.PI / 2, 0, 1);
   g.strokeStyle = env.alpha(c.fg, 0.9);
   g.lineWidth = 1;
-  thread(g, key);
+  thread(g, key, env.alpha(c.fg, 0.14));
   g.fillStyle = c.fg;
   beads(g, key, bead);
   label(g, env, 'the motif', bx + box * 0.5, by + box * 0.1, Math.max(8, size - 2), 'center', env.alpha(c.muted, 0.9));
@@ -294,18 +301,18 @@ function moireBoxes(w, h, v) {
 }
 
 // The lines of one screen across a box: `n` of them, evenly spaced, slid along by `phase` of the
-// width and wrapped, every one crisp on a pixel.
+// width and wrapped, each a crisp bar a little under half a pitch wide, so that where the two
+// screens' bars fall together the print opens and where they interleave it closes -- which is
+// the whole of the moiré.
 function screenLines(g, box, n, offset, phase, color) {
-  g.strokeStyle = color;
-  g.lineWidth = 1;
-  g.beginPath();
+  const pitch = box.w / n;
+  const bar = Math.max(1, Math.round(pitch * 0.42));
+  g.fillStyle = color;
   for (let i = 0; i < n; i++) {
     const u = ((((i + offset) / n + phase) % 1) + 1) % 1;
-    const x = Math.round(box.x + u * box.w) + 0.5;
-    g.moveTo(x, box.y);
-    g.lineTo(x, box.y + box.h);
+    const x = Math.round(box.x + u * box.w - bar / 2);
+    g.fillRect(x, box.y, bar, box.h);
   }
-  g.stroke();
 }
 
 // `s`: whether the bands are marked (the answer is out).
@@ -315,7 +322,7 @@ function drawMoire(g, w, h, env, plan, s, variant) {
   const boxes = moireBoxes(w, h, v);
   const size = Math.max(9, Math.min(15, Math.round(Math.min(w, h) * 0.036)));
   const phase = v.turn / plan.first;
-  const strength = clamp(0.6 * v.density, 0.5, 0.95);
+  const strength = clamp(0.5 * v.density, 0.42, 0.62);
   const firstTone = env.alpha(env.mix(c.accent, c.fg, 0.35), strength);
   const secondTone = env.alpha(c.accent2, strength);
   night(g, w, h, env);
@@ -370,7 +377,7 @@ function moirePiece(env, plan) {
   const draw = (c) => drawMoire(c.g, c.w, c.h, c, plan, s, env.variant);
   return {
     title: moireTitle(plan),
-    brief: 'Two screens of thin upright lines lie over each other: the first has ' + plan.first + ' lines across the width, the second a different count. Where their lines fall together and then apart, broad bands appear across the print, and there are as many bands as the two counts differ by.',
+    brief: 'Two screens of upright lines lie over each other: the first has ' + plan.first + ' lines across the width, the second a different count. Where their lines fall together and then apart, broad bands appear across the print, and there are as many bands as the two counts differ by.',
     goal: 'Say how many lines the second screen has, and whether that is more or fewer than the first.',
     aspect: '4 / 3',
     checkLabel: 'check the print',

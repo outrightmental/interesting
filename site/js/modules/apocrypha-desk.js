@@ -4,7 +4,7 @@
    card it was opened from says which. Nothing here is a real object, a real collection or a real
    claim about the world. See js/feed.js for what a module is and js/stage.js for what a piece is.
 
-   Two puzzles, both deduction:
+   Three puzzles, all deduction:
 
      the drawer       Four specimens go into four drawers, top to bottom, and a card of clues says
                       how: above, right below, not at the top, two drawers between. The clues are
@@ -16,10 +16,14 @@
                       which of its features the rule disputes. The six are rolled until no rule of
                       the same family that four of them would witness singles out another one. A
                       wrong check says whether the specimen is right, and no more.
+     the forged number
+                      Five catalogue cards and the rule a true number keeps (its last digit is the
+                      last digit of the sum of its first three). One card breaks it: find it and
+                      say the digit it should end in. A wrong check says whether the card is right.
 
    A card and the feature it opens as are one puzzle: the spark puts the whole plan on its spec as
-   `of` -- the specimens, the order, the clues; the six and the rule -- and piece(env) opens on that
-   rather than rolling another. */
+   `of` -- the specimens, the order, the clues; the six and the rule; the five numbers -- and
+   piece(env) opens on that rather than rolling another. */
 
 const PLAIN = { density: 1, scale: 1, turn: 0 };
 const WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven'];
@@ -772,21 +776,173 @@ function oddPiece(env, plan) {
   };
 }
 
+/* ---- the forged number: one check digit wrong ---------------------------------------------- */
+
+function checkDigit(number) {
+  return (Number(number[0]) + Number(number[1]) + Number(number[2])) % 10;
+}
+
+function forgedPlan(env) {
+  for (let attempt = 0; attempt < 40; attempt++) {
+    const numbers = [];
+    while (numbers.length < 5) {
+      const head = String(env.int(100, 999));
+      const number = head + checkDigit(head);
+      if (!numbers.includes(number)) numbers.push(number);
+    }
+    const odd = env.int(0, 4);
+    const digit = checkDigit(numbers[odd]);
+    const wrong = (digit + env.int(1, 9)) % 10;
+    const forged = numbers[odd].slice(0, 3) + wrong;
+    if (numbers.includes(forged)) continue;
+    numbers[odd] = forged;
+    return { kind: 'forged', numbers, odd, digit };
+  }
+  return { kind: 'forged', numbers: ['1012', '2035', '3107', '4116', '5207'], odd: 2, digit: checkDigit('310') };
+}
+
+function carriedForged(env) {
+  const p = env.card && env.card.of;
+  if (!p || p.kind !== 'forged') return null;
+  if (!Array.isArray(p.numbers) || p.numbers.length !== 5 || !p.numbers.every((n) => typeof n === 'string' && /^[1-9]\d{3}$/.test(n))) return null;
+  if (new Set(p.numbers).size !== 5 || !Number.isInteger(p.odd) || p.odd < 0 || p.odd > 4) return null;
+  const broken = p.numbers.map((n, i) => (Number(n[3]) !== checkDigit(n) ? i : -1)).filter((i) => i >= 0);
+  if (broken.length !== 1 || broken[0] !== p.odd || p.digit !== checkDigit(p.numbers[p.odd])) return null;
+  return { kind: 'forged', numbers: p.numbers.slice(), odd: p.odd, digit: p.digit };
+}
+
+function forgedTitle(plan) {
+  return 'the forged number: five cards, one wrong';
+}
+
+function drawFan(g, w, h, env, plan, s, look, variant) {
+  const v = variant || PLAIN;
+  const k = env.colors;
+  deskTop(g, w, h, env, look.rows, v.density);
+  const cw = Math.min(w * 0.3, h * 0.42) * v.scale;
+  const ch = cw * 0.62;
+  const fs = Math.max(9, Math.min(18, cw * 0.14));
+  // Five cards fanned across the desk, each with its number, the picked one lifted.
+  plan.numbers.forEach((number, i) => {
+    const x = w * (0.16 + 0.17 * i) + (v.turn - 0.5) * w * 0.03;
+    const y = h * (0.3 + (i % 2) * 0.18);
+    g.save();
+    g.translate(x, y);
+    g.rotate(look.tilt + (i - 2) * 0.06 + (v.turn - 0.5) * 0.05);
+    card(g, env, cw, ch, 0.25, i === 2 ? look.spots : null, 4);
+    if (s.pick === i) {
+      g.strokeStyle = env.alpha(k.accent2, 0.95);
+      g.lineWidth = 2;
+      g.setLineDash([5, 4]);
+      g.strokeRect(-cw / 2 + 3, -ch / 2 + 3, cw - 6, ch - 6);
+      g.setLineDash([]);
+    }
+    const m = Math.min(10, cw * 0.06);
+    write(g, 'card ' + (i + 1), -cw / 2 + m + 2, -ch / 2 + ch / 8, fs * 0.65, env.alpha(k.muted, 0.9), 'left', 500);
+    write(g, 'APC-' + number, -cw / 2 + m + 2, -ch / 2 + ch * 0.5, fs, s.reveal && i === plan.odd ? k.accent : k.accent2, 'left', 700);
+    if (s.reveal && i === plan.odd) write(g, 'should end in ' + plan.digit, -cw / 2 + m + 2, -ch / 2 + ch * 0.8, fs * 0.65, k.accent, 'left', 600);
+    g.restore();
+  });
+  // The rule, on a slip along the bottom of the desk.
+  const sw = w * 0.84;
+  const sh = h * 0.24;
+  const rs = Math.max(9, Math.min(15, Math.min(w, h) * 0.034));
+  const m = Math.min(10, sw * 0.06);
+  const lines = [{ text: 'the rule of the desk', color: k.accent2, weight: 700 }];
+  wrap(g, 'a true number ends in the last digit of the sum of its first three digits', rs, sw - m * 2 - 4).forEach((l) => lines.push({ text: l, color: k.fg, weight: 500 }));
+  wrap(g, 'so 4172 is true: 4 + 1 + 7 = 12, and it ends in 2. one card on the desk is forged', rs, sw - m * 2 - 4).forEach((l) => lines.push({ text: l, color: k.muted, weight: 500 }));
+  const rows = lines.length;
+  const rh = sh / rows;
+  g.save();
+  g.translate(w / 2, h * 0.86);
+  g.rotate(-look.tilt * 0.5);
+  card(g, env, sw, sh, 0.1, null, rows);
+  lines.forEach((l, i) => write(g, l.text, -sw / 2 + m + 2, -sh / 2 + rh * (i + 0.5), Math.min(rs, rh * 0.66), l.color, 'left', l.weight));
+  g.restore();
+}
+
+function forgedPreview(g, w, h, env, plan) {
+  drawFan(g, w, h, env, plan, { pick: -1, reveal: false }, scenery(env), env.variant);
+}
+
+function forgedPiece(env, plan) {
+  const look = scenery(env);
+  const s = { pick: -1, reveal: false };
+  const draw = (c) => drawFan(c.g, c.w, c.h, c, plan, s, look, env.variant);
+  return {
+    title: forgedTitle(plan),
+    brief: 'Five catalogue cards lie on the desk, each with a four-figure number, and the slip under them gives the rule a true number keeps: it ends in the last digit of the sum of its first three. Four of the cards keep it. One was written by someone who did not know the rule.',
+    goal: 'Find the forged card, and say which digit it should end in.',
+    aspect: '4 / 3',
+    checkLabel: 'check the cards',
+    steps: [
+      { id: 'pick', ask: 'the forged card', kind: 'pick', count: 1, items: plan.numbers.map((n, i) => ({ label: 'card ' + (i + 1) + ': APC-' + n, value: i })) },
+      { id: 'digit', ask: 'the digit it should end in', kind: 'number', min: 0, max: 9, step: 1, value: 0 }
+    ],
+    solution: { pick: [plan.odd], digit: plan.digit },
+    check(c) {
+      const picked = Array.isArray(c.value('pick')) ? c.value('pick').map(Number) : [];
+      const cardRight = picked.length === 1 && picked[0] === plan.odd;
+      const digitRight = Number(c.value('digit')) === plan.digit;
+      if (cardRight && digitRight) return { solved: true, say: 'APC-' + plan.numbers[plan.odd] + ' is the forgery; it should end in ' + plan.digit };
+      if (cardRight) return { solved: false, say: 'the card is right; the digit is off' };
+      return { solved: false, say: picked.length === 1 ? 'APC-' + plan.numbers[picked[0]] + ' keeps the rule' : 'pick one card' };
+    },
+    start(c) {
+      c.status('five numbers, one rule, one forgery');
+      draw(c);
+    },
+    apply(id, value, c) {
+      if (id === 'pick') {
+        const picked = Array.isArray(value) ? value.map(Number) : [];
+        s.pick = picked.length === 1 ? picked[0] : -1;
+        if (s.pick >= 0) c.status('card ' + (s.pick + 1) + ', APC-' + plan.numbers[s.pick] + ', you say');
+      }
+      if (id === 'digit') c.status('it should end in ' + Number(value) + ', you say');
+      draw(c);
+    },
+    frame(t, dt, c) {
+      draw(c);
+    },
+    end(c) {
+      s.reveal = true;
+      c.status('APC-' + plan.numbers[plan.odd] + ' should end in ' + plan.digit + '. struck from the catalogue, which never had it');
+      draw(c);
+    }
+  };
+}
+
 /* ---- the module ----------------------------------------------------------------------------- */
 
-function dealsDrawer(env) {
-  return env.chance(0.5);
+// Which of the three the seed deals: the drawer, the odd one out, or the forged number.
+function deal(env) {
+  const roll = env.rnd();
+  return roll < 0.4 ? 'drawer' : roll < 0.75 ? 'odd' : 'forged';
 }
 
 export default {
   id: 'apocrypha-desk',
   needsSky: false,
   paint(g, w, h, env) {
-    if (dealsDrawer(env)) drawerPreview(g, w, h, env, drawerPlan(env));
-    else oddPreview(g, w, h, env, oddPlan(env));
+    const kind = deal(env);
+    if (kind === 'drawer') drawerPreview(g, w, h, env, drawerPlan(env));
+    else if (kind === 'odd') oddPreview(g, w, h, env, oddPlan(env));
+    else forgedPreview(g, w, h, env, forgedPlan(env));
   },
   spark(env) {
-    if (dealsDrawer(env)) {
+    const kind = deal(env);
+    if (kind === 'forged') {
+      const plan = forgedPlan(env);
+      return {
+        overline: 'APC-' + plan.numbers[0] + ' and four more',
+        title: forgedTitle(plan),
+        text: 'Five catalogue numbers, and the rule a true one keeps. One card was written by someone who did not know it. Find it, and say the digit it should end in.',
+        aspect: '4 / 3',
+        paint: (g, w, h, cardEnv) => forgedPreview(g, w, h, cardEnv, plan),
+        of: plan
+      };
+    }
+    if (kind === 'drawer') {
       const plan = drawerPlan(env);
       const names = plan.items.map((i) => SPECIMENS[i].name);
       return {
@@ -815,6 +971,11 @@ export default {
     if (drawer) return drawerPiece(env, drawer);
     const odd = carriedOdd(env);
     if (odd) return oddPiece(env, odd);
-    return dealsDrawer(env) ? drawerPiece(env, drawerPlan(env)) : oddPiece(env, oddPlan(env));
+    const forged = carriedForged(env);
+    if (forged) return forgedPiece(env, forged);
+    const kind = deal(env);
+    if (kind === 'drawer') return drawerPiece(env, drawerPlan(env));
+    if (kind === 'odd') return oddPiece(env, oddPlan(env));
+    return forgedPiece(env, forgedPlan(env));
   }
 };

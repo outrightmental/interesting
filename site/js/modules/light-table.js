@@ -77,6 +77,15 @@ function lamp(g, env, x, y, radius) {
   g.fill();
 }
 
+// The largest size, down from `size`, at which `text` fits in `width`.
+function fitted(g, size, text, width) {
+  for (let at = size; at > 6; at--) {
+    g.font = '500 ' + at + 'px system-ui, sans-serif';
+    if (g.measureText(text).width <= width) return at;
+  }
+  return 6;
+}
+
 function label(g, env, text, x, y, size, align, tone) {
   g.font = '500 ' + size + 'px system-ui, sans-serif';
   g.textAlign = align || 'left';
@@ -413,16 +422,17 @@ function drawFilters(g, w, h, env, plan, s, variant) {
   label(g, env, 'lamp side', w * 0.3, y - radius - size * 1.2, Math.max(8, size - 2), 'center', env.alpha(c.muted, 0.9));
   label(g, env, 'screen side', w * 0.7, y - radius - size * 1.2, Math.max(8, size - 2), 'center', env.alpha(c.muted, 0.9));
   // The table of cos squared, so the arithmetic is on the table.
-  const rowY = h * 0.7;
-  const tiny = Math.max(8, size - 1);
-  label(g, env, 'the first filter passes half the lamp\'s light; each one after passes cos² of the turn from the one before', w * 0.5, rowY, tiny, 'center', env.alpha(c.fg, 0.9));
+  const rowY = h * 0.66;
+  const tiny = fitted(g, Math.max(8, size - 1), 'each one after passes cos² of the turn from the one before', w * 0.9);
+  label(g, env, 'the first filter passes half the lamp\'s light', w * 0.5, rowY, tiny, 'center', env.alpha(c.fg, 0.9));
+  label(g, env, 'each one after passes cos² of the turn from the one before', w * 0.5, rowY + tiny * 1.4, tiny, 'center', env.alpha(c.fg, 0.9));
   const pairs = [[0, '1'], [15, '0.93'], [30, '0.75'], [45, '0.50'], [60, '0.25'], [75, '0.07'], [90, '0']];
   pairs.forEach((pair, i) => {
     const x = w * (0.08 + (i + 0.5) * 0.12);
-    label(g, env, pair[0] + '°', x, rowY + tiny * 2, tiny, 'center', c.accent2);
-    label(g, env, pair[1], x, rowY + tiny * 3.3, tiny, 'center', c.fg);
+    label(g, env, pair[0] + '°', x, rowY + tiny * 3.3, tiny, 'center', c.accent2);
+    label(g, env, pair[1], x, rowY + tiny * 4.6, tiny, 'center', c.fg);
   });
-  label(g, env, 'a turn past 90° reads as 180° less the turn: 120° as 60°, 135° as 45°, 150° as 30°', w * 0.5, rowY + tiny * 5, tiny, 'center', env.alpha(c.muted, 0.9));
+  label(g, env, 'past 90°, read 180° less the turn: 120° as 60°, 135° as 45°, 150° as 30°', w * 0.5, rowY + tiny * 6.4, tiny, 'center', env.alpha(c.muted, 0.9));
 }
 
 function filterPreview(g, w, h, env, plan) {

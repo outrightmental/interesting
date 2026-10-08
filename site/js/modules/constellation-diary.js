@@ -1,136 +1,96 @@
-/* The diary: the persona's stars over a logbook. As a card it is the sky over a ruled page with
-   one mark per star (paint, spark). As a piece it is one of two things: an entry written a line
-   at a time from where the stars sit and sealed with the whole sky pressed into the wax, or the
-   stars called back one by one in the order they came and written up under a watch of the
-   visitor's choosing. See js/feed.js for what a module is and js/stage.js for what a piece is.
+/* The diary: the visitor's stars over a logbook, kept on the midnight watch. As a card it is one
+   of the two puzzles below painted small (paint, spark); as a piece it is that puzzle, and the card
+   it was opened from says which. See js/feed.js for what a module is and js/stage.js for what a
+   piece is.
 
-   A card and the feature it opens as are one entry: the spark puts its number and the star it was
-   written from on its spec as `of`, and the piece carries the number onto the page it writes and
-   opens from the same star. */
+   Two puzzles, drawn from where the visitor's stars sit -- their places, never their words -- and
+   filled out with stars invented from the seed when the sky has too few, so a sky of one star
+   still makes a whole puzzle:
 
-// The card this piece was opened from, in the logbook's own terms: the entry number it was and the
-// star it was written from, or null for a piece nobody pressed (js/stage.js, env.card.of).
-function pressed(env) {
-  const was = env.card && env.card.of;
-  const number = was ? Number(was.entry) : NaN;
-  if (!isFinite(number)) return null;
-  return { entry: Math.max(1, Math.round(number)), star: typeof was.star === 'string' ? was.star : '' };
+     call them back   A memory. Four to six lettered stars come out one at a time, each for a
+                      moment, and then rest. Put them in the order they came. A wrong check says
+                      how many stand in the right place and no more; "show it again" replays the
+                      sky at the price of a hint.
+     the false lines  A deduction. The sky is drawn with its meridian and its horizon, the stars
+                      lettered, and the logbook under it has five or six lines about them -- which
+                      is highest, how many lie west of the meridian, whether one is west of
+                      another. Every line can be checked against the sky, and exactly two are
+                      false. Find them. A wrong check says whether one of the two is right.
+
+   A card and the feature it opens as are one entry: the spark puts the whole plan on its spec as
+   `of` -- the stars, the sequence, the lines -- and piece(env) opens on that rather than rolling
+   another. */
+
+const WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
+const LETTERS = 'ABCDEFG';
+const PLAIN = { density: 1, scale: 1, turn: 0 };
+const OPENER = 'night watch report, midnight:';
+// The sky's timing: a pause, then each star for FLASH seconds out of every SLOT.
+const LEAD = 1.2;
+const FLASH = 0.6;
+const SLOT = 0.95;
+
+/* ---- shared arithmetic ---------------------------------------------------------------------- */
+
+function dials(env) {
+  const v = env && env.variant;
+  const num = (x, d) => (Number.isFinite(Number(x)) ? Number(x) : d);
+  return v && typeof v === 'object' ? { density: num(v.density, 1), scale: num(v.scale, 1), turn: num(v.turn, 0) } : PLAIN;
 }
 
-const INKS = [
-  { label: 'night', value: 'accent' },
-  { label: 'candle', value: 'accent2' },
-  { label: 'pale', value: 'fg' },
-  { label: 'faded', value: 'muted' }
-];
-
-const WATCHES = [
-  { label: 'at dusk', value: 'dusk' },
-  { label: 'at midnight', value: 'midnight' },
-  { label: 'in the small hours', value: 'small' },
-  { label: 'at first light', value: 'dawn' }
-];
-
-const OPENERS = { dusk: 'drift entry:', midnight: 'night watch report:', small: 'observatory memo:', dawn: 'logbook note:' };
-
-const FIRST = ['velvet', 'copper', 'echo', 'saffron', 'silver', 'midnight', 'lumen', 'quiet'];
-const SECOND = ['harbor', 'signal', 'bridge', 'garden', 'archive', 'compass', 'choir', 'voyage'];
-
-const MIDDLES = [
-  'the pattern keeps choosing motion over certainty.',
-  'small lights negotiated a map out of static.',
-  'the sky preferred curiosity to caution.',
-  'the constellation leaned toward unfinished courage.'
-];
-
-const CLOSERS = [
-  'next: move one star and test a new story.',
-  'recommendation: protect one hour for playful drafting.',
-  'next action: begin before your inner critic wakes.',
-  'forecast: momentum improving with each tiny attempt.'
-];
-
-function where(s) {
-  const ns = s.y < 35 ? 'high' : s.y > 65 ? 'low' : 'midway';
-  const ew = s.x < 35 ? 'in the west' : s.x > 65 ? 'in the east' : 'near the middle';
-  return ns + ' ' + ew;
-}
-
-function nearest(stars, star) {
-  let best = null;
-  let bd = Infinity;
-  for (const o of stars) {
-    if (o === star) continue;
-    const d = Math.hypot(o.x - star.x, o.y - star.y);
-    if (d < bd) {
-      bd = d;
-      best = o;
-    }
-  }
-  return best;
-}
-
-// The sky's own number: the same stars in the same places make the same entry title.
-function hashStars(stars) {
-  let h = 2166136261;
-  for (const s of stars) {
-    h = Math.imul(h ^ Math.round(s.x * 10), 16777619);
-    h = Math.imul(h ^ Math.round(s.y * 10), 16777619);
-    const t = String(s.text || '');
-    for (let i = 0; i < t.length; i++) h = Math.imul(h ^ t.charCodeAt(i), 16777619);
-  }
-  return h >>> 0;
-}
-
-function summary(stars) {
-  const n = stars.length || 1;
-  let cx = 0;
-  let cy = 0;
-  for (const s of stars) {
-    cx += s.x;
-    cy += s.y;
-  }
-  cx /= n;
-  cy /= n;
-  let spread = 0;
-  for (const s of stars) spread += Math.hypot(s.x - cx, s.y - cy);
-  return { cx, cy, spread: spread / n };
-}
-
-function spreadWord(spread) {
-  return spread < 12 ? 'tight and intentional' : spread < 24 ? 'balanced and exploratory' : 'wide and adventurous';
-}
-
-function entryTitle(stars) {
-  const h = hashStars(stars);
-  const s = summary(stars);
-  const region = (s.cy < 50 ? 'north' : 'south') + '-' + (s.cx < 50 ? 'west' : 'east');
-  const shape = s.spread < 12 ? 'knot' : s.spread < 24 ? 'field' : 'trail';
-  return FIRST[h % FIRST.length] + ' ' + SECOND[(h >>> 4) % SECOND.length] + ' of the ' + region + ' ' + shape;
-}
-
-function setDrift(s, value, c) {
-  s.drift = Math.max(0, Math.min(1, Number(value) / 100)) || 0;
-  const d = s.drift;
-  c.status(d < 0.05 ? 'the sky holds still' : d < 0.4 ? 'a little drift, as skies do' : d < 0.75 ? 'the stars wander' : 'everything is on the move');
-}
-
-// Three of a list, in an order of the seed's choosing.
-function three(env, list) {
-  const pool = list.slice();
+function range(n) {
   const out = [];
-  while (out.length < 3 && pool.length) out.push(pool.splice(env.int(0, pool.length - 1), 1)[0]);
+  for (let i = 0; i < n; i++) out.push(i);
   return out;
 }
 
-/* ---- drawing ------------------------------------------------------------------------------- */
+function shuffled(env, list) {
+  const out = list.slice();
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = env.int(0, i);
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
 
-function skyTint(env, watch) {
-  const c = env.colors;
-  if (watch === 'dusk') return [env.mix(c.bg2, c.accent2, 0.22), c.bg];
-  if (watch === 'small') return [env.mix(c.bg2, c.accent, 0.14), env.mix(c.bg, c.accent, 0.05)];
-  if (watch === 'dawn') return [env.mix(c.bg2, c.fg, 0.2), env.mix(c.bg, c.accent2, 0.1)];
-  return [c.bg2, c.bg];
+function isPerm(list, n) {
+  return Array.isArray(list) && list.length === n && list.every((v) => Number.isInteger(v) && v >= 0 && v < n) && new Set(list).size === n;
+}
+
+function okPoints(list, n0, n1) {
+  return Array.isArray(list) && list.length >= n0 && list.length <= n1
+    && list.every((p) => p && Number.isInteger(p.x) && Number.isInteger(p.y) && p.x >= 0 && p.x <= 100 && p.y >= 0 && p.y <= 100);
+}
+
+function copyPoints(list) {
+  return list.map((p) => ({ x: p.x, y: p.y }));
+}
+
+// n stars in a square of hundredths, each at least `gap` from the rest: the visitor's stars first,
+// by where they sit, then stars invented from the seed when the sky has too few.
+function gather(env, n, gap, box) {
+  const pts = [];
+  const far = (p) => pts.every((q) => Math.hypot(q.x - p.x, q.y - p.y) >= gap);
+  const into = (x, y) => ({ x: Math.round(box[0] + x / 100 * (box[1] - box[0])), y: Math.round(box[2] + y / 100 * (box[3] - box[2])) });
+  for (const s of (Array.isArray(env.stars) ? env.stars : [])) {
+    if (pts.length >= n) break;
+    const x = Number(s && s.x);
+    const y = Number(s && s.y);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+    const p = into(Math.max(0, Math.min(100, x)), Math.max(0, Math.min(100, y)));
+    if (far(p)) pts.push(p);
+  }
+  for (let guard = 0; pts.length < n; guard++) {
+    const p = into(env.rnd() * 100, env.rnd() * 100);
+    if (far(p) || guard > 300) pts.push(p);
+  }
+  return pts;
+}
+
+/* ---- drawing -------------------------------------------------------------------------------- */
+
+function skyTint(env) {
+  return [env.colors.bg2, env.colors.bg];
 }
 
 function sky(g, w, split, tint) {
@@ -149,44 +109,35 @@ function ring(g, x, y, r, color, width) {
   g.stroke();
 }
 
-// Lines between stars: along the order they came ('path'), or between near neighbours, brighter
-// the nearer they are ('near', within `reach`).
-function links(g, pts, env, ink, mode, reach) {
+// Lines between stars along a path, in the order given.
+function path(g, pts, color) {
+  if (pts.length < 2) return;
   g.lineWidth = 1;
-  if (mode === 'path') {
-    if (pts.length < 2) return;
-    g.strokeStyle = env.alpha(ink, 0.22);
-    g.beginPath();
-    pts.forEach((p, i) => (i ? g.lineTo(p.x, p.y) : g.moveTo(p.x, p.y)));
-    g.stroke();
-    return;
-  }
-  const r2 = reach * reach;
-  for (let a = 0; a < pts.length; a++) {
-    for (let b = a + 1; b < pts.length; b++) {
-      const d2 = (pts[b].x - pts[a].x) ** 2 + (pts[b].y - pts[a].y) ** 2;
-      if (d2 > r2) continue;
-      g.strokeStyle = env.alpha(ink, 0.1 + (1 - d2 / r2) * 0.5);
-      g.beginPath();
-      g.moveTo(pts[a].x, pts[a].y);
-      g.lineTo(pts[b].x, pts[b].y);
-      g.stroke();
-    }
-  }
+  g.strokeStyle = color;
+  g.beginPath();
+  pts.forEach((p, i) => (i ? g.lineTo(p.x, p.y) : g.moveTo(p.x, p.y)));
+  g.stroke();
 }
 
-function dots(g, pts, env, ink, scale) {
-  pts.forEach((p, i) => {
-    const r = (1.8 + (i % 3) * 0.7) * scale;
-    g.fillStyle = env.alpha(ink, 0.22);
-    g.beginPath();
-    g.arc(p.x, p.y, r * 2.4, 0, Math.PI * 2);
-    g.fill();
-    g.fillStyle = env.alpha(env.colors.fg, 0.95);
-    g.beginPath();
-    g.arc(p.x, p.y, r, 0, Math.PI * 2);
-    g.fill();
-  });
+// One star: a soft halo, a bright core, and a letter beside it. `glow` is how far it has come out.
+function star(g, env, p, letter, scale, glow, size) {
+  const r = (2 + glow * 2.5) * scale;
+  const ink = glow > 0 ? env.colors.accent2 : env.colors.accent;
+  g.fillStyle = env.alpha(ink, 0.2 + glow * 0.45);
+  g.beginPath();
+  g.arc(p.x, p.y, r * (2.4 + glow * 2), 0, Math.PI * 2);
+  g.fill();
+  g.fillStyle = env.alpha(env.colors.fg, 0.95);
+  g.beginPath();
+  g.arc(p.x, p.y, r, 0, Math.PI * 2);
+  g.fill();
+  if (letter) {
+    g.font = '600 ' + Math.round(size) + 'px system-ui, sans-serif';
+    g.textAlign = 'left';
+    g.textBaseline = 'middle';
+    g.fillStyle = env.alpha(glow > 0 ? env.colors.accent2 : env.colors.fg, 0.9);
+    g.fillText(letter, p.x + r + size * 0.35, p.y - size * 0.55);
+  }
 }
 
 // The ruled page under the sky: `rows` rules and a margin line at `m`. Returns the rule spacing.
@@ -211,17 +162,6 @@ function page(g, w, h, split, env, ink, m, rows) {
   return step;
 }
 
-// One mark per star, in the order they were placed, as the card has always kept them.
-function marks(g, w, split, step, pts, env, m, rows) {
-  const perLine = Math.ceil(pts.length / rows) || 1;
-  const cell = (w - m - 24) / perLine;
-  g.fillStyle = env.alpha(env.colors.fg, 0.7);
-  pts.forEach((p, i) => {
-    const len = 6 + ((p.text || '').length % 9) * 3;
-    g.fillRect(m + 8 + (i % perLine) * cell, split + step * (Math.floor(i / perLine) + 1) - 4, Math.min(len, cell - 6), 2);
-  });
-}
-
 // A line of handwriting on a rule, shrunk a little and then cut short if it would run off the page.
 function write(g, text, x, y, maxW, size, color) {
   let s = size;
@@ -241,313 +181,552 @@ function write(g, text, x, y, maxW, size, color) {
   g.fillText(t, x, y);
 }
 
-// The scene's measurements: where the sky ends and the page begins, the margin, the hand's size.
-function frameOf(c) {
-  const unit = Math.min(c.w, c.h);
-  return { w: c.w, h: c.h, split: c.h * 0.58, m: Math.max(18, unit * 0.08), unit, size: Math.max(10, Math.min(22, Math.round(unit * 0.036))) };
+// The scene's measurements: where the sky gives way to the page (the configuration's turn moves
+// it a little), the margin, the hand's size.
+function frameOf(w, h, v) {
+  const unit = Math.min(w, h);
+  return { w, h, split: h * (0.52 + v.turn * 0.08), m: Math.max(18, unit * 0.08), unit, size: Math.max(10, Math.min(20, Math.round(unit * 0.034))) };
 }
 
 // Lines of handwriting on the page, one to a rule from the top; `color` may be a function of the row.
-function rows(c, fr, step, lines, color) {
+function rows(g, fr, step, lines, color) {
+  const size = Math.min(fr.size, step * 0.6);
   lines.forEach((line, i) => {
     const col = typeof color === 'function' ? color(i) : color;
-    write(c.g, line, fr.m + fr.size * 0.5, fr.split + step * (i + 1) - fr.size * 0.3, fr.w - fr.m * 2 - fr.size, fr.size, col);
+    write(g, line, fr.m + size * 0.5, fr.split + step * (i + 1) - size * 0.3, fr.w - fr.m * 2 - size, size, col);
   });
 }
 
-// The stars as points in the sky, wobbled by the drift. With less motion asked for, t stays
-// where it is, so the drift spreads the sky instead of wandering it.
-function placed(c, split, pad, drift, t) {
-  const amp = Math.min(c.w, c.h) * 0.025 * drift;
-  return c.points(c.w, split, pad).map((p, i) => ({
-    x: p.x + Math.cos(t * 0.8 + i * 0.9) * amp * 0.9,
-    y: p.y + Math.sin(t * 1.1 + i * 0.7) * amp,
-    text: p.text
-  }));
+// The stars as points in the sky above the page.
+function placed(points, fr, top) {
+  const pad = fr.m * 0.6;
+  const y0 = top || pad;
+  return points.map((p) => ({ x: pad + p.x / 100 * (fr.w - pad * 2), y: y0 + p.y / 100 * (fr.split - y0 - pad) }));
 }
 
-// A wax seal with the whole sky pressed into it.
-function seal(g, c, x, y, r, glow) {
-  const col = c.colors;
-  const halo = g.createRadialGradient(x, y, r * 0.6, x, y, r * 2.4);
-  halo.addColorStop(0, c.alpha(col.accent2, 0.4 * glow));
-  halo.addColorStop(1, c.alpha(col.accent2, 0));
-  g.fillStyle = halo;
-  g.fillRect(x - r * 2.4, y - r * 2.4, r * 4.8, r * 4.8);
-  const wax = g.createRadialGradient(x - r * 0.3, y - r * 0.3, r * 0.1, x, y, r);
-  wax.addColorStop(0, c.mix(col.accent2, col.fg, 0.25));
-  wax.addColorStop(1, c.mix(col.accent2, col.bg, 0.35));
-  g.fillStyle = wax;
-  g.beginPath();
-  g.arc(x, y, r, 0, Math.PI * 2);
-  g.fill();
-  ring(g, x, y, r * 0.82, c.alpha(col.bg, 0.5), 1);
-  g.fillStyle = c.alpha(col.bg, 0.85);
-  for (const s of c.stars) {
-    g.beginPath();
-    g.arc(x + (s.x / 100 - 0.5) * r * 1.2, y + (s.y / 100 - 0.5) * r * 1.2, Math.max(1, r * 0.06), 0, Math.PI * 2);
-    g.fill();
-  }
+/* ---- call them back: a memory --------------------------------------------------------------- */
+
+function recallPlan(env) {
+  const n = env.int(4, 6);
+  const points = gather(env, n, 16, [8, 92, 10, 90]);
+  let seq = shuffled(env, range(n));
+  for (let guard = 0; guard < 12 && seq.every((v, i) => v === i); guard++) seq = shuffled(env, range(n));
+  if (seq.every((v, i) => v === i)) seq.reverse();
+  return { kind: 'recall', number: 1 + env.int(0, 398), points, seq };
 }
 
-// The card: the sky over the page, with the birth-order path and one mark per star. The
-// configuration the card was dealt sets where the sky gives way to the page, how large the stars
-// are written and how many rules the page is ruled for.
-function logbook(ctx, w, h, env) {
-  const v = env.variant;
-  const split = h * (0.5 + v.turn * 0.16);
-  const ink = env.colors.accent;
-  sky(ctx, w, split, skyTint(env, 'midnight'));
-  const pts = env.points(w, split, 10);
-  links(ctx, pts, env, ink, 'path', 0);
-  dots(ctx, pts, env, ink, v.scale);
-  const rows = Math.max(3, Math.round(5 * v.density));
-  const step = page(ctx, w, h, split, env, ink, 26, rows);
-  marks(ctx, w, split, step, pts, env, 26, rows);
+function carriedRecall(env) {
+  const p = env.card && env.card.of;
+  if (!p || p.kind !== 'recall' || !okPoints(p.points, 4, 6)) return null;
+  const n = p.points.length;
+  if (!isPerm(p.seq, n) || p.seq.every((v, i) => v === i)) return null;
+  if (!Number.isInteger(p.number) || p.number < 1 || p.number > 399) return null;
+  return { kind: 'recall', number: p.number, points: copyPoints(p.points), seq: p.seq.slice() };
 }
 
-/* ---- the pieces ---------------------------------------------------------------------------- */
+function recallTitle(plan) {
+  return 'entry ' + plan.number + ': call back ' + WORDS[plan.points.length];
+}
 
-// An entry written a line at a time from where the stars sit, then sealed; the sky goes into
-// the wax when it is done.
-function entry(env) {
-  const was = pressed(env);
-  const inks = three(env, INKS);
-  const count = env.int(3, 4);
-  const holdMs = env.pick([1500, 2000, 2500]);
-  const drift0 = env.int(20, 60);
-  const opener = env.pick([OPENERS.dawn, OPENERS.small, OPENERS.midnight, OPENERS.dusk]);
-  const middle = env.pick(MIDDLES);
-  const closer = env.pick(CLOSERS);
-  const s = { ink: 'accent', drift: drift0 / 100, written: 0, sealed: false, t: 0, fade: 0, lines: null, title: '' };
-  function lines(c) {
-    if (!s.lines) {
-      const sum = summary(c.stars);
-      const n = c.stars.length;
-      s.title = (was ? 'entry ' + was.entry + ', ' : '') + entryTitle(c.stars);
-      const all = [
-        opener + ' ' + s.title,
-        n + (n === 1 ? ' star' : ' stars') + ', centred at ' + sum.cx.toFixed(0) + ' / ' + sum.cy.toFixed(0) + ', ' + spreadWord(sum.spread) + '.',
-        middle,
-        closer
-      ];
-      s.lines = count === 4 ? all : [all[0], all[1], all[3]];
+// Which star is out at `tp` seconds into the showing, or -1; and whether the showing is over.
+function showing(plan, tp) {
+  if (tp < LEAD) return { lit: -1, over: false };
+  const i = Math.floor((tp - LEAD) / SLOT);
+  if (i >= plan.seq.length) return { lit: -1, over: true };
+  return { lit: tp - LEAD - i * SLOT < FLASH ? plan.seq[i] : -1, over: false };
+}
+
+function recallScene(g, w, h, c, plan, s, v) {
+  const fr = frameOf(w, h, v);
+  const ink = c.colors.accent;
+  const gold = c.colors.accent2;
+  sky(g, w, fr.split, skyTint(c));
+  const pts = placed(plan.points, fr);
+  const show = showing(plan, s.t - s.from);
+  if (s.fade > 0) path(g, plan.seq.map((i) => pts[i]), c.alpha(gold, 0.6 * s.fade));
+  pts.forEach((p, i) => {
+    const tapped = s.taps ? s.taps.indexOf(i) : -1;
+    star(g, c, p, LETTERS[i], v.scale, show.lit === i ? 1 : 0, fr.size);
+    if (show.lit === i) ring(g, p.x, p.y, fr.unit * 0.05, c.alpha(gold, 0.8), 1.5);
+    if (tapped >= 0) {
+      ring(g, p.x, p.y, fr.unit * 0.028, c.alpha(gold, 0.85), 1.2);
+      g.font = '500 ' + Math.round(fr.size * 0.8) + 'px system-ui, sans-serif';
+      g.fillStyle = c.alpha(gold, 0.95);
+      g.fillText(String(tapped + 1), p.x + fr.size * 0.5, p.y + fr.size * 0.6);
     }
-    return s.lines;
-  }
-  function draw(c) {
-    const fr = frameOf(c);
-    const { w, h, split, m } = fr;
-    const ink = c.colors[s.ink] || c.colors.accent;
-    const f = s.fade;
-    const r = fr.unit * 0.075;
-    const sx = w - m - r * 1.1;
-    const sy = split + (h - split) * 0.6;
-    sky(c.g, w, split, skyTint(c, 'midnight'));
-    let pts = placed(c, split, m * 0.6, s.drift, s.t);
-    const reach = Math.min(w, split) * 0.27 * (1 - f * 0.8) + 1;
-    if (f > 0) {
-      // The sky goes dark and the stars stream into the seal: drawn over the page, below, so
-      // they can be seen to arrive, with the wax pressed on top of them.
-      const k = f * f;
-      pts = pts.map((p) => ({ x: p.x + (sx - p.x) * k, y: p.y + (sy - p.y) * k, text: p.text }));
-      c.g.fillStyle = 'rgba(0, 0, 0, ' + (f * 0.6).toFixed(3) + ')';
-      c.g.fillRect(0, 0, w, split);
-    } else {
-      links(c.g, pts, c, ink, 'near', reach);
-      dots(c.g, pts, c, ink, 1);
-    }
-    const step = page(c.g, w, h, split, c, ink, m, 5);
-    rows(c, fr, step, lines(c).slice(0, s.written), c.alpha(c.colors.fg, 0.85));
-    if (f > 0) {
-      links(c.g, pts, c, ink, 'near', reach);
-      dots(c.g, pts, c, ink, 1 - f * 0.7);
-    }
-    if (s.sealed) seal(c.g, c, sx, sy, r, 0.5 + f * 0.5);
-  }
+  });
+  const step = page(g, w, h, fr.split, c, ink, fr.m, Math.max(3, Math.round(4 * v.density)));
+  const lines = [OPENER + ' entry ' + plan.number];
+  if (s.fade > 0) lines.push('in the order they came: ' + plan.seq.map((i) => LETTERS[i]).join(', '));
+  else lines.push(show.over ? 'they came out one at a time, and rested.' : s.t - s.from < LEAD ? 'the stars are coming out…' : 'one at a time…');
+  if (s.order) lines.push('called back: ' + s.order.map((i) => LETTERS[i]).join(', '));
+  rows(g, fr, step, lines, (i) => (i === 0 ? c.alpha(gold, 0.95) : c.alpha(c.colors.fg, 0.85)));
+}
+
+function recallPreview(g, w, h, env, plan, t) {
+  recallScene(g, w, h, env, plan, { t: t || 0, from: 0, fade: 0, order: null }, dials(env));
+}
+
+function recallPiece(env, plan) {
+  const n = plan.points.length;
+  const v = dials(env);
+  const s = { t: 0, from: 0, fade: 0, order: range(n), taps: [] };
+  const draw = (c) => recallScene(c.g, c.w, c.h, c, plan, s, v);
+  const inPlace = (order) => order.filter((item, i) => item === plan.seq[i]).length;
   return {
-    title: was ? 'entry ' + was.entry + ', in ' + (count === 4 ? 'four lines' : 'three lines')
-      : count === 4 ? 'four lines in the logbook' : 'a three-line entry',
-    brief: 'Choose the ink and how far the sky drifts, write the entry a line at a time, and hold to seal it; the stars go into the wax when you are done.'
-      + (was && was.star ? ' It is the entry your card began, from the star that said "' + was.star + '".' : ''),
+    title: recallTitle(plan),
+    brief: 'On the midnight watch, ' + WORDS[n] + ' stars come out one at a time, each for a moment, and then they rest. The sky plays once from the start.',
+    goal: 'Put the stars in the order they came out.',
     aspect: '4 / 3',
+    checkLabel: 'check the entry',
     steps: [
-      { id: 'ink', ask: 'the ink', kind: 'choice', options: inks },
-      { id: 'drift', ask: 'time drift', kind: 'range', min: 0, max: 100, step: 1, value: drift0, low: 'still', high: 'wandering' },
-      { id: 'write', ask: 'write the entry, a line at a time', kind: 'press', count, label: 'write a line', after: 'ink' },
-      { id: 'seal', ask: 'seal it', kind: 'hold', ms: holdMs, label: 'hold to seal', after: 'write' }
+      { id: 'order', ask: 'the stars, first to last: arrange them here, or tap them in that order', kind: 'order', items: range(n).map((i) => ({ label: 'star ' + LETTERS[i], value: i })) },
+      { id: 'again', ask: 'see the sky once more', kind: 'press', count: 1, label: 'show it again', optional: true }
     ],
+    solution: { order: plan.seq.slice() },
+    check(c) {
+      const value = c.value('order');
+      const order = isPerm(value, n) ? value : s.order;
+      const k = inPlace(order);
+      return {
+        solved: k === n,
+        say: k === n ? 'all ' + WORDS[n] + ' back, in the order they came'
+          : k === 0 ? 'none of them stands in the right place yet' : WORDS[k] + ' of ' + WORDS[n] + ' in the right place'
+      };
+    },
     start(c) {
-      lines(c);
+      c.status('watch the sky');
       draw(c);
     },
     apply(id, value, c) {
-      if (c.done) return;
-      if (id === 'ink') {
-        s.ink = String(value);
-        c.status('same stars, different ink');
+      if (id === 'order' && isPerm(value, n)) {
+        s.order = value.slice();
+        c.status('called back: ' + s.order.map((i) => LETTERS[i]).join(', '));
       }
-      if (id === 'drift') setDrift(s, value, c);
-      if (id === 'write') {
-        const L = lines(c);
-        const n = Math.round(Number(value)) || 0;
-        s.written = Math.max(0, Math.min(L.length, n));
-        c.status(n > L.length ? 'that is the whole entry; the pen is capped' : s.written ? L[s.written - 1] : 'the pen is uncapped');
+      if (id === 'again') {
+        s.from = s.t;
+        c.hint();
+        c.status('once more: watch the sky');
       }
-      if (id === 'seal') {
-        s.sealed = true;
-        c.status('sealed: ' + s.title);
-      }
-    },
-    frame(t, dt, c) {
-      if (!c.reduced) s.t += dt;
-      if (c.done) s.fade = Math.min(1, s.fade + dt * (c.reduced ? 4 : 1.1));
       draw(c);
-    },
-    end(c) {
-      c.status('sealed: ' + s.title + '. the sky is in the wax and the ink is dry; nothing else is kept.');
-    }
-  };
-}
-
-// The stars called back one by one in the order they came, under a watch of the visitor's
-// choosing, with a hum under it if they like; the whole constellation lights when all are back.
-function replay(env) {
-  const was = pressed(env);
-  const n = env.stars.length;
-  const watches = three(env, WATCHES);
-  const batch = Math.ceil(n / env.int(3, 5));
-  const need = Math.ceil(n / batch);
-  const drift0 = env.int(20, 60);
-  const title = env.pick(['replay the birth order', 'the birth order, replayed', n <= 12 ? 'call back all ' + n : 'call them all back']);
-  const s = { watch: 'midnight', drift: drift0 / 100, back: 0, hum: false, t: 0, gap: 0, beat: 0, pulses: [], ring: 0, fade: 0, title: '' };
-  function label(v) {
-    const w = WATCHES.find((o) => o.value === v);
-    return w ? w.label : v;
-  }
-  function draw(c) {
-    const fr = frameOf(c);
-    const { w, h, split, m, unit } = fr;
-    const ink = c.colors.accent;
-    const gold = c.colors.accent2;
-    const f = s.fade;
-    sky(c.g, w, split, skyTint(c, s.watch));
-    const all = placed(c, split, m * 0.6, s.drift * (1 - f), s.t);
-    const pts = all.slice(0, s.back);
-    links(c.g, pts, c, ink, 'path', 0);
-    if (f > 0) links(c.g, pts, c, gold, 'near', Math.min(w, split) * 0.5 * f);
-    dots(c.g, pts, c, ink, 1 + f * 0.3);
-    if (s.ring > 0 && pts.length) {
-      const p = pts[pts.length - 1];
-      ring(c.g, p.x, p.y, unit * 0.02 + (1 - s.ring) * unit * 0.08, c.alpha(gold, s.ring * 0.8), 1.5);
-    }
-    // The next to come back waits with a ring around it, as it did on the old page.
-    if (s.back < n) ring(c.g, all[s.back].x, all[s.back].y, unit * 0.028 + Math.sin(s.t * 8) * unit * 0.007, c.alpha(gold, 0.82), 1.6);
-    for (const p of s.pulses) {
-      if (p.age < 0 || !all[p.i]) continue;
-      const age = c.reduced ? 0.4 : p.age;
-      ring(c.g, all[p.i].x, all[p.i].y, (0.1 + age) * p.size * unit * 0.12, c.alpha(gold, (1 - p.age / 1.4) * 0.45), 1);
-    }
-    if (f > 0) {
-      c.g.fillStyle = c.alpha(gold, f * 0.08);
-      c.g.fillRect(0, 0, w, split);
-    }
-    const step = page(c.g, w, h, split, c, ink, m, 5);
-    const texts = c.stars.slice(0, s.back).map((st) => st.text || '');
-    const shown = f > 0 ? [OPENERS[s.watch] + ' ' + s.title].concat(texts.slice(-4)) : texts.slice(-5);
-    rows(c, fr, step, shown, (i) => (f > 0 && i === 0 ? c.alpha(gold, 0.95) : c.alpha(c.colors.fg, 0.85)));
-  }
-  return {
-    title: was ? title + ', from entry ' + was.entry : title,
-    brief: 'Pick the watch, set the drift, let the sky hum if you like, and tap it to call each thought back in the order it came; the whole constellation lights when they are all back.'
-      + (was && was.star ? ' Your card stopped at the one that said "' + was.star + '".' : ''),
-    aspect: '4 / 3',
-    steps: [
-      { id: 'watch', ask: 'which watch to log it under', kind: 'choice', options: watches },
-      { id: 'drift', ask: 'time drift', kind: 'range', min: 0, max: 100, step: 1, value: drift0, low: 'still', high: 'wandering' },
-      { id: 'hum', ask: 'a hum under it', kind: 'toggle', label: 'let it hum' },
-      { id: 'back', ask: need === n ? 'tap the sky once for each thought' : 'tap the sky ' + need + ' times', kind: 'tap', label: 'call one back for me', after: 'watch' }
-    ],
-    start(c) {
-      s.title = entryTitle(c.stars);
-      draw(c);
-    },
-    apply(id, value, c) {
-      if (c.done) return;
-      if (id === 'watch') {
-        s.watch = String(value);
-        c.status('logged ' + label(s.watch));
-      }
-      if (id === 'drift') setDrift(s, value, c);
-      if (id === 'hum') {
-        s.hum = !!value;
-        s.gap = 0;
-        if (!s.hum) s.pulses = [];
-        c.status(s.hum ? 'the constellation is humming' : 'the observatory is quiet again');
-      }
     },
     tap(x, y, c) {
-      if (s.back >= n || c.done) return;
-      s.back = Math.min(n, s.back + batch);
-      s.ring = 1;
-      c.progress('back', s.back / n);
-      c.status(s.back >= n ? 'all ' + n + ' back in the sky' : 'latest thought: ' + (c.stars[s.back - 1].text || ''));
-      if (s.back >= n) c.satisfy('back');
+      // Tap the stars in the order they came; the order on the rail follows.
+      const fr = frameOf(c.w, c.h, v);
+      const pts = placed(plan.points, fr);
+      let best = -1;
+      let bd = Infinity;
+      pts.forEach((p, i) => {
+        const d = Math.hypot(p.x - x * c.w, p.y - y * c.h);
+        if (d < bd) {
+          bd = d;
+          best = i;
+        }
+      });
+      if (best < 0 || bd > fr.unit * 0.09) return;
+      if (s.taps.includes(best)) {
+        c.status('star ' + LETTERS[best] + ' is already in your order; keep going');
+        draw(c);
+        return;
+      }
+      s.taps.push(best);
+      if (s.taps.length === n) {
+        s.order = s.taps.slice();
+        s.taps = [];
+        c.set('order', s.order.slice());
+        c.status('called back: ' + s.order.map((i) => LETTERS[i]).join(', ') + '; check it');
+      } else {
+        c.status('star ' + LETTERS[best] + ' came ' + ['first', 'second', 'third', 'fourth', 'fifth', 'sixth'][s.taps.length - 1] + '; tap the next');
+      }
+      draw(c);
     },
     frame(t, dt, c) {
-      if (!c.reduced) s.t += dt;
-      if (s.hum) {
-        s.gap -= dt;
-        if (s.gap <= 0) {
-          // A chord of three from the stars that are back (from the whole sky, where they will be,
-          // until the first are), highest first, as the old ambience went.
-          s.gap = 1.25 + s.drift * 0.9;
-          const k = s.back || n;
-          const order = c.stars.slice(0, k).map((st, i) => i).sort((a, b) => c.stars[a].y - c.stars[b].y);
-          s.pulses.push(
-            { i: order[s.beat % k], age: 0, size: 1 },
-            { i: order[(s.beat * 2 + 3) % k], age: -0.09, size: 0.6 },
-            { i: order[(s.beat * 3 + 1) % k], age: -0.16, size: 1.4 }
-          );
-          s.beat += 1;
-        }
-      }
-      for (const p of s.pulses) p.age += dt;
-      s.pulses = s.pulses.filter((p) => p.age < 1.4);
-      s.ring = Math.max(0, s.ring - dt * 1.5);
-      if (c.done) s.fade = Math.min(1, s.fade + dt * (c.reduced ? 4 : 1.2));
+      s.t += dt;
+      if (c.done) s.fade = Math.min(1, s.fade + dt * (c.reduced ? 4 : 1));
       draw(c);
     },
     end(c) {
-      c.status('all ' + n + ' back, in the order they came, and written up ' + label(s.watch) + ' as "' + s.title + '"');
+      c.status('entry ' + plan.number + ' written up: ' + plan.seq.map((i) => LETTERS[i]).join(', ') + ', in the order they came');
     }
   };
+}
+
+/* ---- the false lines: a deduction ----------------------------------------------------------- */
+
+// Where things stand on the sky: higher is a smaller y; west is a smaller x; the meridian stands
+// at x = M, where the plan put it so that every star keeps clear of it.
+function byY(points) {
+  return range(points.length).sort((a, b) => points[a].y - points[b].y);
+}
+
+function byX(points) {
+  return range(points.length).sort((a, b) => points[a].x - points[b].x);
+}
+
+function westOf(points, i, M) {
+  return points[i].x < M;
+}
+
+// The meridian nearest the middle of the sky that every star keeps five units clear of, or 0.
+function meridianFor(P) {
+  for (let step = 0; step <= 14; step++) {
+    for (const M of [50 - step, 50 + step]) {
+      if (P.every((p) => Math.abs(p.x - M) >= 5)) return M;
+    }
+  }
+  return 0;
+}
+
+// Whether a claim holds on the sky, read strictly.
+function holds(cl, P, M) {
+  const ys = byY(P);
+  const xs = byX(P);
+  switch (cl.t) {
+    case 'highest': return ys[0] === cl.a;
+    case 'lowest': return ys[ys.length - 1] === cl.a;
+    case 'count': return P.filter((p, i) => (cl.side === 'west') === westOf(P, i, M)).length === cl.k;
+    case 'westOf': return P[cl.a].x < P[cl.b].x;
+    case 'above': return P[cl.a].y < P[cl.b].y;
+    case 'lowestSide': return (cl.side === 'west') === westOf(P, ys[ys.length - 1], M);
+    case 'highestSide': return (cl.side === 'west') === westOf(P, ys[0], M);
+    case 'nearest': return P.every((p, i) => i === cl.a || Math.abs(p.x - M) > Math.abs(P[cl.a].x - M));
+    case 'side': return (westOf(P, cl.a, M) === westOf(P, cl.b, M)) === cl.same;
+    case 'most': return (cl.dir === 'west' ? xs[0] : xs[xs.length - 1]) === cl.a;
+    default: return false;
+  }
+}
+
+function claimText(cl) {
+  const A = LETTERS[cl.a];
+  const B = LETTERS[cl.b];
+  switch (cl.t) {
+    case 'highest': return A + ' is the highest star';
+    case 'lowest': return A + ' is the lowest star';
+    case 'count': return (cl.k === 1 ? 'one star lies ' : WORDS[cl.k] + ' stars lie ') + cl.side + ' of the meridian';
+    case 'westOf': return A + ' is west of ' + B;
+    case 'above': return A + ' is higher than ' + B;
+    case 'lowestSide': return 'the lowest star is in the ' + cl.side + ' half';
+    case 'highestSide': return 'the highest star is in the ' + cl.side + ' half';
+    case 'nearest': return A + ' is the star nearest the meridian';
+    case 'side': return A + ' and ' + B + ' are on ' + (cl.same ? 'the same side' : 'opposite sides') + ' of the meridian';
+    case 'most': return A + ' is the ' + (cl.dir === 'west' ? 'westernmost' : 'easternmost') + ' star';
+    default: return '';
+  }
+}
+
+// Every claim that holds on the sky by a margin wide enough to read off the drawing.
+function trueClaims(P, M) {
+  const n = P.length;
+  const ys = byY(P);
+  const xs = byX(P);
+  const out = [];
+  if (P[ys[1]].y - P[ys[0]].y >= 6) {
+    out.push({ t: 'highest', a: ys[0] });
+    out.push({ t: 'highestSide', side: westOf(P, ys[0], M) ? 'west' : 'east' });
+  }
+  if (P[ys[n - 1]].y - P[ys[n - 2]].y >= 6) {
+    out.push({ t: 'lowest', a: ys[n - 1] });
+    out.push({ t: 'lowestSide', side: westOf(P, ys[n - 1], M) ? 'west' : 'east' });
+  }
+  if (P[xs[1]].x - P[xs[0]].x >= 6) out.push({ t: 'most', dir: 'west', a: xs[0] });
+  if (P[xs[n - 1]].x - P[xs[n - 2]].x >= 6) out.push({ t: 'most', dir: 'east', a: xs[n - 1] });
+  const west = P.filter((p) => p.x < M).length;
+  out.push({ t: 'count', side: 'west', k: west });
+  out.push({ t: 'count', side: 'east', k: n - west });
+  const near = range(n).sort((a, b) => Math.abs(P[a].x - M) - Math.abs(P[b].x - M));
+  if (Math.abs(P[near[1]].x - M) - Math.abs(P[near[0]].x - M) >= 5) out.push({ t: 'nearest', a: near[0] });
+  for (let a = 0; a < n; a++) {
+    for (let b = 0; b < n; b++) {
+      if (a === b) continue;
+      if (P[b].x - P[a].x >= 7) out.push({ t: 'westOf', a, b });
+      if (P[b].y - P[a].y >= 7) out.push({ t: 'above', a, b });
+      if (a < b) out.push({ t: 'side', a, b, same: westOf(P, a, M) === westOf(P, b, M) });
+    }
+  }
+  return out;
+}
+
+// The claim turned false: another star named, the count off by one, the two swapped, the side
+// changed. Verified against the sky by the caller.
+function negated(env, cl, n) {
+  const other = (a) => (a + env.int(1, n - 1)) % n;
+  switch (cl.t) {
+    case 'highest':
+    case 'lowest':
+    case 'nearest': return { t: cl.t, a: other(cl.a) };
+    case 'most': return { t: 'most', dir: cl.dir, a: other(cl.a) };
+    case 'count': return { t: 'count', side: cl.side, k: cl.k === 0 ? 1 : cl.k === n ? n - 1 : cl.k + (env.chance(0.5) ? 1 : -1) };
+    case 'westOf':
+    case 'above': return { t: cl.t, a: cl.b, b: cl.a };
+    case 'lowestSide':
+    case 'highestSide': return { t: cl.t, side: cl.side === 'west' ? 'east' : 'west' };
+    case 'side': return { t: 'side', a: cl.a, b: cl.b, same: !cl.same };
+    default: return null;
+  }
+}
+
+// A varied handful: no two claims of one kind, the pairwise kinds last.
+function handful(env, claims, count) {
+  const pool = shuffled(env, claims);
+  const kinds = new Set();
+  const out = [];
+  for (const cl of pool) {
+    const kind = cl.t + (cl.t === 'count' || cl.t === 'most' ? (cl.side || cl.dir) : '');
+    if (kinds.has(kind)) continue;
+    kinds.add(kind);
+    out.push(cl);
+    if (out.length === count) break;
+  }
+  return out;
+}
+
+// A sky that always yields a full handful of claims, for the rare seed whose own stars do not.
+const SPARE_SKY = [{ x: 14, y: 22 }, { x: 38, y: 70 }, { x: 61, y: 12 }, { x: 80, y: 48 }, { x: 70, y: 84 }];
+
+function linesPlan(env) {
+  const number = 1 + env.int(0, 398);
+  let last = null;
+  for (let attempt = 0; attempt < 40; attempt++) {
+    const n = attempt < 30 ? env.int(4, 6) : 5;
+    const points = attempt < 30 ? gather(env, n, 14, [6, 94, 8, 88]) : copyPoints(SPARE_SKY);
+    const meridian = meridianFor(points);
+    if (!meridian) continue;
+    const truths = trueClaims(points, meridian);
+    const count = env.int(5, 6);
+    const chosen = handful(env, truths, count);
+    if (chosen.length < count) continue;
+    const lies = shuffled(env, range(count)).slice(0, 2).sort((a, b) => a - b);
+    const claims = chosen.map((cl, i) => (lies.includes(i) ? negated(env, cl, n) : cl));
+    if (claims.some((cl) => !cl)) continue;
+    const truth = claims.map((cl) => holds(cl, points, meridian));
+    if (truth.filter((t) => !t).length !== 2 || lies.some((i) => truth[i])) continue;
+    last = { kind: 'lines', number, points, meridian, claims, lies };
+    return last;
+  }
+  return last;
+}
+
+function okClaim(cl, n) {
+  if (!cl || typeof cl !== 'object') return false;
+  const star = (i) => Number.isInteger(i) && i >= 0 && i < n;
+  switch (cl.t) {
+    case 'highest':
+    case 'lowest':
+    case 'nearest': return star(cl.a);
+    case 'most': return star(cl.a) && (cl.dir === 'west' || cl.dir === 'east');
+    case 'count': return (cl.side === 'west' || cl.side === 'east') && Number.isInteger(cl.k) && cl.k >= 0 && cl.k <= n;
+    case 'westOf':
+    case 'above': return star(cl.a) && star(cl.b) && cl.a !== cl.b;
+    case 'lowestSide':
+    case 'highestSide': return cl.side === 'west' || cl.side === 'east';
+    case 'side': return star(cl.a) && star(cl.b) && cl.a !== cl.b && typeof cl.same === 'boolean';
+    default: return false;
+  }
+}
+
+function carriedLines(env) {
+  const p = env.card && env.card.of;
+  if (!p || p.kind !== 'lines' || !okPoints(p.points, 4, 6)) return null;
+  const n = p.points.length;
+  if (!Number.isInteger(p.number) || p.number < 1 || p.number > 399) return null;
+  if (!Number.isInteger(p.meridian) || p.meridian < 36 || p.meridian > 64 || !p.points.every((q) => Math.abs(q.x - p.meridian) >= 5)) return null;
+  if (!Array.isArray(p.claims) || p.claims.length < 5 || p.claims.length > 6 || !p.claims.every((cl) => okClaim(cl, n))) return null;
+  const claims = p.claims.map((cl) => ({ t: cl.t, a: cl.a, b: cl.b, k: cl.k, side: cl.side, dir: cl.dir, same: cl.same }));
+  const truth = claims.map((cl) => holds(cl, p.points, p.meridian));
+  const lies = range(claims.length).filter((i) => !truth[i]);
+  if (lies.length !== 2 || !Array.isArray(p.lies) || p.lies.length !== 2 || !lies.every((i, k) => p.lies[k] === i)) return null;
+  return { kind: 'lines', number: p.number, points: copyPoints(p.points), meridian: p.meridian, claims, lies };
+}
+
+function linesTitle(plan) {
+  return 'entry ' + plan.number + ': two false lines';
+}
+
+function linesScene(g, w, h, c, plan, s, v) {
+  const fr = frameOf(w, h, v);
+  const ink = c.colors.accent;
+  const gold = c.colors.accent2;
+  const top = fr.size * 1.8;
+  sky(g, w, fr.split, skyTint(c));
+  // The meridian where the plan stands it, and the horizon where the page begins, west on the left.
+  const pts = placed(plan.points, fr, top);
+  const mx = fr.m * 0.6 + plan.meridian / 100 * (w - fr.m * 1.2);
+  g.strokeStyle = c.alpha(c.colors.muted, 0.55);
+  g.lineWidth = 1;
+  g.setLineDash([4, 5]);
+  g.beginPath();
+  g.moveTo(mx, top * 0.4);
+  g.lineTo(mx, fr.split);
+  g.stroke();
+  g.setLineDash([]);
+  g.strokeStyle = c.alpha(gold, 0.6);
+  g.beginPath();
+  g.moveTo(0, fr.split - 1);
+  g.lineTo(w, fr.split - 1);
+  g.stroke();
+  g.font = '500 ' + Math.round(fr.size * 0.8) + 'px system-ui, sans-serif';
+  g.textBaseline = 'middle';
+  g.fillStyle = c.alpha(c.colors.muted, 0.9);
+  g.textAlign = 'center';
+  g.fillText('meridian', mx, top * 0.5);
+  g.textBaseline = 'bottom';
+  g.textAlign = 'left';
+  g.fillText('W · horizon', fr.m * 0.4, fr.split - 3);
+  g.textAlign = 'right';
+  g.fillText('horizon · E', w - fr.m * 0.4, fr.split - 3);
+  pts.forEach((p, i) => star(g, c, p, LETTERS[i], v.scale, s.fade > 0 && s.lit === i ? 1 : 0, fr.size));
+  // The logbook: the entry, then the lines, numbered; a picked line is crossed, a vouched-for
+  // line is marked as holding.
+  const count = plan.claims.length;
+  const step = page(g, w, h, fr.split, c, ink, fr.m, count + 1);
+  const picked = s.picked || [];
+  const vouched = s.vouched || [];
+  const lines = [OPENER + ' entry ' + plan.number + ', two lines false'].concat(plan.claims.map((cl, i) => (i + 1) + '. ' + claimText(cl)));
+  rows(g, fr, step, lines, (i) => (i === 0 ? c.alpha(gold, 0.95)
+    : s.fade > 0 ? c.alpha(plan.lies.includes(i - 1) ? gold : c.colors.fg, 0.9) : c.alpha(c.colors.fg, picked.includes(i - 1) ? 1 : 0.85)));
+  g.font = '600 ' + Math.round(fr.size * 0.85) + 'px system-ui, sans-serif';
+  g.textAlign = 'right';
+  g.textBaseline = 'alphabetic';
+  for (let i = 0; i < count; i++) {
+    const y = fr.split + step * (i + 2) - fr.size * 0.3;
+    if (s.fade > 0 && plan.lies.includes(i)) {
+      g.strokeStyle = c.alpha(gold, 0.9 * s.fade);
+      g.lineWidth = 1.5;
+      g.beginPath();
+      g.moveTo(fr.m + fr.size * 0.4, y - fr.size * 0.3);
+      g.lineTo(w - fr.m * 0.7, y - fr.size * 0.3);
+      g.stroke();
+    } else if (picked.includes(i)) {
+      g.fillStyle = c.alpha(gold, 0.95);
+      g.fillText('×', fr.m - fr.size * 0.3, y);
+    } else if (vouched.includes(i)) {
+      g.fillStyle = c.alpha(ink, 0.95);
+      g.fillText('✓', fr.m - fr.size * 0.3, y);
+    }
+  }
+}
+
+function linesPreview(g, w, h, env, plan) {
+  linesScene(g, w, h, env, plan, { fade: 0, lit: -1 }, dials(env));
+}
+
+function linesPiece(env, plan) {
+  const n = plan.points.length;
+  const count = plan.claims.length;
+  const v = dials(env);
+  const s = { fade: 0, lit: -1, picked: [], vouched: [] };
+  const draw = (c) => linesScene(c.g, c.w, c.h, c, plan, s, v);
+  return {
+    title: linesTitle(plan),
+    brief: 'The sky is drawn with its meridian and its horizon, west on the left, and the logbook under it says ' + WORDS[count] + ' things about the ' + WORDS[n] + ' stars. Every line can be checked against the drawing. Exactly two are false.',
+    goal: 'Find the two false lines.',
+    aspect: '4 / 3',
+    checkLabel: 'check the log',
+    steps: [
+      { id: 'lines', ask: 'the two false lines: choose them here, or tap them on the page', kind: 'pick', count: 2, items: plan.claims.map((cl, i) => ({ label: (i + 1) + '. ' + claimText(cl), value: i })) },
+      { id: 'hint', ask: 'one line that holds', kind: 'press', count: 1, label: 'vouch for one', optional: true }
+    ],
+    solution: { lines: plan.lies.slice() },
+    check(c) {
+      const value = c.value('lines');
+      const picked = Array.isArray(value) ? value.map(Number) : [];
+      const right = picked.filter((i) => plan.lies.includes(i)).length;
+      const solved = picked.length === 2 && right === 2;
+      return {
+        solved,
+        say: solved ? 'both false lines found; the log is corrected' : right === 1 ? 'one of the two is right' : 'neither of those is a false line'
+      };
+    },
+    start(c) {
+      c.status('read each line against the sky');
+      draw(c);
+    },
+    apply(id, value, c) {
+      if (id === 'lines') {
+        s.picked = Array.isArray(value) ? value.map(Number).filter((i) => Number.isInteger(i) && i >= 0 && i < count) : [];
+        c.status(s.picked.length ? 'marked false: ' + s.picked.map((i) => 'line ' + (i + 1)).join(' and ') : 'no line marked yet');
+      }
+      if (id === 'hint') {
+        const next = range(count).find((i) => !plan.lies.includes(i) && !s.vouched.includes(i) && !s.picked.includes(i))
+          || range(count).find((i) => !plan.lies.includes(i) && !s.vouched.includes(i));
+        if (next !== undefined) {
+          s.vouched.push(next);
+          c.hint();
+          c.status('line ' + (next + 1) + ' holds: ' + claimText(plan.claims[next]));
+        } else {
+          c.status('every true line has been vouched for; the two left are the false ones');
+        }
+      }
+      draw(c);
+    },
+    tap(x, y, c) {
+      // Tap a line on the page to mark it false (or unmark it); the pick on the rail follows.
+      const fr = frameOf(c.w, c.h, v);
+      const step = (c.h - fr.split) / (count + 2);
+      const i = Math.floor((y * c.h - fr.split) / step) - 1;
+      if (y * c.h < fr.split || i < 0 || i >= count) return;
+      const picked = s.picked.filter((k) => k !== i);
+      if (picked.length === s.picked.length) {
+        if (picked.length >= 2) picked.shift();
+        picked.push(i);
+      }
+      s.picked = picked.sort((a, b) => a - b);
+      // The rail takes the pick once it is a pair, as the pick knob itself would.
+      if (s.picked.length === 2) c.set('lines', s.picked.slice());
+      c.status(s.picked.length === 2 ? 'marked false: line ' + (s.picked[0] + 1) + ' and line ' + (s.picked[1] + 1) + '; check the log'
+        : s.picked.length === 1 ? 'marked false: line ' + (s.picked[0] + 1) + '; one more' : 'no line marked');
+      draw(c);
+    },
+    frame(t, dt, c) {
+      if (c.done) s.fade = Math.min(1, s.fade + dt * (c.reduced ? 4 : 1));
+      draw(c);
+    },
+    end(c) {
+      c.status('struck out: line ' + (plan.lies[0] + 1) + ' and line ' + (plan.lies[1] + 1) + '. the rest of the entry stands');
+    }
+  };
+}
+
+/* ---- the module ----------------------------------------------------------------------------- */
+
+function dealsRecall(env) {
+  return env.chance(0.5);
 }
 
 export default {
   id: 'constellation-diary',
   needsSky: true,
-  paint(ctx, w, h, env) {
-    logbook(ctx, w, h, env);
+  paint(g, w, h, env) {
+    if (dealsRecall(env)) recallPreview(g, w, h, env, recallPlan(env), 0);
+    else linesPreview(g, w, h, env, linesPlan(env));
   },
   spark(env) {
-    if (!env.stars.length) return null;
-    const star = env.pick(env.stars);
-    const other = nearest(env.stars, star);
-    const relation = other ? 'nearest the one that said "' + other.text + '"' : 'alone in the whole sky';
-    const number = env.hash(star.text + star.x) % 400 + 1;
+    if (dealsRecall(env)) {
+      const plan = recallPlan(env);
+      return {
+        title: recallTitle(plan),
+        quote: WORDS[plan.points.length][0].toUpperCase() + WORDS[plan.points.length].slice(1) + ' stars come out one at a time on the midnight watch.',
+        text: 'Watch the sky once, then put the stars in the order they came.',
+        aspect: '4 / 3',
+        paint: (g, w, h, cardEnv) => recallPreview(g, w, h, cardEnv, plan, 0),
+        of: plan
+      };
+    }
+    const plan = linesPlan(env);
     return {
-      title: 'entry ' + number,
-      quote: 'The star that said "' + star.text + '" sits ' + where(star) + ', ' + relation + '.',
-      text: 'Written from where it sits. Move it in your persona and the entry changes.',
+      title: linesTitle(plan),
+      quote: claimText(plan.claims[0]) + '.',
+      text: 'The logbook says ' + WORDS[plan.claims.length] + ' things about the sky, and two of them are false. Read each line against the stars.',
       aspect: '4 / 3',
-      paint: logbook,
-      // What this card is of, for the piece it opens as: its number, and the star it was written from.
-      of: { entry: number, star: star.text }
+      paint: (g, w, h, cardEnv) => linesPreview(g, w, h, cardEnv, plan),
+      of: plan
     };
   },
   piece(env) {
-    if (!env.stars || !env.stars.length) return null;
-    return env.chance(0.5) ? entry(env) : replay(env);
+    const recall = carriedRecall(env);
+    if (recall) return recallPiece(env, recall);
+    const lines = carriedLines(env);
+    if (lines) return linesPiece(env, lines);
+    return dealsRecall(env) ? recallPiece(env, recallPlan(env)) : linesPiece(env, linesPlan(env));
   }
 };

@@ -452,7 +452,7 @@ function apexPiece(env, plan) {
     title: apexTitle(plan),
     brief: 'Two tapes ran rule ' + plan.rule + ', drawn at the top pattern by pattern, from one first row -- except that one cell of the second tape\'s first row was flipped. The first rows are hidden; the ' + WORDS[plan.rows] + ' rows after them are shown. A change in a row reaches only the cell under it and the two beside that in the next, and the tape wraps round.',
     goal: 'Find the column of the flipped cell, and count the cells that differ in row ' + plan.rows + '.',
-    aspect: '4 / 3',
+    aspect: '16 / 10',
     checkLabel: 'check the tapes',
     steps: [
       { id: 'column', ask: 'the column of the flipped cell', kind: 'number', min: 1, max: plan.width, step: 1, unit: 'column' },
@@ -533,7 +533,7 @@ export default {
         title: apexTitle(plan),
         text: 'Two tapes under rule ' + plan.rule + ', one cell apart at the start. Find the column that was flipped and count what it changed by row ' + plan.rows + '.',
         mono: plan.width + ' cells / ' + plan.rows + ' rows shown',
-        aspect: '4 / 3',
+        aspect: '16 / 10',
         paint: (ctx, cw, ch, cardEnv) => apexPreview(ctx, cw, ch, cardEnv, plan),
         of: plan
       };

@@ -206,20 +206,20 @@ function drawCross(g, w, h, c, plan, s, variant) {
     { name: 'inner', n: plan.b, bar: plan.inner, tone: col.accent2, note: plan.shift === 0 ? 'from beat 1' : 'from beat ' + (plan.shift + 1) }
   ];
   rows.forEach((row, k) => {
-    const y = geo.cy + (k - 0.5) * size * 2.4;
-    const cell = Math.min(size * 1.1, geo.inner * 1.2 / row.n);
+    const y = geo.cy + (k - 0.5) * size * 3.8;
+    const cell = Math.min(size * 1.3, geo.inner * 1.3 / row.n);
     const x0 = geo.cx - cell * row.n / 2;
-    text(g, c, row.name + ', ' + row.n + ' beats', geo.cx, y - size * 0.95, small, c.alpha(col.fg, 0.8));
+    text(g, c, row.name + ', ' + row.n + ' beats', geo.cx, y - size * 1.25, small, c.alpha(col.fg, 0.8));
     for (let b = 0; b < row.n; b++) {
       const on = row.bar.includes(b);
       g.fillStyle = on ? row.tone : c.alpha(col.muted, 0.5);
       g.beginPath();
-      g.arc(x0 + (b + 0.5) * cell, y, Math.max(1.5, cell * (on ? 0.3 : 0.14)), 0, TAU);
+      g.arc(x0 + (b + 0.5) * cell, y, Math.max(1.5, cell * (on ? 0.32 : 0.15)), 0, TAU);
       g.fill();
     }
-    text(g, c, row.note, geo.cx, y + size * 0.9, small, c.alpha(col.muted, 0.9));
+    text(g, c, row.note, geo.cx, y + size * 1.2, small, c.alpha(col.muted, 0.9));
   });
-  text(g, c, 'loop of ' + L, geo.cx, geo.cy + geo.inner * 0.72, small, c.alpha(col.fg, 0.75));
+  text(g, c, 'loop of ' + L, geo.cx, geo.cy + geo.inner * 0.8, small, c.alpha(col.fg, 0.75));
 }
 
 function crossBlank() {
@@ -436,7 +436,7 @@ function drawWheel(g, w, h, c, plan, s, variant) {
     } else rotationArrow(g, c, right, cy, radius * 1.3, way === 'ccw', col.accent2);
   }
   text(g, c, 'turns clockwise', left, h * 0.7, small, c.alpha(col.fg, 0.85));
-  text(g, c, s.taken ? 'picture ' + s.taken : 'one picture, then ' + plan.p + ' more round the turn', right, h * 0.7, small, c.alpha(col.fg, 0.85));
+  text(g, c, s.taken ? 'picture ' + s.taken : 'the first picture; ' + plan.p + ' to a turn', right, h * 0.7, small, c.alpha(col.fg, 0.85));
   if (s.told) text(g, c, s.told, w / 2, h * 0.77, small, col.accent2);
   // The strip of pictures taken, the latest at the right.
   const slots = Math.max(3, Math.min(6, Math.round(4 * v.density)));

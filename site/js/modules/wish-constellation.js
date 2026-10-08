@@ -428,7 +428,7 @@ function whichPlan(env) {
   for (let attempt = 0; attempt < 40; attempt++) {
     const points = gather(env, n, 14, [8, 92, 8, 92]);
     const all = images(points);
-    if (!distinctImages(all)) continue;
+    const distinct = distinctImages(all);
     const turns = env.int(1, 3);
     const mirror = env.chance(0.5);
     const which = env.int(0, 3);
@@ -452,15 +452,18 @@ function whichPlan(env) {
         });
         const pts = decoys === 0 ? turned(nudged, turns, mirror) : turned(nudged, env.int(0, 3), env.chance(0.5));
         if (spaced(pts, 7) && all.every((img) => setGap(pts, img.pts) >= 6)) decoy = pts;
+        else if (tries === 23) {
+          // The last try stands, unchecked, so a plan is always made; a plan this loop could not
+          // check is one the piece still plays, and one the carried check will roll afresh.
+          decoy = pts;
+          ok = false;
+        }
       }
-      if (!decoy) ok = false;
-      else {
-        skies.push(decoy);
-        decoys += 1;
-      }
+      skies.push(decoy);
+      decoys += 1;
     }
     last = { kind: 'which', number, points, turns, mirror, which, skies };
-    if (ok) return last;
+    if (ok && distinct) return last;
   }
   return last;
 }

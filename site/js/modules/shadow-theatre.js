@@ -447,7 +447,7 @@ function bench(g, w, h, c, p, s, variant) {
   p.shadows.forEach((sh, n) => {
     const f = sh.f / 10;
     const k = sh.k / 100;
-    const base = Math.min(cell * 0.3, screenH * 0.3) * Math.min(1, v.scale);
+    const base = Math.min(cell * 0.22, screenH * 0.26) * Math.min(1, v.scale);
     // The shadow leans by the lamp: a point's x is pushed sideways by how high it stands.
     const map = (q) => ({ x: q[0] * f * base + (0.5 - q[1]) * k * f * base, y: -(0.5 - q[1]) * f * base });
     const pts = CUTOUTS[p.items[sh.cut]].points.map(map);

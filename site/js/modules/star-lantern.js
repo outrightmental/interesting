@@ -349,7 +349,7 @@ function orderPiece(env, plan) {
     brief: capital(WORDS[n]) + ' lettered lanterns rise one after another, and the ' + WORDS[plan.clues.length]
       + ' clues under the sky say how. Exactly one order fits them all. Set the order on the rail, or tap a lantern to move it up one place.',
     goal: 'Put the lanterns in the one order the clues allow, first to rise at the top.',
-    aspect: '4 / 5',
+    aspect: '1 / 1',
     checkLabel: 'check the order',
     steps: [
       { id: 'order', ask: 'the lanterns, first to rise at the top', kind: 'order', items: LETTERS.slice(0, n).map((letter, i) => ({ label: 'lantern ' + letter, value: i })), value: plan.start.slice() },
@@ -410,8 +410,8 @@ function orderPiece(env, plan) {
       if (c.done) {
         s.gone += dt;
         for (let i = 0; i < n; i++) {
-          const up = Math.max(0, s.gone - plan.order.indexOf(i) * 0.7);
-          s.lift[i] = up * up * 40 * Math.max(1, c.h / 320);
+          const up = Math.max(0, s.gone - plan.order.indexOf(i) * 0.9);
+          s.lift[i] = up * 22 * Math.max(1, c.h / 320);
           s.glow[i] = Math.min(0.9, up);
         }
       }
@@ -689,7 +689,7 @@ export default {
         quote: clueText(plan.clues[0]),
         text: (plan.clues.length === 1 ? 'That is the one clue.' : capital(WORDS[plan.clues.length - 1]) + ' more clues wait under the sky.')
           + ' Find the one order the ' + WORDS[plan.n] + ' lanterns rise in.',
-        aspect: '4 / 5',
+        aspect: '1 / 1',
         paint: (g, w, h, cardEnv) => orderPreview(g, w, h, cardEnv, plan, cardEnv.variant.turn * 4),
         of: plan
       };

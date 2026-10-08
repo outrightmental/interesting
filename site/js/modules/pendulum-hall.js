@@ -157,7 +157,7 @@ function drawRack(g, w, h, c, plan, s, variant) {
   const small = Math.max(8, Math.round(size * 0.85));
   hallBackground(g, w, h, c, v);
   const barY = h * 0.1;
-  const Lmax = h * 0.56 * Math.min(1.08, Math.max(0.88, v.scale));
+  const Lmax = h * 0.52 * Math.min(1.08, Math.max(0.88, v.scale));
   const amp = 0.42;
   bar(g, c, w, barY, m);
   const pivots = plan.periods.map((p, i) => w * (0.2 + 0.6 * (n > 1 ? i / (n - 1) : 0.5)));
@@ -175,10 +175,19 @@ function drawRack(g, w, h, c, plan, s, variant) {
     g.stroke();
     g.setLineDash([]);
     const theta = s.beat < 0 ? 0 : amp * rackAngle(p, s.beat);
-    bob(g, c, pivots[i], barY, length, theta, r, tone);
+    const at = bob(g, c, pivots[i], barY, length, theta, r, tone);
+    // A picked pendulum wears a ring; a hint's answer is written under the bar.
+    if (s.picked.includes(i)) {
+      g.strokeStyle = col.accent2;
+      g.lineWidth = 1.5;
+      g.setLineDash([3, 3]);
+      g.beginPath();
+      g.arc(at.x, at.y, r * 2.6, 0, TAU);
+      g.stroke();
+      g.setLineDash([]);
+    }
     text(g, c, p + ' beats', pivots[i], barY + length + r * 4.2, small, c.alpha(col.fg, 0.9));
-    if (s.picked.includes(i)) text(g, c, 'picked', pivots[i], barY + length + r * 4.2 + small * 1.3, small, col.accent2);
-    if (s.shown[i]) text(g, c, s.shown[i], pivots[i], barY + length + r * 4.2 + small * (s.picked.includes(i) ? 2.6 : 1.3), small, col.accent);
+    if (s.shown[i]) text(g, c, s.shown[i], pivots[i], barY + small * 1.3, small, col.accent);
   });
   // The ruler of beats along the foot, the stated beat marked, the replay's beat on it.
   const left = w * 0.08;
@@ -211,8 +220,8 @@ function drawRack(g, w, h, c, plan, s, variant) {
     g.beginPath();
     g.arc(bx, rulerY, Math.max(2, size * 0.2), 0, TAU);
     g.fill();
-    text(g, c, 'beat ' + Math.floor(s.beat), w / 2, h * 0.77, small, c.alpha(col.fg, 0.85));
-  } else text(g, c, 'all through the centre at beat 0, heading right', w / 2, h * 0.77, small, c.alpha(col.fg, 0.75));
+    text(g, c, 'beat ' + Math.floor(s.beat), w / 2, h * 0.79, small, c.alpha(col.fg, 0.85));
+  } else text(g, c, 'all through the centre at beat 0, heading right', w / 2, h * 0.79, small, c.alpha(col.fg, 0.75));
 }
 
 function rackBlank() {
