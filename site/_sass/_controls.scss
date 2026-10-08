@@ -212,6 +212,44 @@ input[type='range']:focus-visible {
   border-radius: var(--md-sys-shape-corner-full);
 }
 
+// The persona's difficulty: the one slider that says how hard every puzzle on the site comes out
+// (issue #93). Rendered by js/persona.js wherever a part depends on the setting -- its own section
+// of the persona sheet, and the rail beside a piece on the stage -- so it is the same control in
+// both places, in the .row slider grammar above with the two ends named either side of the track.
+.difficulty {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.difficulty-row {
+  margin-top: 0;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.difficulty-row label {
+  color: var(--md-sys-color-on-surface);
+}
+
+// The words at the ends of the track, "gentle" and "fierce", which is how the slider says what it
+// is measuring without a readout: quieter than the label and never wrapped mid-track.
+.difficulty-end {
+  flex: none;
+  color: var(--md-sys-color-on-surface-variant);
+  @include type.scale(label-medium);
+}
+
+.difficulty-row input[type='range'] {
+  flex: 1 1 8rem;
+  min-width: 6rem;
+  width: auto;
+}
+
+.difficulty-note,
+.difficulty-status {
+  margin: 0;
+}
+
 select {
   max-width: 100%;
   min-height: 44px;

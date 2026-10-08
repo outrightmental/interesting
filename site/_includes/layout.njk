@@ -106,7 +106,7 @@
     </nav>
     <div class='sparknav-modal' id='sparknav-modal' hidden></div>
   </details>
-  <div class='persona' id='persona' data-state='empty' data-sky='none' data-reading='none' data-asking='false'>
+  <div class='persona' id='persona' data-state='empty' data-sky='none' data-reading='none' data-asking='false' data-difficulty='fair'>
     <p class='persona-text visually-hidden' id='persona-text'>No persona yet.</p>
     <button type='button' class='persona-avatar' id='persona-open' aria-haspopup='dialog' aria-controls='persona-sheet' aria-describedby='persona-text' hidden>
       <span class='persona-portrait' aria-hidden='true'><canvas id='persona-portrait' width='40' height='40'></canvas></span>
@@ -122,7 +122,7 @@
       <h2 id='persona-sheet-title' class='persona-sheet-title'>your persona</h2>
       <button type='button' class='persona-close btn-text' id='persona-close'>close</button>
     </div>
-    <p class='panel-note persona-sheet-intro'>A small sky of stars you place, and a reading from your answer. Several worlds read the same stars, and the site suggests one from the reading. Both stay in this browser.</p>
+    <p class='panel-note persona-sheet-intro'>A small sky of stars you place, a reading from your answer, and the difficulty every puzzle is dealt at. Several worlds read the same stars, the site suggests one from the reading, and one slider sets how hard the puzzles come out. All three stay in this browser.</p>
     <section class='persona-section' aria-labelledby='persona-sky-title'>
       <h3 id='persona-sky-title' class='panel-label'>constellation</h3>
       <p class='panel-note'>Tap the sky to place a star, drag a star to move it, tap one to read its thought. Several worlds read this one sky, each its own way.</p>
@@ -145,6 +145,15 @@
       </div>
       <div class='persona-probe' id='persona-sheet-probe' hidden></div>
       <p class='panel-note'>A question about an object or a mark leads to one suggested world. <a href='{{ siteRoot }}moods.html'>the mood atlas</a> shows where each reading can lead.</p>
+    </section>
+    {# The third setting, named as plainly as the constellation (issue #93): one slider for how hard
+       every puzzle on the site comes out. js/persona.js renders the control into the host below --
+       the same one js/stage.js puts beside the piece it is dealing, so the setting is settable
+       wherever it is a dependency and there is only ever one slider to learn. #}
+    <section class='persona-section' aria-labelledby='persona-difficulty-title'>
+      <h3 id='persona-difficulty-title' class='panel-label'>difficulty</h3>
+      <p class='panel-note'>One setting for every puzzle on this site: how many hints a piece will give you when you ask, and how close a measured answer has to be. The same slider stands beside every piece, so you can change your mind there.</p>
+      <div class='persona-difficulty' id='persona-difficulty'></div>
     </section>
   </dialog>
 </body>
