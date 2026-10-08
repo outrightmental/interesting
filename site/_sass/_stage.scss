@@ -13,10 +13,14 @@
 // rail of controls still reads at.
 //
 // The knobs are M3 controls: a choice is a row of tonal buttons that fill when pressed, a toggle
-// a tonal button that fills when on, a range the M3 slider, a press and a hold one big button
-// (the hold reads as pressed while it is held, and the bar under it fills), a tap and a wait a
-// bar the piece fills. A knob that is set gets a check mark; a knob gated on another is dimmed
-// until it opens.
+// a tonal button that fills when on, a range the M3 slider, a number a stepper round a field, a
+// word a text field, an order a list with up and down beside each item, a pick a row of chips
+// that press in, a grid a block of square cells, a press and a hold one big button (the hold
+// reads as pressed while it is held, and the bar under it fills), a tap and a wait a bar the
+// piece fills. A knob that is set gets a check mark; a knob gated on another is dimmed until it
+// opens. Under the knobs is the check: the one filled button in the rail, enabled once every
+// knob is set, with the score beside it -- because every piece is a puzzle now, and a puzzle is
+// finished by an answer that solves it, not by its knobs having been touched.
 //
 // The ceremony: when the piece is finished, the done chip appears at the end of the dots' row and
 // the burst canvas over the whole stage carries the particles, which clear themselves. Then the way
@@ -188,6 +192,25 @@
   max-width: 60ch;
   color: var(--md-sys-color-on-surface-variant);
   @include type.scale(body-large);
+}
+
+// The goal, under the rules: what counts as solved, in one line a stranger can find before they
+// touch anything. The word in front of it is the label; the line is the piece's own.
+.stage-goal {
+  margin: 0.15rem 0 0;
+  max-width: 60ch;
+  color: var(--md-sys-color-on-surface);
+  @include type.scale(title-medium);
+}
+
+.stage-goal-word {
+  display: inline-block;
+  margin-right: 0.35rem;
+  padding: 0.1rem 0.6rem;
+  border-radius: var(--md-sys-shape-corner-full);
+  background: var(--md-sys-color-primary-container);
+  color: var(--md-sys-color-on-primary-container);
+  @include type.scale(label-large);
 }
 
 .stage-body {
@@ -374,6 +397,190 @@
   justify-self: start;
   min-height: 44px;
   padding: 0.2rem 0.75rem;
+}
+
+.knob-note {
+  margin: 0;
+  color: var(--md-sys-color-on-surface-variant);
+  @include type.scale(body-small);
+}
+
+// A number: a stepper either side of a short field, all three 44px targets.
+.knob-number {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.knob-step {
+  flex: none;
+  width: 44px;
+  min-height: 44px;
+  padding: 0;
+  @include type.scale(title-medium);
+}
+
+.knob-count {
+  width: 6ch;
+  min-height: 44px;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--md-sys-color-outline);
+  border-radius: var(--md-sys-shape-corner-extra-small);
+  background: transparent;
+  color: var(--md-sys-color-on-surface);
+  font-family: inherit;
+  text-align: center;
+  -moz-appearance: textfield;
+  @include type.scale(title-medium);
+}
+
+.knob-count::-webkit-outer-spin-button,
+.knob-count::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.knob-count:focus-visible {
+  outline: 2px solid var(--md-sys-color-primary);
+  outline-offset: -1px;
+  border-color: var(--md-sys-color-primary);
+}
+
+// A word: the text field, with the letters shown as the answer will be read.
+.knob-word {
+  min-height: 48px;
+  letter-spacing: 0.08em;
+}
+
+.knob-word.is-upper {
+  text-transform: uppercase;
+}
+
+// An order: one row per item, its name and two small moves beside it.
+.knob-order {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.knob-order-item {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 44px;
+  padding: 0.15rem 0.25rem 0.15rem 0.75rem;
+  border-radius: var(--md-sys-shape-corner-small);
+  background: var(--md-sys-color-surface-container-high);
+  color: var(--md-sys-color-on-surface);
+  counter-increment: order;
+  @include type.scale(body-medium);
+}
+
+.knob-order-item::before {
+  content: counter(order);
+  flex: none;
+  width: 1.4em;
+  color: var(--md-sys-color-primary);
+  @include type.scale(label-large);
+}
+
+.knob-order-label {
+  flex: 1 1 auto;
+}
+
+.knob-order-move {
+  flex: none;
+  width: 44px;
+  min-height: 44px;
+  padding: 0;
+}
+
+// A pick: chips that press in, as a choice's buttons do.
+.knob-pick button[aria-pressed='true'] {
+  box-shadow: inset 0 0 0 2px var(--md-sys-color-on-primary);
+}
+
+// A grid: square cells, as many across as the knob says, each a pressable state. The cells are
+// sized to the rail so a ten-wide grid still fits a phone, and never under 32px.
+.knob-grid {
+  --grid-cols: 3;
+  display: grid;
+  grid-template-columns: repeat(var(--grid-cols), minmax(0, 1fr));
+  gap: 4px;
+  max-width: calc(var(--grid-cols) * 48px);
+}
+
+.knob-cell {
+  aspect-ratio: 1;
+  min-height: 32px;
+  padding: 0;
+  border-radius: var(--md-sys-shape-corner-small);
+  background: var(--md-sys-color-surface-container-highest);
+  color: var(--md-sys-color-on-surface);
+  @include type.scale(label-large);
+}
+
+.knob-cell[data-state='1'] {
+  background: var(--md-sys-color-primary);
+  color: var(--md-sys-color-on-primary);
+}
+
+.knob-cell[data-state='2'] {
+  background: var(--md-sys-color-tertiary);
+  color: var(--md-sys-color-on-tertiary);
+}
+
+.knob-cell[data-state='3'],
+.knob-cell[data-state='4'],
+.knob-cell[data-state='5'] {
+  background: var(--md-sys-color-secondary);
+  color: var(--md-sys-color-on-secondary);
+}
+
+// The check and the score beside it. One filled button: the one thing in the rail that finishes
+// a piece, dim until there is a whole answer to check.
+.stage-check-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.stage-check {
+  min-width: 9rem;
+  min-height: 48px;
+}
+
+.stage-tries {
+  margin: 0;
+  color: var(--md-sys-color-on-surface-variant);
+  @include type.scale(label-large);
+}
+
+// A wrong answer: the row shakes its head once, and the live line says what the piece said.
+.stage[data-verdict='wrong'] .stage-check-row {
+  animation: stage-no 360ms var(--md-sys-motion-easing-standard) both;
+}
+
+@keyframes stage-no {
+  0%,
+  100% {
+    transform: none;
+  }
+
+  25% {
+    transform: translateX(-6px);
+  }
+
+  55% {
+    transform: translateX(5px);
+  }
+
+  80% {
+    transform: translateX(-3px);
+  }
 }
 
 .stage-status {
@@ -673,6 +880,7 @@
 
   .stage[data-mode='arriving'] .stage-inner,
   .stage-done,
+  .stage[data-verdict='wrong'] .stage-check-row,
   .stage-next:enabled {
     animation: none;
   }

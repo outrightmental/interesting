@@ -1331,7 +1331,7 @@ class MarbleBagTest(SiteDirTestCase):
             "persona": ["For the persona", "persona-sheet-probe", "seed a fresh sky", "Kept as it was",
                         "::backdrop exactly once", "persona.js must not touch window.interestingSite before",
                         "lightbox_harness.mjs", '"lightbox: lightbox,"'],
-            "overall": ["For the framework", "function finish() {", "stage_harness.mjs",
+            "overall": ["For the framework", "function finish(say) {", "stage_harness.mjs",
                         "@use 'lightbox'", "finePrint exactly privacy.html then terms.html",
                         f"at least {mi.MIN_MOOD_PROBES} probe: declarations", '"lightbox: lightbox,"',
                         "forget my reading"],
@@ -4117,28 +4117,32 @@ def piece_module(piece_js, world="toy"):
             "  piece(env) {\n" + piece_js + "\n  }\n};\n")
 
 
-# A piece that finishes: a press knob and a wait knob the piece satisfies itself, differing by seed.
+# A piece that solves: a press knob to turn the toy, and the count of turns, which is the answer
+# the visitor gives and the check judges -- differing by seed.
 FINISHING_PIECE = """    const n = env.int(2, 4);
     let settled = 0;
     return {
       title: n + ' turns of the toy',
-      brief: 'Turn it, then let it settle.',
+      brief: 'Turn it, then say how many turns it took.',
+      goal: 'Say how many turns it took.',
       steps: [
         { id: 'turn', ask: 'turn it', kind: 'press', count: n },
-        { id: 'settle', ask: 'let it settle', kind: 'wait', after: 'turn' }
+        { id: 'count', ask: 'how many turns', kind: 'number', min: 1, max: 9, value: 1, after: 'turn' }
       ],
+      solution: { count: n },
+      check(ctx) {
+        const right = Number(ctx.value('count')) === n;
+        return { solved: right, say: right ? 'that is how many' : 'not that many' };
+      },
       start(ctx) { ctx.g.fillRect(0, 0, ctx.w, ctx.h); },
-      frame(t, dt, ctx) {
-        if ((ctx.value('turn') || 0) >= n) {
-          settled += dt;
-          ctx.progress('settle', settled / 2);
-          if (settled >= 2) ctx.satisfy('settle');
-        }
-      }
+      frame(t, dt, ctx) { settled += dt; }
     };"""
 
-# The same piece, but the wait knob is never satisfied: a visitor opens it and cannot finish.
-ENDLESS_PIECE = FINISHING_PIECE.replace("if (settled >= 2) ctx.satisfy('settle');", "")
+# The same piece with a wait knob it never satisfies: a visitor opens it and can never check.
+ENDLESS_PIECE = FINISHING_PIECE.replace(
+    "{ id: 'count', ask: 'how many turns', kind: 'number', min: 1, max: 9, value: 1, after: 'turn' }",
+    "{ id: 'count', ask: 'how many turns', kind: 'number', min: 1, max: 9, value: 1, after: 'turn' },\n"
+    "        { id: 'settle', ask: 'let it settle', kind: 'wait', after: 'turn' }")
 
 # A piece whose title counts the calls: the same seed does not make the same piece.
 UNSTABLE_PIECE = FINISHING_PIECE.replace("title: n + ' turns of the toy'", "title: (calls += 1) + ' turns'")
@@ -4153,7 +4157,10 @@ SAME_PIECE = FINISHING_PIECE.replace("const n = env.int(2, 4);", "const n = 3;")
 LONG_PIECE = """    return {
       title: 'the long way round',
       brief: 'Six things.',
-      steps: ['a', 'b', 'c', 'd', 'e', 'f'].map((id) => ({ id, ask: id, kind: 'toggle' }))
+      goal: 'Turn all six on.',
+      steps: ['a', 'b', 'c', 'd', 'e', 'f'].map((id) => ({ id, ask: id, kind: 'toggle' })),
+      solution: { a: true, b: true, c: true, d: true, e: true, f: true },
+      check(ctx) { return { solved: ['a', 'b', 'c', 'd', 'e', 'f'].every((id) => ctx.value(id) === true) }; }
     };"""
 
 # A piece that reaches for the document, which the stage never hands it and the harness has not got.
@@ -4163,7 +4170,10 @@ DOCUMENT_PIECE = "    document.title = 'x';\n" + FINISHING_PIECE
 ONE_KNOB_PIECE = """    return {
       title: 'one switch',
       brief: 'Flip it.',
-      steps: [{ id: 'flip', ask: 'flip it', kind: 'toggle' }]
+      goal: 'Turn it on.',
+      steps: [{ id: 'flip', ask: 'flip it', kind: 'toggle' }],
+      solution: { flip: true },
+      check(ctx) { return { solved: ctx.value('flip') === true }; }
     };"""
 
 # A piece shaped like the one issue #60 was reported on: a slider nobody is made to move, and the
@@ -4174,12 +4184,15 @@ SLIDER_PIECE = """    const n = env.int(2, 4);
     return {
       title: n + ' turns at a pace',
       brief: 'Set the pace, turn it, let it settle, and seal it.',
+      goal: 'Set the pace to three quarters.',
       steps: [
         { id: 'pace', ask: 'the pace', kind: 'range', min: 0, max: 100, step: 1, value: 40, low: 'slow', high: 'quick' },
         { id: 'turn', ask: 'turn it', kind: 'press', count: n },
         { id: 'settle', ask: 'let it settle', kind: 'wait', after: 'turn' },
         { id: 'seal', ask: 'seal it', kind: 'hold', ms: 900, label: 'hold to seal', after: 'settle' }
       ],
+      solution: { pace: 75 },
+      check(ctx) { return { solved: Number(ctx.value('pace')) === 75, say: 'checked' }; },
       start(ctx) { ctx.g.fillRect(0, 0, ctx.w, ctx.h); },
       frame(t, dt, ctx) {
         if ((ctx.value('turn') || 0) >= n) {
@@ -4199,10 +4212,13 @@ HOLD_PIECE = """    let holds = 0;
     return {
       title: 'one long hold',
       brief: 'Hold it until the bar fills, then turn the other thing.',
+      goal: 'Turn the other thing on.',
       steps: [
         { id: 'seal', ask: 'hold to seal', kind: 'hold', ms: 900, label: 'hold to seal' },
         { id: 'after', ask: 'and then this', kind: 'toggle' }
       ],
+      solution: { after: true },
+      check(ctx) { return { solved: ctx.value('after') === true }; },
       start(ctx) { ctx.g.fillRect(0, 0, ctx.w, ctx.h); },
       apply(id, value, ctx) { if (id === 'seal') ctx.status('held ' + (holds += 1) + ' time(s)'); }
     };"""
@@ -4217,12 +4233,15 @@ LIVE_PIECE = """    let frames = 0;
     let taps = 0;
     return {
       title: 'a toy that keeps going',
-      brief: 'Turn it, then tap the scene. It is a toy before it is done and after.',
+      brief: 'Turn it the other way, then tap the scene. It is a toy before it is solved and after.',
+      goal: 'Turn it the other way.',
       steps: [
         { id: 'turn', ask: 'turn it', kind: 'choice',
           options: [{ label: 'one way', value: 1 }, { label: 'the other way', value: 2 }] },
         { id: 'touch', ask: 'tap the scene', kind: 'tap', after: 'turn' }
       ],
+      solution: { turn: 2 },
+      check(ctx) { return { solved: ctx.value('turn') === 2 }; },
       start(ctx) { ctx.g.fillRect(0, 0, ctx.w, ctx.h); },
       frame(t, dt, ctx) { frames += 1; ctx.status('frames ' + frames + '; turns ' + turns + '; taps ' + taps); },
       apply(id, value, ctx) { if (id === 'turn') turns += 1; },
@@ -4251,11 +4270,14 @@ CARRIED_PIECE = """    const v = env.variant || {};
       title: 'of ' + (card.title || 'no card') + ' at ' + (v.stretch == null ? 'no stretch' : Number(v.stretch).toFixed(2)),
       brief: 'of: ' + ((card.of && card.of.token) || 'nothing') + '; showing: ' + (card.quote || 'nothing')
         + '; density: ' + (v.density == null ? 'none' : Number(v.density).toFixed(2)),
+      goal: 'Turn both on.',
       aspect: '4 / 3',
       steps: [
         { id: 'a', ask: 'one thing', kind: 'toggle' },
         { id: 'b', ask: 'and another', kind: 'toggle' }
       ],
+      solution: { a: true, b: true },
+      check(ctx) { return { solved: ctx.value('a') === true && ctx.value('b') === true }; },
       start(ctx) { ctx.g.fillRect(0, 0, ctx.w, ctx.h); }
     };"""
 
@@ -4274,24 +4296,27 @@ OF_ITS_CARD_PIECE = FINISHING_PIECE.replace(
     "title: (env.card && env.card.of ? 'turning card ' + env.card.of.n : n + ' turns of the toy')")
 
 
-# A piece that finishes itself on arrival, before its visitor has set anything.
+# A piece that sets one of its own knobs on arrival, before its visitor has set anything.
 SELF_FINISHING_PIECE = """    return {
       title: 'already done',
       brief: 'Nothing to do.',
-      auto: false,
-      steps: [{ id: 'a', ask: 'a', kind: 'toggle' }, { id: 'b', ask: 'b', kind: 'toggle' }],
-      start(ctx) { ctx.complete(); }
+      goal: 'Turn a on.',
+      steps: [{ id: 'a', ask: 'a', kind: 'toggle' }, { id: 'b', ask: 'b', kind: 'wait' }],
+      solution: { a: true },
+      check(ctx) { return { solved: ctx.value('a') === true }; },
+      start(ctx) { ctx.satisfy('b'); }
     };"""
 
 
 class CompletionAxiomTest(SiteDirTestCase):
-    """Every world is a piece a visitor can finish.
+    """Every world is a puzzle a visitor can solve.
 
     A world's page is a stage, and what a visitor opens there is a piece its module makes from a
-    seed: a few knobs, a clear end, a vanish, and the next. The ninth axiom stands beside the
-    other eight -- stated in the prompt, held to by validate_plan -- and what code can settle about
-    it is that every listed world has a module with a piece, and that the piece can be played to
-    its end: by the harness here, exactly as by the stage in a browser.
+    seed: a goal, a few knobs, a check, a solution, a vanish, and the next. The ninth axiom stands
+    beside the other eight -- stated in the prompt, held to by validate_plan -- and what code can
+    settle about it is that every listed world has a module with a piece, that the piece's own
+    solution solves it, and that no wrong answer does: by the harness here, exactly as by the
+    stage in a browser.
     """
 
     PAGES = ["index.html", "error.html", "toy.html"]
@@ -4317,31 +4342,49 @@ class CompletionAxiomTest(SiteDirTestCase):
 
     def test_the_axiom_is_a_standing_rule_of_every_prompt(self):
         rules = self.rules()
-        for rule in ["AXIOM, every run: every world is a piece a visitor can finish",
-                     "a fidget toy with a few levers and knobs on it",
-                     "it plays its ceremony and lights up the way on",
+        for rule in ["AXIOM, every run: every world is a puzzle a visitor can solve",
+                     "every piece is a legitimate puzzle",
+                     "a goal stated in one line",
+                     "a check that says whether the answer solves it, and a solution the piece itself knows",
+                     "A fidget toy finishes when its levers have been pulled; a puzzle finishes when it is solved",
+                     "a press of it is a try",
+                     "Solved plays its ceremony and lights up the way on",
                      "the stage never moves on by itself",
                      "opens the next card in the feed in its place",
+                     "Not solved writes `say` on the live line, counts the try, and changes nothing else",
                      "every listed world's module exports piece(env)",
                      mi.STAGE_SCRIPT,
-                     "choice (two to four options), toggle, range, press, hold, tap, wait",
+                     "choice (two to four options), toggle, range, number, word, order, pick, grid, press, hold, tap, wait",
+                     "`solution` names every answer knob and the value that solves it",
+                     "A press, a hold or a wait is never an answer",
+                     "optional: true is a helper the check does not wait for",
+                     "there is no auto and no complete()",
                      "The same seed makes the same piece and different seeds make different pieces",
                      "never reaches for the document, the window, the clock, Math.random or the browser's storage",
                      "only a tap or a wait knob is the piece's to set",
+                     "ctx.set(id, value) writes a knob from tap() alone",
+                     # What makes a puzzle legitimate, which is what the law holds a piece to.
+                     "every answer wrong at once does not",
+                     "each answer wrong on its own with the rest right does not",
+                     "a puzzle that opens solved is no puzzle",
+                     "a wrong check gives measured feedback",
+                     "never a lone two-to-four-option choice as the whole answer",
+                     "generate every puzzle from its solution",
                      "The world's old interactive page is the piece's material",
                      mi.PIECE_HARNESS_REL,
-                     f"within {mi.PIECE_MAX_TAPS} taps and {mi.PIECE_MAX_SECONDS} seconds of play",
+                     f"within {mi.PIECE_MAX_TAPS} taps and {mi.PIECE_MAX_SECONDS} seconds of",
                      # Issue #60: the half of the axiom the harness could not reach until there was
                      # a harness for the stage, said in the prompt so a run writing a piece or
                      # rewriting the stage knows it.
                      "Every knob must be one its visitor can actually set",
-                     "finishable whatever order they reach its knobs in",
+                     "solvable whatever order they reach its knobs in",
                      "A piece is one instantiation and keeps nothing between them",
                      mi.STAGE_HARNESS_REL,
+                     "a wrong answer checked is refused and counted and leaves every knob live",
                      "a slider a visitor leaves where it stands counts as set",
-                     "a knob nobody set is named rather than silently holding the piece shut",
+                     "a knob nobody set is named rather than silently holding the check shut",
                      "a hold knob is set the moment its bar fills rather than when the visitor lets go",
-                     "a finished piece stays on the stage with the way on lit",
+                     "a solved piece stays on the stage with the way on lit",
                      "leaves nothing of itself on the stage or still running",
                      # Issue #86: Done is not the End, stated to the run that writes the pieces and
                      # to the run that rewrites the stage, and held by the same stage harness.
@@ -4352,7 +4395,7 @@ class CompletionAxiomTest(SiteDirTestCase):
                      "no timeout, no fade-out, no inert state and no teardown",
                      "Keep the done mark out of the way of the content",
                      "never laid over the scene",
-                     "a finished piece is still fully playable",
+                     "a solved piece is still fully playable",
                      # Issue #80: a piece is the card it was opened from, which the same two
                      # harnesses hold it to, so a run writing a piece is told as much.
                      "A piece is also the card it was opened from",
@@ -4362,7 +4405,7 @@ class CompletionAxiomTest(SiteDirTestCase):
             with self.subTest(rule=rule):
                 self.assertIn(rule, rules)
         self.assertIn(f"{mi.PIECE_MIN_STEPS} to {mi.PIECE_MAX_STEPS} knobs", rules)
-        self.assertIn("finished by its visitor, never by itself", rules)
+        self.assertIn("A piece is finished by a check that solves it and by nothing else", rules)
         # The one piece of prose a doubled word would have hidden in: the ceremony's sentence runs
         # straight into the contract's, and the axiom of issue #86 was spliced between them.
         self.assertIn("the river of cards is the river of pieces.", rules)
@@ -4455,7 +4498,7 @@ class CompletionAxiomTest(SiteDirTestCase):
     def test_a_piece_is_finished_by_its_visitor(self):
         self.module.write_text(piece_module(SELF_FINISHING_PIECE))
         missing = mi.worlds_without_a_finish(dict(mi.read_site()))
-        self.assertIn("finished before any knob was set", missing.get("toy.html", ""))
+        self.assertIn('itself before the visitor had set anything', missing.get("toy.html", ""))
 
     def test_a_piece_that_reaches_for_the_document_fails(self):
         self.module.write_text(piece_module(DOCUMENT_PIECE))
@@ -4465,7 +4508,7 @@ class CompletionAxiomTest(SiteDirTestCase):
     def test_a_plan_that_leaves_a_world_unfinishable_is_refused(self):
         with self.assertRaises(mi.RejectedChange) as refused:
             mi.validate_plan(self.plan(**{"js/modules/toy.js": piece_module(ENDLESS_PIECE)}))
-        self.assertIn("every world must be a piece a visitor can finish: toy.html", str(refused.exception))
+        self.assertIn("every world must be a puzzle a visitor can solve: toy.html", str(refused.exception))
 
     def test_a_plan_that_takes_a_piece_away_is_refused(self):
         with self.assertRaises(mi.RejectedChange) as refused:
@@ -4565,6 +4608,10 @@ class StageTest(unittest.TestCase):
             with self.subTest(world=played["was"]["file"], seed=played["was"]["seed"]):
                 self.assertTrue(played["playable"], "the piece never became playable")
                 self.assertEqual(played["unset"], [], "a knob the visitor worked was not set")
+                self.assertTrue(played["checkOffered"], "every knob was set and no check was offered")
+                self.assertTrue(played["checked"], "the check could not be pressed")
+                self.assertTrue(played["solved"], "the piece's own solution did not solve it on the stage")
+                self.assertEqual(played["doneText"], "solved")
                 self.assertTrue(played["movedOn"], "the stage never opened the next piece")
                 self.assertEqual(played["modes"][-5:], ["done", "vanishing", "loading", "arriving", "live"])
         self.assertEqual(result["completes"], len(deal))
@@ -4652,10 +4699,14 @@ class StageTest(unittest.TestCase):
         self.assertTrue(result["playable"], "no world the harness tried had a slider on it")
         self.assertTrue(result["ranges"], "the check is worth nothing without a slider")
         self.assertEqual(result["unset"], [], "the slider was used and the stage did not take it")
-        self.assertTrue(result["finished"], "every knob was set and the piece never finished")
-        # And it is still there to look at: nothing takes a finished piece away but the way on.
-        self.assertEqual(result["look"]["mode"], "done", "the finished piece did not stay on the stage")
-        self.assertTrue(result["look"]["nextLit"], "the finished piece offered no way on")
+        self.assertTrue(result["checkOffered"], "every knob was set and the stage offered no check")
+        self.assertTrue(result["judged"], "the check was pressed and the stage gave no verdict")
+        # Where the slider stands is not this piece's answer, so the verdict is a refusal: the piece
+        # is still on the stage, live, the way on dim, the try counted, and nothing has moved on.
+        self.assertFalse(result["finished"], "a wrong answer finished the piece")
+        self.assertIn(result["look"]["mode"], ["live", "arriving"], "an unsolved piece left its mode")
+        self.assertFalse(result["look"]["nextLit"], "the way on lit over an unsolved piece")
+        self.assertIn("one try", result["look"]["tries"], "the try was not counted")
 
     def test_a_knob_nobody_set_is_named_rather_than_left_a_mystery(self):
         # The other way round: a knob genuinely untouched is genuinely unset, and the stage must not
@@ -4665,6 +4716,7 @@ class StageTest(unittest.TestCase):
         self.assertTrue(result["playable"])
         self.assertIn(result["ranges"][0], result["unset"])
         self.assertFalse(result["finished"], "a piece finished with a knob nobody set")
+        self.assertFalse(result["checkOffered"], "the check was offered with a knob nobody set")
         self.assertTrue(result["wanted"], "the stage said nothing about the knob it was waiting on")
         self.assertIn("the pace", result["wanted"])
         self.assertNotIn("done", result["modes"])
@@ -4676,7 +4728,8 @@ class StageTest(unittest.TestCase):
         # Issue #74: the holding is the answer, so a visitor who presses the knob, watches the bar
         # fill and keeps on holding has set it -- the piece carries on under their finger -- and the
         # bar stays full for as long as they hold it. Here the hold is the piece's last knob, so
-        # filling it finishes the piece: the whole flow runs off the fill and not off the release.
+        # filling it is what offers the check: the whole flow runs off the fill and not off the
+        # release, and nothing finishes until the check is pressed.
         result = self.scenario("holdFilled")
         self.assertTrue(result["playable"], "no world the harness tried had a hold on it")
         self.assertTrue(result["held"], "the check is worth nothing without a hold")
@@ -4687,7 +4740,8 @@ class StageTest(unittest.TestCase):
                 self.assertTrue(result[when]["set"], "the knob stopped being set")
                 self.assertEqual(result[when]["pct"], "100%", "the bar did not stay full")
                 self.assertNotIn("let go early", result[when]["status"])
-                self.assertEqual(result[when]["completes"], 1, "the piece finished other than once")
+                self.assertTrue(result[when]["checkEnabled"], "the last knob filled and no check was offered")
+                self.assertEqual(result[when]["completes"], 0, "a piece finished without its check")
 
     def test_letting_go_of_a_hold_already_set_does_nothing_at_all(self):
         # The other half: the release. HOLD_PIECE's apply() writes how many times the knob has been
@@ -4704,6 +4758,46 @@ class StageTest(unittest.TestCase):
                 self.assertEqual(result[when]["pct"], "100%")
                 self.assertTrue(result[when]["set"])
                 self.assertEqual(result[when]["completes"], 0, "a piece with a knob nobody set finished")
+
+    def test_a_wrong_answer_is_refused_and_the_right_one_solves(self):
+        # The puzzle axiom, on the stage: a piece is finished by a check that solves it and by
+        # nothing else. FINISHING_PIECE's answer is a count; the scenario sets it wrong (the far end
+        # of its range) and checks, then sets it right and checks again. The first check has to be
+        # refused -- counted, said, every knob still live, nothing lit, nothing finished -- and the
+        # second has to solve it, on try two, with the done chip saying so.
+        result = self.scenario("wrongThenRight", toy=FINISHING_PIECE)
+        self.assertTrue(result["playable"], "the piece never became playable")
+        self.assertEqual(result["answers"], ["count"], "the module's own solution was not read")
+        self.assertTrue(result["opened"]["goal"], "the stage showed no goal line")
+        self.assertFalse(result["opened"]["checkEnabled"], "the check was offered before any knob was set")
+        self.assertEqual(result["unset"], [], "a knob the visitor worked was not set")
+        self.assertTrue(result["beforeCheck"]["checkEnabled"], "every knob was set and no check was offered")
+        self.assertTrue(result["wrongChecked"], "the check could not be pressed")
+        wrong = result["afterWrong"]
+        self.assertNotEqual(wrong["mode"], "done", "a wrong answer finished the piece")
+        self.assertEqual(wrong["verdict"], "wrong", "the stage did not mark the verdict")
+        self.assertEqual(wrong["completes"], 0, "a wrong answer played the ceremony")
+        self.assertEqual(wrong["tries"], "one try so far", "the try was not counted")
+        self.assertEqual(wrong["status"], "not that many", "the piece's own word on a wrong answer was not said")
+        self.assertFalse(wrong["nextLit"], "the way on lit over an unsolved piece")
+        self.assertFalse(wrong["doneShown"], "the done mark showed over an unsolved piece")
+        self.assertTrue(all(knob["live"] for knob in wrong["knobs"]), "a wrong answer put a knob out of action")
+        self.assertTrue(all(knob["set"] for knob in wrong["knobs"]), "a wrong answer unset a knob")
+        self.assertEqual(result["laterWrong"]["mode"], wrong["mode"], "the stage moved on by itself after a wrong answer")
+        self.assertEqual(result["laterWrong"]["completes"], 0)
+        self.assertTrue(result["rightChecked"], "the check could not be pressed a second time")
+        right = result["afterRight"]
+        self.assertEqual(right["mode"], "done", "the right answer did not solve the piece")
+        self.assertEqual(right["verdict"], "solved")
+        self.assertEqual(right["completes"], 1, "the ceremony played other than once")
+        self.assertEqual(right["doneText"], "solved", "the done chip does not say solved")
+        self.assertEqual(right["tries"], "solved on try 2", "the solve was not scored by its try")
+        self.assertTrue(right["doneShown"])
+        self.assertEqual([c["solved"] for c in right["checks"]], [False, True], "the stage:check events do not tell the story")
+        self.assertEqual([c["tries"] for c in right["checks"]], [1, 2])
+        self.assertTrue(result["onward"]["lit"], "the way on never lit over the solved piece")
+        self.assertFalse(result["onward"]["movedOnByItself"])
+        self.assertTrue(result["onward"]["movedOn"], "the way on was pressed and nothing followed")
 
     def test_a_piece_leaves_nothing_on_the_stage_or_running_behind_it(self):
         # "Components should completely reset between instantiations." A piece part-played, with a
@@ -5935,7 +6029,7 @@ class RealSiteTest(unittest.TestCase):
     accessible, every page carries the local-state store and its meta menu, no page ties the site
     to an update frequency, every page asks before it offers, every page carries a visitor's way
     of steering the site, no control throws a visitor's saved state away without the shared warning
-    button and its confirmation, and every world is a piece a visitor can finish.
+    button and its confirmation, and every world is a puzzle a visitor can solve.
 
     validate_plan only refuses what a run breaks, so the invariants have to start out true: this is
     what makes them hold from the next deploy onward and not only for pages a later run adds. It
@@ -6021,6 +6115,9 @@ class RealSiteTest(unittest.TestCase):
             with self.subTest(world=played["was"]["file"], seed=played["was"]["seed"]):
                 self.assertTrue(played["playable"])
                 self.assertEqual(played["unset"], [])
+                self.assertTrue(played["checkOffered"], "every knob was set and no check was offered")
+                self.assertTrue(played["solved"], "the module's own solution did not solve its piece on the stage")
+                self.assertEqual(played["doneText"], "solved")
                 self.assertFalse(played["movedOnByItself"],
                                  "the stage opened the next piece with nobody pressing anything")
                 self.assertTrue(played["litWhenFinished"], "the ceremony ended and the way on never lit")
@@ -6057,10 +6154,32 @@ class RealSiteTest(unittest.TestCase):
         used = report["sliderUsed"]["result"]
         self.assertTrue(used["ranges"], "no world the stage opened had a slider to check")
         self.assertEqual(used["unset"], [], f"{used['world']}: a slider used where it stood was not taken")
-        self.assertTrue(used["finished"], f"{used['world']}: every knob set and the piece never finished")
+        self.assertTrue(used["checkOffered"], f"{used['world']}: every knob set and no check offered")
+        self.assertTrue(used["judged"], f"{used['world']}: the check was pressed and no verdict given")
         left = report["sliderUntouched"]["result"]
         self.assertFalse(left["finished"], "a piece finished with a knob nobody set")
+        self.assertFalse(left["checkOffered"], "the check was offered with a knob nobody set")
         self.assertTrue(left["wanted"], "the stage said nothing about the knob it was waiting on")
+        # The puzzle axiom on the site as committed: a wrong answer is refused and the right one
+        # solves, through the stage's own controls, for the first world the deal opens.
+        puzzle = report["wrongThenRight"]["result"]
+        self.assertTrue(puzzle["playable"], f"{puzzle['world']}: the piece never became playable")
+        self.assertTrue(puzzle["answers"], f"{puzzle['world']}: the piece declares no answer")
+        self.assertTrue(puzzle["opened"]["goal"], f"{puzzle['world']}: the stage showed no goal line")
+        self.assertEqual(puzzle["unset"], [], f"{puzzle['world']}: a knob the visitor worked was not set")
+        self.assertTrue(puzzle["wrongChecked"], f"{puzzle['world']}: the check could not be pressed")
+        self.assertNotEqual(puzzle["afterWrong"]["mode"], "done", f"{puzzle['world']}: a wrong answer solved it")
+        self.assertEqual(puzzle["afterWrong"]["completes"], 0, f"{puzzle['world']}: a wrong answer played the ceremony")
+        self.assertEqual(puzzle["afterWrong"]["verdict"], "wrong")
+        self.assertTrue(puzzle["afterWrong"]["status"], f"{puzzle['world']}: a wrong check said nothing")
+        self.assertTrue(all(knob["live"] for knob in puzzle["afterWrong"]["knobs"]),
+                        f"{puzzle['world']}: a wrong answer put a knob out of action")
+        self.assertTrue(puzzle["rightChecked"])
+        self.assertEqual(puzzle["afterRight"]["mode"], "done", f"{puzzle['world']}: the solution did not solve it on the stage")
+        self.assertEqual(puzzle["afterRight"]["completes"], 1)
+        self.assertEqual(puzzle["afterRight"]["doneText"], "solved")
+        self.assertIn("solved on try 2", puzzle["afterRight"]["tries"])
+        self.assertTrue(puzzle["onward"]["movedOn"], f"{puzzle['world']}: the way on was pressed and nothing followed")
         filled = report["holdFilled"]["result"]
         self.assertTrue(filled["held"], "no world the stage opened had a hold knob to check")
         self.assertTrue(filled["filled"]["set"],
@@ -6134,7 +6253,7 @@ class RealSiteTest(unittest.TestCase):
         self.assertIn("lightTheWayOn(true)", script, "nothing lights the way on when a piece is over")
         self.assertIn("dimTheWayOn()", script, "nothing dims it again")
         self.assertIn("ui.onward.focus(", script, "the way on never takes the keyboard")
-        finish = script.split("function finish() {", 1)[1].split("\n}", 1)[0]
+        finish = script.split("function finish(say) {", 1)[1].split("\n}", 1)[0]
         self.assertNotIn("next()", finish, "the stage still shows itself out when a piece is finished")
 
     def test_a_finished_piece_is_not_a_finished_page(self):
@@ -6165,7 +6284,7 @@ class RealSiteTest(unittest.TestCase):
         # And finishing takes nothing away: the knobs are not disabled, and a tap on the scene is
         # not turned back, so the piece stays workable until the way on is actually pressed.
         script = self.source[mi.STAGE_SCRIPT]
-        finish = script.split("function finish() {", 1)[1].split("\n}", 1)[0]
+        finish = script.split("function finish(say) {", 1)[1].split("\n}", 1)[0]
         self.assertNotIn("disabled = true", finish, "finishing a piece puts its knobs out of action")
         taps = script[script.index("ui.canvas.addEventListener('pointerdown'"):]
         taps = taps[:taps.index("\n  });")]

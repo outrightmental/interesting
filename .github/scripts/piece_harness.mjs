@@ -1,64 +1,78 @@
 #!/usr/bin/env node
 /*
-  The completion axiom's instrument: drive every world's piece to its end, without a browser.
+  The puzzle axiom's instrument: prove every world's piece is a puzzle that solves, without a browser.
 
       node .github/scripts/piece_harness.mjs --modules <built site>/js/modules [--seeds 1,2,3]
                                              [--json] [--out report.json] [--require-all]
 
-  Every world on the site is a piece a visitor can finish: a small, procedurally generated item
-  with a few knobs and a clear end, made by the world's module (js/modules/<world>.js) as
+  Every world on the site is a puzzle a visitor can solve: a small, procedurally generated problem
+  with a stated goal, a few knobs to answer it on, a check that says whether the answer solves it,
+  and a solution the piece itself knows -- made by the world's module (js/modules/<world>.js) as
   piece(env) and run by js/stage.js, which documents the contract. The stage is the visitor's
-  instrument; this is the law's. It loads each module from the folder it is given, asks it for
-  a piece for each seed, and plays the piece the way the stage would, on a canvas that records
-  nothing: it sets each knob in order (a choice at one of its options, a range at a point on it,
-  a toggle flipped, a press pressed its count, a hold held for its time), taps the scene at
-  seeded points for a tap knob, and runs frames for a wait knob -- and then it says whether the
-  piece finished. Every seed is played with a sky of five stars; one seed is also played the way
-  the stage plays a module that does not read the sky (with none) or one that does (with a
-  single star), so a piece is held to the skies the stage can hand it. Every seed is then played
-  again with its knobs reached in a seeded order rather than down the page, and the first seed is
-  played through from the top a second time, which has to come out exactly as the first.
+  instrument; this is the law's. It loads each module from the folder it is given, asks it for a
+  piece for each seed, and plays the piece the way the stage would, on a canvas that records
+  nothing: the helper knobs (the ones not named in `solution`) set the way a visitor would set
+  them -- a choice at one of its options, a toggle flipped, a press pressed its count, a hold held
+  for its time, frames run for a wait -- and the answer knobs set to the piece's own solution; then
+  the check is pressed, and the piece has to say it is solved. Every seed is played with a sky of
+  five stars; one seed is also played the way the stage plays a module that does not read the sky
+  (with none) or one that does (with a single star). Every seed is then played again with its
+  knobs reached in a seeded order rather than down the page, and the first seed is played through
+  from the top a second time, which has to come out exactly as the first.
+
+  Then the other half of what makes a puzzle legitimate: a wrong answer must not solve it. Every
+  seed is played with every answer knob wrong at once, and once more per answer knob with that one
+  wrong and the rest right, and none of those checks may say solved -- a declared answer that does
+  not change the verdict is a knob that is not an answer. A wrong value is the other option, the
+  opposite toggle, the far end of a range or a number, the word with its last letter changed, the
+  order with its first two swapped, the pick with one chosen swapped for one not, the grid with one
+  cell cycled, and the piece's own `wrong` points for a tap. And a piece whose answer knobs all
+  open on a value (no choice, no empty word) is played once with them left exactly as they opened,
+  which may not solve either: a puzzle that opens solved is no puzzle.
 
   The first seed is then played three times more, for the alignment axiom (issue #80). A card and
   the feature it opens as are one content piece, procedurally configured once: the stage hands the
   piece the card's configuration on env.variant -- the seven dials of site/js/variant.js -- and the
   content the card was showing on env.card. So the first seed is played under a configuration away
   from the no-op one, then as the card that configuration deals it, then as a card another seed was
-  dealt. All three have to finish like any other play (a sky can change under a card, so a piece
+  dealt. All three have to solve like any other play (a sky can change under a card, so a piece
   reads the card it is handed defensively), and the last two have to be different pieces: what a
   feature is follows from the card it was opened from, and a module that ignored env.card would
   open the same item whichever of its cards a visitor pressed, which is the bug the axiom is here
   to keep out.
 
   The stage harness beside this one (stage_harness.mjs) plays the other half of the axiom: the
-  knobs through js/stage.js's own controls, which is where a knob can turn out to be one the
-  visitor cannot actually set.
+  knobs and the check through js/stage.js's own controls, which is where a knob can turn out to be
+  one the visitor cannot actually set.
 
   A module fails when:
-    - piece(env) throws, or returns nothing, or returns something with no title or no steps;
+    - piece(env) throws, or returns nothing, or returns something with no title, no goal, no
+      steps, no check() or no solution;
     - a piece has fewer than MIN_STEPS knobs (a flow is more than one lever) or more than
-      MAX_STEPS (a visitor has to be able to finish expediently), a knob of a kind the stage does
+      MAX_STEPS (a visitor has to be able to answer expediently), a knob of a kind the stage does
       not render, two knobs with one id, a choice with fewer than two or more than four options,
-      a tap knob without tap(), or an `after` that names no earlier knob (the stage has to be
-      able to render every knob);
+      a tap knob without tap(), an `after` that names no earlier knob, a solution that names a
+      knob the piece has not got or a press, a hold or a wait (those are never answers), or a
+      solution value that is not one the knob can be set to -- an option it has not got, a number
+      off its range, a tolerance (`near`) wider than half the range, an order that is not a
+      permutation of its items, a pick of the wrong size, a grid of the wrong length, a tap
+      without its `taps` and `wrong` points;
     - the piece sets a knob itself (ctx.satisfy) before its visitor has set anything, or sets a
-      knob that is not a tap or a wait: a piece is finished by the person playing it, never by
-      itself on arrival;
-    - the same seed does not make the same piece (same title, brief and knobs), because a piece
-      is an address a visitor can come back to or send to someone;
+      knob that is not a tap or a wait, or a tap answer is not set by its wrong points (the taps
+      set the knob and the check judges them: a tap() that only ever satisfies on the right spot
+      has moved the verifier out of check(), where the law reads it);
+    - the solution, checked, does not solve; a wrong answer, checked, does;
+    - the same seed does not make the same piece (same title, goal, brief, knobs and solution),
+      because a piece is an address a visitor can come back to or send to someone;
     - the same seed played a second time through the same module does not make the same piece or
-      does not play out the same way, because a module keeps nothing between instantiations: a
-      visitor meets a world more than once and the second piece is the first one all over again;
-    - a piece can only be finished with its knobs set down the page, because nothing makes a
-      visitor work in that order and one who does not would be left holding a toy that will not
-      finish;
+      does not play out the same way, because a module keeps nothing between instantiations;
+    - a piece can only be solved with its knobs set down the page, because nothing makes a
+      visitor work in that order;
     - every seed makes the same piece, because the river is of pieces that differ;
-    - the piece is the same piece whichever card it was opened from, because then pressing two
-      different cards of one world would open the same feature twice (the alignment axiom, issue
-      #80). A module whose spark() makes nothing for the seeds tried is not held to this, because
-      there was no card to be of;
-    - the piece does not finish within MAX_TAPS taps of its scene and MAX_SECONDS of simulated
-      time once every knob is set, or start/apply/frame/tap/end throws;
+    - the piece is the same piece whichever card it was opened from (the alignment axiom, issue
+      #80). A module whose spark() makes nothing for the seeds tried is not held to this;
+    - the piece does not come to its check within MAX_TAPS taps of its scene and MAX_SECONDS of
+      simulated time, or start/apply/frame/tap/check/end throws;
     - it reaches for a clock or for Math.random: in here those throw, because a piece draws its
       randomness from the seeded rnd it is handed and its time from the frame clock, and
       anything else would make the same seed a different piece.
@@ -89,15 +103,17 @@ export const MIN_STEPS = 2;
 export const MAX_STEPS = 5;
 export const MAX_TAPS = 12;
 export const MAX_SECONDS = 45;
-// Real time, per module, for all seventeen of its plays: six seeds, one sky, six orders, the
-// replay, and the three the alignment axiom adds (configured, as its own card, as another card).
-// Twenty seconds was ample for seven plays and is thin for seventeen -- the busiest module here
-// takes ten on a quick machine -- and a runner that is twice as slow should still be judging
-// pieces rather than reporting timeouts.
-export const MODULE_TIMEOUT_MS = 45000;
+// Real time, per module, for all of its plays: six seeds solved, one sky, six orders, the replay,
+// the wrong answers (one all-wrong, one per answer knob, and the opening values) for every seed,
+// and the three the alignment axiom adds (configured, as its own card, as another card). A runner
+// that is twice as slow as a quick machine should still be judging pieces rather than reporting
+// timeouts.
+export const MODULE_TIMEOUT_MS = 90000;
 const FRAME = 1 / 30;
 const SETTLE = 0.5; // seconds of frames run after each knob, as a visitor pauses between them
-const KINDS = ['choice', 'toggle', 'range', 'press', 'hold', 'tap', 'wait'];
+const KINDS = ['choice', 'toggle', 'range', 'number', 'word', 'order', 'pick', 'grid', 'press', 'hold', 'tap', 'wait'];
+// The kinds a knob named in `solution` may be: a press, a hold or a wait is never an answer.
+export const ANSWER_KINDS = ['choice', 'toggle', 'range', 'number', 'word', 'order', 'pick', 'grid', 'tap'];
 const SEEDS = [11, 2027, 31337, 777777, 9000001, 123456789]; // spread out: near seeds make near first draws
 const W = 800;
 const H = 450;
@@ -260,15 +276,43 @@ function signatureOf(piece) {
   const steps = (piece.steps || []).map((s) => ({
     id: s.id, ask: s.ask, kind: s.kind, after: s.after,
     options: Array.isArray(s.options) ? s.options.map((o) => [o.label, o.value]) : undefined,
-    min: s.min, max: s.max, step: s.step, value: s.value, count: s.count, ms: s.ms, low: s.low, high: s.high, label: s.label
+    items: Array.isArray(s.items) ? s.items.map((o) => [o.label, o.value]) : undefined,
+    min: s.min, max: s.max, step: s.step, value: s.value, count: s.count, ms: s.ms, low: s.low, high: s.high, label: s.label,
+    rows: s.rows, cols: s.cols, states: s.states, length: s.length, optional: s.optional
   }));
-  return JSON.stringify({ title: piece.title, brief: piece.brief, aspect: piece.aspect, auto: piece.auto, steps });
+  return JSON.stringify({ title: piece.title, brief: piece.brief, goal: piece.goal, aspect: piece.aspect, steps,
+    solution: piece.solution });
 }
 
+const isPoint = (pt) => pt && typeof pt === 'object' && isFinite(Number(pt.x)) && isFinite(Number(pt.y));
+const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+
+/* The range a range or number knob runs over, with the stage's own defaults. */
+function span(step) {
+  const min = Number(step.min == null ? 0 : step.min);
+  const max = Number(step.max == null ? 100 : step.max);
+  const inc = Number(step.step == null ? 1 : step.step) || 1;
+  return { min, max, inc };
+}
+
+/* The target a range or number solution names: { value, near } or a bare number. */
+function target(sol) {
+  if (sol && typeof sol === 'object' && !Array.isArray(sol)) return { value: Number(sol.value), near: Math.max(0, Number(sol.near) || 0) };
+  return { value: Number(sol), near: 0 };
+}
+
+/* What is wrong with `piece` as a puzzle, before it is played: the shape of its knobs and of the
+   solution it declares for them. Every reason is one fixed phrase about one knob. */
 function shapeProblems(piece) {
   const problems = [];
   if (!piece || typeof piece !== 'object') return ['piece() returned nothing'];
   if (typeof piece.title !== 'string' || !piece.title.trim()) problems.push('the piece has no title');
+  if (typeof piece.goal !== 'string' || !piece.goal.trim()) problems.push('the piece has no goal; a puzzle says in one line what counts as solved');
+  if (typeof piece.check !== 'function') problems.push('the piece has no check(); a puzzle has a verifier');
+  const solution = piece.solution;
+  if (!solution || typeof solution !== 'object' || Array.isArray(solution) || !Object.keys(solution).length) {
+    problems.push('the piece has no solution; a puzzle knows the answer that solves it');
+  }
   if (!Array.isArray(piece.steps) || !piece.steps.length) problems.push('the piece has no knobs (steps)');
   else {
     if (piece.steps.length < MIN_STEPS) problems.push('the piece has ' + piece.steps.length + ' knob; a flow is at least ' + MIN_STEPS);
@@ -285,17 +329,180 @@ function shapeProblems(piece) {
       if (s.kind === 'choice' && (!Array.isArray(s.options) || s.options.length < 2 || s.options.length > 4)) {
         problems.push(at + ' is a choice with ' + (Array.isArray(s.options) ? s.options.length : 'no') + ' options; two to four');
       }
+      if ((s.kind === 'order' || s.kind === 'pick') && (!Array.isArray(s.items) || s.items.length < 2 || s.items.length > (s.kind === 'order' ? 8 : 12))) {
+        problems.push(at + ' is ' + (s.kind === 'order' ? 'an order' : 'a pick') + ' with ' + (Array.isArray(s.items) ? s.items.length : 'no') + ' items; two to ' + (s.kind === 'order' ? 'eight' : 'twelve'));
+      }
+      if (s.kind === 'grid') {
+        const rows = Number(s.rows) || 3;
+        const cols = Number(s.cols) || 3;
+        if (rows < 1 || rows > 10 || cols < 1 || cols > 10) problems.push(at + ' is a grid of ' + rows + ' by ' + cols + '; one to ten each way');
+      }
+      if ((s.kind === 'range' || s.kind === 'number') && !(span(s).max > span(s).min)) problems.push(at + ' runs from ' + span(s).min + ' to ' + span(s).max + '; a range needs room');
       if (s.kind === 'tap' && typeof piece.tap !== 'function') problems.push(at + ' is a tap knob but the piece has no tap()');
       if (s.after != null) {
         const earlier = piece.steps.slice(0, i).some((e) => e && e.id === s.after);
         if (!earlier) problems.push(at + ' comes after "' + s.after + '", which is not an earlier knob');
       }
     });
+    // The solution, knob by knob: it has to name answers the stage can actually set.
+    if (solution && typeof solution === 'object' && !Array.isArray(solution)) {
+      for (const id of Object.keys(solution)) {
+        const step = piece.steps.find((s) => s && s.id === id);
+        const sol = solution[id];
+        const at = 'the solution for "' + id + '"';
+        if (!step) {
+          problems.push(at + ' names a knob the piece has not got');
+          continue;
+        }
+        if (ANSWER_KINDS.indexOf(step.kind) === -1) {
+          problems.push(at + ' names a ' + step.kind + ' knob; a press, a hold or a wait is never an answer');
+          continue;
+        }
+        if (step.optional === true) {
+          problems.push(at + ' names an optional knob; an answer is never optional');
+          continue;
+        }
+        switch (step.kind) {
+          case 'choice':
+            if (!Array.isArray(step.options) || !step.options.some((o) => o && o.value === sol)) problems.push(at + ' is not one of its options');
+            break;
+          case 'toggle':
+            if (typeof sol !== 'boolean') problems.push(at + ' is not true or false');
+            break;
+          case 'range':
+          case 'number': {
+            const { min, max } = span(step);
+            const t = target(sol);
+            if (!isFinite(t.value) || t.value < min || t.value > max) problems.push(at + ' is off its range');
+            else if (t.near >= (max - min) / 2) problems.push(at + ' allows ' + t.near + ' either way, which is half its range or more; a target needs an edge');
+            else if (Math.abs(t.value - (t.value > (min + max) / 2 ? min : max)) <= t.near) problems.push(at + ' is solved at the far end of its range too');
+            break;
+          }
+          case 'word':
+            if (typeof sol !== 'string' || !sol.trim()) problems.push(at + ' is not a word');
+            else if (step.length && sol.trim().length > Number(step.length)) problems.push(at + ' is longer than the field allows');
+            break;
+          case 'order': {
+            const values = Array.isArray(step.items) ? step.items.map((i) => i && i.value) : [];
+            if (!Array.isArray(sol) || sol.length !== values.length || !values.every((v) => sol.includes(v)) || new Set(sol).size !== sol.length) {
+              problems.push(at + ' is not an order of its items');
+            }
+            break;
+          }
+          case 'pick': {
+            const values = Array.isArray(step.items) ? step.items.map((i) => i && i.value) : [];
+            const count = step.count == null ? 0 : Number(step.count);
+            if (!Array.isArray(sol) || !sol.every((v) => values.includes(v)) || new Set(sol).size !== sol.length) problems.push(at + ' is not some of its items');
+            else if (count && sol.length !== count) problems.push(at + ' picks ' + sol.length + ' where the knob asks for ' + count);
+            else if (sol.length >= values.length) problems.push(at + ' picks every item, so nothing could be picked wrongly');
+            else if (!sol.length) problems.push(at + ' picks nothing');
+            break;
+          }
+          case 'grid': {
+            const n = (Number(step.rows) || 3) * (Number(step.cols) || 3);
+            const states = Math.max(2, Math.min(6, Number(step.states) || 2));
+            if (!Array.isArray(sol) || sol.length !== n || !sol.every((v) => Number.isInteger(v) && v >= 0 && v < states)) {
+              problems.push(at + ' is not ' + n + ' cell states');
+            }
+            break;
+          }
+          case 'tap':
+            if (!sol || typeof sol !== 'object' || !Array.isArray(sol.taps) || !sol.taps.length || !sol.taps.every(isPoint)
+                || !Array.isArray(sol.wrong) || !sol.wrong.length || !sol.wrong.every(isPoint)) {
+              problems.push(at + ' needs its taps and its wrong points, each a list of { x, y }');
+            } else if (sol.taps.length + sol.wrong.length > MAX_TAPS) {
+              problems.push(at + ' needs more than ' + MAX_TAPS + ' taps to play');
+            }
+            break;
+          default:
+            break;
+        }
+      }
+    }
   }
   return problems;
 }
 
-// Play one piece to its end, as the stage would. Returns { ok, problems, taps, seconds, title }.
+/* The wrong value for an answer knob: one the stage can set, as far from the solution as the knob
+   allows, so a verifier that says yes to it is a verifier that is not looking. */
+export function wrongFor(step, sol) {
+  switch (step.kind) {
+    case 'choice':
+      return step.options.find((o) => o && o.value !== sol).value;
+    case 'toggle':
+      return !sol;
+    case 'range':
+    case 'number': {
+      const { min, max } = span(step);
+      const t = target(sol);
+      return t.value > (min + max) / 2 ? min : max;
+    }
+    case 'word': {
+      const word = String(sol).trim();
+      const last = word.slice(-1).toUpperCase();
+      return word.slice(0, -1) + (last === 'X' ? 'Y' : 'X');
+    }
+    case 'order': {
+      const out = sol.slice();
+      [out[0], out[1]] = [out[1], out[0]];
+      return out;
+    }
+    case 'pick': {
+      const values = step.items.map((i) => i.value);
+      const unchosen = values.find((v) => !sol.includes(v));
+      const out = sol.slice(1);
+      out.push(unchosen);
+      return values.filter((v) => out.includes(v));
+    }
+    case 'grid': {
+      const states = Math.max(2, Math.min(6, Number(step.states) || 2));
+      const out = sol.slice();
+      out[0] = (out[0] + 1) % states;
+      return out;
+    }
+    case 'tap':
+      return sol.wrong;
+    default:
+      return sol;
+  }
+}
+
+/* The value an answer knob opens on, the way the stage opens it, or undefined for a kind that
+   opens unset (a choice, an empty word). */
+function initialOf(step) {
+  switch (step.kind) {
+    case 'toggle':
+      return !!step.value;
+    case 'range':
+    case 'number': {
+      const { min, max } = span(step);
+      if (step.kind === 'number') return step.value == null ? min : Number(step.value);
+      return step.value == null ? (min + max) / 2 : Number(step.value);
+    }
+    case 'order': {
+      const values = step.items.map((i) => i.value);
+      return Array.isArray(step.value) && step.value.length === values.length && step.value.every((v) => values.includes(v)) ? step.value.slice() : values;
+    }
+    case 'pick': {
+      const values = step.items.map((i) => i.value);
+      const chosen = (Array.isArray(step.value) ? step.value : []).filter((v) => values.includes(v));
+      const count = step.count == null ? 0 : Number(step.count);
+      return !chosen.length || (count && chosen.length !== count) ? undefined : values.filter((v) => chosen.includes(v));
+    }
+    case 'grid': {
+      const n = (Number(step.rows) || 3) * (Number(step.cols) || 3);
+      const states = Math.max(2, Math.min(6, Number(step.states) || 2));
+      return Array.isArray(step.value) && step.value.length === n ? step.value.map((v) => (((Number(v) | 0) % states) + states) % states) : new Array(n).fill(0);
+    }
+    default:
+      return undefined;
+  }
+}
+
+/* Play one piece to its check, as the stage would, and press it. Returns { ok, solved, problems,
+   taps, seconds, title }. `opts.answers` says what goes on the answer knobs: 'solution' (the
+   default), 'wrong' (every answer wrong), { only: id } (that answer wrong, the rest right) or
+   'initial' (every answer left as it opened), and `opts.expect` whether the check should solve. */
 export function play(mod, seed, options) {
   const opts = options || {};
   const stars = opts.stars || STARS;
@@ -304,7 +511,9 @@ export function play(mod, seed, options) {
   // the caller asks for others, so every play below is one the stage could have opened.
   const variant = opts.variant || PLAIN_DIALS;
   const card = opts.card || null;
-  const out = { seed, stars: stars.length, label: opts.label || '', ok: false, problems: [], taps: 0, seconds: 0, title: '', steps: 0, signature: '' };
+  const answers = opts.answers || 'solution';
+  const expect = opts.expect == null ? true : !!opts.expect;
+  const out = { seed, stars: stars.length, label: opts.label || '', ok: false, solved: false, tries: 0, problems: [], taps: 0, seconds: 0, title: '', steps: 0, signature: '' };
   let piece;
   try {
     piece = mod.piece(makeEnv(seed, stars, variant, card));
@@ -335,16 +544,31 @@ export function play(mod, seed, options) {
   let completed = false;
   let ended = false;
   let touched = false; // has the visitor set a knob yet?
+  let inTap = false;
   let time = 0;
+  let tries = 0;
   const env = makeEnv(seed, stars, variant, card);
 
+  // What each answer knob is to be set to in this play, and whether it can be at all.
+  const wanted = new Map();
+  for (const id of Object.keys(piece.solution)) {
+    const step = state.get(id).step;
+    const sol = piece.solution[id];
+    let value;
+    if (answers === 'solution') value = sol;
+    else if (answers === 'wrong') value = wrongFor(step, sol);
+    else if (answers && typeof answers === 'object' && answers.only === id) value = wrongFor(step, sol);
+    else if (answers === 'initial') value = initialOf(step);
+    else value = sol;
+    wanted.set(id, value);
+  }
+
   function allSet() {
-    for (const s of state.values()) if (!s.set) return false;
+    for (const s of state.values()) if (!s.set && s.step.optional !== true) return false;
     return true;
   }
   function finish() {
     if (completed) return;
-    if (!touched) out.problems.push('the piece finished before any knob was set; a piece is finished by its visitor');
     completed = true;
     if (!ended && typeof piece.end === 'function') {
       ended = true;
@@ -355,10 +579,7 @@ export function play(mod, seed, options) {
     const s = state.get(id);
     if (!s) return;
     if (value !== undefined) s.value = value;
-    if (!s.set) {
-      s.set = true;
-      if (allSet() && piece.auto !== false) finish();
-    }
+    if (!s.set) s.set = true;
   }
   const ctx = {
     canvas, g, w: W, h: H, dpr: 1,
@@ -372,12 +593,24 @@ export function play(mod, seed, options) {
       else if (s.step.kind !== 'tap' && s.step.kind !== 'wait') out.problems.push('the piece set knob "' + id + '" itself; only a tap or a wait knob is the piece\'s to set');
       mark(id, value);
     },
+    set(id, value) {
+      if (!inTap) {
+        out.problems.push('the piece called ctx.set("' + id + '") outside tap(); a knob is the visitor\'s to set');
+        return false;
+      }
+      const s = state.get(id);
+      if (!s) return false;
+      mark(id, value);
+      return true;
+    },
+    hint() {},
     progress() {},
     status() {},
     value(id) { const s = state.get(id); return s ? s.value : undefined; },
+    get tries() { return tries; },
+    get hints() { return 0; },
     get done() { return completed; },
-    get elapsed() { return time; },
-    complete() { finish(); }
+    get elapsed() { return time; }
   };
   function apply(id, value) {
     touched = true;
@@ -392,15 +625,28 @@ export function play(mod, seed, options) {
       if (typeof piece.frame === 'function') piece.frame(time, FRAME, ctx);
     }
   }
+  function tapAt(x, y) {
+    touched = true;
+    inTap = true;
+    try {
+      piece.tap(x, y, ctx);
+    } finally {
+      inTap = false;
+    }
+    out.taps += 1;
+    frames(0.2);
+  }
   function unlocked(s) {
     return !s.step.after || (state.get(s.step.after) || { set: true }).set;
   }
   // The order a visitor meets the knobs in. Written order by default, because that is the order
   // the stage lays them out; seeded with `shuffle`, because nothing makes a visitor work down the
   // page -- they reach for whatever the piece has just drawn their eye to, and a piece that can
-  // only be finished from the top down is a piece some visitor cannot finish.
+  // only be solved from the top down is a piece some visitor cannot solve.
   function reach() {
-    const list = Array.from(state.values());
+    // An optional knob -- a hint -- is one a visitor may never touch, so the shuffled plays leave
+    // it alone and the plays in written order press it: the puzzle has to solve both ways.
+    const list = Array.from(state.values()).filter((s) => !opts.shuffle || s.step.optional !== true);
     if (!opts.shuffle) return list;
     for (let i = list.length - 1; i > 0; i--) {
       const j = Math.floor(driver() * (i + 1));
@@ -410,42 +656,89 @@ export function play(mod, seed, options) {
     }
     return list;
   }
+  // The check, pressed: the verifier is asked, and a solve ends the piece.
+  function judge() {
+    tries += 1;
+    const verdict = piece.check(ctx);
+    const solved = !!(verdict && verdict.solved);
+    if (verdict && verdict.say != null && typeof verdict.say !== 'string') out.problems.push('check() said something that is not a string');
+    if (solved) finish();
+    return solved;
+  }
 
   try {
-    // Where each slider starts is known to the piece from the first frame, as on the stage.
+    // Where each knob that opens on a value starts, known to the piece from the first frame, as on
+    // the stage.
     for (const s of state.values()) {
-      if (s.step.kind !== 'range') continue;
-      const min = Number(s.step.min == null ? 0 : s.step.min);
-      const max = Number(s.step.max == null ? 100 : s.step.max);
-      s.value = s.step.value == null ? (min + max) / 2 : Number(s.step.value);
+      const initial = initialOf(s.step);
+      if (initial !== undefined) s.value = initial;
+      if (s.step.kind === 'word') s.value = '';
     }
     if (typeof piece.start === 'function') piece.start(ctx);
     frames(SETTLE);
     // Knobs in order, skipping locked ones until their gate opens; a pass that sets nothing ends it.
     let moved = true;
-    while (!completed && moved && time < MAX_SECONDS) {
+    while (!allSet() && moved && time < MAX_SECONDS) {
       moved = false;
       for (const s of reach()) {
         if (s.set || !unlocked(s)) continue;
         const step = s.step;
+        const answer = wanted.has(step.id);
+        const want = wanted.get(step.id);
         switch (step.kind) {
           case 'choice': {
-            const option = step.options[Math.floor(driver() * step.options.length)];
+            const option = answer ? step.options.find((o) => o && o.value === want) : step.options[Math.floor(driver() * step.options.length)];
             apply(step.id, option.value);
             mark(step.id, option.value);
             break;
           }
           case 'toggle': {
-            const on = !step.value; // the first press flips it, as on the stage
+            // The first press flips it, as on the stage; an answer that is where it opened takes
+            // two presses, there and back, because a press is what sets a toggle.
+            let on = !step.value;
             apply(step.id, on);
             mark(step.id, on);
+            if (answer && on !== want) {
+              on = !on;
+              apply(step.id, on);
+              mark(step.id, on);
+            }
             break;
           }
-          case 'range': {
-            const min = Number(step.min == null ? 0 : step.min);
-            const max = Number(step.max == null ? 100 : step.max);
-            const inc = Number(step.step == null ? 1 : step.step) || 1;
-            const v = min + Math.round(((max - min) * driver()) / inc) * inc;
+          case 'range':
+          case 'number': {
+            const { min, max, inc } = span(step);
+            const v = answer ? target(want).value : min + Math.round(((max - min) * driver()) / inc) * inc;
+            apply(step.id, v);
+            mark(step.id, v);
+            break;
+          }
+          case 'word': {
+            const v = answer ? String(want) : 'A';
+            apply(step.id, v);
+            mark(step.id, v);
+            break;
+          }
+          case 'order': {
+            const v = answer ? want.slice() : initialOf(step);
+            apply(step.id, v);
+            mark(step.id, v);
+            break;
+          }
+          case 'pick': {
+            let v;
+            if (answer) v = want.slice();
+            else {
+              const values = step.items.map((i) => i.value);
+              const count = step.count == null ? 1 : Number(step.count);
+              v = values.slice(0, Math.max(1, count));
+            }
+            apply(step.id, v);
+            mark(step.id, v);
+            break;
+          }
+          case 'grid': {
+            const v = answer ? want.slice() : initialOf(step);
             apply(step.id, v);
             mark(step.id, v);
             break;
@@ -467,54 +760,89 @@ export function play(mod, seed, options) {
             break;
           }
           case 'tap':
-            while (!s.set && !completed && out.taps < MAX_TAPS) {
-              touched = true;
-              piece.tap(0.1 + driver() * 0.8, 0.1 + driver() * 0.8, ctx);
-              out.taps += 1;
-              frames(0.2);
-            }
-            if (!s.set && !completed) {
-              out.problems.push('knob "' + step.id + '" was not set by ' + MAX_TAPS + ' taps of the scene');
+            if (answer) {
+              // The piece's own points, in order; a tap answer is set by its taps, right or wrong,
+              // and the check is what judges them.
+              const points = Array.isArray(want) ? want : [];
+              for (const pt of points) {
+                if (s.set || out.taps >= MAX_TAPS) break;
+                tapAt(Number(pt.x), Number(pt.y));
+              }
+              if (!s.set) {
+                out.problems.push('knob "' + step.id + '" was not set by its ' + (answers === 'solution' || (answers && answers.only !== step.id && answers !== 'wrong') ? 'solution' : 'wrong') + ' taps; a tap answer is set by any taps and judged by check()');
+              }
+            } else {
+              while (!s.set && out.taps < MAX_TAPS) tapAt(0.1 + driver() * 0.8, 0.1 + driver() * 0.8);
+              if (!s.set) out.problems.push('knob "' + step.id + '" was not set by ' + MAX_TAPS + ' taps of the scene');
             }
             break;
           case 'wait':
-            while (!s.set && !completed && time < MAX_SECONDS) frames(0.5);
-            if (!s.set && !completed) {
-              out.problems.push('knob "' + step.id + '" was not set by ' + MAX_SECONDS + ' seconds of frames');
-            }
+            while (!s.set && time < MAX_SECONDS) frames(0.5);
+            if (!s.set) out.problems.push('knob "' + step.id + '" was not set by ' + MAX_SECONDS + ' seconds of frames');
             break;
           default:
             break;
         }
-        if (s.set || completed) moved = true;
+        if (s.set) moved = true;
         if (out.problems.length) break;
         frames(SETTLE);
       }
       if (out.problems.length) break;
     }
-    if (!completed && !out.problems.length) {
-      if (piece.auto === false) {
-        while (!completed && time < MAX_SECONDS) frames(0.5);
-        if (!completed) out.problems.push('every knob is set but the piece never called complete() within ' + MAX_SECONDS + ' seconds');
+    if (!out.problems.length) {
+      if (!allSet()) {
+        const stuck = Array.from(state.values()).filter((s) => !s.set && s.step.optional !== true).map((s) => s.step.id);
+        out.problems.push('the piece never came to its check; still unset: ' + stuck.join(', '));
+      } else if (completed) {
+        out.problems.push('the piece was solved before its check was pressed');
       } else {
-        const stuck = Array.from(state.values()).filter((s) => !s.set).map((s) => s.step.id);
-        out.problems.push('the piece did not finish; still unset: ' + stuck.join(', '));
+        // A check is a question and not a move: asked twice, it answers the same.
+        const first = judge();
+        out.solved = first;
+        if (!first) {
+          const second = judge();
+          if (second !== first) out.problems.push('check() changed its mind when pressed again');
+        }
+        if (expect && !first) out.problems.push('the solution does not solve the puzzle (' + (answers === 'solution' ? 'every answer at its solution' : String(answers)) + ')');
+        if (!expect && first) {
+          const which = answers === 'wrong' ? 'every answer wrong' : answers === 'initial' ? 'every answer left as it opened' : 'only "' + answers.only + '" wrong';
+          out.problems.push('the puzzle is solved with ' + which + '; ' + (answers === 'initial' ? 'a puzzle that opens solved is no puzzle' : 'an answer that does not matter is not an answer'));
+        }
       }
     }
     if (completed) frames(1);
   } catch (err) {
     out.problems.push('the piece threw while played: ' + (err && err.stack ? String(err.stack).split('\n').slice(0, 2).join(' ') : err));
   }
+  out.tries = tries;
   out.seconds = Math.round(time * 10) / 10;
-  out.ok = completed && !out.problems.length;
+  out.ok = !out.problems.length && (expect ? completed : !completed);
   return out;
 }
 
-// Judge one module, already imported: every seed with the five stars, the first seed again with
-// the sky the stage may hand it (none for a module that does not read the sky, one star for one
-// that does), every seed once more with its knobs reached in a seeded order, the first seed
-// played through from the top a second time, and the first seed under a configuration, as the card
-// that configuration deals it, and as a card another seed was dealt (the alignment axiom).
+/* The answer knobs a piece has, and whether every one of them opens on a value: the plays that
+   leave the answers as they opened are only possible then. */
+function answersOf(mod, seed) {
+  try {
+    const piece = mod.piece(makeEnv(seed, STARS, PLAIN_DIALS, null));
+    if (!piece || !piece.solution || !Array.isArray(piece.steps)) return { ids: [], opensSet: false };
+    const ids = Object.keys(piece.solution).filter((id) => piece.steps.some((s) => s && s.id === id));
+    const opensSet = ids.length > 0 && ids.every((id) => {
+      const step = piece.steps.find((s) => s.id === id);
+      return step && initialOf(step) !== undefined;
+    });
+    return { ids, opensSet };
+  } catch (err) {
+    return { ids: [], opensSet: false };
+  }
+}
+
+// Judge one module, already imported: every seed solved with the five stars, the first seed again
+// with the sky the stage may hand it (none for a module that does not read the sky, one star for
+// one that does), every seed once more with its knobs reached in a seeded order, the first seed
+// played through from the top a second time, every seed with its answers wrong (all at once, one
+// at a time, and as they opened), and the first seed under a configuration, as the card that
+// configuration deals it, and as a card another seed was dealt (the alignment axiom).
 export function judgeModule(mod, seeds) {
   const report = { hasPiece: false, ok: false, problems: [], runs: [] };
   if (!mod || typeof mod.piece !== 'function') {
@@ -538,8 +866,8 @@ export function judgeModule(mod, seeds) {
   for (const p of skyRun.problems) report.problems.push('seed ' + seeds[0] + ' with ' + (sky.length ? 'one star' : 'no stars') + ': ' + p);
 
   // Reached in another order. Nothing makes a visitor work down the page: they set the knob the
-  // scene has just drawn their eye to, and a piece that is only finishable from the top down
-  // leaves someone holding a finished-looking toy that will not finish (issue #60).
+  // scene has just drawn their eye to, and a piece that is only solvable from the top down leaves
+  // someone holding an answer that will not check (issue #60).
   for (const seed of seeds) {
     const run = play(mod, seed, { shuffle: true, label: 'another order' });
     report.runs.push(run);
@@ -563,10 +891,33 @@ export function judgeModule(mod, seeds) {
     }
   }
 
+  // The wrong answers. A legitimate puzzle is one a wrong answer does not solve: every answer
+  // wrong at once, then each answer wrong on its own with the rest right (so every declared
+  // answer is load-bearing), then -- where every answer knob opens on a value -- the answers left
+  // exactly as they opened, because a puzzle that opens solved is no puzzle.
+  for (const seed of seeds) {
+    const wrong = play(mod, seed, { answers: 'wrong', expect: false, label: 'every answer wrong' });
+    report.runs.push(wrong);
+    for (const p of wrong.problems) report.problems.push('seed ' + seed + ' with every answer wrong: ' + p);
+    const { ids, opensSet } = answersOf(mod, seed);
+    if (ids.length > 1) {
+      for (const id of ids) {
+        const one = play(mod, seed, { answers: { only: id }, expect: false, label: 'only ' + id + ' wrong' });
+        report.runs.push(one);
+        for (const p of one.problems) report.problems.push('seed ' + seed + ' with only "' + id + '" wrong: ' + p);
+      }
+    }
+    if (opensSet) {
+      const opened = play(mod, seed, { answers: 'initial', expect: false, label: 'as it opened' });
+      report.runs.push(opened);
+      for (const p of opened.problems) report.problems.push('seed ' + seed + ' with every answer as it opened: ' + p);
+    }
+  }
+
   // The alignment axiom (issue #80): a card and the feature it opens as are one content piece,
   // procedurally configured once. The stage hands the piece the card's configuration on
   // env.variant and the content the card was showing on env.card, so the same seed under a
-  // configuration has to finish like any other play, and the piece a card opens as has to be a
+  // configuration has to solve like any other play, and the piece a card opens as has to be a
   // piece of that card -- different from the one the same seed makes with no card behind it.
   // Otherwise two different cards of one world open the same feature, which is the bug the axiom
   // is here to keep out.
@@ -671,7 +1022,7 @@ function judgeInWorker(file, seeds) {
       worker.terminate().catch(() => {});
       resolve(report);
     };
-    const worker = new Worker(new URL(import.meta.url), { workerData: { file, seeds }, env: {}, stdout: true, stderr: true });
+    const worker = new Worker(new URL(import.meta.url), { workerData: { harness: 'piece', file, seeds }, env: {}, stdout: true, stderr: true });
     worker.stdout.on('data', () => {}); // a module's stray console output goes nowhere
     worker.stderr.on('data', () => {});
     const timer = setTimeout(() => {
@@ -717,7 +1068,7 @@ async function main(argv) {
   } else {
     for (const m of modules) {
       const mark = m.hasPiece ? (m.ok ? 'ok  ' : 'FAIL') : 'none';
-      const runs = m.runs.map((r) => (r.ok ? '' : '!') + JSON.stringify(r.title || '?') + ' (' + r.steps + ' knobs, ' + r.taps + ' taps, ' + r.seconds + 's' + (r.stars !== 5 ? ', ' + r.stars + ' stars' : '') + (r.label ? ', ' + r.label : '') + ')').join(', ');
+      const runs = m.runs.map((r) => (r.ok ? '' : '!') + JSON.stringify(r.title || '?') + ' (' + r.steps + ' knobs, ' + r.taps + ' taps, ' + r.seconds + 's, ' + (r.solved ? 'solved' : 'not solved') + (r.stars !== 5 ? ', ' + r.stars + ' stars' : '') + (r.label ? ', ' + r.label : '') + ')').join(', ');
       process.stdout.write(mark + '  ' + m.id + (runs ? ': ' + runs : '') + '\n');
       for (const p of m.problems) process.stdout.write('      - ' + p + '\n');
     }
@@ -725,7 +1076,9 @@ async function main(argv) {
   return failing.length ? 1 : 0;
 }
 
-if (!isMainThread) {
+// In a worker of this harness's own: the stage harness imports this file for wrongFor() from
+// inside its workers too, and must not be mistaken for one of them.
+if (!isMainThread && workerData && workerData.harness === 'piece') {
   workerMain().catch((err) => {
     parentPort.postMessage({ hasPiece: true, ok: false, problems: ['the harness failed in the worker: ' + (err && err.message || err)], runs: [] });
   });

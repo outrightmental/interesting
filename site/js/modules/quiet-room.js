@@ -1,40 +1,23 @@
-/* The quiet room: a ring that breathes, a dimmer, and one thing to put down. As a card it is the
-   ring (paint, spark); as a piece it is a few breaths at your pace, one thing set down and
-   left down, or a rain-fogged window you clear and settle. See js/feed.js for what a module is
-   and js/stage.js for what a piece is.
+/* The quiet room: a ring that breathes, a dim room of lamps, and a shelf with a few keepsakes on
+   it. As a card it is the ring (paint, animate) or one of the two puzzles below (spark); as a
+   piece it is one of those puzzles, and the card it was opened from says which. See js/feed.js
+   for what a module is and js/stage.js for what a piece is.
 
-   A card and the feature it opens as are one quiet: the spark puts what it was carrying, or the
-   word it was saying, on its spec as `of`, and whichever shape the piece takes it is about that --
-   the thing the card named is the thing the room sets down, traces or shelves. */
+   Two puzzles, both deduction:
 
-// The card this piece was opened from, in the room's own terms: the burden it was carrying or the
-// word it was saying, or null for a piece nobody pressed (js/stage.js, env.card.of).
-function pressed(env) {
-  const was = env.card && env.card.of;
-  if (!was) return null;
-  const burden = typeof was.burden === 'string' ? was.burden : '';
-  const word = typeof was.word === 'string' ? was.word : '';
-  return burden || word ? { burden, word } : null;
-}
+     the dark room   Lights Out. A square of lamps, some lit; pressing one flips it and its four
+                     neighbours. Put every lamp out. The room is made by pressing lamps in a dark
+                     room, so every puzzle has a solution, and at three by three and four by four
+                     the solution is unique. The scene is the control: tap a lamp to press it, and
+                     the rail's grid keeps the record.
+     the shelf       An ordering puzzle. Four or five keepsakes go on a shelf left to right, and a
+                     few clues say how they stand -- left of, next to, at an end, two apart. The
+                     clues are drawn from the true order and pruned until exactly one order fits
+                     them all. A wrong check says how many stand in the right place and no more.
 
-const BURDENS = [
-  'the unread thing', 'the half-finished message', 'the thing you said in 2014',
-  'the small debt of attention', 'the opinion you did not need to have',
-  'the tab you are keeping open out of guilt', 'the plan that was never yours',
-  'the correction nobody asked for', 'the reply you have drafted four times',
-  'the list that has become a wall', 'the version of this you were going to be by now',
-  'the argument you keep winning in the shower'
-];
-
-const WORDS = ['in - hold - out', 'nothing is required of you here', 'the door is shut and the room is lit low',
-  'no score, no streak, no next thing', 'held, and then let go'];
-
-const PACES = [{ label: 'quick', value: 6 }, { label: 'slow', value: 8 }, { label: 'slower', value: 10 }];
-const PANES = [
-  { label: 'clear glass', value: 'clear' },
-  { label: 'rain streaks', value: 'rain' },
-  { label: 'fogged glass', value: 'fog' }
-];
+   A card and the feature it opens as are one puzzle: the spark puts the whole puzzle on its spec
+   as `of` -- the lamps that were pressed, the shelf's order and clues -- and piece(env) opens on
+   that rather than rolling another. */
 
 const KEEPSAKES = [
   'a brass key',
@@ -43,19 +26,33 @@ const KEEPSAKES = [
   'a spool of blue thread',
   'a ticket stub',
   'a tiny bell',
-  'a dry sprig of rosemary',
+  'a sprig of rosemary',
   'a snapped pencil',
   'a blank matchbook',
-  'a shell with a crack in it',
+  'a cracked shell',
   'a coin from nowhere',
   'a wooden bead'
 ];
 
-const LIGHTS = [
-  { label: 'lamp low', value: 0.68 },
-  { label: 'half light', value: 0.46 },
-  { label: 'just enough to see', value: 0.28 }
-];
+const SHORT = {
+  'a brass key': 'key',
+  'a folded note': 'note',
+  'a smooth stone': 'stone',
+  'a spool of blue thread': 'thread',
+  'a ticket stub': 'stub',
+  'a tiny bell': 'bell',
+  'a sprig of rosemary': 'rosemary',
+  'a snapped pencil': 'pencil',
+  'a blank matchbook': 'matchbook',
+  'a cracked shell': 'shell',
+  'a coin from nowhere': 'coin',
+  'a wooden bead': 'bead'
+};
+
+const ORDINAL = ['first', 'second', 'third', 'fourth', 'fifth'];
+const WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen'];
+
+/* ---- the room ------------------------------------------------------------------------------ */
 
 // The room, out to `swell` and dimmed by `dim`. `scale` is how large the ring is drawn: the card's
 // own, from the configuration it was dealt, and one for the piece, which is the room itself.
@@ -84,57 +81,242 @@ function room(ctx, w, h, env, swell, dim, scale) {
   }
 }
 
-// A line of small text under the ring, for the thing being put down.
-function caption(ctx, w, h, env, text, a) {
-  if (!text || a <= 0) return;
-  ctx.fillStyle = env.alpha(env.colors.fg, a);
-  ctx.font = '500 ' + Math.max(13, Math.round(Math.min(w, h) * 0.045)) + 'px system-ui, sans-serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(text, w / 2, h * 0.86);
+// The dark ground of the room with no ring: what both puzzles are drawn on.
+function floor(g, w, h, env, dim) {
+  const c = env.colors;
+  const ground = g.createRadialGradient(w / 2, h * 0.4, 0, w / 2, h * 0.4, Math.max(w, h) * 0.8);
+  ground.addColorStop(0, env.mix(c.bg, c.bg2, 0.55));
+  ground.addColorStop(1, c.bg);
+  g.fillStyle = ground;
+  g.fillRect(0, 0, w, h);
+  if (dim) {
+    g.fillStyle = 'rgba(5, 3, 5, ' + dim + ')';
+    g.fillRect(0, 0, w, h);
+  }
 }
 
-// A few breaths at a pace the visitor sets; the room goes dark when they are done.
-function breaths(env) {
-  const was = pressed(env);
-  const count = env.int(2, 3);
-  const s = { pace: 0, dim: 0.4, phase: 0, done: 0, finished: false, fade: 0 };
+function caption(g, w, h, env, text, y, a, size) {
+  if (!text || a <= 0) return;
+  g.fillStyle = env.alpha(env.colors.fg, a);
+  g.font = '500 ' + (size || Math.max(12, Math.round(Math.min(w, h) * 0.042))) + 'px system-ui, sans-serif';
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.fillText(text, w / 2, y);
+}
+
+/* ---- the dark room: lights out ------------------------------------------------------------- */
+
+function neighbours(i, n) {
+  const x = i % n;
+  const y = Math.floor(i / n);
+  const out = [i];
+  if (y > 0) out.push(i - n);
+  if (y < n - 1) out.push(i + n);
+  if (x > 0) out.push(i - 1);
+  if (x < n - 1) out.push(i + 1);
+  return out;
+}
+
+// The lamps a set of presses lights in a dark room: each press flips itself and its neighbours.
+function litBy(presses, n) {
+  const lamps = new Array(n * n).fill(0);
+  for (const i of presses) for (const j of neighbours(i, n)) lamps[j] ^= 1;
+  return lamps;
+}
+
+function lampsPlan(env) {
+  const n = env.pick([3, 4, 4]);
+  for (let attempt = 0; attempt < 12; attempt++) {
+    const k = env.int(n, n + 2);
+    const pool = [];
+    for (let i = 0; i < n * n; i++) pool.push(i);
+    const presses = [];
+    while (presses.length < k && pool.length) presses.push(pool.splice(env.int(0, pool.length - 1), 1)[0]);
+    presses.sort((a, b) => a - b);
+    const lit = litBy(presses, n);
+    if (lit.some(Boolean)) return { kind: 'lamps', n, presses };
+  }
+  return { kind: 'lamps', n, presses: [0] };
+}
+
+function carriedLamps(env) {
+  const p = env.card && env.card.of;
+  if (!p || p.kind !== 'lamps') return null;
+  const n = Number(p.n);
+  if (![3, 4, 5].includes(n)) return null;
+  if (!Array.isArray(p.presses) || !p.presses.length || p.presses.length > n * n) return null;
+  const presses = p.presses.map(Number);
+  if (!presses.every((i) => Number.isInteger(i) && i >= 0 && i < n * n)) return null;
+  if (new Set(presses).size !== presses.length) return null;
+  const sorted = presses.slice().sort((a, b) => a - b);
+  if (!litBy(sorted, n).some(Boolean)) return null;
+  return { kind: 'lamps', n, presses: sorted };
+}
+
+function lampsTitle(plan) {
+  return 'the dark room: ' + plan.n + ' by ' + plan.n;
+}
+
+function lampsBrief(plan) {
+  const count = litBy(plan.presses, plan.n).filter(Boolean).length;
+  return 'Press a lamp and it flips itself and the lamps above, below, left and right of it. '
+    + (count === 1 ? 'One lamp is lit.' : WORDS[count][0].toUpperCase() + WORDS[count].slice(1) + ' lamps are lit.');
+}
+
+// Where the lamps sit in the scene: a square in the middle, `cell` wide each.
+function lampGeometry(w, h, n) {
+  const side = Math.min(w, h) * 0.74;
+  return { side, cell: side / n, left: (w - side) / 2, top: h * 0.46 - side / 2 };
+}
+
+function drawLamps(g, w, h, env, plan, s, variant) {
+  const n = plan.n;
+  const geo = lampGeometry(w, h, n);
+  const lamps = s.lamps;
+  const litCount = lamps.filter(Boolean).length;
+  floor(g, w, h, env, s.fade * 0.85);
+  const c = env.colors;
+  // The lit lamps light the room: the more of them, the more of the ceiling shows.
+  if (litCount) {
+    const wash = g.createRadialGradient(w / 2, geo.top + geo.side / 2, 0, w / 2, geo.top + geo.side / 2, geo.side);
+    wash.addColorStop(0, env.alpha(c.accent2, 0.06 + 0.1 * (litCount / (n * n))));
+    wash.addColorStop(1, env.alpha(c.accent2, 0));
+    g.fillStyle = wash;
+    g.fillRect(0, 0, w, h);
+  }
+  const v = variant || { density: 1, scale: 1, turn: 0 };
+  for (let i = 0; i < n * n; i++) {
+    const x = geo.left + (i % n + 0.5) * geo.cell;
+    const y = geo.top + (Math.floor(i / n) + 0.5) * geo.cell;
+    const r = geo.cell * 0.3 * Math.min(1.1, Math.max(0.85, v.scale));
+    const lit = !!lamps[i];
+    if (lit) {
+      const glow = g.createRadialGradient(x, y, r * 0.3, x, y, r * 2.2);
+      glow.addColorStop(0, env.alpha(c.accent2, 0.55));
+      glow.addColorStop(1, env.alpha(c.accent2, 0));
+      g.fillStyle = glow;
+      g.beginPath();
+      g.arc(x, y, r * 2.2, 0, Math.PI * 2);
+      g.fill();
+    }
+    g.fillStyle = lit ? env.mix(c.accent2, c.fg, 0.35) : env.alpha(c.muted, 0.18);
+    g.beginPath();
+    g.arc(x, y, r, 0, Math.PI * 2);
+    g.fill();
+    g.strokeStyle = env.alpha(lit ? c.accent2 : c.muted, lit ? 0.9 : 0.45);
+    g.lineWidth = 1.2;
+    g.beginPath();
+    g.arc(x, y, r, 0, Math.PI * 2);
+    g.stroke();
+    // A pressed lamp carries a small switch mark under it, so the record is on the scene too.
+    if (s.presses[i]) {
+      g.fillStyle = env.alpha(c.accent, 0.95);
+      g.beginPath();
+      g.arc(x, y + r * 1.45, Math.max(2, geo.cell * 0.06), 0, Math.PI * 2);
+      g.fill();
+    }
+    if (s.hinted.includes(i) && !s.presses[i]) {
+      g.strokeStyle = env.alpha(c.accent, 0.95);
+      g.lineWidth = 2;
+      g.setLineDash([4, 4]);
+      g.beginPath();
+      g.arc(x, y, r * 1.5, 0, Math.PI * 2);
+      g.stroke();
+      g.setLineDash([]);
+    }
+  }
+  // The frame of the room's floor, drawn a little differently by the configuration.
+  g.strokeStyle = env.alpha(c.muted, 0.25);
+  g.lineWidth = 1;
+  const inset = geo.cell * 0.1 * v.density;
+  g.strokeRect(geo.left - inset, geo.top - inset, geo.side + inset * 2, geo.side + inset * 2);
+  caption(g, w, h, env, litCount === 0 ? 'dark' : (litCount === 1 ? 'one lamp lit' : WORDS[litCount] + ' lamps lit'), h * 0.93, 0.8);
+}
+
+function lampsPreview(g, w, h, env, plan) {
+  const s = { lamps: litBy(plan.presses, plan.n), presses: new Array(plan.n * plan.n).fill(0), hinted: [], fade: 0 };
+  drawLamps(g, w, h, env, plan, s, env.variant);
+}
+
+function lampsPiece(env, plan) {
+  const n = plan.n;
+  const N = n * n;
+  const lit0 = litBy(plan.presses, n);
+  const solution = new Array(N).fill(0);
+  for (const i of plan.presses) solution[i] = 1;
+  const s = { presses: new Array(N).fill(0), lamps: lit0.slice(), hinted: [], fade: 0 };
+  function relight() {
+    const pressed = [];
+    for (let i = 0; i < N; i++) if (s.presses[i]) pressed.push(i);
+    const flipped = litBy(pressed, n);
+    s.lamps = lit0.map((on, i) => on ^ flipped[i]);
+  }
+  function burning() {
+    return s.lamps.filter(Boolean).length;
+  }
+  function place(i) {
+    return 'row ' + (Math.floor(i / n) + 1) + ', column ' + ((i % n) + 1);
+  }
+  const draw = (c) => drawLamps(c.g, c.w, c.h, c, plan, s, env.variant);
   return {
-    title: count + ' breaths at your pace',
-    brief: 'Set the pace and the light, then follow the ring ' + (count === 2 ? 'twice' : 'three times') + '. The room goes dark on its own when you are done.'
-      + (was && was.burden ? ' The ring holds ' + was.burden + ' while you breathe.' : '')
-      + (was && was.word ? ' The room says: ' + was.word + '.' : ''),
-    aspect: '16 / 9',
+    title: lampsTitle(plan),
+    brief: lampsBrief(plan),
+    goal: 'Put every lamp out.',
+    aspect: '1 / 1',
+    checkLabel: 'check the room',
     steps: [
-      { id: 'pace', ask: 'the pace of a breath', kind: 'choice', options: PACES },
-      { id: 'dim', ask: 'how low the room is lit', kind: 'range', min: 0, max: 100, step: 1, value: 40, low: 'lit', high: 'dark' },
-      { id: 'breathe', ask: 'follow ' + count + ' breaths', kind: 'wait', after: 'pace' }
+      { id: 'presses', ask: 'the lamps to press: tap them in the room, or mark them here', kind: 'grid', rows: n, cols: n, labels: ['left alone', 'pressed'] },
+      { id: 'hint', ask: 'one lamp that needs pressing', kind: 'press', count: 1, label: 'show me one', optional: true }
     ],
-    start(c) {
-      room(c.g, c.w, c.h, c, 0.5, s.dim * 0.6);
+    solution: { presses: solution },
+    check(c) {
+      const left = burning();
+      return {
+        solved: left === 0,
+        say: left === 0 ? 'every lamp is out; the room is dark' : (left === 1 ? 'one lamp still burns' : WORDS[left] + ' lamps still burn')
+      };
     },
-    apply(id, value) {
-      if (id === 'pace') s.pace = Number(value) || 8;
-      if (id === 'dim') s.dim = Math.max(0, Math.min(1, Number(value) / 100));
+    start(c) {
+      c.status('tap a lamp to press it');
+      draw(c);
+    },
+    apply(id, value, c) {
+      if (id === 'presses' && Array.isArray(value) && value.length === N) {
+        s.presses = value.map((v) => (v ? 1 : 0));
+        relight();
+        const left = burning();
+        c.status(left === 0 ? 'the room looks dark; check it' : (left === 1 ? 'one lamp lit' : WORDS[left] + ' lamps lit'));
+      }
+      if (id === 'hint') {
+        const next = solution.findIndex((on, i) => on && !s.presses[i] && !s.hinted.includes(i));
+        if (next >= 0) {
+          s.hinted.push(next);
+          c.hint();
+          c.status('the lamp at ' + place(next) + ' needs pressing');
+        } else {
+          c.status('every lamp that needs pressing is pressed; look for one pressed that should not be');
+        }
+      }
+      draw(c);
+    },
+    tap(x, y, c) {
+      const geo = lampGeometry(c.w, c.h, n);
+      const col = Math.floor((x * c.w - geo.left) / geo.cell);
+      const row = Math.floor((y * c.h - geo.top) / geo.cell);
+      if (col < 0 || col >= n || row < 0 || row >= n) return;
+      const i = row * n + col;
+      const next = s.presses.slice();
+      next[i] = next[i] ? 0 : 1;
+      s.presses = next;
+      relight();
+      c.set('presses', next);
+      const left = burning();
+      c.status((next[i] ? 'pressed ' : 'unpressed ') + place(i) + '; ' + (left === 0 ? 'the room looks dark' : (left === 1 ? 'one lamp lit' : WORDS[left] + ' lamps lit')));
+      draw(c);
     },
     frame(t, dt, c) {
-      if (s.pace && !s.finished) {
-        s.phase += dt / s.pace;
-        if (s.phase >= 1) {
-          s.phase -= 1;
-          s.done += 1;
-          c.status(WORDS[s.done % WORDS.length]);
-          if (s.done >= count) {
-            s.finished = true;
-            c.progress('breathe', 1);
-            c.satisfy('breathe');
-          }
-        }
-        if (!s.finished) c.progress('breathe', (s.done + s.phase) / count);
-      }
-      if (c.done) s.fade = Math.min(1, s.fade + dt * 1.2);
-      const swell = s.pace ? (1 - Math.cos(s.phase * Math.PI * 2)) / 2 : 0.5;
-      room(c.g, c.w, c.h, c, swell * (1 - s.fade), Math.min(0.96, s.dim * 0.6 + s.fade * 0.9));
+      if (c.done) s.fade = Math.min(1, s.fade + dt * 0.8);
+      draw(c);
     },
     end(c) {
       c.status('the room is dark and the door is shut');
@@ -142,348 +324,319 @@ function breaths(env) {
   };
 }
 
-// One thing chosen, held for a moment, and let go with a sigh; it stays down.
-function putDown(env) {
-  const was = pressed(env);
-  const pool = BURDENS.slice();
-  const options = [];
-  while (options.length < 3) {
-    const i = env.int(0, pool.length - 1);
-    options.push({ label: pool[i], value: pool[i] });
-    pool.splice(i, 1);
+/* ---- the shelf: an order from clues -------------------------------------------------------- */
+
+// A clue about where the keepsakes stand. `a` and `b` are item indices, `k` a slot (0-based).
+function holds(clue, order) {
+  const at = (item) => order.indexOf(item);
+  const n = order.length;
+  switch (clue.t) {
+    case 'leftOf': return at(clue.a) < at(clue.b);
+    case 'nextTo': return Math.abs(at(clue.a) - at(clue.b)) === 1;
+    case 'apart': return Math.abs(at(clue.a) - at(clue.b)) === clue.d;
+    case 'end': return at(clue.a) === 0 || at(clue.a) === n - 1;
+    case 'notEnd': return at(clue.a) !== 0 && at(clue.a) !== n - 1;
+    case 'slot': return at(clue.a) === clue.k;
+    case 'notNext': return Math.abs(at(clue.a) - at(clue.b)) > 1;
+    default: return false;
   }
-  // What the card was carrying is the first thing offered: a visitor who pressed it came to put
-  // that down, not to choose again from scratch.
-  if (was && was.burden && options.every((o) => o.value !== was.burden)) {
-    options.unshift({ label: was.burden, value: was.burden });
-  }
-  const holdMs = env.pick([1500, 2000, 2500]);
-  const s = { chosen: '', held: false, sighed: false, swell: 0.4, release: 0 };
-  return {
-    title: 'one thing to put down',
-    brief: 'Choose what you are carrying, hold it for a moment, and let it go with one long sigh. It stays down.'
-      + (was && was.burden ? ' ' + was.burden[0].toUpperCase() + was.burden.slice(1) + ' is the first one offered.' : '')
-      + (was && was.word ? ' The room says: ' + was.word + '.' : ''),
-    aspect: '16 / 9',
-    steps: [
-      { id: 'weight', ask: 'what you are carrying', kind: 'choice', options },
-      { id: 'hold', ask: 'hold it, then let it go', kind: 'hold', ms: holdMs, label: 'hold it', after: 'weight' },
-      { id: 'sigh', ask: 'one long sigh', kind: 'press', count: 1, label: 'sigh', after: 'hold' }
-    ],
-    start(c) {
-      room(c.g, c.w, c.h, c, s.swell, 0.1);
-    },
-    apply(id, value, c) {
-      if (id === 'weight') {
-        s.chosen = String(value);
-        c.status('held: ' + s.chosen);
-      }
-      if (id === 'hold') {
-        s.held = true;
-        c.status('set down');
-      }
-      if (id === 'sigh') s.sighed = true;
-    },
-    frame(t, dt, c) {
-      const target = s.sighed ? 0 : s.held ? 0.25 : s.chosen ? 0.7 : 0.4;
-      s.swell += (target - s.swell) * Math.min(1, dt * 2);
-      if (c.done) s.release = Math.min(1, s.release + dt * 0.9);
-      room(c.g, c.w, c.h, c, s.swell, 0.1 + s.release * 0.8);
-      caption(c.g, c.w, c.h, c, s.chosen, (s.held ? 0.35 : 0.8) * (1 - s.release));
-    },
-    end(c) {
-      c.status(s.chosen + ' - down, and left down');
-    }
-  };
 }
 
-// A rain-fogged window watched and settled: pick the pane, set the wind, trace the glass, wipe,
-// and let the room close around it.
-function windowWatch(env) {
-  const was = pressed(env);
-  const taps = env.int(2, 4);
-  const wipes = env.int(1, 2);
-  const s = { pane: 'clear', gust: 0.35, traced: 0, wiped: 0, t: 0, fog: 0.22, release: 0, rings: [] };
+function clueText(clue, names) {
+  const a = names[clue.a];
+  const b = names[clue.b];
+  switch (clue.t) {
+    case 'leftOf': return 'the ' + a + ' stands somewhere left of the ' + b;
+    case 'nextTo': return 'the ' + a + ' is next to the ' + b;
+    case 'apart': return 'the ' + a + ' and the ' + b + ' are exactly ' + WORDS[clue.d] + ' places apart';
+    case 'end': return 'the ' + a + ' is at one end';
+    case 'notEnd': return 'the ' + a + ' is not at either end';
+    case 'slot': return 'the ' + a + ' is ' + ORDINAL[clue.k] + ' from the left';
+    case 'notNext': return 'the ' + a + ' is not next to the ' + b;
+    default: return '';
+  }
+}
 
-  function draw(c) {
-    room(c.g, c.w, c.h, c, 0.28 + (c.reduced ? 0 : Math.sin(s.t * 0.8) * 0.05), 0.08 + s.release * 0.78);
-    const g = c.g;
-    const w = c.w;
-    const h = c.h;
-    const left = w * 0.16;
-    const top = h * 0.18;
-    const ww = w * 0.68;
-    const hh = h * 0.52;
-
-    g.fillStyle = 'rgba(0, 0, 0, 0.24)';
-    g.fillRect(left, top, ww, hh);
-    g.strokeStyle = c.alpha(c.colors.fg, 0.44);
-    g.lineWidth = 2;
-    g.strokeRect(left, top, ww, hh);
-
-    const rain = s.pane === 'rain' ? 22 : s.pane === 'fog' ? 14 : 8;
-    const drift = (0.2 + s.gust * 0.8) * (c.reduced ? 0.2 : 1);
-    for (let i = 0; i < rain; i++) {
-      const x = left + (((i * 0.6180339 + s.t * drift * (0.12 + (i % 3) * 0.05)) % 1) * ww);
-      const y = top + (((i * 0.241 + s.t * (0.28 + s.gust * 0.42)) % 1) * hh);
-      const len = hh * (0.03 + (i % 5) * 0.01);
-      g.strokeStyle = c.alpha(c.colors.accent2, 0.16 + (i % 4) * 0.07);
-      g.lineWidth = 1;
-      g.beginPath();
-      g.moveTo(x, y);
-      g.lineTo(x - 2 - s.gust * 8, y + len);
-      g.stroke();
+function permutations(n) {
+  const out = [];
+  const used = new Array(n).fill(false);
+  const cur = [];
+  (function walk() {
+    if (cur.length === n) {
+      out.push(cur.slice());
+      return;
     }
-
-    const fog = Math.max(0, Math.min(1, s.fog));
-    if (s.pane === 'fog' || fog > 0) {
-      g.fillStyle = 'rgba(220, 236, 255, ' + (0.08 + fog * 0.26) + ')';
-      g.fillRect(left, top, ww, hh);
+    for (let i = 0; i < n; i++) {
+      if (used[i]) continue;
+      used[i] = true;
+      cur.push(i);
+      walk();
+      cur.pop();
+      used[i] = false;
     }
+  })();
+  return out;
+}
 
-    for (let i = s.rings.length - 1; i >= 0; i--) {
-      const r = s.rings[i];
-      r.a -= 0.03;
-      if (r.a <= 0) {
-        s.rings.splice(i, 1);
-        continue;
-      }
-      g.strokeStyle = c.alpha(c.colors.accent2, r.a * 0.8);
-      g.lineWidth = 1.4;
-      g.beginPath();
-      g.arc(r.x, r.y, 5 + (1 - r.a) * 26, 0, Math.PI * 2);
-      g.stroke();
-    }
+function fits(clues, perms) {
+  return perms.filter((p) => clues.every((clue) => holds(clue, p)));
+}
 
-    if (s.release > 0) {
-      caption(g, w, h, c, 'the pane clears, and the room settles', s.release * 0.9);
+// Every true clue about `order`, which the plan draws from.
+function trueClues(order) {
+  const n = order.length;
+  const out = [];
+  for (let a = 0; a < n; a++) {
+    const pa = order.indexOf(a);
+    if (pa === 0 || pa === n - 1) out.push({ t: 'end', a });
+    else out.push({ t: 'notEnd', a });
+    out.push({ t: 'slot', a, k: pa });
+    for (let b = 0; b < n; b++) {
+      if (a === b) continue;
+      const pb = order.indexOf(b);
+      if (pa < pb) out.push({ t: 'leftOf', a, b });
+      if (Math.abs(pa - pb) === 1 && a < b) out.push({ t: 'nextTo', a, b });
+      if (Math.abs(pa - pb) >= 2 && a < b) out.push({ t: 'apart', a, b, d: Math.abs(pa - pb) });
+      if (Math.abs(pa - pb) > 1 && a < b) out.push({ t: 'notNext', a, b });
     }
   }
+  return out;
+}
 
+// The weight a clue carries in the draw: the vaguer kinds first, so a puzzle leans on reasoning
+// rather than on being told where a thing stands.
+function clueWeight(clue) {
+  return clue.t === 'slot' ? 1 : clue.t === 'end' || clue.t === 'notEnd' ? 3 : 4;
+}
+
+function shelfPlan(env) {
+  const n = env.chance(0.4) ? 5 : 4;
+  const pool = KEEPSAKES.slice();
+  const items = [];
+  while (items.length < n) items.push(pool.splice(env.int(0, pool.length - 1), 1)[0]);
+  const order = [];
+  const slots = [];
+  for (let i = 0; i < n; i++) slots.push(i);
+  while (slots.length) order.push(slots.splice(env.int(0, slots.length - 1), 1)[0]);
+  const perms = permutations(n);
+  const candidates = trueClues(order);
+  let clues = [];
+  // Draw clues, weighted, until exactly one order fits.
+  for (let guard = 0; guard < 40 && fits(clues, perms).length !== 1 && candidates.length; guard++) {
+    const total = candidates.reduce((sum, clue) => sum + clueWeight(clue), 0);
+    let roll = env.rnd() * total;
+    let at = 0;
+    for (let i = 0; i < candidates.length; i++) {
+      roll -= clueWeight(candidates[i]);
+      if (roll <= 0) {
+        at = i;
+        break;
+      }
+    }
+    const clue = candidates.splice(at, 1)[0];
+    const before = fits(clues, perms).length;
+    const after = fits(clues.concat([clue]), perms).length;
+    if (after < before) clues.push(clue);
+  }
+  // Prune: a clue that can go without letting a second order in goes.
+  for (let i = clues.length - 1; i >= 0; i--) {
+    const without = clues.slice(0, i).concat(clues.slice(i + 1));
+    if (fits(without, perms).length === 1) clues = without;
+  }
+  // An opening order that is not the answer, so the shelf asks something.
+  let start = order.slice();
+  for (let guard = 0; guard < 10 && start.every((v, i) => v === order[i]); guard++) {
+    start = [];
+    const rest = [];
+    for (let i = 0; i < n; i++) rest.push(i);
+    while (rest.length) start.push(rest.splice(env.int(0, rest.length - 1), 1)[0]);
+  }
+  if (start.every((v, i) => v === order[i])) start = order.slice().reverse();
+  return { kind: 'shelf', items, order, clues, start };
+}
+
+function carriedShelf(env) {
+  const p = env.card && env.card.of;
+  if (!p || p.kind !== 'shelf') return null;
+  if (!Array.isArray(p.items) || p.items.length < 4 || p.items.length > 5) return null;
+  const n = p.items.length;
+  if (!p.items.every((name) => KEEPSAKES.includes(name)) || new Set(p.items).size !== n) return null;
+  const isPerm = (list) => Array.isArray(list) && list.length === n && list.every((v) => Number.isInteger(v) && v >= 0 && v < n) && new Set(list).size === n;
+  if (!isPerm(p.order) || !isPerm(p.start)) return null;
+  if (p.start.every((v, i) => v === p.order[i])) return null;
+  if (!Array.isArray(p.clues) || !p.clues.length || p.clues.length > 7) return null;
+  const okClue = (c) => c && typeof c === 'object' && ['leftOf', 'nextTo', 'apart', 'end', 'notEnd', 'slot', 'notNext'].includes(c.t)
+    && Number.isInteger(c.a) && c.a >= 0 && c.a < n
+    && (['end', 'notEnd', 'slot'].includes(c.t) || (Number.isInteger(c.b) && c.b >= 0 && c.b < n && c.b !== c.a))
+    && (c.t !== 'apart' || (Number.isInteger(c.d) && c.d >= 2 && c.d < n))
+    && (c.t !== 'slot' || (Number.isInteger(c.k) && c.k >= 0 && c.k < n));
+  if (!p.clues.every(okClue)) return null;
+  const clues = p.clues.map((c) => ({ t: c.t, a: c.a, b: c.b, d: c.d, k: c.k }));
+  const only = fits(clues, permutations(n));
+  if (only.length !== 1 || !only[0].every((v, i) => v === p.order[i])) return null;
+  return { kind: 'shelf', items: p.items.slice(), order: p.order.slice(), clues, start: p.start.slice() };
+}
+
+function shelfTitle(plan) {
+  return 'the shelf: ' + WORDS[plan.items.length] + ' keepsakes';
+}
+
+function shelfGeometry(w, h, n) {
+  const span = w * 0.8;
+  return { span, left: (w - span) / 2, cell: span / n, shelfY: h * 0.4 };
+}
+
+function drawShelf(g, w, h, env, plan, s, variant) {
+  const n = plan.items.length;
+  const names = plan.items.map((name) => SHORT[name] || name);
+  const geo = shelfGeometry(w, h, n);
+  const c = env.colors;
+  const v = variant || { density: 1, scale: 1, turn: 0 };
+  floor(g, w, h, env, s.fade * 0.8);
+  // The lamp over the shelf.
+  const lamp = g.createRadialGradient(w / 2, geo.shelfY - h * 0.2, 0, w / 2, geo.shelfY - h * 0.2, w * 0.55 * v.scale);
+  lamp.addColorStop(0, env.alpha(c.accent2, 0.14));
+  lamp.addColorStop(1, env.alpha(c.accent2, 0));
+  g.fillStyle = lamp;
+  g.fillRect(0, 0, w, h);
+  // The shelf itself.
+  g.fillStyle = env.alpha(c.bg2, 0.7);
+  g.fillRect(geo.left - geo.cell * 0.1, geo.shelfY, geo.span + geo.cell * 0.2, h * 0.025);
+  g.fillStyle = env.alpha(c.muted, 0.3);
+  g.fillRect(geo.left - geo.cell * 0.1, geo.shelfY + h * 0.025, geo.span + geo.cell * 0.2, h * 0.008);
+  const size = Math.max(10, Math.min(16, Math.round(geo.cell * 0.2)));
+  g.font = '500 ' + size + 'px system-ui, sans-serif';
+  g.textAlign = 'center';
+  g.textBaseline = 'bottom';
+  for (let slot = 0; slot < n; slot++) {
+    const x = geo.left + (slot + 0.5) * geo.cell;
+    const item = s.order[slot];
+    const r = geo.cell * 0.14;
+    // The keepsake: a small shape, one per item, with its name under the shelf.
+    g.fillStyle = env.alpha(c.accent, 0.85);
+    g.beginPath();
+    const kind = item % 4;
+    if (kind === 0) g.arc(x, geo.shelfY - r, r, 0, Math.PI * 2);
+    else if (kind === 1) g.rect(x - r, geo.shelfY - r * 2, r * 2, r * 2);
+    else if (kind === 2) {
+      g.moveTo(x, geo.shelfY - r * 2.2);
+      g.lineTo(x + r, geo.shelfY);
+      g.lineTo(x - r, geo.shelfY);
+      g.closePath();
+    } else {
+      g.ellipse(x, geo.shelfY - r, r * 1.3, r * 0.7, 0, 0, Math.PI * 2);
+    }
+    g.fill();
+    g.fillStyle = env.alpha(c.fg, 0.9);
+    g.fillText(names[item], x, geo.shelfY - r * 2.6);
+    g.fillStyle = env.alpha(c.muted, 0.7);
+    g.font = '500 ' + Math.max(9, size - 3) + 'px system-ui, sans-serif';
+    g.textBaseline = 'top';
+    g.fillText(ORDINAL[slot], x, geo.shelfY + h * 0.04);
+    g.font = '500 ' + size + 'px system-ui, sans-serif';
+    g.textBaseline = 'bottom';
+    if (s.hinted.includes(item)) {
+      const right = plan.order.indexOf(item);
+      const hx = geo.left + (right + 0.5) * geo.cell;
+      g.strokeStyle = env.alpha(c.accent2, 0.9);
+      g.lineWidth = 1.5;
+      g.setLineDash([3, 3]);
+      g.strokeRect(hx - geo.cell * 0.42, geo.shelfY - r * 4.2, geo.cell * 0.84, r * 4.1);
+      g.setLineDash([]);
+    }
+  }
+  // The clues, under the shelf.
+  const clueSize = Math.max(10, Math.min(15, Math.round(Math.min(w, h) * 0.034)));
+  g.font = '500 ' + clueSize + 'px system-ui, sans-serif';
+  g.textAlign = 'left';
+  g.textBaseline = 'middle';
+  const x0 = w * 0.08;
+  let y = h * 0.56;
+  plan.clues.forEach((clue, i) => {
+    g.fillStyle = env.alpha(c.accent2, 0.9);
+    g.fillText(String(i + 1) + '.', x0, y);
+    g.fillStyle = env.alpha(c.fg, 0.9);
+    g.fillText(clueText(clue, names), x0 + clueSize * 1.6, y);
+    y += clueSize * 1.55;
+  });
+  g.fillStyle = env.alpha(c.muted, 0.12 * v.density);
+  g.fillRect(0, h * 0.5, w, 1);
+}
+
+function shelfPreview(g, w, h, env, plan) {
+  drawShelf(g, w, h, env, plan, { order: plan.start.slice(), hinted: [], fade: 0 }, env.variant);
+}
+
+function shelfPiece(env, plan) {
+  const n = plan.items.length;
+  const names = plan.items.map((name) => SHORT[name] || name);
+  const s = { order: plan.start.slice(), hinted: [], fade: 0 };
+  const draw = (c) => drawShelf(c.g, c.w, c.h, c, plan, s, env.variant);
+  function rightPlaces() {
+    let right = 0;
+    for (let i = 0; i < n; i++) if (s.order[i] === plan.order[i]) right += 1;
+    return right;
+  }
   return {
-    title: 'the window watch',
-    brief: 'Pick the pane and the wind, trace the glass ' + (taps === 1 ? 'once' : taps + ' times') + ', wipe it ' + (wipes === 1 ? 'once' : 'twice') + ', and let the room settle around what clears.'
-      + (was && was.burden ? ' Trace ' + was.burden + ' on the glass, and wipe that away too.' : '')
-      + (was && was.word ? ' The glass says: ' + was.word + '.' : ''),
-    aspect: '16 / 9',
+    title: shelfTitle(plan),
+    brief: WORDS[n][0].toUpperCase() + WORDS[n].slice(1) + ' keepsakes stand on the shelf, left to right, and '
+      + WORDS[plan.clues.length] + ' clues under it say how. Exactly one order fits them all.',
+    goal: 'Put the keepsakes in the one order every clue allows.',
+    aspect: '4 / 3',
+    checkLabel: 'check the shelf',
     steps: [
-      { id: 'pane', ask: 'the pane', kind: 'choice', options: PANES },
-      { id: 'wind', ask: 'the wind at the frame', kind: 'range', min: 0, max: 100, step: 1, value: 35, low: 'still', high: 'gusting' },
-      { id: 'trace', ask: 'trace the glass ' + (taps === 1 ? 'once' : taps + ' times'), kind: 'tap', label: 'trace one for me', after: 'pane' },
-      { id: 'wipe', ask: 'wipe it ' + (wipes === 1 ? 'once' : 'twice'), kind: 'press', count: wipes, label: 'wipe', after: 'trace' }
+      { id: 'order', ask: 'the keepsakes, left to right', kind: 'order', items: plan.items.map((name, i) => ({ label: name, value: i })), value: plan.start.slice() },
+      { id: 'hint', ask: 'where one keepsake belongs', kind: 'press', count: 1, label: 'show me one', optional: true }
     ],
+    solution: { order: plan.order.slice() },
+    check(c) {
+      const right = rightPlaces();
+      return {
+        solved: right === n,
+        say: right === n ? 'every keepsake stands where the clues put it'
+          : (right === 0 ? 'none of them stands in the right place yet' : WORDS[right] + ' of ' + WORDS[n] + ' stand in the right place')
+      };
+    },
     start(c) {
+      c.status(WORDS[plan.clues.length] + ' clues under the shelf');
       draw(c);
     },
     apply(id, value, c) {
-      if (id === 'pane') {
-        s.pane = String(value);
-        if (s.pane === 'clear') {
-          s.fog = 0.05;
-          c.status('clear pane: almost nothing between you and the night');
-        } else if (s.pane === 'rain') {
-          s.fog = 0.14;
-          c.status('rain streaks: the room answers in lines');
+      if (id === 'order' && Array.isArray(value) && value.length === n) {
+        s.order = value.map(Number);
+        c.status('left to right: ' + s.order.map((i) => names[i]).join(', '));
+      }
+      if (id === 'hint') {
+        const next = plan.order.find((item) => !s.hinted.includes(item) && s.order.indexOf(item) !== plan.order.indexOf(item));
+        if (next !== undefined) {
+          s.hinted.push(next);
+          c.hint();
+          c.status('the ' + names[next] + ' belongs ' + ORDINAL[plan.order.indexOf(next)] + ' from the left');
         } else {
-          s.fog = 0.34;
-          c.status('fogged glass: draw a path through it');
+          c.status('every keepsake you have placed wrongly has been shown; the rest is yours');
         }
       }
-      if (id === 'wind') {
-        s.gust = Math.max(0, Math.min(1, Number(value) / 100));
-        c.status(s.gust < 0.25 ? 'still frame, slow drips' : s.gust < 0.65 ? 'a small draught along the pane' : 'the frame hums with gusts');
-      }
-      if (id === 'wipe') {
-        s.wiped = Number(value) || s.wiped + 1;
-        s.fog = Math.max(0, s.fog - 0.18);
-        c.status(s.wiped >= wipes ? 'wiped clean enough' : 'wiped once; a little more');
-      }
-    },
-    tap(x, y, c) {
-      if (c.done) return;
-      s.traced += 1;
-      s.rings.push({ x: x * c.w, y: y * c.h, a: 1 });
-      s.fog = Math.max(0, s.fog - 0.08);
-      c.progress('trace', Math.min(1, s.traced / taps));
-      c.status(s.traced >= taps ? 'enough traced; you can wipe and settle it' : (taps - s.traced) + ' more to trace');
-      if (s.traced >= taps) c.satisfy('trace');
+      draw(c);
     },
     frame(t, dt, c) {
-      s.t += dt;
-      if (c.done) s.release = Math.min(1, s.release + dt * 1.1);
+      if (c.done) s.fade = Math.min(1, s.fade + dt * 0.6);
       draw(c);
     },
     end(c) {
-      c.status('the pane is settled, and the room is quiet again');
+      c.status(s.order.map((i) => names[i]).join(' - ') + ': kept, and left still');
     }
   };
 }
 
-// Three keepsakes set onto a shelf, latched, and left to settle.
-function shelfRitual(env) {
-  const was = pressed(env);
-  const pool = KEEPSAKES.slice();
-  const picks = [];
-  while (picks.length < 4) {
-    const i = env.int(0, pool.length - 1);
-    picks.push(pool[i]);
-    pool.splice(i, 1);
-  }
-  // What the card was carrying goes on the shelf first: the room shelves the thing a visitor
-  // pressed, among the keepsakes it had out already.
-  if (was && was.burden) picks.unshift(was.burden);
-  const keep = env.int(2, 3);
-  const holdMs = env.pick([1400, 1800, 2200]);
-  const settleFor = env.pick([3.5, 4.5, 5.5]);
-  const s = {
-    dim: 0.52,
-    t: 0,
-    slots: [{ x: 0.24, item: null }, { x: 0.5, item: null }, { x: 0.76, item: null }],
-    queue: picks.slice(),
-    latched: false,
-    settled: 0,
-    release: 0,
-    glow: 0,
-    lightWord: 'lamp low'
-  };
+/* ---- the module ----------------------------------------------------------------------------- */
 
-  function listPlaced() {
-    return s.slots.filter((q) => q.item).map((q) => q.item);
-  }
-
-  function nextSlot(px) {
-    const open = s.slots.filter((q) => !q.item);
-    if (!open.length) return null;
-    let best = open[0];
-    let bd = Math.abs(open[0].x - px);
-    for (const q of open) {
-      const d = Math.abs(q.x - px);
-      if (d < bd) {
-        bd = d;
-        best = q;
-      }
-    }
-    return best;
-  }
-
-  function draw(c) {
-    room(c.g, c.w, c.h, c, 0.2 + Math.sin(s.t * 0.6) * 0.03, s.dim + s.release * 0.35);
-    const g = c.g;
-    const w = c.w;
-    const h = c.h;
-    const shelfY = h * 0.62;
-    const shelfH = h * 0.12;
-
-    g.fillStyle = c.alpha(c.colors.bg2, 0.55);
-    g.fillRect(w * 0.14, shelfY - shelfH * 0.65, w * 0.72, shelfH * 0.58);
-    g.fillStyle = c.alpha(c.colors.muted, 0.34);
-    g.fillRect(w * 0.14, shelfY, w * 0.72, shelfH * 0.1);
-
-    for (let i = 0; i < s.slots.length; i++) {
-      const slot = s.slots[i];
-      const x = w * slot.x;
-      const y = shelfY - shelfH * 0.22;
-      g.strokeStyle = c.alpha(c.colors.accent, 0.22);
-      g.lineWidth = 1;
-      g.beginPath();
-      g.arc(x, y + shelfH * 0.06, Math.min(w, h) * 0.03, 0, Math.PI * 2);
-      g.stroke();
-
-      if (!slot.item) continue;
-      const lit = 0.35 + s.glow * 0.45;
-      g.fillStyle = c.alpha(c.colors.accent2, lit * 0.16);
-      g.beginPath();
-      g.ellipse(x, y - shelfH * 0.05, Math.min(w, h) * 0.055, Math.min(w, h) * 0.03, 0, 0, Math.PI * 2);
-      g.fill();
-
-      g.fillStyle = c.alpha(c.colors.fg, 0.92);
-      g.font = '500 ' + Math.max(11, Math.round(Math.min(w, h) * 0.03)) + 'px system-ui, sans-serif';
-      g.textAlign = 'center';
-      g.textBaseline = 'bottom';
-      g.fillText(slot.item, x, y - shelfH * 0.1);
-    }
-
-    const latchX = w * 0.86;
-    const latchY = shelfY - shelfH * 0.27;
-    g.strokeStyle = c.alpha(c.colors.accent2, 0.7 + s.glow * 0.2);
-    g.lineWidth = 2;
-    g.beginPath();
-    g.moveTo(latchX - 16, latchY);
-    g.lineTo(latchX + (s.latched ? 9 : 2), latchY);
-    g.stroke();
-    g.beginPath();
-    g.arc(latchX + 11, latchY, 5.5, 0, Math.PI * 2);
-    g.stroke();
-
-    if (s.settled > 0) {
-      g.fillStyle = c.alpha(c.colors.fg, Math.min(0.9, s.settled));
-      g.font = '500 ' + Math.max(12, Math.round(Math.min(w, h) * 0.042)) + 'px system-ui, sans-serif';
-      g.textAlign = 'center';
-      g.textBaseline = 'middle';
-      g.fillText('kept, then left still', w / 2, h * 0.85);
-    }
-  }
-
-  return {
-    title: 'the shelf ritual',
-    brief: 'Set the lamp, tap the shelf to place ' + (keep === 2 ? 'two keepsakes' : 'three keepsakes') + ', hold to latch it, then let the room settle around what stays.'
-      + (was && was.burden ? ' ' + was.burden[0].toUpperCase() + was.burden.slice(1) + ' is the first one up.' : '')
-      + (was && was.word ? ' The lamp is low: ' + was.word + '.' : ''),
-    aspect: '16 / 9',
-    steps: [
-      { id: 'light', ask: 'the lamp', kind: 'choice', options: LIGHTS },
-      { id: 'place', ask: 'tap the shelf to place ' + (keep === 2 ? 'two keepsakes' : 'three keepsakes'), kind: 'tap', label: 'place one for me', after: 'light' },
-      { id: 'latch', ask: 'latch the shelf', kind: 'hold', ms: holdMs, label: 'hold to latch', after: 'place' },
-      { id: 'settle', ask: 'let the room settle', kind: 'wait', after: 'latch' }
-    ],
-    start(c) {
-      draw(c);
-      c.status('the shelf is empty');
-    },
-    apply(id, value, c) {
-      if (id === 'light') {
-        s.dim = Math.max(0.2, Math.min(0.85, Number(value) || 0.52));
-        const match = LIGHTS.find((x) => x.value === Number(value));
-        s.lightWord = match ? match.label : 'lamp low';
-        c.status(s.lightWord);
-      }
-      if (id === 'latch') {
-        s.latched = true;
-        s.glow = 1;
-        c.status('latched. now leave it still.');
-      }
-    },
-    tap(x, y, c) {
-      if (c.done || s.latched) return;
-      const slot = nextSlot(x);
-      if (!slot || !s.queue.length) return;
-      slot.item = s.queue.shift();
-      s.glow = 1;
-      const placed = listPlaced();
-      c.progress('place', Math.min(1, placed.length / keep));
-      c.status('placed: ' + slot.item);
-      if (placed.length >= keep) c.satisfy('place');
-    },
-    frame(t, dt, c) {
-      s.t += dt;
-      s.glow = Math.max(0, s.glow - dt * 1.6);
-      if (s.latched && !c.done) {
-        s.settled = Math.min(settleFor, s.settled + dt);
-        c.progress('settle', Math.min(1, s.settled / settleFor));
-        if (s.settled >= settleFor) c.satisfy('settle');
-      }
-      if (c.done) s.release = Math.min(1, s.release + dt * 0.9);
-      draw(c);
-    },
-    end(c) {
-      const placed = listPlaced();
-      c.status((placed.length ? placed.join(' - ') : 'nothing') + ' kept, latched, and left still');
-    }
-  };
+function dealsLamps(env) {
+  return env.chance(0.5);
 }
 
 export default {
   id: 'quiet-room',
+  needsSky: false,
   paint(ctx, w, h, env) {
     // The breath caught where the configuration caught it, at the size it asks for.
     room(ctx, w, h, env, 0.32 + env.variant.turn * 0.36, 0, env.variant.scale);
@@ -494,33 +647,35 @@ export default {
     room(ctx, w, h, env, swell, 0, env.variant.scale);
   },
   spark(env) {
-    if (env.chance(0.6)) {
-      const dim = 0.1 + env.rnd() * 0.35;
-      const burden = env.pick(BURDENS);
+    if (dealsLamps(env)) {
+      const plan = lampsPlan(env);
+      const count = litBy(plan.presses, plan.n).filter(Boolean).length;
       return {
-        title: 'one thing to put down',
-        quote: burden,
-        text: 'Set it down here and leave it down. Nothing in the quiet room keeps score.',
-        aspect: '5 / 3',
-        paint: (ctx, w, h, e) => room(ctx, w, h, e, 0.3, dim, e.variant.scale),
-        // What this card is of, for the piece it opens as: the thing it is carrying.
-        of: { burden }
+        title: lampsTitle(plan),
+        quote: (count === 1 ? 'one lamp lit' : WORDS[count] + ' lamps lit') + '; put them all out',
+        text: 'A lamp pressed flips itself and its four neighbours. Find the presses that leave the room dark.',
+        aspect: '1 / 1',
+        paint: (g, w, h, cardEnv) => lampsPreview(g, w, h, cardEnv, plan),
+        of: plan
       };
     }
-    const word = env.pick(WORDS);
+    const plan = shelfPlan(env);
+    const names = plan.items.map((name) => SHORT[name] || name);
     return {
-      title: 'six out, six back',
-      quote: word,
-      text: 'A breath to follow, or not. The ring takes six seconds out and six back, and holds while you hold.',
-      // What this card is of: the word the room was saying.
-      of: { word }
+      title: shelfTitle(plan),
+      quote: clueText(plan.clues[0], names),
+      text: (plan.clues.length === 1 ? 'That is the one clue.' : WORDS[plan.clues.length - 1][0].toUpperCase() + WORDS[plan.clues.length - 1].slice(1) + ' more clues wait on the shelf.')
+        + ' Put the keepsakes in the one order that fits them all.',
+      aspect: '4 / 3',
+      paint: (g, w, h, cardEnv) => shelfPreview(g, w, h, cardEnv, plan),
+      of: plan
     };
   },
   piece(env) {
-    const roll = env.rnd();
-    if (roll < 0.27) return breaths(env);
-    if (roll < 0.54) return putDown(env);
-    if (roll < 0.78) return windowWatch(env);
-    return shelfRitual(env);
+    const lamps = carriedLamps(env);
+    if (lamps) return lampsPiece(env, lamps);
+    const shelf = carriedShelf(env);
+    if (shelf) return shelfPiece(env, shelf);
+    return dealsLamps(env) ? lampsPiece(env, lampsPlan(env)) : shelfPiece(env, shelfPlan(env));
   }
 };
