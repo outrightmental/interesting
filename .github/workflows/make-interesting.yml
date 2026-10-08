@@ -9,15 +9,25 @@ on:
         description: "GitHub Copilot model ID to use (leave blank to pick one of the heaviest models at random)"
         required: false
         default: ""
-      kind:
-        description: "Kind of run: grow the site, or consolidate it (auto alternates by run number: odd grows, even consolidates)"
+      mode:
+        description: "What the run does (auto draws it from the bag of marbles: a kind of work -- create, enhance or consolidate -- on one area -- one world, the navigation, the persona or the whole site; a bare kind of work draws among its modes)"
         required: false
         type: choice
         default: auto
         options:
           - auto
-          - interesting
+          - create
+          - enhance
           - consolidate
+          - create_item
+          - enhance_item
+          - enhance_nav
+          - enhance_persona
+          - enhance_overall
+          - consolidate_item
+          - consolidate_nav
+          - consolidate_persona
+          - consolidate_overall
 
 permissions: {}
 
@@ -42,16 +52,29 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          # The API answers a transient 5xx now and then; asked three times, with a pause between,
+          # before a guard that cannot tell gives up the run.
+          api_get() {
+            local attempt
+            for attempt in 1 2 3; do
+              if gh api "$@"; then
+                return 0
+              fi
+              echo "::notice::GitHub API call failed (attempt ${attempt} of 3); retrying." >&2
+              sleep $((attempt * 10))
+            done
+            return 1
+          }
           workflow_file="${GITHUB_WORKFLOW_REF%%@*}"
           workflow_file="${workflow_file##*/}"
           api="repos/${GITHUB_REPOSITORY}/actions"
-          started_at="$(gh api "${api}/runs/${GITHUB_RUN_ID}" --jq '.run_started_at')"
+          started_at="$(api_get "${api}/runs/${GITHUB_RUN_ID}" --jq '.run_started_at')"
 
           # Every run of this workflow that has not finished yet. One listing rather than one per
           # status, so that a run changing status cannot slip between two queries. It covers the
           # newest 100 runs, which is days of history at this cadence.
           unfinished="${RUNNER_TEMP}/unfinished-runs.jsonl"
-          gh api "${api}/workflows/${workflow_file}/runs?per_page=100" \
+          api_get "${api}/workflows/${workflow_file}/runs?per_page=100" \
             --jq '.workflow_runs[] | select(.status != "completed")' > "$unfinished"
 
           # Keep the ones that started before this run. When two runs start in the same second, the
@@ -103,10 +126,18 @@ jobs:
 
       # The platform package is the CLI binary itself: an exact version with no dependencies and no
       # install scripts, so nothing unpinned ever runs next to the token. It is installed before
-      # checkout, away from the repository's credentials.
+      # checkout, away from the repository's credentials. The registry drops a request now and
+      # then: three tries, with a pause between, before the run is lost to it.
       - name: Install GitHub Copilot CLI
         run: |
-          npm install --global --ignore-scripts "@github/copilot-linux-x64@${COPILOT_CLI_VERSION}"
+          for attempt in 1 2 3; do
+            if npm install --global --ignore-scripts "@github/copilot-linux-x64@${COPILOT_CLI_VERSION}"; then
+              break
+            fi
+            [ "$attempt" = 3 ] && exit 1
+            echo "::notice::npm install failed (attempt ${attempt} of 3); retrying."
+            sleep $((attempt * 15))
+          done
           copilot-linux-x64 --version
 
       # No credentials are left in the checkout: the model's answer is applied here. The model step
@@ -122,14 +153,23 @@ jobs:
       # gitignored, so installing it here cannot look like a change to the repository, and
       # --ignore-scripts keeps npm from running install hooks at all.
       - name: Install the build toolchain
-        run: npm ci --ignore-scripts
+        run: |
+          for attempt in 1 2 3; do
+            if npm ci --ignore-scripts; then
+              break
+            fi
+            [ "$attempt" = 3 ] && exit 1
+            echo "::notice::npm ci failed (attempt ${attempt} of 3); retrying."
+            sleep $((attempt * 15))
+          done
 
-      # Which kind of run this is -- a growing run or a consolidating run -- follows from the run
-      # number: odd grows the site, even consolidates it, unless the manual "kind" input names one.
-      # The model is one of the heaviest Copilot offers, at near-maximum reasoning effort. An answer
-      # is only written once it passes test.yml's own tests, so what this leaves behind is a change
-      # the deploy pipeline will accept; an answer that is refused is shown back to its model for
-      # repair before another model is asked.
+      # What the run does is drawn from a bag of marbles (MODE_MARBLES in the script): a kind of
+      # work -- create, enhance or consolidate -- on one area of the site -- one world, drawn at
+      # random too, the navigation, the persona or the whole -- unless the manual "mode" input
+      # names one. The model is one of the heaviest Copilot offers, at near-maximum reasoning
+      # effort. An answer is only written once it passes test.yml's own tests, so what this leaves
+      # behind is a change the deploy pipeline will accept; an answer that is refused is shown back
+      # to its model for repair before another model is asked.
       - name: Ask one of the heaviest AI models to work on the website
         id: ai
         env:
@@ -151,8 +191,8 @@ jobs:
           # "none" to leave every model at its own default. Raise it when the models in the pool
           # grant more; an answer that runs past it is pieced back together where it can be.
           MAX_OUTPUT_TOKENS: ${{ vars.MAX_OUTPUT_TOKENS }}
-          RUN_NUMBER: ${{ github.run_number }}
-          RUN_KIND: ${{ inputs.kind }}
+          # A mode, a kind of work, or "auto" (and the schedule's empty string) for the bag.
+          RUN_MODE: ${{ inputs.mode }}
         run: python3 .github/scripts/make_interesting.py
 
       - name: Ensure only /site was modified
@@ -172,10 +212,11 @@ jobs:
         env:
           MODEL: ${{ steps.ai.outputs.model }}
           SUMMARY: ${{ steps.ai.outputs.summary }}
-          # "Make the website more interesting" on a growing run, "Consolidate the website" on a
-          # consolidating one: the script names the kind, so the commit log shows which was which.
+          # "Enhance the quiet room", "Consolidate the navigation", "Create a world": the script
+          # names the mode and the world it drew, so the commit log shows what each run was.
           HEADLINE: ${{ steps.ai.outputs.headline }}
-          KIND: ${{ steps.ai.outputs.kind }}
+          MODE: ${{ steps.ai.outputs.mode }}
+          ITEMS: ${{ steps.ai.outputs.items }}
           GITHUB_TOKEN: ${{ github.token }}
         run: |
           git add -A -- site
@@ -185,7 +226,9 @@ jobs:
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -m "${HEADLINE}: ${SUMMARY}" -m "Model: ${MODEL}" -m "Run: ${KIND}"
+          # Never an empty headline or summary, whatever the outputs carried.
+          git commit -m "${HEADLINE:-Make the website more interesting}: ${SUMMARY:-the change this run made}" \
+            -m "Model: ${MODEL}" -m "Mode: ${MODE}${ITEMS:+ ($ITEMS)}"
           # The tree the script ran test.yml's tests on, before it wrote the change.
           tested="$(git rev-parse 'HEAD^{tree}')"
           # The branch may have moved while the model was thinking: rebase the commit and try again.
@@ -219,7 +262,7 @@ jobs:
           fi
           {
             echo "### ${HEADLINE}"
-            echo "- **Run:** \`${KIND}\`"
+            echo "- **Mode:** \`${MODE}\`${ITEMS:+ — $ITEMS}"
             echo "- **Model:** \`${MODEL}\`"
             echo "- **Change:** \`${SUMMARY}\`"
           } >> "$GITHUB_STEP_SUMMARY"

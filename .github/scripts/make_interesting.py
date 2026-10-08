@@ -1,22 +1,25 @@
 #!/usr/bin/env python3
-"""Make the website more interesting: one run grows it, the next consolidates it.
+"""Make the website more interesting: every run draws what it does from a bag of marbles.
 
 Picks one of the heaviest models GitHub Copilot offers, at near-maximum reasoning
 effort, shows it the current contents of the /site folder, and asks it to work on
-the website. Runs alternate between two kinds (run_kind()): an odd-numbered run
-makes the site more interesting, and an even-numbered run adds nothing and
-instead consolidates, federates, refactors and cleans up what is there.
+the website. What a run does is drawn at random from a bag of marbles
+(chosen_mode(), MODE_MARBLES): a mode is a kind of work -- create, enhance or
+consolidate -- on one area of the site -- one world, the navigation, the persona
+or the whole -- and each mode has as many marbles in the bag as its weight says,
+so a third of all runs enhance one world and a new world is the rarest run of
+all. An item mode draws the world it works on at random too (draw_items()).
 
-Every run of either kind starts the same way, unconditionally: the model is told
+Every run of every mode starts the same way, unconditionally: the model is told
 to envision the site as one experience -- one navigation, one visual language,
 one through-line -- before it chooses anything. WHOLE names what that experience
-has to be. A growing run then makes the one change that most lengthens a
-visitor's stay, and whatever it adds arrives federated in the same run. A
-consolidating run lifts repeated markup, styles and behaviour into the shared
-files, unifies navigation and visual language across every page, merges or
-retires pages that overlap, and removes what has stopped earning its place. So
-the site is made more interesting by becoming one piece and not only by growing,
-and each kind of run gets a whole answer to itself.
+has to be. A creating or enhancing run then makes the one change that most
+lengthens a visitor's stay, inside its mode's own files, and whatever it adds
+arrives federated in the same run. A consolidating run adds nothing: it cleans
+up the code and logic of its area and fixes its bugs, by edits that leave what
+the deploy's tests hold in place where it is. So every run gets a whole answer
+to one small, named piece of work, which is what keeps an answer inside a model's
+output limit and inside the hour (see the modes, below MISSION).
 
 "Interesting" is not left to a model's taste: INTERESTING names the measure, and
 it is user engagement time. The site is more interesting when a person stays
@@ -102,7 +105,10 @@ is what keeps an answer inside a model's output limit and inside the quarter of 
 hour it has to write it, which is where most of a day's runs were being lost. A
 run that loses an answer to the limit or to the clock all the same asks the rest of
 its calls to think one step less hard (lower_effort), and no call is started past
-the run's own deadline (RUN_BUDGET_SECONDS), so the hourly cadence holds.
+the run's own deadline (RUN_BUDGET_SECONDS), so the hourly cadence holds. A CLI
+that fails for a passing reason -- a rate limit, a gateway, the network -- is asked
+again after a pause rather than at once (TRANSIENT_ERROR), and a fault in this
+script's own checking costs the run one round, not the run (see main).
 
 The model is reached through the GitHub Copilot CLI (`copilot`), which bills the
 GitHub Copilot subscription behind the token in COPILOT_GITHUB_TOKEN. (GitHub
@@ -126,6 +132,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import traceback
 import uuid
 from html.parser import HTMLParser
 from pathlib import Path, PurePosixPath
@@ -180,60 +187,226 @@ INTERESTING = ("how long a person stays engaged -- how much they want to keep go
 LEGIBLE = ("legible to a stranger -- a first-time visitor on a phone can tell what the site is, what "
            "any page is for, what to do on it and where to go next, without being told twice")
 
-# The two kinds of run, which alternate: a run either grows the site or consolidates it, never
-# both in one answer. An odd-numbered run makes the site more interesting and an even-numbered
-# run consolidates, federates, refactors and cleans up. The number is the workflow's own
-# (github.run_number, passed in as RUN_NUMBER), so which kind a run was is visible in the run's
-# name, and `n % 2` is the whole of the rule. RUN_KIND names a kind outright (the workflow's
-# manual "kind" input), and a run with neither -- the script run by hand -- grows the site.
+# What a run does is drawn from a bag of marbles, the mechanism xj music uses to choose among
+# memes (docs.xjmusic.com/making-xj-music/memes): every mode puts as many marbles in the bag as
+# its weight says, one marble is drawn at random, and the mode it belongs to is the run's. A mode
+# is a kind of work on one area of the site:
 #
-# Why alternate rather than ask every run for both, as the prompt used to: a run told to federate
-# aggressively and to add something arrives at neither. It adds a page and tidies a stylesheet,
-# and the consolidation that is overdue stays overdue. Giving each kind the whole of a run lets
-# the growing run spend its answer on the change that most lengthens a visitor's stay, and the
-# consolidating run spend its answer on the merge that touches forty files, with nothing new to
-# make room for. A run the guard skips, or one that fails, still takes a number, so two runs of
-# one kind can occasionally land in a row; the alternation is a rhythm, not an invariant.
-INTERESTING_RUN = "interesting"
-CONSOLIDATION_RUN = "consolidate"
-RUN_KINDS = (INTERESTING_RUN, CONSOLIDATION_RUN)
+#   work  create       make a new one
+#         enhance      make it more interesting, measured as INTERESTING says
+#         consolidate  clean up its code and logic and fix its bugs, adding nothing
+#   area  item         one world (a content item is a world here: its page, its module and its
+#                      line in _data/worlds.json), drawn at random too (draw_items)
+#         nav          the navigation experience and the constellation inside the sparkles logo
+#                      in the upper left
+#         persona      the persona configuration inside the button in the upper right, and the
+#                      way the persona runs through the site
+#         overall      the site-wide experience, and the framework beneath it
+#
+# Why a bag rather than the alternation this replaced (odd runs grew the site, even runs
+# consolidated it): half of every day went to consolidating, and a consolidating run -- told to
+# re-federate the whole site aggressively -- wrote the largest possible answer against the files
+# the deploy's tests pin most tightly, and lost most of its runs to the output limit, the clock or
+# those tests. A mode is a small, named piece of work on a named set of files, so an answer can be
+# a few edits; the weights say how the hours are spent; and the rare modes still come round. The
+# draw is per run, remembered nowhere: two runs of one mode can land in a row.
+MODE_MARBLES = {
+    "create_item": 1,
+    "enhance_item": 14,
+    "enhance_nav": 5,
+    "enhance_persona": 4,
+    "enhance_overall": 5,
+    "consolidate_item": 4,
+    "consolidate_nav": 2,
+    "consolidate_persona": 3,
+    "consolidate_overall": 4,
+}
+MODES = tuple(MODE_MARBLES)
+WORKS = ("create", "enhance", "consolidate")
+AREAS = ("item", "nav", "persona", "overall")
+# The mode build_prompt assumes when it is given none: the one with the most marbles, so that a
+# prompt built by hand reads as the typical run does.
+DEFAULT_MODE = "enhance_item"
 
-# What a consolidating run serves, in every place MISSION serves a growing run: the opening of the
-# prompt, the line it reads last, the console line and clean_summary's fallback.
+# How many worlds an item mode works on: one, usually, and now and then two or three -- "one or
+# more content items at random". A bag of its own, drawn the same way.
+ITEM_COUNT_MARBLES = {1: 4, 2: 2, 3: 1}
+
+
+def marble_bag(marbles):
+    """The bag itself: one marble per unit of weight, each named for what it is for, in the order
+    the weights were given. `marbles` maps a name to its weight; a weight that is not a positive
+    whole number puts no marble in."""
+    bag = []
+    for name, weight in marbles.items():
+        if isinstance(weight, int) and weight > 0:
+            bag.extend([name] * weight)
+    return bag
+
+
+def draw_marble(marbles):
+    """One marble drawn at random from the bag `marbles` fills, or None from an empty bag."""
+    bag = marble_bag(marbles)
+    return random.choice(bag) if bag else None
+
+
+def chosen_mode():
+    """The mode this run works in.
+
+    RUN_MODE, if it names a mode, wins: it is a person's choice through the workflow's manual
+    input. If it names a kind of work instead ("enhance", "consolidate", "create" -- or
+    "interesting", the old name for the runs that grow the site, which is the creating and the
+    enhancing modes together), the draw is from that part of the bag only. Otherwise, and for
+    "auto", the whole bag is drawn from; a name that is none of those is said so and drawn past.
+    """
+    named = (os.environ.get("RUN_MODE") or "").strip().lower().replace("-", "_")
+    if named in MODES:
+        return named
+    marbles = MODE_MARBLES
+    if named in WORKS:
+        marbles = {mode: n for mode, n in MODE_MARBLES.items() if mode.startswith(named + "_")}
+    elif named == "interesting":
+        marbles = {mode: n for mode, n in MODE_MARBLES.items() if not mode.startswith("consolidate_")}
+    elif named and named != "auto":
+        print(f"::warning::RUN_MODE {one_line(named, 60)!r} is not one of {', '.join(MODES)}; "
+              "drawing from the bag instead.")
+    return draw_marble(marbles)
+
+
+def draw_items(worlds):
+    """The worlds an item mode works on, drawn at random from `worlds` (the entries of
+    _data/worlds.json, see site_worlds): as many as ITEM_COUNT_MARBLES deals, and never more than
+    there are. None from an empty list, and then the mode lets the model choose."""
+    if not worlds:
+        return []
+    count = min(draw_marble(ITEM_COUNT_MARBLES), len(worlds))
+    return random.sample(list(worlds), k=count)
+
+
+def deal_run(files):
+    """The run the bag deals: its mode (chosen_mode) and, for an item mode that works on worlds
+    that exist, the worlds drawn for it (draw_items) from `files`, the site as read_site() gives
+    it. A creating run draws no world: its world is the one it makes."""
+    run = Run(chosen_mode())
+    if run.area == "item" and run.work != "create":
+        run = Run(run.mode, draw_items(site_worlds(files)))
+    return run
+
+
+def strays(run, plan, existing):
+    """The files `plan` touches that are not this run's mode's to touch, among `existing` (the
+    names of the site's files): the framework and the other worlds in an item mode, the worlds
+    and the pages in a nav or persona mode, nothing in an overall mode, whose files are the
+    framework. Not refused -- an enhancement may need one small edit beyond its own files -- but
+    named back to the model with a refusal (see main), because an answer the deploy's tests refuse
+    usually fell exactly there."""
+    if run.area == "overall":
+        return []
+    if run.area == "item":
+        own = {WORLDS_DATA, MOOD_SHEET, MOOD_SCRIPT, SITEMAP}
+        for world in run.items:
+            own |= {world["file"], module_of(world["file"])}
+    elif run.area == "nav":
+        own = set(NAV_FILES)
+    else:
+        own = set(PERSONA_FILES) | {MOOD_SCRIPT, HOME_PAGE}
+    touched = []
+    for entry in plan.get("files") if isinstance(plan.get("files"), list) else []:
+        if isinstance(entry, dict) and isinstance(entry.get("path"), str):
+            touched.append(entry["path"])
+    for raw in plan.get("delete") if isinstance(plan.get("delete"), list) else []:
+        if isinstance(raw, str):
+            touched.append(raw)
+    return [rel for rel in dict.fromkeys(touched) if rel in existing and rel not in own]
+
+
+class Run:
+    """What the bag dealt this run: its mode, and for an item mode the worlds drawn for it."""
+
+    def __init__(self, mode, items=()):
+        if mode not in MODES:
+            raise ValueError(f"not a mode: {mode!r}")
+        self.mode = mode
+        self.work, self.area = mode.split("_", 1)
+        # Only a mode that works on worlds that exist carries any: a creating run makes its own.
+        self.items = ([world for world in items if isinstance(world, dict)]
+                      if self.area == "item" and self.work != "create" else [])
+
+    def __repr__(self):
+        return f"Run({self.mode!r}, {self.items!r})"
+
+    def __eq__(self, other):
+        return isinstance(other, Run) and (self.mode, self.items) == (other.mode, other.items)
+
+
+def world_name(world):
+    """A world's name as the prompt, a headline and a commit message can carry it: the name
+    _data/worlds.json gives it, cleaned as a summary is (clean_summary), or its page's stem."""
+    stem = str(world.get("file") or "")
+    if stem.endswith(PAGE_SUFFIX):
+        stem = stem[:-len(PAGE_SUFFIX)]
+    return clean_summary(world.get("name") if isinstance(world.get("name"), str) else "", stem or "a world")[:60]
+
+
+def name_items(items):
+    """The drawn worlds as prose names them: "the quiet room", "the quiet room and loam", "a, b
+    and c"; "" for none."""
+    names = [world_name(world) for world in items]
+    if len(names) > 1:
+        return ", ".join(names[:-1]) + " and " + names[-1]
+    return names[0] if names else ""
+
+
+# What the areas are called where the mission and the headline name them.
+AREA_PHRASES = {
+    "nav": "the navigation -- the way around the site, and the constellation inside the sparkles "
+           "logo in the upper left",
+    "persona": "the persona -- the button in the upper right, the sheet it opens, and the way the "
+               "persona runs through the site",
+    "overall": "the site-wide experience and the framework beneath it",
+}
+HEADLINE_AREAS = {"nav": "the navigation", "persona": "the persona", "overall": "the site"}
+
+# What a consolidating run serves, in every place MISSION serves a creating or enhancing run: the
+# opening of the prompt, the line it reads last, the console line and clean_summary's fallback.
 CONSOLIDATION_MISSION = ("consolidate, federate, refactor and clean up the website into a single "
                          "coherent whole")
 
-# The first words of the commit message and of the run summary, by kind: what a reader of
-# `git log` sees before the model's own sentence. The workflow reads them from the "headline"
-# output rather than carrying a prefix of its own.
-HEADLINES = {
-    INTERESTING_RUN: "Make the website more interesting",
-    CONSOLIDATION_RUN: "Consolidate the website",
-}
+
+def aim_of(run):
+    """What the run does, as the phrase that completes "..., by": its work on its area, with the
+    worlds an item mode drew named."""
+    if run.area == "item":
+        what = name_items(run.items)
+        if run.work == "create":
+            what = "one new world, federated into the whole"
+        elif not what:
+            what = "one world"
+    else:
+        what = AREA_PHRASES[run.area]
+    if run.work == "create":
+        return f"creating {what}"
+    if run.work == "enhance":
+        return f"enhancing {what}"
+    return f"cleaning up the code and logic of {what} and fixing its bugs"
 
 
-def mission_of(kind):
-    """The mission a run of this kind serves."""
-    return CONSOLIDATION_MISSION if kind == CONSOLIDATION_RUN else MISSION
+def mission_of(run):
+    """The mission a run serves, with its mode's aim: MISSION for a creating or enhancing run and
+    CONSOLIDATION_MISSION for a consolidating one, each followed by what this run does it by."""
+    base = CONSOLIDATION_MISSION if run.work == "consolidate" else MISSION
+    return f"{base}, by {aim_of(run)}"
 
 
-def run_kind():
-    """Which kind of run this is.
+def headline_of(run):
+    """The first words of the commit message and of the run summary: what a reader of `git log`
+    sees before the model's own sentence. The workflow reads it from the "headline" output rather
+    than carrying a prefix of its own. "Enhance the quiet room: ..." names the world drawn."""
+    verb = {"create": "Create", "enhance": "Enhance", "consolidate": "Consolidate"}[run.work]
+    if run.area == "item":
+        return f"{verb} {name_items(run.items) or 'a world'}"
+    return f"{verb} {HEADLINE_AREAS[run.area]}"
 
-    RUN_KIND, if it names one, wins: it is a person's choice through the workflow's manual input.
-    Otherwise the parity of RUN_NUMBER decides -- odd grows the site, even consolidates it -- and
-    a run with neither is a growing run.
-    """
-    named = (os.environ.get("RUN_KIND") or "").strip().lower()
-    if named in RUN_KINDS:
-        return named
-    if named and named != "auto":
-        print(f"::warning::RUN_KIND {one_line(named, 60)!r} is not one of {', '.join(RUN_KINDS)}; "
-              "deciding by run number instead.")
-    number = (os.environ.get("RUN_NUMBER") or "").strip()
-    if number.isdigit():
-        return CONSOLIDATION_RUN if int(number) % 2 == 0 else INTERESTING_RUN
-    return INTERESTING_RUN
 
 COPILOT_BIN = os.environ.get("COPILOT_BIN", "copilot")
 
@@ -552,6 +725,77 @@ PARTICIPATE_SCRIPT = "js/participate.js"
 PARTICIPATE_TAG = f"<script src='{PARTICIPATE_SCRIPT}' defer></script>"
 PARTICIPATE_FILES = {PARTICIPATE_SCRIPT}
 FIXED_FILES = ANALYTICS_FILES | STATE_FILES | PARTICIPATE_FILES
+
+# The files each area of the site is made of, which is what a mode's block of the prompt names and
+# what split_for_prompt shows first (focus_files): a run can only change what it was shown, and
+# the files its mode works in have to be in view whatever else the prompt has room for.
+WORLDS_DATA = "_data/worlds.json"
+LAYOUT = f"{INCLUDES_DIR}/layout.njk"
+SITE_SCRIPT = "js/site.js"  # the shared shell: the nav, the lightbox, the caution, the unlock
+PERSONA_SCRIPT = "js/persona.js"
+MOOD_SHEET = f"{SASS_DIR}/_mood.scss"
+# The navigation: the logo and its constellation, written by the layout, placed by the shell's
+# script, painted by two partials, and pointed at the pages the data lists.
+NAV_FILES = (LAYOUT, SITE_SCRIPT, f"{SASS_DIR}/_nav.scss", f"{SASS_DIR}/_lightbox.scss", WORLDS_DATA)
+# The persona: its script, the avatar and the sheet the layout writes, its paint, and the shell
+# script that raises the sheet and carries the sky helpers pages used before the persona existed.
+PERSONA_FILES = (PERSONA_SCRIPT, LAYOUT, f"{SASS_DIR}/_persona.scss", f"{SASS_DIR}/_lightbox.scss",
+                 SITE_SCRIPT, f"{SASS_DIR}/_unlock.scss")
+
+
+def is_framework(rel):
+    """Whether `rel` is part of the framework every world stands on rather than one world's own:
+    the layouts and partials, the Sass, the data, the stylesheets and the shared scripts --
+    everything under the shared folders but the modules, which are the worlds' own."""
+    shared = (f"{INCLUDES_DIR}/", f"{SASS_DIR}/", "_data/", "css/", "js/")
+    return rel.startswith(shared) and not rel.startswith(MODULES_DIR)
+
+
+def site_worlds(files):
+    """The worlds _data/worlds.json lists, as its entries, read from the site as read_site() gives
+    it: the page files that end in .html, each with whatever else the entry says (name, mood,
+    what). None when the file is missing or not what it should be -- a run is not lost over the
+    data, an item mode then lets the model choose its world."""
+    for rel, content in files:
+        if rel != WORLDS_DATA:
+            continue
+        try:
+            data = json.loads(content)
+        except (ValueError, RecursionError):
+            return []
+        worlds = data.get("worlds") if isinstance(data, dict) else None
+        if not isinstance(worlds, list):
+            return []
+        return [world for world in worlds
+                if isinstance(world, dict) and isinstance(world.get("file"), str)
+                and world["file"].endswith(PAGE_SUFFIX) and "/" not in world["file"]]
+    return []
+
+
+def focus_files(run, files=()):
+    """The files `run` works in, in the order the prompt shows them after the protected ones: a
+    drawn world's page and module for an item mode (with the data and the palette its lines are
+    in), the shell's own files for nav and persona, and then the whole framework for every mode,
+    so what every world stands on is always in view. `files` is the site as read_site() gives
+    it; a name that is not in it is passed over."""
+    own = []
+    if run.area == "item":
+        for world in run.items:
+            own += [world["file"], module_of(world["file"])]
+        own += [WORLDS_DATA, MOOD_SHEET]
+    elif run.area == "nav":
+        own += NAV_FILES
+    elif run.area == "persona":
+        own += PERSONA_FILES
+    present = {rel for rel, _ in files}
+    own += sorted(rel for rel in present if is_framework(rel) and rel not in FIXED_FILES)
+    focus, seen = [], set()
+    for rel in own:
+        if rel in present and rel not in seen:
+            focus.append(rel)
+            seen.add(rel)
+    return focus
+
 # How many files one run may touch. Roomy enough that a run which federates the site can rewrite
 # every page of it and add the shared files those pages link to, which is what the whole-site
 # review in build_prompt asks for; small enough that a runaway answer is still refused. A page is
@@ -1468,7 +1712,7 @@ def check_participate(before, after):
 
 # Where the two halves of the shared component live. js/site.js is ordinary site source and may be
 # rewritten freely -- what may not happen is the component disappearing out of it.
-DESTRUCTIVE_SCRIPT = "js/site.js"
+DESTRUCTIVE_SCRIPT = SITE_SCRIPT
 SHARED_STYLESHEET = "css/site.css"
 # The one class a destructive control wears, under the same name in the markup and the styling.
 WARNING_CLASS = "warning"
@@ -1763,6 +2007,11 @@ def run_piece_harness(site):
 # the stage did; StageTest and RealSiteTest make the assertions.
 STAGE_HARNESS_REL = ".github/scripts/stage_harness.mjs"
 STAGE_HARNESS = REPO_ROOT / STAGE_HARNESS_REL
+# The harnesses the deploy's tests run the shell through, which the prompt names so a run knows
+# what plays its answer: a run cannot change any of them.
+NAV_HARNESS_REL = ".github/scripts/nav_harness.mjs"
+LIGHTBOX_HARNESS_REL = ".github/scripts/lightbox_harness.mjs"
+CARD_VARIANT_HARNESS_REL = ".github/scripts/card_variant_harness.mjs"
 STAGE_TIMEOUT_SECONDS = 180
 
 
@@ -1881,7 +2130,7 @@ def apply_to(site, ops):
     return after
 
 
-def split_for_prompt(files):
+def split_for_prompt(files, focus=()):
     """Split the site into (shown, omitted): files whose content fits the prompt budget, and the
     names of the rest.
 
@@ -1889,25 +2138,33 @@ def split_for_prompt(files):
     across every page of it.
 
     The protected files are considered first, so they are the last to be left out: every run needs
-    to be able to rewrite the home page, and to wire a page it adds into the sitemap. The other
-    files are considered in a different random order each run: a file the model is not shown
-    cannot be changed, and no file should stay unchangeable run after run.
+    to be able to rewrite the home page, and to wire a page it adds into the sitemap. `focus`
+    names the files the run's mode works in (focus_files), which come next, in that order, so a
+    run can always change what it was drawn to change and always sees the framework it stands on;
+    they are also shown ahead of the rest. The other files are considered in a different random
+    order each run: a file the model is not shown cannot be changed, and no file should stay
+    unchangeable run after run.
 
     FIXED_FILES skip the budget entirely and go straight into the omitted list, which is exactly
     the protection the analytics, local-state and participation axioms want: validate_plan refuses
     to touch what was not shown, and the site's measurement, privacy, local-state and
     participation machinery never costs the prompt a byte.
     """
+    focused = {rel: rank for rank, rel in enumerate(dict.fromkeys(
+        rel for rel in focus if rel not in PROTECTED_FILES and rel not in FIXED_FILES))}
+
     def prompt_order(item):
-        return (item[0] != HOME_PAGE, item[0] not in PROTECTED_FILES, item[0])
+        return (item[0] != HOME_PAGE, item[0] not in PROTECTED_FILES, focused.get(item[0], len(focused)), item[0])
 
     spoken_for = PROTECTED_FILES | FIXED_FILES
     first = sorted((item for item in files if item[0] in PROTECTED_FILES), key=prompt_order)
-    rest = [item for item in files if item[0] not in spoken_for]
+    by_name = {rel: (rel, content) for rel, content in files}
+    second = [by_name[rel] for rel in focused if rel in by_name]
+    rest = [item for item in files if item[0] not in spoken_for and item[0] not in focused]
     fixed = [rel for rel, _ in files if rel in FIXED_FILES]
     random.shuffle(rest)
     shown, omitted, used = [], fixed, 0
-    for rel, content in first + rest:
+    for rel, content in first + second + rest:
         if used + len(content) > PROMPT_BUDGET_CHARS:
             omitted.append(rel)
             continue
@@ -1916,9 +2173,10 @@ def split_for_prompt(files):
     return sorted(shown, key=prompt_order), sorted(omitted)
 
 
-def build_prompt(shown, omitted=(), kind=INTERESTING_RUN, budget=None, feedback=""):
-    """The whole prompt for a run of this kind: the standards every run is held to, then what this
-    kind of run does (grow the site, or consolidate it), then the axioms and the site itself.
+def build_prompt(shown, omitted=(), run=None, budget=None, feedback=""):
+    """The whole prompt for `run` (a Run; the DEFAULT_MODE's if none is given): the standards every
+    run is held to, then what this run's mode does and in which files (mode_block), then the
+    axioms and the site itself.
 
     `budget` is the output budget the run asks for, in tokens (max_output_tokens() unless given);
     0 leaves it unnamed. The prompt says it out loud so the model can size the answer to fit, which
@@ -1930,8 +2188,9 @@ def build_prompt(shown, omitted=(), kind=INTERESTING_RUN, budget=None, feedback=
     model reads last, so the site it answers about is always the site as committed."""
     if budget is None:
         budget = max_output_tokens()
-    mission = mission_of(kind)
-    consolidating = kind == CONSOLIDATION_RUN
+    if run is None:
+        run = Run(DEFAULT_MODE)
+    mission = mission_of(run)
     system = (
         "You are the autonomous curator of a static website served from S3 behind a CDN. "
         f"Your mission this run: {mission}. What all of it has to add up to is {WHOLE} -- "
@@ -1951,7 +2210,7 @@ def build_prompt(shown, omitted=(), kind=INTERESTING_RUN, budget=None, feedback=
         "now. That look at the site as a whole is the first half of every run. What you do is the "
         f"second half, and it follows from what you saw, because the site has to become {WHOLE} "
         "and not a collection of individually decent pages.\n\n"
-        + (consolidation_block() if consolidating else growth_block()) +
+        + mode_block(run) +
         f"LEGIBLE TO A STRANGER. Everything above is held to one more standard, which no check can "
         f"judge and the prompt therefore has to: the site is {LEGIBLE}. Confusion spends "
         "engagement time as surely as boredom does, so hold every change to these six, and undo "
@@ -2456,105 +2715,519 @@ def build_prompt(shown, omitted=(), kind=INTERESTING_RUN, budget=None, feedback=
         )
     if feedback:
         user += "\n\n" + feedback
-    if consolidating:
-        then = ("make the one change that brings it closest to being that: re-federate what is "
-                "already there, aggressively, refactor and clean up, and add nothing")
-    else:
-        then = ("make the one change that gives a visitor the most reason to stay and keep going: "
-                "add something new only as part of the same whole, already federated, and leave "
-                "the consolidating to the run that follows")
     user += (
         f"\n\nThis run's mission: {mission}, measured in {INTERESTING}. Envision all of the above "
-        f"as {WHOLE} -- one navigation, one visual language, one through-line -- and then {then}. "
+        f"as {WHOLE} -- one navigation, one visual language, one through-line -- and then "
+        f"{then_clause(run)}. "
         f"Keep it {LEGIBLE}: one name per page, one way to do each thing, content before chrome, "
         "and never a dead end. Respond with the JSON object only."
     )
     return system + "\n\n" + user
 
 
-# The two kinds of run differ in one block of the system prompt, between ENVISION THE WHOLE FIRST
-# and LEGIBLE TO A STRANGER: what the run does, now that it has looked. Everything before it (the
-# mission, the measure, the look at the whole) and everything after it (the legibility holds, the
-# build, the axioms, the format) is the same for both.
+# The modes differ in one block of the system prompt, between ENVISION THE WHOLE FIRST and LEGIBLE
+# TO A STRANGER: what the run does, now that it has looked, and in which files. Everything before
+# it (the mission, the measure, the look at the whole) and everything after it (the legibility
+# holds, the build, the axioms, the format) is the same for every mode.
 
-ALTERNATION = ("Runs alternate: one makes the site more interesting and the next consolidates it, "
-               "and this is the ")
+# The shell, as every mode but the overall ones names it: the framework every world stands on,
+# which other modes work on and this one leaves alone.
+SHELL_FILES = (f"the layout, {SITE_SCRIPT}, {STAGE_SCRIPT}, js/feed.js, {PERSONA_SCRIPT}, "
+               f"{VARIANT_SCRIPT} and the partials in {SASS_DIR}/")
 
 
-def growth_block():
-    """What a growing run does: add the one thing that most lengthens a visitor's stay, federated."""
+def bag_note(run):
+    """How the run came to be doing what it does: the bag, the mode it drew, and that every other
+    mode has runs of its own, so this run does its one mode whole and leaves the rest."""
+    weights = ", ".join(f"{mode} {n}" for mode, n in MODE_MARBLES.items())
     return (
-        f"THIS RUN GROWS THE SITE. {ALTERNATION}growing run. Spend the whole of this answer on the "
-        "one change that most lengthens a visitor's stay, and none of it on tidying: the "
-        "consolidation that is overdue belongs to the run that follows this one, which adds "
-        "nothing and lifts, merges and retires instead. Leave that run no more to do than you "
-        "found, though: nothing you add may repeat what a shared file already does, and a change "
-        "that needs a shared file changed makes that change rather than copying the shared "
-        "thing.\n\n"
-        "ADD something -- new content, a new world for an orientation that has none, a second "
-        "shape of piece for a world that has one, a new way of querying a visitor's orientation, "
-        "an interactive toy, better visuals, a hidden easter egg -- or deepen what is already "
-        "there, so a world a visitor finishes in one go holds them for three. Whatever you add "
-        "arrives already federated, in the same run: inside the shared layout, in the one visual "
-        "language, wired into the one navigation, sharing the styles and behaviour it has in "
-        "common with the rest. A page that stands apart leaves the site less of a whole, however "
-        "good that page is on its own, so a growing run is held to the whole as firmly as a "
-        "consolidating one. Build on what is already there rather than starting over, and do not "
-        "add for the sake of adding: one change that gives a visitor a reason to keep going is "
-        "the run, and a second page beside it is not.\n\n"
+        "THE BAG OF MARBLES. What a run does is drawn at random from a bag of marbles. A mode is a "
+        "kind of work -- create, enhance or consolidate -- on one area of the site -- one world, "
+        "the navigation, the persona, or the whole -- and each mode has as many marbles in the bag "
+        f"as the hours it is owed: {weights}, of {sum(MODE_MARBLES.values())}. One marble is drawn "
+        f"each run, and this run drew {run.mode}. Every other mode gets runs of its own, so do this "
+        "run's one mode, whole, and leave the rest to the runs that draw them: the consolidation "
+        "that is overdue, the world that is missing, the shell that wants rethinking are each some "
+        "other run's unless they are this one's.\n\n"
     )
 
 
-def consolidation_block():
-    """What a consolidating run does: re-federate, refactor and clean up, and add nothing."""
-    return (
-        f"THIS RUN CONSOLIDATES THE SITE. {ALTERNATION}consolidating run. It adds nothing: no new "
-        "page, no new world, no new piece, no new query mechanism, no new feature, and no new "
-        "copy that is not the plainer form of copy already there. The whole of this answer is "
-        "consolidation, federation, refactoring and cleanup, and the measure above is served by "
-        "that all the same: a site that holds together is one a visitor keeps exploring, and the "
-        "growing run that follows this one builds on what this run leaves.\n\n"
-        "RE-FEDERATE, AGGRESSIVELY. Leave the site more of a single piece than you found it. Lift "
-        "markup, styles and behaviour that the pages repeat into the shared files -- the layout "
-        f"and partials in \"{INCLUDES_DIR}/\", a Sass partial in \"{SASS_DIR}/\", the shared "
-        "stylesheet \"css/site.scss\" that every page links as \"css/site.css\", a shared "
-        "script such as \"js/site.js\" -- and use them from every page that needs them. Give "
-        "every page the same header and navigation, so the whole site is reachable from anywhere. "
-        "Settle on one visual language and hold every page to it: palette, type, spacing, motion. "
-        "Merge pages that overlap, and retire the ones that no longer earn their place: the site "
-        "is better as fewer pages that belong together than as more that do not. Be aggressive "
-        "about it -- take on the consolidation that is overdue rather than the one that is merely "
-        "easy, and do not leave a near-duplicate standing because no single page is to blame for "
-        "it.\n\n"
-        "REFACTOR AND CLEAN UP. Simplify, repair or remove what has stopped working. Take out dead "
-        "code, styles nothing uses, partials nothing includes, variables nothing reads, and "
-        "comments that describe what is no longer there. Give each thing one name and use it "
-        "everywhere. Undo the drift from the six holds under LEGIBLE TO A STRANGER below: a "
+def items_note(run):
+    """The worlds drawn for an item mode, named with their files and what they are like -- or,
+    with no list to draw from, the instruction to choose one."""
+    if not run.items:
+        return ("The world is drawn at random from \"_data/worlds.json\" when there is a list to "
+                "draw from; here there is none, so choose one world yourself, the one that most "
+                "rewards the work, and name it in your summary. ")
+    drawn = []
+    for world in run.items:
+        line = f"{world_name(world)} (\"{world['file']}\", module \"{module_of(world['file'])}\")"
+        what = world.get("what")
+        if isinstance(what, str) and what.strip():
+            line += f": {one_line(what, 200).rstrip('.')}"
+        drawn.append(line)
+    plural = len(run.items) > 1
+    return (f"The world{'s' if plural else ''} it works on {'were' if plural else 'was'} drawn for "
+            "it as well, at random, from \"_data/worlds.json\": " + "; ".join(drawn) + ". ")
+
+
+def its(run):
+    """"it" or "them", and "its" or "their", for the worlds an item mode drew."""
+    plural = len(run.items) > 1
+    return ("them" if plural else "it"), ("their" if plural else "its")
+
+
+# What the navigation and the persona are, as their modes describe them: the files, and what each
+# one does. Said once here, for the enhancing and the consolidating mode alike.
+NAV_IS = (
+    f"What the navigation is: \"{LAYOUT}\" writes the logo -- a <details> whose summary is the "
+    "mark, so the disclosure and the keyboard are the browser's -- and the two orbits of options: "
+    f"the near orbit of destinations, from \"{WORLDS_DATA}\" wayIn plus the world a reading opens "
+    "onto, and the far orbit of the apparatus, \"change this site\", \"cookies\", \"state\" and the "
+    f"finePrint pages. \"{SITE_SCRIPT}\" places the stars, settles which options are in the "
+    "constellation, keeps the keyboard inside it while it is up, marks the page a visitor is on, "
+    f"and raises the whole through the shared lightbox; \"{SASS_DIR}/_nav.scss\" paints it and "
+    f"\"{SASS_DIR}/_lightbox.scss\" paints the veil it opens over. "
+)
+PERSONA_IS = (
+    f"What the persona is: \"{PERSONA_SCRIPT}\" owns the sky as data and as interface -- the key, "
+    "the validation, the seeding, the thoughts a star carries, every write -- and offers it as "
+    "window.interestingPersona (key, stars(), read(), holds(), seedSky(), thought(), setStars(), "
+    f"addStar(), seed(), clear(), onSky(fn), open(), close(), ask(), refresh()); \"{LAYOUT}\" "
+    "writes the avatar (#persona, with its portrait canvas and its one sentence for screen "
+    "readers) and the <dialog> sheet (#persona-sheet, with the sky a visitor places stars on and "
+    f"the reading); \"{SASS_DIR}/_persona.scss\" paints both; the sheet opens through the shared "
+    f"lightbox in \"{SITE_SCRIPT}\", which also carries the sky helpers pages used before the "
+    "persona existed (seedSky, holdsSky, skyKey) and the unlock helper a world powers itself up "
+    "with; the threshold's sideways question is asked in that page's <main> (#persona-probe), "
+    "never in the chrome; and every world that reads the sky reads it through "
+    "window.interestingPersona and follows it through onSky or the unlock helper. "
+)
+FRAMEWORK_IS = (
+    f"The framework is the layout (\"{LAYOUT}\"), the stage (\"{STAGE_SCRIPT}\", "
+    f"\"{STAGE_INCLUDE}\", \"{SASS_DIR}/_stage.scss\"), the feed (\"js/feed.js\", "
+    f"\"{INCLUDES_DIR}/worlds.njk\", \"{SASS_DIR}/_feed.scss\"), the dials a card is dealt with "
+    f"(\"{VARIANT_SCRIPT}\"), the threshold and its library of query mechanisms "
+    f"(\"{MOOD_SCRIPT}\" and the question in index.html), the mood atlas, the site map and the "
+    f"error page, and the one visual language in \"{SASS_DIR}/\": the tokens, the type scale, the "
+    "base rules, the panel, the controls, the unlock, the moods. "
+)
+
+
+def work_block(run):
+    """What this run does and does not do, by mode: the first part of mode_block."""
+    names = name_items(run.items)
+    it, their = its(run)
+    if run.mode == "create_item":
+        return (
+            "THIS RUN CREATES ONE NEW WORLD. " + bag_note(run) +
+            "ADD one world and nothing else: its page \"thing.html\" (front matter naming the "
+            f"layout, and the two lines that include the stage), its line in \"{WORLDS_DATA}\" "
+            "with a mood and an aspect, its module \"js/modules/thing.js\" with its card and its "
+            f"piece, and its <loc> in {SITEMAP} -- plus an orientation in {MOOD_SCRIPT} if the mood "
+            f"flow is to offer it, and a palette in {MOOD_SHEET} if its mood is new. Prefer a "
+            "world for an orientation that has none, or a kind of piece no world deals yet. It "
+            "arrives already federated, in the same run: inside the shared layout, in the one "
+            "visual language, dealt by the feed and played on the stage like every other world, "
+            f"and nothing it adds may repeat what a shared file already does. The shell -- "
+            f"{SHELL_FILES} -- does not change for a new world: a world that needs it changed is "
+            "the wrong world for this run. Tidy nothing, change no other world, and add no second "
+            "page beside it. A module is sent whole, so keep it well under the size a file may be: "
+            "the smaller existing modules are the measure.\n\n"
+        )
+    if run.mode == "enhance_item":
+        heading = f"THIS RUN ENHANCES {names.upper()}. " if names else "THIS RUN ENHANCES ONE WORLD. "
+        return (
+            heading + bag_note(run) + items_note(run) +
+            f"Make {it} more interesting, measured as above, so a world a visitor finishes in one "
+            "go holds them for three: a second shape of piece beside the first, more that differs "
+            "between seeds and between cards, a scene that rewards looking, knobs that ask for a "
+            "prediction and then show its answer, a finish worth reaching, a title and a line in "
+            "the site's own voice, something to discover on the third go that was not there on the "
+            f"first. Deepen what is there rather than starting over, and build on {their} own "
+            f"material. Work inside {their} own files: {their} module, {their} page, {their} line "
+            f"in \"{WORLDS_DATA}\", and where the enhancement needs them {their} orientation in "
+            f"{MOOD_SCRIPT} and {their} palette in {MOOD_SHEET}. The shell -- {SHELL_FILES} -- is "
+            "the framework every world stands on, and other modes work on it: it is not this run's "
+            "to change, and an enhancement that would need it changed is the wrong enhancement for "
+            "this run. Add no world and no page, and tidy nothing that is not in the way.\n\n"
+        )
+    if run.mode == "consolidate_item":
+        heading = f"THIS RUN CONSOLIDATES {names.upper()}" if names else "THIS RUN CONSOLIDATES ONE WORLD"
+        return (
+            f"{heading}: cleans up {their} code and logic, and fixes {their} bugs. " + bag_note(run)
+            + items_note(run) +
+            "It adds nothing: no new world, no new page, no new piece, no new knob, no new "
+            "feature, and no new copy that is not the plainer form of copy already there. Fix what "
+            "is broken first -- a knob a visitor cannot set, a piece that does not finish from "
+            "every order its knobs are reached in or plays differently the second time, a scene "
+            "that overflows or stalls, a card that opens as the wrong piece or as the world's one "
+            "line, a status line that lies, a sky read without checking it is there, a finish that "
+            "does not light the way on -- then clean up: dead code, a helper written twice, state "
+            "that leaks from one piece into the next, a comment that describes what is no longer "
+            "there, a name that does not say what it holds, the shared thing done again in the "
+            "module when the framework already does it. What a visitor can do stays what it is, "
+            "except where a bug took it away: a cleanup that changes behaviour by accident is a "
+            f"regression, not a cleanup. Work inside {their} own files -- {their} module, {their} "
+            f"page, {their} line in \"{WORLDS_DATA}\" -- and leave the shell alone: "
+            f"{SHELL_FILES} are not this run's.\n\n"
+        )
+    if run.mode == "enhance_nav":
+        return (
+            "THIS RUN ENHANCES THE NAVIGATION: the way a visitor gets around the site, and the "
+            "constellation of options that branches out of the sparkles logo in the upper left. "
+            + bag_note(run) + NAV_IS +
+            "Make getting around more interesting and more legible: how the constellation moves, "
+            "reads and fits on a phone and on a short landscape screen; how the page a visitor is "
+            "on is marked; how the world a reading opens onto is offered; what an option tells a "
+            "visitor before it is pressed; the name that fades in beside the logo; the keyboard "
+            "and the screen reader; what there is to discover in the sky between the options. Work "
+            "in those files, by edits. Nothing that adds a second navigation: no app bar, no nav of "
+            "a page's own, no link floated beside either mark, nothing pinned to an edge of the "
+            "viewport, no second way to do what an option already does. No world changes, and no "
+            "page's own prose.\n\n"
+        )
+    if run.mode == "consolidate_nav":
+        return (
+            "THIS RUN CONSOLIDATES THE NAVIGATION: cleans up its code and logic, and fixes its "
+            "bugs. " + bag_note(run) + NAV_IS +
+            "It adds nothing: no new option, no new orbit, no new feature, and no new copy that is "
+            "not the plainer form of copy already there. Fix what is broken first -- a star that "
+            "lands on another on one of the three shapes of screen, an option a keyboard cannot "
+            "reach or a focus that escapes the constellation while it is up, a page not marked as "
+            "the one a visitor is on, a reading's world that does not come and go with the reading, "
+            "a ray drawn over a label, motion that ignores a visitor's request for less -- then "
+            "clean up: dead code and styles nothing uses, a measurement taken twice, a comment that "
+            "describes what is no longer there, a name that does not say what it holds. What a "
+            "visitor can do stays what it is: a cleanup that changes behaviour by accident is a "
+            "regression, not a cleanup. Work in those files, by edits, and nowhere else.\n\n"
+        )
+    if run.mode == "enhance_persona":
+        return (
+            "THIS RUN ENHANCES THE PERSONA: the avatar floating in the upper right of every page, "
+            "the sheet it opens, and the way the persona runs through the site. "
+            + bag_note(run) + PERSONA_IS +
+            "Make configuring a persona more interesting, and make its presence felt across the "
+            "site: the portrait, the sky in the sheet and what a star carries, what the reading "
+            "shows and how it is read, how a world answers to the sky, what changes once a persona "
+            "exists, and how a visitor finds that out. Work in those files -- and in one shared "
+            "file, by one or two edits, where the enhancement is in how the site takes the persona "
+            "in -- never in a world's module. Nothing that adds a second way to open the persona "
+            "or a second place that places stars: the avatar is the one way, and the sheet is the "
+            "one place. No world changes, and no new page.\n\n"
+        )
+    if run.mode == "consolidate_persona":
+        return (
+            "THIS RUN CONSOLIDATES THE PERSONA: cleans up its code and logic, and fixes its bugs. "
+            + bag_note(run) + PERSONA_IS +
+            "It adds nothing: no new control, no new section of the sheet, no new feature, and no "
+            "new copy that is not the plainer form of copy already there. Fix what is broken "
+            "first -- a star that cannot be placed, moved or removed by every means the sheet "
+            "offers, a sky that does not follow the sheet as it is edited, a reading that is not "
+            "shown or not forgotten when asked, a portrait that does not match the sky, a sheet the "
+            "keyboard cannot leave or reach all of, a world told of a change it was not -- then "
+            "clean up: dead code and styles nothing uses, a check written twice, a comment that "
+            "describes what is no longer there, a name that does not say what it holds. What a "
+            "visitor can do stays what it is: a cleanup that changes behaviour by accident is a "
+            "regression, not a cleanup. Work in those files, by edits, and never in a world's "
+            "module.\n\n"
+        )
+    if run.mode == "enhance_overall":
+        return (
+            "THIS RUN ENHANCES THE WHOLE SITE: the site-wide experience, or some aspect of the "
+            "framework beneath it. " + bag_note(run) + FRAMEWORK_IS +
+            "Make the one change that reaches every page or every piece and gives a visitor more "
+            "reason to stay: a new way of querying a visitor's orientation (the single most "
+            "interesting change there is to make here), a stage that plays a piece better, a feed "
+            "that deals better, a finer motion scheme, a sounder type scale, an error page worth "
+            "landing on, a threshold that explains itself on sight. Not a new world (that is "
+            "create_item's run), not one world's own module (enhance_item's), not the "
+            "constellation or the persona for their own sake (their own modes'): what is shared is "
+            "this run's, and only what is shared. Work by edits to the shared files, one coherent "
+            "stage of a change too big for one answer.\n\n"
+        )
+    return (  # consolidate_overall
+        "THIS RUN CONSOLIDATES THE WHOLE SITE: cleans up the code and logic of the site-wide "
+        "experience and the framework beneath it, and fixes their bugs. " + bag_note(run)
+        + FRAMEWORK_IS +
+        "It adds nothing: no new page, no new world, no new piece, no new query mechanism, no new "
+        "feature, and no new copy that is not the plainer form of copy already there. RE-FEDERATE "
+        "where the pages repeat what a shared file should do once: lift markup, styles and "
+        "behaviour that the pages or the modules repeat into the shared files -- the layout and "
+        f"partials in \"{INCLUDES_DIR}/\", a Sass partial in \"{SASS_DIR}/\", the shared stylesheet "
+        f"\"css/site.scss\" that every page links as \"css/site.css\", the shared script "
+        f"\"{SITE_SCRIPT}\" -- and use them from every page that needs them; give every page the "
+        "same header and navigation, settle on one visual language and hold every page to it; "
+        "merge pages that overlap and retire the ones that no longer earn their place, where the "
+        "deploy's tests allow it (below): the site is better as fewer pages that belong together "
+        "than as more that do not. REFACTOR AND CLEAN UP: fix what is broken; take out dead "
+        "code, styles nothing uses, partials nothing includes, variables nothing reads and "
+        "comments that describe what is no longer there; give each thing one name and use it "
+        "everywhere; undo the drift from the six holds under LEGIBLE TO A STRANGER below -- a "
         "second control beside the first, a caption on the feed, a term used as if self-evident. "
         "What a visitor can do stays what it is, except where a merge or a retirement takes a "
         "near-duplicate away on purpose: a consolidation that changes behaviour by accident is a "
-        "regression, not a cleanup.\n\n"
-        "WHAT THE DEPLOY'S TESTS HOLD IN PLACE. An answer is only written once it passes the tests "
-        "every deploy waits on, and those tests read the shared shell as committed, by name: the "
-        "ids, classes and data attributes the layout writes (sparknav-*, lightbox-veil, "
-        "persona-*, stage-*), the names js/site.js exports on window.interestingSite (lightbox, "
-        "destructive, areYouSure, unlock), the rule blocks and the section comments of "
-        f"{SASS_DIR}/_nav.scss, _lightbox.scss, _stage.scss, _persona.scss and _controls.scss, "
-        "the three lists of _data/worlds.json, and the pages index.html, moods.html, "
-        "sitemap.html, privacy.html, terms.html and error.html. Consolidate around the shell, "
-        "not through it: change those files by edits that leave every id, name, class, section "
-        "and file where it is, never rewrite one of them whole or merge two of them, and never "
-        "retire one of those pages. A consolidation that renames or removes any of it is refused "
-        "by the tests and has to be undone, and the run is spent undoing it. The pages, the "
-        "modules in js/modules/ and the page stylesheets are where the overdue consolidation "
-        "is.\n\n"
-        "A run whose entire change is a holistic improvement -- consolidating, unifying, merging, "
-        "refactoring, or only deleting -- is a complete and successful run. It needs no new page "
-        "alongside it, and must have none. The site becomes more interesting by becoming a single "
-        "coherent whole, not only by growing, so do not add for the sake of adding: when the site "
-        "is repetitive, scattered or inconsistent, re-federating it is the more interesting "
-        "change. Build on what is already there rather than starting over.\n\n"
+        "regression, not a cleanup. Work by edits to the shared files, one coherent stage of a "
+        "consolidation too big for one answer, and take on the one that is overdue rather than "
+        "the one that is merely easy.\n\n"
     )
+
+
+# What the deploy's tests hold in place, by area: said to every mode that works there, because
+# that is what answers were being refused for. The names are read off the tests and the harnesses
+# (test_make_interesting.py, *_harness.mjs), which a run cannot change, and they are quoted here
+# as the tests quote them: a test reads the source, comments included, so a heading in a comment
+# can be as load-bearing as a function.
+SHELL_SCRIPT_PINS = (
+    f"In \"{SITE_SCRIPT}\", these lines stay exactly as they are, to the character: "
+    "\"window.interestingSite = {\", \"lightbox: lightbox,\" (with the comma: never shorthand, "
+    "never last, never wrapped in Object.freeze or || {}), \"function lightbox(options)\", the "
+    "heading \"One lightbox, shared\" and the line \"window.interestingSite.destructive(\" in "
+    "the header comment, \"function areYouSure(\", \"are you sure you want to \", "
+    "\"are-you-sure\" (the modal's first class), \"showModal\", \"'cancel'\", \"Escape\", "
+    "\"back.focus()\", \"sure.no.focus()\", \"store.menu\", \"typeof menu.present === "
+    "'function'\", \"menu.present(nav.modal)\", \"'.sparknav-orbit'\", \"'.site-meta-open'\", "
+    "\"'.site-consent-link'\" and \"'.site-steer'\"; every nav id and \"lightbox-veil\" quoted "
+    "by name; and the names \"sparknav-near\" and \"sparknav-far\" never, not even in a comment. "
+    "The state option's label is \"state\" with nothing kept and \"state · N kept\" otherwise; "
+    "the reading option is \"go to <world>\" and, on that world, the world's name with "
+    "aria-current; <html data-nav> is \"live\" the moment the script runs and \"cascade\" on a "
+    "viewport too short for the constellation; each option is placed through style.setProperty "
+    "of --x, --y, --len, --a, --mx, --my and --k, no two on top of each other on a 1440x900, a "
+    "390x780 or a 740x380 screen; the three adopted controls are hidden with both the hidden "
+    "attribute and an inline display: none, their options shown only while the control exists, "
+    "and nothing is appended to <body>; the script assigns window.interestingSite the moment it "
+    "is evaluated. "
+)
+STUB_BROWSER_LIMITS = (
+    "The harnesses are stub browsers, not real ones, and a shell that reaches past what they "
+    f"offer fails every test at once: in \"{NAV_HARNESS_REL}\" there is no clearTimeout, "
+    "getComputedStyle, matchMedia, CustomEvent, console, localStorage or location, an element "
+    "has classList.contains, add and remove only (no toggle, dataset, closest, contains, remove(), "
+    "insertBefore, removeEventListener or getBoundingClientRect), querySelector takes only simple "
+    "comma-separated compound selectors (a tag, #id, .class, [attr], [attr=v], :not([attr]); "
+    "nothing with a space, > or +), and window.interestingPersona is undefined; "
+    f"\"{LIGHTBOX_HARNESS_REL}\" adds classList.toggle, getBoundingClientRect, remove(), "
+    "document.contains, dispatchEvent and clearTimeout but still has no CustomEvent, "
+    f"getComputedStyle, console, matchMedia or showModal, and evaluates \"{PERSONA_SCRIPT}\" "
+    f"before \"{SITE_SCRIPT}\", so persona.js must not touch window.interestingSite before "
+    "DOMContentLoaded. Keep to what the committed scripts already use. "
+)
+NAV_PINS = (
+    f"For the navigation. In \"{LAYOUT}\": every id written with single quotes -- sparknav, "
+    "sparknav-logo, sparknav-near, sparknav-far, sparknav-reading, sparknav-reading-go, "
+    "sparknav-reading-label, sparknav-participate, sparknav-participate-open, sparknav-cookies, "
+    "sparknav-cookies-open, sparknav-state, sparknav-state-open, sparknav-state-label, "
+    "sparknav-modal, lightbox-veil -- the summary with aria-label='interesting: the site menu', "
+    "<span class='sparknav-name'>interesting</span> and no href, the icon written as "
+    "{{ icons[link.icon] }} between the two orbits, the four optional options each ending "
+    "\" hidden>\" after its id, every wayIn and finePrint page as class='sparknav-node' "
+    "href='...' with aria-current='page' on its own page, exactly one <div class='sparknav-modal' "
+    "id='sparknav-modal' hidden></div> inside the <details>, exactly one <div "
+    "class='lightbox-veil' id='lightbox-veil' hidden></div> on every page, the comment above the "
+    "veil that says window.interestingSite.lightbox, and never the words persona-go, site-meta, "
+    "site-steer or sparknav-veil. " + SHELL_SCRIPT_PINS +
+    f"In \"{SASS_DIR}/_nav.scss\": \".sparknav-name {{\" comes before the section comment "
+    "\"// ---- the state interface\" and between them stand max-width: 0, opacity: 0, "
+    "transition: and .sparknav-logo:focus-visible .sparknav-name, with no display: none; "
+    "\".sparknav-modal {\" comes before \".sparknav-modal[hidden]\" with position: fixed, "
+    "inset: 0, place-items: center and overflow: auto between them and display: none after; "
+    "html[data-nav='live'] and html[data-nav] .sparknav-sky[hidden] are present; "
+    "prefers-reduced-motion: reduce is followed by .sparknav-name and .sparknav-node; "
+    "min-height: 44px appears twice; and html[data-nav=live] .sparknav-ray, html[data-nav=live] "
+    ".sparknav-node and .sparknav-logo each declare a literal whole-number z-index, ray below "
+    "chip below logo, while no rule ending in .sparknav-option sets z-index, opacity, "
+    "transform, filter or animation. "
+    f"In \"{SASS_DIR}/_lightbox.scss\": .lightbox-veil, @keyframes lightbox-veil, "
+    "[data-lightbox-front] and [data-lightbox-aside]; between \".lightbox-veil {\" and the "
+    "keyframes, position: fixed, inset: 0, backdrop-filter: blur( and background: color-mix(; "
+    "animation-play-state: paused somewhere; the only saturate(70%) in any stylesheet; and the "
+    "veil's z-index above .sparknav and .persona and below [data-lightbox-front], which is below "
+    ".skip-link. Exactly eight rules in all the Sass set position: fixed -- .skip-link, "
+    ".sparknav, .lightbox-veil, .sparknav-modal, .persona, .persona-sheet-fallback[open], "
+    ".are-you-sure-fallback[open] and .stage-next -- and nothing new joins them. "
+    f"In \"{WORLDS_DATA}\": wayIn begins with index.html (icon home) and finePrint is exactly "
+    "privacy.html then terms.html, each with file, name, gloss, icon and what. "
+    + STUB_BROWSER_LIMITS
+)
+PERSONA_PINS = (
+    f"For the persona. In \"{LAYOUT}\": every id written with single quotes -- persona, "
+    "persona-text, persona-open, persona-portrait, persona-sheet, persona-sheet-title, "
+    "persona-close, persona-sky (with .persona-sky-canvas), persona-drop, persona-seed, "
+    "persona-remove, persona-clear, persona-sky-status, persona-reading, persona-ask, "
+    "persona-forget, persona-reading-go, persona-sheet-probe -- with the data-state, data-sky, "
+    "data-reading and data-asking attributes on #persona; inside <div class='persona'> exactly "
+    "one <button> and no <a>; the two clearing controls written exactly as <button "
+    "id='persona-clear' type='button' class='warning'>clear the sky</button> and <button "
+    "id='persona-forget' type='button' class='warning' hidden>forget my reading</button>, "
+    "which with moods.html's \"forget my reading\" are the only controls on the site whose words "
+    "say they clear, forget, empty, erase, wipe, delete or discard; and never the word "
+    f"persona-go. In \"{PERSONA_SCRIPT}\": persona-sheet, persona-open and persona-close quoted "
+    "by name; window.interestingPersona with key, maxStars, stars, read, holds, seedSky, "
+    "thought, setStars, addStar, seed, clear, onSky, open, close, ask and refresh, since "
+    f"\"{STAGE_SCRIPT}\" reads stars() and onSky() and \"{SITE_SCRIPT}\" reads key, holds and "
+    "seedSky; the window event persona:sky; the sheet opened through "
+    "window.interestingSite.lightbox({ name: 'persona', keep: sheet, onPress: close }) from "
+    "DOMContentLoaded or start and never before, and still opening and closing when no lightbox "
+    "function exists at all; #persona-seed asking window.interestingSite.areYouSure with a what "
+    "that contains \"seed a fresh sky\", and #persona-sky-status saying \"Kept as it was\" when "
+    "that is declined; and the open, close, render and refresh paths reaching for no "
+    "CustomEvent, getComputedStyle, console or matchMedia. " + SHELL_SCRIPT_PINS +
+    f"In \"{SASS_DIR}/_persona.scss\": ::backdrop exactly once, comments included, with "
+    "background: transparent inside it; .persona and .persona-sheet-fallback[open] (written as "
+    "one flat selector line) the only rules that set position: fixed, among the eight the whole "
+    "Sass may have (.skip-link, .sparknav, .lightbox-veil, .sparknav-modal, .persona, "
+    ".persona-sheet-fallback[open], .are-you-sure-fallback[open], .stage-next); .persona below "
+    "the veil and the fallback at the front layer. " + STUB_BROWSER_LIMITS
+)
+ITEM_PINS = (
+    "For a world. Its module exports { id, needsSky, paint(ctx, w, h, env), animate(ctx, w, h, "
+    "env, t), spark(env), piece(env) }, imports nothing, and contains the text env.card, "
+    "env.variant and an `of:` on each spark's spec; every aspect it writes is one of 16 / 9, "
+    "16 / 10, 5 / 3, 4 / 3, 1 / 1, 4 / 5 or 3 / 4; piece(env) returns { title, brief, aspect, "
+    f"steps, start, apply, frame, tap, end }} with {PIECE_MIN_STEPS} to {PIECE_MAX_STEPS} knobs of "
+    "distinct ids, each a choice (two to four options), toggle, range, press, hold, tap or wait, "
+    "an `after` naming an earlier knob; the same seed makes the same piece and different seeds "
+    "different ones, a replay plays out the same, it finishes from any order of its knobs within "
+    f"{PIECE_MAX_TAPS} taps and {PIECE_MAX_SECONDS} seconds, with no star unless needsSky, "
+    "ctx.satisfy only for a tap or a wait knob and only after the visitor has set something, and "
+    "opened on its own card it differs from itself opened on another's; spark(env) differs "
+    "between seeds; nothing in the module reaches document, window, Math.random, Date, "
+    "performance, a timer, fetch or storage, which throw in the harness even at import; paint, "
+    "animate and a spark's paint never throw across sixty rolled variants, draw more than three "
+    "calls on the plain variant, differ between the plain, the low and the high variant, and "
+    "give at least forty distinct pictures from sixty configurations, using only the canvas "
+    "methods the harness stubs (save, restore, translate, rotate, scale, setTransform, "
+    "resetTransform, beginPath, closePath, moveTo, lineTo, arc, arcTo, ellipse, rect, roundRect, "
+    "quadraticCurveTo, bezierCurveTo, fill, stroke, clip, fillRect, strokeRect, clearRect, "
+    "fillText, strokeText, setLineDash, drawImage, createRadialGradient, createLinearGradient, "
+    "measureText, getImageData -- no createPattern, createConicGradient, putImageData or "
+    f"getTransform). \"{PIECE_HARNESS_REL}\" and \"{CARD_VARIANT_HARNESS_REL}\" play all of that. "
+    "Its page stays front matter and the two lines that include the stage; its line in "
+    f"\"{WORLDS_DATA}\" keeps file, name, orientation, mood, aspect and what, in the list's "
+    f"order; its mood is one of {MOOD_SHEET}'s palettes, each written on one line as two spaces, "
+    "the mood, a colon and four lowercase hex seeds in parentheses; and its <loc> stays in "
+    f"{SITEMAP}. The word midnight stays in at least two modules. "
+)
+FRAMEWORK_PINS = (
+    "For the framework, everything the navigation and the persona are held to holds here too "
+    "(the ids the layout writes for them, the lines the shell's script keeps, the rule blocks "
+    "and section comments of the partials, the eight fixed rules, the one ::backdrop in "
+    f"_persona.scss and in _controls.scss, the one saturate(70%)), and so does what a world is "
+    "held to (the module contract the harnesses play). " + SHELL_SCRIPT_PINS +
+    f"In \"{STAGE_SCRIPT}\": \"lightTheWayOn(true)\", \"dimTheWayOn()\", \"ui.onward.focus(\", "
+    "\"function finish() {\" with no next() in its body, \"feature(world.mood, opts.seeds, "
+    "variant)\", \"root.dataset.featured = mood\", \"delete root.dataset.featured\", "
+    "\"function goHome() {\" with unfeature() in its body, \"const SEEDS = ['bg', 'bg2', "
+    "'accent', 'accent2'];\", \"someSeeds(recolor(own, variant))\" and never "
+    "setProperty('--fg' or setProperty('--muted', \"function makeEnv(\" with \"variant: variant "
+    "|| PLAIN\" and \"card: card || null\", \"revive(opts.variant, seed)\", \"framed(piece.aspect\", "
+    "\"from './variant.js'\", \"function heading(world, card)\" with no world.what on a line "
+    "that sets ui.title.textContent, \"setProperty('--stage-head'\", \"ui.head.offsetHeight\" and "
+    "\"observe(ui.head)\"; it imports only ./variant.js and the modules; its ids stay (stage, "
+    "stage-burst, stage-inner, stage-world, stage-title, stage-brief, stage-body, stage-scene, "
+    "stage-canvas, stage-done, stage-done-text, stage-knobs, stage-status, stage-wanted, "
+    "stage-progress, stage-next, stage-head, site-worlds) and so do the knob classes is-set and "
+    "is-locked, the .stage-dot progress, the modes done, vanishing, loading, arriving and live, "
+    "the stage:complete event, the way on disabled until 1.2s after a finish and then focused, "
+    f"and nothing moving on by itself (\"{STAGE_HARNESS_REL}\" plays all of that against a stub "
+    "with no document.body or document.querySelector). "
+    f"In \"{STAGE_INCLUDE}\": id='stage-next' as a <button type='button' class='stage-next' "
+    "with disabled and aria-label= and never the text Next, outside #stage-inner; id='stage-head'; "
+    "data-stage-world on every world page; data-threshold='true' and id='persona-probe' on "
+    "index.html. In \"js/feed.js\": \"function shown(m)\", \"seeds: palette(card, m)\", "
+    "\"variant: m.variant, card: shown(m)\" and interestingStage.open(file, seed, { ... seeds "
+    f"... variant ... card }}); id='feed-grid' from \"{INCLUDES_DIR}/worlds.njk\" on every page. "
+    f"In \"{VARIANT_SCRIPT}\": the named exports mulberry32, hash, mix, alpha, roll, revive, "
+    "recolor, aspect, light, DIALS, PLAIN and ASPECT_LIMITS (0.6 to 1.9), with the contrast the "
+    "tests hold the recolouring to. "
+    f"In \"{SASS_DIR}/_stage.scss\": \".stage-next {{\" with position: fixed, right: "
+    "var(--nav-inset) and bottom: var(--nav-inset); the first-screen arithmetic the tests "
+    "recompute from .stage, .stage-body, .stage-scene, .stage-side, main's padding and "
+    f"min-height in {SASS_DIR}/_panel.scss and --nav-inset, --page-max, --gutter, --nav-h, "
+    f"--fold-peek, --layer-veil and --layer-front in {SASS_DIR}/_tokens.scss. In "
+    f"\"{MOOD_SHEET}\": at least ten palettes, each on one line as two spaces, the mood, a colon "
+    "and four lowercase hex seeds in parentheses, with tender among them, and a "
+    ":root[data-featured=<mood>] for every mood. In \"css/site.scss\": @use 'lightbox' with "
+    f"single quotes. In \"{WORLDS_DATA}\": the keys worlds, wayIn and finePrint (never offSky "
+    "or underSky), at least ten worlds each with file, name, orientation, mood, aspect and what, "
+    "wayIn beginning with index.html, finePrint exactly privacy.html then terms.html. In "
+    f"\"{MOOD_SCRIPT}\": at least {MIN_MOOD_PROBES} probe: declarations, at least ten worlds "
+    "named, at least six of them not of the sky, and window.threshold with reading(), describe, "
+    "mount, forget, arrival, probes, signals and reducedMotion and the threshold:reading event. "
+    "The pages index.html, moods.html (with its <button id='forget' type='button' "
+    "class='warning'>forget my reading</button>), sitemap.html, privacy.html, terms.html and "
+    "error.html stay, and stay listed and linked. " + STUB_BROWSER_LIMITS
+)
+HELD_IN_PLACE = {"item": ITEM_PINS, "nav": NAV_PINS, "persona": PERSONA_PINS, "overall": FRAMEWORK_PINS}
+
+
+def held_in_place(run):
+    """The block that says what the deploy's tests pin in the area this run works in, so an answer
+    is not refused for moving it -- which is what most refused answers were refused for."""
+    return (
+        "WHAT THE DEPLOY'S TESTS HOLD IN PLACE. An answer is only written once it passes the tests "
+        "every deploy waits on (test.yml), and those tests read the site as committed, by name, and "
+        "play its scripts in harnesses a run cannot change. What they hold in place has to stay "
+        "exactly where it is: change those files by edits that leave every id, class, data "
+        "attribute, exported name, section comment, rule block and file where it is; never rewrite "
+        "one of them whole, merge two of them, or retire a page they read; add beside what is "
+        "there rather than in its place. A test's name says what the site is held to, and an "
+        "answer that renames or removes any of it is refused and the run is spent undoing it. "
+        + HELD_IN_PLACE[run.area] + "\n\n"
+    )
+
+
+def complete_run(run):
+    """What a complete and successful run of this mode is: the one change its mode names, whole,
+    with nothing beside it. The last part of mode_block."""
+    if run.work == "consolidate":
+        return (
+            "A run whose entire change is a cleanup -- fixing, refactoring, unifying, or only "
+            "deleting -- is a complete and successful run. It needs no new thing alongside it, and "
+            "must have none. The site becomes more interesting by becoming a single coherent whole, "
+            "not only by growing, so do not add for the sake of adding: when its code is "
+            "repetitive, broken or inconsistent, cleaning it up is the more interesting change. "
+            "SIZE. The answer is small by design: edits, to the files this mode names, a few "
+            "kilobytes in all, and a file sent whole only when it is new. One coherent stage of a "
+            "cleanup too big for one answer is a whole run; half of a bigger one is not.\n\n"
+        )
+    return (
+        "A run whose entire change is the one thing this mode names, done whole, is a complete "
+        "and successful run. It needs nothing alongside it, and must have nothing: the one change "
+        "that gives a visitor a reason to keep going is the run, and a second change outside this "
+        "mode is not. Build on what is already there rather than starting over, and do not add for "
+        "the sake of adding. SIZE. The answer is small by design: edits, to the files this mode "
+        "names, well inside a quarter of your output limit, and a file sent whole only when it is "
+        "new or rewritten from its first line to its last. One coherent stage of a change too big "
+        "for one answer is a whole run; half of a bigger one is not.\n\n"
+    )
+
+
+def mode_block(run):
+    """What this run does, now that it has looked: the one block of the system prompt that differs
+    by mode -- the work, what the deploy's tests hold in place where that work is, and what a
+    complete run of it is."""
+    return work_block(run) + held_in_place(run) + complete_run(run)
+
+
+def then_clause(run):
+    """How the line the model reads last says what to do, by mode: the clause after "and then"."""
+    names = name_items(run.items)
+    if run.work == "consolidate":
+        what = {"item": names or "the one world", "nav": "the navigation", "persona": "the persona",
+                "overall": "the site-wide experience and the framework"}[run.area]
+        return (f"clean up the code and logic of {what} and fix its bugs, by edits that leave what "
+                "the deploy's tests hold in place where it is, and add nothing")
+    if run.mode == "create_item":
+        return ("add one new world as part of the same whole, already federated, and nothing else: "
+                "leave the consolidating, and every other area, to the runs that draw them")
+    where = {"item": f"inside {names or 'the one world'} and {'their' if len(run.items) > 1 else 'its'} own files",
+             "nav": "in the navigation's own files", "persona": "in the persona's own files",
+             "overall": "in the framework's own files"}[run.area]
+    return (f"make the one change that gives a visitor the most reason to stay and keep going, "
+            f"{where}, and leave the consolidating, and every other area, to the runs that draw "
+            "them")
 
 
 def repair_feedback(answer, reason, details="", digest=""):
@@ -2631,6 +3304,20 @@ MODEL_UNAVAILABLE = re.compile(
 # wording is not known, so this reads any error that names the effort or the reasoning as that:
 # the cost of a false match is one more call to the same model, without the flag.
 EFFORT_REFUSED = re.compile(r"reasoning|effort", re.I)
+# What the CLI says when the failure is the kind that passes: a rate limit, an overloaded or
+# unreachable gateway, a dropped connection. The same model is asked again after a pause
+# (RETRY_PAUSE_SECONDS) rather than at once, and the pause never eats into the time a call needs.
+TRANSIENT_ERROR = re.compile(
+    r"rate.?limit|too many requests|\b(?:429|500|502|503|504)\b|overloaded|temporarily|try again"
+    r"|ECONNRESET|ECONNREFUSED|ETIMEDOUT|EAI_AGAIN|socket hang up|fetch failed|network", re.I)
+RETRY_PAUSE_SECONDS = 30
+
+
+def pause_before_retry(seconds):
+    """Wait `seconds` before asking a model again after a transient CLI failure (see main). A seam
+    of its own rather than a bare time.sleep, so a test can watch for the retry pause without also
+    catching the brief sleeps subprocess uses while it waits for the CLI to exit."""
+    time.sleep(seconds)
 
 
 def call_model(model, prompt, effort=None, budget=None, timeout=None):
@@ -3246,9 +3933,14 @@ def main():
     def time_left():
         return RUN_BUDGET_SECONDS - (time.monotonic() - started)
 
-    kind = run_kind()
-    mission = mission_of(kind)
-    shown, omitted = split_for_prompt(read_site())
+    files = read_site()
+    run = deal_run(files)
+    mission = mission_of(run)
+    existing = {rel for rel, _ in files}
+    shown, omitted = split_for_prompt(files, focus_files(run, files))
+    drawn = f"; drawn: {name_items(run.items)}" if run.items else ""
+    print(f"Mode:    {run.mode} ({MODE_MARBLES[run.mode]} of {sum(MODE_MARBLES.values())} marbles{drawn})",
+          flush=True)
     # Resolved once for the whole run: the prompt names the budget and every call asks for it, so
     # the answer the model plans for is the answer the CLI is told to allow.
     budget = max_output_tokens()
@@ -3280,6 +3972,17 @@ def main():
             print(f"::notice::Reasoning effort {effort} -> {lowered} for the rest of this run.")
             effort = lowered
 
+    def strayed_note(plan):
+        # What the answer changed outside its mode's own files, if anything: named back to the
+        # model with the refusal, since that is where an answer the tests refuse usually fell.
+        outside = strays(run, plan, existing) if isinstance(plan, dict) else []
+        if not outside:
+            return ""
+        return ("Outside this run's own files, your answer also changed: "
+                + ", ".join(outside) + ". This run's mode works in its own files: put those back "
+                "as the site above shows them unless the change cannot work without them, and "
+                "then make it the smallest edit that does.")
+
     queue, answering = list(candidates), []
     while queue and attempts < MAX_ATTEMPTS:
         if time_left() < MIN_CALL_SECONDS:
@@ -3295,9 +3998,9 @@ def main():
         # REPAIR_ROUNDS times (see repair_feedback); then the next model is asked.
         while True:
             rounds = f" (repair {repairs} of {REPAIR_ROUNDS})" if repairs else ""
-            print(f"Mission: {mission} ({kind} run)\nModel:   {model}{rounds}\n"
+            print(f"Mission: {mission} ({run.mode} run)\nModel:   {model}{rounds}\n"
                   f"Effort:  {effort or 'the model' + chr(39) + 's own'}", flush=True)
-            prompt = build_prompt(shown, omitted, kind, budget, feedback)
+            prompt = build_prompt(shown, omitted, run, budget, feedback)
             answer = plan = None
             try:
                 answer = call_model(model, prompt, effort=effort, budget=budget,
@@ -3338,10 +4041,34 @@ def main():
                     feedback = repair_feedback(None, reason)
                 elif isinstance(err, ModelError):
                     feedback = ""  # the CLI failed, not the model: the same question, once more
+                    if TRANSIENT_ERROR.search(reason):
+                        # A rate limit or a gateway that is down is not helped by asking at once.
+                        pause = min(RETRY_PAUSE_SECONDS, time_left() - MIN_CALL_SECONDS)
+                        if pause > 0:
+                            print(f"::notice::That reads as a passing failure; waiting {pause:g}s "
+                                  "before asking again.")
+                            pause_before_retry(pause)
                 elif isinstance(err, RejectedChange):
-                    feedback = repair_feedback(answer, reason, err.details, plan_digest(plan))
+                    details = "\n\n".join(part for part in (err.details, strayed_note(plan)) if part)
+                    feedback = repair_feedback(answer, reason, details, plan_digest(plan))
                 else:
                     feedback = repair_feedback(answer, reason)
+                continue
+            except Exception as err:  # noqa: BLE001 -- see below
+                # Neither the answer nor the CLI: this script's own checking failed, on a build, a
+                # harness, a copy of the repository, or a fault of its own. Said in full in the
+                # log, and treated as a CLI failure is: the same model is asked the same question
+                # once more, bounded like every other path, rather than the run dying with an
+                # answer in hand.
+                if not repairs:
+                    answering.append(model)
+                print(f"::warning::{model} failed: this script's own checking raised "
+                      f"{type(err).__name__}: {one_line(err, 300)}")
+                traceback.print_exc()
+                if repairs >= REPAIR_ROUNDS or time_left() < MIN_CALL_SECONDS:
+                    break
+                repairs += 1
+                feedback = ""
                 continue
             else:
                 try:
@@ -3353,8 +4080,9 @@ def main():
                 print(f"Summary: {summary}")
                 set_output("model", model)
                 set_output("summary", summary)
-                set_output("kind", kind)
-                set_output("headline", HEADLINES[kind])
+                set_output("mode", run.mode)
+                set_output("items", name_items(run.items))
+                set_output("headline", headline_of(run))
                 report_unavailable()
                 return
         if not queue:

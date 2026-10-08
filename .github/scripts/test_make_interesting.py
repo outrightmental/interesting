@@ -6,6 +6,7 @@ Run with:  python3 -m unittest discover -s .github/scripts -v
 
 import json
 import os
+import random
 import re
 import shlex
 import shutil
@@ -824,11 +825,11 @@ class RepairFeedbackTest(unittest.TestCase):
 class WholeSiteReviewTest(unittest.TestCase):
     """Issue #16: every run begins by weighing the site as a whole, and federating what is already
     there is a successful run in its own right, not a lesser outcome than adding a page. Now that
-    runs alternate (AlternatingRunsTest), the federating is the consolidating run's whole work and
-    the adding is the growing run's; the weighing is both runs'."""
+    a run's mode is drawn from a bag (MarbleBagTest), the federating is the consolidating modes'
+    whole work and the adding is the creating mode's; the weighing is every mode's."""
 
-    def prompt(self, omitted=(), kind=mi.INTERESTING_RUN):
-        return mi.build_prompt([("index.html", "<h1>hi</h1>")], omitted, kind)
+    def prompt(self, omitted=(), mode=mi.DEFAULT_MODE):
+        return mi.build_prompt([("index.html", "<h1>hi</h1>")], omitted, mi.Run(mode))
 
     def test_the_mission_string_itself_carries_the_holistic_aim(self):
         # Issue #16, question 4: the mission string itself should change, not only the surrounding
@@ -838,19 +839,20 @@ class WholeSiteReviewTest(unittest.TestCase):
         self.assertIn("coherent whole", mi.MISSION)
 
     def test_every_run_is_asked_to_weigh_the_site_as_a_whole_first(self):
-        for kind, choice in [(mi.INTERESTING_RUN, "ADD something"), (mi.CONSOLIDATION_RUN, "RE-FEDERATE")]:
-            with self.subTest(kind=kind):
-                prompt = self.prompt(kind=kind)
+        for mode, choice in [("create_item", "ADD one world"), ("enhance_item", "Make it more interesting"),
+                             ("consolidate_overall", "RE-FEDERATE")]:
+            with self.subTest(mode=mode):
+                prompt = self.prompt(mode=mode)
                 self.assertIn("Every run begins this way", prompt)
                 self.assertIn("look at the site as a whole", prompt)
                 self.assertLess(prompt.index("site as a whole"), prompt.index(choice),
                                 "the review has to come before the choice of change")
 
     def test_federation_is_offered_as_concretely_as_adding(self):
-        # The growing run is told what to add; the consolidating run is told what to federate, by
+        # The creating run is told what to add; the consolidating run is told what to federate, by
         # the source paths a run actually writes and the built path a page links (issue #36).
-        self.assertIn("add something", self.prompt().lower())
-        prompt = self.prompt(kind=mi.CONSOLIDATION_RUN).lower()
+        self.assertIn("add one world", self.prompt(mode="create_item").lower())
+        prompt = self.prompt(mode="consolidate_overall").lower()
         self.assertIn("federate", prompt)
         for move in ["shared files", "css/site.scss", "css/site.css", "js/site.js",
                      "header and navigation", "visual language", "merge pages that overlap",
@@ -861,19 +863,19 @@ class WholeSiteReviewTest(unittest.TestCase):
     def test_a_run_that_only_federates_is_called_a_success(self):
         # validate_plan() has always accepted a plan that only deletes; the consolidating run's
         # prompt invites one, and both kinds are told that deleting is accepted.
-        prompt = self.prompt(kind=mi.CONSOLIDATION_RUN)
+        prompt = self.prompt(mode="consolidate_overall")
         self.assertIn("complete and successful run", prompt)
         self.assertIn("only deleting", prompt)
-        for kind in mi.RUN_KINDS:
-            with self.subTest(kind=kind):
-                prompt = self.prompt(kind=kind)
+        for mode in mi.MODES:
+            with self.subTest(mode=mode):
+                prompt = self.prompt(mode=mode)
                 self.assertIn("only deletes is accepted", prompt)
                 self.assertIn("do not add for the sake of adding", prompt)
 
     def test_a_federation_may_not_leave_the_site_half_done(self):
-        for kind in mi.RUN_KINDS:
-            with self.subTest(kind=kind):
-                prompt = self.prompt(kind=kind)
+        for mode in mi.MODES:
+            with self.subTest(mode=mode):
+                prompt = self.prompt(mode=mode)
                 self.assertIn("Leave the site working at the end of the run", prompt)
                 self.assertIn("update every page that refers to it in the same run", prompt)
                 self.assertIn("coherent stages", prompt)  # a federation too big for one answer
@@ -915,15 +917,15 @@ class SingleExperienceTest(SiteDirTestCase):
 
     Issue #16 made the holistic pass a habit and federation a permitted outcome; issue #36 made
     the pass unconditional, re-federating the default work of a run, and adding the exception that
-    still had to arrive federated. Runs now alternate (AlternatingRunsTest): the pass is still
-    unconditional and the same for both kinds, re-federating aggressively is the whole of a
-    consolidating run, and what a growing run adds still has to arrive federated."""
+    still had to arrive federated. A run's mode is now drawn from a bag (MarbleBagTest): the pass
+    is still unconditional and the same for every mode, re-federating is the whole of the
+    consolidating modes, and what a creating run adds still has to arrive federated."""
 
-    def prompt(self, omitted=(), kind=mi.INTERESTING_RUN):
-        return mi.build_prompt([("index.html", "<h1>hi</h1>")], omitted, kind)
+    def prompt(self, omitted=(), mode=mi.DEFAULT_MODE):
+        return mi.build_prompt([("index.html", "<h1>hi</h1>")], omitted, mi.Run(mode))
 
     def consolidating(self, omitted=()):
-        return self.prompt(omitted, mi.CONSOLIDATION_RUN)
+        return self.prompt(omitted, "consolidate_overall")
 
     def test_the_whole_is_named_as_its_own_standard(self):
         # Spelled out here rather than imported, so rewording WHOLE into something that no longer
@@ -936,40 +938,39 @@ class SingleExperienceTest(SiteDirTestCase):
         self.assertTrue(mi.MISSION.startswith("make the website more interesting"))
 
     def test_every_run_envisions_the_whole_before_it_chooses_anything(self):
-        for kind, choice in [(mi.INTERESTING_RUN, "ADD something"), (mi.CONSOLIDATION_RUN, "RE-FEDERATE")]:
-            prompt = self.prompt(kind=kind)
+        for mode, choice in [("create_item", "ADD one world"), ("consolidate_overall", "RE-FEDERATE")]:
+            prompt = self.prompt(mode=mode)
             self.assertIn("ENVISION THE WHOLE FIRST", prompt)
             for insistence in ["Every run begins this way", "with no exceptions",
                                "before you choose anything"]:
-                with self.subTest(kind=kind, insistence=insistence):
+                with self.subTest(mode=mode, insistence=insistence):
                     self.assertIn(insistence, prompt)
-            # The pass comes before the kind's own block and before the Rules block, so a run holds
+            # The pass comes before the mode's own block and before the Rules block, so a run holds
             # the aim while the choice is still open rather than as a constraint on a settled one.
             for later in [choice, "Rules:"]:
-                with self.subTest(kind=kind, later=later):
+                with self.subTest(mode=mode, later=later):
                     self.assertLess(prompt.index("ENVISION THE WHOLE FIRST"), prompt.index(later))
 
     def test_the_one_experience_is_spelled_out_rather_than_gestured_at(self):
-        for kind, block in [(mi.INTERESTING_RUN, "THIS RUN GROWS"), (mi.CONSOLIDATION_RUN, "THIS RUN CONSOLIDATES")]:
-            envision = self.prompt(kind=kind)
-            envision = envision[envision.index("ENVISION THE WHOLE FIRST"):envision.index(block)]
+        for mode in mi.MODES:
+            envision = self.prompt(mode=mode)
+            envision = envision[envision.index("ENVISION THE WHOLE FIRST"):envision.index("THIS RUN ")]
             for through_line in ["one navigation", "one visual language", "one through-line"]:
-                with self.subTest(kind=kind, through_line=through_line):
+                with self.subTest(mode=mode, through_line=through_line):
                     self.assertIn(through_line, envision)
             self.assertIn(mi.WHOLE, envision)
 
     def test_re_federating_is_the_whole_work_of_a_consolidating_run(self):
-        # Issue #36, question 1, as the alternation keeps it: not "federating is also welcome" but
-        # "this is what the run does" -- and on a consolidating run, all it does.
+        # Issue #36, question 1, as the bag keeps it: not "federating is also welcome" but "this is
+        # what the run does" -- and on a consolidating run, all it does.
         prompt = self.consolidating()
-        self.assertIn("RE-FEDERATE, AGGRESSIVELY", prompt)
-        for posture in ["Leave the site more of a single piece than you found it",
-                        "It adds nothing",
-                        "Be aggressive about it",
-                        "the consolidation that is overdue rather than the one that is merely easy"]:
+        self.assertIn("RE-FEDERATE where the pages repeat what a shared file should do once", prompt)
+        for posture in ["It adds nothing",
+                        "take on the one that is overdue rather than the one that is merely easy",
+                        "a consolidation that changes behaviour by accident is a regression, not a cleanup"]:
             with self.subTest(posture=posture):
                 self.assertIn(posture, prompt)
-        self.assertNotIn("ADD something", prompt)
+        self.assertNotIn("ADD one world", prompt)
 
     def test_re_federating_names_every_shared_file_it_reaches(self):
         federate = self.consolidating()
@@ -978,7 +979,7 @@ class SingleExperienceTest(SiteDirTestCase):
                        "js/site.js"]:
             with self.subTest(target=target):
                 self.assertIn(target, federate)
-        for move in ["markup, styles and behaviour that the pages repeat",
+        for move in ["markup, styles and behaviour that the pages or the modules repeat",
                      "the same header and navigation", "one visual language and hold every page to it"]:
             with self.subTest(move=move):
                 self.assertIn(move, federate)
@@ -987,50 +988,53 @@ class SingleExperienceTest(SiteDirTestCase):
         # Issue #36, question 4: yes -- the pages themselves, not only the markup they share.
         federate = self.consolidating()
         federate = federate[federate.index("RE-FEDERATE"):federate.index("REFACTOR AND CLEAN UP")]
-        self.assertIn("Merge pages that overlap", federate)
+        self.assertIn("merge pages that overlap", federate)
         self.assertIn("retire the ones that no longer earn their place", federate)
         self.assertIn("fewer pages that belong together than as more that do not", federate)
 
-    def test_what_a_growing_run_adds_arrives_already_federated(self):
-        add = self.prompt()
-        add = add[add.index("ADD something"):add.index("LEGIBLE TO A STRANGER")]
+    def test_what_a_creating_run_adds_arrives_already_federated(self):
+        add = self.prompt(mode="create_item")
+        add = add[add.index("ADD one world"):add.index("LEGIBLE TO A STRANGER")]
         self.assertIn("arrives already federated, in the same run", add)
-        self.assertIn("A page that stands apart leaves the site less of a whole", add)
-        self.assertIn("held to the whole as firmly as a consolidating one", add)
-        self.assertIn("nothing you add may repeat what a shared file already does", self.prompt())
+        self.assertIn("dealt by the feed and played on the stage like every other world", add)
+        self.assertIn("nothing it adds may repeat what a shared file already does", add)
+        # And what an enhancing run adds builds on what is there, inside the one whole.
+        for mode in ["enhance_item", "enhance_nav", "enhance_persona", "enhance_overall"]:
+            with self.subTest(mode=mode):
+                self.assertIn("Build on what is already there rather than starting over", self.prompt(mode=mode))
 
     def test_the_aim_is_in_hand_at_both_ends_of_the_run(self):
         # The restatement pattern this repository uses for its standards (see EngagementTimeTest):
         # stated before a run chooses what to do, and again in the line it reads last.
-        for kind in mi.RUN_KINDS:
-            with self.subTest(kind=kind):
-                prompt = self.prompt(kind=kind)
+        for mode in mi.MODES:
+            with self.subTest(mode=mode):
+                prompt = self.prompt(mode=mode)
                 self.assertGreaterEqual(prompt.count(mi.WHOLE), 2)
                 self.assertLess(prompt.index(mi.WHOLE), prompt.index("Rules:"))
-                last = prompt[prompt.index(f"This run's mission: {mi.mission_of(kind)}"):]
+                last = prompt[prompt.index(f"This run's mission: {mi.mission_of(mi.Run(mode))}"):]
                 self.assertIn(f"Envision all of the above as {mi.WHOLE}", last)
         last = self.consolidating()
         last = last[last.index("This run's mission:"):]
-        self.assertIn("re-federate what is already there, aggressively", last)
+        self.assertIn("clean up the code and logic of the site-wide experience and the framework and fix its bugs", last)
         self.assertIn("and add nothing", last)
-        last = self.prompt()
+        last = self.prompt(mode="create_item")
         last = last[last.index("This run's mission:"):]
-        self.assertIn("add something new only as part of the same whole", last)
-        self.assertIn("leave the consolidating to the run that follows", last)
+        self.assertIn("add one new world as part of the same whole, already federated, and nothing else", last)
+        self.assertIn("leave the consolidating, and every other area, to the runs that draw them", last)
 
     def test_a_federation_the_run_cannot_finish_is_carried_on_by_the_next(self):
         # Aggressive, not reckless: the answer limit has not moved, so the way to be aggressive
         # about something too big for one answer is to stage it, never to leave it half done.
-        for kind in mi.RUN_KINDS:
-            with self.subTest(kind=kind):
-                prompt = self.prompt(kind=kind)
+        for mode in mi.MODES:
+            with self.subTest(mode=mode):
+                prompt = self.prompt(mode=mode)
                 self.assertIn("coherent stages", prompt)
                 self.assertIn("Leave the site working at the end of the run", prompt)
 
     def test_the_files_a_run_cannot_see_still_count_as_part_of_the_whole(self):
-        for kind in mi.RUN_KINDS:
-            with self.subTest(kind=kind):
-                prompt = self.prompt(["hidden.html"], kind)
+        for mode in mi.MODES:
+            with self.subTest(mode=mode):
+                prompt = self.prompt(["hidden.html"], mode)
                 self.assertIn("count them as part of the piece when you weigh the site as a whole", prompt)
                 self.assertIn("carried on by a later run", prompt)
 
@@ -1058,108 +1062,393 @@ class SingleExperienceTest(SiteDirTestCase):
 
 
 
-class AlternatingRunsTest(unittest.TestCase):
-    """Runs alternate: an odd-numbered run grows the site and an even-numbered run consolidates
-    it, and each kind gets a whole answer to itself. The kind follows from the workflow's run
-    number (`n % 2`), the manual input can name one, and the prompt, the console line, the
-    summary's fallback and the commit headline all follow the kind."""
+class MarbleBagTest(SiteDirTestCase):
+    """What a run does is drawn from a bag of marbles: a mode -- a kind of work on one area of the
+    site -- with as many marbles in the bag as its weight says, drawn once per run. An item mode
+    draws the world it works on the same way. The manual input can name a mode, or a kind of work
+    to draw among; the prompt, the console line, the outputs and the commit headline all follow
+    the draw, and each mode's block of the prompt names its files and what the deploy's tests
+    hold in place there."""
 
-    def prompt(self, kind):
-        return mi.build_prompt([("index.html", "<h1>hi</h1>")], (), kind)
+    WORLDS = [{"file": "quiet-room.html", "name": "the quiet room", "orientation": "banked low",
+               "mood": "tender", "aspect": "1 / 1", "what": "Set the pace of a breath."},
+              {"file": "loam.html", "name": "loam", "orientation": "low and slow", "mood": "rooted",
+               "aspect": "4 / 5", "what": "Plant and water."},
+              {"file": "word-kiln.html", "name": "the word kiln", "orientation": "verbal",
+               "mood": "verbal", "aspect": "5 / 4", "what": "Feed words into the kiln."}]
 
-    def kind(self, **env):
-        with mock.patch.dict(os.environ, {"RUN_KIND": "", "RUN_NUMBER": "", **env}):
+    def prompt(self, mode, items=(), omitted=()):
+        return mi.build_prompt([("index.html", "<h1>hi</h1>")], omitted, mi.Run(mode, items))
+
+    def mode(self, **env):
+        with mock.patch.dict(os.environ, {"RUN_MODE": "", **env}):
             with mock.patch("builtins.print") as printed:
-                return mi.run_kind(), " ".join(str(call.args[0]) for call in printed.call_args_list)
+                return mi.chosen_mode(), " ".join(str(call.args[0]) for call in printed.call_args_list)
 
-    def test_odd_runs_grow_and_even_runs_consolidate(self):
-        for number in range(1, 11):
-            with self.subTest(number=number):
-                expected = mi.INTERESTING_RUN if number % 2 else mi.CONSOLIDATION_RUN
-                self.assertEqual(self.kind(RUN_NUMBER=str(number)), (expected, ""))
+    def test_the_weights_are_the_ones_asked_for(self):
+        # Spelled out rather than imported, so a weight cannot drift without a test saying so.
+        self.assertEqual(mi.MODE_MARBLES, {
+            "create_item": 1, "enhance_item": 14, "enhance_nav": 5, "enhance_persona": 4,
+            "enhance_overall": 5, "consolidate_item": 4, "consolidate_nav": 2,
+            "consolidate_persona": 3, "consolidate_overall": 4})
+        self.assertEqual(mi.MODES, tuple(mi.MODE_MARBLES))
+        for mode in mi.MODES:
+            work, area = mode.split("_", 1)
+            self.assertIn(work, mi.WORKS)
+            self.assertIn(area, mi.AREAS)
+        self.assertEqual(mi.DEFAULT_MODE, max(mi.MODE_MARBLES, key=mi.MODE_MARBLES.get))
 
-    def test_a_kind_named_by_hand_wins_over_the_run_number(self):
-        self.assertEqual(self.kind(RUN_KIND="consolidate", RUN_NUMBER="7"), (mi.CONSOLIDATION_RUN, ""))
-        self.assertEqual(self.kind(RUN_KIND=" Interesting ", RUN_NUMBER="8"), (mi.INTERESTING_RUN, ""))
-        # The form's default: decide by the number, and say nothing about it.
-        self.assertEqual(self.kind(RUN_KIND="auto", RUN_NUMBER="8"), (mi.CONSOLIDATION_RUN, ""))
+    def test_the_bag_holds_one_marble_per_unit_of_weight(self):
+        bag = mi.marble_bag(mi.MODE_MARBLES)
+        self.assertEqual(len(bag), 42)
+        for mode, weight in mi.MODE_MARBLES.items():
+            with self.subTest(mode=mode):
+                self.assertEqual(bag.count(mode), weight)
+        self.assertEqual(bag[:2], ["create_item", "enhance_item"], "in the order the weights were given")
+        self.assertEqual(mi.marble_bag({"a": 0, "b": -1, "c": "2", "d": 2}), ["d", "d"])
+        self.assertIsNone(mi.draw_marble({}))
 
-    def test_an_unknown_kind_is_warned_about_and_the_number_decides(self):
-        kind, log = self.kind(RUN_KIND="tidy", RUN_NUMBER="8")
-        self.assertEqual(kind, mi.CONSOLIDATION_RUN)
-        self.assertIn("'tidy' is not one of interesting, consolidate", log)
+    def test_a_draw_is_one_marble_from_the_whole_bag(self):
+        bags = []
 
-    def test_a_run_with_neither_grows_the_site(self):
-        self.assertEqual(self.kind(), (mi.INTERESTING_RUN, ""))
-        self.assertEqual(self.kind(RUN_NUMBER="not a number"), (mi.INTERESTING_RUN, ""))
+        def choice(bag):
+            bags.append(list(bag))
+            return bag[-1]
 
-    def test_the_two_kinds_differ_in_one_block_of_the_prompt(self):
-        growing, consolidating = self.prompt(mi.INTERESTING_RUN), self.prompt(mi.CONSOLIDATION_RUN)
-        # Everything from the look at the whole up to the kind's own block is the same...
-        self.assertEqual(growing[growing.index("ENVISION"):growing.index("THIS RUN")],
-                         consolidating[consolidating.index("ENVISION"):consolidating.index("THIS RUN")])
-        # ...and so is everything from the legibility holds to the line read last: the holds, the
-        # build, the nine axioms and the format are not the kind's to vary.
-        holds = "LEGIBLE TO A STRANGER. Everything above"  # the heading, not the block's mention of it
-        self.assertEqual(growing[growing.index(holds):growing.index("This run's mission")],
-                         consolidating[consolidating.index(holds):consolidating.index("This run's mission")])
-        self.assertEqual(growing.count("AXIOM, every run"), consolidating.count("AXIOM, every run"))
-        self.assertEqual(growing.count("AXIOM, every run"), len(CODED_AXIOMS))
+        with mock.patch.object(mi.random, "choice", choice):
+            self.assertEqual(self.mode(), ("consolidate_overall", ""))
+            self.assertEqual(self.mode(RUN_MODE="auto"), ("consolidate_overall", ""))
+        self.assertEqual(bags, [mi.marble_bag(mi.MODE_MARBLES)] * 2)
 
-    def test_a_growing_run_is_told_to_add_and_not_to_tidy(self):
-        prompt = self.prompt(mi.INTERESTING_RUN)
-        for line in ["THIS RUN GROWS THE SITE", "this is the growing run", "ADD something",
-                     "none of it on tidying", "belongs to the run that follows this one",
-                     "one change that gives a visitor a reason to keep going is the run",
-                     "leave the consolidating to the run that follows"]:
-            with self.subTest(line=line):
-                self.assertIn(line, prompt)
-        for absent in ["THIS RUN CONSOLIDATES", "RE-FEDERATE, AGGRESSIVELY", "REFACTOR AND CLEAN UP"]:
-            with self.subTest(absent=absent):
-                self.assertNotIn(absent, prompt)
+    def test_the_draw_follows_the_weights(self):
+        random.seed(20261008)
+        drawn = [mi.draw_marble(mi.MODE_MARBLES) for _ in range(4200)]
+        for mode, weight in mi.MODE_MARBLES.items():
+            with self.subTest(mode=mode):
+                self.assertAlmostEqual(drawn.count(mode) / 100, weight, delta=max(1.5, weight / 4))
 
-    def test_a_consolidating_run_is_told_to_add_nothing(self):
-        prompt = self.prompt(mi.CONSOLIDATION_RUN)
-        for line in ["THIS RUN CONSOLIDATES THE SITE", "this is the consolidating run", "It adds nothing",
-                     "no new page, no new world, no new piece, no new query mechanism, no new feature",
-                     "RE-FEDERATE, AGGRESSIVELY", "REFACTOR AND CLEAN UP",
-                     "a consolidation that changes behaviour by accident is a regression, not a cleanup",
-                     "It needs no new page alongside it, and must have none", "and add nothing"]:
-            with self.subTest(line=line):
-                self.assertIn(line, prompt)
-        for absent in ["THIS RUN GROWS", "ADD something"]:
-            with self.subTest(absent=absent):
-                self.assertNotIn(absent, prompt)
+    def test_a_mode_named_by_hand_wins_over_the_bag(self):
+        with mock.patch.object(mi.random, "choice", side_effect=AssertionError("the bag was drawn from")):
+            for mode in mi.MODES:
+                with self.subTest(mode=mode):
+                    self.assertEqual(self.mode(RUN_MODE=mode), (mode, ""))
+            self.assertEqual(self.mode(RUN_MODE=" Enhance-Nav "), ("enhance_nav", ""))
 
-    def test_the_mission_follows_the_kind_at_both_ends(self):
-        self.assertEqual(mi.mission_of(mi.INTERESTING_RUN), mi.MISSION)
-        self.assertEqual(mi.mission_of(mi.CONSOLIDATION_RUN), mi.CONSOLIDATION_MISSION)
-        self.assertNotEqual(mi.MISSION, mi.CONSOLIDATION_MISSION)
-        for word in ["consolidate", "federate", "refactor", "clean up"]:
-            with self.subTest(word=word):
-                self.assertIn(word, mi.CONSOLIDATION_MISSION)
-        for kind in mi.RUN_KINDS:
-            with self.subTest(kind=kind):
-                prompt = self.prompt(kind)
-                self.assertIn(f"Your mission this run: {mi.mission_of(kind)}", prompt)
-                self.assertIn(f"This run's mission: {mi.mission_of(kind)}, measured in {mi.INTERESTING}", prompt)
+    def test_a_kind_of_work_draws_among_its_own_modes(self):
+        bags = []
 
-    def test_the_summary_falls_back_to_the_mission_of_the_kind(self):
+        def choice(bag):
+            bags.append(list(bag))
+            return bag[0]
+
+        with mock.patch.object(mi.random, "choice", choice):
+            self.assertEqual(self.mode(RUN_MODE="consolidate"), ("consolidate_item", ""))
+            self.assertEqual(self.mode(RUN_MODE="enhance"), ("enhance_item", ""))
+            self.assertEqual(self.mode(RUN_MODE="create"), ("create_item", ""))
+            # The old name for the runs that grow the site: everything but consolidating.
+            self.assertEqual(self.mode(RUN_MODE="interesting"), ("create_item", ""))
+        self.assertEqual(sorted(set(bags[0])), ["consolidate_item", "consolidate_nav",
+                                                "consolidate_overall", "consolidate_persona"])
+        self.assertEqual(bags[0].count("consolidate_item"), 4)
+        self.assertEqual(sorted(set(bags[1])), ["enhance_item", "enhance_nav", "enhance_overall", "enhance_persona"])
+        self.assertEqual(bags[2], ["create_item"])
+        self.assertEqual(sorted(set(bags[3])), ["create_item", "enhance_item", "enhance_nav",
+                                                "enhance_overall", "enhance_persona"])
+
+    def test_an_unknown_mode_is_warned_about_and_the_bag_decides(self):
+        mode, log = self.mode(RUN_MODE="tidy")
+        self.assertIn(mode, mi.MODES)
+        self.assertIn("'tidy' is not one of create_item, enhance_item", log)
+        self.assertIn("drawing from the bag instead", log)
+
+    def test_the_worlds_are_read_from_the_data(self):
+        files = [("index.html", "x"), (mi.WORLDS_DATA, json.dumps({"worlds": self.WORLDS, "wayIn": []}))]
+        self.assertEqual(mi.site_worlds(files), self.WORLDS)
+        self.assertEqual(mi.site_worlds([("index.html", "x")]), [])
+        self.assertEqual(mi.site_worlds([(mi.WORLDS_DATA, "{not json")]), [])
+        self.assertEqual(mi.site_worlds([(mi.WORLDS_DATA, json.dumps(["a list"]))]), [])
+        self.assertEqual(mi.site_worlds([(mi.WORLDS_DATA, json.dumps({"worlds": "x"}))]), [])
+        odd = {"worlds": [{"file": "a.html"}, {"file": 3}, "junk", {"name": "no file"},
+                          {"file": "sub/b.html"}, {"file": "notes.txt"}]}
+        self.assertEqual(mi.site_worlds([(mi.WORLDS_DATA, json.dumps(odd))]), [{"file": "a.html"}])
+
+    def test_an_item_mode_draws_its_worlds_at_random(self):
+        self.assertEqual(mi.draw_items([]), [])
+        self.assertEqual(mi.ITEM_COUNT_MARBLES, {1: 4, 2: 2, 3: 1})
+        with mock.patch.object(mi.random, "choice", lambda bag: 2):
+            drawn = mi.draw_items(self.WORLDS)
+            self.assertEqual(len(drawn), 2)
+            self.assertTrue(all(world in self.WORLDS for world in drawn))
+            self.assertEqual(len(mi.draw_items(self.WORLDS[:1])), 1, "never more than there are")
+        random.seed(7)
+        counts = {len(mi.draw_items(self.WORLDS)) for _ in range(200)}
+        self.assertEqual(counts, {1, 2, 3})
+
+    def test_the_bag_deals_the_run_and_its_worlds(self):
+        files = [("index.html", "x"), (mi.WORLDS_DATA, json.dumps({"worlds": self.WORLDS}))]
+        with mock.patch.object(mi, "chosen_mode", return_value="enhance_item"):
+            run = mi.deal_run(files)
+        self.assertEqual(run.mode, "enhance_item")
+        self.assertTrue(1 <= len(run.items) <= 3)
+        self.assertTrue(all(world in self.WORLDS for world in run.items))
+        for mode in ["create_item", "enhance_nav", "consolidate_overall"]:
+            with mock.patch.object(mi, "chosen_mode", return_value=mode):
+                with self.subTest(mode=mode):
+                    self.assertEqual(mi.deal_run(files), mi.Run(mode))
+        with mock.patch.object(mi, "chosen_mode", return_value="consolidate_item"):
+            self.assertEqual(mi.deal_run([("index.html", "x")]).items, [], "no list, no draw")
+
+    def test_a_run_knows_its_work_its_area_and_its_worlds(self):
+        run = mi.Run("consolidate_item", self.WORLDS[:2])
+        self.assertEqual((run.work, run.area, run.items), ("consolidate", "item", self.WORLDS[:2]))
+        self.assertEqual(mi.Run("create_item", self.WORLDS).items, [], "a creating run makes its own world")
+        self.assertEqual(mi.Run("enhance_nav", self.WORLDS).items, [])
+        self.assertEqual(mi.Run("enhance_item", ["junk", self.WORLDS[0]]).items, self.WORLDS[:1])
+        with self.assertRaises(ValueError):
+            mi.Run("tidy")
+        self.assertEqual(mi.Run("enhance_nav"), mi.Run("enhance_nav"))
+        self.assertNotEqual(mi.Run("enhance_nav"), mi.Run("consolidate_nav"))
+
+    def test_the_drawn_worlds_are_named_as_prose_names_them(self):
+        self.assertEqual(mi.name_items([]), "")
+        self.assertEqual(mi.name_items(self.WORLDS[:1]), "the quiet room")
+        self.assertEqual(mi.name_items(self.WORLDS[:2]), "the quiet room and loam")
+        self.assertEqual(mi.name_items(self.WORLDS), "the quiet room, loam and the word kiln")
+        # A name is the model's own data, so it is cleaned as a summary is before it reaches a
+        # commit message, and a world without one goes by its page.
+        self.assertEqual(mi.world_name({"file": "x.html", "name": "fixes #1 @you <b>now</b>"}), "fixes 1 you bnowb")
+        self.assertEqual(mi.world_name({"file": "quiet-room.html"}), "quiet-room")
+        self.assertEqual(mi.world_name({"file": "quiet-room.html", "name": 7}), "quiet-room")
+        self.assertEqual(mi.world_name({}), "a world")
+        self.assertEqual(len(mi.world_name({"file": "x.html", "name": "n" * 300})), 60)
+
+    def test_the_mission_and_the_headline_follow_the_mode(self):
+        quiet = self.WORLDS[:1]
+        expected = {
+            "create_item": ("Create a world", "creating one new world, federated into the whole"),
+            "enhance_item": ("Enhance the quiet room", "enhancing the quiet room"),
+            "enhance_nav": ("Enhance the navigation", "enhancing the navigation"),
+            "enhance_persona": ("Enhance the persona", "enhancing the persona"),
+            "enhance_overall": ("Enhance the site", "enhancing the site-wide experience and the framework"),
+            "consolidate_item": ("Consolidate the quiet room", "cleaning up the code and logic of the quiet room and fixing its bugs"),
+            "consolidate_nav": ("Consolidate the navigation", "cleaning up the code and logic of the navigation"),
+            "consolidate_persona": ("Consolidate the persona", "cleaning up the code and logic of the persona"),
+            "consolidate_overall": ("Consolidate the site", "cleaning up the code and logic of the site-wide experience"),
+        }
+        for mode, (headline, aim) in expected.items():
+            with self.subTest(mode=mode):
+                run = mi.Run(mode, quiet)
+                self.assertEqual(mi.headline_of(run), headline)
+                mission = mi.mission_of(run)
+                base = mi.CONSOLIDATION_MISSION if run.work == "consolidate" else mi.MISSION
+                self.assertTrue(mission.startswith(base + ", by "), mission)
+                self.assertIn(aim, mission)
+        self.assertEqual(mi.headline_of(mi.Run("enhance_item")), "Enhance a world")
+        self.assertEqual(mi.headline_of(mi.Run("enhance_item", self.WORLDS[:2])), "Enhance the quiet room and loam")
+        self.assertIn("by enhancing one world", mi.mission_of(mi.Run("enhance_item")))
         self.assertEqual(mi.clean_summary("", mi.CONSOLIDATION_MISSION), mi.CONSOLIDATION_MISSION)
         self.assertEqual(mi.clean_summary(None), mi.MISSION)
 
-    def test_the_headline_opens_the_commit_message(self):
-        # The growing run keeps the prefix every AI commit used to carry, so `git log` reads on
-        # unchanged; the consolidating run gets its own. The workflow reads both from the script.
-        self.assertEqual(mi.HEADLINES[mi.INTERESTING_RUN], "Make the website more interesting")
-        self.assertEqual(mi.HEADLINES[mi.CONSOLIDATION_RUN], "Consolidate the website")
+    def test_the_modes_differ_in_one_block_of_the_prompt(self):
+        typical = self.prompt(mi.DEFAULT_MODE)
+        holds = "LEGIBLE TO A STRANGER. Everything above"  # the heading, not the block's mention of it
+        for mode in mi.MODES:
+            with self.subTest(mode=mode):
+                prompt = self.prompt(mode, self.WORLDS[:1])
+                # Everything from the look at the whole up to the mode's own block is the same...
+                self.assertEqual(prompt[prompt.index("ENVISION"):prompt.index("THIS RUN ")],
+                                 typical[typical.index("ENVISION"):typical.index("THIS RUN ")])
+                # ...and so is everything from the legibility holds to the line read last: the
+                # holds, the build, the nine axioms and the format are not the mode's to vary.
+                self.assertEqual(prompt[prompt.index(holds):prompt.index("This run's mission")],
+                                 typical[typical.index(holds):typical.index("This run's mission")])
+                self.assertEqual(prompt.count("AXIOM, every run"), len(CODED_AXIOMS))
+                self.assertLess(prompt.index("THIS RUN "), prompt.index(holds))
+
+    def test_every_mode_says_how_it_was_drawn_and_what_a_whole_run_is(self):
+        for mode in mi.MODES:
+            with self.subTest(mode=mode):
+                prompt = self.prompt(mode)
+                block = prompt[prompt.index("THIS RUN "):prompt.index("LEGIBLE TO A STRANGER. Everything")]
+                for part in ["THE BAG OF MARBLES", f"this run drew {mode}", "enhance_item 14", "of 42",
+                             "leave the rest to the runs that draw them",
+                             "WHAT THE DEPLOY'S TESTS HOLD IN PLACE", "harnesses a run cannot change",
+                             "complete and successful run", "do not add for the sake of adding",
+                             "SIZE. The answer is small by design", "One coherent stage"]:
+                    self.assertIn(part, block, part)
+
+    def test_each_mode_names_its_work_and_its_files(self):
+        quiet = self.WORLDS[:1]
+        said = {
+            "create_item": ["THIS RUN CREATES ONE NEW WORLD", "ADD one world and nothing else",
+                            '"js/modules/thing.js"', "arrives already federated, in the same run",
+                            "does not change for a new world", "Tidy nothing"],
+            "enhance_item": ["THIS RUN ENHANCES THE QUIET ROOM", 'the quiet room ("quiet-room.html", module "js/modules/quiet-room.js"): Set the pace of a breath.',
+                             "Make it more interesting", "Work inside its own files",
+                             "it is not this run's to change", "Add no world and no page, and tidy nothing"],
+            "enhance_nav": ["THIS RUN ENHANCES THE NAVIGATION", "What the navigation is",
+                            "Make getting around more interesting", "Nothing that adds a second navigation"],
+            "enhance_persona": ["THIS RUN ENHANCES THE PERSONA", "What the persona is",
+                                "Make configuring a persona more interesting", "never in a world's module"],
+            "enhance_overall": ["THIS RUN ENHANCES THE WHOLE SITE", "The framework is the layout",
+                                "Not a new world (that is create_item's run)", "only what is shared"],
+            "consolidate_item": ["THIS RUN CONSOLIDATES THE QUIET ROOM: cleans up its code and logic, and fixes its bugs",
+                                 "It adds nothing", "Fix what is broken first", "leave the shell alone"],
+            "consolidate_nav": ["THIS RUN CONSOLIDATES THE NAVIGATION", "It adds nothing",
+                                "a star that lands on another", "regression, not a cleanup"],
+            "consolidate_persona": ["THIS RUN CONSOLIDATES THE PERSONA", "It adds nothing",
+                                    "a star that cannot be placed", "never in a world's module"],
+            "consolidate_overall": ["THIS RUN CONSOLIDATES THE WHOLE SITE", "It adds nothing",
+                                    "RE-FEDERATE", "REFACTOR AND CLEAN UP",
+                                    "overdue rather than the one that is merely easy"],
+        }
+        for mode, parts in said.items():
+            prompt = self.prompt(mode, quiet)
+            for part in parts:
+                with self.subTest(mode=mode, part=part):
+                    self.assertIn(part, prompt)
+        # Two worlds, and a mode with no list to draw from.
+        prompt = self.prompt("enhance_item", self.WORLDS[:2])
+        self.assertIn("THIS RUN ENHANCES THE QUIET ROOM AND LOAM", prompt)
+        self.assertIn("The worlds it works on were drawn for it as well", prompt)
+        self.assertIn("Make them more interesting", prompt)
+        self.assertIn("Work inside their own files", prompt)
+        prompt = self.prompt("enhance_item")
+        self.assertIn("THIS RUN ENHANCES ONE WORLD", prompt)
+        self.assertIn("choose one world yourself", prompt)
+        self.assertIn("THIS RUN CONSOLIDATES ONE WORLD", self.prompt("consolidate_item"))
+
+    def test_each_area_is_told_what_the_tests_hold_in_place_there(self):
+        # The names the tests and the harnesses pin, by area: the ids, the lines, the section
+        # comments, the stub browsers' limits. Refusals were mostly for moving one of these.
+        pinned = {
+            "item": ["For a world", "env.card", "ctx.satisfy only for a tap or a wait knob",
+                     "Math.random", "piece_harness.mjs", "card_variant_harness.mjs"],
+            "nav": ["For the navigation", "sparknav-state-label", "// ---- the state interface",
+                    '"lightbox: lightbox,"', '"One lightbox, shared"', "state · N kept",
+                    "never, not even in a comment", "Exactly eight rules", "nav_harness.mjs",
+                    "no clearTimeout, getComputedStyle, matchMedia, CustomEvent, console"],
+            "persona": ["For the persona", "persona-sheet-probe", "seed a fresh sky", "Kept as it was",
+                        "::backdrop exactly once", "persona.js must not touch window.interestingSite before",
+                        "lightbox_harness.mjs", '"lightbox: lightbox,"'],
+            "overall": ["For the framework", "function finish() {", "stage_harness.mjs",
+                        "@use 'lightbox'", "finePrint exactly privacy.html then terms.html",
+                        f"at least {mi.MIN_MOOD_PROBES} probe: declarations", '"lightbox: lightbox,"',
+                        "forget my reading"],
+        }
+        for mode in mi.MODES:
+            area = mode.split("_", 1)[1]
+            held = mi.held_in_place(mi.Run(mode))
+            for part in pinned[area]:
+                with self.subTest(mode=mode, part=part):
+                    self.assertIn(part, held)
+            self.assertIn(held, self.prompt(mode))
+        self.assertIn("never rewrite one of them whole, merge two of them, or retire a page they read",
+                      mi.held_in_place(mi.Run("enhance_nav")))
+
+    def test_consolidating_modes_add_nothing_and_the_others_tidy_nothing(self):
+        for mode in mi.MODES:
+            with self.subTest(mode=mode):
+                prompt = self.prompt(mode, self.WORLDS[:1])
+                last = prompt[prompt.index("This run's mission:"):]
+                if mode.startswith("consolidate_"):
+                    self.assertIn("It adds nothing", prompt)
+                    self.assertIn("and add nothing", last)
+                    self.assertIn("by edits that leave what the deploy's tests hold in place where it is", last)
+                    self.assertNotIn("ADD one world", prompt)
+                else:
+                    self.assertIn("leave the consolidating, and every other area, to the runs that draw them", last)
+                    self.assertNotIn("It adds nothing", prompt)
+        last = self.prompt("create_item")
+        self.assertIn("add one new world as part of the same whole, already federated", last[last.index("This run's mission:"):])
+        last = self.prompt("enhance_item", self.WORLDS[:2])
+        self.assertIn("inside the quiet room and loam and their own files", last[last.index("This run's mission:"):])
+        last = self.prompt("consolidate_item", self.WORLDS[:1])
+        self.assertIn("clean up the code and logic of the quiet room and fix its bugs", last[last.index("This run's mission:"):])
+
+    def test_the_files_a_mode_works_in_are_shown_first_and_never_left_out(self):
+        files = [("index.html", "i"), ("error.html", "e"), ("a.js", "a" * 12_000), ("b.js", "b" * 12_000),
+                 ("c.js", "c" * 12_000), ("js/site.js", "s" * 100), ("js/modules/c.js", "m" * 12_000)]
+        seen = set()
+        for _ in range(40):
+            with mock.patch.object(mi, "PROMPT_BUDGET_CHARS", 30_000):
+                shown, omitted = mi.split_for_prompt(files, focus=["c.js", "js/site.js", "missing.js", "c.js"])
+            names = [rel for rel, _ in shown]
+            # The protected pages, then the focus in its order, then whatever else fits.
+            self.assertEqual(names[:4], ["index.html", "error.html", "c.js", "js/site.js"], names)
+            self.assertNotIn("c.js", omitted)
+            self.assertEqual(len(names), 5)
+            seen.update(names[4:])
+        self.assertEqual(seen, {"a.js", "b.js", "js/modules/c.js"}, "the rest still rotate")
+        # Without a focus, nothing about the split changes.
+        shown, omitted = mi.split_for_prompt(files)
+        self.assertEqual(len(shown), 7)
+        self.assertEqual(omitted, [])
+
+    def test_the_framework_is_what_is_shared_and_not_a_world(self):
+        for rel in ["_includes/layout.njk", "_sass/_nav.scss", "_data/worlds.json", "css/site.scss",
+                    "js/site.js", "js/stage.js"]:
+            with self.subTest(rel=rel):
+                self.assertTrue(mi.is_framework(rel))
+        for rel in ["js/modules/loam.js", "loam.html", "index.html", "sitemap.xml", "favicon.svg", "a.js"]:
+            with self.subTest(rel=rel):
+                self.assertFalse(mi.is_framework(rel))
+
+    def test_each_mode_focuses_on_its_own_files_and_then_the_framework(self):
+        files = [(rel, "x") for rel in ["index.html", "loam.html", "quiet-room.html", "js/modules/loam.js",
+                                        "js/modules/quiet-room.js", "js/site.js", "js/persona.js",
+                                        "js/stage.js", "js/state.js", "_includes/layout.njk",
+                                        "_sass/_nav.scss", "_sass/_persona.scss", "_sass/_mood.scss",
+                                        "_data/worlds.json", "css/site.scss", "favicon.svg"]]
+        framework = ["_data/worlds.json", "_includes/layout.njk", "_sass/_mood.scss", "_sass/_nav.scss",
+                     "_sass/_persona.scss", "css/site.scss", "js/persona.js", "js/site.js", "js/stage.js"]
+        item = mi.focus_files(mi.Run("enhance_item", self.WORLDS[1:2]), files)
+        self.assertEqual(item[:4], ["loam.html", "js/modules/loam.js", "_data/worlds.json", "_sass/_mood.scss"])
+        self.assertEqual(sorted(item), sorted(set(framework + ["loam.html", "js/modules/loam.js"])))
+        self.assertNotIn("js/state.js", item, "the fixed files are never shown")
+        self.assertNotIn("js/modules/quiet-room.js", item, "another world is not this run's")
+        nav = mi.focus_files(mi.Run("consolidate_nav"), files)
+        self.assertEqual(nav[:4], ["_includes/layout.njk", "js/site.js", "_sass/_nav.scss", "_data/worlds.json"])
+        self.assertEqual(sorted(nav), framework)
+        persona = mi.focus_files(mi.Run("enhance_persona"), files)
+        self.assertEqual(persona[:3], ["js/persona.js", "_includes/layout.njk", "_sass/_persona.scss"])
+        self.assertEqual(mi.focus_files(mi.Run("enhance_overall"), files), framework)
+        # A creating run has no world yet; the data and the palette its lines go in come first.
+        created = mi.focus_files(mi.Run("create_item"), files)
+        self.assertEqual(created[:2], ["_data/worlds.json", "_sass/_mood.scss"])
+        self.assertEqual(sorted(created), framework)
+        self.assertEqual(mi.focus_files(mi.Run("enhance_item", self.WORLDS[1:2])), [], "nothing to show from nothing")
+
+    def test_what_an_answer_changed_outside_its_mode_is_named(self):
+        existing = {"index.html", "loam.html", "quiet-room.html", "js/modules/loam.js", "js/site.js",
+                    "_includes/layout.njk", "_sass/_nav.scss", "_data/worlds.json", "js/threshold.js",
+                    "sitemap.xml", "js/persona.js", "_sass/_mood.scss"}
+        plan = {"files": [{"path": "loam.html"}, {"path": "js/modules/loam.js"}, {"path": "js/site.js"},
+                          {"path": "new.html"}, {"path": "_data/worlds.json"}, "junk", {"path": 3}],
+                "delete": ["quiet-room.html", "js/site.js", 4]}
+        item = mi.Run("enhance_item", self.WORLDS[1:2])
+        self.assertEqual(mi.strays(item, plan, existing), ["js/site.js", "quiet-room.html"])
+        self.assertEqual(mi.strays(mi.Run("enhance_nav"), plan, existing),
+                         ["loam.html", "js/modules/loam.js", "quiet-room.html"])
+        self.assertEqual(mi.strays(mi.Run("enhance_persona"), {"files": [{"path": "index.html"}, {"path": "js/threshold.js"}, {"path": "_sass/_nav.scss"}]}, existing),
+                         ["_sass/_nav.scss"])
+        self.assertEqual(mi.strays(mi.Run("consolidate_overall"), plan, existing), [])
+        self.assertEqual(mi.strays(item, {"files": "x", "delete": None}, existing), [])
+
+    def test_the_workflow_offers_every_mode_and_reads_the_draw_back(self):
         workflow = (mi.REPO_ROOT / ".github" / "workflows" / "make-interesting.yml").read_text()
-        self.assertIn('git commit -m "${HEADLINE}: ${SUMMARY}"', workflow)
-        self.assertNotIn('"Make the website more interesting: ${SUMMARY}"', workflow)
+        self.assertIn("RUN_MODE: ${{ inputs.mode }}", workflow)
+        for option in ["auto", "create", "enhance", "consolidate", *mi.MODES]:
+            with self.subTest(option=option):
+                self.assertIn(f"\n          - {option}\n", workflow)
+        self.assertIn("MODE: ${{ steps.ai.outputs.mode }}", workflow)
+        self.assertIn("ITEMS: ${{ steps.ai.outputs.items }}", workflow)
         self.assertIn("HEADLINE: ${{ steps.ai.outputs.headline }}", workflow)
-        self.assertIn("RUN_NUMBER: ${{ github.run_number }}", workflow)
-        self.assertIn("RUN_KIND: ${{ inputs.kind }}", workflow)
-        # The workflow's name is what deploy.yml listens for, and the kind does not change it.
+        self.assertIn('git commit -m "${HEADLINE', workflow)
+        for gone in ["RUN_KIND", "inputs.kind", "RUN_NUMBER", "steps.ai.outputs.kind"]:
+            with self.subTest(gone=gone):
+                self.assertNotIn(gone, workflow)
+        # The workflow's name is what deploy.yml listens for, and the mode does not change it.
         self.assertIn("name: Make the website more interesting\n", workflow)
 
 
@@ -1390,8 +1679,8 @@ class BuildPipelinePromptTest(unittest.TestCase):
     def test_federating_may_now_reach_the_layout_and_the_shared_sass(self):
         # "Full creative opportunity within its silo": the shared files are part of what a run may
         # federate, not a fixed frame around what it may.
-        federate = mi.build_prompt([("index.html", "<h1>hi</h1>")], (), mi.CONSOLIDATION_RUN)
-        federate = federate[federate.index("FEDERATE"):federate.index("How the site is built")]
+        federate = mi.build_prompt([("index.html", "<h1>hi</h1>")], (), mi.Run("consolidate_overall"))
+        federate = federate[federate.index("RE-FEDERATE"):federate.index("How the site is built")]
         self.assertIn(mi.INCLUDES_DIR, federate)
         self.assertIn(mi.SASS_DIR, federate)
 
@@ -2735,7 +3024,7 @@ class EngagementTimeTest(unittest.TestCase):
         # The mission is stated twice -- once up front, once at the end of the site dump, which is
         # the last thing the model reads before answering. Both carry the measure now.
         prompt = self.prompt()
-        self.assertIn(f"This run's mission: {mi.MISSION}, measured in {mi.INTERESTING}", prompt)
+        self.assertIn(f"This run's mission: {mi.mission_of(mi.Run(mi.DEFAULT_MODE))}, measured in {mi.INTERESTING}", prompt)
 
     def test_the_prompt_prefers_engagement_to_tidiness(self):
         # The point of naming the measure: a run that only makes the site look neat has not earned
@@ -2770,7 +3059,7 @@ class LegibilityStandardTest(unittest.TestCase):
         prompt = self.prompt()
         self.assertIn("LEGIBLE TO A STRANGER", prompt)
         self.assertIn(mi.LEGIBLE, prompt)
-        self.assertLess(prompt.index("ADD something"), prompt.index("LEGIBLE TO A STRANGER"))
+        self.assertLess(prompt.index("THIS RUN "), prompt.index("LEGIBLE TO A STRANGER"))
         self.assertLess(prompt.index("LEGIBLE TO A STRANGER"), prompt.index("Rules:"))
 
     def test_the_six_holds_are_each_named(self):
@@ -2796,7 +3085,7 @@ class LegibilityStandardTest(unittest.TestCase):
 
     def test_the_standard_is_in_hand_at_the_end_of_the_run_too(self):
         prompt = self.prompt()
-        last = prompt[prompt.index(f"This run's mission: {mi.MISSION}"):]
+        last = prompt[prompt.index(f"This run's mission: {mi.mission_of(mi.Run(mi.DEFAULT_MODE))}"):]
         self.assertIn(f"Keep it {mi.LEGIBLE}", last)
         self.assertIn("never a dead end", last)
 
@@ -3028,11 +3317,17 @@ class MoodAxiomTest(SiteDirTestCase):
         # Open question 1 and 3 of the issue: inventing new ways of asking is meant to be part of
         # the site's ongoing interesting-ness, so the prompt has to invite it where a run chooses
         # what to do, not only forbid the collapse of what is there.
-        prompt = mi.build_prompt([("index.html", "<h1>hi</h1>")])
-        self.assertIn("a new way of querying a visitor's orientation", prompt)
-        self.assertIn("a new world for an orientation that has none", prompt)
-        self.assertIn(f"at least {mi.MIN_MOOD_PROBES} distinct query mechanisms", prompt)
-        self.assertIn("probe: 'some-id'", prompt)
+        # Each invitation lives in the mode whose run it is (MarbleBagTest): a new mechanism is a
+        # change to the framework, and a new world is the creating run's.
+        self.assertIn("a new way of querying a visitor's orientation",
+                      mi.build_prompt([("index.html", "<h1>hi</h1>")], (), mi.Run("enhance_overall")))
+        self.assertIn("a world for an orientation that has none",
+                      mi.build_prompt([("index.html", "<h1>hi</h1>")], (), mi.Run("create_item")))
+        for mode in mi.MODES:
+            with self.subTest(mode=mode):
+                prompt = mi.build_prompt([("index.html", "<h1>hi</h1>")], (), mi.Run(mode))
+                self.assertIn(f"at least {mi.MIN_MOOD_PROBES} distinct query mechanisms", prompt)
+                self.assertIn("probe: 'some-id'", prompt)
 
     def test_a_page_a_run_adds_must_carry_the_flow(self):
         # A whole page but for the one line, so the mood axiom is the only thing left to refuse it.
@@ -6932,7 +7227,7 @@ class MainTest(SiteDirTestCase):
 
     def run_main(self, env=None):
         out = self.root / "github_output"
-        full_env = {"GITHUB_OUTPUT": str(out), "MODEL": "", "MODEL_POOL": "", "RUN_KIND": "", "RUN_NUMBER": ""}
+        full_env = {"GITHUB_OUTPUT": str(out), "MODEL": "", "MODEL_POOL": "", "RUN_MODE": ""}
         full_env.update(env or {})
         self.printed = []
         with mock.patch.dict(os.environ, full_env):
@@ -6942,14 +7237,15 @@ class MainTest(SiteDirTestCase):
 
     def test_applies_first_usable_answer_and_reports_it(self):
         fake = FakeCopilot(self, f"say({GOOD_PLAN!r})")
-        output = self.run_main()
+        output = self.run_main({"RUN_MODE": "enhance_overall"})
         self.assertFalse([line for line in self.printed if "not available" in line])
         self.assertEqual((self.site / "clock.html").read_text(), CLOCK_PAGE)
         (call,) = fake.calls()
         model = call["args"][1]
         self.assertIn(model, mi.MODELS)
-        self.assertEqual(read_outputs(output), {"model": model, "summary": "Added a clock.",
-                                                "kind": "interesting", "headline": "Make the website more interesting"})
+        self.assertEqual(read_outputs(output), {"model": model, "summary": "Added a clock.", "mode": "enhance_overall",
+                                                "items": "", "headline": "Enhance the site"})
+        self.assertIn("Mode:    enhance_overall (5 of 42 marbles)", self.printed)
 
     def test_the_whole_run_asks_for_one_output_budget(self):
         # The prompt's number and the CLI's number are the same number, resolved once for the run:
@@ -6977,18 +7273,70 @@ class MainTest(SiteDirTestCase):
         self.assertEqual(read_outputs(output)["summary"], "Added a clock.")
         self.assertTrue([line for line in self.printed if "ran past its output limit" in line])
 
-    def test_the_run_number_picks_the_kind_and_the_kind_names_the_commit(self):
+    def test_the_mode_named_by_hand_shapes_the_prompt_the_outputs_and_the_log(self):
         fake = FakeCopilot(self, f"say({GOOD_PLAN!r})")
-        output = self.run_main({"RUN_NUMBER": "8"})
+        output = self.run_main({"RUN_MODE": "consolidate_nav"})
         (call,) = fake.calls()
-        self.assertIn("THIS RUN CONSOLIDATES THE SITE", call["prompt"])
-        self.assertNotIn("ADD something", call["prompt"])
+        self.assertIn("THIS RUN CONSOLIDATES THE NAVIGATION", call["prompt"])
+        self.assertNotIn("ADD one world", call["prompt"])
         outputs = read_outputs(output)
-        self.assertEqual((outputs["kind"], outputs["headline"]), ("consolidate", "Consolidate the website"))
-        self.assertTrue([line for line in self.printed if line.startswith(f"Mission: {mi.CONSOLIDATION_MISSION} (consolidate run)")])
-        output = self.run_main({"RUN_NUMBER": "9"})
-        self.assertIn("THIS RUN GROWS THE SITE", fake.calls()[-1]["prompt"])
-        self.assertEqual(read_outputs(output)["headline"], "Make the website more interesting")
+        self.assertEqual((outputs["mode"], outputs["headline"]), ("consolidate_nav", "Consolidate the navigation"))
+        mission = mi.mission_of(mi.Run("consolidate_nav"))
+        self.assertTrue([line for line in self.printed if line.startswith(f"Mission: {mission} (consolidate_nav run)")])
+        output = self.run_main({"RUN_MODE": "create_item"})
+        self.assertIn("THIS RUN CREATES ONE NEW WORLD", fake.calls()[-1]["prompt"])
+        self.assertEqual(read_outputs(output)["headline"], "Create a world")
+        self.assertIn("Mode:    create_item (1 of 42 marbles)", self.printed)
+
+    def test_the_bag_is_drawn_once_per_run_and_the_draw_shapes_everything(self):
+        fake = FakeCopilot(self, f"say({GOOD_PLAN!r})")
+        with mock.patch.object(mi, "chosen_mode", return_value="enhance_persona") as drawn:
+            output = self.run_main()
+        self.assertEqual(drawn.call_count, 1)
+        self.assertIn("THIS RUN ENHANCES THE PERSONA", fake.calls()[0]["prompt"])
+        self.assertEqual(read_outputs(output)["headline"], "Enhance the persona")
+
+    def test_an_item_mode_draws_a_world_and_names_it_everywhere(self):
+        # The world is drawn from the site's own list, named in the prompt, shown first, named in
+        # the headline, the items output and the log -- and never in a commit message uncleaned.
+        worlds = [{"file": "loam.html", "name": "loam #1", "mood": "rooted", "aspect": "4 / 5", "what": "Plant."},
+                  {"file": "clock.html", "name": "the clock", "mood": "tender", "aspect": "1 / 1", "what": "Tick."}]
+        (self.site / "_data").mkdir()
+        (self.site / "_data" / "worlds.json").write_text(json.dumps({"worlds": worlds, "wayIn": [], "finePrint": []}))
+        (self.site / "loam.html").write_text(page(title="loam", body="<p>loam</p>"))
+        (self.site / "js" / "modules").mkdir(parents=True)
+        (self.site / "js" / "modules" / "loam.js").write_text("export default { id: 'loam' };")
+        fake = FakeCopilot(self, f"say({GOOD_PLAN!r})")
+        with mock.patch.object(mi, "chosen_mode", return_value="consolidate_item"), \
+                mock.patch.object(mi, "draw_items", lambda found: found[:1]):
+            output = self.run_main()
+        prompt = fake.calls()[0]["prompt"]
+        self.assertIn("THIS RUN CONSOLIDATES LOAM 1", prompt)
+        self.assertIn('loam 1 ("loam.html", module "js/modules/loam.js"): Plant.', prompt)
+        self.assertLess(prompt.index("=== loam.html ==="), prompt.index("=== js/modules/loam.js ==="))
+        self.assertLess(prompt.index("=== js/modules/loam.js ==="), prompt.index("=== _data/worlds.json ==="))
+        outputs = read_outputs(output)
+        self.assertEqual((outputs["mode"], outputs["items"], outputs["headline"]),
+                         ("consolidate_item", "loam 1", "Consolidate loam 1"))
+        self.assertIn("Mode:    consolidate_item (4 of 42 marbles; drawn: loam 1)", self.printed)
+
+    def test_what_an_answer_changed_outside_its_mode_is_named_in_the_refusal(self):
+        # The answer the tests refuse touched index.html and sitemap.xml in a run that works on the
+        # navigation's own files: the repair round says so, beside the failing tests.
+        fake = FakeCopilot(self, f"say({GOOD_PLAN!r})")
+        self.require_passing_tests.side_effect = [
+            mi.RejectedChange("the tests fail: A", details="FAIL: test_a\nAssertionError: no"), None]
+        self.run_main({"RUN_MODE": "enhance_nav"})
+        second = fake.calls()[1]["prompt"]
+        # The sitemap the plan writes is new to this fixture, so only the home page is outside.
+        self.assertIn("The details:\nFAIL: test_a\nAssertionError: no\n\nOutside this run's own files, your answer "
+                      "also changed: index.html.", second)
+        self.assertIn("put those back as the site above shows them unless the change cannot work without them", second)
+        # Nothing of the kind on a mode whose files are the framework, or when nothing strayed.
+        fake = FakeCopilot(self, f"say({GOOD_PLAN!r})")
+        self.require_passing_tests.side_effect = [mi.RejectedChange("the tests fail: A"), None]
+        self.run_main({"RUN_MODE": "consolidate_overall"})
+        self.assertNotIn("Outside this run's own files", fake.calls()[1]["prompt"])
 
     def test_falls_back_to_another_model(self):
         # The first model asked never gives a usable answer, in its first round or in the repair
@@ -7283,12 +7631,72 @@ class MainTest(SiteDirTestCase):
                 sys.exit(1)
             say({GOOD_PLAN!r})
         """)
-        output = self.run_main({"MODEL": "only-model"})
+        with mock.patch.object(mi, "pause_before_retry") as slept:
+            output = self.run_main({"MODEL": "only-model"})
         self.assertEqual([c["args"][1] for c in fake.calls()], ["only-model", "only-model"])
         self.assertEqual(read_outputs(output)["model"], "only-model")
-        # The CLI failed, not the model: the same question is asked again, with nothing added.
+        # The CLI failed, not the model: the same question is asked again, with nothing added --
+        # and a rate limit is not helped by asking at once, so not before a pause.
         self.assertNotIn("YOUR PREVIOUS ANSWER", fake.calls()[1]["prompt"])
         self.assertNotIn("EARLIER THIS RUN", fake.calls()[1]["prompt"])
+        slept.assert_called_once_with(mi.RETRY_PAUSE_SECONDS)
+        self.assertTrue([line for line in self.printed if "passing failure; waiting 30s" in line])
+
+    def test_a_cli_failure_that_will_not_pass_is_asked_again_at_once(self):
+        fake = FakeCopilot(self, f"""
+            if len(open(LOG).read().splitlines()) < 2:
+                sys.stderr.write('Error: something else entirely')
+                sys.exit(1)
+            say({GOOD_PLAN!r})
+        """)
+        with mock.patch.object(mi, "pause_before_retry") as slept:
+            self.run_main({"MODEL": "only-model"})
+        self.assertEqual(len(fake.calls()), 2)
+        slept.assert_not_called()
+
+    def test_the_pause_never_eats_the_time_a_call_needs(self):
+        fake = FakeCopilot(self, f"""
+            if len(open(LOG).read().splitlines()) < 2:
+                sys.stderr.write('Error: 503 Service Unavailable')
+                sys.exit(1)
+            say({GOOD_PLAN!r})
+        """)
+        with mock.patch.object(mi, "RUN_BUDGET_SECONDS", mi.MIN_CALL_SECONDS + 10), \
+                mock.patch.object(mi, "pause_before_retry") as slept:
+            self.run_main({"MODEL": "only-model"})
+        self.assertEqual(len(fake.calls()), 2)
+        (pause,) = slept.call_args.args
+        self.assertLess(pause, 10.5)
+        self.assertGreater(pause, 0)
+        for message in ["rate limit exceeded", "429 Too Many Requests", "502 Bad Gateway", "ECONNRESET",
+                        "fetch failed", "model is overloaded, try again later", "network error"]:
+            with self.subTest(message=message):
+                self.assertTrue(mi.TRANSIENT_ERROR.search(message))
+        for message in ["invalid JSON", "the model refused", "status 400"]:
+            with self.subTest(message=message):
+                self.assertFalse(mi.TRANSIENT_ERROR.search(message))
+
+    def test_a_fault_in_the_checking_costs_a_round_and_not_the_run(self):
+        # This script's own checks raised, on an answer in hand: the same model is asked once more,
+        # and the fault is in the log in full rather than being the end of the run.
+        fake = FakeCopilot(self, f"say({GOOD_PLAN!r})")
+        real = mi.validate_plan
+        with mock.patch.object(mi, "validate_plan", side_effect=[KeyError("boom"), real(json.loads(GOOD_PLAN))]):
+            output = self.run_main({"MODEL": "only-model"})
+        self.assertEqual(len(fake.calls()), 2)
+        self.assertEqual(read_outputs(output)["summary"], "Added a clock.")
+        self.assertTrue([line for line in self.printed if "this script's own checking raised KeyError: 'boom'" in line])
+        self.assertNotIn("YOUR PREVIOUS ANSWER", fake.calls()[1]["prompt"])
+        self.assertTrue((self.site / "clock.html").is_file())
+
+    def test_a_fault_in_the_checking_is_bounded_like_every_other_path(self):
+        fake = FakeCopilot(self, f"say({GOOD_PLAN!r})")
+        with mock.patch.object(mi, "validate_plan", side_effect=KeyError("boom")):
+            with self.assertRaises(SystemExit) as caught:
+                self.run_main()
+        self.assertIn("No model produced a usable change", str(caught.exception))
+        self.assertEqual(len(fake.calls()), mi.MAX_ATTEMPTS * (1 + mi.REPAIR_ROUNDS))
+        self.assertEqual(sorted(p.name for p in self.site.iterdir()), ["error.html", "index.html"])
 
     def test_a_cli_failure_is_no_lesson_for_the_next_model(self):
         # What the next model is told is what the last one got wrong about the answer; a CLI that
@@ -7299,7 +7707,8 @@ class MainTest(SiteDirTestCase):
                 sys.stderr.write('Error: rate limit exceeded'); sys.exit(1)
             say({GOOD_PLAN!r})
         """)
-        self.run_main()
+        with mock.patch.object(mi, "pause_before_retry"):
+            self.run_main()
         calls = fake.calls()
         self.assertEqual(len(calls), mi.REPAIR_ROUNDS + 2)
         self.assertNotEqual(calls[-1]["args"][1], calls[0]["args"][1])
