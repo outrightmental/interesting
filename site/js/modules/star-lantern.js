@@ -665,25 +665,39 @@ function driftPiece(env, plan) {
 
 /* ---- the module ----------------------------------------------------------------------------- */
 
-function dealsOrder(env) {
-  return env.chance(0.55);
+// Which of the two puzzles this card is, and its plan, dealt once from the env's seeded stream and
+// kept with that env. Every pass over one card -- the still picture and then every animated frame --
+// asks here, so they are all the same card; dealing per frame instead would re-roll the whole
+// puzzle thirty times a second (issue #92, and js/feed.js on what animate owes a card).
+const dealt = new WeakMap();
+function deal(env) {
+  let got = dealt.get(env);
+  if (!got) {
+    const order = env.chance(0.55);
+    got = { order, plan: order ? orderPlan(env) : driftPlan(env) };
+    dealt.set(env, got);
+  }
+  return got;
 }
 
 export default {
   id: 'star-lantern',
   needsSky: true,
   paint(g, w, h, env) {
-    if (dealsOrder(env)) orderPreview(g, w, h, env, orderPlan(env), env.variant.turn * 4);
-    else driftPreview(g, w, h, env, driftPlan(env), env.variant.turn * 4);
+    const d = deal(env);
+    if (d.order) orderPreview(g, w, h, env, d.plan, env.variant.turn * 4);
+    else driftPreview(g, w, h, env, d.plan, env.variant.turn * 4);
   },
   animate(g, w, h, env, t) {
-    if (dealsOrder(env)) orderPreview(g, w, h, env, orderPlan(env), t + env.variant.turn * 4);
-    else driftPreview(g, w, h, env, driftPlan(env), t + env.variant.turn * 4);
+    const d = deal(env);
+    if (d.order) orderPreview(g, w, h, env, d.plan, t + env.variant.turn * 4);
+    else driftPreview(g, w, h, env, d.plan, t + env.variant.turn * 4);
   },
   spark(env) {
     if (!env.stars.length) return null;
-    if (dealsOrder(env)) {
-      const plan = orderPlan(env);
+    const d = deal(env);
+    if (d.order) {
+      const plan = d.plan;
       return {
         title: orderTitle(plan),
         quote: clueText(plan.clues[0]),
@@ -694,7 +708,7 @@ export default {
         of: plan
       };
     }
-    const plan = driftPlan(env);
+    const plan = d.plan;
     return {
       title: driftTitle(),
       mono: plan.bands.map((d, i) => 'band ' + (i + 1) + ': ' + (d === 0 ? 'still' : signed(d))).join('\n'),
@@ -709,6 +723,7 @@ export default {
     if (order) return orderPiece(env, order);
     const drift = carriedDrift(env);
     if (drift) return driftPiece(env, drift);
-    return dealsOrder(env) ? orderPiece(env, orderPlan(env)) : driftPiece(env, driftPlan(env));
+    const d = deal(env);
+    return d.order ? orderPiece(env, d.plan) : driftPiece(env, d.plan);
   }
 };

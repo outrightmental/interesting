@@ -627,24 +627,38 @@ function chordPiece(env, plan) {
 
 /* ---- the module ----------------------------------------------------------------------------- */
 
-function dealsEcho(env) {
-  return env.chance(0.5);
+// Which of the two this card is, and its plan, dealt once from the env's seeded stream and kept
+// with that env. Every pass over one card -- the still picture and then every animated frame --
+// asks here, so they are all the same card; dealing per frame instead would re-roll the whole
+// puzzle thirty times a second (issue #92, and js/feed.js on what animate owes a card).
+const dealt = new WeakMap();
+function deal(env) {
+  let got = dealt.get(env);
+  if (!got) {
+    const echo = env.chance(0.5);
+    got = { echo, plan: echo ? echoPlan(env) : chordPlan(env) };
+    dealt.set(env, got);
+  }
+  return got;
 }
 
 export default {
   id: 'constellation-echo',
   needsSky: true,
   paint(g, w, h, env) {
-    if (dealsEcho(env)) echoPreview(g, w, h, env, echoPlan(env), env.variant.turn * 3);
-    else chordPreview(g, w, h, env, chordPlan(env), env.variant.turn * 4);
+    const d = deal(env);
+    if (d.echo) echoPreview(g, w, h, env, d.plan, env.variant.turn * 3);
+    else chordPreview(g, w, h, env, d.plan, env.variant.turn * 4);
   },
   animate(g, w, h, env, t) {
-    if (dealsEcho(env)) echoPreview(g, w, h, env, echoPlan(env), t + env.variant.turn * 3);
-    else chordPreview(g, w, h, env, chordPlan(env), t + env.variant.turn * 4);
+    const d = deal(env);
+    if (d.echo) echoPreview(g, w, h, env, d.plan, t + env.variant.turn * 3);
+    else chordPreview(g, w, h, env, d.plan, t + env.variant.turn * 4);
   },
   spark(env) {
-    if (dealsEcho(env)) {
-      const plan = echoPlan(env);
+    const d = deal(env);
+    if (d.echo) {
+      const plan = d.plan;
       const order = byDistance(plan);
       return {
         title: echoTitle(plan),
@@ -655,7 +669,7 @@ export default {
         of: plan
       };
     }
-    const plan = chordPlan(env);
+    const plan = d.plan;
     return {
       title: chordTitle(plan),
       mono: 'beat   ' + sumsOf(plan.voices).map((n, i) => String(i).padStart(2, ' ')).join('') + '\ntotal  ' + sumsOf(plan.voices).map((n) => String(n).padStart(2, ' ')).join(''),
@@ -670,6 +684,7 @@ export default {
     if (echo) return echoPiece(env, echo);
     const chord = carriedChord(env);
     if (chord) return chordPiece(env, chord);
-    return dealsEcho(env) ? echoPiece(env, echoPlan(env)) : chordPiece(env, chordPlan(env));
+    const d = deal(env);
+    return d.echo ? echoPiece(env, d.plan) : chordPiece(env, d.plan);
   }
 };
