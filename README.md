@@ -169,11 +169,13 @@ replacing one of them.
   the active track can fill to the handle). Every pressable thing carries a state layer, and the one focus indicator
   is a 3px primary ring.
 - **The motion scheme is the rite's, not M3's.** M3's three cubic-bezier easings are gone. The
-  tokens name seven families of curve — `--ease-arrive`, `--ease-leave`, `--ease-shift`,
-  `--ease-flicker`, `--ease-pulse`, `--ease-drift`, `--ease-wipe` — every one a piecewise
-  `linear()` curve that `js/motion.js` rolls afresh for every movement, the durations and the
-  geometry of a movement rolled beside them, and the M3 names kept only as aliases of those, so
-  nothing written against them can be a standard curve again (see [Motion axiom](#motion-axiom)).
+  tokens name nine families of stair — `--ease-arrive`, `--ease-leave`, `--ease-stair`,
+  `--ease-shift`, `--ease-flicker`, `--ease-pulse`, `--ease-drift`, `--ease-wipe`,
+  `--ease-ratchet` — every one a `linear()` stair of a few forward treads that `js/motion.js`
+  composes afresh for every movement, the durations and the geometry of a movement rolled beside
+  them, and the M3 names kept only as aliases of those, so nothing written against them can be a
+  standard curve again; a surface changes by one edge, a slice or a curve, from `_cut.scss` (see
+  [Motion axiom](#motion-axiom)).
 - **A serif for the rite's words, a sans for the instructions, paired by the mood.** The
   [ritual axiom](#ritual-axiom) sets the words that carry the atmosphere — a heading, a piece's
   title, a card's name, the question — in a serif, `type.rite`, and leaves everything a visitor
@@ -786,161 +788,138 @@ puzzle stands on its own legs, and the rite is fun first and never tiresome.
 
 The [ritual axiom](#ritual-axiom) says what the site has to feel like. This says how it has to
 **move**: **nothing on the site moves along a standard curve, and nothing on it fades.** No
-transition and no animation — a slide, a wipe, the background washing to a new corner, a colour
-shifting, a ring turning, a chip branching out, a control under the pointer, a card arriving, words
-appearing, the page scrolling — is eased by `linear`, by `ease` and its three siblings, or by any
-`cubic-bezier`, and nothing in a script tweens along a polynomial of its own. Every movement runs
-along a curve rolled a moment ago and never rolled again: a **procedurally generated glitch of a
-curve**, with a hesitation before it starts, a stutter in the middle, an overshoot it has to settle
-from, a flicker before it lands — so every movement feels like part of a working rather than a
-widget settling into place, deliberate and never twice the same. And no change of state is a fade:
-a surface that changes changes **by its area, through a procedurally generated matte**, one tread
-of a **rolled step series** at a time, and a thing that turns turns in clicks. The geometry of a
-movement is rolled beside its timing — where a thing comes in from and how far, where it goes
-when it leaves, which way the veil wipes, what pattern a surface changes in, what texture a set
-control is filled with, what tone a palette passes through, where the page's own sky washes in
-from. The typography follows the same rule: the faces shift their **register** with the mood, one
-curated pairing per mood and never two faces that do not go together, on a variable face the site
-carries itself so the letterforms are a movement of the rite too, and the whole modality of the
+transition and no animation — a slide, a wipe, a colour shifting, a ring turning, a chip branching
+out, a control under the pointer, a card arriving, words appearing, the page scrolling — is eased
+by `linear`, by `ease` and its three siblings, or by any `cubic-bezier`, and nothing in a script
+tweens along a polynomial of its own. And the rite is **simple on purpose**: every movement is one
+clear choice made for a reason, so it reads as the one gesture the working needs — *we made this
+very specific choice so that the magic would work* — and costs the page next to nothing. A surface
+that changes changes by **one clean edge** stepping across it: a **slice**, a straight edge at an
+angle, or a **curve**, a circle growing from a point. The edge steps in a **stair of two to five
+treads that always go forward** — no slip back, no stutter, no overshoot, no flicker of dropouts —
+and a surface that stays changed rests as **two shades of its colour split by that edge**, never a
+pattern, a texture, a noise or a grain. The reason picks the edge, and no movement is ever the same
+twice: on its trigger the engine composes it from a few pieces — how many treads, how wide each
+is, how long the whole takes, the angle or the point — so the same hover on the same button is a
+different stair every time and still one clear gesture. The typography follows the same rule: the
+faces shift their **register** with the mood, one curated pairing per mood and never two faces
+that do not go together, on a variable face the site carries itself, and the whole modality of the
 site — palette, face and movement — turns over from one piece of content to the next. Like the
 nine axioms before it, this is an invariant of the iteration: stated in the prompt, held to in
 code, and true of the site as committed.
 
-- **Every movement is composed anew on its trigger.** A rite is not one rolled curve laid over a
-  fixed sequence of keyframes: it is a whole put together, the moment it is triggered, from pieces
-  each chosen at random from a vocabulary — an opening (a cut in from the rolled edge, a blink,
-  nothing), a climb up the matte ladder (steady, with a slip back, in a leap, with a stutter, with
-  a flicker out, doubled), a landing (the patterned top, the flat rung then the top, an overshoot),
-  a dip (how deep, which way, with what flash), a return (straight, over the mark, a double
-  bounce), an approach (straight, hesitating, past the mark, skewed in) — with the width of every
-  tread uneven and its own, and a length rolled for that play. No piece of a wax, a wane, an ink, a
-  seal or an unseal says anything about opacity: a tread with the surface gone is a mask that lets
-  nothing through, because a property written in one tread and left out of the next is
-  interpolated between them by the browser, and that would be a fade under the ladder. The engine writes the composition
-  as an `@keyframes` rule of its own into a stylesheet it keeps (recycling the oldest as new ones
-  come) and names it on the element — `--rite-wax`, `--rite-wane`, `--rite-stamp`, `--rite-ink`,
-  `--rite-seal`, `--rite-unseal`, `--rite-develop`, `--rite-unmake`, `--rite-veil-out` — where the
-  stylesheets read it before their own: `animation: var(--rite-wax, matte-in) …`. So the same hover
-  on the same button is never the same twice, two buttons hovered together wax two different ways,
-  and the named keyframes in the Sass are what a page with no script plays. The engine's own
-  movements compose the same way: a scroll and a crossfade run on a **stepper** that emits the
-  treads of a stair rolled for that call (uneven, with a hold and a slip where the grain allows,
-  never a fraction between), a FLIP jumps its way home in held pairs, and a reveal deals each glyph
-  two sigils, its own delay and one of a pool of curves rolled for that line. A module composes
-  within its seed's determinism, rolling `rite.at(k)` afresh per trigger, so a second press on the
-  same piece plays a different stair, matte and flicker from the first.
+- **Every edge has a reason.**
+
+  | rite | edge | where it comes from |
+  |---|---|---|
+  | wax (under the pointer, a visible focus) | slice | square to the pointer's approach, from the side it came in (to the nearest 15°); the register's angle for a key |
+  | wane | slice | back out the way it came |
+  | stamp (a press) | curve | grows from where the press landed (the middle for a key) |
+  | seal (becomes set) | curve | two shades split by a curve round where it was pressed |
+  | unseal | slice | the register's angle |
+  | develop (arrives) | slice | from the side it arrives from, the thing lifting in by the same treads |
+  | unmake (leaves) | slice | toward where it goes, the thing lifting out by the same treads |
+  | reveal (a line of words) | slice | the register's slant, like a pen's |
+  | veil (the lightbox) | curve | from the control that raised it |
+
+  Each register of [`_type.scss`](site/_sass/_type.scss) carries the angle its slices cut at
+  (`--cut-angle`) and the slant its words are cut in at (`--reveal-angle`), so a change of mood
+  changes the hand that cuts as well as the face.
+- **The edge, written once.** [`site/_sass/_cut.scss`](site/_sass/_cut.scss) is the one partial
+  every movement uses (`@use 'cut'`). `cut.slice()` and `cut.curve()` are masks: what the edge has
+  passed at `--cut`, a registered percentage (`@property --cut` in `_tokens.scss`, not inherited)
+  that `@keyframes cut-in` steps from 0% to 100% and `cut-out` back. `cut.shades(colour)` and
+  `cut.shades-curve(colour)` are the two shades a changed surface rests in. `@include cut.play(in,
+  wax, medium)` plays the edge in the rite's treads (`--ease-wax`, `--motion-wax`, with the
+  family's baked stair and the page's duration behind them); `cut.develop` and `cut.unmake` play an
+  arrival and a leaving, the slice and a `translate` (`lift-in`, `lift-out`) in the same treads, so
+  the position never glides and never fights a transform of the element's own. The animation lives
+  on the element that holds the mask, because `--cut` does not inherit.
 - **The grammar of a change of state.** Every control and every surface on the site changes the
-  same five ways, and never by a fade. A control under the pointer or the focus **waxes**: its
-  state layer arrives through the **matte ladder** — five masks at rising coverage the engine
-  rolled a moment ago, a thresholded noise, a scatter of shards, scan lines, a dither, an iris or
-  a grain — one tread at a time (`is-waxing`, `@keyframes matte-in`), and when the pointer leaves
-  it **wanes** back down the ladder (`is-waning`). A press **stamps** it: a dip in hard cuts and a
-  flash (`is-stamping`). A control that becomes set is **sealed**: its colour arrives in treads and
-  the **fill texture** — hatching, scan lines, stipple, moiré or rings, rolled, in its own text
-  colour — climbs the ladder onto it and stays, so a set control is a textured one and not merely
-  a tinted one (`is-sealing`); one unset is **unsealed** (`is-unsealing`). A thing appearing
-  **develops** through the ladder from the rolled geometry and a thing leaving is **unmade** down
-  it, with one flicker back; anything that turns **ratchets** in clicks with backlash; words
-  **are revealed** glyph by glyph, each through a sigil; things that change places **move
-  there**. A link in the words is a control too ([`_base.scss`](site/_sass/_base.scss)): at rest
-  a hairline; under the pointer its underline climbs a stair of thickness, offset and style while a
-  plate of the fill texture develops behind the words; it comes home down a stair of its own cuts;
-  and a press dips the words in a link's terms — the ink, the rule doubled and pulled in, the
-  letters spread — beside the composed stamp a line of words cannot show. The engine puts the state classes on every pressable element — reading the pointer, the
-  keyboard, a visible focus, and every attribute a control is set by (`aria-pressed`,
-  `aria-selected`, `aria-checked`, `aria-current`, `aria-expanded`, `open`, the `is-set` family of
-  classes) — and takes each passing one off when its animation ends;
-  [`site/_sass/_controls.scss`](site/_sass/_controls.scss) says what each looks like, and every
-  keyframe of a rite is a **hard cut**, each tread held to the moment of the next (a property a
-  tread leaves unsaid is one the browser would slide between the treads that say it, so every
-  tread says all of them), so even a
-  swooping curve reads as treads and a stair curve as a stair of stairs. A page with no script
-  climbs the same ladder from `:hover`, `:focus-visible` and `:active`, on the baked mattes of
-  `_tokens.scss`.
+  same five ways, and never by a fade. A control under the pointer or the focus **waxes**: its state
+  layer is cut in by a slice from the pointer's side (`is-waxing`), and when the pointer leaves it
+  **wanes**, cut back out the way it came (`is-waning`). A press **stamps** it: one tread of setting
+  down, and an ink cut in by a curve from the press (`is-stamping`). A control that becomes set is
+  **sealed**: two shades of its colour split by a curve round where it was pressed are cut in and
+  stay (`is-sealing`); one unset is **unsealed** by a slice (`is-unsealing`). A thing appearing
+  **develops** behind a slice from the side it comes from, and a thing leaving is **unmade** toward
+  where it goes; anything that turns **ratchets** in even clicks; a line of words is **revealed**
+  by one slice at the register's slant, a tread to each word or two, and is never taken apart into
+  letters; things that change places **move there** in one stair. A link in the words is a control
+  too ([`_base.scss`](site/_sass/_base.scss)), in a link's own terms. The engine puts the state
+  classes on every pressable element — reading the pointer, the keyboard, a visible focus, and
+  every attribute a control is set by (`aria-pressed`, `aria-selected`, `aria-checked`,
+  `aria-current`, `aria-expanded`, `open`, the `is-set` family of classes) — and takes each passing
+  one off when its animation ends; [`site/_sass/_controls.scss`](site/_sass/_controls.scss) says
+  what each looks like. A page with no script plays the same edges from `:hover`, `:focus-visible`
+  and `:active`, at the register's angle, on the baked stairs of `_tokens.scss`.
+- **Cheap by construction.** The second pass of this axiom drew every change through a ladder of
+  patterned masks — noise fields, shards, dithers, a span with two sigils per letter, a keyframe
+  rule written into a stylesheet on every trigger, and the whole page re-rolled whenever any
+  animation ended — and it made the site stutter under its own weight, which is the one thing a
+  working cannot do. So: a movement animates `--cut`, `transform`, `translate`, `scale`, `rotate`
+  or `opacity` in treads, which the compositor draws, and never a `box-shadow`, a `filter`, a
+  `clip-path`, a `background-position` or a mask image; no pattern, noise, SVG filter or picture is
+  a mask; no animation loops but a small transform on a control waiting to be pressed; no rule is
+  written into a stylesheet while the page runs; and `:root` is written once as the page loads and
+  again when its mood changes, never per movement — a movement's composition is written on the
+  element that plays it, whose style is recalculated alone.
 - **The engine.** [`site/js/motion.js`](site/js/motion.js), one line in the `<head>` of every
   page, written once in [`site/_includes/layout.njk`](site/_includes/layout.njk) and not deferred,
   so it has rolled before the body is drawn. CSS cannot roll a die, but it can read a custom
-  property, and the `linear()` easing function can express any piecewise curve, so the engine
-  writes its roll onto `:root`: eight **families** — `--ease-arrive` (a hesitation, the surge past
-  the mark, the settle, sometimes a flicker as it lands), `--ease-leave` (a flicker, a refusal to
-  go, then the rush out), `--ease-shift` (a drift in uneven steps), `--ease-flicker`,
-  `--ease-pulse`, `--ease-drift` (the slow turn of a ring, with a catch now and then), `--ease-wipe`
-  (the veil: a lag, the swallow, a blink), `--ease-stair` (three to seven uneven treads, the curve
-  every change of state climbs) and `--ease-ratchet` (how anything turns: eighteen to ninety teeth,
-  each a click forward, a slip of a part of a tooth back and a hold, never an even rotation) — and
-  one `--ease-<name>` and one `--motion-<name>` per `@keyframes` animation, the curve and the
-  length both re-rolled every time that animation finishes so the next time it plays it plays
-  differently; the durations, rolled with a little jitter; the geometry, `--arrive-x`, `--arrive-y`, `--arrive-rot`,
-  `--arrive-scale`, `--leave-*`, `--wipe-from` and `--wipe-to` (an edge, a slit, an iris, a
-  corner), `--state-from`, `--sky-x` and `--sky-y`, and the small particulars of one movement each;
-  and the **mattes**, `--matte-1` to `--matte-5` (the ladder, as `mask` values: an SVG noise field
-  thresholded at rising coverage, a scatter of shards, or scan, dither, iris and grain gradients)
-  with `--matte-fill` and `--matte-fill-size` (the texture a surface that stays changed is filled
-  with), `--matte-top` (that texture as a mask, the top rung — one layer only, since a full
-  layer beside it would be added to it and let everything through — so a surface that has
-  arrived rests patterned and never flat) and `--matte-kind` (also `<html data-matte>`). The noise ladder is
-  calibrated: the turbulence channel is stretched before it is cut, so the five rungs really cover
-  about a fifth, a third, a half, three quarters and the whole; the shards are drawn smallest
-  first and wrapped at the tile's edges so they repeat without a seam; the dither is a Bayer tile
-  lit cell by cell. Every transition in [`site/_sass`](site/_sass) names a family as its
-  timing function, every animation names its own spell with a family as the fallback, and every
-  keyframe reads the rolled geometry and the rolled mattes rather than a fixed distance or a flat
-  tint. A script's own movements — the stage's colour crossfade, its burst, its scroll, the
-  threshold's stars coming out and knocks ringing, the constellation's stagger — ask the same
-  engine (`window.interestingMotion`: `ease(family)`, `curve(family)`, `tween()`, `scrollTo()`,
-  `scrollIntoView()`, `ms(name)`, `stagger(k)`, `geometry()`, `mattes()`, `shift()`,
-  `stepper()`), and the rites only a script can start are the engine's too: `reveal(el)` wraps
-  each character of a line in an inline glyph that carries two sigils for the length of the rite
-  and unwraps it after (`textContent` is never anything but the words, so a screen reader and the
-  harnesses read the line whole, and the line keeps its kerning); `flip(list, change)` runs a
-  change and sends every child that moved from its old place to its new one in the held treads of
-  a stair rolled for it, by the Web Animations API, and lets the new ones develop; `arrive(el, {
-  seed, spell })` writes a geometry, a curve, a composition and (asked for) a ladder of the
-  element's own on it, so a batch of cards dealt together arrives from as many directions as there
-  are cards, and `deal(el)` pins the page's roll on a thing waiting in its delay; `rite(el, name)`,
-  `wax(el)`, `wane(el)` and `seal(el)` play a state rite on demand; `temperFor(el)` reads the
-  temperament of the mood an element sits inside, so a card of another world in the feed moves by
-  its own; and the **ghost veil** — the lightbox's veil is hidden the instant what was behind it is
-  put away, so the engine leaves a clone in its place, pinned to the roll it was born with, that is
-  eaten down the ladder and wipes back to the shape it opened from. The engine's accounting is the
-  browser's: whether anything is in flight is read from `document.getAnimations()`, so an
-  animation cancelled without a word (an element removed or hidden mid-flight) can never leave
-  the roll stuck, and a spell with an animation in flight keeps its curve until that animation
-  ends. Every script keeps a polyline of its own for the stub browsers the harnesses run in, which
-  load no engine.
+  property, and the `linear()` easing function can express any stair, so the engine writes the
+  page's roll onto `:root`: nine **families**, each a stair with one rule — `--ease-arrive` (lands
+  with shrinking treads), `--ease-leave` (departs with growing ones), `--ease-stair` (holds, then
+  steps evenly; the curve every change of state climbs), `--ease-shift`, `--ease-flicker` (two
+  quick treads), `--ease-pulse`, `--ease-drift`, `--ease-wipe` and `--ease-ratchet` (how anything
+  turns: even clicks, never an even rotation); the durations; and the geometry, `--arrive-x`,
+  `--arrive-y` and `--arrive-angle` (one clear direction a thing comes from and the slice it comes
+  in behind), `--leave-*`, `--wipe-from`, `--wipe-to`, `--state-from`, `--sky-x` and `--sky-y`.
+  Then, per movement, `cut(el, rite, options)` composes the movement and writes it on the element
+  — `--ease-<rite>` and `--motion-<rite>`, with `--cut-angle` for a slice or `--cut-x` and `--cut-y`
+  for a curve — and hands back its length. A script's own movements ask the same engine
+  (`window.interestingMotion`: `ease(family)`, `curve(family)`, `tween()`, `stepper()`,
+  `scrollTo()`, `scrollIntoView()`, `ms(name)`, `stagger(k)`, `geometry()`, `cut()`, `shift()`),
+  and the rites only a script can start are the engine's too: `reveal(el)` steps one mask across a
+  line (`is-revealing`, `--cut` animated by the Web Animations API), with a tread at the gaps
+  between words, so `textContent` is never anything but the words and the line keeps its kerning;
+  `flip(list, change)` sends every child that moved to its new place in one stair; `arrive(el, {
+  seed, spell })` writes an arrival of the element's own on it, so a batch of cards dealt together
+  arrives from as many directions as there are cards, and `deal(el)` pins the page's roll on a thing
+  waiting in its delay; `rite(el, name)`, `wax(el)`, `wane(el)` and `seal(el)` play a state rite on
+  demand; `temperFor(el)` reads the temperament of the mood an element sits inside; and the
+  **ghost veil** — the lightbox's veil is hidden the instant what was behind it is put away, so the
+  engine leaves a copy in its place that is cut away by one edge. Every script keeps a polyline of
+  its own for the stub browsers the harnesses run in, which load no engine.
 - **A module moves the same way.** Nothing a world's module draws on its canvas moves along a
   formula either: a selection does not fade to another opacity, a wheel does not turn evenly, a
   solved thing does not wash in. `env.rite` (and `ctx.rite`, the same object inside a piece) is
   the piece's own roll of how it moves, from [`site/js/variant.js`](site/js/variant.js), seeded
-  from the piece's seed so the same seed plays the same rite: `rite.ease(t)`, a glitch of a curve;
-  `rite.stair(t, n)`, `t` stepped onto uneven treads, for a state that changes; `rite.ratchet(t)`,
-  a turn in clicks with backlash; `rite.flicker(t)`, 0 or 1, for a thing that arrives by blinking
-  on; `rite.matte(x, y, k)`, which says whether the piece's own procedurally generated matte —
-  noise, shards, scan lines, a dither, an iris, a grain — lets the cell at column `x`, row `y`
-  through at coverage `k`, so a region that becomes selected changes by its area in that pattern;
-  `rite.paint(g, x, y, w, h, k)`, which fills a rect's cells through that matte so no module
-  writes the loop; `rite.series(t, n)`, the tread reached; `rite.turn(t)`, the ratchet by another
-  name; and `rite.at(seed)`, the same rite rolled afresh, for one per thing that moves or one per
-  trigger. Every env builder hands it —
-  `js/feed.js`, `js/stage.js` and the three harnesses, the piece harness carrying a copy of the
-  block word for word, which `RealSiteTest` holds equal to the original — and a module imports
-  nothing and touches no clock or `Math.random`, as before.
-- **When it rolls.** Once as the `<head>` is read, so the first paint already moves along a curve
-  of its own; on every transition that ends, for the next one (a running transition keeps the
-  curve it started with, so nothing in flight is disturbed); on every animation that ends, once no
-  animation of that name is still running, and at every turn of a looping one; on every press, key
-  and focus, just before the movement it is about to cause, the mattes with the geometry; whenever
-  the site changes what it is wearing; and every so often on a page left alone. A page with no
-  script moves along the baked fallbacks in `_tokens.scss`, rolled once by the same maker, so even
-  then nothing moves along a formula; a browser that knows no `linear()` is given a `steps()`
-  stair with a rolled number of treads, the one easing such a browser has that is not a standard
+  from the piece's seed so the same seed plays the same rite: `rite.ease(t)`, a landing in a few
+  shrinking treads; `rite.stair(t, n)`, `t` stepped onto two to five treads, for a state that
+  changes; `rite.ratchet(t)`, a turn in even clicks; `rite.flicker(t)`, one cut, off and then on
+  for good; the piece's **one edge** — `rite.kind` (`'slice'` or `'curve'`) and `rite.angle`, its
+  signature, kept by every `rite.at(seed)` — with `rite.paint(g, x, y, w, h, k)`, which fills the
+  part of a box that edge has passed at coverage `k` as one polygon or one disc (never a grid of
+  cells), `rite.region(g, x, y, w, h, k)`, the same shape added to a path to clip or stroke (a
+  shape that is not a box is a clip round a paint), and `rite.matte(u, v, k)`, whether a point of
+  the box (in fractions of it) is behind the edge; `rite.series(t, n)`, the tread reached; and
+  `rite.at(seed)`, the same edge with treads rolled afresh, for one per trigger. Every env builder
+  hands it — `js/feed.js`, `js/stage.js` and the three harnesses, the piece harness carrying a copy
+  of the block word for word, which `RealSiteTest` holds equal to the original — and a module
+  imports nothing and touches no clock or `Math.random`, as before.
+- **When it rolls.** Once as the `<head>` is read, so the first paint already moves along a stair
+  of its own; and again whenever the site changes what it is wearing. A movement is composed on its
+  trigger, on the element, and an animation that ends is rolled afresh on the element that played
+  it, so its next play is another stair — never by re-rolling the page. A page with no script moves
+  along the baked fallbacks in `_tokens.scss`, rolled once by the same maker; a browser that knows
+  no `linear()` is given a `steps()` stair, the one easing such a browser has that is not a standard
   curve, and `<html data-motion='steps'>` says so.
 - **The temperament.** Each mood of [`site/_sass/_mood.scss`](site/_sass/_mood.scss) carries a
-  temperament beside its palette: `--motion-grain` (how glitchy its movements are), `--motion-tempo`
-  (how long they take) and `--motion-steps` (whether its curves prefer a typewriter's stair to a
-  brush's swoop). A restless world stutters and snaps; a tender one hesitates and drifts; the
-  curious one steps. The engine reads the three off `:root` on every full roll, so a movement is
-  customised twice over — by the mood of what is on the screen, and by the roll.
+  temperament beside its palette: `--motion-grain` (how uneven its treads are), `--motion-tempo`
+  (how long they take) and `--motion-steps` (whether it prefers fewer, longer treads). The engine
+  reads the three off `:root` on every full roll, so a movement is customised twice over — by the
+  mood of what is on the screen, and by the roll.
 - **The registers.** [`site/_sass/_type.scss`](site/_sass/_type.scss) declares them (`$registers`),
   and every one is a *setting* of the vendored face rather than the name of a face a machine may
   or may not have: Fraunces at an optical size (`opsz` 9 to 144), a weight (`wght` 100 to 900), a
@@ -973,7 +952,7 @@ code, and true of the site as committed.
   last two as ems of the words' own size, never lengths), so when the register turns over the
   axes, the size, the leading, the tracking and the word-spacing step to their new values along
   the stair, the letterforms themselves a movement of the rite, and every wearer of `type.rite`
-  is thrown through the matte ladder (`rite-shift`) as it turns. Small capitals are made from the
+  is cut into its new face by one slice at the new register's slant (`rite-shift`) as it turns. Small capitals are made from the
   capitals: the vendored subset carries no small-cap or figure features, and no weight or slant
   is ever faked. `type.rite-dress` draws the register's
   ornaments and rule on the words that carry a page (its heading, the stage's title), and
@@ -981,57 +960,61 @@ code, and true of the site as committed.
 - **The shift of modality.** When the mood, the world or the featured piece changes on `:root`,
   the engine reads the temperament again, rolls everything to it, and writes `<html data-shifting>`
   for one rolled moment, during which the rite's words — the stage's head, a page's heading, a
-  card's name — are cut through a sigil flicker into their new face (`@keyframes rite-shift` in
+  card's name — are cut into their new face by one slice (`@keyframes rite-shift` in
   `_mood.scss`), the register's axes step to their new values along the stair, the palette changes
-  underneath in treads and the page's sky washes across to the new corner the roll gave it
-  (`--sky-x` and `--sky-y` are registered custom properties, so `main`'s gradient can move them).
-  The words flicker and never a control: an instruction stays where a visitor can read it. A
-  visitor who asked for less motion gets the change and not the throw, as everywhere: every
-  transition and animation is still turned off under `prefers-reduced-motion`, every state is
-  simply there (the state layer at the top of the ladder, the texture on a set control), a tween
-  lands at once, a scroll jumps, words are shown, and the veil leaves no ghost.
-- **Stated in the prompt.** The tenth `AXIOM` in the `Rules:` block names the line, the engine's
-  custom properties and functions, the grammar of a change of state, `env.rite`, the registers and
-  the fixed font sheet, and — as with the cadence and mood axioms — every easing the code refuses,
-  in full, so it is a rule a run can follow rather than a trap it springs: the keywords `linear`,
-  `ease`, `ease-in`, `ease-out` and `ease-in-out` and the function `cubic-bezier()` in a
-  transition, an animation or a timing-function declaration or in the easing of a Web Animations
-  call, and the browser's own smoothing, `scroll-behavior: smooth` and `behavior: 'smooth'` on a
-  scroll. It says what is welcome too: `linear()` with stops is the engine's own curve, and a
-  `linear-gradient` is paint. The `RITUAL, NOT RIDDLE` standard carries the feel of it beside the
-  serif, and the line a run reads last ends on it.
+  underneath in treads and the page's sky moves across to the new corner the roll gave it. The
+  words are cut and never a control: an instruction stays where a visitor can read it. A visitor
+  who asked for less motion gets the change and not the cut, as everywhere: every transition and
+  animation is turned off under `prefers-reduced-motion`, every state is simply there (the state
+  layer in its two shades, a set control sealed), a tween lands at once, a scroll jumps, words are
+  shown whole, and the veil leaves no ghost.
+- **Stated in the prompt.** The tenth `AXIOM` in the `Rules:` block names the line, the one edge
+  and its reasons, the engine's custom properties and functions, `_cut.scss`, the grammar of a
+  change of state, what the rite may cost, `env.rite`, the registers and the fixed font sheet, and
+  — as with the cadence and mood axioms — every easing the code refuses, in full, so it is a rule
+  a run can follow rather than a trap it springs: the keywords `linear`, `ease`, `ease-in`,
+  `ease-out` and `ease-in-out` and the function `cubic-bezier()` in a transition, an animation or
+  a timing-function declaration or in the easing of a Web Animations call, and the browser's own
+  smoothing, `scroll-behavior: smooth` and `behavior: 'smooth'` on a scroll. It says what is
+  welcome too: `linear()` with stops is the engine's own curve, and a `linear-gradient` is paint.
+  The `RITUAL, NOT RIDDLE` standard carries the feel of it beside the serif, and the line a run
+  reads last ends on it.
 - **Held to in code.** `check_motion` in
   [`.github/scripts/make_interesting.py`](.github/scripts/make_interesting.py) refuses a plan that
   takes the engine's line off a page, that moves anything on a page by one of the easings above,
   or that **fades a state**: a transition of `opacity`, `color`, `background`, `background-color`,
   `border-color`, `outline-color`, `fill`, `stroke`, `filter`, `backdrop-filter`, `visibility` or
   `all` along any curve but `var(--ease-stair)` (a curve written out in place, a `linear()` with
-  stops or a `steps()`, may be a stair of its own and is let through; a transform may still slide
-  along a family, because a slide is a movement and not a fade) — all read as text, like the
-  cadence check, of the page and every script and stylesheet it loads, so an easing federated into
-  a shared file is found and the fixed files are left alone. As with the other nine, only what the
-  run itself breaks is refused, and every reason is one easing or one fade in one place, so
-  clearing one can only take a reason away. `js/motion.js` joins `js/threshold.js` in
-  `PROTECTED_FILES`: a run may rewrite and extend it, and may never delete it. `css/fonts.css`
-  joins the consent library in `FIXED_FILES`.
-- **What is deliberately not checked**: whether a curve feels like a working, whether a register
-  suits its mood, whether a module's selection really grows through its matte, and whether a
-  script's own arithmetic traces a polynomial. No code could judge the first two, and the last two
-  would have to read every expression on the site; the prompt asks for all four, and the stage's
-  contract says a module that lerps is the kind this site refuses.
+  stops or a `steps()`, may be a stair of its own and is let through; a transform may still move
+  along a family, because a movement is not a fade) — all read as text, like the cadence check,
+  of the page and every script and stylesheet it loads, so an easing federated into a shared file
+  is found and the fixed files are left alone. As with the other nine, only what the run itself
+  breaks is refused, and every reason is one easing or one fade in one place, so clearing one can
+  only take a reason away. `js/motion.js` joins `js/threshold.js` in `PROTECTED_FILES`: a run may
+  rewrite and extend it, and may never delete it. `css/fonts.css` joins the consent library in
+  `FIXED_FILES`.
+- **What is deliberately not checked**: whether an edge's reason is the right one, whether a
+  register suits its mood, and whether a script's own arithmetic traces a polynomial. No code
+  could judge the first two, and the last would have to read every expression on the site; the
+  prompt asks for all three, and the stage's contract says a module that lerps is the kind this
+  site refuses.
 - **True of the site as committed.** `RealSiteTest` builds `/site` on every pull request and
   before every deploy and sweeps it with the same check: every page loads the engine, nothing a
   page or its files would move by is a standard easing, every transition in the Sass names a
-  family and every animation its own spell, the geometry is read where the movements are, the
-  controls keep the ladder, the stamp and the seal and no colour of a control moves along a fade,
-  every matte tread is written for both mask syntaxes, the glyph rite and the ghost veil are
-  there, every env builder hands `rite`, the harness's copy of the rite is the original's, the
-  rite's arithmetic is a stair, a ratchet, a flicker and a matte (run in Node), the font sheet
-  carries its licence and fetches nothing, every mood names a register `_type.scss` declares and
-  the built stylesheet writes that register's faces and temperament wherever the mood's palette is
-  written, and the engine still offers everything the scripts ask it for. `MotionAxiomTest` holds
-  the check itself: what it finds, what it leaves alone, and that a page which already moved by a
-  formula blocks nothing.
+  family and every animation its own spell, the geometry and the edge's angle and point are read
+  where the movements are, the controls keep the one-edge grammar and no colour of a control moves
+  along a fade, no stylesheet changes a surface through a ladder, a pattern, a picture or a
+  prefixed twin, no script composes a rule or reads a field of cells, the reveal is one mask and
+  not glyphs, every keyframe animates only what the compositor draws cheaply (or `--cut`) in at
+  most three stops and every loop only a transform, the engine writes nothing into a stylesheet,
+  takes no line apart and never re-rolls the page on an animation's end, every env builder hands
+  `rite`, the harness's copy of the rite is the original's, the rite's arithmetic is a forward
+  stair of two to five treads, a ratchet, a single cut and one edge painted as one shape (run in
+  Node), the font sheet carries its licence and fetches nothing, every mood names a register
+  `_type.scss` declares and the built stylesheet writes that register's faces and temperament
+  wherever the mood's palette is written, and the engine still offers everything the scripts ask
+  it for. `MotionAxiomTest` holds the check itself: what it finds, what it leaves alone, and that
+  a page which already moved by a formula blocks nothing.
 
 ### Powered down, never broken
 
