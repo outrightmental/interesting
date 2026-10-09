@@ -17,8 +17,8 @@
                       another. Every line can be checked against the sky, and exactly two are
                       false. Find them. A wrong check says whether one of the two is right.
      the second watch A comparison. The first watch drew the sky and the second drew it again,
-                      side by side, and one star is not where it was. Name it, and the way it
-                      went. A wrong check says which of the two is right and no more; the
+                      side by side, and one star is not where it was. Name it, the way it
+                      went, and how far. Coordinates make the distance readable; the
                       hint, at its price, names the half of the sky the mover is in.
 
    A card and the feature it opens as are one entry: the spark puts the whole plan on its spec as
@@ -346,7 +346,10 @@ function recallPiece(env, plan) {
           best = i;
         }
       });
-      if (best < 0 || bd > fr.unit * 0.09) return;
+      if (best < 0 || bd > fr.unit * 0.09) {
+        c.status('tap a lettered star to add it to your order, or arrange the stars with the controls');
+        return;
+      }
       if (s.taps.includes(best)) {
         c.status('star ' + LETTERS[best] + ' is already in your order; keep going');
         draw(c);
@@ -655,7 +658,7 @@ function linesPiece(env, plan) {
       const value = c.value('lines');
       const picked = Array.isArray(value) ? value.map(Number) : [];
       const right = picked.filter((i) => plan.lies.includes(i)).length;
-      const solved = picked.length === 2 && right === 2;
+      const solved = picked.length === 2 && new Set(picked).size === 2 && right === 2;
       return {
         solved,
         say: solved ? 'both false lines found; the log is corrected' : right === 1 ? 'one of the two is right' : 'neither of those is a false line'
@@ -691,15 +694,17 @@ function linesPiece(env, plan) {
       const fr = frameOf(c.w, c.h, v);
       const step = (c.h - fr.split) / (count + 2);
       const i = Math.floor((y * c.h - fr.split) / step) - 1;
-      if (y * c.h < fr.split || i < 0 || i >= count) return;
+      if (y * c.h < fr.split || i < 0 || i >= count) {
+        c.status('tap a numbered line on the page to mark it false, or choose it with the controls');
+        return;
+      }
       const picked = s.picked.filter((k) => k !== i);
       if (picked.length === s.picked.length) {
         if (picked.length >= 2) picked.shift();
         picked.push(i);
       }
       s.picked = picked.sort((a, b) => a - b);
-      // The rail takes the pick once it is a pair, as the pick knob itself would.
-      if (s.picked.length === 2) c.set('lines', s.picked.slice());
+      c.set('lines', s.picked.slice());
       c.status(s.picked.length === 2 ? 'marked false: line ' + (s.picked[0] + 1) + ' and line ' + (s.picked[1] + 1) + '; check the log'
         : s.picked.length === 1 ? 'marked false: line ' + (s.picked[0] + 1) + '; one more' : 'no line marked');
       draw(c);
@@ -741,6 +746,11 @@ function driftWay(plan) {
   return dx > 0 ? 'east' : dx < 0 ? 'west' : dy < 0 ? 'north' : 'south';
 }
 
+function driftDistance(plan) {
+  const from = plan.points[plan.star];
+  return Math.abs(plan.to.x - from.x) + Math.abs(plan.to.y - from.y);
+}
+
 function driftPlan(env) {
   const number = 1 + env.int(0, 398);
   for (let attempt = 0; attempt < 40; attempt++) {
@@ -761,7 +771,7 @@ function carriedDrift(env) {
   if (!Number.isInteger(p.number) || p.number < 1 || p.number > 399) return null;
   if (!Number.isInteger(p.star) || p.star < 0 || p.star >= p.points.length || !driftOk(p.points, p.star, p.to)) return null;
   const plan = { kind: 'drift', number: p.number, points: copyPoints(p.points), star: p.star, to: { x: p.to.x, y: p.to.y } };
-  return driftWay(plan) ? plan : null;
+  return driftWay(plan) && driftDistance(plan) <= 30 ? plan : null;
 }
 
 function driftTitle(plan) {
@@ -792,7 +802,7 @@ function driftScene(g, w, h, c, plan, s, v) {
   sky(g, w, fr.split, skyTint(c));
   if (s.half) {
     g.fillStyle = c.alpha(gold, 0.07);
-    for (const x0 of [0, pw]) g.fillRect(x0 + (s.half === 'west' ? 0 : pw / 2), top * 0.4, pw / 2, fr.split - top * 0.4);
+    g.fillRect(s.half === 'west' ? 0 : pw / 2, top * 0.4, pw / 2, fr.split - top * 0.4);
   }
   g.strokeStyle = c.alpha(c.colors.muted, 0.55);
   g.lineWidth = 1;
@@ -821,10 +831,15 @@ function driftScene(g, w, h, c, plan, s, v) {
     ring(g, first[s.picked].x, first[s.picked].y, fr.unit * 0.03, c.alpha(gold, 0.85), 1.2);
     ring(g, later[s.picked].x, later[s.picked].y, fr.unit * 0.03, c.alpha(gold, 0.85), 1.2);
   }
-  const step = page(g, w, h, fr.split, c, ink, fr.m, Math.max(4, Math.round(4 * v.density)));
-  const lines = [OPENER + ' entry ' + plan.number + ', the second watch', 'the sky as the first watch drew it, and as it stands now.'];
-  lines.push(s.fade > 0 ? 'star ' + LETTERS[plan.star] + ' has drifted ' + driftWay(plan) + ' since the first watch.' : 'one star has drifted. which, and which way?');
-  if (s.half) lines.push('the one that moved is in the ' + s.half + ' half.');
+  const step = page(g, w, h, fr.split, c, ink, fr.m, Math.max(5, Math.round(5 * v.density)));
+  const lines = [OPENER + ' entry ' + plan.number + ', the second watch', 'coordinates: right, then down; each scale runs from 0 to 100.'];
+  lines.push(s.fade > 0 ? 'star ' + LETTERS[plan.star] + ' drifted ' + driftWay(plan) + ' by ' + driftDistance(plan) + ' steps.' : 'one star moved straight. which, which way, and how far?');
+  if (s.half) lines.push('in the first drawing, the mover is in the ' + s.half + ' half.');
+  if (s.picked >= 0 && s.picked < plan.points.length) {
+    const a = plan.points[s.picked];
+    const b = driftSecond(plan)[s.picked];
+    lines.push('star ' + LETTERS[s.picked] + ': first (' + a.x + ', ' + a.y + '); second (' + b.x + ', ' + b.y + ').');
+  }
   rows(g, fr, step, lines, (i) => (i === 0 ? c.alpha(gold, 0.95) : c.alpha(c.colors.fg, 0.85)));
 }
 
@@ -835,32 +850,37 @@ function driftPreview(g, w, h, env, plan) {
 function driftPiece(env, plan) {
   const n = plan.points.length;
   const v = dials(env);
-  const helps = asked(env).helps;
+  const { helps, margin } = asked(env);
   const way = driftWay(plan);
-  const s = { fade: 0, picked: -1, half: null };
+  const distance = driftDistance(plan);
+  const second = driftSecond(plan);
+  const s = { fade: 0, picked: -1, half: null, hints: 0 };
   const draw = (c) => driftScene(c.g, c.w, c.h, c, plan, s, v);
   const wayOf = (value) => (WAYS.find((o) => o.value === value) || {}).label;
   return {
     title: driftTitle(plan),
-    brief: 'The first watch drew the sky on the left; the second drew it again before midnight, on the right. ' + capital(WORDS[n]) + ' stars, lettered the same in both. One of them has drifted since the first drawing; the rest have kept their places.',
-    goal: 'Name the star that drifted, and the way it went.',
+    brief: 'Compare two watches: the first drawing is on the left, the second on the right. One of the ' + WORDS[n] + ' stars moved straight; the rest stayed put. Each star\'s control lists its first and second coordinates: right, then down, on scales from 0 to 100. Choose a star to read those coordinates on the page too. Subtract the changed coordinate to measure the distance. ' + (margin ? 'Your distance may be ' + margin + ' steps out.' : 'The distance must be exact.'),
+    goal: 'Name the star that moved, its direction, and how many coordinate steps it moved.',
     aspect: '4 / 3',
     checkLabel: 'compare the watches',
     steps: [
-      { id: 'star', ask: 'the star that drifted: choose it here, or tap it on either sky', kind: 'pick', count: 1, items: range(n).map((i) => ({ label: 'star ' + LETTERS[i], value: i })) },
+      { id: 'star', ask: 'the moving star; coordinates are first watch / second watch', kind: 'pick', count: 1, items: range(n).map((i) => ({ label: 'star ' + LETTERS[i] + ': (' + plan.points[i].x + ', ' + plan.points[i].y + ') / (' + second[i].x + ', ' + second[i].y + ')', value: i })) },
       { id: 'way', ask: 'the way it went', kind: 'choice', options: WAYS },
-      // The watch has one thing to say, so a fierce difficulty does not offer to say it.
-      helps > 1 ? { id: 'half', ask: 'which half of the sky holds the one that moved', kind: 'press', count: 1, label: 'narrow it down', optional: true } : null
+      { id: 'by', ask: 'how many coordinate steps it moved', kind: 'number', min: 1, max: 30, step: 1, value: 1, unit: 'steps' },
+      { id: 'half', ask: 'one clue about the moving star', kind: 'press', count: 1, label: 'narrow it down', optional: true }
     ].filter(Boolean),
-    solution: { star: [plan.star], way },
+    solution: { star: [plan.star], way, by: { value: distance, near: margin } },
     check(c) {
       const picked = c.value('star');
-      const i = Array.isArray(picked) && picked.length ? Number(picked[0]) : -1;
+      const i = Array.isArray(picked) && picked.length === 1 ? Number(picked[0]) : -1;
       const starRight = i === plan.star;
       const wayRight = c.value('way') === way;
-      if (starRight && wayRight) return { solved: true, say: 'star ' + LETTERS[plan.star] + ' drifted ' + way + ' between the watches; the entry is written up' };
-      if (!starRight && !wayRight) return { solved: false, say: 'that star kept its place, and the drift did not go that way' };
-      return { solved: false, say: starRight ? 'that is the star, but the drift did not go that way' : 'the way is right, but that star kept its place' };
+      const by = Number(c.value('by'));
+      const off = Math.abs(by - distance);
+      const distanceRight = Number.isInteger(by) && by >= 1 && by <= 30 && off <= margin;
+      if (starRight && wayRight && distanceRight) return { solved: true, say: 'star ' + LETTERS[plan.star] + ' moved ' + way + ' by ' + distance + ' steps; the two watches agree with your account' };
+      const right = Number(starRight) + Number(wayRight) + Number(distanceRight);
+      return { solved: false, say: WORDS[right] + ' of three details match; ' + (distanceRight ? 'the distance is within the allowed margin' : off === 1 ? 'the distance is off by one step' : 'the distance is outside the allowed margin') };
     },
     start(c) {
       c.status('read the second drawing against the first, star by star');
@@ -869,16 +889,36 @@ function driftPiece(env, plan) {
     apply(id, value, c) {
       if (id === 'star') {
         s.picked = Array.isArray(value) && value.length ? Number(value[0]) : -1;
-        c.status(s.picked >= 0 ? 'star ' + LETTERS[s.picked] + ' marked as the one that drifted' : 'no star marked yet');
+        if (Number.isInteger(s.picked) && s.picked >= 0 && s.picked < n) {
+          const a = plan.points[s.picked];
+          const b = second[s.picked];
+          c.status('star ' + LETTERS[s.picked] + ': first (' + a.x + ', ' + a.y + '), second (' + b.x + ', ' + b.y + '); coordinates are right, then down');
+        } else {
+          s.picked = -1;
+          c.status('no star marked yet');
+        }
       }
       if (id === 'way') c.status('drifted ' + wayOf(value) + ', you say');
+      if (id === 'by') c.status('distance ' + Number(value) + ' steps; compare the first and second coordinates');
       if (id === 'half') {
-        if (!s.half) {
-          s.half = plan.points[plan.star].x < 50 ? 'west' : 'east';
-          c.hint();
-          c.status('the one that moved is in the ' + s.half + ' half of the sky');
+        if (s.hints >= helps) {
+          c.status('all the clues available at this difficulty have been given; compare the coordinates for the rest');
         } else {
-          c.status('the half is named; the star is yours to find');
+          s.hints += 1;
+          c.hint();
+          const from = plan.points[plan.star];
+          if (s.hints === 1) {
+            s.half = from.x < 50 ? 'west' : 'east';
+            c.status('in the first drawing, the moving star is in the ' + s.half + ' half');
+          } else if (s.hints === 2) {
+            c.status('in the first drawing, the moving star is in the ' + (from.y < 50 ? 'upper' : 'lower') + ' half');
+          } else if (s.hints === 3) {
+            c.status('the drift changes the ' + (from.x === plan.to.x ? 'down coordinate; compare heights' : 'right coordinate; compare left and right positions'));
+          } else if (s.hints === 4) {
+            c.status('compare star ' + LETTERS[plan.star] + ' in the two drawings');
+          } else {
+            c.status('the changed coordinate differs by ' + distance + ' steps');
+          }
         }
       }
       draw(c);
@@ -886,7 +926,10 @@ function driftPiece(env, plan) {
     tap(x, y, c) {
       // Tap a star on either drawing to name it; the pick on the rail follows.
       const fr = frameOf(c.w, c.h, v);
-      if (y * c.h > fr.split) return;
+      if (y * c.h > fr.split) {
+        c.status('choose a star on either sky, or use its coordinate control');
+        return;
+      }
       const pw = c.w / 2;
       const x0 = x * c.w < pw ? 0 : pw;
       const pts = driftPanel(x0 ? driftSecond(plan) : plan.points, x0, pw, fr);
@@ -899,10 +942,15 @@ function driftPiece(env, plan) {
           best = i;
         }
       });
-      if (best < 0 || bd > fr.unit * 0.09) return;
+      if (best < 0 || bd > fr.unit * 0.09) {
+        c.status('tap a lettered star, or choose its coordinate control');
+        return;
+      }
       s.picked = best;
       c.set('star', [best]);
-      c.status('star ' + LETTERS[best] + ' marked as the one that drifted; say the way it went');
+      const a = plan.points[best];
+      const b = second[best];
+      c.status('star ' + LETTERS[best] + ': first (' + a.x + ', ' + a.y + '), second (' + b.x + ', ' + b.y + '); say its direction and distance');
       draw(c);
     },
     frame(t, dt, c) {
@@ -910,7 +958,7 @@ function driftPiece(env, plan) {
       draw(c);
     },
     end(c) {
-      c.status('entry ' + plan.number + ' written up: star ' + LETTERS[plan.star] + ' drifted ' + way + ' between the watches; the rest held');
+      c.status('entry ' + plan.number + ' written up: star ' + LETTERS[plan.star] + ' moved ' + way + ' by ' + distance + ' steps; choose any other star to compare what stayed still');
     }
   };
 }
@@ -923,30 +971,47 @@ function dealt(env) {
   return r < 0.36 ? 'recall' : r < 0.7 ? 'lines' : 'drift';
 }
 
+const entries = new WeakMap();
+function entry(env) {
+  let plan = entries.get(env);
+  if (!plan) {
+    const kind = dealt(env);
+    plan = kind === 'recall' ? recallPlan(env) : kind === 'lines' ? linesPlan(env) : driftPlan(env);
+    entries.set(env, plan);
+  }
+  return plan;
+}
+
 export default {
   id: 'constellation-diary',
   needsSky: true,
   paint(g, w, h, env) {
-    const kind = dealt(env);
-    if (kind === 'recall') recallPreview(g, w, h, env, recallPlan(env), 0);
-    else if (kind === 'lines') linesPreview(g, w, h, env, linesPlan(env));
-    else driftPreview(g, w, h, env, driftPlan(env));
+    const plan = entry(env);
+    if (plan.kind === 'recall') recallPreview(g, w, h, env, plan, 0);
+    else if (plan.kind === 'lines') linesPreview(g, w, h, env, plan);
+    else driftPreview(g, w, h, env, plan);
+  },
+  animate(g, w, h, env, t) {
+    const plan = entry(env);
+    if (plan.kind !== 'recall' || env.reduced) return false;
+    recallPreview(g, w, h, env, plan, Math.max(0, t) % (LEAD + SLOT * plan.seq.length + 2));
   },
   spark(env) {
-    const kind = dealt(env);
+    const cached = entry(env);
+    const kind = cached.kind;
     if (kind === 'drift') {
-      const plan = driftPlan(env);
+      const plan = cached;
       return {
         title: driftTitle(plan),
         quote: 'One of the ' + WORDS[plan.points.length] + ' stars is not where the first watch left it.',
-        text: 'Two drawings of one sky, a watch apart. Find the star that drifted, and the way it went.',
+        text: 'Two drawings of one sky, a watch apart. Find the moving star, its direction and its distance; compare the coordinates to write a complete account.',
         aspect: '4 / 3',
         paint: (g, w, h, cardEnv) => driftPreview(g, w, h, cardEnv, plan),
         of: plan
       };
     }
     if (kind === 'recall') {
-      const plan = recallPlan(env);
+      const plan = cached;
       return {
         title: recallTitle(plan),
         quote: WORDS[plan.points.length][0].toUpperCase() + WORDS[plan.points.length].slice(1) + ' stars come out one at a time on the midnight watch.',
@@ -956,7 +1021,7 @@ export default {
         of: plan
       };
     }
-    const plan = linesPlan(env);
+    const plan = cached;
     return {
       title: linesTitle(plan),
       quote: claimText(plan.claims[0]) + '.',
@@ -973,9 +1038,9 @@ export default {
     if (lines) return linesPiece(env, lines);
     const drift = carriedDrift(env);
     if (drift) return driftPiece(env, drift);
-    const kind = dealt(env);
-    if (kind === 'recall') return recallPiece(env, recallPlan(env));
-    if (kind === 'lines') return linesPiece(env, linesPlan(env));
-    return driftPiece(env, driftPlan(env));
+    const plan = entry(env);
+    if (plan.kind === 'recall') return recallPiece(env, plan);
+    if (plan.kind === 'lines') return linesPiece(env, plan);
+    return driftPiece(env, plan);
   }
 };

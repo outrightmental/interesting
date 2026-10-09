@@ -11,7 +11,7 @@
                      it missed by and on which side. The ring is placed on a flight the puzzle
                      flew first, so it can always be reached, and the far ends of both sliders
                      are checked at the making to miss it.
-     the moons       Three moons on circular orbits round a planet, drawn to scale with a ruler
+     the moons       Three to five moons on circular orbits round a planet, drawn to scale with a ruler
                      and a scale bar. A moon's period grows as its radius to the three halves, so
                      the outermost and the innermost orbit are in a whole-number step. Put the
                      moons in order of period and say how many laps the innermost makes while the
@@ -422,6 +422,7 @@ function slingPiece(env, p) {
           replays += 1;
           s.clock = 0;
           s.fraction = c.reduced ? 1 : 0;
+          c.hint();
           c.status('the last flight, again: ' + s.verdict);
         } else {
           c.status('nothing has flown yet; release the probe first');
@@ -446,20 +447,24 @@ function slingPiece(env, p) {
 /* ---- the moons ------------------------------------------------------------------------------ */
 
 function moonsPlan(env) {
+  const n = env.int(3, 5);
   const number = 100 + env.int(0, 899);
   const name = 'the ' + env.pick(FIRST) + ' ' + env.pick(SECOND);
   let last = null;
   for (let attempt = 0; attempt < 40; attempt++) {
-    const k = env.int(2, 8);
+    const k = env.int(n === 3 ? 2 : 4, 8);
     const inner = env.int(10, 16);
     const outer = Math.round(inner * Math.pow(k, 2 / 3));
-    if (Math.round(Math.pow(outer / inner, 1.5)) !== k || outer - inner < 6) continue;
+    if (Math.round(Math.pow(outer / inner, 1.5)) !== k || outer - inner < 3 * (n - 1)) continue;
     const middle = env.int(inner + 3, outer - 3);
-    const names = shuffled(env, [0, 1, 2, 3, 4, 5, 6, 7]).slice(0, 3);
-    let listing = shuffled(env, [inner, middle, outer]);
-    for (let guard = 0; guard < 8 && listing[0] < listing[1] && listing[1] < listing[2]; guard++) listing = shuffled(env, [inner, middle, outer]);
-    if (listing[0] < listing[1] && listing[1] < listing[2]) listing = [outer, middle, inner];
-    const angles = [env.int(0, 359), env.int(0, 359), env.int(0, 359)];
+    const radii = n === 3 ? [inner, middle, outer]
+      : Array.from({ length: n }, (_, i) => Math.round(inner + (outer - inner) * i / (n - 1)));
+    const names = shuffled(env, [0, 1, 2, 3, 4, 5, 6, 7]).slice(0, n);
+    let listing = shuffled(env, radii);
+    const ascending = (list) => list.every((r, i) => i === 0 || list[i - 1] < r);
+    for (let guard = 0; guard < 8 && ascending(listing); guard++) listing = shuffled(env, radii);
+    if (ascending(listing)) listing = radii.slice().reverse();
+    const angles = Array.from({ length: n }, () => env.int(0, 359));
     last = { kind: 'moons', number, name, k, radii: listing, names, angles };
     return last;
   }
@@ -471,13 +476,14 @@ function carriedMoons(env) {
   if (!p || p.kind !== 'moons' || !Number.isInteger(p.number) || p.number < 100 || p.number > 999) return null;
   if (typeof p.name !== 'string' || !p.name || p.name.length > 40) return null;
   if (!Number.isInteger(p.k) || p.k < 2 || p.k > 8) return null;
-  if (!Array.isArray(p.radii) || p.radii.length !== 3 || !p.radii.every((r) => Number.isInteger(r) && r >= 8 && r <= 70)) return null;
+  if (!Array.isArray(p.radii) || p.radii.length < 3 || p.radii.length > 5 || !p.radii.every((r) => Number.isInteger(r) && r >= 8 && r <= 70)) return null;
+  const n = p.radii.length;
   const sorted = p.radii.slice().sort((a, b) => a - b);
-  if (sorted[0] >= sorted[1] || sorted[1] >= sorted[2]) return null;
-  if (Math.round(Math.pow(sorted[2] / sorted[0], 1.5)) !== p.k) return null;
-  if (p.radii[0] < p.radii[1] && p.radii[1] < p.radii[2]) return null;
-  if (!Array.isArray(p.names) || p.names.length !== 3 || !p.names.every((i) => Number.isInteger(i) && i >= 0 && i < FIRST.length) || new Set(p.names).size !== 3) return null;
-  if (!Array.isArray(p.angles) || p.angles.length !== 3 || !p.angles.every((a) => Number.isInteger(a) && a >= 0 && a < 360)) return null;
+  if (sorted.some((r, i) => i > 0 && r - sorted[i - 1] < 3)) return null;
+  if (Math.round(Math.pow(sorted[n - 1] / sorted[0], 1.5)) !== p.k) return null;
+  if (p.radii.every((r, i) => i === 0 || p.radii[i - 1] < r)) return null;
+  if (!Array.isArray(p.names) || p.names.length !== n || !p.names.every((i) => Number.isInteger(i) && i >= 0 && i < FIRST.length) || new Set(p.names).size !== n) return null;
+  if (!Array.isArray(p.angles) || p.angles.length !== n || !p.angles.every((a) => Number.isInteger(a) && a >= 0 && a < 360)) return null;
   return { kind: 'moons', number: p.number, name: p.name, k: p.k, radii: p.radii.slice(), names: p.names.slice(), angles: p.angles.slice() };
 }
 
@@ -487,7 +493,7 @@ function moonsTitle(p) {
 
 // The moons shortest period first: the order that solves it.
 function moonsOrder(p) {
-  return [0, 1, 2].sort((a, b) => p.radii[a] - p.radii[b]);
+  return p.radii.map((r, i) => i).sort((a, b) => p.radii[a] - p.radii[b]);
 }
 
 function moonsScene(g, w, h, env, p, s, v) {
@@ -561,7 +567,9 @@ function moonsScene(g, w, h, env, p, s, v) {
     g.textAlign = Math.cos(a) < 0 ? 'right' : 'left';
     g.textBaseline = 'middle';
     g.fillStyle = env.alpha(hot ? col.accent2 : col.fg, 0.9);
-    g.fillText(FIRST[p.names[i]] + (hot ? ', ' + ['shortest', 'middle', 'longest'][order.indexOf(i)] + ' period' : ''), x + (Math.cos(a) < 0 ? -1 : 1) * rad * 1.8, y - rad * 1.6);
+    const rank = order.indexOf(i);
+    const clue = rank === 0 ? 'shortest period' : rank === order.length - 1 ? 'longest period' : 'period rank ' + (rank + 1);
+    g.fillText(FIRST[p.names[i]] + (hot ? ', ' + clue : ''), x + (Math.cos(a) < 0 ? -1 : 1) * rad * 1.8, y - rad * 1.6);
   });
   // The scale bar, and the law.
   const bar = 10 * u;
@@ -589,44 +597,44 @@ function moonsScene(g, w, h, env, p, s, v) {
   g.textAlign = 'center';
   g.fillStyle = env.alpha(col.muted, 0.85);
   const foot = s.order ? 'shortest period first: ' + s.order.map((i) => FIRST[p.names[i]]).join(', ') + ' · ' + s.laps + (s.laps === 1 ? ' lap' : ' laps') + ' of the innermost for one of the outermost'
-    : 'three moons to scale; the inner one laps the outer a whole number of times';
+    : WORDS[p.radii.length] + ' moons to scale; the inner one laps the outer a whole number of times';
   g.fillText(foot, w / 2, h * 0.95, w * 0.92);
 }
 
-function moonsPreview(g, w, h, env, p) {
-  moonsScene(g, w, h, env, p, { spin: 0, hinted: [], order: null, laps: 1 }, dials(env));
+function moonsPreview(g, w, h, env, p, spin = 0) {
+  moonsScene(g, w, h, env, p, { spin, hinted: [], order: null, laps: 1 }, dials(env));
 }
 
 function moonsPiece(env, p) {
   const v = dials(env);
   const helps = asked(env).helps;
   const answer = moonsOrder(p);
-  const s = { spin: 0, hinted: [], order: [0, 1, 2], laps: 1 };
+  const n = p.radii.length;
+  const s = { spin: 0, hinted: [], order: p.radii.map((r, i) => i), laps: 1 };
   const draw = (c) => moonsScene(c.g, c.w, c.h, c, p, s, v);
   const names = p.names.map((i) => FIRST[i]);
   return {
     title: moonsTitle(p),
-    brief: 'One law, read off a ruler. Three moons circle ' + p.name + ', drawn to scale: the ruler reads each orbit\'s radius and the bar is ten units. A moon\'s period grows as its radius to the three halves (the square of the period as the cube of the radius), and these three were chosen so that the innermost laps the outermost a whole number of times.',
+    brief: WORDS[n][0].toUpperCase() + WORDS[n].slice(1) + ' moons circle ' + p.name + '. Their orbit radii are ' + names.map((name, i) => name + ': ' + p.radii[i] + ' units').join('; ') + '. A larger radius means a longer period. For the lap count, divide the outer radius by the inner radius, raise that ratio to 1.5, and round to the nearest whole number. The ruler shows the same measurements.',
     goal: 'Put the moons in order of period, shortest first, and say how many laps the innermost makes while the outermost makes one.',
     aspect: '16 / 10',
     checkLabel: 'check the orbits',
     steps: [
-      { id: 'order', ask: 'the moons, shortest period first', kind: 'order', items: [0, 1, 2].map((i) => ({ label: 'the ' + names[i] + ' moon', value: i })) },
+      { id: 'order', ask: 'the moons, shortest period first', kind: 'order', items: names.map((name, i) => ({ label: 'the ' + name + ' moon', value: i })) },
       { id: 'laps', ask: 'laps of the innermost moon for one lap of the outermost', kind: 'number', min: 1, max: 9, step: 1, value: 1, unit: 'laps' },
-      // One thing to say, so a fierce difficulty does not offer to say it.
-      helps > 1 ? { id: 'hint', ask: 'which moon has the shortest period', kind: 'press', count: 1, label: 'name it', optional: true } : null
+      { id: 'hint', ask: 'one moon in period order', kind: 'press', count: 1, label: 'show a clue', optional: true }
     ].filter(Boolean),
     solution: { order: answer.slice(), laps: p.k },
     check(c) {
       const value = c.value('order');
-      const order = isPerm(value, 3) ? value : s.order;
+      const order = isPerm(value, n) ? value : s.order;
       const right = order.filter((m, i) => m === answer[i]).length;
       const laps = Math.round(Number(c.value('laps')));
       const off = Math.abs(laps - p.k);
-      if (right === 3 && off === 0) {
-        return { solved: true, say: 'in step: the ' + names[answer[0]] + ' moon laps ' + WORDS[p.k] + ' times for one lap of the ' + names[answer[2]] + ' moon' };
+      if (right === n && off === 0) {
+        return { solved: true, say: 'in step: the ' + names[answer[0]] + ' moon laps ' + WORDS[p.k] + ' times for one lap of the ' + names[answer[n - 1]] + ' moon' };
       }
-      const parts = [right === 3 ? 'the order holds' : right === 0 ? 'no moon stands in the right place' : WORDS[right] + ' of three in the right place'];
+      const parts = [right === n ? 'the order holds' : right === 0 ? 'no moon stands in the right place' : WORDS[right] + ' of ' + WORDS[n] + ' in the right place'];
       parts.push(off === 0 ? 'the count holds' : off === 1 ? 'the count is off by one' : 'the count is off by more than one');
       return { solved: false, say: parts.join('; ') };
     },
@@ -635,7 +643,7 @@ function moonsPiece(env, p) {
       draw(c);
     },
     apply(id, value, c) {
-      if (id === 'order' && isPerm(value, 3)) {
+      if (id === 'order' && isPerm(value, n)) {
         s.order = value.slice();
         c.status('shortest period first: ' + s.order.map((i) => names[i]).join(', '));
       }
@@ -645,22 +653,38 @@ function moonsPiece(env, p) {
         c.status(s.laps + (s.laps === 1 ? ' lap' : ' laps') + ' of the innermost for one of the outermost');
       }
       if (id === 'hint') {
-        if (!s.hinted.includes(answer[0])) {
-          s.hinted.push(answer[0]);
+        if (s.hinted.length < Math.min(helps, n)) {
+          const rank = s.hinted.length;
+          const moon = answer[rank];
+          s.hinted.push(moon);
           c.hint();
-          c.status('the ' + names[answer[0]] + ' moon has the shortest period: it rides the innermost orbit');
+          c.status('period place ' + (rank + 1) + ': the ' + names[moon] + ' moon, at radius ' + p.radii[moon] + '; smaller orbits have shorter periods');
         } else {
-          c.status('the ' + names[answer[0]] + ' moon is marked already; the count follows from the two radii');
+          c.status('all the orbit clues available at this difficulty are marked; use the radii for the remaining order and lap count');
         }
       }
       draw(c);
+    },
+    tap(x, y, c) {
+      const outer = Math.max(...p.radii);
+      const u = Math.min(c.w * 0.3, c.h * 0.4) / outer;
+      let nearest = -1;
+      let distance = Infinity;
+      p.radii.forEach((r, i) => {
+        const a = (p.angles[i] + s.spin * 360 / (30 * Math.pow(r / outer, 1.5))) * Math.PI / 180;
+        const d = Math.hypot(x * c.w - (c.w * 0.46 + Math.cos(a) * r * u), y * c.h - (c.h * 0.5 + Math.sin(a) * r * u));
+        if (d < distance) { distance = d; nearest = i; }
+      });
+      c.status(distance <= Math.max(22, Math.min(c.w, c.h) * 0.08)
+        ? 'the ' + names[nearest] + ' moon: orbit radius ' + p.radii[nearest] + ' units'
+        : 'tap a moon to read its radius, or use the measurements above');
     },
     frame(t, dt, c) {
       if (c.done && !c.reduced) s.spin += dt;
       draw(c);
     },
     end(c) {
-      c.status('the moons are in motion: watch the ' + names[answer[0]] + ' moon lap the ' + names[answer[2]] + ' moon ' + WORDS[p.k] + ' times');
+      c.status('the moons are in motion: watch the ' + names[answer[0]] + ' moon lap the ' + names[answer[n - 1]] + ' moon ' + WORDS[p.k] + ' times; tap any moon to inspect it');
     }
   };
 }
@@ -671,26 +695,43 @@ function dealsMoons(env) {
   return env.chance(0.5);
 }
 
+const plans = new WeakMap();
+function deal(env) {
+  let plan = plans.get(env);
+  if (!plan) {
+    plan = dealsMoons(env) ? moonsPlan(env) : slingPlan(env);
+    plans.set(env, plan);
+  }
+  return plan;
+}
+
 export default {
   id: 'gravity-well',
   needsSky: false,
   paint(g, w, h, env) {
-    if (dealsMoons(env)) moonsPreview(g, w, h, env, moonsPlan(env));
-    else slingPreview(g, w, h, env, slingPlan(env));
+    const plan = deal(env);
+    if (plan.kind === 'moons') moonsPreview(g, w, h, env, plan);
+    else slingPreview(g, w, h, env, plan);
+  },
+  animate(g, w, h, env, t) {
+    const plan = deal(env);
+    if (plan.kind !== 'moons' || env.reduced) return false;
+    moonsPreview(g, w, h, env, plan, Math.max(0, t) * 0.5);
   },
   spark(env) {
-    if (dealsMoons(env)) {
-      const p = moonsPlan(env);
+    const plan = deal(env);
+    if (plan.kind === 'moons') {
+      const p = plan;
       return {
         title: moonsTitle(p),
-        text: 'Three moons drawn to scale. Order them by period and say how many laps the innermost makes for one of the outermost.',
+        text: WORDS[p.radii.length][0].toUpperCase() + WORDS[p.radii.length].slice(1) + ' moons drawn to scale. Order them by period and count the inner moon\'s laps; after solving, watch the system turn and inspect any moon.',
         mono: 'period ∝ radius³ᐟ²',
         aspect: '16 / 10',
         paint: (g, w, h, cardEnv) => moonsPreview(g, w, h, cardEnv, p),
         of: p
       };
     }
-    const p = slingPlan(env);
+    const p = plan;
     return {
       title: slingTitle(p),
       text: 'One well, one ring. Find the launch angle and speed that carry the probe through the ring; every check is a flight.',
@@ -705,6 +746,7 @@ export default {
     if (sling) return slingPiece(env, sling);
     const moons = carriedMoons(env);
     if (moons) return moonsPiece(env, moons);
-    return dealsMoons(env) ? moonsPiece(env, moonsPlan(env)) : slingPiece(env, slingPlan(env));
+    const plan = deal(env);
+    return plan.kind === 'moons' ? moonsPiece(env, plan) : slingPiece(env, plan);
   }
 };
