@@ -490,13 +490,37 @@ function riteTempo() {
    page, the engine wraps each glyph in a sigil for the length of the rite (motion.reveal, which
    leaves textContent exactly the words throughout and unwraps after). The stub browser the stage
    harness runs in has no engine, so there the words are simply there. */
+const revealing = typeof WeakMap === 'function' ? new WeakMap() : null; // node -> the undo of its rite
+
 function reveal(node) {
   if (!node || calm.matches || !motion || typeof motion.reveal !== 'function') return;
   try {
-    motion.reveal(node);
+    const undo = motion.reveal(node);
+    if (revealing && typeof undo === 'function') revealing.set(node, undo);
   } catch (e) {
     /* the words are there, which is the whole of what matters */
   }
+}
+
+// A rite still in flight on a node is unwrapped before the node is written again: the glyph spans
+// go and the words stand whole, so a second line never lands on the first one's pieces.
+function unreveal(node) {
+  if (!node || !revealing) return;
+  const undo = revealing.get(node);
+  if (!undo) return;
+  revealing.delete(node);
+  try {
+    undo();
+  } catch (e) {
+    /* nothing to unwrap */
+  }
+}
+
+// The words of a node, written whole (unwrapping any rite still on it first).
+function write(node, text) {
+  if (!node) return;
+  unreveal(node);
+  node.textContent = text == null ? '' : String(text);
 }
 
 // A line written and revealed, when it changed: the heading's words, a label, a count.
@@ -504,7 +528,7 @@ function inscribe(node, text) {
   if (!node) return;
   const words = text == null ? '' : String(text);
   if (node.textContent === words) return;
-  node.textContent = words;
+  write(node, words);
   if (words) reveal(node);
 }
 
@@ -1028,6 +1052,7 @@ function sparkOf(mod, seed, world, variant, stars) {
 function heading(world, card) {
   const title = (card && card.title) || world.name;
   const changed = ui.title.textContent !== title;
+  unreveal(ui.title);
   ui.title.textContent = title;
   if (changed) reveal(ui.title);
   inscribe(ui.brief, card ? (card.quote || card.text || card.mono || '') : (world.what || ''));
@@ -1132,6 +1157,7 @@ function begin(opened) {
   // rather than to the world's one line (issue #80).
   const named = piece.title || (card && card.title) || world.name;
   const renamed = ui.title.textContent !== named;
+  unreveal(ui.title);
   ui.title.textContent = named;
   if (renamed) reveal(ui.title); // the rite's word lands glyph by glyph (the text rites above)
   // The working's own particulars, rolled from its seed and not from the piece's stream (env.rnd is
@@ -2419,17 +2445,19 @@ function close() {
   delete stage.dataset.turning;
   delete stage.dataset.try;
   delete stage.dataset.tryParity;
+  // The words that were revealed are unwrapped before they are taken away (write).
   if (ui.sigil) {
-    ui.sigil.textContent = '';
+    write(ui.sigil, '');
     ui.sigil.hidden = true;
   }
-  ui.brief.textContent = '';
-  if (ui.goalText) ui.goalText.textContent = '';
+  write(ui.brief, '');
+  if (ui.goalText) write(ui.goalText, '');
   if (ui.goal) ui.goal.hidden = true;
+  unreveal(ui.world);
   ui.knobs.textContent = '';
   if (ui.check) {
     ui.check.disabled = true;
-    ui.check.textContent = 'check';
+    write(ui.check, 'check');
   }
   if (ui.tries) {
     ui.tries.textContent = '';
@@ -2442,7 +2470,7 @@ function close() {
     ui.wanted.textContent = '';
     ui.wanted.hidden = true;
   }
-  ui.doneText.textContent = 'done';
+  write(ui.doneText, 'done');
   ui.done.hidden = true;
   dimTheWayOn();
 }
@@ -2452,6 +2480,7 @@ function goHome() {
   close();
   inscribe(ui.world, home.name);
   const returning = ui.title.textContent !== home.line;
+  unreveal(ui.title);
   ui.title.textContent = home.line;
   if (returning) reveal(ui.title); // the invitation re-materialises by the glyph rite
   if (ui.read) ui.read.hidden = true;

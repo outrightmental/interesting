@@ -442,7 +442,8 @@ function sideView(g, w, h, c, p, s, variant) {
     const would = Math.min(shadowHeight(p, s.tried), 30);
     const from = s.triedFrom == null ? would : Math.min(s.triedFrom, 30);
     const at = from + (would - from) * rite.ease(pt);
-    const top = floor - at * unit;
+    // The curve may overshoot a little; the line stays on the wall.
+    const top = Math.max(h * 0.06, Math.min(floor, floor - at * unit));
     const lo = Math.max(h * 0.06, Math.min(top, floor - H * unit));
     const hi = Math.max(top, floor - H * unit);
     if (hi - lo > 1) surface(g, rite, own, wallX, lo, w - wallX, hi - lo, pt, c.alpha(col.accent, 0.3));

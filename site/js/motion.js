@@ -2135,7 +2135,8 @@
               put = true;
             } else d.parent.removeChild(piece);
           }
-          if (!put && d.parent.appendChild) d.parent.appendChild(d.node);
+          // No piece left means the element was rewritten under the rite: the words there now
+          // are the newer ones, and the old node is not put back.
         }
         if (typeof opts.done === 'function') opts.done();
       }

@@ -804,6 +804,26 @@ site — palette, face and movement — turns over from one piece of content to 
 nine axioms before it, this is an invariant of the iteration: stated in the prompt, held to in
 code, and true of the site as committed.
 
+- **Every movement is composed anew on its trigger.** A rite is not one rolled curve laid over a
+  fixed sequence of keyframes: it is a whole put together, the moment it is triggered, from pieces
+  each chosen at random from a vocabulary — an opening (a cut in from the rolled edge, a blink,
+  nothing), a climb up the matte ladder (steady, with a slip back, in a leap, with a stutter, with
+  a flicker out, doubled), a landing (the patterned top, the flat rung then the top, an overshoot),
+  a dip (how deep, which way, with what flash), a return (straight, over the mark, a double
+  bounce), an approach (straight, hesitating, past the mark, skewed in) — with the width of every
+  tread uneven and its own, and a length rolled for that play. The engine writes the composition
+  as an `@keyframes` rule of its own into a stylesheet it keeps (recycling the oldest as new ones
+  come) and names it on the element — `--rite-wax`, `--rite-wane`, `--rite-stamp`, `--rite-ink`,
+  `--rite-seal`, `--rite-unseal`, `--rite-develop`, `--rite-unmake`, `--rite-veil-out` — where the
+  stylesheets read it before their own: `animation: var(--rite-wax, matte-in) …`. So the same hover
+  on the same button is never the same twice, two buttons hovered together wax two different ways,
+  and the named keyframes in the Sass are what a page with no script plays. The engine's own
+  movements compose the same way: a scroll and a crossfade run on a **stepper** that emits the
+  treads of a stair rolled for that call (uneven, with a hold and a slip where the grain allows,
+  never a fraction between), a FLIP jumps its way home in held pairs, and a reveal deals each glyph
+  two sigils, its own delay and one of a pool of curves rolled for that line. A module composes
+  within its seed's determinism, rolling `rite.at(k)` afresh per trigger, so a second press on the
+  same piece plays a different stair, matte and flicker from the first.
 - **The grammar of a change of state.** Every control and every surface on the site changes the
   same five ways, and never by a fade. A control under the pointer or the focus **waxes**: its
   state layer arrives through the **matte ladder** — five masks at rising coverage the engine
@@ -834,32 +854,48 @@ code, and true of the site as committed.
   the mark, the settle, sometimes a flicker as it lands), `--ease-leave` (a flicker, a refusal to
   go, then the rush out), `--ease-shift` (a drift in uneven steps), `--ease-flicker`,
   `--ease-pulse`, `--ease-drift` (the slow turn of a ring, with a catch now and then), `--ease-wipe`
-  (the veil: a lag, the swallow, a blink) and `--ease-stair` (three to seven uneven treads, the
-  curve every change of state climbs) — and one `--ease-<name>` per `@keyframes` animation,
-  re-rolled every time that animation finishes so the next time it plays it plays differently; the
-  durations, rolled with a little jitter; the geometry, `--arrive-x`, `--arrive-y`, `--arrive-rot`,
+  (the veil: a lag, the swallow, a blink), `--ease-stair` (three to seven uneven treads, the curve
+  every change of state climbs) and `--ease-ratchet` (how anything turns: eighteen to ninety teeth,
+  each a click forward, a slip of a part of a tooth back and a hold, never an even rotation) — and
+  one `--ease-<name>` and one `--motion-<name>` per `@keyframes` animation, the curve and the
+  length both re-rolled every time that animation finishes so the next time it plays it plays
+  differently; the durations, rolled with a little jitter; the geometry, `--arrive-x`, `--arrive-y`, `--arrive-rot`,
   `--arrive-scale`, `--leave-*`, `--wipe-from` and `--wipe-to` (an edge, a slit, an iris, a
   corner), `--state-from`, `--sky-x` and `--sky-y`, and the small particulars of one movement each;
   and the **mattes**, `--matte-1` to `--matte-5` (the ladder, as `mask` values: an SVG noise field
   thresholded at rising coverage, a scatter of shards, or scan, dither, iris and grain gradients)
   with `--matte-fill` and `--matte-fill-size` (the texture a surface that stays changed is filled
-  with) and `--matte-kind`. Every transition in [`site/_sass`](site/_sass) names a family as its
+  with), `--matte-top` (that texture as a mask, the top rung, so a surface that has arrived rests
+  patterned and never flat) and `--matte-kind` (also `<html data-matte>`). The noise ladder is
+  calibrated: the turbulence channel is stretched before it is cut, so the five rungs really cover
+  about a fifth, a third, a half, three quarters and the whole; the shards are drawn smallest
+  first and wrapped at the tile's edges so they repeat without a seam; the dither is a Bayer tile
+  lit cell by cell. Every transition in [`site/_sass`](site/_sass) names a family as its
   timing function, every animation names its own spell with a family as the fallback, and every
   keyframe reads the rolled geometry and the rolled mattes rather than a fixed distance or a flat
   tint. A script's own movements — the stage's colour crossfade, its burst, its scroll, the
   threshold's stars coming out and knocks ringing, the constellation's stagger — ask the same
   engine (`window.interestingMotion`: `ease(family)`, `curve(family)`, `tween()`, `scrollTo()`,
-  `scrollIntoView()`, `ms(name)`, `stagger(k)`, `geometry()`, `mattes()`, `shift()`), and the
-  rites only a script can start are the engine's too: `reveal(el)` wraps each character of a line
-  in a glyph that carries a sigil for the length of the rite and unwraps it after (`textContent`
-  is never anything but the words, so a screen reader and the harnesses read the line whole);
-  `flip(list, change)` runs a change and sends every child that moved from its old place to its
-  new one along a rolled curve, by the Web Animations API, and lets the new ones develop;
-  `rite(el, name)`, `wax(el)` and `wane(el)` play a state rite on demand; and the **ghost veil** —
-  the lightbox's veil is hidden the instant what was behind it is put away, so the engine leaves a
-  clone in its place that is eaten down the ladder and wipes back to the shape it opened from.
-  Every script keeps a polyline of its own for the stub browsers the harnesses run in, which load
-  no engine.
+  `scrollIntoView()`, `ms(name)`, `stagger(k)`, `geometry()`, `mattes()`, `shift()`,
+  `stepper()`), and the rites only a script can start are the engine's too: `reveal(el)` wraps
+  each character of a line in an inline glyph that carries two sigils for the length of the rite
+  and unwraps it after (`textContent` is never anything but the words, so a screen reader and the
+  harnesses read the line whole, and the line keeps its kerning); `flip(list, change)` runs a
+  change and sends every child that moved from its old place to its new one in the held treads of
+  a stair rolled for it, by the Web Animations API, and lets the new ones develop; `arrive(el, {
+  seed, spell })` writes a geometry, a curve, a composition and (asked for) a ladder of the
+  element's own on it, so a batch of cards dealt together arrives from as many directions as there
+  are cards, and `deal(el)` pins the page's roll on a thing waiting in its delay; `rite(el, name)`,
+  `wax(el)`, `wane(el)` and `seal(el)` play a state rite on demand; `temperFor(el)` reads the
+  temperament of the mood an element sits inside, so a card of another world in the feed moves by
+  its own; and the **ghost veil** — the lightbox's veil is hidden the instant what was behind it is
+  put away, so the engine leaves a clone in its place, pinned to the roll it was born with, that is
+  eaten down the ladder and wipes back to the shape it opened from. The engine's accounting is the
+  browser's: whether anything is in flight is read from `document.getAnimations()`, so an
+  animation cancelled without a word (an element removed or hidden mid-flight) can never leave
+  the roll stuck, and a spell with an animation in flight keeps its curve until that animation
+  ends. Every script keeps a polyline of its own for the stub browsers the harnesses run in, which
+  load no engine.
 - **A module moves the same way.** Nothing a world's module draws on its canvas moves along a
   formula either: a selection does not fade to another opacity, a wheel does not turn evenly, a
   solved thing does not wash in. `env.rite` (and `ctx.rite`, the same object inside a piece) is
@@ -867,10 +903,13 @@ code, and true of the site as committed.
   from the piece's seed so the same seed plays the same rite: `rite.ease(t)`, a glitch of a curve;
   `rite.stair(t, n)`, `t` stepped onto uneven treads, for a state that changes; `rite.ratchet(t)`,
   a turn in clicks with backlash; `rite.flicker(t)`, 0 or 1, for a thing that arrives by blinking
-  on; and `rite.matte(x, y, k)`, which says whether the piece's own procedurally generated matte —
+  on; `rite.matte(x, y, k)`, which says whether the piece's own procedurally generated matte —
   noise, shards, scan lines, a dither, an iris, a grain — lets the cell at column `x`, row `y`
-  through at coverage `k`, so a region that becomes selected changes by its area in that pattern
-  (tile it in cells of `rite.cell` px and fill the ones let through). Every env builder hands it —
+  through at coverage `k`, so a region that becomes selected changes by its area in that pattern;
+  `rite.paint(g, x, y, w, h, k)`, which fills a rect's cells through that matte so no module
+  writes the loop; `rite.series(t, n)`, the tread reached; `rite.turn(t)`, the ratchet by another
+  name; and `rite.at(seed)`, the same rite rolled afresh, for one per thing that moves or one per
+  trigger. Every env builder hands it —
   `js/feed.js`, `js/stage.js` and the three harnesses, the piece harness carrying a copy of the
   block word for word, which `RealSiteTest` holds equal to the original — and a module imports
   nothing and touches no clock or `Math.random`, as before.

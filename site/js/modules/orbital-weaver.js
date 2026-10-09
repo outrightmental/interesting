@@ -43,6 +43,68 @@ function clamp(v, lo, hi) {
   return Math.max(lo, Math.min(hi, v));
 }
 
+/* ---- the rite: how this module moves ------------------------------------------------------- */
+
+/* env.rite (ctx.rite inside a piece) is the piece's own roll of how it moves (js/variant.js;
+   js/stage.js, "The rite"). Nothing on the loom moves along a formula or cuts without a rite:
+   the loom turns in the ratchet's clicks, one arm's step at a time, never a smooth rotation; the
+   dust drifts in treads and blinks on rite.flicker; a lit arm, a mirrored copy the visitor says
+   is there, and the bands of a read print all develop by their AREA through the matte, cell by
+   cell in the piece's own pattern, and never by a fade; a count the visitor sets arrives as a
+   series of ticks round the rim or under the print; an answer read out blinks on. Every change
+   is read against the piece's own clock, s.t, which frame() advances: a change made at `since`
+   has come came() of its way, which is 1 at once for a visitor who asked for less motion and
+   for whatever stood there from the start. Each thing that moves has a roll of its own
+   (rite.at), so no two step together. */
+
+const STILL = {
+  ease: () => 1, stair: () => 1, ratchet: () => 0, flicker: () => 1, matte: () => true,
+  series: (p, n) => Math.max(1, Math.floor(n || 1)), treads: 1, kind: 'none', cell: 4, at: () => STILL
+};
+
+function riteOf(env) {
+  return env && env.rite ? env.rite : STILL;
+}
+
+function came(s, since, span, reduced) {
+  if (reduced || since == null || since < 0) return 1;
+  return clamp((s.t - since) / span, 0, 1);
+}
+
+function fract(x) {
+  return x - Math.floor(x);
+}
+
+// Turns made at x turns along: the whole ones, and the one under way in the ratchet's clicks.
+function turns(rite, x) {
+  return Math.floor(x) + rite.ratchet(fract(x));
+}
+
+// The tread reached at p, 0 to n, on the rite's own uneven stair: a count arriving in a series.
+function series(rite, p, n) {
+  if (typeof rite.series === 'function') return rite.series(p, n);
+  return Math.round(rite.stair(p, n) * n);
+}
+
+// The cells of a box the matte lets through at coverage k, filled in the current fillStyle: how a
+// surface changes by its area. Cells are rite.cell px, coarser over a wide box so a frame stays
+// cheap, on a grid fixed to the canvas so the pattern holds still while it grows. At k >= 1 every
+// cell is let through. Clip first to keep it to a shape.
+function develop(g, rite, x0, y0, bw, bh, k, size) {
+  if (k <= 0) return;
+  const cell = size || Math.max(rite.cell, Math.ceil(Math.max(bw, bh) / 28));
+  const cx0 = Math.floor(x0 / cell);
+  const cy0 = Math.floor(y0 / cell);
+  const cx1 = Math.ceil((x0 + bw) / cell);
+  const cy1 = Math.ceil((y0 + bh) / cell);
+  for (let cy = cy0; cy < cy1; cy++) {
+    for (let cx = cx0; cx < cx1; cx++) {
+      if (k < 1 && !rite.matte(cx, cy, k)) continue;
+      g.fillRect(cx * cell, cy * cell, cell, cell);
+    }
+  }
+}
+
 /* ---- shared drawing ------------------------------------------------------------------------- */
 
 function night(g, w, h, env) {
@@ -55,8 +117,9 @@ function night(g, w, h, env) {
 }
 
 // The persona's stars, faint behind the loom, and a little dust whose number is the
-// configuration's density and whose drift is its turn.
-function sky(g, w, h, env, v, t) {
+// configuration's density and whose drift is its turn. The dust drifts in treads -- a step along
+// every period, up the rite's stair -- and every fourth speck blinks out on a roll of its own.
+function sky(g, w, h, env, v, t, rite) {
   const c = env.colors;
   for (const s of env.stars || []) {
     const x = Number(s && s.x);
@@ -68,9 +131,12 @@ function sky(g, w, h, env, v, t) {
     g.fill();
   }
   const count = Math.max(10, Math.round(36 * v.density));
+  const period = 2.2;
+  const drift = (Math.floor(t / period) + rite.at(0xd5).stair(fract(t / period))) * period;
   for (let i = 0; i < count; i++) {
+    if (i % 4 === 0 && !rite.at(0xd0 + (i % 11)).flicker(fract(t / 3.4 + i * 0.09))) continue;
     g.fillStyle = env.alpha(c.muted, 0.06 + (i % 5) * 0.025);
-    g.fillRect((i * 129.3 + v.turn * 97 + t * 9) % w, (i * 83.7 + v.turn * 41 + t * 5) % h, 1, 1);
+    g.fillRect((i * 129.3 + v.turn * 97 + drift * 9) % w, (i * 83.7 + v.turn * 41 + drift * 5) % h, 1, 1);
   }
 }
 
@@ -162,32 +228,74 @@ function beads(g, pts, r) {
   }
 }
 
-// `s`: the loom's rotation, whether one arm is lit (a hint), whether the answer is out.
+// The area of a shard, developed through the matte at coverage k: clipped to the shard, so only
+// its cells are let through.
+function developShard(g, rite, pts, k, size) {
+  if (k <= 0) return;
+  let x0 = Infinity;
+  let y0 = Infinity;
+  let x1 = -Infinity;
+  let y1 = -Infinity;
+  for (const p of pts) {
+    x0 = Math.min(x0, p.x);
+    y0 = Math.min(y0, p.y);
+    x1 = Math.max(x1, p.x);
+    y1 = Math.max(y1, p.y);
+  }
+  g.save();
+  g.beginPath();
+  pts.forEach((p, i) => (i ? g.lineTo(p.x, p.y) : g.moveTo(p.x, p.y)));
+  g.closePath();
+  g.clip();
+  develop(g, rite, x0, y0, x1 - x0, y1 - y0, k, size);
+  g.restore();
+}
+
+// `s`: how long the loom has been turning (spun, in seconds), whether one arm is lit (a hint)
+// and since when, the visitor's count and whether they say it is mirrored (and since when),
+// whether the answer is out (and since when); and the piece's clock, t.
 function drawFolds(g, w, h, env, plan, s, variant, t) {
   const v = variant || PLAIN;
   const c = env.colors;
+  const rite = riteOf(env);
+  const reduced = !!env.reduced;
   const geo = loomGeometry(w, h, v);
-  const base = v.turn * Math.PI * 2 + s.rot;
+  const step = (Math.PI * 2) / plan.k;
+  // The loom turns one arm's step every few seconds, in the ratchet's clicks, never evenly.
+  const rot = s.spun ? step * turns(rite.at(0x70), s.spun / 3.6) : 0;
+  const base = v.turn * Math.PI * 2 + rot;
   const size = Math.max(9, Math.min(15, Math.round(geo.m * 0.036)));
   const bead = Math.max(1.4, geo.m * 0.006);
+  const cell = Math.max(rite.cell, Math.ceil(geo.m / 90));
   night(g, w, h, env);
-  sky(g, w, h, env, v, t || 0);
+  sky(g, w, h, env, v, t || 0, rite);
   g.lineJoin = 'round';
   g.lineWidth = Math.max(1, geo.m * 0.003);
+  // The lit arm is a set surface: its shards develop through the matte from the moment the
+  // hint was asked, their halo thickens up a stair and their stroke blinks to the foreground.
+  const litRite = rite.at(0x11);
+  const litP = s.lit ? came(s, s.litAt, 1.6, reduced) : 0;
+  const litK = s.lit ? litRite.stair(litP) : 0;
+  const litOn = s.lit && litRite.flicker(litP);
   for (let arm = 0; arm < plan.k; arm++) {
     const tone = arm % 2 ? c.accent : c.accent2;
     const lit = s.lit && arm === 0;
     for (const sign of plan.mirrored ? [1, -1] : [1]) {
       const pts = copyOf(plan, geo.cx, geo.cy, geo.R, base, arm, sign);
-      if (lit) {
+      if (lit && litOn && litK > 0) {
         g.strokeStyle = env.alpha(c.fg, 0.35);
-        g.lineWidth = Math.max(4, geo.m * 0.016);
+        g.lineWidth = Math.max(4, geo.m * 0.016) * litRite.stair(litP, 4);
         thread(g, pts, null);
         g.lineWidth = Math.max(1, geo.m * 0.003);
       }
-      g.strokeStyle = env.alpha(lit ? c.fg : tone, lit ? 1 : 0.8);
-      thread(g, pts, env.alpha(lit ? c.fg : tone, lit ? 0.3 : 0.14));
-      g.fillStyle = env.alpha(lit ? c.fg : tone, 0.95);
+      const fore = lit && litOn;
+      g.strokeStyle = env.alpha(fore ? c.fg : tone, fore ? 1 : 0.8);
+      thread(g, pts, env.alpha(tone, 0.14));
+      if (lit && litK > 0) {
+        g.fillStyle = env.alpha(c.fg, 0.4);
+        developShard(g, litRite, pts, litK, cell);
+      }
+      g.fillStyle = env.alpha(fore ? c.fg : tone, 0.95);
       beads(g, pts, bead);
     }
   }
@@ -196,6 +304,19 @@ function drawFolds(g, w, h, env, plan, s, variant, t) {
   g.beginPath();
   g.arc(geo.cx, geo.cy, geo.R, 0, Math.PI * 2);
   g.stroke();
+  // The visitor's count, as ticks round the rim: they arrive one tread at a time, a series.
+  if (s.guess) {
+    const n = series(rite.at(0x9e), came(s, s.guessAt, 1.2, reduced), s.guess);
+    g.strokeStyle = env.alpha(c.accent2, 0.85);
+    g.lineWidth = Math.max(1.5, geo.m * 0.004);
+    g.beginPath();
+    for (let i = 0; i < n; i++) {
+      const a = base + i * ((Math.PI * 2) / s.guess);
+      g.moveTo(geo.cx + Math.cos(a) * geo.R * 1.01, geo.cy + Math.sin(a) * geo.R * 1.01);
+      g.lineTo(geo.cx + Math.cos(a) * geo.R * 1.07, geo.cy + Math.sin(a) * geo.R * 1.07);
+    }
+    g.stroke();
+  }
   // The motif as laid once, in the corner, its axis pointing up.
   const box = geo.m * 0.2;
   const bx = geo.m * 0.03;
@@ -205,19 +326,39 @@ function drawFolds(g, w, h, env, plan, s, variant, t) {
   g.strokeStyle = env.alpha(c.muted, 0.4);
   g.strokeRect(bx, by, box, box);
   const key = copyOf(plan, bx + box * 0.5, by + box * 0.56, box * 0.46, -Math.PI / 2, 0, 1);
+  // The mirror the visitor says is there: the key's mirror image develops into the corner
+  // through the matte when they say so, and leaves back down the stair when they take it back.
+  const mirrorRite = rite.at(0x3d);
+  const mirrorP = mirrorRite.stair(came(s, s.mirrorAt, 1.2, reduced));
+  const mirrorK = s.mirror ? mirrorP : 1 - mirrorP;
+  if (mirrorK > 0) {
+    const twin = copyOf(plan, bx + box * 0.5, by + box * 0.56, box * 0.46, -Math.PI / 2, 0, -1);
+    g.fillStyle = env.alpha(c.accent2, 0.45);
+    developShard(g, mirrorRite, twin, mirrorK, Math.max(2, Math.min(cell, 3)));
+    g.strokeStyle = env.alpha(c.accent2, 0.5);
+    g.lineWidth = 1;
+    g.setLineDash([2, 3]);
+    thread(g, twin, null);
+    g.setLineDash([]);
+  }
   g.strokeStyle = env.alpha(c.fg, 0.9);
   g.lineWidth = 1;
   thread(g, key, env.alpha(c.fg, 0.14));
   g.fillStyle = c.fg;
   beads(g, key, bead);
   label(g, env, 'the sigil', bx + box * 0.5, by + box * 0.1, Math.max(8, size - 2), 'center', env.alpha(c.muted, 0.9));
-  if (s.open) {
+  // The answer blinks on.
+  if (s.open && rite.at(0x0a).flicker(came(s, s.openAt, 1, reduced))) {
     label(g, env, WORDS[plan.k] + ' folds' + (plan.mirrored ? ', mirrored' : ', one hand'), w - geo.m * 0.03, h - geo.m * 0.04, size, 'right', c.accent2);
   }
 }
 
+function foldsStill() {
+  return { spun: 0, lit: false, litAt: null, open: false, openAt: null, t: 0, guess: null, guessAt: null, mirror: false, mirrorAt: null };
+}
+
 function foldsPreview(g, w, h, env, plan, t) {
-  drawFolds(g, w, h, env, plan, { rot: 0, lit: false, open: false }, env.variant, t || 0);
+  drawFolds(g, w, h, env, plan, foldsStill(), env.variant, t || 0);
 }
 
 function foldsPiece(env, plan) {
@@ -229,7 +370,7 @@ function foldsPiece(env, plan) {
     'one arm is lit: everything on it is one fold',
     'the weave ' + (plan.mirrored ? 'shows both hands: every copy is laid with its mirror image' : 'is all of one hand: no copy is mirrored')
   ];
-  const s = { rot: 0, lit: false, open: false, t: 0, shown: 0 };
+  const s = Object.assign(foldsStill(), { shown: 0 });
   const draw = (c) => drawFolds(c.g, c.w, c.h, c, plan, s, env.variant, s.t);
   return {
     title: foldsTitle(plan),
@@ -257,13 +398,27 @@ function foldsPiece(env, plan) {
     apply(id, value, c) {
       if (id === 'folds') {
         const n = Math.round(Number(value));
-        if (Number.isFinite(n)) c.status(clamp(n, 2, MAX_FOLDS) + ' folds, you say');
+        if (Number.isFinite(n)) {
+          const guess = clamp(n, 2, MAX_FOLDS);
+          if (guess !== s.guess) {
+            s.guess = guess;
+            s.guessAt = s.t;
+          }
+          c.status(guess + ' folds, you say');
+        }
       }
-      if (id === 'mirror') c.status(value ? 'mirrored, you say' : 'one hand, you say');
+      if (id === 'mirror') {
+        if (!!value !== s.mirror) {
+          s.mirror = !!value;
+          s.mirrorAt = s.t;
+        }
+        c.status(value ? 'mirrored, you say' : 'one hand, you say');
+      }
       if (id === 'hint') {
         if (s.shown < Math.min(shows.length, helps)) {
           c.status(shows[s.shown]);
           s.shown += 1;
+          if (!s.lit) s.litAt = s.t;
           s.lit = true;
           c.hint();
         } else if (s.shown >= helps) {
@@ -275,12 +430,14 @@ function foldsPiece(env, plan) {
       draw(c);
     },
     frame(t, dt, c) {
+      // Less motion asked for: the clock stands, and every change came() at once.
       if (!c.reduced) s.t += dt;
-      if (c.done && !c.reduced) s.rot += dt * 0.12;
+      if (c.done && !c.reduced) s.spun += dt;
       draw(c);
     },
     end(c) {
       s.open = true;
+      s.openAt = s.t;
       c.status('the weave turns: ' + WORDS[plan.k] + ' folds' + (plan.mirrored ? ', mirrored' : ''));
       draw(c);
     }
@@ -337,10 +494,13 @@ function screenLines(g, box, n, offset, phase, color) {
   }
 }
 
-// `s`: whether the bands are marked (the answer is out).
+// `s`: whether the bands are marked (the answer is out) and since when; the visitor's count and
+// direction and since when; and the piece's clock, t.
 function drawMoire(g, w, h, env, plan, s, variant) {
   const v = variant || PLAIN;
   const c = env.colors;
+  const rite = riteOf(env);
+  const reduced = !!env.reduced;
   const boxes = moireBoxes(w, h, v);
   const size = Math.max(9, Math.min(15, Math.round(Math.min(w, h) * 0.036)));
   const phase = v.turn / plan.first;
@@ -356,18 +516,27 @@ function drawMoire(g, w, h, env, plan, s, variant) {
   screenLines(g, boxes.both, plan.first, 0.5, phase, firstTone);
   // The second screen sits half a pitch along, which centres its bands in the print.
   screenLines(g, boxes.both, plan.second, 1, phase, secondTone);
-  if (s.open) {
+  // The bands, once the print is read: each develops through the matte from the moment the
+  // answer came out, its core at full coverage and its shoulders at half, blinking on the way the
+  // rite's flicker has it, and holds -- never a wash.
+  const bandRite = rite.at(0x6a);
+  const openP = s.open ? came(s, s.openAt, 1.8, reduced) : 0;
+  const bandK = s.open ? bandRite.stair(openP) : 0;
+  if (bandK > 0 && bandRite.flicker(openP)) {
     const apart = Math.abs(plan.first - plan.second);
+    const cell = Math.max(rite.cell, Math.ceil(boxes.both.h / 40));
+    g.fillStyle = env.alpha(c.accent2, 0.2);
+    g.save();
+    g.beginPath();
+    g.rect(boxes.both.x, boxes.both.y, boxes.both.w, boxes.both.h);
+    g.clip();
     for (let j = 0; j < apart; j++) {
       const x = boxes.both.x + ((j + 0.5) / apart) * boxes.both.w;
       const span = boxes.both.w / apart;
-      const band = g.createLinearGradient(x - span / 2, 0, x + span / 2, 0);
-      band.addColorStop(0, env.alpha(c.accent2, 0));
-      band.addColorStop(0.5, env.alpha(c.accent2, 0.22));
-      band.addColorStop(1, env.alpha(c.accent2, 0));
-      g.fillStyle = band;
-      g.fillRect(x - span / 2, boxes.both.y, span, boxes.both.h);
+      develop(g, bandRite, x - span / 2, boxes.both.y, span, boxes.both.h, bandK * 0.3, cell);
+      develop(g, bandRite, x - span / 4, boxes.both.y, span / 2, boxes.both.h, bandK, cell);
     }
+    g.restore();
   }
   g.strokeStyle = env.alpha(c.muted, 0.45);
   g.lineWidth = 1;
@@ -379,17 +548,39 @@ function drawMoire(g, w, h, env, plan, s, variant) {
     g.lineTo(box.x + box.w, box.y + box.h);
     g.stroke();
   }
+  // The visitor's count, as ticks under the print, arriving one tread at a time: a series.
+  if (s.guess) {
+    const n = series(rite.at(0x9e), came(s, s.guessAt, 1.2, reduced), s.guess);
+    g.strokeStyle = env.alpha(c.accent2, 0.85);
+    g.lineWidth = 1;
+    g.beginPath();
+    for (let i = 0; i < n; i++) {
+      const x = Math.round(boxes.both.x + ((i + 0.5) / s.guess) * boxes.both.w) + 0.5;
+      g.moveTo(x, boxes.both.y + boxes.both.h + 3);
+      g.lineTo(x, boxes.both.y + boxes.both.h + 3 + size * 0.5);
+    }
+    g.stroke();
+  }
   label(g, env, 'the first screen alone: ' + plan.first + ' lines', boxes.alone.x, boxes.alone.y - size * 0.9, size, 'left', env.mix(c.accent, c.fg, 0.35));
   label(g, env, 'the second screen', boxes.both.x, boxes.both.y - size * 0.9, size, 'left', c.accent2);
   label(g, env, ' laid over the first', boxes.both.x + g.measureText('the second screen').width, boxes.both.y - size * 0.9, size, 'left', env.alpha(c.fg, 0.9));
-  if (s.open) {
+  // The direction the visitor says, blinking on beside the print's title.
+  if (s.which && rite.at(0x5c).flicker(came(s, s.whichAt, 0.9, reduced))) {
+    label(g, env, s.which === 'more' ? 'more, you say' : 'fewer, you say', boxes.both.x + boxes.both.w, boxes.both.y - size * 0.9, size, 'right', env.alpha(c.accent2, 0.9));
+  }
+  // The answer blinks on.
+  if (s.open && rite.at(0x0a).flicker(came(s, s.openAt, 1, reduced))) {
     const apart = Math.abs(plan.first - plan.second);
     label(g, env, WORDS[apart] + (apart === 1 ? ' band: ' : ' bands: ') + plan.second + ' lines on the second screen', w - boxes.pad, h * 0.95, size, 'right', c.accent2);
   }
 }
 
+function moireStill() {
+  return { open: false, openAt: null, t: 0, guess: null, guessAt: null, which: null, whichAt: null };
+}
+
 function moirePreview(g, w, h, env, plan) {
-  drawMoire(g, w, h, env, plan, { open: false }, env.variant);
+  drawMoire(g, w, h, env, plan, moireStill(), env.variant);
 }
 
 function moirePiece(env, plan) {
@@ -400,7 +591,7 @@ function moirePiece(env, plan) {
     more ? 'the second screen\'s lines sit closer together than the first\'s' : 'the second screen\'s lines sit farther apart than the first\'s',
     'the print shows ' + WORDS[apart] + (apart === 1 ? ' broad band' : ' broad bands') + ' across it'
   ];
-  const s = { open: false, shown: 0 };
+  const s = Object.assign(moireStill(), { shown: 0 });
   const draw = (c) => drawMoire(c.g, c.w, c.h, c, plan, s, env.variant);
   return {
     title: moireTitle(plan),
@@ -431,9 +622,23 @@ function moirePiece(env, plan) {
     apply(id, value, c) {
       if (id === 'second') {
         const n = Math.round(Number(value));
-        if (Number.isFinite(n)) c.status(clamp(n, 4, 30) + ' lines on the second screen, you say');
+        if (Number.isFinite(n)) {
+          const guess = clamp(n, 4, 30);
+          if (guess !== s.guess) {
+            s.guess = guess;
+            s.guessAt = s.t;
+          }
+          c.status(guess + ' lines on the second screen, you say');
+        }
       }
-      if (id === 'which') c.status(value === 'more' ? 'more lines than the first, you say' : 'fewer lines than the first, you say');
+      if (id === 'which') {
+        const which = value === 'more' ? 'more' : 'fewer';
+        if (which !== s.which) {
+          s.which = which;
+          s.whichAt = s.t;
+        }
+        c.status(value === 'more' ? 'more lines than the first, you say' : 'fewer lines than the first, you say');
+      }
       if (id === 'hint') {
         if (s.shown < Math.min(shows.length, helps)) {
           c.status(shows[s.shown]);
@@ -448,10 +653,12 @@ function moirePiece(env, plan) {
       draw(c);
     },
     frame(t, dt, c) {
+      if (!c.reduced) s.t += dt;
       draw(c);
     },
     end(c) {
       s.open = true;
+      s.openAt = s.t;
       c.status(WORDS[apart] + (apart === 1 ? ' band' : ' bands') + ' from ' + plan.first + ' lines against ' + plan.second + '; the bands are lit on the print');
       draw(c);
     }
@@ -493,7 +700,8 @@ export default {
     const d = deal(env);
     // The printed screens of the moire puzzle do not move: the still picture is the whole of it.
     if (d.moire) return false;
-    drawFolds(g, w, h, env, d.plan, { rot: t * 0.05, lit: false, open: false }, env.variant, t);
+    // The card's loom turns in the ratchet's clicks, an arm's step every few seconds.
+    drawFolds(g, w, h, env, d.plan, Object.assign(foldsStill(), { spun: t, t }), env.variant, t);
   },
   spark(env) {
     const d = deal(env);

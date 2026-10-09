@@ -77,12 +77,32 @@
     var m = engine();
     return (m && m.ms(name)) || fallback;
   }
-  // One passing rite on an element, by the name of its class is-<name>; the engine's clock takes
-  // the class off again after `after` ms.
+  // One passing rite on an element, by the name of its class is-<name>, taken off again after
+  // `after` ms. Put on here rather than by the engine's own rite(), which waits a frame before the
+  // class goes on so a restarted rite restarts: the shared lightbox holds the page's frames while
+  // the sheet is up (js/site.js), and most of these rites are the sheet's. A style flush between
+  // the class going and coming does the same work at once.
+  var passing = typeof WeakMap === 'function' ? new WeakMap() : null;
   function rite(el, name, after) {
     var m = engine();
-    if (!el || !el.classList || !m || typeof m.rite !== 'function' || calm()) return;
-    m.rite(el, name, after);
+    if (!el || !el.classList || !m || calm() || typeof window.setTimeout !== 'function') return;
+    var cls = 'is-' + name;
+    var timers = passing ? passing.get(el) : null;
+    if (!timers && passing) {
+      timers = {};
+      passing.set(el, timers);
+    }
+    if (timers && timers[name]) window.clearTimeout(timers[name]);
+    el.classList.remove(cls);
+    if (typeof el.getBoundingClientRect === 'function') el.getBoundingClientRect();
+    el.classList.add(cls);
+    var wait = after || riteMs('long', 560) * 2 + 400;
+    if (timers) {
+      timers[name] = window.setTimeout(function () {
+        timers[name] = 0;
+        el.classList.remove(cls);
+      }, wait);
+    }
   }
   // Words written to a line and revealed there. A line still revealing is put back whole first, so
   // a status rewritten mid-rite never carries the old glyphs into the new words; `quiet` writes
@@ -1172,11 +1192,24 @@
     var saved = read();
     var fresh = [];
     var order = [];
+    // A star is the same star by what it is, not by its place in the list: one taken out shifts
+    // every star after it by one, and those stay where they are rather than being unmade and dealt
+    // again.
+    var keep = Object.create(null);
+    if (!dealAll) {
+      for (var o = 0; o < old.length; o++) {
+        var it = old[o];
+        if (!it || !it.el || it.el.parentNode !== sheet.field) continue;
+        var key = it.x + '|' + it.y + '|' + it.text;
+        (keep[key] = keep[key] || []).push(o);
+      }
+    }
     fieldStars = clean(saved.value).map(function (s, j) {
-      var was = !dealAll && old[j];
-      if (was && was.el && was.el.parentNode === sheet.field
-          && was.x === s.x && was.y === s.y && was.text === s.text) {
-        old[j] = null;
+      var same = keep[s.x + '|' + s.y + '|' + s.text];
+      var at = same && same.length ? same.shift() : -1;
+      var was = at >= 0 ? old[at] : null;
+      if (was) {
+        old[at] = null;
         if (was.el.classList) was.el.classList.remove('dragging');
         order.push(-1);
         return was;
