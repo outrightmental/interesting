@@ -469,11 +469,44 @@
     try { m.reveal(node, { pace: pace || 0.42 }); } catch (e) { /* the words are there */ }
   }
   // The trace line is the scribe: the live region gets its plain write (assistive tech hears each
-  // line once) and the glass twin under it shows the same words arriving through sigils.
+  // line once) and the glass twin under it shows the same words arriving through sigils. Only
+  // the part of the line that changed is revealed (a count ticking over in a status line that
+  // is otherwise the same words), and a line revealed whole is paced to land within one long
+  // beat however many glyphs it has, so a run of presses never leaves the glass a scramble.
+  function paceFor(text) {
+    var n = text ? text.length : 0;
+    var step = beat('stagger') || BEATS.stagger;
+    if (!n || !step) return 0.3;
+    return Math.min(0.3, beat('long') / (n * step));
+  }
   function note(trace, text) {
     if (!trace) return;
     trace.textContent = text;
-    if (trace.glass) say(trace.glass, text, 0.3);
+    var glass = trace.glass;
+    if (!glass) return;
+    if (typeof trace.undoGlass === 'function') { try { trace.undoGlass(); } catch (e) { /* the words stand */ } }
+    trace.undoGlass = null;
+    var was = glass.textContent || '';
+    var next = text || '';
+    var head = 0;
+    while (head < was.length && head < next.length && was.charAt(head) === next.charAt(head)) head += 1;
+    var tail = 0;
+    while (tail < was.length - head && tail < next.length - head
+      && was.charAt(was.length - 1 - tail) === next.charAt(next.length - 1 - tail)) tail += 1;
+    var changed = next.slice(head, next.length - tail);
+    var m = engine();
+    if (!was || !next || changed.length > next.length * 0.6 || stilled() || !m || typeof m.reveal !== 'function'
+      || typeof document.createTextNode !== 'function') {
+      say(glass, next, paceFor(next));
+      return;
+    }
+    glass.textContent = '';
+    if (head) glass.appendChild(document.createTextNode(next.slice(0, head)));
+    var part = el('span', 'probe-trace-change', changed);
+    glass.appendChild(part);
+    if (tail) glass.appendChild(document.createTextNode(next.slice(next.length - tail)));
+    if (!changed) return;
+    try { trace.undoGlass = m.reveal(part, { pace: paceFor(changed) }); } catch (e) { /* the words are there */ }
   }
   // The meter (aria-hidden) takes its marks and stamps them: data-tick alternates so the
   // stylesheet's one-tread mark-stamp restarts on every write.
@@ -481,10 +514,18 @@
     if (!node || typeof node.setAttribute !== 'function') return;
     node.setAttribute('data-tick', node.getAttribute('data-tick') === 'a' ? 'b' : 'a');
   }
+  // The meter cleared goes down the ladder before its marks are taken, and is itself again after.
   function gauge(trace, text) {
     if (!trace || !trace.meter) return;
-    trace.meter.textContent = text;
-    if (text) tick(trace.meter);
+    var meter = trace.meter;
+    if (text) {
+      if (meter.classList && meter.classList.contains('is-leaving')) restore(meter);
+      meter.textContent = text;
+      tick(meter);
+      return;
+    }
+    if (!meter.textContent) return;
+    unmake(meter, function () { meter.textContent = ''; restore(meter); });
   }
   // A tally that ratchets: one mark at a time, grouped in fives with a slash.
   function tally(n) {
@@ -508,36 +549,83 @@
       node.setAttribute('data-dealt', 'true');
     });
   }
+  // The length the engine rolled for a rite on an element (--motion-<name>, written inline by
+  // composeOn), in ms; 0 where none was written.
+  function rolled(node, name) {
+    if (!node || !node.style || typeof node.style.getPropertyValue !== 'function') return 0;
+    var v = parseFloat(node.style.getPropertyValue(name));
+    return isFinite(v) && v > 0 ? v : 0;
+  }
+  // A rite composed for one element and one trigger: --rite-<kind> names the composition and
+  // --motion-<fallback> its rolled length (both read by the stylesheet before its own keyframes).
+  // Hands back that length, or 0 where there is no engine or the visitor asked for stillness.
+  function composeFor(node, kind, fallback, beatName) {
+    var m = engine();
+    var wait = beat(beatName || 'medium');
+    if (!m || typeof m.composeOn !== 'function' || !wait || !node || !node.style) return 0;
+    try { m.composeOn(node, kind, fallback, wait); } catch (e) { return 0; }
+    return rolled(node, '--motion-' + fallback) || wait;
+  }
   // A thing leaving: down the ladder to the rolled leave corner (is-leaving, probe-out or the
-  // composition the engine wrote), then `fn` at the animation's end or the clock's.
+  // composition the engine wrote), then `fn` at the animation's own end or, failing that, the
+  // clock's. Hands back the rite's length in ms, so a caller can wait for the rite and not the
+  // clock. A node restored before the end (restore) keeps what it has: the callback of a leave
+  // that was undone never runs.
   function unmake(node, fn) {
     var wait = beat('medium');
-    if (!node || !wait || !node.classList) { if (fn) fn(); return; }
+    if (!node || !wait || !node.classList) { if (fn) fn(); return 0; }
     var m = engine();
     if (m && typeof m.composeOn === 'function' && !(node.style && node.style.getPropertyValue('--rite-unmake'))) {
       try { m.composeOn(node, 'unmake', 'probe-out', wait); } catch (e) { /* the stylesheet's own */ }
+    } else if (node.style && !rolled(node, '--motion-probe-out') && rolled(node, '--motion-card-out')) {
+      // The leave the engine composed at the arrival (m.arrive) plays at the length it rolled then.
+      node.style.setProperty('--motion-probe-out', node.style.getPropertyValue('--motion-card-out'));
     }
+    var length = rolled(node, '--motion-probe-out') || wait;
+    var token = { hid: node.getAttribute('aria-hidden') !== 'true' };
+    node.unmakeToken = token;
     node.classList.add('is-leaving');
     node.setAttribute('aria-hidden', 'true');
     if (node.style) node.style.pointerEvents = 'none';
     if (node.tagName === 'BUTTON') node.tabIndex = -1;
     var once = false;
-    function go() { if (once) return; once = true; if (fn) fn(); }
-    node.addEventListener('animationend', function (ev) { if (ev.target === node) go(); });
-    window.setTimeout(go, wait * 2 + 240);
+    function go() { if (once) return; once = true; if (node.unmakeToken !== token) return; if (fn) fn(); }
+    node.addEventListener('animationend', function (ev) { if (ev.target === node && !ev.pseudoElement) go(); });
+    window.setTimeout(go, length + wait + 240);
+    return length;
   }
-  // A control spent: its texture leaves down the ladder and its ground cuts to the disabled grey
-  // (data-spent, rite-spent), and only then is it disabled -- a disabled control plays nothing.
+  // A thing that was leaving, kept after all (a meter written again, an order that takes a new
+  // name): the leave is undone, and the next leave composes anew.
+  function restore(node) {
+    if (!node || !node.classList) return;
+    var token = node.unmakeToken;
+    node.unmakeToken = null;
+    node.classList.remove('is-leaving');
+    if (!token || token.hid) node.removeAttribute('aria-hidden');
+    if (node.style) {
+      node.style.pointerEvents = '';
+      if (typeof node.style.removeProperty === 'function') {
+        node.style.removeProperty('--rite-unmake');
+        node.style.removeProperty('--motion-probe-out');
+      }
+    }
+    if (node.tagName === 'BUTTON') node.tabIndex = 0;
+  }
+  // A control spent: its texture leaves down the ladder by a composition of this retirement's own
+  // (--rite-unseal) at a length rolled for it (--motion-rite-spent), its ground cuts to the
+  // disabled grey along its own stair (data-spent, rite-spent), and only then is it disabled -- a
+  // disabled control plays nothing. An input is spent the same way.
   function retire(button) {
     if (!button || button.disabled) return;
     button.setAttribute('aria-disabled', 'true');
     var wait = beat('medium');
     if (!wait) { button.disabled = true; return; }
+    var length = composeFor(button, 'unseal', 'rite-spent') || wait;
     button.setAttribute('data-spent', 'true');
     var once = false;
     function go() { if (once) return; once = true; button.disabled = true; }
-    button.addEventListener('animationend', function (ev) { if (ev.target === button && /spent/.test(ev.animationName)) go(); });
-    window.setTimeout(go, wait * 2 + 240);
+    button.addEventListener('animationend', function (ev) { if (ev.target === button && !ev.pseudoElement && /spent/.test(ev.animationName)) go(); });
+    window.setTimeout(go, length + wait + 240);
   }
   // The texture a sealed surface wears, rolled for it alone when the engine is there.
   function dress(node) {
@@ -908,10 +996,16 @@
     skip.addEventListener('click', function () {
       if (answered) return;
       answered = true;
+      // Focus leaves the frame before the frame is hidden from assistive tech: it rests on the
+      // host (focusable for the length of the rite) until whoever asked moves it on.
+      var lent = !host.hasAttribute('tabindex');
+      if (lent) host.setAttribute('tabindex', '-1');
+      try { host.focus({ preventScroll: true }); } catch (e) { try { host.focus(); } catch (e2) { /* it stays */ } }
       // The question descends the ladder before it goes; only then is the host cleared.
       unmake(frame, function () {
         if (frame.parentNode === host) host.removeChild(frame);
         if (!host.firstElementChild) host.textContent = '';
+        if (lent) host.removeAttribute('tabindex');
         if (typeof opts.onSkip === 'function') opts.onSkip(probe);
       });
     });
@@ -927,18 +1021,33 @@
     function finish() {
       if (answered) return;
       answered = true;
-      unmake(skip, function () { skip.hidden = true; });
+      var skipLength = unmake(skip, function () { skip.hidden = true; });
       var reading = record(answer);
+      // The trace's last line was heard once already, so the live line is let go; its glass twin
+      // and the meter go down the ladder rather than being wiped.
       trace.textContent = '';
-      glass.textContent = '';
+      if (typeof trace.undoGlass === 'function') { try { trace.undoGlass(); } catch (e) { /* the words stand */ } }
+      trace.undoGlass = null;
+      if (glass.textContent) unmake(glass, function () { glass.textContent = ''; restore(glass); });
+      gauge(trace, '');
       // The reading lands as a seal: the frame takes the fill texture in the new primary, climbing
-      // the ladder (probe-read), before the question is handed on.
+      // the ladder (probe-read, or the composition written here), before the question is handed on.
       dress(frame);
       var wait = beat('long');
       if (m && typeof m.composeOn === 'function' && wait) { try { m.composeOn(frame, 'seal', 'probe-read', wait); } catch (e) { /* the stylesheet's */ } }
       host.setAttribute('data-probe-state', 'read');
-      function hand() { if (typeof opts.onAnswer === 'function') opts.onAnswer(reading, probe); }
-      if (wait) window.setTimeout(hand, wait); else hand();
+      var handed = false;
+      function hand() { if (handed) return; handed = true; if (typeof opts.onAnswer === 'function') opts.onAnswer(reading, probe); }
+      if (!wait) { hand(); return; }
+      // Handed on when the seal has climbed -- the rite's own end on the frame's ::before, or its
+      // rolled length on the clock -- and not before the skip has gone down the ladder.
+      var sealLength = rolled(frame, '--motion-probe-read') || wait;
+      var after = Math.max(0, (skipLength || 0) - sealLength) + 40;
+      frame.addEventListener('animationend', function (ev) {
+        if (ev.target !== frame || ev.pseudoElement !== '::before' || !/probe-read|rite-seal/.test(ev.animationName)) return;
+        window.setTimeout(hand, after);
+      });
+      window.setTimeout(hand, Math.max(sealLength, skipLength || 0) + 240);
     }
     var kinds = {
       choice: choiceProbe, sequence: sequenceProbe, tap: tapProbe, hold: holdProbe,
@@ -956,17 +1065,23 @@
     if (detail) button.appendChild(el('span', 'probe-option-detail', detail));
     return button;
   }
+  // Each landing (a line, its doors, its counter) is dealt into a landing of its own; when the
+  // next is dealt the one that was is left over its place as a ghost that descends the ladder,
+  // sealed door and all, while the new one develops under it. The last landing is never wiped:
+  // its sealed door stands under the frame's read seal until the question is handed on.
   function choiceProbe(probe, body, trace, answer, finish) {
     var steps = probe.steps || [{ ask: null, options: probe.options }];
     var index = 0;
+    var landing = null;
     function step() {
-      body.textContent = '';
+      var old = landing;
+      landing = el('div', 'probe-landing');
       var stage = steps[index];
       var taken = false;
+      var line = null;
       if (stage.ask && steps.length > 1 && !probe.quick) {
-        var line = el('p', 'probe-step');
-        body.appendChild(line);
-        say(line, stage.ask);
+        line = el('p', 'probe-step');
+        landing.appendChild(line);
       }
       var group = el('div', 'probe-options');
       group.setAttribute('role', 'group');
@@ -989,25 +1104,28 @@
             if (index < steps.length) {
               note(trace, 'noted: ' + option.label);
               step();
-            } else {
-              body.textContent = '';
-              finish();
-            }
+            } else finish();
           }
           if (wait) window.setTimeout(go, wait); else go();
         });
         buttons.push(button);
         group.appendChild(button);
       });
-      body.appendChild(group);
-      dealOut(buttons);
+      landing.appendChild(group);
+      var counter = null;
       if (steps.length > 1) {
-        var counter = el('p', 'probe-count probe-counter', (probe.quick ? 'pair ' : '') + (index + 1) + ' of ' + steps.length);
-        body.appendChild(counter);
-        tick(counter);
+        counter = el('p', 'probe-count probe-counter', (probe.quick ? 'pair ' : '') + (index + 1) + ' of ' + steps.length);
+        landing.appendChild(counter);
       }
+      if (old) old.classList.add('probe-landing-ghost');
+      body.appendChild(landing);
+      if (line) say(line, stage.ask);
+      dealOut(buttons);
+      if (counter) tick(counter);
+      // Focus moves to the new landing before the old one is hidden from assistive tech.
       var first = group.querySelector('button');
       if (first && index > 0) first.focus();
+      if (old) unmake(old, function () { if (old.parentNode === body) body.removeChild(old); });
     }
     step();
   }
@@ -1028,7 +1146,8 @@
     }
     var order = el('p', 'probe-step probe-order');
     order.hidden = true;
-    order.appendChild(el('span', 'probe-order-lead', 'chosen order: '));
+    var lead = el('span', 'probe-order-lead', 'chosen order: ');
+    order.appendChild(lead);
     var names = el('span', 'probe-order-names');
     order.appendChild(names);
     body.appendChild(order);
@@ -1070,7 +1189,7 @@
       var gone = picked.slice();
       picked = [];
       note(trace, 'order reset');
-      while (names.firstChild) takeName();
+      takeAll();
       gone.forEach(function (item) { bringBack(items.indexOf(item)); });
       refresh();
     });
@@ -1090,8 +1209,15 @@
       undo.disabled = picked.length === 0;
       reset.disabled = picked.length === 0;
     }
+    // The names still standing in the order (not on their way out).
+    function standing() {
+      if (typeof names.querySelectorAll !== 'function') return names.childNodes.length;
+      return names.querySelectorAll('.probe-order-name:not(.is-leaving)').length;
+    }
     function putName(item) {
-      if (names.childNodes.length) {
+      // An order that was going (its last name taken) and takes a new name is kept after all.
+      if (order.classList.contains('is-leaving')) { restore(order); names.textContent = ''; }
+      if (standing()) {
         var arrow = el('span', 'probe-order-arrow', ' → ');
         arrow.setAttribute('aria-hidden', 'true');
         names.appendChild(arrow);
@@ -1099,16 +1225,34 @@
       }
       var name = el('span', 'probe-order-name');
       names.appendChild(name);
-      order.hidden = false;
+      if (order.hidden) {
+        order.hidden = false;
+        say(lead, 'chosen order: ');
+      }
       say(name, item.label);
     }
+    // A name taken out of the order goes down the ladder with its arrow; the last one takes the
+    // whole line with it, and only then is the line hidden.
     function takeName() {
-      var name = names.lastChild;
+      var list = typeof names.querySelectorAll === 'function' ? names.querySelectorAll('.probe-order-name:not(.is-leaving)') : names.childNodes;
+      var name = list.length ? list[list.length - 1] : null;
       if (!name) return;
       var arrow = name.previousSibling;
-      names.removeChild(name);
-      if (arrow && arrow.classList && arrow.classList.contains('probe-order-arrow')) names.removeChild(arrow);
-      if (!names.firstChild) order.hidden = true;
+      if (!(arrow && arrow.classList && arrow.classList.contains('probe-order-arrow') && !arrow.classList.contains('is-leaving'))) arrow = null;
+      function drop() {
+        if (name.parentNode === names) names.removeChild(name);
+        if (arrow && arrow.parentNode === names) names.removeChild(arrow);
+      }
+      if (standing() === 1) {
+        unmake(order, function () { drop(); names.textContent = ''; order.hidden = true; restore(order); });
+        return;
+      }
+      if (arrow) unmake(arrow);
+      unmake(name, drop);
+    }
+    function takeAll() {
+      if (!standing()) return;
+      unmake(order, function () { names.textContent = ''; order.hidden = true; restore(order); });
     }
     function pick(item, index) {
       busy = true;
@@ -1471,6 +1615,10 @@
       button.setAttribute('aria-pressed', 'false');
       var pane = el('span', 'probe-window-pane');
       pane.setAttribute('aria-hidden', 'true');
+      // The lamp behind the pane: a layer of its own, lit through a composition of its own
+      // (--rite-seal, pane-light) and put out through another (--rite-unseal, pane-dark).
+      var light = el('span', 'probe-window-light');
+      pane.appendChild(light);
       button.appendChild(pane);
       panes.push(pane);
       button.addEventListener('click', function () {
@@ -1478,10 +1626,12 @@
         var at = selected.indexOf(index);
         if (at !== -1) {
           selected.splice(at, 1);
+          composeFor(light, 'unseal', 'pane-dark');
           button.setAttribute('data-was-lit', 'true');
           button.setAttribute('aria-pressed', 'false');
         } else {
           selected.push(index);
+          composeFor(light, 'seal', 'pane-light');
           button.removeAttribute('data-was-lit');
           button.setAttribute('aria-pressed', 'true');
         }
@@ -1509,10 +1659,16 @@
           add(answer, { curious: 3, verbal: 2, tempestuous: 1 }, 1);
         } else add(answer, { brooding: 2, cosmic: 1, curious: 1 }, 1);
         note(trace, 'three lit: the building reads');
-        shuffled(panes).forEach(function (p, k) { p.style.setProperty('--d', staggerOf(k) + 'ms'); });
-        field.setAttribute('data-read', 'true');
-        var wait = beat('long');
-        if (wait) window.setTimeout(finish, wait); else finish();
+        // The third lamp climbs before the facade reads: data-read waits for that rite's rolled
+        // length, and the reading is handed on a long beat after the last pane has stamped.
+        var climb = stilled() ? 0 : rolled(light, '--motion-pane-light') || beat('medium');
+        function facade() {
+          shuffled(panes).forEach(function (p, k) { p.style.setProperty('--d', staggerOf(k) + 'ms'); });
+          field.setAttribute('data-read', 'true');
+          var wait = beat('long');
+          if (wait) window.setTimeout(finish, wait); else finish();
+        }
+        if (climb) window.setTimeout(facade, climb); else facade();
       });
       field.appendChild(button);
     });
@@ -1542,11 +1698,16 @@
     group.setAttribute('aria-label', 'Give the seven weights to these bowls');
     var buttons = [];
     var details = [];
+    var counters = [];
     probe.bowls.forEach(function (bowl, index) {
       var button = el('button', 'probe-option');
       button.type = 'button';
       button.appendChild(el('span', 'probe-option-label', bowl.label));
-      var detail = el('span', 'probe-option-detail');
+      // The count under each bowl is a counter that ticks (count-tick) when it changes.
+      var detail = el('span', 'probe-option-detail', bowl.place + ' bowl: ');
+      var counter = el('span', 'probe-counter');
+      detail.appendChild(counter);
+      counters.push(counter);
       button.appendChild(detail);
       button.addEventListener('click', function () {
         if (submitted || placed.length >= probe.total) return;
@@ -1700,8 +1861,12 @@
       var left = probe.total - placed.length;
       buttons.forEach(function (button, index) {
         var bowl = probe.bowls[index];
-        details[index].textContent = bowl.place + ' bowl: ' + plural(counts[index], 'weight');
-        button.setAttribute('aria-label', 'Give one weight to ' + bowl.label + '; ' + plural(counts[index], 'weight') + ' inside');
+        var count = plural(counts[index], 'weight');
+        if (counters[index].textContent !== count) {
+          counters[index].textContent = count;
+          tick(counters[index]);
+        }
+        button.setAttribute('aria-label', 'Give one weight to ' + bowl.label + '; ' + count + ' inside');
         if (submitted) retire(button); else button.disabled = left === 0;
       });
       if (submitted) { retire(undo); retire(leave); } else {
@@ -1751,17 +1916,27 @@
           else add(answer, probe.many, 1);
           button.style.setProperty('--key-turn', (10 + Math.random() * 10).toFixed(1) + 'deg');
           button.setAttribute('data-turned', 'true');
+          var shed = 0;
           shuffled(buttons.filter(function (b) { return b !== button; })).forEach(function (other, k) {
-            other.style.setProperty('--d', staggerOf(k) + 'ms');
-            unmake(other);
+            var delay = staggerOf(k);
+            other.style.setProperty('--d', delay + 'ms');
+            shed = Math.max(shed, delay + unmake(other));
           });
           note(trace, key.label + ' turns in the lock');
           var wait = beat('long');
+          // The turned key stays as it is, its texture the mark of the answer, and is only inert
+          // (the `done` guard ignores presses); the six that shed are disabled once they have gone.
           function turned() {
-            for (var i = 0; i < buttons.length; i++) buttons[i].disabled = true;
+            button.setAttribute('aria-disabled', 'true');
             finish();
           }
-          if (wait) window.setTimeout(turned, wait); else turned();
+          function shedded() {
+            for (var i = 0; i < buttons.length; i++) if (buttons[i] !== button) buttons[i].disabled = true;
+          }
+          if (wait) {
+            window.setTimeout(turned, wait);
+            window.setTimeout(shedded, Math.max(wait, shed + 40));
+          } else { shedded(); turned(); }
           return;
         }
         held = index;
@@ -1784,6 +1959,11 @@
   // nearer end's word opens its tracking a step; 'leave it there' seals the panel.
   function sliderProbe(probe, body, trace, answer, finish) {
     var wrap = el('div', 'probe-dial');
+    // The panel's seal: a layer of its own that the composition the engine writes at data-set
+    // (--rite-seal) climbs onto, leaving the ember and the frost at the coverage the dial gave them.
+    var seal = el('span', 'probe-dial-seal');
+    seal.setAttribute('aria-hidden', 'true');
+    wrap.appendChild(seal);
     var input = document.createElement('input');
     input.type = 'range';
     input.min = '0';
@@ -1805,17 +1985,23 @@
       wrap.setAttribute('data-lean', v < 40 ? 'cold' : v > 60 ? 'warm' : 'mid');
     }
     room();
+    var sealed = null; // the value left there, once the dial is spent
     input.addEventListener('input', function () {
+      if (sealed !== null) { input.value = sealed; return; }
       room();
       tick(wrap);
       note(trace, 'the dial is somewhere it was not');
     });
+    input.addEventListener('keydown', function (ev) { if (sealed !== null) ev.preventDefault(); });
     done.addEventListener('click', function () {
       if (done.disabled || done.getAttribute('aria-disabled') === 'true') return;
       var warmth = Number(input.value) / 100;
       add(answer, probe.cold, 1 - warmth);
       add(answer, probe.warm, warmth);
-      input.disabled = true;
+      // The dial is spent like any control (inert under the rite, disabled only after it), and
+      // the panel is sealed.
+      sealed = input.value;
+      retire(input);
       wrap.setAttribute('data-set', 'true');
       retire(done);
       finish();
@@ -1863,7 +2049,30 @@
     var glass = 0; // the coverage of the glass laid over the night at 'enough'
     var due = 0;
     var veil = matteField(null, 'scan');
-    function pace(n) { return 160 + 900 * Math.pow(0.95, n); }
+    // The dusk deepens by area: night is laid over the sky through a matte of this sky's own at
+    // a coverage that climbs a stair of three to five rolled treads as the stars come out, each
+    // tread painted once and kept; never a colour lerp. And the stars keep no series: each
+    // comes after a pace jittered for it alone, with a hold every few stars, the few rolled per sky.
+    var duskField = matteField(null);
+    var duskStair = treadsOf(rite('stair'), 3 + Math.floor(Math.random() * 3));
+    var duskLayers = {};
+    function duskLayer(w, h, k) {
+      var key = Math.round(unit(k) * 20);
+      if (duskLayers[key]) return duskLayers[key];
+      var off = document.createElement('canvas');
+      off.width = w;
+      off.height = h;
+      var og = off.getContext('2d');
+      if (og) duskField.paint(og, 0, 0, w, h, key / 20, rgba(night, 0.9));
+      duskLayers[key] = off;
+      return off;
+    }
+    var holdEvery = 3 + Math.floor(Math.random() * 4);
+    function pace(n) {
+      var base = 160 + 900 * Math.pow(0.95, n);
+      var hold = n && n % holdEvery === 0 ? between(300, 1100) : 0;
+      return base * between(0.7, 1.4) + hold;
+    }
     function count() {
       if (!trace.meter) return;
       var dots = '';
@@ -1882,7 +2091,7 @@
       count();
       if (stars.length === 1) note(trace, 'the first one is out');
       if (stars.length >= full) {
-        enough.textContent = 'that is all of them';
+        say(enough, 'that is all of them');
         retire(hurry);
         note(trace, 'the sky is full');
       }
@@ -1899,10 +2108,13 @@
       var h = sky.height;
       var p = Math.min(1, stars.length / full);
       var grad = g.createLinearGradient(0, 0, 0, h);
-      grad.addColorStop(0, rgba(blend(blend(dusk, warm, 0.22 * (1 - p)), night, 0.3 + p * 0.6), 1));
-      grad.addColorStop(1, rgba(blend(night, dusk, 0.2 * (1 - p)), 1));
+      grad.addColorStop(0, rgba(blend(blend(dusk, warm, 0.22), night, 0.3), 1));
+      grad.addColorStop(1, rgba(blend(night, dusk, 0.2), 1));
       g.fillStyle = grad;
       g.fillRect(0, 0, w, h);
+      // Night laid over the dusk by area, one tread of the rolled stair at a time.
+      var deep = duskStair(p);
+      if (deep > 0) g.drawImage(duskLayer(w, h, deep * 0.85), 0, 0);
       g.fillStyle = 'rgba(0,0,0,0.4)';
       g.fillRect(0, h * 0.9, w, h * 0.1);
       var reach = w * 0.2;
