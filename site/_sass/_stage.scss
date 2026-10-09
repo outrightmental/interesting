@@ -102,8 +102,11 @@
   gap: 1.25rem;
 }
 
+// Composed anew for every arrival and every leaving (--rite-develop / --rite-unmake, written on the
+// inner by js/stage.js through the engine's composer, with a length rolled for that one trigger);
+// the named keyframes below are what a page without the composer plays.
 .stage[data-mode='arriving'] .stage-inner {
-  animation: stage-in var(--motion-long) var(--ease-stage-in, var(--ease-arrive)) both;
+  animation: var(--rite-develop, stage-in) var(--motion-stage-in, var(--motion-long)) var(--ease-stage-in, var(--ease-arrive)) both;
 }
 
 // A re-deal (the difficulty moved, the sky re-made) is the same working cast again: no travel,
@@ -113,7 +116,7 @@
 }
 
 .stage[data-mode='vanishing'] .stage-inner {
-  animation: stage-unmake var(--motion-long) var(--ease-stage-unmake, var(--ease-leave)) both;
+  animation: var(--rite-unmake, stage-unmake) var(--motion-stage-unmake, var(--motion-long)) var(--ease-stage-unmake, var(--ease-leave)) both;
 }
 
 // The travel, in four treads with one slip: the slab lands where it is going in cuts.
@@ -338,7 +341,7 @@
 // the roll's edge (--state-from) through the ladder, on a delay of its own, lifted by the roll's
 // --lift-*; the words inside land by the glyph rite js/stage.js asks for.
 .stage[data-dealing] .stage-head > * {
-  animation: head-in var(--motion-medium) var(--ease-head-in, var(--ease-stair)) both;
+  animation: var(--rite-develop, head-in) var(--motion-head-in, var(--motion-medium)) var(--ease-head-in, var(--ease-stair)) both;
   animation-delay: calc(var(--part-i, 0) * var(--motion-stagger, 44ms) * 1.5);
 }
 
@@ -571,10 +574,13 @@
 // is covered by a veil -- a scanline screen in the primary over the plate's own dark, with a
 // shutter of spokes ticking round in hard treads (--tick, stepped by plate-tick on the scene and
 // read here) -- which drops over it tread by tread up the ladder (plate-veil). When the piece is
-// dealt the veil leaves back down the ladder with the leave family's one refusal (plate-unveil)
-// while the picture develops under it through the working's own blotches (plate-develop, on the
-// canvas). A piece being powered up gets one bright line stepping down the plate first (tube-warm).
-// Over the canvas and under the hairline (_rite.scss, 1) and the ward (2).
+// dealt the veil is eaten in the working's own bites (plate-unveil through --plate-veil-1 to -4,
+// js/stage.js: the inverse of the blotch stack, so the veil is punched out exactly where the
+// picture is let through, with the leave family's one refusal) while the picture develops under
+// it through the same blotches (plate-develop, on the canvas). The engine's fine ladder is never
+// laid over the plate's own matte: at the plate's size its tile reads as a dim, not as a tear. A
+// piece being powered up gets one bright line stepping down the plate first (tube-warm). Over the
+// canvas and under the hairline (_rite.scss, 1) and the ward (2).
 .stage-scene::before {
   content: '';
   position: absolute;
@@ -657,30 +663,32 @@
   87%, 100% { --tick: 30deg; }
 }
 
+// The veil eaten where the picture comes through: each tread is the blotch stack's negative at that
+// tread (the engine's ladder stands in where a page has none), then the last shards, then gone.
 @keyframes plate-unveil {
   0%, 14.9% {
-    mask: var(--matte-5);
-    -webkit-mask: var(--matte-5);
+    mask: var(--plate-veil-1, var(--matte-5));
+    -webkit-mask: var(--plate-veil-1, var(--matte-5));
   }
 
   15%, 32.9% {
-    mask: var(--matte-4);
-    -webkit-mask: var(--matte-4);
+    mask: var(--plate-veil-2, var(--matte-4));
+    -webkit-mask: var(--plate-veil-2, var(--matte-4));
   }
 
   33%, 39.9% {
-    mask: var(--matte-5); // the refusal
-    -webkit-mask: var(--matte-5);
+    mask: var(--plate-veil-1, var(--matte-5)); // the refusal
+    -webkit-mask: var(--plate-veil-1, var(--matte-5));
   }
 
   40%, 57.9% {
-    mask: var(--matte-3);
-    -webkit-mask: var(--matte-3);
+    mask: var(--plate-veil-3, var(--matte-3));
+    -webkit-mask: var(--plate-veil-3, var(--matte-3));
   }
 
   58%, 75.9% {
-    mask: var(--matte-2);
-    -webkit-mask: var(--matte-2);
+    mask: var(--plate-veil-4, var(--matte-2));
+    -webkit-mask: var(--plate-veil-4, var(--matte-2));
   }
 
   76%, 91.9% {
@@ -823,8 +831,9 @@
   mask: radial-gradient(circle at 50% 50%, transparent 0 22%, #000 23% 46%, transparent 47%);
   -webkit-mask: radial-gradient(circle at 50% 50%, transparent 0 22%, #000 23% 46%, transparent 47%);
   pointer-events: none; // the next press goes to the scene, as every press does
-  // Four frames along a curve rolled for this press: the roll says when each cut falls.
-  animation: stage-reject 240ms var(--ease-stage-reject, var(--ease-leave)) both;
+  // Four frames along a curve rolled for this press, for as long as the roll gives the spell (the
+  // scheme's fifth of a second without the engine; js/stage.js sweeps it off the same figure).
+  animation: stage-reject var(--motion-stage-reject, var(--motion-short, 240ms)) var(--ease-stage-reject, var(--ease-leave)) both;
 }
 
 // Less motion asked for: the mark is the change, held still and then taken away, the way the
@@ -872,27 +881,55 @@
 }
 
 .stage-knobs {
+  position: relative; // the loading plates are laid over the rail while they are eaten
   display: grid;
   gap: 0.6rem;
 }
 
 // While a module loads the rail is not empty: two stamped-out plates, empty seals the real knobs
-// will replace, each a hatch at a pitch of its own.
+// will replace, each a hatch at a pitch of its own. They stamp onto the rail as the knobs do
+// (knob-stamp) and, when the deal begins, they are not cut away under the real knobs but laid over
+// the rail for one beat and eaten down the ladder (knob-unmake), one after the other, as the ghost's
+// knobs are: a surface that leaves, leaves by a rite.
 .stage[data-mode='loading'] .stage-knobs::before,
-.stage[data-mode='loading'] .stage-knobs::after {
+.stage[data-mode='loading'] .stage-knobs::after,
+.stage[data-dealing] .stage-knobs::before,
+.stage[data-dealing] .stage-knobs::after {
   content: '';
   height: 4.25rem;
   border-radius: var(--md-sys-shape-corner-medium);
   background:
     repeating-linear-gradient(var(--hatch-angle, 35deg), transparent 0 4px, color-mix(in oklab, var(--md-sys-color-primary) 7%, transparent) 4px 5px)
     var(--md-sys-color-surface-container-low);
+  pointer-events: none;
 }
 
-.stage[data-mode='loading'] .stage-knobs::after {
+.stage[data-mode='loading'] .stage-knobs::after,
+.stage[data-dealing] .stage-knobs::after {
+  --knob-i: 1;
   height: 5.5rem;
   background:
     radial-gradient(color-mix(in oklab, var(--md-sys-color-primary) 9%, transparent) 1px, transparent 1.6px) 0 0 / var(--screen-pitch, 5px) var(--screen-pitch, 5px)
     var(--md-sys-color-surface-container-low);
+}
+
+.stage[data-mode='loading'] .stage-knobs::before,
+.stage[data-mode='loading'] .stage-knobs::after {
+  animation: knob-stamp var(--motion-knob-stamp, var(--motion-medium)) var(--ease-knob-stamp, var(--ease-stair)) both;
+  animation-delay: calc(var(--knob-i, 0) * var(--motion-stagger, 44ms));
+}
+
+.stage[data-dealing] .stage-knobs::before,
+.stage[data-dealing] .stage-knobs::after {
+  position: absolute;
+  inset: 0 0 auto 0;
+  z-index: 1;
+  animation: knob-unmake var(--motion-knob-unmake, var(--motion-short)) var(--ease-knob-unmake, var(--ease-leave)) both;
+  animation-delay: calc(var(--knob-i, 0) * var(--motion-stagger, 44ms));
+}
+
+.stage[data-dealing] .stage-knobs::after {
+  top: 4.85rem;
 }
 
 // The ghost: the last piece's knobs and seals, moved here by js/stage.js for one movement and laid
@@ -920,14 +957,26 @@
   gap: 0.4rem;
 }
 
-.stage-ghost .knob {
-  animation: knob-unmake var(--motion-medium) var(--ease-knob-unmake, var(--ease-leave)) both;
+// The ghost lives inside .stage while the new piece is dealt, so these are written above the deal's
+// own rules (which are scoped to the live rail, #stage-knobs and #stage-progress, below): a ghosted
+// knob is unmade by the leaving composed for it when it arrived (--rite-unmake, js/motion.js
+// arrive) or by knob-unmake, never stamped in again. Moving the nodes would restart the seals they
+// carry (the texture, the mark, the reel), so those are stilled: the knob's own unmaking is the rite.
+.stage .stage-ghost .knob {
+  animation: var(--rite-unmake, knob-unmake) var(--motion-knob-unmake, var(--motion-medium)) var(--ease-knob-unmake, var(--ease-leave)) both;
   animation-delay: calc(var(--knob-i, 0) * var(--motion-stagger, 44ms));
 }
 
-.stage-ghost .stage-dot {
+.stage .stage-ghost .stage-dot {
   animation: seal-strike var(--motion-short) var(--ease-seal-strike, var(--ease-leave)) both;
   animation-delay: calc(var(--dot-i, 0) * var(--motion-stagger, 44ms));
+}
+
+.stage-ghost .knob.is-set::before,
+.stage-ghost .knob.is-set .knob-mark,
+.stage-ghost .knob.is-set .knob-bar::before,
+.stage-ghost .knob[data-unwarding]::after {
+  animation: none;
 }
 
 @keyframes knob-unmake {
@@ -1109,8 +1158,11 @@
 // Dealt: each knob stamps onto the rail one tread after the last, in the order js/stage.js rolled
 // (--knob-i), from the roll's edge -- it lands oversized and off its mark, holds, snaps to place,
 // flickers once and settles, its plate coming through the ladder.
-.stage[data-dealing] .knob {
-  animation: knob-stamp var(--motion-medium) var(--ease-knob-stamp, var(--ease-stair)) both;
+// Scoped to the live rail, so the ghost's knobs (above) are never dealt a second time; each knob's
+// arrival is composed for it alone (--rite-develop, js/stage.js renderKnobs through the engine's
+// arrive), with knob-stamp the no-composer fallback.
+.stage[data-dealing] #stage-knobs > .knob {
+  animation: var(--rite-develop, knob-stamp) var(--motion-knob-stamp, var(--motion-medium)) var(--ease-knob-stamp, var(--ease-stair)) both;
   animation-delay: calc(var(--knob-i, 0) * var(--motion-stagger, 44ms) + var(--motion-short, 170ms));
 }
 
@@ -1690,9 +1742,13 @@
   animation: check-strike var(--motion-medium) var(--ease-check-strike, var(--ease-stair)) both;
 }
 
-// The press stamps the lit lamp like any control (the stamp is _controls.scss's).
+// The press stamps the lit lamp like any control (the stamp is _controls.scss's, composed per press
+// by js/motion.js). The strike stays first in the list under the stamp, so the browser keeps the
+// one already running by its name and the lamp is never struck again by a press on it.
 .stage-check.is-stamping:enabled {
-  animation: rite-stamp var(--motion-short) var(--ease-rite-stamp, var(--ease-flicker)) both;
+  animation:
+    check-strike var(--motion-medium) var(--ease-check-strike, var(--ease-stair)) both,
+    var(--rite-stamp, rite-stamp) var(--motion-rite-stamp, var(--motion-short)) var(--ease-rite-stamp, var(--ease-flicker)) both;
 }
 
 @keyframes check-strike {
@@ -1728,11 +1784,11 @@
 }
 
 .stage[data-verdict='wrong'][data-try-parity='a'] .stage-check-row {
-  animation: stage-no 360ms var(--ease-stage-no, var(--ease-flicker)) both;
+  animation: stage-no var(--motion-stage-no, var(--motion-medium)) var(--ease-stage-no, var(--ease-flicker)) both;
 }
 
 .stage[data-verdict='wrong'][data-try-parity='b'] .stage-check-row {
-  animation: stage-no-b 360ms var(--ease-stage-no-b, var(--ease-flicker)) both;
+  animation: stage-no-b var(--motion-stage-no-b, var(--motion-medium)) var(--ease-stage-no-b, var(--ease-flicker)) both;
 }
 
 // The jolt: a snap, a hold, a snap the other way, a hold, a settle -- never a slide.
@@ -1776,60 +1832,69 @@
   }
 }
 
-.stage[data-verdict='wrong'][data-try-parity='a'] .stage-check {
+// The static is laid on the lamp's fill layer (::before, the texture every filled control carries,
+// _controls.scss) and not on the lamp itself, so the strike that lit it is never replaced and never
+// replayed by a refusal: the hatch flickers on over the fill in two cuts and the fill's own texture
+// is back.
+.stage[data-verdict='wrong'][data-try-parity='a'] .stage-check::before {
   animation: check-refuse var(--motion-short) var(--ease-check-refuse, var(--ease-flicker)) both;
 }
 
-.stage[data-verdict='wrong'][data-try-parity='b'] .stage-check {
+.stage[data-verdict='wrong'][data-try-parity='b'] .stage-check::before {
   animation: check-refuse-b var(--motion-short) var(--ease-check-refuse-b, var(--ease-flicker)) both;
 }
 
 @keyframes check-refuse {
   0%, 39.9% {
     background-image: repeating-linear-gradient(45deg, var(--md-sys-color-on-primary) 0 1px, transparent 1px 4px);
-    filter: contrast(1.3);
+    opacity: 0.6;
   }
 
   40%, 59.9% {
-    background-image: none;
-    filter: none;
+    background-image: var(--matte-fill);
+    opacity: var(--fill-opacity, 0.22);
   }
 
   60%, 79.9% {
     background-image: repeating-linear-gradient(-45deg, var(--md-sys-color-on-primary) 0 1px, transparent 1px 4px);
-    filter: contrast(1.3);
+    opacity: 0.6;
   }
 
   80%, 100% {
-    background-image: none;
-    filter: none;
+    background-image: var(--matte-fill);
+    opacity: var(--fill-opacity, 0.22);
   }
 }
 
 @keyframes check-refuse-b {
   0%, 29.9% {
     background-image: repeating-linear-gradient(-45deg, var(--md-sys-color-on-primary) 0 1px, transparent 1px 3px);
-    filter: contrast(1.3) brightness(0.9);
+    opacity: 0.7;
   }
 
   30%, 49.9% {
-    background-image: none;
-    filter: none;
+    background-image: var(--matte-fill);
+    opacity: var(--fill-opacity, 0.22);
   }
 
   50%, 69.9% {
     background-image: repeating-linear-gradient(45deg, var(--md-sys-color-on-primary) 0 1px, transparent 1px 3px);
-    filter: contrast(1.3);
+    opacity: 0.55;
   }
 
   70%, 100% {
-    background-image: none;
-    filter: none;
+    background-image: var(--matte-fill);
+    opacity: var(--fill-opacity, 0.22);
   }
 }
 
-.stage[data-verdict='wrong'] .stage-scene {
+// The plate's twitch, keyed on the try's parity like the row's jolt, so every refusal replays it.
+.stage[data-verdict='wrong'][data-try-parity='a'] .stage-scene {
   animation: plate-twitch var(--motion-short) var(--ease-plate-twitch, var(--ease-flicker)) both;
+}
+
+.stage[data-verdict='wrong'][data-try-parity='b'] .stage-scene {
+  animation: plate-twitch-b var(--motion-short) var(--ease-plate-twitch-b, var(--ease-flicker)) both;
 }
 
 @keyframes plate-twitch {
@@ -1838,6 +1903,16 @@
   }
 
   45%, 100% {
+    transform: none;
+  }
+}
+
+@keyframes plate-twitch-b {
+  0%, 39.9% {
+    transform: translateX(-2px);
+  }
+
+  40%, 100% {
     transform: none;
   }
 }
@@ -2074,15 +2149,41 @@
   animation-delay: calc(var(--dot-i, 0) * var(--motion-stagger, 44ms) * 1.5);
 }
 
-.stage[data-dealing] .stage-dot {
+// The deal, scoped to the live row so the ghost's seals (struck out above) are never dealt again:
+// a seal still dark is stamped onto the row without the glow a lit one carries (seal-deal), and one
+// already lit (a re-deal) lights in its turn.
+.stage[data-dealing] #stage-progress .stage-dot {
+  animation: seal-deal var(--motion-medium) var(--ease-seal-deal, var(--ease-stair)) both;
+  animation-delay: calc(var(--dot-i, 0) * var(--motion-stagger, 44ms) + var(--motion-medium, 340ms));
+}
+
+.stage[data-dealing] #stage-progress .stage-dot.is-set {
   animation: seal-light var(--motion-medium) var(--ease-seal-light, var(--ease-stair)) both;
   animation-delay: calc(var(--dot-i, 0) * var(--motion-stagger, 44ms) + var(--motion-medium, 340ms));
 }
 
-.stage[data-mode='vanishing'] .stage-dot,
-.stage[data-mode='vanishing'] .stage-done {
+.stage[data-mode='vanishing'] .stage-dot {
   animation: seal-strike var(--motion-short) var(--ease-seal-strike, var(--ease-leave)) both;
   animation-delay: calc(var(--dot-i, 0) * var(--motion-stagger, 44ms));
+}
+
+// A dark seal dealt: oversized and off its tilt for one cut, a hold, a snap under size, settled.
+@keyframes seal-deal {
+  0%, 24.9% {
+    transform: rotate(45deg) scale(1.8);
+  }
+
+  25%, 49.9% {
+    transform: rotate(calc(45deg + var(--seal-rot, 3deg) * 2)) scale(1.8);
+  }
+
+  50%, 64.9% {
+    transform: rotate(45deg) scale(0.9);
+  }
+
+  65%, 100% {
+    transform: rotate(45deg);
+  }
 }
 
 @keyframes seal-light {
@@ -2149,7 +2250,43 @@
     var(--md-sys-color-secondary-container);
   color: var(--md-sys-color-on-secondary-container);
   rotate: var(--seal-rot, -3deg);
-  animation: stage-pop var(--motion-long) var(--ease-stage-pop, var(--ease-arrive)) both;
+  // Composed for this one solve (--rite-develop, js/stage.js finish() through the engine), or the
+  // stamp written below.
+  animation: var(--rite-develop, stage-pop) var(--motion-stage-pop, var(--motion-long)) var(--ease-stage-pop, var(--ease-arrive)) both;
+}
+
+// Under the vanish the chip is struck as a seal is -- but as a chip, not as a diamond: tilted and
+// swollen for one cut, matted and small, whole again for the refusal, then gone -- by the leaving
+// composed for it or by chip-strike. The tilt is the chip's own `rotate`, which the strike leaves.
+.stage[data-mode='vanishing'] .stage-done {
+  animation: var(--rite-unmake, chip-strike) var(--motion-chip-strike, var(--motion-short)) var(--ease-chip-strike, var(--ease-leave)) both;
+}
+
+@keyframes chip-strike {
+  0%, 34.9% {
+    transform: scale(1.3) rotate(calc(var(--seal-rot, -3deg) * 2));
+    mask: none;
+    -webkit-mask: none;
+  }
+
+  35%, 59.9% {
+    transform: scale(0.7);
+    mask: var(--matte-3);
+    -webkit-mask: var(--matte-3);
+  }
+
+  60%, 69.9% {
+    transform: none; // the refusal
+    mask: none;
+    -webkit-mask: none;
+  }
+
+  70%, 100% {
+    transform: scale(0.7);
+    mask: var(--matte-1);
+    -webkit-mask: var(--matte-1);
+    visibility: hidden;
+  }
 }
 
 .stage-done::before {
@@ -2292,8 +2429,41 @@
   animation: lamp-light var(--motion-medium) var(--ease-lamp-light, var(--ease-stair)) both;
 }
 
+// The press stamps the lamp with the strike kept first in the list, so the one running is kept by
+// its name and never replayed under the press.
 .stage-next.is-stamping:enabled {
-  animation: rite-stamp var(--motion-short) var(--ease-rite-stamp, var(--ease-flicker)) both;
+  animation:
+    lamp-light var(--motion-medium) var(--ease-lamp-light, var(--ease-stair)) both,
+    var(--rite-stamp, rite-stamp) var(--motion-rite-stamp, var(--motion-short)) var(--ease-rite-stamp, var(--ease-flicker)) both;
+}
+
+// Going dark is a rite as well (js/stage.js dimTheWayOn writes data-dimmed on a lamp that was lit
+// and lightTheWayOn takes it off): the lamp flares, is cut to the roll's wipe shape and dim, flares
+// once more, and is the unlit plate -- never one cut from lit to unlit.
+.stage-next:disabled[data-dimmed] {
+  animation: lamp-dark var(--motion-short) var(--ease-lamp-dark, var(--ease-flicker)) both;
+}
+
+@keyframes lamp-dark {
+  0%, 29.9% {
+    filter: brightness(1.3);
+    clip-path: none;
+  }
+
+  30%, 49.9% {
+    filter: brightness(0.6);
+    clip-path: var(--wipe-to, inset(0));
+  }
+
+  50%, 64.9% {
+    filter: brightness(1.1);
+    clip-path: none;
+  }
+
+  65%, 100% {
+    filter: none;
+    clip-path: none;
+  }
 }
 
 .stage-next:enabled .icon {
@@ -2422,11 +2592,14 @@
 // order (knob-stamp, the rail's own deal, off --knob-i), each from the roll's edge.
 .stage[data-mode='asking'] .stage-ask,
 .stage[data-mode='quiet'] .stage-ask {
-  animation: ask-in var(--motion-medium) var(--ease-ask-in, var(--ease-stair)) both;
+  animation: var(--rite-develop, ask-in) var(--motion-ask-in, var(--motion-medium)) var(--ease-ask-in, var(--ease-stair)) both;
 }
 
+// Each card's arrival is composed for it (--rite-develop, js/stage.js thresholdStart through the
+// engine's arrive) and its place in the deal rolled there too (--knob-i inline); the table under
+// this is the order a page without scripting deals.
 .stage[data-mode='asking'] .threshold-probe .probe-option {
-  animation: knob-stamp var(--motion-medium) var(--ease-knob-stamp, var(--ease-stair)) both;
+  animation: var(--rite-develop, knob-stamp) var(--motion-knob-stamp, var(--motion-medium)) var(--ease-knob-stamp, var(--ease-stair)) both;
   animation-delay: calc(var(--knob-i, 0) * var(--motion-stagger, 44ms) * 1.5 + var(--motion-short, 170ms));
 }
 
@@ -2583,11 +2756,15 @@
   .stage[data-dealing] .stage-canvas,
   .stage[data-powered] .stage-scene::before,
   .stage[data-reflow] .stage-canvas,
-  .stage-ghost .knob,
-  .stage-ghost .stage-dot,
+  .stage[data-mode='loading'] .stage-knobs::before,
+  .stage[data-mode='loading'] .stage-knobs::after,
+  .stage[data-dealing] .stage-knobs::before,
+  .stage[data-dealing] .stage-knobs::after,
+  .stage .stage-ghost .knob,
+  .stage .stage-ghost .stage-dot,
   .knob.is-set::before,
   .knob[data-unwarding]::after,
-  .stage[data-dealing] .knob,
+  .stage[data-dealing] #stage-knobs > .knob,
   .knob.is-set .knob-mark,
   .knob-hold.is-held::before,
   .knob-hold.is-refusing,
@@ -2601,9 +2778,10 @@
   .stage-check.is-stamping:enabled,
   .stage[data-verdict='wrong'][data-try-parity='a'] .stage-check-row,
   .stage[data-verdict='wrong'][data-try-parity='b'] .stage-check-row,
-  .stage[data-verdict='wrong'][data-try-parity='a'] .stage-check,
-  .stage[data-verdict='wrong'][data-try-parity='b'] .stage-check,
-  .stage[data-verdict='wrong'] .stage-scene,
+  .stage[data-verdict='wrong'][data-try-parity='a'] .stage-check::before,
+  .stage[data-verdict='wrong'][data-try-parity='b'] .stage-check::before,
+  .stage[data-verdict='wrong'][data-try-parity='a'] .stage-scene,
+  .stage[data-verdict='wrong'][data-try-parity='b'] .stage-scene,
   .stage-tries,
   .stage-wanted,
   .stage-status[data-said='a'],
@@ -2619,13 +2797,15 @@
   .stage-wanted[data-said='b']::after,
   .stage-tries[data-said='b']::after,
   .stage-dot.is-set,
-  .stage[data-dealing] .stage-dot,
+  .stage[data-dealing] #stage-progress .stage-dot,
+  .stage[data-dealing] #stage-progress .stage-dot.is-set,
   .stage[data-mode='vanishing'] .stage-dot,
   .stage[data-mode='vanishing'] .stage-done,
   .stage-done,
   .stage-done::before,
   .stage-next:enabled,
   .stage-next.is-stamping:enabled,
+  .stage-next:disabled[data-dimmed],
   .stage-next:enabled .icon,
   .stage[data-turning='a'] .stage-inner::before,
   .stage[data-turning='b'] .stage-inner::before,
@@ -2641,11 +2821,14 @@
     display: none;
   }
 
-  // The veils are a movement, so they are simply not there; the ghost is swept at once.
+  // The veils are a movement, so they are simply not there; the ghost is swept at once, and the
+  // loading plates go the instant the knobs are there.
   .stage[data-mode='loading'] .stage-scene::before,
   .stage[data-unmaking] .stage-scene::before,
   .stage[data-dealing] .stage-scene::before,
   .stage[data-powered] .stage-scene::before,
+  .stage[data-dealing] .stage-knobs::before,
+  .stage[data-dealing] .stage-knobs::after,
   .stage-ghost {
     display: none;
   }

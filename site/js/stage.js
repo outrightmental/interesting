@@ -482,6 +482,54 @@ function riteTempo() {
   return Number.isFinite(tempo) && tempo > 0 ? tempo : 1;
 }
 
+/* The composer (README: "Motion axiom"): every arrival and every leaving on the stage is composed
+   anew for the one trigger from the engine's vocabulary of pieces -- an opening, a climb, a landing,
+   with uneven treads -- and named on the element (--rite-develop / --rite-unmake), with a length of
+   its own (--motion-<spell>) that the stage's timers read back so no mode is left under a movement
+   still going. The stylesheet reads the composed name before its own keyframes, which are what a
+   page without the engine plays. Each is a no-op in the stub browser, which has no engine. */
+
+// An arrival composed for an element: its geometry, its curve and its composition, written inline.
+// Hands back the undo, which takes the inline roll off again.
+function composeArrival(node, seed, spell) {
+  if (!node || !node.style || calm.matches || !motion || typeof motion.arrive !== 'function') return null;
+  try {
+    const undo = motion.arrive(node, { seed: seed >>> 0, spell, className: false });
+    return typeof undo === 'function' ? undo : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+// A leaving composed for an element, at a length rolled off the base given.
+function composeLeave(node, spell, baseMs) {
+  if (!node || !node.style || calm.matches || !motion || typeof motion.composeOn !== 'function') return;
+  try {
+    motion.composeOn(node, 'unmake', spell, baseMs);
+  } catch (e) {
+    /* the stylesheet's own keyframes play */
+  }
+}
+
+// A development composed for an element that is not travelling (the done chip), likewise.
+function composeDevelop(node, spell, baseMs) {
+  if (!node || !node.style || calm.matches || !motion || typeof motion.composeOn !== 'function') return;
+  try {
+    motion.composeOn(node, 'develop', spell, baseMs);
+  } catch (e) {
+    /* the stylesheet's own keyframes play */
+  }
+}
+
+// How long a composed movement on an element is (--motion-<spell>, inline), or the roll's figure.
+function inlineMs(node, spell, fallback) {
+  if (node && node.style && typeof node.style.getPropertyValue === 'function') {
+    const ms = parseFloat(node.style.getPropertyValue('--motion-' + spell));
+    if (Number.isFinite(ms) && ms > 0) return ms;
+  }
+  return fallback;
+}
+
 /* ---- the text rites ------------------------------------------------------------------------ */
 
 /* Words on the stage are never swapped in: they are revealed (README: "Motion axiom"). The text is
@@ -536,7 +584,9 @@ function inscribe(node, text) {
    than by the engine: a piece may write its status every frame, and a rite that restarted every
    frame would never land. The line is written whole and at once; data-said flips between two
    values so the stylesheet's line-said / line-said-b restarts, and never more often than one beat
-   (--motion-medium), so a line rewritten under the rite is simply the new words landing under it. */
+   (--motion-medium). A line rewritten under the rite lands under it as the new words -- and is
+   then said again when the beat is over, so the last words written are always the ones typed in
+   and no line ever simply cuts to its new words. */
 const saidAt = new Map();
 
 function speak(node, text) {
@@ -545,11 +595,26 @@ function speak(node, text) {
   if (node.textContent === words) return;
   node.textContent = words;
   if (!words || calm.matches) return;
+  say(node);
+}
+
+function say(node) {
   const now = performance.now();
-  const last = saidAt.get(node) || { at: -1e9, parity: 'b' };
-  if (now - last.at < riteMs('medium', 340)) return;
+  const beat = riteMs('medium', 340);
+  const last = saidAt.get(node) || { at: -1e9, parity: 'b', again: null };
+  if (now - last.at < beat) {
+    // Under a rite still typing: said again the moment the beat ends, with whatever is written then.
+    if (!last.again) {
+      last.again = later(() => {
+        last.again = null;
+        if (node.textContent) say(node);
+      }, Math.max(16, beat - (now - last.at) + 16));
+    }
+    saidAt.set(node, last);
+    return;
+  }
   const parity = last.parity === 'a' ? 'b' : 'a';
-  saidAt.set(node, { at: now, parity });
+  saidAt.set(node, { at: now, parity, again: null });
   node.setAttribute('data-said', parity);
 }
 
@@ -999,6 +1064,16 @@ function ghostRail() {
   const seals = el('div', 'stage-ghost-seals');
   for (const dot of dots) seals.appendChild(dot);
   ghost.appendChild(seals);
+  // A ghost is a picture of controls and not controls: nothing in it is reachable by a Tab from the
+  // heading while it is eaten, so the old piece's knobs are made inert and every control in them
+  // disabled and taken out of the tab order (the stub browser may lack either).
+  if ('inert' in ghost) ghost.inert = true;
+  if (typeof ghost.querySelectorAll === 'function') {
+    for (const control of ghost.querySelectorAll('button, input, select, textarea')) {
+      control.disabled = true;
+      control.tabIndex = -1;
+    }
+  }
   side.appendChild(ghost);
   return ghost;
 }
@@ -1156,6 +1231,7 @@ function begin(opened) {
     tally: null, // the tally across puzzles, once this one is solved
     inTap: false, // whether the piece's tap() is running, which is the one time ctx.set() counts
     startedAt: performance.now(),
+    undos: [], // what takes the composed arrivals' inline roll off the parts that outlive the piece
     ctx: null
   };
 
@@ -1218,6 +1294,19 @@ function begin(opened) {
   if (arriving) {
     stage.dataset.dealing = '';
     if (opts.powered) stage.dataset.powered = '';
+    // The arrival is composed for this one opening (the composer above): the inner's travel and
+    // the head's lines each get a geometry, a curve and a composition of their own, seeded off the
+    // working and the part, so the same address arrives the same way twice and no two workings
+    // alike. A re-deal does not travel, so it composes nothing.
+    if (!opts.redeal) {
+      const undoInner = composeArrival(ui.inner, seed ^ 0x51a6e, 'stage-in');
+      if (undoInner) current.undos.push(undoInner);
+      const parts = ui.head && ui.head.children ? Array.from(ui.head.children) : [];
+      parts.forEach((part, i) => {
+        const undo = composeArrival(part, (seed ^ ((i + 7) * 0x9e3779b9)) >>> 0, 'head-in');
+        if (undo) current.undos.push(undo);
+      });
+    }
   }
   current.ctx = makeCtx(env);
   sizeHead(); // this piece's title and line are written: the scene's room is whatever they left
@@ -1228,17 +1317,23 @@ function begin(opened) {
     /* a piece that cannot start still has its knobs; the frame loop guards itself */
   }
   if (opts && opts.arriving) {
-    // For as long as the stylesheet is giving the arrival right now (--motion-long, rolled by
-    // js/motion.js), and a little over, so the mode never changes under a movement still going.
+    // For as long as the arrival composed on the inner is (--motion-stage-in, inline) or, without
+    // the composer, the stylesheet is giving it right now (--motion-long, rolled by js/motion.js),
+    // and a little over, so the mode never changes under a movement still going.
+    const travel = inlineMs(ui.inner, 'stage-in', riteMs('long', 560));
     later(() => {
       if (current && current.token === token && stage.dataset.mode === 'arriving') setMode('live');
-    }, riteMs('long', 560) + 60);
+    }, travel + 60);
+    // The deal outlasts it by the slowest knob's stamp (each composed at its own length, up to a
+    // third over the medium) and the staggers.
+    let stamp = riteMs('medium', 340);
+    for (const s of current.state.values()) stamp = Math.max(stamp, inlineMs(s.knob, 'knob-stamp', 0));
     later(() => {
       if (!current || current.token !== token) return;
       delete stage.dataset.dealing;
       delete stage.dataset.redeal;
       delete stage.dataset.powered;
-    }, riteMs('long', 560) + riteMs('medium', 340) + (steps.length + 3) * riteMs('stagger', 44) + 80);
+    }, travel + stamp + (steps.length + 3) * riteMs('stagger', 44) + 80);
   }
   if (!opts || opts.focus !== false) ui.title.focus({ preventScroll: true });
   startFrames();
@@ -1266,6 +1361,11 @@ function platePlan(rnd) {
     const layer = blots.map((b) => 'radial-gradient(circle at ' + b.x + '% ' + b.y + '%, #000 '
       + Math.round(b.r * climb[k]) + '%, transparent 0)').join(', ');
     ui.scene.style.setProperty('--plate-' + (k + 1), layer);
+    // The veil's matte at the same tread is the negative: the whole plate with the blotches taken
+    // out of it (the top layer subtracts the union of the blotches under it), so the veil is eaten
+    // exactly where the picture is let through, in the working's own bites and never through the
+    // engine's fine tile, which at the plate's size reads as a dim.
+    ui.scene.style.setProperty('--plate-veil-' + (k + 1), 'linear-gradient(#000, #000) subtract, ' + layer);
   }
 }
 
@@ -1430,6 +1530,9 @@ function renderKnobs() {
     knob.style.setProperty('--knob-i', String(order[i]));
     const own = mulberry32(((current.seed ^ ((i + 1) * 0x9e3779b9)) >>> 0) || 1);
     particulars(knob, own);
+    // Its stamp onto the rail, and the unmaking it will get as a ghost, composed for this knob
+    // alone (the composer above): its own direction, curve and treads, seeded off its place.
+    composeArrival(knob, (current.seed ^ ((i + 1) * 0x9e3779b9)) >>> 0, 'knob-stamp');
     current.state.get(step.id).treads = barTreads(own);
     const ask = el('p', 'knob-ask', step.ask || step.id);
     ask.id = 'knob-ask-' + step.id;
@@ -2238,8 +2341,10 @@ function rejectTap(x, y) {
   mark.style.setProperty('--ward-gap', (0.3 + altRnd() * 0.4).toFixed(2));
   ui.scene.appendChild(mark);
   // Registered like every other timer of the stage's, so a mark pressed out of a piece on its way
-  // out goes with it rather than outliving it; close() sweeps whatever is still there.
-  later(() => mark.remove(), REJECT_MS);
+  // out goes with it rather than outliving it; close() sweeps whatever is still there. It stays
+  // for as long as the roll is giving the spell (--motion-stage-reject, js/motion.js), and a
+  // little over, or the scheme's fifth of a second without the engine.
+  later(() => mark.remove(), riteMs('stage-reject', REJECT_MS) + 40);
 }
 
 // Where the press landed in the scene, as a fraction of it: 0..1, and the middle for a pointer
@@ -2323,6 +2428,7 @@ function finish(say) {
   // count rolled for this solve and no other, and the word lands by the glyph rite.
   particulars(ui.done, altRnd);
   ui.done.hidden = true;
+  composeDevelop(ui.done, 'stage-pop', riteMs('long', 560)); // its stamp, composed for this solve
   inscribe(ui.doneText, 'solved');
   ui.done.hidden = false;
   // The finale is on the scene, which on a phone may be above the knob that finished it. The done
@@ -2356,12 +2462,17 @@ function finish(say) {
 // sky, a world with nothing to play) leave the focus on the heading, where they already put it.
 function lightTheWayOn(focus) {
   if (!ui.onward) return;
+  ui.onward.removeAttribute('data-dimmed');
   ui.onward.disabled = false;
   if (focus) ui.onward.focus({ preventScroll: true });
 }
 
+// A lamp that was lit goes dark by a rite (lamp-dark, off data-dimmed) and not in one cut; one
+// that was never lit is simply unlit.
 function dimTheWayOn() {
-  if (ui.onward) ui.onward.disabled = true;
+  if (!ui.onward) return;
+  if (!ui.onward.disabled && !calm.matches) ui.onward.setAttribute('data-dimmed', '');
+  ui.onward.disabled = true;
 }
 
 // The way on, pressed: the piece scales away and the next card opens in its place -- exactly what
@@ -2373,13 +2484,18 @@ function goOn() {
   dimTheWayOn(); // one press is one piece: a second one cannot overtake the first
   const finished = !!(current && current.completed);
   const piece = current; // null where there was nothing to finish: a missing module, or a gate
+  // The unmaking is composed for this one leaving (the composer above): the inner's, and the done
+  // chip's strike, each at a length of its own.
+  composeLeave(ui.inner, 'stage-unmake', riteMs('long', 560));
+  if (ui.done && !ui.done.hidden) composeLeave(ui.done, 'chip-strike', riteMs('short', 170));
   setMode('vanishing');
-  // The vanish takes the time the stylesheet is giving it right now (--motion-long, rolled by
-  // js/motion.js), so the next piece opens once the last has gone and not a frame before.
+  // The vanish takes the time composed on the inner (--motion-stage-unmake) or the time the
+  // stylesheet is giving it right now (--motion-long, rolled by js/motion.js), so the next piece
+  // opens once the last has gone and not a frame before.
   later(() => {
     if (current !== piece) return; // something else took the stage while this one was leaving
     next(finished ? {} : { replace: true });
-  }, calm.matches ? 120 : riteMs('long', 520) + 40);
+  }, calm.matches ? 120 : inlineMs(ui.inner, 'stage-unmake', riteMs('long', 520)) + 40);
 }
 
 async function next(options) {
@@ -2430,6 +2546,18 @@ function close() {
   if (frameHandle) cancelAnimationFrame(frameHandle);
   frameHandle = 0;
   lastFrame = 0;
+  // The composed arrivals' inline roll comes off the parts that stay (the inner, the head's lines),
+  // so the next piece composes its own; the lines said are forgotten with the piece.
+  if (current && current.undos) {
+    for (const undo of current.undos) {
+      try {
+        undo();
+      } catch (e) {
+        /* nothing to take off */
+      }
+    }
+  }
+  saidAt.clear();
   current = null;
   if (ui.gate) {
     ui.gate.remove();
@@ -2444,7 +2572,10 @@ function close() {
   ui.canvas.setAttribute('aria-label', 'the scene');
   ui.scene.style.removeProperty('--piece-aspect');
   ui.scene.style.removeProperty('--piece-ratio');
-  for (let k = 1; k <= 4; k++) ui.scene.style.removeProperty('--plate-' + k);
+  for (let k = 1; k <= 4; k++) {
+    ui.scene.style.removeProperty('--plate-' + k);
+    ui.scene.style.removeProperty('--plate-veil-' + k);
+  }
   delete stage.dataset.dealing;
   delete stage.dataset.redeal;
   delete stage.dataset.powered;
@@ -2621,14 +2752,20 @@ function burst() {
   for (let i = 1; i < n; i++) treads.push(Math.max(0.02, Math.min(0.98, (n - i + (own() - 0.5) * 0.8) / n)));
   treads.sort((a, b) => b - a);
   treads.push(0);
+  // The shards move in treads of the rite and never along a formula: each is dealt a reach along
+  // its sector, a count of treads to take it there, a sag, and one tread on which it slips back,
+  // and on every held frame it stands where the working's own stair (env.rite, js/variant.js) puts
+  // it -- so a shard jumps from place to place and holds, as the rest of the ceremony does.
+  const stair = current && current.env && current.env.rite ? current.env.rite : rite(seed);
   const parts = [];
   for (let i = 0; i < 110; i++) {
     const sector = Math.floor(own() * sectors);
     const spread = (Math.PI * 2) / sectors;
     const a = sector * spread + turn + (own() - 0.5) * spread * 0.45;
-    const v = 140 + own() * 520;
-    parts.push({ x: cx, y: cy, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 60, r: 1.5 + own() * 4,
-      c: [colors.accent, colors.accent2, colors.fg][i % 3], life: 0.8 + own() * 0.7, age: 0 });
+    const k = 3 + Math.floor(own() * 4);
+    parts.push({ x: cx, y: cy, a, reach: 120 + own() * 520, sag: 30 + own() * 130, k,
+      slipAt: own() < 0.6 ? 1 + Math.floor(own() * (k - 1)) : -1, slip: 0.08 + own() * 0.14,
+      r: 1.5 + own() * 4, c: [colors.accent, colors.accent2, colors.fg][i % 3], life: 0.8 + own() * 0.7, age: 0 });
   }
   const plan = {
     positive: 0.16 + Math.random() * 0.08, // seconds the positive seal holds
@@ -2712,7 +2849,8 @@ function burst() {
       g.lineWidth = 2;
       g.strokeStyle = colors.accent;
       g.setLineDash(dash);
-      g.lineDashOffset = frames * 3;
+      // The dashes advance by the ratchet -- clicks with backlash -- and never march evenly.
+      g.lineDashOffset = Math.floor(stair.ratchet(Math.min(1, elapsed / 1.1)) * dash[0] * 6);
       g.beginPath();
       g.arc(cx, cy, Math.max(0, (Math.floor(open * 6) / 6) * ringReach), 0, Math.PI * 2);
       g.stroke();
@@ -2736,11 +2874,13 @@ function burst() {
       p.age += dt;
       if (p.age > p.life) continue;
       alive++;
-      p.vy += 420 * dt;
-      p.vx *= 0.985;
-      p.x += p.vx * dt;
-      p.y += p.vy * dt;
-      if (dither(i, frames, seed) < p.age / p.life) continue; // dying by dither
+      // Where the stair puts it at this age, less the slip on the one tread it slips back on.
+      const t = p.age / p.life;
+      const tread = stair.series(t, p.k);
+      const f = Math.max(0, stair.stair(t, p.k) - (tread === p.slipAt ? p.slip : 0));
+      p.x = cx + Math.cos(p.a) * p.reach * f;
+      p.y = cy + Math.sin(p.a) * p.reach * f + p.sag * f;
+      if (dither(i, frames, seed) < t) continue; // dying by dither
       g.fillStyle = p.c;
       g.fillRect(p.x - p.r, p.y - p.r, p.r * 2, p.r * 2);
     }
@@ -2787,12 +2927,33 @@ function thresholdStart() {
     });
   }
 
+  // The answer cards are dealt in an order rolled for this one asking (--knob-i, which the
+  // stylesheet's deal reads; the table there is the order a page without scripting deals), each
+  // with an arrival composed for it alone. Only the cards not yet dealt are touched, so a card mid-
+  // stamp is never re-dealt by a change elsewhere in the question.
+  function dealProbe() {
+    if (!probe || typeof probe.querySelectorAll !== 'function') return;
+    const fresh = Array.from(probe.querySelectorAll('.probe-option')).filter((o) => o.style && !o.style.getPropertyValue('--knob-i'));
+    if (!fresh.length) return;
+    const order = dealOrder(fresh.length, altRnd);
+    fresh.forEach((option, i) => {
+      option.style.setProperty('--knob-i', String(order[i]));
+      composeArrival(option, newSeed(), 'knob-stamp');
+    });
+  }
+
+  // The ask -- the question, or the quiet invitation -- arrives by a composition of its own on
+  // every change of mode that shows it.
+  const askBox = document.getElementById('stage-ask');
+
   function render() {
     const asking = !!(probe && !probe.hidden);
     if (asking) {
       // Through goHome(), not a bare close(): the piece that was on takes its name, its line and
       // its featured palette with it, so the question is asked on the threshold's own ground.
       if (current || pending) goHome();
+      if (stage.dataset.mode !== 'asking') composeArrival(askBox, newSeed(), 'ask-in');
+      dealProbe();
       setMode('asking');
       wasAsking = true;
       return;
@@ -2810,11 +2971,16 @@ function thresholdStart() {
       open(o.world, newSeed(), { arriving: true, keepRead: true, focus: r.source === 'answer' });
       return;
     }
-    if (!current && !pending) setMode('quiet');
+    if (!current && !pending) {
+      if (stage.dataset.mode !== 'quiet') composeArrival(askBox, newSeed(), 'ask-in');
+      setMode('quiet');
+    }
   }
 
   if (probe && window.MutationObserver) {
     new MutationObserver(render).observe(probe, { attributes: true, attributeFilter: ['hidden'] });
+    // A new question's cards (js/threshold.js renders each question's own) are dealt as they land.
+    new MutationObserver(() => { if (!probe.hidden) dealProbe(); }).observe(probe, { childList: true, subtree: true });
   }
   window.addEventListener('threshold:reading', render);
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', render);
