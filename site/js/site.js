@@ -1229,6 +1229,12 @@
       // On the world itself the option says where the visitor is, rather than offering them a
       // trip to where they already are.
       relabel(nav.readingLabel, here ? world.worldName : 'go to ' + world.worldName);
+      // The whispered line under the suggestion: the reading it follows from, in the reading's
+      // own words, so the option says why it is offered before it is pressed.
+      if (nav.readingGloss) {
+        relabel(nav.readingGloss, here ? 'where your reading led' : 'read as ' + world.name);
+        nav.readingGloss.hidden = false;
+      }
       if (here) nav.readingGo.setAttribute('aria-current', 'page');
       else nav.readingGo.removeAttribute('aria-current');
       nav.reading.hidden = false;
@@ -1654,6 +1660,7 @@
       reading: document.getElementById('sparknav-reading'),
       readingGo: document.getElementById('sparknav-reading-go'),
       readingLabel: document.getElementById('sparknav-reading-label'),
+      readingGloss: document.getElementById('sparknav-reading-gloss'),
       participate: document.getElementById('sparknav-participate'),
       participateOpen: document.getElementById('sparknav-participate-open'),
       cookies: document.getElementById('sparknav-cookies'),

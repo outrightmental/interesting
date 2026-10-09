@@ -708,6 +708,42 @@ html:not([data-nav='live']) .sparknav .sparknav-sky.is-branching .sparknav-node.
   overflow-wrap: anywhere;
 }
 
+// The words of a star: the page's name, and under it one whispered line of what the page is for
+// (the gloss _data/worlds.json keeps beside each destination), so an option says what it opens
+// before it is pressed. The line sits muted under the name and brightens one stair-tread while
+// the chip is waxed, like a label read by closer light.
+.sparknav-words {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+}
+
+.sparknav-gloss {
+  @include type.scale(label-small);
+  color: var(--md-sys-color-on-surface-variant);
+  letter-spacing: 0.01em;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  transition: color var(--motion-short) var(--ease-stair);
+}
+
+.sparknav-node.is-waxing .sparknav-gloss,
+.sparknav-node:hover .sparknav-gloss,
+.sparknav-node:focus-visible .sparknav-gloss {
+  color: var(--md-sys-color-on-surface);
+}
+
+.sparknav-node[aria-current='page'] .sparknav-gloss {
+  color: inherit;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sparknav-gloss {
+    transition: none;
+  }
+}
+
 // The page the visitor is already on, marked the way the feed marks its own card -- and sealed:
 // a set surface is a textured surface, the roll's fill in the chip's own ink over its colour,
 // with a small sigil before its name. The texture climbs the ladder onto it as the constellation

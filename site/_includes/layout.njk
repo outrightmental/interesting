@@ -61,7 +61,7 @@
           <span class='sparknav-ray' aria-hidden='true'></span>
           <a class='sparknav-node' href='{{ siteRoot }}{{ link.file }}'{% if here == link.file %} aria-current='page'{% endif %}>
             <svg class='icon' viewBox='0 0 24 24' aria-hidden='true' focusable='false'><path d='{{ icons[link.icon] }}'/></svg>
-            <span class='sparknav-label'>{{ link.name }}</span>
+            <span class='sparknav-words'><span class='sparknav-label'>{{ link.name }}</span><span class='sparknav-gloss'>{{ link.gloss }}</span></span>
           </a>
         </li>
 {%- endfor %}
@@ -69,7 +69,7 @@
           <span class='sparknav-ray' aria-hidden='true'></span>
           <a class='sparknav-node' id='sparknav-reading-go' href='{{ siteRoot }}moods.html'>
             <svg class='icon' viewBox='0 0 24 24' aria-hidden='true' focusable='false'><path d='{{ icons.star }}'/></svg>
-            <span class='sparknav-label' id='sparknav-reading-label'>the mood atlas</span>
+            <span class='sparknav-words'><span class='sparknav-label' id='sparknav-reading-label'>the mood atlas</span><span class='sparknav-gloss' id='sparknav-reading-gloss' hidden></span></span>
           </a>
         </li>
       </ul>
@@ -100,7 +100,7 @@
           <span class='sparknav-ray' aria-hidden='true'></span>
           <a class='sparknav-node' href='{{ siteRoot }}{{ link.file }}'{% if here == link.file %} aria-current='page'{% endif %}>
             <svg class='icon' viewBox='0 0 24 24' aria-hidden='true' focusable='false'><path d='{{ icons[link.icon] }}'/></svg>
-            <span class='sparknav-label'>{{ link.name }}</span>
+            <span class='sparknav-words'><span class='sparknav-label'>{{ link.name }}</span><span class='sparknav-gloss'>{{ link.gloss }}</span></span>
           </a>
         </li>
 {%- endfor %}
