@@ -1508,9 +1508,17 @@
     // them by the browser, and that is a fade. So the pieces of the wax, the wane, the ink, the
     // seal and the unseal say nothing about opacity at all, and the develop, the unmake and the
     // veil's leave, which must end with the thing gone, say it in every tread.
+    // Every tread says where the matte sits as well as which rung it is: the shorthand would
+    // otherwise put the pattern back at 0 0 in every composed tread and lose the phase the engine
+    // wrote on the element (--matte-shift), so no two elements' ladders would differ in phase.
     function masked(rung) {
       var v = rung === 'top' ? 'var(--matte-top)' : rung === 'none' ? 'none' : rung === 'off' ? 'linear-gradient(transparent, transparent)' : 'var(--matte-' + rung + ')';
-      return { mask: v, '-webkit-mask': v };
+      return { mask: v, '-webkit-mask': v, 'mask-position': 'var(--matte-shift, 0 0)', '-webkit-mask-position': 'var(--matte-shift, 0 0)' };
+    }
+
+    // The ink's treads sit where the press landed (--stamp-x, --stamp-y, written by the stamp).
+    function inked(rung) {
+      return merge(masked(rung), { 'mask-position': 'var(--stamp-x, 50%) var(--stamp-y, 50%)', '-webkit-mask-position': 'var(--stamp-x, 50%) var(--stamp-y, 50%)' });
     }
 
     function merge(a, b) {
@@ -1571,17 +1579,17 @@
       ink: {
         opening: [
           function () { return []; },
-          function () { return [merge(masked(2), { 'clip-path': 'var(--state-from, inset(0 50% 0 50%))' })]; }
+          function () { return [merge(inked(2), { 'clip-path': 'var(--state-from, inset(0 50% 0 50%))' })]; }
         ],
         climb: [
-          function () { return [merge(masked(2), { 'clip-path': 'inset(0)' }), merge(masked(4), { 'clip-path': 'inset(0)' }), merge(masked('top'), { 'clip-path': 'inset(0)' })]; },
-          function () { return [merge(masked(1), { 'clip-path': 'inset(0)' }), merge(masked(3), { 'clip-path': 'inset(0)' }), merge(masked(5), { 'clip-path': 'inset(0)' }), merge(masked('top'), { 'clip-path': 'inset(0)' })]; },
-          function () { return [merge(masked(3), { 'clip-path': 'inset(0)' }), merge(masked('top'), { 'clip-path': 'inset(0)' }), merge(masked(2), { 'clip-path': 'inset(0)' }), merge(masked('top'), { 'clip-path': 'inset(0)' })]; }
+          function () { return [merge(inked(2), { 'clip-path': 'inset(0)' }), merge(inked(4), { 'clip-path': 'inset(0)' }), merge(inked('top'), { 'clip-path': 'inset(0)' })]; },
+          function () { return [merge(inked(1), { 'clip-path': 'inset(0)' }), merge(inked(3), { 'clip-path': 'inset(0)' }), merge(inked(5), { 'clip-path': 'inset(0)' }), merge(inked('top'), { 'clip-path': 'inset(0)' })]; },
+          function () { return [merge(inked(3), { 'clip-path': 'inset(0)' }), merge(inked('top'), { 'clip-path': 'inset(0)' }), merge(inked(2), { 'clip-path': 'inset(0)' }), merge(inked('top'), { 'clip-path': 'inset(0)' })]; }
         ],
         landing: [
-          function () { return [merge(masked(3), { 'clip-path': 'inset(0)' })]; },
-          function () { return [merge(masked(2), { 'clip-path': 'inset(0)' })]; },
-          function () { return [merge(masked(4), { 'clip-path': 'inset(0)' }), merge(masked('top'), { 'clip-path': 'inset(0)' })]; }
+          function () { return [merge(inked(3), { 'clip-path': 'inset(0)' })]; },
+          function () { return [merge(inked(2), { 'clip-path': 'inset(0)' })]; },
+          function () { return [merge(inked(4), { 'clip-path': 'inset(0)' }), merge(inked('top'), { 'clip-path': 'inset(0)' })]; }
         ]
       },
       // The control itself under a press.

@@ -11,9 +11,10 @@
 //                  leaving, it settles back down the treads with one refusal (card-settle).
 //   stamp          a press (is-stamping, :active): the link dips in two cuts and a crack of shards
 //                  flashes over the plate in the primary (card-crack), never a darker tint.
-//   seal / unseal  a card that becomes the current one, the suggested one or an unpowered one
-//                  (is-sealing / is-unsealing on the card or its link): the rolled fill texture
-//                  climbs the ladder onto its picture and stays; leaving, it climbs down.
+//   seal / unseal  a card that becomes the current one, the suggested one, an unpowered one or
+//                  one put aside under a sheet (is-sealing / is-unsealing on the card or its
+//                  link): a fill texture rolled for the card climbs the ladder onto its picture
+//                  and stays; leaving, it climbs down.
 //   develop        a card seen for the first time (card-enter, @keyframes card-in): from the
 //                  rolled geometry through the ladder, with one flicker back, staggered by --d;
 //                  a card re-dealt in place (is-dealt, card-develop): its face through the ladder.
@@ -23,7 +24,11 @@
 //                  by the script, the plate's hairline waking, the shadow of a card standing out.
 //
 // Every keyframe here is a held pair, so even a swooping spell reads as treads, and each spell is
-// re-rolled by the engine when it ends (--ease-card-in and the rest; SPELLS in js/motion.js).
+// re-rolled by the engine when it ends (--ease-card-in and the rest; SPELLS in js/motion.js). And
+// every rite reads the composition the engine wrote for its trigger before its own keyframes
+// (--rite-wax, --rite-develop, --rite-unmake and the rest, inline on the card, its link or its
+// badge; js/feed.js asks for them), for the length rolled for that spell (--motion-<spell>), so
+// the same movement is a different movement each time: the keyframes here are the no-script fall.
 @use 'type';
 
 .feed {
@@ -147,8 +152,10 @@
 
 // ---- the state layer: wax and wane --------------------------------------------------------
 // The link's state layer is the matte itself: it wears the first rung of the ladder at rest and
-// climbs to the top while the pointer or the focus is on it, each rung offset by the card's own
-// grain. The page with no script climbs it from :hover and :focus-visible.
+// climbs to the top while the pointer or the focus is on it, each rung offset by the phase the
+// engine rolls for this one wax (--matte-shift, written inline by js/motion.js, so two waxes of one
+// card climb through different blotches) or, with no script, by the card's own grain. The page
+// with no script climbs it from :hover and :focus-visible.
 .card-link::before,
 .card-link::after {
   content: '';
@@ -166,8 +173,8 @@
   background: var(--md-sys-color-on-surface);
   mask: var(--matte-1);
   -webkit-mask: var(--matte-1);
-  mask-position: var(--card-grain, 0 0);
-  -webkit-mask-position: var(--card-grain, 0 0);
+  mask-position: var(--matte-shift, var(--card-grain, 0 0));
+  -webkit-mask-position: var(--matte-shift, var(--card-grain, 0 0));
 }
 
 .card-link.is-waxing::after,
@@ -176,8 +183,8 @@
   opacity: var(--state-opacity, var(--md-sys-state-hover-opacity));
   mask: var(--matte-top);
   -webkit-mask: var(--matte-top);
-  mask-position: var(--card-grain, 0 0);
-  -webkit-mask-position: var(--card-grain, 0 0);
+  mask-position: var(--matte-shift, var(--card-grain, 0 0));
+  -webkit-mask-position: var(--matte-shift, var(--card-grain, 0 0));
   // Composed anew on every wax (--rite-wax, js/motion.js); card-wax for a page with no script.
   animation: var(--rite-wax, card-wax) var(--motion-matte-in, var(--motion-card-wax, var(--motion-medium))) var(--ease-card-wax, var(--ease-stair)) both;
 }
@@ -188,8 +195,8 @@
 
 .card-link.is-waning::after {
   opacity: var(--md-sys-state-hover-opacity);
-  mask-position: var(--card-grain, 0 0);
-  -webkit-mask-position: var(--card-grain, 0 0);
+  mask-position: var(--matte-shift, var(--card-grain, 0 0));
+  -webkit-mask-position: var(--matte-shift, var(--card-grain, 0 0));
   animation: var(--rite-wane, card-wane) var(--motion-matte-out, var(--motion-card-wane, var(--motion-medium))) var(--ease-card-wane, var(--ease-stair)) both;
 }
 
@@ -197,50 +204,50 @@
   0%, 17.9% {
     mask: var(--matte-1);
     -webkit-mask: var(--matte-1);
-    mask-position: var(--card-grain, 0 0);
-    -webkit-mask-position: var(--card-grain, 0 0);
+    mask-position: var(--matte-shift, var(--card-grain, 0 0));
+    -webkit-mask-position: var(--matte-shift, var(--card-grain, 0 0));
   }
 
   18%, 37.9% {
     mask: var(--matte-2);
     -webkit-mask: var(--matte-2);
-    mask-position: var(--card-grain, 0 0);
-    -webkit-mask-position: var(--card-grain, 0 0);
+    mask-position: var(--matte-shift, var(--card-grain, 0 0));
+    -webkit-mask-position: var(--matte-shift, var(--card-grain, 0 0));
   }
 
   38%, 45.9% {
     mask: var(--matte-1);
     -webkit-mask: var(--matte-1);
-    mask-position: var(--card-grain, 0 0);
-    -webkit-mask-position: var(--card-grain, 0 0);
+    mask-position: var(--matte-shift, var(--card-grain, 0 0));
+    -webkit-mask-position: var(--matte-shift, var(--card-grain, 0 0));
   }
 
   46%, 63.9% {
     mask: var(--matte-3);
     -webkit-mask: var(--matte-3);
-    mask-position: var(--card-grain, 0 0);
-    -webkit-mask-position: var(--card-grain, 0 0);
+    mask-position: var(--matte-shift, var(--card-grain, 0 0));
+    -webkit-mask-position: var(--matte-shift, var(--card-grain, 0 0));
   }
 
   64%, 81.9% {
     mask: var(--matte-4);
     -webkit-mask: var(--matte-4);
-    mask-position: var(--card-grain, 0 0);
-    -webkit-mask-position: var(--card-grain, 0 0);
+    mask-position: var(--matte-shift, var(--card-grain, 0 0));
+    -webkit-mask-position: var(--matte-shift, var(--card-grain, 0 0));
   }
 
   82%, 94.9% {
     mask: var(--matte-5);
     -webkit-mask: var(--matte-5);
-    mask-position: var(--card-grain, 0 0);
-    -webkit-mask-position: var(--card-grain, 0 0);
+    mask-position: var(--matte-shift, var(--card-grain, 0 0));
+    -webkit-mask-position: var(--matte-shift, var(--card-grain, 0 0));
   }
 
   95%, 100% {
     mask: var(--matte-top);
     -webkit-mask: var(--matte-top);
-    mask-position: var(--card-grain, 0 0);
-    -webkit-mask-position: var(--card-grain, 0 0);
+    mask-position: var(--matte-shift, var(--card-grain, 0 0));
+    -webkit-mask-position: var(--matte-shift, var(--card-grain, 0 0));
   }
 }
 
@@ -248,43 +255,43 @@
   0%, 21.9% {
     mask: var(--matte-top);
     -webkit-mask: var(--matte-top);
-    mask-position: var(--card-grain, 0 0);
-    -webkit-mask-position: var(--card-grain, 0 0);
+    mask-position: var(--matte-shift, var(--card-grain, 0 0));
+    -webkit-mask-position: var(--matte-shift, var(--card-grain, 0 0));
   }
 
   22%, 43.9% {
     mask: var(--matte-4);
     -webkit-mask: var(--matte-4);
-    mask-position: var(--card-grain, 0 0);
-    -webkit-mask-position: var(--card-grain, 0 0);
+    mask-position: var(--matte-shift, var(--card-grain, 0 0));
+    -webkit-mask-position: var(--matte-shift, var(--card-grain, 0 0));
   }
 
   44%, 63.9% {
     mask: var(--matte-3);
     -webkit-mask: var(--matte-3);
-    mask-position: var(--card-grain, 0 0);
-    -webkit-mask-position: var(--card-grain, 0 0);
+    mask-position: var(--matte-shift, var(--card-grain, 0 0));
+    -webkit-mask-position: var(--matte-shift, var(--card-grain, 0 0));
   }
 
   64%, 71.9% {
     mask: var(--matte-4);
     -webkit-mask: var(--matte-4);
-    mask-position: var(--card-grain, 0 0);
-    -webkit-mask-position: var(--card-grain, 0 0);
+    mask-position: var(--matte-shift, var(--card-grain, 0 0));
+    -webkit-mask-position: var(--matte-shift, var(--card-grain, 0 0));
   }
 
   72%, 85.9% {
     mask: var(--matte-2);
     -webkit-mask: var(--matte-2);
-    mask-position: var(--card-grain, 0 0);
-    -webkit-mask-position: var(--card-grain, 0 0);
+    mask-position: var(--matte-shift, var(--card-grain, 0 0));
+    -webkit-mask-position: var(--matte-shift, var(--card-grain, 0 0));
   }
 
   86%, 97.9% {
     mask: var(--matte-1);
     -webkit-mask: var(--matte-1);
-    mask-position: var(--card-grain, 0 0);
-    -webkit-mask-position: var(--card-grain, 0 0);
+    mask-position: var(--matte-shift, var(--card-grain, 0 0));
+    -webkit-mask-position: var(--matte-shift, var(--card-grain, 0 0));
   }
 
   98%, 100% {
@@ -302,8 +309,8 @@
   background: var(--md-sys-color-primary);
   mask: var(--matte-2);
   -webkit-mask: var(--matte-2);
-  mask-position: var(--card-grain, 0 0);
-  -webkit-mask-position: var(--card-grain, 0 0);
+  mask-position: var(--matte-shift, var(--card-grain, 0 0));
+  -webkit-mask-position: var(--matte-shift, var(--card-grain, 0 0));
 }
 
 .card-link.is-stamping,
@@ -829,7 +836,7 @@
 
 .card.is-dealt .card-media,
 .card.is-dealt .card-body {
-  animation: card-develop var(--motion-card-develop, var(--motion-long)) var(--ease-card-develop, var(--ease-stair)) both;
+  animation: var(--rite-develop, card-develop) var(--motion-card-develop, var(--motion-long)) var(--ease-card-develop, var(--ease-stair)) both;
 }
 
 .card.is-dealt .card-body {
@@ -881,7 +888,7 @@
 // pressed (card-taken) is handed to the stage: it pops over first, then goes up and out.
 .card-redeal .card-media,
 .card-redeal .card-body {
-  animation: card-unmake var(--motion-card-unmake, var(--motion-medium)) var(--ease-card-unmake, var(--ease-leave)) both;
+  animation: var(--rite-unmake, card-unmake) var(--motion-card-unmake, var(--motion-medium)) var(--ease-card-unmake, var(--ease-leave)) both;
 }
 
 @keyframes card-unmake {
@@ -1004,9 +1011,11 @@
 }
 
 // ---- the feed under a lightbox ---------------------------------------------------------------
-// Behind the veil every card is put aside: its picture wears the fill texture, stepping on and
-// off along the stair, so the feed that comes back is the feed that was sealed, unsealed.
-html[data-lightbox] .card-media::before {
+// Behind the veil the cards on screen are put aside (is-aside, js/feed.js watching <html
+// data-lightbox>): each is sealed -- its picture wears its own fill texture, climbing on along a
+// seal composed for it -- and unsealed when the sheet goes, so the feed that comes back is the
+// feed that was sealed, unsealed. Only the cards on screen, never the whole deck.
+.card.is-aside .card-media::before {
   opacity: 0.12;
 }
 
