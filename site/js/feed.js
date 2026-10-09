@@ -88,7 +88,7 @@ function skyStars() {
   return persona ? persona.stars() : [];
 }
 
-function makeEnv(card, seed, world, variant, starsOverride) {
+function makeEnv(card, seed, world, variant, starsOverride, colorsOverride) {
   const rnd = mulberry32(seed);
   const stars = starsOverride || skyStars();
   return {
@@ -101,7 +101,7 @@ function makeEnv(card, seed, world, variant, starsOverride) {
       const p = pad || 0;
       return stars.map((s) => ({ x: p + s.x / 100 * (w - p * 2), y: p + s.y / 100 * (h - p * 2), text: s.text }));
     },
-    colors: card.isConnected ? readColors(card) : Object.assign({}, FALLBACK),
+    colors: colorsOverride || (card.isConnected ? readColors(card) : Object.assign({}, FALLBACK)),
     mix, alpha, reduced: calm.matches, world, variant: variant || PLAIN
   };
 }
@@ -661,6 +661,47 @@ function start() {
   }
 }
 
-window.interestingFeed = { take, consume };
+/* The persona borrows a real card configuration without consuming or changing the card. Each
+   preview captures its stars and colours; drawing starts a fresh seeded stream even on a resize,
+   and needs no further palette measurement. Nothing touches a piece already on the stage. */
+async function previewSky(index) {
+  if (!Number.isInteger(index) || index < 0) throw new TypeError('A sky preview needs a non-negative index.');
+  const available = WORLDS.map((world) => {
+    const card = cards.find((item) => {
+      const m = meta.get(item);
+      return m && m.world.file === world.file && item.isConnected && !item.classList.contains('card-leave');
+    });
+    return card ? { world, card } : null;
+  }).filter(Boolean);
+  const readers = (await Promise.all(available.map(async (reader) => {
+    const mod = await loadModule(reader.world.id);
+    return mod && mod.needsSky && typeof mod.spark === 'function'
+      ? Object.assign(reader, { mod }) : null;
+  }))).filter((reader) => reader && reader.card.isConnected && !reader.card.classList.contains('card-leave'));
+  if (!readers.length) throw new Error('No sky puzzle preview could be opened.');
+  const reader = readers[index % readers.length];
+  const m = meta.get(reader.card);
+  tint(reader.card, m);
+  const env = makeEnv(reader.card, m.seed, reader.world, m.variant);
+  if (!env.stars.length) throw new Error('A sky puzzle preview needs stars.');
+  const spec = reader.mod.spark(env);
+  if (!spec) throw new Error('This world supplied no sky puzzle preview.');
+  const painter = typeof spec.paint === 'function' ? spec.paint : reader.mod.paint;
+  if (typeof painter !== 'function') throw new Error('This world supplied no preview picture.');
+  return {
+    world: reader.world,
+    title: spec.title || reader.world.name,
+    line: spec.quote || spec.text || spec.mono || reader.world.what,
+    aspect: aspect(spec.aspect || reader.world.aspect, m.variant || PLAIN),
+    colors: env.colors,
+    draw(ctx, w, h) {
+      const picture = makeEnv(reader.card, m.seed, reader.world, m.variant, env.stars, env.colors);
+      picture.reduced = true;
+      painter(ctx, w, h, picture);
+    }
+  };
+}
+
+window.interestingFeed = { take, consume, previewSky };
 if (grid && WORLDS.length) start();
 window.dispatchEvent(new CustomEvent('feed:ready'));

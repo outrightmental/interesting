@@ -12,7 +12,9 @@
    A star's editable words give it a glint in both the portrait and the sheet. A short path
    through nearby thoughts makes those words readable together; choosing or moving a star changes
    the path. Sky cards follow the words without changing their seed; a puzzle already begun keeps
-   its clues.
+   its clues. The sheet's optional puzzle preview borrows the feed's own modules and card
+   configurations through interestingFeed.previewSky(), so changing a star reveals a real world's
+   response rather than an imitation. Moving a star updates the preview when the move ends.
 
    The difficulty is advertised as specifically as the sky and settable from everywhere it is a
    dependency (issue #93), which is every piece on the site: `tuner(host)` below renders the one
@@ -510,6 +512,7 @@
     if (sheet && sheet.host.open) {
       if (!sameStars(serialize(), list)) renderField();
       renderReading();
+      renderSkyAnswer();
     }
   }
   function askInCard() {
@@ -663,7 +666,84 @@
   var openedBy = null;
   var sheetWasOpen = false;
   var sheetBox = null;
+  var skyAnswerIndex = 0;
+  var skyAnswerWanted = false;
+  var skyAnswerTicket = 0;
+  var skyAnswerStars = null;
+  var skyAnswerAt = -1;
+  var skyAnswerSample = null;
   function sheetStatus(text) { if (sheet && sheet.status) sheet.status.textContent = text; }
+  function drawSkyAnswer() {
+    if (!sheet || !sheet.preview || !sheet.answerCanvas || !skyAnswerSample) return;
+    sheet.preview.hidden = false;
+    var box = sheet.preview.getBoundingClientRect();
+    if (!box.width || !box.height) return;
+    var ctx = sizeCanvas(sheet.answerCanvas, box.width, box.height);
+    if (!ctx) {
+      sheet.preview.hidden = true;
+      sheet.answerLine.textContent = 'The picture cannot be drawn here. ' + skyAnswerSample.line;
+      return;
+    }
+    try {
+      skyAnswerSample.draw(ctx, box.width, box.height);
+    } catch (error) {
+      sheet.preview.hidden = true;
+      sheet.answerLine.textContent = 'This picture could not be drawn. ' + skyAnswerSample.line
+        + ' You can preview another world.';
+    }
+  }
+  function renderSkyAnswer() {
+    if (!sheet || !sheet.answer || !sheet.answerRead) return;
+    var feed = window.interestingFeed;
+    var list = stars();
+    sheet.answer.hidden = !list.length || !feed || typeof feed.previewSky !== 'function';
+    if (sheet.answer.hidden) {
+      skyAnswerTicket += 1;
+      skyAnswerStars = null;
+      skyAnswerSample = null;
+      sheet.preview.hidden = true;
+      sheet.answerWorld.hidden = true;
+      sheet.answerTitle.hidden = true;
+      sheet.answerLine.textContent = '';
+      sheet.answerRead.disabled = false;
+      return;
+    }
+    if (!skyAnswerWanted || activeDrag) return;
+    if (skyAnswerAt === skyAnswerIndex && skyAnswerStars && sameStars(skyAnswerStars, list)) return;
+    var ticket = ++skyAnswerTicket;
+    skyAnswerStars = list;
+    skyAnswerAt = skyAnswerIndex;
+    sheet.answerRead.disabled = true;
+    sheet.answerLine.textContent = 'Making a preview from your stars.';
+    feed.previewSky(skyAnswerIndex).then(function (sample) {
+      if (ticket !== skyAnswerTicket || !sheet.host.open) return;
+      skyAnswerSample = sample;
+      sheet.answer.setAttribute('data-mood', sample.world.mood);
+      ['bg', 'bg2', 'accent', 'accent2'].forEach(function (name) {
+        sheet.answer.style.setProperty('--' + name, sample.colors[name]);
+      });
+      sheet.answerWorld.textContent = sample.world.name;
+      sheet.answerWorld.hidden = false;
+      sheet.answerTitle.textContent = sample.title;
+      sheet.answerTitle.hidden = false;
+      sheet.answerNote.textContent = 'Preview only. Change a star to see what changes, or press the preview button to see your sky in another world.';
+      sheet.preview.style.setProperty('aspect-ratio', sample.aspect);
+      sheet.answerLine.textContent = sample.line;
+      sheet.answerLabel.textContent = 'preview another world';
+      sheet.answerRead.disabled = false;
+      drawSkyAnswer();
+    }).catch(function () {
+      if (ticket !== skyAnswerTicket || !sheet.host.open) return;
+      skyAnswerStars = null;
+      skyAnswerSample = null;
+      sheet.preview.hidden = true;
+      sheet.answerWorld.hidden = true;
+      sheet.answerTitle.hidden = true;
+      sheet.answerLine.textContent = 'This preview could not be opened. Your sky is unchanged; you can try another world here or use the cards below.';
+      sheet.answerLabel.textContent = 'preview another world';
+      sheet.answerRead.disabled = false;
+    });
+  }
   function fieldIntro(list) {
     if (!list.length) return 'No stars yet. Seed a small sky or drop a star to begin.';
     return list.length + ' star' + (list.length === 1 ? ' is' : 's are') + ' placed. The cards that read this sky follow your changes.';
@@ -838,6 +918,7 @@
       suppressClickUntil = Date.now() + DRAG_SUPPRESS_MS;
       var kept = setStars(serialize(), 'moved');
       sheetStatus('Moved.' + namedLine() + keptNote(kept));
+      renderSkyAnswer();
     }
   }
   function renderReading() {
@@ -854,7 +935,7 @@
       } else sheet.readingGo.hidden = true;
     }
   }
-  function renderSheet() { renderField(); renderReading(); }
+  function renderSheet() { renderField(); renderReading(); renderSkyAnswer(); }
   function openSheet(section, opener) {
     if (!sheet) return;
     stopAskingInCard();
@@ -889,6 +970,8 @@
     if (!sheet || sheet.host.open || !sheetWasOpen) return;
     sheetWasOpen = false;
     activeDrag = null;
+    skyAnswerTicket += 1;
+    skyAnswerStars = null;
     sheet.host.classList.remove('persona-sheet-fallback');
     if (sheetBox) sheetBox.down();
     refresh();
@@ -913,6 +996,15 @@
       wordsForm: document.getElementById('persona-star-words'),
       words: document.getElementById('persona-star-thought'),
       neighbor: document.getElementById('persona-star-neighbor'),
+      answer: document.getElementById('persona-sky-answer'),
+      answerRead: document.getElementById('persona-sky-read'),
+      answerLabel: document.getElementById('persona-sky-read-label'),
+      answerNote: document.getElementById('persona-sky-answer-note'),
+      answerWorld: document.getElementById('persona-sky-answer-world'),
+      answerTitle: document.getElementById('persona-sky-answer-title'),
+      answerLine: document.getElementById('persona-sky-answer-line'),
+      preview: document.getElementById('persona-sky-preview'),
+      answerCanvas: document.getElementById('persona-sky-preview-canvas'),
       reading: document.getElementById('persona-reading'), ask: document.getElementById('persona-ask'),
       forget: document.getElementById('persona-forget'), readingGo: document.getElementById('persona-reading-go'),
       tune: document.getElementById('persona-difficulty')
@@ -926,6 +1018,14 @@
       sheetBox = shell.lightbox({ name: 'persona', keep: host, onPress: closeSheet });
     }
     if (sheet.close) sheet.close.addEventListener('click', closeSheet);
+    if (sheet.answerRead) sheet.answerRead.addEventListener('click', function () {
+      if (skyAnswerWanted) skyAnswerIndex += 1;
+      skyAnswerWanted = true;
+      renderSkyAnswer();
+    });
+    window.addEventListener('feed:ready', function () {
+      if (host.open) renderSkyAnswer();
+    });
     host.addEventListener('close', onSheetClosed);
     host.addEventListener('click', function (ev) {
       if (ev.target !== host) return;
@@ -1072,7 +1172,11 @@
       },
       onCancel: renderReading
     });
-    window.addEventListener('resize', function () { if (sheet.host.open) drawField(); });
+    window.addEventListener('resize', function () {
+      if (!sheet.host.open) return;
+      drawField();
+      drawSkyAnswer();
+    });
   }
   function start() {
     buildCard();
