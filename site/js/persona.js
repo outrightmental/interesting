@@ -112,11 +112,29 @@
   // --motion-<spell>), which _sass/_persona.scss reads before its own keyframes. The class that
   // plays it is put on by the caller (rite, or the stylesheet's :not([hidden]) / [open]), never by
   // the engine, whose own pass waits a frame the lightbox may be holding.
-  function arriveOn(el, spell, seed) {
+  // With `mattes`, a matte ladder of the element's own as well (--matte-1..5, --matte-top, inline),
+  // for the things a visitor sees arrive side by side -- the stars dealt together, the sheet --
+  // so they climb as many ladders as there are of them, not the page's one.
+  function arriveOn(el, spell, seed, mattes) {
     var m = engine();
     if (!el || !el.style || !m || calm() || typeof m.arrive !== 'function') return;
-    try { m.arrive(el, { spell: spell, seed: seed, className: false }); }
+    try { m.arrive(el, { spell: spell, seed: seed, className: false, mattes: !!mattes }); }
     catch (e) { console.error('The arrival could not be composed', e); }
+  }
+  // A star moved by an arrow key is nudged (is-nudged, _sass/_persona.scss star-nudge): a tread
+  // past its new place along the key's way (--nudge-dx/-dy, the sign of the move) and one flicker
+  // of its gleam, with the dip the engine composes for this one press (--rite-stamp, --motion-star-
+  // nudge), so no two nudges are alike. Nothing here moves the star: placeElement has, at once.
+  function nudge(el, move) {
+    var m = engine();
+    if (!el || !el.style || !m || calm() || typeof el.style.setProperty !== 'function') return;
+    el.style.setProperty('--nudge-dx', String(move[0] > 0 ? 1 : move[0] < 0 ? -1 : 0));
+    el.style.setProperty('--nudge-dy', String(move[1] > 0 ? 1 : move[1] < 0 ? -1 : 0));
+    if (typeof m.composeOn === 'function') {
+      try { m.composeOn(el, 'stamp', 'star-nudge', riteMs('short', 170)); }
+      catch (e) { console.error('The nudge could not be composed', e); }
+    }
+    rite(el, 'nudged', riteLength(el, 'star-nudge', riteMs('short', 170)) + 100);
   }
   // What leaves leaves by a composition of its own (--rite-unmake, --motion-<spell>), written on
   // the element -- or on the ghost of it -- that plays it.
@@ -1233,6 +1251,13 @@
     el.className = 'persona-star';
     el.setAttribute('aria-label', starLabel(star));
     el.setAttribute('aria-pressed', 'false');
+    // The light is a child of the button, so the matte it waxes through masks the light alone and
+    // the thread badge stays legible (_sass/_persona.scss, .persona-star-light). Nothing is read
+    // from it: the button keeps its name, its press and its place.
+    var light = document.createElement('span');
+    light.className = 'persona-star-light';
+    light.setAttribute('aria-hidden', 'true');
+    el.appendChild(light);
     star.el = el;
     placeElement(star);
     el.addEventListener('focus', function () { select(index); });
@@ -1263,6 +1288,7 @@
         star.x = Number(clamp(star.x + moves[ev.key][0], 1, 99).toFixed(2));
         star.y = Number(clamp(star.y + moves[ev.key][1], 1, 99).toFixed(2));
         placeElement(star);
+        nudge(star.el, moves[ev.key]);
         var kept = setStars(serialize(), 'moved');
         drawField();
         select(index);
@@ -1282,7 +1308,7 @@
     var m = engine();
     if (!m || calm() || !el || typeof el.cloneNode !== 'function' || !el.parentNode
         || typeof el.parentNode.insertBefore !== 'function' || typeof window.setTimeout !== 'function') return;
-    var ghost = el.cloneNode(false);
+    var ghost = el.cloneNode(true); // with the light inside it, which is what is seen to go
     ghost.className = 'persona-star persona-star-ghost';
     ghost.removeAttribute('id');
     ghost.removeAttribute('aria-pressed');
@@ -1293,7 +1319,9 @@
     ghost.setAttribute('inert', '');
     leaveOn(ghost, 'star-unmake');
     el.parentNode.insertBefore(ghost, el);
-    function gone() {
+    // The ghost's own rite ending takes it out -- not the light's inside it, whose end bubbles.
+    function gone(ev) {
+      if (ev && ev.target && ev.target !== ghost) return;
       if (ghost.parentNode) ghost.parentNode.removeChild(ghost);
     }
     ghost.addEventListener('animationend', gone);
@@ -1355,7 +1383,7 @@
       var wait = deal.length > 1 && typeof m.stagger === 'function' ? Math.round(m.stagger(k)) : 0;
       el.style.setProperty('--d', wait + 'ms');
       // Each star's own arrival: its geometry, its curve, its composition, then the class.
-      arriveOn(el, 'star-develop');
+      arriveOn(el, 'star-develop', null, true);
       rite(el, 'placed', riteLength(el, 'star-develop', riteMs('long', 560)) + wait + 200);
     }
     select(-1);
@@ -1455,7 +1483,7 @@
         // The sheet is dealt by a composition of its own, rolled before it is shown so its first
         // frame is already the composition's (the fallback box keeps its own transform, so it is
         // dealt by the stylesheet's keyframes instead).
-        arriveOn(sheet.host, 'sheet-in');
+        arriveOn(sheet.host, 'sheet-in', null, true);
         sheet.host.showModal();
       } else { sheet.host.setAttribute('open', ''); sheet.host.classList.add('persona-sheet-fallback'); }
       sheetWasOpen = true;

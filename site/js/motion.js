@@ -693,7 +693,13 @@
     'power-up': 'stair',
     'list-in': 'arrive',
     'cast-ring-out': 'leave',
-    'cast-ring-dashed-out': 'leave'
+    'cast-ring-dashed-out': 'leave',
+    'star-nudge': 'stair',
+    'sky-wax-ring': 'stair',
+    'chip-strike': 'leave',
+    'seal-deal': 'stair',
+    'plate-twitch-b': 'flicker',
+    'lamp-dark': 'flicker'
   };
 
   function familyOf(name) {

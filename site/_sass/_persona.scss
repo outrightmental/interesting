@@ -227,7 +227,7 @@
   background: var(--md-sys-color-primary);
   color: var(--md-sys-color-on-primary);
   // The corner's own arrival (avatar-in, above, or the composed one), the beckon from then on.
-  animation: persona-beckon 2.8s var(--ease-persona-beckon, var(--ease-pulse)) infinite, var(--rite-develop, avatar-in) var(--motion-avatar-in, var(--motion-long)) var(--ease-avatar-in, var(--ease-arrive)) both;
+  animation: persona-beckon var(--motion-persona-beckon, 2.8s) var(--ease-persona-beckon, var(--ease-pulse)) infinite, var(--rite-develop, avatar-in) var(--motion-avatar-in, var(--motion-long)) var(--ease-avatar-in, var(--ease-arrive)) both;
 }
 
 @keyframes persona-beckon {
@@ -266,7 +266,7 @@
 
 // Once a beat the beckoning label's tracking twitches for one tread, as the halo lands.
 .persona[data-state='empty'] .persona-label {
-  animation: beckon-label 2.8s var(--ease-beckon-label, var(--ease-flicker)) infinite;
+  animation: beckon-label var(--motion-beckon-label, 2.8s) var(--ease-beckon-label, var(--ease-flicker)) infinite;
 }
 
 @keyframes beckon-label {
@@ -358,7 +358,7 @@
   place-items: center;
   color: currentColor;
   font-size: 1rem;
-  animation: glyph-unmake var(--motion-long) var(--ease-glyph-unmake, var(--ease-leave)) both;
+  animation: glyph-unmake var(--motion-glyph-unmake, var(--motion-long)) var(--ease-glyph-unmake, var(--ease-leave)) both;
 }
 
 @keyframes glyph-unmake {
@@ -400,7 +400,7 @@
 
 .persona.is-casting .persona-portrait::before {
   border-color: color-mix(in oklab, currentColor 60%, transparent);
-  animation: ring-cast var(--motion-long) var(--ease-ring-cast, var(--ease-stair)) both;
+  animation: ring-cast var(--motion-ring-cast, var(--motion-long)) var(--ease-ring-cast, var(--ease-stair)) both;
 }
 
 @keyframes ring-cast {
@@ -446,7 +446,7 @@
 // the ladder, and nothing is unmade, since no visitor watched it being cast.
 .persona.is-casting .persona-portrait canvas,
 .persona.is-dawning .persona-portrait canvas {
-  animation: portrait-cast var(--motion-long) var(--ease-portrait-cast, var(--ease-stair)) both;
+  animation: portrait-cast var(--motion-portrait-cast, var(--motion-long)) var(--ease-portrait-cast, var(--ease-stair)) both;
 }
 
 @keyframes portrait-cast {
@@ -526,7 +526,7 @@
 }
 
 .persona:not([data-state='empty']) .persona-avatar.is-waning .persona-label {
-  animation: persona-name-out var(--motion-medium) var(--ease-persona-name-out, var(--ease-stair)) both;
+  animation: persona-name-out var(--motion-persona-name-out, var(--motion-medium)) var(--ease-persona-name-out, var(--ease-stair)) both;
 }
 
 @keyframes persona-name {
@@ -638,7 +638,7 @@
 .persona[data-asking='true'] .persona-portrait {
   outline: 2px solid var(--md-sys-color-primary);
   outline-offset: 1px;
-  animation: portrait-ask var(--motion-medium) var(--ease-portrait-ask, var(--ease-stair)) both;
+  animation: portrait-ask var(--motion-portrait-ask, var(--motion-medium)) var(--ease-portrait-ask, var(--ease-stair)) both;
 }
 
 @keyframes portrait-ask {
@@ -672,7 +672,7 @@
 // button around it stamps as every control does (_controls.scss); this is what the sky does inside.
 .persona-avatar.is-stamping .persona-portrait,
 .persona-avatar:active .persona-portrait {
-  animation: portrait-stamp var(--motion-short) var(--ease-portrait-stamp, var(--ease-flicker)) both;
+  animation: portrait-stamp var(--motion-portrait-stamp, var(--motion-short)) var(--ease-portrait-stamp, var(--ease-flicker)) both;
 }
 
 @keyframes portrait-stamp {
@@ -998,7 +998,7 @@
 // hand of cards rather than switched on whole.
 .persona-sheet[open] > * {
   --k: 0;
-  animation: sheet-part-in var(--motion-long) var(--ease-sheet-part-in, var(--ease-stair)) calc(var(--k, 0) * var(--motion-stagger, 44ms) * 2 + var(--motion-short, 170ms)) both;
+  animation: sheet-part-in var(--motion-sheet-part-in, var(--motion-long)) var(--ease-sheet-part-in, var(--ease-stair)) calc(var(--k, 0) * var(--motion-stagger, 44ms) * 2 + var(--motion-short, 170ms)) both;
 }
 
 .persona-sheet[open] > :nth-child(2) {
@@ -1214,36 +1214,75 @@
 
 .persona-sky:hover {
   box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--md-sys-color-primary) 55%, transparent);
-  // The edge is struck in treads -- wide, slipped, narrower, home -- with one flicker of the
-  // field's ground, never a ring that fades in. The sky itself is never masked: the stars under
-  // the pointer are what a visitor is reaching for.
+  // The edge is struck in treads -- wide, slipped, narrower, home -- never a ring that fades in.
+  // The sky itself is never masked or filtered: it holds the canvas the script redraws in treads
+  // and every star with its own rites, and the stars under the pointer are what a visitor is
+  // reaching for. The flicker that goes with the strike is the ring's (sky-wax-ring, below).
   animation: sky-wax var(--motion-sky-wax, var(--motion-medium)) var(--ease-sky-wax, var(--ease-stair)) both;
 }
 
 @keyframes sky-wax {
   0%, 22.9% {
     box-shadow: inset 0 0 0 3px color-mix(in oklab, var(--md-sys-color-primary) 30%, transparent);
-    filter: brightness(1.08);
   }
 
   23%, 44.9% {
     box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--md-sys-color-primary) 55%, transparent);
-    filter: none;
   }
 
   45%, 53.9% {
     box-shadow: inset 0 0 0 2px color-mix(in oklab, var(--md-sys-color-primary) 70%, transparent);
-    filter: brightness(1.14) contrast(1.06);
   }
 
   54%, 77.9% {
     box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--md-sys-color-primary) 40%, transparent);
-    filter: none;
   }
 
   78%, 100% {
     box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--md-sys-color-primary) 55%, transparent);
+  }
+}
+
+// The ring behind the stars (_rite.scss draws it) plays three rites that may overlap -- its cast
+// as the sheet opens, its flicker as the field waxes, its click as a star lands -- each in a slot
+// of its own, so none is dropped for another.
+.persona-sky::before {
+  animation:
+    var(--ring-cast-animation, none var(--ease-stair)),
+    var(--ring-wax-animation, none var(--ease-stair)),
+    var(--ring-click-animation, none var(--ease-flicker));
+}
+
+// As the field waxes the ring is lit in treads -- bright, slipped dark, brighter, home -- the one
+// small surface in the sky that takes a filter.
+.persona-sky:hover::before {
+  --ring-wax-animation: sky-wax-ring var(--motion-sky-wax-ring, var(--motion-medium)) var(--ease-sky-wax-ring, var(--ease-stair)) both;
+}
+
+@keyframes sky-wax-ring {
+  0%, 22.9% {
+    filter: brightness(1.6) contrast(1.2);
+    border-color: color-mix(in oklab, var(--md-sys-color-primary) 60%, transparent);
+  }
+
+  23%, 44.9% {
     filter: none;
+    border-color: color-mix(in oklab, var(--md-sys-color-primary) 22%, transparent);
+  }
+
+  45%, 53.9% {
+    filter: brightness(1.9) contrast(1.3);
+    border-color: color-mix(in oklab, var(--md-sys-color-primary) 75%, transparent);
+  }
+
+  54%, 77.9% {
+    filter: none;
+    border-color: color-mix(in oklab, var(--md-sys-color-primary) 35%, transparent);
+  }
+
+  78%, 100% {
+    filter: none;
+    border-color: color-mix(in oklab, var(--md-sys-color-primary) 22%, transparent);
   }
 }
 
@@ -1319,7 +1358,7 @@
 // place in clicks with backlash, through the ladder, a beat after the sheet itself; and it clicks
 // one tooth round whenever a star lands in the sky (is-struck, from js/persona.js).
 .persona-sheet[open] .persona-sky::before {
-  animation: sky-ring-cast var(--motion-long) var(--ease-sky-ring-cast, var(--ease-stair)) calc(var(--motion-short, 170ms) * 2) both;
+  --ring-cast-animation: sky-ring-cast var(--motion-sky-ring-cast, var(--motion-long)) var(--ease-sky-ring-cast, var(--ease-stair)) calc(var(--motion-short, 170ms) * 2) both;
 }
 
 @keyframes sky-ring-cast {
@@ -1361,7 +1400,7 @@
 }
 
 .persona-sky.is-struck::before {
-  animation: sky-ring-click var(--motion-medium) var(--ease-sky-ring-click, var(--ease-flicker)) both;
+  --ring-click-animation: sky-ring-click var(--motion-sky-ring-click, var(--motion-medium)) var(--ease-sky-ring-click, var(--ease-flicker)) both;
 }
 
 @keyframes sky-ring-click {
@@ -1391,7 +1430,7 @@
 // A strike -- a star landing, a star taken away -- flickers the drawn lines for one tread while the
 // script redraws them in treads of its own.
 .persona-sky.is-struck .persona-sky-canvas {
-  animation: canvas-flicker var(--motion-medium) var(--ease-canvas-flicker, var(--ease-flicker)) both;
+  animation: canvas-flicker var(--motion-canvas-flicker, var(--motion-medium)) var(--ease-canvas-flicker, var(--ease-flicker)) both;
 }
 
 @keyframes canvas-flicker {
@@ -1607,18 +1646,20 @@
 // when a star is given new words -- registered, so a browser can step it; the rest is cuts.
 @property --star-gleam {
   syntax: '<number>';
-  inherits: false;
+  inherits: true; // written on the button (js/persona.js), read by the light inside it
   initial-value: 1;
 }
 
-.persona-star {
+// `button.persona-star` rather than `.persona-star`: _controls.scss gives every pressed button
+// (button:active, button.is-stamping) an animation of its own, which would otherwise replace the
+// whole list below for as long as a star is held.
+button.persona-star {
   transition:
     background-color var(--motion-short) var(--ease-stair),
     color var(--motion-short) var(--ease-stair),
     box-shadow var(--motion-short) var(--ease-stair),
     outline-offset var(--motion-short) var(--ease-stair),
     --star-gleam var(--motion-medium) var(--ease-stair);
-  --star-light: radial-gradient(circle, var(--md-sys-color-on-surface) 0 2px, var(--md-sys-color-primary) 3px, transparent calc(7px * var(--star-gleam, 1) * var(--gleam-up, 1)));
   position: absolute;
   width: 44px;
   height: 44px;
@@ -1628,7 +1669,7 @@
   border: 0;
   border-radius: 50%;
   display: block;
-  background: var(--star-light);
+  background: none;
   color: var(--md-sys-color-primary);
   box-shadow: none;
   cursor: grab;
@@ -1636,6 +1677,31 @@
   user-select: none;
   -webkit-user-select: none;
   -webkit-touch-callout: none;
+  // Every rite of the star's own has a slot of its own in the one animation list, so none is
+  // dropped when two play at once -- a dealt star hovered mid-deal, a selected star pressed, a
+  // focused star nudged: the place it is dealt by, the seal, the press's dip, the hold (lifted,
+  // set down, nudged) and the focus's ring. A slot not in play is still. The light's own wax and
+  // wane play on the light (.persona-star-light, below), masked there and nowhere else.
+  animation:
+    var(--place-animation, none var(--ease-arrive)),
+    var(--seal-animation, none var(--ease-stair)),
+    var(--press-animation, none var(--ease-flicker)),
+    var(--hold-animation, none var(--ease-stair)),
+    var(--focus-animation, none var(--ease-stair));
+}
+
+// The star's light, a child of the button (js/persona.js), so the matte it waxes through masks
+// the light alone: a mask on the button would cut its thread badge (::after) and its seal
+// (::before) as well, whatever mask they were given of their own. Under both of them.
+.persona-star-light {
+  --star-light: radial-gradient(circle, var(--md-sys-color-on-surface) 0 2px, var(--md-sys-color-primary) 3px, transparent calc(7px * var(--star-gleam, 1) * var(--gleam-up, 1)));
+  position: absolute;
+  inset: 0;
+  z-index: -3;
+  border-radius: 50%;
+  display: block;
+  background: var(--star-light);
+  pointer-events: none;
 }
 
 .persona-star::after {
@@ -1702,8 +1768,6 @@
   color: var(--md-sys-color-on-tertiary-container);
   opacity: 1;
   clip-path: none;
-  mask: none; // the star's waxing ladder is the star's, not the badge's (_controls.scss ::after)
-  -webkit-mask: none;
   pointer-events: none;
   @include type.scale(label-small);
 }
@@ -1752,27 +1816,29 @@
 }
 
 // Waxing: the gleam grows one tread, slips, grows again, and an inset ring is cut in (star-wax),
-// while the whole star arrives at its waxed light up the matte ladder -- the climb js/motion.js
-// composed for this one hover (--rite-wax, written on the star as it waxes, shifted by the roll's
-// --matte-shift so no two stars wax alike), or the shared matte-in of _controls.scss for a page
-// with no script -- and rests patterned at the ladder's top. :hover for a page with no script.
-.persona-star.is-waxing,
-.persona-star:hover {
-  background: var(--star-light);
+// while the light arrives at its waxed self up the matte ladder -- the climb js/motion.js
+// composed for this one hover (--rite-wax, written on the star as it waxes and read by the light
+// inside it, shifted by the roll's --matte-shift so no two stars wax alike), or the shared
+// matte-in of _controls.scss for a page with no script -- and rests patterned at the ladder's
+// top (--matte-top, the roll's fill as a mask; with m.arrive's mattes, a ladder of the star's
+// own). :hover for a page with no script.
+.persona-star.is-waxing .persona-star-light,
+.persona-star:hover .persona-star-light {
   box-shadow: inset 0 0 0 1px var(--md-sys-color-primary);
   mask: var(--matte-top);
   -webkit-mask: var(--matte-top);
   mask-position: var(--matte-shift, 0 0);
   -webkit-mask-position: var(--matte-shift, 0 0);
-  animation: star-wax var(--motion-medium) var(--ease-star-wax, var(--ease-stair)) both, var(--rite-wax, matte-in) var(--motion-matte-in, var(--motion-medium)) var(--ease-matte-in, var(--ease-stair)) both;
+  animation: star-wax var(--motion-star-wax, var(--motion-medium)) var(--ease-star-wax, var(--ease-stair)) both, var(--rite-wax, matte-in) var(--motion-matte-in, var(--motion-medium)) var(--ease-matte-in, var(--ease-stair)) both;
 }
 
-// Waning: the gleam and the ring go in treads, and the star comes back down the ladder to its
-// plain light, with one flicker back up, never to nothing -- the star stays in the sky.
-.persona-star.is-waning {
+// Waning: the gleam and the ring go in treads (star-wane) while the light comes back down the
+// ladder to its plain self, with one flicker back up, by the descent composed for this one
+// leaving (--rite-wane) -- never to nothing: the star stays in the sky.
+.persona-star.is-waning .persona-star-light {
   mask-position: var(--matte-shift, 0 0);
   -webkit-mask-position: var(--matte-shift, 0 0);
-  animation: star-wane var(--motion-medium) var(--ease-star-wane, var(--ease-stair)) both;
+  animation: star-wane var(--motion-star-wane, var(--motion-medium)) var(--ease-star-wane, var(--ease-stair)) both, var(--rite-wane, matte-out) var(--motion-matte-out, var(--motion-medium)) var(--ease-matte-out, var(--ease-stair)) both;
 }
 
 @keyframes star-wax {
@@ -1801,54 +1867,41 @@
   0%, 27.9% {
     --gleam-up: 1.25;
     box-shadow: inset 0 0 0 1px var(--md-sys-color-primary);
-    mask: var(--matte-top);
-    -webkit-mask: var(--matte-top);
   }
 
   28%, 49.9% {
     --gleam-up: 1.05;
     box-shadow: inset 0 0 0 2px var(--md-sys-color-primary);
-    mask: var(--matte-4);
-    -webkit-mask: var(--matte-4);
   }
 
   50%, 59.9% {
     --gleam-up: 1.18;
     box-shadow: inset 0 0 0 0 var(--md-sys-color-primary);
-    mask: var(--matte-5);
-    -webkit-mask: var(--matte-5);
   }
 
-  60%, 79.9% {
+  60%, 100% {
     --gleam-up: 1;
     box-shadow: none;
-    mask: var(--matte-2);
-    -webkit-mask: var(--matte-2);
-  }
-
-  80%, 100% {
-    --gleam-up: 1;
-    box-shadow: none;
-    mask: none;
-    -webkit-mask: none;
   }
 }
 
-// Selected: the texture is sealed on (::before, above) and a halo in the tertiary blooms in treads
-// with one slip; the halo is taken back down in treads when the star is unselected.
+// Unselected: the halo is taken back down in treads (is-unsealing, js/motion.js). Before the
+// selected rule, so a star selected again while its unselecting still plays shows its selection.
+.persona-star.is-unsealing {
+  --seal-animation: star-unselect var(--motion-star-unselect, var(--motion-medium)) var(--ease-star-unselect, var(--ease-stair)) both;
+}
+
+// Selected: the texture is sealed on (::before, above, climbing the ladder by the seal js/motion.js
+// composed -- is-sealing, _controls.scss) and a halo in the tertiary blooms in treads with one
+// slip.
 .persona-star.selected {
   color: var(--md-sys-color-tertiary);
-  background: var(--star-light);
   box-shadow: inset 0 0 0 2px var(--md-sys-color-tertiary), 0 0 14px color-mix(in oklab, var(--md-sys-color-tertiary) 70%, transparent);
-  animation: star-select var(--motion-medium) var(--ease-star-select, var(--ease-stair)) both;
+  --seal-animation: star-select var(--motion-star-select, var(--motion-medium)) var(--ease-star-select, var(--ease-stair)) both;
 }
 
 .persona-star.selected::before {
   opacity: 0.26;
-}
-
-.persona-star.is-unsealing {
-  animation: star-unselect var(--motion-medium) var(--ease-star-unselect, var(--ease-stair)) both;
 }
 
 @keyframes star-select {
@@ -1896,23 +1949,19 @@
   }
 }
 
-// Waxing while selected: every rite at once, the halo's, the gleam's and the ladder's.
-.persona-star.selected.is-waxing,
-.persona-star.selected:hover {
-  animation: star-select var(--motion-medium) var(--ease-star-select, var(--ease-stair)) both, star-wax var(--motion-medium) var(--ease-star-wax, var(--ease-stair)) both, var(--rite-wax, matte-in) var(--motion-matte-in, var(--motion-medium)) var(--ease-matte-in, var(--ease-stair)) both;
-}
-
-// Focus is struck: the ring lands wide and closes in three uneven treads with one flicker.
+// Focus is struck: the ring lands wide and closes in three uneven treads with one flicker. The
+// light inside waxes meanwhile (is-waxing, which js/motion.js puts on for visible focus too).
 .persona-star:focus-visible {
   outline: 3px solid var(--md-sys-color-primary);
   outline-offset: 3px;
-  animation: star-focus var(--motion-medium) var(--ease-star-focus, var(--ease-stair)) both;
+  --focus-animation: star-focus var(--motion-star-focus, var(--motion-medium)) var(--ease-star-focus, var(--ease-stair)) both;
 }
 
-.persona-star.selected:focus-visible {
-  animation:
-    star-select var(--motion-medium) var(--ease-star-select, var(--ease-stair)) both,
-    star-focus var(--motion-medium) var(--ease-star-focus, var(--ease-stair)) both;
+// Pressed (is-stamping, js/motion.js: pointerdown, Enter, Space): the dip and flash the engine
+// composed for this one press (--rite-stamp), or the shared stamp of _controls.scss. Its own slot,
+// so a press that becomes a drag dips under the lift rather than being dropped for it.
+.persona-star.is-stamping {
+  --press-animation: var(--rite-stamp, rite-stamp) var(--motion-rite-stamp, var(--motion-short)) var(--ease-rite-stamp, var(--ease-flicker)) both;
 }
 
 @keyframes star-focus {
@@ -1943,7 +1992,7 @@
   cursor: grabbing;
   transform: scale(1.25);
   box-shadow: inset 0 0 0 2px var(--md-sys-color-primary);
-  animation: star-lift var(--motion-short) var(--ease-star-lift, var(--ease-flicker)) both;
+  --hold-animation: star-lift var(--motion-star-lift, var(--motion-short)) var(--ease-star-lift, var(--ease-flicker)) both;
 }
 
 @keyframes star-lift {
@@ -1970,7 +2019,39 @@
 
 // Set down (is-dropped, js/persona.js): it settles in two treads with a slip past its size.
 .persona-star.is-dropped {
-  animation: star-drop var(--motion-medium) var(--ease-star-drop, var(--ease-stair)) both;
+  --hold-animation: star-drop var(--motion-star-drop, var(--motion-medium)) var(--ease-star-drop, var(--ease-stair)) both;
+}
+
+// Nudged by an arrow key (is-nudged, js/persona.js, with --nudge-dx/-dy the key's way): the star
+// lands a tread past its new place along the roll's --shake-x, slips back, and comes home, with one
+// flicker of its gleam -- and dips meanwhile by the press js/motion.js composed for this one nudge
+// (--rite-stamp), so no two nudges are alike. Its translate and the dip's transform are separate
+// properties, so both show.
+.persona-star.is-nudged {
+  --hold-animation: star-nudge var(--motion-star-nudge, var(--motion-short)) var(--ease-star-nudge, var(--ease-stair)) both;
+  --press-animation: var(--rite-stamp, none) var(--motion-star-nudge, var(--motion-short)) var(--ease-star-nudge, var(--ease-stair)) both;
+}
+
+@keyframes star-nudge {
+  0%, 29.9% {
+    --gleam-up: 1.5;
+    translate: calc(var(--shake-x, 6px) * var(--nudge-dx, 0) * 1.6) calc(var(--shake-x, 6px) * var(--nudge-dy, 0) * 1.6);
+  }
+
+  30%, 54.9% {
+    --gleam-up: 1.1;
+    translate: calc(var(--shake-x, 6px) * var(--nudge-dx, 0) * -0.5) calc(var(--shake-x, 6px) * var(--nudge-dy, 0) * -0.5);
+  }
+
+  55%, 74.9% {
+    --gleam-up: 1.3;
+    translate: calc(var(--shake-x, 6px) * var(--nudge-dx, 0) * 0.6) calc(var(--shake-x, 6px) * var(--nudge-dy, 0) * 0.6);
+  }
+
+  75%, 100% {
+    --gleam-up: 1;
+    translate: 0 0;
+  }
 }
 
 @keyframes star-drop {
@@ -2000,7 +2081,7 @@
 // the arrival js/motion.js composed for this one star (--rite-develop, from m.arrive, with a
 // geometry of the star's own), or the keyframes below for a page with no script.
 .persona-star.is-placed {
-  animation: var(--rite-develop, star-develop) var(--motion-star-develop, var(--motion-long)) var(--ease-star-develop, var(--ease-arrive)) var(--d, 0ms) both;
+  --place-animation: var(--rite-develop, star-develop) var(--motion-star-develop, var(--motion-long)) var(--ease-star-develop, var(--ease-arrive)) var(--d, 0ms) both;
 }
 
 @keyframes star-develop {
@@ -2049,7 +2130,7 @@
 
 // Removed: the star itself goes at once (the list is what it is), and a ghost of it js/persona.js
 // leaves in its place is unmade down the ladder with one flicker back, toward the roll's leave.
-.persona-star-ghost {
+.persona-star.persona-star-ghost {
   pointer-events: none;
   animation: var(--rite-unmake, star-unmake) var(--motion-star-unmake, var(--motion-medium)) var(--ease-star-unmake, var(--ease-leave)) both;
 }
@@ -2102,7 +2183,7 @@
 // back in treads, underlined in cuts.
 .difficulty-end.is-near {
   color: var(--md-sys-color-primary);
-  animation: end-seal var(--motion-medium) var(--ease-end-seal, var(--ease-stair)) both;
+  animation: end-seal var(--motion-end-seal, var(--motion-medium)) var(--ease-end-seal, var(--ease-stair)) both;
 }
 
 @keyframes end-seal {
@@ -2161,8 +2242,10 @@
   .persona-sheet[open],
   .persona-sheet[open] > *,
   .persona-sheet.persona-ghost,
+  .persona-sky::before,
   .persona-sheet[open] .persona-sky::before,
   .persona-sky:hover,
+  .persona-sky:hover::before,
   .persona-sky.is-struck::before,
   .persona-sky.is-struck .persona-sky-canvas,
   .persona-sky-name:not([hidden]),
@@ -2174,19 +2257,19 @@
   .persona-sheet .is-unmaking,
   .persona-probe.is-unmaking,
   .persona-star[data-thread]::after,
-  .persona-star.is-waxing,
-  .persona-star:hover,
-  .persona-star.is-waning,
+  button.persona-star,
+  .persona-star.is-waxing .persona-star-light,
+  .persona-star:hover .persona-star-light,
+  .persona-star.is-waning .persona-star-light,
   .persona-star.selected,
-  .persona-star.selected.is-waxing,
-  .persona-star.selected:hover,
   .persona-star.is-unsealing,
   .persona-star:focus-visible,
-  .persona-star.selected:focus-visible,
+  .persona-star.is-stamping,
   .persona-star.dragging,
   .persona-star.is-dropped,
+  .persona-star.is-nudged,
   .persona-star.is-placed,
-  .persona-star-ghost,
+  .persona-star.persona-star-ghost,
   .difficulty-end.is-near {
     animation: none;
   }
@@ -2195,11 +2278,12 @@
     content: none;
   }
 
-  .persona-label {
+  .persona-label,
+  .persona:not([data-state='empty']) .persona-label {
     transition: none;
   }
 
-  .persona-star,
+  button.persona-star,
   .persona-star.dragging,
   .persona-sky {
     transition: none;
@@ -2210,7 +2294,7 @@
   }
 
   .persona-sheet.persona-ghost,
-  .persona-star-ghost {
+  .persona-star.persona-star-ghost {
     display: none;
   }
 
@@ -2224,4 +2308,21 @@
     animation: none;
     opacity: 0.6;
   }
+}
+
+// A ghost is a copy of what it stands for, parts and all, and the parts keep the rules that made
+// them arrive -- the sky's name, the thread, the words form developing from their rolled
+// --arrive-x/-y, the badges stamping on, the selected star's halo blooming -- which would all
+// start again, new, inside a box that is leaving. So inside a ghost (the sheet's, the probe's)
+// nothing moves but the ghost: one unmaking, of the whole. Last in the file, so it outranks every
+// rule above it at the same specificity, with a step up for the light inside a star.
+.persona-sheet.persona-ghost *,
+.persona-sheet.persona-ghost *::before,
+.persona-sheet.persona-ghost *::after,
+.persona-sheet.persona-ghost .persona-star *,
+.persona-probe.is-unmaking *,
+.persona-probe.is-unmaking *::before,
+.persona-probe.is-unmaking *::after {
+  animation: none;
+  transition: none;
 }
