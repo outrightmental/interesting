@@ -150,9 +150,16 @@
   // inside a lightbox would ever arrive. A page with no frames at all (the stub harnesses) is
   // handed whatever the window offers at the time, or nothing.
   var nativeFrame = typeof global.requestAnimationFrame === 'function' ? global.requestAnimationFrame : null;
+  var nativeCancel = typeof global.cancelAnimationFrame === 'function' ? global.cancelAnimationFrame : null;
   function frameOf() {
     if (nativeFrame) return function (fn) { return nativeFrame.call(global, fn); };
     return typeof global.requestAnimationFrame === 'function' ? global.requestAnimationFrame : null;
+  }
+
+  // Cancel through the same frame provider, not the shell's replacement for held page frames.
+  function cancelOf() {
+    if (nativeFrame) return nativeCancel ? function (handle) { nativeCancel.call(global, handle); } : null;
+    return typeof global.cancelAnimationFrame === 'function' ? global.cancelAnimationFrame : null;
   }
 
   /* ---- a seeded stream ------------------------------------------------------------------- */
@@ -1847,7 +1854,7 @@
       if (!rites) return null;
       var s = rites.get(el);
       if (!s) {
-        s = { hover: false, focus: false, timers: {} };
+        s = { hover: false, focus: false, timers: {}, passes: {} };
         rites.set(el, s);
       }
       return s;
@@ -1870,25 +1877,26 @@
     }
 
     // A rite that passes: the class goes on, and comes off at the end of the animation it started
-    // or when the clock says it must have ended, whichever is first. Starting one that is already
-    // playing restarts it, so a second press is a second stamp.
+    // or when the clock says it must have ended, whichever is first. Restarting or ending it
+    // invalidates its queued frame and timeout, so neither can change a newer rite.
     function pass(el, kind, after) {
       if (!el) return;
       var cls = 'is-' + kind;
       var s = riteState(el);
+      endPass(el, kind);
+      var token = {};
+      if (s) s.passes[kind] = token;
       // The clock is the fallback, so it is generous: the animation's end is what takes the class
       // off, and a class that lingers on a still element does nothing.
       var wait = after || ((ms('long') || 560) * 2 + 400);
-      if (s && s.timers[kind] && typeof global.clearTimeout === 'function') global.clearTimeout(s.timers[kind]);
-      dropClass(el, cls);
-      // Off and on again on the next frame, so a rite that is restarted restarts.
+      // Off and on again on the next frame, unless this rite has already been superseded.
       var raf = frameOf() || function (fn) { fn(); };
       raf(function () {
+        if (s && s.passes[kind] !== token) return;
         addClass(el, cls);
         if (s && typeof global.setTimeout === 'function') {
           s.timers[kind] = global.setTimeout(function () {
-            s.timers[kind] = 0;
-            dropClass(el, cls);
+            if (s.passes[kind] === token) endPass(el, kind);
           }, wait);
         }
       });
@@ -1896,8 +1904,9 @@
 
     function endPass(el, kind) {
       var s = rites && rites.get(el);
-      if (s && s.timers[kind] && typeof global.clearTimeout === 'function') {
-        global.clearTimeout(s.timers[kind]);
+      if (s) {
+        delete s.passes[kind];
+        if (s.timers[kind] && typeof global.clearTimeout === 'function') global.clearTimeout(s.timers[kind]);
         s.timers[kind] = 0;
       }
       dropClass(el, 'is-' + kind);
@@ -2056,6 +2065,7 @@
         var is = isSet(el, attr);
         if (was === is) continue;
         if (el.getAttribute('data-rite') === 'none') continue;
+        endPass(el, is ? 'unsealing' : 'sealing');
         if (is) dress(el);
         if (reduced()) continue;
         if (is) composeOn(el, 'seal', 'rite-seal', 560);
@@ -2404,7 +2414,7 @@
       var step = typeof opts.step === 'function' ? opts.step : function () {};
       var done = typeof opts.done === 'function' ? opts.done : function () {};
       var raf = frameOf();
-      var cancel = typeof global.cancelAnimationFrame === 'function' ? global.cancelAnimationFrame : null;
+      var cancel = cancelOf();
       var rnd = mulberry32(entropy());
       var g = temper.grain;
       var n = Math.max(2, Math.round(opts.treads || (3 + rnd() * (3 + g * 5))));
@@ -2574,7 +2584,7 @@
       var step = typeof opts.step === 'function' ? opts.step : function () {};
       var done = typeof opts.done === 'function' ? opts.done : function () {};
       var raf = frameOf();
-      var cancel = typeof global.cancelAnimationFrame === 'function' ? global.cancelAnimationFrame : null;
+      var cancel = cancelOf();
       if (!raf || !ms || (reduced() && !opts.always)) {
         step(1, 1);
         done();
