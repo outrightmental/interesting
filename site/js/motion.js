@@ -1539,7 +1539,7 @@
           function () { return [masked(1), masked(2), masked(3), masked(4), masked(5)]; },
           function () { return [masked(1), masked(2), masked(3), masked(2), masked(4), masked(5)]; },
           function () { return [masked(1), masked(3), masked(5)]; },
-          function () { return [masked(1), { 'mask-position': 'calc(var(--matte-shift-x, 0px) + 11px) var(--matte-shift-y, 0px)', '-webkit-mask-position': 'calc(var(--matte-shift-x, 0px) + 11px) var(--matte-shift-y, 0px)' }, masked(2), masked(3), masked(4), masked(5)]; },
+          function () { return [masked(1), merge(masked(1), { 'mask-position': 'calc(var(--matte-shift-x, 0px) + 11px) var(--matte-shift-y, 0px)', '-webkit-mask-position': 'calc(var(--matte-shift-x, 0px) + 11px) var(--matte-shift-y, 0px)' }), masked(2), masked(3), masked(4), masked(5)]; },
           function () { return [masked(1), masked(2), masked(3), masked('off'), masked(4), masked(5)]; },
           function () { return [masked(1), masked(2), masked(1), masked(2), masked(3), masked(4), masked(5)]; },
           function () { return [masked(2), masked(4), masked(3), masked(5)]; }
