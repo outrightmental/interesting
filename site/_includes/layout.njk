@@ -145,7 +145,7 @@
       </div>
       <p class='panel-status' id='persona-sky-status' aria-live='polite'></p>
       <div class='persona-sky-answer' id='persona-sky-answer' hidden>
-        <p class='panel-note' id='persona-sky-answer-note'>See a puzzle made from these stars, without leaving the sheet.</p>
+        <p class='panel-note' id='persona-sky-answer-note'>Preview a puzzle made from your stars, then move a star or change its words to compare what happens.</p>
         <p class='persona-sky-answer-world' id='persona-sky-answer-world' hidden></p>
         <h4 class='persona-sky-answer-title' id='persona-sky-answer-title' hidden></h4>
         <button class='persona-sky-read btn-text' id='persona-sky-read' type='button' aria-describedby='persona-sky-answer-note persona-sky-answer-title persona-sky-answer-line'>
@@ -153,6 +153,15 @@
           <span id='persona-sky-read-label'>preview a puzzle</span>
         </button>
         <p class='panel-status' id='persona-sky-answer-line' aria-live='polite'></p>
+        <details class='persona-sky-comparison' id='persona-sky-comparison' hidden>
+          <summary>compare with the first preview</summary>
+          <div class='persona-sky-before'>
+            <p class='panel-note' id='persona-sky-before-change'></p>
+            <p class='persona-sky-answer-title' id='persona-sky-before-title'></p>
+            <span class='persona-sky-preview' id='persona-sky-before-picture' hidden><canvas id='persona-sky-before-canvas' aria-hidden='true'></canvas></span>
+            <p class='panel-status' id='persona-sky-before-line'></p>
+          </div>
+        </details>
       </div>
     </section>
     <section class='persona-section' aria-labelledby='persona-reading-title'>

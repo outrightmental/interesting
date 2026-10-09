@@ -1490,6 +1490,7 @@
 .persona-sky-answer:not([hidden]),
 .persona-sky-answer-world:not([hidden]),
 .persona-sky-answer-title:not([hidden]),
+.persona-sky-comparison:not([hidden]),
 .persona-sky-preview:not([hidden]) {
   // Composed anew for each showing (--rite-develop, m.arrive from js/persona.js show()), the
   // keyframes below for a page with no script.
@@ -1625,6 +1626,24 @@
   display: block;
   width: 100%;
   height: 100%;
+}
+
+.persona-sky-comparison {
+  min-width: 0;
+}
+
+.persona-sky-comparison summary {
+  min-height: 44px;
+  padding-block: 0.75rem;
+  color: var(--md-sys-color-primary);
+  cursor: pointer;
+  @include type.scale(label-large);
+}
+
+.persona-sky-before {
+  display: grid;
+  gap: 0.5rem;
+  padding-block: 0.5rem;
 }
 
 .persona-star-words {
@@ -2261,6 +2280,11 @@ button.persona-star {
   [id='persona-remove']:not([hidden]),
   [id='persona-forget']:not([hidden]),
   [id='persona-reading-go']:not([hidden]),
+  .persona-sky-answer:not([hidden]),
+  .persona-sky-answer-world:not([hidden]),
+  .persona-sky-answer-title:not([hidden]),
+  .persona-sky-comparison:not([hidden]),
+  .persona-sky-preview:not([hidden]),
   .persona-sheet .is-unmaking,
   .persona-probe.is-unmaking,
   .persona-star[data-thread]::after,

@@ -15,6 +15,8 @@
    its clues. The sheet's optional puzzle preview borrows the feed's own modules and card
    configurations through interestingFeed.previewSky(), so changing a star reveals a real world's
    response rather than an imitation. Moving a star updates the preview when the move ends.
+   The first preview's picture and words stay available for comparison while that world is being
+   previewed in the open sheet. This is a temporary picture, never another saved or editable sky.
 
    The difficulty is advertised as specifically as the sky and settable from everywhere it is a
    dependency (issue #93), which is every piece on the site: `tuner(host)` below renders the one
@@ -1076,6 +1078,48 @@
   var skyAnswerStars = null;
   var skyAnswerAt = -1;
   var skyAnswerSample = null;
+  var skyAnswerFirst = null;
+  function resetSkyComparison() {
+    skyAnswerFirst = null;
+    if (!sheet || !sheet.comparison) return;
+    sheet.comparison.open = false;
+    conceal(sheet.comparison);
+  }
+  function rememberSkyAnswer(list, drawn) {
+    if (!sheet || !sheet.comparison || !sheet.beforeCanvas || !sheet.beforePicture
+        || skyAnswerFirst || !skyAnswerSample) return;
+    skyAnswerFirst = list.map(cleanStar);
+    say(sheet.beforeTitle, skyAnswerSample.title, true);
+    var canvas = sheet.beforeCanvas;
+    canvas.width = sheet.answerCanvas.width;
+    canvas.height = sheet.answerCanvas.height;
+    var ctx = drawn && canvas.width && canvas.height ? canvas.getContext('2d') : null;
+    sheet.beforePicture.hidden = !ctx;
+    if (ctx) {
+      ctx.drawImage(sheet.answerCanvas, 0, 0);
+      sheet.beforePicture.style.setProperty('aspect-ratio', skyAnswerSample.aspect);
+    }
+    say(sheet.beforeLine, (ctx ? '' : 'The first picture is unavailable here. ')
+      + skyAnswerSample.line, true);
+  }
+  function renderSkyComparison(list) {
+    if (!sheet || !sheet.comparison) return;
+    if (!skyAnswerFirst || sameStars(skyAnswerFirst, list)) {
+      conceal(sheet.comparison);
+      return;
+    }
+    var samePlaces = skyAnswerFirst.length === list.length && skyAnswerFirst.every(function (star, i) {
+      return star.x === list[i].x && star.y === list[i].y;
+    });
+    var sameWords = skyAnswerFirst.length === list.length && skyAnswerFirst.every(function (star, i) {
+      return star.text === list[i].text;
+    });
+    var change = samePlaces ? 'Only the words have changed.'
+      : sameWords ? 'Only the positions have changed.' : 'The stars or their words have changed.';
+    say(sheet.beforeChange, change + ' This is the first preview; the current one is above. '
+      + 'They may look alike: not every star affects every puzzle.', !sheet.comparison.open);
+    show(sheet.comparison);
+  }
   function drawSkyAnswer() {
     if (!sheet || !sheet.preview || !sheet.answerCanvas || !skyAnswerSample) return;
     show(sheet.preview);
@@ -1089,6 +1133,7 @@
     }
     try {
       skyAnswerSample.draw(ctx, box.width, box.height);
+      return true;
     } catch (error) {
       conceal(sheet.preview);
       say(sheet.answerLine, 'This picture could not be drawn. ' + skyAnswerSample.line
@@ -1102,6 +1147,7 @@
     var off = !list.length || !feed || typeof feed.previewSky !== 'function';
     if (off) {
       conceal(sheet.answer);
+      resetSkyComparison();
       skyAnswerTicket += 1;
       skyAnswerStars = null;
       skyAnswerSample = null;
@@ -1131,16 +1177,18 @@
       say(sheet.answerWorld, sample.world.name);
       show(sheet.answerTitle);
       say(sheet.answerTitle, sample.title);
-      sheet.answerNote.textContent = 'Preview only. Change a star to see what changes, or press the preview button to see your sky in another world.';
+      sheet.answerNote.textContent = 'Current preview. Move a star or change its words, then compare with the first preview. Press the preview button to try another world. Comparing does not change your stars.';
       sheet.preview.style.setProperty('aspect-ratio', sample.aspect);
       say(sheet.answerLine, sample.line);
       sheet.answerLabel.textContent = 'preview another world';
       sheet.answerRead.disabled = false;
-      drawSkyAnswer();
+      rememberSkyAnswer(list, drawSkyAnswer());
+      renderSkyComparison(list);
     }).catch(function () {
       if (ticket !== skyAnswerTicket || !sheet.host.open) return;
       skyAnswerStars = null;
       skyAnswerSample = null;
+      conceal(sheet.comparison);
       conceal(sheet.preview);
       conceal(sheet.answerWorld);
       conceal(sheet.answerTitle);
@@ -1327,14 +1375,18 @@
     el.appendChild(light);
     star.el = el;
     placeElement(star);
-    el.addEventListener('focus', function () { select(index); });
+    function locate() {
+      index = fieldStars.indexOf(star);
+      return index >= 0;
+    }
+    el.addEventListener('focus', function () { if (locate()) select(index); });
     el.addEventListener('click', function (ev) {
       ev.stopPropagation();
-      if (Date.now() < suppressClickUntil) return;
+      if (Date.now() < suppressClickUntil || !locate()) return;
       select(index);
     });
     el.addEventListener('pointerdown', function (ev) {
-      if (activeDrag || (typeof ev.button === 'number' && ev.button !== 0)) return;
+      if (activeDrag || (typeof ev.button === 'number' && ev.button !== 0) || !locate()) return;
       ev.preventDefault();
       ev.stopPropagation();
       activeDrag = { index: index, pointerId: ev.pointerId, moved: false };
@@ -1348,6 +1400,7 @@
     });
     el.addEventListener('lostpointercapture', function (ev) { endDrag(ev.pointerId); });
     el.addEventListener('keydown', function (ev) {
+      if (!locate()) return;
       var step = ev.shiftKey ? 6 : 2;
       var moves = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] };
       if (moves[ev.key]) {
@@ -1582,6 +1635,7 @@
     stopFieldCast();
     skyAnswerTicket += 1;
     skyAnswerStars = null;
+    resetSkyComparison();
     sheet.host.classList.remove('persona-sheet-fallback');
     if (sheetBox) sheetBox.down();
     refresh();
@@ -1616,6 +1670,12 @@
       answerLine: document.getElementById('persona-sky-answer-line'),
       preview: document.getElementById('persona-sky-preview'),
       answerCanvas: document.getElementById('persona-sky-preview-canvas'),
+      comparison: document.getElementById('persona-sky-comparison'),
+      beforeChange: document.getElementById('persona-sky-before-change'),
+      beforeTitle: document.getElementById('persona-sky-before-title'),
+      beforePicture: document.getElementById('persona-sky-before-picture'),
+      beforeCanvas: document.getElementById('persona-sky-before-canvas'),
+      beforeLine: document.getElementById('persona-sky-before-line'),
       reading: document.getElementById('persona-reading'), ask: document.getElementById('persona-ask'),
       forget: document.getElementById('persona-forget'), readingGo: document.getElementById('persona-reading-go'),
       tune: document.getElementById('persona-difficulty')
@@ -1631,6 +1691,7 @@
     if (sheet.close) sheet.close.addEventListener('click', closeSheet);
     host.addEventListener('cancel', leaveSheetGhost); // Escape, which closes the dialog itself
     if (sheet.answerRead) sheet.answerRead.addEventListener('click', function () {
+      resetSkyComparison();
       if (skyAnswerWanted) skyAnswerIndex += 1;
       skyAnswerWanted = true;
       renderSkyAnswer();
