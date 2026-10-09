@@ -180,6 +180,10 @@
   color: var(--md-sys-color-on-surface);
 }
 
+.persona-flight[data-mark='difficulty'] {
+  color: var(--md-sys-color-tertiary);
+}
+
 // The ring that blooms around the portrait as the mark lands, which is the avatar answering for it:
 // it waits out the flight and then opens and fades, and it is gone with the mark it belongs to.
 .persona-flight::after {
@@ -377,6 +381,17 @@
   @include type.scale(title-small);
 }
 
+.persona-thread {
+  margin: 0;
+  padding: 0.8rem 1rem;
+  border-radius: var(--md-sys-shape-corner-medium);
+  background: var(--md-sys-color-surface-container);
+  color: var(--md-sys-color-on-surface);
+  overflow-wrap: anywhere;
+  @include type.scale(title-medium);
+  @include type.rite;
+}
+
 .persona-star-words {
   display: grid;
   gap: 0.5rem;
@@ -419,6 +434,23 @@
 
 .persona-star::after {
   display: none;
+}
+
+.persona-star[data-thread]::after {
+  content: attr(data-thread);
+  position: absolute;
+  inset: 0 auto auto 0;
+  z-index: 1;
+  width: 1.1rem;
+  height: 1.1rem;
+  display: grid;
+  place-items: center;
+  border-radius: var(--md-sys-shape-corner-full);
+  background: var(--md-sys-color-tertiary-container);
+  color: var(--md-sys-color-on-tertiary-container);
+  opacity: 1;
+  pointer-events: none;
+  @include type.scale(label-small);
 }
 
 // Each star keeps a 44px touch target around its small light.

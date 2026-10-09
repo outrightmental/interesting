@@ -9,8 +9,10 @@
                      site (js/threshold.js keeps that one; this file only shows it)
      difficulty      how hard every puzzle on the site comes out, 1 (gentle) to 5 (fierce)
 
-   A star's editable words give it a glint in both the portrait and the sheet. Sky cards follow
-   those words without changing their seed; a puzzle already begun keeps its clues.
+   A star's editable words give it a glint in both the portrait and the sheet. A short path
+   through nearby thoughts makes those words readable together; choosing or moving a star changes
+   the path. Sky cards follow the words without changing their seed; a puzzle already begun keeps
+   its clues.
 
    The difficulty is advertised as specifically as the sky and settable from everywhere it is a
    dependency (issue #93), which is every piece on the site: `tuner(host)` below renders the one
@@ -157,6 +159,36 @@
     var where = ns && ew ? ns + '-' + ew : (ns || ew);
     return count + ', ' + knit + (where ? ', keeping to the ' + where : ', holding the middle of the sky');
   }
+  function threadOf(list, start) {
+    if (!list.length) return [];
+    var at = start;
+    if (!Number.isInteger(at) || at < 0 || at >= list.length) {
+      var centre = skyTraits(list);
+      var closest = Infinity;
+      at = 0;
+      for (var i = 0; i < list.length; i++) {
+        var dx = (list[i].x - centre.cx) * 2;
+        var dy = list[i].y - centre.cy;
+        var distance = dx * dx + dy * dy;
+        if (distance < closest) { closest = distance; at = i; }
+      }
+    }
+    var path = [at];
+    while (path.length < Math.min(3, list.length)) {
+      var previous = list[path[path.length - 1]];
+      var nearest = -1;
+      var best = Infinity;
+      for (var j = 0; j < list.length; j++) {
+        if (path.indexOf(j) !== -1) continue;
+        var x = (list[j].x - previous.x) * 2;
+        var y = list[j].y - previous.y;
+        var gap = x * x + y * y;
+        if (gap < best) { best = gap; nearest = j; }
+      }
+      path.push(nearest);
+    }
+    return path;
+  }
   function read() { return store ? store.read(SKY, []) : { status: 'unavailable', value: [] }; }
   function stars() { return clean(read().value); }
   var listeners = [];
@@ -245,7 +277,11 @@
   }
   function setDifficulty(level) {
     var want = levelOf(level) || DEFAULT_LEVEL;
+    var before = difficulty().level;
     var kept = store ? store.set(DIFFICULTY, want) : false;
+    if (sheet && sheet.host.open && before !== want) {
+      noteSet('difficulty', sheet.tune && sheet.tune.querySelector('input'));
+    }
     var now = difficulty();
     for (var i = 0; i < tuned.length; i++) {
       try { tuned[i](now, kept); }
@@ -345,7 +381,8 @@
       host.classList.remove('difficulty');
     };
   }
-  function drawSky(ctx, list, w, h, pad, dotRadius, lineWidth) {
+  function drawSky(ctx, list, w, h, pad, dotRadius, lineWidth, route) {
+    var path = route || threadOf(list);
     var points = list.map(function (s) {
       return { x: pad + s.x / 100 * (w - pad * 2), y: pad + s.y / 100 * (h - pad * 2) };
     });
@@ -377,11 +414,24 @@
         ctx.stroke();
       }
     }
+    if (path.length > 1) {
+      ctx.globalAlpha = 0.9;
+      ctx.lineWidth = lineWidth * 2.8;
+      ctx.strokeStyle = 'currentColor';
+      ctx.beginPath();
+      for (var r = 0; r < path.length; r++) {
+        var point = points[path[r]];
+        if (r) ctx.lineTo(point.x, point.y);
+        else ctx.moveTo(point.x, point.y);
+      }
+      ctx.stroke();
+    }
     ctx.globalAlpha = 1;
     for (var p = 0; p < points.length; p++) {
       ctx.beginPath();
       ctx.fillStyle = 'rgba(236, 244, 255, 0.96)';
-      ctx.arc(points[p].x, points[p].y, dotRadius * starGleam(list[p].text), 0, Math.PI * 2);
+      ctx.arc(points[p].x, points[p].y, dotRadius * starGleam(list[p].text)
+        * (path.indexOf(p) === -1 ? 1 : 1.7), 0, Math.PI * 2);
       ctx.fill();
     }
   }
@@ -535,6 +585,7 @@
      with the same query (.stage-reject and its is-still), and the class is written here off the
      query so the script and _sass/_persona.scss cannot fall out of step. */
   var MARKS = { sky: '✦', reading: '◐' }; // the glyph each setting sends home
+  MARKS.difficulty = '◇';
   var FLIGHT_MS = 520; // the flight, as long as _sass/_persona.scss animates it for
   var STILL_MS = 260; // how long the mark is simply held on the portrait instead, with less motion
   var calmer = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
@@ -618,20 +669,10 @@
   }
   function renderNeighbor() {
     if (!sheet || !sheet.neighbor || selected < 0 || !fieldStars[selected]) return;
-    var box = sheet.field.getBoundingClientRect();
-    var w = Math.max(1, box.width - 44);
-    var h = Math.max(1, box.height - 44);
-    var near = -1;
-    var best = Infinity;
-    for (var i = 0; i < fieldStars.length; i++) {
-      if (i === selected) continue;
-      var dx = (fieldStars[i].x - fieldStars[selected].x) * w;
-      var dy = (fieldStars[i].y - fieldStars[selected].y) * h;
-      var distance = dx * dx + dy * dy;
-      if (distance < best) { best = distance; near = i; }
-    }
-    var line = near < 0 ? 'Place another star to see which thought is closest.'
-      : 'Closest star: "' + fieldStars[near].text + '". Move this star to bring a different thought closer.';
+    var path = threadOf(fieldStars, selected);
+    var line = path.length < 2 ? 'Place another star to see which thought comes next.'
+      : 'Next thought: "' + (fieldStars[path[1]].text || 'a star without words')
+        + '". Move this star to change which thought comes next.';
     if (sheet.neighbor.textContent !== line) sheet.neighbor.textContent = line;
   }
   function keptNote(kept) {
@@ -651,18 +692,37 @@
     sheet.name.textContent = named ? '✦ ' + named + ' — ' + skyRead(list) : '';
     sheet.name.hidden = !named;
   }
+  function renderThread() {
+    var path = threadOf(fieldStars, selected);
+    for (var i = 0; i < fieldStars.length; i++) {
+      if (!fieldStars[i].el) continue;
+      var place = path.indexOf(i);
+      if (place < 0) fieldStars[i].el.removeAttribute('data-thread');
+      else fieldStars[i].el.setAttribute('data-thread', String(place + 1));
+    }
+    if (sheet && sheet.thread) {
+      var words = path.length < 2 ? '' : path.map(function (index) {
+        var text = fieldStars[index].text.trim();
+        return text ? '“' + text + '”' : 'a star without words';
+      }).join(' → ');
+      sheet.thread.hidden = !words;
+      if (sheet.thread.textContent !== words) sheet.thread.textContent = words;
+    }
+    return path;
+  }
   function namedLine() {
     var named = skyName(serialize());
     return named ? ' Your sky reads as ' + named + ' now.' : '';
   }
   function drawField() {
     renderName();
+    var path = renderThread();
     renderNeighbor();
     if (!sheet || !sheet.field || !sheet.canvas) return;
     var box = sheet.field.getBoundingClientRect();
     if (!box.width || !box.height) return;
     var ctx = sizeCanvas(sheet.canvas, box.width, box.height);
-    if (ctx) drawSky(ctx, fieldStars, box.width, box.height, 22, 0, 1.1);
+    if (ctx) drawSky(ctx, fieldStars, box.width, box.height, 22, 0, 1.1, path);
   }
   function select(index) {
     var changed = selected !== index;
@@ -677,9 +737,9 @@
     if (sheet.wordsForm) sheet.wordsForm.hidden = index < 0;
     if (index >= 0) {
       if (changed && sheet.words) sheet.words.value = fieldStars[index].text;
-      renderNeighbor();
       sheetStatus('✦ ' + fieldStars[index].text + ' (' + (index + 1) + ' of ' + fieldStars.length + ')');
     }
+    drawField();
   }
   function pointInField(clientX, clientY) {
     var box = sheet.field.getBoundingClientRect();
@@ -740,7 +800,6 @@
     fieldStars = clean(saved.value).map(function (s) { return { x: s.x, y: s.y, text: s.text, el: null }; });
     for (var j = 0; j < fieldStars.length; j++) createStarElement(fieldStars[j], j);
     select(-1);
-    drawField();
     sheetStatus(saved.status === 'unreadable'
       ? 'What this browser kept of your sky cannot be read, so it starts fresh. Tap the sky to place a star.'
       : fieldIntro(fieldStars) + keptNote(true));
@@ -843,6 +902,7 @@
       seed: document.getElementById('persona-seed'), remove: document.getElementById('persona-remove'),
       clear: document.getElementById('persona-clear'), status: document.getElementById('persona-sky-status'),
       name: document.getElementById('persona-sky-name'),
+      thread: document.getElementById('persona-thread'),
       wordsForm: document.getElementById('persona-star-words'),
       words: document.getElementById('persona-star-thought'),
       neighbor: document.getElementById('persona-star-neighbor'),
@@ -966,7 +1026,7 @@
       if (star.el) star.el.setAttribute('aria-label', starLabel(star));
       placeElement(star);
       var kept = setStars(serialize(), 'worded');
-      renderNeighbor();
+      drawField();
       sheetStatus('This star now carries: "' + star.text + '". The cards that read your sky follow these words.' + keptNote(kept));
     });
     if (sheet.remove) sheet.remove.addEventListener('click', function () {
