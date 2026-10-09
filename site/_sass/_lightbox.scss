@@ -180,7 +180,9 @@ html[data-lightbox] [data-lightbox-aside] * {
 
 .shell-unmake {
   pointer-events: none;
-  animation: shell-unmake var(--motion-medium) var(--ease-shell-unmake, var(--ease-leave)) both;
+  // Composed anew for every leaving (--rite-unmake, js/site.js unmake), at a length rolled for it;
+  // the keyframes below for a page with no script.
+  animation: var(--rite-unmake, shell-unmake) var(--motion-shell-unmake, var(--motion-medium)) var(--ease-shell-unmake, var(--ease-leave)) both;
 }
 
 @keyframes shell-unmake {

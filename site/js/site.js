@@ -260,6 +260,34 @@
     return (m && m.ms(name)) || fallback;
   }
 
+  // A length the engine wrote inline on an element (--motion-<spell>, from its composer), or 0.
+  function inlineMs(node, name) {
+    if (!node || !node.style || typeof node.style.getPropertyValue !== 'function') return 0;
+    var value = parseFloat(node.style.getPropertyValue(name));
+    return isFinite(value) && value > 0 ? value : 0;
+  }
+
+  // The composer (README: "The composer"): the same movement is never the same twice, because
+  // every rite is put together afresh from pieces on its trigger. A thing that arrives has its
+  // develop composed and named on it (--rite-develop, with its own geometry and curve, m.arrive);
+  // a thing that leaves has its unmake composed for that leaving (--rite-unmake, m.composeOn),
+  // and the stylesheet reads the name before its own keyframes. Nothing here without the engine,
+  // or for a visitor who asked for stillness: the named keyframes are what plays then, or nothing.
+  function composeArrival(node, spell) {
+    var m = engine();
+    if (!m || typeof m.arrive !== 'function' || calm() || !node || !node.style) return false;
+    m.arrive(node, { spell: spell, className: false });
+    return true;
+  }
+
+  // Hands back the length rolled for the leaving (--motion-<spell>), or 0 where nothing was composed.
+  function composeLeave(node, spell) {
+    var m = engine();
+    if (!m || typeof m.composeOn !== 'function' || calm() || !node || !node.style) return 0;
+    m.composeOn(node, 'unmake', spell, 340);
+    return inlineMs(node, '--motion-' + spell);
+  }
+
   // Words written to a line, and revealed there. A line still revealing is put back whole first,
   // so a question asked over a question never carries the old words into the new ones.
   var revealed = typeof WeakMap === 'function' ? new WeakMap() : null;
@@ -303,10 +331,14 @@
     node.setAttribute('inert', '');
     // Under a lightbox the page's aside is held still; the leaving thing is let play.
     if (node.style && typeof node.style.setProperty === 'function') node.style.setProperty('animation-play-state', 'running');
+    // Composed anew for this leaving (--rite-unmake, read by .shell-unmake); the clock below is
+    // only the fallback for a browser that never says the animation ended, so it waits for the
+    // length the composer rolled.
+    var length = composeLeave(node, 'shell-unmake');
     node.classList.add('shell-unmake');
     node.addEventListener('animationend', finish);
     node.addEventListener('animationcancel', finish);
-    window.setTimeout(finish, riteMs('medium', 340) + 160);
+    window.setTimeout(finish, Math.max(riteMs('medium', 340), length) + 160);
   }
 
   // A ghost of a box that has to go at once -- the "are you sure?" dialog, which must close
@@ -1295,16 +1327,65 @@
       return;
     }
     endUnmake();
+    // Each chip's leaving composed anew for this close (--rite-unmake, _sass/_nav.scss), pointed
+    // back at the logo it branched from; the rings' and the rays' leave is the stylesheet's own.
+    var longest = 0;
+    for (i = 0; i < options.length; i++) {
+      if (options[i].hidden) continue;
+      var node = typeof options[i].querySelector === 'function' ? options[i].querySelector('.sparknav-node') : null;
+      if (!node) continue;
+      aimAtLogo(node, options[i], '--leave-x', '--leave-y', 0.72);
+      longest = Math.max(longest, composeLeave(node, 'sparknav-unmake'));
+    }
+    // The rings go last (cast-ring-out, _sass/_nav.scss): as long as the longest leaving composed
+    // above and the last chip's turn in the order, so no chip is left after the circle it was cast
+    // in has gone.
+    if (nav.host.style && typeof nav.host.style.setProperty === 'function') {
+      var rings = Math.max(riteMs('medium', 340), longest) + Math.ceil(count / 2) * riteMs('stagger', 44);
+      nav.host.style.setProperty('--motion-cast-ring-out', rings + 'ms');
+      nav.host.style.setProperty('--motion-cast-ring-dashed-out', Math.round(rings * 0.92) + 'ms');
+    }
     nav.sky.classList.add('is-unmaking');
     // Out of reach while it goes: a chip being unmade is not in the tab order or the tree a
     // reader walks, as it is already out from under the pointer.
     if (typeof nav.sky.setAttribute === 'function') nav.sky.setAttribute('inert', '');
+    // The <details> closes only when the last chip, the last ray and the rings have gone: the
+    // longest leaving the composer rolled (or the stylesheet's own length), the last chip's turn
+    // in the order, and a little.
     unmaking = window.setTimeout(function () {
       unmaking = 0;
       nav.sky.classList.remove('is-unmaking');
       if (typeof nav.sky.removeAttribute === 'function') nav.sky.removeAttribute('inert');
       then();
-    }, riteMs('medium', 340) + Math.ceil(count / 2) * riteMs('stagger', 44) + 80);
+    }, Math.max(riteMs('medium', 340), longest) + Math.ceil(count / 2) * riteMs('stagger', 44) + 80);
+  }
+
+  /* A chip's own geometry, said by the shell rather than rolled: a star branches out of the logo
+     and goes back into it (--fx/--fy, star() above, which the named keyframes read), so the
+     composition the engine writes for it (m.arrive, m.composeOn) is handed the same way, as its
+     --arrive-x/-y or --leave-x/-y. The rest of the roll -- the turn, the scale, the skew, the curve,
+     the pieces -- stays the engine's. */
+  function aimAtLogo(node, option, xName, yName, by) {
+    if (!option.style || typeof option.style.getPropertyValue !== 'function'
+        || !node.style || typeof node.style.setProperty !== 'function') return;
+    var fx = parseFloat(option.style.getPropertyValue('--fx'));
+    var fy = parseFloat(option.style.getPropertyValue('--fy'));
+    if (!isFinite(fx) || !isFinite(fy)) return;
+    node.style.setProperty(xName, Math.round(fx * by) + 'px');
+    node.style.setProperty(yName, Math.round(fy * by) + 'px');
+  }
+
+  /* Each chip's arrival composed anew on every press (--rite-develop, read by .is-branching
+     .sparknav-node): its own curve, its own treads and pieces, and the way out of the logo as its
+     geometry. Without the engine the named keyframes play, from the same place. */
+  function cast() {
+    var options = nav.sky.querySelectorAll('.sparknav-option');
+    for (var i = 0; i < options.length; i++) {
+      if (options[i].hidden) continue;
+      var node = typeof options[i].querySelector === 'function' ? options[i].querySelector('.sparknav-node') : null;
+      if (!node || !composeArrival(node, 'sparknav-branch')) continue;
+      aimAtLogo(node, options[i], '--arrive-x', '--arrive-y', 1);
+    }
   }
 
   function branch(on) {
@@ -1313,6 +1394,7 @@
       endUnmake(); // pressed again before the last close had finished: cast afresh
       shape();
       deal();
+      cast();
       navBox.up();
       // The branch starts over on every press: a browser that keeps a closed <details> rendered
       // would otherwise have run the animation once and left it there.
@@ -1375,7 +1457,10 @@
       var menu = hostedStateMenu();
       if (!nav.modal || !menu) return false;
       // The host is on screen before the panel arrives in it, because nothing inside a hidden box
-      // can take the focus and the panel puts the focus in its own text as it opens.
+      // can take the focus and the panel puts the focus in its own text as it opens. It develops
+      // where the constellation was, by a composition of its own for this taking-over
+      // (--rite-develop, .sparknav-modal).
+      composeArrival(nav.modal, 'sparknav-modal');
       nav.modal.hidden = false;
       var release = menu.present(nav.modal);
       if (!release) {

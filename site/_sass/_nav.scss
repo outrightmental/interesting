@@ -473,7 +473,10 @@
   padding: calc(var(--nav-inset) + 3.5rem) 1rem 1.5rem;
   overflow: auto;
   overscroll-behavior: contain;
-  animation: sparknav-modal var(--motion-medium) var(--ease-sparknav-modal, var(--ease-arrive)) both;
+  // Composed anew every time the state interface takes the lightbox (--rite-develop, written by
+  // js/site.js through m.arrive); the keyframes below are what a page with no script plays, and
+  // the length is the one rolled for the spell.
+  animation: var(--rite-develop, sparknav-modal) var(--motion-sparknav-modal, var(--motion-medium)) var(--ease-sparknav-modal, var(--ease-arrive)) both;
 }
 
 // Said outright, because a hidden box with `display: grid` on it is a box that is still there.
@@ -637,17 +640,40 @@ html[data-nav] .sparknav-sky[hidden] {
   animation: var(--rite-wane, chip-wane) var(--motion-matte-out, var(--motion-chip-wane, var(--motion-medium))) var(--ease-chip-wane, var(--ease-stair)) both;
 }
 
-// The stamp: the chip sinks in one cut and springs back in two. Said with the mark's own class in
-// front so it outranks the branch below, which is on the chip for as long as the sky is open.
+// The stamp: the chip sinks in one cut and springs back in two (composed anew on every press,
+// --rite-stamp; chip-stamp for a page with no script).
 .sparknav .sparknav-node.is-stamping,
 .sparknav .sparknav-node:active {
   animation: var(--rite-stamp, chip-stamp) var(--motion-rite-stamp, var(--motion-chip-stamp, var(--motion-short))) var(--ease-chip-stamp, var(--ease-flicker)) both;
 }
 
+// On a constellation that has branched, the chip is still carrying its develop, held at its end
+// (.is-branching .sparknav-node, below, which outranks the rule above in the live layout): the
+// stamp plays beside it rather than in its place, or the develop would start over from the logo
+// the moment the press let go. The delays are the develop's own turn in the order and none for
+// the stamp. Said with the sky's class as well, so it outranks the branch in both layouts.
+.sparknav .sparknav-sky.is-branching .sparknav-node.is-stamping {
+  animation:
+    var(--rite-develop, sparknav-branch) var(--motion-sparknav-branch, var(--motion-medium)) var(--ease-sparknav-branch, var(--ease-arrive)) both,
+    var(--rite-stamp, chip-stamp) var(--motion-rite-stamp, var(--motion-chip-stamp, var(--motion-short))) var(--ease-chip-stamp, var(--ease-flicker)) both;
+  animation-delay: calc(var(--roll, var(--k, 0)) * var(--motion-stagger, 40ms) + var(--jit, 0ms)), 0ms;
+}
+
+html:not([data-nav='live']) .sparknav .sparknav-sky.is-branching .sparknav-node.is-stamping {
+  animation:
+    var(--rite-develop, sparknav-cascade) var(--motion-sparknav-cascade, var(--motion-medium)) var(--ease-sparknav-cascade, var(--ease-arrive)) both,
+    var(--rite-stamp, chip-stamp) var(--motion-rite-stamp, var(--motion-chip-stamp, var(--motion-short))) var(--ease-chip-stamp, var(--ease-flicker)) both;
+  animation-delay: calc(var(--roll, var(--k, 0)) * var(--motion-stagger, 40ms) + var(--jit, 0ms)), 0ms;
+}
+
+// Under a press with no script the state layer is at the pressed opacity, and patterned still:
+// the top rung of the ladder, never a flat sheet.
 .sparknav-node:active::after {
   opacity: var(--md-sys-state-pressed-opacity);
-  mask: none;
-  -webkit-mask: none;
+  mask: var(--matte-top);
+  -webkit-mask: var(--matte-top);
+  mask-position: calc(var(--k, 0) * 37px) calc(var(--k, 0) * 23px);
+  -webkit-mask-position: calc(var(--k, 0) * 37px) calc(var(--k, 0) * 23px);
 }
 
 .sparknav-node:focus-visible {
@@ -787,12 +813,12 @@ html:not([data-nav='live']) .sparknav-node {
 // The cascade still develops rather than appearing: each chip through the ladder in the rolled
 // order, from one tread to the side.
 html:not([data-nav='live']) .is-branching .sparknav-node {
-  animation: sparknav-cascade var(--motion-medium) var(--ease-sparknav-cascade, var(--ease-arrive)) both;
+  animation: var(--rite-develop, sparknav-cascade) var(--motion-sparknav-cascade, var(--motion-medium)) var(--ease-sparknav-cascade, var(--ease-arrive)) both;
   animation-delay: calc(var(--roll, var(--k, 0)) * var(--motion-stagger, 40ms) + var(--jit, 0ms));
 }
 
 html:not([data-nav='live']) .is-unmaking .sparknav-node {
-  animation: sparknav-unmake var(--motion-medium) var(--ease-sparknav-unmake, var(--ease-leave)) both;
+  animation: var(--rite-unmake, sparknav-unmake) var(--motion-sparknav-unmake, var(--motion-medium)) var(--ease-sparknav-unmake, var(--ease-leave)) both;
   animation-delay: calc(var(--roll, var(--k, 0)) * var(--motion-stagger, 40ms) * 0.5);
   pointer-events: none;
 }
@@ -875,9 +901,13 @@ html[data-nav='live'] {
   // rolled for every branching (js/motion.js), the step between stars is rolled with it
   // (--motion-stagger), each star takes its turn in a rolled order (--roll, a stride through the
   // set cast afresh on every press by js/site.js) with a jitter of its own on top (--jit), so the
-  // scatter comes out a little ragged, like a thing cast and not laid.
+  // scatter comes out a little ragged, like a thing cast and not laid. And never the same
+  // movement: each chip's develop is composed anew on every press (--rite-develop, m.arrive in
+  // js/site.js, which also hands the composition the chip's own geometry -- it comes from the
+  // logo, --fx/--fy, as the keyframes below do for a page with no script) at a length rolled for
+  // it (--motion-sparknav-branch); the stagger below is the shell's and stays.
   .is-branching .sparknav-node {
-    animation: sparknav-branch var(--motion-medium) var(--ease-sparknav-branch, var(--ease-arrive)) both;
+    animation: var(--rite-develop, sparknav-branch) var(--motion-sparknav-branch, var(--motion-medium)) var(--ease-sparknav-branch, var(--ease-arrive)) both;
     animation-delay: calc(var(--roll, var(--k, 0)) * var(--motion-stagger, 40ms) + var(--jit, 0ms));
   }
 
@@ -899,7 +929,10 @@ html[data-nav='live'] {
     );
   }
 
-  // Each ray is drawn out half a step behind its chip, dash by dash through the ladder.
+  // Each ray is drawn out half a step behind its chip, dash by dash through the ladder. The rays
+  // are the one part that keeps to its named keyframes rather than a composed develop: a ray's
+  // transform carries its angle (rotate(var(--a))) on every tread, which a composition written
+  // for a box would drop, and a ray with no angle is a line pointing the wrong way.
   .is-branching .sparknav-ray {
     animation: sparknav-ray var(--motion-medium) var(--ease-sparknav-ray, var(--ease-arrive)) both;
     animation-delay: calc(var(--roll, var(--k, 0)) * var(--motion-stagger, 40ms) + var(--jit, 0ms) + var(--motion-stagger, 40ms) * 0.5);
@@ -913,8 +946,11 @@ html[data-nav='live'] {
     z-index: var(--layer-front);
   }
 
+  // The chips' unmake is composed afresh for the close (--rite-unmake, js/site.js unmakeSky,
+  // which points its --leave-x/-y back at the logo); the rays keep theirs, for the same reason
+  // as above.
   .is-unmaking .sparknav-node {
-    animation: sparknav-unmake var(--motion-medium) var(--ease-sparknav-unmake, var(--ease-leave)) both;
+    animation: var(--rite-unmake, sparknav-unmake) var(--motion-sparknav-unmake, var(--motion-medium)) var(--ease-sparknav-unmake, var(--ease-leave)) both;
     animation-delay: calc(var(--roll, var(--k, 0)) * var(--motion-stagger, 40ms) * 0.5);
     pointer-events: none;
   }
@@ -936,14 +972,17 @@ html[data-nav='live'] {
   }
 
   // And leave as the chips unmake: back down the ladder, the solid ring a tread smaller than it
-  // stood and the dashed one turning back by the spark's extra, until the cut when the sky
-  // closes -- never a ring that is there one frame and gone the next.
+  // stood and the dashed one turning back by the spark's extra, whole on every tread and cut in
+  // the last, before the sky closes under them (js/site.js keeps [open] until they have gone, and
+  // writes --motion-cast-ring-out on the mark so the rings last as long as the longest chip's
+  // composed leaving and its turn) -- never a ring that is there one frame and gone the next, and
+  // never one that dims.
   .sparknav[open]:has(.is-unmaking)::before {
-    animation: cast-ring-out var(--motion-medium) var(--ease-cast-ring-out, var(--ease-leave)) both;
+    animation: cast-ring-out var(--motion-cast-ring-out, var(--motion-medium)) var(--ease-cast-ring-out, var(--ease-leave)) both;
   }
 
   .sparknav[open]:has(.is-unmaking)::after {
-    animation: cast-ring-dashed-out var(--motion-medium) var(--ease-cast-ring-dashed-out, var(--ease-leave)) both;
+    animation: cast-ring-dashed-out var(--motion-cast-ring-dashed-out, var(--motion-medium)) var(--ease-cast-ring-dashed-out, var(--ease-leave)) both;
   }
 }
 
@@ -986,6 +1025,8 @@ html[data-nav='live'] {
   70%, 85.9% {
     mask: var(--matte-5);
     -webkit-mask: var(--matte-5);
+    mask-position: calc(var(--k, 0) * 37px) calc(var(--k, 0) * 23px);
+    -webkit-mask-position: calc(var(--k, 0) * 37px) calc(var(--k, 0) * 23px);
     transform: translate(calc(var(--fx, 0px) * 0.03), calc(var(--fy, 0px) * 0.03)) scale(0.985);
   }
 
@@ -1198,36 +1239,42 @@ html[data-nav='live'] {
 
 @keyframes cast-ring-out {
   0%, 21.9% {
+    opacity: 1;
     mask: var(--matte-5);
     -webkit-mask: var(--matte-5);
     transform: translate(-50%, -50%) scale(1.02);
   }
 
   22%, 43.9% {
+    opacity: 1;
     mask: var(--matte-4);
     -webkit-mask: var(--matte-4);
     transform: translate(-50%, -50%) scale(0.97);
   }
 
   44%, 55.9% {
+    opacity: 1;
     mask: var(--matte-5);
     -webkit-mask: var(--matte-5);
     transform: translate(-50%, -50%) scale(0.98);
   }
 
   56%, 75.9% {
+    opacity: 1;
     mask: var(--matte-3);
     -webkit-mask: var(--matte-3);
     transform: translate(-50%, -50%) scale(0.9);
   }
 
   76%, 89.9% {
+    opacity: 1;
     mask: var(--matte-2);
     -webkit-mask: var(--matte-2);
     transform: translate(-50%, -50%) scale(0.8);
   }
 
   90%, 100% {
+    opacity: 0;
     mask: var(--matte-1);
     -webkit-mask: var(--matte-1);
     transform: translate(-50%, -50%) scale(0.66);
@@ -1236,30 +1283,35 @@ html[data-nav='live'] {
 
 @keyframes cast-ring-dashed-out {
   0%, 25.9% {
+    opacity: 1;
     mask: var(--matte-5);
     -webkit-mask: var(--matte-5);
     transform: translate(-50%, -50%) rotate(calc(var(--spark-extra, 0deg) * 0.06));
   }
 
   26%, 47.9% {
+    opacity: 1;
     mask: var(--matte-4);
     -webkit-mask: var(--matte-4);
     transform: translate(-50%, -50%) rotate(calc(var(--spark-extra, 0deg) * -0.1)) scale(0.98);
   }
 
   48%, 67.9% {
+    opacity: 1;
     mask: var(--matte-3);
     -webkit-mask: var(--matte-3);
     transform: translate(-50%, -50%) rotate(calc(var(--spark-extra, 0deg) * -0.22)) scale(0.92);
   }
 
   68%, 85.9% {
+    opacity: 1;
     mask: var(--matte-2);
     -webkit-mask: var(--matte-2);
     transform: translate(-50%, -50%) rotate(calc(var(--spark-extra, 0deg) * -0.3)) scale(0.84);
   }
 
   86%, 100% {
+    opacity: 0;
     mask: var(--matte-1);
     -webkit-mask: var(--matte-1);
     transform: translate(-50%, -50%) rotate(calc(var(--spark-extra, 0deg) * -0.4)) scale(0.72);
@@ -1423,6 +1475,8 @@ html[data-nav='live'] {
   .sparknav-node.is-waning::after,
   .sparknav .sparknav-node.is-stamping,
   .sparknav .sparknav-node:active,
+  .sparknav .sparknav-sky.is-branching .sparknav-node.is-stamping,
+  html:not([data-nav='live']) .sparknav .sparknav-sky.is-branching .sparknav-node.is-stamping,
   .sparknav-node.is-sealing::before,
   .sparknav-node.is-unsealing::before,
   .is-branching .sparknav-node[aria-current='page']::before,
