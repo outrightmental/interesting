@@ -23,7 +23,7 @@
     { "file": "pendulum-hall.html", "name": "the pendulum hall", "orientation": "counting in echoes", "mood": "metrical", "aspect": "16 / 10",
       "what": "Keep time with a rack of pendulums and say when they meet again, or tune a spring so the swing crosses in time." },
     { "file": "star-lantern.html", "name": "the lantern ritual", "orientation": "wants a rite", "mood": "ceremonial", "aspect": "3 / 4",
-      "what": "Light the rite: find the order the lanterns rise from the clues, or add the winds to say where one drifts." },
+      "what": "Light the rite: order the lanterns from clues, predict a drift, or recover two missing winds from two lanterns' journeys." },
     { "file": "wish-terrarium.html", "name": "the terrarium", "orientation": "minding something", "mood": "tending", "aspect": "4 / 5",
       "what": "Tend what is under glass: decide which plants get water from their tags and readings, or order the stems by age." },
     { "file": "constellation-weather.html", "name": "the weather lab", "orientation": "weather coming", "mood": "tempestuous", "aspect": "16 / 10",

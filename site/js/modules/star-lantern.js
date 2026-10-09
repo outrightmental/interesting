@@ -1,9 +1,9 @@
-/* The lantern ritual: lanterns hung under the persona's stars, and two puzzles set among them. As
+/* The lantern ritual: lanterns hung under the persona's stars, and three puzzles set among them. As
    a card it is the puzzle the seed deals, drawn small (paint, spark); as a piece it is one of the
-   two puzzles below, and the card it was opened from says which. See js/feed.js for what a module
+   three puzzles below, and the card it was opened from says which. See js/feed.js for what a module
    is and js/stage.js for what a piece is.
 
-   Two puzzles, both deduction:
+   Three puzzles, all deduction:
 
      the lighting order  Four or five lettered lanterns rise one after another, and a few clues
                          under the sky say how: before, right after, first, last, so many between,
@@ -16,6 +16,11 @@
                          grid. Say how far it has drifted when it leaves the top, and which band
                          pushes hardest. A wrong check says only which way to look. Some seeds
                          are the long ascent, through five bands.
+     the two witnesses   Two wind values are missing. Lantern A crosses every band; B starts above
+                         the lower missing wind. Their arrival columns determine the upper wind
+                         first, then the lower. Checks trace the visitor's proposed winds, never
+                         hidden answers. Worked subtractions cost hints; the lit paths remain
+                         available to experiment with after solving.
 
    A card and the feature it opens as are one puzzle: the spark puts the whole plan on its spec as
    `of` -- the order and its clues, or the four bands -- and piece(env) opens on that rather than
@@ -50,7 +55,7 @@ function sky(g, w, h, env) {
   const c = env.colors;
   const grad = g.createLinearGradient(0, 0, 0, h);
   grad.addColorStop(0, c.bg);
-  grad.addColorStop(1, c.bg2);
+  grad.addColorStop(1, env.mix(c.bg, c.bg2, 0.35));
   g.fillStyle = grad;
   g.fillRect(0, 0, w, h);
 }
@@ -359,8 +364,8 @@ function orderPiece(env, plan) {
   }
   return {
     title: orderTitle(plan),
-    brief: 'The rite of the rising. ' + capital(WORDS[n]) + ' lettered lanterns rise one after another, and the ' + WORDS[plan.clues.length]
-      + ' clues under the sky say how. Exactly one order fits them all. Set the order on the rail, or tap a lantern to move it up one place.',
+    brief: 'Arrange ' + WORDS[n] + ' lanterns, first to rise at the top. Exactly one order fits these clues: '
+      + plan.clues.map(clueText).join('; ') + '. Use the order controls, or tap a lantern to move it up one place; the first wraps to last.',
     goal: 'Put the lanterns in the one order the clues allow, first to rise at the top.',
     aspect: '1 / 1',
     checkLabel: 'check the order',
@@ -407,7 +412,10 @@ function orderPiece(env, plan) {
     tap(x, y, c) {
       const geo = orderGeometry(c.w, c.h, n);
       const col = Math.floor((x * c.w - geo.left) / geo.cell);
-      if (col < 0 || col >= n || y * c.h > c.h * 0.58) return;
+      if (col < 0 || col >= n || y * c.h > c.h * 0.58) {
+        c.status('Tap a lantern above the clues to move it up one place.');
+        return;
+      }
       const rank = s.order.indexOf(col);
       const next = s.order.slice();
       if (rank === 0) {
@@ -423,19 +431,19 @@ function orderPiece(env, plan) {
       draw(c);
     },
     frame(t, dt, c) {
-      s.t += dt;
+      if (!c.reduced) s.t += dt;
       if (c.done) {
-        s.gone += dt;
+        s.gone = c.reduced ? 2 : Math.min(2, s.gone + dt * 2);
         for (let i = 0; i < n; i++) {
-          const up = Math.max(0, s.gone - plan.order.indexOf(i) * 0.9);
-          s.lift[i] = up * 22 * Math.max(1, c.h / 320);
-          s.glow[i] = Math.min(0.9, up);
+          const up = Math.max(0, Math.min(1, s.gone - s.order.indexOf(i) * 0.12));
+          s.lift[i] = c.reduced ? 0 : up * 4 * Math.max(1, c.h / 320);
+          s.glow[i] = up * 0.9;
         }
       }
       draw(c);
     },
     end(c) {
-      c.status(named(plan.order) + ': up and away, in that order');
+      c.status(named(plan.order) + ': the order holds. The lights stay yours to rearrange.');
     }
   };
 }
@@ -581,7 +589,7 @@ function drawDrift(g, w, h, env, plan, s, variant) {
   let lx = geo.x(0);
   let ly = geo.bottom + geo.band * 0.42;
   if (s.flight > 0) {
-    const f = Math.min(s.flight, nb + 1.2);
+    const f = Math.min(s.flight, nb);
     const b = Math.min(nb - 1, Math.floor(f));
     const col = f >= nb ? pos[nb] : pos[b] + (pos[b + 1] - pos[b]) * (f - b);
     lx = geo.x(col);
@@ -621,12 +629,14 @@ function driftPiece(env, plan) {
   const total = driftTotal(plan.bands);
   const hard = strongest(plan.bands);
   const pos = positions(plan.bands);
-  const s = { band: 0, guess: null, hinted: [], flight: 0, t: 0 };
+  const s = { band: 0, guess: null, hinted: [], flight: 0, t: 0, launched: false };
   const draw = (c) => drawDrift(c.g, c.w, c.h, c, plan, s, env.variant);
   const leaves = (n) => 'column ' + signed(n) + ', ' + WORDS[Math.abs(n)] + (Math.abs(n) === 1 ? ' column ' : ' columns ') + (n < 0 ? 'left' : 'right') + ' of where it was let go';
   return {
     title: driftTitle(plan),
-    brief: 'An offering to the wind: one lantern is let go at the dotted column and rises through ' + WORDS[nb] + ' bands of wind. Each band pushes it the number of columns its arrow shows, left when the number is negative and right when it is positive, and the grid is there to count on.',
+    brief: 'Add the winds to follow a lantern released at column 0. Read bands from bottom to top; negative pushes left and positive pushes right. Winds in columns: '
+      + plan.bands.map((wind, i) => 'band ' + (i + 1) + ': ' + signed(wind)).join('; ')
+      + '. The strongest band has the largest push, ignoring its sign.',
     goal: 'Say how many columns it has drifted when it leaves the top, and which band pushes hardest.',
     aspect: '4 / 3',
     checkLabel: 'let it go',
@@ -642,7 +652,12 @@ function driftPiece(env, plan) {
       const band = Math.round(Number(c.value('band')));
       const driftRight = guess === total;
       const bandRight = band === hard;
-      if (driftRight && bandRight) return { solved: true, say: 'it leaves the top at ' + leaves(total) + '; band ' + hard + ' pushed hardest' };
+      s.launched = driftRight && bandRight;
+      s.flight = c.reduced && s.launched ? nb : 0;
+      if (s.launched) {
+        draw(c);
+        return { solved: true, say: 'it leaves the top at ' + leaves(total) + '; band ' + hard + ' pushed hardest' };
+      }
       const parts = [];
       if (!driftRight) parts.push(guess < total ? 'it leaves the top further right than that' : 'it leaves the top further left than that');
       parts.push(bandRight ? 'the band is right' : 'band ' + band + ' is not the one that pushes hardest');
@@ -653,6 +668,10 @@ function driftPiece(env, plan) {
       draw(c);
     },
     apply(id, value, c) {
+      if (id === 'drift' || id === 'band') {
+        s.launched = false;
+        s.flight = 0;
+      }
       if (id === 'drift') {
         const n = Math.round(Number(value));
         s.guess = Number.isFinite(n) ? Math.max(-COLS, Math.min(COLS, n)) : null;
@@ -664,31 +683,252 @@ function driftPiece(env, plan) {
         c.status('you say band ' + s.band + ' pushes hardest');
       }
       if (id === 'hint') {
-        const next = Math.max(1, Math.min(nb - 1, Math.round(Number(value)) || 1));
-        if (!s.hinted.includes(next)) {
+        const next = s.hinted.length + 1;
+        if (s.hinted.length < Math.min(nb - 1, helps)) {
           s.hinted.push(next);
           c.hint();
           c.status('after band ' + next + ' it is at ' + signed(pos[next]));
         } else {
-          c.status('the last band is yours to add');
+          c.status('No hints left at this difficulty. The shown positions stay marked on the grid.');
         }
       }
       draw(c);
     },
     frame(t, dt, c) {
-      s.t += dt;
-      if (c.done) s.flight = Math.min(nb + 3, s.flight + dt * 0.8);
+      if (!c.reduced) s.t += dt;
+      if (s.launched) s.flight = c.reduced ? nb : Math.min(nb, s.flight + dt * nb * 1.2);
       draw(c);
     },
     end(c) {
-      c.status('let go: it rises through the ' + WORDS[nb] + ' bands and leaves at ' + signed(total));
+      c.status('It arrives at ' + signed(total) + '. The path stays lit; press check again to replay the ascent.');
+    }
+  };
+}
+
+/* ---- the two witnesses ---------------------------------------------------------------------- */
+
+const WIND_IDS = ['lower-wind', 'upper-wind'];
+
+function witnessPlan(env, base) {
+  const split = env.int(1, base.bands.length - 1);
+  return { kind: 'witness', bands: base.bands.slice(), split,
+    lower: env.int(0, split - 1), upper: env.int(split, base.bands.length - 1) };
+}
+
+function carriedWitness(env) {
+  const p = env.card && env.card.of;
+  if (!p || p.kind !== 'witness' || !driftOk(p.bands)) return null;
+  if (![p.split, p.lower, p.upper].every(Number.isInteger)
+      || p.split < 1 || p.split >= p.bands.length
+      || p.lower < 0 || p.lower >= p.split
+      || p.upper < p.split || p.upper >= p.bands.length) return null;
+  return { kind: 'witness', bands: p.bands.slice(), split: p.split, lower: p.lower, upper: p.upper };
+}
+
+function witnessTitle(p) {
+  return 'the two witnesses: ' + WORDS[p.bands.length] + ' winds';
+}
+
+function witnessClues(p) {
+  const winds = p.bands.map((wind, i) => 'band ' + (i + 1) + ': '
+    + (i === p.lower || i === p.upper ? 'missing' : signed(wind))).join('; ');
+  return 'Winds, bottom to top: ' + winds + '. A starts at column 0 below band 1 and arrives at '
+    + signed(driftTotal(p.bands)) + '. B starts at column 0 below band ' + (p.split + 1)
+    + ' and arrives at ' + signed(driftTotal(p.bands.slice(p.split))) + '.';
+}
+
+function witnessGeometry(w, h, n) {
+  return { left: w * 0.08, span: w * 0.84, top: h * 0.24, bottom: h * 0.77,
+    band: h * 0.53 / n, x: (col) => w * (0.5 + col * 0.023) };
+}
+
+function drawWitness(g, w, h, env, plan, s, variant) {
+  const v = variant || PLAIN;
+  const c = env.colors;
+  const nb = plan.bands.length;
+  const geo = witnessGeometry(w, h, nb);
+  const size = Math.max(9, Math.min(14, Math.round(Math.min(w, h) * 0.043)));
+  const k = Math.max(0.55, Math.min(1.5, Math.min(w, h) / 300)) * v.scale;
+  const arrivals = [driftTotal(plan.bands), driftTotal(plan.bands.slice(plan.split))];
+  sky(g, w, h, env);
+  sparks(g, w, h, env, v, 0.18);
+  write(g, 'A arrives ' + signed(arrivals[0]), w * 0.27, h * 0.06, size, 'center', c.fg);
+  write(g, 'B arrives ' + signed(arrivals[1]), w * 0.73, h * 0.06, size, 'center', c.fg);
+  g.strokeStyle = env.alpha(c.muted, 0.25);
+  g.lineWidth = 1;
+  g.setLineDash([2, 4]);
+  g.beginPath();
+  g.moveTo(geo.x(0), geo.top);
+  g.lineTo(geo.x(0), geo.bottom);
+  g.stroke();
+  g.setLineDash([]);
+  for (let b = 0; b < nb; b++) {
+    const y = geo.bottom - (b + 1) * geo.band;
+    const missing = b === plan.lower ? 0 : b === plan.upper ? 1 : -1;
+    const wind = missing < 0 ? plan.bands[b] : s.winds[missing];
+    g.fillStyle = env.alpha(b % 2 ? c.accent : c.accent2, s.look === b ? 0.13 : 0.045);
+    g.fillRect(geo.left, y, geo.span, geo.band);
+    g.strokeStyle = env.alpha(c.muted, 0.3);
+    g.strokeRect(geo.left, y, geo.span, geo.band);
+    write(g, 'band ' + (b + 1), geo.left + 4, y + size * 0.8, size, 'left', c.fg);
+    write(g, missing < 0 ? signed(wind) : '? / set ' + signed(wind),
+      geo.left + geo.span - 4, y + size * 0.8, size, 'right', c.accent2);
+    g.strokeStyle = missing < 0 ? c.fg : c.accent;
+    g.fillStyle = g.strokeStyle;
+    g.lineWidth = 1.5;
+    g.setLineDash(missing < 0 ? [] : [2, 3]);
+    if (wind) arrow(g, geo.x(0), geo.x(wind), y + geo.band * 0.68, 4 * k);
+    else {
+      g.beginPath();
+      g.arc(geo.x(0), y + geo.band * 0.68, 2 * k, 0, TAU);
+      g.stroke();
+    }
+    g.setLineDash([]);
+    if ((missing === 1 && s.hints >= 2) || (missing === 0 && s.hints >= 4)) {
+      write(g, 'shown ' + signed(plan.bands[b]), w / 2, y + size * 0.8, size, 'center', c.accent2);
+    }
+  }
+  for (let i = 0; i < 2; i++) {
+    const start = i ? plan.split : 0;
+    const count = nb - start;
+    const pos = positions((s.run || new Array(nb).fill(0)).slice(start));
+    const f = s.run ? s.flight * count : 0;
+    const b = Math.min(count - 1, Math.floor(f));
+    const col = pos[b] + (pos[b + 1] - pos[b]) * (f - b);
+    const boundary = geo.bottom - (start + f) * geo.band;
+    const lift = (i ? 22 : 8) * k;
+    g.strokeStyle = env.alpha(i ? c.accent : c.accent2, 0.8);
+    g.lineWidth = 1.5;
+    g.setLineDash(i ? [3, 3] : []);
+    g.beginPath();
+    g.arc(geo.x(arrivals[i]), geo.top - lift, 10 * k, 0, TAU);
+    g.stroke();
+    if (s.run) {
+      g.beginPath();
+      g.moveTo(geo.x(0), geo.bottom - start * geo.band);
+      for (let j = 1; j <= Math.floor(f); j++) {
+        g.lineTo(geo.x(pos[j]), geo.bottom - (start + j) * geo.band);
+      }
+      g.lineTo(geo.x(col), boundary);
+      g.stroke();
+    }
+    g.setLineDash([]);
+    const bob = env.reduced ? 0 : Math.sin(s.t * 1.1 + i * 2 + v.turn * TAU) * 2 * k;
+    const y = boundary + geo.band * 0.32 * (1 - s.flight) - lift * Math.pow(s.flight, 8);
+    lantern(g, env, geo.x(col), y + bob, 0.7 + s.flight * 0.5, k, i ? 'B' : 'A');
+  }
+  write(g, 'A starts below band 1', w / 2, h * 0.88, size, 'center', c.fg);
+  write(g, 'B starts below band ' + (plan.split + 1), w / 2, h * 0.95, size, 'center', c.fg);
+}
+
+function witnessPreview(g, w, h, env, plan, t) {
+  drawWitness(g, w, h, env, plan,
+    { winds: [0, 0], hints: 0, run: null, flight: 0, look: -1, t: t || 0 }, env.variant);
+}
+
+function witnessPiece(env, plan) {
+  const helps = Math.min(4, asked(env).helps);
+  const missing = [plan.lower, plan.upper];
+  const arrivals = [driftTotal(plan.bands), driftTotal(plan.bands.slice(plan.split))];
+  const visibleUpper = arrivals[1] - plan.bands[plan.upper];
+  const remaining = arrivals[0] - plan.bands[plan.lower];
+  const hints = [
+    'B misses the lower unknown wind. The visible winds above its start add to ' + signed(visibleUpper)
+      + '; subtract that from its arrival, ' + signed(arrivals[1]) + '.',
+    'Band ' + (plan.upper + 1) + ': ' + signed(arrivals[1]) + ' - (' + signed(visibleUpper)
+      + ') = ' + signed(plan.bands[plan.upper]) + '.',
+    'For A, the visible winds plus the recovered upper wind add to ' + signed(remaining)
+      + '. Subtract this from its arrival, ' + signed(arrivals[0]) + '.',
+    'Band ' + (plan.lower + 1) + ': ' + signed(arrivals[0]) + ' - (' + signed(remaining)
+      + ') = ' + signed(plan.bands[plan.lower]) + '.'
+  ];
+  const s = { winds: [0, 0], hints: 0, run: null, flight: 0, look: -1, t: 0 };
+  const draw = (c) => drawWitness(c.g, c.w, c.h, c, plan, s, env.variant);
+  const valid = (n) => Number.isInteger(n) && n >= -4 && n <= 4;
+  return {
+    title: witnessTitle(plan),
+    brief: 'Recover two missing winds from two lantern journeys. Each band adds its push in columns: negative is left, positive is right. Both lanterns cross every band above their start. '
+      + witnessClues(plan) + ' Tap a band to read it.',
+    goal: 'Set both missing winds so A and B reach their stated arrival columns.',
+    aspect: '1 / 1',
+    checkLabel: 'check the journeys',
+    steps: WIND_IDS.map((id, i) => ({ id, ask: 'band ' + (missing[i] + 1) + ': the missing wind',
+      kind: 'number', min: -4, max: 4, step: 1, value: 0, unit: 'columns' })).concat([
+      { id: 'hint', ask: 'a worked subtraction (up to ' + helps + ' hints)', kind: 'press',
+        count: 1, label: 'show a hint', optional: true }
+    ]),
+    solution: { 'lower-wind': plan.bands[plan.lower], 'upper-wind': plan.bands[plan.upper] },
+    check(c) {
+      const winds = WIND_IDS.map((id) => Number(c.value(id)));
+      if (!winds.every(valid)) return { solved: false, say: 'Set both winds to whole numbers from -4 to +4.' };
+      const trial = plan.bands.slice();
+      missing.forEach((band, i) => { trial[band] = winds[i]; });
+      const right = Number(driftTotal(trial) === arrivals[0])
+        + Number(driftTotal(trial.slice(plan.split)) === arrivals[1]);
+      s.winds = winds;
+      s.run = trial;
+      s.flight = c.reduced ? 1 : 0;
+      draw(c);
+      return { solved: right === 2, say: right === 2
+        ? 'Both lanterns reach their arrival columns. The two missing winds are recovered.'
+        : capital(WORDS[right]) + ' of two arrival columns matched. The paths show the winds you set.' };
+    },
+    start(c) {
+      c.status('Two starting heights, two arrival columns. Find the two missing winds.');
+      draw(c);
+    },
+    apply(id, value, c) {
+      const at = WIND_IDS.indexOf(id);
+      if (at >= 0) {
+        const wind = Number(value);
+        if (!valid(wind)) {
+          c.status('Use a whole number from -4 to +4 for a missing wind.');
+          return;
+        }
+        s.winds[at] = wind;
+        s.run = null;
+        s.flight = 0;
+        s.look = missing[at];
+        c.status('Band ' + (missing[at] + 1) + ' set to ' + signed(wind) + '. Check to trace both journeys.');
+      }
+      if (id === 'hint') {
+        if (s.hints < helps) {
+          c.hint();
+          c.status(hints[s.hints]);
+          s.hints += 1;
+        } else c.status('No hints left at this difficulty. ' + hints[s.hints - 1]);
+      }
+      draw(c);
+    },
+    tap(x, y, c) {
+      const geo = witnessGeometry(c.w, c.h, plan.bands.length);
+      const band = Math.floor((geo.bottom - y * c.h) / geo.band);
+      if (x * c.w < geo.left || x * c.w > geo.left + geo.span || band < 0 || band >= plan.bands.length) {
+        s.look = -1;
+        c.status(witnessClues(plan));
+      } else {
+        s.look = band;
+        const at = missing.indexOf(band);
+        c.status('Band ' + (band + 1) + (at < 0 ? ' pushes ' + signed(plan.bands[band]) + ' columns.'
+          : ' is missing. You have set ' + signed(s.winds[at]) + '; use its number control to change it.'));
+      }
+      draw(c);
+    },
+    frame(t, dt, c) {
+      if (!c.reduced) s.t += dt;
+      if (s.run) s.flight = c.reduced ? 1 : Math.min(1, s.flight + dt * 1.2);
+      draw(c);
+    },
+    end(c) {
+      c.status('Both witnesses agree. Change a wind and check again to send them on a different journey.');
+      draw(c);
     }
   };
 }
 
 /* ---- the module ----------------------------------------------------------------------------- */
 
-// Which of the two puzzles this card is, and its plan, dealt once from the env's seeded stream and
+// Which of the three puzzles this card is, and its plan, dealt once from the env's seeded stream and
 // kept with that env. Every pass over one card -- the still picture and then every animated frame --
 // asks here, so they are all the same card; dealing per frame instead would re-roll the whole
 // puzzle thirty times a second (issue #92, and js/feed.js on what animate owes a card).
@@ -697,7 +937,8 @@ function deal(env) {
   let got = dealt.get(env);
   if (!got) {
     const order = env.chance(0.55);
-    got = { order, plan: order ? orderPlan(env) : driftPlan(env) };
+    const plan = order ? orderPlan(env) : driftPlan(env);
+    got = { order, plan: !order && env.chance(0.5) ? witnessPlan(env, plan) : plan };
     dealt.set(env, got);
   }
   return got;
@@ -708,17 +949,30 @@ export default {
   needsSky: true,
   paint(g, w, h, env) {
     const d = deal(env);
-    if (d.order) orderPreview(g, w, h, env, d.plan, env.variant.turn * 4);
+    if (d.plan.kind === 'witness') witnessPreview(g, w, h, env, d.plan, env.variant.turn * 4);
+    else if (d.order) orderPreview(g, w, h, env, d.plan, env.variant.turn * 4);
     else driftPreview(g, w, h, env, d.plan, env.variant.turn * 4);
   },
   animate(g, w, h, env, t) {
+    if (env.reduced) return false;
     const d = deal(env);
-    if (d.order) orderPreview(g, w, h, env, d.plan, t + env.variant.turn * 4);
+    if (d.plan.kind === 'witness') witnessPreview(g, w, h, env, d.plan, t + env.variant.turn * 4);
+    else if (d.order) orderPreview(g, w, h, env, d.plan, t + env.variant.turn * 4);
     else driftPreview(g, w, h, env, d.plan, t + env.variant.turn * 4);
   },
   spark(env) {
     if (!env.stars.length) return null;
     const { order, plan } = deal(env);
+    if (plan.kind === 'witness') {
+      return {
+        title: witnessTitle(plan),
+        text: 'Two lanterns remember what the wind forgot. Recover two missing pushes from their starting heights and arrival columns.',
+        mono: witnessClues(plan),
+        aspect: '1 / 1',
+        paint: (g, w, h, cardEnv) => witnessPreview(g, w, h, cardEnv, plan, cardEnv.variant.turn * 4),
+        of: plan
+      };
+    }
     if (order) {
       return {
         title: orderTitle(plan),
@@ -740,11 +994,14 @@ export default {
     };
   },
   piece(env) {
+    const witness = carriedWitness(env);
+    if (witness) return witnessPiece(env, witness);
     const order = carriedOrder(env);
     if (order) return orderPiece(env, order);
     const drift = carriedDrift(env);
     if (drift) return driftPiece(env, drift);
     const d = deal(env);
+    if (d.plan.kind === 'witness') return witnessPiece(env, d.plan);
     return d.order ? orderPiece(env, d.plan) : driftPiece(env, d.plan);
   }
 };
