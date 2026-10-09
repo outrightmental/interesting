@@ -54,8 +54,8 @@ def read_outputs(text):
 # The coded axioms, by the name of the check that holds each one. Written down once, so adding or
 # retiring an axiom is one edit here rather than one per test that counts them.
 CODED_AXIOMS = ["check_accessibility", "check_analytics", "check_cadence", "check_completion",
-                "check_destructive", "check_mood", "check_participate", "check_reachability",
-                "check_state"]
+                "check_destructive", "check_mood", "check_motion", "check_participate",
+                "check_reachability", "check_state"]
 
 
 def sitemap(*pages):
@@ -131,6 +131,16 @@ def queried(body):
     return f"<head>{mi.MOOD_TAG}</head>\n<body>{body}</body>"
 
 
+def moving(body):
+    """A bare fragment that loads the motion engine, and nothing more.
+
+    The motion counterpart of tagged(): it carries the one line and, being a fragment, fails the
+    responsive-and-accessible axiom from the start, so only the motion check can refuse a fixture
+    built from it.
+    """
+    return f"<head>{mi.MOTION_TAG}</head>\n<body>{body}</body>"
+
+
 def mood_script(*probes):
     """A stand-in for the shared mood script, declaring `probes` as its query mechanisms."""
     declared = ",\n".join(f"  {{ probe: '{name}', kind: 'choice' }}" for name in probes)
@@ -140,7 +150,7 @@ def mood_script(*probes):
 def page(body="<p>a page</p>", title="a page", lang="en",
          viewport="width=device-width, initial-scale=1", css="", focus=True, calm=True,
          analytics=mi.ANALYTICS_SCRIPT, state=mi.STATE_SCRIPT, mood=mi.MOOD_SCRIPT,
-         participate=mi.PARTICIPATE_SCRIPT):
+         participate=mi.PARTICIPATE_SCRIPT, motion=mi.MOTION_SCRIPT):
     """A whole page that satisfies every axiom: responsive and accessible (issue #26), and carrying
     the analytics and consent line (issue #24).
 
@@ -148,13 +158,15 @@ def page(body="<p>a page</p>", title="a page", lang="en",
     has to look like. Every argument takes one part of the axiom away again, so a test can break
     exactly one thing: the style block always animates (`transition`) and always drops the browser's
     focus ring (`outline: none`), so `calm=False` and `focus=False` really do leave a page failing.
-    `analytics`, `state`, `mood` and `participate` are the srcs of the four shared scripts, so a
-    page in a sub-folder can load them by the matching relative path, and `analytics=""`,
-    `state=""`, `mood=""` or `participate=""` leaves one line off without touching anything else.
+    `analytics`, `state`, `mood`, `participate` and `motion` are the srcs of the five shared
+    scripts, so a page in a sub-folder can load them by the matching relative path, and
+    `analytics=""`, `state=""`, `mood=""`, `participate=""` or `motion=""` leaves one line off
+    without touching anything else. The transition it animates by is a piecewise linear() curve
+    and not a keyword, because the motion axiom refuses a page that moves by one.
     """
     style = ["  * { box-sizing: border-box; }",
              "  .panel { max-width: 60rem; padding: clamp(0.8rem, 3vw, 2rem); }",
-             "  a { transition: color 0.2s ease; }",
+             "  a { transition: color 0.2s linear(0, 0.3 20%, 0.35 28%, 1.04 70%, 1); }",
              "  button { outline: none; min-height: 44px; }"]
     if focus:
         style.append("  a:focus-visible, button:focus-visible { outline: 2px solid #8db8ff; }")
@@ -167,6 +179,7 @@ def page(body="<p>a page</p>", title="a page", lang="en",
             + (f"  <script src='{state}'></script>\n" if state else "")
             + (f"  <script src='{mood}' defer></script>\n" if mood else "")
             + (f"  <script src='{participate}' defer></script>\n" if participate else "")
+            + (f"  <script src='{motion}'></script>\n" if motion else "")
             + f"  <title>{title}</title>\n  <style>\n"
             + "\n".join(style + ([f"  {css}"] if css else [])) + "\n  </style>\n</head>\n<body>\n"
             f"  <main class='panel'>\n    <h1>{title}</h1>\n    {body}\n  </main>\n</body>\n</html>\n")
@@ -1259,7 +1272,7 @@ class MarbleBagTest(SiteDirTestCase):
                 self.assertEqual(prompt[prompt.index("ENVISION"):prompt.index("THIS RUN ")],
                                  typical[typical.index("ENVISION"):typical.index("THIS RUN ")])
                 # ...and so is everything from the legibility holds to the line read last: the
-                # holds, the build, the nine axioms and the format are not the mode's to vary.
+                # holds, the build, the ten axioms and the format are not the mode's to vary.
                 self.assertEqual(prompt[prompt.index(holds):prompt.index("This run's mission")],
                                  typical[typical.index(holds):typical.index("This run's mission")])
                 self.assertEqual(prompt.count("AXIOM, every run"), len(CODED_AXIOMS))
@@ -2078,7 +2091,7 @@ class ResponsiveAccessibleAxiomTest(SiteDirTestCase):
     def test_motion_only_has_to_be_answered_for_where_there_is_motion(self):
         # A still page owes nobody a prefers-reduced-motion rule; a page that moves owes one however
         # it moves, in CSS or from script.
-        still = page(calm=False).replace("transition: color 0.2s ease;", "color: #8db8ff;")
+        still = re.sub(r"transition: color 0\.2s linear\([^)]*\);", "color: #8db8ff;", page(calm=False))
         self.assertEqual(self.violations(still), [])
         for motion in ["@keyframes drift { to { transform: translateY(1rem); } }",
                        "div { animation: drift 4s infinite; }"]:
@@ -3415,6 +3428,202 @@ class CadenceAxiomTest(SiteDirTestCase):
         self.wired_site()
         (self.site / "old.html").write_text("<p>Tonight's experiment.</p>")
         self.assertEqual(len(mi.validate_plan({"delete": ["old.html"]})), 1)
+
+
+class MotionAxiomTest(SiteDirTestCase):
+    """The motion axiom: nothing on the site moves along a standard curve. Every transition and
+    animation runs along a curve js/motion.js rolled for that one movement -- a procedurally
+    generated glitch of a curve, never twice the same -- with where the thing moves from rolled
+    beside it, and the typography shifts its register with the mood. Stated in the prompt and
+    held to by validate_plan, like the nine beside it: the engine's line on every page, and no
+    linear, ease, ease-in, ease-out, ease-in-out, cubic-bezier or browser smoothing anywhere a
+    page or the files it loads would move by them. The rest -- whether a curve feels like a
+    working, whether a register suits its mood -- is the prompt's, and RealSiteTest holds the
+    committed site to the readable half (see test_nothing_on_the_site_moves_along_a_standard_curve
+    there)."""
+
+    PAGES = ["index.html", "error.html", "toy.html"]
+
+    def wired_site(self):
+        """A site that satisfies reachability and carries the engine, so only the motion check can
+        refuse a plan here."""
+        (self.site / "js").mkdir(exist_ok=True)
+        (self.site / mi.MOTION_SCRIPT).write_text("/* the engine that rolls every curve */")
+        (self.site / "index.html").write_text(moving(home("toy.html", "error.html")))
+        (self.site / "error.html").write_text(moving("<p>404</p>"))
+        (self.site / "toy.html").write_text(moving("<p>toy</p>"))
+        (self.site / "sitemap.xml").write_text(sitemap(*self.PAGES))
+
+    def phrases(self, content, **assets):
+        return mi.easing_phrases("p.html", dict({"p.html": content}, **assets))
+
+    def test_the_axiom_is_a_standing_rule_of_every_prompt(self):
+        prompt = mi.build_prompt([("index.html", "<h1>hi</h1>")])
+        rules = prompt[prompt.index("Rules:"):]
+        for rule in ["AXIOM, every run: nothing on the site moves along a standard curve",
+                     "a procedurally generated glitch of a curve", "never the same twice",
+                     "where the thing moves from, how far, which way a wipe travels",
+                     mi.MOTION_TAG, "Keep that line on every page you rewrite",
+                     f"\"{mi.MOTION_SCRIPT}\" is yours to rewrite and extend and may never be deleted",
+                     "--ease-arrive, --ease-leave, --ease-shift, --ease-flicker, --ease-pulse, --ease-drift",
+                     "window.interestingMotion", "ease(family)", "tween({ ms, family, step, done })",
+                     "scrollTo(top)", "var(--ease-thing-in, var(--ease-arrive))",
+                     "never tweens along t*t, a sine or a power of its own",
+                     "typographic register", "$registers-of", "faces that go together",
+                     "never two that do not",
+                     "plan that leaves a page without the line, or moves anything by one of those, is refused"]:
+            with self.subTest(rule=rule):
+                self.assertIn(rule, rules)
+        # One AXIOM in the prompt per coded axiom, so neither list can grow without the other.
+        self.assertEqual(rules.count("AXIOM, every run:"), len(CODED_AXIOMS))
+
+    def test_the_prompt_names_every_easing_the_code_refuses(self):
+        # A rule a run can follow rather than a trap it springs, as with the cadence and mood
+        # axioms: everything check_motion would refuse is spelled out in the prompt first.
+        rules = mi.build_prompt([("index.html", "<h1>hi</h1>")])
+        for refused in ["linear, ease, ease-in, ease-out and ease-in-out", "cubic-bezier()",
+                        "scroll-behavior: smooth", "behavior: 'smooth'"]:
+            with self.subTest(refused=refused):
+                self.assertIn(refused, rules)
+        # And what is welcome is said too, so a run does not flinch from the one function it needs.
+        self.assertIn("linear() with stops is the engine's own piecewise curve and is welcome", rules)
+        self.assertIn("a linear-gradient is paint, not motion", rules)
+
+    def test_the_standard_is_in_the_ritual_holds_and_in_the_line_read_last(self):
+        prompt = mi.build_prompt([("index.html", "<h1>hi</h1>")])
+        ritual = prompt[prompt.index("RITUAL, NOT RIDDLE"):prompt.index("Rules:")]
+        self.assertIn("every movement is a working", ritual)
+        self.assertIn("one curated pairing of faces per mood", ritual)
+        last = prompt[prompt.index(f"This run's mission: {mi.mission_of(mi.Run(mi.DEFAULT_MODE))}"):]
+        self.assertIn("every movement along a curve rolled for it and never a formula", last)
+
+    def test_a_standard_easing_is_found_wherever_a_page_would_move_by_it(self):
+        self.assertEqual(self.phrases("<style>a { transition: color 0.2s ease; }</style>"),
+                         ["ease in transition"])
+        self.assertEqual(self.phrases("<style>a { animation: in 1s ease-in-out both; }</style>"),
+                         ["ease-in-out in animation"])
+        self.assertEqual(self.phrases("<style>a { transition-timing-function: linear; }</style>"),
+                         ["linear in transition-timing-function"])
+        self.assertEqual(self.phrases("<style>a { animation-timing-function: cubic-bezier(0.2, 0, 0, 1); }</style>"),
+                         ["cubic-bezier( in animation-timing-function"])
+        self.assertEqual(self.phrases("<script>el.animate(frames, { duration: 300, easing: 'ease-out' });</script>"),
+                         ["ease-out in easing"])
+        self.assertEqual(self.phrases("<script>window.scrollTo({ top: 0, behavior: 'smooth' });</script>"),
+                         ["smooth in behavior"])
+        self.assertEqual(self.phrases("<style>html { scroll-behavior: smooth; }</style>"),
+                         ["smooth in scroll-behavior"])
+        # Set on an element's style from a script, by assignment or by name.
+        self.assertEqual(self.phrases("<script>node.style.transition = 'opacity 0.3s ease-in';</script>"),
+                         ["ease-in in style.transition"])
+        self.assertEqual(self.phrases("<script>node.style.setProperty('animation-timing-function', 'linear');</script>"),
+                         ["linear in style.animation-timing-function"])
+        # And CSS written inside a script, as the fixed files write theirs.
+        self.assertEqual(self.phrases("<script>css.textContent = '.x{transition:opacity .2s ease}';</script>"),
+                         ["ease in transition"])
+        # A declaration written over several lines, as the Sass partials write theirs, is read whole.
+        self.assertEqual(self.phrases("<style>a {\n  transition:\n    opacity 1s var(--ease-flicker),\n    transform 1s ease;\n}</style>"),
+                         ["ease in transition"])
+
+    def test_the_engines_own_curve_and_a_gradient_are_left_alone(self):
+        # linear() with stops is the piecewise curve the whole site moves along, and a
+        # linear-gradient is paint: neither is the keyword, and neither may be mistaken for it.
+        for fine in ["<style>a { transition: color 0.2s linear(0, 0.3 20%, 1.04 70%, 1); }</style>",
+                     "<style>a { animation: in var(--motion-long) var(--ease-in, var(--ease-arrive)) both; }</style>",
+                     "<style>a { background: linear-gradient(red, blue); transition: --sky-x 1s var(--ease-shift); }</style>",
+                     "<style>a { transition: opacity 1s steps(4, jump-both); }</style>",
+                     "<style>.release { color: red; } .ease-of-use { color: blue; }</style>",
+                     "<script>var easing = 'the rite'; el.animate(k, { easing: 'linear(0, 1)' });</script>",
+                     "<p>A transition: the page eases into the next, with ease.</p>"]:
+            with self.subTest(fine=fine):
+                self.assertEqual(self.phrases(fine), [])
+
+    def test_an_easing_federated_into_a_shared_script_or_stylesheet_counts(self):
+        found = self.phrases("<link rel='stylesheet' href='css/site.css'><script src='js/site.js'></script>",
+                             **{"css/site.css": "a{transition:color .2s ease-in}",
+                                "js/site.js": "node.animate(k, { easing: 'cubic-bezier(.3,0,.8,.15)' });"})
+        self.assertEqual(found, ["cubic-bezier( in easing", "ease-in in transition"])
+
+    def test_the_fixed_files_are_not_policed(self):
+        # The vendored consent library eases its own banner however it likes, and it is not this
+        # site's motion to police: a release of it saying `ease` must not fail every page at once.
+        page_html = "<head><link rel='stylesheet' href='css/cookieconsent.css'></head>"
+        self.assertEqual(mi.easing_phrases("p.html", {"p.html": page_html,
+                                                      "css/cookieconsent.css": ".cm{transition:opacity .3s ease}"}),
+                         [])
+
+    def test_a_page_a_run_adds_must_carry_the_line_and_move_by_no_formula(self):
+        self.wired_site()
+        plan = {"files": [
+            {"path": "new.html", "content": page(title="new", motion="")},
+            {"path": "index.html", "content": moving(home("toy.html", "error.html", "new.html"))},
+            {"path": "sitemap.xml", "content": sitemap(*self.PAGES, "new.html")},
+        ]}
+        with self.assertRaisesRegex(mi.RejectedChange, r"new\.html has no <script src='js/motion\.js'>"):
+            mi.validate_plan(plan)
+        plan["files"][0]["content"] = page(title="new", css="a { transition: opacity 1s ease-in-out; }")
+        with self.assertRaisesRegex(mi.RejectedChange, r'new\.html would move by "ease-in-out in transition"'):
+            mi.validate_plan(plan)
+        plan["files"][0]["content"] = page(title="new")
+        self.assertEqual(len(mi.validate_plan(plan)), 3)
+
+    def test_dropping_the_line_from_a_page_a_run_rewrites_is_refused(self):
+        self.wired_site()
+        with self.assertRaisesRegex(mi.RejectedChange, r"toy\.html has no <script src='js/motion\.js'>"):
+            mi.validate_plan({"files": [{"path": "toy.html", "content": "<p>toy, unmoved</p>"}]})
+
+    def test_easing_by_a_formula_in_a_page_a_run_rewrites_is_refused(self):
+        # The page answers prefers-reduced-motion, so the accessibility check has nothing to say and
+        # only the easing is what refuses it.
+        self.wired_site()
+        calm = "@media (prefers-reduced-motion: reduce) { * { animation: none; } }"
+        with self.assertRaisesRegex(mi.RejectedChange, r'toy\.html would move by "linear in animation"'):
+            mi.validate_plan({"files": [{"path": "toy.html",
+                                         "content": moving(f"<style>p {{ animation: drift 2s linear infinite; }} {calm}</style>")}]})
+        with self.assertRaisesRegex(mi.RejectedChange, r'"smooth in behavior"'):
+            mi.validate_plan({"files": [{"path": "toy.html",
+                                         "content": moving("<script>scrollTo({ top: 0, behavior: 'smooth' });</script>")}]})
+
+    def test_an_easing_a_page_already_carried_blocks_nothing(self):
+        # The same bargain every other axiom makes: a page that already moves by a formula stays the
+        # site's own to put right, because refusing every plan over it would leave no plan able to.
+        self.wired_site()
+        (self.site / "toy.html").write_text(moving("<style>p { transition: color 1s ease; }</style>"))
+        self.assertEqual(mi.pages_moving_by_formula(dict(mi.read_site())), {"toy.html": ["ease in transition"]})
+        ops = mi.validate_plan({"files": [{"path": "toy.html",
+                                           "content": moving("<style>p { transition: color 2s ease; }</style>")}]})
+        self.assertEqual(len(ops), 1)
+
+    def test_clearing_one_easing_is_never_mistaken_for_adding_another(self):
+        # Each reason is one easing in one place, so a partial clean-up can only take reasons away.
+        self.wired_site()
+        (self.site / "toy.html").write_text(
+            moving("<style>p { transition: color 1s ease; } q { animation: in 1s linear; }</style>"))
+        self.assertEqual(mi.pages_moving_by_formula(dict(mi.read_site())),
+                         {"toy.html": ["ease in transition", "linear in animation"]})
+        half = {"files": [{"path": "toy.html", "content": moving("<style>p { transition: color 1s ease; }</style>")}]}
+        self.assertEqual(len(mi.validate_plan(half)), 1)
+
+    def test_retiring_a_page_that_moved_by_a_formula_is_fine(self):
+        self.wired_site()
+        (self.site / "old.html").write_text(moving("<style>p { transition: color 1s ease; }</style>"))
+        self.assertEqual(len(mi.validate_plan({"delete": ["old.html"]})), 1)
+
+    def test_the_engine_may_be_rewritten_but_never_deleted(self):
+        self.wired_site()
+        self.assertIn(mi.MOTION_SCRIPT, mi.PROTECTED_FILES)
+        self.assertNotIn(mi.MOTION_SCRIPT, mi.FIXED_FILES)
+        with self.assertRaisesRegex(mi.RejectedChange, r"refusing to delete js/motion\.js"):
+            mi.validate_plan({"delete": [mi.MOTION_SCRIPT]})
+        ops = mi.validate_plan({"files": [{"path": mi.MOTION_SCRIPT, "content": "/* rolled again */"}]})
+        self.assertEqual(len(ops), 1)
+
+    def test_a_site_without_the_engine_is_not_held_to_the_line(self):
+        # The same reasoning as the other shared lines: nothing to load, nothing to refuse for.
+        (self.site / "index.html").write_text(home("toy.html", "error.html"))
+        (self.site / "toy.html").write_text("<p>toy</p>")
+        (self.site / "sitemap.xml").write_text(sitemap(*self.PAGES))
+        self.assertEqual(mi.pages_missing_motion(dict(mi.read_site())), set())
+        self.assertEqual(len(mi.validate_plan({"files": [{"path": "toy.html", "content": "<p>toy</p>"}]})), 1)
 
 
 class MoodAxiomTest(SiteDirTestCase):
@@ -5162,7 +5371,7 @@ class StageTest(unittest.TestCase):
 
 
 class BuildPipelineTest(unittest.TestCase):
-    """Issue #25: the real build, and all nine axioms judged on what it produces.
+    """Issue #25: the real build, and all ten axioms judged on what it produces.
 
     SiteDirTestCase stands the build in with the identity, which is exactly right for its plain-HTML
     fixtures; this is where the pipeline itself is exercised. /site is source now -- a layout is not
@@ -5178,7 +5387,7 @@ class BuildPipelineTest(unittest.TestCase):
     LAYOUT = ("<!DOCTYPE html>\n<html lang='en'>\n<head><title>{{ title }}</title>\n"
               "<meta name='viewport' content='width=device-width, initial-scale=1'>\n"
               "<link rel='stylesheet' href='css/site.css'>\n"
-              f"{mi.ANALYTICS_TAG}\n{mi.STATE_TAG}\n{mi.PARTICIPATE_TAG}</head>\n"
+              f"{mi.ANALYTICS_TAG}\n{mi.STATE_TAG}\n{mi.PARTICIPATE_TAG}\n{mi.MOTION_TAG}</head>\n"
               "<body>\n<main>{{ content | safe }}</main></body>\n</html>\n")
     NAV = "<nav>{% for page in ['toy.html', 'error.html'] %}<a href='{{ page }}'>{{ page }}</a>{% endfor %}</nav>\n"
     PAGES = ["index.html", "toy.html", "error.html"]
@@ -5208,6 +5417,7 @@ class BuildPipelineTest(unittest.TestCase):
         self.write(mi.ANALYTICS_SCRIPT, "/* the shared tag and banner */\n")
         self.write(mi.STATE_SCRIPT, "/* the shared store and its meta menu */\n")
         self.write(mi.PARTICIPATE_SCRIPT, "/* the button that opens a new issue */\n")
+        self.write(mi.MOTION_SCRIPT, "/* the engine that rolls every curve */\n")
         # The home page links nothing itself: its navigation arrives from the shared partial, so
         # only the built site shows that toy.html and error.html can be reached.
         self.write("index.html", front_matter(layout="layout.njk", title="interesting")
@@ -5228,7 +5438,7 @@ class BuildPipelineTest(unittest.TestCase):
         built = self.built()
         self.assertEqual(sorted(built), sorted(["css/site.css", "error.html", "index.html",
                                                 mi.ANALYTICS_SCRIPT, mi.STATE_SCRIPT,
-                                                mi.PARTICIPATE_SCRIPT,
+                                                mi.PARTICIPATE_SCRIPT, mi.MOTION_SCRIPT,
                                                 "sitemap.xml", "toy.html"]))
         self.assertTrue(built["index.html"].startswith("<!DOCTYPE html>"))
         self.assertIn("<title>interesting</title>", built["index.html"])
@@ -5297,7 +5507,8 @@ class BuildPipelineTest(unittest.TestCase):
         # not.
         for tag, axiom in [(mi.ANALYTICS_TAG, "analytics tag and consent banner"),
                            (mi.STATE_TAG, "shared local-state store and its meta menu"),
-                           (mi.PARTICIPATE_TAG, "a visitor's way of steering the site")]:
+                           (mi.PARTICIPATE_TAG, "a visitor's way of steering the site"),
+                           (mi.MOTION_TAG, "the engine that rolls every curve")]:
             with self.subTest(axiom=axiom):
                 bare = self.LAYOUT.replace(tag, "")
                 with self.assertRaisesRegex(mi.RejectedChange, r"has no <script"):
@@ -6496,12 +6707,13 @@ class PersonaHandOffTest(unittest.TestCase):
 
 
 class RealSiteTest(unittest.TestCase):
-    """The site in this repository obeys all nine axioms: every page is reachable from the root,
+    """The site in this repository obeys all ten axioms: every page is reachable from the root,
     every page carries the analytics tag and consent banner, every page is responsive and
     accessible, every page carries the local-state store and its meta menu, no page ties the site
     to an update frequency, every page asks before it offers, every page carries a visitor's way
     of steering the site, no control throws a visitor's saved state away without the shared warning
-    button and its confirmation, and every world is a puzzle a visitor can solve.
+    button and its confirmation, nothing on the site moves along a standard curve, and every world
+    is a puzzle a visitor can solve.
 
     validate_plan only refuses what a run breaks, so the invariants have to start out true: this is
     what makes them hold from the next deploy onward and not only for pages a later run adds. It
@@ -6569,6 +6781,140 @@ class RealSiteTest(unittest.TestCase):
         built = self.site["css/site.css"]
         self.assertIn("Iowan Old Style", built, "the built stylesheet carries no serif stack")
         self.assertIn(".stage-sigil", built, "the piece's sigil is not styled")
+
+    def test_nothing_on_the_site_moves_along_a_standard_curve(self):
+        # The motion axiom on the site as committed: every page loads the engine, and nothing a page
+        # or the files it loads would move by is a standard easing -- read by the same sweep the
+        # check makes, so a hand-written commit that eases a thing by `ease` is caught here and the
+        # deploy is blocked.
+        self.assertEqual(mi.pages_missing_motion(self.site), set())
+        self.assertEqual(mi.pages_moving_by_formula(self.site), {})
+        self.assertGreater(len(mi.html_pages(self.site)), 1, "the check is worth nothing on one page")
+        # Written once in the shared shell, before the persona and the shell's own script, and not
+        # deferred: it has to have rolled before the body is drawn and before anything asks it.
+        layout = self.source["_includes/layout.njk"]
+        self.assertRegex(layout, in_the_shell(mi.MOTION_TAG))
+        self.assertLess(layout.index("js/motion.js"), layout.index("js/persona.js"))
+        self.assertLess(layout.index("js/motion.js"), layout.index("js/site.js"))
+        # The engine itself: what it writes and what it offers, by name, because every stylesheet
+        # and script on the site reads the roll by these names.
+        engine = self.source[mi.MOTION_SCRIPT]
+        for offered in ["global.interestingMotion = live", "curve: curve", "ease: ease", "tween: tween",
+                        "scrollTo: scrollTo", "scrollIntoView: scrollIntoView", "ms: ms",
+                        "stagger: stagger", "geometry: geometry", "shift: shift", "roll: rollAll",
+                        "'(prefers-reduced-motion: reduce)'", "linear(", "steps("]:
+            with self.subTest(offered=offered):
+                self.assertIn(offered, engine)
+        for family in ["arrive", "leave", "shift", "flicker", "pulse", "drift", "wipe"]:
+            with self.subTest(family=family):
+                self.assertIn(f"    {family}: function (m)", engine, "the engine lost a family")
+        # The tokens: seven families, each a baked piecewise curve for a page with no script, the
+        # three M3 names kept only as aliases of them, and a stair for a browser that knows no
+        # linear() -- never `ease`, which is what an unreadable curve would otherwise fall back to.
+        tokens = self.source[f"{mi.SASS_DIR}/_tokens.scss"]
+        for family in ["arrive", "leave", "shift", "flicker", "pulse", "drift", "wipe"]:
+            with self.subTest(token=family):
+                self.assertRegex(tokens, rf"--ease-{family}: linear\(0, .*, 1\);")
+        for alias, family in [("standard", "shift"), ("emphasized", "arrive"), ("emphasized-accelerate", "leave")]:
+            with self.subTest(alias=alias):
+                self.assertIn(f"--md-sys-motion-easing-{alias}: var(--ease-{family});", tokens)
+        self.assertIn("@supports not (animation-timing-function: linear(0, 0.5 50%, 1))", tokens)
+        self.assertIn("--ease-arrive: steps(", tokens)
+        self.assertNotRegex(tokens, r"cubic-bezier\s*\(", "a cubic-bezier is declared in the tokens")
+        # Every transition and animation in the Sass takes a rolled curve, and every @keyframes
+        # animation its own spell with a family as the fallback, so each plays differently each time.
+        for rel, text in sorted(self.source.items()):
+            if not rel.startswith(f"{mi.SASS_DIR}/") or rel in mi.FIXED_FILES:
+                continue
+            for declaration in mi.TIMING_DECLARATION.finditer(text):
+                value = declaration.group(1)
+                if value.strip() == "none":
+                    continue  # stillness, under prefers-reduced-motion: no curve to roll
+                with self.subTest(rel=rel, declaration=declaration.group(0)[:60]):
+                    self.assertIn("var(--ease-", value, "a movement with no rolled curve")
+                    self.assertFalse(mi.STANDARD_EASING.search(value), "a standard easing in the Sass")
+        for rel, text in sorted(self.source.items()):
+            if rel.startswith(f"{mi.SASS_DIR}/"):
+                for name in re.findall(r"^@keyframes ([\w-]+) \{", text, re.M):
+                    with self.subTest(spell=name):
+                        self.assertRegex(text, rf"animation: {re.escape(name)} [^;]*var\(--ease-{re.escape(name)}, var\(--ease-\w+\)\)",
+                                         f"{name} plays along a family's curve rather than a spell of its own")
+        # The geometry is read where the movements are: an arrival comes from the roll's --arrive-*,
+        # a departure goes to its --leave-*, the veil wipes between --wipe-from and --wipe-to, a state
+        # layer sweeps from --state-from, and the page's sky washes in from --sky-x and --sky-y.
+        sass = "\n".join(text for rel, text in sorted(self.source.items()) if rel.startswith(f"{mi.SASS_DIR}/"))
+        for read in ["var(--arrive-x", "var(--arrive-y", "var(--arrive-rot", "var(--leave-x", "var(--leave-y",
+                     "var(--wipe-from", "var(--wipe-to", "var(--state-from", "var(--sky-x", "var(--sky-y",
+                     "var(--motion-stagger", "var(--motion-shift"]:
+            with self.subTest(read=read):
+                self.assertIn(read, sass, f"nothing in the Sass reads {read}")
+        self.assertNotIn("scroll-behavior: smooth", sass, "the browser's own curve scrolls the page")
+        # And the scripts: a movement only a script can make asks the engine or keeps a polyline of
+        # its own, never a formula, and the page scrolls through the engine.
+        stage = self.source[mi.STAGE_SCRIPT]
+        for part in ["const motion = window.interestingMotion || null;", "const OWN_CURVE = [[0, 0],",
+                     "riteEase('leave')", "riteEase('arrive')", "motion.scrollTo(0)",
+                     "motion.scrollIntoView(node, { block: 'center' })", "riteMs('long'"]:
+            with self.subTest(part=part):
+                self.assertIn(part, stage)
+        self.assertNotIn("behavior: 'smooth'", stage)
+        self.assertNotIn("behavior: calm.matches ? 'auto' : 'smooth'", stage)
+        self.assertIn("style.setProperty('--jit', jitterFor(order) + 'ms');", self.source[mi.SITE_SCRIPT])
+        self.assertIn("motion.ms('medium')", self.source["js/feed.js"])
+        self.assertIn("function rite(family)", self.source[mi.MOOD_SCRIPT])
+
+    def test_every_mood_wears_a_register_and_a_temperament(self):
+        # The typographic half of the motion axiom on the site as committed: each of the fifteen
+        # moods names one register of _type.scss, and the built stylesheet writes that register's
+        # faces and temperament wherever the mood's palette is written -- the page's world, the
+        # reading, the featured piece, and a card of the feed -- so the whole modality of the site
+        # shifts with the content.
+        types = self.source[f"{mi.SASS_DIR}/_type.scss"]
+        registers = set(re.findall(r"^  ([a-z]+): \($", types, re.M))
+        self.assertGreaterEqual(len(registers), 8, "too few registers to shift between")
+        self.assertIn("@mixin register($name)", types)
+        self.assertIn("votive", registers, "the home register is gone")
+        moods = self.source[f"{mi.SASS_DIR}/_mood.scss"]
+        palettes = set(re.findall(r"^\s+([a-z]+):\s*\(#", moods, re.M))
+        worn = dict(re.findall(r"^  ([a-z]+): ([a-z]+),?$", moods[moods.index("$registers-of"):moods.index(");", moods.index("$registers-of"))], re.M))
+        self.assertEqual(set(worn), palettes, "a mood wears no register, or a register names no mood")
+        for mood, register in sorted(worn.items()):
+            with self.subTest(mood=mood, register=register):
+                self.assertIn(register, registers, f"{mood} wears a register _type.scss does not declare")
+        # Each register is one pairing: a serif (or a typewriter's slab) for the rite, a sans or a
+        # mono for the act, every stack ending in a generic family, and faces that go together --
+        # which the names say: a register pairs its own two stacks and never borrows another's rite
+        # with a third's act, so no pairing exists that was not curated here.
+        for register in sorted(registers):
+            block = types[types.index(f"\n  {register}: ("):]
+            block = block[:re.search(r"\n  \)", block).start()]
+            with self.subTest(register=register):
+                self.assertRegex(block, r"rite: (\$rite|\([^)]*(serif|monospace)\))")
+                self.assertRegex(block, r"act: (\$sans-stack|\$mono-stack|\([^)]*(sans-serif|monospace)\))")
+                for key in ["weight:", "tracking:", "style:", "caps:", "grain:", "tempo:", "steps:"]:
+                    self.assertIn(key, block, f"{register} says nothing about its {key[:-1]}")
+        built = self.site["css/site.css"]
+        for mood in sorted(palettes):
+            with self.subTest(mood=mood):
+                for where in [f":root[data-world={mood}]", f":root[data-featured={mood}]"]:
+                    rule = built[built.index(where + "{"):]
+                    rule = rule[:rule.index("}")]
+                    for prop in ["--font-rite:", "--font-act:", "--font-mono:", "--rite-weight:",
+                                 "--rite-tracking:", "--motion-grain:", "--motion-tempo:", "--motion-steps:"]:
+                        self.assertIn(prop, rule, f"{where} writes no {prop}")
+        # The faces read the register: the rite's mixin and the page's own face both go through it.
+        self.assertIn("font-family: var(--font-rite, #{$rite});", types)
+        self.assertIn("$sans: var(--font-act, #{$sans-stack});", types)
+        self.assertIn("$mono: var(--font-mono, #{$mono-stack});", types)
+        self.assertRegex(built, r"html\{[^}]*font-family:var\(--font-act,")
+        # And the shift of modality is a movement: the rite's words flicker as the register turns
+        # over, along a rolled curve, and hold still for a visitor who asked for less motion.
+        self.assertIn("@keyframes rite-shift", moods)
+        self.assertIn("html[data-shifting] .stage-head", moods)
+        calm = moods[moods.index("@media (prefers-reduced-motion: reduce)"):]
+        self.assertIn("html[data-shifting]", calm)
+        self.assertIn("animation: none", calm[calm.index("html[data-shifting]"):])
+        self.assertIn("'data-shifting'", self.source[mi.MOTION_SCRIPT])
 
     def test_every_world_is_a_piece_a_visitor_can_finish(self):
         # The completion axiom, on the site as committed: every world the layout lists has a module
@@ -8463,7 +8809,7 @@ class MainTest(SiteDirTestCase):
 
     def test_an_answer_the_tests_refuse_is_not_written_and_its_model_is_asked_to_repair_it(self):
         # The gate comes after the axioms and before anything is written: an answer that holds to
-        # all nine but fails the tests every deploy waits on is refused like any other, and the
+        # all ten but fails the tests every deploy waits on is refused like any other, and the
         # model that wrote it is shown the answer and the failures and asked for the plan again,
         # rather than the run pushing a commit that blocks the deploy or starting over.
         fake = FakeCopilot(self, f"say({GOOD_PLAN!r})")

@@ -52,13 +52,16 @@ a.action {
   @include type.scale(label-large);
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
+  // A control changing its colour does so along a curve rolled for that change (README: "Motion
+  // axiom"): never linear, never ease, and never the same curve twice.
   transition:
-    background-color var(--md-sys-motion-duration-short) var(--md-sys-motion-easing-standard),
-    color var(--md-sys-motion-duration-short) var(--md-sys-motion-easing-standard),
-    box-shadow var(--md-sys-motion-duration-short) var(--md-sys-motion-easing-standard);
+    background-color var(--motion-short) var(--ease-shift),
+    color var(--motion-short) var(--ease-shift),
+    box-shadow var(--motion-short) var(--ease-flicker);
 }
 
-// The state layer.
+// The state layer. It sweeps in from the edge the roll gave it rather than fading in place
+// (--state-from, js/motion.js, re-rolled before every press), along the flicker family's curve.
 button::after,
 a.action::after {
   content: '';
@@ -68,23 +71,29 @@ a.action::after {
   border-radius: inherit;
   background: currentColor;
   opacity: 0;
+  clip-path: var(--state-from, inset(0 100% 0 0));
   pointer-events: none;
-  transition: opacity var(--md-sys-motion-duration-short) var(--md-sys-motion-easing-standard);
+  transition:
+    opacity var(--motion-short) var(--ease-flicker),
+    clip-path var(--motion-short) var(--ease-flicker);
 }
 
 button:hover::after,
 a.action:hover::after {
   opacity: var(--md-sys-state-hover-opacity);
+  clip-path: inset(0);
 }
 
 button:focus-visible::after,
 a.action:focus-visible::after {
   opacity: var(--md-sys-state-focus-opacity);
+  clip-path: inset(0);
 }
 
 button:active::after,
 a.action:active::after {
   opacity: var(--md-sys-state-pressed-opacity);
+  clip-path: inset(0);
 }
 
 .btn-filled,

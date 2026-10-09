@@ -77,13 +77,75 @@
   --md-sys-shape-corner-extra-large: 28px;
   --md-sys-shape-corner-full: 999px;
 
-  // Motion scheme (m3.material.io/styles/motion).
-  --md-sys-motion-easing-standard: cubic-bezier(0.2, 0, 0, 1);
-  --md-sys-motion-easing-emphasized: cubic-bezier(0.05, 0.7, 0.1, 1);
-  --md-sys-motion-easing-emphasized-accelerate: cubic-bezier(0.3, 0, 0.8, 0.15);
-  --md-sys-motion-duration-short: 150ms;
-  --md-sys-motion-duration-medium: 300ms;
-  --md-sys-motion-duration-long: 500ms;
+  // Motion scheme -- the rite's, not M3's (README: "Motion axiom"). No curve on this site is
+  // linear, ease or any cubic-bezier: each is a piecewise linear() curve with a hesitation, a
+  // stutter, an overshoot and a flicker in it, and js/motion.js rolls every one of them afresh on
+  // :root as the page arrives and again for every movement after that, under the temperament of
+  // whatever mood the site is wearing. The curves written here are the baked fallbacks a page with
+  // no script moves along, rolled once by the same maker, so even without a script nothing moves
+  // along a formula. Every transition reads one of the seven families; every @keyframes animation
+  // reads its own --ease-<name> (rolled when that animation ends, with a family as its fallback),
+  // so the next time it plays it plays differently.
+  --ease-arrive: linear(0, 0.301 10.9%, 0.472 21.9%, 0.524 32.8%, 0.913 40.9%, 1.063 49%, 1.086 57.1%, 0.967 75.1%, 1 93.1%, 0.964 94%, 1 95%, 1);
+  --ease-leave: linear(0, 0.176 1.1%, 0 2.3%, 0 17.1%, 0.056 27.5%, 0.189 37.9%, 0.384 48.3%, 0.607 64.1%, 0.94 79.8%, 1);
+  --ease-shift: linear(0, 0.422 15.2%, 0.652 30.4%, 0.716 45.5%, 0.949 65%, 1.023 84.5%, 0.991 92.3%, 1 99.5%, 1);
+  --ease-flicker: linear(0, 0.319 18.5%, 0.134 25.1%, 0.754 34.4%, 0.996 43.8%, 1.035 53.2%, 0.818 54.8%, 1.035 56.4%, 0.987 78.2%, 1 99.5%, 1);
+  --ease-pulse: linear(0, 0.249 13.6%, 0.495 27.3%, 0.736 40.9%, 0.938 65.2%, 1 89.5%, 1);
+  --ease-drift: linear(0, 0.093 6.3%, 0.093 9.4%, 0.162 12.5%, 0.206 18.8%, 0.238 25%, 0.296 31.3%, 0.366 37.5%, 0.4 43.8%, 0.463 50%, 0.593 56.3%, 0.597 62.5%, 0.719 68.8%, 0.736 75%, 0.818 81.3%, 0.839 87.5%, 0.96 93.8%, 1);
+  --ease-wipe: linear(0, 0.047 10.5%, 0.417 18%, 0.667 25.5%, 0.805 33%, 0.845 40.4%, 0.61 41.8%, 0.845 43.1%, 0.949 67.7%, 1 92.3%, 1);
+  // The durations: rolled with a little jitter and scaled by the mood's tempo, these standing
+  // until the script has rolled. --motion-turn is the slow ring's one turn (_rite.scss).
+  --motion-short: 170ms;
+  --motion-medium: 340ms;
+  --motion-long: 560ms;
+  --motion-slow: 1200ms;
+  --motion-stagger: 44ms;
+  --motion-shift: 640ms;
+  --motion-turn: 120s;
+  // The temperament a mood lends its movements (_mood.scss sets all three beside each palette):
+  // how glitchy they are, how long they take, and whether they prefer a stair to a swoop.
+  --motion-grain: 0.45;
+  --motion-tempo: 1;
+  --motion-steps: 0;
+  // The M3 names, kept as aliases of the rite's curves, so nothing written against them can ever
+  // be a standard curve again.
+  --md-sys-motion-easing-standard: var(--ease-shift);
+  --md-sys-motion-easing-emphasized: var(--ease-arrive);
+  --md-sys-motion-easing-emphasized-accelerate: var(--ease-leave);
+  --md-sys-motion-duration-short: var(--motion-short);
+  --md-sys-motion-duration-medium: var(--motion-medium);
+  --md-sys-motion-duration-long: var(--motion-long);
+  // The geometry of a movement, rolled beside its timing: where an arrival comes from and where a
+  // departure goes (the stage, the cards, the constellation, the mark that flies home to the
+  // persona), the shape the veil wipes in from and the one it ends on, the edge a control's state
+  // layer sweeps in from, how far the rite's words are thrown as the site changes its modality,
+  // where the page's sky washes in from (_panel.scss), and the small particulars named where
+  // they are used. These stand until js/motion.js rolls them.
+  --arrive-x: 0px;
+  --arrive-y: 28px;
+  --arrive-rot: 0.6deg;
+  --arrive-scale: 0.96;
+  --arrive-skew: 0deg;
+  --leave-x: 0px;
+  --leave-y: -22px;
+  --leave-rot: -0.8deg;
+  --leave-scale: 0.92;
+  --wipe-from: inset(0 0 100% 0);
+  --wipe-to: inset(0);
+  --state-from: inset(0 100% 0 0);
+  --shift-x: 3px;
+  --shift-skew: -4deg;
+  --shift-blur: 5px;
+  --sky-x: 12%;
+  --sky-y: -14%;
+  --lift-y: -2px;
+  --lift-rot: 0.3deg;
+  --spark-extra: 0deg;
+  --pop-over: 1.1;
+  --shake-x: 6px;
+  --beckon-spread: 8px;
+  --reject-grow: 1;
+  --ray-from: 0.2;
 
   // Elevation (m3.material.io/styles/elevation): in the dark the tone does most of the work, and
   // these shadows do the rest.
@@ -135,6 +197,38 @@
     --nav-inset: 0.6rem;
     --nav-h: 56px;
     --fold-peek: 2.25rem;
+  }
+}
+
+// Registered, so the sky can move: a custom property a browser knows the type of is one it can
+// interpolate, and main's gradient (_panel.scss) reads these two for where the page's own sky
+// washes in from, so a change of modality is a sky washing across to a new corner rather than a
+// cut. A browser that knows no @property reads the same two as plain properties and cuts.
+@property --sky-x {
+  syntax: '<percentage>';
+  inherits: true;
+  initial-value: 12%;
+}
+
+@property --sky-y {
+  syntax: '<percentage>';
+  inherits: true;
+  initial-value: -14%;
+}
+
+// A browser that knows no linear() curve is given a stair instead: steps(), the one easing such a
+// browser has that is not a standard curve, with js/motion.js rolling the number of treads and the
+// place of the jump wherever it runs. Said with @supports rather than left to the cascade, because
+// a curve a browser cannot read would otherwise leave the property unset -- which is `ease`.
+@supports not (animation-timing-function: linear(0, 0.5 50%, 1)) {
+  :root {
+    --ease-arrive: steps(5, jump-end);
+    --ease-leave: steps(4, jump-start);
+    --ease-shift: steps(6, jump-both);
+    --ease-flicker: steps(3, jump-both);
+    --ease-pulse: steps(7, jump-none);
+    --ease-drift: steps(24, jump-none);
+    --ease-wipe: steps(5, jump-end);
   }
 }
 

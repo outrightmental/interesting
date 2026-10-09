@@ -52,7 +52,7 @@
   text-decoration: none;
   box-shadow: var(--md-sys-elevation-level3);
   @include type.scale(label-large);
-  transition: transform var(--md-sys-motion-duration-short) var(--md-sys-motion-easing-standard);
+  transition: transform var(--motion-short) var(--ease-arrive);
 }
 
 .skip-link:focus-visible {
@@ -102,7 +102,7 @@
   cursor: pointer;
   list-style: none;
   @include type.scale(title-medium);
-  transition: box-shadow var(--md-sys-motion-duration-short) var(--md-sys-motion-easing-standard);
+  transition: box-shadow var(--motion-short) var(--ease-flicker);
 }
 
 // The disclosure triangle, in both spellings browsers give it.
@@ -116,13 +116,15 @@
   box-shadow: var(--md-sys-elevation-level3);
 }
 
+// The sparkles turn as the menu opens: by a third of a turn and a little more or less, the little
+// being the roll's (--spark-extra, js/motion.js), along a curve rolled for this press.
 .sparknav-spark {
   color: var(--md-sys-color-primary);
-  transition: transform var(--md-sys-motion-duration-medium) var(--md-sys-motion-easing-standard);
+  transition: transform var(--motion-medium) var(--ease-arrive);
 }
 
 .sparknav[open] .sparknav-spark {
-  transform: rotate(60deg);
+  transform: rotate(calc(60deg + var(--spark-extra, 0deg)));
 }
 
 // The title: the quick, tight fade in and out beside the mark. It keeps its place in the
@@ -134,9 +136,9 @@
   overflow: hidden;
   white-space: nowrap;
   transition:
-    max-width var(--md-sys-motion-duration-short) var(--md-sys-motion-easing-standard),
-    margin-left var(--md-sys-motion-duration-short) var(--md-sys-motion-easing-standard),
-    opacity 110ms var(--md-sys-motion-easing-standard);
+    max-width var(--motion-short) var(--ease-shift),
+    margin-left var(--motion-short) var(--ease-shift),
+    opacity calc(var(--motion-short) * 0.65) var(--ease-flicker);
 }
 
 .sparknav:hover .sparknav-name,
@@ -170,7 +172,7 @@
   padding: calc(var(--nav-inset) + 3.5rem) 1rem 1.5rem;
   overflow: auto;
   overscroll-behavior: contain;
-  animation: sparknav-modal var(--md-sys-motion-duration-medium) var(--md-sys-motion-easing-standard) both;
+  animation: sparknav-modal var(--motion-medium) var(--ease-sparknav-modal, var(--ease-arrive)) both;
 }
 
 // Said outright, because a hidden box with `display: grid` on it is a box that is still there.
@@ -179,11 +181,11 @@
 }
 
 // It arrives where the constellation was, rather than from nowhere: the veil is already up, so
-// this is the only thing that moves.
+// this is the only thing that moves -- from a little of the way the roll says arrivals come from.
 @keyframes sparknav-modal {
   from {
     opacity: 0;
-    transform: translateY(0.6rem);
+    transform: translate(calc(var(--arrive-x, 0px) * 0.4), calc(var(--arrive-y, 28px) * 0.4)) rotate(calc(var(--arrive-rot, 0deg) * 0.5));
   }
 
   to {
@@ -238,7 +240,8 @@ html[data-nav] .sparknav-sky[hidden] {
 }
 
 // The M3 state layer, as every pressable thing on the site carries (see _controls.scss; an <a>
-// that is not a.action has none of its own).
+// that is not a.action has none of its own). It sweeps in from the edge the roll gave it rather
+// than fading in place (--state-from, js/motion.js), along a curve rolled for this press.
 .sparknav-node::after {
   content: '';
   position: absolute;
@@ -247,20 +250,26 @@ html[data-nav] .sparknav-sky[hidden] {
   border-radius: inherit;
   background: currentColor;
   opacity: 0;
+  clip-path: var(--state-from, inset(0 100% 0 0));
   pointer-events: none;
-  transition: opacity var(--md-sys-motion-duration-short) var(--md-sys-motion-easing-standard);
+  transition:
+    opacity var(--motion-short) var(--ease-flicker),
+    clip-path var(--motion-short) var(--ease-flicker);
 }
 
 .sparknav-node:hover::after {
   opacity: var(--md-sys-state-hover-opacity);
+  clip-path: inset(0);
 }
 
 .sparknav-node:focus-visible::after {
   opacity: var(--md-sys-state-focus-opacity);
+  clip-path: inset(0);
 }
 
 .sparknav-node:active::after {
   opacity: var(--md-sys-state-pressed-opacity);
+  clip-path: inset(0);
 }
 
 .sparknav-node:focus-visible {
@@ -366,10 +375,13 @@ html[data-nav='live'] {
   }
 
   // js/site.js adds .is-branching on every press, so the constellation branches out again each
-  // time instead of only the first time it is rendered.
+  // time instead of only the first time it is rendered -- and never the same way: the curve is
+  // rolled for every branching (js/motion.js), the step between stars is rolled with it
+  // (--motion-stagger), and each star carries a jitter of its own (--jit, written by js/site.js
+  // on every press), so the scatter comes out a little ragged, like a thing cast and not laid.
   .is-branching .sparknav-node {
-    animation: sparknav-branch var(--md-sys-motion-duration-medium) var(--md-sys-motion-easing-standard) both;
-    animation-delay: calc(var(--k, 0) * 40ms);
+    animation: sparknav-branch var(--motion-medium) var(--ease-sparknav-branch, var(--ease-arrive)) both;
+    animation-delay: calc(var(--k, 0) * var(--motion-stagger, 40ms) + var(--jit, 0ms));
   }
 
   .sparknav-ray {
@@ -391,16 +403,17 @@ html[data-nav='live'] {
   }
 
   .is-branching .sparknav-ray {
-    animation: sparknav-ray var(--md-sys-motion-duration-medium) var(--md-sys-motion-easing-standard) both;
-    animation-delay: calc(var(--k, 0) * 40ms);
+    animation: sparknav-ray var(--motion-medium) var(--ease-sparknav-ray, var(--ease-arrive)) both;
+    animation-delay: calc(var(--k, 0) * var(--motion-stagger, 40ms) + var(--jit, 0ms));
   }
 }
 
-// Each star shoots out from the logo it belongs to, and its ray is drawn after it.
+// Each star shoots out from the logo it belongs to, turning a little as it comes (the roll's
+// --arrive-rot), and its ray is drawn after it from however much of itself the roll left it.
 @keyframes sparknav-branch {
   from {
     opacity: 0;
-    transform: translate(var(--fx, 0), var(--fy, 0)) scale(0.8);
+    transform: translate(var(--fx, 0), var(--fy, 0)) rotate(var(--arrive-rot, 0deg)) scale(calc(var(--arrive-scale, 0.96) - 0.14));
   }
 
   to {
@@ -412,7 +425,7 @@ html[data-nav='live'] {
 @keyframes sparknav-ray {
   from {
     opacity: 0;
-    transform: rotate(var(--a, 0deg)) scaleX(0.2);
+    transform: rotate(var(--a, 0deg)) scaleX(var(--ray-from, 0.2));
   }
 
   to {

@@ -20,6 +20,10 @@
 // Everything behind whatever is open, at once. The div is one line of _includes/layout.njk, hidden
 // until something raises it, so a visitor with no script at all gets no veil and no dimming they
 // could not dismiss.
+// The veil arrives as a wipe and never twice the same one: it opens from a shape the roll gave it
+// (--wipe-from, js/motion.js -- an edge, a slit, an iris, a corner) to the whole page (--wipe-to),
+// along a curve rolled for this rising alone (--ease-lightbox-veil, with the wipe family as its
+// fallback), fading in under the wipe. Nothing of it is a standard curve (README: "Motion axiom").
 .lightbox-veil {
   position: fixed;
   inset: 0;
@@ -27,16 +31,23 @@
   background: color-mix(in oklab, var(--md-sys-color-surface) 62%, transparent);
   backdrop-filter: blur(9px) saturate(70%);
   -webkit-backdrop-filter: blur(9px) saturate(70%);
-  animation: lightbox-veil var(--md-sys-motion-duration-medium) var(--md-sys-motion-easing-standard) both;
+  clip-path: var(--wipe-to, inset(0));
+  animation: lightbox-veil var(--motion-medium) var(--ease-lightbox-veil, var(--ease-wipe)) both;
 }
 
 @keyframes lightbox-veil {
   from {
     opacity: 0;
+    clip-path: var(--wipe-from, inset(0 0 100% 0));
+  }
+
+  55% {
+    opacity: 1;
   }
 
   to {
     opacity: 1;
+    clip-path: var(--wipe-to, inset(0));
   }
 }
 

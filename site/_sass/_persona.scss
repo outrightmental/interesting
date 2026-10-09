@@ -76,7 +76,9 @@
   padding-right: 1rem;
   background: var(--md-sys-color-primary);
   color: var(--md-sys-color-on-primary);
-  animation: persona-beckon 2.8s var(--md-sys-motion-easing-standard) infinite;
+  // One breath in, one out, along a curve rolled for every breath (js/motion.js re-rolls a looping
+  // spell at each iteration), reaching as far as the roll says (--beckon-spread).
+  animation: persona-beckon 2.8s var(--ease-persona-beckon, var(--ease-pulse)) infinite;
 }
 
 // With no sky placed yet the ring is dashed, with one faint star where the portrait will be,
@@ -114,9 +116,9 @@
   overflow: hidden;
   white-space: nowrap;
   transition:
-    max-width var(--md-sys-motion-duration-short) var(--md-sys-motion-easing-standard),
-    margin var(--md-sys-motion-duration-short) var(--md-sys-motion-easing-standard),
-    opacity 110ms var(--md-sys-motion-easing-standard);
+    max-width var(--motion-short) var(--ease-shift),
+    margin var(--motion-short) var(--ease-shift),
+    opacity calc(var(--motion-short) * 0.65) var(--ease-flicker);
 }
 
 .persona:not([data-state='empty']) .persona-avatar:hover .persona-label,
@@ -139,7 +141,7 @@
   }
 
   50% {
-    box-shadow: 0 0 0 8px color-mix(in oklab, var(--md-sys-color-primary) 22%, transparent);
+    box-shadow: 0 0 0 var(--beckon-spread, 8px) color-mix(in oklab, var(--md-sys-color-primary) 22%, transparent);
   }
 }
 
@@ -170,7 +172,9 @@
   border-radius: var(--md-sys-shape-corner-full);
   color: var(--md-sys-color-primary);
   pointer-events: none; // the avatar under it is what a press reaches, as it always is
-  animation: persona-flight 520ms var(--md-sys-motion-easing-emphasized) both;
+  // The flight takes the time the script counts and a path the roll gives it: the curve is rolled
+  // for every flight (js/motion.js), and the mark turns as it comes by the roll's --arrive-rot.
+  animation: persona-flight 520ms var(--ease-persona-flight, var(--ease-arrive)) both;
   @include type.scale(title-medium);
 }
 
@@ -193,13 +197,13 @@
   border: 2px solid currentColor;
   border-radius: var(--md-sys-shape-corner-full);
   opacity: 0;
-  animation: persona-flight-ring 180ms var(--md-sys-motion-easing-standard) 340ms both;
+  animation: persona-flight-ring 180ms var(--ease-persona-flight-ring, var(--ease-leave)) 340ms both;
 }
 
 @keyframes persona-flight {
   from {
     opacity: 0;
-    transform: translate(var(--persona-flight-x, 0), var(--persona-flight-y, 0)) scale(1.5);
+    transform: translate(var(--persona-flight-x, 0), var(--persona-flight-y, 0)) rotate(var(--arrive-rot, 0deg)) scale(1.5);
   }
 
   15% {

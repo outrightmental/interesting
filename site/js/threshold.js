@@ -302,6 +302,35 @@
   var calm = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
   function reducedMotion() { return !!(calm && calm.matches); }
 
+  /* A curve for one movement of a mechanism -- a star coming out, a knock ringing -- rolled by
+     the motion engine (js/motion.js) for that movement alone, so no two stars come out the same
+     way and no knock rings like the last (README: "Motion axiom"). Where there is no engine the
+     flow keeps a glitch of a curve of its own, a polyline and never a formula, because nothing
+     on this site fades or grows along one. */
+  var OWN_CURVE = [[0, 0], [0.12, 0.03], [0.4, 0.66], [0.48, 0.6], [0.66, 1.04], [0.84, 0.98], [1, 1]];
+  function along(stops) {
+    return function (t) {
+      if (t <= 0) return stops[0][1];
+      if (t >= 1) return stops[stops.length - 1][1];
+      for (var i = 1; i < stops.length; i++) {
+        if (t <= stops[i][0]) {
+          var t0 = stops[i - 1][0];
+          var y0 = stops[i - 1][1];
+          return stops[i][0] > t0 ? y0 + (stops[i][1] - y0) * ((t - t0) / (stops[i][0] - t0)) : stops[i][1];
+        }
+      }
+      return 1;
+    };
+  }
+  function rite(family) {
+    var motion = window.interestingMotion;
+    if (motion && typeof motion.ease === 'function') {
+      try { return motion.ease(family); } catch (e) { /* the flow's own curve stands */ }
+    }
+    return along(OWN_CURVE);
+  }
+  function unit(value) { return Math.max(0, Math.min(1, value)); }
+
   function load() {
     var blank = { visits: 0, last: null, drift: {}, recent: [], orientation: null };
     var parsed = store.get(READING, blank);
@@ -1155,9 +1184,11 @@
       if (!trace.meter) return;
       trace.meter.textContent = stars.length ? stars.length + (stars.length === 1 ? ' star' : ' stars') : 'none out yet';
     }
+    var linkRise = rite('shift'); // how the lines between stars come up, rolled for this sky
     function appear(x, y, own) {
+      // Each star comes out along a curve rolled for it alone.
       stars.push({ x: x, y: y, r: 0.9 + Math.random() * 1.5, phase: Math.random() * Math.PI * 2,
-        born: performance.now(), own: !!own });
+        born: performance.now(), own: !!own, rise: rite('arrive') });
       count();
       if (stars.length === 1) trace.textContent = 'the first one is out';
       if (stars.length >= full) {
@@ -1200,7 +1231,7 @@
           if (d2 < best) { best = d2; near = j; }
         }
         if (near < 0) continue;
-        var fade = still ? 1 : Math.min(1, (now - Math.max(a.born, stars[near].born)) / 900);
+        var fade = still ? 1 : unit(linkRise(Math.min(1, (now - Math.max(a.born, stars[near].born)) / 900)));
         g.strokeStyle = rgba(cool, (0.08 + 0.2 * (1 - Math.sqrt(best) / reach)) * fade);
         g.beginPath();
         g.moveTo(a.x * w, a.y * h);
@@ -1209,7 +1240,7 @@
       }
       for (i = 0; i < stars.length; i++) {
         var s = stars[i];
-        var f = still ? 1 : Math.min(1, (now - s.born) / 700);
+        var f = still ? 1 : unit(s.rise(Math.min(1, (now - s.born) / 700)));
         var tw = still ? 0.85 : 0.7 + 0.3 * Math.sin(now / 480 + s.phase);
         var c = s.own ? warm : blend(cool, [255, 255, 255], 0.55);
         var x = s.x * w;
@@ -1331,11 +1362,12 @@
       g.fillStyle = 'rgba(0,0,0,0.35)';
       g.fillRect(0, bottom, w, h - bottom);
       // The door shudders under a fresh knock, unless the visitor asked for stillness.
+      // The shudder dies away along the knock's own rolled curve rather than evenly.
       var shake = 0;
       if (!still) {
         for (i = 0; i < knocks.length; i++) {
           var age = (now - knocks[i].born) / 260;
-          if (age < 1) shake += Math.sin(age * Math.PI * 3) * (1 - age) * 3;
+          if (age < 1) shake += Math.sin(age * Math.PI * 3) * (1 - unit(knocks[i].jolt(age))) * 3;
         }
       }
       g.strokeStyle = rgba(cool, 0.35);
@@ -1370,10 +1402,11 @@
       for (i = 0; i < knocks.length; i++) {
         var life = (now - knocks[i].born) / 700;
         if (life >= 1) continue;
-        g.strokeStyle = rgba(cool, still ? 0.5 : (1 - life) * 0.6);
+        var rung = unit(knocks[i].ring(life)); // how far this knock's ring has got, its own way
+        g.strokeStyle = rgba(cool, still ? 0.5 : (1 - rung) * 0.6);
         g.lineWidth = 2;
         g.beginPath();
-        g.arc(knocks[i].x, knocks[i].y, still ? h * 0.08 : h * 0.03 + life * h * 0.22, 0, Math.PI * 2);
+        g.arc(knocks[i].x, knocks[i].y, still ? h * 0.08 : h * 0.03 + rung * h * 0.22, 0, Math.PI * 2);
         g.stroke();
       }
       // The knock written down: one tick for each, spaced along the strip as they fell.
@@ -1412,7 +1445,9 @@
     }
     function rap(fx, fy) {
       if (stopped) return;
-      knocks.push({ at: Date.now(), born: performance.now(), x: fx * door.width, y: fy * door.height });
+      // Each knock rings out and shudders the door along curves rolled for that knock alone.
+      knocks.push({ at: Date.now(), born: performance.now(), x: fx * door.width, y: fy * door.height,
+        ring: rite('leave'), jolt: rite('leave') });
       done.disabled = false;
       trace.textContent = knocks.length === 1 ? 'one knock' : knocks.length + ' knocks';
       if (trace.meter) trace.meter.textContent = pattern();

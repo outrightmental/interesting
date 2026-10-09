@@ -33,10 +33,23 @@ main {
   // The logo and the persona float over this, so the feature keeps the room they need clear at
   // the top and nothing of a page's lands under either of them.
   padding: calc(var(--nav-h) + 1rem) var(--gutter) 2rem;
-  // The page's own sky, washing in from the top left corner to the viewport's edges.
+  // The page's own sky, washing in from a corner of the top edge to the viewport's edges. Which
+  // corner is the roll's (--sky-x and --sky-y, js/motion.js), and the two are registered custom
+  // properties (_tokens.scss), so when the roll moves them the sky washes across to its new corner
+  // along a rolled curve rather than cutting -- the fade of the background is a movement of the
+  // rite like any other.
   background:
-    radial-gradient(130vw 90vh at 12% -14%, color-mix(in oklab, var(--bg2) 80%, transparent) 0%, transparent 62%),
+    radial-gradient(130vw 90vh at var(--sky-x, 12%) var(--sky-y, -14%), color-mix(in oklab, var(--bg2) 80%, transparent) 0%, transparent 62%),
     radial-gradient(70vw 60vh at 100% 55%, color-mix(in oklab, var(--md-sys-color-primary) 9%, transparent) 0%, transparent 60%);
+  transition:
+    --sky-x var(--motion-slow, 1200ms) var(--ease-shift),
+    --sky-y var(--motion-slow, 1200ms) var(--ease-shift);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  main {
+    transition: none;
+  }
 }
 
 .panel {

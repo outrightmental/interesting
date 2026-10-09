@@ -13,9 +13,10 @@
   opacity: 0.38;
   filter: saturate(0.35);
   pointer-events: none;
+  // The generator starting: the dimming lifts along a rolled curve (_tokens.scss, js/motion.js).
   transition:
-    opacity var(--md-sys-motion-duration-short) var(--md-sys-motion-easing-standard),
-    filter var(--md-sys-motion-duration-short) var(--md-sys-motion-easing-standard);
+    opacity var(--motion-medium) var(--ease-shift),
+    filter var(--motion-medium) var(--ease-shift);
 }
 
 .unlock {

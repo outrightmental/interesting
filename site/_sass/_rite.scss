@@ -60,7 +60,9 @@
   width: 60vmin;
   height: 60vmin;
   border: 1px dashed color-mix(in oklab, var(--md-sys-color-tertiary) 26%, transparent);
-  animation: rite-turn 120s linear infinite;
+  // One turn in about two minutes, never evenly: the drift family wanders in speed and catches now
+  // and then, and js/motion.js rolls a new curve for every turn (README: "Motion axiom").
+  animation: rite-turn var(--motion-turn, 120s) var(--ease-rite-turn, var(--ease-drift)) infinite;
 }
 
 // The list pages and the prose pages lay their children out in flow, which a positioned ring at 0

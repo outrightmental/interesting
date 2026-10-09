@@ -74,23 +74,29 @@
   pointer-events: none;
 }
 
+// A piece leaving and the next arriving (README: "Motion axiom"): the vanish goes where the roll
+// sends departures and the arrival comes from where the roll says arrivals come from (--leave-*
+// and --arrive-*, js/motion.js), each along a curve rolled for that one movement -- the leave
+// family's for the vanish, and a spell of its own for the arrival, rolled afresh every time one
+// lands. js/stage.js takes its own timers from the same roll (--motion-long), so a mode is never
+// left before its movement is over.
 .stage-inner {
   position: relative;
   z-index: 1;
   display: grid;
   gap: 1.25rem;
   transition:
-    transform var(--md-sys-motion-duration-long) var(--md-sys-motion-easing-emphasized-accelerate),
-    opacity var(--md-sys-motion-duration-long) var(--md-sys-motion-easing-emphasized-accelerate);
+    transform var(--motion-long) var(--ease-leave),
+    opacity var(--motion-long) var(--ease-leave);
 }
 
 .stage[data-mode='vanishing'] .stage-inner {
-  transform: scale(0.9) translateY(-2%);
+  transform: translate(var(--leave-x, 0px), var(--leave-y, -22px)) rotate(var(--leave-rot, 0deg)) scale(var(--leave-scale, 0.9));
   opacity: 0;
 }
 
 .stage[data-mode='arriving'] .stage-inner {
-  animation: stage-in 560ms var(--md-sys-motion-easing-emphasized) both;
+  animation: stage-in var(--motion-long) var(--ease-stage-in, var(--ease-arrive)) both;
 }
 
 .stage[data-mode='loading'] .stage-body {
@@ -100,7 +106,7 @@
 @keyframes stage-in {
   from {
     opacity: 0;
-    transform: translateY(32px) scale(0.97);
+    transform: translate(var(--arrive-x, 0px), var(--arrive-y, 32px)) rotate(var(--arrive-rot, 0deg)) skewX(var(--arrive-skew, 0deg)) scale(var(--arrive-scale, 0.97));
   }
 
   to {
@@ -183,15 +189,19 @@
   @include type.rite;
 }
 
+// The scale sets a weight and a tracking of its own at each size, so the rite's face is included
+// again after it: the register's weight and tracking are the title's at every width.
 @media (min-width: 840px) {
   .stage-title {
     @include type.scale(display-small);
+    @include type.rite;
   }
 }
 
 @media (min-width: 1800px) {
   .stage-title {
     @include type.scale(display-medium);
+    @include type.rite;
   }
 }
 
@@ -235,7 +245,7 @@
   grid-template-columns: var(--stage-scene) minmax(var(--stage-knobs), 1fr);
   gap: var(--stage-gap);
   align-items: start;
-  transition: opacity var(--md-sys-motion-duration-short) var(--md-sys-motion-easing-standard);
+  transition: opacity var(--motion-short) var(--ease-shift);
 }
 
 .stage-scene {
@@ -285,7 +295,8 @@
   border: 2px solid var(--md-sys-color-on-surface-variant);
   border-radius: var(--md-sys-shape-corner-full);
   pointer-events: none; // the next press goes to the scene, as every press does
-  animation: stage-reject 240ms var(--md-sys-motion-easing-standard) both;
+  // Opened along a curve rolled for this press, to a size the roll gave it (--reject-grow).
+  animation: stage-reject 240ms var(--ease-stage-reject, var(--ease-leave)) both;
 }
 
 // Less motion asked for: the mark is the change, held still and then taken away, the way the
@@ -304,7 +315,7 @@
 
   to {
     opacity: 0;
-    transform: scale(1);
+    transform: scale(var(--reject-grow, 1));
   }
 }
 
@@ -340,8 +351,8 @@
   border-radius: var(--md-sys-shape-corner-medium);
   background: var(--md-sys-color-surface-container);
   transition:
-    background-color var(--md-sys-motion-duration-short) var(--md-sys-motion-easing-standard),
-    opacity var(--md-sys-motion-duration-short) var(--md-sys-motion-easing-standard);
+    background-color var(--motion-short) var(--ease-shift),
+    opacity var(--motion-short) var(--ease-shift);
 }
 
 .knob.is-locked {
@@ -379,10 +390,10 @@
   background: var(--md-sys-color-primary);
   color: var(--md-sys-color-on-primary);
   opacity: 0;
-  transform: scale(0.4);
+  transform: scale(0.4) rotate(var(--arrive-rot, 0deg));
   transition:
-    opacity var(--md-sys-motion-duration-short) var(--md-sys-motion-easing-emphasized),
-    transform var(--md-sys-motion-duration-medium) var(--md-sys-motion-easing-emphasized);
+    opacity var(--motion-short) var(--ease-flicker),
+    transform var(--motion-medium) var(--ease-arrive);
 }
 
 .knob-mark::after {
@@ -462,7 +473,8 @@
   height: 100%;
   border-radius: inherit;
   background: var(--md-sys-color-primary);
-  transition: width var(--md-sys-motion-duration-short) linear;
+  // A bar fills in the rolled steps of the shift family: a meter that creeps, catches and jumps.
+  transition: width var(--motion-short) var(--ease-shift);
 }
 
 .knob-alt {
@@ -631,9 +643,10 @@
   @include type.scale(label-large);
 }
 
-// A wrong answer: the row shakes its head once, and the live line says what the piece said.
+// A wrong answer: the row shakes its head once, as far as the roll says (--shake-x) and along a
+// curve rolled for this refusal, and the live line says what the piece said.
 .stage[data-verdict='wrong'] .stage-check-row {
-  animation: stage-no 360ms var(--md-sys-motion-easing-standard) both;
+  animation: stage-no 360ms var(--ease-stage-no, var(--ease-flicker)) both;
 }
 
 @keyframes stage-no {
@@ -643,15 +656,15 @@
   }
 
   25% {
-    transform: translateX(-6px);
+    transform: translateX(calc(var(--shake-x, 6px) * -1));
   }
 
   55% {
-    transform: translateX(5px);
+    transform: translateX(calc(var(--shake-x, 6px) * 0.8));
   }
 
   80% {
-    transform: translateX(-3px);
+    transform: translateX(calc(var(--shake-x, 6px) * -0.5));
   }
 }
 
@@ -704,7 +717,7 @@
 .stage-dot {
   // Its size and its diamond are the seal's (_rite.scss); this is only its colour.
   background: var(--md-sys-color-outline-variant);
-  transition: background-color var(--md-sys-motion-duration-short) var(--md-sys-motion-easing-standard);
+  transition: background-color var(--motion-short) var(--ease-flicker);
 }
 
 .stage-dot.is-set {
@@ -725,7 +738,7 @@
   border-radius: var(--md-sys-shape-corner-full);
   background: var(--md-sys-color-secondary-container);
   color: var(--md-sys-color-on-secondary-container);
-  animation: stage-pop 420ms var(--md-sys-motion-easing-emphasized) both;
+  animation: stage-pop 420ms var(--ease-stage-pop, var(--ease-arrive)) both;
 }
 
 // The same check mark a set knob earns, at the same size: the dots say how many knobs are set and
@@ -749,15 +762,16 @@
   @include type.scale(label-large);
 }
 
+// The seal steps forward, past its size by as much as the roll says (--pop-over) and back.
 @keyframes stage-pop {
   0% {
     opacity: 0;
-    transform: scale(0.4);
+    transform: scale(0.4) rotate(var(--arrive-rot, 0deg));
   }
 
   65% {
     opacity: 1;
-    transform: scale(1.1);
+    transform: scale(var(--pop-over, 1.1));
   }
 
   100% {
@@ -809,7 +823,7 @@
   background: var(--md-sys-color-primary);
   color: var(--md-sys-color-on-primary);
   box-shadow: var(--md-sys-elevation-level3);
-  animation: stage-pop 520ms var(--md-sys-motion-easing-emphasized) both;
+  animation: stage-pop 520ms var(--ease-stage-pop, var(--ease-arrive)) both;
 }
 
 .stage-next:enabled:focus-visible {
@@ -839,6 +853,7 @@
 @media (min-width: 840px) {
   .threshold-probe .probe-ask {
     @include type.scale(headline-large);
+    @include type.rite;
   }
 }
 
