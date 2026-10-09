@@ -431,7 +431,11 @@ function slitPiece(env, plan) {
       const changeRight = c.value('change') === change.does;
       if (spacingRight && changeRight) return { solved: true, say: 'the table reads true: the slits are ' + (spacing / 100).toFixed(2) + ' mm apart, and ' + change.what + ' ' + EFFECTS.find((e) => e.value === change.does).label.replace('them', 'the fringes') };
       const near = Number.isFinite(guess) && Math.abs(guess - spacing) <= spacing * 0.1;
-      const spacingWord = spacingRight ? 'the spacing is right' : near ? 'the spacing is close but not on the mark' : 'the spacing is off';
+      const spacingWord = spacingRight ? 'the spacing is right'
+        : near ? 'the spacing is close but not on the mark'
+        : !Number.isFinite(guess) ? 'the spacing is off'
+        : guess > spacing ? 'the spacing is off: slits that far apart would pack the fringes tighter than the ruler shows'
+        : 'the spacing is off: slits that close together would spread the fringes wider than the ruler shows';
       const changeWord = changeRight ? 'the prediction is right' : 'the prediction is off';
       return { solved: false, say: spacingWord + '; ' + changeWord };
     },
@@ -737,8 +741,10 @@ function filterPiece(env, plan) {
       // it may be.
       const passRight = Math.abs(Number(c.value('passes')) - best.percent) <= margin * 5;
       if (orderRight && passRight) return { solved: true, say: 'the screen lights: with the ' + best.middle + '° filter in the middle, ' + Math.round(best.exact * 10) / 10 + '% of the light reaches the screen' };
-      if (!orderRight && !passRight) return { solved: false, say: 'the screen stays dark: the order and the percentage are both off' };
-      return { solved: false, say: orderRight ? 'the order is right; the percentage is off' : 'the percentage is right; the order is off' };
+      const stood = isOrder(order, plan.angles) && !orderRight ? Math.round(passes(order)) : null;
+      const standing = stood === null ? '' : '; as they stand, the filters pass about ' + stood + '%';
+      if (!orderRight && !passRight) return { solved: false, say: 'the screen stays dark: the order and the percentage are both off' + standing };
+      return { solved: false, say: orderRight ? 'the order is right; the percentage is off' : 'the percentage is right; the order is off' + standing };
     },
     start(c) {
       c.status('the screen stays unread until the order is found');

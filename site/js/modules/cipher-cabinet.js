@@ -12,7 +12,8 @@
                        the setting can be reasoned to rather than tried: the tallest bar nearly
                        always wants to read E. Find the setting and the direction that open the
                        note, and read that word through the wheel. A wrong check says how many
-                       of its letters are right and no more; a hint shows one letter of it.
+                       of its letters are right, and what the commonest letter reads at the
+                       setting tried; a hint shows one letter of it.
      the turning key   A six-by-six board of letters and a nine-hole key. At the right notch,
                        turned the right way, the key's four views read the note out in order,
                        nine letters at a time; at any other, they read nothing. Find the notch
@@ -505,9 +506,13 @@ function wheelPiece(env) {
       const right = lettersRight(typed, word);
       const parts = [];
       if (!wordRight) parts.push(right === 0 ? 'no letter of the word is in its place' : (right === 1 ? 'one letter of the word is right' : WORDS[Math.min(right, 10)] + ' letters of the word are right'));
-      if (!shiftRight && !wayRight) parts.push('the wheel and the direction are both off');
-      else if (!shiftRight) parts.push('the wheel is not at the setting that opens it');
-      else if (!wayRight) parts.push('the line is read the wrong way round');
+      if (!shiftRight) {
+        const at = Math.round(Number(c.value('wheel')));
+        const tallest = tally(received)[0];
+        const reads = Number.isFinite(at) ? turn(tallest.letter, -at) : '?';
+        parts.push('the wheel is off: at that setting the line\'s commonest letter, ' + tallest.letter + ', reads ' + reads + (reads === 'E' ? ' — the house counted against its habit this once, so weigh the next bar' : ' rather than the E the house favours'));
+        if (!wayRight) parts.push('the direction is off too');
+      } else if (!wayRight) parts.push('the line is read the wrong way round');
       return { solved: false, say: parts.join('; ') };
     },
     start(c) {

@@ -9,8 +9,8 @@
                              side, moving toward it at a stated speed, and a clock showing the
                              hour now. One square is ten kilometres, and the scale bar says so.
                              Say the hour the front reaches the station, past midnight if it must,
-                             and which side it comes from. A wrong check says only that the hour
-                             is off, or that the side is right.
+                             and which side it comes from. A wrong check says whether the hour
+                             falls short or overshoots, and whether the side is right.
      the pressure map        Five stations (six on a crowded map) with their readings. The wind blows from the
                              highest toward the lowest. Name the station it blows toward, the way
                              it blows by the compass, and the difference in pressure between the
@@ -547,7 +547,11 @@ function frontPiece(env, plan) {
       const sideRight = c.value('side') === plan.side;
       if (hourRight && sideRight) return { solved: true, say: 'entered in the ledger: the front arrives from the ' + plan.side + ' at ' + fmt(arrives) };
       const parts = [];
-      if (!hourRight) parts.push('the hour is off');
+      if (!hourRight) {
+        const waited = Number.isFinite(hour) ? ((hour - plan.now) % 24 + 24) % 24 : NaN;
+        if (!Number.isFinite(waited)) parts.push('the hour is off');
+        else parts.push(waited < hours ? 'the hour is off: the front needs more time than that' : 'the hour is off: the front is in before then');
+      }
       parts.push(sideRight ? 'the side is right' : 'the side is off');
       return { solved: false, say: parts.join('; ') };
     },
@@ -803,7 +807,13 @@ function pressurePiece(env, plan) {
       if (towardRight && wayRight && gapRight) return { solved: true, say: 'entered in the ledger: ' + gap + ' hPa from station ' + LETTERS[hi] + ' to station ' + LETTERS[lo] + ', blowing ' + way };
       const parts = [];
       parts.push(towardRight ? 'the station is right' : 'the wind does not blow toward that station');
-      if (!wayRight) parts.push('the way is off');
+      if (!wayRight) {
+        const saidWay = c.value('way');
+        const axis = (s) => (s === 'north' || s === 'south' ? 'ns' : 'ew');
+        parts.push(SIDES.includes(saidWay) && axis(saidWay) === axis(way)
+          ? 'the axis is right, but the wind runs the other way along it'
+          : 'the way is off: the wind follows the other axis');
+      }
       if (!gapRight) parts.push(n < gap ? 'the difference is larger than that' : 'the difference is smaller than that');
       return { solved: false, say: parts.join('; ') };
     },
