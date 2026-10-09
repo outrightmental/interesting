@@ -247,7 +247,10 @@ a.unlock-else:focus-visible::before {
 .current a:not(.action).is-waning,
 .unlock-note a:not(.action).is-waning,
 a.unlock-else.is-waning {
-  animation: link-under-out var(--motion-link-under-out, var(--motion-short)) var(--ease-link-under-out, var(--ease-stair)) both;
+  // Its length is the plate's own (the composed wane's --motion-matte-out, written inline on the
+  // link by js/motion.js), so the line and the plate land in the same frame and the waning class
+  // -- taken off when the plate's rite ends -- never cuts the line short of home.
+  animation: link-under-out var(--motion-matte-out, var(--motion-link-under-out, var(--motion-short))) var(--ease-link-under-out, var(--ease-stair)) both;
 }
 
 @keyframes link-under-out {
@@ -324,9 +327,9 @@ a.unlock-else:active {
   // The composed stamp dips a box, and a line of words is no box (transform does not apply to an
   // inline): so the words themselves dip in a link's own terms beside it -- the ink, the rule
   // doubled and pulled in, the letters spread, in cuts -- and spring back.
-  animation:
-    var(--rite-stamp, rite-stamp) var(--motion-rite-stamp, var(--motion-short)) var(--ease-rite-stamp, var(--ease-flicker)) both,
-    link-stamp var(--motion-link-stamp, var(--motion-short)) var(--ease-link-stamp, var(--ease-flicker)) both;
+  // Both play for the composed press's own length (--motion-rite-stamp, inline on the link), so
+  // the words spring back in the frame the plate does.
+  animation: link-stamp var(--motion-rite-stamp, var(--motion-link-stamp, var(--motion-short))) var(--ease-link-stamp, var(--ease-flicker)) both, var(--rite-stamp, rite-stamp) var(--motion-rite-stamp, var(--motion-short)) var(--ease-rite-stamp, var(--ease-flicker)) both;
 }
 
 @keyframes link-stamp {
