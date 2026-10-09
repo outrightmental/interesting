@@ -3470,8 +3470,10 @@ class MotionAxiomTest(SiteDirTestCase):
                      "scrollTo(top)", "var(--ease-thing-in, var(--ease-arrive))",
                      "never tweens along t*t, a sine or a power of its own",
                      "typographic register", "$registers-of", "faces that go together",
-                     "never two that do not",
-                     "plan that leaves a page without the line, or moves anything by one of those, is refused"]:
+                     "never two that do not", "a control under the pointer or the focus does not fade",
+                     "is-waxing", "is-stamping", "is-sealing", "--matte-1 to --matte-5", "env.rite",
+                     "rite.matte(x, y, k)", "reveal(el)", "flip(list, change)", f"\"{mi.FONT_SHEET}\"",
+                     "plan that leaves a page without the line, moves anything by one of those, or fades a state, is refused"]:
             with self.subTest(rule=rule):
                 self.assertIn(rule, rules)
         # One AXIOM in the prompt per coded axiom, so neither list can grow without the other.
@@ -3542,6 +3544,46 @@ class MotionAxiomTest(SiteDirTestCase):
                              **{"css/site.css": "a{transition:color .2s ease-in}",
                                 "js/site.js": "node.animate(k, { easing: 'cubic-bezier(.3,0,.8,.15)' });"})
         self.assertEqual(found, ["cubic-bezier( in easing", "ease-in in transition"])
+
+    def test_a_fade_is_found_wherever_a_page_would_change_a_state_by_one(self):
+        # The grammar of a change of state (README: "Motion axiom"): a colour, an opacity, a filter
+        # or a visibility that changes changes in treads, along the stair, and a transition of one
+        # along any other family is a fade. A transform may still slide along a family.
+        def fades(css="", js=""):
+            site = {"p.html": "<link rel='stylesheet' href='css/site.css'><script src='js/a.js'></script>",
+                    "css/site.css": css, "js/a.js": js}
+            return mi.fade_phrases("p.html", site)
+        self.assertEqual(fades("a { transition: opacity var(--motion-short) var(--ease-flicker); }"),
+                         ["opacity along --ease-flicker in transition"])
+        self.assertEqual(fades("a { transition:\n    background-color var(--motion-short) var(--ease-shift),\n    transform var(--motion-short) var(--ease-shift); }"),
+                         ["background-color along --ease-shift in transition"])
+        self.assertEqual(fades("a { transition: all 1s var(--ease-arrive); }"), ["all along --ease-arrive in transition"])
+        self.assertEqual(fades(js="el.style.transition = 'color 1s var(--ease-shift)';"),
+                         ["color along --ease-shift in style.transition"])
+        for fine in ["a { transition: opacity var(--motion-short) var(--ease-stair); }",
+                     "a { transition: color var(--motion-short) var(--ease-stair), background-color var(--motion-short) var(--ease-stair); }",
+                     "a { transition: opacity 1s var(--ease-thing, var(--ease-stair)); }",
+                     "a { transition: transform var(--motion-long) var(--ease-arrive), clip-path 1s var(--ease-wipe); }",
+                     "a { transition: --range-pct var(--motion-short) var(--ease-stair); }",
+                     "a { transition: none; }",
+                     "a { animation: fade-in 1s var(--ease-fade-in, var(--ease-arrive)) both; }",
+                     "<p>A transition: the opacity of the page eases in.</p>"]:
+            with self.subTest(fine=fine):
+                self.assertEqual(fades(fine), [])
+        # The fixed files are not policed, here as everywhere.
+        self.assertEqual(mi.fade_phrases("p.html", {"p.html": "<link rel='stylesheet' href='css/cookieconsent.css'>",
+                                                    "css/cookieconsent.css": ".cm{transition:opacity .3s var(--ease-shift)}"}), [])
+
+    def test_fading_a_state_in_a_page_a_run_rewrites_is_refused(self):
+        self.wired_site()
+        plan = {"files": [{"path": "toy.html", "content": page(title="toy", css="a { transition: opacity 1s var(--ease-flicker); }")}]}
+        with self.assertRaisesRegex(mi.RejectedChange, r'toy\.html would fade by "opacity along --ease-flicker in transition"'):
+            mi.validate_plan(plan)
+        plan["files"][0]["content"] = page(title="toy", css="a { transition: opacity 1s var(--ease-stair); }")
+        self.assertEqual(len(mi.validate_plan(plan)), 1)
+        rules = mi.build_prompt([("index.html", "<h1>hi</h1>")])
+        self.assertIn("along any curve but var(--ease-stair)", rules)
+        self.assertIn("a slide is a movement and not a fade", rules)
 
     def test_the_fixed_files_are_not_policed(self):
         # The vendored consent library eases its own banner however it likes, and it is not this
@@ -6789,6 +6831,7 @@ class RealSiteTest(unittest.TestCase):
         # deploy is blocked.
         self.assertEqual(mi.pages_missing_motion(self.site), set())
         self.assertEqual(mi.pages_moving_by_formula(self.site), {})
+        self.assertEqual(mi.pages_fading(self.site), {}, "a state on the site still changes by a fade")
         self.assertGreater(len(mi.html_pages(self.site)), 1, "the check is worth nothing on one page")
         # Written once in the shared shell, before the persona and the shell's own script, and not
         # deferred: it has to have rolled before the body is drawn and before anything asks it.
@@ -6862,6 +6905,122 @@ class RealSiteTest(unittest.TestCase):
         self.assertIn("style.setProperty('--jit', jitterFor(order) + 'ms');", self.source[mi.SITE_SCRIPT])
         self.assertIn("motion.ms('medium')", self.source["js/feed.js"])
         self.assertIn("function rite(family)", self.source[mi.MOOD_SCRIPT])
+
+    def test_nothing_on_the_site_changes_state_by_a_fade(self):
+        # The second half of the motion axiom on the site as committed: a control under the pointer
+        # waxes through the matte ladder and wanes back down it, a press stamps, a set control is
+        # sealed with a texture, a scalar that changes changes in treads, words are revealed glyph
+        # by glyph, the veil leaves as a ghost, and a module moves by env.rite -- never by a fade,
+        # a glide or a formula. Held by name, because every stylesheet and script reads the roll by
+        # these names (README: "Motion axiom").
+        engine = self.source[mi.MOTION_SCRIPT]
+        for offered in ["    stair: function (m)", "reveal: reveal", "flip: flip", "rite: rite",
+                        "mattes: mattes", "wax: wax", "wane: wane", "'--matte-' + (i + 1)",
+                        "write('--matte-fill', m.fillImage);", "function rollMattes(rnd, temper)",
+                        "'is-waxing'", "'waning'", "'stamping'", "'sealing'", "'unsealing'",
+                        "'matte-in': 'stair'", "'rite-seal': 'stair'", "'glyph-in'", "'lightbox-veil-out'",
+                        "function reveal(el, options)", "function flip(container, change, options)",
+                        "function raiseGhost(veil)"]:
+            with self.subTest(offered=offered):
+                self.assertIn(offered, engine)
+        tokens = self.source[f"{mi.SASS_DIR}/_tokens.scss"]
+        self.assertRegex(tokens, r"--ease-stair: linear\(0, .*, 1\);")
+        self.assertIn("--ease-stair: steps(", tokens)
+        for baked in ["--matte-1:", "--matte-2:", "--matte-3:", "--matte-4:", "--matte-5:", "--matte-fill:",
+                      "--matte-fill-size:", "@property --range-pct"]:
+            with self.subTest(baked=baked):
+                self.assertIn(baked, tokens, f"the tokens bake no {baked}")
+        # The grammar of a control: the ladder, the stamp, the seal, and a stair for its colour.
+        controls = self.source[f"{mi.SASS_DIR}/_controls.scss"]
+        for rule in [".is-waxing::after", ".is-waning::after", ".is-stamping", ".is-sealing::before",
+                     ".is-unsealing::before", "@keyframes matte-in", "@keyframes matte-out",
+                     "@keyframes rite-stamp", "@keyframes rite-seal", "@keyframes rite-unseal",
+                     "background: var(--matte-fill);", "background-size: var(--matte-fill-size);",
+                     "mask: var(--matte-1);", "mask: var(--matte-5);", "mask: none;",
+                     "transition: --range-pct var(--motion-short) var(--ease-stair);"]:
+            with self.subTest(rule=rule):
+                self.assertIn(rule, controls, f"the controls lost {rule}")
+        self.assertNotRegex(controls, r"(background-color|color|opacity)[^;]*var\(--ease-(shift|flicker)\)",
+                            "a control still fades to its new colour")
+        # Every tread of a ladder is written for both mask syntaxes, so it climbs in every browser.
+        for rel, text in sorted(self.source.items()):
+            if rel.startswith(f"{mi.SASS_DIR}/"):
+                with self.subTest(rel=rel):
+                    self.assertEqual(len(re.findall(r"(?<!-webkit-)mask: var\(--matte-", text)),
+                                     len(re.findall(r"-webkit-mask: var\(--matte-", text)),
+                                     "a matte tread with one mask syntax and not the other")
+        ornament = self.source[f"{mi.SASS_DIR}/_rite.scss"]
+        for rule in [".is-revealing .glyph {", ".is-revealing .glyph::before {", "content: attr(data-sigil);",
+                     "@keyframes glyph-in", "@keyframes glyph-sigil"]:
+            with self.subTest(rule=rule):
+                self.assertIn(rule, ornament)
+        veil = self.source[f"{mi.SASS_DIR}/_lightbox.scss"]
+        self.assertIn(".lightbox-veil.is-ghost {", veil)
+        self.assertIn("@keyframes lightbox-veil-out", veil)
+        # A module moves by env.rite, handed by every env builder and both of the harnesses that
+        # play a module, and the stage's contract says so.
+        variant = self.source[mi.VARIANT_SCRIPT]
+        self.assertIn("export function rite(seed)", variant)
+        self.assertIn("rite: rite(seed)", self.source["js/feed.js"])
+        stage = self.source[mi.STAGE_SCRIPT]
+        self.assertIn("rite: rite(seed)", stage)
+        self.assertIn("rite: env.rite,", stage)
+        self.assertIn("The rite: how a piece moves", stage)
+        piece_harness = mi.PIECE_HARNESS.read_text(encoding="utf-8")
+        self.assertIn("rite: riteOf(seed)", piece_harness)
+        self.assertIn("rite: env.rite", piece_harness)
+        self.assertIn("rite: V.rite(seed)", (mi.REPO_ROOT / ".github" / "scripts" / "stage_harness.mjs").read_text(encoding="utf-8"))
+        self.assertIn("rite: V.rite(seed)", (mi.REPO_ROOT / mi.CARD_VARIANT_HARNESS_REL).read_text(encoding="utf-8"))
+
+        def rite_block(text):
+            return text[text.index("function riteOf(seed) {"):text.index("/* rite:end */")]
+        self.assertEqual(rite_block(variant), rite_block(piece_harness),
+                         "the piece harness's copy of the rite has drifted from js/variant.js")
+
+    def test_a_pieces_rite_is_a_stair_a_ratchet_a_flicker_and_a_matte(self):
+        # env.rite in arithmetic: the same seed rolls the same rite; the stair and the ratchet climb
+        # from 0 to 1 in treads and never glide; the flicker is 0 or 1; the matte lets more cells
+        # through as the coverage rises and never fewer; and no two seeds roll the same curve.
+        needs_node(self)
+        script = """
+          const V = await import(process.argv[1]);
+          const out = {};
+          const a = V.rite(7), b = V.rite(7), c = V.rite(8);
+          const xs = Array.from({ length: 41 }, (_, i) => i / 40);
+          out.same = xs.every((t) => a.ease(t) === b.ease(t) && a.stair(t) === b.stair(t) && a.ratchet(t) === b.ratchet(t));
+          out.differ = xs.some((t) => a.ease(t) !== c.ease(t));
+          out.ends = [a.ease(0), a.ease(1), a.stair(0), a.stair(1), a.ratchet(0), a.ratchet(1)];
+          const stair = xs.map((t) => a.stair(t));
+          out.stairMonotone = stair.every((y, i) => i === 0 || y >= stair[i - 1]);
+          out.stairLevels = new Set(stair).size;
+          out.stairTreads = a.treads;
+          out.ratchetIn = xs.every((t) => a.ratchet(t) >= 0 && a.ratchet(t) <= 1);
+          out.flickerBinary = xs.every((t) => a.flicker(t) === 0 || a.flicker(t) === 1);
+          out.flickerEnds = [a.flicker(0), a.flicker(1)];
+          const covered = (k) => { let n = 0; for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) if (a.matte(x, y, k)) n++; return n; };
+          const ks = [0, 0.2, 0.4, 0.6, 0.8, 1].map(covered);
+          out.matteMonotone = ks.every((n, i) => i === 0 || n >= ks[i - 1]);
+          out.matteEnds = [ks[0], ks[ks.length - 1]];
+          out.kinds = new Set([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((s) => V.rite(s).kind)).size;
+          process.stdout.write(JSON.stringify(out));
+        """
+        run = subprocess.run([mi.NODE_BIN, "--input-type=module", "-e", script, "--",
+                              str(mi.REPO_ROOT / "site" / mi.VARIANT_SCRIPT)],
+                             capture_output=True, text=True, timeout=60)
+        self.assertEqual(run.returncode, 0, run.stderr)
+        out = json.loads(run.stdout)
+        self.assertTrue(out["same"], "the same seed rolled a different rite")
+        self.assertTrue(out["differ"], "two seeds rolled the same curve")
+        self.assertEqual(out["ends"], [0, 1, 0, 1, 0, 1])
+        self.assertTrue(out["stairMonotone"])
+        self.assertGreaterEqual(out["stairLevels"], 3, "a stair with fewer than three treads is a cut")
+        self.assertEqual(out["stairLevels"], out["stairTreads"])
+        self.assertTrue(out["ratchetIn"])
+        self.assertTrue(out["flickerBinary"])
+        self.assertEqual(out["flickerEnds"], [0, 1])
+        self.assertTrue(out["matteMonotone"], "the matte let fewer cells through at a higher coverage")
+        self.assertEqual(out["matteEnds"], [0, 1024])
+        self.assertGreaterEqual(out["kinds"], 3, "twelve seeds rolled fewer than three kinds of matte")
 
     def test_every_mood_wears_a_register_and_a_temperament(self):
         # The typographic half of the motion axiom on the site as committed: each of the fifteen
@@ -7879,6 +8038,26 @@ class RealSiteTest(unittest.TestCase):
                 self.assertIn("CookieConsent 3.1.0", self.site[rel])
                 self.assertIn("github.com/orestbida/cookieconsent", self.site[rel])
                 self.assertIn("MIT License", self.site[rel])
+
+    def test_the_vendored_font_keeps_its_license_and_fetches_nothing(self):
+        # The rite's own face (README: "No font is fetched from anyone"): Fraunces, carried by the
+        # site itself in one fixed stylesheet with its licence, two faces inline as base64 and not
+        # one URL to anyone else; linked by the layout before the site's stylesheet, so the
+        # registers of _type.scss find it already declared.
+        sheet = self.site[mi.FONT_SHEET]
+        self.assertIn(mi.FONT_SHEET, mi.FIXED_FILES)
+        for part in ["Fraunces", "github.com/undercasetype/Fraunces", "SIL Open Font License, Version 1.1",
+                     "PERMISSION & CONDITIONS", "font-family: 'Fraunces'", "font-weight: 100 900",
+                     "font-style: normal", "font-style: italic", "font-display: swap",
+                     "src: url(data:font/woff2;base64,"]:
+            with self.subTest(part=part):
+                self.assertIn(part, sheet)
+        self.assertEqual(sheet.count("@font-face"), 2)
+        self.assertNotRegex(sheet, r"url\(\s*['\"]?https?:", "the font sheet fetches from somewhere")
+        layout = self.source[f"{mi.INCLUDES_DIR}/layout.njk"]
+        self.assertLess(layout.index("css/fonts.css"), layout.index("css/site.css"),
+                        "the font must be declared before the stylesheet that sets it")
+        self.assertIn("Fraunces", self.source[f"{mi.SASS_DIR}/_type.scss"], "no register wears the vendored face")
 
 
 class DomainTest(unittest.TestCase):

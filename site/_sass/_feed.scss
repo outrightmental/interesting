@@ -1,5 +1,29 @@
 // The same world cards follow every page. Without scripting they remain plain links in CSS columns;
 // js/feed.js lays them into masonry columns and deals more as a visitor scrolls.
+//
+// Nothing on a card fades, glides or cuts (README: "Motion axiom"). Every state a card passes
+// through is a rite of the shared grammar, played on classes js/motion.js and js/feed.js put on:
+//
+//   wax / wane     the pointer or a visible focus on the link (is-waxing / is-waning, :hover,
+//                  :focus-visible): the state layer climbs the matte ladder tread by tread, offset
+//                  by the card's own grain (--card-grain, js/feed.js) so no two cards wax alike,
+//                  and the card lifts in hard treads (card-lift) to the rolled --lift-y/--lift-rot;
+//                  leaving, it settles back down the treads with one refusal (card-settle).
+//   stamp          a press (is-stamping, :active): the link dips in two cuts and a crack of shards
+//                  flashes over the plate in the primary (card-crack), never a darker tint.
+//   seal / unseal  a card that becomes the current one, the suggested one or an unpowered one
+//                  (is-sealing / is-unsealing on the card or its link): the rolled fill texture
+//                  climbs the ladder onto its picture and stays; leaving, it climbs down.
+//   develop        a card seen for the first time (card-enter, @keyframes card-in): from the
+//                  rolled geometry through the ladder, with one flicker back, staggered by --d;
+//                  a card re-dealt in place (is-dealt, card-develop): its face through the ladder.
+//   unmake         a card taken (card-leave, card-out) and the one pressed, which pops over and
+//                  goes up to the stage (card-taken); a face about to be re-dealt (card-redeal).
+//   stair          every colour, shadow and lift that changes rides --ease-stair: a tint written
+//                  by the script, the plate's hairline waking, the shadow of a card standing out.
+//
+// Every keyframe here is a held pair, so even a swooping spell reads as treads, and each spell is
+// re-rolled by the engine when it ends (--ease-card-in and the rest; SPELLS in js/motion.js).
 @use 'type';
 
 .feed {
@@ -37,9 +61,10 @@
   margin: 0;
 }
 
+// ---- the card at rest, and every scalar it changes ------------------------------------------
 // A card lifts under the pointer by as much, and with as much of a turn, as the roll gave it
-// (--lift-y and --lift-rot, js/motion.js), along curves rolled for that lift (README: "Motion
-// axiom"); its arrival and its leaving below come from and go to where the roll sends them.
+// (--lift-y and --lift-rot, js/motion.js), in treads; its tint, its shadow and its colour change in
+// treads too (the stair family), so a card re-tinted by the script steps to its new palette.
 .card {
   position: relative;
   border-radius: var(--md-sys-shape-corner-large);
@@ -47,12 +72,67 @@
   color: var(--md-sys-color-on-surface);
   overflow: hidden;
   box-shadow: var(--md-sys-elevation-level1);
-  transition: box-shadow var(--motion-medium) var(--ease-shift), transform var(--motion-medium) var(--ease-arrive);
+  transition:
+    box-shadow var(--motion-medium) var(--ease-stair),
+    transform var(--motion-medium) var(--ease-stair),
+    background-color var(--motion-medium) var(--ease-stair),
+    color var(--motion-medium) var(--ease-stair);
 }
 
-.card:hover {
+.card:hover,
+.card:has(> .card-link.is-waxing),
+.card:has(> .card-link:focus-visible) {
   box-shadow: var(--md-sys-elevation-level2);
   transform: translateY(var(--lift-y, -2px)) rotate(var(--lift-rot, 0deg));
+}
+
+// With the script: the lift lands in hard treads, the turn arriving on the second, and the card
+// settles back down them with one refusal on the way.
+.card:has(> .card-link.is-waxing) {
+  animation: card-lift var(--motion-medium) var(--ease-card-lift, var(--ease-stair)) both;
+}
+
+.card:has(> .card-link.is-waning) {
+  animation: card-settle var(--motion-medium) var(--ease-card-settle, var(--ease-stair)) both;
+}
+
+@keyframes card-lift {
+  0%, 34.9% {
+    transform: translateY(-1px);
+    box-shadow: var(--md-sys-elevation-level1);
+  }
+
+  35%, 69.9% {
+    transform: translateY(calc(var(--lift-y, -2px) * 0.6)) rotate(var(--lift-rot, 0deg));
+    box-shadow: var(--md-sys-elevation-level2);
+  }
+
+  70%, 100% {
+    transform: translateY(var(--lift-y, -2px)) rotate(var(--lift-rot, 0deg));
+    box-shadow: var(--md-sys-elevation-level2);
+  }
+}
+
+@keyframes card-settle {
+  0%, 29.9% {
+    transform: translateY(var(--lift-y, -2px)) rotate(var(--lift-rot, 0deg));
+    box-shadow: var(--md-sys-elevation-level2);
+  }
+
+  30%, 59.9% {
+    transform: translateY(-1px);
+    box-shadow: var(--md-sys-elevation-level1);
+  }
+
+  60%, 74.9% {
+    transform: translateY(calc(var(--lift-y, -2px) * 0.5)) rotate(calc(var(--lift-rot, 0deg) * 0.5));
+    box-shadow: var(--md-sys-elevation-level2);
+  }
+
+  75%, 100% {
+    transform: none;
+    box-shadow: var(--md-sys-elevation-level1);
+  }
 }
 
 .card-link {
@@ -64,35 +144,285 @@
   border-radius: inherit;
 }
 
+// ---- the state layer: wax and wane --------------------------------------------------------
+// The link's state layer is the matte itself: it wears the first rung of the ladder at rest and
+// climbs to the top while the pointer or the focus is on it, each rung offset by the card's own
+// grain. The page with no script climbs it from :hover and :focus-visible.
+.card-link::before,
 .card-link::after {
   content: '';
   position: absolute;
   inset: 0;
   z-index: 1;
   border-radius: inherit;
-  background: var(--md-sys-color-on-surface);
-  opacity: 0;
-  clip-path: var(--state-from, inset(0 100% 0 0));
   pointer-events: none;
-  transition:
-    opacity var(--motion-short) var(--ease-flicker),
-    clip-path var(--motion-short) var(--ease-flicker);
+  opacity: 0;
+  mask-repeat: repeat;
+  -webkit-mask-repeat: repeat;
 }
 
-.card-link:hover::after { opacity: var(--md-sys-state-hover-opacity); clip-path: inset(0); }
-.card-link:focus-visible::after { opacity: var(--md-sys-state-focus-opacity); clip-path: inset(0); }
-.card-link:active::after { opacity: var(--md-sys-state-pressed-opacity); clip-path: inset(0); }
+.card-link::after {
+  background: var(--md-sys-color-on-surface);
+  mask: var(--matte-1);
+  -webkit-mask: var(--matte-1);
+  mask-position: var(--card-grain, 0 0);
+  -webkit-mask-position: var(--card-grain, 0 0);
+}
 
+.card-link.is-waxing::after,
+.card-link:hover::after,
+.card-link:focus-visible::after {
+  opacity: var(--state-opacity, var(--md-sys-state-hover-opacity));
+  mask: none;
+  -webkit-mask: none;
+  animation: card-wax var(--motion-medium) var(--ease-card-wax, var(--ease-stair)) both;
+}
+
+.card-link:focus-visible::after {
+  --state-opacity: var(--md-sys-state-focus-opacity);
+}
+
+.card-link.is-waning::after {
+  opacity: var(--md-sys-state-hover-opacity);
+  animation: card-wane var(--motion-medium) var(--ease-card-wane, var(--ease-stair)) both;
+}
+
+@keyframes card-wax {
+  0%, 17.9% {
+    mask: var(--matte-1);
+    -webkit-mask: var(--matte-1);
+    mask-position: var(--card-grain, 0 0);
+    -webkit-mask-position: var(--card-grain, 0 0);
+  }
+
+  18%, 37.9% {
+    mask: var(--matte-2);
+    -webkit-mask: var(--matte-2);
+    mask-position: var(--card-grain, 0 0);
+    -webkit-mask-position: var(--card-grain, 0 0);
+  }
+
+  38%, 45.9% {
+    mask: var(--matte-1);
+    -webkit-mask: var(--matte-1);
+    mask-position: var(--card-grain, 0 0);
+    -webkit-mask-position: var(--card-grain, 0 0);
+  }
+
+  46%, 63.9% {
+    mask: var(--matte-3);
+    -webkit-mask: var(--matte-3);
+    mask-position: var(--card-grain, 0 0);
+    -webkit-mask-position: var(--card-grain, 0 0);
+  }
+
+  64%, 81.9% {
+    mask: var(--matte-4);
+    -webkit-mask: var(--matte-4);
+    mask-position: var(--card-grain, 0 0);
+    -webkit-mask-position: var(--card-grain, 0 0);
+  }
+
+  82%, 94.9% {
+    mask: var(--matte-5);
+    -webkit-mask: var(--matte-5);
+  }
+
+  95%, 100% {
+    mask: none;
+    -webkit-mask: none;
+  }
+}
+
+@keyframes card-wane {
+  0%, 21.9% {
+    mask: var(--matte-5);
+    -webkit-mask: var(--matte-5);
+  }
+
+  22%, 43.9% {
+    mask: var(--matte-4);
+    -webkit-mask: var(--matte-4);
+    mask-position: var(--card-grain, 0 0);
+    -webkit-mask-position: var(--card-grain, 0 0);
+  }
+
+  44%, 63.9% {
+    mask: var(--matte-3);
+    -webkit-mask: var(--matte-3);
+    mask-position: var(--card-grain, 0 0);
+    -webkit-mask-position: var(--card-grain, 0 0);
+  }
+
+  64%, 71.9% {
+    mask: var(--matte-4);
+    -webkit-mask: var(--matte-4);
+    mask-position: var(--card-grain, 0 0);
+    -webkit-mask-position: var(--card-grain, 0 0);
+  }
+
+  72%, 85.9% {
+    mask: var(--matte-2);
+    -webkit-mask: var(--matte-2);
+    mask-position: var(--card-grain, 0 0);
+    -webkit-mask-position: var(--card-grain, 0 0);
+  }
+
+  86%, 97.9% {
+    mask: var(--matte-1);
+    -webkit-mask: var(--matte-1);
+    mask-position: var(--card-grain, 0 0);
+    -webkit-mask-position: var(--card-grain, 0 0);
+  }
+
+  98%, 100% {
+    opacity: 0;
+    mask: var(--matte-1);
+    -webkit-mask: var(--matte-1);
+  }
+}
+
+// ---- the stamp ------------------------------------------------------------------------------
+// A press: the link dips in two cuts and a crack of the ladder's second rung flashes over the
+// plate in the primary, then goes out in cuts. :active is the same stamp for a page with no script.
+.card-link::before {
+  z-index: 2;
+  background: var(--md-sys-color-primary);
+  mask: var(--matte-2);
+  -webkit-mask: var(--matte-2);
+  mask-position: var(--card-grain, 0 0);
+  -webkit-mask-position: var(--card-grain, 0 0);
+}
+
+.card-link.is-stamping,
+.card-link:active {
+  animation: card-stamp var(--motion-short) var(--ease-card-stamp, var(--ease-flicker)) both;
+}
+
+.card-link.is-stamping::before,
+.card-link:active::before {
+  animation: card-crack var(--motion-short) var(--ease-card-crack, var(--ease-flicker)) both;
+}
+
+@keyframes card-stamp {
+  0%, 44.9% {
+    transform: translateY(1px) scale(0.978);
+    filter: contrast(1.2) brightness(1.1);
+  }
+
+  45%, 69.9% {
+    transform: translateY(1px) scale(0.978);
+    filter: contrast(1.2) brightness(1.1);
+  }
+
+  70%, 84.9% {
+    transform: translateY(0) scale(1.008);
+    filter: none;
+  }
+
+  85%, 100% {
+    transform: none;
+    filter: none;
+  }
+}
+
+@keyframes card-crack {
+  0%, 29.9% {
+    opacity: 0.22;
+    mask: var(--matte-2);
+    -webkit-mask: var(--matte-2);
+  }
+
+  30%, 54.9% {
+    opacity: 0.22;
+    mask: var(--matte-3);
+    -webkit-mask: var(--matte-3);
+  }
+
+  55%, 69.9% {
+    opacity: 0;
+    mask: var(--matte-3);
+    -webkit-mask: var(--matte-3);
+  }
+
+  70%, 84.9% {
+    opacity: 0.16;
+    mask: var(--matte-1);
+    -webkit-mask: var(--matte-1);
+  }
+
+  85%, 100% {
+    opacity: 0;
+    mask: var(--matte-1);
+    -webkit-mask: var(--matte-1);
+  }
+}
+
+// ---- the focus ------------------------------------------------------------------------------
+// A key brings the focus to a card: the struck ring, dashed in the primary, arriving in cuts from
+// well inside the edge and flickering once to the tertiary on its way out to the edge.
 .card-link:focus-visible {
-  outline: 3px solid var(--md-sys-color-primary);
+  outline: 3px dashed var(--md-sys-color-primary);
   outline-offset: -3px;
+  animation: card-focus var(--motion-medium) var(--ease-card-focus, var(--ease-stair)) both;
 }
 
+@keyframes card-focus {
+  0%, 24.9% {
+    outline-offset: -12px;
+    outline-color: var(--md-sys-color-tertiary);
+  }
+
+  25%, 49.9% {
+    outline-offset: -6px;
+    outline-color: var(--md-sys-color-primary);
+  }
+
+  50%, 64.9% {
+    outline-offset: -8px;
+    outline-color: var(--md-sys-color-tertiary);
+  }
+
+  65%, 100% {
+    outline-offset: -3px;
+    outline-color: var(--md-sys-color-primary);
+  }
+}
+
+// ---- the picture plate ----------------------------------------------------------------------
+// The plate's hairline (_rite.scss, .card-media::after) wakes in treads under the pointer; the
+// fill texture a set card wears (::before) sits over the picture and under the hairline, never
+// under the words, so the words keep their contrast.
 .card-media {
   position: relative;
   width: 100%;
   background: radial-gradient(circle at var(--card-light, 30% 20%), var(--bg2) 0%, var(--bg) 75%);
   overflow: hidden;
+}
+
+.card-media::after {
+  transition: border-color var(--motion-medium) var(--ease-stair);
+}
+
+.card:hover .card-media::after,
+.card:has(> .card-link.is-waxing) .card-media::after,
+.card-link:focus-visible .card-media::after {
+  border-color: color-mix(in oklab, var(--md-sys-color-primary) 48%, transparent);
+}
+
+.card-media::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  color: var(--md-sys-color-primary);
+  background: var(--matte-fill);
+  background-size: var(--matte-fill-size);
+  opacity: 0;
+  pointer-events: none;
+  mask-repeat: repeat;
+  -webkit-mask-repeat: repeat;
+  transition: opacity var(--motion-medium) var(--ease-stair);
 }
 
 .card-canvas {
@@ -132,26 +462,139 @@
   @include type.scale(body-medium);
 }
 
-.card-current { box-shadow: var(--md-sys-elevation-level2); }
-// The card a fresh reading points at (js/feed.js, suggest()): lifted like the current one, so the
-// "for you" badge sits on a card that stands forward of the mosaic.
-.card-suggested { box-shadow: var(--md-sys-elevation-level2); }
+// A tint the script writes (js/feed.js, tint()) steps every line of the card to its new colour.
+.card-overline,
+.card-title,
+.card-text,
+.card-quote,
+.card-mono,
+.card-cite,
+.card-badge {
+  transition:
+    color var(--motion-medium) var(--ease-stair),
+    background-color var(--motion-medium) var(--ease-stair);
+}
+
+// ---- set: the current card, the suggested card, the unpowered card -----------------------------
+// A set card is a textured card: the rolled fill climbs onto its picture (card-seal) when it is
+// set and leaves down the ladder (card-unseal) when it is not. The current card's link flips
+// aria-current, which js/motion.js seals; the suggested card and the unpowered one (a world card
+// painted over a ghost of a sky not yet cast) are sealed by js/feed.js on the card itself.
+.card-current,
+.card-suggested {
+  box-shadow: var(--md-sys-elevation-level2);
+}
+
+.card-current .card-media::before,
+.card-suggested .card-media::before {
+  opacity: 0.2;
+}
+
+.card-unpowered .card-media::before {
+  opacity: 0.14;
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.card.is-sealing .card-media::before,
+.card-link.is-sealing .card-media::before {
+  opacity: 0.2;
+  animation: card-seal var(--motion-long) var(--ease-card-seal, var(--ease-stair)) both;
+}
+
+.card.is-unsealing .card-media::before,
+.card-link.is-unsealing .card-media::before {
+  animation: card-unseal var(--motion-medium) var(--ease-card-unseal, var(--ease-stair)) both;
+}
+
+@keyframes card-seal {
+  0%, 15.9% {
+    mask: var(--matte-1);
+    -webkit-mask: var(--matte-1);
+  }
+
+  16%, 33.9% {
+    mask: var(--matte-2);
+    -webkit-mask: var(--matte-2);
+  }
+
+  34%, 41.9% {
+    mask: var(--matte-1);
+    -webkit-mask: var(--matte-1);
+  }
+
+  42%, 59.9% {
+    mask: var(--matte-3);
+    -webkit-mask: var(--matte-3);
+  }
+
+  60%, 79.9% {
+    mask: var(--matte-4);
+    -webkit-mask: var(--matte-4);
+  }
+
+  80%, 93.9% {
+    mask: var(--matte-5);
+    -webkit-mask: var(--matte-5);
+  }
+
+  94%, 100% {
+    mask: none;
+    -webkit-mask: none;
+  }
+}
+
+@keyframes card-unseal {
+  0%, 27.9% {
+    opacity: 0.2;
+    mask: var(--matte-4);
+    -webkit-mask: var(--matte-4);
+  }
+
+  28%, 55.9% {
+    opacity: 0.2;
+    mask: var(--matte-3);
+    -webkit-mask: var(--matte-3);
+  }
+
+  56%, 67.9% {
+    opacity: 0.2;
+    mask: var(--matte-4);
+    -webkit-mask: var(--matte-4);
+  }
+
+  68%, 85.9% {
+    opacity: 0.2;
+    mask: var(--matte-2);
+    -webkit-mask: var(--matte-2);
+  }
+
+  86%, 100% {
+    opacity: 0;
+    mask: var(--matte-1);
+    -webkit-mask: var(--matte-1);
+  }
+}
+
 .card-current .card-badge {
   background: var(--md-sys-color-secondary-container);
   color: var(--md-sys-color-on-secondary-container);
 }
+
 .card-current .card-link[aria-current='page'] .card-title {
   text-decoration: underline;
   text-decoration-style: dotted;
   text-decoration-thickness: 1px;
   text-underline-offset: 0.18em;
 }
+
 .card-spark .card-title { @include type.scale(title-large); @include type.rite; }
+
 .card-quote {
   margin: 0.25rem 0 0;
   color: var(--md-sys-color-on-surface);
   @include type.scale(body-large);
 }
+
 .card-mono {
   margin: 0.25rem 0 0;
   white-space: pre-wrap;
@@ -161,12 +604,19 @@
   @include type.scale(body-small);
   letter-spacing: 0.25px;
 }
+
 .card-cite {
   margin: 0.25rem 0 0;
   color: var(--md-sys-color-on-surface-variant);
   font-style: italic;
   @include type.scale(body-small);
 }
+
+// ---- the badge ------------------------------------------------------------------------------
+// "you are here" and "for you": a badge the script pins on arrives from above through the ladder
+// and stamps down (is-dealt, badge-in); one taken off leaves down the ladder (is-gone, badge-out).
+// The badge on the suggested card beckons while it waits: a ring of the tertiary that comes and
+// goes in cuts, every turn along a spell rolled afresh.
 .card-badge {
   position: absolute;
   top: 0.6rem;
@@ -178,37 +628,434 @@
   color: var(--md-sys-color-on-tertiary-container);
   @include type.scale(label-small);
 }
+
+.card-suggested .card-badge {
+  animation: badge-beckon calc(var(--motion-slow, 1200ms) * 3) var(--ease-badge-beckon, var(--ease-pulse)) infinite;
+}
+
+.card-badge.is-dealt {
+  animation: badge-in var(--motion-long) var(--ease-badge-in, var(--ease-arrive)) both;
+}
+
+.card-badge.is-gone {
+  pointer-events: none;
+  animation: badge-out var(--motion-medium) var(--ease-badge-out, var(--ease-leave)) both;
+}
+
+@keyframes badge-in {
+  0%, 19.9% {
+    transform: translateY(calc(var(--arrive-y, 28px) * -0.4)) rotate(var(--arrive-rot, 0deg));
+    mask: var(--matte-1);
+    -webkit-mask: var(--matte-1);
+  }
+
+  20%, 39.9% {
+    transform: translateY(calc(var(--arrive-y, 28px) * -0.2)) rotate(var(--arrive-rot, 0deg));
+    mask: var(--matte-3);
+    -webkit-mask: var(--matte-3);
+  }
+
+  40%, 59.9% {
+    transform: translateY(1px) scale(var(--pop-over, 1.1));
+    mask: var(--matte-4);
+    -webkit-mask: var(--matte-4);
+  }
+
+  60%, 74.9% {
+    transform: translateY(1px) scale(0.96);
+    mask: var(--matte-5);
+    -webkit-mask: var(--matte-5);
+  }
+
+  75%, 100% {
+    transform: none;
+    mask: none;
+    -webkit-mask: none;
+  }
+}
+
+@keyframes badge-out {
+  0%, 29.9% {
+    transform: none;
+    mask: var(--matte-4);
+    -webkit-mask: var(--matte-4);
+  }
+
+  30%, 54.9% {
+    transform: translateY(calc(var(--leave-y, -22px) * 0.15)) rotate(var(--leave-rot, 0deg));
+    mask: var(--matte-2);
+    -webkit-mask: var(--matte-2);
+  }
+
+  55%, 69.9% {
+    transform: translateY(calc(var(--leave-y, -22px) * 0.1));
+    mask: var(--matte-3);
+    -webkit-mask: var(--matte-3);
+  }
+
+  70%, 100% {
+    transform: translateY(calc(var(--leave-y, -22px) * 0.4)) rotate(var(--leave-rot, 0deg));
+    mask: var(--matte-1);
+    -webkit-mask: var(--matte-1);
+    visibility: hidden;
+  }
+}
+
+@keyframes badge-beckon {
+  0%, 61.9% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+
+  62%, 68.9% {
+    box-shadow: 0 0 0 2px color-mix(in oklab, var(--md-sys-color-tertiary) 55%, transparent);
+  }
+
+  69%, 73.9% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+
+  74%, 83.9% {
+    box-shadow: 0 0 0 var(--beckon-spread, 8px) color-mix(in oklab, var(--md-sys-color-tertiary) 28%, transparent);
+  }
+
+  84%, 100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+
 .card-actions {
   display: flex;
   justify-content: flex-end;
   gap: 0.25rem;
   padding: 0 0.5rem 0.5rem;
 }
+
 .card-actions button {
   padding-block: 0.25rem;
 }
-// A card dealt arrives from where the roll says, turning as it comes, along a spell rolled afresh
-// each time one lands; a card taken leaves the way the roll sends departures. js/feed.js waits out
-// the leaving by the same rolled duration (--motion-medium) before it takes the card away.
-.card-enter { animation: card-in var(--motion-long) var(--ease-card-in, var(--ease-arrive)) both; }
-@keyframes card-in {
-  from { opacity: 0; transform: translate(calc(var(--arrive-x, 0px) * 0.5), calc(var(--arrive-y, 28px) * 0.5)) rotate(var(--arrive-rot, 0deg)) scale(var(--arrive-scale, 0.96)); }
-  to { opacity: 1; transform: none; }
+
+// ---- develop: a card seen for the first time, a face re-dealt -----------------------------------
+// A card dealt waits rolled up (card-rolled: clipped to nothing, still in the flow and still in the
+// tab order, so a key can reach it and scroll it into view) until js/feed.js sees it meet the
+// viewport; then it develops (card-enter): from where the roll says, turning as it comes, up the
+// matte ladder with one flicker back, after a delay of its own (--d, rolled with jitter per card
+// of the batch; --k from the markup is the fallback). A face re-dealt in place ("another", or the
+// sky arriving) climbs the ladder on its picture and, a stagger later, on its words (is-dealt).
+.card-rolled {
+  clip-path: inset(50%);
 }
+
+.card-enter {
+  animation: card-in var(--motion-long) var(--ease-card-in, var(--ease-arrive)) var(--d, calc(var(--k, 0) * var(--motion-stagger, 44ms))) both;
+}
+
+@keyframes card-in {
+  0%, 9.9% {
+    clip-path: inset(50%);
+    mask: var(--matte-1);
+    -webkit-mask: var(--matte-1);
+    mask-position: var(--card-grain, 0 0);
+    -webkit-mask-position: var(--card-grain, 0 0);
+    transform: translate(var(--arrive-x, 0px), var(--arrive-y, 28px)) rotate(var(--arrive-rot, 0deg)) skew(var(--arrive-skew, 0deg)) scale(var(--arrive-scale, 0.96));
+  }
+
+  10%, 24.9% {
+    clip-path: none;
+    mask: var(--matte-1);
+    -webkit-mask: var(--matte-1);
+    mask-position: var(--card-grain, 0 0);
+    -webkit-mask-position: var(--card-grain, 0 0);
+    transform: translate(var(--arrive-x, 0px), var(--arrive-y, 28px)) rotate(var(--arrive-rot, 0deg)) skew(var(--arrive-skew, 0deg)) scale(var(--arrive-scale, 0.96));
+  }
+
+  25%, 39.9% {
+    clip-path: none;
+    mask: var(--matte-2);
+    -webkit-mask: var(--matte-2);
+    mask-position: var(--card-grain, 0 0);
+    -webkit-mask-position: var(--card-grain, 0 0);
+    transform: translate(calc(var(--arrive-x, 0px) * 0.6), calc(var(--arrive-y, 28px) * 0.6)) rotate(calc(var(--arrive-rot, 0deg) * 0.6)) skew(calc(var(--arrive-skew, 0deg) * 0.5)) scale(calc(var(--arrive-scale, 0.96) + 0.02));
+  }
+
+  40%, 48.9% {
+    clip-path: none;
+    mask: var(--matte-1);
+    -webkit-mask: var(--matte-1);
+    mask-position: var(--card-grain, 0 0);
+    -webkit-mask-position: var(--card-grain, 0 0);
+    transform: translate(calc(var(--arrive-x, 0px) * 0.6), calc(var(--arrive-y, 28px) * 0.6)) rotate(calc(var(--arrive-rot, 0deg) * 0.6)) skew(calc(var(--arrive-skew, 0deg) * 0.5)) scale(calc(var(--arrive-scale, 0.96) + 0.02));
+  }
+
+  49%, 64.9% {
+    clip-path: none;
+    mask: var(--matte-3);
+    -webkit-mask: var(--matte-3);
+    mask-position: var(--card-grain, 0 0);
+    -webkit-mask-position: var(--card-grain, 0 0);
+    transform: translate(calc(var(--arrive-x, 0px) * 0.25), calc(var(--arrive-y, 28px) * 0.25)) rotate(calc(var(--arrive-rot, 0deg) * 0.25));
+  }
+
+  65%, 79.9% {
+    clip-path: none;
+    mask: var(--matte-4);
+    -webkit-mask: var(--matte-4);
+    mask-position: var(--card-grain, 0 0);
+    -webkit-mask-position: var(--card-grain, 0 0);
+    transform: translateY(calc(var(--arrive-y, 28px) * -0.08));
+  }
+
+  80%, 93.9% {
+    clip-path: none;
+    mask: var(--matte-5);
+    -webkit-mask: var(--matte-5);
+    transform: none;
+  }
+
+  94%, 100% {
+    clip-path: none;
+    mask: none;
+    -webkit-mask: none;
+    transform: none;
+  }
+}
+
+.card.is-dealt .card-media,
+.card.is-dealt .card-body {
+  animation: card-develop var(--motion-long) var(--ease-card-develop, var(--ease-stair)) both;
+}
+
+.card.is-dealt .card-body {
+  animation-delay: calc(var(--motion-stagger, 44ms) * 2);
+}
+
+@keyframes card-develop {
+  0%, 17.9% {
+    mask: var(--matte-1);
+    -webkit-mask: var(--matte-1);
+  }
+
+  18%, 35.9% {
+    mask: var(--matte-2);
+    -webkit-mask: var(--matte-2);
+  }
+
+  36%, 43.9% {
+    mask: var(--matte-1);
+    -webkit-mask: var(--matte-1);
+  }
+
+  44%, 61.9% {
+    mask: var(--matte-3);
+    -webkit-mask: var(--matte-3);
+  }
+
+  62%, 79.9% {
+    mask: var(--matte-4);
+    -webkit-mask: var(--matte-4);
+  }
+
+  80%, 93.9% {
+    mask: var(--matte-5);
+    -webkit-mask: var(--matte-5);
+  }
+
+  94%, 100% {
+    mask: none;
+    -webkit-mask: none;
+  }
+}
+
+// ---- unmake: a face about to be re-dealt, a card taken, the card pressed ------------------------
+// Before "another" deals a new face, the old one leaves down the ladder (card-redeal) and the
+// script waits out the rolled --motion-medium before it swaps the words. A card taken by the stage
+// (card-leave) goes down the ladder with one flicker back to where the roll sends departures, and
+// js/feed.js waits out the same rolled duration before it takes the card away. The card a visitor
+// pressed (card-taken) is handed to the stage: it pops over first, then goes up and out.
+.card-redeal .card-media,
+.card-redeal .card-body {
+  animation: card-unmake var(--motion-medium) var(--ease-card-unmake, var(--ease-leave)) both;
+}
+
+@keyframes card-unmake {
+  0%, 24.9% {
+    mask: var(--matte-5);
+    -webkit-mask: var(--matte-5);
+  }
+
+  25%, 49.9% {
+    mask: var(--matte-3);
+    -webkit-mask: var(--matte-3);
+  }
+
+  50%, 61.9% {
+    mask: var(--matte-4);
+    -webkit-mask: var(--matte-4);
+  }
+
+  62%, 81.9% {
+    mask: var(--matte-2);
+    -webkit-mask: var(--matte-2);
+  }
+
+  82%, 100% {
+    mask: var(--matte-1);
+    -webkit-mask: var(--matte-1);
+  }
+}
+
 .card-leave {
   pointer-events: none;
   animation: card-out var(--motion-medium) var(--ease-card-out, var(--ease-leave)) both;
 }
+
 @keyframes card-out {
-  to { opacity: 0; transform: translate(var(--leave-x, 0px), var(--leave-y, -24px)) rotate(var(--leave-rot, 0deg)) scale(var(--leave-scale, 0.96)); }
+  0%, 19.9% {
+    mask: var(--matte-5);
+    -webkit-mask: var(--matte-5);
+    transform: none;
+  }
+
+  20%, 39.9% {
+    mask: var(--matte-4);
+    -webkit-mask: var(--matte-4);
+    transform: translate(calc(var(--leave-x, 0px) * 0.2), calc(var(--leave-y, -24px) * 0.2)) rotate(calc(var(--leave-rot, 0deg) * 0.3));
+  }
+
+  40%, 54.9% {
+    mask: var(--matte-2);
+    -webkit-mask: var(--matte-2);
+    transform: translate(calc(var(--leave-x, 0px) * 0.5), calc(var(--leave-y, -24px) * 0.5)) rotate(calc(var(--leave-rot, 0deg) * 0.6)) scale(calc(1 - (1 - var(--leave-scale, 0.96)) * 0.5));
+  }
+
+  55%, 64.9% {
+    mask: var(--matte-4);
+    -webkit-mask: var(--matte-4);
+    transform: translate(calc(var(--leave-x, 0px) * 0.35), calc(var(--leave-y, -24px) * 0.35)) rotate(calc(var(--leave-rot, 0deg) * 0.5));
+  }
+
+  65%, 84.9% {
+    mask: var(--matte-1);
+    -webkit-mask: var(--matte-1);
+    transform: translate(calc(var(--leave-x, 0px) * 0.8), calc(var(--leave-y, -24px) * 0.8)) rotate(var(--leave-rot, 0deg)) scale(var(--leave-scale, 0.96));
+  }
+
+  85%, 100% {
+    clip-path: inset(50%);
+    mask: var(--matte-1);
+    -webkit-mask: var(--matte-1);
+    transform: translate(var(--leave-x, 0px), var(--leave-y, -24px)) rotate(var(--leave-rot, 0deg)) scale(var(--leave-scale, 0.96));
+  }
 }
+
+.card-leave.card-taken {
+  z-index: 3;
+  animation: card-taken var(--motion-medium) var(--ease-card-taken, var(--ease-leave)) both;
+}
+
+@keyframes card-taken {
+  0%, 24.9% {
+    mask: none;
+    -webkit-mask: none;
+    transform: scale(var(--pop-over, 1.1));
+    filter: brightness(1.12);
+  }
+
+  25%, 44.9% {
+    mask: var(--matte-4);
+    -webkit-mask: var(--matte-4);
+    transform: translateY(calc(var(--leave-y, -24px) * 0.6)) scale(var(--pop-over, 1.1));
+    filter: none;
+  }
+
+  45%, 59.9% {
+    mask: var(--matte-2);
+    -webkit-mask: var(--matte-2);
+    transform: translateY(calc(var(--leave-y, -24px) * 1.4)) rotate(calc(var(--leave-rot, 0deg) * 0.5)) scale(var(--pop-over, 1.1));
+    filter: none;
+  }
+
+  60%, 69.9% {
+    mask: var(--matte-3);
+    -webkit-mask: var(--matte-3);
+    transform: translateY(calc(var(--leave-y, -24px) * 1.1)) rotate(calc(var(--leave-rot, 0deg) * 0.5)) scale(var(--pop-over, 1.1));
+    filter: none;
+  }
+
+  70%, 86.9% {
+    mask: var(--matte-1);
+    -webkit-mask: var(--matte-1);
+    transform: translateY(calc(var(--leave-y, -24px) * 2.4)) rotate(var(--leave-rot, 0deg)) scale(calc(var(--pop-over, 1.1) * 0.9));
+    filter: none;
+  }
+
+  87%, 100% {
+    clip-path: inset(50%);
+    mask: var(--matte-1);
+    -webkit-mask: var(--matte-1);
+    transform: translateY(calc(var(--leave-y, -24px) * 3)) rotate(var(--leave-rot, 0deg)) scale(calc(var(--pop-over, 1.1) * 0.9));
+    filter: none;
+  }
+}
+
+// ---- the feed under a lightbox ---------------------------------------------------------------
+// Behind the veil every card is put aside: its picture wears the fill texture, stepping on and
+// off along the stair, so the feed that comes back is the feed that was sealed, unsealed.
+html[data-lightbox] .card-media::before {
+  opacity: 0.12;
+}
+
 .feed-sentinel { height: 1px; margin-top: 1rem; }
+
 @media (max-width: 599px) {
   .feed-grid { columns: 2; column-gap: 0.6rem; }
   .feed-grid.is-masonry, .feed-col { gap: 0.6rem; }
   .card-body { padding: 0.7rem 0.75rem 0.85rem; }
 }
+
+// Less motion asked for: every card is where it is and wears what it wears; js/feed.js develops,
+// swaps and takes cards away at once under the same query.
 @media (prefers-reduced-motion: reduce) {
-  .card, .card-link::after { transition: none; }
-  .card-enter, .card-leave { animation: none; }
+  .card,
+  .card-link::before,
+  .card-link::after,
+  .card-media::before,
+  .card-media::after,
+  .card-overline,
+  .card-title,
+  .card-text,
+  .card-quote,
+  .card-mono,
+  .card-cite,
+  .card-badge {
+    transition: none;
+  }
+
+  .card,
+  .card-link,
+  .card-link::before,
+  .card-link::after,
+  .card-media::before,
+  .card-badge,
+  .card-enter,
+  .card-leave,
+  .card-redeal .card-media,
+  .card-redeal .card-body,
+  .card.is-dealt .card-media,
+  .card.is-dealt .card-body {
+    animation: none;
+  }
+
+  .card-rolled {
+    clip-path: none;
+  }
+
+  .card-link.is-waning::after,
+  .card-link::before {
+    opacity: 0;
+  }
+
+  .card-badge.is-gone,
+  .card-leave {
+    visibility: hidden;
+  }
 }

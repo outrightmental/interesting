@@ -227,7 +227,7 @@
   env, what piece() is handed, and the same configuration js/feed.js hands paint() and spark():
     { seed, rnd(), pick(list), int(a, b), chance(p), hash(text), stars, points(w, h, pad),
       colors, mix(a, b, t), alpha(c, a), reduced, world: { file, name, orientation },
-      variant, card, difficulty }. variant is the configuration this piece is of (js/variant.js):
+      variant, card, difficulty, rite }. variant is the configuration this piece is of (js/variant.js):
     variant.density is how much of itself to draw, variant.scale how large, variant.turn where to
     start, and the stage has already framed the scene by variant.stretch and painted the site in
     the colours the three colour dials derived. card is the content the card was showing when it
@@ -269,11 +269,30 @@
   same river at any setting, and a module reads env.difficulty inside piece() and nowhere else.
   A module reads it defensively, through a small helper of its own: a card's env has none.
 
+  ---------------------------------------------------------------------------------------------
+  The rite: how a piece moves
+
+  env.rite (and ctx.rite, the same object) is the piece's own roll of how it moves (README:
+  "Motion axiom"), from js/variant.js, seeded from the piece's seed so the same seed plays the
+  same rite. Nothing a module draws moves along a formula: a selection does not fade to another
+  opacity, a wheel does not turn evenly, a solved thing does not wash in. rite.ease(t) is a
+  glitch of a curve; rite.stair(t, n) steps t onto uneven treads, for a state that changes (a
+  highlight, an opacity, a size); rite.ratchet(t) turns in clicks with backlash, for anything
+  that rotates; rite.flicker(t) is 0 or 1, for a thing that arrives by blinking on; and
+  rite.matte(x, y, k) says, for the cell at column x and row y, whether the piece's own
+  procedurally generated matte -- noise, shards, scan lines, a dither, an iris, a grain -- lets
+  a surface through at coverage k, so a region that becomes selected changes by its area in
+  that pattern (tile it in cells of rite.cell px and fill the ones let through) and never by a
+  fade. rite.at(seed) is another such roll, for a module that wants one per thing it moves. The
+  harnesses hand the same roll, and a module that moves anything along t * t, a lerp, a sine
+  or an even rotation is the kind of module this site refuses.
+
   ctx, the same object for the whole piece:
     canvas, g (its 2d context), w, h (CSS pixels; the context is already scaled for the screen),
     colors { bg, bg2, accent, accent2, fg, muted } in the world's palette, rnd() (seeded: the
     same seed makes the same piece), pick(list), int(a, b), chance(p), stars, points(w, h, pad),
-    mix(a, b, t), alpha(c, a), reduced (less motion asked for), satisfy(id, value), progress(id,
+    mix(a, b, t), alpha(c, a), reduced (less motion asked for), rite (how this piece moves: see
+    env.rite below), satisfy(id, value), progress(id,
     fraction), status(text) (one live line under the knobs), value(id), set(id, value) (from
     tap() only), hint() (one hint given), tries, hints, done (solved), elapsed (seconds).
 
@@ -324,7 +343,7 @@
   site keeps, so it exports with the rest.
 */
 
-import { PLAIN, revive, recolor, aspect as framed, ratioOf, mulberry32, hash, mix, alpha } from './variant.js';
+import { PLAIN, revive, recolor, aspect as framed, ratioOf, mulberry32, hash, mix, alpha, rite } from './variant.js';
 
 const root = document.documentElement.getAttribute('data-root') || '';
 const stage = document.getElementById('stage');
@@ -905,7 +924,10 @@ function makeEnv(seed, world, stars, variant, card) {
     card: card || null,
     // How hard the visitor asked for it (issue #93). The one setting, read here and nowhere else
     // in this file, so every piece on the site is dealt at it.
-    difficulty: askedDifficulty()
+    difficulty: askedDifficulty(),
+    // How this piece moves (README: "Motion axiom"): its own roll of a curve, a stair, a ratchet,
+    // a flicker and a matte, from the same seed, so nothing it draws moves along a formula.
+    rite: rite(seed)
   };
 }
 
@@ -1033,6 +1055,7 @@ function makeCtx(env) {
     mix,
     alpha,
     reduced: calm.matches,
+    rite: env.rite, // how this piece moves: the same roll piece() was handed
     satisfy(id, value) {
       markSet(id, value, 'piece');
     },

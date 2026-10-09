@@ -846,7 +846,8 @@ function envFor(V, seed, world, stars, variant, card, difficulty) {
     // The difficulty the stage will hand this piece (issue #93): the stub persona's, so the piece
     // the module is asked for is the very piece the stage opened. A card carries none, as in the
     // browser, which is why sparkOf() below is handed nothing.
-    difficulty: difficulty || null
+    difficulty: difficulty || null,
+    rite: V.rite(seed)
   };
 }
 

@@ -9,16 +9,30 @@
 // How it behaves:
 //   at rest        the logo alone: a pill with the sparkles mark in it, tonal and blurred so it
 //                  reads over any world's palette.
-//   on rollover    the site's name fades in beside the mark, quickly and tightly, and fades out
-//                  again. Focus does the same thing, so a keyboard sees what a pointer sees.
-//   on press       the page becomes a lightbox -- dimmed, blurred, its animation held, its
-//                  controls inert -- and the options branch out from the logo as a constellation of
-//                  chips, each on a ray back to the mark. Every ray is drawn beneath every chip, so
-//                  a ray crossing the scatter passes behind the options in its way rather than over
-//                  their labels (issue #72). The lightbox itself is not this file's: it is the one
-//                  the whole site shares (_lightbox.scss, and window.interestingSite.lightbox in
-//                  js/site.js), the same one the persona sheet and the shared "are you sure?" modal
-//                  open through (issue #70).
+//   on rollover    the pill waxes -- a rolled texture climbs the matte ladder over it, tread by
+//                  tread, and the mark twitches one tread -- and the site's name is printed out
+//                  beside the mark in slices through a rolled matte, like a word coming off a
+//                  jammed press. Focus does the same thing, so a keyboard sees what a pointer sees.
+//   on press       the pill is stamped (a sink in hard cuts and a flash), the page becomes a
+//                  lightbox -- dimmed, blurred, its animation held, its controls inert -- the
+//                  sparkles ratchet a third of a turn with backlash, and the options branch out
+//                  from the logo as a constellation of chips, each one developing through its own
+//                  tread of the matte in a rolled order, each on a ray drawn out in treads behind
+//                  it. Every ray is drawn beneath every chip, so a ray crossing the scatter passes
+//                  behind the options in its way rather than over their labels (issue #72). The
+//                  lightbox itself is not this file's: it is the one the whole site shares
+//                  (_lightbox.scss, and window.interestingSite.lightbox in js/site.js), the same
+//                  one the persona sheet and the shared "are you sure?" modal open through (issue
+//                  #70).
+//   on close       nothing is cut: the chips are unmade down the ladder, slipping back toward the
+//                  logo with one flicker of refusal, the rays retract in treads, and the <details>
+//                  closes only when the last of them has gone (js/site.js, close()).
+//
+// Nothing here fades, glides or cuts while a visitor is watching (README: "Motion axiom"). A
+// surface that changes changes through the matte ladder (--matte-1 to --matte-5, rolled by
+// js/motion.js); a scalar that changes -- a shadow, an offset, a colour, where a chip sits --
+// changes along the stair family in treads; every @keyframes below is written as held pairs, so
+// each tread is a cut and the rolled curve only decides when the cuts fall.
 //
 // Two layouts, and the <details> element does the work of switching between them:
 //   with scripting the options are placed by js/site.js, which is the only thing that knows how
@@ -27,8 +41,9 @@
 //                  own amount so the set reads as a scatter rather than a list. The script writes
 //                  --x, --y, --len, --a, --mx, --my, --fx, --fy and --k on to each option (where
 //                  the star sits, the ray that reaches it and the point it reaches out from,
-//                  where it branches out from, and its place in the order), and the rules below
-//                  are what consume them. <html data-nav>
+//                  where it branches out from, and its place in the order), --jit and --roll on
+//                  every press (its own jitter, and its rolled place in the order the chips
+//                  develop in), and the rules below are what consume them. <html data-nav>
 //                  says the script is here; it is set before the body is drawn, so there is no
 //                  flash of the other layout.
 //   without it     a plain cascade of the same chips under the logo, which is what the markup is
@@ -39,6 +54,8 @@
 
 @use 'type';
 
+// The skip link drops in treads when a keyboard reaches it -- down the ladder, a tread too far,
+// and back -- and retracts up the stair when the focus moves on.
 .skip-link {
   position: fixed;
   top: 0.75rem;
@@ -52,12 +69,45 @@
   text-decoration: none;
   box-shadow: var(--md-sys-elevation-level3);
   @include type.scale(label-large);
-  transition: transform var(--motion-short) var(--ease-arrive);
+  transition: transform var(--motion-short) var(--ease-stair);
 }
 
 .skip-link:focus-visible {
   transform: translateY(0);
   outline-color: var(--md-sys-color-on-surface);
+  animation: skip-drop var(--motion-medium) var(--ease-skip-drop, var(--ease-arrive)) both;
+}
+
+@keyframes skip-drop {
+  0%, 21.9% {
+    transform: translateY(-110%) skewX(var(--arrive-skew, 0deg));
+    mask: var(--matte-2);
+    -webkit-mask: var(--matte-2);
+  }
+
+  22%, 45.9% {
+    transform: translateY(-38%);
+    mask: var(--matte-3);
+    -webkit-mask: var(--matte-3);
+  }
+
+  46%, 65.9% {
+    transform: translateY(9%) scale(var(--pop-over, 1.04));
+    mask: var(--matte-4);
+    -webkit-mask: var(--matte-4);
+  }
+
+  66%, 83.9% {
+    transform: translateY(-3%);
+    mask: var(--matte-5);
+    -webkit-mask: var(--matte-5);
+  }
+
+  84%, 100% {
+    transform: none;
+    mask: none;
+    -webkit-mask: none;
+  }
 }
 
 // The wrapper the skip link lands on spans the page; the feature inside it is full-bleed.
@@ -101,8 +151,14 @@
   color: var(--md-sys-color-on-surface);
   cursor: pointer;
   list-style: none;
+  outline: 3px solid transparent;
+  outline-offset: -3px;
   @include type.scale(title-medium);
-  transition: box-shadow var(--motion-short) var(--ease-flicker);
+  // The shadow lifts and the focus ring is struck in treads, never in a glide.
+  transition:
+    box-shadow var(--motion-short) var(--ease-stair),
+    outline-color var(--motion-short) var(--ease-stair),
+    outline-offset var(--motion-short) var(--ease-stair);
 }
 
 // The disclosure triangle, in both spellings browsers give it.
@@ -112,23 +168,196 @@
   content: '';
 }
 
-.sparknav-logo:hover {
+// The frost: the pill's own fill texture (--matte-fill, in the pill's own ink), under the mark
+// and the name, which the pointer or the focus brings up through the ladder. The pill is already
+// a stacking context (its z-index above), so a layer at -1 sits over its background and under
+// its contents.
+.sparknav-logo::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: var(--matte-fill);
+  background-size: var(--matte-fill-size);
+  opacity: 0;
+  pointer-events: none;
+  mask: var(--matte-1);
+  -webkit-mask: var(--matte-1);
+  mask-repeat: repeat;
+  -webkit-mask-repeat: repeat;
+}
+
+// Waxing: js/motion.js puts is-waxing on the summary while a pointer or a visible focus is on
+// it; :hover and :focus-visible are the same rite for a page with no script.
+.sparknav-logo.is-waxing,
+.sparknav-logo:hover,
+.sparknav-logo:focus-visible {
   box-shadow: var(--md-sys-elevation-level3);
 }
 
+.sparknav-logo.is-waxing::after,
+.sparknav-logo:hover::after,
+.sparknav-logo:focus-visible::after {
+  opacity: 0.16;
+  mask: none;
+  -webkit-mask: none;
+  animation: logo-frost var(--motion-medium) var(--ease-logo-frost, var(--ease-stair)) both;
+}
+
+// Waning: the frost leaves back down the ladder.
+.sparknav-logo.is-waning::after {
+  opacity: 0.16;
+  animation: logo-thaw var(--motion-medium) var(--ease-logo-thaw, var(--ease-stair)) both;
+}
+
+.sparknav-logo:focus-visible {
+  outline-color: var(--md-sys-color-primary);
+  outline-offset: 2px;
+}
+
+// The stamp: a press sinks the pill in one cut, holds, a half-step back, home -- with a flash of
+// contrast on the way down. :active is the same for a page with no script.
+.sparknav-logo.is-stamping,
+.sparknav-logo:active {
+  animation: logo-stamp var(--motion-short) var(--ease-logo-stamp, var(--ease-flicker)) both;
+}
+
+@keyframes logo-frost {
+  0%, 21.9% {
+    mask: var(--matte-1);
+    -webkit-mask: var(--matte-1);
+  }
+
+  22%, 41.9% {
+    mask: var(--matte-2);
+    -webkit-mask: var(--matte-2);
+  }
+
+  42%, 55.9% {
+    mask: var(--matte-1);
+    -webkit-mask: var(--matte-1);
+  }
+
+  56%, 73.9% {
+    mask: var(--matte-3);
+    -webkit-mask: var(--matte-3);
+  }
+
+  74%, 89.9% {
+    mask: var(--matte-4);
+    -webkit-mask: var(--matte-4);
+  }
+
+  90%, 100% {
+    mask: none;
+    -webkit-mask: none;
+  }
+}
+
+@keyframes logo-thaw {
+  0%, 27.9% {
+    mask: var(--matte-4);
+    -webkit-mask: var(--matte-4);
+  }
+
+  28%, 51.9% {
+    mask: var(--matte-3);
+    -webkit-mask: var(--matte-3);
+  }
+
+  52%, 71.9% {
+    mask: var(--matte-2);
+    -webkit-mask: var(--matte-2);
+  }
+
+  72%, 93.9% {
+    mask: var(--matte-1);
+    -webkit-mask: var(--matte-1);
+  }
+
+  94%, 100% {
+    opacity: 0;
+    mask: var(--matte-1);
+    -webkit-mask: var(--matte-1);
+  }
+}
+
+@keyframes logo-stamp {
+  0%, 31.9% {
+    transform: translateY(1.5px) scale(0.965) skewX(calc(var(--arrive-skew, 0deg) * 0.5));
+    filter: contrast(1.3) brightness(1.1);
+  }
+
+  32%, 61.9% {
+    transform: translateY(1px) scale(0.975);
+    filter: contrast(1.15);
+  }
+
+  62%, 81.9% {
+    transform: translateY(-0.5px) scale(1.015);
+    filter: none;
+  }
+
+  82%, 100% {
+    transform: none;
+    filter: none;
+  }
+}
+
 // The sparkles turn as the menu opens: by a third of a turn and a little more or less, the little
-// being the roll's (--spark-extra, js/motion.js), along a curve rolled for this press.
+// being the roll's (--spark-extra, js/motion.js), and never as one smooth turn -- a ratchet of
+// uneven treads with a slip of backlash on one of them and a flicker of scale as it lands, along
+// a stair rolled for this press. Closing turns it back along a stair of its own, in fewer treads.
+// Under the pointer the mark twitches one tread (rotate composes with the transform, so a twitch
+// and a turn never fight).
 .sparknav-spark {
   color: var(--md-sys-color-primary);
-  transition: transform var(--motion-medium) var(--ease-arrive);
+  transition:
+    transform var(--motion-medium) var(--ease-stair),
+    rotate var(--motion-short) var(--ease-stair);
+}
+
+.sparknav-logo.is-waxing .sparknav-spark,
+.sparknav-logo:hover .sparknav-spark,
+.sparknav-logo:focus-visible .sparknav-spark {
+  rotate: calc(var(--lift-rot, 0.3deg) * 18);
 }
 
 .sparknav[open] .sparknav-spark {
   transform: rotate(calc(60deg + var(--spark-extra, 0deg)));
+  animation: spark-ratchet var(--motion-medium) var(--ease-spark-ratchet, var(--ease-stair)) both;
 }
 
-// The title: the quick, tight fade in and out beside the mark. It keeps its place in the
-// accessibility tree throughout -- clipped, never display:none -- so the logo is always named.
+@keyframes spark-ratchet {
+  0%, 17.9% {
+    transform: rotate(calc(14deg + var(--spark-extra, 0deg) * 0.2));
+  }
+
+  18%, 33.9% {
+    transform: rotate(calc(8deg + var(--spark-extra, 0deg) * 0.1));
+  }
+
+  34%, 55.9% {
+    transform: rotate(calc(39deg + var(--spark-extra, 0deg) * 0.55));
+  }
+
+  56%, 73.9% {
+    transform: rotate(calc(66deg + var(--spark-extra, 0deg) * 1.1)) scale(1.14);
+  }
+
+  74%, 85.9% {
+    transform: rotate(calc(57deg + var(--spark-extra, 0deg) * 0.95)) scale(0.96);
+  }
+
+  86%, 100% {
+    transform: rotate(calc(60deg + var(--spark-extra, 0deg)));
+  }
+}
+
+// The title: printed beside the mark in slices through a rolled matte, its room opening in
+// treads up the stair, and taken back the same way. It keeps its place in the accessibility tree
+// throughout -- clipped, never display:none -- so the logo is always named.
 .sparknav-name {
   max-width: 0;
   margin-left: 0;
@@ -136,17 +365,58 @@
   overflow: hidden;
   white-space: nowrap;
   transition:
-    max-width var(--motion-short) var(--ease-shift),
-    margin-left var(--motion-short) var(--ease-shift),
-    opacity calc(var(--motion-short) * 0.65) var(--ease-flicker);
+    max-width var(--motion-medium) var(--ease-stair),
+    margin-left var(--motion-medium) var(--ease-stair),
+    opacity var(--motion-short) var(--ease-stair),
+    letter-spacing var(--motion-short) var(--ease-stair);
 }
 
 .sparknav:hover .sparknav-name,
+.sparknav-logo.is-waxing .sparknav-name,
 .sparknav-logo:focus-visible .sparknav-name,
 .sparknav[open] .sparknav-name {
   max-width: 9rem;
   margin-left: 0.45rem;
   opacity: 1;
+  animation: name-print var(--motion-medium) var(--ease-name-print, var(--ease-stair)) both;
+}
+
+@keyframes name-print {
+  0%, 19.9% {
+    letter-spacing: 0.12em;
+    mask: var(--matte-1);
+    -webkit-mask: var(--matte-1);
+  }
+
+  20%, 37.9% {
+    letter-spacing: 0.08em;
+    mask: var(--matte-2);
+    -webkit-mask: var(--matte-2);
+  }
+
+  38%, 51.9% {
+    letter-spacing: 0.1em;
+    mask: var(--matte-1);
+    -webkit-mask: var(--matte-1);
+  }
+
+  52%, 69.9% {
+    letter-spacing: 0.04em;
+    mask: var(--matte-3);
+    -webkit-mask: var(--matte-3);
+  }
+
+  70%, 85.9% {
+    letter-spacing: 0.01em;
+    mask: var(--matte-4);
+    -webkit-mask: var(--matte-4);
+  }
+
+  86%, 100% {
+    letter-spacing: normal;
+    mask: none;
+    -webkit-mask: none;
+  }
 }
 
 // ---- the state interface, hosted in the lightbox -----------------------------------------
@@ -181,15 +451,42 @@
 }
 
 // It arrives where the constellation was, rather than from nowhere: the veil is already up, so
-// this is the only thing that moves -- from a little of the way the roll says arrivals come from.
+// this is the only thing that moves -- developing through the ladder inside the shape the roll
+// gave the veil (--wipe-from, then --wipe-to), from a little of the way the roll says arrivals
+// come from, a tread too far, and set.
 @keyframes sparknav-modal {
-  from {
-    opacity: 0;
+  0%, 21.9% {
+    clip-path: var(--wipe-from, inset(0 0 100% 0));
+    mask: var(--matte-2);
+    -webkit-mask: var(--matte-2);
     transform: translate(calc(var(--arrive-x, 0px) * 0.4), calc(var(--arrive-y, 28px) * 0.4)) rotate(calc(var(--arrive-rot, 0deg) * 0.5));
   }
 
-  to {
-    opacity: 1;
+  22%, 45.9% {
+    clip-path: var(--wipe-to, inset(0));
+    mask: var(--matte-3);
+    -webkit-mask: var(--matte-3);
+    transform: translate(calc(var(--arrive-x, 0px) * 0.15), calc(var(--arrive-y, 28px) * 0.15)) rotate(calc(var(--arrive-rot, 0deg) * 0.2));
+  }
+
+  46%, 67.9% {
+    clip-path: var(--wipe-to, inset(0));
+    mask: var(--matte-4);
+    -webkit-mask: var(--matte-4);
+    transform: translate(0, calc(var(--arrive-y, 28px) * -0.08)) scale(var(--pop-over, 1.02));
+  }
+
+  68%, 85.9% {
+    clip-path: var(--wipe-to, inset(0));
+    mask: var(--matte-5);
+    -webkit-mask: var(--matte-5);
+    transform: none;
+  }
+
+  86%, 100% {
+    clip-path: var(--wipe-to, inset(0));
+    mask: none;
+    -webkit-mask: none;
     transform: none;
   }
 }
@@ -236,51 +533,111 @@ html[data-nav] .sparknav-sky[hidden] {
   text-decoration: none;
   font-family: inherit;
   cursor: pointer;
+  outline: 3px solid transparent;
+  outline-offset: -3px;
   @include type.scale(label-large);
+  // Where a chip sits moves in treads when the window is resized under an open constellation;
+  // its colour, its shadow and its focus ring change in treads too.
+  transition:
+    top var(--motion-medium) var(--ease-stair),
+    left var(--motion-medium) var(--ease-stair),
+    background-color var(--motion-short) var(--ease-stair),
+    color var(--motion-short) var(--ease-stair),
+    box-shadow var(--motion-short) var(--ease-stair),
+    outline-color var(--motion-short) var(--ease-stair),
+    outline-offset var(--motion-short) var(--ease-stair);
 }
 
-// The M3 state layer, as every pressable thing on the site carries (see _controls.scss; an <a>
-// that is not a.action has none of its own). It sweeps in from the edge the roll gave it rather
-// than fading in place (--state-from, js/motion.js), along a curve rolled for this press.
+// The two layers every pressable thing on the site carries (see _controls.scss): the fill
+// texture (::before, under) a set chip wears, and the state layer (::after, over) a chip under the
+// pointer brings up through the ladder. Each matte is offset by the chip's place in the order
+// (--k), so no two chips reveal alike from the one roll.
+.sparknav-node::before,
 .sparknav-node::after {
   content: '';
   position: absolute;
   inset: 0;
-  z-index: -1;
   border-radius: inherit;
-  background: currentColor;
-  opacity: 0;
-  clip-path: var(--state-from, inset(0 100% 0 0));
   pointer-events: none;
-  transition:
-    opacity var(--motion-short) var(--ease-flicker),
-    clip-path var(--motion-short) var(--ease-flicker);
+  mask-repeat: repeat;
+  -webkit-mask-repeat: repeat;
 }
 
-.sparknav-node:hover::after {
-  opacity: var(--md-sys-state-hover-opacity);
-  clip-path: inset(0);
+.sparknav-node::before {
+  z-index: -2;
+  background: var(--matte-fill);
+  background-size: var(--matte-fill-size);
+  opacity: 0;
+}
+
+.sparknav-node::after {
+  z-index: -1;
+  background: currentColor;
+  opacity: 0;
+  mask: var(--matte-1);
+  -webkit-mask: var(--matte-1);
+  mask-position: calc(var(--k, 0) * 37px) calc(var(--k, 0) * 23px);
+  -webkit-mask-position: calc(var(--k, 0) * 37px) calc(var(--k, 0) * 23px);
+}
+
+// Waxing: the state layer climbs the ladder and holds at the top while the pointer or the focus
+// is on the chip (is-waxing, js/motion.js; :hover and :focus-visible for a page with no script).
+.sparknav-node.is-waxing::after,
+.sparknav-node:hover::after,
+.sparknav-node:focus-visible::after {
+  opacity: var(--state-opacity, var(--md-sys-state-hover-opacity));
+  mask: none;
+  -webkit-mask: none;
+  animation: chip-wax var(--motion-medium) var(--ease-chip-wax, var(--ease-stair)) both;
 }
 
 .sparknav-node:focus-visible::after {
-  opacity: var(--md-sys-state-focus-opacity);
-  clip-path: inset(0);
+  --state-opacity: var(--md-sys-state-focus-opacity);
+}
+
+// Waning: back down the ladder, and gone.
+.sparknav-node.is-waning::after {
+  opacity: var(--md-sys-state-hover-opacity);
+  animation: chip-wane var(--motion-medium) var(--ease-chip-wane, var(--ease-stair)) both;
+}
+
+// The stamp: the chip sinks in one cut and springs back in two. Said with the mark's own class in
+// front so it outranks the branch below, which is on the chip for as long as the sky is open.
+.sparknav .sparknav-node.is-stamping,
+.sparknav .sparknav-node:active {
+  animation: chip-stamp var(--motion-short) var(--ease-chip-stamp, var(--ease-flicker)) both;
 }
 
 .sparknav-node:active::after {
   opacity: var(--md-sys-state-pressed-opacity);
-  clip-path: inset(0);
+  mask: none;
+  -webkit-mask: none;
 }
 
 .sparknav-node:focus-visible {
-  outline: 3px solid var(--md-sys-color-primary);
+  outline-color: var(--md-sys-color-primary);
   outline-offset: 2px;
 }
 
+// The icon twitches one tread under the pointer and sinks one tread under a press.
 .sparknav-node .icon {
   width: 20px;
   height: 20px;
   color: var(--md-sys-color-primary);
+  transition:
+    rotate var(--motion-short) var(--ease-stair),
+    translate var(--motion-short) var(--ease-stair);
+}
+
+.sparknav-node.is-waxing .icon,
+.sparknav-node:hover .icon,
+.sparknav-node:focus-visible .icon {
+  rotate: calc(var(--lift-rot, 0.3deg) * 24);
+}
+
+.sparknav-node.is-stamping .icon,
+.sparknav-node:active .icon {
+  translate: 0 1px;
 }
 
 .sparknav-label {
@@ -289,14 +646,72 @@ html[data-nav] .sparknav-sky[hidden] {
   overflow-wrap: anywhere;
 }
 
-// The page the visitor is already on, marked the way the feed marks its own card.
+// The page the visitor is already on, marked the way the feed marks its own card -- and sealed:
+// a set surface is a textured surface, the roll's fill in the chip's own ink over its colour,
+// with a small sigil before its name. The texture climbs the ladder onto it as the constellation
+// lands (and whenever the mark is set, is-sealing, js/motion.js) and leaves down it when unset.
 .sparknav-node[aria-current='page'] {
   background: var(--md-sys-color-secondary-container);
   color: var(--md-sys-color-on-secondary-container);
 }
 
+.sparknav-node[aria-current='page']::before {
+  opacity: 0.2;
+}
+
 .sparknav-node[aria-current='page'] .icon {
   color: inherit;
+}
+
+.sparknav-node[aria-current='page'] .sparknav-label::before {
+  content: '\2726 ' / '';
+  color: var(--md-sys-color-tertiary);
+}
+
+.sparknav-node.is-sealing::before,
+.is-branching .sparknav-node[aria-current='page']::before {
+  opacity: 0.2;
+  animation: rite-seal var(--motion-long) var(--ease-rite-seal, var(--ease-stair)) both;
+}
+
+.sparknav-node.is-unsealing::before {
+  animation: rite-unseal var(--motion-medium) var(--ease-rite-unseal, var(--ease-stair)) both;
+}
+
+.is-branching .sparknav-node[aria-current='page']::before,
+.is-branching .sparknav-node[aria-current='page'] .sparknav-label::before {
+  animation-delay: calc(var(--roll, var(--k, 0)) * var(--motion-stagger, 40ms) + var(--jit, 0ms) + var(--motion-short, 170ms));
+}
+
+.is-branching .sparknav-node[aria-current='page'] .sparknav-label::before {
+  display: inline-block;
+  animation: current-wink var(--motion-long) var(--ease-current-wink, var(--ease-flicker)) both;
+}
+
+@keyframes current-wink {
+  0%, 17.9% {
+    opacity: 0;
+  }
+
+  18%, 35.9% {
+    opacity: 1;
+    transform: rotate(calc(var(--lift-rot, 0.3deg) * 40)) scale(1.3);
+  }
+
+  36%, 47.9% {
+    opacity: 0.2;
+    transform: none;
+  }
+
+  48%, 65.9% {
+    opacity: 1;
+    transform: rotate(calc(var(--lift-rot, 0.3deg) * -24));
+  }
+
+  66%, 100% {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 .sparknav-ray {
@@ -331,6 +746,51 @@ html[data-nav] .sparknav-sky[hidden] {
 
 html:not([data-nav='live']) .sparknav-node {
   max-width: 100%;
+}
+
+// The cascade still develops rather than appearing: each chip through the ladder in the rolled
+// order, from one tread to the side.
+html:not([data-nav='live']) .is-branching .sparknav-node {
+  animation: sparknav-cascade var(--motion-medium) var(--ease-sparknav-cascade, var(--ease-arrive)) both;
+  animation-delay: calc(var(--roll, var(--k, 0)) * var(--motion-stagger, 40ms) + var(--jit, 0ms));
+}
+
+html:not([data-nav='live']) .is-unmaking .sparknav-node {
+  animation: sparknav-unmake var(--motion-medium) var(--ease-sparknav-unmake, var(--ease-leave)) both;
+  animation-delay: calc(var(--roll, var(--k, 0)) * var(--motion-stagger, 40ms) * 0.5);
+  pointer-events: none;
+}
+
+@keyframes sparknav-cascade {
+  0%, 24.9% {
+    mask: var(--matte-1);
+    -webkit-mask: var(--matte-1);
+    transform: translateX(calc(var(--shift-x, 3px) * -2));
+  }
+
+  25%, 49.9% {
+    mask: var(--matte-2);
+    -webkit-mask: var(--matte-2);
+    transform: translateX(calc(var(--shift-x, 3px) * -1));
+  }
+
+  50%, 69.9% {
+    mask: var(--matte-3);
+    -webkit-mask: var(--matte-3);
+    transform: translateX(calc(var(--shift-x, 3px) * 0.3));
+  }
+
+  70%, 87.9% {
+    mask: var(--matte-5);
+    -webkit-mask: var(--matte-5);
+    transform: none;
+  }
+
+  88%, 100% {
+    mask: none;
+    -webkit-mask: none;
+    transform: none;
+  }
 }
 
 // The scatter: the script has placed every star, so each option is absolute, each chip sits where
@@ -377,11 +837,12 @@ html[data-nav='live'] {
   // js/site.js adds .is-branching on every press, so the constellation branches out again each
   // time instead of only the first time it is rendered -- and never the same way: the curve is
   // rolled for every branching (js/motion.js), the step between stars is rolled with it
-  // (--motion-stagger), and each star carries a jitter of its own (--jit, written by js/site.js
-  // on every press), so the scatter comes out a little ragged, like a thing cast and not laid.
+  // (--motion-stagger), each star takes its turn in a rolled order (--roll, a stride through the
+  // set cast afresh on every press by js/site.js) with a jitter of its own on top (--jit), so the
+  // scatter comes out a little ragged, like a thing cast and not laid.
   .is-branching .sparknav-node {
     animation: sparknav-branch var(--motion-medium) var(--ease-sparknav-branch, var(--ease-arrive)) both;
-    animation-delay: calc(var(--k, 0) * var(--motion-stagger, 40ms) + var(--jit, 0ms));
+    animation-delay: calc(var(--roll, var(--k, 0)) * var(--motion-stagger, 40ms) + var(--jit, 0ms));
   }
 
   .sparknav-ray {
@@ -402,52 +863,444 @@ html[data-nav='live'] {
     );
   }
 
+  // Each ray is drawn out half a step behind its chip, dash by dash through the ladder.
   .is-branching .sparknav-ray {
     animation: sparknav-ray var(--motion-medium) var(--ease-sparknav-ray, var(--ease-arrive)) both;
-    animation-delay: calc(var(--k, 0) * var(--motion-stagger, 40ms) + var(--jit, 0ms));
+    animation-delay: calc(var(--roll, var(--k, 0)) * var(--motion-stagger, 40ms) + var(--jit, 0ms) + var(--motion-stagger, 40ms) * 0.5);
+  }
+
+  // The unmaking (js/site.js, close()): the chips go down the ladder toward the logo, the rays
+  // retract, half a step apart in the same rolled order, and nothing is pressable meanwhile.
+  .is-unmaking .sparknav-node {
+    animation: sparknav-unmake var(--motion-medium) var(--ease-sparknav-unmake, var(--ease-leave)) both;
+    animation-delay: calc(var(--roll, var(--k, 0)) * var(--motion-stagger, 40ms) * 0.5);
+    pointer-events: none;
+  }
+
+  .is-unmaking .sparknav-ray {
+    animation: sparknav-ray-out var(--motion-medium) var(--ease-sparknav-ray-out, var(--ease-leave)) both;
+    animation-delay: calc(var(--roll, var(--k, 0)) * var(--motion-stagger, 40ms) * 0.5);
+  }
+
+  // The circle the constellation is cast in (_rite.scss draws the two rings): cast in cuts, the
+  // solid ring developing through the ladder a tread larger than it lands, the dashed one
+  // ratcheting a few degrees as it does.
+  .sparknav[open]::before {
+    animation: cast-ring var(--motion-long) var(--ease-cast-ring, var(--ease-stair)) both;
+  }
+
+  .sparknav[open]::after {
+    animation: cast-ring-dashed var(--motion-long) var(--ease-cast-ring-dashed, var(--ease-stair)) both;
   }
 }
 
-// Each star shoots out from the logo it belongs to, turning a little as it comes (the roll's
-// --arrive-rot), and its ray is drawn after it from however much of itself the roll left it.
+// Each star develops out of the logo it belongs to: through its own treads of the matte, from
+// most of the way back to the mark (--fx, --fy), turning a little as it comes (the roll's
+// --arrive-rot), a tread too far, a slip back, and set.
 @keyframes sparknav-branch {
-  from {
-    opacity: 0;
-    transform: translate(var(--fx, 0), var(--fy, 0)) rotate(var(--arrive-rot, 0deg)) scale(calc(var(--arrive-scale, 0.96) - 0.14));
+  0%, 17.9% {
+    mask: var(--matte-1);
+    -webkit-mask: var(--matte-1);
+    mask-position: calc(var(--k, 0) * 37px) calc(var(--k, 0) * 23px);
+    -webkit-mask-position: calc(var(--k, 0) * 37px) calc(var(--k, 0) * 23px);
+    transform: translate(var(--fx, 0px), var(--fy, 0px)) rotate(var(--arrive-rot, 0deg)) scale(calc(var(--arrive-scale, 0.96) - 0.14));
   }
 
-  to {
-    opacity: 1;
+  18%, 35.9% {
+    mask: var(--matte-2);
+    -webkit-mask: var(--matte-2);
+    mask-position: calc(var(--k, 0) * 37px) calc(var(--k, 0) * 23px);
+    -webkit-mask-position: calc(var(--k, 0) * 37px) calc(var(--k, 0) * 23px);
+    transform: translate(calc(var(--fx, 0px) * 0.55), calc(var(--fy, 0px) * 0.55)) rotate(calc(var(--arrive-rot, 0deg) * 0.6)) scale(var(--arrive-scale, 0.96));
+  }
+
+  36%, 51.9% {
+    mask: var(--matte-3);
+    -webkit-mask: var(--matte-3);
+    mask-position: calc(var(--k, 0) * 37px) calc(var(--k, 0) * 23px);
+    -webkit-mask-position: calc(var(--k, 0) * 37px) calc(var(--k, 0) * 23px);
+    transform: translate(calc(var(--fx, 0px) * 0.2), calc(var(--fy, 0px) * 0.2)) rotate(calc(var(--arrive-rot, 0deg) * 0.2));
+  }
+
+  52%, 69.9% {
+    mask: var(--matte-4);
+    -webkit-mask: var(--matte-4);
+    mask-position: calc(var(--k, 0) * 37px) calc(var(--k, 0) * 23px);
+    -webkit-mask-position: calc(var(--k, 0) * 37px) calc(var(--k, 0) * 23px);
+    transform: translate(calc(var(--fx, 0px) * -0.08), calc(var(--fy, 0px) * -0.08)) scale(var(--pop-over, 1.06));
+  }
+
+  70%, 85.9% {
+    mask: var(--matte-5);
+    -webkit-mask: var(--matte-5);
+    transform: translate(calc(var(--fx, 0px) * 0.03), calc(var(--fy, 0px) * 0.03)) scale(0.985);
+  }
+
+  86%, 100% {
+    mask: none;
+    -webkit-mask: none;
     transform: none;
   }
 }
 
+// A ray reaches out in treads from however much of itself the roll left it (--ray-from): out, a
+// slip back, out past its length, and home, drawn through the ladder so it comes out dash by dash.
 @keyframes sparknav-ray {
-  from {
-    opacity: 0;
+  0%, 21.9% {
+    mask: var(--matte-1);
+    -webkit-mask: var(--matte-1);
     transform: rotate(var(--a, 0deg)) scaleX(var(--ray-from, 0.2));
   }
 
-  to {
-    opacity: 1;
+  22%, 39.9% {
+    mask: var(--matte-2);
+    -webkit-mask: var(--matte-2);
+    transform: rotate(var(--a, 0deg)) scaleX(calc(var(--ray-from, 0.2) + 0.3));
+  }
+
+  40%, 51.9% {
+    mask: var(--matte-3);
+    -webkit-mask: var(--matte-3);
+    transform: rotate(var(--a, 0deg)) scaleX(calc(var(--ray-from, 0.2) + 0.18));
+  }
+
+  52%, 69.9% {
+    mask: var(--matte-4);
+    -webkit-mask: var(--matte-4);
+    transform: rotate(var(--a, 0deg)) scaleX(0.84);
+  }
+
+  70%, 85.9% {
+    mask: var(--matte-5);
+    -webkit-mask: var(--matte-5);
+    transform: rotate(var(--a, 0deg)) scaleX(1.05);
+  }
+
+  86%, 100% {
+    mask: none;
+    -webkit-mask: none;
     transform: rotate(var(--a, 0deg)) scaleX(1);
   }
 }
 
-// Less motion: the name is there or it is not, and the constellation arrives all at once instead
-// of branching. Nothing here moves after that.
+// Unmaking a star: a step out first (the leave family's refusal), then down the ladder and back
+// toward the logo, one flicker whole on the way, to the roll's --leave-rot and --leave-scale.
+@keyframes sparknav-unmake {
+  0%, 17.9% {
+    mask: var(--matte-5);
+    -webkit-mask: var(--matte-5);
+    transform: translate(calc(var(--fx, 0px) * -0.05), calc(var(--fy, 0px) * -0.05)) scale(1.02);
+  }
+
+  18%, 35.9% {
+    mask: var(--matte-4);
+    -webkit-mask: var(--matte-4);
+    transform: translate(calc(var(--fx, 0px) * 0.16), calc(var(--fy, 0px) * 0.16)) rotate(calc(var(--leave-rot, 0deg) * 0.5));
+  }
+
+  36%, 49.9% {
+    mask: var(--matte-5);
+    -webkit-mask: var(--matte-5);
+    transform: translate(calc(var(--fx, 0px) * 0.12), calc(var(--fy, 0px) * 0.12)) rotate(calc(var(--leave-rot, 0deg) * 0.3));
+  }
+
+  50%, 67.9% {
+    mask: var(--matte-3);
+    -webkit-mask: var(--matte-3);
+    transform: translate(calc(var(--fx, 0px) * 0.38), calc(var(--fy, 0px) * 0.38)) rotate(var(--leave-rot, 0deg)) scale(var(--leave-scale, 0.92));
+  }
+
+  68%, 85.9% {
+    mask: var(--matte-2);
+    -webkit-mask: var(--matte-2);
+    transform: translate(calc(var(--fx, 0px) * 0.6), calc(var(--fy, 0px) * 0.6)) rotate(var(--leave-rot, 0deg)) scale(calc(var(--leave-scale, 0.92) - 0.06));
+  }
+
+  86%, 100% {
+    opacity: 0;
+    mask: var(--matte-1);
+    -webkit-mask: var(--matte-1);
+    transform: translate(calc(var(--fx, 0px) * 0.72), calc(var(--fy, 0px) * 0.72)) rotate(var(--leave-rot, 0deg)) scale(calc(var(--leave-scale, 0.92) - 0.1));
+  }
+}
+
+@keyframes sparknav-ray-out {
+  0%, 23.9% {
+    mask: var(--matte-5);
+    -webkit-mask: var(--matte-5);
+    transform: rotate(var(--a, 0deg)) scaleX(1.03);
+  }
+
+  24%, 47.9% {
+    mask: var(--matte-3);
+    -webkit-mask: var(--matte-3);
+    transform: rotate(var(--a, 0deg)) scaleX(0.7);
+  }
+
+  48%, 63.9% {
+    mask: var(--matte-4);
+    -webkit-mask: var(--matte-4);
+    transform: rotate(var(--a, 0deg)) scaleX(0.78);
+  }
+
+  64%, 83.9% {
+    mask: var(--matte-2);
+    -webkit-mask: var(--matte-2);
+    transform: rotate(var(--a, 0deg)) scaleX(0.4);
+  }
+
+  84%, 100% {
+    opacity: 0;
+    mask: var(--matte-1);
+    -webkit-mask: var(--matte-1);
+    transform: rotate(var(--a, 0deg)) scaleX(var(--ray-from, 0.2));
+  }
+}
+
+// The rings keep the translate _rite.scss centres them with; only the scale and the turn tread.
+@keyframes cast-ring {
+  0%, 19.9% {
+    mask: var(--matte-1);
+    -webkit-mask: var(--matte-1);
+    transform: translate(-50%, -50%) scale(0.62);
+  }
+
+  20%, 39.9% {
+    mask: var(--matte-2);
+    -webkit-mask: var(--matte-2);
+    transform: translate(-50%, -50%) scale(0.84);
+  }
+
+  40%, 57.9% {
+    mask: var(--matte-3);
+    -webkit-mask: var(--matte-3);
+    transform: translate(-50%, -50%) scale(var(--pop-over, 1.04));
+  }
+
+  58%, 75.9% {
+    mask: var(--matte-4);
+    -webkit-mask: var(--matte-4);
+    transform: translate(-50%, -50%) scale(0.98);
+  }
+
+  76%, 91.9% {
+    mask: var(--matte-5);
+    -webkit-mask: var(--matte-5);
+    transform: translate(-50%, -50%);
+  }
+
+  92%, 100% {
+    mask: none;
+    -webkit-mask: none;
+    transform: translate(-50%, -50%);
+  }
+}
+
+@keyframes cast-ring-dashed {
+  0%, 23.9% {
+    mask: var(--matte-1);
+    -webkit-mask: var(--matte-1);
+    transform: translate(-50%, -50%) rotate(calc(var(--spark-extra, 0deg) * -0.4)) scale(0.7);
+  }
+
+  24%, 45.9% {
+    mask: var(--matte-2);
+    -webkit-mask: var(--matte-2);
+    transform: translate(-50%, -50%) rotate(calc(var(--spark-extra, 0deg) * -0.25)) scale(0.9);
+  }
+
+  46%, 63.9% {
+    mask: var(--matte-3);
+    -webkit-mask: var(--matte-3);
+    transform: translate(-50%, -50%) rotate(calc(var(--spark-extra, 0deg) * -0.3)) scale(1.03);
+  }
+
+  64%, 81.9% {
+    mask: var(--matte-4);
+    -webkit-mask: var(--matte-4);
+    transform: translate(-50%, -50%) rotate(calc(var(--spark-extra, 0deg) * -0.08));
+  }
+
+  82%, 93.9% {
+    mask: var(--matte-5);
+    -webkit-mask: var(--matte-5);
+    transform: translate(-50%, -50%);
+  }
+
+  94%, 100% {
+    mask: none;
+    -webkit-mask: none;
+    transform: translate(-50%, -50%);
+  }
+}
+
+// The stamp on a chip: down in one cut, held, a half-step back, home.
+@keyframes chip-stamp {
+  0%, 31.9% {
+    transform: translateY(1px) scale(0.965) skewX(calc(var(--arrive-skew, 0deg) * 0.4));
+    filter: contrast(1.25) brightness(1.08);
+  }
+
+  32%, 61.9% {
+    transform: translateY(1px) scale(0.975);
+    filter: contrast(1.1);
+  }
+
+  62%, 81.9% {
+    transform: translateY(0) scale(1.012);
+    filter: none;
+  }
+
+  82%, 100% {
+    transform: none;
+    filter: none;
+  }
+}
+
+// The chip's state layer up the ladder, offset by the chip's place, with one slip back.
+@keyframes chip-wax {
+  0%, 19.9% {
+    mask: var(--matte-1);
+    -webkit-mask: var(--matte-1);
+    mask-position: calc(var(--k, 0) * 37px) calc(var(--k, 0) * 23px);
+    -webkit-mask-position: calc(var(--k, 0) * 37px) calc(var(--k, 0) * 23px);
+  }
+
+  20%, 37.9% {
+    mask: var(--matte-2);
+    -webkit-mask: var(--matte-2);
+    mask-position: calc(var(--k, 0) * 37px) calc(var(--k, 0) * 23px);
+    -webkit-mask-position: calc(var(--k, 0) * 37px) calc(var(--k, 0) * 23px);
+  }
+
+  38%, 55.9% {
+    mask: var(--matte-3);
+    -webkit-mask: var(--matte-3);
+    mask-position: calc(var(--k, 0) * 37px) calc(var(--k, 0) * 23px);
+    -webkit-mask-position: calc(var(--k, 0) * 37px) calc(var(--k, 0) * 23px);
+  }
+
+  56%, 67.9% {
+    mask: var(--matte-2);
+    -webkit-mask: var(--matte-2);
+    mask-position: calc(var(--k, 0) * 37px) calc(var(--k, 0) * 23px);
+    -webkit-mask-position: calc(var(--k, 0) * 37px) calc(var(--k, 0) * 23px);
+  }
+
+  68%, 83.9% {
+    mask: var(--matte-4);
+    -webkit-mask: var(--matte-4);
+    mask-position: calc(var(--k, 0) * 37px) calc(var(--k, 0) * 23px);
+    -webkit-mask-position: calc(var(--k, 0) * 37px) calc(var(--k, 0) * 23px);
+  }
+
+  84%, 95.9% {
+    mask: var(--matte-5);
+    -webkit-mask: var(--matte-5);
+  }
+
+  96%, 100% {
+    mask: none;
+    -webkit-mask: none;
+  }
+}
+
+@keyframes chip-wane {
+  0%, 23.9% {
+    mask: var(--matte-5);
+    -webkit-mask: var(--matte-5);
+  }
+
+  24%, 47.9% {
+    mask: var(--matte-4);
+    -webkit-mask: var(--matte-4);
+    mask-position: calc(var(--k, 0) * 37px) calc(var(--k, 0) * 23px);
+    -webkit-mask-position: calc(var(--k, 0) * 37px) calc(var(--k, 0) * 23px);
+  }
+
+  48%, 67.9% {
+    mask: var(--matte-3);
+    -webkit-mask: var(--matte-3);
+    mask-position: calc(var(--k, 0) * 37px) calc(var(--k, 0) * 23px);
+    -webkit-mask-position: calc(var(--k, 0) * 37px) calc(var(--k, 0) * 23px);
+  }
+
+  68%, 83.9% {
+    mask: var(--matte-2);
+    -webkit-mask: var(--matte-2);
+    mask-position: calc(var(--k, 0) * 37px) calc(var(--k, 0) * 23px);
+    -webkit-mask-position: calc(var(--k, 0) * 37px) calc(var(--k, 0) * 23px);
+  }
+
+  84%, 96.9% {
+    mask: var(--matte-1);
+    -webkit-mask: var(--matte-1);
+    mask-position: calc(var(--k, 0) * 37px) calc(var(--k, 0) * 23px);
+    -webkit-mask-position: calc(var(--k, 0) * 37px) calc(var(--k, 0) * 23px);
+  }
+
+  97%, 100% {
+    opacity: 0;
+    mask: var(--matte-1);
+    -webkit-mask: var(--matte-1);
+  }
+}
+
+// Less motion: the name is there or it is not, the constellation arrives all at once instead of
+// branching and goes all at once instead of unmaking (js/site.js closes it at once), every state
+// is simply there, and nothing climbs, stamps, ratchets or seals. Each rule below is written at
+// the specificity of the one it stills, so the stillness wins.
 @media (prefers-reduced-motion: reduce) {
   .skip-link,
   .sparknav-logo,
   .sparknav-spark,
   .sparknav-name,
+  .sparknav-node,
+  .sparknav-node .icon,
   .sparknav-node::after {
     transition: none;
   }
 
+  .skip-link:focus-visible,
+  .sparknav-logo.is-waxing::after,
+  .sparknav-logo:hover::after,
+  .sparknav-logo:focus-visible::after,
+  .sparknav-logo.is-waning::after,
+  .sparknav-logo.is-stamping,
+  .sparknav-logo:active,
+  .sparknav[open] .sparknav-spark,
+  .sparknav:hover .sparknav-name,
+  .sparknav-logo.is-waxing .sparknav-name,
+  .sparknav-logo:focus-visible .sparknav-name,
+  .sparknav[open] .sparknav-name,
   .sparknav-modal,
+  .sparknav-node.is-waxing::after,
+  .sparknav-node:hover::after,
+  .sparknav-node:focus-visible::after,
+  .sparknav-node.is-waning::after,
+  .sparknav .sparknav-node.is-stamping,
+  .sparknav .sparknav-node:active,
+  .sparknav-node.is-sealing::before,
+  .sparknav-node.is-unsealing::before,
+  .is-branching .sparknav-node[aria-current='page']::before,
+  .is-branching .sparknav-node[aria-current='page'] .sparknav-label::before,
+  html:not([data-nav='live']) .is-branching .sparknav-node,
+  html:not([data-nav='live']) .is-unmaking .sparknav-node,
   html[data-nav='live'] .is-branching .sparknav-node,
-  html[data-nav='live'] .is-branching .sparknav-ray {
+  html[data-nav='live'] .is-branching .sparknav-ray,
+  html[data-nav='live'] .is-unmaking .sparknav-node,
+  html[data-nav='live'] .is-unmaking .sparknav-ray,
+  html[data-nav='live'] .sparknav[open]::before,
+  html[data-nav='live'] .sparknav[open]::after {
     animation: none;
+  }
+
+  .sparknav-logo.is-waning::after,
+  .sparknav-node.is-waning::after {
+    opacity: 0;
+  }
+
+  .sparknav-node.is-unsealing::before {
+    opacity: 0;
   }
 }

@@ -26,6 +26,7 @@
 {%- if description or thisWorld %}
   <meta name='description' content='{{ description if description else thisWorld.what }}'>
 {%- endif %}
+  <link rel='stylesheet' href='{{ siteRoot }}css/fonts.css'>
 {%- if inlineStyles %}
   <style>{{ 'site' | css | safe }}{{ stylesheet | css | safe }}</style>
 {%- else %}

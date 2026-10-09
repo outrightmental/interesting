@@ -764,7 +764,14 @@ STATE_FILES = {STATE_SCRIPT}
 PARTICIPATE_SCRIPT = "js/participate.js"
 PARTICIPATE_TAG = f"<script src='{PARTICIPATE_SCRIPT}' defer></script>"
 PARTICIPATE_FILES = {PARTICIPATE_SCRIPT}
-FIXED_FILES = ANALYTICS_FILES | STATE_FILES | PARTICIPATE_FILES
+# The rite's own face (README: "Motion axiom", the typographic half): one vendored open-licensed
+# variable font, Fraunces, inline as base64 in one stylesheet with its licence, so nothing is
+# fetched from a third party. Fixed for the same reason the consent library is -- a vendored
+# release is not the site's prose, and a quarter of a megabyte of base64 is not a file a model
+# should be shown or allowed to rewrite from memory.
+FONT_SHEET = "css/fonts.css"
+FONT_FILES = {FONT_SHEET}
+FIXED_FILES = ANALYTICS_FILES | STATE_FILES | PARTICIPATE_FILES | FONT_FILES
 
 # The files each area of the site is made of, which is what a mode's block of the prompt names and
 # what split_for_prompt shows first (focus_files): a run can only change what it was shown, and
@@ -1996,6 +2003,93 @@ def easing_phrases(rel, site):
     return sorted(found)
 
 
+# What a fade is: a transition of one of these properties along any curve but the stair's. A
+# colour, an opacity, a filter or a visibility that changes changes in treads (README: "Motion
+# axiom", the grammar of a change of state); `all` is all of them. A transform or a size may still
+# run along a family -- a slide is a movement, not a fade -- and an animation is read by its spell.
+FADING_PROPERTIES = frozenset([
+    "all", "opacity", "color", "background", "background-color", "border-color", "outline-color",
+    "fill", "stroke", "filter", "backdrop-filter", "visibility", "text-decoration-color", "caret-color",
+])
+STAIR = "--ease-stair"
+
+
+def split_outside_parens(value):
+    """`value` split on the commas that are not inside parentheses: the items of a transition."""
+    items, depth, start = [], 0, 0
+    for i, ch in enumerate(value):
+        if ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth = max(0, depth - 1)
+        elif ch == "," and depth == 0:
+            items.append(value[start:i])
+            start = i + 1
+    items.append(value[start:])
+    return items
+
+
+def in_treads(item):
+    """Whether one item of a transition moves in treads: along the stair family, or along a curve
+    written out in place -- a linear() with stops or a steps() -- which is the engine's own kind
+    of curve and may be a stair of its own."""
+    return STAIR in item or re.search(r"(?<![\w-])(?:linear|steps)\s*\(", item) is not None
+
+
+def fade_phrases(rel, site):
+    """The fades page `rel` would make, lowercased and sorted: each one the property, the curve it
+    moves along and where, as "opacity along --ease-flicker in transition".
+
+    A fade is a transition of a colour, an opacity, a filter or a visibility (FADING_PROPERTIES)
+    along any curve but the stair's: nothing on the site changes its state by a fade, it changes
+    in treads. Read as text, like easing_phrases and for the same reasons, over the page and the
+    scripts and stylesheets it loads, with FIXED_FILES left out.
+    """
+    sources = [site.get(rel) or ""]
+    sources += [site[asset] for asset in assets_of(rel, site) if asset not in FIXED_FILES]
+    found = set()
+    for source in sources:
+        for declaration in TIMING_DECLARATION.finditer(source):
+            head = declaration.group(0).split(":", 1)[0].strip().lower()
+            if head != "transition":
+                continue
+            value = declaration.group(1)
+            if value.strip().lower() == "none":
+                continue
+            for item in split_outside_parens(value):
+                named = re.match(r"\s*([\w-]+)", item)
+                if not named:
+                    continue
+                prop = named.group(1).lower()
+                if prop not in FADING_PROPERTIES or in_treads(item):
+                    continue
+                curve = re.search(r"var\((--ease-[\w-]+)", item)
+                found.add(f"{prop} along {curve.group(1).lower() if curve else 'no curve'} in transition")
+        for assignment in STYLE_ASSIGNMENT.finditer(source):
+            where = (assignment.group(1) or assignment.group(4) or "").lower()
+            if where != "transition":
+                continue
+            for item in split_outside_parens(assignment.group(3) or assignment.group(6) or ""):
+                named = re.match(r"\s*([\w-]+)", item)
+                if not named:
+                    continue
+                prop = named.group(1).lower()
+                if prop in FADING_PROPERTIES and not in_treads(item):
+                    curve = re.search(r"var\((--ease-[\w-]+)", item)
+                    found.add(f"{prop} along {curve.group(1).lower() if curve else 'no curve'} in style.transition")
+    return sorted(found)
+
+
+def pages_fading(site):
+    """The pages of `site` that would change a state by a fade, as {page: [phrase, ...]}."""
+    found = {}
+    for page in sorted(html_pages(site)):
+        phrases = fade_phrases(page, site)
+        if phrases:
+            found[page] = phrases
+    return found
+
+
 def pages_moving_by_formula(site):
     """The pages of `site` that would move by a standard easing, as {page: [phrase, ...]}."""
     found = {}
@@ -2013,7 +2107,8 @@ def pages_missing_motion(site):
 
 def check_motion(before, after):
     """Raise RejectedChange if the change from site `before` to site `after` leaves a page without
-    the motion engine's line, or moves anything on a page by a standard easing.
+    the motion engine's line, moves anything on a page by a standard easing, or changes a state on
+    a page by a fade.
 
     Only what this run breaks is refused, for the same reason the nine checks above only refuse what
     this run breaks: an easing a page already carries stays the site's own to clear away -- every run
@@ -2035,6 +2130,16 @@ def check_motion(before, after):
                 "nothing on the site moves along a standard curve: every transition, animation "
                 f"and scroll runs along a curve {MOTION_SCRIPT} rolled, never linear, ease or a "
                 f"cubic-bezier, and {page} would move by "
+                + " and ".join(f'"{phrase}"' for phrase in added))
+
+    faded = pages_fading(before)
+    for page, phrases in sorted(pages_fading(after).items()):
+        added = [phrase for phrase in phrases if phrase not in faded.get(page, ())]
+        if added:
+            raise RejectedChange(
+                "nothing on the site changes its state by a fade: a colour, an opacity, a filter "
+                "or a visibility that changes changes in treads, its transition along "
+                f"var({STAIR}) and never along another family, and {page} would fade by "
                 + " and ".join(f'"{phrase}"' for phrase in added))
 
 
@@ -2798,50 +2903,80 @@ def build_prompt(shown, omitted=(), run=None, budget=None, feedback=""):
         "and it is below the threshold. And window.confirm is refused outright, anywhere in a page "
         "or a script it loads: a browser dialog cannot say which of a visitor's things is about to "
         "go, and a question that reads differently on every page is not a safety switch.\n"
-        "- AXIOM, every run: nothing on the site moves along a standard curve. Every transition "
-        "and every animation -- a fade, a slide, a wipe, the background washing to a new corner, "
-        "a colour shifting, a ring opening, a chip branching out, a state layer sweeping in, the "
-        "page scrolling -- is a movement of the rite: it runs along a curve rolled for that one "
-        "movement, a procedurally generated glitch of a curve with a hesitation, a stutter, an "
-        "overshoot and a flicker in it, never the same twice, and where the thing moves from, how "
-        "far, which way a wipe travels and what tone a colour passes through are rolled beside "
-        f"it, so every movement feels deliberate and utterly its own. One line in the <head> of a "
-        f"page brings the engine that rolls it:\n    {MOTION_TAG}\n"
+        "- AXIOM, every run: nothing on the site moves along a standard curve, and nothing on it "
+        "fades. Every transition and every animation -- a slide, a wipe, the background washing "
+        "to a new corner, a colour shifting, a ring turning, a chip branching out, a control "
+        "under the pointer, a card arriving, words appearing, the page scrolling -- is a movement "
+        "of the rite: it runs along a curve rolled for that one movement, a procedurally "
+        "generated glitch of a curve with a hesitation, a stutter, an overshoot and a flicker in "
+        "it, never the same twice, and where the thing moves from, how far, which way a wipe "
+        "travels, what pattern a surface changes in and what tone a colour passes through are "
+        "rolled beside it, so every movement feels deliberate and utterly its own. One line in "
+        f"the <head> of a page brings the engine that rolls it:\n    {MOTION_TAG}\n"
         "Keep that line on every page you rewrite, exactly as it is and not deferred, and put it "
         f"on every page you add. \"{MOTION_SCRIPT}\" is yours to rewrite and extend and may never "
         "be deleted: it writes the roll on :root as custom properties for the stylesheets "
         "(--ease-arrive, --ease-leave, --ease-shift, --ease-flicker, --ease-pulse, --ease-drift, "
-        "--ease-wipe; one --ease-<name> per @keyframes name, rolled afresh every time that "
-        "animation finishes; the durations --motion-short, --motion-medium, --motion-long, "
-        "--motion-slow and --motion-stagger; and the geometry --arrive-x, --arrive-y, "
+        "--ease-wipe and --ease-stair; one --ease-<name> per @keyframes name, rolled afresh every "
+        "time that animation finishes; the durations --motion-short, --motion-medium, "
+        "--motion-long, --motion-slow and --motion-stagger; the geometry --arrive-x, --arrive-y, "
         "--arrive-rot, --arrive-scale, --leave-x, --leave-y, --leave-rot, --leave-scale, "
-        "--wipe-from, --wipe-to, --state-from, --sky-x and --sky-y), and it offers the same roll "
-        "to a script as window.interestingMotion -- ease(family), curve(family), tween({ ms, "
-        "family, step, done }), scrollTo(top), scrollIntoView(el), ms(name), stagger(k), "
-        "geometry() and shift(). Every transition and animation you write names one of those "
-        "custom properties as its timing function, as every one on the site already does "
-        "(transition: opacity var(--motion-short) var(--ease-flicker); animation: thing-in "
-        "var(--motion-long) var(--ease-thing-in, var(--ease-arrive)) both), takes its distance "
-        "and direction from the rolled geometry, and answers prefers-reduced-motion as before; "
-        "a movement only a script can make (a colour crossfade, a burst, a scroll) asks the "
-        "engine for its curve or its tween, falls back to a polyline of its own where the engine "
-        "is absent, and never tweens along t*t, a sine or a power of its own. Each mood of "
+        "--wipe-from, --wipe-to, --state-from, --sky-x and --sky-y; and the mattes --matte-1 to "
+        "--matte-5, five procedurally generated masks at rising coverage -- a thresholded noise, "
+        "a scatter of shards, scan lines, a dither, an iris, a grain -- with --matte-fill, the "
+        "texture a surface that stays changed is filled with), and it offers the same roll to a "
+        "script as window.interestingMotion -- ease(family), curve(family), tween({ ms, family, "
+        "step, done }), scrollTo(top), scrollIntoView(el), ms(name), stagger(k), geometry(), "
+        "mattes(), reveal(el), flip(list, change), rite(el, name) and shift(). The grammar of a "
+        "change of state, which every control and every surface on the site follows: a control "
+        "under the pointer or the focus does not fade to a tint, it waxes -- its state layer "
+        "arrives through the matte ladder one tread at a time (is-waxing, @keyframes matte-in) "
+        "and wanes back down it (is-waning); a press stamps it (is-stamping, a dip in hard cuts); "
+        "a control that becomes set is sealed, its colour arriving in treads and the fill "
+        "texture climbing onto it (is-sealing; a set control is a textured one), and one unset "
+        "is unsealed; a thing appearing develops through the ladder from the rolled geometry and "
+        "a thing leaving is unmade down it; anything that turns ratchets in clicks; words arrive "
+        "glyph by glyph through a sigil (reveal); things that change places move there (flip). "
+        "The engine puts the state classes on every pressable element and takes the passing ones "
+        "off; _controls.scss says what each looks like, and every keyframe of a rite is a hard "
+        "cut -- each tread held to the moment of the next -- so nothing reads as a fade. Every "
+        "transition you write for a change of state takes var(--ease-stair) (never --ease-shift "
+        "for a colour, a size, an opacity, a bar or a dot), every animation names its own "
+        "--ease-<name> with a family as the fallback (animation: thing-in var(--motion-long) "
+        "var(--ease-thing-in, var(--ease-arrive)) both; add the name to SPELLS in the engine), "
+        "takes its distance and direction from the rolled geometry and its surface from the "
+        "mattes, and answers prefers-reduced-motion by standing still; a movement only a script "
+        "can make asks the engine for its curve, its tween or its rite, falls back to a polyline "
+        "of its own where the engine is absent, and never tweens along t*t, a sine or a power of "
+        "its own. A module moves the same way on its canvas: env.rite (js/variant.js), handed to "
+        "every module by every env builder and by the harnesses, is the piece's own roll -- "
+        "rite.ease(t), rite.stair(t, n), rite.ratchet(t), rite.flicker(t) and rite.matte(x, y, "
+        "k), which says whether the piece's own matte lets the cell at (x, y) through at "
+        "coverage k -- so a selection on a canvas changes by its area in a pattern and never by "
+        "a fade, a wheel turns in clicks and never evenly, and a solved thing blinks in and never "
+        "washes in. Each mood of "
         f"{MOOD_SHEET} also lends its movements a temperament (--motion-grain, --motion-tempo, "
         "--motion-steps) and its words a typographic register (_type.scss, $registers): one "
-        "curated pairing of a serif for the rite's words and a sans for the instructions, with a "
-        "tracking, a weight, a slant and a case of its own, so the whole modality of the site "
-        "shifts with the content; a new mood picks one of the registers in $registers-of, and a "
-        "new register pairs faces that go together -- a modern serif with a geometric sans, an "
-        "old-style serif with a humanist sans, a transitional serif with a grotesque -- and never "
-        "two that do not. Concretely, these are refused in a page and in any script or stylesheet "
-        "it loads: the timing-function keywords linear, ease, ease-in, ease-out and ease-in-out "
-        "and the function cubic-bezier() in a transition, an animation or a timing-function "
-        "declaration or in the easing of a Web Animations call, and the browser's own smoothing, "
-        "scroll-behavior: smooth and behavior: 'smooth' on a scroll. linear() with stops is the "
-        "engine's own piecewise curve and is welcome; a linear-gradient is paint, not motion. A "
-        "plan that leaves a page without the line, or moves anything by one of those, is refused, "
-        "and this too is checked on the built site, including the shared scripts and stylesheets "
-        "a page loads.\n"
+        "curated pairing of the rite's own face, Fraunces -- a variable serif the site carries "
+        f"itself in \"{FONT_SHEET}\", with its licence, so no font is fetched from anyone; the "
+        "sheet is fixed, never shown to you and never yours to write -- with a sans for the "
+        "instructions, set along the font's axes (opsz, wght, SOFT, WONK) with a tracking, a "
+        "weight, a slant, a case, a rule and an ornament of its own, so the whole modality of "
+        "the site shifts with the content and no two registers can be mistaken for each other; "
+        "a new mood picks one of the registers in $registers-of, and a new register pairs faces "
+        "that go together and never two that do not. Concretely, these are refused in a page "
+        "and in any script or stylesheet it loads: the timing-function keywords linear, ease, "
+        "ease-in, ease-out and ease-in-out and the function cubic-bezier() in a transition, an "
+        "animation or a timing-function declaration or in the easing of a Web Animations call, "
+        "and the browser's own smoothing, scroll-behavior: smooth and behavior: 'smooth' on a "
+        "scroll; and a fade: a transition of opacity, color, background, background-color, "
+        "border-color, outline-color, fill, stroke, filter, backdrop-filter, visibility or all "
+        "along any curve but var(--ease-stair). linear() with stops is the engine's own piecewise "
+        "curve and is welcome; a linear-gradient is paint, not motion; a transform or a size may "
+        "still slide along a family, because a slide is a movement and not a fade. A plan that "
+        "leaves a page without the line, moves anything by one of those, or fades a state, is "
+        "refused, and this too is checked on the built site, including the shared scripts and "
+        "stylesheets a page loads.\n"
         "- AXIOM, every run: every world is a puzzle a visitor can solve. A world's page is not "
         "fixed content but a stage, and what a visitor opens there is a piece, and every piece is "
         "a legitimate puzzle: a small, procedurally generated problem made on the spot by the "
@@ -3513,8 +3648,9 @@ FRAMEWORK_PINS = (
     "\"variant: m.variant, card: shown(m)\" and interestingStage.open(file, seed, { ... seeds "
     f"... variant ... card }}); id='feed-grid' from \"{INCLUDES_DIR}/worlds.njk\" on every page. "
     f"In \"{VARIANT_SCRIPT}\": the named exports mulberry32, hash, mix, alpha, roll, revive, "
-    "recolor, aspect, light, DIALS, PLAIN and ASPECT_LIMITS (0.6 to 1.9), with the contrast the "
-    "tests hold the recolouring to. "
+    "recolor, aspect, light, rite, DIALS, PLAIN and ASPECT_LIMITS (0.6 to 1.9), with the contrast "
+    "the tests hold the recolouring to, and the rite block (from the rite:begin comment to "
+    "rite:end) kept word for word the same as the copy in the piece harness. "
     f"In \"{SASS_DIR}/_stage.scss\": \".stage-next {{\" with position: fixed, right: "
     "var(--nav-inset) and bottom: var(--nav-inset); \".stage-reject {{\" as a position: absolute "
     "mark with pointer-events: none, held still under prefers-reduced-motion; the first-screen "
@@ -3544,11 +3680,23 @@ FRAMEWORK_PINS = (
     f"which \"{STAGE_INCLUDE}\" writes as id='stage-sigil' in the head. The motion axiom's "
     f"readable half: \"{MOTION_SCRIPT}\" stays, loaded by the layout as {MOTION_TAG} without "
     f"defer and before {PERSONA_SCRIPT}, assigning window.interestingMotion with ease, curve, "
-    "tween, scrollTo, scrollIntoView, ms, stagger, geometry, shift and roll; "
-    f"\"{SASS_DIR}/_tokens.scss\" declares --ease-arrive, --ease-leave, --ease-shift, "
-    "--ease-flicker, --ease-pulse, --ease-drift and --ease-wipe each as a linear( curve, "
-    "--motion-short, --motion-medium and --motion-long, and the three --md-sys-motion-easing-* "
-    f"names as var() aliases of them; \"{SASS_DIR}/_type.scss\" declares $registers and "
+    "tween, scrollTo, scrollIntoView, ms, stagger, geometry, mattes, reveal, flip, rite, wax, "
+    "wane, shift and roll, keeping the stair family, the state classes is-waxing, is-waning, "
+    "is-stamping, is-sealing and is-unsealing, and the writes of --matte-1 to --matte-5 and "
+    f"--matte-fill; \"{SASS_DIR}/_tokens.scss\" declares --ease-arrive, --ease-leave, "
+    "--ease-shift, --ease-flicker, --ease-pulse, --ease-drift, --ease-wipe and --ease-stair each "
+    "as a linear( curve (and each as a steps( curve under @supports not linear()), --matte-1 to "
+    "--matte-5, --matte-fill and --matte-fill-size, @property --range-pct, --motion-short, "
+    "--motion-medium and --motion-long, and the three --md-sys-motion-easing-* names as var() "
+    f"aliases of them; \"{SASS_DIR}/_controls.scss\" keeps .is-waxing::after, .is-waning::after, "
+    ".is-stamping, .is-sealing::before and .is-unsealing::before, the keyframes matte-in, "
+    "matte-out, rite-stamp, rite-seal and rite-unseal, background: var(--matte-fill) on the fill, "
+    "and no colour or opacity of a control moving along --ease-shift or --ease-flicker; every "
+    "mask: var(--matte- tread in the Sass is written with its -webkit-mask: twin; "
+    f"\"{SASS_DIR}/_rite.scss\" keeps .is-revealing .glyph with content: attr(data-sigil) and "
+    f"the keyframes glyph-in and glyph-sigil; \"{SASS_DIR}/_lightbox.scss\" keeps "
+    ".lightbox-veil.is-ghost and lightbox-veil-out; js/feed.js and js/stage.js hand every module "
+    f"rite: rite(seed) on env (and the stage rite: env.rite on ctx); \"{SASS_DIR}/_type.scss\" declares $registers and "
     f"@mixin register, and type.rite reads var(--font-rite; \"{MOOD_SHEET}\" maps every mood to "
     "a register in $registers-of and writes :root[data-featured=<mood>] with --font-rite, "
     "--font-act, --motion-grain and --motion-tempo; every transition and animation in the Sass "

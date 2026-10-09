@@ -111,6 +111,7 @@ function makeEnv(seed, variant, colors) {
     reduced: false,
     world: { file: "toy.html", name: "a world", orientation: "an orientation" },
     variant,
+    rite: V.rite(seed),
   };
 }
 

@@ -202,11 +202,89 @@ html[data-nav='live'] .sparknav[open]::after {
   pointer-events: none;
 }
 
-// Less motion asked for: every ring is where it is, and nothing turns.
+// ---- the glyph rite -----------------------------------------------------------------------
+// Words do not appear; they are revealed (README: "Motion axiom"). js/motion.js (reveal) wraps
+// each character of an arriving line in a span.glyph for the length of the rite -- carrying a
+// sigil in its place (data-sigil, drawn by ::before) and a delay of its own (--d), inside a
+// span.glyph-word that keeps the word whole -- and takes the spans out when the last has landed.
+// The letter arrives in cuts: the sigil blinks up in the tertiary, holds, flickers, and is cut to
+// the letter, which lands a tread high and drops; no glyph fades, and no two land at one moment.
+.is-revealing .glyph-word {
+  display: inline-block;
+  white-space: nowrap;
+}
+
+.is-revealing .glyph {
+  display: inline-block;
+  position: relative;
+  animation: glyph-in var(--motion-medium) var(--ease-glyph-in, var(--ease-stair)) var(--d, 0ms) both;
+}
+
+.is-revealing .glyph::before {
+  content: attr(data-sigil);
+  position: absolute;
+  inset: 0;
+  color: var(--md-sys-color-tertiary);
+  opacity: 0;
+  pointer-events: none;
+  animation: glyph-sigil var(--motion-medium) var(--ease-glyph-sigil, var(--ease-flicker)) var(--d, 0ms) both;
+}
+
+@keyframes glyph-in {
+  0%, 47.9% {
+    opacity: 0;
+    transform: translateY(0.14em);
+  }
+
+  48%, 61.9% {
+    opacity: 1;
+    transform: translateY(-0.06em);
+  }
+
+  62%, 71.9% {
+    opacity: 0.3;
+    transform: none;
+  }
+
+  72%, 100% {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes glyph-sigil {
+  0%, 7.9% {
+    opacity: 0;
+  }
+
+  8%, 27.9% {
+    opacity: 1;
+  }
+
+  28%, 35.9% {
+    opacity: 0.3;
+  }
+
+  36%, 47.9% {
+    opacity: 1;
+  }
+
+  48%, 100% {
+    opacity: 0;
+  }
+}
+
+// Less motion asked for: every ring is where it is, nothing turns, and words are simply there.
 @media (prefers-reduced-motion: reduce) {
   .stage::after,
   .list-page-main::after,
-  .prose-main::after {
+  .prose-main::after,
+  .is-revealing .glyph {
+    animation: none;
+  }
+
+  .is-revealing .glyph::before {
+    content: none;
     animation: none;
   }
 }

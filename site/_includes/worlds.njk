@@ -18,13 +18,17 @@
   through its module in js/modules/, moves the world the visitor's reading opens onto to the
   front, and keeps dealing fresh cards -- the things the worlds make -- as the visitor scrolls,
   without end. The sentinel at the bottom is what tells it to deal more.
+
+  Each card carries its place in the list as --k, the fallback stagger for its development (a card
+  js/feed.js rolls up below the first screen develops through the matte ladder as the visitor
+  reaches it, after a delay the engine rolls per card; without that roll the stylesheet reads --k).
 -#}
 {%- set here = (page.filePathStem | replace('/', '')) + '.html' if page else '' -%}
 <section class='feed' id='feed' aria-labelledby='feed-title'>
   <h2 class='feed-title visually-hidden' id='feed-title'>every world</h2>
   <div class='feed-grid' id='feed-grid'>
 {%- for world in worlds.worlds %}
-    <article class='card card-world{% if world.file == here %} card-current{% endif %}' data-world='{{ world.file }}' data-mood='{{ world.mood }}' data-name='{{ world.name }}' data-orientation='{{ world.orientation }}'>
+    <article class='card card-world{% if world.file == here %} card-current{% endif %}' data-world='{{ world.file }}' data-mood='{{ world.mood }}' data-name='{{ world.name }}' data-orientation='{{ world.orientation }}' style='--k: {{ loop.index0 % 7 }}'>
       <a class='card-link' href='{{ siteRoot }}{{ world.file }}'{% if world.file == here %} aria-current='page'{% endif %}>
         <div class='card-media' style='aspect-ratio: {{ world.aspect }}'><canvas class='card-canvas' aria-hidden='true'></canvas>{% if world.file == here %}<span class='card-badge'>you are here</span>{% endif %}</div>
         <div class='card-body'>

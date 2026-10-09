@@ -40,6 +40,23 @@
       --sky-x, --sky-y  where the page's own sky washes in from (main's gradient)
       --lift-y, --lift-rot, --spark-extra, --pop-over, --shake-x, --beckon-spread, --reject-grow,
       --ray-from        the small particulars of one movement each, named where they are used
+      --matte-1 .. --matte-5
+                        the matte ladder: five masks at rising coverage, procedurally generated
+                        (a noise field thresholded, a scatter of shards, scan lines, a dither, an
+                        iris, a grain), so a surface that changes changes by its area and never
+                        by a fade -- a hover arrives tread by tread through them
+      --matte-fill, --matte-fill-size, --matte-kind
+                        the texture a surface that stays changed (pressed, selected, set) is
+                        filled with, in the colour of its text, and the kind of matte rolled
+
+  How a control changes (README: "Motion axiom"). Nothing fades. A control under the pointer or
+  the focus waxes -- is-waxing, its changed surface arriving through the matte ladder -- and when
+  they leave it wanes (is-waning); a press stamps it (is-stamping); one that becomes set is sealed
+  (is-sealing) and one unset is unsealed (is-unsealing). This file puts the classes on, reading
+  the pointer, the keyboard, the focus and every attribute a control is set by, and takes each
+  passing one off again when its animation ends; _sass/_controls.scss says what each looks like.
+  Words arriving are revealed glyph by glyph through a sigil (reveal, below); the veil leaves as
+  a ghost that plays out (the ghost veil); things that change places move there (flip).
 
   How it reaches the scripts. window.interestingMotion is the same roll offered as functions, for
   the movements only a script can make: the theme's crossfade, the burst, a scroll, the mark that
@@ -56,6 +73,11 @@
       m.stagger(k)                // the k-th of a scatter's delay, with its own jitter, in ms
       m.shift()                   // the site is changing its modality: flicker the rite's words
       m.roll()                    // roll everything again now
+      m.reveal(el)                // the words of el arrive glyph by glyph, each through a sigil
+      m.flip(list, change)        // run change(); every child of list that moved moves there
+      m.rite(el, 'stamping')      // one passing rite on el, by the name of its class is-<name>
+      m.wax(el) / m.wane(el)      // el under the pointer, and the pointer leaving it
+      m.mattes()                  // the matte ladder and the fill, as the strings that were written
       m.reduced                   // true for a visitor who asked for less motion
 
   When it rolls. Everything is rolled once as the <head> is read, so the first paint already
@@ -419,6 +441,18 @@
       if (m.chance(g)) m.stutter();
       m.sweep(m.between(0.75, 0.9), m.between(0.94, 0.985), m.between(1.5, 2.5), 2);
       return m.finish();
+    },
+    // A stair: the step series itself. A change that is not allowed to glide -- a colour, an
+    // opacity, a bar filling, a surface changing -- climbs in a rolled number of uneven treads with
+    // sloped risers, a hold on the way up where the grain allows, and lands with a slip and a
+    // snap. Never a fade: a fade is one riser with no treads, and this has three to nine.
+    stair: function (m) {
+      var g = m.grain;
+      var n = 3 + Math.round(m.rnd() * (3 + g * 3));
+      if (m.chance(0.5 + g * 0.4)) m.hold(m.between(0.02, 0.1));
+      m.stair(m.between(0.82, 0.96), m.chance(g * 0.6) ? 1 + m.between(0.02, 0.06) : 1, n);
+      if (m.y > 1) m.settle(1, m.y - 1, 1, 1);
+      return m.finish();
     }
   };
 
@@ -429,28 +463,200 @@
     'stage-in': 'arrive',
     'card-in': 'arrive',
     'card-out': 'leave',
+    'card-develop': 'stair',
     'sparknav-branch': 'arrive',
     'sparknav-ray': 'arrive',
     'sparknav-modal': 'arrive',
     'lightbox-veil': 'wipe',
+    'lightbox-veil-out': 'wipe',
     'stage-pop': 'arrive',
     'stage-no': 'flicker',
     'stage-reject': 'leave',
+    'stage-develop': 'stair',
     'persona-beckon': 'pulse',
     'persona-flight': 'arrive',
     'persona-flight-ring': 'leave',
     'rite-turn': 'drift',
-    'rite-shift': 'flicker'
+    'rite-shift': 'flicker',
+    'matte-in': 'stair',
+    'matte-out': 'stair',
+    'rite-stamp': 'flicker',
+    'rite-seal': 'stair',
+    'rite-unseal': 'stair',
+    'glyph-in': 'arrive',
+    'glyph-sigil': 'flicker',
+    'dialog-in': 'arrive',
+    'knob-in': 'arrive',
+    'seal-set': 'stair',
+    'card-lift': 'stair',
+    'card-settle': 'stair',
+    'card-wax': 'stair',
+    'card-wane': 'stair',
+    'card-stamp': 'flicker',
+    'card-crack': 'flicker',
+    'card-focus': 'stair',
+    'card-seal': 'stair',
+    'card-unseal': 'stair',
+    'card-unmake': 'leave',
+    'card-taken': 'leave',
+    'badge-in': 'arrive',
+    'badge-out': 'leave',
+    'badge-beckon': 'pulse',
+    'skip-drop': 'arrive',
+    'logo-frost': 'stair',
+    'logo-thaw': 'stair',
+    'logo-stamp': 'flicker',
+    'spark-ratchet': 'stair',
+    'name-print': 'stair',
+    'current-wink': 'flicker',
+    'sparknav-cascade': 'arrive',
+    'sparknav-unmake': 'leave',
+    'sparknav-ray-out': 'leave',
+    'cast-ring': 'stair',
+    'cast-ring-dashed': 'stair',
+    'chip-stamp': 'flicker',
+    'chip-wax': 'stair',
+    'chip-wane': 'stair',
+    'shell-unmake': 'leave'
   };
 
   function familyOf(name) {
     if (FAMILIES[name]) return name;
     if (SPELLS[name]) return SPELLS[name];
-    if (/out|leave|gone|away|reject/.test(name)) return 'leave';
+    if (/out|leave|gone|away|reject|unseal/.test(name)) return 'leave';
     if (/turn|spin|drift/.test(name)) return 'drift';
     if (/beckon|breath|pulse/.test(name)) return 'pulse';
     if (/veil|wipe/.test(name)) return 'wipe';
+    if (/matte|seal|stair|step|develop/.test(name)) return 'stair';
     return 'arrive';
+  }
+
+  /* ---- the mattes ------------------------------------------------------------------------- */
+
+  /* A matte is how a surface changes without fading (README: "Motion axiom"): a procedurally
+     generated mask that reveals or fills a surface in blotches, shards, scanlines, dither or an
+     iris, and never as a flat solid. Each roll makes a ladder of five -- the same matte at rising
+     coverage, from a few specks to the whole -- as values the `mask` shorthand takes, and the
+     stylesheets step through the ladder in keyframes (mask is not interpolable, so a keyframe
+     switch is a hard tread: the step series the ladder is for). A sixth value is a fill texture,
+     for a surface that stays changed -- a selected button, a set knob -- so that what it wears is
+     a generated pattern over its colour and not a solid.
+
+     The noise and the shards are small SVGs written as data: URIs; the scanlines, the dither and
+     the iris are gradients a browser can draw without them. All of them are black where the
+     surface shows and transparent where it does not, which is what mask-mode: alpha reads. */
+
+  var MATTE_KINDS = ['noise', 'noise', 'shards', 'scan', 'dither', 'iris', 'grain'];
+
+  function svgURI(svg) {
+    return 'url("data:image/svg+xml,' + encodeURIComponent(svg).replace(/%20/g, ' ').replace(/%22/g, "'") + '")';
+  }
+
+  // Noise thresholded at a coverage: feTurbulence, read as a single channel, cut by a discrete
+  // alpha table so that the covered fraction rises with the coverage asked for.
+  function noiseMatte(rnd, coverage, seed, frequency, octaves, fractal) {
+    var n = 10;
+    var table = [];
+    for (var i = 0; i < n; i++) table.push(i / (n - 1) < 1 - coverage ? 0 : 1);
+    var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96">'
+      + '<filter id="m" x="0" y="0" width="100%" height="100%" color-interpolation-filters="sRGB">'
+      + '<feTurbulence type="' + (fractal ? 'fractalNoise' : 'turbulence') + '" baseFrequency="' + frequency + '" numOctaves="' + octaves + '" seed="' + seed + '" stitchTiles="stitch"/>'
+      + '<feColorMatrix type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  1 0 0 0 0"/>'
+      + '<feComponentTransfer><feFuncA type="discrete" tableValues="' + table.join(' ') + '"/></feComponentTransfer>'
+      + '</filter><rect width="96" height="96" filter="url(#m)"/></svg>';
+    return svgURI(svg) + ' 0 0 / 96px 96px repeat';
+  }
+
+  // Shards: a scatter of rolled triangles over the tile, as many drawn as the coverage asks.
+  function shardMatte(shards, coverage) {
+    var count = Math.round(shards.length * coverage);
+    var polys = '';
+    for (var i = 0; i < count; i++) polys += '<polygon points="' + shards[i] + '"/>';
+    if (coverage >= 1) polys = '<rect width="120" height="120"/>';
+    var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120">' + polys + '</svg>';
+    return svgURI(svg) + ' 0 0 / 120px 120px repeat';
+  }
+
+  function rollShards(rnd) {
+    var shards = [];
+    for (var i = 0; i < 26; i++) {
+      var cx = rnd() * 120;
+      var cy = rnd() * 120;
+      var r = 14 + rnd() * 34;
+      var a = rnd() * Math.PI * 2;
+      var pts = [];
+      for (var k = 0; k < 3; k++) {
+        var ang = a + k * (Math.PI * 2 / 3) + (rnd() - 0.5) * 0.8;
+        pts.push((cx + Math.cos(ang) * r).toFixed(1) + ',' + (cy + Math.sin(ang) * r).toFixed(1));
+      }
+      shards.push(pts.join(' '));
+    }
+    return shards;
+  }
+
+  function rollMattes(rnd, temper) {
+    var g = temper.grain;
+    var kind = temper.steps > 0.5 && rnd() < 0.5 ? (rnd() < 0.5 ? 'scan' : 'dither') : MATTE_KINDS[Math.floor(rnd() * MATTE_KINDS.length)];
+    var ladder = [];
+    var coverages = [0.1 + rnd() * 0.08, 0.26 + rnd() * 0.1, 0.46 + rnd() * 0.12, 0.7 + rnd() * 0.12, 1];
+    var i;
+    if (kind === 'noise' || kind === 'grain') {
+      var seed = 1 + Math.floor(rnd() * 9999);
+      var frequency = (kind === 'grain' ? 0.08 + rnd() * 0.12 : 0.012 + rnd() * 0.05).toFixed(4);
+      var octaves = 1 + Math.floor(rnd() * 3);
+      var fractal = rnd() < 0.5;
+      for (i = 0; i < 5; i++) ladder.push(noiseMatte(rnd, coverages[i], seed, frequency, octaves, fractal));
+    } else if (kind === 'shards') {
+      var shards = rollShards(rnd);
+      for (i = 0; i < 5; i++) ladder.push(shardMatte(shards, coverages[i]));
+    } else if (kind === 'scan') {
+      var angle = Math.round(rnd() < 0.6 ? (rnd() < 0.5 ? 0 : 90) : rnd() * 180);
+      var period = 3 + Math.round(rnd() * 9);
+      for (i = 0; i < 5; i++) {
+        var band = Math.max(1, Math.round(period * coverages[i]));
+        ladder.push(i === 4 ? 'linear-gradient(#000, #000)'
+          : 'repeating-linear-gradient(' + angle + 'deg, #000 0 ' + band + 'px, transparent ' + band + 'px ' + period + 'px)');
+      }
+    } else if (kind === 'dither') {
+      var cell = 4 + Math.round(rnd() * 6);
+      for (i = 0; i < 5; i++) {
+        var on = Math.max(2, Math.round(cell * Math.sqrt(coverages[i])));
+        ladder.push(i === 4 ? 'linear-gradient(#000, #000)'
+          : 'radial-gradient(#000 ' + (on / 2).toFixed(1) + 'px, transparent ' + (on / 2 + 0.5).toFixed(1) + 'px) 0 0 / ' + cell + 'px ' + cell + 'px repeat');
+      }
+    } else {
+      var ix = Math.round(rnd() * 100);
+      var iy = Math.round(rnd() * 100);
+      for (i = 0; i < 5; i++) {
+        var radius = Math.round(coverages[i] * 150);
+        ladder.push(i === 4 ? 'linear-gradient(#000, #000)'
+          : 'radial-gradient(circle at ' + ix + '% ' + iy + '%, #000 ' + radius + '%, transparent ' + (radius + 1) + '%)');
+      }
+    }
+    // The fill texture a changed surface wears: a hatch, scanlines, a stipple, a moire of two
+    // hatches or rings, in currentColor so it takes the surface's own ink.
+    var fills = ['hatch', 'scan', 'stipple', 'moire', 'rings'];
+    var fill = fills[Math.floor(rnd() * fills.length)];
+    var image;
+    var size = 'auto';
+    var fa = Math.round(rnd() * 180);
+    var fp = 3 + Math.round(rnd() * 5);
+    var fw = Math.max(1, Math.round(fp * (0.25 + rnd() * 0.35)));
+    if (fill === 'hatch') {
+      image = 'repeating-linear-gradient(' + fa + 'deg, currentColor 0 ' + fw + 'px, transparent ' + fw + 'px ' + fp + 'px)';
+    } else if (fill === 'scan') {
+      image = 'repeating-linear-gradient(' + (rnd() < 0.5 ? 0 : 90) + 'deg, currentColor 0 1px, transparent 1px ' + fp + 'px)';
+    } else if (fill === 'stipple') {
+      var dot = 1 + rnd() * 1.4;
+      image = 'radial-gradient(currentColor ' + dot.toFixed(1) + 'px, transparent ' + (dot + 0.6).toFixed(1) + 'px)';
+      size = (fp + 2) + 'px ' + (fp + 2) + 'px';
+    } else if (fill === 'moire') {
+      image = 'repeating-linear-gradient(' + fa + 'deg, currentColor 0 1px, transparent 1px ' + fp + 'px), '
+        + 'repeating-linear-gradient(' + (fa + 60 + Math.round(rnd() * 60)) + 'deg, currentColor 0 1px, transparent 1px ' + (fp + 1) + 'px)';
+    } else {
+      image = 'repeating-radial-gradient(circle at ' + Math.round(rnd() * 100) + '% ' + Math.round(rnd() * 100) + '%, currentColor 0 1px, transparent 1px ' + (fp + 2) + 'px)';
+    }
+    return { kind: kind, ladder: ladder, fill: fill, fillImage: image, fillSize: size, grain: g };
   }
 
   function makeCurve(family, temper, seed) {
@@ -670,8 +876,21 @@
       write('--sky-y', g.skyY.toFixed(1) + '%');
     }
 
-    var TRANSITION_FAMILIES = ['shift', 'flicker'];
-    var ALL_FAMILIES = ['arrive', 'leave', 'shift', 'flicker', 'pulse', 'drift', 'wipe'];
+    // The matte ladder and the fill texture (see "the mattes" above), rolled with the geometry:
+    // --matte-1 to --matte-5 at rising coverage, --matte-fill and --matte-fill-size for a surface
+    // that stays changed, and --matte-kind for a stylesheet that wants to know.
+    function rollMattesNow() {
+      var rnd = mulberry32(entropy());
+      var m = rollMattes(rnd, temper);
+      current.mattes = m;
+      for (var i = 0; i < m.ladder.length; i++) write('--matte-' + (i + 1), m.ladder[i]);
+      write('--matte-fill', m.fillImage);
+      write('--matte-fill-size', m.fillSize);
+      write('--matte-kind', m.kind);
+    }
+
+    var TRANSITION_FAMILIES = ['shift', 'flicker', 'stair'];
+    var ALL_FAMILIES = ['arrive', 'leave', 'shift', 'flicker', 'pulse', 'drift', 'wipe', 'stair'];
 
     function rollAll() {
       temper = readTemper(doc);
@@ -679,6 +898,7 @@
       for (var name in SPELLS) if (Object.prototype.hasOwnProperty.call(SPELLS, name)) rollSpell(name);
       rollDurationsNow();
       rollGeometryNow();
+      rollMattesNow();
       rollSkyNow();
       lastRoll = now();
     }
@@ -700,8 +920,10 @@
       lastQuick = at;
       rollFamilies(TRANSITION_FAMILIES);
       if (!withGeometry) return;
-      if (!running) rollGeometryNow();
-      else geometryWanted = true;
+      if (!running) {
+        rollGeometryNow();
+        rollMattesNow();
+      } else geometryWanted = true;
     }
 
     function onPress() {
@@ -757,6 +979,7 @@
         }
       }
       rollGeometryNow();
+      rollMattesNow();
     }
 
     // One that loops re-rolls its own spell at the turn of every loop, which is the one moment a
@@ -786,6 +1009,8 @@
       doc.addEventListener('keydown', onPress, true);
       doc.addEventListener('focusin', onPress, true);
       doc.addEventListener('pointerover', onPass, true);
+      watchStates();
+      watchVeil();
       // The site changing what it wears: the temperament is read again and everything rolled to
       // it, and the rite's words flicker through the change (see shift below).
       if (typeof global.MutationObserver === 'function' && html) {
@@ -855,6 +1080,469 @@
           }, (current.durations ? current.durations.shift : 640) + 80);
         }
       });
+    }
+
+    /* ---- the state rites ------------------------------------------------------------------- */
+
+    /* A control does not fade. Under the pointer it waxes: its changed surface arrives through the
+       matte ladder, tread by tread (is-waxing, @keyframes matte-in), and when the pointer leaves it
+       wanes the same way back (is-waning, matte-out). A press stamps it (is-stamping, rite-stamp).
+       A control that becomes set is sealed (is-sealing, rite-seal) and one that is unset again is
+       unsealed (is-unsealing, rite-unseal). The classes are this file's and the keyframes are the
+       stylesheet's (_sass/_controls.scss), so what each rite looks like is the stylesheet's to say
+       and when it plays is this file's; a module that paints its own controls plays its own rites
+       on its canvas (env.rite, js/variant.js). Every passing class is taken off again when the
+       animation it started ends, or after the rolled duration if no animation was there to end,
+       so a stylesheet that has no rite for an element leaves no class behind on it. */
+
+    var PRESSABLE = 'a[href], button, input, select, textarea, summary, label, [role="button"], '
+      + '[role="option"], [role="tab"], [role="radio"], [role="checkbox"], [role="switch"], '
+      + '[role="menuitem"], [role="link"], [data-rite]';
+    // The attributes a control is set by -- a chip pressed, a tab chosen, a knob set, a details
+    // opened -- watched over the whole page so the seal plays whoever set it.
+    var SET_ATTRS = ['aria-pressed', 'aria-selected', 'aria-checked', 'aria-current', 'aria-expanded', 'open', 'data-set', 'data-selected', 'data-on', 'class'];
+    var SET_CLASS = /(?:^|\s)(?:is-set|is-on|is-selected|is-active|is-chosen|is-current|is-open|is-lit|selected|active)(?:\s|$)/;
+    // What ends each passing rite: the animation whose name says so, or the clock.
+    var PASSING = {
+      waning: /out|wane/,
+      stamping: /stamp|press/,
+      sealing: /(?:^|-)seal|set/,
+      unsealing: /unseal|unset/
+    };
+
+    var rites = typeof global.WeakMap === 'function' ? new global.WeakMap() : null;
+
+    function riteState(el) {
+      if (!rites) return null;
+      var s = rites.get(el);
+      if (!s) {
+        s = { hover: false, focus: false, timers: {} };
+        rites.set(el, s);
+      }
+      return s;
+    }
+
+    function pressable(target) {
+      if (!target || typeof target.closest !== 'function') return null;
+      var el = target.closest(PRESSABLE);
+      if (!el) return null;
+      if (el.getAttribute('data-rite') === 'none' || el.hasAttribute('disabled') || el.hasAttribute('inert')) return null;
+      return el;
+    }
+
+    function addClass(el, name) {
+      if (el && el.classList) el.classList.add(name);
+    }
+
+    function dropClass(el, name) {
+      if (el && el.classList) el.classList.remove(name);
+    }
+
+    // A rite that passes: the class goes on, and comes off at the end of the animation it started
+    // or when the clock says it must have ended, whichever is first. Starting one that is already
+    // playing restarts it, so a second press is a second stamp.
+    function pass(el, kind, after) {
+      if (!el) return;
+      var cls = 'is-' + kind;
+      var s = riteState(el);
+      // The clock is the fallback, so it is generous: the animation's end is what takes the class
+      // off, and a class that lingers on a still element does nothing.
+      var wait = after || ((ms('long') || 560) * 2 + 400);
+      if (s && s.timers[kind] && typeof global.clearTimeout === 'function') global.clearTimeout(s.timers[kind]);
+      dropClass(el, cls);
+      // Off and on again on the next frame, so a rite that is restarted restarts.
+      var raf = typeof global.requestAnimationFrame === 'function' ? global.requestAnimationFrame : function (fn) { fn(); };
+      raf(function () {
+        addClass(el, cls);
+        if (s && typeof global.setTimeout === 'function') {
+          s.timers[kind] = global.setTimeout(function () {
+            s.timers[kind] = 0;
+            dropClass(el, cls);
+          }, wait);
+        }
+      });
+    }
+
+    function endPass(el, kind) {
+      var s = rites && rites.get(el);
+      if (s && s.timers[kind] && typeof global.clearTimeout === 'function') {
+        global.clearTimeout(s.timers[kind]);
+        s.timers[kind] = 0;
+      }
+      dropClass(el, 'is-' + kind);
+    }
+
+    // A passing rite's animation ending takes its class off; the clock is only for the element
+    // the stylesheet gave no animation to.
+    function onRiteEnd(ev) {
+      var el = ev && ev.target;
+      var name = ev && ev.animationName;
+      if (!el || !name || !el.classList) return;
+      for (var kind in PASSING) {
+        if (Object.prototype.hasOwnProperty.call(PASSING, kind)
+          && el.classList.contains('is-' + kind) && PASSING[kind].test(name)) {
+          endPass(el, kind);
+        }
+      }
+    }
+
+    function wax(el) {
+      if (!el) return;
+      endPass(el, 'waning');
+      addClass(el, 'is-waxing');
+    }
+
+    function wane(el) {
+      if (!el || !el.classList || !el.classList.contains('is-waxing')) return;
+      dropClass(el, 'is-waxing');
+      pass(el, 'waning');
+    }
+
+    function onOver(ev) {
+      var el = pressable(ev.target);
+      if (!el) return;
+      var s = riteState(el);
+      if (s) {
+        if (s.hover) return;
+        s.hover = true;
+      }
+      wax(el);
+    }
+
+    function onOut(ev) {
+      var el = pressable(ev.target);
+      if (!el) return;
+      var to = ev.relatedTarget;
+      if (to && typeof el.contains === 'function' && el.contains(to)) return;
+      var s = riteState(el);
+      if (s) {
+        s.hover = false;
+        if (s.focus) return;
+      }
+      wane(el);
+    }
+
+    // Focus waxes a control only when the focus is one the browser would show (a key brought it
+    // there), so a control pressed with the pointer is not left lit after the pointer has gone.
+    function onFocusIn(ev) {
+      var el = pressable(ev.target);
+      if (!el) return;
+      var visible = true;
+      try {
+        if (typeof el.matches === 'function') visible = el.matches(':focus-visible');
+      } catch (e) {
+        /* a browser without :focus-visible shows every focus */
+      }
+      if (!visible) return;
+      var s = riteState(el);
+      if (s) s.focus = true;
+      wax(el);
+    }
+
+    function onFocusOut(ev) {
+      var el = pressable(ev.target);
+      if (!el) return;
+      var s = riteState(el);
+      if (s) {
+        s.focus = false;
+        if (s.hover) return;
+      }
+      wane(el);
+    }
+
+    function onStamp(ev) {
+      if (ev.type === 'keydown' && ev.key !== 'Enter' && ev.key !== ' ') return;
+      var el = pressable(ev.target);
+      if (!el) return;
+      // A key pressed into a field is a word, not a press.
+      if (ev.type === 'keydown' && (el.tagName === 'TEXTAREA' || el.isContentEditable
+        || (el.tagName === 'INPUT' && !/^(?:button|submit|reset|checkbox|radio|range|color|file)$/i.test(el.type || '')))) return;
+      pass(el, 'stamping', (ms('medium') || 340) + 400);
+    }
+
+    // Set or unset: read off the attribute that changed, so a control set by any script seals.
+    function isSet(el, attr) {
+      if (attr === 'class') return SET_CLASS.test(el.className || '');
+      var v = el.getAttribute(attr);
+      if (v == null || v === 'false') return false;
+      if (attr === 'aria-expanded') return v === 'true';
+      return true;
+    }
+
+    function onSetChange(changes) {
+      for (var i = 0; i < changes.length; i++) {
+        var c = changes[i];
+        var el = c.target;
+        var attr = c.attributeName;
+        if (!el || !attr || !el.classList) continue;
+        var was = attr === 'class'
+          ? SET_CLASS.test(c.oldValue || '')
+          : (c.oldValue != null && c.oldValue !== 'false' && (attr !== 'aria-expanded' || c.oldValue === 'true'));
+        var is = isSet(el, attr);
+        if (was === is) continue;
+        if (reduced()) continue;
+        if (el.getAttribute('data-rite') === 'none') continue;
+        pass(el, is ? 'sealing' : 'unsealing');
+      }
+    }
+
+    function watchStates() {
+      doc.addEventListener('pointerover', onOver, true);
+      doc.addEventListener('pointerout', onOut, true);
+      doc.addEventListener('focusin', onFocusIn, true);
+      doc.addEventListener('focusout', onFocusOut, true);
+      doc.addEventListener('pointerdown', onStamp, true);
+      doc.addEventListener('keydown', onStamp, true);
+      doc.addEventListener('animationend', onRiteEnd, true);
+      doc.addEventListener('animationcancel', onRiteEnd, true);
+      if (typeof global.MutationObserver === 'function' && doc.documentElement) {
+        try {
+          new global.MutationObserver(onSetChange).observe(doc.documentElement, {
+            attributes: true, attributeOldValue: true, subtree: true, attributeFilter: SET_ATTRS
+          });
+        } catch (e) {
+          /* a browser whose observer takes no filter: controls set without a seal */
+        }
+      }
+    }
+
+    /* ---- the glyph rite -------------------------------------------------------------------- */
+
+    /* Words do not appear: they are revealed. For the length of the rite each character of the
+       element is wrapped in a span.glyph that carries a sigil in its place (data-sigil, which the
+       stylesheet shows through ::before) and its own delay (--d), and each word in a span.glyph-word
+       so no word breaks in the middle; the stylesheet (_sass/_rite.scss, @keyframes glyph-in and
+       glyph-sigil) shows the sigil and then the letter, in a stair. When the last has landed the
+       spans are taken out and the text put back, so the element is afterwards exactly what it was,
+       and textContent is never anything but the words. A visitor who asked for less motion is
+       shown the words. Hands back a function that ends the rite early. */
+
+    var SIGILS = '§¶†‡•¤±÷×¬~^*#%&@=?!/|<>:;.';
+    var GLYPH_LIMIT = 160;
+    var revealing = typeof global.WeakMap === 'function' ? new global.WeakMap() : null;
+
+    function textNodesOf(el) {
+      var out = [];
+      if (!doc.createTreeWalker || typeof global.NodeFilter === 'undefined') {
+        var kids = el.childNodes;
+        for (var i = 0; i < kids.length; i++) if (kids[i].nodeType === 3) out.push(kids[i]);
+        return out;
+      }
+      var walker = doc.createTreeWalker(el, global.NodeFilter.SHOW_TEXT, null);
+      var node;
+      while ((node = walker.nextNode())) {
+        if (/\S/.test(node.nodeValue)) out.push(node);
+      }
+      return out;
+    }
+
+    function reveal(el, options) {
+      if (!el || !el.childNodes || !doc.createElement) return function () {};
+      var opts = options || {};
+      var undoBefore = revealing && revealing.get(el);
+      if (undoBefore) undoBefore();
+      if (reduced() && !opts.always) return function () {};
+      var rnd = mulberry32(entropy());
+      var step = Math.max(8, (ms('stagger') || 44) * (opts.pace || 0.42));
+      var nodes = textNodesOf(el);
+      var done = [];
+      var k = 0;
+      var last = 0;
+      for (var n = 0; n < nodes.length && k < GLYPH_LIMIT; n++) {
+        var node = nodes[n];
+        var text = node.nodeValue;
+        var parent = node.parentNode;
+        if (!parent) continue;
+        var frag = doc.createDocumentFragment();
+        var words = text.split(/(\s+)/);
+        for (var w = 0; w < words.length; w++) {
+          var word = words[w];
+          if (!word) continue;
+          if (/^\s+$/.test(word) || k >= GLYPH_LIMIT) {
+            frag.appendChild(doc.createTextNode(word));
+            continue;
+          }
+          var span = doc.createElement('span');
+          span.className = 'glyph-word';
+          var chars = typeof Array.from === 'function' ? Array.from(word) : word.split('');
+          for (var c = 0; c < chars.length; c++) {
+            var glyph = doc.createElement('span');
+            glyph.className = 'glyph';
+            glyph.textContent = chars[c];
+            glyph.setAttribute('data-sigil', SIGILS.charAt(Math.floor(rnd() * SIGILS.length)));
+            var delay = Math.round(k * step + (rnd() - 0.5) * step * (0.8 + temper.grain));
+            delay = Math.max(0, delay);
+            if (delay > last) last = delay;
+            glyph.style.setProperty('--d', delay + 'ms');
+            glyph.style.setProperty('--k', String(k));
+            span.appendChild(glyph);
+            k += 1;
+          }
+          frag.appendChild(span);
+        }
+        var pieces = [];
+        for (var f = 0; f < frag.childNodes.length; f++) pieces.push(frag.childNodes[f]);
+        parent.replaceChild(frag, node);
+        done.push({ parent: parent, node: node, pieces: pieces });
+      }
+      if (!k) return function () {};
+      addClass(el, 'is-revealing');
+      var ended = false;
+      var timer = 0;
+      function undo() {
+        if (ended) return;
+        ended = true;
+        if (timer && typeof global.clearTimeout === 'function') global.clearTimeout(timer);
+        if (revealing) revealing['delete'](el);
+        dropClass(el, 'is-revealing');
+        // Each text node goes back where its first piece is, and the pieces go.
+        for (var i = 0; i < done.length; i++) {
+          var d = done[i];
+          var put = false;
+          for (var j = 0; j < d.pieces.length; j++) {
+            var piece = d.pieces[j];
+            if (piece.parentNode !== d.parent) continue;
+            if (!put) {
+              d.parent.replaceChild(d.node, piece);
+              put = true;
+            } else d.parent.removeChild(piece);
+          }
+          if (!put && d.parent.appendChild) d.parent.appendChild(d.node);
+        }
+        if (typeof opts.done === 'function') opts.done();
+      }
+      if (revealing) revealing.set(el, undo);
+      var total = last + (ms('long') || 560) + (opts.after || 200);
+      if (typeof global.setTimeout === 'function') timer = global.setTimeout(undo, total);
+      else undo();
+      return undo;
+    }
+
+    /* ---- the ghost veil -------------------------------------------------------------------- */
+
+    /* The veil (#lightbox-veil, js/site.js) is hidden the instant what was behind it is put
+       away, because the script that lowers it has the page to give back and no time to spend. So
+       a ghost of it is left in its place for one more movement: a clone with no id and no name,
+       aria-hidden and under no pointer, that the stylesheet plays out (@keyframes
+       lightbox-veil-out) and that goes when the animation ends. Raised again before the ghost has
+       gone, the veil takes its place back and the ghost goes at once. */
+
+    var ghost = null;
+    var ghostTimer = 0;
+
+    function dropGhost() {
+      if (ghostTimer && typeof global.clearTimeout === 'function') global.clearTimeout(ghostTimer);
+      ghostTimer = 0;
+      if (ghost && ghost.parentNode) ghost.parentNode.removeChild(ghost);
+      ghost = null;
+    }
+
+    function raiseGhost(veil) {
+      dropGhost();
+      if (reduced() || !veil.parentNode || typeof veil.cloneNode !== 'function') return;
+      ghost = veil.cloneNode(false);
+      ghost.removeAttribute('id');
+      ghost.removeAttribute('hidden');
+      ghost.setAttribute('aria-hidden', 'true');
+      ghost.setAttribute('inert', '');
+      ghost.className = (veil.className ? veil.className + ' ' : '') + 'is-ghost';
+      ghost.style.pointerEvents = 'none';
+      veil.parentNode.insertBefore(ghost, veil.nextSibling);
+      var mine = ghost;
+      mine.addEventListener('animationend', function () { if (ghost === mine) dropGhost(); });
+      mine.addEventListener('animationcancel', function () { if (ghost === mine) dropGhost(); });
+      if (typeof global.setTimeout === 'function') {
+        ghostTimer = global.setTimeout(function () { if (ghost === mine) dropGhost(); }, (ms('long') || 560) * 3 + 600);
+      }
+    }
+
+    function watchVeil() {
+      if (typeof global.MutationObserver !== 'function' || typeof doc.getElementById !== 'function') return;
+      var veil = doc.getElementById('lightbox-veil');
+      if (!veil) {
+        if (typeof doc.addEventListener === 'function' && doc.readyState === 'loading') {
+          doc.addEventListener('DOMContentLoaded', watchVeil, { once: true });
+        }
+        return;
+      }
+      var shown = !veil.hidden;
+      try {
+        new global.MutationObserver(function () {
+          var up = !veil.hidden;
+          if (up) dropGhost();
+          else if (shown) raiseGhost(veil);
+          shown = up;
+        }).observe(veil, { attributes: true, attributeFilter: ['hidden'] });
+      } catch (e) {
+        /* the veil goes the way it came */
+      }
+    }
+
+    /* ---- FLIP ------------------------------------------------------------------------------ */
+
+    /* Things changing places -- the feed dealing a card into a row, a list reordered -- move from
+       where they were to where they are, each along a curve of its own, instead of being there.
+       Measure, change, measure, move: `flip(container, change)` runs `change()` between two
+       measurements of the container's children and sends every child that moved from its old place
+       to its new one by the Web Animations API, along a drift curve rolled for it (a stair where
+       the browser has no linear()). A child that is new gets the class is-dealt for the stylesheet
+       to arrive. A visitor who asked for less motion gets the change. Hands back the animations. */
+
+    function flip(container, change, options) {
+      var opts = options || {};
+      var kids = container && container.children ? container.children : null;
+      var before = [];
+      var can = kids && !reduced() && typeof Element !== 'undefined' && Element.prototype
+        && typeof Element.prototype.animate === 'function';
+      if (can) {
+        for (var i = 0; i < kids.length; i++) before.push([kids[i], kids[i].getBoundingClientRect()]);
+      }
+      if (typeof change === 'function') change();
+      if (!can) return [];
+      var out = [];
+      for (var b = 0; b < before.length; b++) {
+        var el = before[b][0];
+        var was = before[b][1];
+        if (el.parentNode !== container) continue;
+        var is = el.getBoundingClientRect();
+        var dx = was.left - is.left;
+        var dy = was.top - is.top;
+        var sx = is.width ? was.width / is.width : 1;
+        var sy = is.height ? was.height / is.height : 1;
+        if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5 && Math.abs(sx - 1) < 0.01 && Math.abs(sy - 1) < 0.01) continue;
+        var c = makeCurve(opts.family || 'drift', temper);
+        var easing = supportsLinear ? c.toCSS() : 'steps(' + (4 + Math.round(temper.grain * 6)) + ', jump-end)';
+        var when = ms('long') || 560;
+        try {
+          out.push(el.animate([
+            { transform: 'translate(' + dx.toFixed(1) + 'px, ' + dy.toFixed(1) + 'px) scale(' + sx.toFixed(3) + ', ' + sy.toFixed(3) + ')', transformOrigin: '0 0' },
+            { transform: 'none', transformOrigin: '0 0' }
+          ], { duration: when * (0.8 + Math.random() * 0.5), easing: easing, delay: stagger(b) * 0.4, fill: 'backwards' }));
+        } catch (e) {
+          /* the browser could not read the curve: it is where it is */
+        }
+      }
+      for (var k = 0; k < kids.length; k++) {
+        var fresh = true;
+        for (var q = 0; q < before.length; q++) if (before[q][0] === kids[k]) { fresh = false; break; }
+        if (fresh) pass(kids[k], 'dealt');
+      }
+      return out;
+    }
+
+    /* ---- what a script asks for: the rites ------------------------------------------------- */
+
+    // A passing rite on an element, asked for by name: stamp, seal, unseal, wane, or any other the
+    // stylesheet has a class is-<name> for.
+    function rite(el, name, after) {
+      if (!el || !name) return;
+      if (name === 'wax') return wax(el);
+      if (name === 'wane') return wane(el);
+      pass(el, name, after);
+    }
+
+    function mattes() {
+      return current.mattes;
     }
 
     /* ---- what a script asks for ------------------------------------------------------------ */
@@ -962,6 +1650,12 @@
       ms: ms,
       stagger: stagger,
       geometry: geometry,
+      mattes: mattes,
+      reveal: reveal,
+      flip: flip,
+      rite: rite,
+      wax: wax,
+      wane: wane,
       shift: shift,
       roll: rollAll,
       families: ALL_FAMILIES.slice(),

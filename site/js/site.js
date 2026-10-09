@@ -231,6 +231,117 @@
     return node;
   }
 
+  /* ---- the rites the shell asks the engine for ------------------------------------------- */
+  /* Nothing the shell writes or takes away is cut while a visitor is watching (README: "Motion
+     axiom"). Words a script writes are revealed -- js/motion.js wraps them in glyphs for the
+     length of the rite and puts them back, so textContent is never anything but the words -- and
+     a thing the shell takes off the screen is unmade first (.shell-unmake, _sass/_lightbox.scss),
+     or a ghost of it is left where it was when the thing itself has to go at once. The engine is
+     optional throughout: the stub browsers the harnesses run load none, and without it, or for a
+     visitor who asked for less motion, everything happens at once and synchronously. */
+
+  function engine() {
+    var m = window.interestingMotion;
+    return m && typeof m.ms === 'function' ? m : null;
+  }
+
+  function calm() {
+    var m = engine();
+    if (m) return !!m.reduced;
+    try {
+      return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function riteMs(name, fallback) {
+    var m = engine();
+    return (m && m.ms(name)) || fallback;
+  }
+
+  // Words written to a line, and revealed there. A line still revealing is put back whole first,
+  // so a question asked over a question never carries the old words into the new ones.
+  var revealed = typeof WeakMap === 'function' ? new WeakMap() : null;
+
+  function say(node, text, quiet) {
+    if (!node) return;
+    var before = revealed && revealed.get(node);
+    if (before) {
+      before();
+      revealed['delete'](node);
+    }
+    if (text != null) node.textContent = text;
+    var m = engine();
+    if (quiet || !m || typeof m.reveal !== 'function' || calm()) return;
+    var undo = m.reveal(node);
+    if (revealed && typeof undo === 'function') revealed.set(node, undo);
+  }
+
+  // Can this be unmade before it goes: an engine to time it by, a visitor who did not ask for
+  // stillness, and a browser with the clock and the classList the rite needs.
+  function canUnmake(node) {
+    return !!(node && node.classList && engine() && !calm()
+      && typeof window.setTimeout === 'function' && typeof node.addEventListener === 'function');
+  }
+
+  // Unmade: down the matte ladder with one flicker back, then `then()` -- at once where it cannot
+  // be unmade, so a caller's bookkeeping is the same either way.
+  function unmake(node, then) {
+    if (!canUnmake(node)) {
+      then();
+      return;
+    }
+    var done = false;
+    function finish(ev) {
+      if (done || (ev && ev.target && ev.target !== node)) return;
+      done = true;
+      node.classList.remove('shell-unmake');
+      then();
+    }
+    node.setAttribute('aria-hidden', 'true');
+    node.setAttribute('inert', '');
+    node.classList.add('shell-unmake');
+    node.addEventListener('animationend', finish);
+    node.addEventListener('animationcancel', finish);
+    window.setTimeout(finish, riteMs('medium', 340) + 160);
+  }
+
+  // A ghost of a box that has to go at once -- the "are you sure?" dialog, which must close
+  // before the focus can go home to the control that opened it: a copy of it left exactly where
+  // it was, unmade there, and taken out when it has gone. Under no pointer, hidden from a screen
+  // reader, and playing through whatever lightbox is still up around it.
+  function ghostOf(host) {
+    if (!canUnmake(host) || typeof host.getBoundingClientRect !== 'function' || !document.body
+        || typeof host.innerHTML !== 'string' || typeof host.querySelectorAll !== 'function') return;
+    var box = host.getBoundingClientRect();
+    if (!box || !box.width || !box.height) return;
+    var ghost = document.createElement('div');
+    ghost.className = String(host.className || '').replace(/\b[\w-]+-fallback\b/g, '').replace(/\s+/g, ' ').trim() + ' shell-ghost';
+    ghost.innerHTML = host.innerHTML;
+    var named = ghost.querySelectorAll('[id]');
+    for (var i = 0; i < named.length; i++) named[i].removeAttribute('id');
+    ghost.setAttribute('aria-hidden', 'true');
+    ghost.setAttribute('inert', '');
+    var style = ghost.style;
+    style.setProperty('position', 'fixed');
+    style.setProperty('top', box.top + 'px');
+    style.setProperty('left', box.left + 'px');
+    style.setProperty('width', box.width + 'px');
+    style.setProperty('height', box.height + 'px');
+    style.setProperty('margin', '0');
+    style.setProperty('display', 'grid');
+    style.setProperty('gap', '1rem');
+    style.setProperty('align-content', 'start');
+    style.setProperty('z-index', 'calc(var(--layer-front) + 1)');
+    style.setProperty('pointer-events', 'none');
+    style.setProperty('animation-play-state', 'running');
+    document.body.appendChild(ghost);
+    unmake(ghost, function () {
+      if (ghost.parentNode) ghost.parentNode.removeChild(ghost);
+    });
+  }
+
   var unlockCount = 0;
 
   function unlock(host, options) {
@@ -252,8 +363,15 @@
     }
 
     function powerUp(value, how) {
-      if (box && box.parentNode) box.parentNode.removeChild(box);
+      // The box is unmade where it stands and taken out when it has gone; the part under it is
+      // powered up now, which is what the box was for.
+      var gone = box;
       box = null;
+      if (gone && gone.parentNode) {
+        unmake(gone, function () {
+          if (gone.parentNode) gone.parentNode.removeChild(gone);
+        });
+      }
       host.classList.remove('powered-down');
       host.removeAttribute('inert');
       host.removeAttribute('aria-hidden');
@@ -287,7 +405,8 @@
       box.setAttribute('role', 'group');
       box.setAttribute('aria-labelledby', heading.id);
       box.appendChild(heading);
-      box.appendChild(el('p', 'unlock-note', note));
+      var line = el('p', 'unlock-note', note);
+      box.appendChild(line);
       var controls = el('div', 'controls');
       var go = el('button', 'unlock-go btn-filled', button);
       go.type = 'button';
@@ -307,6 +426,10 @@
       }
 
       host.parentNode.insertBefore(box, host);
+      // The words arrive as words do here: revealed, not cut in.
+      say(heading);
+      say(line);
+      say(go);
       host.classList.add('powered-down');
       host.setAttribute('inert', '');
       host.setAttribute('aria-hidden', 'true');
@@ -621,6 +744,9 @@
     var answered = asking;
     asking = null; // first, so closing the dialog cannot send the answer twice
     if (!answered) return;
+    // The box has to close at once (a modal dialog holds the focus until it does), so what is
+    // unmade is a ghost of it, left exactly where the question was.
+    if (sure.host.open) ghostOf(sure.host);
     if (sure.host.open && typeof sure.host.close === 'function') sure.host.close();
     else sure.host.removeAttribute('open');
     sure.host.classList.remove('are-you-sure-fallback');
@@ -649,10 +775,10 @@
         onPress: function () { settle(false); }
       });
     }
-    sure.title.textContent = 'are you sure you want to ' + what + '?';
-    sure.note.textContent = opts.detail || '';
+    say(sure.title, 'are you sure you want to ' + what + '?');
+    say(sure.note, opts.detail || '', !opts.detail);
     sure.note.hidden = !opts.detail;
-    sure.go.textContent = String(opts.confirm || '').trim() || ('yes, ' + what);
+    say(sure.go, String(opts.confirm || '').trim() || ('yes, ' + what));
     asking = {
       onConfirm: onConfirm,
       onCancel: onCancel,
@@ -741,10 +867,30 @@
     else fillAllRanges();
   }
 
+  // A slider let go of settles: .is-settling for one short movement after the finger lifts or
+  // the key comes up, which is what the stylesheet ratchets the fill on (never under the finger).
+  var settling = typeof WeakMap === 'function' ? new WeakMap() : null;
+
+  function settleRange(ev) {
+    var input = ev && ev.target;
+    if (!input || input.type !== 'range' || !input.classList || typeof window.setTimeout !== 'function') return;
+    if (!engine() || calm()) return;
+    input.classList.add('is-settling');
+    var was = settling && settling.get(input);
+    if (was && typeof window.clearTimeout === 'function') window.clearTimeout(was);
+    var timer = window.setTimeout(function () {
+      input.classList.remove('is-settling');
+    }, riteMs('short', 170) + 80);
+    if (settling) settling.set(input, timer);
+  }
+
   function watchRanges() {
     document.addEventListener('input', function (ev) {
       if (ev.target && ev.target.type === 'range') fillRange(ev.target);
     });
+    document.addEventListener('change', settleRange);
+    document.addEventListener('pointerup', settleRange);
+    document.addEventListener('keyup', settleRange);
     // A piece may move a slider without an input event (ctx.set, from a tap on the scene), and a
     // new piece puts new ones on the page: either way, everything is re-read on the next frame.
     document.addEventListener('click', fillSoon);
@@ -1008,7 +1154,7 @@
       nav.readingGo.href = root + world.world;
       // On the world itself the option says where the visitor is, rather than offering them a
       // trip to where they already are.
-      nav.readingLabel.textContent = here ? world.worldName : 'go to ' + world.worldName;
+      label(nav.readingLabel, here ? world.worldName : 'go to ' + world.worldName);
       if (here) nav.readingGo.setAttribute('aria-current', 'page');
       else nav.readingGo.removeAttribute('aria-current');
       nav.reading.hidden = false;
@@ -1030,7 +1176,7 @@
     // worth saying before it is opened.
     if (nav.stateLabel) {
       var kept = store && typeof store.keys === 'function' ? store.keys().length : 0;
-      nav.stateLabel.textContent = kept ? 'state · ' + kept + ' kept' : 'state';
+      label(nav.stateLabel, kept ? 'state · ' + kept + ' kept' : 'state');
     }
     place();
   }
@@ -1042,10 +1188,83 @@
      of its own, which is a moment too late for anything that has to happen before the next line
      runs. The lightbox is the shared one, so the veil, the inert page, the paused animations and
      the held frame loop are one call rather than four. */
+  // A chip's words, revealed when they change while the constellation is on screen; written
+  // plainly while it is away, where nobody is watching.
+  function label(node, text) {
+    if (!node || node.textContent === text) return;
+    say(node, text, !nav.host.open);
+  }
+
+  function gcd(a, b) {
+    while (b) {
+      var t = a % b;
+      a = b;
+      b = t;
+    }
+    return a;
+  }
+
+  /* The order the chips develop in, cast afresh on every press: a stride through the set from a
+     rolled start, one way or the other, so the constellation never comes out top to bottom twice
+     running. --roll on each option is its turn, and the stylesheet counts the steps from it; a
+     page with no engine, or a visitor who asked for less motion, keeps the plain order. */
+  function deal() {
+    var options = nav.sky.querySelectorAll('.sparknav-option');
+    var shown = [];
+    for (var i = 0; i < options.length; i++) if (!options[i].hidden) shown.push(options[i]);
+    var n = shown.length;
+    var start = 0;
+    var stride = 1;
+    if (n > 1 && engine() && !calm()) {
+      var strides = [1, 2, 3, 5, 7];
+      var fit = [];
+      for (var s = 0; s < strides.length; s++) if (strides[s] < n && gcd(strides[s], n) === 1) fit.push(strides[s]);
+      stride = fit[Math.floor(Math.random() * fit.length)] || 1;
+      if (Math.random() < 0.5) stride = n - stride;
+      start = Math.floor(Math.random() * n);
+    }
+    for (var k = 0; k < n; k++) {
+      shown[k].style.setProperty('--roll', String((start + k * stride) % n));
+    }
+  }
+
+  /* The constellation unmade (close below): the chips go down the ladder toward the logo and the
+     rays retract (.is-unmaking, _sass/_nav.scss), and only then does the <details> close -- the
+     lightbox, the inert page and aria-expanded are given back at once, before it, because the
+     page behind has to be live for whatever the press was for. Without the engine, or for a
+     visitor who asked for less motion, `then()` runs at once. */
+  var unmaking = 0; // the clock on the unmaking under way, or 0
+
+  function endUnmake() {
+    if (!unmaking) return;
+    if (typeof window.clearTimeout === 'function') window.clearTimeout(unmaking);
+    unmaking = 0;
+    nav.sky.classList.remove('is-unmaking');
+  }
+
+  function unmakeSky(then) {
+    var count = 0;
+    var options = nav.sky.querySelectorAll('.sparknav-option');
+    for (var i = 0; i < options.length; i++) if (!options[i].hidden) count += 1;
+    if (!count || !canUnmake(nav.sky)) {
+      then();
+      return;
+    }
+    endUnmake();
+    nav.sky.classList.add('is-unmaking');
+    unmaking = window.setTimeout(function () {
+      unmaking = 0;
+      nav.sky.classList.remove('is-unmaking');
+      then();
+    }, riteMs('medium', 340) + Math.ceil(count / 2) * riteMs('stagger', 44) + 80);
+  }
+
   function branch(on) {
     nav.logo.setAttribute('aria-expanded', on ? 'true' : 'false');
     if (on) {
+      endUnmake(); // pressed again before the last close had finished: cast afresh
       shape();
+      deal();
       navBox.up();
       // The branch starts over on every press: a browser that keeps a closed <details> rendered
       // would otherwise have run the animation once and left it there.
@@ -1058,6 +1277,7 @@
       stateModal(false);
       navBox.down();
       nav.sky.classList.remove('is-branching');
+      if (!nav.host.open) endUnmake(); // closed by the browser itself: nothing left to unmake
     }
   }
 
@@ -1065,8 +1285,17 @@
      down now rather than in the task the toggle event is queued in -- an adopted dialog opening
      on the next line has to find the page live, not inert. */
   function close(focusLogo) {
-    if (nav.host.open) nav.host.open = false;
+    // Only a constellation that is on screen is unmade: the state interface's close has nothing
+    // of the sky to show, and a browser without the engine closes at once.
+    var skyShown = nav.host.open && !nav.sky.hidden;
     branch(false);
+    if (skyShown) {
+      unmakeSky(function () {
+        if (nav.host.open) nav.host.open = false;
+      });
+    } else if (nav.host.open) {
+      nav.host.open = false;
+    }
     if (focusLogo && typeof nav.logo.focus === 'function') nav.logo.focus();
   }
 
@@ -1222,6 +1451,21 @@
     nav.host.addEventListener('toggle', function () {
       branch(nav.host.open);
     });
+
+    // Opening is the browser's own disclosure. Closing by the logo goes through close(), so the
+    // constellation is unmade before the <details> closes rather than cut by it; pressed again
+    // while it is still being unmade, the constellation is cast afresh.
+    nav.logo.addEventListener('click', function (event) {
+      if (!nav.host.open) return;
+      if (event && typeof event.preventDefault === 'function') event.preventDefault();
+      if (unmaking) {
+        endUnmake();
+        nav.host.open = false;
+        nav.host.open = true;
+        return;
+      }
+      close(false);
+    });
     nav.logo.setAttribute('aria-expanded', nav.host.open ? 'true' : 'false');
 
     // A destination closes the menu on its way out, so a link to the page the visitor is already
@@ -1338,11 +1582,20 @@
     difficultyKey: 'difficulty'
   };
 
+  // The skip link's words are revealed as it drops in, every time a keyboard reaches it.
+  function watchTheSkipLink() {
+    document.addEventListener('focusin', function (ev) {
+      var target = ev && ev.target;
+      if (target && target.classList && target.classList.contains('skip-link')) say(target);
+    });
+  }
+
   function start() {
     retireOldKeys();
     watchTheVeil();
     buildNav();
     watchRanges();
+    watchTheSkipLink();
   }
 
   if (document.readyState === 'loading') {

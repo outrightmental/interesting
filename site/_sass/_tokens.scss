@@ -93,6 +93,21 @@
   --ease-pulse: linear(0, 0.249 13.6%, 0.495 27.3%, 0.736 40.9%, 0.938 65.2%, 1 89.5%, 1);
   --ease-drift: linear(0, 0.093 6.3%, 0.093 9.4%, 0.162 12.5%, 0.206 18.8%, 0.238 25%, 0.296 31.3%, 0.366 37.5%, 0.4 43.8%, 0.463 50%, 0.593 56.3%, 0.597 62.5%, 0.719 68.8%, 0.736 75%, 0.818 81.3%, 0.839 87.5%, 0.96 93.8%, 1);
   --ease-wipe: linear(0, 0.047 10.5%, 0.417 18%, 0.667 25.5%, 0.805 33%, 0.845 40.4%, 0.61 41.8%, 0.845 43.1%, 0.949 67.7%, 1 92.3%, 1);
+  // The stair: a state that changes changes in treads, never in a glide -- a highlight, an
+  // opacity, a bar, a colour -- and the matte ladder is climbed along it.
+  --ease-stair: linear(0, 0 7.2%, 0.21 7.4%, 0.21 29.5%, 0.44 29.7%, 0.44 52.1%, 0.71 52.3%, 0.71 76%, 0.93 76.2%, 0.93 94.4%, 1);
+  // The matte ladder (README: "Motion axiom"): five masks at rising coverage, through which a
+  // surface that changes arrives tread by tread, and the texture a surface that stays changed is
+  // filled with. js/motion.js rolls them (a thresholded noise field, a scatter of shards, scan
+  // lines, a dither, an iris, a grain); these are the baked ones a page with no script climbs.
+  --matte-1: repeating-linear-gradient(0deg, #000 0 1px, transparent 1px 5px);
+  --matte-2: repeating-linear-gradient(0deg, #000 0 2px, transparent 2px 5px);
+  --matte-3: repeating-linear-gradient(0deg, #000 0 3px, transparent 3px 5px);
+  --matte-4: repeating-linear-gradient(0deg, #000 0 4px, transparent 4px 5px);
+  --matte-5: linear-gradient(#000, #000);
+  --matte-fill: repeating-linear-gradient(45deg, currentColor 0 1px, transparent 1px 4px);
+  --matte-fill-size: auto;
+  --matte-kind: scan;
   // The durations: rolled with a little jitter and scaled by the mood's tempo, these standing
   // until the script has rolled. --motion-turn is the slow ring's one turn (_rite.scss).
   --motion-short: 170ms;
@@ -216,6 +231,14 @@
   initial-value: -14%;
 }
 
+// A slider's fill (_controls.scss): registered so the track's gradient can move in treads after
+// the thumb, along the stair family, rather than jump or glide.
+@property --range-pct {
+  syntax: '<percentage>';
+  inherits: false;
+  initial-value: 50%;
+}
+
 // A browser that knows no linear() curve is given a stair instead: steps(), the one easing such a
 // browser has that is not a standard curve, with js/motion.js rolling the number of treads and the
 // place of the jump wherever it runs. Said with @supports rather than left to the cascade, because
@@ -229,6 +252,7 @@
     --ease-pulse: steps(7, jump-none);
     --ease-drift: steps(24, jump-none);
     --ease-wipe: steps(5, jump-end);
+    --ease-stair: steps(5, jump-end);
   }
 }
 
