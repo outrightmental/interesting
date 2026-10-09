@@ -106,6 +106,13 @@ function along(stops) {
   };
 }
 
+// The kiln's movements run on env.rite (README: "Motion axiom"): the heat is a series of levels
+// that flicker, never a sine; a tile fires by its area through the matte and cools in treads; a
+// rung lights in treads. `frac` is where in a period a clock stands.
+function frac(x) {
+  return x - Math.floor(x);
+}
+
 function riteCurve(seed, over) {
   let a = (seed >>> 0) || 1;
   const rnd = () => {
@@ -189,13 +196,26 @@ function px(c, w, h, k, floor) {
   return Math.max(floor, Math.round(Math.min(w, h) * k));
 }
 
-function tile(g, env, x, y, size, letter, lit, tilt) {
+function tile(g, env, x, y, size, letter, lit, tilt, own) {
   const c = env.colors;
   g.save();
   g.translate(x, y);
   g.rotate(tilt || 0);
-  g.fillStyle = env.mix(c.bg2, c.accent2, 0.13 + lit * 0.5);
+  g.fillStyle = env.mix(c.bg2, c.accent2, 0.13);
   g.fillRect(-size / 2, -size * 0.6, size, size * 1.2);
+  // The glow of a firing tile develops by its area, the cells its own matte lets through at the
+  // coverage it has reached, never by a tint brightening.
+  if (lit > 0 && own) {
+    g.save();
+    g.beginPath();
+    g.rect(-size / 2, -size * 0.6, size, size * 1.2);
+    g.clip();
+    own.paint(g, -size / 2, -size * 0.6, size, size * 1.2, lit, env.mix(c.bg2, c.accent2, 0.63));
+    g.restore();
+  } else if (lit > 0) {
+    g.fillStyle = env.mix(c.bg2, c.accent2, 0.13 + lit * 0.5);
+    g.fillRect(-size / 2, -size * 0.6, size, size * 1.2);
+  }
   g.strokeStyle = lit > 0.5 ? c.accent2 : env.alpha(c.accent, 0.8);
   g.lineWidth = 1;
   g.strokeRect(-size / 2, -size * 0.6, size, size * 1.2);
@@ -289,7 +309,9 @@ function anagramScene(g, w, h, env, plan, s, variant) {
   const cx = w / 2;
   const cy = h * 0.72;
   const r = Math.min(w, h) * 0.2 * v.scale;
-  const cooled = s.phase > 0.4 ? (s.cool || ease)((s.phase - 0.4) / 0.6) : 0;
+  const cooledRaw = s.phase > 0.4 ? (s.cool || ease)((s.phase - 0.4) / 0.6) : 0;
+  // The kiln goes dark in treads as the tiles cool, never a dimming.
+  const cooled = env.rite ? env.rite.at(0xc001).stair(cooledRaw) : cooledRaw;
   kiln(g, w, h, env, s.heat, { cx, cy, r, lit: 1 - cooled * 0.7 });
   embers(g, env, cx, cy, r, v, s.phase, 1 - cooled * 0.8);
   const size = Math.min(h * 0.13 * v.scale, (w * 0.84) / n / 1.15);
@@ -319,21 +341,25 @@ function anagramScene(g, w, h, env, plan, s, variant) {
     let lit = 0;
     if (s.phase > 0) {
       const to = s.slots ? place(s.slots[i], slotY) : x;
+      // Each tile has a roll of its own: it drops into the kiln along its own glitch of a curve
+      // (a travel, which may hesitate and overshoot) and lights by its area through its own
+      // matte in treads; it climbs out to its slot in clicks.
+      const own = env.rite ? env.rite.at(0x7e11 + i * 5) : null;
       if (s.phase < 0.4) {
-        const f = (s.fire || ease)(s.phase / 0.4);
+        const f = own ? own.ease(s.phase / 0.4) : (s.fire || ease)(s.phase / 0.4);
         x += (cx + (i - (n - 1) / 2) * r * 0.3 - x) * f;
         y += (cy - y) * f;
         tilt = f * (i % 2 ? -1 : 1) * 1.2;
-        lit = f;
+        lit = own ? own.stair(s.phase / 0.4) : f;
       } else {
-        const f = (s.cool || ease)((s.phase - 0.4) / 0.6);
+        const f = own ? own.ratchet((s.phase - 0.4) / 0.6) : (s.cool || ease)((s.phase - 0.4) / 0.6);
         x = cx + (i - (n - 1) / 2) * r * 0.3 + (to - (cx + (i - (n - 1) / 2) * r * 0.3)) * f;
         y = cy + (slotY - cy) * f;
         tilt = (1 - f) * (i % 2 ? -1 : 1) * 1.2;
         lit = 1;
       }
     }
-    tile(g, env, x, y, size, plan.tiles[i], lit, tilt);
+    tile(g, env, x, y, size, plan.tiles[i], lit, tilt, env.rite ? env.rite.at(0x7e11 + i * 5) : null);
   }
   caption(g, env, w, h, s.phase >= 1 ? 'it is a kiln, not a dictionary' : s.line, h * 0.95, env.alpha(c.muted, 0.9), small);
 }
@@ -399,7 +425,11 @@ function anagramPiece(env, plan) {
     },
     frame(t, dt, c) {
       s.t += dt;
-      if (!c.reduced) s.heat = 0.5 + Math.sin(s.t * 3.1) * 0.05 + Math.sin(s.t * 7) * 0.04;
+      if (!c.reduced && c.rite) {
+        const slow = c.rite.at(0x4ea7);
+        const quick = c.rite.at(0x4ea8);
+        s.heat = 0.46 + 0.08 * slow.stair(frac(s.t / 2.6)) + 0.04 * quick.flicker(frac(s.t / 0.7));
+      }
       if (c.done) s.phase = Math.min(1, s.phase + dt / (c.reduced ? 0.5 : 3.2));
       draw(c);
     },
@@ -463,8 +493,9 @@ function ladderScene(g, w, h, env, plan, s, variant) {
   const m = Math.min(w, h);
   const cx = w / 2;
   const r = m * 0.24 * v.scale;
-  kiln(g, w, h, env, 0.6, { cx, cy: h * 0.92, r, lit: 0.6 + s.lit * 0.4 });
-  embers(g, env, cx, h * 0.92, r, v, s.phase, 0.7 + s.lit * 0.3);
+  const litStep = env.rite ? env.rite.at(0x11ad).stair(s.lit) : s.lit;
+  kiln(g, w, h, env, 0.6, { cx, cy: h * 0.92, r, lit: 0.6 + litStep * 0.4 });
+  embers(g, env, cx, h * 0.92, r, v, s.phase, 0.7 + litStep * 0.3);
   const small = px(env, w, h, 0.036, 10);
   const size = Math.min((w * 0.5) / 4 / 1.1, h * 0.1 * v.scale);
   const railX = [cx - w * 0.3, cx + w * 0.3];
@@ -487,7 +518,10 @@ function ladderScene(g, w, h, env, plan, s, variant) {
     g.moveTo(railX[0], y);
     g.lineTo(railX[1], y);
     g.stroke();
-    const lit = s.phase > 0 ? (s.climb || ease)((s.phase * 4 - k) / 1.2) : 0;
+    // Each rung lights on a roll of its own, in treads, as the climb reaches it.
+    const rung = env.rite ? env.rite.at(0x1add + k * 11) : null;
+    const reach = Math.max(0, Math.min(1, (s.phase * 4 - k) / 1.2));
+    const lit = s.phase > 0 ? (rung ? rung.stair(reach) : (s.climb || ease)(reach)) : 0;
     for (let i = 0; i < 4; i++) {
       const x = cx + (i - 1.5) * size * 1.1;
       const letter = words[k][i] || '';
@@ -495,7 +529,7 @@ function ladderScene(g, w, h, env, plan, s, variant) {
         // At the finale the letter each step changed glows.
         const below = k > 0 ? words[k - 1] : null;
         const changed = s.phase > 0 && below && below.length === 4 && below[i] !== words[k][i];
-        tile(g, env, x, y, size, letter, changed ? lit : lit * 0.4, 0);
+        tile(g, env, x, y, size, letter, changed ? lit : lit * 0.4, 0, rung ? rung.at(i + 1) : null);
       } else slot(g, env, x, y, size, letter);
       // A hint: the letter one way up changes at this step, marked on the rung below it.
       if (k < 3 && s.hints > k && s.phase === 0) {

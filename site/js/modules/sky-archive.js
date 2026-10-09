@@ -87,6 +87,25 @@ function along(stops) {
   };
 }
 
+// The movements of the archive run on env.rite (README: "Motion axiom"): a breath is a stair
+// up and down, never a sine; the wheel turns in clicks; a mark blinks on. `frac` is where in a
+// period a clock stands, `tri` the same folded into a rise and a fall.
+function frac(x) {
+  return x - Math.floor(x);
+}
+
+function tri(x) {
+  const f = frac(x);
+  return f < 0.5 ? f * 2 : 2 - f * 2;
+}
+
+// A breath that steps: up a stair of its own and down it again, each mark on its own roll.
+function breath(rite, t, period, k, depth) {
+  if (!rite || !t) return 0;
+  const own = rite.at(0x6b7e + k * 7);
+  return (own.stair(tri(t / period + k * 0.137)) - 0.5) * 2 * depth;
+}
+
 function riteCurve(seed, over) {
   let a = (seed >>> 0) || 1;
   const rnd = () => {
@@ -308,7 +327,7 @@ function wheelScene(g, w, h, c, p, s, variant) {
     g.lineTo(edge.x, edge.y);
     g.stroke();
     g.setLineDash([]);
-    const breathe = s.t ? 0.12 * Math.sin(s.t * 1.8 + k * 2.1) : 0;
+    const breathe = breath(c.rite, s.t, 3.4, k, 0.12);
     glow(g, c, star.x, star.y, R * 0.12, col.accent2, (lit ? 0.7 : 0.45) + breathe);
     g.fillStyle = col.accent2;
     g.beginPath();
@@ -343,7 +362,10 @@ function wheelPiece(env, p) {
   // notches out it may be and still turn the lock.
   const { helps, margin } = asked(env);
   // The wheel turns to its notch along a curve rolled for this piece, past it and back.
-  const s = { angle: 0, spin: 0, t: 0, told: false, turn: riteCurve((env.seed >>> 0) ^ 0x51a7, true) };
+  // The wheel turns to its notch in clicks -- the ratchet of this piece's own rite, a tooth at a
+  // time with a slip back and a hold, never a smooth turn -- and the turn is composed afresh
+  // for the solve from the roll's pieces (which teeth, which slips) by rite.at.
+  const s = { angle: 0, spin: 0, t: 0, told: false, turn: riteCurve((env.seed >>> 0) ^ 0x51a7, true), spun: 0 };
   const draw = (c) => wheelScene(c.g, c.w, c.h, c, p, s, env.variant);
   return {
     title: wheelTitle(p),
@@ -399,8 +421,10 @@ function wheelPiece(env, p) {
     frame(t, dt, c) {
       if (!c.reduced) s.t += dt;
       if (c.done) {
-        s.spin = c.reduced ? 1 : Math.min(1, s.spin + dt * 0.7);
-        s.angle = (s.turn || ease)(s.spin) * p.t * (Math.PI * 2 / NOTCHES) * (p.cw ? 1 : -1);
+        if (!s.spun) s.spun = 1 + ((s.t * 1000) | 0) % 97;
+        s.spin = c.reduced ? 1 : Math.min(1, s.spin + dt * 0.55);
+        const click = c.rite ? c.rite.at(0x51a7 + s.spun).ratchet(s.spin) : (s.turn || ease)(s.spin);
+        s.angle = click * p.t * (Math.PI * 2 / NOTCHES) * (p.cw ? 1 : -1);
       }
       draw(c);
     },
@@ -612,7 +636,7 @@ function omensScene(g, w, h, c, p, s, variant) {
   const unit = Math.min(f.sw, f.sh);
   p.pts.forEach((q) => {
     const r = unit * (0.006 + q.b * 0.0024);
-    const breathe = s.t ? 0.08 * Math.sin(s.t * 1.6 + q.b * 1.7) : 0;
+    const breathe = breath(c.rite, s.t, 3.8, q.b, 0.08);
     glow(g, c, X(q.x), Y(q.y), r * 5, col.accent2, 0.25 + q.b * 0.05 + breathe);
     g.fillStyle = c.mix(col.fg, col.accent2, q.b / 9);
     g.beginPath();
@@ -621,14 +645,21 @@ function omensScene(g, w, h, c, p, s, variant) {
   });
   // The hint, once asked for: the two brightest, ringed and named.
   if (s.marked) {
+    // The rings blink on (a flicker of the piece's own rite) and widen a tread at a time; the
+    // names come a beat behind them.
+    const age = s.markedAt == null || !s.t ? 1 : Math.min(1, (s.t - s.markedAt) / 1.1);
+    const own = c.rite ? c.rite.at(0x2b1d) : null;
+    const on = own ? own.flicker(age) : 1;
+    const grow = own ? own.stair(age) : 1;
     g.strokeStyle = c.alpha(col.accent2, 0.9);
     g.lineWidth = 1.2;
     g.setLineDash([3, 3]);
     byBrightness(p.pts).slice(0, 2).forEach((q, k) => {
+      if (!on) return;
       g.beginPath();
-      g.arc(X(q.x), Y(q.y), unit * 0.05, 0, Math.PI * 2);
+      g.arc(X(q.x), Y(q.y), unit * (0.03 + 0.02 * grow), 0, Math.PI * 2);
       g.stroke();
-      write(g, k ? 'second brightest' : 'brightest', X(q.x), Y(q.y) - unit * 0.07, fs * 0.75, col.accent2, 'center', 500);
+      if (own ? own.at(k + 1).flicker(age) : 1) write(g, k ? 'second brightest' : 'brightest', X(q.x), Y(q.y) - unit * 0.07, fs * 0.75, col.accent2, 'center', 500);
     });
     g.setLineDash([]);
   }
@@ -647,6 +678,20 @@ function omensScene(g, w, h, c, p, s, variant) {
     g.beginPath();
     g.roundRect(x, top, cw, ch, fs * 0.5);
     g.fill();
+    // A picked omen is sealed: a wash of the accent develops over its card by area, through the
+    // matte of this pick's own roll, in treads -- and leaves the same way when it is unpicked.
+    const pickedAt = s.pickedAt && s.pickedAt[i];
+    const since = pickedAt == null || !s.t ? 1 : Math.min(1, (s.t - pickedAt) / 1.3);
+    const own = c.rite ? c.rite.at(0x0ae0 + i * 3 + (s.picks || 0)) : null;
+    const cover = own ? own.stair(since) : 1;
+    if (own && (picked || since < 1)) {
+      g.save();
+      g.beginPath();
+      g.roundRect(x, top, cw, ch, fs * 0.5);
+      g.clip();
+      own.paint(g, x, top, cw, ch, picked ? cover : 1 - cover, c.alpha(col.accent2, 0.16));
+      g.restore();
+    }
     g.strokeStyle = picked ? c.alpha(col.accent2, 0.95) : c.alpha(col.muted, 0.4);
     g.lineWidth = picked ? 2 : 1;
     g.stroke();
@@ -694,7 +739,14 @@ function omensPiece(env, p) {
     },
     apply(id, value, c) {
       if (id === 'hold') {
+        const was = s.picked;
         s.picked = Array.isArray(value) ? value.map(Number) : [];
+        // Every omen whose pick changed starts its seal (or its unsealing) now, on a fresh roll.
+        s.pickedAt = s.pickedAt || {};
+        s.picks = (s.picks || 0) + 1;
+        p.claims.forEach((id2, i) => {
+          if (was.includes(i) !== s.picked.includes(i)) s.pickedAt[i] = s.t;
+        });
         c.status(s.picked.length ? 'picked: ' + s.picked.map((i) => 'omen ' + (i + 1)).join(', ') : 'nothing picked yet');
       }
       if (id === 'second') {
@@ -706,6 +758,7 @@ function omensPiece(env, p) {
         const miscalled = unread.filter((i) => s.picked.includes(i) !== p.truth.includes(i));
         if (!s.marked) {
           s.marked = true;
+          s.markedAt = s.t;
           c.hint();
           c.status('the two brightest are ringed; the ring, the band and the hand\'s width are the measure');
         } else if (spent >= helps) {
