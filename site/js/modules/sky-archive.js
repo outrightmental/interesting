@@ -1,10 +1,10 @@
 /* The sky archive: a wheel of letters turned under the stars, and omens written against a sky.
-   As a card it is the wheel with three stars pointing at its rim, or a square sky with five omen
-   cards under it (paint, spark); as a piece it is one of the two puzzles below, and the card it
+   As a card it is a wheel, a square sky with five omen cards, or a numbered star chart
+   (paint, spark); as a piece it is one of the three puzzles below, and the card it
    was opened from says which. See js/feed.js for what a module is and js/stage.js for what a
    piece is.
 
-   Two puzzles, both deduction:
+   Three puzzles, all deduction:
 
      the wheel of letters   Twenty-four letters round the rim, a notch apart, and three stars inside
                             the wheel, each pointing at one. The archive asks for a word of three
@@ -22,6 +22,11 @@
                             available beside the picture. A wrong check measures both answers
                             without identifying a true claim; a closer reading costs a hint, and
                             a solve reads a line from the archive.
+
+     the star's itinerary  Follow four or five cardinal steps through a numbered, three-by-three
+                            star chart. Name the last star and add the brightness of every star
+                            landed on. The route is generated within the chart; hints reveal
+                            successive landings, and the complete trail remains playable.
 
    The sky a visitor brings may be one star or many: it is drawn behind the wheel for colour, and
    nothing of the puzzle depends on it. The plan is rolled from the seed, dealt once per card and
@@ -845,6 +850,205 @@ function omensPiece(env, p) {
   };
 }
 
+/* ---- the star's itinerary ------------------------------------------------------------------- */
+
+const DIRECTIONS = ['N', 'E', 'S', 'W'];
+
+function routeStep(at, direction) {
+  const row = Math.floor(at / 3);
+  const col = at % 3;
+  if (direction === 'N' && row > 0) return at - 3;
+  if (direction === 'E' && col < 2) return at + 1;
+  if (direction === 'S' && row < 2) return at + 3;
+  if (direction === 'W' && col > 0) return at - 1;
+  return null;
+}
+
+function routeWalk(p) {
+  const trail = [p.start];
+  for (const direction of p.moves) {
+    const next = routeStep(trail[trail.length - 1], direction);
+    if (next === null) return null;
+    trail.push(next);
+  }
+  return trail;
+}
+
+function routePlan(env) {
+  const lights = some(env, [1, 2, 3, 4, 5, 6, 7, 8, 9], 9);
+  const trail = [env.int(0, 8)];
+  const moves = [];
+  const length = env.chance(0.35) ? 5 : 4;
+  while (moves.length < length) {
+    const at = trail[trail.length - 1];
+    const possible = DIRECTIONS.filter((d) => routeStep(at, d) !== null);
+    const onward = possible.filter((d) => routeStep(at, d) !== trail[trail.length - 2]);
+    const direction = env.pick(onward.length ? onward : possible);
+    moves.push(direction);
+    trail.push(routeStep(at, direction));
+  }
+  return { kind: 'route', lights, start: trail[0], moves };
+}
+
+function carriedRoute(env) {
+  const p = env.card && env.card.of;
+  if (!p || p.kind !== 'route' || !Array.isArray(p.lights) || p.lights.length !== 9) return null;
+  if (!p.lights.every((n) => Number.isInteger(n) && n >= 1 && n <= 9) || new Set(p.lights).size !== 9) return null;
+  if (!Number.isInteger(p.start) || p.start < 0 || p.start > 8) return null;
+  if (!Array.isArray(p.moves) || (p.moves.length !== 4 && p.moves.length !== 5)
+      || !p.moves.every((d) => DIRECTIONS.includes(d)) || !routeWalk(p)) return null;
+  return { kind: 'route', lights: p.lights.slice(), start: p.start, moves: p.moves.slice() };
+}
+
+function routeTitle(p) {
+  return 'the star\'s itinerary: ' + WORDS[p.moves.length] + ' steps';
+}
+
+function routeBlank(t) {
+  return { seen: 0, focus: -1, done: false, t: t || 0 };
+}
+
+function routeScene(g, w, h, c, p, s, variant) {
+  const v = variant || PLAIN;
+  const col = c.colors;
+  const fs = Math.max(10, Math.min(14, Math.min(w, h) * 0.034));
+  const radius = Math.min(w, h) * 0.037 * v.scale;
+  const point = (i) => ({ x: w * (0.16 + (i % 3) * 0.34), y: h * (0.18 + Math.floor(i / 3) * 0.25) });
+  const trail = routeWalk(p);
+  const visible = s.done ? p.moves.length : s.seen;
+  dark(g, w, h, c, v);
+  write(g, 'start at star ' + (p.start + 1), w / 2, h * 0.055, fs, col.accent2, 'center', 600);
+  g.strokeStyle = c.alpha(col.muted, 0.22);
+  g.lineWidth = 1;
+  g.beginPath();
+  for (let i = 0; i < 9; i++) {
+    const a = point(i);
+    if (i % 3 < 2) {
+      const b = point(i + 1);
+      g.moveTo(a.x, a.y);
+      g.lineTo(b.x, b.y);
+    }
+    if (i < 6) {
+      const b = point(i + 3);
+      g.moveTo(a.x, a.y);
+      g.lineTo(b.x, b.y);
+    }
+  }
+  g.stroke();
+  if (visible) {
+    g.strokeStyle = col.accent2;
+    g.lineWidth = Math.max(2, radius * 0.18);
+    g.beginPath();
+    trail.slice(0, visible + 1).forEach((index, step) => {
+      const q = point(index);
+      if (step) g.lineTo(q.x, q.y);
+      else g.moveTo(q.x, q.y);
+    });
+    g.stroke();
+  }
+  for (let i = 0; i < 9; i++) {
+    const q = point(i);
+    const r = radius * (0.75 + p.lights[i] * 0.045);
+    const lit = i === p.start || i === s.focus || trail.slice(1, visible + 1).includes(i);
+    const shift = breath(c.rite, s.t, 3.7, i, 0.06);
+    glow(g, c, q.x, q.y, r * 2.3, lit ? col.accent2 : col.accent, 0.22 + (lit ? 0.18 : 0) + shift);
+    g.fillStyle = lit ? col.accent2 : c.mix(col.accent, col.fg, p.lights[i] / 9);
+    g.beginPath();
+    g.arc(q.x, q.y, r, 0, Math.PI * 2);
+    g.fill();
+    write(g, String(i + 1), q.x, q.y, fs, col.bg, 'center', 700);
+    write(g, String(p.lights[i]), q.x, q.y + r + fs * 1.15, fs, col.fg, 'center', 600);
+    if (i === s.focus) {
+      g.strokeStyle = col.accent2;
+      g.lineWidth = 1.5;
+      g.setLineDash([3, 3]);
+      g.beginPath();
+      g.arc(q.x, q.y, r * 1.55, 0, Math.PI * 2);
+      g.stroke();
+      g.setLineDash([]);
+    }
+  }
+  write(g, 'steps: ' + p.moves.join('  '), w / 2, h * 0.84, fs * 1.15, col.accent2, 'center', 700);
+  write(g, 'brightness is below each star', w / 2, h * 0.93, fs, c.alpha(col.fg, 0.9), 'center', 500);
+}
+
+function routePreview(g, w, h, env, p, t) {
+  routeScene(g, w, h, env, p, routeBlank(t), env.variant);
+}
+
+function routePiece(env, p) {
+  const helps = asked(env).helps;
+  const trail = routeWalk(p);
+  const end = trail[trail.length - 1] + 1;
+  const sum = trail.slice(1).reduce((total, index) => total + p.lights[index], 0);
+  const s = routeBlank(0);
+  const draw = (c) => routeScene(c.g, c.w, c.h, c, p, s, env.variant);
+  return {
+    title: routeTitle(p),
+    brief: 'Stars 1 to 9 form three rows, numbered left to right. Each star\'s brightness is written below it. Start at star ' + (p.start + 1)
+      + ' and follow ' + p.moves.join(', ') + ': N is up, E right, S down, W left. Add the brightness of each star you LAND ON, not the starting star; count a star again if you revisit it. For a text reading, brightness by star: '
+      + p.lights.map((light, i) => (i + 1) + ': ' + light).join('; ') + '. Tap a star to choose it as your end star.',
+    goal: 'Name the last star and add the brightness of every star landed on.',
+    aspect: '1 / 1',
+    checkLabel: 'read the route',
+    steps: [
+      { id: 'end', ask: 'which star is last (1 to 9)', kind: 'number', min: 1, max: 9, step: 1, value: 1 },
+      { id: 'sum', ask: 'brightness added along the route', kind: 'number', min: 0, max: 45, step: 1, value: 0 },
+      { id: 'hint', ask: 'show the next landing', kind: 'press', count: 1, label: 'show a step', optional: true }
+    ],
+    solution: { end, sum },
+    check(c) {
+      const lastMatches = Number(c.value('end')) === end;
+      const sumMatches = Number(c.value('sum')) === sum;
+      return { solved: lastMatches && sumMatches, say: lastMatches && sumMatches
+        ? 'the route ends at star ' + end + ' and its landings add to ' + sum
+        : 'the last star ' + (lastMatches ? 'matches' : 'does not match') + '; the brightness total ' + (sumMatches ? 'matches' : 'does not match') };
+    },
+    start(c) {
+      c.status('Start at star ' + (p.start + 1) + '; follow the steps written under the chart.');
+      draw(c);
+    },
+    apply(id, value, c) {
+      if (id === 'end') {
+        s.focus = Number(value) - 1;
+        c.status('Star ' + value + ' marked as the last star.');
+      }
+      if (id === 'sum') c.status('You counted ' + value + ' brightness across the landings.');
+      if (id === 'hint') {
+        if (s.seen < helps && s.seen < p.moves.length) {
+          s.seen += 1;
+          c.hint();
+          const at = trail[s.seen];
+          c.status('After step ' + s.seen + ', the route reaches star ' + (at + 1) + ', brightness ' + p.lights[at] + '.');
+        } else c.status('No more steps can be shown at this difficulty; those already shown stay on the chart.');
+      }
+      draw(c);
+    },
+    tap(x, y, c) {
+      for (let i = 0; i < 9; i++) {
+        if (Math.abs(x - (0.16 + (i % 3) * 0.34)) < 0.12
+            && Math.abs(y - (0.18 + Math.floor(i / 3) * 0.25)) < 0.1) {
+          s.focus = i;
+          c.set('end', i + 1);
+          c.status('Star ' + (i + 1) + ' has brightness ' + p.lights[i] + '; marked as the last star.');
+          draw(c);
+          return;
+        }
+      }
+      c.status('Tap one of the numbered stars to mark it as the last star.');
+    },
+    frame(t, dt, c) {
+      if (!c.reduced) s.t += Math.max(0, dt);
+      draw(c);
+    },
+    end(c) {
+      s.done = true;
+      c.status('The route ends at star ' + end + '; its landings add to ' + sum + '. The chart stays open to read again.');
+      draw(c);
+    }
+  };
+}
+
 /* ---- the module ----------------------------------------------------------------------------- */
 
 // Which asking this card is, and its plan, dealt once from the env's seeded stream and kept with
@@ -855,7 +1059,7 @@ const dealt = new WeakMap();
 function deal(env) {
   let got = dealt.get(env);
   if (!got) {
-    got = env.chance(0.5) ? wheelPlan(env) : omensPlan(env);
+    got = env.chance(0.26) ? routePlan(env) : env.chance(0.5) ? wheelPlan(env) : omensPlan(env);
     dealt.set(env, got);
   }
   return got;
@@ -870,7 +1074,8 @@ export default {
       // The card's rim is turned as far as the configuration turns it, so a repeat is the same
       // wheel seen at another setting.
       wheelScene(g, w, h, env, p, { angle: env.variant.turn * Math.PI * 2, spin: 0 }, env.variant);
-    } else omensPreview(g, w, h, env, p);
+    } else if (p.kind === 'route') routePreview(g, w, h, env, p, 0);
+    else omensPreview(g, w, h, env, p);
   },
   // The card at rest breathes: the pointer stars swell and settle and the drawn sky glimmers, so
   // a card rewards a second look without re-dealing anything. At t = 0 it is exactly the still
@@ -880,9 +1085,8 @@ export default {
     const p = deal(env);
     if (p.kind === 'wheel') {
       wheelScene(g, w, h, env, p, { angle: env.variant.turn * Math.PI * 2, spin: 0, t }, env.variant);
-    } else {
-      omensScene(g, w, h, env, p, { picked: [], reveal: false, t }, env.variant);
-    }
+    } else if (p.kind === 'route') routePreview(g, w, h, env, p, t);
+    else omensScene(g, w, h, env, p, { picked: [], reveal: false, t }, env.variant);
   },
   spark(env) {
     const p = deal(env);
@@ -896,6 +1100,14 @@ export default {
         of: p
       };
     }
+    if (p.kind === 'route') return {
+      title: routeTitle(p),
+      quote: 'start at star ' + (p.start + 1) + '; ' + p.moves.join('  '),
+      text: 'Follow the steps across the chart. Name the last star and add the brightness of the stars you land on.',
+      aspect: '1 / 1',
+      paint: (g, w, h, cardEnv) => routePreview(g, w, h, cardEnv, p, 0),
+      of: p
+    };
     return {
       title: omensTitle(p),
       quote: CLAIMS[p.claims[0]].text,
@@ -910,7 +1122,9 @@ export default {
     if (wheel) return wheelPiece(env, wheel);
     const omens = carriedOmens(env);
     if (omens) return omensPiece(env, omens);
+    const route = carriedRoute(env);
+    if (route) return routePiece(env, route);
     const p = deal(env);
-    return p.kind === 'wheel' ? wheelPiece(env, p) : omensPiece(env, p);
+    return p.kind === 'wheel' ? wheelPiece(env, p) : p.kind === 'route' ? routePiece(env, p) : omensPiece(env, p);
   }
 };

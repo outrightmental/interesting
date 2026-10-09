@@ -23,7 +23,7 @@
     { "file": "pendulum-hall.html", "name": "the pendulum hall", "orientation": "counting in echoes", "mood": "metrical", "aspect": "16 / 10",
       "what": "Keep time with pendulums that start together or on staggered beats: find their shared crossing, or tune a spring to hand a swing across in time." },
     { "file": "star-lantern.html", "name": "the lantern ritual", "orientation": "wants a rite", "mood": "ceremonial", "aspect": "3 / 4",
-      "what": "Light the rite: order the lanterns from clues, predict a drift, or recover two missing winds from two lanterns' journeys." },
+      "what": "Light the rite: order lanterns from clues, predict a drift, recover missing winds, or follow mirrored lanterns to their first crossing." },
     { "file": "wish-terrarium.html", "name": "the terrarium", "orientation": "minding something", "mood": "tending", "aspect": "4 / 5",
       "what": "Tend what is under glass: decide which plants get water from their tags and readings, or order the stems by age." },
     { "file": "constellation-weather.html", "name": "the weather lab", "orientation": "weather coming", "mood": "tempestuous", "aspect": "16 / 10",
@@ -47,7 +47,7 @@
     { "file": "shadow-theatre.html", "name": "the shadow theatre", "orientation": "magpie", "mood": "curious", "aspect": "4 / 3",
       "what": "Work out where the lamp stands from a shadow's size, or match four shadows to the cutouts that cast them." },
     { "file": "sky-archive.html", "name": "the archive oracle", "orientation": "asking elsewhere", "mood": "divinatory", "aspect": "1 / 1",
-      "what": "Ask the archive: turn a wheel of letters onto its word, or find two true omens and the brightest star's quadrant." }
+      "what": "Ask the archive: turn a letter wheel onto its word, find two true omens, or trace a star's route and add the lights it visits." }
   ],
   "finePrint": [
     { "file": "privacy.html", "name": "privacy", "gloss": "what is kept, and where", "icon": "shield",

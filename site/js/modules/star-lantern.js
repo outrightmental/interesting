@@ -1,9 +1,9 @@
-/* The lantern ritual: lanterns hung under the persona's stars, and three puzzles set among them. As
+/* The lantern ritual: lanterns hung under the persona's stars, and four puzzles set among them. As
    a card it is the puzzle the seed deals, drawn small (paint, spark); as a piece it is one of the
-   three puzzles below, and the card it was opened from says which. See js/feed.js for what a module
+   four puzzles below, and the card it was opened from says which. See js/feed.js for what a module
    is and js/stage.js for what a piece is.
 
-   Three puzzles, all deduction:
+   Four puzzles, all deduction:
 
      the lighting order  Four or five lettered lanterns rise one after another, and a few clues
                          under the sky say how: before, right after, first, last, so many between,
@@ -21,6 +21,11 @@
                          first, then the lower. Checks trace the visitor's proposed winds, never
                          hidden answers. Worked subtractions cost hints; the lit paths remain
                          available to experiment with after solving.
+
+     the midnight crossing  Two lanterns rise through the same winds, one following every push
+                            and the other mirroring it. Find the first band after which they meet
+                            or exchange sides, and where the first lantern exits. Hints expose
+                            successive positions; the lit paths can still be explored on a solve.
 
    A card and the feature it opens as are one puzzle: the spark puts the whole plan on its spec as
    `of` -- the order and its clues, or the four bands -- and piece(env) opens on that rather than
@@ -1204,6 +1209,210 @@ function witnessPiece(env, plan) {
   };
 }
 
+/* ---- the midnight crossing ----------------------------------------------------------------- */
+
+function mirrorFirst(bands, gap) {
+  let travelled = 0;
+  for (let i = 0; i < bands.length; i++) {
+    travelled += bands[i];
+    if (travelled >= gap) return i + 1;
+  }
+  return 0;
+}
+
+function mirrorOk(p) {
+  if (!p || !Number.isInteger(p.gap) || p.gap < 2 || p.gap > 4
+      || !Array.isArray(p.bands) || (p.bands.length !== BANDS && p.bands.length !== BANDS + 1)
+      || !p.bands.every((d) => Number.isInteger(d) && d >= -3 && d <= 3)
+      || !p.bands.some((d) => d > 0) || !p.bands.some((d) => d < 0)) return false;
+  let travelled = 0;
+  for (const wind of p.bands) {
+    travelled += wind;
+    if (Math.abs(travelled - p.gap) > COLS) return false;
+  }
+  return mirrorFirst(p.bands, p.gap) > 0 && travelled !== p.gap;
+}
+
+function mirrorPlan(env) {
+  const n = env.chance(0.35) ? BANDS + 1 : BANDS;
+  const gap = env.int(2, 4);
+  for (let attempt = 0; attempt < 200; attempt++) {
+    const bands = Array.from({ length: n }, () => env.int(-3, 3));
+    const plan = { kind: 'mirror', gap, bands };
+    if (mirrorOk(plan)) return plan;
+  }
+  return { kind: 'mirror', gap: 2, bands: n === BANDS ? [1, -1, 3, 1] : [1, -1, 3, -1, 1] };
+}
+
+function carriedMirror(env) {
+  const p = env.card && env.card.of;
+  return p && p.kind === 'mirror' && mirrorOk(p)
+    ? { kind: 'mirror', gap: p.gap, bands: p.bands.slice() } : null;
+}
+
+function mirrorTitle(p) {
+  return 'the midnight crossing: ' + WORDS[p.bands.length] + ' winds';
+}
+
+function mirrorBlank(t) {
+  return { t: t || 0, focus: 0, guess: null, hints: 0, doneAt: -1, flight: 0 };
+}
+
+function drawMirror(g, w, h, env, plan, s, variant) {
+  const v = variant || PLAIN;
+  const c = env.colors;
+  const rite = riteOf(env);
+  const nb = plan.bands.length;
+  const geo = driftGeometry(w, h, nb);
+  const k = Math.max(0.65, Math.min(1.6, Math.min(w, h) / 320)) * v.scale;
+  const small = Math.max(9, Math.min(13, Math.round(Math.min(w, h) * 0.035)));
+  const pos = positions(plan.bands);
+  const shown = s.doneAt >= 0 ? Math.min(nb, Math.floor(s.flight)) : s.hints;
+  const boundary = (i) => geo.bottom - i * geo.band;
+  sky(g, w, h, env);
+  sparks(g, w, h, env, v, 0.1, s.t);
+  write(g, 'A follows the wind · B mirrors it', w / 2, h * 0.05, small, 'center', c.fg);
+  g.strokeStyle = env.alpha(c.muted, 0.3);
+  g.lineWidth = 1;
+  g.setLineDash([2, 5]);
+  g.beginPath();
+  g.moveTo(geo.x(0), geo.top);
+  g.lineTo(geo.x(0), geo.bottom + geo.band * 0.5);
+  g.stroke();
+  g.setLineDash([]);
+  for (let b = 0; b < nb; b++) {
+    const y = boundary(b + 1);
+    const wind = plan.bands[b];
+    g.fillStyle = env.alpha(b % 2 ? c.accent : c.accent2, 0.06);
+    g.fillRect(geo.left, y, geo.span, geo.band);
+    g.strokeStyle = env.alpha(s.focus === b + 1 ? c.accent2 : c.muted, s.focus === b + 1 ? 0.9 : 0.35);
+    g.lineWidth = s.focus === b + 1 ? 2 : 1;
+    g.strokeRect(geo.left, y, geo.span, geo.band);
+    write(g, 'band ' + (b + 1), geo.left + 4, y + small, small, 'left', c.fg);
+    write(g, 'wind ' + signed(wind), geo.left + geo.span - 4, y + small, small, 'right', c.accent2);
+    if (wind) {
+      g.strokeStyle = c.accent;
+      g.fillStyle = c.accent;
+      g.lineWidth = 1.5;
+      arrow(g, geo.x(0), geo.x(wind), y + geo.band * 0.68, 4 * k);
+    } else {
+      g.strokeStyle = c.accent;
+      g.beginPath();
+      g.arc(geo.x(0), y + geo.band * 0.68, 3 * k, 0, TAU);
+      g.stroke();
+    }
+  }
+  for (let lamp = 0; lamp < 2; lamp++) {
+    const side = lamp ? -1 : 1;
+    const xAt = (i) => geo.x(side * (pos[i] - plan.gap));
+    g.strokeStyle = env.alpha(lamp ? c.accent : c.accent2, 0.9);
+    g.lineWidth = 2;
+    g.beginPath();
+    g.moveTo(xAt(0), geo.bottom + geo.band * 0.4);
+    g.lineTo(xAt(0), geo.bottom);
+    for (let i = 1; i <= shown; i++) g.lineTo(xAt(i), boundary(i));
+    g.stroke();
+    const y = shown ? boundary(shown) : geo.bottom + geo.band * 0.4;
+    const bob = env.reduced ? 0 : sway(rite, 0x49, s.t, lamp) * 2.5 * k;
+    lantern(g, env, xAt(shown), y + bob, 0.8, k, lamp ? 'B' : 'A');
+  }
+  if (s.guess !== null) {
+    g.strokeStyle = c.accent2;
+    g.lineWidth = 2;
+    g.setLineDash([3, 3]);
+    g.strokeRect(geo.x(s.guess) - 5 * k, geo.top - 10 * k, 10 * k, 8 * k);
+    g.setLineDash([]);
+  }
+  write(g, 'A starts at ' + signed(-plan.gap) + ' · B at ' + signed(plan.gap), w / 2, h * 0.93, small, 'center', c.fg);
+  if (s.doneAt >= 0) daybreak(g, rite, env, w, h, came(s, s.doneAt, 2.4, !!env.reduced), 0.1);
+}
+
+function mirrorPreview(g, w, h, env, plan, t) {
+  drawMirror(g, w, h, env, plan, mirrorBlank(t), env.variant);
+}
+
+function mirrorPiece(env, plan) {
+  const { helps } = asked(env);
+  const nb = plan.bands.length;
+  const first = mirrorFirst(plan.bands, plan.gap);
+  const exit = -plan.gap + driftTotal(plan.bands);
+  const pos = positions(plan.bands);
+  const s = mirrorBlank(0);
+  const draw = (c) => drawMirror(c.g, c.w, c.h, c, plan, s, env.variant);
+  return {
+    title: mirrorTitle(plan),
+    brief: 'A begins at column ' + signed(-plan.gap) + ' and B at ' + signed(plan.gap)
+      + '. Both rise through the same winds, bottom to top. A follows each wind; B moves the same distance in the OPPOSITE direction. Compare their columns after each band: which is the FIRST band after which A is level with or right of B? Where does A leave the top? Winds: '
+      + plan.bands.map((wind, i) => 'band ' + (i + 1) + ': ' + signed(wind)).join('; ')
+      + '. Tap a band to mark it as the first crossing.',
+    goal: 'Mark the first band after which A is level with or right of B, and A\'s exit column.',
+    aspect: '4 / 3',
+    checkLabel: 'check the crossing',
+    steps: [
+      { id: 'cross', ask: 'first crossing band, counted from the bottom', kind: 'number', min: 1, max: nb, step: 1, value: 1 },
+      { id: 'exit', ask: 'A\'s exit column (left is negative)', kind: 'number', min: -COLS, max: COLS, step: 1, value: 0 },
+      { id: 'hint', ask: 'show where both lanterns are after the next band', kind: 'press', count: 1, label: 'show a band', optional: true }
+    ],
+    solution: { cross: first, exit },
+    check(c) {
+      const crossingMatches = Number(c.value('cross')) === first;
+      const exitMatches = Number(c.value('exit')) === exit;
+      return { solved: crossingMatches && exitMatches, say: crossingMatches && exitMatches
+        ? 'A reaches or passes B after band ' + first + ' and leaves at column ' + signed(exit)
+        : 'the first crossing band ' + (crossingMatches ? 'matches' : 'does not match')
+          + '; A\'s exit column ' + (exitMatches ? 'matches' : 'does not match') };
+    },
+    start(c) {
+      c.status('A follows each wind; B mirrors it. Compare their columns after each band.');
+      draw(c);
+    },
+    apply(id, value, c) {
+      if (id === 'cross') {
+        s.focus = Number(value);
+        c.status('Band ' + value + ' marked as the first crossing.');
+      }
+      if (id === 'exit') {
+        s.guess = Number(value);
+        c.status('You marked column ' + signed(s.guess) + ' for A\'s exit.');
+      }
+      if (id === 'hint') {
+        if (s.hints < helps && s.hints < nb) {
+          s.hints += 1;
+          c.hint();
+          const a = pos[s.hints] - plan.gap;
+          c.status('After band ' + s.hints + ', A is at ' + signed(a) + ' and B is at ' + signed(-a) + '.');
+        } else c.status('No more bands can be shown at this difficulty; the visible paths stay on the chart.');
+      }
+      draw(c);
+    },
+    tap(x, y, c) {
+      const geo = driftGeometry(c.w, c.h, nb);
+      const band = Math.floor((geo.bottom - y * c.h) / geo.band);
+      if (x * c.w >= geo.left && x * c.w <= geo.left + geo.span && band >= 0 && band < nb) {
+        s.focus = band + 1;
+        c.set('cross', band + 1);
+        c.status('Band ' + (band + 1) + ' pushes A ' + signed(plan.bands[band]) + ' columns and B the opposite way; marked as the first crossing.');
+      } else c.status('Tap a numbered wind band to mark the first crossing.');
+      draw(c);
+    },
+    frame(t, dt, c) {
+      s.t += Math.max(0, dt);
+      if (s.doneAt >= 0) {
+        const progress = c.reduced ? 1 : Math.min(1, Math.max(0, (s.t - s.doneAt) / 2.2));
+        const own = roll(riteOf(c), 0x4a, 0);
+        s.flight = nb * (c.reduced ? 1 : Math.min(1, Math.max(0, own.stair(progress))));
+      }
+      draw(c);
+    },
+    end(c) {
+      s.doneAt = s.t;
+      s.flight = c.reduced ? nb : 0;
+      c.status('A first reaches or passes B after band ' + first + ' and leaves at ' + signed(exit) + '. Tap a band or change either answer to keep exploring.');
+      draw(c);
+    }
+  };
+}
+
 /* ---- the module ----------------------------------------------------------------------------- */
 
 // Which of the three puzzles this card is, and its plan, dealt once from the env's seeded stream and
@@ -1214,9 +1423,12 @@ const dealt = new WeakMap();
 function deal(env) {
   let got = dealt.get(env);
   if (!got) {
-    const order = env.chance(0.55);
-    const plan = order ? orderPlan(env) : driftPlan(env);
-    got = { order, plan: !order && env.chance(0.5) ? witnessPlan(env, plan) : plan };
+    if (env.chance(0.22)) got = { order: false, plan: mirrorPlan(env) };
+    else {
+      const order = env.chance(0.55);
+      const plan = order ? orderPlan(env) : driftPlan(env);
+      got = { order, plan: !order && env.chance(0.5) ? witnessPlan(env, plan) : plan };
+    }
     dealt.set(env, got);
   }
   return got;
@@ -1227,7 +1439,8 @@ export default {
   needsSky: true,
   paint(g, w, h, env) {
     const d = deal(env);
-    if (d.plan.kind === 'witness') witnessPreview(g, w, h, env, d.plan, env.variant.turn * 4);
+    if (d.plan.kind === 'mirror') mirrorPreview(g, w, h, env, d.plan, env.variant.turn * 4);
+    else if (d.plan.kind === 'witness') witnessPreview(g, w, h, env, d.plan, env.variant.turn * 4);
     else if (d.order) orderPreview(g, w, h, env, d.plan, env.variant.turn * 4);
     else driftPreview(g, w, h, env, d.plan, env.variant.turn * 4);
   },
@@ -1236,13 +1449,23 @@ export default {
   animate(g, w, h, env, t) {
     if (env.reduced) return false;
     const d = deal(env);
-    if (d.plan.kind === 'witness') witnessPreview(g, w, h, env, d.plan, t + env.variant.turn * 4);
+    if (d.plan.kind === 'mirror') mirrorPreview(g, w, h, env, d.plan, t + env.variant.turn * 4);
+    else if (d.plan.kind === 'witness') witnessPreview(g, w, h, env, d.plan, t + env.variant.turn * 4);
     else if (d.order) orderPreview(g, w, h, env, d.plan, t + env.variant.turn * 4);
     else driftPreview(g, w, h, env, d.plan, t + env.variant.turn * 4);
   },
   spark(env) {
     if (!env.stars.length) return null;
     const { order, plan } = deal(env);
+    if (plan.kind === 'mirror') return {
+      title: mirrorTitle(plan),
+      quote: 'A follows the wind; B mirrors it',
+      mono: plan.bands.map((wind, i) => 'band ' + (i + 1) + ': ' + signed(wind)).join(' / '),
+      text: 'Follow both lanterns. Find their first crossing and the column where A leaves the top.',
+      aspect: '4 / 3',
+      paint: (g, w, h, cardEnv) => mirrorPreview(g, w, h, cardEnv, plan, cardEnv.variant.turn * 4),
+      of: plan
+    };
     if (plan.kind === 'witness') {
       return {
         title: witnessTitle(plan),
@@ -1274,6 +1497,8 @@ export default {
     };
   },
   piece(env) {
+    const mirror = carriedMirror(env);
+    if (mirror) return mirrorPiece(env, mirror);
     const witness = carriedWitness(env);
     if (witness) return witnessPiece(env, witness);
     const order = carriedOrder(env);
@@ -1281,6 +1506,7 @@ export default {
     const drift = carriedDrift(env);
     if (drift) return driftPiece(env, drift);
     const d = deal(env);
+    if (d.plan.kind === 'mirror') return mirrorPiece(env, d.plan);
     if (d.plan.kind === 'witness') return witnessPiece(env, d.plan);
     return d.order ? orderPiece(env, d.plan) : driftPiece(env, d.plan);
   }
