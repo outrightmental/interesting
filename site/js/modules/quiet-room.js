@@ -66,6 +66,27 @@ function asked(env) {
   return { level, helps: 6 - level, margin: Math.max(0, 3 - level) };
 }
 
+const PLAIN = { density: 1, scale: 1, turn: 0 };
+const capital = (text) => text[0].toUpperCase() + text.slice(1);
+
+// A shuffle of 0 .. n-1 from the env's stream.
+function shuffled(env, n) {
+  const rest = [];
+  for (let i = 0; i < n; i++) rest.push(i);
+  const out = [];
+  while (rest.length) out.push(rest.splice(env.int(0, rest.length - 1), 1)[0]);
+  return out;
+}
+
+// An opening order that is not the answer, so the piece asks something.
+function startFor(env, order) {
+  const n = order.length;
+  let start = order.slice();
+  for (let guard = 0; guard < 10 && start.every((v, i) => v === order[i]); guard++) start = shuffled(env, n);
+  if (start.every((v, i) => v === order[i])) start = order.slice().reverse();
+  return start;
+}
+
 /* ---- the room ------------------------------------------------------------------------------ */
 
 // The room, out to `swell` and dimmed by `dim`. `scale` is how large the ring is drawn: the card's
@@ -95,7 +116,7 @@ function room(ctx, w, h, env, swell, dim, scale) {
   }
 }
 
-// The dark ground of the room with no ring: what both puzzles are drawn on.
+// The dark ground of the room with no ring: what the puzzles are drawn on.
 function floor(g, w, h, env, dim) {
   const c = env.colors;
   const ground = g.createRadialGradient(w / 2, h * 0.4, 0, w / 2, h * 0.4, Math.max(w, h) * 0.8);
@@ -174,7 +195,7 @@ function lampsTitle(plan) {
 function lampsBrief(plan) {
   const count = litBy(plan.presses, plan.n).filter(Boolean).length;
   return 'A vigil to be put out. Press a lamp and it flips itself and the lamps above, below, left and right of it. '
-    + (count === 1 ? 'One lamp is lit.' : WORDS[count][0].toUpperCase() + WORDS[count].slice(1) + ' lamps are lit.');
+    + (count === 1 ? 'One lamp is lit.' : capital(WORDS[count]) + ' lamps are lit.');
 }
 
 // Where the lamps sit in the scene: a square in the middle, `cell` wide each.
@@ -198,7 +219,7 @@ function drawLamps(g, w, h, env, plan, s, variant) {
     g.fillStyle = wash;
     g.fillRect(0, 0, w, h);
   }
-  const v = variant || { density: 1, scale: 1, turn: 0 };
+  const v = variant || PLAIN;
   for (let i = 0; i < n * n; i++) {
     const x = geo.left + (i % n + 0.5) * geo.cell;
     const y = geo.top + (Math.floor(i / n) + 0.5) * geo.cell;
@@ -260,14 +281,27 @@ function lampsPiece(env, plan) {
   const solution = new Array(N).fill(0);
   for (const i of plan.presses) solution[i] = 1;
   const s = { presses: new Array(N).fill(0), lamps: lit0.slice(), hinted: [], fade: 0 };
-  function relight() {
+  // The lamps still lit once `presses` have been made in the room as it opened.
+  function lampsAfter(presses) {
     const pressed = [];
-    for (let i = 0; i < N; i++) if (s.presses[i]) pressed.push(i);
+    for (let i = 0; i < N; i++) if (presses[i]) pressed.push(i);
     const flipped = litBy(pressed, n);
-    s.lamps = lit0.map((on, i) => on ^ flipped[i]);
+    return lit0.map((on, i) => on ^ flipped[i]);
   }
-  function burning() {
-    return s.lamps.filter(Boolean).length;
+  function relight() {
+    s.lamps = lampsAfter(s.presses);
+  }
+  function burning(lamps) {
+    return (lamps || s.lamps).filter(Boolean).length;
+  }
+  // The record as the rail holds it, which is what the check judges; the scene's own copy stands
+  // in where the rail has nothing to say.
+  function pressesNow(c) {
+    const v = c.value('presses');
+    return Array.isArray(v) && v.length === N ? v.map((on) => (on ? 1 : 0)) : s.presses;
+  }
+  function litLine(left) {
+    return left === 0 ? 'the room looks dark' : left === 1 ? 'one lamp lit' : WORDS[left] + ' lamps lit';
   }
   function place(i) {
     return 'row ' + (Math.floor(i / n) + 1) + ', column ' + ((i % n) + 1);
@@ -285,7 +319,7 @@ function lampsPiece(env, plan) {
     ],
     solution: { presses: solution },
     check(c) {
-      const left = burning();
+      const left = burning(lampsAfter(pressesNow(c)));
       return {
         solved: left === 0,
         say: left === 0 ? 'every lamp is out; the room is dark' : (left === 1 ? 'one lamp still burns' : WORDS[left] + ' lamps still burn')
@@ -300,7 +334,7 @@ function lampsPiece(env, plan) {
         s.presses = value.map((v) => (v ? 1 : 0));
         relight();
         const left = burning();
-        c.status(left === 0 ? 'the room looks dark; check it' : (left === 1 ? 'one lamp lit' : WORDS[left] + ' lamps lit'));
+        c.status(litLine(left) + (left === 0 ? '; check it' : ''));
       }
       if (id === 'hint') {
         const next = s.hinted.length < helps
@@ -321,7 +355,10 @@ function lampsPiece(env, plan) {
       const geo = lampGeometry(c.w, c.h, n);
       const col = Math.floor((x * c.w - geo.left) / geo.cell);
       const row = Math.floor((y * c.h - geo.top) / geo.cell);
-      if (col < 0 || col >= n || row < 0 || row >= n) return;
+      if (col < 0 || col >= n || row < 0 || row >= n) {
+        c.status('no lamp there; tap a lamp to press it');
+        return;
+      }
       const i = row * n + col;
       const next = s.presses.slice();
       next[i] = next[i] ? 0 : 1;
@@ -329,7 +366,7 @@ function lampsPiece(env, plan) {
       relight();
       c.set('presses', next);
       const left = burning();
-      c.status((next[i] ? 'pressed ' : 'unpressed ') + place(i) + '; ' + (left === 0 ? 'the room looks dark' : (left === 1 ? 'one lamp lit' : WORDS[left] + ' lamps lit')));
+      c.status((next[i] ? 'pressed ' : 'unpressed ') + place(i) + '; ' + litLine(left));
       draw(c);
     },
     frame(t, dt, c) {
@@ -432,10 +469,7 @@ function shelfPlan(env) {
   const pool = KEEPSAKES.slice();
   const items = [];
   while (items.length < n) items.push(pool.splice(env.int(0, pool.length - 1), 1)[0]);
-  const order = [];
-  const slots = [];
-  for (let i = 0; i < n; i++) slots.push(i);
-  while (slots.length) order.push(slots.splice(env.int(0, slots.length - 1), 1)[0]);
+  const order = shuffled(env, n);
   const perms = permutations(n);
   const candidates = trueClues(order);
   let clues = [];
@@ -461,16 +495,7 @@ function shelfPlan(env) {
     const without = clues.slice(0, i).concat(clues.slice(i + 1));
     if (fits(without, perms).length === 1) clues = without;
   }
-  // An opening order that is not the answer, so the shelf asks something.
-  let start = order.slice();
-  for (let guard = 0; guard < 10 && start.every((v, i) => v === order[i]); guard++) {
-    start = [];
-    const rest = [];
-    for (let i = 0; i < n; i++) rest.push(i);
-    while (rest.length) start.push(rest.splice(env.int(0, rest.length - 1), 1)[0]);
-  }
-  if (start.every((v, i) => v === order[i])) start = order.slice().reverse();
-  return { kind: 'shelf', items, order, clues, start };
+  return { kind: 'shelf', items, order, clues, start: startFor(env, order) };
 }
 
 function carriedShelf(env) {
@@ -509,7 +534,7 @@ function drawShelf(g, w, h, env, plan, s, variant) {
   const names = plan.items.map((name) => SHORT[name] || name);
   const geo = shelfGeometry(w, h, n);
   const c = env.colors;
-  const v = variant || { density: 1, scale: 1, turn: 0 };
+  const v = variant || PLAIN;
   floor(g, w, h, env, s.fade * 0.8);
   // The lamp over the shelf.
   const lamp = g.createRadialGradient(w / 2, geo.shelfY - h * 0.2, 0, w / 2, geo.shelfY - h * 0.2, w * 0.55 * v.scale);
@@ -591,14 +616,20 @@ function shelfPiece(env, plan) {
   const names = plan.items.map((name) => SHORT[name] || name);
   const s = { order: plan.start.slice(), hinted: [], fade: 0 };
   const draw = (c) => drawShelf(c.g, c.w, c.h, c, plan, s, env.variant);
-  function rightPlaces() {
+  // The order as the rail holds it, which is what the check judges.
+  function orderNow(c) {
+    const v = c.value('order');
+    return Array.isArray(v) && v.length === n ? v.map(Number) : s.order;
+  }
+  function rightPlaces(c) {
+    const cur = orderNow(c);
     let right = 0;
-    for (let i = 0; i < n; i++) if (s.order[i] === plan.order[i]) right += 1;
+    for (let i = 0; i < n; i++) if (cur[i] === plan.order[i]) right += 1;
     return right;
   }
   return {
     title: shelfTitle(plan),
-    brief: 'A reading of the shelf. ' + WORDS[n][0].toUpperCase() + WORDS[n].slice(1) + ' keepsakes stand on it, left to right, and '
+    brief: 'A reading of the shelf. ' + capital(WORDS[n]) + ' keepsakes stand on it, left to right, and '
       + WORDS[plan.clues.length] + ' clues under it say how. Exactly one order fits them all.',
     goal: 'Put the keepsakes in the one order every clue allows.',
     aspect: '4 / 3',
@@ -609,7 +640,7 @@ function shelfPiece(env, plan) {
     ],
     solution: { order: plan.order.slice() },
     check(c) {
-      const right = rightPlaces();
+      const right = rightPlaces(c);
       return {
         solved: right === n,
         say: right === n ? 'every keepsake stands where the clues put it'
@@ -706,7 +737,7 @@ function secondLookGeometry(w, h) {
 
 function drawSecondLook(g, w, h, env, plan, s, variant) {
   const c = env.colors;
-  const v = variant || { density: 1, scale: 1, turn: 0 };
+  const v = variant || PLAIN;
   const geo = secondLookGeometry(w, h);
   const after = secondLookAfter(plan);
   const changed = litBy(plan.pressed, 3);
@@ -923,7 +954,7 @@ export default {
     return {
       title: shelfTitle(plan),
       quote: clueText(plan.clues[0], names),
-      text: (plan.clues.length === 1 ? 'That is the one clue.' : WORDS[plan.clues.length - 1][0].toUpperCase() + WORDS[plan.clues.length - 1].slice(1) + ' more clues wait under the shelf.')
+      text: (plan.clues.length === 1 ? 'That is the one clue.' : capital(WORDS[plan.clues.length - 1]) + ' more clues wait under the shelf.')
         + ' Put the keepsakes in the one order that fits them all.',
       aspect: '4 / 3',
       paint: (g, w, h, cardEnv) => shelfPreview(g, w, h, cardEnv, plan),

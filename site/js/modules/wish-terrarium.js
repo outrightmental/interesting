@@ -237,6 +237,14 @@ function badge(g, env, x, y, text, k, size) {
   write(g, text, x, y + 0.5, size, 'center', c.fg, '600');
 }
 
+// The stroke scale and the small type size everything under the glass is drawn at.
+function metrics(w, h, v) {
+  return {
+    k: clamp(Math.min(w, h) / 340, 0.6, 1.8) * v.scale,
+    small: Math.max(8, Math.min(12, Math.round(Math.min(w, h) * 0.032)))
+  };
+}
+
 function shuffled(env, n) {
   const rest = [];
   for (let i = 0; i < n; i++) rest.push(i);
@@ -320,8 +328,7 @@ function drawWater(g, w, h, env, plan, s, variant) {
   const c = env.colors;
   const n = plan.n;
   const geo = waterGeometry(w, h, n);
-  const k = clamp(Math.min(w, h) / 340, 0.6, 1.8) * v.scale;
-  const small = Math.max(8, Math.min(12, Math.round(Math.min(w, h) * 0.032)));
+  const { k, small } = metrics(w, h, v);
   const tiny = Math.max(7, Math.min(11, Math.round(geo.cell * 0.16)));
   glass(g, w, h, env, v, !!plan.lamp, s.t);
   // The lamp, on its cord, and the vent in the top corner.
@@ -552,8 +559,7 @@ function drawAge(g, w, h, env, plan, s, variant) {
   const v = variant || PLAIN;
   const c = env.colors;
   const geo = ageGeometry(w, h);
-  const k = clamp(Math.min(w, h) / 340, 0.6, 1.8) * v.scale;
-  const small = Math.max(8, Math.min(12, Math.round(Math.min(w, h) * 0.032)));
+  const { k, small } = metrics(w, h, v);
   const a = ages(plan);
   glass(g, w, h, env, v, true, s.t);
   write(g, 'your chosen ranks are below the stems', w / 2, h * 0.05, small, 'center', env.alpha(c.muted, 0.85));
