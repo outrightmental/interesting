@@ -15,7 +15,7 @@
 // means "not this". What the script does on top of it: makes every other child of <body> inert and
 // hidden from a screen reader, marks each one it put aside with data-lightbox-aside, names the one
 // it left in front with data-lightbox-front, holds the page's requestAnimationFrame loop, and
-// writes <html data-lightbox='nav'> (or 'persona', or 'are-you-sure') for the rules below.
+// writes <html data-lightbox='nav'> (or 'persona', 'state', or 'are-you-sure') for the rules below.
 
 // Everything behind whatever is open, at once. The div is one line of _includes/layout.njk, hidden
 // until something raises it, so a visitor with no script at all gets no veil and no dimming they

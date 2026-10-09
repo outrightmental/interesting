@@ -874,22 +874,25 @@
     var mid = Math.max(18, Math.round(logoHeight / 2));
     var groups = [];
     var widths = [];
-    var height = 0;
+    var tallest = 0;
     var counted = 0;
     for (var g = 0; g < nav.orbits.length; g++) {
       var shown = shownOptions(nav.orbits[g]);
       if (shown.length) {
         groups.push(shown);
         widths.push(widestIn(shown));
-        for (var s = 0; s < shown.length; s++) height = Math.max(height, shown[s].height);
+        for (var s = 0; s < shown.length; s++) tallest = Math.max(tallest, shown[s].height);
         counted += shown.length;
       }
     }
     if (!groups.length) return;
     var top = logoHeight + 8;
-    var room = Math.max(120, (window.innerHeight || 700) - top - 60);
-    var minStep = Math.max(STAR_STEP_MIN, height + 4);
-    var wide = (window.innerWidth || 1024) >= TWO_COLUMN_WIDTH;
+    // The viewport, read once: the same two figures decide the columns, the step and the fit.
+    var viewportW = window.innerWidth || 1024;
+    var viewportH = window.innerHeight || 700;
+    var room = Math.max(120, viewportH - top - 60);
+    var minStep = Math.max(STAR_STEP_MIN, tallest + 4);
+    var wide = viewportW >= TWO_COLUMN_WIDTH;
     // A column per orbit as soon as the screen is wide enough for one -- and also when one column
     // would not fit the viewport, where the columns are the only thing that makes it fit.
     var columns = groups.length > 1 && (wide || room < counted * minStep) ? groups.length : 1;
@@ -904,7 +907,7 @@
     // And one column after all, if the last of them would run off the right-hand edge.
     var last = groups.length - 1;
     if (columns > 1 && widths[last]
-        && lefts[last] + spread + widths[last] + 16 > (window.innerWidth || 1024)) {
+        && lefts[last] + spread + widths[last] + 16 > viewportW) {
       columns = 1;
     }
     // The longest column decides the step, so every orbit falls at the same rhythm.
@@ -914,7 +917,7 @@
       for (g = 0; g < groups.length; g++) longest = Math.max(longest, groups[g].length);
     }
     var step = longest > 1
-      ? Math.max(minStep, Math.min(STAR_STEP, (room - height) / (longest - 1))) : STAR_STEP;
+      ? Math.max(minStep, Math.min(STAR_STEP, (room - tallest) / (longest - 1))) : STAR_STEP;
     var order = 0;
     var y = top;
     var deepest = top;
@@ -934,7 +937,7 @@
     // And if the lowest star would still be below the fold -- a very short viewport, or a very
     // long list of options -- the cascade is what fits: the stylesheet's other layout, a list
     // under the logo that scrolls, which is also what the markup is without a script at all.
-    var fits = deepest + mid + 16 <= (window.innerHeight || 700);
+    var fits = deepest + mid + 16 <= viewportH;
     html.setAttribute('data-nav', fits ? 'live' : 'cascade');
   }
 
@@ -1234,10 +1237,12 @@
       // because a panel pinned to a live page has to find the page live.
       close(true);
       if (!nav.stateCorner) return;
+      nav.stateCorner.click();
+      // Watched after the press, not before it: a store may only build its panel on the first
+      // press, and a panel looked up before then is nothing -- the focus would never come home.
       whenThePanelCloses(document.getElementById(STATE_PANEL), function () {
         if (typeof nav.logo.focus === 'function') nav.logo.focus();
       });
-      nav.stateCorner.click();
     });
 
     // A press on the dimmed page around the state interface is a press on the page: the same

@@ -25,9 +25,10 @@
 //                  many there are: a column of stars down the left edge on a phone, two
 //                  interleaved columns on a wider screen, each star pushed out sideways by its
 //                  own amount so the set reads as a scatter rather than a list. The script writes
-//                  --x, --y, --len, --a, --fx, --fy and --k on to each option (where the star
-//                  sits, the ray that reaches it, where it branches out from, and its place in
-//                  the order), and the rules below are what consume them. <html data-nav>
+//                  --x, --y, --len, --a, --mx, --my, --fx, --fy and --k on to each option (where
+//                  the star sits, the ray that reaches it and the point it reaches out from,
+//                  where it branches out from, and its place in the order), and the rules below
+//                  are what consume them. <html data-nav>
 //                  says the script is here; it is set before the body is drawn, so there is no
 //                  flash of the other layout.
 //   without it     a plain cascade of the same chips under the logo, which is what the markup is
