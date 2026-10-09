@@ -353,7 +353,21 @@ function drawFolds(g, w, h, env, plan, s, variant, t) {
   g.stroke();
   // The visitor's count, as ticks round the rim: they arrive one tread at a time, a series,
   // stepping from the count that stood to the one set, on the roll of that setting.
-  if (s.guess) {
+  // The marks the visitor set on the rim themselves, one per tap, each blinking on where it was
+  // set and turning with the loom; failing those, the count from the knob, as even ticks.
+  if (s.ticks && s.ticks.length) {
+    g.strokeStyle = env.alpha(c.accent2, 0.9);
+    g.lineWidth = Math.max(1.5, geo.m * 0.005);
+    g.beginPath();
+    for (let i = 0; i < s.ticks.length; i++) {
+      const tick = s.ticks[i];
+      if (!roll(rite, 0xa1, tick.n).flicker(came(s, tick.at, 0.6, reduced))) continue;
+      const a = base + tick.rel;
+      g.moveTo(geo.cx + Math.cos(a) * geo.R * 0.98, geo.cy + Math.sin(a) * geo.R * 0.98);
+      g.lineTo(geo.cx + Math.cos(a) * geo.R * 1.08, geo.cy + Math.sin(a) * geo.R * 1.08);
+    }
+    g.stroke();
+  } else if (s.guess) {
     const n = counted(roll(rite, 0x9e, s.guesses), came(s, s.guessAt, 1.2, reduced), s.guessFrom, s.guess);
     g.strokeStyle = env.alpha(c.accent2, 0.85);
     g.lineWidth = Math.max(1.5, geo.m * 0.004);
@@ -414,7 +428,7 @@ function foldsStill() {
     spun: 0, lit: false, litAt: null, open: false, openAt: null, t: 0, guess: null, guessAt: null, mirror: false, mirrorAt: null,
     // How many times each thing has moved (the roll for its next movement), and the count the
     // ticks step from; and when the loom showed the hand of the weave.
-    guesses: 0, guessFrom: 0, mirrors: 0, handAt: null
+    guesses: 0, guessFrom: 0, mirrors: 0, handAt: null, ticks: []
   };
 }
 
@@ -431,7 +445,7 @@ function foldsPiece(env, plan) {
     'one arm is lit: everything on it is one fold',
     'the weave ' + (plan.mirrored ? 'shows both hands: every copy is laid with its mirror image' : 'is all of one hand: no copy is mirrored')
   ];
-  const s = Object.assign(foldsStill(), { shown: 0 });
+  const s = Object.assign(foldsStill(), { shown: 0, ticksSet: 0 });
   const draw = (c) => drawFolds(c.g, c.w, c.h, c, plan, s, env.variant, s.t);
   return {
     title: foldsTitle(plan),
@@ -453,7 +467,7 @@ function foldsPiece(env, plan) {
       return { solved: false, say: foldsRight ? 'the fold count is right; the mirror is off' : 'the mirror is right; the fold count is off' };
     },
     start(c) {
-      c.status('the loom is still; the sigil waits in the corner');
+      c.status('the loom is still; tap over each arm to mark it on the rim, and the marks count the folds');
       draw(c);
     },
     apply(id, value, c) {
@@ -493,6 +507,34 @@ function foldsPiece(env, plan) {
           c.status('the loom has shown what it has; the rest is counting');
         }
       }
+      draw(c);
+    },
+    // The rim is the counter: tap over an arm to set a mark there, tap a mark to take it off, and
+    // the marks are the fold count.
+    tap(x, y, c) {
+      const v = env.variant || PLAIN;
+      const geo = loomGeometry(c.w, c.h, v);
+      const dx = x * c.w - geo.cx;
+      const dy = y * c.h - geo.cy;
+      if (Math.hypot(dx, dy) < geo.R * 0.3) {
+        c.status('tap over an arm, nearer the rim, to mark it');
+        return;
+      }
+      const step = (Math.PI * 2) / plan.k;
+      const base = v.turn * Math.PI * 2 + (s.spun ? step * turns(riteOf(c), 0x70, s.spun / 3.6) : 0);
+      const rel = Math.atan2(dy, dx) - base;
+      const near = s.ticks.findIndex((tick) => {
+        const d = Math.abs((((tick.rel - rel) % (Math.PI * 2)) + Math.PI * 3) % (Math.PI * 2) - Math.PI);
+        return d < 0.2;
+      });
+      if (near >= 0) s.ticks.splice(near, 1);
+      else s.ticks.push({ rel, at: s.t, n: ++s.ticksSet });
+      const n = s.ticks.length;
+      if (n >= 2 && n <= MAX_FOLDS) c.set('folds', n);
+      c.status(n === 0 ? 'no marks on the rim'
+        : n === 1 ? 'one mark on the rim; mark every arm once to count the folds'
+          : n > MAX_FOLDS ? 'more marks than any loom has folds; tap a mark to take it off'
+            : n + ' marks on the rim: ' + n + ' folds, you say');
       draw(c);
     },
     frame(t, dt, c) {

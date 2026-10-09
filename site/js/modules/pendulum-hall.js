@@ -426,7 +426,7 @@ function rackPiece(env, plan) {
       return { solved: false, say: parts.join('; ') };
     },
     start(c) {
-      c.status('rack ' + plan.number + ': periods ' + plan.periods.join(', ') + '; start beats ' + starts.join(', ') + '; find the first shared crossing after beat 0');
+      c.status('rack ' + plan.number + ': periods ' + plan.periods.join(', ') + '; start beats ' + starts.join(', ') + '; tap a pendulum to pick it for beat ' + plan.at + ', or the ruler to show any beat');
       draw(c);
     },
     apply(id, value, c) {
@@ -463,6 +463,42 @@ function rackPiece(env, plan) {
           c.status('every pendulum at beat ' + plan.at + ' has been shown; the meeting beat is yours');
         }
       }
+      draw(c);
+    },
+    // The scene is the control: tap a pendulum to pick it for the stated beat (and again to let
+    // it go), or tap the ruler along the foot to show the rack at that beat and set it as the
+    // meeting beat.
+    tap(x, y, c) {
+      const v = env.variant || PLAIN;
+      const px = x * c.w;
+      const py = y * c.h;
+      const left = c.w * 0.08;
+      const right = c.w * 0.92;
+      if (Math.abs(py - c.h * 0.91) < c.h * 0.09) {
+        const beat = Math.max(1, Math.min(60, Math.round((px - left) / (right - left) * 60)));
+        s.to = -1;
+        s.beat = beat;
+        c.set('meet', beat);
+        c.status('beat ' + beat + ' shown and set as the meeting beat; a centred bob may be heading left or still waiting to start');
+        draw(c);
+        return;
+      }
+      const Lmax = c.h * 0.52 * Math.min(1.08, Math.max(0.88, v.scale));
+      const spacing = c.w * 0.6 / Math.max(1, n - 1);
+      let hit = -1;
+      plan.periods.forEach((p, i) => {
+        const pivot = c.w * (0.2 + 0.6 * (n > 1 ? i / (n - 1) : 0.5));
+        if (Math.abs(px - pivot) < spacing * 0.45 && py >= c.h * 0.1 && py <= c.h * 0.1 + Lmax + c.h * 0.08) hit = i;
+      });
+      if (hit < 0) {
+        c.status('tap a pendulum to pick it for beat ' + plan.at + ', or the ruler to show a beat');
+        return;
+      }
+      const on = !s.picked.includes(hit);
+      s.picks[hit] = { on, at: s.t, roll: s.rolls++ };
+      s.picked = on ? s.picked.concat([hit]).sort((a, b) => a - b) : s.picked.filter((i) => i !== hit);
+      c.set('which', s.picked.slice());
+      c.status(name(hit) + (on ? ' picked' : ' let go') + ' for beat ' + plan.at + (s.picked.length ? ': ' + s.picked.map(name).join(', ') : ''));
       draw(c);
     },
     frame(t, dt, c) {

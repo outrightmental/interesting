@@ -355,6 +355,41 @@ function drawNext(g, w, h, env, plan, s, variant) {
   g.strokeRect(geo.left - inset, geo.top - inset, geo.size * plan.width + inset * 2, geo.size * shown + inset * 2);
   const tableY = y0 + depth * geo.size + Math.max(h * 0.06, geo.size * 0.7);
   glyphTable(g, env, w * 0.06, tableY, w * 0.88, s.open ? plan.rule : null, v, s.open ? openP : null);
+  // The lens: the three cells one row above a cell, bracketed, the cell under them pointed at,
+  // and their pattern of three marked in the table -- what to look up to set that cell. A card's
+  // lens walks the shown rows; the piece's sits on the cell last tapped. It blinks on and holds.
+  if (s.lens) {
+    const r = clamp(Math.floor(s.lens.r), 0, 3);
+    const vals = r < shown ? rows[r] : s.row.slice((r - shown) * plan.width, (r - shown + 1) * plan.width);
+    const col = clamp(Math.floor(s.lens.u), 0, plan.width - 1);
+    if (vals.length === plan.width && rite.at(0x5c0).flicker(came(s.t, s.lensAt, SPAN, env.reduced))) {
+      const yR = r < shown ? geo.top + r * geo.size : y0 + (r - shown) * geo.size;
+      const yB = r + 1 < shown ? geo.top + (r + 1) * geo.size : y0 + (r + 1 - shown) * geo.size;
+      const cx = geo.left + s.lens.u * geo.size;
+      g.strokeStyle = c.accent2;
+      g.lineWidth = Math.max(1.5, geo.size * 0.1);
+      for (let d = -1; d <= 1; d++) {
+        const x = (col + d + plan.width) % plan.width;
+        g.strokeRect(geo.left + x * geo.size + inset * 0.4, yR + inset * 0.4, geo.size - inset * 0.8, geo.size - inset * 0.8);
+      }
+      g.fillStyle = c.accent2;
+      g.beginPath();
+      g.moveTo(cx + geo.size / 2, yB + geo.size * 0.12);
+      g.lineTo(cx + geo.size * 0.3, yB + geo.size * 0.42);
+      g.lineTo(cx + geo.size * 0.7, yB + geo.size * 0.42);
+      g.closePath();
+      g.fill();
+      const each = w * 0.88 / 8;
+      const gx = w * 0.06 + each * (7 - hoodOf(vals, col) + 0.5);
+      const tip = Math.max(3, geo.size * 0.15);
+      g.beginPath();
+      g.moveTo(gx, tableY - tip * 0.8);
+      g.lineTo(gx - tip, tableY - tip * 2.2);
+      g.lineTo(gx + tip, tableY - tip * 2.2);
+      g.closePath();
+      g.fill();
+    }
+  }
   // The caption changes its words by blinking to the new ones, never by a crossfade.
   const named = s.open && rite.at(0x7e).flicker(openP);
   label(g, env, named ? 'rule ' + plan.rule : 'the rule, pattern by pattern', w * 0.5, Math.min(h * 0.97, tableY + geo.size * 1.9), small, 'center', env.alpha(c.muted, 0.85));
@@ -363,11 +398,13 @@ function drawNext(g, w, h, env, plan, s, variant) {
 // The scene's state before anyone has touched it: no cell lit, nothing shown, the rule unread,
 // and no clock yet (a card is drawn once and stands).
 function nextBlank(plan) {
-  return { row: new Array(plan.width * (plan.depth || 1)).fill(0), shown: [], shownAt: [], at: [], flips: [], open: false, openAt: null, t: 0 };
+  return { row: new Array(plan.width * (plan.depth || 1)).fill(0), shown: [], shownAt: [], at: [], flips: [], open: false, openAt: null, t: 0, lens: null, lensAt: null };
 }
 
-function nextPreview(g, w, h, env, plan) {
-  drawNext(g, w, h, env, plan, nextBlank(plan), env.variant);
+function nextPreview(g, w, h, env, plan, lens) {
+  const s = nextBlank(plan);
+  s.lens = lens || null;
+  drawNext(g, w, h, env, plan, s, env.variant);
 }
 
 function nextPiece(env, plan) {
@@ -414,7 +451,7 @@ function nextPiece(env, plan) {
       return { solved: false, say: (n === 1 ? 'one cell' : count(n) + ' cells') + ' of ' + count(cells) + ' ' + (n === 1 ? 'is' : 'are') + ' right' };
     },
     start(c) {
-      c.status(depth === 2 ? 'two rows hidden: tap a cell of row four or five to light it' : 'tap a cell of row five to light it');
+      c.status(depth === 2 ? 'two rows hidden: tap a cell of row four or five to light it, and the bench brackets the three cells above it' : 'tap a cell of row five to light it, and the bench brackets the three cells above it');
       draw(c);
     },
     apply(id, value, c) {
@@ -455,8 +492,11 @@ function nextPiece(env, plan) {
       const next = s.row.slice();
       next[i] = next[i] ? 0 : 1;
       write(next);
+      // The lens moves to the tapped cell: its three parents bracketed, their pattern marked.
+      s.lens = { r: shown - 1 + Math.floor(i / width), u: col };
+      s.lensAt = s.t;
       c.set('row', next.slice());
-      c.status('cell ' + (col + 1) + ' of row ' + rowName(i) + ' ' + (next[i] ? 'lit' : 'dark'));
+      c.status('cell ' + (col + 1) + ' of row ' + rowName(i) + ' ' + (next[i] ? 'lit' : 'dark') + '; its three parents are bracketed above and their pattern is marked in the table');
       draw(c);
     },
     frame(t, dt, c) {
@@ -711,16 +751,46 @@ function dealsApex(env) {
   return (((Math.imul(env.seed >>> 0, 0x9E3779B1) >>> 0) >>> 3) & 1) === 1;
 }
 
+// The plan, dealt once from the env's seeded stream and kept with that env, so the still picture,
+// every animated frame, the spark and the piece of one card are all the same tape.
+const dealt = new WeakMap();
+function deal(env) {
+  let got = dealt.get(env);
+  if (!got) {
+    const apex = dealsApex(env);
+    got = { apex, plan: apex ? apexPlan(env) : nextPlan(env) };
+    dealt.set(env, got);
+  }
+  return got;
+}
+
 export default {
   id: 'machine-shop',
   needsSky: false,
   paint(g, w, h, env) {
-    if (dealsApex(env)) apexPreview(g, w, h, env, apexPlan(env));
-    else nextPreview(g, w, h, env, nextPlan(env));
+    const d = deal(env);
+    if (d.apex) apexPreview(g, w, h, env, d.plan);
+    else nextPreview(g, w, h, env, d.plan, { r: 0, u: 0 });
+  },
+  // The card in motion: the lens walks the shown rows, a cell every half-second in the ratchet's
+  // clicks, reading each pattern of three against the table. At t = 0 it stands where paint left
+  // it. The changed cell's two tapes do not move, and say so.
+  animate(g, w, h, env, t) {
+    const d = deal(env);
+    if (d.apex) return false;
+    const shown = 5 - (d.plan.depth || 1);
+    const steps = env.reduced ? 0 : t / 0.45;
+    const whole = Math.floor(steps);
+    const frac = env.rite ? env.rite.at(0x5c0 + whole).ratchet(steps - whole) : 0;
+    const total = d.plan.width * (shown - 1);
+    const k = (((whole + frac) % total) + total) % total;
+    const r = Math.floor(k / d.plan.width);
+    nextPreview(g, w, h, env, d.plan, { r, u: k - r * d.plan.width });
   },
   spark(env) {
-    if (dealsApex(env)) {
-      const plan = apexPlan(env);
+    const d = deal(env);
+    if (d.apex) {
+      const plan = d.plan;
       return {
         title: apexTitle(plan),
         text: 'Two tapes, one rite: rule ' + plan.rule + ', one cell apart at the start. Find the column that was flipped and count what it changed by row ' + plan.rows + '.',
@@ -730,7 +800,7 @@ export default {
         of: plan
       };
     }
-    const plan = nextPlan(env);
+    const plan = d.plan;
     return {
       title: nextTitle(plan),
       text: plan.depth === 2
@@ -738,7 +808,7 @@ export default {
         : 'Four rows of one hidden rule, every pattern of three on show. Read the rule off the bench and recite the fifth row.',
       mono: plan.width + ' cells / rule ?' + (plan.depth === 2 ? ' / two rows hidden' : ''),
       aspect: '4 / 3',
-      paint: (ctx, cw, ch, cardEnv) => nextPreview(ctx, cw, ch, cardEnv, plan),
+        paint: (ctx, cw, ch, cardEnv) => nextPreview(ctx, cw, ch, cardEnv, plan, { r: 0, u: 0 }),
       of: plan
     };
   },
@@ -747,6 +817,7 @@ export default {
     if (apex) return apexPiece(env, apex);
     const next = carriedNext(env);
     if (next) return nextPiece(env, next);
-    return dealsApex(env) ? apexPiece(env, apexPlan(env)) : nextPiece(env, nextPlan(env));
+    const d = deal(env);
+    return d.apex ? apexPiece(env, d.plan) : nextPiece(env, d.plan);
   }
 };
