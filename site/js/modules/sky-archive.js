@@ -268,7 +268,7 @@ function wheelScene(g, w, h, c, p, s, variant) {
   const cy = h * 0.52;
   const R = Math.min(w, h) * 0.35 * v.scale;
   const rim = rimOf(p.dropped);
-  const notches = starNotches(p);
+  const starsAt = starNotches(p);
   const angle = s.angle || 0;
   dark(g, w, h, c, v);
   const step = Math.PI * 2 / NOTCHES;
@@ -316,7 +316,7 @@ function wheelScene(g, w, h, c, p, s, variant) {
   g.fill();
   // The three stars, each on a spoke from the centre out to the rim.
   const lit = s.spin >= 1;
-  notches.forEach((n, k) => {
+  starsAt.forEach((n, k) => {
     const star = at(n, R * p.radii[k] / 100, 0);
     const edge = at(n, R * 0.95, 0);
     g.strokeStyle = c.alpha(col.accent2, 0.5);
@@ -339,7 +339,7 @@ function wheelScene(g, w, h, c, p, s, variant) {
   const size = Math.max(10, R * 0.13);
   rim.forEach((ch, i) => {
     const q = at(i, R * 0.87, angle);
-    const on = lit && notches.some((n, k) => rim[mod(n + (p.cw ? -p.t : p.t), NOTCHES)] === ch);
+    const on = lit && starsAt.some((n, k) => rim[mod(n + (p.cw ? -p.t : p.t), NOTCHES)] === ch);
     if (on) glow(g, c, q.x, q.y, size * 1.4, col.accent2, 0.6);
     write(g, ch, q.x, q.y, size, on ? col.accent2 : c.alpha(col.fg, 0.9), 'center', 600);
   });
