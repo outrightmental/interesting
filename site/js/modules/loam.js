@@ -581,7 +581,8 @@ function drawMix(g, w, h, env, plan, s, variant) {
       write(g, now, x + cupW / 2, cy + cupH / 2, Math.max(8, Math.round(cupH * 0.55)), c.bg, 'center', '600');
     }
   }
-  write(g, s.parts == null ? 'how many of the ten from A?' : 'a = ' + s.parts, w / 2, cy + cupH + small * 1.1, small, env.alpha(c.fg, 0.9));
+  // The count under the cups blinks on with the set that changed it, never cutting to new words.
+  if (setRite.flicker(setP)) write(g, s.parts == null ? 'how many of the ten from A?' : 'a = ' + s.parts, w / 2, cy + cupH + small * 1.1, small, env.alpha(c.fg, 0.9));
   // The blends the shed has ruled out, as ticks along a = 0..10 that blink on when they are
   // struck.
   if (s.ruled && s.ruled.length) {

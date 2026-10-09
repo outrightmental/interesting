@@ -237,7 +237,9 @@
 
 // The register's numeric dimensions (_type.scss): registered so that when the register turns
 // over the axes of the rite's face, its tracking and its word-spacing step to their new values
-// along the stair, the letterforms themselves a movement of the rite.
+// along the stair, the letterforms themselves a movement of the rite. The tracking and the
+// word-spacing are numbers -- ems of the words' own size, multiplied where they are read -- and
+// not lengths, which would be resolved against :root's size the moment they were written.
 @property --rite-weight {
   syntax: '<number>';
   inherits: true;
@@ -263,15 +265,22 @@
 }
 
 @property --rite-tracking {
-  syntax: '<length>';
+  syntax: '<number>';
   inherits: true;
-  initial-value: 0px;
+  initial-value: -0.005;
 }
 
 @property --rite-words {
-  syntax: '<length>';
+  syntax: '<number>';
   inherits: true;
-  initial-value: 0px;
+  initial-value: 0;
+}
+
+// A type role's size (type.scale), for type.rite to take the register's scale over. Not
+// inherited: a wearer that sets no role takes the scale over the size it inherited instead.
+@property --role-size {
+  syntax: '*';
+  inherits: false;
 }
 
 // A slider's fill (_controls.scss): registered so the track's gradient can move in treads after

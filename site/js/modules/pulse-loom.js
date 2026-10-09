@@ -540,9 +540,10 @@ function drawWheel(g, w, h, c, plan, s, variant) {
   // in frame(t) from the piece's clock).
   wheel(g, c, left, cy, radius, plan.n, phase + s.spin, col.accent, 0.95);
   rotationArrow(g, c, left, cy, radius * 1.13, false, col.accent);
-  // The latest picture: it blinks onto the plate on a roll of its own; until it is on, the plate
-  // still shows the picture before it.
-  const shutter = rite.at(0x200 + s.index);
+  // The latest picture: it blinks onto the plate on a roll of its own -- one per fall of the
+  // shutter, so a picture taken again on the next lap lands differently; until it is on, the
+  // plate still shows the picture before it.
+  const shutter = rite.at(0x200 + s.shots);
   const shotP = came(s.t, s.indexAt, SHUTTER, c.reduced);
   const landed = shutter.flicker(shotP);
   const plate = landed ? s.index : s.indexWas;
@@ -613,9 +614,10 @@ function drawWheel(g, w, h, c, plan, s, variant) {
 
 // The scene's state before anyone has touched it: the wheel at rest, no picture taken, the omen
 // unread, and no clock yet (a card is drawn once and stands). `runAt` is when the camera started;
-// `indexAt` when the picture on the plate was taken, `indexWas` the one before it.
+// `indexAt` when the picture on the plate was taken, `indexWas` the one before it, `shots` how
+// many times the shutter has fallen since the piece opened (each fall composes its own rite).
 function wheelBlank() {
-  return { spin: 0, index: 0, indexWas: 0, indexAt: null, taken: 0, runAt: null, reveal: false, revealAt: null, told: '', toldAt: null, shown: 0, t: 0 };
+  return { spin: 0, index: 0, indexWas: 0, indexAt: null, taken: 0, runAt: null, reveal: false, revealAt: null, told: '', toldAt: null, shown: 0, shots: 0, t: 0 };
 }
 
 function wheelPreview(g, w, h, env, plan) {
@@ -638,6 +640,7 @@ function wheelPiece(env, plan) {
     s.indexWas = 0;
     s.indexAt = s.t;
     s.taken = 1;
+    s.shots += 1;
   }
   return {
     title: wheelTitle(plan),
@@ -695,9 +698,11 @@ function wheelPiece(env, plan) {
     frame(t, dt, c) {
       s.t = t;
       // The wheel turns a tooth every TOOTH seconds, in the ratchet's clicks with their backlash:
-      // never an even rotation. Less motion asked for, it stands.
+      // never an even rotation, and every tooth on a roll of its own, so no two clicks round
+      // alike. Less motion asked for, it stands.
       const turns = c.reduced ? 0 : t / TOOTH;
-      s.spin = (Math.floor(turns) + rite.turn(fract(turns))) * TAU / plan.n;
+      const tooth = Math.floor(turns);
+      s.spin = (tooth + rite.at(0x500 + tooth).turn(fract(turns))) * TAU / plan.n;
       if (s.runAt != null) {
         // The shutter falls on uneven treads: the pictures of a roll come at the rite's own
         // intervals, and once the omen is read they go on round and round.
@@ -711,6 +716,7 @@ function wheelPiece(env, plan) {
           s.indexWas = s.index;
           s.index = shot;
           s.indexAt = t;
+          s.shots += 1;
         }
         s.taken = s.index + 1;
       }

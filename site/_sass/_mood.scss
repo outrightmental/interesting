@@ -76,7 +76,7 @@ $registers-of: (
   brooding: storm,
   tempestuous: squall,
   attentive: vigil,
-  tending: monastic,
+  tending: almanac,
   divinatory: sibyl,
   geometric: brass,
   metrical: meter
@@ -120,14 +120,11 @@ $registers-of: (
 // as the whole modality turns over, along a curve rolled for this shift alone, by the distance
 // and the slant the same roll gave it. The palette's own crossfade (js/stage.js) and the sky's
 // wash (_panel.scss) run under it. It is the words that flicker and never a control: an
-// instruction stays where a visitor can read it.
+// instruction stays where a visitor can read it. Every wearer of the rite is thrown by the mixin
+// itself (type.rite); the two below are thrown whole without wearing it: the stage's head with
+// all its lines (its title is thrown with it, not on its own), and a card's overline.
 html[data-shifting] .stage-head,
-html[data-shifting] .list-page-main > h1,
-html[data-shifting] .prose-main > h1,
-html[data-shifting] .section-title,
-html[data-shifting] .panel-title,
-html[data-shifting] .card-overline,
-html[data-shifting] .card-title {
+html[data-shifting] .card-overline {
   animation: rite-shift var(--motion-rite-shift, var(--motion-shift, 640ms)) var(--ease-rite-shift, var(--ease-stair)) both;
 }
 
@@ -140,6 +137,7 @@ html[data-shifting] .card-title {
     mask: var(--matte-5);
     -webkit-mask: var(--matte-5);
     transform: none;
+    font-variation-settings: 'opsz' var(--rite-opsz, 72), 'wght' var(--rite-weight, 400), 'SOFT' var(--rite-soft, 20), 'WONK' var(--rite-wonk, 0);
   }
 
   12%, 23.9% {
@@ -1504,14 +1502,10 @@ html[data-shifting] .card-title {
     transition: none;
   }
 
-  // The change of modality without the throw: the words land in their new face at once.
+  // The change of modality without the throw: the words land in their new face at once (the
+  // wearers of the rite are stilled by type.rite itself).
   html[data-shifting] .stage-head,
-  html[data-shifting] .list-page-main > h1,
-  html[data-shifting] .prose-main > h1,
-  html[data-shifting] .section-title,
-  html[data-shifting] .panel-title,
-  html[data-shifting] .card-overline,
-  html[data-shifting] .card-title {
+  html[data-shifting] .card-overline {
     animation: none;
   }
 }

@@ -939,15 +939,16 @@ code, and true of the site as committed.
   lowercase, under a short hairline); *sibyl* (the italic with the alternates on, between a
   pilcrow and a lozenge, a dotted rule, a glow, a two-line cap); *lapidary* (the display master,
   hairline-thin and hard, uppercase and tracked out, under a double rule); *monastic* (the
-  book's setting: text size, old-style figures, a section mark, a hairline rule, a raised cap);
-  *astral* (medium and tight, lining figures, a ± after); *folio* (the text master, soft, with a
+  book's setting: text size, a section mark, a hairline rule, a raised cap);
+  *astral* (medium and tight, a ± after); *folio* (the text master, soft, with a
   dotted rule and a cap); *cabinet* (the one register not on Fraunces: a typewriter's slab,
   uppercase and spaced, under a dashed rule, over a plain interface sans, stepping); *brass*
   (small capitals spaced wide and hard-edged, between middle dots, a short double rule); *storm*
   (black and tight at display size); *squall* (black, slanted, the alternates on, quick); *wire*
   (the tiny optical master blown up, heavy and low-contrast, wound tight, the quickest); *vigil*
-  (light and soft in small capitals, spaced, held still, with a halo); and *meter* (counting:
-  tabular figures, the alternates on, a hash before, over a monospaced sans). No two share the
+  (light and soft in small capitals, spaced, held still, with a halo); *meter* (counting: a hash
+  before, the alternates on, over a monospaced sans); and *almanac* (a gardener's hand: text
+  size, softened, lowercase, a short dotted rule, a raised cap, the gentlest movements). No two share the
   same axes, slant, caps and case, which `RealSiteTest` holds, so none can be mistaken for
   another; every one pairs faces that belong together; and `_mood.scss` maps each of the fifteen
   moods to one of them (`$registers-of`), written in the same three places as the seeds — the
@@ -956,9 +957,13 @@ code, and true of the site as committed.
   custom properties (`--font-rite`, `--font-act`, `--font-mono`, `--rite-weight`, `--rite-opsz`,
   `--rite-soft`, `--rite-wonk`, `--rite-tracking`, `--rite-words`, `--rite-style`, `--rite-caps`,
   `--rite-case`, `--rite-leading`, the rule, the ornaments, the cap), with the home register as
-  every fallback; the numeric ones are registered properties, so when the register turns over
-  the axes, the tracking and the word-spacing step to their new values along the stair, and the
-  letterforms themselves are a movement of the rite. `type.rite-dress` draws the register's
+  every fallback; the axes, the tracking and the word-spacing are registered properties (the
+  last two as ems of the words' own size, never lengths), so when the register turns over the
+  axes, the size, the leading, the tracking and the word-spacing step to their new values along
+  the stair, the letterforms themselves a movement of the rite, and every wearer of `type.rite`
+  is thrown through the matte ladder (`rite-shift`) as it turns. Small capitals are made from the
+  capitals: the vendored subset carries no small-cap or figure features, and no weight or slant
+  is ever faked. `type.rite-dress` draws the register's
   ornaments and rule on the words that carry a page (its heading, the stage's title), and
   `type.rite-cap` the raised cap on the first paragraph of a page of prose.
 - **The shift of modality.** When the mood, the world or the featured piece changes on `:root`,

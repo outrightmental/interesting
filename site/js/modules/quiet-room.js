@@ -213,7 +213,8 @@ function room(ctx, w, h, env, t) {
     const click = own.stair(p);
     const lash = own.ratchet(p) - click;
     const over = click > 0 && lash ? (lash > 0 ? 0.35 : -0.35) : 0;
-    const slot = i + own.treads * (Math.floor(turns) + click) + over;
+    // Whole teeth: a stair's tread is i/(treads-1), so treads*click would stand between teeth.
+    const slot = i + own.treads * Math.floor(turns) + Math.round(click * own.treads) + over;
     const a = (v.turn + slot / TEETH) * Math.PI * 2;
     ctx.moveTo(w / 2 + Math.cos(a) * r * 1.1, h / 2 + Math.sin(a) * r * 1.1);
     ctx.lineTo(w / 2 + Math.cos(a) * r * 1.2, h / 2 + Math.sin(a) * r * 1.2);
@@ -740,9 +741,11 @@ function drawShelf(g, w, h, env, plan, s, variant) {
     const item = s.order[slot];
     const own = rite.at(0x3a7e + item);
     // A keepsake moved to another slot travels there along the rite's curve -- a hesitation, a
-    // surge, a stutter, a settle -- and its name blinks on at the new place.
+    // surge, a stutter, a settle -- in held treads of its own stair (the curve sampled at each
+    // tread, never run through), the way the engine's FLIP moves a thing changing places; its
+    // name blinks on at the new place.
     const p = came(s, s.movedAt[item], 0.9, reduced);
-    const x = slotX(s.from[item]) + (slotX(slot) - slotX(s.from[item])) * own.ease(p);
+    const x = slotX(s.from[item]) + (slotX(slot) - slotX(s.from[item])) * own.ease(own.stair(p, own.treads + 3));
     // The keepsake: a small shape, one per item, with its name under the shelf.
     g.fillStyle = env.alpha(c.accent, 0.85);
     g.beginPath();

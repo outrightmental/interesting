@@ -314,8 +314,15 @@ function wheelScene(g, w, h, c, p, s, variant) {
   g.lineTo(tip.x - Math.cos(tip.a) * R * 0.035, tip.y - Math.sin(tip.a) * R * 0.035);
   g.closePath();
   g.fill();
-  // The three stars, each on a spoke from the centre out to the rim.
+  // The three stars, each on a spoke from the centre out to the rim. Their glow comes up the
+  // stair of the solve's own roll as the wheel clicks round, and the letters they land on (and
+  // the count written under the wheel) blink on, a flicker, once it has clicked home: nothing
+  // here cuts from unlit to lit.
+  const own = s.spin > 0 && c.rite ? c.rite.at(0x1ead + (s.spun || 0)) : null;
   const lit = s.spin >= 1;
+  const litK = lit ? 1 : own ? own.stair(s.spin) : 0;
+  const landed = s.landedAt == null || !s.t ? 1 : Math.min(1, (s.t - s.landedAt) / 1.2);
+  const shine = !lit ? 0 : own ? own.flicker(landed) : 1;
   starsAt.forEach((n, k) => {
     const star = at(n, R * p.radii[k] / 100, 0);
     const edge = at(n, R * 0.95, 0);
@@ -328,7 +335,7 @@ function wheelScene(g, w, h, c, p, s, variant) {
     g.stroke();
     g.setLineDash([]);
     const breathe = breath(c.rite, s.t, 3.4, k, 0.12);
-    glow(g, c, star.x, star.y, R * 0.12, col.accent2, (lit ? 0.7 : 0.45) + breathe);
+    glow(g, c, star.x, star.y, R * 0.12, col.accent2, 0.45 + 0.25 * litK + breathe);
     g.fillStyle = col.accent2;
     g.beginPath();
     g.arc(star.x, star.y, Math.max(2.5, R * 0.03), 0, Math.PI * 2);
@@ -339,7 +346,7 @@ function wheelScene(g, w, h, c, p, s, variant) {
   const size = Math.max(10, R * 0.13);
   rim.forEach((ch, i) => {
     const q = at(i, R * 0.87, angle);
-    const on = lit && starsAt.some((n, k) => rim[mod(n + (p.cw ? -p.t : p.t), NOTCHES)] === ch);
+    const on = shine && starsAt.some((n, k) => rim[mod(n + (p.cw ? -p.t : p.t), NOTCHES)] === ch);
     if (on) glow(g, c, q.x, q.y, size * 1.4, col.accent2, 0.6);
     write(g, ch, q.x, q.y, size, on ? col.accent2 : c.alpha(col.fg, 0.9), 'center', 600);
   });
@@ -349,8 +356,8 @@ function wheelScene(g, w, h, c, p, s, variant) {
   write(g, p.word.split('').join('  '), cx, h * 0.045 + fs * 1.3, fs * 1.4, col.accent2, 'center', 700);
   write(g, 'no ' + p.dropped[0] + ', no ' + p.dropped[1] + ' on the rim', w * 0.03, h * 0.96, fs * 0.8, c.alpha(col.muted, 0.8), 'left', 500);
   write(g, 'clockwise', tip.x + R * 0.1, tip.y - R * 0.02, fs * 0.8, c.alpha(col.muted, 0.9), 'left', 500);
-  const foot = s.spin >= 1 ? notches(p.t) + ' ' + wayWord(p.cw) : s.told ? 'the archive says: ' + wayWord(p.cw) : 'the wheel is seized: say how it must turn';
-  write(g, foot, w * 0.97, h * 0.96, fs * 0.8, s.spin >= 1 || s.told ? col.accent2 : c.alpha(col.muted, 0.8), 'right', 500);
+  const foot = lit ? (shine ? notches(p.t) + ' ' + wayWord(p.cw) : '') : s.told ? 'the archive says: ' + wayWord(p.cw) : 'the wheel is seized: say how it must turn';
+  write(g, foot, w * 0.97, h * 0.96, fs * 0.8, lit || s.told ? col.accent2 : c.alpha(col.muted, 0.8), 'right', 500);
 }
 
 function wheelPreview(g, w, h, env, p) {
@@ -423,6 +430,7 @@ function wheelPiece(env, p) {
       if (c.done) {
         if (!s.spun) s.spun = 1 + ((s.t * 1000) | 0) % 97;
         s.spin = c.reduced ? 1 : Math.min(1, s.spin + dt * 0.55);
+        if (s.spin >= 1 && s.landedAt == null) s.landedAt = s.t;
         const click = c.rite ? c.rite.at(0x51a7 + s.spun).ratchet(s.spin) : (s.turn || ease)(s.spin);
         s.angle = click * p.t * (Math.PI * 2 / NOTCHES) * (p.cw ? 1 : -1);
       }
@@ -682,8 +690,11 @@ function omensScene(g, w, h, c, p, s, variant) {
     // matte of this pick's own roll, in treads -- and leaves the same way when it is unpicked.
     const pickedAt = s.pickedAt && s.pickedAt[i];
     const since = pickedAt == null || !s.t ? 1 : Math.min(1, (s.t - pickedAt) / 1.3);
-    const own = c.rite ? c.rite.at(0x0ae0 + i * 3 + (s.picks || 0)) : null;
+    // The roll is the pick's own, kept from the moment it was made, so a later pick on another
+    // card does not swap this one's matte under it mid-seal.
+    const own = c.rite ? c.rite.at(0x0ae0 + i * 3 + ((s.pickRoll && s.pickRoll[i]) || 0)) : null;
     const cover = own ? own.stair(since) : 1;
+    const edge = picked ? cover : 1 - cover; // how far the card is sealed, in treads
     if (own && (picked || since < 1)) {
       g.save();
       g.beginPath();
@@ -692,10 +703,16 @@ function omensScene(g, w, h, c, p, s, variant) {
       own.paint(g, x, top, cw, ch, picked ? cover : 1 - cover, c.alpha(col.accent2, 0.16));
       g.restore();
     }
-    g.strokeStyle = picked ? c.alpha(col.accent2, 0.95) : c.alpha(col.muted, 0.4);
-    g.lineWidth = picked ? 2 : 1;
+    // The border thickens and colours by the same stair as the wash, never a cut.
+    g.strokeStyle = c.alpha(c.mix(col.muted, col.accent2, edge), 0.4 + 0.55 * edge);
+    g.lineWidth = 1 + edge;
     g.stroke();
-    write(g, 'omen ' + (i + 1) + (holds ? ': holds' : settled ? ': does not hold' : ''), x + fs * 0.6, top + fs, fs * 0.85, holds ? col.accent2 : settled ? c.alpha(col.muted, 0.9) : col.accent2, 'left', 700);
+    // The verdict blinks on, a flicker of its own roll, from the moment the archive read the
+    // omen or the puzzle was solved.
+    const saidAt = s.reveal ? s.revealAt : s.readAt ? s.readAt[i] : null;
+    const said = saidAt == null || !s.t ? 1 : Math.min(1, (s.t - saidAt) / 1.0);
+    const spoken = settled && (own ? own.at(0x5a1d + i).flicker(said) : 1);
+    write(g, 'omen ' + (i + 1) + (spoken ? (holds ? ': holds' : ': does not hold') : ''), x + fs * 0.6, top + fs, fs * 0.85, spoken ? (holds ? col.accent2 : c.alpha(col.muted, 0.9)) : col.accent2, 'left', 700);
     const lines = wrap(g, CLAIMS[id].text, fs * 0.9, cw - fs * 1.2);
     lines.slice(0, 4).forEach((line, k) => write(g, line, x + fs * 0.6, top + fs * 2.3 + k * fs * 1.2, fs * 0.9, c.alpha(col.fg, 0.9), 'left', 500));
   });
@@ -743,9 +760,13 @@ function omensPiece(env, p) {
         s.picked = Array.isArray(value) ? value.map(Number) : [];
         // Every omen whose pick changed starts its seal (or its unsealing) now, on a fresh roll.
         s.pickedAt = s.pickedAt || {};
+        s.pickRoll = s.pickRoll || {};
         s.picks = (s.picks || 0) + 1;
         p.claims.forEach((id2, i) => {
-          if (was.includes(i) !== s.picked.includes(i)) s.pickedAt[i] = s.t;
+          if (was.includes(i) !== s.picked.includes(i)) {
+            s.pickedAt[i] = s.t;
+            s.pickRoll[i] = s.picks;
+          }
         });
         c.status(s.picked.length ? 'picked: ' + s.picked.map((i) => 'omen ' + (i + 1)).join(', ') : 'nothing picked yet');
       }
@@ -766,6 +787,8 @@ function omensPiece(env, p) {
         } else if (unread.length) {
           const next = miscalled.length ? miscalled[0] : unread[0];
           s.read.push(next);
+          s.readAt = s.readAt || {};
+          s.readAt[next] = s.t;
           c.hint();
           c.status('omen ' + (next + 1) + (p.truth.includes(next) ? ' holds against the sky' : ' does not hold'));
         } else {
@@ -780,6 +803,7 @@ function omensPiece(env, p) {
     },
     end(c) {
       s.reveal = true;
+      s.revealAt = s.t;
       const line = READINGS[(p.truth.length * 3 + p.truth[0] + p.pts.length) % READINGS.length];
       c.status('the omens that hold: ' + p.truth.map((i) => 'omen ' + (i + 1)).join(', ') + '. the archive reads: ' + line);
       draw(c);

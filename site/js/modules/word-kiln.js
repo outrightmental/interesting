@@ -213,7 +213,8 @@ function tile(g, env, x, y, size, letter, lit, tilt, own) {
     own.paint(g, -size / 2, -size * 0.6, size, size * 1.2, lit, env.mix(c.bg2, c.accent2, 0.63));
     g.restore();
   } else if (lit > 0) {
-    g.fillStyle = env.mix(c.bg2, c.accent2, 0.13 + lit * 0.5);
+    // No roll to hand (no harness or stage is without one): the tint still moves in four treads.
+    g.fillStyle = env.mix(c.bg2, c.accent2, 0.13 + (Math.ceil(lit * 4) / 4) * 0.5);
     g.fillRect(-size / 2, -size * 0.6, size, size * 1.2);
   }
   g.strokeStyle = lit > 0.5 ? c.accent2 : env.alpha(c.accent, 0.8);
@@ -313,7 +314,8 @@ function anagramScene(g, w, h, env, plan, s, variant) {
   // The kiln goes dark in treads as the tiles cool, never a dimming.
   const cooled = env.rite ? env.rite.at(0xc001).stair(cooledRaw) : cooledRaw;
   kiln(g, w, h, env, s.heat, { cx, cy, r, lit: 1 - cooled * 0.7 });
-  embers(g, env, cx, cy, r, v, s.phase, 1 - cooled * 0.8);
+  // The embers rise with the finale in treads of the kiln's own roll, never a drift.
+  embers(g, env, cx, cy, r, v, env.rite ? env.rite.at(0xe3be).stair(s.phase, 9) : s.phase, 1 - cooled * 0.8);
   const size = Math.min(h * 0.13 * v.scale, (w * 0.84) / n / 1.15);
   const rackY = h * 0.2;
   const slotY = h * 0.44;
@@ -324,8 +326,12 @@ function anagramScene(g, w, h, env, plan, s, variant) {
     // The slots the word is typed into, and the hints over them.
     for (let k = 0; k < n; k++) {
       slot(g, env, place(k, slotY), slotY, size * 0.8, s.guess[k] || '');
-      const shown = (k === 0 && s.hints >= 1) || (k === n - 1 && s.hints >= 2);
-      if (shown) {
+      const which = k === 0 ? 1 : k === n - 1 ? 2 : 0;
+      const shown = which > 0 && s.hints >= which;
+      // A shown letter blinks on, a flicker of its own roll, from the moment it was asked for.
+      const askedAt = shown && s.hintAt ? s.hintAt[which] : null;
+      const age = askedAt == null || !s.t || env.reduced ? 1 : Math.min(1, (s.t - askedAt) / 0.9);
+      if (shown && (env.rite ? env.rite.at(0x4171 + which).flicker(age) : 1)) {
         font(g, small, '500');
         g.textAlign = 'center';
         g.textBaseline = 'middle';
@@ -349,7 +355,8 @@ function anagramScene(g, w, h, env, plan, s, variant) {
         const f = own ? own.ease(s.phase / 0.4) : (s.fire || ease)(s.phase / 0.4);
         x += (cx + (i - (n - 1) / 2) * r * 0.3 - x) * f;
         y += (cy - y) * f;
-        tilt = f * (i % 2 ? -1 : 1) * 1.2;
+        // It tumbles as it falls in clicks (the roll's ratchet), never an even turn.
+        tilt = (own ? own.turn(s.phase / 0.4) : f) * (i % 2 ? -1 : 1) * 1.2;
         lit = own ? own.stair(s.phase / 0.4) : f;
       } else {
         const f = own ? own.ratchet((s.phase - 0.4) / 0.6) : (s.cool || ease)((s.phase - 0.4) / 0.6);
@@ -415,6 +422,8 @@ function anagramPiece(env, plan) {
       if (id === 'hint') {
         if (s.hints < helps) {
           s.hints += 1;
+          s.hintAt = s.hintAt || {};
+          s.hintAt[s.hints] = s.t;
           c.hint();
           c.status(s.hints === 1 ? 'the word starts with ' + plan.word[0] : 'and it ends with ' + plan.word[n - 1]);
         } else if (helps < 2) {
@@ -495,7 +504,7 @@ function ladderScene(g, w, h, env, plan, s, variant) {
   const r = m * 0.24 * v.scale;
   const litStep = env.rite ? env.rite.at(0x11ad).stair(s.lit) : s.lit;
   kiln(g, w, h, env, 0.6, { cx, cy: h * 0.92, r, lit: 0.6 + litStep * 0.4 });
-  embers(g, env, cx, h * 0.92, r, v, s.phase, 0.7 + litStep * 0.3);
+  embers(g, env, cx, h * 0.92, r, v, env.rite ? env.rite.at(0xe3be).stair(s.phase, 9) : s.phase, 0.7 + litStep * 0.3);
   const small = px(env, w, h, 0.036, 10);
   const size = Math.min((w * 0.5) / 4 / 1.1, h * 0.1 * v.scale);
   const railX = [cx - w * 0.3, cx + w * 0.3];
@@ -534,7 +543,10 @@ function ladderScene(g, w, h, env, plan, s, variant) {
       // A hint: the letter one way up changes at this step, marked on the rung below it.
       if (k < 3 && s.hints > k && s.phase === 0) {
         const at = changedAt(plan.rungs[k], plan.rungs[k + 1]);
-        if (at === i) {
+        // The mark blinks on, a flicker of the rung's own roll, from the moment it was asked for.
+        const askedAt = s.hintAt ? s.hintAt[k + 1] : null;
+        const age = askedAt == null || !s.t || env.reduced ? 1 : Math.min(1, (s.t - askedAt) / 0.9);
+        if (at === i && (rung ? rung.at(0x4171).flicker(age) : 1)) {
           g.fillStyle = c.accent2;
           g.beginPath();
           g.moveTo(x, y - size * 0.75);
@@ -566,7 +578,7 @@ function ladderPiece(env, plan) {
   const a = plan.rungs[0];
   const b = plan.rungs[3];
   // The rungs light along a curve rolled for this piece (see riteCurve).
-  const s = { first: '', second: '', hints: 0, phase: 0, lit: 0, line: 'change one letter a step; every rung a word',
+  const s = { first: '', second: '', hints: 0, phase: 0, lit: 0, t: 0, line: 'change one letter a step; every rung a word',
     climb: riteCurve((env.seed >>> 0) ^ 0x1add) };
   const draw = (c) => ladderScene(c.g, c.w, c.h, c, plan, s, env.variant);
   return {
@@ -611,6 +623,8 @@ function ladderPiece(env, plan) {
         if (s.hints < helps) {
           const at = changedAt(plan.rungs[s.hints], plan.rungs[s.hints + 1]) + 1;
           s.hints += 1;
+          s.hintAt = s.hintAt || {};
+          s.hintAt[s.hints] = s.t;
           c.hint();
           c.status((s.hints === 1 ? 'one way up: the first step changes letter ' : s.hints === 2 ? 'then the second step changes letter ' : 'and the last step changes letter ') + at);
         } else if (s.hints >= helps) {
@@ -620,6 +634,7 @@ function ladderPiece(env, plan) {
       draw(c);
     },
     frame(t, dt, c) {
+      s.t += dt;
       if (c.done) {
         s.phase = Math.min(1, s.phase + dt / (c.reduced ? 0.5 : 2.5));
         s.lit = Math.min(1, s.lit + dt);

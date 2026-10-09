@@ -360,10 +360,11 @@ function recallScene(g, w, h, c, plan, s, v) {
     // The order they came, drawn from star to star in treads: a segment at a time, the last of
     // them reaching across as far as the stair has it.
     const seg = plan.points.length - 1;
-    const far = rite.stair(doneP, seg) * seg;
-    const whole = Math.min(seg, Math.floor(far));
+    // Three treads to a segment: far is in thirds, so the last segment reaches across in thirds.
+    const far = rite.stair(doneP, seg * 3) * seg;
+    const whole = Math.min(seg, Math.floor(far + 1e-9));
     const line = plan.seq.slice(0, whole + 2).map((i) => pts[i]);
-    path(g, line, c.alpha(gold, 0.6), whole >= seg ? null : rite.stair(far - whole, 3));
+    path(g, line, c.alpha(gold, 0.6), whole >= seg ? null : far - whole);
   }
   pts.forEach((p, i) => {
     const tapped = s.taps ? s.taps.indexOf(i) : -1;

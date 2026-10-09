@@ -112,7 +112,7 @@
 
 @font-face {
   font-family: 'Fraunces';
-  font-style: normal;
+  font-style: italic;
   font-weight: 100 900;
   font-stretch: normal;
   font-display: swap;
@@ -121,7 +121,7 @@
 
 @font-face {
   font-family: 'Fraunces';
-  font-style: italic;
+  font-style: normal;
   font-weight: 100 900;
   font-stretch: normal;
   font-display: swap;

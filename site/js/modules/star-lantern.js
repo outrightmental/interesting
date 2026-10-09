@@ -106,9 +106,17 @@ function sway(rite, base, t, i) {
   return (tri * 2 - 1) * (0.6 + 0.4 * own.ease(0.5));
 }
 
-// A travel from `from` to `to` along the curve of the roll, by how far it has come.
+// A tread of the roll's curve: the stair says WHEN a thing moves (one of the roll's uneven
+// treads) and the curve says WHERE that tread lands (its hesitation, its surge, its stutter back,
+// its overshoot past the mark and its settle), so even the swooping curve reads as held treads
+// and never as a glide. Everything in this sky that goes from one place to another goes by it.
+function tread(own, p) {
+  return p >= 1 ? 1 : own.ease(own.stair(p));
+}
+
+// A travel from `from` to `to`, by how far it has come, in the treads of the roll.
 function travel(own, from, to, p) {
-  return p >= 1 ? to : from + (to - from) * own.ease(p);
+  return p >= 1 ? to : from + (to - from) * tread(own, p);
 }
 
 // The cells of a box the matte lets through at coverage k, filled in the current fillStyle: how a
@@ -669,13 +677,14 @@ function arrow(g, x0, x1, y, head) {
   g.fill();
 }
 
-// A climb of f bands, read through the rite: every band crossed is its own glitch of a curve,
-// rolled for that band of that flight, so the lantern hesitates, surges and settles into each.
+// A climb of f bands, read through the rite: every band crossed is its own glitch of a curve
+// taken in its own treads, rolled for that band of that flight, so the lantern hesitates, surges,
+// overshoots and settles into each in held steps and never floats up evenly.
 function climbed(rite, base, flight, f, count) {
   if (f <= 0) return 0;
   if (f >= count) return count;
   const b = Math.floor(f);
-  return Math.min(count, b + Math.max(0, roll(rite, base + b, flight).ease(f - b)));
+  return Math.min(count, b + Math.max(0, tread(roll(rite, base + b, flight), f - b)));
 }
 
 // A dotted line's dashes advanced in the ratchet's clicks, one tooth-set per `period` seconds
