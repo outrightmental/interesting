@@ -6,8 +6,8 @@
    Two puzzles, one deduction and one experiment:
 
      when they meet again  Three or four pendulums on one bar, each with its period written under
-                           it and drawn as its length, all set swinging through the centre at beat
-                           0 to the right. One whose period is P beats comes back through the
+                           it and drawn as its length, starting together or on separate beats.
+                           One whose period is P beats comes back through the
                            centre heading right every P beats. Name the first beat when all of
                            them come through together again, and say which of them are coming
                            through at a stated beat. A wrong check says how many come through
@@ -209,13 +209,16 @@ function rackPlan(env) {
   const periods = [];
   while (periods.length < n) periods.push(pool.splice(env.int(0, pool.length - 1), 1)[0]);
   const meet = lcmOf(periods);
+  const anchor = env.chance(0.5) ? env.int(2, meet - 1) : 0;
+  const starts = periods.map((p) => anchor % p);
   // The stated beat: one on which some of them, not none and not all, come through the centre.
   const beats = [];
   for (let t = 2; t <= Math.min(60, meet - 1); t++) {
-    const through = periods.filter((p) => t % p === 0).length;
+    const through = throughAt(periods, t, starts).length;
     if (through > 0 && through < n) beats.push(t);
   }
-  return { kind: 'rack', number: 100 + env.int(0, 899), periods, at: beats.length ? env.pick(beats) : periods[0] };
+  if (!beats.length) throw new Error('The rack has no partial crossing beat.');
+  return { kind: 'rack', number: 100 + env.int(0, 899), periods, starts, at: env.pick(beats) };
 }
 
 function carriedRack(env) {
@@ -226,23 +229,36 @@ function carriedRack(env) {
   const number = Number(p.number);
   const at = Number(p.at);
   if (!Number.isInteger(number) || number < 100 || number > 999 || !Number.isInteger(at) || at < 1 || at > 60) return null;
-  const through = periods.filter((q) => at % q === 0).length;
+  const starts = p.starts === undefined ? periods.map(() => 0)
+    : Array.isArray(p.starts) && p.starts.length === periods.length ? p.starts.slice() : null;
+  if (!starts || !starts.every((s, i) => Number.isInteger(s) && s >= 0 && s < periods[i])) return null;
+  const through = throughAt(periods, at, starts).length;
   if (through === 0 || through === periods.length) return null;
-  if (lcmOf(periods) > 60) return null;
-  return { kind: 'rack', number, periods, at };
+  if (lcmOf(periods) > 60 || !rackMeet({ periods, starts })) return null;
+  return { kind: 'rack', number, periods, starts, at };
 }
 
 function rackTitle(plan) {
-  return 'rack ' + plan.number + ': when they meet again';
+  return 'rack ' + plan.number + ': ' + (plan.starts && plan.starts.some((s) => s > 0) ? 'the staggered start' : 'when they meet again');
 }
 
-function throughAt(periods, beat) {
-  return periods.map((p, i) => i).filter((i) => beat % periods[i] === 0);
+function throughAt(periods, beat, starts) {
+  return periods.map((p, i) => i).filter((i) => {
+    const start = starts ? starts[i] : 0;
+    return beat >= start && (beat - start) % periods[i] === 0;
+  });
 }
 
-// Each pendulum's angle at `beat`: set swinging through the centre to the right at beat 0.
-function rackAngle(period, beat) {
-  return Math.sin(TAU * beat / period);
+function rackMeet(plan) {
+  for (let beat = 1; beat <= 60; beat++) {
+    if (throughAt(plan.periods, beat, plan.starts).length === plan.periods.length) return beat;
+  }
+  return 0;
+}
+
+// A pendulum hangs still until its start beat, then crosses the centre heading right.
+function rackAngle(period, beat, start = 0) {
+  return beat < start ? 0 : Math.sin(TAU * (beat - start) / period);
 }
 
 function drawRack(g, w, h, c, plan, s, variant) {
@@ -276,7 +292,8 @@ function drawRack(g, w, h, c, plan, s, variant) {
     g.lineTo(pivots[i], barY + length + r * 2.5);
     g.stroke();
     g.setLineDash([]);
-    const theta = beat < 0 ? 0 : amp * rackAngle(p, beat);
+    const start = plan.starts ? plan.starts[i] : 0;
+    const theta = beat < 0 ? 0 : amp * rackAngle(p, beat, start);
     // A picked pendulum is sealed: a disc develops behind it through the matte by its area, on
     // the roll of that pick, and its ring blinks on; unpicked, it dissolves back down.
     const pick = s.picks ? s.picks[i] : null;
@@ -304,6 +321,7 @@ function drawRack(g, w, h, c, plan, s, variant) {
       g.setLineDash([]);
     }
     text(g, c, p + ' beats', pivots[i], barY + length + r * 4.2, small, c.alpha(col.fg, 0.9));
+    text(g, c, 'starts at ' + start, pivots[i], barY + length + r * 4.2 + small * 1.4, small, col.accent2);
     // A hint's answer blinks on under the bar.
     if (s.shown[i] && rite.at(0x200 + i).flicker(came(s, s.shownAt ? s.shownAt[i] : -1, 0.8, reduced))) {
       text(g, c, s.shown[i], pivots[i], barY + small * 1.3, small, col.accent);
@@ -341,7 +359,7 @@ function drawRack(g, w, h, c, plan, s, variant) {
     g.arc(bx, rulerY, Math.max(2, size * 0.2), 0, TAU);
     g.fill();
     text(g, c, 'beat ' + Math.max(0, Math.floor(beat)), w / 2, h * 0.805, small, c.alpha(col.fg, 0.85));
-  } else text(g, c, 'all through the centre at beat 0, heading right', w / 2, h * 0.805, small, c.alpha(col.fg, 0.75), 'center', w * 0.9);
+  } else text(g, c, plan.starts && plan.starts.some((s) => s > 0) ? 'different start beats; all starts head right' : 'all through the centre at beat 0, heading right', w / 2, h * 0.805, small, c.alpha(col.fg, 0.75), 'center', w * 0.9);
 }
 
 function rackBlank() {
@@ -358,22 +376,22 @@ function rackPreview(g, w, h, env, plan) {
 function rackPiece(env, plan) {
   const helps = asked(env).helps;
   const n = plan.periods.length;
-  const meet = lcmOf(plan.periods);
-  const through = throughAt(plan.periods, plan.at);
+  const starts = plan.starts || plan.periods.map(() => 0);
+  const meet = rackMeet(plan);
+  const through = throughAt(plan.periods, plan.at, starts);
   const s = rackBlank();
   const pace = 0.35;
   const draw = (c) => drawRack(c.g, c.w, c.h, c, plan, s, env.variant || PLAIN);
   const name = (i) => 'the ' + plan.periods[i] + '-beat pendulum';
   return {
     title: rackTitle(plan),
-    brief: 'A vigil kept in beats. ' + WORDS[n][0].toUpperCase() + WORDS[n].slice(1) + ' pendulums hang from one bar, their periods written under them. '
-      + 'At beat 0 all of them swing through the centre to the right together. One whose period is P beats comes back through the centre heading right every P beats.',
+    brief: 'Find a shared crossing among ' + WORDS[n] + ' pendulums. From left to right: ' + plan.periods.map((p, i) => ORDINAL[i] + ', period ' + p + ', starts at beat ' + starts[i]).join('; ') + '. Each hangs still until its start beat, then crosses the centre heading right, and repeats that crossing every period. Add its period to its start beat to list later crossings. Changing the meeting-beat control shows the rack at that beat; no waiting is needed.',
     goal: 'Name the first beat when all of them come through the centre heading right together, and pick the ones that do at beat ' + plan.at + '.',
     aspect: '16 / 10',
     checkLabel: 'count it out',
     steps: [
       { id: 'meet', ask: 'the first beat when all of them come through heading right together', kind: 'number', min: 1, max: 60, step: 1, unit: 'beat' },
-      { id: 'which', ask: 'the ones coming through heading right at beat ' + plan.at, kind: 'pick', items: plan.periods.map((p, i) => ({ label: ORDINAL[i] + ', ' + p + ' beats', value: i })) },
+      { id: 'which', ask: 'the ones coming through heading right at beat ' + plan.at, kind: 'pick', count: through.length, items: plan.periods.map((p, i) => ({ label: ORDINAL[i] + ', period ' + p + ', starts at ' + starts[i], value: i })) },
       { id: 'hint', ask: 'one pendulum at beat ' + plan.at, kind: 'press', count: 1, label: 'show me one', optional: true }
     ],
     solution: { meet, which: through.slice() },
@@ -389,22 +407,29 @@ function rackPiece(env, plan) {
       if (meetRight && pickRight) return { solved: true, say: 'the vigil holds: all through together at beat ' + meet + '; ' + through.map(name).join(' and ') + ' at beat ' + plan.at };
       const parts = [];
       if (!meetRight) {
-        const together = Number.isFinite(beat) && beat >= 1 ? throughAt(plan.periods, beat).length : 0;
+        const together = Number.isFinite(beat) && beat >= 1 ? throughAt(plan.periods, beat, starts).length : 0;
         parts.push(together === n ? 'at beat ' + beat + ' they do all come through, but not for the first time'
           : 'at beat ' + beat + ' only ' + WORDS[together] + ' of the ' + WORDS[n] + ' come through heading right');
       }
       if (!pickRight) {
         parts.push(right === 0 ? 'none of your picks is through the centre at beat ' + plan.at
-          : WORDS[right] + ' of your picks ' + (right === 1 ? 'is' : 'are') + ' right' + (extra ? ', ' + WORDS[extra] + ' ' + (extra === 1 ? 'is' : 'are') + ' not' : ', and one is missing'));
+          : WORDS[right] + ' of your picks ' + (right === 1 ? 'is' : 'are') + ' right' + (extra ? ', ' + WORDS[extra] + ' ' + (extra === 1 ? 'is' : 'are') + ' not' : ', and ' + WORDS[through.length - right] + ' missing'));
       }
       return { solved: false, say: parts.join('; ') };
     },
     start(c) {
-      c.status('rack ' + plan.number + ': ' + plan.periods.join(', ') + ' beats');
+      c.status('rack ' + plan.number + ': periods ' + plan.periods.join(', ') + '; start beats ' + starts.join(', ') + '; find the first shared crossing after beat 0');
       draw(c);
     },
     apply(id, value, c) {
-      if (id === 'meet') c.status('all through together at beat ' + Math.round(Number(value)) + ', you say');
+      if (id === 'meet') {
+        const beat = Math.round(Number(value));
+        if (Number.isFinite(beat) && beat >= 1 && beat <= 60) {
+          s.to = -1;
+          s.beat = beat;
+          c.status('showing beat ' + beat + '; a centred bob may be heading left or still waiting to start, so use the periods and start beats to check heading right');
+        } else c.status('choose a meeting beat from 1 to 60');
+      }
       if (id === 'which' && Array.isArray(value)) {
         const next = value.map(Number).filter((i) => Number.isInteger(i) && i >= 0 && i < n);
         // Every pendulum whose pick changed seals or unseals itself afresh, on a roll of its own.
@@ -436,8 +461,11 @@ function rackPiece(env, plan) {
       s.t += Math.max(0, dt);
       if (c.done && s.doneAt < 0) s.doneAt = s.t;
       if (s.to >= 0) {
-        s.beat = Math.min(s.to, s.beat + Math.max(0, dt) / pace);
-        if (c.done && s.beat >= s.to) s.beat = 0;
+        if (c.reduced) s.beat = s.to;
+        else {
+          s.beat = Math.min(s.to, s.beat + Math.max(0, dt) / pace);
+          if (c.done && s.beat >= s.to) s.beat = 0;
+        }
       }
       draw(c);
     },
@@ -445,7 +473,7 @@ function rackPiece(env, plan) {
       s.to = meet;
       s.beat = 0;
       if (s.doneAt < 0) s.doneAt = s.t;
-      c.status('the rack swings on, home together every ' + meet + ' beats');
+      c.status('first shared crossing: beat ' + meet + '; it repeats every ' + lcmOf(plan.periods) + ' beats. Change the meeting beat to inspect the rack at another point');
       draw(c);
     }
   };
@@ -657,7 +685,7 @@ function drawSpring(g, w, h, c, plan, s, variant) {
 }
 
 function springBlank(plan) {
-  return { k: plan.open, kFrom: plan.open, kAt: -1, sets: 0, runs: [], replay: null, loop: false, t: 0, doneAt: -1 };
+  return { k: plan.open, kFrom: plan.open, kAt: -1, sets: 0, runs: [], probes: [], replay: null, loop: false, t: 0, doneAt: -1 };
 }
 
 function springPreview(g, w, h, env, plan) {
@@ -712,11 +740,12 @@ function springPiece(env, plan) {
     },
     apply(id, value, c) {
       if (id === 'hint') {
-        const tried = probes.filter((k) => s.runs.some((run) => run.k === k));
+        const tried = s.probes;
         const next = tried.length < helps ? probes.find((k) => !s.runs.some((run) => run.k === k)) : undefined;
         if (next !== undefined) {
           const tau = crossTime(next);
           s.runs.push({ k: next, tau, at: s.t });
+          s.probes.push(next);
           c.hint();
           c.status('a spring at ' + next + ' crosses in ' + breathsOf(tau) + ' breaths; its mark is on the ruler');
         } else if (tried.length >= helps) {
@@ -824,8 +853,8 @@ export default {
     const plan = d.plan;
     return {
       title: rackTitle(plan),
-      text: 'A vigil in beats. Set swinging together at beat 0: when do all of them come through the centre together again, and which are through at beat ' + plan.at + '?',
-      mono: 'periods  ' + plan.periods.join(', ') + ' beats\nasked    beat ' + plan.at,
+      text: plan.starts.some((s) => s > 0) ? 'The rack starts one pendulum after another. Use each start beat and period to find the first shared rightward crossing, then pick the ones crossing at beat ' + plan.at + '.' : 'A vigil in beats. Starting together at beat 0, when do they first cross heading right together again, and which cross at beat ' + plan.at + '?',
+      mono: 'periods  ' + plan.periods.join(', ') + ' beats\nstarts   ' + plan.starts.join(', ') + '\nasked    beat ' + plan.at,
       aspect: '16 / 10',
       paint: (g, w, h, cardEnv) => rackPreview(g, w, h, cardEnv, plan),
       of: plan

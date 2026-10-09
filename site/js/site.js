@@ -1053,6 +1053,8 @@
     // Nothing to place while the state interface has the lightbox: the constellation is not on
     // screen to be measured, and it is shaped again on the next press either way.
     if (!nav || nav.sky.hidden) return;
+    // Measure the layout the stars will use, not a cascade left by a shorter viewport.
+    if (html.getAttribute('data-nav') !== 'live') html.setAttribute('data-nav', 'live');
     var logoHeight = nav.logo.offsetHeight || STAR_STEP_MIN;
     var mid = Math.max(18, Math.round(logoHeight / 2));
     var groups = [];
@@ -1203,6 +1205,7 @@
       relabel(nav.stateLabel, kept ? 'state · ' + kept + ' kept' : 'state');
     }
     place();
+    restoreNavFocus();
   }
 
   /* ---- opening and closing ---------------------------------------------------------------- */
@@ -1396,6 +1399,29 @@
     watch.observe(panel, { attributes: true, attributeFilter: ['hidden'] });
   }
 
+  function navIsFront() {
+    var top = raised.length ? raised[raised.length - 1] : null;
+    return !!(nav && nav.host.open && !asking && top && top.keep === nav.host);
+  }
+
+  function visibleInNav(node) {
+    if (!node || !(node.offsetWidth || node.offsetHeight)) return false;
+    for (var parent = node; parent && parent !== nav.host; parent = parent.parentNode) {
+      if (parent === document.body || parent.hidden || parent.hasAttribute('inert')
+          || parent.getAttribute('aria-hidden') === 'true') return false;
+    }
+    return parent === nav.host;
+  }
+
+  // An option can disappear, and an adopted control can return focus to its hidden button.
+  function restoreNavFocus() {
+    if (!navIsFront() || visibleInNav(document.activeElement)) return;
+    // A closing state panel returns focus through its close watcher instead.
+    var menu = stateHosted ? hostedStateMenu() : null;
+    if (menu && menu.panel && menu.panel.hidden) return;
+    nav.logo.focus();
+  }
+
   // The chips, the logo included, in the order a Tab walks them -- and the state interface's own
   // controls while it is the thing the lightbox is holding, its text box included, because a
   // keyboard trapped in a modal has to be able to reach all of it.
@@ -1406,12 +1432,7 @@
     for (var i = 0; i < all.length; i++) {
       var tab = all[i].getAttribute('tabindex');
       if (all[i].disabled || (tab !== null && Number(tab) < 0)) continue;
-      var visible = !!(all[i].offsetWidth || all[i].offsetHeight);
-      for (var parent = all[i]; visible && parent && parent !== nav.host; parent = parent.parentNode) {
-        if (parent.hidden || parent.hasAttribute('inert')
-            || parent.getAttribute('aria-hidden') === 'true') visible = false;
-      }
-      if (visible) reachable.push(all[i]);
+      if (visibleInNav(all[i])) reachable.push(all[i]);
     }
     return reachable;
   }
@@ -1545,16 +1566,15 @@
     });
 
     document.addEventListener('keydown', function (event) {
-      if (!nav.host.open || asking) return;
-      var top = raised.length ? raised[raised.length - 1] : null;
       // A nested lightbox owns its keyboard until it hands the constellation back.
-      if (!top || top.keep !== nav.host) return;
+      if (!navIsFront()) return;
       if (event.key === 'Escape' || event.key === 'Esc') {
         close(true);
         return;
       }
       keepFocusInside(event);
     });
+    document.addEventListener('focusin', restoreNavFocus);
 
     // The options follow the reading and adopted controls; page markers follow the stage too.
     window.addEventListener('threshold:reading', shape);
