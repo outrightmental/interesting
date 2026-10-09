@@ -1172,7 +1172,7 @@
       nav.readingGo.href = root + world.world;
       // On the world itself the option says where the visitor is, rather than offering them a
       // trip to where they already are.
-      label(nav.readingLabel, here ? world.worldName : 'go to ' + world.worldName);
+      relabel(nav.readingLabel, here ? world.worldName : 'go to ' + world.worldName);
       if (here) nav.readingGo.setAttribute('aria-current', 'page');
       else nav.readingGo.removeAttribute('aria-current');
       nav.reading.hidden = false;
@@ -1194,7 +1194,7 @@
     // worth saying before it is opened.
     if (nav.stateLabel) {
       var kept = store && typeof store.keys === 'function' ? store.keys().length : 0;
-      label(nav.stateLabel, kept ? 'state · ' + kept + ' kept' : 'state');
+      relabel(nav.stateLabel, kept ? 'state · ' + kept + ' kept' : 'state');
     }
     place();
   }
@@ -1208,7 +1208,7 @@
      the held frame loop are one call rather than four. */
   // A chip's words, revealed when they change while the constellation is on screen; written
   // plainly while it is away, where nobody is watching.
-  function label(node, text) {
+  function relabel(node, text) {
     if (!node || node.textContent === text) return;
     say(node, text, !nav.host.open);
   }
