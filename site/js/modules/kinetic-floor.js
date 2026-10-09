@@ -345,21 +345,25 @@ function drawLanes(g, w, h, env, plan, s, variant) {
     }
     label(g, String(k + 1), w * 0.05, floorY - u * 2, size, env.alpha(c.fg, 0.9), 'center', '600');
     const callX = w * 0.87;
-    if (s.time >= 0 && s.time > 2.2) {
-      // The count of what fell blinks on once the chains have had their time.
-      if (rite.at(0x400 + k).flicker(reduced ? 1 : clamp01((s.time - 2.2) / 0.7))) {
-        const n = fallen(lane, s.time, rite, k);
-        label(g, n === lane.n ? 'all ' + n + ' fell' : n + ' of ' + lane.n + ' fell', callX, floorY - u * 2, small, c.accent2);
-      }
-    } else if (calledAt >= 0) {
-      // The call's badge develops by its area, and the word of the call blinks on over it.
+    // What stands at the call: the count of what fell once the chains have had their time, which
+    // blinks on in place of the word; else the word of the call, which blinks on in place of the
+    // '?'. Nothing here cuts out: the thing before shows wherever the flicker of the thing after
+    // is off, so the one replaces the other in the flicker's dropouts.
+    const counted = s.time >= 0 && s.time > 2.2 ? (reduced ? 1 : clamp01((s.time - 2.2) / 0.7)) : 0;
+    const countOn = counted > 0 && rite.at(0x400 + k).flicker(counted);
+    const wordOn = calledAt >= 0 && callRite.flicker(came(s, calledAt, 0.9, reduced));
+    if (calledAt >= 0) {
+      // The call's badge develops by its area under the word.
       const bx = callX - u * 2.4;
       const by = floorY - u * 3.1;
       g.fillStyle = env.alpha(c.accent2, 0.22);
       develop(g, callRite, bx, by, u * 4.8, u * 2.2, sealed, null, Math.max(rite.cell, Math.ceil(u / 2)));
-      if (callRite.flicker(came(s, calledAt, 0.9, reduced))) {
-        label(g, s.calls[k] ? 'crosses' : 'stops', callX, floorY - u * 2, size, c.accent2);
-      }
+    }
+    if (countOn) {
+      const n = fallen(lane, s.time, rite, k);
+      label(g, n === lane.n ? 'all ' + n + ' fell' : n + ' of ' + lane.n + ' fell', callX, floorY - u * 2, small, c.accent2);
+    } else if (wordOn) {
+      label(g, s.calls[k] ? 'crosses' : 'stops', callX, floorY - u * 2, size, c.accent2);
     } else {
       label(g, '?', callX, floorY - u * 2, size, env.alpha(c.muted, 0.7));
     }

@@ -799,12 +799,14 @@ function moonsScene(g, w, h, env, p, s, v) {
     g.fillText(FIRST[p.names[i]] + (on ? ', ' + clue : ''), x + (Math.cos(a) < 0 ? -1 : 1) * rad * 1.8, y - rad * 1.6);
     const place = s.order ? s.order.indexOf(i) : -1;
     if (place >= 0 && place < placed) {
-      // The numeral sits in a small set surface of its own, developed through the matte.
+      // The numeral sits in a small set surface of its own, developed through the matte: its
+      // coverage climbs a stair of the setting's own roll, never the clock's straight ramp.
       const nx = x + (Math.cos(a) < 0 ? -1 : 1) * rad * 1.8;
       const ny = y + rad * 1.9;
       const boxW = size * 1.1;
+      const boxRite = roll(rite, 0x61 + i, s.orders);
       g.fillStyle = env.alpha(col.accent2, 0.3);
-      develop(g, roll(rite, 0x60, s.orders), Math.cos(a) < 0 ? nx - boxW : nx, ny - size * 0.5, boxW, size, came(s, s.orderAt, 0.9, reduced), null, Math.max(2, rite.cell));
+      develop(g, boxRite, Math.cos(a) < 0 ? nx - boxW : nx, ny - size * 0.5, boxW, size, boxRite.stair(came(s, s.orderAt, 0.9, reduced)), null, Math.max(2, rite.cell));
       font(g, size * 0.8, 700);
       g.textAlign = Math.cos(a) < 0 ? 'right' : 'left';
       g.fillStyle = col.accent2;

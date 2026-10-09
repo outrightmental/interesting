@@ -685,7 +685,15 @@
     'dial-seal': 'stair',
     'key-turn': 'ratchet',
     'rite-spent': 'stair',
-    'power-down': 'stair'
+    'power-down': 'stair',
+    'link-under': 'stair',
+    'link-under-out': 'stair',
+    'link-stamp': 'flicker',
+    'unlock-in': 'arrive',
+    'power-up': 'stair',
+    'list-in': 'arrive',
+    'cast-ring-out': 'leave',
+    'cast-ring-dashed-out': 'leave'
   };
 
   function familyOf(name) {
@@ -882,7 +890,9 @@
     // through the ladder rests patterned rather than as a flat tint. Dense enough to read as the
     // surface, open enough to read as a pattern.
     var topImage = image.replace(/currentColor/g, '#000');
-    var top = topImage + (size === 'auto' ? '' : ' 0 0 / ' + size) + ', linear-gradient(#000, #000)';
+    // One layer only: a second, full layer beside it would be added to it (mask-composite's
+    // default) and let the whole surface through, and the top of the ladder would be a flat sheet.
+    var top = topImage + (size === 'auto' ? '' : ' 0 0 / ' + size);
     return { kind: kind, ladder: ladder, fill: fill, fillImage: image, fillSize: size, top: top, grain: g };
   }
 

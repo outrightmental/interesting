@@ -965,7 +965,14 @@ function gate(opened) {
       }
       // Power coming on is an arrival: the plate warms like a tube and the piece develops.
       opened.opts = Object.assign({}, opened.opts, { arriving: true, powered: true });
-      begin(opened);
+      // First the gate -- the machine under its sheet -- is unmade down the ladder where it
+      // stood, and only then does the scene develop in its place: one thing after another, never
+      // a cut under an arrival. Where nothing can play, the helper hands back at once.
+      const gate = ui.gate;
+      ui.gate = null;
+      const go = () => { if (pending === opened.token) begin(opened); };
+      if (gate && site && typeof site.unmake === 'function') site.unmake(gate, () => { gate.remove(); go(); });
+      else { if (gate) gate.remove(); go(); }
     }
   });
   if (opened.opts.focus !== false) ui.title.focus({ preventScroll: true });

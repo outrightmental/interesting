@@ -774,10 +774,21 @@
   }
 }
 
-// The element the unlock helper powers down for a piece that needs a sky: it has nothing to show
-// of its own, and it is removed with the piece.
+// The element the unlock helper powers down for a piece that needs a sky: the plate where the
+// scene would be, unexposed, so the dust sheet the helper lays over it (_unlock.scss) has a
+// machine to lie on; it is unmade down the ladder when the power comes on (js/stage.js, gate())
+// and removed with the piece.
 .stage-gate {
-  display: none;
+  position: relative;
+  width: 100%;
+  max-width: calc(var(--stage-h) * var(--piece-ratio, 1.7778));
+  aspect-ratio: var(--piece-aspect, 16 / 9);
+  justify-self: start;
+  border-radius: var(--md-sys-shape-corner-large);
+  overflow: hidden;
+  background:
+    repeating-linear-gradient(var(--plate-angle, 7deg), transparent 0 3px, color-mix(in oklab, var(--md-sys-color-primary) 10%, transparent) 3px 4px),
+    var(--md-sys-color-surface-container-lowest);
 }
 
 .stage-canvas {

@@ -106,10 +106,13 @@ function fract(x) {
 }
 
 // A clock read through the escapement: the whole units gone by, and the one under way in the
-// ratchet's clicks. Negative time is time before the start and stays as it is.
+// ratchet's clicks. Every unit is a tick of its own roll (rite.at over the unit's number), so no
+// two beats click alike: a different count of teeth, a different backlash, the same clock.
+// Negative time is time before the start and stays as it is.
 function escaped(rite, x) {
   if (!(x > 0)) return x;
-  return Math.floor(x) + rite.ratchet(fract(x));
+  const unit = Math.floor(x);
+  return unit + rite.at(0xe5c + unit).ratchet(fract(x));
 }
 
 // The cells of a box the matte lets through at coverage k, filled in the current fillStyle: how a
@@ -311,7 +314,12 @@ function drawRack(g, w, h, c, plan, s, variant) {
       }
     }
     const at = bob(g, c, pivots[i], barY, length, theta, r, tone);
-    if (pick && pick.on && rite.at(0x100 + i * 64 + (pick.roll % 64)).flicker(came(s, pick.at, 0.9, reduced))) {
+    // The ring blinks on with the pick; unpicked, it holds a moment, refuses once or twice in the
+    // flicker's dropouts, and is gone -- never a cut.
+    const ringOn = pick && (pick.on
+      ? rite.at(0x100 + i * 64 + (pick.roll % 64)).flicker(came(s, pick.at, 0.9, reduced))
+      : !rite.at(0x100 + i * 64 + (pick.roll % 64)).flicker(came(s, pick.at, 0.9, reduced)));
+    if (ringOn) {
       g.strokeStyle = col.accent2;
       g.lineWidth = 1.5;
       g.setLineDash([3, 3]);

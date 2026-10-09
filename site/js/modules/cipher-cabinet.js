@@ -677,10 +677,12 @@ function grilleBoard(p) {
 // The key's state, with the moment (on the piece's own clock, s.t) each part of it last changed,
 // so the scene plays the change as a rite rather than cutting to it; -1 is "from the start".
 // `from` is the angle the key stood at when it was last sent turning, which the ratchet turns
-// from; `routeWas` the route line that stood before the last change of notch or turn.
+// from; `routeWas` the route line and `stripsWas` the four views that stood before the last
+// change of notch or turn, which the new ones blink over.
 function grilleBlank() {
   return {
     corner: 0, direction: 1, view: 0, viewWas: 0, viewAt: -1, from: 0, turnAt: -1, routeWas: '',
+    stripsWas: ['', '', '', ''],
     guess: '', guessWas: '', guessAt: -1, hints: 0, hintAt: -1, reveal: false, solvedAt: -1, t: 0
   };
 }
@@ -784,13 +786,17 @@ function grilleScene(g, w, h, c, p, board, s, variant) {
       };
       develop(g, rite, -side / 2, -side / 2, side, side, keep, solid, Math.max(rite.cell, Math.ceil(side / 36)));
     }
-    g.strokeStyle = col.accent;
-    g.lineWidth = Math.max(1, cell * 0.035);
-    g.strokeRect(-side / 2, -side / 2, side, side);
-    for (const index of p.holes) {
-      g.strokeRect(-side / 2 + index % SIDE * cell + inset,
-        -side / 2 + Math.floor(index / SIDE) * cell + inset,
-        cell - inset * 2, cell - inset * 2);
+    // The key's outline goes the way a thing leaves: it holds while the mask thins, blinks out
+    // with the flicker's refusals (the flicker read backwards) and is gone before the last cell.
+    if (!s.reveal || rite.at(0x8a).flicker(1 - revealP)) {
+      g.strokeStyle = col.accent;
+      g.lineWidth = Math.max(1, cell * 0.035);
+      g.strokeRect(-side / 2, -side / 2, side, side);
+      for (const index of p.holes) {
+        g.strokeRect(-side / 2 + index % SIDE * cell + inset,
+          -side / 2 + Math.floor(index / SIDE) * cell + inset,
+          cell - inset * 2, cell - inset * 2);
+      }
     }
     g.restore();
   }
@@ -824,8 +830,13 @@ function grilleScene(g, w, h, c, p, board, s, variant) {
     // is a set surface that develops behind the strip through the matte and leaves the strip it
     // stood behind the same way, and the strip's colour blinks over once it is under way.
     const viewP = got(s.viewAt, SPAN);
+    const turnP = got(s.turnAt, TURN);
     for (let view = 0; view < 4; view++) {
-      const text = (view + 1) + '  ' + strip(p, board, s.corner, s.direction, view);
+      // A strip whose letters changed with the route blinks over to the new ones; one that
+      // reads the same stands.
+      const now = strip(p, board, s.corner, s.direction, view);
+      const letters = turnP >= 1 || now === s.stripsWas[view] || rite.at(0x4c0 + view).flicker(turnP) ? now : s.stripsWas[view];
+      const text = (view + 1) + '  ' + letters;
       const y = h * (0.72 + view * 0.052);
       const own = rite.at(0x4b0 + view);
       const k = coverage(view === s.view, view === s.viewWas, own, viewP);
@@ -838,7 +849,6 @@ function grilleScene(g, w, h, c, p, board, s, variant) {
       g.fillText(text, w * 0.08, y);
     }
     // The route line blinks over to the new route; a hint blinks on after it.
-    const turnP = got(s.turnAt, TURN);
     const hintP = got(s.hintAt, SPAN);
     const route = turnP >= 1 || rite.at(0x3a).flicker(turnP) ? routeLine(s) : s.routeWas;
     const hint = s.hints >= 1 && rite.at(0x3b).flicker(hintP)
@@ -917,6 +927,7 @@ function grillePiece(env, carriedPlan) {
       const stood = keyAngle(s, rite, !!c.reduced);
       const goalWas = quarter(s.corner + s.direction * s.view);
       const routeWas = routeLine(s);
+      const stripsWere = [0, 1, 2, 3].map((view) => strip(p, board, s.corner, s.direction, view));
       if (id === 'corner') {
         const corner = Number(value);
         if (Number.isInteger(corner) && corner >= 0 && corner <= 3) s.corner = corner;
@@ -957,6 +968,7 @@ function grillePiece(env, carriedPlan) {
         s.from = stood;
         s.turnAt = s.t;
         s.routeWas = routeWas;
+        s.stripsWas = stripsWere;
       }
       draw(c);
     },

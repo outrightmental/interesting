@@ -1049,7 +1049,7 @@ function drawFan(g, w, h, env, plan, s, look, variant) {
     const vouched = s.vouched.indexOf(i);
     if (opened && i === plan.odd) {
       write(g, 'should end in ' + plan.digit, -cw / 2 + m + 2, -ch / 2 + ch * 0.8, fs * 0.65, k.accent, 'left', 600);
-    } else if (s.pick === i && s.digit !== null && own.flicker(got(s.digitAt, SPAN))) {
+    } else if (s.pick === i && s.digit !== null && own.flicker(got(Math.max(s.digitAt, s.pickAt), SPAN))) {
       write(g, 'ends in ' + s.digit + ', you say', -cw / 2 + m + 2, -ch / 2 + ch * 0.8, fs * 0.65, k.fg, 'left', 500);
     } else if (vouched >= 0) {
       const vp = got(s.vouchAt[vouched], SPAN);

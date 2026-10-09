@@ -64,7 +64,7 @@
   // and then, and js/motion.js rolls a new curve for every turn (README: "Motion axiom").
   // A ratchet: the ring turns in clicks, each with a slip back and a hold (the ratchet family,
   // js/motion.js), never an even rotation, and js/motion.js rolls a new ratchet for every turn.
-  animation: rite-turn var(--motion-turn, 120s) var(--ease-rite-turn, var(--ease-ratchet)) infinite;
+  animation: rite-turn var(--motion-rite-turn, var(--motion-turn, 120s)) var(--ease-rite-turn, var(--ease-ratchet)) infinite;
 }
 
 // The list pages and the prose pages lay their children out in flow, which a positioned ring at 0

@@ -301,6 +301,8 @@
     }
     node.setAttribute('aria-hidden', 'true');
     node.setAttribute('inert', '');
+    // Under a lightbox the page's aside is held still; the leaving thing is let play.
+    if (node.style && typeof node.style.setProperty === 'function') node.style.setProperty('animation-play-state', 'running');
     node.classList.add('shell-unmake');
     node.addEventListener('animationend', finish);
     node.addEventListener('animationcancel', finish);
@@ -376,6 +378,12 @@
         });
       }
       host.classList.remove('powered-down');
+      // The sheet lifts off the machine up the ladder (is-powering-up, _unlock.scss power-up)
+      // before the host is itself again; at once where nothing can play.
+      if (!calm() && typeof window.setTimeout === 'function') {
+        host.classList.add('is-powering-up');
+        window.setTimeout(function () { host.classList.remove('is-powering-up'); }, riteMs('medium', 340) + 200);
+      }
       host.removeAttribute('inert');
       host.removeAttribute('aria-hidden');
       var first = host.querySelector('button:not([disabled]), a[href], input, [tabindex]');
@@ -433,10 +441,16 @@
       }
 
       host.parentNode.insertBefore(box, host);
-      // The words arrive as words do here: revealed, not cut in.
+      // The box develops from a geometry of its own (--rite-develop, _unlock.scss), and the words
+      // arrive as words do here: revealed, not cut in.
+      var motion = engine();
+      if (motion && typeof motion.arrive === 'function' && !calm()) {
+        motion.arrive(box, { seed: 0x0b0c + unlockCount, spell: 'unlock-in', mattes: true, className: false });
+      }
       say(heading);
       say(line);
       say(goWord);
+      host.setAttribute('data-unlock-host', '');
       host.classList.add('powered-down');
       host.setAttribute('inert', '');
       host.setAttribute('aria-hidden', 'true');
@@ -1267,6 +1281,7 @@
     if (typeof window.clearTimeout === 'function') window.clearTimeout(unmaking);
     unmaking = 0;
     nav.sky.classList.remove('is-unmaking');
+    if (typeof nav.sky.removeAttribute === 'function') nav.sky.removeAttribute('inert');
   }
 
   function unmakeSky(then) {
@@ -1279,9 +1294,13 @@
     }
     endUnmake();
     nav.sky.classList.add('is-unmaking');
+    // Out of reach while it goes: a chip being unmade is not in the tab order or the tree a
+    // reader walks, as it is already out from under the pointer.
+    if (typeof nav.sky.setAttribute === 'function') nav.sky.setAttribute('inert', '');
     unmaking = window.setTimeout(function () {
       unmaking = 0;
       nav.sky.classList.remove('is-unmaking');
+      if (typeof nav.sky.removeAttribute === 'function') nav.sky.removeAttribute('inert');
       then();
     }, riteMs('medium', 340) + Math.ceil(count / 2) * riteMs('stagger', 44) + 80);
   }
@@ -1377,6 +1396,10 @@
     if (stateHosted) {
       var giveItBack = stateHosted;
       stateHosted = null; // first, so the watcher above knows this close is not a visitor's
+      // What the panel showed leaves down the ladder as a ghost of itself where it stood (the
+      // panel is the store's and goes at once); nothing to ghost if it has already gone.
+      var shown = hostedStateMenu();
+      if (shown && shown.panel && !shown.panel.hidden) ghostOf(shown.panel);
       giveItBack();
     }
     // Put away whether anything was being hosted or not: an empty host left on screen would be an
@@ -1506,6 +1529,7 @@
       if (unmaking) {
         endUnmake();
         nav.host.open = false;
+        void nav.host.offsetWidth; // a style pass with [open] gone, so the rings and the spark restart
         nav.host.open = true;
         return;
       }
@@ -1532,19 +1556,28 @@
     });
 
     nav.stateOpen.addEventListener('click', function () {
-      // The lightbox is not dropped and raised again: it stays up, and the state interface takes
-      // the constellation's place inside it (issue #66).
-      if (stateModal(true)) return;
-      // Nothing to host it with, so the corner menu, as it was before: out of the way first,
-      // because a panel pinned to a live page has to find the page live.
-      close(true);
-      if (!nav.stateCorner) return;
-      nav.stateCorner.click();
-      // Watched after the press, not before it: a store may only build its panel on the first
-      // press, and a panel looked up before then is nothing -- the focus would never come home.
-      whenThePanelCloses(document.getElementById(STATE_PANEL), function () {
-        if (typeof nav.logo.focus === 'function') nav.logo.focus();
-      });
+      function corner() {
+        // Nothing to host it with, so the corner menu, as it was before: out of the way first,
+        // because a panel pinned to a live page has to find the page live.
+        close(true);
+        if (!nav.stateCorner) return;
+        nav.stateCorner.click();
+        // Watched after the press, not before it: a store may only build its panel on the first
+        // press, and a panel looked up before then is nothing -- the focus would never come home.
+        whenThePanelCloses(document.getElementById(STATE_PANEL), function () {
+          if (typeof nav.logo.focus === 'function') nav.logo.focus();
+        });
+      }
+      // The lightbox is not dropped and raised again: it stays up, the constellation is unmade
+      // down the ladder (never cut away), and the state interface takes its place inside it
+      // (issue #66).
+      if (hostedStateMenu() && nav.modal) {
+        unmakeSky(function () {
+          if (!stateModal(true)) corner();
+        });
+        return;
+      }
+      corner();
     });
 
     // A press on the dimmed page around the state interface is a press on the page: the same
@@ -1615,6 +1648,7 @@
 
   window.interestingSite = {
     unlock: unlock,
+    unmake: unmake,
     difficulty: difficulty,
     destructive: destructive,
     areYouSure: areYouSure,

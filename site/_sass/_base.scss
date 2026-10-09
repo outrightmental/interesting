@@ -234,7 +234,56 @@ a.unlock-else:focus-visible::before {
   animation: var(--rite-wax, matte-in) var(--motion-matte-in, var(--motion-medium)) var(--ease-matte-in, var(--ease-stair)) both;
 }
 
-// Waning: the plate goes back down the ladder (the underline steps home by its transition).
+// Waning: the underline comes home down a stair of its own cuts (a transition cannot start from
+// where an animation left a value, so the way home is keyframes too) and the plate goes back down
+// the ladder.
+.prose a:not(.action).is-waning,
+.tagline a:not(.action).is-waning,
+.page-purpose a:not(.action).is-waning,
+.pages a:not(.action).is-waning,
+.orientations a:not(.action).is-waning,
+.panel-note a:not(.action).is-waning,
+.section-note a:not(.action).is-waning,
+.current a:not(.action).is-waning,
+.unlock-note a:not(.action).is-waning,
+a.unlock-else.is-waning {
+  animation: link-under-out var(--motion-link-under-out, var(--motion-short)) var(--ease-link-under-out, var(--ease-stair)) both;
+}
+
+@keyframes link-under-out {
+  0%, 29.9% {
+    text-decoration-line: underline;
+    text-decoration-style: solid;
+    text-decoration-thickness: 2px;
+    text-underline-offset: 0.2em;
+    text-decoration-color: var(--md-sys-color-primary);
+  }
+
+  30%, 54.9% {
+    text-decoration-line: underline;
+    text-decoration-style: dashed;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 0.05em;
+    text-decoration-color: var(--md-sys-color-tertiary);
+  }
+
+  55%, 79.9% {
+    text-decoration-line: underline;
+    text-decoration-style: dotted;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 0.25em;
+    text-decoration-color: color-mix(in oklab, var(--md-sys-color-primary) 55%, transparent);
+  }
+
+  80%, 100% {
+    text-decoration-line: underline;
+    text-decoration-style: solid;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 0.15em;
+    text-decoration-color: color-mix(in oklab, var(--md-sys-color-primary) 55%, transparent);
+  }
+}
+
 .prose a:not(.action).is-waning::before,
 .tagline a:not(.action).is-waning::before,
 .page-purpose a:not(.action).is-waning::before,
@@ -272,7 +321,42 @@ a.unlock-else.is-stamping,
 .current a:not(.action):active,
 .unlock-note a:not(.action):active,
 a.unlock-else:active {
-  animation: var(--rite-stamp, rite-stamp) var(--motion-rite-stamp, var(--motion-short)) var(--ease-rite-stamp, var(--ease-flicker)) both;
+  // The composed stamp dips a box, and a line of words is no box (transform does not apply to an
+  // inline): so the words themselves dip in a link's own terms beside it -- the ink, the rule
+  // doubled and pulled in, the letters spread, in cuts -- and spring back.
+  animation:
+    var(--rite-stamp, rite-stamp) var(--motion-rite-stamp, var(--motion-short)) var(--ease-rite-stamp, var(--ease-flicker)) both,
+    link-stamp var(--motion-link-stamp, var(--motion-short)) var(--ease-link-stamp, var(--ease-flicker)) both;
+}
+
+@keyframes link-stamp {
+  0%, 44.9% {
+    color: var(--md-sys-color-tertiary);
+    text-decoration-style: double;
+    text-underline-offset: 0.05em;
+    letter-spacing: 0.02em;
+  }
+
+  45%, 69.9% {
+    color: var(--md-sys-color-on-surface);
+    text-decoration-style: solid;
+    text-underline-offset: 0.2em;
+    letter-spacing: 0.01em;
+  }
+
+  70%, 84.9% {
+    color: var(--md-sys-color-tertiary);
+    text-decoration-style: double;
+    text-underline-offset: 0.1em;
+    letter-spacing: 0;
+  }
+
+  85%, 100% {
+    color: var(--md-sys-color-primary);
+    text-decoration-style: solid;
+    text-underline-offset: 0.2em;
+    letter-spacing: 0;
+  }
 }
 
 .prose a:not(.action).is-stamping::before,
@@ -384,8 +468,18 @@ svg {
     scroll-behavior: auto;
   }
 
-  // A link in the words is simply underlined, plated when hovered, and nothing climbs or stamps.
-  #{$word-links},
+  // A link in the words is simply underlined, plated when hovered, and nothing climbs or stamps:
+  // every state is named, at the specificity of the rule it stills, so the stillness wins.
+  .prose a:not(.action),
+  .tagline a:not(.action),
+  .page-purpose a:not(.action),
+  .pages a:not(.action),
+  .orientations a:not(.action),
+  .panel-note a:not(.action),
+  .section-note a:not(.action),
+  .current a:not(.action),
+  .unlock-note a:not(.action),
+  a.unlock-else,
   .prose a:not(.action)::before,
   .tagline a:not(.action)::before,
   .page-purpose a:not(.action)::before,
@@ -395,7 +489,127 @@ svg {
   .section-note a:not(.action)::before,
   .current a:not(.action)::before,
   .unlock-note a:not(.action)::before,
-  a.unlock-else::before {
+  a.unlock-else::before,
+  .prose a:not(.action).is-waxing,
+  .prose a:not(.action):hover,
+  .prose a:not(.action):focus-visible,
+  .prose a:not(.action).is-waning,
+  .prose a:not(.action).is-stamping,
+  .prose a:not(.action):active,
+  .tagline a:not(.action).is-waxing,
+  .tagline a:not(.action):hover,
+  .tagline a:not(.action):focus-visible,
+  .tagline a:not(.action).is-waning,
+  .tagline a:not(.action).is-stamping,
+  .tagline a:not(.action):active,
+  .page-purpose a:not(.action).is-waxing,
+  .page-purpose a:not(.action):hover,
+  .page-purpose a:not(.action):focus-visible,
+  .page-purpose a:not(.action).is-waning,
+  .page-purpose a:not(.action).is-stamping,
+  .page-purpose a:not(.action):active,
+  .pages a:not(.action).is-waxing,
+  .pages a:not(.action):hover,
+  .pages a:not(.action):focus-visible,
+  .pages a:not(.action).is-waning,
+  .pages a:not(.action).is-stamping,
+  .pages a:not(.action):active,
+  .orientations a:not(.action).is-waxing,
+  .orientations a:not(.action):hover,
+  .orientations a:not(.action):focus-visible,
+  .orientations a:not(.action).is-waning,
+  .orientations a:not(.action).is-stamping,
+  .orientations a:not(.action):active,
+  .panel-note a:not(.action).is-waxing,
+  .panel-note a:not(.action):hover,
+  .panel-note a:not(.action):focus-visible,
+  .panel-note a:not(.action).is-waning,
+  .panel-note a:not(.action).is-stamping,
+  .panel-note a:not(.action):active,
+  .section-note a:not(.action).is-waxing,
+  .section-note a:not(.action):hover,
+  .section-note a:not(.action):focus-visible,
+  .section-note a:not(.action).is-waning,
+  .section-note a:not(.action).is-stamping,
+  .section-note a:not(.action):active,
+  .current a:not(.action).is-waxing,
+  .current a:not(.action):hover,
+  .current a:not(.action):focus-visible,
+  .current a:not(.action).is-waning,
+  .current a:not(.action).is-stamping,
+  .current a:not(.action):active,
+  .unlock-note a:not(.action).is-waxing,
+  .unlock-note a:not(.action):hover,
+  .unlock-note a:not(.action):focus-visible,
+  .unlock-note a:not(.action).is-waning,
+  .unlock-note a:not(.action).is-stamping,
+  .unlock-note a:not(.action):active,
+  a.unlock-else.is-waxing,
+  a.unlock-else:hover,
+  a.unlock-else:focus-visible,
+  a.unlock-else.is-waning,
+  a.unlock-else.is-stamping,
+  a.unlock-else:active,
+  .prose a:not(.action).is-waxing::before,
+  .prose a:not(.action):hover::before,
+  .prose a:not(.action):focus-visible::before,
+  .prose a:not(.action).is-waning::before,
+  .prose a:not(.action).is-stamping::before,
+  .prose a:not(.action):active::before,
+  .tagline a:not(.action).is-waxing::before,
+  .tagline a:not(.action):hover::before,
+  .tagline a:not(.action):focus-visible::before,
+  .tagline a:not(.action).is-waning::before,
+  .tagline a:not(.action).is-stamping::before,
+  .tagline a:not(.action):active::before,
+  .page-purpose a:not(.action).is-waxing::before,
+  .page-purpose a:not(.action):hover::before,
+  .page-purpose a:not(.action):focus-visible::before,
+  .page-purpose a:not(.action).is-waning::before,
+  .page-purpose a:not(.action).is-stamping::before,
+  .page-purpose a:not(.action):active::before,
+  .pages a:not(.action).is-waxing::before,
+  .pages a:not(.action):hover::before,
+  .pages a:not(.action):focus-visible::before,
+  .pages a:not(.action).is-waning::before,
+  .pages a:not(.action).is-stamping::before,
+  .pages a:not(.action):active::before,
+  .orientations a:not(.action).is-waxing::before,
+  .orientations a:not(.action):hover::before,
+  .orientations a:not(.action):focus-visible::before,
+  .orientations a:not(.action).is-waning::before,
+  .orientations a:not(.action).is-stamping::before,
+  .orientations a:not(.action):active::before,
+  .panel-note a:not(.action).is-waxing::before,
+  .panel-note a:not(.action):hover::before,
+  .panel-note a:not(.action):focus-visible::before,
+  .panel-note a:not(.action).is-waning::before,
+  .panel-note a:not(.action).is-stamping::before,
+  .panel-note a:not(.action):active::before,
+  .section-note a:not(.action).is-waxing::before,
+  .section-note a:not(.action):hover::before,
+  .section-note a:not(.action):focus-visible::before,
+  .section-note a:not(.action).is-waning::before,
+  .section-note a:not(.action).is-stamping::before,
+  .section-note a:not(.action):active::before,
+  .current a:not(.action).is-waxing::before,
+  .current a:not(.action):hover::before,
+  .current a:not(.action):focus-visible::before,
+  .current a:not(.action).is-waning::before,
+  .current a:not(.action).is-stamping::before,
+  .current a:not(.action):active::before,
+  .unlock-note a:not(.action).is-waxing::before,
+  .unlock-note a:not(.action):hover::before,
+  .unlock-note a:not(.action):focus-visible::before,
+  .unlock-note a:not(.action).is-waning::before,
+  .unlock-note a:not(.action).is-stamping::before,
+  .unlock-note a:not(.action):active::before,
+  a.unlock-else.is-waxing::before,
+  a.unlock-else:hover::before,
+  a.unlock-else:focus-visible::before,
+  a.unlock-else.is-waning::before,
+  a.unlock-else.is-stamping::before,
+  a.unlock-else:active::before {
     animation: none;
     transition: none;
   }

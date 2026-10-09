@@ -110,7 +110,7 @@
   --matte-fill: repeating-linear-gradient(45deg, currentColor 0 1px, transparent 1px 4px);
   --matte-fill-size: auto;
   // The top of the ladder: the fill as a mask, so a surface that has arrived rests patterned.
-  --matte-top: repeating-linear-gradient(45deg, #000 0 1px, transparent 1px 4px), linear-gradient(#000, #000);
+  --matte-top: repeating-linear-gradient(45deg, #000 0 1px, transparent 1px 4px);
   --matte-kind: scan;
   // The durations: rolled with a little jitter and scaled by the mood's tempo, these standing
   // until the script has rolled. --motion-turn is the slow ring's one turn (_rite.scss).
