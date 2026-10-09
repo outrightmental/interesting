@@ -1,0 +1,83 @@
+// The cut (README: "Motion axiom"): how a surface on this site changes. Not by a fade and not
+// through a pattern: by ONE clean edge that steps across it -- a slice (a straight edge at an
+// angle) or a curve (a circle round a point) -- chosen for a reason, in a few treads that always
+// go forward. A surface that stays changed rests as two shades of its colour split by its edge.
+//
+//     @use 'cut';
+//     .thing::after {
+//       background: cut.shades(currentColor);      // two shades, split through the centre
+//       mask: cut.slice();                         // what the slice has passed
+//       @include cut.play(in, wax, medium);        // the slice steps across in treads
+//     }
+//
+// The edge moves by --cut (registered in _tokens.scss, not inherited): cut-in steps it from 0% to
+// 100%, cut-out back. The treads are --ease-<rite> and the length --motion-<rite>, which
+// js/motion.js writes on the element for each movement it starts (cut(), wax(), arrive() ...),
+// with the family's baked stair and the page's duration behind them for a page with no script.
+// The angle is --cut-angle (the register's, or the pointer's approach for a hover), the point of
+// a curve --cut-x and --cut-y (where a press landed), a set control's curve --seal-x and --seal-y.
+// An arrival moves behind a slice at --arrive-angle (the direction it travels) and a leaving one
+// behind --leave-angle, and both move by `translate` in the same treads (lift-in, lift-out), so
+// the position never glides and never fights a transform of the element's own.
+
+// What a slice at `$angle` has passed at --cut: black behind the edge, nothing beyond it.
+@function slice($angle: var(--cut-angle, 112deg)) {
+  @return linear-gradient(#{$angle}, #000 var(--cut, 0%), transparent var(--cut, 0%));
+}
+
+// What a curve round (`$x`, `$y`) has passed at --cut: a disc growing from the point to the
+// farthest corner.
+@function curve($x: var(--cut-x, 50%), $y: var(--cut-y, 50%)) {
+  @return radial-gradient(circle farthest-corner at #{$x} #{$y}, #000 var(--cut, 0%), transparent var(--cut, 0%));
+}
+
+// A solid in two shades, split by a slice through its centre: $color, and $color at $b of itself.
+@function shades($color: currentColor, $b: 45%, $angle: var(--cut-angle, 112deg)) {
+  @return linear-gradient(#{$angle}, #{$color} 50%, color-mix(in oklab, #{$color} #{$b}, transparent) 50%);
+}
+
+// A solid in two shades, split by a curve round (`$x`, `$y`): $color inside, the lighter outside.
+@function shades-curve($color: currentColor, $b: 45%, $x: var(--seal-x, 18%), $y: var(--seal-y, 82%), $r: 58%) {
+  @return radial-gradient(circle farthest-corner at #{$x} #{$y}, #{$color} #{$r}, color-mix(in oklab, #{$color} #{$b}, transparent) #{$r});
+}
+
+// The edge stepping across, in (0% to 100%) or out (back to 0%), in the rite's treads.
+@mixin play($dir, $rite, $base: medium, $family: stair) {
+  animation: cut-#{$dir} var(--motion-#{$rite}, var(--motion-#{$base})) var(--ease-#{$rite}, var(--ease-#{$family})) both;
+}
+
+// An arrival: the slice it comes in behind and the way it comes, in one stair.
+@mixin develop($rite: develop, $base: long, $family: arrive) {
+  mask: slice(var(--arrive-angle, 0deg));
+  animation:
+    cut-in var(--motion-#{$rite}, var(--motion-#{$base})) var(--ease-#{$rite}, var(--ease-#{$family})) both,
+    lift-in var(--motion-#{$rite}, var(--motion-#{$base})) var(--ease-#{$rite}, var(--ease-#{$family})) both;
+}
+
+// A leaving: the slice it goes behind and the way it goes, in one stair.
+@mixin unmake($rite: unmake, $base: medium, $family: leave) {
+  mask: slice(var(--leave-angle, 0deg));
+  animation:
+    cut-out var(--motion-#{$rite}, var(--motion-#{$base})) var(--ease-#{$rite}, var(--ease-#{$family})) both,
+    lift-out var(--motion-#{$rite}, var(--motion-#{$base})) var(--ease-#{$rite}, var(--ease-#{$family})) both;
+}
+
+@keyframes cut-in {
+  from { --cut: 0%; }
+  to { --cut: 100%; }
+}
+
+@keyframes cut-out {
+  from { --cut: 100%; }
+  to { --cut: 0%; }
+}
+
+@keyframes lift-in {
+  from { translate: var(--arrive-x, 0px) var(--arrive-y, 22px); }
+  to { translate: 0 0; }
+}
+
+@keyframes lift-out {
+  from { translate: 0 0; }
+  to { translate: var(--leave-x, 0px) var(--leave-y, -16px); }
+}

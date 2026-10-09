@@ -255,37 +255,37 @@ export function light(v) {
    with no variant.js beside it; RealSiteTest holds the two copies to be one. */
 /* ---- the rite: how a piece moves -----------------------------------------------------------
 
-   Nothing a module draws moves along a formula either (README: "Motion axiom"). A selection
-   does not fade to another opacity, a wheel does not turn evenly, a solved thing does not wash
-   in: the piece's own movements are rolled, from its seed, so the same seed plays the same rite
-   and a different seed a different one. env.rite is that roll, handed to every module by every
-   env builder (js/feed.js, js/stage.js and the three harnesses):
+   Nothing a module draws moves along a formula either (README: "Motion axiom", the cut). A
+   selection does not fade to another opacity, a wheel does not turn evenly, a solved thing does
+   not wash in: each changes in a few treads, always forward, and a surface that changes changes by
+   its area behind ONE clean edge -- a slice at an angle, or a curve round a point -- never a
+   pattern, a noise or a scatter of cells. The piece's rite is rolled from its seed, so the same
+   seed plays the same rite and a different seed a different one. env.rite is that roll, handed to
+   every module by every env builder (js/feed.js, js/stage.js and the three harnesses):
 
-     rite.ease(t)           t -> y along a glitch of a curve: a hesitation, a surge, a stutter,
-                            a small overshoot and a settle; y may pass 1 a little on its way
-     rite.stair(t, n)       t stepped onto n uneven treads (the roll's own count when n is not
-                            given): what a thing changing its state moves by -- a highlight, an
-                            opacity, a size -- never a glide
-     rite.ratchet(t)        t turned in clicks, each with its own small backlash: how a wheel,
-                            a dial or a whole scene turns, never a smooth rotation
-     rite.flicker(t)        0 or 1: a thing arriving blinks on, drops out a rolled number of
-                            times and holds, never fades
-     rite.matte(x, y, k)    true where the piece's matte lets a surface through at coverage k
-                            (0..1), for the cell at column x, row y: a procedurally generated
-                            pattern -- noise, shards, scan lines, a dither, an iris, a grain --
-                            so a region that becomes selected (or stops being) changes by its
-                            area in that pattern and never by a fade. Tile a region in cells of
-                            a few pixels and fill the cells the matte lets through
+     rite.ease(t)           t -> y in a few treads that land: the first the longest way, each
+                            after it shorter -- what a thing travelling to a new place moves by
+     rite.stair(t, n)       t stepped onto n even treads after a hold (the roll's own count when n
+                            is not given): what a thing changing its state moves by
+     rite.ratchet(t)        t turned in even clicks, a clock's: how a wheel, a dial or a whole
+                            scene turns, never a smooth rotation (rite.turn is the same)
+     rite.flicker(t)        0 or 1: a thing arriving is cut on at the roll's moment and stays
+     rite.series(t, n)      the tread reached at t, 0 to n: a counter, a notch
+     rite.kind, rite.angle  the piece's edge: 'slice' (a straight edge at `angle` degrees, 0 up,
+                            90 right) or 'curve' (a circle grown from rite.origin, a corner or an
+                            edge's middle of the box, as fractions) -- one per piece, its signature
      rite.paint(g, x, y, w, h, k, style)
-                            the cells of that rect the matte lets through at coverage k, filled
-                            through the context g (in rite.cell px), so no module writes the
-                            cell loop itself; style, if given, is the fillStyle to use
-     rite.series(t, n)      the tread reached at t, 0 to n: a flicker series, a counter, a notch
-     rite.turn(t)           the ratchet by another name, for what turns
-     rite.treads            the roll's tread count, rite.kind the matte's kind, rite.cell a
-                            cell size in px that suits the matte
-     rite.at(seed)          the same rite rolled afresh from another seed, for a module that
-                            wants one per thing it moves
+                            the part of the box (x, y, w, h) the edge has passed at coverage k
+                            (0..1), filled through g in one path: one polygon or one arc, never
+                            cells; style, if given, is the fillStyle
+     rite.region(g, x, y, w, h, k)
+                            the same part added to g's current path, to fill, stroke or clip with
+     rite.matte(u, v, k)    whether the point (u, v) of a box, in fractions of it, is behind the
+                            edge at coverage k
+     rite.treads            the roll's tread count
+     rite.at(seed)          the same edge (kind, angle, origin) with its treads and its moment
+                            rolled afresh from another seed: one per thing the piece moves, so
+                            every movement differs and every one cuts the way the piece does
 
    Pure arithmetic over the seed and nothing more: no browser, no clock, no Math.random. */
 
@@ -293,180 +293,174 @@ export function rite(seed) {
   return riteOf(seed);
 }
 
-function riteOf(seed) {
+const RITE_ANGLES = [90, 112, 135, 150, 180, 45, 0, 270];
+const RITE_ORIGINS = [[0, 1], [1, 1], [0, 0], [1, 0], [0.5, 1], [0, 0.5]];
+
+function riteOf(seed, edge) {
   const src = mulberry32(((seed >>> 0) ^ 0x9e3779b9) >>> 0);
   const rnd = () => src();
   const between = (a, b) => a + rnd() * (b - a);
-
-  // The curve: a polyline of [t, y] stops with a hesitation, a surge, a stutter and a settle.
-  const stops = [[0, 0]];
-  let t = between(0.04, 0.16);
-  let y = between(0, 0.08);
-  stops.push([t, y]);
-  const surge = between(0.5, 0.86);
-  t += between(0.16, 0.3);
-  y = surge;
-  stops.push([t, y]);
-  if (rnd() < 0.7) {
-    t += between(0.03, 0.08);
-    stops.push([t, surge - between(0.06, 0.22)]);
-  }
-  t += between(0.1, 0.22);
-  const over = rnd() < 0.6 ? 1 + between(0.02, 0.1) : 1;
-  stops.push([Math.min(t, 0.9), over]);
-  if (over > 1) stops.push([Math.min(t + between(0.04, 0.08), 0.96), 1 - between(0, 0.03)]);
-  stops.push([1, 1]);
-
-  const ease = (p) => {
-    const q = p <= 0 ? 0 : p >= 1 ? 1 : p;
-    for (let i = 1; i < stops.length; i++) {
-      if (q <= stops[i][0]) {
-        const [t0, y0] = stops[i - 1];
-        const [t1, y1] = stops[i];
-        return t1 === t0 ? y1 : y0 + (y1 - y0) * ((q - t0) / (t1 - t0));
-      }
-    }
-    return 1;
+  // The edge is the piece's signature: rolled once from its seed, kept by every at().
+  const sig = edge || {
+    kind: rnd() < 0.5 ? 'slice' : 'curve',
+    angle: RITE_ANGLES[Math.floor(rnd() * RITE_ANGLES.length)],
+    origin: RITE_ORIGINS[Math.floor(rnd() * RITE_ORIGINS.length)]
   };
+  if (edge) rnd();
 
-  // The treads: uneven widths, so no two steps of a stair are the same length.
-  const treads = 3 + Math.floor(rnd() * 6);
-  const widths = [];
-  let sum = 0;
-  for (let i = 0; i < treads; i++) {
-    const w = between(0.4, 1.6);
-    widths.push(w);
-    sum += w;
-  }
-  const edges = [0];
-  for (let i = 0; i < treads; i++) edges.push(edges[i] + widths[i] / sum);
+  // The treads: a hold, then evenly spaced jumps.
+  const treads = 3 + Math.floor(rnd() * 3);
+  const first = between(0.18, 0.32);
+  const last = between(0.82, 0.92);
+  const momentsFor = (n) => {
+    const out = [];
+    for (let i = 0; i < n; i++) out.push(n === 1 ? last : first + (last - first) * (i / (n - 1)));
+    return out;
+  };
+  const clamp01 = (p) => (p <= 0 ? 0 : p >= 1 ? 1 : p);
   const stair = (p, n) => {
-    const q = p <= 0 ? 0 : p >= 1 ? 1 : p;
+    const q = clamp01(p);
     if (q >= 1) return 1;
-    if (n && n !== treads) {
-      // Another count: the same unevenness, re-sampled.
-      const k = Math.max(1, Math.floor(n));
-      let i = 0;
-      while (i < k && q >= edgeAt(i + 1, k)) i++;
-      return i / k;
-    }
+    const k = Math.max(1, Math.floor(n || treads));
+    const moments = momentsFor(k);
     let i = 0;
-    while (i < treads - 1 && q >= edges[i + 1]) i++;
-    return i / (treads - 1 || 1);
-  };
-  const edgeAt = (i, k) => {
-    // Edges for a count not the roll's own: the roll's widths, repeated, scaled to k treads.
-    let total = 0;
-    for (let j = 0; j < k; j++) total += widths[j % treads];
-    let acc = 0;
-    for (let j = 0; j < i; j++) acc += widths[j % treads];
-    return acc / total;
+    while (i < k && moments[i] <= q) i++;
+    return i / k;
   };
 
-  // The ratchet: the stair with a little backlash after each click, so a wheel that turns
-  // settles into every tooth.
-  const backlash = between(0.004, 0.03);
-  const ratchet = (p) => {
-    const q = p <= 0 ? 0 : p >= 1 ? 1 : p;
-    if (q >= 1) return 1;
-    let i = 0;
-    while (i < treads - 1 && q >= edges[i + 1]) i++;
-    const base = i / (treads - 1 || 1);
-    const into = (q - edges[i]) / ((edges[i + 1] || 1) - edges[i]);
-    // No backlash before the first click: a wheel at rest is at rest.
-    // The backlash settles in three held steps, never a decay run through.
-    const settle = into < 0.1 ? 1 : into < 0.2 ? 0.6 : into < 0.3 ? 0.25 : 0;
-    const kick = i > 0 ? settle * backlash * (i % 2 ? -1 : 1) : 0;
-    return Math.max(0, Math.min(1, base + kick));
-  };
-
-  // The flicker: on from a rolled moment, with a few dropouts before it holds.
-  const onAt = between(0.05, 0.3);
-  const drops = [];
-  const nDrops = Math.floor(rnd() * 4);
-  for (let i = 0; i < nDrops; i++) {
-    const a = between(onAt, 0.85);
-    drops.push([a, a + between(0.01, 0.06)]);
+  // The landing: the first tread the longest way, each after it shorter and held longer.
+  const ratio = between(0.42, 0.62);
+  const rises = [];
+  let total = 0;
+  for (let i = 0; i < treads; i++) {
+    const r = Math.pow(ratio, i);
+    rises.push(r);
+    total += r;
   }
-  const flicker = (p) => {
-    const q = p <= 0 ? 0 : p >= 1 ? 1 : p;
-    if (q < onAt) return 0;
-    for (let i = 0; i < drops.length; i++) if (q >= drops[i][0] && q < drops[i][1]) return 0;
-    return 1;
+  const lands = [];
+  let gap = between(0.08, 0.16);
+  let at = gap;
+  for (let i = 0; i < treads; i++) {
+    lands.push(at);
+    gap *= between(1.25, 1.55);
+    at += gap;
+  }
+  const scale = between(0.82, 0.92) / lands[treads - 1];
+  for (let i = 0; i < treads; i++) lands[i] *= scale;
+  const ease = (p) => {
+    const q = clamp01(p);
+    if (q >= 1) return 1;
+    let y = 0;
+    for (let i = 0; i < treads && lands[i] <= q; i++) y += rises[i] / total;
+    return Math.min(1, y);
   };
 
-  // The matte: a field over cells, thresholded by coverage, in one of six patterns.
-  const KINDS = ['noise', 'noise', 'shards', 'scan', 'dither', 'iris', 'grain'];
-  const kind = KINDS[Math.floor(rnd() * KINDS.length)];
-  const salt = Math.floor(rnd() * 0x7fffffff);
-  const block = 1 + Math.floor(rnd() * 3);
-  const angle = between(0, Math.PI);
-  const period = 3 + Math.floor(rnd() * 6);
-  const cx = between(0.2, 0.8);
-  const cy = between(0.2, 0.8);
-  const span = Math.round(between(10, 36));
-  const cell = kind === 'grain' ? 2 : kind === 'dither' ? 3 : 2 + Math.floor(rnd() * 4);
-  const field = (x, y) => {
-    let h = (Math.imul(x | 0, 374761393) + Math.imul(y | 0, 668265263) + salt) | 0;
-    h = Math.imul(h ^ (h >>> 13), 1274126177);
-    return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+  // The ratchet: even clicks, evenly spaced -- a clock's, never a slip.
+  const clicks = treads + 1;
+  const ratchet = (p) => {
+    const q = clamp01(p);
+    if (q >= 1) return 1;
+    return Math.min(1, Math.floor(q * (clicks + 1)) / clicks);
   };
-  const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
-  const matte = (x, y, k) => {
-    const c = k <= 0 ? 0 : k >= 1 ? 1 : k;
+
+  // The flicker: cut on at the roll's moment, and on from then.
+  const onAt = between(0.12, 0.4);
+  const flicker = (p) => (clamp01(p) >= onAt && p > 0 ? 1 : 0);
+
+  const series = (p, n) => {
+    const k = Math.max(1, Math.floor(n || treads));
+    return Math.round(stair(p, k) * k);
+  };
+
+  // The edge in a box: the slice's direction (0deg up, 90deg right), or the curve's centre.
+  const rad = (sig.angle * Math.PI) / 180;
+  const dx = Math.sin(rad);
+  const dy = -Math.cos(rad);
+  // How far along the slice's direction a point of the box is, 0 at the corner it starts from
+  // and 1 at the corner it ends on; and how far from the curve's centre, 1 at the farthest corner.
+  const reach = (px, py, x, y, w, h) => {
+    if (sig.kind === 'slice') {
+      const half = (Math.abs(dx) * w + Math.abs(dy) * h) / 2 || 1;
+      return ((px - (x + w / 2)) * dx + (py - (y + h / 2)) * dy + half) / (2 * half);
+    }
+    const ox = x + sig.origin[0] * w;
+    const oy = y + sig.origin[1] * h;
+    const far = Math.max(Math.hypot(x - ox, y - oy), Math.hypot(x + w - ox, y - oy), Math.hypot(x - ox, y + h - oy), Math.hypot(x + w - ox, y + h - oy)) || 1;
+    return Math.hypot(px - ox, py - oy) / far;
+  };
+  const matte = (u, v, k) => {
+    const c = clamp01(k);
     if (c <= 0) return false;
     if (c >= 1) return true;
-    let v;
-    if (kind === 'noise') v = field(Math.floor(x / block), Math.floor(y / block)) * 0.7 + field(x, y) * 0.3;
-    else if (kind === 'grain') v = field(x, y);
-    else if (kind === 'shards') {
-      const s = (x * Math.cos(angle) + y * Math.sin(angle)) / period;
-      v = field(Math.floor(s), Math.floor((y * Math.cos(angle) - x * Math.sin(angle)) / (period * 3)));
-    } else if (kind === 'scan') v = ((y % period) / period) * 0.8 + field(0, Math.floor(y / period)) * 0.2;
-    else if (kind === 'dither') v = (BAYER[((y & 3) << 2) | (x & 3)] + field(x >> 2, y >> 2) * 0.9) / 16;
-    else {
-      // An iris, or a field of them: one opens every `span` cells, from a centre of its own.
-      const dx = (((x % span) + span) % span) / span - cx;
-      const dy = (((y % span) + span) % span) / span - cy;
-      v = Math.min(1, Math.sqrt(dx * dx + dy * dy) / 0.72) * 0.85 + field(x, y) * 0.15;
-    }
-    return v < c;
+    return reach(u, v, 0, 0, 1, 1) < c;
   };
-
-
-  // What a module paints a matte with, so no module writes the cell loop: the cells of the rect
-  // (x, y, w, h) the matte lets through at coverage k, filled through the context handed in.
+  // The part of the box behind the edge, added to g's path: the box cut by the slice's line (a
+  // polygon of up to five corners), or the curve's disc.
+  const region = (g, x, y, w, h, k) => {
+    const c = clamp01(k);
+    if (!g || c <= 0) return;
+    if (c >= 1) {
+      g.rect(x, y, w, h);
+      return;
+    }
+    if (sig.kind === 'curve') {
+      const ox = x + sig.origin[0] * w;
+      const oy = y + sig.origin[1] * h;
+      const far = Math.max(Math.hypot(x - ox, y - oy), Math.hypot(x + w - ox, y - oy), Math.hypot(x - ox, y + h - oy), Math.hypot(x + w - ox, y + h - oy));
+      g.moveTo(ox + far * c, oy);
+      g.arc(ox, oy, far * c, 0, Math.PI * 2);
+      return;
+    }
+    const corners = [[x, y], [x + w, y], [x + w, y + h], [x, y + h]];
+    const inside = (pt) => reach(pt[0], pt[1], x, y, w, h) <= c;
+    const out = [];
+    for (let i = 0; i < 4; i++) {
+      const a = corners[i];
+      const b = corners[(i + 1) % 4];
+      const ra = reach(a[0], a[1], x, y, w, h);
+      const rb = reach(b[0], b[1], x, y, w, h);
+      if (ra <= c) out.push(a);
+      if ((ra <= c) !== (rb <= c)) {
+        const f = (c - ra) / (rb - ra);
+        out.push([a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f]);
+      }
+    }
+    if (out.length < 3 && !inside(corners[0])) return;
+    for (let i = 0; i < out.length; i++) {
+      if (i === 0) g.moveTo(out[i][0], out[i][1]);
+      else g.lineTo(out[i][0], out[i][1]);
+    }
+    g.closePath();
+  };
   const paint = (g, x, y, w, h, k, style) => {
-    const c = k <= 0 ? 0 : k >= 1 ? 1 : k;
+    const c = clamp01(k);
     if (c <= 0 || !g || typeof g.fillRect !== 'function') return;
     if (style != null) g.fillStyle = style;
     if (c >= 1) {
       g.fillRect(x, y, w, h);
       return;
     }
-    const size = Math.max(1, cell);
-    const cols = Math.ceil(w / size);
-    const rows = Math.ceil(h / size);
-    for (let r = 0; r < rows; r++) {
-      for (let q = 0; q < cols; q++) {
-        if (!matte(q, r, c)) continue;
-        const cx = x + q * size;
-        const cy = y + r * size;
-        g.fillRect(cx, cy, Math.min(size, x + w - cx), Math.min(size, y + h - cy));
-      }
+    if (sig.kind === 'curve') {
+      g.save();
+      g.beginPath();
+      g.rect(x, y, w, h);
+      g.clip();
+      g.beginPath();
+      region(g, x, y, w, h, c);
+      g.fill();
+      g.restore();
+      return;
     }
-  };
-  // The tread reached at p, 0 to n: a flicker series, a counter, a dial's notch.
-  const series = (p, n) => {
-    const k = Math.max(1, Math.floor(n || treads));
-    return Math.round(stair(p, k) * k);
+    g.beginPath();
+    region(g, x, y, w, h, c);
+    g.fill();
   };
 
   return {
-    ease, stair, ratchet, flicker, matte, paint, series,
+    ease, stair, ratchet, flicker, matte, paint, region, series,
     turn: ratchet,
-    treads, kind, cell, stops,
-    at: (other) => riteOf(((seed >>> 0) ^ (other >>> 0) ^ 0x51a7c0de) >>> 0)
+    treads, kind: sig.kind, angle: sig.angle, origin: sig.origin.slice(), cell: 4,
+    at: (other) => riteOf(((seed >>> 0) ^ (other >>> 0) ^ 0x51a7c0de) >>> 0, sig)
   };
 }
 /* rite:end */
