@@ -855,8 +855,8 @@ function routeTitle(p) {
   return 'the star\'s itinerary: ' + WORDS[p.moves.length] + ' steps';
 }
 
-function routeBlank(t) {
-  return { seen: 0, focus: -1, done: false, t: t || 0 };
+function routeBlank() {
+  return { seen: 0, from: 0, shownAt: null, shows: 0, focus: -1, focusAt: null, focuses: 0, done: false, t: 0 };
 }
 
 function routeScene(g, w, h, c, p, s, variant) {
@@ -866,7 +866,15 @@ function routeScene(g, w, h, c, p, s, variant) {
   const radius = Math.min(w, h) * 0.037 * v.scale;
   const point = (i) => ({ x: w * (0.16 + (i % 3) * 0.34), y: h * (0.18 + Math.floor(i / 3) * 0.25) });
   const trail = routeWalk(p);
-  const visible = s.done ? p.moves.length : s.seen;
+  // The trail, as far as it has been shown. Each landing a hint shows -- and at the solve, the rest
+  // of the route -- is drawn out from the star it leaves in the stair's treads, on a roll of that
+  // showing's own, and a star lights as the trail lands on it.
+  const target = s.done ? p.moves.length : s.seen;
+  const from = Math.min(s.from || 0, target);
+  const own = c.rite && s.shownAt != null ? c.rite.at(0x7a11 + (s.shows || 0)) : null;
+  const since = s.shownAt == null || !s.t ? 1 : Math.min(1, (s.t - s.shownAt) / 0.9);
+  const shown = from + (target - from) * (own ? own.stair(since) : 1);
+  const landed = Math.floor(shown + 1e-9);
   dark(g, w, h, c, v);
   write(g, 'start at star ' + (p.start + 1), w / 2, h * 0.055, fs, col.accent2, 'center', 600);
   g.strokeStyle = c.alpha(col.muted, 0.22);
@@ -886,23 +894,30 @@ function routeScene(g, w, h, c, p, s, variant) {
     }
   }
   g.stroke();
-  if (visible) {
+  if (shown > 0) {
     g.strokeStyle = col.accent2;
     g.lineWidth = Math.max(2, radius * 0.18);
     g.beginPath();
-    trail.slice(0, visible + 1).forEach((index, step) => {
-      const q = point(index);
-      if (step) g.lineTo(q.x, q.y);
-      else g.moveTo(q.x, q.y);
-    });
+    const first = point(trail[0]);
+    g.moveTo(first.x, first.y);
+    for (let step = 1; step <= Math.ceil(shown - 1e-9); step++) {
+      const a = point(trail[step - 1]);
+      const b = point(trail[step]);
+      const part = Math.min(1, shown - (step - 1));
+      g.lineTo(a.x + (b.x - a.x) * part, a.y + (b.y - a.y) * part);
+    }
     g.stroke();
   }
+  // The star marked as the last is lit at once, as the press that marked it, and its ring widens
+  // out of it a tread at a time on a roll of that mark's own.
+  const ringRite = c.rite && s.focusAt != null ? c.rite.at(0x2f0c + (s.focuses || 0)) : null;
+  const ringAge = s.focusAt == null || !s.t ? 1 : Math.min(1, (s.t - s.focusAt) / 0.7);
+  const ringOut = ringRite ? ringRite.stair(ringAge) : 1;
   for (let i = 0; i < 9; i++) {
     const q = point(i);
     const r = radius * (0.75 + p.lights[i] * 0.045);
-    const lit = i === p.start || i === s.focus || trail.slice(1, visible + 1).includes(i);
-    const shift = breath(c.rite, s.t, 3.7, i, 0.06);
-    glow(g, c, q.x, q.y, r * 2.3, lit ? col.accent2 : col.accent, 0.22 + (lit ? 0.18 : 0) + shift);
+    const lit = i === p.start || i === s.focus || trail.slice(1, landed + 1).includes(i);
+    glow(g, c, q.x, q.y, r * 2.3, lit ? col.accent2 : col.accent, 0.22 + (lit ? 0.18 : 0));
     g.fillStyle = lit ? col.accent2 : c.mix(col.accent, col.fg, p.lights[i] / 9);
     g.beginPath();
     g.arc(q.x, q.y, r, 0, Math.PI * 2);
@@ -914,7 +929,7 @@ function routeScene(g, w, h, c, p, s, variant) {
       g.lineWidth = 1.5;
       g.setLineDash([3, 3]);
       g.beginPath();
-      g.arc(q.x, q.y, r * 1.55, 0, Math.PI * 2);
+      g.arc(q.x, q.y, r * (1.15 + 0.4 * ringOut), 0, Math.PI * 2);
       g.stroke();
       g.setLineDash([]);
     }
@@ -923,8 +938,8 @@ function routeScene(g, w, h, c, p, s, variant) {
   write(g, 'brightness is below each star', w / 2, h * 0.93, fs, c.alpha(col.fg, 0.9), 'center', 500);
 }
 
-function routePreview(g, w, h, env, p, t) {
-  routeScene(g, w, h, env, p, routeBlank(t), env.variant);
+function routePreview(g, w, h, env, p) {
+  routeScene(g, w, h, env, p, routeBlank(), env.variant);
 }
 
 function routePiece(env, p) {
@@ -932,7 +947,14 @@ function routePiece(env, p) {
   const trail = routeWalk(p);
   const end = trail[trail.length - 1] + 1;
   const sum = trail.slice(1).reduce((total, index) => total + p.lights[index], 0);
-  const s = routeBlank(0);
+  const s = routeBlank();
+  // A new star marked as the last one: its ring widens on a roll of this mark's own.
+  const mark = (i) => {
+    if (i === s.focus) return;
+    s.focus = i;
+    s.focusAt = s.t;
+    s.focuses += 1;
+  };
   const draw = (c) => routeScene(c.g, c.w, c.h, c, p, s, env.variant);
   return {
     title: routeTitle(p),
@@ -961,13 +983,17 @@ function routePiece(env, p) {
     },
     apply(id, value, c) {
       if (id === 'end') {
-        s.focus = Number(value) - 1;
+        mark(Number(value) - 1);
         c.status('Star ' + value + ' marked as the last star.');
       }
       if (id === 'sum') c.status('You counted ' + value + ' brightness across the landings.');
       if (id === 'hint') {
         if (s.seen < helps && s.seen < p.moves.length) {
+          // The trail is drawn out from where it stands to the landing shown.
+          s.from = s.seen;
           s.seen += 1;
+          s.shownAt = s.t;
+          s.shows += 1;
           c.hint();
           const at = trail[s.seen];
           c.status('After step ' + s.seen + ', the route reaches star ' + (at + 1) + ', brightness ' + p.lights[at] + '.');
@@ -979,7 +1005,7 @@ function routePiece(env, p) {
       for (let i = 0; i < 9; i++) {
         if (Math.abs(x - (0.16 + (i % 3) * 0.34)) < 0.12
             && Math.abs(y - (0.18 + Math.floor(i / 3) * 0.25)) < 0.1) {
-          s.focus = i;
+          mark(i);
           c.set('end', i + 1);
           c.status('Star ' + (i + 1) + ' has brightness ' + p.lights[i] + '; marked as the last star.');
           draw(c);
@@ -993,7 +1019,11 @@ function routePiece(env, p) {
       draw(c);
     },
     end(c) {
+      // The rest of the route is drawn out from the last landing shown.
+      s.from = s.seen;
       s.done = true;
+      s.shownAt = s.t;
+      s.shows += 1;
       c.status('The route ends at star ' + end + '; its landings add to ' + sum + '. The chart stays open to read again.');
       draw(c);
     }
@@ -1003,9 +1033,8 @@ function routePiece(env, p) {
 /* ---- the module ----------------------------------------------------------------------------- */
 
 // Which asking this card is, and its plan, dealt once from the env's seeded stream and kept with
-// that env: every pass over one card -- the still picture, every breathing frame, the spark --
-// asks here, so they are all one card rather than a re-roll per frame (see js/feed.js on what
-// animate owes a card).
+// that env: every pass over one card -- the still picture and the spark -- asks here, so they are
+// one card rather than a re-roll per pass.
 const dealt = new WeakMap();
 function deal(env) {
   let got = dealt.get(env);
@@ -1025,19 +1054,8 @@ export default {
       // The card's rim is turned as far as the configuration turns it, so a repeat is the same
       // wheel seen at another setting.
       wheelScene(g, w, h, env, p, { angle: env.variant.turn * Math.PI * 2, spin: 0 }, env.variant);
-    } else if (p.kind === 'route') routePreview(g, w, h, env, p, 0);
+    } else if (p.kind === 'route') routePreview(g, w, h, env, p);
     else omensPreview(g, w, h, env, p);
-  },
-  // The card at rest breathes: the pointer stars swell and settle and the drawn sky glimmers, so
-  // a card rewards a second look without re-dealing anything. At t = 0 it is exactly the still
-  // picture paint left, and a visitor who asked for stillness gets that picture and no motion.
-  animate(g, w, h, env, t) {
-    if (env.reduced) return false;
-    const p = deal(env);
-    if (p.kind === 'wheel') {
-      wheelScene(g, w, h, env, p, { angle: env.variant.turn * Math.PI * 2, spin: 0, t }, env.variant);
-    } else if (p.kind === 'route') routePreview(g, w, h, env, p, t);
-    else omensScene(g, w, h, env, p, { picked: [], reveal: false, t }, env.variant);
   },
   spark(env) {
     const p = deal(env);
@@ -1056,7 +1074,7 @@ export default {
       quote: 'start at star ' + (p.start + 1) + '; ' + p.moves.join('  '),
       text: 'Follow the steps across the chart. Name the last star and add the brightness of the stars you land on.',
       aspect: '1 / 1',
-      paint: (g, w, h, cardEnv) => routePreview(g, w, h, cardEnv, p, 0),
+      paint: (g, w, h, cardEnv) => routePreview(g, w, h, cardEnv, p),
       of: p
     };
     return {

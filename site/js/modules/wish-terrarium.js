@@ -55,21 +55,44 @@ function asked(env) {
 /* ---- the rite: how this module moves ------------------------------------------------------- */
 
 /* env.rite (ctx.rite inside a piece) is the piece's own roll of how it moves (js/variant.js;
-   js/stage.js, "The rite"). Nothing drawn under this glass moves along a formula or cuts without
-   a rite: the breeze that leans a stem is a stair climbed and come back down, never a sine; a
-   plant marked for water is a surface that develops -- the ground under it and the air about it
-   fill cell by cell through the piece's own matte, its drops fall in treads, its glow thickens in
-   treads -- and a plant unmarked gives that back down the same treads; a hint and a rank blink on
-   with rite.flicker; a bloom opens on its own stair and its petals turn in rite.ratchet's clicks;
-   the fog that comes over a solved glass develops through the matte, densest at the top, and its
-   drips creep down in treads. Every change is read against the piece's own clock, s.t, which
-   frame() advances: a change made at `since` has come came() of its way, which is 1 at once for a
-   visitor who asked for less motion, and for whatever stood there from the start (since < 0).
-   Each stem, dapple and drip moves on a roll of its own (rite.at), so no two step together. */
+   js/stage.js, "The rite"): one edge, a slice at an angle or a curve round a corner, which is the
+   piece's signature, and the few treads every change climbs, always forward. Nothing under this
+   glass moves along a formula, and nothing moves without a reason:
 
+     the breeze      comes through the vent, and only while it is open: a gust bows each stem away
+                     from the vent in a few treads and stands it up again in a few more, reaching
+                     the stem nearest the vent first. With the vent shut -- or in the stems'
+                     puzzle, which has none -- the air is still, and so are the stems.
+     a marked plant  changes by its area: the air over its bed and the wet ground at its foot are
+                     cut in behind the piece's edge as its stair climbs, its stem thickens on the
+                     same stair and its drops come one to a tread; unmarked, all of it goes back
+                     the way it came.
+     a moved stem    has the air over its bed cut in behind the edge and taken back the way it
+                     came, and its new rank cut on at its moment (rite.flicker: off, then on for
+                     good). A hint is cut on the same way.
+     a solved glass  blooms on each stem's own stair, left to right or oldest to youngest, and
+                     the fog comes over it behind the piece's edge, densest at the top pane; once
+                     it is there its drips run down the glass, each in treads of its own, and stay.
+
+   Every change is read against the piece's own clock, s.t, which frame() advances: a change made
+   at `since` has come came() of its way, which is 1 at once for a visitor who asked for less
+   motion, and for whatever stood there from the start (since < 0). Each stem and drip steps on a
+   roll of its own (rite.at, the same edge with its own treads), so no two step together. */
+
+// The rite when an env carries none: every change already made, the air still, and a surface that
+// is there at all is there whole.
 const STILL = {
-  ease: () => 1, stair: () => 1, ratchet: () => 0, flicker: () => 1, matte: () => true,
-  treads: 1, kind: 'none', cell: 4, at: () => STILL
+  ease: () => 1, stair: () => 1, ratchet: () => 1, flicker: () => 1, series: (t, n) => n || 1,
+  matte: () => true, treads: 1, kind: 'slice', angle: 90, origin: [0, 1],
+  region(g, x, y, w, h, k) {
+    if (k > 0) g.rect(x, y, w, h);
+  },
+  paint(g, x, y, w, h, k, style) {
+    if (k <= 0) return;
+    if (style != null) g.fillStyle = style;
+    g.fillRect(x, y, w, h);
+  },
+  at: () => STILL
 };
 
 function riteOf(env) {
@@ -102,19 +125,19 @@ function fract(x) {
   return x - Math.floor(x);
 }
 
-// A breath: up the stair and back down it, `period` seconds round, entered `offset` of the way
-// round -- uneven treads up and uneven treads down, never a cosine.
-function breath(rite, t, period, offset, n) {
-  const phase = fract(t / period + offset);
-  return phase < 0.5 ? rite.stair(phase * 2, n) : 1 - rite.stair((phase - 0.5) * 2, n);
+// The breeze through an open vent, as it leans a stem standing `far` of the glass's width from the
+// vent: a gust every GUST seconds, the stem bowing away in a few treads and standing up again in a
+// few more, and reaching a stem later the farther it stands from the vent, as a breeze would. 0 is
+// upright and 1 the gust's full lean; with no rite to step by, the air is still.
+const GUST = 6;
+function gust(rite, t, far) {
+  if (rite === STILL) return 0;
+  const phase = fract(t / GUST - far * 0.3);
+  return phase < 0.5 ? rite.stair(phase * 2) : 1 - rite.stair((phase - 0.5) * 2);
 }
 
-// A swing: the breath spread to -1..1, for a thing that leans one way and then the other.
-function swing(rite, t, period, offset) {
-  return breath(rite, t, period, offset) * 2 - 1;
-}
-
-// A pulse: a highlight that arrives up the stair and leaves back down it within one play.
+// A pulse: a highlight cut in up the stair and taken back down it, the way it came, within one
+// play -- two forward movements, with the stair's hold between them.
 function pulse(rite, p) {
   return p >= 1 ? 0 : p < 0.5 ? rite.stair(p * 2) : 1 - rite.stair((p - 0.5) * 2);
 }
@@ -124,36 +147,6 @@ function level(rite, s, on, onAt, offAt, span, reduced) {
   if (on) return rite.stair(came(s, onAt, span, reduced));
   if (offAt == null || offAt < 0) return 0;
   return 1 - rite.stair(came(s, offAt, span, reduced));
-}
-
-// The cells of a box that the matte lets through at coverage k, filled in the current fillStyle:
-// how a surface changes by its area. Cells are rite.cell px, coarser over a wide box so a frame
-// stays cheap, on a grid fixed to the canvas so the pattern holds still while it grows. `k` may be
-// a function of the cell's centre, for a surface denser in one place than another; `inside` keeps
-// the tiling to a shape within the box, and `across` is how many cells the box is at most (28
-// unless given).
-function develop(g, rite, x0, y0, bw, bh, k, inside, across) {
-  const fixed = typeof k === 'number';
-  if (fixed && k <= 0) return;
-  const cell = Math.max(rite.cell, Math.ceil(Math.max(bw, bh) / (across || 28)));
-  const cx0 = Math.floor(x0 / cell);
-  const cy0 = Math.floor(y0 / cell);
-  const cx1 = Math.ceil((x0 + bw) / cell);
-  const cy1 = Math.ceil((y0 + bh) / cell);
-  for (let cy = cy0; cy < cy1; cy++) {
-    for (let cx = cx0; cx < cx1; cx++) {
-      const px = cx * cell;
-      const py = cy * cell;
-      if (inside && !inside(px + cell / 2, py + cell / 2)) continue;
-      const c = fixed ? k : k(px + cell / 2, py + cell / 2);
-      if (c <= 0) continue;
-      if (c < 1 && !rite.matte(cx, cy, c)) continue;
-      // The cell, clipped to the box: the grid is the canvas's, the surface is the box's.
-      const qx = Math.max(px, x0);
-      const qy = Math.max(py, y0);
-      g.fillRect(qx, qy, Math.min(px + cell, x0 + bw) - qx, Math.min(py + cell, y0 + bh) - qy);
-    }
-  }
 }
 
 /* ---- drawing shared by both ---------------------------------------------------------------- */

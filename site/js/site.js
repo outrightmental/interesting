@@ -993,13 +993,17 @@
     }
   }
 
-  // Every slider says how full it is, so the M3 track can paint up to the handle.
+  // Every slider says how full it is, so the M3 track can paint up to the handle. Written only when
+  // it changes: every slider is read again after any change to the page, and a write of the same
+  // value would still ask the browser to restyle a slider that has not moved.
   function fillRange(input) {
     var min = Number(input.min === '' ? 0 : input.min);
     var max = Number(input.max === '' ? 100 : input.max);
     var value = Number(input.value);
     var pct = max > min ? ((value - min) / (max - min)) * 100 : 0;
-    input.style.setProperty('--range-pct', Math.max(0, Math.min(100, pct)).toFixed(2) + '%');
+    var fill = Math.max(0, Math.min(100, pct)).toFixed(2) + '%';
+    if (typeof input.style.getPropertyValue === 'function' && input.style.getPropertyValue('--range-pct') === fill) return;
+    input.style.setProperty('--range-pct', fill);
   }
 
   var fillPending = false;

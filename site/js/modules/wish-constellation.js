@@ -45,22 +45,37 @@ function asked(env) {
 /* ---- the rite: how this module moves ------------------------------------------------------- */
 
 /* env.rite (ctx.rite inside a piece) is the piece's own roll of how it moves (js/variant.js;
-   js/stage.js, "The rite"). Nothing drawn in this sky moves along a formula or cuts without a
-   rite: a light twinkles up a stair and back down it, never a sine; a light that is tapped or
-   hinted gets its ring in the ratchet's clicks and its word by a blink; the light under the
-   pointer is a halo that develops cell by cell through the piece's own matte and unmakes the same
-   way; a sky that is chosen fills through the matte, a sky marked as a decoy is veiled through it,
-   and the sky that turns out to be yours is lit through it with a flicker; the visitor's own sky,
-   once the puzzle is solved, flips in treads and turns in rite.ratchet's clicks to meet it; the
-   postcard's finale draws each light's travel in treads. Every change is read against the piece's
-   own clock, s.t, which frame() advances: a change made at `since` has come came() of its way,
-   which is 1 at once for a visitor who asked for less motion, and for whatever stood there from
-   the start (since < 0). Each light and each sky moves on a roll of its own (rite.at), so no two
-   step together. */
+   js/stage.js, "The rite"): a few treads, always forward, and one clean edge -- the piece's slice
+   or curve, its signature -- for any surface that changes. A light that is tapped or hinted gets
+   its ring in the ratchet's even clicks and its word cut on at its moment; the light last touched
+   has a halo cut in by the piece's edge, and the one touched before it gives its halo back the
+   same way, the region shrinking; a sky that is chosen is cut in by the edge and the one chosen
+   before it gives its fill back, a sky marked as a decoy is veiled by the edge, and the sky that
+   turns out to be yours is lit by it; the visitor's own sky, once the puzzle is solved, flips in
+   treads and turns in rite.ratchet's clicks to meet it; the postcard's finale draws each light's
+   travel in treads. A surface that stays changed rests as two shades of its colour split by the
+   edge through its middle, never a flat wash or a pattern. The lights themselves hold still: they
+   wait for nothing, so they do not twinkle -- and on the postcard a light that varied in size
+   could be read as a clue to its depth. Every change is read against the piece's own clock, s.t,
+   which frame() advances: a change made at `since` has come came() of its way, which is 1 at once
+   for a visitor who asked for less motion, and for whatever stood there from the start (since <
+   0). Each light and each sky moves on a roll of its own (rite.at), so no two step together, and
+   every roll keeps the piece's edge. */
 
+// The rite of a piece handed none: everything stands where it ends, and a surface is cut by a
+// plain upright slice from its left side.
 const STILL = {
-  ease: () => 1, stair: () => 1, ratchet: () => 0, flicker: () => 1, matte: () => true,
-  treads: 1, kind: 'none', cell: 4, at: () => STILL
+  ease: () => 1, stair: () => 1, ratchet: () => 1, turn: () => 1, flicker: () => 1,
+  treads: 1, kind: 'slice', angle: 90,
+  region: (g, x, y, w, h, k) => {
+    if (k > 0) g.rect(x, y, w * Math.min(1, k), h);
+  },
+  paint: (g, x, y, w, h, k, style) => {
+    if (k <= 0) return;
+    if (style != null) g.fillStyle = style;
+    g.fillRect(x, y, w * Math.min(1, k), h);
+  },
+  at: () => STILL
 };
 
 function riteOf(env) {
@@ -89,17 +104,6 @@ function came(s, since, span, reduced) {
   return Math.max(0, Math.min(1, (s.t - since) / span));
 }
 
-function fract(x) {
-  return x - Math.floor(x);
-}
-
-// A breath: up the stair and back down it, `period` seconds round, entered `offset` of the way
-// round -- uneven treads up and uneven treads down, never a cosine.
-function breath(rite, t, period, offset, n) {
-  const phase = fract(t / period + offset);
-  return phase < 0.5 ? rite.stair(phase * 2, n) : 1 - rite.stair((phase - 0.5) * 2, n);
-}
-
 // How far a thing that is `on` has come up its stair since onAt, or back down it since offAt.
 function level(rite, s, on, onAt, offAt, span, reduced) {
   if (on) return rite.stair(came(s, onAt, span, reduced));
@@ -107,43 +111,26 @@ function level(rite, s, on, onAt, offAt, span, reduced) {
   return 1 - rite.stair(came(s, offAt, span, reduced));
 }
 
-// The cells of a box that the matte lets through at coverage k, filled in the current fillStyle:
-// how a surface changes by its area. Cells are rite.cell px, coarser over a wide box so a frame
-// stays cheap, on a grid fixed to the canvas so the pattern holds still while it grows. `inside`
-// keeps the tiling to a shape within the box, and `across` is how many cells the box is at most
-// (28 unless given).
-function develop(g, rite, x0, y0, bw, bh, k, inside, across) {
+// A surface `k` of the way to being there, in the current fillStyle: the part of the box the
+// piece's edge has passed, and over the half behind the edge's middle a second coat of the same
+// colour. One edge moves while it comes or goes, and at rest it is two shades of one colour split
+// by that edge through the middle of the box. One path per coat.
+function cover(g, rite, x, y, w, h, k) {
   if (k <= 0) return;
-  const cell = Math.max(rite.cell, Math.ceil(Math.max(bw, bh) / (across || 28)));
-  const cx0 = Math.floor(x0 / cell);
-  const cy0 = Math.floor(y0 / cell);
-  const cx1 = Math.ceil((x0 + bw) / cell);
-  const cy1 = Math.ceil((y0 + bh) / cell);
-  for (let cy = cy0; cy < cy1; cy++) {
-    for (let cx = cx0; cx < cx1; cx++) {
-      const px = cx * cell;
-      const py = cy * cell;
-      if (inside && !inside(px + cell / 2, py + cell / 2)) continue;
-      if (k < 1 && !rite.matte(cx, cy, k)) continue;
-      // The cell, clipped to the box: the grid is the canvas's, the surface is the box's.
-      const qx = Math.max(px, x0);
-      const qy = Math.max(py, y0);
-      g.fillRect(qx, qy, Math.min(px + cell, x0 + bw) - qx, Math.min(py + cell, y0 + bh) - qy);
-    }
-  }
+  rite.paint(g, x, y, w, h, k);
+  rite.paint(g, x, y, w, h, Math.min(k, 0.5));
 }
 
-// A disc that is `k` of the way to being there: solid once it is, its cells before that.
+// A disc that is `k` of the way to being there: the cover of its bounding box, clipped to it.
 function disc(g, rite, x, y, r, k, fill) {
   if (k <= 0) return;
+  g.save();
+  g.beginPath();
+  g.arc(x, y, r, 0, TAU);
+  g.clip();
   g.fillStyle = fill;
-  if (k >= 1) {
-    g.beginPath();
-    g.arc(x, y, r, 0, TAU);
-    g.fill();
-    return;
-  }
-  develop(g, rite, x - r, y - r, r * 2, r * 2, k, (px, py) => (px - x) * (px - x) + (py - y) * (py - y) <= r * r, 16);
+  cover(g, rite, x - r, y - r, r * 2, r * 2, k);
+  g.restore();
 }
 
 /* ---- shared arithmetic ---------------------------------------------------------------------- */
@@ -245,15 +232,11 @@ function links(g, side, c, pts, reach, boost) {
   }
 }
 
-// How bright the i-th light of a sky is at t: a breath on its own roll, 0.8 to 1 in treads.
-function twinkle(rite, seed, i, t) {
-  return 0.8 + 0.2 * breath(own(rite, seed + i), t, 2.6 + (i % 4) * 0.6, i * 0.23);
-}
-
 // One light: its resting halo, and over that -- when it is `hot` of the way to being lit -- a
-// hotter halo that develops through the matte; then the core.
-function star(g, c, p, tw, glow, rite, hot) {
-  const r = 9 * tw * glow;
+// hotter halo cut in by the piece's edge; then the core. Every light is the same size, so none
+// looks nearer than it is.
+function star(g, c, p, glow, rite, hot) {
+  const r = 9 * glow;
   const halo = g.createRadialGradient(p.x, p.y, 0, p.x, p.y, r);
   halo.addColorStop(0, c.alpha(c.colors.accent, 0.5));
   halo.addColorStop(1, c.alpha(c.colors.accent, 0));
@@ -261,14 +244,14 @@ function star(g, c, p, tw, glow, rite, hot) {
   g.beginPath();
   g.arc(p.x, p.y, r, 0, TAU);
   g.fill();
-  if (hot > 0) disc(g, rite || STILL, p.x, p.y, r * 1.3, hot, c.alpha(c.colors.accent2, 0.45));
+  if (hot > 0) disc(g, rite || STILL, p.x, p.y, r * 1.3, hot, c.alpha(c.colors.accent2, 0.28));
   g.fillStyle = c.alpha(c.colors.fg, 0.95);
   g.beginPath();
-  g.arc(p.x, p.y, 1.6 + 0.6 * tw, 0, TAU);
+  g.arc(p.x, p.y, 2.2, 0, TAU);
   g.fill();
 }
 
-// A ring round a light, `sweep` of the way round from the top: it arrives in clicks.
+// A ring round a light, `sweep` of the way round from the top: it comes round in clicks.
 function ring(g, c, x, y, a, r, sweep) {
   if (sweep <= 0) return;
   g.strokeStyle = c.alpha(c.colors.accent2, a);
@@ -379,25 +362,24 @@ function postcardScene(g, w, h, c, plan, s, v) {
       const x = left + (p.x - shift) / 100 * box.width;
       const y = box.top + p.y / 100 * box.height;
       if (pane === 1 && s.doneAt >= 0) {
-        // The finale: the shift itself, drawn as the line each light travelled, in treads from
-        // where the left eye had it, each light on its own roll and a little after the last.
-        const fp = came(s, s.doneAt + i * 0.15, 1.3, reduced);
-        if (fp > 0 && mine.flicker(fp)) {
+        // The finale: the shift itself, drawn as the line each light travelled, laid in treads
+        // from where the left eye had it, each light on its own roll and a little after the last.
+        const laid = mine.stair(came(s, s.doneAt + i * 0.15, 1.3, reduced));
+        if (laid > 0) {
           const x0 = left + p.x / 100 * box.width;
           g.strokeStyle = c.alpha(c.colors.accent2, 0.7);
           g.lineWidth = 1;
           g.beginPath();
           g.moveTo(x0, y);
-          g.lineTo(x0 + (x - x0) * mine.stair(fp, 6), y);
+          g.lineTo(x0 + (x - x0) * laid, y);
           g.stroke();
         }
       }
-      const tw = twinkle(rite, 0x7, i, s.t);
-      // The light last touched: its halo develops through the matte, and the one touched before
+      // The light last touched: its halo is cut in by the piece's edge, and the one touched before
       // it gives its halo back the same way.
       const hot = i === s.lit ? mine.stair(came(s, s.litAt, 0.6, reduced))
         : i === s.wasLit ? 1 - mine.stair(came(s, s.wasLitAt, 0.6, reduced)) : 0;
-      star(g, c, { x, y }, tw, glow, mine, hot);
+      star(g, c, { x, y }, glow, mine, hot);
       font(g, size * 0.9, 600);
       g.textAlign = 'left';
       g.fillStyle = c.alpha(hot >= 0.5 ? c.colors.accent2 : c.colors.fg, 0.9);
@@ -405,7 +387,7 @@ function postcardScene(g, w, h, c, plan, s, v) {
       const tapped = s.taps.indexOf(i);
       const gone = s.cleared.indexOf(i);
       if (tapped >= 0) {
-        // A tapped light: its ring comes round in clicks and its place blinks on.
+        // A tapped light: its ring comes round in clicks and its place is cut on at its moment.
         const tp = came(s, s.tapAt[i], 0.7, reduced);
         ring(g, c, x, y, 0.8, size * 0.6, mine.ratchet(tp));
         if (mine.flicker(tp)) {
@@ -414,7 +396,8 @@ function postcardScene(g, w, h, c, plan, s, v) {
           g.fillText(String(tapped + 1), x + size * 0.55, y + size * 0.55);
         }
       } else if (gone >= 0 && s.clearedAt >= 0) {
-        // The order complete: the rings go back round the way they came, with one flicker back.
+        // The order complete: the rings go back round the way they came, and each place is cut
+        // out at its moment.
         const cp = came(s, s.clearedAt, 0.7, reduced);
         if (cp < 1) {
           ring(g, c, x, y, 0.8, size * 0.6, 1 - mine.ratchet(cp));
@@ -446,8 +429,8 @@ function postcardScene(g, w, h, c, plan, s, v) {
   g.fillText('the same lights; the nearer, the farther it shifts', w / 2, h * 0.94, w * 0.92);
 }
 
-function postcardPreview(g, w, h, env, plan, t) {
-  postcardScene(g, w, h, env, plan, postcardState(plan.points.length, t), dials(env));
+function postcardPreview(g, w, h, env, plan) {
+  postcardScene(g, w, h, env, plan, postcardState(plan.points.length, 0), dials(env));
 }
 
 function postcardPiece(env, plan) {
@@ -695,23 +678,23 @@ function whichLayout(w, h) {
 }
 
 // One sky in a square: its frame, its lights and the lines between them. opts.fill is a surface
-// that has developed `opts.fillK` of the way over the box, under the lights; opts.lit a second,
+// that has come `opts.fillK` of the way over the box, under the lights; opts.lit a second,
 // brighter one that has come `opts.litK` of the way over that (the sky that turns out to be yours,
-// which is the chosen one already, so it needs a surface of its own on a roll of its own,
-// opts.litRite); opts.veil one that has come `opts.veilK` of the way over them (a decoy's dimming);
-// all by their area, through the matte, never by alpha. The lights twinkle on the rolls opts.seed
-// and up.
+// which is the chosen one already, so it needs a surface of its own); opts.veil one that has come
+// `opts.veilK` of the way over them (a decoy's dimming). Each is cut in by the piece's edge across
+// the square and rests in two shades split by it -- by its area, never by alpha -- and as they all
+// share the one edge, their splits lie on one line.
 function skyBox(g, c, pts, x, y, side, v, opts) {
   const rite = opts.rite || STILL;
   g.fillStyle = c.alpha(c.colors.bg, 0.55);
   g.fillRect(x, y, side, side);
   if (opts.fill && opts.fillK > 0) {
     g.fillStyle = opts.fill;
-    develop(g, rite, x, y, side, side, opts.fillK, null, 12);
+    cover(g, rite, x, y, side, side, opts.fillK);
   }
   if (opts.lit && opts.litK > 0) {
     g.fillStyle = opts.lit;
-    develop(g, opts.litRite || rite, x, y, side, side, opts.litK, null, 16);
+    cover(g, rite, x, y, side, side, opts.litK);
   }
   g.strokeStyle = opts.border || c.alpha(c.colors.muted, 0.7);
   g.lineWidth = opts.width || 1;
@@ -719,10 +702,10 @@ function skyBox(g, c, pts, x, y, side, v, opts) {
   const at = pts.map((p) => ({ x: x + p.x / 100 * side, y: y + p.y / 100 * side }));
   const glow = v.scale * Math.max(0.45, Math.min(1, side / 260));
   links(g, side, c, at, 0.5, 1);
-  at.forEach((p, i) => star(g, c, p, twinkle(rite, opts.seed || 0, i, opts.t || 0), glow, rite, 0));
+  at.forEach((p) => star(g, c, p, glow, rite, 0));
   if (opts.veil && opts.veilK > 0) {
     g.fillStyle = opts.veil;
-    develop(g, rite, x, y, side, side, opts.veilK, null, 12);
+    cover(g, rite, x, y, side, side, opts.veilK);
   }
   const size = Math.max(9, Math.min(16, Math.round(side * 0.11)));
   if (opts.label) {
@@ -750,7 +733,7 @@ function whichState(t) {
 }
 
 // The visitor's own sky once the puzzle is solved: flipped left for right in treads, if it was
-// flipped, then turned clockwise in the ratchet's clicks to lie as the true sky lies.
+// flipped, then turned clockwise in the ratchet's even clicks to lie as the true sky lies.
 function reference(plan, rite, s, reduced) {
   if (s.doneAt < 0) return plan.points;
   const fp = plan.mirror ? own(rite, 0xf11).stair(came(s, s.doneAt, 1, reduced)) : 0;
@@ -780,27 +763,27 @@ function whichScene(g, w, h, c, plan, s, v) {
   const c0 = lay.cells[0];
   const c1 = lay.cells[1];
   g.fillText('four skies', c0.x + (c1.x + c1.side - c0.x) / 2, h * 0.085, c1.x + c1.side - c0.x);
-  skyBox(g, c, reference(plan, rite, s, reduced), lay.left, lay.top, lay.side, v, { rite, t: s.t, seed: 0x100, border: c.alpha(c.colors.accent, 0.8) });
+  skyBox(g, c, reference(plan, rite, s, reduced), lay.left, lay.top, lay.side, v, { rite, border: c.alpha(c.colors.accent, 0.8) });
   plan.skies.forEach((sky, i) => {
     const cell = lay.cells[i];
     const mine = own(rite, 0x200 + i);
-    // Chosen: the sky fills through the matte; the one chosen before it empties the same way.
+    // Chosen: the sky is cut in by the edge; the one chosen before it gives its fill back the
+    // same way, the region shrinking.
     const chosenK = level(mine, s, s.choice === i, s.choiceAt, s.wasChoice === i ? s.wasChoiceAt : -1, 0.8, reduced);
-    // A decoy: a veil over it develops through the matte, and the word blinks on.
+    // A decoy: a veil is cut over it by the edge, and the word comes with its first tread.
     const hp = s.hinted.includes(i) ? came(s, s.hintAt[i], 1.1, reduced) : 0;
     const decoyK = hp > 0 ? mine.stair(hp) : 0;
-    // Yours, once solved: a brighter surface of its own develops through the matte on a roll of
-    // its own over the chosen fill (the sky found is the sky chosen, so the chosen fill is already
-    // whole underneath), and is not there at all during its flicker's dropouts.
+    // Yours, once solved: a brighter surface of its own is cut in by the edge over the chosen
+    // fill (the sky found is the sky chosen, so the chosen fill is already whole underneath).
     const fp = s.doneAt >= 0 && i === plan.which ? came(s, s.doneAt, 1.6, reduced) : 0;
-    const found = fp > 0 && !!mine.flicker(fp);
-    const foundK = found ? mine.stair(fp) : 0;
+    const foundK = fp > 0 ? mine.stair(fp) : 0;
+    const found = foundK > 0;
     skyBox(g, c, sky, cell.x, cell.y, cell.side, v, {
-      rite, t: s.t, seed: 0x300 + i * 16, label: SKIES[i],
-      fill: c.alpha(c.colors.accent2, 0.16), fillK: chosenK,
-      lit: c.alpha(c.colors.accent2, 0.3), litK: foundK, litRite: own(rite, 0x4c1 + i),
-      veil: c.alpha(c.colors.bg, 0.72), veilK: decoyK,
-      note: hp > 0 && mine.flicker(hp) ? 'decoy' : '',
+      rite, label: SKIES[i],
+      fill: c.alpha(c.colors.accent2, 0.1), fillK: chosenK,
+      lit: c.alpha(c.colors.accent2, 0.18), litK: foundK,
+      veil: c.alpha(c.colors.bg, 0.48), veilK: decoyK,
+      note: decoyK > 0 ? 'decoy' : '',
       border: found || chosenK > 0 ? c.colors.accent2 : undefined,
       width: found || chosenK >= 0.5 ? 2 : 1
     });
@@ -819,8 +802,8 @@ function whichScene(g, w, h, c, plan, s, v) {
   }
 }
 
-function whichPreview(g, w, h, env, plan, t) {
-  whichScene(g, w, h, env, plan, whichState(t), dials(env));
+function whichPreview(g, w, h, env, plan) {
+  whichScene(g, w, h, env, plan, whichState(0), dials(env));
 }
 
 function whichPiece(env, plan) {
@@ -931,22 +914,15 @@ function deal(env) {
   return got;
 }
 
-// Where the card's own motion stands when it is still, so animate picks the picture up at t = 0.
-const phaseOf = (env) => env.variant.turn * 6;
-
 export default {
   id: 'wish-constellation',
   needsSky: true,
+  // The card is a still picture: its lights wait for nothing, so it has no animate and the feed
+  // never repaints it.
   paint(g, w, h, env) {
     const d = deal(env);
-    if (d.postcard) postcardPreview(g, w, h, env, d.plan, phaseOf(env));
-    else whichPreview(g, w, h, env, d.plan, phaseOf(env));
-  },
-  animate(g, w, h, env, t) {
-    const d = deal(env);
-    const phase = t + phaseOf(env);
-    if (d.postcard) postcardPreview(g, w, h, env, d.plan, phase);
-    else whichPreview(g, w, h, env, d.plan, phase);
+    if (d.postcard) postcardPreview(g, w, h, env, d.plan);
+    else whichPreview(g, w, h, env, d.plan);
   },
   spark(env) {
     const d = deal(env);
@@ -957,7 +933,7 @@ export default {
         quote: WORDS[plan.points.length] + ' lights, two eyes, one depth',
         text: 'A light shifts between the views by more the nearer it is. Put them in order, nearest to farthest.',
         aspect: '4 / 3',
-        paint: (g, w, h, cardEnv) => postcardPreview(g, w, h, cardEnv, plan, 0),
+        paint: (g, w, h, cardEnv) => postcardPreview(g, w, h, cardEnv, plan),
         of: plan
       };
     }
@@ -967,7 +943,7 @@ export default {
       quote: 'four skies; one is your sigil, turned',
       text: 'Your ' + WORDS[plan.points.length] + ' lights, turned and maybe flipped, among three near misses. Say which sky, how far it turned and whether it was flipped.',
       aspect: '4 / 3',
-      paint: (g, w, h, cardEnv) => whichPreview(g, w, h, cardEnv, plan, 0),
+      paint: (g, w, h, cardEnv) => whichPreview(g, w, h, cardEnv, plan),
       of: plan
     };
   },
