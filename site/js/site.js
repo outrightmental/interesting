@@ -854,6 +854,19 @@
     // Where the chip starts from when it branches out: most of the way back to the logo.
     style.setProperty('--fx', Math.round(-dx * 0.55) + 'px');
     style.setProperty('--fy', Math.round(-dy * 0.55) + 'px');
+    // And a jitter of its own on top of its turn in the order (README: "Motion axiom"): the
+    // motion engine rolls one for each star on every press, so the constellation is cast a little
+    // differently every time; without the engine a star keeps to its turn and nothing more.
+    style.setProperty('--jit', jitterFor(order) + 'ms');
+  }
+
+  // The motion engine's roll for the k-th star's delay, less the step the stylesheet already adds
+  // for its place in the order: the stylesheet counts the steps, this is only the raggedness.
+  function jitterFor(order) {
+    var motion = window.interestingMotion;
+    if (!motion || typeof motion.stagger !== 'function' || typeof motion.ms !== 'function') return 0;
+    var step = motion.ms('stagger') || 0;
+    return Math.max(-step, motion.stagger(order) - order * step);
   }
 
   // The widest chip of an orbit, or 0 while the constellation has never been open: a chip that is

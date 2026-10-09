@@ -37,6 +37,7 @@
 // a card -- the configuration wins over the mood it was derived inside.
 
 @use 'sass:list';
+@use 'sass:map';
 @use 'type';
 
 $moods: (
@@ -57,6 +58,30 @@ $moods: (
   metrical: (#060f11, #14454a, #8ff0e4, #ffdfc2)
 );
 
+// The register each mood wears (_type.scss, $registers): the faces its rite's words and its
+// instructions are set in, and the temperament its movements take (js/motion.js). Written in the
+// same three places as the seeds, in the same order, so the whole modality of the site -- palette,
+// face and motion together -- follows the page, then the reading, then the piece on the stage, and
+// a card in the feed wears its own world's whole modality beside them. Every pairing is one that
+// goes together (see the registers themselves); a mood picks one and never mixes two.
+$registers-of: (
+  tender: hush,
+  restless: wire,
+  analytic: astral,
+  rooted: monastic,
+  verbal: folio,
+  curious: cabinet,
+  cosmic: votive,
+  ceremonial: lapidary,
+  brooding: storm,
+  tempestuous: squall,
+  attentive: vigil,
+  tending: monastic,
+  divinatory: sibyl,
+  geometric: brass,
+  metrical: meter
+);
+
 @mixin seeds($palette) {
   --bg: #{list.nth($palette, 1)};
   --bg2: #{list.nth($palette, 2)};
@@ -64,22 +89,77 @@ $moods: (
   --accent2: #{list.nth($palette, 4)};
 }
 
+@mixin modality($mood, $palette) {
+  @include seeds($palette);
+  @include type.register(map.get($registers-of, $mood));
+}
+
 @each $mood, $palette in $moods {
   :root[data-world='#{$mood}'] {
-    @include seeds($palette);
+    @include modality($mood, $palette);
   }
 }
 
 @each $mood, $palette in $moods {
   :root[data-mood='#{$mood}'],
   [data-mood='#{$mood}'] {
-    @include seeds($palette);
+    @include modality($mood, $palette);
   }
 }
 
 @each $mood, $palette in $moods {
   :root[data-featured='#{$mood}'] {
-    @include seeds($palette);
+    @include modality($mood, $palette);
+  }
+}
+
+// ---- the shift of modality -----------------------------------------------------------------
+// The site changing what it is wearing: js/motion.js writes <html data-shifting> for one rolled
+// moment whenever the mood, the world or the featured piece changes on :root, and for that moment
+// the rite's words are thrown, blurred and let land in their new face -- a flicker of the frame
+// as the whole modality turns over, along a curve rolled for this shift alone, by the distance
+// and the slant the same roll gave it. The palette's own crossfade (js/stage.js) and the sky's
+// wash (_panel.scss) run under it. It is the words that flicker and never a control: an
+// instruction stays where a visitor can read it.
+html[data-shifting] .stage-head,
+html[data-shifting] .list-page-main > h1,
+html[data-shifting] .prose-main > h1,
+html[data-shifting] .section-title,
+html[data-shifting] .panel-title,
+html[data-shifting] .card-overline,
+html[data-shifting] .card-title {
+  animation: rite-shift var(--motion-shift, 640ms) var(--ease-rite-shift, var(--ease-flicker)) both;
+}
+
+@keyframes rite-shift {
+  from {
+    opacity: 1;
+    filter: none;
+    transform: none;
+  }
+
+  14% {
+    opacity: 0.55;
+    filter: blur(var(--shift-blur, 5px)) contrast(1.35);
+    transform: translateX(var(--shift-x, 3px)) skewX(var(--shift-skew, -4deg));
+  }
+
+  30% {
+    opacity: 0.95;
+    filter: blur(calc(var(--shift-blur, 5px) * 0.25));
+    transform: translateX(calc(var(--shift-x, 3px) * -0.5)) skewX(calc(var(--shift-skew, -4deg) * -0.4));
+  }
+
+  46% {
+    opacity: 0.7;
+    filter: blur(calc(var(--shift-blur, 5px) * 0.6));
+    transform: translateX(calc(var(--shift-x, 3px) * 0.3));
+  }
+
+  to {
+    opacity: 1;
+    filter: none;
+    transform: none;
   }
 }
 
@@ -314,5 +394,16 @@ $moods: (
   .probe-big,
   .probe-window {
     transition: none;
+  }
+
+  // The change of modality without the throw: the words land in their new face at once.
+  html[data-shifting] .stage-head,
+  html[data-shifting] .list-page-main > h1,
+  html[data-shifting] .prose-main > h1,
+  html[data-shifting] .section-title,
+  html[data-shifting] .panel-title,
+  html[data-shifting] .card-overline,
+  html[data-shifting] .card-title {
+    animation: none;
   }
 }

@@ -474,8 +474,12 @@ function consume(card) {
     meta.delete(card);
     relayout();
   };
+  // The card leaves along the rolled curve and for the rolled time the stylesheet gives card-out
+  // (README: "Motion axiom"), so the stage's loop waits out whatever the roll came to.
+  const motion = window.interestingMotion;
+  const leaving = motion && typeof motion.ms === 'function' ? motion.ms('medium') + 40 : 300;
   if (calm.matches) gone();
-  else window.setTimeout(gone, 300);
+  else window.setTimeout(gone, leaving);
   if (cards.length < 12) more();
 }
 function take(fit, avoid) {

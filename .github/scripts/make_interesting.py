@@ -27,7 +27,7 @@ longer and wants to keep going. LEGIBLE names the test a stranger puts the site
 to -- one name per page, one way to do each thing, content before chrome, never
 a dead end -- because confusion spends engagement time as surely as boredom.
 
-Nine axioms stand over every run, each stated in the prompt and held to in code:
+Ten axioms stand over every run, each stated in the prompt and held to in code:
 
   - All of the content stays reachable from the root, both by following links
     from index.html and through sitemap.xml. check_reachability() refuses a plan
@@ -85,11 +85,20 @@ Nine axioms stand over every run, each stated in the prompt and held to in code:
     done mark clear of its picture, until the visitor presses the way on. That
     half is stated in the prompt and held on the committed site by the stage
     harness, not by a check that refuses a plan.
+  - Nothing on the site moves along a standard curve. Every transition and every
+    animation -- a fade, a slide, a wipe, a colour shifting, a ring opening, a
+    page scrolling -- runs along a curve js/motion.js rolled for that one
+    movement, a procedurally generated glitch of a curve, different every time,
+    with the geometry of the movement rolled beside it; and the typography shifts
+    its register with the mood, one curated pairing of faces per mood and never
+    a mix. check_motion() refuses a plan that takes the engine's line off a page
+    or that eases anything by linear, ease, ease-in, ease-out, ease-in-out, a
+    cubic-bezier, or the browser's own smooth scrolling.
 
 The files behind the analytics, state and participation axioms (FIXED_FILES) are
 never shown to a model and are refused outright as a write or a delete.
 
-An answer that holds to all nine is then held to the repository's own tests, the
+An answer that holds to all ten is then held to the repository's own tests, the
 ones deploy.yml runs before every deploy: require_passing_tests() runs test.yml's
 command on a copy of the repository with the change applied, and refuses the
 answer if any test fails. A refused answer is never written, and if main moves on
@@ -697,13 +706,22 @@ SASS_DIR = "_sass"
 MOOD_SCRIPT = "js/threshold.js"
 MOOD_TAG = f"<script src='{MOOD_SCRIPT}' defer></script>"
 
+# The one line every page carries for the motion axiom (README: "Motion axiom"), and the file it
+# brings. js/motion.js rolls every curve the site moves along -- as custom properties on :root for
+# the stylesheets, and as functions for the scripts -- so that nothing on the site ever moves along
+# linear, ease or a cubic-bezier. Not deferred, like the state line: it has to have rolled before
+# the body is drawn and before any other script asks it for a curve.
+MOTION_SCRIPT = "js/motion.js"
+MOTION_TAG = f"<script src='{MOTION_SCRIPT}'></script>"
+
 # May be rewritten, never deleted, and shown to the model first so it can always be rewritten.
 # sitemap.xml is one of them because the reachability axiom below leans on it, and MOOD_SCRIPT
 # because the mood axiom does: every page of the site loads it, so a run that deleted it would
 # leave a dangling script tag on every page and no query for anyone arriving. Unlike FIXED_FILES
 # it is always shown and always writable -- inventing another query mechanism in it is the single
-# most interesting change a run can make.
-PROTECTED_FILES = {"index.html", "error.html", "sitemap.xml", MOOD_SCRIPT}
+# most interesting change a run can make. MOTION_SCRIPT is one for the same reason: every page
+# loads it, and the movement of the whole site is rolled in it.
+PROTECTED_FILES = {"index.html", "error.html", "sitemap.xml", MOOD_SCRIPT, MOTION_SCRIPT}
 # The one line every page carries, and the files it pulls in (issue #24). js/analytics.js brings the
 # site both its cookie consent banner and -- only once a visitor accepts -- its Google Analytics
 # tag, so a single line per page carries the whole of it and a single check can hold it in place.
@@ -1902,6 +1920,125 @@ def check_destructive(before, after):
 
 
 # ------------------------------------------------------------------------------------------------
+# The motion axiom (README: "Motion axiom"). Nothing on the site moves along a standard curve.
+# Every transition and every animation -- a fade, a slide, a wipe, a colour shifting, a ring
+# opening, a chip branching out, the page scrolling -- runs along a curve rolled for that one
+# movement by js/motion.js: a procedurally generated glitch of a curve, with a hesitation, a
+# stutter, an overshoot and a flicker in it, never the same twice, with where the thing moves from
+# and how far rolled beside it. The stylesheets read the roll as custom properties (--ease-arrive,
+# --ease-leave, --ease-shift and the rest, _sass/_tokens.scss) and the scripts as functions
+# (window.interestingMotion), and the typography shifts its register with the mood beside it
+# (_sass/_type.scss, _sass/_mood.scss): one curated pairing of faces per mood, never a mix. The
+# prompt states all of it; the two signals below are the part of it that source can settle.
+#
+#   1. Every page carries the engine. One line brings it, exactly as the other shared lines work,
+#      so the shell carries it to every page at once and a run that drops it is refused.
+#   2. Nothing is eased by a standard formula. The timing functions a browser knows by name
+#      (linear, ease, ease-in, ease-out, ease-in-out), the one that is a formula (cubic-bezier),
+#      and the browser's own smooth scrolling (scroll-behavior: smooth, behavior: 'smooth') are
+#      refused wherever a page or a script or stylesheet it loads would move by them: in a
+#      transition or animation declaration, in the easing of a Web Animations call, or in a scroll.
+#      linear() with stops is the piecewise curve the engine writes and is not the keyword; a
+#      linear-gradient is paint and not motion; both are left alone.
+#
+# What is deliberately not checked: whether a curve feels like a working, whether a register suits
+# its mood, and whether a script's own arithmetic traces a polynomial. No code could judge the first
+# two, and the third would have to read every expression on the site; the prompt asks for all three
+# and the checks do not pretend to.
+
+# A timing-function keyword, or the one function that is a formula. `linear(` with a bracket is the
+# engine's own piecewise curve and is not the keyword; `linear-gradient` is paint. The look-behind
+# keeps `--ease-arrive` and `ease-in` from matching as `ease`.
+STANDARD_EASING = re.compile(
+    r"(?<![\w-])(?:linear|ease|ease-in|ease-out|ease-in-out)(?![\w(-])|(?<![\w-])cubic-bezier\s*\(",
+    re.I)
+# Where an easing is read from: the value of a transition or animation declaration -- in a
+# stylesheet, where it follows a brace, a semicolon or the start of a line, or in a script, where
+# it is set on an element's style or written as CSS inside a string -- the easing option of a Web
+# Animations call, and a scroll's behaviour. A sentence of prose that happens to say "transition:"
+# is not a declaration: nothing but a brace, a semicolon, a quote or a line break comes before one.
+TIMING_DECLARATION = re.compile(
+    r"""(?:^|(?<=[{;'"\n]))[ \t]*(?:transition|animation)(?:-timing-function)?\s*:\s*([^;}'"]*)""", re.I | re.M)
+STYLE_ASSIGNMENT = re.compile(
+    r"""\.(transition|animation|transitionTimingFunction|animationTimingFunction)\s*=\s*(['"])([^'"]*)\2"""
+    r"""|setProperty\(\s*['"]((?:transition|animation)(?:-timing-function)?)['"]\s*,\s*(['"])([^'"]*)\5""", re.I)
+EASING_OPTION = re.compile(r"""(?<![\w-])easing\s*:\s*(['"])([^'"]*)\1""", re.I)
+BROWSER_SMOOTHING = re.compile(
+    r"""(?<![\w-])scroll-behavior\s*:\s*smooth\b|(?<![\w-])behavior\s*:\s*['"]smooth['"]""", re.I)
+
+
+def easing_phrases(rel, site):
+    """The standard easings page `rel` would move by, lowercased and sorted: each one the keyword or
+    function found and where, as "ease in transition", "cubic-bezier( in animation", "ease-in in
+    easing" or "smooth in scroll-behavior".
+
+    Read as text, like cadence_phrases, and for the same reason: the site's motion lives in the
+    stylesheets and the scripts a page loads far more than in the page, so those are read with it.
+    FIXED_FILES are left out -- a vendored consent library eases its own banner however it likes,
+    and is not this site's motion to police.
+    """
+    sources = [site.get(rel) or ""]
+    sources += [site[asset] for asset in assets_of(rel, site) if asset not in FIXED_FILES]
+    found = set()
+    for source in sources:
+        for declaration in TIMING_DECLARATION.finditer(source):
+            for easing in STANDARD_EASING.finditer(declaration.group(1)):
+                found.add(f"{easing.group(0).lower()} in {declaration.group(0).split(':', 1)[0].strip().lower()}")
+        for assignment in STYLE_ASSIGNMENT.finditer(source):
+            where = (assignment.group(1) or assignment.group(4) or "").lower()
+            for easing in STANDARD_EASING.finditer(assignment.group(3) or assignment.group(6) or ""):
+                found.add(f"{easing.group(0).lower()} in style.{where}")
+        for option in EASING_OPTION.finditer(source):
+            for easing in STANDARD_EASING.finditer(option.group(2)):
+                found.add(f"{easing.group(0).lower()} in easing")
+        for smoothing in BROWSER_SMOOTHING.finditer(source):
+            found.add("smooth in " + ("scroll-behavior" if "scroll-behavior" in smoothing.group(0).lower() else "behavior"))
+    return sorted(found)
+
+
+def pages_moving_by_formula(site):
+    """The pages of `site` that would move by a standard easing, as {page: [phrase, ...]}."""
+    found = {}
+    for page in sorted(html_pages(site)):
+        phrases = easing_phrases(page, site)
+        if phrases:
+            found[page] = phrases
+    return found
+
+
+def pages_missing_motion(site):
+    """The pages of `site` that do not load MOTION_SCRIPT."""
+    return pages_missing(site, MOTION_SCRIPT)
+
+
+def check_motion(before, after):
+    """Raise RejectedChange if the change from site `before` to site `after` leaves a page without
+    the motion engine's line, or moves anything on a page by a standard easing.
+
+    Only what this run breaks is refused, for the same reason the nine checks above only refuse what
+    this run breaks: an easing a page already carries stays the site's own to clear away -- every run
+    is asked to -- and refusing every plan over one would leave no plan able to clear it. Each reason
+    is one easing in one place, so taking one out of a page can only ever take a reason away.
+    """
+    was = pages_missing_motion(before)
+    broke = sorted(page for page in pages_missing_motion(after) if page not in was)
+    if broke:
+        raise RejectedChange(
+            f"every page must carry the motion engine's line: {broke[0]} has no {MOTION_TAG}"
+            + (f" (and {len(broke) - 1} more)" if len(broke) > 1 else ""))
+
+    had = pages_moving_by_formula(before)
+    for page, phrases in sorted(pages_moving_by_formula(after).items()):
+        added = [phrase for phrase in phrases if phrase not in had.get(page, ())]
+        if added:
+            raise RejectedChange(
+                "nothing on the site moves along a standard curve: every transition, animation "
+                f"and scroll runs along a curve {MOTION_SCRIPT} rolled, never linear, ease or a "
+                f"cubic-bezier, and {page} would move by "
+                + " and ".join(f'"{phrase}"' for phrase in added))
+
+
+# ------------------------------------------------------------------------------------------------
 # The completion axiom, which is the puzzle axiom. Every world is a puzzle a visitor can solve: a
 # world's page is a stage (js/stage.js, _includes/stage.njk) on which the world's module
 # (js/modules/<world>.js) makes a small, randomly configured piece from a seed -- a title, a line,
@@ -2287,9 +2424,16 @@ def build_prompt(shown, omitted=(), run=None, budget=None, feedback=""):
         "on it; they hold still for a visitor who asked for less motion; every control keeps its "
         "44px target and its contrast. The rite's words -- a world's name, a piece's title, the "
         "question, a heading -- are set in the serif _type.scss gives them (type.rite); what to do "
-        "is set in the sans. A change that makes the site feel more like a rite without taking one "
-        "bit of clarity away is a good change; one that trades clarity for mystery fails this "
-        "standard even though no check can see it.\n\n"
+        "is set in the sans. Which serif and which sans is the mood's register (_type.scss, "
+        "$registers; _mood.scss, $registers-of): one curated pairing of faces per mood, with its "
+        "own tracking, weight, slant and case and its own motion temperament, so the whole "
+        "modality of the site -- palette, face and movement together -- shifts with the content, "
+        "and never two faces that do not go together. And every movement is a working: nothing "
+        "fades, slides, wipes, opens or scrolls along a standard curve, only along one the "
+        "motion engine rolled for it (see the motion axiom in the Rules). A change that makes "
+        "the site feel more like a rite without taking one bit of clarity away is a good change; "
+        "one that trades clarity for mystery fails this standard even though no check can see "
+        "it.\n\n"
         "POWERED DOWN, NEVER BROKEN. Where a component depends on something the visitor has not "
         "done yet -- a saved sky, a kept list, storage this browser does not offer -- its only "
         "announcement of that is the solution, in place: the component presents as unpowered, not "
@@ -2338,9 +2482,16 @@ def build_prompt(shown, omitted=(), run=None, budget=None, feedback=""):
         "- The one visual language is Material Design 3 (m3.material.io), written once in "
         f"\"{SASS_DIR}/\": the tokens in _tokens.scss (every M3 colour role derived with "
         "color-mix() from four seeds, --bg, --bg2, --accent and --accent2; the shape scale; the "
-        "motion scheme; the elevation levels), the type scale as a mixin in _type.scss -- with "
-        "type.rite, the one serif face the rite's words wear over M3's sans (see RITUAL, NOT "
-        "RIDDLE above), and the ornament partial _rite.scss, the rings, seals and sigils every "
+        "motion scheme, which is the rite's and not M3's -- seven families of rolled linear() "
+        f"curve, --ease-arrive, --ease-leave, --ease-shift, --ease-flicker, --ease-pulse, "
+        "--ease-drift and --ease-wipe, the rolled durations --motion-short, --motion-medium, "
+        "--motion-long and --motion-slow, and the rolled geometry --arrive-x, --arrive-y, "
+        "--leave-x, --leave-y, --wipe-from, --state-from and the rest, all of them written on "
+        f":root by \"{MOTION_SCRIPT}\" and every one with a baked procedural fallback; the "
+        "elevation levels), the type scale as a mixin in _type.scss -- with "
+        "type.rite, the serif face the rite's words wear over the register's sans, and the "
+        "registers themselves, one pairing of faces per mood (see RITUAL, NOT RIDDLE above), and "
+        "the ornament partial _rite.scss, the rings, seals and sigils every "
         "page shares -- and the "
         "components -- the floating logo and the chips of its constellation, the tonal, filled, "
         "outlined and text buttons, the chips, "
@@ -2647,6 +2798,50 @@ def build_prompt(shown, omitted=(), run=None, budget=None, feedback=""):
         "and it is below the threshold. And window.confirm is refused outright, anywhere in a page "
         "or a script it loads: a browser dialog cannot say which of a visitor's things is about to "
         "go, and a question that reads differently on every page is not a safety switch.\n"
+        "- AXIOM, every run: nothing on the site moves along a standard curve. Every transition "
+        "and every animation -- a fade, a slide, a wipe, the background washing to a new corner, "
+        "a colour shifting, a ring opening, a chip branching out, a state layer sweeping in, the "
+        "page scrolling -- is a movement of the rite: it runs along a curve rolled for that one "
+        "movement, a procedurally generated glitch of a curve with a hesitation, a stutter, an "
+        "overshoot and a flicker in it, never the same twice, and where the thing moves from, how "
+        "far, which way a wipe travels and what tone a colour passes through are rolled beside "
+        f"it, so every movement feels deliberate and utterly its own. One line in the <head> of a "
+        f"page brings the engine that rolls it:\n    {MOTION_TAG}\n"
+        "Keep that line on every page you rewrite, exactly as it is and not deferred, and put it "
+        f"on every page you add. \"{MOTION_SCRIPT}\" is yours to rewrite and extend and may never "
+        "be deleted: it writes the roll on :root as custom properties for the stylesheets "
+        "(--ease-arrive, --ease-leave, --ease-shift, --ease-flicker, --ease-pulse, --ease-drift, "
+        "--ease-wipe; one --ease-<name> per @keyframes name, rolled afresh every time that "
+        "animation finishes; the durations --motion-short, --motion-medium, --motion-long, "
+        "--motion-slow and --motion-stagger; and the geometry --arrive-x, --arrive-y, "
+        "--arrive-rot, --arrive-scale, --leave-x, --leave-y, --leave-rot, --leave-scale, "
+        "--wipe-from, --wipe-to, --state-from, --sky-x and --sky-y), and it offers the same roll "
+        "to a script as window.interestingMotion -- ease(family), curve(family), tween({ ms, "
+        "family, step, done }), scrollTo(top), scrollIntoView(el), ms(name), stagger(k), "
+        "geometry() and shift(). Every transition and animation you write names one of those "
+        "custom properties as its timing function, as every one on the site already does "
+        "(transition: opacity var(--motion-short) var(--ease-flicker); animation: thing-in "
+        "var(--motion-long) var(--ease-thing-in, var(--ease-arrive)) both), takes its distance "
+        "and direction from the rolled geometry, and answers prefers-reduced-motion as before; "
+        "a movement only a script can make (a colour crossfade, a burst, a scroll) asks the "
+        "engine for its curve or its tween, falls back to a polyline of its own where the engine "
+        "is absent, and never tweens along t*t, a sine or a power of its own. Each mood of "
+        f"{MOOD_SHEET} also lends its movements a temperament (--motion-grain, --motion-tempo, "
+        "--motion-steps) and its words a typographic register (_type.scss, $registers): one "
+        "curated pairing of a serif for the rite's words and a sans for the instructions, with a "
+        "tracking, a weight, a slant and a case of its own, so the whole modality of the site "
+        "shifts with the content; a new mood picks one of the registers in $registers-of, and a "
+        "new register pairs faces that go together -- a modern serif with a geometric sans, an "
+        "old-style serif with a humanist sans, a transitional serif with a grotesque -- and never "
+        "two that do not. Concretely, these are refused in a page and in any script or stylesheet "
+        "it loads: the timing-function keywords linear, ease, ease-in, ease-out and ease-in-out "
+        "and the function cubic-bezier() in a transition, an animation or a timing-function "
+        "declaration or in the easing of a Web Animations call, and the browser's own smoothing, "
+        "scroll-behavior: smooth and behavior: 'smooth' on a scroll. linear() with stops is the "
+        "engine's own piecewise curve and is welcome; a linear-gradient is paint, not motion. A "
+        "plan that leaves a page without the line, or moves anything by one of those, is refused, "
+        "and this too is checked on the built site, including the shared scripts and stylesheets "
+        "a page loads.\n"
         "- AXIOM, every run: every world is a puzzle a visitor can solve. A world's page is not "
         "fixed content but a stage, and what a visitor opens there is a piece, and every piece is "
         "a legitimate puzzle: a small, procedurally generated problem made on the spot by the "
@@ -2852,7 +3047,8 @@ def build_prompt(shown, omitted=(), run=None, budget=None, feedback=""):
         f"{then_clause(run)}. "
         f"Keep it {LEGIBLE}: one name per page, one way to do each thing, content before chrome, "
         f"and never a dead end. Keep it {RITUAL}: the rite in the frame, the instruction in the "
-        "sentence, and no riddle where a rule should be. Respond with the JSON object only."
+        "sentence, no riddle where a rule should be, and every movement along a curve rolled for "
+        "it and never a formula. Respond with the JSON object only."
     )
     return system + "\n\n" + user
 
@@ -2865,7 +3061,7 @@ def build_prompt(shown, omitted=(), run=None, budget=None, feedback=""):
 # The shell, as every mode but the overall ones names it: the framework every world stands on,
 # which other modes work on and this one leaves alone.
 SHELL_FILES = (f"the layout, {SITE_SCRIPT}, {STAGE_SCRIPT}, js/feed.js, {PERSONA_SCRIPT}, "
-               f"{VARIANT_SCRIPT} and the partials in {SASS_DIR}/")
+               f"{VARIANT_SCRIPT}, {MOTION_SCRIPT} and the partials in {SASS_DIR}/")
 
 
 def bag_note(run):
@@ -2943,9 +3139,10 @@ FRAMEWORK_IS = (
     f"\"{STAGE_INCLUDE}\", \"{SASS_DIR}/_stage.scss\"), the feed (\"js/feed.js\", "
     f"\"{INCLUDES_DIR}/worlds.njk\", \"{SASS_DIR}/_feed.scss\"), the dials a card is dealt with "
     f"(\"{VARIANT_SCRIPT}\"), the threshold and its library of query mechanisms "
-    f"(\"{MOOD_SCRIPT}\" and the question in index.html), the mood atlas, the site map and the "
-    f"error page, and the one visual language in \"{SASS_DIR}/\": the tokens, the type scale, the "
-    "base rules, the panel, the controls, the unlock, the moods. "
+    f"(\"{MOOD_SCRIPT}\" and the question in index.html), the motion engine (\"{MOTION_SCRIPT}\", "
+    "which rolls every curve the site moves along), the mood atlas, the site map and the "
+    f"error page, and the one visual language in \"{SASS_DIR}/\": the tokens, the type scale and "
+    "its registers, the base rules, the panel, the controls, the unlock, the moods. "
 )
 
 
@@ -3344,7 +3541,20 @@ FRAMEWORK_PINS = (
     f"\"{SASS_DIR}/_rite.scss\" is @use'd from css/site.scss with single quotes, holds no "
     "position: fixed, says pointer-events: none, and answers prefers-reduced-motion: reduce "
     "with animation: none; the built css/site.css names the serif stack and styles .stage-sigil, "
-    f"which \"{STAGE_INCLUDE}\" writes as id='stage-sigil' in the head. " + STUB_BROWSER_LIMITS
+    f"which \"{STAGE_INCLUDE}\" writes as id='stage-sigil' in the head. The motion axiom's "
+    f"readable half: \"{MOTION_SCRIPT}\" stays, loaded by the layout as {MOTION_TAG} without "
+    f"defer and before {PERSONA_SCRIPT}, assigning window.interestingMotion with ease, curve, "
+    "tween, scrollTo, scrollIntoView, ms, stagger, geometry, shift and roll; "
+    f"\"{SASS_DIR}/_tokens.scss\" declares --ease-arrive, --ease-leave, --ease-shift, "
+    "--ease-flicker, --ease-pulse, --ease-drift and --ease-wipe each as a linear( curve, "
+    "--motion-short, --motion-medium and --motion-long, and the three --md-sys-motion-easing-* "
+    f"names as var() aliases of them; \"{SASS_DIR}/_type.scss\" declares $registers and "
+    f"@mixin register, and type.rite reads var(--font-rite; \"{MOOD_SHEET}\" maps every mood to "
+    "a register in $registers-of and writes :root[data-featured=<mood>] with --font-rite, "
+    "--font-act, --motion-grain and --motion-tempo; every transition and animation in the Sass "
+    "names a var(--ease-...) as its timing function; and nowhere in the site's own source does "
+    "a transition, animation, timing-function or easing say linear, ease, ease-in, ease-out, "
+    "ease-in-out or cubic-bezier, or a scroll say smooth. " + STUB_BROWSER_LIMITS
 )
 HELD_IN_PLACE = {"item": ITEM_PINS, "nav": NAV_PINS, "persona": PERSONA_PINS, "overall": FRAMEWORK_PINS}
 
@@ -3807,11 +4017,11 @@ def validate_plan(plan, unseen=()):
     analytics and consent line, make one fail the responsive-and-accessible axiom, leave one without
     the local-state store and its meta menu, tie one to an update frequency, stop the site asking
     before it offers, leave one without a visitor's way of steering the site, let a control throw a
-    visitor's saved state away without the shared warning button and its confirmation, or leave a
-    world a visitor cannot finish is refused: all nine axioms hold however the prompt is answered.
-    All nine are judged on the built site (issue #25), which is the only site a visitor ever sees,
-    so the plan is built before any of them is asked, and a plan that does not build is refused for
-    that alone.
+    visitor's saved state away without the shared warning button and its confirmation, leave a
+    world a visitor cannot finish, or move anything along a standard curve is refused: all ten
+    axioms hold however the prompt is answered. All ten are judged on the built site (issue #25),
+    which is the only site a visitor ever sees, so the plan is built before any of them is asked,
+    and a plan that does not build is refused for that alone.
     """
     files = plan.get("files") or []
     deletes = plan.get("delete") or []
@@ -3885,7 +4095,7 @@ def validate_plan(plan, unseen=()):
         # The site as committed does not build, so there is no "before" to compare against and the
         # axioms have nothing to say this run. Same reasoning as check_reachability's: every run is
         # asked to repair the site, and refusing a plan over damage it did not do would leave no
-        # plan able to. This run still had to build, and the next is held to all nine axioms again.
+        # plan able to. This run still had to build, and the next is held to all ten axioms again.
         print(f"::warning::the site as committed does not build ({one_line(err, 300)}), so this "
               "run's change was only checked for building, not against the axioms")
         return ops
@@ -3897,12 +4107,13 @@ def validate_plan(plan, unseen=()):
     check_mood(built_before, built_after)
     check_participate(built_before, built_after)
     check_destructive(built_before, built_after)
+    check_motion(built_before, built_after)
     check_completion(built_before, built_after)
     return ops
 
 
 # The tests every deploy waits on. deploy.yml runs test.yml on each commit that lands on main and
-# publishes nothing until it passes, and the nine axioms are only part of what it checks:
+# publishes nothing until it passes, and the ten axioms are only part of what it checks:
 # RealSiteTest holds the site as committed to much more besides (the shell's shared lines, the
 # stage's markup, what every module says its cards are of). On 2026-10-06 the hourly run twice
 # pushed a commit that had passed every check in validate_plan and failed those tests, and every

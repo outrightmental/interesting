@@ -85,10 +85,56 @@ function neighbours(word) {
   return RUNGS.filter((w) => diff(w, word) === 1);
 }
 
-function ease(value) {
-  const t = Math.max(0, Math.min(1, value));
-  return t * t * (3 - 2 * t);
+/* The motion of the rite (README: "Motion axiom"): nothing here moves along a formula. A curve is
+   a polyline -- a hesitation, a surge, a stutter, a settle -- and riteCurve rolls one from a seed,
+   so the tiles' fall into the kiln, their cooling into their slots and a ladder's rungs lighting
+   each run their own way for every piece and the same way every time that piece is played.
+   Rolled from the seed and never from env.rnd, so the puzzle a seed deals is untouched by it;
+   `ease` is the one baked curve a preview falls back on. */
+function along(stops) {
+  return (t) => {
+    if (!(t > 0)) return stops[0][1];
+    if (t >= 1) return stops[stops.length - 1][1];
+    for (let i = 1; i < stops.length; i++) {
+      if (t <= stops[i][0]) {
+        const [t0, y0] = stops[i - 1];
+        const [t1, y1] = stops[i];
+        return t1 > t0 ? y0 + (y1 - y0) * ((t - t0) / (t1 - t0)) : y1;
+      }
+    }
+    return 1;
+  };
 }
+
+function riteCurve(seed, over) {
+  let a = (seed >>> 0) || 1;
+  const rnd = () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  const between = (lo, hi) => lo + (hi - lo) * rnd();
+  const stops = [[0, 0]];
+  let at = 0;
+  const put = (t, y) => {
+    at = Math.min(0.99, Math.max(at, t));
+    stops.push([at, y]);
+  };
+  if (rnd() < 0.7) put(between(0.03, 0.14), between(0, 0.02)); // the hesitation
+  const peak = between(0.45, 0.7);
+  const high = over ? 1 + between(0.02, 0.1) : 1;
+  put(at + (peak - at) * between(0.3, 0.55), high * between(0.45, 0.7)); // the surge
+  if (rnd() < 0.6) put(at + between(0.02, 0.06), stops[stops.length - 1][1]); // the stutter
+  put(peak, high);
+  if (over) put(peak + (1 - peak) * between(0.3, 0.6), 1 - (high - 1) * 0.4); // the settle
+  put(between(0.86, 0.96), over ? 1 : between(0.96, 1));
+  stops.push([1, 1]);
+  return along(stops);
+}
+
+const ease = along([[0, 0], [0.1, 0.02], [0.38, 0.64], [0.45, 0.58], [0.62, 1], [0.8, 0.97], [1, 1]]);
 
 /* ---- the kiln's mouth and its ember -------------------------------------------------------- */
 
@@ -243,7 +289,7 @@ function anagramScene(g, w, h, env, plan, s, variant) {
   const cx = w / 2;
   const cy = h * 0.72;
   const r = Math.min(w, h) * 0.2 * v.scale;
-  const cooled = s.phase > 0.4 ? ease((s.phase - 0.4) / 0.6) : 0;
+  const cooled = s.phase > 0.4 ? (s.cool || ease)((s.phase - 0.4) / 0.6) : 0;
   kiln(g, w, h, env, s.heat, { cx, cy, r, lit: 1 - cooled * 0.7 });
   embers(g, env, cx, cy, r, v, s.phase, 1 - cooled * 0.8);
   const size = Math.min(h * 0.13 * v.scale, (w * 0.84) / n / 1.15);
@@ -274,13 +320,13 @@ function anagramScene(g, w, h, env, plan, s, variant) {
     if (s.phase > 0) {
       const to = s.slots ? place(s.slots[i], slotY) : x;
       if (s.phase < 0.4) {
-        const f = ease(s.phase / 0.4);
+        const f = (s.fire || ease)(s.phase / 0.4);
         x += (cx + (i - (n - 1) / 2) * r * 0.3 - x) * f;
         y += (cy - y) * f;
         tilt = f * (i % 2 ? -1 : 1) * 1.2;
         lit = f;
       } else {
-        const f = ease((s.phase - 0.4) / 0.6);
+        const f = (s.cool || ease)((s.phase - 0.4) / 0.6);
         x = cx + (i - (n - 1) / 2) * r * 0.3 + (to - (cx + (i - (n - 1) / 2) * r * 0.3)) * f;
         y = cy + (slotY - cy) * f;
         tilt = (1 - f) * (i % 2 ? -1 : 1) * 1.2;
@@ -300,7 +346,9 @@ function anagramPreview(g, w, h, env, plan) {
 function anagramPiece(env, plan) {
   const helps = Math.min(2, asked(env).helps);
   const n = plan.tiles.length;
-  const s = { heat: 0.5, phase: 0, guess: '', hints: 0, slots: null, fired: '', line: 'tap nothing; type the word and check it', t: 0 };
+  // The firing and the cooling each run along a curve rolled for this piece (see riteCurve).
+  const s = { heat: 0.5, phase: 0, guess: '', hints: 0, slots: null, fired: '', line: 'tap nothing; type the word and check it', t: 0,
+    fire: riteCurve((env.seed >>> 0) ^ 0x7e11), cool: riteCurve((env.seed >>> 0) ^ 0xc001) };
   const draw = (c) => anagramScene(c.g, c.w, c.h, c, plan, s, env.variant);
   function right(typed) {
     let count = 0;
@@ -439,7 +487,7 @@ function ladderScene(g, w, h, env, plan, s, variant) {
     g.moveTo(railX[0], y);
     g.lineTo(railX[1], y);
     g.stroke();
-    const lit = s.phase > 0 ? ease((s.phase * 4 - k) / 1.2) : 0;
+    const lit = s.phase > 0 ? (s.climb || ease)((s.phase * 4 - k) / 1.2) : 0;
     for (let i = 0; i < 4; i++) {
       const x = cx + (i - 1.5) * size * 1.1;
       const letter = words[k][i] || '';
@@ -483,7 +531,9 @@ function ladderPiece(env, plan) {
   const helps = Math.min(3, asked(env).helps);
   const a = plan.rungs[0];
   const b = plan.rungs[3];
-  const s = { first: '', second: '', hints: 0, phase: 0, lit: 0, line: 'change one letter a step; every rung a word' };
+  // The rungs light along a curve rolled for this piece (see riteCurve).
+  const s = { first: '', second: '', hints: 0, phase: 0, lit: 0, line: 'change one letter a step; every rung a word',
+    climb: riteCurve((env.seed >>> 0) ^ 0x1add) };
   const draw = (c) => ladderScene(c.g, c.w, c.h, c, plan, s, env.variant);
   return {
     title: ladderTitle(plan),

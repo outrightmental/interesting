@@ -37,6 +37,9 @@
   margin: 0;
 }
 
+// A card lifts under the pointer by as much, and with as much of a turn, as the roll gave it
+// (--lift-y and --lift-rot, js/motion.js), along curves rolled for that lift (README: "Motion
+// axiom"); its arrival and its leaving below come from and go to where the roll sends them.
 .card {
   position: relative;
   border-radius: var(--md-sys-shape-corner-large);
@@ -44,11 +47,12 @@
   color: var(--md-sys-color-on-surface);
   overflow: hidden;
   box-shadow: var(--md-sys-elevation-level1);
-  transition: box-shadow var(--md-sys-motion-duration-medium) var(--md-sys-motion-easing-standard), transform var(--md-sys-motion-duration-medium) var(--md-sys-motion-easing-standard);
+  transition: box-shadow var(--motion-medium) var(--ease-shift), transform var(--motion-medium) var(--ease-arrive);
 }
 
 .card:hover {
   box-shadow: var(--md-sys-elevation-level2);
+  transform: translateY(var(--lift-y, -2px)) rotate(var(--lift-rot, 0deg));
 }
 
 .card-link {
@@ -68,13 +72,16 @@
   border-radius: inherit;
   background: var(--md-sys-color-on-surface);
   opacity: 0;
+  clip-path: var(--state-from, inset(0 100% 0 0));
   pointer-events: none;
-  transition: opacity var(--md-sys-motion-duration-short) var(--md-sys-motion-easing-standard);
+  transition:
+    opacity var(--motion-short) var(--ease-flicker),
+    clip-path var(--motion-short) var(--ease-flicker);
 }
 
-.card-link:hover::after { opacity: var(--md-sys-state-hover-opacity); }
-.card-link:focus-visible::after { opacity: var(--md-sys-state-focus-opacity); }
-.card-link:active::after { opacity: var(--md-sys-state-pressed-opacity); }
+.card-link:hover::after { opacity: var(--md-sys-state-hover-opacity); clip-path: inset(0); }
+.card-link:focus-visible::after { opacity: var(--md-sys-state-focus-opacity); clip-path: inset(0); }
+.card-link:active::after { opacity: var(--md-sys-state-pressed-opacity); clip-path: inset(0); }
 
 .card-link:focus-visible {
   outline: 3px solid var(--md-sys-color-primary);
@@ -139,7 +146,7 @@
   text-decoration-thickness: 1px;
   text-underline-offset: 0.18em;
 }
-.card-spark .card-title { @include type.scale(title-large); }
+.card-spark .card-title { @include type.scale(title-large); @include type.rite; }
 .card-quote {
   margin: 0.25rem 0 0;
   color: var(--md-sys-color-on-surface);
@@ -180,17 +187,20 @@
 .card-actions button {
   padding-block: 0.25rem;
 }
-.card-enter { animation: card-in var(--md-sys-motion-duration-long) var(--md-sys-motion-easing-emphasized) both; }
+// A card dealt arrives from where the roll says, turning as it comes, along a spell rolled afresh
+// each time one lands; a card taken leaves the way the roll sends departures. js/feed.js waits out
+// the leaving by the same rolled duration (--motion-medium) before it takes the card away.
+.card-enter { animation: card-in var(--motion-long) var(--ease-card-in, var(--ease-arrive)) both; }
 @keyframes card-in {
-  from { opacity: 0; transform: translateY(14px); }
-  to { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; transform: translate(calc(var(--arrive-x, 0px) * 0.5), calc(var(--arrive-y, 28px) * 0.5)) rotate(var(--arrive-rot, 0deg)) scale(var(--arrive-scale, 0.96)); }
+  to { opacity: 1; transform: none; }
 }
 .card-leave {
   pointer-events: none;
-  animation: card-out var(--md-sys-motion-duration-medium) var(--md-sys-motion-easing-emphasized-accelerate) both;
+  animation: card-out var(--motion-medium) var(--ease-card-out, var(--ease-leave)) both;
 }
 @keyframes card-out {
-  to { opacity: 0; transform: translateY(-24px) scale(0.96); }
+  to { opacity: 0; transform: translate(var(--leave-x, 0px), var(--leave-y, -24px)) rotate(var(--leave-rot, 0deg)) scale(var(--leave-scale, 0.96)); }
 }
 .feed-sentinel { height: 1px; margin-top: 1rem; }
 @media (max-width: 599px) {

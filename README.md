@@ -15,7 +15,8 @@ iterate a more interesting website
   shared files behind the analytics tag (see [Analytics axiom](#analytics-axiom)), the one behind
   the local-state store (see [Local state axiom](#local-state-axiom)), the one behind the mood
   flow (see [Mood axiom](#mood-axiom)), the one behind a visitor's way of steering the site (see
-  [Participation axiom](#participation-axiom)) and the shared helpers every page calls, among them
+  [Participation axiom](#participation-axiom)), the one that rolls every curve the site moves
+  along (see [Motion axiom](#motion-axiom)) and the shared helpers every page calls, among them
   the one destructive-control component (see
   [Destructive-caution axiom](#destructive-caution-axiom)). A request
   for a page that is not there gets `error.html` back, with a 404, from a CloudFront custom error
@@ -153,8 +154,11 @@ replacing one of them.
   `js/stage.js` takes the attribute off again on the way home. The card that was pressed hands its
   own four seeds over with it, so the site takes the colour of that card and not merely of its
   world (see [The feature and the feed](#the-feature-and-the-feed)), and the shift is a crossfade
-  through a neutral grey — a quick fade out to it, then a fuller fade into the new theme — or no
-  shift at all for a visitor who asked for less motion.
+  through a settled tone — a quick fade out to it, then a fuller fade into the new theme, each of
+  the four seeds along a curve rolled for it alone and a few rolled frames apart, the tone grey
+  most of the time and now and then an ink or an ash (see [Motion axiom](#motion-axiom)) — or no
+  shift at all for a visitor who asked for less motion. The featured mood's typographic register
+  and motion temperament land with its palette, so the whole modality of the site turns over.
 - **The M3 parts, as classes.** The type scale is a mixin (`_type.scss`), and the components are
   the shared classes every page already used: a bare `<button>` is a tonal button, `a.action` an
   outlined one, `.btn-filled` and `.btn-text` the other two emphases, `aria-pressed='true'` reads
@@ -164,14 +168,30 @@ replacing one of them.
   M3 slider with its 16px track and 4px handle (`js/site.js` keeps `--range-pct` on each one so
   the active track can fill to the handle). Every pressable thing carries a state layer, and the one focus indicator
   is a 3px primary ring.
-- **One serif, for the rite's words.** The [ritual axiom](#ritual-axiom) sets the words that
-  carry the atmosphere — a heading, a piece's title, a card's name, the question — in a serif,
-  `type.rite`, and leaves everything a visitor acts on in M3's sans, so the two can be told apart
-  by their face. The ornament that goes with it (rings, seals, the sigil) is one partial,
-  `_rite.scss`, drawn behind and beside the content and never over it.
-- **No font is fetched.** Roboto is M3's default and is used where it is installed, and the serif
-  is a system stack (Iowan Old Style, Palatino, Book Antiqua, Georgia) for the same reason; nothing
-  is loaded from a third party, which is the analytics axiom's rule for the site's own code too.
+- **The motion scheme is the rite's, not M3's.** M3's three cubic-bezier easings are gone. The
+  tokens name seven families of curve — `--ease-arrive`, `--ease-leave`, `--ease-shift`,
+  `--ease-flicker`, `--ease-pulse`, `--ease-drift`, `--ease-wipe` — every one a piecewise
+  `linear()` curve that `js/motion.js` rolls afresh for every movement, the durations and the
+  geometry of a movement rolled beside them, and the M3 names kept only as aliases of those, so
+  nothing written against them can be a standard curve again (see [Motion axiom](#motion-axiom)).
+- **A serif for the rite's words, a sans for the instructions, paired by the mood.** The
+  [ritual axiom](#ritual-axiom) sets the words that carry the atmosphere — a heading, a piece's
+  title, a card's name, the question — in a serif, `type.rite`, and leaves everything a visitor
+  acts on in the sans, so the two can be told apart by their face. Which serif and which sans is
+  the mood's **register** (`$registers` in `_type.scss`, `$registers-of` in `_mood.scss`): one
+  curated pairing per mood — a modern serif with a geometric sans, an old-style serif with a
+  humanist sans, a transitional serif with a grotesque, a typewriter's slab with a plain interface
+  sans — with its own tracking, weight, slant and case, written wherever the mood's palette is
+  written, so a page, a featured piece and a card of the feed each wear a whole modality and never
+  two faces that do not go together (see [Motion axiom](#motion-axiom)). The ornament that goes
+  with it (rings, seals, the sigil) is one partial, `_rite.scss`, drawn behind and beside the
+  content and never over it.
+- **No font is fetched.** Roboto is M3's default and is used where it is installed, and every
+  register is a system stack — Iowan Old Style, Palatino, Book Antiqua and Georgia for the home
+  register, Didot, Hoefler Text, Charter, Baskerville, American Typewriter, Avenir, Gill Sans,
+  Optima and Helvetica Neue among the others, each falling back on the home pair — for the same
+  reason; nothing is loaded from a third party, which is the analytics axiom's rule for the site's
+  own code too.
 - **One build fix came with it.** Compressed Sass opens with a byte-order mark when a sheet holds
   a non-ASCII character, and inside the one page that inlines its styles (`error.html`) that mark
   glued itself to the first selector, which the browser then dropped — the whole `:root` block.
@@ -577,7 +597,8 @@ for a while, which is exactly why it has to be ruled out by name.
   accepted exactly as before. A test holds that open: it asserts the accepted plan *and* the whole
   list of `check_` functions, so an axiom cannot be added or retired without saying so there. That
   list grew to eight when [Destructive-caution axiom](#destructive-caution-axiom) arrived and to
-  nine with [Completion axiom](#completion-axiom), which is what tells a standard no check could
+  nine with [Completion axiom](#completion-axiom) and to ten with [Motion axiom](#motion-axiom),
+  which is what tells a standard no check could
   judge apart from a law that can be held.
 
 ### The bag of marbles
@@ -659,7 +680,7 @@ saying where to go next, and the home page explained none of its own words.
   and never about the machinery; and never a dead end, which is its own standard below.
 - **Deliberately not held to in code.** No check could judge whether a page reads clearly, so the
   prompt is where this standard lives, exactly as `WHOLE` and `INTERESTING` do: it is not among the
-  nine coded axioms, and `LegibilityStandardTest` holds the prompt to the standard the way
+  ten coded axioms, and `LegibilityStandardTest` holds the prompt to the standard the way
   `EngagementTimeTest` holds it to the measure.
 - **One list of pages.** [`site/_data/worlds.json`](site/_data/worlds.json) is the one place a
   world's name, orientation, mood, card aspect and one-line description are kept, in one flat
@@ -713,14 +734,17 @@ puzzle stands on its own legs, and the rite is fun first and never tiresome.
     of the [constellation](#the-logo-and-the-constellation) is untouched.
 - **The typographic rule is how the limit is made visible.** The rite's words — a page's `<h1>`,
   a piece's title, a card's name, the persona sheet's title, the question the threshold asks, a
-  section heading — are set in one serif face, `type.rite` in
-  [`site/_sass/_type.scss`](site/_sass/_type.scss), a system stack (Iowan Old Style, Palatino,
-  Book Antiqua, Georgia) that fetches nothing, as M3's Roboto fetches nothing. Everything that
-  tells a visitor what to do — a button, a knob's ask, a brief, a goal, a status line, a chip in
-  the constellation — stays in the sans. So the atmosphere and the instruction can be told apart
-  by the face they are set in, on every page, and a word in the serif is never one a visitor has
-  to act on. `RealSiteTest` holds the stylesheets to that: the headings include the mixin, the
-  controls inherit the sans and never include it.
+  section heading — are set in a serif face, `type.rite` in
+  [`site/_sass/_type.scss`](site/_sass/_type.scss), a system stack that fetches nothing, as M3's
+  Roboto fetches nothing; which serif, and with what tracking, weight, slant and case, is the
+  mood's register (see [Motion axiom](#motion-axiom)), with Iowan Old Style, Palatino, Book
+  Antiqua and Georgia as the home register every other falls back on. Everything that tells a
+  visitor what to do — a button, a knob's ask, a brief, a goal, a status line, a chip in the
+  constellation — stays in the sans the register pairs with it. So the atmosphere and the
+  instruction can be told apart by the face they are set in, on every page, and a word in the
+  serif is never one a visitor has to act on. `RealSiteTest` holds the stylesheets to that: the
+  headings include the mixin, the controls inherit the sans and never include it, and every mood
+  names one register.
 - **The ornament is one partial.** [`site/_sass/_rite.scss`](site/_sass/_rite.scss) is the
   rings, the seals and the sigil, written once and reached by every page through `css/site.scss`:
   the two faint circles a feature is drawn inside (the stage and the two list pages alike), the
@@ -739,7 +763,7 @@ puzzle stands on its own legs, and the rite is fun first and never tiresome.
   and no riddle where a rule should be.*
 - **Deliberately not held to in code.** No check could judge whether a page feels like a rite, or
   whether a flourish cost a visitor a moment of clarity, so the prompt is where this standard
-  lives, exactly as `WHOLE`, `INTERESTING` and `LEGIBLE` do: it is not among the nine coded axioms,
+  lives, exactly as `WHOLE`, `INTERESTING` and `LEGIBLE` do: it is not among the ten coded axioms,
   and `RitualStandardTest` holds the prompt to the standard the way `LegibilityStandardTest` does.
   The one half a stylesheet can be read for — the serif on the rite's words, the sans on the
   controls, the ornament held still — `RealSiteTest` reads off the site as committed.
@@ -752,6 +776,118 @@ puzzle stands on its own legs, and the rite is fun first and never tiresome.
   verb. The module copy was the largest part of the pass and the most constrained: the piece
   harness played every world's pieces through the law before and after, and refused any wording
   that changed what a piece is.
+
+### Motion axiom
+
+The [ritual axiom](#ritual-axiom) says what the site has to feel like. This says how it has to
+**move**: **nothing on the site moves along a standard curve.** No transition and no animation —
+a fade, a slide, a wipe, the background washing to a new corner, a colour shifting, a ring opening,
+a chip branching out, a state layer sweeping in, the page scrolling — is eased by `linear`, by
+`ease` and its three siblings, or by any `cubic-bezier`, and nothing in a script tweens along a
+polynomial of its own. Every movement runs along a curve rolled a moment ago and never rolled
+again: a **procedurally generated glitch of a curve**, with a hesitation before it starts, a
+stutter in the middle, an overshoot it has to settle from, a flicker before it lands — so every
+movement feels like part of a working rather than a widget settling into place, deliberate and
+never twice the same. And the geometry of a movement is rolled beside its timing: where a thing
+comes in from and how far, where it goes when it leaves, which way the veil wipes, which edge a
+control's state layer sweeps in from, what tone a palette passes through on its way to another,
+where the page's own sky washes in from. The typography follows the same rule: the faces shift
+their **register** with the mood, one curated pairing per mood and never two faces that do not go
+together, so the whole modality of the site — palette, face and movement — turns over from one
+piece of content to the next. Like the nine axioms before it, this is an invariant of the
+iteration: stated in the prompt, held to in code, and true of the site as committed.
+
+- **The engine.** [`site/js/motion.js`](site/js/motion.js), one line in the `<head>` of every
+  page, written once in [`site/_includes/layout.njk`](site/_includes/layout.njk) and not deferred,
+  so it has rolled before the body is drawn. CSS cannot roll a die, but it can read a custom
+  property, and the `linear()` easing function can express any piecewise curve, so the engine
+  writes its roll onto `:root`: seven **families** — `--ease-arrive` (a hesitation, the surge past
+  the mark, the settle, sometimes a flicker as it lands), `--ease-leave` (a flicker, a refusal to
+  go, then the rush out), `--ease-shift` (a drift in uneven steps), `--ease-flicker`,
+  `--ease-pulse`, `--ease-drift` (the slow turn of a ring, with a catch now and then) and
+  `--ease-wipe` (the veil: a lag, the swallow, a blink) — and one `--ease-<name>` per `@keyframes`
+  animation, re-rolled every time that animation finishes so the next time it plays it plays
+  differently; the durations, rolled with a little jitter; and the geometry, `--arrive-x`,
+  `--arrive-y`, `--arrive-rot`, `--arrive-scale`, `--leave-*`, `--wipe-from` and `--wipe-to`
+  (an edge, a slit, an iris, a corner), `--state-from`, `--sky-x` and `--sky-y`, and the small
+  particulars of one movement each. Every transition in [`site/_sass`](site/_sass) names a
+  family as its timing function, every animation names its own spell with a family as the
+  fallback, and every keyframe reads the rolled geometry rather than a fixed distance. A script's
+  own movements — the stage's colour crossfade, its burst, its scroll, the threshold's stars coming
+  out and knocks ringing, the constellation's stagger — ask the same engine
+  (`window.interestingMotion`: `ease(family)`, `curve(family)`, `tween()`, `scrollTo()`,
+  `scrollIntoView()`, `ms(name)`, `stagger(k)`, `geometry()`, `shift()`), and keep a polyline of
+  their own for the stub browsers the harnesses run in, which load no engine.
+- **When it rolls.** Once as the `<head>` is read, so the first paint already moves along a curve
+  of its own; on every transition that ends, for the next one (a running transition keeps the
+  curve it started with, so nothing in flight is disturbed); on every animation that ends, once no
+  animation of that name is still running, and at every turn of a looping one; on every press, key
+  and focus, just before the movement it is about to cause; whenever the site changes what it is
+  wearing; and every so often on a page left alone. A page with no script moves along the baked
+  fallbacks in `_tokens.scss`, rolled once by the same maker, so even then nothing moves along a
+  formula; a browser that knows no `linear()` is given a `steps()` stair with a rolled number of
+  treads, the one easing such a browser has that is not a standard curve, and `<html
+  data-motion='steps'>` says so.
+- **The temperament.** Each mood of [`site/_sass/_mood.scss`](site/_sass/_mood.scss) carries a
+  temperament beside its palette: `--motion-grain` (how glitchy its movements are), `--motion-tempo`
+  (how long they take) and `--motion-steps` (whether its curves prefer a typewriter's stair to a
+  brush's swoop). A restless world stutters and snaps; a tender one hesitates and drifts; the
+  curious one steps. The engine reads the three off `:root` on every full roll, so a movement is
+  customised twice over — by the mood of what is on the screen, and by the roll.
+- **The registers.** [`site/_sass/_type.scss`](site/_sass/_type.scss) declares the pairings
+  (`$registers`): *votive*, the home register (Iowan Old Style over Roboto); *hush* and *vigil*, the
+  same pair slanted or in small capitals; *sibyl* (Hoefler Text italic over Optima); *lapidary*
+  (Didot, tracked out, over Avenir); *monastic* (Garamond over Gill Sans); *astral* (Charter over
+  Helvetica Neue); *folio* (Baskerville over Gill Sans); *cabinet* (American Typewriter over Segoe
+  UI, stepping); *brass* (Palatino in small capitals over Avenir); *storm* and *squall* (Charter
+  set heavy and tight, upright or slanted, over Helvetica Neue); *wire* (Iowan Old Style set
+  black and tight over Roboto, the quickest); and *meter* (Charter with tabular figures over a
+  monospaced sans). Every one is a system stack falling back on the home pair, every one pairs
+  faces that belong together, and `_mood.scss` maps each of the fifteen moods to one of them
+  (`$registers-of`), written in the same three places as the seeds — the page's world, the
+  reading, the featured piece — and on every card of the feed, so the mosaic shifts register card
+  by card. `type.rite` and the page's own face read the register through custom properties
+  (`--font-rite`, `--font-act`, `--font-mono`, `--rite-weight`, `--rite-tracking`, `--rite-style`,
+  `--rite-caps`), with the home register as every fallback.
+- **The shift of modality.** When the mood, the world or the featured piece changes on `:root`,
+  the engine reads the temperament again, rolls everything to it, and writes `<html data-shifting>`
+  for one rolled moment, during which the rite's words — the stage's head, a page's heading, a
+  card's name — are thrown, blurred and let land in their new face (`@keyframes rite-shift` in
+  `_mood.scss`), while the palette crossfades underneath and the page's sky washes across to the
+  new corner the roll gave it (`--sky-x` and `--sky-y` are registered custom properties, so
+  `main`'s gradient can transition them). The words flicker and never a control: an instruction
+  stays where a visitor can read it. A visitor who asked for less motion gets the change and not
+  the throw, as everywhere: every transition and animation is still turned off under
+  `prefers-reduced-motion`, a tween lands at once, and a scroll jumps.
+- **Stated in the prompt.** The tenth `AXIOM` in the `Rules:` block names the line, the engine's
+  custom properties and functions, the registers, and — as with the cadence and mood axioms — every
+  easing the code refuses, in full, so it is a rule a run can follow rather than a trap it springs:
+  the keywords `linear`, `ease`, `ease-in`, `ease-out` and `ease-in-out` and the function
+  `cubic-bezier()` in a transition, an animation or a timing-function declaration or in the easing
+  of a Web Animations call, and the browser's own smoothing, `scroll-behavior: smooth` and
+  `behavior: 'smooth'` on a scroll. It says what is welcome too: `linear()` with stops is the
+  engine's own curve, and a `linear-gradient` is paint. The `RITUAL, NOT RIDDLE` standard carries
+  the feel of it beside the serif, and the line a run reads last ends on it.
+- **Held to in code.** `check_motion` in
+  [`.github/scripts/make_interesting.py`](.github/scripts/make_interesting.py) refuses a plan that
+  takes the engine's line off a page, or that moves anything on a page by one of the easings above
+  — read as text, like the cadence check, of the page and every script and stylesheet it loads, so
+  an easing federated into a shared file is found and the fixed files are left alone. As with the
+  other nine, only what the run itself breaks is refused, and every reason is one easing in one
+  place, so clearing one can only take a reason away. `js/motion.js` joins `js/threshold.js` in
+  `PROTECTED_FILES`: a run may rewrite and extend it, and may never delete it.
+- **What is deliberately not checked**: whether a curve feels like a working, whether a register
+  suits its mood, and whether a script's own arithmetic traces a polynomial. No code could judge the
+  first two, and the third would have to read every expression on the site; the prompt asks for
+  all three.
+- **True of the site as committed.** `RealSiteTest` builds `/site` on every pull request and
+  before every deploy and sweeps it with the same check: every page loads the engine, nothing a
+  page or its files would move by is a standard easing, every transition in the Sass names a
+  family and every animation its own spell, the geometry is read where the movements are, every
+  mood names a register `_type.scss` declares and the built stylesheet writes that register's faces
+  and temperament wherever the mood's palette is written, and the engine still offers everything
+  the scripts ask it for. `MotionAxiomTest` holds the check itself: what it finds, what it leaves
+  alone, and that a page which already moved by a formula blocks nothing.
 
 ### Powered down, never broken
 
@@ -1597,7 +1733,7 @@ out of the way of the content it is reporting on.
   own behaviour is already described, and it is held on the committed site by the harness rather
   than by a `check_` function refusing a plan — for the same reason the rest of the stage is: the
   harness drives the stage through the stage's own elements, and those are a run's to rewrite, so
-  gating plans on it would pin markup the [Silo](#silo) leaves open. There are still nine coded
+  gating plans on it would pin markup the [Silo](#silo) leaves open. There are still ten coded
   axioms (see [One single experience](#one-single-experience)), and the prompt says plainly which
   half of the completion axiom refuses a plan and which holds the committed site, because a rule
   the code does not enforce must not be dressed up as one that does.
@@ -1684,7 +1820,7 @@ gesture they make at it.
   [`.github/scripts/make_interesting.py`](.github/scripts/make_interesting.py) and is held on the
   committed site by the harness rather than by a `check_` function refusing a plan — the harness
   drives the stage through the stage's own elements, and those are a run's to rewrite. There are
-  still nine coded axioms (see [One single experience](#one-single-experience)).
+  still ten coded axioms (see [One single experience](#one-single-experience)).
 - **Site-wide, not only the stage's.** The stage is where it had something to fix and where it is
   held in code, but it is stated for any picture a visitor can press. A piece with no `tap` knob is
   still free to write a `tap()` and answer presses itself — several worlds do — and that is the

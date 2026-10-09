@@ -41,20 +41,181 @@ $scale: (
   letter-spacing: list.nth($role, 4);
 }
 
-// The font stacks. Roboto is M3's default and lands wherever it is installed; nothing is fetched.
-$sans: Roboto, 'Helvetica Neue', system-ui, -apple-system, 'Segoe UI', sans-serif;
-$mono: 'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
+// The font stacks the site falls back on. Roboto is M3's default and lands wherever it is
+// installed; nothing is fetched, here or in any register below.
+$sans-stack: Roboto, 'Helvetica Neue', system-ui, -apple-system, 'Segoe UI', sans-serif;
+$mono-stack: 'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
 
-// The rite's face (README: "Ritual axiom"): the one serif on the site, worn by the words that carry
-// the atmosphere -- a page's heading, a piece's title, a card's name, the persona sheet's title, the
-// question the threshold asks -- and never by a control, a knob's ask, a brief, a goal or a status
-// line, which stay in $sans. So the atmosphere and the instruction can be told apart by the face
-// they are set in, and a word in the serif is never one a visitor has to act on. A system stack,
-// like $sans: nothing is fetched. Include it after the scale, which sets the weight it overrides.
+// The rite's face (README: "Ritual axiom"): a serif, worn by the words that carry the atmosphere
+// -- a page's heading, a piece's title, a card's name, the persona sheet's title, the question the
+// threshold asks -- and never by a control, a knob's ask, a brief, a goal or a status line, which
+// stay in the sans. So the atmosphere and the instruction can be told apart by the face they are
+// set in, and a word in the serif is never one a visitor has to act on. This stack is the home
+// register's and the one every other register falls back on. A system stack, like $sans-stack:
+// nothing is fetched. Include the mixin after the scale, which sets the weight it overrides.
 $rite: 'Iowan Old Style', 'Palatino Linotype', Palatino, 'Book Antiqua', Georgia, 'Times New Roman', serif;
 
+// ---- the registers -------------------------------------------------------------------------
+// The modality of the type shifts with the content (README: "Motion axiom", the typographic
+// half). A register is one pairing of faces -- the serif the rite's words wear, the sans every
+// instruction is set in, the mono a readout is written in -- with the tracking, weight, slant and
+// case that go with it, and the temperament the mood's movements take (see js/motion.js). Every
+// register is a pairing that goes together and nothing else is ever combined: a modern serif with a
+// geometric sans, an old-style serif with a humanist sans, a transitional serif with a grotesque, a
+// typewriter face with a plain interface sans. All of them are system stacks, each falling back on
+// the home register's faces, so a machine without the first face of a pairing still gets a pairing
+// that holds.
+//
+// Each mood of _mood.scss wears one register, on :root for the page and on a card for the card, so
+// the site changes its whole modality -- palette, face and motion together -- as a piece is featured
+// and a card of another world is dealt beside it. The custom properties a register writes are the
+// ones the mixins below read, with the home register as every fallback: --font-rite, --font-act,
+// --font-mono, --rite-weight, --rite-tracking, --rite-style, --rite-caps, --rite-numeric, and the
+// three of the temperament, --motion-grain, --motion-tempo and --motion-steps.
+$registers: (
+  // The home register: the old-style serif and M3's sans the site has always worn.
+  votive: (
+    rite: $rite,
+    act: $sans-stack,
+    mono: $mono-stack,
+    weight: 400, tracking: -0.005em, style: normal, caps: normal, numeric: normal,
+    grain: 0.45, tempo: 1, steps: 0
+  ),
+  // Hushed: the same pairing, the rite's words slanted and loosened, the movements slow and soft.
+  hush: (
+    rite: $rite,
+    act: $sans-stack,
+    mono: $mono-stack,
+    weight: 400, tracking: 0.012em, style: italic, caps: normal, numeric: normal,
+    grain: 0.2, tempo: 1.35, steps: 0
+  ),
+  // The sibyl: an old-style italic over a humanist sans, both calligraphic.
+  sibyl: (
+    rite: ('Hoefler Text', 'Apple Garamond', Garamond, 'Baskerville Old Face', 'Book Antiqua', Georgia, serif),
+    act: (Optima, 'Gill Sans', 'Gill Sans MT', Candara, Calibri, 'Segoe UI', sans-serif),
+    mono: $mono-stack,
+    weight: 400, tracking: 0.015em, style: italic, caps: normal, numeric: normal,
+    grain: 0.35, tempo: 1.2, steps: 0
+  ),
+  // Lapidary: a high-contrast modern serif, tracked out, over a geometric sans.
+  lapidary: (
+    rite: (Didot, 'Bodoni 72', 'Bodoni MT', 'Big Caslon', 'Iowan Old Style', Georgia, serif),
+    act: ('Avenir Next', Avenir, Futura, 'Century Gothic', 'Trebuchet MS', sans-serif),
+    mono: $mono-stack,
+    weight: 400, tracking: 0.035em, style: normal, caps: normal, numeric: normal,
+    grain: 0.3, tempo: 1.15, steps: 0
+  ),
+  // Monastic: a Garamond over a humanist sans, the pairing of a printed book.
+  monastic: (
+    rite: ('Hoefler Text', Garamond, 'Apple Garamond', 'EB Garamond', 'Book Antiqua', Georgia, serif),
+    act: ('Gill Sans', 'Gill Sans MT', Optima, Candara, Calibri, 'Segoe UI', sans-serif),
+    mono: $mono-stack,
+    weight: 400, tracking: 0, style: normal, caps: normal, numeric: oldstyle-nums,
+    grain: 0.3, tempo: 1.1, steps: 0
+  ),
+  // Astral: a transitional serif over a grotesque, the pairing of a journal of record.
+  astral: (
+    rite: (Charter, 'Bitstream Charter', Baskerville, Cambria, Georgia, serif),
+    act: ('Helvetica Neue', Helvetica, Roboto, Arial, system-ui, sans-serif),
+    mono: $mono-stack,
+    weight: 400, tracking: -0.01em, style: normal, caps: normal, numeric: lining-nums,
+    grain: 0.55, tempo: 0.9, steps: 0
+  ),
+  // Folio: a Baskerville over a humanist sans, for a world made of words.
+  folio: (
+    rite: (Baskerville, 'Baskerville Old Face', Charter, Cambria, Georgia, serif),
+    act: ('Gill Sans', 'Gill Sans MT', Optima, Candara, Calibri, sans-serif),
+    mono: $mono-stack,
+    weight: 400, tracking: 0, style: normal, caps: normal, numeric: oldstyle-nums,
+    grain: 0.4, tempo: 1, steps: 0
+  ),
+  // The cabinet: a typewriter's slab serif over a plain interface sans, and movements that step.
+  cabinet: (
+    rite: ('American Typewriter', 'Courier Prime', 'Courier New', Courier, 'Nimbus Mono PS', monospace),
+    act: ('Segoe UI', system-ui, -apple-system, Roboto, 'Helvetica Neue', sans-serif),
+    mono: ('Courier Prime', 'Courier New', Courier, ui-monospace, Menlo, monospace),
+    weight: 400, tracking: 0.02em, style: normal, caps: normal, numeric: lining-nums,
+    grain: 0.85, tempo: 0.95, steps: 1
+  ),
+  // Brass: the home serif engraved in small capitals, over a geometric sans.
+  brass: (
+    rite: ('Palatino Linotype', Palatino, 'Book Antiqua', 'Iowan Old Style', Georgia, serif),
+    act: ('Avenir Next', Avenir, Futura, 'Century Gothic', 'Trebuchet MS', sans-serif),
+    mono: $mono-stack,
+    weight: 400, tracking: 0.12em, style: normal, caps: all-small-caps, numeric: lining-nums,
+    grain: 0.5, tempo: 1, steps: 0
+  ),
+  // The storm: a transitional serif set heavy and tight, over a grotesque.
+  storm: (
+    rite: (Charter, 'Bitstream Charter', Cambria, Georgia, 'Times New Roman', serif),
+    act: ('Helvetica Neue', Helvetica, Roboto, Arial, sans-serif),
+    mono: $mono-stack,
+    weight: 600, tracking: -0.02em, style: normal, caps: normal, numeric: lining-nums,
+    grain: 0.75, tempo: 1.1, steps: 0
+  ),
+  // The squall: the same, slanted, and quick.
+  squall: (
+    rite: (Charter, 'Bitstream Charter', Cambria, Georgia, 'Times New Roman', serif),
+    act: ('Helvetica Neue', Helvetica, Roboto, Arial, sans-serif),
+    mono: $mono-stack,
+    weight: 700, tracking: -0.02em, style: italic, caps: normal, numeric: lining-nums,
+    grain: 0.9, tempo: 0.75, steps: 0
+  ),
+  // Wire: the home serif wound tight and black, over the sans, with the fastest movements.
+  wire: (
+    rite: ('Iowan Old Style', Charter, 'Palatino Linotype', Georgia, serif),
+    act: (Roboto, 'Helvetica Neue', Arial, system-ui, sans-serif),
+    mono: $mono-stack,
+    weight: 700, tracking: -0.03em, style: normal, caps: normal, numeric: lining-nums,
+    grain: 0.95, tempo: 0.65, steps: 0
+  ),
+  // The vigil: the home pairing with the rite's words in small capitals, spaced, held still.
+  vigil: (
+    rite: $rite,
+    act: $sans-stack,
+    mono: $mono-stack,
+    weight: 400, tracking: 0.08em, style: normal, caps: all-small-caps, numeric: normal,
+    grain: 0.3, tempo: 1.05, steps: 0
+  ),
+  // The meter: a transitional serif with tabular figures over a monospaced sans, counting.
+  meter: (
+    rite: (Charter, 'Bitstream Charter', Cambria, Georgia, serif),
+    act: $mono-stack,
+    mono: $mono-stack,
+    weight: 400, tracking: 0.01em, style: normal, caps: normal, numeric: tabular-nums,
+    grain: 0.7, tempo: 0.85, steps: 1
+  )
+);
+
+// A register's custom properties, written wherever a mood is set (_mood.scss).
+@mixin register($name) {
+  $r: map.get($registers, $name);
+  @if not $r {
+    @error "no register named #{$name}";
+  }
+  --font-rite: #{map.get($r, rite)};
+  --font-act: #{map.get($r, act)};
+  --font-mono: #{map.get($r, mono)};
+  --rite-weight: #{map.get($r, weight)};
+  --rite-tracking: #{map.get($r, tracking)};
+  --rite-style: #{map.get($r, style)};
+  --rite-caps: #{map.get($r, caps)};
+  --rite-numeric: #{map.get($r, numeric)};
+  --motion-grain: #{map.get($r, grain)};
+  --motion-tempo: #{map.get($r, tempo)};
+  --motion-steps: #{map.get($r, steps)};
+}
+
+// The faces as a partial uses them: the register's, with the home stack as the fallback, so a page
+// with no register set -- or a browser that reads no custom property -- still wears the home pair.
+$sans: var(--font-act, #{$sans-stack});
+$mono: var(--font-mono, #{$mono-stack});
+
 @mixin rite {
-  font-family: $rite;
-  font-weight: 400;
-  letter-spacing: -0.005em;
+  font-family: var(--font-rite, #{$rite});
+  font-weight: var(--rite-weight, 400);
+  font-style: var(--rite-style, normal);
+  font-variant-caps: var(--rite-caps, normal);
+  font-variant-numeric: var(--rite-numeric, normal);
+  letter-spacing: var(--rite-tracking, -0.005em);
 }

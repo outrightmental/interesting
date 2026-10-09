@@ -399,12 +399,79 @@ function worldOf(file) {
 
 // The four names a palette is (_sass/_mood.scss, js/variant.js), and no others.
 const SEEDS = ['bg', 'bg2', 'accent', 'accent2'];
-const GRAY = '#808080'; // the neutral the theme dips through, so one colour clears before the next
-const DIP_MS = 140; // the quick fade out to that neutral
-const RISE_MS = 420; // the fade from it into the colour of the card just pressed
+// The tones the theme may dip through, so one colour clears before the next: the neutral grey most
+// of the time, now and then a deeper ink or a paler ash, the roll deciding which (README: "Motion
+// axiom" -- the fade of the background is a movement of the rite like any other).
+const TONES = ['#808080', '#808080', '#808080', '#2c2c30', '#b4b2ad'];
+const DIP_MS = 140; // the quick fade out to that tone, at the scheme's own tempo
+const RISE_MS = 420; // the fade from it into the colour of the card just pressed, at the same
 
 let featured = null; // the palette the site is wearing for the activity on the stage, once landed
 let fading = 0; // the crossfade in flight, so two picks in a row never fight over the seeds
+
+/* ---- the motion engine, where it is --------------------------------------------------------- */
+
+// window.interestingMotion (js/motion.js) rolls every curve on the site, and the stage takes its
+// own curves and its timers from the same roll, so a vanish is over before the next piece opens and
+// the crossfade's dip runs along a curve rolled for that one shift. The stub browser the stage
+// harness runs in has no engine, so every ask below falls back: the timers to the scheme's own
+// figures, and a curve to the one polyline written here -- a glitch of a curve and never a formula,
+// because no movement on this site runs along one (README: "Motion axiom").
+const motion = window.interestingMotion || null;
+const OWN_CURVE = [[0, 0], [0.1, 0.02], [0.38, 0.64], [0.45, 0.58], [0.62, 1.05], [0.8, 0.97], [0.9, 1.01], [1, 1]];
+
+// A function t -> y along a polyline of [t, y] stops, which is what the engine hands back too.
+function along(stops) {
+  return (t) => {
+    if (t <= 0) return stops[0][1];
+    if (t >= 1) return stops[stops.length - 1][1];
+    for (let i = 1; i < stops.length; i++) {
+      if (t <= stops[i][0]) {
+        const [t0, y0] = stops[i - 1];
+        const [t1, y1] = stops[i];
+        return t1 > t0 ? y0 + (y1 - y0) * ((t - t0) / (t1 - t0)) : y1;
+      }
+    }
+    return 1;
+  };
+}
+
+// A curve of the family, rolled for this one use, or the stage's own where there is no engine.
+function riteEase(family) {
+  if (motion && typeof motion.ease === 'function') {
+    try {
+      return motion.ease(family);
+    } catch (e) {
+      /* the stage's own curve stands */
+    }
+  }
+  return along(OWN_CURVE);
+}
+
+// How long the stylesheet is giving a movement right now, or the scheme's own figure without it.
+function riteMs(name, fallback) {
+  if (motion && typeof motion.ms === 'function') {
+    const ms = motion.ms(name);
+    if (ms > 0) return ms;
+  }
+  return fallback;
+}
+
+function riteTempo() {
+  const tempo = motion && motion.temper ? Number(motion.temper.tempo) : 1;
+  return Number.isFinite(tempo) && tempo > 0 ? tempo : 1;
+}
+
+// The page scrolls along a rolled curve, or jumps: never along the browser's own smoothing.
+function scrollToTop() {
+  if (motion && typeof motion.scrollTo === 'function') motion.scrollTo(0);
+  else window.scrollTo({ top: 0, behavior: 'auto' });
+}
+
+function scrollSceneIntoView(node) {
+  if (motion && typeof motion.scrollIntoView === 'function') motion.scrollIntoView(node, { block: 'center' });
+  else node.scrollIntoView({ block: 'center', behavior: 'auto' });
+}
 
 function readSeeds(node) {
   const style = getComputedStyle(node);
@@ -434,11 +501,17 @@ function someSeeds(seeds) {
   return out;
 }
 
-/* The site becomes `to` from wherever it is now, by way of a neutral grey, and lands exactly on
-   it (issue #61) -- a quick fade out to the neutral so the colour it was leaves cleanly, then a
-   fuller fade from the neutral into the colour that was asked for, so the theme shifts through a
+/* The site becomes `to` from wherever it is now, by way of a settled tone, and lands exactly on
+   it (issue #61) -- a quick fade out to the tone so the colour it was leaves cleanly, then a
+   fuller fade from the tone into the colour that was asked for, so the theme shifts through a
    settled middle rather than smearing one palette straight over another. A visitor who asked for
-   less motion gets the change and not the shift. */
+   less motion gets the change and not the shift.
+
+   The shift is a working of its own (README: "Motion axiom"), and no two are alike: each of the
+   four seeds leaves along a curve rolled for it alone and rises along another, the four staggered
+   by a few rolled frames so the ground lands before the accents snap in, or the accents before the
+   ground; the tone in the middle is the roll's -- grey most of the time, now and then an ink or an
+   ash -- and the whole of it runs at the tempo of the mood the site is arriving in. */
 function crossfade(from, to, done) {
   if (fading) cancelAnimationFrame(fading);
   fading = 0;
@@ -451,24 +524,43 @@ function crossfade(from, to, done) {
   }
   // This turn's paint is still the colour the site was: the shift starts from there.
   writeSeeds(from);
+  const tempo = riteTempo();
+  const tone = TONES[Math.floor(Math.random() * TONES.length)];
+  const plan = {};
+  for (const name of SEEDS) {
+    plan[name] = {
+      wait: Math.round(Math.random() * 90 * tempo), // the stagger: when this seed sets out
+      dip: riteEase('leave'),
+      rise: riteEase('arrive'),
+      dipMs: DIP_MS * tempo * (0.8 + Math.random() * 0.5),
+      riseMs: RISE_MS * tempo * (0.8 + Math.random() * 0.5)
+    };
+  }
+  const total = Math.max(...SEEDS.map((name) => plan[name].wait + plan[name].dipMs + plan[name].riseMs));
   const startedAt = performance.now();
   const step = (now) => {
     const elapsed = now - startedAt;
     const at = {};
-    if (elapsed < DIP_MS) {
-      // Fading out to the neutral grey.
-      const t = Math.max(0, elapsed / DIP_MS);
-      for (const name of SEEDS) at[name] = mix(from[name], GRAY, t);
-    } else {
-      // Rising from the neutral grey into the new theme, landing exactly on it.
-      const t = Math.min(1, (elapsed - DIP_MS) / RISE_MS);
-      for (const name of SEEDS) at[name] = t < 1 ? mix(GRAY, to[name], t) : to[name];
+    for (const name of SEEDS) {
+      const p = plan[name];
+      const own = elapsed - p.wait;
+      if (own <= 0) {
+        at[name] = from[name];
+      } else if (own < p.dipMs) {
+        // Fading out to the tone, along this seed's own curve (which may slip back for a frame).
+        at[name] = mix(from[name], tone, Math.max(0, Math.min(1, p.dip(own / p.dipMs))));
+      } else {
+        // Rising from the tone into the new theme, landing exactly on it.
+        const t = (own - p.dipMs) / p.riseMs;
+        at[name] = t < 1 ? mix(tone, to[name], Math.max(0, Math.min(1, p.rise(t)))) : to[name];
+      }
     }
     writeSeeds(at);
-    if (elapsed < DIP_MS + RISE_MS) {
+    if (elapsed < total) {
       fading = requestAnimationFrame(step);
       return;
     }
+    writeSeeds(to);
     fading = 0;
     if (done) done();
   };
@@ -652,7 +744,7 @@ async function open(file, seed, options) {
       /* a file: URL, or a browser that will not: the piece still opens */
     }
   }
-  if (opts.scroll) window.scrollTo({ top: 0, behavior: calm.matches ? 'auto' : 'smooth' });
+  if (opts.scroll) scrollToTop();
   setMode('loading');
   // close() above left the stage empty: what the card was showing stands until the module lands and
   // begin() draws the piece. The world's one line is never written here -- it is the same line for
@@ -908,9 +1000,11 @@ function begin(opened) {
     /* a piece that cannot start still has its knobs; the frame loop guards itself */
   }
   if (opts && opts.arriving) {
+    // For as long as the stylesheet is giving the arrival right now (--motion-long, rolled by
+    // js/motion.js), and a little over, so the mode never changes under a movement still going.
     later(() => {
       if (current && current.token === token && stage.dataset.mode === 'arriving') setMode('live');
-    }, 600);
+    }, riteMs('long', 560) + 60);
   }
   if (!opts || opts.focus !== false) ui.title.focus({ preventScroll: true });
   startFrames();
@@ -1821,9 +1915,7 @@ function finish(say) {
   // The finale is on the scene, which on a phone may be above the knob that finished it. The done
   // mark is not: it reports from the end of the dots' row in the rail, clear of the picture.
   const box = ui.scene.getBoundingClientRect();
-  if (box.top < 0 || box.bottom > window.innerHeight) {
-    ui.scene.scrollIntoView({ block: 'center', behavior: calm.matches ? 'auto' : 'smooth' });
-  }
+  if (box.top < 0 || box.bottom > window.innerHeight) scrollSceneIntoView(ui.scene);
   chime();
   burst();
   try {
@@ -1869,10 +1961,12 @@ function goOn() {
   const finished = !!(current && current.completed);
   const piece = current; // null where there was nothing to finish: a missing module, or a gate
   setMode('vanishing');
+  // The vanish takes the time the stylesheet is giving it right now (--motion-long, rolled by
+  // js/motion.js), so the next piece opens once the last has gone and not a frame before.
   later(() => {
     if (current !== piece) return; // something else took the stage while this one was leaving
     next(finished ? {} : { replace: true });
-  }, calm.matches ? 120 : 520);
+  }, calm.matches ? 120 : riteMs('long', 520) + 40);
 }
 
 async function next(options) {
@@ -2025,25 +2119,42 @@ function burst() {
   const colors = current ? current.env.colors : FALLBACK;
   const cx = scene.left - box.left + scene.width / 2;
   const cy = scene.top - box.top + scene.height / 2;
+  // The burst is a working too (README: "Motion axiom"): the ring opens along a curve rolled for
+  // this one finish rather than growing evenly, every particle fades along a curve of its own, a
+  // few of them strobe, and now and then the whole burst holds a frame -- the stutter of a thing
+  // seen by lamplight -- with the grain of the mood saying how often.
+  const grain = motion && motion.temper ? Number(motion.temper.grain) || 0.45 : 0.45;
+  const ringOpens = riteEase('wipe');
+  const ringReach = 700 + Math.random() * 400;
   const parts = [];
   for (let i = 0; i < 140; i++) {
     const a = Math.random() * Math.PI * 2;
     const v = 120 + Math.random() * 520;
     parts.push({ x: cx, y: cy, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 80, r: 1.5 + Math.random() * 4,
-      c: [colors.accent, colors.accent2, colors.fg][i % 3], life: 0.9 + Math.random() * 0.6, age: 0 });
+      c: [colors.accent, colors.accent2, colors.fg][i % 3], life: 0.9 + Math.random() * 0.6, age: 0,
+      fade: riteEase('leave'), strobe: Math.random() < grain * 0.35 ? 2 + Math.floor(Math.random() * 3) : 0 });
   }
   let last = performance.now();
   let ring = 0;
+  let held = 0; // frames the burst is holding still for
+  let frames = 0;
   function tick(now) {
     // A frame's timestamp can precede the performance.now() read just before it: never negative.
     const dt = Math.max(0, Math.min(0.05, (now - last) / 1000));
     last = now;
+    frames += 1;
+    if (held > 0) {
+      held -= 1;
+      requestAnimationFrame(tick);
+      return;
+    }
+    if (Math.random() < grain * 0.06) held = 1 + Math.floor(Math.random() * 2);
     ring += dt;
     g.clearRect(0, 0, box.width, box.height);
     g.lineWidth = 3;
     g.strokeStyle = alpha(colors.accent, Math.max(0, 0.7 - ring * 0.9));
     g.beginPath();
-    g.arc(cx, cy, Math.max(0, ring * 900), 0, Math.PI * 2);
+    g.arc(cx, cy, Math.max(0, ringOpens(Math.min(1, ring / 1.2)) * ringReach), 0, Math.PI * 2);
     g.stroke();
     let alive = 0;
     for (const p of parts) {
@@ -2054,7 +2165,8 @@ function burst() {
       p.vx *= 0.985;
       p.x += p.vx * dt;
       p.y += p.vy * dt;
-      g.fillStyle = alpha(p.c, Math.max(0, 1 - p.age / p.life));
+      if (p.strobe && frames % p.strobe === 0) continue; // a strobing particle skips its frame
+      g.fillStyle = alpha(p.c, Math.max(0, 1 - p.fade(p.age / p.life)));
       g.beginPath();
       g.arc(p.x, p.y, p.r, 0, Math.PI * 2);
       g.fill();
