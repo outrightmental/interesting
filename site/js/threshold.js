@@ -294,6 +294,22 @@
       slowing: { tender: 2, brooding: 1, rooted: 1 },
       waited: { attentive: 2, brooding: 1, divinatory: 1 },
       sudden: { restless: 2, tempestuous: 1, verbal: 1 }
+    },
+    {
+      probe: 'cairn', name: 'the cairn', kind: 'cairn',
+      ask: 'A flat place, and stones enough. Stack a cairn, each stone where you set it, and leave it standing when it is done.',
+      label: 'set a stone', done: 'leave it standing',
+      buckets: [
+        { under: 3, weights: { tender: 3, brooding: 2, divinatory: 1 } },
+        { under: 5, weights: { rooted: 3, tending: 2, tender: 1 } },
+        { under: 7, weights: { analytic: 2, geometric: 2, metrical: 1, attentive: 1 } },
+        { under: 10, weights: { ceremonial: 2, curious: 2, verbal: 1 } },
+        { under: Infinity, weights: { restless: 3, cosmic: 2, tempestuous: 1 } }
+      ],
+      plumb: { geometric: 3, metrical: 2, analytic: 1 },
+      daring: { restless: 2, tempestuous: 2, curious: 1 },
+      sway: { attentive: 2, metrical: 1, divinatory: 1 },
+      leaning: { rooted: 2, tender: 1, brooding: 1 }
     }
   ];
 
@@ -552,7 +568,7 @@
       choice: choiceProbe, sequence: sequenceProbe, tap: tapProbe, hold: holdProbe,
       place: placeProbe, draw: drawProbe, windows: windowsProbe, balance: balanceProbe,
       slider: sliderProbe, sky: skyProbe, keys: keysProbe, knock: knockProbe,
-      rubbing: rubbingProbe
+      rubbing: rubbingProbe, cairn: cairnProbe
     };
     (kinds[probe.kind] || choiceProbe)(probe, body, trace, answer, finish);
     return probe;
@@ -1491,6 +1507,166 @@
       finish();
     });
     paint(performance.now());
+  }
+  // A cairn is read when it is left standing, never while it rises: how many stones, and the
+  // shape the stack took -- plumb, swaying, leaning, or daring. Each stone goes where the visitor
+  // sets it: tap the ground either side of the stack, steer the next stone with the arrow keys and
+  // place it with enter, or let the button set one square on. No cairn is wrong and nothing falls:
+  // a stone set far out simply hangs there, which is its own kind of answer.
+  function cairnProbe(probe, body, trace, answer, finish) {
+    var MAX = 14;
+    var ground = el('canvas', 'probe-pad');
+    ground.width = 600;
+    ground.height = 320;
+    ground.tabIndex = 0;
+    ground.setAttribute('role', 'application');
+    ground.setAttribute('aria-label', 'a flat place to stack stones: tap where the next stone goes, or steer it with the arrow keys and place it with enter');
+    ground.style.cursor = 'pointer';
+    ground.style.touchAction = 'manipulation';
+    var g = ground.getContext('2d');
+    ground.hidden = !g;
+    body.appendChild(ground);
+    var controls = el('div', 'controls');
+    var set = el('button', 'probe-big', probe.label);
+    set.type = 'button';
+    var leave = el('button', 'btn-filled', probe.done);
+    leave.type = 'button';
+    leave.disabled = true;
+    controls.appendChild(set);
+    controls.appendChild(leave);
+    body.appendChild(controls);
+    body.appendChild(el('p', 'probe-count', 'as many stones as feel right: tap either side of the stack to set one off-centre, and say when it is done'));
+    var style = window.getComputedStyle(body);
+    var tone = function (name, fallback) { return rgbOf(style.getPropertyValue(name), fallback); };
+    var night = tone('--bg', '#070a14');
+    var dusk = tone('--bg2', '#1c2a4e');
+    var cool = tone('--accent', '#9fcbff');
+    var warm = tone('--accent2', '#ffe7ab');
+    var stones = [];
+    var cursor = 0;
+    var done = false;
+    function stoneW(i) { return Math.max(26, 86 - i * 4); }
+    function topX() {
+      var x = ground.width / 2;
+      for (var i = 1; i < stones.length; i++) x += stones[i].off * stoneW(i - 1);
+      return x;
+    }
+    function paint() {
+      if (!g) return;
+      var w = ground.width;
+      var h = ground.height;
+      var grad = g.createLinearGradient(0, 0, 0, h);
+      grad.addColorStop(0, rgba(blend(night, dusk, 0.5), 1));
+      grad.addColorStop(1, rgba(night, 1));
+      g.fillStyle = grad;
+      g.fillRect(0, 0, w, h);
+      var floor = h * 0.88;
+      g.fillStyle = 'rgba(0,0,0,0.4)';
+      g.fillRect(0, floor, w, h - floor);
+      g.lineCap = 'butt';
+      g.strokeStyle = rgba(cool, 0.3);
+      g.lineWidth = 1;
+      g.beginPath();
+      g.moveTo(0, floor);
+      g.lineTo(w, floor);
+      g.stroke();
+      var x = w / 2;
+      var y = floor;
+      g.lineCap = 'round';
+      for (var i = 0; i < stones.length; i++) {
+        var sw = stoneW(i);
+        var sh = Math.max(9, 19 - i);
+        x += i ? stones[i].off * stoneW(i - 1) : 0;
+        y -= sh + 1;
+        var mid = y + sh / 2;
+        g.strokeStyle = rgba(blend(night, cool, 0.3 + (i % 3) * 0.07), 1);
+        g.lineWidth = sh;
+        g.beginPath();
+        g.moveTo(x - sw / 2 + sh / 2, mid);
+        g.lineTo(x + sw / 2 - sh / 2, mid);
+        g.stroke();
+        g.strokeStyle = rgba(cool, 0.35);
+        g.lineWidth = 1.2;
+        g.beginPath();
+        g.moveTo(x - sw / 2 + sh, y + 1);
+        g.lineTo(x + sw / 2 - sh, y + 1);
+        g.stroke();
+      }
+      if (!done && stones.length < MAX) {
+        var gw = stoneW(stones.length);
+        var gx = x + (stones.length ? cursor * stoneW(stones.length - 1) : 0);
+        g.setLineDash([4, 5]);
+        g.strokeStyle = rgba(warm, 0.65);
+        g.lineWidth = 2;
+        g.beginPath();
+        g.moveTo(gx - gw / 2, y - 7);
+        g.lineTo(gx + gw / 2, y - 7);
+        g.stroke();
+        g.setLineDash([]);
+      }
+    }
+    function place(off) {
+      if (done || stones.length >= MAX) return;
+      var o = stones.length ? Math.max(-0.42, Math.min(0.42, off)) : 0;
+      stones.push({ off: o });
+      cursor = 0;
+      leave.disabled = false;
+      trace.textContent = stones.length >= MAX ? 'that is all the stones there are'
+        : plural(stones.length, 'stone') + (stones.length === 1 ? ', the base'
+          : o > 0.08 ? ', set a little east' : o < -0.08 ? ', set a little west' : ', set square');
+      if (trace.meter) trace.meter.textContent = stones.slice(1).map(function (s) {
+        return s.off > 0.08 ? '\u2197' : s.off < -0.08 ? '\u2196' : '\u00b7';
+      }).join(' ');
+      paint();
+    }
+    ground.addEventListener('click', function (ev) {
+      var box = ground.getBoundingClientRect();
+      if (!box.width) return;
+      var px = (ev.clientX - box.left) / box.width * ground.width;
+      var base = stoneW(stones.length ? stones.length - 1 : 0);
+      place((px - topX()) / base);
+    });
+    ground.addEventListener('keydown', function (ev) {
+      if (done) return;
+      if (ev.key === 'ArrowLeft' || ev.key === 'ArrowRight') {
+        ev.preventDefault();
+        cursor = Math.max(-0.42, Math.min(0.42, cursor + (ev.key === 'ArrowLeft' ? -0.14 : 0.14)));
+        trace.textContent = cursor > 0.04 ? 'the next stone hangs east; enter sets it'
+          : cursor < -0.04 ? 'the next stone hangs west; enter sets it' : 'the next stone sits square; enter sets it';
+        paint();
+      } else if (ev.key === 'Enter' || ev.key === ' ') {
+        ev.preventDefault();
+        place(cursor);
+      }
+    });
+    set.addEventListener('click', function () { place(0); });
+    leave.addEventListener('click', function () {
+      if (done || !stones.length) return;
+      done = true;
+      var n = stones.length;
+      bucket(probe.buckets, n, answer);
+      var offs = stones.slice(1).map(function (s) { return s.off; });
+      if (offs.length >= 2) {
+        var maxAbs = 0;
+        var drift = 0;
+        var turns = 0;
+        for (var i = 0; i < offs.length; i++) {
+          maxAbs = Math.max(maxAbs, Math.abs(offs[i]));
+          drift += offs[i];
+          if (i && offs[i] * offs[i - 1] < -0.003) turns += 1;
+        }
+        if (maxAbs < 0.08) add(answer, probe.plumb, 1);
+        else if (maxAbs > 0.3 || Math.abs(drift) > 0.5) add(answer, probe.daring, 1);
+        else if (turns * 2 >= offs.length) add(answer, probe.sway, 1);
+        else add(answer, probe.leaning, 1);
+      }
+      set.disabled = true;
+      leave.disabled = true;
+      ground.style.cursor = 'default';
+      if (trace.meter) trace.meter.textContent = '';
+      finish();
+    });
+    paint();
   }
   // A rubbing reads the final coverage, not the path or speed of the hand. Dragging and native
   // buttons uncover the same patches; no gesture history or drawing is kept with the reading.
