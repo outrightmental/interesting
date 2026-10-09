@@ -326,7 +326,9 @@ share a common lightbox component. the current persona lightbox is weak.*
   thing open is marked `data-lightbox-front`, which is what lifts it over the veil. The page's frame
   loop is **held**: the `requestAnimationFrame` callbacks a page asks for while a lightbox is up are
   kept and run when the last one comes down, because CSS can pause an animation but not a loop, and
-  every animated page here runs one of its own. And `<html data-lightbox='nav'>` (or `'persona'`, or
+  every animated page here runs one of its own; the engine's own frames are not held with them
+  (`js/motion.js` takes the browser's frame when it loads), so a chip pressed inside the open
+  constellation still stamps and a part of the persona sheet still seals. And `<html data-lightbox='nav'>` (or `'persona'`, or
   `'are-you-sure'`) says which one is up — written only when it changes, so a caller that renames
   its own box where it stands, as the constellation does when the state interface takes the lightbox
   over (`box.up('state')`, issue #66), never clears the attribute in between.
@@ -811,7 +813,10 @@ code, and true of the site as committed.
   a flicker out, doubled), a landing (the patterned top, the flat rung then the top, an overshoot),
   a dip (how deep, which way, with what flash), a return (straight, over the mark, a double
   bounce), an approach (straight, hesitating, past the mark, skewed in) — with the width of every
-  tread uneven and its own, and a length rolled for that play. The engine writes the composition
+  tread uneven and its own, and a length rolled for that play. No piece of a wax, a wane, an ink, a
+  seal or an unseal says anything about opacity: a tread with the surface gone is a mask that lets
+  nothing through, because a property written in one tread and left out of the next is
+  interpolated between them by the browser, and that would be a fade under the ladder. The engine writes the composition
   as an `@keyframes` rule of its own into a stylesheet it keeps (recycling the oldest as new ones
   come) and names it on the element — `--rite-wax`, `--rite-wane`, `--rite-stamp`, `--rite-ink`,
   `--rite-seal`, `--rite-unseal`, `--rite-develop`, `--rite-unmake`, `--rite-veil-out` — where the
@@ -837,12 +842,18 @@ code, and true of the site as committed.
   **develops** through the ladder from the rolled geometry and a thing leaving is **unmade** down
   it, with one flicker back; anything that turns **ratchets** in clicks with backlash; words
   **are revealed** glyph by glyph, each through a sigil; things that change places **move
-  there**. The engine puts the state classes on every pressable element — reading the pointer, the
+  there**. A link in the words is a control too ([`_base.scss`](site/_sass/_base.scss)): at rest
+  a hairline; under the pointer its underline climbs a stair of thickness, offset and style while a
+  plate of the fill texture develops behind the words; it comes home down a stair of its own cuts;
+  and a press dips the words in a link's terms — the ink, the rule doubled and pulled in, the
+  letters spread — beside the composed stamp a line of words cannot show. The engine puts the state classes on every pressable element — reading the pointer, the
   keyboard, a visible focus, and every attribute a control is set by (`aria-pressed`,
   `aria-selected`, `aria-checked`, `aria-current`, `aria-expanded`, `open`, the `is-set` family of
   classes) — and takes each passing one off when its animation ends;
   [`site/_sass/_controls.scss`](site/_sass/_controls.scss) says what each looks like, and every
-  keyframe of a rite is a **hard cut**, each tread held to the moment of the next, so even a
+  keyframe of a rite is a **hard cut**, each tread held to the moment of the next (a property a
+  tread leaves unsaid is one the browser would slide between the treads that say it, so every
+  tread says all of them), so even a
   swooping curve reads as treads and a stair curve as a stair of stairs. A page with no script
   climbs the same ladder from `:hover`, `:focus-visible` and `:active`, on the baked mattes of
   `_tokens.scss`.
@@ -865,8 +876,9 @@ code, and true of the site as committed.
   and the **mattes**, `--matte-1` to `--matte-5` (the ladder, as `mask` values: an SVG noise field
   thresholded at rising coverage, a scatter of shards, or scan, dither, iris and grain gradients)
   with `--matte-fill` and `--matte-fill-size` (the texture a surface that stays changed is filled
-  with), `--matte-top` (that texture as a mask, the top rung, so a surface that has arrived rests
-  patterned and never flat) and `--matte-kind` (also `<html data-matte>`). The noise ladder is
+  with), `--matte-top` (that texture as a mask, the top rung — one layer only, since a full
+  layer beside it would be added to it and let everything through — so a surface that has
+  arrived rests patterned and never flat) and `--matte-kind` (also `<html data-matte>`). The noise ladder is
   calibrated: the turbulence channel is stretched before it is cut, so the five rungs really cover
   about a fifth, a third, a half, three quarters and the whole; the shards are drawn smallest
   first and wrapped at the tile's edges so they repeat without a seam; the dither is a Bayer tile
@@ -1031,7 +1043,12 @@ game whose generator has not been started — and carries the one button that st
 to begin*, which writes a small random sky to the persona exactly as placing stars in it would,
 and powers the world up where the visitor stands. A quieter second choice may follow the button
 and never replaces it: for the sky, a button that opens the persona sheet, where stars are placed
-by hand.
+by hand. The powering down and up are rites of the motion axiom: the host dims along the stair and
+a dust sheet of the rolled fill texture comes down the matte ladder onto it, the box develops from
+a geometry of its own and its words are revealed; when the power comes on the sheet lifts back up
+the ladder, the box is unmade down it, and on the stage the gate the helper powered down — a
+visible, unexposed plate where the scene will be — is unmade before the scene develops in its
+place.
 
 - **Stated in the prompt**, under `POWERED DOWN, NEVER BROKEN`, to the model only: as with `WHOLE`,
   no check could tell a dead end from a deliberate one, so a `check_` of its own was ruled out
