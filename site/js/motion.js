@@ -141,6 +141,20 @@
 (function (global) {
   'use strict';
 
+  /* ---- the browser's own frame ----------------------------------------------------------- */
+
+  // Taken when the engine loads. The shell holds the page's frames while a lightbox is up
+  // (js/site.js puts a holding requestAnimationFrame in the window's place to still the pieces
+  // behind the sheet), and the engine's own frames -- the passing classes of a stamp, a seal or a
+  // deal, the stepper, the tween, the throw of a shift -- must not be held with them, or nothing
+  // inside a lightbox would ever arrive. A page with no frames at all (the stub harnesses) is
+  // handed whatever the window offers at the time, or nothing.
+  var nativeFrame = typeof global.requestAnimationFrame === 'function' ? global.requestAnimationFrame : null;
+  function frameOf() {
+    if (nativeFrame) return function (fn) { return nativeFrame.call(global, fn); };
+    return typeof global.requestAnimationFrame === 'function' ? global.requestAnimationFrame : null;
+  }
+
   /* ---- a seeded stream ------------------------------------------------------------------- */
 
   // mulberry32, the same small generator js/variant.js deals cards with. Seeded from entropy for
@@ -1247,7 +1261,7 @@
     var transitionRoll = 0;
     function onTransitionEnd() {
       if (transitionRoll) return;
-      var raf = typeof global.requestAnimationFrame === 'function' ? global.requestAnimationFrame : null;
+      var raf = frameOf();
       if (!raf) {
         rollFamilies(TRANSITION_FAMILIES);
         return;
@@ -1391,7 +1405,7 @@
       }
       // Taken off and put back, so a shift during a shift starts the flicker over.
       html.removeAttribute('data-shifting');
-      var raf = typeof global.requestAnimationFrame === 'function' ? global.requestAnimationFrame : function (fn) { fn(); };
+      var raf = frameOf() || function (fn) { fn(); };
       raf(function () {
         if (token !== shiftToken) return;
         html.setAttribute('data-shifting', '');
@@ -1838,7 +1852,7 @@
       if (s && s.timers[kind] && typeof global.clearTimeout === 'function') global.clearTimeout(s.timers[kind]);
       dropClass(el, cls);
       // Off and on again on the next frame, so a rite that is restarted restarts.
-      var raf = typeof global.requestAnimationFrame === 'function' ? global.requestAnimationFrame : function (fn) { fn(); };
+      var raf = frameOf() || function (fn) { fn(); };
       raf(function () {
         addClass(el, cls);
         if (s && typeof global.setTimeout === 'function') {
@@ -2359,7 +2373,7 @@
       var total = Math.max(0, Number(opts.ms) || 0);
       var step = typeof opts.step === 'function' ? opts.step : function () {};
       var done = typeof opts.done === 'function' ? opts.done : function () {};
-      var raf = typeof global.requestAnimationFrame === 'function' ? global.requestAnimationFrame : null;
+      var raf = frameOf();
       var cancel = typeof global.cancelAnimationFrame === 'function' ? global.cancelAnimationFrame : null;
       var rnd = mulberry32(entropy());
       var g = temper.grain;
@@ -2529,7 +2543,7 @@
       var ms = Math.max(0, Number(opts.ms) || 0);
       var step = typeof opts.step === 'function' ? opts.step : function () {};
       var done = typeof opts.done === 'function' ? opts.done : function () {};
-      var raf = typeof global.requestAnimationFrame === 'function' ? global.requestAnimationFrame : null;
+      var raf = frameOf();
       var cancel = typeof global.cancelAnimationFrame === 'function' ? global.cancelAnimationFrame : null;
       if (!raf || !ms || (reduced() && !opts.always)) {
         step(1, 1);

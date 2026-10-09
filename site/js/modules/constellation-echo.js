@@ -313,13 +313,19 @@ function drawEcho(g, w, h, c, plan, s, variant, t) {
   // goes out ring by ring on the stair (see frame()); the breath steps out on the treads and dims
   // by levels, never a fade.
   const reach = s.pulse >= 0 ? s.pulse : -1;
-  if (reach >= 0) {
+  // Where the run stands in its cycle, and how many times it has come round: the ring blinks out
+  // at the end of a run and blinks on again at the mark, never jumping back; the stars it lit
+  // blink out as the next run sets out (see below).
+  const again = s.cycle > 0 ? fract(s.played / s.cycle) : 0.5;
+  const rounds = s.cycle > 0 ? Math.floor(s.played / s.cycle) : 0;
+  const ringOn = again >= 0.9 ? !rite.flicker((again - 0.9) / 0.1) : rite.flicker(Math.min(1, again / 0.12));
+  if (reach >= 0 && ringOn) {
     g.strokeStyle = c.alpha(col.accent2, 0.55);
     g.lineWidth = 1.6;
     g.beginPath();
     g.arc(S.x, S.y, reach * geo.side, 0, TAU);
     g.stroke();
-  } else {
+  } else if (reach < 0) {
     const ph = c.reduced ? 0.5 : fract(t / 3);
     const breath = rite.stair(ph);
     const dim = rite.stair(ph, 4);
@@ -363,9 +369,15 @@ function drawEcho(g, w, h, c, plan, s, variant, t) {
       g.fillStyle = c.alpha(col.accent, 0.3);
       developDisc(g, c, p.x, p.y, r * 3.6, halo);
     }
-    if (lit) {
-      const back = rite.stair(Math.min(1, (reach - d) / 0.12));
-      if (rite.flicker(Math.min(1, (reach - d) / 0.1))) {
+    // A star the pulse reaches blinks alight -- its core and its glow on the same flicker, never
+    // a recolouring at the instant the ring passes -- while its echo ring steps out.
+    // A star the last run lit blinks out as the next run sets out: held, then dropped with the
+    // flicker's refusals, its ring held at full reach meanwhile.
+    const dying = !lit && reach >= 0 && rounds > 0 && again < 0.12 && !rite.flicker(again / 0.12);
+    const alight = (lit && rite.flicker(Math.min(1, (reach - d) / 0.1))) || dying;
+    if (lit || dying) {
+      const back = lit ? rite.stair(Math.min(1, (reach - d) / 0.12)) : 1;
+      if (alight) {
         g.fillStyle = c.alpha(col.accent2, 0.4);
         developDisc(g, c, p.x, p.y, r * 2.8, Math.max(back, 0.3));
       }
@@ -375,7 +387,7 @@ function drawEcho(g, w, h, c, plan, s, variant, t) {
       g.arc(p.x, p.y, r + back * geo.side * 0.05, 0, TAU);
       g.stroke();
     }
-    g.fillStyle = lit ? col.accent2 : c.alpha(col.fg, 0.95);
+    g.fillStyle = alight ? col.accent2 : c.alpha(col.fg, 0.95);
     g.beginPath();
     g.arc(p.x, p.y, r, 0, TAU);
     g.fill();
@@ -422,7 +434,7 @@ function drawEcho(g, w, h, c, plan, s, variant, t) {
 // for one a hint has shown -- each { on, at } on the piece's clock; orderAt when the order was
 // last set, doneAt when the piece solved. A card has none of them.
 function echoBlank(plan) {
-  return { order: null, hinted: [], taps: [], pulse: -1, played: 0, marks: {}, orderAt: null, doneAt: null };
+  return { order: null, hinted: [], taps: [], pulse: -1, played: 0, cycle: 0, marks: {}, orderAt: null, doneAt: null };
 }
 
 function echoPreview(g, w, h, env, plan, t) {
@@ -443,6 +455,7 @@ function echoPiece(env, plan) {
   const span = far + 0.3;
   const rings = Math.max(3, Math.floor(span / 0.05));
   const cycle = span / 0.12;
+  s.cycle = cycle;
   function rightPlaces() {
     let right = 0;
     for (let i = 0; i < n; i++) if (s.order[i] === order[i]) right += 1;
@@ -670,12 +683,18 @@ function drawChord(g, w, h, c, plan, s, variant, t) {
   // picked and comes back down the stair when it is unpicked; its beats blink full.
   PERIODS.forEach((p, row) => {
     const y = geo.rowTop + row * geo.rowGap;
-    const picked = s.picked.includes(p);
     const shown = s.shown[p];
     const sounding = plan.voices.includes(p);
     const found = s.reveal && sounding;
-    const tone = found ? col.accent2 : picked ? col.accent : col.muted;
-    const band = coverage(c, t, marks['row' + p], 1.1);
+    const mark = marks['row' + p];
+    // A picked row's beats blink full on the flicker and its tone arrives with them; an unpicked
+    // row's beats blink out (held, then dropped with the flicker's refusals) -- never a cut
+    // either way. A found row keeps whatever it had until the reveal blinks on.
+    const blink = mark ? rite.flicker(prog(c, t, mark.at, 0.8)) : 0;
+    const pickLit = mark ? (mark.on ? !!blink : !blink) : false;
+    const revealOn = found && !!rite.flicker(revealed);
+    const tone = revealOn ? col.accent2 : pickLit ? col.accent : col.muted;
+    const band = coverage(c, t, mark, 1.1);
     if (band > 0) {
       g.fillStyle = c.alpha(col.accent, 0.16);
       develop(g, c, geo.left, y - geo.rowGap * 0.32, geo.right - geo.left, geo.rowGap * 0.64, band, rite.cell * 2);
@@ -686,7 +705,7 @@ function drawChord(g, w, h, c, plan, s, variant, t) {
     }
     caption(g, w, c, EVERY[p], geo.left - size * 0.6, y, 0.85, small, 'right');
     g.lineWidth = 1.2;
-    const full = found ? rite.flicker(revealed) : picked && rite.flicker(prog(c, t, marks['row' + p] ? marks['row' + p].at : 0, 0.8));
+    const full = revealOn || pickLit;
     for (let b = 0; b < BEATS; b += p) {
       const x = geo.left + (b + 0.5) * geo.col;
       const r = Math.max(2, geo.col * 0.2 * Math.min(1.15, Math.max(0.8, v.scale)));

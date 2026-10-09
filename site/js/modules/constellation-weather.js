@@ -382,6 +382,16 @@ function frontLine(plan, sweep) {
   }
 }
 
+// Where the guess hand stands on the piece's clock: ratcheting from where it was (guessFrom, an
+// hour that may be fractional when the hand was caught mid-turn) to the hour named, the shorter
+// way round, tooth by tooth; null when no hour has been named.
+function guessHand(env, plan, s) {
+  if (s.guess == null) return null;
+  const from = s.guessFrom == null ? plan.now : s.guessFrom;
+  const diff = ((((s.guess - from + 12) % 24) + 24) % 24) - 12;
+  return from + diff * riteOf(env).ratchet(prog(env, s.t, s.guessAt == null ? 0 : s.guessAt, 1.2));
+}
+
 function drawFront(g, w, h, env, plan, s, variant) {
   const v = variant || PLAIN;
   const c = env.colors;
@@ -464,16 +474,13 @@ function drawFront(g, w, h, env, plan, s, variant) {
   write(g, 'moving at ' + plan.speed + ' km/h', geo.x(11), geo.strip, size, 'center', c.fg, '600');
   // The hand for the hour the visitor names ratchets round from where it stood, tooth by tooth
   // with its backlash, the shorter way round the dial.
-  let hand = null;
-  if (s.guess != null) {
-    const from = s.guessFrom == null ? plan.now : s.guessFrom;
-    const diff = ((((s.guess - from + 12) % 24) + 24) % 24) - 12;
-    hand = from + diff * rite.ratchet(prog(env, s.t, s.guessAt == null ? 0 : s.guessAt, 1.2));
-  }
-  clock(g, env, geo.x(GC - 1.2), geo.strip, Math.min(geo.sq * 1.1, geo.sq * v.scale), plan.now, hand, size);
-  // What the visitor has said, and what a hint showed, blink on: a word arrives, it never fades in.
+  clock(g, env, geo.x(GC - 1.2), geo.strip, Math.min(geo.sq * 1.1, geo.sq * v.scale), plan.now, guessHand(env, plan, s), size);
+  // What the visitor has said, and what a hint showed, blink on: a word arrives, it never fades
+  // in. The hint's word stands under the side's, so when a side is named after it the word
+  // blinks in afresh at its new place rather than jumping there.
   if (s.side && rite.flicker(prog(env, s.t, s.sideAt == null ? 0 : s.sideAt, 1))) write(g, 'from the ' + s.side + '?', sx, sy + geo.sq * 0.9, size, 'center', env.alpha(c.accent, 0.95));
-  if (s.hinted && rite.flicker(prog(env, s.t, s.hintAt == null ? 0 : s.hintAt, 1.2))) write(g, plan.squares * KM + ' km out', sx, sy + geo.sq * (s.side ? 1.6 : 0.9), size, 'center', c.accent2, '600');
+  const hintFrom = s.hintAt == null ? 0 : Math.max(s.hintAt, s.sideAt == null ? 0 : s.sideAt);
+  if (s.hinted && rite.flicker(prog(env, s.t, hintFrom, 1.2))) write(g, plan.squares * KM + ' km out', sx, sy + geo.sq * (s.side ? 1.6 : 0.9), size, 'center', c.accent2, '600');
   // The rain once the front is in: it blinks on and thickens by treads -- its count and its
   // weight each a stair, never a fade -- and falls in jerks on the stair rather than streaming.
   if (s.rain > 0 && rite.flicker(s.rain)) {
@@ -551,7 +558,9 @@ function frontPiece(env, plan) {
     apply(id, value, c) {
       if (id === 'hour') {
         const n = Math.round(Number(value));
-        s.guessFrom = s.guess == null ? plan.now : s.guess;
+        // The hand sets out from where it stands now, even if caught mid-ratchet.
+        const standing = guessHand(c, plan, s);
+        s.guessFrom = standing == null ? plan.now : ((standing % 24) + 24) % 24;
         s.guess = Number.isFinite(n) ? clamp(n, 0, 23) : null;
         s.guessAt = s.t;
         c.status('you say ' + fmt(s.guess));
