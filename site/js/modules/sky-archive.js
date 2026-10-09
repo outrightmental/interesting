@@ -26,8 +26,9 @@
                             and a solve reads a line from the archive.
 
    The sky a visitor brings may be one star or many: it is drawn behind the wheel for colour, and
-   nothing of the puzzle depends on it. The plan is rolled from the seed, carried whole on the
-   card's `of`, and rebuilt from that, so a card and the feature it opens as are one puzzle. */
+   nothing of the puzzle depends on it. The plan is rolled from the seed, dealt once per card and
+   kept with its env (a WeakMap), carried whole on the card's `of`, and rebuilt from that, so a
+   card, its breathing at rest (animate) and the feature it opens as are one puzzle. */
 
 const PLAIN = { density: 1, scale: 1, turn: 0 };
 const WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve'];
@@ -357,7 +358,10 @@ function wheelPiece(env, p) {
       draw(c);
     },
     end(c) {
-      c.status('the wheel turns ' + notches(p.t) + ' ' + wayWord(p.cw) + ' and the stars read ' + p.word + '; it is archived');
+      // Every solve is answered in the archive's own voice, as the omens' is: the line is the
+      // plan's, so one wheel always reads the same and another wheel reads another.
+      const line = READINGS[(p.t + p.word.charCodeAt(0) + (p.cw ? 1 : 0)) % READINGS.length];
+      c.status('the wheel turns ' + notches(p.t) + ' ' + wayWord(p.cw) + ' and the stars read ' + p.word + '. the archive reads: ' + line);
     }
   };
 }
@@ -376,7 +380,12 @@ const READINGS = [
   'what is true of the stars is true of the asking',
   'the hand that measured is the hand that is read',
   'nothing moved while you looked, and that was the answer',
-  'the brightest is not the nearest; the nearest is enough'
+  'the brightest is not the nearest; the nearest is enough',
+  'turn once more and you are back where you began; stop there',
+  'the rim remembers every word it was ever asked for',
+  'count again at midnight and the count will hold',
+  'what the wheel gives, the horizon keeps',
+  'ask less of the faintest star; it carries the most'
 ];
 
 // Each omen family has two readings, one the other's opposite; a sky gets one claim per family.
@@ -680,23 +689,46 @@ function omensPiece(env, p) {
 
 /* ---- the module ----------------------------------------------------------------------------- */
 
-function dealsWheel(env) {
-  return env.chance(0.5);
+// Which asking this card is, and its plan, dealt once from the env's seeded stream and kept with
+// that env: every pass over one card -- the still picture, every breathing frame, the spark --
+// asks here, so they are all one card rather than a re-roll per frame (see js/feed.js on what
+// animate owes a card).
+const dealt = new WeakMap();
+function deal(env) {
+  let got = dealt.get(env);
+  if (!got) {
+    got = env.chance(0.5) ? wheelPlan(env) : omensPlan(env);
+    dealt.set(env, got);
+  }
+  return got;
 }
 
 export default {
   id: 'sky-archive',
   needsSky: true,
   paint(g, w, h, env) {
-    if (dealsWheel(env)) {
+    const p = deal(env);
+    if (p.kind === 'wheel') {
       // The card's rim is turned as far as the configuration turns it, so a repeat is the same
       // wheel seen at another setting.
-      wheelScene(g, w, h, env, wheelPlan(env), { angle: env.variant.turn * Math.PI * 2, spin: 0 }, env.variant);
-    } else omensPreview(g, w, h, env, omensPlan(env));
+      wheelScene(g, w, h, env, p, { angle: env.variant.turn * Math.PI * 2, spin: 0 }, env.variant);
+    } else omensPreview(g, w, h, env, p);
+  },
+  // The card at rest breathes: the pointer stars swell and settle and the drawn sky glimmers, so
+  // a card rewards a second look without re-dealing anything. At t = 0 it is exactly the still
+  // picture paint left, and a visitor who asked for stillness gets that picture and no motion.
+  animate(g, w, h, env, t) {
+    if (env.reduced) return false;
+    const p = deal(env);
+    if (p.kind === 'wheel') {
+      wheelScene(g, w, h, env, p, { angle: env.variant.turn * Math.PI * 2, spin: 0, t }, env.variant);
+    } else {
+      omensScene(g, w, h, env, p, { picked: [], reveal: false, t }, env.variant);
+    }
   },
   spark(env) {
-    if (dealsWheel(env)) {
-      const p = wheelPlan(env);
+    const p = deal(env);
+    if (p.kind === 'wheel') {
       return {
         title: wheelTitle(p),
         quote: 'the archive asks for ' + p.word,
@@ -706,7 +738,6 @@ export default {
         of: p
       };
     }
-    const p = omensPlan(env);
     return {
       title: omensTitle(p),
       quote: CLAIMS[p.claims[0]].text,
@@ -721,6 +752,7 @@ export default {
     if (wheel) return wheelPiece(env, wheel);
     const omens = carriedOmens(env);
     if (omens) return omensPiece(env, omens);
-    return dealsWheel(env) ? wheelPiece(env, wheelPlan(env)) : omensPiece(env, omensPlan(env));
+    const p = deal(env);
+    return p.kind === 'wheel' ? wheelPiece(env, p) : omensPiece(env, p);
   }
 };
