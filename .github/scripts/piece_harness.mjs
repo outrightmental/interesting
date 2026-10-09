@@ -230,6 +230,12 @@ function hash(text) {
                             so a region that becomes selected (or stops being) changes by its
                             area in that pattern and never by a fade. Tile a region in cells of
                             a few pixels and fill the cells the matte lets through
+     rite.paint(g, x, y, w, h, k, style)
+                            the cells of that rect the matte lets through at coverage k, filled
+                            through the context g (in rite.cell px), so no module writes the
+                            cell loop itself; style, if given, is the fillStyle to use
+     rite.series(t, n)      the tread reached at t, 0 to n: a flicker series, a counter, a notch
+     rite.turn(t)           the ratchet by another name, for what turns
      rite.treads            the roll's tread count, rite.kind the matte's kind, rite.cell a
                             cell size in px that suits the matte
      rite.at(seed)          the same rite rolled afresh from another seed, for a module that
@@ -375,8 +381,38 @@ function riteOf(seed) {
     return v < c;
   };
 
+
+  // What a module paints a matte with, so no module writes the cell loop: the cells of the rect
+  // (x, y, w, h) the matte lets through at coverage k, filled through the context handed in.
+  const paint = (g, x, y, w, h, k, style) => {
+    const c = k <= 0 ? 0 : k >= 1 ? 1 : k;
+    if (c <= 0 || !g || typeof g.fillRect !== 'function') return;
+    if (style != null) g.fillStyle = style;
+    if (c >= 1) {
+      g.fillRect(x, y, w, h);
+      return;
+    }
+    const size = Math.max(1, cell);
+    const cols = Math.ceil(w / size);
+    const rows = Math.ceil(h / size);
+    for (let r = 0; r < rows; r++) {
+      for (let q = 0; q < cols; q++) {
+        if (!matte(q, r, c)) continue;
+        const cx = x + q * size;
+        const cy = y + r * size;
+        g.fillRect(cx, cy, Math.min(size, x + w - cx), Math.min(size, y + h - cy));
+      }
+    }
+  };
+  // The tread reached at p, 0 to n: a flicker series, a counter, a dial's notch.
+  const series = (p, n) => {
+    const k = Math.max(1, Math.floor(n || treads));
+    return Math.round(stair(p, k) * k);
+  };
+
   return {
-    ease, stair, ratchet, flicker, matte,
+    ease, stair, ratchet, flicker, matte, paint, series,
+    turn: ratchet,
     treads, kind, cell, stops,
     at: (other) => riteOf(((seed >>> 0) ^ (other >>> 0) ^ 0x51a7c0de) >>> 0)
   };

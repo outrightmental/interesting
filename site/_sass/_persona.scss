@@ -19,6 +19,44 @@
 // which made a second floating item of this corner on a wide screen and a third piece of
 // navigation on the site; the world a reading opens onto is an option in the logo's constellation
 // instead (issue #64).
+//
+// Every change of state here is a rite (README: "Motion axiom"), and every tread of every rite is a
+// hard cut -- each keyframe held to the moment of the next -- so nothing in this corner or in the
+// sheet fades, glides or is simply there:
+//
+//   beckon          the empty avatar's halo, in treads with a dark hold (persona-beckon), the
+//                   label's tracking twitching once a beat (beckon-label)
+//   name            the sky's name printed out of the matte ladder beside the portrait on wax
+//                   (persona-name), and taken back down it on wane (persona-name-out)
+//   cast            the first sky drawn into the portrait (js/persona.js puts is-casting on the
+//                   corner): the waiting glyph unmade, the dashed ring ratcheting off, the sky
+//                   developing through the ladder (glyph-unmake, ring-cast, portrait-cast)
+//   wait / twinkle  the dashed ring clicking round while no sky is placed (ring-wait); the drawn
+//                   portrait's one-frame gleam now and then (portrait-twinkle)
+//   ask / stamp     the asking ring struck in treads (portrait-ask); a press on the avatar sinking
+//                   the portrait in cuts (portrait-stamp)
+//   flight          the mark going home in skips, never a glide (persona-flight), the ring blooming
+//                   as a halo through the ladder (persona-flight-ring)
+//   sheet           dealt through the ladder from the rolled geometry (sheet-in), its parts
+//                   following in a stagger (sheet-part-in); unmade on close as a ghost js/persona.js
+//                   leaves where it was (sheet-out); every line it writes is revealed
+//   sky             the ring behind the stars cast in a ratchet (sky-ring-cast) and clicking one
+//                   tooth as a star lands (sky-ring-click); the lines drawn by a step series in
+//                   the script; the canvas flickering once on a strike (canvas-flicker)
+//   star            at rest; waxing (star-wax) and waning (star-wane); lifted in cuts while dragged
+//                   (star-lift) and set down with a slip (star-drop); placed as a pebble through the
+//                   ladder (star-develop); unmade when removed (star-unmake, on a ghost); selected =
+//                   the sealed texture and a halo in treads (star-select), unsealed back down
+//                   (star-unselect); focus struck (star-focus); the thread badge stamped (thread-stamp)
+//   parts           the name, the thread, the words form and the buttons that come and go in the
+//                   sheet develop (part-in) and are unmade (part-unmake) rather than cut
+//   difficulty      the end word the handle has reached, sealed for one tread (end-seal)
+//   avatar          the corner itself developing through the ladder from the roll's geometry as
+//                   js/persona.js shows it (avatar-in); the ring the portrait wears once there is
+//                   a reading, sealed on in treads the first time one is read (reading-seal)
+//   field           the sky waxing under the pointer in treads of its edge; a tap that lands a star
+//                   stamped where the finger fell, a blotch of the fill texture in cuts (sky-stamp);
+//                   a star's place in the thread taken away through the ladder (thread-unmake)
 
 @use 'type';
 
@@ -46,6 +84,72 @@
   color: var(--md-sys-color-on-surface-variant);
 }
 
+// The corner is written hidden and shown by js/persona.js once it has read what it holds, so it is
+// a thing arriving: it develops through the matte ladder from the roll's geometry (--arrive-x/-y,
+// turned by --arrive-rot), refuses once, lands a tread too far (--pop-over) and sets, for as long
+// as the roll gives this spell.
+.persona-avatar:not([hidden]) {
+  animation: avatar-in var(--motion-avatar-in, var(--motion-long)) var(--ease-avatar-in, var(--ease-arrive)) both;
+}
+
+@keyframes avatar-in {
+  0%, 17.9% {
+    mask: var(--matte-1);
+    -webkit-mask: var(--matte-1);
+    translate: calc(var(--arrive-x, 0px) * 0.5) calc(var(--arrive-y, 28px) * -0.5);
+    rotate: calc(var(--arrive-rot, 0deg) * 3);
+    scale: var(--arrive-scale, 0.96);
+  }
+
+  18%, 35.9% {
+    mask: var(--matte-2);
+    -webkit-mask: var(--matte-2);
+    translate: calc(var(--arrive-x, 0px) * 0.25) calc(var(--arrive-y, 28px) * -0.2);
+    rotate: calc(var(--arrive-rot, 0deg) * 1.5);
+    scale: 1;
+  }
+
+  36%, 43.9% {
+    mask: var(--matte-1);
+    -webkit-mask: var(--matte-1);
+    translate: calc(var(--arrive-x, 0px) * 0.3) calc(var(--arrive-y, 28px) * -0.25);
+    rotate: calc(var(--arrive-rot, 0deg) * 1.5);
+    scale: 1;
+  }
+
+  44%, 61.9% {
+    mask: var(--matte-3);
+    -webkit-mask: var(--matte-3);
+    translate: 0 calc(var(--arrive-y, 28px) * -0.06);
+    rotate: 0deg;
+    scale: 1;
+  }
+
+  62%, 77.9% {
+    mask: var(--matte-4);
+    -webkit-mask: var(--matte-4);
+    translate: 0 0;
+    rotate: 0deg;
+    scale: var(--pop-over, 1.04);
+  }
+
+  78%, 91.9% {
+    mask: var(--matte-5);
+    -webkit-mask: var(--matte-5);
+    translate: 0 0;
+    rotate: 0deg;
+    scale: 1;
+  }
+
+  92%, 100% {
+    mask: none;
+    -webkit-mask: none;
+    translate: 0 0;
+    rotate: 0deg;
+    scale: 1;
+  }
+}
+
 .persona-portrait {
   position: relative;
   width: 40px;
@@ -67,25 +171,156 @@
   color: var(--md-sys-color-primary);
 }
 
+// A drawn portrait is a sky: now and then one frame of it gleams, in cuts, on a loop whose curve
+// js/motion.js re-rolls at every turn, so the gleam never falls at the same moment twice.
+.persona:not([data-state='empty']) .persona-portrait canvas {
+  animation: portrait-twinkle calc(var(--motion-slow) * 6) var(--ease-portrait-twinkle, var(--ease-flicker)) infinite;
+}
+
+@keyframes portrait-twinkle {
+  0%, 83.9% {
+    filter: none;
+    transform: none;
+  }
+
+  84%, 86.4% {
+    filter: brightness(1.4) contrast(1.12);
+    transform: scale(1.04) rotate(calc(var(--lift-rot, 0.3deg) * 2));
+  }
+
+  86.5%, 89.9% {
+    filter: none;
+    transform: none;
+  }
+
+  90%, 91.9% {
+    filter: brightness(1.22);
+    transform: scale(1.02);
+  }
+
+  92%, 100% {
+    filter: none;
+    transform: none;
+  }
+}
+
 .persona-label {
   @include type.scale(label-large);
 }
 
-// The one lit control on a page with no persona yet: the label shows, filled and beckoning.
+// The one lit control on a page with no persona yet: the label shows, filled and beckoning. The
+// beckon is a lighthouse, not a breath: the halo arrives in two cuts, slips one, reaches the roll's
+// --beckon-spread, and decays in three with a dark hold between beats; the curve js/motion.js
+// re-rolls at every beat decides when each cut falls.
 .persona[data-state='empty'] .persona-avatar {
   padding-right: 1rem;
   background: var(--md-sys-color-primary);
   color: var(--md-sys-color-on-primary);
-  // One breath in, one out, along a curve rolled for every breath (js/motion.js re-rolls a looping
-  // spell at each iteration), reaching as far as the roll says (--beckon-spread).
-  animation: persona-beckon 2.8s var(--ease-persona-beckon, var(--ease-pulse)) infinite;
+  // The corner's own arrival first (avatar-in, above), the beckon from then on.
+  animation:
+    avatar-in var(--motion-avatar-in, var(--motion-long)) var(--ease-avatar-in, var(--ease-arrive)) both,
+    persona-beckon 2.8s var(--ease-persona-beckon, var(--ease-pulse)) infinite;
+}
+
+@keyframes persona-beckon {
+  0%, 11.9% {
+    box-shadow: var(--md-sys-elevation-level2), 0 0 0 0 color-mix(in oklab, var(--md-sys-color-primary) 0%, transparent);
+  }
+
+  12%, 19.9% {
+    box-shadow: var(--md-sys-elevation-level2), 0 0 0 calc(var(--beckon-spread, 8px) * 0.45) color-mix(in oklab, var(--md-sys-color-primary) 28%, transparent);
+  }
+
+  20%, 23.9% {
+    box-shadow: var(--md-sys-elevation-level2), 0 0 0 calc(var(--beckon-spread, 8px) * 0.3) color-mix(in oklab, var(--md-sys-color-primary) 18%, transparent);
+  }
+
+  24%, 39.9% {
+    box-shadow: var(--md-sys-elevation-level2), 0 0 0 var(--beckon-spread, 8px) color-mix(in oklab, var(--md-sys-color-primary) 22%, transparent);
+  }
+
+  40%, 52.9% {
+    box-shadow: var(--md-sys-elevation-level2), 0 0 0 calc(var(--beckon-spread, 8px) * 0.7) color-mix(in oklab, var(--md-sys-color-primary) 16%, transparent);
+  }
+
+  53%, 61.9% {
+    box-shadow: var(--md-sys-elevation-level2), 0 0 0 calc(var(--beckon-spread, 8px) * 0.38) color-mix(in oklab, var(--md-sys-color-primary) 10%, transparent);
+  }
+
+  62%, 65.9% {
+    box-shadow: var(--md-sys-elevation-level2), 0 0 0 calc(var(--beckon-spread, 8px) * 0.55) color-mix(in oklab, var(--md-sys-color-primary) 14%, transparent);
+  }
+
+  66%, 100% {
+    box-shadow: var(--md-sys-elevation-level2), 0 0 0 0 color-mix(in oklab, var(--md-sys-color-primary) 0%, transparent);
+  }
+}
+
+// Once a beat the beckoning label's tracking twitches for one tread, as the halo lands.
+.persona[data-state='empty'] .persona-label {
+  animation: beckon-label 2.8s var(--ease-beckon-label, var(--ease-flicker)) infinite;
+}
+
+@keyframes beckon-label {
+  0%, 23.9% {
+    letter-spacing: normal;
+  }
+
+  24%, 27.9% {
+    letter-spacing: 0.07em;
+  }
+
+  28%, 30.9% {
+    letter-spacing: 0.02em;
+  }
+
+  31%, 100% {
+    letter-spacing: normal;
+  }
 }
 
 // With no sky placed yet the ring is dashed, with one faint star where the portrait will be,
-// whatever else the persona is doing (asking, say).
-.persona[data-sky='none'] .persona-portrait {
-  outline: 1px dashed color-mix(in oklab, currentColor 60%, transparent);
-  outline-offset: -2px;
+// whatever else the persona is doing (asking, say). The ring is a child of the portrait rather
+// than its outline, so it can turn: it clicks round in a ratchet while it waits, and ratchets off
+// when the first sky is cast.
+.persona-portrait::before {
+  content: '';
+  position: absolute;
+  inset: 1px;
+  border-radius: var(--md-sys-shape-corner-full);
+  border: 1px dashed transparent;
+  pointer-events: none;
+}
+
+.persona[data-sky='none'] .persona-portrait::before {
+  border-color: color-mix(in oklab, currentColor 60%, transparent);
+  animation: ring-wait calc(var(--motion-slow) * 4) var(--ease-ring-wait, var(--ease-drift)) infinite;
+}
+
+@keyframes ring-wait {
+  0%, 23.9% {
+    transform: rotate(0deg);
+  }
+
+  24%, 26.9% {
+    transform: rotate(-5deg);
+  }
+
+  27%, 48.9% {
+    transform: rotate(19deg);
+  }
+
+  49%, 73.9% {
+    transform: rotate(36deg);
+  }
+
+  74%, 76.9% {
+    transform: rotate(32deg);
+  }
+
+  77%, 100% {
+    transform: rotate(55deg);
+  }
 }
 
 .persona[data-state='empty'] .persona-portrait {
@@ -103,11 +338,161 @@
   font-size: 1rem;
 }
 
+// The first sky being cast (js/persona.js puts is-casting on the corner as data-sky flips to set):
+// the waiting glyph is unmade down the ladder with one flicker back, the dashed ring ratchets two
+// clicks and dissolves, and the drawn sky develops through the ladder behind them -- while the
+// script draws its stars in one tread at a time.
+.persona.is-casting .persona-portrait::after {
+  content: '\2726';
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: currentColor;
+  font-size: 1rem;
+  animation: glyph-unmake var(--motion-long) var(--ease-glyph-unmake, var(--ease-leave)) both;
+}
+
+@keyframes glyph-unmake {
+  0%, 19.9% {
+    opacity: 0.8;
+    mask: var(--matte-5);
+    -webkit-mask: var(--matte-5);
+    transform: scale(1.2) rotate(calc(var(--leave-rot, -0.8deg) * 6));
+  }
+
+  20%, 39.9% {
+    opacity: 0.8;
+    mask: var(--matte-3);
+    -webkit-mask: var(--matte-3);
+    transform: scale(1) rotate(0deg);
+  }
+
+  40%, 49.9% {
+    opacity: 0.8;
+    mask: var(--matte-4);
+    -webkit-mask: var(--matte-4);
+    transform: scale(1.1);
+  }
+
+  50%, 69.9% {
+    opacity: 0.8;
+    mask: var(--matte-2);
+    -webkit-mask: var(--matte-2);
+    transform: scale(0.8) translate(var(--leave-x, 0px), calc(var(--leave-y, -22px) * 0.3));
+  }
+
+  70%, 100% {
+    opacity: 0;
+    mask: var(--matte-1);
+    -webkit-mask: var(--matte-1);
+    transform: scale(0.5) translate(var(--leave-x, 0px), calc(var(--leave-y, -22px) * 0.5));
+  }
+}
+
+.persona.is-casting .persona-portrait::before {
+  border-color: color-mix(in oklab, currentColor 60%, transparent);
+  animation: ring-cast var(--motion-long) var(--ease-ring-cast, var(--ease-stair)) both;
+}
+
+@keyframes ring-cast {
+  0%, 24.9% {
+    transform: rotate(0deg);
+    mask: var(--matte-5);
+    -webkit-mask: var(--matte-5);
+  }
+
+  25%, 44.9% {
+    transform: rotate(22deg);
+    mask: var(--matte-4);
+    -webkit-mask: var(--matte-4);
+  }
+
+  45%, 52.9% {
+    transform: rotate(18deg);
+    mask: var(--matte-5);
+    -webkit-mask: var(--matte-5);
+  }
+
+  53%, 74.9% {
+    transform: rotate(47deg);
+    mask: var(--matte-3);
+    -webkit-mask: var(--matte-3);
+  }
+
+  75%, 89.9% {
+    transform: rotate(61deg);
+    mask: var(--matte-2);
+    -webkit-mask: var(--matte-2);
+  }
+
+  90%, 100% {
+    transform: rotate(70deg);
+    mask: var(--matte-1);
+    -webkit-mask: var(--matte-1);
+    opacity: 0;
+  }
+}
+
+// A sky already there as the page arrives only dawns (is-dawning): the drawn sky develops through
+// the ladder, and nothing is unmade, since no visitor watched it being cast.
+.persona.is-casting .persona-portrait canvas,
+.persona.is-dawning .persona-portrait canvas {
+  animation: portrait-cast var(--motion-long) var(--ease-portrait-cast, var(--ease-stair)) both;
+}
+
+@keyframes portrait-cast {
+  0%, 17.9% {
+    mask: var(--matte-1);
+    -webkit-mask: var(--matte-1);
+    transform: scale(var(--arrive-scale, 0.96)) rotate(var(--arrive-rot, 0deg));
+  }
+
+  18%, 35.9% {
+    mask: var(--matte-2);
+    -webkit-mask: var(--matte-2);
+    transform: scale(1) rotate(calc(var(--arrive-rot, 0deg) * 0.5));
+  }
+
+  36%, 43.9% {
+    mask: var(--matte-1);
+    -webkit-mask: var(--matte-1);
+  }
+
+  44%, 61.9% {
+    mask: var(--matte-3);
+    -webkit-mask: var(--matte-3);
+    transform: none;
+  }
+
+  62%, 79.9% {
+    mask: var(--matte-4);
+    -webkit-mask: var(--matte-4);
+    transform: scale(var(--pop-over, 1.05));
+  }
+
+  80%, 93.9% {
+    mask: var(--matte-5);
+    -webkit-mask: var(--matte-5);
+    transform: none;
+  }
+
+  94%, 100% {
+    mask: none;
+    -webkit-mask: none;
+    transform: none;
+  }
+}
+
 // With a persona the portrait is enough at rest, and the label carries the sky's name -- what the
-// persona reads the arrangement as (js/persona.js, skyName). It fades in beside the portrait on
-// rollover and on focus, exactly as the site's name does beside the logo opposite it (_nav.scss),
-// so the two corners speak one language: hover either mark and it says who it is. Collapsed by
-// max-width rather than hidden, so the button keeps its name in the accessibility tree throughout.
+// persona reads the arrangement as (js/persona.js, skyName). It is printed beside the portrait on
+// wax (is-waxing from js/motion.js, :hover and :focus-visible for a page with no script), exactly
+// as the site's name is printed beside the logo opposite it (_nav.scss), so the two corners speak
+// one language: hover either mark and it says who it is. The name comes out of the matte ladder
+// in slices with its tracking settling in treads, as if by a jammed press, and goes back down the
+// ladder when the pointer leaves (is-waning). Collapsed by max-width rather than hidden, so the
+// button keeps its name in the accessibility tree throughout; the width, the margin and the
+// opacity move along the stair family, in treads, never a glide.
 .persona:not([data-state='empty']) .persona-label {
   max-width: 0;
   margin-left: -0.6rem; // the flex gap the collapsed label would otherwise hold open
@@ -116,32 +501,191 @@
   overflow: hidden;
   white-space: nowrap;
   transition:
-    max-width var(--motion-short) var(--ease-shift),
-    margin var(--motion-short) var(--ease-shift),
-    opacity calc(var(--motion-short) * 0.65) var(--ease-flicker);
+    max-width var(--motion-medium) var(--ease-stair),
+    margin var(--motion-medium) var(--ease-stair),
+    opacity var(--motion-medium) var(--ease-stair),
+    letter-spacing var(--motion-medium) var(--ease-stair);
 }
 
 .persona:not([data-state='empty']) .persona-avatar:hover .persona-label,
+.persona:not([data-state='empty']) .persona-avatar.is-waxing .persona-label,
 .persona:not([data-state='empty']) .persona-avatar:focus-visible .persona-label {
   max-width: 13rem;
   margin-left: 0;
   margin-right: 0.5rem;
   opacity: 1;
+  animation: persona-name var(--motion-persona-name, var(--motion-medium)) var(--ease-persona-name, var(--ease-stair)) both;
 }
 
+.persona:not([data-state='empty']) .persona-avatar.is-waning .persona-label {
+  animation: persona-name-out var(--motion-medium) var(--ease-persona-name-out, var(--ease-stair)) both;
+}
+
+@keyframes persona-name {
+  0%, 19.9% {
+    letter-spacing: 0.14em;
+    mask: var(--matte-1);
+    -webkit-mask: var(--matte-1);
+  }
+
+  20%, 37.9% {
+    letter-spacing: 0.09em;
+    mask: var(--matte-2);
+    -webkit-mask: var(--matte-2);
+  }
+
+  38%, 49.9% {
+    letter-spacing: 0.11em;
+    mask: var(--matte-1);
+    -webkit-mask: var(--matte-1);
+  }
+
+  50%, 67.9% {
+    letter-spacing: 0.05em;
+    mask: var(--matte-3);
+    -webkit-mask: var(--matte-3);
+  }
+
+  68%, 85.9% {
+    letter-spacing: 0.015em;
+    mask: var(--matte-4);
+    -webkit-mask: var(--matte-4);
+  }
+
+  86%, 100% {
+    letter-spacing: normal;
+    mask: none;
+    -webkit-mask: none;
+  }
+}
+
+@keyframes persona-name-out {
+  0%, 24.9% {
+    letter-spacing: normal;
+    mask: var(--matte-4);
+    -webkit-mask: var(--matte-4);
+  }
+
+  25%, 44.9% {
+    letter-spacing: 0.03em;
+    mask: var(--matte-3);
+    -webkit-mask: var(--matte-3);
+  }
+
+  45%, 54.9% {
+    letter-spacing: 0.01em;
+    mask: var(--matte-4);
+    -webkit-mask: var(--matte-4);
+  }
+
+  55%, 74.9% {
+    letter-spacing: 0.06em;
+    mask: var(--matte-2);
+    -webkit-mask: var(--matte-2);
+  }
+
+  75%, 100% {
+    letter-spacing: 0.1em;
+    mask: var(--matte-1);
+    -webkit-mask: var(--matte-1);
+  }
+}
+
+// With a reading the portrait wears a thin ring in the tertiary -- the colour the reading dresses
+// the site in. It is sealed on in treads, with one slip, the moment a reading is first read while
+// a visitor watches (is-read, from js/persona.js); a reading carried in from an earlier page is
+// simply worn, since nobody watched it arrive.
+.persona:not([data-reading='none']) .persona-portrait {
+  box-shadow: 0 0 0 2px color-mix(in oklab, var(--md-sys-color-tertiary) 70%, transparent);
+}
+
+.persona.is-read .persona-portrait {
+  animation: reading-seal var(--motion-reading-seal, var(--motion-medium)) var(--ease-reading-seal, var(--ease-stair)) both;
+}
+
+@keyframes reading-seal {
+  0%, 22.9% {
+    box-shadow: 0 0 0 0 color-mix(in oklab, var(--md-sys-color-tertiary) 70%, transparent);
+  }
+
+  23%, 44.9% {
+    box-shadow: 0 0 0 5px color-mix(in oklab, var(--md-sys-color-tertiary) 40%, transparent);
+  }
+
+  45%, 54.9% {
+    box-shadow: 0 0 0 1px color-mix(in oklab, var(--md-sys-color-tertiary) 90%, transparent);
+  }
+
+  55%, 76.9% {
+    box-shadow: 0 0 0 3px color-mix(in oklab, var(--md-sys-color-tertiary) 55%, transparent);
+  }
+
+  77%, 100% {
+    box-shadow: 0 0 0 2px color-mix(in oklab, var(--md-sys-color-tertiary) 70%, transparent);
+  }
+}
+
+// The persona asking in the card: the ring is struck, not switched on -- it lands wide, closes in
+// three uneven treads with one flicker of its colour, and holds.
 .persona[data-asking='true'] .persona-portrait {
   outline: 2px solid var(--md-sys-color-primary);
   outline-offset: 1px;
+  animation: portrait-ask var(--motion-medium) var(--ease-portrait-ask, var(--ease-stair)) both;
 }
 
-@keyframes persona-beckon {
-  0%,
-  100% {
-    box-shadow: 0 0 0 0 color-mix(in oklab, var(--md-sys-color-primary) 0%, transparent);
+@keyframes portrait-ask {
+  0%, 24.9% {
+    outline-offset: 7px;
+    outline-color: var(--md-sys-color-primary);
   }
 
-  50% {
-    box-shadow: 0 0 0 var(--beckon-spread, 8px) color-mix(in oklab, var(--md-sys-color-primary) 22%, transparent);
+  25%, 47.9% {
+    outline-offset: 3px;
+    outline-color: var(--md-sys-color-primary);
+  }
+
+  48%, 57.9% {
+    outline-offset: 4px;
+    outline-color: transparent;
+  }
+
+  58%, 79.9% {
+    outline-offset: 2px;
+    outline-color: var(--md-sys-color-primary);
+  }
+
+  80%, 100% {
+    outline-offset: 1px;
+    outline-color: var(--md-sys-color-primary);
+  }
+}
+
+// A press on the avatar stamps the portrait: down in one cut, a flash, a tread too far, home. The
+// button around it stamps as every control does (_controls.scss); this is what the sky does inside.
+.persona-avatar.is-stamping .persona-portrait,
+.persona-avatar:active .persona-portrait {
+  animation: portrait-stamp var(--motion-short) var(--ease-portrait-stamp, var(--ease-flicker)) both;
+}
+
+@keyframes portrait-stamp {
+  0%, 34.9% {
+    transform: scale(0.88) rotate(calc(var(--lift-rot, 0.3deg) * -3));
+    filter: brightness(1.3) contrast(1.15);
+  }
+
+  35%, 64.9% {
+    transform: scale(0.88) rotate(calc(var(--lift-rot, 0.3deg) * -3));
+    filter: none;
+  }
+
+  65%, 84.9% {
+    transform: scale(var(--pop-over, 1.06));
+    filter: brightness(1.12);
+  }
+
+  85%, 100% {
+    transform: none;
+    filter: none;
   }
 }
 
@@ -151,9 +695,10 @@
 // leaves the control it was set on, crosses the page, sinks into the portrait and blooms a ring
 // around it as it lands. "That thing you just configured lives there, in that menu" (issue #94).
 // js/persona.js draws it, measures where it lands (left and top, inside this corner) and where it
-// came from (--persona-flight-x and -y, the offset from the portrait to the control that was set),
-// and takes it away again after the flight; the duration below is the FLIGHT_MS that file counts,
-// and the ring is timed to land inside it rather than be cut off by it.
+// came from (--persona-flight-x and -y, the offset from the portrait to the control that was set,
+// and --persona-flight-ax/-ay, a rolled bow off the straight line for the middle of the way), and
+// takes it away again after the flight; the duration below is the FLIGHT_MS that file counts, and
+// the ring is timed to land inside it rather than be cut off by it.
 //
 // It is a child of .persona rather than a thing pinned over the page of its own: the corner is
 // already positioned, so the mark lands wherever the portrait is at whatever size, needs no layer
@@ -161,6 +706,11 @@
 // rest of this corner by the rule in _lightbox.scss, which is the site's own law and not an
 // exception to it. It takes no press, and it says nothing to a screen reader: the one sentence
 // beside the avatar already says where things stand, and this is the picture of it.
+//
+// The mark goes home as a skipped stone, not a glide: it is cut in at the control it leaves, crosses
+// in five uneven treads with the path bowed by the roll, flickers once in the air, lands a tread too
+// far, flickers as it lands and sinks; the curve js/motion.js rolls for every flight decides where
+// each cut falls.
 .persona-flight {
   position: absolute;
   z-index: 1; // over the avatar it is landing on, which is the only other thing in this corner
@@ -189,7 +739,8 @@
 }
 
 // The ring that blooms around the portrait as the mark lands, which is the avatar answering for it:
-// it waits out the flight and then opens and fades, and it is gone with the mark it belongs to.
+// it waits out the flight and then opens through the ladder as a halo, in treads with one slip,
+// and it is gone with the mark it belongs to.
 .persona-flight::after {
   content: '';
   position: absolute;
@@ -201,35 +752,101 @@
 }
 
 @keyframes persona-flight {
-  from {
+  0%, 7.9% {
     opacity: 0;
     transform: translate(var(--persona-flight-x, 0), var(--persona-flight-y, 0)) rotate(var(--arrive-rot, 0deg)) scale(1.5);
   }
 
-  15% {
+  8%, 19.9% {
     opacity: 1;
+    transform: translate(var(--persona-flight-x, 0), var(--persona-flight-y, 0)) rotate(var(--arrive-rot, 0deg)) scale(1.5);
   }
 
-  70% {
+  20%, 31.9% {
+    opacity: 1;
+    transform: translate(calc(var(--persona-flight-x, 0) * 0.78 + var(--persona-flight-ax, 0px) * 0.5), calc(var(--persona-flight-y, 0) * 0.78 + var(--persona-flight-ay, 0px) * 0.5)) rotate(calc(var(--arrive-rot, 0deg) * 0.6)) scale(1.4);
+  }
+
+  32%, 42.9% {
+    opacity: 1;
+    transform: translate(calc(var(--persona-flight-x, 0) * 0.55 + var(--persona-flight-ax, 0px)), calc(var(--persona-flight-y, 0) * 0.55 + var(--persona-flight-ay, 0px))) rotate(calc(var(--arrive-rot, 0deg) * -0.4)) scale(1.3);
+  }
+
+  43%, 45.9% {
+    opacity: 0.2;
+    transform: translate(calc(var(--persona-flight-x, 0) * 0.55 + var(--persona-flight-ax, 0px)), calc(var(--persona-flight-y, 0) * 0.55 + var(--persona-flight-ay, 0px))) rotate(calc(var(--arrive-rot, 0deg) * -0.4)) scale(1.3);
+  }
+
+  46%, 55.9% {
+    opacity: 1;
+    transform: translate(calc(var(--persona-flight-x, 0) * 0.3 + var(--persona-flight-ax, 0px) * 0.7), calc(var(--persona-flight-y, 0) * 0.3 + var(--persona-flight-ay, 0px) * 0.7)) rotate(calc(var(--arrive-rot, 0deg) * -0.2)) scale(1.15);
+  }
+
+  56%, 64.9% {
+    opacity: 1;
+    transform: translate(calc(var(--persona-flight-x, 0) * 0.1), calc(var(--persona-flight-y, 0) * 0.1)) scale(1.05);
+  }
+
+  65%, 69.9% {
+    opacity: 1;
+    transform: translate(calc(var(--persona-flight-x, 0) * -0.04), calc(var(--persona-flight-y, 0) * -0.04)) scale(0.9);
+  }
+
+  70%, 83.9% {
     opacity: 1;
     transform: translate(0, 0) scale(1);
   }
 
-  to {
+  84%, 87.9% {
+    opacity: 0.25;
+    transform: translate(0, 0) scale(1);
+  }
+
+  88%, 93.9% {
+    opacity: 1;
+    transform: translate(0, 0) scale(1);
+  }
+
+  94%, 100% {
     opacity: 0;
-    transform: translate(0, 0) scale(1);
+    transform: translate(0, 0) scale(0.7);
   }
 }
 
 @keyframes persona-flight-ring {
-  from {
-    opacity: 0.9;
+  0%, 24.9% {
+    opacity: 0.95;
     transform: scale(0.72);
+    mask: var(--matte-5);
+    -webkit-mask: var(--matte-5);
   }
 
-  to {
+  25%, 49.9% {
+    opacity: 0.9;
+    transform: scale(1.06);
+    mask: var(--matte-4);
+    -webkit-mask: var(--matte-4);
+  }
+
+  50%, 59.9% {
+    opacity: 0.9;
+    transform: scale(0.98);
+    mask: var(--matte-4);
+    -webkit-mask: var(--matte-4);
+  }
+
+  60%, 79.9% {
+    opacity: 0.7;
+    transform: scale(1.22);
+    mask: var(--matte-3);
+    -webkit-mask: var(--matte-3);
+  }
+
+  80%, 100% {
     opacity: 0;
     transform: scale(1.35);
+    mask: var(--matte-1);
+    -webkit-mask: var(--matte-1);
   }
 }
 
@@ -265,9 +882,14 @@
   }
 }
 
-// The sideways question belongs to the threshold's feature.
+// The sideways question belongs to the threshold's feature. It develops through the ladder when
+// the persona asks it, and is unmade as a ghost js/persona.js leaves where it was when it is done.
 .persona-probe {
   margin-top: 0.5rem;
+}
+
+.persona-probe:not([hidden]) {
+  animation: part-in var(--motion-long) var(--ease-part-in, var(--ease-arrive)) both;
 }
 
 // ---- the sheet ---------------------------------------------------------------------------
@@ -291,10 +913,210 @@
   display: none;
 }
 
+// The sheet is dealt like a plate: it develops through the matte ladder from the roll's geometry
+// (--arrive-x/-y, turned by --arrive-rot, from --arrive-scale), refuses once, lands a tread too far
+// (--pop-over) and sets. A native dialog in the top layer can be masked and moved like anything
+// else; the individual translate/rotate/scale properties leave the fallback box's own transform
+// (below) alone.
 .persona-sheet[open] {
   display: grid;
   gap: 1rem;
   align-content: start;
+  animation: sheet-in var(--motion-sheet-in, var(--motion-long)) var(--ease-sheet-in, var(--ease-arrive)) both;
+}
+
+@keyframes sheet-in {
+  0%, 15.9% {
+    mask: var(--matte-1);
+    -webkit-mask: var(--matte-1);
+    translate: var(--arrive-x, 0px) var(--arrive-y, 28px);
+    rotate: var(--arrive-rot, 0deg);
+    scale: var(--arrive-scale, 0.96);
+  }
+
+  16%, 31.9% {
+    mask: var(--matte-2);
+    -webkit-mask: var(--matte-2);
+    translate: calc(var(--arrive-x, 0px) * 0.6) calc(var(--arrive-y, 28px) * 0.6);
+    rotate: calc(var(--arrive-rot, 0deg) * 0.6);
+    scale: 1;
+  }
+
+  32%, 39.9% {
+    mask: var(--matte-1);
+    -webkit-mask: var(--matte-1);
+    translate: calc(var(--arrive-x, 0px) * 0.7) calc(var(--arrive-y, 28px) * 0.7);
+    rotate: calc(var(--arrive-rot, 0deg) * 0.6);
+    scale: 1;
+  }
+
+  40%, 55.9% {
+    mask: var(--matte-3);
+    -webkit-mask: var(--matte-3);
+    translate: calc(var(--arrive-x, 0px) * 0.25) calc(var(--arrive-y, 28px) * 0.25);
+    rotate: calc(var(--arrive-rot, 0deg) * 0.25);
+    scale: 1;
+  }
+
+  56%, 71.9% {
+    mask: var(--matte-4);
+    -webkit-mask: var(--matte-4);
+    translate: 0 calc(var(--arrive-y, 28px) * -0.08);
+    rotate: 0deg;
+    scale: var(--pop-over, 1.03);
+  }
+
+  72%, 87.9% {
+    mask: var(--matte-5);
+    -webkit-mask: var(--matte-5);
+    translate: 0 0;
+    rotate: 0deg;
+    scale: 1;
+  }
+
+  88%, 100% {
+    mask: none;
+    -webkit-mask: none;
+    translate: 0 0;
+    rotate: 0deg;
+    scale: 1;
+  }
+}
+
+// The sheet's parts -- the head, the intro, the three sections -- follow it up the ladder one
+// stagger apart (--k from their place, --motion-stagger from the roll), so the sheet is dealt as a
+// hand of cards rather than switched on whole.
+.persona-sheet[open] > * {
+  --k: 0;
+  animation: sheet-part-in var(--motion-long) var(--ease-sheet-part-in, var(--ease-stair)) calc(var(--k, 0) * var(--motion-stagger, 44ms) * 2 + var(--motion-short, 170ms)) both;
+}
+
+.persona-sheet[open] > :nth-child(2) {
+  --k: 1;
+}
+
+.persona-sheet[open] > :nth-child(3) {
+  --k: 2;
+}
+
+.persona-sheet[open] > :nth-child(4) {
+  --k: 3;
+}
+
+.persona-sheet[open] > :nth-child(5) {
+  --k: 4;
+}
+
+@keyframes sheet-part-in {
+  0%, 21.9% {
+    mask: var(--matte-1);
+    -webkit-mask: var(--matte-1);
+    translate: 0 calc(var(--arrive-y, 28px) * 0.25);
+  }
+
+  22%, 43.9% {
+    mask: var(--matte-2);
+    -webkit-mask: var(--matte-2);
+    translate: 0 calc(var(--arrive-y, 28px) * 0.1);
+  }
+
+  44%, 51.9% {
+    mask: var(--matte-1);
+    -webkit-mask: var(--matte-1);
+    translate: 0 calc(var(--arrive-y, 28px) * 0.1);
+  }
+
+  52%, 71.9% {
+    mask: var(--matte-3);
+    -webkit-mask: var(--matte-3);
+    translate: 0 0;
+  }
+
+  72%, 89.9% {
+    mask: var(--matte-4);
+    -webkit-mask: var(--matte-4);
+    translate: 0 0;
+  }
+
+  90%, 100% {
+    mask: none;
+    -webkit-mask: none;
+    translate: 0 0;
+  }
+}
+
+// Closing. A modal dialog has to close at once for the focus to go home and the veil to come
+// down, so what is unmade is a ghost of it: js/persona.js leaves a copy of the sheet exactly where
+// the sheet was (pinned by the script, inline, to the box it measured, under no pointer and hidden
+// from a screen reader), unmade here down the ladder with one flicker back toward the roll's
+// --leave-x/-y, and taken out when the rite ends. It plays on through whatever lightbox is still
+// up. Where it is pinned is the script's to say, with the box: nothing here pins it, so the closed
+// list of what the stylesheets float over a page (issue #64) stays the two marks and their parts.
+.persona-sheet.persona-ghost {
+  display: grid;
+  gap: 1rem;
+  align-content: start;
+  margin: 0;
+  z-index: var(--layer-front);
+  pointer-events: none;
+  overflow: hidden;
+  animation: sheet-out var(--motion-sheet-out, var(--motion-medium)) var(--ease-sheet-out, var(--ease-leave)) both;
+  animation-play-state: running;
+}
+
+@keyframes sheet-out {
+  0%, 17.9% {
+    opacity: 1;
+    mask: var(--matte-5);
+    -webkit-mask: var(--matte-5);
+    translate: calc(var(--leave-x, 0px) * -0.1) calc(var(--leave-y, -22px) * -0.1);
+    scale: 1.01;
+  }
+
+  18%, 35.9% {
+    opacity: 1;
+    mask: var(--matte-4);
+    -webkit-mask: var(--matte-4);
+    translate: calc(var(--leave-x, 0px) * 0.25) calc(var(--leave-y, -22px) * 0.25);
+    rotate: calc(var(--leave-rot, 0deg) * 0.4);
+    scale: 1;
+  }
+
+  36%, 45.9% {
+    opacity: 1;
+    mask: var(--matte-5);
+    -webkit-mask: var(--matte-5);
+    translate: calc(var(--leave-x, 0px) * 0.18) calc(var(--leave-y, -22px) * 0.18);
+    rotate: calc(var(--leave-rot, 0deg) * 0.3);
+    scale: 1;
+  }
+
+  46%, 63.9% {
+    opacity: 1;
+    mask: var(--matte-3);
+    -webkit-mask: var(--matte-3);
+    translate: calc(var(--leave-x, 0px) * 0.5) calc(var(--leave-y, -22px) * 0.5);
+    rotate: var(--leave-rot, 0deg);
+    scale: var(--leave-scale, 0.92);
+  }
+
+  64%, 81.9% {
+    opacity: 1;
+    mask: var(--matte-2);
+    -webkit-mask: var(--matte-2);
+    translate: calc(var(--leave-x, 0px) * 0.8) calc(var(--leave-y, -22px) * 0.8);
+    rotate: var(--leave-rot, 0deg);
+    scale: calc(var(--leave-scale, 0.92) - 0.04);
+  }
+
+  82%, 100% {
+    opacity: 0;
+    mask: var(--matte-1);
+    -webkit-mask: var(--matte-1);
+    translate: var(--leave-x, 0px) var(--leave-y, -22px);
+    rotate: var(--leave-rot, 0deg);
+    scale: calc(var(--leave-scale, 0.92) - 0.08);
+  }
 }
 
 // Nothing of its own behind it: the shared veil is what dims and blurs the page while the sheet is
@@ -373,6 +1195,144 @@
   overflow: hidden;
   cursor: crosshair;
   touch-action: none;
+  // Under the pointer the field waxes: its edge is cut in along the stair family, in treads.
+  box-shadow: inset 0 0 0 0 color-mix(in oklab, var(--md-sys-color-primary) 55%, transparent);
+  transition: box-shadow var(--motion-medium) var(--ease-stair);
+}
+
+.persona-sky:hover {
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--md-sys-color-primary) 55%, transparent);
+}
+
+// A tap on the sky lands a star, and the sky is stamped where the finger fell (is-stamping, with
+// --stamp-x/-y from js/persona.js): a blotch of the roll's fill texture in the primary, cut in
+// large, held, a tread too far, taken down the ladder and gone -- never a ripple that fades.
+.persona-sky::after {
+  content: '';
+  position: absolute;
+  left: var(--stamp-x, 50%);
+  top: var(--stamp-y, 50%);
+  width: 4.5rem;
+  height: 4.5rem;
+  margin: -2.25rem 0 0 -2.25rem;
+  border-radius: var(--md-sys-shape-corner-full);
+  color: var(--md-sys-color-primary);
+  background: var(--matte-fill);
+  background-size: var(--matte-fill-size);
+  pointer-events: none;
+  display: none;
+}
+
+.persona-sky.is-stamping::after {
+  display: block;
+  animation: sky-stamp var(--motion-sky-stamp, var(--motion-medium)) var(--ease-sky-stamp, var(--ease-flicker)) both;
+}
+
+@keyframes sky-stamp {
+  0%, 17.9% {
+    opacity: 0.9;
+    transform: scale(0.45) rotate(calc(var(--arrive-rot, 0deg) * 6));
+    mask: var(--matte-4);
+    -webkit-mask: var(--matte-4);
+  }
+
+  18%, 37.9% {
+    opacity: 0.8;
+    transform: scale(1.15);
+    mask: var(--matte-5);
+    -webkit-mask: var(--matte-5);
+  }
+
+  38%, 45.9% {
+    opacity: 0.8;
+    transform: scale(0.95);
+    mask: var(--matte-3);
+    -webkit-mask: var(--matte-3);
+  }
+
+  46%, 65.9% {
+    opacity: 0.7;
+    transform: scale(1.3) rotate(calc(var(--arrive-rot, 0deg) * -3));
+    mask: var(--matte-3);
+    -webkit-mask: var(--matte-3);
+  }
+
+  66%, 83.9% {
+    opacity: 0.6;
+    transform: scale(1.4);
+    mask: var(--matte-2);
+    -webkit-mask: var(--matte-2);
+  }
+
+  84%, 100% {
+    opacity: 0;
+    transform: scale(1.5);
+    mask: var(--matte-1);
+    -webkit-mask: var(--matte-1);
+  }
+}
+
+// The ring behind the stars (_rite.scss draws it) is cast as the sheet opens: it ratchets into
+// place in clicks with backlash, through the ladder, a beat after the sheet itself; and it clicks
+// one tooth round whenever a star lands in the sky (is-struck, from js/persona.js).
+.persona-sheet[open] .persona-sky::before {
+  animation: sky-ring-cast var(--motion-long) var(--ease-sky-ring-cast, var(--ease-stair)) calc(var(--motion-short, 170ms) * 2) both;
+}
+
+@keyframes sky-ring-cast {
+  0%, 19.9% {
+    transform: translate(-50%, -50%) rotate(-26deg) scale(0.86);
+    mask: var(--matte-1);
+    -webkit-mask: var(--matte-1);
+  }
+
+  20%, 39.9% {
+    transform: translate(-50%, -50%) rotate(-9deg) scale(0.96);
+    mask: var(--matte-2);
+    -webkit-mask: var(--matte-2);
+  }
+
+  40%, 47.9% {
+    transform: translate(-50%, -50%) rotate(-13deg) scale(0.96);
+    mask: var(--matte-1);
+    -webkit-mask: var(--matte-1);
+  }
+
+  48%, 69.9% {
+    transform: translate(-50%, -50%) rotate(4deg) scale(1.02);
+    mask: var(--matte-4);
+    -webkit-mask: var(--matte-4);
+  }
+
+  70%, 85.9% {
+    transform: translate(-50%, -50%) rotate(-2deg) scale(1);
+    mask: var(--matte-5);
+    -webkit-mask: var(--matte-5);
+  }
+
+  86%, 100% {
+    transform: translate(-50%, -50%);
+    mask: none;
+    -webkit-mask: none;
+  }
+}
+
+.persona-sky.is-struck::before {
+  animation: sky-ring-click var(--motion-medium) var(--ease-sky-ring-click, var(--ease-flicker)) both;
+}
+
+@keyframes sky-ring-click {
+  0%, 29.9% {
+    transform: translate(-50%, -50%) rotate(8deg);
+  }
+
+  30%, 54.9% {
+    transform: translate(-50%, -50%) rotate(-2.5deg);
+  }
+
+  55%, 100% {
+    transform: translate(-50%, -50%);
+  }
 }
 
 .persona-sky-canvas {
@@ -385,8 +1345,33 @@
   pointer-events: none;
 }
 
+// A strike -- a star landing, a star taken away -- flickers the drawn lines for one tread while the
+// script redraws them in treads of its own.
+.persona-sky.is-struck .persona-sky-canvas {
+  animation: canvas-flicker var(--motion-medium) var(--ease-canvas-flicker, var(--ease-flicker)) both;
+}
+
+@keyframes canvas-flicker {
+  0%, 17.9% {
+    filter: brightness(1.6) contrast(1.2);
+  }
+
+  18%, 33.9% {
+    filter: none;
+  }
+
+  34%, 41.9% {
+    filter: brightness(1.3);
+  }
+
+  42%, 100% {
+    filter: none;
+  }
+}
+
 // The sky's name, under the field: what the persona reads the arrangement as (js/persona.js,
-// skyName), renamed live as a star is dragged across a boundary.
+// skyName), renamed live as a star is dragged across a boundary -- revealed glyph by glyph
+// (js/motion.js), and developed through the ladder when it first has a name to show.
 .persona-sky-name {
   margin: 0;
   color: var(--md-sys-color-tertiary);
@@ -402,6 +1387,99 @@
   overflow-wrap: anywhere;
   @include type.scale(title-medium);
   @include type.rite;
+}
+
+// What comes and goes in the sheet -- the name, the thread, the words form, the remove and forget
+// buttons, the world the reading points at -- develops through the ladder when it is shown and is
+// unmade down it (is-unmaking, from js/persona.js) before it is hidden, never cut.
+.persona-sky-name:not([hidden]),
+.persona-thread:not([hidden]),
+.persona-star-words:not([hidden]),
+[id='persona-remove']:not([hidden]),
+[id='persona-forget']:not([hidden]),
+[id='persona-reading-go']:not([hidden]) {
+  animation: part-in var(--motion-part-in, var(--motion-medium)) var(--ease-part-in, var(--ease-arrive)) both;
+}
+
+.persona-sheet .is-unmaking,
+.persona-probe.is-unmaking {
+  pointer-events: none;
+  animation: part-unmake var(--motion-medium) var(--ease-part-unmake, var(--ease-leave)) both;
+}
+
+@keyframes part-in {
+  0%, 23.9% {
+    mask: var(--matte-1);
+    -webkit-mask: var(--matte-1);
+    translate: calc(var(--arrive-x, 0px) * 0.2) calc(var(--arrive-y, 28px) * 0.3);
+  }
+
+  24%, 45.9% {
+    mask: var(--matte-2);
+    -webkit-mask: var(--matte-2);
+    translate: calc(var(--arrive-x, 0px) * 0.1) calc(var(--arrive-y, 28px) * 0.12);
+  }
+
+  46%, 53.9% {
+    mask: var(--matte-1);
+    -webkit-mask: var(--matte-1);
+    translate: calc(var(--arrive-x, 0px) * 0.1) calc(var(--arrive-y, 28px) * 0.12);
+  }
+
+  54%, 73.9% {
+    mask: var(--matte-3);
+    -webkit-mask: var(--matte-3);
+    translate: 0 calc(var(--arrive-y, 28px) * -0.04);
+  }
+
+  74%, 91.9% {
+    mask: var(--matte-5);
+    -webkit-mask: var(--matte-5);
+    translate: 0 0;
+  }
+
+  92%, 100% {
+    mask: none;
+    -webkit-mask: none;
+    translate: 0 0;
+  }
+}
+
+@keyframes part-unmake {
+  0%, 24.9% {
+    opacity: 1;
+    mask: var(--matte-4);
+    -webkit-mask: var(--matte-4);
+    translate: 0 0;
+  }
+
+  25%, 49.9% {
+    opacity: 1;
+    mask: var(--matte-3);
+    -webkit-mask: var(--matte-3);
+    translate: calc(var(--leave-x, 0px) * 0.3) calc(var(--leave-y, -22px) * 0.2);
+  }
+
+  50%, 59.9% {
+    opacity: 1;
+    mask: var(--matte-4);
+    -webkit-mask: var(--matte-4);
+    translate: calc(var(--leave-x, 0px) * 0.2) calc(var(--leave-y, -22px) * 0.15);
+  }
+
+  60%, 84.9% {
+    opacity: 1;
+    mask: var(--matte-2);
+    -webkit-mask: var(--matte-2);
+    translate: calc(var(--leave-x, 0px) * 0.6) calc(var(--leave-y, -22px) * 0.5);
+  }
+
+  85%, 100% {
+    opacity: 0;
+    mask: var(--matte-1);
+    -webkit-mask: var(--matte-1);
+    translate: var(--leave-x, 0px) calc(var(--leave-y, -22px) * 0.8);
+  }
 }
 
 .persona-star-words {
@@ -423,8 +1501,25 @@
   overflow-wrap: anywhere;
 }
 
+// A star: its light is a radial in the primary, as wide as its words' gleam (--star-gleam, from
+// js/persona.js) and the rite's own multiplier (--gleam-up, from the keyframes below). Its left
+// and top are never transitioned: js/persona.js places the star under the pointer. The button's
+// own colour, ring and outline move along the stair family (_controls.scss), and so does the gleam
+// when a star is given new words -- registered, so a browser can step it; the rest is cuts.
+@property --star-gleam {
+  syntax: '<number>';
+  inherits: false;
+  initial-value: 1;
+}
+
 .persona-star {
-  --star-light: radial-gradient(circle, var(--md-sys-color-on-surface) 0 2px, var(--md-sys-color-primary) 3px, transparent calc(7px * var(--star-gleam, 1)));
+  transition:
+    background-color var(--motion-short) var(--ease-stair),
+    color var(--motion-short) var(--ease-stair),
+    box-shadow var(--motion-short) var(--ease-stair),
+    outline-offset var(--motion-short) var(--ease-stair),
+    --star-gleam var(--motion-medium) var(--ease-stair);
+  --star-light: radial-gradient(circle, var(--md-sys-color-on-surface) 0 2px, var(--md-sys-color-primary) 3px, transparent calc(7px * var(--star-gleam, 1) * var(--gleam-up, 1)));
   position: absolute;
   width: 44px;
   height: 44px;
@@ -435,21 +1530,67 @@
   border-radius: 50%;
   display: block;
   background: var(--star-light);
+  color: var(--md-sys-color-primary);
   box-shadow: none;
   cursor: grab;
   touch-action: none;
   user-select: none;
   -webkit-user-select: none;
   -webkit-touch-callout: none;
-  transition: none;
 }
 
 .persona-star::after {
   display: none;
 }
 
-.persona-star[data-thread]::after {
-  content: attr(data-thread);
+// The thread badge: the star's place in the short path through nearby thoughts, stamped on in cuts
+// through the ladder whenever it is given (data-thread, js/persona.js) -- and, when the place is
+// taken away, the old number (data-thread-was, is-unthreaded) unmade down the ladder with one
+// flicker back rather than cut.
+.persona-star.is-unthreaded:not([data-thread])::after {
+  content: attr(data-thread-was);
+  animation: thread-unmake var(--motion-thread-unmake, var(--motion-medium)) var(--ease-thread-unmake, var(--ease-leave)) both;
+}
+
+@keyframes thread-unmake {
+  0%, 24.9% {
+    opacity: 1;
+    transform: scale(1.1);
+    mask: var(--matte-5);
+    -webkit-mask: var(--matte-5);
+  }
+
+  25%, 49.9% {
+    opacity: 1;
+    transform: scale(0.9) rotate(calc(var(--leave-rot, 0deg) * 4));
+    mask: var(--matte-3);
+    -webkit-mask: var(--matte-3);
+  }
+
+  50%, 59.9% {
+    opacity: 1;
+    transform: scale(1);
+    mask: var(--matte-4);
+    -webkit-mask: var(--matte-4);
+  }
+
+  60%, 79.9% {
+    opacity: 1;
+    transform: scale(0.6) rotate(calc(var(--leave-rot, 0deg) * 8));
+    mask: var(--matte-2);
+    -webkit-mask: var(--matte-2);
+  }
+
+  80%, 100% {
+    opacity: 0;
+    transform: scale(0.3);
+    mask: var(--matte-1);
+    -webkit-mask: var(--matte-1);
+  }
+}
+
+.persona-star[data-thread]::after,
+.persona-star.is-unthreaded:not([data-thread])::after {
   position: absolute;
   inset: 0 auto auto 0;
   z-index: 1;
@@ -466,33 +1607,415 @@
   @include type.scale(label-small);
 }
 
-// Each star keeps a 44px touch target around its small light.
+.persona-star[data-thread]::after {
+  content: attr(data-thread);
+  animation: thread-stamp var(--motion-thread-stamp, var(--motion-medium)) var(--ease-thread-stamp, var(--ease-flicker)) both;
+}
+
+@keyframes thread-stamp {
+  0%, 19.9% {
+    transform: scale(0.4) rotate(calc(var(--arrive-rot, 0deg) * 4));
+    mask: var(--matte-2);
+    -webkit-mask: var(--matte-2);
+  }
+
+  20%, 44.9% {
+    transform: scale(1.35);
+    mask: var(--matte-4);
+    -webkit-mask: var(--matte-4);
+  }
+
+  45%, 64.9% {
+    transform: scale(0.88);
+    mask: var(--matte-5);
+    -webkit-mask: var(--matte-5);
+  }
+
+  65%, 100% {
+    transform: none;
+    mask: none;
+    -webkit-mask: none;
+  }
+}
+
+// Each star keeps a 44px touch target around its small light, which is also the seal a selected
+// star wears: the rolled fill texture (--matte-fill, _controls.scss gives every button's ::before
+// the texture at opacity 0) in the tertiary, climbing the ladder onto the star as it is selected
+// (is-sealing, js/motion.js) and leaving down it when it is not (is-unsealing).
 .persona-star::before {
   content: '';
   position: absolute;
   inset: 0;
   border-radius: 50%;
+  color: var(--md-sys-color-tertiary);
 }
 
+// Waxing: the gleam grows one tread, slips, grows again, and an inset ring is cut in, the whole
+// star arriving at its waxed light through the top of the matte ladder (shifted by the roll's
+// --matte-shift, so no two stars wax alike). :hover for a page with no script.
+.persona-star.is-waxing,
 .persona-star:hover {
   background: var(--star-light);
   box-shadow: inset 0 0 0 1px var(--md-sys-color-primary);
+  animation: star-wax var(--motion-medium) var(--ease-star-wax, var(--ease-stair)) both;
 }
 
+.persona-star.is-waning {
+  animation: star-wane var(--motion-medium) var(--ease-star-wane, var(--ease-stair)) both;
+}
+
+@keyframes star-wax {
+  0%, 24.9% {
+    --gleam-up: 1.25;
+    box-shadow: inset 0 0 0 0 var(--md-sys-color-primary);
+    mask: var(--matte-3);
+    -webkit-mask: var(--matte-3);
+    mask-position: var(--matte-shift, 0 0);
+    -webkit-mask-position: var(--matte-shift, 0 0);
+  }
+
+  25%, 49.9% {
+    --gleam-up: 1.1;
+    box-shadow: inset 0 0 0 2px var(--md-sys-color-primary);
+    mask: var(--matte-5);
+    -webkit-mask: var(--matte-5);
+    mask-position: var(--matte-shift, 0 0);
+    -webkit-mask-position: var(--matte-shift, 0 0);
+  }
+
+  50%, 61.9% {
+    --gleam-up: 1.45;
+    box-shadow: inset 0 0 0 1px var(--md-sys-color-primary);
+    mask: var(--matte-4);
+    -webkit-mask: var(--matte-4);
+    mask-position: var(--matte-shift, 0 0);
+    -webkit-mask-position: var(--matte-shift, 0 0);
+  }
+
+  62%, 100% {
+    --gleam-up: 1.25;
+    box-shadow: inset 0 0 0 1px var(--md-sys-color-primary);
+    mask: none;
+    -webkit-mask: none;
+  }
+}
+
+@keyframes star-wane {
+  0%, 29.9% {
+    --gleam-up: 1.25;
+    box-shadow: inset 0 0 0 1px var(--md-sys-color-primary);
+  }
+
+  30%, 54.9% {
+    --gleam-up: 1.05;
+    box-shadow: inset 0 0 0 2px var(--md-sys-color-primary);
+  }
+
+  55%, 64.9% {
+    --gleam-up: 1.18;
+    box-shadow: inset 0 0 0 0 var(--md-sys-color-primary);
+  }
+
+  65%, 100% {
+    --gleam-up: 1;
+    box-shadow: none;
+  }
+}
+
+// Selected: the texture is sealed on (::before, above) and a halo in the tertiary blooms in treads
+// with one slip; the halo is taken back down in treads when the star is unselected.
+.persona-star.selected {
+  color: var(--md-sys-color-tertiary);
+  background: var(--star-light);
+  box-shadow: inset 0 0 0 2px var(--md-sys-color-tertiary), 0 0 14px color-mix(in oklab, var(--md-sys-color-tertiary) 70%, transparent);
+  animation: star-select var(--motion-medium) var(--ease-star-select, var(--ease-stair)) both;
+}
+
+.persona-star.selected::before {
+  opacity: 0.26;
+}
+
+.persona-star.is-unsealing {
+  animation: star-unselect var(--motion-medium) var(--ease-star-unselect, var(--ease-stair)) both;
+}
+
+@keyframes star-select {
+  0%, 21.9% {
+    --gleam-up: 1.5;
+    box-shadow: inset 0 0 0 1px var(--md-sys-color-tertiary), 0 0 0 color-mix(in oklab, var(--md-sys-color-tertiary) 70%, transparent);
+  }
+
+  22%, 43.9% {
+    --gleam-up: 1.2;
+    box-shadow: inset 0 0 0 3px var(--md-sys-color-tertiary), 0 0 8px color-mix(in oklab, var(--md-sys-color-tertiary) 70%, transparent);
+  }
+
+  44%, 53.9% {
+    --gleam-up: 1.35;
+    box-shadow: inset 0 0 0 2px var(--md-sys-color-tertiary), 0 0 4px color-mix(in oklab, var(--md-sys-color-tertiary) 70%, transparent);
+  }
+
+  54%, 77.9% {
+    --gleam-up: 1.1;
+    box-shadow: inset 0 0 0 2px var(--md-sys-color-tertiary), 0 0 20px color-mix(in oklab, var(--md-sys-color-tertiary) 80%, transparent);
+  }
+
+  78%, 100% {
+    --gleam-up: 1.15;
+    box-shadow: inset 0 0 0 2px var(--md-sys-color-tertiary), 0 0 14px color-mix(in oklab, var(--md-sys-color-tertiary) 70%, transparent);
+  }
+}
+
+@keyframes star-unselect {
+  0%, 27.9% {
+    box-shadow: inset 0 0 0 2px var(--md-sys-color-tertiary), 0 0 14px color-mix(in oklab, var(--md-sys-color-tertiary) 70%, transparent);
+  }
+
+  28%, 55.9% {
+    box-shadow: inset 0 0 0 1px var(--md-sys-color-tertiary), 0 0 6px color-mix(in oklab, var(--md-sys-color-tertiary) 50%, transparent);
+  }
+
+  56%, 67.9% {
+    box-shadow: inset 0 0 0 2px var(--md-sys-color-tertiary), 0 0 10px color-mix(in oklab, var(--md-sys-color-tertiary) 60%, transparent);
+  }
+
+  68%, 100% {
+    box-shadow: none;
+  }
+}
+
+// Waxing while selected: both rites, the halo's and the gleam's.
+.persona-star.selected.is-waxing,
+.persona-star.selected:hover {
+  animation:
+    star-select var(--motion-medium) var(--ease-star-select, var(--ease-stair)) both,
+    star-wax var(--motion-medium) var(--ease-star-wax, var(--ease-stair)) both;
+}
+
+// Focus is struck: the ring lands wide and closes in three uneven treads with one flicker.
+.persona-star:focus-visible {
+  outline: 3px solid var(--md-sys-color-primary);
+  outline-offset: 3px;
+  animation: star-focus var(--motion-medium) var(--ease-star-focus, var(--ease-stair)) both;
+}
+
+.persona-star.selected:focus-visible {
+  animation:
+    star-select var(--motion-medium) var(--ease-star-select, var(--ease-stair)) both,
+    star-focus var(--motion-medium) var(--ease-star-focus, var(--ease-stair)) both;
+}
+
+@keyframes star-focus {
+  0%, 24.9% {
+    outline-offset: 9px;
+    outline-color: var(--md-sys-color-primary);
+  }
+
+  25%, 47.9% {
+    outline-offset: 5px;
+    outline-color: var(--md-sys-color-primary);
+  }
+
+  48%, 57.9% {
+    outline-offset: 6px;
+    outline-color: transparent;
+  }
+
+  58%, 100% {
+    outline-offset: 3px;
+    outline-color: var(--md-sys-color-primary);
+  }
+}
+
+// Picked up like a gem: the star grows in two hard treads with a flicker of its gleam, and is
+// held there, large, for as long as it is dragged (the stamp held).
 .persona-star.dragging {
   cursor: grabbing;
   transform: scale(1.25);
   box-shadow: inset 0 0 0 2px var(--md-sys-color-primary);
+  animation: star-lift var(--motion-short) var(--ease-star-lift, var(--ease-flicker)) both;
 }
 
-.persona-star.selected {
-  background: var(--star-light);
-  box-shadow: inset 0 0 0 2px var(--md-sys-color-tertiary), 0 0 14px color-mix(in oklab, var(--md-sys-color-tertiary) 70%, transparent);
+@keyframes star-lift {
+  0%, 29.9% {
+    --gleam-up: 1.6;
+    transform: scale(1.12) translate(calc(var(--shake-x, 6px) * -0.25), 0);
+  }
+
+  30%, 59.9% {
+    --gleam-up: 1.3;
+    transform: scale(1.3) translate(calc(var(--shake-x, 6px) * 0.15), 0);
+  }
+
+  60%, 79.9% {
+    --gleam-up: 1.5;
+    transform: scale(1.22);
+  }
+
+  80%, 100% {
+    --gleam-up: 1.3;
+    transform: scale(1.25);
+  }
 }
 
-.persona-star:focus-visible {
-  outline: 3px solid var(--md-sys-color-primary);
-  outline-offset: 3px;
+// Set down (is-dropped, js/persona.js): it settles in two treads with a slip past its size.
+.persona-star.is-dropped {
+  animation: star-drop var(--motion-medium) var(--ease-star-drop, var(--ease-stair)) both;
+}
+
+@keyframes star-drop {
+  0%, 27.9% {
+    --gleam-up: 1.3;
+    transform: scale(1.25);
+  }
+
+  28%, 54.9% {
+    --gleam-up: 1.1;
+    transform: scale(0.94);
+  }
+
+  55%, 74.9% {
+    --gleam-up: 1.4;
+    transform: scale(1.06);
+  }
+
+  75%, 100% {
+    --gleam-up: 1;
+    transform: none;
+  }
+}
+
+// Placed (is-placed, js/persona.js, with --d from the roll's stagger when a whole sky is dealt):
+// a pebble dropped from above, landing in hard treads through the ladder, squashing once, set.
+.persona-star.is-placed {
+  animation: star-develop var(--motion-star-develop, var(--motion-long)) var(--ease-star-develop, var(--ease-arrive)) var(--d, 0ms) both;
+}
+
+@keyframes star-develop {
+  0%, 17.9% {
+    --gleam-up: 2.2;
+    transform: scale(1.9) rotate(calc(var(--arrive-rot, 0deg) * 5));
+    mask: var(--matte-1);
+    -webkit-mask: var(--matte-1);
+  }
+
+  18%, 35.9% {
+    --gleam-up: 1.8;
+    transform: scale(1.4) rotate(calc(var(--arrive-rot, 0deg) * 2));
+    mask: var(--matte-2);
+    -webkit-mask: var(--matte-2);
+  }
+
+  36%, 43.9% {
+    --gleam-up: 2;
+    transform: scale(1.5);
+    mask: var(--matte-1);
+    -webkit-mask: var(--matte-1);
+  }
+
+  44%, 61.9% {
+    --gleam-up: 1.3;
+    transform: scale(0.86);
+    mask: var(--matte-3);
+    -webkit-mask: var(--matte-3);
+  }
+
+  62%, 79.9% {
+    --gleam-up: 1.5;
+    transform: scale(var(--pop-over, 1.08));
+    mask: var(--matte-5);
+    -webkit-mask: var(--matte-5);
+  }
+
+  80%, 100% {
+    --gleam-up: 1;
+    transform: none;
+    mask: none;
+    -webkit-mask: none;
+  }
+}
+
+// Removed: the star itself goes at once (the list is what it is), and a ghost of it js/persona.js
+// leaves in its place is unmade down the ladder with one flicker back, toward the roll's leave.
+.persona-star-ghost {
+  pointer-events: none;
+  animation: star-unmake var(--motion-medium) var(--ease-star-unmake, var(--ease-leave)) both;
+}
+
+@keyframes star-unmake {
+  0%, 19.9% {
+    --gleam-up: 1.6;
+    opacity: 1;
+    transform: scale(1.3);
+    mask: var(--matte-5);
+    -webkit-mask: var(--matte-5);
+  }
+
+  20%, 39.9% {
+    --gleam-up: 1.2;
+    opacity: 1;
+    transform: scale(1) translate(calc(var(--leave-x, 0px) * 0.2), calc(var(--leave-y, -22px) * 0.2));
+    mask: var(--matte-3);
+    -webkit-mask: var(--matte-3);
+  }
+
+  40%, 49.9% {
+    --gleam-up: 1.4;
+    opacity: 1;
+    transform: scale(1.1);
+    mask: var(--matte-4);
+    -webkit-mask: var(--matte-4);
+  }
+
+  50%, 74.9% {
+    --gleam-up: 1;
+    opacity: 1;
+    transform: scale(0.7) translate(calc(var(--leave-x, 0px) * 0.5), calc(var(--leave-y, -22px) * 0.5));
+    mask: var(--matte-2);
+    -webkit-mask: var(--matte-2);
+  }
+
+  75%, 100% {
+    --gleam-up: 0.6;
+    opacity: 0;
+    transform: scale(0.4) translate(var(--leave-x, 0px), var(--leave-y, -22px));
+    mask: var(--matte-1);
+    -webkit-mask: var(--matte-1);
+  }
+}
+
+// ---- the difficulty's ends ---------------------------------------------------------------
+// The slider is the site's (_controls.scss); the word at the end the handle reaches (is-near, from
+// js/persona.js) is sealed for a moment: lit in the primary, its tracking opening and snapping
+// back in treads, underlined in cuts.
+.difficulty-end.is-near {
+  color: var(--md-sys-color-primary);
+  animation: end-seal var(--motion-medium) var(--ease-end-seal, var(--ease-stair)) both;
+}
+
+@keyframes end-seal {
+  0%, 24.9% {
+    letter-spacing: 0.12em;
+    text-decoration: underline dashed;
+    text-underline-offset: 0.3em;
+  }
+
+  25%, 49.9% {
+    letter-spacing: 0.04em;
+    text-decoration: underline dashed;
+    text-underline-offset: 0.15em;
+  }
+
+  50%, 59.9% {
+    letter-spacing: 0.08em;
+    text-decoration: none;
+  }
+
+  60%, 100% {
+    letter-spacing: normal;
+    text-decoration: underline dashed;
+    text-underline-offset: 0.2em;
+  }
 }
 
 @media (max-width: 599px) {
@@ -504,9 +2027,59 @@
   }
 }
 
+// Less motion asked for: every state is simply there. The avatar stands, the name is beside it or
+// not, the sheet is open or shut, a star is where it is, and nothing climbs, clicks or flies.
 @media (prefers-reduced-motion: reduce) {
-  .persona[data-state='empty'] .persona-avatar {
+  .persona-avatar:not([hidden]),
+  .persona.is-read .persona-portrait,
+  .persona-sky.is-stamping::after,
+  .persona-star.is-unthreaded:not([data-thread])::after,
+  .persona[data-state='empty'] .persona-avatar,
+  .persona[data-state='empty'] .persona-label,
+  .persona:not([data-state='empty']) .persona-portrait canvas,
+  .persona[data-sky='none'] .persona-portrait::before,
+  .persona.is-casting .persona-portrait::after,
+  .persona.is-casting .persona-portrait::before,
+  .persona.is-casting .persona-portrait canvas,
+  .persona.is-dawning .persona-portrait canvas,
+  .persona[data-asking='true'] .persona-portrait,
+  .persona-avatar.is-stamping .persona-portrait,
+  .persona-avatar:active .persona-portrait,
+  .persona-probe:not([hidden]),
+  .persona-sheet[open],
+  .persona-sheet[open] > *,
+  .persona-sheet.persona-ghost,
+  .persona-sheet[open] .persona-sky::before,
+  .persona-sky.is-struck::before,
+  .persona-sky.is-struck .persona-sky-canvas,
+  .persona-sky-name:not([hidden]),
+  .persona-thread:not([hidden]),
+  .persona-star-words:not([hidden]),
+  [id='persona-remove']:not([hidden]),
+  [id='persona-forget']:not([hidden]),
+  [id='persona-reading-go']:not([hidden]),
+  .persona-sheet .is-unmaking,
+  .persona-probe.is-unmaking,
+  .persona-star[data-thread]::after,
+  .persona-star.is-waxing,
+  .persona-star:hover,
+  .persona-star.is-waning,
+  .persona-star.selected,
+  .persona-star.selected.is-waxing,
+  .persona-star.selected:hover,
+  .persona-star.is-unsealing,
+  .persona-star:focus-visible,
+  .persona-star.selected:focus-visible,
+  .persona-star.dragging,
+  .persona-star.is-dropped,
+  .persona-star.is-placed,
+  .persona-star-ghost,
+  .difficulty-end.is-near {
     animation: none;
+  }
+
+  .persona.is-casting .persona-portrait::after {
+    content: none;
   }
 
   .persona-label {
@@ -514,8 +2087,18 @@
   }
 
   .persona-star,
-  .persona-star.dragging {
+  .persona-star.dragging,
+  .persona-sky {
     transition: none;
+  }
+
+  .persona-sky.is-stamping::after {
+    display: none;
+  }
+
+  .persona-sheet.persona-ghost,
+  .persona-star-ghost {
+    display: none;
   }
 
   // The same answer as .is-still above, for a page whose script never read the query.

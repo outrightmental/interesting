@@ -101,11 +101,12 @@ function fract(x) {
 // The cells of a box that the matte lets through at coverage k, filled in the current fillStyle:
 // how a surface changes by its area. Cells are rite.cell px, coarser over a wide box so a frame
 // stays cheap, on a grid fixed to the canvas so the pattern holds still while it grows. `inside`
-// keeps the tiling to a shape within the box. At k >= 1 every cell is let through, so a caller
-// that wants a solid draws the shape itself instead.
-function develop(g, rite, x0, y0, bw, bh, k, inside) {
+// keeps the tiling to a shape within the box, and `size` is a cell size of the caller's own, for
+// a box whose size moves (the grid must not move with it). At k >= 1 every cell is let through,
+// so a caller that wants a solid draws the shape itself instead.
+function develop(g, rite, x0, y0, bw, bh, k, inside, size) {
   if (k <= 0) return;
-  const cell = Math.max(rite.cell, Math.ceil(Math.max(bw, bh) / 28));
+  const cell = size || Math.max(rite.cell, Math.ceil(Math.max(bw, bh) / 28));
   const cx0 = Math.floor(x0 / cell);
   const cy0 = Math.floor(y0 / cell);
   const cx1 = Math.ceil((x0 + bw) / cell);
@@ -147,7 +148,7 @@ function nightfall(g, rite, w, h, p, depth) {
 /* ---- the room ------------------------------------------------------------------------------ */
 
 const BREATH = 12; // seconds to a breath of the ring
-const TURN = 3.5;  // seconds in which the dial round the ring clicks through one roll of treads
+const TURN = 3.5;  // seconds in which a mark round the ring clicks through one roll of treads
 const TEETH = 24;
 
 // How far the room is through its breath, t seconds after this card was painted: twelve seconds to
@@ -163,8 +164,8 @@ function breath(v, rite, t, n) {
 
 // The room, t seconds into its breath, at the size the configuration asks for. The ring swells on
 // one stair, its glow on another and the floor catches the light on a third, each a roll of the
-// piece's rite, so the three never step together; the dial of teeth round the ring turns in the
-// ratchet's clicks, with its backlash.
+// piece's rite, so the three never step together; the marks round the ring orbit in the
+// ratchet's clicks, with its backlash, each on a roll of its own.
 function room(ctx, w, h, env, t) {
   const c = env.colors;
   const v = env.variant || PLAIN;
@@ -185,25 +186,35 @@ function room(ctx, w, h, env, t) {
   ctx.fillStyle = glow;
   ctx.fillRect(0, 0, w, h);
   // The floor catching the light: cells of the room's own matte, let through as the breath fills
-  // and taken back as it empties -- a pattern growing and shrinking, never a wash.
-  const reach = r * 1.45;
+  // and taken back as it empties -- a pattern growing and shrinking, never a wash. The cells are
+  // sized by the canvas and the floor's reach is the ring's fullest, not its breath, so the grid
+  // and the floor hold still while the ring breathes and only the pattern changes.
+  const reach = Math.min(w, h) * 0.28 * 1.45 * (v.scale || 1);
   ctx.fillStyle = env.alpha(c.accent2, 0.2);
   develop(ctx, rite, w / 2 - reach, h / 2 - reach, reach * 2, reach * 2, 0.06 + 0.42 * caught,
-    (px, py) => (px - w / 2) * (px - w / 2) + (py - h / 2) * (py - h / 2) <= reach * reach);
+    (px, py) => (px - w / 2) * (px - w / 2) + (py - h / 2) * (py - h / 2) <= reach * reach,
+    Math.max(rite.cell, Math.ceil(Math.min(w, h) / 44)));
   ctx.strokeStyle = env.alpha(c.accent, 0.45 + swell * 0.3);
   ctx.lineWidth = 1.2;
   ctx.beginPath();
   ctx.arc(w / 2, h / 2, r, 0, Math.PI * 2);
   ctx.stroke();
-  // The dial: a tooth per click, `treads` clicks to a turn of TURN seconds. Every tooth is the
-  // same, so the turn that one period makes lands the dial on itself and the next period's first
-  // click is the only seam -- its backlash.
-  const turned = (v.turn + rite.ratchet(fract(t / TURN)) * rite.treads / TEETH) * Math.PI * 2;
+  // The sparks round the ring: TEETH marks, each orbiting in clicks of a roll of its own -- its
+  // own count of clicks to a turn of TURN seconds, each click with the ratchet's backlash held as
+  // a tread and cut back, so nothing round the ring glides and no two marks click together. A mark
+  // always rests on a tooth of the ring, so the turn one period makes lands it on itself.
   ctx.strokeStyle = env.alpha(c.accent2, 0.5 + light * 0.3);
   ctx.lineWidth = 1;
   ctx.beginPath();
   for (let i = 0; i < TEETH; i++) {
-    const a = turned + (i / TEETH) * Math.PI * 2;
+    const own = rite.at(0x7ee7 + i);
+    const turns = t / TURN + i / TEETH;
+    const p = fract(turns);
+    const click = own.stair(p);
+    const lash = own.ratchet(p) - click;
+    const over = click > 0 && lash ? (lash > 0 ? 0.35 : -0.35) : 0;
+    const slot = i + own.treads * (Math.floor(turns) + click) + over;
+    const a = (v.turn + slot / TEETH) * Math.PI * 2;
     ctx.moveTo(w / 2 + Math.cos(a) * r * 1.1, h / 2 + Math.sin(a) * r * 1.1);
     ctx.lineTo(w / 2 + Math.cos(a) * r * 1.2, h / 2 + Math.sin(a) * r * 1.2);
   }
@@ -313,7 +324,7 @@ function drawLamps(g, w, h, env, plan, s, variant) {
   const rite = riteOf(env);
   const reduced = !!env.reduced;
   floor(g, w, h, env);
-  nightfall(g, rite, w, h, came(s, s.doneAt, 2.4, reduced), 0.85);
+  nightfall(g, rite, w, h, s.doneAt >= 0 ? came(s, s.doneAt, 2.4, reduced) : 0, 0.85);
   const c = env.colors;
   // The lit lamps light the room: the more of them, the more of the ceiling shows. When the count
   // changes the ceiling steps to the new light on the stair rather than cutting to it.
@@ -684,7 +695,7 @@ function drawShelf(g, w, h, env, plan, s, variant) {
   const rite = riteOf(env);
   const reduced = !!env.reduced;
   floor(g, w, h, env);
-  const doneP = came(s, s.doneAt, 2.6, reduced);
+  const doneP = s.doneAt >= 0 ? came(s, s.doneAt, 2.6, reduced) : 0;
   nightfall(g, rite, w, h, doneP, 0.8);
   // The lamp over the shelf.
   const lamp = g.createRadialGradient(w / 2, geo.shelfY - h * 0.2, 0, w / 2, geo.shelfY - h * 0.2, w * 0.55 * v.scale);

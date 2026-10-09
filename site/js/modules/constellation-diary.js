@@ -45,6 +45,78 @@ function asked(env) {
   return { level, helps: 6 - level, margin: Math.max(0, 3 - level) };
 }
 
+/* ---- the rite: how this module moves ------------------------------------------------------- */
+
+/* env.rite (ctx.rite inside a piece) is the piece's own roll of how it moves (js/variant.js;
+   js/stage.js, "The rite"). Nothing drawn here moves along a formula or cuts without a rite: a
+   state that changes climbs rite.stair in uneven treads; a thing arriving -- a star coming out, a
+   mark on the page, a line of the log -- blinks on with rite.flicker and leaves with one flicker
+   back; a surface that becomes set -- a star's halo, the band behind a line marked false, the
+   half of the sky the watch names -- develops by its AREA through rite.matte, cell by cell in
+   the piece's own pattern, and never by a fade; a line drawn across the page comes in treads.
+   Every change is read against the piece's own clock, s.t, which frame() advances: a change
+   made at `since` has come came() of its way, which is 1 at once for a visitor who asked for
+   less motion and for whatever stood there from the start (since < 0). Each star, line or mark
+   moves on a roll of its own (rite.at), so no two step together. */
+
+const STILL = {
+  ease: () => 1, stair: () => 1, ratchet: () => 0, flicker: () => 1, matte: () => true,
+  treads: 1, kind: 'none', cell: 4, at: () => STILL
+};
+
+function riteOf(env) {
+  return env && env.rite ? env.rite : STILL;
+}
+
+function came(s, since, span, reduced) {
+  if (reduced || since == null || since < 0) return 1;
+  return Math.max(0, Math.min(1, (s.t - since) / span));
+}
+
+// The cells of a box that the matte lets through at coverage k, filled in the current fillStyle:
+// how a surface changes by its area. Cells are rite.cell px, coarser over a wide box so a frame
+// stays cheap, on a grid fixed to the canvas so the pattern holds still while it grows. `inside`
+// keeps the tiling to a shape within the box. At k >= 1 every cell is let through, so a caller
+// that wants a solid draws the shape itself instead.
+function develop(g, rite, x0, y0, bw, bh, k, inside) {
+  if (k <= 0) return;
+  const cell = Math.max(rite.cell, Math.ceil(Math.max(bw, bh) / 28));
+  const cx0 = Math.floor(x0 / cell);
+  const cy0 = Math.floor(y0 / cell);
+  const cx1 = Math.ceil((x0 + bw) / cell);
+  const cy1 = Math.ceil((y0 + bh) / cell);
+  for (let cy = cy0; cy < cy1; cy++) {
+    for (let cx = cx0; cx < cx1; cx++) {
+      const px = cx * cell;
+      const py = cy * cell;
+      if (inside && !inside(px + cell / 2, py + cell / 2)) continue;
+      if (k < 1 && !rite.matte(cx, cy, k)) continue;
+      g.fillRect(px, py, cell, cell);
+    }
+  }
+}
+
+// A disc that is `k` of the way to being there: solid once it is, its cells before that.
+function disc(g, rite, x, y, r, k, fill) {
+  if (k <= 0) return;
+  g.fillStyle = fill;
+  if (k >= 1) {
+    g.beginPath();
+    g.arc(x, y, r, 0, Math.PI * 2);
+    g.fill();
+    return;
+  }
+  develop(g, rite, x - r, y - r, r * 2, r * 2, k, (px, py) => (px - x) * (px - x) + (py - y) * (py - y) <= r * r);
+}
+
+// A box that is `k` of the way to being there.
+function box(g, rite, x0, y0, bw, bh, k, fill) {
+  if (k <= 0) return;
+  g.fillStyle = fill;
+  if (k >= 1) g.fillRect(x0, y0, bw, bh);
+  else develop(g, rite, x0, y0, bw, bh, k);
+}
+
 /* ---- shared arithmetic ---------------------------------------------------------------------- */
 
 function dials(env) {
@@ -124,24 +196,34 @@ function ring(g, x, y, r, color, width) {
   g.stroke();
 }
 
-// Lines between stars along a path, in the order given.
-function path(g, pts, color) {
+// Lines between stars along a path, in the order given. `reach` draws only that fraction of the
+// last segment, so a path can come in treads.
+function path(g, pts, color, reach) {
   if (pts.length < 2) return;
   g.lineWidth = 1;
   g.strokeStyle = color;
   g.beginPath();
-  pts.forEach((p, i) => (i ? g.lineTo(p.x, p.y) : g.moveTo(p.x, p.y)));
+  pts.forEach((p, i) => {
+    if (!i) g.moveTo(p.x, p.y);
+    else if (i < pts.length - 1 || reach == null) g.lineTo(p.x, p.y);
+    else {
+      const q = pts[i - 1];
+      g.lineTo(q.x + (p.x - q.x) * reach, q.y + (p.y - q.y) * reach);
+    }
+  });
   g.stroke();
 }
 
-// One star: a soft halo, a bright core, and a letter beside it. `glow` is how far it has come out.
-function star(g, env, p, letter, scale, glow, size) {
+// One star: a soft halo, a bright core, and a letter beside it. `glow` is how far it has come out,
+// on a stair: the halo of a star that is out develops through the matte as far as the stair has
+// it, over the resting halo, and never brightens by alpha.
+function star(g, env, p, letter, scale, glow, size, rite) {
   const r = (2 + glow * 2.5) * scale;
-  const ink = glow > 0 ? env.colors.accent2 : env.colors.accent;
-  g.fillStyle = env.alpha(ink, 0.2 + glow * 0.45);
+  g.fillStyle = env.alpha(env.colors.accent, 0.2);
   g.beginPath();
-  g.arc(p.x, p.y, r * (2.4 + glow * 2), 0, Math.PI * 2);
+  g.arc(p.x, p.y, 4.8 * scale, 0, Math.PI * 2);
   g.fill();
+  if (glow > 0) disc(g, rite || STILL, p.x, p.y, r * (2.4 + glow * 2), glow, env.alpha(env.colors.accent2, 0.5));
   g.fillStyle = env.alpha(env.colors.fg, 0.95);
   g.beginPath();
   g.arc(p.x, p.y, r, 0, Math.PI * 2);
@@ -203,12 +285,13 @@ function frameOf(w, h, v) {
   return { w, h, split: h * (0.52 + v.turn * 0.08), m: Math.max(18, unit * 0.08), unit, size: Math.max(10, Math.min(20, Math.round(unit * 0.034))) };
 }
 
-// Lines of handwriting on the page, one to a rule from the top; `color` may be a function of the row.
+// Lines of handwriting on the page, one to a rule from the top; `color` may be a function of the
+// row, and a row whose colour is null is left blank (a line that is blinking on).
 function rows(g, fr, step, lines, color) {
   const size = Math.min(fr.size, step * 0.6);
   lines.forEach((line, i) => {
     const col = typeof color === 'function' ? color(i) : color;
-    write(g, line, fr.m + size * 0.5, fr.split + step * (i + 1) - size * 0.3, fr.w - fr.m * 2 - size, size, col);
+    if (col) write(g, line, fr.m + size * 0.5, fr.split + step * (i + 1) - size * 0.3, fr.w - fr.m * 2 - size, size, col);
   });
 }
 
@@ -243,50 +326,90 @@ function recallTitle(plan) {
   return 'entry ' + plan.number + ': call back ' + WORDS[plan.points.length];
 }
 
-// Which star is out at `tp` seconds into the showing, or -1; and whether the showing is over.
+// Which star is out at `tp` seconds into the showing, or -1, and how far into its moment it is
+// (`into`, 0..1); which star is just resting again and how far it has gone (`leaving`, `gone`);
+// and whether the showing is over.
 function showing(plan, tp) {
-  if (tp < LEAD) return { lit: -1, over: false };
+  const none = { lit: -1, into: 0, leaving: -1, gone: 1, over: false };
+  if (tp < LEAD) return none;
   const i = Math.floor((tp - LEAD) / SLOT);
-  if (i >= plan.seq.length) return { lit: -1, over: true };
-  return { lit: tp - LEAD - i * SLOT < FLASH ? plan.seq[i] : -1, over: false };
+  if (i >= plan.seq.length) return Object.assign({}, none, { over: true });
+  const phase = tp - LEAD - i * SLOT;
+  if (phase < FLASH) return { lit: plan.seq[i], into: phase / FLASH, leaving: -1, gone: 1, over: false };
+  return { lit: -1, into: 0, leaving: plan.seq[i], gone: (phase - FLASH) / (SLOT - FLASH), over: false };
+}
+
+// The showing as it opens: the clock at zero, the showing from the start, nothing done, no order
+// given and no star tapped (-1 is "never").
+function recallState(n, t) {
+  return { t: t || 0, from: 0, doneAt: -1, order: null, taps: [], tapAt: new Array(n).fill(-1), replays: 0 };
 }
 
 function recallScene(g, w, h, c, plan, s, v) {
   const fr = frameOf(w, h, v);
   const ink = c.colors.accent;
   const gold = c.colors.accent2;
+  const rite = riteOf(c);
+  const reduced = !!c.reduced;
   sky(g, w, fr.split, skyTint(c));
   const pts = placed(plan.points, fr);
   const show = showing(plan, s.t - s.from);
-  if (s.fade > 0) path(g, plan.seq.map((i) => pts[i]), c.alpha(gold, 0.6 * s.fade));
+  const doneP = came(s, s.doneAt, 2.5, reduced);
+  const done = s.doneAt >= 0;
+  if (done && rite.flicker(doneP)) {
+    // The order they came, drawn from star to star in treads: a segment at a time, the last of
+    // them reaching across as far as the stair has it.
+    const seg = plan.points.length - 1;
+    const far = rite.stair(doneP, seg) * seg;
+    const whole = Math.min(seg, Math.floor(far));
+    const line = plan.seq.slice(0, whole + 2).map((i) => pts[i]);
+    path(g, line, c.alpha(gold, 0.6), whole >= seg ? null : rite.stair(far - whole, 3));
+  }
   pts.forEach((p, i) => {
     const tapped = s.taps ? s.taps.indexOf(i) : -1;
-    star(g, c, p, LETTERS[i], v.scale, show.lit === i ? 1 : 0, fr.size);
-    if (show.lit === i) ring(g, p.x, p.y, fr.unit * 0.05, c.alpha(gold, 0.8), 1.5);
-    if (tapped >= 0) {
-      ring(g, p.x, p.y, fr.unit * 0.028, c.alpha(gold, 0.85), 1.2);
-      g.font = '500 ' + Math.round(fr.size * 0.8) + 'px system-ui, sans-serif';
-      g.fillStyle = c.alpha(gold, 0.95);
-      g.fillText(String(tapped + 1), p.x + fr.size * 0.5, p.y + fr.size * 0.6);
+    const own = rite.at(0x57a + i);
+    // A star coming out develops through the matte and blinks on; one resting again goes back
+    // down the stair, its halo taken back cell by cell.
+    let glow = 0;
+    if (show.lit === i) glow = reduced ? 1 : own.stair(Math.min(1, show.into * 2.5));
+    else if (show.leaving === i) glow = reduced ? 0 : 1 - own.stair(show.gone);
+    star(g, c, p, LETTERS[i], v.scale, glow, fr.size, rite);
+    if (show.lit === i && (reduced || own.flicker(show.into))) ring(g, p.x, p.y, fr.unit * (0.035 + 0.015 * own.stair(show.into)), c.alpha(gold, 0.8), 1.5);
+    // The ring and number of a star the visitor has tapped blink on and widen in treads; when the
+    // order is given and the taps start over, each leaves with one flicker back.
+    const tp = came(s, s.tapAt[i], 0.7, reduced);
+    if (tapped >= 0 ? own.flicker(tp) : (tp < 1 && own.flicker(1 - tp))) {
+      ring(g, p.x, p.y, fr.unit * (0.02 + 0.008 * own.stair(tp)), c.alpha(gold, 0.85), 1.2);
+      if (tapped >= 0) {
+        g.font = '500 ' + Math.round(fr.size * 0.8) + 'px system-ui, sans-serif';
+        g.fillStyle = c.alpha(gold, 0.95);
+        g.fillText(String(tapped + 1), p.x + fr.size * 0.5, p.y + fr.size * 0.6);
+      }
     }
   });
   const step = page(g, w, h, fr.split, c, ink, fr.m, Math.max(3, Math.round(4 * v.density)));
   const lines = [OPENER + ' entry ' + plan.number];
-  if (s.fade > 0) lines.push('in the order they came: ' + plan.seq.map((i) => LETTERS[i]).join(', '));
-  else lines.push(show.over ? 'they came out one at a time, and rested.' : s.t - s.from < LEAD ? 'the stars are coming out.' : 'one at a time.');
+  // The second line changes as the showing goes, and when it is written up: each change blinks on.
+  const told = done && rite.flicker(doneP);
+  const played = s.t - s.from;
+  const sinceLine = played < LEAD ? played : show.over ? played - LEAD - plan.seq.length * SLOT : played - LEAD;
+  const lineOn = reduced || rite.at(0x11e).flicker(Math.min(1, sinceLine / 0.5));
+  if (told) lines.push('in the order they came: ' + plan.seq.map((i) => LETTERS[i]).join(', '));
+  else lines.push(show.over ? 'they came out one at a time, and rested.' : played < LEAD ? 'the stars are coming out.' : 'one at a time.');
   if (s.order) lines.push('called back: ' + s.order.map((i) => LETTERS[i]).join(', '));
-  rows(g, fr, step, lines, (i) => (i === 0 ? c.alpha(gold, 0.95) : c.alpha(c.colors.fg, 0.85)));
+  rows(g, fr, step, lines, (i) => (i === 0 ? c.alpha(gold, 0.95) : i === 1 && !told && !lineOn ? null : c.alpha(c.colors.fg, 0.85)));
 }
 
 function recallPreview(g, w, h, env, plan, t) {
-  recallScene(g, w, h, env, plan, { t: t || 0, from: 0, fade: 0, order: null }, dials(env));
+  recallScene(g, w, h, env, plan, recallState(plan.points.length, t), dials(env));
 }
 
 function recallPiece(env, plan) {
   const n = plan.points.length;
   const v = dials(env);
   const helps = asked(env).helps;
-  const s = { t: 0, from: 0, fade: 0, order: range(n), taps: [], replays: 0 };
+  const s = recallState(n, 0);
+  s.order = range(n);
   const draw = (c) => recallScene(c.g, c.w, c.h, c, plan, s, v);
   const inPlace = (order) => order.filter((item, i) => item === plan.seq[i]).length;
   return {
@@ -353,9 +476,11 @@ function recallPiece(env, plan) {
         return;
       }
       s.taps.push(best);
+      s.tapAt[best] = s.t;
       if (s.taps.length === n) {
         s.order = s.taps.slice();
         s.taps = [];
+        for (let i = 0; i < n; i++) s.tapAt[i] = s.t;
         c.set('order', s.order.slice());
         c.status('called back: ' + s.order.map((i) => LETTERS[i]).join(', ') + '; check it');
       } else {
@@ -365,10 +490,10 @@ function recallPiece(env, plan) {
     },
     frame(t, dt, c) {
       s.t += dt;
-      if (c.done) s.fade = Math.min(1, s.fade + dt * (c.reduced ? 4 : 1));
       draw(c);
     },
     end(c) {
+      s.doneAt = s.t;
       c.status('entry ' + plan.number + ' written up: ' + plan.seq.map((i) => LETTERS[i]).join(', ') + ', in the order they came');
     }
   };
@@ -565,10 +690,18 @@ function linesTitle(plan) {
   return 'entry ' + plan.number + ': two false lines';
 }
 
+// The log as it opens: no line marked or vouched for, nothing struck out, and every mark that
+// comes or goes timed against the piece's clock (-1 is "never").
+function linesState(count) {
+  return { t: 0, doneAt: -1, picked: [], vouched: [], markAt: new Array(count).fill(-1), vouchAt: new Array(count).fill(-1) };
+}
+
 function linesScene(g, w, h, c, plan, s, v) {
   const fr = frameOf(w, h, v);
   const ink = c.colors.accent;
   const gold = c.colors.accent2;
+  const rite = riteOf(c);
+  const reduced = !!c.reduced;
   const top = fr.size * 1.8;
   sky(g, w, fr.split, skyTint(c));
   // The meridian where the plan stands it, and the horizon where the page begins, west on the left.
@@ -597,32 +730,50 @@ function linesScene(g, w, h, c, plan, s, v) {
   g.fillText('W · horizon', fr.m * 0.4, fr.split - 3);
   g.textAlign = 'right';
   g.fillText('horizon · E', w - fr.m * 0.4, fr.split - 3);
-  pts.forEach((p, i) => star(g, c, p, LETTERS[i], v.scale, s.fade > 0 && s.lit === i ? 1 : 0, fr.size));
-  // The logbook: the entry, then the lines, numbered; a picked line is crossed, a vouched-for
-  // line is marked as holding.
+  pts.forEach((p, i) => star(g, c, p, LETTERS[i], v.scale, 0, fr.size, rite));
+  // The logbook: the entry, then the lines, numbered. A line marked false has a band develop
+  // behind it through the matte and a cross blink on beside it; a vouched-for line gets its tick
+  // the same way; a corrected log strikes its two false lines out in treads and turns them gold.
   const count = plan.claims.length;
   const step = page(g, w, h, fr.split, c, ink, fr.m, count + 1);
   const picked = s.picked || [];
   const vouched = s.vouched || [];
+  const done = s.doneAt >= 0;
+  const doneP = came(s, s.doneAt, 2.2, reduced);
+  const size = Math.min(fr.size, step * 0.6);
+  const bands = range(count).map((i) => {
+    const own = rite.at(0xba4d + i);
+    const mp = came(s, s.markAt[i], 0.8, reduced);
+    const on = picked.includes(i);
+    return { k: on ? own.stair(mp) : (mp < 1 ? 1 - own.stair(mp) : 0), cross: on ? own.flicker(mp) : (mp < 1 && own.flicker(1 - mp)), own };
+  });
+  bands.forEach((band, i) => {
+    const y = fr.split + step * (i + 2) - size * 0.3;
+    box(g, rite, fr.m + size * 0.2, y - size * 0.95, w - fr.m * 1.6 - size * 0.2, size * 1.25, band.k, c.alpha(gold, 0.14));
+  });
   const lines = [OPENER + ' entry ' + plan.number + ', two lines false'].concat(plan.claims.map((cl, i) => (i + 1) + '. ' + claimText(cl)));
   rows(g, fr, step, lines, (i) => (i === 0 ? c.alpha(gold, 0.95)
-    : s.fade > 0 ? c.alpha(plan.lies.includes(i - 1) ? gold : c.colors.fg, 0.9) : c.alpha(c.colors.fg, picked.includes(i - 1) ? 1 : 0.85)));
+    : done && plan.lies.includes(i - 1) && bands[i - 1].own.flicker(doneP) ? c.alpha(gold, 0.9)
+      : c.alpha(c.colors.fg, bands[i - 1].k >= 1 && picked.includes(i - 1) ? 1 : 0.85)));
   g.font = '600 ' + Math.round(fr.size * 0.85) + 'px system-ui, sans-serif';
   g.textAlign = 'right';
   g.textBaseline = 'alphabetic';
   for (let i = 0; i < count; i++) {
     const y = fr.split + step * (i + 2) - fr.size * 0.3;
-    if (s.fade > 0 && plan.lies.includes(i)) {
-      g.strokeStyle = c.alpha(gold, 0.9 * s.fade);
-      g.lineWidth = 1.5;
-      g.beginPath();
-      g.moveTo(fr.m + fr.size * 0.4, y - fr.size * 0.3);
-      g.lineTo(w - fr.m * 0.7, y - fr.size * 0.3);
-      g.stroke();
-    } else if (picked.includes(i)) {
+    if (done && plan.lies.includes(i)) {
+      const reach = bands[i].own.stair(doneP);
+      if (reach > 0) {
+        g.strokeStyle = c.alpha(gold, 0.9);
+        g.lineWidth = 1.5;
+        g.beginPath();
+        g.moveTo(fr.m + fr.size * 0.4, y - fr.size * 0.3);
+        g.lineTo(fr.m + fr.size * 0.4 + (w - fr.m * 1.1 - fr.size * 0.4) * reach, y - fr.size * 0.3);
+        g.stroke();
+      }
+    } else if (bands[i].cross) {
       g.fillStyle = c.alpha(gold, 0.95);
       g.fillText('×', fr.m - fr.size * 0.3, y);
-    } else if (vouched.includes(i)) {
+    } else if (vouched.includes(i) && rite.at(0x7ec + i).flicker(came(s, s.vouchAt[i], 0.7, reduced))) {
       g.fillStyle = c.alpha(ink, 0.95);
       g.fillText('✓', fr.m - fr.size * 0.3, y);
     }
@@ -630,7 +781,7 @@ function linesScene(g, w, h, c, plan, s, v) {
 }
 
 function linesPreview(g, w, h, env, plan) {
-  linesScene(g, w, h, env, plan, { fade: 0, lit: -1 }, dials(env));
+  linesScene(g, w, h, env, plan, linesState(plan.claims.length), dials(env));
 }
 
 function linesPiece(env, plan) {
@@ -638,8 +789,13 @@ function linesPiece(env, plan) {
   const count = plan.claims.length;
   const v = dials(env);
   const helps = asked(env).helps;
-  const s = { fade: 0, lit: -1, picked: [], vouched: [] };
+  const s = linesState(count);
   const draw = (c) => linesScene(c.g, c.w, c.h, c, plan, s, v);
+  // The marks as they change: every line marked or unmarked by `next` is timed from now.
+  function mark(next) {
+    for (let i = 0; i < count; i++) if (s.picked.includes(i) !== next.includes(i)) s.markAt[i] = s.t;
+    s.picked = next;
+  }
   return {
     title: linesTitle(plan),
     brief: 'A ledger to correct. The sky is drawn with its meridian and its horizon, west on the left, and the logbook under it says ' + WORDS[count] + ' things about the ' + WORDS[n] + ' stars. Every line can be checked against the drawing. Exactly two are false.',
@@ -667,7 +823,7 @@ function linesPiece(env, plan) {
     },
     apply(id, value, c) {
       if (id === 'lines') {
-        s.picked = Array.isArray(value) ? value.map(Number).filter((i) => Number.isInteger(i) && i >= 0 && i < count) : [];
+        mark(Array.isArray(value) ? value.map(Number).filter((i) => Number.isInteger(i) && i >= 0 && i < count) : []);
         c.status(s.picked.length ? 'marked false: ' + s.picked.map((i) => 'line ' + (i + 1)).join(' and ') : 'no line marked yet');
       }
       if (id === 'hint') {
@@ -676,6 +832,7 @@ function linesPiece(env, plan) {
             || range(count).find((i) => !plan.lies.includes(i) && !s.vouched.includes(i)));
         if (next !== undefined) {
           s.vouched.push(next);
+          s.vouchAt[next] = s.t;
           c.hint();
           c.status('line ' + (next + 1) + ' holds: ' + claimText(plan.claims[next]));
         } else if (s.vouched.length >= helps) {
@@ -697,7 +854,7 @@ function linesPiece(env, plan) {
         if (picked.length >= 2) picked.shift();
         picked.push(i);
       }
-      s.picked = picked.sort((a, b) => a - b);
+      mark(picked.sort((a, b) => a - b));
       // The rail takes the pick once it is a pair, as the pick knob itself would.
       if (s.picked.length === 2) c.set('lines', s.picked.slice());
       c.status(s.picked.length === 2 ? 'marked false: line ' + (s.picked[0] + 1) + ' and line ' + (s.picked[1] + 1) + '; check the log'
@@ -705,10 +862,11 @@ function linesPiece(env, plan) {
       draw(c);
     },
     frame(t, dt, c) {
-      if (c.done) s.fade = Math.min(1, s.fade + dt * (c.reduced ? 4 : 1));
+      s.t += dt;
       draw(c);
     },
     end(c) {
+      s.doneAt = s.t;
       c.status('struck out: line ' + (plan.lies[0] + 1) + ' and line ' + (plan.lies[1] + 1) + '. the rest of the entry stands');
     }
   };
@@ -781,18 +939,27 @@ function driftPanel(points, x0, pw, fr) {
   return points.map((p) => ({ x: x0 + pad + p.x / 100 * (pw - pad * 2), y: top + p.y / 100 * (fr.split - top - pad) }));
 }
 
+// The watches as they open: no star marked (and none marked before it), no half named, nothing
+// written up, and every change timed against the piece's clock (-1 is "never").
+function driftState() {
+  return { t: 0, doneAt: -1, picked: -1, was: -1, pickAt: -1, half: null, halfAt: -1 };
+}
+
 function driftScene(g, w, h, c, plan, s, v) {
   const fr = frameOf(w, h, v);
   const ink = c.colors.accent;
   const gold = c.colors.accent2;
+  const rite = riteOf(c);
+  const reduced = !!c.reduced;
   const top = fr.size * 1.8;
   const pw = w / 2;
   const scale = v.scale * 0.85;
   const size = fr.size * 0.85;
   sky(g, w, fr.split, skyTint(c));
   if (s.half) {
-    g.fillStyle = c.alpha(gold, 0.07);
-    for (const x0 of [0, pw]) g.fillRect(x0 + (s.half === 'west' ? 0 : pw / 2), top * 0.4, pw / 2, fr.split - top * 0.4);
+    // The half of the sky the watch names develops over both drawings through the matte.
+    const k = rite.at(0x4a1f).stair(came(s, s.halfAt, 1.3, reduced));
+    for (const x0 of [0, pw]) box(g, rite, x0 + (s.half === 'west' ? 0 : pw / 2), top * 0.4, pw / 2, fr.split - top * 0.4, k, c.alpha(gold, 0.07));
   }
   g.strokeStyle = c.alpha(c.colors.muted, 0.55);
   g.lineWidth = 1;
@@ -810,26 +977,40 @@ function driftScene(g, w, h, c, plan, s, v) {
   g.fillText('second watch', pw * 1.5, top * 0.5);
   const first = driftPanel(plan.points, 0, pw, fr);
   const later = driftPanel(driftSecond(plan), pw, pw, fr);
-  if (s.fade > 0) {
+  const done = s.doneAt >= 0;
+  const doneP = came(s, s.doneAt, 2.4, reduced);
+  const told = rite.at(0xd0e);
+  if (done) {
+    // Written up: the place the star left blinks on, and the way it went is drawn across in
+    // treads from there to where it stands now.
     const from = driftPanel(plan.points, pw, pw, fr)[plan.star];
-    ring(g, from.x, from.y, 3 * scale, c.alpha(gold, 0.6 * s.fade), 1);
-    path(g, [from, later[plan.star]], c.alpha(gold, 0.8 * s.fade));
+    if (told.flicker(doneP)) ring(g, from.x, from.y, 3 * scale, c.alpha(gold, 0.6), 1);
+    const reach = told.stair(doneP);
+    if (reach > 0) path(g, [from, later[plan.star]], c.alpha(gold, 0.8), reach);
   }
-  first.forEach((p, i) => star(g, c, p, LETTERS[i], scale, 0, size));
-  later.forEach((p, i) => star(g, c, p, LETTERS[i], scale, s.fade > 0 && i === plan.star ? s.fade : 0, size));
-  if (s.picked >= 0 && s.picked < first.length) {
-    ring(g, first[s.picked].x, first[s.picked].y, fr.unit * 0.03, c.alpha(gold, 0.85), 1.2);
-    ring(g, later[s.picked].x, later[s.picked].y, fr.unit * 0.03, c.alpha(gold, 0.85), 1.2);
-  }
+  first.forEach((p, i) => star(g, c, p, LETTERS[i], scale, 0, size, rite));
+  later.forEach((p, i) => star(g, c, p, LETTERS[i], scale, done && i === plan.star ? told.stair(doneP) : 0, size, rite));
+  // The star marked as the mover wears a ring on both drawings; it blinks on and widens in treads,
+  // and the ring on a star marked before it leaves with one flicker back.
+  const pp = came(s, s.pickAt, 0.7, reduced);
+  const own = rite.at(0x91c);
+  const wear = (i, rr) => {
+    ring(g, first[i].x, first[i].y, rr, c.alpha(gold, 0.85), 1.2);
+    ring(g, later[i].x, later[i].y, rr, c.alpha(gold, 0.85), 1.2);
+  };
+  if (s.picked >= 0 && s.picked < first.length && own.flicker(pp)) wear(s.picked, fr.unit * (0.022 + 0.008 * own.stair(pp)));
+  if (s.was >= 0 && s.was < first.length && s.was !== s.picked && pp < 1 && own.flicker(1 - pp)) wear(s.was, fr.unit * 0.03);
   const step = page(g, w, h, fr.split, c, ink, fr.m, Math.max(4, Math.round(4 * v.density)));
   const lines = [OPENER + ' entry ' + plan.number + ', the second watch', 'the sky as the first watch drew it, and as it stands now.'];
-  lines.push(s.fade > 0 ? 'star ' + LETTERS[plan.star] + ' has drifted ' + driftWay(plan) + ' since the first watch.' : 'one star has drifted. which, and which way?');
+  const written = done && told.flicker(doneP);
+  lines.push(written ? 'star ' + LETTERS[plan.star] + ' has drifted ' + driftWay(plan) + ' since the first watch.' : 'one star has drifted. which, and which way?');
   if (s.half) lines.push('the one that moved is in the ' + s.half + ' half.');
-  rows(g, fr, step, lines, (i) => (i === 0 ? c.alpha(gold, 0.95) : c.alpha(c.colors.fg, 0.85)));
+  const halfOn = !s.half || rite.at(0x4a1f).flicker(came(s, s.halfAt, 1.3, reduced));
+  rows(g, fr, step, lines, (i) => (i === 0 ? c.alpha(gold, 0.95) : i === 3 && !halfOn ? null : c.alpha(c.colors.fg, 0.85)));
 }
 
 function driftPreview(g, w, h, env, plan) {
-  driftScene(g, w, h, env, plan, { fade: 0, picked: -1, half: null }, dials(env));
+  driftScene(g, w, h, env, plan, driftState(), dials(env));
 }
 
 function driftPiece(env, plan) {
@@ -837,9 +1018,15 @@ function driftPiece(env, plan) {
   const v = dials(env);
   const helps = asked(env).helps;
   const way = driftWay(plan);
-  const s = { fade: 0, picked: -1, half: null };
+  const s = driftState();
   const draw = (c) => driftScene(c.g, c.w, c.h, c, plan, s, v);
   const wayOf = (value) => (WAYS.find((o) => o.value === value) || {}).label;
+  function pick(i) {
+    if (i === s.picked) return;
+    s.was = s.picked;
+    s.picked = i;
+    s.pickAt = s.t;
+  }
   return {
     title: driftTitle(plan),
     brief: 'The first watch drew the sky on the left; the second drew it again before midnight, on the right. ' + capital(WORDS[n]) + ' stars, lettered the same in both. One of them has drifted since the first drawing; the rest have kept their places.',
@@ -868,13 +1055,14 @@ function driftPiece(env, plan) {
     },
     apply(id, value, c) {
       if (id === 'star') {
-        s.picked = Array.isArray(value) && value.length ? Number(value[0]) : -1;
+        pick(Array.isArray(value) && value.length ? Number(value[0]) : -1);
         c.status(s.picked >= 0 ? 'star ' + LETTERS[s.picked] + ' marked as the one that drifted' : 'no star marked yet');
       }
       if (id === 'way') c.status('drifted ' + wayOf(value) + ', you say');
       if (id === 'half') {
         if (!s.half) {
           s.half = plan.points[plan.star].x < 50 ? 'west' : 'east';
+          s.halfAt = s.t;
           c.hint();
           c.status('the one that moved is in the ' + s.half + ' half of the sky');
         } else {
@@ -900,16 +1088,17 @@ function driftPiece(env, plan) {
         }
       });
       if (best < 0 || bd > fr.unit * 0.09) return;
-      s.picked = best;
+      pick(best);
       c.set('star', [best]);
       c.status('star ' + LETTERS[best] + ' marked as the one that drifted; say the way it went');
       draw(c);
     },
     frame(t, dt, c) {
-      if (c.done) s.fade = Math.min(1, s.fade + dt * (c.reduced ? 4 : 1));
+      s.t += dt;
       draw(c);
     },
     end(c) {
+      s.doneAt = s.t;
       c.status('entry ' + plan.number + ' written up: star ' + LETTERS[plan.star] + ' drifted ' + way + ' between the watches; the rest held');
     }
   };

@@ -134,9 +134,16 @@ function develop(card, k) {
   const delay = motion && typeof motion.stagger === 'function' ? motion.stagger(k) : Math.round(k * 44 + Math.random() * 30);
   card.style.setProperty('--d', delay + 'ms');
   card.classList.add('card-enter');
-  const settle = () => card.classList.remove('card-enter');
-  card.addEventListener('animationend', settle, { once: true });
-  card.addEventListener('animationcancel', settle, { once: true });
+  // The card's own spell ending takes the class off -- not a child's (a badge, a face re-dealt
+  // under it), whose ends bubble up through it.
+  const settle = (ev) => {
+    if (ev && (ev.target !== card || ev.animationName !== 'card-in')) return;
+    card.classList.remove('card-enter');
+    card.removeEventListener('animationend', settle);
+    card.removeEventListener('animationcancel', settle);
+  };
+  card.addEventListener('animationend', settle);
+  card.addEventListener('animationcancel', settle);
   window.setTimeout(settle, delay + riteMs('long') + 200);
 }
 
@@ -157,8 +164,11 @@ function unbadge(mark) {
     return;
   }
   mark.classList.add('is-gone');
-  const gone = () => mark.remove();
-  mark.addEventListener('animationend', gone, { once: true });
+  const gone = (ev) => {
+    if (ev && ev.target !== mark) return;
+    mark.remove();
+  };
+  mark.addEventListener('animationend', gone);
   window.setTimeout(gone, riteMs('medium') + 200);
 }
 
@@ -479,14 +489,15 @@ function columnCount() {
   const min = window.innerWidth < 600 ? 150 : 230;
   return Math.max(1, Math.min(6, Math.floor((grid.clientWidth + gap) / (min + gap))));
 }
-// A card is dealt into the shortest column through the engine's flip, which marks it dealt
-// (is-dealt) for the stylesheet; where no watcher will see it meet the viewport, it develops now.
-function place(card) {
+// A card is placed in the shortest column; one being dealt goes in through the engine's flip,
+// which marks it dealt (is-dealt) for the stylesheet. Where no watcher will see it meet the
+// viewport, it develops now.
+function place(card, dealing) {
   let shortest = 0;
   for (let i = 1; i < heights.length; i++) if (heights[i] < heights[shortest]) shortest = i;
   const col = columns[shortest];
   const motion = engine();
-  if (laid && motion && typeof motion.flip === 'function') motion.flip(col, () => col.appendChild(card));
+  if (dealing && laid && motion && typeof motion.flip === 'function') motion.flip(col, () => col.appendChild(card));
   else col.appendChild(card);
   tint(card, meta.get(card));
   heights[shortest] += card.offsetHeight + gap;
@@ -782,7 +793,7 @@ async function more() {
     }
     for (const card of batch) {
       add(card);
-      place(card);
+      place(card, true);
     }
   } finally {
     busy = false;

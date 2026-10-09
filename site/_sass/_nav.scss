@@ -870,7 +870,13 @@ html[data-nav='live'] {
   }
 
   // The unmaking (js/site.js, close()): the chips go down the ladder toward the logo, the rays
-  // retract, half a step apart in the same rolled order, and nothing is pressable meanwhile.
+  // retract, half a step apart in the same rolled order, and nothing is pressable meanwhile. The
+  // lightbox has already let go of the mark, so the mark holds itself over the ghost of the veil
+  // (js/motion.js) until the last chip has gone, as it was held while the veil was up.
+  .sparknav:has(.is-unmaking) {
+    z-index: var(--layer-front);
+  }
+
   .is-unmaking .sparknav-node {
     animation: sparknav-unmake var(--motion-medium) var(--ease-sparknav-unmake, var(--ease-leave)) both;
     animation-delay: calc(var(--roll, var(--k, 0)) * var(--motion-stagger, 40ms) * 0.5);

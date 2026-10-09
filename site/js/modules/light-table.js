@@ -57,6 +57,78 @@ function clamp(v, lo, hi) {
   return Math.max(lo, Math.min(hi, v));
 }
 
+/* ---- the rite: how this module moves ------------------------------------------------------- */
+
+/* env.rite (ctx.rite inside a piece) is the piece's own roll of how it moves (js/variant.js;
+   js/stage.js, "The rite"). Nothing drawn on the table moves along a formula or cuts without a
+   rite: the wavefronts leaving the slits advance in rite.ratchet's clicks, the lamp breathes on
+   rite.stair, the dust blinks on rite.flicker; a filter turned to a new place turns in clicks;
+   a thing arriving -- an answer read, a guess written, a filter named -- blinks on with
+   rite.flicker; and a surface that becomes set -- the beam once the order is found, the screen
+   lit, the chip behind a named filter, the guess's bar, the light over a solved table -- develops
+   by its AREA through rite.matte, cell by cell in the piece's own pattern, and never by a fade.
+   Every change is read against the piece's own clock, s.t, which frame() advances: a change made
+   at `since` has come came() of its way, which is 1 at once for a visitor who asked for less
+   motion, and for whatever stood there from the start (since < 0). Each band, plate or speck
+   moves on a roll of its own (rite.at), so no two step together. */
+
+const STILL = {
+  ease: () => 1, stair: () => 1, ratchet: () => 0, flicker: () => 1, matte: () => true,
+  treads: 1, kind: 'none', cell: 4, at: () => STILL
+};
+
+function riteOf(env) {
+  return env && env.rite ? env.rite : STILL;
+}
+
+function came(s, since, span, reduced) {
+  if (reduced || since == null || since < 0) return 1;
+  return Math.max(0, Math.min(1, (s.t - since) / span));
+}
+
+function fract(x) {
+  return x - Math.floor(x);
+}
+
+// The cells of a box that the matte lets through at coverage k, filled in the current fillStyle:
+// how a surface changes by its area. Cells are rite.cell px, coarser over a wide box so a frame
+// stays cheap, on a grid fixed to the canvas so the pattern holds still while it grows. `inside`
+// keeps the tiling to a shape within the box. At k >= 1 every cell is let through.
+function develop(g, rite, x0, y0, bw, bh, k, inside, size) {
+  if (k <= 0) return;
+  const cell = size || Math.max(rite.cell, Math.ceil(Math.max(bw, bh) / 28));
+  const cx0 = Math.floor(x0 / cell);
+  const cy0 = Math.floor(y0 / cell);
+  const cx1 = Math.ceil((x0 + bw) / cell);
+  const cy1 = Math.ceil((y0 + bh) / cell);
+  for (let cy = cy0; cy < cy1; cy++) {
+    for (let cx = cx0; cx < cx1; cx++) {
+      const px = cx * cell;
+      const py = cy * cell;
+      if (inside && !inside(px + cell / 2, py + cell / 2)) continue;
+      if (k < 1 && !rite.matte(cx, cy, k)) continue;
+      g.fillRect(px, py, cell, cell);
+    }
+  }
+}
+
+// Up the stair and back down it over one period, entered at the configuration's turn: the lamp's
+// breath, never a cosine.
+function breath(rite, t, period, turn, n) {
+  const phase = fract(t / period + turn);
+  return phase < 0.5 ? rite.stair(phase * 2, n) : 1 - rite.stair((phase - 0.5) * 2, n);
+}
+
+// The light that comes over a solved table: it develops through the matte from the moment the
+// piece was solved, blinking on and dropping out the way the rite's flicker has it, and holds.
+function daybreak(g, rite, env, w, h, p) {
+  const k = rite.stair(p);
+  if (k <= 0 || !rite.flicker(p)) return;
+  g.fillStyle = env.alpha(env.colors.accent2, 0.16);
+  if (k >= 1) g.fillRect(0, 0, w, h);
+  else develop(g, rite, 0, 0, w, h, k, null, Math.max(rite.cell, Math.ceil(Math.min(w, h) / 32)));
+}
+
 /* ---- shared drawing ------------------------------------------------------------------------- */
 
 function background(g, w, h, env) {
@@ -68,20 +140,26 @@ function background(g, w, h, env) {
 }
 
 // Dust on the table: a few marks whose phase is the configuration's turn and whose number is its
-// density.
-function dust(g, w, h, env, v) {
+// density. Each speck blinks on a roll of its own, in its own period, so the dust never twinkles
+// in step.
+function dust(g, w, h, env, v, t) {
+  const rite = riteOf(env);
   g.fillStyle = env.alpha(env.colors.fg, 0.12);
   for (let i = 0, count = Math.max(6, Math.round(20 * v.density)); i < count; i++) {
+    const own = rite.at(0xd05 + i);
+    if (!own.flicker(fract((t || 0) / (2.2 + (i % 5) * 0.7) + i * 0.37 + v.turn))) continue;
     g.fillRect(((i * 0.6180339 + v.turn * 0.3) % 1) * w, ((i * 0.7548777 + v.turn * 0.17) % 1) * h, 1, 1);
   }
 }
 
-function lamp(g, env, x, y, radius) {
-  const glow = g.createRadialGradient(x, y, 0, x, y, radius);
+// The lamp, its glow swollen by `swell` (0..1): one tread of the breath at a time.
+function lamp(g, env, x, y, radius, swell) {
+  const r = radius * (0.86 + 0.28 * (swell || 0));
+  const glow = g.createRadialGradient(x, y, 0, x, y, r);
   glow.addColorStop(0, env.alpha(env.colors.accent2, 0.6));
   glow.addColorStop(1, env.alpha(env.colors.accent2, 0));
   g.fillStyle = glow;
-  g.fillRect(x - radius, y - radius, radius * 2, radius * 2);
+  g.fillRect(x - r, y - r, r * 2, r * 2);
   g.fillStyle = env.colors.fg;
   g.beginPath();
   g.arc(x, y, Math.max(2, radius * 0.09), 0, Math.PI * 2);
@@ -157,45 +235,101 @@ function slitGeometry(w, h) {
   };
 }
 
-// `s`: whether the answer is in (the spacing written on the mask).
+// The slits' state as a scene opens: nothing answered, nothing predicted, nothing revealed, and
+// every change timed against the piece's clock from here on (-1 is "there from the start").
+function slitState() {
+  return { open: false, t: 0, openAt: -1, guess: null, guessAt: -1, effect: null, effectAt: -1 };
+}
+
+// The fringes a spacing makes, slice by slice down a strip: cos squared of the height over the
+// fringe spacing, under a soft envelope. `k` under 1 develops the strip through the matte in cells
+// instead of slices -- how a prediction arrives.
+function fringes(g, env, rite, x, top, width, height, reach, fringe, k, strength) {
+  const c = env.colors;
+  const value = (mm) => Math.exp(-0.9 * (mm / reach) ** 2) * Math.cos((Math.PI * mm) / fringe) ** 2;
+  if (k >= 1) {
+    const slices = 180;
+    const sliceH = height / slices;
+    for (let i = 0; i < slices; i++) {
+      const mm = ((i + 0.5) / slices - 0.5) * reach * 2;
+      g.fillStyle = env.alpha(c.accent2, 0.03 + value(mm) * strength);
+      g.fillRect(x, top + i * sliceH, width, sliceH + 0.5);
+    }
+    return;
+  }
+  if (k <= 0) return;
+  const cell = Math.max(rite.cell, Math.ceil(height / 60));
+  const cx0 = Math.floor(x / cell);
+  const cx1 = Math.ceil((x + width) / cell);
+  const cy0 = Math.floor(top / cell);
+  const cy1 = Math.ceil((top + height) / cell);
+  for (let cy = cy0; cy < cy1; cy++) {
+    const py = cy * cell;
+    const mm = ((py + cell / 2 - top) / height - 0.5) * reach * 2;
+    const a = 0.03 + value(mm) * strength;
+    for (let cx = cx0; cx < cx1; cx++) {
+      if (!rite.matte(cx, cy, k)) continue;
+      g.fillStyle = env.alpha(c.accent2, a);
+      g.fillRect(cx * cell, py, cell, cell);
+    }
+  }
+}
+
+// `s`: whether the answer is in (the spacing written on the mask), the guess and the prediction
+// the visitor has made, and the clock.
 function drawSlits(g, w, h, env, plan, s, variant) {
   const v = variant || PLAIN;
   const c = env.colors;
+  const rite = riteOf(env);
+  const reduced = !!env.reduced;
+  const t = reduced ? 0 : s.t || 0; // less motion asked for: the lamp, the fronts and the dust hold still
   const geo = slitGeometry(w, h);
   const size = Math.max(9, Math.min(15, Math.round(Math.min(w, h) * 0.036)));
   const reach = reachOf(plan);
   const screenH = geo.bottom - geo.top;
   const perMm = screenH / (reach * 2);
+  const openP = s.open ? came(s, s.openAt, 1.8, reduced) : 0;
   background(g, w, h, env);
-  dust(g, w, h, env, v);
-  // The lamp and its wavelength.
+  dust(g, w, h, env, v, t);
+  // The lamp and its wavelength: the glow breathes on the stair, six seconds to a breath.
   const sourceX = geo.sourceX + (v.turn - 0.5) * w * 0.03;
-  lamp(g, env, sourceX, geo.middle, Math.min(w, h) * 0.11 * v.scale);
+  lamp(g, env, sourceX, geo.middle, Math.min(w, h) * 0.11 * v.scale, breath(rite.at(0x1a4), t, 6, v.turn));
   label(g, env, plan.lambda + ' nm', sourceX, geo.middle + Math.min(w, h) * 0.12, size, 'center', c.accent2);
-  // The mask with its two slits, and the arcs that leave them.
+  // The mask with its two slits, and the wavefronts that leave them: a ring every ringStep,
+  // advancing one step in the ratchet's clicks every 2.4 seconds, so a front always rests on a
+  // tooth and the turn one period makes lands the fronts on themselves. Each slit on a roll of
+  // its own.
   const gap = Math.max(6, h * 0.05);
   const openings = [geo.middle - gap / 2, geo.middle + gap / 2];
   const ringStep = Math.max(8, (geo.screenX - geo.maskX) / (6 * v.density) / v.scale);
-  for (const y of openings) {
+  openings.forEach((y, slit) => {
     g.strokeStyle = env.alpha(c.accent2, 0.3);
     g.lineWidth = 1;
     g.beginPath();
     g.moveTo(sourceX, geo.middle);
     g.lineTo(geo.maskX, y);
     g.stroke();
-    for (let r = ringStep; r < geo.screenX - geo.maskX; r += ringStep) {
+    const advance = rite.at(0x5e1 + slit).ratchet(fract(t / 2.4 + v.turn)) * ringStep;
+    for (let r = advance; r < geo.screenX - geo.maskX; r += ringStep) {
+      if (r < 2) continue;
       g.strokeStyle = env.alpha(c.accent, 0.08 + 0.08 * (1 - r / (geo.screenX - geo.maskX)));
       g.beginPath();
       g.arc(geo.maskX, y, r, -Math.PI / 2, Math.PI / 2);
       g.stroke();
     }
-  }
+  });
   const slitH = Math.max(2, h * 0.012);
   g.fillStyle = c.accent2;
   g.fillRect(geo.maskX - 2, geo.top, 4, openings[0] - slitH / 2 - geo.top);
   g.fillRect(geo.maskX - 2, openings[0] + slitH / 2, 4, gap - slitH);
   g.fillRect(geo.maskX - 2, openings[1] + slitH / 2, 4, geo.bottom - openings[1] - slitH / 2);
-  label(g, env, 'd ' + (s.open ? (plan.spacing / 100).toFixed(2) + ' mm' : '?'), geo.maskX, geo.top - size * 0.9, size, 'center', c.accent2);
+  // What the mask says of its spacing: the answer blinks on once it is read; before that, the
+  // visitor's guess blinks on as a question of its own, and a question mark holds otherwise.
+  const answered = s.open && rite.flicker(openP);
+  const guessP = s.guess !== null ? came(s, s.guessAt, 0.9, reduced) : 0;
+  const guessing = !answered && s.guess !== null && rite.at(0x9e5).flicker(guessP);
+  const said = answered ? (plan.spacing / 100).toFixed(2) + ' mm' : guessing ? (clamp(s.guess, 10, 100) / 100).toFixed(2) + ' mm?' : '?';
+  label(g, env, 'd ' + said, geo.maskX, geo.top - size * 0.9, size, 'center', guessing ? c.accent : c.accent2);
   // The distance to the screen.
   const dimY = geo.bottom + size * 0.9;
   g.strokeStyle = env.alpha(c.muted, 0.7);
@@ -209,22 +343,34 @@ function drawSlits(g, w, h, env, plan, s, variant) {
   g.lineTo(geo.screenX, dimY + 4);
   g.stroke();
   label(g, env, 'L ' + plan.length + ' mm', (geo.maskX + geo.screenX) / 2, dimY + size * 0.9, size, 'center', c.accent2);
-  // The screen: the fringes as the slits make them, cos squared of the height over the fringe
-  // spacing, under a soft envelope.
+  // The screen: the fringes as the slits make them.
   g.fillStyle = env.mix(c.bg, c.bg2, 0.5);
   g.fillRect(geo.screenX, geo.top, geo.screenW, screenH);
-  const slices = 180;
-  const sliceH = screenH / slices;
-  for (let i = 0; i < slices; i++) {
-    const mm = ((i + 0.5) / slices - 0.5) * reach * 2;
-    const envelope = Math.exp(-0.9 * (mm / reach) ** 2);
-    const value = envelope * Math.cos((Math.PI * mm) / plan.fringe) ** 2;
-    g.fillStyle = env.alpha(c.accent2, 0.03 + value * 0.75);
-    g.fillRect(geo.screenX, geo.top + i * sliceH, geo.screenW, sliceH + 0.5);
-  }
+  fringes(g, env, rite, geo.screenX, geo.top, geo.screenW, screenH, reach, plan.fringe, 1, 0.75);
   g.strokeStyle = env.alpha(c.fg, 0.65);
   g.lineWidth = 1.2;
   g.strokeRect(geo.screenX, geo.top, geo.screenW, screenH);
+  // The prediction: a ghost of a screen beside the real one, the fringes as the visitor says the
+  // change would leave them -- spread, packed or the same -- developing through the matte from
+  // the moment the choice was made, and drawn afresh through it when the choice changes.
+  if (s.effect !== null && !answered) {
+    const factor = s.effect === 'spread' ? 1.4 : s.effect === 'pack' ? 0.7 : 1;
+    const ghostW = geo.screenW * 0.5;
+    const ghostX = geo.screenX - ghostW - w * 0.018;
+    const own = rite.at(0x3c7);
+    const k = own.stair(came(s, s.effectAt, 1.4, reduced));
+    if (k > 0 && own.flicker(k)) {
+      g.fillStyle = env.alpha(env.mix(c.bg, c.bg2, 0.5), 0.6);
+      develop(g, rite, ghostX, geo.top, ghostW, screenH, k, null, Math.max(rite.cell, Math.ceil(screenH / 60)));
+      fringes(g, env, rite, ghostX, geo.top, ghostW, screenH, reach, plan.fringe * factor, k, 0.45);
+      if (k >= 1) {
+        g.strokeStyle = env.alpha(c.accent, 0.55);
+        g.lineWidth = 1;
+        g.strokeRect(ghostX, geo.top, ghostW, screenH);
+      }
+      label(g, env, s.effect === 'same' ? 'as is' : s.effect, ghostX + ghostW / 2, geo.top - size * 0.9, Math.max(8, size - 2), 'center', c.accent);
+    }
+  }
   // The ruler: a tick every millimetre, longer every five and ten, numbered where there is room.
   const every = reach <= 4 ? 1 : reach <= 16 ? 5 : 10;
   g.strokeStyle = env.alpha(c.fg, 0.8);
@@ -244,10 +390,17 @@ function drawSlits(g, w, h, env, plan, s, variant) {
     if (mm % every === 0) label(g, env, String(mm), geo.rulerX + w * 0.04, y, tickSize, 'left', env.alpha(c.fg, 0.9));
   }
   label(g, env, 'mm', geo.rulerX + w * 0.02, geo.top - size * 0.9, size, 'left', env.alpha(c.muted, 0.9));
+  // The table read true: the light comes over it through the matte, and the fringes burn
+  // brighter, cell by cell.
+  if (s.open) {
+    daybreak(g, rite, env, w, h, openP);
+    const k = rite.at(0x7a2).stair(openP);
+    if (k > 0 && rite.at(0x7a2).flicker(openP)) fringes(g, env, rite, geo.screenX, geo.top, geo.screenW, screenH, reach, plan.fringe, k, 0.5);
+  }
 }
 
 function slitPreview(g, w, h, env, plan) {
-  drawSlits(g, w, h, env, Object.assign({ spacing: spacingOf(plan.lambda, plan.length, plan.fringe) }, plan), { open: false }, env.variant);
+  drawSlits(g, w, h, env, Object.assign({ spacing: spacingOf(plan.lambda, plan.length, plan.fringe) }, plan), slitState(), env.variant);
 }
 
 function slitPiece(env, plan) {
@@ -257,7 +410,7 @@ function slitPiece(env, plan) {
   const spacing = spacingOf(plan.lambda, plan.length, plan.fringe);
   const full = Object.assign({ spacing }, plan);
   const change = CHANGES[plan.ask];
-  const s = { open: false };
+  const s = slitState();
   const draw = (c) => drawSlits(c.g, c.w, c.h, c, full, s, env.variant);
   return {
     title: slitTitle(plan),
@@ -287,19 +440,33 @@ function slitPiece(env, plan) {
     apply(id, value, c) {
       if (id === 'spacing') {
         const n = Math.round(Number(value));
-        if (Number.isFinite(n)) c.status('slits ' + (clamp(n, 10, 100) / 100).toFixed(2) + ' mm apart, you say');
+        if (Number.isFinite(n)) {
+          c.status('slits ' + (clamp(n, 10, 100) / 100).toFixed(2) + ' mm apart, you say');
+          if (s.guess !== n) {
+            s.guess = n;
+            s.guessAt = s.t;
+          }
+        }
       }
       if (id === 'change') {
         const effect = EFFECTS.find((e) => e.value === value);
-        if (effect) c.status(change.what + ' ' + effect.label.replace('them', 'the fringes') + ', you say');
+        if (effect) {
+          c.status(change.what + ' ' + effect.label.replace('them', 'the fringes') + ', you say');
+          if (s.effect !== effect.value) {
+            s.effect = effect.value;
+            s.effectAt = s.t;
+          }
+        }
       }
       draw(c);
     },
     frame(t, dt, c) {
+      s.t = t;
       draw(c);
     },
     end(c) {
       s.open = true;
+      s.openAt = s.t;
       c.status((spacing / 100).toFixed(2) + ' mm between the slits: ' + plan.lambda + ' nm times ' + plan.length + ' mm over ' + plan.fringe + ' mm');
       draw(c);
     }
@@ -367,7 +534,8 @@ function filterTitle(plan) {
   return 'filter set ' + plan.number + ': ' + plan.angles.join(', ') + ' degrees';
 }
 
-function filterPlate(g, env, x, y, radius, angle, v) {
+// A plate drawn at `angle` degrees, its ring in `ring`.
+function filterPlate(g, env, x, y, radius, angle, v, ring) {
   const c = env.colors;
   g.save();
   g.translate(x, y);
@@ -389,7 +557,7 @@ function filterPlate(g, env, x, y, radius, angle, v) {
   }
   g.stroke();
   g.restore();
-  g.strokeStyle = c.fg;
+  g.strokeStyle = ring || c.fg;
   g.lineWidth = Math.max(1, radius * 0.05);
   g.beginPath();
   g.arc(0, 0, radius, 0, Math.PI * 2);
@@ -397,42 +565,119 @@ function filterPlate(g, env, x, y, radius, angle, v) {
   g.restore();
 }
 
-// `s`: the order on the table, the middle a hint has named, and the light once the answer is in.
+// The filters' state as a scene opens: the order as given, nothing named, nothing lit, and every
+// change timed against the piece's clock from here on (-1 is "there from the start").
+function filterState(order) {
+  return {
+    order: order.slice(), from: order.slice(), orderAt: -1, named: null, namedAt: -1,
+    open: false, openAt: -1, guess: null, guessFrom: 0, guessAt: -1, t: 0
+  };
+}
+
+// The short way round between two filter angles, as a signed turn: a polariser at 150 is 30 from
+// one at 0.
+function turnBetween(from, to) {
+  return ((((to - from) % 180) + 270) % 180) - 90;
+}
+
+// `s`: the order on the table, the middle a hint has named, the light once the answer is in, the
+// visitor's guess at it, and the clock.
 function drawFilters(g, w, h, env, plan, s, variant) {
   const v = variant || PLAIN;
   const c = env.colors;
+  const rite = riteOf(env);
+  const reduced = !!env.reduced;
+  const t = reduced ? 0 : s.t || 0; // less motion asked for: the lamp and the dust hold still
   const size = Math.max(9, Math.min(15, Math.round(Math.min(w, h) * 0.036)));
   const y = h * 0.36;
   const radius = Math.min(w * 0.07, h * 0.12) * v.scale;
   const best = bestOf(plan.angles);
   const light = s.open && best ? best.exact / 100 : null;
+  const openP = s.open ? came(s, s.openAt, 1.8, reduced) : 0;
+  const orderP = came(s, s.orderAt, 1.3, reduced);
+  const namedP = s.named !== null ? came(s, s.namedAt, 1.1, reduced) : 0;
   background(g, w, h, env);
-  dust(g, w, h, env, v);
+  dust(g, w, h, env, v, t);
   label(g, env, 'filter set ' + plan.number, w * 0.5, h * 0.07, size, 'center', c.accent2);
-  // The beam, lamp to screen: the same faint band everywhere until the answer is in.
+  // The beam, lamp to screen: the same faint band everywhere until the answer is in; then each
+  // stretch develops to its own strength through the matte, on a roll of its own, blinking on.
   const band = h * 0.07;
   const stops = [w * 0.07, w * 0.3, w * 0.5, w * 0.7, w * 0.9];
-  let strength = 1;
   for (let i = 0; i < 4; i++) {
-    if (light !== null) strength = i === 0 ? 1 : i === 1 ? 0.5 : i === 2 ? 0.5 * cos2(s.order[0] - s.order[1]) : light;
-    g.fillStyle = env.alpha(c.accent2, light === null ? 0.08 : 0.04 + strength * 0.3);
+    g.fillStyle = env.alpha(c.accent2, 0.08);
     g.fillRect(stops[i], y - band / 2, stops[i + 1] - stops[i], band);
+    if (light === null) continue;
+    const strength = i === 0 ? 1 : i === 1 ? 0.5 : i === 2 ? 0.5 * cos2(s.order[0] - s.order[1]) : light;
+    const own = rite.at(0xb3a + i);
+    const k = own.stair(openP);
+    if (k <= 0 || !own.flicker(openP)) continue;
+    g.fillStyle = env.alpha(c.accent2, 0.04 + strength * 0.3);
+    if (k >= 1) g.fillRect(stops[i], y - band / 2, stops[i + 1] - stops[i], band);
+    else develop(g, rite, stops[i], y - band / 2, stops[i + 1] - stops[i], band, k, null, Math.max(rite.cell, Math.ceil(band / 8)));
   }
-  lamp(g, env, w * 0.07, y, Math.min(w, h) * 0.1 * v.scale);
+  lamp(g, env, w * 0.07, y, Math.min(w, h) * 0.1 * v.scale, breath(rite.at(0x1a4), t, 6, v.turn));
   for (let i = 0; i < 3; i++) {
     const x = w * (0.3 + i * 0.2);
-    filterPlate(g, env, x, y, radius, s.order[i], v);
-    label(g, env, s.order[i] + '°', x, y + radius + size * 1.1, size, 'center', s.named === s.order[i] ? c.accent2 : c.fg);
+    // A filter put in a new place turns to its angle in the ratchet's clicks, with the backlash,
+    // on a roll of its own; the chip behind a named filter develops through the matte.
+    const plate = rite.at(0xf11 + i);
+    const angle = s.from[i] + turnBetween(s.from[i], s.order[i]) * plate.ratchet(orderP);
+    // The angle written under a plate that is changing: the old one blinks out, the new blinks on.
+    const written = plate.flicker(orderP) ? s.order[i] : plate.flicker(1 - orderP) ? s.from[i] : null;
+    const named = s.named === s.order[i];
+    const own = rite.at(0xc4e + i);
+    const chip = named ? own.stair(namedP) : 0;
+    const lit = named && chip > 0 && own.flicker(namedP);
+    filterPlate(g, env, x, y, radius, angle, v, lit ? c.accent2 : c.fg);
+    if (lit) {
+      g.fillStyle = env.alpha(c.accent2, 0.22);
+      const chipW = size * 3.2;
+      const chipH = size * 1.5;
+      if (chip >= 1) g.fillRect(x - chipW / 2, y + radius + size * 1.1 - chipH / 2, chipW, chipH);
+      else develop(g, rite, x - chipW / 2, y + radius + size * 1.1 - chipH / 2, chipW, chipH, chip, null, rite.cell);
+    }
+    if (written !== null) label(g, env, Math.round(written) + '°', x, y + radius + size * 1.1, size, 'center', lit ? c.accent2 : c.fg);
   }
-  // The screen: unread until the order is found.
+  // The screen: unread until the order is found; then the light comes onto it through the matte.
   const screenX = w * 0.9;
   const screenH = h * 0.24;
-  g.fillStyle = light === null ? env.mix(c.bg, c.bg2, 0.5) : env.mix(c.bg, c.accent2, Math.min(1, Math.sqrt(light) * 1.4));
+  g.fillStyle = env.mix(c.bg, c.bg2, 0.5);
   g.fillRect(screenX, y - screenH / 2, w * 0.03, screenH);
+  const screenOwn = rite.at(0x5c2);
+  const screenK = light === null ? 0 : screenOwn.stair(openP);
+  const screenOn = screenK > 0 && screenOwn.flicker(openP);
+  if (screenOn) {
+    g.fillStyle = env.mix(c.bg, c.accent2, Math.min(1, Math.sqrt(light) * 1.4));
+    if (screenK >= 1) g.fillRect(screenX, y - screenH / 2, w * 0.03, screenH);
+    else develop(g, rite, screenX, y - screenH / 2, w * 0.03, screenH, screenK, null, rite.cell);
+  }
   g.strokeStyle = env.alpha(c.fg, 0.65);
   g.lineWidth = 1.2;
   g.strokeRect(screenX, y - screenH / 2, w * 0.03, screenH);
-  label(g, env, light === null ? '?' : Math.round(light * 1000) / 10 + '%', screenX + w * 0.015, y + screenH / 2 + size, size, 'center', c.accent2);
+  label(g, env, screenOn ? Math.round(light * 1000) / 10 + '%' : '?', screenX + w * 0.015, y + screenH / 2 + size, size, 'center', c.accent2);
+  // The visitor's guess at the light: a bar beside the screen to the height of it, which climbs
+  // the stair from where the last guess stood and develops through the matte as it goes.
+  if (s.guess !== null && !screenOn) {
+    const own = rite.at(0x2d9);
+    const p = came(s, s.guessAt, 0.9, reduced);
+    const to = clamp(s.guess, 0, 100) / 100;
+    const at = s.guessFrom + (to - s.guessFrom) * rite.stair(p);
+    const barW = w * 0.012;
+    const barX = screenX + w * 0.03 + w * 0.008;
+    const barH = screenH * at;
+    g.fillStyle = env.alpha(c.accent, 0.75);
+    const k = own.stair(p);
+    // The bar's frame blinks on with the first guess and holds; the bar itself develops inside it.
+    if (own.flicker(p)) {
+      if (barH > 0) {
+        if (k >= 1) g.fillRect(barX, y + screenH / 2 - barH, barW, barH);
+        else develop(g, rite, barX, y + screenH / 2 - barH, barW, barH, k, null, rite.cell);
+      }
+      g.strokeStyle = env.alpha(c.accent, 0.5);
+      g.lineWidth = 1;
+      g.strokeRect(barX, y - screenH / 2, barW, screenH);
+    }
+  }
   label(g, env, 'lamp side', w * 0.3, y - radius - size * 1.2, Math.max(8, size - 2), 'center', env.alpha(c.muted, 0.9));
   label(g, env, 'screen side', w * 0.7, y - radius - size * 1.2, Math.max(8, size - 2), 'center', env.alpha(c.muted, 0.9));
   // The table of cos squared, so the arithmetic is on the table.
@@ -447,17 +692,29 @@ function drawFilters(g, w, h, env, plan, s, variant) {
     label(g, env, pair[1], x, rowY + tiny * 4.6, tiny, 'center', c.fg);
   });
   label(g, env, 'past 90°, read 180° less the turn: 120° as 60°, 135° as 45°, 150° as 30°', w * 0.5, rowY + tiny * 6.4, tiny, 'center', env.alpha(c.muted, 0.9));
+  // The screen lit: the light comes over the table through the matte.
+  if (s.open) daybreak(g, rite, env, w, h, openP);
 }
 
 function filterPreview(g, w, h, env, plan) {
-  drawFilters(g, w, h, env, plan, { order: plan.start.slice(), named: null, open: false }, env.variant);
+  drawFilters(g, w, h, env, plan, filterState(plan.start), env.variant);
 }
 
 function filterPiece(env, plan) {
   const { helps, margin } = asked(env);
   const best = bestOf(plan.angles);
-  const s = { order: plan.start.slice(), named: null, open: false };
+  const s = filterState(plan.start);
   const draw = (c) => drawFilters(c.g, c.w, c.h, c, plan, s, env.variant);
+  // The order on the table changes: every plate turns from where it stands now to its new angle.
+  const reorder = (order, c) => {
+    const rite = riteOf(c);
+    const p = came(s, s.orderAt, 1.3, !!c.reduced);
+    s.from = s.order.map((to, i) => s.from[i] + turnBetween(s.from[i], to) * rite.at(0xf11 + i).ratchet(p));
+    s.order = order.slice();
+    s.orderAt = s.t;
+    // A named filter carried to another place: its chip develops afresh where it now stands.
+    if (s.named !== null) s.namedAt = s.t;
+  };
   return {
     title: filterTitle(plan),
     brief: 'Three polarising filters, at ' + plan.angles.join(', ') + ' degrees, stand in a line between the lamp and the screen. The first one the light meets passes half of it whatever its angle; each one after passes cos² of the angle between it and the one before, and the table under the lamp has the values.',
@@ -487,16 +744,26 @@ function filterPiece(env, plan) {
     },
     apply(id, value, c) {
       if (id === 'order' && isOrder(value, plan.angles)) {
-        s.order = value.slice();
+        if (value.some((a, i) => a !== s.order[i])) reorder(value, c);
         c.status('lamp, then ' + s.order.join('°, ') + '°, then the screen');
       }
       if (id === 'passes') {
         const n = Math.round(Number(value));
-        if (Number.isFinite(n)) c.status(clamp(n, 0, 100) + '% gets through, you say');
+        if (Number.isFinite(n)) {
+          c.status(clamp(n, 0, 100) + '% gets through, you say');
+          if (s.guess !== n) {
+            const p = came(s, s.guessAt, 0.9, !!c.reduced);
+            const was = s.guess === null ? 0 : clamp(s.guess, 0, 100) / 100;
+            s.guessFrom = s.guessFrom + (was - s.guessFrom) * riteOf(c).stair(p);
+            s.guess = n;
+            s.guessAt = s.t;
+          }
+        }
       }
       if (id === 'hint') {
         if (s.named === null) {
           s.named = best.middle;
+          s.namedAt = s.t;
           c.hint();
           c.status('the ' + best.middle + '° filter goes in the middle');
         } else {
@@ -506,11 +773,13 @@ function filterPiece(env, plan) {
       draw(c);
     },
     frame(t, dt, c) {
+      s.t = t;
       draw(c);
     },
     end(c) {
       s.open = true;
-      s.order = best.order.slice();
+      s.openAt = s.t;
+      if (best.order.some((a, i) => a !== s.order[i])) reorder(best.order, c);
       c.status('half, times ' + cos2(best.order[0] - best.order[1]).toFixed(2) + ', times ' + cos2(best.order[1] - best.order[2]).toFixed(2) + ': ' + Math.round(best.exact * 10) / 10 + '% reaches the screen');
       draw(c);
     }

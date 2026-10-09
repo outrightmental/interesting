@@ -87,12 +87,13 @@
 }
 
 // With the script: the lift lands in hard treads, the turn arriving on the second, and the card
-// settles back down them with one refusal on the way.
-.card:has(> .card-link.is-waxing) {
+// settles back down them with one refusal on the way. A card arriving or leaving keeps its own
+// rite: the pointer passing over it neither cuts the arrival short nor holds a leaving card back.
+.card:not(.card-enter):not(.card-leave):has(> .card-link.is-waxing) {
   animation: card-lift var(--motion-medium) var(--ease-card-lift, var(--ease-stair)) both;
 }
 
-.card:has(> .card-link.is-waning) {
+.card:not(.card-enter):not(.card-leave):has(> .card-link.is-waning) {
   animation: card-settle var(--motion-medium) var(--ease-card-settle, var(--ease-stair)) both;
 }
 
@@ -735,14 +736,15 @@
 }
 
 // ---- develop: a card seen for the first time, a face re-dealt -----------------------------------
-// A card dealt waits rolled up (card-rolled: clipped to nothing, still in the flow and still in the
+// A card dealt waits rolled up (card-rolled: masked to nothing, still in the flow and still in the
 // tab order, so a key can reach it and scroll it into view) until js/feed.js sees it meet the
 // viewport; then it develops (card-enter): from where the roll says, turning as it comes, up the
 // matte ladder with one flicker back, after a delay of its own (--d, rolled with jitter per card
 // of the batch; --k from the markup is the fallback). A face re-dealt in place ("another", or the
 // sky arriving) climbs the ladder on its picture and, a stagger later, on its words (is-dealt).
 .card-rolled {
-  clip-path: inset(50%);
+  mask: linear-gradient(transparent, transparent);
+  -webkit-mask: linear-gradient(transparent, transparent);
 }
 
 .card-enter {
@@ -751,16 +753,12 @@
 
 @keyframes card-in {
   0%, 9.9% {
-    clip-path: inset(50%);
-    mask: var(--matte-1);
-    -webkit-mask: var(--matte-1);
-    mask-position: var(--card-grain, 0 0);
-    -webkit-mask-position: var(--card-grain, 0 0);
+    mask: linear-gradient(transparent, transparent);
+    -webkit-mask: linear-gradient(transparent, transparent);
     transform: translate(var(--arrive-x, 0px), var(--arrive-y, 28px)) rotate(var(--arrive-rot, 0deg)) skew(var(--arrive-skew, 0deg)) scale(var(--arrive-scale, 0.96));
   }
 
   10%, 24.9% {
-    clip-path: none;
     mask: var(--matte-1);
     -webkit-mask: var(--matte-1);
     mask-position: var(--card-grain, 0 0);
@@ -769,7 +767,6 @@
   }
 
   25%, 39.9% {
-    clip-path: none;
     mask: var(--matte-2);
     -webkit-mask: var(--matte-2);
     mask-position: var(--card-grain, 0 0);
@@ -778,7 +775,6 @@
   }
 
   40%, 48.9% {
-    clip-path: none;
     mask: var(--matte-1);
     -webkit-mask: var(--matte-1);
     mask-position: var(--card-grain, 0 0);
@@ -787,7 +783,6 @@
   }
 
   49%, 64.9% {
-    clip-path: none;
     mask: var(--matte-3);
     -webkit-mask: var(--matte-3);
     mask-position: var(--card-grain, 0 0);
@@ -796,7 +791,6 @@
   }
 
   65%, 79.9% {
-    clip-path: none;
     mask: var(--matte-4);
     -webkit-mask: var(--matte-4);
     mask-position: var(--card-grain, 0 0);
@@ -805,14 +799,12 @@
   }
 
   80%, 93.9% {
-    clip-path: none;
     mask: var(--matte-5);
     -webkit-mask: var(--matte-5);
     transform: none;
   }
 
   94%, 100% {
-    clip-path: none;
     mask: none;
     -webkit-mask: none;
     transform: none;
@@ -940,9 +932,8 @@
   }
 
   85%, 100% {
-    clip-path: inset(50%);
-    mask: var(--matte-1);
-    -webkit-mask: var(--matte-1);
+    mask: linear-gradient(transparent, transparent);
+    -webkit-mask: linear-gradient(transparent, transparent);
     transform: translate(var(--leave-x, 0px), var(--leave-y, -24px)) rotate(var(--leave-rot, 0deg)) scale(var(--leave-scale, 0.96));
   }
 }
@@ -989,9 +980,8 @@
   }
 
   87%, 100% {
-    clip-path: inset(50%);
-    mask: var(--matte-1);
-    -webkit-mask: var(--matte-1);
+    mask: linear-gradient(transparent, transparent);
+    -webkit-mask: linear-gradient(transparent, transparent);
     transform: translateY(calc(var(--leave-y, -24px) * 3)) rotate(var(--leave-rot, 0deg)) scale(calc(var(--pop-over, 1.1) * 0.9));
     filter: none;
   }
@@ -1046,7 +1036,6 @@ html[data-lightbox] .card-media::before {
   }
 
   .card-rolled {
-    clip-path: none;
   }
 
   .card-link.is-waning::after,

@@ -121,7 +121,7 @@ html[data-lightbox] [data-lightbox-aside] * {
 // the roll gave -- and what is left wipes back to the shape the veil opened from.
 .lightbox-veil.is-ghost {
   pointer-events: none;
-  animation: lightbox-veil-out var(--motion-medium) var(--ease-lightbox-veil-out, var(--ease-wipe)) both;
+  animation: var(--rite-veil-out, lightbox-veil-out) var(--motion-lightbox-veil-out, var(--motion-medium)) var(--ease-lightbox-veil-out, var(--ease-wipe)) both;
 }
 
 @keyframes lightbox-veil-out {

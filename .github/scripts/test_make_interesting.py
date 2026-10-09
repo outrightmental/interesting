@@ -3466,12 +3466,13 @@ class MotionAxiomTest(SiteDirTestCase):
                      mi.MOTION_TAG, "Keep that line on every page you rewrite",
                      f"\"{mi.MOTION_SCRIPT}\" is yours to rewrite and extend and may never be deleted",
                      "--ease-arrive, --ease-leave, --ease-shift, --ease-flicker, --ease-pulse, --ease-drift",
-                     "window.interestingMotion", "ease(family)", "tween({ ms, family, step, done })",
+                     "window.interestingMotion", "ease(family)", "tween({ ms, family, step, done, treads })",
                      "scrollTo(top)", "var(--ease-thing-in, var(--ease-arrive))",
                      "never tweens along t*t, a sine or a power of its own",
                      "typographic register", "$registers-of", "faces that go together",
                      "never two that do not", "a control under the pointer or the focus does not fade",
                      "is-waxing", "is-stamping", "is-sealing", "--matte-1 to --matte-5", "env.rite",
+                     "composed anew on its trigger", "var(--rite-wax, matte-in)",
                      "rite.matte(x, y, k)", "reveal(el)", "flip(list, change)", f"\"{mi.FONT_SHEET}\"",
                      "plan that leaves a page without the line, moves anything by one of those, or fades a state, is refused"]:
             with self.subTest(rule=rule):
@@ -6880,7 +6881,7 @@ class RealSiteTest(unittest.TestCase):
             if rel.startswith(f"{mi.SASS_DIR}/"):
                 for name in re.findall(r"^@keyframes ([\w-]+) \{", text, re.M):
                     with self.subTest(spell=name):
-                        self.assertRegex(text, rf"animation: {re.escape(name)} [^;]*var\(--ease-{re.escape(name)}, var\(--ease-\w+\)\)",
+                        self.assertRegex(text, rf"animation: (?:var\(--rite-[\w-]+, )?{re.escape(name)}\)? [^;]*var\(--ease-{re.escape(name)}, var\(--ease-\w+\)\)",
                                          f"{name} plays along a family's curve rather than a spell of its own")
         # The geometry is read where the movements are: an arrival comes from the roll's --arrive-*,
         # a departure goes to its --leave-*, the veil wipes between --wipe-from and --wipe-to, a state
@@ -6914,9 +6915,14 @@ class RealSiteTest(unittest.TestCase):
         # a glide or a formula. Held by name, because every stylesheet and script reads the roll by
         # these names (README: "Motion axiom").
         engine = self.source[mi.MOTION_SCRIPT]
-        for offered in ["    stair: function (m)", "reveal: reveal", "flip: flip", "rite: rite",
+        for offered in ["    stair: function (m)", "    ratchet: function (m)", "reveal: reveal", "flip: flip",
+                        "rite: rite", "stepper: stepper", "arrive: arrive", "deal: deal", "seal: dress",
                         "mattes: mattes", "wax: wax", "wane: wane", "'--matte-' + (i + 1)",
-                        "write('--matte-fill', m.fillImage);", "function rollMattes(rnd, temper)",
+                        "write('--matte-fill', m.fillImage);", "write('--matte-top', m.top);",
+                        "write('--motion-' + name, length + 'ms');", "function busy()",
+                        "function compose(kind, options)", "function composeOn(el, kind, fallback, baseMs, options)",
+                        "var VOCABULARY = {", "compose: compose", "data-interesting-rites",
+                        "function rollMattes(rnd, temper)",
                         "'is-waxing'", "'waning'", "'stamping'", "'sealing'", "'unsealing'",
                         "'matte-in': 'stair'", "'rite-seal': 'stair'", "'glyph-in'", "'lightbox-veil-out'",
                         "function reveal(el, options)", "function flip(container, change, options)",
@@ -6925,9 +6931,11 @@ class RealSiteTest(unittest.TestCase):
                 self.assertIn(offered, engine)
         tokens = self.source[f"{mi.SASS_DIR}/_tokens.scss"]
         self.assertRegex(tokens, r"--ease-stair: linear\(0, .*, 1\);")
+        self.assertRegex(tokens, r"--ease-ratchet: linear\(0, .*, 1\);")
         self.assertIn("--ease-stair: steps(", tokens)
+        self.assertIn("--ease-ratchet: steps(", tokens)
         for baked in ["--matte-1:", "--matte-2:", "--matte-3:", "--matte-4:", "--matte-5:", "--matte-fill:",
-                      "--matte-fill-size:", "@property --range-pct"]:
+                      "--matte-fill-size:", "--matte-top:", "@property --range-pct"]:
             with self.subTest(baked=baked):
                 self.assertIn(baked, tokens, f"the tokens bake no {baked}")
         # The grammar of a control: the ladder, the stamp, the seal, and a stair for its colour.
@@ -6935,8 +6943,13 @@ class RealSiteTest(unittest.TestCase):
         for rule in [".is-waxing::after", ".is-waning::after", ".is-stamping", ".is-sealing::before",
                      ".is-unsealing::before", "@keyframes matte-in", "@keyframes matte-out",
                      "@keyframes rite-stamp", "@keyframes rite-seal", "@keyframes rite-unseal",
+                     "@keyframes stamp-ink", "mask-position: var(--stamp-x, 50%) var(--stamp-y, 50%);",
+                     "animation: var(--rite-wax, matte-in)", "animation: var(--rite-wane, matte-out)",
+                     "animation: var(--rite-stamp, rite-stamp)", "animation: var(--rite-ink, stamp-ink)",
+                     "animation: var(--rite-seal, rite-seal)", "animation: var(--rite-unseal, rite-unseal)",
+                     "mask-position: var(--matte-shift, 0 0);", "clip-path: var(--state-from",
                      "background: var(--matte-fill);", "background-size: var(--matte-fill-size);",
-                     "mask: var(--matte-1);", "mask: var(--matte-5);", "mask: none;",
+                     "mask: var(--matte-1);", "mask: var(--matte-5);", "mask: var(--matte-top);",
                      "transition: --range-pct var(--motion-short) var(--ease-stair);"]:
             with self.subTest(rule=rule):
                 self.assertIn(rule, controls, f"the controls lost {rule}")
@@ -6951,12 +6964,14 @@ class RealSiteTest(unittest.TestCase):
                                      "a matte tread with one mask syntax and not the other")
         ornament = self.source[f"{mi.SASS_DIR}/_rite.scss"]
         for rule in [".is-revealing .glyph {", ".is-revealing .glyph::before {", "content: attr(data-sigil);",
-                     "@keyframes glyph-in", "@keyframes glyph-sigil"]:
+                     "content: attr(data-sigil-2);", "@keyframes glyph-in", "@keyframes glyph-sigil",
+                     "@keyframes glyph-sigil-2", "@keyframes glyph-word", "display: inline;"]:
             with self.subTest(rule=rule):
                 self.assertIn(rule, ornament)
         veil = self.source[f"{mi.SASS_DIR}/_lightbox.scss"]
         self.assertIn(".lightbox-veil.is-ghost {", veil)
         self.assertIn("@keyframes lightbox-veil-out", veil)
+        self.assertIn("animation: var(--rite-veil-out, lightbox-veil-out)", veil)
         # A module moves by env.rite, handed by every env builder and both of the harnesses that
         # play a module, and the stage's contract says so.
         variant = self.source[mi.VARIANT_SCRIPT]

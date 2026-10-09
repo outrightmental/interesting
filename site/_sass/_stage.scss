@@ -17,20 +17,20 @@
 // word a text field, an order a list with up and down beside each item, a pick a row of chips
 // that press in, a grid a block of square cells, a press and a hold one big button (the hold
 // reads as pressed while it is held, and the bar under it fills), a tap and a wait a bar the
-// piece fills. A knob that is set gets a check mark; a knob gated on another is dimmed until it
+// piece fills. A knob that is set gets a seal; a knob gated on another is warded until it
 // opens. Under the knobs is the check: the one filled button in the rail, enabled once every
 // knob is set, with the score beside it -- because every piece is a puzzle now, and a puzzle is
 // finished by an answer that solves it, not by its knobs having been touched.
 //
-// The ceremony: when the piece is finished, the done chip appears at the end of the dots' row and
-// the burst canvas over the whole stage carries the particles, which clear themselves. Then the way
-// on lights up and nothing else happens until it is pressed (issue #78), at which point the stage's
-// inner scales away and the next piece arrives from a little below. All of it stops still for a
-// visitor who asked for less motion.
+// The ceremony: when the piece is finished, the done chip is stamped at the end of the dots' row
+// and the burst canvas over the whole stage carries the seal and the shards, which clear
+// themselves. Then the way on lights up and nothing else happens until it is pressed (issue #78),
+// at which point the stage's inner is unmade and the next piece develops. All of it stops still
+// for a visitor who asked for less motion.
 //
 // Every press on the scene does something (issue #89). The piece answers most of them; the ones it
-// has nothing to do with the stage answers itself, with .stage-reject -- one small ring at the
-// point pressed, which opens, fades and is gone. Unresponsiveness is uninteresting, and a press
+// has nothing to do with the stage answers itself, with .stage-reject -- one small ward at the
+// point pressed, shown in four hard frames and gone. Unresponsiveness is uninteresting, and a press
 // that lands on nothing is the one thing the picture may not do.
 //
 // Nothing of the ceremony is laid over the scene, and nothing of it closes the piece down: Done is
@@ -38,6 +38,19 @@
 // lower-right corner, over the piece's own finale, and the knobs went inert under it. A finished
 // piece is still a toy, so the picture stays whole and every control stays live; what the ceremony
 // changes is the report beside the dots and the one mark in the corner of the screen.
+//
+// How the stage moves (README: "Motion axiom"). Nothing here fades, glides or cuts without a rite.
+// Every surface that changes arrives through the matte ladder (--matte-1 to --matte-5, rolled by
+// js/motion.js) or through the plate's own blotch matte (--plate-1 to --plate-4, seeded from the
+// working by js/stage.js) in hard treads; every scalar that changes -- a colour, a bar, a dot --
+// changes along the stair family; every press stamps; everything that becomes set is sealed with a
+// generated texture (the hatch, the screen, the rings, each at a pitch and an angle rolled for that
+// one knob); every word is revealed glyph by glyph (the glyph rite of _rite.scss, asked for by
+// js/stage.js); and every keyframe below is written as held pairs, so even a swooping curve reads
+// as treads. The geometry (--arrive-*, --leave-*, --state-from, --wipe-from/to, --shake-x,
+// --pop-over, --lift-*) and the stagger are the roll's, and the per-knob particulars (--knob-i,
+// --seal-rot, --seal-teeth, --hatch-angle, --screen-pitch, --ward-angle, --bar-pitch) are
+// js/stage.js's, written inline, so no two knobs and no two deals move alike.
 
 @use 'type';
 
@@ -74,44 +87,201 @@
   pointer-events: none;
 }
 
-// A piece leaving and the next arriving (README: "Motion axiom"): the vanish goes where the roll
-// sends departures and the arrival comes from where the roll says arrivals come from (--leave-*
-// and --arrive-*, js/motion.js), each along a curve rolled for that one movement -- the leave
-// family's for the vanish, and a spell of its own for the arrival, rolled afresh every time one
-// lands. js/stage.js takes its own timers from the same roll (--motion-long), so a mode is never
+// ---- the inner: its travel in, and its unmaking ---------------------------------------------
+// A piece leaving and the next arriving (README: "Motion axiom"). The arrival's travel comes from
+// where the roll says arrivals come from (--arrive-*) and is quantised into treads (stage-in);
+// every part of the piece then develops on its own delay off data-dealing, below. The vanish is an
+// unmaking: the inner is eaten down the ladder in bites with the leave family's one refusal -- a
+// hard cut back to whole -- and goes where the roll sends departures (--leave-*), never by an
+// opacity ramp. js/stage.js takes its timers from the same roll (--motion-long), so a mode is never
 // left before its movement is over.
 .stage-inner {
   position: relative;
   z-index: 1;
   display: grid;
   gap: 1.25rem;
-  transition:
-    transform var(--motion-long) var(--ease-leave),
-    opacity var(--motion-long) var(--ease-leave);
-}
-
-.stage[data-mode='vanishing'] .stage-inner {
-  transform: translate(var(--leave-x, 0px), var(--leave-y, -22px)) rotate(var(--leave-rot, 0deg)) scale(var(--leave-scale, 0.9));
-  opacity: 0;
 }
 
 .stage[data-mode='arriving'] .stage-inner {
   animation: stage-in var(--motion-long) var(--ease-stage-in, var(--ease-arrive)) both;
 }
 
-.stage[data-mode='loading'] .stage-body {
-  opacity: 0.4;
+// A re-deal (the difficulty moved, the sky re-made) is the same working cast again: no travel,
+// only the mattes and the stamps.
+.stage[data-redeal] .stage-inner {
+  animation: none;
 }
 
+.stage[data-mode='vanishing'] .stage-inner {
+  animation: stage-unmake var(--motion-long) var(--ease-stage-unmake, var(--ease-leave)) both;
+}
+
+// The travel, in four treads with one slip: the slab lands where it is going in cuts.
 @keyframes stage-in {
-  from {
-    opacity: 0;
+  0%, 17.9% {
     transform: translate(var(--arrive-x, 0px), var(--arrive-y, 32px)) rotate(var(--arrive-rot, 0deg)) skewX(var(--arrive-skew, 0deg)) scale(var(--arrive-scale, 0.97));
   }
 
-  to {
-    opacity: 1;
+  18%, 41.9% {
+    transform: translate(calc(var(--arrive-x, 0px) * 0.55), calc(var(--arrive-y, 32px) * 0.55)) rotate(calc(var(--arrive-rot, 0deg) * 0.5)) scale(var(--arrive-scale, 0.97));
+  }
+
+  42%, 63.9% {
+    transform: translate(calc(var(--arrive-x, 0px) * 0.18), calc(var(--arrive-y, 32px) * 0.18)) rotate(calc(var(--arrive-rot, 0deg) * 0.2));
+  }
+
+  64%, 73.9% {
+    transform: translate(calc(var(--arrive-x, 0px) * 0.3), calc(var(--arrive-y, 32px) * 0.3)); // the slip
+  }
+
+  74%, 100% {
     transform: none;
+  }
+}
+
+// The unmaking: bites down the ladder, one flicker back to whole, then the rush out.
+@keyframes stage-unmake {
+  0%, 11.9% {
+    mask: none;
+    -webkit-mask: none;
+    transform: none;
+  }
+
+  12%, 29.9% {
+    mask: var(--matte-5);
+    -webkit-mask: var(--matte-5);
+    transform: translate(calc(var(--leave-x, 0px) * 0.1), calc(var(--leave-y, -22px) * 0.1));
+  }
+
+  30%, 44.9% {
+    mask: var(--matte-4);
+    -webkit-mask: var(--matte-4);
+    transform: translate(calc(var(--leave-x, 0px) * 0.25), calc(var(--leave-y, -22px) * 0.25)) rotate(calc(var(--leave-rot, 0deg) * 0.3));
+  }
+
+  45%, 51.9% {
+    mask: none; // the refusal: whole again for one cut
+    -webkit-mask: none;
+    transform: translate(calc(var(--leave-x, 0px) * 0.1), calc(var(--leave-y, -22px) * 0.1));
+  }
+
+  52%, 67.9% {
+    mask: var(--matte-3);
+    -webkit-mask: var(--matte-3);
+    transform: translate(calc(var(--leave-x, 0px) * 0.5), calc(var(--leave-y, -22px) * 0.5)) rotate(calc(var(--leave-rot, 0deg) * 0.6)) scale(0.97);
+  }
+
+  68%, 83.9% {
+    mask: var(--matte-2);
+    -webkit-mask: var(--matte-2);
+    transform: translate(calc(var(--leave-x, 0px) * 0.8), calc(var(--leave-y, -22px) * 0.8)) rotate(var(--leave-rot, 0deg)) scale(0.94);
+  }
+
+  84%, 100% {
+    mask: var(--matte-1);
+    -webkit-mask: var(--matte-1);
+    transform: translate(var(--leave-x, 0px), var(--leave-y, -22px)) rotate(var(--leave-rot, 0deg)) scale(var(--leave-scale, 0.9));
+  }
+}
+
+// The palette turning over (js/stage.js crossfade): where the ground seed changes, the colour the
+// site was is laid over the piece as a veil and torn off down the ladder in bites, with the leave
+// family's one refusal, while the four seeds jump through their treads beneath it -- so a new
+// palette arrives as shards and never as a wash. Two spells alternate off data-turning so a turn
+// begun under a turn restarts. Over the inner's parts and under the way on (outside the inner).
+.stage-inner::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: none;
+  background: var(--veil-bg, transparent);
+  pointer-events: none;
+}
+
+.stage[data-turning='a'] .stage-inner::before {
+  display: block;
+  animation: veil-tear var(--motion-medium) var(--ease-veil-tear, var(--ease-stair)) both;
+}
+
+.stage[data-turning='b'] .stage-inner::before {
+  display: block;
+  animation: veil-tear-b var(--motion-medium) var(--ease-veil-tear-b, var(--ease-stair)) both;
+}
+
+@keyframes veil-tear {
+  0%, 17.9% {
+    mask: var(--matte-4);
+    -webkit-mask: var(--matte-4);
+    visibility: visible;
+  }
+
+  18%, 37.9% {
+    mask: var(--matte-3);
+    -webkit-mask: var(--matte-3);
+    visibility: visible;
+  }
+
+  38%, 45.9% {
+    mask: var(--matte-4); // the refusal
+    -webkit-mask: var(--matte-4);
+    visibility: visible;
+  }
+
+  46%, 67.9% {
+    mask: var(--matte-2);
+    -webkit-mask: var(--matte-2);
+    visibility: visible;
+  }
+
+  68%, 89.9% {
+    mask: var(--matte-1);
+    -webkit-mask: var(--matte-1);
+    visibility: visible;
+  }
+
+  90%, 100% {
+    mask: var(--matte-1);
+    -webkit-mask: var(--matte-1);
+    visibility: hidden;
+  }
+}
+
+@keyframes veil-tear-b {
+  0%, 21.9% {
+    mask: var(--matte-5);
+    -webkit-mask: var(--matte-5);
+    visibility: visible;
+  }
+
+  22%, 39.9% {
+    mask: var(--matte-3);
+    -webkit-mask: var(--matte-3);
+    visibility: visible;
+  }
+
+  40%, 59.9% {
+    mask: var(--matte-2);
+    -webkit-mask: var(--matte-2);
+    visibility: visible;
+  }
+
+  60%, 66.9% {
+    mask: var(--matte-3); // the refusal
+    -webkit-mask: var(--matte-3);
+    visibility: visible;
+  }
+
+  67%, 87.9% {
+    mask: var(--matte-1);
+    -webkit-mask: var(--matte-1);
+    visibility: visible;
+  }
+
+  88%, 100% {
+    mask: var(--matte-1);
+    -webkit-mask: var(--matte-1);
+    visibility: hidden;
   }
 }
 
@@ -157,10 +327,63 @@
   display: none;
 }
 
+// ---- the head ---------------------------------------------------------------------------------
 .stage-head {
   display: grid;
   gap: 0.35rem;
   max-width: 64rem;
+}
+
+// The head's lines arrive one tread each as the piece is dealt: each line's surface comes in from
+// the roll's edge (--state-from) through the ladder, on a delay of its own, lifted by the roll's
+// --lift-*; the words inside land by the glyph rite js/stage.js asks for.
+.stage[data-dealing] .stage-head > * {
+  animation: head-in var(--motion-medium) var(--ease-head-in, var(--ease-stair)) both;
+  animation-delay: calc(var(--part-i, 0) * var(--motion-stagger, 44ms) * 1.5);
+}
+
+.stage-head > :nth-child(1) { --part-i: 0; }
+.stage-head > :nth-child(2) { --part-i: 1; }
+.stage-head > :nth-child(3) { --part-i: 2; }
+.stage-head > :nth-child(4) { --part-i: 3; }
+.stage-head > :nth-child(5) { --part-i: 4; }
+.stage-head > :nth-child(6) { --part-i: 5; }
+
+@keyframes head-in {
+  0%, 21.9% {
+    clip-path: var(--state-from, inset(0 100% 0 0));
+    mask: var(--matte-1);
+    -webkit-mask: var(--matte-1);
+    transform: translateY(calc(var(--lift-y, -2px) * -3)) rotate(var(--lift-rot, 0.3deg));
+  }
+
+  22%, 43.9% {
+    clip-path: none;
+    mask: var(--matte-2);
+    -webkit-mask: var(--matte-2);
+    transform: translateY(calc(var(--lift-y, -2px) * -2));
+  }
+
+  44%, 63.9% {
+    clip-path: none;
+    mask: var(--matte-3);
+    -webkit-mask: var(--matte-3);
+    transform: translateY(var(--lift-y, -2px));
+  }
+
+  64%, 79.9% {
+    clip-path: none;
+    mask: var(--matte-4);
+    -webkit-mask: var(--matte-4);
+    transform: none;
+  }
+
+  80%, 100% {
+    clip-path: none;
+    mask: none;
+    -webkit-mask: none;
+    transform: none;
+  }
 }
 
 // The world's name is the label over the piece, so it keeps the sans a label wears; the h1 rule in
@@ -177,6 +400,7 @@
   margin: 0;
   color: var(--md-sys-color-on-surface-variant);
   @include type.scale(label-large);
+  animation: line-develop var(--motion-medium) var(--ease-line-develop, var(--ease-stair)) both;
 }
 
 // The piece's title is the rite's word on the stage, set in the serif; the brief, the goal and
@@ -216,13 +440,81 @@
   @include type.scale(body-large);
 }
 
+// The sigil is cast (its text and face are _rite.scss's): on every un-hiding the glyph in front of
+// it stamps -- one frame large, a hold, a snap to size, a flicker -- while js/stage.js reveals the
+// digits glyph by glyph; and under the vanish its letters scatter out.
+.stage-sigil {
+  animation: line-develop var(--motion-medium) var(--ease-line-develop, var(--ease-stair)) both;
+}
+
+.stage-sigil::before {
+  display: inline-block;
+  animation: sigil-cast var(--motion-medium) var(--ease-sigil-cast, var(--ease-stair)) both;
+}
+
+@keyframes sigil-cast {
+  0%, 24.9% {
+    transform: scale(1.9) rotate(var(--seal-rot, -3deg));
+  }
+
+  25%, 54.9% {
+    transform: scale(1.9) rotate(var(--seal-rot, -3deg));
+  }
+
+  55%, 69.9% {
+    transform: scale(1.2) rotate(calc(var(--seal-rot, -3deg) * -1));
+  }
+
+  70%, 79.9% {
+    transform: scale(0);
+  }
+
+  80%, 100% {
+    transform: none;
+  }
+}
+
+.stage[data-mode='vanishing'] .stage-sigil {
+  animation: sigil-scatter var(--motion-medium) var(--ease-sigil-scatter, var(--ease-leave)) both;
+}
+
+@keyframes sigil-scatter {
+  0%, 19.9% {
+    letter-spacing: 0.1em;
+    clip-path: none;
+  }
+
+  20%, 44.9% {
+    letter-spacing: 0.32em;
+    clip-path: inset(0 0 0 0);
+  }
+
+  45%, 54.9% {
+    letter-spacing: 0.1em; // the refusal
+    clip-path: none;
+  }
+
+  55%, 79.9% {
+    letter-spacing: 0.6em;
+    clip-path: inset(0 40% 0 0);
+  }
+
+  80%, 100% {
+    letter-spacing: 0.9em;
+    clip-path: inset(0 100% 0 0);
+  }
+}
+
 // The goal, under the rules: what counts as solved, in one line a stranger can find before they
-// touch anything. The word in front of it is the label; the line is the piece's own.
+// touch anything. The word in front of it is the label; the line is the piece's own. It is
+// pronounced: the line develops on its un-hiding and the chip is stamped like a seal, at the
+// working's own tilt, its surface the rings of a seal rather than a flat pill.
 .stage-goal {
   margin: 0.15rem 0 0;
   max-width: 60ch;
   color: var(--md-sys-color-on-surface);
   @include type.scale(title-medium);
+  animation: line-develop var(--motion-medium) var(--ease-line-develop, var(--ease-stair)) both;
 }
 
 .stage-goal-word {
@@ -230,11 +522,16 @@
   margin-right: 0.35rem;
   padding: 0.1rem 0.6rem;
   border-radius: var(--md-sys-shape-corner-full);
-  background: var(--md-sys-color-primary-container);
+  background:
+    repeating-radial-gradient(circle at 50% 50%, transparent 0 2px, color-mix(in oklab, var(--md-sys-color-primary) 16%, transparent) 2px 3px)
+    var(--md-sys-color-primary-container);
   color: var(--md-sys-color-on-primary-container);
+  rotate: var(--seal-rot, -2deg);
   @include type.scale(label-large);
+  animation: seal-stamp var(--motion-medium) var(--ease-seal-stamp, var(--ease-stair)) both;
 }
 
+// ---- the body: the scene and the rail -----------------------------------------------------------
 .stage-body {
   --stage-gap: 1.5rem;
   --stage-knobs: 300px; // the knobs' own: the room the scene never takes, and the floor of their column
@@ -245,7 +542,6 @@
   grid-template-columns: var(--stage-scene) minmax(var(--stage-knobs), 1fr);
   gap: var(--stage-gap);
   align-items: start;
-  transition: opacity var(--motion-short) var(--ease-shift);
 }
 
 .stage-scene {
@@ -259,6 +555,213 @@
   border-radius: var(--md-sys-shape-corner-large);
   background: var(--md-sys-color-surface-container-lowest);
   overflow: hidden;
+}
+
+// The unexposed plate (README: "Motion axiom"). While a module loads the plate is not dimmed: it
+// is covered by a veil -- a scanline screen in the primary over the plate's own dark, with a
+// shutter of spokes ticking round in hard treads (--tick, stepped by plate-tick on the scene and
+// read here) -- which drops over it tread by tread up the ladder (plate-veil). When the piece is
+// dealt the veil leaves back down the ladder with the leave family's one refusal (plate-unveil)
+// while the picture develops under it through the working's own blotches (plate-develop, on the
+// canvas). A piece being powered up gets one bright line stepping down the plate first (tube-warm).
+// Over the canvas and under the hairline (_rite.scss, 1) and the ward (2).
+.stage-scene::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: none;
+  pointer-events: none;
+  background:
+    repeating-conic-gradient(from var(--tick, 0deg) at 50% 50%, color-mix(in oklab, var(--md-sys-color-primary) 8%, transparent) 0 7deg, transparent 7deg 30deg),
+    repeating-linear-gradient(var(--plate-angle, 7deg), transparent 0 3px, color-mix(in oklab, var(--md-sys-color-primary) 10%, transparent) 3px 4px),
+    var(--md-sys-color-surface-container-lowest);
+}
+
+.stage[data-mode='loading'] .stage-scene::before,
+.stage[data-unmaking] .stage-scene::before {
+  display: block;
+  animation: plate-veil var(--motion-medium) var(--ease-plate-veil, var(--ease-stair)) both;
+}
+
+.stage[data-mode='loading'] .stage-scene,
+.stage[data-unmaking] .stage-scene {
+  animation: plate-tick var(--motion-slow) var(--ease-plate-tick, var(--ease-drift)) infinite;
+}
+
+.stage[data-dealing] .stage-scene::before {
+  display: block;
+  animation: plate-unveil var(--motion-long) var(--ease-plate-unveil, var(--ease-leave)) both;
+}
+
+.stage[data-dealing] .stage-canvas {
+  animation: plate-develop var(--motion-long) var(--ease-plate-develop, var(--ease-stair)) both;
+}
+
+.stage[data-powered] .stage-scene::before {
+  display: block;
+  animation: tube-warm var(--motion-medium) var(--ease-tube-warm, var(--ease-stair)) both;
+}
+
+// A resize is a re-exposure: the canvas lands through two scanline treads rather than flickering.
+.stage[data-reflow] .stage-canvas {
+  animation: plate-reexpose var(--motion-short) var(--ease-plate-reexpose, var(--ease-stair)) both;
+}
+
+@keyframes plate-veil {
+  0%, 24.9% {
+    mask: var(--matte-1);
+    -webkit-mask: var(--matte-1);
+  }
+
+  25%, 49.9% {
+    mask: var(--matte-2);
+    -webkit-mask: var(--matte-2);
+  }
+
+  50%, 69.9% {
+    mask: var(--matte-3);
+    -webkit-mask: var(--matte-3);
+  }
+
+  70%, 86.9% {
+    mask: var(--matte-4);
+    -webkit-mask: var(--matte-4);
+  }
+
+  87%, 100% {
+    mask: none;
+    -webkit-mask: none;
+  }
+}
+
+// The shutter: eight treads round, uneven, with one catch back.
+@keyframes plate-tick {
+  0%, 11.9% { --tick: 0deg; }
+  12%, 23.9% { --tick: 9deg; }
+  24%, 36.9% { --tick: 14deg; }
+  37%, 42.9% { --tick: 11deg; }
+  43%, 58.9% { --tick: 19deg; }
+  59%, 71.9% { --tick: 22deg; }
+  72%, 86.9% { --tick: 27deg; }
+  87%, 100% { --tick: 30deg; }
+}
+
+@keyframes plate-unveil {
+  0%, 14.9% {
+    mask: var(--matte-5);
+    -webkit-mask: var(--matte-5);
+  }
+
+  15%, 32.9% {
+    mask: var(--matte-4);
+    -webkit-mask: var(--matte-4);
+  }
+
+  33%, 39.9% {
+    mask: var(--matte-5); // the refusal
+    -webkit-mask: var(--matte-5);
+  }
+
+  40%, 57.9% {
+    mask: var(--matte-3);
+    -webkit-mask: var(--matte-3);
+  }
+
+  58%, 75.9% {
+    mask: var(--matte-2);
+    -webkit-mask: var(--matte-2);
+  }
+
+  76%, 91.9% {
+    mask: var(--matte-1);
+    -webkit-mask: var(--matte-1);
+  }
+
+  92%, 100% {
+    mask: var(--matte-1);
+    -webkit-mask: var(--matte-1);
+    visibility: hidden;
+  }
+}
+
+// The picture develops through the working's blotches (--plate-1 to --plate-4, js/stage.js; the
+// engine's ladder stands in where a page has none), then through the engine's own full matte.
+@keyframes plate-develop {
+  0%, 17.9% {
+    mask: var(--plate-1, var(--matte-1));
+    -webkit-mask: var(--plate-1, var(--matte-1));
+  }
+
+  18%, 36.9% {
+    mask: var(--plate-2, var(--matte-2));
+    -webkit-mask: var(--plate-2, var(--matte-2));
+  }
+
+  37%, 56.9% {
+    mask: var(--plate-3, var(--matte-3));
+    -webkit-mask: var(--plate-3, var(--matte-3));
+  }
+
+  57%, 76.9% {
+    mask: var(--plate-4, var(--matte-4));
+    -webkit-mask: var(--plate-4, var(--matte-4));
+  }
+
+  77%, 91.9% {
+    mask: var(--matte-5);
+    -webkit-mask: var(--matte-5);
+  }
+
+  92%, 100% {
+    mask: none;
+    -webkit-mask: none;
+  }
+}
+
+// Power coming on: one bright line steps down the plate in three treads, holds, and the veil goes.
+@keyframes tube-warm {
+  0%, 19.9% {
+    background-image: linear-gradient(var(--md-sys-color-primary), var(--md-sys-color-primary));
+    background-size: 100% 2px;
+    background-repeat: no-repeat;
+    background-position: 0 12%;
+  }
+
+  20%, 44.9% {
+    background-image: linear-gradient(var(--md-sys-color-primary), var(--md-sys-color-primary));
+    background-size: 100% 2px;
+    background-repeat: no-repeat;
+    background-position: 0 47%;
+  }
+
+  45%, 69.9% {
+    background-image: linear-gradient(var(--md-sys-color-primary), var(--md-sys-color-primary));
+    background-size: 100% 3px;
+    background-repeat: no-repeat;
+    background-position: 0 83%;
+  }
+
+  70%, 84.9% {
+    mask: var(--matte-3);
+    -webkit-mask: var(--matte-3);
+  }
+
+  85%, 100% {
+    mask: var(--matte-1);
+    -webkit-mask: var(--matte-1);
+    visibility: hidden;
+  }
+}
+
+@keyframes plate-reexpose {
+  0%, 49.9% {
+    clip-path: inset(0 0 55% 0);
+  }
+
+  50%, 100% {
+    clip-path: inset(0);
+  }
 }
 
 // The element the unlock helper powers down for a piece that needs a sky: it has nothing to show
@@ -280,22 +783,26 @@
 // Every press on the scene does something (issue #89): unresponsiveness is uninteresting. Where
 // the press has nothing to reach -- a piece with no tap() of its own, a tap knob still locked
 // behind another, a module still loading -- js/stage.js answers for the piece with this and
-// nothing else: one ring at the point pressed, opening and fading out, and gone a fifth of a
-// second later. It is the smallest acknowledgement there is, and that is the whole of the brief:
-// a press that lands on nothing must still be visibly received, and receiving it must not
-// interrupt a piece a visitor is in the middle of or read as the piece's own answer. So it is a
-// hairline ring in the muted ink the rail's own text is written in, not a flash, not a shake of
-// the frame, and not in either accent -- those are the colours the pieces answer in.
+// nothing else: one ward at the point pressed, gone a fifth of a second later. It is the smallest
+// acknowledgement there is, and that is the whole of the brief: a press that lands on nothing must
+// still be visibly received, and receiving it must not interrupt a piece a visitor is in the
+// middle of or read as the piece's own answer. So it is a generated ward glyph in the muted ink
+// the rail's own text is written in -- a rolled three-to-seven-spoke asterisk (--ward-spokes) at a
+// rolled turn (--ward-rot), its spokes as wide as the roll says (--ward-gap), js/stage.js -- shown
+// in four hard frames (there, its negative, there, gone) and never rippled or faded; not a flash,
+// not a shake of the frame, and not in either accent, which are the colours the pieces answer in.
 .stage-reject {
   position: absolute;
   z-index: 2; // over the canvas, under the burst (which is pinned over the whole stage at 3)
   width: 2.5rem;
   height: 2.5rem;
   margin: -1.25rem 0 0 -1.25rem; // centred on the point pressed, which is its left and top
-  border: 2px solid var(--md-sys-color-on-surface-variant);
-  border-radius: var(--md-sys-shape-corner-full);
+  color: var(--md-sys-color-on-surface-variant);
+  background: repeating-conic-gradient(from var(--ward-rot, 0deg) at 50% 50%, currentColor 0 calc(360deg / var(--ward-spokes, 5) * var(--ward-gap, 0.4)), transparent 0 calc(360deg / var(--ward-spokes, 5)));
+  mask: radial-gradient(circle at 50% 50%, transparent 0 22%, #000 23% 46%, transparent 47%);
+  -webkit-mask: radial-gradient(circle at 50% 50%, transparent 0 22%, #000 23% 46%, transparent 47%);
   pointer-events: none; // the next press goes to the scene, as every press does
-  // Opened along a curve rolled for this press, to a size the roll gave it (--reject-grow).
+  // Four frames along a curve rolled for this press: the roll says when each cut falls.
   animation: stage-reject 240ms var(--ease-stage-reject, var(--ease-leave)) both;
 }
 
@@ -308,18 +815,33 @@
 }
 
 @keyframes stage-reject {
-  from {
-    opacity: 0.8;
-    transform: scale(0.5);
+  0%, 34.9% {
+    transform: scale(var(--reject-grow, 1));
+    filter: none;
+    visibility: visible;
   }
 
-  to {
-    opacity: 0;
-    transform: scale(var(--reject-grow, 1));
+  35%, 69.9% {
+    transform: scale(var(--reject-grow, 1)) rotate(calc(180deg / var(--ward-spokes, 5)));
+    filter: invert(1); // the negative: spokes to gaps
+    visibility: visible;
+  }
+
+  70%, 84.9% {
+    transform: scale(calc(var(--reject-grow, 1) * 0.8));
+    filter: none;
+    visibility: visible;
+  }
+
+  85%, 100% {
+    transform: scale(calc(var(--reject-grow, 1) * 0.8));
+    filter: none;
+    visibility: hidden;
   }
 }
 
 .stage-side {
+  position: relative; // the ghost of the last rail is laid over this one while it is eaten
   display: grid;
   gap: 0.75rem;
   align-content: start;
@@ -333,6 +855,93 @@
   gap: 0.6rem;
 }
 
+// While a module loads the rail is not empty: two stamped-out plates, empty seals the real knobs
+// will replace, each a hatch at a pitch of its own.
+.stage[data-mode='loading'] .stage-knobs::before,
+.stage[data-mode='loading'] .stage-knobs::after {
+  content: '';
+  height: 4.25rem;
+  border-radius: var(--md-sys-shape-corner-medium);
+  background:
+    repeating-linear-gradient(var(--hatch-angle, 35deg), transparent 0 4px, color-mix(in oklab, var(--md-sys-color-primary) 7%, transparent) 4px 5px)
+    var(--md-sys-color-surface-container-low);
+}
+
+.stage[data-mode='loading'] .stage-knobs::after {
+  height: 5.5rem;
+  background:
+    radial-gradient(color-mix(in oklab, var(--md-sys-color-primary) 9%, transparent) 1px, transparent 1.6px) 0 0 / var(--screen-pitch, 5px) var(--screen-pitch, 5px)
+    var(--md-sys-color-surface-container-low);
+}
+
+// The ghost: the last piece's knobs and seals, moved here by js/stage.js for one movement and laid
+// over the rail under no pointer, each knob eaten down the ladder in the order it was dealt and
+// each seal struck out, while the new rail stamps in beneath. Gone when the script sweeps it.
+.stage-ghost {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: grid;
+  gap: 0.75rem;
+  align-content: start;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.stage-ghost-rail {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.stage-ghost-seals {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.4rem;
+}
+
+.stage-ghost .knob {
+  animation: knob-unmake var(--motion-medium) var(--ease-knob-unmake, var(--ease-leave)) both;
+  animation-delay: calc(var(--knob-i, 0) * var(--motion-stagger, 44ms));
+}
+
+.stage-ghost .stage-dot {
+  animation: seal-strike var(--motion-short) var(--ease-seal-strike, var(--ease-leave)) both;
+  animation-delay: calc(var(--dot-i, 0) * var(--motion-stagger, 44ms));
+}
+
+@keyframes knob-unmake {
+  0%, 17.9% {
+    mask: var(--matte-5);
+    -webkit-mask: var(--matte-5);
+    transform: none;
+  }
+
+  18%, 37.9% {
+    mask: var(--matte-3);
+    -webkit-mask: var(--matte-3);
+    transform: translate(calc(var(--leave-x, 0px) * 0.3), 0);
+  }
+
+  38%, 45.9% {
+    mask: var(--matte-4); // the refusal
+    -webkit-mask: var(--matte-4);
+    transform: none;
+  }
+
+  46%, 67.9% {
+    mask: var(--matte-2);
+    -webkit-mask: var(--matte-2);
+    transform: translate(calc(var(--leave-x, 0px) * 0.7), calc(var(--leave-y, -22px) * 0.2)) rotate(var(--leave-rot, 0deg));
+  }
+
+  68%, 100% {
+    mask: var(--matte-1);
+    -webkit-mask: var(--matte-1);
+    transform: translate(var(--leave-x, 0px), calc(var(--leave-y, -22px) * 0.4)) rotate(var(--leave-rot, 0deg));
+    visibility: hidden;
+  }
+}
+
 // The difficulty slider at the foot of the rail (issue #93): the setting every piece is dealt at,
 // offered where it is a dependency. It is not one of the piece's knobs -- it does not answer the
 // puzzle and it is not counted by the dots -- so it stands under them, divided off and quiet, in
@@ -342,25 +951,183 @@
   border-top: 1px solid var(--md-sys-color-outline-variant);
 }
 
+// ---- the knobs --------------------------------------------------------------------------------
+// A knob is a plate with two layers under its content: ::before is the texture it takes when set
+// (a hatch at the knob's own angle, climbing the ladder on, knob-seal) and ::after is the ward it
+// wears while locked (a hatched veil at the knob's own angle, torn off through the ladder when the
+// gate opens, ward-tear). The fill texture every pressed control inside it wears (--matte-fill,
+// _controls.scss) is the knob's own too, at its own angle and pitch, so a choice's pressed option
+// and the toggle beside it are never textured alike.
 .knob {
   --knob-pct: 0%;
+  --matte-fill: repeating-linear-gradient(var(--hatch-angle, 35deg), currentColor 0 1px, transparent 1px var(--screen-pitch, 5px));
+  --matte-fill-size: auto;
   position: relative;
+  isolation: isolate;
   display: grid;
   gap: 0.6rem;
   padding: 0.85rem 2.75rem 0.85rem 1rem;
   border-radius: var(--md-sys-shape-corner-medium);
   background: var(--md-sys-color-surface-container);
-  transition:
-    background-color var(--motion-short) var(--ease-shift),
-    opacity var(--motion-short) var(--ease-shift);
+  // The plate's colour, where it changes, changes in treads.
+  transition: background-color var(--motion-short) var(--ease-stair);
 }
 
-.knob.is-locked {
-  opacity: 0.45;
+.knob::before,
+.knob::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+}
+
+// Set: the plate takes its texture, through the ladder.
+.knob::before {
+  background: repeating-linear-gradient(var(--hatch-angle, 35deg), transparent 0 4px, color-mix(in oklab, var(--md-sys-color-primary) 12%, transparent) 4px 5px);
 }
 
 .knob.is-set {
   background: var(--md-sys-color-surface-container-high);
+}
+
+.knob.is-set::before {
+  opacity: 1;
+  animation: knob-seal var(--motion-medium) var(--ease-knob-seal, var(--ease-stair)) both;
+}
+
+@keyframes knob-seal {
+  0%, 19.9% {
+    mask: var(--matte-1);
+    -webkit-mask: var(--matte-1);
+  }
+
+  20%, 39.9% {
+    mask: var(--matte-2);
+    -webkit-mask: var(--matte-2);
+  }
+
+  40%, 59.9% {
+    mask: var(--matte-3);
+    -webkit-mask: var(--matte-3);
+  }
+
+  60%, 79.9% {
+    mask: var(--matte-4);
+    -webkit-mask: var(--matte-4);
+  }
+
+  80%, 94.9% {
+    mask: var(--matte-5);
+    -webkit-mask: var(--matte-5);
+  }
+
+  95%, 100% {
+    mask: none;
+    -webkit-mask: none;
+  }
+}
+
+// Warded: a locked knob is not dimmed but veiled -- a hatched screen at its own angle over the
+// plate, with the controls under it disabled by js/stage.js. The gate opening tears the veil off
+// from the roll's edge in bites, with one flicker back, and the ward is gone.
+.knob::after {
+  background: repeating-linear-gradient(var(--ward-angle, -28deg), color-mix(in oklab, var(--md-sys-color-surface) 70%, transparent) 0 4px, transparent 4px 7px);
+}
+
+.knob.is-locked::after {
+  opacity: 1;
+}
+
+.knob[data-unwarding]::after {
+  opacity: 1;
+  animation: ward-tear var(--motion-medium) var(--ease-ward-tear, var(--ease-stair)) both;
+}
+
+@keyframes ward-tear {
+  0%, 19.9% {
+    clip-path: var(--wipe-to, inset(0));
+    mask: none;
+    -webkit-mask: none;
+  }
+
+  20%, 39.9% {
+    clip-path: var(--wipe-to, inset(0));
+    mask: var(--matte-4);
+    -webkit-mask: var(--matte-4);
+  }
+
+  40%, 47.9% {
+    clip-path: var(--wipe-to, inset(0));
+    mask: none; // the flicker back
+    -webkit-mask: none;
+  }
+
+  48%, 69.9% {
+    clip-path: var(--wipe-to, inset(0));
+    mask: var(--matte-2);
+    -webkit-mask: var(--matte-2);
+  }
+
+  70%, 89.9% {
+    clip-path: var(--wipe-from, inset(0 0 100% 0));
+    mask: var(--matte-1);
+    -webkit-mask: var(--matte-1);
+  }
+
+  90%, 100% {
+    clip-path: var(--wipe-from, inset(0 0 100% 0));
+    mask: var(--matte-1);
+    -webkit-mask: var(--matte-1);
+    opacity: 0;
+  }
+}
+
+// Dealt: each knob stamps onto the rail one tread after the last, in the order js/stage.js rolled
+// (--knob-i), from the roll's edge -- it lands oversized and off its mark, holds, snaps to place,
+// flickers once and settles, its plate coming through the ladder.
+.stage[data-dealing] .knob {
+  animation: knob-stamp var(--motion-medium) var(--ease-knob-stamp, var(--ease-stair)) both;
+  animation-delay: calc(var(--knob-i, 0) * var(--motion-stagger, 44ms) + var(--motion-short, 170ms));
+}
+
+@keyframes knob-stamp {
+  0%, 24.9% {
+    clip-path: var(--state-from, inset(0 100% 0 0));
+    mask: var(--matte-1);
+    -webkit-mask: var(--matte-1);
+    transform: translate(calc(var(--arrive-x, 0px) * 0.3), calc(var(--arrive-y, 28px) * 0.3)) scale(1.04);
+  }
+
+  25%, 44.9% {
+    clip-path: none;
+    mask: var(--matte-2);
+    -webkit-mask: var(--matte-2);
+    transform: translate(calc(var(--arrive-x, 0px) * 0.3), calc(var(--arrive-y, 28px) * 0.3)) scale(1.04);
+  }
+
+  45%, 64.9% {
+    clip-path: none;
+    mask: var(--matte-4);
+    -webkit-mask: var(--matte-4);
+    transform: scale(0.985);
+  }
+
+  65%, 72.9% {
+    clip-path: none;
+    mask: var(--matte-3); // the flicker
+    -webkit-mask: var(--matte-3);
+    transform: none;
+  }
+
+  73%, 100% {
+    clip-path: none;
+    mask: none;
+    -webkit-mask: none;
+    transform: none;
+  }
 }
 
 .knob-ask {
@@ -379,7 +1146,9 @@
   background: var(--md-sys-color-surface-container-low);
 }
 
-// The check mark a set knob earns, in the top right corner.
+// The seal a set knob earns, in the top right corner: a disc of rolled teeth (--seal-teeth) with
+// the check impressed in it, stamped like wax -- one frame oversized and off its mark, a hold, a
+// snap to size, a settle at the knob's own tilt (--seal-rot). Never a fade-in, never a pop.
 .knob-mark {
   position: absolute;
   top: 0.85rem;
@@ -387,13 +1156,10 @@
   width: 22px;
   height: 22px;
   border-radius: var(--md-sys-shape-corner-full);
-  background: var(--md-sys-color-primary);
+  background: repeating-conic-gradient(from var(--seal-rot, 3deg) at 50% 50%, var(--md-sys-color-primary) 0 calc(360deg / var(--seal-teeth, 8) * 0.6), color-mix(in oklab, var(--md-sys-color-primary) 72%, var(--md-sys-color-on-primary)) 0 calc(360deg / var(--seal-teeth, 8)));
   color: var(--md-sys-color-on-primary);
-  opacity: 0;
-  transform: scale(0.4) rotate(var(--arrive-rot, 0deg));
-  transition:
-    opacity var(--motion-short) var(--ease-flicker),
-    transform var(--motion-medium) var(--ease-arrive);
+  rotate: var(--seal-rot, 3deg);
+  visibility: hidden;
 }
 
 .knob-mark::after {
@@ -409,8 +1175,30 @@
 }
 
 .knob.is-set .knob-mark {
-  opacity: 1;
-  transform: none;
+  visibility: visible;
+  animation: seal-stamp var(--motion-medium) var(--ease-seal-stamp, var(--ease-stair)) both;
+}
+
+@keyframes seal-stamp {
+  0%, 27.9% {
+    transform: translate(calc(var(--arrive-x, 0px) * -0.2), calc(var(--arrive-y, 28px) * -0.25)) scale(1.7) rotate(calc(var(--seal-rot, 3deg) * 2));
+  }
+
+  28%, 49.9% {
+    transform: translate(calc(var(--arrive-x, 0px) * -0.2), calc(var(--arrive-y, 28px) * -0.25)) scale(1.7) rotate(calc(var(--seal-rot, 3deg) * 2));
+  }
+
+  50%, 69.9% {
+    transform: scale(1.15);
+  }
+
+  70%, 79.9% {
+    transform: scale(0.94) rotate(calc(var(--seal-rot, 3deg) * -1));
+  }
+
+  80%, 100% {
+    transform: none;
+  }
 }
 
 .segmented {
@@ -424,7 +1212,9 @@
   padding: 0.4rem 1rem;
 }
 
+// A toggle's texture is the seal's rings, so on reads as a stamp rather than a tint.
 .knob-toggle {
+  --matte-fill: repeating-radial-gradient(circle at 50% 50%, currentColor 0 1px, transparent 1px var(--screen-pitch, 5px));
   justify-self: start;
 }
 
@@ -451,13 +1241,55 @@
   -webkit-touch-callout: none;
 }
 
-// Held: filled, as a pressed toggle is; the bar under it says how long is left.
+// Held: a press into wax. The fill arrives in one cut (no colour tween under a finger), and the
+// surface is a generated grain that closes in as the bar fills -- a disc growing by the knob's own
+// quantised --knob-pct, so the rings follow the treads -- with the fill texture winding one notch
+// per tread (hold-wind, re-rolled each turn). Let go early and the button refuses in two hard cuts
+// (hold-refuse, asked for by js/stage.js) while the bar snaps back.
 .knob-hold.is-held {
-  background: var(--md-sys-color-primary);
+  background:
+    radial-gradient(circle at 50% 50%, color-mix(in oklab, var(--md-sys-color-on-primary) 16%, transparent) 0 var(--knob-pct), transparent 0)
+    var(--md-sys-color-primary);
   color: var(--md-sys-color-on-primary);
+  transition: none;
 }
 
-// A bar the piece (or the hold) fills: a tap's progress, a timed phase.
+.knob-hold.is-held::before {
+  opacity: var(--fill-opacity, 0.22);
+  animation: hold-wind var(--motion-medium) var(--ease-hold-wind, var(--ease-drift)) infinite;
+}
+
+@keyframes hold-wind {
+  0%, 32.9% { background-position: 0 0; }
+  33%, 65.9% { background-position: 3px 1px; }
+  66%, 100% { background-position: 6px 2px; }
+}
+
+.knob-hold.is-refusing {
+  animation: hold-refuse var(--motion-short) var(--ease-hold-refuse, var(--ease-flicker)) both;
+}
+
+@keyframes hold-refuse {
+  0%, 39.9% {
+    transform: translateX(calc(var(--shake-x, 6px) * -0.5));
+    filter: contrast(1.3);
+  }
+
+  40%, 69.9% {
+    transform: translateX(calc(var(--shake-x, 6px) * 0.4));
+    filter: none;
+  }
+
+  70%, 100% {
+    transform: none;
+    filter: none;
+  }
+}
+
+// A bar the piece (or the hold) fills: a tap's progress, a timed phase. It is a film reel: the
+// fill advances in the knob's own treads (js/stage.js snaps every write to them) along the stair,
+// its surface a sprocket of stripes at the knob's own pitch, and the last tread lands with a
+// flicker (reel-land).
 .knob-bar {
   display: block;
   height: 8px;
@@ -472,9 +1304,65 @@
   width: var(--knob-pct);
   height: 100%;
   border-radius: inherit;
+  background: repeating-linear-gradient(90deg, var(--md-sys-color-primary) 0 var(--bar-pitch, 7px), color-mix(in oklab, var(--md-sys-color-primary) 55%, transparent) var(--bar-pitch, 7px) calc(var(--bar-pitch, 7px) + 2px));
+  transition: width var(--motion-short) var(--ease-stair);
+}
+
+.knob.is-set .knob-bar::before {
+  animation: reel-land var(--motion-short) var(--ease-reel-land, var(--ease-flicker)) both;
+}
+
+@keyframes reel-land {
+  0%, 29.9% {
+    filter: brightness(1.6);
+  }
+
+  30%, 54.9% {
+    filter: none;
+  }
+
+  55%, 74.9% {
+    filter: brightness(1.4);
+  }
+
+  75%, 100% {
+    filter: none;
+  }
+}
+
+// A press knob's notches: one small seal per press, stamped out under the button and punched in a
+// cut with a one-frame oversize as each press lands.
+.knob-notches {
+  display: flex;
+  gap: 0.35rem;
+}
+
+.knob-notches i {
+  display: block;
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  background: var(--md-sys-color-outline-variant);
+  transform: rotate(45deg);
+}
+
+.knob-notches i[data-done] {
   background: var(--md-sys-color-primary);
-  // A bar fills in the rolled steps of the shift family: a meter that creeps, catches and jumps.
-  transition: width var(--motion-short) var(--ease-shift);
+  animation: notch-punch var(--motion-short) var(--ease-notch-punch, var(--ease-flicker)) both;
+}
+
+@keyframes notch-punch {
+  0%, 39.9% {
+    transform: rotate(45deg) scale(1.9);
+  }
+
+  40%, 64.9% {
+    transform: rotate(calc(45deg + var(--seal-rot, 3deg) * 3)) scale(0.8);
+  }
+
+  65%, 100% {
+    transform: rotate(45deg);
+  }
 }
 
 .knob-alt {
@@ -489,7 +1377,9 @@
   @include type.scale(body-small);
 }
 
-// A number: a stepper either side of a short field, all three 44px targets.
+// A number: a stepper either side of a short field, all three 44px targets. The field's digits
+// ratchet when the stage writes them (count-ratchet, asked for by js/stage.js: three treads of
+// travel and a flicker of the rule), never when the visitor types.
 .knob-number {
   display: flex;
   align-items: center;
@@ -516,6 +1406,7 @@
   text-align: center;
   -moz-appearance: textfield;
   @include type.scale(title-medium);
+  transition: border-color var(--motion-short) var(--ease-stair);
 }
 
 .knob-count::-webkit-outer-spin-button,
@@ -530,6 +1421,31 @@
   border-color: var(--md-sys-color-primary);
 }
 
+.knob-count.is-ratcheting {
+  animation: count-ratchet var(--motion-short) var(--ease-count-ratchet, var(--ease-stair)) both;
+}
+
+@keyframes count-ratchet {
+  0%, 29.9% {
+    transform: translateY(-0.35em);
+    border-color: var(--md-sys-color-primary);
+  }
+
+  30%, 54.9% {
+    transform: translateY(0.18em);
+    border-color: var(--md-sys-color-outline);
+  }
+
+  55%, 74.9% {
+    transform: translateY(-0.06em);
+    border-color: var(--md-sys-color-primary);
+  }
+
+  75%, 100% {
+    transform: none;
+  }
+}
+
 // A word: the text field, with the letters shown as the answer will be read.
 .knob-word {
   min-height: 48px;
@@ -540,7 +1456,10 @@
   text-transform: uppercase;
 }
 
-// An order: one row per item, its name and two small moves beside it.
+// An order: one row per item, its name and two small moves beside it. A move is a swap in a step
+// series: the two rows that changed places are handed the distance back to where they were (--dy,
+// js/stage.js) and step from there to here in treads with one slip (row-swap); the displaced row
+// takes a scanline for one tread.
 .knob-order {
   display: grid;
   gap: 0.35rem;
@@ -570,6 +1489,37 @@
   @include type.scale(label-large);
 }
 
+.knob-order-item[data-flip] {
+  animation: row-swap var(--motion-medium) var(--ease-row-swap, var(--ease-stair)) both;
+}
+
+.knob-order-item[data-flip='displaced'] {
+  background-image: repeating-linear-gradient(0deg, transparent 0 2px, color-mix(in oklab, var(--md-sys-color-primary) 14%, transparent) 2px 3px);
+}
+
+@keyframes row-swap {
+  0%, 24.9% {
+    transform: translateY(var(--dy, 0px));
+  }
+
+  25%, 49.9% {
+    transform: translateY(calc(var(--dy, 0px) * 0.45));
+  }
+
+  50%, 59.9% {
+    transform: translateY(calc(var(--dy, 0px) * 0.6)); // the slip
+  }
+
+  60%, 79.9% {
+    transform: translateY(calc(var(--dy, 0px) * 0.12));
+  }
+
+  80%, 100% {
+    transform: none;
+    background-image: none;
+  }
+}
+
 .knob-order-label {
   flex: 1 1 auto;
 }
@@ -581,13 +1531,21 @@
   padding: 0;
 }
 
-// A pick: chips that press in, as a choice's buttons do.
+// A pick: chips that press in, as a choice's buttons do, pinned with a stipple and an inset ring.
+.knob-pick {
+  --matte-fill: radial-gradient(currentColor 1px, transparent 1.6px);
+  --matte-fill-size: var(--screen-pitch, 5px) var(--screen-pitch, 5px);
+}
+
 .knob-pick button[aria-pressed='true'] {
   box-shadow: inset 0 0 0 2px var(--md-sys-color-on-primary);
 }
 
 // A grid: square cells, as many across as the knob says, each a pressable state. The cells are
-// sized to the rail so a ten-wide grid still fits a phone, and never under 32px.
+// sized to the rail so a ten-wide grid still fits a phone, and never under 32px. Each state is a
+// texture and not a solid -- 1 a hatch at the knob's angle, 2 a dot screen, 3 to 5 scanlines of
+// rising density, the number readable as the pattern -- and a cell flips state in one cut with a
+// one-frame oversize (cell-flip and cell-flip-b alternate, so every flip restarts).
 .knob-grid {
   --grid-cols: 3;
   display: grid;
@@ -607,11 +1565,14 @@
 }
 
 .knob-cell[data-state='1'] {
+  --matte-fill: repeating-linear-gradient(var(--hatch-angle, 35deg), currentColor 0 1px, transparent 1px 4px);
   background: var(--md-sys-color-primary);
   color: var(--md-sys-color-on-primary);
 }
 
 .knob-cell[data-state='2'] {
+  --matte-fill: radial-gradient(currentColor 1px, transparent 1.5px);
+  --matte-fill-size: 4px 4px;
   background: var(--md-sys-color-tertiary);
   color: var(--md-sys-color-on-tertiary);
 }
@@ -619,12 +1580,72 @@
 .knob-cell[data-state='3'],
 .knob-cell[data-state='4'],
 .knob-cell[data-state='5'] {
+  --matte-fill: repeating-linear-gradient(90deg, currentColor 0 1px, transparent 1px 5px);
   background: var(--md-sys-color-secondary);
   color: var(--md-sys-color-on-secondary);
 }
 
-// The check and the score beside it. One filled button: the one thing in the rail that finishes
-// a piece, dim until there is a whole answer to check.
+.knob-cell[data-state='4'] {
+  --matte-fill: repeating-linear-gradient(90deg, currentColor 0 1px, transparent 1px 3px);
+}
+
+.knob-cell[data-state='5'] {
+  --matte-fill: repeating-linear-gradient(90deg, currentColor 0 1px, transparent 1px 2px);
+}
+
+// A textured cell shows its texture: the fill layer every control has, at the fill's opacity.
+.knob-cell[data-state='1']::before,
+.knob-cell[data-state='2']::before,
+.knob-cell[data-state='3']::before,
+.knob-cell[data-state='4']::before,
+.knob-cell[data-state='5']::before {
+  opacity: var(--fill-opacity, 0.22);
+}
+
+.knob-cell[data-flip='a'] {
+  animation: cell-flip var(--motion-short) var(--ease-cell-flip, var(--ease-flicker)) both;
+}
+
+.knob-cell[data-flip='b'] {
+  animation: cell-flip-b var(--motion-short) var(--ease-cell-flip-b, var(--ease-flicker)) both;
+}
+
+@keyframes cell-flip {
+  0%, 44.9% {
+    transform: scale(1.14) rotate(var(--seal-rot, 3deg));
+  }
+
+  45%, 69.9% {
+    transform: scale(0.96);
+  }
+
+  70%, 100% {
+    transform: none;
+  }
+}
+
+@keyframes cell-flip-b {
+  0%, 39.9% {
+    transform: scale(1.12) rotate(calc(var(--seal-rot, 3deg) * -1));
+  }
+
+  40%, 64.9% {
+    transform: scale(0.97);
+  }
+
+  65%, 100% {
+    transform: none;
+  }
+}
+
+// ---- the check and the score ------------------------------------------------------------------
+// One filled button: the one thing in the rail that finishes a piece, unlit until there is a whole
+// answer to check. Unlit is not grey but an unlit plate -- the surface with a faint dot screen --
+// and lit is struck like a lamp: the primary comes through the roll's wipe shape in three treads
+// and flickers twice in hard cuts (check-strike) before it holds; the word on it lands by the glyph
+// rite. A wrong answer refuses: the row jolts in hard treads (stage-no, stage-no-b: the two
+// alternate off data-try-parity so every refusal replays and differs), a cross-hatch static is laid
+// over the lamp for two cuts (check-refuse, check-refuse-b) and the plate twitches once.
 .stage-check-row {
   display: flex;
   flex-wrap: wrap;
@@ -637,37 +1658,181 @@
   min-height: 48px;
 }
 
+.stage-check:disabled {
+  background:
+    radial-gradient(color-mix(in oklab, var(--md-sys-color-on-surface) 10%, transparent) 0.8px, transparent 1.3px) 0 0 / var(--screen-pitch, 5px) var(--screen-pitch, 5px)
+    var(--md-sys-color-surface-container-low);
+  color: color-mix(in oklab, var(--md-sys-color-on-surface) 45%, transparent);
+}
+
+.stage-check:enabled {
+  animation: check-strike var(--motion-medium) var(--ease-check-strike, var(--ease-stair)) both;
+}
+
+// The press stamps the lit lamp like any control (the stamp is _controls.scss's).
+.stage-check.is-stamping:enabled {
+  animation: rite-stamp var(--motion-short) var(--ease-rite-stamp, var(--ease-flicker)) both;
+}
+
+@keyframes check-strike {
+  0%, 17.9% {
+    clip-path: var(--wipe-from, inset(0 0 100% 0));
+    filter: brightness(1.5);
+  }
+
+  18%, 37.9% {
+    clip-path: inset(0 0 40% 0);
+    filter: none;
+  }
+
+  38%, 44.9% {
+    clip-path: var(--wipe-from, inset(0 0 100% 0)); // the first flicker
+    filter: brightness(0.7);
+  }
+
+  45%, 64.9% {
+    clip-path: var(--wipe-to, inset(0));
+    filter: brightness(1.3);
+  }
+
+  65%, 71.9% {
+    clip-path: var(--wipe-to, inset(0));
+    filter: brightness(0.75); // the second
+  }
+
+  72%, 100% {
+    clip-path: none;
+    filter: none;
+  }
+}
+
+.stage[data-verdict='wrong'][data-try-parity='a'] .stage-check-row {
+  animation: stage-no 360ms var(--ease-stage-no, var(--ease-flicker)) both;
+}
+
+.stage[data-verdict='wrong'][data-try-parity='b'] .stage-check-row {
+  animation: stage-no-b 360ms var(--ease-stage-no-b, var(--ease-flicker)) both;
+}
+
+// The jolt: a snap, a hold, a snap the other way, a hold, a settle -- never a slide.
+@keyframes stage-no {
+  0%, 19.9% {
+    transform: translateX(calc(var(--shake-x, 6px) * -1)) skewX(-3deg);
+  }
+
+  20%, 44.9% {
+    transform: translateX(calc(var(--shake-x, 6px) * 0.8));
+  }
+
+  45%, 64.9% {
+    transform: translateX(calc(var(--shake-x, 6px) * -0.5));
+  }
+
+  65%, 79.9% {
+    transform: translateX(calc(var(--shake-x, 6px) * 0.25));
+  }
+
+  80%, 100% {
+    transform: none;
+  }
+}
+
+@keyframes stage-no-b {
+  0%, 24.9% {
+    transform: translateX(var(--shake-x, 6px)) skewX(3deg);
+  }
+
+  25%, 39.9% {
+    transform: translateX(calc(var(--shake-x, 6px) * -0.9));
+  }
+
+  40%, 59.9% {
+    transform: translateX(calc(var(--shake-x, 6px) * 0.4));
+  }
+
+  60%, 100% {
+    transform: none;
+  }
+}
+
+.stage[data-verdict='wrong'][data-try-parity='a'] .stage-check {
+  animation: check-refuse var(--motion-short) var(--ease-check-refuse, var(--ease-flicker)) both;
+}
+
+.stage[data-verdict='wrong'][data-try-parity='b'] .stage-check {
+  animation: check-refuse-b var(--motion-short) var(--ease-check-refuse-b, var(--ease-flicker)) both;
+}
+
+@keyframes check-refuse {
+  0%, 39.9% {
+    background-image: repeating-linear-gradient(45deg, var(--md-sys-color-on-primary) 0 1px, transparent 1px 4px);
+    filter: contrast(1.3);
+  }
+
+  40%, 59.9% {
+    background-image: none;
+    filter: none;
+  }
+
+  60%, 79.9% {
+    background-image: repeating-linear-gradient(-45deg, var(--md-sys-color-on-primary) 0 1px, transparent 1px 4px);
+    filter: contrast(1.3);
+  }
+
+  80%, 100% {
+    background-image: none;
+    filter: none;
+  }
+}
+
+@keyframes check-refuse-b {
+  0%, 29.9% {
+    background-image: repeating-linear-gradient(-45deg, var(--md-sys-color-on-primary) 0 1px, transparent 1px 3px);
+    filter: contrast(1.3) brightness(0.9);
+  }
+
+  30%, 49.9% {
+    background-image: none;
+    filter: none;
+  }
+
+  50%, 69.9% {
+    background-image: repeating-linear-gradient(45deg, var(--md-sys-color-on-primary) 0 1px, transparent 1px 3px);
+    filter: contrast(1.3);
+  }
+
+  70%, 100% {
+    background-image: none;
+    filter: none;
+  }
+}
+
+.stage[data-verdict='wrong'] .stage-scene {
+  animation: plate-twitch var(--motion-short) var(--ease-plate-twitch, var(--ease-flicker)) both;
+}
+
+@keyframes plate-twitch {
+  0%, 44.9% {
+    transform: translateX(2px);
+  }
+
+  45%, 100% {
+    transform: none;
+  }
+}
+
 .stage-tries {
   margin: 0;
   color: var(--md-sys-color-on-surface-variant);
   @include type.scale(label-large);
+  animation: line-develop var(--motion-medium) var(--ease-line-develop, var(--ease-stair)) both;
 }
 
-// A wrong answer: the row shakes its head once, as far as the roll says (--shake-x) and along a
-// curve rolled for this refusal, and the live line says what the piece said.
-.stage[data-verdict='wrong'] .stage-check-row {
-  animation: stage-no 360ms var(--ease-stage-no, var(--ease-flicker)) both;
-}
-
-@keyframes stage-no {
-  0%,
-  100% {
-    transform: none;
-  }
-
-  25% {
-    transform: translateX(calc(var(--shake-x, 6px) * -1));
-  }
-
-  55% {
-    transform: translateX(calc(var(--shake-x, 6px) * 0.8));
-  }
-
-  80% {
-    transform: translateX(calc(var(--shake-x, 6px) * -0.5));
-  }
-}
-
+// The live lines: the status, the wanted line and the tries are written whole by js/stage.js (a
+// screen reader hears the line) and typed in by the stylesheet -- the line comes through the
+// ladder from the roll's edge with a sigil cursor block after it that blinks at the cuts
+// (line-said and line-said-b alternate off data-said so each new line restarts) -- and their first
+// appearance develops (line-develop).
 .stage-status {
   margin: 0;
   min-height: 1.5em;
@@ -682,8 +1847,164 @@
   margin: 0;
   color: var(--md-sys-color-secondary);
   @include type.scale(label-large);
+  animation: line-develop var(--motion-medium) var(--ease-line-develop, var(--ease-stair)) both;
 }
 
+.stage-status[data-said='a'],
+.stage-wanted[data-said='a'],
+.stage-tries[data-said='a'] {
+  animation: line-said var(--motion-medium) var(--ease-line-said, var(--ease-stair)) both;
+}
+
+.stage-status[data-said='b'],
+.stage-wanted[data-said='b'],
+.stage-tries[data-said='b'] {
+  animation: line-said-b var(--motion-medium) var(--ease-line-said-b, var(--ease-stair)) both;
+}
+
+.stage-status[data-said]::after,
+.stage-wanted[data-said]::after,
+.stage-tries[data-said]::after {
+  content: '\25AE' / '';
+  margin-left: 0.15em;
+  color: var(--md-sys-color-tertiary);
+  visibility: hidden;
+}
+
+.stage-status[data-said='a']::after,
+.stage-wanted[data-said='a']::after,
+.stage-tries[data-said='a']::after {
+  animation: cursor-blink var(--motion-medium) var(--ease-cursor-blink, var(--ease-flicker)) both;
+}
+
+.stage-status[data-said='b']::after,
+.stage-wanted[data-said='b']::after,
+.stage-tries[data-said='b']::after {
+  animation: cursor-blink-b var(--motion-medium) var(--ease-cursor-blink-b, var(--ease-flicker)) both;
+}
+
+@keyframes line-said {
+  0%, 17.9% {
+    clip-path: inset(0 82% 0 0);
+    mask: var(--matte-2);
+    -webkit-mask: var(--matte-2);
+    letter-spacing: 0.04em;
+  }
+
+  18%, 37.9% {
+    clip-path: inset(0 55% 0 0);
+    mask: var(--matte-3);
+    -webkit-mask: var(--matte-3);
+    letter-spacing: 0.03em;
+  }
+
+  38%, 57.9% {
+    clip-path: inset(0 30% 0 0);
+    mask: var(--matte-4);
+    -webkit-mask: var(--matte-4);
+    letter-spacing: 0.02em;
+  }
+
+  58%, 77.9% {
+    clip-path: inset(0 8% 0 0);
+    mask: var(--matte-5);
+    -webkit-mask: var(--matte-5);
+    letter-spacing: 0.01em;
+  }
+
+  78%, 100% {
+    clip-path: none;
+    mask: none;
+    -webkit-mask: none;
+    letter-spacing: normal;
+  }
+}
+
+@keyframes line-said-b {
+  0%, 21.9% {
+    clip-path: inset(0 70% 0 0);
+    mask: var(--matte-1);
+    -webkit-mask: var(--matte-1);
+    letter-spacing: 0.05em;
+  }
+
+  22%, 45.9% {
+    clip-path: inset(0 40% 0 0);
+    mask: var(--matte-3);
+    -webkit-mask: var(--matte-3);
+    letter-spacing: 0.02em;
+  }
+
+  46%, 53.9% {
+    clip-path: inset(0 60% 0 0); // the slip back
+    mask: var(--matte-2);
+    -webkit-mask: var(--matte-2);
+    letter-spacing: 0.03em;
+  }
+
+  54%, 79.9% {
+    clip-path: inset(0 12% 0 0);
+    mask: var(--matte-5);
+    -webkit-mask: var(--matte-5);
+    letter-spacing: 0.01em;
+  }
+
+  80%, 100% {
+    clip-path: none;
+    mask: none;
+    -webkit-mask: none;
+    letter-spacing: normal;
+  }
+}
+
+@keyframes cursor-blink {
+  0%, 29.9% { visibility: visible; }
+  30%, 44.9% { visibility: hidden; }
+  45%, 69.9% { visibility: visible; }
+  70%, 100% { visibility: hidden; }
+}
+
+@keyframes cursor-blink-b {
+  0%, 19.9% { visibility: hidden; }
+  20%, 49.9% { visibility: visible; }
+  50%, 59.9% { visibility: hidden; }
+  60%, 84.9% { visibility: visible; }
+  85%, 100% { visibility: hidden; }
+}
+
+// A line appearing (the tries, the wanted line, the goal, the sigil, the reading): through the
+// ladder from the roll's edge, lifted by the roll, in treads.
+@keyframes line-develop {
+  0%, 24.9% {
+    clip-path: var(--state-from, inset(0 100% 0 0));
+    mask: var(--matte-2);
+    -webkit-mask: var(--matte-2);
+    transform: translateY(calc(var(--lift-y, -2px) * -2));
+  }
+
+  25%, 49.9% {
+    clip-path: none;
+    mask: var(--matte-3);
+    -webkit-mask: var(--matte-3);
+    transform: translateY(calc(var(--lift-y, -2px) * -1));
+  }
+
+  50%, 74.9% {
+    clip-path: none;
+    mask: var(--matte-4);
+    -webkit-mask: var(--matte-4);
+    transform: none;
+  }
+
+  75%, 100% {
+    clip-path: none;
+    mask: none;
+    -webkit-mask: none;
+    transform: none;
+  }
+}
+
+// ---- the foot: the seals and the done chip ------------------------------------------------------
 .stage-foot {
   display: flex;
   align-items: center;
@@ -714,14 +2035,74 @@
   margin-left: -0.75rem;
 }
 
+// The dots are the working's seals (their size and diamond are _rite.scss's). They persist for the
+// piece and light in place: a seal struck lights in a stair -- oversized for one cut, tilted, its
+// glow blinking on in two cuts -- and on a finish the ones still dark light one tread after another
+// in the order js/stage.js rolled (--dot-i). A lit seal is cross-hatched, not flat. On the deal
+// they stamp in one by one; under the vanish and in the ghost they are struck out one by one.
 .stage-dot {
-  // Its size and its diamond are the seal's (_rite.scss); this is only its colour.
   background: var(--md-sys-color-outline-variant);
-  transition: background-color var(--motion-short) var(--ease-flicker);
+  transition: background-color var(--motion-short) var(--ease-stair);
 }
 
 .stage-dot.is-set {
-  background: var(--md-sys-color-primary);
+  background:
+    repeating-linear-gradient(45deg, transparent 0 1px, color-mix(in oklab, var(--md-sys-color-on-primary) 35%, transparent) 1px 2px)
+    var(--md-sys-color-primary);
+  animation: seal-light var(--motion-medium) var(--ease-seal-light, var(--ease-stair)) both;
+  animation-delay: calc(var(--dot-i, 0) * var(--motion-stagger, 44ms) * 1.5);
+}
+
+.stage[data-dealing] .stage-dot {
+  animation: seal-light var(--motion-medium) var(--ease-seal-light, var(--ease-stair)) both;
+  animation-delay: calc(var(--dot-i, 0) * var(--motion-stagger, 44ms) + var(--motion-medium, 340ms));
+}
+
+.stage[data-mode='vanishing'] .stage-dot,
+.stage[data-mode='vanishing'] .stage-done {
+  animation: seal-strike var(--motion-short) var(--ease-seal-strike, var(--ease-leave)) both;
+  animation-delay: calc(var(--dot-i, 0) * var(--motion-stagger, 44ms));
+}
+
+@keyframes seal-light {
+  0%, 24.9% {
+    transform: rotate(45deg) scale(1.8);
+    box-shadow: none;
+  }
+
+  25%, 49.9% {
+    transform: rotate(calc(45deg + var(--seal-rot, 3deg) * 2)) scale(1.8);
+    box-shadow: 0 0 8px color-mix(in oklab, var(--md-sys-color-primary) 55%, transparent);
+  }
+
+  50%, 64.9% {
+    transform: rotate(45deg) scale(0.9);
+    box-shadow: none;
+  }
+
+  65%, 100% {
+    transform: rotate(45deg);
+    box-shadow: 0 0 8px color-mix(in oklab, var(--md-sys-color-primary) 55%, transparent);
+  }
+}
+
+@keyframes seal-strike {
+  0%, 34.9% {
+    transform: rotate(45deg) scale(1.5);
+  }
+
+  35%, 59.9% {
+    transform: rotate(45deg) scale(0.6);
+  }
+
+  60%, 69.9% {
+    transform: rotate(45deg); // the refusal
+  }
+
+  70%, 100% {
+    transform: rotate(45deg) scale(0);
+    visibility: hidden;
+  }
 }
 
 // Done, said where the progress is already said: one chip at the end of the dots' row, the last dot
@@ -729,16 +2110,41 @@
 // anything, so there is no corner of the picture it can take and nothing of the piece's finale it
 // can stand on -- and the piece under it is still live, which is the whole point of moving it here.
 // The scene it used to cover is the content; a mark that reports on content does not sit on it.
+// It is the seal of the ceremony, stamped like wax (stage-pop, in hard treads: dropped in large at
+// a rolled tilt, held, snapped, settled) over an ink splat that dries in two cuts (::before,
+// ink-dry), its surface a hatch and its disc a ring of rolled teeth, the word landing by the glyph
+// rite. Every solve stamps differently: js/stage.js rolls the tilt and the teeth for each.
 .stage-done {
+  position: relative;
+  isolation: isolate;
   display: flex;
   align-items: center;
   gap: 0.4rem;
   margin: 0;
   padding: 0.2rem 0.65rem 0.2rem 0.25rem;
   border-radius: var(--md-sys-shape-corner-full);
-  background: var(--md-sys-color-secondary-container);
+  background:
+    repeating-linear-gradient(var(--hatch-angle, 35deg), transparent 0 3px, color-mix(in oklab, var(--md-sys-color-primary) 9%, transparent) 3px 4px)
+    var(--md-sys-color-secondary-container);
   color: var(--md-sys-color-on-secondary-container);
-  animation: stage-pop 420ms var(--ease-stage-pop, var(--ease-arrive)) both;
+  rotate: var(--seal-rot, -3deg);
+  animation: stage-pop var(--motion-long) var(--ease-stage-pop, var(--ease-arrive)) both;
+}
+
+.stage-done::before {
+  content: '';
+  position: absolute;
+  inset: -40% -18%;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 18% 60%, color-mix(in oklab, var(--md-sys-color-primary) 30%, transparent) 0 9%, transparent 0),
+    radial-gradient(circle at 70% 20%, color-mix(in oklab, var(--md-sys-color-primary) 26%, transparent) 0 7%, transparent 0),
+    radial-gradient(circle at 88% 70%, color-mix(in oklab, var(--md-sys-color-primary) 30%, transparent) 0 6%, transparent 0),
+    radial-gradient(circle at 40% 85%, color-mix(in oklab, var(--md-sys-color-primary) 22%, transparent) 0 8%, transparent 0),
+    radial-gradient(circle at 55% 45%, color-mix(in oklab, var(--md-sys-color-primary) 18%, transparent) 0 14%, transparent 0),
+    radial-gradient(circle at 8% 25%, color-mix(in oklab, var(--md-sys-color-primary) 24%, transparent) 0 5%, transparent 0);
+  animation: ink-dry var(--motion-long) var(--ease-ink-dry, var(--ease-stair)) both;
 }
 
 // The same check mark a set knob earns, at the same size: the dots say how many knobs are set and
@@ -749,7 +2155,7 @@
   width: 22px;
   height: 22px;
   border-radius: var(--md-sys-shape-corner-full);
-  background: var(--md-sys-color-primary);
+  background: repeating-conic-gradient(from var(--seal-rot, -3deg) at 50% 50%, var(--md-sys-color-primary) 0 calc(360deg / var(--seal-teeth, 8) * 0.6), color-mix(in oklab, var(--md-sys-color-primary) 72%, var(--md-sys-color-on-primary)) 0 calc(360deg / var(--seal-teeth, 8)));
   color: var(--md-sys-color-on-primary);
 }
 
@@ -762,21 +2168,51 @@
   @include type.scale(label-large);
 }
 
-// The seal steps forward, past its size by as much as the roll says (--pop-over) and back.
+// The seal dropped: large and tilted in one cut, held, snapped to size, over by as much as the roll
+// says (--pop-over) and back.
 @keyframes stage-pop {
-  0% {
-    opacity: 0;
-    transform: scale(0.4) rotate(var(--arrive-rot, 0deg));
+  0%, 19.9% {
+    transform: translate(calc(var(--arrive-x, 0px) * -0.25), calc(var(--arrive-y, 28px) * -0.4)) scale(1.7) rotate(calc(var(--seal-rot, -3deg) * 3));
   }
 
-  65% {
-    opacity: 1;
+  20%, 39.9% {
+    transform: translate(calc(var(--arrive-x, 0px) * -0.25), calc(var(--arrive-y, 28px) * -0.4)) scale(1.7) rotate(calc(var(--seal-rot, -3deg) * 3));
+  }
+
+  40%, 59.9% {
     transform: scale(var(--pop-over, 1.1));
   }
 
-  100% {
-    opacity: 1;
-    transform: scale(1);
+  60%, 72.9% {
+    transform: scale(0.94) rotate(calc(var(--seal-rot, -3deg) * -1));
+  }
+
+  73%, 100% {
+    transform: none;
+  }
+}
+
+@keyframes ink-dry {
+  0%, 34.9% {
+    visibility: hidden;
+  }
+
+  35%, 59.9% {
+    visibility: visible;
+    mask: none;
+    -webkit-mask: none;
+  }
+
+  60%, 84.9% {
+    visibility: visible;
+    mask: var(--matte-3);
+    -webkit-mask: var(--matte-3);
+  }
+
+  85%, 100% {
+    visibility: visible;
+    mask: var(--matte-1);
+    -webkit-mask: var(--matte-1);
   }
 }
 
@@ -796,7 +2232,10 @@
 // Dim for the whole piece and lit when it is over: `disabled` is the state, so the dimming is the
 // same treatment every disabled control on the site wears (_controls.scss), a keyboard cannot
 // reach it before there is anywhere to go, and js/stage.js has one flag to set rather than a
-// class to keep in step with it.
+// class to keep in step with it. Unlit it is an unlit lamp -- the dark plate with a faint dot
+// screen -- and lit it is struck: the primary comes through the roll's wipe shape in treads and
+// flickers twice in hard cuts (lamp-light), the shadow stamping on in one; the caret steps in
+// (caret-step). Dimming is one cut to unlit.
 .stage-next {
   position: fixed;
   right: var(--nav-inset);
@@ -817,13 +2256,87 @@
   height: 32px;
 }
 
-// Lit: the one filled control on the screen, raised off the page, with the mark stepping forward
-// the way the done mark pops over the scene.
+.stage-next:disabled {
+  background:
+    radial-gradient(color-mix(in oklab, var(--md-sys-color-on-surface) 12%, transparent) 0.8px, transparent 1.3px) 0 0 / var(--screen-pitch, 5px) var(--screen-pitch, 5px)
+    var(--md-sys-color-surface-container-low);
+  color: color-mix(in oklab, var(--md-sys-color-on-surface) 45%, transparent);
+}
+
+// Lit: the one filled control on the screen, raised off the page.
 .stage-next:enabled {
   background: var(--md-sys-color-primary);
   color: var(--md-sys-color-on-primary);
   box-shadow: var(--md-sys-elevation-level3);
-  animation: stage-pop 520ms var(--ease-stage-pop, var(--ease-arrive)) both;
+  animation: lamp-light var(--motion-medium) var(--ease-lamp-light, var(--ease-stair)) both;
+}
+
+.stage-next.is-stamping:enabled {
+  animation: rite-stamp var(--motion-short) var(--ease-rite-stamp, var(--ease-flicker)) both;
+}
+
+.stage-next:enabled .icon {
+  animation: caret-step var(--motion-medium) var(--ease-caret-step, var(--ease-stair)) both;
+}
+
+@keyframes lamp-light {
+  0%, 19.9% {
+    clip-path: var(--wipe-from, inset(0 0 100% 0));
+    box-shadow: none;
+    filter: brightness(1.4);
+  }
+
+  20%, 39.9% {
+    clip-path: inset(0 0 35% 0 round 50%);
+    box-shadow: none;
+    filter: none;
+  }
+
+  40%, 46.9% {
+    clip-path: var(--wipe-from, inset(0 0 100% 0)); // the first flicker
+    box-shadow: none;
+    filter: brightness(0.7);
+  }
+
+  47%, 66.9% {
+    clip-path: var(--wipe-to, inset(0));
+    box-shadow: none;
+    filter: brightness(1.25);
+  }
+
+  67%, 73.9% {
+    clip-path: var(--wipe-to, inset(0));
+    box-shadow: none;
+    filter: brightness(0.7); // the second
+  }
+
+  74%, 100% {
+    clip-path: none;
+    box-shadow: var(--md-sys-elevation-level3);
+    filter: none;
+  }
+}
+
+@keyframes caret-step {
+  0%, 46.9% {
+    transform: translateX(-6px);
+    visibility: hidden;
+  }
+
+  47%, 69.9% {
+    transform: translateX(-6px);
+    visibility: visible;
+  }
+
+  70%, 84.9% {
+    transform: translateX(2px);
+    visibility: visible;
+  }
+
+  85%, 100% {
+    transform: none;
+    visibility: visible;
+  }
 }
 
 .stage-next:enabled:focus-visible {
@@ -879,6 +2392,72 @@
 
 .threshold-probe .probe-big {
   min-height: 96px;
+}
+
+// The asking is the site's divination (js/stage.js thresholdStart, js/threshold.js), and nothing of
+// it cuts in: the ask -- the question and its controls, or the quiet invitation returning -- comes
+// through the ladder from the roll's edge, lifted by the roll (ask-in, played on every change of
+// mode that shows it), and the answer cards stamp onto it one tread after another in a scrambled
+// order (knob-stamp, the rail's own deal, off --knob-i), each from the roll's edge.
+.stage[data-mode='asking'] .stage-ask,
+.stage[data-mode='quiet'] .stage-ask {
+  animation: ask-in var(--motion-medium) var(--ease-ask-in, var(--ease-stair)) both;
+}
+
+.stage[data-mode='asking'] .threshold-probe .probe-option {
+  animation: knob-stamp var(--motion-medium) var(--ease-knob-stamp, var(--ease-stair)) both;
+  animation-delay: calc(var(--knob-i, 0) * var(--motion-stagger, 44ms) * 1.5 + var(--motion-short, 170ms));
+}
+
+.threshold-probe .probe-option:nth-child(1) { --knob-i: 2; }
+.threshold-probe .probe-option:nth-child(2) { --knob-i: 0; }
+.threshold-probe .probe-option:nth-child(3) { --knob-i: 3; }
+.threshold-probe .probe-option:nth-child(4) { --knob-i: 1; }
+.threshold-probe .probe-option:nth-child(5) { --knob-i: 4; }
+.threshold-probe .probe-option:nth-child(n + 6) { --knob-i: 5; }
+
+@keyframes ask-in {
+  0%, 22.9% {
+    clip-path: var(--state-from, inset(0 100% 0 0));
+    mask: var(--matte-1);
+    -webkit-mask: var(--matte-1);
+    transform: translateY(calc(var(--lift-y, -2px) * -3)) skewX(calc(var(--arrive-skew, 0deg) * 0.5));
+  }
+
+  23%, 44.9% {
+    clip-path: none;
+    mask: var(--matte-2);
+    -webkit-mask: var(--matte-2);
+    transform: translateY(calc(var(--lift-y, -2px) * -2));
+  }
+
+  45%, 51.9% {
+    clip-path: none;
+    mask: var(--matte-1); // the refusal
+    -webkit-mask: var(--matte-1);
+    transform: translateY(calc(var(--lift-y, -2px) * -2));
+  }
+
+  52%, 71.9% {
+    clip-path: none;
+    mask: var(--matte-3);
+    -webkit-mask: var(--matte-3);
+    transform: translateY(var(--lift-y, -2px));
+  }
+
+  72%, 87.9% {
+    clip-path: none;
+    mask: var(--matte-4);
+    -webkit-mask: var(--matte-4);
+    transform: none;
+  }
+
+  88%, 100% {
+    clip-path: none;
+    mask: none;
+    -webkit-mask: none;
+    transform: none;
+  }
 }
 
 // Unpowered: the scene waits dim behind the shared unlock box, which the helper puts before it.
@@ -955,21 +2534,99 @@
   }
 }
 
+// Less motion asked for: every rite above is stilled. What is set is set, what is lit is lit, what
+// arrives is there, and what leaves is gone; the textures stay, because a texture is a state and
+// not a movement. js/stage.js reads the same query and plays no ghost, no deal and no burst.
 @media (prefers-reduced-motion: reduce) {
-  .stage-inner,
-  .stage-body,
   .knob,
-  .knob-mark,
+  .knob-count,
   .knob-bar::before,
   .stage-dot {
     transition: none;
   }
 
   .stage[data-mode='arriving'] .stage-inner,
+  .stage[data-mode='vanishing'] .stage-inner,
+  .stage[data-dealing] .stage-head > *,
+  .stage-read,
+  .stage-sigil,
+  .stage-sigil::before,
+  .stage[data-mode='vanishing'] .stage-sigil,
+  .stage-goal,
+  .stage-goal-word,
+  .stage[data-mode='loading'] .stage-scene::before,
+  .stage[data-unmaking] .stage-scene::before,
+  .stage[data-mode='loading'] .stage-scene,
+  .stage[data-unmaking] .stage-scene,
+  .stage[data-dealing] .stage-scene::before,
+  .stage[data-dealing] .stage-canvas,
+  .stage[data-powered] .stage-scene::before,
+  .stage[data-reflow] .stage-canvas,
+  .stage-ghost .knob,
+  .stage-ghost .stage-dot,
+  .knob.is-set::before,
+  .knob[data-unwarding]::after,
+  .stage[data-dealing] .knob,
+  .knob.is-set .knob-mark,
+  .knob-hold.is-held::before,
+  .knob-hold.is-refusing,
+  .knob.is-set .knob-bar::before,
+  .knob-notches i[data-done],
+  .knob-count.is-ratcheting,
+  .knob-order-item[data-flip],
+  .knob-cell[data-flip='a'],
+  .knob-cell[data-flip='b'],
+  .stage-check:enabled,
+  .stage-check.is-stamping:enabled,
+  .stage[data-verdict='wrong'][data-try-parity='a'] .stage-check-row,
+  .stage[data-verdict='wrong'][data-try-parity='b'] .stage-check-row,
+  .stage[data-verdict='wrong'][data-try-parity='a'] .stage-check,
+  .stage[data-verdict='wrong'][data-try-parity='b'] .stage-check,
+  .stage[data-verdict='wrong'] .stage-scene,
+  .stage-tries,
+  .stage-wanted,
+  .stage-status[data-said='a'],
+  .stage-wanted[data-said='a'],
+  .stage-tries[data-said='a'],
+  .stage-status[data-said='b'],
+  .stage-wanted[data-said='b'],
+  .stage-tries[data-said='b'],
+  .stage-status[data-said='a']::after,
+  .stage-wanted[data-said='a']::after,
+  .stage-tries[data-said='a']::after,
+  .stage-status[data-said='b']::after,
+  .stage-wanted[data-said='b']::after,
+  .stage-tries[data-said='b']::after,
+  .stage-dot.is-set,
+  .stage[data-dealing] .stage-dot,
+  .stage[data-mode='vanishing'] .stage-dot,
+  .stage[data-mode='vanishing'] .stage-done,
   .stage-done,
-  .stage[data-verdict='wrong'] .stage-check-row,
-  .stage-next:enabled {
+  .stage-done::before,
+  .stage-next:enabled,
+  .stage-next.is-stamping:enabled,
+  .stage-next:enabled .icon,
+  .stage[data-turning='a'] .stage-inner::before,
+  .stage[data-turning='b'] .stage-inner::before,
+  .stage[data-mode='asking'] .stage-ask,
+  .stage[data-mode='quiet'] .stage-ask,
+  .stage[data-mode='asking'] .threshold-probe .probe-option {
     animation: none;
+  }
+
+  // The palette's veil is a movement and nothing else, so it is simply not there.
+  .stage[data-turning='a'] .stage-inner::before,
+  .stage[data-turning='b'] .stage-inner::before {
+    display: none;
+  }
+
+  // The veils are a movement, so they are simply not there; the ghost is swept at once.
+  .stage[data-mode='loading'] .stage-scene::before,
+  .stage[data-unmaking] .stage-scene::before,
+  .stage[data-dealing] .stage-scene::before,
+  .stage[data-powered] .stage-scene::before,
+  .stage-ghost {
+    display: none;
   }
 
   // The same answer as .is-still above, for a page whose script never read the query.

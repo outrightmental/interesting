@@ -104,8 +104,10 @@ a.action::after {
   z-index: -1;
   background: currentColor;
   opacity: 0;
-  mask: var(--matte-1);
-  -webkit-mask: var(--matte-1);
+  // Where the ladder is read from: a phase of the element's own (js/motion.js writes
+  // --matte-shift on each control it waxes), so no two controls in a row reveal alike.
+  mask-position: var(--matte-shift, 0 0);
+  -webkit-mask-position: var(--matte-shift, 0 0);
 }
 
 // Waxing: the state layer climbs the ladder and stays at the top while the pointer or the focus
@@ -116,22 +118,28 @@ button:hover::after,
 a.action:hover::after,
 button:focus-visible::after,
 a.action:focus-visible::after {
-  opacity: var(--state-opacity, var(--md-sys-state-hover-opacity));
-  mask: none;
-  -webkit-mask: none;
-  animation: matte-in var(--motion-medium) var(--ease-matte-in, var(--ease-stair)) both;
+  opacity: var(--state-opacity, 0.12);
+  mask: var(--matte-top);
+  -webkit-mask: var(--matte-top);
+  mask-position: var(--matte-shift, 0 0);
+  -webkit-mask-position: var(--matte-shift, 0 0);
+  // The rite js/motion.js composed for this one hover (--rite-wax), or the one below for a
+  // page with no script.
+  animation: var(--rite-wax, matte-in) var(--motion-matte-in, var(--motion-medium)) var(--ease-matte-in, var(--ease-stair)) both;
 }
 
 button:focus-visible::after,
 a.action:focus-visible::after {
-  --state-opacity: var(--md-sys-state-focus-opacity);
+  --state-opacity: 0.16;
 }
 
 // Waning: back down the ladder, and gone.
 button.is-waning::after,
 a.action.is-waning::after {
-  opacity: var(--md-sys-state-hover-opacity);
-  animation: matte-out var(--motion-medium) var(--ease-matte-out, var(--ease-stair)) both;
+  opacity: 0.12;
+  mask-position: var(--matte-shift, 0 0);
+  -webkit-mask-position: var(--matte-shift, 0 0);
+  animation: var(--rite-wane, matte-out) var(--motion-matte-out, var(--motion-medium)) var(--ease-matte-out, var(--ease-stair)) both;
 }
 
 // The stamp: a press is a dip in two cuts and a flash of the fill through the ladder, never a
@@ -140,14 +148,46 @@ button.is-stamping,
 a.action.is-stamping,
 button:active,
 a.action:active {
-  animation: rite-stamp var(--motion-short) var(--ease-rite-stamp, var(--ease-flicker)) both;
+  animation: var(--rite-stamp, rite-stamp) var(--motion-rite-stamp, var(--motion-short)) var(--ease-rite-stamp, var(--ease-flicker)) both;
 }
 
+// The ink: the pressed layer lands where the press was (--stamp-x/--stamp-y, written by
+// js/motion.js from the pointer) and spreads outward down the ladder from there, cut from the
+// edge the roll gave the state layer (--state-from), never a flat tint.
+button.is-stamping::after,
+a.action.is-stamping::after,
 button:active::after,
 a.action:active::after {
-  opacity: var(--md-sys-state-pressed-opacity);
-  mask: none;
-  -webkit-mask: none;
+  opacity: 0.2;
+  mask-position: var(--stamp-x, 50%) var(--stamp-y, 50%);
+  -webkit-mask-position: var(--stamp-x, 50%) var(--stamp-y, 50%);
+  animation: var(--rite-ink, stamp-ink) var(--motion-stamp-ink, var(--motion-short)) var(--ease-stamp-ink, var(--ease-flicker)) both;
+}
+
+@keyframes stamp-ink {
+  0%, 24.9% {
+    clip-path: var(--state-from, inset(0 50% 0 50%));
+    mask: var(--matte-2);
+    -webkit-mask: var(--matte-2);
+  }
+
+  25%, 54.9% {
+    clip-path: inset(0);
+    mask: var(--matte-4);
+    -webkit-mask: var(--matte-4);
+  }
+
+  55%, 79.9% {
+    clip-path: inset(0);
+    mask: var(--matte-top);
+    -webkit-mask: var(--matte-top);
+  }
+
+  80%, 100% {
+    clip-path: inset(0);
+    mask: var(--matte-3);
+    -webkit-mask: var(--matte-3);
+  }
 }
 
 // Set: filled, and sealed with the texture, which is what makes a set control unmistakable at a
@@ -174,12 +214,19 @@ button.is-sealing::before,
 a.action.is-sealing::before,
 .is-sealing > button::before {
   opacity: var(--fill-opacity, 0.22);
-  animation: rite-seal var(--motion-long) var(--ease-rite-seal, var(--ease-stair)) both;
+  animation: var(--rite-seal, rite-seal) var(--motion-rite-seal, var(--motion-long)) var(--ease-rite-seal, var(--ease-stair)) both;
 }
 
 button.is-unsealing::before,
 a.action.is-unsealing::before {
-  animation: rite-unseal var(--motion-medium) var(--ease-rite-unseal, var(--ease-stair)) both;
+  animation: var(--rite-unseal, rite-unseal) var(--motion-rite-unseal, var(--motion-medium)) var(--ease-rite-unseal, var(--ease-stair)) both;
+}
+
+// A page with no script: the texture arrives in treads on its own.
+button[aria-pressed='true']::before,
+[aria-selected='true']::before,
+[aria-checked='true']::before {
+  transition: opacity var(--motion-medium) var(--ease-stair);
 }
 
 .btn-filled:focus-visible,
@@ -249,15 +296,15 @@ button:disabled::before {
   }
 
   95%, 100% {
-    mask: none;
-    -webkit-mask: none;
+    mask: var(--matte-top);
+    -webkit-mask: var(--matte-top);
   }
 }
 
 @keyframes matte-out {
   0%, 24.9% {
-    mask: var(--matte-5);
-    -webkit-mask: var(--matte-5);
+    mask: var(--matte-top);
+    -webkit-mask: var(--matte-top);
   }
 
   25%, 49.9% {
@@ -315,16 +362,19 @@ button:disabled::before {
 // tread, and holds at the top.
 @keyframes rite-seal {
   0%, 17.9% {
+    clip-path: var(--state-from, inset(0 100% 0 0));
     mask: var(--matte-1);
     -webkit-mask: var(--matte-1);
   }
 
   18%, 35.9% {
+    clip-path: inset(0);
     mask: var(--matte-2);
     -webkit-mask: var(--matte-2);
   }
 
   36%, 55.9% {
+    clip-path: inset(0);
     mask: var(--matte-3);
     -webkit-mask: var(--matte-3);
   }
@@ -452,13 +502,16 @@ input[type='range']:focus-visible {
   border-radius: var(--md-sys-shape-corner-full);
 }
 
-// A slider being set stamps too: the thumb's halo widens in a cut and comes back.
-input[type='range'].is-stamping::-webkit-slider-thumb {
-  box-shadow: 0 0 0 9px var(--md-sys-color-surface-container);
+// A slider being set stamps too: the thumb's halo widens in a cut and comes back; released
+// (is-settling, written by js/site.js) the halo clicks to a ring of the primary and off.
+input[type='range'].is-stamping::-webkit-slider-thumb,
+input[type='range'].is-settling::-webkit-slider-thumb {
+  box-shadow: 0 0 0 9px var(--md-sys-color-surface-container), 0 0 0 10px var(--md-sys-color-primary);
 }
 
-input[type='range'].is-stamping::-moz-range-thumb {
-  box-shadow: 0 0 0 9px var(--md-sys-color-surface-container);
+input[type='range'].is-stamping::-moz-range-thumb,
+input[type='range'].is-settling::-moz-range-thumb {
+  box-shadow: 0 0 0 9px var(--md-sys-color-surface-container), 0 0 0 10px var(--md-sys-color-primary);
 }
 
 // The persona's difficulty: the one slider that says how hard every puzzle on the site comes out
@@ -547,8 +600,30 @@ input[type='text']:hover,
 input[type='search']:hover,
 textarea:hover {
   border-color: var(--md-sys-color-on-surface-variant);
-  background: color-mix(in oklab, var(--md-sys-color-on-surface) 4%, transparent);
+  background-color: color-mix(in oklab, var(--md-sys-color-on-surface) 4%, transparent);
+  // A field carries no pseudo-element to climb a ladder on, so its own texture arrives by its
+  // size in treads: the fill pattern, in its ink at 6%, stepped larger as the field is reached.
+  background-image: var(--matte-fill);
+  background-size: var(--matte-fill-size);
+  animation: field-wax var(--motion-field-wax, var(--motion-medium)) var(--ease-field-wax, var(--ease-stair)) both;
 }
+
+@keyframes field-wax {
+  0%, 32.9% {
+    background-image: none;
+  }
+
+  33%, 65.9% {
+    background-image: var(--matte-fill);
+    background-position: 0 0;
+  }
+
+  66%, 100% {
+    background-image: var(--matte-fill);
+    background-position: 2px 1px;
+  }
+}
+
 
 input[type='text']::placeholder,
 input[type='search']::placeholder,
@@ -733,5 +808,22 @@ a.action.warning:focus-visible {
   button.is-unsealing::before,
   a.action.is-unsealing::before {
     opacity: 0;
+  }
+
+  button.is-stamping::after,
+  a.action.is-stamping::after,
+  button:active::after,
+  a.action:active::after,
+  input[type='text'].is-waxing,
+  input[type='search'].is-waxing,
+  textarea.is-waxing,
+  input[type='text']:hover,
+  input[type='search']:hover,
+  textarea:hover,
+  button[aria-pressed='true']::before,
+  [aria-selected='true']::before,
+  [aria-checked='true']::before {
+    animation: none;
+    transition: none;
   }
 }

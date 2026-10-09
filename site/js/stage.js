@@ -427,6 +427,7 @@ const RISE_MS = 420; // the fade from it into the colour of the card just presse
 
 let featured = null; // the palette the site is wearing for the activity on the stage, once landed
 let fading = 0; // the crossfade in flight, so two picks in a row never fight over the seeds
+let turnParity = 'b'; // which of the two veil spells the last palette turn played, so the next restarts
 
 /* ---- the motion engine, where it is --------------------------------------------------------- */
 
@@ -479,6 +480,79 @@ function riteMs(name, fallback) {
 function riteTempo() {
   const tempo = motion && motion.temper ? Number(motion.temper.tempo) : 1;
   return Number.isFinite(tempo) && tempo > 0 ? tempo : 1;
+}
+
+/* ---- the text rites ------------------------------------------------------------------------ */
+
+/* Words on the stage are never swapped in: they are revealed (README: "Motion axiom"). The text is
+   written whole first -- the harnesses read textContent back the instant a call returns, and the
+   aria-live lines are read by a screen reader as one line -- and then, where the engine is on the
+   page, the engine wraps each glyph in a sigil for the length of the rite (motion.reveal, which
+   leaves textContent exactly the words throughout and unwraps after). The stub browser the stage
+   harness runs in has no engine, so there the words are simply there. */
+function reveal(node) {
+  if (!node || calm.matches || !motion || typeof motion.reveal !== 'function') return;
+  try {
+    motion.reveal(node);
+  } catch (e) {
+    /* the words are there, which is the whole of what matters */
+  }
+}
+
+// A line written and revealed, when it changed: the heading's words, a label, a count.
+function inscribe(node, text) {
+  if (!node) return;
+  const words = text == null ? '' : String(text);
+  if (node.textContent === words) return;
+  node.textContent = words;
+  if (words) reveal(node);
+}
+
+/* The live lines (the status, the wanted line, the tries) are typed in by the stylesheet rather
+   than by the engine: a piece may write its status every frame, and a rite that restarted every
+   frame would never land. The line is written whole and at once; data-said flips between two
+   values so the stylesheet's line-said / line-said-b restarts, and never more often than one beat
+   (--motion-medium), so a line rewritten under the rite is simply the new words landing under it. */
+const saidAt = new Map();
+
+function speak(node, text) {
+  if (!node) return;
+  const words = text == null ? '' : String(text);
+  if (node.textContent === words) return;
+  node.textContent = words;
+  if (!words || calm.matches) return;
+  const now = performance.now();
+  const last = saidAt.get(node) || { at: -1e9, parity: 'b' };
+  if (now - last.at < riteMs('medium', 340)) return;
+  const parity = last.parity === 'a' ? 'b' : 'a';
+  saidAt.set(node, { at: now, parity });
+  node.setAttribute('data-said', parity);
+}
+
+// A small roll of a thing's particulars (a seal's tilt and teeth, a hatch's angle), seeded, so the
+// same working wears the same seal twice and no two knobs on one rail wear the same one.
+function particulars(node, rnd) {
+  if (!node || !node.style) return;
+  node.style.setProperty('--seal-rot', ((rnd() - 0.5) * 9).toFixed(2) + 'deg');
+  node.style.setProperty('--seal-teeth', String(5 + Math.floor(rnd() * 7)));
+  node.style.setProperty('--hatch-angle', Math.round(rnd() * 180) + 'deg');
+  node.style.setProperty('--screen-pitch', (3 + Math.round(rnd() * 4)) + 'px');
+  node.style.setProperty('--ward-angle', Math.round(-60 + rnd() * 120) + 'deg');
+  node.style.setProperty('--bar-pitch', (5 + Math.round(rnd() * 6)) + 'px');
+  node.style.setProperty('--plate-angle', Math.round(-20 + rnd() * 40) + 'deg');
+}
+
+// A rolled order 0..n-1 for things that are dealt one tread each, so the deal differs every time.
+function dealOrder(n, rnd) {
+  const order = [];
+  for (let i = 0; i < n; i++) order.push(i);
+  for (let i = n - 1; i > 0; i--) {
+    const j = Math.floor(rnd() * (i + 1));
+    const held = order[i];
+    order[i] = order[j];
+    order[j] = held;
+  }
+  return order;
 }
 
 // The page scrolls along a rolled curve, or jumps: never along the browser's own smoothing.
@@ -543,38 +617,71 @@ function crossfade(from, to, done) {
   }
   // This turn's paint is still the colour the site was: the shift starts from there.
   writeSeeds(from);
+  // The old ground is torn off the piece (README: "Motion axiom"): where the ground seed changes,
+  // a veil the colour it was is laid over the inner and eaten down the ladder in bites (veil-tear
+  // and veil-tear-b alternate, _sass/_stage.scss) while the seeds jump through their treads under
+  // it, so the new palette arrives as shards and never as a wash. The stub records the strings.
+  if (stage && stage.dataset && stage.style && from.bg !== to.bg) {
+    stage.style.setProperty('--veil-bg', from.bg || 'transparent');
+    turnParity = turnParity === 'a' ? 'b' : 'a';
+    stage.dataset.turning = turnParity;
+    later(() => delete stage.dataset.turning, riteMs('medium', 340) + 80);
+  }
   const tempo = riteTempo();
   const tone = TONES[Math.floor(Math.random() * TONES.length)];
+  // The palette turns over in a step series, never a smear (README: "Motion axiom"): each seed
+  // flashes to the tone for one held frame, then jumps through three to six rolled intermediate
+  // mixes with holds between them -- a hand-tinted plate changing frame by frame -- and lands on
+  // the colour asked for. The treads' places in time come off a leave curve rolled for this
+  // seed and their heights off an arrive curve rolled for it, so the stair is the roll's twice
+  // over; the four seeds set out in a rolled order a few rolled frames apart.
   const plan = {};
   for (const name of SEEDS) {
+    const dip = riteEase('leave');
+    const rise = riteEase('arrive');
+    const count = 3 + Math.floor(Math.random() * 4);
+    const treads = [];
+    for (let i = 1; i <= count; i++) {
+      const t = i / count;
+      treads.push({
+        at: Math.max(0, Math.min(1, dip(t * 0.92))), // when this tread is reached, as a fraction
+        y: i === count ? 1 : Math.max(0, Math.min(1, rise(t))) // how far it is along the change
+      });
+    }
+    treads.sort((a, b) => a.at - b.at);
     plan[name] = {
       wait: Math.round(Math.random() * 90 * tempo), // the stagger: when this seed sets out
-      dip: riteEase('leave'),
-      rise: riteEase('arrive'),
-      dipMs: DIP_MS * tempo * (0.8 + Math.random() * 0.5),
-      riseMs: RISE_MS * tempo * (0.8 + Math.random() * 0.5)
+      flashMs: DIP_MS * tempo * (0.25 + Math.random() * 0.3), // the one frame of the tone
+      riseMs: RISE_MS * tempo * (0.8 + Math.random() * 0.5),
+      treads,
+      was: ''
     };
   }
-  const total = Math.max(...SEEDS.map((name) => plan[name].wait + plan[name].dipMs + plan[name].riseMs));
+  const total = Math.max(...SEEDS.map((name) => plan[name].wait + plan[name].flashMs + plan[name].riseMs));
   const startedAt = performance.now();
   const step = (now) => {
     const elapsed = now - startedAt;
     const at = {};
+    let moved = false;
     for (const name of SEEDS) {
       const p = plan[name];
       const own = elapsed - p.wait;
+      let value;
       if (own <= 0) {
-        at[name] = from[name];
-      } else if (own < p.dipMs) {
-        // Fading out to the tone, along this seed's own curve (which may slip back for a frame).
-        at[name] = mix(from[name], tone, Math.max(0, Math.min(1, p.dip(own / p.dipMs))));
+        value = from[name];
+      } else if (own < p.flashMs) {
+        value = tone; // the one flash: the colour it was is gone before the next is there
       } else {
-        // Rising from the tone into the new theme, landing exactly on it.
-        const t = (own - p.dipMs) / p.riseMs;
-        at[name] = t < 1 ? mix(tone, to[name], Math.max(0, Math.min(1, p.rise(t)))) : to[name];
+        const f = (own - p.flashMs) / p.riseMs;
+        let y = 0;
+        for (const tread of p.treads) if (f >= tread.at) y = tread.y;
+        value = f >= 1 || y >= 1 ? to[name] : mix(tone, to[name], y);
       }
+      at[name] = value;
+      if (value !== p.was) moved = true;
+      p.was = value;
     }
-    writeSeeds(at);
+    if (moved) writeSeeds(at); // a hold is a frame nothing is written on
     if (elapsed < total) {
       fading = requestAnimationFrame(step);
       return;
@@ -739,7 +846,20 @@ async function open(file, seed, options) {
   const world = worldOf(file);
   if (!world) return false;
   seed = (Number(seed) >>> 0) || newSeed();
+  // A piece torn down for another is unmade, not cut: its rail and seals are ghosted beside the
+  // real rail and eaten down the ladder while the next develops (see ghostRail). The ghost is
+  // taken before close() empties the rail, and its timer is registered after close() has stopped
+  // everything the old piece had running, so it is the new piece's to sweep.
+  const ghost = ghostRail();
   close();
+  if (ghost) {
+    stage.dataset.unmaking = '';
+    later(() => {
+      ghost.remove();
+      delete stage.dataset.unmaking;
+    }, riteMs('medium', 340) + 6 * riteMs('stagger', 44) + 80);
+  }
+  if (opts.redeal) stage.dataset.redeal = '';
   const token = {};
   pending = token;
   // The configuration this piece is of: the pressed card's seven dials, or -- for a piece nobody
@@ -754,7 +874,7 @@ async function open(file, seed, options) {
   // The site features this activity: its world's palette, as the card that was pressed wore it --
   // or as this configuration wears it, for a piece with no card behind it.
   feature(world.mood, opts.seeds, variant);
-  if (ui.world) ui.world.textContent = world.name;
+  if (ui.world) inscribe(ui.world, world.name);
   document.title = world.name + ' · interesting';
   if (opts.push !== false) {
     try {
@@ -819,14 +939,41 @@ function gate(opened) {
           persona ? persona.stars() : []);
         if (opened.card) heading(opened.world, opened.card);
       }
+      // Power coming on is an arrival: the plate warms like a tube and the piece develops.
+      opened.opts = Object.assign({}, opened.opts, { arriving: true, powered: true });
       begin(opened);
     }
   });
   if (opened.opts.focus !== false) ui.title.focus({ preventScroll: true });
 }
 
+/* The old rail and its seals, ghosted beside the real rail for one movement: every knob and dot
+   is moved (not copied -- the stub browser has no cloneNode) into a .stage-ghost under no pointer,
+   which the stylesheet eats down the ladder knob by knob in the order they were dealt, and the
+   caller sweeps when the movement is over. Nothing of it is in #stage-knobs or #stage-progress,
+   so the rail reads as empty the instant open() returns. A visitor who asked for less motion
+   gets the cut, as everywhere. */
+function ghostRail() {
+  if (!ui || !ui.knobs || !ui.knobs.parentNode || calm.matches) return null;
+  const side = ui.knobs.parentNode;
+  for (const old of side.querySelectorAll('.stage-ghost')) old.remove(); // one ghost at a time
+  const knobs = Array.from(ui.knobs.children || []);
+  const dots = ui.progress ? Array.from(ui.progress.querySelectorAll('.stage-dot')) : [];
+  if (!knobs.length && !dots.length) return null;
+  const ghost = el('div', 'stage-ghost');
+  ghost.setAttribute('aria-hidden', 'true');
+  const rail = el('div', 'stage-ghost-rail');
+  for (const knob of knobs) rail.appendChild(knob);
+  ghost.appendChild(rail);
+  const seals = el('div', 'stage-ghost-seals');
+  for (const dot of dots) seals.appendChild(dot);
+  ghost.appendChild(seals);
+  side.appendChild(ghost);
+  return ghost;
+}
+
 function empty(opts) {
-  ui.brief.textContent = 'Nothing to solve here yet.';
+  inscribe(ui.brief, 'Nothing to solve here yet.');
   lightTheWayOn(false); // nothing to finish, so the way on is the whole of what this offers
   setMode('empty');
   if (!opts || opts.focus !== false) ui.title.focus({ preventScroll: true });
@@ -879,8 +1026,11 @@ function sparkOf(mod, seed, world, variant, stars) {
    card from -- the page speaks for itself instead, with the world's own line under its name, which
    is what it says in its quiet state too. */
 function heading(world, card) {
-  ui.title.textContent = (card && card.title) || world.name;
-  ui.brief.textContent = card ? (card.quote || card.text || card.mono || '') : (world.what || '');
+  const title = (card && card.title) || world.name;
+  const changed = ui.title.textContent !== title;
+  ui.title.textContent = title;
+  if (changed) reveal(ui.title);
+  inscribe(ui.brief, card ? (card.quote || card.text || card.mono || '') : (world.what || ''));
 }
 
 /* The difficulty the visitor has set, as a piece is handed it: the persona keeps the setting for
@@ -981,18 +1131,31 @@ function begin(opened) {
   // card has named the card's own thing, and one that has nothing to say falls back to the card
   // rather than to the world's one line (issue #80).
   const named = piece.title || (card && card.title) || world.name;
+  const renamed = ui.title.textContent !== named;
   ui.title.textContent = named;
+  if (renamed) reveal(ui.title); // the rite's word lands glyph by glyph (the text rites above)
+  // The working's own particulars, rolled from its seed and not from the piece's stream (env.rnd is
+  // the piece's to spend): the seal's tilt and teeth, the hatch's angle, and the blotches the
+  // plate develops through, so a shared address develops the same way twice.
+  const own = mulberry32((seed ^ 0x9e3779b9) >>> 0);
+  particulars(stage, own);
+  platePlan(own);
   // The sigil: the working's number beside the world's name, which is the seed in this piece's own
   // address -- so the one piece of numerology on the site is also the way to send a piece to someone.
+  // It is cast: hidden until written, so the stylesheet's sigil-cast plays on every un-hiding, and
+  // the digits land through the glyph rite.
   if (ui.sigil) {
-    ui.sigil.textContent = 'working ' + seed;
+    ui.sigil.hidden = true;
+    inscribe(ui.sigil, 'working ' + seed);
     ui.sigil.hidden = false;
   }
-  ui.brief.textContent = piece.brief || (card && (card.quote || card.text || card.mono)) || '';
+  inscribe(ui.brief, piece.brief || (card && (card.quote || card.text || card.mono)) || '');
   // The goal, in one line under the rules: what counts as solved. A puzzle without one is a toy,
-  // so the line is only ever hidden for a piece that has not said.
+  // so the line is only ever hidden for a piece that has not said. It is pronounced: the chip seals
+  // and the words are revealed, on every un-hiding.
   const goal = typeof piece.goal === 'string' ? piece.goal.trim() : '';
-  if (ui.goalText) ui.goalText.textContent = goal;
+  if (ui.goal) ui.goal.hidden = true;
+  if (ui.goalText) inscribe(ui.goalText, goal);
   if (ui.goal) ui.goal.hidden = !goal;
   ui.canvas.setAttribute('aria-label', 'the scene: ' + named);
   // Framed as the card was: the piece's own ratio, stretched by the dial that stretched the card's
@@ -1012,7 +1175,17 @@ function begin(opened) {
   dimTheWayOn();
 
   // The scene has a size only once the stage is in a mode that shows it.
-  setMode(opts && opts.arriving && !calm.matches ? 'arriving' : 'live');
+  const arriving = !!(opts && opts.arriving && !calm.matches);
+  setMode(arriving ? 'arriving' : 'live');
+  // The deal (README: "Motion axiom"): while data-dealing is on, the plate develops through its
+  // blotch matte, the head's lines arrive one tread each, the knobs stamp onto the rail in a rolled
+  // order and the check is struck last (_sass/_stage.scss). It outlasts the mode, which only the
+  // inner's travel reads: every part has its own delay and its own length, and the attribute comes
+  // off once the slowest has landed.
+  if (arriving) {
+    stage.dataset.dealing = '';
+    if (opts.powered) stage.dataset.powered = '';
+  }
   current.ctx = makeCtx(env);
   sizeHead(); // this piece's title and line are written: the scene's room is whatever they left
   sizeScene();
@@ -1027,6 +1200,12 @@ function begin(opened) {
     later(() => {
       if (current && current.token === token && stage.dataset.mode === 'arriving') setMode('live');
     }, riteMs('long', 560) + 60);
+    later(() => {
+      if (!current || current.token !== token) return;
+      delete stage.dataset.dealing;
+      delete stage.dataset.redeal;
+      delete stage.dataset.powered;
+    }, riteMs('long', 560) + riteMs('medium', 340) + (steps.length + 3) * riteMs('stagger', 44) + 80);
   }
   if (!opts || opts.focus !== false) ui.title.focus({ preventScroll: true });
   startFrames();
@@ -1035,6 +1214,45 @@ function begin(opened) {
   } catch (e) {
     /* older browsers get the piece and no event */
   }
+}
+
+/* The matte the plate develops through (README: "Motion axiom"): a stack of hard-edged blotches at
+   rolled places whose radii step up in four treads -- --plate-1 to --plate-4, each a mask value the
+   stylesheet's plate-develop climbs before the engine's own full matte -- so the picture comes
+   through in bites and never washes in. Seeded from the working's seed, so one address develops
+   the same way twice and every seed differently. The stub records the strings and reads nothing. */
+function platePlan(rnd) {
+  if (!ui || !ui.scene || !ui.scene.style) return;
+  const blots = [];
+  const count = 10 + Math.floor(rnd() * 5);
+  for (let i = 0; i < count; i++) {
+    blots.push({ x: Math.round(rnd() * 100), y: Math.round(rnd() * 100), r: 16 + Math.round(rnd() * 30) });
+  }
+  const climb = [0.22, 0.42, 0.66, 1];
+  for (let k = 0; k < climb.length; k++) {
+    const layer = blots.map((b) => 'radial-gradient(circle at ' + b.x + '% ' + b.y + '%, #000 '
+      + Math.round(b.r * climb[k]) + '%, transparent 0)').join(', ');
+    ui.scene.style.setProperty('--plate-' + (k + 1), layer);
+  }
+}
+
+/* A bar's treads (README: "Motion axiom"): a fill advances in six to nine rolled uneven steps and
+   holds between them, never creeps. The list is the knob's own, rolled when it is dealt, and both
+   the piece's progress() and a hold's ticker snap to it, so the step series is in the data the
+   stylesheet is handed and not only in the paint. The last tread is the fill itself (1). */
+function barTreads(rnd) {
+  const n = 6 + Math.floor(rnd() * 4);
+  const treads = [];
+  for (let i = 1; i < n; i++) treads.push((i + (rnd() - 0.5) * 0.7) / n);
+  treads.sort((a, b) => a - b);
+  treads.push(1);
+  return treads;
+}
+
+function snapTread(fraction, treads) {
+  let at = 0;
+  for (const t of treads || []) if (fraction >= t) at = t;
+  return at;
 }
 
 function makeCtx(env) {
@@ -1063,10 +1281,16 @@ function makeCtx(env) {
       const s = c.state.get(id);
       if (!s || !s.knob) return;
       const f = Math.max(0, Math.min(1, Number(fraction) || 0));
-      s.knob.style.setProperty('--knob-pct', (f * 100).toFixed(1) + '%');
+      // Snapped to the knob's own treads: the bar advances in rolled steps and holds between.
+      const at = f >= 1 ? 1 : snapTread(f, s.treads);
+      const pct = (at * 100).toFixed(1) + '%';
+      if (s.shown !== pct) {
+        s.shown = pct;
+        s.knob.style.setProperty('--knob-pct', pct);
+      }
     },
     status(text) {
-      ui.status.textContent = text == null ? '' : String(text);
+      speak(ui.status, text == null ? '' : String(text));
     },
     value(id) {
       const s = c.state.get(id);
@@ -1121,6 +1345,12 @@ function reflow() {
   sizeHead();
   if (!current) return;
   if (Math.abs(ui.scene.getBoundingClientRect().width - lastWidth) < 1) return;
+  // A resize is a re-exposure, not a flicker: the canvas lands through two scanline treads
+  // (plate-reexpose) off data-reflow, which the stage's own clock takes off again.
+  if (!calm.matches) {
+    stage.dataset.reflow = '';
+    later(() => delete stage.dataset.reflow, riteMs('short', 170) + 40);
+  }
   sizeScene();
   // A piece that draws only in start() draws again at the new size.
   if (typeof current.piece.frame !== 'function' && typeof current.piece.start === 'function') {
@@ -1153,11 +1383,21 @@ function sizeScene() {
 
 function renderKnobs() {
   ui.knobs.textContent = '';
-  for (const step of current.steps) {
+  // The knobs are dealt (README: "Motion axiom"): each stamps onto the rail one tread after the
+  // last in an order rolled afresh for this deal -- --knob-i is the delay the stylesheet reads,
+  // never the DOM order, which stays the piece's -- and each wears particulars of its own (the
+  // seal's tilt and teeth, the hatch's angle, the bar's pitch), rolled from the seed and the
+  // knob's place, so no knob on a rail is textured like its neighbour.
+  const order = dealOrder(current.steps.length, altRnd);
+  current.steps.forEach((step, i) => {
     const knob = el('div', 'knob');
     knob.dataset.id = step.id;
     knob.dataset.kind = step.kind;
     if (step.optional === true) knob.dataset.optional = 'true'; // a helper the check does not wait for
+    knob.style.setProperty('--knob-i', String(order[i]));
+    const own = mulberry32(((current.seed ^ ((i + 1) * 0x9e3779b9)) >>> 0) || 1);
+    particulars(knob, own);
+    current.state.get(step.id).treads = barTreads(own);
     const ask = el('p', 'knob-ask', step.ask || step.id);
     ask.id = 'knob-ask-' + step.id;
     // A helper the check does not wait for says so, so nobody wonders whether they must use it.
@@ -1170,7 +1410,7 @@ function renderKnobs() {
     knob.appendChild(mark);
     current.state.get(step.id).knob = knob;
     ui.knobs.appendChild(knob);
-  }
+  });
   updateGates();
 }
 
@@ -1219,7 +1459,9 @@ function renderCheck() {
   if (!c || !ui.check) return;
   const all = Array.from(c.state.values()).every((s) => s.set || s.step.optional === true);
   ui.check.disabled = !all;
-  ui.check.textContent = c.completed ? 'check again' : (typeof c.piece.checkLabel === 'string' && c.piece.checkLabel.trim() ? c.piece.checkLabel.trim() : 'check');
+  // The word on it lands by the glyph rite when it changes; the lamp itself is struck by the
+  // stylesheet off `disabled` (check-strike), which is the whole of its state.
+  inscribe(ui.check, c.completed ? 'check again' : (typeof c.piece.checkLabel === 'string' && c.piece.checkLabel.trim() ? c.piece.checkLabel.trim() : 'check'));
 }
 
 /* The score line beside the check: how many tries so far, or which try solved it, how many hints
@@ -1233,7 +1475,8 @@ function renderTries() {
   else if (c.tries) parts.push(c.tries === 1 ? 'one try so far' : c.tries + ' tries so far');
   if (c.hints) parts.push(c.hints === 1 ? 'one hint' : c.hints + ' hints');
   if (c.completed && c.tally && c.tally.solved > 1) parts.push(c.tally.solved + ' solved so far');
-  ui.tries.textContent = parts.join(' \u00b7 ');
+  // Written whole, typed in by the stylesheet (line-said); its first appearance develops.
+  speak(ui.tries, parts.join(' \u00b7 '));
   ui.tries.hidden = !parts.length;
 }
 
@@ -1281,10 +1524,14 @@ function judge() {
   const solved = !!(verdict && verdict.solved);
   const say = verdict && typeof verdict.say === 'string' ? verdict.say.trim() : '';
   if (c.completed) {
-    ui.status.textContent = say || (solved ? 'still solved' : 'not solved like that; the puzzle is done either way');
+    speak(ui.status, say || (solved ? 'still solved' : 'not solved like that; the puzzle is done either way'));
     return;
   }
   c.tries += 1;
+  // The try is written beside the verdict so the refusal replays and differs: the stylesheet
+  // restarts the jolt off data-try-parity flipping (stage-no / stage-no-b), keyed by the count.
+  stage.dataset.try = String(c.tries);
+  stage.dataset.tryParity = c.tries % 2 ? 'a' : 'b';
   stage.dataset.verdict = solved ? 'solved' : 'wrong';
   try {
     window.dispatchEvent(new CustomEvent('stage:check', { detail: { file: c.world.file, seed: c.seed, solved, tries: c.tries } }));
@@ -1295,7 +1542,7 @@ function judge() {
     finish(say);
     return;
   }
-  ui.status.textContent = say || 'not yet';
+  speak(ui.status, say || 'not yet');
   renderTries();
 }
 
@@ -1303,8 +1550,16 @@ function updateGates() {
   for (const s of current.state.values()) {
     const gate = s.step.after ? current.state.get(s.step.after) : null;
     const locked = !!(gate && !gate.set);
+    const was = s.knob.classList.contains('is-locked');
     s.knob.classList.toggle('is-locked', locked);
     for (const control of s.knob.querySelectorAll('button, input')) control.disabled = locked;
+    // A gate opening tears the ward off (README: "Motion axiom"): data-unwarding plays ward-tear
+    // on the veil and comes off when it has, through the stage's own clock.
+    if (was && !locked && !calm.matches) {
+      const knob = s.knob;
+      knob.setAttribute('data-unwarding', '');
+      later(() => knob.removeAttribute('data-unwarding'), riteMs('medium', 340) + 80);
+    }
   }
 }
 
@@ -1316,20 +1571,49 @@ function tapsOpen() {
 }
 
 function renderProgress() {
-  ui.progress.textContent = '';
   let set = 0;
   const left = [];
   let asked = 0;
   let begun = false; // has the visitor set anything at all, a hint included?
+  const wanted = [];
   for (const s of current.state.values()) {
     if (s.set) begun = true;
     if (s.step.optional === true) continue; // a helper the check does not wait for is not a dot
     asked += 1;
     if (s.set) set += 1;
     else left.push(s.step.ask || s.step.id);
-    ui.progress.appendChild(el('span', 'stage-dot' + (s.set ? ' is-set' : '')));
+    wanted.push(s);
   }
-  ui.progress.appendChild(hidden(set + ' of ' + asked + ' set'));
+  // The dots are the working's seals and they persist (README: "Motion axiom"): rendered once per
+  // piece and lit in place, so a seal that lights stamps (seal-light) rather than being replaced
+  // already lit. The ones lighting now are dealt a rolled order for their cascade (--dot-i), which
+  // on a finish is every seal still dark lighting one tread after another toward the done chip.
+  let dots = ui.progress.querySelectorAll('.stage-dot');
+  if (dots.length !== wanted.length) {
+    ui.progress.textContent = '';
+    wanted.forEach((s, i) => {
+      const dot = el('span', 'stage-dot');
+      dot.setAttribute('data-i', String(i));
+      dot.style.setProperty('--dot-i', String(i)); // its place in the deal, until it lights
+      ui.progress.appendChild(dot);
+    });
+    ui.progress.appendChild(hidden(''));
+    dots = ui.progress.querySelectorAll('.stage-dot');
+  }
+  const lighting = [];
+  wanted.forEach((s, i) => {
+    const dot = dots[i];
+    if (!dot) return;
+    if (s.set && !dot.classList.contains('is-set')) lighting.push(dot);
+    else if (!s.set) dot.classList.remove('is-set');
+  });
+  const order = dealOrder(lighting.length, altRnd);
+  lighting.forEach((dot, k) => {
+    dot.style.setProperty('--dot-i', String(order[k]));
+    dot.classList.add('is-set');
+  });
+  const count = ui.progress.querySelector('.visually-hidden');
+  if (count) count.textContent = set + ' of ' + asked + ' set';
   // What is left, said out loud. A knob may be set in any order, and the one at the bottom of the
   // page is often not the last one a visitor has to touch -- a piece can gate its finale on an
   // earlier knob and leave an ungated one above it untouched. Without this line, setting the
@@ -1338,11 +1622,11 @@ function renderProgress() {
   // Two are named, more are counted, because the stranded knob is always among the last one or two
   // left -- the visitor has done everything else by then -- and a list of five is noise.
   if (ui.wanted) {
-    const say = begun && left.length > 0;
-    ui.wanted.textContent = !say ? ''
+    const tell = begun && left.length > 0;
+    speak(ui.wanted, !tell ? ''
       : left.length <= 2 ? 'still to set: ' + left.join(' and ')
-        : 'still to set: ' + left[0] + ', and ' + (left.length - 1) + ' more';
-    ui.wanted.hidden = !say;
+        : 'still to set: ' + left[0] + ', and ' + (left.length - 1) + ' more');
+    ui.wanted.hidden = !tell;
   }
 }
 
@@ -1459,7 +1743,13 @@ const KNOBS = {
     state.value = Number(input.value);
     const give = (v) => {
       const n = clamp(v);
+      const was = input.value;
       input.value = String(n);
+      // The number ratchets like an odometer (count-ratchet) when the stage wrote it: a typed
+      // value is the visitor's own and is left alone.
+      if (was !== input.value && motion && typeof motion.rite === 'function' && !calm.matches) {
+        motion.rite(input, 'ratcheting', riteMs('short', 170) + 200);
+      }
       apply(step.id, n);
       markSet(step.id, n, 'knob');
     };
@@ -1536,13 +1826,35 @@ const KNOBS = {
       apply(step.id, v);
       markSet(step.id, v, 'knob');
     }
+    // Where each row stands, by its value, so a swap can be played from the old place to the new.
+    function tops() {
+      const out = new Map();
+      Array.from(list.children || []).forEach((row, k) => {
+        if (typeof row.getBoundingClientRect === 'function') out.set(values[k], row.getBoundingClientRect().top);
+      });
+      return out;
+    }
     function move(i, d, refocus) {
       const j = i + d;
       if (j >= 0 && j < values.length) {
+        const before = calm.matches ? null : tops();
         const held = values[i];
         values[i] = values[j];
         values[j] = held;
         draw();
+        // The swap in a step series (README: "Motion axiom"): the two rows that changed places are
+        // handed the distance back to where they were (--dy) and the stylesheet's row-swap steps
+        // them from there to here in treads. The DOM order is rebuilt at once and is the truth.
+        if (before) {
+          Array.from(list.children || []).forEach((row, k) => {
+            const was = before.get(values[k]);
+            if (was === undefined || typeof row.getBoundingClientRect !== 'function') return;
+            const dy = was - row.getBoundingClientRect().top;
+            if (Math.abs(dy) < 0.5) return;
+            row.style.setProperty('--dy', dy.toFixed(1) + 'px');
+            row.setAttribute('data-flip', k === j ? 'moved' : 'displaced');
+          });
+        }
         const row = list.children[j];
         const again = row && row.querySelectorAll('button')[refocus];
         if (again && typeof again.focus === 'function') again.focus();
@@ -1646,12 +1958,20 @@ const KNOBS = {
     const buttons = [];
     const name = (i) => 'row ' + (Math.floor(i / cols) + 1) + ', column ' + ((i % cols) + 1) + ': '
       + (labels[cells[i]] != null ? String(labels[cells[i]]) : (states === 2 ? (cells[i] ? 'on' : 'off') : 'state ' + cells[i]));
+    const flips = new Array(n).fill(''); // which of the two flip spells each cell played last
     function paint() {
       buttons.forEach((b, i) => {
+        const was = b.dataset.state;
         b.dataset.state = String(cells[i]);
         b.setAttribute('aria-label', name(i));
         if (states === 2) b.setAttribute('aria-pressed', cells[i] ? 'true' : 'false');
         b.textContent = states > 2 && cells[i] ? String(cells[i]) : '';
+        // A cell that changed its state flips in one cut with a one-frame oversize (cell-flip,
+        // cell-flip-b: the two alternate so every flip restarts); its neighbours stay still.
+        if (was !== undefined && was !== b.dataset.state && !calm.matches) {
+          flips[i] = flips[i] === 'a' ? 'b' : 'a';
+          b.setAttribute('data-flip', flips[i]);
+        }
       });
     }
     for (let i = 0; i < n; i++) {
@@ -1696,14 +2016,28 @@ const KNOBS = {
     let n = 0;
     const b = el('button', 'knob-big', word(count));
     b.type = 'button';
+    // Each press punches a notch (README: "Motion axiom"): a row of stamped-out seals under the
+    // button, one filled per press in a cut with a one-frame oversize (notch-punch), so the count
+    // is visible as well as said; the last notch is the knob's own seal.
+    const notches = el('span', 'knob-notches');
+    notches.setAttribute('aria-hidden', 'true');
+    const marks = [];
+    for (let i = 0; i < count; i++) {
+      const notch = el('i');
+      notch.style.setProperty('--notch-i', String(i));
+      marks.push(notch);
+      notches.appendChild(notch);
+    }
     b.addEventListener('click', () => {
       n += 1;
-      b.textContent = word(count - n);
+      inscribe(b, word(count - n));
+      if (marks[n - 1]) marks[n - 1].setAttribute('data-done', '');
       knob.style.setProperty('--knob-pct', ((n / count) * 100).toFixed(1) + '%');
       apply(step.id, n);
       if (n >= count) markSet(step.id, n, 'knob');
     });
     knob.appendChild(b);
+    knob.appendChild(notches);
   },
   hold(step, knob) {
     const ms = Math.max(300, Math.min(8000, Number(step.ms) || 1500));
@@ -1729,17 +2063,26 @@ const KNOBS = {
     // The bar, and the knob the moment the bar is full: the holding is the answer and the letting
     // go is not part of it, so a visitor who watches it fill and keeps holding has already set the
     // knob and the piece carries on under their finger (issue #74).
+    // The bar advances in the knob's own treads (barTreads) and holds between them: the ticker
+    // writes only when the next tread is reached, so the step series is in the data and the
+    // stylesheet has nothing to smooth.
+    let shown = '';
     function paint() {
       const held = performance.now() - started;
       if (held >= ms) {
         fill(held);
         return;
       }
-      knob.style.setProperty('--knob-pct', ((held / ms) * 100).toFixed(1) + '%');
+      const s = current && current.state.get(step.id);
+      const pct = (snapTread(held / ms, s && s.treads) * 100).toFixed(1) + '%';
+      if (pct === shown) return;
+      shown = pct;
+      knob.style.setProperty('--knob-pct', pct);
     }
     function fill(held) {
       fired = true;
       halt(); // there is nothing left to paint: the bar stays full under the finger
+      shown = '100%';
       knob.style.setProperty('--knob-pct', '100%');
       apply(step.id, held);
       markSet(step.id, held, 'knob');
@@ -1754,8 +2097,11 @@ const KNOBS = {
       b.classList.remove('is-held');
       b.setAttribute('aria-pressed', 'false');
       if (fired) return;
-      knob.style.setProperty('--knob-pct', '0%');
-      ui.status.textContent = 'let go early; hold it longer';
+      shown = '0%';
+      knob.style.setProperty('--knob-pct', '0%'); // one cut back: the spring let go
+      // The refusal: two hard cuts on the button (hold-refuse), and the line typed in.
+      if (motion && typeof motion.rite === 'function' && !calm.matches) motion.rite(b, 'refusing', riteMs('short', 170) + 200);
+      speak(ui.status, 'let go early; hold it longer');
     }
     b.addEventListener('pointerdown', (ev) => {
       ev.preventDefault();
@@ -1851,6 +2197,12 @@ function rejectTap(x, y) {
   if (calm.matches) mark.classList.add('is-still');
   mark.style.setProperty('left', (x * 100).toFixed(2) + '%');
   mark.style.setProperty('top', (y * 100).toFixed(2) + '%');
+  // The refused press is warded (README: "Motion axiom"): a generated ward glyph -- a rolled
+  // three-to-seven-spoke asterisk at a rolled turn with a rolled gap -- that the stylesheet shows
+  // in four hard frames (stage-reject) and never ripples. Pure paint: no glyph text, no fade.
+  mark.style.setProperty('--ward-spokes', String(3 + Math.floor(altRnd() * 5)));
+  mark.style.setProperty('--ward-rot', Math.round(altRnd() * 360) + 'deg');
+  mark.style.setProperty('--ward-gap', (0.3 + altRnd() * 0.4).toFixed(2));
   ui.scene.appendChild(mark);
   // Registered like every other timer of the stage's, so a mark pressed out of a piece on its way
   // out goes with it rather than outliving it; close() sweeps whatever is still there.
@@ -1923,7 +2275,7 @@ function finish(say) {
   updateGates();
   // What the verifier said on the solve, or the default; the piece's own closing line, if it
   // writes one in end(), stands over both.
-  ui.status.textContent = say || (c.piece.title ? 'solved: ' + c.piece.title : 'solved');
+  speak(ui.status, say || (c.piece.title ? 'solved: ' + c.piece.title : 'solved'));
   c.tally = tally(c);
   renderTries();
   renderCheck();
@@ -1933,7 +2285,12 @@ function finish(say) {
     /* the finale is optional */
   }
   setMode('done');
-  ui.doneText.textContent = 'solved';
+  // The seal (README: "Motion axiom"): the done chip is stamped like wax by the stylesheet on its
+  // un-hiding (stage-pop in hard treads, an ink splat drying under it), at a tilt and with a tooth
+  // count rolled for this solve and no other, and the word lands by the glyph rite.
+  particulars(ui.done, altRnd);
+  ui.done.hidden = true;
+  inscribe(ui.doneText, 'solved');
   ui.done.hidden = false;
   // The finale is on the scene, which on a phone may be above the knob that finished it. The done
   // mark is not: it reports from the end of the dots' row in the rail, clear of the picture.
@@ -2054,6 +2411,14 @@ function close() {
   ui.canvas.setAttribute('aria-label', 'the scene');
   ui.scene.style.removeProperty('--piece-aspect');
   ui.scene.style.removeProperty('--piece-ratio');
+  for (let k = 1; k <= 4; k++) ui.scene.style.removeProperty('--plate-' + k);
+  delete stage.dataset.dealing;
+  delete stage.dataset.redeal;
+  delete stage.dataset.powered;
+  delete stage.dataset.reflow;
+  delete stage.dataset.turning;
+  delete stage.dataset.try;
+  delete stage.dataset.tryParity;
   if (ui.sigil) {
     ui.sigil.textContent = '';
     ui.sigil.hidden = true;
@@ -2085,8 +2450,10 @@ function close() {
 // The threshold's own state, back from a piece: what the page said before anything opened.
 function goHome() {
   close();
-  ui.world.textContent = home.name;
+  inscribe(ui.world, home.name);
+  const returning = ui.title.textContent !== home.line;
   ui.title.textContent = home.line;
+  if (returning) reveal(ui.title); // the invitation re-materialises by the glyph rite
   if (ui.read) ui.read.hidden = true;
   document.title = home.title;
   // Nothing is featured now, so the site goes back to its own colour: the page's own world, or
@@ -2102,6 +2469,22 @@ function goHome() {
 
 /* ---- ceremony ------------------------------------------------------------------------------ */
 
+/* The chime is cast from the working (README: "Motion axiom"), never the same three sines: three to
+   five notes whose degrees are rolled from a small modal table -- a brighter mode for the tender
+   worlds, one with a flattened degree for the restless ones -- at intervals rolled between 70 and
+   240ms with one hesitation and one grace note, the waveform rolled between sine and triangle,
+   the whole at the mood's tempo, the last note now and then doubled an octave up as a flicker.
+   Seeded from the seed, so a shared working rings the same and no two workings ring alike. The
+   envelope is a step series of its own: hard attacks and held steps down, no ramps. Quiet. */
+const MODES = {
+  bright: [0, 2, 4, 6, 7, 9, 11, 12], // lydian-ish
+  plain: [0, 2, 4, 5, 7, 9, 11, 12],
+  flat: [0, 2, 3, 5, 7, 8, 10, 12], // a flattened third and sixth
+  open: [0, 2, 5, 7, 9, 12, 14]
+};
+const TENDER_MOODS = ['tender', 'quiet', 'soft', 'warm', 'calm', 'still', 'gentle'];
+const RESTLESS_MOODS = ['restless', 'wild', 'sharp', 'feral', 'fierce', 'dark', 'cold', 'storm'];
+
 function chime() {
   try {
     const Ctor = window.AudioContext || window.webkitAudioContext;
@@ -2109,23 +2492,55 @@ function chime() {
     if (!chime.ctx) chime.ctx = new Ctor();
     const ac = chime.ctx;
     if (ac.state === 'suspended' && ac.resume) ac.resume().catch(() => {});
+    const seed = current ? current.seed : newSeed();
+    const mood = current ? String(current.world.mood || '') : '';
+    const own = mulberry32((seed ^ 0x51a7) >>> 0);
+    const tempo = riteTempo();
+    const family = TENDER_MOODS.indexOf(mood) !== -1 ? 'bright' : RESTLESS_MOODS.indexOf(mood) !== -1 ? 'flat'
+      : (own() < 0.5 ? 'plain' : 'open');
+    const scale = MODES[family];
+    const base = 440 * Math.pow(2, (own() < 0.5 ? 0 : 3) / 12); // A or C, this working's choosing
+    const count = 3 + Math.floor(own() * 3);
+    const hesitation = Math.floor(own() * count); // the one note held back
+    const grace = Math.floor(own() * count); // the one note with a grace before it
+    const wave = own() < 0.6 ? 'sine' : 'triangle';
     const now = ac.currentTime;
-    [[523.25, 0], [783.99, 0.12], [1046.5, 0.24]].forEach(([freq, at]) => {
-      const osc = ac.createOscillator();
-      const gain = ac.createGain();
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(freq, now + at);
-      gain.gain.setValueAtTime(0.0001, now + at);
-      gain.gain.exponentialRampToValueAtTime(0.045, now + at + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.0001, now + at + 0.5);
-      osc.connect(gain);
-      gain.connect(ac.destination);
-      osc.start(now + at);
-      osc.stop(now + at + 0.55);
-    });
+    let at = 0;
+    let degree = Math.floor(own() * 3);
+    for (let i = 0; i < count; i++) {
+      degree = Math.max(0, Math.min(scale.length - 1, degree + (own() < 0.7 ? 1 + Math.floor(own() * 2) : -1)));
+      const freq = base * Math.pow(2, scale[degree] / 12);
+      if (i === grace) note(ac, wave, freq * Math.pow(2, -2 / 12), now + at, 0.06, 0.02); // the slip
+      note(ac, wave, freq, now + at, 0.42 + own() * 0.2, 0.045);
+      if (i === count - 1 && own() < 0.35) note(ac, wave, freq * 2, now + at + 0.05, 0.16, 0.02); // the flicker
+      at += (0.07 + own() * 0.17 + (i === hesitation ? 0.14 : 0)) * tempo;
+    }
   } catch (e) {
     /* no sound is fine */
   }
+}
+
+// One note: a hard attack and a step series of held gains down to nothing, never a ramp.
+function note(ac, wave, freq, at, length, loud) {
+  const osc = ac.createOscillator();
+  const gain = ac.createGain();
+  osc.type = wave;
+  osc.frequency.setValueAtTime(freq, at);
+  const steps = 4;
+  gain.gain.setValueAtTime(loud, at);
+  for (let s = 1; s <= steps; s++) gain.gain.setValueAtTime(loud * (1 - s / steps) * 0.8, at + (length * s) / steps);
+  gain.gain.setValueAtTime(0.0001, at + length);
+  osc.connect(gain);
+  gain.connect(ac.destination);
+  osc.start(at);
+  osc.stop(at + length + 0.05);
+}
+
+// A hash in 0..1 of a few integers, for the dither that decides what is drawn on a frame.
+function dither(a, b, c) {
+  let h = (Math.imul(a | 0, 374761393) + Math.imul(b | 0, 668265263) + Math.imul(c | 0, 2246822519)) | 0;
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
 }
 
 function burst() {
@@ -2140,47 +2555,148 @@ function burst() {
   if (!g) return;
   g.setTransform(dpr, 0, 0, dpr, 0, 0);
   const colors = current ? current.env.colors : FALLBACK;
+  const seed = current ? current.seed : newSeed();
   const cx = scene.left - box.left + scene.width / 2;
   const cy = scene.top - box.top + scene.height / 2;
-  // The burst is a working too (README: "Motion axiom"): the ring opens along a curve rolled for
-  // this one finish rather than growing evenly, every particle fades along a curve of its own, a
-  // few of them strobe, and now and then the whole burst holds a frame -- the stutter of a thing
-  // seen by lamplight -- with the grain of the mood saying how often.
+  /* The burst is the stamping of the working onto the plate (README: "Motion axiom"), drawn in
+     hard-held frames: a generated seal -- a polygon of rolled sides, a ring of the seed's digits
+     ticking round it, hatch lines at a rolled angle -- is impressed over the scene's centre,
+     flips to its negative, holds, and dissolves through a dither matte (cells let through by a
+     seeded threshold falling in rolled treads, never an alpha fade); the shards of the palette fly
+     out in a rolled number of sectors and die by dither too, each drawn or not on a frame by a
+     seeded coin and never dimmed. The ring opens in treads along a wipe curve rolled for this one
+     finish. Seeded from the seed for its shape, from the roll for its holds. */
+  const own = mulberry32((seed ^ 0x5ea1) >>> 0);
   const grain = motion && motion.temper ? Number(motion.temper.grain) || 0.45 : 0.45;
   const ringOpens = riteEase('wipe');
   const ringReach = 700 + Math.random() * 400;
+  const sides = 3 + Math.floor(own() * 7);
+  const turn = own() * Math.PI * 2;
+  const R = Math.max(40, Math.min(scene.width, scene.height) * (0.14 + own() * 0.1));
+  const hatch = own() * Math.PI;
+  const pitch = 5 + Math.round(own() * 6);
+  const digits = String(seed);
+  const sectors = 2 + Math.floor(own() * 5);
+  const cell = 8 + Math.round(own() * 8);
+  const dash = [4 + Math.round(own() * 10), 3 + Math.round(own() * 8)];
+  // The dissolve: coverage falls from 1 to 0 in a rolled number of uneven treads.
+  const treads = [];
+  const n = 4 + Math.floor(own() * 4);
+  for (let i = 1; i < n; i++) treads.push(Math.max(0.02, Math.min(0.98, (n - i + (own() - 0.5) * 0.8) / n)));
+  treads.sort((a, b) => b - a);
+  treads.push(0);
   const parts = [];
-  for (let i = 0; i < 140; i++) {
-    const a = Math.random() * Math.PI * 2;
-    const v = 120 + Math.random() * 520;
-    parts.push({ x: cx, y: cy, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 80, r: 1.5 + Math.random() * 4,
-      c: [colors.accent, colors.accent2, colors.fg][i % 3], life: 0.9 + Math.random() * 0.6, age: 0,
-      fade: riteEase('leave'), strobe: Math.random() < grain * 0.35 ? 2 + Math.floor(Math.random() * 3) : 0 });
+  for (let i = 0; i < 110; i++) {
+    const sector = Math.floor(own() * sectors);
+    const spread = (Math.PI * 2) / sectors;
+    const a = sector * spread + turn + (own() - 0.5) * spread * 0.45;
+    const v = 140 + own() * 520;
+    parts.push({ x: cx, y: cy, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 60, r: 1.5 + own() * 4,
+      c: [colors.accent, colors.accent2, colors.fg][i % 3], life: 0.8 + own() * 0.7, age: 0 });
+  }
+  const plan = {
+    positive: 0.16 + Math.random() * 0.08, // seconds the positive seal holds
+    negative: 0.1 + Math.random() * 0.08, // the negative
+    again: 0.08 + Math.random() * 0.06, // positive once more
+    dissolve: 0.6 + Math.random() * 0.3 // the dither dissolve
+  };
+  const total = plan.positive + plan.negative + plan.again + plan.dissolve;
+  function seal(negative, coverage) {
+    // The dither matte: only the cells the seeded threshold lets through at this coverage show.
+    if (coverage <= 0) return;
+    g.save();
+    if (coverage < 1) {
+      g.beginPath();
+      const span = R * 1.5;
+      for (let y = -span; y < span; y += cell) {
+        for (let x = -span; x < span; x += cell) {
+          if (dither(Math.round(x / cell), Math.round(y / cell), seed) < coverage) g.rect(cx + x, cy + y, cell, cell);
+        }
+      }
+      g.clip();
+    }
+    const ink = negative ? colors.bg : colors.accent;
+    const paper = negative ? colors.accent : colors.bg;
+    g.lineWidth = 3;
+    g.strokeStyle = ink;
+    g.fillStyle = paper;
+    g.beginPath();
+    for (let s = 0; s <= sides; s++) {
+      const a = turn + (s / sides) * Math.PI * 2;
+      const r = R * (s % 2 ? 1 : 0.9);
+      if (s) g.lineTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r);
+      else g.moveTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r);
+    }
+    g.closePath();
+    g.fill();
+    g.stroke();
+    // The hatch, clipped to the seal.
+    g.save();
+    g.clip();
+    g.lineWidth = 1;
+    g.strokeStyle = alpha(ink, 0.55);
+    g.beginPath();
+    for (let d = -R * 2; d < R * 2; d += pitch) {
+      g.moveTo(cx + Math.cos(hatch) * d - Math.sin(hatch) * R * 2, cy + Math.sin(hatch) * d + Math.cos(hatch) * R * 2);
+      g.lineTo(cx + Math.cos(hatch) * d + Math.sin(hatch) * R * 2, cy + Math.sin(hatch) * d - Math.cos(hatch) * R * 2);
+    }
+    g.stroke();
+    g.restore();
+    // The ring of digits round it, in the tertiary, each on its spoke.
+    g.fillStyle = negative ? colors.bg : colors.accent2;
+    g.font = 'bold 12px monospace';
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    for (let i = 0; i < digits.length; i++) {
+      const a = turn + (i / digits.length) * Math.PI * 2;
+      g.fillText(digits.charAt(i), cx + Math.cos(a) * (R + 14), cy + Math.sin(a) * (R + 14));
+    }
+    g.restore();
   }
   let last = performance.now();
-  let ring = 0;
-  let held = 0; // frames the burst is holding still for
+  let elapsed = 0;
+  let held = 0; // raf frames the drawn frame is held for: every frame is held
   let frames = 0;
   function tick(now) {
     // A frame's timestamp can precede the performance.now() read just before it: never negative.
     const dt = Math.max(0, Math.min(0.05, (now - last) / 1000));
     last = now;
     frames += 1;
+    elapsed += dt;
     if (held > 0) {
       held -= 1;
       requestAnimationFrame(tick);
       return;
     }
-    if (Math.random() < grain * 0.06) held = 1 + Math.floor(Math.random() * 2);
-    ring += dt;
+    held = 1 + Math.floor(Math.random() * (2 + grain * 2));
     g.clearRect(0, 0, box.width, box.height);
-    g.lineWidth = 3;
-    g.strokeStyle = alpha(colors.accent, Math.max(0, 0.7 - ring * 0.9));
-    g.beginPath();
-    g.arc(cx, cy, Math.max(0, ringOpens(Math.min(1, ring / 1.2)) * ringReach), 0, Math.PI * 2);
-    g.stroke();
+    // The ring, opening in six treads and gone in one cut.
+    const open = ringOpens(Math.min(1, elapsed / 1.1));
+    if (elapsed < 1.1) {
+      g.lineWidth = 2;
+      g.strokeStyle = colors.accent;
+      g.setLineDash(dash);
+      g.lineDashOffset = frames * 3;
+      g.beginPath();
+      g.arc(cx, cy, Math.max(0, (Math.floor(open * 6) / 6) * ringReach), 0, Math.PI * 2);
+      g.stroke();
+      g.setLineDash([]);
+    }
+    // The seal: positive, negative, positive, then eaten by the dither in treads.
+    let coverage = 1;
+    let negative = false;
+    if (elapsed < plan.positive) negative = false;
+    else if (elapsed < plan.positive + plan.negative) negative = true;
+    else if (elapsed < plan.positive + plan.negative + plan.again) negative = false;
+    else {
+      const f = (elapsed - plan.positive - plan.negative - plan.again) / plan.dissolve;
+      coverage = treads[Math.min(treads.length - 1, Math.floor(f * treads.length))];
+    }
+    seal(negative, coverage);
+    // The shards: moved every frame, drawn when the dither says so, dimmed never.
     let alive = 0;
-    for (const p of parts) {
+    for (let i = 0; i < parts.length; i++) {
+      const p = parts[i];
       p.age += dt;
       if (p.age > p.life) continue;
       alive++;
@@ -2188,13 +2704,11 @@ function burst() {
       p.vx *= 0.985;
       p.x += p.vx * dt;
       p.y += p.vy * dt;
-      if (p.strobe && frames % p.strobe === 0) continue; // a strobing particle skips its frame
-      g.fillStyle = alpha(p.c, Math.max(0, 1 - p.fade(p.age / p.life)));
-      g.beginPath();
-      g.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-      g.fill();
+      if (dither(i, frames, seed) < p.age / p.life) continue; // dying by dither
+      g.fillStyle = p.c;
+      g.fillRect(p.x - p.r, p.y - p.r, p.r * 2, p.r * 2);
     }
-    if (alive && ring < 1.6) requestAnimationFrame(tick);
+    if (alive || elapsed < total) requestAnimationFrame(tick);
     else g.clearRect(0, 0, box.width, box.height);
   }
   requestAnimationFrame(tick);
@@ -2254,7 +2768,7 @@ function thresholdStart() {
     wasAsking = false;
     if (read && worldOf(o.world) && (fresh || (!current && !pending))) {
       if (ui.read) {
-        ui.read.textContent = (r.source === 'answer' ? 'read just now as ' : 'carried over as ') + o.name;
+        inscribe(ui.read, (r.source === 'answer' ? 'read just now as ' : 'carried over as ') + o.name);
         ui.read.hidden = false;
       }
       open(o.world, newSeed(), { arriving: true, keepRead: true, focus: r.source === 'answer' });
@@ -2296,12 +2810,13 @@ function start() {
   window.addEventListener('popstate', (ev) => {
     const s = ev.state && ev.state.world ? ev.state : parseHash();
     if (s && s.world && worldOf(s.world)) {
-      if (!current || current.world.file !== s.world || current.seed !== s.seed) open(s.world, s.seed, { push: false });
+      // Back or forward through the pieces: an arrival like any other (README: "Motion axiom").
+      if (!current || current.world.file !== s.world || current.seed !== s.seed) open(s.world, s.seed, { push: false, arriving: true });
       return;
     }
     if (location.hash) return; // the page's own fragment (the skip link): nothing to do
     if (threshold) goHome();
-    else if (random && firstPiece) open(firstPiece.file, firstPiece.seed, { push: false, keepRead: true });
+    else if (random && firstPiece) open(firstPiece.file, firstPiece.seed, { push: false, keepRead: true, arriving: true });
     // A world page's own entry always carries its piece's hash, so there is nothing else to land on.
   });
   // Learn which worlds read the sky, after the first paint has had its turn.
@@ -2324,8 +2839,10 @@ function start() {
     // does: one setting, every puzzle on the site, settable wherever it is met.
     persona.onDifficulty(() => {
       if (!current) return;
+      // The re-deal is a shuffle (README: "Motion axiom"): the rail that was is unmade and the
+      // same working is dealt again through its own matte -- an arrival with no travel (redeal).
       open(current.world.file, current.seed,
-        { push: false, focus: false, variant: current.variant, card: current.card });
+        { push: false, focus: false, variant: current.variant, card: current.card, arriving: true, redeal: true });
     });
   }
   if (persona && typeof persona.onSky === 'function') {
@@ -2336,22 +2853,25 @@ function start() {
         // The same card, remade under the new sky: the configuration it opened with goes back in,
         // so a piece re-made for a sky is still the card that was pressed.
         open(current.world.file, current.seed,
-          { push: false, focus: false, variant: current.variant, card: current.card });
+          { push: false, focus: false, variant: current.variant, card: current.card, arriving: true, redeal: true });
       }
     });
   }
 
+  // The first open is the most-seen open of all, so it arrives like every other (README: "Motion
+  // axiom"): the plate develops, the words land, the knobs are dealt. 'arriving' is the mode's
+  // name for it and 'live' is where it lands, as for a card pressed in the feed.
   if (threshold) {
     thresholdStart();
   } else if (pageWorld) {
     const h = parseHash();
     const file = h && h.world && worldOf(h.world) ? h.world : pageWorld;
-    open(file, h ? h.seed : newSeed(), { push: true, replace: true, focus: false });
+    open(file, h ? h.seed : newSeed(), { push: true, replace: true, focus: false, arriving: true });
   } else if (random) {
     // A page of no world (the 404): whatever comes next, which is the first card of the feed. The
     // address stays what was asked for, with the line that says there is no page there.
     const h = parseHash();
-    if (h && h.world && worldOf(h.world)) open(h.world, h.seed, { push: false, focus: false });
+    if (h && h.world && worldOf(h.world)) open(h.world, h.seed, { push: false, focus: false, arriving: true });
     else next({ push: false, keepRead: true, focus: false, first: true });
   }
 }

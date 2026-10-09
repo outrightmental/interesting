@@ -411,8 +411,12 @@
       var line = el('p', 'unlock-note', note);
       box.appendChild(line);
       var controls = el('div', 'controls');
-      var go = el('button', 'unlock-go btn-filled', button);
+      // The button's words sit in a span of their own, so they can be revealed (a button lays
+      // its children out as a flex row, which would close the gaps between revealed words).
+      var go = el('button', 'unlock-go btn-filled');
       go.type = 'button';
+      var goWord = el('span', 'unlock-word', button);
+      go.appendChild(goWord);
       controls.appendChild(go);
       box.appendChild(controls);
       if (elsewhere && elsewhere.open && persona) {
@@ -432,7 +436,7 @@
       // The words arrive as words do here: revealed, not cut in.
       say(heading);
       say(line);
-      say(go);
+      say(goWord);
       host.classList.add('powered-down');
       host.setAttribute('inert', '');
       host.setAttribute('aria-hidden', 'true');
@@ -708,6 +712,8 @@
     var actions = el('div', 'controls are-you-sure-actions');
     var go = el('button', 'warning are-you-sure-go');
     go.type = 'button';
+    var goWord = el('span', 'are-you-sure-word'); // the words, revealable (see unlock)
+    go.appendChild(goWord);
     var no = el('button', 'are-you-sure-no', 'cancel');
     no.type = 'button';
     actions.appendChild(go);
@@ -755,7 +761,7 @@
         next.focus();
       }
     });
-    return { host: host, title: title, note: note, go: go, no: no };
+    return { host: host, title: title, note: note, go: go, goWord: goWord, no: no };
   }
 
   function settle(yes) {
@@ -796,7 +802,7 @@
     say(sure.title, 'are you sure you want to ' + what + '?');
     say(sure.note, opts.detail || '', !opts.detail);
     sure.note.hidden = !opts.detail;
-    say(sure.go, String(opts.confirm || '').trim() || ('yes, ' + what));
+    say(sure.goWord, String(opts.confirm || '').trim() || ('yes, ' + what));
     asking = {
       onConfirm: onConfirm,
       onCancel: onCancel,

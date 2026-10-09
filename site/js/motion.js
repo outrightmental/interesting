@@ -45,9 +45,21 @@
                         (a noise field thresholded, a scatter of shards, scan lines, a dither, an
                         iris, a grain), so a surface that changes changes by its area and never
                         by a fade -- a hover arrives tread by tread through them
-      --matte-fill, --matte-fill-size, --matte-kind
+      --matte-fill, --matte-fill-size, --matte-kind, --matte-top
                         the texture a surface that stays changed (pressed, selected, set) is
-                        filled with, in the colour of its text, and the kind of matte rolled
+                        filled with, in the colour of its text; the kind of matte rolled (also
+                        <html data-matte>); and the top of the ladder, the same texture as a
+                        mask, so a surface that has arrived rests patterned and never flat
+      --motion-<spell>  one length per @keyframes name, rolled beside its curve
+      --ease-ratchet    how anything turns: teeth, a slip back, a hold, never an even rotation
+
+  Every movement is composed anew on its trigger (the composer, below): a rite is a whole put
+  together from pieces each chosen at random from a vocabulary -- an opening, a climb, a landing;
+  a dip, a flash, a return; an approach, an overshoot, a hesitation -- with uneven treads, written
+  as a @keyframes rule of its own and named on the element (--rite-wax, --rite-wane, --rite-stamp,
+  --rite-ink, --rite-seal, --rite-unseal, --rite-develop, --rite-unmake, --rite-veil-out), so the
+  same hover on the same button is never the same twice. The named keyframes in the stylesheets
+  are what a page with no script plays.
 
   How a control changes (README: "Motion axiom"). Nothing fades. A control under the pointer or
   the focus waxes -- is-waxing, its changed surface arriving through the matte ladder -- and when
@@ -73,11 +85,21 @@
       m.stagger(k)                // the k-th of a scatter's delay, with its own jitter, in ms
       m.shift()                   // the site is changing its modality: flicker the rite's words
       m.roll()                    // roll everything again now
-      m.reveal(el)                // the words of el arrive glyph by glyph, each through a sigil
-      m.flip(list, change)        // run change(); every child of list that moved moves there
+      m.reveal(el, { scramble })  // the words of el arrive glyph by glyph, each through sigils
+      m.flip(list, change)        // run change(); every child of list that moved jumps there in treads
+      m.stepper({ ms, treads, step(k, n, slipping), done })
+                                  // a movement in treads: step is called with each tread reached
       m.rite(el, 'stamping')      // one passing rite on el, by the name of its class is-<name>
       m.wax(el) / m.wane(el)      // el under the pointer, and the pointer leaving it
+      m.seal(el)                  // dress el in a fill texture of its own (done on its own when set)
+      m.compose('wax')            // a @keyframes rule composed from pieces, by name; m.composeOn(el,
+                                  // kind, fallback, ms) writes it on el as --rite-<kind>
+      m.arrive(el, { seed, spell, mattes })
+                                  // a geometry, a curve and a ladder of el's own, written on it
+      m.deal(el, { spells })      // pin the page's roll on el while it waits in its delay
       m.mattes()                  // the matte ladder and the fill, as the strings that were written
+      m.geometryFor(seed, el) / m.ladderFor(seed, el) / m.temperFor(el)
+                                  // a roll of an element's own, not written anywhere
       m.reduced                   // true for a visitor who asked for less motion
 
   When it rolls. Everything is rolled once as the <head> is read, so the first paint already
@@ -149,12 +171,12 @@
 
   var DEFAULT_TEMPER = { grain: 0.45, tempo: 1, steps: 0 };
 
-  function readTemper(doc) {
+  function readTemper(doc, el) {
     var temper = { grain: DEFAULT_TEMPER.grain, tempo: DEFAULT_TEMPER.tempo, steps: DEFAULT_TEMPER.steps };
     if (!doc || typeof global.getComputedStyle !== 'function') return temper;
     var style;
     try {
-      style = global.getComputedStyle(doc.documentElement);
+      style = global.getComputedStyle(el || doc.documentElement);
     } catch (e) {
       return temper;
     }
@@ -279,8 +301,11 @@
 
   // A settle: bounces of shrinking size round a value, which is how an overshoot is paid back.
   Maker.prototype.settle = function (y, amplitude, bounces, until) {
-    var span = until - this.t;
     var n = Math.max(1, bounces);
+    // The bounces need room: a settle asked for right at the pen is spread a little past it,
+    // never stacked on one instant as a three-way flicker in a single frame.
+    until = Math.max(until, this.t + 0.03 * n);
+    var span = until - this.t;
     for (var i = 1; i <= n; i++) {
       var sign = i % 2 ? -1 : 1;
       var a = amplitude * Math.pow(0.38, i);
@@ -453,6 +478,36 @@
       m.stair(m.between(0.82, 0.96), m.chance(g * 0.6) ? 1 + m.between(0.02, 0.06) : 1, n);
       if (m.y > 1) m.settle(1, m.y - 1, 1, 1);
       return m.finish();
+    },
+    // A ratchet: how anything turns -- a ring, a wheel, a dial, a whole scene. Many teeth, each a
+    // click forward, a slip of a part of a tooth back, and a hold, so a turn is never even and a
+    // ring is never seen to glide. The teeth are uneven and the slips are the grain's.
+    ratchet: function (m) {
+      var g = m.grain;
+      var teeth = 18 + Math.round(m.rnd() * (30 + g * 40));
+      var widths = [];
+      var total = 0;
+      for (var i = 0; i < teeth; i++) {
+        var w = m.between(0.5, 1.5);
+        widths.push(w);
+        total += w;
+      }
+      var t = 0;
+      var y = 0;
+      for (var k = 0; k < teeth; k++) {
+        var dt = widths[k] / total;
+        var dy = 1 / teeth;
+        var rise = dt * m.between(0.12, 0.3);
+        // the click
+        m.put(clamp(t + rise, 0.001, 0.999), clamp(y + dy * (1 + (m.chance(g * 0.5) ? m.between(0.1, 0.35) : 0)), 0, 1));
+        // the slip back, where the grain allows it
+        if (m.chance(0.3 + g * 0.5)) m.put(clamp(t + rise + dt * m.between(0.08, 0.2), 0.001, 0.999), clamp(y + dy * (1 - m.between(0.15, 0.4)), 0, 1));
+        t += dt;
+        y += dy;
+        // the hold until the next tooth
+        if (k < teeth - 1) m.put(clamp(t, 0.001, 0.999), clamp(y, 0, 1));
+      }
+      return m.finish();
     }
   };
 
@@ -476,7 +531,7 @@
     'persona-beckon': 'pulse',
     'persona-flight': 'arrive',
     'persona-flight-ring': 'leave',
-    'rite-turn': 'drift',
+    'rite-turn': 'ratchet',
     'rite-shift': 'flicker',
     'matte-in': 'stair',
     'matte-out': 'stair',
@@ -517,14 +572,93 @@
     'chip-stamp': 'flicker',
     'chip-wax': 'stair',
     'chip-wane': 'stair',
-    'shell-unmake': 'leave'
+    'shell-unmake': 'leave',
+    'portrait-twinkle': 'flicker',
+    'beckon-label': 'flicker',
+    'ring-wait': 'drift',
+    'glyph-unmake': 'leave',
+    'ring-cast': 'stair',
+    'portrait-cast': 'stair',
+    'persona-name': 'stair',
+    'persona-name-out': 'stair',
+    'portrait-ask': 'stair',
+    'portrait-stamp': 'flicker',
+    'sheet-in': 'arrive',
+    'sheet-part-in': 'stair',
+    'sheet-out': 'leave',
+    'sky-ring-cast': 'stair',
+    'sky-ring-click': 'flicker',
+    'canvas-flicker': 'flicker',
+    'part-in': 'arrive',
+    'part-unmake': 'leave',
+    'thread-stamp': 'flicker',
+    'star-wax': 'stair',
+    'star-wane': 'stair',
+    'star-select': 'stair',
+    'star-unselect': 'stair',
+    'star-focus': 'stair',
+    'star-lift': 'flicker',
+    'star-drop': 'stair',
+    'star-develop': 'arrive',
+    'star-unmake': 'leave',
+    'end-seal': 'stair',
+    'stamp-ink': 'flicker',
+    'field-wax': 'stair',
+    'glyph-word': 'arrive',
+    'glyph-sigil-2': 'flicker',
+    'stage-unmake': 'leave',
+    'stage-no-b': 'flicker',
+    'head-in': 'stair',
+    'line-develop': 'stair',
+    'line-said': 'stair',
+    'line-said-b': 'stair',
+    'cursor-blink': 'flicker',
+    'cursor-blink-b': 'flicker',
+    'sigil-cast': 'stair',
+    'sigil-scatter': 'leave',
+    'seal-stamp': 'stair',
+    'seal-light': 'stair',
+    'seal-strike': 'leave',
+    'plate-veil': 'stair',
+    'plate-tick': 'drift',
+    'plate-unveil': 'leave',
+    'plate-develop': 'stair',
+    'plate-reexpose': 'stair',
+    'plate-twitch': 'flicker',
+    'tube-warm': 'stair',
+    'knob-stamp': 'stair',
+    'knob-seal': 'stair',
+    'knob-unmake': 'leave',
+    'ward-tear': 'stair',
+    'hold-wind': 'drift',
+    'hold-refuse': 'flicker',
+    'reel-land': 'flicker',
+    'notch-punch': 'flicker',
+    'count-ratchet': 'stair',
+    'row-swap': 'stair',
+    'cell-flip': 'flicker',
+    'cell-flip-b': 'flicker',
+    'check-strike': 'stair',
+    'check-refuse': 'flicker',
+    'check-refuse-b': 'flicker',
+    'ink-dry': 'stair',
+    'lamp-light': 'stair',
+    'caret-step': 'stair',
+    'ask-in': 'stair',
+    'veil-tear': 'stair',
+    'veil-tear-b': 'stair',
+    'avatar-in': 'arrive',
+    'sky-stamp': 'flicker',
+    'thread-unmake': 'leave',
+    'reading-seal': 'stair'
   };
 
   function familyOf(name) {
     if (FAMILIES[name]) return name;
     if (SPELLS[name]) return SPELLS[name];
     if (/out|leave|gone|away|reject|unseal/.test(name)) return 'leave';
-    if (/turn|spin|drift/.test(name)) return 'drift';
+    if (/turn|spin|ratchet|wheel|dial/.test(name)) return 'ratchet';
+    if (/drift/.test(name)) return 'drift';
     if (/beckon|breath|pulse/.test(name)) return 'pulse';
     if (/veil|wipe/.test(name)) return 'wipe';
     if (/matte|seal|stair|step|develop/.test(name)) return 'stair';
@@ -554,24 +688,44 @@
 
   // Noise thresholded at a coverage: feTurbulence, read as a single channel, cut by a discrete
   // alpha table so that the covered fraction rises with the coverage asked for.
+  // The channel feTurbulence gives is not spread evenly over 0..1 -- fractalNoise sits in a bell
+  // around 0.5 and turbulence crowds toward 0 -- so it is stretched first (a linear transfer with
+  // the slope and intercept that spread each kind over the whole range), and then cut: a table
+  // of many steps, 1 above the threshold and 0 below, so that the covered fraction really rises
+  // with the coverage asked for, rung by rung, instead of the first two rungs coming out empty
+  // and the last two solid.
   function noiseMatte(rnd, coverage, seed, frequency, octaves, fractal) {
-    var n = 10;
+    var n = 40;
     var table = [];
     for (var i = 0; i < n; i++) table.push(i / (n - 1) < 1 - coverage ? 0 : 1);
+    var slope = fractal ? 3.2 : 2.2;
+    var intercept = fractal ? -1.1 : -0.05;
     var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96">'
       + '<filter id="m" x="0" y="0" width="100%" height="100%" color-interpolation-filters="sRGB">'
       + '<feTurbulence type="' + (fractal ? 'fractalNoise' : 'turbulence') + '" baseFrequency="' + frequency + '" numOctaves="' + octaves + '" seed="' + seed + '" stitchTiles="stitch"/>'
       + '<feColorMatrix type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  1 0 0 0 0"/>'
+      + '<feComponentTransfer><feFuncA type="linear" slope="' + slope + '" intercept="' + intercept + '"/></feComponentTransfer>'
       + '<feComponentTransfer><feFuncA type="discrete" tableValues="' + table.join(' ') + '"/></feComponentTransfer>'
       + '</filter><rect width="96" height="96" filter="url(#m)"/></svg>';
     return svgURI(svg) + ' 0 0 / 96px 96px repeat';
   }
 
-  // Shards: a scatter of rolled triangles over the tile, as many drawn as the coverage asks.
+  // Shards: a scatter of rolled triangles over the tile, the smallest first, as many drawn as
+  // the coverage asks. A shard that crosses the tile's edge is drawn again on the far side, so
+  // the tile repeats without a seam.
   function shardMatte(shards, coverage) {
     var count = Math.round(shards.length * coverage);
     var polys = '';
-    for (var i = 0; i < count; i++) polys += '<polygon points="' + shards[i] + '"/>';
+    for (var i = 0; i < count; i++) {
+      var sh = shards[i];
+      for (var w = 0; w < sh.wraps.length; w++) {
+        var dx = sh.wraps[w][0];
+        var dy = sh.wraps[w][1];
+        var pts = [];
+        for (var k = 0; k < 3; k++) pts.push((sh.pts[k][0] + dx).toFixed(1) + ',' + (sh.pts[k][1] + dy).toFixed(1));
+        polys += '<polygon points="' + pts.join(' ') + '"/>';
+      }
+    }
     if (coverage >= 1) polys = '<rect width="120" height="120"/>';
     var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120">' + polys + '</svg>';
     return svgURI(svg) + ' 0 0 / 120px 120px repeat';
@@ -582,16 +736,44 @@
     for (var i = 0; i < 26; i++) {
       var cx = rnd() * 120;
       var cy = rnd() * 120;
-      var r = 14 + rnd() * 34;
+      var r = 12 + rnd() * 30;
       var a = rnd() * Math.PI * 2;
       var pts = [];
+      var minX = 999, maxX = -999, minY = 999, maxY = -999;
       for (var k = 0; k < 3; k++) {
         var ang = a + k * (Math.PI * 2 / 3) + (rnd() - 0.5) * 0.8;
-        pts.push((cx + Math.cos(ang) * r).toFixed(1) + ',' + (cy + Math.sin(ang) * r).toFixed(1));
+        var x = cx + Math.cos(ang) * r;
+        var y = cy + Math.sin(ang) * r;
+        pts.push([x, y]);
+        if (x < minX) minX = x; if (x > maxX) maxX = x; if (y < minY) minY = y; if (y > maxY) maxY = y;
       }
-      shards.push(pts.join(' '));
+      // The copies that keep it whole across the tile's edges.
+      var xs = [0];
+      var ys = [0];
+      if (minX < 0) xs.push(120); if (maxX > 120) xs.push(-120);
+      if (minY < 0) ys.push(120); if (maxY > 120) ys.push(-120);
+      var wraps = [];
+      for (var xi = 0; xi < xs.length; xi++) for (var yi = 0; yi < ys.length; yi++) wraps.push([xs[xi], ys[yi]]);
+      var area = Math.abs((pts[1][0] - pts[0][0]) * (pts[2][1] - pts[0][1]) - (pts[2][0] - pts[0][0]) * (pts[1][1] - pts[0][1])) / 2;
+      shards.push({ pts: pts, wraps: wraps, area: area });
     }
+    shards.sort(function (a, b) { return a.area - b.area; });
     return shards;
+  }
+
+  // A dither: a 4x4 Bayer tile as sixteen cells, lit in Bayer order, so each rung of the ladder
+  // lights the next few cells and no two rungs are the same.
+  var BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
+  function ditherMatte(cell, coverage) {
+    var lit = Math.round(16 * coverage);
+    if (lit >= 16) return 'linear-gradient(#000, #000)';
+    var rects = '';
+    for (var i = 0; i < 16; i++) {
+      if (BAYER[i] < lit) rects += '<rect x="' + (i % 4) * cell + '" y="' + Math.floor(i / 4) * cell + '" width="' + cell + '" height="' + cell + '"/>';
+    }
+    var size = cell * 4;
+    var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + size + '" height="' + size + '">' + rects + '</svg>';
+    return svgURI(svg) + ' 0 0 / ' + size + 'px ' + size + 'px repeat';
   }
 
   function rollMattes(rnd, temper) {
@@ -601,29 +783,34 @@
     var coverages = [0.1 + rnd() * 0.08, 0.26 + rnd() * 0.1, 0.46 + rnd() * 0.12, 0.7 + rnd() * 0.12, 1];
     var i;
     if (kind === 'noise' || kind === 'grain') {
+      // Several features to a tile (a frequency of 0.03 is three across 96px), and a few
+      // octaves, so the channel has a histogram to cut rather than one blob that is all above
+      // or all below the line; fractalNoise, whose bell the stretch above is tuned to.
       var seed = 1 + Math.floor(rnd() * 9999);
-      var frequency = (kind === 'grain' ? 0.08 + rnd() * 0.12 : 0.012 + rnd() * 0.05).toFixed(4);
-      var octaves = 1 + Math.floor(rnd() * 3);
-      var fractal = rnd() < 0.5;
+      var frequency = (kind === 'grain' ? 0.09 + rnd() * 0.12 : 0.028 + rnd() * 0.05).toFixed(4);
+      var octaves = 2 + Math.floor(rnd() * 3);
+      var fractal = true;
       for (i = 0; i < 5; i++) ladder.push(noiseMatte(rnd, coverages[i], seed, frequency, octaves, fractal));
     } else if (kind === 'shards') {
       var shards = rollShards(rnd);
       for (i = 0; i < 5; i++) ladder.push(shardMatte(shards, coverages[i]));
     } else if (kind === 'scan') {
+      // Lines wide enough that every rung is its own: the band grows a rung at a time, and from
+      // the third rung a second set of lines crosses the first.
       var angle = Math.round(rnd() < 0.6 ? (rnd() < 0.5 ? 0 : 90) : rnd() * 180);
-      var period = 3 + Math.round(rnd() * 9);
+      var period = 8 + Math.round(rnd() * 8);
       for (i = 0; i < 5; i++) {
-        var band = Math.max(1, Math.round(period * coverages[i]));
-        ladder.push(i === 4 ? 'linear-gradient(#000, #000)'
-          : 'repeating-linear-gradient(' + angle + 'deg, #000 0 ' + band + 'px, transparent ' + band + 'px ' + period + 'px)');
+        var band = Math.max(1, Math.round(period * coverages[i] * (i >= 2 ? 0.75 : 1)));
+        var lines = 'repeating-linear-gradient(' + angle + 'deg, #000 0 ' + band + 'px, transparent ' + band + 'px ' + period + 'px)';
+        if (i >= 2) {
+          var cross = Math.max(1, Math.round(period * coverages[i] * 0.5));
+          lines += ', repeating-linear-gradient(' + (angle + 90) + 'deg, #000 0 ' + cross + 'px, transparent ' + cross + 'px ' + (period + 3) + 'px)';
+        }
+        ladder.push(i === 4 ? 'linear-gradient(#000, #000)' : lines);
       }
     } else if (kind === 'dither') {
-      var cell = 4 + Math.round(rnd() * 6);
-      for (i = 0; i < 5; i++) {
-        var on = Math.max(2, Math.round(cell * Math.sqrt(coverages[i])));
-        ladder.push(i === 4 ? 'linear-gradient(#000, #000)'
-          : 'radial-gradient(#000 ' + (on / 2).toFixed(1) + 'px, transparent ' + (on / 2 + 0.5).toFixed(1) + 'px) 0 0 / ' + cell + 'px ' + cell + 'px repeat');
-      }
+      var cell = 2 + Math.round(rnd() * 4);
+      for (i = 0; i < 5; i++) ladder.push(ditherMatte(cell, coverages[i]));
     } else {
       var ix = Math.round(rnd() * 100);
       var iy = Math.round(rnd() * 100);
@@ -656,7 +843,12 @@
     } else {
       image = 'repeating-radial-gradient(circle at ' + Math.round(rnd() * 100) + '% ' + Math.round(rnd() * 100) + '%, currentColor 0 1px, transparent 1px ' + (fp + 2) + 'px)';
     }
-    return { kind: kind, ladder: ladder, fill: fill, fillImage: image, fillSize: size, grain: g };
+    // The top of the ladder: the same texture in black, as a mask, so a surface that has arrived
+    // through the ladder rests patterned rather than as a flat tint. Dense enough to read as the
+    // surface, open enough to read as a pattern.
+    var topImage = image.replace(/currentColor/g, '#000');
+    var top = topImage + (size === 'auto' ? '' : ' 0 0 / ' + size) + ', linear-gradient(#000, #000)';
+    return { kind: kind, ladder: ladder, fill: fill, fillImage: image, fillSize: size, top: top, grain: g };
   }
 
   function makeCurve(family, temper, seed) {
@@ -782,7 +974,7 @@
       supportsLinear = true;
     }
     var temper = readTemper(doc);
-    var current = { curves: {}, spells: {}, durations: null, geometry: null };
+    var current = { curves: {}, spells: {}, spellMs: {}, durations: null, geometry: null };
     var inFlight = {}; // animation name -> how many are running
     var running = 0; // all of them, the ones that loop for ever aside
     var looping = { 'persona-beckon': true, 'rite-turn': true }; // the ones that never end
@@ -791,6 +983,24 @@
     var bootAt = 0;
     var lastRoll = 0;
     var breathTimer = null;
+    var temperOf = typeof global.WeakMap === 'function' ? new global.WeakMap() : null;
+
+    // The temperament an element moves by: its own mood's where it sits inside one (a card of
+    // another world in the feed), the page's otherwise. Cached until the site shifts.
+    function temperFor(el) {
+      if (!el || typeof el.closest !== 'function') return temper;
+      var host = null;
+      try {
+        host = el.closest('[data-mood], [data-world], [data-featured]');
+      } catch (e) {
+        return temper;
+      }
+      if (!host || host === html) return temper;
+      if (temperOf && temperOf.has(host)) return temperOf.get(host);
+      var t = readTemper(doc, host);
+      if (temperOf) temperOf.set(host, t);
+      return t;
+    }
 
     function reduced() {
       return !!(calm && calm.matches);
@@ -814,12 +1024,21 @@
       }
     }
 
+    // A spell's own length beside its curve: --motion-<name>, from its family's base, rolled a
+    // quarter either way and scaled by the tempo, so a rite that plays twice is never the same
+    // length twice. A stylesheet reads it as var(--motion-<name>, var(--motion-long)).
+    var SPELL_MS = { arrive: 560, leave: 340, shift: 340, flicker: 170, pulse: 2400, drift: 120000, wipe: 340, stair: 340, ratchet: 120000, scroll: 600 };
     function rollSpell(name) {
+      if (composedSet[name]) return;
       var rnd = mulberry32(entropy());
       var family = familyOf(name);
       var curve = makeCurve(family, temper, Math.floor(rnd() * 0x7fffffff));
       current.spells[name] = curve;
       write('--ease-' + name, cssOf(curve, family, rnd));
+      var base = SPELL_MS[family] || 340;
+      var length = Math.round(base * temper.tempo * (0.75 + rnd() * 0.5));
+      current.spellMs[name] = length;
+      write('--motion-' + name, length + 'ms');
     }
 
     function rollDurationsNow() {
@@ -886,16 +1105,53 @@
       for (var i = 0; i < m.ladder.length; i++) write('--matte-' + (i + 1), m.ladder[i]);
       write('--matte-fill', m.fillImage);
       write('--matte-fill-size', m.fillSize);
+      write('--matte-top', m.top);
       write('--matte-kind', m.kind);
+      // Said on <html> too, so a stylesheet can dress a kind: html[data-matte='scan'] ...
+      if (html && typeof html.setAttribute === 'function') html.setAttribute('data-matte', m.kind);
     }
 
     var TRANSITION_FAMILIES = ['shift', 'flicker', 'stair'];
-    var ALL_FAMILIES = ['arrive', 'leave', 'shift', 'flicker', 'pulse', 'drift', 'wipe', 'stair'];
+    var ALL_FAMILIES = ['arrive', 'leave', 'shift', 'flicker', 'pulse', 'drift', 'wipe', 'stair', 'ratchet'];
 
+    /* Whether anything that ends is in flight. document.getAnimations is the truth where the
+       browser has it -- it counts an animation still in its delay, and forgets one that was
+       cancelled without a word (an element removed or hidden mid-flight, which older browsers
+       never report) -- and the hand-kept counter is the fallback. A looping animation never
+       counts, because it never ends. */
+    function busy() {
+      if (typeof doc.getAnimations === 'function') {
+        try {
+          var all = doc.getAnimations();
+          for (var i = 0; i < all.length; i++) {
+            var a = all[i];
+            if (!a || a.playState !== 'running' || !a.effect || typeof a.effect.getTiming !== 'function') continue;
+            var timing = a.effect.getTiming();
+            if (timing.iterations === Infinity) continue;
+            if (a.animationName && looping[a.animationName]) continue;
+            return true;
+          }
+          running = 0;
+          return false;
+        } catch (e) {
+          /* the counter, then */
+        }
+      }
+      return running > 0;
+    }
+
+    // Everything rolled again -- but a spell with an animation in flight keeps its curve until
+    // that animation ends (a curve changed under a running animation is a jump along it), and is
+    // marked wanted, so the next end re-rolls it; a looping one is re-rolled at its next turn.
     function rollAll() {
       temper = readTemper(doc);
+      if (temperOf) temperOf = new global.WeakMap();
       rollFamilies(ALL_FAMILIES);
-      for (var name in SPELLS) if (Object.prototype.hasOwnProperty.call(SPELLS, name)) rollSpell(name);
+      for (var name in SPELLS) {
+        if (!Object.prototype.hasOwnProperty.call(SPELLS, name)) continue;
+        if (inFlight[name] || looping[name]) spellWanted[name] = true;
+        else rollSpell(name);
+      }
       rollDurationsNow();
       rollGeometryNow();
       rollMattesNow();
@@ -916,22 +1172,53 @@
     var lastQuick = 0;
     function rollQuick(withGeometry) {
       var at = now();
-      if (at - lastQuick < 48) return;
+      if (at - lastQuick < 96) return;
       lastQuick = at;
       rollFamilies(TRANSITION_FAMILIES);
       if (!withGeometry) return;
-      if (!running) {
+      if (!busy()) {
         rollGeometryNow();
         rollMattesNow();
       } else geometryWanted = true;
     }
 
-    function onPress() {
+    // A field being typed into is not a press, nor is a focus the browser would not show: only
+    // a pointer, an activation key, a Tab, or a visible focus rolls the quick families.
+    function onPress(ev) {
+      if (ev && ev.type === 'keydown') {
+        var el = ev.target;
+        if (ev.key !== 'Enter' && ev.key !== ' ' && ev.key !== 'Tab') return;
+        if (el && (el.tagName === 'TEXTAREA' || el.isContentEditable
+          || (el.tagName === 'INPUT' && !/^(?:button|submit|reset|checkbox|radio|range|color|file)$/i.test(el.type || '')))) return;
+      }
+      if (ev && ev.type === 'focusin') {
+        try {
+          if (ev.target && typeof ev.target.matches === 'function' && !ev.target.matches(':focus-visible')) return;
+        } catch (e) {
+          /* every focus shows, then */
+        }
+      }
       rollQuick(true);
     }
 
     function onPass() {
       rollQuick(false);
+    }
+
+    // A geometry asked for while something was in flight is rolled once the flight is over.
+    var settleTimer = 0;
+    function settleLater() {
+      if (settleTimer || typeof global.setTimeout !== 'function') return;
+      settleTimer = global.setTimeout(function () {
+        settleTimer = 0;
+        if (!geometryWanted) return;
+        if (busy()) {
+          settleLater();
+          return;
+        }
+        rollGeometryNow();
+        rollMattesNow();
+      }, 120);
     }
 
     /* ---- what the page tells it ------------------------------------------------------------ */
@@ -948,7 +1235,11 @@
         transitionRoll = 0;
         rollFamilies(TRANSITION_FAMILIES);
         rollFamilies(['arrive', 'leave']);
-        if (!running) rollGeometryNow();
+        if (!busy()) rollGeometryNow();
+        else {
+          geometryWanted = true;
+          settleLater();
+        }
       });
     }
 
@@ -971,7 +1262,10 @@
         running = Math.max(0, running - 1);
       }
       spellWanted[name] = true;
-      if (running) return;
+      if (busy()) {
+        settleLater();
+        return;
+      }
       for (var spell in spellWanted) {
         if (Object.prototype.hasOwnProperty.call(spellWanted, spell) && !inFlight[spell]) {
           rollSpell(spell);
@@ -1033,14 +1327,21 @@
 
     // A page left alone rolls itself again every so often, at a rolled interval, so its next
     // movement is never the one it rolled a minute ago; nothing in flight is touched.
+    var breaths = 0;
     function breathe() {
       if (typeof global.setTimeout !== 'function') return;
-      var wait = 12000 + Math.random() * 18000;
+      // The wait is the maker's: a stair curve sampled at a rolled point, stretched as the page
+      // is left alone longer, so an idle page breathes slower and slower (up to a minute and a
+      // half) and a page touched again breathes quickly once more.
+      var rnd = mulberry32(entropy());
+      var curve = makeCurve('stair', temper, Math.floor(rnd() * 0x7fffffff));
+      var wait = (12000 + curve.at(rnd()) * 18000) * Math.min(3, 1 + breaths * 0.5);
       breathTimer = global.setTimeout(function () {
         if (now() - lastRoll > 4000) {
-          if (running) rollFamilies(TRANSITION_FAMILIES);
+          breaths += 1;
+          if (busy()) rollFamilies(TRANSITION_FAMILIES);
           else rollAll();
-        }
+        } else breaths = 0;
         breathe();
       }, wait);
     }
@@ -1082,6 +1383,352 @@
       });
     }
 
+    /* ---- the composer ---------------------------------------------------------------------- */
+
+    /* Every movement is composed anew each time it is triggered. A rite is not one rolled curve
+       laid over a fixed sequence of keyframes: it is a whole put together, on the trigger, from
+       pieces each chosen at random from a vocabulary -- an opening (a cut in from the rolled
+       edge, a blink, nothing), a climb up the matte ladder (steady, with a slip back, in a leap,
+       with a stutter, with a flicker out, doubled), a landing (the patterned top, the flat rung
+       then the top, an overshoot past it), a dip (how deep, which way, with what flash), a return
+       (straight, over the mark, a double bounce), an approach (straight, hesitating, past the
+       mark, skewed in) -- with the width of every tread uneven and its own. The composition is
+       written as an @keyframes rule of its own into a stylesheet of the engine's, and its name
+       is written on the element (--rite-wax, --rite-wane, --rite-stamp, --rite-ink, --rite-seal,
+       --rite-unseal, --rite-develop, --rite-unmake, --rite-veil-out), where the stylesheet reads
+       it as `animation: var(--rite-wax, matte-in) ...`, the named keyframes being only what a page
+       with no script plays. So the same hover on the same button is never the same twice, and
+       two buttons hovered together wax two different ways. The rules are recycled: the oldest go
+       as new ones come, long after anything could still be playing them. */
+
+    var COMPOSED_CAP = 240;
+    var composedSheet = null;
+    var composedNames = [];
+    var composedCount = 0;
+    var composedSet = {};
+
+    function composedSheetReady() {
+      if (composedSheet) return composedSheet;
+      if (!doc.createElement || !doc.head || typeof doc.head.appendChild !== 'function') return null;
+      try {
+        var style = doc.createElement('style');
+        style.setAttribute('data-interesting-rites', '');
+        doc.head.appendChild(style);
+        composedSheet = style.sheet || null;
+      } catch (e) {
+        composedSheet = null;
+      }
+      return composedSheet;
+    }
+
+    // The frames of a composition: states, each a set of declarations, held one after another
+    // over treads of uneven width -- each state written as a held pair, so nothing between two
+    // states is ever interpolated. The widths come from the roll; `weights` may stretch some.
+    function framesOf(states, rnd, weights) {
+      var widths = [];
+      var total = 0;
+      for (var i = 0; i < states.length; i++) {
+        var w = (0.45 + rnd() * 1.1) * (weights && weights[i] ? weights[i] : 1);
+        widths.push(w);
+        total += w;
+      }
+      var out = '';
+      var at = 0;
+      for (var k = 0; k < states.length; k++) {
+        var from = at;
+        at += widths[k] / total;
+        var to = k === states.length - 1 ? 1 : at;
+        var decl = states[k];
+        var body = '';
+        for (var prop in decl) if (Object.prototype.hasOwnProperty.call(decl, prop)) body += prop + ': ' + decl[prop] + '; ';
+        var a = (from * 100).toFixed(1);
+        var b = k === states.length - 1 ? '100' : Math.max(from * 100, to * 100 - 0.1).toFixed(1);
+        out += (a === b ? a : a + '%, ' + b) + '% { ' + body + '} ';
+      }
+      return out;
+    }
+
+    function masked(rung) {
+      var v = rung === 'top' ? 'var(--matte-top)' : rung === 'none' ? 'none' : rung === 'off' ? 'none' : 'var(--matte-' + rung + ')';
+      return { mask: v, '-webkit-mask': v };
+    }
+
+    function merge(a, b) {
+      var out = {};
+      var k;
+      for (k in a) if (Object.prototype.hasOwnProperty.call(a, k)) out[k] = a[k];
+      for (k in b) if (Object.prototype.hasOwnProperty.call(b, k)) out[k] = b[k];
+      return out;
+    }
+
+    function pick(rnd, list) {
+      return list[Math.floor(rnd() * list.length)];
+    }
+
+    /* The vocabulary. Each kind is a list of pieces to choose from, and each piece a function of
+       the roll that gives back states; a composition is one piece from each slot, in order. */
+    var VOCABULARY = {
+      // The state layer arriving under the pointer.
+      wax: {
+        opening: [
+          function () { return []; },
+          function (rnd) { return [merge(masked(1), { 'clip-path': 'var(--state-from, inset(0 50% 0 50%))', opacity: '0.12' })]; },
+          function () { return [merge(masked('off'), { opacity: '0' })]; }
+        ],
+        climb: [
+          function () { return [masked(1), masked(2), masked(3), masked(4), masked(5)]; },
+          function () { return [masked(1), masked(2), masked(3), masked(2), masked(4), masked(5)]; },
+          function () { return [masked(1), masked(3), masked(5)]; },
+          function () { return [masked(1), { 'mask-position': 'calc(var(--matte-shift-x, 0px) + 11px) var(--matte-shift-y, 0px)', '-webkit-mask-position': 'calc(var(--matte-shift-x, 0px) + 11px) var(--matte-shift-y, 0px)' }, masked(2), masked(3), masked(4), masked(5)]; },
+          function () { return [masked(1), masked(2), masked(3), merge(masked(3), { opacity: '0' }), masked(4), masked(5)]; },
+          function () { return [masked(1), masked(2), masked(1), masked(2), masked(3), masked(4), masked(5)]; },
+          function () { return [masked(2), masked(4), masked(3), masked(5)]; }
+        ],
+        landing: [
+          function () { return [masked('top')]; },
+          function () { return [masked('none'), masked('top')]; },
+          function () { return [masked('top'), merge(masked('top'), { opacity: '0.2' }), masked('top')]; }
+        ]
+      },
+      // The state layer leaving.
+      wane: {
+        opening: [
+          function () { return [masked('top')]; },
+          function () { return [masked('top'), masked('none'), masked('top')]; }
+        ],
+        climb: [
+          function () { return [masked(5), masked(4), masked(3), masked(2), masked(1)]; },
+          function () { return [masked(5), masked(3), masked(4), masked(2), masked(1)]; },
+          function () { return [masked(4), masked(2), masked(1)]; },
+          function () { return [masked(5), masked(4), merge(masked(4), { opacity: '0' }), masked(3), masked(1)]; }
+        ],
+        landing: [
+          function () { return [merge(masked(1), { opacity: '0' })]; },
+          function () { return [merge(masked('off'), { opacity: '0' })]; }
+        ]
+      },
+      // The ink of a press, spreading from where the press landed.
+      ink: {
+        opening: [
+          function () { return []; },
+          function () { return [merge(masked(2), { 'clip-path': 'var(--state-from, inset(0 50% 0 50%))' })]; }
+        ],
+        climb: [
+          function () { return [merge(masked(2), { 'clip-path': 'inset(0)' }), merge(masked(4), { 'clip-path': 'inset(0)' }), merge(masked('top'), { 'clip-path': 'inset(0)' })]; },
+          function () { return [merge(masked(1), { 'clip-path': 'inset(0)' }), merge(masked(3), { 'clip-path': 'inset(0)' }), merge(masked(5), { 'clip-path': 'inset(0)' }), merge(masked('top'), { 'clip-path': 'inset(0)' })]; },
+          function () { return [merge(masked(3), { 'clip-path': 'inset(0)' }), merge(masked('top'), { 'clip-path': 'inset(0)' }), merge(masked(2), { 'clip-path': 'inset(0)' }), merge(masked('top'), { 'clip-path': 'inset(0)' })]; }
+        ],
+        landing: [
+          function () { return [merge(masked(3), { 'clip-path': 'inset(0)' })]; },
+          function () { return [merge(masked(2), { 'clip-path': 'inset(0)' })]; },
+          function () { return [merge(masked('top'), { 'clip-path': 'inset(0)', opacity: '0.14' })]; }
+        ]
+      },
+      // The control itself under a press.
+      stamp: {
+        opening: [
+          function () { return []; },
+          function () { return [{ transform: 'none', filter: 'brightness(1.12)' }]; }
+        ],
+        climb: [
+          function (rnd) {
+            var depth = pick(rnd, ['0.985', '0.97', '0.955']);
+            var sink = pick(rnd, ['0', '1px', '2px']);
+            var skew = pick(rnd, ['0deg', '0deg', '0.8deg', '-0.8deg', '1.4deg']);
+            var flash = pick(rnd, ['contrast(1.25) brightness(1.08)', 'brightness(1.18)', 'contrast(1.4)', 'none']);
+            var t = 'translateY(' + sink + ') scale(' + depth + ') skewX(' + skew + ')';
+            return [{ transform: t, filter: flash }, { transform: t, filter: flash }];
+          },
+          function (rnd) {
+            var depth = pick(rnd, ['0.975', '0.96']);
+            return [{ transform: 'scale(' + depth + ')', filter: 'contrast(1.3)' }, { transform: 'scale(' + depth + ') translateY(1px)', filter: 'contrast(1.3)' }, { transform: 'scale(' + depth + ')', filter: 'none' }];
+          }
+        ],
+        landing: [
+          function () { return [{ transform: 'none', filter: 'none' }]; },
+          function () { return [{ transform: 'scale(var(--pop-over, 1.012))', filter: 'none' }, { transform: 'none', filter: 'none' }]; },
+          function () { return [{ transform: 'scale(1.01)', filter: 'none' }, { transform: 'scale(0.995)', filter: 'none' }, { transform: 'none', filter: 'none' }]; }
+        ]
+      },
+      // The fill texture arriving on a control that becomes set.
+      seal: {
+        opening: [
+          function () { return [merge(masked(1), { 'clip-path': 'var(--state-from, inset(0 100% 0 0))' })]; },
+          function () { return [merge(masked(2), { 'clip-path': 'var(--state-from, inset(0 100% 0 0))' }), merge(masked(1), { 'clip-path': 'inset(0)' })]; },
+          function () { return []; }
+        ],
+        climb: [
+          function () { return [merge(masked(2), { 'clip-path': 'inset(0)' }), merge(masked(3), { 'clip-path': 'inset(0)' }), merge(masked(4), { 'clip-path': 'inset(0)' }), merge(masked(5), { 'clip-path': 'inset(0)' })]; },
+          function () { return [merge(masked(2), { 'clip-path': 'inset(0)' }), merge(masked(4), { 'clip-path': 'inset(0)' }), merge(masked(3), { 'clip-path': 'inset(0)' }), merge(masked(5), { 'clip-path': 'inset(0)' })]; },
+          function () { return [merge(masked(3), { 'clip-path': 'inset(0)' }), merge(masked(5), { 'clip-path': 'inset(0)' })]; },
+          function () { return [merge(masked(2), { 'clip-path': 'inset(0)' }), merge(masked(3), { 'clip-path': 'inset(0)' }), merge(masked('off'), { 'clip-path': 'inset(0)', opacity: '0' }), merge(masked(4), { 'clip-path': 'inset(0)' }), merge(masked(5), { 'clip-path': 'inset(0)' })]; }
+        ],
+        landing: [
+          function () { return [merge(masked('none'), { 'clip-path': 'inset(0)' })]; },
+          function () { return [merge(masked('top'), { 'clip-path': 'inset(0)' }), merge(masked('none'), { 'clip-path': 'inset(0)' })]; }
+        ]
+      },
+      // The texture leaving.
+      unseal: {
+        opening: [
+          function () { return [masked('none')]; },
+          function () { return [masked('none'), masked(5), masked('none')]; }
+        ],
+        climb: [
+          function () { return [masked(4), masked(3), masked(2)]; },
+          function () { return [masked(4), masked(2), masked(3), masked(1)]; },
+          function () { return [masked(3), masked(1)]; }
+        ],
+        landing: [
+          function () { return [merge(masked(1), { opacity: '0' })]; }
+        ]
+      },
+      // A thing arriving: from the rolled geometry, through the ladder.
+      develop: {
+        opening: [
+          function () { return [merge(masked('off'), { opacity: '0', transform: 'translate(var(--arrive-x, 0px), var(--arrive-y, 24px)) rotate(var(--arrive-rot, 0deg)) scale(var(--arrive-scale, 0.94)) skewX(var(--arrive-skew, 0deg))' })]; },
+          function () { return []; }
+        ],
+        climb: [
+          function () {
+            return [
+              merge(masked(1), { opacity: '1', transform: 'translate(var(--arrive-x, 0px), var(--arrive-y, 24px)) rotate(var(--arrive-rot, 0deg)) scale(var(--arrive-scale, 0.94)) skewX(var(--arrive-skew, 0deg))' }),
+              merge(masked(2), { opacity: '1', transform: 'translate(calc(var(--arrive-x, 0px) * 0.6), calc(var(--arrive-y, 24px) * 0.6)) rotate(calc(var(--arrive-rot, 0deg) * 0.6)) scale(calc(var(--arrive-scale, 0.94) + (1 - var(--arrive-scale, 0.94)) * 0.4))' }),
+              merge(masked(3), { opacity: '1', transform: 'translate(calc(var(--arrive-x, 0px) * 0.25), calc(var(--arrive-y, 24px) * 0.25)) rotate(calc(var(--arrive-rot, 0deg) * 0.25)) scale(1)' }),
+              merge(masked(4), { opacity: '1', transform: 'translate(calc(var(--arrive-x, 0px) * -0.08), calc(var(--arrive-y, 24px) * -0.08)) scale(var(--pop-over, 1.012))' }),
+              merge(masked(5), { opacity: '1', transform: 'none' })
+            ];
+          },
+          function () {
+            return [
+              merge(masked(1), { opacity: '1', transform: 'translate(var(--arrive-x, 0px), var(--arrive-y, 24px)) scale(var(--arrive-scale, 0.94))' }),
+              merge(masked(1), { opacity: '1', transform: 'translate(calc(var(--arrive-x, 0px) * 0.7), calc(var(--arrive-y, 24px) * 0.7)) scale(var(--arrive-scale, 0.94))' }),
+              merge(masked(3), { opacity: '1', transform: 'translate(calc(var(--arrive-x, 0px) * 0.7), calc(var(--arrive-y, 24px) * 0.7)) rotate(var(--arrive-rot, 0deg)) scale(var(--arrive-scale, 0.94))' }),
+              merge(masked(2), { opacity: '1', transform: 'translate(calc(var(--arrive-x, 0px) * 0.2), calc(var(--arrive-y, 24px) * 0.2)) scale(1)' }),
+              merge(masked(4), { opacity: '1', transform: 'none' }),
+              merge(masked(5), { opacity: '1', transform: 'none' })
+            ];
+          },
+          function () {
+            return [
+              merge(masked(2), { opacity: '1', transform: 'translate(var(--arrive-x, 0px), var(--arrive-y, 24px)) skewX(var(--arrive-skew, 0deg))' }),
+              merge(masked(4), { opacity: '1', transform: 'translate(0px, calc(var(--arrive-y, 24px) * -0.15)) skewX(calc(var(--arrive-skew, 0deg) * -0.5)) scale(var(--pop-over, 1.012))' }),
+              merge(masked(3), { opacity: '1', transform: 'translate(0px, calc(var(--arrive-y, 24px) * 0.05))' }),
+              merge(masked(5), { opacity: '1', transform: 'none' })
+            ];
+          }
+        ],
+        landing: [
+          function () { return [merge(masked('none'), { opacity: '1', transform: 'none' })]; },
+          function () { return [merge(masked('top'), { opacity: '1', transform: 'none' }), merge(masked('none'), { opacity: '1', transform: 'none' })]; },
+          function () { return [merge(masked('none'), { opacity: '1', transform: 'scale(1.004)' }), merge(masked('none'), { opacity: '1', transform: 'none' })]; }
+        ]
+      },
+      // A thing leaving: down the ladder, to the rolled geometry, with a refusal.
+      unmake: {
+        opening: [
+          function () { return [merge(masked('none'), { opacity: '1', transform: 'none' })]; },
+          function () { return [merge(masked('none'), { opacity: '1', transform: 'translate(calc(var(--leave-x, 0px) * -0.3), calc(var(--leave-y, -20px) * -0.3))' }), merge(masked('none'), { opacity: '1', transform: 'none' })]; }
+        ],
+        climb: [
+          function () {
+            return [
+              merge(masked(5), { opacity: '1', transform: 'translate(calc(var(--leave-x, 0px) * 0.2), calc(var(--leave-y, -20px) * 0.2)) rotate(calc(var(--leave-rot, 0deg) * 0.3))' }),
+              merge(masked(4), { opacity: '1', transform: 'translate(calc(var(--leave-x, 0px) * 0.5), calc(var(--leave-y, -20px) * 0.5)) rotate(calc(var(--leave-rot, 0deg) * 0.6)) scale(calc(1 - (1 - var(--leave-scale, 0.9)) * 0.5))' }),
+              merge(masked(5), { opacity: '1', transform: 'translate(calc(var(--leave-x, 0px) * 0.4), calc(var(--leave-y, -20px) * 0.4)) rotate(calc(var(--leave-rot, 0deg) * 0.5))' }),
+              merge(masked(2), { opacity: '1', transform: 'translate(var(--leave-x, 0px), var(--leave-y, -20px)) rotate(var(--leave-rot, 0deg)) scale(var(--leave-scale, 0.9))' })
+            ];
+          },
+          function () {
+            return [
+              merge(masked(4), { opacity: '1', transform: 'translate(calc(var(--leave-x, 0px) * 0.3), calc(var(--leave-y, -20px) * 0.3))' }),
+              merge(masked(2), { opacity: '1', transform: 'translate(calc(var(--leave-x, 0px) * 0.7), calc(var(--leave-y, -20px) * 0.7)) scale(var(--leave-scale, 0.9))' }),
+              merge(masked(3), { opacity: '1', transform: 'translate(calc(var(--leave-x, 0px) * 0.7), calc(var(--leave-y, -20px) * 0.7)) scale(var(--leave-scale, 0.9))' }),
+              merge(masked(1), { opacity: '1', transform: 'translate(var(--leave-x, 0px), var(--leave-y, -20px)) rotate(var(--leave-rot, 0deg)) scale(var(--leave-scale, 0.9))' })
+            ];
+          }
+        ],
+        landing: [
+          function () { return [merge(masked(1), { opacity: '0', transform: 'translate(var(--leave-x, 0px), var(--leave-y, -20px)) rotate(var(--leave-rot, 0deg)) scale(var(--leave-scale, 0.9))' })]; },
+          function () { return [merge(masked('off'), { opacity: '0', transform: 'translate(var(--leave-x, 0px), var(--leave-y, -20px)) scale(var(--leave-scale, 0.9))' })]; }
+        ]
+      },
+      // The veil's ghost leaving.
+      'veil-out': {
+        opening: [
+          function () { return [merge(masked(5), { opacity: '1', 'clip-path': 'var(--wipe-to, inset(0))' })]; },
+          function () { return [merge(masked(5), { opacity: '1', 'clip-path': 'var(--wipe-to, inset(0))' }), merge(masked('none'), { opacity: '1', 'clip-path': 'var(--wipe-to, inset(0))' })]; }
+        ],
+        climb: [
+          function () { return [merge(masked(4), { opacity: '1', 'clip-path': 'var(--wipe-to, inset(0))' }), merge(masked(3), { opacity: '1' }), merge(masked(2), { opacity: '1' }), merge(masked(1), { opacity: '1' })]; },
+          function () { return [merge(masked(3), { opacity: '1', 'clip-path': 'var(--wipe-to, inset(0))' }), merge(masked(4), { opacity: '1' }), merge(masked(2), { opacity: '1' }), merge(masked(1), { opacity: '1' })]; },
+          function () { return [merge(masked(4), { opacity: '1', 'clip-path': 'var(--wipe-to, inset(0))' }), merge(masked(2), { opacity: '1' }), merge(masked('off'), { opacity: '0' }), merge(masked(2), { opacity: '1' }), merge(masked(1), { opacity: '1' })]; }
+        ],
+        landing: [
+          function () { return [merge(masked(1), { opacity: '0', 'clip-path': 'var(--wipe-from, inset(0 0 100% 0))' })]; }
+        ]
+      }
+    };
+
+    /* One composition: a piece from each slot of the kind's vocabulary, a width for every tread,
+       written as a rule of its own. Hands back the name, or null where there is no sheet to write
+       to (a stub browser, a visitor who asked for less motion), in which case the stylesheet's
+       own keyframes play. */
+    function compose(kind, options) {
+      var opts = options || {};
+      var voc = VOCABULARY[kind];
+      if (!voc || reduced()) return null;
+      var sheet = composedSheetReady();
+      if (!sheet || typeof sheet.insertRule !== 'function') return null;
+      var rnd = mulberry32(opts.seed == null ? entropy() : (opts.seed >>> 0));
+      var states = [];
+      var slots = ['opening', 'climb', 'landing'];
+      for (var s = 0; s < slots.length; s++) {
+        var piece = pick(rnd, voc[slots[s]]);
+        var got = piece(rnd);
+        for (var i = 0; i < got.length; i++) states.push(got[i]);
+      }
+      if (states.length < 2) states.push(states[0]);
+      composedCount += 1;
+      var name = 'rite-' + kind + '-' + composedCount.toString(36) + Math.floor(rnd() * 46656).toString(36);
+      var rule = '@keyframes ' + name + ' { ' + framesOf(states, rnd) + '}';
+      try {
+        sheet.insertRule(rule, sheet.cssRules.length);
+      } catch (e) {
+        return null;
+      }
+      composedNames.push(name);
+      composedSet[name] = true;
+      while (composedNames.length > COMPOSED_CAP) {
+        var old = composedNames.shift();
+        delete composedSet[old];
+        try {
+          for (var r = 0; r < sheet.cssRules.length; r++) {
+            if (sheet.cssRules[r].name === old) {
+              sheet.deleteRule(r);
+              break;
+            }
+          }
+        } catch (e2) {
+          /* it stays until the page goes */
+        }
+      }
+      return name;
+    }
+
+    // A composition written on an element: --rite-<kind> names it, --motion-<fallback> is its
+    // length rolled for this trigger alone. Hands back the name.
+    function composeOn(el, kind, fallback, baseMs, options) {
+      if (!el || !el.style) return null;
+      var name = compose(kind, options);
+      var rnd = mulberry32(entropy());
+      var t = temperFor(el);
+      var length = Math.round((baseMs || 340) * t.tempo * (0.7 + rnd() * 0.6));
+      setInline(el, '--motion-' + fallback, length + 'ms');
+      if (name) setInline(el, '--rite-' + kind, name);
+      return name;
+    }
+
     /* ---- the state rites ------------------------------------------------------------------- */
 
     /* A control does not fade. Under the pointer it waxes: its changed surface arrives through the
@@ -1104,10 +1751,19 @@
     var SET_CLASS = /(?:^|\s)(?:is-set|is-on|is-selected|is-active|is-chosen|is-current|is-open|is-lit|selected|active)(?:\s|$)/;
     // What ends each passing rite: the animation whose name says so, or the clock.
     var PASSING = {
-      waning: /out|wane/,
-      stamping: /stamp|press/,
-      sealing: /(?:^|-)seal|set/,
-      unsealing: /unseal|unset/
+      waning: /wane|thaw|matte-out|settle/,
+      stamping: /stamp|press|ink/,
+      sealing: /(?:^|-)seal(?!ed)|-set$/,
+      unsealing: /unseal|unset/,
+      dealt: /develop|dealt|-in$/
+    };
+    // The names known to end a rite, before the regexes above are tried.
+    var ENDS = {
+      waning: { 'matte-out': 1, 'card-wane': 1, 'chip-wane': 1, 'logo-thaw': 1, 'card-settle': 1 },
+      stamping: { 'rite-stamp': 1, 'stamp-ink': 1, 'card-stamp': 1, 'chip-stamp': 1, 'logo-stamp': 1 },
+      sealing: { 'rite-seal': 1, 'card-seal': 1 },
+      unsealing: { 'rite-unseal': 1, 'card-unseal': 1 },
+      dealt: { 'card-develop': 1, 'card-in': 1, 'badge-in': 1 }
     };
 
     var rites = typeof global.WeakMap === 'function' ? new global.WeakMap() : null;
@@ -1179,22 +1835,50 @@
       var name = ev && ev.animationName;
       if (!el || !name || !el.classList) return;
       for (var kind in PASSING) {
-        if (Object.prototype.hasOwnProperty.call(PASSING, kind)
-          && el.classList.contains('is-' + kind) && PASSING[kind].test(name)) {
-          endPass(el, kind);
-        }
+        if (!Object.prototype.hasOwnProperty.call(PASSING, kind) || !el.classList.contains('is-' + kind)) continue;
+        if (ENDS[kind][name] || PASSING[kind].test(name)) endPass(el, kind);
       }
     }
 
+    // A number of an element's own, from where it sits and what it says, so two chips in a row
+    // never wax through the same blotches: the matte is shifted by it and its curve rolled by it.
+    function seedOf(el) {
+      var text = (el.id || '') + '|' + (el.className || '') + '|' + (el.textContent || '').slice(0, 40);
+      var h = 2166136261;
+      for (var i = 0; i < text.length; i++) h = Math.imul(h ^ text.charCodeAt(i), 16777619);
+      var kids = el.parentNode && el.parentNode.children ? el.parentNode.children : null;
+      var k = 0;
+      if (kids) for (var j = 0; j < kids.length; j++) if (kids[j] === el) { k = j; break; }
+      return ((h ^ Math.imul(k + 1, 2654435761)) >>> 0);
+    }
+
+    function setInline(el, name, value) {
+      if (el && el.style && typeof el.style.setProperty === 'function') el.style.setProperty(name, value);
+    }
+
+    // The matte shifted to the element's own phase, and its own curve for the climb, written on
+    // the element: everything else is the page's roll, so the cost is two inline properties.
     function wax(el) {
       if (!el) return;
       endPass(el, 'waning');
+      if (!reduced()) {
+        var rnd = mulberry32(seedOf(el) ^ (entropy() & 0xff));
+        var t = temperFor(el);
+        var sx = Math.round(rnd() * 96);
+        var sy = Math.round(rnd() * 96);
+        setInline(el, '--matte-shift', sx + 'px ' + sy + 'px');
+        setInline(el, '--matte-shift-x', sx + 'px');
+        setInline(el, '--matte-shift-y', sy + 'px');
+        setInline(el, '--ease-matte-in', cssOf(makeCurve('stair', t, Math.floor(rnd() * 0x7fffffff)), 'stair', rnd));
+        composeOn(el, 'wax', 'matte-in', 340);
+      }
       addClass(el, 'is-waxing');
     }
 
     function wane(el) {
       if (!el || !el.classList || !el.classList.contains('is-waxing')) return;
       dropClass(el, 'is-waxing');
+      composeOn(el, 'wane', 'matte-out', 340);
       pass(el, 'waning');
     }
 
@@ -1257,6 +1941,22 @@
       // A key pressed into a field is a word, not a press.
       if (ev.type === 'keydown' && (el.tagName === 'TEXTAREA' || el.isContentEditable
         || (el.tagName === 'INPUT' && !/^(?:button|submit|reset|checkbox|radio|range|color|file)$/i.test(el.type || '')))) return;
+      // Where the press landed, as the point the ink spreads from (the middle for a key).
+      var px = 50;
+      var py = 50;
+      if (ev.type !== 'keydown' && typeof el.getBoundingClientRect === 'function' && typeof ev.clientX === 'number') {
+        var box = el.getBoundingClientRect();
+        if (box.width && box.height) {
+          px = clamp(Math.round((ev.clientX - box.left) / box.width * 100), 0, 100);
+          py = clamp(Math.round((ev.clientY - box.top) / box.height * 100), 0, 100);
+        }
+      }
+      setInline(el, '--stamp-x', px + '%');
+      setInline(el, '--stamp-y', py + '%');
+      if (!reduced()) {
+        composeOn(el, 'stamp', 'rite-stamp', 170);
+        composeOn(el, 'ink', 'stamp-ink', 170);
+      }
       pass(el, 'stamping', (ms('medium') || 340) + 400);
     }
 
@@ -1280,10 +1980,23 @@
           : (c.oldValue != null && c.oldValue !== 'false' && (attr !== 'aria-expanded' || c.oldValue === 'true'));
         var is = isSet(el, attr);
         if (was === is) continue;
-        if (reduced()) continue;
         if (el.getAttribute('data-rite') === 'none') continue;
+        if (is) dress(el);
+        if (reduced()) continue;
+        if (is) composeOn(el, 'seal', 'rite-seal', 560);
+        else composeOn(el, 'unseal', 'rite-unseal', 340);
         pass(el, is ? 'sealing' : 'unsealing');
       }
+    }
+
+    // The texture a control that becomes set wears: rolled for it alone, from its own seed and
+    // its own temperament, so no two set controls on a page wear the same hatch at the same
+    // angle. Written inline, where the stylesheet's var(--matte-fill) finds it first.
+    function dress(el) {
+      if (!el || !el.style) return;
+      var m = rollMattes(mulberry32(seedOf(el)), temperFor(el));
+      setInline(el, '--matte-fill', m.fillImage);
+      setInline(el, '--matte-fill-size', m.fillSize);
     }
 
     function watchStates() {
@@ -1318,6 +2031,7 @@
        shown the words. Hands back a function that ends the rite early. */
 
     var SIGILS = '§¶†‡•¤±÷×¬~^*#%&@=?!/|<>:;.';
+    var CURVE_POOL = 4;
     var GLYPH_LIMIT = 160;
     var revealing = typeof global.WeakMap === 'function' ? new global.WeakMap() : null;
 
@@ -1343,7 +2057,13 @@
       if (undoBefore) undoBefore();
       if (reduced() && !opts.always) return function () {};
       var rnd = mulberry32(entropy());
+      var t = temperFor(el);
       var step = Math.max(8, (ms('stagger') || 44) * (opts.pace || 0.42));
+      // A pool of curves rolled for this reveal, dealt round the glyphs: each glyph climbs one of
+      // four stairs of this line's own, rather than all of them the page's one.
+      var pool = [];
+      for (var q = 0; q < CURVE_POOL; q++) pool.push(cssOf(makeCurve('stair', t, Math.floor(rnd() * 0x7fffffff)), 'stair', rnd));
+      var scramble = opts.scramble == null ? 1 : opts.scramble;
       var nodes = textNodesOf(el);
       var done = [];
       var k = 0;
@@ -1365,19 +2085,27 @@
           var span = doc.createElement('span');
           span.className = 'glyph-word';
           var chars = typeof Array.from === 'function' ? Array.from(word) : word.split('');
+          var wordDelay = -1;
           for (var c = 0; c < chars.length; c++) {
             var glyph = doc.createElement('span');
             glyph.className = 'glyph';
             glyph.textContent = chars[c];
             glyph.setAttribute('data-sigil', SIGILS.charAt(Math.floor(rnd() * SIGILS.length)));
-            var delay = Math.round(k * step + (rnd() - 0.5) * step * (0.8 + temper.grain));
+            if (scramble > 0) glyph.setAttribute('data-sigil-2', SIGILS.charAt(Math.floor(rnd() * SIGILS.length)));
+            var delay = Math.round(k * step + (rnd() - 0.5) * step * (0.8 + t.grain));
             delay = Math.max(0, delay);
             if (delay > last) last = delay;
+            if (wordDelay < 0 || delay < wordDelay) wordDelay = delay;
             glyph.style.setProperty('--d', delay + 'ms');
             glyph.style.setProperty('--k', String(k));
+            glyph.style.setProperty('--ease-glyph-in', pool[k % CURVE_POOL]);
             span.appendChild(glyph);
             k += 1;
           }
+          // The word drops into place as its first glyph lands (a glyph is inline, so it keeps
+          // the line's kerning, and the word is what moves).
+          span.style.setProperty('--wd', Math.max(0, wordDelay) + 'ms');
+          span.style.setProperty('--ease-glyph-word', pool[(k + 1) % CURVE_POOL]);
           frag.appendChild(span);
         }
         var pieces = [];
@@ -1447,6 +2175,19 @@
       ghost.setAttribute('inert', '');
       ghost.className = (veil.className ? veil.className + ' ' : '') + 'is-ghost';
       ghost.style.pointerEvents = 'none';
+      // The ghost keeps the roll it was born with: the shapes, the ladder and the curve are
+      // pinned on it, so a roll made while it plays out cannot jump it.
+      composeOn(ghost, 'veil-out', 'lightbox-veil-out', 340);
+      var pin = ['--wipe-from', '--wipe-to', '--matte-1', '--matte-2', '--matte-3', '--matte-4', '--matte-5', '--matte-top', '--ease-lightbox-veil-out', '--motion-medium'];
+      try {
+        var computed = global.getComputedStyle(veil);
+        for (var i = 0; i < pin.length; i++) {
+          var v = computed.getPropertyValue(pin[i]);
+          if (v) ghost.style.setProperty(pin[i], v);
+        }
+      } catch (e) {
+        /* it reads the page's roll as it goes */
+      }
       veil.parentNode.insertBefore(ghost, veil.nextSibling);
       var mine = ghost;
       mine.addEventListener('animationend', function () { if (ghost === mine) dropGhost(); });
@@ -1488,46 +2229,160 @@
        the browser has no linear()). A child that is new gets the class is-dealt for the stylesheet
        to arrive. A visitor who asked for less motion gets the change. Hands back the animations. */
 
+    /* The treads of a stair curve as keyframe offsets: [t, y] pairs with each tread held to the
+       moment of the next, so a movement written from them moves in cuts, never a glide. */
+    function treadsOf(curve) {
+      var stops = curve.stops;
+      var out = [];
+      var lastY = 0;
+      for (var i = 0; i < stops.length; i++) {
+        var t = clamp(stops[i][0], 0, 1);
+        var y = stops[i][1];
+        if (i > 0 && Math.abs(y - lastY) < 0.02) continue;
+        if (out.length) out.push([Math.max(out[out.length - 1][0], t - 0.0005), lastY]);
+        out.push([t, y]);
+        lastY = y;
+      }
+      if (!out.length || out[out.length - 1][0] < 1) out.push([1, 1]);
+      out[0][0] = 0;
+      return out;
+    }
+
     function flip(container, change, options) {
       var opts = options || {};
+      var items = opts.items ? Array.prototype.slice.call(opts.items) : null;
       var kids = container && container.children ? container.children : null;
+      if (!items && kids) items = Array.prototype.slice.call(kids);
       var before = [];
-      var can = kids && !reduced() && typeof Element !== 'undefined' && Element.prototype
+      var can = items && !reduced() && typeof Element !== 'undefined' && Element.prototype
         && typeof Element.prototype.animate === 'function';
       if (can) {
-        for (var i = 0; i < kids.length; i++) before.push([kids[i], kids[i].getBoundingClientRect()]);
+        for (var i = 0; i < items.length; i++) {
+          if (typeof items[i].getBoundingClientRect === 'function') before.push([items[i], items[i].getBoundingClientRect()]);
+        }
       }
       if (typeof change === 'function') change();
       if (!can) return [];
       var out = [];
+      var rnd = mulberry32(entropy());
       for (var b = 0; b < before.length; b++) {
         var el = before[b][0];
         var was = before[b][1];
-        if (el.parentNode !== container) continue;
+        if (!el.isConnected && el.ownerDocument && typeof el.isConnected === 'boolean') continue;
         var is = el.getBoundingClientRect();
+        if (!is.width && !is.height) continue;
         var dx = was.left - is.left;
         var dy = was.top - is.top;
         var sx = is.width ? was.width / is.width : 1;
         var sy = is.height ? was.height / is.height : 1;
         if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5 && Math.abs(sx - 1) < 0.01 && Math.abs(sy - 1) < 0.01) continue;
-        var c = makeCurve(opts.family || 'drift', temper);
-        var easing = supportsLinear ? c.toCSS() : 'steps(' + (4 + Math.round(temper.grain * 6)) + ', jump-end)';
-        var when = ms('long') || 560;
+        // From where it was to where it is, in the treads of a stair rolled for it: each tread a
+        // held pair of keyframes, so the card jumps its way home and never slides.
+        var t = temperFor(el);
+        var curve = makeCurve(opts.family || 'stair', t, Math.floor(rnd() * 0x7fffffff));
+        var treads = treadsOf(curve);
+        var frames = [];
+        for (var k = 0; k < treads.length; k++) {
+          var y = treads[k][1];
+          var tx = dx * (1 - y);
+          var ty = dy * (1 - y);
+          var ssx = 1 + (sx - 1) * (1 - y);
+          var ssy = 1 + (sy - 1) * (1 - y);
+          frames.push({
+            offset: treads[k][0],
+            transform: 'translate(' + tx.toFixed(1) + 'px, ' + ty.toFixed(1) + 'px) scale(' + ssx.toFixed(3) + ', ' + ssy.toFixed(3) + ')',
+            transformOrigin: '0 0'
+          });
+        }
+        var when = (ms('long') || 560) * (0.8 + rnd() * 0.5);
         try {
-          out.push(el.animate([
-            { transform: 'translate(' + dx.toFixed(1) + 'px, ' + dy.toFixed(1) + 'px) scale(' + sx.toFixed(3) + ', ' + sy.toFixed(3) + ')', transformOrigin: '0 0' },
-            { transform: 'none', transformOrigin: '0 0' }
-          ], { duration: when * (0.8 + Math.random() * 0.5), easing: easing, delay: stagger(b) * 0.4, fill: 'backwards' }));
+          out.push(el.animate(frames, { duration: when, easing: supportsLinear ? 'linear(0, 1)' : 'steps(1, jump-end)', delay: stagger(b) * 0.4, fill: 'backwards' }));
         } catch (e) {
-          /* the browser could not read the curve: it is where it is */
+          /* the browser could not read the frames: it is where it is */
         }
       }
-      for (var k = 0; k < kids.length; k++) {
-        var fresh = true;
-        for (var q = 0; q < before.length; q++) if (before[q][0] === kids[k]) { fresh = false; break; }
-        if (fresh) pass(kids[k], 'dealt');
+      // What is new develops -- unless it is waiting to be seen (a card still rolled up, or one
+      // hidden), which develops when its own watcher says so.
+      if (kids && opts.dealt !== false) {
+        for (var n = 0; n < kids.length; n++) {
+          var kid = kids[n];
+          var fresh = true;
+          for (var q = 0; q < before.length; q++) if (before[q][0] === kid) { fresh = false; break; }
+          if (!fresh || kid.hidden || (kid.classList && kid.classList.contains('card-rolled'))) continue;
+          pass(kid, 'dealt');
+        }
       }
       return out;
+    }
+
+    /* ---- the stepper ----------------------------------------------------------------------- */
+
+    /* A movement a script makes in treads: `step(k, n)` is called with the tread reached, 0 to n,
+       at the moments a stair rolled for this call puts them -- uneven, with a hold here and a slip
+       back there where the grain allows -- and never with a fraction in between; then `done()`.
+       What the stage's crossfade, a scroll and a counter move by. Hands back a function that stops
+       it. A visitor who asked for less motion gets the last tread at once. */
+    function stepper(options) {
+      var opts = options || {};
+      var total = Math.max(0, Number(opts.ms) || 0);
+      var step = typeof opts.step === 'function' ? opts.step : function () {};
+      var done = typeof opts.done === 'function' ? opts.done : function () {};
+      var raf = typeof global.requestAnimationFrame === 'function' ? global.requestAnimationFrame : null;
+      var cancel = typeof global.cancelAnimationFrame === 'function' ? global.cancelAnimationFrame : null;
+      var rnd = mulberry32(entropy());
+      var g = temper.grain;
+      var n = Math.max(2, Math.round(opts.treads || (3 + rnd() * (3 + g * 5))));
+      if (!raf || !total || (reduced() && !opts.always)) {
+        step(n, n, false);
+        done();
+        return function () {};
+      }
+      // The moments of the treads: uneven widths, a hold, and a slip or two back by one tread.
+      var moments = [];
+      var acc = 0;
+      var widths = [];
+      for (var i = 0; i < n; i++) {
+        var w = rnd() * (0.6 + g) + 0.4;
+        widths.push(w);
+        acc += w;
+      }
+      var at = 0;
+      for (var j = 0; j < n; j++) {
+        at += widths[j] / acc;
+        moments.push({ at: at, k: j + 1 });
+        if (j > 0 && j < n - 1 && rnd() < g * 0.35) {
+          moments.push({ at: at + widths[j] / acc * 0.3, k: j, slip: true });
+          moments.push({ at: at + widths[j] / acc * 0.55, k: j + 1 });
+        }
+      }
+      moments.sort(function (a, b) { return a.at - b.at; });
+      var started = now();
+      var handle = 0;
+      var stopped = false;
+      var next = 0;
+      var last = -1;
+      function frame(tm) {
+        if (stopped) return;
+        var p = Math.min(1, Math.max(0, tm - started) / total);
+        while (next < moments.length && moments[next].at <= p) {
+          if (moments[next].k !== last) {
+            last = moments[next].k;
+            step(last, n, !!moments[next].slip);
+          }
+          next += 1;
+        }
+        if (p < 1) handle = raf(frame);
+        else {
+          if (last !== n) step(n, n, false);
+          done();
+        }
+      }
+      step(0, n, false);
+      handle = raf(frame);
+      return function () {
+        stopped = true;
+        if (cancel && handle) cancel(handle);
+      };
     }
 
     /* ---- what a script asks for: the rites ------------------------------------------------- */
@@ -1543,6 +2398,83 @@
 
     function mattes() {
       return current.mattes;
+    }
+
+    // A geometry of an element's own, rolled from a seed and not written on :root.
+    function geometryFor(seed, el) {
+      return rollGeometry(mulberry32(seed == null ? entropy() : (seed >>> 0)), el ? temperFor(el) : temper);
+    }
+
+    // A ladder of an element's own: the five mattes and the fill, rolled from a seed.
+    function ladderFor(seed, el) {
+      return rollMattes(mulberry32(seed == null ? entropy() : (seed >>> 0)), el ? temperFor(el) : temper);
+    }
+
+    /* An arrival of an element's own: its geometry (where it comes from, how far, at what tilt),
+       its curve for the named spell and, asked for, its own matte ladder are rolled from a seed
+       and written on the element, so a batch of cards dealt together arrives from as many
+       directions as there are cards. Then the class the stylesheet plays (is-dealt, or the one
+       given). Hands back a function that takes the inline roll off again. */
+    function arrive(el, options) {
+      if (!el || !el.style) return function () {};
+      var opts = options || {};
+      var seed = opts.seed == null ? entropy() : (opts.seed >>> 0);
+      var rnd = mulberry32(seed);
+      var t = temperFor(el);
+      var g = rollGeometry(rnd, t);
+      var names = [];
+      function put(name, value) { setInline(el, name, value); names.push(name); }
+      put('--arrive-x', g.arriveX.toFixed(1) + 'px');
+      put('--arrive-y', g.arriveY.toFixed(1) + 'px');
+      put('--arrive-rot', g.arriveRot.toFixed(2) + 'deg');
+      put('--arrive-scale', g.arriveScale.toFixed(3));
+      put('--arrive-skew', g.arriveSkew.toFixed(2) + 'deg');
+      put('--lift-y', g.liftY.toFixed(1) + 'px');
+      put('--lift-rot', g.liftRot.toFixed(2) + 'deg');
+      put('--pop-over', g.popOver.toFixed(3));
+      var spell = opts.spell || 'card-in';
+      put('--ease-' + spell, cssOf(makeCurve(familyOf(spell), t, Math.floor(rnd() * 0x7fffffff)), familyOf(spell), rnd));
+      if (opts.mattes) {
+        var m = rollMattes(rnd, t);
+        for (var i = 0; i < m.ladder.length; i++) put('--matte-' + (i + 1), m.ladder[i]);
+        put('--matte-top', m.top);
+      }
+      // The arrival itself, composed for this element alone, and the leaving it may need later.
+      composeOn(el, 'develop', spell, SPELL_MS[familyOf(spell)] || 560, { seed: Math.floor(rnd() * 0x7fffffff) });
+      composeOn(el, 'unmake', 'card-out', 340, { seed: Math.floor(rnd() * 0x7fffffff) });
+      names.push('--rite-develop', '--rite-unmake', '--motion-' + spell, '--motion-card-out');
+      if (opts.className !== false) pass(el, opts.className || 'dealt');
+      return function () {
+        for (var n = 0; n < names.length; n++) if (el.style && typeof el.style.removeProperty === 'function') el.style.removeProperty(names[n]);
+      };
+    }
+
+    /* The page's roll, pinned on an element: a thing drawn at its from-keyframe while it waits in
+       its delay would move to every new roll made before it starts; pinned, it keeps the roll it
+       was dealt. Hands back a function that unpins. */
+    function deal(el, options) {
+      if (!el || !el.style || typeof global.getComputedStyle !== 'function') return function () {};
+      var opts = options || {};
+      var names = ['--arrive-x', '--arrive-y', '--arrive-rot', '--arrive-scale', '--arrive-skew',
+        '--matte-1', '--matte-2', '--matte-3', '--matte-4', '--matte-5', '--matte-top'];
+      var spells = opts.spells || [];
+      for (var i = 0; i < spells.length; i++) names.push('--ease-' + spells[i]);
+      var pinned = [];
+      try {
+        var computed = global.getComputedStyle(el);
+        for (var n = 0; n < names.length; n++) {
+          var v = computed.getPropertyValue(names[n]);
+          if (v) {
+            el.style.setProperty(names[n], v);
+            pinned.push(names[n]);
+          }
+        }
+      } catch (e) {
+        /* nothing pinned: it reads the page's roll */
+      }
+      return function () {
+        for (var k = 0; k < pinned.length; k++) if (el.style && typeof el.style.removeProperty === 'function') el.style.removeProperty(pinned[k]);
+      };
     }
 
     /* ---- what a script asks for ------------------------------------------------------------ */
@@ -1573,6 +2505,9 @@
         return function () {};
       }
       var at = ease(opts.family);
+      // Asked for treads, the eased progress is stepped onto that many, so even a tween is a
+      // stair of its own rather than a glide.
+      var treads = opts.treads ? Math.max(2, Math.round(opts.treads)) : 0;
       var started = now();
       var handle = 0;
       var stopped = false;
@@ -1580,7 +2515,9 @@
         if (stopped) return;
         var elapsed = Math.max(0, t - started);
         var p = Math.min(1, elapsed / ms);
-        step(p < 1 ? at(p) : 1, p);
+        var y = p < 1 ? at(p) : 1;
+        if (treads && p < 1) y = Math.floor(clamp(y, 0, 1) * treads) / treads;
+        step(y, p);
         if (p < 1) handle = raf(frame);
         else done();
       }
@@ -1593,22 +2530,44 @@
 
     var scrolling = null;
 
+    /* The page scrolls in treads: a stair of jumps rolled for this scroll alone, with a slip back
+       where the grain allows, and never a glide -- the browser's own smoothing is refused
+       everywhere (README: "Motion axiom"). A wheel, a touch or a key while it is going stops it,
+       so the page never fights the visitor. The horizontal position is kept. */
+    var scrollStop = null;
+    function stopScrolling() {
+      if (scrolling) scrolling();
+      scrolling = null;
+      if (scrollStop) scrollStop();
+      scrollStop = null;
+    }
+
     function scrollTo(top, options) {
       var opts = options || {};
       var from = typeof global.scrollY === 'number' ? global.scrollY : (global.pageYOffset || 0);
+      var left = typeof global.scrollX === 'number' ? global.scrollX : (global.pageXOffset || 0);
       var to = Math.max(0, Number(top) || 0);
-      if (scrolling) scrolling();
+      stopScrolling();
       if (reduced() || typeof global.scrollTo !== 'function' || Math.abs(to - from) < 2) {
-        if (typeof global.scrollTo === 'function') global.scrollTo(0, to);
+        if (typeof global.scrollTo === 'function') global.scrollTo(left, to);
         return;
       }
       var distance = Math.abs(to - from);
       var ms = opts.ms || clamp(260 + distance * 0.35, 320, 1100) * temper.tempo;
-      scrolling = tween({
+      var treads = opts.treads || clamp(Math.round(distance / 140), 4, 12);
+      var interrupt = ['wheel', 'touchstart', 'keydown'];
+      function halt() { stopScrolling(); }
+      if (typeof doc.addEventListener === 'function') {
+        for (var i = 0; i < interrupt.length; i++) doc.addEventListener(interrupt[i], halt, { passive: true, capture: true });
+        scrollStop = function () {
+          for (var j = 0; j < interrupt.length; j++) doc.removeEventListener(interrupt[j], halt, { passive: true, capture: true });
+        };
+      }
+      scrolling = stepper({
         ms: ms,
-        family: 'scroll',
-        step: function (y) { global.scrollTo(0, from + (to - from) * y); },
-        done: function () { scrolling = null; }
+        treads: treads,
+        step: function (k, n) { global.scrollTo(left, from + (to - from) * (k / n)); },
+        done: function () { stopScrolling(); }
       });
     }
 
@@ -1627,8 +2586,8 @@
 
     function ms(name) {
       var d = current.durations;
-      if (!d) return 0;
-      return d[name] || 0;
+      if (d && d[name]) return d[name];
+      return current.spellMs[name] || 0;
     }
 
     function stagger(k) {
@@ -1653,9 +2612,19 @@
       mattes: mattes,
       reveal: reveal,
       flip: flip,
+      stepper: stepper,
       rite: rite,
       wax: wax,
       wane: wane,
+      seal: dress,
+      compose: compose,
+      composeOn: composeOn,
+      arrive: arrive,
+      deal: deal,
+      geometryFor: geometryFor,
+      ladderFor: ladderFor,
+      temperFor: temperFor,
+      treads: function (curve) { return treadsOf(curve && curve.stops ? curve : makeCurve('stair', temper)); },
       shift: shift,
       roll: rollAll,
       families: ALL_FAMILIES.slice(),
@@ -1691,6 +2660,9 @@
     },
     durations: function (temper, seed) {
       return rollDurations(mulberry32(seed == null ? entropy() : seed), temper || DEFAULT_TEMPER);
+    },
+    mattes: function (temper, seed) {
+      return rollMattes(mulberry32(seed == null ? entropy() : seed), temper || DEFAULT_TEMPER);
     }
   };
 
