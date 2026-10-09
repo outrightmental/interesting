@@ -1,8 +1,8 @@
 /* The gravity well: one probe, one well, and the moons of a far planet. As a card it is one of the
-   two puzzles below painted small (paint, spark); as a piece it is that puzzle, and the card it was
+   three puzzles below painted small (paint, spark); as a piece it is that puzzle, and the card it was
    opened from says which. See js/feed.js for what a module is and js/stage.js for what a piece is.
 
-   Two puzzles, one an experiment and one a deduction:
+   Three puzzles: an experiment, an orbit reading, and a meeting to find:
 
      the slingshot   A well in the field and a ring somewhere past it. Set the launch angle and
                      the speed, and every check is a flight: the probe is released from the left
@@ -17,6 +17,10 @@
                      moons in order of period and say how many laps the innermost makes while the
                      outermost makes one. A wrong check says how many moons stand in the right
                      place and whether the count is off by one or by more.
+     the meeting     Two moons start on one line and orbit at different periods. Turn the system to
+                     any tick, find the first time they meet again, and count the inner moon's
+                     completed laps. The scene follows the visitor's time setting and remains
+                     theirs to turn after the check.
 
    A card and the feature it opens as are one puzzle: the spark puts the whole plan on its spec as
    `of` -- the well, the ring, the solution it was flown from; the radii, the step, the moons --
@@ -689,6 +693,188 @@ function moonsPiece(env, p) {
   };
 }
 
+/* ---- the meeting --------------------------------------------------------------------------- */
+
+const MEETING_PERIODS = [[2, 3], [3, 4], [4, 5], [4, 6], [6, 8], [6, 9], [8, 10], [8, 12], [9, 12]];
+
+function meetingTick(p) {
+  return p.inner * p.outer / (p.outer - p.inner);
+}
+
+function meetingLaps(p) {
+  return p.outer / (p.outer - p.inner);
+}
+
+function meetingPlan(env) {
+  const periods = env.pick(MEETING_PERIODS);
+  return {
+    kind: 'meeting', number: 100 + env.int(0, 899),
+    name: 'the ' + env.pick(FIRST) + ' ' + env.pick(SECOND),
+    inner: periods[0], outer: periods[1],
+    names: shuffled(env, FIRST.map((_, i) => i)).slice(0, 2),
+    angle: env.int(0, 359)
+  };
+}
+
+function carriedMeeting(env) {
+  const p = env.card && env.card.of;
+  if (!p || p.kind !== 'meeting' || !Number.isInteger(p.number) || p.number < 100 || p.number > 999) return null;
+  if (typeof p.name !== 'string' || !p.name || p.name.length > 40) return null;
+  if (!MEETING_PERIODS.some(([inner, outer]) => inner === p.inner && outer === p.outer)) return null;
+  if (!Array.isArray(p.names) || p.names.length !== 2 || !p.names.every((i) => Number.isInteger(i) && i >= 0 && i < FIRST.length) || p.names[0] === p.names[1]) return null;
+  if (!Number.isInteger(p.angle) || p.angle < 0 || p.angle >= 360) return null;
+  return { kind: 'meeting', number: p.number, name: p.name, inner: p.inner, outer: p.outer,
+    names: p.names.slice(), angle: p.angle };
+}
+
+function meetingTitle(p) {
+  return 'orbit ' + p.number + ': the returning moons';
+}
+
+function meetingScene(g, w, h, env, p, s, v) {
+  const col = env.colors;
+  background(g, w, h, env, v);
+  const cx = w * 0.5;
+  const cy = h * 0.52;
+  const radius = Math.min(w * 0.31, h * 0.32) * v.scale;
+  const radii = [radius * Math.pow(p.inner / p.outer, 2 / 3), radius];
+  const joined = s.tick > 0 && s.tick % meetingTick(p) === 0;
+  const size = Math.max(9, Math.min(16, Math.round(Math.min(w, h) * 0.043)));
+  g.strokeStyle = env.alpha(col.accent, 0.45);
+  g.lineWidth = 1;
+  g.setLineDash([4, 5]);
+  for (const r of radii) {
+    g.beginPath();
+    g.arc(cx, cy, r, 0, Math.PI * 2);
+    g.stroke();
+  }
+  g.setLineDash([]);
+  const start = p.angle * Math.PI / 180 + v.turn * 0.6;
+  g.strokeStyle = env.alpha(col.muted, 0.35);
+  g.beginPath();
+  g.moveTo(cx, cy);
+  g.lineTo(cx + Math.cos(start) * radius, cy + Math.sin(start) * radius);
+  g.stroke();
+  body(g, env, cx, cy, Math.max(4, radius * 0.095), 4, false);
+  [p.inner, p.outer].forEach((period, i) => {
+    const angle = start + 2 * Math.PI * s.tick / period;
+    const x = cx + Math.cos(angle) * radii[i];
+    const y = cy + Math.sin(angle) * radii[i];
+    const r = Math.max(3, radius * 0.055);
+    const glow = g.createRadialGradient(x, y, 0, x, y, r * (joined ? 5 : 3));
+    glow.addColorStop(0, env.alpha(i ? col.accent : col.accent2, joined ? 0.8 : 0.45));
+    glow.addColorStop(1, env.alpha(col.accent, 0));
+    g.fillStyle = glow;
+    g.fillRect(x - r * 5, y - r * 5, r * 10, r * 10);
+    g.fillStyle = i ? col.accent : col.accent2;
+    g.beginPath();
+    g.arc(x, y, r, 0, Math.PI * 2);
+    g.fill();
+  });
+  if (joined) {
+    g.strokeStyle = env.alpha(col.accent2, s.open ? 1 : 0.7);
+    g.lineWidth = s.open ? 2.5 : 1.5;
+    g.beginPath();
+    const innerAngle = start + 2 * Math.PI * s.tick / p.inner;
+    g.moveTo(cx + Math.cos(innerAngle) * radii[0], cy + Math.sin(innerAngle) * radii[0]);
+    g.lineTo(cx + Math.cos(innerAngle) * radius, cy + Math.sin(innerAngle) * radius);
+    g.stroke();
+  }
+  font(g, size);
+  g.textBaseline = 'middle';
+  g.textAlign = 'center';
+  g.fillStyle = col.fg;
+  g.fillText(p.name, cx, h * 0.07, w * 0.88);
+  g.textAlign = 'left';
+  g.fillStyle = col.accent2;
+  g.fillText(FIRST[p.names[0]] + ': ' + p.inner + ' ticks/lap', w * 0.04, h * 0.19, w * 0.45);
+  g.textAlign = 'right';
+  g.fillStyle = col.accent;
+  g.fillText(FIRST[p.names[1]] + ': ' + p.outer + ' ticks/lap', w * 0.96, h * 0.19, w * 0.45);
+  g.textAlign = 'center';
+  g.fillStyle = env.alpha(col.fg, 0.9);
+  g.fillText(s.tick === 0 ? 'tick 0: together at the start'
+    : 'tick ' + s.tick + (joined ? ': together again' : ': still apart'), cx, h * 0.86, w * 0.92);
+  if (s.hints) {
+    g.fillStyle = env.alpha(col.accent2, 0.9);
+    g.fillText('inner gains ' + (p.outer - p.inner) + '/' + (p.inner * p.outer) + ' lap each tick',
+      cx, h * 0.95, w * 0.92);
+  }
+}
+
+function meetingPreview(g, w, h, env, p) {
+  meetingScene(g, w, h, env, p, { tick: 0, hints: 0, open: false }, dials(env));
+}
+
+function meetingPiece(env, p) {
+  const helps = asked(env).helps;
+  const first = meetingTick(p);
+  const laps = meetingLaps(p);
+  const s = { tick: 0, hints: 0, open: false };
+  const draw = (c) => meetingScene(c.g, c.w, c.h, c, p, s, dials(env));
+  const clues = [
+    'Each tick the inner gains ' + (p.outer - p.inner) + '/' + (p.inner * p.outer) + ' of a lap on the outer.',
+    'At tick ' + p.inner + ', the inner has made one lap; the outer has not.',
+    'At tick ' + (first / 2) + ', the inner is half a lap ahead.',
+    'They are still apart at tick ' + (first - 1) + '.',
+    'At their first reunion the inner has made ' + laps + ' full laps.'
+  ];
+  return {
+    title: meetingTitle(p),
+    brief: 'Two moons of ' + p.name + ' start on the same line at tick 0. The ' + FIRST[p.names[0]] + ' moon makes a full lap every ' + p.inner + ' ticks; the ' + FIRST[p.names[1]] + ' moon takes ' + p.outer + '. Set a tick to turn them. They meet again when the faster moon has gained one full lap on the slower one.',
+    goal: 'Find the first tick after 0 when they line up again, and count the inner moon\'s full laps by then.',
+    aspect: '16 / 10',
+    checkLabel: 'check the meeting',
+    steps: [
+      { id: 'tick', ask: 'the first tick when the moons meet again', kind: 'number', min: 0, max: 40, step: 1, value: 0, unit: 'ticks' },
+      { id: 'laps', ask: 'full laps of the inner moon by then', kind: 'number', min: 0, max: 9, step: 1, value: 0, unit: 'laps' },
+      { id: 'hint', ask: 'one clue about the next meeting', kind: 'press', count: 1, label: 'show a clue', optional: true }
+    ],
+    solution: { tick: first, laps },
+    check(c) {
+      const tick = Number(c.value('tick'));
+      const count = Number(c.value('laps'));
+      if (tick === first && count === laps) {
+        return { solved: true, say: 'together again at tick ' + first + ': the inner moon has made ' + laps + ' full laps' };
+      }
+      const position = tick === 0 ? 'they are together only at the start'
+        : tick > 0 && tick % first === 0 ? 'they meet at this tick, but not for the first time'
+          : 'they are apart at this tick';
+      return { solved: false, say: position + '; the inner lap count is ' + (count === laps ? 'right' : 'off') };
+    },
+    start(c) {
+      c.status('both moons start on one line; set a tick to turn them');
+      draw(c);
+    },
+    apply(id, value, c) {
+      if (id === 'tick' && Number.isFinite(Number(value))) {
+        s.tick = Math.max(0, Math.min(40, Math.round(Number(value))));
+        c.status('tick ' + s.tick + ': ' + (s.tick === 0 ? 'together at the start'
+          : s.tick % first === 0 ? 'on the same line again' : 'the moons are apart'));
+      }
+      if (id === 'laps' && Number.isFinite(Number(value))) {
+        c.status('the inner moon has made ' + Math.round(Number(value)) + ' full laps, you say');
+      }
+      if (id === 'hint') {
+        if (s.hints < helps) {
+          c.status(clues[s.hints]);
+          s.hints++;
+          c.hint();
+        } else c.status('that is all this orbit will show at this difficulty');
+      }
+      draw(c);
+    },
+    frame(t, dt, c) {
+      draw(c);
+    },
+    end(c) {
+      s.open = true;
+      c.status('the moons meet at tick ' + first + '. Change the tick to watch them part and return.');
+      draw(c);
+    }
+  };
+}
+
 /* ---- the module ----------------------------------------------------------------------------- */
 
 function dealsMoons(env) {
@@ -699,7 +885,7 @@ const plans = new WeakMap();
 function deal(env) {
   let plan = plans.get(env);
   if (!plan) {
-    plan = dealsMoons(env) ? moonsPlan(env) : slingPlan(env);
+    plan = dealsMoons(env) ? (env.chance(0.5) ? moonsPlan(env) : meetingPlan(env)) : slingPlan(env);
     plans.set(env, plan);
   }
   return plan;
@@ -711,6 +897,7 @@ export default {
   paint(g, w, h, env) {
     const plan = deal(env);
     if (plan.kind === 'moons') moonsPreview(g, w, h, env, plan);
+    else if (plan.kind === 'meeting') meetingPreview(g, w, h, env, plan);
     else slingPreview(g, w, h, env, plan);
   },
   animate(g, w, h, env, t) {
@@ -731,6 +918,17 @@ export default {
         of: p
       };
     }
+    if (plan.kind === 'meeting') {
+      const p = plan;
+      return {
+        title: meetingTitle(p),
+        text: 'Two moons start together. Turn the system to find their first meeting and count the inner moon\'s full laps.',
+        mono: FIRST[p.names[0]] + ' ' + p.inner + ' ticks/lap / ' + FIRST[p.names[1]] + ' ' + p.outer + ' ticks/lap',
+        aspect: '16 / 10',
+        paint: (g, w, h, cardEnv) => meetingPreview(g, w, h, cardEnv, p),
+        of: p
+      };
+    }
     const p = plan;
     return {
       title: slingTitle(p),
@@ -746,7 +944,10 @@ export default {
     if (sling) return slingPiece(env, sling);
     const moons = carriedMoons(env);
     if (moons) return moonsPiece(env, moons);
+    const meeting = carriedMeeting(env);
+    if (meeting) return meetingPiece(env, meeting);
     const plan = deal(env);
-    return plan.kind === 'moons' ? moonsPiece(env, plan) : slingPiece(env, plan);
+    return plan.kind === 'moons' ? moonsPiece(env, plan)
+      : plan.kind === 'meeting' ? meetingPiece(env, plan) : slingPiece(env, plan);
   }
 };

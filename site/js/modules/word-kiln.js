@@ -9,11 +9,11 @@
                    accepted; a wrong check says how many tiles stand where the kiln's own word has
                    them, or that the word is not in the book, and no more. The hints, at a price,
                    are the first letter and then the last.
-     the ladder    A word ladder from one four-letter word to another in exactly three steps, one
-                   letter changed at a step, every rung a word in the book. The two middle rungs
-                   are the answer, and any pair that makes a true ladder is accepted. A wrong
-                   check says which step fails and never which word would mend it. The hints, at
-                   a price, are which letter one way up changes at each step.
+     the ladder    A word ladder between four-letter words in three or four steps, one letter
+                   changed at each step, every rung a word in the book. The visitor supplies the
+                   two or three middle rungs; any complete climb holds. A wrong check counts
+                   valid words and single-letter steps without naming a missing rung. Hints, at
+                   a price, mark which letter changes on one step at a time.
 
    A card and the feature it opens as are one firing: the spark puts the whole plan on its spec
    as `of` -- the word and the order its tiles were dealt in, or the four rungs -- and piece(env)
@@ -415,29 +415,27 @@ function anagramPiece(env, plan) {
 /* ---- the ladder ------------------------------------------------------------------------------ */
 
 function ladderPlan(env) {
+  const length = env.chance(0.4) ? 5 : 4;
   for (let attempt = 0; attempt < 80; attempt++) {
-    const a = env.pick(RUNGS);
-    const n1 = neighbours(a);
-    if (!n1.length) continue;
-    const w1 = env.pick(n1);
-    const n2 = neighbours(w1).filter((w) => w !== a);
-    if (!n2.length) continue;
-    const w2 = env.pick(n2);
-    const n3 = neighbours(w2).filter((w) => w !== a && w !== w1);
-    if (!n3.length) continue;
-    const b = env.pick(n3);
-    // A real climb, if one is to be had: the two ends more than a step apart.
-    if (diff(a, b) < 2 && attempt < 40) continue;
-    return { kind: 'ladder', rungs: [a, w1, w2, b] };
+    const rungs = [env.pick(RUNGS)];
+    while (rungs.length < length) {
+      const next = neighbours(rungs[rungs.length - 1]).filter((word) => !rungs.includes(word));
+      if (!next.length) break;
+      rungs.push(env.pick(next));
+    }
+    if (rungs.length === length && diff(rungs[0], rungs[length - 1]) >= 2) {
+      return { kind: 'ladder', rungs };
+    }
   }
-  return { kind: 'ladder', rungs: ['cold', 'cord', 'core', 'care'] };
+  return { kind: 'ladder', rungs: length === 5
+    ? ['cold', 'cord', 'core', 'care', 'bare'] : ['cold', 'cord', 'core', 'care'] };
 }
 
 function validLadder(rungs) {
-  if (!Array.isArray(rungs) || rungs.length !== 4) return false;
+  if (!Array.isArray(rungs) || (rungs.length !== 4 && rungs.length !== 5)) return false;
   if (!rungs.every((w) => typeof w === 'string' && IN_RUNGS.has(w))) return false;
-  if (new Set(rungs).size !== 4) return false;
-  for (let i = 0; i < 3; i++) if (diff(rungs[i], rungs[i + 1]) !== 1) return false;
+  if (new Set(rungs).size !== rungs.length) return false;
+  for (let i = 0; i < rungs.length - 1; i++) if (diff(rungs[i], rungs[i + 1]) !== 1) return false;
   return true;
 }
 
@@ -449,7 +447,8 @@ function carriedLadder(env) {
 }
 
 function ladderTitle(plan) {
-  return 'the ladder: ' + plan.rungs[0] + ' to ' + plan.rungs[3];
+  return 'the ladder: ' + plan.rungs[0] + ' to ' + plan.rungs[plan.rungs.length - 1]
+    + (plan.rungs.length === 5 ? ' in four steps' : '');
 }
 
 function changedAt(a, b) {
@@ -466,7 +465,8 @@ function ladderScene(g, w, h, env, plan, s, variant) {
   kiln(g, w, h, env, 0.6, { cx, cy: h * 0.92, r, lit: 0.6 + s.lit * 0.4 });
   embers(g, env, cx, h * 0.92, r, v, s.phase, 0.7 + s.lit * 0.3);
   const small = px(env, w, h, 0.036, 10);
-  const size = Math.min((w * 0.5) / 4 / 1.1, h * 0.1 * v.scale);
+  const n = plan.rungs.length;
+  const size = Math.min((w * 0.5) / 4 / 1.1, h * (n === 5 ? 0.085 : 0.1) * v.scale);
   const railX = [cx - w * 0.3, cx + w * 0.3];
   g.strokeStyle = env.alpha(c.muted, 0.7);
   g.lineWidth = Math.max(2, m * 0.012);
@@ -476,29 +476,30 @@ function ladderScene(g, w, h, env, plan, s, variant) {
     g.lineTo(x, h * 0.8);
   }
   g.stroke();
-  // The rungs, bottom to top: the start, the two the visitor fills, the end.
-  const words = [plan.rungs[0], s.first, s.second, plan.rungs[3]];
-  const fixed = [true, false, false, true];
-  for (let k = 0; k < 4; k++) {
-    const y = h * (0.71 - k * 0.19);
+  // The rungs, bottom to top: the start, the visitor's middle rungs, the end.
+  const words = [plan.rungs[0], s.first, s.second];
+  if (n === 5) words.push(s.third);
+  words.push(plan.rungs[n - 1]);
+  for (let k = 0; k < n; k++) {
+    const y = h * ((n === 5 ? 0.75 : 0.71) - k * (n === 5 ? 0.16 : 0.19));
     g.strokeStyle = env.alpha(c.muted, 0.7);
     g.lineWidth = Math.max(2, m * 0.01);
     g.beginPath();
     g.moveTo(railX[0], y);
     g.lineTo(railX[1], y);
     g.stroke();
-    const lit = s.phase > 0 ? (s.climb || ease)((s.phase * 4 - k) / 1.2) : 0;
+    const lit = s.phase > 0 ? (s.climb || ease)((s.phase * (n + 0.3) - k) / 1.2) : 0;
     for (let i = 0; i < 4; i++) {
       const x = cx + (i - 1.5) * size * 1.1;
       const letter = words[k][i] || '';
-      if (fixed[k] || s.phase > 0) {
+      if (k === 0 || k === n - 1 || s.phase > 0) {
         // At the finale the letter each step changed glows.
         const below = k > 0 ? words[k - 1] : null;
         const changed = s.phase > 0 && below && below.length === 4 && below[i] !== words[k][i];
         tile(g, env, x, y, size, letter, changed ? lit : lit * 0.4, 0);
       } else slot(g, env, x, y, size, letter);
       // A hint: the letter one way up changes at this step, marked on the rung below it.
-      if (k < 3 && s.hints > k && s.phase === 0) {
+      if (k < n - 1 && s.hints > k && s.phase === 0) {
         const at = changedAt(plan.rungs[k], plan.rungs[k + 1]);
         if (at === i) {
           g.fillStyle = c.accent2;
@@ -516,49 +517,57 @@ function ladderScene(g, w, h, env, plan, s, variant) {
     g.textBaseline = 'middle';
     g.fillStyle = env.alpha(c.muted, 0.9);
     // The rung's name beside the rail, or the short form where a narrow scene leaves it no room.
-    const name = k === 0 ? 'start' : k === 3 ? 'end' : k === 1 ? 'first rung' : 'second rung';
+    const name = k === 0 ? 'start' : k === n - 1 ? 'end' : k === 1 ? 'first rung' : k === 2 ? 'second rung' : 'third rung';
     const fits = railX[0] - small * 0.6 - g.measureText(name).width >= small * 0.4;
-    g.fillText(fits ? name : (k === 1 ? 'rung 1' : k === 2 ? 'rung 2' : name), railX[0] - small * 0.6, y);
+    g.fillText(fits ? name : 'rung ' + k, railX[0] - small * 0.6, y);
   }
   caption(g, env, w, h, s.phase >= 1 ? 'one letter a step; the book holds every rung' : s.line, h * 0.86, env.alpha(c.muted, 0.9), small);
 }
 
 function ladderPreview(g, w, h, env, plan) {
-  ladderScene(g, w, h, env, plan, { first: '', second: '', hints: 0, phase: 0, lit: 0, line: 'three steps, one letter each' }, env.variant);
+  ladderScene(g, w, h, env, plan, { first: '', second: '', third: '', hints: 0, phase: 0, lit: 0,
+    line: (plan.rungs.length - 1) + ' steps, one letter each' }, env.variant);
 }
 
 function ladderPiece(env, plan) {
-  const helps = Math.min(3, asked(env).helps);
+  const n = plan.rungs.length;
+  const helps = Math.min(n - 1, asked(env).helps);
   const a = plan.rungs[0];
-  const b = plan.rungs[3];
+  const b = plan.rungs[n - 1];
   // The rungs light along a curve rolled for this piece (see riteCurve).
-  const s = { first: '', second: '', hints: 0, phase: 0, lit: 0, line: 'change one letter a step; every rung a word',
+  const s = { first: '', second: '', third: '', hints: 0, phase: 0, lit: 0, line: 'change one letter a step; every rung a word',
     climb: riteCurve((env.seed >>> 0) ^ 0x1add) };
   const draw = (c) => ladderScene(c.g, c.w, c.h, c, plan, s, env.variant);
   return {
     title: ladderTitle(plan),
-    brief: 'A small climb, by the book. A word ladder from ' + a + ' to ' + b + ' in exactly three steps. Each step changes one letter and keeps the other three where they are, and every rung is a word in the kiln\'s book. Any two middle rungs that make a true ladder will do.',
-    goal: 'Fill the two middle rungs so that each step changes one letter and every rung is a word.',
+    brief: 'A word ladder from ' + a + ' to ' + b + ' in exactly ' + (n - 1) + ' steps. Each step changes one letter and keeps the other three where they are. Every rung must be a word in the kiln\'s book; any complete climb will do.',
+    goal: 'Fill the ' + (n === 5 ? 'three' : 'two') + ' middle rungs so each step changes one letter and every rung is a word.',
     aspect: '3 / 4',
     checkLabel: 'climb it',
     steps: [
       { id: 'first', ask: 'the first rung, one letter from ' + a, kind: 'word', length: 4, placeholder: '____', upper: false },
-      { id: 'second', ask: 'the second rung, one letter from ' + b, kind: 'word', length: 4, placeholder: '____', upper: false },
+      { id: 'second', ask: n === 5 ? 'the second rung, between the others' : 'the second rung, one letter from ' + b, kind: 'word', length: 4, placeholder: '____', upper: false },
+      ...(n === 5 ? [{ id: 'third', ask: 'the third rung, one letter from ' + b, kind: 'word', length: 4, placeholder: '____', upper: false }] : []),
       { id: 'hint', ask: 'which letter changes, one way up', kind: 'press', count: 1, label: 'show a step', optional: true }
     ],
-    solution: { first: plan.rungs[1], second: plan.rungs[2] },
+    solution: n === 5 ? { first: plan.rungs[1], second: plan.rungs[2], third: plan.rungs[3] }
+      : { first: plan.rungs[1], second: plan.rungs[2] },
     check(c) {
-      const f = clean(c.value('first'));
-      const g2 = clean(c.value('second'));
-      const problems = [];
-      if (!IN_RUNGS.has(f)) problems.push('the first rung is not a word in the kiln\'s book');
-      if (!IN_RUNGS.has(g2)) problems.push('the second rung is not a word in the kiln\'s book');
-      if (f.length === 4 && diff(a, f) !== 1) problems.push('the first rung is not one letter from the start');
-      if (f.length === 4 && g2.length === 4 && diff(f, g2) !== 1) problems.push('the two rungs are not one letter apart');
-      if (g2.length === 4 && diff(g2, b) !== 1) problems.push('the second rung is not one letter from the end');
-      if (new Set([a, f, g2, b]).size !== 4) problems.push('a rung repeats a word already on the ladder');
-      if (problems.length) return { solved: false, say: problems.slice(0, 2).join('; ') };
-      return { solved: true, say: a + ', ' + f + ', ' + g2 + ', ' + b + ': the ladder holds' };
+      const middle = [clean(c.value('first')), clean(c.value('second'))];
+      if (n === 5) middle.push(clean(c.value('third')));
+      const words = [a, ...middle, b];
+      const inBook = middle.filter((word) => IN_RUNGS.has(word)).length;
+      let singleSteps = 0;
+      for (let i = 0; i < n - 1; i++) {
+        if (words[i].length === 4 && words[i + 1].length === 4 && diff(words[i], words[i + 1]) === 1) singleSteps++;
+      }
+      const distinct = new Set(words).size === n;
+      if (inBook === n - 2 && singleSteps === n - 1 && distinct) {
+        return { solved: true, say: words.join(', ') + ': the ladder holds' };
+      }
+      return { solved: false, say: inBook + ' of ' + (n - 2) + ' middle rungs are in the book; '
+        + singleSteps + ' of ' + (n - 1) + ' steps change one letter'
+        + (distinct ? '' : '; a word repeats') };
     },
     start(c) {
       c.status(a + ' to ' + b + ' in three steps');
@@ -573,15 +582,17 @@ function ladderPiece(env, plan) {
         s.second = clean(value).slice(0, 4);
         c.status(s.second ? 'second rung: ' + s.second : 'nothing on the second rung yet');
       }
+      if (id === 'third') {
+        s.third = clean(value).slice(0, 4);
+        c.status(s.third ? 'third rung: ' + s.third : 'nothing on the third rung yet');
+      }
       if (id === 'hint') {
         if (s.hints < helps) {
           const at = changedAt(plan.rungs[s.hints], plan.rungs[s.hints + 1]) + 1;
           s.hints += 1;
           c.hint();
-          c.status((s.hints === 1 ? 'one way up: the first step changes letter ' : s.hints === 2 ? 'then the second step changes letter ' : 'and the last step changes letter ') + at);
-        } else if (s.hints >= helps) {
-          c.status('that is all the kiln will show at this difficulty; the words are yours');
-        } else c.status('every step has been shown; the words are yours');
+          c.status('step ' + s.hints + ' changes letter ' + at);
+        } else c.status('that is all the kiln will show at this difficulty; the words are yours');
       }
       draw(c);
     },
@@ -595,15 +606,22 @@ function ladderPiece(env, plan) {
     end(c) {
       s.first = clean(c.value('first')) || plan.rungs[1];
       s.second = clean(c.value('second')) || plan.rungs[2];
-      c.status('the ladder holds: ' + [a, s.first, s.second, b].join(', ') + '. one letter a step, and every rung in the book.');
+      if (n === 5) s.third = clean(c.value('third')) || plan.rungs[3];
+      c.status('the ladder holds: ' + [a, s.first, s.second, ...(n === 5 ? [s.third] : []), b].join(', ') + '. one letter a step, and every rung in the book.');
     }
   };
 }
 
 /* ---- the module ----------------------------------------------------------------------------- */
 
+const plans = new WeakMap();
 function deal(env) {
-  return env.chance(0.5) ? anagramPlan(env) : ladderPlan(env);
+  let plan = plans.get(env);
+  if (!plan) {
+    plan = env.chance(0.5) ? anagramPlan(env) : ladderPlan(env);
+    plans.set(env, plan);
+  }
+  return plan;
 }
 
 export default {
@@ -613,6 +631,9 @@ export default {
     const plan = deal(env);
     if (plan.kind === 'anagram') anagramPreview(g, w, h, env, plan);
     else ladderPreview(g, w, h, env, plan);
+  },
+  animate(g, w, h, env, t) {
+    return false;
   },
   spark(env) {
     const plan = deal(env);
@@ -628,8 +649,8 @@ export default {
     }
     return {
       title: ladderTitle(plan),
-      mono: plan.rungs[0] + '\n____\n____\n' + plan.rungs[3],
-      text: 'Three steps, one letter changed at each, every rung a word in the kiln\'s book. Fill the two middle rungs and the climb holds.',
+      mono: plan.rungs[0] + '\n' + Array(plan.rungs.length - 2).fill('____').join('\n') + '\n' + plan.rungs[plan.rungs.length - 1],
+      text: (plan.rungs.length - 1) + ' steps, one letter changed at each, every rung a word in the kiln\'s book. Fill the middle rungs to complete the climb.',
       aspect: '3 / 4',
       paint: (g, w, h, cardEnv) => ladderPreview(g, w, h, cardEnv, plan),
       of: plan
