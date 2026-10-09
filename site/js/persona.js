@@ -146,7 +146,7 @@
         : t.sx > t.sy * 1.6 ? SKY_NOUN.wide
           : t.sy > t.sx * 1.6 ? SKY_NOUN.tall
             : t.spread > 30 ? SKY_NOUN.scattered : SKY_NOUN.ring;
-    return 'the ' + adj[t.code % adj.length] + ' ' + noun[(t.code >> 3) % noun.length];
+    return 'the ' + adj[t.code % adj.length] + ' ' + noun[(t.code >>> 3) % noun.length];
   }
   function skyRead(value) {
     var list = clean(value === undefined ? stars() : value);
@@ -208,10 +208,11 @@
   }
   function announce(list, how, kept) {
     refresh();
-    listeners.slice().forEach(function (fn) { fn(list.slice(), how, kept); });
+    // Readers receive independent snapshots; changing one must not change the saved sky.
+    listeners.slice().forEach(function (fn) { fn(list.map(cleanStar), how, kept); });
     if (typeof window.CustomEvent === 'function' && typeof window.dispatchEvent === 'function') {
       window.dispatchEvent(new window.CustomEvent('persona:sky', {
-        detail: { stars: list.slice(), how: how, kept: kept }
+        detail: { stars: list.map(cleanStar), how: how, kept: kept }
       }));
     }
   }
@@ -741,6 +742,11 @@
     }
     drawField();
   }
+  function focusStar(index) {
+    var star = fieldStars[index];
+    var target = star && star.el ? star.el : sheet.drop;
+    if (target) target.focus();
+  }
   function pointInField(clientX, clientY) {
     var box = sheet.field.getBoundingClientRect();
     return { x: clamp((clientX - box.left - 22) / Math.max(1, box.width - 44) * 100, 1, 99),
@@ -763,9 +769,11 @@
       select(index);
     });
     el.addEventListener('pointerdown', function (ev) {
+      if (activeDrag || (typeof ev.button === 'number' && ev.button !== 0)) return;
       ev.preventDefault();
       ev.stopPropagation();
       activeDrag = { index: index, pointerId: ev.pointerId, moved: false };
+      el.focus();
       select(index);
       if (el.setPointerCapture) {
         try { el.setPointerCapture(ev.pointerId); }
@@ -773,6 +781,7 @@
       }
       el.classList.add('dragging');
     });
+    el.addEventListener('lostpointercapture', function (ev) { endDrag(ev.pointerId); });
     el.addEventListener('keydown', function (ev) {
       var step = ev.shiftKey ? 6 : 2;
       var moves = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] };
@@ -810,10 +819,8 @@
     var list = serialize();
     list.splice(index, 1);
     var kept = setStars(list, 'removed');
+    focusStar(0);
     sheetStatus('Removed the star that said: ' + gone + '. ' + fieldIntro(fieldStars) + keptNote(kept));
-    var next = sheet.field.querySelector('.persona-star');
-    if (next) next.focus();
-    else if (sheet.drop) sheet.drop.focus();
   }
   function endDrag(pointerId) {
     if (!activeDrag || activeDrag.pointerId !== pointerId) return;
@@ -879,7 +886,7 @@
     onSheetClosed();
   }
   function onSheetClosed() {
-    if (!sheet || !sheetWasOpen) return;
+    if (!sheet || sheet.host.open || !sheetWasOpen) return;
     sheetWasOpen = false;
     activeDrag = null;
     sheet.host.classList.remove('persona-sheet-fallback');
@@ -965,8 +972,8 @@
       var point = pointInField(ev.clientX, ev.clientY);
       var words = thought();
       var kept = addStar({ x: point.x, y: point.y, text: words });
+      focusStar(fieldStars.length - 1);
       sheetStatus('✦ ' + words + namedLine() + keptNote(kept));
-      select(fieldStars.length - 1);
     });
     document.addEventListener('pointermove', function (ev) {
       if (!activeDrag || activeDrag.pointerId !== ev.pointerId) return;
@@ -989,14 +996,13 @@
       var words = thought();
       var kept = addStar({ x: 50 + (Math.random() - 0.5) * 30,
         y: 50 + (Math.random() - 0.5) * 30, text: words });
+      focusStar(fieldStars.length - 1);
       sheetStatus('✦ ' + words + namedLine() + ' Drag it where it belongs.' + keptNote(kept));
-      select(fieldStars.length - 1);
     });
     function seedTheSky() {
       var kept = seed();
+      focusStar(0);
       sheetStatus('Seeded ' + fieldStars.length + ' stars.' + namedLine() + ' Drag them into a shape, or tap the sky for more.' + keptNote(kept));
-      var first = sheet.field.querySelector('.persona-star');
-      if (first) first.focus();
     }
     if (sheet.seed) sheet.seed.addEventListener('click', function () {
       if (!fieldStars.length) { seedTheSky(); return; }

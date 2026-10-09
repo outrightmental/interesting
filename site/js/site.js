@@ -359,6 +359,9 @@
     var box = null;
 
     function readValue() {
+      if (isSky && persona) {
+        return { status: persona.read().status, value: persona.stars() };
+      }
       return store ? store.read(key, null) : { status: 'unavailable', value: null };
     }
 
@@ -698,6 +701,8 @@
     host.className = 'are-you-sure';
     var title = el('p', 'are-you-sure-title');
     title.id = 'are-you-sure-title';
+    host.setAttribute('role', 'dialog');
+    host.setAttribute('aria-modal', 'true');
     host.setAttribute('aria-labelledby', title.id);
     var note = el('p', 'are-you-sure-note');
     var actions = el('div', 'controls are-you-sure-actions');
@@ -720,7 +725,9 @@
       settle(false);
     });
     // Closed any other way the browser offers -- still no, and the caller still hears about it.
-    host.addEventListener('close', function () { settle(false); });
+    host.addEventListener('close', function () {
+      if (!host.open) settle(false);
+    });
     // A press on the backdrop, which is what a dialog owes anyone who opened it by mistake. The
     // dialog element is the target for the backdrop as well as its own padding, so the press has
     // to land outside the box itself. (The shared veil is behind the top layer, so while the
@@ -733,9 +740,20 @@
         settle(false);
       }
     });
-    // A browser without dialog.showModal() has no Escape of its own, so it is given one.
+    // Without dialog.showModal(), both Escape and the focus loop belong to this question.
     document.addEventListener('keydown', function (ev) {
-      if (asking && (ev.key === 'Escape' || ev.key === 'Esc')) settle(false);
+      if (!asking) return;
+      if (ev.key === 'Escape' || ev.key === 'Esc') {
+        ev.preventDefault();
+        settle(false);
+        return;
+      }
+      if (ev.key === 'Tab' && typeof host.showModal !== 'function') {
+        ev.preventDefault();
+        var next = document.activeElement === go ? no
+          : document.activeElement === no ? go : (ev.shiftKey ? no : go);
+        next.focus();
+      }
     });
     return { host: host, title: title, note: note, go: go, no: no };
   }
