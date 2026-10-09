@@ -287,6 +287,10 @@
   overflow: auto;
 }
 
+.persona-sheet:not([open]) {
+  display: none;
+}
+
 .persona-sheet[open] {
   display: grid;
   gap: 1rem;
@@ -346,6 +350,10 @@
 .persona-section .persona-probe,
 .persona-section .difficulty {
   margin: 0;
+}
+
+.persona-section .panel-status {
+  overflow-wrap: anywhere;
 }
 
 // The sky a visitor places stars in. The canvas behind the stars draws the links between them;
@@ -453,6 +461,7 @@
   background: var(--md-sys-color-tertiary-container);
   color: var(--md-sys-color-on-tertiary-container);
   opacity: 1;
+  clip-path: none;
   pointer-events: none;
   @include type.scale(label-small);
 }
