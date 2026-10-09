@@ -16,6 +16,9 @@
                       whole weeks, all different. Put the stems oldest to youngest and say how old
                       the oldest is.
 
+   The brief and answer labels repeat the drawn readings, so neither puzzle depends on seeing
+   the canvas.
+
    A card and the feature it opens as are one puzzle: the spark puts the whole plan on its spec as
    `of` -- the rules and readings, or the rates and leaf counts -- and piece(env) opens on that
    rather than rolling another. The sky may be one star or many; it lights the glass, and the plan
@@ -407,7 +410,7 @@ function waterPiece(env, plan) {
   const got = watered(plan);
   const answer = [];
   for (let i = 0; i < n; i++) if (got[i]) answer.push(i);
-  const s = { chosen: [], hinted: [], bloom: new Array(n).fill(0), fog: 0, t: 0 };
+  const s = { chosen: [], hinted: [], bloom: new Array(n).fill(0), fog: 0, t: (env.variant || PLAIN).turn * 5 };
   const draw = (c) => drawWater(c.g, c.w, c.h, c, plan, s, env.variant);
   const kinds = RULE_IDS.filter((r) => plan.rules.includes(r));
   function chosenNow(c) {
@@ -416,21 +419,21 @@ function waterPiece(env, plan) {
   }
   return {
     title: waterTitle(plan),
-    brief: 'A tending rite, kept to the letter. ' + capital(WORDS[n]) + ' plants wait under glass at midnight, each tagged with one rule, and the glass shows what the rules are judged by: a soil meter under every plant, the lamp, the vent, and a drop beside any plant watered last time. The tags: '
+    brief: capital(WORDS[n]) + ' plants wait under glass at midnight, each tagged with one rule. The lamp is ' + (plan.lamp ? 'on' : 'off') + ' and the vent is ' + (plan.vent ? 'open' : 'shut') + '. Each plant has a soil reading; a drop marks one watered last time. The tags: '
       + kinds.map((r) => RULES[r].tag + ' (' + RULES[r].rule + ')').join('; ') + '. Judge them left to right.',
     goal: 'Mark every plant that gets water, and none that stays dry.',
     aspect: '16 / 10',
-    checkLabel: 'water them',
+    checkLabel: 'check the plants',
     steps: [
-      { id: 'water', ask: 'the plants to water: tap them under the glass, or mark them here', kind: 'pick', items: plan.rules.map((r, i) => ({ label: 'plant ' + (i + 1) + ' (' + RULES[r].tag + ')', value: i })) },
+      { id: 'water', ask: 'the plants to water: tap them under the glass, or mark them here', kind: 'pick', items: plan.rules.map((r, i) => ({ label: 'plant ' + (i + 1) + ' (' + RULES[r].tag + '); soil ' + plan.soil[i] + (plan.last[i] ? '; watered last time' : '; not watered last time'), value: i })) },
       { id: 'hint', ask: 'one plant judged', kind: 'press', count: 1, label: 'show me one', optional: true }
     ],
     solution: { water: answer },
     check(c) {
       const chosen = chosenNow(c);
-      const right = chosen.filter((i) => got[i]).length;
+      const right = answer.filter((i) => chosen.includes(i)).length;
       const dry = chosen.filter((i) => !got[i]).length;
-      const solved = right === answer.length && dry === 0;
+      const solved = chosen.length === answer.length && right === answer.length && dry === 0;
       let say;
       if (solved) say = 'the round is kept: ' + (answer.length === 1 ? 'one plant drinks' : WORDS[answer.length] + ' plants drink') + ', and the rest stay dry';
       else if (!right) say = 'none of the right plants is marked yet' + (dry ? ', and ' + WORDS[dry] + ' marked that should stay dry' : '');
@@ -465,7 +468,10 @@ function waterPiece(env, plan) {
     tap(x, y, c) {
       const geo = waterGeometry(c.w, c.h, n);
       const col = Math.floor((x * c.w - geo.left) / geo.cell);
-      if (col < 0 || col >= n) return;
+      if (col < 0 || col >= n) {
+        c.status('no plant there; tap a plant to mark it for water');
+        return;
+      }
       const next = s.chosen.includes(col) ? s.chosen.filter((i) => i !== col) : s.chosen.concat([col]).sort((a, b) => a - b);
       s.chosen = next;
       c.set('water', next.slice());
@@ -473,10 +479,10 @@ function waterPiece(env, plan) {
       draw(c);
     },
     frame(t, dt, c) {
-      s.t += dt;
+      if (!c.reduced) s.t += dt;
       if (c.done) {
-        s.fog = Math.min(1, s.fog + dt * 0.5);
-        for (const i of answer) s.bloom[i] = Math.min(1, s.bloom[i] + dt * 0.8);
+        s.fog = c.reduced ? 1 : Math.min(1, s.fog + dt * 0.5);
+        for (const i of answer) s.bloom[i] = c.reduced ? 1 : Math.min(1, s.bloom[i] + dt * 0.8);
       }
       draw(c);
     },
@@ -550,7 +556,7 @@ function drawAge(g, w, h, env, plan, s, variant) {
   const small = Math.max(8, Math.min(12, Math.round(Math.min(w, h) * 0.032)));
   const a = ages(plan);
   glass(g, w, h, env, v, true, s.t);
-  write(g, 'oldest first, left to right as you set them', w / 2, h * 0.05, small, 'center', env.alpha(c.muted, 0.85));
+  write(g, 'your chosen ranks are below the stems', w / 2, h * 0.05, small, 'center', env.alpha(c.muted, 0.85));
   for (let i = 0; i < 4; i++) {
     const x = geo.left + (i + 0.5) * geo.cell;
     const height = (geo.soilY - h * 0.14) * (0.32 + (0.66 * plan.leaves[i]) / 24);
@@ -574,7 +580,7 @@ function agePiece(env, plan) {
   const order = ageOrder(plan);
   const a = ages(plan);
   const oldest = a[order[0]];
-  const s = { order: plan.start.slice(), hinted: [], bloom: [0, 0, 0, 0], fog: 0, t: 0 };
+  const s = { order: plan.start.slice(), hinted: [], bloom: [0, 0, 0, 0], bloomTime: 0, fog: 0, t: (env.variant || PLAIN).turn * 5 };
   const draw = (c) => drawAge(c.g, c.w, c.h, c, plan, s, env.variant);
   const named = (list) => list.map((i) => LETTERS[i]).join(', ');
   function current(c) {
@@ -583,12 +589,12 @@ function agePiece(env, plan) {
   }
   return {
     title: ageTitle(),
-    brief: 'A reading of the leaves. Four stems under glass. Each tag gives how many leaves that stem grows in a week, and its leaves are drawn and counted. A stem that grows three leaves a week and carries twelve has grown for four weeks. Set the order on the rail, or tap a stem to move it up one place.',
+    brief: 'Four stems under glass. Each tag gives how many leaves that stem grows in a week, and its leaves are drawn and counted. A stem that grows three leaves a week and carries twelve has grown for four weeks. Set the order with the arrows, or tap a stem to move it up one place; a stem already first moves to the end.',
     goal: 'Put the stems oldest to youngest, and say how many weeks the oldest has grown.',
     aspect: '16 / 10',
     checkLabel: 'check the bed',
     steps: [
-      { id: 'order', ask: 'the stems, oldest first', kind: 'order', items: LETTERS.map((l, i) => ({ label: 'stem ' + l, value: i })), value: plan.start.slice() },
+      { id: 'order', ask: 'the stems, oldest first', kind: 'order', items: LETTERS.map((l, i) => ({ label: 'stem ' + l + ': ' + plan.leaves[i] + ' leaves; ' + plan.rates[i] + ' per week', value: i })), value: plan.start.slice() },
       { id: 'oldest', ask: 'how long the oldest has grown', kind: 'number', min: 1, max: 24, step: 1, value: 1, unit: 'weeks' },
       { id: 'hint', ask: 'one stem\'s age', kind: 'press', count: 1, label: 'show me one', optional: true }
     ],
@@ -632,7 +638,10 @@ function agePiece(env, plan) {
     tap(x, y, c) {
       const geo = ageGeometry(c.w, c.h);
       const col = Math.floor((x * c.w - geo.left) / geo.cell);
-      if (col < 0 || col >= 4) return;
+      if (col < 0 || col >= 4) {
+        c.status('no stem there; tap a stem to move it up one place');
+        return;
+      }
       const rank = s.order.indexOf(col);
       const next = s.order.slice();
       if (rank === 0) {
@@ -648,11 +657,12 @@ function agePiece(env, plan) {
       draw(c);
     },
     frame(t, dt, c) {
-      s.t += dt;
+      if (!c.reduced) s.t += dt;
       if (c.done) {
-        s.fog = Math.min(0.5, s.fog + dt * 0.3);
+        s.fog = c.reduced ? 0.5 : Math.min(0.5, s.fog + dt * 0.3);
+        s.bloomTime += dt;
         order.forEach((i, rank) => {
-          s.bloom[i] = Math.min(1, s.bloom[i] + Math.max(0, dt * 0.9 - rank * 0.01));
+          s.bloom[i] = c.reduced ? 1 : Math.max(s.bloom[i], clamp(s.bloomTime * 0.9 - rank * 0.25, 0, 1));
         });
       }
       draw(c);
@@ -689,6 +699,7 @@ export default {
     else agePreview(g, w, h, env, d.plan, env.variant.turn * 5);
   },
   animate(g, w, h, env, t) {
+    if (env.reduced) return false;
     const d = deal(env);
     if (d.water) waterPreview(g, w, h, env, d.plan, t + env.variant.turn * 5);
     else agePreview(g, w, h, env, d.plan, t + env.variant.turn * 5);
