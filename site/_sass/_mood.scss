@@ -246,7 +246,8 @@ html[data-shifting] .card-overline {
 // Each mechanism tints its seals a little differently: the host's data-probe has a say.
 [data-probe='knock'] .probe,
 [data-probe='key-ring'] .probe,
-[data-probe='cairn'] .probe {
+[data-probe='cairn'] .probe,
+[data-probe='compass'] .probe {
   --fill-opacity: 0.28;
 }
 

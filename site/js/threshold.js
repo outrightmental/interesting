@@ -311,6 +311,25 @@
       daring: { restless: 2, tempestuous: 2, curious: 1 },
       sway: { attentive: 2, metrical: 1, divinatory: 1 },
       leaning: { rooted: 2, tender: 1, brooding: 1 }
+    },
+    {
+      probe: 'compass', name: 'the unmarked compass', kind: 'compass',
+      ask: 'A compass with no letters on it. Turn the needle to the way you would walk, then set out.',
+      label: 'set out',
+      points: [
+        { bearing: 0, weights: { cosmic: 3, divinatory: 1, brooding: 1 } },
+        { bearing: 45, weights: { analytic: 3, geometric: 2 } },
+        { bearing: 90, weights: { restless: 3, tempestuous: 2, verbal: 1 } },
+        { bearing: 135, weights: { curious: 3, verbal: 2 } },
+        { bearing: 180, weights: { rooted: 3, tender: 2 } },
+        { bearing: 225, weights: { tending: 3, ceremonial: 2 } },
+        { bearing: 270, weights: { attentive: 3, brooding: 2, divinatory: 1 } },
+        { bearing: 315, weights: { metrical: 3, geometric: 1, attentive: 1 } }
+      ],
+      untouched: { divinatory: 3, tender: 1, cosmic: 1 },
+      nudged: { analytic: 2, attentive: 1, geometric: 1 },
+      swung: { restless: 2, curious: 2, verbal: 1 },
+      spun: { tempestuous: 2, ceremonial: 2, cosmic: 1 }
     }
   ];
 
@@ -1091,7 +1110,7 @@
       choice: choiceProbe, sequence: sequenceProbe, tap: tapProbe, hold: holdProbe,
       place: placeProbe, draw: drawProbe, windows: windowsProbe, balance: balanceProbe,
       slider: sliderProbe, sky: skyProbe, keys: keysProbe, knock: knockProbe,
-      rubbing: rubbingProbe, cairn: cairnProbe
+      rubbing: rubbingProbe, cairn: cairnProbe, compass: compassProbe
     };
     (kinds[probe.kind] || choiceProbe)(probe, body, trace, answer, finish);
     return probe;
@@ -2896,6 +2915,254 @@
       });
     }
     report();
+  }
+  // A compass with no letters on it. The needle starts on a rolled bearing and the visitor turns
+  // it to the way they would walk -- round the dial with a finger or a mouse, or by the arrow keys
+  // -- then sets out. The bearing is most of the answer, blended between the two nearest of eight
+  // unlettered points, and how far the needle travelled to get there is the rest: left as it lay,
+  // nudged, swung round, or spun past a full turn. No bearing is wrong, and the compass never
+  // answers on its own: setting out is the visitor's press. The needle ratchets after the hand in
+  // rolled treads with a slip back, never a glide; the face is grained through a matte of this
+  // compass's own; the meter tallies each eighth of a turn; and 'set out' settles dusk over the
+  // dial in treads with the needle cut warm.
+  function compassProbe(probe, body, trace, answer, finish) {
+    var dial = el('canvas', 'probe-pad probe-compass');
+    dial.width = 600;
+    dial.height = 320;
+    dial.tabIndex = 0;
+    dial.setAttribute('role', 'application');
+    dial.setAttribute('aria-label', 'an unmarked compass: drag round the dial to turn the needle, or turn it with the arrow keys, then press enter to set out');
+    dial.style.cursor = 'grab';
+    var g = dial.getContext('2d');
+    dial.hidden = !g;
+    body.appendChild(dial);
+    var controls = el('div', 'controls');
+    var go = el('button', 'btn-filled', probe.label);
+    go.type = 'button';
+    controls.appendChild(go);
+    body.appendChild(controls);
+    body.appendChild(el('p', 'probe-count', 'the needle starts somewhere random: turn it as far as you like, or not at all, and set out'));
+    var style = window.getComputedStyle(body);
+    var tone = function (name, fallback) { return rgbOf(style.getPropertyValue(name), fallback); };
+    var night = tone('--bg', '#070a14');
+    var dusk = tone('--bg2', '#1c2a4e');
+    var cool = tone('--accent', '#9fcbff');
+    var warm = tone('--accent2', '#ffe7ab');
+    var start = Math.random() * 360;
+    var bearing = start;
+    var shown = start;
+    var travelled = 0;
+    var dragging = false;
+    var set = false;
+    var sealed = 0;
+    var lastHour = null;
+    var lastMarks = 0;
+    var cancel = null;
+    var face = null;
+    var tooth = matteField(null, 'grain');
+    var veil = matteField(null, 'scan');
+    var ringDash = dashesOf(prng(Math.floor(Math.random() * 0x7fffffff)));
+    function wrap(a) { return ((a % 360) + 360) % 360; }
+    function hourOf(b) { var hr = Math.round(wrap(b) / 30) % 12; return hr === 0 ? 12 : hr; }
+    function point(a, r, cx, cy) { var rad = a * Math.PI / 180; return [cx + Math.sin(rad) * r, cy - Math.cos(rad) * r]; }
+    function paint() {
+      if (!g) return;
+      var w = dial.width;
+      var h = dial.height;
+      var cx = w / 2;
+      var cy = h * 0.52;
+      var R = h * 0.4;
+      var i;
+      var grad = g.createLinearGradient(0, 0, 0, h);
+      grad.addColorStop(0, rgba(blend(night, dusk, 0.5), 1));
+      grad.addColorStop(1, rgba(night, 1));
+      g.fillStyle = grad;
+      g.fillRect(0, 0, w, h);
+      // The face: a disc of the dusk, grained once through a matte of this compass's own.
+      g.fillStyle = rgba(blend(night, dusk, 0.75), 1);
+      g.beginPath();
+      g.arc(cx, cy, R, 0, Math.PI * 2);
+      g.fill();
+      if (!face) {
+        face = document.createElement('canvas');
+        face.width = w;
+        face.height = h;
+        var fg = face.getContext('2d');
+        if (fg) {
+          fg.beginPath();
+          fg.arc(cx, cy, R, 0, Math.PI * 2);
+          fg.clip();
+          tooth.paint(fg, cx - R, cy - R, R * 2, R * 2, 0.3, rgba(dusk, 0.55));
+        }
+      }
+      g.drawImage(face, 0, 0);
+      g.lineCap = 'butt';
+      g.lineWidth = 1.5;
+      g.strokeStyle = rgba(cool, 0.45);
+      g.beginPath();
+      g.arc(cx, cy, R, 0, Math.PI * 2);
+      g.stroke();
+      g.setLineDash(ringDash);
+      g.lineWidth = 1;
+      g.strokeStyle = rgba(cool, 0.28);
+      g.beginPath();
+      g.arc(cx, cy, R * 0.72, 0, Math.PI * 2);
+      g.stroke();
+      g.setLineDash([]);
+      // Thirty-two ticks, the eight points longer and warm, and no letter on any of them.
+      for (i = 0; i < 32; i++) {
+        var major = i % 4 === 0;
+        var t0 = point(i * 11.25, R * (major ? 0.84 : 0.92), cx, cy);
+        var t1 = point(i * 11.25, R * 0.97, cx, cy);
+        g.strokeStyle = rgba(major ? warm : cool, major ? 0.8 : 0.4);
+        g.lineWidth = major ? 2 : 1;
+        g.beginPath();
+        g.moveTo(t0[0], t0[1]);
+        g.lineTo(t1[0], t1[1]);
+        g.stroke();
+      }
+      // The rose: an eight-pointed star of hairlines under the needle.
+      g.strokeStyle = rgba(cool, 0.18);
+      g.lineWidth = 1;
+      g.beginPath();
+      for (i = 0; i < 8; i++) {
+        var s0 = point(i * 45, R * 0.66, cx, cy);
+        var s1 = point((i + 3) * 45, R * 0.66, cx, cy);
+        g.moveTo(s0[0], s0[1]);
+        g.lineTo(s1[0], s1[1]);
+      }
+      g.stroke();
+      // Where the needle lay at first: a dashed hairline, so what was turned can be read back.
+      var w0 = point(start, R * 0.5, cx, cy);
+      var w1 = point(start, R * 0.78, cx, cy);
+      g.setLineDash([2, 4]);
+      g.strokeStyle = rgba(warm, 0.35);
+      g.beginPath();
+      g.moveTo(w0[0], w0[1]);
+      g.lineTo(w1[0], w1[1]);
+      g.stroke();
+      g.setLineDash([]);
+      // The needle: warm toward the way, cool behind, on a hub.
+      var rad = shown * Math.PI / 180;
+      var px = Math.cos(rad) * 7;
+      var py = Math.sin(rad) * 7;
+      var tip = point(shown, R * 0.78, cx, cy);
+      var tail = point(shown + 180, R * 0.5, cx, cy);
+      g.fillStyle = rgba(warm, sealed ? 1 : 0.92);
+      g.beginPath();
+      g.moveTo(tip[0], tip[1]);
+      g.lineTo(cx + px, cy + py);
+      g.lineTo(cx - px, cy - py);
+      g.closePath();
+      g.fill();
+      g.fillStyle = rgba(cool, 0.7);
+      g.beginPath();
+      g.moveTo(tail[0], tail[1]);
+      g.lineTo(cx + px, cy + py);
+      g.lineTo(cx - px, cy - py);
+      g.closePath();
+      g.fill();
+      g.fillStyle = rgba(night, 1);
+      g.strokeStyle = rgba(warm, 0.9);
+      g.lineWidth = 1.5;
+      g.beginPath();
+      g.arc(cx, cy, 5, 0, Math.PI * 2);
+      g.fill();
+      g.stroke();
+      if (sealed) veil.paint(g, 0, 0, w, h, sealed, rgba(night, 0.8));
+    }
+    // The needle ratchets after the hand: from where it stands to the bearing, in two to four
+    // rolled treads with a slip back where the roll allows, never a glide.
+    function ratchet() {
+      if (cancel) cancel();
+      var from = wrap(shown);
+      var d = ((bearing - from + 540) % 360) - 180;
+      cancel = series({ ms: beat('short'), treads: 2 + Math.floor(Math.random() * 3), step: function (k, n, slipping) {
+        var y = k >= n ? 1 : k / n;
+        if (slipping) y = Math.max(0, y - 0.2);
+        shown = from + d * y;
+        paint();
+      }, done: function () { shown = bearing; paint(); } });
+    }
+    function turn(to) {
+      if (set) return;
+      to = wrap(to);
+      var delta = ((to - bearing + 540) % 360) - 180;
+      if (Math.abs(delta) < 1.5) return;
+      travelled += Math.abs(delta);
+      bearing = to;
+      var hour = hourOf(bearing);
+      if (hour !== lastHour) {
+        lastHour = hour;
+        note(trace, 'the needle stands at ' + hour + " o'clock");
+      }
+      var marks = Math.min(40, Math.floor(travelled / 45));
+      if (marks !== lastMarks) {
+        lastMarks = marks;
+        gauge(trace, marks ? tally(marks) : '');
+      }
+      ratchet();
+    }
+    function bearingAt(ev) {
+      var box = dial.getBoundingClientRect();
+      if (!box.width || !box.height) return null;
+      var x = (ev.clientX - box.left) / box.width * dial.width - dial.width / 2;
+      var y = (ev.clientY - box.top) / box.height * dial.height - dial.height * 0.52;
+      return Math.atan2(x, -y) * 180 / Math.PI;
+    }
+    function release() {
+      if (!dragging) return;
+      dragging = false;
+      if (!set) dial.style.cursor = 'grab';
+    }
+    dial.addEventListener('pointerdown', function (ev) {
+      if (set) return;
+      dragging = true;
+      try { dial.setPointerCapture(ev.pointerId); } catch (e) { /* the moves still read */ }
+      dial.style.cursor = 'grabbing';
+      var b = bearingAt(ev);
+      if (b !== null) turn(b);
+    });
+    dial.addEventListener('pointermove', function (ev) {
+      if (!dragging) return;
+      var b = bearingAt(ev);
+      if (b !== null) turn(b);
+    });
+    dial.addEventListener('pointerup', release);
+    dial.addEventListener('pointercancel', release);
+    dial.addEventListener('keydown', function (ev) {
+      if (set) return;
+      var steps = { ArrowLeft: -15, ArrowRight: 15, ArrowUp: -15, ArrowDown: 15 };
+      if (steps[ev.key] !== undefined) {
+        ev.preventDefault();
+        turn(bearing + steps[ev.key]);
+      } else if (ev.key === 'Enter' || ev.key === ' ') {
+        ev.preventDefault();
+        setOut();
+      }
+    });
+    function setOut() {
+      if (set) return;
+      set = true;
+      dragging = false;
+      var b = wrap(bearing);
+      var i = Math.floor(b / 45) % 8;
+      var j = (i + 1) % 8;
+      var frac = (b - i * 45) / 45;
+      add(answer, probe.points[i].weights, 1 - frac);
+      add(answer, probe.points[j].weights, frac);
+      add(answer, travelled < 1 ? probe.untouched : travelled < 60 ? probe.nudged : travelled < 300 ? probe.swung : probe.spun, 1);
+      retire(go);
+      dial.style.cursor = 'default';
+      dial.setAttribute('aria-disabled', 'true');
+      dial.tabIndex = -1;
+      gauge(trace, '');
+      // Dusk settles over the dial in treads; the needle cuts warm.
+      series({ ms: beat('medium'), treads: 3, step: function (k, n2) { sealed = k >= n2 ? 0.3 : k * 0.1; paint(); } });
+      finish();
+    }
+    go.addEventListener('click', setOut);
+    paint();
   }
   function describe(reading) {
     var o = reading && reading.orientation;
