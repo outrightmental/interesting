@@ -131,6 +131,83 @@ function cleaned(value) {
   return String(value == null ? '' : value).toUpperCase().replace(/[^A-Z]/g, '');
 }
 
+/* ---- the rite: how this module moves ------------------------------------------------------- */
+
+/* env.rite (ctx.rite inside a piece) is the piece's own roll of how it moves (js/variant.js;
+   js/stage.js, "The rite"). Nothing drawn here moves along a formula or cuts without a rite: the
+   wheel's inner alphabet turns to a new setting in rite.ratchet's clicks, with its backlash, and
+   so does the grille's key to its next view; the ring's glow breathes up rite.stair and back down
+   it, never a sine; a bar of the ledger that comes to read E, a cell of the word that is shown, a
+   view of the key that becomes the one on the board, the band over a solved note, the key that
+   lifts off a solved board -- every surface that becomes set or unset changes by its AREA through
+   rite.matte, cell by cell in the piece's own pattern, and never by a fade; and every word or
+   letter that arrives -- a typed letter, a hint, the setting's number, the note itself -- blinks
+   on with rite.flicker and holds. Every change is read against the piece's own clock, which
+   frame() advances: a change made at `since` has come came() of its way, which is 1 at once for
+   a visitor who asked for less motion and for whatever stood there from the start (since < 0).
+   Each letter, bar or view moves on a roll of its own (rite.at), so no two step together. */
+
+const STILL = {
+  ease: () => 1, stair: () => 1, ratchet: () => 1, flicker: () => 1, matte: () => true,
+  treads: 1, kind: 'none', cell: 4, at: () => STILL
+};
+
+function riteOf(env) {
+  return env && env.rite ? env.rite : STILL;
+}
+
+function came(now, since, span, reduced) {
+  if (reduced || since == null || since < 0) return 1;
+  return Math.max(0, Math.min(1, (now - since) / span));
+}
+
+function fract(x) {
+  return x - Math.floor(x);
+}
+
+// The cells of a box that the matte lets through at coverage k, filled in the current fillStyle:
+// how a surface changes by its area. Cells are rite.cell px, coarser over a wide box so a frame
+// stays cheap, on a grid fixed to the canvas so the pattern holds still while it grows. `inside`
+// keeps the tiling to a shape within the box. At k >= 1 every cell is let through.
+function develop(g, rite, x0, y0, bw, bh, k, inside, size) {
+  if (k <= 0) return;
+  const cell = size || Math.max(rite.cell, Math.ceil(Math.max(bw, bh) / 28));
+  const cx0 = Math.floor(x0 / cell);
+  const cy0 = Math.floor(y0 / cell);
+  const cx1 = Math.ceil((x0 + bw) / cell);
+  const cy1 = Math.ceil((y0 + bh) / cell);
+  for (let cy = cy0; cy < cy1; cy++) {
+    for (let cx = cx0; cx < cx1; cx++) {
+      const px = cx * cell;
+      const py = cy * cell;
+      if (inside && !inside(px + cell / 2, py + cell / 2)) continue;
+      if (k < 1 && !rite.matte(cx, cy, k)) continue;
+      g.fillRect(px, py, cell, cell);
+    }
+  }
+}
+
+// A surface that is coming (set) or going (unset): its coverage, 1 when it has been there all
+// along, climbing the stair when it is arriving and coming back down it when it is leaving.
+function coverage(now, was, rite, p) {
+  if (now && was) return 1;
+  if (now) return rite.stair(p);
+  if (was) return 1 - rite.stair(p);
+  return 0;
+}
+
+// How far through its breath a ring is, t seconds in: up the stair and back down it, entered at
+// the point the configuration puts this card at so no two rings on a screen swell together.
+const BREATH = 7;
+function breath(v, rite, t) {
+  const phase = fract(t / BREATH + v.turn);
+  return phase < 0.5 ? rite.stair(phase * 2) : 1 - rite.stair((phase - 0.5) * 2);
+}
+
+const TURN = 0.9;   // seconds a wheel or a key takes to click round to its next setting
+const SPAN = 0.7;   // seconds a letter, a bar or a view takes to arrive
+const REVEAL = 1.6; // seconds a solved note takes to develop
+
 /* ---- the letter wheel ----------------------------------------------------------------------- */
 
 function plan(env) {
@@ -168,8 +245,14 @@ function keySpan(p) {
   return [end - word.length + 1, end];
 }
 
+// The wheel's state, with the moment (on the piece's own clock) each part of it last changed, so
+// the scene can play the change as a rite rather than cut to it; -1 is "there from the start".
 function blank() {
-  return { shift: 0, reverse: false, guess: '', hints: [], reveal: false, open: 0, time: 0 };
+  return {
+    shift: 0, shiftWas: 0, shiftAt: -1, reverse: false, reverseAt: -1,
+    guess: '', guessWas: '', guessAt: -1, hints: [], hintAt: [],
+    reveal: false, solvedAt: -1, time: 0
+  };
 }
 
 function wheelTitle(p) {
@@ -189,10 +272,16 @@ function wheelScene(g, w, h, c, p, state, variant, time) {
   const small = Math.max(8, Math.round(size * 0.8));
   const radius = Math.min(w * 0.19, h * (roomy ? 0.2 : 0.17)) * Math.min(1.1, Math.max(0.9, v.scale));
   const middle = h * (roomy ? 0.52 : 0.5);
+  const rite = riteOf(c);
+  const reduced = !!c.reduced;
+  const got = (since, span) => came(time, since, span, reduced);
   background(g, w, h, c);
 
+  // The dust of the house: each mote blinks on in its own time, on a roll of its own, and drops
+  // out again every few seconds -- never a glide of alpha.
   g.fillStyle = c.alpha(colors.accent, 0.12);
   for (let i = 0, count = Math.max(7, Math.round(18 * v.density)); i < count; i++) {
+    if (!reduced && !rite.at(0x9d + i).flicker(fract(time / 3.1 + i * 0.6180339))) continue;
     g.fillRect(((i * 0.6180339 + v.turn * 0.3) % 1) * w, ((i * 0.7548777) % 1) * h, 1, 1);
   }
   g.strokeStyle = c.alpha(colors.muted, 0.38);
@@ -236,8 +325,10 @@ function wheelScene(g, w, h, c, p, state, variant, time) {
 
   // The wheel: the received alphabet round the outside, the plain alphabet round the inside,
   // turned by the shift the visitor has set. It shows which letter stands for which; it never
-  // reads the note out.
-  const glow = c.reduced ? 0.5 : (1 + Math.sin(time * 1.7)) / 2;
+  // reads the note out. The ring's glow breathes up the stair and back down it; the inner
+  // alphabet turns from the setting that stood to the new one in the ratchet's clicks, the
+  // shortest way round, and the setting's number blinks on once the wheel is under way.
+  const glow = c.reduced ? 0.5 : breath(v, rite, time);
   g.strokeStyle = c.alpha(colors.accent2, 0.45 + glow * 0.3);
   g.lineWidth = Math.max(1, radius * 0.04);
   g.beginPath();
@@ -248,6 +339,9 @@ function wheelScene(g, w, h, c, p, state, variant, time) {
   g.beginPath();
   g.arc(w / 2, middle, radius * 0.7, 0, Math.PI * 2);
   g.stroke();
+  const turnP = got(state.shiftAt, TURN);
+  const way = ((state.shift - state.shiftWas + 13) % 26 + 26) % 26 - 13;
+  const offset = turnP >= 1 ? state.shift : state.shiftWas + way * rite.ratchet(turnP);
   const outerSize = Math.max(7, Math.round(radius * 0.16));
   const innerSize = Math.max(6, Math.round(radius * 0.13));
   for (let i = 0; i < 26; i++) {
@@ -255,16 +349,19 @@ function wheelScene(g, w, h, c, p, state, variant, time) {
     g.font = '600 ' + outerSize + 'px ui-monospace, monospace';
     g.fillStyle = colors.fg;
     g.fillText(ALPHABET[i], w / 2 + Math.cos(a) * radius * 0.86, middle + Math.sin(a) * radius * 0.86);
-    const plain = (i - state.shift + 26) % 26;
+    const b = ((i + offset) / 26) * Math.PI * 2 - Math.PI / 2;
     g.font = '600 ' + innerSize + 'px ui-monospace, monospace';
     g.fillStyle = c.alpha(colors.accent2, 0.95);
-    g.fillText(ALPHABET[plain], w / 2 + Math.cos(a) * radius * 0.56, middle + Math.sin(a) * radius * 0.56);
+    g.fillText(ALPHABET[i], w / 2 + Math.cos(b) * radius * 0.56, middle + Math.sin(b) * radius * 0.56);
   }
   g.font = '600 ' + Math.max(8, Math.round(radius * 0.16)) + 'px ui-monospace, monospace';
   g.fillStyle = colors.accent2;
-  g.fillText(String(state.shift).padStart(2, '0'), w / 2, middle - radius * 0.1);
+  const shown = rite.at(0x5e).flicker(turnP) ? state.shift : state.shiftWas;
+  g.fillText(String(shown).padStart(2, '0'), w / 2, middle - radius * 0.1);
   g.font = '500 ' + Math.max(7, Math.round(radius * 0.13)) + 'px ui-monospace, monospace';
-  g.fillText(state.reverse ? '<<' : '>>', w / 2, middle + radius * 0.12);
+  const wayP = got(state.reverseAt, SPAN);
+  const reverseShown = rite.at(0x2c).flicker(wayP) ? state.reverse : !state.reverse;
+  g.fillText(reverseShown ? '<<' : '>>', w / 2, middle + radius * 0.12);
   if (roomy) {
     // The letter ledger beside the wheel: the commonest letters of the received line, and what
     // each one stands for at this setting. The tallest bar nearly always wants to read E, which is
@@ -282,20 +379,33 @@ function wheelScene(g, w, h, c, p, state, variant, time) {
       g.fillStyle = c.alpha(colors.muted, 0.9);
       g.fillText('counted', w * 0.06, middle - (ledger.length / 2) * rowGap - small * 0.8);
       g.fillText('reads', readsAt, middle - (ledger.length / 2) * rowGap - small * 0.8);
+      // A bar that comes to read E is a set surface: the lit colour develops over it through the
+      // matte, cell by cell, as the wheel turns, and leaves the bar it stood on the same way; the
+      // letter each bar reads blinks over to the new one on a roll of its own.
       ledger.forEach((entry, i) => {
         const y = middle + (i - (ledger.length - 1) / 2) * rowGap;
         const len = barMax * entry.count / ledger[0].count;
         const reads = turn(entry.letter, -state.shift);
+        const was = turn(entry.letter, -state.shiftWas);
         const lit = reads === 'E';
+        const own = rite.at(0x1ed + i);
+        const k = coverage(lit, was === 'E', own, turnP);
         g.fillStyle = colors.fg;
         g.fillText(entry.letter, w * 0.06, y);
-        g.fillStyle = c.alpha(lit ? colors.accent2 : colors.accent, lit ? 0.85 : 0.5);
+        g.fillStyle = c.alpha(colors.accent, 0.5);
         g.fillRect(w * 0.06 + small * 1.5, y - small * 0.2, len, small * 0.4);
-        g.fillStyle = lit ? colors.accent2 : colors.fg;
-        g.fillText(reads, readsAt, y);
+        if (k > 0) {
+          g.fillStyle = c.alpha(colors.accent2, 0.9);
+          develop(g, own, w * 0.06 + small * 1.5, y - small * 0.2, len, small * 0.4, k, null, Math.max(2, rite.cell));
+        }
+        const settled = turnP >= 1 || own.flicker(turnP);
+        g.fillStyle = (settled ? lit : was === 'E') ? colors.accent2 : colors.fg;
+        g.fillText(settled ? reads : was, readsAt, y);
       });
     }
-    const way = state.reverse ? 'read right to left' : 'read left to right';
+    const wayNow = state.reverse ? 'read right to left' : 'read left to right';
+    const wayWas = state.reverse ? 'read left to right' : 'read right to left';
+    const way = rite.at(0x2c).flicker(got(state.reverseAt, SPAN)) ? wayNow : wayWas;
     if (w / 2 + radius * 1.1 + g.measureText(way).width < w * 0.94) {
       g.textAlign = 'right';
       g.fillStyle = c.alpha(colors.muted, 0.9);
@@ -304,21 +414,26 @@ function wheelScene(g, w, h, c, p, state, variant, time) {
     g.textAlign = 'center';
   }
 
-  // The word, as typed, letter by letter in the cells the note's word fills; hints above.
+  // The word, as typed, letter by letter in the cells the note's word fills; hints above. A solved
+  // note blinks in over the cells (and the cells blink out under it) while a band of the lock's
+  // colour develops across the foot of the scene through the matte: it never washes in.
+  const revealP = got(state.solvedAt, REVEAL);
+  const opened = state.reveal && rite.flicker(revealP);
   g.font = '500 ' + small + 'px ui-monospace, monospace';
   g.textAlign = 'left';
   g.fillStyle = colors.accent2;
-  g.fillText(state.reveal ? 'THE NOTE' : 'THE WORD, THROUGH THE WHEEL', w * 0.06, h * 0.79);
+  g.fillText(opened ? 'THE NOTE' : 'THE WORD, THROUGH THE WHEEL', w * 0.06, h * 0.79);
   g.textAlign = 'center';
-  if (state.reveal) {
-    g.fillStyle = c.alpha(colors.accent2, state.open * 0.12);
-    g.fillRect(0, h * 0.76, w, h * 0.24);
-    g.save();
-    g.globalAlpha = state.open;
-    g.font = '600 ' + size + 'px ui-monospace, monospace';
-    g.fillStyle = colors.accent2;
-    writeRows(g, note, w / 2, h * 0.88, w * 0.88, size);
-    g.restore();
+  if (opened) {
+    const k = rite.stair(revealP);
+    g.fillStyle = c.alpha(colors.accent2, 0.16);
+    if (k >= 1) g.fillRect(0, h * 0.76, w, h * 0.24);
+    else develop(g, rite, 0, h * 0.76, w, h * 0.24, k);
+    if (rite.at(0x7e).flicker(revealP)) {
+      g.font = '600 ' + size + 'px ui-monospace, monospace';
+      g.fillStyle = colors.accent2;
+      writeRows(g, note, w / 2, h * 0.88, w * 0.88, size);
+    }
     return;
   }
   const cellH = Math.min(size * 1.3, h * 0.12);
@@ -326,21 +441,33 @@ function wheelScene(g, w, h, c, p, state, variant, time) {
   const x0 = w / 2 - (cell * word.length) / 2;
   const top = h * 0.84;
   const guess = cleaned(state.guess);
+  const guessWas = cleaned(state.guessWas);
+  const guessP = got(state.guessAt, SPAN);
   g.font = '600 ' + Math.round(cellH * 0.7) + 'px ui-monospace, monospace';
   for (let i = 0; i < word.length; i++) {
     const x = x0 + cell * i;
+    const own = rite.at(0x600 + i);
+    const hinted = state.hints.indexOf(i);
+    // A cell that has been shown its letter is a set surface: it textures through the matte.
+    if (hinted >= 0) {
+      const hp = got(state.hintAt[hinted], SPAN);
+      g.fillStyle = c.alpha(colors.accent2, 0.22);
+      develop(g, own, x + cell * 0.08, top, cell * 0.84, cellH, own.stair(hp));
+      if (own.flicker(hp)) {
+        g.fillStyle = colors.accent2;
+        g.font = '500 ' + small + 'px ui-monospace, monospace';
+        g.fillText(word[i], x + cell / 2, top - small * 0.7);
+        g.font = '600 ' + Math.round(cellH * 0.7) + 'px ui-monospace, monospace';
+      }
+    }
     g.strokeStyle = c.alpha(colors.muted, 0.6);
     g.lineWidth = 1;
     g.strokeRect(x + cell * 0.08, top, cell * 0.84, cellH);
-    if (guess[i]) {
+    // A typed letter blinks on; one that was already there stands.
+    const letter = guess[i] === guessWas[i] || own.flicker(guessP) ? guess[i] : guessWas[i];
+    if (letter) {
       g.fillStyle = colors.fg;
-      g.fillText(guess[i], x + cell / 2, top + cellH * 0.52);
-    }
-    if (state.hints.includes(i)) {
-      g.fillStyle = colors.accent2;
-      g.font = '500 ' + small + 'px ui-monospace, monospace';
-      g.fillText(word[i], x + cell / 2, top - small * 0.7);
-      g.font = '600 ' + Math.round(cellH * 0.7) + 'px ui-monospace, monospace';
+      g.fillText(letter, x + cell / 2, top + cellH * 0.52);
     }
   }
 }
@@ -390,15 +517,27 @@ function wheelPiece(env) {
     apply(id, value, c) {
       if (id === 'wheel') {
         const position = Number(value);
-        state.shift = Number.isFinite(position) ? Math.max(0, Math.min(25, Math.round(position))) : 0;
+        const shift = Number.isFinite(position) ? Math.max(0, Math.min(25, Math.round(position))) : 0;
+        if (shift !== state.shift) {
+          state.shiftWas = state.shift;
+          state.shiftAt = state.time;
+          state.shift = shift;
+        }
         c.status('at ' + state.shift + ' turns the outside letter A stands for ' + ALPHABET[(26 - state.shift) % 26]);
       }
       if (id === 'direction') {
-        state.reverse = value === 'reverse';
+        const reverse = value === 'reverse';
+        if (reverse !== state.reverse) state.reverseAt = state.time;
+        state.reverse = reverse;
         c.status('reading ' + (state.reverse ? 'right to left' : 'left to right'));
       }
       if (id === 'word') {
-        state.guess = cleaned(value);
+        const guess = cleaned(value);
+        if (guess !== state.guess) {
+          state.guessWas = state.guess;
+          state.guessAt = state.time;
+          state.guess = guess;
+        }
       }
       if (id === 'hint') {
         const next = [];
@@ -408,6 +547,7 @@ function wheelPiece(env) {
         if (next.length) {
           const i = next[Math.floor(next.length / 2)];
           state.hints.push(i);
+          state.hintAt.push(state.time);
           c.hint();
           c.status('letter ' + (i + 1) + ' of the word is ' + word[i]);
         } else if (state.hints.length >= helps) {
@@ -419,13 +559,12 @@ function wheelPiece(env) {
       draw(c);
     },
     frame(t, dt, c) {
-      if (!c.reduced) state.time += dt;
-      if (state.reveal) state.open = c.reduced ? 1 : Math.min(1, state.open + Math.max(0, dt) * 1.5);
+      if (!c.reduced) state.time += Math.max(0, Number(dt) || 0);
       draw(c);
     },
     end(c) {
       state.reveal = true;
-      if (c.reduced) state.open = 1;
+      state.solvedAt = state.time;
       c.status('the note reads: ' + note);
       draw(c);
     }
@@ -535,8 +674,17 @@ function grilleBoard(p) {
   return board;
 }
 
+// The key's state, with the moment (on the piece's own clock, s.t) each part of it last changed,
+// so the scene plays the change as a rite rather than cutting to it; -1 is "from the start".
+// `from` is the angle the key stood at when it was last sent turning, which the ratchet turns
+// from; `routeWas` the route line and `stripsWas` the four views that stood before the last
+// change of notch or turn, which the new ones blink over.
 function grilleBlank() {
-  return { corner: 0, direction: 1, view: 0, guess: '', hints: 0, angle: 0, reveal: false, open: 0 };
+  return {
+    corner: 0, direction: 1, view: 0, viewWas: 0, viewAt: -1, from: 0, turnAt: -1, routeWas: '',
+    stripsWas: ['', '', '', ''],
+    guess: '', guessWas: '', guessAt: -1, hints: 0, hintAt: -1, reveal: false, solvedAt: -1, t: 0
+  };
 }
 
 function strip(p, board, corner, direction, view) {
@@ -545,6 +693,20 @@ function strip(p, board, corner, direction, view) {
 
 function turningWord(direction) {
   return direction === 1 ? 'clockwise' : 'counterclockwise';
+}
+
+function routeLine(s) {
+  return 'from the ' + NOTCHES[s.corner].label + ', ' + turningWord(s.direction);
+}
+
+// The angle the key stands at: the notch and view it was set to, reached from where it stood in
+// the ratchet's clicks, each with its backlash, the shortest way round -- never a smooth turn.
+function keyAngle(s, rite, reduced) {
+  const goal = quarter(s.corner + s.direction * s.view) * QUARTER;
+  const p = came(s.t, s.turnAt, TURN, reduced);
+  if (p >= 1) return goal;
+  const difference = ((goal - s.from + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI;
+  return s.from + difference * rite.ratchet(p);
 }
 
 function grilleScene(g, w, h, c, p, board, s, variant) {
@@ -559,6 +721,12 @@ function grilleScene(g, w, h, c, p, board, s, variant) {
   const top = cy - side / 2;
   const size = Math.max(9, Math.min(22, cell * 0.48));
   const small = Math.max(9, Math.min(16, m * 0.034));
+  const rite = riteOf(c);
+  const reduced = !!c.reduced;
+  const got = (since, span) => came(s.t, since, span, reduced);
+  const angle = keyAngle(s, rite, reduced);
+  const revealP = got(s.solvedAt, REVEAL);
+  const opened = s.reveal && rite.flicker(revealP);
   background(g, w, h, c);
   g.save();
 
@@ -573,7 +741,7 @@ function grilleScene(g, w, h, c, p, board, s, variant) {
   g.textAlign = 'center';
   g.textBaseline = 'middle';
   g.fillStyle = col.accent2;
-  g.fillText(s.reveal ? 'ONE KEY / FOUR VIEWS' : 'KEY / ' + p.case, w / 2, h * 0.045);
+  g.fillText(opened ? 'ONE KEY / FOUR VIEWS' : 'KEY / ' + p.case, w / 2, h * 0.045);
 
   g.font = '600 ' + size + 'px ui-monospace, monospace';
   for (let index = 0; index < SQUARES; index++) {
@@ -588,30 +756,50 @@ function grilleScene(g, w, h, c, p, board, s, variant) {
     g.fillText(board[index], x + cell / 2, y + cell / 2);
   }
 
-  // The holes are actual holes in one rotating mask; the board underneath never turns.
-  g.save();
-  g.translate(cx, cy);
-  g.rotate(s.angle);
-  g.globalAlpha = s.reveal ? 1 - s.open : 1;
-  g.beginPath();
-  g.rect(-side / 2, -side / 2, side, side);
+  // The holes are actual holes in one rotating mask; the board underneath never turns. Over a
+  // solved board the key lifts off down the matte ladder: its surface leaves cell by cell in the
+  // piece's own pattern (in the key's own frame, so the pattern turns with it), never by alpha.
   const inset = cell * 0.09;
-  for (const index of p.holes) {
-    g.rect(-side / 2 + index % SIDE * cell + inset,
-      -side / 2 + Math.floor(index / SIDE) * cell + inset,
-      cell - inset * 2, cell - inset * 2);
+  const keep = s.reveal ? 1 - rite.stair(revealP) : 1;
+  if (keep > 0) {
+    g.save();
+    g.translate(cx, cy);
+    g.rotate(angle);
+    g.fillStyle = c.mix(col.bg, col.bg2, 0.3);
+    if (keep >= 1) {
+      g.beginPath();
+      g.rect(-side / 2, -side / 2, side, side);
+      for (const index of p.holes) {
+        g.rect(-side / 2 + index % SIDE * cell + inset,
+          -side / 2 + Math.floor(index / SIDE) * cell + inset,
+          cell - inset * 2, cell - inset * 2);
+      }
+      g.fill('evenodd');
+    } else {
+      const solid = (px, py) => {
+        const ix = Math.floor((px + side / 2) / cell);
+        const iy = Math.floor((py + side / 2) / cell);
+        if (ix < 0 || iy < 0 || ix >= SIDE || iy >= SIDE || !p.holes.includes(iy * SIDE + ix)) return true;
+        const fx = px + side / 2 - ix * cell;
+        const fy = py + side / 2 - iy * cell;
+        return fx < inset || fy < inset || fx > cell - inset || fy > cell - inset;
+      };
+      develop(g, rite, -side / 2, -side / 2, side, side, keep, solid, Math.max(rite.cell, Math.ceil(side / 36)));
+    }
+    // The key's outline goes the way a thing leaves: it holds while the mask thins, blinks out
+    // with the flicker's refusals (the flicker read backwards) and is gone before the last cell.
+    if (!s.reveal || rite.at(0x8a).flicker(1 - revealP)) {
+      g.strokeStyle = col.accent;
+      g.lineWidth = Math.max(1, cell * 0.035);
+      g.strokeRect(-side / 2, -side / 2, side, side);
+      for (const index of p.holes) {
+        g.strokeRect(-side / 2 + index % SIDE * cell + inset,
+          -side / 2 + Math.floor(index / SIDE) * cell + inset,
+          cell - inset * 2, cell - inset * 2);
+      }
+    }
+    g.restore();
   }
-  g.fillStyle = c.mix(col.bg, col.bg2, 0.3);
-  g.fill('evenodd');
-  g.strokeStyle = col.accent;
-  g.lineWidth = Math.max(1, cell * 0.035);
-  g.strokeRect(-side / 2, -side / 2, side, side);
-  for (const index of p.holes) {
-    g.strokeRect(-side / 2 + index % SIDE * cell + inset,
-      -side / 2 + Math.floor(index / SIDE) * cell + inset,
-      cell - inset * 2, cell - inset * 2);
-  }
-  g.restore();
 
   const notchRadius = side * 0.55;
   g.strokeStyle = col.muted;
@@ -623,7 +811,7 @@ function grilleScene(g, w, h, c, p, board, s, variant) {
     g.lineTo(cx + Math.cos(a) * (notchRadius + cell * 0.12), cy + Math.sin(a) * (notchRadius + cell * 0.12));
   }
   g.stroke();
-  const a = s.angle - QUARTER;
+  const a = angle - QUARTER;
   const px = cx + Math.cos(a) * notchRadius;
   const py = cy + Math.sin(a) * notchRadius;
   const pointer = Math.max(3, cell * 0.16);
@@ -637,28 +825,52 @@ function grilleScene(g, w, h, c, p, board, s, variant) {
 
   g.font = '500 ' + small + 'px ui-monospace, monospace';
   g.textAlign = 'left';
-  if (!s.reveal) {
-    // The four views along the route the visitor has set, the one on the board marked.
+  if (!opened) {
+    // The four views along the route the visitor has set, the one on the board marked: the mark
+    // is a set surface that develops behind the strip through the matte and leaves the strip it
+    // stood behind the same way, and the strip's colour blinks over once it is under way.
+    const viewP = got(s.viewAt, SPAN);
+    const turnP = got(s.turnAt, TURN);
     for (let view = 0; view < 4; view++) {
-      g.fillStyle = view === s.view ? col.accent2 : col.fg;
-      g.fillText((view + 1) + '  ' + strip(p, board, s.corner, s.direction, view), w * 0.08, h * (0.72 + view * 0.052));
+      // A strip whose letters changed with the route blinks over to the new ones; one that
+      // reads the same stands.
+      const now = strip(p, board, s.corner, s.direction, view);
+      const letters = turnP >= 1 || now === s.stripsWas[view] || rite.at(0x4c0 + view).flicker(turnP) ? now : s.stripsWas[view];
+      const text = (view + 1) + '  ' + letters;
+      const y = h * (0.72 + view * 0.052);
+      const own = rite.at(0x4b0 + view);
+      const k = coverage(view === s.view, view === s.viewWas, own, viewP);
+      if (k > 0) {
+        g.fillStyle = c.alpha(col.accent2, 0.2);
+        develop(g, own, w * 0.08 - small * 0.4, y - small * 0.62, g.measureText(text).width + small * 0.8, small * 1.24, k);
+      }
+      const marked = view === s.view && (view === s.viewWas || own.flicker(viewP));
+      g.fillStyle = marked ? col.accent2 : col.fg;
+      g.fillText(text, w * 0.08, y);
     }
+    // The route line blinks over to the new route; a hint blinks on after it.
+    const hintP = got(s.hintAt, SPAN);
+    const route = turnP >= 1 || rite.at(0x3a).flicker(turnP) ? routeLine(s) : s.routeWas;
+    const hint = s.hints >= 1 && rite.at(0x3b).flicker(hintP)
+      ? ' / hint: it starts at the ' + NOTCHES[p.start].label + (s.hints >= 2 ? ', ' + turningWord(p.direction) : '')
+      : '';
     g.fillStyle = col.muted;
-    g.fillText('from the ' + NOTCHES[s.corner].label + ', ' + turningWord(s.direction)
-      + (s.hints >= 1 ? ' / hint: it starts at the ' + NOTCHES[p.start].label : '')
-      + (s.hints >= 2 ? ', ' + turningWord(p.direction) : ''), w * 0.08, h * 0.935);
+    g.fillText(route + hint, w * 0.08, h * 0.935);
     g.textAlign = 'right';
     g.fillStyle = col.accent2;
-    g.fillText('first word: ' + (cleaned(s.guess) || '_'), w * 0.92, h * 0.935);
+    const guessP = got(s.guessAt, SPAN);
+    const guess = rite.at(0x3c).flicker(guessP) ? s.guess : s.guessWas;
+    g.fillText('first word: ' + (cleaned(guess) || '_'), w * 0.92, h * 0.935);
   } else {
+    // The note blinks in under the lifting key, each line on a roll of its own.
     g.fillStyle = col.accent2;
     g.fillText('THE NOTE', w * 0.08, h * 0.74);
-    g.save();
-    g.globalAlpha = s.open;
     g.textAlign = 'center';
     g.fillStyle = col.fg;
-    writeRows(g, NOTES[p.note], w / 2, h * 0.82, w * 0.84, small);
-    g.restore();
+    const limit = Math.max(8, Math.floor((w * 0.84) / (small * 0.68)));
+    rows(NOTES[p.note], limit).forEach((line, index) => {
+      if (rite.at(0x7e + index).flicker(revealP)) g.fillText(line, w / 2, h * 0.82 + index * small * 1.16);
+    });
   }
   g.restore();
 }
@@ -674,6 +886,7 @@ function grillePiece(env, carriedPlan) {
   const s = grilleBlank();
   const note = NOTES[p.note];
   const first = note.split(' ')[0];
+  const rite = riteOf(env);
   const draw = (c) => grilleScene(c.g, c.w, c.h, c, p, board, s, env.variant);
   return {
     title: grilleTitle(p),
@@ -710,6 +923,11 @@ function grillePiece(env, carriedPlan) {
       draw(c);
     },
     apply(id, value, c) {
+      // Where the key stands now, before anything moves it: the ratchet turns from here.
+      const stood = keyAngle(s, rite, !!c.reduced);
+      const goalWas = quarter(s.corner + s.direction * s.view);
+      const routeWas = routeLine(s);
+      const stripsWere = [0, 1, 2, 3].map((view) => strip(p, board, s.corner, s.direction, view));
       if (id === 'corner') {
         const corner = Number(value);
         if (Number.isInteger(corner) && corner >= 0 && corner <= 3) s.corner = corner;
@@ -721,13 +939,23 @@ function grillePiece(env, carriedPlan) {
         c.status('the key turns ' + turningWord(s.direction) + '; view ' + (s.view + 1) + ' reads ' + strip(p, board, s.corner, s.direction, s.view));
       }
       if (id === 'view') {
+        s.viewWas = s.view;
+        s.viewAt = s.t;
         s.view = (s.view + 1) % 4;
         c.status('view ' + (s.view + 1) + ' of four reads ' + strip(p, board, s.corner, s.direction, s.view));
       }
-      if (id === 'word') s.guess = cleaned(value);
+      if (id === 'word') {
+        const guess = cleaned(value);
+        if (guess !== s.guess) {
+          s.guessWas = s.guess;
+          s.guessAt = s.t;
+          s.guess = guess;
+        }
+      }
       if (id === 'hint') {
         if (s.hints < helps) {
           s.hints += 1;
+          s.hintAt = s.t;
           c.hint();
           c.status(s.hints === 1 ? 'the key starts at the ' + NOTCHES[p.start].label : 'and it turns ' + turningWord(p.direction));
         } else if (helps < 2) {
@@ -736,20 +964,21 @@ function grillePiece(env, carriedPlan) {
           c.status('both hints are shown; read the four views and type the first word');
         }
       }
-      if (c.reduced) s.angle = quarter(s.corner + s.direction * s.view) * QUARTER;
+      if (quarter(s.corner + s.direction * s.view) !== goalWas || routeLine(s) !== routeWas) {
+        s.from = stood;
+        s.turnAt = s.t;
+        s.routeWas = routeWas;
+        s.stripsWas = stripsWere;
+      }
       draw(c);
     },
     frame(t, dt, c) {
-      const goal = quarter(s.corner + s.direction * s.view) * QUARTER;
-      const difference = ((goal - s.angle + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI;
-      s.angle = c.reduced ? goal : s.angle + difference * Math.min(1, Math.max(0, dt) * 12);
-      if (Math.abs(difference) < 0.0001) s.angle = goal;
-      if (s.reveal) s.open = c.reduced ? 1 : Math.min(1, s.open + Math.max(0, dt) * 1.5);
+      if (!c.reduced) s.t += Math.max(0, Number(dt) || 0);
       draw(c);
     },
     end(c) {
       s.reveal = true;
-      if (c.reduced) s.open = 1;
+      s.solvedAt = s.t;
       c.status('the note reads: ' + note + '. One key exposes every square exactly once across four views.');
       draw(c);
     }

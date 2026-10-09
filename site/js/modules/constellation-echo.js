@@ -56,12 +56,18 @@ function background(g, w, h, c) {
   g.fillRect(0, 0, w, h);
 }
 
-// The chamber's dust: specks that drift with time and sit where the configuration puts them.
+// The chamber's dust: specks that sit where the configuration puts them and tick along, each on
+// its own phase of the piece's stair -- a tread every so often, never a glide -- and each blinking
+// out for a rolled moment at the top of every cycle.
 function dust(g, w, h, c, v, t) {
+  const rite = riteOf(c);
   const count = Math.max(10, Math.round(36 * v.density));
   g.fillStyle = c.alpha(c.colors.muted, 0.14);
   for (let i = 0; i < count; i++) {
-    g.fillRect((i * 127.3 + v.turn * 211 + t * 6) % w, (i * 79.7 + v.turn * 97 + t * 3) % h, 1.2, 1.2);
+    const ph = t / 7 + i * 0.37;
+    if (!rite.flicker(fract(ph))) continue;
+    const adv = (Math.floor(ph) + rite.stair(fract(ph))) * 40;
+    g.fillRect((i * 127.3 + v.turn * 211 + adv) % w, (i * 79.7 + v.turn * 97 + adv * 0.5) % h, 1.2, 1.2);
   }
 }
 
@@ -100,6 +106,80 @@ function round3(x) {
 function gcd(a, b) {
   while (b) [a, b] = [b, a % b];
   return a;
+}
+
+/* ---- the rite: how the chamber moves ------------------------------------------------------- */
+
+/* Nothing here moves along a formula (js/stage.js, "The rite"). env.rite -- ctx.rite in a piece,
+   the same object -- is the piece's own roll of a curve, a stair, a ratchet, a flicker and a
+   matte, from its seed; every env builder hands one. STILL is the fallback for an env without
+   it: every rite at its end state, so a drawing holds rather than throws. */
+const STILL = {
+  ease: (t) => (t >= 1 ? 1 : 0), stair: (t) => (t >= 1 ? 1 : 0), ratchet: (t) => (t >= 1 ? 1 : 0),
+  flicker: (t) => (t >= 1 ? 1 : 0), matte: (x, y, k) => k >= 1, treads: 4, kind: 'none', cell: 3,
+  at() { return STILL; }
+};
+
+function riteOf(c) {
+  return c && c.rite ? c.rite : STILL;
+}
+
+function fract(x) {
+  return x - Math.floor(x);
+}
+
+// Where a thing that happened at `at` on the piece's clock stands in a rite `dur` seconds long:
+// 0 before it, 1 once it is over, and 1 at once when less motion is asked for.
+function prog(c, time, at, dur) {
+  if (at == null || at < 0) return 0;
+  if (c.reduced) return 1;
+  return clamp((time - at) / dur, 0, 1);
+}
+
+// A mark is { on, at }: a surface set (on) or unset at `at`. Its coverage climbs the stair when
+// it is set and comes back down it when it is unset -- never a fade either way.
+function coverage(c, time, mark, dur) {
+  if (!mark) return 0;
+  const k = riteOf(c).stair(prog(c, time, mark.at, dur));
+  return mark.on ? k : 1 - k;
+}
+
+// A surface arriving by its area: the rectangle tiled in cells of `cell` px (the matte's own size
+// when not given), each cell filled where the matte lets it through at coverage k. The cells are
+// indexed in canvas space, so the pattern stands still under a region that grows.
+function develop(g, c, x, y, w, h, k, cell) {
+  if (k <= 0 || w <= 0 || h <= 0) return;
+  const rite = riteOf(c);
+  const s = Math.max(1, cell || rite.cell);
+  const cols = Math.ceil(w / s);
+  const rows = Math.ceil(h / s);
+  const ox = Math.floor(x / s);
+  const oy = Math.floor(y / s);
+  for (let j = 0; j < rows; j++) {
+    for (let i = 0; i < cols; i++) {
+      if (!rite.matte(ox + i, oy + j, k)) continue;
+      g.fillRect(x + i * s, y + j * s, Math.min(s, w - i * s), Math.min(s, h - j * s));
+    }
+  }
+}
+
+// The same, for a disc: the cells whose centres lie within r of (cx, cy).
+function developDisc(g, c, cx, cy, r, k, cell) {
+  if (k <= 0 || r <= 0) return;
+  const rite = riteOf(c);
+  const s = Math.max(1, cell || rite.cell);
+  const i0 = Math.floor((cx - r) / s);
+  const i1 = Math.ceil((cx + r) / s);
+  const j0 = Math.floor((cy - r) / s);
+  const j1 = Math.ceil((cy + r) / s);
+  for (let j = j0; j < j1; j++) {
+    for (let i = i0; i < i1; i++) {
+      const dx = (i + 0.5) * s - cx;
+      const dy = (j + 0.5) * s - cy;
+      if (dx * dx + dy * dy > r * r || !rite.matte(i, j, k)) continue;
+      g.fillRect(i * s, j * s, s, s);
+    }
+  }
 }
 
 function lcmOf(list) {
@@ -220,17 +300,36 @@ function drawEcho(g, w, h, c, plan, s, variant, t) {
     g.arc(S.x, S.y, r * geo.side, 0, TAU);
     g.stroke();
   }
-  // The pulse: a breath inside the first ring before a solve, the whole run after one.
+  const rite = riteOf(c);
+  const marks = s.marks || {};
+  // The solved wash: the room takes the pulse's colour by its area, through the matte, blinking
+  // on as it develops; it never washes in.
+  const washed = prog(c, t, s.doneAt, 2.6);
+  if (washed > 0 && rite.flicker(washed)) {
+    g.fillStyle = c.alpha(col.accent2, 0.1);
+    develop(g, c, geo.x0, geo.y0, geo.side, geo.side, rite.stair(washed), rite.cell * 4);
+  }
+  // The pulse: a breath inside the first ring before a solve, the whole run after one. The run
+  // goes out ring by ring on the stair (see frame()); the breath steps out on the treads and dims
+  // by levels, never a fade.
   const reach = s.pulse >= 0 ? s.pulse : -1;
-  if (reach >= 0) {
+  // Where the run stands in its cycle, and how many times it has come round: the ring blinks out
+  // at the end of a run and blinks on again at the mark, never jumping back; the stars it lit
+  // blink out as the next run sets out (see below).
+  const again = s.cycle > 0 ? fract(s.played / s.cycle) : 0.5;
+  const rounds = s.cycle > 0 ? Math.floor(s.played / s.cycle) : 0;
+  const ringOn = again >= 0.9 ? !rite.flicker((again - 0.9) / 0.1) : rite.flicker(Math.min(1, again / 0.12));
+  if (reach >= 0 && ringOn) {
     g.strokeStyle = c.alpha(col.accent2, 0.55);
     g.lineWidth = 1.6;
     g.beginPath();
     g.arc(S.x, S.y, reach * geo.side, 0, TAU);
     g.stroke();
-  } else {
-    const breath = c.reduced ? 0.5 : (t % 3) / 3;
-    g.strokeStyle = c.alpha(col.accent2, 0.4 * (1 - breath));
+  } else if (reach < 0) {
+    const ph = c.reduced ? 0.5 : fract(t / 3);
+    const breath = rite.stair(ph);
+    const dim = rite.stair(ph, 4);
+    g.strokeStyle = c.alpha(col.accent2, 0.4 - 0.32 * dim);
     g.lineWidth = 1.2;
     g.beginPath();
     g.arc(S.x, S.y, (0.015 + 0.075 * breath) * geo.side * v.scale, 0, TAU);
@@ -254,7 +353,8 @@ function drawEcho(g, w, h, c, plan, s, variant, t) {
   g.beginPath();
   g.arc(S.x, S.y, mr * 2.2, 0, TAU);
   g.stroke();
-  // The stars, lettered; a star the pulse has reached is lit, and its echo rings back.
+  // The stars, lettered; a star the pulse has reached is lit, and its echo rings back: the ring
+  // steps out on the treads, the glow behind it develops through the matte.
   g.font = '600 ' + size + 'px system-ui, sans-serif';
   g.textBaseline = 'middle';
   plan.stars.forEach((star, i) => {
@@ -262,19 +362,32 @@ function drawEcho(g, w, h, c, plan, s, variant, t) {
     const d = dist(star, plan.source);
     const lit = reach >= 0 && reach >= d;
     const r = Math.max(2.5, geo.side * (0.011 + (star.sky ? 0.003 : 0)) * v.scale);
-    if (lit) {
-      const back = Math.min(1, (reach - d) / 0.08);
-      g.strokeStyle = c.alpha(col.accent2, 0.6 * (1 - back * 0.5));
+    // The tap halo: a star chosen on the scene is marked by its area, the halo growing through
+    // the matte when it is chosen and leaving back down the stair when the choice is undone.
+    const halo = coverage(c, t, marks['tap' + i], 0.9);
+    if (halo > 0) {
+      g.fillStyle = c.alpha(col.accent, 0.3);
+      developDisc(g, c, p.x, p.y, r * 3.6, halo);
+    }
+    // A star the pulse reaches blinks alight -- its core and its glow on the same flicker, never
+    // a recolouring at the instant the ring passes -- while its echo ring steps out.
+    // A star the last run lit blinks out as the next run sets out: held, then dropped with the
+    // flicker's refusals, its ring held at full reach meanwhile.
+    const dying = !lit && reach >= 0 && rounds > 0 && again < 0.12 && !rite.flicker(again / 0.12);
+    const alight = (lit && rite.flicker(Math.min(1, (reach - d) / 0.1))) || dying;
+    if (lit || dying) {
+      const back = lit ? rite.stair(Math.min(1, (reach - d) / 0.12)) : 1;
+      if (alight) {
+        g.fillStyle = c.alpha(col.accent2, 0.4);
+        developDisc(g, c, p.x, p.y, r * 2.8, Math.max(back, 0.3));
+      }
+      g.strokeStyle = c.alpha(col.accent2, 0.6 - 0.3 * back);
       g.lineWidth = 1.4;
       g.beginPath();
       g.arc(p.x, p.y, r + back * geo.side * 0.05, 0, TAU);
       g.stroke();
-      g.fillStyle = c.alpha(col.accent2, 0.35);
-      g.beginPath();
-      g.arc(p.x, p.y, r * 2.6, 0, TAU);
-      g.fill();
     }
-    g.fillStyle = lit ? col.accent2 : c.alpha(col.fg, 0.95);
+    g.fillStyle = alight ? col.accent2 : c.alpha(col.fg, 0.95);
     g.beginPath();
     g.arc(p.x, p.y, r, 0, TAU);
     g.fill();
@@ -288,29 +401,40 @@ function drawEcho(g, w, h, c, plan, s, variant, t) {
     g.textAlign = p.x > S.x ? 'left' : 'right';
     g.fillText(LETTERS[i], lx, p.y - r * 2.2);
     if (s.hinted.includes(i)) {
-      g.strokeStyle = c.alpha(col.accent2, 0.9);
-      g.lineWidth = 1.5;
-      g.setLineDash([3, 3]);
-      g.beginPath();
-      g.arc(p.x, p.y, r * 3.4, 0, TAU);
-      g.stroke();
-      g.setLineDash([]);
-      g.fillStyle = col.accent2;
-      g.fillText(ORDINAL[order.indexOf(i)], lx, p.y + r * 2.4);
+      // A hint arrives by blinking on: its ring steps out on the treads, its word flickers in.
+      const shown = prog(c, t, marks['hint' + i] ? marks['hint' + i].at : 0, 1.4);
+      if (rite.flicker(shown)) {
+        g.strokeStyle = c.alpha(col.accent2, 0.9);
+        g.lineWidth = 1.5;
+        g.setLineDash([3, 3]);
+        g.beginPath();
+        g.arc(p.x, p.y, r * (2.2 + 1.2 * rite.stair(shown)), 0, TAU);
+        g.stroke();
+        g.setLineDash([]);
+      }
+      if (rite.flicker(Math.min(1, shown * 1.3))) {
+        g.fillStyle = col.accent2;
+        g.fillText(ORDINAL[order.indexOf(i)], lx, p.y + r * 2.4);
+      }
     }
     const tapped = s.taps.indexOf(i);
-    if (tapped >= 0) {
+    if (tapped >= 0 && rite.flicker(prog(c, t, marks['tap' + i] ? marks['tap' + i].at : 0, 0.7))) {
       g.fillStyle = col.accent;
       g.fillText(String(tapped + 1), lx, p.y + r * 2.4);
     }
   });
-  // The order as it stands, written along the foot of the room.
+  // The order as it stands, written along the foot of the room; it blinks in when it changes.
   const line = s.order ? s.order.map((i) => LETTERS[i]).join('  ') : '';
-  caption(g, w, c, line, w / 2, geo.y0 + geo.side * 0.955, 0.85, size);
+  if (line && (s.orderAt == null || rite.flicker(prog(c, t, s.orderAt, 0.9)))) {
+    caption(g, w, c, line, w / 2, geo.y0 + geo.side * 0.955, 0.85, size);
+  }
 }
 
+// marks: the surfaces that are set or unset -- 'tap<i>' for a star chosen on the scene, 'hint<i>'
+// for one a hint has shown -- each { on, at } on the piece's clock; orderAt when the order was
+// last set, doneAt when the piece solved. A card has none of them.
 function echoBlank(plan) {
-  return { order: null, hinted: [], taps: [], pulse: -1, played: 0 };
+  return { order: null, hinted: [], taps: [], pulse: -1, played: 0, cycle: 0, marks: {}, orderAt: null, doneAt: null };
 }
 
 function echoPreview(g, w, h, env, plan, t) {
@@ -326,10 +450,25 @@ function echoPiece(env, plan) {
   s.order = plan.stars.map((star, i) => i);
   let time = 0;
   const draw = (c) => drawEcho(c.g, c.w, c.h, c, plan, s, env.variant, time);
+  // The pulse's run after a solve goes out ring by ring on the stair -- one tread per ring of
+  // the room, each its own length -- and comes round again.
+  const span = far + 0.3;
+  const rings = Math.max(3, Math.floor(span / 0.05));
+  const cycle = span / 0.12;
+  s.cycle = cycle;
   function rightPlaces() {
     let right = 0;
     for (let i = 0; i < n; i++) if (s.order[i] === order[i]) right += 1;
     return right;
+  }
+  // Which stars are chosen on the scene: the marks of those no longer in the taps come down.
+  function markTaps() {
+    for (let i = 0; i < n; i++) {
+      const on = s.taps.includes(i);
+      const m = s.marks['tap' + i];
+      if (on && !(m && m.on)) s.marks['tap' + i] = { on: true, at: time };
+      else if (!on && m && m.on) s.marks['tap' + i] = { on: false, at: time };
+    }
   }
   return {
     title: echoTitle(plan),
@@ -358,7 +497,9 @@ function echoPiece(env, plan) {
     apply(id, value, c) {
       if (id === 'order' && Array.isArray(value) && value.length === n) {
         s.order = value.map(Number);
+        s.orderAt = time;
         s.taps = [];
+        markTaps();
         c.status('first back to last: ' + s.order.map((i) => LETTERS[i]).join(', '));
       }
       if (id === 'hint') {
@@ -367,6 +508,7 @@ function echoPiece(env, plan) {
           : undefined;
         if (next !== undefined) {
           s.hinted.push(next);
+          s.marks['hint' + next] = { on: true, at: time };
           c.hint();
           c.status('star ' + LETTERS[next] + ' comes back ' + ORDINAL[order.indexOf(next)]);
         } else if (s.hinted.length >= helps) {
@@ -392,6 +534,7 @@ function echoPiece(env, plan) {
       });
       if (best < 0) {
         s.taps = [];
+        markTaps();
         c.status('tap a star to make it the next echo back');
         draw(c);
         return;
@@ -400,25 +543,28 @@ function echoPiece(env, plan) {
       s.taps.push(best);
       if (s.taps.length === n) {
         s.order = s.taps.slice();
+        s.orderAt = time;
         c.set('order', s.taps.slice());
         s.taps = [];
         c.status('first back to last: ' + s.order.map((i) => LETTERS[i]).join(', ') + '; send the pulse');
       } else {
         c.status('star ' + LETTERS[best] + ' comes back ' + ORDINAL[s.taps.length - 1] + '; ' + WORDS[n - s.taps.length] + ' more to tap');
       }
+      markTaps();
       draw(c);
     },
     frame(t, dt, c) {
       time += Math.max(0, dt);
       if (c.done) {
-        s.played = (s.played + Math.max(0, dt) * 0.12) % (far + 0.3);
-        s.pulse = s.played;
+        s.played += Math.max(0, dt);
+        s.pulse = riteOf(c).stair(fract(s.played / cycle), rings) * span;
       }
       draw(c);
     },
     end(c) {
       s.pulse = 0;
       s.played = 0;
+      s.doneAt = time;
       c.status('the echoes come back ' + order.map((i) => LETTERS[i]).join(', ') + '; the pulse keeps going out');
       draw(c);
     }
@@ -500,14 +646,28 @@ function drawChord(g, w, h, c, plan, s, variant, t) {
     g.stroke();
   }
   caption(g, w, c, 'total', geo.left - size * 0.6, geo.stripBottom - 2 * unit, 0.7, small, 'right');
-  const glow = c.reduced ? 0.5 : (1 + Math.sin(t * 1.5 + v.turn * TAU)) / 2;
+  const rite = riteOf(c);
+  const marks = s.marks || {};
+  // The solved strip: once the chord is found the totals take the voices' colour by their area,
+  // through the matte, blinking on as it develops.
+  const revealed = prog(c, t, s.revealAt, 2.2);
+  if (revealed > 0 && rite.flicker(revealed)) {
+    g.fillStyle = c.alpha(col.accent2, 0.12);
+    develop(g, c, geo.left, geo.stripTop, geo.right - geo.left, geo.stripBottom - geo.stripTop, rite.stair(revealed), rite.cell * 3);
+  }
+  // The blocks breathe by their area: each on its own phase, the cells its matte lets through
+  // come up the stair and go back down it, never a brightening.
   const bw = geo.col * 0.6 * Math.min(1.15, Math.max(0.8, v.scale));
   for (let b = 0; b < BEATS; b++) {
     const x = geo.left + (b + 0.5) * geo.col;
     for (let k = 0; k < bars[b]; k++) {
       const y = geo.stripBottom - (k + 1) * unit;
-      g.fillStyle = c.alpha(col.accent, 0.55 + glow * 0.25);
+      g.fillStyle = c.alpha(col.accent, 0.5);
       g.fillRect(x - bw / 2, y + unit * 0.08, bw, unit * 0.84);
+      const ph = c.reduced ? 0.25 : fract(t / 5 + b * 0.23 + k * 0.41 + v.turn);
+      const lit = rite.stair(ph < 0.5 ? ph * 2 : 2 - ph * 2);
+      g.fillStyle = c.alpha(col.accent2, 0.55);
+      develop(g, c, x - bw / 2, y + unit * 0.08, bw, unit * 0.84, lit);
       g.strokeStyle = c.alpha(col.accent2, 0.5);
       g.strokeRect(x - bw / 2, y + unit * 0.08, bw, unit * 0.84);
     }
@@ -519,18 +679,37 @@ function drawChord(g, w, h, c, plan, s, variant, t) {
   g.lineTo(geo.right, geo.stripBottom);
   g.stroke();
   // The voices: each on its own row, its beats hollow until it is picked, lit when it is found.
+  // A picked row is a set surface: a band develops across it through the matte when it is
+  // picked and comes back down the stair when it is unpicked; its beats blink full.
   PERIODS.forEach((p, row) => {
     const y = geo.rowTop + row * geo.rowGap;
-    const picked = s.picked.includes(p);
     const shown = s.shown[p];
     const sounding = plan.voices.includes(p);
-    const tone = s.reveal && sounding ? col.accent2 : picked ? col.accent : col.muted;
+    const found = s.reveal && sounding;
+    const mark = marks['row' + p];
+    // A picked row's beats blink full on the flicker and its tone arrives with them; an unpicked
+    // row's beats blink out (held, then dropped with the flicker's refusals) -- never a cut
+    // either way. A found row keeps whatever it had until the reveal blinks on.
+    const blink = mark ? rite.flicker(prog(c, t, mark.at, 0.8)) : 0;
+    const pickLit = mark ? (mark.on ? !!blink : !blink) : false;
+    const revealOn = found && !!rite.flicker(revealed);
+    const tone = revealOn ? col.accent2 : pickLit ? col.accent : col.muted;
+    const band = coverage(c, t, mark, 1.1);
+    if (band > 0) {
+      g.fillStyle = c.alpha(col.accent, 0.16);
+      develop(g, c, geo.left, y - geo.rowGap * 0.32, geo.right - geo.left, geo.rowGap * 0.64, band, rite.cell * 2);
+    }
+    if (found && rite.flicker(revealed)) {
+      g.fillStyle = c.alpha(col.accent2, 0.2);
+      develop(g, c, geo.left, y - geo.rowGap * 0.32, geo.right - geo.left, geo.rowGap * 0.64, rite.stair(revealed), rite.cell * 2);
+    }
     caption(g, w, c, EVERY[p], geo.left - size * 0.6, y, 0.85, small, 'right');
     g.lineWidth = 1.2;
+    const full = revealOn || pickLit;
     for (let b = 0; b < BEATS; b += p) {
       const x = geo.left + (b + 0.5) * geo.col;
       const r = Math.max(2, geo.col * 0.2 * Math.min(1.15, Math.max(0.8, v.scale)));
-      if (picked || (s.reveal && sounding)) {
+      if (full) {
         g.fillStyle = c.alpha(tone, 0.9);
         g.beginPath();
         g.arc(x, y, r, 0, TAU);
@@ -542,7 +721,7 @@ function drawChord(g, w, h, c, plan, s, variant, t) {
         g.stroke();
       }
     }
-    if (shown) {
+    if (shown && rite.flicker(prog(c, t, marks['shown' + p] ? marks['shown' + p].at : 0, 1.2))) {
       const x = geo.right + size * 0.3;
       g.fillStyle = col.accent2;
       g.font = '600 ' + small + 'px system-ui, sans-serif';
@@ -555,8 +734,10 @@ function drawChord(g, w, h, c, plan, s, variant, t) {
   g.fillRect(geo.left, geo.rowTop - geo.rowGap * 0.6, geo.right - geo.left, 1);
 }
 
+// marks: 'row<p>' { on, at } for a voice picked or unpicked, 'shown<p>' for one a hint has
+// named; revealAt when the piece solved. A card has none of them.
 function chordBlank() {
-  return { picked: [], shown: {}, reveal: false };
+  return { picked: [], shown: {}, reveal: false, marks: {}, revealAt: null };
 }
 
 function chordPreview(g, w, h, env, plan, t) {
@@ -612,6 +793,12 @@ function chordPiece(env, plan) {
     apply(id, value, c) {
       if (id === 'voices' && Array.isArray(value)) {
         s.picked = value.map(Number).filter((p) => PERIODS.includes(p));
+        for (const p of PERIODS) {
+          const on = s.picked.includes(p);
+          const m = s.marks['row' + p];
+          if (on && !(m && m.on)) s.marks['row' + p] = { on: true, at: time };
+          else if (!on && m && m.on) s.marks['row' + p] = { on: false, at: time };
+        }
         c.status(s.picked.length ? 'picked: ' + named(s.picked) : 'no voice picked');
       }
       if (id === 'meet') {
@@ -623,6 +810,7 @@ function chordPiece(env, plan) {
         const next = given < helps ? reveal.find((p) => !s.shown[p]) : undefined;
         if (next !== undefined) {
           s.shown[next] = voices.includes(next) ? 'on' : 'off';
+          s.marks['shown' + next] = { on: true, at: time };
           c.hint();
           c.status('the voice on ' + EVERY[next] + ' is ' + (s.shown[next] === 'on' ? 'sounding' : 'silent'));
         } else if (given >= helps) {
@@ -639,6 +827,7 @@ function chordPiece(env, plan) {
     },
     end(c) {
       s.reveal = true;
+      s.revealAt = time;
       c.status('the chord was ' + named(voices) + '; it strikes whole again on beat ' + meet);
       draw(c);
     }

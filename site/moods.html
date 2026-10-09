@@ -27,26 +27,39 @@ description: 'A reading is what the site makes of your answer to one sideways qu
     var signals = document.getElementById('signal-line');
     var worldLink = document.getElementById('current-world');
     var list = document.getElementById('orientations');
+    // Words that change while a visitor reads land by the glyph rite, and a line of the atlas
+    // arrives through the matte ladder (README: "Motion axiom"); cut in where nothing can play.
+    function engine() { var m = window.interestingMotion; return m && !m.reduced ? m : null; }
+    function say(node, text) {
+      if (node.textContent === text) return;
+      node.textContent = text;
+      var m = engine();
+      if (m && typeof m.reveal === 'function') m.reveal(node);
+    }
+    function arrive(node, k) {
+      var m = engine();
+      if (m && typeof m.arrive === 'function') m.arrive(node, { seed: 0x0a7a + k, spell: 'list-in', mattes: true });
+    }
 
     function showReading(reading) {
       var o = reading && reading.orientation;
-      current.textContent = api.describe(reading);
+      say(current, api.describe(reading));
       var hasAnswer = !!(o && reading.source && reading.source !== 'signals');
       worldLink.hidden = !hasAnswer;
       if (hasAnswer) {
         worldLink.href = o.world;
-        worldLink.textContent = o.worldName;
+        say(worldLink, o.worldName);
       }
     }
 
     function showSignals() {
       var s = api.signals();
-      signals.textContent = 'It is ' + s.part + ' where you are'
-        + (s.zone ? ' (' + s.zone + ')' : '') + '; the hour can tilt a suggestion.';
+      say(signals, 'It is ' + s.part + ' where you are'
+        + (s.zone ? ' (' + s.zone + ')' : '') + '; the hour can tilt a suggestion.');
     }
 
     list.textContent = '';
-    api.orientations().forEach(function (orientation) {
+    api.orientations().forEach(function (orientation, k) {
       var item = document.createElement('li');
       var name = document.createElement('h3');
       name.className = 'orientation-name';
@@ -61,6 +74,7 @@ description: 'A reading is what the site makes of your answer to one sideways qu
       item.appendChild(pull);
       item.appendChild(world);
       list.appendChild(item);
+      arrive(item, k);
     });
     window.addEventListener('threshold:reading', function () { showReading(api.reading()); });
     showReading(api.reading());

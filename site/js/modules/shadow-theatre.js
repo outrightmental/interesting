@@ -87,6 +87,99 @@ function asked(env) {
   return { level, helps: 6 - level, margin: Math.max(0, 3 - level) };
 }
 
+/* ---- the rite: how this module moves ------------------------------------------------------- */
+
+/* env.rite (ctx.rite inside a piece) is the piece's own roll of how it moves (js/variant.js;
+   js/stage.js, "The rite"). Nothing drawn in the theatre moves along a formula or cuts without a
+   rite: the lamp's glow breathes on rite.stair and the shadows on the screen tremble in its
+   treads; a thing arriving -- a distance read, a guess written, a name under a shadow, a shadow
+   named by a hint -- blinks on with rite.flicker and the thing it replaces blinks out; a line
+   that moves (the height the wall would show from a wrong lamp) travels in rite.stair's treads,
+   each landing on rite.ease's curve, never a glide; and a
+   surface that becomes set -- the shadow the visitor predicts, the frame round a hinted shadow,
+   the chip behind a matched name, the wall and the screen lit over a solved night -- develops
+   by its AREA through rite.matte, cell by cell in the piece's own pattern, and never by a fade.
+   Every change is read against the piece's own clock, s.t, which frame() advances: a change made
+   at `since` has come came() of its way, which is 1 at once for a visitor who asked for less
+   motion, and for whatever stood there from the start (since < 0). Each shadow, name or frame
+   moves on a roll of its own (rite.at), so no two step together. */
+
+const STILL = {
+  ease: () => 1, stair: () => 1, ratchet: () => 0, flicker: () => 1, matte: () => true,
+  treads: 1, kind: 'none', cell: 4, at: () => STILL
+};
+
+function riteOf(env) {
+  return env && env.rite ? env.rite : STILL;
+}
+
+function came(s, since, span, reduced) {
+  if (reduced || since == null || since < 0) return 1;
+  return Math.max(0, Math.min(1, (s.t - since) / span));
+}
+
+function fract(x) {
+  return x - Math.floor(x);
+}
+
+// The cells of a box that the matte lets through at coverage k, filled in the current fillStyle:
+// how a surface changes by its area. Cells are rite.cell px, coarser over a wide box so a frame
+// stays cheap, on a grid fixed to the canvas so the pattern holds still while it grows. `inside`
+// keeps the tiling to a shape within the box. At k >= 1 every cell is let through.
+function develop(g, rite, x0, y0, bw, bh, k, inside, size) {
+  if (k <= 0) return;
+  const cell = size || Math.max(rite.cell, Math.ceil(Math.max(bw, bh) / 28));
+  const cx0 = Math.floor(x0 / cell);
+  const cy0 = Math.floor(y0 / cell);
+  const cx1 = Math.ceil((x0 + bw) / cell);
+  const cy1 = Math.ceil((y0 + bh) / cell);
+  for (let cy = cy0; cy < cy1; cy++) {
+    for (let cx = cx0; cx < cx1; cx++) {
+      const px = cx * cell;
+      const py = cy * cell;
+      if (inside && !inside(px + cell / 2, py + cell / 2)) continue;
+      if (k < 1 && !rite.matte(cx, cy, k)) continue;
+      g.fillRect(px, py, cell, cell);
+    }
+  }
+}
+
+// Up the stair and back down it over one period, entered at the configuration's turn: the lamp's
+// breath, never a cosine.
+function breath(rite, t, period, turn, n) {
+  const phase = fract(t / period + turn);
+  return phase < 0.5 ? rite.stair(phase * 2, n) : 1 - rite.stair((phase - 0.5) * 2, n);
+}
+
+// The lamp lit for good over a solved night: light comes over the whole house through the matte
+// from the moment of the solve, blinking on and dropping out the way the rite's flicker has it,
+// and holds.
+function daybreak(g, rite, c, w, h, p) {
+  const k = rite.stair(p);
+  if (k <= 0 || !rite.flicker(p)) return;
+  g.fillStyle = c.alpha(c.colors.accent2, 0.14);
+  if (k >= 1) g.fillRect(0, 0, w, h);
+  else develop(g, rite, 0, 0, w, h, k, null, Math.max(rite.cell, Math.ceil(Math.min(w, h) / 32)));
+}
+
+// A thing travelling from one place to another: in treads, never a glide, each tread landing on
+// the rite's own curve (so a tread may overshoot a little and the last settles), on the roll
+// handed in.
+function travel(own, p) {
+  return own.ease(own.stair(p));
+}
+
+// A surface arriving: solid once it is there, its cells through the matte before that, and
+// nothing while the flicker has it out.
+function surface(g, rite, own, x, y, bw, bh, p, fill, inside) {
+  const k = own.stair(p);
+  if (k <= 0 || !own.flicker(p)) return false;
+  g.fillStyle = fill;
+  if (k >= 1 && !inside) g.fillRect(x, y, bw, bh);
+  else develop(g, rite, x, y, bw, bh, k, inside);
+  return k >= 1;
+}
+
 /* ---- shared drawing ------------------------------------------------------------------------- */
 
 function some(env, list, n) {
@@ -113,8 +206,9 @@ function text(g, str, x, y, size, color, align, weight) {
   g.fillText(str, x, y);
 }
 
-// The house: its dark, the lamp's glow, the folds of the backcloth and the curtain along the top.
-function house(g, w, h, c, v, lampX, lampY) {
+// The house: its dark, the lamp's glow (swollen by `swell`, a tread of its breath), the folds of
+// the backcloth and the curtain along the top.
+function house(g, w, h, c, v, lampX, lampY, swell) {
   const col = c.colors;
   const m = Math.min(w, h);
   const background = g.createLinearGradient(0, 0, w, h);
@@ -122,8 +216,8 @@ function house(g, w, h, c, v, lampX, lampY) {
   background.addColorStop(1, col.bg);
   g.fillStyle = background;
   g.fillRect(0, 0, w, h);
-  const light = g.createRadialGradient(lampX, lampY, 0, lampX, lampY, m * 1.3);
-  light.addColorStop(0, c.alpha(col.accent2, 0.28));
+  const light = g.createRadialGradient(lampX, lampY, 0, lampX, lampY, m * (1.15 + 0.3 * (swell || 0)));
+  light.addColorStop(0, c.alpha(col.accent2, 0.22 + 0.12 * (swell || 0)));
   light.addColorStop(1, c.alpha(col.accent2, 0));
   g.fillStyle = light;
   g.fillRect(0, 0, w, h);
@@ -147,12 +241,13 @@ function house(g, w, h, c, v, lampX, lampY) {
   g.stroke();
 }
 
-function lampDot(g, c, x, y, r) {
-  const glow = g.createRadialGradient(x, y, 0, x, y, r * 4);
+function lampDot(g, c, x, y, r, swell) {
+  const reach = r * (3.4 + 1.2 * (swell || 0));
+  const glow = g.createRadialGradient(x, y, 0, x, y, reach);
   glow.addColorStop(0, c.alpha(c.colors.accent2, 0.6));
   glow.addColorStop(1, c.alpha(c.colors.accent2, 0));
   g.fillStyle = glow;
-  g.fillRect(x - r * 4, y - r * 4, r * 8, r * 8);
+  g.fillRect(x - reach, y - reach, reach * 2, reach * 2);
   g.fillStyle = c.colors.accent2;
   g.beginPath();
   g.arc(x, y, r, 0, Math.PI * 2);
@@ -216,17 +311,31 @@ function spans(n) {
   return (n <= 12 ? WORDS[n] : String(n)) + (n === 1 ? ' span' : ' spans');
 }
 
+// The lamp's state as a scene opens: nothing tried, nothing guessed, nothing revealed, and every
+// change timed against the piece's clock from here on (-1 is "there from the start").
+function lampState() {
+  return {
+    tried: null, triedFrom: null, triedAt: -1, reveal: false, revealAt: -1,
+    guess: null, guessAt: -1, change: null, changeAt: -1, t: 0
+  };
+}
+
 // The side view: floor, wall, the cutout standing on the floor, the shadow on the wall to scale,
 // the lamp off to the left behind a break in the floor (its distance is the question).
 function sideView(g, w, h, c, p, s, variant) {
   const v = variant || PLAIN;
   const col = c.colors;
+  const rite = riteOf(c);
+  const reduced = !!c.reduced;
+  const t = reduced ? 0 : s.t || 0; // less motion asked for: the lamp and the shadows hold still
   const m = Math.min(w, h);
   const H = shadowHeight(p, p.d);
   const floor = h * 0.8;
   const wallX = w * 0.86;
   const lampX = w * 0.1 + (v.turn - 0.5) * w * 0.04;
-  house(g, w, h, c, v, lampX, floor);
+  const swell = breath(rite.at(0x1a4), t, 5, v.turn);
+  const revealP = s.reveal ? came(s, s.revealAt, 2, reduced) : 0;
+  house(g, w, h, c, v, lampX, floor, swell);
   // Scale: the taller of the shadow and the wider of the gap decide the span in pixels.
   const unit = Math.min((floor - h * 0.14) / H, (w * 0.46) / p.a) * Math.min(1, v.scale);
   const cutX = wallX - p.a * unit;
@@ -234,8 +343,21 @@ function sideView(g, w, h, c, p, s, variant) {
   // The wall, and the shadow on it.
   g.fillStyle = c.mix(col.bg2, col.accent2, 0.55);
   g.fillRect(wallX, h * 0.06, w - wallX, floor - h * 0.06);
+  // The lamp lit for good: the wall brightens through the matte from the moment of the solve.
+  if (s.reveal) surface(g, rite, rite.at(0x4a11), wallX, h * 0.06, w - wallX, floor - h * 0.06, revealP, c.alpha(col.accent2, 0.3));
   g.fillStyle = c.alpha(col.bg, 0.92);
   g.fillRect(wallX, floor - H * unit, w - wallX, H * unit);
+  // The visitor's prediction on the wall: grows, and a ghost of more shadow develops above the
+  // real one; shrinks, and the wall develops back over its top; the same, and a band holds the
+  // top edge where it is. Through the matte from the moment of the choice.
+  if (s.change !== null && !s.reveal) {
+    const own = rite.at(0x6b2);
+    const p2 = came(s, s.changeAt, 1.3, reduced);
+    const reach = Math.min(Math.max(6, H * unit * 0.16), floor - H * unit - h * 0.06);
+    if (s.change === 'grows') surface(g, rite, own, wallX, floor - H * unit - reach, w - wallX, reach, p2, c.alpha(col.bg, 0.55));
+    else if (s.change === 'shrinks') surface(g, rite, own, wallX, floor - H * unit, w - wallX, reach, p2, c.alpha(c.mix(col.bg2, col.accent2, 0.55), 0.8));
+    else surface(g, rite, own, wallX, floor - H * unit - 2, w - wallX, 4, p2, c.alpha(col.accent2, 0.6));
+  }
   // The floor.
   g.fillStyle = c.mix(col.bg, col.bg2, 0.5);
   g.fillRect(0, floor, w, h - floor);
@@ -280,7 +402,7 @@ function sideView(g, w, h, c, p, s, variant) {
   g.strokeStyle = c.alpha(col.accent2, 0.7);
   g.lineWidth = 1;
   g.stroke();
-  lampDot(g, c, lampX, floor - 3, Math.max(3, m * 0.012));
+  lampDot(g, c, lampX, floor - 3, Math.max(3, m * 0.012), swell);
   // The measurements: the cutout's height, the gap to the wall, the shadow's height, and the
   // one that is asked.
   const dim = (x1, y1, x2, y2) => {
@@ -309,25 +431,46 @@ function sideView(g, w, h, c, p, s, variant) {
   dim(wallX - 8, floor, wallX - 8, floor - H * unit);
   text(g, 'H = ' + spans(H), wallX - 14, floor - H * unit / 2, fs, col.accent2, 'right', 600);
   dim(lampX, floor + h * 0.06, cutX, floor + h * 0.06);
-  text(g, 'd = ' + (s.reveal ? spans(p.d) : '?'), (lampX + cutX) / 2, floor + h * 0.06 + fs, fs, s.reveal ? col.accent2 : col.accent, 'center', 700);
+  // What the drawing says of d: the answer blinks on once it is read, over a line of the lamp's
+  // light that develops under it; before that, the visitor's guess blinks on as a question of
+  // its own, and a question mark holds otherwise.
+  const answered = s.reveal && rite.flicker(revealP);
+  const guessP = s.guess !== null ? came(s, s.guessAt, 0.9, reduced) : 0;
+  const guessing = !answered && s.guess !== null && rite.at(0x9e5).flicker(guessP);
+  if (s.reveal) surface(g, rite, rite.at(0x2f8), lampX, floor + h * 0.06 - 2, cutX - lampX, 4, revealP, c.alpha(col.accent2, 0.8));
+  const said = answered ? spans(p.d) : guessing ? spans(Math.max(1, Math.round(s.guess))) + '?' : '?';
+  text(g, 'd = ' + said, (lampX + cutX) / 2, floor + h * 0.06 + fs, fs, answered ? col.accent2 : col.accent, 'center', 700);
   text(g, 'the wall', wallX + (w - wallX) / 2, h * 0.1, fs * 0.9, c.alpha(col.bg, 0.8), 'center', 600);
   if (s.tried != null && !s.reveal) {
-    // What the wall would show with the lamp where the visitor put it, drawn faintly over the real shadow.
-    const would = shadowHeight(p, s.tried);
-    const top = floor - Math.min(would, 30) * unit;
-    g.strokeStyle = c.alpha(col.accent, 0.9);
-    g.lineWidth = 1.5;
-    g.setLineDash([3, 4]);
-    g.beginPath();
-    g.moveTo(wallX, top);
-    g.lineTo(w, top);
-    g.stroke();
-    g.setLineDash([]);
+    // What the wall would show with the lamp where the visitor put it: the shadow it would throw
+    // develops over the real one through the matte, and its top line travels there in treads
+    // along the rite's curve from where the last try stood, blinking on.
+    const own = rite.at(0x7d3);
+    const pt = came(s, s.triedAt, 1.1, reduced);
+    const would = Math.min(shadowHeight(p, s.tried), 30);
+    const from = s.triedFrom == null ? would : Math.min(s.triedFrom, 30);
+    const at = from + (would - from) * travel(own, pt);
+    // The curve may overshoot a little; the line stays on the wall.
+    const top = Math.max(h * 0.06, Math.min(floor, floor - at * unit));
+    const lo = Math.max(h * 0.06, Math.min(top, floor - H * unit));
+    const hi = Math.max(top, floor - H * unit);
+    if (hi - lo > 1) surface(g, rite, own, wallX, lo, w - wallX, hi - lo, pt, c.alpha(col.accent, 0.3));
+    if (own.flicker(pt)) {
+      g.strokeStyle = c.alpha(col.accent, 0.9);
+      g.lineWidth = 1.5;
+      g.setLineDash([3, 4]);
+      g.beginPath();
+      g.moveTo(wallX, top);
+      g.lineTo(w, top);
+      g.stroke();
+      g.setLineDash([]);
+    }
   }
+  if (s.reveal) daybreak(g, rite, c, w, h, revealP);
 }
 
 function lampPreview(g, w, h, env, p) {
-  sideView(g, w, h, env, p, { tried: null, reveal: false }, env.variant);
+  sideView(g, w, h, env, p, lampState(), env.variant);
 }
 
 function lampPiece(env, p) {
@@ -336,7 +479,7 @@ function lampPiece(env, p) {
   const margin = asked(env).margin;
   const H = shadowHeight(p, p.d);
   const move = MOVES[p.move];
-  const s = { tried: null, reveal: false };
+  const s = lampState();
   const draw = (c) => sideView(c.g, c.w, c.h, c, p, s, env.variant);
   const tenth = (n) => String(Math.round(n * 10) / 10);
   return {
@@ -357,7 +500,16 @@ function lampPiece(env, p) {
       if (distanceRight && changeRight) return { solved: true, say: 'the lamp is ' + spans(p.d) + ' behind the cutout, and the shadow ' + move.answer };
       const parts = [];
       if (!distanceRight) {
-        s.tried = Number.isFinite(d) && d >= 1 ? d : null;
+        const tried = Number.isFinite(d) && d >= 1 ? d : null;
+        if (tried !== s.tried) {
+          // The line the wall would show moves from where the last try left it.
+          const pt = came(s, s.triedAt, 1.1, !!c.reduced);
+          const stood = s.tried == null ? null : shadowHeight(p, s.tried);
+          const from = s.triedFrom == null || stood == null ? stood : s.triedFrom + (stood - s.triedFrom) * travel(riteOf(c).at(0x7d3), pt);
+          s.triedFrom = from;
+          s.tried = tried;
+          s.triedAt = s.t;
+        }
         parts.push(s.tried ? 'from there the shadow would stand ' + tenth(shadowHeight(p, d)) + ' spans tall, not ' + H : 'the distance is off');
       }
       parts.push(changeRight ? 'the movement is right' : 'the movement is off');
@@ -371,18 +523,31 @@ function lampPiece(env, p) {
       if (id === 'distance') {
         const d = Number(value);
         c.status(Number.isFinite(d) && d >= 1 ? 'the lamp ' + spans(Math.round(d)) + ' behind the cutout; light it to see' : 'the lamp has to stand somewhere');
+        const guess = Number.isFinite(d) && d >= 1 ? d : null;
+        if (guess !== s.guess) {
+          s.guess = guess;
+          s.guessAt = s.t;
+        }
       }
       if (id === 'change') {
         const o = CHANGES.find((x) => x.value === value);
-        if (o) c.status('when ' + move.text + ', ' + o.label + ', you say');
+        if (o) {
+          c.status('when ' + move.text + ', ' + o.label + ', you say');
+          if (s.change !== o.value) {
+            s.change = o.value;
+            s.changeAt = s.t;
+          }
+        }
       }
       draw(c);
     },
     frame(t, dt, c) {
+      s.t = t;
       draw(c);
     },
     end(c) {
       s.reveal = true;
+      s.revealAt = s.t;
       c.status('d = ' + spans(p.d) + ': ' + p.h + ' spans times ' + (p.d + p.a) + ' over ' + p.d + ' is ' + H + '. the lamp stays lit');
       draw(c);
     }
@@ -425,14 +590,29 @@ function matchTitle(p) {
   return 'match the shadows: ' + p.items.map((i) => CUTOUTS[i].name).join(', ');
 }
 
+// The bench's state as a scene opens: the visitor's matching (none on a card), nothing hinted,
+// nothing revealed, and every change timed against the piece's clock from here on (-1 is "there
+// from the start").
+function matchState(order) {
+  return {
+    order: order ? order.slice() : null, from: order ? order.slice() : null, movedAt: [-1, -1, -1, -1],
+    hinted: [], hintAt: [-1, -1, -1, -1], reveal: false, revealAt: -1, t: 0
+  };
+}
+
 // The bench of cutouts along the top and the screen with their shadows along the bottom.
 function bench(g, w, h, c, p, s, variant) {
   const v = variant || PLAIN;
   const col = c.colors;
+  const rite = riteOf(c);
+  const reduced = !!c.reduced;
+  const t = reduced ? 0 : s.t || 0; // less motion asked for: the lamp and the shadows hold still
   const m = Math.min(w, h);
   const lampX = w * (0.1 + v.turn * 0.1);
-  house(g, w, h, c, v, lampX, h * 0.12);
-  lampDot(g, c, lampX, h * 0.12, Math.max(3, m * 0.013));
+  const swell = breath(rite.at(0x1a4), t, 5, v.turn);
+  const revealP = s.reveal ? came(s, s.revealAt, 2.2, reduced) : 0;
+  house(g, w, h, c, v, lampX, h * 0.12, swell);
+  lampDot(g, c, lampX, h * 0.12, Math.max(3, m * 0.013), swell);
   const fs = Math.max(9, Math.min(14, m * 0.03));
   const cell = w / 4;
   const benchY = h * 0.32;
@@ -450,19 +630,25 @@ function bench(g, w, h, c, p, s, variant) {
     g.stroke();
     text(g, 'the ' + CUTOUTS[cut].name, x, benchY + h * 0.012 + fs, fs, col.fg, 'center', 600);
   });
-  // The screen: lit paper, with the four shadows numbered along it.
+  // The screen: lit paper, with the four shadows numbered along it. Every shadow has its cutout:
+  // the screen brightens through the matte from the moment of the solve.
   const screenY = h * 0.44;
   const screenH = h * 0.5;
   g.fillStyle = c.mix(col.bg2, col.accent2, 0.6);
   g.fillRect(w * 0.02, screenY, w * 0.96, screenH);
+  if (s.reveal) surface(g, rite, rite.at(0x4a11), w * 0.02, screenY, w * 0.96, screenH, revealP, c.alpha(col.accent2, 0.28));
   g.strokeStyle = c.alpha(col.fg, 0.4);
   g.lineWidth = 1;
   g.strokeRect(w * 0.02, screenY, w * 0.96, screenH);
   p.shadows.forEach((sh, n) => {
+    const own = rite.at(0x5ad + n);
     const f = sh.f / 10;
-    const k = sh.k / 100;
+    // The shadow leans by the lamp, and trembles with its flame: the lean moves a little on the
+    // stair, up and back, each shadow in a period of its own.
+    const tremble = breath(own, t, 2.6 + n * 0.45, v.turn + n * 0.31, 4) - 0.5;
+    const k = sh.k / 100 + tremble * 0.05;
     const base = Math.min(cell * 0.22, screenH * 0.26) * Math.min(1, v.scale);
-    // The shadow leans by the lamp: a point's x is pushed sideways by how high it stands.
+    // A point's x is pushed sideways by how high it stands.
     const map = (q) => ({ x: q[0] * f * base + (0.5 - q[1]) * k * f * base, y: -(0.5 - q[1]) * f * base });
     const pts = CUTOUTS[p.items[sh.cut]].points.map(map);
     const minX = Math.min(...pts.map((q) => q.x));
@@ -479,30 +665,47 @@ function bench(g, w, h, c, p, s, variant) {
     g.fill();
     text(g, String(n + 1), (n + 0.5) * cell, screenY + fs * 1.1, fs * 1.1, col.bg, 'center', 700);
     text(g, 'x ' + (f % 1 ? f.toFixed(1) : f), (n + 0.5) * cell, screenY + screenH - fs, fs * 0.9, c.alpha(col.bg, 0.8), 'center', 600);
-    // The visitor's matching, written under each shadow once it has been set.
+    // The visitor's matching, written under each shadow once it has been set: a name that
+    // changes blinks out and the new one blinks on, on this shadow's own roll; a name proved
+    // right develops a chip behind it through the matte.
     if (s.order) {
-      const guess = CUTOUTS[p.items[s.order[n]]].name;
-      text(g, guess, (n + 0.5) * cell, screenY + screenH + fs * 0.9, fs * 0.9, s.reveal && s.order[n] === sh.cut ? col.accent2 : col.fg, 'center', 600);
+      const mp = came(s, s.movedAt[n], 0.9, reduced);
+      const now = CUTOUTS[p.items[s.order[n]]].name;
+      const was = CUTOUTS[p.items[s.from[n]]].name;
+      const shown = own.flicker(mp) ? now : own.flicker(1 - mp) ? was : null;
+      let chipOn = false;
+      if (s.reveal && s.order[n] === sh.cut) {
+        const chip = rite.at(0x8c1 + n);
+        surface(g, rite, chip, (n + 0.15) * cell, screenY + screenH + fs * 0.2, cell * 0.7, fs * 1.4, revealP, c.alpha(col.accent2, 0.22));
+        chipOn = chip.stair(revealP) > 0 && chip.flicker(revealP) === 1;
+      }
+      if (shown !== null) text(g, shown, (n + 0.5) * cell, screenY + screenH + fs * 0.9, fs * 0.9, chipOn ? col.accent2 : col.fg, 'center', 600);
     }
+    // A shadow a hint has named: a frame develops round it through the matte, a band of cells
+    // along the edge of its column, blinking on.
     if (s.hinted.includes(n)) {
-      g.strokeStyle = c.alpha(col.accent, 0.95);
-      g.lineWidth = 2;
-      g.setLineDash([4, 4]);
-      g.strokeRect((n + 0.06) * cell, screenY + 3, cell * 0.88, screenH - 6);
-      g.setLineDash([]);
+      const hp = came(s, s.hintAt[n], 1.1, reduced);
+      const x0 = (n + 0.06) * cell;
+      const y0 = screenY + 3;
+      const bw = cell * 0.88;
+      const bh = screenH - 6;
+      const edge = Math.max(4, m * 0.012);
+      surface(g, rite, rite.at(0x3e9 + n), x0, y0, bw, bh, hp, c.alpha(col.accent, 0.95),
+        (px, py) => px - x0 < edge || x0 + bw - px < edge || py - y0 < edge || y0 + bh - py < edge);
     }
   });
+  if (s.reveal) daybreak(g, rite, c, w, h, revealP);
 }
 
 function matchPreview(g, w, h, env, p) {
-  bench(g, w, h, env, p, { order: null, hinted: [], reveal: false }, env.variant);
+  bench(g, w, h, env, p, matchState(null), env.variant);
 }
 
 function matchPiece(env, p) {
   const helps = asked(env).helps;
   const names = p.items.map((i) => CUTOUTS[i].name);
   const solution = p.shadows.map((sh) => sh.cut);
-  const s = { order: p.start.slice(), hinted: [], reveal: false };
+  const s = matchState(p.start);
   const draw = (c) => bench(c.g, c.w, c.h, c, p, s, env.variant);
   function matched() {
     let n = 0;
@@ -533,7 +736,14 @@ function matchPiece(env, p) {
     },
     apply(id, value, c) {
       if (id === 'order' && Array.isArray(value) && value.length === 4) {
-        s.order = value.map(Number);
+        const order = value.map(Number);
+        // Every name that changes starts its rite now, from the name that stood there.
+        order.forEach((at, n) => {
+          if (at === s.order[n]) return;
+          s.from[n] = s.order[n];
+          s.movedAt[n] = s.t;
+        });
+        s.order = order;
         c.status('shadows 1 to 4: ' + s.order.map((i) => names[i]).join(', '));
       }
       if (id === 'hint') {
@@ -541,6 +751,7 @@ function matchPiece(env, p) {
           ? [0, 1, 2, 3].find((n) => !s.hinted.includes(n) && s.order[n] !== solution[n]) : undefined;
         if (next !== undefined) {
           s.hinted.push(next);
+          s.hintAt[next] = s.t;
           c.hint();
           c.status('shadow ' + (next + 1) + ' was cast by the ' + names[solution[next]]);
         } else if (s.hinted.length >= helps) {
@@ -552,10 +763,12 @@ function matchPiece(env, p) {
       draw(c);
     },
     frame(t, dt, c) {
+      s.t = t;
       draw(c);
     },
     end(c) {
       s.reveal = true;
+      s.revealAt = s.t;
       c.status('shadows 1 to 4: ' + solution.map((i) => names[i]).join(', ') + '. the lamp stays lit');
       draw(c);
     }

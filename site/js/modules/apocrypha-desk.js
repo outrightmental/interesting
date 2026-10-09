@@ -51,55 +51,76 @@ function asked(env) {
 
 /* ---- the drawing: desk, card, specimen ----------------------------------------------------- */
 
-/* The motion of the rite (README: "Motion axiom"): nothing here moves along a formula. A curve is
-   a polyline -- a hesitation, a surge, a stutter, a settle -- and riteCurve rolls one from a seed,
-   so the fade that falls over a solved cabinet runs its own way for every piece and the same way
-   every time that piece is played. Rolled from the seed and never from env.rnd, so the puzzle a
-   seed deals is untouched by it; `ease` is the one baked curve a preview falls back on. */
-function along(stops) {
-  return (t) => {
-    if (!(t > 0)) return stops[0][1];
-    if (t >= 1) return stops[stops.length - 1][1];
-    for (let i = 1; i < stops.length; i++) {
-      if (t <= stops[i][0]) {
-        const [t0, y0] = stops[i - 1];
-        const [t1, y1] = stops[i];
-        return t1 > t0 ? y0 + (y1 - y0) * ((t - t0) / (t1 - t0)) : y1;
-      }
+/* ---- the rite: how this module moves ------------------------------------------------------- */
+
+/* env.rite (ctx.rite inside a piece) is the piece's own roll of how it moves (js/variant.js;
+   js/stage.js, "The rite"). Nothing drawn here moves along a formula or cuts without a rite: a
+   specimen that changes drawers travels along rite.ease, a glitch of a curve, on a roll of its
+   own; a surface that becomes set -- the drawer a hint names, the specimen or the card a visitor
+   picks, the forgery once it is found, the wash over a solved desk -- develops by its AREA
+   through rite.matte, cell by cell in the piece's own pattern, and leaves the same way, never by
+   a fade; a picked card lifts off the desk on rite.stair's uneven treads; and every word that
+   arrives -- a hint's label, what the visitor says, the verdict -- blinks on with rite.flicker and
+   holds. Every change is read against the piece's own clock, s.t, which frame() advances: a
+   change made at `since` has come came() of its way, which is 1 at once for a visitor who asked
+   for less motion and for whatever stood there from the start (since < 0). Rolled from the seed
+   and never from env.rnd, so the puzzle a seed deals is untouched by it. */
+
+const STILL = {
+  ease: () => 1, stair: () => 1, ratchet: () => 1, flicker: () => 1, matte: () => true,
+  treads: 1, kind: 'none', cell: 4, at: () => STILL
+};
+
+function riteOf(env) {
+  return env && env.rite ? env.rite : STILL;
+}
+
+function came(now, since, span, reduced) {
+  if (reduced || since == null || since < 0) return 1;
+  return Math.max(0, Math.min(1, (now - since) / span));
+}
+
+// The cells of a box that the matte lets through at coverage k, filled in the current fillStyle:
+// how a surface changes by its area. Cells are rite.cell px, coarser over a wide box so a frame
+// stays cheap, on a grid fixed to the canvas (or to the frame the caller has translated into) so
+// the pattern holds still while it grows. At k >= 1 every cell is let through.
+function develop(g, rite, x0, y0, bw, bh, k, size) {
+  if (k <= 0) return;
+  const cell = size || Math.max(rite.cell, Math.ceil(Math.max(bw, bh) / 28));
+  const cx0 = Math.floor(x0 / cell);
+  const cy0 = Math.floor(y0 / cell);
+  const cx1 = Math.ceil((x0 + bw) / cell);
+  const cy1 = Math.ceil((y0 + bh) / cell);
+  for (let cy = cy0; cy < cy1; cy++) {
+    for (let cx = cx0; cx < cx1; cx++) {
+      if (k < 1 && !rite.matte(cx, cy, k)) continue;
+      g.fillRect(cx * cell, cy * cell, cell, cell);
     }
-    return 1;
-  };
+  }
 }
 
-function riteCurve(seed, over) {
-  let a = (seed >>> 0) || 1;
-  const rnd = () => {
-    a = (a + 0x6d2b79f5) >>> 0;
-    let t = a;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-  const between = (lo, hi) => lo + (hi - lo) * rnd();
-  const stops = [[0, 0]];
-  let at = 0;
-  const put = (t, y) => {
-    at = Math.min(0.99, Math.max(at, t));
-    stops.push([at, y]);
-  };
-  if (rnd() < 0.7) put(between(0.03, 0.14), between(0, 0.02)); // the hesitation
-  const peak = between(0.45, 0.7);
-  const high = over ? 1 + between(0.02, 0.1) : 1;
-  put(at + (peak - at) * between(0.3, 0.55), high * between(0.45, 0.7)); // the surge
-  if (rnd() < 0.6) put(at + between(0.02, 0.06), stops[stops.length - 1][1]); // the stutter
-  put(peak, high);
-  if (over) put(peak + (1 - peak) * between(0.3, 0.6), 1 - (high - 1) * 0.4); // the settle
-  put(between(0.86, 0.96), over ? 1 : between(0.96, 1));
-  stops.push([1, 1]);
-  return along(stops);
+// A surface that is coming (set) or going (unset): its coverage, 1 when it has been there all
+// along, climbing the stair when it is arriving and coming back down it when it is leaving.
+function coverage(now, was, rite, p) {
+  if (now && was) return 1;
+  if (now) return rite.stair(p);
+  if (was) return 1 - rite.stair(p);
+  return 0;
 }
 
-const ease = along([[0, 0], [0.1, 0.02], [0.38, 0.64], [0.45, 0.58], [0.62, 1], [0.8, 0.97], [1, 1]]);
+// The wash that comes over a solved desk: it develops through the matte from the moment the piece
+// was solved, blinking on and dropping out the way the rite's flicker has it, and holds.
+function wash(g, rite, w, h, p, fill) {
+  const k = rite.stair(p);
+  if (k <= 0 || !rite.flicker(p)) return;
+  g.fillStyle = fill;
+  if (k >= 1) g.fillRect(0, 0, w, h);
+  else develop(g, rite, 0, 0, w, h, k);
+}
+
+const TRAVEL = 1.1; // seconds a specimen takes to change drawers
+const SPAN = 0.7;   // seconds a pick, a hint or a word takes to arrive
+const REVEAL = 1.8; // seconds a solved desk takes to develop
 
 function catalogue(env) {
   return env.pick(LETTERS.split('')) + env.pick(LETTERS.split('')) + '-' + env.int(1000, 9999);
@@ -430,37 +451,57 @@ function drawCabinet(g, w, h, env, plan, s, look, variant) {
   const k = env.colors;
   const names = plan.items.map((i) => SPECIMENS[i].name);
   const geo = drawerGeometry(w, h, v.scale);
+  const rite = riteOf(env);
+  const reduced = !!env.reduced;
+  const got = (since, span) => came(s.t, since, span, reduced);
   deskTop(g, w, h, env, look.rows, v.density);
-  // The cabinet: four drawer fronts, top to bottom, with the specimen each holds just now.
+  // The cabinet: four drawer fronts, top to bottom.
   g.fillStyle = env.mix(k.bg, k.bg2, 0.8);
   g.fillRect(geo.x - geo.cw * 0.04, geo.y - geo.slot * 0.12, geo.cw * 1.08, geo.ch + geo.slot * 0.24);
   const size = Math.max(9, Math.min(16, geo.slot * 0.26));
   for (let slot = 0; slot < 4; slot++) {
     const y = geo.y + slot * geo.slot;
-    const item = s.order[slot];
     g.fillStyle = env.mix(k.bg2, k.accent2, 0.12 + slot * 0.03);
     g.fillRect(geo.x, y + geo.slot * 0.04, geo.cw, geo.slot * 0.92);
     g.fillStyle = env.alpha(k.fg, 0.08);
     g.fillRect(geo.x, y + geo.slot * 0.04, geo.cw, 1);
     g.fillStyle = env.alpha(k.accent2, 0.6);
     g.fillRect(geo.x + geo.cw * 0.78, y + geo.slot * 0.5 - 2, geo.cw * 0.12, 4);
+    write(g, DRAWERS[slot], geo.x + geo.cw * 0.34, y + geo.slot * 0.68, size * 0.8, env.alpha(k.muted, 0.8), 'left', 500);
+  }
+  // A hinted specimen's drawer is a set surface: the mark's colour textures the drawer front
+  // through the matte, cell by cell, and the dashed frame and its label blink on over it.
+  for (let n = 0; n < s.hinted.length; n++) {
+    const item = s.hinted[n];
+    const slot = plan.order.indexOf(item);
+    const y = geo.y + slot * geo.slot;
+    const own = rite.at(0x4a + item);
+    const hp = got(s.hintAt[n], SPAN);
+    g.fillStyle = env.alpha(k.accent2, 0.22);
+    develop(g, own, geo.x, y + geo.slot * 0.04, geo.cw, geo.slot * 0.92, own.stair(hp));
+    if (own.flicker(hp)) {
+      g.strokeStyle = env.alpha(k.accent2, 0.95);
+      g.lineWidth = 2;
+      g.setLineDash([5, 4]);
+      g.strokeRect(geo.x + 3, y + geo.slot * 0.08, geo.cw - 6, geo.slot * 0.84);
+      g.setLineDash([]);
+      write(g, 'the ' + names[item] + ' goes here', geo.x + geo.cw - 6, y + geo.slot * 0.88, size * 0.75, k.accent2, 'right', 600);
+    }
+  }
+  // The specimens, each in the drawer it holds just now -- or on its way there from the drawer
+  // it held, along the rite's curve on a roll of its own, so no two travel alike.
+  const travelP = got(s.orderAt, TRAVEL);
+  for (let item = 0; item < 4; item++) {
+    const to = s.order.indexOf(item);
+    const from = s.was.indexOf(item);
+    const own = rite.at(0x2d + item);
+    const slot = travelP >= 1 || from < 0 ? to : from + (to - from) * own.ease(travelP);
+    const y = geo.y + slot * geo.slot;
     g.save();
     g.translate(geo.x + geo.cw * 0.17, y + geo.slot * 0.5);
     specimen(g, env, SPECIMENS[plan.items[item]].kind, geo.slot * 0.3, env.alpha(k.accent, 0.6));
     g.restore();
     write(g, 'the ' + names[item], geo.x + geo.cw * 0.34, y + geo.slot * 0.42, size, k.fg, 'left', 600);
-    write(g, DRAWERS[slot], geo.x + geo.cw * 0.34, y + geo.slot * 0.68, size * 0.8, env.alpha(k.muted, 0.8), 'left', 500);
-  }
-  // A hinted specimen gets a dashed mark on the drawer it belongs in.
-  for (const item of s.hinted) {
-    const slot = plan.order.indexOf(item);
-    const y = geo.y + slot * geo.slot;
-    g.strokeStyle = env.alpha(k.accent2, 0.95);
-    g.lineWidth = 2;
-    g.setLineDash([5, 4]);
-    g.strokeRect(geo.x + 3, y + geo.slot * 0.08, geo.cw - 6, geo.slot * 0.84);
-    g.setLineDash([]);
-    write(g, 'the ' + names[item] + ' goes here', geo.x + geo.cw - 6, y + geo.slot * 0.88, size * 0.75, k.accent2, 'right', 600);
   }
   // The card of clues, beside the cabinet.
   const cx = w * 0.72 + (v.turn - 0.5) * w * 0.03;
@@ -483,22 +524,28 @@ function drawCabinet(g, w, h, env, plan, s, look, variant) {
     write(g, l.text, -cw / 2 + m + 2 + fsz * 1.3, -ch / 2 + rh * (i + 1.5), fsz, k.fg, 'left', 500);
   });
   g.restore();
-  if (s.fade > 0) {
-    g.fillStyle = env.alpha(k.accent2, (s.cool || ease)(s.fade) * 0.1);
-    g.fillRect(0, 0, w, h);
+  // Over a solved cabinet the lock's colour develops across the desk through the matte, and
+  // "filed" blinks onto the card: never a wash that fades in.
+  if (s.solvedAt >= 0) {
+    const sp = got(s.solvedAt, REVEAL);
+    wash(g, rite, w, h, sp, env.alpha(k.accent2, 0.14));
+    if (rite.at(0x7e).flicker(sp)) write(g, 'FILED', geo.x + geo.cw / 2, geo.y - geo.slot * 0.3, size, k.accent2, 'center', 700);
   }
 }
 
+function drawerBlank(plan) {
+  return { order: plan.start.slice(), was: plan.start.slice(), orderAt: -1, hinted: [], hintAt: [], solvedAt: -1, t: 0 };
+}
+
 function drawerPreview(g, w, h, env, plan) {
-  drawCabinet(g, w, h, env, plan, { order: plan.start.slice(), hinted: [], fade: 0 }, scenery(env), env.variant);
+  drawCabinet(g, w, h, env, plan, drawerBlank(plan), scenery(env), env.variant);
 }
 
 function drawerPiece(env, plan) {
   const names = plan.items.map((i) => SPECIMENS[i].name);
   const helps = asked(env).helps;
   const look = scenery(env);
-  // The fade over a solved cabinet runs along a curve rolled for this piece (see riteCurve).
-  const s = { order: plan.start.slice(), hinted: [], fade: 0, cool: riteCurve((env.seed >>> 0) ^ 0x4f1d) };
+  const s = drawerBlank(plan);
   const draw = (c) => drawCabinet(c.g, c.w, c.h, c, plan, s, look, env.variant);
   function right() {
     let n = 0;
@@ -530,7 +577,12 @@ function drawerPiece(env, plan) {
     },
     apply(id, value, c) {
       if (id === 'order' && Array.isArray(value) && value.length === 4) {
-        s.order = value.map(Number);
+        const order = value.map(Number);
+        if (order.some((item, i) => item !== s.order[i])) {
+          s.was = s.order.slice();
+          s.orderAt = s.t;
+          s.order = order;
+        }
         c.status('top to bottom: ' + s.order.map((i) => names[i]).join(', '));
       }
       if (id === 'hint') {
@@ -539,6 +591,7 @@ function drawerPiece(env, plan) {
           : undefined;
         if (next !== undefined) {
           s.hinted.push(next);
+          s.hintAt.push(s.t);
           c.hint();
           c.status('the ' + names[next] + ' belongs in the ' + DRAWERS[plan.order.indexOf(next)] + ' drawer');
         } else if (s.hinted.length >= helps) {
@@ -550,11 +603,13 @@ function drawerPiece(env, plan) {
       draw(c);
     },
     frame(t, dt, c) {
-      if (c.done) s.fade = Math.min(1, s.fade + dt * 0.8);
+      if (!c.reduced) s.t += Math.max(0, Number(dt) || 0);
       draw(c);
     },
     end(c) {
+      s.solvedAt = s.t;
       c.status(plan.number + ': ' + s.order.map((i) => names[i]).join(' over ') + '. filed; none of it exists');
+      draw(c);
     }
   };
 }
@@ -739,6 +794,12 @@ function drawTray(g, w, h, env, plan, s, look, variant) {
   const v = variant || PLAIN;
   const k = env.colors;
   const geo = trayGeometry(w, h, v.scale);
+  const rite = riteOf(env);
+  const reduced = !!env.reduced;
+  const got = (since, span) => came(s.t, since, span, reduced);
+  const pickP = got(s.pickAt, SPAN);
+  const revealP = got(s.solvedAt, REVEAL);
+  const opened = s.reveal && rite.flicker(revealP);
   deskTop(g, w, h, env, look.rows, v.density);
   // The drawer, pulled out and seen from above, with the six laid in it.
   g.fillStyle = env.mix(k.bg, k.bg2, 0.9);
@@ -754,11 +815,28 @@ function drawTray(g, w, h, env, plan, s, look, variant) {
   plan.specs.forEach((spec, i) => {
     const cx = geo.x + (i % 3 + 0.5) * geo.cw + (v.turn - 0.5) * geo.cw * 0.06;
     const cy = geo.y + (Math.floor(i / 3) + 0.42) * geo.ch;
-    if (s.pick === i) {
+    const own = rite.at(0x51 + i);
+    const bx = cx - geo.cw * 0.44;
+    const by = cy - geo.ch * 0.38;
+    const bw = geo.cw * 0.88;
+    const bh = geo.ch * 0.84;
+    // The picked specimen's bed is a set surface: it textures through the matte, cell by cell,
+    // and the bed of the one picked before it clears the same way; the dashed frame blinks on.
+    const pk = coverage(s.pick === i, s.pickWas === i, own, pickP);
+    if (pk > 0) {
+      g.fillStyle = env.alpha(k.accent2, 0.2);
+      develop(g, own, bx, by, bw, bh, pk);
+    }
+    // The one that breaks the rule, once the drawer is solved, develops in the lock's colour.
+    if (s.reveal && i === plan.odd) {
+      g.fillStyle = env.alpha(k.accent, 0.32);
+      develop(g, own, bx, by, bw, bh, own.stair(revealP));
+    }
+    if (s.pick === i && (s.pickWas === i || own.flicker(pickP))) {
       g.strokeStyle = env.alpha(k.accent2, 0.9);
       g.lineWidth = 2;
       g.setLineDash([5, 4]);
-      g.strokeRect(cx - geo.cw * 0.44, cy - geo.ch * 0.38, geo.cw * 0.88, geo.ch * 0.84);
+      g.strokeRect(bx, by, bw, bh);
       g.setLineDash([]);
     }
     g.save();
@@ -766,6 +844,15 @@ function drawTray(g, w, h, env, plan, s, look, variant) {
     creature(g, env, spec, r);
     g.restore();
     write(g, String(i + 1), cx, cy + geo.ch * 0.4, size, k.accent2, 'center', 700);
+    // A specimen the drawer has vouched for: a strip of the desk's colour develops under its
+    // number and "keeps" blinks on beside it.
+    const vouched = s.vouched.indexOf(i);
+    if (vouched >= 0) {
+      const vp = got(s.vouchAt[vouched], SPAN);
+      g.fillStyle = env.alpha(k.accent, 0.5);
+      develop(g, own, cx - geo.cw * 0.3, cy + geo.ch * 0.33, geo.cw * 0.6, Math.max(3, geo.ch * 0.03), own.stair(vp), Math.max(2, rite.cell));
+      if (own.flicker(vp)) write(g, 'keeps', cx + size * 0.9, cy + geo.ch * 0.4, size * 0.75, env.alpha(k.fg, 0.8), 'left', 500);
+    }
   });
   // The rule, pinned to the drawer on an index card.
   const cw = w * 0.76;
@@ -778,20 +865,29 @@ function drawTray(g, w, h, env, plan, s, look, variant) {
   const m = Math.min(10, cw * 0.06);
   write(g, plan.number + ' / the rule of this drawer', -cw / 2 + m + 2, -ch / 2 + ch / 6, fs * 0.85, k.accent2, 'left', 700);
   write(g, ruleText(plan.rule), -cw / 2 + m + 2, -ch / 2 + ch / 2, fs, k.fg, 'left', 600);
-  write(g, s.reveal ? 'specimen ' + (plan.odd + 1) + ' does not: ' + describe(plan.specs[plan.odd]) : 'five of the six keep it; one does not',
-    -cw / 2 + m + 2, -ch / 2 + ch * 5 / 6, fs * 0.85, s.reveal ? k.accent : k.muted, 'left', 500);
+  // The card's last line: the verdict blinks on over what the visitor said, which blinked on
+  // over the card's own line.
+  const feature = FEATURES.find((f) => f.value === s.choice);
+  const said = feature && rite.at(0x1c).flicker(got(s.choiceAt, SPAN)) ? 'the rule disputes ' + feature.label + ', you say' : null;
+  const line = opened ? 'specimen ' + (plan.odd + 1) + ' does not: ' + describe(plan.specs[plan.odd]) : said || 'five of the six keep it; one does not';
+  write(g, line, -cw / 2 + m + 2, -ch / 2 + ch * 5 / 6, fs * 0.85, opened ? k.accent : said ? k.fg : k.muted, 'left', 500);
   g.restore();
+  if (s.reveal) wash(g, rite, w, h, revealP, env.alpha(k.accent2, 0.1));
+}
+
+function oddBlank() {
+  return { pick: -1, pickWas: -1, pickAt: -1, choice: null, choiceAt: -1, vouched: [], vouchAt: [], reveal: false, solvedAt: -1, t: 0 };
 }
 
 function oddPreview(g, w, h, env, plan) {
-  drawTray(g, w, h, env, plan, { pick: -1, reveal: false }, scenery(env), env.variant);
+  drawTray(g, w, h, env, plan, oddBlank(), scenery(env), env.variant);
 }
 
 function oddPiece(env, plan) {
   const look = scenery(env);
   const helps = asked(env).helps;
   const keepers = plan.specs.map((spec, i) => i).filter((i) => i !== plan.odd);
-  const s = { pick: -1, reveal: false, vouched: [] };
+  const s = oddBlank();
   const draw = (c) => drawTray(c.g, c.w, c.h, c, plan, s, look, env.variant);
   const feature = FEATURES.find((f) => f.value === plan.rule.thenAttr);
   return {
@@ -821,17 +917,27 @@ function oddPiece(env, plan) {
     apply(id, value, c) {
       if (id === 'pick') {
         const picked = Array.isArray(value) ? value.map(Number) : [];
-        s.pick = picked.length === 1 ? picked[0] : -1;
+        const pick = picked.length === 1 ? picked[0] : -1;
+        if (pick !== s.pick) {
+          s.pickWas = s.pick;
+          s.pickAt = s.t;
+          s.pick = pick;
+        }
         if (s.pick >= 0) c.status('specimen ' + (s.pick + 1) + ': ' + describe(plan.specs[s.pick]));
       }
       if (id === 'choice') {
         const f = FEATURES.find((o) => o.value === value);
-        if (f) c.status('the rule disputes ' + f.label + ', you say');
+        if (f) {
+          if (f.value !== s.choice) s.choiceAt = s.t;
+          s.choice = f.value;
+          c.status('the rule disputes ' + f.label + ', you say');
+        }
       }
       if (id === 'hint') {
         const next = s.vouched.length < helps ? keepers.find((i) => !s.vouched.includes(i)) : undefined;
         if (next !== undefined) {
           s.vouched.push(next);
+          s.vouchAt.push(s.t);
           c.hint();
           c.status('specimen ' + (next + 1) + ' keeps the rule: ' + describe(plan.specs[next]));
         } else if (s.vouched.length >= helps) {
@@ -843,10 +949,12 @@ function oddPiece(env, plan) {
       draw(c);
     },
     frame(t, dt, c) {
+      if (!c.reduced) s.t += Math.max(0, Number(dt) || 0);
       draw(c);
     },
     end(c) {
       s.reveal = true;
+      s.solvedAt = s.t;
       c.status('specimen ' + (plan.odd + 1) + ' is ' + describe(plan.specs[plan.odd]) + ', which the rule does not allow. filed; none of it exists');
       draw(c);
     }
@@ -895,19 +1003,38 @@ function forgedTitle(plan) {
 function drawFan(g, w, h, env, plan, s, look, variant) {
   const v = variant || PLAIN;
   const k = env.colors;
+  const rite = riteOf(env);
+  const reduced = !!env.reduced;
+  const got = (since, span) => came(s.t, since, span, reduced);
+  const pickP = got(s.pickAt, SPAN);
+  const revealP = got(s.solvedAt, REVEAL);
+  const opened = s.reveal && rite.flicker(revealP);
   deskTop(g, w, h, env, look.rows, v.density);
   const cw = Math.min(w * 0.3, h * 0.42) * v.scale;
   const ch = cw * 0.62;
   const fs = Math.max(9, Math.min(18, cw * 0.14));
-  // Five cards fanned across the desk, each with its number, the picked one lifted.
+  // Five cards fanned across the desk, each with its number. The picked one lifts off the desk
+  // on the stair's uneven treads (and the one picked before it settles back down them), its face
+  // textures through the matte as a set surface, and its dashed frame blinks on.
   plan.numbers.forEach((number, i) => {
     const x = w * (0.16 + 0.17 * i) + (v.turn - 0.5) * w * 0.03;
     const y = h * (0.3 + (i % 2) * 0.18);
+    const own = rite.at(0x61 + i);
+    const lift = coverage(s.pick === i, s.pickWas === i, own, pickP);
     g.save();
-    g.translate(x, y);
+    g.translate(x, y - ch * 0.12 * lift);
     g.rotate(look.tilt + (i - 2) * 0.06 + (v.turn - 0.5) * 0.05);
     card(g, env, cw, ch, 0.25, i === 2 ? look.spots : null, 4);
-    if (s.pick === i) {
+    if (lift > 0) {
+      g.fillStyle = env.alpha(k.accent2, 0.18);
+      develop(g, own, -cw / 2 + 3, -ch / 2 + 3, cw - 6, ch - 6, lift);
+    }
+    // The forgery, once it is found, develops in the lock's colour.
+    if (s.reveal && i === plan.odd) {
+      g.fillStyle = env.alpha(k.accent, 0.3);
+      develop(g, own, -cw / 2 + 3, -ch / 2 + 3, cw - 6, ch - 6, own.stair(revealP));
+    }
+    if (s.pick === i && (s.pickWas === i || own.flicker(pickP))) {
       g.strokeStyle = env.alpha(k.accent2, 0.95);
       g.lineWidth = 2;
       g.setLineDash([5, 4]);
@@ -916,8 +1043,20 @@ function drawFan(g, w, h, env, plan, s, look, variant) {
     }
     const m = Math.min(10, cw * 0.06);
     write(g, 'card ' + (i + 1), -cw / 2 + m + 2, -ch / 2 + ch / 8, fs * 0.65, env.alpha(k.muted, 0.9), 'left', 500);
-    write(g, 'APC-' + number, -cw / 2 + m + 2, -ch / 2 + ch * 0.5, fs, s.reveal && i === plan.odd ? k.accent : k.accent2, 'left', 700);
-    if (s.reveal && i === plan.odd) write(g, 'should end in ' + plan.digit, -cw / 2 + m + 2, -ch / 2 + ch * 0.8, fs * 0.65, k.accent, 'left', 600);
+    write(g, 'APC-' + number, -cw / 2 + m + 2, -ch / 2 + ch * 0.5, fs, opened && i === plan.odd ? k.accent : k.accent2, 'left', 700);
+    // The card's foot: the verdict blinks on; before it, what the visitor says the picked card
+    // should end in, or "keeps the rule" on a card the desk has vouched for, each blinking on.
+    const vouched = s.vouched.indexOf(i);
+    if (opened && i === plan.odd) {
+      write(g, 'should end in ' + plan.digit, -cw / 2 + m + 2, -ch / 2 + ch * 0.8, fs * 0.65, k.accent, 'left', 600);
+    } else if (s.pick === i && s.digit !== null && own.flicker(got(Math.max(s.digitAt, s.pickAt), SPAN))) {
+      write(g, 'ends in ' + s.digit + ', you say', -cw / 2 + m + 2, -ch / 2 + ch * 0.8, fs * 0.65, k.fg, 'left', 500);
+    } else if (vouched >= 0) {
+      const vp = got(s.vouchAt[vouched], SPAN);
+      g.fillStyle = env.alpha(k.accent, 0.5);
+      develop(g, own, -cw / 2 + m + 2, -ch / 2 + ch * 0.9, cw * 0.6, Math.max(2, ch * 0.03), own.stair(vp), Math.max(2, rite.cell));
+      if (own.flicker(vp)) write(g, 'keeps the rule', -cw / 2 + m + 2, -ch / 2 + ch * 0.8, fs * 0.65, env.alpha(k.fg, 0.85), 'left', 500);
+    }
     g.restore();
   });
   // The rule, on a slip along the bottom of the desk.
@@ -936,17 +1075,22 @@ function drawFan(g, w, h, env, plan, s, look, variant) {
   card(g, env, sw, sh, 0.1, null, rows);
   lines.forEach((l, i) => write(g, l.text, -sw / 2 + m + 2, -sh / 2 + rh * (i + 0.5), Math.min(rs, rh * 0.66), l.color, 'left', l.weight));
   g.restore();
+  if (s.reveal) wash(g, rite, w, h, revealP, env.alpha(k.accent2, 0.1));
+}
+
+function forgedBlank() {
+  return { pick: -1, pickWas: -1, pickAt: -1, digit: null, digitAt: -1, vouched: [], vouchAt: [], reveal: false, solvedAt: -1, t: 0 };
 }
 
 function forgedPreview(g, w, h, env, plan) {
-  drawFan(g, w, h, env, plan, { pick: -1, reveal: false }, scenery(env), env.variant);
+  drawFan(g, w, h, env, plan, forgedBlank(), scenery(env), env.variant);
 }
 
 function forgedPiece(env, plan) {
   const look = scenery(env);
   const helps = asked(env).helps;
   const trueCards = plan.numbers.map((n, i) => i).filter((i) => i !== plan.odd);
-  const s = { pick: -1, reveal: false, vouched: [] };
+  const s = forgedBlank();
   const draw = (c) => drawFan(c.g, c.w, c.h, c, plan, s, look, env.variant);
   return {
     title: forgedTitle(plan),
@@ -975,14 +1119,27 @@ function forgedPiece(env, plan) {
     apply(id, value, c) {
       if (id === 'pick') {
         const picked = Array.isArray(value) ? value.map(Number) : [];
-        s.pick = picked.length === 1 ? picked[0] : -1;
+        const pick = picked.length === 1 ? picked[0] : -1;
+        if (pick !== s.pick) {
+          s.pickWas = s.pick;
+          s.pickAt = s.t;
+          s.pick = pick;
+        }
         if (s.pick >= 0) c.status('card ' + (s.pick + 1) + ', APC-' + plan.numbers[s.pick] + ', you say');
       }
-      if (id === 'digit') c.status('it should end in ' + Number(value) + ', you say');
+      if (id === 'digit') {
+        const digit = Number(value);
+        if (Number.isFinite(digit)) {
+          if (digit !== s.digit) s.digitAt = s.t;
+          s.digit = digit;
+        }
+        c.status('it should end in ' + Number(value) + ', you say');
+      }
       if (id === 'hint') {
         const next = s.vouched.length < helps ? trueCards.find((i) => !s.vouched.includes(i)) : undefined;
         if (next !== undefined) {
           s.vouched.push(next);
+          s.vouchAt.push(s.t);
           c.hint();
           c.status('APC-' + plan.numbers[next] + ' keeps the rule: ' + plan.numbers[next].slice(0, 3).split('').join(' + ') + ' ends in ' + plan.numbers[next][3]);
         } else if (s.vouched.length >= helps) {
@@ -994,10 +1151,12 @@ function forgedPiece(env, plan) {
       draw(c);
     },
     frame(t, dt, c) {
+      if (!c.reduced) s.t += Math.max(0, Number(dt) || 0);
       draw(c);
     },
     end(c) {
       s.reveal = true;
+      s.solvedAt = s.t;
       c.status('APC-' + plan.numbers[plan.odd] + ' should end in ' + plan.digit + '. struck from the catalogue, which never had it');
       draw(c);
     }

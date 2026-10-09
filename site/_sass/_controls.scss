@@ -12,8 +12,23 @@
 //                  saved state away, which is painted and guarded at the bottom of this file
 //
 // A pressed toggle (aria-pressed='true') and a working control (aria-busy='true') read as filled,
-// so the state of a toggle is the state of its colour. Every control carries an M3 state layer:
-// an overlay of its own text colour at 8% on hover, 10% on focus and 12% while pressed.
+// so the state of a toggle is the state of its colour.
+//
+// How a control changes (README: "Motion axiom"). Nothing here fades. Every control has two
+// layers under its words: ::after is the state layer and ::before is the fill. A control under the
+// pointer or the focus does not fade to a higher opacity: it waxes, its state layer arriving
+// through the matte ladder (--matte-1 to --matte-5, js/motion.js: a thresholded noise, a scatter
+// of shards, scan lines, a dither, an iris or a grain, rolled afresh for every movement) one
+// tread at a time, so its surface changes by its area and in a pattern, along a stair rolled for
+// that climb; and when the pointer leaves it wanes back down the ladder. A press does not fade
+// either: it stamps, a stair of a dip and a flash of the fill. A control that becomes set does not
+// fade to its new colour: its colour arrives in treads (the stair family) and it is sealed -- the
+// fill texture (--matte-fill, hatching, scan lines, stipple, rings, in its own text colour)
+// climbing the ladder onto it and staying, so a set control is a textured one and not merely a
+// tinted one; and one unset again is unsealed, the texture leaving down the ladder. js/motion.js
+// puts the classes on (is-waxing, is-waning, is-stamping, is-sealing, is-unsealing) and takes the
+// passing ones off; the :hover, :focus-visible and :active rules beneath are the same rites for a
+// page with no script, which climbs the baked ladder of _tokens.scss.
 //
 // .warning and .are-you-sure are two halves of one thing: the treatment every control that throws
 // a visitor's saved state away wears, and the modal that every press of one opens. Both are
@@ -52,56 +67,166 @@ a.action {
   @include type.scale(label-large);
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
-  // A control changing its colour does so along a curve rolled for that change (README: "Motion
-  // axiom"): never linear, never ease, and never the same curve twice.
+  // A control changing its colour does so in treads (README: "Motion axiom"): the stair family,
+  // rolled for that change -- three to seven cuts and never a glide, never the same stair twice.
   transition:
-    background-color var(--motion-short) var(--ease-shift),
-    color var(--motion-short) var(--ease-shift),
-    box-shadow var(--motion-short) var(--ease-flicker);
+    background-color var(--motion-short) var(--ease-stair),
+    color var(--motion-short) var(--ease-stair),
+    box-shadow var(--motion-short) var(--ease-stair),
+    outline-offset var(--motion-short) var(--ease-stair);
 }
 
-// The state layer. It sweeps in from the edge the roll gave it rather than fading in place
-// (--state-from, js/motion.js, re-rolled before every press), along the flicker family's curve.
+// The two layers: the fill (::before, under) and the state layer (::after, over), both under the
+// words. Each is masked by the ladder while it moves and by nothing once it has arrived.
+button::before,
+a.action::before,
 button::after,
 a.action::after {
   content: '';
   position: absolute;
   inset: 0;
-  z-index: -1;
   border-radius: inherit;
-  background: currentColor;
-  opacity: 0;
-  clip-path: var(--state-from, inset(0 100% 0 0));
   pointer-events: none;
-  transition:
-    opacity var(--motion-short) var(--ease-flicker),
-    clip-path var(--motion-short) var(--ease-flicker);
+  mask-repeat: repeat;
+  -webkit-mask-repeat: repeat;
 }
 
+button::before,
+a.action::before {
+  z-index: -2;
+  background: var(--matte-fill);
+  background-size: var(--matte-fill-size);
+  opacity: 0;
+}
+
+button::after,
+a.action::after {
+  z-index: -1;
+  background: currentColor;
+  opacity: 0;
+  // Where the ladder is read from: a phase of the element's own (js/motion.js writes
+  // --matte-shift on each control it waxes), so no two controls in a row reveal alike.
+  mask-position: var(--matte-shift, 0 0);
+  -webkit-mask-position: var(--matte-shift, 0 0);
+}
+
+// Waxing: the state layer climbs the ladder and stays at the top while the pointer or the focus
+// is on the control. The page with no script climbs it from :hover and :focus-visible.
+button.is-waxing::after,
+a.action.is-waxing::after,
 button:hover::after,
-a.action:hover::after {
-  opacity: var(--md-sys-state-hover-opacity);
-  clip-path: inset(0);
+a.action:hover::after,
+button:focus-visible::after,
+a.action:focus-visible::after {
+  opacity: var(--state-opacity, 0.12);
+  mask: var(--matte-top);
+  -webkit-mask: var(--matte-top);
+  mask-position: var(--matte-shift, 0 0);
+  -webkit-mask-position: var(--matte-shift, 0 0);
+  // The rite js/motion.js composed for this one hover (--rite-wax), or the one below for a
+  // page with no script.
+  animation: var(--rite-wax, matte-in) var(--motion-matte-in, var(--motion-medium)) var(--ease-matte-in, var(--ease-stair)) both;
 }
 
 button:focus-visible::after,
 a.action:focus-visible::after {
-  opacity: var(--md-sys-state-focus-opacity);
-  clip-path: inset(0);
+  --state-opacity: 0.16;
 }
 
+// Waning: back down the ladder, and gone.
+button.is-waning::after,
+a.action.is-waning::after {
+  opacity: 0.12;
+  mask-position: var(--matte-shift, 0 0);
+  -webkit-mask-position: var(--matte-shift, 0 0);
+  animation: var(--rite-wane, matte-out) var(--motion-matte-out, var(--motion-medium)) var(--ease-matte-out, var(--ease-stair)) both;
+}
+
+// The stamp: a press is a dip in two cuts and a flash of the fill through the ladder, never a
+// fade to a darker tint. :active is the same stamp for a page with no script.
+button.is-stamping,
+a.action.is-stamping,
+button:active,
+a.action:active {
+  animation: var(--rite-stamp, rite-stamp) var(--motion-rite-stamp, var(--motion-short)) var(--ease-rite-stamp, var(--ease-flicker)) both;
+}
+
+// The ink: the pressed layer lands where the press was (--stamp-x/--stamp-y, written by
+// js/motion.js from the pointer) and spreads outward down the ladder from there, cut from the
+// edge the roll gave the state layer (--state-from), never a flat tint.
+button.is-stamping::after,
+a.action.is-stamping::after,
 button:active::after,
 a.action:active::after {
-  opacity: var(--md-sys-state-pressed-opacity);
-  clip-path: inset(0);
+  opacity: 0.2;
+  mask-position: var(--stamp-x, 50%) var(--stamp-y, 50%);
+  -webkit-mask-position: var(--stamp-x, 50%) var(--stamp-y, 50%);
+  animation: var(--rite-ink, stamp-ink) var(--motion-stamp-ink, var(--motion-short)) var(--ease-stamp-ink, var(--ease-flicker)) both;
 }
 
+@keyframes stamp-ink {
+  0%, 24.9% {
+    clip-path: var(--state-from, inset(0 50% 0 50%));
+    mask: var(--matte-2);
+    -webkit-mask: var(--matte-2);
+  }
+
+  25%, 54.9% {
+    clip-path: inset(0);
+    mask: var(--matte-4);
+    -webkit-mask: var(--matte-4);
+  }
+
+  55%, 79.9% {
+    clip-path: inset(0);
+    mask: var(--matte-top);
+    -webkit-mask: var(--matte-top);
+  }
+
+  80%, 100% {
+    clip-path: inset(0);
+    mask: var(--matte-3);
+    -webkit-mask: var(--matte-3);
+  }
+}
+
+// Set: filled, and sealed with the texture, which is what makes a set control unmistakable at a
+// glance and not merely a tinted one.
 .btn-filled,
 a.action.btn-filled,
 button[aria-pressed='true'],
 button[aria-busy='true'] {
   background: var(--md-sys-color-primary);
   color: var(--md-sys-color-on-primary);
+}
+
+button[aria-pressed='true']::before,
+button[aria-busy='true']::before,
+[aria-selected='true']::before,
+[aria-checked='true']::before,
+.btn-filled::before {
+  opacity: var(--fill-opacity, 0.22);
+}
+
+// Sealing: the texture climbs the ladder onto the control as it becomes set; unsealing is the
+// texture leaving down it. Played by js/motion.js on the attribute changing.
+button.is-sealing::before,
+a.action.is-sealing::before,
+.is-sealing > button::before {
+  opacity: var(--fill-opacity, 0.22);
+  animation: var(--rite-seal, rite-seal) var(--motion-rite-seal, var(--motion-long)) var(--ease-rite-seal, var(--ease-stair)) both;
+}
+
+button.is-unsealing::before,
+a.action.is-unsealing::before {
+  animation: var(--rite-unseal, rite-unseal) var(--motion-rite-unseal, var(--motion-medium)) var(--ease-rite-unseal, var(--ease-stair)) both;
+}
+
+// A page with no script: the texture arrives in treads on its own.
+button[aria-pressed='true']::before,
+[aria-selected='true']::before,
+[aria-checked='true']::before {
+  transition: opacity var(--motion-medium) var(--ease-stair);
 }
 
 .btn-filled:focus-visible,
@@ -131,10 +256,169 @@ a.action[aria-disabled='true'] {
   color: color-mix(in oklab, var(--md-sys-color-on-surface) 38%, transparent);
   box-shadow: none;
   cursor: default;
+  animation: none;
 }
 
-button:disabled::after {
+button:disabled::after,
+button:disabled::before {
   display: none;
+}
+
+// --------------------------------------------------------------------------------------------
+// The rites themselves: the ladder climbed and descended, the stamp, the seal. Every tread is a
+// hard cut (each rung held to the moment of the next), so even a swooping curve reads as treads
+// and a stair curve as a stair of stairs; the rolled curve decides when each cut falls.
+
+@keyframes matte-in {
+  0%, 19.9% {
+    mask: var(--matte-1);
+    -webkit-mask: var(--matte-1);
+  }
+
+  20%, 39.9% {
+    mask: var(--matte-2);
+    -webkit-mask: var(--matte-2);
+  }
+
+  40%, 59.9% {
+    mask: var(--matte-3);
+    -webkit-mask: var(--matte-3);
+  }
+
+  60%, 79.9% {
+    mask: var(--matte-4);
+    -webkit-mask: var(--matte-4);
+  }
+
+  80%, 94.9% {
+    mask: var(--matte-5);
+    -webkit-mask: var(--matte-5);
+  }
+
+  95%, 100% {
+    mask: var(--matte-top);
+    -webkit-mask: var(--matte-top);
+  }
+}
+
+@keyframes matte-out {
+  0%, 24.9% {
+    mask: var(--matte-top);
+    -webkit-mask: var(--matte-top);
+  }
+
+  25%, 49.9% {
+    mask: var(--matte-4);
+    -webkit-mask: var(--matte-4);
+  }
+
+  50%, 69.9% {
+    mask: var(--matte-3);
+    -webkit-mask: var(--matte-3);
+  }
+
+  70%, 84.9% {
+    mask: var(--matte-2);
+    -webkit-mask: var(--matte-2);
+  }
+
+  85%, 97.9% {
+    mask: var(--matte-1);
+    -webkit-mask: var(--matte-1);
+  }
+
+  98%, 100% {
+    opacity: 0;
+    mask: var(--matte-1);
+    -webkit-mask: var(--matte-1);
+  }
+}
+
+// The stamp: down in one cut, held, a half-step back, home. The fill flashes with it (::before
+// is not addressable from here, so the flash is the control's own filter).
+@keyframes rite-stamp {
+  0%, 29.9% {
+    transform: translateY(1px) scale(0.965);
+    filter: contrast(1.25) brightness(1.08);
+  }
+
+  30%, 64.9% {
+    transform: translateY(1px) scale(0.965);
+    filter: contrast(1.25) brightness(1.08);
+  }
+
+  65%, 84.9% {
+    transform: translateY(0) scale(1.012);
+    filter: none;
+  }
+
+  85%, 100% {
+    transform: none;
+    filter: none;
+  }
+}
+
+// The seal: the texture arrives through the ladder, in the fill's own opacity from the first
+// tread, and holds at the top.
+@keyframes rite-seal {
+  0%, 17.9% {
+    clip-path: var(--state-from, inset(0 100% 0 0));
+    mask: var(--matte-1);
+    -webkit-mask: var(--matte-1);
+  }
+
+  18%, 35.9% {
+    clip-path: inset(0);
+    mask: var(--matte-2);
+    -webkit-mask: var(--matte-2);
+  }
+
+  36%, 55.9% {
+    clip-path: inset(0);
+    mask: var(--matte-3);
+    -webkit-mask: var(--matte-3);
+  }
+
+  56%, 77.9% {
+    mask: var(--matte-4);
+    -webkit-mask: var(--matte-4);
+  }
+
+  78%, 93.9% {
+    mask: var(--matte-5);
+    -webkit-mask: var(--matte-5);
+  }
+
+  94%, 100% {
+    mask: none;
+    -webkit-mask: none;
+  }
+}
+
+@keyframes rite-unseal {
+  0%, 29.9% {
+    opacity: var(--fill-opacity, 0.22);
+    mask: var(--matte-4);
+    -webkit-mask: var(--matte-4);
+  }
+
+  30%, 59.9% {
+    opacity: var(--fill-opacity, 0.22);
+    mask: var(--matte-3);
+    -webkit-mask: var(--matte-3);
+  }
+
+  60%, 84.9% {
+    opacity: var(--fill-opacity, 0.22);
+    mask: var(--matte-2);
+    -webkit-mask: var(--matte-2);
+  }
+
+  85%, 100% {
+    opacity: 0;
+    mask: var(--matte-1);
+    -webkit-mask: var(--matte-1);
+  }
 }
 
 // A labelled slider: "time drift", "wind", "bloom". The M3 slider: a 16px track with the active
@@ -153,6 +437,9 @@ button:disabled::after {
   flex: none;
 }
 
+// The fill follows the thumb in treads (README: "Motion axiom"): --range-pct is a registered
+// property (_tokens.scss), so the track's gradient moves along the stair family -- the fill
+// ratchets after the thumb rather than gliding under it.
 input[type='range'] {
   --range-pct: 50%;
   -webkit-appearance: none;
@@ -164,6 +451,7 @@ input[type='range'] {
   background: transparent;
   cursor: pointer;
   accent-color: var(--md-sys-color-primary);
+  transition: --range-pct var(--motion-short) var(--ease-stair);
 }
 
 input[type='range']::-webkit-slider-runnable-track {
@@ -214,6 +502,18 @@ input[type='range']:focus-visible {
   border-radius: var(--md-sys-shape-corner-full);
 }
 
+// A slider being set stamps too: the thumb's halo widens in a cut and comes back; released
+// (is-settling, written by js/site.js) the halo clicks to a ring of the primary and off.
+input[type='range'].is-stamping::-webkit-slider-thumb,
+input[type='range'].is-settling::-webkit-slider-thumb {
+  box-shadow: 0 0 0 9px var(--md-sys-color-surface-container), 0 0 0 10px var(--md-sys-color-primary);
+}
+
+input[type='range'].is-stamping::-moz-range-thumb,
+input[type='range'].is-settling::-moz-range-thumb {
+  box-shadow: 0 0 0 9px var(--md-sys-color-surface-container), 0 0 0 10px var(--md-sys-color-primary);
+}
+
 // The persona's difficulty: the one slider that says how hard every puzzle on the site comes out
 // (issue #93). Rendered by js/persona.js wherever a part depends on the setting -- its own section
 // of the persona sheet, and the rail beside a piece on the stage -- so it is the same control in
@@ -262,9 +562,19 @@ select {
   color: var(--md-sys-color-on-surface);
   font-family: inherit;
   @include type.scale(label-large);
+  transition:
+    border-color var(--motion-short) var(--ease-stair),
+    background-color var(--motion-short) var(--ease-stair);
+}
+
+select.is-waxing,
+select:hover {
+  border-color: var(--md-sys-color-on-surface-variant);
+  background: var(--md-sys-color-surface-container-high);
 }
 
 // A text field, outlined (the word kiln's). The label sits above it in the page's own markup.
+// Its border thickens and its field fills in treads as it is reached, never in a glide.
 input[type='text'],
 input[type='search'],
 textarea {
@@ -277,7 +587,43 @@ textarea {
   color: var(--md-sys-color-on-surface);
   font-family: inherit;
   @include type.scale(body-large);
+  transition:
+    border-color var(--motion-short) var(--ease-stair),
+    background-color var(--motion-short) var(--ease-stair),
+    box-shadow var(--motion-short) var(--ease-stair);
 }
+
+input[type='text'].is-waxing,
+input[type='search'].is-waxing,
+textarea.is-waxing,
+input[type='text']:hover,
+input[type='search']:hover,
+textarea:hover {
+  border-color: var(--md-sys-color-on-surface-variant);
+  background-color: color-mix(in oklab, var(--md-sys-color-on-surface) 4%, transparent);
+  // A field carries no pseudo-element to climb a ladder on, so its own texture arrives by its
+  // size in treads: the fill pattern, in its ink at 6%, stepped larger as the field is reached.
+  background-image: var(--matte-fill);
+  background-size: var(--matte-fill-size);
+  animation: field-wax var(--motion-field-wax, var(--motion-medium)) var(--ease-field-wax, var(--ease-stair)) both;
+}
+
+@keyframes field-wax {
+  0%, 32.9% {
+    background-image: none;
+  }
+
+  33%, 65.9% {
+    background-image: var(--matte-fill);
+    background-position: 0 0;
+  }
+
+  66%, 100% {
+    background-image: var(--matte-fill);
+    background-position: 2px 1px;
+  }
+}
+
 
 input[type='text']::placeholder,
 input[type='search']::placeholder,
@@ -292,6 +638,7 @@ textarea:focus-visible {
   outline: 2px solid var(--md-sys-color-primary);
   outline-offset: -1px;
   border-color: var(--md-sys-color-primary);
+  box-shadow: inset 0 0 0 1px var(--md-sys-color-primary);
 }
 
 // --------------------------------------------------------------------------------------------
@@ -357,6 +704,41 @@ a.action.warning:focus-visible {
   display: grid;
   gap: 1rem;
   align-content: start;
+  // The question arrives as a dealing, not a fade: cut in through the ladder from the rolled
+  // edge, a tread too far, and set (README: "Motion axiom").
+  animation: dialog-in var(--motion-medium) var(--ease-dialog-in, var(--ease-arrive)) both;
+}
+
+@keyframes dialog-in {
+  0%, 21.9% {
+    transform: translate(var(--arrive-x, 0), var(--arrive-y, 12px)) scale(var(--arrive-scale, 0.96));
+    mask: var(--matte-2);
+    -webkit-mask: var(--matte-2);
+  }
+
+  22%, 47.9% {
+    transform: translate(calc(var(--arrive-x, 0) * 0.5), calc(var(--arrive-y, 12px) * 0.5)) scale(1);
+    mask: var(--matte-3);
+    -webkit-mask: var(--matte-3);
+  }
+
+  48%, 71.9% {
+    transform: translate(0, calc(var(--arrive-y, 12px) * -0.12)) scale(var(--pop-over, 1.012));
+    mask: var(--matte-4);
+    -webkit-mask: var(--matte-4);
+  }
+
+  72%, 89.9% {
+    transform: none;
+    mask: var(--matte-5);
+    -webkit-mask: var(--matte-5);
+  }
+
+  90%, 100% {
+    transform: none;
+    mask: none;
+    -webkit-mask: none;
+  }
 }
 
 // Nothing of its own behind it: the shared veil dims and blurs the page, and a backdrop painted
@@ -399,11 +781,49 @@ a.action.warning:focus-visible {
   flex: 1 1 9rem;
 }
 
+// Less motion: every state is simply there. The state layer sits at the top of the ladder for a
+// control under the pointer, the fill is on a set control, and nothing climbs, stamps or seals.
 @media (prefers-reduced-motion: reduce) {
   button,
   a.action,
+  select,
+  input[type='range'],
+  input[type='text'],
+  input[type='search'],
+  textarea,
+  button::before,
+  a.action::before,
   button::after,
-  a.action::after {
+  a.action::after,
+  .are-you-sure[open] {
+    transition: none;
+    animation: none;
+  }
+
+  button.is-waning::after,
+  a.action.is-waning::after {
+    opacity: 0;
+  }
+
+  button.is-unsealing::before,
+  a.action.is-unsealing::before {
+    opacity: 0;
+  }
+
+  button.is-stamping::after,
+  a.action.is-stamping::after,
+  button:active::after,
+  a.action:active::after,
+  input[type='text'].is-waxing,
+  input[type='search'].is-waxing,
+  textarea.is-waxing,
+  input[type='text']:hover,
+  input[type='search']:hover,
+  textarea:hover,
+  button[aria-pressed='true']::before,
+  [aria-selected='true']::before,
+  [aria-checked='true']::before {
+    animation: none;
     transition: none;
   }
 }

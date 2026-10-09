@@ -54,6 +54,7 @@ const SHORT = {
 
 const ORDINAL = ['first', 'second', 'third', 'fourth', 'fifth'];
 const WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen'];
+const PLAIN = { density: 1, scale: 1, turn: 0 };
 
 /* How hard the visitor asked for their puzzles. The persona keeps one difficulty for the whole
    site (js/persona.js) and js/stage.js hands it to a piece on env.difficulty, 1 (gentle) to 5
@@ -66,7 +67,84 @@ function asked(env) {
   return { level, helps: 6 - level, margin: Math.max(0, 3 - level) };
 }
 
-const PLAIN = { density: 1, scale: 1, turn: 0 };
+/* ---- the rite: how this module moves ------------------------------------------------------- */
+
+/* env.rite (ctx.rite inside a piece) is the piece's own roll of how it moves (js/variant.js;
+   js/stage.js, "The rite"). Nothing drawn here moves along a formula or cuts without a rite: a
+   state that changes climbs rite.stair in uneven treads; a thing arriving blinks on with
+   rite.flicker and leaves with one flicker back; a surface that becomes set -- a lamp lit, a
+   switch marked, a slot shown, the dark over a solved room -- develops by its AREA through
+   rite.matte, cell by cell in the piece's own pattern, and never by a fade; the ring's dial turns
+   in rite.ratchet's clicks. Every change is read against the piece's own clock, s.t, which
+   frame() advances: a change made at `since` has come came() of its way, which is 1 at once for
+   a visitor who asked for less motion, and for whatever stood there from the start (since < 0).
+   Each lamp, slot or line moves on a roll of its own (rite.at), so no two step together. */
+
+const STILL = {
+  ease: () => 1, stair: () => 1, ratchet: () => 0, flicker: () => 1, matte: () => true,
+  treads: 1, kind: 'none', cell: 4, at: () => STILL
+};
+
+function riteOf(env) {
+  return env && env.rite ? env.rite : STILL;
+}
+
+function came(s, since, span, reduced) {
+  if (reduced || since == null || since < 0) return 1;
+  return Math.max(0, Math.min(1, (s.t - since) / span));
+}
+
+function fract(x) {
+  return x - Math.floor(x);
+}
+
+// The cells of a box that the matte lets through at coverage k, filled in the current fillStyle:
+// how a surface changes by its area. Cells are rite.cell px, coarser over a wide box so a frame
+// stays cheap, on a grid fixed to the canvas so the pattern holds still while it grows. `inside`
+// keeps the tiling to a shape within the box, and `size` is a cell size of the caller's own, for
+// a box whose size moves (the grid must not move with it). At k >= 1 every cell is let through,
+// so a caller that wants a solid draws the shape itself instead.
+function develop(g, rite, x0, y0, bw, bh, k, inside, size) {
+  if (k <= 0) return;
+  const cell = size || Math.max(rite.cell, Math.ceil(Math.max(bw, bh) / 28));
+  const cx0 = Math.floor(x0 / cell);
+  const cy0 = Math.floor(y0 / cell);
+  const cx1 = Math.ceil((x0 + bw) / cell);
+  const cy1 = Math.ceil((y0 + bh) / cell);
+  for (let cy = cy0; cy < cy1; cy++) {
+    for (let cx = cx0; cx < cx1; cx++) {
+      const px = cx * cell;
+      const py = cy * cell;
+      if (inside && !inside(px + cell / 2, py + cell / 2)) continue;
+      if (k < 1 && !rite.matte(cx, cy, k)) continue;
+      g.fillRect(px, py, cell, cell);
+    }
+  }
+}
+
+// A disc that is `k` of the way to being there: solid once it is, its cells before that.
+function disc(g, rite, x, y, r, k, fill) {
+  if (k <= 0) return;
+  g.fillStyle = fill;
+  if (k >= 1) {
+    g.beginPath();
+    g.arc(x, y, r, 0, Math.PI * 2);
+    g.fill();
+    return;
+  }
+  develop(g, rite, x - r, y - r, r * 2, r * 2, k, (px, py) => (px - x) * (px - x) + (py - y) * (py - y) <= r * r);
+}
+
+// The dark that comes over a solved scene: it develops through the matte from the moment the piece
+// was solved, blinking on and dropping out the way the rite's flicker has it, and holds.
+function nightfall(g, rite, w, h, p, depth) {
+  const k = rite.stair(p);
+  if (k <= 0 || !rite.flicker(p)) return;
+  g.fillStyle = 'rgba(5, 3, 5, ' + depth + ')';
+  if (k >= 1) g.fillRect(0, 0, w, h);
+  else develop(g, rite, 0, 0, w, h, k);
+}
+
 const capital = (text) => text[0].toUpperCase() + text.slice(1);
 
 // A shuffle of 0 .. n-1 from the env's stream.
@@ -89,45 +167,89 @@ function startFor(env, order) {
 
 /* ---- the room ------------------------------------------------------------------------------ */
 
-// The room, out to `swell` and dimmed by `dim`. `scale` is how large the ring is drawn: the card's
-// own, from the configuration it was dealt, and one for the piece, which is the room itself.
-function room(ctx, w, h, env, swell, dim, scale) {
+const BREATH = 12; // seconds to a breath of the ring
+const TURN = 3.5;  // seconds in which a mark round the ring clicks through one roll of treads
+const TEETH = 24;
+
+// How far the room is through its breath, t seconds after this card was painted: twelve seconds to
+// a breath, entered at the point the configuration puts this card at, so that no two rooms on the
+// screen swell together. The breath climbs the rite's stair and comes back down it -- uneven
+// treads, never a cosine. breath(v, rite, 0) is where the still card stands, so the motion carries
+// on from the picture already on the canvas rather than jumping to another part of the breath
+// (issue #92; js/feed.js has the contract animate is held to).
+function breath(v, rite, t, n) {
+  const phase = fract(t / BREATH + v.turn);
+  return phase < 0.5 ? rite.stair(phase * 2, n) : 1 - rite.stair((phase - 0.5) * 2, n);
+}
+
+// The room, t seconds into its breath, at the size the configuration asks for. The ring swells on
+// one stair, its glow on another and the floor catches the light on a third, each a roll of the
+// piece's rite, so the three never step together; the marks round the ring orbit in the
+// ratchet's clicks, with its backlash, each on a roll of its own.
+function room(ctx, w, h, env, t) {
   const c = env.colors;
+  const v = env.variant || PLAIN;
+  const rite = riteOf(env);
+  const swell = breath(v, rite, t);
+  const light = breath(v, rite.at(0x1a3f), t);
+  const caught = breath(v, rite.at(0x77e1), t, 12);
   const g = ctx.createRadialGradient(w / 2, h * 0.46, 0, w / 2, h * 0.46, Math.max(w, h) * 0.7);
   g.addColorStop(0, env.mix(c.bg, c.accent, 0.1));
   g.addColorStop(1, c.bg);
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, w, h);
-  const r = Math.min(w, h) * (0.17 + swell * 0.11) * (scale || 1);
+  const r = Math.min(w, h) * (0.17 + swell * 0.11) * (v.scale || 1);
   const glow = ctx.createRadialGradient(w / 2, h / 2, r * 0.2, w / 2, h / 2, r * 1.6);
-  glow.addColorStop(0, env.alpha(c.accent, 0.28 + swell * 0.2));
+  glow.addColorStop(0, env.alpha(c.accent, 0.28 + light * 0.2));
   glow.addColorStop(0.7, env.alpha(c.accent, 0.06));
   glow.addColorStop(1, env.alpha(c.accent, 0));
   ctx.fillStyle = glow;
   ctx.fillRect(0, 0, w, h);
+  // The floor catching the light: cells of the room's own matte, let through as the breath fills
+  // and taken back as it empties -- a pattern growing and shrinking, never a wash. The cells are
+  // sized by the canvas and the floor's reach is the ring's fullest, not its breath, so the grid
+  // and the floor hold still while the ring breathes and only the pattern changes.
+  const reach = Math.min(w, h) * 0.28 * 1.45 * (v.scale || 1);
+  ctx.fillStyle = env.alpha(c.accent2, 0.2);
+  develop(ctx, rite, w / 2 - reach, h / 2 - reach, reach * 2, reach * 2, 0.06 + 0.42 * caught,
+    (px, py) => (px - w / 2) * (px - w / 2) + (py - h / 2) * (py - h / 2) <= reach * reach,
+    Math.max(rite.cell, Math.ceil(Math.min(w, h) / 44)));
   ctx.strokeStyle = env.alpha(c.accent, 0.45 + swell * 0.3);
   ctx.lineWidth = 1.2;
   ctx.beginPath();
   ctx.arc(w / 2, h / 2, r, 0, Math.PI * 2);
   ctx.stroke();
-  if (dim) {
-    ctx.fillStyle = 'rgba(5, 3, 5, ' + dim + ')';
-    ctx.fillRect(0, 0, w, h);
+  // The sparks round the ring: TEETH marks, each orbiting in clicks of a roll of its own -- its
+  // own count of clicks to a turn of TURN seconds, each click with the ratchet's backlash held as
+  // a tread and cut back, so nothing round the ring glides and no two marks click together. A mark
+  // always rests on a tooth of the ring, so the turn one period makes lands it on itself.
+  ctx.strokeStyle = env.alpha(c.accent2, 0.5 + light * 0.3);
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let i = 0; i < TEETH; i++) {
+    const own = rite.at(0x7ee7 + i);
+    const turns = t / TURN + i / TEETH;
+    const p = fract(turns);
+    const click = own.stair(p);
+    const lash = own.ratchet(p) - click;
+    const over = click > 0 && lash ? (lash > 0 ? 0.35 : -0.35) : 0;
+    // Whole teeth: a stair's tread is i/(treads-1), so treads*click would stand between teeth.
+    const slot = i + own.treads * Math.floor(turns) + Math.round(click * own.treads) + over;
+    const a = (v.turn + slot / TEETH) * Math.PI * 2;
+    ctx.moveTo(w / 2 + Math.cos(a) * r * 1.1, h / 2 + Math.sin(a) * r * 1.1);
+    ctx.lineTo(w / 2 + Math.cos(a) * r * 1.2, h / 2 + Math.sin(a) * r * 1.2);
   }
+  ctx.stroke();
 }
 
 // The dark ground of the room with no ring: what the puzzles are drawn on.
-function floor(g, w, h, env, dim) {
+function floor(g, w, h, env) {
   const c = env.colors;
   const ground = g.createRadialGradient(w / 2, h * 0.4, 0, w / 2, h * 0.4, Math.max(w, h) * 0.8);
   ground.addColorStop(0, env.mix(c.bg, c.bg2, 0.55));
   ground.addColorStop(1, c.bg);
   g.fillStyle = ground;
   g.fillRect(0, 0, w, h);
-  if (dim) {
-    g.fillStyle = 'rgba(5, 3, 5, ' + dim + ')';
-    g.fillRect(0, 0, w, h);
-  }
 }
 
 function caption(g, w, h, env, text, y, a, size) {
@@ -204,17 +326,35 @@ function lampGeometry(w, h, n) {
   return { side, cell: side / n, left: (w - side) / 2, top: h * 0.46 - side / 2 };
 }
 
+// The room's state as it opens: the lamps as given, nothing pressed, nothing shown, and every
+// change timed against the piece's clock from here on (-1 is "there from the start").
+function lampState(plan, lamps) {
+  const N = plan.n * plan.n;
+  return {
+    lamps, presses: new Array(N).fill(0), hinted: [], t: 0,
+    changedAt: new Array(N).fill(-1), markAt: new Array(N).fill(-1), hintAt: new Array(N).fill(-1),
+    countAt: -1, countWas: null, doneAt: -1
+  };
+}
+
 function drawLamps(g, w, h, env, plan, s, variant) {
   const n = plan.n;
   const geo = lampGeometry(w, h, n);
   const lamps = s.lamps;
   const litCount = lamps.filter(Boolean).length;
-  floor(g, w, h, env, s.fade * 0.85);
+  const rite = riteOf(env);
+  const reduced = !!env.reduced;
+  floor(g, w, h, env);
+  nightfall(g, rite, w, h, s.doneAt >= 0 ? came(s, s.doneAt, 2.4, reduced) : 0, 0.85);
   const c = env.colors;
-  // The lit lamps light the room: the more of them, the more of the ceiling shows.
-  if (litCount) {
+  // The lit lamps light the room: the more of them, the more of the ceiling shows. When the count
+  // changes the ceiling steps to the new light on the stair rather than cutting to it.
+  const ceiling = (count) => 0.06 + 0.1 * (count / (n * n));
+  const was = s.countWas == null ? litCount : s.countWas;
+  const lightNow = ceiling(was) + (ceiling(litCount) - ceiling(was)) * rite.stair(came(s, s.countAt, 0.7, reduced));
+  if (litCount || was) {
     const wash = g.createRadialGradient(w / 2, geo.top + geo.side / 2, 0, w / 2, geo.top + geo.side / 2, geo.side);
-    wash.addColorStop(0, env.alpha(c.accent2, 0.06 + 0.1 * (litCount / (n * n))));
+    wash.addColorStop(0, env.alpha(c.accent2, lightNow));
     wash.addColorStop(1, env.alpha(c.accent2, 0));
     g.fillStyle = wash;
     g.fillRect(0, 0, w, h);
@@ -225,39 +365,54 @@ function drawLamps(g, w, h, env, plan, s, variant) {
     const y = geo.top + (Math.floor(i / n) + 0.5) * geo.cell;
     const r = geo.cell * 0.3 * Math.min(1.1, Math.max(0.85, v.scale));
     const lit = !!lamps[i];
-    if (lit) {
-      const glow = g.createRadialGradient(x, y, r * 0.3, x, y, r * 2.2);
+    const own = rite.at(i + 1);
+    // How far this lamp's light has come: a lamp lit develops through the matte; one put out
+    // leaves the same way, its light taken back cell by cell.
+    const p = came(s, s.changedAt[i], 0.9, reduced);
+    const k = lit ? own.stair(p) : 1 - own.stair(p);
+    const halo = lit ? own.flicker(p) : own.flicker(1 - p);
+    if (k > 0 && halo) {
+      const reach = r * (1.2 + k);
+      const glow = g.createRadialGradient(x, y, r * 0.3, x, y, reach);
       glow.addColorStop(0, env.alpha(c.accent2, 0.55));
       glow.addColorStop(1, env.alpha(c.accent2, 0));
       g.fillStyle = glow;
       g.beginPath();
-      g.arc(x, y, r * 2.2, 0, Math.PI * 2);
+      g.arc(x, y, reach, 0, Math.PI * 2);
       g.fill();
     }
-    g.fillStyle = lit ? env.mix(c.accent2, c.fg, 0.35) : env.alpha(c.muted, 0.18);
+    g.fillStyle = env.alpha(c.muted, 0.18);
     g.beginPath();
     g.arc(x, y, r, 0, Math.PI * 2);
     g.fill();
-    g.strokeStyle = env.alpha(lit ? c.accent2 : c.muted, lit ? 0.9 : 0.45);
+    disc(g, rite, x, y, r, k, env.mix(c.accent2, c.fg, 0.35));
+    const rim = k >= 0.5;
+    g.strokeStyle = env.alpha(rim ? c.accent2 : c.muted, rim ? 0.9 : 0.45);
     g.lineWidth = 1.2;
     g.beginPath();
     g.arc(x, y, r, 0, Math.PI * 2);
     g.stroke();
-    // A pressed lamp carries a small switch mark under it, so the record is on the scene too.
-    if (s.presses[i]) {
+    // A pressed lamp carries a small switch mark under it, so the record is on the scene too. It
+    // blinks on the way the rite has it, and blinks out when the press is taken back.
+    const mp = came(s, s.markAt[i], 0.6, reduced);
+    if (s.presses[i] ? own.flicker(mp) : (mp < 1 && own.flicker(1 - mp))) {
       g.fillStyle = env.alpha(c.accent, 0.95);
       g.beginPath();
       g.arc(x, y + r * 1.45, Math.max(2, geo.cell * 0.06), 0, Math.PI * 2);
       g.fill();
     }
     if (s.hinted.includes(i) && !s.presses[i]) {
-      g.strokeStyle = env.alpha(c.accent, 0.95);
-      g.lineWidth = 2;
-      g.setLineDash([4, 4]);
-      g.beginPath();
-      g.arc(x, y, r * 1.5, 0, Math.PI * 2);
-      g.stroke();
-      g.setLineDash([]);
+      // The ring round a lamp the room has shown: it blinks on and widens in treads.
+      const hp = came(s, s.hintAt[i], 1, reduced);
+      if (own.flicker(hp)) {
+        g.strokeStyle = env.alpha(c.accent, 0.95);
+        g.lineWidth = 2;
+        g.setLineDash([4, 4]);
+        g.beginPath();
+        g.arc(x, y, r * (1.15 + 0.35 * own.stair(hp)), 0, Math.PI * 2);
+        g.stroke();
+        g.setLineDash([]);
+      }
     }
   }
   // The frame of the room's floor, drawn a little differently by the configuration.
@@ -265,12 +420,13 @@ function drawLamps(g, w, h, env, plan, s, variant) {
   g.lineWidth = 1;
   const inset = geo.cell * 0.1 * v.density;
   g.strokeRect(geo.left - inset, geo.top - inset, geo.side + inset * 2, geo.side + inset * 2);
-  caption(g, w, h, env, litCount === 0 ? 'dark' : (litCount === 1 ? 'one lamp lit' : WORDS[litCount] + ' lamps lit'), h * 0.93, 0.8);
+  // The count under the room blinks over to the new words rather than cutting.
+  const words = litCount === 0 ? 'dark' : (litCount === 1 ? 'one lamp lit' : WORDS[litCount] + ' lamps lit');
+  caption(g, w, h, env, words, h * 0.93, rite.flicker(came(s, s.countAt, 0.7, reduced)) ? 0.8 : 0);
 }
 
 function lampsPreview(g, w, h, env, plan) {
-  const s = { lamps: litBy(plan.presses, plan.n), presses: new Array(plan.n * plan.n).fill(0), hinted: [], fade: 0 };
-  drawLamps(g, w, h, env, plan, s, env.variant);
+  drawLamps(g, w, h, env, plan, lampState(plan, litBy(plan.presses, plan.n)), env.variant);
 }
 
 function lampsPiece(env, plan) {
@@ -280,7 +436,15 @@ function lampsPiece(env, plan) {
   const lit0 = litBy(plan.presses, n);
   const solution = new Array(N).fill(0);
   for (const i of plan.presses) solution[i] = 1;
-  const s = { presses: new Array(N).fill(0), lamps: lit0.slice(), hinted: [], fade: 0 };
+  const s = lampState(plan, lit0.slice());
+  function burning(lamps) {
+    return (lamps || s.lamps).filter(Boolean).length;
+  }
+  // The room as it stands, taken before a change so that every lamp, mark and count that the
+  // change moves is timed from the moment it moved.
+  function stood() {
+    return { lamps: s.lamps.slice(), presses: s.presses.slice(), count: burning() };
+  }
   // The lamps still lit once `presses` have been made in the room as it opened.
   function lampsAfter(presses) {
     const pressed = [];
@@ -288,11 +452,17 @@ function lampsPiece(env, plan) {
     const flipped = litBy(pressed, n);
     return lit0.map((on, i) => on ^ flipped[i]);
   }
-  function relight() {
+  function relight(before) {
     s.lamps = lampsAfter(s.presses);
-  }
-  function burning(lamps) {
-    return (lamps || s.lamps).filter(Boolean).length;
+    for (let i = 0; i < N; i++) {
+      if (before.lamps[i] !== s.lamps[i]) s.changedAt[i] = s.t;
+      if (before.presses[i] !== s.presses[i]) s.markAt[i] = s.t;
+    }
+    const count = burning();
+    if (count !== before.count) {
+      s.countWas = before.count;
+      s.countAt = s.t;
+    }
   }
   // The record as the rail holds it, which is what the check judges; the scene's own copy stands
   // in where the rail has nothing to say.
@@ -331,8 +501,9 @@ function lampsPiece(env, plan) {
     },
     apply(id, value, c) {
       if (id === 'presses' && Array.isArray(value) && value.length === N) {
+        const before = stood();
         s.presses = value.map((v) => (v ? 1 : 0));
-        relight();
+        relight(before);
         const left = burning();
         c.status(litLine(left) + (left === 0 ? '; check it' : ''));
       }
@@ -341,6 +512,7 @@ function lampsPiece(env, plan) {
           ? solution.findIndex((on, i) => on && !s.presses[i] && !s.hinted.includes(i)) : -1;
         if (next >= 0) {
           s.hinted.push(next);
+          s.hintAt[next] = s.t;
           c.hint();
           c.status('the lamp at ' + place(next) + ' needs pressing');
         } else if (s.hinted.length >= helps) {
@@ -360,20 +532,22 @@ function lampsPiece(env, plan) {
         return;
       }
       const i = row * n + col;
+      const before = stood();
       const next = s.presses.slice();
       next[i] = next[i] ? 0 : 1;
       s.presses = next;
-      relight();
+      relight(before);
       c.set('presses', next);
       const left = burning();
       c.status((next[i] ? 'pressed ' : 'unpressed ') + place(i) + '; ' + litLine(left));
       draw(c);
     },
     frame(t, dt, c) {
-      if (c.done) s.fade = Math.min(1, s.fade + dt * 0.8);
+      s.t += dt;
       draw(c);
     },
     end(c) {
+      s.doneAt = s.t;
       c.status('the room is dark and the door is shut');
     }
   };
@@ -529,13 +703,25 @@ function shelfGeometry(w, h, n) {
   return { span, left: (w - span) / 2, cell: span / n, shelfY: h * 0.4 };
 }
 
+// The shelf as it opens: the keepsakes in the opening order, each standing where it is (from = its
+// own slot, so nothing is on its way), nothing shown, and the clock at zero.
+function shelfState(plan) {
+  const n = plan.items.length;
+  const from = new Array(n).fill(0).map((_, item) => plan.start.indexOf(item));
+  return { order: plan.start.slice(), hinted: [], t: 0, from, movedAt: new Array(n).fill(-1), hintAt: new Array(n).fill(-1), doneAt: -1 };
+}
+
 function drawShelf(g, w, h, env, plan, s, variant) {
   const n = plan.items.length;
   const names = plan.items.map((name) => SHORT[name] || name);
   const geo = shelfGeometry(w, h, n);
   const c = env.colors;
   const v = variant || PLAIN;
-  floor(g, w, h, env, s.fade * 0.8);
+  const rite = riteOf(env);
+  const reduced = !!env.reduced;
+  floor(g, w, h, env);
+  const doneP = s.doneAt >= 0 ? came(s, s.doneAt, 2.6, reduced) : 0;
+  nightfall(g, rite, w, h, doneP, 0.8);
   // The lamp over the shelf.
   const lamp = g.createRadialGradient(w / 2, geo.shelfY - h * 0.2, 0, w / 2, geo.shelfY - h * 0.2, w * 0.55 * v.scale);
   lamp.addColorStop(0, env.alpha(c.accent2, 0.14));
@@ -548,13 +734,42 @@ function drawShelf(g, w, h, env, plan, s, variant) {
   g.fillStyle = env.alpha(c.muted, 0.3);
   g.fillRect(geo.left - geo.cell * 0.1, geo.shelfY + h * 0.025, geo.span + geo.cell * 0.2, h * 0.008);
   const size = Math.max(10, Math.min(16, Math.round(geo.cell * 0.2)));
+  const r = geo.cell * 0.14;
+  const slotX = (slot) => geo.left + (slot + 0.5) * geo.cell;
+  // What the room shows: the slot a shown keepsake belongs in develops through the matte, and its
+  // outline blinks on; a solved shelf lights every slot the same way, each on a roll of its own.
+  for (let slot = 0; slot < n; slot++) {
+    const item = plan.order[slot];
+    const own = rite.at(0x5e1f + slot);
+    const shown = s.hinted.includes(item) ? came(s, s.hintAt[item], 1.1, reduced) : 0;
+    const kept = s.doneAt >= 0 ? own.stair(doneP) : 0;
+    const k = Math.max(shown > 0 ? own.stair(shown) : 0, kept);
+    const hx = slotX(slot);
+    if (k > 0) {
+      g.fillStyle = env.alpha(c.accent2, 0.16);
+      if (k >= 1) g.fillRect(hx - geo.cell * 0.42, geo.shelfY - r * 4.2, geo.cell * 0.84, r * 4.1);
+      else develop(g, rite, hx - geo.cell * 0.42, geo.shelfY - r * 4.2, geo.cell * 0.84, r * 4.1, k);
+    }
+    if (shown > 0 && own.flicker(shown)) {
+      g.strokeStyle = env.alpha(c.accent2, 0.9);
+      g.lineWidth = 1.5;
+      g.setLineDash([3, 3]);
+      g.strokeRect(hx - geo.cell * 0.42, geo.shelfY - r * 4.2, geo.cell * 0.84, r * 4.1);
+      g.setLineDash([]);
+    }
+  }
   g.font = '500 ' + size + 'px system-ui, sans-serif';
   g.textAlign = 'center';
   g.textBaseline = 'bottom';
   for (let slot = 0; slot < n; slot++) {
-    const x = geo.left + (slot + 0.5) * geo.cell;
     const item = s.order[slot];
-    const r = geo.cell * 0.14;
+    const own = rite.at(0x3a7e + item);
+    // A keepsake moved to another slot travels there along the rite's curve -- a hesitation, a
+    // surge, a stutter, a settle -- in held treads of its own stair (the curve sampled at each
+    // tread, never run through), the way the engine's FLIP moves a thing changing places; its
+    // name blinks on at the new place.
+    const p = came(s, s.movedAt[item], 0.9, reduced);
+    const x = slotX(s.from[item]) + (slotX(slot) - slotX(s.from[item])) * own.ease(own.stair(p, own.treads + 3));
     // The keepsake: a small shape, one per item, with its name under the shelf.
     g.fillStyle = env.alpha(c.accent, 0.85);
     g.beginPath();
@@ -570,23 +785,16 @@ function drawShelf(g, w, h, env, plan, s, variant) {
       g.ellipse(x, geo.shelfY - r, r * 1.3, r * 0.7, 0, 0, Math.PI * 2);
     }
     g.fill();
-    g.fillStyle = env.alpha(c.fg, 0.9);
-    g.fillText(names[item], x, geo.shelfY - r * 2.6);
+    if (own.flicker(p)) {
+      g.fillStyle = env.alpha(c.fg, 0.9);
+      g.fillText(names[item], slotX(slot), geo.shelfY - r * 2.6);
+    }
     g.fillStyle = env.alpha(c.muted, 0.7);
     g.font = '500 ' + Math.max(9, size - 3) + 'px system-ui, sans-serif';
     g.textBaseline = 'top';
-    g.fillText(ORDINAL[slot], x, geo.shelfY + h * 0.04);
+    g.fillText(ORDINAL[slot], slotX(slot), geo.shelfY + h * 0.04);
     g.font = '500 ' + size + 'px system-ui, sans-serif';
     g.textBaseline = 'bottom';
-    if (s.hinted.includes(item)) {
-      const right = plan.order.indexOf(item);
-      const hx = geo.left + (right + 0.5) * geo.cell;
-      g.strokeStyle = env.alpha(c.accent2, 0.9);
-      g.lineWidth = 1.5;
-      g.setLineDash([3, 3]);
-      g.strokeRect(hx - geo.cell * 0.42, geo.shelfY - r * 4.2, geo.cell * 0.84, r * 4.1);
-      g.setLineDash([]);
-    }
   }
   // The clues, under the shelf.
   const clueSize = Math.max(10, Math.min(15, Math.round(Math.min(w, h) * 0.034)));
@@ -607,14 +815,14 @@ function drawShelf(g, w, h, env, plan, s, variant) {
 }
 
 function shelfPreview(g, w, h, env, plan) {
-  drawShelf(g, w, h, env, plan, { order: plan.start.slice(), hinted: [], fade: 0 }, env.variant);
+  drawShelf(g, w, h, env, plan, shelfState(plan), env.variant);
 }
 
 function shelfPiece(env, plan) {
   const helps = asked(env).helps;
   const n = plan.items.length;
   const names = plan.items.map((name) => SHORT[name] || name);
-  const s = { order: plan.start.slice(), hinted: [], fade: 0 };
+  const s = shelfState(plan);
   const draw = (c) => drawShelf(c.g, c.w, c.h, c, plan, s, env.variant);
   // The order as the rail holds it, which is what the check judges.
   function orderNow(c) {
@@ -653,7 +861,16 @@ function shelfPiece(env, plan) {
     },
     apply(id, value, c) {
       if (id === 'order' && Array.isArray(value) && value.length === n) {
+        const before = s.order.slice();
         s.order = value.map(Number);
+        // Every keepsake that changed slot sets out from the slot it stood in.
+        for (let slot = 0; slot < n; slot++) {
+          const item = s.order[slot];
+          if (before.indexOf(item) !== slot) {
+            s.from[item] = before.indexOf(item);
+            s.movedAt[item] = s.t;
+          }
+        }
         c.status('left to right: ' + s.order.map((i) => names[i]).join(', '));
       }
       if (id === 'hint') {
@@ -662,6 +879,7 @@ function shelfPiece(env, plan) {
           : undefined;
         if (next !== undefined) {
           s.hinted.push(next);
+          s.hintAt[next] = s.t;
           c.hint();
           c.status('the ' + names[next] + ' belongs ' + ORDINAL[plan.order.indexOf(next)] + ' from the left');
         } else if (s.hinted.length >= helps) {
@@ -673,10 +891,11 @@ function shelfPiece(env, plan) {
       draw(c);
     },
     frame(t, dt, c) {
-      if (c.done) s.fade = Math.min(1, s.fade + dt * 0.6);
+      s.t += dt;
       draw(c);
     },
     end(c) {
+      s.doneAt = s.t;
       c.status(s.order.map((i) => names[i]).join(' - ') + ': kept, and left still');
     }
   };
@@ -735,13 +954,22 @@ function secondLookGeometry(w, h) {
   return { side, cell: side / 3, lefts: [w * 0.07, w * 0.54], top: h * 0.19 };
 }
 
+// The two views as they open: nothing marked, no row shown, nothing revealed, and every mark that
+// comes or goes timed against the piece's clock (-1 is "never").
+function secondLookState() {
+  return { picked: [], hintRow: null, reveal: false, t: 0, markAt: new Array(9).fill(-1), hintAt: -1, revealAt: -1 };
+}
+
 function drawSecondLook(g, w, h, env, plan, s, variant) {
   const c = env.colors;
   const v = variant || PLAIN;
   const geo = secondLookGeometry(w, h);
   const after = secondLookAfter(plan);
   const changed = litBy(plan.pressed, 3);
-  floor(g, w, h, env, 0);
+  const rite = riteOf(env);
+  const reduced = !!env.reduced;
+  const revealP = s.reveal ? came(s, s.revealAt, 2, reduced) : 0;
+  floor(g, w, h, env);
   [plan.before, after].forEach((lamps, view) => {
     const left = geo.lefts[view];
     g.fillStyle = env.alpha(c.bg2, 0.35);
@@ -754,6 +982,18 @@ function drawSecondLook(g, w, h, env, plan, s, variant) {
     g.textAlign = 'center';
     g.textBaseline = 'middle';
     g.fillText(view ? 'after' : 'before', left + geo.side / 2, geo.top * 0.58);
+    if (view === 0 && s.hintRow !== null) {
+      // The row the room has narrowed the search to: its band develops through the matte, and
+      // its outline blinks on.
+      const hp = came(s, s.hintAt, 1.1, reduced);
+      const own = rite.at(0x40c);
+      const k = own.stair(hp);
+      if (k > 0) {
+        g.fillStyle = env.alpha(c.accent, 0.14);
+        if (k >= 1) g.fillRect(left + 3, geo.top + s.hintRow * geo.cell + 3, geo.side - 6, geo.cell - 6);
+        else develop(g, rite, left + 3, geo.top + s.hintRow * geo.cell + 3, geo.side - 6, geo.cell - 6, k);
+      }
+    }
     for (let i = 0; i < 9; i++) {
       const row = Math.floor(i / 3);
       const x = left + (i % 3 + 0.5) * geo.cell;
@@ -775,7 +1015,30 @@ function drawSecondLook(g, w, h, env, plan, s, variant) {
       g.strokeStyle = env.alpha(lamps[i] ? c.accent2 : c.muted, lamps[i] ? 0.9 : 0.6);
       g.lineWidth = 1.5;
       g.stroke();
-      if (view === 0 && s.picked.includes(i) || view === 1 && s.reveal && changed[i]) {
+      // A marked switch (first view) or a revealed change (second view): the ring round the lamp
+      // develops through the matte as a band of cells, and its line blinks on once the band is
+      // there. A mark taken back leaves the same way, down the stair.
+      const own = rite.at(0x2b0 + i + view * 9);
+      let k = 0;
+      let on = false;
+      if (view === 0) {
+        const mp = came(s, s.markAt[i], 0.8, reduced);
+        const marked = s.picked.includes(i);
+        k = marked ? own.stair(mp) : (mp < 1 ? 1 - own.stair(mp) : 0);
+        on = marked ? own.flicker(mp) : own.flicker(1 - mp);
+      } else if (s.reveal && changed[i]) {
+        k = own.stair(revealP);
+        on = own.flicker(revealP);
+      }
+      if (k > 0) {
+        const outer = r * 1.55;
+        g.fillStyle = env.alpha(c.accent, 0.5);
+        develop(g, rite, x - outer, y - outer, outer * 2, outer * 2, k, (px, py) => {
+          const d = (px - x) * (px - x) + (py - y) * (py - y);
+          return d <= outer * outer && d >= r * 1.2 * r * 1.2;
+        });
+      }
+      if (k > 0 && on) {
         g.strokeStyle = c.accent;
         g.lineWidth = 2;
         g.beginPath();
@@ -783,7 +1046,7 @@ function drawSecondLook(g, w, h, env, plan, s, variant) {
         g.stroke();
       }
     }
-    if (view === 0 && s.hintRow !== null) {
+    if (view === 0 && s.hintRow !== null && rite.at(0x40c).flicker(came(s, s.hintAt, 1.1, reduced))) {
       g.strokeStyle = c.accent;
       g.lineWidth = 2;
       g.setLineDash([4, 4]);
@@ -793,11 +1056,13 @@ function drawSecondLook(g, w, h, env, plan, s, variant) {
     g.strokeStyle = env.alpha(c.muted, 0.2 + 0.1 * v.density);
     g.strokeRect(left - 3, geo.top - 3, geo.side + 6, geo.side + 6);
   });
-  caption(g, w, h, env, s.reveal ? 'changed lamps ringed' : 'each press flips its neighbours', h * 0.91, 0.9);
+  // The caption blinks over to its new words when the changes are revealed.
+  caption(g, w, h, env, s.reveal ? 'changed lamps ringed' : 'each press flips its neighbours', h * 0.91,
+    s.reveal && !rite.flicker(revealP) ? 0 : 0.9);
 }
 
 function secondLookPreview(g, w, h, env, plan) {
-  drawSecondLook(g, w, h, env, plan, { picked: [], hintRow: null, reveal: false }, env.variant);
+  drawSecondLook(g, w, h, env, plan, secondLookState(), env.variant);
 }
 
 function secondLookPiece(env, plan) {
@@ -806,8 +1071,13 @@ function secondLookPiece(env, plan) {
   const row = changedRow(plan.pressed);
   const changed = litBy(plan.pressed, 3).filter(Boolean).length;
   const rows = ['top', 'middle', 'bottom'];
-  const s = { picked: [], hintRow: null, reveal: false };
+  const s = secondLookState();
   const draw = (c) => drawSecondLook(c.g, c.w, c.h, c, plan, s, env.variant);
+  // The marks as they change: every switch marked or unmarked by `next` is timed from now.
+  function mark(next) {
+    for (let i = 0; i < 9; i++) if (s.picked.includes(i) !== next.includes(i)) s.markAt[i] = s.t;
+    s.picked = next;
+  }
   return {
     title: secondLookTitle(plan),
     brief: 'Two views of the same nine lamps. Someone pressed exactly two switches between the first and second view. Each press flips that lamp and its neighbours above, below, left and right; a lamp flipped twice stays as it was. Before: ' + secondLookRows(plan.before) + '. After: ' + secondLookRows(after) + '.',
@@ -839,13 +1109,14 @@ function secondLookPiece(env, plan) {
     },
     apply(id, value, c) {
       if (id === 'switches') {
-        s.picked = Array.isArray(value) ? value.slice() : [];
+        mark(Array.isArray(value) ? value.slice() : []);
         c.status(s.picked.length + ' of two switches marked');
       }
       if (id === 'row') c.status('you say the ' + rows[value] + ' row changed most');
       if (id === 'hint') {
         if (s.hintRow === null) {
           s.hintRow = Math.floor(plan.pressed[0] / 3);
+          s.hintAt = s.t;
           c.hint();
         }
         c.status('one of the pressed switches is in the ' + rows[s.hintRow] + ' row');
@@ -870,8 +1141,10 @@ function secondLookPiece(env, plan) {
           c.status('that switch is already marked; choose another');
           return;
         }
-        if (s.picked.length === 2) s.picked.shift();
-        s.picked.push(i);
+        const next = s.picked.slice();
+        if (next.length === 2) next.shift();
+        next.push(i);
+        mark(next);
         if (s.picked.length === 2) c.set('switches', s.picked.slice().sort((a, b) => a - b));
         c.status(s.picked.length + ' of two switches marked in the first view');
         draw(c);
@@ -880,10 +1153,12 @@ function secondLookPiece(env, plan) {
       c.status('tap a lamp in the first view to mark a switch, or compare it with the second view');
     },
     frame(t, dt, c) {
+      s.t += dt;
       draw(c);
     },
     end(c) {
       s.reveal = true;
+      s.revealAt = s.t;
       c.status('two presses changed ' + changed + ' lamps; the ' + rows[row] + ' row changed most');
       draw(c);
     }
@@ -901,28 +1176,19 @@ function dealt(env) {
   return ((Math.imul(env.seed >>> 0, 0x9e3779b1) >>> 29) & 3) === 3 ? 'second-look' : lamps ? 'lamps' : 'shelf';
 }
 
-// How far the room is through its breath, t seconds after this card was painted: twelve seconds to
-// a breath, entered at the point the configuration puts this card at, so that no two rooms on the
-// screen swell together. breath(v, 0) is where the still card stands, so the motion carries on from
-// the picture already on the canvas rather than jumping to another part of the breath (issue #92;
-// js/feed.js has the contract animate is held to).
-function breath(v, t) {
-  const phase = (t / 12 + v.turn) % 1;
-  return (1 - Math.cos(phase * Math.PI * 2)) / 2;
-}
-
 export default {
   id: 'quiet-room',
   needsSky: false,
   paint(ctx, w, h, env) {
     // The breath caught where the configuration caught it, at the size it asks for: the animation
     // below, stopped at zero.
-    room(ctx, w, h, env, breath(env.variant, 0), 0, env.variant.scale);
+    room(ctx, w, h, env, 0);
   },
   // `t` is seconds since the card was painted, and nothing here is drawn from the env's seeded
-  // stream, so the same t always gives the same room.
+  // stream, so the same t always gives the same room: the breath climbs its stairs and the dial
+  // clicks round from wherever t puts them.
   animate(ctx, w, h, env, t) {
-    room(ctx, w, h, env, breath(env.variant, t), 0, env.variant.scale);
+    room(ctx, w, h, env, t);
   },
   spark(env) {
     const kind = dealt(env);

@@ -24,6 +24,7 @@
    `of` -- the periods and the stated beat, or the breath, the target and the question -- and
    piece(env) opens on that rather than rolling another. */
 
+
 const PLAIN = { density: 1, scale: 1, turn: 0 };
 const WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
 const ORDINAL = ['first', 'second', 'third', 'fourth'];
@@ -43,6 +44,9 @@ const THEN = [
   { label: 'later', value: 'later' },
   { label: 'at the same time', value: 'same' }
 ];
+// The escapement: the pair's clock advances in clicks of the rite's ratchet, one tooth-set per
+// TOOTH seconds of the replay, so the swing is handed across in steps and never glides.
+const TOOTH = 0.5;
 
 /* How hard the visitor asked for their puzzles. The persona keeps one difficulty for the whole
    site (js/persona.js) and js/stage.js hands it to a piece on env.difficulty, 1 (gentle) to 5
@@ -64,8 +68,92 @@ function lcmOf(list) {
   return list.reduce((acc, p) => acc * p / gcd(acc, p), 1);
 }
 
-function hallBackground(g, w, h, c, v) {
+/* ---- the rite: how this hall moves ---------------------------------------------------------- */
+
+/* env.rite (ctx.rite inside a piece) is the piece's own roll of how it moves (js/variant.js;
+   js/stage.js, "The rite"). Nothing in the hall moves along a formula or cuts without a rite.
+   The hall's clocks are escapements: the rack's beat and the pair's seconds advance in the
+   ratchet's clicks with backlash, so a pendulum swings in steps -- its angle is still the
+   physics of its period, read off a clock that ticks -- and the beat counter, the replay's dot
+   on the ruler and the trace of the swing's reach all step with it. A picked pendulum is SEALED:
+   a disc develops behind it through the matte, cell by cell in the piece's own pattern, and its
+   ring blinks on; an unpicked one dissolves back down the same ladder. A hint's answer, a run's
+   mark on the ruler and the caption blink on; the spring's stiffness readout counts to its new
+   value in treads and the coils follow it; the light over a solved hall develops through the
+   matte with a flicker, never a wash; and the dust blinks. Every change is read against the
+   piece's own clock, s.t, which frame() advances: a change made at `since` has come came() of
+   its way, which is 1 at once for a visitor who asked for less motion and for whatever stood
+   there from the start. Every trigger rolls a fresh rite (rite.at(k) with the count of that
+   trigger in k), so a second pick, a second run, a second move of the slider composes a different
+   stair, matte and flicker from the first. */
+
+const STILL = {
+  ease: () => 1, stair: () => 1, ratchet: () => 0, flicker: () => 1, matte: () => true,
+  series: (p, n) => Math.max(1, Math.floor(n || 1)), treads: 1, kind: 'none', cell: 4, at: () => STILL
+};
+
+function riteOf(env) {
+  return env && env.rite ? env.rite : STILL;
+}
+
+function came(s, since, span, reduced) {
+  if (reduced || since == null || since < 0) return 1;
+  return Math.max(0, Math.min(1, (s.t - since) / span));
+}
+
+function fract(x) {
+  return x - Math.floor(x);
+}
+
+// A clock read through the escapement: the whole units gone by, and the one under way in the
+// ratchet's clicks. Every unit is a tick of its own roll (rite.at over the unit's number), so no
+// two beats click alike: a different count of teeth, a different backlash, the same clock.
+// Negative time is time before the start and stays as it is.
+function escaped(rite, x) {
+  if (!(x > 0)) return x;
+  const unit = Math.floor(x);
+  return unit + rite.at(0xe5c + unit).ratchet(fract(x));
+}
+
+// The cells of a box the matte lets through at coverage k, filled in the current fillStyle: how a
+// surface changes by its area. Cells are rite.cell px, coarser over a wide box so a frame stays
+// cheap, on a grid fixed to the canvas so the pattern holds still while it grows. `inside` keeps
+// the tiling to a shape within the box. At k >= 1 every cell is let through.
+function develop(g, rite, x0, y0, bw, bh, k, inside, size) {
+  if (k <= 0) return;
+  const cell = size || Math.max(rite.cell, Math.ceil(Math.max(bw, bh) / 28));
+  const cx0 = Math.floor(x0 / cell);
+  const cy0 = Math.floor(y0 / cell);
+  const cx1 = Math.ceil((x0 + bw) / cell);
+  const cy1 = Math.ceil((y0 + bh) / cell);
+  for (let cy = cy0; cy < cy1; cy++) {
+    for (let cx = cx0; cx < cx1; cx++) {
+      const px = cx * cell;
+      const py = cy * cell;
+      if (inside && !inside(px + cell / 2, py + cell / 2)) continue;
+      if (k < 1 && !rite.matte(cx, cy, k)) continue;
+      g.fillRect(px, py, cell, cell);
+    }
+  }
+}
+
+// The light that comes over a solved hall: it develops through the matte from the moment of the
+// solve, blinking on and dropping out the way the rite's flicker has it, and holds.
+function daybreak(g, rite, c, w, h, p, strength) {
+  const own = rite.at(0xdb);
+  const k = own.stair(p);
+  if (k <= 0 || !own.flicker(p)) return;
+  g.fillStyle = c.alpha(c.colors.accent2, strength || 0.1);
+  develop(g, own, 0, 0, w, h, k, null, Math.max(rite.cell, Math.ceil(Math.min(w, h) / 30)));
+}
+
+/* ---- drawing shared by both ----------------------------------------------------------------- */
+
+// The dust: standing where the configuration put it, and every fifth speck blinking out the way
+// the rite's flicker has it, on a roll of its own, so the hall is never quite still.
+function hallBackground(g, w, h, c, v, t) {
   const col = c.colors;
+  const rite = riteOf(c);
   const grad = g.createLinearGradient(0, 0, 0, h);
   grad.addColorStop(0, col.bg2);
   grad.addColorStop(1, col.bg);
@@ -73,6 +161,7 @@ function hallBackground(g, w, h, c, v) {
   g.fillRect(0, 0, w, h);
   g.fillStyle = c.alpha(col.accent, 0.12);
   for (let i = 0, dots = Math.max(8, Math.round(22 * v.density)); i < dots; i++) {
+    if (i % 5 === 0 && !rite.at(0xd0 + (i % 11)).flicker(fract((t || 0) / 3.1 + i * 0.173))) continue;
     g.fillRect(((i * 0.6180339 + v.turn * 0.37) % 1) * w, ((i * 0.7548777) % 1) * h, 1.2, 1.2);
   }
 }
@@ -178,11 +267,16 @@ function rackAngle(period, beat, start = 0) {
 function drawRack(g, w, h, c, plan, s, variant) {
   const v = variant || PLAIN;
   const col = c.colors;
+  const rite = riteOf(c);
+  const reduced = !!c.reduced;
   const n = plan.periods.length;
   const m = Math.min(w, h);
   const size = Math.max(9, Math.min(17, Math.round(m * 0.045)));
   const small = Math.max(8, Math.round(size * 0.85));
-  hallBackground(g, w, h, c, v);
+  hallBackground(g, w, h, c, v, s.t);
+  if (s.doneAt != null && s.doneAt >= 0) daybreak(g, rite, c, w, h, came(s, s.doneAt, 2.4, reduced), 0.1);
+  // The rack's clock, read through the escapement: beats in the ratchet's clicks.
+  const beat = s.beat < 0 ? -1 : escaped(rite, s.beat);
   const barY = h * 0.1;
   const Lmax = h * 0.52 * Math.min(1.08, Math.max(0.88, v.scale));
   const amp = 0.42;
@@ -202,10 +296,30 @@ function drawRack(g, w, h, c, plan, s, variant) {
     g.stroke();
     g.setLineDash([]);
     const start = plan.starts ? plan.starts[i] : 0;
-    const theta = s.beat < 0 ? 0 : amp * rackAngle(p, s.beat, start);
+    const theta = beat < 0 ? 0 : amp * rackAngle(p, beat, start);
+    // A picked pendulum is sealed: a disc develops behind it through the matte by its area, on
+    // the roll of that pick, and its ring blinks on; unpicked, it dissolves back down.
+    const pick = s.picks ? s.picks[i] : null;
+    if (pick) {
+      const own = rite.at(0x100 + i * 64 + (pick.roll % 64));
+      const went = own.stair(came(s, pick.at, 0.9, reduced));
+      const k = pick.on ? went : 1 - went;
+      if (k > 0) {
+        const hx = pivots[i] + Math.sin(theta) * length;
+        const hy = barY + Math.cos(theta) * length;
+        const halo = r * 3.1;
+        g.fillStyle = c.alpha(col.accent2, 0.28);
+        develop(g, own, hx - halo, hy - halo, halo * 2, halo * 2, k,
+          (px, py) => (px - hx) * (px - hx) + (py - hy) * (py - hy) <= halo * halo, Math.max(rite.cell, Math.ceil(halo / 7)));
+      }
+    }
     const at = bob(g, c, pivots[i], barY, length, theta, r, tone);
-    // A picked pendulum wears a ring; a hint's answer is written under the bar.
-    if (s.picked.includes(i)) {
+    // The ring blinks on with the pick; unpicked, it holds a moment, refuses once or twice in the
+    // flicker's dropouts, and is gone -- never a cut.
+    const ringOn = pick && (pick.on
+      ? rite.at(0x100 + i * 64 + (pick.roll % 64)).flicker(came(s, pick.at, 0.9, reduced))
+      : !rite.at(0x100 + i * 64 + (pick.roll % 64)).flicker(came(s, pick.at, 0.9, reduced)));
+    if (ringOn) {
       g.strokeStyle = col.accent2;
       g.lineWidth = 1.5;
       g.setLineDash([3, 3]);
@@ -216,7 +330,10 @@ function drawRack(g, w, h, c, plan, s, variant) {
     }
     text(g, c, p + ' beats', pivots[i], barY + length + r * 4.2, small, c.alpha(col.fg, 0.9));
     text(g, c, 'starts at ' + start, pivots[i], barY + length + r * 4.2 + small * 1.4, small, col.accent2);
-    if (s.shown[i]) text(g, c, s.shown[i], pivots[i], barY + small * 1.3, small, col.accent);
+    // A hint's answer blinks on under the bar.
+    if (s.shown[i] && rite.at(0x200 + i).flicker(came(s, s.shownAt ? s.shownAt[i] : -1, 0.8, reduced))) {
+      text(g, c, s.shown[i], pivots[i], barY + small * 1.3, small, col.accent);
+    }
   });
   // The ruler of beats along the foot, the stated beat marked, the replay's beat on it.
   const left = w * 0.08;
@@ -243,18 +360,18 @@ function drawRack(g, w, h, c, plan, s, variant) {
   g.closePath();
   g.fill();
   text(g, c, 'beat ' + plan.at, ax, rulerY - size * 1.9, small, col.accent2);
-  if (s.beat >= 0) {
-    const bx = left + (right - left) * Math.min(60, s.beat) / 60;
+  if (beat >= 0) {
+    const bx = left + (right - left) * Math.min(60, beat) / 60;
     g.fillStyle = col.fg;
     g.beginPath();
     g.arc(bx, rulerY, Math.max(2, size * 0.2), 0, TAU);
     g.fill();
-    text(g, c, 'beat ' + Math.floor(s.beat), w / 2, h * 0.805, small, c.alpha(col.fg, 0.85));
+    text(g, c, 'beat ' + Math.max(0, Math.floor(beat)), w / 2, h * 0.805, small, c.alpha(col.fg, 0.85));
   } else text(g, c, plan.starts && plan.starts.some((s) => s > 0) ? 'different start beats; all starts head right' : 'all through the centre at beat 0, heading right', w / 2, h * 0.805, small, c.alpha(col.fg, 0.75), 'center', w * 0.9);
 }
 
 function rackBlank() {
-  return { beat: -1, picked: [], shown: {}, to: -1, loop: false };
+  return { beat: -1, picked: [], shown: {}, shownAt: {}, picks: {}, rolls: 0, to: -1, loop: false, t: 0, doneAt: -1 };
 }
 
 function rackPreview(g, w, h, env, plan) {
@@ -322,7 +439,13 @@ function rackPiece(env, plan) {
         } else c.status('choose a meeting beat from 1 to 60');
       }
       if (id === 'which' && Array.isArray(value)) {
-        s.picked = value.map(Number).filter((i) => Number.isInteger(i) && i >= 0 && i < n);
+        const next = value.map(Number).filter((i) => Number.isInteger(i) && i >= 0 && i < n);
+        // Every pendulum whose pick changed seals or unseals itself afresh, on a roll of its own.
+        for (let i = 0; i < n; i++) {
+          const on = next.includes(i);
+          if (on !== s.picked.includes(i)) s.picks[i] = { on, at: s.t, roll: s.rolls++ };
+        }
+        s.picked = next;
         c.status(s.picked.length ? 'at beat ' + plan.at + ': ' + s.picked.map(name).join(', ') : 'none picked for beat ' + plan.at);
       }
       if (id === 'hint') {
@@ -331,6 +454,7 @@ function rackPiece(env, plan) {
         if (next >= 0) {
           const yes = through.includes(next);
           s.shown[next] = yes ? 'through at ' + plan.at : 'not at ' + plan.at;
+          s.shownAt[next] = s.t;
           c.hint();
           c.status('at beat ' + plan.at + ' ' + name(next) + (yes ? ' is coming through the centre heading right' : ' is not'));
         } else if (given >= helps) {
@@ -342,6 +466,8 @@ function rackPiece(env, plan) {
       draw(c);
     },
     frame(t, dt, c) {
+      s.t += Math.max(0, dt);
+      if (c.done && s.doneAt < 0) s.doneAt = s.t;
       if (s.to >= 0) {
         if (c.reduced) s.beat = s.to;
         else {
@@ -354,6 +480,7 @@ function rackPiece(env, plan) {
     end(c) {
       s.to = meet;
       s.beat = 0;
+      if (s.doneAt < 0) s.doneAt = s.t;
       c.status('first shared crossing: beat ' + meet + '; it repeats every ' + lcmOf(plan.periods) + ' beats. Change the meeting beat to inspect the rack at another point');
       draw(c);
     }
@@ -423,6 +550,17 @@ function springMotion(k, time) {
   };
 }
 
+// The replay's seconds, read through the escapement in teeth of TOOTH seconds.
+function replayTime(rite, t) {
+  return escaped(rite, t / TOOTH) * TOOTH;
+}
+
+// The stiffness as drawn: counting from where it stood to where the slider has it, in treads.
+function stiffnessShown(s, rite, reduced) {
+  if (s.kFrom == null || s.kAt == null || s.kAt < 0) return s.k;
+  return Math.round(s.kFrom + (s.k - s.kFrom) * rite.at(0x400 + (s.sets || 0)).stair(came(s, s.kAt, 0.8, reduced)));
+}
+
 function spring(g, c, a, b, radius, k, v) {
   const dx = b.x - a.x;
   const dy = b.y - a.y;
@@ -445,9 +583,11 @@ function spring(g, c, a, b, radius, k, v) {
 }
 
 // The ruler of breaths along the foot: the target line, past runs as marks, and the swing sizes
-// of the run being replayed traced over it.
-function springRuler(g, w, h, c, plan, s, v, size) {
+// of the run being replayed traced over it. `now` is the replay's time as the escapement reads it.
+function springRuler(g, w, h, c, plan, s, v, size, now) {
   const col = c.colors;
+  const rite = riteOf(c);
+  const reduced = !!c.reduced;
   const left = w * 0.08;
   const right = w * 0.92;
   const top = h * 0.75;
@@ -477,8 +617,9 @@ function springRuler(g, w, h, c, plan, s, v, size) {
   g.stroke();
   g.setLineDash([]);
   text(g, c, 'cross here', tx, top - size * 0.9, Math.max(8, size * 0.85), col.accent2);
-  // Past runs: a mark at the crossing each stiffness made.
+  // Past runs: a mark at the crossing each stiffness made, blinking on when it was logged.
   for (const run of s.runs) {
+    if (!rite.at(0x300 + run.k).flicker(came(s, run.at == null ? -1 : run.at, 0.9, reduced))) continue;
     const x = xOf(Math.min(span, run.tau));
     g.fillStyle = c.alpha(col.fg, 0.85);
     g.beginPath();
@@ -490,7 +631,7 @@ function springRuler(g, w, h, c, plan, s, v, size) {
     text(g, c, (run.tau > span ? '>' : '') + run.k, x, top + size * 0.5, Math.max(8, size * 0.8), c.alpha(col.fg, 0.8));
   }
   if (s.replay) {
-    const f = Math.min(span, s.replay.t);
+    const f = Math.min(span, now);
     const samples = Math.max(40, Math.round(90 * v.density));
     for (const [key, color, dashed] of [['firstReach', col.accent2, false], ['secondReach', col.accent, true]]) {
       g.strokeStyle = color;
@@ -513,15 +654,20 @@ function springRuler(g, w, h, c, plan, s, v, size) {
 function drawSpring(g, w, h, c, plan, s, variant) {
   const v = variant || PLAIN;
   const col = c.colors;
+  const rite = riteOf(c);
+  const reduced = !!c.reduced;
   const m = Math.min(w, h);
   const size = Math.max(9, Math.min(17, Math.round(m * 0.04)));
   const barY = h * 0.1;
   const length = Math.min(h * 0.4, w * 0.4) * Math.min(1.08, Math.max(0.88, v.scale));
   const amplitude = 0.2;
   const radius = Math.max(3, m * 0.024 * v.scale);
-  hallBackground(g, w, h, c, v);
+  hallBackground(g, w, h, c, v, s.t);
+  if (s.doneAt != null && s.doneAt >= 0) daybreak(g, rite, c, w, h, came(s, s.doneAt, 2.4, reduced), 0.1);
   bar(g, c, w, barY, m);
-  const motion = s.replay ? springMotion(s.replay.k, s.replay.t) : { first: 1, second: 0, firstReach: 1, secondReach: 0 };
+  // The replay's clock, read through the escapement: the pair is handed its swing in clicks.
+  const now = s.replay ? replayTime(rite, s.replay.t) : 0;
+  const motion = s.replay ? springMotion(s.replay.k, now) : { first: 1, second: 0, firstReach: 1, secondReach: 0 };
   const pivots = [w * 0.3, w * 0.7];
   g.strokeStyle = c.alpha(col.muted, 0.3);
   g.lineWidth = 1;
@@ -533,7 +679,7 @@ function drawSpring(g, w, h, c, plan, s, variant) {
     g.stroke();
   }
   g.setLineDash([]);
-  const k = s.k;
+  const k = stiffnessShown(s, rite, reduced);
   const a = { x: pivots[0] + Math.sin(amplitude * motion.first) * length, y: barY + Math.cos(amplitude * motion.first) * length };
   const b = { x: pivots[1] + Math.sin(amplitude * motion.second) * length, y: barY + Math.cos(amplitude * motion.second) * length };
   spring(g, c, a, b, radius, k, v);
@@ -543,11 +689,11 @@ function drawSpring(g, w, h, c, plan, s, variant) {
   text(g, c, 'second: ' + Math.round(motion.secondReach * 100) + '%', pivots[1], h * 0.62, size, c.alpha(col.fg, 0.9));
   text(g, c, 'spring at ' + k + ' of 100', w / 2, h * 0.055, size, c.alpha(col.fg, 0.9));
   text(g, c, 'one breath is ' + plan.breath + ' seconds; alone, each swings once in ' + OWN, w / 2, h * 0.655, Math.max(8, size * 0.85), c.alpha(col.muted, 0.95), 'center', w * 0.9);
-  springRuler(g, w, h, c, plan, s, v, size);
+  springRuler(g, w, h, c, plan, s, v, size, now);
 }
 
 function springBlank(plan) {
-  return { k: plan.open, runs: [], probes: [], replay: null, loop: false };
+  return { k: plan.open, kFrom: plan.open, kAt: -1, sets: 0, runs: [], probes: [], replay: null, loop: false, t: 0, doneAt: -1 };
 }
 
 function springPreview(g, w, h, env, plan) {
@@ -587,7 +733,7 @@ function springPiece(env, plan) {
       const tau = crossTime(k);
       const onMark = Math.abs(tau - sol.target) <= sol.tol;
       const thenRight = c.value('then') === then;
-      if (!s.runs.some((run) => run.k === k)) s.runs.push({ k, tau });
+      if (!s.runs.some((run) => run.k === k)) s.runs.push({ k, tau, at: s.t });
       s.replay = { k, t: 0 };
       s.loop = false;
       const took = 'crosses in ' + breathsOf(tau) + ' breaths';
@@ -606,7 +752,7 @@ function springPiece(env, plan) {
         const next = tried.length < helps ? probes.find((k) => !s.runs.some((run) => run.k === k)) : undefined;
         if (next !== undefined) {
           const tau = crossTime(next);
-          s.runs.push({ k: next, tau });
+          s.runs.push({ k: next, tau, at: s.t });
           s.probes.push(next);
           c.hint();
           c.status('a spring at ' + next + ' crosses in ' + breathsOf(tau) + ' breaths; its mark is on the ruler');
@@ -618,13 +764,24 @@ function springPiece(env, plan) {
       }
       if (id === 'spring') {
         const k = Number(value);
-        if (Number.isFinite(k)) s.k = Math.max(1, Math.min(100, Math.round(k)));
+        if (Number.isFinite(k)) {
+          const next = Math.max(1, Math.min(100, Math.round(k)));
+          if (next !== s.k) {
+            // The readout counts to the new stiffness in treads, on a roll of this move's own.
+            s.kFrom = stiffnessShown(s, riteOf(c), !!c.reduced);
+            s.k = next;
+            s.kAt = s.t;
+            s.sets += 1;
+          }
+        }
         c.status('spring at ' + s.k + (s.k < 20 ? ', soft' : s.k > 75 ? ', stiff' : '') + '; let go to see the crossing');
       }
       if (id === 'then') c.status('a ' + plan.ask + ' spring, you say, crosses ' + (value === 'same' ? 'at the same time' : value));
       draw(c);
     },
     frame(t, dt, c) {
+      s.t += Math.max(0, dt);
+      if (c.done && s.doneAt < 0) s.doneAt = s.t;
       if (s.replay) {
         s.replay.t += Math.max(0, dt);
         if (s.replay.t > span) {
@@ -637,6 +794,7 @@ function springPiece(env, plan) {
     end(c) {
       s.loop = true;
       s.replay = { k: s.replay ? s.replay.k : sol.value, t: 0 };
+      if (s.doneAt < 0) s.doneAt = s.t;
       c.status('the swing crosses in ' + WORDS[plan.breaths] + ' breaths and comes back; the pair keeps trading it');
       draw(c);
     }
@@ -668,18 +826,22 @@ export default {
     if (d.spring) springPreview(g, w, h, env, d.plan);
     else rackPreview(g, w, h, env, d.plan);
   },
+  // A card in motion: the same clocks the piece keeps, read off t through the escapement, so the
+  // card ticks the way the piece will. At t = 0 it is the still picture paint left behind.
   animate(g, w, h, env, t) {
     const v = env.variant || PLAIN;
     const d = deal(env);
     if (d.spring) {
       const plan = d.plan;
       const s = springBlank(plan);
+      s.t = env.reduced ? 0 : t;
       s.replay = { k: plan.open, t: env.reduced ? v.turn * plan.breath * 2 : (t * 0.6 + v.turn * plan.breath * 2) % ((plan.breaths + 1.5) * plan.breath) };
       drawSpring(g, w, h, env, plan, s, v);
       return;
     }
     const plan = d.plan;
     const s = rackBlank();
+    s.t = env.reduced ? 0 : t;
     s.beat = env.reduced ? v.turn * 12 : (t * 1.5 + v.turn * 12) % 60;
     drawRack(g, w, h, env, plan, s, v);
   },

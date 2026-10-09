@@ -41,9 +41,11 @@ main {
   background:
     radial-gradient(130vw 90vh at var(--sky-x, 12%) var(--sky-y, -14%), color-mix(in oklab, var(--bg2) 80%, transparent) 0%, transparent 62%),
     radial-gradient(70vw 60vh at 100% 55%, color-mix(in oklab, var(--md-sys-color-primary) 9%, transparent) 0%, transparent 60%);
+  // The wash is a stair: the sky jumps corner to corner in rolled treads (README: "Motion
+  // axiom"), the weather of the page moving the way everything else on it does.
   transition:
-    --sky-x var(--motion-slow, 1200ms) var(--ease-shift),
-    --sky-y var(--motion-slow, 1200ms) var(--ease-shift);
+    --sky-x var(--motion-slow, 1200ms) var(--ease-stair),
+    --sky-y var(--motion-slow, 1200ms) var(--ease-stair);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -101,7 +103,7 @@ main {
   color: var(--md-sys-color-on-surface);
   @include type.scale(title-large);
   @include type.rite;
-  font-size: 1.5rem;
+  --role-size: 1.5rem;
 }
 
 .prose h2:first-child {

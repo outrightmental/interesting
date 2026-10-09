@@ -26,6 +26,7 @@ const PLACE = ['nearest', 'second nearest', 'third nearest', 'fourth nearest', '
 const LETTERS = 'ABCDEFG';
 const SKIES = 'ABCD';
 const PLAIN = { density: 1, scale: 1, turn: 0 };
+const TAU = Math.PI * 2;
 // How far the nearest and the farthest light shift between the two views, in hundredths of a view.
 const SHIFT_NEAR = 26;
 const SHIFT_FAR = 4;
@@ -39,6 +40,110 @@ function asked(env) {
   const said = env && env.difficulty ? Number(env.difficulty.level) : NaN;
   const level = Number.isFinite(said) ? Math.max(1, Math.min(5, Math.round(said))) : 3;
   return { level, helps: 6 - level, margin: Math.max(0, 3 - level) };
+}
+
+/* ---- the rite: how this module moves ------------------------------------------------------- */
+
+/* env.rite (ctx.rite inside a piece) is the piece's own roll of how it moves (js/variant.js;
+   js/stage.js, "The rite"). Nothing drawn in this sky moves along a formula or cuts without a
+   rite: a light twinkles up a stair and back down it, never a sine; a light that is tapped or
+   hinted gets its ring in the ratchet's clicks and its word by a blink; the light under the
+   pointer is a halo that develops cell by cell through the piece's own matte and unmakes the same
+   way; a sky that is chosen fills through the matte, a sky marked as a decoy is veiled through it,
+   and the sky that turns out to be yours is lit through it with a flicker; the visitor's own sky,
+   once the puzzle is solved, flips in treads and turns in rite.ratchet's clicks to meet it; the
+   postcard's finale draws each light's travel in treads. Every change is read against the piece's
+   own clock, s.t, which frame() advances: a change made at `since` has come came() of its way,
+   which is 1 at once for a visitor who asked for less motion, and for whatever stood there from
+   the start (since < 0). Each light and each sky moves on a roll of its own (rite.at), so no two
+   step together. */
+
+const STILL = {
+  ease: () => 1, stair: () => 1, ratchet: () => 0, flicker: () => 1, matte: () => true,
+  treads: 1, kind: 'none', cell: 4, at: () => STILL
+};
+
+function riteOf(env) {
+  return env && env.rite ? env.rite : STILL;
+}
+
+// The rite rolled afresh for one thing this module moves, kept with the rite it was rolled from so
+// a frame rolls each one once rather than thirty times a second.
+const OWN = new WeakMap();
+function own(rite, n) {
+  let kept = OWN.get(rite);
+  if (!kept) {
+    kept = new Map();
+    OWN.set(rite, kept);
+  }
+  let r = kept.get(n);
+  if (!r) {
+    r = rite.at(n);
+    kept.set(n, r);
+  }
+  return r;
+}
+
+function came(s, since, span, reduced) {
+  if (reduced || since == null || since < 0) return 1;
+  return Math.max(0, Math.min(1, (s.t - since) / span));
+}
+
+function fract(x) {
+  return x - Math.floor(x);
+}
+
+// A breath: up the stair and back down it, `period` seconds round, entered `offset` of the way
+// round -- uneven treads up and uneven treads down, never a cosine.
+function breath(rite, t, period, offset, n) {
+  const phase = fract(t / period + offset);
+  return phase < 0.5 ? rite.stair(phase * 2, n) : 1 - rite.stair((phase - 0.5) * 2, n);
+}
+
+// How far a thing that is `on` has come up its stair since onAt, or back down it since offAt.
+function level(rite, s, on, onAt, offAt, span, reduced) {
+  if (on) return rite.stair(came(s, onAt, span, reduced));
+  if (offAt == null || offAt < 0) return 0;
+  return 1 - rite.stair(came(s, offAt, span, reduced));
+}
+
+// The cells of a box that the matte lets through at coverage k, filled in the current fillStyle:
+// how a surface changes by its area. Cells are rite.cell px, coarser over a wide box so a frame
+// stays cheap, on a grid fixed to the canvas so the pattern holds still while it grows. `inside`
+// keeps the tiling to a shape within the box, and `across` is how many cells the box is at most
+// (28 unless given).
+function develop(g, rite, x0, y0, bw, bh, k, inside, across) {
+  if (k <= 0) return;
+  const cell = Math.max(rite.cell, Math.ceil(Math.max(bw, bh) / (across || 28)));
+  const cx0 = Math.floor(x0 / cell);
+  const cy0 = Math.floor(y0 / cell);
+  const cx1 = Math.ceil((x0 + bw) / cell);
+  const cy1 = Math.ceil((y0 + bh) / cell);
+  for (let cy = cy0; cy < cy1; cy++) {
+    for (let cx = cx0; cx < cx1; cx++) {
+      const px = cx * cell;
+      const py = cy * cell;
+      if (inside && !inside(px + cell / 2, py + cell / 2)) continue;
+      if (k < 1 && !rite.matte(cx, cy, k)) continue;
+      // The cell, clipped to the box: the grid is the canvas's, the surface is the box's.
+      const qx = Math.max(px, x0);
+      const qy = Math.max(py, y0);
+      g.fillRect(qx, qy, Math.min(px + cell, x0 + bw) - qx, Math.min(py + cell, y0 + bh) - qy);
+    }
+  }
+}
+
+// A disc that is `k` of the way to being there: solid once it is, its cells before that.
+function disc(g, rite, x, y, r, k, fill) {
+  if (k <= 0) return;
+  g.fillStyle = fill;
+  if (k >= 1) {
+    g.beginPath();
+    g.arc(x, y, r, 0, TAU);
+    g.fill();
+    return;
+  }
+  develop(g, rite, x - r, y - r, r * 2, r * 2, k, (px, py) => (px - x) * (px - x) + (py - y) * (py - y) <= r * r, 16);
 }
 
 /* ---- shared arithmetic ---------------------------------------------------------------------- */
@@ -140,27 +245,36 @@ function links(g, side, c, pts, reach, boost) {
   }
 }
 
-function star(g, c, p, tw, glow) {
-  const tone = p.hot ? c.colors.accent2 : c.colors.accent;
+// How bright the i-th light of a sky is at t: a breath on its own roll, 0.8 to 1 in treads.
+function twinkle(rite, seed, i, t) {
+  return 0.8 + 0.2 * breath(own(rite, seed + i), t, 2.6 + (i % 4) * 0.6, i * 0.23);
+}
+
+// One light: its resting halo, and over that -- when it is `hot` of the way to being lit -- a
+// hotter halo that develops through the matte; then the core.
+function star(g, c, p, tw, glow, rite, hot) {
   const r = 9 * tw * glow;
   const halo = g.createRadialGradient(p.x, p.y, 0, p.x, p.y, r);
-  halo.addColorStop(0, c.alpha(tone, 0.5));
-  halo.addColorStop(1, c.alpha(tone, 0));
+  halo.addColorStop(0, c.alpha(c.colors.accent, 0.5));
+  halo.addColorStop(1, c.alpha(c.colors.accent, 0));
   g.fillStyle = halo;
   g.beginPath();
-  g.arc(p.x, p.y, r, 0, Math.PI * 2);
+  g.arc(p.x, p.y, r, 0, TAU);
   g.fill();
+  if (hot > 0) disc(g, rite || STILL, p.x, p.y, r * 1.3, hot, c.alpha(c.colors.accent2, 0.45));
   g.fillStyle = c.alpha(c.colors.fg, 0.95);
   g.beginPath();
-  g.arc(p.x, p.y, 1.6 + 0.6 * tw, 0, Math.PI * 2);
+  g.arc(p.x, p.y, 1.6 + 0.6 * tw, 0, TAU);
   g.fill();
 }
 
-function ring(g, c, x, y, a, r) {
+// A ring round a light, `sweep` of the way round from the top: it arrives in clicks.
+function ring(g, c, x, y, a, r, sweep) {
+  if (sweep <= 0) return;
   g.strokeStyle = c.alpha(c.colors.accent2, a);
   g.lineWidth = 1.5;
   g.beginPath();
-  g.arc(x, y, r, 0, Math.PI * 2);
+  g.arc(x, y, r, -Math.PI / 2, -Math.PI / 2 + Math.min(1, sweep) * TAU);
   g.stroke();
 }
 
@@ -205,8 +319,20 @@ function postcardLayout(w, h) {
   return { lefts: [w * 0.04, w * 0.52], width: w * 0.44, top: h * 0.15, height: h * 0.62 };
 }
 
+// The state the postcard is drawn from. Every moment is on the piece's own clock, and -1 is
+// "from the start" (so a preview, and a light never touched, stand still).
+function postcardState(n, t) {
+  return {
+    t, order: null, orderAt: -1, hinted: [], hintAt: new Array(n).fill(-1),
+    taps: [], tapAt: new Array(n).fill(-1), cleared: [], clearedAt: -1,
+    lit: -1, litAt: -1, wasLit: -1, wasLitAt: -1, doneAt: -1
+  };
+}
+
 function postcardScene(g, w, h, c, plan, s, v) {
   const box = postcardLayout(w, h);
+  const rite = riteOf(c);
+  const reduced = !!c.reduced;
   const n = plan.points.length;
   const size = Math.max(10, Math.min(18, Math.round(Math.min(w, h) * 0.04)));
   const glow = v.scale * Math.max(0.55, Math.min(1, box.width / 300));
@@ -248,35 +374,64 @@ function postcardScene(g, w, h, c, plan, s, v) {
     g.rect(left, box.top, box.width, box.height);
     g.clip();
     plan.points.forEach((p, i) => {
+      const mine = own(rite, 0x11 + i);
       const shift = pane === 1 ? shiftOf(plan.ranks[i], n) : 0;
       const x = left + (p.x - shift) / 100 * box.width;
       const y = box.top + p.y / 100 * box.height;
-      if (pane === 1 && s.fade > 0) {
-        // The finale: the shift itself, drawn as the line each light travelled.
-        g.strokeStyle = c.alpha(c.colors.accent2, 0.7 * s.fade);
-        g.lineWidth = 1;
-        g.beginPath();
-        g.moveTo(left + p.x / 100 * box.width, y);
-        g.lineTo(x, y);
-        g.stroke();
+      if (pane === 1 && s.doneAt >= 0) {
+        // The finale: the shift itself, drawn as the line each light travelled, in treads from
+        // where the left eye had it, each light on its own roll and a little after the last.
+        const fp = came(s, s.doneAt + i * 0.15, 1.3, reduced);
+        if (fp > 0 && mine.flicker(fp)) {
+          const x0 = left + p.x / 100 * box.width;
+          g.strokeStyle = c.alpha(c.colors.accent2, 0.7);
+          g.lineWidth = 1;
+          g.beginPath();
+          g.moveTo(x0, y);
+          g.lineTo(x0 + (x - x0) * mine.stair(fp, 6), y);
+          g.stroke();
+        }
       }
-      const tw = s.t ? 0.8 + 0.2 * Math.sin(s.t * 1.7 + i * 1.3) : 1;
-      star(g, c, { x, y, hot: s.lit === i }, tw, glow);
+      const tw = twinkle(rite, 0x7, i, s.t);
+      // The light last touched: its halo develops through the matte, and the one touched before
+      // it gives its halo back the same way.
+      const hot = i === s.lit ? mine.stair(came(s, s.litAt, 0.6, reduced))
+        : i === s.wasLit ? 1 - mine.stair(came(s, s.wasLitAt, 0.6, reduced)) : 0;
+      star(g, c, { x, y }, tw, glow, mine, hot);
       font(g, size * 0.9, 600);
       g.textAlign = 'left';
-      g.fillStyle = c.alpha(s.lit === i ? c.colors.accent2 : c.colors.fg, 0.9);
+      g.fillStyle = c.alpha(hot >= 0.5 ? c.colors.accent2 : c.colors.fg, 0.9);
       g.fillText(LETTERS[i], x + size * 0.55, y - size * 0.6);
-      const tapped = s.taps ? s.taps.indexOf(i) : -1;
+      const tapped = s.taps.indexOf(i);
+      const gone = s.cleared.indexOf(i);
       if (tapped >= 0) {
-        ring(g, c, x, y, 0.8, size * 0.6);
-        font(g, size * 0.7);
-        g.fillStyle = c.alpha(c.colors.accent2, 0.95);
-        g.fillText(String(tapped + 1), x + size * 0.55, y + size * 0.55);
-      } else if (s.hinted && s.hinted.includes(i)) {
-        ring(g, c, x, y, 0.9, size * 0.7);
-        font(g, size * 0.75);
-        g.fillStyle = c.alpha(c.colors.accent2, 0.95);
-        g.fillText(PLACE[plan.ranks[i]], x + size * 0.55, y + size * 0.6);
+        // A tapped light: its ring comes round in clicks and its place blinks on.
+        const tp = came(s, s.tapAt[i], 0.7, reduced);
+        ring(g, c, x, y, 0.8, size * 0.6, mine.ratchet(tp));
+        if (mine.flicker(tp)) {
+          font(g, size * 0.7);
+          g.fillStyle = c.alpha(c.colors.accent2, 0.95);
+          g.fillText(String(tapped + 1), x + size * 0.55, y + size * 0.55);
+        }
+      } else if (gone >= 0 && s.clearedAt >= 0) {
+        // The order complete: the rings go back round the way they came, with one flicker back.
+        const cp = came(s, s.clearedAt, 0.7, reduced);
+        if (cp < 1) {
+          ring(g, c, x, y, 0.8, size * 0.6, 1 - mine.ratchet(cp));
+          if (!mine.flicker(cp)) {
+            font(g, size * 0.7);
+            g.fillStyle = c.alpha(c.colors.accent2, 0.95);
+            g.fillText(String(gone + 1), x + size * 0.55, y + size * 0.55);
+          }
+        }
+      } else if (s.hinted.includes(i)) {
+        const hp = came(s, s.hintAt[i], 1, reduced);
+        ring(g, c, x, y, 0.9, size * 0.7, mine.ratchet(hp));
+        if (mine.flicker(hp)) {
+          font(g, size * 0.75);
+          g.fillStyle = c.alpha(c.colors.accent2, 0.95);
+          g.fillText(PLACE[plan.ranks[i]], x + size * 0.55, y + size * 0.6);
+        }
       }
     });
     g.restore();
@@ -284,13 +439,15 @@ function postcardScene(g, w, h, c, plan, s, v) {
   font(g, size);
   g.textAlign = 'center';
   g.fillStyle = c.alpha(c.colors.fg, 0.8);
-  if (s.order) g.fillText('nearest to farthest: ' + s.order.map((i) => LETTERS[i]).join('  '), w / 2, h * 0.86, w * 0.9);
+  if (s.order && own(rite, 0x0d).flicker(came(s, s.orderAt, 0.9, reduced))) {
+    g.fillText('nearest to farthest: ' + s.order.map((i) => LETTERS[i]).join('  '), w / 2, h * 0.86, w * 0.9);
+  }
   g.fillStyle = c.alpha(c.colors.muted, 0.85);
   g.fillText('the same lights; the nearer, the farther it shifts', w / 2, h * 0.94, w * 0.92);
 }
 
 function postcardPreview(g, w, h, env, plan, t) {
-  postcardScene(g, w, h, env, plan, { t, fade: 0, lit: -1 }, dials(env));
+  postcardScene(g, w, h, env, plan, postcardState(plan.points.length, t), dials(env));
 }
 
 function postcardPiece(env, plan) {
@@ -298,9 +455,14 @@ function postcardPiece(env, plan) {
   const n = plan.points.length;
   const v = dials(env);
   const answer = postcardOrder(plan);
-  const s = { t: 0, order: range(n), hinted: [], taps: [], fade: 0, lit: -1 };
+  const s = postcardState(n, 0);
+  s.order = range(n);
   const draw = (c) => postcardScene(c.g, c.w, c.h, c, plan, s, v);
   const inPlace = (order) => order.filter((item, i) => item === answer[i]).length;
+  function settle(order) {
+    s.order = order.slice();
+    s.orderAt = s.t;
+  }
   return {
     title: postcardTitle(plan),
     brief: 'A reading by two eyes. Two views of the same ' + WORDS[n] + ' lights, from a left eye and a right eye a step apart. The nearer a light is, the farther it shifts between the views; the farthest barely moves. Nothing else about them changes.',
@@ -328,7 +490,7 @@ function postcardPiece(env, plan) {
     },
     apply(id, value, c) {
       if (id === 'order' && isPerm(value, n)) {
-        s.order = value.slice();
+        settle(value);
         c.status('nearest to farthest: ' + s.order.map((i) => LETTERS[i]).join(', '));
       }
       if (id === 'hint') {
@@ -337,6 +499,7 @@ function postcardPiece(env, plan) {
           : undefined;
         if (next !== undefined) {
           s.hinted.push(next);
+          s.hintAt[next] = s.t;
           c.hint();
           c.status('light ' + LETTERS[next] + ' is the ' + PLACE[plan.ranks[next]]);
         } else if (s.hinted.length >= helps) {
@@ -362,15 +525,23 @@ function postcardPiece(env, plan) {
         }
       });
       if (best < 0 || bd > Math.min(c.w, c.h) * 0.08) return;
-      s.lit = best;
+      if (s.lit !== best) {
+        s.wasLit = s.lit;
+        s.wasLitAt = s.t;
+        s.lit = best;
+        s.litAt = s.t;
+      }
       if (s.taps.includes(best)) {
         c.status('light ' + LETTERS[best] + ' is already in your order; keep going');
         draw(c);
         return;
       }
       s.taps.push(best);
+      s.tapAt[best] = s.t;
       if (s.taps.length === n) {
-        s.order = s.taps.slice();
+        settle(s.taps);
+        s.cleared = s.taps;
+        s.clearedAt = s.t;
         s.taps = [];
         c.set('order', s.order.slice());
         c.status('nearest to farthest: ' + s.order.map((i) => LETTERS[i]).join(', ') + '; check it');
@@ -381,7 +552,7 @@ function postcardPiece(env, plan) {
     },
     frame(t, dt, c) {
       if (!c.reduced) s.t += dt;
-      if (c.done) s.fade = Math.min(1, s.fade + dt * (c.reduced ? 4 : 1));
+      if (c.done && s.doneAt < 0) s.doneAt = s.t;
       draw(c);
     },
     end(c) {
@@ -523,17 +694,36 @@ function whichLayout(w, h) {
   return { side, left, top, cells };
 }
 
-// One sky in a square: its frame, its lights and the lines between them.
+// One sky in a square: its frame, its lights and the lines between them. opts.fill is a surface
+// that has developed `opts.fillK` of the way over the box, under the lights; opts.lit a second,
+// brighter one that has come `opts.litK` of the way over that (the sky that turns out to be yours,
+// which is the chosen one already, so it needs a surface of its own on a roll of its own,
+// opts.litRite); opts.veil one that has come `opts.veilK` of the way over them (a decoy's dimming);
+// all by their area, through the matte, never by alpha. The lights twinkle on the rolls opts.seed
+// and up.
 function skyBox(g, c, pts, x, y, side, v, opts) {
-  g.fillStyle = c.alpha(c.colors.bg, opts.dim ? 0.8 : 0.55);
+  const rite = opts.rite || STILL;
+  g.fillStyle = c.alpha(c.colors.bg, 0.55);
   g.fillRect(x, y, side, side);
+  if (opts.fill && opts.fillK > 0) {
+    g.fillStyle = opts.fill;
+    develop(g, rite, x, y, side, side, opts.fillK, null, 12);
+  }
+  if (opts.lit && opts.litK > 0) {
+    g.fillStyle = opts.lit;
+    develop(g, opts.litRite || rite, x, y, side, side, opts.litK, null, 16);
+  }
   g.strokeStyle = opts.border || c.alpha(c.colors.muted, 0.7);
   g.lineWidth = opts.width || 1;
   g.strokeRect(x, y, side, side);
   const at = pts.map((p) => ({ x: x + p.x / 100 * side, y: y + p.y / 100 * side }));
-  const glow = v.scale * Math.max(0.45, Math.min(1, side / 260)) * (opts.dim ? 0.6 : 1);
-  links(g, side, c, at, 0.5, opts.dim ? 0.5 : 1);
-  at.forEach((p, i) => star(g, c, p, opts.tw ? 0.8 + 0.2 * Math.sin(opts.tw + i * 1.3) : 1, glow));
+  const glow = v.scale * Math.max(0.45, Math.min(1, side / 260));
+  links(g, side, c, at, 0.5, 1);
+  at.forEach((p, i) => star(g, c, p, twinkle(rite, opts.seed || 0, i, opts.t || 0), glow, rite, 0));
+  if (opts.veil && opts.veilK > 0) {
+    g.fillStyle = opts.veil;
+    develop(g, rite, x, y, side, side, opts.veilK, null, 12);
+  }
   const size = Math.max(9, Math.min(16, Math.round(side * 0.11)));
   if (opts.label) {
     font(g, size, 600);
@@ -551,8 +741,34 @@ function skyBox(g, c, pts, x, y, side, v, opts) {
   }
 }
 
+// The state the four skies are drawn from; -1 is "from the start".
+function whichState(t) {
+  return {
+    t, choice: -1, choiceAt: -1, wasChoice: -1, wasChoiceAt: -1, turns: 1, mirror: false,
+    hinted: [], hintAt: [-1, -1, -1, -1], doneAt: -1, live: false, saidAt: -1
+  };
+}
+
+// The visitor's own sky once the puzzle is solved: flipped left for right in treads, if it was
+// flipped, then turned clockwise in the ratchet's clicks to lie as the true sky lies.
+function reference(plan, rite, s, reduced) {
+  if (s.doneAt < 0) return plan.points;
+  const fp = plan.mirror ? own(rite, 0xf11).stair(came(s, s.doneAt, 1, reduced)) : 0;
+  const tp = came(s, s.doneAt + (plan.mirror ? 1 : 0), 2.4, reduced);
+  const ang = own(rite, 0x7a7).ratchet(tp) * plan.turns * Math.PI / 2;
+  const cos = Math.cos(ang);
+  const sin = Math.sin(ang);
+  return plan.points.map((p) => {
+    const dx = (p.x - 50) * (1 - 2 * fp);
+    const dy = p.y - 50;
+    return { x: 50 + dx * cos - dy * sin, y: 50 + dx * sin + dy * cos };
+  });
+}
+
 function whichScene(g, w, h, c, plan, s, v) {
   const lay = whichLayout(w, h);
+  const rite = riteOf(c);
+  const reduced = !!c.reduced;
   const size = Math.max(10, Math.min(18, Math.round(Math.min(w, h) * 0.04)));
   backdrop(g, w, h, c);
   dust(g, w, h, c, v);
@@ -564,28 +780,39 @@ function whichScene(g, w, h, c, plan, s, v) {
   const c0 = lay.cells[0];
   const c1 = lay.cells[1];
   g.fillText('four skies', c0.x + (c1.x + c1.side - c0.x) / 2, h * 0.085, c1.x + c1.side - c0.x);
-  // The reference, gliding to its turned place once the puzzle is solved.
-  const truth = turned(plan.points, plan.turns, plan.mirror);
-  const k = s.fade * s.fade * (3 - 2 * s.fade);
-  const ref = plan.points.map((p, i) => ({ x: p.x + (truth[i].x - p.x) * k, y: p.y + (truth[i].y - p.y) * k }));
-  skyBox(g, c, ref, lay.left, lay.top, lay.side, v, { tw: s.t, border: c.alpha(c.colors.accent, 0.8) });
+  skyBox(g, c, reference(plan, rite, s, reduced), lay.left, lay.top, lay.side, v, { rite, t: s.t, seed: 0x100, border: c.alpha(c.colors.accent, 0.8) });
   plan.skies.forEach((sky, i) => {
     const cell = lay.cells[i];
-    const chosen = s.choice === i;
-    const decoy = s.hinted && s.hinted.includes(i);
-    const found = s.fade > 0 && i === plan.which;
+    const mine = own(rite, 0x200 + i);
+    // Chosen: the sky fills through the matte; the one chosen before it empties the same way.
+    const chosenK = level(mine, s, s.choice === i, s.choiceAt, s.wasChoice === i ? s.wasChoiceAt : -1, 0.8, reduced);
+    // A decoy: a veil over it develops through the matte, and the word blinks on.
+    const hp = s.hinted.includes(i) ? came(s, s.hintAt[i], 1.1, reduced) : 0;
+    const decoyK = hp > 0 ? mine.stair(hp) : 0;
+    // Yours, once solved: a brighter surface of its own develops through the matte on a roll of
+    // its own over the chosen fill (the sky found is the sky chosen, so the chosen fill is already
+    // whole underneath), and is not there at all during its flicker's dropouts.
+    const fp = s.doneAt >= 0 && i === plan.which ? came(s, s.doneAt, 1.6, reduced) : 0;
+    const found = fp > 0 && !!mine.flicker(fp);
+    const foundK = found ? mine.stair(fp) : 0;
     skyBox(g, c, sky, cell.x, cell.y, cell.side, v, {
-      label: SKIES[i], tw: s.t, dim: decoy, note: decoy ? 'decoy' : '',
-      border: found ? c.alpha(c.colors.accent2, 0.5 + 0.5 * s.fade) : chosen ? c.colors.accent2 : undefined,
-      width: chosen || found ? 2 : 1
+      rite, t: s.t, seed: 0x300 + i * 16, label: SKIES[i],
+      fill: c.alpha(c.colors.accent2, 0.16), fillK: chosenK,
+      lit: c.alpha(c.colors.accent2, 0.3), litK: foundK, litRite: own(rite, 0x4c1 + i),
+      veil: c.alpha(c.colors.bg, 0.72), veilK: decoyK,
+      note: hp > 0 && mine.flicker(hp) ? 'decoy' : '',
+      border: found || chosenK > 0 ? c.colors.accent2 : undefined,
+      width: found || chosenK >= 0.5 ? 2 : 1
     });
   });
   font(g, size);
   g.textAlign = 'center';
   g.textBaseline = 'middle';
   if (s.live) {
-    g.fillStyle = c.alpha(c.colors.fg, 0.8);
-    g.fillText((s.choice >= 0 ? 'sky ' + SKIES[s.choice] : 'no sky yet') + ', ' + turnsWord(s.turns) + (s.mirror ? ', flipped first' : ', not flipped'), w / 2, h * 0.9, w * 0.9);
+    if (own(rite, 0x5a1d).flicker(came(s, s.saidAt, 0.8, reduced))) {
+      g.fillStyle = c.alpha(c.colors.fg, 0.8);
+      g.fillText((s.choice >= 0 ? 'sky ' + SKIES[s.choice] : 'no sky yet') + ', ' + turnsWord(s.turns) + (s.mirror ? ', flipped first' : ', not flipped'), w / 2, h * 0.9, w * 0.9);
+    }
   } else {
     g.fillStyle = c.alpha(c.colors.muted, 0.85);
     g.fillText('one of the four is your sky, turned; the others are near misses', w / 2, h * 0.9, w * 0.92);
@@ -593,15 +820,17 @@ function whichScene(g, w, h, c, plan, s, v) {
 }
 
 function whichPreview(g, w, h, env, plan, t) {
-  whichScene(g, w, h, env, plan, { t, fade: 0, choice: -1, live: false }, dials(env));
+  whichScene(g, w, h, env, plan, whichState(t), dials(env));
 }
 
 function whichPiece(env, plan) {
   const helps = asked(env).helps;
   const n = plan.points.length;
   const v = dials(env);
-  const s = { t: 0, choice: -1, turns: 1, mirror: false, hinted: [], fade: 0, live: true };
+  const s = whichState(0);
+  s.live = true;
   const draw = (c) => whichScene(c.g, c.w, c.h, c, plan, s, v);
+  const said = () => { s.saidAt = s.t; };
   return {
     title: whichTitle(plan),
     brief: 'Your sigil, turned. One of the four small skies is your ' + WORDS[n] + ' lights, turned clockwise by one, two or three quarter turns -- and perhaps flipped left for right before it was turned. The other three are near misses: the same lights, with a few nudged out of place.',
@@ -632,16 +861,24 @@ function whichPiece(env, plan) {
     apply(id, value, c) {
       if (id === 'sky') {
         const k = Number(value);
-        if ([0, 1, 2, 3].includes(k)) s.choice = k;
+        if ([0, 1, 2, 3].includes(k) && k !== s.choice) {
+          s.wasChoice = s.choice;
+          s.wasChoiceAt = s.t;
+          s.choice = k;
+          s.choiceAt = s.t;
+        }
+        said();
         c.status('sky ' + SKIES[s.choice] + '; now how far it turned, and whether it was flipped');
       }
       if (id === 'turns') {
         const k = Math.round(Number(value));
         if (k >= 1 && k <= 3) s.turns = k;
+        said();
         c.status(turnsWord(s.turns) + ' clockwise');
       }
       if (id === 'mirror') {
         s.mirror = !!value;
+        said();
         c.status(s.mirror ? 'flipped left for right, then turned' : 'turned, never flipped');
       }
       if (id === 'hint') {
@@ -649,6 +886,7 @@ function whichPiece(env, plan) {
           ? range(4).find((k) => k !== plan.which && !s.hinted.includes(k)) : undefined;
         if (next !== undefined) {
           s.hinted.push(next);
+          s.hintAt[next] = s.t;
           c.hint();
           c.status('sky ' + SKIES[next] + ' is a decoy: a light or two of it is off');
         } else if (s.hinted.length >= helps) {
@@ -667,7 +905,7 @@ function whichPiece(env, plan) {
     },
     frame(t, dt, c) {
       if (!c.reduced) s.t += dt;
-      if (c.done) s.fade = Math.min(1, s.fade + dt * (c.reduced ? 4 : 0.8));
+      if (c.done && s.doneAt < 0) s.doneAt = s.t;
       draw(c);
     },
     end(c) {

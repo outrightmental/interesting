@@ -46,6 +46,91 @@ function asked(env) {
   return { level, helps: 6 - level, margin: Math.max(0, 3 - level) };
 }
 
+/* ---- the rite: how the lab moves ----------------------------------------------------------- */
+
+/* Nothing here moves along a formula (js/stage.js, "The rite"). env.rite -- ctx.rite in a piece,
+   the same object -- is the piece's own roll of a curve, a stair, a ratchet, a flicker and a
+   matte, from its seed; every env builder hands one. STILL is the fallback for an env without
+   it: every rite at its end state, so a drawing holds rather than throws. */
+const STILL = {
+  ease: (t) => (t >= 1 ? 1 : 0), stair: (t) => (t >= 1 ? 1 : 0), ratchet: (t) => (t >= 1 ? 1 : 0),
+  flicker: (t) => (t >= 1 ? 1 : 0), matte: (x, y, k) => k >= 1, treads: 4, kind: 'none', cell: 3,
+  at() { return STILL; }
+};
+
+function riteOf(c) {
+  return c && c.rite ? c.rite : STILL;
+}
+
+function fract(x) {
+  return x - Math.floor(x);
+}
+
+// Where a thing that happened at `at` on the piece's clock stands in a rite `dur` seconds long:
+// 0 before it, 1 once it is over, and 1 at once when less motion is asked for.
+function prog(c, time, at, dur) {
+  if (at == null || at < 0) return 0;
+  if (c.reduced) return 1;
+  return clamp((time - at) / dur, 0, 1);
+}
+
+// A mark is { on, at }: a surface set (on) or unset at `at`. Its coverage climbs the stair when
+// it is set and comes back down it when it is unset -- never a fade either way.
+function coverage(c, time, mark, dur) {
+  if (!mark) return 0;
+  const k = riteOf(c).stair(prog(c, time, mark.at, dur));
+  return mark.on ? k : 1 - k;
+}
+
+// A surface arriving by its area: the rectangle tiled in cells of `cell` px (the matte's own size
+// when not given), each cell filled where the matte lets it through at coverage k. The cells are
+// indexed in canvas space, so the pattern stands still under a region that grows.
+function develop(g, c, x, y, w, h, k, cell) {
+  if (k <= 0 || w <= 0 || h <= 0) return;
+  const rite = riteOf(c);
+  const s = Math.max(1, cell || rite.cell);
+  const cols = Math.ceil(w / s);
+  const rows = Math.ceil(h / s);
+  const ox = Math.floor(x / s);
+  const oy = Math.floor(y / s);
+  for (let j = 0; j < rows; j++) {
+    for (let i = 0; i < cols; i++) {
+      if (!rite.matte(ox + i, oy + j, k)) continue;
+      g.fillRect(x + i * s, y + j * s, Math.min(s, w - i * s), Math.min(s, h - j * s));
+    }
+  }
+}
+
+// The same, for a disc: the cells whose centres lie within r of (cx, cy).
+function developDisc(g, c, cx, cy, r, k, cell) {
+  if (k <= 0 || r <= 0) return;
+  const rite = riteOf(c);
+  const s = Math.max(1, cell || rite.cell);
+  const i0 = Math.floor((cx - r) / s);
+  const i1 = Math.ceil((cx + r) / s);
+  const j0 = Math.floor((cy - r) / s);
+  const j1 = Math.ceil((cy + r) / s);
+  for (let j = j0; j < j1; j++) {
+    for (let i = i0; i < i1; i++) {
+      const dx = (i + 0.5) * s - cx;
+      const dy = (j + 0.5) * s - cy;
+      if (dx * dx + dy * dy > r * r || !rite.matte(i, j, k)) continue;
+      g.fillRect(i * s, j * s, s, s);
+    }
+  }
+}
+
+// The one-square-deep band along a side of the map: the surface a named side is marked by.
+function sideBand(geo, side) {
+  const d = geo.sq;
+  switch (side) {
+    case 'north': return { x: geo.left, y: geo.top, w: geo.right - geo.left, h: d };
+    case 'south': return { x: geo.left, y: geo.bottom - d, w: geo.right - geo.left, h: d };
+    case 'west': return { x: geo.left, y: geo.top, w: d, h: geo.bottom - geo.top };
+    default: return { x: geo.right - d, y: geo.top, w: d, h: geo.bottom - geo.top };
+  }
+}
+
 /* ---- drawing shared by both ---------------------------------------------------------------- */
 
 function write(g, text, x, y, size, align, tone, weight) {
@@ -83,9 +168,14 @@ function ground(g, w, h, env, v, hour, t) {
     g.arc(p.x, p.y, 1.2 * v.scale, 0, TAU);
     g.fill();
   }
+  // The haze sways on the piece's stair, each drift on its own phase: out a tread at a time and
+  // back the same way, never a swing.
+  const rite = riteOf(env);
   const haze = Math.max(2, Math.round(6 * v.density));
   for (let i = 0; i < haze; i++) {
-    const x = ((i * 0.618 + 0.2 + v.turn * 0.31 + Math.sin((t || 0) * 0.2 + i) * 0.02) % 1) * w;
+    const ph = fract((env.reduced ? 0 : t || 0) / 9 + i * 0.29);
+    const sway = rite.stair(ph < 0.5 ? ph * 2 : 2 - ph * 2);
+    const x = ((i * 0.618 + 0.2 + v.turn * 0.31 + sway * 0.04) % 1) * w;
     const y = ((i * 0.41 + 0.1 + v.turn * 0.17) % 1) * h;
     const r = Math.min(w, h) * (0.08 + (i % 3) * 0.04) * v.scale;
     const d = g.createRadialGradient(x, y, 0, x, y, r);
@@ -189,10 +279,13 @@ function clock(g, env, x, y, r, hour, guess, size) {
   write(g, 'now ' + fmt(hour), x - r - size * 0.5, y, size, 'right', c.accent2, '600');
 }
 
-// A slip printed over the map once a puzzle is solved: it comes down from the top edge.
+// A slip printed over the map once a puzzle is solved: it comes down from the top edge in
+// clicks on the piece's stair, its paper develops through the matte as it comes, and its words
+// blink on once it is down.
 function slip(g, w, h, env, lines, rise, size) {
   if (!lines || rise <= 0) return;
   const c = env.colors;
+  const rite = riteOf(env);
   g.font = '500 ' + size + 'px system-ui, sans-serif';
   let widest = 0;
   for (const l of lines) widest = Math.max(widest, g.measureText(l).width);
@@ -201,14 +294,16 @@ function slip(g, w, h, env, lines, rise, size) {
   const bw = Math.min(w * 0.9, widest + pad * 2);
   const bh = lines.length * lh + pad * 2;
   const x = (w - bw) / 2;
-  const y = -bh + rise * ((h - bh) / 2 + bh);
-  g.fillStyle = env.alpha(c.bg, 0.92);
+  const down = rite.stair(rise);
+  const y = -bh + down * ((h - bh) / 2 + bh);
+  g.fillStyle = env.alpha(c.bg, 0.94);
+  develop(g, env, x, y, bw, bh, Math.max(down, 0.2), rite.cell * 2);
   g.strokeStyle = env.alpha(c.fg, 0.3);
   g.lineWidth = 1;
   g.beginPath();
   g.roundRect(x, y, bw, bh, size * 0.5);
-  g.fill();
   g.stroke();
+  if (!rite.flicker(rise)) return;
   lines.forEach((l, i) => write(g, l, x + pad, y + pad + lh * (i + 0.5), size, 'left', env.alpha(i === 0 ? c.accent2 : c.fg, 0.92)));
 }
 
@@ -287,25 +382,52 @@ function frontLine(plan, sweep) {
   }
 }
 
+// Where the guess hand stands on the piece's clock: ratcheting from where it was (guessFrom, an
+// hour that may be fractional when the hand was caught mid-turn) to the hour named, the shorter
+// way round, tooth by tooth; null when no hour has been named.
+function guessHand(env, plan, s) {
+  if (s.guess == null) return null;
+  const from = s.guessFrom == null ? plan.now : s.guessFrom;
+  const diff = ((((s.guess - from + 12) % 24) + 24) % 24) - 12;
+  return from + diff * riteOf(env).ratchet(prog(env, s.t, s.guessAt == null ? 0 : s.guessAt, 1.2));
+}
+
 function drawFront(g, w, h, env, plan, s, variant) {
   const v = variant || PLAIN;
   const c = env.colors;
+  const rite = riteOf(env);
+  const marks = s.marks || {};
   const geo = ground(g, w, h, env, v, plan.now, s.t);
   const size = Math.max(8, Math.min(13, Math.round(geo.sq * 0.6)));
-  const line = frontLine(plan, s.sweep);
+  // Once the forecast is logged the front advances a square per tread of the stair (see
+  // frame()), never a glide across the map.
+  const line = frontLine(plan, rite.stair(s.sweep, plan.squares));
   const [sc, sr] = plan.station;
-  // The air the front brings, shaded behind it, and the front itself with its teeth toward the
-  // station.
+  // The air the front brings: a textured surface behind it, the cells the matte lets through at
+  // a coverage that breathes up and down the stair, and the front itself with its teeth toward
+  // the station.
   const tone = c.accent;
-  g.fillStyle = env.alpha(tone, 0.1);
+  g.fillStyle = env.alpha(tone, 0.2);
+  const ph = env.reduced ? 0.25 : fract((s.t || 0) / 11 + v.turn);
+  const breath = 0.4 + 0.3 * rite.stair(ph < 0.5 ? ph * 2 : 2 - ph * 2);
+  const grain = Math.max(rite.cell, Math.round(geo.sq * 0.3));
   if (line.vertical) {
     const x = geo.x(line.at);
-    if (line.dx > 0) g.fillRect(geo.left, geo.top, x - geo.left, geo.bottom - geo.top);
-    else g.fillRect(x, geo.top, geo.right - x, geo.bottom - geo.top);
+    if (line.dx > 0) develop(g, env, geo.left, geo.top, x - geo.left, geo.bottom - geo.top, breath, grain);
+    else develop(g, env, x, geo.top, geo.right - x, geo.bottom - geo.top, breath, grain);
   } else {
     const y = geo.y(line.at);
-    if (line.dy > 0) g.fillRect(geo.left, geo.top, geo.right - geo.left, y - geo.top);
-    else g.fillRect(geo.left, y, geo.right - geo.left, geo.bottom - y);
+    if (line.dy > 0) develop(g, env, geo.left, geo.top, geo.right - geo.left, y - geo.top, breath, grain);
+    else develop(g, env, geo.left, y, geo.right - geo.left, geo.bottom - y, breath, grain);
+  }
+  // The side the visitor names is marked by its area: a band along that edge of the map comes
+  // up through the matte, and the band of a side no longer named goes back down the stair.
+  for (const side of SIDES) {
+    const k = coverage(env, s.t, marks['side' + side], 1.2);
+    if (k <= 0) continue;
+    const band = sideBand(geo, side);
+    g.fillStyle = env.alpha(c.accent, 0.24);
+    develop(g, env, band.x, band.y, band.w, band.h, k, rite.cell * 2);
   }
   g.strokeStyle = env.alpha(tone, 0.9);
   g.lineWidth = Math.max(1.5, geo.sq * 0.12);
@@ -350,34 +472,59 @@ function drawFront(g, w, h, env, plan, s, variant) {
   write(g, 'the station', sx + geo.sq * 0.55 * v.scale * (sc > GC * 0.7 ? -1 : 1), sy - geo.sq * 0.5, size, sc > GC * 0.7 ? 'right' : 'left', c.accent2, '600');
   scaleBar(g, env, geo, geo.x(0.2), geo.strip, size);
   write(g, 'moving at ' + plan.speed + ' km/h', geo.x(11), geo.strip, size, 'center', c.fg, '600');
-  clock(g, env, geo.x(GC - 1.2), geo.strip, Math.min(geo.sq * 1.1, geo.sq * v.scale), plan.now, s.guess, size);
-  if (s.side) write(g, 'from the ' + s.side + '?', sx, sy + geo.sq * 0.9, size, 'center', env.alpha(c.accent, 0.95));
-  if (s.hinted) write(g, plan.squares * KM + ' km out', sx, sy + geo.sq * (s.side ? 1.6 : 0.9), size, 'center', c.accent2, '600');
-  if (s.rain > 0) {
-    g.strokeStyle = env.alpha(c.accent, 0.5 * s.rain);
+  // The hand for the hour the visitor names ratchets round from where it stood, tooth by tooth
+  // with its backlash, the shorter way round the dial.
+  clock(g, env, geo.x(GC - 1.2), geo.strip, Math.min(geo.sq * 1.1, geo.sq * v.scale), plan.now, guessHand(env, plan, s), size);
+  // What the visitor has said, and what a hint showed, blink on: a word arrives, it never fades
+  // in. The hint's word stands under the side's, so when a side is named after it the word
+  // blinks in afresh at its new place rather than jumping there.
+  if (s.side && rite.flicker(prog(env, s.t, s.sideAt == null ? 0 : s.sideAt, 1))) write(g, 'from the ' + s.side + '?', sx, sy + geo.sq * 0.9, size, 'center', env.alpha(c.accent, 0.95));
+  const hintFrom = s.hintAt == null ? 0 : Math.max(s.hintAt, s.sideAt == null ? 0 : s.sideAt);
+  if (s.hinted && rite.flicker(prog(env, s.t, hintFrom, 1.2))) write(g, plan.squares * KM + ' km out', sx, sy + geo.sq * (s.side ? 1.6 : 0.9), size, 'center', c.accent2, '600');
+  // The rain once the front is in: it blinks on and thickens by treads -- its count and its
+  // weight each a stair, never a fade -- and falls in jerks on the stair rather than streaming.
+  if (s.rain > 0 && rite.flicker(s.rain)) {
+    g.strokeStyle = env.alpha(c.accent, 0.25 + 0.3 * rite.stair(s.rain, 3));
     g.lineWidth = 1;
     g.beginPath();
-    const n = Math.round(60 * s.rain);
+    const n = Math.round(60 * Math.max(0.2, rite.stair(s.rain)));
+    const fall = (Math.floor(s.t / 0.8) + rite.stair(fract(s.t / 0.8))) * 0.32;
     for (let i = 0; i < n; i++) {
-      const x = ((i * 0.618034 + s.t * 0.05) % 1) * w;
-      const y = ((i * 0.754877 + s.t * 0.4) % 1) * h;
+      const x = ((i * 0.618034 + fall * 0.125) % 1) * w;
+      const y = ((i * 0.754877 + fall) % 1) * h;
       g.moveTo(x, y);
       g.lineTo(x + line.dx * geo.sq * 0.3, y + line.dy * geo.sq * 0.3 + geo.sq * 0.3);
     }
     g.stroke();
   }
+  // The solved wash: the map takes the ledger's colour by its area, through the matte, blinking
+  // on as it develops.
+  const washed = prog(env, s.t, s.doneAt, 2.6);
+  if (washed > 0 && rite.flicker(washed)) {
+    g.fillStyle = env.alpha(c.accent2, 0.1);
+    develop(g, env, geo.left, geo.top, geo.right - geo.left, geo.bottom - geo.top, rite.stair(washed), rite.cell * 4);
+  }
   slip(g, w, h, env, s.lines, s.rise, size);
 }
 
+// The live state of a front: t is the piece's clock; sweep, rain and rise are the ceremony's
+// progresses, each stepped onto the stair when drawn; marks holds 'side<name>' { on, at } for a
+// side named or un-named; guessFrom/guessAt, sideAt, hintAt and doneAt are when the hour was
+// named, the side named, the hint shown and the piece solved. A card has the clock and no more.
+function frontBlank(t) {
+  return { t: t || 0, sweep: 0, guess: null, side: '', hinted: false, rain: 0, lines: null, rise: 0,
+    marks: {}, guessFrom: null, guessAt: null, sideAt: null, hintAt: null, doneAt: null };
+}
+
 function frontPreview(g, w, h, env, plan, t) {
-  drawFront(g, w, h, env, plan, { t: t || 0, sweep: 0, guess: null, side: '', hinted: false, rain: 0, lines: null, rise: 0 }, env.variant);
+  drawFront(g, w, h, env, plan, frontBlank(t), env.variant);
 }
 
 function frontPiece(env, plan) {
   const hours = frontHours(plan);
   const arrives = (plan.now + hours) % 24;
   const { helps, margin } = asked(env);
-  const s = { t: 0, sweep: 0, guess: null, side: '', hinted: false, rain: 0, lines: null, rise: 0 };
+  const s = frontBlank(0);
   const draw = (c) => drawFront(c.g, c.w, c.h, c, plan, s, env.variant);
   return {
     title: frontTitle(plan),
@@ -411,16 +558,27 @@ function frontPiece(env, plan) {
     apply(id, value, c) {
       if (id === 'hour') {
         const n = Math.round(Number(value));
+        // The hand sets out from where it stands now, even if caught mid-ratchet.
+        const standing = guessHand(c, plan, s);
+        s.guessFrom = standing == null ? plan.now : ((standing % 24) + 24) % 24;
         s.guess = Number.isFinite(n) ? clamp(n, 0, 23) : null;
+        s.guessAt = s.t;
         c.status('you say ' + fmt(s.guess));
       }
       if (id === 'side') {
+        const was = s.side;
         s.side = SIDES.includes(value) ? value : '';
+        if (s.side !== was) {
+          if (was) s.marks['side' + was] = { on: false, at: s.t };
+          if (s.side) s.marks['side' + s.side] = { on: true, at: s.t };
+          s.sideAt = s.t;
+        }
         c.status('you say it comes from the ' + s.side);
       }
       if (id === 'hint') {
         if (!s.hinted) {
           s.hinted = true;
+          s.hintAt = s.t;
           c.hint();
           c.status('the front is ' + plan.squares * KM + ' km from the station');
         } else {
@@ -440,6 +598,7 @@ function frontPiece(env, plan) {
     },
     end(c) {
       s.lines = ['front ledger', 'from the ' + plan.side + ', ' + plan.squares * KM + ' km at ' + plan.speed + ' km/h', 'arrived ' + fmt(arrives) + (plan.now + hours >= 24 ? ', past midnight' : '')];
+      s.doneAt = s.t;
       c.status('the front comes in from the ' + plan.side + ' and reaches the station at ' + fmt(arrives));
     }
   };
@@ -516,8 +675,12 @@ function drawPressure(g, w, h, env, plan, s, variant) {
   const geo = ground(g, w, h, env, v, 21, s.t);
   const size = Math.max(8, Math.min(13, Math.round(geo.sq * 0.6)));
   const st = plan.stations;
+  const rite = riteOf(env);
+  const marks = s.marks || {};
   const ranked = st.map((q, i) => i).sort((a, b) => st[a].p - st[b].p);
-  // Each station with its reading, ringed the more the higher its pressure stands.
+  // Each station with its reading, ringed the more the higher its pressure stands. The station
+  // the visitor names is marked by its area -- a halo comes up through the matte, and the halo of
+  // one no longer named goes back down the stair -- and the one a hint shows blinks its halo on.
   st.forEach((q, i) => {
     const x = geo.x(q.c);
     const y = geo.y(q.r);
@@ -529,11 +692,21 @@ function drawPressure(g, w, h, env, plan, s, variant) {
       g.ellipse(x, y, geo.sq * (0.5 + k * 0.24) * v.scale, geo.sq * (0.4 + k * 0.19) * v.scale, (i * 0.7 + v.turn) % Math.PI, 0, TAU);
       g.stroke();
     }
+    const named = coverage(env, s.t, marks['toward' + i], 1);
+    if (named > 0) {
+      g.fillStyle = env.alpha(c.accent, 0.3);
+      developDisc(g, env, x, y, geo.sq * 0.95 * v.scale, named);
+    }
+    const shown = s.hinted === i ? prog(env, s.t, s.hintAt == null ? 0 : s.hintAt, 1.3) : 0;
+    if (shown > 0 && rite.flicker(shown)) {
+      g.fillStyle = env.alpha(c.accent2, 0.3);
+      developDisc(g, env, x, y, geo.sq * 0.95 * v.scale, rite.stair(shown));
+    }
     station(g, env, x, y, geo.sq * 0.42 * v.scale, LETTERS[i], size);
     const below = q.r > GR - 4;
     write(g, q.p + ' hPa', x, y + (below ? -1 : 1) * geo.sq * 0.95, size, 'center', c.fg, '600');
-    if (s.toward === i) write(g, 'toward here?', x, y + (below ? -1 : 1) * geo.sq * 0.95 + (below ? -1 : 1) * size * 1.2, size, 'center', env.alpha(c.accent, 0.95));
-    if (s.hinted === i) write(g, 'the wind blows from here', x, y + (below ? -1 : 1) * geo.sq * 0.95 + (below ? -1 : 1) * size * 1.2, size, 'center', c.accent2, '600');
+    if (s.toward === i && rite.flicker(prog(env, s.t, marks['toward' + i] ? marks['toward' + i].at : 0, 1))) write(g, 'toward here?', x, y + (below ? -1 : 1) * geo.sq * 0.95 + (below ? -1 : 1) * size * 1.2, size, 'center', env.alpha(c.accent, 0.95));
+    if (s.hinted === i && rite.flicker(shown)) write(g, 'the wind blows from here', x, y + (below ? -1 : 1) * geo.sq * 0.95 + (below ? -1 : 1) * size * 1.2, size, 'center', c.accent2, '600');
   });
   // The compass rose under the map, so a way can be named, and the legend beside it.
   const cx = geo.x(GC - 1.2);
@@ -555,23 +728,47 @@ function drawPressure(g, w, h, env, plan, s, variant) {
   if (s.toward >= 0) said.push('toward ' + LETTERS[s.toward]);
   if (s.way) said.push('blowing ' + s.way);
   if (s.gap != null) said.push(s.gap + ' hPa between');
-  write(g, said.length ? 'you say: ' + said.join(', ') : 'readings in hPa; the wind blows high to low', geo.x(0.2), cy, size, 'left', env.alpha(said.length ? c.accent : c.fg, 0.9));
-  // The wind drawn in, once the puzzle is solved: from the highest to the lowest.
+  // The legend, which blinks in afresh whenever what the visitor says changes.
+  if (s.saidAt == null || rite.flicker(prog(env, s.t, s.saidAt, 0.8))) {
+    write(g, said.length ? 'you say: ' + said.join(', ') : 'readings in hPa; the wind blows high to low', geo.x(0.2), cy, size, 'left', env.alpha(said.length ? c.accent : c.fg, 0.9));
+  }
+  // The wind drawn in, once the puzzle is solved: from the highest to the lowest, a square per
+  // tread of the stair, blinking on as it sets out.
   if (s.blow > 0) {
     const a = st[highest(st)];
     const b = st[lowest(st)];
-    g.strokeStyle = env.alpha(c.accent2, 0.9);
-    g.fillStyle = env.alpha(c.accent2, 0.9);
-    g.lineWidth = Math.max(1.5, geo.sq * 0.1);
-    const x1 = geo.x(a.c) + (geo.x(b.c) - geo.x(a.c)) * s.blow;
-    const y1 = geo.y(a.r) + (geo.y(b.r) - geo.y(a.r)) * s.blow;
-    arrow(g, geo.x(a.c), geo.y(a.r), x1, y1, geo.sq * 0.4);
+    const squares = Math.max(3, Math.abs(b.c - a.c), Math.abs(b.r - a.r));
+    const gone = rite.stair(s.blow, squares);
+    if (gone > 0 && rite.flicker(s.blow)) {
+      g.strokeStyle = env.alpha(c.accent2, 0.9);
+      g.fillStyle = env.alpha(c.accent2, 0.9);
+      g.lineWidth = Math.max(1.5, geo.sq * 0.1);
+      const x1 = geo.x(a.c) + (geo.x(b.c) - geo.x(a.c)) * gone;
+      const y1 = geo.y(a.r) + (geo.y(b.r) - geo.y(a.r)) * gone;
+      arrow(g, geo.x(a.c), geo.y(a.r), x1, y1, geo.sq * 0.4);
+    }
+  }
+  // The solved wash: the map takes the ledger's colour by its area, through the matte, blinking
+  // on as it develops.
+  const washed = prog(env, s.t, s.doneAt, 2.6);
+  if (washed > 0 && rite.flicker(washed)) {
+    g.fillStyle = env.alpha(c.accent2, 0.1);
+    develop(g, env, geo.left, geo.top, geo.right - geo.left, geo.bottom - geo.top, rite.stair(washed), rite.cell * 4);
   }
   slip(g, w, h, env, s.lines, s.rise, size);
 }
 
+// The live state of a pressure map: t is the piece's clock; blow and rise are the ceremony's
+// progresses, each stepped onto the stair when drawn; marks holds 'toward<i>' { on, at } for a
+// station named or un-named; hintAt, saidAt and doneAt are when the hint was shown, the legend
+// last changed and the piece solved. A card has the clock and no more.
+function pressureBlank(t) {
+  return { t: t || 0, toward: -1, way: '', gap: null, hinted: -1, blow: 0, lines: null, rise: 0,
+    marks: {}, hintAt: null, saidAt: null, doneAt: null };
+}
+
 function pressurePreview(g, w, h, env, plan, t) {
-  drawPressure(g, w, h, env, plan, { t: t || 0, toward: -1, way: '', gap: null, hinted: -1, blow: 0, lines: null, rise: 0 }, env.variant);
+  drawPressure(g, w, h, env, plan, pressureBlank(t), env.variant);
 }
 
 function pressurePiece(env, plan) {
@@ -581,7 +778,7 @@ function pressurePiece(env, plan) {
   const lo = lowest(st);
   const way = windWay(st);
   const gap = st[hi].p - st[lo].p;
-  const s = { t: 0, toward: -1, way: '', gap: null, hinted: -1, blow: 0, lines: null, rise: 0 };
+  const s = pressureBlank(0);
   const draw = (c) => drawPressure(c.g, c.w, c.h, c, plan, s, env.variant);
   return {
     title: pressureTitle(plan),
@@ -616,21 +813,30 @@ function pressurePiece(env, plan) {
     },
     apply(id, value, c) {
       if (id === 'toward') {
+        const was = s.toward;
         s.toward = Array.isArray(value) && value.length ? Number(value[0]) : -1;
+        if (s.toward !== was) {
+          if (was >= 0) s.marks['toward' + was] = { on: false, at: s.t };
+          if (s.toward >= 0) s.marks['toward' + s.toward] = { on: true, at: s.t };
+        }
+        s.saidAt = s.t;
         c.status(s.toward >= 0 ? 'you say it blows toward station ' + LETTERS[s.toward] : 'no station marked');
       }
       if (id === 'way') {
         s.way = SIDES.includes(value) ? value : '';
+        s.saidAt = s.t;
         c.status('you say it blows ' + s.way);
       }
       if (id === 'gap') {
         const n = Math.round(Number(value));
         s.gap = Number.isFinite(n) ? clamp(n, 1, 60) : null;
+        s.saidAt = s.t;
         c.status('you say the difference is ' + s.gap + ' hPa');
       }
       if (id === 'hint') {
         if (s.hinted < 0) {
           s.hinted = hi;
+          s.hintAt = s.t;
           c.hint();
           c.status('the wind blows from station ' + LETTERS[hi] + ', the highest reading');
         } else {
@@ -649,6 +855,7 @@ function pressurePiece(env, plan) {
     },
     end(c) {
       s.lines = ['wind ledger', 'from station ' + LETTERS[hi] + ' (' + st[hi].p + ' hPa) to station ' + LETTERS[lo] + ' (' + st[lo].p + ' hPa)', 'blowing ' + way + ', ' + gap + ' hPa between them'];
+      s.doneAt = s.t;
       c.status('the wind blows ' + way + ' from station ' + LETTERS[hi] + ' to station ' + LETTERS[lo] + ', ' + gap + ' hPa between them');
     }
   };

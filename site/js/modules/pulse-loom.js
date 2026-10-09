@@ -53,6 +53,66 @@ function lcm(a, b) {
   return a * b / gcd(a, b);
 }
 
+/* ---- the rite: how the loom moves ----------------------------------------------------------- */
+
+/* Nothing on the loom fades, glides or cuts bare (README: "Motion axiom"). A crossing that is
+   lit is strung tread by tread from the outer ring to the inner on rite.stair, its two strikes
+   take on a halo that develops by its AREA through the piece's matte, and its knot blinks on with
+   rite.flicker and holds; the solved loop's rings take on a texture that develops the same way.
+   The wagon wheel turns in rite.turn's clicks, one tooth at a time with its backlash, never
+   evenly; the camera's shutter falls on rite.series's uneven treads; each picture blinks onto the
+   plate and into the strip, where its slot develops through the matte; the omen's arrow is drawn
+   round its arc in treads. Every crossing, picture and word moves on a roll of its own (rite.at),
+   read against the piece's own clock, recorded in frame(t); the harnesses hand a rite like the
+   stage does, and a piece with none stands still. */
+const STILL = {
+  ease: () => 1, stair: () => 1, ratchet: () => 1, flicker: () => 1, matte: () => true,
+  series: (p, n) => n, turn: () => 1, treads: 1, kind: 'none', cell: 4, at: () => STILL
+};
+
+function riteOf(env) {
+  return env && env.rite ? env.rite : STILL;
+}
+
+// How far through its rite a thing is, `now` seconds in, that began at `since`: 1 when it has
+// been there all along (or less motion was asked for), 0 before it begins.
+function came(now, since, span, reduced) {
+  if (reduced || since == null || since < 0 || now == null) return 1;
+  return Math.max(0, Math.min(1, (now - since) / span));
+}
+
+function fract(x) {
+  return x - Math.floor(x);
+}
+
+// The cells of a box that the matte lets through at coverage k, filled in the current fillStyle:
+// how a surface changes by its area. Cells are rite.cell px, coarser over a wide box so a frame
+// stays cheap, on a grid fixed to the canvas so the pattern holds still while it grows. `inside`
+// keeps the tiling to a shape within the box. At k >= 1 every cell is let through.
+function develop(g, rite, x0, y0, bw, bh, k, inside, size) {
+  if (k <= 0) return;
+  const cell = size || Math.max(rite.cell, Math.ceil(Math.max(bw, bh) / 28));
+  const cx0 = Math.floor(x0 / cell);
+  const cy0 = Math.floor(y0 / cell);
+  const cx1 = Math.ceil((x0 + bw) / cell);
+  const cy1 = Math.ceil((y0 + bh) / cell);
+  for (let cy = cy0; cy < cy1; cy++) {
+    for (let cx = cx0; cx < cx1; cx++) {
+      const px = cx * cell;
+      const py = cy * cell;
+      if (inside && !inside(px + cell / 2, py + cell / 2)) continue;
+      if (k < 1 && !rite.matte(cx, cy, k)) continue;
+      g.fillRect(px, py, cell, cell);
+    }
+  }
+}
+
+const SPAN = 0.8;     // seconds a crossing takes to string, a halo to develop
+const REVEAL = 1.8;   // seconds the solved loop or the omen takes to develop
+const STAGGER = 0.18; // seconds between one crossing and the next when the loom lights them all
+const TOOTH = 1.1;    // seconds the wheel takes to click round one tooth
+const SHUTTER = 0.3;  // seconds a picture takes to land on the plate
+
 function ground(g, w, h, c) {
   const grad = g.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, Math.max(w, h) * 0.72);
   grad.addColorStop(0, c.colors.bg2);
@@ -162,12 +222,28 @@ function beatAngle(i, L) {
 function drawCross(g, w, h, c, plan, s, variant) {
   const v = variant || PLAIN;
   const col = c.colors;
+  const rite = riteOf(c);
   const geo = crossGeometry(w, h, v);
   const L = plan.L;
   const size = Math.max(9, Math.min(16, Math.round(geo.r * 0.09)));
   const small = Math.max(8, Math.round(size * 0.85));
   ground(g, w, h, c);
   lint(g, w, h, c, v);
+  // The solved loop: the band between the rings takes on a texture that develops through the
+  // matte, blinking in and holding.
+  if (s.solvedAt != null) {
+    const sp = came(s.t, s.solvedAt, REVEAL, c.reduced);
+    const wash = rite.at(0x7f);
+    if (wash.flicker(sp)) {
+      const r0 = geo.inner * 0.9;
+      const r1 = geo.outer * 1.06;
+      g.fillStyle = c.alpha(col.accent2, 0.14);
+      develop(g, wash, geo.cx - r1, geo.cy - r1, r1 * 2, r1 * 2, wash.stair(sp), (px, py) => {
+        const d = Math.hypot(px - geo.cx, py - geo.cy);
+        return d >= r0 && d <= r1;
+      });
+    }
+  }
   g.lineWidth = Math.max(1, geo.r * 0.005);
   g.strokeStyle = c.alpha(col.muted, 0.5);
   for (const radius of [geo.outer, geo.inner]) {
@@ -201,17 +277,32 @@ function drawCross(g, w, h, c, plan, s, variant) {
       text(g, c, String(i + 1), geo.cx + cos * geo.outer * 1.12, geo.cy + sin * geo.outer * 1.12, small, c.alpha(col.fg, 0.85));
     }
   }
-  // The crossings that are shown: a thread between the two strikes, lit.
-  for (const i of s.lit) {
+  // The crossings that are shown: a thread strung between the two strikes tread by tread, from
+  // the outer ring in, a halo round each strike that develops through the matte, and a knot that
+  // blinks on and holds -- each crossing on a roll of its own.
+  const halo = Math.max(4, geo.r * 0.07);
+  s.lit.forEach((i, j) => {
+    const own = rite.at(0x100 + i);
+    const p = came(s.t, s.litAt && s.litAt[j], SPAN, c.reduced);
+    const k = own.stair(p);
     const a = beatAngle(i, L);
     const from = { x: geo.cx + Math.cos(a) * geo.outer, y: geo.cy + Math.sin(a) * geo.outer };
     const to = { x: geo.cx + Math.cos(a) * geo.inner, y: geo.cy + Math.sin(a) * geo.inner };
-    thread(g, c, from, to, col.accent2, 0.9, Math.max(1.5, geo.r * 0.014));
-    g.fillStyle = col.fg;
-    g.beginPath();
-    g.arc((from.x + to.x) / 2, (from.y + to.y) / 2, Math.max(2, geo.r * 0.02), 0, TAU);
-    g.fill();
-  }
+    g.fillStyle = c.alpha(col.accent2, 0.35);
+    for (const at of [from, to]) {
+      develop(g, own, at.x - halo, at.y - halo, halo * 2, halo * 2, k, (px, py) => Math.hypot(px - at.x, py - at.y) <= halo, Math.max(2, rite.cell));
+    }
+    if (k > 0) {
+      const tip = { x: from.x + (to.x - from.x) * k, y: from.y + (to.y - from.y) * k };
+      thread(g, c, from, tip, col.accent2, 0.9, Math.max(1.5, geo.r * 0.014));
+    }
+    if (own.flicker(p)) {
+      g.fillStyle = col.fg;
+      g.beginPath();
+      g.arc((from.x + to.x) / 2, (from.y + to.y) / 2, Math.max(2, geo.r * 0.02), 0, TAU);
+      g.fill();
+    }
+  });
   // The bars, written in the middle: each drum's bar as a row of beats.
   const rows = [
     { name: 'outer', n: plan.a, bar: plan.outer, tone: col.accent, note: 'from beat 1' },
@@ -234,8 +325,10 @@ function drawCross(g, w, h, c, plan, s, variant) {
   text(g, c, 'loop of ' + L, geo.cx, geo.cy + geo.inner * 0.8, small, c.alpha(col.fg, 0.75));
 }
 
+// The scene's state before anyone has touched it: nothing lit, nothing solved, no clock yet (a
+// card is drawn once and stands).
 function crossBlank() {
-  return { lit: [] };
+  return { lit: [], litAt: [], solvedAt: null, t: 0 };
 }
 
 function crossPreview(g, w, h, env, plan) {
@@ -280,6 +373,7 @@ function crossPiece(env, plan) {
         const next = s.lit.length < helps ? hits.slice().reverse().find((i) => !s.lit.includes(i)) : undefined;
         if (next !== undefined) {
           s.lit.push(next);
+          s.litAt.push(s.t);
           c.hint();
           c.status('both drums strike on beat ' + (next + 1));
         } else if (s.lit.length >= helps) {
@@ -291,10 +385,20 @@ function crossPiece(env, plan) {
       draw(c);
     },
     frame(t, dt, c) {
+      s.t = t;
       draw(c);
     },
     end(c) {
-      s.lit = hits.slice();
+      // The crossings not yet lit come in one after another round the loop, each in its turn;
+      // the ones already lit stay as they are.
+      s.solvedAt = s.t;
+      let late = 0;
+      for (const i of hits) {
+        if (s.lit.includes(i)) continue;
+        s.lit.push(i);
+        s.litAt.push(s.t + late * STAGGER);
+        late += 1;
+      }
       c.status('the loop lit: ' + hits.map((i) => i + 1).join(', '));
       draw(c);
     }
@@ -369,10 +473,14 @@ function wheel(g, c, x, y, r, teeth, angle, color, strength) {
   g.restore();
 }
 
-function rotationArrow(g, c, x, y, r, backward, color) {
+// The arrow round a wheel. `drawn` is how much of its arc is drawn so far (0..1, the whole when
+// not given) and `headed` whether its head is on yet: an arrow that arrives is drawn round in
+// treads with its head blinking on at the tip.
+function rotationArrow(g, c, x, y, r, backward, color, drawn, headed) {
   const sign = backward ? -1 : 1;
   const start = -Math.PI * 0.86;
-  const span = Math.PI * 1.15;
+  const span = Math.PI * 1.15 * (drawn == null ? 1 : Math.max(0, Math.min(1, drawn)));
+  if (span <= 0) return;
   g.strokeStyle = color;
   g.lineWidth = Math.max(1, r * 0.017);
   g.beginPath();
@@ -382,6 +490,7 @@ function rotationArrow(g, c, x, y, r, backward, color) {
     else g.moveTo(x + Math.cos(a) * r, y + Math.sin(a) * r);
   }
   g.stroke();
+  if (headed === false) return;
   const a = (start + span) * sign;
   const px = x + Math.cos(a) * r;
   const py = y + Math.sin(a) * r;
@@ -402,6 +511,7 @@ function rotationArrow(g, c, x, y, r, backward, color) {
 function drawWheel(g, w, h, c, plan, s, variant) {
   const v = variant || PLAIN;
   const col = c.colors;
+  const rite = riteOf(c);
   const m = Math.min(w, h);
   const pad = w * 0.045;
   const panel = (w - pad * 3) / 2;
@@ -426,46 +536,75 @@ function drawWheel(g, w, h, c, plan, s, variant) {
   text(g, c, 'the wheel: ' + plan.n + ' teeth', left, h * 0.09, size, col.fg, 'center', panel);
   text(g, c, 'the pictures: ' + plan.p + ' per turn', right, h * 0.09, size, col.fg, 'center', panel);
   const phase = v.turn * TAU;
+  // The real wheel: its turn is the ratchet, a tooth at a time with its backlash (s.spin, set
+  // in frame(t) from the piece's clock).
   wheel(g, c, left, cy, radius, plan.n, phase + s.spin, col.accent, 0.95);
   rotationArrow(g, c, left, cy, radius * 1.13, false, col.accent);
+  // The latest picture: it blinks onto the plate on a roll of its own -- one per fall of the
+  // shutter, so a picture taken again on the next lap lands differently; until it is on, the
+  // plate still shows the picture before it.
+  const shutter = rite.at(0x200 + s.shots);
+  const shotP = came(s.t, s.indexAt, SHUTTER, c.reduced);
+  const landed = shutter.flicker(shotP);
+  const plate = landed ? s.index : s.indexWas;
   // The p places round the rim: one picture per place, the wheel a pth of a turn on each time.
+  // The place the camera stands at now is lit, and grows to its size in treads.
+  const at = s.taken > 0 ? plate % plan.p : -1;
   for (let i = 0; i < plan.p; i++) {
     const a = -Math.PI / 2 + i / plan.p * TAU;
-    g.fillStyle = c.alpha(col.accent2, i === 0 ? 1 : 0.6);
+    const here = i === at;
+    const grow = here ? 0.6 + 0.4 * shutter.stair(shotP) : 1;
+    g.fillStyle = c.alpha(col.accent2, here || i === 0 ? 1 : 0.6);
     g.beginPath();
-    g.arc(right + Math.cos(a) * radius * 1.16, cy + Math.sin(a) * radius * 1.16, Math.max(1.5, radius * (i === 0 ? 0.045 : 0.03)), 0, TAU);
+    g.arc(right + Math.cos(a) * radius * 1.16, cy + Math.sin(a) * radius * 1.16, Math.max(1.5, radius * (here ? 0.055 * grow : i === 0 ? 0.045 : 0.03)), 0, TAU);
     g.fill();
   }
-  wheel(g, c, right, cy, radius, plan.n, phase + s.index / plan.p * TAU, col.accent2, 0.95);
+  wheel(g, c, right, cy, radius, plan.n, phase + plate / plan.p * TAU, col.accent2, 0.95);
   if (s.reveal) {
+    // The omen: its arrow is drawn round in treads and its head blinks on; the standstill's
+    // marks blink on and hold.
     const way = seeming(plan);
+    const omen = rite.at(0x7e);
+    const op = came(s.t, s.revealAt, REVEAL, c.reduced);
     if (way === 'still') {
-      g.strokeStyle = col.accent2;
-      g.lineWidth = Math.max(1, radius * 0.025);
-      g.beginPath();
-      g.moveTo(right - radius * 0.05, cy - radius * 0.12);
-      g.lineTo(right - radius * 0.05, cy + radius * 0.12);
-      g.moveTo(right + radius * 0.05, cy - radius * 0.12);
-      g.lineTo(right + radius * 0.05, cy + radius * 0.12);
-      g.stroke();
-    } else rotationArrow(g, c, right, cy, radius * 1.3, way === 'ccw', col.accent2);
+      if (omen.flicker(op)) {
+        g.strokeStyle = col.accent2;
+        g.lineWidth = Math.max(1, radius * 0.025);
+        g.beginPath();
+        g.moveTo(right - radius * 0.05, cy - radius * 0.12);
+        g.lineTo(right - radius * 0.05, cy + radius * 0.12);
+        g.moveTo(right + radius * 0.05, cy - radius * 0.12);
+        g.lineTo(right + radius * 0.05, cy + radius * 0.12);
+        g.stroke();
+      }
+    } else rotationArrow(g, c, right, cy, radius * 1.3, way === 'ccw', col.accent2, omen.stair(op), omen.flicker(op));
   }
   text(g, c, 'turns clockwise', left, h * 0.7, small, c.alpha(col.fg, 0.85), 'center', panel);
-  text(g, c, s.taken ? 'picture ' + s.taken : 'the first picture; ' + plan.p + ' to a turn', right, h * 0.7, small, c.alpha(col.fg, 0.85), 'center', panel);
-  if (s.told) text(g, c, s.told, w / 2, h * 0.77, small, col.accent2, 'center', w * 0.9);
-  // The strip of pictures taken, the latest at the right.
+  // The caption under the plate changes its words with the picture: it blinks to the new ones.
+  const captioned = s.taken > 0 ? plate + 1 : 0;
+  text(g, c, captioned ? 'picture ' + captioned : 'the first picture; ' + plan.p + ' to a turn', right, h * 0.7, small, c.alpha(col.fg, 0.85), 'center', panel);
+  // What the lamp has told: it blinks on and holds, each telling on a roll of its own.
+  if (s.told && rite.at(0x300 + s.shown).flicker(came(s.t, s.toldAt, SPAN, c.reduced))) text(g, c, s.told, w / 2, h * 0.77, small, col.accent2, 'center', w * 0.9);
+  // The strip of pictures taken, the latest at the right: a slot a picture lands in develops
+  // through the matte, and the picture blinks into it.
   const slots = Math.max(3, Math.min(6, Math.round(4 * v.density)));
   const gap = w * 0.018;
   const sw = (w - pad * 2 - gap * (slots - 1)) / slots;
   const top = h * 0.82;
   const sh = h * 0.105;
-  const first = Math.max(0, s.index - slots + 1);
+  const first = Math.max(0, plate - slots + 1);
   for (let i = 0; i < slots; i++) {
     const x = pad + i * (sw + gap);
     const shot = first + i;
-    const taken = s.taken > 0 && shot <= s.index;
+    const taken = s.taken > 0 && shot <= plate;
+    const latest = taken && shot === s.index;
+    const k = latest ? shutter.stair(shotP) : taken ? 1 : 0;
     g.fillStyle = c.alpha(col.bg, 0.65);
     g.fillRect(x, top, sw, sh);
+    if (k > 0) {
+      g.fillStyle = c.alpha(col.accent2, 0.16);
+      develop(g, latest ? shutter : rite, x, top, sw, sh, k, null, Math.max(2, rite.cell));
+    }
     g.strokeStyle = c.alpha(taken ? col.accent2 : col.muted, taken ? 0.65 : 0.3);
     g.lineWidth = 1;
     g.strokeRect(x, top, sw, sh);
@@ -473,8 +612,12 @@ function drawWheel(g, w, h, c, plan, s, variant) {
   }
 }
 
+// The scene's state before anyone has touched it: the wheel at rest, no picture taken, the omen
+// unread, and no clock yet (a card is drawn once and stands). `runAt` is when the camera started;
+// `indexAt` when the picture on the plate was taken, `indexWas` the one before it, `shots` how
+// many times the shutter has fallen since the piece opened (each fall composes its own rite).
 function wheelBlank() {
-  return { spin: 0, index: 0, taken: 0, run: -1, reveal: false, told: '', shown: 0 };
+  return { spin: 0, index: 0, indexWas: 0, indexAt: null, taken: 0, runAt: null, reveal: false, revealAt: null, told: '', toldAt: null, shown: 0, shots: 0, t: 0 };
 }
 
 function wheelPreview(g, w, h, env, plan) {
@@ -488,7 +631,17 @@ function wheelPiece(env, plan) {
   const s = wheelBlank();
   const interval = 0.45;
   const roll = Math.min(24, back * 2 + 2);
+  const rite = riteOf(env);
   const draw = (c) => drawWheel(c.g, c.w, c.h, c, plan, s, env.variant);
+  // The camera starts (again) now: the first picture lands on the plate.
+  function shoot() {
+    s.runAt = s.t;
+    s.index = 0;
+    s.indexWas = 0;
+    s.indexAt = s.t;
+    s.taken = 1;
+    s.shots += 1;
+  }
   return {
     title: wheelTitle(plan),
     brief: 'The old omen of the turning wheel. The wheel has ' + plan.n + ' identical teeth and turns clockwise, never the other way. A camera takes ' + plan.p
@@ -506,9 +659,7 @@ function wheelPiece(env, plan) {
     check(c) {
       const seemRight = c.value('seem') === way;
       const backRight = Number(c.value('back')) === back;
-      s.run = 0;
-      s.index = 0;
-      s.taken = 1;
+      shoot();
       if (seemRight && backRight) return { solved: true, say: 'the omen reads: the pictures ' + (way === 'still' ? 'stand still' : 'seem to go ' + wayLabel(way)) + ', and a tooth is back after ' + back };
       return {
         solved: false,
@@ -532,6 +683,7 @@ function wheelPiece(env, plan) {
           'the pictures ' + (way === 'still' ? 'stand still' : 'seem to go ' + wayLabel(way))];
         if (s.shown < Math.min(shows.length, helps)) {
           s.told = shows[s.shown];
+          s.toldAt = s.t;
           s.shown += 1;
           c.hint();
           c.status(s.told);
@@ -544,19 +696,36 @@ function wheelPiece(env, plan) {
       draw(c);
     },
     frame(t, dt, c) {
-      s.spin += (c.reduced ? 0 : Math.max(0, dt)) * 0.35;
-      if (s.run >= 0) {
-        s.run += Math.max(0, dt);
-        const shot = Math.floor(s.run / interval);
-        if (c.done) s.index = shot % (back * 3 + 1);
-        else s.index = Math.min(roll, shot);
+      s.t = t;
+      // The wheel turns a tooth every TOOTH seconds, in the ratchet's clicks with their backlash:
+      // never an even rotation, and every tooth on a roll of its own, so no two clicks round
+      // alike. Less motion asked for, it stands.
+      const turns = c.reduced ? 0 : t / TOOTH;
+      const tooth = Math.floor(turns);
+      s.spin = (tooth + rite.at(0x500 + tooth).turn(fract(turns))) * TAU / plan.n;
+      if (s.runAt != null) {
+        // The shutter falls on uneven treads: the pictures of a roll come at the rite's own
+        // intervals, and once the omen is read they go on round and round.
+        const run = Math.max(0, t - s.runAt);
+        let shot;
+        if (c.done) {
+          const cycle = back * 3 + 1;
+          shot = rite.series(fract(run / (cycle * interval)), cycle) % cycle;
+        } else shot = Math.min(roll, rite.series(Math.min(1, run / (roll * interval)), roll));
+        if (shot !== s.index) {
+          s.indexWas = s.index;
+          s.index = shot;
+          s.indexAt = t;
+          s.shots += 1;
+        }
         s.taken = s.index + 1;
       }
       draw(c);
     },
     end(c) {
       s.reveal = true;
-      s.run = 0;
+      s.revealAt = s.t;
+      shoot();
       c.status('the pictures go on: ' + (way === 'still' ? 'every one the same' : 'seeming to go ' + wayLabel(way)) + ', a tooth home every ' + back);
       draw(c);
     }

@@ -24,8 +24,21 @@
                                  nothing on this card moves, and the loop lets it go.
 
    .github/scripts/card_variant_harness.mjs holds every module to this, and CardVariantTest in
-   test_make_interesting.py makes the assertions. */
-import { roll, PLAIN, recolor, aspect, light, mulberry32, hash, mix, alpha } from './variant.js';
+   test_make_interesting.py makes the assertions.
+
+   How the feed moves (README: "Motion axiom"). Nothing a visitor watches here cuts or fades: the
+   stylesheet (_sass/_feed.scss) holds the rites and this file puts the classes on at the moment
+   each is due. A card dealt waits rolled up (card-rolled) until it first meets the viewport, then
+   develops (card-enter) after a delay rolled with jitter for its place in the batch; a face
+   re-dealt by "another" or by the sky arriving leaves down the matte ladder (card-redeal) before
+   the new one climbs it (is-dealt) and its name is revealed glyph by glyph; a card taken leaves
+   (card-leave), the one pressed pops over and goes up to the stage (card-taken); a badge pinned on
+   develops (is-dealt) and one taken off leaves (is-gone); the suggested card and the unpowered one
+   are sealed with the rolled texture (is-sealing / is-unsealing); and when the columns are laid
+   again every card that changed its place travels there along a curve the engine rolled. The
+   engine (window.interestingMotion) is optional throughout: without it the classes still go on
+   and the clock takes them off. */
+import { roll, PLAIN, recolor, aspect, light, mulberry32, hash, mix, alpha, rite } from './variant.js';
 
 const persona = window.interestingPersona;
 const root = document.documentElement.getAttribute('data-root') || '';
@@ -45,6 +58,7 @@ let heights = [];
 let gap = 16;
 let suggested = null;
 let relayoutHandle = 0;
+let laid = false;
 
 function el(tag, className, text) {
   const node = document.createElement(tag);
@@ -65,6 +79,180 @@ function newSeed() {
   seedCounter += 1;
   return (salt ^ Math.imul(seedCounter, 2654435761)) >>> 0;
 }
+
+/* ---- the rites ---------------------------------------------------------------------------- */
+
+function engine() {
+  return window.interestingMotion || null;
+}
+
+// A rolled duration by name, or the stylesheet's baked one when the engine is not there.
+function riteMs(name) {
+  const motion = engine();
+  const got = motion && typeof motion.ms === 'function' ? motion.ms(name) : 0;
+  if (got) return got;
+  return { short: 170, medium: 340, long: 560, slow: 1200, stagger: 44, shift: 640 }[name] || 340;
+}
+
+// A passing rite on an element: the engine puts the class is-<name> on and takes it off when the
+// animation ends; without the engine the class goes on and the clock takes it off.
+function play(node, name, after) {
+  if (!node || !node.classList || calm.matches) return;
+  const motion = engine();
+  if (motion && typeof motion.rite === 'function') {
+    motion.rite(node, name, after);
+    return;
+  }
+  const cls = 'is-' + name;
+  node.classList.remove(cls);
+  requestAnimationFrame(() => {
+    node.classList.add(cls);
+    window.setTimeout(() => node.classList.remove(cls), after || riteMs('long') + 300);
+  });
+}
+
+// Words a visitor watches arrive are revealed glyph by glyph; the words themselves never change.
+function reveal(node, pace) {
+  const motion = engine();
+  if (node && motion && typeof motion.reveal === 'function' && !calm.matches) motion.reveal(node, { pace });
+}
+
+// The grain a card's mattes are offset by, from its seed, so no two cards wax or develop alike.
+function grain(card, seed) {
+  if (!card.style || typeof card.style.setProperty !== 'function') return;
+  card.style.setProperty('--card-grain', ((seed % 97) - 48) + 'px ' + (((seed >>> 8) % 89) - 44) + 'px');
+}
+
+// A movement composed for this trigger alone (README: "Motion axiom", the composer): the engine
+// writes a fresh @keyframes rule from its pieces and names it on the element as --rite-<kind>,
+// with a length of its own as --motion-<fallback>; the stylesheet reads the name before its own
+// keyframes, which stay for a page with no script. Hands back the name, or null.
+function compose(node, kind, fallback, baseMs, seed) {
+  const motion = engine();
+  if (!node || calm.matches || !motion || typeof motion.composeOn !== 'function') return null;
+  const options = typeof seed === 'number' ? { seed: seed >>> 0 } : undefined;
+  return motion.composeOn(node, kind, fallback, baseMs, options);
+}
+
+// The seed a card's rites are composed from: the card's own, turned by the kind, so a card's seal
+// is not its arrival and no two cards share one.
+function seedFor(card, turn) {
+  const m = meta.get(card);
+  const seed = m && typeof m.seed === 'number' ? m.seed : hash(String(cards.indexOf(card)));
+  return (seed ^ turn) >>> 0;
+}
+
+// A card sealed (the suggested one, the unpowered one, one put aside under a sheet) wears a
+// texture rolled for it alone and the texture climbs onto its picture along a seal composed for
+// this moment; unsealed, it leaves down a composed unseal.
+function seal(card, is) {
+  const motion = engine();
+  if (is) {
+    if (motion && typeof motion.seal === 'function') motion.seal(card);
+    compose(card, 'seal', 'card-seal', 560, seedFor(card, 0x5ea1));
+    play(card, 'sealing', riteMs('long') * 2 + 300);
+  } else {
+    compose(card, 'unseal', 'card-unseal', 340, seedFor(card, 0x05ea));
+    play(card, 'unsealing', riteMs('medium') * 2 + 300);
+  }
+}
+
+// What ends a rite: the named keyframes, or a composition of that kind.
+function spellIs(name, fixed, kind) {
+  return name === fixed || (typeof name === 'string' && name.indexOf('rite-' + kind + '-') === 0);
+}
+
+// A card rolled up develops: the k-th of a batch waits its rolled stagger, then climbs a ladder of
+// its own from a geometry of its own along a development composed for it (m.arrive, which writes
+// them inline); the class comes off when the spell ends, and the roll with it, so a card laid
+// again does not arrive again. A visitor who asked for less motion is shown the card.
+function develop(card, k) {
+  if (!card.classList.contains('card-rolled')) return;
+  card.classList.remove('card-rolled');
+  if (calm.matches) return;
+  const motion = engine();
+  const m = meta.get(card) || {};
+  const delay = motion && typeof motion.stagger === 'function' ? motion.stagger(k) : Math.round(k * 44 + Math.random() * 30);
+  card.style.setProperty('--d', delay + 'ms');
+  let undo = null;
+  if (motion && typeof motion.arrive === 'function') {
+    undo = motion.arrive(card, { seed: m.seed, spell: 'card-in', mattes: true, className: false });
+  } else if (motion && typeof motion.deal === 'function') {
+    // No arrival of its own to be had: the page's roll is pinned, so the card waiting in its delay
+    // keeps the roll it was dealt when another spell ending re-rolls the page.
+    undo = motion.deal(card, { spells: ['card-in'] });
+  }
+  card.classList.add('card-enter');
+  // The card's own spell ending takes the class off -- not a child's (a badge, a face re-dealt
+  // under it), whose ends bubble up through it. A spell cancelled by the card changing column
+  // mid-arrival (the columns laid again move it, and a moved node starts its animations afresh)
+  // is not its end: the card arrives again where it now is, rather than snapping to rest.
+  const settle = (ev) => {
+    if (ev && (ev.target !== card || !spellIs(ev.animationName, 'card-in', 'develop'))) return;
+    if (ev && ev.type === 'animationcancel' && card.isConnected) return;
+    card.classList.remove('card-enter');
+    card.removeEventListener('animationend', settle);
+    card.removeEventListener('animationcancel', settle);
+    if (typeof undo === 'function') undo();
+    undo = null;
+  };
+  card.addEventListener('animationend', settle);
+  card.addEventListener('animationcancel', settle);
+  window.setTimeout(settle, delay + riteMs('long') * 2 + 400);
+}
+
+// A badge pinned on a card arrives from a geometry of its own through a development composed for
+// it, and its words are revealed; one taken off leaves down a composed unmake and goes when the
+// spell has played.
+function badge(card, text) {
+  const mark = el('span', 'card-badge', text);
+  (card.querySelector('.card-media') || card).appendChild(mark);
+  const motion = engine();
+  if (!calm.matches && motion && typeof motion.arrive === 'function') {
+    motion.arrive(mark, { seed: seedFor(card, 0x51f ^ hash(text)), spell: 'badge-in' });
+  } else play(mark, 'dealt', riteMs('long') + 300);
+  reveal(mark, 0.6);
+  return mark;
+}
+
+function unbadge(mark) {
+  if (!mark) return;
+  if (calm.matches || !engine()) {
+    mark.remove();
+    return;
+  }
+  compose(mark, 'unmake', 'badge-out', 340, seedFor(mark.closest ? mark.closest('.card') : null, 0x90e));
+  mark.classList.add('is-gone');
+  const gone = (ev) => {
+    if (ev && ev.target !== mark) return;
+    mark.remove();
+  };
+  mark.addEventListener('animationend', gone);
+  mark.addEventListener('animationcancel', gone);
+  window.setTimeout(gone, riteMs('medium') * 2 + 300);
+}
+
+function badgeOf(card, text) {
+  return Array.from(card.querySelectorAll('.card-badge')).find((node) => node.textContent === text && !node.classList.contains('is-gone')) || null;
+}
+
+// Things changing places move there: the engine's flip measures every settled card before `change`
+// lays the columns again and after, and each that moved jumps from its old place to its new one in
+// the held treads of a stair rolled for it (js/motion.js flip: never a glide), each a little after
+// the last. A card in the middle of arriving or leaving is left to its own rite, and nothing new
+// is marked dealt here: a card dealt develops when its own watcher sees it.
+function flipCards(change) {
+  const motion = engine();
+  if (!laid || calm.matches || !motion || typeof motion.flip !== 'function') {
+    change();
+    return;
+  }
+  const settled = cards.filter((card) => card.isConnected
+    && !card.classList.contains('card-rolled') && !card.classList.contains('card-enter') && !card.classList.contains('card-leave'));
+  motion.flip(grid, change, { items: settled, dealt: false });
+}
+
+/* ---- the cards ---------------------------------------------------------------------------- */
 
 function readColors(card) {
   const style = getComputedStyle(card);
@@ -102,10 +290,15 @@ function makeEnv(card, seed, world, variant, starsOverride, colorsOverride) {
       return stars.map((s) => ({ x: p + s.x / 100 * (w - p * 2), y: p + s.y / 100 * (h - p * 2), text: s.text }));
     },
     colors: colorsOverride || (card.isConnected ? readColors(card) : Object.assign({}, FALLBACK)),
-    mix, alpha, reduced: calm.matches, world, variant: variant || PLAIN
+    mix, alpha, reduced: calm.matches, world, variant: variant || PLAIN,
+    // How this piece moves (README: "Motion axiom"): its own roll of a curve, a stair, a ratchet,
+    // a flicker and a matte, from the same seed, so nothing it draws moves along a formula.
+    rite: rite(seed)
   };
 }
 
+// A tint is written as custom properties, and the stylesheet steps every colour that derives from
+// them to the new palette along the stair (_feed.scss), so a re-tinted card never cuts or fades.
 function tint(card, m) {
   if (!m || !m.variant || m.variant.plain || m.tinted === m.variant || !card.isConnected) return;
   if (!m.base) m.base = readColors(card);
@@ -221,6 +414,16 @@ function paintUnpowered(ctx, w, h, env) {
   }
 }
 
+// A card painted over a ghost of a sky not yet cast is unpowered: sealed with the texture until
+// the sky arrives, when the seal is lifted (the texture leaves down the ladder) and it is painted
+// for real.
+function unpowered(card, is) {
+  const was = card.classList.contains('card-unpowered');
+  if (was === is) return;
+  card.classList.toggle('card-unpowered', is);
+  seal(card, is);
+}
+
 async function paint(card) {
   const m = meta.get(card);
   if (!m || !m.canvas || !card.isConnected) return;
@@ -229,7 +432,8 @@ async function paint(card) {
   if (meta.get(card) !== m) return;
   const box = m.canvas.parentNode;
   const w = box.clientWidth;
-  const h = box.clientHeight;
+  // A plate stepping to a new size (reroll) is painted at the size it is stepping to.
+  const h = m.plateHeight || box.clientHeight;
   if (!w || !h) return;
   const ctx = sizeCanvas(m.canvas, w, h);
   if (!ctx) return;
@@ -240,8 +444,10 @@ async function paint(card) {
     if (typeof mod.paint === 'function') mod.paint(ctx, w, h, ghost);
     else paintFallback(ctx, w, h, ghost);
     paintUnpowered(ctx, w, h, env);
+    unpowered(card, true);
     return;
   }
+  unpowered(card, false);
   const painter = m.spec && m.spec.paint || mod && mod.paint;
   if (painter) painter(ctx, w, h, env);
   else paintFallback(ctx, w, h, env);
@@ -291,6 +497,8 @@ function frame(now) {
   if (active.size) frameHandle = requestAnimationFrame(frame);
 }
 
+// Two watchers: one paints a card a screen ahead of the visitor, so the picture is there when the
+// card is; the other develops it only as it meets the viewport, so the arrival is seen.
 const watcher = 'IntersectionObserver' in window ? new IntersectionObserver((entries) => {
   for (const entry of entries) {
     const m = meta.get(entry.target);
@@ -303,37 +511,68 @@ const watcher = 'IntersectionObserver' in window ? new IntersectionObserver((ent
   }
 }, { rootMargin: '320px 0px' }) : null;
 
+const developer = 'IntersectionObserver' in window ? new IntersectionObserver((entries) => {
+  let k = 0;
+  for (const entry of entries) {
+    if (!entry.isIntersecting || !meta.get(entry.target)) continue;
+    if (entry.target.classList.contains('card-rolled')) develop(entry.target, k++);
+    developer.unobserve(entry.target);
+  }
+}, { rootMargin: '0px 0px -6% 0px', threshold: 0.05 }) : null;
+
 function columnCount() {
   const min = window.innerWidth < 600 ? 150 : 230;
   return Math.max(1, Math.min(6, Math.floor((grid.clientWidth + gap) / (min + gap))));
 }
-function place(card) {
+// A card is placed in the shortest column. Laying the columns again (`cursors`: how far down each
+// column the laying has reached), a card already where it belongs is not touched, so a rite it
+// is in the middle of -- its arrival, a wax, a face being re-dealt -- plays on; only a card whose
+// place changed is moved, and a card leaving (not in `cards` any more, finishing its unmake where
+// it stands) is stepped over. One being dealt goes on the end of the shortest column, rolled up,
+// to develop when its watcher sees it; where no watcher will, it develops now.
+function place(card, cursors) {
   let shortest = 0;
   for (let i = 1; i < heights.length; i++) if (heights[i] < heights[shortest]) shortest = i;
-  columns[shortest].appendChild(card);
+  const col = columns[shortest];
+  if (cursors) {
+    let n = cursors[shortest];
+    let at = col.children[n] || null;
+    while (at && at !== card && at.classList.contains('card-leave')) at = col.children[++n] || null;
+    if (at !== card) col.insertBefore(card, at);
+    cursors[shortest] = n + 1;
+  } else col.appendChild(card);
   tint(card, meta.get(card));
   heights[shortest] += card.offsetHeight + gap;
   if (!watcher && meta.get(card).canvas) paint(card);
+  if (!developer) develop(card, 0);
 }
+// The columns are kept from one laying to the next and made or taken away only when their number
+// changes, so a relayout restarts no card's rites; a card whose plate changed width is repainted.
 function rebuild() {
-  grid.classList.add('is-masonry');
-  gap = parseFloat(getComputedStyle(grid).columnGap) || 16;
-  grid.textContent = '';
-  columns = [];
-  heights = [];
-  for (let i = 0, n = columnCount(); i < n; i++) {
-    const col = el('div', 'feed-col');
-    grid.appendChild(col);
-    columns.push(col);
-    heights.push(0);
-  }
-  for (const card of cards) {
-    card.classList.remove('card-enter');
-    place(card);
-  }
+  flipCards(() => {
+    grid.classList.add('is-masonry');
+    gap = parseFloat(getComputedStyle(grid).columnGap) || 16;
+    const n = columnCount();
+    while (columns.length < n) {
+      const col = el('div', 'feed-col');
+      grid.appendChild(col);
+      columns.push(col);
+    }
+    const spare = columns.splice(n);
+    heights = columns.map(() => 0);
+    const cursors = columns.map(() => 0);
+    for (const card of cards) place(card, cursors);
+    // A column taken away: what is still in it (a card leaving) finishes in the last one kept.
+    for (const col of spare) {
+      while (col.firstChild) columns[columns.length - 1].appendChild(col.firstChild);
+      col.remove();
+    }
+  });
+  laid = true;
   for (const card of cards) {
     const m = meta.get(card);
-    if (!m || !m.painted) continue;
+    if (!m || !m.painted || !m.canvas || !m.canvas.parentNode) continue;
+    if (m.canvas.parentNode.clientWidth === m.w) continue;
     m.dirty = true;
     if (m.visible) paint(card);
   }
@@ -342,6 +581,7 @@ function add(card, first) {
   if (first) cards.unshift(card);
   else cards.push(card);
   if (watcher) watcher.observe(card);
+  if (developer && card.classList.contains('card-rolled')) developer.observe(card);
 }
 function relayout() {
   if (relayoutHandle) return;
@@ -351,12 +591,25 @@ function relayout() {
   });
 }
 
+// The cards the template wrote are on the page before this runs: those below the first screen are
+// rolled up to develop as the visitor reaches them, and those already in view are left as they are.
+function belowTheFold(card) {
+  if (typeof card.getBoundingClientRect !== 'function' || !window.innerHeight) return false;
+  try {
+    return card.getBoundingClientRect().top > window.innerHeight;
+  } catch (error) {
+    return false;
+  }
+}
 function registerStatic() {
   for (const card of Array.from(grid.querySelectorAll('.card-world'))) {
     const world = WORLDS.find((w) => w.file === card.dataset.world);
     if (!world) continue;
-    meta.set(card, { kind: 'world', world, id: world.id, seed: (hash(world.file) ^ salt) >>> 0,
+    const seed = (hash(world.file) ^ salt) >>> 0;
+    meta.set(card, { kind: 'world', world, id: world.id, seed,
       variant: PLAIN, canvas: card.querySelector('.card-canvas'), isStatic: true });
+    grain(card, seed);
+    if (!calm.matches && belowTheFold(card)) card.classList.add('card-rolled');
     add(card);
   }
 }
@@ -370,9 +623,10 @@ function media(ratio) {
 }
 function worldCard(world, seed) {
   const variant = roll(seed);
-  const card = el('article', 'card card-world card-enter');
+  const card = el('article', 'card card-world card-rolled');
   card.dataset.world = world.file;
   card.dataset.mood = world.mood;
+  grain(card, seed);
   const link = el('a', 'card-link');
   link.href = root + world.file;
   const picture = media(aspect(world.aspect, variant));
@@ -398,9 +652,10 @@ function sparkBody(world, spec) {
 }
 function sparkCard(world, mod, seed) {
   const variant = roll(seed);
-  const card = el('article', 'card card-spark card-enter');
+  const card = el('article', 'card card-spark card-rolled');
   card.dataset.world = world.file;
   card.dataset.mood = world.mood;
+  grain(card, seed);
   let spec;
   try {
     spec = mod.spark(makeEnv(card, seed, world, variant));
@@ -429,6 +684,41 @@ function sparkCard(world, mod, seed) {
   meta.set(card, { kind: 'spark', world, id: world.id, seed, variant, canvas, spec, mod });
   return card;
 }
+// A plate changing size (a face re-dealt with another aspect, a plate put on or taken off) steps
+// there in treads the engine rolls: pinned at the height it had, then moved tread by tread to the
+// height it has, and let go. Without the engine, or with less motion asked for, it is there at
+// once. `after` runs when the plate has landed.
+function stepPlate(m, box, was, is, after) {
+  const motion = engine();
+  if (m.plate) {
+    m.plate();
+    m.plate = null;
+  }
+  const land = () => {
+    m.plate = null;
+    m.plateHeight = 0;
+    if (box.style) box.style.height = '';
+    if (typeof after === 'function') after();
+  };
+  if (calm.matches || !box.style || Math.abs(is - was) < 0.5 || !motion || typeof motion.stepper !== 'function') {
+    land();
+    return;
+  }
+  m.plateHeight = is;
+  box.style.height = was.toFixed(1) + 'px';
+  m.plate = motion.stepper({
+    ms: riteMs('medium'),
+    treads: 4,
+    step: (k, n) => { box.style.height = (was + (is - was) * k / n).toFixed(1) + 'px'; },
+    done: land
+  });
+}
+
+// Another face for the card: what the card is showing (m.spec, which take() and a press hand on)
+// changes at once; what the visitor sees leaves down the ladder first (card-redeal, along an
+// unmake composed for this face), and the new face is swapped in when that has played -- its
+// plate stepping to its new size -- develops along a composed development of its own (is-dealt),
+// and has its name revealed.
 function reroll(card, keepSeed) {
   const m = meta.get(card);
   if (!m || !m.mod) return;
@@ -443,22 +733,71 @@ function reroll(card, keepSeed) {
   }
   if (!spec) return;
   Object.assign(m, { seed, variant, spec });
-  tint(card, m);
-  const link = card.querySelector('.card-link');
-  link.replaceChild(sparkBody(m.world, spec), link.querySelector('.card-body'));
-  const oldMedia = link.querySelector('.card-media');
-  const ratio = aspect(spec.aspect || m.world.aspect, variant);
-  if (spec.paint && !oldMedia) {
-    const picture = media(ratio);
-    link.insertBefore(picture.box, link.firstChild);
-    m.canvas = picture.canvas;
-  } else if (!spec.paint && oldMedia) {
-    oldMedia.remove();
-    m.canvas = null;
-  } else if (oldMedia) oldMedia.style.aspectRatio = ratio;
-  m.painted = false;
-  if (m.canvas) paint(card);
-  relayout();
+  grain(card, seed);
+  const swap = () => {
+    if (meta.get(card) !== m || !card.isConnected) return;
+    tint(card, m);
+    const link = card.querySelector('.card-link');
+    link.replaceChild(sparkBody(m.world, m.spec), link.querySelector('.card-body'));
+    const oldMedia = link.querySelector('.card-media');
+    const ratio = aspect(m.spec.aspect || m.world.aspect, m.variant);
+    // The box's laid-out height, not its drawn one: the old face is mid-unmake, scaled and moved.
+    const heightOf = (box) => (box && typeof box.offsetHeight === 'number' ? box.offsetHeight : 0);
+    if (m.spec.paint && !oldMedia) {
+      const picture = media(ratio);
+      link.insertBefore(picture.box, link.firstChild);
+      m.canvas = picture.canvas;
+      stepPlate(m, picture.box, 0, heightOf(picture.box), relayout);
+    } else if (!m.spec.paint && oldMedia) {
+      m.canvas = null;
+      stepPlate(m, oldMedia, heightOf(oldMedia), 0, () => {
+        oldMedia.remove();
+        relayout();
+      });
+    } else if (oldMedia) {
+      const was = heightOf(oldMedia);
+      oldMedia.style.aspectRatio = ratio;
+      stepPlate(m, oldMedia, was, heightOf(oldMedia), relayout);
+    }
+    m.painted = false;
+    if (m.canvas) paint(card);
+    compose(card, 'develop', 'card-develop', 560, seedFor(card, 0xdea1));
+    play(card, 'dealt', riteMs('long') * 2 + 300);
+    reveal(link.querySelector('.card-title'), 0.5);
+    relayout();
+  };
+  if (m.swap) {
+    window.clearTimeout(m.swap);
+    m.swap = 0;
+  }
+  if (m.swapEnd) {
+    card.removeEventListener('animationend', m.swapEnd);
+    m.swapEnd = null;
+  }
+  if (calm.matches || card.classList.contains('card-rolled') || !card.isConnected) {
+    card.classList.remove('card-redeal');
+    swap();
+    return;
+  }
+  // The old face goes down the ladder; its own spell ending (on the plate or the words, whichever
+  // lands first) swaps the new one in, with the clock as the fallback for a face given no spell.
+  const dealt = () => {
+    if (m.swap) window.clearTimeout(m.swap);
+    m.swap = 0;
+    card.removeEventListener('animationend', m.swapEnd);
+    m.swapEnd = null;
+    card.classList.remove('card-redeal');
+    swap();
+  };
+  m.swapEnd = (ev) => {
+    if (!ev || !ev.target || ev.target.parentNode !== card.querySelector('.card-link')) return;
+    if (!spellIs(ev.animationName, 'card-unmake', 'unmake')) return;
+    dealt();
+  };
+  compose(card, 'unmake', 'card-unmake', 340, seedFor(card, 0x0bad));
+  card.classList.add('card-redeal');
+  card.addEventListener('animationend', m.swapEnd);
+  m.swap = window.setTimeout(dealt, riteMs('medium') * 2 + 300);
 }
 
 function consume(card) {
@@ -466,20 +805,43 @@ function consume(card) {
   if (at < 0) return;
   cards.splice(at, 1);
   if (watcher) watcher.unobserve(card);
+  if (developer) developer.unobserve(card);
   deactivate(card);
   if (card === suggested) suggested = null;
+  const m = meta.get(card);
+  if (m) {
+    // A face half-way to being re-dealt is not re-dealt: the card is leaving.
+    if (m.swap) window.clearTimeout(m.swap);
+    if (m.swapEnd) card.removeEventListener('animationend', m.swapEnd);
+    m.swap = 0;
+    m.swapEnd = null;
+  }
+  card.classList.remove('card-rolled', 'card-enter', 'card-redeal');
+  // The leaving is composed for this card alone, from its own seed.
+  compose(card, 'unmake', 'card-out', 340, seedFor(card, 0x0ff));
   card.classList.add('card-leave');
-  const gone = () => {
+  let done = false;
+  const gone = (ev) => {
+    if (ev && (ev.target !== card || !(spellIs(ev.animationName, 'card-out', 'unmake') || ev.animationName === 'card-taken'))) return;
+    if (done) return;
+    done = true;
+    card.removeEventListener('animationend', gone);
+    card.removeEventListener('animationcancel', gone);
     card.remove();
     meta.delete(card);
     relayout();
   };
-  // The card leaves along the rolled curve and for the rolled time the stylesheet gives card-out
-  // (README: "Motion axiom"), so the stage's loop waits out whatever the roll came to.
+  // The card leaves along the rolled curve and for the length the roll gave card-out (README:
+  // "Motion axiom"): its own spell ending takes it away, and the clock only stands in for a card
+  // given no spell, so the stage's loop waits out whatever the roll came to.
   const motion = window.interestingMotion;
-  const leaving = motion && typeof motion.ms === 'function' ? motion.ms('medium') + 40 : 300;
+  const leaving = motion && typeof motion.ms === 'function' ? motion.ms('medium') * 2 + 300 : 300;
   if (calm.matches) gone();
-  else window.setTimeout(gone, leaving);
+  else {
+    card.addEventListener('animationend', gone);
+    card.addEventListener('animationcancel', gone);
+    window.setTimeout(gone, leaving);
+  }
   if (cards.length < 12) more();
 }
 function take(fit, avoid) {
@@ -510,6 +872,8 @@ function openFromCard(ev) {
   const seed = m.seed;
   const variant = m.variant;
   const was = shown(m);
+  // The pressed card is the one handed to the stage: it pops over and goes up to it (card-taken).
+  card.classList.add('card-taken');
   consume(card);
   window.interestingStage.open(file, seed, { arriving: true, scroll: true, seeds, variant, card: was });
 }
@@ -565,6 +929,8 @@ async function more() {
   if (sentinel && nearBottom()) more();
 }
 
+// The card a fresh reading points at: badged "for you" and sealed with the texture; the one it
+// pointed at before is unsealed and its badge taken off.
 function suggest() {
   const flow = window.threshold;
   if (!flow || typeof flow.reading !== 'function') return false;
@@ -577,14 +943,15 @@ function suggest() {
   }) || null : null;
   if (target === suggested) return false;
   if (suggested) {
-    const badge = Array.from(suggested.querySelectorAll('.card-badge')).find((node) => node.textContent === 'for you');
-    if (badge) badge.remove();
+    unbadge(badgeOf(suggested, 'for you'));
     suggested.classList.remove('card-suggested');
+    seal(suggested, false);
   }
   suggested = target;
   if (target) {
-    (target.querySelector('.card-media') || target).appendChild(el('span', 'card-badge', 'for you'));
+    badge(target, 'for you');
     target.classList.add('card-suggested');
+    seal(target, true);
     const at = cards.indexOf(target);
     if (at > 0) {
       cards.splice(at, 1);
@@ -613,6 +980,8 @@ function start() {
   window.addEventListener('threshold:reading', () => {
     if (suggest()) relayout();
   });
+  // The world the stage opens onto is the current card: its link flips aria-current, which
+  // js/motion.js seals (the texture climbs onto its picture), and its badge develops.
   window.addEventListener('stage:open', (ev) => {
     const file = ev.detail && ev.detail.file;
     for (const card of cards) {
@@ -625,9 +994,8 @@ function start() {
         if (isHere) link.setAttribute('aria-current', 'page');
         else link.removeAttribute('aria-current');
       }
-      const old = Array.from(card.querySelectorAll('.card-badge')).find((node) => node.textContent === 'you are here');
-      if (old) old.remove();
-      if (isHere) (card.querySelector('.card-media') || card).appendChild(el('span', 'card-badge', 'you are here'));
+      unbadge(badgeOf(card, 'you are here'));
+      if (isHere) badge(card, 'you are here');
     }
   });
   let skyPending = false;
@@ -651,6 +1019,25 @@ function start() {
       }
     });
   });
+  // Under a sheet (<html data-lightbox>, js/site.js) the cards on screen are put aside: each is
+  // sealed with its texture along a seal composed for it, and unsealed when the sheet goes. Only
+  // what is on screen, so a sheet opening seals a handful of cards and not the whole deck.
+  if (typeof MutationObserver === 'function') {
+    const html = document.documentElement;
+    let aside = html.hasAttribute('data-lightbox');
+    new MutationObserver(() => {
+      const is = html.hasAttribute('data-lightbox');
+      if (is === aside) return;
+      aside = is;
+      for (const card of cards) {
+        const m = meta.get(card);
+        const was = card.classList.contains('is-aside');
+        if (is ? (was || !m || !m.visible || card.classList.contains('card-rolled')) : !was) continue;
+        card.classList.toggle('is-aside', is);
+        seal(card, is);
+      }
+    }).observe(html, { attributes: true, attributeFilter: ['data-lightbox'] });
+  }
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden) for (const card of active) activate(card);
   });
