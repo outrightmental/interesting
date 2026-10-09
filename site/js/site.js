@@ -313,10 +313,12 @@
   // before the focus can go home to the control that opened it: a copy of it left exactly where
   // it was, unmade there, and taken out when it has gone. Under no pointer, hidden from a screen
   // reader, and playing through whatever lightbox is still up around it.
-  function ghostOf(host) {
+  function ghostOf(host, lastBox) {
     if (!canUnmake(host) || typeof host.getBoundingClientRect !== 'function' || !document.body
         || typeof host.innerHTML !== 'string' || typeof host.querySelectorAll !== 'function') return;
     var box = host.getBoundingClientRect();
+    // A box that has already been hidden has no rect of its own: the one it was last seen at.
+    if ((!box || !box.width || !box.height) && lastBox && lastBox.width && lastBox.height) box = lastBox;
     if (!box || !box.width || !box.height) return;
     var ghost = document.createElement('div');
     ghost.className = String(host.className || '').replace(/\b[\w-]+-fallback\b/g, '').replace(/\s+/g, ' ').trim() + ' shell-ghost';
@@ -1361,6 +1363,7 @@
      tidies up either way, because an empty host left on screen is an invisible layer over the
      page. */
   var stateHosted = null; // the function that gives the panel back, while it is being hosted
+  var stateBox = null; // where the hosted panel was last seen, for its ghost
 
   function hostedStateMenu() {
     var menu = store && store.menu;
@@ -1380,6 +1383,8 @@
         return false;
       }
       stateHosted = release;
+      // Where the panel stands, for its ghost: the store hides it before the shell hears of it.
+      stateBox = typeof menu.panel.getBoundingClientRect === 'function' ? menu.panel.getBoundingClientRect() : null;
       // The same box, renamed where it stands: <html data-lightbox> goes from 'nav' straight to
       // 'state' without ever being removed, so every rule keyed on the lightbox being up stays
       // matched through the swap and nothing behind the veil so much as blinks.
@@ -1399,7 +1404,8 @@
       // What the panel showed leaves down the ladder as a ghost of itself where it stood (the
       // panel is the store's and goes at once); nothing to ghost if it has already gone.
       var shown = hostedStateMenu();
-      if (shown && shown.panel && !shown.panel.hidden) ghostOf(shown.panel);
+      if (shown && shown.panel) ghostOf(shown.panel, stateBox);
+      stateBox = null;
       giveItBack();
     }
     // Put away whether anything was being hosted or not: an empty host left on screen would be an
