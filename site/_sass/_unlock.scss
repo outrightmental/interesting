@@ -76,7 +76,7 @@
   color: var(--md-sys-color-on-surface);
   @include type.scale(title-medium);
   @include type.rite;
-  font-size: 1.1rem;
+  --role-size: 1.1rem;
 }
 
 .unlock-note {

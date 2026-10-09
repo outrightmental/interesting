@@ -185,30 +185,35 @@ html[data-lightbox] [data-lightbox-aside] * {
 
 @keyframes shell-unmake {
   0%, 15.9% {
+    opacity: 1;
     mask: var(--matte-5);
     -webkit-mask: var(--matte-5);
     transform: translate(calc(var(--leave-x, 0px) * -0.1), calc(var(--leave-y, -22px) * -0.1)) scale(1.01);
   }
 
   16%, 33.9% {
+    opacity: 1;
     mask: var(--matte-4);
     -webkit-mask: var(--matte-4);
     transform: translate(calc(var(--leave-x, 0px) * 0.2), calc(var(--leave-y, -22px) * 0.2)) rotate(calc(var(--leave-rot, 0deg) * 0.4));
   }
 
   34%, 45.9% {
+    opacity: 1;
     mask: var(--matte-5);
     -webkit-mask: var(--matte-5);
     transform: translate(calc(var(--leave-x, 0px) * 0.15), calc(var(--leave-y, -22px) * 0.15)) rotate(calc(var(--leave-rot, 0deg) * 0.3));
   }
 
   46%, 63.9% {
+    opacity: 1;
     mask: var(--matte-3);
     -webkit-mask: var(--matte-3);
     transform: translate(calc(var(--leave-x, 0px) * 0.5), calc(var(--leave-y, -22px) * 0.5)) rotate(var(--leave-rot, 0deg)) scale(var(--leave-scale, 0.92));
   }
 
   64%, 81.9% {
+    opacity: 1;
     mask: var(--matte-2);
     -webkit-mask: var(--matte-2);
     transform: translate(calc(var(--leave-x, 0px) * 0.8), calc(var(--leave-y, -22px) * 0.8)) rotate(var(--leave-rot, 0deg)) scale(calc(var(--leave-scale, 0.92) - 0.04));

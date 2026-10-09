@@ -103,7 +103,7 @@ main {
   color: var(--md-sys-color-on-surface);
   @include type.scale(title-large);
   @include type.rite;
-  font-size: 1.5rem;
+  --role-size: 1.5rem;
 }
 
 .prose h2:first-child {

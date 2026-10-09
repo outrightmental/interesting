@@ -90,11 +90,11 @@
 // settles back down them with one refusal on the way. A card arriving or leaving keeps its own
 // rite: the pointer passing over it neither cuts the arrival short nor holds a leaving card back.
 .card:not(.card-enter):not(.card-leave):has(> .card-link.is-waxing) {
-  animation: card-lift var(--motion-medium) var(--ease-card-lift, var(--ease-stair)) both;
+  animation: card-lift var(--motion-card-lift, var(--motion-medium)) var(--ease-card-lift, var(--ease-stair)) both;
 }
 
 .card:not(.card-enter):not(.card-leave):has(> .card-link.is-waning) {
-  animation: card-settle var(--motion-medium) var(--ease-card-settle, var(--ease-stair)) both;
+  animation: card-settle var(--motion-card-settle, var(--motion-medium)) var(--ease-card-settle, var(--ease-stair)) both;
 }
 
 @keyframes card-lift {
@@ -174,9 +174,12 @@
 .card-link:hover::after,
 .card-link:focus-visible::after {
   opacity: var(--state-opacity, var(--md-sys-state-hover-opacity));
-  mask: none;
-  -webkit-mask: none;
-  animation: card-wax var(--motion-medium) var(--ease-card-wax, var(--ease-stair)) both;
+  mask: var(--matte-top);
+  -webkit-mask: var(--matte-top);
+  mask-position: var(--card-grain, 0 0);
+  -webkit-mask-position: var(--card-grain, 0 0);
+  // Composed anew on every wax (--rite-wax, js/motion.js); card-wax for a page with no script.
+  animation: var(--rite-wax, card-wax) var(--motion-matte-in, var(--motion-card-wax, var(--motion-medium))) var(--ease-card-wax, var(--ease-stair)) both;
 }
 
 .card-link:focus-visible::after {
@@ -185,7 +188,9 @@
 
 .card-link.is-waning::after {
   opacity: var(--md-sys-state-hover-opacity);
-  animation: card-wane var(--motion-medium) var(--ease-card-wane, var(--ease-stair)) both;
+  mask-position: var(--card-grain, 0 0);
+  -webkit-mask-position: var(--card-grain, 0 0);
+  animation: var(--rite-wane, card-wane) var(--motion-matte-out, var(--motion-card-wane, var(--motion-medium))) var(--ease-card-wane, var(--ease-stair)) both;
 }
 
 @keyframes card-wax {
@@ -227,18 +232,24 @@
   82%, 94.9% {
     mask: var(--matte-5);
     -webkit-mask: var(--matte-5);
+    mask-position: var(--card-grain, 0 0);
+    -webkit-mask-position: var(--card-grain, 0 0);
   }
 
   95%, 100% {
-    mask: none;
-    -webkit-mask: none;
+    mask: var(--matte-top);
+    -webkit-mask: var(--matte-top);
+    mask-position: var(--card-grain, 0 0);
+    -webkit-mask-position: var(--card-grain, 0 0);
   }
 }
 
 @keyframes card-wane {
   0%, 21.9% {
-    mask: var(--matte-5);
-    -webkit-mask: var(--matte-5);
+    mask: var(--matte-top);
+    -webkit-mask: var(--matte-top);
+    mask-position: var(--card-grain, 0 0);
+    -webkit-mask-position: var(--card-grain, 0 0);
   }
 
   22%, 43.9% {
@@ -297,12 +308,12 @@
 
 .card-link.is-stamping,
 .card-link:active {
-  animation: card-stamp var(--motion-short) var(--ease-card-stamp, var(--ease-flicker)) both;
+  animation: var(--rite-stamp, card-stamp) var(--motion-rite-stamp, var(--motion-card-stamp, var(--motion-short))) var(--ease-card-stamp, var(--ease-flicker)) both;
 }
 
 .card-link.is-stamping::before,
 .card-link:active::before {
-  animation: card-crack var(--motion-short) var(--ease-card-crack, var(--ease-flicker)) both;
+  animation: var(--rite-ink, card-crack) var(--motion-stamp-ink, var(--motion-card-crack, var(--motion-short))) var(--ease-card-crack, var(--ease-flicker)) both;
 }
 
 @keyframes card-stamp {
@@ -312,8 +323,8 @@
   }
 
   45%, 69.9% {
-    transform: translateY(1px) scale(0.978);
-    filter: contrast(1.2) brightness(1.1);
+    transform: translateY(2px) scale(0.972) rotate(calc(var(--lift-rot, 0deg) * -0.5));
+    filter: contrast(1.35) brightness(0.96);
   }
 
   70%, 84.9% {
@@ -365,7 +376,7 @@
 .card-link:focus-visible {
   outline: 3px dashed var(--md-sys-color-primary);
   outline-offset: -3px;
-  animation: card-focus var(--motion-medium) var(--ease-card-focus, var(--ease-stair)) both;
+  animation: card-focus var(--motion-card-focus, var(--motion-medium)) var(--ease-card-focus, var(--ease-stair)) both;
 }
 
 @keyframes card-focus {
@@ -453,8 +464,16 @@
   color: var(--md-sys-color-on-surface);
   @include type.scale(title-large);
   @include type.rite;
-  font-size: 1.15rem;
+  --role-size: 1.15rem;
   overflow-wrap: anywhere;
+  // The dotted rule under the current card's name (below) is always drawn and steps from
+  // nothing to the ink along the stair, so it never pops on or off.
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-decoration-thickness: 1px;
+  text-decoration-color: transparent;
+  text-underline-offset: 0.18em;
+  transition: text-decoration-color var(--motion-medium) var(--ease-stair);
 }
 
 .card-text {
@@ -499,12 +518,12 @@
 .card.is-sealing .card-media::before,
 .card-link.is-sealing .card-media::before {
   opacity: 0.2;
-  animation: card-seal var(--motion-long) var(--ease-card-seal, var(--ease-stair)) both;
+  animation: var(--rite-seal, card-seal) var(--motion-rite-seal, var(--motion-card-seal, var(--motion-long))) var(--ease-card-seal, var(--ease-stair)) both;
 }
 
 .card.is-unsealing .card-media::before,
 .card-link.is-unsealing .card-media::before {
-  animation: card-unseal var(--motion-medium) var(--ease-card-unseal, var(--ease-stair)) both;
+  animation: var(--rite-unseal, card-unseal) var(--motion-rite-unseal, var(--motion-card-unseal, var(--motion-medium))) var(--ease-card-unseal, var(--ease-stair)) both;
 }
 
 @keyframes card-seal {
@@ -582,10 +601,7 @@
 }
 
 .card-current .card-link[aria-current='page'] .card-title {
-  text-decoration: underline;
-  text-decoration-style: dotted;
-  text-decoration-thickness: 1px;
-  text-underline-offset: 0.18em;
+  text-decoration-color: currentColor;
 }
 
 .card-spark .card-title { @include type.scale(title-large); @include type.rite; }
@@ -635,12 +651,12 @@
 }
 
 .card-badge.is-dealt {
-  animation: badge-in var(--motion-long) var(--ease-badge-in, var(--ease-arrive)) both;
+  animation: var(--rite-develop, badge-in) var(--motion-badge-in, var(--motion-long)) var(--ease-badge-in, var(--ease-arrive)) both;
 }
 
 .card-badge.is-gone {
   pointer-events: none;
-  animation: badge-out var(--motion-medium) var(--ease-badge-out, var(--ease-leave)) both;
+  animation: var(--rite-unmake, badge-out) var(--motion-badge-out, var(--motion-medium)) var(--ease-badge-out, var(--ease-leave)) both;
 }
 
 @keyframes badge-in {
@@ -748,7 +764,7 @@
 }
 
 .card-enter {
-  animation: card-in var(--motion-long) var(--ease-card-in, var(--ease-arrive)) var(--d, calc(var(--k, 0) * var(--motion-stagger, 44ms))) both;
+  animation: var(--rite-develop, card-in) var(--motion-card-in, var(--motion-long)) var(--ease-card-in, var(--ease-arrive)) var(--d, calc(var(--k, 0) * var(--motion-stagger, 44ms))) both;
 }
 
 @keyframes card-in {
@@ -813,7 +829,7 @@
 
 .card.is-dealt .card-media,
 .card.is-dealt .card-body {
-  animation: card-develop var(--motion-long) var(--ease-card-develop, var(--ease-stair)) both;
+  animation: card-develop var(--motion-card-develop, var(--motion-long)) var(--ease-card-develop, var(--ease-stair)) both;
 }
 
 .card.is-dealt .card-body {
@@ -865,7 +881,7 @@
 // pressed (card-taken) is handed to the stage: it pops over first, then goes up and out.
 .card-redeal .card-media,
 .card-redeal .card-body {
-  animation: card-unmake var(--motion-medium) var(--ease-card-unmake, var(--ease-leave)) both;
+  animation: card-unmake var(--motion-card-unmake, var(--motion-medium)) var(--ease-card-unmake, var(--ease-leave)) both;
 }
 
 @keyframes card-unmake {
@@ -897,7 +913,7 @@
 
 .card-leave {
   pointer-events: none;
-  animation: card-out var(--motion-medium) var(--ease-card-out, var(--ease-leave)) both;
+  animation: var(--rite-unmake, card-out) var(--motion-card-out, var(--motion-medium)) var(--ease-card-out, var(--ease-leave)) both;
 }
 
 @keyframes card-out {
@@ -940,7 +956,7 @@
 
 .card-leave.card-taken {
   z-index: 3;
-  animation: card-taken var(--motion-medium) var(--ease-card-taken, var(--ease-leave)) both;
+  animation: card-taken var(--motion-card-taken, var(--motion-medium)) var(--ease-card-taken, var(--ease-leave)) both;
 }
 
 @keyframes card-taken {
@@ -1036,6 +1052,8 @@ html[data-lightbox] .card-media::before {
   }
 
   .card-rolled {
+    mask: none;
+    -webkit-mask: none;
   }
 
   .card-link.is-waning::after,

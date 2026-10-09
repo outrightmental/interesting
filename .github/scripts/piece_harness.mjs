@@ -324,7 +324,9 @@ function riteOf(seed) {
     const base = i / (treads - 1 || 1);
     const into = (q - edges[i]) / ((edges[i + 1] || 1) - edges[i]);
     // No backlash before the first click: a wheel at rest is at rest.
-    const kick = i > 0 && into < 0.3 ? (1 - into / 0.3) * backlash * (i % 2 ? -1 : 1) : 0;
+    // The backlash settles in three held steps, never a decay run through.
+    const settle = into < 0.1 ? 1 : into < 0.2 ? 0.6 : into < 0.3 ? 0.25 : 0;
+    const kick = i > 0 ? settle * backlash * (i % 2 ? -1 : 1) : 0;
     return Math.max(0, Math.min(1, base + kick));
   };
 

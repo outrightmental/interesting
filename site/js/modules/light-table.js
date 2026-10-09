@@ -72,8 +72,10 @@ function clamp(v, lo, hi) {
    motion, and for whatever stood there from the start (since < 0). Each band, plate or speck
    moves on a roll of its own (rite.at), so no two step together. */
 
+// No rite handed (no env builder does this; a guard): everything stands where it ends, so a
+// plate turned to a new place is at that place and never stuck at its old angle.
 const STILL = {
-  ease: () => 1, stair: () => 1, ratchet: () => 0, flicker: () => 1, matte: () => true,
+  ease: () => 1, stair: () => 1, ratchet: () => 1, flicker: () => 1, matte: () => true,
   treads: 1, kind: 'none', cell: 4, at: () => STILL
 };
 

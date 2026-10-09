@@ -695,9 +695,12 @@ function whichLayout(w, h) {
 }
 
 // One sky in a square: its frame, its lights and the lines between them. opts.fill is a surface
-// that has developed `opts.fillK` of the way over the box, under the lights; opts.veil one that has
-// come `opts.veilK` of the way over them (a decoy's dimming); both by their area, through the
-// matte, never by alpha. The lights twinkle on the rolls opts.seed and up.
+// that has developed `opts.fillK` of the way over the box, under the lights; opts.lit a second,
+// brighter one that has come `opts.litK` of the way over that (the sky that turns out to be yours,
+// which is the chosen one already, so it needs a surface of its own on a roll of its own,
+// opts.litRite); opts.veil one that has come `opts.veilK` of the way over them (a decoy's dimming);
+// all by their area, through the matte, never by alpha. The lights twinkle on the rolls opts.seed
+// and up.
 function skyBox(g, c, pts, x, y, side, v, opts) {
   const rite = opts.rite || STILL;
   g.fillStyle = c.alpha(c.colors.bg, 0.55);
@@ -705,6 +708,10 @@ function skyBox(g, c, pts, x, y, side, v, opts) {
   if (opts.fill && opts.fillK > 0) {
     g.fillStyle = opts.fill;
     develop(g, rite, x, y, side, side, opts.fillK, null, 12);
+  }
+  if (opts.lit && opts.litK > 0) {
+    g.fillStyle = opts.lit;
+    develop(g, opts.litRite || rite, x, y, side, side, opts.litK, null, 16);
   }
   g.strokeStyle = opts.border || c.alpha(c.colors.muted, 0.7);
   g.lineWidth = opts.width || 1;
@@ -782,14 +789,16 @@ function whichScene(g, w, h, c, plan, s, v) {
     // A decoy: a veil over it develops through the matte, and the word blinks on.
     const hp = s.hinted.includes(i) ? came(s, s.hintAt[i], 1.1, reduced) : 0;
     const decoyK = hp > 0 ? mine.stair(hp) : 0;
-    // Yours, once solved: lit through the matte, with a flicker.
+    // Yours, once solved: a brighter surface of its own develops through the matte on a roll of
+    // its own over the chosen fill (the sky found is the sky chosen, so the chosen fill is already
+    // whole underneath), and is not there at all during its flicker's dropouts.
     const fp = s.doneAt >= 0 && i === plan.which ? came(s, s.doneAt, 1.6, reduced) : 0;
     const found = fp > 0 && !!mine.flicker(fp);
     const foundK = found ? mine.stair(fp) : 0;
     skyBox(g, c, sky, cell.x, cell.y, cell.side, v, {
       rite, t: s.t, seed: 0x300 + i * 16, label: SKIES[i],
-      fill: found ? c.alpha(c.colors.accent2, 0.22) : c.alpha(c.colors.accent2, 0.16),
-      fillK: Math.max(foundK, chosenK),
+      fill: c.alpha(c.colors.accent2, 0.16), fillK: chosenK,
+      lit: c.alpha(c.colors.accent2, 0.3), litK: foundK, litRite: own(rite, 0x4c1 + i),
       veil: c.alpha(c.colors.bg, 0.72), veilK: decoyK,
       note: hp > 0 && mine.flicker(hp) ? 'decoy' : '',
       border: found || chosenK > 0 ? c.colors.accent2 : undefined,

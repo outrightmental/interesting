@@ -200,15 +200,21 @@
 .sparknav-logo:hover::after,
 .sparknav-logo:focus-visible::after {
   opacity: 0.16;
-  mask: none;
-  -webkit-mask: none;
-  animation: logo-frost var(--motion-medium) var(--ease-logo-frost, var(--ease-stair)) both;
+  mask: var(--matte-top);
+  -webkit-mask: var(--matte-top);
+  mask-position: var(--matte-shift, 0 0);
+  -webkit-mask-position: var(--matte-shift, 0 0);
+  // Composed anew on every frost (--rite-wax, js/motion.js), the keyframes below for a page with
+  // no script; the length is the one rolled for the spell.
+  animation: var(--rite-wax, logo-frost) var(--motion-matte-in, var(--motion-logo-frost, var(--motion-medium))) var(--ease-logo-frost, var(--ease-stair)) both;
 }
 
 // Waning: the frost leaves back down the ladder.
 .sparknav-logo.is-waning::after {
   opacity: 0.16;
-  animation: logo-thaw var(--motion-medium) var(--ease-logo-thaw, var(--ease-stair)) both;
+  mask-position: var(--matte-shift, 0 0);
+  -webkit-mask-position: var(--matte-shift, 0 0);
+  animation: var(--rite-wane, logo-thaw) var(--motion-matte-out, var(--motion-logo-thaw, var(--motion-medium))) var(--ease-logo-thaw, var(--ease-stair)) both;
 }
 
 .sparknav-logo:focus-visible {
@@ -220,66 +226,92 @@
 // contrast on the way down. :active is the same for a page with no script.
 .sparknav-logo.is-stamping,
 .sparknav-logo:active {
-  animation: logo-stamp var(--motion-short) var(--ease-logo-stamp, var(--ease-flicker)) both;
+  animation: var(--rite-stamp, logo-stamp) var(--motion-rite-stamp, var(--motion-logo-stamp, var(--motion-short))) var(--ease-logo-stamp, var(--ease-flicker)) both;
 }
 
 @keyframes logo-frost {
   0%, 21.9% {
     mask: var(--matte-1);
     -webkit-mask: var(--matte-1);
+    mask-position: var(--matte-shift, 0 0);
+    -webkit-mask-position: var(--matte-shift, 0 0);
   }
 
   22%, 41.9% {
     mask: var(--matte-2);
     -webkit-mask: var(--matte-2);
+    mask-position: var(--matte-shift, 0 0);
+    -webkit-mask-position: var(--matte-shift, 0 0);
   }
 
   42%, 55.9% {
     mask: var(--matte-1);
     -webkit-mask: var(--matte-1);
+    mask-position: var(--matte-shift, 0 0);
+    -webkit-mask-position: var(--matte-shift, 0 0);
   }
 
   56%, 73.9% {
     mask: var(--matte-3);
     -webkit-mask: var(--matte-3);
+    mask-position: var(--matte-shift, 0 0);
+    -webkit-mask-position: var(--matte-shift, 0 0);
   }
 
   74%, 89.9% {
     mask: var(--matte-4);
     -webkit-mask: var(--matte-4);
+    mask-position: var(--matte-shift, 0 0);
+    -webkit-mask-position: var(--matte-shift, 0 0);
   }
 
   90%, 100% {
-    mask: none;
-    -webkit-mask: none;
+    mask: var(--matte-top);
+    -webkit-mask: var(--matte-top);
+    mask-position: var(--matte-shift, 0 0);
+    -webkit-mask-position: var(--matte-shift, 0 0);
   }
 }
 
 @keyframes logo-thaw {
   0%, 27.9% {
-    mask: var(--matte-4);
-    -webkit-mask: var(--matte-4);
+    opacity: 0.16;
+    mask: var(--matte-top);
+    -webkit-mask: var(--matte-top);
+    mask-position: var(--matte-shift, 0 0);
+    -webkit-mask-position: var(--matte-shift, 0 0);
   }
 
   28%, 51.9% {
+    opacity: 0.16;
     mask: var(--matte-3);
     -webkit-mask: var(--matte-3);
+    mask-position: var(--matte-shift, 0 0);
+    -webkit-mask-position: var(--matte-shift, 0 0);
   }
 
   52%, 71.9% {
+    opacity: 0.16;
     mask: var(--matte-2);
     -webkit-mask: var(--matte-2);
+    mask-position: var(--matte-shift, 0 0);
+    -webkit-mask-position: var(--matte-shift, 0 0);
   }
 
   72%, 93.9% {
+    opacity: 0.16;
     mask: var(--matte-1);
     -webkit-mask: var(--matte-1);
+    mask-position: var(--matte-shift, 0 0);
+    -webkit-mask-position: var(--matte-shift, 0 0);
   }
 
   94%, 100% {
     opacity: 0;
     mask: var(--matte-1);
     -webkit-mask: var(--matte-1);
+    mask-position: var(--matte-shift, 0 0);
+    -webkit-mask-position: var(--matte-shift, 0 0);
   }
 }
 
@@ -367,7 +399,6 @@
   transition:
     max-width var(--motion-medium) var(--ease-stair),
     margin-left var(--motion-medium) var(--ease-stair),
-    opacity var(--motion-short) var(--ease-stair),
     letter-spacing var(--motion-short) var(--ease-stair);
 }
 
@@ -586,9 +617,12 @@ html[data-nav] .sparknav-sky[hidden] {
 .sparknav-node:hover::after,
 .sparknav-node:focus-visible::after {
   opacity: var(--state-opacity, var(--md-sys-state-hover-opacity));
-  mask: none;
-  -webkit-mask: none;
-  animation: chip-wax var(--motion-medium) var(--ease-chip-wax, var(--ease-stair)) both;
+  mask: var(--matte-top);
+  -webkit-mask: var(--matte-top);
+  mask-position: calc(var(--k, 0) * 37px) calc(var(--k, 0) * 23px);
+  -webkit-mask-position: calc(var(--k, 0) * 37px) calc(var(--k, 0) * 23px);
+  // Composed anew on every wax (--rite-wax, js/motion.js), chip-wax for a page with no script.
+  animation: var(--rite-wax, chip-wax) var(--motion-matte-in, var(--motion-chip-wax, var(--motion-medium))) var(--ease-chip-wax, var(--ease-stair)) both;
 }
 
 .sparknav-node:focus-visible::after {
@@ -598,14 +632,16 @@ html[data-nav] .sparknav-sky[hidden] {
 // Waning: back down the ladder, and gone.
 .sparknav-node.is-waning::after {
   opacity: var(--md-sys-state-hover-opacity);
-  animation: chip-wane var(--motion-medium) var(--ease-chip-wane, var(--ease-stair)) both;
+  mask-position: calc(var(--k, 0) * 37px) calc(var(--k, 0) * 23px);
+  -webkit-mask-position: calc(var(--k, 0) * 37px) calc(var(--k, 0) * 23px);
+  animation: var(--rite-wane, chip-wane) var(--motion-matte-out, var(--motion-chip-wane, var(--motion-medium))) var(--ease-chip-wane, var(--ease-stair)) both;
 }
 
 // The stamp: the chip sinks in one cut and springs back in two. Said with the mark's own class in
 // front so it outranks the branch below, which is on the chip for as long as the sky is open.
 .sparknav .sparknav-node.is-stamping,
 .sparknav .sparknav-node:active {
-  animation: chip-stamp var(--motion-short) var(--ease-chip-stamp, var(--ease-flicker)) both;
+  animation: var(--rite-stamp, chip-stamp) var(--motion-rite-stamp, var(--motion-chip-stamp, var(--motion-short))) var(--ease-chip-stamp, var(--ease-flicker)) both;
 }
 
 .sparknav-node:active::after {
@@ -671,11 +707,11 @@ html[data-nav] .sparknav-sky[hidden] {
 .sparknav-node.is-sealing::before,
 .is-branching .sparknav-node[aria-current='page']::before {
   opacity: 0.2;
-  animation: rite-seal var(--motion-long) var(--ease-rite-seal, var(--ease-stair)) both;
+  animation: var(--rite-seal, rite-seal) var(--motion-rite-seal, var(--motion-long)) var(--ease-rite-seal, var(--ease-stair)) both;
 }
 
 .sparknav-node.is-unsealing::before {
-  animation: rite-unseal var(--motion-medium) var(--ease-rite-unseal, var(--ease-stair)) both;
+  animation: var(--rite-unseal, rite-unseal) var(--motion-rite-unseal, var(--motion-medium)) var(--ease-rite-unseal, var(--ease-stair)) both;
 }
 
 .is-branching .sparknav-node[aria-current='page']::before,
@@ -898,6 +934,17 @@ html[data-nav='live'] {
   .sparknav[open]::after {
     animation: cast-ring-dashed var(--motion-long) var(--ease-cast-ring-dashed, var(--ease-stair)) both;
   }
+
+  // And leave as the chips unmake: back down the ladder, the solid ring a tread smaller than it
+  // stood and the dashed one turning back by the spark's extra, until the cut when the sky
+  // closes -- never a ring that is there one frame and gone the next.
+  .sparknav[open]:has(.is-unmaking)::before {
+    animation: cast-ring-out var(--motion-medium) var(--ease-cast-ring-out, var(--ease-leave)) both;
+  }
+
+  .sparknav[open]:has(.is-unmaking)::after {
+    animation: cast-ring-dashed-out var(--motion-medium) var(--ease-cast-ring-dashed-out, var(--ease-leave)) both;
+  }
 }
 
 // Each star develops out of the logo it belongs to: through its own treads of the matte, from
@@ -993,30 +1040,35 @@ html[data-nav='live'] {
 // toward the logo, one flicker whole on the way, to the roll's --leave-rot and --leave-scale.
 @keyframes sparknav-unmake {
   0%, 17.9% {
+    opacity: 1;
     mask: var(--matte-5);
     -webkit-mask: var(--matte-5);
     transform: translate(calc(var(--fx, 0px) * -0.05), calc(var(--fy, 0px) * -0.05)) scale(1.02);
   }
 
   18%, 35.9% {
+    opacity: 1;
     mask: var(--matte-4);
     -webkit-mask: var(--matte-4);
     transform: translate(calc(var(--fx, 0px) * 0.16), calc(var(--fy, 0px) * 0.16)) rotate(calc(var(--leave-rot, 0deg) * 0.5));
   }
 
   36%, 49.9% {
+    opacity: 1;
     mask: var(--matte-5);
     -webkit-mask: var(--matte-5);
     transform: translate(calc(var(--fx, 0px) * 0.12), calc(var(--fy, 0px) * 0.12)) rotate(calc(var(--leave-rot, 0deg) * 0.3));
   }
 
   50%, 67.9% {
+    opacity: 1;
     mask: var(--matte-3);
     -webkit-mask: var(--matte-3);
     transform: translate(calc(var(--fx, 0px) * 0.38), calc(var(--fy, 0px) * 0.38)) rotate(var(--leave-rot, 0deg)) scale(var(--leave-scale, 0.92));
   }
 
   68%, 85.9% {
+    opacity: 1;
     mask: var(--matte-2);
     -webkit-mask: var(--matte-2);
     transform: translate(calc(var(--fx, 0px) * 0.6), calc(var(--fy, 0px) * 0.6)) rotate(var(--leave-rot, 0deg)) scale(calc(var(--leave-scale, 0.92) - 0.06));
@@ -1032,24 +1084,28 @@ html[data-nav='live'] {
 
 @keyframes sparknav-ray-out {
   0%, 23.9% {
+    opacity: 1;
     mask: var(--matte-5);
     -webkit-mask: var(--matte-5);
     transform: rotate(var(--a, 0deg)) scaleX(1.03);
   }
 
   24%, 47.9% {
+    opacity: 1;
     mask: var(--matte-3);
     -webkit-mask: var(--matte-3);
     transform: rotate(var(--a, 0deg)) scaleX(0.7);
   }
 
   48%, 63.9% {
+    opacity: 1;
     mask: var(--matte-4);
     -webkit-mask: var(--matte-4);
     transform: rotate(var(--a, 0deg)) scaleX(0.78);
   }
 
   64%, 83.9% {
+    opacity: 1;
     mask: var(--matte-2);
     -webkit-mask: var(--matte-2);
     transform: rotate(var(--a, 0deg)) scaleX(0.4);
@@ -1140,6 +1196,76 @@ html[data-nav='live'] {
   }
 }
 
+@keyframes cast-ring-out {
+  0%, 21.9% {
+    mask: var(--matte-5);
+    -webkit-mask: var(--matte-5);
+    transform: translate(-50%, -50%) scale(1.02);
+  }
+
+  22%, 43.9% {
+    mask: var(--matte-4);
+    -webkit-mask: var(--matte-4);
+    transform: translate(-50%, -50%) scale(0.97);
+  }
+
+  44%, 55.9% {
+    mask: var(--matte-5);
+    -webkit-mask: var(--matte-5);
+    transform: translate(-50%, -50%) scale(0.98);
+  }
+
+  56%, 75.9% {
+    mask: var(--matte-3);
+    -webkit-mask: var(--matte-3);
+    transform: translate(-50%, -50%) scale(0.9);
+  }
+
+  76%, 89.9% {
+    mask: var(--matte-2);
+    -webkit-mask: var(--matte-2);
+    transform: translate(-50%, -50%) scale(0.8);
+  }
+
+  90%, 100% {
+    mask: var(--matte-1);
+    -webkit-mask: var(--matte-1);
+    transform: translate(-50%, -50%) scale(0.66);
+  }
+}
+
+@keyframes cast-ring-dashed-out {
+  0%, 25.9% {
+    mask: var(--matte-5);
+    -webkit-mask: var(--matte-5);
+    transform: translate(-50%, -50%) rotate(calc(var(--spark-extra, 0deg) * 0.06));
+  }
+
+  26%, 47.9% {
+    mask: var(--matte-4);
+    -webkit-mask: var(--matte-4);
+    transform: translate(-50%, -50%) rotate(calc(var(--spark-extra, 0deg) * -0.1)) scale(0.98);
+  }
+
+  48%, 67.9% {
+    mask: var(--matte-3);
+    -webkit-mask: var(--matte-3);
+    transform: translate(-50%, -50%) rotate(calc(var(--spark-extra, 0deg) * -0.22)) scale(0.92);
+  }
+
+  68%, 85.9% {
+    mask: var(--matte-2);
+    -webkit-mask: var(--matte-2);
+    transform: translate(-50%, -50%) rotate(calc(var(--spark-extra, 0deg) * -0.3)) scale(0.84);
+  }
+
+  86%, 100% {
+    mask: var(--matte-1);
+    -webkit-mask: var(--matte-1);
+    transform: translate(-50%, -50%) rotate(calc(var(--spark-extra, 0deg) * -0.4)) scale(0.72);
+  }
+}
+
 // The stamp on a chip: down in one cut, held, a half-step back, home.
 @keyframes chip-stamp {
   0%, 31.9% {
@@ -1203,21 +1329,29 @@ html[data-nav='live'] {
   84%, 95.9% {
     mask: var(--matte-5);
     -webkit-mask: var(--matte-5);
+    mask-position: calc(var(--k, 0) * 37px) calc(var(--k, 0) * 23px);
+    -webkit-mask-position: calc(var(--k, 0) * 37px) calc(var(--k, 0) * 23px);
   }
 
   96%, 100% {
-    mask: none;
-    -webkit-mask: none;
+    mask: var(--matte-top);
+    -webkit-mask: var(--matte-top);
+    mask-position: calc(var(--k, 0) * 37px) calc(var(--k, 0) * 23px);
+    -webkit-mask-position: calc(var(--k, 0) * 37px) calc(var(--k, 0) * 23px);
   }
 }
 
 @keyframes chip-wane {
   0%, 23.9% {
-    mask: var(--matte-5);
-    -webkit-mask: var(--matte-5);
+    opacity: var(--md-sys-state-hover-opacity);
+    mask: var(--matte-top);
+    -webkit-mask: var(--matte-top);
+    mask-position: calc(var(--k, 0) * 37px) calc(var(--k, 0) * 23px);
+    -webkit-mask-position: calc(var(--k, 0) * 37px) calc(var(--k, 0) * 23px);
   }
 
   24%, 47.9% {
+    opacity: var(--md-sys-state-hover-opacity);
     mask: var(--matte-4);
     -webkit-mask: var(--matte-4);
     mask-position: calc(var(--k, 0) * 37px) calc(var(--k, 0) * 23px);
@@ -1225,6 +1359,7 @@ html[data-nav='live'] {
   }
 
   48%, 67.9% {
+    opacity: var(--md-sys-state-hover-opacity);
     mask: var(--matte-3);
     -webkit-mask: var(--matte-3);
     mask-position: calc(var(--k, 0) * 37px) calc(var(--k, 0) * 23px);
@@ -1232,6 +1367,7 @@ html[data-nav='live'] {
   }
 
   68%, 83.9% {
+    opacity: var(--md-sys-state-hover-opacity);
     mask: var(--matte-2);
     -webkit-mask: var(--matte-2);
     mask-position: calc(var(--k, 0) * 37px) calc(var(--k, 0) * 23px);
@@ -1239,6 +1375,7 @@ html[data-nav='live'] {
   }
 
   84%, 96.9% {
+    opacity: var(--md-sys-state-hover-opacity);
     mask: var(--matte-1);
     -webkit-mask: var(--matte-1);
     mask-position: calc(var(--k, 0) * 37px) calc(var(--k, 0) * 23px);
@@ -1297,7 +1434,9 @@ html[data-nav='live'] {
   html[data-nav='live'] .is-unmaking .sparknav-node,
   html[data-nav='live'] .is-unmaking .sparknav-ray,
   html[data-nav='live'] .sparknav[open]::before,
-  html[data-nav='live'] .sparknav[open]::after {
+  html[data-nav='live'] .sparknav[open]::after,
+  html[data-nav='live'] .sparknav[open]:has(.is-unmaking)::before,
+  html[data-nav='live'] .sparknav[open]:has(.is-unmaking)::after {
     animation: none;
   }
 

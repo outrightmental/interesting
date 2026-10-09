@@ -94,7 +94,8 @@ function asked(env) {
    rite: the lamp's glow breathes on rite.stair and the shadows on the screen tremble in its
    treads; a thing arriving -- a distance read, a guess written, a name under a shadow, a shadow
    named by a hint -- blinks on with rite.flicker and the thing it replaces blinks out; a line
-   that moves (the height the wall would show from a wrong lamp) travels along rite.ease; and a
+   that moves (the height the wall would show from a wrong lamp) travels in rite.stair's treads,
+   each landing on rite.ease's curve, never a glide; and a
    surface that becomes set -- the shadow the visitor predicts, the frame round a hinted shadow,
    the chip behind a matched name, the wall and the screen lit over a solved night -- develops
    by its AREA through rite.matte, cell by cell in the piece's own pattern, and never by a fade.
@@ -159,6 +160,13 @@ function daybreak(g, rite, c, w, h, p) {
   g.fillStyle = c.alpha(c.colors.accent2, 0.14);
   if (k >= 1) g.fillRect(0, 0, w, h);
   else develop(g, rite, 0, 0, w, h, k, null, Math.max(rite.cell, Math.ceil(Math.min(w, h) / 32)));
+}
+
+// A thing travelling from one place to another: in treads, never a glide, each tread landing on
+// the rite's own curve (so a tread may overshoot a little and the last settles), on the roll
+// handed in.
+function travel(own, p) {
+  return own.ease(own.stair(p));
 }
 
 // A surface arriving: solid once it is there, its cells through the matte before that, and
@@ -435,13 +443,13 @@ function sideView(g, w, h, c, p, s, variant) {
   text(g, 'the wall', wallX + (w - wallX) / 2, h * 0.1, fs * 0.9, c.alpha(col.bg, 0.8), 'center', 600);
   if (s.tried != null && !s.reveal) {
     // What the wall would show with the lamp where the visitor put it: the shadow it would throw
-    // develops over the real one through the matte, and its top line travels there along the
-    // rite's curve from where the last try stood, blinking on.
+    // develops over the real one through the matte, and its top line travels there in treads
+    // along the rite's curve from where the last try stood, blinking on.
     const own = rite.at(0x7d3);
     const pt = came(s, s.triedAt, 1.1, reduced);
     const would = Math.min(shadowHeight(p, s.tried), 30);
     const from = s.triedFrom == null ? would : Math.min(s.triedFrom, 30);
-    const at = from + (would - from) * rite.ease(pt);
+    const at = from + (would - from) * travel(own, pt);
     // The curve may overshoot a little; the line stays on the wall.
     const top = Math.max(h * 0.06, Math.min(floor, floor - at * unit));
     const lo = Math.max(h * 0.06, Math.min(top, floor - H * unit));
@@ -497,7 +505,7 @@ function lampPiece(env, p) {
           // The line the wall would show moves from where the last try left it.
           const pt = came(s, s.triedAt, 1.1, !!c.reduced);
           const stood = s.tried == null ? null : shadowHeight(p, s.tried);
-          const from = s.triedFrom == null || stood == null ? stood : s.triedFrom + (stood - s.triedFrom) * riteOf(c).ease(pt);
+          const from = s.triedFrom == null || stood == null ? stood : s.triedFrom + (stood - s.triedFrom) * travel(riteOf(c).at(0x7d3), pt);
           s.triedFrom = from;
           s.tried = tried;
           s.triedAt = s.t;
