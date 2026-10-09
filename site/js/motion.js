@@ -527,7 +527,6 @@
     'stage-pop': 'arrive',
     'stage-no': 'flicker',
     'stage-reject': 'leave',
-    'stage-develop': 'stair',
     'persona-beckon': 'pulse',
     'persona-flight': 'arrive',
     'persona-flight-ring': 'leave',
@@ -541,8 +540,6 @@
     'glyph-in': 'arrive',
     'glyph-sigil': 'flicker',
     'dialog-in': 'arrive',
-    'knob-in': 'arrive',
-    'seal-set': 'stair',
     'card-lift': 'stair',
     'card-settle': 'stair',
     'card-wax': 'stair',
@@ -650,7 +647,8 @@
     'avatar-in': 'arrive',
     'sky-stamp': 'flicker',
     'thread-unmake': 'leave',
-    'reading-seal': 'stair'
+    'reading-seal': 'stair',
+    'sky-wax': 'stair'
   };
 
   function familyOf(name) {
@@ -1374,6 +1372,16 @@
       raf(function () {
         if (token !== shiftToken) return;
         html.setAttribute('data-shifting', '');
+        // The words of the rite are cut through their sigils into the new face, a few of them:
+        // the stage's head, a page's heading, the section and panel titles.
+        if (typeof doc.querySelectorAll === 'function') {
+          try {
+            var words = doc.querySelectorAll('.stage-title, .list-page-main > h1, .prose-main > h1, .section-title, .panel-title');
+            for (var w = 0; w < words.length && w < 6; w++) reveal(words[w], { scramble: 1, pace: 0.3 });
+          } catch (e) {
+            /* a page with none of them */
+          }
+        }
         if (typeof global.clearTimeout === 'function' && shiftTimer) global.clearTimeout(shiftTimer);
         if (typeof global.setTimeout === 'function') {
           shiftTimer = global.setTimeout(function () {

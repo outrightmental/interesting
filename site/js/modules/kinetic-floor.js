@@ -42,6 +42,74 @@ function asked(env) {
   return { level, helps: 6 - level, margin: Math.max(0, 3 - level) };
 }
 
+/* ---- the rite: how this floor moves --------------------------------------------------------- */
+
+/* env.rite (ctx.rite inside a piece) is the piece's own roll of how it moves (js/variant.js;
+   js/stage.js, "The rite"). Nothing on the floor moves along a formula or cuts without a rite:
+   a domino falls in the stop-motion treads of its own stair laid over the rite's glitch of a
+   curve (a stutter on the way down is the curve's own); a lane that has been called is SEALED --
+   its band develops a texture through the matte, cell by cell in the piece's own pattern, in the
+   colour of the call, and the word of the call blinks on; a lane the hint names has its answer
+   blink on; the plank turns to its new tilt in the ratchet's clicks with backlash, never a glide,
+   the pivot walks the ruler in treads, the clamp's jaws develop and dissolve by their area, a
+   caption blinks on; and the light that comes over a tipped lane or a balanced plank develops
+   through the matte with a flicker, never a wash. Every change is read against the piece's own
+   clock, s.t, which frame() advances: a change made at `since` has come came() of its way, which
+   is 1 at once for a visitor who asked for less motion and for whatever stood there from the
+   start. Every trigger rolls a fresh rite (rite.at(k) with the count of that trigger in k), so a
+   second call on a lane, a second check, a second move of the pivot composes a different stair,
+   matte and flicker from the first. */
+
+const STILL = {
+  ease: () => 1, stair: () => 1, ratchet: () => 0, flicker: () => 1, matte: () => true,
+  series: (p, n) => Math.max(1, Math.floor(n || 1)), treads: 1, kind: 'none', cell: 4, at: () => STILL
+};
+
+function riteOf(env) {
+  return env && env.rite ? env.rite : STILL;
+}
+
+function came(s, since, span, reduced) {
+  if (reduced || since == null || since < 0) return 1;
+  return Math.max(0, Math.min(1, (s.t - since) / span));
+}
+
+function clamp01(x) {
+  return x <= 0 ? 0 : x >= 1 ? 1 : x;
+}
+
+// The cells of a box the matte lets through at coverage k, filled in the current fillStyle: how a
+// surface changes by its area. Cells are rite.cell px, coarser over a wide box so a frame stays
+// cheap, on a grid fixed to the canvas so the pattern holds still while it grows. `inside` keeps
+// the tiling to a shape within the box. At k >= 1 every cell is let through.
+function develop(g, rite, x0, y0, bw, bh, k, inside, size) {
+  if (k <= 0) return;
+  const cell = size || Math.max(rite.cell, Math.ceil(Math.max(bw, bh) / 28));
+  const cx0 = Math.floor(x0 / cell);
+  const cy0 = Math.floor(y0 / cell);
+  const cx1 = Math.ceil((x0 + bw) / cell);
+  const cy1 = Math.ceil((y0 + bh) / cell);
+  for (let cy = cy0; cy < cy1; cy++) {
+    for (let cx = cx0; cx < cx1; cx++) {
+      const px = cx * cell;
+      const py = cy * cell;
+      if (inside && !inside(px + cell / 2, py + cell / 2)) continue;
+      if (k < 1 && !rite.matte(cx, cy, k)) continue;
+      g.fillRect(px, py, cell, cell);
+    }
+  }
+}
+
+// The light that comes over the floor once something has moved: it develops through the matte
+// from that moment, blinking on and dropping out the way the rite's flicker has it, and holds.
+function daybreak(g, rite, env, w, h, p, strength) {
+  const own = rite.at(0xdb);
+  const k = own.stair(p);
+  if (k <= 0 || !own.flicker(p)) return;
+  g.fillStyle = env.alpha(env.colors.accent, strength || 0.08);
+  develop(g, own, 0, 0, w, h, k, null, Math.max(rite.cell, Math.ceil(Math.min(w, h) / 30)));
+}
+
 /* ---- shared drawing ------------------------------------------------------------------------ */
 
 function block(g, x, y, bw, bh, angle, fill, stroke) {
@@ -58,12 +126,13 @@ function block(g, x, y, bw, bh, angle, fill, stroke) {
   g.restore();
 }
 
-// The floor's ground: the same gradient the old rig lit, brighter by `lit` once something moves.
-function ground(g, w, h, env, lit) {
+// The floor's ground: the same gradient the old rig lit. What lights it once something moves is
+// daybreak(), by its area, never a brighter gradient.
+function ground(g, w, h, env) {
   const c = env.colors;
   const grad = g.createLinearGradient(0, 0, 0, h);
-  grad.addColorStop(0, env.mix(c.bg2, c.accent, lit || 0));
-  grad.addColorStop(1, env.mix(c.bg, c.accent, (lit || 0) * 0.5));
+  grad.addColorStop(0, c.bg2);
+  grad.addColorStop(1, c.bg);
   g.fillStyle = grad;
   g.fillRect(0, 0, w, h);
 }
@@ -146,35 +215,43 @@ function lanesGeometry(w, h, plan, v) {
   return { top, band, x0: w * 0.1, u: fit * Math.min(1.08, Math.max(0.92, v.scale)), spanMax };
 }
 
-// Domino i of a lane, `time` seconds after its first was tipped: the angle it has fallen to. A
+// Domino i of lane k, `time` seconds after its first was tipped: the angle it has fallen to. A
 // domino past a gap the push does not cross never moves; the one before such a gap leans as far
-// as the next upright lets it.
-function fallAngle(lane, i, time) {
+// as the next upright lets it. It falls in the stop-motion treads of its own stair laid over the
+// rite's curve -- a stutter on the way down is the curve's own -- never along t * t.
+function fallAngle(lane, i, time, rite, k) {
   const over = crosses(lane);
   const step = 0.22;
   let start;
   if (i <= lane.at) start = i * step;
   else if (over) start = (lane.at + 1) * step + lane.g * 0.03 + (i - lane.at - 1) * step;
   else return 0;
-  const f = Math.max(0, Math.min(1, (time - start) / 0.5));
+  const f = clamp01((time - start) / 0.5);
+  if (f <= 0) return 0;
+  const own = rite.at(0x300 + (k || 0) * 16 + i);
+  const fell = f >= 1 ? 1 : own.stair(clamp01(own.ease(f)));
   const rest = i === lane.at && !over ? (lane.g >= lane.h ? 1 : Math.asin(lane.g / lane.h) / (Math.PI / 2)) : 1;
-  return f * f * rest * Math.PI / 2;
+  return fell * rest * Math.PI / 2;
 }
 
-function fallen(lane, time) {
+function fallen(lane, time, rite, k) {
   let n = 0;
-  for (let i = 0; i < lane.n; i++) if (fallAngle(lane, i, time) > 0.01) n += 1;
+  for (let i = 0; i < lane.n; i++) if (fallAngle(lane, i, time, rite, k) > 0.01) n += 1;
   return n;
 }
 
 function drawLanes(g, w, h, env, plan, s, variant) {
   const v = variant || PLAIN;
   const c = env.colors;
+  const rite = riteOf(env);
+  const reduced = !!env.reduced;
   const geo = lanesGeometry(w, h, plan, v);
   const u = geo.u;
   const size = Math.max(10, Math.min(14, Math.round(Math.min(w, h) * 0.034)));
   const small = Math.max(9, size - 2);
-  ground(g, w, h, env, s.time >= 0 ? 0.06 : 0);
+  ground(g, w, h, env);
+  // The light over a tipped floor: develops through the matte from the moment of the tip.
+  if (s.time >= 0) daybreak(g, rite, env, w, h, reduced ? 1 : clamp01(s.time / 1.6), 0.08);
   label(g, 'a falling domino crosses a gap narrower than four fifths of its height', w / 2, h * 0.05, small, env.alpha(c.muted, 0.85));
   const every = v.density < 0.9 ? 2 : 1;
   plan.lanes.forEach((lane, k) => {
@@ -182,6 +259,16 @@ function drawLanes(g, w, h, env, plan, s, variant) {
     const bandTop = geo.top + k * geo.band;
     const floorY = bandTop + geo.band * 0.74;
     const x0 = geo.x0;
+    // A called lane is a sealed lane: its band develops a texture through the matte, in the
+    // colour of the call, by its area -- a fresh roll for every call made on it.
+    const calledAt = s.calledAt ? s.calledAt[k] : -1;
+    const callRite = rite.at(0x100 + k * 64 + ((s.changes ? s.changes[k] : 0) % 64));
+    const sealed = calledAt >= 0 ? callRite.stair(came(s, calledAt, 0.9, reduced)) : 0;
+    if (sealed > 0) {
+      g.fillStyle = env.alpha(s.calls && s.calls[k] ? c.accent : c.muted, 0.14);
+      develop(g, callRite, x0 - u, bandTop + geo.band * 0.08, (geo.spanMax + 2) * u, geo.band * 0.82, sealed, null,
+        Math.max(rite.cell, Math.ceil(geo.band / 14)));
+    }
     // The grid both measures are drawn to.
     g.strokeStyle = env.alpha(c.accent, 0.085 * v.density);
     g.lineWidth = 1;
@@ -205,7 +292,7 @@ function drawLanes(g, w, h, env, plan, s, variant) {
     // The dominoes, last to first, so the earlier ones lie over the later when they fall.
     const bw = u;
     for (let i = lane.n - 1; i >= 0; i--) {
-      const angle = s.time >= 0 ? fallAngle(lane, i, s.time) : 0;
+      const angle = s.time >= 0 ? fallAngle(lane, i, s.time, rite, k) : 0;
       const x = x0 + (lay.xs[i] + 1) * u;
       const bh = lane.h * u;
       const cx = x - bw / 2 * Math.cos(angle) + bh / 2 * Math.sin(angle);
@@ -259,32 +346,51 @@ function drawLanes(g, w, h, env, plan, s, variant) {
     label(g, String(k + 1), w * 0.05, floorY - u * 2, size, env.alpha(c.fg, 0.9), 'center', '600');
     const callX = w * 0.87;
     if (s.time >= 0 && s.time > 2.2) {
-      const n = fallen(lane, s.time);
-      label(g, n === lane.n ? 'all ' + n + ' fell' : n + ' of ' + lane.n + ' fell', callX, floorY - u * 2, small, c.accent2);
+      // The count of what fell blinks on once the chains have had their time.
+      if (rite.at(0x400 + k).flicker(reduced ? 1 : clamp01((s.time - 2.2) / 0.7))) {
+        const n = fallen(lane, s.time, rite, k);
+        label(g, n === lane.n ? 'all ' + n + ' fell' : n + ' of ' + lane.n + ' fell', callX, floorY - u * 2, small, c.accent2);
+      }
+    } else if (calledAt >= 0) {
+      // The call's badge develops by its area, and the word of the call blinks on over it.
+      const bx = callX - u * 2.4;
+      const by = floorY - u * 3.1;
+      g.fillStyle = env.alpha(c.accent2, 0.22);
+      develop(g, callRite, bx, by, u * 4.8, u * 2.2, sealed, null, Math.max(rite.cell, Math.ceil(u / 2)));
+      if (callRite.flicker(came(s, calledAt, 0.9, reduced))) {
+        label(g, s.calls[k] ? 'crosses' : 'stops', callX, floorY - u * 2, size, c.accent2);
+      }
     } else {
-      const text = s.calls ? (s.calls[k] ? 'crosses' : 'stops') : '?';
-      label(g, text, callX, floorY - u * 2, size, s.touched ? c.accent2 : env.alpha(c.muted, 0.7));
+      label(g, '?', callX, floorY - u * 2, size, env.alpha(c.muted, 0.7));
     }
     if (s.hinted && s.hinted.includes(k)) {
-      label(g, crosses(lane) ? 'shown: crosses' : 'shown: stops', callX, floorY - u * 2 + small * 1.4, small, env.alpha(c.muted, 0.9));
+      const hintAt = s.hintAt ? s.hintAt[k] : -1;
+      if (rite.at(0x200 + k).flicker(came(s, hintAt, 0.8, reduced))) {
+        label(g, crosses(lane) ? 'shown: crosses' : 'shown: stops', callX, floorY - u * 2 + small * 1.4, small, env.alpha(c.muted, 0.9));
+      }
     }
   });
 }
 
 function lanesPreview(g, w, h, env, plan) {
-  drawLanes(g, w, h, env, plan, { calls: null, touched: false, hinted: [], time: -1 }, env.variant);
+  drawLanes(g, w, h, env, plan, { calls: null, touched: false, hinted: [], time: -1, t: 0 }, env.variant);
 }
 
 function lanesPiece(env, plan) {
   const helps = asked(env).helps;
   const truth = plan.lanes.map((l) => (crosses(l) ? 1 : 0));
-  const s = { calls: [0, 0, 0, 0], touched: false, hinted: [], time: -1 };
+  const s = { calls: [0, 0, 0, 0], touched: false, hinted: [], time: -1, t: 0, calledAt: [-1, -1, -1, -1], changes: [0, 0, 0, 0], hintAt: {} };
   const draw = (c) => drawLanes(c.g, c.w, c.h, c, plan, s, env.variant);
   function right() {
     return truth.reduce((n, t, i) => n + (s.calls[i] === t ? 1 : 0), 0);
   }
   function callWords() {
     return s.calls.map((v, i) => 'lane ' + (i + 1) + ' ' + (v ? 'crosses' : 'stops')).join(', ');
+  }
+  // A call made on lane k: the lane seals itself afresh, on a roll of this call's own.
+  function called(k) {
+    s.calledAt[k] = s.t;
+    s.changes[k] += 1;
   }
   return {
     title: 'will it cross: four lanes in procession',
@@ -310,7 +416,9 @@ function lanesPiece(env, plan) {
     },
     apply(id, value, c) {
       if (id === 'calls' && Array.isArray(value) && value.length === 4) {
-        s.calls = value.map((v) => (v ? 1 : 0));
+        const next = value.map((v) => (v ? 1 : 0));
+        for (let k = 0; k < 4; k++) if (s.calledAt[k] < 0 || next[k] !== s.calls[k]) called(k);
+        s.calls = next;
         s.touched = true;
         c.status(callWords());
       }
@@ -322,6 +430,7 @@ function lanesPiece(env, plan) {
         }
         if (k >= 0) {
           s.hinted.push(k);
+          s.hintAt[k] = s.t;
           c.hint();
           c.status('lane ' + (k + 1) + (truth[k] ? ' crosses: its gap is under four fifths of its height' : ' stops: its gap is four fifths of its height or more'));
         } else if (s.hinted.length >= helps) {
@@ -338,12 +447,15 @@ function lanesPiece(env, plan) {
       next[k] = next[k] ? 0 : 1;
       s.calls = next;
       s.touched = true;
+      called(k);
       c.set('calls', next.slice());
       c.status('lane ' + (k + 1) + (next[k] ? ' called to cross' : ' called to stop'));
       draw(c);
     },
     frame(t, dt, c) {
-      if (s.time >= 0) s.time += c.reduced ? dt * 3 : dt;
+      const step = Math.max(0, dt);
+      s.t += step;
+      if (s.time >= 0) s.time += c.reduced ? step * 3 : step;
       draw(c);
     },
     end(c) {
@@ -408,13 +520,30 @@ function plankGeometry(w, h) {
   return { left: w * 0.1, u: (w * 0.8) / 20, rulerY: h * 0.72, plankY: h * 0.5, thick: Math.max(3, h * 0.03) };
 }
 
+// Where the pivot is drawn: walking from where it was to where the knob has it, in treads.
+function pivotShown(s, rite, reduced) {
+  if (s.pivotFrom == null || s.pivotAt == null || s.pivotAt < 0) return s.pivot;
+  return s.pivotFrom + (s.pivot - s.pivotFrom) * rite.at(0x400 + (s.sets || 0)).stair(came(s, s.pivotAt, 0.8, reduced));
+}
+
+// How far the plank has turned: from the tilt it had to the tilt the last check earned, in the
+// ratchet's clicks with backlash, never an approach along a lerp.
+function angleShown(s, rite, reduced) {
+  if (s.angleFrom == null || s.angleAt == null || s.angleAt < 0) return s.angle;
+  return s.angleFrom + (s.angle - s.angleFrom) * rite.at(0x300 + (s.checks || 0)).ratchet(came(s, s.angleAt, 1.3, reduced));
+}
+
 function drawPlank(g, w, h, env, plan, s, variant) {
   const v = variant || PLAIN;
   const c = env.colors;
+  const rite = riteOf(env);
+  const reduced = !!env.reduced;
   const geo = plankGeometry(w, h);
   const size = Math.max(10, Math.min(15, Math.round(Math.min(w, h) * 0.05)));
   const small = Math.max(9, Math.round(size * 0.8));
-  ground(g, w, h, env, s.lit * 0.08);
+  ground(g, w, h, env);
+  // The light over a balanced plank: develops through the matte from the solve.
+  if (s.doneAt != null && s.doneAt >= 0) daybreak(g, rite, env, w, h, came(s, s.doneAt, 2.2, reduced), 0.08);
   // The ruler, 0 to 20.
   g.strokeStyle = env.alpha(c.muted, 0.7);
   g.lineWidth = 1.5;
@@ -435,8 +564,9 @@ function drawPlank(g, w, h, env, plan, s, variant) {
     g.stroke();
     if (i % every === 0 || tall) label(g, String(i), x, geo.rulerY + h * 0.035 + small * 0.8, small, env.alpha(c.fg, tall ? 0.95 : 0.6));
   }
-  // The pivot, where the knob has it, and the plank turned about it by whatever the last check earned.
-  const px = geo.left + s.pivot * geo.u;
+  // The pivot, walking to where the knob has it, and the plank turned about it in clicks by
+  // whatever the last check earned.
+  const px = geo.left + pivotShown(s, rite, reduced) * geo.u;
   const py = geo.plankY + geo.thick / 2;
   g.fillStyle = env.alpha(c.accent2, 0.9);
   g.beginPath();
@@ -447,7 +577,7 @@ function drawPlank(g, w, h, env, plan, s, variant) {
   g.fill();
   g.save();
   g.translate(px, py);
-  g.rotate(s.angle);
+  g.rotate(angleShown(s, rite, reduced));
   g.translate(-px, -py);
   g.fillStyle = env.mix(c.bg2, c.accent, 0.6);
   g.fillRect(geo.left - geo.u * 0.3, geo.plankY - geo.thick / 2, geo.u * 20.6, geo.thick);
@@ -463,23 +593,28 @@ function drawPlank(g, w, h, env, plan, s, variant) {
     label(g, String(b.m), x, y, Math.max(9, Math.round(side * 0.5)), c.bg, 'center', '600');
     label(g, 'at ' + b.x, x, geo.plankY + geo.thick / 2 + small * 0.8, small, env.alpha(c.muted, 0.9));
   }
-  if (s.clamped) {
-    g.strokeStyle = env.alpha(c.muted, 0.9);
-    g.lineWidth = 2;
+  // The clamp's jaws: they develop by their area when the clamp is put on and dissolve by it when
+  // it is let go, through a matte rolled for that clamping, never a cut.
+  const clampRite = rite.at(0x500 + (s.clamps || 0));
+  const held = clampRite.stair(came(s, s.clampAt == null ? -1 : s.clampAt, 0.7, reduced));
+  const jaws = s.clamped ? held : 1 - held;
+  if (jaws > 0) {
+    g.fillStyle = env.alpha(c.muted, 0.9);
+    const jawW = Math.max(2, geo.thick * 0.6);
     for (const x of [geo.left - geo.u * 0.3, geo.left + geo.u * 20.3]) {
-      g.beginPath();
-      g.moveTo(x, geo.plankY - geo.thick * 1.6);
-      g.lineTo(x, geo.plankY + geo.thick * 1.6);
-      g.stroke();
+      develop(g, clampRite, x - jawW / 2, geo.plankY - geo.thick * 1.6, jawW, geo.thick * 3.2, jaws, null, Math.max(1, Math.min(rite.cell, Math.ceil(jawW / 2))));
     }
   }
   g.restore();
-  label(g, s.caption, w / 2, h * 0.92, small, env.alpha(c.muted, 0.9));
+  // The caption blinks on each time it changes.
+  if (rite.at(0x600 + (s.captions || 0)).flicker(came(s, s.captionAt == null ? -1 : s.captionAt, 0.7, reduced))) {
+    label(g, s.caption, w / 2, h * 0.92, small, env.alpha(c.muted, 0.9));
+  }
 }
 
 function plankPreview(g, w, h, env, plan) {
   const v = env.variant || PLAIN;
-  drawPlank(g, w, h, env, plan, { pivot: Math.round(v.turn * 20), angle: 0, clamped: true, lit: 0, caption: 'where does it balance?' }, v);
+  drawPlank(g, w, h, env, plan, { pivot: Math.round(v.turn * 20), angle: 0, clamped: true, caption: 'where does it balance?', t: 0 }, v);
 }
 
 function plankPiece(env, plan) {
@@ -488,9 +623,34 @@ function plankPiece(env, plan) {
   const margin = asked(env).margin;
   const centre = centreOf(plan.blocks);
   const tip = centre < 10 ? 'left' : centre > 10 ? 'right' : 'level';
-  const s = { pivot: 10, angle: 0, target: 0, clamped: true, lit: 0, caption: 'the clamp holds it level until you check' };
+  const s = {
+    pivot: 10, pivotFrom: 10, pivotAt: -1, sets: 0,
+    angle: 0, angleFrom: 0, angleAt: -1, checks: 0,
+    clamped: true, clampAt: -1, clamps: 0,
+    doneAt: -1, t: 0,
+    caption: 'the clamp holds it level until you check', captionAt: -1, captions: 0
+  };
   const draw = (c) => drawPlank(c.g, c.w, c.h, c, plan, s, env.variant);
   const n = plan.blocks.length;
+  // Every change of state is made at the clock and on a fresh roll of its own.
+  function tilt(c, target) {
+    s.angleFrom = angleShown(s, riteOf(c), !!c.reduced);
+    s.angle = target;
+    s.angleAt = s.t;
+    s.checks += 1;
+  }
+  function clamp(c, on) {
+    if (s.clamped === on) return;
+    s.clamped = on;
+    s.clampAt = s.t;
+    s.clamps += 1;
+  }
+  function say(text) {
+    if (text === s.caption) return;
+    s.caption = text;
+    s.captionAt = s.t;
+    s.captions += 1;
+  }
   return {
     title: plankTitle(plan),
     brief: 'A weighing. ' + WORDS[n][0].toUpperCase() + WORDS[n].slice(1) + ' blocks stand on a weightless plank over a ruler from 0 to 20, each with its mass written on it and its place under it. A plank balances on a pivot when the masses times their distances from it come to the same on both sides. A clamp holds it level until you check; a wrong check lets it tip.',
@@ -506,22 +666,22 @@ function plankPiece(env, plan) {
       const p = Math.round(Number(c.value('pivot')));
       const pivotRight = Math.abs(p - centre) <= margin;
       const callRight = c.value('tip') === tip;
-      s.clamped = false;
+      clamp(c, false);
       if (pivotRight && callRight) {
-        s.target = 0;
-        s.caption = 'balanced at ' + centre;
+        tilt(c, 0);
+        say('balanced at ' + centre);
         return { solved: true, say: 'the weighing holds: balanced at ' + centre + '; with the pivot at 10 it ' + (tip === 'level' ? 'stays level' : 'tips to the ' + tip) };
       }
       const parts = [];
       if (!pivotRight) {
-        s.target = (p < centre ? 1 : -1) * 0.14;
+        tilt(c, (p < centre ? 1 : -1) * 0.14);
         parts.push('with the pivot at ' + p + ' the plank tips to the ' + (p < centre ? 'right' : 'left'));
       } else {
-        s.target = 0;
+        tilt(c, 0);
         parts.push('the pivot is in the right place');
       }
       if (!callRight) parts.push('the call for the pivot at 10 is wrong');
-      s.caption = pivotRight ? 'level on its pivot' : 'tipping';
+      say(pivotRight ? 'level on its pivot' : 'tipping');
       return { solved: false, say: parts.join('; ') };
     },
     start(c) {
@@ -531,24 +691,30 @@ function plankPiece(env, plan) {
     apply(id, value, c) {
       if (id === 'pivot') {
         const p = Math.round(Number(value));
-        s.pivot = Number.isFinite(p) ? Math.max(0, Math.min(20, p)) : 10;
-        s.clamped = true;
-        s.target = 0;
-        s.caption = 'the clamp holds it level until you check';
+        const next = Number.isFinite(p) ? Math.max(0, Math.min(20, p)) : 10;
+        if (next !== s.pivot) {
+          s.pivotFrom = pivotShown(s, riteOf(c), !!c.reduced);
+          s.pivot = next;
+          s.pivotAt = s.t;
+          s.sets += 1;
+        }
+        clamp(c, true);
+        tilt(c, 0);
+        say('the clamp holds it level until you check');
         c.status('the pivot is at ' + s.pivot + ', clamped level');
       }
       if (id === 'tip') c.status('at 10, you say it ' + (value === 'level' ? 'stays level' : 'tips to the ' + value));
       draw(c);
     },
     frame(t, dt, c) {
-      const step = Math.min(1, Math.max(0, dt) * (c.reduced ? 20 : 4));
-      s.angle += (s.target - s.angle) * step;
-      if (c.done) s.lit = Math.min(1, s.lit + dt);
+      s.t += Math.max(0, dt);
+      if (c.done && s.doneAt < 0) s.doneAt = s.t;
       draw(c);
     },
     end(c) {
-      s.clamped = false;
-      s.target = 0;
+      clamp(c, false);
+      tilt(c, 0);
+      if (s.doneAt < 0) s.doneAt = s.t;
       c.status('balanced at ' + centre + '. the clamp is off and it stays where it is; move the pivot and check again to see it tip.');
     }
   };

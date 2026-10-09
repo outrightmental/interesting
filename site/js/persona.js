@@ -104,6 +104,34 @@
       }, wait);
     }
   }
+  // What arrives arrives by a composition of its own (README: "Motion axiom", the composer): the
+  // engine rolls the element a geometry, a curve for the named spell and a fresh @keyframes rule
+  // put together from pieces, and writes them inline (--arrive-*, --ease-<spell>, --rite-develop,
+  // --motion-<spell>), which _sass/_persona.scss reads before its own keyframes. The class that
+  // plays it is put on by the caller (rite, or the stylesheet's :not([hidden]) / [open]), never by
+  // the engine, whose own pass waits a frame the lightbox may be holding.
+  function arriveOn(el, spell, seed) {
+    var m = engine();
+    if (!el || !el.style || !m || calm() || typeof m.arrive !== 'function') return;
+    try { m.arrive(el, { spell: spell, seed: seed, className: false }); }
+    catch (e) { console.error('The arrival could not be composed', e); }
+  }
+  // What leaves leaves by a composition of its own (--rite-unmake, --motion-<spell>), written on
+  // the element -- or on the ghost of it -- that plays it.
+  function leaveOn(el, spell, baseMs) {
+    var m = engine();
+    if (!el || !el.style || !m || calm() || typeof m.composeOn !== 'function') return;
+    try { m.composeOn(el, 'unmake', spell, baseMs || riteMs('medium', 340)); }
+    catch (e) { console.error('The leaving could not be composed', e); }
+  }
+  // How long a composed rite was given, read back off the element, so a class is never taken off
+  // or a node hidden while the rite it plays is still running.
+  function riteLength(el, spell, fallback) {
+    var style = el && el.style;
+    if (!style || typeof style.getPropertyValue !== 'function') return fallback;
+    var n = parseFloat(style.getPropertyValue('--motion-' + spell));
+    return isFinite(n) && n > 0 ? n : fallback;
+  }
   // Words written to a line and revealed there. A line still revealing is put back whole first, so
   // a status rewritten mid-rite never carries the old glyphs into the new words; `quiet` writes
   // the words without the rite, for a line nobody can see at the moment.
@@ -134,6 +162,9 @@
       concealing['delete'](node);
     }
     if (node.classList) node.classList.remove('is-unmaking');
+    // A part coming into view arrives by a composition of its own; one already in view keeps
+    // the words it has.
+    if (node.hidden) arriveOn(node, 'part-in');
     node.hidden = false;
   }
   function conceal(node) {
@@ -144,19 +175,22 @@
       node.hidden = true;
       return;
     }
+    leaveOn(node, 'part-unmake');
     node.classList.add('is-unmaking');
     concealing.set(node, window.setTimeout(function () {
       concealing['delete'](node);
       node.classList.remove('is-unmaking');
       node.hidden = true;
-    }, riteMs('medium', 340) + 60));
+    }, riteLength(node, 'part-unmake', riteMs('medium', 340)) + 60));
   }
   // A ghost of a box that has to go at once -- the sheet, which must close for the focus to go
   // home and the veil to come down; the question in the card, whose words are the threshold's to
   // clear: a copy of it left exactly where it was, unmade there by the stylesheet (the class the
   // caller names), and taken out when the rite has ended. Under no pointer and hidden from a
-  // screen reader, with every id stripped so the page keeps its one of each.
-  function ghostOf(host, className, layer) {
+  // screen reader, with every id stripped so the page keeps its one of each. `spell` names the
+  // keyframes the stylesheet would play without a script, which is the length the composed
+  // unmaking is written under.
+  function ghostOf(host, className, layer, spell) {
     var m = engine();
     if (!m || calm() || !host || typeof host.getBoundingClientRect !== 'function' || !document.body
         || typeof host.innerHTML !== 'string' || typeof host.querySelectorAll !== 'function'
@@ -179,6 +213,7 @@
     style.setProperty('margin', '0');
     style.setProperty('pointer-events', 'none');
     if (layer) style.setProperty('z-index', layer);
+    if (spell) leaveOn(ghost, spell);
     document.body.appendChild(ghost);
     function gone() {
       if (ghost.parentNode) ghost.parentNode.removeChild(ghost);
@@ -696,6 +731,8 @@
     card.host.setAttribute('data-asking', askingInCard ? 'true' : 'false');
     card.host.setAttribute('data-sky', list.length ? 'set' : 'none');
     card.host.setAttribute('data-difficulty', difficulty().name);
+    // The corner is shown once it has read what it holds, and arrives by a composition of its own.
+    if (card.open.hidden) arriveOn(card.open, 'avatar-in');
     card.open.hidden = false;
     var label = list.length || isRead ? 'open persona' : 'set up persona';
     var named = list.length ? skyName(list) : '';
@@ -780,6 +817,7 @@
     if (!card || !card.probe || !t || typeof t.mount !== 'function' || askingInCard) return;
     if (sheet && sheet.host.open) closeSheet();
     askingInCard = true;
+    arriveOn(card.probe, 'part-in');
     card.probe.hidden = false;
     refresh();
     t.mount(card.probe, {
@@ -798,7 +836,7 @@
     if (card && card.probe) {
       // The question's words are the threshold's to clear, so what is unmade is a ghost of it,
       // left where the question was (_sass/_persona.scss, .persona-probe.is-unmaking).
-      if (!card.probe.hidden) ghostOf(card.probe, 'persona-probe is-unmaking', '44');
+      if (!card.probe.hidden) ghostOf(card.probe, 'persona-probe is-unmaking', '44', 'part-unmake');
       card.probe.textContent = '';
       card.probe.hidden = true;
     }
@@ -1171,6 +1209,7 @@
     ghost.setAttribute('aria-hidden', 'true');
     ghost.setAttribute('tabindex', '-1');
     ghost.setAttribute('inert', '');
+    leaveOn(ghost, 'star-unmake');
     el.parentNode.insertBefore(ghost, el);
     function gone() {
       if (ghost.parentNode) ghost.parentNode.removeChild(ghost);
@@ -1233,7 +1272,9 @@
       if (!m || calm() || !el || !el.style || typeof el.style.setProperty !== 'function') continue;
       var wait = deal.length > 1 && typeof m.stagger === 'function' ? Math.round(m.stagger(k)) : 0;
       el.style.setProperty('--d', wait + 'ms');
-      rite(el, 'placed', riteMs('long', 560) + wait + 200);
+      // Each star's own arrival: its geometry, its curve, its composition, then the class.
+      arriveOn(el, 'star-develop');
+      rite(el, 'placed', riteLength(el, 'star-develop', riteMs('long', 560)) + wait + 200);
     }
     select(-1);
     sheetStatus(saved.status === 'unreadable'
@@ -1300,7 +1341,7 @@
   function leaveSheetGhost() {
     if (!sheet || !sheet.host.open) return;
     dropSheetGhost();
-    var ghost = ghostOf(sheet.host, 'persona-sheet persona-ghost');
+    var ghost = ghostOf(sheet.host, 'persona-sheet persona-ghost', null, 'sheet-out');
     if (!ghost) return;
     sheetGhost = ghost;
     var copy = typeof ghost.querySelector === 'function' ? ghost.querySelector('.persona-sky-canvas') : null;
@@ -1327,8 +1368,13 @@
       sweep();
       dropSheetGhost();
       if (sheetBox) sheetBox.up();
-      if (typeof sheet.host.showModal === 'function') sheet.host.showModal();
-      else { sheet.host.setAttribute('open', ''); sheet.host.classList.add('persona-sheet-fallback'); }
+      if (typeof sheet.host.showModal === 'function') {
+        // The sheet is dealt by a composition of its own, rolled before it is shown so its first
+        // frame is already the composition's (the fallback box keeps its own transform, so it is
+        // dealt by the stylesheet's keyframes instead).
+        arriveOn(sheet.host, 'sheet-in');
+        sheet.host.showModal();
+      } else { sheet.host.setAttribute('open', ''); sheet.host.classList.add('persona-sheet-fallback'); }
       sheetWasOpen = true;
       // The title is revealed as the sheet is dealt.
       var m = engine();
@@ -1546,7 +1592,7 @@
         if (t && typeof t.forget === 'function') t.forget();
         renderReading();
         refresh();
-        if (sheet.reading) sheet.reading.textContent = 'The reading is forgotten. Your stars stay.';
+        if (sheet.reading) say(sheet.reading, 'The reading is forgotten. Your stars stay.');
         if (sheet.ask) sheet.ask.focus();
       },
       onCancel: renderReading

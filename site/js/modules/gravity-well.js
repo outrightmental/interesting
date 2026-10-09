@@ -94,7 +94,10 @@ function isPerm(list, n) {
    dust blinks on rite.flicker. Every change is read against the piece's own clock, s.t, which
    frame() advances: a change made at `since` has come came() of its way, which is 1 at once
    for a visitor who asked for less motion and for whatever stood there from the start. Each
-   thing that moves has a roll of its own (rite.at), so no two step together. */
+   thing that moves has a roll of its own (rite.at), so no two step together -- and each TIME it
+   moves it is rolled again (roll(): the thing's seed crossed with how many times it has moved),
+   so the second swing of the aim composes a different stair, flicker and matte from the first,
+   a wheel's every turn clicks differently, and a swing may slip a tooth past and fall back. */
 
 const STILL = {
   ease: () => 1, stair: () => 1, ratchet: () => 0, flicker: () => 1, matte: () => true,
@@ -114,9 +117,29 @@ function fract(x) {
   return x - Math.floor(x);
 }
 
-// Turns made at x turns along: the whole ones, and the one under way in the ratchet's clicks.
-function turns(rite, x) {
-  return Math.floor(x) + rite.ratchet(fract(x));
+// The roll for the n-th time a thing moves: its own seed crossed with the count, so no two
+// triggers of one movement play alike while the same seed still plays the same piece.
+function roll(rite, base, n) {
+  return rite.at(((base | 0) ^ (Math.imul((n | 0) + 1, 0x9e37) | 0)) >>> 0);
+}
+
+// Turns made at x turns along: the whole ones, and the one under way in the ratchet's clicks --
+// each whole turn on a roll of its own, so no turn of a wheel clicks like the one before.
+function turns(rite, base, x) {
+  const whole = Math.floor(x);
+  return whole + swing(roll(rite, base, whole), x - whole);
+}
+
+// A swing from 0 to 1 composed of the roll's pieces: the ratchet's clicks, and -- on a roll whose
+// curve overshoots -- a slip one tooth past the mark near the end, fallen back from on the last
+// tread. Never an even turn, and not the same swing twice.
+function swing(own, p) {
+  const q = p <= 0 ? 0 : p >= 1 ? 1 : p;
+  const k = own.ratchet(q);
+  const teeth = Math.max(2, own.treads || 2);
+  const slips = typeof own.ease === 'function' && own.ease(0.9) > 1;
+  if (slips && q >= 0.55 && q < 0.86 && k < 1) return Math.min(1, k + 1 / (teeth - 1));
+  return k;
 }
 
 // Up the stair and back down it over one period: a breath, never a cosine.
@@ -148,9 +171,10 @@ function develop(g, rite, x0, y0, bw, bh, k, inside, size) {
 }
 
 // The light that comes over a solved field: it develops through the matte from the moment the
-// piece was solved, blinking on and dropping out the way the rite's flicker has it, and holds.
-function daybreak(g, rite, env, w, h, p, strength) {
-  const own = rite.at(0xdb);
+// piece was solved, blinking on and dropping out the way the rite's flicker has it, and holds;
+// rolled by which check solved it, so a field solved on the third flight lights another way.
+function daybreak(g, rite, env, w, h, p, strength, n) {
+  const own = roll(rite, 0xdb, n || 0);
   const k = own.stair(p);
   if (k <= 0 || !own.flicker(p)) return;
   g.fillStyle = env.alpha(env.colors.accent2, strength || 0.12);
@@ -160,7 +184,8 @@ function daybreak(g, rite, env, w, h, p, strength) {
 /* ---- drawing shared by both ----------------------------------------------------------------- */
 
 // The dust: standing where the configuration put it, and every seventh speck blinking out the
-// way the rite's flicker has it, on a roll of its own, so the field is never quite still.
+// way the rite's flicker has it -- on a roll of its own per speck and per blink, so the field is
+// never quite still and no blink repeats.
 function background(g, w, h, env, v, rite, t) {
   const col = env.colors;
   const glow = g.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, Math.max(w, h) * 0.75);
@@ -171,7 +196,10 @@ function background(g, w, h, env, v, rite, t) {
   for (let i = 0, n = Math.max(12, Math.round(85 * v.density)); i < n; i++) {
     const x = ((i * 0.61803398875 + v.turn * 0.23) % 1) * w;
     const y = ((i * 0.754877666 + v.turn * 0.17) % 1) * h;
-    if (i % 7 === 0 && !rite.at(0xd0 + (i % 13)).flicker(fract((t || 0) / 2.7 + i * 0.173))) continue;
+    if (i % 7 === 0) {
+      const phase = (t || 0) / 2.7 + i * 0.173;
+      if (!roll(rite, 0xd0 + (i % 13), Math.floor(phase)).flicker(fract(phase))) continue;
+    }
     g.fillStyle = env.alpha(col.fg, 0.12 + (i % 4) * 0.06);
     g.fillRect(x, y, i % 9 ? 1 : 1.7, i % 9 ? 1 : 1.7);
   }
@@ -352,7 +380,9 @@ function slingScene(g, w, h, env, p, s, v) {
   const ringR = k * RING_R;
   const pass = s.flight && s.pass && s.pass.d <= RING_R;
   const lit = pass && s.doneAt != null ? came(s, s.doneAt, 2.4, reduced) : 0;
-  const ringRite = rite.at(0x21);
+  // Every flight rolls the ring's rite afresh, so a ring passed on the fourth try lights in
+  // another matte and another flicker than one passed on the first.
+  const ringRite = roll(rite, 0x21, s.flights);
   g.fillStyle = env.alpha(col.accent2, 0.06);
   g.beginPath();
   g.arc(ring.x, ring.y, ringR, 0, Math.PI * 2);
@@ -362,8 +392,10 @@ function slingScene(g, w, h, env, p, s, v) {
     develop(g, ringRite, ring.x - ringR, ring.y - ringR, ringR * 2, ringR * 2, ringRite.stair(lit),
       (px, py) => Math.hypot(px - ring.x, py - ring.y) <= ringR, Math.max(rite.cell, Math.ceil(ringR / 9)));
   }
-  g.strokeStyle = env.alpha(col.accent2, pass ? 1 : 0.85);
-  g.lineWidth = Math.max(1.5, k * 0.006) * (1 + 1.4 * ringRite.stair(lit, 4));
+  // The rim brightens and thickens up a stair as the ring is passed: no cut to a new alpha.
+  const rim = ringRite.stair(lit, 4);
+  g.strokeStyle = env.alpha(col.accent2, 0.85 + 0.15 * rim);
+  g.lineWidth = Math.max(1.5, k * 0.006) * (1 + 1.4 * rim);
   g.beginPath();
   g.arc(ring.x, ring.y, ringR, 0, Math.PI * 2);
   g.stroke();
@@ -401,7 +433,7 @@ function slingScene(g, w, h, env, p, s, v) {
     const until = Math.max(2, Math.min(pts.length, Math.ceil(pts.length * s.fraction)));
     g.lineCap = 'round';
     g.lineJoin = 'round';
-    g.strokeStyle = env.alpha(col.accent2, pass ? 0.95 : 0.8);
+    g.strokeStyle = env.alpha(col.accent2, 0.8 + 0.15 * rim);
     g.lineWidth = Math.max(1.5, k * 0.006 * v.scale);
     g.beginPath();
     for (let i = 0; i < until; i++) {
@@ -412,7 +444,7 @@ function slingScene(g, w, h, env, p, s, v) {
     g.stroke();
     // A passed flight's path is set too: a glow develops along it through the matte, in cells.
     if (lit > 0 && ringRite.flicker(lit)) {
-      const glowRite = rite.at(0x9f);
+      const glowRite = roll(rite, 0x9f, s.flights);
       const kk = glowRite.stair(lit);
       const cell = Math.max(rite.cell, Math.ceil(k * 0.012));
       g.fillStyle = env.alpha(col.accent2, 0.3);
@@ -429,30 +461,34 @@ function slingScene(g, w, h, env, p, s, v) {
       }
     }
     const head = map.at(pts[until - 1].x, pts[until - 1].y);
+    // The head's glow breathes on a stair, each breath on a roll of its own.
     g.fillStyle = env.alpha(col.accent2, 0.22);
     g.beginPath();
-    g.arc(head.x, head.y, Math.max(6, k * 0.02 * v.scale) * (0.6 + 0.8 * breath(rite.at(0x4e), s.clock, 1.3, 3)), 0, Math.PI * 2);
+    g.arc(head.x, head.y, Math.max(6, k * 0.02 * v.scale) * (0.6 + 0.8 * breath(roll(rite, 0x4e, Math.floor(s.clock / 1.3)), s.clock, 1.3, 3)), 0, Math.PI * 2);
     g.fill();
     g.fillStyle = col.fg;
     g.beginPath();
     g.arc(head.x, head.y, Math.max(2.5, k * 0.007 * v.scale), 0, Math.PI * 2);
     g.fill();
-    // Where it came nearest the ring, marked: the mark blinks on once the flight has landed.
+    // Where it came nearest the ring, marked once the flight has landed: the line is laid from
+    // the probe's nearest point toward the ring in treads, blinking as it comes, never drawn whole.
     const landed = reduced ? 1 : Math.max(0, Math.min(1, (s.clock - REPLAY) / 0.8));
-    if (landed > 0 && !pass && s.pass && rite.at(0x3e).flicker(landed)) {
+    const markRite = roll(rite, 0x3e, s.flights);
+    if (landed > 0 && !pass && s.pass && markRite.flicker(landed)) {
       const near = map.at(pts[s.pass.i].x, pts[s.pass.i].y);
+      const laid = markRite.stair(landed, 5);
       g.strokeStyle = env.alpha(col.accent, 0.7);
       g.lineWidth = 1;
       g.setLineDash([2, 4]);
       g.beginPath();
       g.moveTo(near.x, near.y);
-      g.lineTo(ring.x, ring.y);
+      g.lineTo(near.x + (ring.x - near.x) * laid, near.y + (ring.y - near.y) * laid);
       g.stroke();
       g.setLineDash([]);
     }
   }
   // The light over a solved field.
-  if (lit > 0) daybreak(g, rite, env, w, h, lit, 0.1);
+  if (lit > 0) daybreak(g, rite, env, w, h, lit, 0.1, s.flights);
   const size = Math.max(10, Math.min(17, Math.round(Math.min(w, h) * 0.042)));
   font(g, size);
   g.textAlign = 'left';
@@ -465,29 +501,33 @@ function slingScene(g, w, h, env, p, s, v) {
   g.fillText((angleRead > 0 ? '+' : '') + angleRead + '° · speed ' + Math.round(speedNow), w * 0.96, h * 0.07, w * 0.5);
   g.textAlign = 'center';
   g.fillStyle = env.alpha(col.muted, 0.85);
-  // The verdict blinks on when a flight is released; nothing is said while it is still off.
+  // The verdict blinks on when a flight is released, on that flight's own roll; nothing is said
+  // while it is still off.
   const said = s.flight ? (reduced ? 1 : Math.max(0, Math.min(1, s.clock / 0.9))) : 0;
   if (!s.flight) g.fillText('the well bends every flight the same way; through the ring is the goal', w / 2, h * 0.94, w * 0.92);
-  else if (rite.at(0x7e).flicker(said)) g.fillText(s.verdict, w / 2, h * 0.94, w * 0.92);
+  else if (roll(rite, 0x7e, s.flights).flicker(said)) g.fillText(s.verdict, w / 2, h * 0.94, w * 0.92);
 }
 
 function slingState(p) {
   return {
     angle: AIM.open, speed: PUSH.open, flight: null, pass: null, fraction: 0, clock: 0, verdict: '',
-    t: 0, doneAt: null, aimFrom: AIM.open, aimAt: null, speedFrom: PUSH.open, speedAt: null
+    t: 0, doneAt: null, aimFrom: AIM.open, aimAt: null, speedFrom: PUSH.open, speedAt: null,
+    // How many times each thing has moved: the roll for its next movement.
+    aims: 0, speeds: 0, flights: 0
   };
 }
 
 // The aim as it stands on the pad: swung from where it was to where it is set in the ratchet's
-// clicks; and the speed line, climbed to up a stair. Both are what the readout counts.
+// clicks (with a slip past the mark on a roll that has one); and the speed line, climbed to up a
+// stair. Both are what the readout counts, and each setting rolls its own swing.
 function angleShown(s, rite, reduced) {
   if (s.aimAt == null) return s.angle;
-  return s.aimFrom + (s.angle - s.aimFrom) * rite.at(0xa1).ratchet(came(s, s.aimAt, 0.9, reduced));
+  return s.aimFrom + (s.angle - s.aimFrom) * swing(roll(rite, 0xa1, s.aims), came(s, s.aimAt, 0.9, reduced));
 }
 
 function speedShown(s, rite, reduced) {
   if (s.speedAt == null) return s.speed;
-  return s.speedFrom + (s.speed - s.speedFrom) * rite.at(0x5d).stair(came(s, s.speedAt, 0.9, reduced));
+  return s.speedFrom + (s.speed - s.speedFrom) * roll(rite, 0x5d, s.speeds).stair(came(s, s.speedAt, 0.9, reduced));
 }
 
 function slingPreview(g, w, h, env, p) {
@@ -526,6 +566,7 @@ function slingPiece(env, p) {
       const pass = nearestTo(flight.pts, p.rx, p.ry);
       s.flight = flight;
       s.pass = pass;
+      s.flights += 1;
       s.clock = c.reduced ? REPLAY + 1 : 0;
       s.fraction = c.reduced ? 1 : 0;
       const solved = pass.d <= RING_R;
@@ -547,12 +588,14 @@ function slingPiece(env, p) {
         // The aim swings from wherever it stands now, mid-click or settled, to the new angle.
         s.aimFrom = angleShown(s, rite, c.reduced);
         s.aimAt = s.t;
+        s.aims += 1;
         s.angle = clampTo(value, AIM);
         c.status('aimed ' + (s.angle === 0 ? 'straight across' : Math.abs(s.angle) + ' degrees ' + (s.angle > 0 ? 'up' : 'down')));
       }
       if (id === 'speed') {
         s.speedFrom = speedShown(s, rite, c.reduced);
         s.speedAt = s.t;
+        s.speeds += 1;
         s.speed = clampTo(value, PUSH);
         c.status('speed ' + s.speed + ' of 100');
       }
@@ -561,6 +604,8 @@ function slingPiece(env, p) {
           c.status('the flight has been replayed as often as this difficulty allows; release another');
         } else if (s.flight) {
           replays += 1;
+          // A replay is another flight of the same path: it rolls its own curve and blinks.
+          s.flights += 1;
           s.clock = c.reduced ? REPLAY + 1 : 0;
           s.fraction = c.reduced ? 1 : 0;
           c.status('the last flight, again: ' + s.verdict);
@@ -574,9 +619,10 @@ function slingPiece(env, p) {
       s.t += dt;
       if (s.flight && s.clock < REPLAY + 1) {
         s.clock += dt;
-        // The replay runs along the rite's curve, which may overshoot the end a little and
-        // settle: the head goes past the last point and comes back, clamped to the path.
-        s.fraction = c.reduced ? 1 : Math.max(0, Math.min(1, riteOf(c).at(0xf17).ease(s.clock / REPLAY)));
+        // The replay runs along the curve this flight rolled -- a hesitation off the pad, a
+        // surge, a stutter -- which may overshoot the end a little and settle: the head goes
+        // past the last point and comes back, clamped to the path.
+        s.fraction = c.reduced ? 1 : Math.max(0, Math.min(1, roll(riteOf(c), 0xf17, s.flights).ease(s.clock / REPLAY)));
       }
       if (c.done && s.doneAt == null) s.doneAt = s.t;
       draw(c);
@@ -646,10 +692,11 @@ function moonsScene(g, w, h, env, p, s, v) {
   const u = R / outer;
   const size = Math.max(10, Math.min(16, Math.round(Math.min(w, h) * 0.04)));
   const lit = s.doneAt == null ? 0 : came(s, s.doneAt, 2.6, reduced);
-  // The orbits: dashed, and once the moons are in motion the dashes tick round in clicks.
+  // The orbits: dashed, and once the moons are in motion the dashes tick round in clicks, every
+  // tick on a roll of its own.
   g.lineWidth = 1;
   g.setLineDash([4, 5]);
-  g.lineDashOffset = s.spin ? -9 * turns(rite.at(0x0b), s.spin / 1.6) : 0;
+  g.lineDashOffset = s.spin ? -9 * turns(rite, 0x0b, s.spin / 1.6) : 0;
   p.radii.forEach((r) => {
     g.strokeStyle = env.alpha(col.accent, 0.45);
     g.beginPath();
@@ -658,6 +705,22 @@ function moonsScene(g, w, h, env, p, s, v) {
   });
   g.setLineDash([]);
   g.lineDashOffset = 0;
+  // The laps the visitor says: that many notches round the outermost orbit, arriving one tread
+  // at a time in a series -- a counter that counts, never a number that cuts -- and each new count
+  // steps from the last one, up or down, on a roll of its own.
+  if (s.lapsAt != null) {
+    const lapRite = roll(rite, 0x1a, s.counts);
+    const shown = s.lapsFrom + Math.round(lapRite.stair(came(s, s.lapsAt, 1.1, reduced), Math.max(1, Math.abs(s.laps - s.lapsFrom))) * (s.laps - s.lapsFrom));
+    g.strokeStyle = env.alpha(col.accent2, 0.9);
+    g.lineWidth = Math.max(1.5, u * 0.3);
+    g.beginPath();
+    for (let i = 0; i < shown; i++) {
+      const a = -Math.PI / 2 + (i / Math.max(shown, 1)) * Math.PI * 2;
+      g.moveTo(cx + Math.cos(a) * (outer * u + size * 0.3), cy + Math.sin(a) * (outer * u + size * 0.3));
+      g.lineTo(cx + Math.cos(a) * (outer * u + size * 0.8), cy + Math.sin(a) * (outer * u + size * 0.8));
+    }
+    g.stroke();
+  }
   body(g, env, cx, cy, Math.max(4, u * 2.4) * v.scale, 4, false);
   // The ruler, out from the planet: a tick every two units, a number every ten, and each
   // orbit's crossing marked with its reading.
@@ -692,9 +755,12 @@ function moonsScene(g, w, h, env, p, s, v) {
   // while no moon ever glides. A moon the hint names is a set surface: its halo develops
   // through the matte and its reading blinks on.
   const order = moonsOrder(p);
+  // The visitor's order, as a numeral by each moon: the numerals arrive one tread at a time in a
+  // series on the roll of that setting, so the second ordering deals them in another rhythm.
+  const placed = s.orderAt != null ? roll(rite, 0x60, s.orders).series(came(s, s.orderAt, 0.9, reduced), 3) : 0;
   p.radii.forEach((r, i) => {
     const period = 30 * Math.pow(r / outer, 1.5);
-    const a = (p.angles[i] + (s.spin ? 360 * turns(rite.at(0x30 + i), s.spin / period) : 0)) * Math.PI / 180;
+    const a = (p.angles[i] + (s.spin ? 360 * turns(rite, 0x30 + i, s.spin / period) : 0)) * Math.PI / 180;
     const x = cx + Math.cos(a) * r * u;
     const y = cy + Math.sin(a) * r * u;
     const rad = Math.max(3, u * 1.1) * v.scale;
@@ -723,9 +789,22 @@ function moonsScene(g, w, h, env, p, s, v) {
     g.textBaseline = 'middle';
     g.fillStyle = env.alpha(on ? col.accent2 : col.fg, 0.9);
     g.fillText(FIRST[p.names[i]] + (on ? ', ' + ['shortest', 'middle', 'longest'][order.indexOf(i)] + ' period' : ''), x + (Math.cos(a) < 0 ? -1 : 1) * rad * 1.8, y - rad * 1.6);
+    const place = s.order ? s.order.indexOf(i) : -1;
+    if (place >= 0 && place < placed) {
+      // The numeral sits in a small set surface of its own, developed through the matte.
+      const nx = x + (Math.cos(a) < 0 ? -1 : 1) * rad * 1.8;
+      const ny = y + rad * 1.9;
+      const boxW = size * 1.1;
+      g.fillStyle = env.alpha(col.accent2, 0.3);
+      develop(g, roll(rite, 0x60, s.orders), Math.cos(a) < 0 ? nx - boxW : nx, ny - size * 0.5, boxW, size, came(s, s.orderAt, 0.9, reduced), null, Math.max(2, rite.cell));
+      font(g, size * 0.8, 700);
+      g.textAlign = Math.cos(a) < 0 ? 'right' : 'left';
+      g.fillStyle = col.accent2;
+      g.fillText(String(place + 1), nx + (Math.cos(a) < 0 ? -size * 0.15 : size * 0.15), ny);
+    }
   });
   // The light over a solved sky.
-  if (lit > 0) daybreak(g, rite, env, w, h, lit, 0.1);
+  if (lit > 0) daybreak(g, rite, env, w, h, lit, 0.1, s.checks);
   // The scale bar, and the law.
   const bar = 10 * u;
   g.strokeStyle = env.alpha(col.fg, 0.8);
@@ -751,20 +830,29 @@ function moonsScene(g, w, h, env, p, s, v) {
   g.fillText('period ∝ radius³ᐟ²', w * 0.96, h * 0.07, w * 0.4);
   g.textAlign = 'center';
   g.fillStyle = env.alpha(col.muted, 0.85);
-  const foot = s.order ? 'shortest period first: ' + s.order.map((i) => FIRST[p.names[i]]).join(', ') + ' · ' + s.laps + (s.laps === 1 ? ' lap' : ' laps') + ' of the innermost for one of the outermost'
+  // The footer reads the settings back; a new reading blinks in on the roll of that change,
+  // never cutting straight to the new words.
+  const foot = s.order && s.footAt != null ? 'shortest period first: ' + s.order.map((i) => FIRST[p.names[i]]).join(', ') + ' · ' + s.laps + (s.laps === 1 ? ' lap' : ' laps') + ' of the innermost for one of the outermost'
     : 'three moons to scale; the inner one laps the outer a whole number of times';
-  g.fillText(foot, w / 2, h * 0.95, w * 0.92);
+  if (s.footAt == null || roll(rite, 0x0f, s.foots).flicker(came(s, s.footAt, 0.7, reduced))) g.fillText(foot, w / 2, h * 0.95, w * 0.92);
+}
+
+function moonsState() {
+  return {
+    spin: 0, hinted: [], hintedAt: null, order: null, laps: 1, t: 0, doneAt: null,
+    orderAt: null, orders: 0, lapsAt: null, lapsFrom: 1, counts: 0, footAt: null, foots: 0, checks: 0
+  };
 }
 
 function moonsPreview(g, w, h, env, p) {
-  moonsScene(g, w, h, env, p, { spin: 0, hinted: [], hintedAt: null, order: null, laps: 1, t: 0, doneAt: null }, dials(env));
+  moonsScene(g, w, h, env, p, moonsState(), dials(env));
 }
 
 function moonsPiece(env, p) {
   const v = dials(env);
   const helps = asked(env).helps;
   const answer = moonsOrder(p);
-  const s = { spin: 0, hinted: [], hintedAt: null, order: [0, 1, 2], laps: 1, t: 0, doneAt: null };
+  const s = Object.assign(moonsState(), { order: [0, 1, 2] });
   const draw = (c) => moonsScene(c.g, c.w, c.h, c, p, s, v);
   const names = p.names.map((i) => FIRST[i]);
   return {
@@ -786,6 +874,7 @@ function moonsPiece(env, p) {
       const right = order.filter((m, i) => m === answer[i]).length;
       const laps = Math.round(Number(c.value('laps')));
       const off = Math.abs(laps - p.k);
+      s.checks += 1;
       if (right === 3 && off === 0) {
         return { solved: true, say: 'in step: the ' + names[answer[0]] + ' moon laps ' + WORDS[p.k] + ' times for one lap of the ' + names[answer[2]] + ' moon' };
       }
@@ -800,11 +889,23 @@ function moonsPiece(env, p) {
     apply(id, value, c) {
       if (id === 'order' && isPerm(value, 3)) {
         s.order = value.slice();
+        s.orderAt = s.t;
+        s.orders += 1;
+        s.footAt = s.t;
+        s.foots += 1;
         c.status('shortest period first: ' + s.order.map((i) => names[i]).join(', '));
       }
       if (id === 'laps') {
         const n = Math.round(Number(value));
-        if (n >= 1 && n <= 9) s.laps = n;
+        if (n >= 1 && n <= 9 && (s.lapsAt == null || n !== s.laps)) {
+          // The notches step from the count that stood (none, the first time) to the one set.
+          s.lapsFrom = s.lapsAt == null ? 0 : s.laps;
+          s.laps = n;
+          s.lapsAt = s.t;
+          s.counts += 1;
+          s.footAt = s.t;
+          s.foots += 1;
+        }
         c.status(s.laps + (s.laps === 1 ? ' lap' : ' laps') + ' of the innermost for one of the outermost');
       }
       if (id === 'hint') {
