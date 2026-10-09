@@ -277,6 +277,54 @@ $moods: (
   cursor: crosshair;
 }
 
+// The print stays beneath sixteen native buttons; their soot lifts wherever rubbed.
+.probe-rubbing {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-rows: repeat(4, minmax(44px, 1fr));
+  width: min(100%, 24rem);
+  aspect-ratio: 3 / 2;
+  min-height: 176px;
+  border-radius: var(--md-sys-shape-corner-large);
+  background: var(--md-sys-color-surface-container-lowest);
+  overflow: hidden;
+  touch-action: none;
+}
+
+.probe-rubbing-picture {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.probe-rub-cell {
+  z-index: 1;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0;
+  border-radius: 0;
+  background:
+    repeating-linear-gradient(45deg, transparent 0 4px, color-mix(in oklab, var(--md-sys-color-primary) 8%, transparent) 4px 5px),
+    var(--md-sys-color-surface-container-high);
+  color: var(--md-sys-color-on-surface);
+  box-shadow: inset 0 0 0 1px var(--md-sys-color-outline-variant);
+  @include type.scale(label-medium);
+}
+
+.probe-rub-cell[data-uncovered='true'] {
+  background: transparent;
+  box-shadow: none;
+}
+
+.probe-rub-cell:focus-visible {
+  outline-offset: -3px;
+}
+
 .probe-dial {
   display: grid;
   gap: 0.35rem;
@@ -312,7 +360,8 @@ $moods: (
 @media (prefers-reduced-motion: reduce) {
   .probe-option,
   .probe-big,
-  .probe-window {
+  .probe-window,
+  .probe-rub-cell {
     transition: none;
   }
 }

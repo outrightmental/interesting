@@ -264,6 +264,20 @@
       all: { ceremonial: 2, metrical: 1 }
     },
     {
+      probe: 'soot-print', name: 'the covered print', kind: 'rubbing',
+      ask: 'Rub the soot off any part of this print; what you uncover suggests a puzzle. Open one whenever you like, even if you leave the print covered.',
+      motifs: [
+        { label: 'a key', word: 'key', weights: { analytic: 3, restless: 2, verbal: 1 } },
+        { label: 'a shell', word: 'shell', weights: { attentive: 3, cosmic: 2, brooding: 1, divinatory: 1 } },
+        { label: 'a branch', word: 'branch', weights: { rooted: 3, tending: 2, tender: 1 } },
+        { label: 'a wheel', word: 'wheel', weights: { geometric: 3, metrical: 2, ceremonial: 1, curious: 1 } }
+      ],
+      untouched: { divinatory: 3, tender: 2 },
+      glimpse: { tender: 2, attentive: 1 },
+      search: { curious: 2, verbal: 1 },
+      whole: { ceremonial: 2, restless: 1, tempestuous: 1 }
+    },
+    {
       probe: 'knock', name: 'the knock', kind: 'knock',
       ask: 'A door, and no one expecting you. Knock the way you would knock.',
       label: 'knock', done: 'that is my knock',
@@ -508,7 +522,8 @@
     var kinds = {
       choice: choiceProbe, sequence: sequenceProbe, tap: tapProbe, hold: holdProbe,
       place: placeProbe, draw: drawProbe, windows: windowsProbe, balance: balanceProbe,
-      slider: sliderProbe, sky: skyProbe, keys: keysProbe, knock: knockProbe
+      slider: sliderProbe, sky: skyProbe, keys: keysProbe, knock: knockProbe,
+      rubbing: rubbingProbe
     };
     (kinds[probe.kind] || choiceProbe)(probe, body, trace, answer, finish);
     return probe;
@@ -1441,6 +1456,198 @@
       finish();
     });
     paint(performance.now());
+  }
+  // A rubbing reads the final coverage, not the path or speed of the hand. Dragging and native
+  // buttons uncover the same patches; no gesture history or drawing is kept with the reading.
+  function rubbingProbe(probe, body, trace, answer, finish) {
+    var revealed = new Array(16).fill(false);
+    var buttons = [];
+    var pointer = null;
+    var field = el('div', 'probe-rubbing');
+    field.setAttribute('role', 'group');
+    field.setAttribute('aria-label', 'Covered print. Arrow keys choose a patch; Enter or Space uncovers it.');
+    var picture = el('canvas', 'probe-rubbing-picture');
+    picture.width = 480;
+    picture.height = 320;
+    picture.setAttribute('aria-hidden', 'true');
+    var g = picture.getContext('2d');
+    picture.hidden = !g;
+    field.appendChild(picture);
+
+    function motifOf(index) {
+      return Math.floor(index / 8) * 2 + Math.floor((index % 4) / 2);
+    }
+    function patchLabel(index) {
+      return 'row ' + (Math.floor(index / 4) + 1) + ', column ' + (index % 4 + 1);
+    }
+    function count() {
+      return revealed.filter(function (seen) { return seen; }).length;
+    }
+    function report(detail) {
+      var n = count();
+      reset.disabled = n === 0;
+      trace.textContent = (g ? '' : 'The picture cannot be drawn here; uncovered patches name what they show. ')
+        + (n ? n + ' of 16 patches uncovered.' : 'The print is still covered.')
+        + (detail ? ' ' + detail : '');
+    }
+    function uncover(index) {
+      if (index < 0 || index >= buttons.length) return;
+      var motif = probe.motifs[motifOf(index)];
+      if (!revealed[index]) {
+        revealed[index] = true;
+        buttons[index].setAttribute('data-uncovered', 'true');
+        buttons[index].setAttribute('aria-label', patchLabel(index) + ': ' + motif.label + ', uncovered');
+        if (!g) buttons[index].textContent = motif.word;
+        report('This patch shows part of ' + motif.label + '.');
+      } else report('This patch already shows part of ' + motif.label + '.');
+    }
+    for (var i = 0; i < revealed.length; i++) {
+      (function (index) {
+        var button = el('button', 'probe-rub-cell');
+        button.type = 'button';
+        button.setAttribute('aria-label', 'uncover ' + patchLabel(index));
+        button.addEventListener('click', function () { uncover(index); });
+        buttons.push(button);
+        field.appendChild(button);
+      })(i);
+    }
+    body.appendChild(field);
+    body.appendChild(el('p', 'probe-count', 'Drag or tap to rub. With a keyboard, arrow keys choose a patch; Enter or Space rubs it.'));
+    var controls = el('div', 'controls');
+    var done = el('button', 'btn-filled', 'open a puzzle');
+    done.type = 'button';
+    var reset = el('button', 'btn-text', 'start over');
+    reset.type = 'button';
+    controls.appendChild(done);
+    controls.appendChild(reset);
+    body.appendChild(controls);
+
+    function at(ev) {
+      var box = field.getBoundingClientRect();
+      if (!box.width || !box.height) return -1;
+      var x = (ev.clientX - box.left) / box.width;
+      var y = (ev.clientY - box.top) / box.height;
+      if (!isFinite(x) || !isFinite(y) || x < 0 || x >= 1 || y < 0 || y >= 1) return -1;
+      return Math.floor(y * 4) * 4 + Math.floor(x * 4);
+    }
+    field.addEventListener('pointerdown', function (ev) {
+      if (pointer !== null || ev.button !== 0) return;
+      pointer = ev.pointerId;
+      if (field.setPointerCapture) field.setPointerCapture(ev.pointerId);
+      uncover(at(ev));
+    });
+    field.addEventListener('pointermove', function (ev) {
+      if (pointer !== ev.pointerId) return;
+      var index = at(ev);
+      if (index >= 0 && !revealed[index]) uncover(index);
+    });
+    function release(ev) {
+      if (pointer === ev.pointerId) pointer = null;
+    }
+    field.addEventListener('pointerup', release);
+    field.addEventListener('pointercancel', release);
+    field.addEventListener('lostpointercapture', release);
+    field.addEventListener('keydown', function (ev) {
+      var index = buttons.indexOf(document.activeElement);
+      if (index < 0) return;
+      var moves = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -4, ArrowDown: 4 };
+      var next;
+      if (typeof moves[ev.key] === 'number') next = Math.max(0, Math.min(15, index + moves[ev.key]));
+      else if (ev.key === 'Home') next = 0;
+      else if (ev.key === 'End') next = 15;
+      else return;
+      ev.preventDefault();
+      buttons[next].focus();
+    });
+    reset.addEventListener('click', function () {
+      revealed = new Array(16).fill(false);
+      buttons.forEach(function (button, index) {
+        button.removeAttribute('data-uncovered');
+        button.setAttribute('aria-label', 'uncover ' + patchLabel(index));
+        button.textContent = '';
+      });
+      report('You can rub a different part, or open a puzzle without uncovering any more.');
+      buttons[0].focus();
+    });
+    done.addEventListener('click', function () {
+      Object.keys(answer).forEach(function (id) { delete answer[id]; });
+      var counts = probe.motifs.map(function () { return 0; });
+      revealed.forEach(function (seen, index) {
+        if (seen) counts[motifOf(index)] += 1;
+      });
+      var n = count();
+      if (n) probe.motifs.forEach(function (motif, index) {
+        add(answer, motif.weights, counts[index] / n);
+      });
+      add(answer, !n ? probe.untouched : n <= 4 ? probe.glimpse : n >= 12 ? probe.whole : probe.search, 1);
+      finish();
+    });
+
+    if (g) {
+      var style = window.getComputedStyle(body);
+      var ground = rgbOf(style.getPropertyValue('--bg'), '#070a14');
+      var corner = rgbOf(style.getPropertyValue('--bg2'), '#1c2a4e');
+      var cool = rgbOf(style.getPropertyValue('--accent'), '#9fcbff');
+      var warm = rgbOf(style.getPropertyValue('--accent2'), '#ffe7ab');
+      var ink = rgbOf(style.getPropertyValue('--fg'), '#e6eaf5');
+      g.fillStyle = rgba(blend(ground, corner, 0.12), 1);
+      g.fillRect(0, 0, picture.width, picture.height);
+      probe.motifs.forEach(function (motif, index) {
+        var x = index % 2 * 240 + 120;
+        var y = Math.floor(index / 2) * 160 + 80;
+        g.strokeStyle = rgba(cool, 0.24);
+        g.lineWidth = 1;
+        g.beginPath();
+        g.arc(x, y, 58, 0, Math.PI * 2);
+        g.stroke();
+        g.strokeStyle = rgba(index % 2 ? warm : cool, 0.95);
+        g.lineWidth = 2.5;
+        g.lineCap = 'round';
+        g.lineJoin = 'round';
+        g.beginPath();
+        if (index === 0) {
+          g.arc(x - 22, y - 8, 18, 0, Math.PI * 2);
+          g.moveTo(x - 4, y - 8);
+          g.lineTo(x + 42, y - 8);
+          g.moveTo(x + 22, y - 8);
+          g.lineTo(x + 22, y + 10);
+          g.moveTo(x + 37, y - 8);
+          g.lineTo(x + 37, y + 4);
+        } else if (index === 1) {
+          for (var s = 0; s <= 72; s++) {
+            var a = s / 72 * Math.PI * 6;
+            var r = s / 72 * 38;
+            var sx = x + Math.cos(a) * r;
+            var sy = y - 5 + Math.sin(a) * r;
+            if (s) g.lineTo(sx, sy);
+            else g.moveTo(sx, sy);
+          }
+        } else if (index === 2) {
+          g.moveTo(x, y + 34);
+          g.lineTo(x, y - 40);
+          for (var leaf = 0; leaf < 3; leaf++) {
+            for (var side = -1; side <= 1; side += 2) {
+              g.moveTo(x, y + 18 - leaf * 20);
+              g.lineTo(x + side * (24 + leaf * 4), y - leaf * 20);
+            }
+          }
+        } else {
+          g.arc(x, y - 5, 35, 0, Math.PI * 2);
+          for (var spoke = 0; spoke < 8; spoke++) {
+            var angle = spoke / 8 * Math.PI * 2;
+            g.moveTo(x, y - 5);
+            g.lineTo(x + Math.cos(angle) * 35, y - 5 + Math.sin(angle) * 35);
+          }
+        }
+        g.stroke();
+        g.fillStyle = rgba(ink, 0.95);
+        g.font = '500 15px system-ui, sans-serif';
+        g.textAlign = 'center';
+        g.textBaseline = 'middle';
+        g.fillText(motif.word, x, y + 68);
+      });
+    }
+    report();
   }
   function describe(reading) {
     var o = reading && reading.orientation;
