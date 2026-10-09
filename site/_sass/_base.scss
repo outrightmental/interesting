@@ -26,6 +26,19 @@ html {
   color: var(--md-sys-color-on-surface);
   font-family: type.$sans;
   -webkit-text-size-adjust: 100%;
+  // The one scrollbar wears the mood: a thumb in the primary over a track that is the page.
+  scrollbar-color: color-mix(in oklab, var(--md-sys-color-primary) 38%, transparent) transparent;
+}
+
+// What a visitor selects is marked in the tertiary's container, the colour the sigils blink in.
+::selection {
+  background-color: var(--md-sys-color-tertiary-container);
+  color: var(--md-sys-color-on-tertiary-container);
+}
+
+::target-text {
+  background-color: var(--md-sys-color-tertiary-container);
+  color: var(--md-sys-color-on-tertiary-container);
 }
 
 body {

@@ -81,6 +81,58 @@ function clamp(v, lo, hi) {
   return Math.max(lo, Math.min(hi, v));
 }
 
+/* ---- the rite: how the bench moves ---------------------------------------------------------- */
+
+/* Nothing on the bench fades or cuts bare (README: "Motion axiom"). A cell a visitor lights
+   develops by its AREA through the piece's matte, tile by tile in its own pattern, and goes dark
+   the same way back down the stair; its outline steps between its two tones on the stair; a mark
+   the bench shows (a hinted cell, a marked difference, the apex) blinks on with rite.flicker and
+   holds; the solved table fills in glyph by glyph, each on a roll of its own, and the solved rows
+   take on a texture that develops through the matte. Every cell, mark and glyph moves on a roll of
+   its own (rite.at), and a cell pressed twice moves differently the second time, so no two step
+   together. Every change is read against the piece's own clock, recorded in frame(t), and the
+   harnesses hand a rite like the stage does; a piece with none stands still. */
+const STILL = {
+  ease: () => 1, stair: () => 1, ratchet: () => 1, flicker: () => 1, matte: () => true,
+  series: (p, n) => n, turn: () => 1, treads: 1, kind: 'none', cell: 4, at: () => STILL
+};
+
+function riteOf(env) {
+  return env && env.rite ? env.rite : STILL;
+}
+
+// How far through its rite a thing is, `now` seconds in, that began at `since`: 1 when it has
+// been there all along (or less motion was asked for), 0 before it begins.
+function came(now, since, span, reduced) {
+  if (reduced || since == null || since < 0 || now == null) return 1;
+  return Math.max(0, Math.min(1, (now - since) / span));
+}
+
+// The cells of a box that the matte lets through at coverage k, filled in the current fillStyle:
+// how a surface changes by its area. Cells are rite.cell px, coarser over a wide box so a frame
+// stays cheap, on a grid fixed to the canvas so the pattern holds still while it grows. At k >= 1
+// every cell is let through.
+function develop(g, rite, x0, y0, bw, bh, k, size) {
+  if (k <= 0) return;
+  const cell = size || Math.max(rite.cell, Math.ceil(Math.max(bw, bh) / 28));
+  const cx0 = Math.floor(x0 / cell);
+  const cy0 = Math.floor(y0 / cell);
+  const cx1 = Math.ceil((x0 + bw) / cell);
+  const cy1 = Math.ceil((y0 + bh) / cell);
+  for (let cy = cy0; cy < cy1; cy++) {
+    for (let cx = cx0; cx < cx1; cx++) {
+      if (k < 1 && !rite.matte(cx, cy, k)) continue;
+      const px = Math.max(x0, cx * cell);
+      const py = Math.max(y0, cy * cell);
+      g.fillRect(px, py, Math.min(cell, x0 + bw - px), Math.min(cell, y0 + bh - py));
+    }
+  }
+}
+
+const SPAN = 0.7;     // seconds a cell takes to light or go dark, a mark to arrive
+const REVEAL = 1.8;   // seconds the solved bench takes to develop
+const STAGGER = 0.14; // seconds between one row's marks and the next when the bench marks them all
+
 /* ---- shared drawing ------------------------------------------------------------------------- */
 
 function background(g, w, h, env) {
@@ -110,9 +162,13 @@ function cell(g, env, x, y, size, lit, inset, tone) {
 }
 
 // The eight patterns of three and what the rule makes of each, or a question mark where the rule
-// is still to be read. Patterns run 111 down to 000, as the rule's binary digits do.
-function glyphTable(g, env, x0, y, span, rule, v) {
+// is still to be read. Patterns run 111 down to 000, as the rule's binary digits do. `reveal`, if
+// given, is how far the table has got filling itself in (0..1): each glyph's answer blinks on in
+// its turn, on a roll of its own, and a lit answer develops through the matte -- the question
+// mark stands until that glyph's moment.
+function glyphTable(g, env, x0, y, span, rule, v, reveal) {
   const c = env.colors;
+  const rite = riteOf(env);
   const each = span / 8;
   const mini = Math.min(each / 4.2, span * 0.03);
   const inset = mini * clamp(0.1 / v.density, 0.05, 0.16);
@@ -126,13 +182,23 @@ function glyphTable(g, env, x0, y, span, rule, v) {
       const bit = (hood >> (2 - b)) & 1;
       cell(g, env, cx + (b - 1.5) * mini, y, mini, bit, inset);
     }
-    if (rule === null) {
+    // This glyph's own moment within the reveal: the eight come in a stagger, not at once.
+    let p = 1;
+    let own = rite;
+    if (rule !== null && reveal != null && reveal < 1) {
+      own = rite.at(0x400 + i);
+      p = clamp((reveal - i * 0.07) / (1 - 7 * 0.07), 0, 1);
+    }
+    if (rule === null || !own.flicker(p)) {
       g.fillStyle = env.alpha(c.accent2, 0.9);
       g.fillText('?', cx, y + mini * 2.1);
     } else {
       const out = (rule >> hood) & 1;
-      cell(g, env, cx - mini / 2, y + mini * 1.5, mini, out, inset, env.alpha(c.accent2, 0.95));
-      if (!out) {
+      cell(g, env, cx - mini / 2, y + mini * 1.5, mini, false, inset);
+      if (out) {
+        g.fillStyle = env.alpha(c.accent2, 0.95);
+        develop(g, own, cx - mini / 2 + inset, y + mini * 1.5 + inset, mini - inset * 2, mini - inset * 2, own.stair(p), Math.max(1, Math.min(rite.cell, Math.ceil(mini / 5))));
+      } else {
         g.strokeStyle = env.alpha(c.muted, 0.5);
         g.lineWidth = 1;
         g.strokeRect(cx - mini / 2 + inset, y + mini * 1.5 + inset, mini - inset * 2, mini - inset * 2);
@@ -216,6 +282,7 @@ function nextGeometry(w, h, width, v) {
 function drawNext(g, w, h, env, plan, s, variant) {
   const v = variant || PLAIN;
   const c = env.colors;
+  const rite = riteOf(env);
   const geo = nextGeometry(w, h, plan.width, v);
   const rows = runRows(plan.start, plan.rule, 4);
   const inset = geo.size * clamp(0.09 / v.density, 0.05, 0.14);
@@ -231,7 +298,11 @@ function drawNext(g, w, h, env, plan, s, variant) {
     label(g, env, String(r + 1), geo.left - geo.labelW * 0.5, y + geo.size / 2, small, 'center', env.alpha(c.muted, 0.9));
     for (let x = 0; x < plan.width; x++) cell(g, env, geo.left + x * geo.size, y, geo.size, rows[r][x], inset);
   }
-  // The hidden rows: the visitor's, outlined, lit where they have lit them.
+  // The hidden rows: the visitor's, outlined, lit where they have lit them. A cell they light
+  // develops through the matte on a roll of its own (another roll each time it is pressed), and
+  // one they put out goes back down the same stair; its outline steps between the two tones.
+  const openP = s.open ? came(s.t, s.openAt, REVEAL, env.reduced) : 0;
+  const cellPx = Math.max(2, Math.min(rite.cell, Math.ceil(geo.size / 8)));
   for (let k = 0; k < depth; k++) {
   const y5 = y0 + k * geo.size;
   label(g, env, String(shown + k + 1), geo.left - geo.labelW * 0.5, y5 + geo.size / 2, small, 'center', c.accent2);
@@ -239,39 +310,64 @@ function drawNext(g, w, h, env, plan, s, variant) {
     const x0 = geo.left + x * geo.size;
     const i = k * plan.width + x;
     const lit = !!s.row[i];
-    cell(g, env, x0, y5, geo.size, lit, inset, env.alpha(c.accent2, 0.95));
-    g.strokeStyle = env.alpha(lit ? c.accent2 : c.muted, lit ? 0.9 : 0.55);
+    const own = rite.at(0x100 + i * 0x20 + ((s.flips && s.flips[i]) || 0));
+    const p = came(s.t, s.at && s.at[i], SPAN, env.reduced);
+    const cover = lit ? own.stair(p) : (s.at && s.at[i] != null ? 1 - own.stair(p) : 0);
+    cell(g, env, x0, y5, geo.size, false, inset);
+    if (cover > 0) {
+      g.fillStyle = env.alpha(c.accent2, 0.95);
+      develop(g, own, x0 + inset, y5 + inset, geo.size - inset * 2, geo.size - inset * 2, cover, cellPx);
+    }
+    g.strokeStyle = env.alpha(env.mix(c.muted, c.accent2, cover), 0.55 + 0.35 * cover);
     g.lineWidth = 1;
     g.strokeRect(x0 + inset, y5 + inset, geo.size - inset * 2, geo.size - inset * 2);
-    if (s.shown.includes(i)) {
+    const hinted = s.shown.indexOf(i);
+    if (hinted >= 0) {
       // A hinted cell: a small mark beside it -- above the first hidden row, under the second --
-      // lit or dark as the rule has it.
+      // lit or dark as the rule has it. It blinks on and holds, and grows to its size in treads.
+      const mark = rite.at(0x300 + i);
+      const mp = came(s.t, s.shownAt && s.shownAt[hinted], SPAN, env.reduced);
+      if (!mark.flicker(mp)) continue;
+      const grow = 0.5 + 0.5 * mark.stair(mp);
       const want = rows[shown + k][x];
       const my = k === 0 ? y5 - geo.gap / 2 : y5 + geo.size + Math.max(3, geo.size * 0.18);
       g.fillStyle = want ? c.accent2 : env.alpha(c.muted, 0.7);
       g.beginPath();
-      g.arc(x0 + geo.size / 2, my, Math.max(1.5, geo.size * 0.08), 0, Math.PI * 2);
+      g.arc(x0 + geo.size / 2, my, Math.max(1.5, geo.size * 0.08 * grow), 0, Math.PI * 2);
       g.fill();
       if (!want) {
         g.strokeStyle = env.alpha(c.muted, 0.9);
         g.beginPath();
-        g.arc(x0 + geo.size / 2, my, Math.max(2.5, geo.size * 0.13), 0, Math.PI * 2);
+        g.arc(x0 + geo.size / 2, my, Math.max(2.5, geo.size * 0.13 * grow), 0, Math.PI * 2);
         g.stroke();
       }
     }
   }
+  }
+  // The solved rows take on a texture: it develops through the matte, blinking in, and holds.
+  if (s.open && rite.at(0x7f).flicker(openP)) {
+    g.fillStyle = env.alpha(c.accent2, 0.18);
+    develop(g, rite.at(0x7f), geo.left, y0, geo.size * plan.width, geo.size * depth, rite.at(0x7f).stair(openP) * 0.6, cellPx);
   }
   // The frame of the bench, and the table of patterns under it.
   g.strokeStyle = env.alpha(c.muted, 0.25);
   g.lineWidth = 1;
   g.strokeRect(geo.left - inset, geo.top - inset, geo.size * plan.width + inset * 2, geo.size * shown + inset * 2);
   const tableY = y0 + depth * geo.size + Math.max(h * 0.06, geo.size * 0.7);
-  glyphTable(g, env, w * 0.06, tableY, w * 0.88, s.open ? plan.rule : null, v);
-  label(g, env, s.open ? 'rule ' + plan.rule : 'the rule, pattern by pattern', w * 0.5, Math.min(h * 0.97, tableY + geo.size * 1.9), small, 'center', env.alpha(c.muted, 0.85));
+  glyphTable(g, env, w * 0.06, tableY, w * 0.88, s.open ? plan.rule : null, v, s.open ? openP : null);
+  // The caption changes its words by blinking to the new ones, never by a crossfade.
+  const named = s.open && rite.at(0x7e).flicker(openP);
+  label(g, env, named ? 'rule ' + plan.rule : 'the rule, pattern by pattern', w * 0.5, Math.min(h * 0.97, tableY + geo.size * 1.9), small, 'center', env.alpha(c.muted, 0.85));
+}
+
+// The scene's state before anyone has touched it: no cell lit, nothing shown, the rule unread,
+// and no clock yet (a card is drawn once and stands).
+function nextBlank(plan) {
+  return { row: new Array(plan.width * (plan.depth || 1)).fill(0), shown: [], shownAt: [], at: [], flips: [], open: false, openAt: null, t: 0 };
 }
 
 function nextPreview(g, w, h, env, plan) {
-  drawNext(g, w, h, env, plan, { row: new Array(plan.width * (plan.depth || 1)).fill(0), shown: [], open: false }, env.variant);
+  drawNext(g, w, h, env, plan, nextBlank(plan), env.variant);
 }
 
 function nextPiece(env, plan) {
@@ -282,9 +378,18 @@ function nextPiece(env, plan) {
   const cells = width * depth;
   const rows = runRows(plan.start, plan.rule, 4);
   const answer = rows.slice(shown).reduce((all, row) => all.concat(row), []);
-  const s = { row: new Array(cells).fill(0), shown: [], open: false };
+  const s = nextBlank(plan);
   const rowName = (i) => ROWNAME[shown + Math.floor(i / width)];
   const draw = (c) => drawNext(c.g, c.w, c.h, c, plan, s, env.variant);
+  // A row written: every cell that changed starts its rite now, on a fresh roll of its own.
+  function write(next) {
+    for (let i = 0; i < cells; i++) {
+      if ((next[i] ? 1 : 0) === (s.row[i] ? 1 : 0)) continue;
+      s.at[i] = s.t;
+      s.flips[i] = (s.flips[i] || 0) + 1;
+    }
+    s.row = next.map((v) => (v ? 1 : 0));
+  }
   function right() {
     let n = 0;
     for (let i = 0; i < cells; i++) if ((s.row[i] ? 1 : 0) === answer[i]) n += 1;
@@ -314,7 +419,7 @@ function nextPiece(env, plan) {
     },
     apply(id, value, c) {
       if (id === 'row' && Array.isArray(value) && value.length === cells) {
-        s.row = value.map((v) => (v ? 1 : 0));
+        write(value);
         const lit = s.row.filter(Boolean).length;
         c.status((depth === 2 ? 'the hidden rows: ' : 'row five: ') + (lit === 1 ? 'one cell lit' : count(lit) + ' cells lit'));
       }
@@ -326,6 +431,7 @@ function nextPiece(env, plan) {
         if (next.length) {
           const i = next[Math.floor(next.length / 2)];
           s.shown.push(i);
+          s.shownAt.push(s.t);
           c.hint();
           c.status('cell ' + ((i % width) + 1) + ' of row ' + rowName(i) + ' is ' + (answer[i] ? 'lit' : 'dark'));
         } else if (s.shown.length >= helps) {
@@ -348,16 +454,18 @@ function nextPiece(env, plan) {
       const i = clamp(Math.floor(rel), 0, depth - 1) * width + col;
       const next = s.row.slice();
       next[i] = next[i] ? 0 : 1;
-      s.row = next;
+      write(next);
       c.set('row', next.slice());
       c.status('cell ' + (col + 1) + ' of row ' + rowName(i) + ' ' + (next[i] ? 'lit' : 'dark'));
       draw(c);
     },
     frame(t, dt, c) {
+      s.t = t;
       draw(c);
     },
     end(c) {
       s.open = true;
+      s.openAt = s.t;
       c.status('rule ' + plan.rule + ': the table under the bench is filled in');
       draw(c);
     }
@@ -430,10 +538,13 @@ function apexGeometry(w, h, plan, v) {
 function drawApex(g, w, h, env, plan, s, variant) {
   const v = variant || PLAIN;
   const c = env.colors;
+  const rite = riteOf(env);
   const geo = apexGeometry(w, h, plan, v);
   const hist = apexHistory(plan);
   const inset = geo.size * clamp(0.09 / v.density, 0.05, 0.14);
   const small = Math.max(9, Math.min(15, Math.round(Math.min(w, h) * 0.036)));
+  const cellPx = Math.max(2, Math.min(rite.cell, Math.ceil(geo.size / 8)));
+  const pointedP = s.pointed ? came(s.t, s.pointedAt, REVEAL, env.reduced) : 0;
   background(g, w, h, env);
   grain(g, w, h, env, v);
   label(g, env, 'rule ' + plan.rule, w * 0.5, h * 0.06, small + 2, 'center', c.accent2);
@@ -442,6 +553,15 @@ function drawApex(g, w, h, env, plan, s, variant) {
     const left = geo.left[tape];
     const rows = tape ? hist.b : hist.a;
     label(g, env, tape ? 'the second tape' : 'the first tape', left + geo.tapeW / 2, geo.top - geo.size * 0.8, small, 'center');
+    // The flipped column, once it is pointed out: a wash down the whole column of both tapes,
+    // developing through the matte on a roll of the tape's own.
+    if (s.pointed) {
+      const wash = rite.at(0x7c + tape);
+      if (wash.flicker(pointedP)) {
+        g.fillStyle = env.alpha(c.accent2, 0.16);
+        develop(g, wash, left + plan.flip * geo.size, geo.top, geo.size, geo.size * (plan.rows + 1), wash.stair(pointedP), cellPx);
+      }
+    }
     // The hidden first row: an outline and nothing in it.
     g.setLineDash([3, 3]);
     g.strokeStyle = env.alpha(c.muted, 0.5);
@@ -452,12 +572,21 @@ function drawApex(g, w, h, env, plan, s, variant) {
     for (let r = 1; r <= plan.rows; r++) {
       const y = geo.top + r * geo.size;
       if (tape === 0) label(g, env, String(r), left - geo.labelW * 0.5, y + geo.size / 2, small, 'center', env.alpha(c.muted, 0.9));
+      // A marked row: each differing cell takes on a wash that develops through the matte, and
+      // its outline blinks on and holds, the row on a roll of its own.
+      const marked = tape === 1 ? s.marked.indexOf(r) : -1;
+      const own = marked >= 0 ? rite.at(0x200 + r) : null;
+      const mp = marked >= 0 ? came(s.t, s.markedAt && s.markedAt[marked], SPAN, env.reduced) : 0;
       for (let x = 0; x < plan.width; x++) {
         cell(g, env, left + x * geo.size, y, geo.size, rows[r][x], inset);
-        if (tape === 1 && s.marked.includes(r) && hist.diffs[r].includes(x)) {
-          g.strokeStyle = c.accent2;
-          g.lineWidth = Math.max(1, geo.size * 0.07);
-          g.strokeRect(left + x * geo.size + inset, y + inset, geo.size - inset * 2, geo.size - inset * 2);
+        if (own && hist.diffs[r].includes(x)) {
+          g.fillStyle = env.alpha(c.accent2, rows[r][x] ? 0.3 : 0.45);
+          develop(g, own, left + x * geo.size + inset, y + inset, geo.size - inset * 2, geo.size - inset * 2, own.stair(mp), cellPx);
+          if (own.flicker(mp)) {
+            g.strokeStyle = c.accent2;
+            g.lineWidth = Math.max(1, geo.size * 0.07);
+            g.strokeRect(left + x * geo.size + inset, y + inset, geo.size - inset * 2, geo.size - inset * 2);
+          }
         }
       }
     }
@@ -469,7 +598,8 @@ function drawApex(g, w, h, env, plan, s, variant) {
     for (let x = 0; x < plan.width; x += every) {
       label(g, env, String(x + 1), left + (x + 0.5) * geo.size, geo.top + (plan.rows + 1) * geo.size + small * 0.9, Math.max(8, small - 2), 'center', env.alpha(c.muted, 0.8));
     }
-    if (tape === 1 && s.pointed) {
+    // The apex: it blinks on over the hidden row and holds.
+    if (tape === 1 && s.pointed && rite.at(0x7e).flicker(pointedP)) {
       const x = left + (plan.flip + 0.5) * geo.size;
       g.fillStyle = c.accent2;
       g.beginPath();
@@ -482,15 +612,21 @@ function drawApex(g, w, h, env, plan, s, variant) {
   }
 }
 
+// The scene's state before anyone has touched it: no row marked, the flip not pointed out, and
+// no clock yet (a card is drawn once and stands).
+function apexBlank() {
+  return { marked: [], markedAt: [], pointed: false, pointedAt: null, t: 0 };
+}
+
 function apexPreview(g, w, h, env, plan) {
-  drawApex(g, w, h, env, plan, { marked: [], pointed: false }, env.variant);
+  drawApex(g, w, h, env, plan, apexBlank(), env.variant);
 }
 
 function apexPiece(env, plan) {
   const helps = asked(env).helps;
   const hist = apexHistory(plan);
   const last = hist.diffs[plan.rows].length;
-  const s = { marked: [], pointed: false };
+  const s = apexBlank();
   const draw = (c) => drawApex(c.g, c.w, c.h, c, plan, s, env.variant);
   return {
     title: apexTitle(plan),
@@ -535,6 +671,7 @@ function apexPiece(env, plan) {
         const next = s.marked.length < helps ? order.find((r) => !s.marked.includes(r)) : undefined;
         if (next) {
           s.marked.push(next);
+          s.markedAt.push(s.t);
           c.hint();
           const n = hist.diffs[next].length;
           c.status('row ' + next + ' is marked on the second tape: ' + (n === 1 ? 'one cell differs' : WORDS[n] + ' cells differ') + ' there');
@@ -547,11 +684,20 @@ function apexPiece(env, plan) {
       draw(c);
     },
     frame(t, dt, c) {
+      s.t = t;
       draw(c);
     },
     end(c) {
       s.pointed = true;
-      for (let r = 1; r <= plan.rows; r++) if (!s.marked.includes(r)) s.marked.push(r);
+      s.pointedAt = s.t;
+      // The rows not yet marked come in one after another down the tape, each in its turn.
+      let late = 0;
+      for (let r = 1; r <= plan.rows; r++) {
+        if (s.marked.includes(r)) continue;
+        s.marked.push(r);
+        s.markedAt.push(s.t + late * STAGGER);
+        late += 1;
+      }
       c.status('the flip in column ' + (plan.flip + 1) + ' spread to ' + (last === 1 ? 'one cell' : WORDS[last] + ' cells') + ' by row ' + plan.rows + '; every difference is marked');
       draw(c);
     }

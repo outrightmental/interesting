@@ -861,8 +861,12 @@
     noteProbe(probe.probe);
     // A question already up is set aside, not deleted: its frame stays as a ghost that descends
     // the ladder to the rolled leave corner while the new one develops under it.
-    var old = host.firstElementChild;
-    var ghost = old && old.classList && old.classList.contains('probe') && !old.classList.contains('probe-ghost') && beat('medium') ? old : null;
+    var old = null;
+    for (var c = 0; c < host.children.length && !old; c++) {
+      var kid = host.children[c];
+      if (kid.classList && kid.classList.contains('probe') && !kid.classList.contains('probe-ghost')) old = kid;
+    }
+    var ghost = old && beat('medium') ? old : null;
     host.textContent = '';
     if (ghost) {
       ghost.classList.add('probe-ghost');
@@ -1328,7 +1332,7 @@
     var warm = rgbOf(style.getPropertyValue('--accent2'), '#ffe7ab');
     var paper = rgbOf(style.getPropertyValue('--bg2'), '#1c2a4e');
     var grain = matteField(null);
-    var tooth = matteField(null, 'scan');
+    var tooth = matteField(null, 'grain');
     var cover = between(0.55, 0.8);
     var set = null; // { k: coverage, warm: the last tread }
     var off = document.createElement('canvas');
@@ -1352,7 +1356,7 @@
         ground.width = w;
         ground.height = h;
         var gg = ground.getContext('2d');
-        if (gg) tooth.paint(gg, 0, 0, w, h, 0.22, rgba(paper, 0.5));
+        if (gg) tooth.paint(gg, 0, 0, w, h, 0.3, rgba(paper, 0.45));
       }
       ctx.drawImage(ground, 0, 0);
       if (!points.length) return;
@@ -1668,7 +1672,7 @@
         g.arc(w / 2 + (i - (spare - 1) / 2) * h * 0.055, h * 0.92, h * 0.018, 0, Math.PI * 2);
         g.fill();
       }
-      if (shown.sealed) veil.paint(g, 0, 0, w, h, shown.sealed, rgbOf(ground, '#070a14').length ? rgba(rgbOf(ground, '#070a14'), 0.75) : ground);
+      if (shown.sealed) veil.paint(g, 0, 0, w, h, shown.sealed, rgba(rgbOf(ground, '#070a14'), 0.75));
     }
     function settle(how) {
       if (cancel) cancel();
@@ -1937,17 +1941,18 @@
         var x = s.x * w;
         var y = s.y * h;
         var flare = !still && age < 1 && f >= 1 ? 1.6 : 1;
-        var r = s.r * (lit ? 1 : 0.7) * flare;
+        var r = s.r * 1.5 * (lit ? 1 : 0.7) * flare;
         if (f <= 0) continue;
         if (age >= 1 || f >= 1) {
-          if (lit) s.matte.disc(g, x, y, r * 4, 0.1, rgba(c, 0.5));
-          g.fillStyle = rgba(c, lit ? 1 : 0.8);
+          // Out: a core, and a halo that is a matte disc (its area, never its alpha, is the twinkle).
+          if (lit) s.matte.disc(g, x, y, r * 4, 0.3, rgba(c, 0.45));
+          g.fillStyle = rgba(c, lit ? 1 : 0.85);
           g.beginPath();
           g.arc(x, y, r, 0, Math.PI * 2);
           g.fill();
         } else {
           // Resolving: the disc's area fills through its matte, tread by tread.
-          s.matte.disc(g, x, y, r * 3, f, rgba(c, 0.9));
+          s.matte.disc(g, x, y, r * 4, f, rgba(c, 1));
         }
       }
       if (glass) veil.paint(g, 0, 0, w, h, glass, rgba(night, 0.8));

@@ -648,7 +648,29 @@
     'sky-stamp': 'flicker',
     'thread-unmake': 'leave',
     'reading-seal': 'stair',
-    'sky-wax': 'stair'
+    'sky-wax': 'stair',
+    'probe-in': 'arrive',
+    'probe-out': 'leave',
+    'probe-read': 'stair',
+    'count-tick': 'flicker',
+    'count-tick-b': 'flicker',
+    'mark-stamp': 'flicker',
+    'mark-stamp-b': 'flicker',
+    'tap-stamp': 'flicker',
+    'tap-stamp-b': 'flicker',
+    'mark-set': 'arrive',
+    'mark-ring': 'stair',
+    'field-seal': 'stair',
+    'pane-light': 'stair',
+    'pane-dark': 'stair',
+    'pane-read': 'flicker',
+    'soot-lift': 'stair',
+    'soot-cover': 'stair',
+    'room-turn': 'stair',
+    'room-turn-b': 'stair',
+    'dial-seal': 'stair',
+    'key-turn': 'ratchet',
+    'rite-spent': 'stair'
   };
 
   function familyOf(name) {

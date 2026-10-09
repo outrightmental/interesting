@@ -34,6 +34,7 @@ const PLAIN = { density: 1, scale: 1, turn: 0 };
 const TAU = Math.PI * 2;
 const COLS = 12; // columns either side of the release column, in the drift puzzle
 const BANDS = 4;
+const SWAY = 2.9; // seconds a lantern takes to sway there and back, in treads
 
 const signed = (n) => (n > 0 ? '+' : '') + n;
 const capital = (text) => text[0].toUpperCase() + text.slice(1);
@@ -49,6 +50,107 @@ function asked(env) {
   return { level, helps: 6 - level, margin: Math.max(0, 3 - level) };
 }
 
+/* ---- the rite: how the lanterns move -------------------------------------------------------- */
+
+/* env.rite (ctx.rite inside a piece) is the piece's own roll of how it moves (js/variant.js;
+   js/stage.js, "The rite"). Nothing under this sky moves along a formula or cuts without a rite.
+   A lantern sways in treads, each on a roll of its own per swing, so no two sway alike and no
+   swing repeats the last; the scatter of sparks blinks the way the flicker has it. A lantern
+   moved to another place TRAVELS there along the rite's glitch of a curve and its place-name
+   blinks on; a lantern let go climbs each band along a curve rolled for that band of that
+   flight; a lantern that has arrived lifts into its ring in treads. A chosen band, a looked-at
+   band, a hinted place are SEALED: a fill develops through the matte by its area, on the roll of
+   that choice, and the one chosen before dissolves back down the same ladder; a wind the visitor
+   sets swings its arrow from the old push to the new along the curve, and its readout blinks on;
+   a hint's mark, a hint's line, the mark over a guessed column blink on; "let go here" blinks
+   out when the lantern goes; a solved sky's lanterns glow brighter in treads and the light over
+   it develops through the matte with a flicker, never a wash. Every change is read against the
+   piece's own clock, s.t, which frame() advances (and which a card's animate reads off t): a
+   change made at `since` has come came() of its way, which is 1 at once for a visitor who asked
+   for less motion and for whatever stood there from the start. Every trigger rolls a fresh rite
+   (rite.at(k) with the count of that trigger in k), so a second move, a second check, a second
+   tap composes a different stair, matte and flicker from the first. */
+
+const STILL = {
+  ease: () => 1, stair: () => 1, ratchet: () => 0, flicker: () => 1, matte: () => true,
+  series: (p, n) => Math.max(1, Math.floor(n || 1)), treads: 1, kind: 'none', cell: 4, at: () => STILL
+};
+
+function riteOf(env) {
+  return env && env.rite ? env.rite : STILL;
+}
+
+function fract(x) {
+  return x - Math.floor(x);
+}
+
+function came(s, since, span, reduced) {
+  if (reduced || since == null || since < 0) return 1;
+  return Math.max(0, Math.min(1, (s.t - since) / span));
+}
+
+// The rite rolled afresh for the n-th trigger of one kind of thing: a second press composes
+// another stair, matte and flicker from the first.
+function roll(rite, base, n) {
+  return rite.at(((base | 0) ^ (Math.imul((n | 0) + 1, 0x9e37) | 0)) >>> 0);
+}
+
+// A lantern's sway at time t, -1 to 1: there and back in the stair's treads, on a roll of its own
+// for every swing (so no swing repeats the last) and a phase of its own per lantern (so no two
+// step together). The swing's reach is the roll's too.
+function sway(rite, base, t, i) {
+  const x = t / SWAY + i * 0.37;
+  const own = roll(rite, base + i, Math.floor(x));
+  const p = fract(x);
+  const tri = p < 0.5 ? own.stair(p * 2) : 1 - own.stair((p - 0.5) * 2);
+  return (tri * 2 - 1) * (0.6 + 0.4 * own.ease(0.5));
+}
+
+// A travel from `from` to `to` along the curve of the roll, by how far it has come.
+function travel(own, from, to, p) {
+  return p >= 1 ? to : from + (to - from) * own.ease(p);
+}
+
+// The cells of a box the matte lets through at coverage k, filled in the current fillStyle: how a
+// surface changes by its area. Cells are rite.cell px, coarser over a wide box so a frame stays
+// cheap, on a grid fixed to the canvas so the pattern holds still while it grows. `inside` keeps
+// the tiling to a shape within the box. At k >= 1 every cell is let through.
+function develop(g, rite, x0, y0, bw, bh, k, inside, size) {
+  if (k <= 0 || bw <= 0 || bh <= 0) return;
+  const cell = size || Math.max(rite.cell, Math.ceil(Math.max(bw, bh) / 28));
+  const cx0 = Math.floor(x0 / cell);
+  const cy0 = Math.floor(y0 / cell);
+  const cx1 = Math.ceil((x0 + bw) / cell);
+  const cy1 = Math.ceil((y0 + bh) / cell);
+  for (let cy = cy0; cy < cy1; cy++) {
+    for (let cx = cx0; cx < cx1; cx++) {
+      const px = cx * cell;
+      const py = cy * cell;
+      if (inside && !inside(px + cell / 2, py + cell / 2)) continue;
+      if (k < 1 && !rite.matte(cx, cy, k)) continue;
+      g.fillRect(px, py, cell, cell);
+    }
+  }
+}
+
+// A sealed surface: it develops through the matte while it is set (k climbs) and dissolves back
+// down the ladder when it is unset (k falls), each on the roll of that set.
+function sealed(g, rite, box, on, p, size) {
+  const k = on ? rite.stair(p) : 1 - rite.stair(p);
+  if (k <= 0) return;
+  develop(g, rite, box.x, box.y, box.w, box.h, k, null, size);
+}
+
+// The light that comes over a solved sky: it develops through the matte from the moment of the
+// solve, blinking on and dropping out the way the rite's flicker has it, and holds.
+function daybreak(g, rite, env, w, h, p, strength) {
+  const own = roll(rite, 0xdb, 0);
+  const k = own.stair(p);
+  if (k <= 0 || !own.flicker(p)) return;
+  g.fillStyle = env.alpha(env.colors.accent2, strength || 0.1);
+  develop(g, own, 0, 0, w, h, k, null, Math.max(rite.cell, Math.ceil(Math.min(w, h) / 30)));
+}
+
 /* ---- drawing shared by both ---------------------------------------------------------------- */
 
 function sky(g, w, h, env) {
@@ -61,9 +163,12 @@ function sky(g, w, h, env) {
 }
 
 // The stars as they stand, as faint sparks in the upper sky, and a scatter more from the
-// configuration, so a sky of one star is still a sky.
-function sparks(g, w, h, env, v, depth) {
+// configuration, so a sky of one star is still a sky. Every third of the scatter blinks the way
+// the rite's flicker has it, on a roll of its own per speck and per blink, so the sky is never
+// quite still.
+function sparks(g, w, h, env, v, depth, t) {
   const c = env.colors;
+  const rite = riteOf(env);
   g.fillStyle = env.alpha(c.fg, 0.55);
   for (const p of env.points(w, h, 10)) {
     g.beginPath();
@@ -73,6 +178,10 @@ function sparks(g, w, h, env, v, depth) {
   const n = Math.max(4, Math.round(16 * v.density));
   g.fillStyle = env.alpha(c.fg, 0.25);
   for (let i = 0; i < n; i++) {
+    if (i % 3 === 0) {
+      const phase = (t || 0) / 1.1 + i * 0.173;
+      if (!roll(rite, 0xd0 + (i % 11), Math.floor(phase)).flicker(fract(phase))) continue;
+    }
     const x = ((i * 0.6180339 + v.turn * 0.37) % 1) * w;
     const y = ((i * 0.7548777 + v.turn * 0.13) % 1) * h * depth;
     g.fillRect(x, y, 1, 1);
@@ -297,15 +406,23 @@ function orderGeometry(w, h, n) {
   return { left: (w - span) / 2, span, cell: span / n, top, bottom, y: (rank) => top + ((bottom - top) * rank) / (n - 1) };
 }
 
+function orderBlank(plan, t) {
+  const n = plan.n;
+  return { order: plan.start.slice(), hinted: [], hintedAt: [], from: {}, moves: 0, lift: new Array(n).fill(0),
+    glow: new Array(n).fill(0), t: t || 0, gone: 0, doneAt: -1 };
+}
+
 function drawOrder(g, w, h, env, plan, s, variant) {
   const v = variant || PLAIN;
   const c = env.colors;
+  const rite = riteOf(env);
+  const reduced = !!env.reduced;
   const n = plan.n;
   const geo = orderGeometry(w, h, n);
   const k = Math.max(0.75, Math.min(2, Math.min(w, h) / 320)) * v.scale;
   const small = Math.max(9, Math.min(13, Math.round(Math.min(w, h) * 0.036)));
   sky(g, w, h, env);
-  sparks(g, w, h, env, v, 0.5);
+  sparks(g, w, h, env, v, 0.5, s.t);
   write(g, 'first to rise at the top', w / 2, h * 0.05, small, 'center', env.alpha(c.muted, 0.85));
   // A faint rail for each rank, so a height can be read as a place.
   g.strokeStyle = env.alpha(c.muted, 0.1 + 0.08 * v.density);
@@ -321,18 +438,33 @@ function drawOrder(g, w, h, env, plan, s, variant) {
   for (let i = 0; i < n; i++) {
     const rank = s.order.indexOf(i);
     const x = geo.left + (i + 0.5) * geo.cell;
-    const bob = Math.sin(s.t * 0.9 + i * 1.1 + v.turn * TAU) * 2.5 * k;
-    const y = geo.y(rank) + bob - (s.lift[i] || 0);
+    const bob = reduced ? 0 : sway(rite, 0x10, s.t, i) * 3 * k;
+    // A lantern moved to another place travels there along the curve of that move's roll, and
+    // the name of its place blinks on when it arrives.
+    const from = s.from[i];
+    const moveRite = from ? roll(rite, 0x100 + i, from.roll) : null;
+    const moveP = from ? came(s, from.at, 0.9, reduced) : 1;
+    const hung = from ? travel(moveRite, geo.y(from.rank), geo.y(rank), moveP) : geo.y(rank);
+    const y = hung + bob - (s.lift[i] || 0);
     if (s.hinted.includes(i)) {
+      // The hinted place is sealed: a fill develops through the matte in it, on the roll of that
+      // hint, and its frame blinks on.
+      const at = s.hinted.indexOf(i);
+      const hintRite = roll(rite, 0x200, at);
+      const hintP = came(s, s.hintedAt[at], 0.8, reduced);
       const hy = geo.y(plan.order.indexOf(i));
-      g.strokeStyle = env.alpha(c.accent, 0.9);
-      g.lineWidth = 1.5;
-      g.setLineDash([3, 3]);
-      g.strokeRect(x - 11 * k, hy - 12 * k, 22 * k, 24 * k);
-      g.setLineDash([]);
+      g.fillStyle = env.alpha(c.accent, 0.22);
+      sealed(g, hintRite, { x: x - 11 * k, y: hy - 12 * k, w: 22 * k, h: 24 * k }, true, hintP, Math.max(2, rite.cell));
+      if (hintRite.flicker(hintP)) {
+        g.strokeStyle = env.alpha(c.accent, 0.9);
+        g.lineWidth = 1.5;
+        g.setLineDash([3, 3]);
+        g.strokeRect(x - 11 * k, hy - 12 * k, 22 * k, 24 * k);
+        g.setLineDash([]);
+      }
     }
     lantern(g, env, x, y, 0.5 + (s.glow[i] || 0), k, LETTERS[i]);
-    write(g, ORDINAL[rank], x, geo.bottom + 24 * k, small, 'center', env.alpha(c.fg, 0.8));
+    if (!from || moveRite.flicker(moveP)) write(g, ORDINAL[rank], x, geo.bottom + 24 * k, small, 'center', env.alpha(c.fg, 0.8));
   }
   // The clues, under the sky.
   const size = Math.max(9, Math.min(15, Math.round(Math.min(w, h) * 0.04)));
@@ -345,22 +477,32 @@ function drawOrder(g, w, h, env, plan, s, variant) {
     write(g, clueText(clue), x0 + size * 1.6, y, size, 'left', env.alpha(c.fg, 0.9));
     y += size * 1.5;
   });
+  if (s.doneAt != null && s.doneAt >= 0) daybreak(g, rite, env, w, h, came(s, s.doneAt, 2.4, reduced), 0.1);
 }
 
 function orderPreview(g, w, h, env, plan, t) {
-  const n = plan.n;
-  drawOrder(g, w, h, env, plan, { order: plan.start.slice(), hinted: [], lift: new Array(n).fill(0), glow: new Array(n).fill(0), t: t || 0 }, env.variant);
+  drawOrder(g, w, h, env, plan, orderBlank(plan, t), env.variant);
 }
 
 function orderPiece(env, plan) {
   const helps = asked(env).helps;
   const n = plan.n;
-  const s = { order: plan.start.slice(), hinted: [], lift: new Array(n).fill(0), glow: new Array(n).fill(0), t: 0, gone: 0 };
+  const s = orderBlank(plan, 0);
   const draw = (c) => drawOrder(c.g, c.w, c.h, c, plan, s, env.variant);
   const named = (list) => list.map((i) => LETTERS[i]).join(', ');
   function current(c) {
     const v = c.value('order');
     return Array.isArray(v) && v.length === n ? v.map(Number) : s.order;
+  }
+  // Every lantern whose place changed sets off from where it hung, on a roll of this move's own.
+  function rehang(next) {
+    for (let i = 0; i < n; i++) {
+      const was = s.order.indexOf(i);
+      if (was === next.indexOf(i)) continue;
+      s.from[i] = { rank: was, at: s.t, roll: s.moves };
+    }
+    s.moves += 1;
+    s.order = next;
   }
   return {
     title: orderTitle(plan),
@@ -390,7 +532,7 @@ function orderPiece(env, plan) {
     },
     apply(id, value, c) {
       if (id === 'order' && Array.isArray(value) && value.length === n) {
-        s.order = value.map(Number);
+        rehang(value.map(Number));
         c.status('first to last: ' + named(s.order));
       }
       if (id === 'hint') {
@@ -399,6 +541,7 @@ function orderPiece(env, plan) {
           : undefined;
         if (next !== undefined) {
           s.hinted.push(next);
+          s.hintedAt.push(s.t);
           c.hint();
           c.status('lantern ' + LETTERS[next] + ' rises ' + ORDINAL[plan.order.indexOf(next)]);
         } else if (s.hinted.length >= helps) {
@@ -425,17 +568,20 @@ function orderPiece(env, plan) {
         next[rank] = next[rank - 1];
         next[rank - 1] = col;
       }
-      s.order = next;
+      rehang(next);
       c.set('order', next.slice());
       c.status('lantern ' + LETTERS[col] + ' now rises ' + ORDINAL[next.indexOf(col)]);
       draw(c);
     },
     frame(t, dt, c) {
-      if (!c.reduced) s.t += dt;
+      s.t += Math.max(0, dt);
       if (c.done) {
+        if (s.doneAt < 0) s.doneAt = s.t;
         s.gone = c.reduced ? 2 : Math.min(2, s.gone + dt * 2);
+        // The lanterns rise and brighten in treads, first to rise first, each on a roll of its own.
         for (let i = 0; i < n; i++) {
-          const up = Math.max(0, Math.min(1, s.gone - s.order.indexOf(i) * 0.12));
+          const own = roll(riteOf(c), 0x300, i);
+          const up = own.stair(Math.max(0, Math.min(1, s.gone - s.order.indexOf(i) * 0.12)));
           s.lift[i] = c.reduced ? 0 : up * 4 * Math.max(1, c.h / 320);
           s.glow[i] = up * 0.9;
         }
@@ -443,6 +589,7 @@ function orderPiece(env, plan) {
       draw(c);
     },
     end(c) {
+      if (s.doneAt < 0) s.doneAt = s.t;
       c.status(named(plan.order) + ': the order holds. The lights stay yours to rearrange.');
     }
   };
@@ -522,15 +669,39 @@ function arrow(g, x0, x1, y, head) {
   g.fill();
 }
 
+// A climb of f bands, read through the rite: every band crossed is its own glitch of a curve,
+// rolled for that band of that flight, so the lantern hesitates, surges and settles into each.
+function climbed(rite, base, flight, f, count) {
+  if (f <= 0) return 0;
+  if (f >= count) return count;
+  const b = Math.floor(f);
+  return Math.min(count, b + Math.max(0, roll(rite, base + b, flight).ease(f - b)));
+}
+
+// A dotted line's dashes advanced in the ratchet's clicks, one tooth-set per `period` seconds
+// on a fresh roll each time round, as an offset for setLineDash; still for less motion.
+function clicks(rite, base, t, period, reduced) {
+  if (reduced) return 0;
+  const x = (t || 0) / period;
+  return -7 * (Math.floor(x) + roll(rite, base, Math.floor(x)).ratchet(fract(x)));
+}
+
+function driftBlank(t) {
+  return { band: 0, bandPrev: 0, bandAt: -1, bandSets: 0, guess: null, guessFrom: null, guessAt: -1, guesses: 0,
+    hinted: [], hintAt: [], flight: 0, launches: 0, launchAt: -1, t: t || 0, launched: false, doneAt: -1 };
+}
+
 function drawDrift(g, w, h, env, plan, s, variant) {
   const v = variant || PLAIN;
   const c = env.colors;
+  const rite = riteOf(env);
+  const reduced = !!env.reduced;
   const nb = plan.bands.length;
   const geo = driftGeometry(w, h, nb);
   const k = Math.max(0.6, Math.min(1.6, Math.min(w, h) / 320)) * v.scale;
   const small = Math.max(8, Math.min(13, Math.round(Math.min(w, h) * 0.034)));
   sky(g, w, h, env);
-  sparks(g, w, h, env, v, 0.11);
+  sparks(g, w, h, env, v, 0.11, s.t);
   // The column grid, and the release column dotted up through every band.
   g.strokeStyle = env.alpha(c.muted, 0.1 + 0.06 * v.density);
   g.lineWidth = 1;
@@ -543,23 +714,35 @@ function drawDrift(g, w, h, env, plan, s, variant) {
   g.stroke();
   g.strokeStyle = env.alpha(c.accent2, 0.5);
   g.setLineDash([3, 4]);
+  g.lineDashOffset = clicks(rite, 0x0d, s.t, 1.3, reduced);
   g.beginPath();
   g.moveTo(geo.x(0), geo.top - 4);
   g.lineTo(geo.x(0), geo.bottom + geo.band * 0.85);
   g.stroke();
   g.setLineDash([]);
+  g.lineDashOffset = 0;
   for (let col = -COLS; col <= COLS; col += 4) {
     write(g, signed(col), geo.x(col), h * 0.955, small, 'center', env.alpha(col === 0 ? c.accent2 : c.muted, 0.85));
   }
-  // The bands, bottom to top: a strip, its number, and its push drawn from the dotted column.
+  // The bands, bottom to top: a strip, its number, and its push drawn from the dotted column. The
+  // band the visitor names is sealed: its fill develops through the matte on the roll of that
+  // naming and its edge blinks on; the band named before dissolves back down the ladder.
   const pos = positions(plan.bands);
+  const bandRite = roll(rite, 0x20, s.bandSets);
+  const bandP = came(s, s.bandAt, 0.9, reduced);
   for (let b = 0; b < nb; b++) {
     const y0 = geo.bottom - (b + 1) * geo.band;
     const d = plan.bands[b];
     const chosen = s.band === b + 1;
-    g.fillStyle = env.alpha(b % 2 ? c.accent : c.accent2, 0.05 + (chosen ? 0.08 : 0));
+    const was = !chosen && s.bandAt >= 0 && s.bandPrev === b + 1;
+    g.fillStyle = env.alpha(b % 2 ? c.accent : c.accent2, 0.05);
     g.fillRect(geo.left, y0, geo.span, geo.band);
-    g.strokeStyle = env.alpha(chosen ? c.accent2 : c.muted, chosen ? 0.7 : 0.3);
+    if (chosen || was) {
+      g.fillStyle = env.alpha(c.accent2, 0.1);
+      sealed(g, bandRite, { x: geo.left, y: y0, w: geo.span, h: geo.band }, chosen, bandP, Math.max(rite.cell, Math.ceil(geo.span / 40)));
+    }
+    const lit = chosen && bandRite.flicker(bandP);
+    g.strokeStyle = env.alpha(lit ? c.accent2 : c.muted, lit ? 0.7 : 0.3);
     g.strokeRect(geo.left, y0, geo.span, geo.band);
     write(g, 'band ' + (b + 1), geo.left + 4, y0 + small * 0.9, small, 'left', env.alpha(c.muted, 0.9));
     write(g, d === 0 ? 'still' : signed(d) + (Math.abs(d) === 1 ? ' column' : ' columns'), geo.left + geo.span - 4, y0 + small * 0.9, small, 'right', env.alpha(c.accent2, 0.95));
@@ -576,7 +759,9 @@ function drawDrift(g, w, h, env, plan, s, variant) {
       g.arc(geo.x(0), ym, 3 * k, 0, TAU);
       g.stroke();
     }
-    if (s.hinted.includes(b + 1)) {
+    // A shown position blinks on, on the roll of that hint.
+    const shown = s.hinted.indexOf(b + 1);
+    if (shown >= 0 && roll(rite, 0x30, b).flicker(came(s, s.hintAt[shown], 0.8, reduced))) {
       g.fillStyle = env.alpha(c.accent, 0.95);
       g.beginPath();
       g.arc(geo.x(pos[b + 1]), y0, 3 * k, 0, TAU);
@@ -584,12 +769,14 @@ function drawDrift(g, w, h, env, plan, s, variant) {
       write(g, 'at ' + signed(pos[b + 1]), geo.x(pos[b + 1]), y0 - small * 0.8, small, 'center', env.alpha(c.accent, 0.95));
     }
   }
-  // The lantern: waiting under the first band, or in flight once it has been let go.
-  const bob = Math.sin(s.t * 1.1 + v.turn * TAU) * 2 * k;
+  // The lantern: waiting under the first band, or in flight once it has been let go, climbing
+  // each band along a curve rolled for that band of that flight.
+  const bob = reduced ? 0 : sway(rite, 0x40, s.t, 0) * 2.5 * k;
   let lx = geo.x(0);
   let ly = geo.bottom + geo.band * 0.42;
+  const launchRite = roll(rite, 0x50, s.launches);
   if (s.flight > 0) {
-    const f = Math.min(s.flight, nb);
+    const f = climbed(rite, 0x60, s.launches, Math.min(s.flight, nb), nb);
     const b = Math.min(nb - 1, Math.floor(f));
     const col = f >= nb ? pos[nb] : pos[b] + (pos[b + 1] - pos[b]) * (f - b);
     lx = geo.x(col);
@@ -603,24 +790,32 @@ function drawDrift(g, w, h, env, plan, s, variant) {
     g.lineTo(lx, ly);
     g.stroke();
     g.setLineDash([]);
-  } else {
-    write(g, 'let go here', lx + 10 * k, ly, small, 'left', env.alpha(c.muted, 0.9));
   }
-  lantern(g, env, lx, ly + bob, 0.7 + Math.min(1, s.flight) * 0.5, k, '');
-  // The answer as set: a hollow mark over the column the visitor says it leaves at.
+  // "let go here" blinks out as the lantern goes, with one flicker back.
+  if (!(s.flight > 0) || !launchRite.flicker(came(s, s.launchAt, 0.6, reduced))) {
+    write(g, 'let go here', geo.x(0) + 10 * k, geo.bottom + geo.band * 0.42, small, 'left', env.alpha(c.muted, 0.9));
+  }
+  lantern(g, env, lx, ly + bob, 0.7 + launchRite.stair(Math.min(1, s.flight)) * 0.5, k, '');
+  // The answer as set: a hollow mark over the column the visitor says it leaves at, which blinks
+  // on and travels from the column said before along the curve of that setting's roll.
   if (s.guess != null) {
-    const gx = geo.x(s.guess);
-    g.strokeStyle = env.alpha(c.accent, 0.9);
-    g.lineWidth = 1.5;
-    g.setLineDash([3, 3]);
-    g.strokeRect(gx - 6 * k, geo.top - 10 * k, 12 * k, 8 * k);
-    g.setLineDash([]);
+    const guessRite = roll(rite, 0x70, s.guesses);
+    const guessP = came(s, s.guessAt, 0.8, reduced);
+    const gx = s.guessFrom == null ? geo.x(s.guess) : travel(guessRite, geo.x(s.guessFrom), geo.x(s.guess), guessP);
+    if (guessRite.flicker(guessP)) {
+      g.strokeStyle = env.alpha(c.accent, 0.9);
+      g.lineWidth = 1.5;
+      g.setLineDash([3, 3]);
+      g.strokeRect(gx - 6 * k, geo.top - 10 * k, 12 * k, 8 * k);
+      g.setLineDash([]);
+    }
   }
   write(g, 'where it leaves the top', w / 2, h * 0.045, small, 'center', env.alpha(c.muted, 0.85));
+  if (s.doneAt != null && s.doneAt >= 0) daybreak(g, rite, env, w, h, came(s, s.doneAt, 2.4, reduced), 0.1);
 }
 
 function driftPreview(g, w, h, env, plan, t) {
-  drawDrift(g, w, h, env, plan, { band: 0, guess: null, hinted: [], flight: 0, t: t || 0 }, env.variant);
+  drawDrift(g, w, h, env, plan, driftBlank(t), env.variant);
 }
 
 function driftPiece(env, plan) {
@@ -629,7 +824,7 @@ function driftPiece(env, plan) {
   const total = driftTotal(plan.bands);
   const hard = strongest(plan.bands);
   const pos = positions(plan.bands);
-  const s = { band: 0, guess: null, hinted: [], flight: 0, t: 0, launched: false };
+  const s = driftBlank(0);
   const draw = (c) => drawDrift(c.g, c.w, c.h, c, plan, s, env.variant);
   const leaves = (n) => 'column ' + signed(n) + ', ' + WORDS[Math.abs(n)] + (Math.abs(n) === 1 ? ' column ' : ' columns ') + (n < 0 ? 'left' : 'right') + ' of where it was let go';
   return {
@@ -655,6 +850,9 @@ function driftPiece(env, plan) {
       s.launched = driftRight && bandRight;
       s.flight = c.reduced && s.launched ? nb : 0;
       if (s.launched) {
+        // Every flight is its own: a fresh roll for its climb, its glow and the label it leaves.
+        s.launches += 1;
+        s.launchAt = s.t;
         draw(c);
         return { solved: true, say: 'it leaves the top at ' + leaves(total) + '; band ' + hard + ' pushed hardest' };
       }
@@ -674,18 +872,33 @@ function driftPiece(env, plan) {
       }
       if (id === 'drift') {
         const n = Math.round(Number(value));
-        s.guess = Number.isFinite(n) ? Math.max(-COLS, Math.min(COLS, n)) : null;
+        const next = Number.isFinite(n) ? Math.max(-COLS, Math.min(COLS, n)) : null;
+        if (next !== s.guess) {
+          // The mark sets off from the column said before, on a roll of this setting's own.
+          s.guessFrom = s.guess;
+          s.guess = next;
+          s.guessAt = s.t;
+          s.guesses += 1;
+        }
         c.status('you say it leaves at ' + signed(s.guess));
       }
       if (id === 'band') {
         const n = Math.round(Number(value));
-        s.band = Number.isFinite(n) ? Math.max(1, Math.min(nb, n)) : 0;
+        const next = Number.isFinite(n) ? Math.max(1, Math.min(nb, n)) : 0;
+        if (next !== s.band) {
+          // The band named before dissolves while this one seals, on a roll of this naming's own.
+          s.bandPrev = s.band;
+          s.band = next;
+          s.bandAt = s.t;
+          s.bandSets += 1;
+        }
         c.status('you say band ' + s.band + ' pushes hardest');
       }
       if (id === 'hint') {
         const next = s.hinted.length + 1;
         if (s.hinted.length < Math.min(nb - 1, helps)) {
           s.hinted.push(next);
+          s.hintAt.push(s.t);
           c.hint();
           c.status('after band ' + next + ' it is at ' + signed(pos[next]));
         } else {
@@ -695,11 +908,13 @@ function driftPiece(env, plan) {
       draw(c);
     },
     frame(t, dt, c) {
-      if (!c.reduced) s.t += dt;
+      s.t += Math.max(0, dt);
+      if (c.done && s.doneAt < 0) s.doneAt = s.t;
       if (s.launched) s.flight = c.reduced ? nb : Math.min(nb, s.flight + dt * nb * 1.2);
       draw(c);
     },
     end(c) {
+      if (s.doneAt < 0) s.doneAt = s.t;
       c.status('It arrives at ' + signed(total) + '. The path stays lit; press check again to replay the ascent.');
     }
   };
@@ -742,49 +957,74 @@ function witnessGeometry(w, h, n) {
     band: h * 0.53 / n, x: (col) => w * (0.5 + col * 0.023) };
 }
 
+function witnessBlank(t) {
+  return { winds: [0, 0], windFrom: [0, 0], windAt: [-1, -1], windSets: [0, 0], hints: 0, hintAt: [],
+    run: null, runs: 0, runAt: -1, flight: 0, look: -1, lookPrev: -1, lookAt: -1, looks: 0, t: t || 0, doneAt: -1 };
+}
+
 function drawWitness(g, w, h, env, plan, s, variant) {
   const v = variant || PLAIN;
   const c = env.colors;
+  const rite = riteOf(env);
+  const reduced = !!env.reduced;
   const nb = plan.bands.length;
   const geo = witnessGeometry(w, h, nb);
   const size = Math.max(9, Math.min(14, Math.round(Math.min(w, h) * 0.043)));
   const k = Math.max(0.55, Math.min(1.5, Math.min(w, h) / 300)) * v.scale;
   const arrivals = [driftTotal(plan.bands), driftTotal(plan.bands.slice(plan.split))];
   sky(g, w, h, env);
-  sparks(g, w, h, env, v, 0.18);
+  sparks(g, w, h, env, v, 0.18, s.t);
   write(g, 'A arrives ' + signed(arrivals[0]), w * 0.27, h * 0.06, size, 'center', c.fg);
   write(g, 'B arrives ' + signed(arrivals[1]), w * 0.73, h * 0.06, size, 'center', c.fg);
   g.strokeStyle = env.alpha(c.muted, 0.25);
   g.lineWidth = 1;
   g.setLineDash([2, 4]);
+  g.lineDashOffset = clicks(rite, 0x0d, s.t, 1.3, reduced);
   g.beginPath();
   g.moveTo(geo.x(0), geo.top);
   g.lineTo(geo.x(0), geo.bottom);
   g.stroke();
   g.setLineDash([]);
+  g.lineDashOffset = 0;
+  // The band being looked at is sealed: its fill develops through the matte on the roll of that
+  // look, and the one looked at before dissolves back down the ladder.
+  const lookRite = roll(rite, 0x70, s.looks);
+  const lookP = came(s, s.lookAt, 0.9, reduced);
   for (let b = 0; b < nb; b++) {
     const y = geo.bottom - (b + 1) * geo.band;
     const missing = b === plan.lower ? 0 : b === plan.upper ? 1 : -1;
-    const wind = missing < 0 ? plan.bands[b] : s.winds[missing];
-    g.fillStyle = env.alpha(b % 2 ? c.accent : c.accent2, s.look === b ? 0.13 : 0.045);
+    // A wind the visitor set swings its arrow from the old push to the new along the curve of
+    // that setting's roll; its readout blinks on when it lands.
+    const windRite = missing < 0 ? null : roll(rite, 0x80 + missing, s.windSets[missing]);
+    const windP = missing < 0 ? 1 : came(s, s.windAt[missing], 0.9, reduced);
+    const wind = missing < 0 ? plan.bands[b] : travel(windRite, s.windFrom[missing], s.winds[missing], windP);
+    g.fillStyle = env.alpha(b % 2 ? c.accent : c.accent2, 0.045);
     g.fillRect(geo.left, y, geo.span, geo.band);
+    if (s.look === b || (s.lookAt >= 0 && s.lookPrev === b && s.look !== b)) {
+      g.fillStyle = env.alpha(b % 2 ? c.accent : c.accent2, 0.09);
+      sealed(g, lookRite, { x: geo.left, y, w: geo.span, h: geo.band }, s.look === b, lookP, Math.max(rite.cell, Math.ceil(geo.span / 40)));
+    }
     g.strokeStyle = env.alpha(c.muted, 0.3);
     g.strokeRect(geo.left, y, geo.span, geo.band);
     write(g, 'band ' + (b + 1), geo.left + 4, y + size * 0.8, size, 'left', c.fg);
-    write(g, missing < 0 ? signed(wind) : '? / set ' + signed(wind),
-      geo.left + geo.span - 4, y + size * 0.8, size, 'right', c.accent2);
+    if (missing < 0 || windRite.flicker(windP)) {
+      write(g, missing < 0 ? signed(wind) : '? / set ' + signed(s.winds[missing]),
+        geo.left + geo.span - 4, y + size * 0.8, size, 'right', c.accent2);
+    }
     g.strokeStyle = missing < 0 ? c.fg : c.accent;
     g.fillStyle = g.strokeStyle;
     g.lineWidth = 1.5;
     g.setLineDash(missing < 0 ? [] : [2, 3]);
-    if (wind) arrow(g, geo.x(0), geo.x(wind), y + geo.band * 0.68, 4 * k);
+    if (Math.abs(wind) >= 0.05) arrow(g, geo.x(0), geo.x(wind), y + geo.band * 0.68, 4 * k);
     else {
       g.beginPath();
       g.arc(geo.x(0), y + geo.band * 0.68, 2 * k, 0, TAU);
       g.stroke();
     }
     g.setLineDash([]);
-    if ((missing === 1 && s.hints >= 2) || (missing === 0 && s.hints >= 4)) {
+    // A worked subtraction's answer blinks on, on the roll of that hint.
+    const told = missing === 1 && s.hints >= 2 ? 1 : missing === 0 && s.hints >= 4 ? 3 : -1;
+    if (told >= 0 && roll(rite, 0x90, told).flicker(came(s, s.hintAt[told], 0.8, reduced))) {
       write(g, 'shown ' + signed(plan.bands[b]), w / 2, y + size * 0.8, size, 'center', c.accent2);
     }
   }
@@ -792,9 +1032,11 @@ function drawWitness(g, w, h, env, plan, s, variant) {
     const start = i ? plan.split : 0;
     const count = nb - start;
     const pos = positions((s.run || new Array(nb).fill(0)).slice(start));
-    const f = s.run ? s.flight * count : 0;
+    // The climb, band by band along a curve rolled for that band of that run; the lift into the
+    // ring at the top comes in treads.
+    const f = s.run ? climbed(rite, 0xa0 + i * 8, s.runs, s.flight * count, count) : 0;
     const b = Math.min(count - 1, Math.floor(f));
-    const col = pos[b] + (pos[b + 1] - pos[b]) * (f - b);
+    const col = f >= count ? pos[count] : pos[b] + (pos[b + 1] - pos[b]) * (f - b);
     const boundary = geo.bottom - (start + f) * geo.band;
     const lift = (i ? 22 : 8) * k;
     g.strokeStyle = env.alpha(i ? c.accent : c.accent2, 0.8);
@@ -806,24 +1048,26 @@ function drawWitness(g, w, h, env, plan, s, variant) {
     if (s.run) {
       g.beginPath();
       g.moveTo(geo.x(0), geo.bottom - start * geo.band);
-      for (let j = 1; j <= Math.floor(f); j++) {
+      for (let j = 1; j <= Math.min(count, Math.floor(f)); j++) {
         g.lineTo(geo.x(pos[j]), geo.bottom - (start + j) * geo.band);
       }
       g.lineTo(geo.x(col), boundary);
       g.stroke();
     }
     g.setLineDash([]);
-    const bob = env.reduced ? 0 : Math.sin(s.t * 1.1 + i * 2 + v.turn * TAU) * 2 * k;
-    const y = boundary + geo.band * 0.32 * (1 - s.flight) - lift * Math.pow(s.flight, 8);
-    lantern(g, env, geo.x(col), y + bob, 0.7 + s.flight * 0.5, k, i ? 'B' : 'A');
+    const bob = reduced ? 0 : sway(rite, 0xb0, s.t, i) * 2.5 * k;
+    const runRite = roll(rite, 0xc0 + i, s.runs);
+    const rise = runRite.stair(Math.max(0, Math.min(1, (s.flight - 0.7) / 0.3)));
+    const y = boundary + geo.band * 0.32 * (1 - f / count) - lift * rise;
+    lantern(g, env, geo.x(col), y + bob, 0.7 + runRite.stair(s.flight) * 0.5, k, i ? 'B' : 'A');
   }
   write(g, 'A starts below band 1', w / 2, h * 0.88, size, 'center', c.fg);
   write(g, 'B starts below band ' + (plan.split + 1), w / 2, h * 0.95, size, 'center', c.fg);
+  if (s.doneAt != null && s.doneAt >= 0) daybreak(g, rite, env, w, h, came(s, s.doneAt, 2.4, reduced), 0.1);
 }
 
 function witnessPreview(g, w, h, env, plan, t) {
-  drawWitness(g, w, h, env, plan,
-    { winds: [0, 0], hints: 0, run: null, flight: 0, look: -1, t: t || 0 }, env.variant);
+  drawWitness(g, w, h, env, plan, witnessBlank(t), env.variant);
 }
 
 function witnessPiece(env, plan) {
@@ -842,9 +1086,17 @@ function witnessPiece(env, plan) {
     'Band ' + (plan.lower + 1) + ': ' + signed(arrivals[0]) + ' - (' + signed(remaining)
       + ') = ' + signed(plan.bands[plan.lower]) + '.'
   ];
-  const s = { winds: [0, 0], hints: 0, run: null, flight: 0, look: -1, t: 0 };
+  const s = witnessBlank(0);
   const draw = (c) => drawWitness(c.g, c.w, c.h, c, plan, s, env.variant);
   const valid = (n) => Number.isInteger(n) && n >= -4 && n <= 4;
+  // A wind set: its arrow sets off from where it pointed, on a roll of this setting's own.
+  function setWind(at, wind) {
+    if (wind === s.winds[at]) return;
+    s.windFrom[at] = s.winds[at];
+    s.winds[at] = wind;
+    s.windAt[at] = s.t;
+    s.windSets[at] += 1;
+  }
   return {
     title: witnessTitle(plan),
     brief: 'Recover two missing winds from two lantern journeys. Each band adds its push in columns: negative is left, positive is right. Both lanterns cross every band above their start. '
@@ -865,8 +1117,11 @@ function witnessPiece(env, plan) {
       missing.forEach((band, i) => { trial[band] = winds[i]; });
       const right = Number(driftTotal(trial) === arrivals[0])
         + Number(driftTotal(trial.slice(plan.split)) === arrivals[1]);
-      s.winds = winds;
+      winds.forEach((wind, i) => setWind(i, wind));
       s.run = trial;
+      // Every run is its own: a fresh roll for the climb, the lift and the glow.
+      s.runs += 1;
+      s.runAt = s.t;
       s.flight = c.reduced ? 1 : 0;
       draw(c);
       return { solved: right === 2, say: right === 2
@@ -885,16 +1140,22 @@ function witnessPiece(env, plan) {
           c.status('Use a whole number from -4 to +4 for a missing wind.');
           return;
         }
-        s.winds[at] = wind;
+        setWind(at, wind);
         s.run = null;
         s.flight = 0;
-        s.look = missing[at];
+        if (s.look !== missing[at]) {
+          s.lookPrev = s.look;
+          s.look = missing[at];
+          s.lookAt = s.t;
+          s.looks += 1;
+        }
         c.status('Band ' + (missing[at] + 1) + ' set to ' + signed(wind) + '. Check to trace both journeys.');
       }
       if (id === 'hint') {
         if (s.hints < helps) {
           c.hint();
           c.status(hints[s.hints]);
+          s.hintAt[s.hints] = s.t;
           s.hints += 1;
         } else c.status('No hints left at this difficulty. ' + hints[s.hints - 1]);
       }
@@ -903,11 +1164,17 @@ function witnessPiece(env, plan) {
     tap(x, y, c) {
       const geo = witnessGeometry(c.w, c.h, plan.bands.length);
       const band = Math.floor((geo.bottom - y * c.h) / geo.band);
-      if (x * c.w < geo.left || x * c.w > geo.left + geo.span || band < 0 || band >= plan.bands.length) {
-        s.look = -1;
+      const next = x * c.w < geo.left || x * c.w > geo.left + geo.span || band < 0 || band >= plan.bands.length ? -1 : band;
+      if (next !== s.look) {
+        // The band looked at before dissolves while this one seals, on a roll of this look's own.
+        s.lookPrev = s.look;
+        s.look = next;
+        s.lookAt = s.t;
+        s.looks += 1;
+      }
+      if (next < 0) {
         c.status(witnessClues(plan));
       } else {
-        s.look = band;
         const at = missing.indexOf(band);
         c.status('Band ' + (band + 1) + (at < 0 ? ' pushes ' + signed(plan.bands[band]) + ' columns.'
           : ' is missing. You have set ' + signed(s.winds[at]) + '; use its number control to change it.'));
@@ -915,11 +1182,13 @@ function witnessPiece(env, plan) {
       draw(c);
     },
     frame(t, dt, c) {
-      if (!c.reduced) s.t += dt;
+      s.t += Math.max(0, dt);
+      if (c.done && s.doneAt < 0) s.doneAt = s.t;
       if (s.run) s.flight = c.reduced ? 1 : Math.min(1, s.flight + dt * 1.2);
       draw(c);
     },
     end(c) {
+      if (s.doneAt < 0) s.doneAt = s.t;
       c.status('Both witnesses agree. Change a wind and check again to send them on a different journey.');
       draw(c);
     }
@@ -953,6 +1222,8 @@ export default {
     else if (d.order) orderPreview(g, w, h, env, d.plan, env.variant.turn * 4);
     else driftPreview(g, w, h, env, d.plan, env.variant.turn * 4);
   },
+  // A card in motion: the lanterns sway in treads and the sparks blink, read off t through the
+  // rite, so the card moves the way the piece will. At t = 0 it is the still picture paint left.
   animate(g, w, h, env, t) {
     if (env.reduced) return false;
     const d = deal(env);
