@@ -383,4 +383,20 @@ svg {
   html {
     scroll-behavior: auto;
   }
+
+  // A link in the words is simply underlined, plated when hovered, and nothing climbs or stamps.
+  #{$word-links},
+  .prose a:not(.action)::before,
+  .tagline a:not(.action)::before,
+  .page-purpose a:not(.action)::before,
+  .pages a:not(.action)::before,
+  .orientations a:not(.action)::before,
+  .panel-note a:not(.action)::before,
+  .section-note a:not(.action)::before,
+  .current a:not(.action)::before,
+  .unlock-note a:not(.action)::before,
+  a.unlock-else::before {
+    animation: none;
+    transition: none;
+  }
 }

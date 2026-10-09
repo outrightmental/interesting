@@ -326,6 +326,10 @@ $mono: var(--font-mono, #{$mono-stack});
     font-variation-settings var(--motion-shift) var(--ease-stair),
     letter-spacing var(--motion-shift) var(--ease-stair),
     word-spacing var(--motion-shift) var(--ease-stair);
+
+  @media (prefers-reduced-motion: reduce) {
+    transition: none;
+  }
 }
 
 // The dressing of a heading in the rite's face: the register's ornaments beside the words and the
