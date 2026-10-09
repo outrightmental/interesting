@@ -394,6 +394,15 @@
   font-family: type.$sans;
   letter-spacing: 0.1px;
   @include type.scale(label-large);
+  // The page's h1, but an overline: the register's ornaments and rule belong to the title below.
+  background-image: none;
+  padding-block-end: 0;
+  text-shadow: none;
+
+  &::before,
+  &::after {
+    content: none;
+  }
 }
 
 .stage-read {
@@ -411,6 +420,7 @@
   color: var(--md-sys-color-on-surface);
   @include type.scale(headline-large);
   @include type.rite;
+  @include type.rite-dress;
 }
 
 // The scale sets a weight and a tracking of its own at each size, so the rite's face is included

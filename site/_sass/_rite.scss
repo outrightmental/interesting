@@ -62,7 +62,9 @@
   border: 1px dashed color-mix(in oklab, var(--md-sys-color-tertiary) 26%, transparent);
   // One turn in about two minutes, never evenly: the drift family wanders in speed and catches now
   // and then, and js/motion.js rolls a new curve for every turn (README: "Motion axiom").
-  animation: rite-turn var(--motion-turn, 120s) var(--ease-rite-turn, var(--ease-drift)) infinite;
+  // A ratchet: the ring turns in clicks, each with a slip back and a hold (the ratchet family,
+  // js/motion.js), never an even rotation, and js/motion.js rolls a new ratchet for every turn.
+  animation: rite-turn var(--motion-turn, 120s) var(--ease-rite-turn, var(--ease-ratchet)) infinite;
 }
 
 // The list pages and the prose pages lay their children out in flow, which a positioned ring at 0

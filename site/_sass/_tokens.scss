@@ -235,6 +235,45 @@
   initial-value: -14%;
 }
 
+// The register's numeric dimensions (_type.scss): registered so that when the register turns
+// over the axes of the rite's face, its tracking and its word-spacing step to their new values
+// along the stair, the letterforms themselves a movement of the rite.
+@property --rite-weight {
+  syntax: '<number>';
+  inherits: true;
+  initial-value: 400;
+}
+
+@property --rite-opsz {
+  syntax: '<number>';
+  inherits: true;
+  initial-value: 72;
+}
+
+@property --rite-soft {
+  syntax: '<number>';
+  inherits: true;
+  initial-value: 20;
+}
+
+@property --rite-wonk {
+  syntax: '<number>';
+  inherits: true;
+  initial-value: 0;
+}
+
+@property --rite-tracking {
+  syntax: '<length>';
+  inherits: true;
+  initial-value: 0px;
+}
+
+@property --rite-words {
+  syntax: '<length>';
+  inherits: true;
+  initial-value: 0px;
+}
+
 // A slider's fill (_controls.scss): registered so the track's gradient can move in treads after
 // the thumb, along the stair family, rather than jump or glide.
 @property --range-pct {

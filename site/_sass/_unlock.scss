@@ -13,10 +13,51 @@
   opacity: 0.38;
   filter: saturate(0.35);
   pointer-events: none;
-  // The generator starting: the dimming lifts along a rolled curve (_tokens.scss, js/motion.js).
+  // The generator starting, or stopping: the dimming comes and goes in treads (README: "Motion
+  // axiom") -- the stair family, rolled for that change, never a fade -- and the screen over the
+  // machine (the fill texture in the surface's ink, _unlock.scss below) lifts a rung at a time.
   transition:
-    opacity var(--motion-medium) var(--ease-shift),
-    filter var(--motion-medium) var(--ease-shift);
+    opacity var(--motion-medium) var(--ease-stair),
+    filter var(--motion-medium) var(--ease-stair);
+  position: relative;
+}
+
+// The screen: the rolled fill texture laid over a powered-down part, so what waits for its
+// generator reads as a machine under a dust sheet and not a part that has merely gone pale.
+.powered-down::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  background: var(--matte-fill);
+  background-size: var(--matte-fill-size);
+  color: var(--md-sys-color-on-surface);
+  opacity: 0.14;
+  pointer-events: none;
+  animation: power-down var(--motion-power-down, var(--motion-medium)) var(--ease-power-down, var(--ease-stair)) both;
+}
+
+// The sheet comes down the ladder onto the machine.
+@keyframes power-down {
+  0%, 24.9% {
+    mask: var(--matte-1);
+    -webkit-mask: var(--matte-1);
+  }
+
+  25%, 49.9% {
+    mask: var(--matte-3);
+    -webkit-mask: var(--matte-3);
+  }
+
+  50%, 79.9% {
+    mask: var(--matte-4);
+    -webkit-mask: var(--matte-4);
+  }
+
+  80%, 100% {
+    mask: none;
+    -webkit-mask: none;
+  }
 }
 
 .unlock {
@@ -67,5 +108,9 @@
 @media (prefers-reduced-motion: reduce) {
   .powered-down {
     transition: none;
+  }
+
+  .powered-down::after {
+    animation: none;
   }
 }

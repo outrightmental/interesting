@@ -531,7 +531,7 @@
     'persona-flight': 'arrive',
     'persona-flight-ring': 'leave',
     'rite-turn': 'ratchet',
-    'rite-shift': 'flicker',
+    'rite-shift': 'stair',
     'matte-in': 'stair',
     'matte-out': 'stair',
     'rite-stamp': 'flicker',
@@ -670,7 +670,8 @@
     'room-turn-b': 'stair',
     'dial-seal': 'stair',
     'key-turn': 'ratchet',
-    'rite-spent': 'stair'
+    'rite-spent': 'stair',
+    'power-down': 'stair'
   };
 
   function familyOf(name) {

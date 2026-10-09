@@ -128,38 +128,60 @@ html[data-shifting] .section-title,
 html[data-shifting] .panel-title,
 html[data-shifting] .card-overline,
 html[data-shifting] .card-title {
-  animation: rite-shift var(--motion-shift, 640ms) var(--ease-rite-shift, var(--ease-flicker)) both;
+  animation: rite-shift var(--motion-rite-shift, var(--motion-shift, 640ms)) var(--ease-rite-shift, var(--ease-stair)) both;
 }
 
 @keyframes rite-shift {
-  from {
-    opacity: 1;
-    filter: none;
+  // The turn-over in cuts: the words are eaten down the ladder in the old face, thrown to the
+  // rolled distance and slant, cut to the axes' extremes -- black, then hairline and wholly soft,
+  // then the alternates on -- and climb back through the ladder landing on the new register's
+  // own axes. No opacity, no blur: every frame a held pair.
+  0%, 11.9% {
+    mask: var(--matte-5);
+    -webkit-mask: var(--matte-5);
     transform: none;
   }
 
-  14% {
-    opacity: 0.55;
-    filter: blur(var(--shift-blur, 5px)) contrast(1.35);
+  12%, 23.9% {
+    mask: var(--matte-3);
+    -webkit-mask: var(--matte-3);
     transform: translateX(var(--shift-x, 3px)) skewX(var(--shift-skew, -4deg));
+    font-variation-settings: 'opsz' 144, 'wght' 900, 'SOFT' 0, 'WONK' 0;
   }
 
-  30% {
-    opacity: 0.95;
-    filter: blur(calc(var(--shift-blur, 5px) * 0.25));
+  24%, 37.9% {
+    mask: var(--matte-1);
+    -webkit-mask: var(--matte-1);
     transform: translateX(calc(var(--shift-x, 3px) * -0.5)) skewX(calc(var(--shift-skew, -4deg) * -0.4));
+    font-variation-settings: 'opsz' 9, 'wght' 100, 'SOFT' 100, 'WONK' 0;
   }
 
-  46% {
-    opacity: 0.7;
-    filter: blur(calc(var(--shift-blur, 5px) * 0.6));
+  38%, 51.9% {
+    mask: var(--matte-2);
+    -webkit-mask: var(--matte-2);
     transform: translateX(calc(var(--shift-x, 3px) * 0.3));
+    font-variation-settings: 'opsz' 72, 'wght' 500, 'SOFT' 50, 'WONK' 1;
   }
 
-  to {
-    opacity: 1;
-    filter: none;
+  52%, 69.9% {
+    mask: var(--matte-4);
+    -webkit-mask: var(--matte-4);
     transform: none;
+    font-variation-settings: 'opsz' var(--rite-opsz, 72), 'wght' var(--rite-weight, 400), 'SOFT' var(--rite-soft, 20), 'WONK' var(--rite-wonk, 0);
+  }
+
+  70%, 83.9% {
+    mask: var(--matte-top);
+    -webkit-mask: var(--matte-top);
+    transform: none;
+    font-variation-settings: 'opsz' var(--rite-opsz, 72), 'wght' var(--rite-weight, 400), 'SOFT' var(--rite-soft, 20), 'WONK' var(--rite-wonk, 0);
+  }
+
+  84%, 100% {
+    mask: none;
+    -webkit-mask: none;
+    transform: none;
+    font-variation-settings: 'opsz' var(--rite-opsz, 72), 'wght' var(--rite-weight, 400), 'SOFT' var(--rite-soft, 20), 'WONK' var(--rite-wonk, 0);
   }
 }
 
