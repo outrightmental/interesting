@@ -7,27 +7,30 @@
 // (_persona.scss), and the "are you sure you want to ______?" modal every destructive control is
 // guarded by (_controls.scss). Before issue #70 only the first of them had any of this -- the veil
 // was the nav's own element, written into the nav's own markup and painted in the nav's own
-// partial -- and the other two had a flat `::backdrop` and nothing else: no blur, no fade, no held
-// frame loop. The verdict in the note that became that issue was that the persona's lightbox was
-// weak. There is one lightbox now, and whatever opens inside it gets the whole effect.
+// partial -- and the other two had a flat `::backdrop` and nothing else: no blur, no veil rising,
+// no held frame loop. The verdict in the note that became that issue was that the persona's
+// lightbox was weak. There is one lightbox now, and whatever opens inside it gets the whole effect.
 //
-// What this file does: dims the page, blurs it, desaturates it, fades in, and takes the press that
-// means "not this". What the script does on top of it: makes every other child of <body> inert and
-// hidden from a screen reader, marks each one it put aside with data-lightbox-aside, names the one
-// it left in front with data-lightbox-front, holds the page's requestAnimationFrame loop, and
-// writes <html data-lightbox='nav'> (or 'persona', 'state', or 'are-you-sure') for the rules below.
+// What this file does: dims the page, blurs it, desaturates it, cuts the veil in from the control
+// that raised it (README: "Motion axiom", the cut), and takes the press that means "not this".
+// What the script does on top of it: makes every other child of <body> inert and hidden from a
+// screen reader, marks each one it put aside with data-lightbox-aside, names the one it left in
+// front with data-lightbox-front, holds the page's requestAnimationFrame loop, and writes
+// <html data-lightbox='nav'> (or 'persona', 'state', or 'are-you-sure') for the rules below.
+
+@use 'cut';
 
 // Everything behind whatever is open, at once. The div is one line of _includes/layout.njk, hidden
 // until something raises it, so a visitor with no script at all gets no veil and no dimming they
 // could not dismiss.
-// The veil does not fade and does not wipe: it condenses. The dim arrives through the matte
-// ladder (--matte-1 to --matte-5, js/motion.js: blotches of thresholded noise, shards, scan lines,
-// a dither or an iris, rolled afresh for every rising) in uneven treads inside the shape the roll
-// gave it (--wipe-from, an edge, a slit, an iris or a corner, for the first tread; then the whole
-// page, --wipe-to), with one tread of refusal on the way up and the blur arriving one tread after
-// the dim, along a curve rolled for this rising alone (--ease-lightbox-veil, with the wipe family
-// as its fallback). Every tread is a held pair, so each is a cut and nothing in between is drawn.
-// Nothing of it is a standard curve (README: "Motion axiom").
+//
+// The veil does not fade: it rises as a curve from the control that raised it. js/site.js reads
+// that control's place once as the veil rises and writes it on the veil as --cut-x and --cut-y
+// (a share of the viewport, which is the veil's own box), so the dim and the blur grow out of the
+// logo, the avatar or the warning button that was pressed, as one disc stepping out to the far
+// corner in a few even treads (--ease-veil, rolled by js/motion.js for this rising alone, with
+// the wipe family behind it). The blur is the veil's own and goes wherever the disc has reached,
+// so nothing of it is drawn ahead of the edge. A page with no engine rises from the middle.
 .lightbox-veil {
   position: fixed;
   inset: 0;
@@ -35,66 +38,8 @@
   background: color-mix(in oklab, var(--md-sys-color-surface) 62%, transparent);
   backdrop-filter: blur(9px) saturate(70%);
   -webkit-backdrop-filter: blur(9px) saturate(70%);
-  clip-path: var(--wipe-to, inset(0));
-  animation: lightbox-veil var(--motion-medium) var(--ease-lightbox-veil, var(--ease-wipe)) both;
-}
-
-@keyframes lightbox-veil {
-  0%, 13.9% {
-    clip-path: var(--wipe-from, inset(0 0 100% 0));
-    mask: var(--matte-1);
-    -webkit-mask: var(--matte-1);
-    backdrop-filter: blur(0px) saturate(100%);
-    -webkit-backdrop-filter: blur(0px) saturate(100%);
-  }
-
-  14%, 29.9% {
-    clip-path: var(--wipe-to, inset(0));
-    mask: var(--matte-2);
-    -webkit-mask: var(--matte-2);
-    backdrop-filter: blur(0px) saturate(100%);
-    -webkit-backdrop-filter: blur(0px) saturate(100%);
-  }
-
-  30%, 45.9% {
-    clip-path: var(--wipe-to, inset(0));
-    mask: var(--matte-3);
-    -webkit-mask: var(--matte-3);
-    backdrop-filter: blur(3px) saturate(90%);
-    -webkit-backdrop-filter: blur(3px) saturate(90%);
-  }
-
-  46%, 57.9% {
-    clip-path: var(--wipe-to, inset(0));
-    mask: var(--matte-2);
-    -webkit-mask: var(--matte-2);
-    backdrop-filter: blur(3px) saturate(90%);
-    -webkit-backdrop-filter: blur(3px) saturate(90%);
-  }
-
-  58%, 73.9% {
-    clip-path: var(--wipe-to, inset(0));
-    mask: var(--matte-4);
-    -webkit-mask: var(--matte-4);
-    backdrop-filter: blur(9px) saturate(70%);
-    -webkit-backdrop-filter: blur(9px) saturate(70%);
-  }
-
-  74%, 89.9% {
-    clip-path: var(--wipe-to, inset(0));
-    mask: var(--matte-5);
-    -webkit-mask: var(--matte-5);
-    backdrop-filter: blur(9px) saturate(70%);
-    -webkit-backdrop-filter: blur(9px) saturate(70%);
-  }
-
-  90%, 100% {
-    clip-path: var(--wipe-to, inset(0));
-    mask: none;
-    -webkit-mask: none;
-    backdrop-filter: blur(9px) saturate(70%);
-    -webkit-backdrop-filter: blur(9px) saturate(70%);
-  }
+  mask: cut.curve();
+  @include cut.play(in, veil, medium, wipe);
 }
 
 // The one thing the veil leaves in front of it, named by the script on whichever child of <body>
@@ -116,126 +61,45 @@ html[data-lightbox] [data-lightbox-aside] * {
 
 // The veil leaving. js/site.js hides it the instant what was behind it is put away, and
 // js/motion.js leaves a ghost of it in its place for one more movement (.is-ghost: a clone with no
-// id, aria-hidden and under no pointer, gone when this ends). The ghost does not fade: it is eaten
-// down the matte ladder in cuts -- the blur going with it in blotches, shards or lines, whatever
-// the roll gave -- and what is left wipes back to the shape the veil opened from.
+// id, aria-hidden and under no pointer, gone when this ends). The clone carries the veil's own
+// --cut-x and --cut-y, so the ghost goes back the way the veil came: the same curve, stepping in
+// to the control that raised it (--ease-veil-out, rolled by the engine for this leaving).
 .lightbox-veil.is-ghost {
   pointer-events: none;
-  animation: var(--rite-veil-out, lightbox-veil-out) var(--motion-lightbox-veil-out, var(--motion-medium)) var(--ease-lightbox-veil-out, var(--ease-wipe)) both;
-}
-
-@keyframes lightbox-veil-out {
-  0%, 17.9% {
-    opacity: 1;
-    clip-path: var(--wipe-to, inset(0));
-    mask: var(--matte-5);
-    -webkit-mask: var(--matte-5);
-  }
-
-  18%, 39.9% {
-    opacity: 1;
-    clip-path: var(--wipe-to, inset(0));
-    mask: var(--matte-4);
-    -webkit-mask: var(--matte-4);
-  }
-
-  40%, 57.9% {
-    opacity: 1;
-    mask: var(--matte-3);
-    -webkit-mask: var(--matte-3);
-  }
-
-  58%, 73.9% {
-    opacity: 1;
-    mask: var(--matte-2);
-    -webkit-mask: var(--matte-2);
-  }
-
-  74%, 89.9% {
-    opacity: 1;
-    mask: var(--matte-1);
-    -webkit-mask: var(--matte-1);
-  }
-
-  90%, 100% {
-    opacity: 0;
-    clip-path: var(--wipe-from, inset(0 0 100% 0));
-    mask: var(--matte-1);
-    -webkit-mask: var(--matte-1);
-  }
+  @include cut.play(out, veil-out, medium, wipe);
 }
 
 // ---- the shell's leave rite -------------------------------------------------------------
-// What the shell takes off the screen is unmade, never cut (js/site.js, unmake and ghostOf): the
-// "are you sure?" question once it is answered -- as a ghost, a copy of the box left where the
-// box was, since the dialog itself has to close at once for the focus to go home -- and the
-// unlock box once the part it guarded has powered up. Down the ladder with one flicker back (the
-// leave family's refusal), toward the roll's --leave-x/-y, turning and shrinking by its
-// --leave-rot and --leave-scale, in held pairs so every tread is a cut. The script takes the
-// class off (or the ghost out) when the animation ends.
+// What the shell takes off the screen is unmade, never cut away at once (js/site.js, unmake and
+// ghostOf): the "are you sure?" question once it is answered -- as a ghost, a copy of the box left
+// where the box was, since the dialog itself has to close at once for the focus to go home -- and
+// the unlock box once the part it guarded has powered up. A slice steps across it toward where it
+// goes (--leave-angle) while it moves that way by --leave-x and --leave-y, in the same growing
+// treads (--ease-unmake, rolled by js/motion.js for this leaving). Where it goes is said by the
+// reason it goes: the question goes back toward the control it was asked from, the state panel
+// toward the logo, the unlock box down into the part it powered (_unlock.scss). The script takes
+// the class off (or the ghost out) when the animation ends.
 .shell-ghost {
   pointer-events: none;
   animation-play-state: running; // a ghost put aside by the lightbox still plays itself out
 }
 
-.shell-unmake {
+// The leading `html` outranks the one class a leaving box already carries (.unlock develops with
+// an animation of its own, and a later partial would otherwise win the tie).
+html .shell-unmake {
   pointer-events: none;
-  // Composed anew for every leaving (--rite-unmake, js/site.js unmake), at a length rolled for it;
-  // the keyframes below for a page with no script.
-  animation: var(--rite-unmake, shell-unmake) var(--motion-shell-unmake, var(--motion-medium)) var(--ease-shell-unmake, var(--ease-leave)) both;
-}
-
-@keyframes shell-unmake {
-  0%, 15.9% {
-    opacity: 1;
-    mask: var(--matte-5);
-    -webkit-mask: var(--matte-5);
-    transform: translate(calc(var(--leave-x, 0px) * -0.1), calc(var(--leave-y, -22px) * -0.1)) scale(1.01);
-  }
-
-  16%, 33.9% {
-    opacity: 1;
-    mask: var(--matte-4);
-    -webkit-mask: var(--matte-4);
-    transform: translate(calc(var(--leave-x, 0px) * 0.2), calc(var(--leave-y, -22px) * 0.2)) rotate(calc(var(--leave-rot, 0deg) * 0.4));
-  }
-
-  34%, 45.9% {
-    opacity: 1;
-    mask: var(--matte-5);
-    -webkit-mask: var(--matte-5);
-    transform: translate(calc(var(--leave-x, 0px) * 0.15), calc(var(--leave-y, -22px) * 0.15)) rotate(calc(var(--leave-rot, 0deg) * 0.3));
-  }
-
-  46%, 63.9% {
-    opacity: 1;
-    mask: var(--matte-3);
-    -webkit-mask: var(--matte-3);
-    transform: translate(calc(var(--leave-x, 0px) * 0.5), calc(var(--leave-y, -22px) * 0.5)) rotate(var(--leave-rot, 0deg)) scale(var(--leave-scale, 0.92));
-  }
-
-  64%, 81.9% {
-    opacity: 1;
-    mask: var(--matte-2);
-    -webkit-mask: var(--matte-2);
-    transform: translate(calc(var(--leave-x, 0px) * 0.8), calc(var(--leave-y, -22px) * 0.8)) rotate(var(--leave-rot, 0deg)) scale(calc(var(--leave-scale, 0.92) - 0.04));
-  }
-
-  82%, 100% {
-    opacity: 0;
-    mask: var(--matte-1);
-    -webkit-mask: var(--matte-1);
-    transform: translate(var(--leave-x, 0px), var(--leave-y, -22px)) rotate(var(--leave-rot, 0deg)) scale(calc(var(--leave-scale, 0.92) - 0.08));
-  }
+  @include cut.unmake(unmake, medium);
 }
 
 // Less motion: the veil is there or it is not, leaves no ghost, and nothing of the shell's is
-// unmade (js/site.js takes it off at once).
+// unmade (js/site.js takes it off at once). Without its animation the veil's edge would sit at
+// nothing, so its mask goes too and the whole veil is simply there.
 @media (prefers-reduced-motion: reduce) {
   .lightbox-veil,
   .lightbox-veil.is-ghost,
-  .shell-unmake {
+  html .shell-unmake {
     animation: none;
+    mask: none;
   }
 
   .lightbox-veil.is-ghost,
