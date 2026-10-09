@@ -47,7 +47,7 @@
     { "file": "shadow-theatre.html", "name": "the shadow theatre", "orientation": "magpie", "mood": "curious", "aspect": "4 / 3",
       "what": "Work out where the lamp stands from a shadow's size, or match four shadows to the cutouts that cast them." },
     { "file": "sky-archive.html", "name": "the archive oracle", "orientation": "asking elsewhere", "mood": "divinatory", "aspect": "1 / 1",
-      "what": "Ask the archive: turn a wheel of letters so the stars spell the word, or judge which omens hold for your sky." }
+      "what": "Ask the archive: turn a wheel of letters onto its word, or find two true omens and the brightest star's quadrant." }
   ],
   "finePrint": [
     { "file": "privacy.html", "name": "privacy", "gloss": "what is kept, and where", "icon": "shield",

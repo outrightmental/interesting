@@ -1,5 +1,5 @@
 /* The sky archive: a wheel of letters turned under the stars, and omens written against a sky.
-   As a card it is the wheel with three stars pointing at its rim, or a small sky with four omen
+   As a card it is the wheel with three stars pointing at its rim, or a square sky with five omen
    cards under it (paint, spark); as a piece it is one of the two puzzles below, and the card it
    was opened from says which. See js/feed.js for what a module is and js/stage.js for what a
    piece is.
@@ -15,15 +15,13 @@
                             off, or fits one way round, and no more, though a gentle difficulty
                             takes a count a notch or two out; asking the archive which way it turns
                             costs a hint, and the fiercest setting does not offer to say it.
-     which omens hold       A sky of five to seven stars, a ring, a horizon band and a hand's-width
-                            scale, and four omens, each a claim that can be checked against the sky.
-                            Pick the ones that hold. The sky is rolled until one to three of the
-                            four hold and no star sits on an edge that would make a claim a matter
-                            of opinion; some seeds roll a crowded sky of eight or nine stars. A wrong
-                            check says how many of the picked hold, and no more; the archive will
-                            ring the two brightest and then read omens against its own sky, as many
-                            turns of it as the difficulty allows and each at the price of a hint,
-                            and a solve reads a line from the archive.
+     which omens hold       A square sky of five to nine stars, a ring, a horizon band and a
+                            hand's-width scale. Five claims are dealt from different omen families:
+                            exactly two hold. Pick those two and locate the brightest star in one
+                            of the four quadrants. The claims and a text reading of the chart are
+                            available beside the picture. A wrong check measures both answers
+                            without identifying a true claim; a closer reading costs a hint, and
+                            a solve reads a line from the archive.
 
    The sky a visitor brings may be one star or many: it is drawn behind the wheel for colour, and
    nothing of the puzzle depends on it. The plan is rolled from the seed, dealt once per card and
@@ -474,7 +472,9 @@ const FAMILIES = [
   [{ id: 'brightClose', text: 'the two brightest lie within a hand\'s width of each other' }, { id: 'brightFar', text: 'the two brightest lie more than a hand\'s width apart' }],
   [{ id: 'noneInBand', text: 'no star touches the horizon band' }, { id: 'oneInBand', text: 'a star touches the horizon band' }],
   [{ id: 'brightestEast', text: 'the brightest star lies east of the meridian' }, { id: 'brightestWest', text: 'the brightest star lies west of the meridian' }],
-  [{ id: 'faintestNorth', text: 'the faintest star lies north of the ring\'s centre line' }, { id: 'threeNorth', text: 'exactly three stars lie north of the ring\'s centre line' }]
+  [{ id: 'faintestNorth', text: 'the faintest star lies north of the ring\'s centre line' }, { id: 'threeNorth', text: 'exactly three stars lie north of the ring\'s centre line' }],
+  [{ id: 'faintInRing', text: 'the faintest star lies inside the ring' }, { id: 'faintOutRing', text: 'the faintest star lies outside the ring' }],
+  [{ id: 'brightSameSide', text: 'the two brightest lie on the same side of the meridian' }, { id: 'brightSplit', text: 'the two brightest lie on opposite sides of the meridian' }]
 ];
 const CLAIMS = {};
 FAMILIES.forEach((pair, f) => pair.forEach((claim) => { CLAIMS[claim.id] = Object.assign({ family: f }, claim); }));
@@ -504,6 +504,10 @@ function claimHolds(id, pts) {
     case 'brightestWest': return bright[0].x < RING.x;
     case 'faintestNorth': return bright[bright.length - 1].y < RING.y;
     case 'threeNorth': return pts.filter((p) => p.y < RING.y).length === 3;
+    case 'faintInRing': return dist(bright[bright.length - 1], RING) < RING.r;
+    case 'faintOutRing': return dist(bright[bright.length - 1], RING) > RING.r;
+    case 'brightSameSide': return (bright[0].x > RING.x) === (bright[1].x > RING.x);
+    case 'brightSplit': return (bright[0].x > RING.x) !== (bright[1].x > RING.x);
     default: return false;
   }
 }
@@ -532,13 +536,13 @@ function starAt(env, pts) {
   return null;
 }
 
-// A sky the generator can always fall back on: three of its four omens hold, and nothing in it is
+// A sky the generator can always fall back on: two of its five omens hold, and nothing in it is
 // on an edge (carriedOmens holds it to the same tests as any other).
 const FALLBACK = {
   kind: 'omens',
   pts: [{ x: 0.2, y: 0.2, b: 9 }, { x: 0.75, y: 0.25, b: 7 }, { x: 0.56, y: 0.38, b: 5 }, { x: 0.3, y: 0.65, b: 3 }, { x: 0.8, y: 0.9, b: 1 }],
-  claims: ['eastMore', 'inRing', 'brightFar', 'noneInBand'],
-  truth: [0, 1, 2]
+  claims: ['eastMore', 'noneInRing', 'brightFar', 'noneInBand', 'faintInRing'],
+  truth: [0, 2]
 };
 
 function omensPlan(env) {
@@ -550,10 +554,14 @@ function omensPlan(env) {
       const q = starAt(env, pts);
       if (q) pts.push({ x: q.x, y: q.y, b: levels[i] });
     }
-    if (pts.length !== n) continue;
-    const claims = some(env, FAMILIES.map((pair, f) => f), 4).map((f) => FAMILIES[f][env.int(0, 1)].id);
+    if (pts.length !== n || !clearSky(pts)) continue;
+    const families = some(env, FAMILIES.map((pair, f) => f), 5);
+    const eligible = families.filter((f) => FAMILIES[f].some((claim) => claimHolds(claim.id, pts)));
+    if (eligible.length < 2 || families.some((f) => FAMILIES[f].every((claim) => claimHolds(claim.id, pts)))) continue;
+    const trueFamilies = new Set(some(env, eligible, 2));
+    const claims = families.map((f) => env.pick(FAMILIES[f].filter((claim) => claimHolds(claim.id, pts) === trueFamilies.has(f))).id);
     const truth = claims.map((id, i) => (claimHolds(id, pts) ? i : -1)).filter((i) => i >= 0);
-    if (clearSky(pts) && truth.length >= 1 && truth.length <= 3) return { kind: 'omens', pts, claims, truth };
+    return { kind: 'omens', pts, claims, truth };
   }
   return { kind: 'omens', pts: FALLBACK.pts.map((q) => Object.assign({}, q)), claims: FALLBACK.claims.slice(), truth: FALLBACK.truth.slice() };
 }
@@ -565,10 +573,10 @@ function carriedOmens(env) {
   const okPt = (q) => q && typeof q === 'object' && Number.isFinite(q.x) && Number.isFinite(q.y) && q.x > 0 && q.x < 1 && q.y > 0 && q.y < 1 && Number.isInteger(q.b) && q.b >= 1 && q.b <= 9;
   if (!p.pts.every(okPt) || new Set(p.pts.map((q) => q.b)).size !== p.pts.length) return null;
   const pts = p.pts.map((q) => ({ x: q.x, y: q.y, b: q.b }));
-  if (!Array.isArray(p.claims) || p.claims.length !== 4 || !p.claims.every((id) => CLAIMS[id])) return null;
-  if (new Set(p.claims.map((id) => CLAIMS[id].family)).size !== 4) return null;
+  if (!Array.isArray(p.claims) || p.claims.length !== 5 || !p.claims.every((id) => CLAIMS[id])) return null;
+  if (new Set(p.claims.map((id) => CLAIMS[id].family)).size !== 5) return null;
   const truth = p.claims.map((id, i) => (claimHolds(id, pts) ? i : -1)).filter((i) => i >= 0);
-  if (truth.length < 1 || truth.length > 3 || !clearSky(pts)) return null;
+  if (truth.length !== 2 || !clearSky(pts)) return null;
   if (!Array.isArray(p.truth) || p.truth.length !== truth.length || !truth.every((i, k) => p.truth[k] === i)) return null;
   return { kind: 'omens', pts, claims: p.claims.slice(), truth };
 }
@@ -578,13 +586,12 @@ function omensTitle(p) {
 }
 
 function skyFrame(w, h, v) {
-  const sw = w * (0.8 + 0.1 * v.scale);
-  const sh = h * (0.52 + 0.08 * v.scale);
-  return { x: w / 2 - sw / 2 + (v.turn - 0.5) * w * 0.02, y: h * 0.03, sw, sh };
+  const side = Math.min(w * (0.8 + 0.08 * v.scale), h * (0.49 + 0.03 * v.scale));
+  return { x: w / 2 - side / 2 + (v.turn - 0.5) * w * 0.02, y: h * 0.025, sw: side, sh: side };
 }
 
 // The drawn sky: the stars by brightness, the ring, the meridian and the centre line, the horizon
-// band, the hand's-width scale, and the four omens under it.
+// band, the hand's-width scale, and the five omens under it.
 function omensScene(g, w, h, c, p, s, variant) {
   const v = variant || PLAIN;
   const col = c.colors;
@@ -598,6 +605,18 @@ function omensScene(g, w, h, c, p, s, variant) {
   g.strokeStyle = c.alpha(col.fg, 0.4);
   g.lineWidth = 1;
   g.strokeRect(f.x, f.y, f.sw, f.sh);
+  if (s.quadrant) {
+    const left = s.quadrant.endsWith('west') ? 0 : RING.x;
+    const top = s.quadrant.startsWith('north') ? 0 : RING.y;
+    const height = s.quadrant.startsWith('north') ? RING.y : 1 - RING.y;
+    const field = c.rite ? c.rite.at(0x4a17) : null;
+    const age = c.reduced || s.quadrantAt == null ? 1 : Math.min(1, Math.max(0, (s.t - s.quadrantAt) / 0.8));
+    if (field) field.paint(g, X(left), Y(top), f.sw * RING.x, f.sh * height, field.stair(age), c.alpha(col.accent2, 0.14));
+    else if (age) {
+      g.fillStyle = c.alpha(col.accent2, 0.14);
+      g.fillRect(X(left), Y(top), f.sw * RING.x, f.sh * height);
+    }
+  }
   // The horizon band.
   g.fillStyle = c.alpha(col.accent, 0.14);
   g.fillRect(f.x, Y(BAND), f.sw, f.sh * (1 - BAND));
@@ -612,7 +631,7 @@ function omensScene(g, w, h, c, p, s, variant) {
   g.setLineDash([3, 5]);
   g.beginPath();
   g.moveTo(X(RING.x), f.y);
-  g.lineTo(X(RING.x), Y(BAND));
+  g.lineTo(X(RING.x), f.y + f.sh);
   g.moveTo(f.x, Y(RING.y));
   g.lineTo(f.x + f.sw, Y(RING.y));
   g.stroke();
@@ -625,6 +644,7 @@ function omensScene(g, w, h, c, p, s, variant) {
   write(g, 'west', f.x + fs * 1.6, Y(RING.y) - fs * 0.8, fs * 0.8, c.alpha(col.muted, 0.8), 'center', 500);
   write(g, 'east', f.x + f.sw - fs * 1.6, Y(RING.y) - fs * 0.8, fs * 0.8, c.alpha(col.muted, 0.8), 'center', 500);
   write(g, 'north', X(RING.x) + fs * 1.8, f.y + fs * 0.8, fs * 0.8, c.alpha(col.muted, 0.8), 'center', 500);
+  write(g, 'south', X(RING.x) + fs * 1.8, Y(0.7), fs * 0.8, c.alpha(col.muted, 0.8), 'center', 500);
   write(g, 'the ring', X(RING.x), Y(RING.y) + RING.r * f.sh + fs * 0.9, fs * 0.8, c.alpha(col.accent2, 0.8), 'center', 500);
   // A hand's width, as a scale.
   const hx = f.x + f.sw * 0.04;
@@ -671,20 +691,23 @@ function omensScene(g, w, h, c, p, s, variant) {
     });
     g.setLineDash([]);
   }
-  // The four omens, as cards under the sky; a picked one is marked, and whether an omen holds is
-  // written on it once the archive has read it, or once the puzzle is solved.
-  const top = f.y + f.sh + h * 0.03;
+  // Five claims sit in two readable columns; the last uses the width of both.
+  const top = f.y + f.sh + h * 0.02;
   const gap = w * 0.015;
-  const cw = (f.sw - gap * 3) / 4;
-  const ch = h - top - h * 0.03;
+  const rowWidth = w * 0.9;
+  const half = (rowWidth - gap) / 2;
+  const rowHeight = (h - top - h * 0.025 - gap * 2) / 3;
   p.claims.forEach((id, i) => {
-    const x = f.x + i * (cw + gap);
+    const x = (w - rowWidth) / 2 + (i % 2) * (half + gap);
+    const y = top + Math.floor(i / 2) * (rowHeight + gap);
+    const cw = i === 4 ? rowWidth : half;
+    const ch = rowHeight;
     const picked = s.picked.includes(i);
     const settled = s.reveal || (s.read || []).includes(i);
     const holds = settled && p.truth.includes(i);
     g.fillStyle = c.alpha(col.bg, 0.6);
     g.beginPath();
-    g.roundRect(x, top, cw, ch, fs * 0.5);
+    g.roundRect(x, y, cw, ch, fs * 0.5);
     g.fill();
     // A picked omen is sealed: a wash of the accent develops over its card by area, through the
     // matte of this pick's own roll, in treads -- and leaves the same way when it is unpicked.
@@ -698,9 +721,9 @@ function omensScene(g, w, h, c, p, s, variant) {
     if (own && (picked || since < 1)) {
       g.save();
       g.beginPath();
-      g.roundRect(x, top, cw, ch, fs * 0.5);
+      g.roundRect(x, y, cw, ch, fs * 0.5);
       g.clip();
-      own.paint(g, x, top, cw, ch, picked ? cover : 1 - cover, c.alpha(col.accent2, 0.16));
+      own.paint(g, x, y, cw, ch, picked ? cover : 1 - cover, c.alpha(col.accent2, 0.16));
       g.restore();
     }
     // The border thickens and colours by the same stair as the wash, never a cut.
@@ -712,9 +735,14 @@ function omensScene(g, w, h, c, p, s, variant) {
     const saidAt = s.reveal ? s.revealAt : s.readAt ? s.readAt[i] : null;
     const said = saidAt == null || !s.t ? 1 : Math.min(1, (s.t - saidAt) / 1.0);
     const spoken = settled && (own ? own.at(0x5a1d + i).flicker(said) : 1);
-    write(g, 'omen ' + (i + 1) + (spoken ? (holds ? ': holds' : ': does not hold') : ''), x + fs * 0.6, top + fs, fs * 0.85, spoken ? (holds ? col.accent2 : c.alpha(col.muted, 0.9)) : col.accent2, 'left', 700);
-    const lines = wrap(g, CLAIMS[id].text, fs * 0.9, cw - fs * 1.2);
-    lines.slice(0, 4).forEach((line, k) => write(g, line, x + fs * 0.6, top + fs * 2.3 + k * fs * 1.2, fs * 0.9, c.alpha(col.fg, 0.9), 'left', 500));
+    write(g, 'omen ' + (i + 1), x + fs * 0.6, y + fs, fs * 0.85, col.accent2, 'left', 700);
+    if (ch < fs * 5) {
+      if (spoken || picked) write(g, spoken ? (holds ? 'holds' : 'does not hold') : 'picked', x + cw / 2, y + ch * 0.7, fs * 0.8, spoken && holds ? col.accent2 : c.alpha(col.fg, 0.9), 'center', 500);
+    } else {
+      if (spoken) write(g, holds ? 'holds' : 'does not hold', x + cw - fs * 0.6, y + fs, fs * 0.75, holds ? col.accent2 : c.alpha(col.muted, 0.9), 'right', 500);
+      const lines = wrap(g, CLAIMS[id].text, fs * 0.9, cw - fs * 1.2);
+      lines.slice(0, 3).forEach((line, k) => write(g, line, x + fs * 0.6, y + fs * 2.2 + k * fs * 1.15, fs * 0.9, c.alpha(col.fg, 0.9), 'left', 500));
+    }
   });
 }
 
@@ -724,34 +752,35 @@ function omensPreview(g, w, h, env, p) {
 
 function omensPiece(env, p) {
   const helps = asked(env).helps;
+  const brightest = byBrightness(p.pts)[0];
+  const quadrant = (brightest.y < RING.y ? 'north' : 'south') + (brightest.x < RING.x ? 'west' : 'east');
+  const positions = p.pts.map((q, i) => (i + 1) + ' (' + Math.round(q.x * 100) + ', ' + Math.round(q.y * 100) + ', ' + q.b + ')').join('; ');
   const s = { picked: [], reveal: false, marked: false, read: [], t: 0 };
   const draw = (c) => omensScene(c.g, c.w, c.h, c, p, s, env.variant);
   return {
     title: omensTitle(p),
-    brief: 'A reading of the sky. The archive drew this sky at midnight and wrote four omens against it. Each omen is a claim about the stars as drawn: the ring, the meridian through its centre, the horizon band and the hand\'s width marked at the corner are the measure, and a larger star is a brighter one. Some of the omens hold; the rest do not.',
-    goal: 'Pick every omen that holds, and none that does not.',
-    aspect: '4 / 3',
+    brief: 'Five claims are written beneath this square sky; exactly two hold. The dashed lines divide east from west and north from south. The ring is centred at (50, 44) with radius 20 on a 0-100 grid; the shaded horizon band begins at 80 south. The bar measures 22 units in any direction, and larger stars are brighter. For a text reading, each star is listed as (east, south, brightness): ' + positions + '.',
+    goal: 'Pick the two omens that hold and mark the quadrant containing the brightest star.',
+    aspect: '3 / 4',
     checkLabel: 'read the omens',
     steps: [
-      { id: 'hold', ask: 'the omens that hold', kind: 'pick', items: p.claims.map((id, i) => ({ label: 'omen ' + (i + 1), value: i })) },
-      { id: 'second', ask: 'the sky read for you: the brightest ringed, then the omens', kind: 'press', count: 1, label: 'read the sky to me', optional: true }
+      { id: 'hold', ask: 'which two omens hold', kind: 'pick', count: 2, items: p.claims.map((id, i) => ({ label: 'omen ' + (i + 1) + ': ' + CLAIMS[id].text, value: i })) },
+      { id: 'quadrant', ask: 'where is the brightest star', kind: 'choice', options: [
+        { label: 'northwest', value: 'northwest' }, { label: 'northeast', value: 'northeast' },
+        { label: 'southwest', value: 'southwest' }, { label: 'southeast', value: 'southeast' }
+      ] },
+      { id: 'second', ask: 'a closer look at the two brightest, then an omen', kind: 'press', count: 1, label: 'read the sky to me', optional: true }
     ],
-    solution: { hold: p.truth.slice() },
+    solution: { hold: p.truth.slice(), quadrant },
     check(c) {
-      const picked = Array.isArray(c.value('hold')) ? c.value('hold').map(Number) : [];
+      const picked = Array.isArray(c.value('hold')) ? [...new Set(c.value('hold').map(Number))] : [];
       const right = picked.filter((i) => p.truth.includes(i)).length;
-      const wrong = picked.length - right;
-      const missed = p.truth.length - right;
-      if (!wrong && !missed) return { solved: true, say: WORDS[p.truth.length] + ' of the four hold, and those are the ones' };
-      const parts = [];
-      if (!picked.length) parts.push('nothing is picked');
-      else parts.push((right === 0 ? 'none' : WORDS[right]) + ' of the ' + (picked.length === 1 ? 'one' : WORDS[picked.length]) + ' picked ' + (right === 1 ? 'holds' : 'hold'));
-      if (wrong) parts.push(WORDS[wrong] + (wrong === 1 ? ' does not' : ' do not'));
-      if (missed) parts.push(WORDS[missed] + ' that ' + (missed === 1 ? 'holds is' : 'hold are') + ' missing');
-      return { solved: false, say: parts.join('; ') };
+      const placed = c.value('quadrant') === quadrant;
+      if (picked.length === 2 && right === 2 && placed) return { solved: true, say: 'both picked omens hold; the brightest star is in the marked quadrant' };
+      return { solved: false, say: (right === 0 ? 'none' : WORDS[right]) + ' of your ' + (picked.length === 1 ? 'one' : WORDS[picked.length] || String(picked.length)) + ' picked omens hold; the brightest star is ' + (placed ? 'in' : 'outside') + ' the marked quadrant' };
     },
     start(c) {
-      c.status(WORDS[p.pts.length] + ' stars, four omens');
+      c.status(WORDS[p.pts.length] + ' stars, five omens; two hold');
       draw(c);
     },
     apply(id, value, c) {
@@ -769,6 +798,11 @@ function omensPiece(env, p) {
           }
         });
         c.status(s.picked.length ? 'picked: ' + s.picked.map((i) => 'omen ' + (i + 1)).join(', ') : 'nothing picked yet');
+      }
+      if (id === 'quadrant') {
+        s.quadrant = value;
+        s.quadrantAt = s.t;
+        c.status('marked the ' + value + ' quadrant for the brightest star');
       }
       if (id === 'second') {
         // One knob, spent down the difficulty's allowance: the first turn of it rings the two
@@ -805,7 +839,7 @@ function omensPiece(env, p) {
       s.reveal = true;
       s.revealAt = s.t;
       const line = READINGS[(p.truth.length * 3 + p.truth[0] + p.pts.length) % READINGS.length];
-      c.status('the omens that hold: ' + p.truth.map((i) => 'omen ' + (i + 1)).join(', ') + '. the archive reads: ' + line);
+      c.status('the omens that hold: ' + p.truth.map((i) => 'omen ' + (i + 1)).join(', ') + '; the brightest star is ' + quadrant + '. the archive reads: ' + line);
       draw(c);
     }
   };
@@ -865,8 +899,8 @@ export default {
     return {
       title: omensTitle(p),
       quote: CLAIMS[p.claims[0]].text,
-      text: 'One of four omens written against a sky of ' + WORDS[p.pts.length] + ' stars. Some hold; pick the ones that do.',
-      aspect: '4 / 3',
+      text: 'Five claims against a sky of ' + WORDS[p.pts.length] + ' stars. Pick the two that hold and locate the brightest star.',
+      aspect: '3 / 4',
       paint: (g, w, h, cardEnv) => omensPreview(g, w, h, cardEnv, p),
       of: p
     };
