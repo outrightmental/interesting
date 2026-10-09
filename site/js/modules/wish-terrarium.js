@@ -364,6 +364,14 @@ function wet(g, env, rite, x, y, rx, ry, k) {
     (px, py) => ((px - x) * (px - x)) / (rx * rx) + ((py - y) * (py - y)) / (ry * ry) <= 1, 16);
 }
 
+// The stroke scale and the small type size everything under the glass is drawn at.
+function metrics(w, h, v) {
+  return {
+    k: clamp(Math.min(w, h) / 340, 0.6, 1.8) * v.scale,
+    small: Math.max(8, Math.min(12, Math.round(Math.min(w, h) * 0.032)))
+  };
+}
+
 function shuffled(env, n) {
   const rest = [];
   for (let i = 0; i < n; i++) rest.push(i);
@@ -459,8 +467,7 @@ function drawWater(g, w, h, env, plan, s, variant) {
   const reduced = !!env.reduced;
   const n = plan.n;
   const geo = waterGeometry(w, h, n);
-  const k = clamp(Math.min(w, h) / 340, 0.6, 1.8) * v.scale;
-  const small = Math.max(8, Math.min(12, Math.round(Math.min(w, h) * 0.032)));
+  const { k, small } = metrics(w, h, v);
   const tiny = Math.max(7, Math.min(11, Math.round(geo.cell * 0.16)));
   const doneP = s.doneAt >= 0 ? came(s, s.doneAt, 2.4, reduced) : 0;
   glass(g, w, h, env, v, !!plan.lamp, s.t, rite);
@@ -716,8 +723,7 @@ function drawAge(g, w, h, env, plan, s, variant) {
   const rite = riteOf(env);
   const reduced = !!env.reduced;
   const geo = ageGeometry(w, h);
-  const k = clamp(Math.min(w, h) / 340, 0.6, 1.8) * v.scale;
-  const small = Math.max(8, Math.min(12, Math.round(Math.min(w, h) * 0.032)));
+  const { k, small } = metrics(w, h, v);
   const a = ages(plan);
   const doneP = s.doneAt >= 0 ? came(s, s.doneAt, 2.4, reduced) : 0;
   glass(g, w, h, env, v, true, s.t, rite);
