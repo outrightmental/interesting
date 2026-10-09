@@ -1,4 +1,5 @@
-/* The mood flow asks a sideways question before suggesting a world. The threshold hosts the question in its stage, the persona's ask leads there from every other page, and the mood atlas shows where each reading leads. Readings live in the shared state document. */
+/* The mood flow asks a sideways question before suggesting a world. The threshold hosts the question in its stage, the persona's ask leads there from every other page, and the mood atlas shows where each reading leads. Readings live in the shared state document.
+   Each host owns one live question: replacing it invalidates delayed handoffs and releases any borrowed focusability. */
 (function () {
   'use strict';
 
@@ -572,6 +573,7 @@
   // clock. A node restored before the end (restore) keeps what it has: the callback of a leave
   // that was undone never runs.
   function unmake(node, fn) {
+    if (node && node.unmakeToken) restore(node);
     var wait = beat('medium');
     if (!node || !wait || !node.classList) { if (fn) fn(); return 0; }
     var m = engine();
@@ -589,9 +591,26 @@
     if (node.style) node.style.pointerEvents = 'none';
     if (node.tagName === 'BUTTON') node.tabIndex = -1;
     var once = false;
-    function go() { if (once) return; once = true; if (node.unmakeToken !== token) return; if (fn) fn(); }
-    node.addEventListener('animationend', function (ev) { if (ev.target === node && !ev.pseudoElement) go(); });
-    window.setTimeout(go, length + wait + 240);
+    var timer = 0;
+    function cancel() {
+      once = true;
+      if (timer && typeof window.clearTimeout === 'function') window.clearTimeout(timer);
+      timer = 0;
+      if (typeof node.removeEventListener === 'function') node.removeEventListener('animationend', ended);
+      token.cancel = null;
+    }
+    function go() {
+      if (once) return;
+      cancel();
+      if (node.unmakeToken !== token) return;
+      if (fn) fn();
+    }
+    function ended(ev) {
+      if (ev.target === node && !ev.pseudoElement) go();
+    }
+    token.cancel = cancel;
+    node.addEventListener('animationend', ended);
+    timer = window.setTimeout(go, length + wait + 240);
     return length;
   }
   // A thing that was leaving, kept after all (a meter written again, an order that takes a new
@@ -599,6 +618,7 @@
   function restore(node) {
     if (!node || !node.classList) return;
     var token = node.unmakeToken;
+    if (token && typeof token.cancel === 'function') token.cancel();
     node.unmakeToken = null;
     node.classList.remove('is-leaving');
     if (!token || token.hid) node.removeAttribute('aria-hidden');
@@ -938,6 +958,7 @@
   function blend(a, b, t) {
     return [0, 1, 2].map(function (i) { return Math.round(a[i] + (b[i] - a[i]) * t); });
   }
+  var mounts = new WeakMap();
   function mount(host, options) {
     if (!host) return null;
     var opts = options || {};
@@ -945,6 +966,18 @@
     var requested = opts.probe || (selector && selector.value);
     var probe = requested ? probeById(requested) : nextProbe();
     if (!probe) return null;
+    var previous = mounts.get(host);
+    if (previous) previous();
+    var active = true;
+    var lentFocus = false;
+    function releaseFocus() {
+      if (lentFocus && host.getAttribute('tabindex') === '-1') host.removeAttribute('tabindex');
+      lentFocus = false;
+    }
+    mounts.set(host, function () {
+      active = false;
+      releaseFocus();
+    });
     if (selector) selector.value = '';
     noteProbe(probe.probe);
     // A question already up is set aside, not deleted: its frame stays as a ghost that descends
@@ -993,19 +1026,23 @@
     var skip = el('button', 'probe-option probe-skip', 'skip the question');
     skip.type = 'button';
     var answered = false;
+    function current() {
+      return active && frame.parentNode === host;
+    }
     skip.addEventListener('click', function () {
-      if (answered) return;
+      if (answered || !current()) return;
       answered = true;
       // Focus leaves the frame before the frame is hidden from assistive tech: it rests on the
       // host (focusable for the length of the rite) until whoever asked moves it on.
-      var lent = !host.hasAttribute('tabindex');
-      if (lent) host.setAttribute('tabindex', '-1');
+      lentFocus = !host.hasAttribute('tabindex');
+      if (lentFocus) host.setAttribute('tabindex', '-1');
       try { host.focus({ preventScroll: true }); } catch (e) { try { host.focus(); } catch (e2) { /* it stays */ } }
       // The question descends the ladder before it goes; only then is the host cleared.
       unmake(frame, function () {
+        if (!current()) { releaseFocus(); return; }
         if (frame.parentNode === host) host.removeChild(frame);
         if (!host.firstElementChild) host.textContent = '';
-        if (lent) host.removeAttribute('tabindex');
+        releaseFocus();
         if (typeof opts.onSkip === 'function') opts.onSkip(probe);
       });
     });
@@ -1019,10 +1056,11 @@
     }
     say(ask, probe.ask, 0.3);
     function finish() {
-      if (answered) return;
+      if (answered || !current()) return;
       answered = true;
       var skipLength = unmake(skip, function () { skip.hidden = true; });
       var reading = record(answer);
+      if (!current()) return;
       // The trace's last line was heard once already, so the live line is let go; its glass twin
       // and the meter go down the ladder rather than being wiped.
       trace.textContent = '';
@@ -1037,7 +1075,7 @@
       if (m && typeof m.composeOn === 'function' && wait) { try { m.composeOn(frame, 'seal', 'probe-read', wait); } catch (e) { /* the stylesheet's */ } }
       host.setAttribute('data-probe-state', 'read');
       var handed = false;
-      function hand() { if (handed) return; handed = true; if (typeof opts.onAnswer === 'function') opts.onAnswer(reading, probe); }
+      function hand() { if (handed || !current()) return; handed = true; if (typeof opts.onAnswer === 'function') opts.onAnswer(reading, probe); }
       if (!wait) { hand(); return; }
       // Handed on when the seal has climbed -- the rite's own end on the frame's ::before, or its
       // rolled length on the clock -- and not before the skip has gone down the ladder.
@@ -1277,10 +1315,7 @@
       var button = buttons[index];
       if (!button) return;
       button.removeAttribute('data-set');
-      button.classList.remove('is-leaving');
-      button.removeAttribute('aria-hidden');
-      button.style.pointerEvents = '';
-      button.tabIndex = 0;
+      restore(button);
       shuffle(function () {
         var next = null;
         for (var i = index + 1; i < buttons.length && !next; i++) {
