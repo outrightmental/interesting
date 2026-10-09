@@ -347,11 +347,69 @@
     return { n: n, cx: cx, cy: cy, sx: Math.sqrt(sx / n), sy: Math.sqrt(sy / n),
       spread: spread / n, code: code };
   }
+  /* Figures: a few arrangements have names of their own, found by moving stars into them -- two
+     stars close together, three or more in a straight line, five or more in a ring, four or more
+     mirrored left to right. Measured as the field is drawn (twice as wide as it is tall), so a
+     ring on screen is a ring here. Pure arithmetic, like skyName. */
+  function figureOf(list) {
+    var t = skyTraits(list);
+    if (!t || t.n < 2) return '';
+    var i;
+    if (t.n === 2) {
+      var gx = (list[0].x - list[1].x) * 2;
+      var gy = list[0].y - list[1].y;
+      return gx * gx + gy * gy < 100 ? 'the twins' : '';
+    }
+    var xx = 0;
+    var yy = 0;
+    var xy = 0;
+    var reach = [];
+    var sum = 0;
+    for (i = 0; i < t.n; i++) {
+      var dx = (list[i].x - t.cx) * 2;
+      var dy = list[i].y - t.cy;
+      xx += dx * dx;
+      yy += dy * dy;
+      xy += dx * dy;
+      var r = Math.sqrt(dx * dx + dy * dy);
+      reach.push(r);
+      sum += r;
+    }
+    var half = (xx + yy) / 2;
+    var root = Math.sqrt(Math.max(0, (xx - yy) * (xx - yy) / 4 + xy * xy));
+    var major = half + root;
+    var minor = half - root;
+    if (major > 100 * t.n && minor < major * 0.004) return t.n === 3 ? 'the belt' : 'the spear';
+    if (t.n >= 5) {
+      var mean = sum / t.n;
+      var worst = 0;
+      for (i = 0; i < t.n; i++) worst = Math.max(worst, Math.abs(reach[i] - mean));
+      if (mean > 12 && worst < mean * 0.14) return 'the halo';
+    }
+    if (t.n >= 4) {
+      var off = 0;
+      var mirrored = true;
+      for (i = 0; i < t.n && mirrored; i++) {
+        var mx = 2 * t.cx - list[i].x;
+        if (Math.abs(list[i].x - t.cx) * 2 > 6) off += 1;
+        var found = false;
+        for (var j = 0; j < t.n && !found; j++) {
+          if (Math.abs((list[j].x - mx) * 2) < 6 && Math.abs(list[j].y - list[i].y) < 4) found = true;
+        }
+        mirrored = found;
+      }
+      if (mirrored && off >= 2) return 'the moth';
+    }
+    return '';
+  }
+  var lastFigure = figureOf(stars());
   function skyName(value) {
     var list = clean(value === undefined ? stars() : value);
     var t = skyTraits(list);
     if (!t) return '';
     if (t.n === 1) return 'the ' + SKY_NOUN.one[t.code % SKY_NOUN.one.length];
+    var figure = figureOf(list);
+    if (figure) return figure;
     var adj = t.cy < 40 ? SKY_ADJ.high : t.cy > 60 ? SKY_ADJ.low
       : t.cx < 40 ? SKY_ADJ.west : t.cx > 60 ? SKY_ADJ.east : SKY_ADJ.mid;
     var noun = t.n === 2 ? SKY_NOUN.two
@@ -370,7 +428,8 @@
     var ns = t.cy < 40 ? 'north' : t.cy > 60 ? 'south' : '';
     var ew = t.cx < 40 ? 'west' : t.cx > 60 ? 'east' : '';
     var where = ns && ew ? ns + '-' + ew : (ns || ew);
-    return count + ', ' + knit + (where ? ', keeping to the ' + where : ', holding the middle of the sky');
+    return count + ', ' + knit + (where ? ', keeping to the ' + where : ', holding the middle of the sky')
+      + (figureOf(list) ? ', a figure with a name of its own' : '');
   }
   function threadOf(list, start) {
     if (!list.length) return [];
@@ -442,12 +501,17 @@
     if (store) kept = list.length ? store.set(SKY, list) : store.remove(SKY);
     // Placed, moved, seeded, removed or cleared: the constellation was set, and if it was set in
     // the sheet it is handed over when the sheet closes (the hand-off, below).
+    var figure = figureOf(list);
     if (sheet && sheet.host.open) {
       noteSet('sky', sheet.field);
       // A star landing or going strikes the sky: the ring clicks one tooth and the lines flicker
-      // (_sass/_persona.scss, is-struck); a star moved or worded only redraws.
-      if (how !== 'moved' && how !== 'worded') rite(sheet.field, 'struck', riteMs('medium', 340) + 100);
+      // (_sass/_persona.scss, is-struck); a star moved or worded only redraws -- unless the move
+      // has just made a figure, which is struck like a star landing.
+      if ((how !== 'moved' && how !== 'worded') || (figure && figure !== lastFigure)) {
+        rite(sheet.field, 'struck', riteMs('medium', 340) + 100);
+      }
     }
+    lastFigure = figure;
     announce(list, how || 'placed', kept);
     return kept;
   }
@@ -1111,6 +1175,7 @@
     if (!sheet || !sheet.name) return;
     var list = serialize();
     var named = skyName(list);
+    sheet.name.setAttribute('data-figure', figureOf(list) ? 'true' : 'false');
     if (named) {
       show(sheet.name);
       say(sheet.name, '✦ ' + named + ' — ' + skyRead(list));
@@ -1152,8 +1217,10 @@
     return path;
   }
   function namedLine() {
-    var named = skyName(serialize());
-    return named ? ' Your sky reads as ' + named + ' now.' : '';
+    var list = serialize();
+    var named = skyName(list);
+    if (!named) return '';
+    return figureOf(list) ? ' A figure with a name of its own: ' + named + '.' : ' Your sky reads as ' + named + ' now.';
   }
   function paintField(pass) {
     if (!sheet || !sheet.field || !sheet.canvas) return;

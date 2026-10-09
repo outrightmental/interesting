@@ -1460,6 +1460,13 @@
   @include type.scale(title-small);
 }
 
+// A figure found -- a shape with a name of its own (js/persona.js, figureOf) -- is one of the
+// rite's words, so its name is set in the serif and lit in the primary.
+.persona-sky-name[data-figure='true'] {
+  color: var(--md-sys-color-primary);
+  @include type.rite;
+}
+
 .persona-thread {
   margin: 0;
   padding: 0.8rem 1rem;
