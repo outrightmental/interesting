@@ -1388,6 +1388,79 @@
     }
   }
 
+  /* ---- the visitor's own sky, behind the options -------------------------------------------- */
+
+  /* What there is to discover in the space between the options: the stars a visitor has placed
+     in their persona glimmer faintly behind the constellation while it is up, joined by the same
+     hairline threads the persona draws between neighbours -- so pressing the logo opens the menu
+     inside their own sky, and a sky changed in the sheet is the sky the next press opens onto.
+     Decoration and nothing more: under no pointer, hidden from a screen reader, below every ray
+     and chip (_sass/_nav.scss), and a visitor with no stars yet keeps the plain dark. Guarded
+     throughout and wrapped whole: a browser without the persona, or without the DOM to draw in,
+     simply has no motes and the constellation is exactly what it was. */
+  function castDust() {
+    try {
+      if (!nav || !nav.sky) return;
+      if (!nav.dust) {
+        if (typeof document.createElement !== 'function' || typeof nav.sky.appendChild !== 'function') return;
+        nav.dust = el('div', 'sparknav-dust');
+        nav.dust.setAttribute('aria-hidden', 'true');
+        nav.sky.appendChild(nav.dust);
+      }
+      nav.dust.textContent = '';
+      var stars = persona && typeof persona.stars === 'function' ? persona.stars() : null;
+      if (!stars || !stars.length) return;
+      var vw = window.innerWidth || 1024;
+      var vh = window.innerHeight || 700;
+      var points = [];
+      for (var i = 0; i < stars.length && points.length < 28; i++) {
+        var s = stars[i];
+        if (!s || typeof s.x !== 'number' || !isFinite(s.x) || typeof s.y !== 'number' || !isFinite(s.y)) continue;
+        points.push({
+          x: Math.min(98, Math.max(2, s.x)) / 100 * vw,
+          y: Math.min(96, Math.max(4, s.y)) / 100 * vh
+        });
+      }
+      // Each star reaches a thread toward its nearest neighbour, once per pair and only nearby,
+      // which is what makes a scatter of motes read as the visitor's constellation.
+      var reach = Math.min(vw, vh) * 0.36;
+      var paired = {};
+      for (i = 0; i < points.length; i++) {
+        var near = -1;
+        var best = reach * reach;
+        for (var j = 0; j < points.length; j++) {
+          if (i === j) continue;
+          var dx = points[j].x - points[i].x;
+          var dy = points[j].y - points[i].y;
+          var d2 = dx * dx + dy * dy;
+          if (d2 < best) { best = d2; near = j; }
+        }
+        if (near === -1) continue;
+        var key = Math.min(i, near) + ':' + Math.max(i, near);
+        if (paired[key]) continue;
+        paired[key] = true;
+        var thread = el('span', 'sparknav-thread');
+        thread.style.setProperty('--sx', points[i].x.toFixed(1) + 'px');
+        thread.style.setProperty('--sy', points[i].y.toFixed(1) + 'px');
+        thread.style.setProperty('--tlen', Math.round(Math.sqrt(best)) + 'px');
+        thread.style.setProperty('--ta', (Math.atan2(points[near].y - points[i].y, points[near].x - points[i].x) * 180 / Math.PI).toFixed(2) + 'deg');
+        thread.style.setProperty('--d', Math.round(260 + Math.random() * 520) + 'ms');
+        nav.dust.appendChild(thread);
+      }
+      for (i = 0; i < points.length; i++) {
+        var mote = el('span', 'sparknav-mote');
+        mote.style.setProperty('--sx', points[i].x.toFixed(1) + 'px');
+        mote.style.setProperty('--sy', points[i].y.toFixed(1) + 'px');
+        mote.style.setProperty('--d', Math.round(Math.random() * 900) + 'ms');
+        mote.style.setProperty('--tw', Math.round(2600 + Math.random() * 2800) + 'ms');
+        mote.style.setProperty('--ms', (0.7 + Math.random() * 0.8).toFixed(2));
+        nav.dust.appendChild(mote);
+      }
+    } catch (e) {
+      /* a browser without the room to draw a sky keeps the plain constellation */
+    }
+  }
+
   function branch(on) {
     nav.logo.setAttribute('aria-expanded', on ? 'true' : 'false');
     if (on) {
@@ -1395,6 +1468,7 @@
       shape();
       deal();
       cast();
+      castDust();
       navBox.up();
       // The branch starts over on every press: a browser that keeps a closed <details> rendered
       // would otherwise have run the animation once and left it there.

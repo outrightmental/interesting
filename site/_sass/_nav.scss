@@ -1441,6 +1441,167 @@ html[data-nav='live'] {
   }
 }
 
+// ---- the visitor's own sky -----------------------------------------------------------------
+// What there is to discover between the options: the stars a visitor has placed in their persona
+// glimmer faintly behind the constellation while it is up, joined by the same hairline threads
+// the persona draws between neighbours, so the menu opens inside their own sky. js/site.js casts
+// them on every press (castDust) from the persona's stars; a visitor with no stars yet keeps the
+// plain dark, and nothing here is pressable or read aloud. Each mote twinkles by hard cuts along
+// a curve rolled for the name (--ease-mote-twinkle, re-rolled at every turn of the loop), each
+// thread is drawn out in treads from the roll's --ray-from, and the whole sky goes down in cuts
+// with the chips when the constellation is unmade. The dust is absolute inside the fixed mark --
+// never a fixed layer of its own -- and only the live scatter shows it; the cascade keeps its
+// plain list.
+.sparknav-dust {
+  display: none;
+}
+
+html[data-nav='live'] .sparknav-dust {
+  display: block;
+  position: absolute;
+  top: calc(-1 * var(--nav-inset));
+  left: calc(-1 * var(--nav-inset));
+  width: 100vw;
+  height: 100vh;
+  z-index: 1; // the sky, not the options: beneath every ray (2), chip (3) and the logo (4)
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.sparknav-mote {
+  position: absolute;
+  top: var(--sy, 50%);
+  left: var(--sx, 50%);
+  width: 5px;
+  height: 5px;
+  margin: -2.5px 0 0 -2.5px;
+  border-radius: 50%;
+  background: var(--md-sys-color-tertiary);
+  box-shadow: 0 0 9px color-mix(in oklab, var(--md-sys-color-tertiary) 55%, transparent);
+  opacity: 0.42;
+  transform: scale(var(--ms, 1));
+}
+
+.sparknav-thread {
+  position: absolute;
+  top: var(--sy, 50%);
+  left: var(--sx, 50%);
+  width: var(--tlen, 0);
+  height: 1px;
+  transform-origin: 0 50%;
+  transform: rotate(var(--ta, 0deg));
+  background: linear-gradient(
+    90deg,
+    color-mix(in oklab, var(--md-sys-color-tertiary) 32%, transparent),
+    color-mix(in oklab, var(--md-sys-color-tertiary) 10%, transparent)
+  );
+  opacity: 0.35;
+}
+
+// The motes come out one by one on their own delays and keep twinkling in cuts while the
+// constellation stands; the threads are drawn out in treads half a beat behind them.
+html[data-nav='live'] .is-branching .sparknav-mote {
+  animation: mote-twinkle var(--tw, var(--motion-slow, 1200ms)) var(--ease-mote-twinkle, var(--ease-flicker)) var(--d, 0ms) infinite backwards;
+}
+
+html[data-nav='live'] .is-branching .sparknav-thread {
+  animation: thread-cast var(--motion-thread-cast, var(--motion-long)) var(--ease-thread-cast, var(--ease-arrive)) var(--d, 0ms) both;
+}
+
+html[data-nav='live'] .is-unmaking .sparknav-mote,
+html[data-nav='live'] .is-unmaking .sparknav-thread {
+  animation: mote-out var(--motion-mote-out, var(--motion-short)) var(--ease-mote-out, var(--ease-leave)) both;
+}
+
+@keyframes mote-twinkle {
+  0%, 7.9% {
+    opacity: 0;
+    transform: scale(calc(var(--ms, 1) * 0.6));
+  }
+
+  8%, 33.9% {
+    opacity: 0.45;
+    transform: scale(var(--ms, 1));
+  }
+
+  34%, 40.9% {
+    opacity: 0.18;
+    transform: scale(calc(var(--ms, 1) * 0.8));
+  }
+
+  41%, 69.9% {
+    opacity: 0.5;
+    transform: scale(calc(var(--ms, 1) * 1.15));
+  }
+
+  70%, 81.9% {
+    opacity: 0.28;
+    transform: scale(var(--ms, 1));
+  }
+
+  82%, 100% {
+    opacity: 0.45;
+    transform: scale(var(--ms, 1));
+  }
+}
+
+@keyframes thread-cast {
+  0%, 24.9% {
+    opacity: 0;
+    transform: rotate(var(--ta, 0deg)) scaleX(var(--ray-from, 0.2));
+  }
+
+  25%, 49.9% {
+    opacity: 0.35;
+    transform: rotate(var(--ta, 0deg)) scaleX(calc(var(--ray-from, 0.2) + 0.25));
+  }
+
+  50%, 63.9% {
+    opacity: 0.2;
+    transform: rotate(var(--ta, 0deg)) scaleX(calc(var(--ray-from, 0.2) + 0.15));
+  }
+
+  64%, 83.9% {
+    opacity: 0.35;
+    transform: rotate(var(--ta, 0deg)) scaleX(0.9);
+  }
+
+  84%, 100% {
+    opacity: 0.35;
+    transform: rotate(var(--ta, 0deg)) scaleX(1);
+  }
+}
+
+@keyframes mote-out {
+  0%, 39.9% {
+    opacity: 0.4;
+  }
+
+  40%, 69.9% {
+    opacity: 0.12;
+  }
+
+  70%, 100% {
+    opacity: 0;
+  }
+}
+
+// Less motion for the visitor's sky: the stars are simply there while the constellation is, and
+// go with it.
+@media (prefers-reduced-motion: reduce) {
+  html[data-nav='live'] .is-branching .sparknav-mote,
+  html[data-nav='live'] .is-branching .sparknav-thread,
+  html[data-nav='live'] .is-unmaking .sparknav-mote,
+  html[data-nav='live'] .is-unmaking .sparknav-thread {
+    animation: none;
+  }
+
+  html[data-nav='live'] .is-unmaking .sparknav-mote,
+  html[data-nav='live'] .is-unmaking .sparknav-thread {
+    opacity: 0;
+  }
+}
+
 // Less motion: the name is there or it is not, the constellation arrives all at once instead of
 // branching and goes all at once instead of unmaking (js/site.js closes it at once), every state
 // is simply there, and nothing climbs, stamps, ratchets or seals. Each rule below is written at
