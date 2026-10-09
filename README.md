@@ -929,7 +929,38 @@ code, and true of the site as committed.
   brush's swoop). A restless world stutters and snaps; a tender one hesitates and drifts; the
   curious one steps. The engine reads the three off `:root` on every full roll, so a movement is
   customised twice over — by the mood of what is on the screen, and by the roll.
-- **The registers.** REGISTERS_PLACEHOLDER
+- **The registers.** [`site/_sass/_type.scss`](site/_sass/_type.scss) declares them (`$registers`),
+  and every one is a *setting* of the vendored face rather than the name of a face a machine may
+  or may not have: Fraunces at an optical size (`opsz` 9 to 144), a weight (`wght` 100 to 900), a
+  softness (`SOFT` 0 to 100) and with or without its quirky alternates (`WONK`), roman or italic,
+  with its own case, tracking, word-spacing, leading, rule, ornaments and raised cap, over the
+  system sans the instructions keep. *votive*, the home register (roman, opsz 72, a middle
+  weight, a bullet before the words); *hush* (the italic, light and wholly soft, forced
+  lowercase, under a short hairline); *sibyl* (the italic with the alternates on, between a
+  pilcrow and a lozenge, a dotted rule, a glow, a two-line cap); *lapidary* (the display master,
+  hairline-thin and hard, uppercase and tracked out, under a double rule); *monastic* (the
+  book's setting: text size, old-style figures, a section mark, a hairline rule, a raised cap);
+  *astral* (medium and tight, lining figures, a ± after); *folio* (the text master, soft, with a
+  dotted rule and a cap); *cabinet* (the one register not on Fraunces: a typewriter's slab,
+  uppercase and spaced, under a dashed rule, over a plain interface sans, stepping); *brass*
+  (small capitals spaced wide and hard-edged, between middle dots, a short double rule); *storm*
+  (black and tight at display size); *squall* (black, slanted, the alternates on, quick); *wire*
+  (the tiny optical master blown up, heavy and low-contrast, wound tight, the quickest); *vigil*
+  (light and soft in small capitals, spaced, held still, with a halo); and *meter* (counting:
+  tabular figures, the alternates on, a hash before, over a monospaced sans). No two share the
+  same axes, slant, caps and case, which `RealSiteTest` holds, so none can be mistaken for
+  another; every one pairs faces that belong together; and `_mood.scss` maps each of the fifteen
+  moods to one of them (`$registers-of`), written in the same three places as the seeds — the
+  page's world, the reading, the featured piece — and on every card of the feed, so the mosaic
+  shifts register card by card. `type.rite` and the page's own face read the register through
+  custom properties (`--font-rite`, `--font-act`, `--font-mono`, `--rite-weight`, `--rite-opsz`,
+  `--rite-soft`, `--rite-wonk`, `--rite-tracking`, `--rite-words`, `--rite-style`, `--rite-caps`,
+  `--rite-case`, `--rite-leading`, the rule, the ornaments, the cap), with the home register as
+  every fallback; the numeric ones are registered properties, so when the register turns over
+  the axes, the tracking and the word-spacing step to their new values along the stair, and the
+  letterforms themselves are a movement of the rite. `type.rite-dress` draws the register's
+  ornaments and rule on the words that carry a page (its heading, the stage's title), and
+  `type.rite-cap` the raised cap on the first paragraph of a page of prose.
 - **The shift of modality.** When the mood, the world or the featured piece changes on `:root`,
   the engine reads the temperament again, rolls everything to it, and writes `<html data-shifting>`
   for one rolled moment, during which the rite's words — the stage's head, a page's heading, a

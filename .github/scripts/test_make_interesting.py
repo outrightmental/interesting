@@ -7063,9 +7063,10 @@ class RealSiteTest(unittest.TestCase):
             block = types[types.index(f"\n  {register}: ("):]
             block = block[:re.search(r"\n  \)", block).start()]
             with self.subTest(register=register):
-                self.assertRegex(block, r"rite: (\$rite|\([^)]*(serif|monospace)\))")
+                self.assertRegex(block, r"rite: (\$rite|\$typewriter|\([^)]*(serif|monospace)\))")
                 self.assertRegex(block, r"act: (\$sans-stack|\$mono-stack|\([^)]*(sans-serif|monospace)\))")
-                for key in ["weight:", "tracking:", "style:", "caps:", "grain:", "tempo:", "steps:"]:
+                for key in ["weight:", "opsz:", "soft:", "wonk:", "tracking:", "words:", "style:", "caps:", "case:",
+                            "rule:", "before:", "after:", "cap:", "grain:", "tempo:", "steps:"]:
                     self.assertIn(key, block, f"{register} says nothing about its {key[:-1]}")
         built = self.site["css/site.css"]
         for mood in sorted(palettes):
@@ -7073,11 +7074,31 @@ class RealSiteTest(unittest.TestCase):
                 for where in [f":root[data-world={mood}]", f":root[data-featured={mood}]"]:
                     rule = built[built.index(where + "{"):]
                     rule = rule[:rule.index("}")]
-                    for prop in ["--font-rite:", "--font-act:", "--font-mono:", "--rite-weight:",
+                    for prop in ["--font-rite:", "--font-act:", "--font-mono:", "--rite-weight:", "--rite-opsz:",
+                                 "--rite-soft:", "--rite-wonk:", "--rite-before:", "--rite-rule-image:",
                                  "--rite-tracking:", "--motion-grain:", "--motion-tempo:", "--motion-steps:"]:
                         self.assertIn(prop, rule, f"{where} writes no {prop}")
-        # The faces read the register: the rite's mixin and the page's own face both go through it.
+        # The faces read the register: the rite's mixin and the page's own face both go through it,
+        # and the rite's words are set on the vendored face's four axes -- the same four tags in the
+        # same order everywhere, so a change of register is one the stair can step -- with the
+        # numeric dimensions registered so that step really is a stair.
         self.assertIn("font-family: var(--font-rite, #{$rite});", types)
+        self.assertIn("font-variation-settings: 'opsz' var(--rite-opsz, 72), 'wght' var(--rite-weight, 400), 'SOFT' var(--rite-soft, 20), 'WONK' var(--rite-wonk, 0);", types)
+        self.assertIn("@mixin rite-dress", types)
+        self.assertIn("@mixin rite-cap", types)
+        self.assertTrue(types.index("'Fraunces'") < types.index("'Iowan Old Style'"), "the vendored face is not first in the rite's stack")
+        tokens = self.source[f"{mi.SASS_DIR}/_tokens.scss"]
+        for axis in ["--rite-weight", "--rite-opsz", "--rite-soft", "--rite-wonk", "--rite-tracking", "--rite-words"]:
+            with self.subTest(axis=axis):
+                self.assertIn(f"@property {axis} {{", tokens, f"{axis} is not registered, so it cannot step")
+        self.assertIn("@include type.rite-dress;", self.source[f"{mi.SASS_DIR}/_base.scss"])
+        self.assertIn("@include type.rite-dress;", self.source[f"{mi.SASS_DIR}/_stage.scss"])
+        axes = {}
+        for register in sorted(registers):
+            block = types[types.index(f"\n  {register}: ("):]
+            block = block[:re.search(r"\n  \)", block).start()]
+            axes[register] = tuple(re.search(rf"{key}: ([^,]+),", block).group(1) for key in ["weight", "opsz", "soft", "wonk", "style", "caps", "case"])
+        self.assertEqual(len(set(axes.values())), len(axes), "two registers are set alike, and could be mistaken for each other")
         self.assertIn("$sans: var(--font-act, #{$sans-stack});", types)
         self.assertIn("$mono: var(--font-mono, #{$mono-stack});", types)
         self.assertRegex(built, r"html\{[^}]*font-family:var\(--font-act,")
