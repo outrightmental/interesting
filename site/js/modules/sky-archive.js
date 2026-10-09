@@ -677,9 +677,12 @@ function omensScene(g, w, h, c, p, s, variant) {
       own.paint(g, x, y, cw, ch, picked ? cover : 1 - cover, c.alpha(col.accent2, 0.16));
       g.restore();
     }
-    // The border thickens and colours by the same stair as the wash, never a cut.
+    // The border thickens and takes the accent in the same treads as the seal. Its outline is
+    // traced again, because the seal's edge left its own path on the context.
     g.strokeStyle = c.alpha(c.mix(col.muted, col.accent2, edge), 0.4 + 0.55 * edge);
     g.lineWidth = 1 + edge;
+    g.beginPath();
+    g.roundRect(x, y, cw, ch, fs * 0.5);
     g.stroke();
     // The verdict is cut on at one moment of its own roll, after the archive read the omen or
     // the puzzle was solved, and stays.

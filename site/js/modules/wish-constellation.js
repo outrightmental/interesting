@@ -900,9 +900,10 @@ function whichPiece(env, plan) {
 /* ---- the module ----------------------------------------------------------------------------- */
 
 // Which of the two this card is, and its plan, dealt once from the env's seeded stream and kept
-// with that env. Every pass over one card -- the still picture and then every animated frame --
-// asks here, so they are all the same card; dealing per frame instead would re-roll the whole
-// puzzle thirty times a second (issue #92, and js/feed.js on what animate owes a card).
+// with that env. Every pass over one card -- the still picture, the spark and the piece it opens
+// as -- asks here, so they are all the same card; dealing again on a later pass would hand the
+// visitor another puzzle from the one they pressed (issue #92, and js/feed.js on what a card owes
+// its module).
 const dealt = new WeakMap();
 function deal(env) {
   let got = dealt.get(env);

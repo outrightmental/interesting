@@ -855,8 +855,8 @@ function moonsState() {
   };
 }
 
-function moonsPreview(g, w, h, env, p, spin = 0) {
-  moonsScene(g, w, h, env, p, Object.assign(moonsState(), { spin }), dials(env));
+function moonsPreview(g, w, h, env, p) {
+  moonsScene(g, w, h, env, p, moonsState(), dials(env));
 }
 
 function moonsPiece(env, p) {
@@ -1203,16 +1203,15 @@ function deal(env) {
 export default {
   id: 'gravity-well',
   needsSky: false,
+  // The card is a still picture, whichever puzzle it deals: its moons are set going only by the
+  // solving of the puzzle they belong to, the probe flies only when released and the meeting turns
+  // only to a tick that is set, so a card waits for nothing, has no animate, and the feed never
+  // repaints it.
   paint(g, w, h, env) {
     const plan = deal(env);
     if (plan.kind === 'moons') moonsPreview(g, w, h, env, plan);
     else if (plan.kind === 'meeting') meetingPreview(g, w, h, env, plan);
     else slingPreview(g, w, h, env, plan);
-  },
-  animate(g, w, h, env, t) {
-    const plan = deal(env);
-    if (plan.kind !== 'moons' || env.reduced) return false;
-    moonsPreview(g, w, h, env, plan, Math.max(0, t) * 0.5);
   },
   spark(env) {
     const plan = deal(env);
