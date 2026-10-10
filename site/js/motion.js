@@ -123,9 +123,9 @@
 
   Less motion asked for. The stylesheets answer prefers-reduced-motion themselves (every
   transition and animation is turned off there) and this file does the same for the movements it
-  makes: a tween lands on its end at once, a scroll jumps, and the shift is the change without the
-  flicker. The curves are still rolled, because a visitor who turns the setting off mid-visit
-  should find the site moving its own way at once.
+  makes: a tween or stepper lands at its end, a scroll jumps, and the shift changes without the
+  flicker. Both script clocks also honour a preference changed in flight on the next frame.
+  The curves are still rolled, so turning the setting off restores the site's own motion.
 
   A browser without linear(). Older browsers know no piecewise curve, so there the curves are
   rolled as steps(n, jump-...) -- a stair with a rolled number of treads, which is the one
@@ -2403,6 +2403,44 @@
 
     /* ---- the stepper ----------------------------------------------------------------------- */
 
+    // Both script clocks share completion and cancellation. A stepper can emit several treads
+    // in one frame; live() lets it stop between them when a callback cancels the movement.
+    function playback(opts, update, begin) {
+      var total = Math.max(0, Number(opts.ms) || 0);
+      var done = typeof opts.done === 'function' ? opts.done : function () {};
+      var always = !!opts.always;
+      var raf = frameOf();
+      var cancel = cancelOf();
+      var started = now();
+      var handle = null;
+      var running = true;
+      function live() { return running; }
+      function jump() { return !raf || !total || (reduced() && !always); }
+      function frame(tm) {
+        handle = null;
+        if (!running) return;
+        var instant = jump();
+        var p = instant ? 1 : clamp((tm - started) / total, 0, 1);
+        update(p, instant, live);
+        if (!running) return;
+        if (p < 1) handle = raf(frame);
+        else {
+          running = false;
+          done();
+        }
+      }
+      if (jump()) frame(started);
+      else {
+        if (begin) begin();
+        if (running) handle = raf(frame);
+      }
+      return function () {
+        running = false;
+        if (handle !== null && cancel) cancel(handle);
+        handle = null;
+      };
+    }
+
     /* A movement a script makes in treads: `step(k, n)` is called with the tread reached, 0 to n,
        at the moments a stair rolled for this call puts them -- uneven, with a hold here and a slip
        back there where the grain allows -- and never with a fraction in between; then `done()`.
@@ -2410,19 +2448,10 @@
        it. A visitor who asked for less motion gets the last tread at once. */
     function stepper(options) {
       var opts = options || {};
-      var total = Math.max(0, Number(opts.ms) || 0);
       var step = typeof opts.step === 'function' ? opts.step : function () {};
-      var done = typeof opts.done === 'function' ? opts.done : function () {};
-      var raf = frameOf();
-      var cancel = cancelOf();
       var rnd = mulberry32(entropy());
       var g = temper.grain;
       var n = Math.max(2, Math.round(opts.treads || (3 + rnd() * (3 + g * 5))));
-      if (!raf || !total || (reduced() && !opts.always)) {
-        step(n, n, false);
-        done();
-        return function () {};
-      }
       // The moments of the treads: uneven widths, a hold, and a slip or two back by one tread.
       var moments = [];
       var acc = 0;
@@ -2442,33 +2471,22 @@
         }
       }
       moments.sort(function (a, b) { return a.at - b.at; });
-      var started = now();
-      var handle = 0;
-      var stopped = false;
       var next = 0;
       var last = -1;
-      function frame(tm) {
-        if (stopped) return;
-        var p = Math.min(1, Math.max(0, tm - started) / total);
-        while (next < moments.length && moments[next].at <= p) {
+      return playback(opts, function (p, instant, live) {
+        if (instant) {
+          if (last !== n) step(n, n, false);
+          return;
+        }
+        while (live() && next < moments.length && moments[next].at <= p) {
           if (moments[next].k !== last) {
             last = moments[next].k;
             step(last, n, !!moments[next].slip);
           }
           next += 1;
         }
-        if (p < 1) handle = raf(frame);
-        else {
-          if (last !== n) step(n, n, false);
-          done();
-        }
-      }
-      step(0, n, false);
-      handle = raf(frame);
-      return function () {
-        stopped = true;
-        if (cancel && handle) cancel(handle);
-      };
+        if (live() && p === 1 && last !== n) step(n, n, false);
+      }, function () { step(0, n, false); });
     }
 
     /* ---- what a script asks for: the rites ------------------------------------------------- */
@@ -2580,38 +2598,16 @@
        visitor who asked for less motion gets one step at the end and done. */
     function tween(options) {
       var opts = options || {};
-      var ms = Math.max(0, Number(opts.ms) || 0);
       var step = typeof opts.step === 'function' ? opts.step : function () {};
-      var done = typeof opts.done === 'function' ? opts.done : function () {};
-      var raf = frameOf();
-      var cancel = cancelOf();
-      if (!raf || !ms || (reduced() && !opts.always)) {
-        step(1, 1);
-        done();
-        return function () {};
-      }
-      var at = ease(opts.family);
+      var at;
       // Asked for treads, the eased progress is stepped onto that many, so even a tween is a
       // stair of its own rather than a glide.
       var treads = opts.treads ? Math.max(2, Math.round(opts.treads)) : 0;
-      var started = now();
-      var handle = 0;
-      var stopped = false;
-      function frame(t) {
-        if (stopped) return;
-        var elapsed = Math.max(0, t - started);
-        var p = Math.min(1, elapsed / ms);
+      return playback(opts, function (p) {
         var y = p < 1 ? at(p) : 1;
         if (treads && p < 1) y = Math.floor(clamp(y, 0, 1) * treads) / treads;
         step(y, p);
-        if (p < 1) handle = raf(frame);
-        else done();
-      }
-      handle = raf(frame);
-      return function () {
-        stopped = true;
-        if (cancel && handle) cancel(handle);
-      };
+      }, function () { at = ease(opts.family); });
     }
 
     var scrolling = null;
@@ -2649,12 +2645,14 @@
           for (var j = 0; j < interrupt.length; j++) doc.removeEventListener(interrupt[j], halt, { passive: true, capture: true });
         };
       }
-      scrolling = stepper({
+      var finished = false;
+      var cancelScroll = stepper({
         ms: ms,
         treads: treads,
         step: function (k, n) { global.scrollTo(left, from + (to - from) * (k / n)); },
-        done: function () { stopScrolling(); }
+        done: function () { finished = true; stopScrolling(); }
       });
+      if (!finished) scrolling = cancelScroll;
     }
 
     function scrollIntoView(node, options) {
