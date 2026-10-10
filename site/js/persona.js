@@ -880,9 +880,12 @@
      star has in the deal (a star at -1 is already in the sky), `pass.count` how many are being
      dealt and `pass.stars` the fraction of the deal so far, so a star and the lines to it are
      drawn only once its place has come up. Each tread draws more of the sky than the last and
-     never less. */
+     never less. The lines take the canvas's
+     own CSS colour, read once a draw: Chromium resolves a context's 'currentColor' from the
+     element's inline style alone and paints black for one set by a stylesheet, as these are. */
   function drawSky(ctx, list, w, h, pad, dotRadius, lineWidth, route, pass) {
     var path = route || threadOf(list);
+    var ink = skyInk(ctx);
     var points = list.map(function (s) {
       return { x: pad + s.x / 100 * (w - pad * 2), y: pad + s.y / 100 * (h - pad * 2) };
     });
@@ -914,7 +917,7 @@
         if (used[key] || !shown(nearest[k].j)) continue;
         used[key] = true;
         ctx.globalAlpha = 0.14 + (1 - nearest[k].d2 / maxDistanceSq) * 0.5;
-        ctx.strokeStyle = 'currentColor';
+        ctx.strokeStyle = ink;
         ctx.beginPath();
         ctx.moveTo(points[a].x, points[a].y);
         ctx.lineTo(points[b].x, points[b].y);
@@ -924,7 +927,7 @@
     if (path.length > 1) {
       ctx.globalAlpha = 0.9;
       ctx.lineWidth = lineWidth * 2.8;
-      ctx.strokeStyle = 'currentColor';
+      ctx.strokeStyle = ink;
       ctx.beginPath();
       var drawn = false;
       for (var r = 0; r < path.length; r++) {
@@ -945,6 +948,11 @@
         * (path.indexOf(p) === -1 ? 1 : 1.7), 0, Math.PI * 2);
       ctx.fill();
     }
+  }
+  function skyInk(ctx) {
+    var canvas = ctx.canvas;
+    if (!canvas || typeof window.getComputedStyle !== 'function') return 'currentColor';
+    return window.getComputedStyle(canvas).color || 'currentColor';
   }
   function sizeCanvas(canvas, w, h) {
     var dpr = window.devicePixelRatio || 1;

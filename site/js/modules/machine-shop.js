@@ -19,6 +19,10 @@
                         one, so the difference has an apex; find its column, and count the cells
                         that differ in the last row. A wrong check says which of the two is off.
 
+   The next-row bench also has a rule notebook: eight tentative outputs, tested only against
+   the visible transitions. It never writes an answer row. A paid cell hint points to an
+   observed example of the pattern, so the visitor can carry that deduction into the notebook.
+
    A card and the feature it opens as are one puzzle: the spark puts the whole plan on its spec as
    `of` -- the rule, the first row, the flip -- and piece(env) opens on that rather than rolling
    another. */
@@ -292,7 +296,7 @@ function cell(g, env, x, y, size, lit, inset, tone) {
 // pattern, left to right, each answer cut on in place of its question mark at a moment of its own
 // roll, and a lit answer cut in behind the piece's edge on that roll's stair. The table is a
 // legend, so an answer, once in, is as plain as the cells it stands for: one shade.
-function ruleTable(g, env, x0, y, span, rule, v, reveal) {
+function ruleTable(g, env, x0, y, span, rule, v, reveal, notebook) {
   const c = env.colors;
   const rite = riteOf(env);
   const each = span / 8;
@@ -315,11 +319,16 @@ function ruleTable(g, env, x0, y, span, rule, v, reveal) {
       own = roll(rite, 0x400 + i);
       p = clamp((reveal - i * 0.07) / (1 - 7 * 0.07), 0, 1);
     }
-    if (rule === null || !own.flicker(p)) {
+    const noted = rule === null && notebook && notebook.notes[i] > 0;
+    if (noted) {
+      own = roll(rite, 0x800 + i * 0x20 + (notebook.noteFlips[i] || 0));
+      p = came(notebook.t, notebook.noteAt[i], SPAN, env.reduced);
+    }
+    if ((rule === null && !noted) || !own.flicker(p)) {
       g.fillStyle = env.alpha(c.accent2, 0.9);
       g.fillText('?', cx, y + mini * 2.1);
     } else {
-      const out = (rule >> hood) & 1;
+      const out = noted ? notebook.notes[i] - 1 : (rule >> hood) & 1;
       cell(g, env, cx - mini / 2, y + mini * 1.5, mini, false, inset);
       if (out) {
         own.paint(g, cx - mini / 2 + inset, y + mini * 1.5 + inset, mini - inset * 2, mini - inset * 2, own.stair(p), env.alpha(c.accent2, 0.95));
@@ -492,7 +501,7 @@ function drawNext(g, w, h, env, plan, s, variant) {
   g.lineWidth = 1;
   g.strokeRect(geo.left - inset, geo.top - inset, geo.size * plan.width + inset * 2, geo.size * shown + inset * 2);
   const tableY = y0 + depth * geo.size + Math.max(h * 0.06, geo.size * 0.7);
-  ruleTable(g, env, w * 0.06, tableY, w * 0.88, s.open ? plan.rule : null, v, s.open ? openP : null);
+  ruleTable(g, env, w * 0.06, tableY, w * 0.88, s.open ? plan.rule : null, v, s.open ? openP : null, s);
   // The lens: the three cells one row above a cell, bracketed, the cell under them pointed at,
   // and their pattern of three marked in the table -- what to look up to set that cell. A card's
   // lens walks the shown rows a cell at a click; the piece's moves to the cell last tapped in one
@@ -532,7 +541,7 @@ function drawNext(g, w, h, env, plan, s, variant) {
   }
   // The caption changes its words by a cut at its moment, never by a crossfade.
   const named = s.open && roll(rite, 0x7e).flicker(openP);
-  label(g, env, named ? 'rule ' + plan.rule : 'the rule, pattern by pattern', w * 0.5, Math.min(h * 0.97, tableY + geo.size * 1.9), small, 'center', env.alpha(c.muted, 0.85));
+  label(g, env, named ? 'rule ' + plan.rule : 'your rule notebook: 111 to 000', w * 0.5, Math.min(h * 0.97, tableY + geo.size * 1.9), small, 'center', env.alpha(c.muted, 0.85));
 }
 
 // Where cell i of the hidden rows stands at s.t, 0 (dark) to 1 (lit): it set off from where it
@@ -551,7 +560,8 @@ function cellLevel(s, i, reduced) {
 // `until` the end of the last movement in flight, `lensUntil` the end of the lens's, and `drawn`
 // the last picture frame() drew.
 function nextBlank(plan) {
-  return { row: new Array(plan.width * (plan.depth || 1)).fill(0), shown: [], shownAt: [], cells: [], flips: [], taps: 0, open: false, openAt: null, t: 0, lens: null, until: -Infinity, lensUntil: -Infinity, drawn: null };
+  return { row: new Array(plan.width * (plan.depth || 1)).fill(0), shown: [], shownAt: [], cells: [], flips: [], taps: 0, open: false, openAt: null, t: 0, lens: null, until: -Infinity, lensUntil: -Infinity, drawn: null,
+    notes: new Array(8).fill(0), noteAt: [], noteFlips: [] };
 }
 
 function nextPreview(g, w, h, env, plan, lens) {
@@ -595,6 +605,34 @@ function nextPiece(env, plan) {
     }
     s.row = next.map((v) => (v ? 1 : 0));
   }
+  function note(next, c) {
+    if (!Array.isArray(next) || next.length !== 8 || !next.every((v) => Number.isInteger(v) && v >= 0 && v <= 2)) {
+      c.status('Use unknown, dark or lit for each of the eight notebook outputs.');
+      return;
+    }
+    for (let i = 0; i < 8; i++) {
+      if (next[i] !== s.notes[i]) {
+        s.noteAt[i] = s.t;
+        s.noteFlips[i] = (s.noteFlips[i] || 0) + 1;
+        busy(s, c, SPAN);
+      }
+    }
+    s.notes = next.slice();
+    let tested = 0;
+    let matched = 0;
+    let unknown = 0;
+    for (let r = 0; r < shown - 1; r++) {
+      for (let x = 0; x < width; x++) {
+        const output = s.notes[7 - hoodOf(rows[r], x)];
+        if (!output) unknown += 1;
+        else {
+          tested += 1;
+          if (output - 1 === rows[r + 1][x]) matched += 1;
+        }
+      }
+    }
+    c.status('Your notebook matches ' + matched + ' of ' + tested + ' observed cells; ' + unknown + ' still use an unknown output. Your answer rows are unchanged.');
+  }
   function right() {
     let n = 0;
     for (let i = 0; i < cells; i++) if ((s.row[i] ? 1 : 0) === answer[i]) n += 1;
@@ -602,15 +640,14 @@ function nextPiece(env, plan) {
   }
   return {
     title: nextTitle(plan),
-    brief: 'The automaton keeps one liturgy: each cell of a row is set by the three cells above it, itself and its two neighbours, and the tape wraps round at its ends. ' + (depth === 2
-      ? 'One hidden rule made rows two and three, and every one of the eight patterns of three appears somewhere in rows one and two, so the rule can be read off the bench and run on twice.'
-      : 'One hidden rule made rows two, three and four, and every one of the eight patterns of three appears somewhere in rows one to three, so the rule can be read off the bench.'),
+    brief: 'Each new cell follows one rule for the three cells above it: left neighbour, centre, right neighbour. The ends wrap around. The shown transitions contain every pattern needed for the missing rows. Use the optional notebook to try outputs for 111, 110, 101, 100, 011, 010, 001 and 000, in that order; its report compares your rule with the shown rows, without changing your answers or spending hints. Here 1 means lit and 0 means dark. Shown rows, left to right: ' + rows.slice(0, shown).map((row, r) => 'row ' + (r + 1) + ': ' + row.join(' ')).join('; ') + '.',
     goal: depth === 2 ? 'Write rows four and five.' : 'Write row five.',
     aspect: '4 / 3',
     checkLabel: depth === 2 ? 'check the rows' : 'check the row',
     steps: [
       { id: 'row', ask: depth === 2 ? 'rows four and five: tap their cells on the bench, or mark them here' : 'row five: tap its cells on the bench, or mark them here', kind: 'grid', rows: depth, cols: width, states: 2, labels: ['dark', 'lit'] },
-      { id: 'hint', ask: depth === 2 ? 'one hidden cell' : 'one cell of row five', kind: 'press', count: 1, label: 'show one cell', optional: true }
+      { id: 'notebook', ask: 'optional rule notebook, 111 to 000: unknown, dark or lit output', kind: 'grid', rows: 1, cols: 8, states: 3, labels: ['unknown', 'dark', 'lit'], optional: true },
+      { id: 'hint', ask: depth === 2 ? 'one hidden cell and its evidence' : 'one cell of row five and its evidence', kind: 'press', count: 1, label: 'show one cell', optional: true }
     ],
     solution: { row: answer },
     check(c) {
@@ -623,6 +660,7 @@ function nextPiece(env, plan) {
       draw(c);
     },
     apply(id, value, c) {
+      if (id === 'notebook') note(value, c);
       if (id === 'row' && Array.isArray(value) && value.length === cells) {
         write(value, c, null);
         const lit = s.row.filter(Boolean).length;
@@ -634,12 +672,20 @@ function nextPiece(env, plan) {
           for (let i = 0; i < cells; i++) if (!s.shown.includes(i)) next.push(i);
         }
         if (next.length) {
-          const i = next[Math.floor(next.length / 2)];
+          const wrong = next.filter((i) => s.row[i] !== answer[i]);
+          const pool = wrong.length ? wrong : next;
+          const i = pool[Math.floor(pool.length / 2)];
           s.shown.push(i);
           s.shownAt.push(s.t);
           busy(s, c, SPAN);
           c.hint();
-          c.status('cell ' + ((i % width) + 1) + ' of row ' + rowName(i) + ' is ' + (answer[i] ? 'lit' : 'dark'));
+          const hood = hoodOf(rows[shown - 1 + Math.floor(i / width)], i % width);
+          let example = '';
+          for (let r = 0; r < shown - 1 && !example; r++) {
+            const x = rows[r].findIndex((v, col) => hoodOf(rows[r], col) === hood);
+            if (x >= 0) example = ' Evidence: row ' + (r + 1) + ', column ' + (x + 1) + ' has pattern ' + hood.toString(2).padStart(3, '0') + '; look at the cell directly below it.';
+          }
+          c.status('Cell ' + ((i % width) + 1) + ' of row ' + rowName(i) + ' is ' + (answer[i] ? 'lit' : 'dark') + '.' + example);
         } else if (s.shown.length >= helps) {
           c.status('that is all the bench will show at this difficulty; run the rule yourself');
         } else {
@@ -650,6 +696,17 @@ function nextPiece(env, plan) {
     },
     tap(x, y, c) {
       const geo = nextGeometry(c.w, c.h, width, env.variant || PLAIN);
+      const tableY = geo.top + 5 * geo.size + geo.gap + Math.max(c.h * 0.06, geo.size * 0.7);
+      const mini = Math.min(c.w * 0.88 / 8 / 4.2, c.w * 0.88 * 0.03);
+      const pattern = Math.floor((x - 0.06) / (0.88 / 8));
+      if (pattern >= 0 && pattern < 8 && y * c.h >= tableY && y * c.h <= tableY + mini * 2.8) {
+        const next = s.notes.slice();
+        next[pattern] = (next[pattern] + 1) % 3;
+        note(next, c);
+        c.set('notebook', next.slice());
+        draw(c);
+        return;
+      }
       const y0 = geo.top + shown * geo.size + geo.gap;
       const col = Math.floor((x * c.w - geo.left) / geo.size);
       const scanRow = Math.floor((y * c.h - geo.top) / geo.size);
