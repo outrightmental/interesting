@@ -1,5 +1,7 @@
 // Shared tokens and components, including the two list-first pages.
 @use 'tokens';
+// The cut's keyframes, once, before every partial that plays them.
+@use 'cut';
 @use 'base';
 @use 'lightbox';
 @use 'nav';

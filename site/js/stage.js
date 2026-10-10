@@ -47,18 +47,18 @@
 
   A piece of content does not End just because it is Done (issue #86). Finishing is a report, not a
   closing time: finish() plays the ceremony, says so beside the progress dots and lights the way on,
-  and changes nothing whatever about how playable the piece is. The frame loop keeps running, a tap
-  on the scene still reaches tap(), every knob stays enabled and can be set again -- including one
-  that was gated behind another, since every gate stands open once everything is set -- and the
-  piece keeps hearing apply() for all of it. There is no timeout, no fade, no inert state and no
-  teardown in between; close() is the one teardown and the only thing that reaches it is the next
-  piece actually opening, which only the press of the way on can do.
+  and changes nothing whatever about how playable the piece is. The frames still come whenever the
+  piece moves, a tap on the scene still reaches tap(), every knob stays enabled and can be set
+  again -- including one that was gated behind another, since every gate stands open once
+  everything is set -- and the piece keeps hearing apply() for all of it. There is no timeout, no
+  fade, no inert state and no teardown in between; close() is the one teardown and the only thing
+  that reaches it is the next piece actually opening, which only the press of the way on can do.
 
   Two things follow from that, and are deliberate. The done mark is laid out with the rail at the
   end of the dots' row, not over the scene: a finished piece's picture is still the content, and
   the report on it does not get to sit on top of it or take a corner of it. And the ceremony runs
-  exactly once -- one 'stage:complete', one chime, one burst -- so fidgeting with a finished toy
-  changes the piece without re-staging the finish.
+  exactly once -- one 'stage:complete', one chime, one landing of the done chip -- so fidgeting with
+  a finished toy changes the piece without re-staging the finish.
 
   ---------------------------------------------------------------------------------------------
   The responsiveness axiom: every press on the scene does something
@@ -67,8 +67,8 @@
   piece a question, and an answer of nothing at all is the one answer this site does not give.
   Most of the time the piece answers: the press reaches its tap(), and what it draws, satisfies or
   moves is the answer. The rest of the time the stage answers for it, with the smallest
-  acknowledgement there is -- one small mark at the point pressed, a fifth of a second, gone
-  (rejectTap()). That is a press received and nothing here, which is a different thing from
+  acknowledgement there is -- one small mark cut in from the point pressed, a fifth of a second,
+  gone (rejectTap()). That is a press received and nothing here, which is a different thing from
   silence.
 
   When the stage answers rather than the piece: a piece with no tap() of its own, a piece whose
@@ -86,8 +86,8 @@
   the whole frame: nothing that interrupts a piece a visitor is in the middle of, and nothing that
   could be mistaken for the piece itself answering. No sound either -- the chime belongs to the
   finish, and a site that clicked at every press is a site nobody can play in a quiet room. A
-  visitor who asked for less motion gets the mark held still and taken away again rather than the
-  ripple, which is what the theme's crossfade and the ceremony's burst do with the same query.
+  visitor who asked for less motion gets the mark held still and taken away again rather than cut
+  in, which is what the theme's crossfade does with the same query.
 
   A piece that wants to refuse one particular press refuses it itself, inside tap(): the stage
   cannot tell a tap the piece considered and declined from one it acted on, and guessing would put
@@ -135,7 +135,11 @@
           start(ctx) {},                            // the scene is ready to draw on (called again
                                                     // after a resize if the piece has no frame)
           frame(t, dt, ctx) {},                     // one frame (optional); t is seconds since the
-                                                    // piece started, dt since the last frame
+                                                    // piece started, dt since the frame before (one
+                                                    // frame's worth after a rest). It draws only
+                                                    // when something on it has moved -- the canvas
+                                                    // keeps the last picture -- and returns false
+                                                    // when the piece is at rest (the frames, below)
           apply(id, value, ctx) {},                 // a knob was set (the stage sets it)
           tap(x, y, ctx) {},                        // the scene was tapped, x and y in 0..1
                                                     // (optional; a 'tap' knob needs it. A press
@@ -211,6 +215,23 @@
   on the canvas, an item dragged into order. It may only be called from tap(), it writes the
   value onto the knob (the rail follows), and it counts as the visitor setting that knob.
 
+  The frames. A page where nothing moves costs nothing, so the stage asks for frames only while the
+  piece has something moving: one that asked every vsync for a still picture kept the main thread
+  awake sixty times a second for as long as a visitor sat reading. frame() returns false when, and
+  only when, the piece is at rest -- nothing it draws is moving or due to move until the visitor
+  acts, the canvas is sized again (ctx.w, ctx.h or ctx.dpr change, and the canvas is cleared with
+  them) or the scene comes back into view -- and on false the stage asks for no more. Any other
+  return, undefined included, keeps the frames coming, so a piece that never says so is asked every
+  frame its scene is on the screen. A piece between two treads of a movement in flight, drawing
+  nothing on this frame because its next tread is not yet due, is not at rest and must not return
+  false: nothing would come back for that tread. Nor is one running a wait knob's timed phase.
+  The stage starts the frames again whenever the piece may have been set moving: a knob applied, a
+  tap (on the scene or through 'tap for me'), ctx.set, ctx.satisfy or ctx.hint, a check or the
+  finale, the scene sized again, the palette landing, and the scene back on the screen or the page
+  shown again. The first frame after a rest starts a fresh clock -- its dt is one frame's worth,
+  not the length of the rest -- and t is the wall clock as ever. So a piece never counts on a frame
+  arriving while it is at rest (a timer counted in frames, a clock advanced by dt): none does.
+
   Every knob has to be settable by the visitor it is put in front of, and the stage has to say
   which ones are not set yet. A knob nobody can satisfy is a puzzle nobody can check, and the way
   that goes wrong is quiet: the visitor sets the last knob on the page, the scene answers, and
@@ -218,7 +239,7 @@
   The line under the live line names what is left, for exactly that (issue #60).
 
   A piece is one instantiation and nothing of it outlives its turn. close() is the one teardown
-  and it takes the whole piece apart -- the frame loop, the ceremony's timers, a ticker under a
+  and it takes the whole piece apart -- the frame loop, the ceremony's timers, the timer under a
   hold still pressed down, the knobs, the check, the lines, the dots, the mark, the scene and its
   shape -- so every piece opens on an empty stage however many times its world has come round
   before. Its turn runs to the press of the way on and not to the solve: nothing is torn down
@@ -273,19 +294,23 @@
   The rite: how a piece moves
 
   env.rite (and ctx.rite, the same object) is the piece's own roll of how it moves (README:
-  "Motion axiom"), from js/variant.js, seeded from the piece's seed so the same seed plays the
-  same rite. Nothing a module draws moves along a formula: a selection does not fade to another
-  opacity, a wheel does not turn evenly, a solved thing does not wash in. rite.ease(t) is a
-  glitch of a curve; rite.stair(t, n) steps t onto uneven treads, for a state that changes (a
-  highlight, an opacity, a size); rite.ratchet(t) turns in clicks with backlash, for anything
-  that rotates; rite.flicker(t) is 0 or 1, for a thing that arrives by blinking on; and
-  rite.matte(x, y, k) says, for the cell at column x and row y, whether the piece's own
-  procedurally generated matte -- noise, shards, scan lines, a dither, an iris, a grain -- lets
-  a surface through at coverage k, so a region that becomes selected changes by its area in
-  that pattern (tile it in cells of rite.cell px and fill the ones let through) and never by a
-  fade. rite.at(seed) is another such roll, for a module that wants one per thing it moves. The
-  harnesses hand the same roll, and a module that moves anything along t * t, a lerp, a sine
-  or an even rotation is the kind of module this site refuses.
+  "Motion axiom", the cut), from js/variant.js, seeded from the piece's seed so the same seed
+  plays the same rite. Nothing a module draws moves along a formula or fades: a selection does
+  not wash to another opacity, a wheel does not turn evenly, a solved thing does not glow in.
+  Every change is a few treads that always go forward. rite.ease(t) is a landing, its first tread
+  the longest way and each after it shorter, for a thing travelling to a new place;
+  rite.stair(t, n) holds and then steps t onto a few even treads, for a state that changes (a
+  highlight, a size, a count); rite.ratchet(t) turns in even clicks, a clock's, for anything that
+  rotates; rite.flicker(t) is one cut -- 0 before the moment the roll chose, 1 after it, and never
+  back -- for a thing that is simply there from its moment. And a surface that changes does so by
+  its area behind the piece's one edge, its signature: rite.kind is 'slice' (a straight edge at
+  rite.angle) or 'curve' (a circle grown from rite.origin), and rite.paint(g, x, y, w, h, k)
+  fills the part of a box that edge has passed at coverage k -- one polygon or one arc, never a
+  pattern and never cells -- while rite.region(g, x, y, w, h, k) adds the same path to g to clip
+  or stroke with, and rite.matte(u, v, k) answers for one point of the box in fractions of it.
+  rite.at(seed) is another roll with the same edge and treads of its own, for a module that wants
+  one per thing it moves. The harnesses hand the same roll, and a module that moves anything
+  along t * t, a lerp, a sine or an even rotation is the kind of module this site refuses.
 
   ctx, the same object for the whole piece:
     canvas, g (its 2d context), w, h (CSS pixels; the context is already scaled for the screen),
@@ -418,27 +443,71 @@ function worldOf(file) {
 
 // The four names a palette is (_sass/_mood.scss, js/variant.js), and no others.
 const SEEDS = ['bg', 'bg2', 'accent', 'accent2'];
-// The tones the theme may dip through, so one colour clears before the next: the neutral grey most
-// of the time, now and then a deeper ink or a paler ash, the roll deciding which (README: "Motion
-// axiom" -- the fade of the background is a movement of the rite like any other).
-const TONES = ['#808080', '#808080', '#808080', '#2c2c30', '#b4b2ad'];
-const DIP_MS = 140; // the quick fade out to that tone, at the scheme's own tempo
-const RISE_MS = 420; // the fade from it into the colour of the card just pressed, at the same
+const TURN_MS = 420; // how long the palette takes to step over, at the scheme's own tempo
 
 let featured = null; // the palette the site is wearing for the activity on the stage, once landed
-let fading = 0; // the crossfade in flight, so two picks in a row never fight over the seeds
-let turnParity = 'b'; // which of the two veil spells the last palette turn played, so the next restarts
+let turning = []; // the treads of the palette turn in flight, so two picks in a row never fight over the seeds
+let wearing = null; // the four seeds this file last wrote inline on :root, or null when none are there
+let moodTable = null; // each mood's own four seeds, off the stylesheet's rules (moodSeeds)
+let inks = null; // the stage's own colours as the page loaded: --fg and --muted never change with a palette
+
+/* Each mood's own four seeds, as _sass/_mood.scss writes them on :root[data-featured=<mood>]: taken
+   off the stylesheet's own rules, once, the first time a palette is asked for. That is a walk over
+   the rules and no restyle of the page, where reading a mood off :root means writing the attribute
+   first and then making the browser restyle the whole document to answer -- the most expensive
+   thing an open did. Only the top level is walked: a palette under a media query would not be the
+   mood's own. A mood the walk did not find (a sheet the browser keeps from script, or the stub the
+   stage harness runs in, which has none) answers null, and the caller reads the page instead. */
+function moodSeeds(mood) {
+  if (!mood) return null;
+  if (!moodTable) {
+    moodTable = new Map();
+    try {
+      for (const sheet of Array.from(document.styleSheets || [])) {
+        let rules = null;
+        try {
+          rules = sheet.cssRules;
+        } catch (e) {
+          rules = null; /* a sheet from elsewhere: nothing of ours is in it */
+        }
+        for (const rule of Array.from(rules || [])) {
+          const selector = typeof rule.selectorText === 'string' ? rule.selectorText : '';
+          if (!selector.startsWith(':root[data-featured=') || !rule.style) continue;
+          const named = selector.match(/^:root\[data-featured=["']?([\w-]+)["']?\]$/);
+          const seeds = {};
+          for (const name of SEEDS) {
+            const value = rule.style.getPropertyValue('--' + name).trim();
+            if (value) seeds[name] = value;
+          }
+          if (named && Object.keys(seeds).length === SEEDS.length) moodTable.set(named[1], seeds);
+        }
+      }
+    } catch (e) {
+      /* no table: every palette is read off the page */
+    }
+  }
+  const seeds = moodTable.get(mood);
+  return seeds ? Object.assign({}, seeds) : null;
+}
+
+/* What the site wears with no seeds of this file's inline on :root: the featured mood, else the
+   visitor's reading, else the page's own world -- the order _sass/_mood.scss settles the three in
+   -- off the table, or read off the page where the table has nothing. */
+function underneath(root) {
+  const d = root.dataset || {};
+  return moodSeeds(d.featured || d.mood || d.world) || readSeeds(root);
+}
 
 /* ---- the motion engine, where it is --------------------------------------------------------- */
 
-// window.interestingMotion (js/motion.js) rolls every curve on the site, and the stage takes its
-// own curves and its timers from the same roll, so a vanish is over before the next piece opens and
-// the crossfade's dip runs along a curve rolled for that one shift. The stub browser the stage
+// window.interestingMotion (js/motion.js) rolls every stair on the site, and the stage takes its
+// own stairs and its timers from the same roll, so a leaving is over before the next piece opens
+// and the palette steps over along a stair rolled for that one turn. The stub browser the stage
 // harness runs in has no engine, so every ask below falls back: the timers to the scheme's own
-// figures, and a curve to the one polyline written here -- a glitch of a curve and never a formula,
-// because no movement on this site runs along one (README: "Motion axiom").
+// figures, and a stair to the one written here -- three treads, a hold before each, always forward
+// and never a formula, because no movement on this site runs along one (README: "Motion axiom").
 const motion = window.interestingMotion || null;
-const OWN_CURVE = [[0, 0], [0.1, 0.02], [0.38, 0.64], [0.45, 0.58], [0.62, 1.05], [0.8, 0.97], [0.9, 1.01], [1, 1]];
+const OWN_CURVE = [[0, 0], [0.28, 0], [0.28, 0.5], [0.58, 0.5], [0.58, 0.82], [0.86, 0.82], [0.86, 1], [1, 1]];
 
 // A function t -> y along a polyline of [t, y] stops, which is what the engine hands back too.
 function along(stops) {
@@ -482,15 +551,29 @@ function riteTempo() {
   return Number.isFinite(tempo) && tempo > 0 ? tempo : 1;
 }
 
-/* The composer (README: "Motion axiom"): every arrival and every leaving on the stage is composed
-   anew for the one trigger from the engine's vocabulary of pieces -- an opening, a climb, a landing,
-   with uneven treads -- and named on the element (--rite-develop / --rite-unmake), with a length of
-   its own (--motion-<spell>) that the stage's timers read back so no mode is left under a movement
-   still going. The stylesheet reads the composed name before its own keyframes, which are what a
-   page without the engine plays. Each is a no-op in the stub browser, which has no engine. */
+/* The cut (README: "Motion axiom"): every movement on the stage is one edge stepping across in a
+   few forward treads, and its composition is chosen for the one trigger by the engine -- the
+   family's stair with a count and spacing of treads rolled for it, and a length of its own --
+   and written on the element that moves (--ease-<spell>, --motion-<spell>), which the stylesheet
+   reads before its family's baked stair. A movement is over when its own animation ends
+   (whenEnded, below); the length the engine hands back is only the clock behind that, for an
+   animation that never plays. Each is a no-op in the stub browser, which has no engine, and for a
+   visitor who asked for less motion. */
 
-// An arrival composed for an element: its geometry, its curve and its composition, written inline.
-// Hands back the undo, which takes the inline roll off again.
+// One movement's composition written on an element (motion.cut); hands back its length in ms, or
+// 0 where nothing was written.
+function cutOn(node, spell, options) {
+  if (!node || !node.style || calm.matches || !motion || typeof motion.cut !== 'function') return 0;
+  try {
+    return motion.cut(node, spell, options || {}) || 0;
+  } catch (e) {
+    return 0; /* the family's own stair plays */
+  }
+}
+
+// An arrival for an element: where it comes from (a clear direction, --arrive-x/y), the slice it
+// comes in behind (--arrive-angle, the direction it travels) and its stair, from a seed, written
+// inline. Hands back the undo, which takes the inline roll off again.
 function composeArrival(node, seed, spell) {
   if (!node || !node.style || calm.matches || !motion || typeof motion.arrive !== 'function') return null;
   try {
@@ -501,27 +584,7 @@ function composeArrival(node, seed, spell) {
   }
 }
 
-// A leaving composed for an element, at a length rolled off the base given.
-function composeLeave(node, spell, baseMs) {
-  if (!node || !node.style || calm.matches || !motion || typeof motion.composeOn !== 'function') return;
-  try {
-    motion.composeOn(node, 'unmake', spell, baseMs);
-  } catch (e) {
-    /* the stylesheet's own keyframes play */
-  }
-}
-
-// A development composed for an element that is not travelling (the done chip), likewise.
-function composeDevelop(node, spell, baseMs) {
-  if (!node || !node.style || calm.matches || !motion || typeof motion.composeOn !== 'function') return;
-  try {
-    motion.composeOn(node, 'develop', spell, baseMs);
-  } catch (e) {
-    /* the stylesheet's own keyframes play */
-  }
-}
-
-// How long a composed movement on an element is (--motion-<spell>, inline), or the roll's figure.
+// How long a movement written on an element is (--motion-<spell>, inline), or the roll's figure.
 function inlineMs(node, spell, fallback) {
   if (node && node.style && typeof node.style.getPropertyValue === 'function') {
     const ms = parseFloat(node.style.getPropertyValue('--motion-' + spell));
@@ -530,18 +593,126 @@ function inlineMs(node, spell, fallback) {
   return fallback;
 }
 
+/* A movement is over when its own animation says so (README: "Motion axiom"), and not when a clock
+   started before it says it must be. The class or the attribute a cut is played off comes away on
+   the animationend of that one animation, on that element or on its ::before or ::after (whose
+   events arrive at the element, naming the pseudo-element), so a main thread that is busy when a
+   cut is asked for -- an open() restyling the page, a module drawing its first frame -- delays the
+   cut's end along with its start and never takes a part away halfway across. An animation that is
+   cancelled (a part moved where it is stilled) ends it too. The clock stays behind it, generous, for
+   an animation that never plays: a stylesheet without it, a browser with no engine, a part never
+   shown. `name` null takes whichever of the node's own animations ends first, for a part that
+   leaves by two in the same treads (a slice and a lift). `own` makes the whole wait the piece's, so
+   close() stops it with the rest. Hands back a cancel that ends the wait without its ending. */
+function whenEnded(node, name, pseudo, wait, fn, own) {
+  let over = false;
+  let stop = null;
+  const listens = !!(node && typeof node.addEventListener === 'function' && typeof node.removeEventListener === 'function');
+  const on = (ev) => {
+    if (!ev || ev.target !== node || (name && ev.animationName !== name)) return;
+    if (String(ev.pseudoElement || '').replace(/^:+/, '') !== (pseudo || '')) return;
+    end();
+  };
+  function drop() {
+    if (listens) {
+      node.removeEventListener('animationend', on);
+      node.removeEventListener('animationcancel', on);
+    }
+    if (stop) stop();
+  }
+  function end() {
+    if (over) return;
+    over = true;
+    drop();
+    fn();
+  }
+  const cancel = () => {
+    if (over) return;
+    over = true;
+    drop();
+  };
+  if (listens) {
+    node.addEventListener('animationend', on);
+    node.addEventListener('animationcancel', on);
+  }
+  const handle = window.setTimeout(end, Math.max(0, wait));
+  stop = () => {
+    window.clearTimeout(handle);
+    if (own) running.delete(cancel);
+  };
+  if (own) running.add(cancel);
+  return cancel;
+}
+
+/* A part that lands and then stands unmasked: the done chip, the ask, a knob's seal, a dot lit, the
+   picture developing onto the plate. The class the stylesheet plays the landing on (is-landing)
+   goes on in the same frame the part is shown -- never a frame late, which would show it whole for
+   that frame and then cut it away -- and comes off when its cut-in has ended (whenEnded, on the
+   part itself or on its `pseudo`), so nothing stands masked after it has arrived and nothing is
+   unmasked before. Its own wait and not the piece's, so a teardown in between can never leave it
+   masked; a second landing takes over the first one's wait. `spell` false lands the part on treads
+   it inherits (the plate's, from the inner's arrival), for as long as `length`. */
+const landings = typeof WeakMap === 'function' ? new WeakMap() : null;
+
+function land(node, spell, options) {
+  if (!node || !node.classList) return;
+  const opts = options || {};
+  // A part that travels in (the ask) takes an arrival of its own; one that lands where it stands
+  // (the done chip) takes only the treads.
+  let ms = 0;
+  if (spell === false) {
+    ms = calm.matches || !motion ? 0 : Number(opts.length) || 0;
+  } else if (opts.seed != null) {
+    if (composeArrival(node, opts.seed, spell)) ms = inlineMs(node, spell, 0);
+  } else {
+    ms = cutOn(node, spell, { family: opts.family, duration: opts.duration, base: opts.base });
+  }
+  if (!ms) return; // less motion, or no engine: the part is simply there
+  if (landings && landings.has(node)) landings.get(node)();
+  node.classList.add('is-landing');
+  const cancel = whenEnded(node, 'cut-in', opts.pseudo || '', (ms + (Number(opts.after) || 0)) * 2 + 200, () => {
+    if (landings) landings.delete(node);
+    node.classList.remove('is-landing');
+  }, false);
+  if (landings) landings.set(node, cancel);
+}
+
+/* Gone: after the way on is pressed the whole inner leaves, and it stays gone (data-gone) through
+   the next module's loading, so nothing of the stage stands up again in a cut before the next
+   piece is there; in whatever mode comes next the inner arrives whole behind one slice
+   (_sass/_stage.scss), and the attribute comes off when that slice has landed -- off the inner's
+   own animationend, with a clock behind it for a stylesheet that never played. */
+let goneTurn = 0; // which leaving the stage is gone for, so a clock left from an earlier one never ends a later
+
+function isGone() {
+  return !!(stage && stage.dataset && stage.dataset.gone !== undefined);
+}
+
+function arriveWhole() {
+  if (!isGone()) return;
+  const turn = goneTurn;
+  const ms = inlineMs(ui.inner, 'stage-in', riteMs('long', 560));
+  window.setTimeout(() => {
+    const mode = stage.dataset.mode;
+    if (turn === goneTurn && mode !== 'vanishing' && mode !== 'loading') delete stage.dataset.gone;
+  }, ms * 2 + 200);
+}
+
 /* ---- the text rites ------------------------------------------------------------------------ */
 
-/* Words on the stage are never swapped in: they are revealed (README: "Motion axiom"). The text is
+/* Words on the stage are never swapped in: they are cut in (README: "Motion axiom"). The text is
    written whole first -- the harnesses read textContent back the instant a call returns, and the
    aria-live lines are read by a screen reader as one line -- and then, where the engine is on the
-   page, the engine wraps each glyph in a sigil for the length of the rite (motion.reveal, which
-   leaves textContent exactly the words throughout and unwraps after). The stub browser the stage
+   page, one slice at the register's slant steps across the line, a tread to a word or two
+   (motion.reveal: one mask on the element and nothing wrapped round a letter, so textContent is
+   the words throughout). Only a line of words is cut in this way and never a control, whose mask
+   would take its whole face with it: a button's label is written in place. Words written while the
+   stage is gone arrive with the stage and are not cut in a second time. The stub browser the stage
    harness runs in has no engine, so there the words are simply there. */
-const revealing = typeof WeakMap === 'function' ? new WeakMap() : null; // node -> the undo of its rite
+const revealing = typeof WeakMap === 'function' ? new WeakMap() : null; // node -> the undo of its cut
 
 function reveal(node) {
-  if (!node || calm.matches || !motion || typeof motion.reveal !== 'function') return;
+  if (!node || calm.matches || isGone() || !motion || typeof motion.reveal !== 'function') return;
   try {
     const undo = motion.reveal(node);
     if (revealing && typeof undo === 'function') revealing.set(node, undo);
@@ -550,8 +721,8 @@ function reveal(node) {
   }
 }
 
-// A rite still in flight on a node is unwrapped before the node is written again: the glyph spans
-// go and the words stand whole, so a second line never lands on the first one's pieces.
+// A cut still in flight on a node is ended before the node is written again: its mask comes off
+// and the words stand whole, so a second line never lands half-cut behind the first one's edge.
 function unreveal(node) {
   if (!node || !revealing) return;
   const undo = revealing.get(node);
@@ -560,11 +731,11 @@ function unreveal(node) {
   try {
     undo();
   } catch (e) {
-    /* nothing to unwrap */
+    /* nothing to end */
   }
 }
 
-// The words of a node, written whole (unwrapping any rite still on it first).
+// The words of a node, written whole (ending any cut still on it first).
 function write(node, text) {
   if (!node) return;
   unreveal(node);
@@ -580,13 +751,13 @@ function inscribe(node, text) {
   if (words) reveal(node);
 }
 
-/* The live lines (the status, the wanted line, the tries) are typed in by the stylesheet rather
-   than by the engine: a piece may write its status every frame, and a rite that restarted every
-   frame would never land. The line is written whole and at once; data-said flips between two
-   values so the stylesheet's line-said / line-said-b restarts, and never more often than one beat
-   (--motion-medium). A line rewritten under the rite lands under it as the new words -- and is
-   then said again when the beat is over, so the last words written are always the ones typed in
-   and no line ever simply cuts to its new words. */
+/* The live lines (the status, the wanted line, the tries) are cut in by the stylesheet rather than
+   by the engine: a piece may write its status every frame, and a cut that restarted every frame
+   would never land. The line is written whole and at once; data-said flips between two values so
+   the stylesheet's slice at the register's slant (line-said / line-said-b) starts again, and never
+   more often than one beat (the length of the line's cut). A line rewritten under the edge lands
+   under it as the new words -- and is then said again when the beat is over, so the last words
+   written are always the ones cut in and no line ever simply switches to its new words. */
 const saidAt = new Map();
 
 function speak(node, text) {
@@ -600,10 +771,11 @@ function speak(node, text) {
 
 function say(node) {
   const now = performance.now();
-  const beat = riteMs('medium', 340);
-  const last = saidAt.get(node) || { at: -1e9, parity: 'b', again: null };
+  const last = saidAt.get(node) || { at: -1e9, parity: 'b', again: null, beat: 0 };
+  const beat = last.beat || riteMs('medium', 340);
   if (now - last.at < beat) {
-    // Under a rite still typing: said again the moment the beat ends, with whatever is written then.
+    // Under an edge still cutting: said again the moment the beat ends, with whatever is written
+    // then.
     if (!last.again) {
       last.again = later(() => {
         last.again = null;
@@ -614,37 +786,22 @@ function say(node) {
     return;
   }
   const parity = last.parity === 'a' ? 'b' : 'a';
-  saidAt.set(node, { at: now, parity, again: null });
+  // The treads and the length of this one line's cut (both spells read them), and the beat is as
+  // long as the cut, so no line starts over one still being cut.
+  const length = cutOn(node, 'line-said', { family: 'stair', duration: 'medium', alias: 'line-said-b' }) || riteMs('medium', 340);
+  saidAt.set(node, { at: now, parity, again: null, beat: length });
   node.setAttribute('data-said', parity);
+  // Whole, the line rests unmasked: the attribute comes off once the edge has crossed it (the end
+  // of this parity's own cut), unless a newer line has taken it over in the meantime. Without the
+  // engine there is no cut to wait for, and the clock is the length the stylesheet gives it.
+  const ends = () => {
+    if (node.getAttribute('data-said') === parity) node.removeAttribute('data-said');
+  };
+  if (motion) whenEnded(node, parity === 'a' ? 'line-said' : 'line-said-b', '', length * 2 + 200, ends, true);
+  else later(ends, length + 40);
 }
 
-// A small roll of a thing's particulars (a seal's tilt and teeth, a hatch's angle), seeded, so the
-// same working wears the same seal twice and no two knobs on one rail wear the same one.
-function particulars(node, rnd) {
-  if (!node || !node.style) return;
-  node.style.setProperty('--seal-rot', ((rnd() - 0.5) * 9).toFixed(2) + 'deg');
-  node.style.setProperty('--seal-teeth', String(5 + Math.floor(rnd() * 7)));
-  node.style.setProperty('--hatch-angle', Math.round(rnd() * 180) + 'deg');
-  node.style.setProperty('--screen-pitch', (3 + Math.round(rnd() * 4)) + 'px');
-  node.style.setProperty('--ward-angle', Math.round(-60 + rnd() * 120) + 'deg');
-  node.style.setProperty('--bar-pitch', (5 + Math.round(rnd() * 6)) + 'px');
-  node.style.setProperty('--plate-angle', Math.round(-20 + rnd() * 40) + 'deg');
-}
-
-// A rolled order 0..n-1 for things that are dealt one tread each, so the deal differs every time.
-function dealOrder(n, rnd) {
-  const order = [];
-  for (let i = 0; i < n; i++) order.push(i);
-  for (let i = n - 1; i > 0; i--) {
-    const j = Math.floor(rnd() * (i + 1));
-    const held = order[i];
-    order[i] = order[j];
-    order[j] = held;
-  }
-  return order;
-}
-
-// The page scrolls along a rolled curve, or jumps: never along the browser's own smoothing.
+// The page scrolls in a rolled stair of treads, or jumps: never along the browser's own smoothing.
 function scrollToTop() {
   if (motion && typeof motion.scrollTo === 'function') motion.scrollTo(0);
   else window.scrollTo({ top: 0, behavior: 'auto' });
@@ -662,13 +819,19 @@ function readSeeds(node) {
   return out;
 }
 
+// The four seeds inline on :root. A seed already there as it is asked for is not written again:
+// every write on :root restyles the whole page, so only a colour that changes costs that.
 function writeSeeds(seeds) {
-  for (const name of SEEDS) document.documentElement.style.setProperty('--' + name, seeds[name]);
+  for (const name of SEEDS) {
+    if (!wearing || wearing[name] !== seeds[name]) document.documentElement.style.setProperty('--' + name, seeds[name]);
+  }
+  wearing = Object.assign({}, seeds);
 }
 
 // The seeds come off again, so the rules in _sass/_mood.scss own the palette once more.
 function clearSeeds() {
   for (const name of SEEDS) document.documentElement.style.removeProperty('--' + name);
+  wearing = null;
 }
 
 // The four of `seeds` that are there, and nothing else a caller put on the object.
@@ -683,103 +846,60 @@ function someSeeds(seeds) {
   return out;
 }
 
-/* The site becomes `to` from wherever it is now, by way of a settled tone, and lands exactly on
-   it (issue #61) -- a quick fade out to the tone so the colour it was leaves cleanly, then a
-   fuller fade from the tone into the colour that was asked for, so the theme shifts through a
-   settled middle rather than smearing one palette straight over another. A visitor who asked for
-   less motion gets the change and not the shift.
+/* The site becomes `to` from wherever it is now, and lands exactly on it (issue #61): the palette
+   steps over in a stair of two treads -- the four seeds together, the first a mix on the way from
+   the colour the site was and the second the colour asked for -- and never slides one palette over
+   another or dips through a third colour on the way. Two and no more, because a tread is one write
+   of the four seeds on :root and every such write restyles the whole page: two is the shortest
+   stair that is still a stair, and the arrival's own edge is what carries the piece into its new
+   colours. A visitor who asked for less motion gets the change and not the steps.
 
-   The shift is a working of its own (README: "Motion axiom"), and no two are alike: each of the
-   four seeds leaves along a curve rolled for it alone and rises along another, the four staggered
-   by a few rolled frames so the ground lands before the accents snap in, or the accents before the
-   ground; the tone in the middle is the roll's -- grey most of the time, now and then an ink or an
-   ash -- and the whole of it runs at the tempo of the mood the site is arriving in. */
+   The turn is a movement of its own (README: "Motion axiom"), and no two are alike: when the first
+   tread falls comes off a leave stair rolled for this turn (a hold, then treads coming quicker) and
+   how far it goes off an arrive stair rolled for it (the first tread the longest way), at the tempo
+   of the mood the site is arriving in. A timer per tread, never a frame loop, and nothing is laid
+   over the piece for it: the palette only ever turns as a piece arrives or the threshold comes
+   back. */
 function crossfade(from, to, done) {
-  if (fading) cancelAnimationFrame(fading);
-  fading = 0;
-  // Nothing to shift: one world's own palette opening on its own page, most of the time.
-  if (calm.matches || typeof requestAnimationFrame !== 'function'
-      || SEEDS.every((name) => from[name] === to[name])) {
+  for (const handle of turning) window.clearTimeout(handle);
+  turning = [];
+  // Nothing to turn: one world's own palette opening on its own page, most of the time.
+  if (calm.matches || SEEDS.every((name) => from[name] === to[name])) {
     writeSeeds(to);
     if (done) done();
     return;
   }
-  // This turn's paint is still the colour the site was: the shift starts from there.
+  // This turn's paint is still the colour the site was: the turn starts from there (and writes
+  // nothing where the site already wears it).
   writeSeeds(from);
-  // The old ground is torn off the piece (README: "Motion axiom"): where the ground seed changes,
-  // a veil the colour it was is laid over the inner and eaten down the ladder in bites (veil-tear
-  // and veil-tear-b alternate, _sass/_stage.scss) while the seeds jump through their treads under
-  // it, so the new palette arrives as shards and never as a wash. The stub records the strings.
-  if (stage && stage.dataset && stage.style && from.bg !== to.bg) {
-    stage.style.setProperty('--veil-bg', from.bg || 'transparent');
-    turnParity = turnParity === 'a' ? 'b' : 'a';
-    stage.dataset.turning = turnParity;
-    later(() => delete stage.dataset.turning, riteMs('medium', 340) + 80);
+  const length = TURN_MS * riteTempo();
+  const when = riteEase('leave');
+  const howFar = riteEase('arrive');
+  const count = 2;
+  const treads = [];
+  for (let i = 1; i <= count; i++) {
+    const t = i / count;
+    const at = i === count ? length : Math.round(length * Math.max(0, Math.min(1, when(t * 0.92))));
+    const y = i === count ? 1 : Math.max(0, Math.min(1, howFar(t)));
+    const last = treads[treads.length - 1];
+    // Two treads that fall at one moment are one tread, the further of the two: one write each.
+    if (last && last.at >= at) last.y = Math.max(last.y, y);
+    else if (!last || y > last.y) treads.push({ at, y });
   }
-  const tempo = riteTempo();
-  const tone = TONES[Math.floor(Math.random() * TONES.length)];
-  // The palette turns over in a step series, never a smear (README: "Motion axiom"): each seed
-  // flashes to the tone for one held frame, then jumps through three to six rolled intermediate
-  // mixes with holds between them -- a hand-tinted plate changing frame by frame -- and lands on
-  // the colour asked for. The treads' places in time come off a leave curve rolled for this
-  // seed and their heights off an arrive curve rolled for it, so the stair is the roll's twice
-  // over; the four seeds set out in a rolled order a few rolled frames apart.
-  const plan = {};
-  for (const name of SEEDS) {
-    const dip = riteEase('leave');
-    const rise = riteEase('arrive');
-    const count = 3 + Math.floor(Math.random() * 4);
-    const treads = [];
-    for (let i = 1; i <= count; i++) {
-      const t = i / count;
-      treads.push({
-        at: Math.max(0, Math.min(1, dip(t * 0.92))), // when this tread is reached, as a fraction
-        y: i === count ? 1 : Math.max(0, Math.min(1, rise(t))) // how far it is along the change
-      });
-    }
-    treads.sort((a, b) => a.at - b.at);
-    plan[name] = {
-      wait: Math.round(Math.random() * 90 * tempo), // the stagger: when this seed sets out
-      flashMs: DIP_MS * tempo * (0.25 + Math.random() * 0.3), // the one frame of the tone
-      riseMs: RISE_MS * tempo * (0.8 + Math.random() * 0.5),
-      treads,
-      was: ''
-    };
-  }
-  const total = Math.max(...SEEDS.map((name) => plan[name].wait + plan[name].flashMs + plan[name].riseMs));
-  const startedAt = performance.now();
-  const step = (now) => {
-    const elapsed = now - startedAt;
-    const at = {};
-    let moved = false;
-    for (const name of SEEDS) {
-      const p = plan[name];
-      const own = elapsed - p.wait;
-      let value;
-      if (own <= 0) {
-        value = from[name];
-      } else if (own < p.flashMs) {
-        value = tone; // the one flash: the colour it was is gone before the next is there
-      } else {
-        const f = (own - p.flashMs) / p.riseMs;
-        let y = 0;
-        for (const tread of p.treads) if (f >= tread.at) y = tread.y;
-        value = f >= 1 || y >= 1 ? to[name] : mix(tone, to[name], y);
+  for (const tread of treads) {
+    turning.push(window.setTimeout(() => {
+      if (tread.y < 1) {
+        const at = {};
+        for (const name of SEEDS) at[name] = mix(from[name], to[name], tread.y);
+        writeSeeds(at);
+        return;
       }
-      at[name] = value;
-      if (value !== p.was) moved = true;
-      p.was = value;
-    }
-    if (moved) writeSeeds(at); // a hold is a frame nothing is written on
-    if (elapsed < total) {
-      fading = requestAnimationFrame(step);
-      return;
-    }
-    writeSeeds(to);
-    fading = 0;
-    if (done) done();
-  };
-  fading = requestAnimationFrame(step);
+      turning = [];
+      writeSeeds(to);
+      startFrames(); // the palette has landed: a piece already on the stage is given a frame in it
+      if (done) done();
+    }, tread.at));
+  }
 }
 
 /* The site features `mood`, in `seeds` when the card that was pressed handed its own palette over,
@@ -789,14 +909,27 @@ function crossfade(from, to, done) {
    by the one file that derives a card's (variant.recolor).
 
    Hands back the palette the site is landing in, which is what the piece is painted in: a piece
-   never reads a colour the crossfade is only passing through. */
+   never reads a colour the crossfade is only passing through.
+
+   It asks the page for nothing it already knows. The colour the site is wearing is the one this
+   file last wrote (or, with nothing written, the one the table gives the attributes on :root), and
+   the mood's own four come off the stylesheet's rules (moodSeeds), so an open writes the attribute
+   and the seeds and never makes the browser restyle the page to read them back. The attribute is
+   written only when the mood changes: js/motion.js hears every write of it as a change of mood and
+   rolls the page again under it, and another piece of the same world is no change of mood. */
 function feature(mood, seeds, variant) {
   const root = document.documentElement;
-  const from = readSeeds(root);
-  clearSeeds(); // so the attribute below, and not the last piece's seeds, says what the site is
-  if (mood) root.dataset.featured = mood;
-  else delete root.dataset.featured;
-  const own = readSeeds(root); // this mood's own four, before any configuration
+  const from = wearing ? Object.assign({}, wearing) : underneath(root);
+  if (mood) {
+    if (root.dataset.featured !== mood) root.dataset.featured = mood;
+  } else if (root.dataset.featured !== undefined) {
+    delete root.dataset.featured;
+  }
+  let own = moodSeeds(mood); // this mood's own four, before any configuration
+  if (!own) {
+    clearSeeds(); // so the attribute, and not the last piece's seeds, says what the site is
+    own = readSeeds(root);
+  }
   const handed = someSeeds(seeds);
   const configured = Object.keys(handed).length || !variant || variant.plain
     ? handed : someSeeds(recolor(own, variant));
@@ -810,11 +943,16 @@ function feature(mood, seeds, variant) {
 // _sass/_mood.scss gives the page once the attribute is off it.
 function unfeature() {
   const root = document.documentElement;
-  const from = readSeeds(root);
+  const from = wearing ? Object.assign({}, wearing) : underneath(root);
   featured = null;
-  clearSeeds();
-  delete root.dataset.featured;
-  crossfade(from, readSeeds(root), clearSeeds);
+  if (root.dataset.featured !== undefined) delete root.dataset.featured;
+  const d = root.dataset || {};
+  let to = moodSeeds(d.mood || d.world);
+  if (!to) {
+    clearSeeds();
+    to = readSeeds(root);
+  }
+  crossfade(from, to, clearSeeds);
 }
 
 const modules = new Map();
@@ -864,7 +1002,6 @@ const ui = stage ? {
   doneText: document.getElementById('stage-done-text'),
   onward: document.getElementById('stage-next'),
   again: document.getElementById('stage-again'),
-  burst: document.getElementById('stage-burst'),
   tune: document.getElementById('stage-difficulty'),
   gate: null // the element the unlock helper powers down, one per unpowered open
 } : null;
@@ -887,7 +1024,7 @@ let firstPiece = null; // on a page of no world (the 404): the piece that opened
 const altRnd = mulberry32(newSeed()); // for the 'tap for me' button, apart from the piece's own
 
 // Everything the stage has running for the piece on stage: the ceremony's timers, a hold knob's
-// ticker, the frame loop. A piece is an instantiation and nothing of it may outlive its turn, so
+// timer, the frame loop. A piece is an instantiation and nothing of it may outlive its turn, so
 // each is registered here with the one call that stops it and close() stops the lot. The token
 // guards further down stay as they are -- a callback that has already fired cannot be unfired --
 // but nothing now depends on them to notice that its piece is gone.
@@ -907,17 +1044,6 @@ function later(fn, ms) {
   return stop;
 }
 
-function ticking(fn, ms) {
-  let handle = 0;
-  const stop = () => {
-    running.delete(stop);
-    window.clearInterval(handle);
-  };
-  handle = window.setInterval(fn, ms);
-  running.add(stop);
-  return stop;
-}
-
 function stopRunning() {
   for (const stop of Array.from(running)) stop();
   running.clear();
@@ -925,6 +1051,8 @@ function stopRunning() {
 
 function setMode(mode) {
   stage.dataset.mode = mode;
+  // A stage that is gone arrives whole in any mode that shows it (see isGone above).
+  if (mode !== 'vanishing' && mode !== 'loading') arriveWhole();
 }
 
 /* ---- opening a piece ---------------------------------------------------------------------- */
@@ -935,20 +1063,19 @@ async function open(file, seed, options) {
   const world = worldOf(file);
   if (!world) return false;
   seed = (Number(seed) >>> 0) || newSeed();
-  // A piece torn down for another is unmade, not cut: its rail and seals are ghosted beside the
-  // real rail and eaten down the ladder while the next develops (see ghostRail). The ghost is
-  // taken before close() empties the rail, and its timer is registered after close() has stopped
-  // everything the old piece had running, so it is the new piece's to sweep.
+  // A piece torn down for another over a stage that stands leaves by a cut, not in one: its rail
+  // and seals are ghosted over the real rail and leave behind one slice while the next is dealt
+  // (see ghostRail). The ghost is taken before close() empties the rail, and its wait is
+  // registered after close() has stopped everything the old piece had running, so it is the new
+  // piece's to sweep. It is swept when its own slice has crossed it (whenEnded): this open() is the
+  // longest task the stage runs, and a clock started inside it would sweep the ghost while most of
+  // it still stood. A stage that is gone has nothing standing to ghost.
   const ghost = ghostRail();
-  close();
+  close(ghost);
   if (ghost) {
-    stage.dataset.unmaking = '';
-    later(() => {
-      ghost.remove();
-      delete stage.dataset.unmaking;
-    }, riteMs('medium', 340) + 6 * riteMs('stagger', 44) + 80);
+    const leaving = cutOn(ghost, 'knob-unmake', { family: 'leave', duration: 'medium' });
+    whenEnded(ghost, 'cut-out', '', leaving ? leaving * 2 + 200 : riteMs('medium', 340) + 80, () => ghost.remove(), true);
   }
-  if (opts.redeal) stage.dataset.redeal = '';
   const token = {};
   pending = token;
   // The configuration this piece is of: the pressed card's seven dials, or -- for a piece nobody
@@ -1028,11 +1155,11 @@ function gate(opened) {
           persona ? persona.stars() : []);
         if (opened.card) heading(opened.world, opened.card);
       }
-      // Power coming on is an arrival: the plate warms like a tube and the piece develops.
-      opened.opts = Object.assign({}, opened.opts, { arriving: true, powered: true });
-      // First the gate -- the machine under its sheet -- is unmade down the ladder where it
-      // stood, and only then does the scene develop in its place: one thing after another, never
-      // a cut under an arrival. Where nothing can play, the helper hands back at once.
+      // Power coming on is an arrival: the piece is dealt onto the stage like any other.
+      opened.opts = Object.assign({}, opened.opts, { arriving: true });
+      // First the gate -- the machine under its sheet -- is unmade where it stood (js/site.js),
+      // and only then is the piece dealt in its place: one thing after another, never one edge
+      // over another. Where nothing can play, the helper hands back at once.
       const gate = ui.gate;
       ui.gate = null;
       const go = () => { if (pending === opened.token) begin(opened); };
@@ -1043,14 +1170,15 @@ function gate(opened) {
   if (opened.opts.focus !== false) ui.title.focus({ preventScroll: true });
 }
 
-/* The old rail and its seals, ghosted beside the real rail for one movement: every knob and dot
-   is moved (not copied -- the stub browser has no cloneNode) into a .stage-ghost under no pointer,
-   which the stylesheet eats down the ladder knob by knob in the order they were dealt, and the
-   caller sweeps when the movement is over. Nothing of it is in #stage-knobs or #stage-progress,
-   so the rail reads as empty the instant open() returns. A visitor who asked for less motion
-   gets the cut, as everywhere. */
+/* The old rail and its seals, ghosted over the real rail for one movement: every knob and dot is
+   moved (not copied -- the stub browser has no cloneNode) into a .stage-ghost under no pointer,
+   which the stylesheet takes away as one thing behind one slice toward where departures go, and
+   the caller sweeps when the movement is over. Nothing of it is in #stage-knobs or
+   #stage-progress, so the rail reads as empty the instant open() returns. A stage that is gone
+   has nothing standing to ghost -- the rail left with the rest of the piece -- and a visitor who
+   asked for less motion gets the change at once, as everywhere. */
 function ghostRail() {
-  if (!ui || !ui.knobs || !ui.knobs.parentNode || calm.matches) return null;
+  if (!ui || !ui.knobs || !ui.knobs.parentNode || calm.matches || isGone()) return null;
   const side = ui.knobs.parentNode;
   for (const old of side.querySelectorAll('.stage-ghost')) old.remove(); // one ghost at a time
   const knobs = Array.from(ui.knobs.children || []);
@@ -1065,14 +1193,12 @@ function ghostRail() {
   for (const dot of dots) seals.appendChild(dot);
   ghost.appendChild(seals);
   // A ghost is a picture of controls and not controls: nothing in it is reachable by a Tab from the
-  // heading while it is eaten, so the old piece's knobs are made inert and every control in them
-  // disabled and taken out of the tab order (the stub browser may lack either).
+  // heading while it leaves, so the old piece's knobs are made inert and every control in them
+  // taken out of the tab order (the stub browser may lack inert) -- but not disabled, which would
+  // grey the picture in a cut just before its slice takes it away.
   if ('inert' in ghost) ghost.inert = true;
   if (typeof ghost.querySelectorAll === 'function') {
-    for (const control of ghost.querySelectorAll('button, input, select, textarea')) {
-      control.disabled = true;
-      control.tabIndex = -1;
-    }
+    for (const control of ghost.querySelectorAll('button, input, select, textarea')) control.tabIndex = -1;
   }
   side.appendChild(ghost);
   return ghost;
@@ -1170,7 +1296,9 @@ function makeEnv(seed, world, stars, variant, card) {
     },
     // The stage's own colours, with the featured palette's four seeds over them: the piece is
     // painted in the colour the site is landing in, never in one the crossfade is passing through.
-    colors: Object.assign(readColors(stage), featured || {}),
+    // The rest (--fg, --muted) are the same under every palette, so they are the ones read as the
+    // page loaded, and an open never restyles the page to ask for them again.
+    colors: Object.assign({}, inks || readColors(stage), featured || {}),
     mix,
     alpha,
     reduced: calm.matches,
@@ -1182,8 +1310,9 @@ function makeEnv(seed, world, stars, variant, card) {
     // How hard the visitor asked for it (issue #93). The one setting, read here and nowhere else
     // in this file, so every piece on the site is dealt at it.
     difficulty: askedDifficulty(),
-    // How this piece moves (README: "Motion axiom"): its own roll of a curve, a stair, a ratchet,
-    // a flicker and a matte, from the same seed, so nothing it draws moves along a formula.
+    // How this piece moves (README: "Motion axiom", the cut): its own roll of a landing, a stair, a
+    // ratchet, a one-cut flicker and one edge, from the same seed, so nothing it draws moves along
+    // a formula and nothing it changes changes but by that edge.
     rite: rite(seed)
   };
 }
@@ -1231,7 +1360,7 @@ function begin(opened) {
     tally: null, // the tally across puzzles, once this one is solved
     inTap: false, // whether the piece's tap() is running, which is the one time ctx.set() counts
     startedAt: performance.now(),
-    undos: [], // what takes the composed arrivals' inline roll off the parts that outlive the piece
+    undos: [], // what takes the arrival's inline roll off the parts that outlive the piece
     ctx: null
   };
 
@@ -1242,17 +1371,10 @@ function begin(opened) {
   const renamed = ui.title.textContent !== named;
   unreveal(ui.title);
   ui.title.textContent = named;
-  if (renamed) reveal(ui.title); // the rite's word lands glyph by glyph (the text rites above)
-  // The working's own particulars, rolled from its seed and not from the piece's stream (env.rnd is
-  // the piece's to spend): the seal's tilt and teeth, the hatch's angle, and the blotches the
-  // plate develops through, so a shared address develops the same way twice.
-  const own = mulberry32((seed ^ 0x9e3779b9) >>> 0);
-  particulars(stage, own);
-  platePlan(own);
+  if (renamed) reveal(ui.title); // the rite's word is cut in by one slice (the text rites above)
   // The sigil: the working's number beside the world's name, which is the seed in this piece's own
   // address -- so the one piece of numerology on the site is also the way to send a piece to someone.
-  // It is cast: hidden until written, so the stylesheet's sigil-cast plays on every un-hiding, and
-  // the digits land through the glyph rite.
+  // Hidden until written, and its figures cut in as they are written.
   if (ui.sigil) {
     ui.sigil.hidden = true;
     inscribe(ui.sigil, 'working ' + seed);
@@ -1260,19 +1382,40 @@ function begin(opened) {
   }
   inscribe(ui.brief, piece.brief || (card && (card.quote || card.text || card.mono)) || '');
   // The goal, in one line under the rules: what counts as solved. A puzzle without one is a toy,
-  // so the line is only ever hidden for a piece that has not said. It is pronounced: the chip seals
-  // and the words are revealed, on every un-hiding.
+  // so the line is only ever hidden for a piece that has not said. It is pronounced: the chip is
+  // stamped on and the words are cut in, on every un-hiding.
   const goal = typeof piece.goal === 'string' ? piece.goal.trim() : '';
   if (ui.goal) ui.goal.hidden = true;
   if (ui.goalText) inscribe(ui.goalText, goal);
   if (ui.goal) ui.goal.hidden = !goal;
   ui.canvas.setAttribute('aria-label', 'the scene: ' + named);
   // Framed as the card was: the piece's own ratio, stretched by the dial that stretched the card's
-  // frame in the feed, so what a visitor pressed and what they land on are the same shape.
+  // frame in the feed, so what a visitor pressed and what they land on are the same shape. The shape
+  // is the scene's, and the ratio is the body's: the scene's column is sized by it as well as the
+  // scene, and a figure written on the scene alone never reaches the column, which then stood at
+  // 16/9 and left a band between an upright scene and the knobs (issue #65).
   const shape = framed(piece.aspect || '16 / 9', variant);
   const ratio = aspectRatio(shape);
   ui.scene.style.setProperty('--piece-aspect', shape);
-  ui.scene.style.setProperty('--piece-ratio', ratio.toFixed(4));
+  ui.body.style.setProperty('--piece-ratio', ratio.toFixed(4));
+
+  // The scene has a size only once the stage is in a mode that shows it.
+  const arriving = !!(opts && opts.arriving && !calm.matches);
+  // The arrival is one roll for this opening, written on the inner before anything is dealt: the
+  // side the piece comes from (--arrive-x/y), the slice it comes in behind (--arrive-angle) and its
+  // stair, seeded off the working, so the same address arrives the same way twice and no two
+  // workings alike. Every part dealt below inherits it, so the piece comes in from one side as one
+  // gesture rather than each part from a direction of its own.
+  if (arriving) {
+    const undoInner = composeArrival(ui.inner, seed ^ 0x51a6e, 'stage-in');
+    if (undoInner) current.undos.push(undoInner);
+  }
+  // Over a stage that stands the parts are dealt (deal(), below); after the way on was pressed the
+  // stage is gone, and the inner arrives whole instead, with nothing in it dealt a second time. A
+  // piece that comes up from below is dealt from the bottom knob up, so the first knob down is the
+  // one nearest the side it comes from; otherwise from the top, in the order the rail reads.
+  const dealing = arriving && !isGone();
+  current.fromBelow = dealing && parseFloat(ui.inner.style.getPropertyValue('--arrive-y')) > 0;
   renderKnobs();
   renderProgress();
   renderCheck();
@@ -1282,32 +1425,7 @@ function begin(opened) {
   // seeded, where it was lit so the visitor could pass the seeding by -- so the piece itself has
   // to put it back to dim, or a sky-gated world would start live with the way on still lit.
   dimTheWayOn();
-
-  // The scene has a size only once the stage is in a mode that shows it.
-  const arriving = !!(opts && opts.arriving && !calm.matches);
   setMode(arriving ? 'arriving' : 'live');
-  // The deal (README: "Motion axiom"): while data-dealing is on, the plate develops through its
-  // blotch matte, the head's lines arrive one tread each, the knobs stamp onto the rail in a rolled
-  // order and the check is struck last (_sass/_stage.scss). It outlasts the mode, which only the
-  // inner's travel reads: every part has its own delay and its own length, and the attribute comes
-  // off once the slowest has landed.
-  if (arriving) {
-    stage.dataset.dealing = '';
-    if (opts.powered) stage.dataset.powered = '';
-    // The arrival is composed for this one opening (the composer above): the inner's travel and
-    // the head's lines each get a geometry, a curve and a composition of their own, seeded off the
-    // working and the part, so the same address arrives the same way twice and no two workings
-    // alike. A re-deal does not travel, so it composes nothing.
-    if (!opts.redeal) {
-      const undoInner = composeArrival(ui.inner, seed ^ 0x51a6e, 'stage-in');
-      if (undoInner) current.undos.push(undoInner);
-      const parts = ui.head && ui.head.children ? Array.from(ui.head.children) : [];
-      parts.forEach((part, i) => {
-        const undo = composeArrival(part, (seed ^ ((i + 7) * 0x9e3779b9)) >>> 0, 'head-in');
-        if (undo) current.undos.push(undo);
-      });
-    }
-  }
   current.ctx = makeCtx(env);
   sizeHead(); // this piece's title and line are written: the scene's room is whatever they left
   sizeScene();
@@ -1316,24 +1434,16 @@ function begin(opened) {
   } catch (e) {
     /* a piece that cannot start still has its knobs; the frame loop guards itself */
   }
+  if (dealing) deal();
   if (opts && opts.arriving) {
-    // For as long as the arrival composed on the inner is (--motion-stage-in, inline) or, without
-    // the composer, the stylesheet is giving it right now (--motion-long, rolled by js/motion.js),
-    // and a little over, so the mode never changes under a movement still going.
+    // The mode says the piece is arriving for as long as the arrival written on the inner is
+    // (--motion-stage-in, inline) or, without the engine, the stylesheet is giving it right now
+    // (--motion-long, rolled by js/motion.js). Nothing is painted off the mode: every part that
+    // moves ends on its own animation, so this clock only says when the stage calls itself live.
     const travel = inlineMs(ui.inner, 'stage-in', riteMs('long', 560));
     later(() => {
       if (current && current.token === token && stage.dataset.mode === 'arriving') setMode('live');
     }, travel + 60);
-    // The deal outlasts it by the slowest knob's stamp (each composed at its own length, up to a
-    // third over the medium) and the staggers.
-    let stamp = riteMs('medium', 340);
-    for (const s of current.state.values()) stamp = Math.max(stamp, inlineMs(s.knob, 'knob-stamp', 0));
-    later(() => {
-      if (!current || current.token !== token) return;
-      delete stage.dataset.dealing;
-      delete stage.dataset.redeal;
-      delete stage.dataset.powered;
-    }, travel + stamp + (steps.length + 3) * riteMs('stagger', 44) + 80);
   }
   if (!opts || opts.focus !== false) ui.title.focus({ preventScroll: true });
   startFrames();
@@ -1344,37 +1454,44 @@ function begin(opened) {
   }
 }
 
-/* The matte the plate develops through (README: "Motion axiom"): a stack of hard-edged blotches at
-   rolled places whose radii step up in four treads -- --plate-1 to --plate-4, each a mask value the
-   stylesheet's plate-develop climbs before the engine's own full matte -- so the picture comes
-   through in bites and never washes in. Seeded from the working's seed, so one address develops
-   the same way twice and every seed differently. The stub records the strings and reads nothing. */
-function platePlan(rnd) {
-  if (!ui || !ui.scene || !ui.scene.style) return;
-  const blots = [];
-  const count = 10 + Math.floor(rnd() * 5);
-  for (let i = 0; i < count; i++) {
-    blots.push({ x: Math.round(rnd() * 100), y: Math.round(rnd() * 100), r: 16 + Math.round(rnd() * 30) });
+/* The deal (README: "Motion axiom"), onto a stage that stands. The picture develops onto the plate
+   behind the arrival's slice in the arrival's own treads, which the canvas inherits from the inner;
+   the knobs come onto the rail behind the same slice one after another (--knob-i, renderKnobs), each
+   in treads cut for it; and the dots are stamped on in the order they read. Each part plays a class
+   of its own and loses it when its own cut has ended (whenEnded), so nothing stands masked after it
+   has landed -- the picture least of all, which repaints every frame anything on it moves and would
+   otherwise be drawn through a mask until the slowest knob was down. Without the engine nothing was
+   cut, and the parts are simply there. */
+function deal() {
+  const c = current;
+  if (!c || !motion) return;
+  const travel = inlineMs(ui.inner, 'stage-in', 0);
+  if (travel) land(ui.canvas, false, { length: travel });
+  const stagger = riteMs('stagger', 44);
+  const wait = riteMs('short', 170);
+  for (const s of c.state.values()) {
+    const knob = s.knob;
+    const ms = inlineMs(knob, 'knob-in', 0);
+    if (!knob || !ms) continue;
+    const delay = (Number(knob.style.getPropertyValue('--knob-i')) || 0) * stagger + wait;
+    knob.classList.add('is-dealing');
+    whenEnded(knob, 'cut-in', '', (ms + delay) * 2 + 200, () => knob.classList.remove('is-dealing'), true);
   }
-  const climb = [0.22, 0.42, 0.66, 1];
-  for (let k = 0; k < climb.length; k++) {
-    const layer = blots.map((b) => 'radial-gradient(circle at ' + b.x + '% ' + b.y + '%, #000 '
-      + Math.round(b.r * climb[k]) + '%, transparent 0)').join(', ');
-    ui.scene.style.setProperty('--plate-' + (k + 1), layer);
-    // The veil's matte at the same tread is the negative: the whole plate with the blotches taken
-    // out of it (the top layer subtracts the union of the blotches under it), so the veil is eaten
-    // exactly where the picture is let through, in the working's own bites and never through the
-    // engine's fine tile, which at the plate's size reads as a dim.
-    ui.scene.style.setProperty('--plate-veil-' + (k + 1), 'linear-gradient(#000, #000) subtract, ' + layer);
-  }
+  const stamp = riteMs('short', 170);
+  const after = riteMs('medium', 340);
+  ui.progress.querySelectorAll('.stage-dot').forEach((dot, i) => {
+    dot.classList.add('is-dealing');
+    whenEnded(dot, 'seal-stamp', '', (stamp + after + i * stagger) * 2 + 200, () => dot.classList.remove('is-dealing'), true);
+  });
 }
 
-/* A bar's treads (README: "Motion axiom"): a fill advances in six to nine rolled uneven steps and
-   holds between them, never creeps. The list is the knob's own, rolled when it is dealt, and both
-   the piece's progress() and a hold's ticker snap to it, so the step series is in the data the
-   stylesheet is handed and not only in the paint. The last tread is the fill itself (1). */
+/* A bar's treads (README: "Motion axiom"): a fill advances in three to five rolled uneven steps
+   and holds between them, never creeps. The list is the knob's own, rolled when it is dealt: the
+   piece's progress() snaps to it, and a hold's bar is cut across on it (holdStair), so the step
+   series is in the data the stylesheet is handed and not only in the paint. The last tread is the
+   fill itself (1). */
 function barTreads(rnd) {
-  const n = 6 + Math.floor(rnd() * 4);
+  const n = 3 + Math.floor(rnd() * 3);
   const treads = [];
   for (let i = 1; i < n; i++) treads.push((i + (rnd() - 0.5) * 0.7) / n);
   treads.sort((a, b) => a - b);
@@ -1386,6 +1503,57 @@ function snapTread(fraction, treads) {
   let at = 0;
   for (const t of treads || []) if (fraction >= t) at = t;
   return at;
+}
+
+// The same treads as a timing function, for the hold's bar: at each moment t the fill jumps to t and
+// holds, so the edge stands still between treads and is full exactly when the hold is. A browser
+// that knows no linear() takes as many even steps.
+function holdStair(treads) {
+  const list = (treads || []).filter((t) => t > 0 && t <= 1);
+  if (!list.length || list[list.length - 1] !== 1) list.push(1);
+  if (motion && motion.stepped) return 'steps(' + list.length + ', jump-end)';
+  const stops = ['0'];
+  let was = 0;
+  for (const t of list) {
+    const at = (Math.round(t * 1000) / 10) + '%';
+    stops.push(was + ' ' + at, (Math.round(t * 1000) / 1000) + ' ' + at);
+    was = Math.round(t * 1000) / 1000;
+  }
+  return 'linear(' + stops.join(', ') + ')';
+}
+
+// Where on a knob the press that set it landed, as fractions of the knob: the point its seal's
+// curve grows from. Read once a press, never in a loop.
+function pressedOn(s, knob, ev) {
+  if (!s || typeof knob.getBoundingClientRect !== 'function' || typeof ev.clientX !== 'number') return;
+  const box = knob.getBoundingClientRect();
+  if (!box.width || !box.height) return;
+  s.pressed = {
+    x: Math.max(0, Math.min(1, (ev.clientX - box.left) / box.width)),
+    y: Math.max(0, Math.min(1, (ev.clientY - box.top) / box.height)),
+    at: performance.now()
+  };
+}
+
+// The knobs whose plate carries the seal: those with no control in them that stays set. A choice,
+// a toggle, a pick and a grid are sealed by their own pressed control (_controls.scss), and a
+// second curve on the plate round the same press, at another size and in other treads, would be
+// two edges for one change -- so their plate only steps to its set colour.
+const PLATE_SEALED = ['range', 'number', 'word', 'order', 'press', 'hold', 'tap', 'wait'];
+
+// A knob set, and sealed (README: "Motion axiom"): the seal's point is written on the knob once,
+// as it becomes set -- where the press that set it landed if one did a moment ago, and its middle
+// for a key, for the piece setting it, or for a finish setting the rest -- so the two shades its
+// plate rests in are split round a point with a reason, the curve lands from there (is-landing,
+// on the plate's ::before), and its dot lights round the same point (renderProgress).
+function seal(s) {
+  if (!s || !s.knob || !s.knob.style) return;
+  const p = s.pressed && performance.now() - s.pressed.at < 1500 ? s.pressed : { x: 0.5, y: 0.5 };
+  s.seal = [Math.round(p.x * 100) + '%', Math.round(p.y * 100) + '%'];
+  s.knob.style.setProperty('--seal-x', s.seal[0]);
+  s.knob.style.setProperty('--seal-y', s.seal[1]);
+  s.knob.classList.add('is-set');
+  if (s.knob.dataset.seal === 'plate') land(s.knob, 'knob-seal', { family: 'arrive', duration: 'long', pseudo: 'before' });
 }
 
 function makeCtx(env) {
@@ -1445,6 +1613,7 @@ function makeCtx(env) {
     hint() {
       c.hints += 1;
       renderTries();
+      startFrames();
     },
     get tries() {
       return c.tries;
@@ -1465,7 +1634,8 @@ function makeCtx(env) {
    height and the gap under it, onto --stage-head for _stage.scss (which only guesses at one line of
    it). Measured rather than assumed, because a title that wraps is taller, and the scene is what
    should give up the difference -- not the margin that lets the feed peek over the fold. offsetHeight
-   and not a rect, so the ceremony's scaling of the stage's inner never reads as a shorter heading. */
+   and not a rect: it is the heading's laid-out height, which the translate an arriving or leaving
+   inner moves by never changes. */
 function sizeHead() {
   if (!ui.head || !ui.inner) return;
   const gap = parseFloat(window.getComputedStyle(ui.inner).rowGap);
@@ -1478,12 +1648,8 @@ function reflow() {
   sizeHead();
   if (!current) return;
   if (Math.abs(ui.scene.getBoundingClientRect().width - lastWidth) < 1) return;
-  // A resize is a re-exposure, not a flicker: the canvas lands through two scanline treads
-  // (plate-reexpose) off data-reflow, which the stage's own clock takes off again.
-  if (!calm.matches) {
-    stage.dataset.reflow = '';
-    later(() => delete stage.dataset.reflow, riteMs('short', 170) + 40);
-  }
+  // A resize is the same picture at a new size, not a new one: the canvas is sized again and the
+  // piece draws on it at once, with nothing played over it.
   sizeScene();
   // A piece that draws only in start() draws again at the new size.
   if (typeof current.piece.frame !== 'function' && typeof current.piece.start === 'function') {
@@ -1510,30 +1676,36 @@ function sizeScene() {
   current.ctx.w = w;
   current.ctx.h = h;
   current.ctx.dpr = dpr;
+  startFrames(); // the canvas is cleared by sizing it: a piece at rest draws its picture again
 }
 
 /* ---- the knobs ----------------------------------------------------------------------------- */
 
 function renderKnobs() {
   ui.knobs.textContent = '';
-  // The knobs are dealt (README: "Motion axiom"): each stamps onto the rail one tread after the
-  // last in an order rolled afresh for this deal -- --knob-i is the delay the stylesheet reads,
-  // never the DOM order, which stays the piece's -- and each wears particulars of its own (the
-  // seal's tilt and teeth, the hatch's angle, the bar's pitch), rolled from the seed and the
-  // knob's place, so no knob on a rail is textured like its neighbour.
-  const order = dealOrder(current.steps.length, altRnd);
+  // The knobs are dealt (README: "Motion axiom", deal()): each comes onto the rail behind the
+  // arrival's slice one tread after the last, starting from the end of the rail nearest the side the
+  // piece comes from -- the bottom knob first for a piece that comes up from below, the top one
+  // otherwise -- and each in treads cut for it alone, seeded off the working and its place, so the
+  // same address deals the same way twice. --knob-i is the turn the stylesheet waits; the DOM order
+  // stays the piece's. The side they all come from is the piece's (the inner's --arrive-*).
+  const count = current.steps.length;
   current.steps.forEach((step, i) => {
     const knob = el('div', 'knob');
+    const state = current.state.get(step.id);
     knob.dataset.id = step.id;
     knob.dataset.kind = step.kind;
     if (step.optional === true) knob.dataset.optional = 'true'; // a helper the check does not wait for
-    knob.style.setProperty('--knob-i', String(order[i]));
-    const own = mulberry32(((current.seed ^ ((i + 1) * 0x9e3779b9)) >>> 0) || 1);
-    particulars(knob, own);
-    // Its stamp onto the rail, and the unmaking it will get as a ghost, composed for this knob
-    // alone (the composer above): its own direction, curve and treads, seeded off its place.
-    composeArrival(knob, (current.seed ^ ((i + 1) * 0x9e3779b9)) >>> 0, 'knob-stamp');
-    current.state.get(step.id).treads = barTreads(own);
+    // The stage seals a knob itself, round the point it was set at (seal), so the engine's own
+    // seal of whatever becomes set (js/motion.js) passes it by.
+    knob.setAttribute('data-rite', 'none');
+    knob.addEventListener('pointerdown', (ev) => pressedOn(state, knob, ev), true);
+    knob.style.setProperty('--knob-i', String(current.fromBelow ? count - 1 - i : i));
+    // Sealed on the plate only where nothing in it seals itself (seal()).
+    if (PLATE_SEALED.indexOf(step.kind) !== -1) knob.dataset.seal = 'plate';
+    const at = ((current.seed ^ ((i + 1) * 0x9e3779b9)) >>> 0) || 1;
+    cutOn(knob, 'knob-in', { family: 'arrive', duration: 'medium', seed: at });
+    state.treads = barTreads(mulberry32(at));
     const ask = el('p', 'knob-ask', step.ask || step.id);
     ask.id = 'knob-ask-' + step.id;
     // A helper the check does not wait for says so, so nobody wonders whether they must use it.
@@ -1563,6 +1735,7 @@ function apply(id, value) {
   } catch (e) {
     /* one knob's handler failing must not stop the piece */
   }
+  startFrames(); // the piece may have been set moving (the frames, above)
 }
 
 function markSet(id, value, by) {
@@ -1574,10 +1747,14 @@ function markSet(id, value, by) {
   // apply() is the usual way that is learnt, and a slider left where it stands never reaches it.
   if (by === 'knob') c.touched = true;
   if (value !== undefined) s.value = value;
+  startFrames(); // set, or set again: the piece may read it on its next frame
   if (!s.set) {
     s.set = true;
     if (s.knob) {
-      s.knob.classList.add('is-set');
+      // Sealed round where it was set, the curve growing from that point (_stage.scss); a knob
+      // the piece set was pressed nowhere, so it is sealed round its middle.
+      if (by === 'piece') s.pressed = null;
+      seal(s);
       if (by === 'piece') s.knob.style.setProperty('--knob-pct', '100%');
     }
     renderProgress();
@@ -1595,9 +1772,11 @@ function renderCheck() {
   if (!c || !ui.check) return;
   const all = Array.from(c.state.values()).every((s) => s.set || s.step.optional === true);
   ui.check.disabled = !all;
-  // The word on it lands by the glyph rite when it changes; the lamp itself is struck by the
-  // stylesheet off `disabled` (check-strike), which is the whole of its state.
-  inscribe(ui.check, c.completed ? 'check again' : (typeof c.piece.checkLabel === 'string' && c.piece.checkLabel.trim() ? c.piece.checkLabel.trim() : 'check'));
+  // The lamp is lit by the stylesheet off `disabled`, which is the whole of its state: its colour
+  // steps to the primary along the stair. The word on it is a control's face, written in place
+  // when it changes and not cut in (the text rites above).
+  const label = c.completed ? 'check again' : (typeof c.piece.checkLabel === 'string' && c.piece.checkLabel.trim() ? c.piece.checkLabel.trim() : 'check');
+  if (ui.check.textContent !== label) write(ui.check, label);
 }
 
 /* The score line beside the check: how many tries so far, or which try solved it, how many hints
@@ -1611,7 +1790,7 @@ function renderTries() {
   else if (c.tries) parts.push(c.tries === 1 ? 'one try so far' : c.tries + ' tries so far');
   if (c.hints) parts.push(c.hints === 1 ? 'one hint' : c.hints + ' hints');
   if (c.completed && c.tally && c.tally.solved > 1) parts.push(c.tally.solved + ' solved so far');
-  // Written whole, typed in by the stylesheet (line-said); its first appearance develops.
+  // Written whole, and cut in by the stylesheet (line-said).
   speak(ui.tries, parts.join(' \u00b7 '));
   ui.tries.hidden = !parts.length;
 }
@@ -1657,6 +1836,7 @@ function judge() {
   } catch (e) {
     verdict = null; /* a verifier that throws has not said yes */
   }
+  startFrames(); // an experiment's check computes a run that its frames replay
   const solved = !!(verdict && verdict.solved);
   const say = verdict && typeof verdict.say === 'string' ? verdict.say.trim() : '';
   if (c.completed) {
@@ -1664,8 +1844,9 @@ function judge() {
     return;
   }
   c.tries += 1;
-  // The try is written beside the verdict so the refusal replays and differs: the stylesheet
-  // restarts the jolt off data-try-parity flipping (stage-no / stage-no-b), keyed by the count.
+  // The try is written beside the verdict so the refusal plays again: the stylesheet starts the
+  // row's one knock aside again off data-try-parity flipping (stage-no / stage-no-b, which go
+  // opposite ways), keyed by the count.
   stage.dataset.try = String(c.tries);
   stage.dataset.tryParity = c.tries % 2 ? 'a' : 'b';
   stage.dataset.verdict = solved ? 'solved' : 'wrong';
@@ -1689,12 +1870,15 @@ function updateGates() {
     const was = s.knob.classList.contains('is-locked');
     s.knob.classList.toggle('is-locked', locked);
     for (const control of s.knob.querySelectorAll('button, input')) control.disabled = locked;
-    // A gate opening tears the ward off (README: "Motion axiom"): data-unwarding plays ward-tear
-    // on the veil and comes off when it has, through the stage's own clock.
+    // A gate opening cuts the ward away (README: "Motion axiom"): data-unwarding has the slice at
+    // the register's angle take the veil off in treads cut for this one opening, and comes off
+    // when the ward's own cut has ended (whenEnded, on the knob's ::after).
     if (was && !locked && !calm.matches) {
       const knob = s.knob;
+      const ms = cutOn(knob, 'unward', { family: 'leave', duration: 'medium' });
       knob.setAttribute('data-unwarding', '');
-      later(() => knob.removeAttribute('data-unwarding'), riteMs('medium', 340) + 80);
+      const off = () => knob.removeAttribute('data-unwarding');
+      whenEnded(knob, 'cut-out', 'after', ms ? ms * 2 + 200 : riteMs('medium', 340) + 80, off, true);
     }
   }
 }
@@ -1721,16 +1905,19 @@ function renderProgress() {
     wanted.push(s);
   }
   // The dots are the working's seals and they persist (README: "Motion axiom"): rendered once per
-  // piece and lit in place, so a seal that lights stamps (seal-light) rather than being replaced
-  // already lit. The ones lighting now are dealt a rolled order for their cascade (--dot-i), which
-  // on a finish is every seal still dark lighting one tread after another toward the done chip.
+  // piece and lit in place, so a seal that lights is cut in by a curve (seal-light) rather than
+  // being replaced already lit. A dot lights round the same point its knob was sealed round
+  // (seal), as its knob is set; where more than one lights at once (a finish setting what was left)
+  // they light one tread after another in the order they read (--light-i). The stage lights them
+  // itself, so the engine's own seal of whatever becomes set passes them by.
   let dots = ui.progress.querySelectorAll('.stage-dot');
   if (dots.length !== wanted.length) {
     ui.progress.textContent = '';
     wanted.forEach((s, i) => {
       const dot = el('span', 'stage-dot');
       dot.setAttribute('data-i', String(i));
-      dot.style.setProperty('--dot-i', String(i)); // its place in the deal, until it lights
+      dot.setAttribute('data-rite', 'none');
+      dot.style.setProperty('--dot-i', String(i)); // its turn in the deal, in the order it reads
       ui.progress.appendChild(dot);
     });
     ui.progress.appendChild(hidden(''));
@@ -1740,13 +1927,18 @@ function renderProgress() {
   wanted.forEach((s, i) => {
     const dot = dots[i];
     if (!dot) return;
-    if (s.set && !dot.classList.contains('is-set')) lighting.push(dot);
+    if (s.set && !dot.classList.contains('is-set')) lighting.push([dot, s]);
     else if (!s.set) dot.classList.remove('is-set');
   });
-  const order = dealOrder(lighting.length, altRnd);
-  lighting.forEach((dot, k) => {
-    dot.style.setProperty('--dot-i', String(order[k]));
+  const turn = riteMs('stagger', 44) * 1.5; // one tread of the cascade, as the stylesheet waits it
+  lighting.forEach(([dot, s], k) => {
+    dot.style.setProperty('--light-i', String(k));
+    if (s.seal) {
+      dot.style.setProperty('--seal-x', s.seal[0]);
+      dot.style.setProperty('--seal-y', s.seal[1]);
+    }
     dot.classList.add('is-set');
+    land(dot, 'seal-light', { family: 'arrive', duration: 'medium', after: k * turn, pseudo: 'before' });
   });
   const count = ui.progress.querySelector('.visually-hidden');
   if (count) count.textContent = set + ' of ' + asked + ' set';
@@ -1881,8 +2073,8 @@ const KNOBS = {
       const n = clamp(v);
       const was = input.value;
       input.value = String(n);
-      // The number ratchets like an odometer (count-ratchet) when the stage wrote it: a typed
-      // value is the visitor's own and is left alone.
+      // The field drops onto its new figure in treads (count-drop) when the stage wrote it: a
+      // typed value is the visitor's own and is left still.
       if (was !== input.value && motion && typeof motion.rite === 'function' && !calm.matches) {
         motion.rite(input, 'ratcheting', riteMs('short', 170) + 200);
       }
@@ -1980,15 +2172,17 @@ const KNOBS = {
         draw();
         // The swap in a step series (README: "Motion axiom"): the two rows that changed places are
         // handed the distance back to where they were (--dy) and the stylesheet's row-swap steps
-        // them from there to here in treads. The DOM order is rebuilt at once and is the truth.
+        // them from there to here in landing treads, one way only. The DOM order is rebuilt at
+        // once and is the truth. Every place is read before anything is written, so the move costs
+        // one layout and not one a row.
         if (before) {
+          const after = tops();
           Array.from(list.children || []).forEach((row, k) => {
             const was = before.get(values[k]);
-            if (was === undefined || typeof row.getBoundingClientRect !== 'function') return;
-            const dy = was - row.getBoundingClientRect().top;
-            if (Math.abs(dy) < 0.5) return;
-            row.style.setProperty('--dy', dy.toFixed(1) + 'px');
-            row.setAttribute('data-flip', k === j ? 'moved' : 'displaced');
+            const is = after.get(values[k]);
+            if (was === undefined || is === undefined || Math.abs(was - is) < 0.5) return;
+            row.style.setProperty('--dy', (was - is).toFixed(1) + 'px');
+            row.setAttribute('data-flip', '');
           });
         }
         const row = list.children[j];
@@ -2094,20 +2288,14 @@ const KNOBS = {
     const buttons = [];
     const name = (i) => 'row ' + (Math.floor(i / cols) + 1) + ', column ' + ((i % cols) + 1) + ': '
       + (labels[cells[i]] != null ? String(labels[cells[i]]) : (states === 2 ? (cells[i] ? 'on' : 'off') : 'state ' + cells[i]));
-    const flips = new Array(n).fill(''); // which of the two flip spells each cell played last
+    // A cell that changed its state was stamped by the press that changed it, as every control is
+    // (js/motion.js), and its colour steps along the stair; its neighbours stay still.
     function paint() {
       buttons.forEach((b, i) => {
-        const was = b.dataset.state;
         b.dataset.state = String(cells[i]);
         b.setAttribute('aria-label', name(i));
         if (states === 2) b.setAttribute('aria-pressed', cells[i] ? 'true' : 'false');
         b.textContent = states > 2 && cells[i] ? String(cells[i]) : '';
-        // A cell that changed its state flips in one cut with a one-frame oversize (cell-flip,
-        // cell-flip-b: the two alternate so every flip restarts); its neighbours stay still.
-        if (was !== undefined && was !== b.dataset.state && !calm.matches) {
-          flips[i] = flips[i] === 'a' ? 'b' : 'a';
-          b.setAttribute('data-flip', flips[i]);
-        }
       });
     }
     for (let i = 0; i < n; i++) {
@@ -2152,21 +2340,21 @@ const KNOBS = {
     let n = 0;
     const b = el('button', 'knob-big', word(count));
     b.type = 'button';
-    // Each press punches a notch (README: "Motion axiom"): a row of stamped-out seals under the
-    // button, one filled per press in a cut with a one-frame oversize (notch-punch), so the count
-    // is visible as well as said; the last notch is the knob's own seal.
+    // Each press fills a notch (README: "Motion axiom"): a row of small diamonds under the button,
+    // one filled and stamped on per press (seal-stamp), so the count is visible as well as said;
+    // the last notch is the knob's own seal. The label counts down in place: it is a control's
+    // face, written and not cut in.
     const notches = el('span', 'knob-notches');
     notches.setAttribute('aria-hidden', 'true');
     const marks = [];
     for (let i = 0; i < count; i++) {
       const notch = el('i');
-      notch.style.setProperty('--notch-i', String(i));
       marks.push(notch);
       notches.appendChild(notch);
     }
     b.addEventListener('click', () => {
       n += 1;
-      inscribe(b, word(count - n));
+      write(b, word(count - n));
       if (marks[n - 1]) marks[n - 1].setAttribute('data-done', '');
       knob.style.setProperty('--knob-pct', ((n / count) * 100).toFixed(1) + '%');
       apply(step.id, n);
@@ -2179,63 +2367,81 @@ const KNOBS = {
     const ms = Math.max(300, Math.min(8000, Number(step.ms) || 1500));
     const b = el('button', 'knob-big knob-hold', step.label || 'press and hold');
     b.type = 'button';
+    const state = current.state.get(step.id);
+    // The bar is cut across in the knob's own treads for exactly as long as the hold takes: the
+    // stylesheet plays it off is-held (_sass/_stage.scss), so nothing here runs while it fills.
+    knob.style.setProperty('--motion-hold-fill', ms + 'ms');
+    knob.style.setProperty('--ease-hold-fill', holdStair(state.treads));
     let started = 0;
-    let ticker = null;
+    let timers = [];
     let fired = false; // this press has already filled the bar and set the knob
     const halt = () => {
-      if (ticker) ticker();
-      ticker = null;
+      for (const stop of timers) stop();
+      timers = [];
     };
+    const show = (pct) => knob.style.setProperty('--knob-pct', pct);
     function down() {
       if (started || b.disabled) return;
       started = performance.now();
       fired = false;
       b.classList.add('is-held');
       b.setAttribute('aria-pressed', 'true');
-      // Registered, so a hold still down when the piece goes -- a finger that never lifts, a knob
-      // disabled under it -- leaves no ticker running against a knob that is no longer anywhere.
-      ticker = ticking(paint, 50);
-    }
-    // The bar, and the knob the moment the bar is full: the holding is the answer and the letting
-    // go is not part of it, so a visitor who watches it fill and keeps holding has already set the
-    // knob and the piece carries on under their finger (issue #74).
-    // The bar advances in the knob's own treads (barTreads) and holds between them: the ticker
-    // writes only when the next tread is reached, so the step series is in the data and the
-    // stylesheet has nothing to smooth.
-    let shown = '';
-    function paint() {
-      const held = performance.now() - started;
-      if (held >= ms) {
-        fill(held);
-        return;
+      // The knob the moment the bar is full: the holding is the answer and the letting go is not
+      // part of it, so a visitor who watches it fill and keeps holding has already set the knob and
+      // the piece carries on under their finger (issue #74). One timer, registered, so a hold still
+      // down when the piece goes -- a finger that never lifts, a knob disabled under it -- leaves
+      // nothing running against a knob that is no longer anywhere.
+      timers.push(later(() => fill(performance.now() - started), ms));
+      // Less motion asked for: no animation steps the bar, so each tread is written here at the
+      // moment the stair would have taken it, and how long is left can still be read off it.
+      if (calm.matches) {
+        show('0%');
+        for (const t of state.treads || []) {
+          if (t < 1) timers.push(later(() => show((t * 100).toFixed(1) + '%'), t * ms));
+        }
       }
-      const s = current && current.state.get(step.id);
-      const pct = (snapTread(held / ms, s && s.treads) * 100).toFixed(1) + '%';
-      if (pct === shown) return;
-      shown = pct;
-      knob.style.setProperty('--knob-pct', pct);
     }
     function fill(held) {
       fired = true;
-      halt(); // there is nothing left to paint: the bar stays full under the finger
-      shown = '100%';
-      knob.style.setProperty('--knob-pct', '100%');
+      halt(); // the bar stays full under the finger
+      show('100%');
       apply(step.id, held);
       markSet(step.id, held, 'knob');
     }
+    // Where the bar's edge has got to while it is held: the animation's, read off the bar once.
+    function reached() {
+      const bar = knob.querySelector('.knob-bar');
+      if (!bar || calm.matches) return '';
+      try {
+        return String(getComputedStyle(bar, '::before').getPropertyValue('--cut') || '').trim();
+      } catch (e) {
+        return '';
+      }
+    }
     // Letting go. After the bar filled this is nothing at all -- the knob is set, and setting it
     // twice over or saying it was let go early would both be lies. Before it, it is a hold that
-    // did not last, and the bar goes back to where it started.
+    // did not last, and the bar steps back to empty from wherever its edge had reached, along the
+    // stair (the bar's own --cut transition). While held, that edge is the animation's and not the
+    // knob's, so the point it reached is written as the knob's own before the animation comes off
+    // -- or the edge would drop to empty in one frame -- and the empty is written two frames later,
+    // once that point has been drawn as the place the step back starts from.
     function up() {
       if (!started) return;
       started = 0;
       halt();
+      const at = fired ? '' : reached();
+      if (at) show(at);
       b.classList.remove('is-held');
       b.setAttribute('aria-pressed', 'false');
       if (fired) return;
-      shown = '0%';
-      knob.style.setProperty('--knob-pct', '0%'); // one cut back: the spring let go
-      // The refusal: two hard cuts on the button (hold-refuse), and the line typed in.
+      if (at && typeof requestAnimationFrame === 'function') {
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+          if (!started && !fired) show('0%');
+        }));
+      } else {
+        show('0%');
+      }
+      // The refusal: the button knocked aside once (stage-no, off is-refusing), and the line cut in.
       if (motion && typeof motion.rite === 'function' && !calm.matches) motion.rite(b, 'refusing', riteMs('short', 170) + 200);
       speak(ui.status, 'let go early; hold it longer');
     }
@@ -2278,6 +2484,7 @@ const KNOBS = {
         /* the piece's tap failing is the piece's own problem */
       }
       current.inTap = false;
+      startFrames();
     });
     knob.appendChild(b);
   },
@@ -2288,35 +2495,53 @@ const KNOBS = {
 
 /* ---- frames and taps ----------------------------------------------------------------------- */
 
+/* The piece's own frames, and nothing more: the loop asks for a frame only while there is a piece
+   that draws in frame(), a scene on the screen to draw it on and something on it moving (the
+   frames, in the contract above). A piece that draws only in start() costs no frame at all; one
+   whose scene has been scrolled out of sight (the feed read under it) stops until the scene comes
+   back; and one whose frame() answered false is at rest and stops until startFrames() is called
+   from wherever it may have been set moving. Each picks up where its clock now is, on a fresh dt
+   -- nothing is computed that does not show. A ctx call the piece makes from inside its own frame()
+   wakes nothing: the piece knows what it did, and its answer is the one that counts. */
+let sceneSeen = true;
+let framing = false; // inside the piece's frame()
+
 function startFrames() {
-  if (!frameHandle) frameHandle = requestAnimationFrame(frame);
+  if (!frameHandle && sceneSeen && !framing) frameHandle = requestAnimationFrame(frame);
 }
 
 function frame(now) {
   frameHandle = 0;
   const c = current;
-  if (!c || !c.ctx || !c.ctx.g) {
+  if (!c || !c.ctx || !c.ctx.g || typeof c.piece.frame !== 'function' || !sceneSeen) {
     lastFrame = 0;
     return;
   }
   const dt = lastFrame ? Math.max(0, Math.min(0.05, (now - lastFrame) / 1000)) : 0.016;
   lastFrame = now;
+  let moving = true;
   if (!document.hidden) {
+    framing = true;
     try {
-      if (typeof c.piece.frame === 'function') c.piece.frame((now - c.startedAt) / 1000, dt, c.ctx);
+      moving = c.piece.frame((now - c.startedAt) / 1000, dt, c.ctx) !== false;
     } catch (e) {
       /* a frame that throws is skipped; the next may not */
     }
+    framing = false;
   }
-  frameHandle = requestAnimationFrame(frame);
+  if (!moving) {
+    lastFrame = 0; // at rest: the frame that wakes it starts a fresh clock
+    return;
+  }
+  if (!frameHandle) frameHandle = requestAnimationFrame(frame);
 }
 
 /* ---- every press on the scene is answered -------------------------------------------------- */
 
 /* The tiny rejection of the responsiveness axiom above (issue #89): one mark at the point pressed,
-   laid in the scene over the canvas, and taken away again a fifth of a second later. The press is
-   visibly received and nothing else about the piece is touched -- no knob, no progress, no status
-   line, no sound, and nothing the piece can see.
+   laid in the scene over the canvas, cut in by a curve from that point and taken away again a
+   fifth of a second later. The press is visibly received and nothing else about the piece is
+   touched -- no knob, no progress, no status line, no sound, and nothing the piece can see.
 
    The mark is written here rather than drawn on the canvas on purpose: the canvas belongs to the
    piece, which may be mid-frame and is about to paint over anything the stage put there. It takes
@@ -2333,18 +2558,19 @@ function rejectTap(x, y) {
   if (calm.matches) mark.classList.add('is-still');
   mark.style.setProperty('left', (x * 100).toFixed(2) + '%');
   mark.style.setProperty('top', (y * 100).toFixed(2) + '%');
-  // The refused press is warded (README: "Motion axiom"): a generated ward glyph -- a rolled
-  // three-to-seven-spoke asterisk at a rolled turn with a rolled gap -- that the stylesheet shows
-  // in four hard frames (stage-reject) and never ripples. Pure paint: no glyph text, no fade.
-  mark.style.setProperty('--ward-spokes', String(3 + Math.floor(altRnd() * 5)));
-  mark.style.setProperty('--ward-rot', Math.round(altRnd() * 360) + 'deg');
-  mark.style.setProperty('--ward-gap', (0.3 + altRnd() * 0.4).toFixed(2));
+  // The press received (README: "Motion axiom"): a ring cut in by a curve growing from its own
+  // centre, which is the point pressed, in two treads cut for this press (stage-reject), and
+  // never rippled or faded. Pure paint: no text, no fade.
+  const length = cutOn(mark, 'stage-reject', { family: 'flicker', base: REJECT_MS });
   ui.scene.appendChild(mark);
-  // Registered like every other timer of the stage's, so a mark pressed out of a piece on its way
-  // out goes with it rather than outliving it; close() sweeps whatever is still there. It stays
-  // for as long as the roll is giving the spell (--motion-stage-reject, js/motion.js), and a
-  // little over, or the scheme's fifth of a second without the engine.
-  later(() => mark.remove(), riteMs('stage-reject', REJECT_MS) + 40);
+  // Registered like every other wait of the stage's, so a mark pressed out of a piece on its way
+  // out goes with it rather than outliving it; close() sweeps whatever is still there. It is taken
+  // away a moment after its own cut has ended (whenEnded), so a press answered while the page is
+  // busy is still answered whole; held still, or without the engine, it stays the scheme's fifth
+  // of a second.
+  const away = () => mark.remove();
+  if (length) whenEnded(mark, 'cut-in', '', length * 2 + 200, () => later(away, 40), true);
+  else later(away, REJECT_MS + 40);
 }
 
 // Where the press landed in the scene, as a fraction of it: 0..1, and the middle for a pointer
@@ -2380,18 +2606,19 @@ if (ui) {
       rejectTap(x, y);
     }
     c.inTap = false;
+    startFrames();
   });
 }
 
 /* ---- finishing ----------------------------------------------------------------------------- */
 
 /* The piece is finished: the ceremony runs and the way on lights, and that is the whole of what
-   changes. Done is not the End (issue #86): the frame loop keeps running, the knobs stay enabled
-   and settable again, a tap still reaches tap(), and nothing of the piece is taken apart -- close()
-   is the one teardown and the only thing that reaches it is the next piece actually opening. The
-   knobs used to be disabled here, in one line, which turned a toy into a picture of a toy the
-   moment it was solved: a visitor still playing with the thing found it dead under their hands,
-   over a mark that said the stage was waiting for them.
+   changes. Done is not the End (issue #86): the frames still come whenever the piece moves, the
+   knobs stay enabled and settable again, a tap still reaches tap(), and nothing of the piece is
+   taken apart -- close() is the one teardown and the only thing that reaches it is the next piece
+   actually opening. The knobs used to be disabled here, in one line, which turned a toy into a
+   picture of a toy the moment it was solved: a visitor still playing with the thing found it dead
+   under their hands, over a mark that said the stage was waiting for them.
 
    It runs once. A knob re-set after this does not play a second ceremony, dispatch a second
    'stage:complete' or re-light anything -- one piece is finished once -- and markSet() sees to that
@@ -2404,7 +2631,10 @@ function finish(say) {
   for (const s of c.state.values()) {
     if (!s.set) {
       s.set = true;
-      if (s.knob) s.knob.classList.add('is-set');
+      if (s.knob) {
+        s.pressed = null; // set by the finish and pressed nowhere: sealed round its middle
+        seal(s);
+      }
     }
   }
   renderProgress();
@@ -2422,21 +2652,21 @@ function finish(say) {
   } catch (e) {
     /* the finale is optional */
   }
+  startFrames(); // the finale plays in the piece's frames
   setMode('done');
-  // The seal (README: "Motion axiom"): the done chip is stamped like wax by the stylesheet on its
-  // un-hiding (stage-pop in hard treads, an ink splat drying under it), at a tilt and with a tooth
-  // count rolled for this solve and no other, and the word lands by the glyph rite.
-  particulars(ui.done, altRnd);
-  ui.done.hidden = true;
-  composeDevelop(ui.done, 'stage-pop', riteMs('long', 560)); // its stamp, composed for this solve
-  inscribe(ui.doneText, 'solved');
+  // The ceremony's one edge (README: "Motion axiom"): the done chip lands as a curve growing out of
+  // its end of the dots' row, in treads cut for this solve (is-landing, done-land), and its word
+  // arrives with it rather than being cut in a second time. That and the chime are the whole of it:
+  // the dots already say every knob is set and the way on lights after it, so nothing is laid over
+  // the stage to say it again.
+  write(ui.doneText, 'solved');
   ui.done.hidden = false;
+  land(ui.done, 'done-land', { family: 'arrive', duration: 'long' });
   // The finale is on the scene, which on a phone may be above the knob that finished it. The done
   // mark is not: it reports from the end of the dots' row in the rail, clear of the picture.
   const box = ui.scene.getBoundingClientRect();
   if (box.top < 0 || box.bottom > window.innerHeight) scrollSceneIntoView(ui.scene);
   chime();
-  burst();
   try {
     window.dispatchEvent(new CustomEvent('stage:complete', { detail: { file: c.world.file, seed: c.seed } }));
   } catch (e) {
@@ -2462,21 +2692,19 @@ function finish(say) {
 // sky, a world with nothing to play) leave the focus on the heading, where they already put it.
 function lightTheWayOn(focus) {
   if (!ui.onward) return;
-  ui.onward.removeAttribute('data-dimmed');
   ui.onward.disabled = false;
   if (focus) ui.onward.focus({ preventScroll: true });
 }
 
-// A lamp that was lit goes dark by a rite (lamp-dark, off data-dimmed) and not in one cut; one
-// that was never lit is simply unlit.
+// Dim again: the lamp steps back to the unlit plate along the stair, as it stepped up (the colour
+// transition every control carries), off the same one flag.
 function dimTheWayOn() {
   if (!ui.onward) return;
-  if (!ui.onward.disabled && !calm.matches) ui.onward.setAttribute('data-dimmed', '');
   ui.onward.disabled = true;
 }
 
-// The way on, pressed: the piece scales away and the next card opens in its place -- exactly what
-// the timer in finish() used to do on the visitor's behalf. A piece nobody finished is replaced in
+// The way on, pressed: the piece leaves and the next card opens in its place -- exactly what the
+// timer in finish() used to do on the visitor's behalf. A piece nobody finished is replaced in
 // the history rather than kept, so the back button walks back through what was finished and not
 // what was passed over.
 function goOn() {
@@ -2484,18 +2712,25 @@ function goOn() {
   dimTheWayOn(); // one press is one piece: a second one cannot overtake the first
   const finished = !!(current && current.completed);
   const piece = current; // null where there was nothing to finish: a missing module, or a gate
-  // The unmaking is composed for this one leaving (the composer above): the inner's, and the done
-  // chip's strike, each at a length of its own.
-  composeLeave(ui.inner, 'stage-unmake', riteMs('long', 560));
-  if (ui.done && !ui.done.hidden) composeLeave(ui.done, 'chip-strike', riteMs('short', 170));
+  // The leaving is cut for this one press: the whole inner goes behind one slice toward where the
+  // roll sends departures, at a length of its own, and the stage stays gone until the next piece
+  // arrives whole (isGone above). Less motion asked for: the next piece is simply there.
+  const leaving = cutOn(ui.inner, 'stage-unmake', { family: 'leave', base: riteMs('long', 560) });
+  if (!calm.matches) {
+    goneTurn += 1;
+    stage.dataset.gone = '';
+  }
   setMode('vanishing');
-  // The vanish takes the time composed on the inner (--motion-stage-unmake) or the time the
-  // stylesheet is giving it right now (--motion-long, rolled by js/motion.js), so the next piece
-  // opens once the last has gone and not a frame before.
-  later(() => {
+  // The next piece opens once the last has gone and not a frame before: when the inner's own slice
+  // has crossed it (whenEnded), however late a busy page started it -- or, with nothing cut (less
+  // motion, no engine), after the stylesheet's own length (--motion-long, js/motion.js).
+  const onward = () => {
     if (current !== piece) return; // something else took the stage while this one was leaving
     next(finished ? {} : { replace: true });
-  }, calm.matches ? 120 : inlineMs(ui.inner, 'stage-unmake', riteMs('long', 520)) + 40);
+  };
+  if (calm.matches) later(onward, 120);
+  else if (leaving) whenEnded(ui.inner, 'cut-out', '', leaving * 2 + 200, onward, true);
+  else later(onward, riteMs('long', 520) + 40);
 }
 
 async function next(options) {
@@ -2537,17 +2772,22 @@ async function next(options) {
 
 // Take the piece on stage apart, completely. Every instantiation starts from an empty stage, so
 // this is the one teardown and it leaves nothing of the last piece behind: no timer of its
-// ceremony, no ticker under a knob still held, no frame loop, no knob, no line, no dot, no mark,
+// ceremony, no timer under a knob still held, no frame loop, no knob, no line, no dot, no mark,
 // and no scene. Everything open() goes on to write is cleared here too, so a close() that opens
 // nothing after it -- the threshold going back, the question coming up -- is just as clean.
-function close() {
+function close(keep) {
   pending = null;
   stopRunning();
+  // A ghost of an earlier rail still leaving goes with the piece, unless it is the one open() has
+  // just made of this piece's own rail (keep), whose leaving is the next piece's to sweep.
+  if (ui.knobs && ui.knobs.parentNode && typeof ui.knobs.parentNode.querySelectorAll === 'function') {
+    for (const ghost of ui.knobs.parentNode.querySelectorAll('.stage-ghost')) if (ghost !== keep) ghost.remove();
+  }
   if (frameHandle) cancelAnimationFrame(frameHandle);
   frameHandle = 0;
   lastFrame = 0;
-  // The composed arrivals' inline roll comes off the parts that stay (the inner, the head's lines),
-  // so the next piece composes its own; the lines said are forgotten with the piece.
+  // The arrival's inline roll comes off the inner, which stays, so the next piece rolls its own;
+  // the lines said are forgotten with the piece.
   if (current && current.undos) {
     for (const undo of current.undos) {
       try {
@@ -2570,20 +2810,12 @@ function close() {
   const g = ui.canvas.getContext('2d');
   if (g) g.clearRect(0, 0, ui.canvas.width, ui.canvas.height);
   ui.canvas.setAttribute('aria-label', 'the scene');
+  ui.canvas.classList.remove('is-landing');
   ui.scene.style.removeProperty('--piece-aspect');
-  ui.scene.style.removeProperty('--piece-ratio');
-  for (let k = 1; k <= 4; k++) {
-    ui.scene.style.removeProperty('--plate-' + k);
-    ui.scene.style.removeProperty('--plate-veil-' + k);
-  }
-  delete stage.dataset.dealing;
-  delete stage.dataset.redeal;
-  delete stage.dataset.powered;
-  delete stage.dataset.reflow;
-  delete stage.dataset.turning;
+  ui.body.style.removeProperty('--piece-ratio');
   delete stage.dataset.try;
   delete stage.dataset.tryParity;
-  // The words that were revealed are unwrapped before they are taken away (write).
+  // The words still being cut in have their cut ended before they are taken away (write).
   if (ui.sigil) {
     write(ui.sigil, '');
     ui.sigil.hidden = true;
@@ -2602,6 +2834,7 @@ function close() {
     ui.tries.hidden = true;
   }
   delete stage.dataset.verdict;
+  for (const line of [ui.status, ui.wanted, ui.tries]) if (line) line.removeAttribute('data-said');
   ui.status.textContent = '';
   ui.progress.textContent = '';
   if (ui.wanted) {
@@ -2610,6 +2843,7 @@ function close() {
   }
   write(ui.doneText, 'done');
   ui.done.hidden = true;
+  ui.done.classList.remove('is-landing');
   dimTheWayOn();
 }
 
@@ -2620,7 +2854,7 @@ function goHome() {
   const returning = ui.title.textContent !== home.line;
   unreveal(ui.title);
   ui.title.textContent = home.line;
-  if (returning) reveal(ui.title); // the invitation re-materialises by the glyph rite
+  if (returning) reveal(ui.title); // the invitation is cut in again by one slice
   if (ui.read) ui.read.hidden = true;
   document.title = home.title;
   // Nothing is featured now, so the site goes back to its own colour: the page's own world, or
@@ -2640,7 +2874,7 @@ function goHome() {
    five notes whose degrees are rolled from a small modal table -- a brighter mode for the tender
    worlds, one with a flattened degree for the restless ones -- at intervals rolled between 70 and
    240ms with one hesitation and one grace note, the waveform rolled between sine and triangle,
-   the whole at the mood's tempo, the last note now and then doubled an octave up as a flicker.
+   the whole at the mood's tempo, the last note now and then doubled an octave up.
    Seeded from the seed, so a shared working rings the same and no two workings ring alike. The
    envelope is a step series of its own: hard attacks and held steps down, no ramps. Quiet. */
 const MODES = {
@@ -2677,9 +2911,9 @@ function chime() {
     for (let i = 0; i < count; i++) {
       degree = Math.max(0, Math.min(scale.length - 1, degree + (own() < 0.7 ? 1 + Math.floor(own() * 2) : -1)));
       const freq = base * Math.pow(2, scale[degree] / 12);
-      if (i === grace) note(ac, wave, freq * Math.pow(2, -2 / 12), now + at, 0.06, 0.02); // the slip
+      if (i === grace) note(ac, wave, freq * Math.pow(2, -2 / 12), now + at, 0.06, 0.02); // the grace note
       note(ac, wave, freq, now + at, 0.42 + own() * 0.2, 0.045);
-      if (i === count - 1 && own() < 0.35) note(ac, wave, freq * 2, now + at + 0.05, 0.16, 0.02); // the flicker
+      if (i === count - 1 && own() < 0.35) note(ac, wave, freq * 2, now + at + 0.05, 0.16, 0.02); // the octave over it
       at += (0.07 + own() * 0.17 + (i === hesitation ? 0.14 : 0)) * tempo;
     }
   } catch (e) {
@@ -2701,193 +2935,6 @@ function note(ac, wave, freq, at, length, loud) {
   gain.connect(ac.destination);
   osc.start(at);
   osc.stop(at + length + 0.05);
-}
-
-// A hash in 0..1 of a few integers, for the dither that decides what is drawn on a frame.
-function dither(a, b, c) {
-  let h = (Math.imul(a | 0, 374761393) + Math.imul(b | 0, 668265263) + Math.imul(c | 0, 2246822519)) | 0;
-  h = Math.imul(h ^ (h >>> 13), 1274126177);
-  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
-}
-
-function burst() {
-  if (calm.matches || !ui.burst) return;
-  const canvas = ui.burst;
-  const box = stage.getBoundingClientRect();
-  const scene = ui.scene.getBoundingClientRect();
-  const dpr = Math.min(2, window.devicePixelRatio || 1);
-  canvas.width = Math.round(box.width * dpr);
-  canvas.height = Math.round(box.height * dpr);
-  const g = canvas.getContext('2d');
-  if (!g) return;
-  g.setTransform(dpr, 0, 0, dpr, 0, 0);
-  const colors = current ? current.env.colors : FALLBACK;
-  const seed = current ? current.seed : newSeed();
-  const cx = scene.left - box.left + scene.width / 2;
-  const cy = scene.top - box.top + scene.height / 2;
-  /* The burst is the stamping of the working onto the plate (README: "Motion axiom"), drawn in
-     hard-held frames: a generated seal -- a polygon of rolled sides, a ring of the seed's digits
-     ticking round it, hatch lines at a rolled angle -- is impressed over the scene's centre,
-     flips to its negative, holds, and dissolves through a dither matte (cells let through by a
-     seeded threshold falling in rolled treads, never an alpha fade); the shards of the palette fly
-     out in a rolled number of sectors and die by dither too, each drawn or not on a frame by a
-     seeded coin and never dimmed. The ring opens in treads along a wipe curve rolled for this one
-     finish. Seeded from the seed for its shape, from the roll for its holds. */
-  const own = mulberry32((seed ^ 0x5ea1) >>> 0);
-  const grain = motion && motion.temper ? Number(motion.temper.grain) || 0.45 : 0.45;
-  const ringOpens = riteEase('wipe');
-  const ringReach = 700 + Math.random() * 400;
-  const sides = 3 + Math.floor(own() * 7);
-  const turn = own() * Math.PI * 2;
-  const R = Math.max(40, Math.min(scene.width, scene.height) * (0.14 + own() * 0.1));
-  const hatch = own() * Math.PI;
-  const pitch = 5 + Math.round(own() * 6);
-  const digits = String(seed);
-  const sectors = 2 + Math.floor(own() * 5);
-  const cell = 8 + Math.round(own() * 8);
-  const dash = [4 + Math.round(own() * 10), 3 + Math.round(own() * 8)];
-  // The dissolve: coverage falls from 1 to 0 in a rolled number of uneven treads.
-  const treads = [];
-  const n = 4 + Math.floor(own() * 4);
-  for (let i = 1; i < n; i++) treads.push(Math.max(0.02, Math.min(0.98, (n - i + (own() - 0.5) * 0.8) / n)));
-  treads.sort((a, b) => b - a);
-  treads.push(0);
-  // The shards move in treads of the rite and never along a formula: each is dealt a reach along
-  // its sector, a count of treads to take it there, a sag, and one tread on which it slips back,
-  // and on every held frame it stands where the working's own stair (env.rite, js/variant.js) puts
-  // it -- so a shard jumps from place to place and holds, as the rest of the ceremony does.
-  const stair = current && current.env && current.env.rite ? current.env.rite : rite(seed);
-  const parts = [];
-  for (let i = 0; i < 110; i++) {
-    const sector = Math.floor(own() * sectors);
-    const spread = (Math.PI * 2) / sectors;
-    const a = sector * spread + turn + (own() - 0.5) * spread * 0.45;
-    const k = 3 + Math.floor(own() * 4);
-    parts.push({ x: cx, y: cy, a, reach: 120 + own() * 520, sag: 30 + own() * 130, k,
-      slipAt: own() < 0.6 ? 1 + Math.floor(own() * (k - 1)) : -1, slip: 0.08 + own() * 0.14,
-      r: 1.5 + own() * 4, c: [colors.accent, colors.accent2, colors.fg][i % 3], life: 0.8 + own() * 0.7, age: 0 });
-  }
-  const plan = {
-    positive: 0.16 + Math.random() * 0.08, // seconds the positive seal holds
-    negative: 0.1 + Math.random() * 0.08, // the negative
-    again: 0.08 + Math.random() * 0.06, // positive once more
-    dissolve: 0.6 + Math.random() * 0.3 // the dither dissolve
-  };
-  const total = plan.positive + plan.negative + plan.again + plan.dissolve;
-  function seal(negative, coverage) {
-    // The dither matte: only the cells the seeded threshold lets through at this coverage show.
-    if (coverage <= 0) return;
-    g.save();
-    if (coverage < 1) {
-      g.beginPath();
-      const span = R * 1.5;
-      for (let y = -span; y < span; y += cell) {
-        for (let x = -span; x < span; x += cell) {
-          if (dither(Math.round(x / cell), Math.round(y / cell), seed) < coverage) g.rect(cx + x, cy + y, cell, cell);
-        }
-      }
-      g.clip();
-    }
-    const ink = negative ? colors.bg : colors.accent;
-    const paper = negative ? colors.accent : colors.bg;
-    g.lineWidth = 3;
-    g.strokeStyle = ink;
-    g.fillStyle = paper;
-    g.beginPath();
-    for (let s = 0; s <= sides; s++) {
-      const a = turn + (s / sides) * Math.PI * 2;
-      const r = R * (s % 2 ? 1 : 0.9);
-      if (s) g.lineTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r);
-      else g.moveTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r);
-    }
-    g.closePath();
-    g.fill();
-    g.stroke();
-    // The hatch, clipped to the seal.
-    g.save();
-    g.clip();
-    g.lineWidth = 1;
-    g.strokeStyle = alpha(ink, 0.55);
-    g.beginPath();
-    for (let d = -R * 2; d < R * 2; d += pitch) {
-      g.moveTo(cx + Math.cos(hatch) * d - Math.sin(hatch) * R * 2, cy + Math.sin(hatch) * d + Math.cos(hatch) * R * 2);
-      g.lineTo(cx + Math.cos(hatch) * d + Math.sin(hatch) * R * 2, cy + Math.sin(hatch) * d - Math.cos(hatch) * R * 2);
-    }
-    g.stroke();
-    g.restore();
-    // The ring of digits round it, in the tertiary, each on its spoke.
-    g.fillStyle = negative ? colors.bg : colors.accent2;
-    g.font = 'bold 12px monospace';
-    g.textAlign = 'center';
-    g.textBaseline = 'middle';
-    for (let i = 0; i < digits.length; i++) {
-      const a = turn + (i / digits.length) * Math.PI * 2;
-      g.fillText(digits.charAt(i), cx + Math.cos(a) * (R + 14), cy + Math.sin(a) * (R + 14));
-    }
-    g.restore();
-  }
-  let last = performance.now();
-  let elapsed = 0;
-  let held = 0; // raf frames the drawn frame is held for: every frame is held
-  let frames = 0;
-  function tick(now) {
-    // A frame's timestamp can precede the performance.now() read just before it: never negative.
-    const dt = Math.max(0, Math.min(0.05, (now - last) / 1000));
-    last = now;
-    frames += 1;
-    elapsed += dt;
-    if (held > 0) {
-      held -= 1;
-      requestAnimationFrame(tick);
-      return;
-    }
-    held = 1 + Math.floor(Math.random() * (2 + grain * 2));
-    g.clearRect(0, 0, box.width, box.height);
-    // The ring, opening in six treads and gone in one cut.
-    const open = ringOpens(Math.min(1, elapsed / 1.1));
-    if (elapsed < 1.1) {
-      g.lineWidth = 2;
-      g.strokeStyle = colors.accent;
-      g.setLineDash(dash);
-      // The dashes advance by the ratchet -- clicks with backlash -- and never march evenly.
-      g.lineDashOffset = Math.floor(stair.ratchet(Math.min(1, elapsed / 1.1)) * dash[0] * 6);
-      g.beginPath();
-      g.arc(cx, cy, Math.max(0, (Math.floor(open * 6) / 6) * ringReach), 0, Math.PI * 2);
-      g.stroke();
-      g.setLineDash([]);
-    }
-    // The seal: positive, negative, positive, then eaten by the dither in treads.
-    let coverage = 1;
-    let negative = false;
-    if (elapsed < plan.positive) negative = false;
-    else if (elapsed < plan.positive + plan.negative) negative = true;
-    else if (elapsed < plan.positive + plan.negative + plan.again) negative = false;
-    else {
-      const f = (elapsed - plan.positive - plan.negative - plan.again) / plan.dissolve;
-      coverage = treads[Math.min(treads.length - 1, Math.floor(f * treads.length))];
-    }
-    seal(negative, coverage);
-    // The shards: moved every frame, drawn when the dither says so, dimmed never.
-    let alive = 0;
-    for (let i = 0; i < parts.length; i++) {
-      const p = parts[i];
-      p.age += dt;
-      if (p.age > p.life) continue;
-      alive++;
-      // Where the stair puts it at this age, less the slip on the one tread it slips back on.
-      const t = p.age / p.life;
-      const tread = stair.series(t, p.k);
-      const f = Math.max(0, stair.stair(t, p.k) - (tread === p.slipAt ? p.slip : 0));
-      p.x = cx + Math.cos(p.a) * p.reach * f;
-      p.y = cy + Math.sin(p.a) * p.reach * f + p.sag * f;
-      if (dither(i, frames, seed) < t) continue; // dying by dither
-      g.fillStyle = p.c;
-      g.fillRect(p.x - p.r, p.y - p.r, p.r * 2, p.r * 2);
-    }
-    if (alive || elapsed < total) requestAnimationFrame(tick);
-    else g.clearRect(0, 0, box.width, box.height);
-  }
-  requestAnimationFrame(tick);
 }
 
 /* ---- the threshold ------------------------------------------------------------------------- */
@@ -2927,37 +2974,83 @@ function thresholdStart() {
     });
   }
 
-  // The answer cards are dealt in an order rolled for this one asking (--knob-i, which the
-  // stylesheet's deal reads; the table there is the order a page without scripting deals), each
-  // with an arrival composed for it alone. Only the cards not yet dealt are touched, so a card mid-
-  // stamp is never re-dealt by a change elsewhere in the question.
-  function dealProbe() {
-    if (!probe || typeof probe.querySelectorAll !== 'function') return;
-    const fresh = Array.from(probe.querySelectorAll('.probe-option')).filter((o) => o.style && !o.style.getPropertyValue('--knob-i'));
-    if (!fresh.length) return;
-    const order = dealOrder(fresh.length, altRnd);
-    fresh.forEach((option, i) => {
-      option.style.setProperty('--knob-i', String(order[i]));
-      composeArrival(option, newSeed(), 'knob-stamp');
-    });
-  }
-
-  // The ask -- the question, or the quiet invitation -- arrives by a composition of its own on
-  // every change of mode that shows it.
+  // The ask -- the question, or the quiet invitation -- arrives behind a slice of its own on every
+  // change of mode that shows it (is-landing, _sass/_stage.scss); a stage that is gone brings it
+  // with the rest. The answer cards inside it are js/threshold.js's to deal, each behind its own
+  // slice, and nothing here deals them a second time.
   const askBox = document.getElementById('stage-ask');
+  const askArrives = () => {
+    if (!isGone()) land(askBox, 'ask-in', { seed: newSeed() });
+  };
+
+  // An answered question is cut away as a ghost of itself, left where it stood (js/persona.js,
+  // stopAskingInCard: a copy of the probe, with no id, playing part-unmake), and the stage brings
+  // on what the question leaves behind only once that cut has ended -- on the ghost's own
+  // animationend. The clock behind it is as generous as every other here (twice the cut's length
+  // and a little), for a ghost that never plays: a busy page, as it is just after an answer, starts
+  // the cut frames after the ghost is put down, and a clock of the cut's length alone would end the
+  // wait with the question still standing. The hand-off is then one change, the question going and
+  // then the piece coming, and the old question's words and plate never stand over the arriving
+  // stage with two edges crossing two layers in one place. A question put aside empty leaves no
+  // ghost, and nothing waits.
+  //
+  // While it waits, the ask keeps the room the question took. The feature is centred in the first
+  // screen (main, _panel.scss), so an ask emptied at once would drop the heading over it to the
+  // middle of the stage, beside the ghost, and lift it again when the piece arrived: a jump with no
+  // edge inside what is one change. The room is the ghost's own height, which js/persona.js wrote on
+  // it as the question's, so it is held without a layout read, and given back as the wait ends.
+  let handing = null; // the cancel of that wait, while it stands
+  function ghostOfQuestion() {
+    if (!probe || typeof document.querySelectorAll !== 'function') return null;
+    let ghost = null; // the newest, if an earlier one is still on its way out
+    for (const node of document.querySelectorAll('.threshold-probe.is-unmaking')) {
+      if (node !== probe) ghost = node;
+    }
+    return ghost;
+  }
+  function keepRoom(height) {
+    if (!askBox || !askBox.style) return;
+    if (height) askBox.style.setProperty('min-height', height);
+    else askBox.style.removeProperty('min-height');
+  }
 
   function render() {
     const asking = !!(probe && !probe.hidden);
     if (asking) {
+      if (handing) {
+        handing();
+        handing = null;
+        keepRoom('');
+      }
       // Through goHome(), not a bare close(): the piece that was on takes its name, its line and
       // its featured palette with it, so the question is asked on the threshold's own ground.
       if (current || pending) goHome();
-      if (stage.dataset.mode !== 'asking') composeArrival(askBox, newSeed(), 'ask-in');
-      dealProbe();
+      if (stage.dataset.mode !== 'asking') askArrives();
       setMode('asking');
       wasAsking = true;
       return;
     }
+    // Still cutting the question away: the reading is read when the cut has ended, as it is then.
+    if (handing) return;
+    const ghost = wasAsking ? ghostOfQuestion() : null;
+    if (ghost) {
+      // A card pressed while the cut plays has already opened a piece of its own, and the reading
+      // does not open another over it.
+      const was = current || pending;
+      const length = inlineMs(ghost, 'part-unmake', riteMs('medium', 340));
+      keepRoom(ghost.style ? ghost.style.getPropertyValue('height') : '');
+      handing = whenEnded(ghost, null, '', length * 2 + 200, () => {
+        handing = null;
+        keepRoom('');
+        if ((current || pending) !== was) wasAsking = false;
+        else settle();
+      }, false);
+      return;
+    }
+    settle();
+  }
+
+  function settle() {
     const r = readingNow();
     const o = r && r.orientation;
     const read = !!(o && r.source && r.source !== 'signals');
@@ -2972,15 +3065,13 @@ function thresholdStart() {
       return;
     }
     if (!current && !pending) {
-      if (stage.dataset.mode !== 'quiet') composeArrival(askBox, newSeed(), 'ask-in');
+      if (stage.dataset.mode !== 'quiet') askArrives();
       setMode('quiet');
     }
   }
 
   if (probe && window.MutationObserver) {
     new MutationObserver(render).observe(probe, { attributes: true, attributeFilter: ['hidden'] });
-    // A new question's cards (js/threshold.js renders each question's own) are dealt as they land.
-    new MutationObserver(() => { if (!probe.hidden) dealProbe(); }).observe(probe, { childList: true, subtree: true });
   }
   window.addEventListener('threshold:reading', render);
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', render);
@@ -3002,6 +3093,8 @@ function start() {
   const threshold = stage.dataset.threshold === 'true';
   const random = stage.dataset.stageRandom === 'true';
 
+  // The stage's own colours, read once while nothing has been written over them (makeEnv).
+  inks = readColors(stage);
   if (ui.onward) ui.onward.addEventListener('click', goOn);
   if (ui.check) ui.check.addEventListener('click', judge);
   window.addEventListener('resize', reflow);
@@ -3009,6 +3102,29 @@ function start() {
   // arrives late, a mode that puts the ask up instead -- and the scene is sized against it.
   if (window.ResizeObserver && ui.head) new window.ResizeObserver(reflow).observe(ui.head);
   sizeHead();
+  // The piece draws only while its scene is on the screen (startFrames): a scene scrolled out of
+  // sight stops asking for frames, and asks again the moment it is back.
+  if (window.IntersectionObserver && ui.scene) {
+    new window.IntersectionObserver((entries) => {
+      const last = entries[entries.length - 1];
+      sceneSeen = !last || last.isIntersecting;
+      if (sceneSeen) startFrames();
+    }).observe(ui.scene);
+  }
+  // And the page shown again after it was hidden: the scene is back in view for the piece.
+  if (typeof document.addEventListener === 'function') {
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) startFrames();
+    });
+  }
+  // A stage that was gone has arrived once its inner's slice has landed (isGone above).
+  if (ui.inner && typeof ui.inner.addEventListener === 'function') {
+    ui.inner.addEventListener('animationend', (ev) => {
+      if (ev.target !== ui.inner || ev.animationName !== 'cut-in' || !isGone()) return;
+      const mode = stage.dataset.mode;
+      if (mode !== 'vanishing' && mode !== 'loading') delete stage.dataset.gone;
+    });
+  }
   window.addEventListener('popstate', (ev) => {
     const s = ev.state && ev.state.world ? ev.state : parseHash();
     if (s && s.world && worldOf(s.world)) {
@@ -3041,10 +3157,10 @@ function start() {
     // does: one setting, every puzzle on the site, settable wherever it is met.
     persona.onDifficulty(() => {
       if (!current) return;
-      // The re-deal is a shuffle (README: "Motion axiom"): the rail that was is unmade and the
-      // same working is dealt again through its own matte -- an arrival with no travel (redeal).
+      // The re-deal is a shuffle (README: "Motion axiom"): the rail that was leaves behind its
+      // slice and the same working is dealt again onto the stage that stands.
       open(current.world.file, current.seed,
-        { push: false, focus: false, variant: current.variant, card: current.card, arriving: true, redeal: true });
+        { push: false, focus: false, variant: current.variant, card: current.card, arriving: true });
     });
   }
   if (persona && typeof persona.onSky === 'function') {
@@ -3055,7 +3171,7 @@ function start() {
         // The same card, remade under the new sky: the configuration it opened with goes back in,
         // so a piece re-made for a sky is still the card that was pressed.
         open(current.world.file, current.seed,
-          { push: false, focus: false, variant: current.variant, card: current.card, arriving: true, redeal: true });
+          { push: false, focus: false, variant: current.variant, card: current.card, arriving: true });
       }
     });
   }

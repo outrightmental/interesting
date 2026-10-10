@@ -6,28 +6,38 @@
 // unlock box sits in front of it in reading order, so the one lit control is the filled button.
 // The box is an outlined card whose outline is dashed, the same grammar the persona card uses for
 // a persona that is not set up yet.
+//
+// How it moves (README: "Motion axiom", the cut): one thing after another, never one edge over
+// another, and nothing fades. Powering down, a dust sheet is drawn down over the machine from the
+// top edge -- the side the unlock box stands on -- by a slice stepping down it; the sheet is the
+// whole of the dimming. Then the box comes up out of the part it powers, from below, behind a slice
+// in the way it travels, with its controls named on it as it comes, and once it has landed what
+// it says -- its title and its note -- is written on it in one gesture (js/site.js). Powering
+// up is the same backwards: the box goes back down into the machine (_lightbox.scss, the shell's
+// leave rite), and then the sheet is lifted back up off it the way it came -- unless the page takes
+// the part away itself, as the stage does with its gate, and the sheet goes with it. js/site.js
+// rolls each movement's treads on the element that plays it (--ease-power-down, --ease-power-up,
+// --ease-develop and their lengths), so no two powerings look quite alike.
 
 @use 'type';
+@use 'cut';
 
+// Out of reach while it waits: no pointer reaches it (js/site.js makes it inert as well), and the
+// sheet below is what says so.
 .powered-down {
-  opacity: 0.38;
-  filter: saturate(0.35);
   pointer-events: none;
-  // The generator starting, or stopping: the dimming comes and goes in treads (README: "Motion
-  // axiom") -- the stair family, rolled for that change, never a fade -- and the screen over the
-  // machine (the fill texture in the surface's ink, _unlock.scss below) lifts a rung at a time.
-  transition:
-    opacity var(--motion-medium) var(--ease-stair),
-    filter var(--motion-medium) var(--ease-stair);
   position: relative;
 }
 
-// The screen: the rolled fill texture laid over a powered-down part, so what waits for its
-// generator reads as a machine under a dust sheet and not a part that has merely gone pale. It is
-// drawn on any host the helper has powered down (data-unlock-host, js/site.js) while it is
-// powered down and while the power comes back on, and is content: none otherwise -- so the sheet
-// that came down the ladder lifts back up it (is-powering-up, power-up) and is never there one
-// frame and gone the next.
+// The sheet: laid over a powered-down part, so what waits for its generator reads as a machine
+// under a dust sheet and not a part that has merely gone pale. It is the page's own surface laid
+// over the machine at most of its strength, so the machine shows through it dimmed -- one layer
+// doing the dimming, which costs nothing while it rests and is drawn by the same edge it moves by.
+// At rest it is two shades of that surface split across the middle, parallel to the edge it came
+// down by. It is drawn on any host the helper has powered down (data-unlock-host, js/site.js) while
+// it is powered down and while the power comes back on, and is content: none otherwise -- so the
+// sheet that came down over the machine is lifted back off it (is-powering-up) and is never there
+// one frame and gone the next.
 [data-unlock-host] {
   position: relative;
 }
@@ -37,75 +47,33 @@
   position: absolute;
   inset: 0;
   z-index: 2;
-  background: var(--matte-fill);
-  background-size: var(--matte-fill-size);
-  color: var(--md-sys-color-on-surface);
-  opacity: 0.14;
+  border-radius: inherit;
+  background: cut.shades(color-mix(in oklab, var(--md-sys-color-surface) 64%, transparent), 84%, 180deg);
   pointer-events: none;
+  // Down from the top edge: the region a slice pointing down the machine has passed.
+  mask: cut.slice(180deg);
 }
 
+// Drawn down over the machine, landing in shrinking treads.
 .powered-down::after {
   content: '';
-  animation: power-down var(--motion-power-down, var(--motion-medium)) var(--ease-power-down, var(--ease-stair)) both;
+  @include cut.play(in, power-down, medium, arrive);
 }
 
+// Lifted back up the way it came, in growing ones, and gone.
 .is-powering-up::after {
   content: '';
-  animation: power-up var(--motion-power-up, var(--motion-medium)) var(--ease-power-up, var(--ease-stair)) both;
+  @include cut.play(out, power-up, medium, leave);
 }
 
-// The sheet lifts off, back up the ladder, and is gone.
-@keyframes power-up {
-  0%, 21.9% {
-    mask: none;
-    -webkit-mask: none;
-  }
-
-  22%, 45.9% {
-    mask: var(--matte-4);
-    -webkit-mask: var(--matte-4);
-  }
-
-  46%, 59.9% {
-    mask: var(--matte-5);
-    -webkit-mask: var(--matte-5);
-  }
-
-  60%, 79.9% {
-    mask: var(--matte-2);
-    -webkit-mask: var(--matte-2);
-  }
-
-  80%, 100% {
-    mask: linear-gradient(transparent, transparent);
-    -webkit-mask: linear-gradient(transparent, transparent);
-  }
-}
-
-// The sheet comes down the ladder onto the machine.
-@keyframes power-down {
-  0%, 24.9% {
-    mask: var(--matte-1);
-    -webkit-mask: var(--matte-1);
-  }
-
-  25%, 49.9% {
-    mask: var(--matte-3);
-    -webkit-mask: var(--matte-3);
-  }
-
-  50%, 79.9% {
-    mask: var(--matte-4);
-    -webkit-mask: var(--matte-4);
-  }
-
-  80%, 100% {
-    mask: none;
-    -webkit-mask: none;
-  }
-}
-
+// The box develops where it is put, coming up out of the machine below it: the lift starts a
+// step down (--arrive-y) and the slice it comes in behind points the way it travels, up. It waits
+// under its own edge until the sheet is down (--unlock-wait, the sheet's length, which js/site.js
+// writes on the box); a leaving's own animation (.shell-unmake) waits for nothing.
 .unlock {
+  --arrive-x: 0px;
+  --arrive-y: 18px;
+  --arrive-angle: 0deg;
   margin: 0 0 1rem;
   padding: 1rem;
   border-radius: var(--md-sys-shape-corner-large);
@@ -114,53 +82,15 @@
   background: var(--md-sys-color-surface-container-high);
   display: grid;
   gap: 0.5rem;
-  // The box develops where it is put, from a geometry of its own (js/site.js asks the engine's
-  // m.arrive for it, which composes --rite-develop); unlock-in is the stylesheet's own.
-  animation: var(--rite-develop, unlock-in) var(--motion-unlock-in, var(--motion-long)) var(--ease-unlock-in, var(--ease-arrive)) both;
+  @include cut.develop(develop, long);
+  animation-delay: var(--unlock-wait, 0ms);
 }
 
-@keyframes unlock-in {
-  0%, 11.9% {
-    mask: linear-gradient(transparent, transparent);
-    -webkit-mask: linear-gradient(transparent, transparent);
-    transform: translate(var(--arrive-x, 0px), var(--arrive-y, 24px)) rotate(var(--arrive-rot, 0deg));
-  }
-
-  12%, 33.9% {
-    mask: var(--matte-1);
-    -webkit-mask: var(--matte-1);
-    transform: translate(var(--arrive-x, 0px), var(--arrive-y, 24px)) rotate(var(--arrive-rot, 0deg));
-  }
-
-  34%, 51.9% {
-    mask: var(--matte-2);
-    -webkit-mask: var(--matte-2);
-    transform: translate(calc(var(--arrive-x, 0px) * 0.5), calc(var(--arrive-y, 24px) * 0.5));
-  }
-
-  52%, 63.9% {
-    mask: var(--matte-1);
-    -webkit-mask: var(--matte-1);
-    transform: translate(calc(var(--arrive-x, 0px) * 0.5), calc(var(--arrive-y, 24px) * 0.5));
-  }
-
-  64%, 81.9% {
-    mask: var(--matte-4);
-    -webkit-mask: var(--matte-4);
-    transform: translate(0px, calc(var(--arrive-y, 24px) * -0.06)) scale(var(--pop-over, 1.012));
-  }
-
-  82%, 93.9% {
-    mask: var(--matte-top);
-    -webkit-mask: var(--matte-top);
-    transform: none;
-  }
-
-  94%, 100% {
-    mask: none;
-    -webkit-mask: none;
-    transform: none;
-  }
+// And once the machine is powered it goes back down into it, behind a slice pointing down.
+.unlock.shell-unmake {
+  --leave-x: 0px;
+  --leave-y: 16px;
+  --leave-angle: 180deg;
 }
 
 .unlock-title {
@@ -199,15 +129,15 @@
   @include type.scale(label-large);
 }
 
+// Less motion: the machine is under its sheet at once and out from under it at once, and the box
+// and its words are simply there. Without their animations the edges would sit at nothing, so the
+// masks go too.
 @media (prefers-reduced-motion: reduce) {
-  .powered-down {
-    transition: none;
-  }
-
   .powered-down::after,
   .is-powering-up::after,
   .unlock {
     animation: none;
+    mask: none;
   }
 
   .is-powering-up::after {

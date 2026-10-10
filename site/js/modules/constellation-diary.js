@@ -48,24 +48,79 @@ function asked(env) {
 /* ---- the rite: how this module moves ------------------------------------------------------- */
 
 /* env.rite (ctx.rite inside a piece) is the piece's own roll of how it moves (js/variant.js;
-   js/stage.js, "The rite"). Nothing drawn here moves along a formula or cuts without a rite: a
-   state that changes climbs rite.stair in uneven treads; a thing arriving -- a star coming out, a
-   mark on the page, a line of the log -- blinks on with rite.flicker and leaves with one flicker
-   back; a surface that becomes set -- a star's halo, the band behind a line marked false, the
-   half of the sky the watch names -- develops by its AREA through rite.matte, cell by cell in
-   the piece's own pattern, and never by a fade; a line drawn across the page comes in treads.
-   Every change is read against the piece's own clock, s.t, which frame() advances: a change
-   made at `since` has come came() of its way, which is 1 at once for a visitor who asked for
-   less motion and for whatever stood there from the start (since < 0). Each star, line or mark
-   moves on a roll of its own (rite.at), so no two step together. */
+   js/stage.js, "The rite"): a few treads, always forward, and one clean edge -- the piece's slice
+   or curve, its signature -- for any surface that changes. Nothing drawn here moves along a
+   formula, and nothing moves without a reason:
 
+     a star coming out   in the showing has its halo cut in behind the piece's edge up its own
+                         stair, and its ring cut on at its moment and widened a tread at a time;
+                         resting again, it gives the halo back down the stair the way it came.
+     a mark              -- a ring on a star tapped or named, a cross or a tick in the margin, a
+                         line of the log -- is cut on at its roll's moment (rite.flicker) and stays;
+                         one taken away is cut off at its moment, once, and never blinks back. A
+                         mark that is not yet on when it is taken away never comes on, and one
+                         still on when it is given back simply stays.
+     a surface set       -- the band behind a line marked false, the half of the sky the watch
+                         names, the halo of a star coming out or of the star that moved -- is cut
+                         in by the edge (rite.paint: the part of its box the edge has passed, and a
+                         second coat over the half behind the edge's middle) and rests in two
+                         shades of its colour split by that edge through its middle: never a fade,
+                         a flat wash or a pattern. A disc is a clip with its box painted inside.
+                         Taken away, it goes back down its stair from wherever it had reached.
+     a line drawn        across the sky or the page -- the order the stars came, the way the mover
+                         went, a false line struck out -- reaches across in the stair's few treads.
+
+   Between showings the stars hold still: nothing in them is waiting, so nothing twinkles. Every
+   change is read against the piece's own clock, s.t, which frame() advances: a change made at
+   `since` has come came() of its way, which is 1 at once for a visitor who asked for less motion
+   and for whatever stood there from the start (since < 0). Each star, line or mark moves on a roll
+   of its own (rite.at: the same edge, its own treads and moment), so no two step together.
+
+   What a frame costs. The stage asks for a frame sixty times a second while the diary says
+   something on it is moving, and the diary has something new to show in very few of them. A piece
+   notes how long each change it makes goes on moving (pace().stir) -- the showing of the sky is
+   one -- and draws the change at once; after that a frame does nothing at all unless something is
+   still moving or the canvas is not the one it last drew on (a new size, new colours), and once
+   the last change has been shown at its end frame() says the diary is at rest (it returns false),
+   so the stage asks for no more frames until the visitor acts, the scene is sized again or it
+   comes back into view. While something moves, a frame takes a note of the picture it
+   would draw, which costs no pixels (sketch), and paints only when that note differs from the last
+   picture drawn: a stair holds each tread for a good part of its span, so most of those frames
+   have nothing new in them either. The sky's gradient, which never changes while a piece plays,
+   is painted once for its size and colours onto a canvas of its own and laid down whole each time
+   (plate). */
+
+// The rite of a piece handed none: everything stands where it ends, and a surface is cut by a
+// plain upright slice from its left side.
 const STILL = {
-  ease: () => 1, stair: () => 1, ratchet: () => 0, flicker: () => 1, matte: () => true,
-  treads: 1, kind: 'none', cell: 4, at: () => STILL
+  stair: () => 1, flicker: () => 1, treads: 1, kind: 'slice', angle: 90,
+  paint(g, x, y, w, h, k, style) {
+    if (k <= 0) return;
+    if (style != null) g.fillStyle = style;
+    g.fillRect(x, y, w * Math.min(1, k), h);
+  },
+  at: () => STILL
 };
 
 function riteOf(env) {
   return env && env.rite ? env.rite : STILL;
+}
+
+// The rite rolled afresh for one thing this module moves, kept with the rite it was rolled from so
+// a frame rolls each one once rather than sixty times a second.
+const OWN = new WeakMap();
+function own(rite, n) {
+  let kept = OWN.get(rite);
+  if (!kept) {
+    kept = new Map();
+    OWN.set(rite, kept);
+  }
+  let r = kept.get(n);
+  if (!r) {
+    r = rite.at(n);
+    kept.set(n, r);
+  }
+  return r;
 }
 
 function came(s, since, span, reduced) {
@@ -73,48 +128,127 @@ function came(s, since, span, reduced) {
   return Math.max(0, Math.min(1, (s.t - since) / span));
 }
 
-// The cells of a box that the matte lets through at coverage k, filled in the current fillStyle:
-// how a surface changes by its area. Cells are rite.cell px, coarser over a wide box so a frame
-// stays cheap, on a grid fixed to the canvas so the pattern holds still while it grows. `inside`
-// keeps the tiling to a shape within the box. At k >= 1 every cell is let through, so a caller
-// that wants a solid draws the shape itself instead.
-function develop(g, rite, x0, y0, bw, bh, k, inside) {
-  if (k <= 0) return;
-  const cell = Math.max(rite.cell, Math.ceil(Math.max(bw, bh) / 28));
-  const cx0 = Math.floor(x0 / cell);
-  const cy0 = Math.floor(y0 / cell);
-  const cx1 = Math.ceil((x0 + bw) / cell);
-  const cy1 = Math.ceil((y0 + bh) / cell);
-  for (let cy = cy0; cy < cy1; cy++) {
-    for (let cx = cx0; cx < cx1; cx++) {
-      const px = cx * cell;
-      const py = cy * cell;
-      if (inside && !inside(px + cell / 2, py + cell / 2)) continue;
-      if (k < 1 && !rite.matte(cx, cy, k)) continue;
-      g.fillRect(px, py, cell, cell);
+// When a frame has anything new to draw (see "What a frame costs" above). stir(until) says a change
+// has just been made that moves until the piece's clock reaches `until`. due() is whether this
+// frame could show anything new at all: a change still moving, a change not yet shown, or a canvas
+// that is not the one last drawn on, so once a frame has shown its picture due() is also whether
+// the diary is still on its way (true) or at rest (false). show() puts the picture `paint` makes
+// on the canvas -- if it differs from the one already there (or `force`), and otherwise leaves the
+// canvas alone.
+function pace() {
+  let key = null;
+  let seenAt = -Infinity;
+  let until = -Infinity;
+  let shown = null;
+  return {
+    stir(at) {
+      key = null;
+      if (at > until) until = at;
+    },
+    due(s, c) {
+      return key === null || seenAt < until || canvasKey(c) !== key;
+    },
+    show(s, c, paint, force) {
+      const fresh = force || key === null || canvasKey(c) !== key;
+      const note = sketch(c.g, paint);
+      if (fresh || note !== shown) paint(c.g);
+      key = canvasKey(c);
+      seenAt = s.t;
+      shown = note;
     }
-  }
+  };
 }
 
-// A disc that is `k` of the way to being there: solid once it is, its cells before that.
-function disc(g, rite, x, y, r, k, fill) {
-  if (k <= 0) return;
-  g.fillStyle = fill;
-  if (k >= 1) {
-    g.beginPath();
-    g.arc(x, y, r, 0, Math.PI * 2);
-    g.fill();
+// What `paint` would put on the canvas, as a note of every call it makes and every setting it
+// writes, taken against a stand-in that paints nothing (text is measured by the real context, so
+// a line wraps as it will). Two equal notes are the same picture: a stair holds most of its span
+// on one tread, and a frame on the same tread as the last one drawn has nothing new to show.
+function sketch(real, paint) {
+  const note = [];
+  const gradient = (kind, args) => {
+    note.push(kind, ...args);
+    return { addColorStop: (at, color) => note.push(at, color) };
+  };
+  const pad = new Proxy({}, {
+    get(t, k) {
+      if (k in t) return t[k];
+      if (k === 'canvas') return real.canvas;
+      if (k === 'measureText') {
+        return (text) => {
+          if (t.font) face(real, t.font);
+          return real.measureText(text);
+        };
+      }
+      if (k === 'createLinearGradient' || k === 'createRadialGradient') return (...args) => gradient(k, args);
+      return (...args) => note.push(k, ...args);
+    },
+    set(t, k, v) {
+      t[k] = v;
+      note.push(k, v);
+      return true;
+    }
+  });
+  paint(pad);
+  return note.join('\u0001');
+}
+
+// The canvas a picture was drawn on, as far as it matters to the picture: its size, its pixels and
+// its colours. A canvas sized again is a cleared one.
+function canvasKey(c) {
+  const col = c.colors || {};
+  const cv = c.canvas || (c.g && c.g.canvas) || {};
+  return [c.w, c.h, c.dpr, cv.width, cv.height, col.bg, col.bg2, col.accent, col.accent2, col.fg, col.muted, c.reduced ? 1 : 0].join('|');
+}
+
+// A part of the picture that stands still while a piece plays -- the sky's gradient, the dearest
+// thing drawn here -- painted by `paint` once for this size and these colours onto a canvas of its
+// own, w by h from the top left, and laid down whole from then on. A card, painted once, has no
+// `cache` and paints it straight; so does a page that has no such canvas to give.
+function plate(cache, name, g, w, h, c, paint) {
+  const Off = typeof OffscreenCanvas === 'function' ? OffscreenCanvas : null;
+  if (!cache || !Off || typeof g.drawImage !== 'function') {
+    paint(g);
     return;
   }
-  develop(g, rite, x - r, y - r, r * 2, r * 2, k, (px, py) => (px - x) * (px - x) + (py - y) * (py - y) <= r * r);
+  const dpr = Number(c.dpr) > 0 ? Number(c.dpr) : 1;
+  const key = canvasKey(c);
+  let kept = cache[name];
+  if (!kept || kept.key !== key) {
+    const canvas = new Off(Math.max(1, Math.round(w * dpr)), Math.max(1, Math.round(h * dpr)));
+    const pg = canvas.getContext('2d');
+    if (!pg) {
+      paint(g);
+      return;
+    }
+    pg.setTransform(dpr, 0, 0, dpr, 0, 0);
+    paint(pg);
+    kept = { key, canvas };
+    cache[name] = kept;
+  }
+  g.drawImage(kept.canvas, 0, 0, w, h);
 }
 
-// A box that is `k` of the way to being there.
+// A box that is `k` of the way to being there, in `fill`: the part of it the piece's edge has
+// passed, and over the half behind the edge's middle a second coat of the same colour. One edge
+// moves while it comes or goes, and at rest it is two shades of one colour split by that edge
+// through the middle of the box. One path per coat.
 function box(g, rite, x0, y0, bw, bh, k, fill) {
   if (k <= 0) return;
   g.fillStyle = fill;
-  if (k >= 1) g.fillRect(x0, y0, bw, bh);
-  else develop(g, rite, x0, y0, bw, bh, k);
+  rite.paint(g, x0, y0, bw, bh, k);
+  rite.paint(g, x0, y0, bw, bh, Math.min(k, 0.5));
+}
+
+// A disc that is `k` of the way to being there: the circle is a clip, and the box round it is cut
+// in inside it.
+function disc(g, rite, x, y, r, k, fill) {
+  if (k <= 0) return;
+  g.save();
+  g.beginPath();
+  g.arc(x, y, r, 0, Math.PI * 2);
+  g.clip();
+  box(g, rite, x - r, y - r, r * 2, r * 2, k, fill);
+  g.restore();
 }
 
 /* ---- shared arithmetic ---------------------------------------------------------------------- */
@@ -215,21 +349,21 @@ function path(g, pts, color, reach) {
 }
 
 // One star: a soft halo, a bright core, and a letter beside it. `glow` is how far it has come out,
-// on a stair: the halo of a star that is out develops through the matte as far as the stair has
-// it, over the resting halo, and never brightens by alpha.
+// on a stair: the halo of a star that is out is cut in behind the piece's edge as far as the stair
+// has it, over the resting halo, and grows with it a tread at a time; it never brightens by alpha.
 function star(g, env, p, letter, scale, glow, size, rite) {
   const r = (2 + glow * 2.5) * scale;
   g.fillStyle = env.alpha(env.colors.accent, 0.2);
   g.beginPath();
   g.arc(p.x, p.y, 4.8 * scale, 0, Math.PI * 2);
   g.fill();
-  if (glow > 0) disc(g, rite || STILL, p.x, p.y, r * (2.4 + glow * 2), glow, env.alpha(env.colors.accent2, 0.5));
+  if (glow > 0) disc(g, rite || STILL, p.x, p.y, r * (2.4 + glow * 2), glow, env.alpha(env.colors.accent2, 0.38));
   g.fillStyle = env.alpha(env.colors.fg, 0.95);
   g.beginPath();
   g.arc(p.x, p.y, r, 0, Math.PI * 2);
   g.fill();
   if (letter) {
-    g.font = '600 ' + Math.round(size) + 'px system-ui, sans-serif';
+    face(g, '600 ' + Math.round(size) + 'px system-ui, sans-serif');
     g.textAlign = 'left';
     g.textBaseline = 'middle';
     g.fillStyle = env.alpha(glow > 0 ? env.colors.accent2 : env.colors.fg, 0.9);
@@ -259,15 +393,39 @@ function page(g, w, h, split, env, ink, m, rows) {
   return step;
 }
 
+// The face words are set in, set only when it is not the one the canvas already holds: setting a
+// canvas's font, even to the face it has, makes the browser bring the page's style up to date
+// first, and the diary letters every star and writes every line of its page, so a picture sets it
+// once for each size rather than once for each word. A canvas spells a face back in its own way
+// (700 as 'bold', a size cut to a few places, and a page's rows are sized in fractions of a pixel),
+// so the canvas is asked whether it holds the face as it spelled it when it was first set here: a
+// canvas resized back to its defaults, or restored to a face it saved, is never mistaken. Only a
+// few dozen spellings are kept, so a feed of many cards does not gather them.
+const spelled = new Map();
+function face(g, font) {
+  if (g.font === (spelled.get(font) || font)) return;
+  g.font = font;
+  if (spelled.size >= 48) spelled.clear();
+  spelled.set(font, g.font);
+}
+
 // A line of handwriting on a rule, shrunk a little and then cut short if it would run off the page.
+// A line too wide goes straight to the size its width at this one says will fit (a line's width
+// goes with its size), rather than trying a pixel smaller at a time, and only a line that still
+// overruns there is tried smaller again.
 function write(g, text, x, y, maxW, size, color) {
   let s = size;
   g.textAlign = 'left';
   g.textBaseline = 'alphabetic';
-  g.font = '500 ' + s + 'px system-ui, sans-serif';
-  while (s > 9 && g.measureText(text).width > maxW) {
-    s -= 1;
-    g.font = '500 ' + s + 'px system-ui, sans-serif';
+  face(g, '500 ' + s + 'px system-ui, sans-serif');
+  const wide = g.measureText(text).width;
+  if (s > 9 && wide > maxW) {
+    s = Math.max(9, Math.min(s - 1, Math.floor(s * maxW / wide)));
+    face(g, '500 ' + s + 'px system-ui, sans-serif');
+    while (s > 9 && g.measureText(text).width > maxW) {
+      s -= 1;
+      face(g, '500 ' + s + 'px system-ui, sans-serif');
+    }
   }
   let t = text;
   if (g.measureText(t).width > maxW) {
@@ -286,7 +444,7 @@ function frameOf(w, h, v) {
 }
 
 // Lines of handwriting on the page, one to a rule from the top; `color` may be a function of the
-// row, and a row whose colour is null is left blank (a line that is blinking on).
+// row, and a row whose colour is null is left blank (a line not yet cut on).
 function rows(g, fr, step, lines, color) {
   const size = Math.min(fr.size, step * 0.6);
   lines.forEach((line, i) => {
@@ -339,62 +497,96 @@ function showing(plan, tp) {
   return { lit: -1, into: 0, leaving: plan.seq[i], gone: (phase - FLASH) / (SLOT - FLASH), over: false };
 }
 
-// The showing as it opens: the clock at zero, the showing from the start, nothing done, no order
-// given and no star tapped (-1 is "never").
-function recallState(n, t) {
-  return { t: t || 0, from: 0, doneAt: -1, order: null, taps: [], tapAt: new Array(n).fill(-1), replays: 0 };
+// How long one showing of the sky runs, from its start to the line that says the stars rested.
+function shown(plan) {
+  return LEAD + SLOT * plan.seq.length + 0.6;
 }
 
-function recallScene(g, w, h, c, plan, s, v) {
+// How long a tap's ring takes to be cut on and widened, or to be cut off; and how long the entry
+// takes to be written up once it is solved.
+const TAP = 0.7;
+const WRITTEN = 2.5;
+
+// The showing as it opens: the clock at zero, the showing from the start, nothing done, no order
+// given and no star tapped (-1 is "never"). For each star, ringWas, ringR and ringNo are the ring
+// it wore when its tap last changed (whether it was on, how far it had widened, its number).
+function recallState(n, t) {
+  return {
+    t: t || 0, from: 0, doneAt: -1, order: null, taps: [], tapAt: new Array(n).fill(-1), replays: 0,
+    ringWas: new Array(n).fill(false), ringR: new Array(n).fill(0), ringNo: new Array(n).fill(0)
+  };
+}
+
+// The ring star i wears for a tap: whether it is on, how far it has widened (0..1) and the number
+// beside it. A star in the taps has its ring cut on at its moment -- or kept, if it still wore one
+// when it was tapped -- and widened a tread at a time from where it was. When the order is given
+// and the taps start over, a star keeps the ring it wore then, if it wore one, and that ring and
+// its number are cut off once, at the star's own moment; a ring not yet on never comes on.
+function tapRing(rite, s, i, reduced) {
+  const its = own(rite, 0x57a + i);
+  const tp = came(s, s.tapAt[i], TAP, reduced);
+  const tapped = (s.taps || []).indexOf(i);
+  const from = s.ringR[i];
+  if (tapped >= 0) return { on: s.ringWas[i] || its.flicker(tp) === 1, r: from + (1 - from) * its.stair(tp), no: tapped + 1 };
+  return { on: s.ringWas[i] && !its.flicker(tp), r: from, no: s.ringNo[i] };
+}
+
+// `plates` is the piece's cache of what stands still (plate); a card has none.
+function recallScene(g, w, h, c, plan, s, v, plates) {
   const fr = frameOf(w, h, v);
   const ink = c.colors.accent;
   const gold = c.colors.accent2;
   const rite = riteOf(c);
   const reduced = !!c.reduced;
-  sky(g, w, fr.split, skyTint(c));
+  plate(plates, 'sky', g, w, fr.split, c, (pg) => sky(pg, w, fr.split, skyTint(c)));
   const pts = placed(plan.points, fr);
   const show = showing(plan, s.t - s.from);
-  const doneP = came(s, s.doneAt, 2.5, reduced);
+  const doneP = came(s, s.doneAt, WRITTEN, reduced);
   const done = s.doneAt >= 0;
-  if (done && rite.flicker(doneP)) {
-    // The order they came, drawn from star to star in treads: a segment at a time, the last of
-    // them reaching across as far as the stair has it.
-    const seg = plan.points.length - 1;
-    // Three treads to a segment: far is in thirds, so the last segment reaches across in thirds.
-    const far = rite.stair(doneP, seg * 3) * seg;
+  // Written up, the order they came is drawn from star to star along the whole path in the stair's
+  // few treads, each tread carrying it the same number of legs further (counted star to star, not
+  // by length).
+  const seg = plan.points.length - 1;
+  const far = done ? rite.stair(doneP) * seg : 0;
+  if (far > 0) {
     const whole = Math.min(seg, Math.floor(far + 1e-9));
     const line = plan.seq.slice(0, whole + 2).map((i) => pts[i]);
     path(g, line, c.alpha(gold, 0.6), whole >= seg ? null : far - whole);
   }
+  // The tapped stars' numbers are set after every star is drawn, all in one size, so the canvas's
+  // font is set once for them rather than once for each star between its letter and its number.
+  const numbers = [];
   pts.forEach((p, i) => {
-    const tapped = s.taps ? s.taps.indexOf(i) : -1;
-    const own = rite.at(0x57a + i);
-    // A star coming out develops through the matte and blinks on; one resting again goes back
-    // down the stair, its halo taken back cell by cell.
+    const its = own(rite, 0x57a + i);
+    // A star coming out has its halo cut in up its stair and its ring cut on at its moment; one
+    // resting again goes back down the stair, its halo given back the way it came.
     let glow = 0;
-    if (show.lit === i) glow = reduced ? 1 : own.stair(Math.min(1, show.into * 2.5));
-    else if (show.leaving === i) glow = reduced ? 0 : 1 - own.stair(show.gone);
+    if (show.lit === i) glow = reduced ? 1 : its.stair(Math.min(1, show.into * 2.5));
+    else if (show.leaving === i) glow = reduced ? 0 : 1 - its.stair(show.gone);
     star(g, c, p, LETTERS[i], v.scale, glow, fr.size, rite);
-    if (show.lit === i && (reduced || own.flicker(show.into))) ring(g, p.x, p.y, fr.unit * (0.035 + 0.015 * own.stair(show.into)), c.alpha(gold, 0.8), 1.5);
-    // The ring and number of a star the visitor has tapped blink on and widen in treads; when the
-    // order is given and the taps start over, each leaves with one flicker back.
-    const tp = came(s, s.tapAt[i], 0.7, reduced);
-    if (tapped >= 0 ? own.flicker(tp) : (tp < 1 && own.flicker(1 - tp))) {
-      ring(g, p.x, p.y, fr.unit * (0.02 + 0.008 * own.stair(tp)), c.alpha(gold, 0.85), 1.2);
-      if (tapped >= 0) {
-        g.font = '500 ' + Math.round(fr.size * 0.8) + 'px system-ui, sans-serif';
-        g.fillStyle = c.alpha(gold, 0.95);
-        g.fillText(String(tapped + 1), p.x + fr.size * 0.5, p.y + fr.size * 0.6);
-      }
+    if (show.lit === i && (reduced || its.flicker(show.into))) ring(g, p.x, p.y, fr.unit * (0.035 + 0.015 * its.stair(show.into)), c.alpha(gold, 0.8), 1.5);
+    // The ring and number of a star the visitor has tapped (tapRing).
+    const worn = tapRing(rite, s, i, reduced);
+    if (worn.on) {
+      ring(g, p.x, p.y, fr.unit * (0.02 + 0.008 * worn.r), c.alpha(gold, 0.85), 1.2);
+      if (worn.no > 0) numbers.push({ no: String(worn.no), x: p.x + fr.size * 0.5, y: p.y + fr.size * 0.6 });
     }
   });
+  if (numbers.length) {
+    face(g, '500 ' + Math.round(fr.size * 0.8) + 'px system-ui, sans-serif');
+    g.textAlign = 'left';
+    g.textBaseline = 'middle';
+    g.fillStyle = c.alpha(gold, 0.95);
+    for (const at of numbers) g.fillText(at.no, at.x, at.y);
+  }
   const step = page(g, w, h, fr.split, c, ink, fr.m, Math.max(3, Math.round(4 * v.density)));
   const lines = [OPENER + ' entry ' + plan.number];
-  // The second line changes as the showing goes, and when it is written up: each change blinks on.
+  // The second line changes as the showing goes, and when it is written up: each change is cut on
+  // at its moment.
   const told = done && rite.flicker(doneP);
   const played = s.t - s.from;
   const sinceLine = played < LEAD ? played : show.over ? played - LEAD - plan.seq.length * SLOT : played - LEAD;
-  const lineOn = reduced || rite.at(0x11e).flicker(Math.min(1, sinceLine / 0.5));
+  const lineOn = reduced || own(rite, 0x11e).flicker(Math.min(1, sinceLine / 0.5));
   if (told) lines.push('in the order they came: ' + plan.seq.map((i) => LETTERS[i]).join(', '));
   else lines.push(show.over ? 'they came out one at a time, and rested.' : played < LEAD ? 'the stars are coming out.' : 'one at a time.');
   if (s.order) lines.push('called back: ' + s.order.map((i) => LETTERS[i]).join(', '));
@@ -411,7 +603,12 @@ function recallPiece(env, plan) {
   const helps = asked(env).helps;
   const s = recallState(n, 0);
   s.order = range(n);
-  const draw = (c) => recallScene(c.g, c.w, c.h, c, plan, s, v);
+  const plates = {};
+  const paced = pace();
+  // The picture as it stands now. A change the piece has just made is drawn at once; a frame
+  // draws only a picture that differs from the one on the canvas.
+  const paint = (c) => (g) => recallScene(g, c.w, c.h, c, plan, s, v, plates);
+  const draw = (c) => paced.show(s, c, paint(c), true);
   const inPlace = (order) => order.filter((item, i) => item === plan.seq[i]).length;
   return {
     title: recallTitle(plan),
@@ -436,6 +633,9 @@ function recallPiece(env, plan) {
     },
     start(c) {
       c.status('watch the sky');
+      // The showing runs on the piece's clock whatever motion the visitor asked for: it is the
+      // puzzle, not an ornament.
+      paced.stir(s.from + shown(plan));
       draw(c);
     },
     apply(id, value, c) {
@@ -449,6 +649,7 @@ function recallPiece(env, plan) {
         if (s.replays < helps) {
           s.replays += 1;
           s.from = s.t;
+          paced.stir(s.from + shown(plan));
           c.hint();
           c.status('once more: watch the sky' + (s.replays >= helps ? ' (the last showing at this difficulty)' : ''));
         } else {
@@ -479,12 +680,27 @@ function recallPiece(env, plan) {
         draw(c);
         return;
       }
+      // The ring the star wears from now goes on from the one it wore (if a ring from the last
+      // order was still on it) and, when this tap completes the order, every star keeps the ring
+      // it wears at this moment and lets it go at its own moment: so the last star tapped, whose
+      // ring has not yet come on, never wears one, and no ring blinks.
+      const rite = riteOf(c);
+      const before = tapRing(rite, s, best, c.reduced);
+      s.ringWas[best] = before.on;
+      s.ringR[best] = before.on ? before.r : 0;
       s.taps.push(best);
       s.tapAt[best] = s.t;
+      paced.stir(s.t + (c.reduced ? 0 : TAP));
       if (s.taps.length === n) {
         s.order = s.taps.slice();
+        for (let i = 0; i < n; i++) {
+          const worn = tapRing(rite, s, i, c.reduced);
+          s.ringWas[i] = worn.on;
+          s.ringR[i] = worn.r;
+          s.ringNo[i] = worn.no;
+          s.tapAt[i] = s.t;
+        }
         s.taps = [];
-        for (let i = 0; i < n; i++) s.tapAt[i] = s.t;
         c.set('order', s.order.slice());
         c.status('called back: ' + s.order.map((i) => LETTERS[i]).join(', ') + '; check it');
       } else {
@@ -494,10 +710,12 @@ function recallPiece(env, plan) {
     },
     frame(t, dt, c) {
       s.t += dt;
-      draw(c);
+      if (paced.due(s, c)) paced.show(s, c, paint(c));
+      return paced.due(s, c);
     },
     end(c) {
       s.doneAt = s.t;
+      paced.stir(s.t + (c.reduced ? 0 : WRITTEN));
       c.status('entry ' + plan.number + ' written up: ' + plan.seq.map((i) => LETTERS[i]).join(', ') + ', in the order they came');
     }
   };
@@ -695,19 +913,43 @@ function linesTitle(plan) {
 }
 
 // The log as it opens: no line marked or vouched for, nothing struck out, and every mark that
-// comes or goes timed against the piece's clock (-1 is "never").
+// comes or goes timed against the piece's clock (-1 is "never"). markFrom and crossWas are how far
+// in a line's band stood, and whether its cross was on, when its mark last changed.
 function linesState(count) {
-  return { t: 0, doneAt: -1, picked: [], vouched: [], markAt: new Array(count).fill(-1), vouchAt: new Array(count).fill(-1) };
+  return {
+    t: 0, doneAt: -1, picked: [], vouched: [], markAt: new Array(count).fill(-1), vouchAt: new Array(count).fill(-1),
+    markFrom: new Array(count).fill(0), crossWas: new Array(count).fill(false)
+  };
 }
 
-function linesScene(g, w, h, c, plan, s, v) {
+// How long a line's band takes to come in or go, a tick to be cut on, and the log to be corrected.
+const BAND = 0.8;
+const VOUCH = 0.7;
+const CORRECTED = 2.2;
+
+// Line i of the log as marked false: how far in the band behind it is (k), whether its cross is
+// on, and the roll both move on. A line marked has its band cut in up the stair from where it
+// stood and its cross cut on at its moment (or kept, if it still wore one); unmarked, the band
+// goes back down the stair from where it stood and the cross, if it was on, is cut off at that
+// moment -- so a line marked and unmarked again quickly neither jumps nor blinks.
+function bandOf(rite, s, i, reduced) {
+  const its = own(rite, 0xba4d + i);
+  const p = came(s, s.markAt[i], BAND, reduced);
+  const step = its.stair(p);
+  const cut = its.flicker(p) === 1;
+  const from = s.markFrom[i];
+  if ((s.picked || []).includes(i)) return { k: from + (1 - from) * step, cross: s.crossWas[i] || cut, own: its };
+  return { k: from * (1 - step), cross: s.crossWas[i] && !cut, own: its };
+}
+
+function linesScene(g, w, h, c, plan, s, v, plates) {
   const fr = frameOf(w, h, v);
   const ink = c.colors.accent;
   const gold = c.colors.accent2;
   const rite = riteOf(c);
   const reduced = !!c.reduced;
   const top = fr.size * 1.8;
-  sky(g, w, fr.split, skyTint(c));
+  plate(plates, 'sky', g, w, fr.split, c, (pg) => sky(pg, w, fr.split, skyTint(c)));
   // The meridian where the plan stands it, and the horizon where the page begins, west on the left.
   const pts = placed(plan.points, fr, top);
   const mx = fr.m * 0.6 + plan.meridian / 100 * (w - fr.m * 1.2);
@@ -724,7 +966,7 @@ function linesScene(g, w, h, c, plan, s, v) {
   g.moveTo(0, fr.split - 1);
   g.lineTo(w, fr.split - 1);
   g.stroke();
-  g.font = '500 ' + Math.round(fr.size * 0.8) + 'px system-ui, sans-serif';
+  face(g, '500 ' + Math.round(fr.size * 0.8) + 'px system-ui, sans-serif');
   g.textBaseline = 'middle';
   g.fillStyle = c.alpha(c.colors.muted, 0.9);
   g.textAlign = 'center';
@@ -735,31 +977,28 @@ function linesScene(g, w, h, c, plan, s, v) {
   g.textAlign = 'right';
   g.fillText('horizon · E', w - fr.m * 0.4, fr.split - 3);
   pts.forEach((p, i) => star(g, c, p, LETTERS[i], v.scale, 0, fr.size, rite));
-  // The logbook: the entry, then the lines, numbered. A line marked false has a band develop
-  // behind it through the matte and a cross blink on beside it; a vouched-for line gets its tick
-  // the same way; a corrected log strikes its two false lines out in treads and turns them gold.
+  // The logbook: the entry, then the lines, numbered. A line marked false has a band cut in behind
+  // it by the piece's edge, up the line's own stair, and a cross cut on beside it at the line's
+  // moment; unmarked, the band goes back down the stair the way it came and the cross is cut off at
+  // that moment. A vouched-for line has its tick cut on at its moment; a corrected log strikes its
+  // two false lines out in treads and turns them gold at their moment.
   const count = plan.claims.length;
   const step = page(g, w, h, fr.split, c, ink, fr.m, count + 1);
   const picked = s.picked || [];
   const vouched = s.vouched || [];
   const done = s.doneAt >= 0;
-  const doneP = came(s, s.doneAt, 2.2, reduced);
+  const doneP = came(s, s.doneAt, CORRECTED, reduced);
   const size = Math.min(fr.size, step * 0.6);
-  const bands = range(count).map((i) => {
-    const own = rite.at(0xba4d + i);
-    const mp = came(s, s.markAt[i], 0.8, reduced);
-    const on = picked.includes(i);
-    return { k: on ? own.stair(mp) : (mp < 1 ? 1 - own.stair(mp) : 0), cross: on ? own.flicker(mp) : (mp < 1 && own.flicker(1 - mp)), own };
-  });
+  const bands = range(count).map((i) => bandOf(rite, s, i, reduced));
   bands.forEach((band, i) => {
     const y = fr.split + step * (i + 2) - size * 0.3;
-    box(g, rite, fr.m + size * 0.2, y - size * 0.95, w - fr.m * 1.6 - size * 0.2, size * 1.25, band.k, c.alpha(gold, 0.14));
+    box(g, band.own, fr.m + size * 0.2, y - size * 0.95, w - fr.m * 1.6 - size * 0.2, size * 1.25, band.k, c.alpha(gold, 0.1));
   });
   const lines = [OPENER + ' entry ' + plan.number + ', two lines false'].concat(plan.claims.map((cl, i) => (i + 1) + '. ' + claimText(cl)));
   rows(g, fr, step, lines, (i) => (i === 0 ? c.alpha(gold, 0.95)
     : done && plan.lies.includes(i - 1) && bands[i - 1].own.flicker(doneP) ? c.alpha(gold, 0.9)
       : c.alpha(c.colors.fg, bands[i - 1].k >= 1 && picked.includes(i - 1) ? 1 : 0.85)));
-  g.font = '600 ' + Math.round(fr.size * 0.85) + 'px system-ui, sans-serif';
+  face(g, '600 ' + Math.round(fr.size * 0.85) + 'px system-ui, sans-serif');
   g.textAlign = 'right';
   g.textBaseline = 'alphabetic';
   for (let i = 0; i < count; i++) {
@@ -777,7 +1016,7 @@ function linesScene(g, w, h, c, plan, s, v) {
     } else if (bands[i].cross) {
       g.fillStyle = c.alpha(gold, 0.95);
       g.fillText('×', fr.m - fr.size * 0.3, y);
-    } else if (vouched.includes(i) && rite.at(0x7ec + i).flicker(came(s, s.vouchAt[i], 0.7, reduced))) {
+    } else if (vouched.includes(i) && own(rite, 0x7ec + i).flicker(came(s, s.vouchAt[i], VOUCH, reduced))) {
       g.fillStyle = c.alpha(ink, 0.95);
       g.fillText('✓', fr.m - fr.size * 0.3, y);
     }
@@ -794,11 +1033,25 @@ function linesPiece(env, plan) {
   const v = dials(env);
   const helps = asked(env).helps;
   const s = linesState(count);
-  const draw = (c) => linesScene(c.g, c.w, c.h, c, plan, s, v);
-  // The marks as they change: every line marked or unmarked by `next` is timed from now.
-  function mark(next) {
-    for (let i = 0; i < count; i++) if (s.picked.includes(i) !== next.includes(i)) s.markAt[i] = s.t;
+  const plates = {};
+  const paced = pace();
+  // The picture as it stands now. A change the piece has just made is drawn at once; a frame
+  // draws only a picture that differs from the one on the canvas.
+  const paint = (c) => (g) => linesScene(g, c.w, c.h, c, plan, s, v, plates);
+  const draw = (c) => paced.show(s, c, paint(c), true);
+  // The marks as they change: every line marked or unmarked by `next` is timed from now, and goes
+  // on from where its band and its cross stood at this moment.
+  function mark(next, c) {
+    const rite = riteOf(c);
+    for (let i = 0; i < count; i++) {
+      if (s.picked.includes(i) === next.includes(i)) continue;
+      const was = bandOf(rite, s, i, c.reduced);
+      s.markFrom[i] = was.k;
+      s.crossWas[i] = was.cross;
+      s.markAt[i] = s.t;
+    }
     s.picked = next;
+    paced.stir(s.t + (c.reduced ? 0 : BAND));
   }
   return {
     title: linesTitle(plan),
@@ -827,7 +1080,7 @@ function linesPiece(env, plan) {
     },
     apply(id, value, c) {
       if (id === 'lines') {
-        mark(Array.isArray(value) ? value.map(Number).filter((i) => Number.isInteger(i) && i >= 0 && i < count) : []);
+        mark(Array.isArray(value) ? value.map(Number).filter((i) => Number.isInteger(i) && i >= 0 && i < count) : [], c);
         c.status(s.picked.length ? 'marked false: ' + s.picked.map((i) => 'line ' + (i + 1)).join(' and ') : 'no line marked yet');
       }
       if (id === 'hint') {
@@ -837,6 +1090,7 @@ function linesPiece(env, plan) {
         if (next !== undefined) {
           s.vouched.push(next);
           s.vouchAt[next] = s.t;
+          paced.stir(s.t + (c.reduced ? 0 : VOUCH));
           c.hint();
           c.status('line ' + (next + 1) + ' holds: ' + claimText(plan.claims[next]));
         } else if (s.vouched.length >= helps) {
@@ -861,7 +1115,7 @@ function linesPiece(env, plan) {
         if (picked.length >= 2) picked.shift();
         picked.push(i);
       }
-      mark(picked.sort((a, b) => a - b));
+      mark(picked.sort((a, b) => a - b), c);
       // The rail takes the pick once it is a pair, as the pick knob itself would.
       if (s.picked.length === 2) c.set('lines', s.picked.slice());
       c.status(s.picked.length === 2 ? 'marked false: line ' + (s.picked[0] + 1) + ' and line ' + (s.picked[1] + 1) + '; check the log'
@@ -870,10 +1124,12 @@ function linesPiece(env, plan) {
     },
     frame(t, dt, c) {
       s.t += dt;
-      draw(c);
+      if (paced.due(s, c)) paced.show(s, c, paint(c));
+      return paced.due(s, c);
     },
     end(c) {
       s.doneAt = s.t;
+      paced.stir(s.t + (c.reduced ? 0 : CORRECTED));
       c.status('struck out: line ' + (plan.lies[0] + 1) + ' and line ' + (plan.lies[1] + 1) + '. the rest of the entry stands');
     }
   };
@@ -890,7 +1146,6 @@ const WAYS = [
   { label: 'west, to the left', value: 'west' }
 ];
 const MOVE = { north: [0, -1], south: [0, 1], east: [1, 0], west: [-1, 0] };
-const capital = (text) => text[0].toUpperCase() + text.slice(1);
 
 function driftOk(points, star, to) {
   if (!to || !Number.isInteger(to.x) || !Number.isInteger(to.y) || to.x < 4 || to.x > 96 || to.y < 4 || to.y > 96) return false;
@@ -952,12 +1207,34 @@ function driftPanel(points, x0, pw, fr) {
 }
 
 // The watches as they open: no star marked (and none marked before it), no half named, nothing
-// written up, and every change timed against the piece's clock (-1 is "never").
+// written up, and every change timed against the piece's clock (-1 is "never"). pickOn and pickR,
+// wasOn and wasR, are the rings the star marked and the star marked before it wore when the mark
+// last changed (whether on, and how far widened).
 function driftState() {
-  return { t: 0, doneAt: -1, picked: -1, was: -1, pickAt: -1, half: null, halfAt: -1, hints: 0 };
+  return { t: 0, doneAt: -1, picked: -1, was: -1, pickAt: -1, pickOn: false, pickR: 0, wasOn: false, wasR: 0, half: null, halfAt: -1, hints: 0 };
 }
 
-function driftScene(g, w, h, c, plan, s, v) {
+// How long the mover's ring takes to pass to another star, the named half to come in, and the
+// watch to be written up.
+const PICK = 0.7;
+const HALF = 1.3;
+const WATCHED = 2.4;
+
+// The ring star i wears as the mover: whether it is on and how far it has widened (0..1). The star
+// marked has its ring cut on at the mark's moment -- or kept, if it still wore one -- and widened a
+// tread at a time from where it was; the star marked before it keeps the ring it wore, if it wore
+// one, until that same moment, so the ring passes from one to the other in one cut, and a ring not
+// yet on when the mark moved on never comes on.
+function moverRing(rite, s, i, reduced) {
+  if (i < 0) return { on: false, r: 0 };
+  const its = own(rite, 0x91c);
+  const p = came(s, s.pickAt, PICK, reduced);
+  if (i === s.picked) return { on: s.pickOn || its.flicker(p) === 1, r: s.pickR + (1 - s.pickR) * its.stair(p) };
+  if (i === s.was) return { on: s.wasOn && !its.flicker(p), r: s.wasR };
+  return { on: false, r: 0 };
+}
+
+function driftScene(g, w, h, c, plan, s, v, plates) {
   const fr = frameOf(w, h, v);
   const ink = c.colors.accent;
   const gold = c.colors.accent2;
@@ -967,11 +1244,13 @@ function driftScene(g, w, h, c, plan, s, v) {
   const pw = w / 2;
   const scale = v.scale * 0.85;
   const size = fr.size * 0.85;
-  sky(g, w, fr.split, skyTint(c));
+  plate(plates, 'sky', g, w, fr.split, c, (pg) => sky(pg, w, fr.split, skyTint(c)));
+  const named = own(rite, 0x4a1f);
   if (s.half) {
-    // The half of the sky the watch names develops over both drawings through the matte.
-    const k = rite.at(0x4a1f).stair(came(s, s.halfAt, 1.3, reduced));
-    for (const x0 of [0, pw]) box(g, rite, x0 + (s.half === 'west' ? 0 : pw / 2), top * 0.4, pw / 2, fr.split - top * 0.4, k, c.alpha(gold, 0.07));
+    // The half of the sky the watch names is cut in over both drawings by the piece's edge, up its
+    // own stair, and rests in two shades.
+    const k = named.stair(came(s, s.halfAt, HALF, reduced));
+    for (const x0 of [0, pw]) box(g, named, x0 + (s.half === 'west' ? 0 : pw / 2), top * 0.4, pw / 2, fr.split - top * 0.4, k, c.alpha(gold, 0.05));
   }
   g.strokeStyle = c.alpha(c.colors.muted, 0.55);
   g.lineWidth = 1;
@@ -981,7 +1260,7 @@ function driftScene(g, w, h, c, plan, s, v) {
   g.lineTo(pw, fr.split);
   g.stroke();
   g.setLineDash([]);
-  g.font = '500 ' + Math.round(fr.size * 0.8) + 'px system-ui, sans-serif';
+  face(g, '500 ' + Math.round(fr.size * 0.8) + 'px system-ui, sans-serif');
   g.textBaseline = 'middle';
   g.textAlign = 'center';
   g.fillStyle = c.alpha(c.colors.muted, 0.9);
@@ -990,11 +1269,11 @@ function driftScene(g, w, h, c, plan, s, v) {
   const first = driftPanel(plan.points, 0, pw, fr);
   const later = driftPanel(driftSecond(plan), pw, pw, fr);
   const done = s.doneAt >= 0;
-  const doneP = came(s, s.doneAt, 2.4, reduced);
-  const told = rite.at(0xd0e);
+  const doneP = came(s, s.doneAt, WATCHED, reduced);
+  const told = own(rite, 0xd0e);
   if (done) {
-    // Written up: the place the star left blinks on, and the way it went is drawn across in
-    // treads from there to where it stands now.
+    // Written up: the place the star left is cut on at its moment, and the way it went is drawn
+    // across in treads from there to where it stands now.
     const from = driftPanel(plan.points, pw, pw, fr)[plan.star];
     if (told.flicker(doneP)) ring(g, from.x, from.y, 3 * scale, c.alpha(gold, 0.6), 1);
     const reach = told.stair(doneP);
@@ -1002,24 +1281,26 @@ function driftScene(g, w, h, c, plan, s, v) {
   }
   first.forEach((p, i) => star(g, c, p, LETTERS[i], scale, 0, size, rite));
   later.forEach((p, i) => star(g, c, p, LETTERS[i], scale, done && i === plan.star ? told.stair(doneP) : 0, size, rite));
-  // The star marked as the mover wears a ring on both drawings; it blinks on and widens in treads,
-  // and the ring on a star marked before it leaves with one flicker back.
-  const pp = came(s, s.pickAt, 0.7, reduced);
-  const own = rite.at(0x91c);
-  const wear = (i, rr) => {
+  // The star marked as the mover wears a ring on both drawings, and the star marked before it
+  // gives its ring up at the moment the new one comes on (moverRing).
+  const wear = (i) => {
+    const worn = moverRing(rite, s, i, reduced);
+    if (!worn.on) return;
+    const rr = fr.unit * (0.022 + 0.008 * worn.r);
     ring(g, first[i].x, first[i].y, rr, c.alpha(gold, 0.85), 1.2);
     ring(g, later[i].x, later[i].y, rr, c.alpha(gold, 0.85), 1.2);
   };
   const marked = s.picked >= 0 && s.picked < first.length;
-  if (marked && own.flicker(pp)) wear(s.picked, fr.unit * (0.022 + 0.008 * own.stair(pp)));
-  if (s.was >= 0 && s.was < first.length && s.was !== s.picked && pp < 1 && own.flicker(1 - pp)) wear(s.was, fr.unit * 0.03);
+  if (marked) wear(s.picked);
+  if (s.was >= 0 && s.was < first.length && s.was !== s.picked) wear(s.was);
+  const markOn = marked && moverRing(rite, s, s.picked, reduced).on;
   const step = page(g, w, h, fr.split, c, ink, fr.m, Math.max(5, Math.round(5 * v.density)));
   const lines = [OPENER + ' entry ' + plan.number + ', the second watch', 'coordinates: right, then down; each scale runs from 0 to 100.'];
   const written = done && told.flicker(doneP);
   lines.push(written ? 'star ' + LETTERS[plan.star] + ' drifted ' + driftWay(plan) + ' by ' + driftDistance(plan) + ' steps.' : 'one star moved straight. which, which way, and how far?');
   if (s.half) lines.push('in the first drawing, the mover is in the ' + s.half + ' half.');
-  const halfOn = !s.half || rite.at(0x4a1f).flicker(came(s, s.halfAt, 1.3, reduced));
-  // The marked star's coordinates, read off the page, blink on with its ring.
+  const halfOn = !s.half || named.flicker(came(s, s.halfAt, HALF, reduced));
+  // The marked star's coordinates, read off the page, are cut on with its ring.
   if (marked) {
     const a = plan.points[s.picked];
     const b = driftSecond(plan)[s.picked];
@@ -1027,7 +1308,7 @@ function driftScene(g, w, h, c, plan, s, v) {
   }
   const halfRow = s.half ? 3 : -1;
   const markRow = marked ? (s.half ? 4 : 3) : -1;
-  rows(g, fr, step, lines, (i) => (i === 0 ? c.alpha(gold, 0.95) : (i === halfRow && !halfOn) || (i === markRow && !own.flicker(pp)) ? null : c.alpha(c.colors.fg, 0.85)));
+  rows(g, fr, step, lines, (i) => (i === 0 ? c.alpha(gold, 0.95) : (i === halfRow && !halfOn) || (i === markRow && !markOn) ? null : c.alpha(c.colors.fg, 0.85)));
 }
 
 function driftPreview(g, w, h, env, plan) {
@@ -1042,13 +1323,27 @@ function driftPiece(env, plan) {
   const distance = driftDistance(plan);
   const second = driftSecond(plan);
   const s = driftState();
-  const draw = (c) => driftScene(c.g, c.w, c.h, c, plan, s, v);
+  const plates = {};
+  const paced = pace();
+  // The picture as it stands now. A change the piece has just made is drawn at once; a frame
+  // draws only a picture that differs from the one on the canvas.
+  const paint = (c) => (g) => driftScene(g, c.w, c.h, c, plan, s, v, plates);
+  const draw = (c) => paced.show(s, c, paint(c), true);
   const wayOf = (value) => (WAYS.find((o) => o.value === value) || {}).label;
-  function pick(i) {
+  // The mark moves to star i (or to none, -1): each of the two rings goes on from the one it wore.
+  function pick(i, c) {
     if (i === s.picked) return;
+    const rite = riteOf(c);
+    const before = moverRing(rite, s, s.picked, c.reduced);
+    const next = moverRing(rite, s, i, c.reduced);
     s.was = s.picked;
+    s.wasOn = before.on;
+    s.wasR = before.r;
     s.picked = i;
+    s.pickOn = next.on;
+    s.pickR = next.on ? next.r : 0;
     s.pickAt = s.t;
+    paced.stir(s.t + (c.reduced ? 0 : PICK));
   }
   return {
     title: driftTitle(plan),
@@ -1082,7 +1377,7 @@ function driftPiece(env, plan) {
     apply(id, value, c) {
       if (id === 'star') {
         const i = Array.isArray(value) && value.length ? Number(value[0]) : -1;
-        pick(Number.isInteger(i) && i >= 0 && i < n ? i : -1);
+        pick(Number.isInteger(i) && i >= 0 && i < n ? i : -1, c);
         if (s.picked >= 0) {
           const a = plan.points[s.picked];
           const b = second[s.picked];
@@ -1103,6 +1398,7 @@ function driftPiece(env, plan) {
           if (s.hints === 1) {
             s.half = from.x < 50 ? 'west' : 'east';
             s.halfAt = s.t;
+            paced.stir(s.t + (c.reduced ? 0 : HALF));
             c.status('in the first drawing, the moving star is in the ' + s.half + ' half');
           } else if (s.hints === 2) {
             c.status('in the first drawing, the moving star is in the ' + (from.y < 50 ? 'upper' : 'lower') + ' half');
@@ -1140,7 +1436,7 @@ function driftPiece(env, plan) {
         c.status('tap a lettered star, or choose its coordinate control');
         return;
       }
-      pick(best);
+      pick(best, c);
       c.set('star', [best]);
       const a = plan.points[best];
       const b = second[best];
@@ -1149,10 +1445,12 @@ function driftPiece(env, plan) {
     },
     frame(t, dt, c) {
       s.t += dt;
-      draw(c);
+      if (paced.due(s, c)) paced.show(s, c, paint(c));
+      return paced.due(s, c);
     },
     end(c) {
       s.doneAt = s.t;
+      paced.stir(s.t + (c.reduced ? 0 : WATCHED));
       c.status('entry ' + plan.number + ' written up: star ' + LETTERS[plan.star] + ' moved ' + way + ' by ' + distance + ' steps; choose any other star to compare what stayed still');
     }
   };
@@ -1180,16 +1478,28 @@ function entry(env) {
 export default {
   id: 'constellation-diary',
   needsSky: true,
+  // The memory's card is painted at the start of its showing, which animate then plays; for a
+  // visitor who asked for less motion, whose card is never animated, it is painted with the
+  // showing over and the stars at rest, so the page says what became of them.
   paint(g, w, h, env) {
     const plan = entry(env);
-    if (plan.kind === 'recall') recallPreview(g, w, h, env, plan, 0);
+    if (plan.kind === 'recall') recallPreview(g, w, h, env, plan, env.reduced ? shown(plan) : 0);
     else if (plan.kind === 'lines') linesPreview(g, w, h, env, plan);
     else driftPreview(g, w, h, env, plan);
   },
+  // Only the memory's card moves, because its sky is the puzzle: the stars come out one at a time,
+  // once, as they do in the piece, and the sky rests. t is counted from the card's first frame on
+  // screen (js/feed.js), so the showing starts as it is seen. Once the last line is written the
+  // card draws that resting sky and says nothing more moves, so the feed lets it go; the frame
+  // that says so still draws, because a card met again after its showing is over has only the
+  // start of it on its canvas. The other two entries wait for a reader and hold still from the
+  // start.
   animate(g, w, h, env, t) {
     const plan = entry(env);
     if (plan.kind !== 'recall' || env.reduced) return false;
-    recallPreview(g, w, h, env, plan, Math.max(0, t) % (LEAD + SLOT * plan.seq.length + 2));
+    const rest = shown(plan);
+    recallPreview(g, w, h, env, plan, Math.min(Math.max(0, t), rest));
+    if (t >= rest) return false;
   },
   spark(env) {
     const cached = entry(env);
@@ -1212,7 +1522,9 @@ export default {
         quote: WORDS[plan.points.length][0].toUpperCase() + WORDS[plan.points.length].slice(1) + ' stars come out one at a time on the midnight watch.',
         text: 'Watch the sky once, then put the stars in the order they came.',
         aspect: '4 / 3',
-        paint: (g, w, h, cardEnv) => recallPreview(g, w, h, cardEnv, plan, 0),
+        // A spark's picture is painted once and never animated: the showing is over in it, and
+        // its second line says the stars came out and rested.
+        paint: (g, w, h, cardEnv) => recallPreview(g, w, h, cardEnv, plan, shown(plan)),
         of: plan
       };
     }

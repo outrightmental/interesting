@@ -60,27 +60,77 @@ function clamp(v, lo, hi) {
 /* ---- the rite: how this module moves ------------------------------------------------------- */
 
 /* env.rite (ctx.rite inside a piece) is the piece's own roll of how it moves (js/variant.js;
-   js/stage.js, "The rite"). Nothing drawn on the table moves along a formula or cuts without a
-   rite: the wavefronts leaving the slits advance in rite.ratchet's clicks, the lamp breathes on
-   rite.stair, the dust blinks on rite.flicker; a filter turned to a new place turns in clicks;
-   a thing arriving -- an answer read, a guess written, a filter named -- blinks on with
-   rite.flicker; and a surface that becomes set -- the beam once the order is found, the screen
-   lit, the chip behind a named filter, the guess's bar, the light over a solved table -- develops
-   by its AREA through rite.matte, cell by cell in the piece's own pattern, and never by a fade.
+   js/stage.js, "The rite"): one clean edge -- a slice at an angle or a curve round a corner, the
+   piece's signature -- and the few treads every change climbs, always forward. Nothing on the
+   table moves along a formula, and nothing moves without a reason:
+
+     at rest         the table is waiting, so nothing on it moves: the lamp burns at one size, the
+                     wavefronts lie where they leave the slits and the dust lies where it fell. A
+                     frame with nothing new in it is not drawn at all (settled, below).
+     a filter moved  turns to its new angle in rite.stair's even treads after a hold, and the
+                     angle written under it is cut over to the new one at its moment (rite.flicker).
+     a thing said    -- an answer read, a guess at the spacing written -- is cut on at its moment
+                     in place of what stood there; a guess at the light raises or lowers its bar
+                     in rite.stair's treads from where the last guess left it.
+     a thing shown   -- the prediction's ghost screen, the guess bar's frame, the beam once the
+                     order is found, the screen lit, the fringes burning brighter, the chip behind
+                     a named filter, the light over a solved table -- is cut in behind the piece's
+                     edge as its stair climbs: one path filled (rite.paint) or one clip drawn
+                     through (rite.region), never a fade and never cells. A new prediction is cut
+                     in over the old one by the same edge. A mark of state (the chip, the light
+                     over the table) rests as two shades of its colour split by that edge through
+                     its middle; a thing whose shade is a reading (the beam, the screen, the
+                     fringes) rests at that shade.
+     a thing done    -- the ghost screen and the guess bar once the table has its answer, the chip
+                     where a named filter stood before it was moved -- is cut away behind the same
+                     edge on a roll of its own, one way: drawn through the part of its box the
+                     edge has not reached yet, until there is none.
+
    Every change is read against the piece's own clock, s.t, which frame() advances: a change made
    at `since` has come came() of its way, which is 1 at once for a visitor who asked for less
-   motion, and for whatever stood there from the start (since < 0). Each band, plate or speck
-   moves on a roll of its own (rite.at), so no two step together. */
+   motion, and for whatever stood there from the start (since < 0). Each band, plate or chip steps
+   on a roll of its own, rolled again each time it moves (roll, below), so no two step together and
+   no move steps like the one before it. */
 
-// No rite handed (no env builder does this; a guard): everything stands where it ends, so a
-// plate turned to a new place is at that place and never stuck at its old angle.
+// The rite of a piece handed none (no env builder does this; a guard): every change already made,
+// so a plate turned to a new place is at that place, and a surface cut by a plain upright slice
+// from its left side.
 const STILL = {
-  ease: () => 1, stair: () => 1, ratchet: () => 1, flicker: () => 1, matte: () => true,
-  treads: 1, kind: 'none', cell: 4, at: () => STILL
+  stair: () => 1, flicker: () => 1, treads: 1, kind: 'slice', angle: 90,
+  region(g, x, y, w, h, k) {
+    if (k > 0) g.rect(x, y, w * Math.min(1, k), h);
+  },
+  paint(g, x, y, w, h, k, style) {
+    if (k <= 0) return;
+    if (style != null) g.fillStyle = style;
+    g.fillRect(x, y, w * Math.min(1, k), h);
+  },
+  at: () => STILL
 };
 
 function riteOf(env) {
   return env && env.rite ? env.rite : STILL;
+}
+
+// The roll for the n-th time a thing moves: its own seed crossed with the count, so no two moves of
+// one thing step alike while the same seed still plays the same piece, every roll keeping the
+// piece's edge. Kept with the rite it was rolled from, so a frame reuses a roll rather than making
+// it afresh thirty times a second.
+const ROLLS = new WeakMap();
+function roll(rite, base, n) {
+  const seed = ((base | 0) ^ (Math.imul((n | 0) + 1, 0x9e37) | 0)) >>> 0;
+  let kept = ROLLS.get(rite);
+  if (!kept) {
+    kept = new Map();
+    ROLLS.set(rite, kept);
+  }
+  let own = kept.get(seed);
+  if (!own) {
+    if (kept.size > 96) kept.clear();
+    own = rite.at(seed);
+    kept.set(seed, own);
+  }
+  return own;
 }
 
 function came(s, since, span, reduced) {
@@ -88,47 +138,80 @@ function came(s, since, span, reduced) {
   return Math.max(0, Math.min(1, (s.t - since) / span));
 }
 
-function fract(x) {
-  return x - Math.floor(x);
+// The longest any change on the table takes to come the whole of its way, in seconds.
+const LONGEST = 1.8;
+
+function sizeOf(c) {
+  return c.w + 'x' + c.h + '@' + (c.dpr || 1);
 }
 
-// The cells of a box that the matte lets through at coverage k, filled in the current fillStyle:
-// how a surface changes by its area. Cells are rite.cell px, coarser over a wide box so a frame
-// stays cheap, on a grid fixed to the canvas so the pattern holds still while it grows. `inside`
-// keeps the tiling to a shape within the box. At k >= 1 every cell is let through.
-function develop(g, rite, x0, y0, bw, bh, k, inside, size) {
+// Whether a frame has nothing to draw: the canvas holds a picture drawn at this size, and that
+// picture was drawn once the latest change (made at `last`) had come the whole of its way -- at
+// once for a visitor who asked for less motion, and for a table with no change made yet (last <
+// 0). The table at rest stands still, so drawing it again would spend a frame on nothing a
+// visitor could see; a new size (the stage clears the canvas to resize it) or a new change draws
+// again. It is when the picture was drawn that is read, not the clock alone: the stage asks for
+// no frames while the scene is out of sight, so a change made then, or one the scroll cut off
+// half way, is still owed its finished picture, and the first frame back draws it.
+function settled(s, c, last, reduced) {
+  if (s.drawn !== sizeOf(c)) return false;
+  return s.drawnAt >= (reduced || last < 0 ? last : last + LONGEST + 0.05);
+}
+
+// One frame: drawn unless it is settled, and answering whether anything is still on its way once
+// it has been -- false when the table is at rest, which tells the stage to ask for no frame until a
+// knob, a tap, a check, a new size or the scene coming back into view. The piece's clock is its
+// own, advanced by the frames it is given and standing still while none come, so a change made
+// after a rest is timed from where the clock stood and plays its whole way.
+function step(s, c, last, draw) {
+  if (!settled(s, c, last, !!c.reduced)) draw(c);
+  return !settled(s, c, last, !!c.reduced);
+}
+
+// A surface `k` of the way to being there, in the current fillStyle: the part of the box the
+// piece's edge has passed, and over the half behind the edge's middle a second coat of the same
+// colour. One edge moves while it comes, and at rest it is two shades of one colour split by that
+// edge through the middle of the box. One path per coat.
+function cover(g, rite, x, y, w, h, k) {
   if (k <= 0) return;
-  const cell = size || Math.max(rite.cell, Math.ceil(Math.max(bw, bh) / 28));
-  const cx0 = Math.floor(x0 / cell);
-  const cy0 = Math.floor(y0 / cell);
-  const cx1 = Math.ceil((x0 + bw) / cell);
-  const cy1 = Math.ceil((y0 + bh) / cell);
-  for (let cy = cy0; cy < cy1; cy++) {
-    for (let cx = cx0; cx < cx1; cx++) {
-      const px = cx * cell;
-      const py = cy * cell;
-      if (inside && !inside(px + cell / 2, py + cell / 2)) continue;
-      if (k < 1 && !rite.matte(cx, cy, k)) continue;
-      g.fillRect(px, py, cell, cell);
-    }
+  rite.paint(g, x, y, w, h, k);
+  rite.paint(g, x, y, w, h, Math.min(k, 0.5));
+}
+
+// One drawing giving way to another behind the piece's edge, `k` of the way: `after` (if there is
+// one) drawn whole through the part of the box the edge has passed, `before` (if there is one)
+// through the rest. With no `after` it is a leaving: `before` cut away by the edge, one way. One
+// edge between them and one clip each, never cells.
+function wipe(g, rite, x, y, w, h, k, before, after) {
+  if (k < 1 && before) {
+    g.save();
+    g.beginPath();
+    g.rect(x, y, w, h);
+    if (k > 0) rite.region(g, x, y, w, h, k);
+    g.clip('evenodd');
+    before();
+    g.restore();
   }
+  if (k <= 0 || !after) return;
+  if (k >= 1) {
+    after();
+    return;
+  }
+  g.save();
+  g.beginPath();
+  rite.region(g, x, y, w, h, k);
+  g.clip();
+  after();
+  g.restore();
 }
 
-// Up the stair and back down it over one period, entered at the configuration's turn: the lamp's
-// breath, never a cosine.
-function breath(rite, t, period, turn, n) {
-  const phase = fract(t / period + turn);
-  return phase < 0.5 ? rite.stair(phase * 2, n) : 1 - rite.stair((phase - 0.5) * 2, n);
-}
-
-// The light that comes over a solved table: it develops through the matte from the moment the
-// piece was solved, blinking on and dropping out the way the rite's flicker has it, and holds.
+// The light that comes over a solved table: cut in behind the piece's edge on its stair from the
+// moment the piece was solved, and resting in two shades.
 function daybreak(g, rite, env, w, h, p) {
   const k = rite.stair(p);
-  if (k <= 0 || !rite.flicker(p)) return;
-  g.fillStyle = env.alpha(env.colors.accent2, 0.16);
-  if (k >= 1) g.fillRect(0, 0, w, h);
-  else develop(g, rite, 0, 0, w, h, k, null, Math.max(rite.cell, Math.ceil(Math.min(w, h) / 32)));
+  if (k <= 0) return;
+  g.fillStyle = env.alpha(env.colors.accent2, 0.09);
+  cover(g, rite, 0, 0, w, h, k);
 }
 
 /* ---- shared drawing ------------------------------------------------------------------------- */
@@ -141,22 +224,18 @@ function background(g, w, h, env) {
   g.fillRect(0, 0, w, h);
 }
 
-// Dust on the table: a few marks whose phase is the configuration's turn and whose number is its
-// density. Each speck blinks on a roll of its own, in its own period, so the dust never twinkles
-// in step.
-function dust(g, w, h, env, v, t) {
-  const rite = riteOf(env);
+// Dust on the table: a few specks where the configuration's turn put them, as many as its density
+// asks. They lie still: nothing in them waits for anything, so nothing in them moves.
+function dust(g, w, h, env, v) {
   g.fillStyle = env.alpha(env.colors.fg, 0.12);
   for (let i = 0, count = Math.max(6, Math.round(20 * v.density)); i < count; i++) {
-    const own = rite.at(0xd05 + i);
-    if (!own.flicker(fract((t || 0) / (2.2 + (i % 5) * 0.7) + i * 0.37 + v.turn))) continue;
     g.fillRect(((i * 0.6180339 + v.turn * 0.3) % 1) * w, ((i * 0.7548777 + v.turn * 0.17) % 1) * h, 1, 1);
   }
 }
 
-// The lamp, its glow swollen by `swell` (0..1): one tread of the breath at a time.
-function lamp(g, env, x, y, radius, swell) {
-  const r = radius * (0.86 + 0.28 * (swell || 0));
+// The lamp: its glow and its flame. It burns at one size, as a lamp lit on purpose does.
+function lamp(g, env, x, y, radius) {
+  const r = radius;
   const glow = g.createRadialGradient(x, y, 0, x, y, r);
   glow.addColorStop(0, env.alpha(env.colors.accent2, 0.6));
   glow.addColorStop(1, env.alpha(env.colors.accent2, 0));
@@ -238,43 +317,60 @@ function slitGeometry(w, h) {
 }
 
 // The slits' state as a scene opens: nothing answered, nothing predicted, nothing revealed, and
-// every change timed against the piece's clock from here on (-1 is "there from the start").
+// every change timed against the piece's clock from here on (-1 is "there from the start"). `was`
+// is what stood before the latest change -- the guess the mask said, the prediction on the ghost
+// screen -- shown until the new one is cut in over it, and the counts roll each move afresh.
 function slitState() {
-  return { open: false, t: 0, openAt: -1, guess: null, guessAt: -1, effect: null, effectAt: -1 };
+  return {
+    open: false, t: 0, openAt: -1, guess: null, guessWas: null, guessAt: -1, guesses: 0,
+    effect: null, effectWas: null, effectAt: -1, effects: 0, drawn: null, drawnAt: -1
+  };
 }
 
-// The fringes a spacing makes, slice by slice down a strip: cos squared of the height over the
-// fringe spacing, under a soft envelope. `k` under 1 develops the strip through the matte in cells
-// instead of slices -- how a prediction arrives.
-function fringes(g, env, rite, x, top, width, height, reach, fringe, k, strength) {
+// The guess the mask says it has: the new one once its moment has come, the one before it until
+// then, so a guess is cut over to the next and never blinks out between them.
+function saidGuess(s, rite, reduced) {
+  if (s.guessAt < 0) return s.guess;
+  return roll(rite, 0x9e5, s.guesses).flicker(came(s, s.guessAt, 0.9, reduced)) ? s.guess : s.guessWas;
+}
+
+// How far the latest prediction has been cut in over the ghost screen, 0 to 1.
+function effectCut(s, rite, reduced) {
+  return roll(rite, 0x3c7, s.effects).stair(came(s, s.effectAt, 1.4, reduced));
+}
+
+// How many stops the fringes' gradient takes: eight or more to every fringe even when a
+// prediction packs them, which is finer than the eye parts on a strip this narrow.
+const FRINGE_STOPS = 120;
+
+// The gradients already made, kept per canvas by what they were made for: the real screen's
+// fringes never change at a size and a ghost's only when its prediction does, so a frame that
+// draws them again reuses the gradient rather than working out its stops afresh.
+const STRIPS = new WeakMap();
+
+// The fringes a spacing makes, down a strip: cos squared of the height over the fringe spacing,
+// under a soft envelope, painted as one gradient down the strip -- one fill, however many fringes.
+function fringes(g, env, x, top, width, height, reach, fringe, strength) {
   const c = env.colors;
-  const value = (mm) => Math.exp(-0.9 * (mm / reach) ** 2) * Math.cos((Math.PI * mm) / fringe) ** 2;
-  if (k >= 1) {
-    const slices = 180;
-    const sliceH = height / slices;
-    for (let i = 0; i < slices; i++) {
-      const mm = ((i + 0.5) / slices - 0.5) * reach * 2;
-      g.fillStyle = env.alpha(c.accent2, 0.03 + value(mm) * strength);
-      g.fillRect(x, top + i * sliceH, width, sliceH + 0.5);
-    }
-    return;
+  const key = top + '|' + height + '|' + reach + '|' + fringe + '|' + strength + '|' + c.accent2;
+  let kept = STRIPS.get(g);
+  if (!kept) {
+    kept = new Map();
+    STRIPS.set(g, kept);
   }
-  if (k <= 0) return;
-  const cell = Math.max(rite.cell, Math.ceil(height / 60));
-  const cx0 = Math.floor(x / cell);
-  const cx1 = Math.ceil((x + width) / cell);
-  const cy0 = Math.floor(top / cell);
-  const cy1 = Math.ceil((top + height) / cell);
-  for (let cy = cy0; cy < cy1; cy++) {
-    const py = cy * cell;
-    const mm = ((py + cell / 2 - top) / height - 0.5) * reach * 2;
-    const a = 0.03 + value(mm) * strength;
-    for (let cx = cx0; cx < cx1; cx++) {
-      if (!rite.matte(cx, cy, k)) continue;
-      g.fillStyle = env.alpha(c.accent2, a);
-      g.fillRect(cx * cell, py, cell, cell);
+  let strip = kept.get(key);
+  if (!strip) {
+    const value = (mm) => Math.exp(-0.9 * (mm / reach) ** 2) * Math.cos((Math.PI * mm) / fringe) ** 2;
+    strip = g.createLinearGradient(0, top, 0, top + height);
+    for (let i = 0; i <= FRINGE_STOPS; i++) {
+      const mm = (i / FRINGE_STOPS - 0.5) * reach * 2;
+      strip.addColorStop(i / FRINGE_STOPS, env.alpha(c.accent2, 0.03 + value(mm) * strength));
     }
+    if (kept.size > 11) kept.clear();
+    kept.set(key, strip);
   }
+  g.fillStyle = strip;
+  g.fillRect(x, top, width, height);
 }
 
 // `s`: whether the answer is in (the spacing written on the mask), the guess and the prediction
@@ -284,7 +380,6 @@ function drawSlits(g, w, h, env, plan, s, variant) {
   const c = env.colors;
   const rite = riteOf(env);
   const reduced = !!env.reduced;
-  const t = reduced ? 0 : s.t || 0; // less motion asked for: the lamp, the fronts and the dust hold still
   const geo = slitGeometry(w, h);
   const size = Math.max(9, Math.min(15, Math.round(Math.min(w, h) * 0.036)));
   const reach = reachOf(plan);
@@ -292,27 +387,24 @@ function drawSlits(g, w, h, env, plan, s, variant) {
   const perMm = screenH / (reach * 2);
   const openP = s.open ? came(s, s.openAt, 1.8, reduced) : 0;
   background(g, w, h, env);
-  dust(g, w, h, env, v, t);
-  // The lamp and its wavelength: the glow breathes on the stair, six seconds to a breath.
+  dust(g, w, h, env, v);
+  // The lamp and its wavelength.
   const sourceX = geo.sourceX + (v.turn - 0.5) * w * 0.03;
-  lamp(g, env, sourceX, geo.middle, Math.min(w, h) * 0.11 * v.scale, breath(rite.at(0x1a4), t, 6, v.turn));
+  lamp(g, env, sourceX, geo.middle, Math.min(w, h) * 0.11 * v.scale);
   label(g, env, plan.lambda + ' nm', sourceX, geo.middle + Math.min(w, h) * 0.12, size, 'center', c.accent2);
-  // The mask with its two slits, and the wavefronts that leave them: a ring every ringStep,
-  // advancing one step in the ratchet's clicks every 2.4 seconds, so a front always rests on a
-  // tooth and the turn one period makes lands the fronts on themselves. Each slit on a roll of
-  // its own.
+  // The mask with its two slits, and the wavefronts that leave them: a ring every ringStep, the
+  // first set off from the slit by the configuration's turn, lying where they fall.
   const gap = Math.max(6, h * 0.05);
   const openings = [geo.middle - gap / 2, geo.middle + gap / 2];
   const ringStep = Math.max(8, (geo.screenX - geo.maskX) / (6 * v.density) / v.scale);
-  openings.forEach((y, slit) => {
+  openings.forEach((y) => {
     g.strokeStyle = env.alpha(c.accent2, 0.3);
     g.lineWidth = 1;
     g.beginPath();
     g.moveTo(sourceX, geo.middle);
     g.lineTo(geo.maskX, y);
     g.stroke();
-    const advance = rite.at(0x5e1 + slit).ratchet(fract(t / 2.4 + v.turn)) * ringStep;
-    for (let r = advance; r < geo.screenX - geo.maskX; r += ringStep) {
+    for (let r = v.turn * ringStep; r < geo.screenX - geo.maskX; r += ringStep) {
       if (r < 2) continue;
       g.strokeStyle = env.alpha(c.accent, 0.08 + 0.08 * (1 - r / (geo.screenX - geo.maskX)));
       g.beginPath();
@@ -325,13 +417,13 @@ function drawSlits(g, w, h, env, plan, s, variant) {
   g.fillRect(geo.maskX - 2, geo.top, 4, openings[0] - slitH / 2 - geo.top);
   g.fillRect(geo.maskX - 2, openings[0] + slitH / 2, 4, gap - slitH);
   g.fillRect(geo.maskX - 2, openings[1] + slitH / 2, 4, geo.bottom - openings[1] - slitH / 2);
-  // What the mask says of its spacing: the answer blinks on once it is read; before that, the
-  // visitor's guess blinks on as a question of its own, and a question mark holds otherwise.
+  // What the mask says of its spacing: the answer is cut on at its moment once it is read; before
+  // that, the visitor's guess as a question of its own, each new guess cut over the last at its
+  // moment, and a question mark until there is one.
   const answered = s.open && rite.flicker(openP);
-  const guessP = s.guess !== null ? came(s, s.guessAt, 0.9, reduced) : 0;
-  const guessing = !answered && s.guess !== null && rite.at(0x9e5).flicker(guessP);
-  const said = answered ? (plan.spacing / 100).toFixed(2) + ' mm' : guessing ? (clamp(s.guess, 10, 100) / 100).toFixed(2) + ' mm?' : '?';
-  label(g, env, 'd ' + said, geo.maskX, geo.top - size * 0.9, size, 'center', guessing ? c.accent : c.accent2);
+  const guessed = answered ? null : saidGuess(s, rite, reduced);
+  const said = answered ? (plan.spacing / 100).toFixed(2) + ' mm' : guessed !== null ? (clamp(guessed, 10, 100) / 100).toFixed(2) + ' mm?' : '?';
+  label(g, env, 'd ' + said, geo.maskX, geo.top - size * 0.9, size, 'center', guessed !== null ? c.accent : c.accent2);
   // The distance to the screen.
   const dimY = geo.bottom + size * 0.9;
   g.strokeStyle = env.alpha(c.muted, 0.7);
@@ -348,30 +440,41 @@ function drawSlits(g, w, h, env, plan, s, variant) {
   // The screen: the fringes as the slits make them.
   g.fillStyle = env.mix(c.bg, c.bg2, 0.5);
   g.fillRect(geo.screenX, geo.top, geo.screenW, screenH);
-  fringes(g, env, rite, geo.screenX, geo.top, geo.screenW, screenH, reach, plan.fringe, 1, 0.75);
+  fringes(g, env, geo.screenX, geo.top, geo.screenW, screenH, reach, plan.fringe, 0.75);
   g.strokeStyle = env.alpha(c.fg, 0.65);
   g.lineWidth = 1.2;
   g.strokeRect(geo.screenX, geo.top, geo.screenW, screenH);
-  // The prediction: a ghost of a screen beside the real one, the fringes as the visitor says the
-  // change would leave them -- spread, packed or the same -- developing through the matte from
-  // the moment the choice was made, and drawn afresh through it when the choice changes.
-  if (s.effect !== null && !answered) {
-    const factor = s.effect === 'spread' ? 1.4 : s.effect === 'pack' ? 0.7 : 1;
+  // The prediction: a ghost of a screen in a frame beside the real one, the fringes as the visitor
+  // says the change would leave them -- spread, packed or the same -- cut in, frame and all, behind
+  // the piece's edge from the moment the choice was made, and cut in over the last one by the same
+  // edge when the choice changes, so it is never empty between them. Its word is cut over at the
+  // edge's first tread. Once the table is read true the prediction has had its answer: the ghost is
+  // cut away behind an edge of its own, and its word goes at that edge's first tread.
+  if (s.effect !== null) {
     const ghostW = geo.screenW * 0.5;
     const ghostX = geo.screenX - ghostW - w * 0.018;
-    const own = rite.at(0x3c7);
-    const k = own.stair(came(s, s.effectAt, 1.4, reduced));
-    if (k > 0 && own.flicker(k)) {
+    const ghost = (effect) => () => {
+      const factor = effect === 'spread' ? 1.4 : effect === 'pack' ? 0.7 : 1;
       g.fillStyle = env.alpha(env.mix(c.bg, c.bg2, 0.5), 0.6);
-      develop(g, rite, ghostX, geo.top, ghostW, screenH, k, null, Math.max(rite.cell, Math.ceil(screenH / 60)));
-      fringes(g, env, rite, ghostX, geo.top, ghostW, screenH, reach, plan.fringe * factor, k, 0.45);
-      if (k >= 1) {
-        g.strokeStyle = env.alpha(c.accent, 0.55);
-        g.lineWidth = 1;
-        g.strokeRect(ghostX, geo.top, ghostW, screenH);
-      }
-      label(g, env, s.effect === 'same' ? 'as is' : s.effect, ghostX + ghostW / 2, geo.top - size * 0.9, Math.max(8, size - 2), 'center', c.accent);
-    }
+      g.fillRect(ghostX, geo.top, ghostW, screenH);
+      fringes(g, env, ghostX, geo.top, ghostW, screenH, reach, plan.fringe * factor, 0.45);
+      g.strokeStyle = env.alpha(c.accent, 0.55);
+      g.lineWidth = 1;
+      g.strokeRect(ghostX, geo.top, ghostW, screenH);
+    };
+    // The box the edges cross, a pixel over the frame so its line goes with the screen it frames.
+    const bx = ghostX - 1;
+    const by = geo.top - 1;
+    const bw = ghostW + 2;
+    const bh = screenH + 2;
+    const k = effectCut(s, rite, reduced);
+    const standing = () => wipe(g, roll(rite, 0x3c7, s.effects), bx, by, bw, bh, k, s.effectWas === null ? null : ghost(s.effectWas), ghost(s.effect));
+    const away = roll(rite, 0x3c8, 0);
+    const gone = s.open ? away.stair(openP) : 0;
+    if (gone > 0) wipe(g, away, bx, by, bw, bh, gone, standing, null);
+    else standing();
+    const shown = k > 0 ? s.effect : s.effectWas;
+    if (shown !== null && gone <= 0) label(g, env, shown === 'same' ? 'as is' : shown, ghostX + ghostW / 2, geo.top - size * 0.9, Math.max(8, size - 2), 'center', c.accent);
   }
   // The ruler: a tick every millimetre, longer every five and ten, numbered where there is room.
   const every = reach <= 4 ? 1 : reach <= 16 ? 5 : 10;
@@ -392,12 +495,13 @@ function drawSlits(g, w, h, env, plan, s, variant) {
     if (mm % every === 0) label(g, env, String(mm), geo.rulerX + w * 0.04, y, tickSize, 'left', env.alpha(c.fg, 0.9));
   }
   label(g, env, 'mm', geo.rulerX + w * 0.02, geo.top - size * 0.9, size, 'left', env.alpha(c.muted, 0.9));
-  // The table read true: the light comes over it through the matte, and the fringes burn
-  // brighter, cell by cell.
+  // The table read true: the light comes over it behind the piece's edge, and the fringes burn
+  // brighter behind an edge of their own, both on their stairs.
   if (s.open) {
     daybreak(g, rite, env, w, h, openP);
-    const k = rite.at(0x7a2).stair(openP);
-    if (k > 0 && rite.at(0x7a2).flicker(openP)) fringes(g, env, rite, geo.screenX, geo.top, geo.screenW, screenH, reach, plan.fringe, k, 0.5);
+    const own = roll(rite, 0x7a2, 0);
+    wipe(g, own, geo.screenX, geo.top, geo.screenW, screenH, own.stair(openP), null,
+      () => fringes(g, env, geo.screenX, geo.top, geo.screenW, screenH, reach, plan.fringe, 0.5));
   }
 }
 
@@ -413,7 +517,11 @@ function slitPiece(env, plan) {
   const full = Object.assign({ spacing }, plan);
   const change = CHANGES[plan.ask];
   const s = slitState();
-  const draw = (c) => drawSlits(c.g, c.w, c.h, c, full, s, env.variant);
+  const draw = (c) => {
+    drawSlits(c.g, c.w, c.h, c, full, s, env.variant);
+    s.drawn = sizeOf(c);
+    s.drawnAt = s.t;
+  };
   return {
     title: slitTitle(plan),
     brief: 'A lamp lit on purpose: light of wavelength ' + plan.lambda + ' nm passes two slits and lands on a screen ' + plan.length + ' mm away as bright and dark fringes. Neighbouring bright fringes are a wavelength times the distance, over the slit spacing, apart; the ruler beside the screen is in millimetres.',
@@ -449,8 +557,11 @@ function slitPiece(env, plan) {
         if (Number.isFinite(n)) {
           c.status('slits ' + (clamp(n, 10, 100) / 100).toFixed(2) + ' mm apart, you say');
           if (s.guess !== n) {
+            // The new guess is cut over whatever the mask says now.
+            s.guessWas = saidGuess(s, riteOf(c), !!c.reduced);
             s.guess = n;
             s.guessAt = s.t;
+            s.guesses += 1;
           }
         }
       }
@@ -459,16 +570,19 @@ function slitPiece(env, plan) {
         if (effect) {
           c.status(change.what + ' ' + effect.label.replace('them', 'the fringes') + ', you say');
           if (s.effect !== effect.value) {
+            // The new prediction is cut in over whichever the ghost screen shows now.
+            s.effectWas = effectCut(s, riteOf(c), !!c.reduced) > 0 ? s.effect : s.effectWas;
             s.effect = effect.value;
             s.effectAt = s.t;
+            s.effects += 1;
           }
         }
       }
       draw(c);
     },
     frame(t, dt, c) {
-      s.t = t;
-      draw(c);
+      s.t += Math.max(0, dt);
+      return step(s, c, Math.max(s.openAt, s.guessAt, s.effectAt), draw);
     },
     end(c) {
       s.open = true;
@@ -572,12 +686,25 @@ function filterPlate(g, env, x, y, radius, angle, v, ring) {
 }
 
 // The filters' state as a scene opens: the order as given, nothing named, nothing lit, and every
-// change timed against the piece's clock from here on (-1 is "there from the start").
+// change timed against the piece's clock from here on (-1 is "there from the start"); the counts
+// roll each move afresh. `namedSlot` is the place the named filter's chip stands in, and
+// `chipsGone` the places it has been carried away from, each cut away from where it stood
+// (`slot`, as far in as it had come, `had`, on the roll of its count, `n`, from the time `at`).
+// `barAt` is when the first guess brought the guess bar's frame in.
 function filterState(order) {
   return {
-    order: order.slice(), from: order.slice(), orderAt: -1, named: null, namedAt: -1,
-    open: false, openAt: -1, guess: null, guessFrom: 0, guessAt: -1, t: 0
+    order: order.slice(), from: order.slice(), orderAt: -1, orders: 0,
+    named: null, namedSlot: -1, namedAt: -1, namings: 0, chipsGone: [],
+    open: false, openAt: -1, guess: null, guessFrom: 0, guessAt: -1, guesses: 0, barAt: -1,
+    t: 0, drawn: null, drawnAt: -1
   };
+}
+
+// The box of the chip behind the angle written under a plate at (x, y): x, y, width, height.
+function chipBox(x, y, radius, size) {
+  const chipW = size * 3.2;
+  const chipH = size * 1.5;
+  return [x - chipW / 2, y + radius + size * 1.1 - chipH / 2, chipW, chipH];
 }
 
 // The short way round between two filter angles, as a signed turn: a polariser at 150 is 30 from
@@ -593,7 +720,6 @@ function drawFilters(g, w, h, env, plan, s, variant) {
   const c = env.colors;
   const rite = riteOf(env);
   const reduced = !!env.reduced;
-  const t = reduced ? 0 : s.t || 0; // less motion asked for: the lamp and the dust hold still
   const size = Math.max(9, Math.min(15, Math.round(Math.min(w, h) * 0.036)));
   const y = h * 0.36;
   const radius = Math.min(w * 0.07, h * 0.12) * v.scale;
@@ -603,10 +729,11 @@ function drawFilters(g, w, h, env, plan, s, variant) {
   const orderP = came(s, s.orderAt, 1.3, reduced);
   const namedP = s.named !== null ? came(s, s.namedAt, 1.1, reduced) : 0;
   background(g, w, h, env);
-  dust(g, w, h, env, v, t);
+  dust(g, w, h, env, v);
   label(g, env, 'filter set ' + plan.number, w * 0.5, h * 0.07, size, 'center', c.accent2);
   // The beam, lamp to screen: the same faint band everywhere until the answer is in; then each
-  // stretch develops to its own strength through the matte, on a roll of its own, blinking on.
+  // stretch is cut in to its own strength behind the piece's edge, on a roll of its own, and
+  // rests at that strength, because how bright it is is how much light the filters pass.
   const band = h * 0.07;
   const stops = [w * 0.07, w * 0.3, w * 0.5, w * 0.7, w * 0.9];
   for (let i = 0; i < 4; i++) {
@@ -614,75 +741,87 @@ function drawFilters(g, w, h, env, plan, s, variant) {
     g.fillRect(stops[i], y - band / 2, stops[i + 1] - stops[i], band);
     if (light === null) continue;
     const strength = i === 0 ? 1 : i === 1 ? 0.5 : i === 2 ? 0.5 * cos2(s.order[0] - s.order[1]) : light;
-    const own = rite.at(0xb3a + i);
-    const k = own.stair(openP);
-    if (k <= 0 || !own.flicker(openP)) continue;
-    g.fillStyle = env.alpha(c.accent2, 0.04 + strength * 0.3);
-    if (k >= 1) g.fillRect(stops[i], y - band / 2, stops[i + 1] - stops[i], band);
-    else develop(g, rite, stops[i], y - band / 2, stops[i + 1] - stops[i], band, k, null, Math.max(rite.cell, Math.ceil(band / 8)));
+    const own = roll(rite, 0xb3a + i, 0);
+    own.paint(g, stops[i], y - band / 2, stops[i + 1] - stops[i], band, own.stair(openP), env.alpha(c.accent2, 0.04 + strength * 0.3));
   }
-  lamp(g, env, w * 0.07, y, Math.min(w, h) * 0.1 * v.scale, breath(rite.at(0x1a4), t, 6, v.turn));
+  lamp(g, env, w * 0.07, y, Math.min(w, h) * 0.1 * v.scale);
+  const chipTone = env.alpha(c.accent2, 0.13);
   for (let i = 0; i < 3; i++) {
     const x = w * (0.3 + i * 0.2);
-    // A filter put in a new place turns to its angle in the ratchet's clicks, with the backlash,
-    // on a roll of its own; the chip behind a named filter develops through the matte.
-    const plate = rite.at(0xf11 + i);
-    const angle = s.from[i] + turnBetween(s.from[i], s.order[i]) * plate.ratchet(orderP);
-    // The angle written under a plate that is changing: the old one blinks out, the new blinks on.
-    const written = plate.flicker(orderP) ? s.order[i] : plate.flicker(1 - orderP) ? s.from[i] : null;
-    const named = s.named === s.order[i];
-    const own = rite.at(0xc4e + i);
-    const chip = named ? own.stair(namedP) : 0;
-    const lit = named && chip > 0 && own.flicker(namedP);
+    // A filter put in a new place turns to its angle in the stair's even treads after a hold, on a
+    // roll of its own for this move, and the angle written under it is cut over to the new one at
+    // its moment. The chip behind a named filter is cut in behind the piece's edge where the
+    // filter stands and rests in two shades; when the filter is carried to another place, the
+    // chip is cut away from the old one behind an edge of its own as it is cut in at the new. The
+    // plate's ring and angle are lit while any of a chip is behind them.
+    const plate = roll(rite, 0xf11 + i, s.orders);
+    const angle = s.from[i] + turnBetween(s.from[i], s.order[i]) * plate.stair(orderP);
+    const written = plate.flicker(orderP) ? s.order[i] : s.from[i];
+    const box = chipBox(x, y, radius, size);
+    const own = roll(rite, 0xc4e + i, s.namings);
+    const chip = s.namedSlot === i ? own.stair(namedP) : 0;
+    const leaving = s.chipsGone.filter((gone) => gone.slot === i && gone.had > 0)
+      .map((gone) => ({ gone, k: roll(rite, 0xd5f + i, gone.n).stair(came(s, gone.at, 1.1, reduced)) }))
+      .filter((left) => left.k < 1);
+    const lit = chip > 0 || leaving.length > 0;
     filterPlate(g, env, x, y, radius, angle, v, lit ? c.accent2 : c.fg);
-    if (lit) {
-      g.fillStyle = env.alpha(c.accent2, 0.22);
-      const chipW = size * 3.2;
-      const chipH = size * 1.5;
-      if (chip >= 1) g.fillRect(x - chipW / 2, y + radius + size * 1.1 - chipH / 2, chipW, chipH);
-      else develop(g, rite, x - chipW / 2, y + radius + size * 1.1 - chipH / 2, chipW, chipH, chip, null, rite.cell);
+    leaving.forEach((left) => {
+      wipe(g, roll(rite, 0xd5f + i, left.gone.n), box[0], box[1], box[2], box[3], left.k, () => {
+        g.fillStyle = chipTone;
+        cover(g, roll(rite, 0xc4e + i, left.gone.n), box[0], box[1], box[2], box[3], left.gone.had);
+      }, null);
+    });
+    if (chip > 0) {
+      g.fillStyle = chipTone;
+      cover(g, own, box[0], box[1], box[2], box[3], chip);
     }
-    if (written !== null) label(g, env, Math.round(written) + '°', x, y + radius + size * 1.1, size, 'center', lit ? c.accent2 : c.fg);
+    label(g, env, Math.round(written) + '°', x, y + radius + size * 1.1, size, 'center', lit ? c.accent2 : c.fg);
   }
-  // The screen: unread until the order is found; then the light comes onto it through the matte.
+  // The screen: unread until the order is found; then the light is cut onto it behind the
+  // piece's edge, and it rests at the shade of the light that reaches it.
   const screenX = w * 0.9;
   const screenH = h * 0.24;
   g.fillStyle = env.mix(c.bg, c.bg2, 0.5);
   g.fillRect(screenX, y - screenH / 2, w * 0.03, screenH);
-  const screenOwn = rite.at(0x5c2);
+  const screenOwn = roll(rite, 0x5c2, 0);
   const screenK = light === null ? 0 : screenOwn.stair(openP);
-  const screenOn = screenK > 0 && screenOwn.flicker(openP);
-  if (screenOn) {
-    g.fillStyle = env.mix(c.bg, c.accent2, Math.min(1, Math.sqrt(light) * 1.4));
-    if (screenK >= 1) g.fillRect(screenX, y - screenH / 2, w * 0.03, screenH);
-    else develop(g, rite, screenX, y - screenH / 2, w * 0.03, screenH, screenK, null, rite.cell);
-  }
+  const screenOn = screenK > 0;
+  if (screenOn) screenOwn.paint(g, screenX, y - screenH / 2, w * 0.03, screenH, screenK, env.mix(c.bg, c.accent2, Math.min(1, Math.sqrt(light) * 1.4)));
   g.strokeStyle = env.alpha(c.fg, 0.65);
   g.lineWidth = 1.2;
   g.strokeRect(screenX, y - screenH / 2, w * 0.03, screenH);
   label(g, env, screenOn ? Math.round(light * 1000) / 10 + '%' : '?', screenX + w * 0.015, y + screenH / 2 + size, size, 'center', c.accent2);
-  // The visitor's guess at the light: a bar beside the screen to the height of it, which climbs
-  // the stair from where the last guess stood and develops through the matte as it goes.
-  if (s.guess !== null && !screenOn) {
-    const own = rite.at(0x2d9);
-    const p = came(s, s.guessAt, 0.9, reduced);
+  // The visitor's guess at the light: a bar in a frame beside the screen, to the height of the
+  // guess, which climbs or drops the stair from where the last guess left it -- from nothing, the
+  // first time -- on a roll of its own for each guess. The first guess brings the frame in with
+  // it, behind the piece's edge on that guess's own stair. Once the screen is lit the guess has
+  // had its answer, and the bar and its frame are cut away behind an edge of their own.
+  if (s.guess !== null) {
     const to = clamp(s.guess, 0, 100) / 100;
-    const at = s.guessFrom + (to - s.guessFrom) * rite.stair(p);
+    const at = s.guessFrom + (to - s.guessFrom) * roll(rite, 0x2d9, s.guesses).stair(came(s, s.guessAt, 0.9, reduced));
     const barW = w * 0.012;
     const barX = screenX + w * 0.03 + w * 0.008;
     const barH = screenH * at;
-    g.fillStyle = env.alpha(c.accent, 0.75);
-    const k = own.stair(p);
-    // The bar's frame blinks on with the first guess and holds; the bar itself develops inside it.
-    if (own.flicker(p)) {
+    const bar = () => {
       if (barH > 0) {
-        if (k >= 1) g.fillRect(barX, y + screenH / 2 - barH, barW, barH);
-        else develop(g, rite, barX, y + screenH / 2 - barH, barW, barH, k, null, rite.cell);
+        g.fillStyle = env.alpha(c.accent, 0.75);
+        g.fillRect(barX, y + screenH / 2 - barH, barW, barH);
       }
       g.strokeStyle = env.alpha(c.accent, 0.5);
       g.lineWidth = 1;
       g.strokeRect(barX, y - screenH / 2, barW, screenH);
-    }
+    };
+    // The box the edges cross, a pixel over the frame so its line goes with the bar.
+    const bx = barX - 1;
+    const by = y - screenH / 2 - 1;
+    const bw = barW + 2;
+    const bh = screenH + 2;
+    const first = roll(rite, 0x2d9, 1);
+    const standing = () => wipe(g, first, bx, by, bw, bh, first.stair(came(s, s.barAt, 0.9, reduced)), null, bar);
+    const away = roll(rite, 0x2da, 0);
+    const gone = light === null ? 0 : away.stair(openP);
+    if (gone > 0) wipe(g, away, bx, by, bw, bh, gone, standing, null);
+    else standing();
   }
   label(g, env, 'lamp side', w * 0.3, y - radius - size * 1.2, Math.max(8, size - 2), 'center', env.alpha(c.muted, 0.9));
   label(g, env, 'screen side', w * 0.7, y - radius - size * 1.2, Math.max(8, size - 2), 'center', env.alpha(c.muted, 0.9));
@@ -698,7 +837,7 @@ function drawFilters(g, w, h, env, plan, s, variant) {
     label(g, env, pair[1], x, rowY + tiny * 4.6, tiny, 'center', c.fg);
   });
   label(g, env, 'past 90°, read 180° less the turn: 120° as 60°, 135° as 45°, 150° as 30°', w * 0.5, rowY + tiny * 6.4, tiny, 'center', env.alpha(c.muted, 0.9));
-  // The screen lit: the light comes over the table through the matte.
+  // The screen lit: the light comes over the table behind the piece's edge.
   if (s.open) daybreak(g, rite, env, w, h, openP);
 }
 
@@ -710,16 +849,33 @@ function filterPiece(env, plan) {
   const { helps, margin } = asked(env);
   const best = bestOf(plan.angles);
   const s = filterState(plan.start);
-  const draw = (c) => drawFilters(c.g, c.w, c.h, c, plan, s, env.variant);
-  // The order on the table changes: every plate turns from where it stands now to its new angle.
+  const draw = (c) => {
+    drawFilters(c.g, c.w, c.h, c, plan, s, env.variant);
+    s.drawn = sizeOf(c);
+    s.drawnAt = s.t;
+  };
+  // The order on the table changes: every plate turns from where it stands now to its new angle,
+  // on a fresh roll.
   const reorder = (order, c) => {
     const rite = riteOf(c);
-    const p = came(s, s.orderAt, 1.3, !!c.reduced);
-    s.from = s.order.map((to, i) => s.from[i] + turnBetween(s.from[i], to) * rite.at(0xf11 + i).ratchet(p));
+    const reduced = !!c.reduced;
+    const p = came(s, s.orderAt, 1.3, reduced);
+    s.from = s.order.map((to, i) => s.from[i] + turnBetween(s.from[i], to) * roll(rite, 0xf11 + i, s.orders).stair(p));
     s.order = order.slice();
     s.orderAt = s.t;
-    // A named filter carried to another place: its chip develops afresh where it now stands.
-    if (s.named !== null) s.namedAt = s.t;
+    s.orders += 1;
+    // A named filter carried to another place: its chip is cut away from the place it leaves, as
+    // far in as it had come, and cut in afresh where the filter now stands. One that stays where
+    // it was keeps its chip.
+    const slot = s.named === null ? -1 : s.order.indexOf(s.named);
+    if (slot !== s.namedSlot) {
+      const had = roll(rite, 0xc4e + s.namedSlot, s.namings).stair(came(s, s.namedAt, 1.1, reduced));
+      s.chipsGone = s.chipsGone.filter((gone) => came(s, gone.at, 1.1, reduced) < 1);
+      s.chipsGone.push({ slot: s.namedSlot, had, n: s.namings, at: s.t });
+      s.namedSlot = slot;
+      s.namedAt = s.t;
+      s.namings += 1;
+    }
   };
   return {
     title: filterTitle(plan),
@@ -760,18 +916,23 @@ function filterPiece(env, plan) {
         if (Number.isFinite(n)) {
           c.status(clamp(n, 0, 100) + '% gets through, you say');
           if (s.guess !== n) {
+            // The bar moves on from wherever it stands now; the first guess brings its frame.
             const p = came(s, s.guessAt, 0.9, !!c.reduced);
             const was = s.guess === null ? 0 : clamp(s.guess, 0, 100) / 100;
-            s.guessFrom = s.guessFrom + (was - s.guessFrom) * riteOf(c).stair(p);
+            s.guessFrom = s.guessFrom + (was - s.guessFrom) * roll(riteOf(c), 0x2d9, s.guesses).stair(p);
+            if (s.guess === null) s.barAt = s.t;
             s.guess = n;
             s.guessAt = s.t;
+            s.guesses += 1;
           }
         }
       }
       if (id === 'hint') {
         if (s.named === null) {
           s.named = best.middle;
+          s.namedSlot = s.order.indexOf(best.middle);
           s.namedAt = s.t;
+          s.namings += 1;
           c.hint();
           c.status('the ' + best.middle + '° filter goes in the middle');
         } else {
@@ -781,8 +942,8 @@ function filterPiece(env, plan) {
       draw(c);
     },
     frame(t, dt, c) {
-      s.t = t;
-      draw(c);
+      s.t += Math.max(0, dt);
+      return step(s, c, Math.max(s.openAt, s.orderAt, s.namedAt, s.guessAt), draw);
     },
     end(c) {
       s.open = true;

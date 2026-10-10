@@ -25,6 +25,7 @@
   --md-sys-color-on-primary-container: color-mix(in oklab, var(--accent) 78%, #fff);
   // Secondary: the tonal button, the active navigation pill, the chip.
   --md-sys-color-secondary: color-mix(in oklab, var(--accent) 64%, var(--muted));
+  --md-sys-color-on-secondary: color-mix(in oklab, var(--accent) 24%, #000);
   --md-sys-color-secondary-container: color-mix(in oklab, var(--accent) 20%, var(--bg));
   --md-sys-color-on-secondary-container: color-mix(in oklab, var(--accent) 70%, #fff);
   // Tertiary: the status line a page writes its answers to, the badge on a suggested card.
@@ -78,51 +79,47 @@
   --md-sys-shape-corner-full: 999px;
 
   // Motion scheme -- the rite's, not M3's (README: "Motion axiom"). No curve on this site is
-  // linear, ease or any cubic-bezier: each is a piecewise linear() curve with a hesitation, a
-  // stutter, an overshoot and a flicker in it, and js/motion.js rolls every one of them afresh on
-  // :root as the page arrives and again for every movement after that, under the temperament of
-  // whatever mood the site is wearing. The curves written here are the baked fallbacks a page with
-  // no script moves along, rolled once by the same maker, so even without a script nothing moves
-  // along a formula. Every transition reads one of the seven families; every @keyframes animation
-  // reads its own --ease-<name> (rolled when that animation ends, with a family as its fallback),
-  // so the next time it plays it plays differently.
-  --ease-arrive: linear(0, 0.301 10.9%, 0.472 21.9%, 0.524 32.8%, 0.913 40.9%, 1.063 49%, 1.086 57.1%, 0.967 75.1%, 1 93.1%, 0.964 94%, 1 95%, 1);
-  --ease-leave: linear(0, 0.176 1.1%, 0 2.3%, 0 17.1%, 0.056 27.5%, 0.189 37.9%, 0.384 48.3%, 0.607 64.1%, 0.94 79.8%, 1);
-  --ease-shift: linear(0, 0.422 15.2%, 0.652 30.4%, 0.716 45.5%, 0.949 65%, 1.023 84.5%, 0.991 92.3%, 1 99.5%, 1);
-  --ease-flicker: linear(0, 0.319 18.5%, 0.134 25.1%, 0.754 34.4%, 0.996 43.8%, 1.035 53.2%, 0.818 54.8%, 1.035 56.4%, 0.987 78.2%, 1 99.5%, 1);
-  --ease-pulse: linear(0, 0.249 13.6%, 0.495 27.3%, 0.736 40.9%, 0.938 65.2%, 1 89.5%, 1);
-  --ease-drift: linear(0, 0.093 6.3%, 0.093 9.4%, 0.162 12.5%, 0.206 18.8%, 0.238 25%, 0.296 31.3%, 0.366 37.5%, 0.4 43.8%, 0.463 50%, 0.593 56.3%, 0.597 62.5%, 0.719 68.8%, 0.736 75%, 0.818 81.3%, 0.839 87.5%, 0.96 93.8%, 1);
-  --ease-wipe: linear(0, 0.047 10.5%, 0.417 18%, 0.667 25.5%, 0.805 33%, 0.845 40.4%, 0.61 41.8%, 0.845 43.1%, 0.949 67.7%, 1 92.3%, 1);
-  // The stair: a state that changes changes in treads, never in a glide -- a highlight, an
-  // opacity, a bar, a colour -- and the matte ladder is climbed along it.
-  --ease-stair: linear(0, 0 7.2%, 0.21 7.4%, 0.21 29.5%, 0.44 29.7%, 0.44 52.1%, 0.71 52.3%, 0.71 76%, 0.93 76.2%, 0.93 94.4%, 1);
-  // The ratchet: how anything turns -- teeth, a slip back, a hold -- never an even rotation.
-  --ease-ratchet: linear(0, 0.06 2.1%, 0.05 3.4%, 0.05 5.8%, 0.11 7.3%, 0.11 11.9%, 0.17 13.1%, 0.15 14.4%, 0.17 18.2%, 0.22 19.6%, 0.22 24.1%, 0.28 25.4%, 0.28 29.7%, 0.34 31%, 0.32 32.2%, 0.34 36.3%, 0.39 37.5%, 0.39 41.8%, 0.45 43.1%, 0.45 47.2%, 0.5 48.4%, 0.49 49.5%, 0.5 53.6%, 0.56 54.9%, 0.56 59%, 0.61 60.2%, 0.61 64.4%, 0.67 65.7%, 0.65 66.9%, 0.67 70.8%, 0.72 72%, 0.72 76.4%, 0.78 77.7%, 0.78 81.9%, 0.83 83.1%, 0.83 87.3%, 0.89 88.6%, 0.88 89.8%, 0.89 93.7%, 0.94 95%, 0.94 98.6%, 1);
-  // The matte ladder (README: "Motion axiom"): five masks at rising coverage, through which a
-  // surface that changes arrives tread by tread, and the texture a surface that stays changed is
-  // filled with. js/motion.js rolls them (a thresholded noise field, a scatter of shards, scan
-  // lines, a dither, an iris, a grain); these are the baked ones a page with no script climbs.
-  --matte-1: repeating-linear-gradient(0deg, #000 0 1px, transparent 1px 5px);
-  --matte-2: repeating-linear-gradient(0deg, #000 0 2px, transparent 2px 5px);
-  --matte-3: repeating-linear-gradient(0deg, #000 0 3px, transparent 3px 5px);
-  --matte-4: repeating-linear-gradient(0deg, #000 0 4px, transparent 4px 5px);
-  --matte-5: linear-gradient(#000, #000);
-  --matte-fill: repeating-linear-gradient(45deg, currentColor 0 1px, transparent 1px 4px);
-  --matte-fill-size: auto;
-  // The top of the ladder: the fill as a mask, so a surface that has arrived rests patterned.
-  --matte-top: repeating-linear-gradient(45deg, #000 0 1px, transparent 1px 4px);
-  --matte-kind: scan;
-  // The durations: rolled with a little jitter and scaled by the mood's tempo, these standing
-  // until the script has rolled. --motion-turn is the slow ring's one turn (_rite.scss).
+  // linear, ease or any cubic-bezier, and none glides: each is a stair, a few treads always going
+  // forward, rolled by js/motion.js on :root once as the page arrives (and again when the site
+  // changes its mood) and on an element for each movement it starts. These are the baked stairs a
+  // page with no script moves by, made once by the same maker. arrive lands in shrinking treads,
+  // leave goes in growing ones, stair holds and then steps evenly, shift takes its first tread at
+  // once and then steps evenly (a change of mood under words already standing), flicker is two
+  // quick treads, pulse is the beat of the one loop left (the persona's beckon, a few times round
+  // and then still), drift a slow even stair, wipe is the veil's, and the ratchet turns a thing in
+  // a few even clicks -- each of them two to five treads. Nothing loops for ever. Every @keyframes
+  // animation reads its own --ease-<name>, or the treads of the rite it plays (the edge's cut-in
+  // reads --ease-wax on a hover, a press's set-down --ease-stamp), with one of these behind it.
+  --ease-arrive: linear(0, 0 11.5%, 0.513 11.5%, 0.513 27.9%, 0.783 27.9%, 0.783 52.5%, 0.925 52.5%, 0.925 87.3%, 1 87.3%, 1);
+  --ease-leave: linear(0, 0 30.1%, 0.186 30.1%, 0.186 56.4%, 0.494 56.4%, 0.494 71.6%, 1 71.6%, 1);
+  --ease-shift: linear(0, 0 0%, 0.333 0%, 0.333 32.8%, 0.667 32.8%, 0.667 65.7%, 1 65.7%, 1);
+  --ease-flicker: linear(0, 0 27.2%, 0.678 27.2%, 0.678 74%, 1 74%, 1);
+  --ease-pulse: linear(0, 0 25%, 0.333 25%, 0.333 50%, 0.667 50%, 0.667 75%, 1 75%, 1);
+  --ease-drift: linear(0, 0 16.7%, 0.2 16.7%, 0.2 33.3%, 0.4 33.3%, 0.4 50%, 0.6 50%, 0.6 66.7%, 0.8 66.7%, 0.8 83.3%, 1 83.3%, 1);
+  --ease-wipe: linear(0, 0 15.9%, 0.25 15.9%, 0.25 39.6%, 0.5 39.6%, 0.5 63.2%, 0.75 63.2%, 0.75 86.8%, 1 86.8%, 1);
+  // The stair: a state that changes changes in treads, never in a glide.
+  --ease-stair: linear(0, 0 26.1%, 0.2 26.1%, 0.2 42%, 0.4 42%, 0.4 57.9%, 0.6 57.9%, 0.6 73.8%, 0.8 73.8%, 0.8 89.7%, 1 89.7%, 1);
+  // The ratchet: how a thing turns -- a few even clicks, a key's, never a slip or an even rotation.
+  --ease-ratchet: linear(0, 0 25%, 0.333 25%, 0.333 50%, 0.667 50%, 0.667 75%, 1 75%, 1);
+  // The cut (README: "Motion axiom", _cut.scss): the angle a slice cuts at and the slant words
+  // are revealed at. The register writes both (_type.scss); these stand until one does.
+  --cut-angle: 112deg;
+  --reveal-angle: 100deg;
+  // The arrival's and the departure's directions, and the slices they move behind (js/motion.js
+  // rolls them; these stand until it has).
+  --arrive-angle: 0deg;
+  --leave-angle: 0deg;
+  // The durations: rolled with a little jitter round these and scaled by the mood's tempo, these
+  // standing until the script has rolled.
   --motion-short: 170ms;
   --motion-medium: 340ms;
   --motion-long: 560ms;
   --motion-slow: 1200ms;
   --motion-stagger: 44ms;
   --motion-shift: 640ms;
-  --motion-turn: 120s;
   // The temperament a mood lends its movements (_mood.scss sets all three beside each palette):
-  // how glitchy they are, how long they take, and whether they prefer a stair to a swoop.
+  // how uneven their treads are (0 even, 1 as uneven as each family's rule allows), how long they
+  // take, and whether their stairs take a tread more.
   --motion-grain: 0.45;
   --motion-tempo: 1;
   --motion-steps: 0;
@@ -136,35 +133,21 @@
   --md-sys-motion-duration-long: var(--motion-long);
   // The geometry of a movement, rolled beside its timing: where an arrival comes from and where a
   // departure goes (the stage, the cards, the constellation, the mark that flies home to the
-  // persona), the shape the veil wipes in from and the one it ends on, the edge a control's state
-  // layer sweeps in from, how far the rite's words are thrown as the site changes its modality,
-  // where the page's sky washes in from (_panel.scss), and the small particulars named where
-  // they are used. These stand until js/motion.js rolls them.
+  // persona), the corner the page's sky opens from (_panel.scss, picked once per visit) and how far
+  // the sparkles turn past a sixth (_nav.scss). These stand for a page with no script; js/motion.js
+  // rolls them as the page loads.
   --arrive-x: 0px;
   --arrive-y: 28px;
-  --arrive-rot: 0.6deg;
-  --arrive-scale: 0.96;
-  --arrive-skew: 0deg;
   --leave-x: 0px;
   --leave-y: -22px;
-  --leave-rot: -0.8deg;
-  --leave-scale: 0.92;
-  --wipe-from: inset(0 0 100% 0);
-  --wipe-to: inset(0);
-  --state-from: inset(0 100% 0 0);
-  --shift-x: 3px;
-  --shift-skew: -4deg;
-  --shift-blur: 5px;
   --sky-x: 12%;
   --sky-y: -14%;
-  --lift-y: -2px;
-  --lift-rot: 0.3deg;
   --spark-extra: 0deg;
-  --pop-over: 1.1;
-  --shake-x: 6px;
-  --beckon-spread: 8px;
-  --reject-grow: 1;
-  --ray-from: 0.2;
+  // Two distances that are not rolled: one small distance each, the same every time, with or
+  // without a script -- how far a card stands up under the pointer (_feed.scss) and how far a
+  // wrong answer's row is thrown aside before it steps back (_stage.scss).
+  --lift-y: -2px;
+  --shake-x: 3px;
 
   // Elevation (m3.material.io/styles/elevation): in the dark the tone does most of the work, and
   // these shadows do the rest.
@@ -219,27 +202,12 @@
   }
 }
 
-// Registered, so the sky can move: a custom property a browser knows the type of is one it can
-// interpolate, and main's gradient (_panel.scss) reads these two for where the page's own sky
-// washes in from, so a change of modality is a sky washing across to a new corner rather than a
-// cut. A browser that knows no @property reads the same two as plain properties and cuts.
-@property --sky-x {
-  syntax: '<percentage>';
-  inherits: true;
-  initial-value: 12%;
-}
-
-@property --sky-y {
-  syntax: '<percentage>';
-  inherits: true;
-  initial-value: -14%;
-}
-
-// The register's numeric dimensions (_type.scss): registered so that when the register turns
-// over the axes of the rite's face, its tracking and its word-spacing step to their new values
-// along the stair, the letterforms themselves a movement of the rite. The tracking and the
-// word-spacing are numbers -- ems of the words' own size, multiplied where they are read -- and
-// not lengths, which would be resolved against :root's size the moment they were written.
+// The register's numeric dimensions (_type.scss), registered as the numbers they are: a value
+// that is not one is dropped for the one the words inherit rather than undoing the whole of the
+// face's settings where it is read. The tracking and the word-spacing are numbers -- ems of the
+// words' own size, multiplied where they are read -- and not lengths, which would be resolved
+// against :root's size the moment they were written. Nothing steps them: when the register turns
+// over they land at once, under the one slice that cuts the words into their new face.
 @property --rite-weight {
   syntax: '<number>';
   inherits: true;
@@ -283,6 +251,15 @@
   inherits: false;
 }
 
+// The cut's edge (_cut.scss): how far a slice or a curve has passed, from 0% (nothing) to 100%
+// (the whole surface). Registered, so cut-in and cut-out can step it in treads; not inherited, so
+// it is the property of the one layer that animates it.
+@property --cut {
+  syntax: '<percentage>';
+  inherits: false;
+  initial-value: 0%;
+}
+
 // A slider's fill (_controls.scss): registered so the track's gradient can move in treads after
 // the thumb, along the stair family, rather than jump or glide.
 @property --range-pct {
@@ -297,15 +274,15 @@
 // a curve a browser cannot read would otherwise leave the property unset -- which is `ease`.
 @supports not (animation-timing-function: linear(0, 0.5 50%, 1)) {
   :root {
-    --ease-arrive: steps(5, jump-end);
-    --ease-leave: steps(4, jump-start);
-    --ease-shift: steps(6, jump-both);
-    --ease-flicker: steps(3, jump-both);
-    --ease-pulse: steps(7, jump-none);
-    --ease-drift: steps(24, jump-none);
-    --ease-wipe: steps(5, jump-end);
+    --ease-arrive: steps(4, jump-end);
+    --ease-leave: steps(3, jump-end);
+    --ease-shift: steps(3, jump-start);
+    --ease-flicker: steps(2, jump-end);
+    --ease-pulse: steps(3, jump-end);
+    --ease-drift: steps(5, jump-end);
+    --ease-wipe: steps(4, jump-end);
     --ease-stair: steps(5, jump-end);
-    --ease-ratchet: steps(36, jump-end);
+    --ease-ratchet: steps(3, jump-end);
   }
 }
 

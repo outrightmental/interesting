@@ -5,11 +5,12 @@
 //     @use 'type';
 //     h1 { @include type.scale(headline-large); }
 //
-// Emits nothing until it is included, so css/site.css carries none of it.
+// Emits nothing of its own until it is included, so css/site.css carries none of it.
 
 @use 'sass:list';
 @use 'sass:map';
 @use 'sass:math';
+@use 'cut';
 
 $scale: (
   display-large: (57px, 64px, 400, -0.25px),
@@ -82,10 +83,14 @@ $typewriter: 'American Typewriter', 'Courier Prime', 'Courier New', Courier, 'Ni
 // ones the mixins below read, with the home register as every fallback: --font-rite, --font-act,
 // --font-mono, --rite-weight, --rite-opsz, --rite-soft, --rite-wonk, --rite-tracking, --rite-words,
 // --rite-style, --rite-caps, --rite-case, --rite-scale, --rite-leading,
-// --rite-rule, --rite-rule-width, --rite-before, --rite-after, --rite-cap, --rite-glow, and the
-// three of the temperament, --motion-grain, --motion-tempo and --motion-steps. The numeric ones
-// are registered (_tokens.scss), so when the register turns over they step to their new values
-// along the stair -- the letterforms themselves a movement of the rite.
+// --rite-rule, --rite-rule-width, --rite-before, --rite-after, --rite-cap, --rite-glow; the three
+// of the temperament, --motion-tempo (how long its movements are), --motion-steps (a tread more
+// in each stair, where it is 1) and --motion-grain (how uneven an arrival's, a leaving's and a
+// press's treads are: 0 even, 1 as uneven as each family's rule allows); and the hand that
+// cuts, --cut-angle and --reveal-angle. When the register turns over, the words at rest in the
+// page are cut into their new face by one slice at the new slant, on the shift's one stair (rite,
+// below), and the axes, the size and the spacing land at once under that slice: one edge, one
+// layout.
 //
 //   rite / act / mono   the faces
 //   weight, opsz, soft, wonk   the axes
@@ -96,9 +101,11 @@ $typewriter: 'American Typewriter', 'Courier Prime', 'Courier New', Courier, 'Ni
 //   scale, leading      the size against the role's (type.scale), and the line height
 //   rule                the rule under the rite's words: none | hair | double | dotted | dashed
 //   rule-width          how far it runs, as a share of the measure
-//   before, after       ornaments beside the words, from glyphs the vendored subset has
+//   before, after       ornaments beside the words, from characters the vendored subset has
 //   cap                 the raised first letter of a page of prose, as a multiple of the size
 //   glow                a halo of the primary behind the words, 0 or 1
+//   cut, slant          the angle the register's slices cut at (_cut.scss: a hover, a seal, an
+//                       unseal, a page's own movements) and the slant its words are cut in at
 $registers: (
   // The home register: Fraunces roman at a middle optical size, over the system sans.
   votive: (
@@ -108,7 +115,8 @@ $registers: (
     weight: 400, opsz: 72, soft: 20, wonk: 0,
     tracking: -0.005, words: 0, style: normal, caps: normal, case: none,
     scale: 1, leading: 1.15, rule: none, rule-width: 0, before: '\2022', after: '', cap: 1, glow: 0,
-    grain: 0.45, tempo: 1, steps: 0
+    grain: 0.45, tempo: 1, steps: 0,
+    cut: 112deg, slant: 100deg
   ),
   // Hushed: the italic, light and wholly soft, forced lowercase and loosened, under a short hairline.
   hush: (
@@ -118,7 +126,8 @@ $registers: (
     weight: 300, opsz: 48, soft: 100, wonk: 0,
     tracking: 0.02, words: 0.1, style: italic, caps: normal, case: lowercase,
     scale: 0.92, leading: 1.3, rule: hair, rule-width: 30%, before: '', after: '', cap: 1, glow: 0,
-    grain: 0.2, tempo: 1.35, steps: 0
+    grain: 0.2, tempo: 1.35, steps: 0,
+    cut: 100deg, slant: 112deg
   ),
   // The sibyl: the italic with the quirky alternates on, soft, between a pilcrow and a lozenge.
   sibyl: (
@@ -128,7 +137,8 @@ $registers: (
     weight: 500, opsz: 96, soft: 60, wonk: 1,
     tracking: 0.015, words: 0.04, style: italic, caps: normal, case: none,
     scale: 1.04, leading: 1.2, rule: dotted, rule-width: 100%, before: '\00B6', after: '\00A4', cap: 2.2, glow: 1,
-    grain: 0.35, tempo: 1.2, steps: 0
+    grain: 0.35, tempo: 1.2, steps: 0,
+    cut: 125deg, slant: 118deg
   ),
   // Lapidary: the display master, hairline-thin and hard, tracked out, over a geometric sans.
   lapidary: (
@@ -138,7 +148,8 @@ $registers: (
     weight: 200, opsz: 144, soft: 0, wonk: 0,
     tracking: 0.06, words: 0.12, style: normal, caps: normal, case: uppercase,
     scale: 1.08, leading: 1.1, rule: double, rule-width: 100%, before: '', after: '', cap: 1, glow: 0,
-    grain: 0.3, tempo: 1.15, steps: 0
+    grain: 0.3, tempo: 1.15, steps: 0,
+    cut: 80deg, slant: 90deg
   ),
   // Monastic: the book's setting -- text size, a section mark, a raised cap, a hairline rule.
   monastic: (
@@ -148,7 +159,8 @@ $registers: (
     weight: 450, opsz: 14, soft: 30, wonk: 0,
     tracking: 0, words: 0, style: normal, caps: normal, case: none,
     scale: 0.96, leading: 1.25, rule: hair, rule-width: 100%, before: '\00A7', after: '', cap: 2.6, glow: 0,
-    grain: 0.3, tempo: 1.1, steps: 0
+    grain: 0.3, tempo: 1.1, steps: 0,
+    cut: 180deg, slant: 98deg
   ),
   // Astral: a journal of record -- medium weight, tight, a plus-minus after, over a grotesque.
   astral: (
@@ -156,9 +168,10 @@ $registers: (
     act: ('Helvetica Neue', Helvetica, Roboto, Arial, system-ui, sans-serif),
     mono: $mono-stack,
     weight: 600, opsz: 36, soft: 0, wonk: 0,
-    tracking: -0.015, words: -0.02, style: normal, caps: normal, case: none,
+    tracking: -0.015, words: 0, style: normal, caps: normal, case: none,
     scale: 1, leading: 1.1, rule: hair, rule-width: 100%, before: '', after: '\00B1', cap: 1, glow: 0,
-    grain: 0.55, tempo: 0.9, steps: 0
+    grain: 0.55, tempo: 0.9, steps: 0,
+    cut: 150deg, slant: 96deg
   ),
   // Folio: a world made of words -- the text master, soft, roman, with a dotted rule and a cap.
   folio: (
@@ -168,7 +181,8 @@ $registers: (
     weight: 400, opsz: 9, soft: 50, wonk: 0,
     tracking: 0.01, words: 0.02, style: normal, caps: normal, case: none,
     scale: 1, leading: 1.3, rule: dotted, rule-width: 60%, before: '', after: '', cap: 2.4, glow: 0,
-    grain: 0.4, tempo: 1, steps: 0
+    grain: 0.4, tempo: 1, steps: 0,
+    cut: 165deg, slant: 102deg
   ),
   // The cabinet: the typewriter's slab over a plain interface sans, and movements that step.
   cabinet: (
@@ -178,7 +192,8 @@ $registers: (
     weight: 400, opsz: 14, soft: 0, wonk: 0,
     tracking: 0.04, words: 0.1, style: normal, caps: normal, case: uppercase,
     scale: 0.9, leading: 1.4, rule: dashed, rule-width: 100%, before: '', after: '\00A0\002A', cap: 1, glow: 0,
-    grain: 0.85, tempo: 0.95, steps: 1
+    grain: 0.85, tempo: 0.95, steps: 1,
+    cut: 90deg, slant: 90deg
   ),
   // Brass: engraved in small capitals, spaced wide, hard-edged, over a geometric sans.
   brass: (
@@ -188,17 +203,20 @@ $registers: (
     weight: 500, opsz: 48, soft: 0, wonk: 0,
     tracking: 0.14, words: 0.2, style: normal, caps: all-small-caps, case: none,
     scale: 1, leading: 1.2, rule: double, rule-width: 40%, before: '\00B7', after: '\00B7', cap: 1, glow: 0,
-    grain: 0.5, tempo: 1, steps: 0
+    grain: 0.5, tempo: 1, steps: 0,
+    cut: 135deg, slant: 94deg
   ),
-  // The storm: black and tight, the display master, over a grotesque.
+  // The storm: black and tight, the display master, over a grotesque -- tight in its letters,
+  // never in its word spaces, which at this weight would close up into one run-on word.
   storm: (
     rite: $rite,
     act: ('Helvetica Neue', Helvetica, Roboto, Arial, sans-serif),
     mono: $mono-stack,
     weight: 800, opsz: 120, soft: 0, wonk: 0,
-    tracking: -0.03, words: -0.04, style: normal, caps: normal, case: none,
+    tracking: -0.02, words: 0, style: normal, caps: normal, case: none,
     scale: 1.1, leading: 1, rule: none, rule-width: 0, before: '', after: '', cap: 1, glow: 0,
-    grain: 0.75, tempo: 1.1, steps: 0
+    grain: 0.75, tempo: 1.1, steps: 0,
+    cut: 160deg, slant: 98deg
   ),
   // The squall: the same, slanted, the alternates on, and quick.
   squall: (
@@ -206,20 +224,23 @@ $registers: (
     act: ('Helvetica Neue', Helvetica, Roboto, Arial, sans-serif),
     mono: $mono-stack,
     weight: 900, opsz: 120, soft: 0, wonk: 1,
-    tracking: -0.02, words: -0.02, style: italic, caps: normal, case: none,
+    tracking: -0.02, words: 0, style: italic, caps: normal, case: none,
     scale: 1.06, leading: 1, rule: none, rule-width: 0, before: '', after: '\00AC', cap: 1, glow: 0,
-    grain: 0.9, tempo: 0.75, steps: 0
+    grain: 0.9, tempo: 0.75, steps: 0,
+    cut: 120deg, slant: 120deg
   ),
-  // Wire: the tiny optical master blown up -- heavy, low-contrast -- wound tight, with the fastest
-  // movements.
+  // Wire: the tiny optical master blown up -- heavy, low-contrast -- set a little tight, with the
+  // fastest movements. Its character is the weight and the optical size, never closed-up spaces:
+  // the words keep their gaps, or a heading reads as one run-on word.
   wire: (
     rite: $rite,
     act: (Roboto, 'Helvetica Neue', Arial, system-ui, sans-serif),
     mono: $mono-stack,
     weight: 700, opsz: 9, soft: 0, wonk: 0,
-    tracking: -0.04, words: -0.06, style: normal, caps: normal, case: none,
+    tracking: -0.02, words: 0, style: normal, caps: normal, case: none,
     scale: 1.02, leading: 1.05, rule: hair, rule-width: 100%, before: '', after: '', cap: 1, glow: 0,
-    grain: 0.95, tempo: 0.65, steps: 0
+    grain: 0.95, tempo: 0.65, steps: 0,
+    cut: 0deg, slant: 96deg
   ),
   // The vigil: light and soft, in small capitals, spaced, held still, with a halo.
   vigil: (
@@ -229,7 +250,8 @@ $registers: (
     weight: 300, opsz: 72, soft: 80, wonk: 0,
     tracking: 0.1, words: 0.16, style: normal, caps: all-small-caps, case: none,
     scale: 0.98, leading: 1.3, rule: none, rule-width: 0, before: '', after: '', cap: 1, glow: 1,
-    grain: 0.3, tempo: 1.05, steps: 0
+    grain: 0.3, tempo: 1.05, steps: 0,
+    cut: 200deg, slant: 104deg
   ),
   // The meter: counting -- a hash before, the alternates on, over a monospaced sans.
   meter: (
@@ -239,7 +261,8 @@ $registers: (
     weight: 500, opsz: 24, soft: 10, wonk: 1,
     tracking: 0.02, words: 0.06, style: normal, caps: normal, case: none,
     scale: 0.94, leading: 1.25, rule: dashed, rule-width: 50%, before: '\0023', after: '', cap: 1, glow: 0,
-    grain: 0.7, tempo: 0.85, steps: 1
+    grain: 0.7, tempo: 0.85, steps: 1,
+    cut: 45deg, slant: 92deg
   ),
   // The almanac: a gardener's hand -- text size, softened, lowercase and a little loosened, a
   // short dotted rule, a bullet after, a raised cap, and the gentlest movements.
@@ -250,12 +273,14 @@ $registers: (
     weight: 350, opsz: 24, soft: 70, wonk: 0,
     tracking: 0.03, words: 0.05, style: normal, caps: normal, case: lowercase,
     scale: 0.95, leading: 1.35, rule: dotted, rule-width: 25%, before: '', after: '\2022', cap: 1.8, glow: 0,
-    grain: 0.25, tempo: 1.25, steps: 0
+    grain: 0.25, tempo: 1.25, steps: 0,
+    cut: 30deg, slant: 106deg
   )
 );
 
 // The rules a register may draw under the rite's words: an image and a height, drawn in the
-// primary at the bottom of the words over the register's width.
+// primary at the bottom of the words over the register's width. A dotted or a dashed rule is a
+// line of type, like the ornaments: painted once under the heading, and never moved.
 $rules: (
   none: (none, 0px),
   hair: (linear-gradient(var(--md-sys-color-primary), var(--md-sys-color-primary)), 1px),
@@ -317,6 +342,8 @@ $rules: (
   --motion-grain: #{map.get($r, grain)};
   --motion-tempo: #{map.get($r, tempo)};
   --motion-steps: #{map.get($r, steps)};
+  --cut-angle: #{map.get($r, cut)};
+  --reveal-angle: #{map.get($r, slant)};
 }
 
 // The faces as a partial uses them: the register's, with the home stack as the fallback, so a page
@@ -325,15 +352,30 @@ $sans: var(--font-act, #{$sans-stack});
 $mono: var(--font-mono, #{$mono-stack});
 
 // The rite's words: the face at the register's axes (the same four tags in the same order
-// everywhere, so the value is one the stair can step between registers), the slant, the case, the
-// tracking, and the register's own scale and leading over the role's. font-weight is kept beside
-// the axis for the fallback faces, which have no axis to set. Small capitals are made from the
-// capitals (the vendored subset has no smcp of its own); a weight or a slant is never faked, so a
-// fallback face shows what it has. The size is the role's (--role-size, which type.scale writes)
-// taken by the register's scale, or the inherited size where a wearer sets no role. And every
-// wearer is thrown when the register turns over (rite-shift, _mood.scss) -- except inside the
-// stage's head, which is thrown whole.
-@mixin rite {
+// everywhere), the slant, the case, the tracking, and the register's own scale and leading over
+// the role's. font-weight is kept beside the axis for the fallback faces, which have no axis to
+// set. Small capitals are made from the capitals (the vendored subset has no smcp of its own); a
+// weight or a slant is never faked, so a fallback face shows what it has. The size is the role's
+// (--role-size, which type.scale writes) taken by the register's scale, or the inherited size
+// where a wearer sets no role.
+//
+// When the register turns over (html[data-shifting], written by js/motion.js for one rolled
+// moment), everything of the new register lands at once -- the face, the slant, the case, the
+// axes, the size, the spacing -- and the words that sit at rest in a page of words (a prose
+// page's headings, a list line's name) are cut into their new face by one slice at the new
+// register's slant (--reveal-angle), the hand the new register writes in, on the shift's one
+// stair (--ease-rite-shift and --motion-rite-shift, which js/motion.js writes on :root for the
+// whole shift). Nothing of it steps on a stair of its own: a size or a spacing stepped tread by
+// tread would lay the page out again at every tread and re-break a heading's lines three times,
+// a second change on words the slice is already changing. A wearer asks for the slice with
+// `type.rite($shift: true)`. The rest are left to what already moves them, since the slice would
+// replace their own mask and animation and fight them: a page's heading and a section's or a
+// panel's title, which js/motion.js (shift) reveals itself on the same stair; the stage's head,
+// which _mood.scss cuts whole; and the parts that arrive and leave on their own (the threshold's
+// question, the persona sheet, the unlock box) or wear their own world's register (a card).
+// Nothing is cut behind a lightbox ([inert]), where the page's animations are held still and a
+// held slice would hide the words.
+@mixin rite($shift: false) {
   font-family: var(--font-rite, #{$rite});
   font-weight: var(--rite-weight, 400);
   font-style: var(--rite-style, normal);
@@ -345,26 +387,23 @@ $mono: var(--font-mono, #{$mono-stack});
   word-spacing: calc(var(--rite-words, 0) * 1em);
   text-transform: var(--rite-case, none);
   line-height: var(--rite-leading, 1.15);
-  // What steps when the register turns over (html[data-shifting], _mood.scss): the axes, the
-  // size, the leading, the tracking and the word-spacing, each along the stair -- never a glide,
-  // and never the same stair twice. rite-dress repeats the list with the rule, the padding under
-  // it and the glow (one transition declaration per rule, so it cannot add to this one).
-  transition:
-    font-variation-settings var(--motion-shift) var(--ease-stair),
-    font-size var(--motion-shift) var(--ease-stair),
-    line-height var(--motion-shift) var(--ease-stair),
-    letter-spacing var(--motion-shift) var(--ease-stair),
-    word-spacing var(--motion-shift) var(--ease-stair);
 
-  html[data-shifting] &:not(.stage-head *) {
-    animation: rite-shift var(--motion-rite-shift, var(--motion-shift, 640ms)) var(--ease-rite-shift, var(--ease-stair)) both;
+  @if $shift {
+    html[data-shifting] &:not([inert] *) {
+      mask: cut.slice(var(--reveal-angle, 100deg));
+      @include cut.play(in, rite-shift, shift, shift);
+    }
   }
 
+  // Less motion: the new face is simply there, whole.
   @media (prefers-reduced-motion: reduce) {
     transition: none;
 
-    html[data-shifting] &:not(.stage-head *) {
-      animation: none;
+    @if $shift {
+      html[data-shifting] &:not([inert] *) {
+        mask: none;
+        animation: none;
+      }
     }
   }
 }
@@ -373,6 +412,8 @@ $mono: var(--font-mono, #{$mono-stack});
 // rule under them, which is what tells one register from another at the first glance. For the
 // words that carry a page -- a page's h1, the stage's title, the persona sheet's title -- and never
 // a card's name or a control. Included after rite, in a rule with no ::before/::after of its own.
+// None of it moves on its own: the ornaments, the rule and the glow belong to the words, and
+// whatever edge cuts the words into a new face (a reveal, the shift's slice) cuts them too.
 @mixin rite-dress {
   &::before {
     content: var(--rite-before, '') / '';
@@ -397,21 +438,6 @@ $mono: var(--font-mono, #{$mono-stack});
   background-size: var(--rite-rule-width, 0) var(--rite-rule-size, 0px);
   padding-block-end: calc(var(--rite-rule-size, 0px) + 0.1em);
   text-shadow: 0 0 calc(var(--rite-glow, 0) * 0.5em) color-mix(in oklab, var(--md-sys-color-primary) 55%, transparent);
-  // The rule, the padding under it and the glow turn over in the same treads as the words (the
-  // rite's own list again, since this declaration replaces the mixin's).
-  transition:
-    font-variation-settings var(--motion-shift) var(--ease-stair),
-    font-size var(--motion-shift) var(--ease-stair),
-    line-height var(--motion-shift) var(--ease-stair),
-    letter-spacing var(--motion-shift) var(--ease-stair),
-    word-spacing var(--motion-shift) var(--ease-stair),
-    background-size var(--motion-shift) var(--ease-stair),
-    padding-block-end var(--motion-shift) var(--ease-stair),
-    text-shadow var(--motion-shift) var(--ease-stair);
-
-  @media (prefers-reduced-motion: reduce) {
-    transition: none;
-  }
 }
 
 // The raised cap that opens a page of prose: the first letter at the register's cap, in the

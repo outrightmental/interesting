@@ -32,7 +32,7 @@
    The sky a visitor brings may be one star or many: it is drawn behind the wheel for colour, and
    nothing of the puzzle depends on it. The plan is rolled from the seed, dealt once per card and
    kept with its env (a WeakMap), carried whole on the card's `of`, and rebuilt from that, so a
-   card, its breathing at rest (animate) and the feature it opens as are one puzzle. */
+   card and the feature it opens as are one puzzle. */
 
 const PLAIN = { density: 1, scale: 1, turn: 0 };
 const WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve'];
@@ -70,75 +70,120 @@ function mod(n, m) {
   return ((n % m) + m) % m;
 }
 
-/* The motion of the rite (README: "Motion axiom"): nothing here moves along a formula. A curve is
-   a polyline -- a hesitation, a surge, a stutter, an overshoot and a settle -- and riteCurve rolls
-   one from a seed, so the wheel of a solved archive turns to its notch its own way for every
-   piece, past it and back, and the same way every time that piece is played. Rolled from the seed
-   and never from env.rnd, so the puzzle a seed deals is untouched by it; `ease` is the one baked
-   curve a preview falls back on. */
-function along(stops) {
-  return (t) => {
-    if (!(t > 0)) return stops[0][1];
-    if (t >= 1) return stops[stops.length - 1][1];
-    for (let i = 1; i < stops.length; i++) {
-      if (t <= stops[i][0]) {
-        const [t0, y0] = stops[i - 1];
-        const [t1, y1] = stops[i];
-        return t1 > t0 ? y0 + (y1 - y0) * ((t - t0) / (t1 - t0)) : y1;
-      }
-    }
-    return 1;
-  };
+/* The movements of the archive run on env.rite (README: "Motion axiom"): nothing here moves along
+   a formula, and nothing moves at rest. The wheel of a solved archive turns in a few clicks, each
+   landing on a notch, and its stars' glow comes up on those same clicks; the old words under it
+   go with the first click, and the letters it reads light, and its count is written, with the
+   last. A picked omen, a marked quadrant or the star marked as the last is sealed behind the
+   piece's one edge, its slice or its curve, in a few treads, and one unset goes back behind the
+   same edge from as far as it had come: a mark is how far the edge has passed over it, and a press
+   turns it round where it stands (aim(), choose()), so nothing jumps to whole before it goes back
+   and nothing is dropped half-way. The itinerary's trail is drawn out from the star it leaves in
+   treads. A verdict, the hint's rings and names, a 'picked' or the archive's answer is cut on at
+   one moment of its trigger's roll and stays; old words go before new ones come, and a verdict
+   once said is never said again. The stars do not breathe: a swell and a settle repeated for as
+   long as the page is open is a movement that goes back on itself, over the whole scene, for
+   nothing a visitor waits on, so a card of the archive is a still picture and a piece's sky holds
+   still between the visitor's moves -- and a frame redraws only while something is moving
+   (framed()), so a still sky is not drawn again at all, and asks for no further frame. */
+
+// The rite of a scene handed none: every movement at its end and every surface whole.
+const STILL = {
+  treads: 1,
+  stair: () => 1, series: () => 1, flicker: () => 1,
+  paint(g, x, y, w, h, k, style) {
+    if (k <= 0) return;
+    if (style != null) g.fillStyle = style;
+    g.fillRect(x, y, w, h);
+  },
+  region(g, x, y, w, h, k) {
+    if (k > 0) g.rect(x, y, w, h);
+  },
+  at: () => STILL
+};
+
+function riteOf(c) {
+  return c && c.rite ? c.rite : STILL;
 }
 
-// The movements of the archive run on env.rite (README: "Motion axiom"): a breath is a stair
-// up and down, never a sine; the wheel turns in clicks; a mark blinks on. `frac` is where in a
-// period a clock stands, `tri` the same folded into a rise and a fall.
-function frac(x) {
-  return x - Math.floor(x);
+// How far a change made at `at` has come, over `span` seconds of the piece's clock: 1 at once for a
+// visitor who asked for less motion and for whatever stood there from the start. Anything still on
+// its way marks the scene busy, so the next frame draws it again.
+function came(s, at, span, reduced) {
+  if (reduced || at == null || at < 0 || !s) return 1;
+  const p = Math.max(0, Math.min(1, ((s.t || 0) - at) / span));
+  if (p < 1) s.busy = true;
+  return p;
 }
 
-function tri(x) {
-  const f = frac(x);
-  return f < 0.5 ? f * 2 : 2 - f * 2;
+// One frame of a piece: the scene is drawn again only when something on it is moving, when a
+// trigger changed it, or when it was sized again (which clears the canvas); otherwise the picture
+// on the canvas is the picture. The frame answers whether anything is still moving once it is
+// drawn: false when the sky is at rest, which tells the stage to ask for no frame until a knob, a
+// tap, a check, a new size or the scene coming back sets something going again -- the only things
+// that do, so the clock may stand still meanwhile.
+function framed(s, c, draw) {
+  const lost = !!(c.g && typeof c.g.isContextLost === 'function' && c.g.isContextLost());
+  if (!s.dirty && !s.busy && !lost && s.on === c.g && s.w === c.w && s.h === c.h && s.dpr === c.dpr) return false;
+  draw(c);
+  return s.busy;
 }
 
-// A breath that steps: up a stair of its own and down it again, each mark on its own roll.
-function breath(rite, t, period, k, depth) {
-  if (!rite || !t) return 0;
-  const own = rite.at(0x6b7e + k * 7);
-  return (own.stair(tri(t / period + k * 0.137)) - 0.5) * 2 * depth;
+// Draws with the bookkeeping framed() reads: whatever is moving marks itself busy as it is drawn.
+function drawn(s, c, paint) {
+  s.busy = false;
+  s.dirty = false;
+  s.on = c.g;
+  s.w = c.w;
+  s.h = c.h;
+  s.dpr = c.dpr;
+  paint();
 }
 
-function riteCurve(seed, over) {
-  let a = (seed >>> 0) || 1;
-  const rnd = () => {
-    a = (a + 0x6d2b79f5) >>> 0;
-    let t = a;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-  const between = (lo, hi) => lo + (hi - lo) * rnd();
-  const stops = [[0, 0]];
-  let at = 0;
-  const put = (t, y) => {
-    at = Math.min(0.99, Math.max(at, t));
-    stops.push([at, y]);
-  };
-  if (rnd() < 0.7) put(between(0.03, 0.14), between(0, 0.02)); // the hesitation
-  const peak = between(0.45, 0.7);
-  const high = over ? 1 + between(0.02, 0.1) : 1;
-  put(at + (peak - at) * between(0.3, 0.55), high * between(0.45, 0.7)); // the surge
-  if (rnd() < 0.6) put(at + between(0.02, 0.06), stops[stops.length - 1][1]); // the stutter
-  put(peak, high);
-  if (over) put(peak + (1 - peak) * between(0.3, 0.6), 1 - (high - 1) * 0.4); // the settle
-  put(between(0.86, 0.96), over ? 1 : between(0.96, 1));
-  stops.push([1, 1]);
-  return along(stops);
+/* Marks: what a visitor sets, sealed on the scene. A kind of mark has its own salt for the rolls
+   and its own length; each mark is how far the edge has passed over it, from where it stood when
+   its last trigger came toward 1 (set) or 0 (unset), in that trigger's treads. */
+function marks(base, span) {
+  return { base, span, n: 0, list: [] };
 }
 
-const ease = along([[0, 0], [0.1, 0.02], [0.38, 0.64], [0.45, 0.58], [0.62, 1], [0.8, 0.97], [1, 1]]);
+function cover(set, m, rite, s, reduced) {
+  return m.from + (m.to - m.from) * rite.at(set.base + m.n).stair(came(s, m.at, set.span, reduced));
+}
+
+// Set or unset `key`: a mark already heading that way is left to land, one heading the other way
+// turns where it stands on the trigger's roll (set.n), and a new one comes from nothing.
+function aim(set, key, on, rite, s, reduced) {
+  const to = on ? 1 : 0;
+  const m = set.list.find((x) => x.key === key);
+  if (m ? m.to === to : !on) return false;
+  if (m) {
+    m.from = cover(set, m, rite, s, reduced);
+    m.to = to;
+    m.at = s.t;
+    m.n = set.n;
+  } else set.list.push({ key, from: 0, to, at: s.t, n: set.n });
+  return true;
+}
+
+// One trigger over a kind of mark: `on(key)` says which keys are set now. Marks gone back to
+// nothing are let go.
+function retake(set, keys, on, rite, s, reduced) {
+  set.n += 1;
+  for (const key of keys) aim(set, key, on(key), rite, s, reduced);
+  set.list = set.list.filter((m) => m.to === 1 || cover(set, m, rite, s, reduced) > 0);
+}
+
+// `key` becomes the one mark of its kind that is set (null for none).
+function choose(set, key, rite, s, reduced) {
+  const keys = set.list.map((m) => m.key);
+  if (key != null && !keys.includes(key)) keys.push(key);
+  retake(set, keys, (k) => k === key, rite, s, reduced);
+}
+
+function markOf(set, key) {
+  return set ? set.list.find((m) => m.key === key) : null;
+}
 
 function some(env, list, n) {
   const pool = list.slice();
@@ -273,9 +318,18 @@ function wheelScene(g, w, h, c, p, s, variant) {
   const R = Math.min(w, h) * 0.35 * v.scale;
   const rim = rimOf(p.dropped);
   const starsAt = starNotches(p);
-  const angle = s.angle || 0;
-  dark(g, w, h, c, v);
   const step = Math.PI * 2 / NOTCHES;
+  // A solved wheel turns in its roll's few clicks (series), each landing on a whole notch -- the
+  // notches between shared out as evenly as whole notches allow -- and stops on the last. The glow
+  // of its stars comes up on the same clicks, and the letters it reads light with the last one.
+  // A scene handed no rite is shown turned home.
+  const own = s.turnAt != null ? riteOf(c).at(0x51a7 + (s.turns || 0)) : null;
+  const n = own ? Math.max(1, own.treads || 1) : 1;
+  const clicks = own ? own.series(came(s, s.turnAt, 0.8, c.reduced), n) : 0;
+  const angle = own ? s.from + Math.round(clicks * (s.target - s.from) / step / n) * step : s.angle || 0;
+  s.angle = angle;
+  const lit = !!own && clicks >= n && s.trial.read === p.word;
+  dark(g, w, h, c, v);
   const at = (notch, r, turn) => {
     const a = -Math.PI / 2 + notch * step + (turn || 0);
     return { x: cx + Math.cos(a) * r, y: cy + Math.sin(a) * r, a };
@@ -318,18 +372,12 @@ function wheelScene(g, w, h, c, p, s, variant) {
   g.lineTo(tip.x - Math.cos(tip.a) * R * 0.035, tip.y - Math.sin(tip.a) * R * 0.035);
   g.closePath();
   g.fill();
-  // The three stars, each on a spoke from the centre out to the rim. Their glow comes up the
-  // stair of the solve's own roll as the wheel clicks round, and the letters they land on (and
-  // the count written under the wheel) blink on, a flicker, once it has clicked home: nothing
-  // here cuts from unlit to lit.
-  const own = s.spin > 0 && c.rite ? c.rite.at(0x1ead + (s.spun || 0)) : null;
-  const lit = s.spin >= 1 && (!s.trial || s.trial.read === p.word);
-  const litK = lit ? 1 : own ? own.stair(s.spin) : 0;
-  const landed = s.landedAt == null || !s.t ? 1 : Math.min(1, (s.t - s.landedAt) / 1.2);
-  const shine = !lit ? 0 : own ? own.flicker(landed) : 1;
-  starsAt.forEach((n, k) => {
-    const star = at(n, R * p.radii[k] / 100, 0);
-    const edge = at(n, R * 0.95, 0);
+  // The three stars, each on a spoke from the centre out to the rim, their glow up a step with
+  // each click of the turn.
+  const litK = clicks / n;
+  starsAt.forEach((notch, k) => {
+    const star = at(notch, R * p.radii[k] / 100, 0);
+    const edge = at(notch, R * 0.95, 0);
     g.strokeStyle = c.alpha(col.accent2, 0.5);
     g.lineWidth = 1;
     g.setLineDash([3, 4]);
@@ -338,8 +386,7 @@ function wheelScene(g, w, h, c, p, s, variant) {
     g.lineTo(edge.x, edge.y);
     g.stroke();
     g.setLineDash([]);
-    const breathe = breath(c.rite, s.t, 3.4, k, 0.12);
-    glow(g, c, star.x, star.y, R * 0.12, col.accent2, 0.45 + 0.25 * litK + breathe);
+    glow(g, c, star.x, star.y, R * 0.12, col.accent2, 0.45 + 0.25 * litK);
     g.fillStyle = col.accent2;
     g.beginPath();
     g.arc(star.x, star.y, Math.max(2.5, R * 0.03), 0, Math.PI * 2);
@@ -350,7 +397,7 @@ function wheelScene(g, w, h, c, p, s, variant) {
   const size = Math.max(10, R * 0.13);
   rim.forEach((ch, i) => {
     const q = at(i, R * 0.87, angle);
-    const on = shine && starsAt.some((n, k) => rim[mod(n + (p.cw ? -p.t : p.t), NOTCHES)] === ch);
+    const on = lit && starsAt.some((notch) => rim[mod(notch + (s.trial.cw ? -s.trial.n : s.trial.n), NOTCHES)] === ch);
     if (on) glow(g, c, q.x, q.y, size * 1.4, col.accent2, 0.6);
     write(g, ch, q.x, q.y, size, on ? col.accent2 : c.alpha(col.fg, 0.9), 'center', 600);
   });
@@ -360,32 +407,45 @@ function wheelScene(g, w, h, c, p, s, variant) {
   write(g, p.word.split('').join('  '), cx, h * 0.045 + fs * 1.3, fs * 1.4, col.accent2, 'center', 700);
   write(g, 'no ' + p.dropped[0] + ', no ' + p.dropped[1] + ' on the rim', w * 0.03, h * 0.96, fs * 0.8, c.alpha(col.muted, 0.8), 'left', 500);
   write(g, 'clockwise', tip.x + R * 0.1, tip.y - R * 0.02, fs * 0.8, c.alpha(col.muted, 0.9), 'left', 500);
-  const foot = s.trial ? notches(s.trial.n) + ' ' + wayWord(s.trial.cw) + ': ' + s.trial.read
-    : s.told ? 'the archive says: ' + wayWord(p.cw) : 'set a count and direction to try a turn';
-  write(g, foot, w * 0.5, h * 0.9, fs * 0.8, s.trial || s.told ? col.accent2 : col.fg, 'center', 500);
+  // The words at the foot. What the archive says when asked goes from the foot at once and is cut
+  // on at one moment of its own roll, so the old words never turn straight into the new ones; and
+  // at the solve the words go with the wheel's first click and its count is written with the last.
+  const toldOn = !s.told || riteOf(c).at(0x7e11).flicker(came(s, s.toldAt, 0.8, c.reduced)) === 1;
+  const before = s.told ? (toldOn ? 'the archive says: ' + wayWord(p.cw) : '') : 'set a count and direction to try a turn';
+  const foot = s.trial ? (clicks >= n ? notches(s.trial.n) + ' ' + wayWord(s.trial.cw) + ': ' + s.trial.read : '') : before;
+  if (foot) write(g, foot, w * 0.5, h * 0.9, fs * 0.8, s.trial || s.told ? col.accent2 : col.fg, 'center', 500);
+}
+
+function wheelBlank(angle) {
+  return { angle: angle || 0, t: 0, told: false, toldAt: null, doneAt: null,
+    from: 0, target: 0, turnAt: null, turns: 0, trial: null };
 }
 
 function wheelPreview(g, w, h, env, p) {
-  wheelScene(g, w, h, env, p, { angle: 0, spin: 0 }, env.variant);
+  wheelScene(g, w, h, env, p, wheelBlank(0), env.variant);
 }
 
 function wheelPiece(env, p) {
   // The count is notches read off a rim, so it is a measured answer: the difficulty says how many
   // notches out it may be and still turn the lock.
   const { margin } = asked(env);
-  // The wheel turns to its notch along a curve rolled for this piece, past it and back.
-  // The wheel turns to its notch in clicks -- the ratchet of this piece's own rite, a tooth at a
-  // time with a slip back and a hold, never a smooth turn -- and the turn is composed afresh
-  // for the solve from the roll's pieces (which teeth, which slips) by rite.at.
-  const s = { angle: 0, spin: 0, t: 0, told: false, turn: riteCurve((env.seed >>> 0) ^ 0x51a7, true), spun: 0,
-    from: 0, target: 0, turnAt: null, turns: 0, trial: null };
-  const draw = (c) => wheelScene(c.g, c.w, c.h, c, p, s, env.variant);
+  // The wheel turns to its notch in a few clicks of this piece's rite, rolled afresh for the solve
+  // by rite.at, each landing on a notch, and stops on the last: never a smooth turn, never past it
+  // and back.
+  const s = wheelBlank(0);
+  const draw = (c) => drawn(s, c, () => wheelScene(c.g, c.w, c.h, c, p, s, env.variant));
+  const solve = () => {
+    if (s.doneAt != null) return;
+    s.doneAt = s.t;
+    s.dirty = true;
+  };
   function turnTo(n, cw, c) {
     s.trial = { n, cw, read: reading(p, n, cw) };
     s.from = s.angle;
     s.target = n * (Math.PI * 2 / NOTCHES) * (cw ? 1 : -1);
     s.turnAt = s.t;
     s.turns += 1;
+    s.dirty = true;
     if (c.reduced) s.angle = s.target;
   }
   function tryTurn(c) {
@@ -440,6 +500,7 @@ function wheelPiece(env, p) {
       if (id === 'ask') {
         if (!s.told) {
           s.told = true;
+          s.toldAt = s.t;
           c.hint();
         }
         c.status('the archive says the wheel turns ' + wayWord(p.cw) + '; the count is yours to find');
@@ -447,20 +508,12 @@ function wheelPiece(env, p) {
       draw(c);
     },
     frame(t, dt, c) {
-      if (!c.reduced) s.t += dt;
-      if (s.turnAt != null) {
-        const progress = c.reduced ? 1 : Math.max(0, Math.min(1, (s.t - s.turnAt) / 0.8));
-        const click = c.rite ? c.rite.at(0x51a7 + s.turns).ratchet(progress) : (s.turn || ease)(progress);
-        s.angle = s.from + (s.target - s.from) * click;
-      }
-      if (c.done) {
-        if (!s.spun) s.spun = 1 + ((s.t * 1000) | 0) % 97;
-        s.spin = c.reduced ? 1 : Math.min(1, s.spin + dt * 0.55);
-        if (s.spin >= 1 && s.landedAt == null) s.landedAt = s.t;
-      }
-      draw(c);
+      s.t += Math.max(0, dt);
+      if (c.done) solve();
+      return framed(s, c, draw);
     },
     end(c) {
+      solve();
       // Every solve is answered in the archive's own voice, as the omens' is: the line is the
       // plan's, so one wheel always reads the same and another wheel reads another.
       const n = Number(c.value('count'));
@@ -635,16 +688,19 @@ function omensScene(g, w, h, c, p, s, variant) {
   g.strokeStyle = c.alpha(col.fg, 0.4);
   g.lineWidth = 1;
   g.strokeRect(f.x, f.y, f.sw, f.sh);
-  if (s.quadrant) {
-    const left = s.quadrant.endsWith('west') ? 0 : RING.x;
-    const top = s.quadrant.startsWith('north') ? 0 : RING.y;
-    const height = s.quadrant.startsWith('north') ? RING.y : 1 - RING.y;
-    const field = c.rite ? c.rite.at(0x4a17) : null;
-    const age = c.reduced || s.quadrantAt == null ? 1 : Math.min(1, Math.max(0, (s.t - s.quadrantAt) / 0.8));
-    if (field) field.paint(g, X(left), Y(top), f.sw * RING.x, f.sh * height, field.stair(age), c.alpha(col.accent2, 0.14));
-    else if (age) {
-      g.fillStyle = c.alpha(col.accent2, 0.14);
-      g.fillRect(X(left), Y(top), f.sw * RING.x, f.sh * height);
+  const rite = riteOf(c);
+  const reduced = !!c.reduced;
+  // The quadrant marked for the brightest star is sealed behind the piece's edge on the roll of
+  // that mark, and the one marked before goes back behind the same edge from as far as it had come.
+  if (s.quadrants) {
+    for (const m of s.quadrants.list) {
+      const k = cover(s.quadrants, m, rite, s, reduced);
+      if (k <= 0) continue;
+      const name = m.key;
+      const left = name.endsWith('west') ? 0 : RING.x;
+      const top = name.startsWith('north') ? 0 : RING.y;
+      const height = name.startsWith('north') ? RING.y : 1 - RING.y;
+      rite.at(s.quadrants.base + m.n).paint(g, X(left), Y(top), f.sw * RING.x, f.sh * height, k, c.alpha(col.accent2, 0.14));
     }
   }
   // The horizon band.
@@ -694,30 +750,24 @@ function omensScene(g, w, h, c, p, s, variant) {
   const unit = Math.min(f.sw, f.sh);
   p.pts.forEach((q) => {
     const r = unit * (0.006 + q.b * 0.0024);
-    const breathe = breath(c.rite, s.t, 3.8, q.b, 0.08);
-    glow(g, c, X(q.x), Y(q.y), r * 5, col.accent2, 0.25 + q.b * 0.05 + breathe);
+    glow(g, c, X(q.x), Y(q.y), r * 5, col.accent2, 0.25 + q.b * 0.05);
     g.fillStyle = c.mix(col.fg, col.accent2, q.b / 9);
     g.beginPath();
     g.arc(X(q.x), Y(q.y), r, 0, Math.PI * 2);
     g.fill();
   });
   // The hint, once asked for: the two brightest, ringed and named.
-  if (s.marked) {
-    // The rings blink on (a flicker of the piece's own rite) and widen a tread at a time; the
-    // names come a beat behind them.
-    const age = s.markedAt == null || !s.t ? 1 : Math.min(1, (s.t - s.markedAt) / 1.1);
-    const own = c.rite ? c.rite.at(0x2b1d) : null;
-    const on = own ? own.flicker(age) : 1;
-    const grow = own ? own.stair(age) : 1;
+  // The rings round the two brightest and their names are one answer to one press: all cut on
+  // together at one moment of that press's roll, and they stay.
+  if (s.marked && rite.at(0x2b1d).flicker(came(s, s.markedAt, 1.1, reduced)) === 1) {
     g.strokeStyle = c.alpha(col.accent2, 0.9);
     g.lineWidth = 1.2;
     g.setLineDash([3, 3]);
     byBrightness(p.pts).slice(0, 2).forEach((q, k) => {
-      if (!on) return;
       g.beginPath();
-      g.arc(X(q.x), Y(q.y), unit * (0.03 + 0.02 * grow), 0, Math.PI * 2);
+      g.arc(X(q.x), Y(q.y), unit * 0.05, 0, Math.PI * 2);
       g.stroke();
-      if (own ? own.at(k + 1).flicker(age) : 1) write(g, k ? 'second brightest' : 'brightest', X(q.x), Y(q.y) - unit * 0.07, fs * 0.75, col.accent2, 'center', 500);
+      write(g, k ? 'second brightest' : 'brightest', X(q.x), Y(q.y) - unit * 0.07, fs * 0.75, col.accent2, 'center', 500);
     });
     g.setLineDash([]);
   }
@@ -732,52 +782,66 @@ function omensScene(g, w, h, c, p, s, variant) {
     const y = top + Math.floor(i / 2) * (rowHeight + gap);
     const cw = i === 4 ? rowWidth : half;
     const ch = rowHeight;
-    const picked = s.picked.includes(i);
     const settled = s.reveal || (s.read || []).includes(i);
     const holds = settled && p.truth.includes(i);
     g.fillStyle = c.alpha(col.bg, 0.6);
     g.beginPath();
     g.roundRect(x, y, cw, ch, fs * 0.5);
     g.fill();
-    // A picked omen is sealed: a wash of the accent develops over its card by area, through the
-    // matte of this pick's own roll, in treads -- and leaves the same way when it is unpicked.
-    const pickedAt = s.pickedAt && s.pickedAt[i];
-    const since = pickedAt == null || !s.t ? 1 : Math.min(1, (s.t - pickedAt) / 1.3);
-    // The roll is the pick's own, kept from the moment it was made, so a later pick on another
-    // card does not swap this one's matte under it mid-seal.
-    const own = c.rite ? c.rite.at(0x0ae0 + i * 3 + ((s.pickRoll && s.pickRoll[i]) || 0)) : null;
-    const cover = own ? own.stair(since) : 1;
-    const edge = picked ? cover : 1 - cover; // how far the card is sealed, in treads
-    if (own && (picked || since < 1)) {
+    // A picked omen is sealed: the accent comes over its card behind the piece's edge, on the roll
+    // of the pick that set it, in treads -- and goes back behind the same edge, from as far as it
+    // had come, when it is unpicked.
+    const m = markOf(s.picks, i);
+    const edge = m ? cover(s.picks, m, rite, s, reduced) : 0; // how far the card is sealed
+    if (edge > 0) {
       g.save();
       g.beginPath();
       g.roundRect(x, y, cw, ch, fs * 0.5);
       g.clip();
-      own.paint(g, x, y, cw, ch, picked ? cover : 1 - cover, c.alpha(col.accent2, 0.16));
+      rite.at(s.picks.base + m.n).paint(g, x, y, cw, ch, edge, c.alpha(col.accent2, 0.16));
       g.restore();
     }
-    // The border thickens and colours by the same stair as the wash, never a cut.
+    // The border thickens and takes the accent in the same treads as the seal. Its outline is
+    // traced again, because the seal's edge left its own path on the context.
     g.strokeStyle = c.alpha(c.mix(col.muted, col.accent2, edge), 0.4 + 0.55 * edge);
     g.lineWidth = 1 + edge;
+    g.beginPath();
+    g.roundRect(x, y, cw, ch, fs * 0.5);
     g.stroke();
-    // The verdict blinks on, a flicker of its own roll, from the moment the archive read the
-    // omen or the puzzle was solved.
-    const saidAt = s.reveal ? s.revealAt : s.readAt ? s.readAt[i] : null;
-    const said = saidAt == null || !s.t ? 1 : Math.min(1, (s.t - saidAt) / 1.0);
-    const spoken = settled && (own ? own.at(0x5a1d + i).flicker(said) : 1);
+    // The verdict is cut on at one moment of the roll of what said it -- the archive's reading of
+    // this omen, or the solve, which says every verdict not yet said at one moment of its own --
+    // and stays: a verdict already said keeps the moment it was said at.
+    const readAt = s.readAt && s.readAt[i] != null ? s.readAt[i] : null;
+    const saidAt = readAt != null ? readAt : s.reveal ? s.revealAt : null;
+    const sayer = rite.at(readAt != null ? 0x5a1d + 1 + i : 0x5a1d);
+    const spoken = settled && sayer.flicker(came(s, saidAt, 1.0, reduced)) === 1;
     write(g, 'omen ' + (i + 1), x + fs * 0.6, y + fs, fs * 0.85, col.accent2, 'left', 700);
     if (ch < fs * 5) {
-      if (spoken || picked) write(g, spoken ? (holds ? 'holds' : 'does not hold') : 'picked', x + cw / 2, y + ch * 0.7, fs * 0.8, spoken && holds ? col.accent2 : c.alpha(col.fg, 0.9), 'center', 500);
+      // 'picked' is cut on at one moment of the pick's roll as the seal comes over the card. It
+      // goes when the omen is unpicked or the archive is about to say its verdict, which is then
+      // cut on in its place: one word goes and the next comes, never one turning into another.
+      const marked = !!m && m.to === 1 && !settled && rite.at(s.picks.base + m.n).flicker(came(s, m.at, s.picks.span, reduced)) === 1;
+      if (spoken) write(g, holds ? 'holds' : 'does not hold', x + cw / 2, y + ch * 0.7, fs * 0.8, holds ? col.accent2 : c.alpha(col.fg, 0.9), 'center', 500);
+      else if (marked) write(g, 'picked', x + cw / 2, y + ch * 0.7, fs * 0.8, c.alpha(col.fg, 0.9), 'center', 500);
     } else {
       if (spoken) write(g, holds ? 'holds' : 'does not hold', x + cw - fs * 0.6, y + fs, fs * 0.75, holds ? col.accent2 : c.alpha(col.muted, 0.9), 'right', 500);
-      const lines = wrap(g, CLAIMS[id].text, fs * 0.9, cw - fs * 1.2);
+      // The claim's lines, measured once for this size of card and kept.
+      const key = id + '|' + Math.round(fs * 10) + '|' + Math.round(cw);
+      const kept = s.lines || (s.lines = new Map());
+      if (!kept.has(key)) kept.set(key, wrap(g, CLAIMS[id].text, fs * 0.9, cw - fs * 1.2));
+      const lines = kept.get(key);
       lines.slice(0, 3).forEach((line, k) => write(g, line, x + fs * 0.6, y + fs * 2.2 + k * fs * 1.15, fs * 0.9, c.alpha(col.fg, 0.9), 'left', 500));
     }
   });
 }
 
+function omensBlank() {
+  return { picked: [], picks: marks(0x0ae0, 1.3), quadrant: null, quadrants: marks(0x4a17, 0.8), reveal: false, revealAt: null,
+    marked: false, markedAt: null, read: [], readAt: {}, t: 0 };
+}
+
 function omensPreview(g, w, h, env, p) {
-  omensScene(g, w, h, env, p, { picked: [], reveal: false }, env.variant);
+  omensScene(g, w, h, env, p, omensBlank(), env.variant);
 }
 
 function omensPiece(env, p) {
@@ -785,8 +849,8 @@ function omensPiece(env, p) {
   const brightest = byBrightness(p.pts)[0];
   const quadrant = (brightest.y < RING.y ? 'north' : 'south') + (brightest.x < RING.x ? 'west' : 'east');
   const positions = p.pts.map((q, i) => (i + 1) + ' (' + Math.round(q.x * 100) + ', ' + Math.round(q.y * 100) + ', ' + q.b + ')').join('; ');
-  const s = { picked: [], reveal: false, marked: false, read: [], t: 0 };
-  const draw = (c) => omensScene(c.g, c.w, c.h, c, p, s, env.variant);
+  const s = omensBlank();
+  const draw = (c) => drawn(s, c, () => omensScene(c.g, c.w, c.h, c, p, s, env.variant));
   return {
     title: omensTitle(p),
     brief: 'Five claims are written beneath this square sky; exactly two hold. The dashed lines divide east from west and north from south. The ring is centred at (50, 44) with radius 20 on a 0-100 grid; the shaded horizon band begins at 80 south. The bar measures 22 units in any direction, and larger stars are brighter. For a text reading, each star is listed as (east, south, brightness): ' + positions + '.',
@@ -815,23 +879,18 @@ function omensPiece(env, p) {
     },
     apply(id, value, c) {
       if (id === 'hold') {
-        const was = s.picked;
         s.picked = Array.isArray(value) ? value.map(Number) : [];
-        // Every omen whose pick changed starts its seal (or its unsealing) now, on a fresh roll.
-        s.pickedAt = s.pickedAt || {};
-        s.pickRoll = s.pickRoll || {};
-        s.picks = (s.picks || 0) + 1;
-        p.claims.forEach((id2, i) => {
-          if (was.includes(i) !== s.picked.includes(i)) {
-            s.pickedAt[i] = s.t;
-            s.pickRoll[i] = s.picks;
-          }
-        });
+        // Every omen whose pick changed starts its seal (or its unsealing) now, from as far as its
+        // card had come, on this pick's roll.
+        retake(s.picks, p.claims.map((id2, i) => i), (i) => s.picked.includes(i), riteOf(c), s, !!c.reduced);
         c.status(s.picked.length ? 'picked: ' + s.picked.map((i) => 'omen ' + (i + 1)).join(', ') : 'nothing picked yet');
       }
       if (id === 'quadrant') {
-        s.quadrant = value;
-        s.quadrantAt = s.t;
+        if (value !== s.quadrant) {
+          // The quadrant marked before goes while this one seals, on a roll of this mark's own.
+          s.quadrant = value;
+          choose(s.quadrants, value, riteOf(c), s, !!c.reduced);
+        }
         c.status('marked the ' + value + ' quadrant for the brightest star');
       }
       if (id === 'second') {
@@ -851,7 +910,6 @@ function omensPiece(env, p) {
         } else if (unread.length) {
           const next = miscalled.length ? miscalled[0] : unread[0];
           s.read.push(next);
-          s.readAt = s.readAt || {};
           s.readAt[next] = s.t;
           c.hint();
           c.status('omen ' + (next + 1) + (p.truth.includes(next) ? ' holds against the sky' : ' does not hold'));
@@ -862,12 +920,14 @@ function omensPiece(env, p) {
       draw(c);
     },
     frame(t, dt, c) {
-      if (!c.reduced) s.t += dt;
-      draw(c);
+      s.t += Math.max(0, dt);
+      return framed(s, c, draw);
     },
     end(c) {
-      s.reveal = true;
-      s.revealAt = s.t;
+      if (!s.reveal) {
+        s.reveal = true;
+        s.revealAt = s.t;
+      }
       const line = READINGS[(p.truth.length * 3 + p.truth[0] + p.pts.length) % READINGS.length];
       c.status('the omens that hold: ' + p.truth.map((i) => 'omen ' + (i + 1)).join(', ') + '; the brightest star is ' + quadrant + '. the archive reads: ' + line);
       draw(c);
@@ -929,8 +989,16 @@ function routeTitle(p) {
   return 'the star\'s itinerary: ' + WORDS[p.moves.length] + ' steps';
 }
 
-function routeBlank(t) {
-  return { seen: 0, focus: -1, done: false, t: t || 0 };
+// How far along its steps the trail is drawn now: from where the last showing took it up to the
+// landing it shows, in that showing's treads.
+function trailAt(s, c, total) {
+  const target = s.done ? total : s.seen;
+  const from = Math.min(s.from || 0, target);
+  return from + (target - from) * riteOf(c).at(0x7a11 + (s.shows || 0)).stair(came(s, s.shownAt, 0.9, !!c.reduced));
+}
+
+function routeBlank() {
+  return { seen: 0, from: 0, shownAt: null, shows: 0, focus: -1, focused: marks(0x2f0c, 0.7), done: false, t: 0 };
 }
 
 function routeScene(g, w, h, c, p, s, variant) {
@@ -940,7 +1008,13 @@ function routeScene(g, w, h, c, p, s, variant) {
   const radius = Math.min(w, h) * 0.037 * v.scale;
   const point = (i) => ({ x: w * (0.16 + (i % 3) * 0.34), y: h * (0.18 + Math.floor(i / 3) * 0.25) });
   const trail = routeWalk(p);
-  const visible = s.done ? p.moves.length : s.seen;
+  const rite = riteOf(c);
+  const reduced = !!c.reduced;
+  // The trail, as far as it has been shown. Each landing a hint shows -- and at the solve, the rest
+  // of the route -- is drawn out from the star it leaves in the stair's treads, on a roll of that
+  // showing's own, and a star lights as the trail lands on it.
+  const shown = trailAt(s, c, p.moves.length);
+  const landed = Math.floor(shown + 1e-9);
   dark(g, w, h, c, v);
   write(g, 'start at star ' + (p.start + 1), w / 2, h * 0.055, fs, col.accent2, 'center', 600);
   g.strokeStyle = c.alpha(col.muted, 0.22);
@@ -960,30 +1034,46 @@ function routeScene(g, w, h, c, p, s, variant) {
     }
   }
   g.stroke();
-  if (visible) {
+  if (shown > 0) {
     g.strokeStyle = col.accent2;
     g.lineWidth = Math.max(2, radius * 0.18);
     g.beginPath();
-    trail.slice(0, visible + 1).forEach((index, step) => {
-      const q = point(index);
-      if (step) g.lineTo(q.x, q.y);
-      else g.moveTo(q.x, q.y);
-    });
+    const first = point(trail[0]);
+    g.moveTo(first.x, first.y);
+    for (let step = 1; step <= Math.ceil(shown - 1e-9); step++) {
+      const a = point(trail[step - 1]);
+      const b = point(trail[step]);
+      const part = Math.min(1, shown - (step - 1));
+      g.lineTo(a.x + (b.x - a.x) * part, a.y + (b.y - a.y) * part);
+    }
     g.stroke();
   }
+  // The star marked as the last is sealed: the lit colour comes over its disc behind the piece's
+  // edge, on the roll of the press that marked it, with its ring round it from the first tread;
+  // the star marked before goes back behind the same edge from as far as it had come, and its ring
+  // goes with the last of it.
   for (let i = 0; i < 9; i++) {
     const q = point(i);
     const r = radius * (0.75 + p.lights[i] * 0.045);
-    const lit = i === p.start || i === s.focus || trail.slice(1, visible + 1).includes(i);
-    const shift = breath(c.rite, s.t, 3.7, i, 0.06);
-    glow(g, c, q.x, q.y, r * 2.3, lit ? col.accent2 : col.accent, 0.22 + (lit ? 0.18 : 0) + shift);
+    const lit = i === p.start || trail.slice(1, landed + 1).includes(i);
+    glow(g, c, q.x, q.y, r * 2.3, lit ? col.accent2 : col.accent, 0.22 + (lit ? 0.18 : 0));
     g.fillStyle = lit ? col.accent2 : c.mix(col.accent, col.fg, p.lights[i] / 9);
     g.beginPath();
     g.arc(q.x, q.y, r, 0, Math.PI * 2);
     g.fill();
+    const m = markOf(s.focused, i);
+    const k = m ? cover(s.focused, m, rite, s, reduced) : 0;
+    if (k > 0) {
+      g.save();
+      g.beginPath();
+      g.arc(q.x, q.y, r, 0, Math.PI * 2);
+      g.clip();
+      rite.at(s.focused.base + m.n).paint(g, q.x - r, q.y - r, r * 2, r * 2, k, col.accent2);
+      g.restore();
+    }
     write(g, String(i + 1), q.x, q.y, fs, col.bg, 'center', 700);
     write(g, String(p.lights[i]), q.x, q.y + r + fs * 1.15, fs, col.fg, 'center', 600);
-    if (i === s.focus) {
+    if (k > 0) {
       g.strokeStyle = col.accent2;
       g.lineWidth = 1.5;
       g.setLineDash([3, 3]);
@@ -997,8 +1087,8 @@ function routeScene(g, w, h, c, p, s, variant) {
   write(g, 'brightness is below each star', w / 2, h * 0.93, fs, c.alpha(col.fg, 0.9), 'center', 500);
 }
 
-function routePreview(g, w, h, env, p, t) {
-  routeScene(g, w, h, env, p, routeBlank(t), env.variant);
+function routePreview(g, w, h, env, p) {
+  routeScene(g, w, h, env, p, routeBlank(), env.variant);
 }
 
 function routePiece(env, p) {
@@ -1006,8 +1096,15 @@ function routePiece(env, p) {
   const trail = routeWalk(p);
   const end = trail[trail.length - 1] + 1;
   const sum = trail.slice(1).reduce((total, index) => total + p.lights[index], 0);
-  const s = routeBlank(0);
-  const draw = (c) => routeScene(c.g, c.w, c.h, c, p, s, env.variant);
+  const s = routeBlank();
+  // A new star marked as the last one is sealed on a roll of this mark's own, and the one marked
+  // before is taken back; the same star again changes nothing.
+  const mark = (i, c) => {
+    if (i === s.focus) return;
+    s.focus = i;
+    choose(s.focused, i >= 0 && i < 9 ? i : null, riteOf(c), s, !!c.reduced);
+  };
+  const draw = (c) => drawn(s, c, () => routeScene(c.g, c.w, c.h, c, p, s, env.variant));
   return {
     title: routeTitle(p),
     brief: 'Stars 1 to 9 form three rows, numbered left to right. Each star\'s brightness is written below it. Start at star ' + (p.start + 1)
@@ -1035,13 +1132,18 @@ function routePiece(env, p) {
     },
     apply(id, value, c) {
       if (id === 'end') {
-        s.focus = Number(value) - 1;
+        mark(Number(value) - 1, c);
         c.status('Star ' + value + ' marked as the last star.');
       }
       if (id === 'sum') c.status('You counted ' + value + ' brightness across the landings.');
       if (id === 'hint') {
         if (s.seen < helps && s.seen < p.moves.length) {
+          // The trail is drawn out from where it stands now -- a showing not yet landed is taken up
+          // where it is, never finished at a jump -- to the landing shown.
+          s.from = trailAt(s, c, p.moves.length);
           s.seen += 1;
+          s.shownAt = s.t;
+          s.shows += 1;
           c.hint();
           const at = trail[s.seen];
           c.status('After step ' + s.seen + ', the route reaches star ' + (at + 1) + ', brightness ' + p.lights[at] + '.');
@@ -1053,7 +1155,7 @@ function routePiece(env, p) {
       for (let i = 0; i < 9; i++) {
         if (Math.abs(x - (0.16 + (i % 3) * 0.34)) < 0.12
             && Math.abs(y - (0.18 + Math.floor(i / 3) * 0.25)) < 0.1) {
-          s.focus = i;
+          mark(i, c);
           c.set('end', i + 1);
           c.status('Star ' + (i + 1) + ' has brightness ' + p.lights[i] + '; marked as the last star.');
           draw(c);
@@ -1063,11 +1165,17 @@ function routePiece(env, p) {
       c.status('Tap one of the numbered stars to mark it as the last star.');
     },
     frame(t, dt, c) {
-      if (!c.reduced) s.t += Math.max(0, dt);
-      draw(c);
+      s.t += Math.max(0, dt);
+      return framed(s, c, draw);
     },
     end(c) {
-      s.done = true;
+      // The rest of the route is drawn out from the last landing shown, once.
+      if (!s.done) {
+        s.from = trailAt(s, c, p.moves.length);
+        s.done = true;
+        s.shownAt = s.t;
+        s.shows += 1;
+      }
       c.status('The route ends at star ' + end + '; its landings add to ' + sum + '. The chart stays open to read again.');
       draw(c);
     }
@@ -1077,9 +1185,8 @@ function routePiece(env, p) {
 /* ---- the module ----------------------------------------------------------------------------- */
 
 // Which asking this card is, and its plan, dealt once from the env's seeded stream and kept with
-// that env: every pass over one card -- the still picture, every breathing frame, the spark --
-// asks here, so they are all one card rather than a re-roll per frame (see js/feed.js on what
-// animate owes a card).
+// that env: every pass over one card -- the still picture and the spark -- asks here, so they are
+// one card rather than a re-roll per pass.
 const dealt = new WeakMap();
 function deal(env) {
   let got = dealt.get(env);
@@ -1097,20 +1204,9 @@ export default {
     const p = deal(env);
     if (p.kind === 'wheel') {
       // The rim starts at the same setting on the card and on the stage.
-      wheelScene(g, w, h, env, p, { angle: 0, spin: 0 }, env.variant);
-    } else if (p.kind === 'route') routePreview(g, w, h, env, p, 0);
+      wheelScene(g, w, h, env, p, wheelBlank(0), env.variant);
+    } else if (p.kind === 'route') routePreview(g, w, h, env, p);
     else omensPreview(g, w, h, env, p);
-  },
-  // The card at rest breathes: the pointer stars swell and settle and the drawn sky glimmers, so
-  // a card rewards a second look without re-dealing anything. At t = 0 it is exactly the still
-  // picture paint left, and a visitor who asked for stillness gets that picture and no motion.
-  animate(g, w, h, env, t) {
-    if (env.reduced) return false;
-    const p = deal(env);
-    if (p.kind === 'wheel') {
-      wheelScene(g, w, h, env, p, { angle: 0, spin: 0, t }, env.variant);
-    } else if (p.kind === 'route') routePreview(g, w, h, env, p, t);
-    else omensScene(g, w, h, env, p, { picked: [], reveal: false, t }, env.variant);
   },
   spark(env) {
     const p = deal(env);
@@ -1129,7 +1225,7 @@ export default {
       quote: 'start at star ' + (p.start + 1) + '; ' + p.moves.join('  '),
       text: 'Follow the steps across the chart. Name the last star and add the brightness of the stars you land on.',
       aspect: '1 / 1',
-      paint: (g, w, h, cardEnv) => routePreview(g, w, h, cardEnv, p, 0),
+      paint: (g, w, h, cardEnv) => routePreview(g, w, h, cardEnv, p),
       of: p
     };
     return {

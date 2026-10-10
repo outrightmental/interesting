@@ -279,7 +279,7 @@ const CORNERS = {
 
 // The moments in a card's life the motion above is observed at: the frame it was painted on, a few
 // seconds in, past the twelve-second breath the slowest of these loops on, and ten minutes in --
-// a card the feed painted before the visitor scrolled a long way.
+// a card that started moving, was scrolled away from, and was met again long after.
 const CLOCK = [0, 1.7, 4.5, 11.9, 37, 611.5];
 
 observed.modules = {};

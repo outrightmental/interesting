@@ -44,9 +44,11 @@ const THEN = [
   { label: 'later', value: 'later' },
   { label: 'at the same time', value: 'same' }
 ];
-// The escapement: the pair's clock advances in clicks of the rite's ratchet, one tooth-set per
+// The escapement: the pair's clock advances in the rite's ratchet, one set of even clicks per
 // TOOTH seconds of the replay, so the swing is handed across in steps and never glides.
 const TOOTH = 0.5;
+// The rack's pace: the seconds one beat takes as the rack counts out, in the piece and on a card.
+const BEAT = 0.35;
 
 /* How hard the visitor asked for their puzzles. The persona keeps one difficulty for the whole
    site (js/persona.js) and js/stage.js hands it to a piece on env.difficulty, 1 (gentle) to 5
@@ -71,29 +73,69 @@ function lcmOf(list) {
 /* ---- the rite: how this hall moves ---------------------------------------------------------- */
 
 /* env.rite (ctx.rite inside a piece) is the piece's own roll of how it moves (js/variant.js;
-   js/stage.js, "The rite"). Nothing in the hall moves along a formula or cuts without a rite.
-   The hall's clocks are escapements: the rack's beat and the pair's seconds advance in the
-   ratchet's clicks with backlash, so a pendulum swings in steps -- its angle is still the
-   physics of its period, read off a clock that ticks -- and the beat counter, the replay's dot
-   on the ruler and the trace of the swing's reach all step with it. A picked pendulum is SEALED:
-   a disc develops behind it through the matte, cell by cell in the piece's own pattern, and its
-   ring blinks on; an unpicked one dissolves back down the same ladder. A hint's answer, a run's
-   mark on the ruler and the caption blink on; the spring's stiffness readout counts to its new
-   value in treads and the coils follow it; the light over a solved hall develops through the
-   matte with a flicker, never a wash; and the dust blinks. Every change is read against the
-   piece's own clock, s.t, which frame() advances: a change made at `since` has come came() of
-   its way, which is 1 at once for a visitor who asked for less motion and for whatever stood
-   there from the start. Every trigger rolls a fresh rite (rite.at(k) with the count of that
-   trigger in k), so a second pick, a second run, a second move of the slider composes a different
-   stair, matte and flicker from the first. */
+   js/stage.js, "The rite"): its one edge -- a slice at its angle, or a curve from its corner --
+   and the treads it steps in. Nothing in the hall glides or fades, and every movement goes one
+   way. The hall's clocks are escapements: the rack's beat and the pair's seconds advance in the
+   ratchet's even clicks, the same teeth every beat as a clock's are, so a pendulum swings in
+   steps -- its angle is still the physics of its period, read off a clock that ticks -- and the
+   beat counter, the replay's dot on the ruler and the trace of the swing's reach step with it.
+   A clock runs once and rests: the rack counts out to the beat asked for (after the solve, to the
+   meeting) and stands there, a run of the pair plays from the let-go to the end of the ruler and
+   stands on its last tooth, and a card plays one swing and is still. A picked pendulum is SEALED:
+   a disc comes in behind it by its area, behind the piece's edge in the stair's treads (rite.paint,
+   one path), resting in two shades split by that edge (cover), and its ring is cut on; let go,
+   the disc goes back out behind the same edge the way it came and the ring is cut off. A pick
+   caught part way by the next turns from where it stands, never jumping to whole and back. A
+   hint's answer and a run's mark on the ruler are cut on at the flicker's one moment and stay;
+   the spring's stiffness readout counts to its new value in treads and the coils follow it; the
+   light over a solved hall comes behind the piece's edge in the stair's treads and rests in two
+   shades, never a wash. The dust stands where the configuration put it. Every change is read
+   against the piece's own clock, s.t, which frame() advances: a change made at `since` has come
+   came() of its way, which is 1 at once for a visitor who asked for less motion and for whatever
+   stood there from the start. Every trigger rolls its own treads (rite.at(k) with the count of
+   that trigger in k, rolled once and kept), so a second pick or a second move of the slider steps
+   differently from the first while cutting along the same edge. Between clicks and changes
+   nothing is drawn: a frame with nothing new on it is let go (settled). Once nothing is on its
+   way -- no clock counting out, no change still coming -- frame() says so (it returns false) and
+   the stage asks for no more frames until the visitor acts, the scene is sized again or it comes
+   back into view. */
 
+// What stands in for a rite on an env that carries none: whatever has not begun stands where it
+// was, whatever has begun is already at its end, and a surface is painted whole.
+const begun = (t) => (t > 0 ? 1 : 0);
 const STILL = {
-  ease: () => 1, stair: () => 1, ratchet: () => 0, flicker: () => 1, matte: () => true,
-  series: (p, n) => Math.max(1, Math.floor(n || 1)), treads: 1, kind: 'none', cell: 4, at: () => STILL
+  ease: begun, stair: begun, ratchet: begun, flicker: begun,
+  paint(g, x, y, w, h, k, style) {
+    if (!(k > 0)) return;
+    if (style != null) g.fillStyle = style;
+    g.fillRect(x, y, w, h);
+  },
+  region(g, x, y, w, h, k) {
+    if (k > 0) g.rect(x, y, w, h);
+  },
+  at: () => STILL
 };
 
 function riteOf(env) {
   return env && env.rite ? env.rite : STILL;
+}
+
+// The rolls the hall takes from a rite, one per seed, rolled the first time one is asked for and
+// kept: a seal's or a mark's treads are the same on every frame of its change, so they are worked
+// out once rather than rolled again on every frame it is drawn.
+const kept = new WeakMap();
+function rolled(rite, seed) {
+  let rolls = kept.get(rite);
+  if (!rolls) {
+    rolls = new Map();
+    kept.set(rite, rolls);
+  }
+  let own = rolls.get(seed);
+  if (!own) {
+    own = rite.at(seed);
+    rolls.set(seed, own);
+  }
+  return own;
 }
 
 function came(s, since, span, reduced) {
@@ -101,61 +143,80 @@ function came(s, since, span, reduced) {
   return Math.max(0, Math.min(1, (s.t - since) / span));
 }
 
-function fract(x) {
-  return x - Math.floor(x);
+// The longest any change in the hall takes to come the whole of its way, in seconds: the light
+// over a solved hall.
+const LONGEST = 2.4;
+
+function sizeOf(c) {
+  return c.w + 'x' + c.h + '@' + (c.dpr || 1);
+}
+
+// The latest of the moments given, on the piece's clock, or -1 when nothing has changed yet.
+function latest(times) {
+  let last = -1;
+  for (const at of times) if (at != null && at > last) last = at;
+  return last;
+}
+
+// Whether a frame has nothing to draw: the canvas holds the picture drawn at this size and at this
+// click of the hall's clock (`key`), and that picture was drawn once the latest change (made at
+// `last`) had come the whole of its way -- at once, for a visitor who asked for less motion. A
+// hall at rest, or between two clicks of its escapement, stands still, so drawing it again would
+// spend a frame on nothing a visitor could see; a new size (the stage clears the canvas to resize
+// it), a click or a new change draws again. It is when the picture was drawn that is read, not
+// the clock alone: the stage asks for no frames while the scene is out of sight, so a change cut
+// off there is still owed its finished picture, and the first frame back draws it.
+function settled(s, c, key, last) {
+  if (s.drawn !== sizeOf(c) || s.drawnKey !== key) return false;
+  return s.drawnAt >= (c.reduced || last < 0 ? last : last + LONGEST + 0.05);
 }
 
 // A clock read through the escapement: the whole units gone by, and the one under way in the
-// ratchet's clicks. Every unit is a tick of its own roll (rite.at over the unit's number), so no
-// two beats click alike: a different count of teeth, a different backlash, the same clock.
-// Negative time is time before the start and stays as it is.
+// ratchet's even clicks -- the same teeth every unit, as a clock's are. Negative time is time
+// before the start and stays as it is.
 function escaped(rite, x) {
   if (!(x > 0)) return x;
   const unit = Math.floor(x);
-  return unit + rite.at(0xe5c + unit).ratchet(fract(x));
+  return unit + rite.ratchet(x - unit);
 }
 
-// The cells of a box the matte lets through at coverage k, filled in the current fillStyle: how a
-// surface changes by its area. Cells are rite.cell px, coarser over a wide box so a frame stays
-// cheap, on a grid fixed to the canvas so the pattern holds still while it grows. `inside` keeps
-// the tiling to a shape within the box. At k >= 1 every cell is let through.
-function develop(g, rite, x0, y0, bw, bh, k, inside, size) {
-  if (k <= 0) return;
-  const cell = size || Math.max(rite.cell, Math.ceil(Math.max(bw, bh) / 28));
-  const cx0 = Math.floor(x0 / cell);
-  const cy0 = Math.floor(y0 / cell);
-  const cx1 = Math.ceil((x0 + bw) / cell);
-  const cy1 = Math.ceil((y0 + bh) / cell);
-  for (let cy = cy0; cy < cy1; cy++) {
-    for (let cx = cx0; cx < cx1; cx++) {
-      const px = cx * cell;
-      const py = cy * cell;
-      if (inside && !inside(px + cell / 2, py + cell / 2)) continue;
-      if (k < 1 && !rite.matte(cx, cy, k)) continue;
-      const left = Math.max(px, x0);
-      const top = Math.max(py, y0);
-      g.fillRect(left, top, Math.min(px + cell, x0 + bw) - left, Math.min(py + cell, y0 + bh) - top);
-    }
-  }
+// A surface `k` of the way to being there, in the current fillStyle: the part of the box the
+// piece's edge has passed, and a second coat over the part it had passed by halfway. While it
+// comes one edge moves; at rest it is two shades of one colour split by that edge through the
+// middle of the box -- a slice through its centre, or the curve's arc halfway out. Two paths.
+function cover(g, rite, x, y, w, h, k) {
+  if (!(k > 0)) return;
+  rite.paint(g, x, y, w, h, k);
+  rite.paint(g, x, y, w, h, Math.min(k, 0.5));
 }
 
-// The light that comes over a solved hall: it develops through the matte from the moment of the
-// solve, blinking on and dropping out the way the rite's flicker has it, and holds.
+// A disc that is k of the way in: the disc is the clip, and the surface is covered across the
+// square round it, one edge whatever its size.
+function disc(g, rite, x, y, r, k, style) {
+  if (!(k > 0) || r <= 0) return;
+  g.save();
+  g.beginPath();
+  g.arc(x, y, r, 0, TAU);
+  g.clip();
+  g.fillStyle = style;
+  cover(g, rite, x - r, y - r, r * 2, r * 2, k);
+  g.restore();
+}
+
+// The light that comes over a solved hall: from the moment of the solve it crosses the hall
+// behind the piece's edge in the stair's treads, and rests in two shades.
 function daybreak(g, rite, c, w, h, p, strength) {
-  const own = rite.at(0xdb);
-  const k = own.stair(p);
-  if (k <= 0 || !own.flicker(p)) return;
+  const own = rolled(rite, 0xdb);
   g.fillStyle = c.alpha(c.colors.accent2, strength || 0.1);
-  develop(g, own, 0, 0, w, h, k, null, Math.max(rite.cell, Math.ceil(Math.min(w, h) / 30)));
+  cover(g, own, 0, 0, w, h, own.stair(p));
 }
 
 /* ---- drawing shared by both ----------------------------------------------------------------- */
 
-// The dust: standing where the configuration put it, and every fifth speck blinking out the way
-// the rite's flicker has it, on a roll of its own, so the hall is never quite still.
-function hallBackground(g, w, h, c, v, t) {
+// The ground, and the dust standing where the configuration put it: the hall is still, and only
+// its clocks move.
+function hallBackground(g, w, h, c, v) {
   const col = c.colors;
-  const rite = riteOf(c);
   const grad = g.createLinearGradient(0, 0, 0, h);
   grad.addColorStop(0, col.bg2);
   grad.addColorStop(1, col.bg);
@@ -163,13 +224,28 @@ function hallBackground(g, w, h, c, v, t) {
   g.fillRect(0, 0, w, h);
   g.fillStyle = c.alpha(col.accent, 0.12);
   for (let i = 0, dots = Math.max(8, Math.round(22 * v.density)); i < dots; i++) {
-    if (i % 5 === 0 && !rite.at(0xd0 + (i % 11)).flicker(fract((t || 0) / 3.1 + i * 0.173))) continue;
     g.fillRect(((i * 0.6180339 + v.turn * 0.37) % 1) * w, ((i * 0.7548777) % 1) * h, 1.2, 1.2);
   }
 }
 
+// The face words are set in, set only when it is not the one the canvas already holds: setting a
+// canvas's font, even to the face it has, makes the browser bring the page's style up to date
+// first, and the hall labels every pendulum and every tenth beat of its ruler. Its labels come in a
+// size or two, so a picture sets the font once for each size, not once for each label. A canvas
+// spells a face back in its own way (700 as 'bold', a size cut to a few places), so the canvas is
+// asked whether it holds the face as it spelled it when it was first set here: a canvas resized
+// back to its defaults, or restored to a face it saved, is never mistaken. Only a few dozen
+// spellings are kept, so a feed of many cards does not gather them.
+const spelled = new Map();
+function face(g, font) {
+  if (g.font === (spelled.get(font) || font)) return;
+  g.font = font;
+  if (spelled.size >= 48) spelled.clear();
+  spelled.set(font, g.font);
+}
+
 function text(g, c, line, x, y, size, color, align, width) {
-  g.font = '500 ' + size + 'px system-ui, sans-serif';
+  face(g, '500 ' + size + 'px system-ui, sans-serif');
   g.textAlign = align || 'center';
   g.textBaseline = 'middle';
   g.fillStyle = color || c.colors.fg;
@@ -266,6 +342,37 @@ function rackAngle(period, beat, start = 0) {
   return beat < start ? 0 : Math.sin(TAU * (beat - start) / period);
 }
 
+// Where pendulum i's seal stands now: its roll (`own`), how far its disc is in (`k`) and whether
+// its ring is on. A pick is { on, at, roll, from, ring }: picked (on) or let go at `at`, the
+// roll-th pick, from the coverage and the ring it stood at then. The disc climbs from there to
+// whole (or goes back down from there) on the stair of the pick's own roll, and the ring is cut to
+// the new state at that roll's moment -- one way each time, so a pick caught part way by the next
+// turns from where it stands rather than jumping.
+function sealOf(s, i, rite, reduced) {
+  const pick = s.picks[i];
+  if (!pick) return { own: rite, k: 0, ring: false };
+  const own = rolled(rite, 0x100 + i * 64 + (pick.roll % 64));
+  const went = came(s, pick.at, 0.9, reduced);
+  const step = own.stair(went);
+  return {
+    own,
+    k: pick.on ? pick.from + (1 - pick.from) * step : pick.from * (1 - step),
+    ring: own.flicker(went) ? pick.on : pick.ring
+  };
+}
+
+// Picks pendulum i (on) or lets it go now, from wherever its seal stands.
+function pickUp(s, i, on, rite, reduced) {
+  const was = sealOf(s, i, rite, reduced);
+  s.picks[i] = { on, at: s.t, roll: s.rolls++, from: was.k, ring: was.ring };
+}
+
+// The rack's clock as it is drawn -- the beat read through the escapement -- which is all of it
+// that changes the picture between two frames.
+function rackKey(rite, s) {
+  return s.beat < 0 ? -1 : escaped(rite, s.beat);
+}
+
 function drawRack(g, w, h, c, plan, s, variant) {
   const v = variant || PLAIN;
   const col = c.colors;
@@ -275,10 +382,10 @@ function drawRack(g, w, h, c, plan, s, variant) {
   const m = Math.min(w, h);
   const size = Math.max(9, Math.min(17, Math.round(m * 0.045)));
   const small = Math.max(8, Math.round(size * 0.85));
-  hallBackground(g, w, h, c, v, s.t);
+  hallBackground(g, w, h, c, v);
   if (s.doneAt != null && s.doneAt >= 0) daybreak(g, rite, c, w, h, came(s, s.doneAt, 2.4, reduced), 0.1);
   // The rack's clock, read through the escapement: beats in the ratchet's clicks.
-  const beat = s.beat < 0 ? -1 : escaped(rite, s.beat);
+  const beat = rackKey(rite, s);
   const barY = h * 0.1;
   const Lmax = h * 0.52 * Math.min(1.08, Math.max(0.88, v.scale));
   const amp = 0.42;
@@ -299,29 +406,15 @@ function drawRack(g, w, h, c, plan, s, variant) {
     g.setLineDash([]);
     const start = plan.starts ? plan.starts[i] : 0;
     const theta = beat < 0 ? 0 : amp * rackAngle(p, beat, start);
-    // A picked pendulum is sealed: a disc develops behind it through the matte by its area, on
-    // the roll of that pick, and its ring blinks on; unpicked, it dissolves back down.
-    const pick = s.picks ? s.picks[i] : null;
-    if (pick) {
-      const own = rite.at(0x100 + i * 64 + (pick.roll % 64));
-      const went = own.stair(came(s, pick.at, 0.9, reduced));
-      const k = pick.on ? went : 1 - went;
-      if (k > 0) {
-        const hx = pivots[i] + Math.sin(theta) * length;
-        const hy = barY + Math.cos(theta) * length;
-        const halo = r * 3.1;
-        g.fillStyle = c.alpha(col.accent2, 0.28);
-        develop(g, own, hx - halo, hy - halo, halo * 2, halo * 2, k,
-          (px, py) => (px - hx) * (px - hx) + (py - hy) * (py - hy) <= halo * halo, Math.max(rite.cell, Math.ceil(halo / 7)));
-      }
-    }
+    // A picked pendulum is sealed: a disc comes in behind it by its area, behind the piece's edge
+    // in the stair's treads of that pick's own roll, and rests in two shades; its ring is cut on
+    // at that roll's moment. Let go, the disc goes back out the way it came and the ring is cut
+    // off at its moment.
+    const seal = sealOf(s, i, rite, reduced);
+    disc(g, seal.own, pivots[i] + Math.sin(theta) * length, barY + Math.cos(theta) * length, r * 3.1,
+      seal.k, c.alpha(col.accent2, 0.28));
     const at = bob(g, c, pivots[i], barY, length, theta, r, tone);
-    // The ring blinks on with the pick; unpicked, it holds a moment, refuses once or twice in the
-    // flicker's dropouts, and is gone -- never a cut.
-    const ringOn = pick && (pick.on
-      ? rite.at(0x100 + i * 64 + (pick.roll % 64)).flicker(came(s, pick.at, 0.9, reduced))
-      : !rite.at(0x100 + i * 64 + (pick.roll % 64)).flicker(came(s, pick.at, 0.9, reduced)));
-    if (ringOn) {
+    if (seal.ring) {
       g.strokeStyle = col.accent2;
       g.lineWidth = 1.5;
       g.setLineDash([3, 3]);
@@ -332,8 +425,8 @@ function drawRack(g, w, h, c, plan, s, variant) {
     }
     text(g, c, p + ' beats', pivots[i], barY + length + r * 4.2, small, c.alpha(col.fg, 0.9));
     text(g, c, 'starts at ' + start, pivots[i], barY + length + r * 4.2 + small * 1.4, small, col.accent2);
-    // A hint's answer blinks on under the bar.
-    if (s.shown[i] && rite.at(0x200 + i).flicker(came(s, s.shownAt ? s.shownAt[i] : -1, 0.8, reduced))) {
+    // A hint's answer is cut on under the bar.
+    if (s.shown[i] && rolled(rite, 0x200 + i).flicker(came(s, s.shownAt ? s.shownAt[i] : -1, 0.8, reduced))) {
       text(g, c, s.shown[i], pivots[i], barY + small * 1.3, small, col.accent);
     }
   });
@@ -372,10 +465,22 @@ function drawRack(g, w, h, c, plan, s, variant) {
   } else text(g, c, plan.starts && plan.starts.some((s) => s > 0) ? 'different start beats; all starts head right' : 'all through the centre at beat 0, heading right', w / 2, h * 0.805, small, c.alpha(col.fg, 0.75), 'center', w * 0.9);
 }
 
+// The live state of a rack: beat is the clock (-1 before any beat is shown) and to the beat it is
+// counting out to (-1 for none); picks holds { on, at, roll, from, ring } for each pendulum whose
+// pick has changed, and rolls counts them; shown and shownAt are the hints' words and when each
+// was given; doneAt is when the piece was solved; drawn, drawnKey and drawnAt are the size, the
+// click and the moment of the picture on the canvas (settled).
 function rackBlank() {
-  return { beat: -1, picked: [], shown: {}, shownAt: {}, picks: {}, rolls: 0, to: -1, loop: false, t: 0, doneAt: -1 };
+  return { beat: -1, picked: [], shown: {}, shownAt: {}, picks: {}, rolls: 0, to: -1, t: 0, doneAt: -1,
+    drawn: null, drawnKey: null, drawnAt: -1 };
 }
 
+// The latest change on the rack that is still read against the clock: a pick, a hint, the solve.
+function rackLast(s) {
+  return latest([s.doneAt, ...Object.values(s.picks).map((pick) => pick.at), ...Object.values(s.shownAt)]);
+}
+
+// The rack as its card shows it: still, before any beat is shown, as its piece opens.
 function rackPreview(g, w, h, env, plan) {
   const v = env.variant || PLAIN;
   const s = rackBlank();
@@ -389,8 +494,12 @@ function rackPiece(env, plan) {
   const meet = rackMeet(plan);
   const through = throughAt(plan.periods, plan.at, starts);
   const s = rackBlank();
-  const pace = 0.35;
-  const draw = (c) => drawRack(c.g, c.w, c.h, c, plan, s, env.variant || PLAIN);
+  const draw = (c) => {
+    drawRack(c.g, c.w, c.h, c, plan, s, env.variant || PLAIN);
+    s.drawn = sizeOf(c);
+    s.drawnKey = rackKey(riteOf(c), s);
+    s.drawnAt = s.t;
+  };
   const name = (i) => 'the ' + plan.periods[i] + '-beat pendulum';
   return {
     title: rackTitle(plan),
@@ -441,10 +550,11 @@ function rackPiece(env, plan) {
       }
       if (id === 'which' && Array.isArray(value)) {
         const next = value.map(Number).filter((i) => Number.isInteger(i) && i >= 0 && i < n);
-        // Every pendulum whose pick changed seals or unseals itself afresh, on a roll of its own.
+        // Every pendulum whose pick changed seals or unseals itself afresh, on a roll of its own,
+        // from wherever its seal stands.
         for (let i = 0; i < n; i++) {
           const on = next.includes(i);
-          if (on !== s.picked.includes(i)) s.picks[i] = { on, at: s.t, roll: s.rolls++ };
+          if (on !== s.picked.includes(i)) pickUp(s, i, on, riteOf(c), !!c.reduced);
         }
         s.picked = next;
         c.status(s.picked.length ? 'at beat ' + plan.at + ': ' + s.picked.map(name).join(', ') : 'none picked for beat ' + plan.at);
@@ -495,23 +605,27 @@ function rackPiece(env, plan) {
         c.status('tap a pendulum to pick it for beat ' + plan.at + ', or the ruler to show a beat');
         return;
       }
+      // ctx.set writes the knob and does not come back through apply(), so the tap seals or unseals
+      // the pendulum itself and keeps the picks it draws in step with the knob.
       const on = !s.picked.includes(hit);
-      const next = on ? s.picked.concat([hit]).sort((a, b) => a - b) : s.picked.filter((i) => i !== hit);
-      c.set('which', next);
+      pickUp(s, hit, on, riteOf(c), !!c.reduced);
+      s.picked = on ? s.picked.concat([hit]).sort((a, b) => a - b) : s.picked.filter((i) => i !== hit);
+      c.set('which', s.picked.slice());
       c.status(name(hit) + (on ? ' picked' : ' let go') + ' for beat ' + plan.at + (s.picked.length ? ': ' + s.picked.map(name).join(', ') : ''));
       draw(c);
     },
+    // The rack counts out to the beat asked for -- after a check the beat named, after the solve
+    // the meeting -- once, from beat 0, and rests there: the whole rack is never wound back to
+    // play again. Less motion is shown the beat at once. A frame is drawn only when the
+    // escapement has clicked or a change is still coming its way (settled); between two clicks of
+    // a count-out nothing is drawn, but the rack is not at rest until it has counted out to its
+    // beat and the picture on the canvas is the finished one (false).
     frame(t, dt, c) {
       s.t += Math.max(0, dt);
       if (c.done && s.doneAt < 0) s.doneAt = s.t;
-      if (s.to >= 0) {
-        if (c.reduced) s.beat = s.to;
-        else {
-          s.beat = Math.min(s.to, s.beat + Math.max(0, dt) / pace);
-          if (c.done && s.beat >= s.to) s.beat = 0;
-        }
-      }
-      draw(c);
+      if (s.to >= 0) s.beat = c.reduced ? s.to : Math.min(s.to, s.beat + Math.max(0, dt) / BEAT);
+      if (!settled(s, c, rackKey(riteOf(c), s), rackLast(s))) draw(c);
+      return (s.to >= 0 && s.beat < s.to) || !settled(s, c, rackKey(riteOf(c), s), rackLast(s));
     },
     end(c) {
       s.to = meet;
@@ -594,7 +708,7 @@ function replayTime(rite, t) {
 // The stiffness as drawn: counting from where it stood to where the slider has it, in treads.
 function stiffnessShown(s, rite, reduced) {
   if (s.kFrom == null || s.kAt == null || s.kAt < 0) return s.k;
-  return Math.round(s.kFrom + (s.k - s.kFrom) * rite.at(0x400 + (s.sets || 0)).stair(came(s, s.kAt, 0.8, reduced)));
+  return Math.round(s.kFrom + (s.k - s.kFrom) * rolled(rite, 0x400 + (s.sets || 0)).stair(came(s, s.kAt, 0.8, reduced)));
 }
 
 function spring(g, c, a, b, radius, k, v) {
@@ -653,9 +767,9 @@ function springRuler(g, w, h, c, plan, s, v, size, now) {
   g.stroke();
   g.setLineDash([]);
   text(g, c, 'cross here', tx, top - size * 0.9, Math.max(8, size * 0.85), col.accent2);
-  // Past runs: a mark at the crossing each stiffness made, blinking on when it was logged.
+  // Past runs: a mark at the crossing each stiffness made, cut on when it was logged.
   for (const run of s.runs) {
-    if (!rite.at(0x300 + run.k).flicker(came(s, run.at == null ? -1 : run.at, 0.9, reduced))) continue;
+    if (!rolled(rite, 0x300 + run.k).flicker(came(s, run.at == null ? -1 : run.at, 0.9, reduced))) continue;
     const x = xOf(Math.min(span, run.tau));
     g.fillStyle = c.alpha(col.fg, 0.85);
     g.beginPath();
@@ -669,7 +783,10 @@ function springRuler(g, w, h, c, plan, s, v, size, now) {
   if (s.replay) {
     const f = Math.min(span, now);
     const samples = Math.max(40, Math.round(90 * v.density));
-    for (const [key, color, dashed] of [['firstReach', col.accent2, false], ['secondReach', col.accent, true]]) {
+    // Each swing's reach, as springMotion has it -- the first |cos|, the second |sin| of half the
+    // beat between the two modes -- worked out here sample by sample without an object for each.
+    const half = (Math.sqrt(W1 * W1 + 2 * Math.max(0, s.replay.k) * C) - W1) / 2;
+    for (const [wave, color, dashed] of [[Math.cos, col.accent2, false], [Math.sin, col.accent, true]]) {
       g.strokeStyle = color;
       g.lineWidth = dashed ? 1.5 : 2.2;
       g.setLineDash(dashed ? [4, 3] : []);
@@ -677,7 +794,7 @@ function springRuler(g, w, h, c, plan, s, v, size, now) {
       const count = Math.ceil(samples * f / span);
       for (let i = 0; i <= count; i++) {
         const time = Math.min(f, i / samples * span);
-        const reach = springMotion(s.replay.k, time)[key];
+        const reach = Math.abs(wave(half * time));
         if (i) g.lineTo(xOf(time), bottom - (bottom - top) * reach);
         else g.moveTo(xOf(time), bottom - (bottom - top) * reach);
       }
@@ -698,7 +815,7 @@ function drawSpring(g, w, h, c, plan, s, variant) {
   const length = Math.min(h * 0.4, w * 0.4) * Math.min(1.08, Math.max(0.88, v.scale));
   const amplitude = 0.2;
   const radius = Math.max(3, m * 0.024 * v.scale);
-  hallBackground(g, w, h, c, v, s.t);
+  hallBackground(g, w, h, c, v);
   if (s.doneAt != null && s.doneAt >= 0) daybreak(g, rite, c, w, h, came(s, s.doneAt, 2.4, reduced), 0.1);
   bar(g, c, w, barY, m);
   // The replay's clock, read through the escapement: the pair is handed its swing in clicks.
@@ -728,10 +845,29 @@ function drawSpring(g, w, h, c, plan, s, variant) {
   springRuler(g, w, h, c, plan, s, v, size, now);
 }
 
+// The live state of a pair: k is the spring the slider has, counted to from kFrom since kAt (the
+// sets-th move); runs are the crossings logged on the ruler (probes the ones the hall tried), each
+// with when it was logged; replay is the run being played, { k, t } with t its seconds from the
+// let-go; doneAt is when the piece was solved; drawn, drawnKey and drawnAt are the size, the click
+// and the moment of the picture on the canvas (settled).
 function springBlank(plan) {
-  return { k: plan.open, kFrom: plan.open, kAt: -1, sets: 0, runs: [], probes: [], replay: null, loop: false, t: 0, doneAt: -1 };
+  return { k: plan.open, kFrom: plan.open, kAt: -1, sets: 0, runs: [], probes: [], replay: null, t: 0, doneAt: -1,
+    drawn: null, drawnKey: null, drawnAt: -1 };
 }
 
+// The pair's clock as it is drawn -- the run being replayed, at its time read through the
+// escapement -- which is all of it that changes the picture between two frames.
+function springKey(rite, s) {
+  return s.replay ? s.replay.k + '@' + replayTime(rite, s.replay.t) : '';
+}
+
+// The latest change on the pair that is still read against the clock: a move of the slider, a
+// run logged, the solve.
+function springLast(s) {
+  return latest([s.doneAt, s.kAt, ...s.runs.map((run) => run.at)]);
+}
+
+// The pair as its card shows it: the first pendulum held to the side, as its piece opens.
 function springPreview(g, w, h, env, plan) {
   const v = env.variant || PLAIN;
   const s = springBlank(plan);
@@ -748,7 +884,12 @@ function springPiece(env, plan) {
   const then = plan.ask === 'stiffer' ? 'sooner' : 'later';
   const s = springBlank(plan);
   const span = (plan.breaths + 1.5) * plan.breath;
-  const draw = (c) => drawSpring(c.g, c.w, c.h, c, plan, s, env.variant || PLAIN);
+  const draw = (c) => {
+    drawSpring(c.g, c.w, c.h, c, plan, s, env.variant || PLAIN);
+    s.drawn = sizeOf(c);
+    s.drawnKey = springKey(riteOf(c), s);
+    s.drawnAt = s.t;
+  };
   const breathsOf = (tau) => (tau / plan.breath).toFixed(1);
   return {
     title: springTitle(plan),
@@ -770,7 +911,6 @@ function springPiece(env, plan) {
       const thenRight = c.value('then') === then;
       if (!s.runs.some((run) => run.k === k)) s.runs.push({ k, tau, at: s.t });
       s.replay = { k, t: 0 };
-      s.loop = false;
       const took = 'crosses in ' + breathsOf(tau) + ' breaths';
       if (onMark && thenRight) return { solved: true, say: took + ': on the mark, the swing handed whole' };
       const parts = [onMark ? took + ': on the mark' : took + (tau < sol.target ? ', too soon' : ', too late')];
@@ -807,6 +947,9 @@ function springPiece(env, plan) {
             s.k = next;
             s.kAt = s.t;
             s.sets += 1;
+            // The run on show was the old spring's. Before the solve the pair is put back at its
+            // let-go, to be let go by the next check; after it, the new spring's run plays at once,
+            // so another stiffness is another experiment.
             s.replay = c.done ? { k: next, t: 0 } : null;
           }
         }
@@ -816,20 +959,21 @@ function springPiece(env, plan) {
       if (id === 'then') c.status('a ' + plan.ask + ' spring, you say, crosses ' + (value === 'same' ? 'at the same time' : value));
       draw(c);
     },
+    // A run plays out once, from the let-go to the end of the ruler, and rests on its last tooth --
+    // the solved run too, played once more from the let-go, and after the solve the run of each
+    // new stiffness set: the whole pair is never wound back to play again of itself. Less motion is
+    // shown the whole run at once. A frame is drawn only when the
+    // escapement has clicked or a change is still coming its way (settled); the pair is at rest
+    // (false) once its run has played to the end of the ruler and the picture on the canvas is
+    // the finished one.
     frame(t, dt, c) {
       s.t += Math.max(0, dt);
       if (c.done && s.doneAt < 0) s.doneAt = s.t;
-      if (s.replay) {
-        s.replay.t += Math.max(0, dt);
-        if (s.replay.t > span) {
-          if (s.loop) s.replay.t = 0;
-          else s.replay.t = span;
-        }
-      }
-      draw(c);
+      if (s.replay) s.replay.t = c.reduced ? span : Math.min(span, s.replay.t + Math.max(0, dt));
+      if (!settled(s, c, springKey(riteOf(c), s), springLast(s))) draw(c);
+      return (s.replay && s.replay.t < span) || !settled(s, c, springKey(riteOf(c), s), springLast(s));
     },
     end(c) {
-      s.loop = true;
       s.replay = { k: s.replay ? s.replay.k : sol.value, t: 0 };
       if (s.doneAt < 0) s.doneAt = s.t;
       c.status('the swing crosses in ' + WORDS[plan.breaths] + ' breaths and comes back; the pair keeps trading it');
@@ -855,33 +999,64 @@ function deal(env) {
   return got;
 }
 
+// How long a card moves, in seconds since its first frame on screen. A card keeps the piece's own
+// pace, and its one count-out or its one swing is over before this -- the slowest pendulum's swing
+// is at most six beats of BEAT seconds, the pair's one swing OWN seconds -- and from then on
+// nothing on it moves, so it says so and the feed lets it go.
+const CARD_RUN = 2.2;
+
+// A card at `t` seconds since its first frame on screen, playing once at the piece's pace and
+// resting. Still (t = 0, and the picture paint leaves), it is the picture its piece opens on: the
+// rack before any beat is shown, the pair with the first pendulum held to the side. Moving, the
+// rack counts out from beat 0 through one swing of its slowest pendulum -- enough for every
+// pendulum on it to be seen keeping its own period -- and stands there; the pair is let go and
+// plays one swing of its own (OWN seconds of the run its spring is set for), and stands there.
+// `key` is its clock as the escapement reads it (-1 for the still picture), which is all that
+// changes the picture, so two moments with one key are one drawing.
+function cardAt(env, d, t) {
+  const rite = riteOf(env);
+  const plan = d.plan;
+  if (d.spring) {
+    const s = springBlank(plan);
+    if (!(t > 0)) return { s, key: -1 };
+    s.replay = { k: plan.open, t: Math.min(OWN, t) };
+    return { s, key: replayTime(rite, s.replay.t) };
+  }
+  const s = rackBlank();
+  if (!(t > 0)) return { s, key: -1 };
+  s.beat = Math.min(Math.max(...plan.periods), t / BEAT);
+  return { s, key: escaped(rite, s.beat) };
+}
+
+function drawCard(g, w, h, env, d, at) {
+  const v = env.variant || PLAIN;
+  if (d.spring) drawSpring(g, w, h, env, d.plan, at.s, v);
+  else drawRack(g, w, h, env, d.plan, at.s, v);
+  d.drawn = { g, w, h, key: at.key };
+}
+
 export default {
   id: 'pendulum-hall',
   needsSky: false,
   paint(g, w, h, env) {
     const d = deal(env);
-    if (d.spring) springPreview(g, w, h, env, d.plan);
-    else rackPreview(g, w, h, env, d.plan);
+    drawCard(g, w, h, env, d, cardAt(env, d, 0));
   },
-  // A card in motion: the same clocks the piece keeps, read off t through the escapement, so the
-  // card ticks the way the piece will. At t = 0 it is the still picture paint left behind.
+  // A card in motion: the same clocks the piece keeps, at the piece's pace and read off t through
+  // the escapement, so the card ticks the way the piece will -- once, and then it rests (cardAt).
+  // At t = 0 it is the still picture paint left behind. Between two clicks of the escapement
+  // nothing on the card has changed and its canvas already holds the picture, so the canvas last
+  // drawn on is drawn again only when the clock has clicked on: the same picture for the same t,
+  // and nothing drawn between clicks or once the run has come to rest. Once its run is over, and
+  // from the first frame for a visitor who asked for less motion, the clocks stand still and the
+  // card says so.
   animate(g, w, h, env, t) {
-    if (env.reduced) return false;
-    const v = env.variant || PLAIN;
+    if (env.reduced || t >= CARD_RUN) return false;
     const d = deal(env);
-    if (d.spring) {
-      const plan = d.plan;
-      const s = springBlank(plan);
-      s.t = t;
-      if (t > 0) s.replay = { k: plan.open, t: (t * 0.6) % ((plan.breaths + 1.5) * plan.breath) };
-      drawSpring(g, w, h, env, plan, s, v);
-      return true;
-    }
-    const plan = d.plan;
-    const s = rackBlank();
-    s.t = t;
-    if (t > 0) s.beat = (t * 1.5) % 60;
-    drawRack(g, w, h, env, plan, s, v);
+    const at = cardAt(env, d, t);
+    const last = d.drawn;
+    if (last && last.g === g && last.w === w && last.h === h && last.key === at.key) return true;
+    drawCard(g, w, h, env, d, at);
     return true;
   },
   spark(env) {

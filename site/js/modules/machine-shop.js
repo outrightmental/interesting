@@ -65,6 +65,15 @@ function runRows(start, rule, count) {
   return rows;
 }
 
+// A plan's five rows, run once and kept with the plan: a plan never changes, so a frame reads its
+// rows rather than running the rule again.
+const ran = new WeakMap();
+function rowsOf(plan) {
+  let rows = ran.get(plan);
+  if (!rows) ran.set(plan, (rows = runRows(plan.start, plan.rule, 4)));
+  return rows;
+}
+
 function randomRow(env, n) {
   const row = [];
   for (let i = 0; i < n; i++) row.push(env.chance(0.5) ? 1 : 0);
@@ -87,22 +96,68 @@ function clamp(v, lo, hi) {
 
 /* ---- the rite: how the bench moves ---------------------------------------------------------- */
 
-/* Nothing on the bench fades or cuts bare (README: "Motion axiom"). A cell a visitor lights
-   develops by its AREA through the piece's matte, tile by tile in its own pattern, and goes dark
-   the same way back down the stair; its outline steps between its two tones on the stair; a mark
-   the bench shows (a hinted cell, a marked difference, the apex) blinks on with rite.flicker and
-   holds; the solved table fills in glyph by glyph, each on a roll of its own, and the solved rows
-   take on a texture that develops through the matte. Every cell, mark and glyph moves on a roll of
-   its own (rite.at), and a cell pressed twice moves differently the second time, so no two step
-   together. Every change is read against the piece's own clock, recorded in frame(t), and the
-   harnesses hand a rite like the stage does; a piece with none stands still. */
+/* Nothing on the bench fades, glides or moves along a formula (README: "Motion axiom"). The
+   piece's rite (env.rite; js/variant.js) is one clean edge -- a slice at an angle, or a curve
+   grown from a corner or the middle of a side -- which is the piece's signature, and the few
+   treads every change climbs, always forward. Each thing on the bench moves for a reason:
+
+     a cell lit        the visitor's: it is cut in as its stair climbs and rests in two shades of
+                       the light's colour split by its edge. A cell lit by a press on the bench is
+                       cut by a curve grown from the point it was pressed at; one lit from the
+                       knobs, by the piece's own edge. Put out, it goes back down the same stair,
+                       the edge going back the way it came. Pressed again on its way, it goes on
+                       from where it stands, with the edge it has. Its outline steps between its
+                       two tones on that stair.
+     a mark shown      a hinted cell's dot, a marked difference's outline, the apex: cut on at its
+                       moment (rite.flicker: nothing before it, the whole mark after) and held. A
+                       hinted dot then grows to its size on its stair.
+     the lens moved    it stays on the cell it was on until its moment, and is then cut over to
+                       the cell last tapped in one cut: never gone in between. On the changed
+                       cell's two tapes, the outline of the place inspected moves the same way.
+     a surface set     a marked difference, the flipped column once it is found, the solved rows:
+                       cut in behind the edge and resting in two shades, as a lit cell does.
+     the solved table  read out pattern by pattern, 111 down to 000: each "?" gives way to its
+                       answer at its own moment, a lit answer cut in behind the edge.
+
+   Every cell and mark steps on a roll of its own (rite.at, the same edge with its own treads), and
+   a cell pressed twice steps differently the second time, so no two step together. Every change
+   is read against the piece's own clock, s.t, which frame() moves on by each frame's dt; a
+   visitor who asked for less motion, and whatever stood there from the start, sees every end
+   state at once. A bench at rest does not move and is not drawn again: frame() draws only while
+   something is on its way, or when the canvas has been sized again, and once nothing is it says
+   the bench is at rest (it returns false) and the stage asks for no more frames until the visitor
+   acts, the scene is sized again or it comes back into view. That is why the clock is the piece's
+   own and not the stage's: the stage's runs on through a rest with no frame to read it, and a
+   change made after one, timed by it, would be found already over on the first frame back. */
+
+// The rite of a piece handed none: every change already made, and a surface cut by a plain
+// upright slice from its left side.
 const STILL = {
-  ease: () => 1, stair: () => 1, ratchet: () => 1, flicker: () => 1, matte: () => true,
-  series: (p, n) => n, turn: () => 1, treads: 1, kind: 'none', cell: 4, at: () => STILL
+  stair: () => 1, flicker: () => 1, treads: 1, kind: 'slice', angle: 90,
+  region(g, x, y, w, h, k) {
+    if (k > 0) g.rect(x, y, w * Math.min(1, k), h);
+  },
+  paint(g, x, y, w, h, k, style) {
+    if (k <= 0) return;
+    if (style != null) g.fillStyle = style;
+    g.fillRect(x, y, w * Math.min(1, k), h);
+  },
+  at: () => STILL
 };
 
 function riteOf(env) {
   return env && env.rite ? env.rite : STILL;
+}
+
+// One roll per thing the bench moves (rite.at, keyed), made once and kept: rolling it is a new
+// stream and a dozen closures, which a frame has no need to make again.
+const rolls = new WeakMap();
+function roll(rite, key) {
+  let kept = rolls.get(rite);
+  if (!kept) rolls.set(rite, (kept = new Map()));
+  let got = kept.get(key);
+  if (!got) kept.set(key, (got = rite.at(key)));
+  return got;
 }
 
 // How far through its rite a thing is, `now` seconds in, that began at `since`: 1 when it has
@@ -112,53 +167,123 @@ function came(now, since, span, reduced) {
   return Math.max(0, Math.min(1, (now - since) / span));
 }
 
-// The cells of a box that the matte lets through at coverage k, filled in the current fillStyle:
-// how a surface changes by its area. Cells are rite.cell px, coarser over a wide box so a frame
-// stays cheap, on a grid fixed to the canvas so the pattern holds still while it grows. At k >= 1
-// every cell is let through.
-function develop(g, rite, x0, y0, bw, bh, k, size) {
-  if (k <= 0) return;
-  const cell = size || Math.max(rite.cell, Math.ceil(Math.max(bw, bh) / 28));
-  const cx0 = Math.floor(x0 / cell);
-  const cy0 = Math.floor(y0 / cell);
-  const cx1 = Math.ceil((x0 + bw) / cell);
-  const cy1 = Math.ceil((y0 + bh) / cell);
-  for (let cy = cy0; cy < cy1; cy++) {
-    for (let cx = cx0; cx < cx1; cx++) {
-      if (k < 1 && !rite.matte(cx, cy, k)) continue;
-      const px = Math.max(x0, cx * cell);
-      const py = Math.max(y0, cy * cell);
-      g.fillRect(px, py, Math.min(cell, x0 + bw - px), Math.min(cell, y0 + bh - py));
-    }
+// How much lighter the far shade of a set surface is: the same fraction the site's own set
+// controls rest at (cut.shades in _sass/_cut.scss).
+const FAR = 0.45;
+
+// A surface `k` of the way to being set, in `color` at `a`, behind `edge` (the piece's rite, or a
+// curve round a press): the edge's first half in the near shade and the band beyond it in the far
+// one, each filled once and the two never over one another. While it comes or goes one edge moves
+// across it; at rest it is two shades of one colour split by that edge through the middle of the
+// box. Two fills, never cells.
+function cover(g, env, edge, x, y, w, h, k, color, a) {
+  const near = Math.min(k, 0.5);
+  if (near <= 0) return;
+  const curve = edge.kind === 'curve';
+  if (curve) {
+    g.save();
+    g.beginPath();
+    g.rect(x, y, w, h);
+    g.clip();
   }
+  if (k > near) {
+    g.beginPath();
+    edge.region(g, x, y, w, h, k);
+    edge.region(g, x, y, w, h, near);
+    g.fillStyle = env.alpha(color, a * FAR);
+    g.fill('evenodd');
+  }
+  g.beginPath();
+  edge.region(g, x, y, w, h, near);
+  g.fillStyle = env.alpha(color, a);
+  g.fill();
+  if (curve) g.restore();
+}
+
+// The edge of a cell lit by a press on the bench: a curve grown from the point it was pressed at
+// (u, v, in fractions of the cell) out to the cell's farthest corner -- the press is the reason.
+function pressedEdge(u, v) {
+  return {
+    kind: 'curve',
+    region(g, x, y, w, h, k) {
+      const c = clamp(k, 0, 1);
+      if (c <= 0) return;
+      if (c >= 1) {
+        g.rect(x, y, w, h);
+        return;
+      }
+      const ox = x + u * w;
+      const oy = y + v * h;
+      const far = Math.hypot(Math.max(u, 1 - u) * w, Math.max(v, 1 - v) * h);
+      g.moveTo(ox + far * c, oy);
+      g.arc(ox, oy, far * c, 0, Math.PI * 2);
+    }
+  };
+}
+
+// A thing replaced by one cut -- the lens moving to another cell -- at `now`: the new from its
+// moment on, and until then whatever stood there when it was told, never nothing in between.
+function showing(r, now, span, reduced) {
+  if (!r) return null;
+  return r.roll.flicker(came(now, r.at, span, reduced)) ? r.now : r.was;
+}
+
+// A lens moved to `now`, a place on the bench, on a tap: what stood there stays until this tap's
+// moment and is then cut over, on a roll of the tap's own. The place it is already going to changes
+// nothing; nor does the place it still shows when a tap away has not reached its moment yet -- the
+// move away is called off and the lens stays where it is, at rest. A bench has one lens, so its
+// movement keeps an end of its own (`lensUntil`) apart from the bench's: a move called off is
+// then over at once, and the bench is not drawn on for a cut that will never come.
+function moved(r, now, s, c) {
+  const same = (p) => p && p.r === now.r && p.u === now.u;
+  if (r && same(r.now)) return r;
+  const was = showing(r, s.t, SPAN, c.reduced);
+  if (same(was)) {
+    s.lensUntil = -Infinity;
+    return { was, now, at: null, roll: STILL };
+  }
+  s.taps += 1;
+  s.lensUntil = c.reduced ? -Infinity : s.t + SPAN;
+  return { was, now, at: s.t, roll: riteOf(c).at(0x5c0 + s.taps) };
+}
+
+// Whether frame() has anything to draw: a movement that ends after the last picture drawn (the
+// bench's or the lens's), or a canvas sized again since (which clears it). `seen` records the picture just drawn, so once a
+// frame has drawn, due() is also whether the bench is still on its way (true) or at rest.
+function due(s, c) {
+  const z = s.drawn;
+  return !z || z.g !== c.g || z.w !== c.w || z.h !== c.h || z.dpr !== c.dpr || z.t < s.until || z.t < s.lensUntil;
+}
+function seen(s, c) {
+  s.drawn = { g: c.g, w: c.w, h: c.h, dpr: c.dpr, t: s.t };
+}
+// A movement started now, `span` seconds long (`late` seconds from now): the bench is drawn until
+// it ends. Less motion shows every end state at once, so nothing is kept in flight for it.
+function busy(s, c, span, late) {
+  if (!c.reduced) s.until = Math.max(s.until, s.t + (late || 0) + span);
 }
 
 const SPAN = 0.7;     // seconds a cell takes to light or go dark, a mark to arrive
-const REVEAL = 1.8;   // seconds the solved bench takes to develop
+const REVEAL = 1.8;   // seconds the solved bench takes to be cut over
 const STAGGER = 0.14; // seconds between one row's marks and the next when the bench marks them all
+const TICK = 0.45;    // seconds the card's lens reads one cell before it clicks on to the next
 
 /* ---- shared drawing ------------------------------------------------------------------------- */
 
-function background(g, w, h, env) {
-  const ground = g.createLinearGradient(0, 0, w, h);
+// The bench's ground, darkening across it from the side the configuration's turn names (the top
+// left corner on a plain card): one quiet choice, drawn once a frame, with nothing scattered on it.
+function background(g, w, h, env, v) {
+  const a = ((v && v.turn) || 0) * Math.PI * 2;
+  const dx = (w / 2) * Math.cos(a) - (h / 2) * Math.sin(a);
+  const dy = (w / 2) * Math.sin(a) + (h / 2) * Math.cos(a);
+  const ground = g.createLinearGradient(w / 2 - dx, h / 2 - dy, w / 2 + dx, h / 2 + dy);
   ground.addColorStop(0, env.colors.bg2);
   ground.addColorStop(1, env.colors.bg);
   g.fillStyle = ground;
   g.fillRect(0, 0, w, h);
 }
 
-// The bench's faint grain: a few marks whose phase is the configuration's turn and whose number
-// is its density.
-function grain(g, w, h, env, v) {
-  g.fillStyle = env.alpha(env.colors.accent, 0.12);
-  for (let i = 0, count = Math.max(6, Math.round(22 * v.density)); i < count; i++) {
-    const x = ((i * 0.6180339 + v.turn * 0.37) % 1) * w;
-    const y = ((i * 0.7548777 + v.turn * 0.11) % 1) * h;
-    g.fillRect(x, y, 1, 1);
-  }
-}
-
-// One cell of a tape. `inset` leaves the grain of the bench between cells.
+// One cell of a tape. `inset` leaves a line of the bench between cells.
 function cell(g, env, x, y, size, lit, inset, tone) {
   const c = env.colors;
   g.fillStyle = lit ? (tone || env.alpha(c.accent, 0.92)) : env.alpha(c.muted, 0.1);
@@ -167,16 +292,17 @@ function cell(g, env, x, y, size, lit, inset, tone) {
 
 // The eight patterns of three and what the rule makes of each, or a question mark where the rule
 // is still to be read. Patterns run 111 down to 000, as the rule's binary digits do. `reveal`, if
-// given, is how far the table has got filling itself in (0..1): each glyph's answer blinks on in
-// its turn, on a roll of its own, and a lit answer develops through the matte -- the question
-// mark stands until that glyph's moment.
-function glyphTable(g, env, x0, y, span, rule, v, reveal, notebook) {
+// given, is how far the table has got filling itself in (0..1): it is read out pattern by
+// pattern, left to right, each answer cut on in place of its question mark at a moment of its own
+// roll, and a lit answer cut in behind the piece's edge on that roll's stair. The table is a
+// legend, so an answer, once in, is as plain as the cells it stands for: one shade.
+function ruleTable(g, env, x0, y, span, rule, v, reveal, notebook) {
   const c = env.colors;
   const rite = riteOf(env);
   const each = span / 8;
   const mini = Math.min(each / 4.2, span * 0.03);
   const inset = mini * clamp(0.1 / v.density, 0.05, 0.16);
-  g.font = '500 ' + Math.max(8, Math.round(mini * 1.3)) + 'px system-ui, sans-serif';
+  face(g, '500 ' + Math.max(8, Math.round(mini * 1.3)) + 'px system-ui, sans-serif');
   g.textAlign = 'center';
   g.textBaseline = 'middle';
   for (let i = 0; i < 8; i++) {
@@ -186,16 +312,16 @@ function glyphTable(g, env, x0, y, span, rule, v, reveal, notebook) {
       const bit = (hood >> (2 - b)) & 1;
       cell(g, env, cx + (b - 1.5) * mini, y, mini, bit, inset);
     }
-    // This glyph's own moment within the reveal: the eight come in a stagger, not at once.
+    // This pattern's own moment within the reveal: the eight are read out in turn, not at once.
     let p = 1;
     let own = rite;
     if (rule !== null && reveal != null && reveal < 1) {
-      own = rite.at(0x400 + i);
+      own = roll(rite, 0x400 + i);
       p = clamp((reveal - i * 0.07) / (1 - 7 * 0.07), 0, 1);
     }
     const noted = rule === null && notebook && notebook.notes[i] > 0;
     if (noted) {
-      own = rite.at(0x800 + i * 0x20 + (notebook.noteFlips[i] || 0));
+      own = roll(rite, 0x800 + i * 0x20 + (notebook.noteFlips[i] || 0));
       p = came(notebook.t, notebook.noteAt[i], SPAN, env.reduced);
     }
     if ((rule === null && !noted) || !own.flicker(p)) {
@@ -205,8 +331,7 @@ function glyphTable(g, env, x0, y, span, rule, v, reveal, notebook) {
       const out = noted ? notebook.notes[i] - 1 : (rule >> hood) & 1;
       cell(g, env, cx - mini / 2, y + mini * 1.5, mini, false, inset);
       if (out) {
-        g.fillStyle = env.alpha(c.accent2, 0.95);
-        develop(g, own, cx - mini / 2 + inset, y + mini * 1.5 + inset, mini - inset * 2, mini - inset * 2, own.stair(p), Math.max(1, Math.min(rite.cell, Math.ceil(mini / 5))));
+        own.paint(g, cx - mini / 2 + inset, y + mini * 1.5 + inset, mini - inset * 2, mini - inset * 2, own.stair(p), env.alpha(c.accent2, 0.95));
       } else {
         g.strokeStyle = env.alpha(c.muted, 0.5);
         g.lineWidth = 1;
@@ -216,8 +341,23 @@ function glyphTable(g, env, x0, y, span, rule, v, reveal, notebook) {
   }
 }
 
+// The face words are set in, set only when it is not the one the canvas already holds: setting a
+// canvas's font, even to the face it has, makes the browser bring the page's style up to date
+// first, and a redraw labels its rows half a dozen times over. A canvas spells a face back in its
+// own way (700 as 'bold', a size cut to a few places), so the canvas is asked whether it holds the
+// face as it spelled it when it was first set here: a face the rule table set, a canvas resized
+// back to its defaults, or one restored to a face it saved, is never mistaken. Only a few dozen
+// spellings are kept, so a feed of many cards does not gather them.
+const spelled = new Map();
+function face(g, font) {
+  if (g.font === (spelled.get(font) || font)) return;
+  g.font = font;
+  if (spelled.size >= 48) spelled.clear();
+  spelled.set(font, g.font);
+}
+
 function label(g, env, text, x, y, size, align, tone) {
-  g.font = '500 ' + size + 'px system-ui, sans-serif';
+  face(g, '500 ' + size + 'px system-ui, sans-serif');
   g.textAlign = align || 'left';
   g.textBaseline = 'middle';
   g.fillStyle = tone || env.colors.fg;
@@ -293,11 +433,10 @@ function drawNext(g, w, h, env, plan, s, variant) {
   const c = env.colors;
   const rite = riteOf(env);
   const geo = nextGeometry(w, h, plan.width, v);
-  const rows = runRows(plan.start, plan.rule, 4);
+  const rows = rowsOf(plan);
   const inset = geo.size * clamp(0.09 / v.density, 0.05, 0.14);
   const small = Math.max(9, Math.min(15, Math.round(Math.min(w, h) * 0.036)));
-  background(g, w, h, env);
-  grain(g, w, h, env, v);
+  background(g, w, h, env, v);
   const depth = plan.depth || 1;
   const shown = 5 - depth;
   const y0 = geo.top + shown * geo.size + geo.gap;
@@ -307,74 +446,75 @@ function drawNext(g, w, h, env, plan, s, variant) {
     label(g, env, String(r + 1), geo.left - geo.labelW * 0.5, y + geo.size / 2, small, 'center', env.alpha(c.muted, 0.9));
     for (let x = 0; x < plan.width; x++) cell(g, env, geo.left + x * geo.size, y, geo.size, rows[r][x], inset);
   }
-  // The hidden rows: the visitor's, outlined, lit where they have lit them. A cell they light
-  // develops through the matte on a roll of its own (another roll each time it is pressed), and
-  // one they put out goes back down the same stair; its outline steps between the two tones.
+  // The hidden rows: the visitor's, outlined, lit where they have lit them. A cell they light is
+  // cut in on a roll of its own (another roll each time it is pressed) -- by a curve from the
+  // point they pressed, or by the piece's edge from the knobs -- and rests in two shades; one they
+  // put out goes back down the same stair, the way it came. Its outline steps between the two
+  // tones on that stair.
   const openP = s.open ? came(s.t, s.openAt, REVEAL, env.reduced) : 0;
-  const cellPx = Math.max(2, Math.min(rite.cell, Math.ceil(geo.size / 8)));
+  const box = geo.size - inset * 2;
   for (let k = 0; k < depth; k++) {
-  const y5 = y0 + k * geo.size;
-  label(g, env, String(shown + k + 1), geo.left - geo.labelW * 0.5, y5 + geo.size / 2, small, 'center', c.accent2);
-  for (let x = 0; x < plan.width; x++) {
-    const x0 = geo.left + x * geo.size;
-    const i = k * plan.width + x;
-    const lit = !!s.row[i];
-    const own = rite.at(0x100 + i * 0x20 + ((s.flips && s.flips[i]) || 0));
-    const p = came(s.t, s.at && s.at[i], SPAN, env.reduced);
-    const cover = lit ? own.stair(p) : (s.at && s.at[i] != null ? 1 - own.stair(p) : 0);
-    cell(g, env, x0, y5, geo.size, false, inset);
-    if (cover > 0) {
-      g.fillStyle = env.alpha(c.accent2, 0.95);
-      develop(g, own, x0 + inset, y5 + inset, geo.size - inset * 2, geo.size - inset * 2, cover, cellPx);
-    }
-    g.strokeStyle = env.alpha(env.mix(c.muted, c.accent2, cover), 0.55 + 0.35 * cover);
-    g.lineWidth = 1;
-    g.strokeRect(x0 + inset, y5 + inset, geo.size - inset * 2, geo.size - inset * 2);
-    const hinted = s.shown.indexOf(i);
-    if (hinted >= 0) {
-      // A hinted cell: a small mark beside it -- above the first hidden row, under the second --
-      // lit or dark as the rule has it. It blinks on and holds, and grows to its size in treads.
-      const mark = rite.at(0x300 + i);
-      const mp = came(s.t, s.shownAt && s.shownAt[hinted], SPAN, env.reduced);
-      if (!mark.flicker(mp)) continue;
-      const grow = 0.5 + 0.5 * mark.stair(mp);
-      const want = rows[shown + k][x];
-      const my = k === 0 ? y5 - geo.gap / 2 : y5 + geo.size + Math.max(3, geo.size * 0.18);
-      g.fillStyle = want ? c.accent2 : env.alpha(c.muted, 0.7);
-      g.beginPath();
-      g.arc(x0 + geo.size / 2, my, Math.max(1.5, geo.size * 0.08 * grow), 0, Math.PI * 2);
-      g.fill();
-      if (!want) {
-        g.strokeStyle = env.alpha(c.muted, 0.9);
+    const y5 = y0 + k * geo.size;
+    label(g, env, String(shown + k + 1), geo.left - geo.labelW * 0.5, y5 + geo.size / 2, small, 'center', c.accent2);
+    for (let x = 0; x < plan.width; x++) {
+      const x0 = geo.left + x * geo.size;
+      const i = k * plan.width + x;
+      const on = cellLevel(s, i, env.reduced);
+      const m = s.cells[i];
+      cell(g, env, x0, y5, geo.size, false, inset);
+      if (on > 0) cover(g, env, (m && m.edge) || rite, x0 + inset, y5 + inset, box, box, on, c.accent2, 0.95);
+      g.strokeStyle = env.alpha(env.mix(c.muted, c.accent2, on), 0.55 + 0.35 * on);
+      g.lineWidth = 1;
+      g.strokeRect(x0 + inset, y5 + inset, box, box);
+      const hinted = s.shown.indexOf(i);
+      if (hinted >= 0) {
+        // A hinted cell: a small mark beside it -- above the first hidden row, under the second --
+        // lit or dark as the rule has it. It is cut on at its moment at half its size, grows the
+        // rest of the way on its stair, and holds.
+        const mark = roll(rite, 0x300 + i);
+        const mp = came(s.t, s.shownAt && s.shownAt[hinted], SPAN, env.reduced);
+        if (!mark.flicker(mp)) continue;
+        const grow = 0.5 + 0.5 * mark.stair(mp);
+        const want = rows[shown + k][x];
+        const my = k === 0 ? y5 - geo.gap / 2 : y5 + geo.size + Math.max(3, geo.size * 0.18);
+        g.fillStyle = want ? c.accent2 : env.alpha(c.muted, 0.7);
         g.beginPath();
-        g.arc(x0 + geo.size / 2, my, Math.max(2.5, geo.size * 0.13 * grow), 0, Math.PI * 2);
-        g.stroke();
+        g.arc(x0 + geo.size / 2, my, Math.max(1.5, geo.size * 0.08 * grow), 0, Math.PI * 2);
+        g.fill();
+        if (!want) {
+          g.strokeStyle = env.alpha(c.muted, 0.9);
+          g.beginPath();
+          g.arc(x0 + geo.size / 2, my, Math.max(2.5, geo.size * 0.13 * grow), 0, Math.PI * 2);
+          g.stroke();
+        }
       }
     }
   }
-  }
-  // The solved rows take on a texture: it develops through the matte, blinking in, and holds.
-  if (s.open && rite.at(0x7f).flicker(openP)) {
-    g.fillStyle = env.alpha(c.accent2, 0.18);
-    develop(g, rite.at(0x7f), geo.left, y0, geo.size * plan.width, geo.size * depth, rite.at(0x7f).stair(openP) * 0.6, cellPx);
+  // The solved rows are set: the light's colour is cut across them behind the piece's edge and
+  // rests there in two shades.
+  if (s.open) {
+    const solved = roll(rite, 0x7f);
+    cover(g, env, solved, geo.left, y0, geo.size * plan.width, geo.size * depth, solved.stair(openP), c.accent2, 0.18);
   }
   // The frame of the bench, and the table of patterns under it.
   g.strokeStyle = env.alpha(c.muted, 0.25);
   g.lineWidth = 1;
   g.strokeRect(geo.left - inset, geo.top - inset, geo.size * plan.width + inset * 2, geo.size * shown + inset * 2);
   const tableY = y0 + depth * geo.size + Math.max(h * 0.06, geo.size * 0.7);
-  glyphTable(g, env, w * 0.06, tableY, w * 0.88, s.open ? plan.rule : null, v, s.open ? openP : null, s);
+  ruleTable(g, env, w * 0.06, tableY, w * 0.88, s.open ? plan.rule : null, v, s.open ? openP : null, s);
   // The lens: the three cells one row above a cell, bracketed, the cell under them pointed at,
   // and their pattern of three marked in the table -- what to look up to set that cell. A card's
-  // lens walks the shown rows; the piece's sits on the cell last tapped. It blinks on and holds.
-  if (s.lens) {
-    const r = clamp(Math.floor(s.lens.r), 0, 3);
+  // lens walks the shown rows a cell at a click; the piece's moves to the cell last tapped in one
+  // cut at its moment, staying where it was until then, and holds.
+  const lens = showing(s.lens, s.t, SPAN, env.reduced);
+  if (lens) {
+    const r = clamp(Math.floor(lens.r), 0, 3);
     const vals = r < shown ? rows[r] : s.row.slice((r - shown) * plan.width, (r - shown + 1) * plan.width);
-    const col = clamp(Math.floor(s.lens.u), 0, plan.width - 1);
-    if (vals.length === plan.width && rite.at(0x5c0).flicker(came(s.t, s.lensAt, SPAN, env.reduced))) {
+    const col = clamp(Math.floor(lens.u), 0, plan.width - 1);
+    if (vals.length === plan.width) {
       const yR = r < shown ? geo.top + r * geo.size : y0 + (r - shown) * geo.size;
       const yB = r + 1 < shown ? geo.top + (r + 1) * geo.size : y0 + (r + 1 - shown) * geo.size;
-      const cx = geo.left + s.lens.u * geo.size;
+      const cx = geo.left + col * geo.size;
       g.strokeStyle = c.accent2;
       g.lineWidth = Math.max(1.5, geo.size * 0.1);
       for (let d = -1; d <= 1; d++) {
@@ -399,21 +539,34 @@ function drawNext(g, w, h, env, plan, s, variant) {
       g.fill();
     }
   }
-  // The caption changes its words by blinking to the new ones, never by a crossfade.
-  const named = s.open && rite.at(0x7e).flicker(openP);
+  // The caption changes its words by a cut at its moment, never by a crossfade.
+  const named = s.open && roll(rite, 0x7e).flicker(openP);
   label(g, env, named ? 'rule ' + plan.rule : 'your rule notebook: 111 to 000', w * 0.5, Math.min(h * 0.97, tableY + geo.size * 1.9), small, 'center', env.alpha(c.muted, 0.85));
 }
 
+// Where cell i of the hidden rows stands at s.t, 0 (dark) to 1 (lit): it set off from where it
+// stood when it was last pressed and climbs or goes down its own stair to where that press sent
+// it, one way and never from an end it had not reached. A cell never pressed stands as the row has
+// it.
+function cellLevel(s, i, reduced) {
+  const m = s.cells[i];
+  if (!m) return s.row[i] ? 1 : 0;
+  if (reduced) return m.to;
+  return m.from + (m.to - m.from) * m.own.stair(came(s.t, m.at, SPAN, reduced));
+}
+
 // The scene's state before anyone has touched it: no cell lit, nothing shown, the rule unread,
-// and no clock yet (a card is drawn once and stands).
+// and no clock yet (a card is drawn once and stands). `cells` holds each pressed cell's movement,
+// `until` the end of the last movement in flight, `lensUntil` the end of the lens's, and `drawn`
+// the last picture frame() drew.
 function nextBlank(plan) {
-  return { row: new Array(plan.width * (plan.depth || 1)).fill(0), shown: [], shownAt: [], at: [], flips: [], open: false, openAt: null, t: 0, lens: null, lensAt: null,
+  return { row: new Array(plan.width * (plan.depth || 1)).fill(0), shown: [], shownAt: [], cells: [], flips: [], taps: 0, open: false, openAt: null, t: 0, lens: null, until: -Infinity, lensUntil: -Infinity, drawn: null,
     notes: new Array(8).fill(0), noteAt: [], noteFlips: [] };
 }
 
 function nextPreview(g, w, h, env, plan, lens) {
   const s = nextBlank(plan);
-  s.lens = lens || null;
+  s.lens = lens ? { was: null, now: lens, at: null, roll: STILL } : null;
   drawNext(g, w, h, env, plan, s, env.variant);
 }
 
@@ -423,17 +576,32 @@ function nextPiece(env, plan) {
   const depth = plan.depth || 1;
   const shown = 5 - depth;
   const cells = width * depth;
-  const rows = runRows(plan.start, plan.rule, 4);
+  const rows = rowsOf(plan);
   const answer = rows.slice(shown).reduce((all, row) => all.concat(row), []);
   const s = nextBlank(plan);
   const rowName = (i) => ROWNAME[shown + Math.floor(i / width)];
-  const draw = (c) => drawNext(c.g, c.w, c.h, c, plan, s, env.variant);
-  // A row written: every cell that changed starts its rite now, on a fresh roll of its own.
-  function write(next) {
+  const draw = (c) => {
+    drawNext(c.g, c.w, c.h, c, plan, s, env.variant);
+    seen(s, c);
+  };
+  // A row written: every cell that changed starts its rite now, on a fresh roll of its own, from
+  // wherever it stands. A cell setting off from dark is cut by a curve from the point it was
+  // pressed at (`press`, from tap), or by the piece's own edge when a knob set it; one already on
+  // its way keeps the edge it has, so a change of mind goes on with the same cut.
+  function write(next, c, press) {
+    const rite = riteOf(c);
     for (let i = 0; i < cells; i++) {
-      if ((next[i] ? 1 : 0) === (s.row[i] ? 1 : 0)) continue;
-      s.at[i] = s.t;
+      const to = next[i] ? 1 : 0;
+      if (to === (s.row[i] ? 1 : 0)) continue;
+      const from = cellLevel(s, i, c.reduced);
+      const was = s.cells[i];
       s.flips[i] = (s.flips[i] || 0) + 1;
+      s.cells[i] = {
+        from, to, at: s.t,
+        own: rite.at(0x100 + i * 0x20 + s.flips[i]),
+        edge: from > 0 && was ? was.edge : press && press.i === i ? pressedEdge(press.u, press.v) : null
+      };
+      busy(s, c, SPAN);
     }
     s.row = next.map((v) => (v ? 1 : 0));
   }
@@ -446,6 +614,7 @@ function nextPiece(env, plan) {
       if (next[i] !== s.notes[i]) {
         s.noteAt[i] = s.t;
         s.noteFlips[i] = (s.noteFlips[i] || 0) + 1;
+        busy(s, c, SPAN);
       }
     }
     s.notes = next.slice();
@@ -493,7 +662,7 @@ function nextPiece(env, plan) {
     apply(id, value, c) {
       if (id === 'notebook') note(value, c);
       if (id === 'row' && Array.isArray(value) && value.length === cells) {
-        write(value);
+        write(value, c, null);
         const lit = s.row.filter(Boolean).length;
         c.status((depth === 2 ? 'the hidden rows: ' : 'row five: ') + (lit === 1 ? 'one cell lit' : count(lit) + ' cells lit'));
       }
@@ -508,6 +677,7 @@ function nextPiece(env, plan) {
           const i = pool[Math.floor(pool.length / 2)];
           s.shown.push(i);
           s.shownAt.push(s.t);
+          busy(s, c, SPAN);
           c.hint();
           const hood = hoodOf(rows[shown - 1 + Math.floor(i / width)], i % width);
           let example = '';
@@ -543,8 +713,9 @@ function nextPiece(env, plan) {
       if (col >= 0 && col < width && scanRow >= 0 && scanRow < shown) {
         const hood = hoodOf(rows[scanRow], col);
         const pattern = [(hood >> 2) & 1, (hood >> 1) & 1, hood & 1].join('');
-        s.lens = { r: scanRow, u: col };
-        s.lensAt = s.t;
+        // A shown cell inspected: the lens is cut over to it, its three cells bracketed, the cell
+        // they made pointed at below and their pattern marked in the table.
+        s.lens = moved(s.lens, { r: scanRow, u: col }, s, c);
         c.status('row ' + (scanRow + 1) + ', column ' + (col + 1) + ': pattern ' + pattern + (scanRow < shown - 1 ? ' makes a ' + (rows[scanRow + 1][col] ? 'lit' : 'dark') + ' cell below' : '; find what this pattern made in an earlier row'));
         draw(c);
         return;
@@ -554,24 +725,33 @@ function nextPiece(env, plan) {
         c.status((depth === 2 ? 'rows four and five are' : 'row five is') + ' outlined; tap a cell there');
         return;
       }
-      const i = clamp(Math.floor(rel), 0, depth - 1) * width + col;
+      const row = clamp(Math.floor(rel), 0, depth - 1);
+      const i = row * width + col;
       const next = s.row.slice();
       next[i] = next[i] ? 0 : 1;
-      write(next);
-      // The lens moves to the tapped cell: its three parents bracketed, their pattern marked.
-      s.lens = { r: shown - 1 + Math.floor(i / width), u: col };
-      s.lensAt = s.t;
+      // Where in the cell the press landed, in fractions of it: the point its curve grows from.
+      const u = clamp((x * c.w - (geo.left + col * geo.size)) / geo.size, 0, 1);
+      const v = clamp((y * c.h - (y0 + row * geo.size)) / geo.size, 0, 1);
+      write(next, c, { i, u, v });
+      // The lens moves to the tapped cell, its three parents bracketed and their pattern marked:
+      // it stays where it was until its moment and is then cut over, on a roll for this tap.
+      s.lens = moved(s.lens, { r: shown - 1 + row, u: col }, s, c);
       c.set('row', next.slice());
       c.status('cell ' + (col + 1) + ' of row ' + rowName(i) + ' ' + (next[i] ? 'lit' : 'dark') + '; its three parents are bracketed above and their pattern is marked in the table');
       draw(c);
     },
+    // The clock moves on by every frame's dt; the bench is drawn only while something is on its
+    // way, or when the canvas has been sized again. A bench at rest is not drawn at all, and says
+    // so (false).
     frame(t, dt, c) {
-      s.t = t;
-      draw(c);
+      s.t += Math.max(0, dt);
+      if (due(s, c)) draw(c);
+      return due(s, c);
     },
     end(c) {
       s.open = true;
       s.openAt = s.t;
+      busy(s, c, REVEAL);
       c.status('rule ' + plan.rule + ': the table under the bench is filled in');
       draw(c);
     }
@@ -587,6 +767,14 @@ function apexHistory(plan) {
   const a = runRows(plan.start, plan.rule, plan.rows);
   const b = runRows(flipped, plan.rule, plan.rows);
   return { a, b, diffs: a.map((row, r) => differing(row, b[r])) };
+}
+
+// The same, run once for a plan the bench draws and kept with it.
+const histories = new WeakMap();
+function historyOf(plan) {
+  let hist = histories.get(plan);
+  if (!hist) histories.set(plan, (hist = apexHistory(plan)));
+  return hist;
 }
 
 // The flip reaches exactly the three cells under it in row one, so the apex can be read.
@@ -640,33 +828,31 @@ function apexGeometry(w, h, plan, v) {
   return { size, left: [left1, left1 + tapeW + gap + labelW], top: h * 0.3, labelW, tapeW };
 }
 
-// `s`: the rows whose differences are marked, whether the flip is pointed out (solved).
+// `s`: the rows whose differences are marked, the place inspected on both tapes, whether the flip
+// is pointed out (solved).
 function drawApex(g, w, h, env, plan, s, variant) {
   const v = variant || PLAIN;
   const c = env.colors;
   const rite = riteOf(env);
   const geo = apexGeometry(w, h, plan, v);
-  const hist = apexHistory(plan);
+  const hist = historyOf(plan);
   const inset = geo.size * clamp(0.09 / v.density, 0.05, 0.14);
   const small = Math.max(9, Math.min(15, Math.round(Math.min(w, h) * 0.036)));
-  const cellPx = Math.max(2, Math.min(rite.cell, Math.ceil(geo.size / 8)));
+  const box = geo.size - inset * 2;
   const pointedP = s.pointed ? came(s.t, s.pointedAt, REVEAL, env.reduced) : 0;
-  background(g, w, h, env);
-  grain(g, w, h, env, v);
+  const inspected = showing(s.inspected, s.t, SPAN, env.reduced);
+  background(g, w, h, env, v);
   label(g, env, 'rule ' + plan.rule, w * 0.5, h * 0.06, small + 2, 'center', c.accent2);
-  glyphTable(g, env, w * 0.08, h * 0.1, w * 0.84, plan.rule, v);
+  ruleTable(g, env, w * 0.08, h * 0.1, w * 0.84, plan.rule, v);
   for (let tape = 0; tape < 2; tape++) {
     const left = geo.left[tape];
     const rows = tape ? hist.b : hist.a;
     label(g, env, tape ? 'the second tape' : 'the first tape', left + geo.tapeW / 2, geo.top - geo.size * 0.8, small, 'center');
-    // The flipped column, once it is pointed out: a wash down the whole column of both tapes,
-    // developing through the matte on a roll of the tape's own.
+    // The flipped column, once it is pointed out, is set: a wash down the whole column of both
+    // tapes, cut in behind the piece's edge on a roll of the tape's own and resting in two shades.
     if (s.pointed) {
-      const wash = rite.at(0x7c + tape);
-      if (wash.flicker(pointedP)) {
-        g.fillStyle = env.alpha(c.accent2, 0.16);
-        develop(g, wash, left + plan.flip * geo.size, geo.top, geo.size, geo.size * (plan.rows + 1), wash.stair(pointedP), cellPx);
-      }
+      const wash = roll(rite, 0x7c + tape);
+      cover(g, env, wash, left + plan.flip * geo.size, geo.top, geo.size, geo.size * (plan.rows + 1), wash.stair(pointedP), c.accent2, 0.16);
     }
     // The hidden first row: an outline and nothing in it.
     g.setLineDash([3, 3]);
@@ -678,29 +864,30 @@ function drawApex(g, w, h, env, plan, s, variant) {
     for (let r = 1; r <= plan.rows; r++) {
       const y = geo.top + r * geo.size;
       if (tape === 0) label(g, env, String(r), left - geo.labelW * 0.5, y + geo.size / 2, small, 'center', env.alpha(c.muted, 0.9));
-      // A marked row: each differing cell takes on a wash that develops through the matte, and
-      // its outline blinks on and holds, the row on a roll of its own.
+      // A marked row: each differing cell is set, a wash cut in behind the piece's edge and
+      // resting in two shades, and its outline is cut on at its moment and holds, the row on a
+      // roll of its own.
       const marked = tape === 1 ? s.marked.indexOf(r) : -1;
-      const own = marked >= 0 ? rite.at(0x200 + r) : null;
+      const own = marked >= 0 ? roll(rite, 0x200 + r) : null;
       const mp = marked >= 0 ? came(s.t, s.markedAt && s.markedAt[marked], SPAN, env.reduced) : 0;
       for (let x = 0; x < plan.width; x++) {
         cell(g, env, left + x * geo.size, y, geo.size, rows[r][x], inset);
         if (own && hist.diffs[r].includes(x)) {
-          g.fillStyle = env.alpha(c.accent2, rows[r][x] ? 0.3 : 0.45);
-          develop(g, own, left + x * geo.size + inset, y + inset, geo.size - inset * 2, geo.size - inset * 2, own.stair(mp), cellPx);
+          cover(g, env, own, left + x * geo.size + inset, y + inset, box, box, own.stair(mp), c.accent2, rows[r][x] ? 0.3 : 0.45);
           if (own.flicker(mp)) {
             g.strokeStyle = c.accent2;
             g.lineWidth = Math.max(1, geo.size * 0.07);
-            g.strokeRect(left + x * geo.size + inset, y + inset, geo.size - inset * 2, geo.size - inset * 2);
+            g.strokeRect(left + x * geo.size + inset, y + inset, box, box);
           }
         }
       }
     }
-    if (s.inspected) {
+    // The place inspected, outlined at once on both tapes: it stays where it was until a tap's
+    // moment and is then cut over to the place tapped, never gone in between.
+    if (inspected) {
       g.strokeStyle = c.accent2;
       g.lineWidth = Math.max(1.5, geo.size * 0.1);
-      g.strokeRect(left + s.inspected.col * geo.size + inset * 0.3,
-        geo.top + s.inspected.r * geo.size + inset * 0.3,
+      g.strokeRect(left + inspected.u * geo.size + inset * 0.3, geo.top + inspected.r * geo.size + inset * 0.3,
         geo.size - inset * 0.6, geo.size - inset * 0.6);
     }
     g.strokeStyle = env.alpha(c.muted, 0.25);
@@ -711,8 +898,8 @@ function drawApex(g, w, h, env, plan, s, variant) {
     for (let x = 0; x < plan.width; x += every) {
       label(g, env, String(x + 1), left + (x + 0.5) * geo.size, geo.top + (plan.rows + 1) * geo.size + small * 0.9, Math.max(8, small - 2), 'center', env.alpha(c.muted, 0.8));
     }
-    // The apex: it blinks on over the hidden row and holds.
-    if (tape === 1 && s.pointed && rite.at(0x7e).flicker(pointedP)) {
+    // The apex: it is cut on over the hidden row at its moment and holds.
+    if (tape === 1 && s.pointed && roll(rite, 0x7e).flicker(pointedP)) {
       const x = left + (plan.flip + 0.5) * geo.size;
       g.fillStyle = c.accent2;
       g.beginPath();
@@ -725,10 +912,12 @@ function drawApex(g, w, h, env, plan, s, variant) {
   }
 }
 
-// The scene's state before anyone has touched it: no row marked, the flip not pointed out, and
-// no clock yet (a card is drawn once and stands).
+// The scene's state before anyone has touched it: no row marked, no place inspected, the flip not
+// pointed out, and no clock yet (a card is drawn once and stands). `until` is the end of the last
+// movement in flight, `lensUntil` the end of the outline's, and `drawn` the last picture frame()
+// drew.
 function apexBlank() {
-  return { marked: [], markedAt: [], inspected: null, pointed: false, pointedAt: null, t: 0 };
+  return { marked: [], markedAt: [], inspected: null, taps: 0, pointed: false, pointedAt: null, t: 0, until: -Infinity, lensUntil: -Infinity, drawn: null };
 }
 
 function apexPreview(g, w, h, env, plan) {
@@ -737,10 +926,13 @@ function apexPreview(g, w, h, env, plan) {
 
 function apexPiece(env, plan) {
   const helps = asked(env).helps;
-  const hist = apexHistory(plan);
+  const hist = historyOf(plan);
   const last = hist.diffs[plan.rows].length;
   const s = apexBlank();
-  const draw = (c) => drawApex(c.g, c.w, c.h, c, plan, s, env.variant);
+  const draw = (c) => {
+    drawApex(c.g, c.w, c.h, c, plan, s, env.variant);
+    seen(s, c);
+  };
   return {
     title: apexTitle(plan),
     brief: 'Two tapes, one rite: both ran rule ' + plan.rule + ', drawn at the top pattern by pattern, from one first row -- except that one cell of the second tape\'s first row was flipped. The first rows are hidden; the ' + WORDS[plan.rows] + ' rows after them are shown. A change in a row reaches only the cell under it and the two beside that in the next, and the tape wraps round.',
@@ -785,6 +977,7 @@ function apexPiece(env, plan) {
         if (next) {
           s.marked.push(next);
           s.markedAt.push(s.t);
+          busy(s, c, SPAN);
           c.hint();
           const n = hist.diffs[next].length;
           c.status('row ' + next + ' is marked on the second tape: ' + (n === 1 ? 'one cell differs' : WORDS[n] + ' cells differ') + ' there');
@@ -796,6 +989,8 @@ function apexPiece(env, plan) {
       }
       draw(c);
     },
+    // A shown cell tapped on either tape: the same place is outlined on both, so the two can be
+    // compared there, the outline cut over from the place inspected before as the lens is.
     tap(x, y, c) {
       const geo = apexGeometry(c.w, c.h, plan, env.variant || PLAIN);
       const px = x * c.w;
@@ -806,23 +1001,28 @@ function apexPiece(env, plan) {
         c.status('Tap a cell in a shown row on either tape to compare the two.');
         return;
       }
-      s.inspected = { r: row, col };
+      s.inspected = moved(s.inspected, { r: row, u: col }, s, c);
       c.status('row ' + row + ', column ' + (col + 1) + ': first tape ' + (hist.a[row][col] ? 'lit' : 'dark') + ', second tape ' + (hist.b[row][col] ? 'lit' : 'dark'));
       draw(c);
     },
+    // As on the next row: the clock moves on by every frame's dt, the tapes are drawn only while
+    // something is on its way or the canvas has been sized again, and at rest they say so.
     frame(t, dt, c) {
-      s.t = t;
-      draw(c);
+      s.t += Math.max(0, dt);
+      if (due(s, c)) draw(c);
+      return due(s, c);
     },
     end(c) {
       s.pointed = true;
       s.pointedAt = s.t;
+      busy(s, c, REVEAL);
       // The rows not yet marked come in one after another down the tape, each in its turn.
       let late = 0;
       for (let r = 1; r <= plan.rows; r++) {
         if (s.marked.includes(r)) continue;
         s.marked.push(r);
         s.markedAt.push(s.t + late * STAGGER);
+        busy(s, c, SPAN, late * STAGGER);
         late += 1;
       }
       c.status('the flip in column ' + (plan.flip + 1) + ' spread to ' + (last === 1 ? 'one cell' : WORDS[last] + ' cells') + ' by row ' + plan.rows + '; every difference is marked');
@@ -857,22 +1057,35 @@ export default {
   paint(g, w, h, env) {
     const d = deal(env);
     if (d.apex) apexPreview(g, w, h, env, d.plan);
-    else nextPreview(g, w, h, env, d.plan, { r: 0, u: 0 });
+    else {
+      nextPreview(g, w, h, env, d.plan, { r: 0, u: 0 });
+      d.drawn = { g, w, h, k: 0 };
+    }
   },
-  // The card in motion: the lens walks the shown rows, a cell every half-second in the ratchet's
-  // clicks, reading each pattern of three against the table. At t = 0 it stands where paint left
-  // it. The changed cell's two tapes do not move, and say so.
+  // The card in motion: the lens reads the shown rows once, a cell at a time, each pattern of
+  // three against the table. It moves as a ratchet does: one click a cell, every click the same
+  // length (TICK) and the same distance, always on to the next cell in reading order -- along a
+  // row, then the next row from its first cell. Once every cell has been read, one more click puts
+  // it back where paint left it, and the card rests there and says so (false), so the feed lets it
+  // go: a card is read once, not forever. At t = 0 it stands where paint left it. Between two
+  // clicks nothing on the card has changed and its canvas already holds the picture, so the canvas
+  // last drawn on is drawn again only when the lens has clicked on: the same picture for the same
+  // t, drawn a couple of times a second rather than thirty. Less motion, and the changed cell's two
+  // tapes, do not move, and say so.
   animate(g, w, h, env, t) {
     const d = deal(env);
-    if (d.apex) return false;
+    if (d.apex || env.reduced) return false;
     const shown = 5 - (d.plan.depth || 1);
-    const steps = env.reduced ? 0 : t / 0.45;
-    const whole = Math.floor(steps);
-    const frac = env.rite ? env.rite.at(0x5c0 + whole).ratchet(steps - whole) : 0;
     const total = d.plan.width * (shown - 1);
-    const k = (((whole + frac) % total) + total) % total;
-    const r = Math.floor(k / d.plan.width);
-    nextPreview(g, w, h, env, d.plan, { r, u: k - r * d.plan.width });
+    const click = Math.floor(Math.max(0, t) / TICK);
+    const k = click >= total ? 0 : click;
+    const last = d.drawn;
+    if (!(last && last.g === g && last.w === w && last.h === h && last.k === k)) {
+      const r = Math.floor(k / d.plan.width);
+      nextPreview(g, w, h, env, d.plan, { r, u: k - r * d.plan.width });
+      d.drawn = { g, w, h, k };
+    }
+    return click < total;
   },
   spark(env) {
     const d = deal(env);
@@ -895,7 +1108,7 @@ export default {
         : 'Four rows of one hidden rule, every pattern of three on show. Read the rule off the bench and recite the fifth row.',
       mono: plan.width + ' cells / rule ?' + (plan.depth === 2 ? ' / two rows hidden' : ''),
       aspect: '4 / 3',
-        paint: (ctx, cw, ch, cardEnv) => nextPreview(ctx, cw, ch, cardEnv, plan, { r: 0, u: 0 }),
+      paint: (ctx, cw, ch, cardEnv) => nextPreview(ctx, cw, ch, cardEnv, plan, { r: 0, u: 0 }),
       of: plan
     };
   },

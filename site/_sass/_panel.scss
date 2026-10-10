@@ -34,24 +34,14 @@ main {
   // the top and nothing of a page's lands under either of them.
   padding: calc(var(--nav-h) + 1rem) var(--gutter) 2rem;
   // The page's own sky, washing in from a corner of the top edge to the viewport's edges. Which
-  // corner is the roll's (--sky-x and --sky-y, js/motion.js), and the two are registered custom
-  // properties (_tokens.scss), so when the roll moves them the sky washes across to its new corner
-  // along a rolled curve rather than cutting -- the fade of the background is a movement of the
-  // rite like any other.
+  // corner is the roll's (--sky-x and --sky-y, js/motion.js), picked once as the page loads, so no
+  // two visits share a sky and one visit keeps its own. Its colour is the palette's and turns when
+  // the palette does; the corner holds through a change of mood, and is never stepped across: the
+  // two are inherited custom properties, so a sky stepped across the page would restyle every
+  // element on it at every frame, for a change the turning palette already shows.
   background:
     radial-gradient(130vw 90vh at var(--sky-x, 12%) var(--sky-y, -14%), color-mix(in oklab, var(--bg2) 80%, transparent) 0%, transparent 62%),
     radial-gradient(70vw 60vh at 100% 55%, color-mix(in oklab, var(--md-sys-color-primary) 9%, transparent) 0%, transparent 60%);
-  // The wash is a stair: the sky jumps corner to corner in rolled treads (README: "Motion
-  // axiom"), the weather of the page moving the way everything else on it does.
-  transition:
-    --sky-x var(--motion-slow, 1200ms) var(--ease-stair),
-    --sky-y var(--motion-slow, 1200ms) var(--ease-stair);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  main {
-    transition: none;
-  }
 }
 
 .panel {
@@ -64,6 +54,8 @@ main {
   margin: 0;
   color: var(--md-sys-color-on-surface);
   @include type.scale(title-large);
+  // Cut into its new face by js/motion.js (shift) when the register turns over, on the shift's
+  // one stair, so it does not ask for the rite's own slice as well: one edge to a line.
   @include type.rite;
 }
 
@@ -102,7 +94,7 @@ main {
   margin-top: 1rem;
   color: var(--md-sys-color-on-surface);
   @include type.scale(title-large);
-  @include type.rite;
+  @include type.rite($shift: true);
   --role-size: 1.5rem;
 }
 

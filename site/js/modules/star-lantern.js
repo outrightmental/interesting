@@ -39,7 +39,6 @@ const PLAIN = { density: 1, scale: 1, turn: 0 };
 const TAU = Math.PI * 2;
 const COLS = 12; // columns either side of the release column, in the drift puzzle
 const BANDS = 4;
-const SWAY = 2.9; // seconds a lantern takes to sway there and back, in treads
 
 const signed = (n) => (n > 0 ? '+' : '') + n;
 const capital = (text) => text[0].toUpperCase() + text.slice(1);
@@ -58,110 +57,261 @@ function asked(env) {
 /* ---- the rite: how the lanterns move -------------------------------------------------------- */
 
 /* env.rite (ctx.rite inside a piece) is the piece's own roll of how it moves (js/variant.js;
-   js/stage.js, "The rite"). Nothing under this sky moves along a formula or cuts without a rite.
-   A lantern sways in treads, each on a roll of its own per swing, so no two sway alike and no
-   swing repeats the last; the scatter of sparks blinks the way the flicker has it. A lantern
-   moved to another place TRAVELS there along the rite's glitch of a curve and its place-name
-   blinks on; a lantern let go climbs each band along a curve rolled for that band of that
-   flight; a lantern that has arrived lifts into its ring in treads. A chosen band, a looked-at
-   band, a hinted place are SEALED: a fill develops through the matte by its area, on the roll of
-   that choice, and the one chosen before dissolves back down the same ladder; a wind the visitor
-   sets swings its arrow from the old push to the new along the curve, and its readout blinks on;
-   a hint's mark, a hint's line, the mark over a guessed column blink on; "let go here" blinks
-   out when the lantern goes; a solved sky's lanterns glow brighter in treads and the light over
-   it develops through the matte with a flicker, never a wash. Every change is read against the
-   piece's own clock, s.t, which frame() advances (and which a card's animate reads off t): a
-   change made at `since` has come came() of its way, which is 1 at once for a visitor who asked
-   for less motion and for whatever stood there from the start. Every trigger rolls a fresh rite
-   (rite.at(k) with the count of that trigger in k), so a second move, a second check, a second
-   tap composes a different stair, matte and flicker from the first. */
+   js/stage.js, "The rite"): a few treads, always forward, and one clean edge -- the piece's slice
+   or curve, its signature -- for any surface that changes. A lantern moved to another place
+   travels there in the rite's landing treads, the longest step first, and the name under it is cut
+   over to its new place as it lands; a lantern let go climbs each band in landing treads rolled
+   for that band of that flight; a lantern that has arrived lifts into its ring up a stair; a
+   mirrored pair goes on one band per hint in landing treads, and a solved crossing climbs the rest
+   of the way up a stair. A chosen band, a looked-at band, a band marked as the first crossing, a
+   hinted place are SEALED: cut in by the piece's edge (rite.paint, one path) up the stair of that
+   choice, resting as two shades of the colour split by the edge through its middle, its frame
+   drawn once the seal has come whole; each one chosen before is given back as the edge withdraws
+   the way it came. A band sealed by a tap, on a piece whose edge is a curve, grows its curve from
+   the point the tap landed on rather than from the piece's own corner. A wind the visitor sets
+   swings its arrow in landing treads, and its readout is cut over from the old number to the new
+   at the setting's moment; a mark over a guessed column travels in landing treads; a hint's mark
+   and a worked answer are cut on at their moment and stay; "let go here" is cut out as the first
+   lantern goes, and stays out. A journey the visitor moves on from -- a new flight, a wind changed
+   under a traced pair -- is given back by the piece's edge across the picture, while the lantern
+   is cut over once to where its new journey starts. A solved sky's lanterns brighten up a stair
+   and the light over it is cut in by the edge and rests in two shades, never a wash.
 
+   A change made while another is still under way sets out from what is SHOWING -- a lantern from
+   the height it has reached, a seal from the part of its band it covers, an arrow from where it
+   points, a readout from the number it reads -- never from either end of the movement it
+   interrupts, so nothing jumps to a place it never reached and comes back.
+
+   Between the visitor's moves the sky holds still: the lanterns hang, the sparks stand and the
+   dotted columns lie where they are, because nothing in them is waiting for anything, and a card
+   is a still picture. Every change is read against the piece's own clock, s.t, which frame()
+   advances: a change made at `since` has come came() of its way, which is 1 at once for a visitor
+   who asked for less motion and for whatever stood there from the start. Once every change has
+   landed the scene is not drawn again until something changes (settled, below). Every trigger
+   rolls the rite afresh (roll(): the thing's seed crossed with the count of that trigger), so a
+   second move, a second check, a second tap steps in other treads from the first -- every roll
+   keeping the piece's edge. */
+
+// The rite of a piece handed none: everything stands where it ends, and a surface is cut by a
+// plain upright slice from its left side.
 const STILL = {
-  ease: () => 1, stair: () => 1, ratchet: () => 0, flicker: () => 1, matte: () => true,
-  series: (p, n) => Math.max(1, Math.floor(n || 1)), treads: 1, kind: 'none', cell: 4, at: () => STILL
+  ease: () => 1, stair: () => 1, ratchet: () => 1, turn: () => 1, flicker: () => 1,
+  series: (p, n) => Math.max(1, Math.floor(n || 1)), treads: 1, kind: 'slice', angle: 90,
+  region: (g, x, y, w, h, k) => {
+    if (k > 0) g.rect(x, y, w * Math.min(1, k), h);
+  },
+  paint: (g, x, y, w, h, k, style) => {
+    if (k <= 0) return;
+    if (style != null) g.fillStyle = style;
+    g.fillRect(x, y, w * Math.min(1, k), h);
+  },
+  at: () => STILL
 };
 
 function riteOf(env) {
   return env && env.rite ? env.rite : STILL;
 }
 
-function fract(x) {
-  return x - Math.floor(x);
-}
-
+// How far a change made at `since` has come, over `span` seconds. Each change asked about is also
+// kept in s.until, the moment the last of them lands, so a frame after that knows it has nothing
+// new to draw (settled, below).
 function came(s, since, span, reduced) {
   if (reduced || since == null || since < 0) return 1;
+  if (!(s.until >= since + span)) s.until = since + span;
   return Math.max(0, Math.min(1, (s.t - since) / span));
 }
 
-// The rite rolled afresh for the n-th trigger of one kind of thing: a second press composes
-// another stair, matte and flicker from the first.
+// The size and the state the canvas was last drawn at.
+function sizeOf(c) {
+  return c.w + 'x' + c.h + '@' + (c.dpr || 1) + (c.done ? ' solved' : '');
+}
+
+// Whether a frame has nothing to draw: the canvas holds the picture last drawn at this size and
+// state, and every change in that picture had come the whole of its way when it was drawn. The sky
+// at rest stands still, so drawing it again would spend a frame on nothing a visitor could see; a
+// new size (the stage clears the canvas to resize it), the solve, or a new change draws again. A
+// change made outside a draw clears s.drawn, so the next frame draws it. Asked again once a frame
+// has drawn, it is what that frame answers (with a climb still under way): false when the sky is
+// at rest, which tells the stage to ask for no frame until a knob, a tap, a check, a new size or the
+// scene coming back sets something going again -- the only things that do, so the piece's clock,
+// advanced by the frames it is given, may stand still meanwhile.
+function settled(s, c) {
+  return s.drawn === sizeOf(c) && s.drawnAt > (s.until == null ? -Infinity : s.until);
+}
+
+// Draws the scene and notes when and at what size it was drawn.
+function drawn(s, c, paint) {
+  paint();
+  s.drawn = sizeOf(c);
+  s.drawnAt = s.t;
+}
+
+// The rite rolled afresh for the n-th trigger of one kind of thing: a second press steps in other
+// treads from the first, on the same edge. Kept with the rite it was rolled from, so a frame reuses
+// a roll rather than making it afresh thirty times a second; the keeping is let go now and then.
+const ROLLS = new WeakMap();
 function roll(rite, base, n) {
-  return rite.at(((base | 0) ^ (Math.imul((n | 0) + 1, 0x9e37) | 0)) >>> 0);
+  const seed = ((base | 0) ^ (Math.imul((n | 0) + 1, 0x9e37) | 0)) >>> 0;
+  let kept = ROLLS.get(rite);
+  if (!kept) {
+    kept = new Map();
+    ROLLS.set(rite, kept);
+  }
+  let own = kept.get(seed);
+  if (!own) {
+    if (kept.size > 96) kept.clear();
+    own = rite.at(seed);
+    kept.set(seed, own);
+  }
+  return own;
 }
 
-// A lantern's sway at time t, -1 to 1: there and back in the stair's treads, on a roll of its own
-// for every swing (so no swing repeats the last) and a phase of its own per lantern (so no two
-// step together). The swing's reach is the roll's too.
-function sway(rite, base, t, i) {
-  const x = t / SWAY + i * 0.37;
-  const own = roll(rite, base + i, Math.floor(x));
-  const p = fract(x);
-  const tri = p < 0.5 ? own.stair(p * 2) : 1 - own.stair((p - 0.5) * 2);
-  return (tri * 2 - 1) * (0.6 + 0.4 * own.ease(0.5));
+// A travel from `from` to `to`, by how far it has come, in the landing treads of the roll: the
+// longest step first, each after it shorter, never a glide and never past the mark. The treads
+// are summed, so the last can land a hair short of 1; it counts as landed.
+function landing(own, p) {
+  if (p >= 1) return 1;
+  const e = own.ease(p);
+  return e >= 1 - 1e-9 ? 1 : e;
 }
 
-// A tread of the roll's curve: the stair says WHEN a thing moves (one of the roll's uneven
-// treads) and the curve says WHERE that tread lands (its hesitation, its surge, its stutter back,
-// its overshoot past the mark and its settle), so even the swooping curve reads as held treads
-// and never as a glide. Everything in this sky that goes from one place to another goes by it.
-function tread(own, p) {
-  return p >= 1 ? 1 : own.ease(own.stair(p));
-}
-
-// A travel from `from` to `to`, by how far it has come, in the treads of the roll.
 function travel(own, from, to, p) {
-  return p >= 1 ? to : from + (to - from) * tread(own, p);
+  const e = landing(own, p);
+  return e >= 1 ? to : from + (to - from) * e;
 }
 
-// The cells of a box the matte lets through at coverage k, filled in the current fillStyle: how a
-// surface changes by its area. Cells are rite.cell px, coarser over a wide box so a frame stays
-// cheap, on a grid fixed to the canvas so the pattern holds still while it grows. `inside` keeps
-// the tiling to a shape within the box. At k >= 1 every cell is let through.
-function develop(g, rite, x0, y0, bw, bh, k, inside, size) {
-  if (k <= 0 || bw <= 0 || bh <= 0) return;
-  const cell = size || Math.max(rite.cell, Math.ceil(Math.max(bw, bh) / 28));
-  const cx0 = Math.floor(x0 / cell);
-  const cy0 = Math.floor(y0 / cell);
-  const cx1 = Math.ceil((x0 + bw) / cell);
-  const cy1 = Math.ceil((y0 + bh) / cell);
-  for (let cy = cy0; cy < cy1; cy++) {
-    for (let cx = cx0; cx < cx1; cx++) {
-      const px = cx * cell;
-      const py = cy * cell;
-      if (inside && !inside(px + cell / 2, py + cell / 2)) continue;
-      if (k < 1 && !rite.matte(cx, cy, k)) continue;
-      g.fillRect(px, py, cell, cell);
-    }
+// A surface that comes to stay, `k` of the way there, in the current fillStyle: the part of the
+// box the piece's edge has passed, and over the half behind the edge's middle a second coat of the
+// same colour. One edge moves while it comes, and at rest it is two shades of one colour split by
+// that edge through the middle of the box. One path per coat. A surface a tap set, on a piece
+// whose edge is a curve, has its curve round the point the tap landed on (`point`, in fractions of
+// the box): the press is the reason it is there.
+function cover(g, own, x, y, w, h, k, point) {
+  if (k <= 0 || w <= 0 || h <= 0) return;
+  if (point && own.kind === 'curve') {
+    pressed(g, x, y, w, h, k, point);
+    pressed(g, x, y, w, h, Math.min(k, 0.5), point);
+    return;
+  }
+  own.paint(g, x, y, w, h, k);
+  own.paint(g, x, y, w, h, Math.min(k, 0.5));
+}
+
+// The piece's curve grown from a press: the part of the box within `k` of the way from the point
+// to the box's farthest corner. One arc, clipped to the box.
+function pressed(g, x, y, w, h, k, point) {
+  if (k >= 1) {
+    g.fillRect(x, y, w, h);
+    return;
+  }
+  const ox = x + point[0] * w;
+  const oy = y + point[1] * h;
+  const far = Math.max(Math.hypot(x - ox, y - oy), Math.hypot(x + w - ox, y - oy),
+    Math.hypot(x - ox, y + h - oy), Math.hypot(x + w - ox, y + h - oy));
+  g.save();
+  g.beginPath();
+  g.rect(x, y, w, h);
+  g.clip();
+  g.beginPath();
+  g.arc(ox, oy, far * k, 0, TAU);
+  g.fill();
+  g.restore();
+}
+
+/* A seal is a surface the visitor sets and unsets -- a chosen band, a looked-at band, a band
+   marked as the first crossing. Each is kept under its key in a puzzle's own `marks` as where its
+   coverage stood when it last changed (`from`), which way it is going (`on`), when (`at`), on
+   which roll (`n`), and the point a tap set it at, if one did (`point`). What shows is that
+   coverage carried toward 1 or 0 up the stair of the change's roll: a seal set or unset while
+   another change to it is under way sets out from what is showing, and every band given back keeps
+   its own edge to the end, however quickly the next is chosen -- never a flash to whole first and
+   never one dropped without an edge. */
+const SEAL = 0.9; // seconds a seal takes to come whole or be given back
+
+function sealOf(s, rite, base, mark, reduced) {
+  if (!mark) return 0;
+  const to = mark.on ? 1 : 0;
+  const q = roll(rite, base, mark.n).stair(came(s, mark.at, SEAL, reduced));
+  return q >= 1 ? to : mark.from + (to - mark.from) * q;
+}
+
+function reseal(s, marks, key, on, rite, base, reduced, point) {
+  if (key == null) return;
+  const was = marks[key];
+  if (was && was.on === on) return;
+  const from = sealOf(s, rite, base, was, reduced);
+  s.seals += 1;
+  // A seal that is still partly showing keeps the curve it was cut by; a fresh one takes the
+  // press's point, or the piece's own corner when a knob set it.
+  marks[key] = { from, on, at: s.t, n: s.seals, point: was && from > 0 ? was.point : (on && point) || null };
+}
+
+// One seal of a box, drawn as it shows now, in the current fillStyle; whether it has come whole.
+function sealed(g, s, rite, base, mark, box, reduced) {
+  const k = sealOf(s, rite, base, mark, reduced);
+  if (k > 0) cover(g, rite, box.x, box.y, box.w, box.h, k, mark.point);
+  return !!(mark && mark.on && k >= 1);
+}
+
+// Where a tap landed, in fractions of a box.
+function within(px, py, box) {
+  return [Math.max(0, Math.min(1, (px - box.x) / box.w)), Math.max(0, Math.min(1, (py - box.y) / box.h))];
+}
+
+// A journey given back: the picture of a path the visitor has moved on from, drawn by `paint`
+// inside what the piece's edge still leaves of the whole scene, as that edge withdraws one way up
+// the stair of the giving-back's own roll. Done ones are let go.
+const GONE = 0.8; // seconds a journey takes to be given back
+
+function giveBack(g, s, rite, w, h, reduced, paint) {
+  s.gone = s.gone.filter((was) => came(s, was.at, GONE, reduced) < 1);
+  for (const was of s.gone) {
+    const own = roll(rite, 0x5a, was.n);
+    const k = 1 - own.stair(came(s, was.at, GONE, reduced));
+    if (k <= 0) continue;
+    g.save();
+    g.beginPath();
+    g.rect(0, 0, w, h);
+    g.clip();
+    g.beginPath();
+    own.region(g, 0, 0, w, h, k);
+    g.clip();
+    paint(was);
+    g.restore();
   }
 }
 
-// A sealed surface: it develops through the matte while it is set (k climbs) and dissolves back
-// down the ladder when it is unset (k falls), each on the roll of that set.
-function sealed(g, rite, box, on, p, size) {
-  const k = on ? rite.stair(p) : 1 - rite.stair(p);
-  if (k <= 0) return;
-  develop(g, rite, box.x, box.y, box.w, box.h, k, null, size);
+function goneFrom(s, journey) {
+  s.goes += 1;
+  s.gone.push(Object.assign({ at: s.t, n: s.goes }, journey));
 }
 
-// The light that comes over a solved sky: it develops through the matte from the moment of the
-// solve, blinking on and dropping out the way the rite's flicker has it, and holds.
+// Where the mark over a guessed column stands now, in columns, or null while it is not yet on: the
+// first is cut on at its moment, and each after it travels from where the mark stood when it was
+// set, in the landing treads of that setting's roll.
+function markAt(s, rite, base, reduced) {
+  if (s.guess == null) return null;
+  const own = roll(rite, base, s.guesses);
+  const p = came(s, s.guessAt, 0.8, reduced);
+  if (s.guessFrom == null) return own.flicker(p) ? s.guess : null;
+  return travel(own, s.guessFrom, s.guess, p);
+}
+
+// A column guessed: the mark sets off from where it shows now -- or, not on yet, is cut on afresh.
+function guessed(s, next, rite, base, reduced) {
+  if (next == null || next === s.guess) return;
+  s.guessFrom = markAt(s, rite, base, reduced);
+  s.guess = next;
+  s.guessAt = s.t;
+  s.guesses += 1;
+}
+
+// The light that comes over a solved sky, cut in by the piece's edge up a stair from the moment of
+// the solve, and resting in two shades.
 function daybreak(g, rite, env, w, h, p, strength) {
   const own = roll(rite, 0xdb, 0);
-  const k = own.stair(p);
-  if (k <= 0 || !own.flicker(p)) return;
-  g.fillStyle = env.alpha(env.colors.accent2, strength || 0.1);
-  develop(g, own, 0, 0, w, h, k, null, Math.max(rite.cell, Math.ceil(Math.min(w, h) / 30)));
+  g.fillStyle = env.alpha(env.colors.accent2, strength || 0.06);
+  cover(g, own, 0, 0, w, h, own.stair(p));
 }
 
 /* ---- drawing shared by both ---------------------------------------------------------------- */
@@ -176,12 +326,9 @@ function sky(g, w, h, env) {
 }
 
 // The stars as they stand, as faint sparks in the upper sky, and a scatter more from the
-// configuration, so a sky of one star is still a sky. Every third of the scatter blinks the way
-// the rite's flicker has it, on a roll of its own per speck and per blink, so the sky is never
-// quite still.
-function sparks(g, w, h, env, v, depth, t) {
+// configuration, so a sky of one star is still a sky. They stand still: they wait for nothing.
+function sparks(g, w, h, env, v, depth) {
   const c = env.colors;
-  const rite = riteOf(env);
   g.fillStyle = env.alpha(c.fg, 0.55);
   for (const p of env.points(w, h, 10)) {
     g.beginPath();
@@ -191,10 +338,6 @@ function sparks(g, w, h, env, v, depth, t) {
   const n = Math.max(4, Math.round(16 * v.density));
   g.fillStyle = env.alpha(c.fg, 0.25);
   for (let i = 0; i < n; i++) {
-    if (i % 3 === 0) {
-      const phase = (t || 0) / 1.1 + i * 0.173;
-      if (!roll(rite, 0xd0 + (i % 11), Math.floor(phase)).flicker(fract(phase))) continue;
-    }
     const x = ((i * 0.6180339 + v.turn * 0.37) % 1) * w;
     const y = ((i * 0.7548777 + v.turn * 0.13) % 1) * h * depth;
     g.fillRect(x, y, 1, 1);
@@ -419,10 +562,20 @@ function orderGeometry(w, h, n) {
   return { left: (w - span) / 2, span, cell: span / n, top, bottom, y: (rank) => top + ((bottom - top) * rank) / (n - 1) };
 }
 
-function orderBlank(plan, t) {
+function orderBlank(plan) {
   const n = plan.n;
   return { order: plan.start.slice(), hinted: [], hintedAt: [], from: {}, moves: 0, lift: new Array(n).fill(0),
-    glow: new Array(n).fill(0), t: t || 0, gone: 0, doneAt: -1 };
+    glow: new Array(n).fill(0), t: 0, rose: 0, doneAt: -1, until: null, drawn: null, drawnAt: -Infinity };
+}
+
+// Where lantern i hangs now: its rank as it shows (a fraction while it travels, geo.y being even in
+// rank) and the place its name says, which is the place it set off from until it has landed.
+function hangs(s, rite, i, reduced) {
+  const rank = s.order.indexOf(i);
+  const from = s.from[i];
+  if (!from) return { rank, name: rank };
+  const e = landing(roll(rite, 0x100 + i, from.roll), came(s, from.at, 0.9, reduced));
+  return e >= 1 ? { rank, name: rank } : { rank: from.rank + (rank - from.rank) * e, name: from.name };
 }
 
 function drawOrder(g, w, h, env, plan, s, variant) {
@@ -435,7 +588,7 @@ function drawOrder(g, w, h, env, plan, s, variant) {
   const k = Math.max(0.75, Math.min(2, Math.min(w, h) / 320)) * v.scale;
   const small = Math.max(9, Math.min(13, Math.round(Math.min(w, h) * 0.036)));
   sky(g, w, h, env);
-  sparks(g, w, h, env, v, 0.5, s.t);
+  sparks(g, w, h, env, v, 0.5);
   write(g, 'first to rise at the top', w / 2, h * 0.05, small, 'center', env.alpha(c.muted, 0.85));
   // A faint rail for each rank, so a height can be read as a place.
   g.strokeStyle = env.alpha(c.muted, 0.1 + 0.08 * v.density);
@@ -449,26 +602,21 @@ function drawOrder(g, w, h, env, plan, s, variant) {
   g.stroke();
   g.setLineDash([]);
   for (let i = 0; i < n; i++) {
-    const rank = s.order.indexOf(i);
     const x = geo.left + (i + 0.5) * geo.cell;
-    const bob = reduced ? 0 : sway(rite, 0x10, s.t, i) * 3 * k;
-    // A lantern moved to another place travels there along the curve of that move's roll, and
-    // the name of its place blinks on when it arrives.
-    const from = s.from[i];
-    const moveRite = from ? roll(rite, 0x100 + i, from.roll) : null;
-    const moveP = from ? came(s, from.at, 0.9, reduced) : 1;
-    const hung = from ? travel(moveRite, geo.y(from.rank), geo.y(rank), moveP) : geo.y(rank);
-    const y = hung + bob - (s.lift[i] || 0);
+    // A lantern moved to another place travels there in the landing treads of that move's roll,
+    // and the name under it is cut over from the old place to the new as it lands.
+    const hung = hangs(s, rite, i, reduced);
+    const y = geo.y(hung.rank) - (s.lift[i] || 0);
     if (s.hinted.includes(i)) {
-      // The hinted place is sealed: a fill develops through the matte in it, on the roll of that
-      // hint, and its frame blinks on.
+      // The hinted place is sealed: cut in by the piece's edge up the stair of that hint's roll,
+      // resting in two shades, and its frame drawn once the seal has come whole.
       const at = s.hinted.indexOf(i);
       const hintRite = roll(rite, 0x200, at);
       const hintP = came(s, s.hintedAt[at], 0.8, reduced);
       const hy = geo.y(plan.order.indexOf(i));
-      g.fillStyle = env.alpha(c.accent, 0.22);
-      sealed(g, hintRite, { x: x - 11 * k, y: hy - 12 * k, w: 22 * k, h: 24 * k }, true, hintP, Math.max(2, rite.cell));
-      if (hintRite.flicker(hintP)) {
+      g.fillStyle = env.alpha(c.accent, 0.16);
+      cover(g, hintRite, x - 11 * k, hy - 12 * k, 22 * k, 24 * k, hintRite.stair(hintP));
+      if (hintRite.stair(hintP) >= 1) {
         g.strokeStyle = env.alpha(c.accent, 0.9);
         g.lineWidth = 1.5;
         g.setLineDash([3, 3]);
@@ -477,7 +625,7 @@ function drawOrder(g, w, h, env, plan, s, variant) {
       }
     }
     lantern(g, env, x, y, 0.5 + (s.glow[i] || 0), k, LETTERS[i]);
-    if (!from || moveRite.flicker(moveP)) write(g, ORDINAL[rank], x, geo.bottom + 24 * k, small, 'center', env.alpha(c.fg, 0.8));
+    write(g, ORDINAL[hung.name], x, geo.bottom + 24 * k, small, 'center', env.alpha(c.fg, 0.8));
   }
   // The clues, under the sky.
   const size = Math.max(9, Math.min(15, Math.round(Math.min(w, h) * 0.04)));
@@ -490,29 +638,31 @@ function drawOrder(g, w, h, env, plan, s, variant) {
     write(g, clueText(clue), x0 + size * 1.6, y, size, 'left', env.alpha(c.fg, 0.9));
     y += size * 1.5;
   });
-  if (s.doneAt != null && s.doneAt >= 0) daybreak(g, rite, env, w, h, came(s, s.doneAt, 2.4, reduced), 0.1);
+  if (s.doneAt != null && s.doneAt >= 0) daybreak(g, rite, env, w, h, came(s, s.doneAt, 2.4, reduced), 0.06);
 }
 
-function orderPreview(g, w, h, env, plan, t) {
-  drawOrder(g, w, h, env, plan, orderBlank(plan, t), env.variant);
+function orderPreview(g, w, h, env, plan) {
+  drawOrder(g, w, h, env, plan, orderBlank(plan), env.variant);
 }
 
 function orderPiece(env, plan) {
   const helps = asked(env).helps;
   const n = plan.n;
-  const s = orderBlank(plan, 0);
-  const draw = (c) => drawOrder(c.g, c.w, c.h, c, plan, s, env.variant);
+  const s = orderBlank(plan);
+  const draw = (c) => drawn(s, c, () => drawOrder(c.g, c.w, c.h, c, plan, s, env.variant));
   const named = (list) => list.map((i) => LETTERS[i]).join(', ');
   function current(c) {
     const v = c.value('order');
     return Array.isArray(v) && v.length === n ? v.map(Number) : s.order;
   }
-  // Every lantern whose place changed sets off from where it hung, on a roll of this move's own.
-  function rehang(next) {
+  // Every lantern whose place changed sets off from the height it shows now -- where it hangs, or
+  // as far as it had come on a move still under way -- with the name it shows, on a roll of this
+  // move's own.
+  function rehang(next, c) {
     for (let i = 0; i < n; i++) {
-      const was = s.order.indexOf(i);
-      if (was === next.indexOf(i)) continue;
-      s.from[i] = { rank: was, at: s.t, roll: s.moves };
+      if (s.order.indexOf(i) === next.indexOf(i)) continue;
+      const now = hangs(s, riteOf(c), i, c.reduced);
+      s.from[i] = { rank: now.rank, name: now.name, at: s.t, roll: s.moves };
     }
     s.moves += 1;
     s.order = next;
@@ -545,7 +695,7 @@ function orderPiece(env, plan) {
     },
     apply(id, value, c) {
       if (id === 'order' && Array.isArray(value) && value.length === n) {
-        rehang(value.map(Number));
+        rehang(value.map(Number), c);
         c.status('first to last: ' + named(s.order));
       }
       if (id === 'hint') {
@@ -581,28 +731,33 @@ function orderPiece(env, plan) {
         next[rank] = next[rank - 1];
         next[rank - 1] = col;
       }
-      rehang(next);
+      rehang(next, c);
       c.set('order', next.slice());
       c.status('lantern ' + LETTERS[col] + ' now rises ' + ORDINAL[next.indexOf(col)]);
       draw(c);
     },
     frame(t, dt, c) {
       s.t += Math.max(0, dt);
+      let rising = false;
       if (c.done) {
         if (s.doneAt < 0) s.doneAt = s.t;
-        s.gone = c.reduced ? 2 : Math.min(2, s.gone + dt * 2);
+        rising = s.rose < 2;
+        s.rose = c.reduced ? 2 : Math.min(2, s.rose + dt * 2);
         // The lanterns rise and brighten in treads, first to rise first, each on a roll of its own.
         for (let i = 0; i < n; i++) {
           const own = roll(riteOf(c), 0x300, i);
-          const up = own.stair(Math.max(0, Math.min(1, s.gone - s.order.indexOf(i) * 0.12)));
+          const up = own.stair(Math.max(0, Math.min(1, s.rose - s.order.indexOf(i) * 0.12)));
           s.lift[i] = c.reduced ? 0 : up * 4 * Math.max(1, c.h / 320);
           s.glow[i] = up * 0.9;
         }
       }
+      if (!rising && settled(s, c)) return false;
       draw(c);
+      return (c.done && s.rose < 2) || !settled(s, c);
     },
     end(c) {
       if (s.doneAt < 0) s.doneAt = s.t;
+      s.drawn = null;
       c.status(named(plan.order) + ': the order holds. The lights stay yours to rearrange.');
     }
   };
@@ -682,27 +837,43 @@ function arrow(g, x0, x1, y, head) {
   g.fill();
 }
 
-// A climb of f bands, read through the rite: every band crossed is its own glitch of a curve
-// taken in its own treads, rolled for that band of that flight, so the lantern hesitates, surges,
-// overshoots and settles into each in held steps and never floats up evenly.
+// A climb of f bands, read through the rite: every band crossed is taken in landing treads rolled
+// for that band of that flight, the longest step first and each after it shorter, so the lantern
+// climbs in held steps, never floats up evenly, and never drops back.
 function climbed(rite, base, flight, f, count) {
   if (f <= 0) return 0;
   if (f >= count) return count;
   const b = Math.floor(f);
-  return Math.min(count, b + Math.max(0, tread(roll(rite, base + b, flight), f - b)));
+  return Math.min(count, b + roll(rite, base + b, flight).ease(f - b));
 }
 
-// A dotted line's dashes advanced in the ratchet's clicks, one tooth-set per `period` seconds
-// on a fresh roll each time round, as an offset for setLineDash; still for less motion.
-function clicks(rite, base, t, period, reduced) {
-  if (reduced) return 0;
-  const x = (t || 0) / period;
-  return -7 * (Math.floor(x) + roll(rite, base, Math.floor(x)).ratchet(fract(x)));
+// `band` is the band named as pushing hardest and `named` its seals (reseal()), `guess` the column
+// said and `guessFrom` where its mark set off from, `flight` how many bands the lantern has climbed
+// on its `launches`-th flight, `freedAt` when the first flight went (the moment "let go here" is
+// cut out for good), and `gone` the flights given back to the edge (giveBack()).
+function driftBlank() {
+  return { band: 0, named: {}, seals: 0, guess: null, guessFrom: null, guessAt: -1, guesses: 0,
+    hinted: [], hintAt: [], flight: 0, launches: 0, freedAt: -1, gone: [], goes: 0, t: 0, launched: false,
+    doneAt: -1, until: null, drawn: null, drawnAt: -Infinity };
 }
 
-function driftBlank(t) {
-  return { band: 0, bandPrev: 0, bandAt: -1, bandSets: 0, guess: null, guessFrom: null, guessAt: -1, guesses: 0,
-    hinted: [], hintAt: [], flight: 0, launches: 0, launchAt: -1, t: t || 0, launched: false, doneAt: -1 };
+// A flight's lit path, as far as it has climbed (climbed(), in landing treads per band), and where
+// its head is.
+function driftPath(g, env, geo, pos, nb, rite, launches, flight) {
+  const f = climbed(rite, 0x60, launches, Math.min(flight, nb), nb);
+  const b = Math.min(nb - 1, Math.floor(f));
+  const col = f >= nb ? pos[nb] : pos[b] + (pos[b + 1] - pos[b]) * (f - b);
+  const head = { x: geo.x(col), y: geo.bottom - f * geo.band };
+  g.strokeStyle = env.alpha(env.colors.accent2, 0.5);
+  g.lineWidth = 1;
+  g.setLineDash([2, 3]);
+  g.beginPath();
+  g.moveTo(geo.x(0), geo.bottom + geo.band * 0.42);
+  for (let j = 1; j <= b; j++) g.lineTo(geo.x(pos[j]), geo.bottom - j * geo.band);
+  g.lineTo(head.x, head.y);
+  g.stroke();
+  g.setLineDash([]);
+  return head;
 }
 
 function drawDrift(g, w, h, env, plan, s, variant) {
@@ -715,7 +886,7 @@ function drawDrift(g, w, h, env, plan, s, variant) {
   const k = Math.max(0.6, Math.min(1.6, Math.min(w, h) / 320)) * v.scale;
   const small = Math.max(8, Math.min(13, Math.round(Math.min(w, h) * 0.034)));
   sky(g, w, h, env);
-  sparks(g, w, h, env, v, 0.11, s.t);
+  sparks(g, w, h, env, v, 0.11);
   // The column grid, and the release column dotted up through every band.
   g.strokeStyle = env.alpha(c.muted, 0.1 + 0.06 * v.density);
   g.lineWidth = 1;
@@ -728,34 +899,26 @@ function drawDrift(g, w, h, env, plan, s, variant) {
   g.stroke();
   g.strokeStyle = env.alpha(c.accent2, 0.5);
   g.setLineDash([3, 4]);
-  g.lineDashOffset = clicks(rite, 0x0d, s.t, 1.3, reduced);
   g.beginPath();
   g.moveTo(geo.x(0), geo.top - 4);
   g.lineTo(geo.x(0), geo.bottom + geo.band * 0.85);
   g.stroke();
   g.setLineDash([]);
-  g.lineDashOffset = 0;
   for (let col = -COLS; col <= COLS; col += 4) {
     write(g, signed(col), geo.x(col), h * 0.955, small, 'center', env.alpha(col === 0 ? c.accent2 : c.muted, 0.85));
   }
   // The bands, bottom to top: a strip, its number, and its push drawn from the dotted column. The
-  // band the visitor names is sealed: its fill develops through the matte on the roll of that
-  // naming and its edge blinks on; the band named before dissolves back down the ladder.
+  // band the visitor names is sealed: cut in by the piece's edge up the stair of that naming's
+  // roll, resting in two shades, its edge lit once the seal has come whole; every band named
+  // before is given back as the same edge withdraws, each from what it showed.
   const pos = positions(plan.bands);
-  const bandRite = roll(rite, 0x20, s.bandSets);
-  const bandP = came(s, s.bandAt, 0.9, reduced);
   for (let b = 0; b < nb; b++) {
     const y0 = geo.bottom - (b + 1) * geo.band;
     const d = plan.bands[b];
-    const chosen = s.band === b + 1;
-    const was = !chosen && s.bandAt >= 0 && s.bandPrev === b + 1;
     g.fillStyle = env.alpha(b % 2 ? c.accent : c.accent2, 0.05);
     g.fillRect(geo.left, y0, geo.span, geo.band);
-    if (chosen || was) {
-      g.fillStyle = env.alpha(c.accent2, 0.1);
-      sealed(g, bandRite, { x: geo.left, y: y0, w: geo.span, h: geo.band }, chosen, bandP, Math.max(rite.cell, Math.ceil(geo.span / 40)));
-    }
-    const lit = chosen && bandRite.flicker(bandP);
+    g.fillStyle = env.alpha(c.accent2, 0.08);
+    const lit = sealed(g, s, rite, 0x20, s.named[b + 1], { x: geo.left, y: y0, w: geo.span, h: geo.band }, reduced);
     g.strokeStyle = env.alpha(lit ? c.accent2 : c.muted, lit ? 0.7 : 0.3);
     g.strokeRect(geo.left, y0, geo.span, geo.band);
     write(g, 'band ' + (b + 1), geo.left + 4, y0 + small * 0.9, small, 'left', env.alpha(c.muted, 0.9));
@@ -773,7 +936,7 @@ function drawDrift(g, w, h, env, plan, s, variant) {
       g.arc(geo.x(0), ym, 3 * k, 0, TAU);
       g.stroke();
     }
-    // A shown position blinks on, on the roll of that hint.
+    // A shown position is cut on at its moment, on the roll of that hint, and stays.
     const shown = s.hinted.indexOf(b + 1);
     if (shown >= 0 && roll(rite, 0x30, b).flicker(came(s, s.hintAt[shown], 0.8, reduced))) {
       g.fillStyle = env.alpha(c.accent, 0.95);
@@ -783,53 +946,40 @@ function drawDrift(g, w, h, env, plan, s, variant) {
       write(g, 'at ' + signed(pos[b + 1]), geo.x(pos[b + 1]), y0 - small * 0.8, small, 'center', env.alpha(c.accent, 0.95));
     }
   }
-  // The lantern: waiting under the first band, or in flight once it has been let go, climbing
-  // each band along a curve rolled for that band of that flight.
-  const bob = reduced ? 0 : sway(rite, 0x40, s.t, 0) * 2.5 * k;
+  // A flight the visitor has replayed: its old path is given back to the piece's edge while the
+  // new one climbs.
+  giveBack(g, s, rite, w, h, reduced, (was) => driftPath(g, env, geo, pos, nb, rite, was.launches, was.flight));
+  // The lantern: hanging still under the first band, or in flight once it has been let go,
+  // climbing each band in landing treads rolled for that band of that flight.
   let lx = geo.x(0);
   let ly = geo.bottom + geo.band * 0.42;
   const launchRite = roll(rite, 0x50, s.launches);
   if (s.flight > 0) {
-    const f = climbed(rite, 0x60, s.launches, Math.min(s.flight, nb), nb);
-    const b = Math.min(nb - 1, Math.floor(f));
-    const col = f >= nb ? pos[nb] : pos[b] + (pos[b + 1] - pos[b]) * (f - b);
-    lx = geo.x(col);
-    ly = geo.bottom - f * geo.band;
-    g.strokeStyle = env.alpha(c.accent2, 0.5);
-    g.lineWidth = 1;
-    g.setLineDash([2, 3]);
-    g.beginPath();
-    g.moveTo(geo.x(0), geo.bottom + geo.band * 0.42);
-    for (let j = 1; j <= b; j++) g.lineTo(geo.x(pos[j]), geo.bottom - j * geo.band);
-    g.lineTo(lx, ly);
-    g.stroke();
-    g.setLineDash([]);
+    const head = driftPath(g, env, geo, pos, nb, rite, s.launches, s.flight);
+    lx = head.x;
+    ly = head.y;
   }
-  // "let go here" blinks out as the lantern goes, with one flicker back.
-  if (!(s.flight > 0) || !launchRite.flicker(came(s, s.launchAt, 0.6, reduced))) {
+  // "let go here" is cut out at the first launch's moment, as the lantern goes, and stays out.
+  if (!(s.freedAt >= 0 && roll(rite, 0x50, 0).flicker(came(s, s.freedAt, 0.6, reduced)))) {
     write(g, 'let go here', geo.x(0) + 10 * k, geo.bottom + geo.band * 0.42, small, 'left', env.alpha(c.muted, 0.9));
   }
-  lantern(g, env, lx, ly + bob, 0.7 + launchRite.stair(Math.min(1, s.flight)) * 0.5, k, '');
-  // The answer as set: a hollow mark over the column the visitor says it leaves at, which blinks
-  // on and travels from the column said before along the curve of that setting's roll.
-  if (s.guess != null) {
-    const guessRite = roll(rite, 0x70, s.guesses);
-    const guessP = came(s, s.guessAt, 0.8, reduced);
-    const gx = s.guessFrom == null ? geo.x(s.guess) : travel(guessRite, geo.x(s.guessFrom), geo.x(s.guess), guessP);
-    if (guessRite.flicker(guessP)) {
-      g.strokeStyle = env.alpha(c.accent, 0.9);
-      g.lineWidth = 1.5;
-      g.setLineDash([3, 3]);
-      g.strokeRect(gx - 6 * k, geo.top - 10 * k, 12 * k, 8 * k);
-      g.setLineDash([]);
-    }
+  lantern(g, env, lx, ly, 0.7 + launchRite.stair(Math.min(1, s.flight)) * 0.5, k, '');
+  // The answer as set: a hollow mark over the column the visitor says it leaves at (markAt()),
+  // never taken away to be put back.
+  const gx = markAt(s, rite, 0x70, reduced);
+  if (gx != null) {
+    g.strokeStyle = env.alpha(c.accent, 0.9);
+    g.lineWidth = 1.5;
+    g.setLineDash([3, 3]);
+    g.strokeRect(geo.x(gx) - 6 * k, geo.top - 10 * k, 12 * k, 8 * k);
+    g.setLineDash([]);
   }
   write(g, 'where it leaves the top', w / 2, h * 0.045, small, 'center', env.alpha(c.muted, 0.85));
-  if (s.doneAt != null && s.doneAt >= 0) daybreak(g, rite, env, w, h, came(s, s.doneAt, 2.4, reduced), 0.1);
+  if (s.doneAt != null && s.doneAt >= 0) daybreak(g, rite, env, w, h, came(s, s.doneAt, 2.4, reduced), 0.06);
 }
 
-function driftPreview(g, w, h, env, plan, t) {
-  drawDrift(g, w, h, env, plan, driftBlank(t), env.variant);
+function driftPreview(g, w, h, env, plan) {
+  drawDrift(g, w, h, env, plan, driftBlank(), env.variant);
 }
 
 function driftPiece(env, plan) {
@@ -838,8 +988,8 @@ function driftPiece(env, plan) {
   const total = driftTotal(plan.bands);
   const hard = strongest(plan.bands);
   const pos = positions(plan.bands);
-  const s = driftBlank(0);
-  const draw = (c) => drawDrift(c.g, c.w, c.h, c, plan, s, env.variant);
+  const s = driftBlank();
+  const draw = (c) => drawn(s, c, () => drawDrift(c.g, c.w, c.h, c, plan, s, env.variant));
   const leaves = (n) => 'column ' + signed(n) + ', ' + WORDS[Math.abs(n)] + (Math.abs(n) === 1 ? ' column ' : ' columns ') + (n < 0 ? 'left' : 'right') + ' of where it was let go';
   return {
     title: driftTitle(plan),
@@ -861,12 +1011,16 @@ function driftPiece(env, plan) {
       const band = Math.round(Number(c.value('band')));
       const driftRight = guess === total;
       const bandRight = band === hard;
-      s.launched = driftRight && bandRight;
-      s.flight = c.reduced && s.launched ? nb : 0;
-      if (s.launched) {
-        // Every flight is its own: a fresh roll for its climb, its glow and the label it leaves.
+      // A wrong check changes nothing on the sky: a path already lit is the true one, and stays.
+      if (driftRight && bandRight) {
+        // Every flight is its own: a fresh roll for its climb and its glow. A flight that already
+        // climbed is given back to the piece's edge, and the lantern is cut over once to the
+        // release column to climb again.
+        if (s.flight > 0) goneFrom(s, { launches: s.launches, flight: s.flight });
+        s.launched = true;
         s.launches += 1;
-        s.launchAt = s.t;
+        if (s.freedAt < 0) s.freedAt = s.t;
+        s.flight = c.reduced ? nb : 0;
         draw(c);
         return { solved: true, say: 'it leaves the top at ' + leaves(total) + '; band ' + hard + ' pushed hardest' };
       }
@@ -880,31 +1034,23 @@ function driftPiece(env, plan) {
       draw(c);
     },
     apply(id, value, c) {
-      if (id === 'drift' || id === 'band') {
-        s.launched = false;
-        s.flight = 0;
-      }
+      // A knob turned leaves the sky as it is: the path a solved flight lit is the true one, so a
+      // change of answer does not take it away.
+      const rite = riteOf(c);
       if (id === 'drift') {
         const n = Math.round(Number(value));
-        const next = Number.isFinite(n) ? Math.max(-COLS, Math.min(COLS, n)) : null;
-        if (next !== s.guess) {
-          // The mark sets off from the column said before, on a roll of this setting's own.
-          s.guessFrom = s.guess;
-          s.guess = next;
-          s.guessAt = s.t;
-          s.guesses += 1;
-        }
+        // The mark sets off from where it shows, on a roll of this setting's own.
+        if (Number.isFinite(n)) guessed(s, Math.max(-COLS, Math.min(COLS, n)), rite, 0x70, c.reduced);
         c.status('you say it leaves at ' + signed(s.guess));
       }
       if (id === 'band') {
         const n = Math.round(Number(value));
         const next = Number.isFinite(n) ? Math.max(1, Math.min(nb, n)) : 0;
         if (next !== s.band) {
-          // The band named before dissolves while this one seals, on a roll of this naming's own.
-          s.bandPrev = s.band;
+          // The band named before is given back while this one seals, each from what it shows.
+          reseal(s, s.named, s.band > 0 ? s.band : null, false, rite, 0x20, c.reduced);
+          reseal(s, s.named, next > 0 ? next : null, true, rite, 0x20, c.reduced);
           s.band = next;
-          s.bandAt = s.t;
-          s.bandSets += 1;
         }
         c.status('you say band ' + s.band + ' pushes hardest');
       }
@@ -924,11 +1070,15 @@ function driftPiece(env, plan) {
     frame(t, dt, c) {
       s.t += Math.max(0, dt);
       if (c.done && s.doneAt < 0) s.doneAt = s.t;
-      if (s.launched) s.flight = c.reduced ? nb : Math.min(nb, s.flight + dt * nb * 1.2);
+      const climbing = s.launched && s.flight < nb;
+      if (climbing) s.flight = c.reduced ? nb : Math.min(nb, s.flight + dt * nb * 1.2);
+      if (!climbing && settled(s, c)) return false;
       draw(c);
+      return (s.launched && s.flight < nb) || !settled(s, c);
     },
     end(c) {
       if (s.doneAt < 0) s.doneAt = s.t;
+      s.drawn = null;
       c.status('It arrives at ' + signed(total) + '. The path stays lit; press check again to replay the ascent.');
     }
   };
@@ -971,9 +1121,58 @@ function witnessGeometry(w, h, n) {
     band: h * 0.53 / n, x: (col) => w * (0.5 + col * 0.023) };
 }
 
-function witnessBlank(t) {
-  return { winds: [0, 0], windFrom: [0, 0], windAt: [-1, -1], windSets: [0, 0], hints: 0, hintAt: [],
-    run: null, runs: 0, runAt: -1, flight: 0, look: -1, lookPrev: -1, lookAt: -1, looks: 0, t: t || 0, doneAt: -1 };
+// `winds` are the two missing winds as set, each swung from `windFrom` (where its arrow pointed
+// when it was set) and read as `windWas` until its setting's moment; `look` is the band looked at
+// and `looked` its seals (reseal()); `run` the winds of the pair last traced, `runs` how many have
+// been traced and `flight` how far up this one has climbed (0..1); `gone` the traced pairs given
+// back to the edge (giveBack()).
+function witnessBlank() {
+  return { winds: [0, 0], windFrom: [0, 0], windWas: [0, 0], windAt: [-1, -1], windSets: [0, 0], hints: 0, hintAt: [],
+    run: null, runs: 0, flight: 0, look: -1, looked: {}, seals: 0, gone: [], goes: 0, t: 0, doneAt: -1,
+    until: null, drawn: null, drawnAt: -Infinity };
+}
+
+// The arrow of a wind the visitor sets, in columns: swung from where it pointed when it was set to
+// the new push, in the landing treads of that setting's roll.
+function windShown(s, rite, at, reduced) {
+  return travel(roll(rite, 0x80 + at, s.windSets[at]), s.windFrom[at], s.winds[at], came(s, s.windAt[at], 0.9, reduced));
+}
+
+// The number its readout shows: the one it read until the setting's moment, and the new one from
+// that moment on -- one cut over, never a gap.
+function windRead(s, rite, at, reduced) {
+  return roll(rite, 0x80 + at, s.windSets[at]).flicker(came(s, s.windAt[at], 0.9, reduced)) ? s.winds[at] : s.windWas[at];
+}
+
+// The two lanterns' paths of one traced pair, as far as they have climbed: A from below band 1, B
+// from below its own band, each band in landing treads rolled for that band of that run. Hands back
+// each lantern's head: its column, how many bands it has climbed, and the height it has reached.
+function witnessPaths(g, env, geo, plan, rite, run, runs, flight) {
+  const c = env.colors;
+  const nb = plan.bands.length;
+  const heads = [];
+  for (let i = 0; i < 2; i++) {
+    const start = i ? plan.split : 0;
+    const count = nb - start;
+    const pos = positions(run.slice(start));
+    const f = climbed(rite, 0xa0 + i * 8, runs, flight * count, count);
+    const b = Math.min(count - 1, Math.floor(f));
+    const col = f >= count ? pos[count] : pos[b] + (pos[b + 1] - pos[b]) * (f - b);
+    const boundary = geo.bottom - (start + f) * geo.band;
+    g.strokeStyle = env.alpha(i ? c.accent : c.accent2, 0.8);
+    g.lineWidth = 1.5;
+    g.setLineDash(i ? [3, 3] : []);
+    g.beginPath();
+    g.moveTo(geo.x(0), geo.bottom - start * geo.band);
+    for (let j = 1; j <= Math.min(count, Math.floor(f)); j++) {
+      g.lineTo(geo.x(pos[j]), geo.bottom - (start + j) * geo.band);
+    }
+    g.lineTo(geo.x(col), boundary);
+    g.stroke();
+    g.setLineDash([]);
+    heads.push({ col, f, boundary });
+  }
+  return heads;
 }
 
 function drawWitness(g, w, h, env, plan, s, variant) {
@@ -987,44 +1186,36 @@ function drawWitness(g, w, h, env, plan, s, variant) {
   const k = Math.max(0.55, Math.min(1.5, Math.min(w, h) / 300)) * v.scale;
   const arrivals = [driftTotal(plan.bands), driftTotal(plan.bands.slice(plan.split))];
   sky(g, w, h, env);
-  sparks(g, w, h, env, v, 0.18, s.t);
+  sparks(g, w, h, env, v, 0.18);
   write(g, 'A arrives ' + signed(arrivals[0]), w * 0.27, h * 0.06, size, 'center', c.fg);
   write(g, 'B arrives ' + signed(arrivals[1]), w * 0.73, h * 0.06, size, 'center', c.fg);
   g.strokeStyle = env.alpha(c.muted, 0.25);
   g.lineWidth = 1;
   g.setLineDash([2, 4]);
-  g.lineDashOffset = clicks(rite, 0x0d, s.t, 1.3, reduced);
   g.beginPath();
   g.moveTo(geo.x(0), geo.top);
   g.lineTo(geo.x(0), geo.bottom);
   g.stroke();
   g.setLineDash([]);
-  g.lineDashOffset = 0;
-  // The band being looked at is sealed: its fill develops through the matte on the roll of that
-  // look, and the one looked at before dissolves back down the ladder.
-  const lookRite = roll(rite, 0x70, s.looks);
-  const lookP = came(s, s.lookAt, 0.9, reduced);
   for (let b = 0; b < nb; b++) {
     const y = geo.bottom - (b + 1) * geo.band;
     const missing = b === plan.lower ? 0 : b === plan.upper ? 1 : -1;
-    // A wind the visitor set swings its arrow from the old push to the new along the curve of
-    // that setting's roll; its readout blinks on when it lands.
-    const windRite = missing < 0 ? null : roll(rite, 0x80 + missing, s.windSets[missing]);
-    const windP = missing < 0 ? 1 : came(s, s.windAt[missing], 0.9, reduced);
-    const wind = missing < 0 ? plan.bands[b] : travel(windRite, s.windFrom[missing], s.winds[missing], windP);
+    // A wind the visitor set swings its arrow in the landing treads of that setting's roll, from
+    // where it pointed; its readout keeps the number it read until the setting's moment and is cut
+    // over to the new one then.
+    const wind = missing < 0 ? plan.bands[b] : windShown(s, rite, missing, reduced);
     g.fillStyle = env.alpha(b % 2 ? c.accent : c.accent2, 0.045);
     g.fillRect(geo.left, y, geo.span, geo.band);
-    if (s.look === b || (s.lookAt >= 0 && s.lookPrev === b && s.look !== b)) {
-      g.fillStyle = env.alpha(b % 2 ? c.accent : c.accent2, 0.09);
-      sealed(g, lookRite, { x: geo.left, y, w: geo.span, h: geo.band }, s.look === b, lookP, Math.max(rite.cell, Math.ceil(geo.span / 40)));
-    }
+    // The band being looked at is sealed: cut in by the piece's edge up the stair of that look's
+    // roll -- round the point it was tapped at, on a piece whose edge is a curve -- and resting in
+    // two shades; every band looked at before is given back as the edge withdraws.
+    g.fillStyle = env.alpha(b % 2 ? c.accent : c.accent2, 0.07);
+    sealed(g, s, rite, 0x70, s.looked[b], { x: geo.left, y, w: geo.span, h: geo.band }, reduced);
     g.strokeStyle = env.alpha(c.muted, 0.3);
     g.strokeRect(geo.left, y, geo.span, geo.band);
     write(g, 'band ' + (b + 1), geo.left + 4, y + size * 0.8, size, 'left', c.fg);
-    if (missing < 0 || windRite.flicker(windP)) {
-      write(g, missing < 0 ? signed(wind) : '? / set ' + signed(s.winds[missing]),
-        geo.left + geo.span - 4, y + size * 0.8, size, 'right', c.accent2);
-    }
+    write(g, missing < 0 ? signed(wind) : '? / set ' + signed(windRead(s, rite, missing, reduced)),
+      geo.left + geo.span - 4, y + size * 0.8, size, 'right', c.accent2);
     g.strokeStyle = missing < 0 ? c.fg : c.accent;
     g.fillStyle = g.strokeStyle;
     g.lineWidth = 1.5;
@@ -1036,22 +1227,19 @@ function drawWitness(g, w, h, env, plan, s, variant) {
       g.stroke();
     }
     g.setLineDash([]);
-    // A worked subtraction's answer blinks on, on the roll of that hint.
+    // A worked subtraction's answer is cut on at its moment, on the roll of that hint, and stays.
     const told = missing === 1 && s.hints >= 2 ? 1 : missing === 0 && s.hints >= 4 ? 3 : -1;
     if (told >= 0 && roll(rite, 0x90, told).flicker(came(s, s.hintAt[told], 0.8, reduced))) {
       write(g, 'shown ' + signed(plan.bands[b]), w / 2, y + size * 0.8, size, 'center', c.accent2);
     }
   }
+  // A traced pair the visitor has moved on from -- a wind changed, a new check -- leaves its paths
+  // to the piece's edge; the pair traced now climbs from its starts.
+  giveBack(g, s, rite, w, h, reduced, (was) => witnessPaths(g, env, geo, plan, rite, was.run, was.runs, was.flight));
+  const heads = s.run ? witnessPaths(g, env, geo, plan, rite, s.run, s.runs, s.flight) : null;
   for (let i = 0; i < 2; i++) {
     const start = i ? plan.split : 0;
     const count = nb - start;
-    const pos = positions((s.run || new Array(nb).fill(0)).slice(start));
-    // The climb, band by band along a curve rolled for that band of that run; the lift into the
-    // ring at the top comes in treads.
-    const f = s.run ? climbed(rite, 0xa0 + i * 8, s.runs, s.flight * count, count) : 0;
-    const b = Math.min(count - 1, Math.floor(f));
-    const col = f >= count ? pos[count] : pos[b] + (pos[b + 1] - pos[b]) * (f - b);
-    const boundary = geo.bottom - (start + f) * geo.band;
     const lift = (i ? 22 : 8) * k;
     g.strokeStyle = env.alpha(i ? c.accent : c.accent2, 0.8);
     g.lineWidth = 1.5;
@@ -1059,29 +1247,22 @@ function drawWitness(g, w, h, env, plan, s, variant) {
     g.beginPath();
     g.arc(geo.x(arrivals[i]), geo.top - lift, 10 * k, 0, TAU);
     g.stroke();
-    if (s.run) {
-      g.beginPath();
-      g.moveTo(geo.x(0), geo.bottom - start * geo.band);
-      for (let j = 1; j <= Math.min(count, Math.floor(f)); j++) {
-        g.lineTo(geo.x(pos[j]), geo.bottom - (start + j) * geo.band);
-      }
-      g.lineTo(geo.x(col), boundary);
-      g.stroke();
-    }
     g.setLineDash([]);
-    const bob = reduced ? 0 : sway(rite, 0xb0, s.t, i) * 2.5 * k;
+    // The lantern stands at its start until a pair is traced, then climbs with its path; the lift
+    // into the ring at the top comes up a stair.
+    const head = heads ? heads[i] : { col: 0, f: 0, boundary: geo.bottom - start * geo.band };
     const runRite = roll(rite, 0xc0 + i, s.runs);
     const rise = runRite.stair(Math.max(0, Math.min(1, (s.flight - 0.7) / 0.3)));
-    const y = boundary + geo.band * 0.32 * (1 - f / count) - lift * rise;
-    lantern(g, env, geo.x(col), y + bob, 0.7 + runRite.stair(s.flight) * 0.5, k, i ? 'B' : 'A');
+    const y = head.boundary + geo.band * 0.32 * (1 - head.f / count) - lift * rise;
+    lantern(g, env, geo.x(head.col), y, 0.7 + runRite.stair(s.flight) * 0.5, k, i ? 'B' : 'A');
   }
   write(g, 'A starts below band 1', w / 2, h * 0.88, size, 'center', c.fg);
   write(g, 'B starts below band ' + (plan.split + 1), w / 2, h * 0.95, size, 'center', c.fg);
-  if (s.doneAt != null && s.doneAt >= 0) daybreak(g, rite, env, w, h, came(s, s.doneAt, 2.4, reduced), 0.1);
+  if (s.doneAt != null && s.doneAt >= 0) daybreak(g, rite, env, w, h, came(s, s.doneAt, 2.4, reduced), 0.06);
 }
 
-function witnessPreview(g, w, h, env, plan, t) {
-  drawWitness(g, w, h, env, plan, witnessBlank(t), env.variant);
+function witnessPreview(g, w, h, env, plan) {
+  drawWitness(g, w, h, env, plan, witnessBlank(), env.variant);
 }
 
 function witnessPiece(env, plan) {
@@ -1100,16 +1281,36 @@ function witnessPiece(env, plan) {
     'Band ' + (plan.lower + 1) + ': ' + signed(arrivals[0]) + ' - (' + signed(remaining)
       + ') = ' + signed(plan.bands[plan.lower]) + '.'
   ];
-  const s = witnessBlank(0);
-  const draw = (c) => drawWitness(c.g, c.w, c.h, c, plan, s, env.variant);
+  const s = witnessBlank();
+  const draw = (c) => drawn(s, c, () => drawWitness(c.g, c.w, c.h, c, plan, s, env.variant));
   const valid = (n) => Number.isInteger(n) && n >= -4 && n <= 4;
-  // A wind set: its arrow sets off from where it pointed, on a roll of this setting's own.
-  function setWind(at, wind) {
-    if (wind === s.winds[at]) return;
-    s.windFrom[at] = s.winds[at];
+  // A wind set: its arrow sets off from where it points now and its readout from the number it
+  // reads now, on a roll of this setting's own. Whether it changed.
+  function setWind(at, wind, c) {
+    if (wind === s.winds[at]) return false;
+    const rite = riteOf(c);
+    s.windFrom[at] = windShown(s, rite, at, c.reduced);
+    s.windWas[at] = windRead(s, rite, at, c.reduced);
     s.winds[at] = wind;
     s.windAt[at] = s.t;
     s.windSets[at] += 1;
+    return true;
+  }
+  // The pair traced before is given back to the piece's edge, and both lanterns are cut over once
+  // to where their next journey starts.
+  function moveOn() {
+    if (s.run && s.flight > 0) goneFrom(s, { run: s.run, runs: s.runs, flight: s.flight });
+    s.run = null;
+    s.flight = 0;
+  }
+  // The band looked at seals and the one looked at before is given back, each from what it shows,
+  // on a roll of this look's own; a tap's seal grows round the point it landed on.
+  function look(next, c, point) {
+    if (next === s.look) return;
+    const rite = riteOf(c);
+    reseal(s, s.looked, s.look >= 0 ? s.look : null, false, rite, 0x70, c.reduced);
+    reseal(s, s.looked, next >= 0 ? next : null, true, rite, 0x70, c.reduced, point);
+    s.look = next;
   }
   return {
     title: witnessTitle(plan),
@@ -1131,11 +1332,11 @@ function witnessPiece(env, plan) {
       missing.forEach((band, i) => { trial[band] = winds[i]; });
       const right = Number(driftTotal(trial) === arrivals[0])
         + Number(driftTotal(trial.slice(plan.split)) === arrivals[1]);
-      winds.forEach((wind, i) => setWind(i, wind));
-      s.run = trial;
+      winds.forEach((wind, i) => setWind(i, wind, c));
       // Every run is its own: a fresh roll for the climb, the lift and the glow.
+      moveOn();
+      s.run = trial;
       s.runs += 1;
-      s.runAt = s.t;
       s.flight = c.reduced ? 1 : 0;
       draw(c);
       return { solved: right === 2, say: right === 2
@@ -1154,15 +1355,9 @@ function witnessPiece(env, plan) {
           c.status('Use a whole number from -4 to +4 for a missing wind.');
           return;
         }
-        setWind(at, wind);
-        s.run = null;
-        s.flight = 0;
-        if (s.look !== missing[at]) {
-          s.lookPrev = s.look;
-          s.look = missing[at];
-          s.lookAt = s.t;
-          s.looks += 1;
-        }
+        // The paths traced were of the winds as they stood: a wind changed gives them back.
+        if (setWind(at, wind, c)) moveOn();
+        look(missing[at], c, null);
         c.status('Band ' + (missing[at] + 1) + ' set to ' + signed(wind) + '. Check to trace both journeys.');
       }
       if (id === 'hint') {
@@ -1179,13 +1374,8 @@ function witnessPiece(env, plan) {
       const geo = witnessGeometry(c.w, c.h, plan.bands.length);
       const band = Math.floor((geo.bottom - y * c.h) / geo.band);
       const next = x * c.w < geo.left || x * c.w > geo.left + geo.span || band < 0 || band >= plan.bands.length ? -1 : band;
-      if (next !== s.look) {
-        // The band looked at before dissolves while this one seals, on a roll of this look's own.
-        s.lookPrev = s.look;
-        s.look = next;
-        s.lookAt = s.t;
-        s.looks += 1;
-      }
+      const box = { x: geo.left, y: geo.bottom - (band + 1) * geo.band, w: geo.span, h: geo.band };
+      look(next, c, next >= 0 ? within(x * c.w, y * c.h, box) : null);
       if (next < 0) {
         c.status(witnessClues(plan));
       } else {
@@ -1198,8 +1388,11 @@ function witnessPiece(env, plan) {
     frame(t, dt, c) {
       s.t += Math.max(0, dt);
       if (c.done && s.doneAt < 0) s.doneAt = s.t;
-      if (s.run) s.flight = c.reduced ? 1 : Math.min(1, s.flight + dt * 1.2);
+      const climbing = !!s.run && s.flight < 1;
+      if (climbing) s.flight = c.reduced ? 1 : Math.min(1, s.flight + dt * 1.2);
+      if (!climbing && settled(s, c)) return false;
       draw(c);
+      return (!!s.run && s.flight < 1) || !settled(s, c);
     },
     end(c) {
       if (s.doneAt < 0) s.doneAt = s.t;
@@ -1254,8 +1447,21 @@ function mirrorTitle(p) {
   return 'the midnight crossing: ' + WORDS[p.bands.length] + ' winds';
 }
 
-function mirrorBlank(t) {
-  return { t: t || 0, focus: 0, guess: null, hints: 0, doneAt: -1, flight: 0 };
+// `focus` is the band marked as the first crossing and `marked` its seals (reseal()), `guess` the
+// exit column marked (`guessFrom` where its mark set off from), `hints` how many bands are shown
+// and `hintAt` when the latest was, and `flight` how many bands of the journey a solved sky shows,
+// climbing from `flightFrom`, the part of the journey showing when it was solved.
+function mirrorBlank() {
+  return { t: 0, focus: 0, marked: {}, seals: 0, guess: null, guessFrom: null, guessAt: -1, guesses: 0,
+    hints: 0, hintAt: -1, doneAt: -1, flight: 0, flightFrom: 0, until: null, drawn: null, drawnAt: -Infinity };
+}
+
+// How many bands of the journey are shown, as a fraction: on a solved sky the replay's climb, and
+// before it the bands the hints have shown, the latest travelled in its hint's landing treads.
+function reachOf(s, rite, nb, reduced) {
+  if (s.doneAt >= 0) return Math.min(nb, s.flight);
+  if (!s.hints) return 0;
+  return Math.min(nb, s.hints - 1 + landing(roll(rite, 0x4b, s.hints), came(s, s.hintAt, 0.8, reduced)));
 }
 
 function drawMirror(g, w, h, env, plan, s, variant) {
@@ -1266,11 +1472,14 @@ function drawMirror(g, w, h, env, plan, s, variant) {
   const geo = driftGeometry(w, h, nb);
   const k = Math.max(0.65, Math.min(1.6, Math.min(w, h) / 320)) * v.scale;
   const small = Math.max(9, Math.min(13, Math.round(Math.min(w, h) * 0.035)));
+  const reduced = !!env.reduced;
   const pos = positions(plan.bands);
-  const shown = s.doneAt >= 0 ? Math.min(nb, Math.floor(s.flight)) : s.hints;
+  const reach = reachOf(s, rite, nb, reduced);
+  const whole = Math.floor(reach);
+  const part = reach - whole;
   const boundary = (i) => geo.bottom - i * geo.band;
   sky(g, w, h, env);
-  sparks(g, w, h, env, v, 0.1, s.t);
+  sparks(g, w, h, env, v, 0.1);
   write(g, 'A follows the wind · B mirrors it', w / 2, h * 0.05, small, 'center', c.fg);
   g.strokeStyle = env.alpha(c.muted, 0.3);
   g.lineWidth = 1;
@@ -1280,13 +1489,19 @@ function drawMirror(g, w, h, env, plan, s, variant) {
   g.lineTo(geo.x(0), geo.bottom + geo.band * 0.5);
   g.stroke();
   g.setLineDash([]);
+  // The band marked as the first crossing is sealed: cut in by the piece's edge up the stair of
+  // that marking's roll -- round the point it was tapped at, on a piece whose edge is a curve --
+  // resting in two shades, its edge lit once the seal has come whole; every band marked before is
+  // given back as the same edge withdraws, each from what it showed.
   for (let b = 0; b < nb; b++) {
     const y = boundary(b + 1);
     const wind = plan.bands[b];
     g.fillStyle = env.alpha(b % 2 ? c.accent : c.accent2, 0.06);
     g.fillRect(geo.left, y, geo.span, geo.band);
-    g.strokeStyle = env.alpha(s.focus === b + 1 ? c.accent2 : c.muted, s.focus === b + 1 ? 0.9 : 0.35);
-    g.lineWidth = s.focus === b + 1 ? 2 : 1;
+    g.fillStyle = env.alpha(c.accent2, 0.08);
+    const lit = sealed(g, s, rite, 0x4c, s.marked[b + 1], { x: geo.left, y, w: geo.span, h: geo.band }, reduced);
+    g.strokeStyle = env.alpha(lit ? c.accent2 : c.muted, lit ? 0.9 : 0.35);
+    g.lineWidth = lit ? 2 : 1;
     g.strokeRect(geo.left, y, geo.span, geo.band);
     write(g, 'band ' + (b + 1), geo.left + 4, y + small, small, 'left', c.fg);
     write(g, 'wind ' + signed(wind), geo.left + geo.span - 4, y + small, small, 'right', c.accent2);
@@ -1302,33 +1517,42 @@ function drawMirror(g, w, h, env, plan, s, variant) {
       g.stroke();
     }
   }
+  // The two journeys, drawn as far as they are shown: each lantern hangs below the chart until a
+  // band is shown and then stands on the path's end, every step of it forward.
   for (let lamp = 0; lamp < 2; lamp++) {
     const side = lamp ? -1 : 1;
     const xAt = (i) => geo.x(side * (pos[i] - plan.gap));
+    const at = (i) => (i ? { x: xAt(i), y: boundary(i) } : { x: xAt(0), y: geo.bottom });
+    const from = at(whole);
+    const to = whole < nb ? at(whole + 1) : from;
+    const head = reach > 0 ? { x: from.x + (to.x - from.x) * part, y: from.y + (to.y - from.y) * part }
+      : { x: xAt(0), y: geo.bottom + geo.band * 0.4 };
     g.strokeStyle = env.alpha(lamp ? c.accent : c.accent2, 0.9);
     g.lineWidth = 2;
     g.beginPath();
     g.moveTo(xAt(0), geo.bottom + geo.band * 0.4);
     g.lineTo(xAt(0), geo.bottom);
-    for (let i = 1; i <= shown; i++) g.lineTo(xAt(i), boundary(i));
+    for (let i = 1; i <= whole; i++) g.lineTo(xAt(i), boundary(i));
+    if (part > 0) g.lineTo(head.x, head.y);
     g.stroke();
-    const y = shown ? boundary(shown) : geo.bottom + geo.band * 0.4;
-    const bob = env.reduced ? 0 : sway(rite, 0x49, s.t, lamp) * 2.5 * k;
-    lantern(g, env, xAt(shown), y + bob, 0.8, k, lamp ? 'B' : 'A');
+    lantern(g, env, head.x, head.y, 0.8, k, lamp ? 'B' : 'A');
   }
-  if (s.guess !== null) {
+  // The exit column as marked (markAt()): the first mark is cut on at its moment; after that it
+  // travels from where it stood in the landing treads of that marking's roll.
+  const gx = markAt(s, rite, 0x4d, reduced);
+  if (gx != null) {
     g.strokeStyle = c.accent2;
     g.lineWidth = 2;
     g.setLineDash([3, 3]);
-    g.strokeRect(geo.x(s.guess) - 5 * k, geo.top - 10 * k, 10 * k, 8 * k);
+    g.strokeRect(geo.x(gx) - 5 * k, geo.top - 10 * k, 10 * k, 8 * k);
     g.setLineDash([]);
   }
   write(g, 'A starts at ' + signed(-plan.gap) + ' · B at ' + signed(plan.gap), w / 2, h * 0.93, small, 'center', c.fg);
-  if (s.doneAt >= 0) daybreak(g, rite, env, w, h, came(s, s.doneAt, 2.4, !!env.reduced), 0.1);
+  if (s.doneAt >= 0) daybreak(g, rite, env, w, h, came(s, s.doneAt, 2.4, reduced), 0.06);
 }
 
-function mirrorPreview(g, w, h, env, plan, t) {
-  drawMirror(g, w, h, env, plan, mirrorBlank(t), env.variant);
+function mirrorPreview(g, w, h, env, plan) {
+  drawMirror(g, w, h, env, plan, mirrorBlank(), env.variant);
 }
 
 function mirrorPiece(env, plan) {
@@ -1337,8 +1561,17 @@ function mirrorPiece(env, plan) {
   const first = mirrorFirst(plan.bands, plan.gap);
   const exit = -plan.gap + driftTotal(plan.bands);
   const pos = positions(plan.bands);
-  const s = mirrorBlank(0);
-  const draw = (c) => drawMirror(c.g, c.w, c.h, c, plan, s, env.variant);
+  const s = mirrorBlank();
+  const draw = (c) => drawn(s, c, () => drawMirror(c.g, c.w, c.h, c, plan, s, env.variant));
+  // A band marked as the first crossing seals, and the one marked before is given back, each from
+  // what it shows, on a roll of this marking's own; a tap's seal grows round the point it landed on.
+  function mark(band, c, point) {
+    if (!Number.isFinite(band) || band === s.focus) return;
+    const rite = riteOf(c);
+    reseal(s, s.marked, s.focus > 0 ? s.focus : null, false, rite, 0x4c, c.reduced);
+    reseal(s, s.marked, band > 0 ? band : null, true, rite, 0x4c, c.reduced, point);
+    s.focus = band;
+  }
   return {
     title: mirrorTitle(plan),
     brief: 'A begins at column ' + signed(-plan.gap) + ' and B at ' + signed(plan.gap)
@@ -1368,16 +1601,19 @@ function mirrorPiece(env, plan) {
     },
     apply(id, value, c) {
       if (id === 'cross') {
-        s.focus = Number(value);
+        mark(Number(value), c, null);
         c.status('Band ' + value + ' marked as the first crossing.');
       }
       if (id === 'exit') {
-        s.guess = Number(value);
+        const next = Number(value);
+        // The mark sets off from where it shows, on a roll of this marking's own.
+        if (Number.isFinite(next)) guessed(s, next, riteOf(c), 0x4d, c.reduced);
         c.status('You marked column ' + signed(s.guess) + ' for A\'s exit.');
       }
       if (id === 'hint') {
         if (s.hints < helps && s.hints < nb) {
           s.hints += 1;
+          s.hintAt = s.t;
           c.hint();
           const a = pos[s.hints] - plan.gap;
           c.status('After band ' + s.hints + ', A is at ' + signed(a) + ' and B is at ' + signed(-a) + '.');
@@ -1389,7 +1625,8 @@ function mirrorPiece(env, plan) {
       const geo = driftGeometry(c.w, c.h, nb);
       const band = Math.floor((geo.bottom - y * c.h) / geo.band);
       if (x * c.w >= geo.left && x * c.w <= geo.left + geo.span && band >= 0 && band < nb) {
-        s.focus = band + 1;
+        const box = { x: geo.left, y: geo.bottom - (band + 1) * geo.band, w: geo.span, h: geo.band };
+        mark(band + 1, c, within(x * c.w, y * c.h, box));
         c.set('cross', band + 1);
         c.status('Band ' + (band + 1) + ' pushes A ' + signed(plan.bands[band]) + ' columns and B the opposite way; marked as the first crossing.');
       } else c.status('Tap a numbered wind band to mark the first crossing.');
@@ -1398,15 +1635,19 @@ function mirrorPiece(env, plan) {
     frame(t, dt, c) {
       s.t += Math.max(0, dt);
       if (s.doneAt >= 0) {
-        const progress = c.reduced ? 1 : Math.min(1, Math.max(0, (s.t - s.doneAt) / 2.2));
+        // The solved sky shows the rest of both journeys, up a stair from the part already shown.
         const own = roll(riteOf(c), 0x4a, 0);
-        s.flight = nb * (c.reduced ? 1 : Math.min(1, Math.max(0, own.stair(progress))));
+        s.flight = s.flightFrom + (nb - s.flightFrom) * own.stair(came(s, s.doneAt, 2.2, c.reduced));
       }
+      if (settled(s, c)) return false;
       draw(c);
+      return !settled(s, c);
     },
     end(c) {
+      // The climb sets out from as far as the journeys show now, a hint's step under way included.
+      s.flightFrom = reachOf(s, riteOf(c), nb, c.reduced);
       s.doneAt = s.t;
-      s.flight = c.reduced ? nb : 0;
+      s.flight = c.reduced ? nb : s.flightFrom;
       c.status('A first reaches or passes B after band ' + first + ' and leaves at ' + signed(exit) + '. Tap a band or change either answer to keep exploring.');
       draw(c);
     }
@@ -1415,10 +1656,10 @@ function mirrorPiece(env, plan) {
 
 /* ---- the module ----------------------------------------------------------------------------- */
 
-// Which of the three puzzles this card is, and its plan, dealt once from the env's seeded stream and
-// kept with that env. Every pass over one card -- the still picture and then every animated frame --
-// asks here, so they are all the same card; dealing per frame instead would re-roll the whole
-// puzzle thirty times a second (issue #92, and js/feed.js on what animate owes a card).
+// Which of the four puzzles this card is, and its plan, dealt once from the env's seeded stream and
+// kept with that env. Every pass over one card -- the still picture, the spark and the piece it
+// opens as -- asks here, so they are all the same card; dealing again on another pass would re-roll
+// the whole puzzle (issue #92).
 const dealt = new WeakMap();
 function deal(env) {
   let got = dealt.get(env);
@@ -1437,22 +1678,15 @@ function deal(env) {
 export default {
   id: 'star-lantern',
   needsSky: true,
+  // The card is a still picture, whichever puzzle it deals: its lanterns hang and its sparks stand
+  // until a visitor moves something, and on a card nobody can, so it has no animate and the feed
+  // never repaints it.
   paint(g, w, h, env) {
     const d = deal(env);
-    if (d.plan.kind === 'mirror') mirrorPreview(g, w, h, env, d.plan, env.variant.turn * 4);
-    else if (d.plan.kind === 'witness') witnessPreview(g, w, h, env, d.plan, env.variant.turn * 4);
-    else if (d.order) orderPreview(g, w, h, env, d.plan, env.variant.turn * 4);
-    else driftPreview(g, w, h, env, d.plan, env.variant.turn * 4);
-  },
-  // A card in motion: the lanterns sway in treads and the sparks blink, read off t through the
-  // rite, so the card moves the way the piece will. At t = 0 it is the still picture paint left.
-  animate(g, w, h, env, t) {
-    if (env.reduced) return false;
-    const d = deal(env);
-    if (d.plan.kind === 'mirror') mirrorPreview(g, w, h, env, d.plan, t + env.variant.turn * 4);
-    else if (d.plan.kind === 'witness') witnessPreview(g, w, h, env, d.plan, t + env.variant.turn * 4);
-    else if (d.order) orderPreview(g, w, h, env, d.plan, t + env.variant.turn * 4);
-    else driftPreview(g, w, h, env, d.plan, t + env.variant.turn * 4);
+    if (d.plan.kind === 'mirror') mirrorPreview(g, w, h, env, d.plan);
+    else if (d.plan.kind === 'witness') witnessPreview(g, w, h, env, d.plan);
+    else if (d.order) orderPreview(g, w, h, env, d.plan);
+    else driftPreview(g, w, h, env, d.plan);
   },
   spark(env) {
     if (!env.stars.length) return null;
@@ -1463,7 +1697,7 @@ export default {
       mono: plan.bands.map((wind, i) => 'band ' + (i + 1) + ': ' + signed(wind)).join(' / '),
       text: 'Follow both lanterns. Find their first crossing and the column where A leaves the top.',
       aspect: '4 / 3',
-      paint: (g, w, h, cardEnv) => mirrorPreview(g, w, h, cardEnv, plan, cardEnv.variant.turn * 4),
+      paint: (g, w, h, cardEnv) => mirrorPreview(g, w, h, cardEnv, plan),
       of: plan
     };
     if (plan.kind === 'witness') {
@@ -1472,7 +1706,7 @@ export default {
         text: 'Two lanterns remember what the wind forgot. Recover two missing pushes from their starting heights and arrival columns.',
         mono: witnessClues(plan),
         aspect: '1 / 1',
-        paint: (g, w, h, cardEnv) => witnessPreview(g, w, h, cardEnv, plan, cardEnv.variant.turn * 4),
+        paint: (g, w, h, cardEnv) => witnessPreview(g, w, h, cardEnv, plan),
         of: plan
       };
     }
@@ -1483,7 +1717,7 @@ export default {
         text: (plan.clues.length === 1 ? 'That is the one clue.' : capital(WORDS[plan.clues.length - 1]) + ' more clues wait under the sky.')
           + ' Find the one order the ' + WORDS[plan.n] + ' lanterns rise in.',
         aspect: '1 / 1',
-        paint: (g, w, h, cardEnv) => orderPreview(g, w, h, cardEnv, plan, cardEnv.variant.turn * 4),
+        paint: (g, w, h, cardEnv) => orderPreview(g, w, h, cardEnv, plan),
         of: plan
       };
     }
@@ -1492,7 +1726,7 @@ export default {
       mono: plan.bands.map((d, i) => 'band ' + (i + 1) + ': ' + (d === 0 ? 'still' : signed(d))).join('\n'),
       text: 'One lantern, lit and let go as an offering to ' + WORDS[plan.bands.length] + ' bands of wind. Say where it leaves the top, and which band pushes it hardest.',
       aspect: '4 / 3',
-      paint: (g, w, h, cardEnv) => driftPreview(g, w, h, cardEnv, plan, cardEnv.variant.turn * 4),
+      paint: (g, w, h, cardEnv) => driftPreview(g, w, h, cardEnv, plan),
       of: plan
     };
   },

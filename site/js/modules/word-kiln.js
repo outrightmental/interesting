@@ -11,10 +11,10 @@
                    are the first letter and then the last.
      the ladder    A word ladder between four-letter words in three or four steps, one letter
                    changed at each step, every rung a word in the book. The visitor supplies the
-                   two or three middle rungs; any complete climb holds. A rack supplies all the
-                   needed words alongside decoys. A wrong check counts valid words and
-                   single-letter steps without naming a missing rung. Hints, at
-                   a price, mark which letter changes on one step at a time.
+                   two or three middle rungs; any complete climb holds. A rack under the ladder
+                   holds every word the climb needs among decoys one letter from a rung. A wrong
+                   check counts valid words and single-letter steps without naming a missing
+                   rung. Hints, at a price, mark which letter changes on one step at a time.
 
    A card and the feature it opens as are one firing: the spark puts the whole plan on its spec
    as `of` -- the word and the order its tiles were dealt in, or the four rungs -- and piece(env)
@@ -86,63 +86,86 @@ function neighbours(word) {
   return RUNGS.filter((w) => diff(w, word) === 1);
 }
 
-/* The motion of the rite (README: "Motion axiom"): nothing here moves along a formula. A curve is
-   a polyline -- a hesitation, a surge, a stutter, a settle -- and riteCurve rolls one from a seed,
-   so the tiles' fall into the kiln, their cooling into their slots and a ladder's rungs lighting
-   each run their own way for every piece and the same way every time that piece is played.
-   Rolled from the seed and never from env.rnd, so the puzzle a seed deals is untouched by it;
-   `ease` is the one baked curve a preview falls back on. */
-function along(stops) {
-  return (t) => {
-    if (!(t > 0)) return stops[0][1];
-    if (t >= 1) return stops[stops.length - 1][1];
-    for (let i = 1; i < stops.length; i++) {
-      if (t <= stops[i][0]) {
-        const [t0, y0] = stops[i - 1];
-        const [t1, y1] = stops[i];
-        return t1 > t0 ? y0 + (y1 - y0) * ((t - t0) / (t1 - t0)) : y1;
-      }
+/* How the kiln moves (README: "Motion axiom"), on env.rite -- ctx.rite inside a piece -- the
+   piece's own roll (js/variant.js), rolled from the seed and never from env.rnd, so the puzzle a
+   seed deals is untouched by it. Nothing glides and everything goes one way: the fired word drops
+   into the kiln and later climbs out to its slots in rite.ease's landing, a few treads, the first
+   the longest way and each after it shorter, carried upright and never tumbled; a tile's glow
+   comes in by its AREA behind the piece's one edge (rite.paint: a slice at its angle or a curve
+   from its corner, one path) in the stair's treads; the embers rise up a stair of a few even
+   treads. The kiln's own heat is the one thing that changes by its brightness -- it cools as the
+   fired tiles leave it, and the kiln under a climbed ladder comes up to full heat -- and it does so
+   in the stair's treads, a step at a time, never a slide. A letter or a step shown as a hint is cut
+   on at the one moment rite.flicker rolls, and stays. The kiln does not pulse while it waits: it
+   rests at one heat until it is fired, the scene is drawn only while something on it is moving
+   (stir, sizeOf), and frame() answers false once nothing is, so a kiln that waits costs no frame
+   at all. The tiles of the word move on one roll together (rite.at, rolled once and kept), on one
+   clock of even clicks, each setting off one tread after the tile before it in reading order and
+   every tile in flight stepping at the same instant, so the drop and the climb are each one
+   gesture running along the word; each rung of a ladder lights on a roll of its own: the same
+   edge, with its own treads and its own moment. */
+
+// What stands in for a rite on an env that carries none: every movement already at its end, and
+// a surface painted whole.
+const STILL = {
+  ease: () => 1, stair: () => 1, flicker: () => 1,
+  paint(g, x, y, w, h, k, style) {
+    if (!(k > 0)) return;
+    if (style != null) g.fillStyle = style;
+    g.fillRect(x, y, w, h);
+  },
+  at: () => STILL
+};
+
+function riteOf(env) {
+  return env && env.rite ? env.rite : STILL;
+}
+
+// The roll of one thing the piece moves -- a tile, a rung, the kiln's heat -- rolled the first time
+// it is asked for and kept: a rite and a seed always roll the same, so a frame looks it up rather
+// than rolling it again.
+const rolls = new WeakMap();
+function rollFor(rite, seed) {
+  let held = rolls.get(rite);
+  if (!held) rolls.set(rite, (held = new Map()));
+  let roll = held.get(seed);
+  if (!roll) held.set(seed, (roll = rite.at(seed)));
+  return roll;
+}
+
+// A change made now keeps the scene drawing for `span` seconds of the piece's clock: the length of
+// the movement it starts. A piece's frame() draws only while something is moving -- up to the first
+// frame past its end, so the picture left standing is the landed one -- or when the stage has sized
+// the canvas again (sizeOf differs from the size last drawn at), which clears it. It answers whether
+// anything is still on its way once it has drawn, and false tells the stage to ask for no more
+// frames until the visitor does something, the canvas is sized again or the scene comes back: the
+// clock stands still meanwhile, and nothing in the kiln waits on it.
+function stir(s, span) {
+  s.until = Math.max(s.until, s.t + span);
+}
+
+function sizeOf(c) {
+  return c.w + 'x' + c.h + 'x' + c.dpr;
+}
+
+// The heights a roll's landing reaches tread by tread -- 0 before the first, 1 after the last --
+// read once from its ease and kept: a landing holds between its treads, so reading it finely finds
+// every one.
+const heights = new WeakMap();
+function landing(roll) {
+  let got = heights.get(roll);
+  if (!got) {
+    got = [0];
+    for (let i = 1; i < 256; i++) {
+      const y = roll.ease(i / 256);
+      if (y > got[got.length - 1] + 1e-9) got.push(y);
     }
-    return 1;
-  };
+    if (got.length < 2) got.push(1);
+    got[got.length - 1] = 1;
+    heights.set(roll, got);
+  }
+  return got;
 }
-
-// The kiln's movements run on env.rite (README: "Motion axiom"): the heat is a series of levels
-// that flicker, never a sine; a tile fires by its area through the matte and cools in treads; a
-// rung lights in treads. `frac` is where in a period a clock stands.
-function frac(x) {
-  return x - Math.floor(x);
-}
-
-function riteCurve(seed, over) {
-  let a = (seed >>> 0) || 1;
-  const rnd = () => {
-    a = (a + 0x6d2b79f5) >>> 0;
-    let t = a;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-  const between = (lo, hi) => lo + (hi - lo) * rnd();
-  const stops = [[0, 0]];
-  let at = 0;
-  const put = (t, y) => {
-    at = Math.min(0.99, Math.max(at, t));
-    stops.push([at, y]);
-  };
-  if (rnd() < 0.7) put(between(0.03, 0.14), between(0, 0.02)); // the hesitation
-  const peak = between(0.45, 0.7);
-  const high = over ? 1 + between(0.02, 0.1) : 1;
-  put(at + (peak - at) * between(0.3, 0.55), high * between(0.45, 0.7)); // the surge
-  if (rnd() < 0.6) put(at + between(0.02, 0.06), stops[stops.length - 1][1]); // the stutter
-  put(peak, high);
-  if (over) put(peak + (1 - peak) * between(0.3, 0.6), 1 - (high - 1) * 0.4); // the settle
-  put(between(0.86, 0.96), over ? 1 : between(0.96, 1));
-  stops.push([1, 1]);
-  return along(stops);
-}
-
-const ease = along([[0, 0], [0.1, 0.02], [0.38, 0.64], [0.45, 0.58], [0.62, 1], [0.8, 0.97], [1, 1]]);
 
 /* ---- the kiln's mouth and its ember -------------------------------------------------------- */
 
@@ -174,14 +197,15 @@ function kiln(g, w, h, env, heat, o) {
   g.fill();
 }
 
-// Embers over the mouth, laid by a fixed sequence: as many as the configuration asks, drifting
-// where it says, and rising with the finale.
-function embers(g, env, cx, cy, r, v, phase, lit) {
+// Embers over the mouth, laid by a fixed sequence: as many as the configuration asks, spread where
+// it says, and lifted together with the finale -- `rise` is how far up the finale has carried
+// them, so they go up and out of the mouth and never wrap back down into it.
+function embers(g, env, cx, cy, r, v, rise, lit) {
   const c = env.colors;
   const count = Math.round(18 * v.density);
   for (let i = 0; i < count; i++) {
     const x = cx + (((i * 0.6180339 + 0.13) % 1) - 0.5) * r * 2.2;
-    const y = cy - r * 0.4 - ((i * 0.7548777 + v.turn + phase * 0.6) % 1) * r * 1.8;
+    const y = cy - r * 0.4 - (((i * 0.7548777 + v.turn) % 1) + rise * 0.6) * r * 1.8;
     g.fillStyle = env.alpha(c.accent2, (0.12 + ((i * 0.41) % 1) * 0.35) * lit);
     g.beginPath();
     g.arc(x, y, (0.6 + ((i * 0.37) % 1)) * v.scale, 0, Math.PI * 2);
@@ -197,27 +221,16 @@ function px(c, w, h, k, floor) {
   return Math.max(floor, Math.round(Math.min(w, h) * k));
 }
 
-function tile(g, env, x, y, size, letter, lit, tilt, own) {
+function tile(g, env, x, y, size, letter, lit, own) {
   const c = env.colors;
   g.save();
   g.translate(x, y);
-  g.rotate(tilt || 0);
   g.fillStyle = env.mix(c.bg2, c.accent2, 0.13);
   g.fillRect(-size / 2, -size * 0.6, size, size * 1.2);
-  // The glow of a firing tile develops by its area, the cells its own matte lets through at the
-  // coverage it has reached, never by a tint brightening.
-  if (lit > 0 && own) {
-    g.save();
-    g.beginPath();
-    g.rect(-size / 2, -size * 0.6, size, size * 1.2);
-    g.clip();
-    own.paint(g, -size / 2, -size * 0.6, size, size * 1.2, lit, env.mix(c.bg2, c.accent2, 0.63));
-    g.restore();
-  } else if (lit > 0) {
-    // No roll to hand (no harness or stage is without one): the tint still moves in four treads.
-    g.fillStyle = env.mix(c.bg2, c.accent2, 0.13 + (Math.ceil(lit * 4) / 4) * 0.5);
-    g.fillRect(-size / 2, -size * 0.6, size, size * 1.2);
-  }
+  // The glow of a firing tile comes in by its area: the part of the tile the piece's edge has
+  // passed at the coverage it has reached, one path, never a tint brightening. A tile held part
+  // way (a ladder's unchanged letter) rests in two shades split by that edge.
+  own.paint(g, -size / 2, -size * 0.6, size, size * 1.2, lit, env.mix(c.bg2, c.accent2, 0.63));
   g.strokeStyle = lit > 0.5 ? c.accent2 : env.alpha(c.accent, 0.8);
   g.lineWidth = 1;
   g.strokeRect(-size / 2, -size * 0.6, size, size * 1.2);
@@ -247,8 +260,12 @@ function slot(g, env, x, y, size, letter) {
   }
 }
 
+// A line of words across the scene, centred, and set smaller where it would run past the canvas's
+// edges (a card in a narrow feed), so it is never cut off at either end.
 function caption(g, env, w, h, text, y, tone, size) {
   font(g, size, '500');
+  const wide = g.measureText(text).width;
+  if (wide > w * 0.94) font(g, Math.max(6, Math.floor((size * w * 0.94) / wide)), '500');
   g.textAlign = 'center';
   g.textBaseline = 'middle';
   g.fillStyle = tone;
@@ -311,12 +328,27 @@ function anagramScene(g, w, h, env, plan, s, variant) {
   const cx = w / 2;
   const cy = h * 0.72;
   const r = Math.min(w, h) * 0.2 * v.scale;
-  const cooledRaw = s.phase > 0.4 ? (s.cool || ease)((s.phase - 0.4) / 0.6) : 0;
-  // The kiln goes dark in treads as the tiles cool, never a dimming.
-  const cooled = env.rite ? env.rite.at(0xc001).stair(cooledRaw) : cooledRaw;
+  const rite = riteOf(env);
+  // The finale keeps one clock. The word moves as one: every tile on a single roll, taking the
+  // same landing's treads, the first the longest way and each after it shorter, and each one tread
+  // behind the tile before it in reading order -- the rack's, left to right, as they drop, and the
+  // fired word's as they climb out, so the word spells itself out of the kiln. The clock ticks in
+  // even clicks, one tread of the landing to a click after a hold, so every tile in flight steps at
+  // the same instant: a journey is the landing's treads and one click more for each tile after the
+  // first. The kiln's heat and its embers step on those clicks too, up stairs of their own.
+  const word = rollFor(rite, 0x7e11);
+  const steps = landing(word);
+  const treads = steps.length - 1;
+  const span = treads + n;
+  const click = (q) => Math.min(span - 1, Math.floor(Math.max(0, q) * span));
+  const drop = s.phase > 0 && s.phase < 0.4 ? click(s.phase / 0.4) : s.phase > 0 ? span - 1 : 0;
+  const climb = s.phase >= 0.4 ? click((s.phase - 0.4) / 0.6) : 0;
+  // The kiln's heat steps down as the fired tiles climb out of it: its glow and its embers darken
+  // a tread at a time, a change of brightness in a few steps and never a slide.
+  const cooled = s.phase >= 0.4 ? rollFor(rite, 0xc001).stair(climb / (span - 1)) : 0;
   kiln(g, w, h, env, s.heat, { cx, cy, r, lit: 1 - cooled * 0.7 });
-  // The embers rise with the finale in treads of the kiln's own roll, never a drift.
-  embers(g, env, cx, cy, r, v, env.rite ? env.rite.at(0xe3be).stair(s.phase, 9) : s.phase, 1 - cooled * 0.8);
+  // The embers rise with the finale up a stair of the kiln's own roll, never a drift.
+  embers(g, env, cx, cy, r, v, rollFor(rite, 0xe3be).stair((drop + climb) / (2 * (span - 1))), 1 - cooled * 0.8);
   const size = Math.min(h * 0.13 * v.scale, (w * 0.84) / n / 1.15);
   const rackY = h * 0.2;
   const slotY = h * 0.44;
@@ -329,10 +361,10 @@ function anagramScene(g, w, h, env, plan, s, variant) {
       slot(g, env, place(k, slotY), slotY, size * 0.8, s.guess[k] || '');
       const which = k === 0 ? 1 : k === n - 1 ? 2 : 0;
       const shown = which > 0 && s.hints >= which;
-      // A shown letter blinks on, a flicker of its own roll, from the moment it was asked for.
+      // A shown letter is cut on at its own roll's moment after it was asked for, and stays.
       const askedAt = shown && s.hintAt ? s.hintAt[which] : null;
       const age = askedAt == null || !s.t || env.reduced ? 1 : Math.min(1, (s.t - askedAt) / 0.9);
-      if (shown && (env.rite ? env.rite.at(0x4171 + which).flicker(age) : 1)) {
+      if (shown && rollFor(rite, 0x4171 + which).flicker(age)) {
         font(g, small, '500');
         g.textAlign = 'center';
         g.textBaseline = 'middle';
@@ -341,33 +373,43 @@ function anagramScene(g, w, h, env, plan, s, variant) {
       }
     }
   }
-  for (let i = 0; i < n; i++) {
+  // The kiln is where the word is made: each tile drops to its own place in the fired word, which
+  // stands in the mouth in one row no wider than the mouth, each tile set smaller as it goes down
+  // -- in the same treads as it travels -- so no letter is hidden behind another. The word then
+  // climbs out as it stands, opening up to its slots, so no two tiles cross on the way.
+  const deep = Math.min(size, (r * 1.7) / (n * 1.1));
+  // Drawn in the order they set off -- the rack's as they drop, the word's as they climb -- so a
+  // tile on its way passes in front of the one that went before it.
+  const order = plan.tiles.split('').map((t, i) => i);
+  if (s.phase >= 0.4 && s.slots) order.sort((a, b) => s.slots[a] - s.slots[b]);
+  for (const i of order) {
     let x = place(i, rackY);
     let y = rackY;
-    let tilt = 0;
+    let at = size;
     let lit = 0;
     if (s.phase > 0) {
-      const to = s.slots ? place(s.slots[i], slotY) : x;
-      // Each tile has a roll of its own: it drops into the kiln along its own glitch of a curve
-      // (a travel, which may hesitate and overshoot) and lights by its area through its own
-      // matte in treads; it climbs out to its slot in clicks.
-      const own = env.rite ? env.rite.at(0x7e11 + i * 5) : null;
+      const k = s.slots ? s.slots[i] : i;
+      const to = place(k, slotY);
+      const mouth = cx + (k - (n - 1) / 2) * deep * 1.1;
+      // Fired, the tile drops upright into the mouth of the kiln down the landing's treads, and
+      // its glow comes in behind the piece's edge a tread at a time with it; then it climbs out to
+      // its slot up the landing's treads again. Each of the two journeys goes one way and lands.
       if (s.phase < 0.4) {
-        const f = own ? own.ease(s.phase / 0.4) : (s.fire || ease)(s.phase / 0.4);
-        x += (cx + (i - (n - 1) / 2) * r * 0.3 - x) * f;
+        const j = Math.max(0, Math.min(treads, drop - i));
+        const f = steps[j];
+        x += (mouth - x) * f;
         y += (cy - y) * f;
-        // It tumbles as it falls in clicks (the roll's ratchet), never an even turn.
-        tilt = (own ? own.turn(s.phase / 0.4) : f) * (i % 2 ? -1 : 1) * 1.2;
-        lit = own ? own.stair(s.phase / 0.4) : f;
+        at = size + (deep - size) * f;
+        lit = j / treads;
       } else {
-        const f = own ? own.ratchet((s.phase - 0.4) / 0.6) : (s.cool || ease)((s.phase - 0.4) / 0.6);
-        x = cx + (i - (n - 1) / 2) * r * 0.3 + (to - (cx + (i - (n - 1) / 2) * r * 0.3)) * f;
+        const f = steps[Math.max(0, Math.min(treads, climb - k))];
+        x = mouth + (to - mouth) * f;
         y = cy + (slotY - cy) * f;
-        tilt = (1 - f) * (i % 2 ? -1 : 1) * 1.2;
+        at = deep + (size - deep) * f;
         lit = 1;
       }
     }
-    tile(g, env, x, y, size, plan.tiles[i], lit, tilt, env.rite ? env.rite.at(0x7e11 + i * 5) : null);
+    tile(g, env, x, y, at, plan.tiles[i], lit, word);
   }
   caption(g, env, w, h, s.phase >= 1 ? 'it is a kiln, not a dictionary' : s.line, h * 0.95, env.alpha(c.muted, 0.9), small);
 }
@@ -380,10 +422,12 @@ function anagramPreview(g, w, h, env, plan) {
 function anagramPiece(env, plan) {
   const helps = Math.min(2, asked(env).helps);
   const n = plan.tiles.length;
-  // The firing and the cooling each run along a curve rolled for this piece (see riteCurve).
-  const s = { heat: 0.5, phase: 0, guess: '', hints: 0, slots: null, fired: '', line: 'type a word; use each tile once', t: 0,
-    fire: riteCurve((env.seed >>> 0) ^ 0x7e11), cool: riteCurve((env.seed >>> 0) ^ 0xc001) };
-  const draw = (c) => anagramScene(c.g, c.w, c.h, c, plan, s, env.variant);
+  // The kiln rests at one heat while it waits; the firing is the only thing that moves in it.
+  const s = { heat: 0.5, phase: 0, guess: '', hints: 0, slots: null, fired: '', line: 'type a word; use each tile once', t: 0, until: -1, size: '' };
+  const draw = (c) => {
+    s.size = sizeOf(c);
+    anagramScene(c.g, c.w, c.h, c, plan, s, env.variant);
+  };
   function right(typed) {
     let count = 0;
     for (let i = 0; i < n && i < typed.length; i++) if (typed[i] === plan.word[i]) count += 1;
@@ -425,6 +469,7 @@ function anagramPiece(env, plan) {
           s.hints += 1;
           s.hintAt = s.hintAt || {};
           s.hintAt[s.hints] = s.t;
+          stir(s, 0.9);
           c.hint();
           c.status(s.hints === 1 ? 'the word starts with ' + plan.word[0] : 'and it ends with ' + plan.word[n - 1]);
         } else if (helps < 2) {
@@ -434,14 +479,15 @@ function anagramPiece(env, plan) {
       draw(c);
     },
     frame(t, dt, c) {
+      // Moving while a shown letter is still to be cut on, and from the solve until the firing has
+      // landed; read before the clock steps, so the frame that lands it is drawn too.
+      const moving = s.t <= s.until || (c.done && s.phase < 1);
       s.t += dt;
-      if (!c.reduced && c.rite) {
-        const slow = c.rite.at(0x4ea7);
-        const quick = c.rite.at(0x4ea8);
-        s.heat = 0.46 + 0.08 * slow.stair(frac(s.t / 2.6)) + 0.04 * quick.flicker(frac(s.t / 0.7));
-      }
-      if (c.done) s.phase = Math.min(1, s.phase + dt / (c.reduced ? 0.5 : 3.2));
-      draw(c);
+      // The firing, once solved: over three seconds and a bit, or at once to its end for a visitor
+      // who asked for less motion.
+      if (c.done) s.phase = c.reduced ? 1 : Math.min(1, s.phase + dt / 3.2);
+      if (moving || s.size !== sizeOf(c)) draw(c);
+      return s.t <= s.until || (c.done && s.phase < 1);
     },
     end(c) {
       s.fired = clean(c.value('word')) || plan.word;
@@ -496,7 +542,18 @@ function changedAt(a, b) {
   return -1;
 }
 
+// The rack under a ladder: the middle rungs of the plan and, beside them, words of the book one
+// letter from some rung of it -- the decoys -- up to eight in all, in the order of the alphabet.
+// A plan always racks the same words, so it is worked out once and kept; the scene that shows it
+// while the climb is moving looks it up.
+const racks = new WeakMap();
 function ladderRack(plan) {
+  let held = racks.get(plan);
+  if (!held) racks.set(plan, (held = rackOf(plan)));
+  return held;
+}
+
+function rackOf(plan) {
   const rack = plan.rungs.slice(1, -1);
   const pool = RUNGS.filter((word) => !plan.rungs.includes(word)
     && plan.rungs.some((rung) => diff(word, rung) === 1));
@@ -515,9 +572,12 @@ function ladderScene(g, w, h, env, plan, s, variant) {
   const m = Math.min(w, h);
   const cx = w / 2;
   const r = m * 0.24 * v.scale;
-  const litStep = env.rite ? env.rite.at(0x11ad).stair(s.lit) : s.lit;
+  const rite = riteOf(env);
+  // Climbed, the kiln under the ladder comes up to full heat a tread at a time, up a stair of its
+  // own -- a change of brightness in a few steps -- and the embers rise.
+  const litStep = rollFor(rite, 0x11ad).stair(s.lit);
   kiln(g, w, h, env, 0.6, { cx, cy: h * 0.92, r, lit: 0.6 + litStep * 0.4 });
-  embers(g, env, cx, h * 0.92, r, v, env.rite ? env.rite.at(0xe3be).stair(s.phase, 9) : s.phase, 0.7 + litStep * 0.3);
+  embers(g, env, cx, h * 0.92, r, v, rollFor(rite, 0xe3be).stair(s.phase), 0.7 + litStep * 0.3);
   const small = px(env, w, h, 0.036, 10);
   const n = plan.rungs.length;
   const size = Math.min((w * 0.5) / 4 / 1.1, h * (n === 5 ? 0.085 : 0.1) * v.scale);
@@ -542,11 +602,12 @@ function ladderScene(g, w, h, env, plan, s, variant) {
     g.moveTo(railX[0], y);
     g.lineTo(railX[1], y);
     g.stroke();
-    // Each rung lights on a roll of its own, in treads, as the climb reaches it (the climb paced
-    // to the ladder's length, so a longer ladder is not a quicker one).
-    const rung = env.rite ? env.rite.at(0x1add + k * 11) : null;
+    // Each rung lights on a roll of its own, up its stair, as the climb reaches it (the climb paced
+    // to the ladder's length, so a longer ladder is not a quicker one); the glow of every letter on
+    // it comes in behind the piece's edge at the rung's coverage, so a rung lights as one.
+    const rung = rollFor(rite, 0x1add + k * 11);
     const reach = Math.max(0, Math.min(1, (s.phase * (n + 0.3) - k) / 1.2));
-    const lit = s.phase > 0 ? (rung ? rung.stair(reach) : (s.climb || ease)(reach)) : 0;
+    const lit = s.phase > 0 ? rung.stair(reach) : 0;
     for (let i = 0; i < 4; i++) {
       const x = cx + (i - 1.5) * size * 1.1;
       const letter = words[k][i] || '';
@@ -554,15 +615,15 @@ function ladderScene(g, w, h, env, plan, s, variant) {
         // At the finale the letter each step changed glows.
         const below = k > 0 ? words[k - 1] : null;
         const changed = s.phase > 0 && below && below.length === 4 && below[i] !== words[k][i];
-        tile(g, env, x, y, size, letter, changed ? lit : lit * 0.4, 0, rung ? rung.at(i + 1) : null);
+        tile(g, env, x, y, size, letter, changed ? lit : lit * 0.4, rung);
       } else slot(g, env, x, y, size, letter);
       // A hint: the letter one way up changes at this step, marked on the rung below it.
       if (k < n - 1 && s.hints > k && s.phase === 0) {
         const at = changedAt(plan.rungs[k], plan.rungs[k + 1]);
-        // The mark blinks on, a flicker of the rung's own roll, from the moment it was asked for.
+        // The mark is cut on at the rung's own moment after it was asked for, and stays.
         const askedAt = s.hintAt ? s.hintAt[k + 1] : null;
         const age = askedAt == null || !s.t || env.reduced ? 1 : Math.min(1, (s.t - askedAt) / 0.9);
-        if (at === i && (rung ? rung.at(0x4171).flicker(age) : 1)) {
+        if (at === i && rollFor(rung, 0x4171).flicker(age)) {
           g.fillStyle = c.accent2;
           g.beginPath();
           g.moveTo(x, y - size * 0.75);
@@ -577,10 +638,14 @@ function ladderScene(g, w, h, env, plan, s, variant) {
     g.textAlign = 'right';
     g.textBaseline = 'middle';
     g.fillStyle = env.alpha(c.muted, 0.9);
-    // The rung's name beside the rail, or the short form where a narrow scene leaves it no room.
+    // The rung's name beside the rail, or the short form where a narrow scene leaves it no room,
+    // set smaller where even that would run off the canvas's edge.
     const name = k === 0 ? 'start' : k === n - 1 ? 'end' : k === 1 ? 'first rung' : k === 2 ? 'second rung' : 'third rung';
-    const fits = railX[0] - small * 0.6 - g.measureText(name).width >= small * 0.4;
-    g.fillText(fits ? name : 'rung ' + k, railX[0] - small * 0.6, y);
+    const room = railX[0] - small;
+    const said = g.measureText(name).width <= room || k === 0 || k === n - 1 ? name : 'rung ' + k;
+    const wide = g.measureText(said).width;
+    if (wide > room) font(g, Math.max(6, Math.floor((small * room) / wide)), '500');
+    g.fillText(said, railX[0] - small * 0.6, y);
   }
   caption(g, env, w, h, s.phase >= 1 ? 'one letter a step; the book holds every rung' : s.line, h * 0.86, env.alpha(c.muted, 0.9), small);
   const rack = ladderRack(plan);
@@ -598,10 +663,11 @@ function ladderPiece(env, plan) {
   const helps = Math.min(n - 1, asked(env).helps);
   const a = plan.rungs[0];
   const b = plan.rungs[n - 1];
-  // The rungs light along a curve rolled for this piece (see riteCurve).
-  const s = { first: '', second: '', third: '', hints: 0, phase: 0, lit: 0, t: 0, line: 'change one letter a step; every rung a word',
-    climb: riteCurve((env.seed >>> 0) ^ 0x1add) };
-  const draw = (c) => ladderScene(c.g, c.w, c.h, c, plan, s, env.variant);
+  const s = { first: '', second: '', third: '', hints: 0, phase: 0, lit: 0, t: 0, until: -1, size: '', line: 'change one letter a step; every rung a word' };
+  const draw = (c) => {
+    s.size = sizeOf(c);
+    ladderScene(c.g, c.w, c.h, c, plan, s, env.variant);
+  };
   return {
     title: ladderTitle(plan),
     brief: 'Climb from ' + a + ' to ' + b + ' in exactly ' + (n - 1) + ' steps, changing one letter at a time without moving the others. The rack holds all the words you need plus decoys: ' + ladderRack(plan).join(', ') + '. Other four-letter words in the kiln\'s book also count. Do not repeat a word; any complete climb will do.',
@@ -656,6 +722,7 @@ function ladderPiece(env, plan) {
           s.hints += 1;
           s.hintAt = s.hintAt || {};
           s.hintAt[s.hints] = s.t;
+          stir(s, 0.9);
           c.hint();
           c.status('step ' + s.hints + ' changes letter ' + at);
         } else c.status('that is all the kiln will show at this difficulty; the words are yours');
@@ -663,12 +730,18 @@ function ladderPiece(env, plan) {
       draw(c);
     },
     frame(t, dt, c) {
+      // Moving while a step's mark is still to be cut on, and from the solve until the climb and the
+      // kiln's heat have landed; read before the clock steps, so the frame that lands them is drawn.
+      const moving = s.t <= s.until || (c.done && (s.phase < 1 || s.lit < 1));
       s.t += dt;
+      // The climb, once solved: over two and a half seconds, or at once to its end for a visitor
+      // who asked for less motion.
       if (c.done) {
-        s.phase = Math.min(1, s.phase + dt / (c.reduced ? 0.5 : 2.5));
-        s.lit = Math.min(1, s.lit + dt);
+        s.phase = c.reduced ? 1 : Math.min(1, s.phase + dt / 2.5);
+        s.lit = c.reduced ? 1 : Math.min(1, s.lit + dt);
       }
-      draw(c);
+      if (moving || s.size !== sizeOf(c)) draw(c);
+      return s.t <= s.until || (c.done && (s.phase < 1 || s.lit < 1));
     },
     end(c) {
       s.first = clean(c.value('first')) || plan.rungs[1];

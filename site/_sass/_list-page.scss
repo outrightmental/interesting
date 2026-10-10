@@ -1,5 +1,6 @@
 // The mood atlas and site map share a reading column and filled list cards.
 @use 'type';
+@use 'cut';
 
 .list-page-main {
   grid-template-columns: minmax(0, var(--main-max));
@@ -10,6 +11,8 @@
   margin: 1.5rem 0 0.5rem;
   color: var(--md-sys-color-on-surface);
   @include type.scale(title-large);
+  // Cut into its new face by js/motion.js (shift) when the register turns over, on the shift's
+  // one stair, so it does not ask for the rite's own slice as well: one edge to a line.
   @include type.rite;
 }
 
@@ -50,11 +53,43 @@
   @include type.scale(body-large);
 }
 
+// The atlas's line about the hour, which its script writes once threshold.js has read the clock,
+// a moment after the first paint. Where a script runs, its room is kept from the start, so its
+// words are cut in where they will stand and the page under them does not move down to make way:
+// as many lines as the sentence takes at that width for the time zones most visitors are in --
+// three on a phone, two on a tablet, one on anything wider. It is the usual length and no more,
+// since the zone's name and the part of the day make the sentence longer or shorter: a long name
+// at the middle of the day (America/Argentina/Buenos_Aires) can still take a line more than is
+// kept and move the page by that line, and on a wide phone a short one leaves a line to spare --
+// where a room kept for every name would leave one to spare for nearly everyone. A page with no
+// script keeps none, as nothing will be written there. The line is a twelve-pixel role on a
+// sixteen-pixel leading, so a line is a rem wherever lh is not understood.
 .signal-line {
   margin: 0.5rem 0 0;
   color: var(--md-sys-color-on-surface-variant);
   font-family: type.$mono;
   @include type.scale(body-small);
+}
+
+@media (scripting: enabled) {
+  .signal-line {
+    min-height: 3rem;
+    min-height: 3lh;
+  }
+}
+
+@media (scripting: enabled) and (min-width: 480px) {
+  .signal-line {
+    min-height: 2rem;
+    min-height: 2lh;
+  }
+}
+
+@media (scripting: enabled) and (min-width: 820px) {
+  .signal-line {
+    min-height: 1rem;
+    min-height: 1lh;
+  }
 }
 
 .orientations li {
@@ -66,80 +101,35 @@
   @include type.scale(body-medium);
 }
 
-// A line of a list -- a page of the site map, an orientation of the atlas -- arrives through the
-// matte ladder from the roll's geometry, each a stagger after the one before (README: "Motion
-// axiom"): list-in is the page's own ladder, and the engine's m.arrive (asked for by the atlas's
-// script for every line it writes) composes a rite of the line's own and names it --rite-develop,
-// so no two lines come in by the same cuts.
+// A line of a list -- a page of the site map, an orientation of the atlas -- arrives (README:
+// "Motion axiom", the cut): it lifts in from the side the page's roll gives (--arrive-x,
+// --arrive-y) behind a slice square to the way it travels (--arrive-angle), the edge and the lift
+// stepping in the page's landing stair (--ease-arrive, --motion-long, rolled once for the page).
+// The whole list comes from one side in that one stair, and each line starts one even stagger
+// after the line above it (--k, its place in the list), so the list reads as one gesture, read
+// down the page.
 .orientations > li,
 .list-stack > li,
 .list-grid > li {
-  animation: var(--rite-develop, list-in) var(--motion-list-in, var(--motion-long)) var(--ease-list-in, var(--ease-arrive)) both;
-  animation-delay: calc(var(--k, 0) * var(--motion-stagger, 40ms) + var(--jit, 0ms));
+  @include cut.develop;
+  animation-delay: calc(var(--k, 0) * var(--motion-stagger, 40ms));
 }
 
-@for $i from 1 through 12 {
+// The place of a line in a list written into the page (the site map's, a dozen at most); a list a
+// script writes says each line's place itself.
+@for $i from 2 through 12 {
   .list-stack > li:nth-child(#{$i}),
   .list-grid > li:nth-child(#{$i}) {
     --k: #{$i - 1};
-    --jit: #{($i * 7) % 11 * 3}ms;
   }
 }
 
-@keyframes list-in {
-  0%, 13.9% {
-    mask: linear-gradient(transparent, transparent);
-    -webkit-mask: linear-gradient(transparent, transparent);
-    transform: translate(var(--arrive-x, 0px), var(--arrive-y, 24px)) rotate(var(--arrive-rot, 0deg)) skewX(var(--arrive-skew, 0deg));
-  }
-
-  14%, 31.9% {
-    mask: var(--matte-1);
-    -webkit-mask: var(--matte-1);
-    transform: translate(var(--arrive-x, 0px), var(--arrive-y, 24px)) rotate(var(--arrive-rot, 0deg)) skewX(var(--arrive-skew, 0deg));
-  }
-
-  32%, 47.9% {
-    mask: var(--matte-3);
-    -webkit-mask: var(--matte-3);
-    transform: translate(calc(var(--arrive-x, 0px) * 0.55), calc(var(--arrive-y, 24px) * 0.55)) rotate(calc(var(--arrive-rot, 0deg) * 0.5));
-  }
-
-  48%, 59.9% {
-    mask: var(--matte-2);
-    -webkit-mask: var(--matte-2);
-    transform: translate(calc(var(--arrive-x, 0px) * 0.55), calc(var(--arrive-y, 24px) * 0.55)) rotate(calc(var(--arrive-rot, 0deg) * 0.5));
-  }
-
-  60%, 75.9% {
-    mask: var(--matte-4);
-    -webkit-mask: var(--matte-4);
-    transform: translate(calc(var(--arrive-x, 0px) * 0.2), calc(var(--arrive-y, 24px) * 0.2));
-  }
-
-  76%, 87.9% {
-    mask: var(--matte-5);
-    -webkit-mask: var(--matte-5);
-    transform: translate(0px, calc(var(--arrive-y, 24px) * -0.08)) scale(var(--pop-over, 1.012));
-  }
-
-  88%, 95.9% {
-    mask: var(--matte-top);
-    -webkit-mask: var(--matte-top);
-    transform: none;
-  }
-
-  96%, 100% {
-    mask: none;
-    -webkit-mask: none;
-    transform: none;
-  }
-}
-
+// Less motion: every line is simply there, whole and in place.
 @media (prefers-reduced-motion: reduce) {
   .orientations > li,
   .list-stack > li,
   .list-grid > li {
+    mask: none;
     animation: none;
   }
 }
@@ -148,7 +138,7 @@
   min-width: 9rem;
   color: var(--md-sys-color-on-surface);
   @include type.scale(title-medium);
-  @include type.rite;
+  @include type.rite($shift: true);
   --role-size: 1.1rem;
 }
 
@@ -165,14 +155,30 @@
   display: inline-block;
   min-height: 24px;
   color: var(--md-sys-color-primary);
-  // Underlined in nothing at rest, so the line's colour and thickness have a stair to climb and
-  // come home by (_base.scss, a link in the words) instead of a line that is there or is not.
-  text-decoration-line: underline;
-  text-decoration-color: transparent;
-  text-decoration-thickness: 1px;
+  // Its underline, its plate and its press are a link in the words' (_base.scss).
   @include type.scale(title-large);
-  @include type.rite;
+  @include type.rite($shift: true);
   --role-size: 1.2rem;
+}
+
+// A page's link under the pointer, or leaving it, as the register turns over: the shift cuts its
+// words into their new face (type.rite($shift), above, played here as there) while its underline
+// goes on in the wax's or the wane's own treads (_base.scss). The two are named together, since
+// the shift's slice alone would take the underline's movement off the link, and the movement would
+// start over from the beginning when the shift was done -- the line falling back to its rest and
+// stepping up again under a pointer that never moved.
+@media (prefers-reduced-motion: no-preference) {
+  html[data-shifting] .pages a:not(.action).is-waxing:not([inert] *) {
+    animation:
+      cut-in var(--motion-rite-shift, var(--motion-shift)) var(--ease-rite-shift, var(--ease-shift)) both,
+      underline-in var(--motion-wax, var(--motion-medium)) var(--ease-wax, var(--ease-stair)) both;
+  }
+
+  html[data-shifting] .pages a:not(.action).is-waning:not([inert] *) {
+    animation:
+      cut-in var(--motion-rite-shift, var(--motion-shift)) var(--ease-rite-shift, var(--ease-shift)) both,
+      underline-out var(--motion-wane, var(--motion-medium)) var(--ease-wane, var(--ease-leave)) both;
+  }
 }
 
 .pages .gloss {

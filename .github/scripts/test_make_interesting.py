@@ -2338,6 +2338,60 @@ def eval_ratio(aspect):
     return float(parts[0]) / (float(parts[1]) if len(parts) > 1 else 1.0)
 
 
+def sass_block(text, start):
+    """The text between the brace that opens at or after `start` and the brace that closes it."""
+    open_at = text.index("{", start)
+    depth = 0
+    for i in range(open_at, len(text)):
+        if text[i] == "{":
+            depth += 1
+        elif text[i] == "}":
+            depth -= 1
+            if depth == 0:
+                return text[open_at + 1:i]
+    return text[open_at + 1:]
+
+
+def sass_keyframes(text):
+    """Every @keyframes in a stylesheet, wherever it is written, by name."""
+    return {m.group(1): sass_block(text, m.end()) for m in re.finditer(r"@keyframes\s+([\w-]+)\s*(?=\{)", text)}
+
+
+def sass_stops(body):
+    """A keyframes body's stops, in order: (selector, the rule's declarations)."""
+    stops, at = [], 0
+    for m in re.finditer(r"((?:from|to|\d+(?:\.\d+)?%)(?:\s*,\s*(?:from|to|\d+(?:\.\d+)?%))*)\s*(?=\{)", body):
+        if m.start() < at:
+            continue
+        rule = sass_block(body, m.end())
+        stops.append((m.group(1), rule))
+        at = m.end() + len(rule) + 2
+    return stops
+
+
+def top_level_parts(value):
+    """A comma-separated value split at its top level, so var(--a, var(--b)) stays whole."""
+    parts, depth, start = [], 0, 0
+    for i, ch in enumerate(value):
+        depth += (ch == "(") - (ch == ")")
+        if ch == "," and depth == 0:
+            parts.append(value[start:i])
+            start = i + 1
+    parts.append(value[start:])
+    return parts
+
+
+def js_function(text, name):
+    """The body of `function name(...) { ... }` in a script, or '' when there is none."""
+    m = re.search(rf"function {re.escape(name)}\s*\([^)]*\)\s*(?=\{{)", text)
+    return sass_block(text, m.end()) if m else ""
+
+
+# The rites js/motion.js composes for a movement and writes on the element that plays it
+# (cut(el, rite)): a stylesheet's keyframes may read one of these as their spell.
+ENGINE_RITES = ["wax", "wane", "stamp", "ink", "seal", "unseal", "develop", "unmake", "reveal", "veil", "veil-out"]
+
+
 def needs_node(test):
     """Skip a test that runs Node when Node is not installed; in CI that is a failure instead."""
     if shutil.which(mi.NODE_BIN) is None:
@@ -2979,7 +3033,8 @@ class CardVariantTest(unittest.TestCase):
                     self.assertTrue(card["steady"], "this card draws something else at the same t")
 
     def test_motion_begins_at_the_picture_the_still_card_left(self):
-        # The contract js/feed.js settles on: `t` is seconds since this card was painted, so the
+        # The contract js/feed.js settles on: `t` is seconds since this card's first frame on
+        # screen (not since it was painted a screen ahead, nor since the page opened), so the
         # first frame is t = 0, and t = 0 is the picture already on the canvas. Before this, the loop
         # passed seconds since the page opened, so a card painted after a long scroll cut straight
         # into an arbitrary phase of its own motion -- a visible jolt the moment it started moving,
@@ -3432,9 +3487,9 @@ class CadenceAxiomTest(SiteDirTestCase):
 
 class MotionAxiomTest(SiteDirTestCase):
     """The motion axiom: nothing on the site moves along a standard curve. Every transition and
-    animation runs along a curve js/motion.js rolled for that one movement -- a procedurally
-    generated glitch of a curve, never twice the same -- with where the thing moves from rolled
-    beside it, and the typography shifts its register with the mood. Stated in the prompt and
+    animation is one edge stepping across in a stair js/motion.js composed for that one movement
+    -- a few forward treads, never twice the same -- with where the thing moves from rolled beside
+    it, and the typography shifts its register with the mood. Stated in the prompt and
     held to by validate_plan, like the nine beside it: the engine's line on every page, and no
     linear, ease, ease-in, ease-out, ease-in-out, cubic-bezier or browser smoothing anywhere a
     page or the files it loads would move by them. The rest -- whether a curve feels like a
@@ -3461,7 +3516,9 @@ class MotionAxiomTest(SiteDirTestCase):
         prompt = mi.build_prompt([("index.html", "<h1>hi</h1>")])
         rules = prompt[prompt.index("Rules:"):]
         for rule in ["AXIOM, every run: nothing on the site moves along a standard curve",
-                     "a procedurally generated glitch of a curve", "never the same twice",
+                     "one clear choice made for a reason", "one clean edge", "a slice, a straight edge at an angle",
+                     "or a curve, a circle growing from a point", "two to five treads that always go forward",
+                     "two shades of its colour split by that edge, never a pattern",
                      "where the thing moves from, how far, which way a wipe travels",
                      mi.MOTION_TAG, "Keep that line on every page you rewrite",
                      f"\"{mi.MOTION_SCRIPT}\" is yours to rewrite and extend and may never be deleted",
@@ -3471,9 +3528,12 @@ class MotionAxiomTest(SiteDirTestCase):
                      "never tweens along t*t, a sine or a power of its own",
                      "typographic register", "$registers-of", "faces that go together",
                      "never two that do not", "a control under the pointer or the focus does not fade",
-                     "is-waxing", "is-stamping", "is-sealing", "--matte-1 to --matte-5", "env.rite",
-                     "composed anew on its trigger", "var(--rite-wax, matte-in)",
-                     "rite.matte(x, y, k)", "reveal(el)", "flip(list, change)", f"\"{mi.FONT_SHEET}\"",
+                     "is-waxing", "is-stamping", "is-sealing", f"\"{mi.SASS_DIR}/_cut.scss\"", "env.rite",
+                     "the engine composes it from a few pieces", "cut(el, rite, options)",
+                     "@include cut.play(in, wax, medium)", "never per movement",
+                     "rite.paint(g, x, y, w, h, k)", "never a grid of cells", "Being cheap is part of the rite",
+                     "no infinite animation but a small transform on a control waiting to be pressed",
+                     "reveal(el)", "flip(list, change)", f"\"{mi.FONT_SHEET}\"",
                      "plan that leaves a page without the line, moves anything by one of those, or fades a state, is refused"]:
             with self.subTest(rule=rule):
                 self.assertIn(rule, rules)
@@ -4636,8 +4696,9 @@ HOLD_PIECE = """    let holds = 0;
 
 # A piece that says what it is still being told, so a finished piece staying playable can be read
 # back off the stage (issue #86). Its frame() writes the counts onto the one live line a piece has,
-# so the harness can see the loop still drawing, the knob still reaching apply() and the scene still
-# reaching tap() long after the ceremony wrote "finished" over that same line.
+# so the harness can see its frames still coming (it never says it is at rest), the knob still
+# reaching apply() and the scene still reaching tap() long after the ceremony wrote "finished" over
+# that same line.
 LIVE_PIECE = """    let frames = 0;
     let turns = 0;
     let taps = 0;
@@ -5105,8 +5166,8 @@ class StageTest(unittest.TestCase):
         self.assertEqual(result["unset"], [], "a knob the visitor worked was not set")
         self.assertEqual(result["atDone"]["mode"], "done", "the piece did not finish")
         self.assertTrue(result["atDone"]["doneShown"], "nothing said the piece was done")
-        # Six seconds on, and a second after that, with nobody touching anything: the frame loop is
-        # still drawing (the burst's own frames are long spent by then) and nothing is disabled.
+        # Six seconds on, and a second after that, with nobody touching anything: this piece never
+        # says it is at rest, so its frames keep coming, and nothing is disabled.
         self.assertGreater(result["drawing"]["frames"], result["later"]["frames"],
                            "the frame loop stopped when the piece finished")
         for when in ["atDone", "later", "drawing", "afterKnob", "afterTap"]:
@@ -5879,12 +5940,18 @@ class NavTest(unittest.TestCase):
         # Read off _lightbox.scss rather than _nav.scss: the veil the logo raises is the one the
         # whole site shares now (issue #70), and the nav holds no paint of its own for it.
         css = self.source["_sass/_lightbox.scss"]
-        veil = css[css.index(".lightbox-veil {"):css.index("@keyframes lightbox-veil")]
+        veil = css[css.index(".lightbox-veil {"):css.index("}", css.index(".lightbox-veil {"))]
         self.assertIn("position: fixed", veil)
         self.assertIn("inset: 0", veil)
         self.assertIn("backdrop-filter: blur(", veil)
         self.assertRegex(veil, r"background: color-mix\(")
         self.assertIn("animation-play-state: paused", css)
+        # It rises as one curve from the control that raised it, and its ghost goes the same way.
+        self.assertIn("mask: cut.curve()", css)
+        self.assertIn("@include cut.play(in, veil", css)
+        # Its ghost goes back from as far as the veil had risen (--cut-from, which the engine writes).
+        self.assertIn("animation: veil-out var(--motion-veil-out", css)
+        self.assertIn("from { --cut: var(--cut-from, 100%); }", css)
         # And the nav's own veil is gone, markup, paint and keyframes alike: there is one.
         for rel, content in sorted(self.source.items()):
             with self.subTest(rel=rel):
@@ -6351,8 +6418,8 @@ class LightboxTest(unittest.TestCase):
 
     def test_the_paint_is_written_once_and_reaches_every_page(self):
         partial = self.source[f"{mi.SASS_DIR}/_lightbox.scss"]
-        for rule in [".lightbox-veil", "@keyframes lightbox-veil", "[data-lightbox-front]",
-                     "[data-lightbox-aside]"]:
+        for rule in [".lightbox-veil", "@include cut.play(in, veil", "animation: veil-out var(--motion-veil-out",
+                     "[data-lightbox-front]", "[data-lightbox-aside]"]:
             with self.subTest(rule=rule):
                 self.assertIn(rule, partial)
         # Through the one stylesheet every page links, like every other shared partial.
@@ -6818,7 +6885,10 @@ class RealSiteTest(unittest.TestCase):
         ornament = self.source[f"{mi.SASS_DIR}/_rite.scss"]
         self.assertIn("@use 'rite';", self.source["css/site.scss"], "the ornament is not shared")
         self.assertIn("prefers-reduced-motion: reduce", ornament)
-        self.assertIn("animation: none", ornament[ornament.index("prefers-reduced-motion: reduce"):])
+        # The ornament holds still for everyone now -- the rings rest -- and the one movement it
+        # carries, a line of words cut in, is simply there for a visitor who asked for less motion.
+        self.assertNotIn("infinite", ornament, "the ornament loops")
+        self.assertIn("mask: none", ornament[ornament.index("prefers-reduced-motion: reduce"):])
         self.assertNotRegex(ornament, r"(?m)^\s*position:\s*fixed\b", "the ornament floats over the page")
         self.assertIn("pointer-events: none", ornament, "the ornament takes a press meant for content")
         built = self.site["css/site.css"]
@@ -6849,10 +6919,10 @@ class RealSiteTest(unittest.TestCase):
                         "'(prefers-reduced-motion: reduce)'", "linear(", "steps("]:
             with self.subTest(offered=offered):
                 self.assertIn(offered, engine)
-        for family in ["arrive", "leave", "shift", "flicker", "pulse", "drift", "wipe"]:
+        for family in ["arrive", "leave", "stair", "shift", "flicker", "pulse", "drift", "wipe", "ratchet"]:
             with self.subTest(family=family):
-                self.assertIn(f"    {family}: function (m)", engine, "the engine lost a family")
-        # The tokens: seven families, each a baked piecewise curve for a page with no script, the
+                self.assertIn(f"    {family}: function (rnd", engine, "the engine lost a family")
+        # The tokens: the families, each a baked stair of a few treads for a page with no script, the
         # three M3 names kept only as aliases of them, and a stair for a browser that knows no
         # linear() -- never `ease`, which is what an unreadable curve would otherwise fall back to.
         tokens = self.source[f"{mi.SASS_DIR}/_tokens.scss"]
@@ -6870,26 +6940,39 @@ class RealSiteTest(unittest.TestCase):
         for rel, text in sorted(self.source.items()):
             if not rel.startswith(f"{mi.SASS_DIR}/") or rel in mi.FIXED_FILES:
                 continue
+            # A mixin's interpolation (var(--ease-#{$rite}, ...)) is read as the name it will be.
+            text = re.sub(r"#\{[^}]*\}", "X", text)
             for declaration in mi.TIMING_DECLARATION.finditer(text):
                 value = declaration.group(1)
-                if value.strip() == "none":
+                if re.fullmatch(r"\s*none(\s*!important)?\s*", value):
                     continue  # stillness, under prefers-reduced-motion: no curve to roll
                 with self.subTest(rel=rel, declaration=declaration.group(0)[:60]):
                     self.assertIn("var(--ease-", value, "a movement with no rolled curve")
                     self.assertFalse(mi.STANDARD_EASING.search(value), "a standard easing in the Sass")
+        # Every @keyframes plays along a spell of its own with a family behind it: by its own name
+        # (animation: thing-in var(--motion-..) var(--ease-thing-in, var(--ease-arrive))), or, for the
+        # edge's own keyframes in _cut.scss, by the rite the mixin is played for.
         for rel, text in sorted(self.source.items()):
             if rel.startswith(f"{mi.SASS_DIR}/"):
-                for name in re.findall(r"^@keyframes ([\w-]+) \{", text, re.M):
+                for name in sass_keyframes(text):
                     with self.subTest(spell=name):
-                        self.assertRegex(text, rf"animation: (?:var\(--rite-[\w-]+, )?{re.escape(name)}\)? [^;]*var\(--ease-{re.escape(name)}, var\(--ease-\w+\)\)",
-                                         f"{name} plays along a family's curve rather than a spell of its own")
-        # The geometry is read where the movements are: an arrival comes from the roll's --arrive-*,
-        # a departure goes to its --leave-*, the veil wipes between --wipe-from and --wipe-to, a state
-        # layer sweeps from --state-from, and the page's sky washes in from --sky-x and --sky-y.
+                        if rel == f"{mi.SASS_DIR}/_cut.scss":
+                            self.assertRegex(text, rf"{re.escape(name.split('-')[0])}-(?:#\{{\$dir\}}|{re.escape(name.split('-')[1])}) var\(--motion-#\{{\$rite\}}, var\(--motion-#\{{\$base\}}\)\) var\(--ease-#\{{\$rite\}}, var\(--ease-#\{{\$family\}}\)\)",
+                                             f"{name} plays along a family's curve rather than a rite of its own")
+                        else:
+                            # Its own spell, or the rite the engine composes for the movement it plays
+                            # (a press is the stamp, whatever keyframes a stylesheet stamps it with).
+                            spell = rf"(?:{re.escape(name)}|{'|'.join(ENGINE_RITES)})"
+                            self.assertRegex(text, rf"animation:\s*(?:[^;]*,\s*)?{re.escape(name)} [^;]*?var\(--ease-{spell}, var\(--ease-\w+\)\)",
+                                             f"{name} plays along a family's curve rather than a spell of its own")
+        # The geometry is read where the movements are: an arrival comes from the roll's --arrive-*
+        # behind a slice at --arrive-angle, a departure goes to its --leave-* behind --leave-angle, a
+        # slice cuts at --cut-angle and a curve grows from --cut-x/--cut-y, and a set control's two
+        # shades split round --seal-x/--seal-y.
         sass = "\n".join(text for rel, text in sorted(self.source.items()) if rel.startswith(f"{mi.SASS_DIR}/"))
-        for read in ["var(--arrive-x", "var(--arrive-y", "var(--arrive-rot", "var(--leave-x", "var(--leave-y",
-                     "var(--wipe-from", "var(--wipe-to", "var(--state-from", "var(--sky-x", "var(--sky-y",
-                     "var(--motion-stagger", "var(--motion-shift"]:
+        for read in ["var(--arrive-x", "var(--arrive-y", "var(--arrive-angle", "var(--leave-x", "var(--leave-y",
+                     "var(--leave-angle", "var(--cut-angle", "var(--cut-x", "var(--cut-y", "var(--seal-x",
+                     "var(--seal-y", "var(--reveal-angle", "var(--motion-stagger"]:
             with self.subTest(read=read):
                 self.assertIn(read, sass, f"nothing in the Sass reads {read}")
         self.assertNotIn("scroll-behavior: smooth", sass, "the browser's own curve scrolls the page")
@@ -6903,75 +6986,126 @@ class RealSiteTest(unittest.TestCase):
                 self.assertIn(part, stage)
         self.assertNotIn("behavior: 'smooth'", stage)
         self.assertNotIn("behavior: calm.matches ? 'auto' : 'smooth'", stage)
-        self.assertIn("style.setProperty('--jit', jitterFor(order) + 'ms');", self.source[mi.SITE_SCRIPT])
+        # The constellation's order is its rolled stride alone: no jitter on top of it.
+        self.assertNotIn("--jit", self.source[mi.SITE_SCRIPT])
         self.assertIn("motion.ms('medium')", self.source["js/feed.js"])
         self.assertIn("function rite(family)", self.source[mi.MOOD_SCRIPT])
 
-    def test_nothing_on_the_site_changes_state_by_a_fade(self):
-        # The second half of the motion axiom on the site as committed: a control under the pointer
-        # waxes through the matte ladder and wanes back down it, a press stamps, a set control is
-        # sealed with a texture, a scalar that changes changes in treads, words are revealed glyph
-        # by glyph, the veil leaves as a ghost, and a module moves by env.rite -- never by a fade,
-        # a glide or a formula. Held by name, because every stylesheet and script reads the roll by
-        # these names (README: "Motion axiom").
+    def test_every_change_of_state_is_one_clean_edge(self):
+        # The second half of the motion axiom on the site as committed: a surface changes by ONE
+        # edge chosen for a reason -- a slice at an angle or a curve round a point -- stepping across
+        # it in a few forward treads, and a surface that stays changed rests as two shades split by
+        # that edge. A control under the pointer is cut in from the pointer's side and cut back out,
+        # a press stamps and inks from where it landed, a set control is sealed in two shades round
+        # the press, a line of words is cut in by one slice, and a module paints one edge on its
+        # canvas -- never a pattern, a ladder of masks, a span per letter, or a fade. Held by name,
+        # because every stylesheet and script reads the edge by these names (README: "Motion axiom").
         engine = self.source[mi.MOTION_SCRIPT]
-        for offered in ["    stair: function (m)", "    ratchet: function (m)", "reveal: reveal", "flip: flip",
-                        "rite: rite", "stepper: stepper", "arrive: arrive", "deal: deal", "seal: dress",
-                        "mattes: mattes", "wax: wax", "wane: wane", "'--matte-' + (i + 1)",
-                        "write('--matte-fill', m.fillImage);", "write('--matte-top', m.top);",
-                        "write('--motion-' + name, length + 'ms');", "function busy()",
-                        "function compose(kind, options)", "function composeOn(el, kind, fallback, baseMs, options)",
-                        "var VOCABULARY = {", "compose: compose", "data-interesting-rites",
-                        "function rollMattes(rnd, temper)",
+        for offered in ["    stair: function (rnd", "    ratchet: function (rnd", "cut: cut", "reveal: reveal",
+                        "flip: flip", "rite: rite", "stepper: stepper", "arrive: arrive", "deal: deal",
+                        "seal: dress", "wax: wax", "wane: wane", "function cut(el, rite, options)",
+                        "setInline(el, '--ease-' + rite, css);", "setInline(el, '--motion-' + rite, length + 'ms');",
+                        "'--cut-angle'", "'--cut-x'", "'--cut-y'", "'--seal-x'", "'--seal-y'",
                         "'is-waxing'", "'waning'", "'stamping'", "'sealing'", "'unsealing'",
-                        "'matte-in': 'stair'", "'rite-seal': 'stair'", "'glyph-in'", "'lightbox-veil-out'",
-                        "function reveal(el, options)", "function flip(container, change, options)",
-                        "function raiseGhost(veil)"]:
+                        "function reveal(el, options)", "'--cut': '0%'", "'--cut': '100%'",
+                        "function flip(container, change, options)", "function raiseGhost(veil)"]:
             with self.subTest(offered=offered):
                 self.assertIn(offered, engine)
+        # Cheap by construction: nothing is written into a stylesheet while the page runs, a line
+        # is never taken apart into a span per letter, and a movement that ends is rolled afresh on
+        # the element that played it -- never by re-rolling the whole page.
+        for gone in ["insertRule", "data-interesting-rites", "setInterval("]:
+            with self.subTest(gone=gone):
+                self.assertNotIn(gone, engine)
+        self.assertNotRegex(engine, r"createElement\(\s*['\"]span['\"]", "the engine takes a line apart into spans")
+        # And :root is the page's roll, written as it loads and when its mood changes -- never by a
+        # movement. The functions a trigger runs write only on the element that plays it.
+        for trigger in ["cut", "wax", "wane", "onStamp", "onSetChange", "reveal", "arrive", "onAnimationEnd",
+                        "onRiteEnd", "pass", "endPass", "flip"]:
+            body = js_function(engine, trigger)
+            with self.subTest(trigger=trigger):
+                self.assertTrue(body, f"the engine has no {trigger}()")
+                self.assertNotRegex(body, r"(?<![\w.])write\(", f"{trigger}() writes the page's roll on :root")
+                self.assertNotIn("documentElement.style", body, f"{trigger}() writes on :root")
+        ending = engine[engine.index("function onAnimationEnd(ev) {"):]
+        ending = ending[:ending.index("\n    }\n")]
+        self.assertNotIn("rollAll", ending, "an animation's end re-rolls the whole page")
+        self.assertIn("spellOn(el, name)", ending)
         tokens = self.source[f"{mi.SASS_DIR}/_tokens.scss"]
         self.assertRegex(tokens, r"--ease-stair: linear\(0, .*, 1\);")
         self.assertRegex(tokens, r"--ease-ratchet: linear\(0, .*, 1\);")
         self.assertIn("--ease-stair: steps(", tokens)
         self.assertIn("--ease-ratchet: steps(", tokens)
-        for baked in ["--matte-1:", "--matte-2:", "--matte-3:", "--matte-4:", "--matte-5:", "--matte-fill:",
-                      "--matte-fill-size:", "--matte-top:", "@property --range-pct"]:
+        for baked in ["@property --cut {", "syntax: '<percentage>';", "--cut-angle:", "--reveal-angle:",
+                      "@property --range-pct"]:
             with self.subTest(baked=baked):
                 self.assertIn(baked, tokens, f"the tokens bake no {baked}")
-        # The grammar of a control: the ladder, the stamp, the seal, and a stair for its colour.
+        # The edge, written once: two masks, two resting shades, and the mixins that play them.
+        cut = self.source[f"{mi.SASS_DIR}/_cut.scss"]
+        for part in ["@function slice(", "@function curve(", "@function shades(", "@function shades-curve(",
+                     "@mixin play(", "@mixin develop(", "@mixin unmake(",
+                     "linear-gradient(#{$angle}, #000 var(--cut, 0%), transparent var(--cut, 0%))",
+                     "radial-gradient(circle farthest-corner at #{$x} #{$y}, #000 var(--cut, 0%), transparent var(--cut, 0%))",
+                     "@keyframes cut-in", "@keyframes cut-out", "@keyframes lift-in", "@keyframes lift-out",
+                     "@keyframes ink-in", "@mixin ink(", "@mixin bleed(", "@function unpassed(",
+                     "var(--ease-#{$rite}, var(--ease-#{$family}))"]:
+            with self.subTest(part=part):
+                self.assertIn(part, cut)
+        self.assertIn("@use 'cut';", self.source["css/site.scss"])
+        # The grammar of a control: cut in and out, stamped, inked, sealed in two shades.
         controls = self.source[f"{mi.SASS_DIR}/_controls.scss"]
         for rule in [".is-waxing::after", ".is-waning::after", ".is-stamping", ".is-sealing::before",
-                     ".is-unsealing::before", "@keyframes matte-in", "@keyframes matte-out",
-                     "@keyframes rite-stamp", "@keyframes rite-seal", "@keyframes rite-unseal",
-                     "@keyframes stamp-ink", "mask-position: var(--stamp-x, 50%) var(--stamp-y, 50%);",
-                     "animation: var(--rite-wax, matte-in)", "animation: var(--rite-wane, matte-out)",
-                     "animation: var(--rite-stamp, rite-stamp)", "animation: var(--rite-ink, stamp-ink)",
-                     "animation: var(--rite-seal, rite-seal)", "animation: var(--rite-unseal, rite-unseal)",
-                     "mask-position: var(--matte-shift, 0 0);", "clip-path: var(--state-from",
-                     "background: var(--matte-fill);", "background-size: var(--matte-fill-size);",
-                     "mask: var(--matte-1);", "mask: var(--matte-5);", "mask: var(--matte-top);",
-                     "transition: --range-pct var(--motion-short) var(--ease-stair);"]:
+                     ".is-unsealing::before", "@include cut.play(in, wax", "@include cut.play(out, wane",
+                     "ink-in var(--motion-ink", "@include cut.play(in, seal", "@include cut.play(out, unseal",
+                     "mask: cut.slice();", "mask: cut.curve(", "background: cut.shades(", "background: cut.shades-curve(",
+                     "@keyframes rite-stamp", "transition: --range-pct var(--motion-short) var(--ease-stair);"]:
             with self.subTest(rule=rule):
                 self.assertIn(rule, controls, f"the controls lost {rule}")
         self.assertNotRegex(controls, r"(background-color|color|opacity)[^;]*var\(--ease-(shift|flicker)\)",
                             "a control still fades to its new colour")
-        # Every tread of a ladder is written for both mask syntaxes, so it climbs in every browser.
+        # Nowhere in the Sass is a surface changed through a pattern: no ladder of masks, no mask
+        # that is a picture or a repeating gradient, no grain, no prefixed twin of a retired rung.
+        retired = re.compile(r"--matte-|--card-grain|data-matte|-webkit-mask|feTurbulence|"
+                             r"var\(--rite-(?:wax|wane|stamp|ink|seal|unseal|develop|unmake|veil|veil-out)\b")
         for rel, text in sorted(self.source.items()):
-            if rel.startswith(f"{mi.SASS_DIR}/"):
-                with self.subTest(rel=rel):
-                    self.assertEqual(len(re.findall(r"(?<!-webkit-)mask: var\(--matte-", text)),
-                                     len(re.findall(r"-webkit-mask: var\(--matte-", text)),
-                                     "a matte tread with one mask syntax and not the other")
+            if not rel.startswith(f"{mi.SASS_DIR}/") or rel in mi.FIXED_FILES:
+                continue
+            with self.subTest(rel=rel):
+                self.assertFalse(retired.search(text), f"{rel} still changes a surface through the old ladder")
+                self.assertNotRegex(text, r"(?m)^\s*mask(?:-image)?\s*:[^;]*(?:url\(|repeating-)",
+                                    "a mask that is a picture or a pattern")
+        # Nor at rest: a surface that stays changed is two shades split by one edge, never a pattern
+        # painted as its background. The one repeating gradient on the site is the dotted or dashed
+        # rule a register draws under a heading (_type.scss's $rules), which is typography and
+        # never a state; and no stylesheet carries a picture of its own.
+        for rel, text in sorted(self.source.items()):
+            if not rel.startswith(f"{mi.SASS_DIR}/") or rel in mi.FIXED_FILES:
+                continue
+            body = text
+            if rel == f"{mi.SASS_DIR}/_type.scss" and "$rules:" in body:
+                start = body.index("$rules:")
+                body = body[:start] + body[body.index(");", start):]
+            with self.subTest(pattern=rel):
+                self.assertNotRegex(body, r"repeating-(?:linear|radial|conic)-gradient\(",
+                                    "a patterned surface outside the registers' rules")
+                self.assertNotRegex(body, r"url\(\s*['\"]?data:image/svg", "a stylesheet paints a picture of its own")
         ornament = self.source[f"{mi.SASS_DIR}/_rite.scss"]
-        for rule in [".is-revealing .glyph {", ".is-revealing .glyph::before {", "content: attr(data-sigil);",
-                     "content: attr(data-sigil-2);", "@keyframes glyph-in", "@keyframes glyph-sigil",
-                     "@keyframes glyph-sigil-2", "@keyframes glyph-word", "display: inline;"]:
-            with self.subTest(rule=rule):
-                self.assertIn(rule, ornament)
-        veil = self.source[f"{mi.SASS_DIR}/_lightbox.scss"]
-        self.assertIn(".lightbox-veil.is-ghost {", veil)
-        self.assertIn("@keyframes lightbox-veil-out", veil)
-        self.assertIn("animation: var(--rite-veil-out, lightbox-veil-out)", veil)
+        self.assertIn(".is-revealing {", ornament)
+        self.assertIn("mask: cut.slice(var(--reveal-angle", ornament)
+        self.assertNotIn(".glyph", ornament, "the reveal still takes a line apart into glyphs")
+        # The scripts compose through cut(): none writes a composed rule's name or reads the old
+        # field of cells, and the whole site loads no stylesheet it writes itself.
+        for rel, text in sorted(self.source.items()):
+            if not rel.endswith(".js") or rel in mi.FIXED_FILES or rel == mi.MOTION_SCRIPT:
+                continue
+            with self.subTest(script=rel):
+                for gone in ["composeOn(", ".compose(", "rite.cell", "matteField", "insertRule", "'--rite-wax'",
+                             "'--rite-develop'", "'--rite-unmake'", "feTurbulence"]:
+                    self.assertFalse(gone in text, f"{rel} still uses {gone}")
+                # A module paints a changing surface as one shape (rite.paint, rite.region); asking the
+                # edge point by point is how a grid of cells comes back.
+                if rel.startswith("js/modules/"):
+                    self.assertNotRegex(text, r"\.matte\(", f"{rel} asks the edge point by point")
         # A module moves by env.rite, handed by every env builder and both of the harnesses that
         # play a module, and the stage's contract says so.
         variant = self.source[mi.VARIANT_SCRIPT]
@@ -6988,35 +7122,128 @@ class RealSiteTest(unittest.TestCase):
         self.assertIn("rite: V.rite(seed)", (mi.REPO_ROOT / mi.CARD_VARIANT_HARNESS_REL).read_text(encoding="utf-8"))
 
         def rite_block(text):
-            return text[text.index("function riteOf(seed) {"):text.index("/* rite:end */")]
+            return text[text.index("function riteOf(seed, edge) {"):text.index("/* rite:end */")]
         self.assertEqual(rite_block(variant), rite_block(piece_harness),
                          "the piece harness's copy of the rite has drifted from js/variant.js")
 
-    def test_a_pieces_rite_is_a_stair_a_ratchet_a_flicker_and_a_matte(self):
+    def test_nothing_costs_the_page_more_than_it_shows(self):
+        # The user's second ask, held where source can hold it: a movement animates only what the
+        # compositor can draw cheaply or the one --cut the edge moves by, the edge only ever goes
+        # one way, a loop is only ever a small turn of a transform, and every keyframe is a short,
+        # plain rule -- so the rite says "a very specific choice" with the minimum of processing.
+        # Keyframes are found wherever they are written: at the top of a partial, inside a media
+        # query, or inside a mixin.
+        costly = re.compile(r"(?<![\w-])(box-shadow|filter|backdrop-filter|clip-path|mask(?:-[\w-]+)?|"
+                            r"background-position|background-size|width|height|top|left|right|bottom|"
+                            r"inset|margin(?:-[\w-]+)?|padding(?:-[\w-]+)?)\s*:")
+        cheap = re.compile(r"(?<![\w-])(transform|translate|rotate|scale|opacity|--cut)\s*:")
+        found = 0
+        for rel, text in sorted(self.source.items()):
+            if not rel.startswith(f"{mi.SASS_DIR}/") or rel in mi.FIXED_FILES:
+                continue
+            plain = re.sub(r"#\{[^}]*\}", "X", text)
+            keyframes = sass_keyframes(plain)
+            for name, body in keyframes.items():
+                found += 1
+                with self.subTest(rel=rel, keyframes=name):
+                    self.assertFalse(costly.search(body), f"@keyframes {name} animates something the page pays to repaint")
+                    stops = sass_stops(body)
+                    self.assertLessEqual(len(stops), 3, f"@keyframes {name} climbs a ladder of {len(stops)} stops")
+                    # The edge goes one way: --cut never turns back within one movement.
+                    cuts = [float(m.group(1)) for _, rule in stops
+                            for m in [re.search(r"--cut\s*:\s*(-?[\d.]+)%", rule)] if m]
+                    if len(cuts) > 2:
+                        rising = all(b2 >= a2 for a2, b2 in zip(cuts, cuts[1:]))
+                        falling = all(b2 <= a2 for a2, b2 in zip(cuts, cuts[1:]))
+                        self.assertTrue(rising or falling, f"@keyframes {name} slips the edge back: {cuts}")
+            for declaration in re.finditer(r"(?m)^\s*animation\s*:([^;]*);", plain):
+                value = declaration.group(1)
+                if "infinite" not in value:
+                    continue
+                for part in top_level_parts(value):
+                    if "infinite" not in part:
+                        continue
+                    name = part.split()[0]
+                    with self.subTest(rel=rel, loop=name):
+                        self.assertIn(name, keyframes, f"the loop {name} plays keyframes declared elsewhere")
+                        props = re.findall(r"(?m)^\s*([\w-]+)\s*:", keyframes[name])
+                        self.assertTrue(props and all(cheap.match(p + ":") for p in props),
+                                        f"the loop {name} moves {props}, which the compositor cannot draw alone")
+        self.assertGreater(found, 5, "the sweep found almost no keyframes, so it is reading the Sass wrong")
+
+    def test_every_family_is_a_forward_stair_of_two_to_five_treads(self):
+        # The engine's own arithmetic, and the stairs the tokens bake for a page with no script:
+        # every family, for any seed, any grain and either temperament, climbs from 0 to 1 in two
+        # to five treads that only go forward -- never an overshoot, a slip back or a ladder.
+        needs_node(self)
+        script = """
+          const fs = require('fs'), vm = require('vm');
+          const sandbox = { module: { exports: {} } };
+          vm.runInNewContext(fs.readFileSync(process.argv[1], 'utf8'), sandbox);
+          const M = sandbox.module.exports;
+          const out = { families: M.families, bad: [] };
+          const tempers = [{ grain: 0, tempo: 1, steps: 0 }, { grain: 1, tempo: 1, steps: 1 }, { grain: 0.45, tempo: 1.3, steps: 0 }];
+          for (const f of M.families) for (const temper of tempers) for (let seed = 1; seed <= 60; seed++) {
+            const c = M.curve(f, temper, seed);
+            const st = c.stops;
+            const forward = st.every((p, i) => i === 0 || (p[0] >= st[i - 1][0] && p[1] >= st[i - 1][1]));
+            const inside = st.every((p) => p[0] >= 0 && p[0] <= 1 && p[1] >= 0 && p[1] <= 1);
+            const levels = new Set(st.map((p) => p[1])).size - 1;
+            const ends = st[0][1] === 0 && st[st.length - 1][1] === 1;
+            if (!forward || !inside || !ends || levels < 2 || levels > 5) out.bad.push([f, seed, temper.steps, forward, inside, ends, levels]);
+          }
+          process.stdout.write(JSON.stringify(out));
+        """
+        run = subprocess.run([mi.NODE_BIN, "-e", script, "--", str(mi.REPO_ROOT / "site" / mi.MOTION_SCRIPT)],
+                             capture_output=True, text=True, timeout=60)
+        self.assertEqual(run.returncode, 0, run.stderr)
+        out = json.loads(run.stdout)
+        self.assertGreaterEqual(len(out["families"]), 9, "the engine offers too few families to check")
+        self.assertEqual(out["bad"][:10], [], "a family climbs a ladder, slips back or overshoots")
+        tokens = self.source[f"{mi.SASS_DIR}/_tokens.scss"]
+        baked = re.findall(r"(--ease-[\w-]+): linear\(([^)]*)\);", tokens)
+        self.assertGreaterEqual(len(baked), 9, "the tokens bake too few stairs to check")
+        for name, body in baked:
+            with self.subTest(token=name):
+                ys = [float(part.split()[0]) for part in body.split(",")]
+                self.assertEqual((ys[0], ys[-1]), (0.0, 1.0), f"{name} does not climb from 0 to 1")
+                self.assertTrue(all(b >= a for a, b in zip(ys, ys[1:])), f"{name} slips back")
+                self.assertTrue(2 <= len(set(ys)) - 1 <= 5, f"{name} is a ladder of {len(set(ys)) - 1} treads")
+
+    def test_a_pieces_rite_is_a_stair_a_ratchet_a_cut_and_one_edge(self):
         # env.rite in arithmetic: the same seed rolls the same rite; the stair and the ratchet climb
-        # from 0 to 1 in treads and never glide; the flicker is 0 or 1; the matte lets more cells
-        # through as the coverage rises and never fewer; and no two seeds roll the same curve.
+        # from 0 to 1 in two to five forward treads and never glide or slip; the flicker is one cut,
+        # off and then on for good; the piece's edge is one slice or one curve, lets more of a box
+        # through as the coverage rises and never less, and is painted as one shape, never cells.
         needs_node(self)
         script = """
           const V = await import(process.argv[1]);
           const out = {};
           const a = V.rite(7), b = V.rite(7), c = V.rite(8);
-          const xs = Array.from({ length: 41 }, (_, i) => i / 40);
+          const xs = Array.from({ length: 401 }, (_, i) => i / 400);
           out.same = xs.every((t) => a.ease(t) === b.ease(t) && a.stair(t) === b.stair(t) && a.ratchet(t) === b.ratchet(t));
           out.differ = xs.some((t) => a.ease(t) !== c.ease(t));
           out.ends = [a.ease(0), a.ease(1), a.stair(0), a.stair(1), a.ratchet(0), a.ratchet(1)];
-          const stair = xs.map((t) => a.stair(t));
-          out.stairMonotone = stair.every((y, i) => i === 0 || y >= stair[i - 1]);
-          out.stairLevels = new Set(stair).size;
+          const forward = (f) => xs.map((t) => f(t)).every((y, i, ys) => i === 0 || y >= ys[i - 1]);
+          out.forward = [forward(a.ease), forward((t) => a.stair(t)), forward(a.ratchet), forward(a.flicker)];
+          out.stairLevels = new Set(xs.map((t) => a.stair(t))).size - 1;
+          out.easeLevels = new Set(xs.map((t) => a.ease(t))).size - 1;
+          out.ratchetLevels = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((s) => new Set(xs.map((t) => V.rite(s).ratchet(t))).size - 1);
+          out.treads = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((s) => V.rite(s).treads);
           out.stairTreads = a.treads;
-          out.ratchetIn = xs.every((t) => a.ratchet(t) >= 0 && a.ratchet(t) <= 1);
           out.flickerBinary = xs.every((t) => a.flicker(t) === 0 || a.flicker(t) === 1);
           out.flickerEnds = [a.flicker(0), a.flicker(1)];
-          const covered = (k) => { let n = 0; for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) if (a.matte(x, y, k)) n++; return n; };
-          const ks = [0, 0.2, 0.4, 0.6, 0.8, 1].map(covered);
+          const covered = (r, k) => { let n = 0; for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) if (r.matte((x + 0.5) / 32, (y + 0.5) / 32, k)) n++; return n; };
+          const ks = [0, 0.2, 0.4, 0.6, 0.8, 1].map((k) => covered(a, k));
           out.matteMonotone = ks.every((n, i) => i === 0 || n >= ks[i - 1]);
           out.matteEnds = [ks[0], ks[ks.length - 1]];
-          out.kinds = new Set([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((s) => V.rite(s).kind)).size;
+          out.kinds = [...new Set([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((s) => V.rite(s).kind))].sort();
+          out.signature = [1, 2, 3].every((s) => { const r = V.rite(s), o = r.at(99); return o.kind === r.kind && o.angle === r.angle; });
+          // One shape per paint: a stub canvas counts the fills a coverage halfway costs.
+          const g = { fills: 0, fillRect() { this.fills++; }, fill() { this.fills++; }, beginPath() {}, closePath() {},
+                      moveTo() {}, lineTo() {}, arc() {}, rect() {}, save() {}, restore() {}, clip() {} };
+          for (let s = 1; s <= 12; s++) V.rite(s).paint(g, 0, 0, 300, 200, 0.5, '#fff');
+          out.fills = g.fills;
           process.stdout.write(JSON.stringify(out));
         """
         run = subprocess.run([mi.NODE_BIN, "--input-type=module", "-e", script, "--",
@@ -7027,15 +7254,22 @@ class RealSiteTest(unittest.TestCase):
         self.assertTrue(out["same"], "the same seed rolled a different rite")
         self.assertTrue(out["differ"], "two seeds rolled the same curve")
         self.assertEqual(out["ends"], [0, 1, 0, 1, 0, 1])
-        self.assertTrue(out["stairMonotone"])
-        self.assertGreaterEqual(out["stairLevels"], 3, "a stair with fewer than three treads is a cut")
+        self.assertEqual(out["forward"], [True, True, True, True], "a rite slipped back")
         self.assertEqual(out["stairLevels"], out["stairTreads"])
-        self.assertTrue(out["ratchetIn"])
+        for treads in out["treads"]:
+            self.assertGreaterEqual(treads, 2, "a stair of one tread is a cut")
+            self.assertLessEqual(treads, 5, "a stair of more than five treads is a ladder")
+        self.assertLessEqual(out["easeLevels"], 5)
+        for clicks in out["ratchetLevels"]:
+            self.assertGreaterEqual(clicks, 2, "a ratchet of one click is a cut")
+            self.assertLessEqual(clicks, 5, "a ratchet of more than five clicks is a ladder")
         self.assertTrue(out["flickerBinary"])
         self.assertEqual(out["flickerEnds"], [0, 1])
-        self.assertTrue(out["matteMonotone"], "the matte let fewer cells through at a higher coverage")
+        self.assertTrue(out["matteMonotone"], "the edge let less of the box through at a higher coverage")
         self.assertEqual(out["matteEnds"], [0, 1024])
-        self.assertGreaterEqual(out["kinds"], 3, "twelve seeds rolled fewer than three kinds of matte")
+        self.assertEqual(out["kinds"], ["curve", "slice"], "twelve seeds did not roll both edges, or rolled another")
+        self.assertTrue(out["signature"], "a piece's edge changed shape between two of its movements")
+        self.assertEqual(out["fills"], 12, "a paint filled more than one shape")
 
     def test_every_mood_wears_a_register_and_a_temperament(self):
         # The typographic half of the motion axiom on the site as committed: each of the fifteen
@@ -7102,8 +7336,8 @@ class RealSiteTest(unittest.TestCase):
         self.assertIn("$sans: var(--font-act, #{$sans-stack});", types)
         self.assertIn("$mono: var(--font-mono, #{$mono-stack});", types)
         self.assertRegex(built, r"html\{[^}]*font-family:var\(--font-act,")
-        # And the shift of modality is a movement: the rite's words flicker as the register turns
-        # over, along a rolled curve, and hold still for a visitor who asked for less motion.
+        # And the shift of modality is a movement: the rite's words are cut into their new face by
+        # one slice as the register turns over, and hold still for a visitor who asked for less motion.
         self.assertIn("@keyframes rite-shift", moods)
         self.assertIn("html[data-shifting] .stage-head", moods)
         calm = moods[moods.index("@media (prefers-reduced-motion: reduce)"):]
@@ -7173,16 +7407,19 @@ class RealSiteTest(unittest.TestCase):
                                  "the way on lit and the keyboard was left wherever it was")
                 self.assertTrue(played["movedOn"], "the way on was pressed and nothing followed")
         # Done is not the End (issue #86), on the site as committed. What can be held of every
-        # world's piece without knowing which piece it is, is held: the frames still drawing a
-        # second after the ceremony is long over, every knob still enabled, nothing of the piece
-        # torn down, the done mark clear of the scene, the ceremony played once through all of it,
-        # and the way on still the one thing that takes the piece away.
+        # world's piece without knowing which piece it is, is held: the frames coming back when a
+        # knob is worked again or the scene is tapped (a piece at rest asks for none, js/stage.js
+        # "The frames."), every knob still enabled, nothing of the piece torn down, the done mark
+        # clear of the scene, the ceremony played once through all of it, and the way on still the
+        # one thing that takes the piece away.
         live = report["afterDone"]["result"]
         self.assertTrue(live["playable"], f"{live['world']}: the piece never became playable")
         self.assertEqual(live["unset"], [], f"{live['world']}: a knob the visitor worked was not set")
         self.assertEqual(live["atDone"]["mode"], "done", f"{live['world']}: the piece never finished")
-        self.assertGreater(live["drawing"]["frames"], live["later"]["frames"],
-                           f"{live['world']}: the frame loop stopped when the piece finished")
+        self.assertGreater(live["afterKnob"]["frames"], live["drawing"]["frames"],
+                           f"{live['world']}: a knob worked again on a finished piece set nothing moving")
+        self.assertGreater(live["afterTap"]["frames"], live["afterKnob"]["frames"],
+                           f"{live['world']}: a tap on a finished piece set nothing moving")
         for when in ["atDone", "later", "drawing", "afterKnob", "afterTap"]:
             with self.subTest(when=when):
                 seen = live[when]
@@ -7198,7 +7435,6 @@ class RealSiteTest(unittest.TestCase):
                                  f"{live['world']}: the dots went away with the finish")
         self.assertTrue(live["reworked"], f"{live['world']}: no knob on this piece could be worked again")
         self.assertEqual(live["current"]["file"], live["world"], "the stage left the finished piece")
-        self.assertGreater(live["running"], 0, f"{live['world']}: nothing was left running for a live piece")
         self.assertTrue(live["onward"]["movedOn"], f"{live['world']}: the way on was pressed and nothing followed")
         used = report["sliderUsed"]["result"]
         self.assertTrue(used["ranges"], "no world the stage opened had a slider to check")

@@ -7,26 +7,31 @@
 // All of it is paint behind or beside the content, and none of it is a control. Every ring is
 // pointer-events: none, so a press lands on the content it is drawn behind; nothing here is
 // pinned to the viewport, so the two-item rule of _nav.scss stands and at rest nothing floats over
-// a page but the logo and the persona; and the one slow turn in it stops under prefers-reduced-motion,
-// because an ornament that moves for a visitor who asked for stillness is an ornament that has
-// stopped giving way. The rite's words wear type.rite and what to do stays in the sans: that half
-// of the axiom lives where the type does, in _type.scss and the partials that set each heading.
+// a page but the logo and the persona; and nothing in it turns or loops: an ornament the size of
+// the feature that moved while nothing was asked of the visitor would be a movement made for no
+// reason, and the browser would draw it on every frame for as long as the page was open. The
+// rite's words wear type.rite and what to do stays in the sans: that half of the axiom lives where
+// the type does, in _type.scss and the partials that set each heading.
 //
 // The colours are the roles every mood derives (_tokens.scss), so the rings take the page's palette
 // -- the world's, the reading's, or the featured piece's -- and nothing here names a colour.
 
 @use 'type';
+@use 'cut';
 
 // ---- the circle a feature is drawn inside ------------------------------------------------
-// Two faint rings off the right-hand side of the feature: the solid one in the primary and the
-// dashed one in the tertiary, turning once in two minutes. They sit on the stage, the two list
-// pages and the two pages of prose -- every <main> there is -- as pseudo-elements, which an
-// absolutely positioned child keeps out of the grid main lays its children in, and the feature's
-// own overflow clips what falls off the edge, so a ring can never widen a phone's page.
+// Two faint rings off the right-hand side of the feature, at rest: the solid one in the primary
+// and the dashed one in the tertiary. They sit on the stage, the two list pages and the two pages
+// of prose -- every <main> there is -- as pseudo-elements, which an absolutely positioned child
+// keeps out of the grid main lays its children in, and the feature clips what falls off the edge,
+// so a ring can never widen a phone's page. It clips (overflow: clip) rather than hides: a box
+// that hides its overflow is still a scroll container, and the ring's overhang would be room a
+// scrollIntoView could slide the whole feature sideways into, where no visitor could scroll it
+// back.
 .stage,
 .list-page-main,
 .prose-main {
-  overflow: hidden;
+  overflow: clip;
 }
 
 .stage::before,
@@ -60,11 +65,6 @@
   width: 60vmin;
   height: 60vmin;
   border: 1px dashed color-mix(in oklab, var(--md-sys-color-tertiary) 26%, transparent);
-  // One turn in about two minutes, never evenly: the drift family wanders in speed and catches now
-  // and then, and js/motion.js rolls a new curve for every turn (README: "Motion axiom").
-  // A ratchet: the ring turns in clicks, each with a slip back and a hold (the ratchet family,
-  // js/motion.js), never an even rotation, and js/motion.js rolls a new ratchet for every turn.
-  animation: rite-turn var(--motion-rite-turn, var(--motion-turn, 120s)) var(--ease-rite-turn, var(--ease-ratchet)) infinite;
 }
 
 // The list pages and the prose pages lay their children out in flow, which a positioned ring at 0
@@ -73,12 +73,6 @@
 .prose-main > * {
   position: relative;
   z-index: 1;
-}
-
-@keyframes rite-turn {
-  to {
-    transform: rotate(360deg);
-  }
 }
 
 // ---- the plate ---------------------------------------------------------------------------
@@ -204,148 +198,19 @@ html[data-nav='live'] .sparknav[open]::after {
   pointer-events: none;
 }
 
-// ---- the glyph rite -----------------------------------------------------------------------
-// Words do not appear; they are revealed (README: "Motion axiom"). js/motion.js (reveal) wraps
-// each character of an arriving line in a span.glyph for the length of the rite -- carrying a
-// sigil in its place (data-sigil, drawn by ::before) and a delay of its own (--d), inside a
-// span.glyph-word that stays whole unless it exceeds its line -- and removes the spans on landing.
-// The letter arrives in cuts: the sigil blinks up in the tertiary, holds, flickers, and is cut to
-// the letter, which lands a tread high and drops; no glyph fades, and no two land at one moment.
-// A glyph stays inline, so the line keeps its kerning and does not jump when the spans go; it
-// is the word (inline-block) that drops into place, as its first glyph lands (--wd), along a
-// curve of the line's own. Two sigils take turns in the letter's place before it is cut in.
-.is-revealing .glyph-word {
-  display: inline-block;
-  max-width: 100%;
-  white-space: normal;
-  overflow-wrap: anywhere;
-  animation: glyph-word var(--motion-glyph-word, var(--motion-medium)) var(--ease-glyph-word, var(--ease-stair)) var(--wd, 0ms) both;
+// ---- the reveal ---------------------------------------------------------------------------
+// Words do not appear; they are cut in (README: "Motion axiom"). js/motion.js (reveal) puts
+// is-revealing on an arriving line and steps its edge across it: one slice at the register's slant
+// (--reveal-angle), a tread to each word or two, so the edge comes to rest in the gaps between
+// them. The line is never taken apart -- no span, no sigil -- and costs one mask for as long as it
+// is arriving.
+.is-revealing {
+  mask: cut.slice(var(--reveal-angle, 100deg));
 }
 
-.is-revealing .glyph {
-  display: inline;
-  position: relative;
-  animation: glyph-in var(--motion-glyph-in, var(--motion-medium)) var(--ease-glyph-in, var(--ease-stair)) var(--d, 0ms) both;
-}
-
-.is-revealing .glyph::before,
-.is-revealing .glyph::after {
-  position: absolute;
-  inset: 0;
-  color: var(--md-sys-color-tertiary);
-  opacity: 0;
-  pointer-events: none;
-}
-
-.is-revealing .glyph::before {
-  content: attr(data-sigil);
-  content: attr(data-sigil) / '';
-  animation: glyph-sigil var(--motion-glyph-sigil, var(--motion-medium)) var(--ease-glyph-sigil, var(--ease-flicker)) var(--d, 0ms) both;
-}
-
-.is-revealing .glyph[data-sigil-2]::after {
-  content: attr(data-sigil-2);
-  content: attr(data-sigil-2) / '';
-  color: var(--md-sys-color-primary);
-  animation: glyph-sigil-2 var(--motion-glyph-sigil-2, var(--motion-medium)) var(--ease-glyph-sigil-2, var(--ease-flicker)) var(--d, 0ms) both;
-}
-
-@keyframes glyph-word {
-  0%, 39.9% {
-    transform: translateY(0.12em);
-  }
-
-  40%, 69.9% {
-    transform: translateY(-0.05em);
-  }
-
-  70%, 100% {
-    transform: none;
-  }
-}
-
-// Hide only the letter's ink: opacity on the span would hide its sigils too.
-@keyframes glyph-in {
-  0%, 47.9% {
-    color: transparent;
-    text-shadow: none;
-  }
-
-  48%, 61.9% {
-    color: inherit;
-    text-shadow: inherit;
-  }
-
-  62%, 71.9% {
-    color: color-mix(in oklab, currentColor 30%, transparent);
-    text-shadow: none;
-  }
-
-  72%, 100% {
-    color: inherit;
-    text-shadow: inherit;
-  }
-}
-
-// The first sigil: on, a dropout, on again, and gone as the letter lands.
-@keyframes glyph-sigil {
-  0%, 7.9% {
-    opacity: 0;
-  }
-
-  8%, 19.9% {
-    opacity: 1;
-  }
-
-  20%, 29.9% {
-    opacity: 0;
-  }
-
-  30%, 39.9% {
-    opacity: 1;
-  }
-
-  40%, 100% {
-    opacity: 0;
-  }
-}
-
-// The second sigil takes the first one's dropouts, so the eye sees A, B, A, B, letter.
-@keyframes glyph-sigil-2 {
-  0%, 19.9% {
-    opacity: 0;
-  }
-
-  20%, 29.9% {
-    opacity: 1;
-  }
-
-  30%, 39.9% {
-    opacity: 0;
-  }
-
-  40%, 47.9% {
-    opacity: 1;
-  }
-
-  48%, 100% {
-    opacity: 0;
-  }
-}
-
-// Less motion asked for: every ring is where it is, nothing turns, and words are simply there.
+// Less motion asked for: words are simply there.
 @media (prefers-reduced-motion: reduce) {
-  .stage::after,
-  .list-page-main::after,
-  .prose-main::after,
-  .is-revealing .glyph,
-  .is-revealing .glyph-word {
-    animation: none;
-  }
-
-  .is-revealing .glyph::before,
-  .is-revealing .glyph::after {
-    content: none;
-    animation: none;
+  .is-revealing {
+    mask: none;
   }
 }

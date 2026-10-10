@@ -3,7 +3,9 @@
 // A page that wants a different sky sets the seeds (see _tokens.scss and _mood.scss); one that
 // wants a different gradient altogether overrides `background` on `main` in its own stylesheet.
 
+@use 'sass:list';
 @use 'type';
+@use 'cut';
 
 *,
 *::before,
@@ -30,7 +32,8 @@ html {
   scrollbar-color: color-mix(in oklab, var(--md-sys-color-primary) 38%, transparent) transparent;
 }
 
-// What a visitor selects is marked in the tertiary's container, the colour the sigils blink in.
+// What a visitor selects is marked in the tertiary container: the tertiary is the colour the
+// register's ornaments are drawn in (type.rite-dress), so a selection is in the page's own hand.
 ::selection {
   background-color: var(--md-sys-color-tertiary-container);
   color: var(--md-sys-color-on-tertiary-container);
@@ -56,7 +59,10 @@ body {
 }
 
 // A page's heading is one of the rite's words, so it wears the serif (type.rite); the overline a
-// world page writes its name as (.stage-world, _stage.scss) is a label and keeps the sans.
+// world page writes its name as (.stage-world, _stage.scss) is a label and keeps the sans. When
+// the register turns over, js/motion.js (shift) cuts a list page's or a prose page's heading into
+// its new face on the shift's one stair, and _mood.scss cuts the stage's head whole on the same
+// stair, so it does not ask for the rite's own slice as well: one edge to a line.
 h1 {
   margin: 0;
   @include type.scale(headline-large);
@@ -105,319 +111,181 @@ a {
 
 // ---- a link in the words ---------------------------------------------------------------------
 // A link in a page of prose, a list page, a note or the unlock box is a control like any other
-// and goes through the same grammar as a button (README: "Motion axiom"), only drawn in a link's
-// own terms: at rest a hairline underline; under the pointer or the focus it waxes -- the
-// underline climbs a stair of thickness, offset and style, and a plate of the roll's fill texture
-// arrives behind the words through the matte ladder (the rite js/motion.js composed for this one
-// hover, --rite-wax, or matte-in on a page with no script); when the pointer leaves it wanes back
-// down the ladder and the underline steps home along the stair; a press stamps it (the dip and the
-// flash of rite-stamp, the ink of stamp-ink landing where the press was). The chips of the logo,
-// the cards and a.action keep their own grammars elsewhere.
-$word-links: '.prose a:not(.action), .tagline a:not(.action), .page-purpose a:not(.action), '
-  + '.pages a:not(.action), .orientations a:not(.action), .panel-note a:not(.action), '
-  + '.section-note a:not(.action), .current a:not(.action), .unlock-note a:not(.action), a.unlock-else';
+// and goes through the same grammar as a button (README: "Motion axiom", the cut; _controls.scss),
+// drawn in a link's own terms. At rest it is words over a hairline underline. Under the pointer or
+// the focus it waxes: a plate behind the words -- two shades of the link's ink split by a slice
+// through its centre -- is cut in by a slice stepping across it from the side the pointer came in
+// by (js/motion.js writes the angle; the register's stands for a key and for a page with no
+// script), and the underline steps up to the full primary in the same treads. When the pointer
+// leaves it wanes: the slice steps back out the way it came and the underline steps home. A press
+// stamps it: the ink -- a layer of its own over the plate (::after), so it starts from nothing
+// whatever the plate is doing -- grows as a curve from the point the press landed, and a press
+// that ends with nothing on the link (a tap) takes its ink back by the same curve. A line of words
+// is no box, so it does not dip as a button does; the ink is the whole of its stamp. The chips of
+// the logo, the cards and a.action keep their own grammars elsewhere.
+//
+// The underline moves only in a wax or a wane, and on keyframes of its own (underline-in,
+// underline-out) rather than by a transition: played in the treads and the length js/motion.js
+// writes on the link before the class that plays them goes on, they start in the same style pass
+// as the plate's cut and from the same end of it, so whatever the plate does the line does with
+// it, tread for tread -- a wax undone half-way, a hover come back during a wane. A transition
+// would set off from wherever the line had got to and, turned back, run shorter than the plate:
+// two stairs on one link. At rest the line has no movement of its own: a change of mood turns its
+// colour with the palette, at the shift's first tread, never on a stair beside the shift's. (A
+// link the shift cuts as well, a page's link in the site map, names both movements together:
+// _list-page.scss.)
+//
+// :hover, :focus-visible and :active play the same for a page with no script, on the baked stair,
+// and only there: the engine writes <html data-cut> as it starts and they stand aside under it
+// (html:not([data-cut])), since a rule matched beside the engine's own class would start the
+// underline on another stair than the slice's. :hover is asked only where a pointer can hover at
+// all (@media (hover: hover)): a touch screen leaves the link it tapped :hover, and a tap is a
+// press, not a hover.
+$word-links: (
+  '.prose a:not(.action)', '.tagline a:not(.action)', '.page-purpose a:not(.action)',
+  '.pages a:not(.action)', '.orientations a:not(.action)', '.panel-note a:not(.action)',
+  '.section-note a:not(.action)', '.current a:not(.action)', '.unlock-note a:not(.action)', 'a.unlock-else'
+);
 
-#{$word-links} {
+// Every link in the words, once for each state given ('' for the link at rest, '::before' for its
+// plate, '.is-waxing', ':hover::before' ...), as one selector list.
+@function word-links($states...) {
+  $out: ();
+  @each $state in $states {
+    @each $link in $word-links {
+      $out: list.append($out, '#{$link}#{$state}', $separator: comma);
+    }
+  }
+  @return $out;
+}
+
+// The same, for a page with no script: the states the engine plays itself once it has started.
+@function unscripted($states...) {
+  $out: ();
+  @each $link in word-links($states...) {
+    $out: list.append($out, 'html:not([data-cut]) #{$link}', $separator: comma);
+  }
+  @return $out;
+}
+
+// The underline at rest: a hairline of the primary at a little over half its strength. Under the
+// pointer or the focus it is the full primary.
+$underline-rest: color-mix(in oklab, var(--md-sys-color-primary) 55%, transparent);
+
+#{word-links('')} {
   position: relative;
   z-index: 0; // its own stacking context, so the plate below sits over the card and under the words
   text-decoration-thickness: 1px;
-  text-decoration-color: color-mix(in oklab, var(--md-sys-color-primary) 55%, transparent);
+  text-decoration-color: $underline-rest;
   -webkit-tap-highlight-color: transparent;
-  // The underline comes home in treads: the stair family, rolled for the change.
-  transition:
-    text-decoration-color var(--motion-short) var(--ease-stair),
-    text-decoration-thickness var(--motion-short) var(--ease-stair),
-    text-underline-offset var(--motion-short) var(--ease-stair),
-    color var(--motion-short) var(--ease-stair);
 }
 
-// The plate: the fill texture in the link's own ink, a little wider than the words, under them.
-.prose a:not(.action)::before,
-.tagline a:not(.action)::before,
-.page-purpose a:not(.action)::before,
-.pages a:not(.action)::before,
-.orientations a:not(.action)::before,
-.panel-note a:not(.action)::before,
-.section-note a:not(.action)::before,
-.current a:not(.action)::before,
-.unlock-note a:not(.action)::before,
-a.unlock-else::before {
+// The plate: the link's ink in two shades, split by a slice through its centre at the angle the
+// pointer brought (--cut-angle), a little wider than the words and under them.
+#{word-links('::before')} {
   content: '';
   position: absolute;
   inset: -0.12em -0.25em;
   z-index: -1;
   border-radius: var(--md-sys-shape-corner-extra-small, 4px);
-  background: var(--matte-fill);
-  background-size: var(--matte-fill-size);
+  background: cut.shades(currentColor);
   opacity: 0;
   pointer-events: none;
-  mask-repeat: repeat;
-  -webkit-mask-repeat: repeat;
-  mask-position: var(--matte-shift, 0 0);
-  -webkit-mask-position: var(--matte-shift, 0 0);
 }
 
-// Waxing: the underline climbs its stair and the plate climbs the ladder, and both stay while the
-// pointer or the focus is on the link.
-.prose a:not(.action).is-waxing,
-.tagline a:not(.action).is-waxing,
-.page-purpose a:not(.action).is-waxing,
-.pages a:not(.action).is-waxing,
-.orientations a:not(.action).is-waxing,
-.panel-note a:not(.action).is-waxing,
-.section-note a:not(.action).is-waxing,
-.current a:not(.action).is-waxing,
-.unlock-note a:not(.action).is-waxing,
-a.unlock-else.is-waxing,
-.prose a:not(.action):hover,
-.tagline a:not(.action):hover,
-.page-purpose a:not(.action):hover,
-.pages a:not(.action):hover,
-.orientations a:not(.action):hover,
-.panel-note a:not(.action):hover,
-.section-note a:not(.action):hover,
-.current a:not(.action):hover,
-.unlock-note a:not(.action):hover,
-a.unlock-else:hover,
-.prose a:not(.action):focus-visible,
-.tagline a:not(.action):focus-visible,
-.page-purpose a:not(.action):focus-visible,
-.pages a:not(.action):focus-visible,
-.orientations a:not(.action):focus-visible,
-.panel-note a:not(.action):focus-visible,
-.section-note a:not(.action):focus-visible,
-.current a:not(.action):focus-visible,
-.unlock-note a:not(.action):focus-visible,
-a.unlock-else:focus-visible {
-  text-decoration-line: underline;
-  text-decoration-thickness: 2px;
-  text-underline-offset: 0.2em;
+// Waxing: the underline steps up to the full primary in the wax's treads, and stays while the
+// pointer or the focus is on the link; the plate is cut in by the slice stepping across it. Only
+// the underline's colour moves: a line that thickened would jump, since a browser does not step a
+// thickness.
+@keyframes underline-in {
+  from { text-decoration-color: $underline-rest; }
+  to { text-decoration-color: var(--md-sys-color-primary); }
+}
+
+@keyframes underline-out {
+  from { text-decoration-color: var(--md-sys-color-primary); }
+  to { text-decoration-color: $underline-rest; }
+}
+
+@mixin waxed {
   text-decoration-color: var(--md-sys-color-primary);
-  animation: link-under var(--motion-link-under, var(--motion-medium)) var(--ease-link-under, var(--ease-stair)) both;
+  animation: underline-in var(--motion-wax, var(--motion-medium)) var(--ease-wax, var(--ease-stair)) both;
 }
 
-.prose a:not(.action).is-waxing::before,
-.tagline a:not(.action).is-waxing::before,
-.page-purpose a:not(.action).is-waxing::before,
-.pages a:not(.action).is-waxing::before,
-.orientations a:not(.action).is-waxing::before,
-.panel-note a:not(.action).is-waxing::before,
-.section-note a:not(.action).is-waxing::before,
-.current a:not(.action).is-waxing::before,
-.unlock-note a:not(.action).is-waxing::before,
-a.unlock-else.is-waxing::before,
-.prose a:not(.action):hover::before,
-.tagline a:not(.action):hover::before,
-.page-purpose a:not(.action):hover::before,
-.pages a:not(.action):hover::before,
-.orientations a:not(.action):hover::before,
-.panel-note a:not(.action):hover::before,
-.section-note a:not(.action):hover::before,
-.current a:not(.action):hover::before,
-.unlock-note a:not(.action):hover::before,
-a.unlock-else:hover::before,
-.prose a:not(.action):focus-visible::before,
-.tagline a:not(.action):focus-visible::before,
-.page-purpose a:not(.action):focus-visible::before,
-.pages a:not(.action):focus-visible::before,
-.orientations a:not(.action):focus-visible::before,
-.panel-note a:not(.action):focus-visible::before,
-.section-note a:not(.action):focus-visible::before,
-.current a:not(.action):focus-visible::before,
-.unlock-note a:not(.action):focus-visible::before,
-a.unlock-else:focus-visible::before {
-  opacity: 0.2;
-  mask: var(--matte-top);
-  -webkit-mask: var(--matte-top);
-  mask-position: var(--matte-shift, 0 0);
-  -webkit-mask-position: var(--matte-shift, 0 0);
-  animation: var(--rite-wax, matte-in) var(--motion-matte-in, var(--motion-medium)) var(--ease-matte-in, var(--ease-stair)) both;
+@mixin waxed-plate {
+  opacity: 0.16;
+  mask: cut.slice();
+  @include cut.play(in, wax, medium);
 }
 
-// Waning: the underline comes home down a stair of its own cuts (a transition cannot start from
-// where an animation left a value, so the way home is keyframes too) and the plate goes back down
-// the ladder.
-.prose a:not(.action).is-waning,
-.tagline a:not(.action).is-waning,
-.page-purpose a:not(.action).is-waning,
-.pages a:not(.action).is-waning,
-.orientations a:not(.action).is-waning,
-.panel-note a:not(.action).is-waning,
-.section-note a:not(.action).is-waning,
-.current a:not(.action).is-waning,
-.unlock-note a:not(.action).is-waning,
-a.unlock-else.is-waning {
-  // Its length is the plate's own (the composed wane's --motion-matte-out, written inline on the
-  // link by js/motion.js), so the line and the plate land in the same frame and the waning class
-  // -- taken off when the plate's rite ends -- never cuts the line short of home.
-  animation: link-under-out var(--motion-matte-out, var(--motion-link-under-out, var(--motion-short))) var(--ease-link-under-out, var(--ease-stair)) both;
+#{word-links('.is-waxing')} {
+  @include waxed;
 }
 
-@keyframes link-under-out {
-  0%, 29.9% {
-    text-decoration-line: underline;
-    text-decoration-style: solid;
-    text-decoration-thickness: 2px;
-    text-underline-offset: 0.2em;
-    text-decoration-color: var(--md-sys-color-primary);
+#{word-links('.is-waxing::before')} {
+  @include waxed-plate;
+}
+
+@media (hover: hover) {
+  #{unscripted(':hover')} {
+    @include waxed;
   }
 
-  30%, 54.9% {
-    text-decoration-line: underline;
-    text-decoration-style: dashed;
-    text-decoration-thickness: 1px;
-    text-underline-offset: 0.05em;
-    text-decoration-color: var(--md-sys-color-tertiary);
-  }
-
-  55%, 79.9% {
-    text-decoration-line: underline;
-    text-decoration-style: dotted;
-    text-decoration-thickness: 1px;
-    text-underline-offset: 0.25em;
-    text-decoration-color: color-mix(in oklab, var(--md-sys-color-primary) 55%, transparent);
-  }
-
-  80%, 100% {
-    text-decoration-line: underline;
-    text-decoration-style: solid;
-    text-decoration-thickness: 1px;
-    text-underline-offset: 0.15em;
-    text-decoration-color: color-mix(in oklab, var(--md-sys-color-primary) 55%, transparent);
+  #{unscripted(':hover::before')} {
+    @include waxed-plate;
   }
 }
 
-.prose a:not(.action).is-waning::before,
-.tagline a:not(.action).is-waning::before,
-.page-purpose a:not(.action).is-waning::before,
-.pages a:not(.action).is-waning::before,
-.orientations a:not(.action).is-waning::before,
-.panel-note a:not(.action).is-waning::before,
-.section-note a:not(.action).is-waning::before,
-.current a:not(.action).is-waning::before,
-.unlock-note a:not(.action).is-waning::before,
-a.unlock-else.is-waning::before {
-  opacity: 0.2;
-  mask-position: var(--matte-shift, 0 0);
-  -webkit-mask-position: var(--matte-shift, 0 0);
-  animation: var(--rite-wane, matte-out) var(--motion-matte-out, var(--motion-medium)) var(--ease-matte-out, var(--ease-stair)) both;
+#{unscripted(':focus-visible')} {
+  @include waxed;
 }
 
-// The stamp: the words dip and flash in cuts; the ink lands on the plate where the press was.
-.prose a:not(.action).is-stamping,
-.tagline a:not(.action).is-stamping,
-.page-purpose a:not(.action).is-stamping,
-.pages a:not(.action).is-stamping,
-.orientations a:not(.action).is-stamping,
-.panel-note a:not(.action).is-stamping,
-.section-note a:not(.action).is-stamping,
-.current a:not(.action).is-stamping,
-.unlock-note a:not(.action).is-stamping,
-a.unlock-else.is-stamping,
-.prose a:not(.action):active,
-.tagline a:not(.action):active,
-.page-purpose a:not(.action):active,
-.pages a:not(.action):active,
-.orientations a:not(.action):active,
-.panel-note a:not(.action):active,
-.section-note a:not(.action):active,
-.current a:not(.action):active,
-.unlock-note a:not(.action):active,
-a.unlock-else:active {
-  // The composed stamp dips a box, and a line of words is no box (transform does not apply to an
-  // inline): so the words themselves dip in a link's own terms beside it -- the ink, the rule
-  // doubled and pulled in, the letters spread, in cuts -- and spring back.
-  // Both play for the composed press's own length (--motion-rite-stamp, inline on the link), so
-  // the words spring back in the frame the plate does.
-  animation: link-stamp var(--motion-rite-stamp, var(--motion-link-stamp, var(--motion-short))) var(--ease-link-stamp, var(--ease-flicker)) both, var(--rite-stamp, rite-stamp) var(--motion-rite-stamp, var(--motion-short)) var(--ease-rite-stamp, var(--ease-flicker)) both;
+#{unscripted(':focus-visible::before')} {
+  @include waxed-plate;
 }
 
-@keyframes link-stamp {
-  0%, 44.9% {
-    color: var(--md-sys-color-tertiary);
-    text-decoration-style: double;
-    text-underline-offset: 0.05em;
-    letter-spacing: 0.02em;
-  }
-
-  45%, 69.9% {
-    color: var(--md-sys-color-on-surface);
-    text-decoration-style: solid;
-    text-underline-offset: 0.2em;
-    letter-spacing: 0.01em;
-  }
-
-  70%, 84.9% {
-    color: var(--md-sys-color-tertiary);
-    text-decoration-style: double;
-    text-underline-offset: 0.1em;
-    letter-spacing: 0;
-  }
-
-  85%, 100% {
-    color: var(--md-sys-color-primary);
-    text-decoration-style: solid;
-    text-underline-offset: 0.2em;
-    letter-spacing: 0;
-  }
+// Waning: the underline steps home in the wane's treads, the slice steps back the way it came,
+// and the plate is gone with it. A page with no script has no wane: when the pointer leaves, the
+// plate and the underline's colour are put back at once, together.
+#{word-links('.is-waning')} {
+  animation: underline-out var(--motion-wane, var(--motion-medium)) var(--ease-wane, var(--ease-leave)) both;
 }
 
-.prose a:not(.action).is-stamping::before,
-.tagline a:not(.action).is-stamping::before,
-.page-purpose a:not(.action).is-stamping::before,
-.pages a:not(.action).is-stamping::before,
-.orientations a:not(.action).is-stamping::before,
-.panel-note a:not(.action).is-stamping::before,
-.section-note a:not(.action).is-stamping::before,
-.current a:not(.action).is-stamping::before,
-.unlock-note a:not(.action).is-stamping::before,
-a.unlock-else.is-stamping::before,
-.prose a:not(.action):active::before,
-.tagline a:not(.action):active::before,
-.page-purpose a:not(.action):active::before,
-.pages a:not(.action):active::before,
-.orientations a:not(.action):active::before,
-.panel-note a:not(.action):active::before,
-.section-note a:not(.action):active::before,
-.current a:not(.action):active::before,
-.unlock-note a:not(.action):active::before,
-a.unlock-else:active::before {
-  opacity: 0.34;
-  mask-position: var(--stamp-x, 50%) var(--stamp-y, 50%);
-  -webkit-mask-position: var(--stamp-x, 50%) var(--stamp-y, 50%);
-  animation: var(--rite-ink, stamp-ink) var(--motion-stamp-ink, var(--motion-short)) var(--ease-stamp-ink, var(--ease-flicker)) both;
+#{word-links('.is-waning::before')} {
+  opacity: 0.16;
+  mask: cut.slice();
+  @include cut.play(out, wane, medium, leave);
 }
 
-// The underline's stair: a dotted hairline in the tertiary, a dashed bar thrown too far, one
-// tread back in the primary, and the waxed rest -- every tread a held pair, nothing between them.
-@keyframes link-under {
-  0%, 23.9% {
-    text-decoration-thickness: 1px;
-    text-underline-offset: 0.15em;
-    text-decoration-color: var(--md-sys-color-tertiary);
-    text-decoration-style: dotted;
-  }
+// The stamp: a solid of the ink growing over the plate as a curve from where the press landed
+// (--cut-x, --cut-y; the middle for a key or a page with no script, which plays it from :active).
+// It is drawn on ::after and only while the press and its going last, so each press makes the
+// layer afresh and its curve starts at nothing: on the plate it would share the plate's running
+// cut-in, which a change of class does not restart, and show whole at once.
+#{word-links('.is-stamping::after', '.is-uninking::after')},
+#{unscripted(':active::after')} {
+  content: '';
+  position: absolute;
+  inset: -0.12em -0.25em;
+  z-index: -1;
+  border-radius: var(--md-sys-shape-corner-extra-small, 4px);
+  background: currentColor;
+  opacity: 0.24;
+  pointer-events: none;
+  mask: cut.curve();
+}
 
-  24%, 47.9% {
-    text-decoration-thickness: 3px;
-    text-underline-offset: calc(0.2em - var(--lift-y, -2px) * 0.6);
-    text-decoration-color: var(--md-sys-color-tertiary);
-    text-decoration-style: dashed;
-  }
+#{word-links('.is-stamping::after')},
+#{unscripted(':active::after')} {
+  @include cut.ink;
+}
 
-  48%, 57.9% {
-    text-decoration-thickness: 2px;
-    text-underline-offset: 0.05em;
-    text-decoration-color: var(--md-sys-color-primary);
-    text-decoration-style: solid;
-  }
-
-  58%, 100% {
-    text-decoration-thickness: 2px;
-    text-underline-offset: 0.2em;
-    text-decoration-color: var(--md-sys-color-primary);
-    text-decoration-style: solid;
-  }
+// The ink going, when the press is over and nothing is on the link -- a tap, a key pressed on a
+// link the pointer is not over: the same curve steps back in to the point the press landed, in
+// the press's own quick treads, so the ink leaves by the edge it came by and is never switched
+// off at once. (Under the pointer or the focus it gives way to the plate the wax has cut in.)
+#{word-links('.is-uninking::after')} {
+  @include cut.play(out, unink, short, flicker);
 }
 
 // The one plain line of purpose under a page's heading: what the page is and what to do on it.
@@ -471,149 +339,23 @@ svg {
     scroll-behavior: auto;
   }
 
-  // A link in the words is simply underlined, plated when hovered, and nothing climbs or stamps:
-  // every state is named, at the specificity of the rule it stills, so the stillness wins.
-  .prose a:not(.action),
-  .tagline a:not(.action),
-  .page-purpose a:not(.action),
-  .pages a:not(.action),
-  .orientations a:not(.action),
-  .panel-note a:not(.action),
-  .section-note a:not(.action),
-  .current a:not(.action),
-  .unlock-note a:not(.action),
-  a.unlock-else,
-  .prose a:not(.action)::before,
-  .tagline a:not(.action)::before,
-  .page-purpose a:not(.action)::before,
-  .pages a:not(.action)::before,
-  .orientations a:not(.action)::before,
-  .panel-note a:not(.action)::before,
-  .section-note a:not(.action)::before,
-  .current a:not(.action)::before,
-  .unlock-note a:not(.action)::before,
-  a.unlock-else::before,
-  .prose a:not(.action).is-waxing,
-  .prose a:not(.action):hover,
-  .prose a:not(.action):focus-visible,
-  .prose a:not(.action).is-waning,
-  .prose a:not(.action).is-stamping,
-  .prose a:not(.action):active,
-  .tagline a:not(.action).is-waxing,
-  .tagline a:not(.action):hover,
-  .tagline a:not(.action):focus-visible,
-  .tagline a:not(.action).is-waning,
-  .tagline a:not(.action).is-stamping,
-  .tagline a:not(.action):active,
-  .page-purpose a:not(.action).is-waxing,
-  .page-purpose a:not(.action):hover,
-  .page-purpose a:not(.action):focus-visible,
-  .page-purpose a:not(.action).is-waning,
-  .page-purpose a:not(.action).is-stamping,
-  .page-purpose a:not(.action):active,
-  .pages a:not(.action).is-waxing,
-  .pages a:not(.action):hover,
-  .pages a:not(.action):focus-visible,
-  .pages a:not(.action).is-waning,
-  .pages a:not(.action).is-stamping,
-  .pages a:not(.action):active,
-  .orientations a:not(.action).is-waxing,
-  .orientations a:not(.action):hover,
-  .orientations a:not(.action):focus-visible,
-  .orientations a:not(.action).is-waning,
-  .orientations a:not(.action).is-stamping,
-  .orientations a:not(.action):active,
-  .panel-note a:not(.action).is-waxing,
-  .panel-note a:not(.action):hover,
-  .panel-note a:not(.action):focus-visible,
-  .panel-note a:not(.action).is-waning,
-  .panel-note a:not(.action).is-stamping,
-  .panel-note a:not(.action):active,
-  .section-note a:not(.action).is-waxing,
-  .section-note a:not(.action):hover,
-  .section-note a:not(.action):focus-visible,
-  .section-note a:not(.action).is-waning,
-  .section-note a:not(.action).is-stamping,
-  .section-note a:not(.action):active,
-  .current a:not(.action).is-waxing,
-  .current a:not(.action):hover,
-  .current a:not(.action):focus-visible,
-  .current a:not(.action).is-waning,
-  .current a:not(.action).is-stamping,
-  .current a:not(.action):active,
-  .unlock-note a:not(.action).is-waxing,
-  .unlock-note a:not(.action):hover,
-  .unlock-note a:not(.action):focus-visible,
-  .unlock-note a:not(.action).is-waning,
-  .unlock-note a:not(.action).is-stamping,
-  .unlock-note a:not(.action):active,
-  a.unlock-else.is-waxing,
-  a.unlock-else:hover,
-  a.unlock-else:focus-visible,
-  a.unlock-else.is-waning,
-  a.unlock-else.is-stamping,
-  a.unlock-else:active,
-  .prose a:not(.action).is-waxing::before,
-  .prose a:not(.action):hover::before,
-  .prose a:not(.action):focus-visible::before,
-  .prose a:not(.action).is-waning::before,
-  .prose a:not(.action).is-stamping::before,
-  .prose a:not(.action):active::before,
-  .tagline a:not(.action).is-waxing::before,
-  .tagline a:not(.action):hover::before,
-  .tagline a:not(.action):focus-visible::before,
-  .tagline a:not(.action).is-waning::before,
-  .tagline a:not(.action).is-stamping::before,
-  .tagline a:not(.action):active::before,
-  .page-purpose a:not(.action).is-waxing::before,
-  .page-purpose a:not(.action):hover::before,
-  .page-purpose a:not(.action):focus-visible::before,
-  .page-purpose a:not(.action).is-waning::before,
-  .page-purpose a:not(.action).is-stamping::before,
-  .page-purpose a:not(.action):active::before,
-  .pages a:not(.action).is-waxing::before,
-  .pages a:not(.action):hover::before,
-  .pages a:not(.action):focus-visible::before,
-  .pages a:not(.action).is-waning::before,
-  .pages a:not(.action).is-stamping::before,
-  .pages a:not(.action):active::before,
-  .orientations a:not(.action).is-waxing::before,
-  .orientations a:not(.action):hover::before,
-  .orientations a:not(.action):focus-visible::before,
-  .orientations a:not(.action).is-waning::before,
-  .orientations a:not(.action).is-stamping::before,
-  .orientations a:not(.action):active::before,
-  .panel-note a:not(.action).is-waxing::before,
-  .panel-note a:not(.action):hover::before,
-  .panel-note a:not(.action):focus-visible::before,
-  .panel-note a:not(.action).is-waning::before,
-  .panel-note a:not(.action).is-stamping::before,
-  .panel-note a:not(.action):active::before,
-  .section-note a:not(.action).is-waxing::before,
-  .section-note a:not(.action):hover::before,
-  .section-note a:not(.action):focus-visible::before,
-  .section-note a:not(.action).is-waning::before,
-  .section-note a:not(.action).is-stamping::before,
-  .section-note a:not(.action):active::before,
-  .current a:not(.action).is-waxing::before,
-  .current a:not(.action):hover::before,
-  .current a:not(.action):focus-visible::before,
-  .current a:not(.action).is-waning::before,
-  .current a:not(.action).is-stamping::before,
-  .current a:not(.action):active::before,
-  .unlock-note a:not(.action).is-waxing::before,
-  .unlock-note a:not(.action):hover::before,
-  .unlock-note a:not(.action):focus-visible::before,
-  .unlock-note a:not(.action).is-waning::before,
-  .unlock-note a:not(.action).is-stamping::before,
-  .unlock-note a:not(.action):active::before,
-  a.unlock-else.is-waxing::before,
-  a.unlock-else:hover::before,
-  a.unlock-else:focus-visible::before,
-  a.unlock-else.is-waning::before,
-  a.unlock-else.is-stamping::before,
-  a.unlock-else:active::before {
+  // A link in the words takes every state at once and nothing steps or is cut: every state is
+  // named, at the specificity of the rule it stills, so the stillness wins.
+  #{word-links('', '.is-waxing', '.is-waning', '::before', '.is-waxing::before', '.is-waning::before',
+    '.is-stamping::after', '.is-uninking::after')},
+  #{unscripted(':hover', ':focus-visible', ':hover::before', ':focus-visible::before', ':active::after')} {
     animation: none;
     transition: none;
+  }
+
+  // Under the pointer or the focus the plate is simply whole, and under a press the ink; waning,
+  // the plate is simply gone, and the ink with the press.
+  #{word-links('.is-waxing::before', '.is-stamping::after')},
+  #{unscripted(':hover::before', ':focus-visible::before', ':active::after')} {
+    mask: none;
+  }
+
+  #{word-links('.is-waning::before', '.is-uninking::after')} {
+    opacity: 0;
   }
 }

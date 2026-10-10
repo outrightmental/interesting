@@ -51,13 +51,42 @@ function asked(env) {
 
 /* ---- the rite: how the lab moves ----------------------------------------------------------- */
 
-/* Nothing here moves along a formula (js/stage.js, "The rite"). env.rite -- ctx.rite in a piece,
-   the same object -- is the piece's own roll of a curve, a stair, a ratchet, a flicker and a
-   matte, from its seed; every env builder hands one. STILL is the fallback for an env without
-   it: every rite at its end state, so a drawing holds rather than throws. */
+/* Nothing here glides, fades or sways (README: "Motion axiom", the cut; js/stage.js, "The rite").
+   env.rite -- ctx.rite in a piece, the same object -- is the piece's own roll from its seed: its
+   one edge, a slice at its angle or a curve from its corner, and the treads it steps in. A surface
+   that comes onto the map -- the band along a named side, the halo round a named station, the
+   slip's paper, the rain once the front is in, the light over a solved map -- comes by its AREA
+   behind that one edge (rite.paint: one path, never cells), in a few treads, always forward, and
+   one taken back goes out behind the same edge the way it came, the region shrinking; one caught
+   part way by the next change turns from where it stands rather than jumping. A mark that stays on
+   the map -- the band, the halo, the air behind the front, the solved light -- rests in two shades
+   of its colour split by that edge (cover), never a flat tint; the slip is a sheet of paper laid
+   over the map, plain as paper. A thing that travels -- the front to the station, the wind's arrow
+   to the lowest reading, the slip down onto the map -- moves in rite.ease's landing, the first
+   tread the longest; the hand on the dial turns in rite.ratchet's even clicks, a clock's; a word
+   is cut on at rite.flicker's one moment, and a word that changes is cut straight from the old to
+   the new at that moment, the old one standing until then, so its place is never blank between.
+   Each surface set or unset steps on a roll of its own (rite.at, rolled once and kept), so a
+   second naming steps in other treads than the first, along the same edge. Between changes
+   nothing moves and nothing is drawn: the map waits for its forecast, and a frame with nothing new
+   on it is let go (settled). Once nothing is on its way, frame() says so -- it returns false --
+   and the stage asks for no more frames until the visitor acts, the scene is sized again or it
+   comes back into view. */
+
+// What stands in for a rite on an env that carries none: whatever has not begun stands where it
+// was, whatever has begun is already at its end, and a surface is painted whole -- so a drawing
+// holds rather than throws.
+const begun = (t) => (t > 0 ? 1 : 0);
 const STILL = {
-  ease: (t) => (t >= 1 ? 1 : 0), stair: (t) => (t >= 1 ? 1 : 0), ratchet: (t) => (t >= 1 ? 1 : 0),
-  flicker: (t) => (t >= 1 ? 1 : 0), matte: (x, y, k) => k >= 1, treads: 4, kind: 'none', cell: 3,
+  ease: begun, stair: begun, ratchet: begun, flicker: begun,
+  paint(g, x, y, w, h, k, style) {
+    if (!(k > 0)) return;
+    if (style != null) g.fillStyle = style;
+    g.fillRect(x, y, w, h);
+  },
+  region(g, x, y, w, h, k) {
+    if (k > 0) g.rect(x, y, w, h);
+  },
   at() { return STILL; }
 };
 
@@ -65,8 +94,22 @@ function riteOf(c) {
   return c && c.rite ? c.rite : STILL;
 }
 
-function fract(x) {
-  return x - Math.floor(x);
+// The rolls the lab takes from a rite, one per seed, rolled the first time one is asked for and
+// kept: a surface's treads are the same on every frame of its change, so they are worked out once
+// rather than rolled again on every frame it is drawn.
+const kept = new WeakMap();
+function rolled(rite, seed) {
+  let rolls = kept.get(rite);
+  if (!rolls) {
+    rolls = new Map();
+    kept.set(rite, rolls);
+  }
+  let own = rolls.get(seed);
+  if (!own) {
+    own = rite.at(seed);
+    rolls.set(seed, own);
+  }
+  return own;
 }
 
 // Where a thing that happened at `at` on the piece's clock stands in a rite `dur` seconds long:
@@ -77,50 +120,73 @@ function prog(c, time, at, dur) {
   return clamp((time - at) / dur, 0, 1);
 }
 
-// A mark is { on, at }: a surface set (on) or unset at `at`. Its coverage climbs the stair when
-// it is set and comes back down it when it is unset -- never a fade either way.
+// A mark is { on, at, n, from }: a surface set (on) or unset at `at`, the n-th of its kind, from
+// the coverage it stood at then. Set, it climbs from there to whole on the stair of its own roll;
+// unset, it goes back down from there the same way, the region shrinking the way it came. A mark
+// caught part way by the next one turns from where it stands -- one way each time, never a jump to
+// whole and back, never a fade.
 function coverage(c, time, mark, dur) {
   if (!mark) return 0;
-  const k = riteOf(c).stair(prog(c, time, mark.at, dur));
-  return mark.on ? k : 1 - k;
+  const k = rolled(riteOf(c), 0x5e7 + (mark.n || 0)).stair(prog(c, time, mark.at, dur));
+  return mark.on ? mark.from + (1 - mark.from) * k : mark.from * (1 - k);
 }
 
-// A surface arriving by its area: the rectangle tiled in cells of `cell` px (the matte's own size
-// when not given), each cell filled where the matte lets it through at coverage k. The cells are
-// indexed in canvas space, so the pattern stands still under a region that grows.
-function develop(g, c, x, y, w, h, k, cell) {
-  if (k <= 0 || w <= 0 || h <= 0) return;
-  const rite = riteOf(c);
-  const s = Math.max(1, cell || rite.cell);
-  const cols = Math.ceil(w / s);
-  const rows = Math.ceil(h / s);
-  const ox = Math.floor(x / s);
-  const oy = Math.floor(y / s);
-  for (let j = 0; j < rows; j++) {
-    for (let i = 0; i < cols; i++) {
-      if (!rite.matte(ox + i, oy + j, k)) continue;
-      g.fillRect(x + i * s, y + j * s, Math.min(s, w - i * s), Math.min(s, h - j * s));
-    }
-  }
+// Sets (on) or unsets the surface `key` now, from wherever its last mark has it.
+function remark(c, s, key, on, dur) {
+  s.marks[key] = { on, at: s.t, n: s.rolls++, from: coverage(c, s.t, s.marks[key], dur) };
 }
 
-// The same, for a disc: the cells whose centres lie within r of (cx, cy).
-function developDisc(g, c, cx, cy, r, k, cell) {
-  if (k <= 0 || r <= 0) return;
-  const rite = riteOf(c);
-  const s = Math.max(1, cell || rite.cell);
-  const i0 = Math.floor((cx - r) / s);
-  const i1 = Math.ceil((cx + r) / s);
-  const j0 = Math.floor((cy - r) / s);
-  const j1 = Math.ceil((cy + r) / s);
-  for (let j = j0; j < j1; j++) {
-    for (let i = i0; i < i1; i++) {
-      const dx = (i + 0.5) * s - cx;
-      const dy = (j + 0.5) * s - cy;
-      if (dx * dx + dy * dy > r * r || !rite.matte(i, j, k)) continue;
-      g.fillRect(i * s, j * s, s, s);
-    }
-  }
+// A surface `k` of the way to being there, in the current fillStyle: the part of the box the
+// piece's edge has passed, and a second coat over the part it had passed by halfway. While it
+// comes one edge moves; at rest it is two shades of one colour split by that edge through the
+// middle of the box -- a slice through its centre, or the curve's arc halfway out. Two paths.
+function cover(g, rite, x, y, w, h, k) {
+  if (!(k > 0)) return;
+  rite.paint(g, x, y, w, h, k);
+  rite.paint(g, x, y, w, h, Math.min(k, 0.5));
+}
+
+// A disc that is k of the way in: the disc is the clip, and the surface is covered across the
+// square round it, one edge whatever its size.
+function disc(g, rite, x, y, r, k, style) {
+  if (!(k > 0) || r <= 0) return;
+  g.save();
+  g.beginPath();
+  g.arc(x, y, r, 0, TAU);
+  g.clip();
+  g.fillStyle = style;
+  cover(g, rite, x - r, y - r, r * 2, r * 2, k);
+  g.restore();
+}
+
+// The longest any change on the map takes to come the whole of its way, in seconds: the light
+// over a solved map.
+const LONGEST = 2.6;
+
+function sizeOf(c) {
+  return c.w + 'x' + c.h + '@' + (c.dpr || 1);
+}
+
+// The latest moment anything was changed on the map, on the piece's clock: the times given and
+// every mark's, or -1 when nothing has been.
+function latest(s, times) {
+  let last = -1;
+  for (const at of times) if (at != null && at > last) last = at;
+  for (const mark of Object.values(s.marks)) if (mark.at > last) last = mark.at;
+  return last;
+}
+
+// Whether a frame has nothing to draw: the canvas holds the picture drawn at this size and at this
+// step of the ceremony (`key`), and that picture was drawn once the latest change (made at `last`)
+// had come the whole of its way -- at once, for a visitor who asked for less motion. A map at rest
+// stands still, so drawing it again would spend a frame on nothing a visitor could see; a new size
+// (the stage clears the canvas to resize it), a new step or a new change draws again. It is when
+// the picture was drawn that is read, not the clock alone: the stage asks for no frames while the
+// scene is out of sight, so a change cut off there is still owed its finished picture, and the
+// first frame back draws it.
+function settled(s, c, key, last) {
+  if (s.drawn !== sizeOf(c) || s.drawnKey !== key) return false;
+  return s.drawnAt >= (c.reduced || last < 0 ? last : last + LONGEST + 0.05);
 }
 
 // The one-square-deep band along a side of the map: the surface a named side is marked by.
@@ -136,9 +202,25 @@ function sideBand(geo, side) {
 
 /* ---- drawing shared by both ---------------------------------------------------------------- */
 
+// The face words are set in, set only when it is not the one the canvas already holds: setting a
+// canvas's font, even to the face it has, makes the browser bring the page's style up to date
+// first, so a map that labels its rows and its instruments sets it once for each size, not once for
+// each word. A canvas spells a face back in its own way (700 as 'bold', a size cut to a few
+// places), so the canvas is asked whether it holds the face as it spelled it when it was first set
+// here: a canvas resized back to its defaults, or restored to a face it saved, is never mistaken,
+// and the stations' bold letters are set once, not once for each station. Only a few dozen
+// spellings are kept, so a feed of many cards does not gather them.
+const spelled = new Map();
+function face(g, font) {
+  if (g.font === (spelled.get(font) || font)) return;
+  g.font = font;
+  if (spelled.size >= 48) spelled.clear();
+  spelled.set(font, g.font);
+}
+
 function write(g, text, x, y, size, align, tone, weight) {
   g.fillStyle = tone;
-  g.font = (weight || '500') + ' ' + size + 'px system-ui, sans-serif';
+  face(g, (weight || '500') + ' ' + size + 'px system-ui, sans-serif');
   g.textAlign = align || 'left';
   g.textBaseline = 'middle';
   g.fillText(text, x, y);
@@ -155,8 +237,9 @@ function mapGeometry(w, h) {
 }
 
 // The map's ground: the sky at the hour, the squares and their numbers, the stars as they stand
-// glinting through, and a drift of haze from the configuration.
-function ground(g, w, h, env, v, hour, t) {
+// glinting through, and a drift of haze where the configuration lays it. None of it moves: it is
+// the paper the weather is read off.
+function ground(g, w, h, env, v, hour) {
   const c = env.colors;
   const geo = mapGeometry(w, h);
   const day = (1 + Math.cos(((hour - 12) / 12) * Math.PI)) / 2;
@@ -171,14 +254,9 @@ function ground(g, w, h, env, v, hour, t) {
     g.arc(p.x, p.y, 1.2 * v.scale, 0, TAU);
     g.fill();
   }
-  // The haze sways on the piece's stair, each drift on its own phase: out a tread at a time and
-  // back the same way, never a swing.
-  const rite = riteOf(env);
   const haze = Math.max(2, Math.round(6 * v.density));
   for (let i = 0; i < haze; i++) {
-    const ph = fract((env.reduced ? 0 : t || 0) / 9 + i * 0.29);
-    const sway = rite.stair(ph < 0.5 ? ph * 2 : 2 - ph * 2);
-    const x = ((i * 0.618 + 0.2 + v.turn * 0.31 + sway * 0.04) % 1) * w;
+    const x = ((i * 0.618 + 0.2 + v.turn * 0.31) % 1) * w;
     const y = ((i * 0.41 + 0.1 + v.turn * 0.17) % 1) * h;
     const r = Math.min(w, h) * (0.08 + (i % 3) * 0.04) * v.scale;
     const d = g.createRadialGradient(x, y, 0, x, y, r);
@@ -366,14 +444,29 @@ function frontLine(plan, sweep) {
   }
 }
 
-// Where the guess hand stands on the piece's clock: ratcheting from where it was (guessFrom, an
-// hour that may be fractional when the hand was caught mid-turn) to the hour named, the shorter
-// way round, tooth by tooth; null when no hour has been named.
+// Where the guess hand stands on the piece's clock: turning from where it was (guessFrom, an hour
+// that may be fractional when the hand was caught mid-turn) to the hour named, the shorter way
+// round, in the ratchet's even clicks; null when no hour has been named.
 function guessHand(env, plan, s) {
   if (s.guess == null) return null;
   const from = s.guessFrom == null ? plan.now : s.guessFrom;
   const diff = ((((s.guess - from + 12) % 24) + 24) % 24) - 12;
   return from + diff * riteOf(env).ratchet(prog(env, s.t, s.guessAt == null ? 0 : s.guessAt, 1.2));
+}
+
+// The side the station's word names on the map: a side named is cut on at the flicker's one
+// moment, and a side renamed is cut straight from the old word to the new at that moment, the old
+// one standing until then (sideWas), so the place is never blank between.
+function sideShown(env, s) {
+  if (s.sideAt == null || riteOf(env).flicker(prog(env, s.t, s.sideAt, 1))) return s.side;
+  return s.sideWas;
+}
+
+// The ceremony's steps as they are drawn -- the square the front stands on, the rain's tread and
+// the slip's -- which is all of it that changes the picture between two frames.
+function frontKey(env, plan, s) {
+  const rite = riteOf(env);
+  return Math.round(rite.ease(s.sweep) * plan.squares) + '|' + rite.stair(s.rain) + '|' + rite.ease(s.rise);
 }
 
 function forecastWait(env, plan, s) {
@@ -388,37 +481,40 @@ function drawFront(g, w, h, env, plan, s, variant) {
   const c = env.colors;
   const rite = riteOf(env);
   const marks = s.marks || {};
-  const geo = ground(g, w, h, env, v, plan.now, s.t);
+  const geo = ground(g, w, h, env, v, plan.now);
   const size = Math.max(8, Math.min(13, Math.round(geo.sq * 0.6)));
-  // Once the forecast is logged the front advances a square per tread of the stair (see
-  // frame()), never a glide across the map.
-  const line = frontLine(plan, rite.stair(s.sweep, plan.squares));
+  // Once the forecast is logged the front comes in to the station in the piece's landing, the
+  // first tread the longest, and every tread ends on a line of the grid: the map counts in
+  // squares, so the front never stands between two.
+  const line = frontLine(plan, Math.round(rite.ease(s.sweep) * plan.squares) / plan.squares);
   const [sc, sr] = plan.station;
-  // The air the front brings: a textured surface behind it, the cells the matte lets through at
-  // a coverage that breathes up and down the stair, and the front itself with its teeth toward
-  // the station.
+  // The air the front brings: the map behind the front in two shades of its tone, split by the
+  // piece's edge halfway across -- a surface at rest is never a flat tint and never a texture --
+  // and the front itself with its teeth toward the station.
   const tone = c.accent;
-  g.fillStyle = env.alpha(tone, 0.2);
-  const ph = env.reduced ? 0.25 : fract((s.t || 0) / 11 + v.turn);
-  const breath = 0.4 + 0.3 * rite.stair(ph < 0.5 ? ph * 2 : 2 - ph * 2);
-  const grain = Math.max(rite.cell, Math.round(geo.sq * 0.3));
+  let air;
   if (line.vertical) {
     const x = geo.x(line.at);
-    if (line.dx > 0) develop(g, env, geo.left, geo.top, x - geo.left, geo.bottom - geo.top, breath, grain);
-    else develop(g, env, x, geo.top, geo.right - x, geo.bottom - geo.top, breath, grain);
+    air = line.dx > 0 ? { x: geo.left, y: geo.top, w: x - geo.left, h: geo.bottom - geo.top }
+      : { x, y: geo.top, w: geo.right - x, h: geo.bottom - geo.top };
   } else {
     const y = geo.y(line.at);
-    if (line.dy > 0) develop(g, env, geo.left, geo.top, geo.right - geo.left, y - geo.top, breath, grain);
-    else develop(g, env, geo.left, y, geo.right - geo.left, geo.bottom - y, breath, grain);
+    air = line.dy > 0 ? { x: geo.left, y: geo.top, w: geo.right - geo.left, h: y - geo.top }
+      : { x: geo.left, y, w: geo.right - geo.left, h: geo.bottom - y };
   }
-  // The side the visitor names is marked by its area: a band along that edge of the map comes
-  // up through the matte, and the band of a side no longer named goes back down the stair.
+  if (air.w > 0 && air.h > 0) {
+    g.fillStyle = env.alpha(tone, 0.12);
+    cover(g, rite, air.x, air.y, air.w, air.h, 1);
+  }
+  // The side the visitor names is marked by its area: a band along that edge of the map comes in
+  // behind the piece's edge and rests in two shades, and the band of a side no longer named goes
+  // back out the way it came.
   for (const side of SIDES) {
     const k = coverage(env, s.t, marks['side' + side], 1.2);
     if (k <= 0) continue;
     const band = sideBand(geo, side);
     g.fillStyle = env.alpha(c.accent, 0.24);
-    develop(g, env, band.x, band.y, band.w, band.h, k, rite.cell * 2);
+    cover(g, rite, band.x, band.y, band.w, band.h, k);
   }
   g.strokeStyle = env.alpha(tone, 0.9);
   g.lineWidth = Math.max(1.5, geo.sq * 0.12);
@@ -480,60 +576,77 @@ function drawFront(g, w, h, env, plan, s, variant) {
   write(g, 'the station', sx + geo.sq * 0.55 * v.scale * (sc > GC * 0.7 ? -1 : 1), sy - geo.sq * 0.5, size, sc > GC * 0.7 ? 'right' : 'left', c.accent2, '600');
   scaleBar(g, env, geo, geo.x(0.2), geo.strip, size);
   write(g, 'moving at ' + plan.speed + ' km/h', geo.x(11), geo.strip, size, 'center', c.fg, '600');
-  // The hand for the hour the visitor names ratchets round from where it stood, tooth by tooth
-  // with its backlash, the shorter way round the dial.
+  // The hand for the hour the visitor names turns from where it stood in the ratchet's even
+  // clicks, the shorter way round the dial.
   clock(g, env, geo.x(GC - 1.2), geo.strip, Math.min(geo.sq * 1.1, geo.sq * v.scale), plan.now, guessHand(env, plan, s), size);
-  // What the visitor has said, and what a hint showed, blink on: a word arrives, it never fades
-  // in. The hint's word stands under the side's, so when a side is named after it the word
-  // blinks in afresh at its new place rather than jumping there.
-  if (s.side && rite.flicker(prog(env, s.t, s.sideAt == null ? 0 : s.sideAt, 1))) write(g, 'from the ' + s.side + '?', sx, sy + geo.sq * 0.9, size, 'center', env.alpha(c.accent, 0.95));
-  const hintFrom = s.hintAt == null ? 0 : Math.max(s.hintAt, s.sideAt == null ? 0 : s.sideAt);
-  if (s.hinted && rite.flicker(prog(env, s.t, hintFrom, 1.2))) write(g, plan.squares * KM + ' km out', sx, sy + geo.sq * (s.side ? 1.6 : 0.9), size, 'center', c.accent2, '600');
-  // The rain once the front is in: it blinks on and thickens by treads -- its count and its
-  // weight each a stair, never a fade -- and falls in jerks on the stair rather than streaming.
-  if (s.rain > 0 && rite.flicker(s.rain)) {
-    g.strokeStyle = env.alpha(c.accent, 0.25 + 0.3 * rite.stair(s.rain, 3));
+  // What the visitor has said, and what a hint showed, is cut on at the flicker's one moment: a
+  // word arrives, it never fades in, and once there it is never blanked. The hint's word stands
+  // under the side's word, so it steps down to make room in the very frame the side's word is cut
+  // on -- one cut, never a gap and never the two words on one line.
+  const side = sideShown(env, s);
+  if (side) write(g, 'from the ' + side + '?', sx, sy + geo.sq * 0.9, size, 'center', env.alpha(c.accent, 0.95));
+  if (s.hinted && rite.flicker(prog(env, s.t, s.hintAt == null ? 0 : s.hintAt, 1.2))) write(g, plan.squares * KM + ' km out', sx, sy + geo.sq * (side ? 1.6 : 0.9), size, 'center', c.accent2, '600');
+  // The rain once the front is in: it comes over the map behind the piece's edge in the stair's
+  // treads, falling and leaning with an east or west wind, and then it stands -- weather marked on
+  // the map, not a film of it, and kept off the instruments under it.
+  const wet = s.rain > 0 ? rite.stair(s.rain) : 0;
+  if (wet > 0) {
+    const mw = geo.right - geo.left;
+    const mh = geo.bottom - geo.top;
+    g.save();
+    g.beginPath();
+    rite.region(g, geo.left, geo.top, mw, mh, wet);
+    g.clip();
+    g.strokeStyle = env.alpha(c.accent, 0.5);
     g.lineWidth = 1;
     g.beginPath();
-    const n = Math.round(60 * Math.max(0.2, rite.stair(s.rain)));
-    const fall = (Math.floor(s.t / 0.8) + rite.stair(fract(s.t / 0.8))) * 0.32;
-    for (let i = 0; i < n; i++) {
-      const x = ((i * 0.618034 + fall * 0.125) % 1) * w;
-      const y = ((i * 0.754877 + fall) % 1) * h;
+    for (let i = 0; i < 60; i++) {
+      const x = geo.left + ((i * 0.618034) % 1) * mw;
+      const y = geo.top + ((i * 0.754877) % 1) * mh;
       g.moveTo(x, y);
-      g.lineTo(x + line.dx * geo.sq * 0.3, y + line.dy * geo.sq * 0.3 + geo.sq * 0.3);
+      g.lineTo(x + line.dx * geo.sq * 0.3, y + geo.sq * 0.45);
     }
     g.stroke();
+    g.restore();
   }
-  // The solved wash: the map takes the ledger's colour by its area, through the matte, blinking
-  // on as it develops.
+  // The solved light: the map takes the ledger's colour by its area, behind the piece's edge in
+  // the stair's treads, and rests in two shades.
   const washed = prog(env, s.t, s.doneAt, 2.6);
-  if (washed > 0 && rite.flicker(washed)) {
+  if (washed > 0) {
     g.fillStyle = env.alpha(c.accent2, 0.1);
-    develop(g, env, geo.left, geo.top, geo.right - geo.left, geo.bottom - geo.top, rite.stair(washed), rite.cell * 4);
+    cover(g, rite, geo.left, geo.top, geo.right - geo.left, geo.bottom - geo.top, rite.stair(washed));
   }
   slip(g, w, h, env, s.lines, s.rise, size);
 }
 
 // The live state of a front: t is the piece's clock; sweep, rain and rise are the ceremony's
-// progresses, each stepped onto the stair when drawn; marks holds 'side<name>' { on, at } for a
-// side named or un-named; guessFrom/guessAt, sideAt, hintAt and doneAt are when the hour was
-// named, the side named, the hint shown and the piece solved. A card has the clock and no more.
-function frontBlank(t) {
-  return { t: t || 0, sweep: 0, guess: null, side: '', hinted: false, rain: 0, lines: null, rise: 0,
-    marks: {}, guessFrom: null, guessAt: null, forecastFrom: 0, sideAt: null, hintAt: null, doneAt: null, help: 0 };
+// progresses, each stepped onto the rite's treads when drawn; marks holds 'side<name>'
+// { on, at, n, from } for a side named or un-named, and rolls counts them; guessFrom/guessAt,
+// sideAt (with sideWas, the word that stood before), hintAt and doneAt are when the hour was named,
+// the side named, the hint shown and the piece solved; drawn, drawnKey and drawnAt are the size,
+// the ceremony's step and the moment of the picture on the canvas (settled). A card is the blank
+// state and no more.
+function frontBlank() {
+  return { t: 0, sweep: 0, guess: null, side: '', sideWas: '', hinted: false, rain: 0, lines: null, rise: 0,
+    marks: {}, rolls: 0, guessFrom: null, guessAt: null, forecastFrom: 0, sideAt: null, hintAt: null, doneAt: null, help: 0,
+    drawn: null, drawnKey: null, drawnAt: -1 };
 }
 
-function frontPreview(g, w, h, env, plan, t) {
-  drawFront(g, w, h, env, plan, frontBlank(t), env.variant);
+function frontPreview(g, w, h, env, plan) {
+  drawFront(g, w, h, env, plan, frontBlank(), env.variant);
 }
 
 function frontPiece(env, plan) {
   const hours = frontHours(plan);
   const arrives = (plan.now + hours) % 24;
   const { helps, margin } = asked(env);
-  const s = frontBlank(0);
-  const draw = (c) => drawFront(c.g, c.w, c.h, c, plan, s, env.variant);
+  const s = frontBlank();
+  const draw = (c) => {
+    drawFront(c.g, c.w, c.h, c, plan, s, env.variant);
+    s.drawn = sizeOf(c);
+    s.drawnKey = frontKey(c, plan, s);
+    s.drawnAt = s.t;
+  };
   return {
     title: frontTitle(plan),
     brief: 'Forecast when the front reaches the station. North is up; columns count east and rows south. The station is at column ' + plan.station[0] + ', row ' + plan.station[1] + '; the front lies along ' + (frontLine(plan, 0).vertical ? 'column ' : 'row ') + frontLine(plan, 0).at + ' and moves toward it at ' + plan.speed + ' km/h. Each square is ten kilometres. It is now ' + fmt(plan.now) + '; use the 24-hour clock, wrapping past midnight if needed. Change the hour to try a forecast: the dashed line shows where the front would be then, pinned to the edge if it leaves the map. The solid line is the starting front.',
@@ -580,11 +693,14 @@ function frontPiece(env, plan) {
           : 'Your hour allows ' + wait + ' h of travel: ' + wait * plan.speed + ' km. The dashed line is your forecast, not a verdict.');
       }
       if (id === 'side') {
-        const was = s.side;
-        s.side = SIDES.includes(value) ? value : '';
-        if (s.side !== was) {
-          if (was) s.marks['side' + was] = { on: false, at: s.t };
-          if (s.side) s.marks['side' + s.side] = { on: true, at: s.t };
+        const next = SIDES.includes(value) ? value : '';
+        if (next !== s.side) {
+          // The band of the side no longer named goes out and the new one comes in, each from
+          // where it stands; the word is cut from the one standing now to the new one.
+          s.sideWas = sideShown(c, s);
+          if (s.side) remark(c, s, 'side' + s.side, false, 1.2);
+          if (next) remark(c, s, 'side' + next, true, 1.2);
+          s.side = next;
           s.sideAt = s.t;
         }
         c.status('you say it comes from the ' + s.side);
@@ -606,14 +722,23 @@ function frontPiece(env, plan) {
       }
       draw(c);
     },
+    // Once solved, the ceremony plays in order -- the front comes in, then the rain, while the
+    // ledger's slip comes down -- and each part rests at its end. Less motion is shown where they
+    // all end at once. A frame is drawn only when it has something new on it: a step of the
+    // ceremony, or a change still coming its way; otherwise the map stands as it was drawn. The
+    // map is at rest -- false, and the stage asks for no more frames -- once the ceremony has
+    // ended and the picture on the canvas is the finished one.
     frame(t, dt, c) {
       s.t += dt;
       if (c.done) {
-        s.sweep = Math.min(1, s.sweep + dt * 0.25);
-        if (s.sweep >= 1) s.rain = Math.min(1, s.rain + dt * 0.6);
-        if (s.lines) s.rise = Math.min(1, s.rise + dt * 1.2);
+        s.sweep = c.reduced ? 1 : Math.min(1, s.sweep + dt * 0.25);
+        if (s.sweep >= 1) s.rain = c.reduced ? 1 : Math.min(1, s.rain + dt * 0.6);
+        if (s.lines) s.rise = c.reduced ? 1 : Math.min(1, s.rise + dt * 1.2);
       }
-      draw(c);
+      const last = latest(s, [s.guessAt, s.sideAt, s.hintAt, s.doneAt]);
+      if (!settled(s, c, frontKey(c, plan, s), last)) draw(c);
+      const going = c.done && (s.sweep < 1 || s.rain < 1 || (s.lines && s.rise < 1));
+      return going || !settled(s, c, frontKey(c, plan, s), last);
     },
     end(c) {
       s.lines = ['front ledger', 'from the ' + plan.side + ', ' + plan.squares * KM + ' km at ' + plan.speed + ' km/h', 'arrived ' + fmt(arrives) + (plan.now + hours >= 24 ? ', past midnight' : '')];
@@ -688,18 +813,50 @@ function pressureTitle(plan) {
   return plan.stations.length === 6 ? 'the crowded map: six stations' : 'the pressure map: five stations';
 }
 
+// The legend under the map: what the visitor says, or what the map is when they have said nothing.
+const QUIET = 'readings in hPa; the wind blows high to low';
+function legendOf(s) {
+  const said = [];
+  if (s.toward >= 0) said.push('toward ' + LETTERS[s.toward]);
+  if (s.way) said.push('blowing ' + s.way);
+  if (s.gap != null) said.push(s.gap + ' hPa between');
+  return said.length ? 'you say: ' + said.join(', ') : QUIET;
+}
+
+// The words as they stand on the map. A change of what the visitor says is cut on at the flicker's
+// one moment, and until then the words that stood before stay (saidWas, towardWas): the legend is
+// cut straight from the old line to the new, and 'toward here?' straight from the station it was
+// under to the one now named -- never a blank between, never off and back on.
+function legendShown(env, s) {
+  if (s.saidAt == null || riteOf(env).flicker(prog(env, s.t, s.saidAt, 0.8))) return legendOf(s);
+  return s.saidWas;
+}
+
+function towardShown(env, s) {
+  if (s.towardAt == null || riteOf(env).flicker(prog(env, s.t, s.towardAt, 1))) return s.toward;
+  return s.towardWas;
+}
+
+// The ceremony's steps as they are drawn -- the arrow's tread and the slip's.
+function pressureKey(env, s) {
+  const rite = riteOf(env);
+  return rite.ease(s.blow) + '|' + rite.ease(s.rise);
+}
+
 function drawPressure(g, w, h, env, plan, s, variant) {
   const v = variant || PLAIN;
   const c = env.colors;
-  const geo = ground(g, w, h, env, v, 21, s.t);
+  const geo = ground(g, w, h, env, v, 21);
   const size = Math.max(8, Math.min(13, Math.round(geo.sq * 0.6)));
   const st = plan.stations;
   const rite = riteOf(env);
   const marks = s.marks || {};
   const ranked = st.map((q, i) => i).sort((a, b) => st[a].p - st[b].p);
   // Each station with its reading, ringed the more the higher its pressure stands. The station
-  // the visitor names is marked by its area -- a halo comes up through the matte, and the halo of
-  // one no longer named goes back down the stair -- and the one a hint shows blinks its halo on.
+  // the visitor names is marked by its area -- a halo comes in behind the piece's edge and rests
+  // in two shades, and the halo of one no longer named goes back out the way it came -- and the
+  // one a hint shows has its halo cut in the same way, on a roll of its own.
+  const toward = towardShown(env, s);
   st.forEach((q, i) => {
     const x = geo.x(q.c);
     const y = geo.y(q.r);
@@ -711,20 +868,21 @@ function drawPressure(g, w, h, env, plan, s, variant) {
       g.ellipse(x, y, geo.sq * (0.5 + k * 0.24) * v.scale, geo.sq * (0.4 + k * 0.19) * v.scale, (i * 0.7 + v.turn) % Math.PI, 0, TAU);
       g.stroke();
     }
-    const named = coverage(env, s.t, marks['toward' + i], 1);
-    if (named > 0) {
-      g.fillStyle = env.alpha(c.accent, 0.3);
-      developDisc(g, env, x, y, geo.sq * 0.95 * v.scale, named);
-    }
+    disc(g, rite, x, y, geo.sq * 0.95 * v.scale, coverage(env, s.t, marks['toward' + i], 1), env.alpha(c.accent, 0.3));
     const shown = s.hinted === i ? prog(env, s.t, s.hintAt == null ? 0 : s.hintAt, 1.3) : 0;
-    if (shown > 0 && rite.flicker(shown)) {
-      g.fillStyle = env.alpha(c.accent2, 0.3);
-      developDisc(g, env, x, y, geo.sq * 0.95 * v.scale, rite.stair(shown));
-    }
+    if (shown > 0) disc(g, rite, x, y, geo.sq * 0.95 * v.scale, rolled(rite, 0x417).stair(shown), env.alpha(c.accent2, 0.3));
     station(g, env, x, y, geo.sq * 0.42 * v.scale, LETTERS[i], size);
+  });
+  // Each station's reading, and what is said of it, is written once every station is drawn: the
+  // canvas's font is set once for the letters and once for the readings rather than twice for
+  // each station, and no station's rings are drawn over another's words.
+  st.forEach((q, i) => {
+    const x = geo.x(q.c);
+    const y = geo.y(q.r);
     const below = q.r > GR - 4;
+    const shown = s.hinted === i ? prog(env, s.t, s.hintAt == null ? 0 : s.hintAt, 1.3) : 0;
     write(g, q.p + ' hPa', x, y + (below ? -1 : 1) * geo.sq * 0.95, size, 'center', c.fg, '600');
-    if (s.toward === i && rite.flicker(prog(env, s.t, marks['toward' + i] ? marks['toward' + i].at : 0, 1))) write(g, 'toward here?', x, y + (below ? -1 : 1) * geo.sq * 0.95 + (below ? -1 : 1) * size * 1.2, size, 'center', env.alpha(c.accent, 0.95));
+    if (toward === i) write(g, 'toward here?', x, y + (below ? -1 : 1) * geo.sq * 0.95 + (below ? -1 : 1) * size * 1.2, size, 'center', env.alpha(c.accent, 0.95));
     if (s.hinted === i && rite.flicker(shown)) write(g, 'the wind blows from here', x, y + (below ? -1 : 1) * geo.sq * 0.95 + (below ? -1 : 1) * size * 1.2, size, 'center', c.accent2, '600');
   });
   // The compass rose under the map, so a way can be named, and the legend beside it.
@@ -743,22 +901,16 @@ function drawPressure(g, w, h, env, plan, s, variant) {
   write(g, 'S', cx, cy + cr + size * 0.55, size, 'center', env.alpha(c.fg, 0.8));
   write(g, 'E', cx + cr + size * 0.5, cy, size, 'center', env.alpha(c.fg, 0.8));
   write(g, 'W', cx - cr - size * 0.5, cy, size, 'center', env.alpha(c.fg, 0.8));
-  const said = [];
-  if (s.toward >= 0) said.push('toward ' + LETTERS[s.toward]);
-  if (s.way) said.push('blowing ' + s.way);
-  if (s.gap != null) said.push(s.gap + ' hPa between');
-  // The legend, which blinks in afresh whenever what the visitor says changes.
-  if (s.saidAt == null || rite.flicker(prog(env, s.t, s.saidAt, 0.8))) {
-    write(g, said.length ? 'you say: ' + said.join(', ') : 'readings in hPa; the wind blows high to low', geo.x(0.2), cy, size, 'left', env.alpha(said.length ? c.accent : c.fg, 0.9));
-  }
-  // The wind drawn in, once the puzzle is solved: from the highest to the lowest, a square per
-  // tread of the stair, blinking on as it sets out.
+  // The legend, cut straight from the old line to the new when what the visitor says changes.
+  const legend = legendShown(env, s);
+  write(g, legend, geo.x(0.2), cy, size, 'left', env.alpha(legend === QUIET ? c.fg : c.accent, 0.9));
+  // The wind drawn in, once the puzzle is solved: its arrow travels from the highest reading to
+  // the lowest in the piece's landing, the first tread the longest, and rests there.
   if (s.blow > 0) {
     const a = st[highest(st)];
     const b = st[lowest(st)];
-    const squares = Math.max(3, Math.abs(b.c - a.c), Math.abs(b.r - a.r));
-    const gone = rite.stair(s.blow, squares);
-    if (gone > 0 && rite.flicker(s.blow)) {
+    const gone = rite.ease(s.blow);
+    if (gone > 0) {
       g.strokeStyle = env.alpha(c.accent2, 0.9);
       g.fillStyle = env.alpha(c.accent2, 0.9);
       g.lineWidth = Math.max(1.5, geo.sq * 0.1);
@@ -767,27 +919,31 @@ function drawPressure(g, w, h, env, plan, s, variant) {
       arrow(g, geo.x(a.c), geo.y(a.r), x1, y1, geo.sq * 0.4);
     }
   }
-  // The solved wash: the map takes the ledger's colour by its area, through the matte, blinking
-  // on as it develops.
+  // The solved light: the map takes the ledger's colour by its area, behind the piece's edge in
+  // the stair's treads, and rests in two shades.
   const washed = prog(env, s.t, s.doneAt, 2.6);
-  if (washed > 0 && rite.flicker(washed)) {
+  if (washed > 0) {
     g.fillStyle = env.alpha(c.accent2, 0.1);
-    develop(g, env, geo.left, geo.top, geo.right - geo.left, geo.bottom - geo.top, rite.stair(washed), rite.cell * 4);
+    cover(g, rite, geo.left, geo.top, geo.right - geo.left, geo.bottom - geo.top, rite.stair(washed));
   }
   slip(g, w, h, env, s.lines, s.rise, size);
 }
 
 // The live state of a pressure map: t is the piece's clock; blow and rise are the ceremony's
-// progresses, each stepped onto the stair when drawn; marks holds 'toward<i>' { on, at } for a
-// station named or un-named; hintAt, saidAt and doneAt are when the hint was shown, the legend
-// last changed and the piece solved. A card has the clock and no more.
-function pressureBlank(t) {
-  return { t: t || 0, toward: -1, way: '', gap: null, hinted: -1, blow: 0, lines: null, rise: 0,
-    marks: {}, hintAt: null, saidAt: null, doneAt: null, help: 0 };
+// progresses, each stepped onto the rite's treads when drawn; marks holds 'toward<i>'
+// { on, at, n, from } for a station named or un-named, and rolls counts them; towardAt and saidAt
+// (with towardWas and saidWas, what stood before) are when the station named and the legend last
+// changed, and hintAt and doneAt when the hint was shown and the piece solved; drawn, drawnKey and
+// drawnAt are the size, the ceremony's step and the moment of the picture on the canvas
+// (settled). A card is the blank state and no more.
+function pressureBlank() {
+  return { t: 0, toward: -1, way: '', gap: null, hinted: -1, blow: 0, lines: null, rise: 0,
+    marks: {}, rolls: 0, towardWas: -1, towardAt: null, saidWas: QUIET, saidAt: null, hintAt: null, doneAt: null, help: 0,
+    drawn: null, drawnKey: null, drawnAt: -1 };
 }
 
-function pressurePreview(g, w, h, env, plan, t) {
-  drawPressure(g, w, h, env, plan, pressureBlank(t), env.variant);
+function pressurePreview(g, w, h, env, plan) {
+  drawPressure(g, w, h, env, plan, pressureBlank(), env.variant);
 }
 
 function pressurePiece(env, plan) {
@@ -797,8 +953,13 @@ function pressurePiece(env, plan) {
   const lo = lowest(st);
   const way = windWay(st);
   const gap = st[hi].p - st[lo].p;
-  const s = pressureBlank(0);
-  const draw = (c) => drawPressure(c.g, c.w, c.h, c, plan, s, env.variant);
+  const s = pressureBlank();
+  const draw = (c) => {
+    drawPressure(c.g, c.w, c.h, c, plan, s, env.variant);
+    s.drawn = sizeOf(c);
+    s.drawnKey = pressureKey(c, s);
+    s.drawnAt = s.t;
+  };
   return {
     title: pressureTitle(plan),
     brief: 'Compare the pressures at ' + COUNT[st.length] + ' stations. On this map the wind blows from the highest reading toward the lowest; name its direction by the axis it mostly follows. North is up, columns count east and rows south. Text readings give station, (column, row), pressure: ' + st.map((q, i) => LETTERS[i] + ' (' + q.c + ', ' + q.r + '): ' + q.p + ' hPa').join('; ') + '.',
@@ -837,26 +998,33 @@ function pressurePiece(env, plan) {
       draw(c);
     },
     apply(id, value, c) {
+      // The legend as it stands now: if what is said below changes it, it is cut from this line.
+      const legend = legendShown(c, s);
       if (id === 'toward') {
-        const was = s.toward;
-        s.toward = Array.isArray(value) && value.length ? Number(value[0]) : -1;
-        if (s.toward !== was) {
-          if (was >= 0) s.marks['toward' + was] = { on: false, at: s.t };
-          if (s.toward >= 0) s.marks['toward' + s.toward] = { on: true, at: s.t };
+        const next = Array.isArray(value) && value.length ? Number(value[0]) : -1;
+        if (next !== s.toward) {
+          // The halo of the station no longer named goes out and the new one comes in, each from
+          // where it stands; the word is cut from the station it stands under now to the new one.
+          s.towardWas = towardShown(c, s);
+          if (s.toward >= 0) remark(c, s, 'toward' + s.toward, false, 1);
+          if (next >= 0) remark(c, s, 'toward' + next, true, 1);
+          s.toward = next;
+          s.towardAt = s.t;
         }
-        s.saidAt = s.t;
         c.status(s.toward >= 0 ? 'you say it blows toward station ' + LETTERS[s.toward] : 'no station marked');
       }
       if (id === 'way') {
         s.way = SIDES.includes(value) ? value : '';
-        s.saidAt = s.t;
         c.status('you say it blows ' + s.way);
       }
       if (id === 'gap') {
         const n = Math.round(Number(value));
         s.gap = Number.isFinite(n) ? clamp(n, 1, 60) : null;
-        s.saidAt = s.t;
         c.status('you say the difference is ' + s.gap + ' hPa');
+      }
+      if (legendOf(s) !== legend) {
+        s.saidWas = legend;
+        s.saidAt = s.t;
       }
       if (id === 'hint') {
         const clues = [
@@ -875,13 +1043,19 @@ function pressurePiece(env, plan) {
       }
       draw(c);
     },
+    // Once solved, the wind's arrow is drawn in while the ledger's slip comes down, and each rests
+    // at its end; less motion is shown where they end at once. A frame is drawn only when it has
+    // something new on it (settled), and the map is at rest once nothing is, as on the front's.
     frame(t, dt, c) {
       s.t += dt;
       if (c.done) {
-        s.blow = Math.min(1, s.blow + dt * 0.5);
-        if (s.lines) s.rise = Math.min(1, s.rise + dt * 1.2);
+        s.blow = c.reduced ? 1 : Math.min(1, s.blow + dt * 0.5);
+        if (s.lines) s.rise = c.reduced ? 1 : Math.min(1, s.rise + dt * 1.2);
       }
-      draw(c);
+      const last = latest(s, [s.towardAt, s.saidAt, s.hintAt, s.doneAt]);
+      if (!settled(s, c, pressureKey(c, s), last)) draw(c);
+      const going = c.done && (s.blow < 1 || (s.lines && s.rise < 1));
+      return going || !settled(s, c, pressureKey(c, s), last);
     },
     end(c) {
       s.lines = ['wind ledger', 'from station ' + LETTERS[hi] + ' (' + st[hi].p + ' hPa) to station ' + LETTERS[lo] + ' (' + st[lo].p + ' hPa)', 'blowing ' + way + ', ' + gap + ' hPa between them'];
@@ -894,9 +1068,9 @@ function pressurePiece(env, plan) {
 /* ---- the module ----------------------------------------------------------------------------- */
 
 // Which of the two this card is, and its plan, dealt once from the env's seeded stream and kept
-// with that env. Every pass over one card -- the still picture and then every animated frame --
-// asks here, so they are all the same card; dealing per frame instead would re-roll the whole
-// puzzle thirty times a second (issue #92, and js/feed.js on what animate owes a card).
+// with that env. Every pass over one card -- paint, the spark's paint and piece() -- asks here, so
+// they are all the same card; dealing on each pass instead would hand each a different puzzle
+// (issue #92, and js/feed.js on what a module owes a card).
 const dealt = new WeakMap();
 function deal(env) {
   let got = dealt.get(env);
@@ -913,13 +1087,14 @@ export default {
   needsSky: true,
   paint(g, w, h, env) {
     const d = deal(env);
-    if (d.front) frontPreview(g, w, h, env, d.plan, env.variant.turn * 6);
-    else pressurePreview(g, w, h, env, d.plan, env.variant.turn * 6);
+    if (d.front) frontPreview(g, w, h, env, d.plan);
+    else pressurePreview(g, w, h, env, d.plan);
   },
-  animate(g, w, h, env, t) {
-    const d = deal(env);
-    if (d.front) frontPreview(g, w, h, env, d.plan, t + env.variant.turn * 6);
-    else pressurePreview(g, w, h, env, d.plan, t + env.variant.turn * 6);
+  // The card is the map waiting for its forecast, and nothing on a waiting map moves (see "the
+  // rite" above): it says so, and the feed lets it go rather than redrawing a still map thirty
+  // times a second.
+  animate() {
+    return false;
   },
   spark(env) {
     if (!env.stars.length) return null;
@@ -931,7 +1106,7 @@ export default {
         mono: 'now ' + fmt(plan.now) + '\nfront: ' + plan.squares + ' squares out, ' + plan.speed + ' km/h\n1 square = ' + KM + ' km',
         text: 'An omen on the map: a front is coming in along the wind. Read the map and the dial, and say when it reaches the station, and from which side.',
         aspect: '4 / 3',
-        paint: (g, w, h, cardEnv) => frontPreview(g, w, h, cardEnv, plan, cardEnv.variant.turn * 6),
+        paint: (g, w, h, cardEnv) => frontPreview(g, w, h, cardEnv, plan),
         of: plan
       };
     }
@@ -941,7 +1116,7 @@ export default {
       mono: plan.stations.map((q, i) => LETTERS[i] + ': ' + q.p + ' hPa').join('\n'),
       text: (plan.stations.length === 6 ? 'Six stations, six readings.' : 'Five stations, five readings.') + ' The wind blows from the highest to the lowest. Say where it goes, which way, and by how much.',
       aspect: '4 / 3',
-      paint: (g, w, h, cardEnv) => pressurePreview(g, w, h, cardEnv, plan, cardEnv.variant.turn * 6),
+      paint: (g, w, h, cardEnv) => pressurePreview(g, w, h, cardEnv, plan),
       of: plan
     };
   },
