@@ -7,7 +7,8 @@
 
    Three puzzles, all deduction:
 
-     the drawer       Four specimens go into four drawers, top to bottom, and a card of clues says
+     the drawer       Four specimens go into four drawers, top to bottom -- or five into five, on
+                      the seeds that deal the tall cabinet -- and a card of clues says
                       how: above, right below, not at the top, two drawers between. The clues are
                       drawn from the true order and pruned until exactly one order fits them (all
                       twenty-four orders are tried). A wrong check says how many stand in the
@@ -29,6 +30,10 @@
 const PLAIN = { density: 1, scale: 1, turn: 0 };
 const WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven'];
 const DRAWERS = ['top', 'second', 'third', 'bottom'];
+// The drawers' words for a cabinet `n` drawers tall: top and bottom hold whatever the height.
+function drawerWord(n, k) {
+  return k === 0 ? 'top' : k === n - 1 ? 'bottom' : ['second', 'third', 'fourth'][k - 1];
+}
 const SPECIMENS = [
   { name: 'key', kind: 'key' },
   { name: 'bell', kind: 'bell' },
@@ -394,11 +399,11 @@ function clueText(clue, names) {
     case 'notTop': return a + ' is not in the top drawer';
     case 'notBottom': return a + ' is not in the bottom drawer';
     case 'rightBelow': return a + ' is right below ' + b;
-    case 'between': return (clue.d === 2 ? 'one drawer lies' : 'two drawers lie') + ' between ' + a + ' and ' + b;
+    case 'between': return WORDS[clue.d - 1] + (clue.d === 2 ? ' drawer lies' : ' drawers lie') + ' between ' + a + ' and ' + b;
     case 'next': return a + ' and ' + b + ' are in neighbouring drawers';
     case 'notNext': return a + ' and ' + b + ' are not in neighbouring drawers';
     case 'end': return a + ' is in the top drawer or the bottom one';
-    case 'slot': return a + ' is in the ' + DRAWERS[clue.k] + ' drawer';
+    case 'slot': return a + ' is in the ' + drawerWord(names.length, clue.k) + ' drawer';
     default: return '';
   }
 }
@@ -485,17 +490,20 @@ function drawClues(env, order, perms) {
 }
 
 function drawerPlan(env) {
-  const n = 4;
+  // About one seed in four deals the tall cabinet: five specimens, five drawers, and a clue more
+  // to hold them. The harder size is the seed's roll, never the difficulty's.
+  const n = env.rnd() < 0.26 ? 5 : 4;
   const items = some(env, [0, 1, 2, 3, 4, 5], n);
-  const order = shuffled(env, [0, 1, 2, 3]);
+  const order = shuffled(env, items.map((v, i) => i));
   const perms = permutations(n);
+  const most = n === 5 ? 6 : 5;
   let clues = null;
-  // At most five clues: a card has only so many lines, so a draw that needs more is drawn again.
+  // A card has only so many lines, so a draw that needs more clues is drawn again.
   for (let attempt = 0; attempt < 12 && !clues; attempt++) {
     const drawn = drawClues(env, order, perms);
-    if (drawn.length <= 5 && fits(drawn, perms).length === 1) clues = drawn;
+    if (drawn.length <= most && fits(drawn, perms).length === 1) clues = drawn;
   }
-  if (!clues) clues = [0, 1, 2].map((a) => ({ t: 'slot', a, k: order.indexOf(a) }));
+  if (!clues) clues = order.slice(0, n - 1).map((a) => ({ t: 'slot', a, k: order.indexOf(a) }));
   // An opening order that is not the answer, so the cabinet asks something.
   let start = shuffled(env, order);
   for (let guard = 0; guard < 10 && start.every((v, i) => v === order[i]); guard++) start = shuffled(env, order);
@@ -506,12 +514,12 @@ function drawerPlan(env) {
 function carriedDrawer(env) {
   const p = env.card && env.card.of;
   if (!p || p.kind !== 'drawer') return null;
-  const n = 4;
-  if (!Array.isArray(p.items) || p.items.length !== n) return null;
+  const n = Array.isArray(p.items) ? p.items.length : 0;
+  if (n !== 4 && n !== 5) return null;
   if (!p.items.every((i) => Number.isInteger(i) && i >= 0 && i < SPECIMENS.length) || new Set(p.items).size !== n) return null;
   const isPerm = (list) => Array.isArray(list) && list.length === n && list.every((v) => Number.isInteger(v) && v >= 0 && v < n) && new Set(list).size === n;
   if (!isPerm(p.order) || !isPerm(p.start) || p.start.every((v, i) => v === p.order[i])) return null;
-  if (!Array.isArray(p.clues) || !p.clues.length || p.clues.length > 5) return null;
+  if (!Array.isArray(p.clues) || !p.clues.length || p.clues.length > (n === 5 ? 6 : 5)) return null;
   const pair = ['above', 'rightBelow', 'between', 'next', 'notNext'];
   const okClue = (c) => c && typeof c === 'object' && ['above', 'notTop', 'notBottom', 'rightBelow', 'between', 'next', 'notNext', 'end', 'slot'].includes(c.t)
     && Number.isInteger(c.a) && c.a >= 0 && c.a < n
@@ -527,20 +535,23 @@ function carriedDrawer(env) {
 }
 
 function drawerTitle(plan) {
-  return 'the drawer: four specimens, ' + WORDS[plan.clues.length] + (plan.clues.length === 1 ? ' clue' : ' clues');
+  const n = plan.items.length;
+  return (n === 5 ? 'the tall cabinet: ' : 'the drawer: ') + WORDS[n] + ' specimens, '
+    + WORDS[plan.clues.length] + (plan.clues.length === 1 ? ' clue' : ' clues');
 }
 
-function drawerGeometry(w, h, scale) {
+function drawerGeometry(w, h, scale, n) {
   const cw = Math.min(w * 0.4, h * 0.56) * scale;
-  const ch = h * 0.72 * scale;
-  return { x: w * 0.06, y: h * 0.5 - ch / 2, cw, ch, slot: ch / 4 };
+  const ch = h * (n === 5 ? 0.78 : 0.72) * scale;
+  return { x: w * 0.06, y: h * 0.5 - ch / 2, cw, ch, slot: ch / n };
 }
 
 function drawCabinet(g, w, h, env, plan, s, look, variant) {
   const v = variant || PLAIN;
   const k = env.colors;
   const names = plan.items.map((i) => SPECIMENS[i].name);
-  const geo = drawerGeometry(w, h, v.scale);
+  const n = plan.items.length;
+  const geo = drawerGeometry(w, h, v.scale, n);
   const rite = riteOf(env);
   const reduced = !!env.reduced;
   const got = (since, span) => came(s.t, since, span, reduced);
@@ -553,7 +564,7 @@ function drawCabinet(g, w, h, env, plan, s, look, variant) {
   // shallow for two lines of legible words holds the name alone, in its middle, and the drawers'
   // order top to bottom says the rest.
   const named = geo.slot * 0.26 >= 9;
-  for (let slot = 0; slot < 4; slot++) {
+  for (let slot = 0; slot < n; slot++) {
     const y = geo.y + slot * geo.slot;
     g.fillStyle = env.mix(k.bg2, k.accent2, 0.12 + slot * 0.03);
     g.fillRect(geo.x, y + geo.slot * 0.04, geo.cw, geo.slot * 0.92);
@@ -561,7 +572,7 @@ function drawCabinet(g, w, h, env, plan, s, look, variant) {
     g.fillRect(geo.x, y + geo.slot * 0.04, geo.cw, 1);
     g.fillStyle = env.alpha(k.accent2, 0.6);
     g.fillRect(geo.x + geo.cw * 0.78, y + geo.slot * 0.5 - 2, geo.cw * 0.12, 4);
-    if (named) write(g, DRAWERS[slot], geo.x + geo.cw * 0.34, y + geo.slot * 0.68, size * 0.8, env.alpha(k.muted, 0.8), 'left', 500, geo.cw * 0.4);
+    if (named) write(g, drawerWord(n, slot), geo.x + geo.cw * 0.34, y + geo.slot * 0.68, size * 0.8, env.alpha(k.muted, 0.8), 'left', 500, geo.cw * 0.4);
   }
   // A hinted specimen's drawer is a set surface: the mark's colour is cut across the drawer front
   // behind the piece's edge and rests there in two shades, and the dashed frame and its label are
@@ -584,7 +595,7 @@ function drawCabinet(g, w, h, env, plan, s, look, variant) {
   }
   // The specimens, each in the drawer it holds just now -- or on its way there from where it
   // stood when it was moved, landing in the treads of a roll of its own, so no two travel alike.
-  for (let item = 0; item < 4; item++) {
+  for (let item = 0; item < n; item++) {
     const slot = slotOf(s, item, rite, reduced);
     const y = geo.y + slot * geo.slot;
     g.save();
@@ -650,7 +661,7 @@ function slotOf(s, item, rite, reduced) {
 // The cabinet before anyone has touched it. `from` is where each specimen set off from, `until`
 // the end of the last movement in flight and `drawn` the last picture frame() drew.
 function drawerBlank(plan) {
-  return { order: plan.start.slice(), from: [0, 1, 2, 3].map((item) => plan.start.indexOf(item)), orderAt: -1, hinted: [], hintAt: [], solvedAt: -1, t: 0, until: -Infinity, drawn: null };
+  return { order: plan.start.slice(), from: plan.start.map((v, item) => plan.start.indexOf(item)), orderAt: -1, hinted: [], hintAt: [], solvedAt: -1, t: 0, until: -Infinity, drawn: null };
 }
 
 function drawerPreview(g, w, h, env, plan) {
@@ -659,6 +670,7 @@ function drawerPreview(g, w, h, env, plan) {
 
 function drawerPiece(env, plan) {
   const names = plan.items.map((i) => SPECIMENS[i].name);
+  const total = plan.items.length;
   const helps = asked(env).helps;
   const look = scenery(env);
   const s = drawerBlank(plan);
@@ -668,12 +680,13 @@ function drawerPiece(env, plan) {
   };
   function right() {
     let n = 0;
-    for (let i = 0; i < 4; i++) if (s.order[i] === plan.order[i]) n += 1;
+    for (let i = 0; i < total; i++) if (s.order[i] === plan.order[i]) n += 1;
     return n;
   }
   return {
     title: drawerTitle(plan),
-    brief: 'A filing, by the card. Four specimens go into the four drawers of the cabinet, top to bottom, and the card beside it says how. Exactly one arrangement fits every line on the card.',
+    brief: 'A filing, by the card. ' + WORDS[total][0].toUpperCase() + WORDS[total].slice(1) + ' specimens go into the ' + WORDS[total] + ' drawers of the '
+      + (total === 5 ? 'tall cabinet' : 'cabinet') + ', top to bottom, and the card beside it says how. Exactly one arrangement fits every line on the card.',
     goal: 'Put each specimen in the one drawer the card allows.',
     aspect: '4 / 3',
     checkLabel: 'check the cabinet',
@@ -685,9 +698,9 @@ function drawerPiece(env, plan) {
     check(c) {
       const n = right();
       return {
-        solved: n === 4,
-        say: n === 4 ? 'every specimen is in the drawer the card allows'
-          : (n === 0 ? 'none of the four is filed in the right drawer yet' : WORDS[n] + ' of four filed in the right drawer')
+        solved: n === total,
+        say: n === total ? 'every specimen is in the drawer the card allows'
+          : (n === 0 ? 'none of the ' + WORDS[total] + ' is filed in the right drawer yet' : WORDS[n] + ' of ' + WORDS[total] + ' filed in the right drawer')
       };
     },
     start(c) {
@@ -695,11 +708,11 @@ function drawerPiece(env, plan) {
       draw(c);
     },
     apply(id, value, c) {
-      if (id === 'order' && Array.isArray(value) && value.length === 4) {
+      if (id === 'order' && Array.isArray(value) && value.length === total) {
         const order = value.map(Number);
         if (order.some((item, i) => item !== s.order[i])) {
           // Each specimen sets off from where it stands now, on its way or not.
-          s.from = [0, 1, 2, 3].map((item) => slotOf(s, item, riteOf(c), c.reduced));
+          s.from = plan.order.map((v, item) => slotOf(s, item, riteOf(c), c.reduced));
           s.orderAt = s.t;
           s.order = order;
           busy(s, c, TRAVEL);
@@ -715,7 +728,7 @@ function drawerPiece(env, plan) {
           s.hintAt.push(s.t);
           busy(s, c, SPAN);
           c.hint();
-          c.status('the ' + names[next] + ' belongs in the ' + DRAWERS[plan.order.indexOf(next)] + ' drawer');
+          c.status('the ' + names[next] + ' belongs in the ' + drawerWord(total, plan.order.indexOf(next)) + ' drawer');
         } else if (s.hinted.length >= helps) {
           c.status('that is all the cabinet will show at this difficulty; the rest is yours');
         } else {
@@ -1385,7 +1398,7 @@ export default {
         title: drawerTitle(plan),
         quote: clueText(plan.clues[0], names),
         text: (plan.clues.length === 1 ? 'That is the one clue.' : WORDS[plan.clues.length - 1][0].toUpperCase() + WORDS[plan.clues.length - 1].slice(1) + ' more wait on the card.')
-          + ' Put the four specimens in the one order of drawers that fits them all.',
+          + ' Put the ' + WORDS[plan.items.length] + ' specimens in the one order of drawers that fits them all.',
         aspect: '4 / 3',
         paint: (g, w, h, cardEnv) => drawerPreview(g, w, h, cardEnv, plan),
         of: plan
