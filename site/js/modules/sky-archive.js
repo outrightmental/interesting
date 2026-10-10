@@ -14,7 +14,8 @@
                             round is made to read nothing. A wrong check says whether the count is
                             off, or fits one way round, and no more, though a gentle difficulty
                             takes a count a notch or two out; asking the archive which way it turns
-                            costs a hint, and the fiercest setting does not offer to say it.
+                            costs a hint at every difficulty. Before checking, the count and
+                            direction turn a trial wheel and read its three letters back.
      which omens hold       A square sky of five to nine stars, a ring, a horizon band and a
                             hand's-width scale. Five claims are dealt from different omen families:
                             exactly two hold. Pick those two and locate the brightest star in one
@@ -322,7 +323,7 @@ function wheelScene(g, w, h, c, p, s, variant) {
   // the count written under the wheel) blink on, a flicker, once it has clicked home: nothing
   // here cuts from unlit to lit.
   const own = s.spin > 0 && c.rite ? c.rite.at(0x1ead + (s.spun || 0)) : null;
-  const lit = s.spin >= 1;
+  const lit = s.spin >= 1 && (!s.trial || s.trial.read === p.word);
   const litK = lit ? 1 : own ? own.stair(s.spin) : 0;
   const landed = s.landedAt == null || !s.t ? 1 : Math.min(1, (s.t - s.landedAt) / 1.2);
   const shine = !lit ? 0 : own ? own.flicker(landed) : 1;
@@ -359,8 +360,9 @@ function wheelScene(g, w, h, c, p, s, variant) {
   write(g, p.word.split('').join('  '), cx, h * 0.045 + fs * 1.3, fs * 1.4, col.accent2, 'center', 700);
   write(g, 'no ' + p.dropped[0] + ', no ' + p.dropped[1] + ' on the rim', w * 0.03, h * 0.96, fs * 0.8, c.alpha(col.muted, 0.8), 'left', 500);
   write(g, 'clockwise', tip.x + R * 0.1, tip.y - R * 0.02, fs * 0.8, c.alpha(col.muted, 0.9), 'left', 500);
-  const foot = lit ? (shine ? notches(p.t) + ' ' + wayWord(p.cw) : '') : s.told ? 'the archive says: ' + wayWord(p.cw) : 'the wheel is seized: say how it must turn';
-  write(g, foot, w * 0.97, h * 0.96, fs * 0.8, lit || s.told ? col.accent2 : c.alpha(col.muted, 0.8), 'right', 500);
+  const foot = s.trial ? notches(s.trial.n) + ' ' + wayWord(s.trial.cw) + ': ' + s.trial.read
+    : s.told ? 'the archive says: ' + wayWord(p.cw) : 'set a count and direction to try a turn';
+  write(g, foot, w * 0.5, h * 0.9, fs * 0.8, s.trial || s.told ? col.accent2 : col.fg, 'center', 500);
 }
 
 function wheelPreview(g, w, h, env, p) {
@@ -370,16 +372,35 @@ function wheelPreview(g, w, h, env, p) {
 function wheelPiece(env, p) {
   // The count is notches read off a rim, so it is a measured answer: the difficulty says how many
   // notches out it may be and still turn the lock.
-  const { helps, margin } = asked(env);
+  const { margin } = asked(env);
   // The wheel turns to its notch along a curve rolled for this piece, past it and back.
   // The wheel turns to its notch in clicks -- the ratchet of this piece's own rite, a tooth at a
   // time with a slip back and a hold, never a smooth turn -- and the turn is composed afresh
   // for the solve from the roll's pieces (which teeth, which slips) by rite.at.
-  const s = { angle: 0, spin: 0, t: 0, told: false, turn: riteCurve((env.seed >>> 0) ^ 0x51a7, true), spun: 0 };
+  const s = { angle: 0, spin: 0, t: 0, told: false, turn: riteCurve((env.seed >>> 0) ^ 0x51a7, true), spun: 0,
+    from: 0, target: 0, turnAt: null, turns: 0, trial: null };
   const draw = (c) => wheelScene(c.g, c.w, c.h, c, p, s, env.variant);
+  function turnTo(n, cw, c) {
+    s.trial = { n, cw, read: reading(p, n, cw) };
+    s.from = s.angle;
+    s.target = n * (Math.PI * 2 / NOTCHES) * (cw ? 1 : -1);
+    s.turnAt = s.t;
+    s.turns += 1;
+    if (c.reduced) s.angle = s.target;
+  }
+  function tryTurn(c) {
+    const n = Number(c.value('count'));
+    const way = c.value('way');
+    if (!Number.isInteger(n) || n < 1 || n > 23 || (way !== 'cw' && way !== 'ccw')) {
+      c.status('Set a count from 1 to 23 and a direction to try a turn.');
+      return;
+    }
+    turnTo(n, way === 'cw', c);
+    c.status('Your turn reads ' + s.trial.read.split('').join(', ') + ' at stars 1, 2 and 3; the archive asks for ' + p.word + '.');
+  }
   return {
     title: wheelTitle(p),
-    brief: 'The archive asks, and the wheel answers. Twenty-four letters round the rim, one notch apart, and three stars inside the wheel, each pointing along its spoke at one letter. The wheel is seized at the setting it kept since midnight. One turn of it, so many notches one way round, brings star 1, star 2 and star 3 onto the letters of the word the archive asks for, in order.',
+    brief: 'Turn the letters beneath the three fixed spokes until stars 1, 2 and 3 read ' + p.word + ' in order. Each change tries your count and direction from the starting setting, not from the previous turn; the letters it reads appear below the wheel. The rim has 24 letters, one notch apart. Clockwise from the top: ' + rimOf(p.dropped).join(' ') + '. At the starting setting kept since midnight, the stars point to ' + reading(p, 0, true).split('').join(', ') + '. Try turns freely, then check; the wheel stays usable after it answers.',
     goal: 'Say how many notches the wheel must turn, and which way, to read the word.',
     aspect: '1 / 1',
     checkLabel: 'turn the wheel',
@@ -389,13 +410,14 @@ function wheelPiece(env, p) {
         { label: 'clockwise', value: 'cw' },
         { label: 'counterclockwise', value: 'ccw' }
       ] },
-      // The archive has one thing to say here, so a fierce difficulty does not offer to say it.
-      helps > 1 ? { id: 'ask', ask: 'which way the wheel turns', kind: 'press', count: 1, label: 'ask the archive', optional: true } : null
+      { id: 'ask', ask: 'one direction that reaches the word', kind: 'press', count: 1, label: 'ask the archive', optional: true }
     ].filter(Boolean),
     solution: { count: p.t, way: p.cw ? 'cw' : 'ccw' },
     check(c) {
       const n = Number(c.value('count'));
-      const cw = c.value('way') === 'cw';
+      const way = c.value('way');
+      if (way !== 'cw' && way !== 'ccw') return { solved: false, say: 'choose clockwise or counterclockwise' };
+      const cw = way === 'cw';
       if (!Number.isInteger(n) || n < 1 || n > 23) return { solved: false, say: 'the count has to be one to twenty-three' };
       const read = reading(p, n, cw);
       if (read === p.word) return { solved: true, say: notches(n) + ' ' + wayWord(cw) + ': the stars read ' + p.word };
@@ -410,15 +432,11 @@ function wheelPiece(env, p) {
       return { solved: false, say: 'the count is off' + (land ? '; ' + WORDS[land] + (land === 1 ? ' star lands' : ' stars land') + ' on a right letter' : '') };
     },
     start(c) {
-      c.status('the archive asks for ' + p.word + '; the wheel is seized');
+      c.status('The archive asks for ' + p.word + '. Set a count and direction to see what your turn reads.');
       draw(c);
     },
     apply(id, value, c) {
-      if (id === 'count') {
-        const n = Number(value);
-        c.status(Number.isInteger(n) && n >= 1 ? notches(n) + ', you say' : 'a count of notches');
-      }
-      if (id === 'way') c.status(value === 'cw' ? 'clockwise, you say' : 'counterclockwise, you say');
+      if (id === 'count' || id === 'way') tryTurn(c);
       if (id === 'ask') {
         if (!s.told) {
           s.told = true;
@@ -430,20 +448,27 @@ function wheelPiece(env, p) {
     },
     frame(t, dt, c) {
       if (!c.reduced) s.t += dt;
+      if (s.turnAt != null) {
+        const progress = c.reduced ? 1 : Math.max(0, Math.min(1, (s.t - s.turnAt) / 0.8));
+        const click = c.rite ? c.rite.at(0x51a7 + s.turns).ratchet(progress) : (s.turn || ease)(progress);
+        s.angle = s.from + (s.target - s.from) * click;
+      }
       if (c.done) {
         if (!s.spun) s.spun = 1 + ((s.t * 1000) | 0) % 97;
         s.spin = c.reduced ? 1 : Math.min(1, s.spin + dt * 0.55);
         if (s.spin >= 1 && s.landedAt == null) s.landedAt = s.t;
-        const click = c.rite ? c.rite.at(0x51a7 + s.spun).ratchet(s.spin) : (s.turn || ease)(s.spin);
-        s.angle = click * p.t * (Math.PI * 2 / NOTCHES) * (p.cw ? 1 : -1);
       }
       draw(c);
     },
     end(c) {
       // Every solve is answered in the archive's own voice, as the omens' is: the line is the
       // plan's, so one wheel always reads the same and another wheel reads another.
+      const n = Number(c.value('count'));
+      const cw = c.value('way') === 'cw';
+      const exact = Number.isInteger(n) && n >= 1 && n <= 23 && reading(p, n, cw) === p.word;
+      turnTo(exact ? n : p.t, exact ? cw : p.cw, c);
       const line = READINGS[(p.t + p.word.charCodeAt(0) + (p.cw ? 1 : 0)) % READINGS.length];
-      c.status('the wheel turns ' + notches(p.t) + ' ' + wayWord(p.cw) + ' and the stars read ' + p.word + '. the archive reads: ' + line);
+      c.status('The wheel turns ' + notches(s.trial.n) + ' ' + wayWord(s.trial.cw) + ' and the stars read ' + p.word + '. The archive reads: ' + line);
     }
   };
 }
@@ -1071,9 +1096,8 @@ export default {
   paint(g, w, h, env) {
     const p = deal(env);
     if (p.kind === 'wheel') {
-      // The card's rim is turned as far as the configuration turns it, so a repeat is the same
-      // wheel seen at another setting.
-      wheelScene(g, w, h, env, p, { angle: env.variant.turn * Math.PI * 2, spin: 0 }, env.variant);
+      // The rim starts at the same setting on the card and on the stage.
+      wheelScene(g, w, h, env, p, { angle: 0, spin: 0 }, env.variant);
     } else if (p.kind === 'route') routePreview(g, w, h, env, p, 0);
     else omensPreview(g, w, h, env, p);
   },
@@ -1084,7 +1108,7 @@ export default {
     if (env.reduced) return false;
     const p = deal(env);
     if (p.kind === 'wheel') {
-      wheelScene(g, w, h, env, p, { angle: env.variant.turn * Math.PI * 2, spin: 0, t }, env.variant);
+      wheelScene(g, w, h, env, p, { angle: 0, spin: 0, t }, env.variant);
     } else if (p.kind === 'route') routePreview(g, w, h, env, p, t);
     else omensScene(g, w, h, env, p, { picked: [], reveal: false, t }, env.variant);
   },

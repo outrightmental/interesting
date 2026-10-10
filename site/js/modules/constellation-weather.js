@@ -16,6 +16,9 @@
                              it blows by the compass, and the difference in pressure between the
                              two. A wrong check says which part is off and no more.
 
+   The forecast dial draws a dashed trial front without moving the original clue. Both maps
+   provide text readings and progressive hints; a solved ledger leaves the map unobstructed.
+
    A card and the feature it opens as are one puzzle: the spark puts the whole plan on its spec as
    `of` -- the station, the front, the speed and the hour, or the five stations and their
    readings -- and piece(env) opens on that rather than rolling another. The sky may be one star
@@ -279,32 +282,13 @@ function clock(g, env, x, y, r, hour, guess, size) {
   write(g, 'now ' + fmt(hour), x - r - size * 0.5, y, size, 'right', c.accent2, '600');
 }
 
-// A slip printed over the map once a puzzle is solved: it comes down from the top edge in
-// clicks on the piece's stair, its paper develops through the matte as it comes, and its words
-// blink on once it is down.
+// The ledger's receipt sits between the map and its instruments, never over the clues.
+// The full reading is reported in the status line.
 function slip(g, w, h, env, lines, rise, size) {
-  if (!lines || rise <= 0) return;
-  const c = env.colors;
-  const rite = riteOf(env);
-  g.font = '500 ' + size + 'px system-ui, sans-serif';
-  let widest = 0;
-  for (const l of lines) widest = Math.max(widest, g.measureText(l).width);
-  const lh = size * 1.5;
-  const pad = size;
-  const bw = Math.min(w * 0.9, widest + pad * 2);
-  const bh = lines.length * lh + pad * 2;
-  const x = (w - bw) / 2;
-  const down = rite.stair(rise);
-  const y = -bh + down * ((h - bh) / 2 + bh);
-  g.fillStyle = env.alpha(c.bg, 0.94);
-  develop(g, env, x, y, bw, bh, Math.max(down, 0.2), rite.cell * 2);
-  g.strokeStyle = env.alpha(c.fg, 0.3);
-  g.lineWidth = 1;
-  g.beginPath();
-  g.roundRect(x, y, bw, bh, size * 0.5);
-  g.stroke();
-  if (!rite.flicker(rise)) return;
-  lines.forEach((l, i) => write(g, l, x + pad, y + pad + lh * (i + 0.5), size, 'left', env.alpha(i === 0 ? c.accent2 : c.fg, 0.92)));
+  if (!lines || rise <= 0 || !riteOf(env).flicker(rise)) return;
+  const geo = mapGeometry(w, h);
+  write(g, lines[0] + ' recorded', geo.left, geo.bottom + geo.sq * 0.95,
+    size, 'left', env.colors.accent2, '600');
 }
 
 function station(g, env, x, y, r, letter, size) {
@@ -392,6 +376,13 @@ function guessHand(env, plan, s) {
   return from + diff * riteOf(env).ratchet(prog(env, s.t, s.guessAt == null ? 0 : s.guessAt, 1.2));
 }
 
+function forecastWait(env, plan, s) {
+  if (s.guess == null) return 0;
+  const wait = ((s.guess - plan.now) % 24 + 24) % 24;
+  const from = s.forecastFrom || 0;
+  return from + (wait - from) * riteOf(env).stair(prog(env, s.t, s.guessAt, 0.7));
+}
+
 function drawFront(g, w, h, env, plan, s, variant) {
   const v = variant || PLAIN;
   const c = env.colors;
@@ -465,6 +456,23 @@ function drawFront(g, w, h, env, plan, s, variant) {
     const y0 = line.vertical ? base : geo.y(line.at) + line.dy * geo.sq * 0.9;
     arrow(g, x0, y0, x0 + line.dx * geo.sq * 1.2, y0 + line.dy * geo.sq * 1.2, geo.sq * 0.25);
   }
+  if (s.guess != null) {
+    const origin = frontLine(plan, 0);
+    const travel = forecastWait(env, plan, s) * plan.speed / KM;
+    const at = origin.at + (origin.vertical ? origin.dx : origin.dy) * travel;
+    const position = clamp(at, 0, origin.vertical ? GC : GR);
+    const x = origin.vertical ? geo.x(position) : geo.left;
+    const y = origin.vertical ? geo.top : geo.y(position);
+    g.save();
+    g.strokeStyle = c.accent2;
+    g.lineWidth = Math.max(1.5, geo.sq * 0.1);
+    g.setLineDash([geo.sq * 0.35, geo.sq * 0.25]);
+    g.beginPath();
+    g.moveTo(x, y);
+    g.lineTo(origin.vertical ? x : geo.right, origin.vertical ? geo.bottom : y);
+    g.stroke();
+    g.restore();
+  }
   // The station, and the instruments under the map: the scale bar, the speed, and the clock.
   const sx = geo.x(sc);
   const sy = geo.y(sr);
@@ -513,7 +521,7 @@ function drawFront(g, w, h, env, plan, s, variant) {
 // named, the side named, the hint shown and the piece solved. A card has the clock and no more.
 function frontBlank(t) {
   return { t: t || 0, sweep: 0, guess: null, side: '', hinted: false, rain: 0, lines: null, rise: 0,
-    marks: {}, guessFrom: null, guessAt: null, sideAt: null, hintAt: null, doneAt: null };
+    marks: {}, guessFrom: null, guessAt: null, forecastFrom: 0, sideAt: null, hintAt: null, doneAt: null, help: 0 };
 }
 
 function frontPreview(g, w, h, env, plan, t) {
@@ -528,15 +536,14 @@ function frontPiece(env, plan) {
   const draw = (c) => drawFront(c.g, c.w, c.h, c, plan, s, env.variant);
   return {
     title: frontTitle(plan),
-    brief: 'The station keeps its vigil. A front is coming in toward the station along the wind, at the speed written beside it. One square of the grid is ten kilometres; the scale bar says so. The dial goes the whole day round, 0 at the top being midnight, and its hand stands at the hour now.',
+    brief: 'Forecast when the front reaches the station. North is up; columns count east and rows south. The station is at column ' + plan.station[0] + ', row ' + plan.station[1] + '; the front lies along ' + (frontLine(plan, 0).vertical ? 'column ' : 'row ') + frontLine(plan, 0).at + ' and moves toward it at ' + plan.speed + ' km/h. Each square is ten kilometres. It is now ' + fmt(plan.now) + '; use the 24-hour clock, wrapping past midnight if needed. Change the hour to try a forecast: the dashed line shows where the front would be then, pinned to the edge if it leaves the map. The solid line is the starting front.',
     goal: 'Say the hour the front reaches the station, and which side it comes from.',
     aspect: '4 / 3',
     checkLabel: 'log the forecast',
     steps: [
       { id: 'hour', ask: 'the hour it arrives, on the 24-hour dial', kind: 'number', min: 0, max: 23, step: 1, value: 0, unit: 'h' },
       { id: 'side', ask: 'the side it comes from', kind: 'choice', options: SIDES.map((side) => ({ label: 'from the ' + side, value: side })) },
-      // The station has one thing to say, so a fierce difficulty does not offer to say it.
-      helps > 1 ? { id: 'hint', ask: 'how far out it is', kind: 'press', count: 1, label: 'show me', optional: true } : null
+      { id: 'hint', ask: 'distance, speed, then the arrival calculation', kind: 'press', count: 1, label: 'show a clue', optional: true }
     ].filter(Boolean),
     solution: { hour: arrives, side: plan.side },
     check(c) {
@@ -564,10 +571,13 @@ function frontPiece(env, plan) {
         const n = Math.round(Number(value));
         // The hand sets out from where it stands now, even if caught mid-ratchet.
         const standing = guessHand(c, plan, s);
+        s.forecastFrom = forecastWait(c, plan, s);
         s.guessFrom = standing == null ? plan.now : ((standing % 24) + 24) % 24;
         s.guess = Number.isFinite(n) ? clamp(n, 0, 23) : null;
         s.guessAt = s.t;
-        c.status('you say ' + fmt(s.guess));
+        const wait = s.guess == null ? null : ((s.guess - plan.now) % 24 + 24) % 24;
+        c.status(wait == null ? 'Enter an hour from 0 to 23.'
+          : 'Your hour allows ' + wait + ' h of travel: ' + wait * plan.speed + ' km. The dashed line is your forecast, not a verdict.');
       }
       if (id === 'side') {
         const was = s.side;
@@ -580,14 +590,19 @@ function frontPiece(env, plan) {
         c.status('you say it comes from the ' + s.side);
       }
       if (id === 'hint') {
-        if (!s.hinted) {
+        const clues = [
+          'The front is ' + plan.squares + ' squares away: ' + plan.squares * KM + ' km from the station.',
+          'At ' + plan.speed + ' km/h it crosses ' + plan.speed / KM + ' grid squares in one hour.',
+          'Travel time is distance divided by speed: ' + plan.squares * KM + ' divided by ' + plan.speed + '.',
+          'The journey takes ' + hours + ' h. Add that to ' + fmt(plan.now) + '; subtract 24 if the sum reaches 24.',
+          'The calculation gives ' + fmt(arrives) + ', arriving from the ' + plan.side + '.'
+        ];
+        if (s.help < helps) {
           s.hinted = true;
           s.hintAt = s.t;
           c.hint();
-          c.status('the front is ' + plan.squares * KM + ' km from the station');
-        } else {
-          c.status('the distance is shown; the speed and the clock are on the map');
-        }
+          c.status(clues[s.help++]);
+        } else c.status('No more clues at this difficulty. The distance stays marked; you can still try hours on the dial.');
       }
       draw(c);
     },
@@ -768,7 +783,7 @@ function drawPressure(g, w, h, env, plan, s, variant) {
 // last changed and the piece solved. A card has the clock and no more.
 function pressureBlank(t) {
   return { t: t || 0, toward: -1, way: '', gap: null, hinted: -1, blow: 0, lines: null, rise: 0,
-    marks: {}, hintAt: null, saidAt: null, doneAt: null };
+    marks: {}, hintAt: null, saidAt: null, doneAt: null, help: 0 };
 }
 
 function pressurePreview(g, w, h, env, plan, t) {
@@ -786,7 +801,7 @@ function pressurePiece(env, plan) {
   const draw = (c) => drawPressure(c.g, c.w, c.h, c, plan, s, env.variant);
   return {
     title: pressureTitle(plan),
-    brief: 'A reading taken from ' + COUNT[st.length] + ' stations, each reporting its pressure. The wind blows from the station reading highest toward the one reading lowest, and the compass in the corner has north at the top. Name the way it blows by whichever axis it mostly follows.',
+    brief: 'Compare the pressures at ' + COUNT[st.length] + ' stations. On this map the wind blows from the highest reading toward the lowest; name its direction by the axis it mostly follows. North is up, columns count east and rows south. Text readings give station, (column, row), pressure: ' + st.map((q, i) => LETTERS[i] + ' (' + q.c + ', ' + q.r + '): ' + q.p + ' hPa').join('; ') + '.',
     goal: 'Name the station the wind blows toward, the way it blows, and the pressure difference between the two.',
     aspect: '4 / 3',
     checkLabel: 'log the wind',
@@ -794,7 +809,7 @@ function pressurePiece(env, plan) {
       { id: 'toward', ask: 'the station the wind blows toward', kind: 'pick', count: 1, items: st.map((q, i) => ({ label: 'station ' + LETTERS[i], value: i })) },
       { id: 'way', ask: 'the way it blows', kind: 'choice', options: SIDES.map((side) => ({ label: side, value: side })) },
       { id: 'gap', ask: 'the pressure difference between the two', kind: 'number', min: 1, max: 60, step: 1, value: 1, unit: 'hPa' },
-      helps > 1 ? { id: 'hint', ask: 'the station it blows from', kind: 'press', count: 1, label: 'show me', optional: true } : null
+      { id: 'hint', ask: 'the readings, then the wind calculation', kind: 'press', count: 1, label: 'show a clue', optional: true }
     ].filter(Boolean),
     solution: { toward: [lo], way, gap },
     check(c) {
@@ -844,14 +859,19 @@ function pressurePiece(env, plan) {
         c.status('you say the difference is ' + s.gap + ' hPa');
       }
       if (id === 'hint') {
-        if (s.hinted < 0) {
+        const clues = [
+          'The highest reading is station ' + LETTERS[hi] + ': ' + st[hi].p + ' hPa. The wind starts there.',
+          'The lowest reading is station ' + LETTERS[lo] + ': ' + st[lo].p + ' hPa. That is its destination.',
+          'Between those stations the column changes by ' + Math.abs(st[lo].c - st[hi].c) + ' and the row by ' + Math.abs(st[lo].r - st[hi].r) + '. Use the larger change to choose the axis.',
+          'Subtract the destination pressure from the starting pressure: ' + st[hi].p + ' minus ' + st[lo].p + '.',
+          'The wind runs ' + way + ', with ' + gap + ' hPa between the two stations.'
+        ];
+        if (s.help < helps) {
           s.hinted = hi;
           s.hintAt = s.t;
           c.hint();
-          c.status('the wind blows from station ' + LETTERS[hi] + ', the highest reading');
-        } else {
-          c.status('the station it blows from is shown; the lowest reading is where it goes');
-        }
+          c.status(clues[s.help++]);
+        } else c.status('No more clues at this difficulty. The starting station stays marked; compare the readings and coordinates.');
       }
       draw(c);
     },

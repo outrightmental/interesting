@@ -27,11 +27,11 @@
     { "file": "wish-terrarium.html", "name": "the terrarium", "orientation": "minding something", "mood": "tending", "aspect": "4 / 5",
       "what": "Tend what is under glass: decide which plants get water from their tags and readings, or order the stems by age." },
     { "file": "constellation-weather.html", "name": "the weather lab", "orientation": "weather coming", "mood": "tempestuous", "aspect": "16 / 10",
-      "what": "Read the omens in the sky: work out the hour a front arrives, or read the pressure map for where the wind blows." },
+      "what": "Read the weather maps: try an arrival hour and watch your forecast move, or trace the wind from high pressure to low." },
     { "file": "orbital-weaver.html", "name": "the orbital weaver", "orientation": "after symmetry", "mood": "geometric", "aspect": "1 / 1",
       "what": "Close the pattern: count the folds of a weave and spot its mirror, or count the bands of a moire to find the hidden screen." },
     { "file": "machine-shop.html", "name": "the machine shop", "orientation": "cold and clear", "mood": "analytic", "aspect": "3 / 4",
-      "what": "Learn the automaton's one rule from its rows and write the next, or find the one cell that changed." },
+      "what": "Learn the automaton's rule, test it in a notebook and write the next rows, or find the one cell that changed." },
     { "file": "light-table.html", "name": "the light table", "orientation": "cold and clear", "mood": "analytic", "aspect": "4 / 3",
       "what": "Light a lamp on purpose: measure a slit spacing from its fringes, or order three filters so the most light passes." },
     { "file": "kinetic-floor.html", "name": "the kinetic floor", "orientation": "wound tight", "mood": "restless", "aspect": "16 / 10",
@@ -47,7 +47,7 @@
     { "file": "shadow-theatre.html", "name": "the shadow theatre", "orientation": "magpie", "mood": "curious", "aspect": "4 / 3",
       "what": "Work out where the lamp stands from a shadow's size, or match four or six enlarged, leaning shadows to their paper cutouts." },
     { "file": "sky-archive.html", "name": "the archive oracle", "orientation": "asking elsewhere", "mood": "divinatory", "aspect": "1 / 1",
-      "what": "Ask the archive: turn a letter wheel onto its word, find two true omens, or trace a star's route and add the lights it visits." }
+      "what": "Ask the archive: try turns of a letter wheel until its stars read a word, find two true omens, or trace a star's route and add its light." }
   ],
   "finePrint": [
     { "file": "privacy.html", "name": "privacy", "gloss": "what is kept, and where", "icon": "shield",
