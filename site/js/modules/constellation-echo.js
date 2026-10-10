@@ -12,10 +12,10 @@
                        the mark make the distances judgeable; nothing is numbered. A wrong check
                        says how many stand in the right place and no more; a hint, at a price,
                        says where one star comes back.
-     the midnight chord  Four voices with periods of 2, 3, 4 and 5 beats, each sounding on beat 0 and
-                       every period after, over a strip of twelve beats. Some of them are sounding,
-                       and the scene shows only the total per beat, as stacked blocks, and the four
-                       voices' own beats. Say which voices are sounding and on which beat after
+     the midnight chord  Four voices drawn from periods of 2, 3, 4, 5, 6 and 8 beats, each sounding
+                       on beat 0 and every period after, over a strip of twelve beats. Some of them
+                       are sounding. Stacked blocks show the totals; hollow circles show what the
+                       visitor's chosen voices would produce beside the four voices' own beats. Say which voices are sounding and on which beat after
                        beat 0 they next all strike together. The chord is drawn from its answer and
                        checked for uniqueness against every other chord before it is dealt.
 
@@ -29,7 +29,8 @@ const LETTERS = ['A', 'B', 'C', 'D', 'E'];
 const WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen'];
 const ORDINAL = ['first', 'second', 'third', 'fourth', 'fifth'];
 const PERIODS = [2, 3, 4, 5];
-const EVERY = { 2: 'every 2nd beat', 3: 'every 3rd beat', 4: 'every 4th beat', 5: 'every 5th beat' };
+const PERIOD_POOL = [2, 3, 4, 5, 6, 8];
+const EVERY = { 2: 'every 2nd beat', 3: 'every 3rd beat', 4: 'every 4th beat', 5: 'every 5th beat', 6: 'every 6th beat', 8: 'every 8th beat' };
 const BEATS = 12;
 const PLAIN = { density: 1, scale: 1, turn: 0 };
 const RATIO = 1.2;
@@ -581,36 +582,44 @@ function sumsOf(voices) {
 }
 
 // Whether no other set of voices makes the same bars: every non-empty subset is tried.
-function uniqueChord(voices) {
+function uniqueChord(voices, periods = PERIODS) {
   const want = sumsOf(voices).join('');
   let hits = 0;
-  for (let mask = 1; mask < 16; mask++) {
-    const subset = PERIODS.filter((p, i) => mask & (1 << i));
+  for (let mask = 1; mask < (1 << periods.length); mask++) {
+    const subset = periods.filter((p, i) => mask & (1 << i));
     if (sumsOf(subset).join('') === want) hits += 1;
   }
   return hits === 1;
 }
 
 function chordPlan(env) {
+  const choices = PERIOD_POOL.slice();
+  const periods = [];
+  while (periods.length < 4) periods.push(choices.splice(env.int(0, choices.length - 1), 1)[0]);
+  periods.sort((a, b) => a - b);
   for (let attempt = 0; attempt < 20; attempt++) {
     const count = env.int(1, 3);
-    const pool = PERIODS.slice();
+    const pool = periods.slice();
     const voices = [];
     while (voices.length < count) voices.push(pool.splice(env.int(0, pool.length - 1), 1)[0]);
     voices.sort((a, b) => a - b);
-    if (uniqueChord(voices)) return { kind: 'chord', voices };
+    if (uniqueChord(voices, periods)) return { kind: 'chord', voices, periods };
   }
-  return { kind: 'chord', voices: [2, 3] };
+  return { kind: 'chord', voices: periods.slice(0, 2), periods };
 }
 
 function carriedChord(env) {
   const p = env.card && env.card.of;
   if (!p || p.kind !== 'chord' || !Array.isArray(p.voices) || p.voices.length < 1 || p.voices.length > 3) return null;
+  if (p.periods != null && !Array.isArray(p.periods)) return null;
+  const periods = p.periods == null ? PERIODS.slice() : p.periods.map(Number);
+  if (periods.length !== 4 || new Set(periods).size !== 4 || !periods.every((v) => PERIOD_POOL.includes(v))) return null;
+  periods.sort((a, b) => a - b);
   const voices = p.voices.map(Number);
-  if (!voices.every((v) => PERIODS.includes(v)) || new Set(voices).size !== voices.length) return null;
+  if (!voices.every((v) => periods.includes(v)) || new Set(voices).size !== voices.length) return null;
   voices.sort((a, b) => a - b);
-  if (!uniqueChord(voices)) return null;
-  return { kind: 'chord', voices };
+  if (!uniqueChord(voices, periods)) return null;
+  return { kind: 'chord', voices, periods };
 }
 
 function chordTitle(plan) {
@@ -629,7 +638,9 @@ function drawChord(g, w, h, c, plan, s, variant, t) {
   const v = variant || PLAIN;
   const col = c.colors;
   const geo = chordGeometry(w, h);
+  const periods = plan.periods || PERIODS;
   const bars = sumsOf(plan.voices);
+  const draft = sumsOf(s.picked);
   const size = Math.max(9, Math.round(Math.min(w, h) * 0.04));
   const small = Math.max(8, Math.round(size * 0.85));
   background(g, w, h, c);
@@ -657,6 +668,8 @@ function drawChord(g, w, h, c, plan, s, variant, t) {
   }
   // The blocks breathe by their area: each on its own phase, the cells its matte lets through
   // come up the stair and go back down it, never a brightening.
+  const comparing = s.draftAt != null && rite.flicker(prog(c, t, s.draftAt, 0.8));
+  if (comparing) caption(g, w, c, 'circles: your totals', (geo.left + geo.right) / 2, geo.stripTop - size * 0.8, 1, small);
   const bw = geo.col * 0.6 * Math.min(1.15, Math.max(0.8, v.scale));
   for (let b = 0; b < BEATS; b++) {
     const x = geo.left + (b + 0.5) * geo.col;
@@ -671,6 +684,13 @@ function drawChord(g, w, h, c, plan, s, variant, t) {
       g.strokeStyle = c.alpha(col.accent2, 0.5);
       g.strokeRect(x - bw / 2, y + unit * 0.08, bw, unit * 0.84);
     }
+    if (comparing) {
+      g.strokeStyle = col.fg;
+      g.lineWidth = 1.5;
+      g.beginPath();
+      g.arc(x, geo.stripBottom - draft[b] * unit, Math.min(3, geo.col * 0.22), 0, TAU);
+      g.stroke();
+    }
     caption(g, w, c, String(b), x, geo.stripBottom + size * 0.8, 0.7, small);
   }
   g.strokeStyle = c.alpha(col.muted, 0.4);
@@ -681,7 +701,7 @@ function drawChord(g, w, h, c, plan, s, variant, t) {
   // The voices: each on its own row, its beats hollow until it is picked, lit when it is found.
   // A picked row is a set surface: a band develops across it through the matte when it is
   // picked and comes back down the stair when it is unpicked; its beats blink full.
-  PERIODS.forEach((p, row) => {
+  periods.forEach((p, row) => {
     const y = geo.rowTop + row * geo.rowGap;
     const shown = s.shown[p];
     const sounding = plan.voices.includes(p);
@@ -722,12 +742,12 @@ function drawChord(g, w, h, c, plan, s, variant, t) {
       }
     }
     if (shown && rite.flicker(prog(c, t, marks['shown' + p] ? marks['shown' + p].at : 0, 1.2))) {
-      const x = geo.right + size * 0.3;
+      const x = geo.left - size * 0.6;
       g.fillStyle = col.accent2;
       g.font = '600 ' + small + 'px system-ui, sans-serif';
-      g.textAlign = 'left';
+      g.textAlign = 'right';
       g.textBaseline = 'middle';
-      g.fillText(shown === 'on' ? 'sounds' : 'silent', x, y);
+      g.fillText(shown === 'on' ? 'sounds' : 'silent', x, y - geo.rowGap * 0.34);
     }
   });
   g.fillStyle = c.alpha(col.muted, 0.2);
@@ -737,7 +757,7 @@ function drawChord(g, w, h, c, plan, s, variant, t) {
 // marks: 'row<p>' { on, at } for a voice picked or unpicked, 'shown<p>' for one a hint has
 // named; revealAt when the piece solved. A card has none of them.
 function chordBlank() {
-  return { picked: [], shown: {}, reveal: false, marks: {}, revealAt: null };
+  return { picked: [], shown: {}, reveal: false, marks: {}, revealAt: null, draftAt: null };
 }
 
 function chordPreview(g, w, h, env, plan, t) {
@@ -746,26 +766,24 @@ function chordPreview(g, w, h, env, plan, t) {
 
 function chordPiece(env, plan) {
   const helps = asked(env).helps;
+  const periods = plan.periods || PERIODS;
   const voices = plan.voices;
   const meet = lcmOf(voices);
   const s = chordBlank();
   let time = 0;
   const draw = (c) => drawChord(c.g, c.w, c.h, c, plan, s, env.variant, time);
   const named = (list) => list.map((p) => EVERY[p]).join(', ');
-  // The hints go through the voices in a seeded order, one per press.
-  const reveal = [];
-  const pool = PERIODS.slice();
-  while (pool.length) reveal.push(pool.splice(env.int(0, pool.length - 1), 1)[0]);
+  // On a period's first beat, only it and shorter periods can contribute.
+  const reveal = periods.slice().sort((a, b) => a - b);
   return {
     title: chordTitle(plan),
-    brief: 'Heard by count alone. Four voices sound in the midnight chamber, each on beat 0 and every period after: one every 2nd beat, one every 3rd, one every 4th, one every 5th. '
-      + 'Some of them are sounding. The strip shows only the total of voices per beat, as stacked blocks.',
+    brief: 'Find which voices make the chord. The four candidates strike on beat 0 and then ' + named(periods) + '. Filled blocks show the clue; hollow circles show the totals of your selection. Totals for beats 0 to 11: ' + sumsOf(voices).join(', ') + '. The next shared beat may lie beyond the strip.',
     goal: 'Say which voices are sounding, and on which beat after beat 0 they next all strike together.',
     aspect: '4 / 3',
     checkLabel: 'check the chord',
     steps: [
-      { id: 'voices', ask: 'the voices that are sounding', kind: 'pick', items: PERIODS.map((p) => ({ label: EVERY[p], value: p })) },
-      { id: 'meet', ask: 'the first beat after 0 on which every sounding voice strikes at once', kind: 'number', min: 2, max: 60, step: 1, unit: 'beat' },
+      { id: 'voices', ask: 'the voices that are sounding', kind: 'pick', items: periods.map((p) => ({ label: EVERY[p], value: p })) },
+      { id: 'meet', ask: 'the first beat after 0 on which every sounding voice strikes at once', kind: 'number', min: 2, max: 120, step: 1, unit: 'beat' },
       { id: 'hint', ask: 'whether one voice is sounding', kind: 'press', count: 1, label: 'show me one', optional: true }
     ],
     solution: { voices: voices.slice(), meet },
@@ -774,26 +792,36 @@ function chordPiece(env, plan) {
       const right = chosen.filter((p) => voices.includes(p)).length;
       const extra = chosen.length - right;
       const missing = voices.length - right;
-      const pickRight = extra === 0 && missing === 0;
-      const meetRight = Number(c.value('meet')) === meet;
+      const pickRight = extra === 0 && missing === 0 && new Set(chosen).size === chosen.length;
+      const beat = Number(c.value('meet'));
+      const meetRight = Number.isInteger(beat) && beat === meet;
       if (pickRight && meetRight) return { solved: true, say: 'the chord is ' + named(voices) + ', together again on beat ' + meet };
       const parts = [];
       if (!pickRight) {
-        if (right === 0) parts.push('none of the voices you picked is sounding');
-        else parts.push(WORDS[right] + ' of your picks ' + (right === 1 ? 'is' : 'are') + ' sounding' + (extra ? ', ' + WORDS[extra] + ' ' + (extra === 1 ? 'is' : 'are') + ' not' : ''));
-        if (!extra && missing) parts.push('a voice is still missing');
+        const wanted = sumsOf(voices);
+        const draft = sumsOf(chosen.filter((p) => periods.includes(p)));
+        const matching = wanted.filter((total, b) => total === draft[b]).length;
+        parts.push(matching + ' of ' + BEATS + ' beat totals match your selection');
       }
-      if (!meetRight) parts.push('the meeting beat is off');
+      if (!meetRight) {
+        if (!Number.isInteger(beat) || beat < 2 || beat > 120) parts.push('choose a whole beat from 2 to 120');
+        else {
+          const striking = voices.filter((p) => beat % p === 0).length;
+          parts.push(striking === voices.length ? 'all sounding voices strike there, but they meet sooner'
+            : striking + ' of ' + voices.length + ' sounding voices strike on that beat');
+        }
+      }
       return { solved: false, say: parts.join('; ') };
     },
     start(c) {
-      c.status('twelve beats, four voices, one chord');
+      c.status('twelve beats, four possible voices; compare your selection with the filled blocks');
       draw(c);
     },
     apply(id, value, c) {
       if (id === 'voices' && Array.isArray(value)) {
-        s.picked = value.map(Number).filter((p) => PERIODS.includes(p));
-        for (const p of PERIODS) {
+        s.picked = value.map(Number).filter((p) => periods.includes(p));
+        s.draftAt = time;
+        for (const p of periods) {
           const on = s.picked.includes(p);
           const m = s.marks['row' + p];
           if (on && !(m && m.on)) s.marks['row' + p] = { on: true, at: time };
@@ -812,7 +840,7 @@ function chordPiece(env, plan) {
           s.shown[next] = voices.includes(next) ? 'on' : 'off';
           s.marks['shown' + next] = { on: true, at: time };
           c.hint();
-          c.status('the voice on ' + EVERY[next] + ' is ' + (s.shown[next] === 'on' ? 'sounding' : 'silent'));
+          c.status('beat ' + next + ' has a total of ' + sumsOf(voices)[next] + '. Count the shorter periods already shown: the voice on ' + EVERY[next] + ' is ' + (s.shown[next] === 'on' ? 'sounding' : 'silent'));
         } else if (given >= helps) {
           c.status('that is all the chamber will show at this difficulty; read the rest off the strip');
         } else {
@@ -882,7 +910,7 @@ export default {
     return {
       title: chordTitle(plan),
       mono: 'beat   ' + sumsOf(plan.voices).map((n, i) => String(i).padStart(2, ' ')).join('') + '\ntotal  ' + sumsOf(plan.voices).map((n) => String(n).padStart(2, ' ')).join(''),
-      text: 'Four voices on periods of 2, 3, 4 and 5 beats; some are sounding. From the totals alone, say which, and when they next all strike together.',
+      text: 'Four voices on periods of ' + (plan.periods || PERIODS).join(', ') + ' beats; some are sounding. Compare your chosen voices with the totals, then find their next shared beat.',
       aspect: '4 / 3',
       paint: (g, w, h, cardEnv) => chordPreview(g, w, h, cardEnv, plan, cardEnv.variant.turn * 4),
       of: plan

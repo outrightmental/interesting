@@ -11,8 +11,9 @@
                    are the first letter and then the last.
      the ladder    A word ladder between four-letter words in three or four steps, one letter
                    changed at each step, every rung a word in the book. The visitor supplies the
-                   two or three middle rungs; any complete climb holds. A wrong check counts
-                   valid words and single-letter steps without naming a missing rung. Hints, at
+                   two or three middle rungs; any complete climb holds. A rack supplies all the
+                   needed words alongside decoys. A wrong check counts valid words and
+                   single-letter steps without naming a missing rung. Hints, at
                    a price, mark which letter changes on one step at a time.
 
    A card and the feature it opens as are one firing: the spark puts the whole plan on its spec
@@ -380,7 +381,7 @@ function anagramPiece(env, plan) {
   const helps = Math.min(2, asked(env).helps);
   const n = plan.tiles.length;
   // The firing and the cooling each run along a curve rolled for this piece (see riteCurve).
-  const s = { heat: 0.5, phase: 0, guess: '', hints: 0, slots: null, fired: '', line: 'tap nothing; type the word and check it', t: 0,
+  const s = { heat: 0.5, phase: 0, guess: '', hints: 0, slots: null, fired: '', line: 'type a word; use each tile once', t: 0,
     fire: riteCurve((env.seed >>> 0) ^ 0x7e11), cool: riteCurve((env.seed >>> 0) ^ 0xc001) };
   const draw = (c) => anagramScene(c.g, c.w, c.h, c, plan, s, env.variant);
   function right(typed) {
@@ -390,7 +391,7 @@ function anagramPiece(env, plan) {
   }
   return {
     title: anagramTitle(plan),
-    brief: 'A small firing. ' + WORDS[n][0].toUpperCase() + WORDS[n].slice(1) + ' tiles sit over the mouth of the kiln; fired, they come out as one common word, and the kiln keeps a book of plain words to check it against. Any word in the book that uses exactly these tiles will do.',
+    brief: 'Unscramble these letters into a common word: ' + plan.tiles.split('').join(' ') + '. Use every tile exactly once. Any word in the kiln\'s book that uses these letters will do.',
     goal: 'Find the word these tiles fire into.',
     aspect: '4 / 3',
     checkLabel: 'fire it',
@@ -495,6 +496,19 @@ function changedAt(a, b) {
   return -1;
 }
 
+function ladderRack(plan) {
+  const rack = plan.rungs.slice(1, -1);
+  const pool = RUNGS.filter((word) => !plan.rungs.includes(word)
+    && plan.rungs.some((rung) => diff(word, rung) === 1));
+  const salt = plan.rungs.join('').split('').reduce((hash, letter) =>
+    (Math.imul(hash, 31) + letter.charCodeAt(0)) >>> 0, 0);
+  const offset = salt % Math.max(1, pool.length);
+  for (let i = 0; i < pool.length && rack.length < 8; i++) {
+    rack.push(pool[(i + offset) % pool.length]);
+  }
+  return rack.sort();
+}
+
 function ladderScene(g, w, h, env, plan, s, variant) {
   const v = variant || PLAIN;
   const c = env.colors;
@@ -569,6 +583,9 @@ function ladderScene(g, w, h, env, plan, s, variant) {
     g.fillText(fits ? name : 'rung ' + k, railX[0] - small * 0.6, y);
   }
   caption(g, env, w, h, s.phase >= 1 ? 'one letter a step; the book holds every rung' : s.line, h * 0.86, env.alpha(c.muted, 0.9), small);
+  const rack = ladderRack(plan);
+  caption(g, env, w, h, 'rack: ' + rack.slice(0, 4).join('  '), h * 0.91, c.fg, small);
+  caption(g, env, w, h, rack.slice(4).join('  '), h * 0.96, c.fg, small);
 }
 
 function ladderPreview(g, w, h, env, plan) {
@@ -587,7 +604,7 @@ function ladderPiece(env, plan) {
   const draw = (c) => ladderScene(c.g, c.w, c.h, c, plan, s, env.variant);
   return {
     title: ladderTitle(plan),
-    brief: 'A word ladder from ' + a + ' to ' + b + ' in exactly ' + (n - 1) + ' steps. Each step changes one letter and keeps the other three where they are. Every rung must be a word in the kiln\'s book; any complete climb will do.',
+    brief: 'Climb from ' + a + ' to ' + b + ' in exactly ' + (n - 1) + ' steps, changing one letter at a time without moving the others. The rack holds all the words you need plus decoys: ' + ladderRack(plan).join(', ') + '. Other four-letter words in the kiln\'s book also count. Do not repeat a word; any complete climb will do.',
     goal: 'Fill the ' + (n === 5 ? 'three' : 'two') + ' middle rungs so each step changes one letter and every rung is a word.',
     aspect: '3 / 4',
     checkLabel: 'climb it',
@@ -617,7 +634,7 @@ function ladderPiece(env, plan) {
         + (distinct ? '' : '; a word repeats') };
     },
     start(c) {
-      c.status(a + ' to ' + b + ' in three steps');
+      c.status(a + ' to ' + b + ' in ' + (n - 1) + ' steps; the rack includes a complete route');
       draw(c);
     },
     apply(id, value, c) {
@@ -700,7 +717,7 @@ export default {
     return {
       title: ladderTitle(plan),
       mono: plan.rungs[0] + '\n' + Array(plan.rungs.length - 2).fill('____').join('\n') + '\n' + plan.rungs[plan.rungs.length - 1],
-      text: (plan.rungs.length - 1) + ' steps, one letter changed at each, every rung a word in the kiln\'s book. Fill the middle rungs to complete the climb.',
+      text: (plan.rungs.length - 1) + ' steps, one letter changed at each. A rack of words includes a complete route and some tempting wrong turns. Fill the middle rungs without repeating a word.',
       aspect: '3 / 4',
       paint: (g, w, h, cardEnv) => ladderPreview(g, w, h, cardEnv, plan),
       of: plan

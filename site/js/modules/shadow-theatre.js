@@ -14,9 +14,10 @@
                          are chosen so the shadow comes out whole. A wrong check says how tall the
                          shadow would be from where the lamp was put, and whether the movement is
                          right, and no more.
-     match the shadows   Four cutouts on the bench and four shadows on the screen, each a cutout
+     match the shadows   Four or six cutouts on the bench and as many shadows on the screen, each
                          scaled by a stated factor and leaned sideways by the lamp, numbered in a
-                         shuffled order. Say which cutout made which shadow. A wrong check says how
+                         shuffled order. Larger casts occupy two rows; outline notes describe
+                         every shadow in words as well as in the picture. Say which cutout made which shadow. A wrong check says how
                          many are matched; a hint, at a price, names one.
 
    A card and the feature it opens as are one night at the theatre: the spark puts the whole plan on
@@ -59,6 +60,19 @@ const CUTOUTS = [
   { name: 'tree', points: [[0, -0.5], [0.35, 0], [0.15, 0], [0.45, 0.3], [0.08, 0.3], [0.08, 0.5], [-0.08, 0.5], [-0.08, 0.3], [-0.45, 0.3], [-0.15, 0], [-0.35, 0]] },
   { name: 'star', points: starPoints() },
   { name: 'moon', points: moonPoints() }
+];
+
+const OUTLINES = [
+  'two teeth on a long stem',
+  'a wide skirt with a small clapper underneath',
+  'a beak to the right and a tail to the left',
+  'a peaked roof with a right-hand chimney',
+  'two ears and a raised tail on the right',
+  'a left handle and a right spout',
+  'one sail above a hull',
+  'two tiers of branches above a trunk',
+  'five pointed tips',
+  'a crescent'
 ];
 
 // What can move in the lamp puzzle, and what the shadow does when it does.
@@ -557,8 +571,9 @@ function lampPiece(env, p) {
 /* ---- match the shadows ---------------------------------------------------------------------- */
 
 function matchPlan(env) {
-  const items = some(env, CUTOUTS.map((cut, i) => i), 4);
-  const shadows = shuffled(env, [0, 1, 2, 3]).map((cut) => ({
+  const count = env.chance(0.5) ? 6 : 4;
+  const items = some(env, CUTOUTS.map((cut, i) => i), count);
+  const shadows = shuffled(env, items.map((cut, i) => i)).map((cut) => ({
     cut,
     f: env.pick([15, 20, 25]),
     k: (env.chance(0.5) ? 1 : -1) * env.int(35, 70)
@@ -573,15 +588,16 @@ function matchPlan(env) {
 function carriedMatch(env) {
   const p = env.card && env.card.of;
   if (!p || p.kind !== 'match') return null;
-  if (!Array.isArray(p.items) || p.items.length !== 4) return null;
-  if (!p.items.every((i) => Number.isInteger(i) && i >= 0 && i < CUTOUTS.length) || new Set(p.items).size !== 4) return null;
-  if (!Array.isArray(p.shadows) || p.shadows.length !== 4) return null;
-  const okShadow = (sh) => sh && typeof sh === 'object' && Number.isInteger(sh.cut) && sh.cut >= 0 && sh.cut < 4
+  if (!Array.isArray(p.items) || ![4, 6].includes(p.items.length)) return null;
+  const count = p.items.length;
+  if (!p.items.every((i) => Number.isInteger(i) && i >= 0 && i < CUTOUTS.length) || new Set(p.items).size !== count) return null;
+  if (!Array.isArray(p.shadows) || p.shadows.length !== count) return null;
+  const okShadow = (sh) => sh && typeof sh === 'object' && Number.isInteger(sh.cut) && sh.cut >= 0 && sh.cut < count
     && [15, 20, 25].includes(sh.f) && Number.isInteger(sh.k) && Math.abs(sh.k) >= 35 && Math.abs(sh.k) <= 70;
-  if (!p.shadows.every(okShadow) || new Set(p.shadows.map((sh) => sh.cut)).size !== 4) return null;
+  if (!p.shadows.every(okShadow) || new Set(p.shadows.map((sh) => sh.cut)).size !== count) return null;
   const shadows = p.shadows.map((sh) => ({ cut: sh.cut, f: sh.f, k: sh.k }));
   const order = shadows.map((sh) => sh.cut);
-  if (!Array.isArray(p.start) || p.start.length !== 4 || !p.start.every((v) => Number.isInteger(v) && v >= 0 && v < 4) || new Set(p.start).size !== 4) return null;
+  if (!Array.isArray(p.start) || p.start.length !== count || !p.start.every((v) => Number.isInteger(v) && v >= 0 && v < count) || new Set(p.start).size !== count) return null;
   if (p.start.every((v, i) => v === order[i])) return null;
   return { kind: 'match', items: p.items.slice(), shadows, start: p.start.slice() };
 }
@@ -595,8 +611,9 @@ function matchTitle(p) {
 // from the start").
 function matchState(order) {
   return {
-    order: order ? order.slice() : null, from: order ? order.slice() : null, movedAt: [-1, -1, -1, -1],
-    hinted: [], hintAt: [-1, -1, -1, -1], reveal: false, revealAt: -1, t: 0
+    order: order ? order.slice() : null, from: order ? order.slice() : null,
+    movedAt: new Array(order ? order.length : 6).fill(-1),
+    hinted: [], hintAt: new Array(order ? order.length : 6).fill(-1), reveal: false, revealAt: -1, t: 0
   };
 }
 
@@ -614,26 +631,29 @@ function bench(g, w, h, c, p, s, variant) {
   house(g, w, h, c, v, lampX, h * 0.12, swell);
   lampDot(g, c, lampX, h * 0.12, Math.max(3, m * 0.013), swell);
   const fs = Math.max(9, Math.min(14, m * 0.03));
-  const cell = w / 4;
-  const benchY = h * 0.32;
-  const size = Math.min(cell * 0.62, h * 0.24) * Math.min(1, v.scale);
-  // The bench: a shelf, and the four cutouts standing on it.
+  const columns = p.items.length > 4 ? 3 : 4;
+  const rows = Math.ceil(p.items.length / columns);
+  const cell = w / columns;
+  const benchY = h * (rows === 2 ? 0.26 : 0.32);
+  const size = Math.min(cell * 0.62, h * (rows === 2 ? 0.13 : 0.24)) * Math.min(1, v.scale);
+  // The bench: a shelf, and the cutouts standing on it.
   g.fillStyle = c.mix(col.bg, col.bg2, 0.7);
-  g.fillRect(0, benchY, w, h * 0.012);
+  for (let row = 0; row < rows; row++) g.fillRect(0, benchY + row * h * 0.17, w, h * 0.012);
   p.items.forEach((cut, i) => {
-    const x = (i + 0.5) * cell;
-    polygon(g, CUTOUTS[cut].points, (q) => ({ x: x + q[0] * size, y: benchY - (0.5 - q[1]) * size }));
+    const x = (i % columns + 0.5) * cell;
+    const y = benchY + Math.floor(i / columns) * h * 0.17;
+    polygon(g, CUTOUTS[cut].points, (q) => ({ x: x + q[0] * size, y: y - (0.5 - q[1]) * size }));
     g.fillStyle = c.mix(col.bg, col.accent, 0.5);
     g.fill();
     g.strokeStyle = c.alpha(col.accent2, 0.75);
     g.lineWidth = 1;
     g.stroke();
-    text(g, 'the ' + CUTOUTS[cut].name, x, benchY + h * 0.012 + fs, fs, col.fg, 'center', 600);
+    text(g, 'the ' + CUTOUTS[cut].name, x, y + h * 0.012 + fs, fs, col.fg, 'center', 600);
   });
-  // The screen: lit paper, with the four shadows numbered along it. Every shadow has its cutout:
+  // The screen: lit paper, with the shadows numbered across each row. Every shadow has its cutout:
   // the screen brightens through the matte from the moment of the solve.
-  const screenY = h * 0.44;
-  const screenH = h * 0.5;
+  const screenY = h * (rows === 2 ? 0.51 : 0.44);
+  const screenH = h * (rows === 2 ? 0.42 : 0.5);
   g.fillStyle = c.mix(col.bg2, col.accent2, 0.6);
   g.fillRect(w * 0.02, screenY, w * 0.96, screenH);
   if (s.reveal) surface(g, rite, rite.at(0x4a11), w * 0.02, screenY, w * 0.96, screenH, revealP, c.alpha(col.accent2, 0.28));
@@ -641,13 +661,16 @@ function bench(g, w, h, c, p, s, variant) {
   g.lineWidth = 1;
   g.strokeRect(w * 0.02, screenY, w * 0.96, screenH);
   p.shadows.forEach((sh, n) => {
+    const column = n % columns;
+    const rowH = screenH / rows;
+    const rowY = screenY + Math.floor(n / columns) * rowH;
     const own = rite.at(0x5ad + n);
     const f = sh.f / 10;
     // The shadow leans by the lamp, and trembles with its flame: the lean moves a little on the
     // stair, up and back, each shadow in a period of its own.
     const tremble = breath(own, t, 2.6 + n * 0.45, v.turn + n * 0.31, 4) - 0.5;
     const k = sh.k / 100 + tremble * 0.05;
-    const base = Math.min(cell * 0.22, screenH * 0.26) * Math.min(1, v.scale);
+    const base = Math.min(cell * 0.22, rowH * 0.2) * Math.min(1, v.scale);
     // A point's x is pushed sideways by how high it stands.
     const map = (q) => ({ x: q[0] * f * base + (0.5 - q[1]) * k * f * base, y: -(0.5 - q[1]) * f * base });
     const pts = CUTOUTS[p.items[sh.cut]].points.map(map);
@@ -655,16 +678,16 @@ function bench(g, w, h, c, p, s, variant) {
     const maxX = Math.max(...pts.map((q) => q.x));
     const minY = Math.min(...pts.map((q) => q.y));
     const maxY = Math.max(...pts.map((q) => q.y));
-    const cx = (n + 0.5) * cell - (minX + maxX) / 2;
-    const cy = screenY + screenH * 0.52 - (minY + maxY) / 2;
+    const cx = (column + 0.5) * cell - (minX + maxX) / 2;
+    const cy = rowY + rowH * 0.45 - (minY + maxY) / 2;
     polygon(g, CUTOUTS[p.items[sh.cut]].points, (q) => {
       const r = map(q);
       return { x: cx + r.x, y: cy + r.y };
     });
     g.fillStyle = c.alpha(col.bg, 0.9);
     g.fill();
-    text(g, String(n + 1), (n + 0.5) * cell, screenY + fs * 1.1, fs * 1.1, col.bg, 'center', 700);
-    text(g, 'x ' + (f % 1 ? f.toFixed(1) : f), (n + 0.5) * cell, screenY + screenH - fs, fs * 0.9, c.alpha(col.bg, 0.8), 'center', 600);
+    text(g, String(n + 1), (column + 0.5) * cell, rowY + fs * 1.1, fs * 1.1, col.bg, 'center', 700);
+    text(g, 'x ' + (f % 1 ? f.toFixed(1) : f), (column + 0.5) * cell, rowY + rowH - fs * 2.1, fs * 0.9, col.bg, 'center', 600);
     // The visitor's matching, written under each shadow once it has been set: a name that
     // changes blinks out and the new one blinks on, on this shadow's own roll; a name proved
     // right develops a chip behind it through the matte.
@@ -676,19 +699,19 @@ function bench(g, w, h, c, p, s, variant) {
       let chipOn = false;
       if (s.reveal && s.order[n] === sh.cut) {
         const chip = rite.at(0x8c1 + n);
-        surface(g, rite, chip, (n + 0.15) * cell, screenY + screenH + fs * 0.2, cell * 0.7, fs * 1.4, revealP, c.alpha(col.accent2, 0.22));
+        surface(g, rite, chip, (column + 0.15) * cell, rowY + rowH - fs * 1.5, cell * 0.7, fs * 1.4, revealP, c.alpha(col.accent2, 0.22));
         chipOn = chip.stair(revealP) > 0 && chip.flicker(revealP) === 1;
       }
-      if (shown !== null) text(g, shown, (n + 0.5) * cell, screenY + screenH + fs * 0.9, fs * 0.9, chipOn ? col.accent2 : col.fg, 'center', 600);
+      if (shown !== null) text(g, shown, (column + 0.5) * cell, rowY + rowH - fs * 0.8, fs * 0.9, col.bg, 'center', chipOn ? 700 : 600);
     }
     // A shadow a hint has named: a frame develops round it through the matte, a band of cells
     // along the edge of its column, blinking on.
     if (s.hinted.includes(n)) {
       const hp = came(s, s.hintAt[n], 1.1, reduced);
-      const x0 = (n + 0.06) * cell;
-      const y0 = screenY + 3;
+      const x0 = (column + 0.06) * cell;
+      const y0 = rowY + 3;
       const bw = cell * 0.88;
-      const bh = screenH - 6;
+      const bh = rowH - 6;
       const edge = Math.max(4, m * 0.012);
       surface(g, rite, rite.at(0x3e9 + n), x0, y0, bw, bh, hp, c.alpha(col.accent, 0.95),
         (px, py) => px - x0 < edge || x0 + bw - px < edge || py - y0 < edge || y0 + bh - py < edge);
@@ -702,6 +725,7 @@ function matchPreview(g, w, h, env, p) {
 }
 
 function matchPiece(env, p) {
+  const count = p.items.length;
   const helps = asked(env).helps;
   const names = p.items.map((i) => CUTOUTS[i].name);
   const solution = p.shadows.map((sh) => sh.cut);
@@ -709,14 +733,14 @@ function matchPiece(env, p) {
   const draw = (c) => bench(c.g, c.w, c.h, c, p, s, env.variant);
   function matched() {
     let n = 0;
-    for (let i = 0; i < 4; i++) if (s.order[i] === solution[i]) n += 1;
+    for (let i = 0; i < count; i++) if (s.order[i] === solution[i]) n += 1;
     return n;
   }
   return {
     title: matchTitle(p),
-    brief: 'The lamp is lit and the screen is read. Four paper cutouts stand on the bench and the lamp throws four shadows on the screen, each a cutout made larger by the factor written under it and leaned sideways by the lamp. The shadows are numbered in no particular order.',
-    goal: 'Say which cutout made shadow 1, 2, 3 and 4.',
-    aspect: '4 / 3',
+    brief: 'Match each numbered shadow to a cutout on the bench. Each is enlarged by the factor underneath and leaned sideways, but keeps its outline. Read each row left to right, then down. Shadow outlines: ' + p.shadows.map((sh, i) => (i + 1) + ': ' + OUTLINES[p.items[sh.cut]]).join('; ') + '.',
+    goal: 'Match shadows 1 to ' + count + ' to their cutouts, using each cutout once.',
+    aspect: count === 6 ? '4 / 5' : '4 / 3',
     checkLabel: 'check the screen',
     steps: [
       { id: 'order', ask: 'the cutouts, in the order of the shadows they made', kind: 'order', items: p.items.map((cut, at) => ({ label: 'the ' + CUTOUTS[cut].name, value: at })), value: p.start.slice() },
@@ -726,16 +750,16 @@ function matchPiece(env, p) {
     check(c) {
       const n = matched();
       return {
-        solved: n === 4,
-        say: n === 4 ? 'every shadow has its cutout' : (n === 0 ? 'no shadow has its cutout yet' : WORDS[n] + ' of four shadows ' + (n === 1 ? 'has' : 'have') + ' the right cutout')
+        solved: n === count,
+        say: n === count ? 'every shadow has its cutout' : (n === 0 ? 'no shadow has its cutout yet' : WORDS[n] + ' of ' + WORDS[count] + ' shadows ' + (n === 1 ? 'has' : 'have') + ' the right cutout')
       };
     },
     start(c) {
-      c.status('four cutouts, four shadows, in no particular order');
+      c.status(WORDS[count] + ' cutouts and ' + WORDS[count] + ' shadows; match by outline, not size');
       draw(c);
     },
     apply(id, value, c) {
-      if (id === 'order' && Array.isArray(value) && value.length === 4) {
+      if (id === 'order' && Array.isArray(value) && value.length === count) {
         const order = value.map(Number);
         // Every name that changes starts its rite now, from the name that stood there.
         order.forEach((at, n) => {
@@ -744,11 +768,11 @@ function matchPiece(env, p) {
           s.movedAt[n] = s.t;
         });
         s.order = order;
-        c.status('shadows 1 to 4: ' + s.order.map((i) => names[i]).join(', '));
+        c.status('shadows 1 to ' + count + ': ' + s.order.map((i) => names[i]).join(', '));
       }
       if (id === 'hint') {
         const next = s.hinted.length < helps
-          ? [0, 1, 2, 3].find((n) => !s.hinted.includes(n) && s.order[n] !== solution[n]) : undefined;
+          ? solution.map((cut, i) => i).find((n) => !s.hinted.includes(n) && s.order[n] !== solution[n]) : undefined;
         if (next !== undefined) {
           s.hinted.push(next);
           s.hintAt[next] = s.t;
@@ -769,7 +793,7 @@ function matchPiece(env, p) {
     end(c) {
       s.reveal = true;
       s.revealAt = s.t;
-      c.status('shadows 1 to 4: ' + solution.map((i) => names[i]).join(', ') + '. the lamp stays lit');
+      c.status('shadows 1 to ' + count + ': ' + solution.map((i) => names[i]).join(', ') + '. the lamp stays lit');
       draw(c);
     }
   };
@@ -777,20 +801,34 @@ function matchPiece(env, p) {
 
 /* ---- the module ----------------------------------------------------------------------------- */
 
+const plans = new WeakMap();
+function deal(env) {
+  let plan = plans.get(env);
+  if (!plan) {
+    plan = env.chance(0.5) ? lampPlan(env) : matchPlan(env);
+    plans.set(env, plan);
+  }
+  return plan;
+}
+
 function dealsLamp(env) {
-  return env.chance(0.5);
+  return deal(env).kind === 'lamp';
 }
 
 export default {
   id: 'shadow-theatre',
   needsSky: false,
   paint(g, w, h, env) {
-    if (dealsLamp(env)) lampPreview(g, w, h, env, lampPlan(env));
-    else matchPreview(g, w, h, env, matchPlan(env));
+    const p = deal(env);
+    if (dealsLamp(env)) lampPreview(g, w, h, env, p);
+    else matchPreview(g, w, h, env, p);
+  },
+  animate(g, w, h, env, t) {
+    return false;
   },
   spark(env) {
+    const p = deal(env);
     if (dealsLamp(env)) {
-      const p = lampPlan(env);
       return {
         title: lampTitle(p),
         mono: 'h = ' + p.h + ' / a = ' + p.a + ' / H = ' + shadowHeight(p, p.d) + ' / d = ?',
@@ -800,11 +838,10 @@ export default {
         of: p
       };
     }
-    const p = matchPlan(env);
     return {
       title: matchTitle(p),
-      text: 'Four cutouts on the bench, four shadows on the screen, each grown and leaned by the lamp. Say which made which.',
-      aspect: '4 / 3',
+      text: p.items.length + ' cutouts, ' + p.items.length + ' shadows, each grown and leaned by the lamp. Match their outlines rather than their sizes' + (p.items.length === 6 ? '; this cast fills two rows.' : '.'),
+      aspect: p.items.length === 6 ? '4 / 5' : '4 / 3',
       paint: (g, w, h, cardEnv) => matchPreview(g, w, h, cardEnv, p),
       of: p
     };
@@ -814,6 +851,7 @@ export default {
     if (lamp) return lampPiece(env, lamp);
     const match = carriedMatch(env);
     if (match) return matchPiece(env, match);
-    return dealsLamp(env) ? lampPiece(env, lampPlan(env)) : matchPiece(env, matchPlan(env));
+    const p = deal(env);
+    return dealsLamp(env) ? lampPiece(env, p) : matchPiece(env, p);
   }
 };
