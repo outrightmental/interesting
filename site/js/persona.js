@@ -29,7 +29,10 @@
    The difficulty is advertised as specifically as the sky and settable from everywhere it is a
    dependency (issue #93), which is every piece on the site: `tuner(host)` below renders the one
    slider, the sheet puts it in its own section, and js/stage.js puts the same control on the
-   stage beside the piece it is dealing. Unlike the sky it always holds a value -- the middle of
+   stage beside the piece it is dealing. Only an effective level change notifies readers; choosing
+   the default explicitly can still be saved without announcing a different difficulty. As with
+   the sky, each subscriber receives an independent snapshot, and subscription changes apply to
+   the next notification. Unlike the sky it always holds a value -- the middle of
    the dial until a visitor moves it -- so nothing is ever powered down waiting for one: a piece
    is dealt at the setting that stands and the slider is offered in place.
 */
@@ -770,18 +773,27 @@
   }
   function setDifficulty(level) {
     var want = levelOf(level) || DEFAULT_LEVEL;
-    var before = difficulty().level;
+    var before = readDifficulty();
+    if (before.set && before.level === want) {
+      return !!(store && store.persistent !== false);
+    }
     var kept = store ? store.set(DIFFICULTY, want) : false;
-    if (sheet && sheet.host.open && before !== want) {
+    var now = difficulty();
+    if (sheet && sheet.host.open && before.level !== now.level) {
       noteSet('difficulty', sheet.tune && sheet.tune.querySelector('input'));
     }
-    var now = difficulty();
-    for (var i = 0; i < tuned.length; i++) {
-      try { tuned[i](now, kept); }
+    refresh();
+    if (before.level === now.level) return kept;
+    var subscribers = tuned.slice();
+    for (var i = 0; i < subscribers.length; i++) {
+      try { subscribers[i](Object.assign({}, now), kept); }
       catch (e) { console.error('A difficulty listener failed', e); }
     }
-    window.dispatchEvent(new CustomEvent('persona:difficulty', { detail: { difficulty: now, kept: kept } }));
-    refresh();
+    if (typeof window.CustomEvent === 'function' && typeof window.dispatchEvent === 'function') {
+      window.dispatchEvent(new window.CustomEvent('persona:difficulty', {
+        detail: { difficulty: now, kept: kept }
+      }));
+    }
     return kept;
   }
   function describeDifficulty() {
