@@ -19,6 +19,11 @@
                        nine letters at a time; at any other, they read nothing. Find the notch
                        and the turn, and read the note's first word. The hints, at a price, are
                        the notch and then the turn.
+     the rod           A note written down a rod of three to seven flat faces and unwound into
+                       one strip. Wound back on the right number of faces it reads the note down
+                       its columns. The faces divide the strip evenly, padded with X, so the
+                       length narrows the search. A wrong check says how many letters of the
+                       last word are right, and how many letters a wrong rod leaves over.
 
    A card and the feature it opens as are one puzzle: the spark puts the whole plan on its spec as
    `of` -- the case, the note, the key, the mirror, the holes -- and piece(env) opens on that
@@ -266,7 +271,7 @@ function plan(env) {
 
 function carried(env) {
   const p = env.card && env.card.of;
-  if (!p || p.family === 'turning-grille' || typeof p.case !== 'string' || !/^[0-9A-Z]{7}$/.test(p.case)
+  if (!p || p.family || typeof p.case !== 'string' || !/^[0-9A-Z]{7}$/.test(p.case)
       || !Number.isInteger(p.note) || p.note < 0 || p.note >= NOTES.length
       || !Number.isInteger(p.key) || p.key < 1 || p.key > 25
       || typeof p.mirror !== 'boolean') return null;
@@ -1114,11 +1119,285 @@ function grillePiece(env, carriedPlan) {
 
 /* ---- the module ----------------------------------------------------------------------------- */
 
+/* ---- the rod ------------------------------------------------------------------------------- */
+
+/* The third lock, dealt to some seeds the wheel would otherwise have: the note written down a rod
+   of a few flat faces, a face to each letter in turn, and the strip unwound and read off face by
+   face. Wound back on the right number of faces, the rod reads the note down its columns; on any
+   other it reads noise. The faces always divide the strip evenly (the end is padded with X), so
+   the strip's length narrows the search and where the X fall says the rest. */
+
+const FEWEST = 2;
+const MOST = 9;
+
+function dealsRod(env) {
+  const seed = env.seed >>> 0;
+  return seed % 3 === 2 && ((seed >>> 4) & 1) === 1;
+}
+
+function rodPlan(env) {
+  const seed = env.seed >>> 0;
+  const mix = Math.imul(seed ^ (seed >>> 13), 0x9e3779b1) >>> 0;
+  return {
+    family: 'rod',
+    case: seed.toString(36).toUpperCase().padStart(7, '0'),
+    note: (mix >>> 3) % NOTES.length,
+    faces: 3 + (mix % 5)
+  };
+}
+
+function carriedRod(env) {
+  const p = env.card && env.card.of;
+  if (!p || p.family !== 'rod' || typeof p.case !== 'string' || !/^[0-9A-Z]{7}$/.test(p.case)
+      || !Number.isInteger(p.note) || p.note < 0 || p.note >= NOTES.length
+      || !Number.isInteger(p.faces) || p.faces < 3 || p.faces > 7) return null;
+  return { family: 'rod', case: p.case, note: p.note, faces: p.faces };
+}
+
+function rodTitle(p) {
+  return 'letter ' + p.case + ': the rod';
+}
+
+// The strip: the padded note written down the rod, a face to each letter in turn, then read off
+// face by face.
+function rodStrip(p) {
+  const plain = NOTES[p.note].replace(/ /g, '');
+  const text = plain + 'X'.repeat((p.faces - plain.length % p.faces) % p.faces);
+  const across = text.length / p.faces;
+  let out = '';
+  for (let f = 0; f < p.faces; f++) for (let c = 0; c < across; c++) out += text[c * p.faces + f];
+  return out;
+}
+
+// The strip wound on `faces` faces, one row to a face, and what the rod reads down its columns.
+function rodWind(strip, faces) {
+  const across = Math.ceil(strip.length / faces);
+  const rows = [];
+  for (let f = 0; f < faces; f++) rows.push(strip.slice(f * across, (f + 1) * across));
+  let reading = '';
+  for (let c = 0; c < across; c++) for (const row of rows) if (row[c]) reading += row[c];
+  return { across, rows, reading };
+}
+
+function rodBlank() {
+  return {
+    faces: FEWEST, windAt: -1, guess: '', guessFrom: '', guessAt: -1,
+    hints: 0, hintsFrom: 0, hintAt: -1, reveal: false, solvedAt: -1, t: 0, drawn: null
+  };
+}
+
+// What the rod shows at its clock's moment: a new winding cuts the rod's tint in afresh behind the
+// piece's edge up its stair; a word typed or a hint shown is cut over at its moment; a solved note
+// is cut in at the foot, as the wheel's is.
+function rodLook(s, rite, reduced) {
+  const got = (since, span) => came(s.t, since, span, reduced);
+  return {
+    faces: s.faces,
+    tint: rite.stair(got(s.windAt, SPAN)),
+    guess: rite.at(0x4c).flicker(got(s.guessAt, SPAN)) ? s.guess : s.guessFrom,
+    hints: rite.at(0x4b).flicker(got(s.hintAt, SPAN)) ? s.hints : s.hintsFrom,
+    revealK: s.reveal ? rite.stair(got(s.solvedAt, REVEAL)) : 0
+  };
+}
+
+function rodScene(g, w, h, c, p, look, variant) {
+  const v = variant || PLAIN;
+  const col = c.colors;
+  const rite = riteOf(c);
+  const strip = rodStrip(p);
+  const k = look.faces;
+  const wind = rodWind(strip, k);
+  const last = NOTES[p.note].split(' ').pop();
+  const small = Math.max(8, Math.min(15, Math.round(Math.min(w, h) * 0.04)));
+  const per = Math.max(8, Math.floor((w * 0.88) / (small * 0.66)));
+  background(g, w, h, c);
+  g.fillStyle = c.alpha(col.accent, 0.12);
+  for (let i = 0, count = Math.max(7, Math.round(18 * v.density)); i < count; i++) {
+    g.fillRect(((i * 0.6180339 + v.turn * 0.3) % 1) * w, ((i * 0.7548777 + v.turn * 0.2) % 1) * h, 1, 1);
+  }
+  g.textBaseline = 'middle';
+  g.textAlign = 'left';
+  face(g, '500 ' + small + 'px ui-monospace, monospace');
+  g.fillStyle = col.accent2;
+  g.fillText('STRIP / ' + p.case + ' / ' + strip.length + ' LETTERS', w * 0.06, h * 0.07);
+  g.fillStyle = col.fg;
+  for (let i = 0, line = 0; i < strip.length && line < 3; i += per, line++) {
+    g.fillText(strip.slice(i, i + per), w * 0.06, h * 0.14 + line * small * 1.2);
+  }
+
+  // The rod, a row to each face, with its two ends; the strip's letters wound on it.
+  const grow = Math.min(1.1, Math.max(0.85, v.scale));
+  const cell = Math.min((w * 0.8 * grow) / wind.across, (h * 0.4 * grow) / k);
+  const rodW = cell * wind.across;
+  const rodH = cell * k;
+  const left = w / 2 - rodW / 2;
+  const top = h * (0.5 + v.turn * 0.02) - rodH / 2;
+  g.fillStyle = c.mix(col.bg, col.bg2, 0.55);
+  g.fillRect(left, top, rodW, rodH);
+  g.fillStyle = c.alpha(col.accent, 0.12);
+  cover(g, rite, left, top, rodW, rodH, look.tint);
+  g.strokeStyle = c.alpha(col.muted, 0.5);
+  g.lineWidth = 1;
+  g.beginPath();
+  for (let f = 0; f <= k; f++) {
+    g.moveTo(left, top + f * cell);
+    g.lineTo(left + rodW, top + f * cell);
+  }
+  g.stroke();
+  g.strokeStyle = c.alpha(col.accent2, 0.7);
+  g.lineWidth = Math.max(1, cell * 0.06);
+  g.beginPath();
+  g.ellipse(left, top + rodH / 2, Math.max(2, cell * 0.25), rodH / 2, 0, 0, Math.PI * 2);
+  g.stroke();
+  g.beginPath();
+  g.ellipse(left + rodW, top + rodH / 2, Math.max(2, cell * 0.25), rodH / 2, 0, -Math.PI / 2, Math.PI / 2);
+  g.stroke();
+  g.textAlign = 'center';
+  face(g, '600 ' + Math.max(6, Math.round(cell * 0.56)) + 'px ui-monospace, monospace');
+  g.fillStyle = col.fg;
+  wind.rows.forEach((row, f) => {
+    for (let i = 0; i < row.length; i++) g.fillText(row[i], left + cell * (i + 0.5), top + cell * (f + 0.5));
+  });
+
+  face(g, '500 ' + small + 'px ui-monospace, monospace');
+  if (look.revealK > 0) {
+    g.fillStyle = c.alpha(col.accent2, 0.16);
+    cover(g, rite, 0, h * 0.76, w, h * 0.24, look.revealK);
+    g.save();
+    g.beginPath();
+    rite.region(g, 0, h * 0.76, w, h * 0.24, look.revealK);
+    g.clip();
+    g.fillStyle = col.accent2;
+    writeRows(g, NOTES[p.note], w / 2, h * 0.84, w * 0.88, small);
+    g.restore();
+    return;
+  }
+  g.textAlign = 'left';
+  g.fillStyle = col.accent2;
+  g.fillText('READ DOWN THE ROD, COLUMN BY COLUMN', w * 0.06, h * 0.76);
+  g.fillStyle = col.fg;
+  for (let i = 0, line = 0; i < wind.reading.length && line < 2; i += per, line++) {
+    g.fillText(wind.reading.slice(i, i + per), w * 0.06, h * 0.82 + line * small * 1.1);
+  }
+  const hint = look.hints >= 1
+    ? ' / hint: ' + p.faces + ' faces' + (look.hints >= 2 ? ', last word begins ' + last.slice(0, look.hints - 1) : '')
+    : '';
+  g.fillStyle = col.muted;
+  g.fillText('wound on ' + k + ' faces' + hint, w * 0.06, h * 0.9);
+  g.textAlign = 'right';
+  g.fillStyle = col.accent2;
+  g.fillText('last word: ' + (cleaned(look.guess) || '_'), w * 0.94, h * 0.96);
+}
+
+function rodPreview(g, w, h, env, p) {
+  rodScene(g, w, h, env, p, rodLook(rodBlank(), riteOf(env), true), env.variant);
+}
+
+function rodPiece(env, carriedPlan) {
+  const p = carriedPlan || rodPlan(env);
+  const helps = asked(env).helps;
+  const strip = rodStrip(p);
+  const note = NOTES[p.note];
+  const last = note.split(' ').pop();
+  const s = rodBlank();
+  const look = (c) => rodLook(s, riteOf(c), !!c.reduced);
+  const draw = (c, always) => {
+    const now = look(c);
+    const drawn = picture(c, now);
+    if (!always && drawn === s.drawn) return;
+    rodScene(c.g, c.w, c.h, c, p, now, env.variant);
+    s.drawn = drawn;
+  };
+  const spare = (k) => (k > 0 ? strip.length % k : 0);
+  return {
+    title: rodTitle(p),
+    brief: 'A note was written down a rod of a few flat faces, a face to each letter in turn, then unwound into one strip. Wind the strip back on the right number of faces and the rod reads the note down each column. The faces always divide the strip evenly: the end was padded with X.',
+    goal: 'Find how many faces the rod has, and type the last word of the note.',
+    aspect: '4 / 3',
+    checkLabel: 'unwind it',
+    steps: [
+      { id: 'faces', ask: 'how many faces the rod has', kind: 'number', min: FEWEST, max: MOST, step: 1, value: FEWEST, unit: 'faces' },
+      { id: 'word', ask: 'the last word of the note', kind: 'word', length: last.length, placeholder: '_'.repeat(last.length) },
+      { id: 'hint', ask: 'the faces, then letters of the word', kind: 'press', count: 1, label: 'show me', optional: true }
+    ],
+    solution: { faces: p.faces, word: last },
+    check(c) {
+      const k = Math.round(Number(c.value('faces')));
+      const facesRight = k === p.faces;
+      const typed = cleaned(c.value('word'));
+      const wordRight = typed === last;
+      if (facesRight && wordRight) return { solved: true, say: 'the strip unwinds: ' + note };
+      const parts = [];
+      if (!wordRight) {
+        const right = lettersRight(typed, last);
+        parts.push(right === 0 ? 'no letter of the last word is in its place' : (right === 1 ? 'one letter of the last word is right' : WORDS[Math.min(right, 10)] + ' letters of the last word are right'));
+      }
+      if (!facesRight) {
+        parts.push(Number.isFinite(k) && spare(k)
+          ? 'the rod is off: ' + k + ' faces leave ' + spare(k) + ' of the ' + strip.length + ' letters over'
+          : 'the rod is off: wound on ' + k + ' faces, the columns do not read');
+      }
+      return { solved: false, say: parts.join('; ') };
+    },
+    start(c) {
+      c.status('the strip is ' + strip.length + ' letters; wind it on a number of faces that divides it evenly');
+      draw(c, true);
+    },
+    apply(id, value, c) {
+      const shown = look(c);
+      if (id === 'faces') {
+        const n = Number(value);
+        const k = Number.isFinite(n) ? Math.max(FEWEST, Math.min(MOST, Math.round(n))) : FEWEST;
+        if (k !== s.faces) {
+          s.faces = k;
+          s.windAt = s.t;
+        }
+        c.status('wound on ' + k + ' faces: ' + (spare(k) ? spare(k) + ' of the ' + strip.length + ' letters are left over' : 'every face holds ' + strip.length / k + ' letters'));
+      }
+      if (id === 'word') {
+        const guess = cleaned(value);
+        if (guess !== s.guess) {
+          s.guessFrom = shown.guess;
+          s.guessAt = s.t;
+          s.guess = guess;
+        }
+      }
+      if (id === 'hint') {
+        if (s.hints < Math.min(helps, last.length + 1)) {
+          s.hintsFrom = shown.hints;
+          s.hints += 1;
+          s.hintAt = s.t;
+          c.hint();
+          c.status(s.hints === 1 ? 'the rod has ' + p.faces + ' faces' : 'the last word begins ' + last.slice(0, s.hints - 1));
+        } else if (s.hints >= helps) {
+          c.status('that is all the cabinet will show at this difficulty; wind the strip and read down the rod');
+        } else {
+          c.status('every letter of the word is shown');
+        }
+      }
+      draw(c, true);
+    },
+    frame(t, dt, c) {
+      if (!c.reduced) s.t += Math.max(0, Number(dt) || 0);
+      draw(c);
+      return !c.reduced && s.t < settledAt([[s.windAt, SPAN], [s.guessAt, SPAN], [s.hintAt, SPAN],
+        [s.reveal ? s.solvedAt : -1, REVEAL]]);
+    },
+    end(c) {
+      s.reveal = true;
+      s.solvedAt = s.t;
+      c.status('the note reads: ' + note);
+      draw(c, true);
+    }
+  };
+}
+
 export default {
   id: 'cipher-cabinet',
   needsSky: false,
   paint(g, w, h, env) {
     if (dealsGrille(env)) grillePreview(g, w, h, env, grillePlan(env));
+    else if (dealsRod(env)) rodPreview(g, w, h, env, rodPlan(env));
     else wheelPreview(g, w, h, env, plan(env));
   },
   animate() {
@@ -1139,6 +1418,17 @@ export default {
         of: p
       };
     }
+    if (dealsRod(env)) {
+      const r = rodPlan(env);
+      return {
+        title: rodTitle(r),
+        mono: rodStrip(r),
+        text: 'A note written down a rod of a few flat faces and unwound into one strip. Wind it back on the right number of faces and read its last word down the rod.',
+        aspect: '4 / 3',
+        paint: (g, w, h, cardEnv) => rodPreview(g, w, h, cardEnv, r),
+        of: r
+      };
+    }
     const p = plan(env);
     return {
       title: wheelTitle(p),
@@ -1152,7 +1442,10 @@ export default {
   piece(env) {
     const grille = carriedGrille(env);
     if (grille) return grillePiece(env, grille);
+    const rod = carriedRod(env);
+    if (rod) return rodPiece(env, rod);
     if (carried(env)) return wheelPiece(env);
-    return dealsGrille(env) ? grillePiece(env) : wheelPiece(env);
+    if (dealsGrille(env)) return grillePiece(env);
+    return dealsRod(env) ? rodPiece(env) : wheelPiece(env);
   }
 };
