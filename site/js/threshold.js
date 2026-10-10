@@ -346,6 +346,24 @@
       pure: { analytic: 2, geometric: 1, brooding: 1 },
       even: { geometric: 3, metrical: 2 },
       muddied: { curious: 2, verbal: 2, divinatory: 1 }
+    },
+    {
+      probe: 'censer', name: 'the swinging censer', kind: 'censer',
+      ask: 'A censer swings on its chain, and the swing is slowly dying. Catch it when it feels right, or let it come to rest first.',
+      label: 'catch it', rest: 'take it down',
+      buckets: [
+        { under: 2, weights: { restless: 3, tempestuous: 2, verbal: 1 } },
+        { under: 5, weights: { curious: 2, analytic: 2, geometric: 1 } },
+        { under: 10, weights: { ceremonial: 2, attentive: 2, metrical: 1 } },
+        { under: 18, weights: { brooding: 2, rooted: 2, tending: 1 } },
+        { under: Infinity, weights: { tender: 2, cosmic: 2, divinatory: 1 } }
+      ],
+      apex: { attentive: 2, geometric: 2, metrical: 1 },
+      flight: { restless: 2, tempestuous: 1, curious: 1 },
+      between: { ceremonial: 2, verbal: 1, divinatory: 1 },
+      left: { brooding: 1, divinatory: 1 },
+      right: { analytic: 1, tending: 1 },
+      rested: { tender: 3, brooding: 2, cosmic: 1 }
     }
   ];
 
@@ -1126,7 +1144,8 @@
       choice: choiceProbe, sequence: sequenceProbe, tap: tapProbe, hold: holdProbe,
       place: placeProbe, draw: drawProbe, windows: windowsProbe, balance: balanceProbe,
       slider: sliderProbe, sky: skyProbe, keys: keysProbe, knock: knockProbe,
-      rubbing: rubbingProbe, cairn: cairnProbe, compass: compassProbe, dye: dyeProbe
+      rubbing: rubbingProbe, cairn: cairnProbe, compass: compassProbe, dye: dyeProbe,
+      censer: censerProbe
     };
     (kinds[probe.kind] || choiceProbe)(probe, body, trace, answer, finish);
     return probe;
@@ -3398,6 +3417,196 @@
       finish();
     });
     paint();
+  }
+  // A censer swings on its chain and the swing is dying. The answer is when the visitor catches
+  // it: after how many swings, and where in the arc -- at the still point of the top, in full
+  // flight through the middle, or on the way between -- and on which side; a visitor who lets it
+  // come to rest and then takes it down is read by that patience. Nothing is hidden: the arc the
+  // swing still reaches is drawn, so the still point can be seen coming, and no catch is wrong.
+  // The censer never swings along a sine: each pass is a reel of rolled treads along the arc, a
+  // new stair for every pass (README: "Motion axiom"); the smoke rises in treads through mattes of
+  // its own, thinning by its area; the ember flickers by holds and drops; and the catch lays a
+  // glass over the scene with the chain cut warm.
+  function censerProbe(probe, body, trace, answer, finish) {
+    var still = stilled();
+    var A0 = 0.78;
+    var DAMP = 0.93;
+    var REST = 0.06;
+    var scene = el('canvas', 'probe-pad');
+    scene.width = 600;
+    scene.height = 320;
+    scene.setAttribute('aria-hidden', 'true');
+    scene.style.cursor = 'pointer';
+    scene.style.touchAction = 'manipulation';
+    var g = scene.getContext('2d');
+    scene.hidden = !g;
+    body.appendChild(scene);
+    var controls = el('div', 'controls');
+    var grab = el('button', 'probe-big', probe.label);
+    grab.type = 'button';
+    controls.appendChild(grab);
+    body.appendChild(controls);
+    body.appendChild(el('p', 'probe-count', 'tap the censer or press the button whenever it feels right; the swing dies down on its own, and a censer at rest can still be taken down'));
+    var style = window.getComputedStyle(body);
+    var tone = function (name, fallback) { return rgbOf(style.getPropertyValue(name), fallback); };
+    var night = tone('--bg', '#070a14');
+    var dusk = tone('--bg2', '#1c2a4e');
+    var cool = tone('--accent', '#9fcbff');
+    var warm = tone('--accent2', '#ffe7ab');
+    var amp = A0;
+    var from = A0;
+    var to = -A0;
+    var shown = A0;
+    var swings = 0;
+    var halfStart = 0;
+    var halfMs = 1000;
+    var stair = treadsOf(rite('shift'), still ? 1 : 5 + Math.floor(Math.random() * 5));
+    var lastFrame = 0;
+    var rested = false;
+    var caught = false;
+    var glass = 0;
+    var puffs = [];
+    var ember = matteField(null, 'grain');
+    var flick = ember.flicker();
+    var veil = matteField(null, 'scan');
+    var arcDash = dashesOf(prng(Math.floor(Math.random() * 0x7fffffff)));
+    var PIVOT = { x: 0.5, y: 0.09 };
+    var L = scene.height * 0.66;
+    function bob(a) {
+      return [PIVOT.x * scene.width + Math.sin(a) * L, PIVOT.y * scene.height + Math.cos(a) * L];
+    }
+    // A puff of smoke let go at the top of a pass: it rises in treads along a curve of its own.
+    function puff(a) {
+      if (still) return;
+      var p = bob(a);
+      puffs.push({ x: p[0], y: p[1], born: performance.now(), life: 1400 + Math.random() * 900,
+        rise: treadsOf(rite('leave'), 4 + Math.floor(Math.random() * 3)), drift: between(-24, 24),
+        matte: matteField(null, Math.random() < 0.5 ? 'noise' : 'grain') });
+      if (puffs.length > 7) puffs.shift();
+    }
+    // The turn at the top of a pass: the swing loses a little, and the next pass gets its own stair.
+    function turn(now) {
+      swings += 1;
+      from = to;
+      amp *= DAMP;
+      to = (from > 0 ? -1 : 1) * amp;
+      halfStart = Math.max(halfStart + halfMs, now - 60);
+      halfMs = 1000 * between(0.92, 1.12);
+      stair = treadsOf(rite('shift'), still ? 1 : 5 + Math.floor(Math.random() * 5));
+      puff(from);
+      gauge(trace, tally(swings));
+      if (amp < REST) {
+        rested = true;
+        shown = 0;
+        note(trace, 'it has come to rest; take it down when you like');
+        say(grab, probe.rest);
+      }
+    }
+    function paint(now) {
+      if (!g) return;
+      var w = scene.width;
+      var h = scene.height;
+      var i;
+      var grad = g.createLinearGradient(0, 0, 0, h);
+      grad.addColorStop(0, rgba(blend(night, dusk, 0.5), 1));
+      grad.addColorStop(1, rgba(night, 1));
+      g.fillStyle = grad;
+      g.fillRect(0, 0, w, h);
+      var px = PIVOT.x * w;
+      var py = PIVOT.y * h;
+      var r = h * 0.065;
+      // The arc the swing still reaches, drawn so the still point can be seen coming.
+      if (!rested) {
+        g.setLineDash(arcDash);
+        g.strokeStyle = rgba(cool, 0.28);
+        g.lineWidth = 1;
+        g.beginPath();
+        g.arc(px, py, L, Math.PI / 2 - amp, Math.PI / 2 + amp);
+        g.stroke();
+        g.setLineDash([]);
+      }
+      // The smoke: each puff rises in treads through a matte of its own, thinning by its area.
+      for (i = 0; i < puffs.length; i++) {
+        var q = puffs[i];
+        var age = (now - q.born) / q.life;
+        if (age >= 1) continue;
+        var up = q.rise(age);
+        q.matte.disc(g, q.x + q.drift * up, q.y - r - up * h * 0.28, r * (0.5 + up * 1.3), 0.5 * (1 - up) + 0.05, rgba(cool, 0.3));
+      }
+      var b = bob(shown);
+      // The chain, in links, and the hook it hangs from.
+      g.setLineDash([5, 4]);
+      g.strokeStyle = rgba(caught ? warm : cool, 0.75);
+      g.lineWidth = 2;
+      g.beginPath();
+      g.moveTo(px, py);
+      g.lineTo(b[0], b[1] - r);
+      g.stroke();
+      g.setLineDash([]);
+      g.fillStyle = rgba(cool, 0.9);
+      g.beginPath();
+      g.arc(px, py, 4, 0, Math.PI * 2);
+      g.fill();
+      // The censer: a body, a lid, and the ember inside it, which flickers by holds and drops.
+      g.fillStyle = rgba(blend(night, warm, 0.35), 1);
+      g.beginPath();
+      g.arc(b[0], b[1], r, 0, Math.PI * 2);
+      g.fill();
+      g.strokeStyle = rgba(warm, caught || rested ? 1 : 0.8);
+      g.lineWidth = 2;
+      g.stroke();
+      g.beginPath();
+      g.moveTo(b[0] - r * 0.7, b[1] - r * 0.25);
+      g.lineTo(b[0] + r * 0.7, b[1] - r * 0.25);
+      g.stroke();
+      var lit = still ? 1 : flick(now);
+      ember.disc(g, b[0], b[1] + r * 0.2, r * 0.5, lit ? 0.5 : 0.25, rgba(warm, 0.95));
+      if (glass) veil.paint(g, 0, 0, w, h, glass, rgba(night, 0.8));
+    }
+    // Nothing swings while the page is set aside behind a lightbox; a pass that ran long while the
+    // tab was hidden is caught up in one turn, never a flurry of them.
+    function frame(now) {
+      if (!scene.isConnected) return;
+      if (!lastFrame) lastFrame = now;
+      if (!halfStart) halfStart = now;
+      var aside = scene.closest('[data-lightbox-aside]');
+      if (aside) halfStart += now - lastFrame;
+      else if (!caught && !rested) {
+        if (now - halfStart >= halfMs) turn(now);
+        if (!rested) shown = from + (to - from) * stair(unit((now - halfStart) / halfMs));
+      }
+      lastFrame = now;
+      paint(now);
+      if (caught && (still || glass >= 0.3)) return;
+      window.requestAnimationFrame(frame);
+    }
+    function seize() {
+      if (caught) return;
+      caught = true;
+      bucket(probe.buckets, swings, answer);
+      var where;
+      if (rested) {
+        add(answer, probe.rested, 1);
+        where = 'taken down from rest';
+      } else {
+        var frac = amp > 0 ? Math.min(1, Math.abs(shown) / amp) : 1;
+        add(answer, frac > 0.78 ? probe.apex : frac < 0.35 ? probe.flight : probe.between, 1);
+        add(answer, shown < 0 ? probe.left : probe.right, 1);
+        where = 'caught ' + (frac > 0.78 ? 'at the top of its swing' : frac < 0.35 ? 'in full flight' : 'on its way')
+          + ' after ' + plural(swings, 'swing');
+      }
+      note(trace, where);
+      retire(grab);
+      scene.style.cursor = 'default';
+      gauge(trace, '');
+      // A glass over the scene: the scan matte settles in treads, the chain cut warm.
+      series({ ms: beat('medium'), treads: 3, step: function (k, n) { glass = k >= n ? 0.3 : k * 0.1; } });
+      finish();
+    }
+    scene.addEventListener('click', seize);
+    grab.addEventListener('click', seize);
+    note(trace, 'swinging');
+    window.requestAnimationFrame(frame);
   }
   function describe(reading) {
     var o = reading && reading.orientation;
