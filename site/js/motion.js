@@ -107,9 +107,16 @@
   // behind the sheet), and the engine's own frames -- the stepper's, the tween's -- must not be
   // held with them, or nothing inside a lightbox would ever arrive.
   var nativeFrame = typeof global.requestAnimationFrame === 'function' ? global.requestAnimationFrame : null;
+  var nativeCancel = typeof global.cancelAnimationFrame === 'function' ? global.cancelAnimationFrame : null;
   function frameOf() {
     if (nativeFrame) return function (fn) { return nativeFrame.call(global, fn); };
     return typeof global.requestAnimationFrame === 'function' ? global.requestAnimationFrame : null;
+  }
+
+  // Cancel through the same frame provider, not the shell's replacement for held page frames.
+  function cancelOf() {
+    if (nativeFrame) return nativeCancel ? function (handle) { nativeCancel.call(global, handle); } : null;
+    return typeof global.cancelAnimationFrame === 'function' ? global.cancelAnimationFrame : null;
   }
 
   /* ---- a seeded stream ------------------------------------------------------------------- */
@@ -692,7 +699,7 @@
       if (!rites) return null;
       var s = rites.get(el);
       if (!s) {
-        s = { hover: false, focus: false, timers: {}, pressX: null, pressY: null, pressAt: 0 };
+        s = { hover: false, focus: false, timers: {}, passes: {}, began: {}, pressX: null, pressY: null, pressAt: 0 };
         rites.set(el, s);
       }
       return s;
@@ -714,6 +721,31 @@
       if (el && el.classList) el.classList.remove(name);
     }
 
+    // The rites that undo one another. A control is never both at once: the one begun ends the
+    // other where it stands, so what shows is the gesture the visitor made last.
+    var OPPOSED = { waxing: 'waning', waning: 'waxing', sealing: 'unsealing', unsealing: 'sealing' };
+
+    // The moment the page's animations stand at. It holds still through a task (and its
+    // microtasks) and moves on with each frame drawn, so a rite begun at the moment it still
+    // reads has never been on screen.
+    function frameNow() {
+      var t = doc && doc.timeline ? doc.timeline.currentTime : null;
+      return typeof t === 'number' ? t : null;
+    }
+
+    function began(el, kind) {
+      var s = riteState(el);
+      if (s) s.began[kind] = frameNow();
+    }
+
+    // Whether el carries a rite that began with no frame drawn since. Undone now, it was never
+    // seen, and there is nothing to undo: the control is as it was before it, and stays so.
+    function unseen(el, kind) {
+      var s = rites && rites.get(el);
+      var t = frameNow();
+      return !!(s && t != null && s.began[kind] === t && el.classList && el.classList.contains('is-' + kind));
+    }
+
     /* A rite that passes: the class goes on at once, so the very next frame drawn plays it, and
        comes off at the end of the animation it started or when the clock (`after`, the movement's
        own length where the caller knows it) says it must have ended, whichever is first. Passed
@@ -722,19 +754,27 @@
        is put back to its start and plays again in the treads just written (from the new press
        point, for a stamp). The class stays on throughout. Taking it off for a frame would not
        restart anything on a control held :active, whose rule plays the same stamp, and a seal
-       taken off for a frame would show its fill whole for that frame. */
+       taken off for a frame would show its fill whole for that frame. Nothing is left to a later
+       frame, so a rite ended before it was drawn can never come back on; and each pass holds a
+       token its clock must still match, so a clock left over from a rite started over or ended
+       can never take a newer one off. */
     function pass(el, kind, after) {
       if (!el) return;
       var cls = 'is-' + kind;
       var s = riteState(el);
+      if (OPPOSED[kind]) endPass(el, OPPOSED[kind]);
       var wait = after || ((ms('long') || 500) * 2 + 400);
       if (s && s.timers[kind] && typeof global.clearTimeout === 'function') global.clearTimeout(s.timers[kind]);
       if (el.classList && el.classList.contains(cls)) restart(el, PASSING[kind]);
-      else addClass(el, cls);
+      else {
+        addClass(el, cls);
+        began(el, kind);
+      }
       if (s && typeof global.setTimeout === 'function') {
+        var token = {};
+        s.passes[kind] = token;
         s.timers[kind] = global.setTimeout(function () {
-          s.timers[kind] = 0;
-          dropClass(el, cls);
+          if (s.passes[kind] === token) endPass(el, kind);
         }, wait);
       }
     }
@@ -758,22 +798,52 @@
 
     function endPass(el, kind) {
       var s = rites && rites.get(el);
-      if (s && s.timers[kind] && typeof global.clearTimeout === 'function') {
-        global.clearTimeout(s.timers[kind]);
+      if (s) {
+        delete s.passes[kind];
+        delete s.began[kind];
+        if (s.timers[kind] && typeof global.clearTimeout === 'function') global.clearTimeout(s.timers[kind]);
         s.timers[kind] = 0;
       }
       dropClass(el, 'is-' + kind);
     }
 
+    /* An animation's end ends the rite it belongs to, unless the same keyframes are still playing
+       on the same layer: then what ended was an older movement. Undo a rite and begin it again
+       within a frame or two -- unset and set, leave and come back and leave -- and the first
+       movement's cancel is reported a frame after the second has started; press again as a stamp
+       finishes and its end is reported after the stamp was put back to its start. Either end,
+       taken as the rite's, would take the class off the newer movement half-way. */
     function onRiteEnd(ev) {
       var el = ev && ev.target;
       var name = ev && ev.animationName;
       if (!el || !name || !el.classList) return;
       var layer = ev.pseudoElement || '';
+      var older = null;
       for (var kind in PASSING) {
         if (!Object.prototype.hasOwnProperty.call(PASSING, kind) || !el.classList.contains('is-' + kind)) continue;
-        if (endsRite(PASSING[kind], name, layer)) endPass(el, kind);
+        if (!endsRite(PASSING[kind], name, layer)) continue;
+        if (older === null) older = stillPlaying(el, name, layer);
+        if (!older) endPass(el, kind);
       }
+    }
+
+    // Whether keyframes of this name are playing on this layer of el (its own, or a ::before or
+    // ::after of it). Asked only of an end that would take a rite off, so seldom.
+    function stillPlaying(el, name, layer) {
+      if (typeof el.getAnimations !== 'function') return false;
+      var all;
+      try {
+        all = layer ? el.getAnimations({ subtree: true }) : el.getAnimations();
+      } catch (e) {
+        return false;
+      }
+      for (var i = 0; i < all.length; i++) {
+        var a = all[i];
+        var effect = a.effect;
+        if (!effect || effect.target !== el || (effect.pseudoElement || '') !== layer || a.animationName !== name) continue;
+        if (a.playState === 'running' || a.playState === 'paused') return true;
+      }
+      return false;
     }
 
     // A number of an element's own, from where it sits and what it says.
@@ -804,17 +874,24 @@
     function wax(el, ev) {
       if (!el) return;
       endPass(el, 'waning');
+      // Waxed already (hovered, and now focused too): it stays as it is. Cut again partway, its
+      // edge would turn and its treads change under it.
+      if (el.classList && el.classList.contains('is-waxing')) return;
       if (!reduced()) {
         var angle = approach(el, ev);
         if (angle == null && el.style && typeof el.style.removeProperty === 'function') el.style.removeProperty('--cut-angle');
         cut(el, 'wax', { angle: angle });
       }
       addClass(el, 'is-waxing');
+      began(el, 'waxing');
     }
 
+    // A wax undone before a frame drew it leaves nothing to cut back out.
     function wane(el) {
       if (!el || !el.classList || !el.classList.contains('is-waxing')) return;
+      var never = unseen(el, 'waxing');
       dropClass(el, 'is-waxing');
+      if (never) return;
       var length = cut(el, 'wane');
       pass(el, 'waning', length && length + LATE);
     }
@@ -931,33 +1008,60 @@
       setInline(el, '--seal-y', y + '%');
     }
 
+    // Whether an attribute's value, as a change record kept it, said the control was set.
+    function wasSet(attr, value) {
+      // The engine's own passing classes come and go in the class too; only a set class counts.
+      if (attr === 'class') return SET_CLASS.test(value || '');
+      return value != null && value !== 'false' && (attr !== 'aria-expanded' || value === 'true');
+    }
+
+    /* A control is sealed when it goes from unset to set, and unsealed the other way, judged
+       from what it was before the whole batch of changes to what it is after them. A group that
+       clears every option and then sets the chosen one leaves the option pressed again exactly
+       as it was: two records, false then true, and no change a visitor could see, so nothing
+       plays. Only the first record of an attribute on an element holds the value from before
+       the batch; the rest are steps within it. A change undone in a later batch of the same
+       task (a script that awaits between the two) is caught by the moment instead: the rite it
+       began was never drawn, so it ends and nothing plays in its place. And a rite already
+       playing is never begun again from here: the only way to reach it is a second attribute
+       saying what the first said, and starting the seal over would put its fill back to nothing
+       partway in. */
     function onSetChange(changes) {
+      var seen = typeof global.Map === 'function' ? new global.Map() : null;
       for (var i = 0; i < changes.length; i++) {
         var c = changes[i];
         var el = c.target;
         var attr = c.attributeName;
         if (!el || !attr || !el.classList) continue;
-        var was;
-        if (attr === 'class') {
-          // The engine's own passing classes come and go here too; only a set class counts.
-          var old = c.oldValue || '';
-          was = SET_CLASS.test(old);
-          if (was === isSet(el, attr)) continue;
-        } else {
-          was = c.oldValue != null && c.oldValue !== 'false' && (attr !== 'aria-expanded' || c.oldValue === 'true');
+        if (seen) {
+          var attrs = seen.get(el);
+          if (!attrs) {
+            attrs = {};
+            seen.set(el, attrs);
+          }
+          if (attrs[attr]) continue;
+          attrs[attr] = true;
         }
+        var was = wasSet(attr, c.oldValue);
         var is = isSet(el, attr);
         if (was === is) continue;
         if (el.getAttribute('data-rite') === 'none') continue;
         // A dialog's open is its own arrival, not a control becoming set.
         if (attr === 'open' && el.tagName === 'DIALOG') continue;
+        // A seal and an unseal end each other, as a wax ends a wane: set and unset within one
+        // moment is the one the visitor left it in. The one undone ends here even when nothing
+        // is to play (a visitor who asked for less motion), so the two are never on together;
+        // undone before a frame drew it, it leaves the control as it was, with nothing to play.
+        var undone = is ? 'unsealing' : 'sealing';
+        var never = unseen(el, undone);
+        endPass(el, undone);
+        if (never) continue;
+        var kind = is ? 'sealing' : 'unsealing';
+        if (el.classList.contains('is-' + kind)) continue;
         if (is) dress(el);
         if (reduced()) continue;
         var length = is ? cut(el, 'seal', { duration: 'long' }) : cut(el, 'unseal');
-        // A seal and an unseal end each other, as a wax ends a wane: set and unset within one
-        // moment is the one the visitor left it in.
-        endPass(el, is ? 'unsealing' : 'sealing');
-        pass(el, is ? 'sealing' : 'unsealing', length && length + LATE);
+        pass(el, kind, length && length + LATE);
       }
     }
 
@@ -1207,7 +1311,7 @@
       var step = typeof opts.step === 'function' ? opts.step : function () {};
       var done = typeof opts.done === 'function' ? opts.done : function () {};
       var raf = frameOf();
-      var cancel = typeof global.cancelAnimationFrame === 'function' ? global.cancelAnimationFrame : null;
+      var cancel = cancelOf();
       var rnd = mulberry32(entropy());
       var n = clamp(Math.round(opts.treads || (3 + Math.floor(rnd() * 3))), 2, 5);
       if (!raf || !total || (reduced() && !opts.always)) {
@@ -1388,7 +1492,7 @@
       var step = typeof opts.step === 'function' ? opts.step : function () {};
       var done = typeof opts.done === 'function' ? opts.done : function () {};
       var raf = frameOf();
-      var cancel = typeof global.cancelAnimationFrame === 'function' ? global.cancelAnimationFrame : null;
+      var cancel = cancelOf();
       if (!raf || !length || (reduced() && !opts.always)) {
         step(1, 1);
         done();

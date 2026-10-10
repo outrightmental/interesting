@@ -330,6 +330,22 @@
       nudged: { analytic: 2, attentive: 1, geometric: 1 },
       swung: { restless: 2, curious: 2, verbal: 1 },
       spun: { tempestuous: 2, ceremonial: 2, cosmic: 1 }
+    },
+    {
+      probe: 'dye-pot', name: 'the dye bath', kind: 'dye',
+      ask: 'A bath of still water, a white cloth, and three jars of dye. Add as many drops as you like, from any jar, then dip the cloth.',
+      label: 'dip the cloth', most: 24,
+      dyes: [
+        { label: 'indigo', detail: 'a deep blue, from leaves', ink: '#2c4a9a', weights: { cosmic: 3, brooding: 2, attentive: 2, analytic: 1 } },
+        { label: 'madder', detail: 'a red, from roots', ink: '#b8323f', weights: { ceremonial: 3, restless: 2, tempestuous: 2, tender: 1 } },
+        { label: 'weld', detail: 'a bright yellow, from a weed', ink: '#d8bf2e', weights: { rooted: 3, tending: 2, curious: 2, verbal: 1 } }
+      ],
+      undyed: { tender: 3, divinatory: 2, attentive: 1 },
+      pale: { tender: 2, divinatory: 1, attentive: 1 },
+      deep: { restless: 2, ceremonial: 2, tempestuous: 1 },
+      pure: { analytic: 2, geometric: 1, brooding: 1 },
+      even: { geometric: 3, metrical: 2 },
+      muddied: { curious: 2, verbal: 2, divinatory: 1 }
     }
   ];
 
@@ -1142,13 +1158,14 @@
     }, true);
     // The reading lands as ONE seal, and only then does what is done with go. A mechanism with a
     // picture or a panel of its own seals that, from the point its answer lives at -- the knocker,
-    // the needle's tip, the top stone, the dial's thumb, the mark -- and hands the seal's length
-    // here (`own`), and the frame draws no second one (data-seal='own'). Otherwise the frame's own
-    // layer is the seal: two shades of the new primary split by a curve round the point the answer
-    // was given (the last press in the frame), grown from there in treads cut for it. Once the seal
-    // has grown, the glass, the meter and the skip go behind a slice, top to bottom, one after
-    // another in one stair; the question is handed on when the last of them has gone. Hands back
-    // the seal's length, so a mechanism can let its spent controls follow the seal as well.
+    // the needle's tip, the top stone, the dial's thumb, the mark, the last drop of dye -- and hands
+    // the seal's length here (`own`), and the frame draws no second one (data-seal='own').
+    // Otherwise the frame's own layer is the seal: two shades of the new primary split by a curve
+    // round the point the answer was given (the last press in the frame), grown from there in
+    // treads cut for it. Once the seal has grown, the glass, the meter and the skip go behind a
+    // slice, top to bottom, one after another in one stair; the question is handed on when the last
+    // of them has gone. Hands back the seal's length, so a mechanism can let its spent controls
+    // follow the seal as well.
     function finish(own) {
       if (answered || !current()) return 0;
       answered = true;
@@ -1185,7 +1202,7 @@
       choice: choiceProbe, sequence: sequenceProbe, tap: tapProbe, hold: holdProbe,
       place: placeProbe, draw: drawProbe, windows: windowsProbe, balance: balanceProbe,
       slider: sliderProbe, sky: skyProbe, keys: keysProbe, knock: knockProbe,
-      rubbing: rubbingProbe, cairn: cairnProbe, compass: compassProbe
+      rubbing: rubbingProbe, cairn: cairnProbe, compass: compassProbe, dye: dyeProbe
     };
     (kinds[probe.kind] || choiceProbe)(probe, body, trace, answer, finish);
     return probe;
@@ -3191,6 +3208,275 @@
       retire(go, finish(seal));
     }
     go.addEventListener('click', setOut);
+    paint();
+  }
+  // A bath of still water, a white cloth, and three jars of dye. Each drop goes into the bath and
+  // spreads there as a blot of its own dye, cut out of the water by one curve round the point it
+  // fell at, stepping out in a few treads -- never a wash of colour -- and it rests in two shades
+  // of its dye, a deeper core and a paler ring, split by that curve. The water rests in two shades
+  // split by one slice through the bath at the register's angle. The answer is the bath the
+  // visitor made: which dyes and in what share, how much, and whether they kept to one, matched
+  // all three, or let them muddle. Nothing about it is wrong, and the bath never answers on its
+  // own: dipping the cloth is the visitor's press. The cloth is lowered in from above behind one
+  // slice, white, and then the bath's colour soaks through it behind one curve from where the last
+  // drop fell (the middle of the bath, if none did), and it rests in two shades of that colour split
+  // by a curve round the same point, deeper inside: the reading's one seal. A tap on a jar in the
+  // picture adds its dye; a tap on the water adds the last dye where it fell; a tap before any jar
+  // is chosen says how to choose one. Start over draws every blot back into the point it fell at,
+  // in treads, one way. The bath is drawn only when a tread lands; there is no clock.
+  function dyeProbe(probe, body, trace, answer, finish) {
+    var MOST = probe.most || 24;
+    var pot = el('canvas', 'probe-pad');
+    pot.width = 600;
+    pot.height = 280;
+    pot.setAttribute('aria-hidden', 'true');
+    pot.style.cursor = 'pointer';
+    pot.style.touchAction = 'manipulation';
+    var g = pot.getContext('2d');
+    pot.hidden = !g;
+    body.appendChild(pot);
+    var counts = probe.dyes.map(function () { return 0; });
+    var group = el('div', 'probe-options');
+    group.setAttribute('role', 'group');
+    group.setAttribute('aria-label', 'three jars of dye');
+    var buttons = probe.dyes.map(function (dye, index) {
+      var button = optionButton(dye.label, dye.detail);
+      button.addEventListener('click', function () { drop(index, null); });
+      group.appendChild(button);
+      return button;
+    });
+    body.appendChild(group);
+    dealOut(buttons);
+    var controls = el('div', 'controls');
+    var dip = el('button', 'btn-filled', probe.label);
+    dip.type = 'button';
+    var again = el('button', 'btn-text', 'start over');
+    again.type = 'button';
+    again.disabled = true;
+    controls.appendChild(dip);
+    controls.appendChild(again);
+    body.appendChild(controls);
+    body.appendChild(el('p', 'probe-count', 'press a jar as often as you like, or tap one in the picture; a tap on the water adds the last dye where you tap. Dip the cloth whenever you like, even undyed.'));
+    var style = window.getComputedStyle(body);
+    var tone = function (name, fallback) { return rgbOf(style.getPropertyValue(name), fallback); };
+    var night = tone('--bg', '#070a14');
+    var dusk = tone('--bg2', '#1c2a4e');
+    var cool = tone('--accent', '#9fcbff');
+    var linen = tone('--fg', '#e6eaf5');
+    var inks = probe.dyes.map(function (dye) { return rgbOf(dye.ink, '#9fcbff'); });
+    var BATH = { x: 0.5, y: 0.34, rx: 0.4, ry: 0.27 };
+    var blots = [];
+    var draining = [];
+    var last = -1;
+    var dipped = false;
+    var laid = 0; // how far the cloth has been lowered in, 0 to 1
+    var steeped = 0; // how far the bath's colour has soaked through it, 0 to 1
+    var still = { kind: 'slice', angle: angleOf(style) };
+    var LOWER = { kind: 'slice', angle: 180 };
+    var soak = null; // the curve the colour comes through the cloth by, set at the dip
+    function jarX(i) { return (i + 0.5) / probe.dyes.length * 0.9 + 0.05; }
+    function total() { return counts.reduce(function (a, b) { return a + b; }, 0); }
+    // The bath's colour, for the cloth: the dyes in their shares over the linen, deeper with more.
+    function mixed() {
+      var n = total();
+      if (!n) return linen;
+      var c = [0, 0, 0];
+      counts.forEach(function (k, i) { for (var q = 0; q < 3; q++) c[q] += inks[i][q] * k / n; });
+      return blend(linen, c, Math.min(0.92, 0.35 + n * 0.05));
+    }
+    function inside() {
+      var a = Math.random() * Math.PI * 2;
+      var r = Math.sqrt(Math.random()) * 0.78;
+      return [BATH.x + Math.cos(a) * BATH.rx * r, BATH.y + Math.sin(a) * BATH.ry * r];
+    }
+    function line() {
+      var n = total();
+      if (!n) return 'still water';
+      var parts = [];
+      counts.forEach(function (k, i) { if (k) parts.push(k + ' ' + probe.dyes[i].label); });
+      return plural(n, 'drop') + ' in the bath: ' + parts.join(', ');
+    }
+    function refresh() {
+      again.disabled = total() === 0;
+      buttons.forEach(function (button, i) {
+        var detail = button.querySelector('.probe-option-detail');
+        if (detail) detail.textContent = probe.dyes[i].detail + (counts[i] ? ' · ' + plural(counts[i], 'drop') : '');
+      });
+    }
+    function paint() {
+      if (!g) return;
+      var w = pot.width;
+      var h = pot.height;
+      // The room and the bench the jars stand on: two shades split by the one line of the bench,
+      // where a tap stops falling in the water and takes up a jar.
+      g.fillStyle = rgba(blend(night, dusk, 0.35), 1);
+      g.fillRect(0, 0, w, h);
+      g.fillStyle = 'rgba(0,0,0,0.35)';
+      g.fillRect(0, h * 0.64, w, h * 0.36);
+      var bx = BATH.x * w;
+      var by = BATH.y * h;
+      var rx = BATH.rx * w;
+      var ry = BATH.ry * h;
+      // The water: two shades split by one slice through the bath, at the register's angle.
+      g.save();
+      g.beginPath();
+      g.ellipse(bx, by, rx, ry, 0, 0, Math.PI * 2);
+      g.fillStyle = rgba(blend(night, dusk, 0.72), 1);
+      g.fill();
+      g.clip();
+      paintCut(g, bx - rx, by - ry, rx * 2, ry * 2, 0.5, still, rgba(dusk, 0.4));
+      var all = blots.concat(draining);
+      for (var i = 0; i < all.length; i++) {
+        var b = all[i];
+        if (b.k <= 0) continue;
+        // A blot: a paler ring and a deeper core of its dye, split by one curve, both cut out of
+        // the water from the point it fell at as it spreads, and drawn back into it as it drains.
+        var x = b.x * w;
+        var y = b.y * h;
+        g.fillStyle = rgba(inks[b.dye], 0.28);
+        g.beginPath();
+        g.arc(x, y, b.r * b.k, 0, Math.PI * 2);
+        g.fill();
+        g.fillStyle = rgba(inks[b.dye], 0.42);
+        g.beginPath();
+        g.arc(x, y, b.r * 0.58 * b.k, 0, Math.PI * 2);
+        g.fill();
+      }
+      // The cloth: lowered in from above behind one slice, white; then the bath's colour soaks
+      // through it behind one curve, and inside that curve the cloth is the colour, a shade deeper
+      // as far as a seal reaches -- so at rest it is two shades split by a curve round the point.
+      if (dipped && laid > 0) {
+        var cw = rx * 1.1;
+        var ch = ry * 1.05;
+        var cx0 = bx - cw / 2;
+        var cy0 = by - ch / 2;
+        paintCut(g, cx0, cy0, cw, ch, laid, LOWER, rgba(linen, 0.92));
+        if (steeped > 0 && soak) {
+          g.save();
+          g.beginPath();
+          if (cutRegion(g, cx0, cy0, cw, ch, steeped, soak)) {
+            g.clip();
+            g.fillStyle = rgba(mixed(), 1);
+            g.fillRect(cx0, cy0, cw, ch);
+            paintCut(g, cx0, cy0, cw, ch, SEAL_REACH, soak, 'rgba(0,0,0,0.16)');
+          }
+          g.restore();
+        }
+      }
+      g.restore();
+      g.strokeStyle = rgba(cool, 0.4);
+      g.lineWidth = 2;
+      g.beginPath();
+      g.ellipse(bx, by, rx, ry, 0, 0, Math.PI * 2);
+      g.stroke();
+      g.font = '500 14px system-ui, sans-serif';
+      g.textAlign = 'center';
+      g.textBaseline = 'top';
+      for (var j = 0; j < inks.length; j++) {
+        var jx = jarX(j) * w;
+        var jy = h * 0.7;
+        var jw = w * 0.1;
+        var jh = h * 0.18;
+        g.fillStyle = rgba(inks[j], 0.95);
+        g.fillRect(jx - jw / 2, jy + jh * 0.3, jw, jh * 0.7);
+        g.strokeStyle = rgba(j === last ? linen : cool, j === last ? 0.95 : 0.45);
+        g.lineWidth = j === last ? 2.5 : 1.5;
+        g.strokeRect(jx - jw / 2, jy, jw, jh);
+        g.fillStyle = rgba(linen, 0.92);
+        g.fillText(probe.dyes[j].label + (counts[j] ? ' · ' + counts[j] : ''), jx, jy + jh + 6);
+      }
+    }
+    function drop(index, at) {
+      if (dipped) return;
+      if (total() >= MOST) { note(trace, 'the bath will take no more; dip the cloth, or start over'); return; }
+      counts[index] += 1;
+      last = index;
+      var p = at || inside();
+      var blot = { x: p[0], y: p[1], r: between(16, 34), dye: index, k: 0, gone: false };
+      blots.push(blot);
+      refresh();
+      note(trace, line());
+      gauge(trace, tally(total()));
+      // The drop spreads from where it fell in rolled treads, always outward; a blot already
+      // being drawn back by start over is the drain's to move.
+      series({ ms: beat('medium'), treads: 3 + Math.floor(Math.random() * 3), step: function (k, n) {
+        if (!k || blot.gone) return;
+        blot.k = k / n;
+        paint();
+      } });
+    }
+    pot.addEventListener('click', function (ev) {
+      if (dipped) { note(trace, 'the cloth is already in the bath'); return; }
+      var box = pot.getBoundingClientRect();
+      if (!box.width || !box.height) return;
+      var fx = (ev.clientX - box.left) / box.width;
+      var fy = (ev.clientY - box.top) / box.height;
+      if (fy > 0.64) {
+        var near = 0;
+        for (var i = 1; i < probe.dyes.length; i++) if (Math.abs(jarX(i) - fx) < Math.abs(jarX(near) - fx)) near = i;
+        drop(near, null);
+        return;
+      }
+      if (last < 0) { note(trace, 'choose a jar first: tap one under the bath, or press its name'); return; }
+      var dx = (fx - BATH.x) / BATH.rx;
+      var dy = (fy - BATH.y) / BATH.ry;
+      var d = Math.sqrt(dx * dx + dy * dy);
+      if (d > 0.92) { fx = BATH.x + dx / d * BATH.rx * 0.92; fy = BATH.y + dy / d * BATH.ry * 0.92; }
+      drop(last, [fx, fy]);
+    });
+    again.addEventListener('click', function () {
+      if (dipped || !blots.length) return;
+      var going = blots;
+      blots = [];
+      going.forEach(function (b) { b.gone = true; });
+      draining = draining.concat(going);
+      counts = counts.map(function () { return 0; });
+      last = -1;
+      buttons[0].focus();
+      refresh();
+      gauge(trace, '');
+      note(trace, 'fresh water: add whatever you like');
+      // Each blot is drawn back into the point it fell at, in treads, never out again; on the last
+      // tread every one is gone, so the end draws nothing more.
+      series({ ms: beat('medium'), treads: 3, step: function (k, n) {
+        if (!k) return;
+        going.forEach(function (b) { b.k = Math.min(b.k, 1 - k / n); });
+        paint();
+      }, done: function () {
+        draining = draining.filter(function (b) { return going.indexOf(b) === -1; });
+      } });
+    });
+    dip.addEventListener('click', function () {
+      if (dipped) return;
+      dipped = true;
+      var n = total();
+      var used = counts.filter(function (k) { return k > 0; }).length;
+      var most = Math.max.apply(null, counts);
+      var least = Math.min.apply(null, counts);
+      counts.forEach(function (k, i) { if (k) add(answer, probe.dyes[i].weights, k / n); });
+      if (!n) add(answer, probe.undyed, 1);
+      else if (n <= 3) add(answer, probe.pale, 1);
+      else if (n >= 10) add(answer, probe.deep, 1);
+      if (used === 1 && n >= 2) add(answer, probe.pure, 1);
+      else if (used === 3) add(answer, most - least <= 1 ? probe.even : probe.muddied, 1);
+      pot.style.cursor = 'default';
+      var from = blots.length ? blots[blots.length - 1] : BATH;
+      soak = { kind: 'curve', x: from.x * pot.width, y: from.y * pot.height };
+      // The cloth goes in in one stair: two treads lower it in, the rest soak the colour through,
+      // so each tread moves one edge and none goes back. The jars and the two controls grey once
+      // the seal has grown.
+      var seal = beat('long');
+      series({ ms: seal, treads: 4 + Math.floor(Math.random() * 2), step: function (k, n2) {
+        if (!k) return;
+        laid = Math.min(1, k / 2);
+        steeped = k <= 2 ? 0 : (k - 2) / (n2 - 2);
+        paint();
+      } });
+      var sealing = finish(seal);
+      buttons.forEach(function (button) { retire(button, sealing); });
+      retire(again, sealing);
+      retire(dip, sealing);
+    });
     paint();
   }
   function describe(reading) {

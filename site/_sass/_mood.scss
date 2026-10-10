@@ -242,9 +242,9 @@ html[data-shifting] .stage-head {
 }
 
 // A mechanism that seals its own picture or panel -- from the knocker, the needle's tip, the top
-// stone, the pivot, the last star, the dial's thumb, the mark, the line's own direction -- seals
-// the reading with that (data-seal='own', written by the script), and the frame grows no second
-// curve from another point beside it.
+// stone, the pivot, the last star, the last drop of dye, the dial's thumb, the mark, the line's own
+// direction -- seals the reading with that (data-seal='own', written by the script), and the frame
+// grows no second curve from another point beside it.
 .probe[data-seal='own']::before {
   content: none;
 }
@@ -253,7 +253,8 @@ html[data-shifting] .stage-head {
 [data-probe='knock'] .probe,
 [data-probe='key-ring'] .probe,
 [data-probe='cairn'] .probe,
-[data-probe='compass'] .probe {
+[data-probe='compass'] .probe,
+[data-probe='dye-pot'] .probe {
   --fill-opacity: 0.28;
 }
 
