@@ -1486,6 +1486,34 @@
   @include type.rite;
 }
 
+// The named shapes under the sky (js/persona.js, renderFigures): a row of quiet marks, the one the
+// sky makes now lit in the primary container, set in the rite's serif and wearing the sealed fill
+// texture js/motion.js climbs onto it as data-set arrives.
+.persona-figures {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+button.persona-figure {
+  min-height: 44px;
+  padding: 0 0.9rem;
+  background: var(--md-sys-color-surface-container);
+  color: var(--md-sys-color-on-surface-variant);
+  @include type.scale(label-large);
+}
+
+button.persona-figure[data-set='true'] {
+  background: var(--md-sys-color-primary-container);
+  color: var(--md-sys-color-on-primary-container);
+  @include type.rite;
+}
+
+button.persona-figure[data-set='true']::before {
+  opacity: 0.22;
+}
+
 // What comes and goes in the sheet -- the name, the thread, the words form, the remove and forget
 // buttons, the world the reading points at -- develops through the ladder when it is shown and is
 // unmade down it (is-unmaking, from js/persona.js) before it is hidden, never cut.

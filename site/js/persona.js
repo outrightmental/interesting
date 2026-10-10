@@ -1287,6 +1287,45 @@
       if (sheet.name.hidden) say(sheet.name, '', true);
     }
   }
+  /* The named shapes, as marks under the sky: the one the sky makes now is lit (data-set, which
+     js/motion.js seals and unseals), and a press on any of them says in plain words how it is made
+     and how near the sky is to it. What the sky is now, never a record of what it was. */
+  var FIGURES = [
+    { name: 'the twins', rule: 'exactly two stars, side by side' },
+    { name: 'the belt', rule: 'exactly three stars in a straight line' },
+    { name: 'the spear', rule: 'four or more stars in a straight line' },
+    { name: 'the halo', rule: 'five or more stars, all the same distance from their middle' },
+    { name: 'the moth', rule: 'four or more stars, each matched by one opposite it, left to right' }
+  ];
+  function tellFigure(f) {
+    var list = serialize();
+    var near = nearFigure(list);
+    sheetStatus(f.name + ': ' + f.rule + '. ' + (figureOf(list) === f.name ? 'Your sky makes it now.'
+      : near ? 'Your sky is close to a named shape: ' + near + '.' : 'Move, drop or remove stars to make it.'));
+  }
+  function renderFigures() {
+    if (!sheet || !sheet.figures) return;
+    if (!sheet.figureChips) {
+      sheet.figureChips = FIGURES.map(function (f) {
+        var chip = element('button', 'persona-figure', f.name);
+        chip.type = 'button';
+        chip.addEventListener('click', function () { tellFigure(f); });
+        sheet.figures.appendChild(chip);
+        return chip;
+      });
+    }
+    var made = figureOf(serialize());
+    for (var i = 0; i < FIGURES.length; i++) {
+      var chip = sheet.figureChips[i];
+      var on = made === FIGURES[i].name;
+      var words = (on ? '✦ ' : '✧ ') + FIGURES[i].name;
+      if (on && chip.getAttribute('data-set') !== 'true') chip.setAttribute('data-set', 'true');
+      else if (!on && chip.hasAttribute('data-set')) chip.removeAttribute('data-set');
+      if (chip.textContent !== words) chip.textContent = words;
+      chip.setAttribute('aria-label', FIGURES[i].name + ': ' + FIGURES[i].rule
+        + (on ? '. Your sky makes this now.' : '. Press to hear how close you are.'));
+    }
+  }
   function renderThread() {
     var path = threadOf(fieldStars, selected);
     for (var i = 0; i < fieldStars.length; i++) {
@@ -1339,6 +1378,7 @@
   // rather than cutting it short.
   function drawField() {
     renderName();
+    renderFigures();
     renderThread();
     renderNeighbor();
     paintField(fieldCast ? fieldCast.pass : null);
@@ -1715,6 +1755,7 @@
       clear: document.getElementById('persona-clear'), status: document.getElementById('persona-sky-status'),
       name: document.getElementById('persona-sky-name'),
       thread: document.getElementById('persona-thread'),
+      figures: document.getElementById('persona-figures'),
       wordsForm: document.getElementById('persona-star-words'),
       words: document.getElementById('persona-star-thought'),
       neighbor: document.getElementById('persona-star-neighbor'),
