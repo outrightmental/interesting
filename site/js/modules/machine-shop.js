@@ -5,7 +5,7 @@
    and the card it was opened from says which. See js/feed.js for what a module is and js/stage.js
    for what a piece is.
 
-   Two puzzles, both deduction:
+   Three puzzles, all deduction:
 
      the next row       A hidden rule ran a tape for four rows. Every one of the eight patterns of
                         three appears somewhere in the first three rows, so the rule can be read
@@ -18,6 +18,9 @@
                         next few shown. The flip reaches exactly the three cells under it in row
                         one, so the difference has an apex; find its column, and count the cells
                         that differ in the last row. A wrong check says which of the two is off.
+     the lost row       A stated rule ran a tape from a first row that was not kept; rows two to
+                        five are shown, and only one first row makes row two. Light row one; rings
+                        on row two mark the cells the row written so far would make wrong.
 
    The next-row bench also has a rule notebook: eight tentative outputs, tested only against
    the visible transitions. It never writes an answer row. A paid cell hint points to an
@@ -1033,6 +1036,254 @@ function apexPiece(env, plan) {
 
 /* ---- the module ----------------------------------------------------------------------------- */
 
+/* ---- the lost first row ------------------------------------------------------------------- */
+
+// The rules a lost row is run back under: each is permutive at an edge, or the parity of the three
+// above, so the row before is often pinned down. A plan keeps only a first row that is the sole
+// row able to make its row two, so the puzzle has one answer.
+const BACK_RULES = [30, 45, 75, 86, 89, 101, 105, 106, 120, 135, 149, 150, 169, 225];
+
+function soleAncestor(plan) {
+  const target = nextRow(plan.start, plan.rule);
+  let found = 0;
+  for (let m = 0; m < (1 << plan.width); m++) {
+    const row = [];
+    for (let x = 0; x < plan.width; x++) row.push((m >> x) & 1);
+    if (!differing(nextRow(row, plan.rule), target).length && ++found > 1) return false;
+  }
+  return found === 1;
+}
+
+function backPlan(env) {
+  const number = env.int(100, 999);
+  const width = env.int(9, 10);
+  for (let attempt = 0; attempt < 40; attempt++) {
+    const rule = env.pick(BACK_RULES);
+    const start = randomRow(env, width);
+    const lit = start.filter(Boolean).length;
+    if (lit < 2 || lit > width - 2) continue;
+    const plan = { kind: 'back', number, width, rule, start };
+    if (soleAncestor(plan)) return plan;
+  }
+  // Rule 150 on ten cells always has one row before any row.
+  return { kind: 'back', number, width: 10, rule: 150, start: [1, 0, 0, 1, 1, 0, 1, 0, 0, 1] };
+}
+
+function carriedBack(env) {
+  const p = env.card && env.card.of;
+  if (!p || p.kind !== 'back') return null;
+  if (!Number.isInteger(p.number) || p.number < 100 || p.number > 999) return null;
+  if (!Number.isInteger(p.width) || p.width < 9 || p.width > 10) return null;
+  if (!Number.isInteger(p.rule) || p.rule < 0 || p.rule > 255) return null;
+  if (!isBits(p.start, p.width) || !p.start.some(Boolean)) return null;
+  const plan = { kind: 'back', number: p.number, width: p.width, rule: p.rule, start: p.start.slice() };
+  return soleAncestor(plan) ? plan : null;
+}
+
+function backTitle(plan) {
+  return 'tape ' + plan.number + ': the lost first row';
+}
+
+function backGeometry(w, h, width, v) {
+  const scale = clamp(v.scale, 0.88, 1.08);
+  const labelW = Math.max(14, Math.min(w, h) * 0.06);
+  const size = Math.min((w * 0.86 - labelW) / width, (h * 0.6) / 5.6) * scale;
+  return { size, left: (w - size * width + labelW) / 2, top: h * 0.3, gap: size * 0.6, labelW };
+}
+
+// The rule at the top, the visitor's row one under it, and rows two to five below a gap. A ring on
+// a cell of row two marks where the row one written so far, run forward, would make it wrong.
+function drawBack(g, w, h, env, plan, s, variant) {
+  const v = variant || PLAIN;
+  const c = env.colors;
+  const rite = riteOf(env);
+  const geo = backGeometry(w, h, plan.width, v);
+  const rows = rowsOf(plan);
+  const inset = geo.size * clamp(0.09 / v.density, 0.05, 0.14);
+  const small = Math.max(9, Math.min(15, Math.round(Math.min(w, h) * 0.036)));
+  const box = geo.size - inset * 2;
+  const rowY = (r) => geo.top + r * geo.size + (r ? geo.gap : 0);
+  background(g, w, h, env, v);
+  label(g, env, 'rule ' + plan.rule, w * 0.5, h * 0.06, small + 2, 'center', c.accent2);
+  ruleTable(g, env, w * 0.08, h * 0.1, w * 0.84, plan.rule, v);
+  const forward = nextRow(s.row, plan.rule);
+  let agree = 0;
+  for (let r = 0; r < 5; r++) {
+    const y = rowY(r);
+    label(g, env, String(r + 1), geo.left - geo.labelW * 0.5, y + geo.size / 2, small, 'center', r ? env.alpha(c.muted, 0.9) : c.accent2);
+    for (let x = 0; x < plan.width; x++) {
+      const x0 = geo.left + x * geo.size;
+      if (r) {
+        cell(g, env, x0, y, geo.size, rows[r][x], inset);
+        if (r === 1 && forward[x] === rows[1][x]) agree += 1;
+        if (r === 1 && !s.open && forward[x] !== rows[1][x]) {
+          g.strokeStyle = c.accent2;
+          g.lineWidth = Math.max(1.5, geo.size * 0.08);
+          g.beginPath();
+          g.arc(x0 + geo.size / 2, y + geo.size / 2, geo.size * 0.3, 0, Math.PI * 2);
+          g.stroke();
+        }
+        continue;
+      }
+      const on = cellLevel(s, x, env.reduced);
+      const m = s.cells[x];
+      cell(g, env, x0, y, geo.size, false, inset);
+      if (on > 0) cover(g, env, (m && m.edge) || rite, x0 + inset, y + inset, box, box, on, c.accent2, 0.95);
+      g.strokeStyle = env.alpha(env.mix(c.muted, c.accent2, on), 0.55 + 0.35 * on);
+      g.lineWidth = 1;
+      g.strokeRect(x0 + inset, y + inset, box, box);
+      const hinted = s.shown.indexOf(x);
+      if (hinted >= 0) {
+        const mark = roll(rite, 0x300 + x);
+        const mp = came(s.t, s.shownAt[hinted], SPAN, env.reduced);
+        if (mark.flicker(mp)) {
+          g.fillStyle = plan.start[x] ? c.accent2 : env.alpha(c.muted, 0.7);
+          g.beginPath();
+          g.arc(x0 + geo.size / 2, y + geo.size + geo.gap / 2, Math.max(1.5, geo.size * 0.08 * (0.5 + 0.5 * mark.stair(mp))), 0, Math.PI * 2);
+          g.fill();
+        }
+      }
+    }
+  }
+  if (s.open) {
+    const solved = roll(rite, 0x7f);
+    cover(g, env, solved, geo.left, geo.top, geo.size * plan.width, geo.size, solved.stair(came(s.t, s.openAt, REVEAL, env.reduced)), c.accent2, 0.18);
+  }
+  g.strokeStyle = env.alpha(c.muted, 0.25);
+  g.lineWidth = 1;
+  g.strokeRect(geo.left - inset, rowY(1) - inset, geo.size * plan.width + inset * 2, geo.size * 4 + inset * 2);
+  label(g, env, s.open ? 'row one restored' : 'row two: ' + agree + ' of ' + plan.width + ' agree', w * 0.5, Math.min(h * 0.97, rowY(4) + geo.size * 1.5), small, 'center', env.alpha(c.muted, 0.85));
+}
+
+function backPreview(g, w, h, env, plan) {
+  drawBack(g, w, h, env, plan, nextBlank(plan), env.variant);
+}
+
+// A row written: every cell that changed starts its rite now, as on the next row's bench.
+function writeRow(s, next, c, press) {
+  const rite = riteOf(c);
+  for (let i = 0; i < next.length; i++) {
+    const to = next[i] ? 1 : 0;
+    if (to === (s.row[i] ? 1 : 0)) continue;
+    const from = cellLevel(s, i, c.reduced);
+    const was = s.cells[i];
+    s.flips[i] = (s.flips[i] || 0) + 1;
+    s.cells[i] = {
+      from, to, at: s.t,
+      own: rite.at(0x100 + i * 0x20 + s.flips[i]),
+      edge: from > 0 && was ? was.edge : press && press.i === i ? pressedEdge(press.u, press.v) : null
+    };
+    busy(s, c, SPAN);
+  }
+  s.row = next.map((v) => (v ? 1 : 0));
+}
+
+function backPiece(env, plan) {
+  const helps = asked(env).helps;
+  const width = plan.width;
+  const rows = rowsOf(plan);
+  const answer = plan.start.slice();
+  const s = nextBlank(plan);
+  const draw = (c) => {
+    drawBack(c.g, c.w, c.h, c, plan, s, env.variant);
+    seen(s, c);
+  };
+  const agree = () => {
+    const f = nextRow(s.row, plan.rule);
+    let n = 0;
+    for (let x = 0; x < width; x++) if (f[x] === rows[1][x]) n += 1;
+    return n;
+  };
+  const report = () => {
+    const n = agree();
+    return n === width ? 'your row one runs into row two exactly' : 'row two would have ' + count(n) + ' of ' + count(width) + ' cells right; the rings mark the rest';
+  };
+  return {
+    title: backTitle(plan),
+    brief: 'Rule ' + plan.rule + ' is drawn at the top: under each pattern of three cells (left neighbour, centre, right neighbour) it shows the cell that pattern makes in the row below. The ends of the tape wrap around. Rows two to five are shown; row one is lost, and exactly one row one makes row two. Light the cells of row one. A ring on a cell of row two marks a cell your row one would make wrong. Here 1 means lit and 0 means dark: ' + rows.slice(1).map((row, r) => 'row ' + (r + 2) + ': ' + row.join(' ')).join('; ') + '.',
+    goal: 'Write row one, the row the tape began from.',
+    aspect: '4 / 3',
+    checkLabel: 'check row one',
+    steps: [
+      { id: 'row', ask: 'row one: tap its cells on the bench, or mark them here', kind: 'grid', rows: 1, cols: width, states: 2, labels: ['dark', 'lit'] },
+      { id: 'hint', ask: 'one cell of row one', kind: 'press', count: 1, label: 'show one cell', optional: true }
+    ],
+    solution: { row: answer },
+    check() {
+      if (s.row.every((v, i) => v === answer[i])) return { solved: true, say: 'row one is restored; rule ' + plan.rule + ' runs it into every row below' };
+      return { solved: false, say: 'run forward, your row one makes ' + count(agree()) + ' of ' + count(width) + ' cells of row two as shown' };
+    },
+    start(c) {
+      c.status('tap a cell of row one to light it; rings on row two mark where your row would go wrong');
+      draw(c);
+    },
+    apply(id, value, c) {
+      if (id === 'row' && Array.isArray(value) && value.length === width) {
+        writeRow(s, value, c, null);
+        c.status(report());
+      }
+      if (id === 'hint') {
+        const left = [];
+        for (let i = 0; i < width; i++) if (!s.shown.includes(i)) left.push(i);
+        if (s.shown.length >= helps) c.status('that is all the bench will show at this difficulty; the rest is yours');
+        else if (!left.length) c.status('every cell of row one is marked on the bench');
+        else {
+          const wrong = left.filter((i) => s.row[i] !== answer[i]);
+          const pool = wrong.length ? wrong : left;
+          const i = pool[Math.floor(pool.length / 2)];
+          s.shown.push(i);
+          s.shownAt.push(s.t);
+          busy(s, c, SPAN);
+          c.hint();
+          c.status('cell ' + (i + 1) + ' of row one is ' + (answer[i] ? 'lit' : 'dark') + '; its mark is under it');
+        }
+      }
+      draw(c);
+    },
+    tap(x, y, c) {
+      const geo = backGeometry(c.w, c.h, width, env.variant || PLAIN);
+      const col = Math.floor((x * c.w - geo.left) / geo.size);
+      const py = y * c.h;
+      if (col >= 0 && col < width && py >= geo.top - geo.size * 0.4 && py < geo.top + geo.size * 1.2) {
+        const next = s.row.slice();
+        next[col] = next[col] ? 0 : 1;
+        const u = clamp((x * c.w - (geo.left + col * geo.size)) / geo.size, 0, 1);
+        const v = clamp((py - geo.top) / geo.size, 0, 1);
+        writeRow(s, next, c, { i: col, u, v });
+        c.set('row', next.slice());
+        c.status('cell ' + (col + 1) + ' of row one ' + (next[col] ? 'lit' : 'dark') + '; ' + report());
+        draw(c);
+        return;
+      }
+      const r = Math.floor((py - geo.top - geo.gap) / geo.size);
+      if (col >= 0 && col < width && r >= 1 && r <= 4) {
+        const shown = rows[r][col] ? 'lit' : 'dark';
+        if (r === 1) c.status('row two, column ' + (col + 1) + ': shown ' + shown + '; your row one makes it ' + (nextRow(s.row, plan.rule)[col] ? 'lit' : 'dark'));
+        else c.status('row ' + ROWNAME[r] + ', column ' + (col + 1) + ' is ' + shown + '; it follows from the row above, so work on row one');
+        return;
+      }
+      c.status('row one is outlined at the top of the bench; tap its cells');
+    },
+    frame(t, dt, c) {
+      s.t += Math.max(0, dt);
+      if (due(s, c)) draw(c);
+      return due(s, c);
+    },
+    end(c) {
+      s.open = true;
+      s.openAt = s.t;
+      busy(s, c, REVEAL);
+      c.status('row one stands again; rule ' + plan.rule + ' runs it down the whole tape');
+      draw(c);
+    }
+  };
+}
+
+// Of the seeds not dealt the changed cell, about a third are dealt the lost first row.
+function dealsBack(env) {
+  return (((Math.imul(env.seed >>> 0, 0x85EBCA6B) >>> 0) >>> 7) % 3) === 0;
+}
+
 // Which puzzle a seed is dealt, from the seed alone so that paint, spark and piece agree.
 function dealsApex(env) {
   return (((Math.imul(env.seed >>> 0, 0x9E3779B1) >>> 0) >>> 3) & 1) === 1;
@@ -1045,7 +1296,8 @@ function deal(env) {
   let got = dealt.get(env);
   if (!got) {
     const apex = dealsApex(env);
-    got = { apex, plan: apex ? apexPlan(env) : nextPlan(env) };
+    const back = !apex && dealsBack(env);
+    got = { apex, back, plan: apex ? apexPlan(env) : back ? backPlan(env) : nextPlan(env) };
     dealt.set(env, got);
   }
   return got;
@@ -1057,6 +1309,7 @@ export default {
   paint(g, w, h, env) {
     const d = deal(env);
     if (d.apex) apexPreview(g, w, h, env, d.plan);
+    else if (d.back) backPreview(g, w, h, env, d.plan);
     else {
       nextPreview(g, w, h, env, d.plan, { r: 0, u: 0 });
       d.drawn = { g, w, h, k: 0 };
@@ -1074,7 +1327,7 @@ export default {
   // tapes, do not move, and say so.
   animate(g, w, h, env, t) {
     const d = deal(env);
-    if (d.apex || env.reduced) return false;
+    if (d.apex || d.back || env.reduced) return false;
     const shown = 5 - (d.plan.depth || 1);
     const total = d.plan.width * (shown - 1);
     const click = Math.floor(Math.max(0, t) / TICK);
@@ -1089,6 +1342,17 @@ export default {
   },
   spark(env) {
     const d = deal(env);
+    if (d.back) {
+      const plan = d.plan;
+      return {
+        title: backTitle(plan),
+        text: 'Rule ' + plan.rule + ' ran this tape from a row nobody kept. Four rows survive; run the rule backward and restore the first.',
+        mono: plan.width + ' cells / rule ' + plan.rule + ' / row one lost',
+        aspect: '4 / 3',
+        paint: (ctx, cw, ch, cardEnv) => backPreview(ctx, cw, ch, cardEnv, plan),
+        of: plan
+      };
+    }
     if (d.apex) {
       const plan = d.plan;
       return {
@@ -1113,11 +1377,13 @@ export default {
     };
   },
   piece(env) {
+    const back = carriedBack(env);
+    if (back) return backPiece(env, back);
     const apex = carriedApex(env);
     if (apex) return apexPiece(env, apex);
     const next = carriedNext(env);
     if (next) return nextPiece(env, next);
     const d = deal(env);
-    return d.apex ? apexPiece(env, d.plan) : nextPiece(env, d.plan);
+    return d.apex ? apexPiece(env, d.plan) : d.back ? backPiece(env, d.plan) : nextPiece(env, d.plan);
   }
 };

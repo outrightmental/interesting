@@ -31,7 +31,7 @@
     { "file": "orbital-weaver.html", "name": "the orbital weaver", "orientation": "after symmetry", "mood": "geometric", "aspect": "1 / 1",
       "what": "Close the pattern: count the folds of a weave and spot its mirror, or count the bands of a moire to find the hidden screen." },
     { "file": "machine-shop.html", "name": "the machine shop", "orientation": "cold and clear", "mood": "analytic", "aspect": "3 / 4",
-      "what": "Learn the automaton's rule, test it in a notebook and write the next rows, or find the one cell that changed." },
+      "what": "Learn the automaton's rule, test it in a notebook and write the next rows, find the one cell that changed, or run a rule backward to restore a lost first row." },
     { "file": "light-table.html", "name": "the light table", "orientation": "cold and clear", "mood": "analytic", "aspect": "4 / 3",
       "what": "Light a lamp on purpose: measure slit spacing, order polarising filters, or match two coloured lamps to a target." },
     { "file": "kinetic-floor.html", "name": "the kinetic floor", "orientation": "wound tight", "mood": "restless", "aspect": "16 / 10",
