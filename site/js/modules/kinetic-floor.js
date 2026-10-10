@@ -1,9 +1,9 @@
-/* The kinetic floor: heavy blocks, a lot of them, nothing breakable -- and on it, two things a
-   visitor can work out before anything is allowed to move. As a card it is one of the two puzzles
+/* The kinetic floor: heavy blocks, a lot of them, nothing breakable -- and on it, three things a
+   visitor can work out before anything is allowed to move. As a card it is one of the three puzzles
    below (paint, spark); as a piece it is that puzzle, and the card it was opened from says which.
    See js/feed.js for what a module is and js/stage.js for what a piece is.
 
-   Two puzzles, both deduction, each with something to tip at the end:
+   Three puzzles, all deduction, each with something to tip at the end:
 
      will it cross      Four lanes of dominoes, each with one gap. A falling domino reaches across
                         a gap only when the gap is narrower than four fifths of its height. Every
@@ -17,10 +17,16 @@
                         say which way it tips with the pivot at the middle. A clamp holds the
                         plank level until a check; a wrong check lets it tip, which is the whole
                         of the feedback.
+     the counterweight  The pivot stays put. Choose one of three hanging weights and its whole-
+                        number position to balance two or three fixed blocks. Only one weight
+                        has an exact placement. A check measures the imbalance; a limited help
+                        breaks the pulls into multiplications. The hanger remains movable after
+                        solving, so another placement is another experiment.
 
    A card and the feature it opens as are one floor: the spark puts the whole plan on its spec as
-   `of` -- the four lanes, or the blocks and their places -- and piece(env) opens on that rather
-   than rolling another. */
+   `of` -- the lanes, or the blocks and their places with any fixed pivot and weight rack -- and
+   piece(env) opens on that rather than rolling another. Cards hold still until opened; their
+   plans are cached per env so painting and opening cannot deal different floors. */
 
 const PLAIN = { density: 1, scale: 1, turn: 0 };
 const WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six'];
@@ -398,7 +404,7 @@ function lanesPiece(env, plan) {
   }
   return {
     title: 'will it cross: four lanes in procession',
-    brief: 'Four lanes of dominoes stand in procession, each with one gap. A falling domino reaches across a gap only when the gap is narrower than four fifths of its height. Every lane writes its domino height and its gap width, and both are drawn on the same grid. Tap a lane to change its call.',
+    brief: 'Four lanes of dominoes stand in procession, each with one gap. A falling domino reaches across a gap only when the gap is narrower than four fifths of its height. Every lane writes its domino height and its gap width, and both are drawn on the same grid. Tap a lane to change its call. ' + plan.lanes.map((l, i) => 'Lane ' + (i + 1) + ': height ' + l.h + ', gap ' + l.g).join('; ') + '.',
     goal: 'Call every lane: does the push stop at the gap, or cross it?',
     aspect: '4 / 5',
     checkLabel: 'check the lanes',
@@ -446,7 +452,10 @@ function lanesPiece(env, plan) {
     tap(x, y, c) {
       const geo = lanesGeometry(c.w, c.h, plan, env.variant || PLAIN);
       const k = Math.floor((y * c.h - geo.top) / geo.band);
-      if (k < 0 || k > 3) return;
+      if (k < 0 || k > 3) {
+        c.status('Tap one of the four numbered lanes to change its call.');
+        return;
+      }
       const next = s.calls.slice();
       next[k] = next[k] ? 0 : 1;
       s.calls = next;
@@ -459,11 +468,11 @@ function lanesPiece(env, plan) {
     frame(t, dt, c) {
       const step = Math.max(0, dt);
       s.t += step;
-      if (s.time >= 0) s.time += c.reduced ? step * 3 : step;
+      if (s.time >= 0) s.time = c.reduced ? 8 : s.time + step;
       draw(c);
     },
     end(c) {
-      s.time = 0;
+      s.time = c.reduced ? 8 : 0;
       const over = truth.filter(Boolean).length;
       c.status('tipped. ' + (over === 1 ? 'one lane goes over' : WORDS[over] + ' lanes go over') + ' and ' + (4 - over === 1 ? 'one stops' : WORDS[4 - over] + ' stop') + ' at the gap. nothing here was fragile.');
     }
@@ -518,6 +527,92 @@ function carriedPlank(env) {
 
 function plankTitle(plan) {
   return 'the weighing: ' + WORDS[plan.blocks.length] + ' blocks, one pivot';
+}
+
+function fixedPull(plan, pivot) {
+  return plan.blocks.reduce((sum, b) => sum + b.m * (b.x - pivot), 0);
+}
+
+function counterAnswers(plan) {
+  const pull = fixedPull(plan, plan.pivot);
+  return plan.weights.map((weight) => ({ weight, position: plan.pivot - pull / weight }))
+    .filter((a) => Number.isInteger(a.position) && a.position >= 0 && a.position <= 20);
+}
+
+function counterweightPlan(env) {
+  for (let attempt = 0; attempt < 240; attempt++) {
+    const pivot = env.int(5, 15);
+    const weight = env.int(2, 6);
+    const position = env.int(1, 19);
+    if (Math.abs(position - pivot) < 3 || Math.abs(position - 10) < 3) continue;
+    const pull = weight * (position - pivot);
+    // Decoy masses cannot divide this pull: only the chosen mass has a whole-number placement.
+    const others = [2, 3, 4, 5, 6].filter((m) => m !== weight && pull % m !== 0);
+    if (others.length < 2) continue;
+    const n = env.chance(0.5) ? 2 : 3;
+    const blocks = [];
+    for (let i = 0; i < n - 1; i++) blocks.push({ m: env.int(1, 6), x: env.int(1, 19) });
+    const m = env.int(1, 6);
+    const x = pivot + (-pull - fixedPull({ blocks }, pivot)) / m;
+    if (!Number.isInteger(x) || x < 1 || x > 19) continue;
+    blocks.push({ m, x });
+    blocks.sort((a, b) => a.x - b.x);
+    if (blocks.some((b, i) => i > 0 && b.x - blocks[i - 1].x < 2)) continue;
+    const weights = [weight];
+    while (weights.length < 3) weights.push(others.splice(env.int(0, others.length - 1), 1)[0]);
+    weights.sort((a, b) => a - b);
+    return { kind: 'counterweight', blocks, pivot, weights };
+  }
+  return { kind: 'counterweight', blocks: [{ m: 2, x: 4 }, { m: 3, x: 19 }], pivot: 10, weights: [2, 4, 5] };
+}
+
+function carriedCounterweight(env) {
+  const p = env.card && env.card.of;
+  if (!p || p.kind !== 'counterweight' || !Array.isArray(p.blocks) || p.blocks.length < 2 || p.blocks.length > 3) return null;
+  const pivot = Number(p.pivot);
+  if (!Number.isInteger(pivot) || pivot < 5 || pivot > 15 || !Array.isArray(p.weights) || p.weights.length !== 3) return null;
+  const weights = p.weights.map(Number);
+  if (weights.some((m) => !Number.isInteger(m) || m < 2 || m > 6) || new Set(weights).size !== 3) return null;
+  const blocks = [];
+  for (const b of p.blocks) {
+    if (!b || typeof b !== 'object') return null;
+    const m = Number(b.m);
+    const x = Number(b.x);
+    if (!Number.isInteger(m) || !Number.isInteger(x) || m < 1 || m > 6 || x < 0 || x > 20) return null;
+    if (blocks.some((other) => Math.abs(other.x - x) < 2)) return null;
+    blocks.push({ m, x });
+  }
+  blocks.sort((a, b) => a.x - b.x);
+  weights.sort((a, b) => a - b);
+  const plan = { kind: 'counterweight', blocks, pivot, weights };
+  const answers = counterAnswers(plan);
+  return answers.length === 1 && Math.abs(answers[0].position - 10) > 2 ? plan : null;
+}
+
+function blockClues(plan) {
+  return plan.blocks.map((b) => 'mass ' + b.m + ' at ' + b.x).join('; ');
+}
+
+function counterweightTitle(plan) {
+  return 'the counterweight: ' + WORDS[plan.blocks.length] + ' loads, pivot ' + plan.pivot;
+}
+
+function counterweightBrief(plan) {
+  return 'Balance the weightless plank on its fixed pivot at ' + plan.pivot + ' by hanging one weight below it. Fixed blocks: ' + blockClues(plan)
+    + '. Available hanging masses: ' + plan.weights.join(', ')
+    + '. A block pulls with its mass times its distance from the pivot; equal left and right totals balance. Choose a mass and a whole-number mark from 0 to 20. Only one mass balances exactly. Set its mark with the number field or tap below the plank.';
+}
+
+function hangerShown(s, rite, reduced) {
+  if (s.positionAt == null || s.positionAt < 0) return s.position;
+  return s.positionFrom + (s.position - s.positionFrom) * rite.at(0x700 + s.moves).stair(came(s, s.positionAt, 0.6, reduced));
+}
+
+function counterweightPreview(g, w, h, env, plan) {
+  drawPlank(g, w, h, env, plan, {
+    pivot: plan.pivot, position: 10, weight: 0, angle: 0, clamped: true,
+    caption: 'hang one weight; make the pulls equal', t: 0
+  }, env.variant);
 }
 
 function plankGeometry(w, h) {
@@ -597,6 +692,28 @@ function drawPlank(g, w, h, env, plan, s, variant) {
     label(g, String(b.m), x, y, Math.max(9, Math.round(side * 0.5)), c.bg, 'center', '600');
     label(g, 'at ' + b.x, x, geo.plankY + geo.thick / 2 + small * 0.8, small, env.alpha(c.muted, 0.9));
   }
+  if (plan.kind === 'counterweight') {
+    const x = geo.left + hangerShown(s, rite, reduced) * geo.u;
+    const side = Math.min(h * 0.12, geo.u * (1 + 0.3 * Math.sqrt(s.weight || 3)) * grow);
+    const top = geo.plankY + geo.thick / 2 + h * 0.04;
+    g.strokeStyle = c.accent2;
+    g.lineWidth = 2;
+    g.beginPath();
+    g.moveTo(x, geo.plankY + geo.thick / 2);
+    g.lineTo(x, top);
+    g.stroke();
+    block(g, x, top + side / 2, side, side, 0, c.bg, c.accent2);
+    const own = rite.at(0x800 + (s.weightsSet || 0));
+    g.save();
+    g.beginPath();
+    g.rect(x - side / 2, top, side, side);
+    g.clip();
+    g.fillStyle = env.alpha(c.accent2, 0.16);
+    develop(g, own, x - side / 2, top, side, side,
+      s.weight ? own.stair(came(s, s.weightAt, 0.45, reduced)) : 0);
+    g.restore();
+    label(g, s.weight ? String(s.weight) : '?', x, top + side / 2, size, c.fg, 'center', '600');
+  }
   // The clamp's jaws: they develop by their area when the clamp is put on and dissolve by it when
   // it is let go, through a matte rolled for that clamping, never a cut.
   const clampRite = rite.at(0x500 + (s.clamps || 0));
@@ -610,6 +727,24 @@ function drawPlank(g, w, h, env, plan, s, variant) {
     }
   }
   g.restore();
+  if (plan.kind === 'counterweight') {
+    label(g, 'choose one hanging weight', w / 2, h * 0.055, small, c.fg);
+    plan.weights.forEach((weight, i) => {
+      const x = w * (0.2 + i * 0.3) + v.turn * geo.u;
+      const side = h * 0.09 * grow;
+      block(g, x, h * 0.17, side, side, 0, c.accent2, c.fg);
+      label(g, String(weight), x, h * 0.17, small, c.bg, 'center', '600');
+      if (s.weight === weight) {
+        g.strokeStyle = c.accent2;
+        g.lineWidth = 2;
+        g.beginPath();
+        g.moveTo(x - side / 2, h * 0.24);
+        g.lineTo(x + side / 2, h * 0.24);
+        g.stroke();
+      }
+    });
+    label(g, 'fixed pivot ' + plan.pivot, w / 2, h * 0.31, small, c.fg);
+  }
   // The caption blinks on each time it changes.
   if (rite.at(0x600 + (s.captions || 0)).flicker(came(s, s.captionAt == null ? -1 : s.captionAt, 0.7, reduced))) {
     label(g, s.caption, w / 2, h * 0.92, small, env.alpha(c.muted, 0.9));
@@ -624,11 +759,16 @@ function plankPreview(g, w, h, env, plan) {
 function plankPiece(env, plan) {
   // The pivot is a place on a ruler, so it is a measured answer: the difficulty says how many
   // marks out it may be and still be called balanced.
-  const margin = asked(env).margin;
-  const centre = centreOf(plan.blocks);
+  const settings = asked(env);
+  const margin = settings.margin;
+  const moving = plan.kind === 'counterweight';
+  const answer = moving ? counterAnswers(plan)[0] : null;
+  const centre = moving ? plan.pivot : centreOf(plan.blocks);
   const tip = centre < 10 ? 'left' : centre > 10 ? 'right' : 'level';
   const s = {
-    pivot: 10, pivotFrom: 10, pivotAt: -1, sets: 0,
+    pivot: moving ? centre : 10, pivotFrom: moving ? centre : 10, pivotAt: -1, sets: 0,
+    weight: 0, weightAt: -1, weightsSet: 0,
+    position: 10, positionFrom: 10, positionAt: -1, moves: 0, helped: 0,
     angle: 0, angleFrom: 0, angleAt: -1, checks: 0,
     clamped: true, clampAt: -1, clamps: 0,
     doneAt: -1, t: 0,
@@ -655,44 +795,118 @@ function plankPiece(env, plan) {
     s.captionAt = s.t;
     s.captions += 1;
   }
+  function moveWeight(value, c) {
+    const next = Number(value);
+    if (!Number.isInteger(next) || next < 0 || next > 20) {
+      c.status('Use a whole-number mark from 0 to 20.');
+      return;
+    }
+    if (next !== s.position) {
+      s.positionFrom = hangerShown(s, riteOf(c), !!c.reduced);
+      s.position = next;
+      s.positionAt = s.t;
+      s.moves += 1;
+    }
+    clamp(c, true);
+    tilt(c, 0);
+    say('clamped; check to compare the pulls');
+    c.status('Hanger at mark ' + s.position + (s.weight ? ', mass ' + s.weight : '; choose its mass') + '.');
+  }
+  const help = { id: 'hint', ask: 'compare the pulls (' + settings.helps + ' uses)', kind: 'press', count: 1, label: 'compare the pulls', optional: true };
+  const leeway = margin ? ' Your setting allows ' + margin + (margin === 1 ? ' mark' : ' marks') + ' of leeway; exact balance still has one whole-number answer.' : '';
   return {
-    title: plankTitle(plan),
-    brief: 'A weighing. ' + WORDS[n][0].toUpperCase() + WORDS[n].slice(1) + ' blocks stand on a weightless plank over a ruler from 0 to 20, each with its mass written on it and its place under it. A plank balances on a pivot when the masses times their distances from it come to the same on both sides. A clamp holds it level until you check; a wrong check lets it tip.',
-    goal: 'Find the whole number where one pivot balances the plank, and say which way it tips with the pivot at 10.',
+    title: moving ? counterweightTitle(plan) : plankTitle(plan),
+    brief: moving ? counterweightBrief(plan) + leeway : 'A weighing. ' + WORDS[n][0].toUpperCase() + WORDS[n].slice(1) + ' blocks stand on a weightless plank over a ruler from 0 to 20, each with its mass written on it and its place under it. A plank balances on a pivot when the masses times their distances from it come to the same on both sides. A clamp holds it level until you check; a wrong check lets it tip. Blocks: ' + blockClues(plan) + '.' + leeway,
+    goal: moving ? 'Choose the hanging mass and its whole-number mark to balance the plank on pivot ' + centre + '.' : 'Find the whole number where one pivot balances the plank, and say which way it tips with the pivot at 10.',
     aspect: '16 / 10',
-    checkLabel: 'let go of the clamp',
-    steps: [
+    checkLabel: moving ? 'check the balance' : 'let go of the clamp',
+    steps: moving ? [
+      { id: 'weight', ask: 'choose one hanging mass', kind: 'choice', options: plan.weights.map((m) => ({ label: 'mass ' + m, value: String(m) })) },
+      { id: 'position', ask: 'where to hang it', kind: 'number', min: 0, max: 20, step: 1, value: 10, unit: 'on the ruler' },
+      help
+    ] : [
       { id: 'pivot', ask: 'where one pivot balances it', kind: 'number', min: 0, max: 20, step: 1, value: 10, unit: 'on the ruler' },
-      { id: 'tip', ask: 'with the pivot at 10, the plank', kind: 'choice', options: TIPS }
+      { id: 'tip', ask: 'with the pivot at 10, the plank', kind: 'choice', options: TIPS },
+      help
     ],
-    solution: { pivot: centre, tip },
+    solution: moving ? { weight: String(answer.weight), position: { value: answer.position, near: margin } } : { pivot: { value: centre, near: margin }, tip },
     check(c) {
+      if (moving) {
+        const weight = Number(c.value('weight'));
+        const position = Number(c.value('position'));
+        if (!plan.weights.includes(weight) || !Number.isInteger(position) || position < 0 || position > 20) {
+          return { solved: false, say: 'Choose a hanging mass and a whole-number mark from 0 to 20.' };
+        }
+        const pull = fixedPull(plan, centre) + weight * (position - centre);
+        const solved = weight === answer.weight && Math.abs(position - answer.position) <= margin;
+        clamp(c, false);
+        tilt(c, Math.sign(pull) * 0.14);
+        say(pull === 0 ? 'balanced; both sides pull equally' : (pull > 0 ? 'right' : 'left') + ' side pulls ' + Math.abs(pull) + ' more');
+        return {
+          solved,
+          say: solved
+            ? (pull === 0 ? 'Balanced. ' : 'Within the ' + margin + '-mark leeway. ') + 'Exact balance: mass ' + answer.weight + ' at mark ' + answer.position + '.'
+            : 'The ' + (pull > 0 ? 'right' : 'left') + ' side pulls ' + Math.abs(pull) + ' more. Change the hanging mass or its mark and check again.'
+        };
+      }
       const p = Math.round(Number(c.value('pivot')));
       const pivotRight = Math.abs(p - centre) <= margin;
       const callRight = c.value('tip') === tip;
       clamp(c, false);
       if (pivotRight && callRight) {
-        tilt(c, 0);
-        say('balanced at ' + centre);
-        return { solved: true, say: 'the weighing holds: balanced at ' + centre + '; with the pivot at 10 it ' + (tip === 'level' ? 'stays level' : 'tips to the ' + tip) };
+        tilt(c, Math.sign(centre - p) * 0.14);
+        say(p === centre ? 'balanced at ' + centre : 'within the allowed leeway');
+        return { solved: true, say: (p === centre ? 'the weighing holds' : 'within the ' + margin + '-mark leeway') + ': exact balance at ' + centre + '; with the pivot at 10 it ' + (tip === 'level' ? 'stays level' : 'tips to the ' + tip) };
       }
       const parts = [];
       if (!pivotRight) {
         tilt(c, (p < centre ? 1 : -1) * 0.14);
         parts.push('with the pivot at ' + p + ' the plank tips to the ' + (p < centre ? 'right' : 'left'));
       } else {
-        tilt(c, 0);
-        parts.push('the pivot is in the right place');
+        tilt(c, Math.sign(centre - p) * 0.14);
+        parts.push(p === centre ? 'the pivot is in the right place' : 'the pivot is within the allowed leeway');
       }
       if (!callRight) parts.push('the call for the pivot at 10 is wrong');
-      say(pivotRight ? 'level on its pivot' : 'tipping');
+      say(p === centre ? 'level on its pivot' : 'tipping');
       return { solved: false, say: parts.join('; ') };
     },
     start(c) {
-      c.status('the clamp holds the plank level until you check');
+      if (moving) say('hang one weight; make the pulls equal');
+      c.status(moving ? 'Choose a hanging mass, then set its mark. The pivot stays at ' + centre + '.' : 'the clamp holds the plank level until you check');
       draw(c);
     },
     apply(id, value, c) {
+      if (moving && id === 'weight') {
+        const weight = Number(value);
+        if (!plan.weights.includes(weight)) {
+          c.status('Choose one of the three masses on the rack.');
+          return;
+        }
+        s.weight = weight;
+        s.weightAt = s.t;
+        s.weightsSet += 1;
+        clamp(c, true);
+        tilt(c, 0);
+        say('clamped; check to compare the pulls');
+        c.status('Hanging mass ' + weight + ' at mark ' + s.position + '.');
+      }
+      if (moving && id === 'position') moveWeight(value, c);
+      if (id === 'hint') {
+        if (s.helped >= settings.helps) {
+          c.status('All comparisons used. Multiply each mass by its distance from the pivot; equal totals balance.');
+        } else {
+          s.helped += 1;
+          c.hint();
+          const pivot = moving ? centre : s.pivot;
+          const blocks = plan.blocks.concat(moving && s.weight ? [{ m: s.weight, x: s.position }] : []);
+          const pulls = blocks.map((b) => {
+            const distance = Math.abs(b.x - pivot);
+            return 'mass ' + b.m + ' at ' + b.x + ': ' + b.m + ' x ' + distance + ' = ' + (b.m * distance) + (b.x < pivot ? ' left' : b.x > pivot ? ' right' : ' on the pivot');
+          });
+          c.status('At pivot ' + pivot + ', ' + pulls.join('; ') + '. Equal left and right totals balance. '
+            + (moving && !s.weight ? 'Choose a hanging mass to add its pull. ' : '') + (settings.helps - s.helped) + ' comparisons left.');
+        }
+      }
       if (id === 'pivot') {
         const p = Math.round(Number(value));
         const next = Number.isFinite(p) ? Math.max(0, Math.min(20, p)) : 10;
@@ -710,6 +924,21 @@ function plankPiece(env, plan) {
       if (id === 'tip') c.status('at 10, you say it ' + (value === 'level' ? 'stays level' : 'tips to the ' + value));
       draw(c);
     },
+    tap(x, y, c) {
+      if (!moving) {
+        c.status('Set the pivot with its number field, then check the balance.');
+        return;
+      }
+      if (y < 0.55) {
+        c.status('Choose a mass with its button; tap below the plank to place the hanger on the ruler.');
+        return;
+      }
+      const geo = plankGeometry(c.w, c.h);
+      const position = Math.max(0, Math.min(20, Math.round((x * c.w - geo.left) / geo.u)));
+      moveWeight(position, c);
+      c.set('position', position);
+      draw(c);
+    },
     frame(t, dt, c) {
       s.t += Math.max(0, dt);
       if (c.done && s.doneAt < 0) s.doneAt = s.t;
@@ -717,17 +946,26 @@ function plankPiece(env, plan) {
     },
     end(c) {
       clamp(c, false);
-      tilt(c, 0);
+      const pull = moving ? fixedPull(plan, centre) + s.weight * (s.position - centre) : centre - s.pivot;
+      tilt(c, Math.sign(pull) * 0.14);
       if (s.doneAt < 0) s.doneAt = s.t;
-      c.status('balanced at ' + centre + '. the clamp is off and it stays where it is; move the pivot and check again to see it tip.');
+      c.status(moving
+        ? 'Exact balance uses mass ' + answer.weight + ' at mark ' + answer.position + '. Change either setting and check again to see which side pulls harder.'
+        : 'Exact balance is at ' + centre + '. The clamp is off; move the pivot and check again to see it tip.');
     }
   };
 }
 
 /* ---- the module ----------------------------------------------------------------------------- */
 
+const plans = new WeakMap();
+
 function deal(env) {
-  return env.chance(0.5) ? lanesPlan(env) : plankPlan(env);
+  if (plans.has(env)) return plans.get(env);
+  const makers = [lanesPlan, plankPlan, counterweightPlan];
+  const plan = carriedLanes(env) || carriedPlank(env) || carriedCounterweight(env) || makers[env.int(0, 2)](env);
+  plans.set(env, plan);
+  return plan;
 }
 
 export default {
@@ -736,10 +974,24 @@ export default {
   paint(g, w, h, env) {
     const plan = deal(env);
     if (plan.kind === 'lanes') lanesPreview(g, w, h, env, plan);
+    else if (plan.kind === 'counterweight') counterweightPreview(g, w, h, env, plan);
     else plankPreview(g, w, h, env, plan);
+  },
+  animate(g, w, h, env, t) {
+    return false;
   },
   spark(env) {
     const plan = deal(env);
+    if (plan.kind === 'counterweight') {
+      return {
+        title: counterweightTitle(plan),
+        mono: 'fixed pivot ' + plan.pivot + '\n' + plan.blocks.map((b) => 'mass ' + b.m + '  at ' + b.x).join('\n') + '\nhanging masses: ' + plan.weights.join(', '),
+        text: counterweightBrief(plan),
+        aspect: '16 / 10',
+        paint: (g, w, h, cardEnv) => counterweightPreview(g, w, h, cardEnv, plan),
+        of: plan
+      };
+    }
     if (plan.kind === 'lanes') {
       return {
         title: 'will it cross: four lanes in procession',
@@ -760,10 +1012,6 @@ export default {
     };
   },
   piece(env) {
-    const lanes = carriedLanes(env);
-    if (lanes) return lanesPiece(env, lanes);
-    const plank = carriedPlank(env);
-    if (plank) return plankPiece(env, plank);
     const plan = deal(env);
     return plan.kind === 'lanes' ? lanesPiece(env, plan) : plankPiece(env, plan);
   }
