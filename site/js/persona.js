@@ -16,6 +16,8 @@
    configurations through interestingFeed.previewSky(), so changing a star reveals a real world's
    response rather than an imitation. Moving a star updates the preview when the move ends.
    A pending preview is invalidated as soon as its stars change, even during a drag.
+   Closing the sheet keeps a move just as releasing the star does. Replacing the sky releases
+   any drag before rendering, so a later pointer release cannot restore the previous sky.
    The first preview's picture and words stay available for comparison while that world is being
    previewed in the open sheet. This is a temporary picture, never another saved or editable sky.
 
@@ -614,7 +616,6 @@
     }
     return '';
   }
-  var lastFigure = figureOf(stars());
   function skyName(value) {
     var list = clean(value === undefined ? stars() : value);
     var t = skyTraits(list);
@@ -705,23 +706,23 @@
       throw new TypeError('A sky must be an array of stars.');
     }
     var list = clean(next);
+    var drag = releaseDrag();
     var saved = read();
     if (saved.status !== 'unreadable' && sameStars(clean(saved.value), list)) {
+      if (drag) refresh();
       return !!(store && saved.status === 'ok' && store.persistent !== false);
     }
     var kept = false;
     if (store) kept = list.length ? store.set(SKY, list) : store.remove(SKY);
     // Placed, moved, seeded, removed or cleared: the constellation was set, and if it was set in
     // the sheet it is handed over when the sheet closes (the hand-off, below).
-    var figure = figureOf(list);
     if (sheet && sheet.host.open) noteSet('sky', sheet.field);
-    lastFigure = figure;
     announce(list, how || 'placed', kept);
     return kept;
   }
   function addStar(star) {
     if (!validStar(star)) return false;
-    var list = stars();
+    var list = activeDrag ? serialize() : stars();
     if (list.length >= MAX_STARS) list.shift();
     list.push(cleanStar(star));
     return setStars(list, 'added');
@@ -1425,7 +1426,7 @@
     }
   }
   function renderSkyAnswer() {
-    if (!sheet || !sheet.answer || !sheet.answerRead) return;
+    if (!sheet || !sheet.host.open || !sheet.answer || !sheet.answerRead) return;
     var feed = window.interestingFeed;
     var list = stars();
     var off = !list.length || !feed || typeof feed.previewSky !== 'function';
@@ -1444,15 +1445,15 @@
     }
     var answerArriving = show(sheet.answer);
     if (!skyAnswerWanted) return;
-    if (skyAnswerAt === skyAnswerIndex && skyAnswerStars && sameStars(skyAnswerStars, list)) return;
     // A star held in a drag: the preview waiting for the stars it was asked for is no longer the
     // sky's, so it is let go now (its ticket spent) rather than drawn when it comes, and a new one
     // is asked for when the move ends.
-    if (activeDrag) {
+    if (activeDrag && activeDrag.moved) {
       skyAnswerTicket += 1;
       skyAnswerStars = null;
       return;
     }
+    if (skyAnswerAt === skyAnswerIndex && skyAnswerStars && sameStars(skyAnswerStars, list)) return;
     var ticket = ++skyAnswerTicket;
     skyAnswerStars = list;
     skyAnswerAt = skyAnswerIndex;
@@ -1998,8 +1999,8 @@
     focusStar(0);
     sheetStatus('Removed the star that said: ' + gone + '. ' + fieldIntro(fieldStars) + keptNote(kept));
   }
-  function endDrag(pointerId) {
-    if (!activeDrag || activeDrag.pointerId !== pointerId) return;
+  function releaseDrag() {
+    if (!activeDrag) return null;
     var drag = activeDrag;
     activeDrag = null;
     var star = fieldStars[drag.index];
@@ -2007,12 +2008,17 @@
       // Set down: the lift comes off, and the star comes back to its size in treads.
       star.el.classList.remove('dragging');
       if (star.el.releasePointerCapture) {
-        try { star.el.releasePointerCapture(pointerId); }
+        try { star.el.releasePointerCapture(drag.pointerId); }
         catch (e) { console.error('Could not release the dragged star', e); }
       }
     }
+    if (drag.moved) suppressClickUntil = Date.now() + DRAG_SUPPRESS_MS;
+    return drag;
+  }
+  function endDrag(pointerId) {
+    if (!activeDrag || activeDrag.pointerId !== pointerId) return;
+    var drag = releaseDrag();
     if (drag.moved) {
-      suppressClickUntil = Date.now() + DRAG_SUPPRESS_MS;
       var kept = setStars(serialize(), 'moved');
       sheetStatus('Moved.' + namedLine() + keptNote(kept));
       renderSkyAnswer();
@@ -2123,6 +2129,7 @@
   function closeSheet() {
     if (!sheet) return;
     if (sheet.host.open) {
+      if (activeDrag) endDrag(activeDrag.pointerId);
       leaveSheetGhost();
       if (sheetBox) sheetBox.down();
       if (typeof sheet.host.close === 'function') sheet.host.close();
@@ -2151,7 +2158,7 @@
   function onSheetClosed() {
     if (!sheet || sheet.host.open || !sheetWasOpen) return;
     sheetWasOpen = false;
-    activeDrag = null;
+    if (activeDrag) endDrag(activeDrag.pointerId);
     stopFieldCast();
     skyAnswerTicket += 1;
     skyAnswerStars = null;
@@ -2312,7 +2319,10 @@
       var x = Number(point.x.toFixed(2));
       var y = Number(point.y.toFixed(2));
       if (star.x === x && star.y === y) return;
-      activeDrag.moved = true;
+      if (!activeDrag.moved) {
+        activeDrag.moved = true;
+        renderSkyAnswer();
+      }
       star.x = x;
       star.y = y;
       placeElement(star);
