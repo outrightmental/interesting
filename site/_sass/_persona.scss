@@ -158,10 +158,14 @@
 }
 
 // The one lit control on a page with no persona yet: the label shows, and the button is filled.
+// Filled, it shows nothing of the page behind it, so it blurs nothing either: a blur behind an
+// opaque fill would be work with nothing to show for it.
 .persona[data-state='empty'] .persona-avatar {
   padding-right: 1rem;
   background: var(--md-sys-color-primary);
   color: var(--md-sys-color-on-primary);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 .persona[data-state='empty'] .persona-portrait {
@@ -302,8 +306,11 @@ html[data-lightbox] .persona[data-state='empty'] .persona-portrait::after {
   @include cut.play(in, portrait-ask, medium);
 }
 
+// The curve cuts the ring in afresh in the reading's colour, so the colour does not step on its own
+// beside it as well: one edge.
 .persona.is-read .persona-portrait::before {
   mask: cut.curve(18%, 82%);
+  transition: none;
   animation: reading-seal var(--motion-reading-seal, var(--motion-medium)) var(--ease-reading-seal, var(--ease-arrive)) both;
 }
 
@@ -753,10 +760,12 @@ html[data-lightbox] .persona[data-state='empty'] .persona-portrait::after {
 // A star is a button with a light in it. Its left and top are never moved by degrees: js/persona.js
 // places the star under the pointer. It plays the grammar every control plays (_controls.scss):
 // a press dips it (rite-stamp), and being chosen seals it -- its ::before, the 44px touch target
-// round its small light, takes two shades of the tertiary split by a curve round where it was
-// pressed (aria-pressed, is-sealing). Picked up to be dragged it grows in treads, and set down it
-// comes back in treads (`transform`, which the compositor draws). Its ::after is not a state
-// layer but the thread badge (below), so its state layer is drawn in the light instead.
+// round its small light, takes two shades of the tertiary split by a curve round the star's own
+// point, which grows from there (aria-pressed, is-sealing). That is the whole of how a chosen star
+// looks: no ring is drawn round it besides, since a ring that is simply there has no edge to come
+// by. Picked up to be dragged it grows in treads, and set down it comes back in treads
+// (`transform`, which the compositor draws). Its ::after is not a state layer but the thread badge
+// (below), so its state layer is drawn in the light instead.
 button.persona-star {
   --fill-opacity: 0.26;
   position: absolute;
@@ -831,33 +840,39 @@ button.persona-star {
 
 // Placed (is-placed, js/persona.js, with --d from the roll's stagger when a whole sky is dealt):
 // the light grows as a curve from its own centre -- the point the star was placed at, where the
-// finger fell on the sky -- in the landing treads rolled for this one star (--ease-star-develop).
+// finger fell on the sky -- in the landing treads rolled for this one star (--ease-star-develop),
+// the curve as wide as the light, so each tread is seen. A star being placed has no state layer
+// yet: the light is what arrives, and a focus given to it as it is placed (the drop button's) is
+// cut in once it has (is-placed comes off).
 .persona-star.is-placed .persona-star-light {
-  mask: cut.curve(50%, 50%);
+  mask: point();
   @include cut.play(in, star-develop, long, arrive);
   animation-delay: var(--d, 0ms);
+}
+
+.persona-star.is-placed .persona-star-light::before {
+  opacity: 0;
+  animation: none;
 }
 
 // Removed: the star itself goes at once (the list is what it is), and a ghost of it js/persona.js
 // leaves in its place is cut back into its point by the same curve, stepping in.
 .persona-star.persona-star-ghost {
   pointer-events: none;
-  mask: cut.curve(50%, 50%);
+  mask: point();
   @include cut.play(out, star-unmake, medium, leave);
 }
 
+// The seal's layer (_controls.scss), in the tertiary, its curve round the star's own point: where
+// it was placed, and where any press on it lands within a few pixels.
 .persona-star::before {
   content: '';
   position: absolute;
   inset: 0;
   border-radius: 50%;
   color: var(--md-sys-color-tertiary);
-}
-
-// Chosen: sealed by _controls.scss (above), and ringed in the tertiary.
-.persona-star.selected {
-  color: var(--md-sys-color-tertiary);
-  box-shadow: inset 0 0 0 2px var(--md-sys-color-tertiary);
+  --seal-x: 50%;
+  --seal-y: 50%;
 }
 
 .persona-star:focus-visible {
@@ -891,9 +906,10 @@ button.persona-star {
 }
 
 // The thread badge: the star's place in the short path through nearby thoughts (data-thread,
-// js/persona.js). It is stamped on as a disc growing from its centre when the place is given, and
-// when the place is taken away the old number (data-thread-was, is-unthreaded) goes back into its
-// centre the same way. Never cut by the button's state layer or ink, which are the light's here.
+// js/persona.js). It is stamped on as a disc growing from its centre when the place is given,
+// stamped again when the place is given a new number (another star chosen, a drag), and when the
+// place is taken away the old number (data-thread-was, is-unthreaded) goes back into its centre
+// the same way. Never cut by the button's state layer or ink, which are the light's here.
 .persona-star::after {
   display: none;
 }
@@ -921,12 +937,29 @@ button.persona-star {
   animation: thread-stamp var(--motion-thread-stamp, var(--motion-medium)) var(--ease-thread-stamp, var(--ease-flicker)) both;
 }
 
+// A new number for a place kept: js/persona.js turns is-renumbered on, or off, at each new number,
+// and the badge's animation changes its name with it -- which is what starts a stamp again on a
+// layer that never stopped being drawn, where the same name would only have changed the digit.
+.persona-star.is-renumbered[data-thread]::after {
+  animation: thread-restamp var(--motion-thread-restamp, var(--motion-medium)) var(--ease-thread-restamp, var(--ease-flicker)) both;
+}
+
 .persona-star.is-unthreaded:not([data-thread])::after {
   content: attr(data-thread-was);
   animation: thread-unmake var(--motion-thread-unmake, var(--motion-medium)) var(--ease-thread-unmake, var(--ease-leave)) both;
 }
 
 @keyframes thread-stamp {
+  from {
+    scale: 0;
+  }
+
+  to {
+    scale: 1;
+  }
+}
+
+@keyframes thread-restamp {
   from {
     scale: 0;
   }
@@ -975,9 +1008,11 @@ button.persona-star {
 // Less motion asked for: every state is simply there. The avatar stands, the name is beside it or
 // not, the sheet is open or shut, a star is where it is, and nothing turns, steps or flies. Every
 // edge that would otherwise sit at its start with nothing to step it is taken off with its
-// animation, so what it would have shown is shown whole.
+// animation, so what it would have shown is shown whole. (js/persona.js puts no arriving, placing
+// or casting class on at all for this visitor; these rules are the answer for a page whose script
+// never read the query.)
 @media (prefers-reduced-motion: reduce) {
-  .persona-avatar:not([hidden]),
+  .persona-avatar.is-arriving,
   .persona[data-state='empty'] .persona-portrait::after,
   .persona.is-casting .persona-portrait canvas,
   .persona.is-casting .persona-portrait::after,
@@ -987,22 +1022,9 @@ button.persona-star {
   .persona:not([data-state='empty']) .persona-avatar.is-waning .persona-label,
   .persona[data-asking='true'] .persona-portrait::before,
   .persona.is-read .persona-portrait::before,
-  .persona-avatar.is-stamping .persona-portrait,
-  .persona-avatar:active .persona-portrait,
-  .persona-probe:not([hidden]),
-  .persona-sheet[open],
+  .persona-sheet[open].is-arriving,
   .persona-sheet.persona-ghost,
-  .persona-sky-name:not([hidden]),
-  .persona-thread:not([hidden]),
-  .persona-star-words:not([hidden]),
-  [id='persona-remove']:not([hidden]),
-  [id='persona-forget']:not([hidden]),
-  [id='persona-reading-go']:not([hidden]),
-  .persona-sky-answer:not([hidden]),
-  .persona-sky-answer-world:not([hidden]),
-  .persona-sky-answer-title:not([hidden]),
-  .persona-sky-comparison:not([hidden]),
-  .persona-sky-preview:not([hidden]),
+  .persona-sheet .is-arriving,
   .persona-sheet .is-unmaking,
   .persona-probe.is-unmaking,
   .persona-star.is-waxing .persona-star-light::before,
@@ -1012,6 +1034,7 @@ button.persona-star {
   .persona-star.persona-star-ghost,
   .persona-star.is-nudged,
   .persona-star[data-thread]::after,
+  .persona-star.is-renumbered[data-thread]::after,
   .persona-star.is-unthreaded:not([data-thread])::after {
     animation: none;
     mask: none;
@@ -1037,6 +1060,7 @@ button.persona-star {
   }
 
   .persona-sheet.persona-ghost,
+  .persona-probe.is-unmaking,
   .persona-star.persona-star-ghost {
     display: none;
   }
@@ -1044,6 +1068,7 @@ button.persona-star {
   // The same answer as .is-still above, for a page whose script never read the query.
   .persona-flight {
     animation: none;
+    mask: none;
     opacity: 0.9;
   }
 
@@ -1054,23 +1079,21 @@ button.persona-star {
 }
 
 // A ghost is a copy of what it stands for, parts and all, and the parts keep the rules that made
-// them arrive -- the sky's name, the thread, the words form cut in from their rolled directions,
-// the badges stamping on, a star's light growing from its point -- which would all start again,
-// new, inside a box that is leaving, and an arrival's edge with nothing to step it would hide its
-// part. So inside a ghost (the sheet's, the probe's) nothing moves but the ghost, and nothing is
-// cut but by the ghost's own edge: one leaving, of the whole. Last in the file, so it outranks
-// every rule above it at the same specificity, with a step up for a star's light and badge.
-.persona-sheet.persona-ghost *,
-.persona-sheet.persona-ghost *::before,
-.persona-sheet.persona-ghost *::after,
-.persona-sheet.persona-ghost .persona-star::after,
-.persona-sheet.persona-ghost .persona-star *,
-.persona-sheet.persona-ghost .persona-star *::before,
-.persona-sheet.persona-ghost .persona-star *::after,
+// them arrive -- the answer cards a question dealt, a star's light growing from its point, a badge
+// stamping on -- which would all start again, new, inside a box that is leaving, and an arrival's
+// edge with nothing to step it would hide its part. js/persona.js takes the passing classes and
+// the dealt marks off the copy and hides what was already on its way out; and inside a ghost (the
+// sheet's, the probe's) nothing moves but the ghost, and nothing is cut but by the ghost's own
+// edge: one leaving, of the whole. Said over whatever a part's own rule says (!important), as the
+// shell says its stilling (_lightbox.scss): a part's arrival may be written anywhere on the site
+// and be more particular than any rule here.
+.persona-ghost *,
+.persona-ghost *::before,
+.persona-ghost *::after,
 .persona-probe.is-unmaking *,
 .persona-probe.is-unmaking *::before,
 .persona-probe.is-unmaking *::after {
-  animation: none;
-  transition: none;
-  mask: none;
+  animation: none !important;
+  transition: none !important;
+  mask: none !important;
 }

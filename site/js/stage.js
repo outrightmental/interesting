@@ -135,7 +135,11 @@
           start(ctx) {},                            // the scene is ready to draw on (called again
                                                     // after a resize if the piece has no frame)
           frame(t, dt, ctx) {},                     // one frame (optional); t is seconds since the
-                                                    // piece started, dt since the last frame
+                                                    // piece started, dt since the last frame. It is
+                                                    // asked for every frame the scene is on the
+                                                    // screen, and draws only when something on it
+                                                    // has moved: the canvas keeps the last picture,
+                                                    // and a still one is not drawn again
           apply(id, value, ctx) {},                 // a knob was set (the stage sets it)
           tap(x, y, ctx) {},                        // the scene was tapped, x and y in 0..1
                                                     // (optional; a 'tap' knob needs it. A press
