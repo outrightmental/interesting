@@ -346,6 +346,24 @@
       pure: { analytic: 2, geometric: 1, brooding: 1 },
       even: { geometric: 3, metrical: 2 },
       muddied: { curious: 2, verbal: 2, divinatory: 1 }
+    },
+    {
+      probe: 'censer', name: 'the swinging censer', kind: 'censer',
+      ask: 'A censer swings on its chain, and the swing is slowly dying. Catch it when it feels right, or let it come to rest first.',
+      label: 'catch it', rest: 'take it down',
+      buckets: [
+        { under: 2, weights: { restless: 3, tempestuous: 2, verbal: 1 } },
+        { under: 5, weights: { curious: 2, analytic: 2, geometric: 1 } },
+        { under: 10, weights: { ceremonial: 2, attentive: 2, metrical: 1 } },
+        { under: 18, weights: { brooding: 2, rooted: 2, tending: 1 } },
+        { under: Infinity, weights: { tender: 2, cosmic: 2, divinatory: 1 } }
+      ],
+      apex: { attentive: 2, geometric: 2, metrical: 1 },
+      flight: { restless: 2, tempestuous: 1, curious: 1 },
+      between: { ceremonial: 2, verbal: 1, divinatory: 1 },
+      left: { brooding: 1, divinatory: 1 },
+      right: { analytic: 1, tending: 1 },
+      rested: { tender: 3, brooding: 2, cosmic: 1 }
     }
   ];
 
@@ -1178,8 +1196,9 @@
     }, true);
     // The reading lands as ONE seal, and only then does what is done with go. A mechanism with a
     // picture or a panel of its own seals that, from the point its answer lives at -- the knocker,
-    // the needle's tip, the top stone, the dial's thumb, the mark, the last drop of dye -- and hands
-    // the seal's length here (`own`), and the frame draws no second one (data-seal='own').
+    // the needle's tip, the top stone, the dial's thumb, the mark, the last drop of dye, the censer
+    // where it was caught -- and hands the seal's length here (`own`), and the frame draws no
+    // second one (data-seal='own').
     // Otherwise the frame's own layer is the seal: two shades of the new primary split by a curve
     // round the point the answer was given (the last press in the frame), grown from there in
     // treads cut for it. Once the seal has grown, the glass, the meter and the skip go behind a
@@ -1222,7 +1241,8 @@
       choice: choiceProbe, sequence: sequenceProbe, tap: tapProbe, hold: holdProbe,
       place: placeProbe, draw: drawProbe, windows: windowsProbe, balance: balanceProbe,
       slider: sliderProbe, sky: skyProbe, keys: keysProbe, knock: knockProbe,
-      rubbing: rubbingProbe, cairn: cairnProbe, compass: compassProbe, dye: dyeProbe
+      rubbing: rubbingProbe, cairn: cairnProbe, compass: compassProbe, dye: dyeProbe,
+      censer: censerProbe
     };
     (kinds[probe.kind] || choiceProbe)(probe, body, trace, answer, finish);
     return probe;
@@ -3550,6 +3570,287 @@
       retire(dip, sealing);
     });
     paint();
+  }
+  // A censer swings on its chain and the swing is dying. The answer is when the visitor catches
+  // it: after how many swings, and where in the arc -- at the still point of the top, in full
+  // flight through the middle, or on the way between -- and on which side; a visitor who lets it
+  // come to rest and then takes it down is read by that patience. Nothing is hidden: the arc the
+  // swing still reaches is drawn, so the still point can be seen coming, and no catch is wrong.
+  // The swing is the question, so it moves for as long as it is asked, and in clean treads: each
+  // pass from one top to the other is a stair rolled for that pass alone (README: "Motion
+  // axiom"), three to five treads that are even strides along the arc and an even step apart in
+  // time -- it hangs at the top, its still point, about a step before the first and about a step
+  // after the last, so the hang at a top is the longest wait of the swing and the middle goes by
+  // fastest, as a censer's does -- always forward, never along a sine. A puff of smoke let go at
+  // each top rises on the treads of the pass that follows, carried on the way the swing was going,
+  // and goes from below behind one slice, toward where smoke goes; the ember is lit and steady.
+  // The room rests in two shades split by one curve: the circle of the chain's reach round the
+  // hook, which the swing travels. The scene is drawn only when a tread lands or a pass turns; the
+  // swing waits where it stands while it is scrolled out of view, set aside behind a lightbox or in
+  // a tab out of sight; and it rests the moment it is caught, where it was caught: the scene is
+  // sealed from the censer out, in treads, with the chain cut warm -- the reading's one seal.
+  function censerProbe(probe, body, trace, answer, finish) {
+    var still = stilled();
+    var A0 = 0.78;
+    var DAMP = 0.93;
+    var REST = 0.06;
+    var scene = el('canvas', 'probe-pad');
+    scene.width = 600;
+    scene.height = 320;
+    scene.setAttribute('aria-hidden', 'true');
+    scene.style.cursor = 'pointer';
+    scene.style.touchAction = 'manipulation';
+    var g = scene.getContext('2d');
+    scene.hidden = !g;
+    body.appendChild(scene);
+    var controls = el('div', 'controls');
+    var grab = el('button', 'probe-big', probe.label);
+    grab.type = 'button';
+    controls.appendChild(grab);
+    body.appendChild(controls);
+    body.appendChild(el('p', 'probe-count', 'tap the censer or press the button whenever it feels right; the swing dies down on its own, and a censer at rest can still be taken down'));
+    var style = window.getComputedStyle(body);
+    var tone = function (name, fallback) { return rgbOf(style.getPropertyValue(name), fallback); };
+    var night = tone('--bg', '#070a14');
+    var dusk = tone('--bg2', '#1c2a4e');
+    var cool = tone('--accent', '#9fcbff');
+    var warm = tone('--accent2', '#ffe7ab');
+    var amp = A0;
+    var from = A0;
+    var to = -A0;
+    var shown = A0;
+    var swings = 0;
+    var halfMs = 1000;
+    var pass = null; // this pass's stair: its treads, and when in the pass each lands
+    var reached = 0; // the tread of this pass the censer stands on
+    var rested = false;
+    var caught = false;
+    var sealed = 0; // how far the seal has grown from the censer, 0 to 1
+    var puff = null; // the smoke let go at the last top, while it rises
+    var timer = 0;
+    var due = 0; // when the next tread lands or the pass turns, while its timer is set
+    var held = -1; // what was left of that wait, while it is put away
+    var seen = true; // whether the scene is in view, as the observer last said (below)
+    var RISE = { kind: 'slice', angle: 180 };
+    var PIVOT = { x: 0.5, y: 0.09 };
+    var L = scene.height * 0.66;
+    function bob(a) {
+      return [PIVOT.x * scene.width + Math.sin(a) * L, PIVOT.y * scene.height + Math.cos(a) * L];
+    }
+    // A pass's stair, rolled for it alone: three to five treads, so that a catch on the way between
+    // the top and the middle can be made in every pass (two for a visitor who asked for less -- the
+    // middle, and the far top), each an even stride of the arc. In time the pass is cut into even
+    // steps, one from each tread to the next, with a rolled hold of about one step at either end:
+    // the hold before the first tread and the hold after the last make the hang at a top together,
+    // about two steps, the longest wait in the swing, because the top is where a swing is still.
+    // In fractions of the pass.
+    function stairFor() {
+      var n = still ? 2 : 3 + Math.floor(Math.random() * 3);
+      var lead = between(0.9, 1.2);
+      var tail = between(0.8, 1.1);
+      var step = 1 / (n - 1 + lead + tail);
+      var at = [];
+      for (var k = 0; k < n; k++) at.push((lead + k) * step);
+      return { n: n, at: at };
+    }
+    // The next tread of this pass, or its turn, after the time left to it. Nothing lands while the
+    // page is set aside behind a lightbox or the question is put away unanswered: it asks again in
+    // a while, as the sky does, and the pass waits where it stands. In a tab out of sight the wait
+    // is put away until the tab is back (below). Nothing at all once the scene has left the page,
+    // has come to rest, or is caught. The question's own box is asked, not the canvas, which is
+    // hidden itself where there is nothing to draw it with and still swings for the count.
+    function next(delay) {
+      if (caught || rested) return;
+      due = Date.now() + delay;
+      timer = window.setTimeout(function () {
+        timer = 0;
+        if (caught || rested) return;
+        if (!scene.isConnected) { stop(); return; }
+        if (document.hidden) { held = 0; return; }
+        if (body.closest('[data-lightbox-aside], [hidden]')) { next(500); return; }
+        land();
+      }, Math.max(0, delay));
+    }
+    // A wait put away with what was left of it, and taken up again from there once the scene is
+    // in view and its tab in sight, so the swing has not died unseen.
+    function hold() {
+      if (!timer) return;
+      window.clearTimeout(timer);
+      timer = 0;
+      held = Math.max(0, due - Date.now());
+    }
+    function resume() {
+      if (held < 0 || !seen || document.hidden || caught || rested) return;
+      var wait = held;
+      held = -1;
+      next(wait);
+    }
+    function stop() {
+      if (timer) window.clearTimeout(timer);
+      timer = 0;
+      held = -1;
+      if (watch) watch.disconnect();
+      document.removeEventListener('visibilitychange', glance);
+    }
+    function glance() {
+      if (!scene.isConnected) stop();
+      else if (document.hidden) hold();
+      else resume();
+    }
+    document.addEventListener('visibilitychange', glance);
+    // A tread lands: the censer a stride further along the arc, the smoke as far up; or, the last
+    // tread landed, the pass turns.
+    function land() {
+      if (reached >= pass.n) { turn(); return; }
+      reached += 1;
+      shown = from + (to - from) * reached / pass.n;
+      if (puff) puff.k = reached / pass.n;
+      paint();
+      next(((reached < pass.n ? pass.at[reached] : 1) - pass.at[reached - 1]) * halfMs);
+    }
+    function begin() {
+      pass = stairFor();
+      reached = 0;
+      next(pass.at[0] * halfMs);
+    }
+    // The turn at the top of a pass: the swing loses a little, a puff is let go where it hangs,
+    // and the next pass gets its own stair -- or the swing has died, and it hangs straight down.
+    function turn() {
+      swings += 1;
+      from = to;
+      amp *= DAMP;
+      to = (from > 0 ? -1 : 1) * amp;
+      halfMs = 1000 * between(0.92, 1.12);
+      gauge(trace, tally(swings));
+      if (amp < REST) {
+        rested = true;
+        shown = 0;
+        puff = null;
+        stop();
+        paint();
+        note(trace, 'it has come to rest; take it down when you like');
+        say(grab, probe.rest);
+        return;
+      }
+      var at = bob(from);
+      puff = still ? null : { x: at[0], y: at[1], k: 0, way: from > 0 ? 1 : -1 };
+      paint();
+      begin();
+    }
+    function paint() {
+      if (!g) return;
+      var w = scene.width;
+      var h = scene.height;
+      var px = PIVOT.x * w;
+      var py = PIVOT.y * h;
+      var r = h * 0.065;
+      // The room: two shades split by one curve, the circle of the chain's reach round the hook,
+      // whose foot the swing travels.
+      g.fillStyle = rgba(blend(night, dusk, 0.25), 1);
+      g.fillRect(0, 0, w, h);
+      g.fillStyle = rgba(blend(night, dusk, 0.5), 1);
+      g.beginPath();
+      g.arc(px, py, L, 0, Math.PI * 2);
+      g.fill();
+      // The arc the swing still reaches, drawn on that curve so the still point can be seen coming.
+      if (!rested) {
+        g.strokeStyle = rgba(cool, 0.4);
+        g.lineWidth = 1.5;
+        g.beginPath();
+        g.arc(px, py, L, Math.PI / 2 - amp, Math.PI / 2 + amp);
+        g.stroke();
+      }
+      // The smoke let go at the last top: risen as far as this pass has come, carried on the way
+      // the swing was going, and gone from below behind one slice as it rises.
+      if (puff && puff.k < 1) {
+        var up = puff.k;
+        var pr = r * (0.5 + up * 1.3);
+        var sx = puff.x + puff.way * 24 * up;
+        var sy = puff.y - r - up * h * 0.28;
+        g.save();
+        g.beginPath();
+        g.arc(sx, sy, pr, 0, Math.PI * 2);
+        g.clip();
+        paintCut(g, sx - pr, sy - pr, pr * 2, pr * 2, 1 - up, RISE, rgba(cool, 0.3));
+        g.restore();
+      }
+      var b = bob(shown);
+      // The chain, and the hook it hangs from.
+      g.strokeStyle = rgba(caught ? warm : cool, 0.75);
+      g.lineWidth = 2;
+      g.beginPath();
+      g.moveTo(px, py);
+      g.lineTo(b[0], b[1] - r);
+      g.stroke();
+      g.fillStyle = rgba(cool, 0.9);
+      g.beginPath();
+      g.arc(px, py, 4, 0, Math.PI * 2);
+      g.fill();
+      // The censer: a body, a lid, and the ember inside it, lit and steady -- two shades of the
+      // warm split by one curve, its glow and its core.
+      g.fillStyle = rgba(blend(night, warm, 0.35), 1);
+      g.beginPath();
+      g.arc(b[0], b[1], r, 0, Math.PI * 2);
+      g.fill();
+      g.strokeStyle = rgba(warm, caught || rested ? 1 : 0.8);
+      g.lineWidth = 2;
+      g.stroke();
+      g.beginPath();
+      g.moveTo(b[0] - r * 0.7, b[1] - r * 0.25);
+      g.lineTo(b[0] + r * 0.7, b[1] - r * 0.25);
+      g.stroke();
+      g.fillStyle = rgba(warm, 0.4);
+      g.beginPath();
+      g.arc(b[0], b[1] + r * 0.2, r * 0.5, 0, Math.PI * 2);
+      g.fill();
+      g.fillStyle = rgba(warm, 0.95);
+      g.beginPath();
+      g.arc(b[0], b[1] + r * 0.2, r * 0.28, 0, Math.PI * 2);
+      g.fill();
+      if (sealed) sealWash(g, w, h, sealed, { x: b[0], y: b[1] }, warm);
+    }
+    // A scene scrolled out of view is still on the page, but no one is watching the swing: its
+    // wait for the next tread is put away with what was left of it, and taken up again from there
+    // when it is back in view, so the swing has not died unseen and a visitor gone down the feed
+    // costs it nothing. Where there is nothing to draw the scene with, the question's own box is
+    // watched, since the count still runs there. A browser without the observer keeps the swing
+    // going all the while.
+    var watch = typeof window.IntersectionObserver === 'function' ? new window.IntersectionObserver(function (entries) {
+      if (!scene.isConnected) { stop(); return; }
+      seen = entries[entries.length - 1].isIntersecting;
+      if (seen) resume();
+      else hold();
+    }) : null;
+    if (watch) watch.observe(g ? scene : body);
+    function seize() {
+      if (caught) return;
+      caught = true;
+      stop();
+      bucket(probe.buckets, swings, answer);
+      var where;
+      if (rested) {
+        add(answer, probe.rested, 1);
+        where = 'taken down from rest';
+      } else {
+        var frac = amp > 0 ? Math.min(1, Math.abs(shown) / amp) : 1;
+        add(answer, frac > 0.78 ? probe.apex : frac < 0.35 ? probe.flight : probe.between, 1);
+        add(answer, shown < 0 ? probe.left : probe.right, 1);
+        where = 'caught ' + (frac > 0.78 ? 'at the top of its swing' : frac < 0.35 ? 'in full flight' : 'on its way')
+          + ' after ' + plural(swings, 'swing');
+      }
+      note(trace, where);
+      scene.style.cursor = 'default';
+      // Sealed from the censer where it was caught, in treads; the chain cuts warm, and the smoke
+      // stays where the catch found it. The button greys once the seal has grown.
+      var seal = beat('medium');
+      series({ ms: seal, treads: 3, step: function (k, n) { if (k) { sealed = k / n; paint(); } } });
+      retire(grab, finish(seal));
+    }
+    scene.addEventListener('click', seize);
+    grab.addEventListener('click', seize);
+    note(trace, 'swinging');
+    paint();
+    begin();
   }
   function describe(reading) {
     var o = reading && reading.orientation;

@@ -40,12 +40,16 @@
 //               waiting star away (portrait-cast)
 //   ring        the ring the portrait wears: the question's sealed on by a curve from that same
 //               lower left as the persona asks (portrait-ask), and the reading's by the same curve
-//               when a reading is first read (reading-seal)
+//               when a reading is first read (reading-seal); inside it, a named shape's solid ring,
+//               sealed on by the same curve once the mark carrying the sky home has landed
+//               (figure-seal)
 //   sheet       arrives behind a slice from the control that opened it (sheet-in); closes as a
 //               ghost js/persona.js leaves where it was, cut away toward that control (sheet-out)
 //   parts       what comes and goes in the sheet arrives behind a slice (part-in) and is cut away
 //               (part-unmake), never switched; the first preview opens behind a slice from the
 //               line that opens it
+//   marks       the named shapes under the sky are controls: the one the sky makes is sealed as
+//               every set control is, and unsealed by a slice when the sky leaves it
 //   star        appears as a curve growing from its own point, which is where it was placed
 //               (star-develop); waxes and wanes as every control does; sealed in two shades by a
 //               curve from that same point when it is chosen (_controls.scss); lifted while dragged
@@ -327,6 +331,44 @@ html[data-lightbox] .persona[data-state='empty'] .persona-portrait::after {
 // changed is not started again: under cut-in's name the ring would only have changed its colour.
 // Under its own, the curve is cut afresh.
 @keyframes reading-seal {
+  from {
+    --cut: 0%;
+  }
+
+  to {
+    --cut: 100%;
+  }
+}
+
+// The ring a named shape puts on the portrait. A sky that makes one (js/persona.js, figureOf,
+// written as data-figure on the corner) wears a solid ring in the primary just inside the
+// portrait's edge, so the corner says on every page that a figure was found -- inside whatever
+// ring the question or the reading puts round the outside (::before, above), so the two can be
+// worn together. It is drawn on the portrait's ::after, the layer the waiting star stands on while
+// there is no sky, and a sky that makes a shape has stars; only while a first sky is being cast is
+// that layer still the star's, being cut away (is-casting), and the ring waits for it to have gone.
+.persona[data-figure='true']:not(.is-casting) .persona-portrait::after {
+  content: '';
+  position: absolute;
+  inset: 3px;
+  border: 1px solid color-mix(in oklab, var(--md-sys-color-primary) 80%, transparent);
+  border-radius: var(--md-sys-shape-corner-full);
+  pointer-events: none;
+}
+
+// Sealed on as the grammar seals what has been set: by one curve, from the portrait's lower left,
+// the side of the page the sky was shaped on and the way the mark carrying it comes home
+// (is-figured, from js/persona.js, after that mark has landed: --figure-seal-after). The curve is
+// on the ring only while it cuts, and the ring stands unmasked for as long as it is worn. The cut
+// plays under a name of its own: a ring taking the layer over from a first sky's cast, which
+// played cut-in there, would under that same name carry on from where the cast ended and stand
+// whole at once; under its own name it is cut afresh.
+.persona.is-figured[data-figure='true']:not(.is-casting) .persona-portrait::after {
+  mask: cut.curve(18%, 82%);
+  animation: figure-seal var(--motion-figure-seal, var(--motion-medium)) var(--ease-figure-seal, var(--ease-arrive)) var(--figure-seal-after, 0ms) both;
+}
+
+@keyframes figure-seal {
   from {
     --cut: 0%;
   }
@@ -672,6 +714,49 @@ html[data-lightbox] .persona[data-state='empty'] .persona-portrait::after {
   overflow-wrap: anywhere;
   @include type.scale(title-medium);
   @include type.rite;
+}
+
+// The named shapes under the sky (js/persona.js, renderFigures): a row of quiet marks, each a
+// button that names a shape in the rite's serif, as a figure's name is set under the sky. The one
+// the sky makes now is set (data-set) and sealed as every set control is (_controls.scss, played
+// by js/motion.js as data-set changes): its ground and its words take the primary container at
+// once, as the seal starts, and its fill -- two shades of its ink split by a curve -- grows in
+// and stays; when the sky stops making the shape a slice cuts the fill away. Every mark wears the
+// serif lit or not, so being lit changes no mark's width and moves none beside it: the seal is the
+// one movement. A press on a mark stamps it as every control is stamped.
+.persona-figures {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+button.persona-figure {
+  min-height: 44px;
+  padding: 0 0.9rem;
+  background: var(--md-sys-color-surface-container);
+  color: var(--md-sys-color-on-surface-variant);
+  @include type.scale(label-large);
+  @include type.rite;
+}
+
+button.persona-figure[data-set='true'] {
+  background: var(--md-sys-color-primary-container);
+  color: var(--md-sys-color-on-primary-container);
+}
+
+// Set, the mark rests in two shades split by the fill's curve, and its state layer is split by
+// the same curve, so under the pointer it still shows the one edge. That rule weighs less than the
+// press's ink and the ink going (button.is-stamping::after, button.is-uninking::after,
+// _controls.scss) -- :where() leaves the button and its class out of the count -- so the ink wins
+// over it as it wins over a set toggle's: a press on a lit mark inks one solid curve from where it
+// landed, never a disc split in two by the seal's curve.
+button.persona-figure[data-set='true']::before {
+  opacity: var(--fill-opacity, 0.22);
+}
+
+:where(button.persona-figure)[data-set='true']::after {
+  background: cut.shades-curve(currentColor);
 }
 
 // What comes and goes in the sheet -- the thread, the words form, the remove and forget buttons,
@@ -1070,6 +1155,7 @@ button.persona-star {
   .persona:not([data-state='empty']) .persona-avatar.is-waning .persona-label,
   .persona.is-asked[data-asking='true'] .persona-portrait::before,
   .persona.is-read .persona-portrait::before,
+  .persona.is-figured[data-figure='true']:not(.is-casting) .persona-portrait::after,
   .persona-sheet[open].is-arriving,
   .persona-sheet.persona-ghost,
   .persona-sheet .is-arriving,

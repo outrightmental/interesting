@@ -480,10 +480,10 @@ function rackLast(s) {
   return latest([s.doneAt, ...Object.values(s.picks).map((pick) => pick.at), ...Object.values(s.shownAt)]);
 }
 
+// The rack as its card shows it: still, before any beat is shown, as its piece opens.
 function rackPreview(g, w, h, env, plan) {
   const v = env.variant || PLAIN;
   const s = rackBlank();
-  s.beat = v.turn * 12;
   drawRack(g, w, h, env, plan, s, v);
 }
 
@@ -605,6 +605,8 @@ function rackPiece(env, plan) {
         c.status('tap a pendulum to pick it for beat ' + plan.at + ', or the ruler to show a beat');
         return;
       }
+      // ctx.set writes the knob and does not come back through apply(), so the tap seals or unseals
+      // the pendulum itself and keeps the picks it draws in step with the knob.
       const on = !s.picked.includes(hit);
       pickUp(s, hit, on, riteOf(c), !!c.reduced);
       s.picked = on ? s.picked.concat([hit]).sort((a, b) => a - b) : s.picked.filter((i) => i !== hit);
@@ -865,10 +867,10 @@ function springLast(s) {
   return latest([s.doneAt, s.kAt, ...s.runs.map((run) => run.at)]);
 }
 
+// The pair as its card shows it: the first pendulum held to the side, as its piece opens.
 function springPreview(g, w, h, env, plan) {
   const v = env.variant || PLAIN;
   const s = springBlank(plan);
-  s.replay = { k: plan.open, t: v.turn * plan.breath * 2 };
   drawSpring(g, w, h, env, plan, s, v);
 }
 
@@ -945,16 +947,22 @@ function springPiece(env, plan) {
             s.k = next;
             s.kAt = s.t;
             s.sets += 1;
+            // The run on show was the old spring's. Before the solve the pair is put back at its
+            // let-go, to be let go by the next check; after it, the new spring's run plays at once,
+            // so another stiffness is another experiment.
+            s.replay = c.done ? { k: next, t: 0 } : null;
           }
         }
-        c.status('spring at ' + s.k + (s.k < 20 ? ', soft' : s.k > 75 ? ', stiff' : '') + '; let go to see the crossing');
+        c.status('spring at ' + s.k + (s.k < 20 ? ', soft' : s.k > 75 ? ', stiff' : '')
+          + (c.done ? '; the pair keeps trading the swing' : '; let go to see the crossing'));
       }
       if (id === 'then') c.status('a ' + plan.ask + ' spring, you say, crosses ' + (value === 'same' ? 'at the same time' : value));
       draw(c);
     },
     // A run plays out once, from the let-go to the end of the ruler, and rests on its last tooth --
-    // the solved run too, played once more from the let-go: the whole pair is never wound back to
-    // play again. Less motion is shown the whole run at once. A frame is drawn only when the
+    // the solved run too, played once more from the let-go, and after the solve the run of each
+    // new stiffness set: the whole pair is never wound back to play again of itself. Less motion is
+    // shown the whole run at once. A frame is drawn only when the
     // escapement has clicked or a change is still coming its way (settled); the pair is at rest
     // (false) once its run has played to the end of the ruler and the picture on the canvas is
     // the finished one.
@@ -998,23 +1006,25 @@ function deal(env) {
 const CARD_RUN = 2.2;
 
 // A card at `t` seconds since its first frame on screen, playing once at the piece's pace and
-// resting. The rack counts out from the beat it was painted at through one swing of its slowest
-// pendulum -- enough for every pendulum on it to be seen keeping its own period -- and stands
-// there; the pair plays one swing of its own (OWN seconds of the run its spring is set for) from
-// where it was painted, and stands there. `key` is its clock as the escapement reads it, which is all that
+// resting. Still (t = 0, and the picture paint leaves), it is the picture its piece opens on: the
+// rack before any beat is shown, the pair with the first pendulum held to the side. Moving, the
+// rack counts out from beat 0 through one swing of its slowest pendulum -- enough for every
+// pendulum on it to be seen keeping its own period -- and stands there; the pair is let go and
+// plays one swing of its own (OWN seconds of the run its spring is set for), and stands there.
+// `key` is its clock as the escapement reads it (-1 for the still picture), which is all that
 // changes the picture, so two moments with one key are one drawing.
 function cardAt(env, d, t) {
-  const v = env.variant || PLAIN;
   const rite = riteOf(env);
   const plan = d.plan;
   if (d.spring) {
     const s = springBlank(plan);
-    const from = v.turn * plan.breath * 2;
-    s.replay = { k: plan.open, t: Math.min((plan.breaths + 1.5) * plan.breath, from + Math.min(OWN, t)) };
+    if (!(t > 0)) return { s, key: -1 };
+    s.replay = { k: plan.open, t: Math.min(OWN, t) };
     return { s, key: replayTime(rite, s.replay.t) };
   }
   const s = rackBlank();
-  s.beat = v.turn * 12 + Math.min(Math.max(...plan.periods), t / BEAT);
+  if (!(t > 0)) return { s, key: -1 };
+  s.beat = Math.min(Math.max(...plan.periods), t / BEAT);
   return { s, key: escaped(rite, s.beat) };
 }
 

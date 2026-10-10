@@ -100,8 +100,12 @@
   (--cut-angle) and the slant its words are revealed at (--reveal-angle).
 
   Less motion asked for. The stylesheets answer prefers-reduced-motion themselves, and this file
-  does the same for the movements it makes: a tween lands on its end at once, a scroll jumps, a
-  reveal shows the words, and no rite is written.
+  does the same for the movements it makes: a tween or a stepper lands on its end at once, a
+  scroll jumps, a reveal shows the words, and no rite is written. The preference is read each time
+  it matters, never kept: the script's one clock (playback, under the stepper and the tween) reads
+  it again on every frame it draws, so a visitor who asks for less motion while something moves
+  sees it land on its next frame. The stairs are still rolled, so one who stops asking finds the
+  site moving its own way at once.
 
   A browser without linear() gets steps(n) -- a stair of the same number of treads.
 
@@ -1660,52 +1664,75 @@
       return out;
     }
 
-    /* ---- the stepper ----------------------------------------------------------------------- */
+    /* ---- the script's clock ---------------------------------------------------------------- */
 
-    /* A movement a script makes in treads: step(k, n) with the tread reached, 0 to n, at the
-       moments a stair rolled for this call puts them, never a fraction in between; then done().
-       Two to five treads, as every movement here takes: `treads` asks for a number of them within
-       that. Hands back a function that stops it. */
-    function stepper(options) {
-      var opts = options || {};
+    /* The one clock the stepper and the tween run on, so both land, stop and answer a visitor's
+       preference the same way. update(p, instant) is called on each frame it draws with the plain
+       progress, 0 to 1; `instant` when the movement lands on its end at once -- with no frame to
+       draw by, no length, or for a visitor who asked for less motion. The preference is read again
+       on every frame, so asking for less motion while a movement is under way lands it on its next
+       frame. begin() runs as a movement that takes frames starts, done() once as it lands. The
+       function it hands back stops it, and a stop is final: no frame is drawn after it, no step
+       is called and done() never is -- not even when a step asks for the stop in the very frame
+       that would have ended the movement. */
+    function playback(opts, update, begin) {
       var total = Math.max(0, Number(opts.ms) || 0);
-      var step = typeof opts.step === 'function' ? opts.step : function () {};
       var done = typeof opts.done === 'function' ? opts.done : function () {};
+      var always = !!opts.always;
       var raf = frameOf();
       var cancel = cancelOf();
-      var rnd = mulberry32(entropy());
-      var n = clamp(Math.round(opts.treads || (3 + Math.floor(rnd() * 3))), 2, 5);
-      if (!raf || !total || (reduced() && !opts.always)) {
-        step(n, n, false);
-        done();
-        return function () {};
-      }
-      var moments = spaced(n, between(rnd, 0.16, 0.3), between(rnd, 0.86, 0.95));
       var started = now();
-      var handle = 0;
-      var stopped = false;
-      var reached = 0;
+      var handle = null;
+      var running = true;
+      function jump() { return !raf || !total || (reduced() && !always); }
       function frame(tm) {
-        if (stopped) return;
-        var p = Math.min(1, Math.max(0, tm - started) / total);
-        var k = reached;
-        while (k < n && moments[k] <= p) k += 1;
-        if (k !== reached) {
-          reached = k;
-          step(k, n, false);
-        }
+        handle = null;
+        if (!running) return;
+        var instant = jump();
+        var p = instant ? 1 : clamp((tm - started) / total, 0, 1);
+        update(p, instant);
+        if (!running) return;
         if (p < 1) handle = raf(frame);
         else {
-          if (reached !== n) step(n, n, false);
+          running = false;
           done();
         }
       }
-      step(0, n, false);
-      handle = raf(frame);
+      if (jump()) frame(started);
+      else {
+        if (begin) begin();
+        if (running) handle = raf(frame);
+      }
       return function () {
-        stopped = true;
-        if (cancel && handle) cancel(handle);
+        running = false;
+        if (handle !== null && cancel) cancel(handle);
+        handle = null;
       };
+    }
+
+    /* ---- the stepper ----------------------------------------------------------------------- */
+
+    /* A movement a script makes in treads: step(k, n) with the tread reached, 0 to n, at the
+       moments a stair rolled for this call puts them, never a fraction in between and never more
+       than one step in a frame, so a step that stops the movement is the last one; then done().
+       Two to five treads, as every movement here takes: `treads` asks for a number of them within
+       that. Hands back a function that stops it. A visitor who asks for less motion, before it
+       starts or while it moves, gets the last tread at once. */
+    function stepper(options) {
+      var opts = options || {};
+      var step = typeof opts.step === 'function' ? opts.step : function () {};
+      var rnd = mulberry32(entropy());
+      var n = clamp(Math.round(opts.treads || (3 + Math.floor(rnd() * 3))), 2, 5);
+      var moments = spaced(n, between(rnd, 0.16, 0.3), between(rnd, 0.86, 0.95));
+      var reached = 0;
+      return playback(opts, function (p, instant) {
+        var k = reached;
+        if (instant || p >= 1) k = n;
+        else while (k < n && moments[k] <= p) k += 1;
+        if (k === reached) return;
+        reached = k;
+        step(k, n, false);
+      }, function () { step(0, n, false); });
     }
 
     /* ---- what a script asks for ------------------------------------------------------------ */
@@ -1859,48 +1886,29 @@
     }
 
     /* A tween: step(y, t) with y on the treads of a stair rolled for it (its family's, or an even
-       one of `treads`, two to five) and t the plain progress, each frame for `ms`, then done().
-       Hands back a function that stops it. */
+       one of `treads`, two to five) and t the plain progress, at each new tread for `ms`, then
+       done(), on the script's one clock (playback): a stop is final, and less motion asked for,
+       before or in flight, lands it on its end. Hands back a function that stops it. */
     function tween(options) {
       var opts = options || {};
-      var length = Math.max(0, Number(opts.ms) || 0);
       var step = typeof opts.step === 'function' ? opts.step : function () {};
-      var done = typeof opts.done === 'function' ? opts.done : function () {};
-      var raf = frameOf();
-      var cancel = cancelOf();
-      if (!raf || !length || (reduced() && !opts.always)) {
-        step(1, 1);
-        done();
-        return function () {};
-      }
-      var at;
-      if (opts.treads) {
-        var rnd = mulberry32(entropy());
-        var n = clamp(Math.round(opts.treads), 2, 5);
-        var c = stairOf(spaced(n, between(rnd, 0.16, 0.3), between(rnd, 0.84, 0.94)), equal(n));
-        at = function (t) { return c.at(t); };
-      } else at = ease(opts.family);
-      var started = now();
-      var handle = 0;
-      var stopped = false;
+      var at = null;
       var lastY = -1;
-      function frame(t) {
-        if (stopped) return;
-        var p = Math.min(1, Math.max(0, t - started) / length);
+      return playback(opts, function (p) {
         var y = p < 1 ? at(p) : 1;
         // Only a new tread is a step: a frame on the same tread asks for nothing to be drawn.
-        if (y !== lastY || p >= 1) {
-          lastY = y;
-          step(y, p);
-        }
-        if (p < 1) handle = raf(frame);
-        else done();
-      }
-      handle = raf(frame);
-      return function () {
-        stopped = true;
-        if (cancel && handle) cancel(handle);
-      };
+        if (y === lastY && p < 1) return;
+        lastY = y;
+        step(y, p);
+      }, function () {
+        // The stair is rolled as the movement starts: one that lands at once needs none.
+        if (opts.treads) {
+          var rnd = mulberry32(entropy());
+          var n = clamp(Math.round(opts.treads), 2, 5);
+          var c = stairOf(spaced(n, between(rnd, 0.16, 0.3), between(rnd, 0.84, 0.94)), equal(n));
+          at = function (t) { return c.at(t); };
+        } else at = ease(opts.family);
+      });
     }
 
     var scrolling = null;
@@ -1912,7 +1920,8 @@
       scrollStop = null;
     }
 
-    /* The page scrolls in a few even treads, never a glide; a wheel, a touch or a key stops it. */
+    /* The page scrolls in a few even treads, never a glide; a wheel, a touch or a key stops it,
+       and less motion asked for while it moves lands it where it was going. */
     function scrollTo(top, options) {
       var opts = options || {};
       var from = typeof global.scrollY === 'number' ? global.scrollY : (global.pageYOffset || 0);
@@ -1934,12 +1943,16 @@
           for (var j = 0; j < interrupt.length; j++) doc.removeEventListener(interrupt[j], halt, { passive: true, capture: true });
         };
       }
-      scrolling = stepper({
+      var finished = false;
+      var stop = stepper({
         ms: length,
         treads: treads,
         step: function (k, n) { global.scrollTo(left, from + (to - from) * (k / n)); },
-        done: function () { stopScrolling(); }
+        done: function () { finished = true; stopScrolling(); }
       });
+      // A scroll that landed as it was asked for (no frame to draw by) has already let go of its
+      // listeners: its stop is not kept, or the next scroll would stop a scroll long finished.
+      if (!finished) scrolling = stop;
     }
 
     function scrollIntoView(node, options) {

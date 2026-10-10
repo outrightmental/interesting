@@ -1,6 +1,6 @@
 /* Loam: a cutaway of soil with roots finding their way round the stones. As a card it is one of
-   the two puzzles below (paint, spark); as a piece it is that puzzle, and the card it was opened
-   from says which. See js/feed.js for what a module is and js/stage.js for what a piece is.
+   the three puzzles below (paint, animate, spark); as a piece it is that puzzle, and the card it was
+   opened from says which. See js/feed.js for what a module is and js/stage.js for what a piece is.
 
    Three puzzles, read off a drawing or followed through the ground:
 
@@ -16,14 +16,17 @@
                 two shares, weighted by the parts. Find a (the bed's share is chosen so a is a
                 whole number) and say whether the blend drains faster or slower than bag A: a
                 sandier soil drains faster. A wrong check says sandier or less sandy than the
-                bed wants, and no more.
+                bed wants, and no more. Solved, the bed takes the blend and goes on taking
+                whatever blend the visitor mixes next, each draining at its own pace.
      the route  A root enters a four-column bed. Each cell sends it down-left, straight down or
                 down-right into the next layer. Follow it to its exit and count its left turns.
                 A look halfway costs a hint; a wrong check says how many readings fit.
 
    A card and the feature it opens as are one bed: the spark puts the whole plan on its spec as
    `of` -- the layers, the band and the water line, or the two bags and the bed -- and piece(env)
-   opens on that rather than rolling another. */
+   opens on that rather than rolling another. The plan is dealt once per env and kept (deal()), so
+   a card's still picture, its motion and the piece opened from it are one bed; and a card's still
+   picture is the picture its piece opens on. */
 
 const PLAIN = { density: 1, scale: 1, turn: 0 };
 const WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven'];
@@ -72,7 +75,9 @@ function asked(env) {
    the one edge, while the water rises to its line -- water finds its level, so its edge is a level
    one, climbing on those same treads -- and the root goes down as far as each tread takes it. In
    the bed the blend comes in wet behind that edge with the day, and once it lies there its water
-   drains out by its level, falling in treads, slower the less sand there is. In the route the root
+   drains out by its level, falling in treads, slower the less sand there is; a blend mixed after
+   the solve is laid over the soil lying there behind the same edge, on a roll of its own, and comes
+   in wet and drains in its turn. In the route the root
    goes down through the rows a tread at a time under the same day. A ruled-out blend, a caption,
    a ring or a cup's letter is cut on at one moment and stays; old words go before new ones come.
 
@@ -83,11 +88,16 @@ function asked(env) {
    reading, a second tap, a second mix steps differently from the first while cutting along the
    same edge. And a frame redraws only while something is moving (framed()): a still drawing is
    left on the canvas as it stands and asks for no further frame, so nothing is computed that does
-   not show. */
+   not show.
+
+   A core card, once it is on the screen, moves once: its water line's wave goes round one turn in
+   the ratchet's even clicks and rests where it was painted, which is where the piece opens. Its
+   first click comes with the card's first moving frame, so a card that moves is seen to move at
+   once; between clicks nothing is drawn, and after the last the card says it is still. */
 
 // The rite of a drawing handed none: every movement at its end and every surface whole.
 const STILL = {
-  stair: () => 1, flicker: () => 1,
+  stair: () => 1, flicker: () => 1, ratchet: () => 1, treads: 1,
   paint(g, x, y, w, h, k, style) {
     if (k <= 0) return;
     if (style != null) g.fillStyle = style;
@@ -375,8 +385,11 @@ function layerTone(env, k) {
   }
 }
 
+// The live state of a core: the root once it is grown, the caption, the clock and the solve; the
+// readings and the bracket (marks(), recount()); and `wave`, how far round its turn a card's water
+// line has gone (animate), 0 in the piece, whose water line is still.
 function coreBlank(caption) {
-  return { root: null, caption, t: 0, doneAt: -1, reads: marks(0x2a, 0.8),
+  return { root: null, caption, t: 0, doneAt: -1, wave: 0, reads: marks(0x2a, 0.8),
     bar: { base: 0x2b, span: 0.8, n: 0, runs: [], said: 0 } };
 }
 
@@ -466,14 +479,14 @@ function drawCore(g, w, h, env, plan, s, variant) {
     g.fillStyle = env.alpha(c.accent, 0.28);
     g.fillRect(geo.left, from, colW, geo.bottom - from);
   }
-  // The water line, wavy, at a layer boundary, and still: the water comes to it, not it to the
-  // water.
+  // The water line, wavy, at a layer boundary, and still in the piece: the water comes to it, not
+  // it to the water. On a card in motion its wave goes round once (s.wave) and rests as painted.
   g.strokeStyle = c.accent;
   g.lineWidth = 2;
   g.beginPath();
   const amp = Math.max(1.5, m * 0.006);
   for (let x = geo.left - size * 0.4; x <= geo.right + size * 0.4; x += 3) {
-    const yy = wy + Math.sin((x / m) * 40 + v.turn * TAU) * amp;
+    const yy = wy + Math.sin((x / m) * 40 + (v.turn + (s.wave || 0) % 1) * TAU) * amp;
     if (x === geo.left - size * 0.4) g.moveTo(x, yy);
     else g.lineTo(x, yy);
   }
@@ -506,8 +519,23 @@ function drawCore(g, w, h, env, plan, s, variant) {
   if (s.doneAt < 0 || k > 0) write(g, s.caption, w / 2, h * 0.955, small, env.alpha(c.muted, 0.9));
 }
 
-function corePreview(g, w, h, env, plan) {
-  drawCore(g, w, h, env, plan, coreBlank('how deep is the water? how many layers to the stones?'), env.variant);
+// The core as a card shows it, with its water line's wave `wave` of the way round its one turn.
+function corePreview(g, w, h, env, plan, wave = 0) {
+  const s = coreBlank('how deep is the water? how many layers to the stones?');
+  s.wave = wave;
+  drawCore(g, w, h, env, plan, s, env.variant);
+}
+
+const RIPPLE = 2.4; // seconds a core card's wave takes to go round, and so how long the card moves
+
+// How far round its one turn a core card's wave has gone t seconds into its motion: 0 to 1, in the
+// ratchet's even clicks, one per tread of the roll. The clock is read one click ahead, so the
+// ratchet's opening hold is spent before the card is seen: the first click lands on the first
+// moving frame, and the last (the wave whole round, as painted) a click before the run is over.
+function rippled(rite, t) {
+  if (!(t > 0)) return 0;
+  const clicks = Math.max(1, Math.round(rite.treads) || 1);
+  return rite.ratchet(Math.min(1, (t / RIPPLE) * (clicks / (clicks + 1)) + 1 / (clicks + 1)));
 }
 
 function corePiece(env, plan) {
@@ -612,15 +640,10 @@ function shareOf(a, b, parts) {
 }
 
 function mixPlan(env) {
-  for (let attempt = 0; attempt < 80; attempt++) {
-    const a = env.int(2, 18) * 5;
-    const b = env.int(2, 18) * 5;
-    if (Math.abs(a - b) < 30) continue;
-    const parts = env.int(1, 9);
-    if (!Number.isInteger(shareOf(a, b, parts))) continue;
-    return { kind: 'mix', a, b, parts };
-  }
-  return { kind: 'mix', a: 20, b: 80, parts: 6 };
+  const a = env.int(1, 9) * 10;
+  const bags = Array.from({ length: 9 }, (_, i) => (i + 1) * 10)
+    .filter((share) => Math.abs(share - a) >= 30);
+  return { kind: 'mix', a, b: env.pick(bags), parts: env.int(1, 9) };
 }
 
 function carriedMix(env) {
@@ -666,9 +689,13 @@ function bag(g, env, x, y, r, share, name, tilt, density, size) {
 
 function mixBlank(parts, caption) {
   // Each cup rests on one soil (`under`) with the soils being laid over it, or taken back off it,
-  // behind the piece's edge (`over`): a layer wholly laid becomes what the cup rests on.
+  // behind the piece's edge (`over`): a layer wholly laid becomes what the cup rests on. `blend` is
+  // the share of the soil the bed was last given (-1 before the solve), and `relaid` the blends
+  // laid over the solved one as the visitor goes on mixing, each { share, at, n }, the n-th of
+  // `blends`; `captionAt` is when the caption one of them wrote was cut on.
   const cups = Array.from({ length: 10 }, (_, i) => ({ under: cupOf(parts, i), over: [], at: -1, n: 0 }));
-  return { parts, partsAt: -1, sets: 0, cups, blend: -1, ruled: [], ruledAt: [], caption, t: 0, doneAt: -1 };
+  return { parts, partsAt: -1, sets: 0, cups, blend: -1, relaid: [], blends: 0, ruled: [], ruledAt: [], caption,
+    captionAt: -1, t: 0, doneAt: -1 };
 }
 
 // What a cup holds: null before a is set, else bag A for the first `parts` cups and bag B after.
@@ -677,6 +704,7 @@ function cupOf(parts, i) {
 }
 
 const POUR = 0.9; // seconds a cup takes to change its soil
+const BLEND = 1.2; // seconds a blend mixed after the solve takes to be laid over the bed
 
 function laid(o, rite, s, reduced) {
   return o.from + (o.to - o.from) * roll(rite, 0x10, o.n).stair(came(s, o.at, POUR, reduced));
@@ -784,38 +812,57 @@ function drawMix(g, w, h, env, plan, s, variant) {
   }
   // The bed, which wants its share and takes the blend at the finale: the blend comes over the bare
   // bed behind the finale's edge, the one the day comes behind, and then the water drains out of it.
+  // Once it is solved the visitor may go on mixing, and each blend they make is laid over the soil
+  // lying there behind the same edge, on a roll of that blend's own across the bed. Each comes in
+  // wet, its grit and its water with it, and once it lies there its water drains out by its level,
+  // falling in treads: faster the sandier it is. Only what shows is drawn: the topmost soil that has
+  // wholly landed (or the bare bed, before any has), and whatever is still coming over it.
   const bx = w * 0.14;
   const by = h * 0.62;
   const bw = w * 0.72;
   const bh = h * 0.28;
   write(g, 'the bed wants ' + target + '% sand', w / 2, by - small * 1.1, size, c.accent2);
-  const bedK = s.blend >= 0 ? k : 0;
-  if (bedK < 1) {
+  const layers = s.blend >= 0 ? [{ share: target, at: s.doneAt, n: 0 }].concat(s.relaid) : [];
+  const rollOf = (layer) => (layer.n ? roll(rite, 0xbe, layer.n) : fin);
+  const spanOf = (layer) => (layer.n ? BLEND : FINALE);
+  const come = [];
+  let base = -1;
+  for (let i = layers.length - 1; i >= 0; i--) {
+    come[i] = layers[i].n ? rollOf(layers[i]).stair(came(s, layers[i].at, BLEND, reduced)) : k;
+    if (come[i] >= 1) {
+      base = i;
+      break;
+    }
+  }
+  if (base < 0) {
     g.fillStyle = env.mix(c.bg, c.bg2, 0.6);
     g.fillRect(bx, by, bw, bh);
     flecks(g, env, bx, by, bw, bh, Math.round(16 * v.density), 7, 0.12);
     write(g, '?', w / 2, by + bh / 2, size * 2, env.alpha(c.muted, 0.5), 'center', '600');
   }
-  if (bedK > 0) {
-    // The blend comes in wet, its grit and its water with it, all behind the one edge: the bed is
-    // clipped to the part of the drawing the edge has passed and the soaked soil is laid inside.
+  for (let i = Math.max(0, base); i < layers.length; i++) {
+    const layer = layers[i];
+    if (!(come[i] > 0)) continue;
+    // The bed is clipped to the part the edge has passed and the soaked soil is laid inside: the
+    // solved blend's edge is the finale's, crossing the whole drawing with the day; a later
+    // blend's crosses the bed alone.
     g.save();
     g.beginPath();
     g.rect(bx, by, bw, bh);
     g.clip();
-    if (bedK < 1) {
+    if (come[i] < 1) {
       g.beginPath();
-      fin.region(g, 0, 0, w, h, bedK);
+      if (layer.n) rollOf(layer).region(g, bx, by, bw, bh, come[i]);
+      else fin.region(g, 0, 0, w, h, come[i]);
       g.clip();
     }
-    g.fillStyle = soilTone(env, s.blend);
+    g.fillStyle = soilTone(env, layer.share);
     g.fillRect(bx, by, bw, bh);
-    flecks(g, env, bx, by, bw, bh, Math.round((20 + s.blend * 0.8) * v.density), 7, 0.3);
-    // The water, draining through it once the blend lies there: faster the sandier it is. Water
-    // keeps a level edge, so its level falls through the bed to the bed's foot on the finale's
-    // treads and is gone.
-    const drain = s.blend >= 0 ? came(s, s.doneAt + FINALE, 1 / (0.08 + (s.blend / 100) * 0.22), reduced) : 0;
-    const level = Math.max(0, 1 - fin.stair(drain));
+    flecks(g, env, bx, by, bw, bh, Math.round((20 + layer.share * 0.8) * v.density), 7, 0.3);
+    // The water keeps a level edge, so its level falls through the bed to the bed's foot on the
+    // blend's own treads once the blend lies there, and is gone.
+    const drain = came(s, layer.at + spanOf(layer), 1 / (0.08 + (layer.share / 100) * 0.22), reduced);
+    const level = Math.max(0, 1 - rollOf(layer).stair(drain));
     if (level > 0) {
       g.fillStyle = env.alpha(c.accent, 0.3);
       g.fillRect(bx, by + bh * (1 - level), bw, bh * level);
@@ -827,13 +874,14 @@ function drawMix(g, w, h, env, plan, s, variant) {
   g.strokeRect(bx, by, bw, bh);
   daybreak(g, fin, env, w, h, k, 0.1);
   // The caption a solve writes goes at the solve, and the new one is cut on with the finale's
-  // first tread.
-  if (s.doneAt < 0 || k > 0) write(g, s.caption, w / 2, h * 0.955, small, env.alpha(c.muted, 0.9));
+  // first tread; the one a later blend writes goes at that blend, and is cut on at its moment.
+  const lastBlend = s.relaid.length ? s.relaid[s.relaid.length - 1] : null;
+  if (lastBlend && s.captionAt >= 0 ? roll(rite, 0xbe, lastBlend.n).flicker(came(s, s.captionAt, BLEND, reduced))
+    : s.doneAt < 0 || k > 0) write(g, s.caption, w / 2, h * 0.955, small, env.alpha(c.muted, 0.9));
 }
 
 function mixPreview(g, w, h, env, plan) {
-  const v = env.variant || PLAIN;
-  drawMix(g, w, h, env, plan, mixBlank(Math.round(v.turn * 10), 'a sandier soil drains faster'), v);
+  drawMix(g, w, h, env, plan, mixBlank(null, 'a sandier soil drains faster'), env.variant);
 }
 
 function mixPiece(env, plan) {
@@ -897,6 +945,17 @@ function mixPiece(env, plan) {
           s.parts = next;
           s.partsAt = s.t;
           pour(s, next, riteOf(c), !!c.reduced);
+          if (c.done && s.blend >= 0) {
+            // Solved, the bed goes on taking what is mixed: the new blend is laid over the soil
+            // lying there, on a roll of its own, and drains at its own pace.
+            s.blend = shareOf(plan.a, plan.b, next);
+            s.blends += 1;
+            s.relaid.push({ share: s.blend, at: s.t, n: s.blends });
+            s.caption = s.blend + '% sand: ' + (s.blend === plan.a
+              ? 'the blend and bag A drain at the same rate'
+              : 'it drains ' + (s.blend > plan.a ? 'faster' : 'slower') + ' than bag A');
+            s.captionAt = s.t;
+          }
         }
         c.status(s.parts + ' of the ten from bag A, ' + (10 - s.parts) + ' from bag B');
       }
@@ -1136,9 +1195,20 @@ function routePiece(env, plan) {
 
 /* ---- the module ----------------------------------------------------------------------------- */
 
+// Which puzzle this card is, and its plan, dealt once from the env's seeded stream and kept with
+// that env: the still picture and every frame of the card in motion ask here, so they are one bed
+// (js/feed.js on what animate owes a card). The card's last picture, `shown`, is kept beside it,
+// apart from the plan, which travels to the stage as the card's `of`.
+const dealt = new WeakMap();
+const shown = new WeakMap();
 function deal(env) {
-  const roll = env.rnd();
-  return roll < 0.34 ? corePlan(env) : roll < 0.68 ? mixPlan(env) : routePlan(env);
+  let plan = dealt.get(env);
+  if (!plan) {
+    const roll = env.rnd();
+    plan = roll < 0.34 ? corePlan(env) : roll < 0.68 ? mixPlan(env) : routePlan(env);
+    dealt.set(env, plan);
+  }
+  return plan;
 }
 
 export default {
@@ -1146,9 +1216,25 @@ export default {
   needsSky: false,
   paint(g, w, h, env) {
     const plan = deal(env);
-    if (plan.kind === 'core') corePreview(g, w, h, env, plan);
-    else if (plan.kind === 'mix') mixPreview(g, w, h, env, plan);
+    if (plan.kind === 'core') {
+      corePreview(g, w, h, env, plan);
+      shown.set(env, { g, w, h, wave: 0 });
+    } else if (plan.kind === 'mix') mixPreview(g, w, h, env, plan);
     else routePreview(g, w, h, env, plan);
+  },
+  // A core card in motion: its water line's wave goes round once (rippled) and rests as it was
+  // painted, so at t = 0 it is the still picture. The canvas is drawn again only when the wave has
+  // clicked on; between clicks it already holds the picture. A mix or a route card, a card whose
+  // turn is over, and every card for a visitor who asked for less motion are still, and say so.
+  animate(g, w, h, env, t) {
+    const plan = deal(env);
+    if (plan.kind !== 'core' || env.reduced || !(t < RIPPLE)) return false;
+    const wave = rippled(riteOf(env), t);
+    const last = shown.get(env);
+    if (last && last.g === g && last.w === w && last.h === h && last.wave === wave) return true;
+    corePreview(g, w, h, env, plan, wave);
+    shown.set(env, { g, w, h, wave });
+    return true;
   },
   spark(env) {
     const plan = deal(env);

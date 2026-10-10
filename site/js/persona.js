@@ -15,6 +15,7 @@
    its clues. The sheet's optional puzzle preview borrows the feed's own modules and card
    configurations through interestingFeed.previewSky(), so changing a star reveals a real world's
    response rather than an imitation. Moving a star updates the preview when the move ends.
+   A pending preview is invalidated as soon as its stars change, even during a drag.
    The first preview's picture and words stay available for comparison while that world is being
    previewed in the open sheet. This is a temporary picture, never another saved or editable sky.
 
@@ -269,6 +270,7 @@
       concealing['delete'](node);
     }
     if (node.classList) node.classList.remove('is-unmaking');
+    node.removeAttribute('inert'); // reachable again, by a key as by a press (conceal, below)
     node.hidden = false;
     if (arriving && !dealing && engine() && !calm()) {
       if (node.style) node.style.removeProperty('--part-wait'); // a wait is makeRoom's to give, each time
@@ -278,17 +280,23 @@
     }
     return arriving;
   }
-  // `keep` is for a line that holds its room whether or not it has anything to say (the sky's name,
-  // with no sky to name): what it says is cut away the same way, and then the line is emptied where
-  // it stands rather than hidden, so nothing under it moves. `room`, for a part whose going lets
-  // what is under it up (makeRoom), is what the hiding is done through once the cut has ended.
+  // A part on its way out is out of reach from the moment it starts to go (inert): neither a key
+  // nor a press lands on a control that is being cut away, and the sheet's own Tab (buildSheet)
+  // passes over it. `keep` is for a line that holds its room whether or not it has anything to say
+  // (the sky's name, with no sky to name): what it says is cut away the same way, and then the line
+  // is emptied where it stands rather than hidden, so nothing under it moves. `room`, for a part
+  // whose going lets what is under it up (makeRoom), is what the hiding is done through once the
+  // cut has ended.
   function conceal(node, keep, room) {
     if (!node || node.hidden || (keep && !node.textContent)) return;
     if (concealing && concealing.get(node)) return; // already being cut away
+    node.setAttribute('inert', '');
     endRite(node, 'arriving');
     function hide() {
-      if (keep) node.textContent = '';
-      else node.hidden = true;
+      if (keep) {
+        node.textContent = '';
+        node.removeAttribute('inert'); // a line left standing, empty, and no longer leaving
+      } else node.hidden = true;
     }
     function gone() {
       if (typeof room === 'function') room(hide);
@@ -550,6 +558,59 @@
         mirrored = found;
       }
       if (mirrored && off >= 2) return 'the moth';
+    }
+    return '';
+  }
+  /* How near the sky is to a figure it does not make yet: the same measures as figureOf with
+     looser tolerances, so a visitor moving stars toward a named shape is told, in plain words,
+     what would complete it. Pure arithmetic, like figureOf. */
+  function nearFigure(list) {
+    var t = skyTraits(list);
+    if (!t || t.n < 2 || figureOf(list)) return '';
+    var i;
+    var j;
+    if (t.n === 2) {
+      var gx = (list[0].x - list[1].x) * 2;
+      var gy = list[0].y - list[1].y;
+      return gx * gx + gy * gy < 400 ? 'twins, if these two stars were a little closer' : '';
+    }
+    var xx = 0;
+    var yy = 0;
+    var xy = 0;
+    var reach = [];
+    var sum = 0;
+    for (i = 0; i < t.n; i++) {
+      var dx = (list[i].x - t.cx) * 2;
+      var dy = list[i].y - t.cy;
+      xx += dx * dx;
+      yy += dy * dy;
+      xy += dx * dy;
+      var r = Math.sqrt(dx * dx + dy * dy);
+      reach.push(r);
+      sum += r;
+    }
+    var half = (xx + yy) / 2;
+    var skew = Math.sqrt(Math.max(0, (xx - yy) * (xx - yy) / 4 + xy * xy));
+    var major = half + skew;
+    var minor = half - skew;
+    if (major > 100 * t.n && minor < major * 0.03) return 'a straight line, if every star lined up exactly';
+    if (t.n >= 5) {
+      var mean = sum / t.n;
+      var worst = 0;
+      for (i = 0; i < t.n; i++) worst = Math.max(worst, Math.abs(reach[i] - mean));
+      if (mean > 12 && worst < mean * 0.3) return 'a ring, if every star sat the same distance from the middle';
+    }
+    if (t.n >= 4) {
+      var off = 0;
+      var matched = 0;
+      for (i = 0; i < t.n; i++) {
+        if (Math.abs(list[i].x - t.cx) * 2 > 6) off += 1;
+        var mx = 2 * t.cx - list[i].x;
+        for (j = 0; j < t.n; j++) {
+          if (Math.abs((list[j].x - mx) * 2) < 16 && Math.abs(list[j].y - list[i].y) < 10) { matched += 1; break; }
+        }
+      }
+      if (off >= 2 && matched === t.n) return 'a mirror image, if each star matched one opposite it, left to right';
     }
     return '';
   }
@@ -950,12 +1011,23 @@
     // (castPortrait, below) -- for a sky placed in the sheet, as the sheet closes, held until the
     // mark carrying it home has landed (card.castAfter). A sky already there as the page arrives
     // comes with the corner's own arrival instead, since nobody watched it being cast.
-    if (list.length && !behind && card.drawnCount === 0 && card.everDrawn) castPortrait();
+    var cast = list.length && !behind && card.drawnCount === 0 && card.everDrawn ? castPortrait() : 0;
     // A reading first read while a visitor watches seals a ring onto the portrait (is-read); one
     // carried in from an earlier page is simply worn. Put on in the same frame data-asking goes
     // false below: the stylesheet's reading-seal is a name of its own, so the curve is cut afresh.
     if (isRead && card.everDrawn && !card.readDrawn) {
       rite(card.host, 'read', (cutOn(card.host, 'reading-seal', { family: 'arrive' }) || riteMs('medium', 320)) + 200);
+    }
+    // A sky that makes a named shape (figureOf) wears a solid ring inside the portrait, so the
+    // corner says on every page that a figure was found (data-figure). Written as the portrait is
+    // drawn, never behind the veil, so the ring is always round the sky the portrait shows; a ring
+    // first worn while a visitor watches is sealed on (sealFigure), one carried in is simply worn.
+    if (!behind) {
+      var figure = figureOf(list);
+      if (figure && card.everDrawn && !card.figureDrawn) sealFigure(cast);
+      card.figureDrawn = !!figure;
+      card.host.setAttribute('data-figure', figure ? 'true' : 'false');
+      renderFigures(figure); // the sheet's marks, shut away with it, follow the saved sky
     }
     card.readDrawn = isRead;
     card.everDrawn = true;
@@ -1004,10 +1076,26 @@
      gone into the portrait and not on top of it. */
   function castPortrait() {
     var length = cutOn(card.host, 'portrait-cast', { duration: 'long' });
-    if (!length) return;
+    if (!length) return 0;
     var after = card.castAfter || 0;
     card.host.style.setProperty('--portrait-cast-after', after + 'ms');
     rite(card.host, 'casting', length + after + 200);
+    return length + after + 200;
+  }
+  /* The ring a named shape puts on the portrait, sealed on as the grammar seals what has been set:
+     by one curve, from the portrait's lower left -- the side of the page the sky was shaped on, in
+     the sheet below and to the left of this corner, and the way the mark carrying it comes home.
+     After that mark has landed (card.castAfter), so the two say it one after the other; and for a
+     first sky that is already a figure, after its cast (`cast`, the cast's whole length), since the
+     ring is drawn on the layer the waiting star is cut away from and the stylesheet holds it off
+     until is-casting has gone. The curve is on the ring only while it cuts (is-figured, taken off
+     by its own end in buildCard, the clock the backstop): the ring a visitor wears stands unmasked. */
+  function sealFigure(cast) {
+    var length = cutOn(card.host, 'figure-seal', { family: 'arrive' });
+    if (!length) return;
+    var after = cast ? 0 : card.castAfter || 0;
+    card.host.style.setProperty('--figure-seal-after', after + 'ms');
+    rite(card.host, 'figured', (cast || after) + length * 2 + 400);
   }
   function paintPortrait(list) {
     if (!card || !card.portrait) return;
@@ -1101,15 +1189,18 @@
     card.drawnCount = 0;
     card.castAfter = 0;
     card.readDrawn = false;
+    card.figureDrawn = false;
     card.open.addEventListener('click', function () { openSheet('sky', card.open); });
-    // The ring's curve comes off the moment it has cut the ring in -- its own end, on the
-    // portrait's ::before -- so the ring a visitor wears stands unmasked; the clocks rite() keeps
-    // for is-asked and is-read are the backstop for a page too busy to draw the end.
+    // A ring's curve comes off the moment it has cut the ring in -- its own end, on the portrait's
+    // ::before (the question's ring, the reading's) or its ::after (a named shape's ring) -- so the
+    // ring a visitor wears stands unmasked; the clocks rite() keeps for is-asked, is-read and
+    // is-figured are the backstop for a page too busy to draw the end.
     var seat = card.portrait && card.portrait.parentNode;
     if (seat && typeof seat.addEventListener === 'function') {
       seat.addEventListener('animationend', function (ev) {
-        if (!ev || ev.target !== seat || ev.pseudoElement !== '::before') return;
-        endRite(card.host, ev.animationName === 'reading-seal' ? 'read' : 'asked');
+        if (!ev || ev.target !== seat) return;
+        if (ev.pseudoElement === '::before') endRite(card.host, ev.animationName === 'reading-seal' ? 'read' : 'asked');
+        else if (ev.pseudoElement === '::after' && ev.animationName === 'figure-seal') endRite(card.host, 'figured');
       });
     }
     card.text.setAttribute('aria-live', 'polite');
@@ -1344,8 +1435,16 @@
       return;
     }
     var answerArriving = show(sheet.answer);
-    if (!skyAnswerWanted || activeDrag) return;
+    if (!skyAnswerWanted) return;
     if (skyAnswerAt === skyAnswerIndex && skyAnswerStars && sameStars(skyAnswerStars, list)) return;
+    // A star held in a drag: the preview waiting for the stars it was asked for is no longer the
+    // sky's, so it is let go now (its ticket spent) rather than drawn when it comes, and a new one
+    // is asked for when the move ends.
+    if (activeDrag) {
+      skyAnswerTicket += 1;
+      skyAnswerStars = null;
+      return;
+    }
     var ticket = ++skyAnswerTicket;
     skyAnswerStars = list;
     skyAnswerAt = skyAnswerIndex;
@@ -1407,20 +1506,106 @@
   // into a line already there, by the reveal's slice, and cut away from it when the sky is
   // cleared. A first name longer than the room kept for it -- a register that sets it wide, on a
   // narrow sheet -- pushes what is under it down, and that steps there (makeRoom) rather than
-  // jumping; a name renamed later, by a drag, is left to take the room it takes.
+  // jumping; a name renamed later, by a drag, is left to take the room it takes. A sky close to a
+  // named shape it does not make yet says so after its name, with what would complete it
+  // (nearFigure), so a visitor moving stars toward one is told how near they are. That hint is a
+  // sentence of its own, long enough to take the line onto another (two more, on a phone), and a
+  // single arrow key brings it or takes it away -- most often as the same key finds or loses a
+  // figure, whose name is set in the serif (data-figure), at a height and a width of its own. So
+  // a line whose hint comes, goes or changes, or whose figure is found or lost, takes its new
+  // words and its new face in the one change that steps what is under it there (makeRoom), as a
+  // first name does, and never jumps it. Only then: a move that keeps both reads no layout for it.
+  var nameHint = '';
   function renderName() {
     if (!sheet || !sheet.name) return;
     var list = serialize();
     var named = skyName(list);
-    sheet.name.setAttribute('data-figure', figureOf(list) ? 'true' : 'false');
+    var figure = figureOf(list) ? 'true' : 'false';
     if (!named) {
-      conceal(sheet.name, true, makeRoom);
+      nameHint = '';
+      // The serif goes once the words it set have been cut away, not under them as they go.
+      conceal(sheet.name, true, function (hide) {
+        makeRoom(function () {
+          hide();
+          sheet.name.setAttribute('data-figure', 'false');
+        });
+      });
       return;
     }
-    var line = '✦ ' + named + ' — ' + skyRead(list);
-    function write() { say(sheet.name, line, show(sheet.name)); }
-    if (sheet.name.textContent) write();
-    else makeRoom(write);
+    var near = figure === 'true' ? '' : nearFigure(list);
+    var hint = near ? '. Close to a named shape: ' + near + '.' : '';
+    var line = '✦ ' + named + ' — ' + skyRead(list) + hint;
+    var room = !sheet.name.textContent || hint !== nameHint || sheet.name.getAttribute('data-figure') !== figure;
+    nameHint = hint;
+    function write() {
+      sheet.name.setAttribute('data-figure', figure);
+      say(sheet.name, line, show(sheet.name));
+    }
+    if (room) makeRoom(write);
+    else write();
+  }
+  /* The named shapes, as marks under the sky: the one the sky makes now is lit, and a press on any
+     of them says in plain words how it is made and how near the sky is to it. What the sky is now,
+     never a record of what it was. A mark is a control like any other: a press stamps it, and lit
+     is a set state (data-set), which js/motion.js seals -- its fill grown as a curve and left
+     standing in two shades -- and unseals by a slice when the sky stops making the shape
+     (_sass/_persona.scss, _controls.scss). The marks are made once, with the sheet, each written
+     as the saved sky stands before it is put in the page, so none is sealed as it is made; and
+     while the sheet is shut they follow the saved sky (refresh), so a sheet opening onto a sky
+     changed elsewhere has nothing to seal inside its own arrival. Nobody sees a mark change while
+     the sheet is shut, so the engine passes that change over (markFigure): a seal begun on a
+     hidden mark would wait for the sheet and play inside its arrival. */
+  var FIGURES = [
+    { name: 'the twins', rule: 'exactly two stars, side by side' },
+    { name: 'the belt', rule: 'exactly three stars in a straight line' },
+    { name: 'the spear', rule: 'four or more stars in a straight line' },
+    { name: 'the halo', rule: 'five or more stars, all the same distance from their middle' },
+    { name: 'the moth', rule: 'four or more stars, each matched by one opposite it, left to right' }
+  ];
+  function tellFigure(f) {
+    var list = serialize();
+    var near = nearFigure(list);
+    sheetStatus(f.name + ': ' + f.rule + '. ' + (figureOf(list) === f.name ? 'Your sky makes it now.'
+      : near ? 'Your sky is close to a named shape: ' + near + '.' : 'Move, drop or remove stars to make it.'));
+  }
+  // One mark written as lit or not: only what has changed is written, so a drag that keeps the sky
+  // in or out of a shape writes nothing here. A mark lit or unlit in a shut sheet is passed over
+  // by the engine (data-rite='none') until the engine has heard of the change, which it does after
+  // the task that made it -- so also when a sky is set and the sheet opened in one go -- and is
+  // the engine's again at once, so a hover, a press or a pointer leaving it plays as on any
+  // control.
+  function markFigure(chip, f, on) {
+    var words = (on ? '✦ ' : '✧ ') + f.name;
+    var label = f.name + ': ' + f.rule + (on ? '. Your sky makes this now.' : '. Press to hear how close you are.');
+    if (on ? chip.getAttribute('data-set') !== 'true' : chip.hasAttribute('data-set')) {
+      var unseen = chip.isConnected && !sheet.host.open && typeof Promise === 'function' && !chip.hasAttribute('data-rite');
+      if (unseen) chip.setAttribute('data-rite', 'none');
+      if (on) chip.setAttribute('data-set', 'true');
+      else chip.removeAttribute('data-set');
+      // Queued after the change, so after the engine is told of it.
+      if (unseen) Promise.resolve().then(function () { chip.removeAttribute('data-rite'); });
+    }
+    if (chip.textContent !== words) chip.textContent = words;
+    if (chip.getAttribute('aria-label') !== label) chip.setAttribute('aria-label', label);
+  }
+  function buildFigures() {
+    if (!sheet || !sheet.figures || sheet.figureChips) return;
+    var made = figureOf(stars());
+    sheet.figureChips = FIGURES.map(function (f) {
+      var chip = element('button', 'persona-figure');
+      chip.type = 'button';
+      markFigure(chip, f, made === f.name);
+      chip.addEventListener('click', function () { tellFigure(f); });
+      sheet.figures.appendChild(chip);
+      return chip;
+    });
+  }
+  // `made` is the shape the sky makes ('' for none), where the caller has it; the field's own
+  // stars otherwise.
+  function renderFigures(made) {
+    if (!sheet || !sheet.figureChips) return;
+    if (made === undefined) made = figureOf(serialize());
+    for (var i = 0; i < FIGURES.length; i++) markFigure(sheet.figureChips[i], FIGURES[i], made === FIGURES[i].name);
   }
   function renderThread() {
     var path = threadOf(fieldStars, selected);
@@ -1471,7 +1656,9 @@
     var list = serialize();
     var named = skyName(list);
     if (!named) return '';
-    return figureOf(list) ? ' A figure with a name of its own: ' + named + '.' : ' Your sky reads as ' + named + ' now.';
+    if (figureOf(list)) return ' A figure with a name of its own: ' + named + '.';
+    var near = nearFigure(list);
+    return ' Your sky reads as ' + named + ' now.' + (near ? ' Close to a named shape: ' + near + '.' : '');
   }
   function paintField(pass, measured) {
     if (!sheet || !sheet.field || !sheet.canvas) return;
@@ -1485,6 +1672,7 @@
   // rather than cutting it short. `box` is the field's, where a drag has already measured it.
   function drawField(box) {
     renderName();
+    renderFigures();
     renderThread();
     renderNeighbor();
     paintField(fieldCast ? fieldCast.pass : null, box);
@@ -1533,19 +1721,20 @@
     cast.timer = window.setTimeout(tread, total * jumps[0][0]);
   }
   /* The parts that come and go between the sky and what stands under it -- the thread, the words
-     form, the remove button, and a first name longer than the room the line keeps for it -- push
-     all of that (the sky's other controls, its status line, its preview, the sections after it)
-     down as they come and let it up as they go. What they push steps there in the landing's
-     treads, on one stair for all of it (the engine's flip), instead of jumping in the one frame the
-     form appears, from under a pointer that was on 'drop a star' a moment before. Only what was
-     shown before the change is stepped. What comes with it (`arrivals`) takes its room at once and
-     waits there, cut away, until what it pushed has stepped aside, and is cut in only then: one
-     movement after the other, and never the new part's words under the old controls passing over
-     them. A step still under way when the next change comes (the name and then the form, for a
-     star dropped on an empty sky) is measured where it stands and taken off as the next begins
-     from there, so the two are one stair and never a step back. Not while the sheet is being
-     opened, which arrives whole by its own one edge; and nothing moves for a visitor who asked for
-     less motion. */
+     form, the remove button, a first name longer than the room the line keeps for it, and the
+     hint after a name that a sky close to a named shape is given (renderName) -- push
+     all of that (the marks of the named shapes, the sky's other controls, its status line, its
+     preview, the sections after it) down as they come and let it up as they go. What they push
+     steps there in the landing's treads, on one stair for all of it (the engine's flip), instead of
+     jumping in the one frame the form appears, from under a pointer that was on 'drop a star' a
+     moment before. Only what was shown before the change is stepped. What comes with it
+     (`arrivals`) takes its room at once and waits there, cut away, until what it pushed has stepped
+     aside, and is cut in only then: one movement after the other, and never the new part's words
+     under the old controls passing over them. A step still under way when the next change comes
+     (the name and then the form, for a star dropped on an empty sky) is measured where it stands
+     and taken off as the next begins from there, so the two are one stair and never a step back.
+     Not while the sheet is being opened, which arrives whole by its own one edge; and nothing
+     moves for a visitor who asked for less motion. */
   var stepping = [];
   function makeRoom(change, arrivals) {
     var m = engine();
@@ -1553,7 +1742,7 @@
       change();
       return;
     }
-    var parts = [sheet.thread, sheet.wordsForm, sheet.drop, sheet.seed, sheet.remove, sheet.clear, sheet.status, sheet.answer];
+    var parts = [sheet.thread, sheet.figures, sheet.wordsForm, sheet.drop, sheet.seed, sheet.remove, sheet.clear, sheet.status, sheet.answer];
     var section = sheet.field.parentNode;
     for (var next = section ? section.nextElementSibling : null; next; next = next.nextElementSibling) parts.push(next);
     var items = parts.filter(function (part) { return part && !part.hidden; });
@@ -1896,21 +2085,25 @@
     // with the sheet's one edge, written into it quietly; only the sky is dealt into it, star by
     // star, as it was placed. The first star takes the focus as it is dealt and is not chosen by
     // it (placing, as focusStar says): placed first, chosen by the next press, so the sheet does
-    // not open with a seal, a words form and a remove button arriving inside its own arrival.
+    // not open with a seal, a words form and a remove button arriving inside its own arrival. The
+    // sheet is put back at its top before the focus is given, so a target further down is brought
+    // into view by the focus and not scrolled away from again; and the focus goes only to a star
+    // that is the sky's, never to the ghost of one being cut away (inert).
     dealing = fresh;
     try {
       renderSheet(fresh);
+      sheet.host.scrollTop = 0;
+      var skyTarget = sheet.field.querySelector('.persona-star:not([inert])') || sheet.drop;
       var target = section === 'reading' ? sheet.ask
         : section === 'difficulty' ? (sheet.tune && sheet.tune.querySelector('input'))
-          : (sheet.field.querySelector('.persona-star') || sheet.drop);
-      if (!target) target = sheet.field.querySelector('.persona-star') || sheet.drop;
+          : skyTarget;
+      if (!target) target = skyTarget;
       if (target && typeof target.focus === 'function') {
         placing = fresh && target.classList && target.classList.contains('persona-star') ? target : null;
         try { target.focus(); }
         finally { placing = null; }
       }
     } finally { dealing = false; }
-    sheet.host.scrollTop = 0;
   }
   /* Closing reads first and then writes, all in the one task, so the page is restyled whole once
      and not once for each thing that changes. The ghost and the hand-off take what they need of
@@ -1982,6 +2175,7 @@
       clear: document.getElementById('persona-clear'), status: document.getElementById('persona-sky-status'),
       name: document.getElementById('persona-sky-name'),
       thread: document.getElementById('persona-thread'),
+      figures: document.getElementById('persona-figures'),
       wordsForm: document.getElementById('persona-star-words'),
       words: document.getElementById('persona-star-thought'),
       neighbor: document.getElementById('persona-star-neighbor'),
@@ -2008,6 +2202,7 @@
     // The sky's name line holds its room from the start, empty until there is a sky to name
     // (renderName), so the first star does not push the controls under it down.
     if (sheet.name) sheet.name.hidden = false;
+    buildFigures();
     // The third setting, in its own section: the same control the stage puts beside a piece, so a
     // visitor meets one slider wherever they meet the setting.
     if (sheet.tune) tuner(sheet.tune, { label: 'difficulty' });
@@ -2044,22 +2239,31 @@
       if (ev.clientX < box.left || ev.clientX > box.right || ev.clientY < box.top || ev.clientY > box.bottom) closeSheet();
     });
     document.addEventListener('keydown', function (ev) {
+      var front = document.documentElement.getAttribute('data-lightbox');
       if (!host.open || typeof host.showModal === 'function'
-          || document.documentElement.getAttribute('data-lightbox') === 'are-you-sure') return;
+          || (front && front !== 'persona')) return;
       if (ev.key === 'Escape' || ev.key === 'Esc') {
         ev.preventDefault();
         closeSheet();
         return;
       }
       if (ev.key !== 'Tab') return;
-      var controls = host.querySelectorAll('button, a[href], input:not([disabled])');
+      var controls = host.querySelectorAll(
+        'summary, a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex="0"]');
       var reachable = [];
       for (var i = 0; i < controls.length; i++) {
         var control = controls[i];
-        if (control.disabled) continue;
+        var tab = control.getAttribute('tabindex');
+        if (control.disabled || (tab !== null && Number(tab) < 0)) continue;
         var visible = true;
         for (var parent = control; parent && parent !== host; parent = parent.parentNode) {
-          if (parent.hidden) { visible = false; break; }
+          if (parent.hidden || parent.hasAttribute('inert')
+              || parent.getAttribute('aria-hidden') === 'true'
+              || (parent.tagName === 'DETAILS' && !parent.open
+                && control !== parent.querySelector('summary'))) {
+            visible = false;
+            break;
+          }
         }
         if (visible) reachable.push(control);
       }
