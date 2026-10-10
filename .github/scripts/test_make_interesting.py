@@ -7086,6 +7086,7 @@ class RealSiteTest(unittest.TestCase):
           out.forward = [forward(a.ease), forward((t) => a.stair(t)), forward(a.ratchet), forward(a.flicker)];
           out.stairLevels = new Set(xs.map((t) => a.stair(t))).size - 1;
           out.easeLevels = new Set(xs.map((t) => a.ease(t))).size - 1;
+          out.ratchetLevels = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((s) => new Set(xs.map((t) => V.rite(s).ratchet(t))).size - 1);
           out.treads = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((s) => V.rite(s).treads);
           out.stairTreads = a.treads;
           out.flickerBinary = xs.every((t) => a.flicker(t) === 0 || a.flicker(t) === 1);
@@ -7117,6 +7118,9 @@ class RealSiteTest(unittest.TestCase):
             self.assertGreaterEqual(treads, 2, "a stair of one tread is a cut")
             self.assertLessEqual(treads, 5, "a stair of more than five treads is a ladder")
         self.assertLessEqual(out["easeLevels"], 5)
+        for clicks in out["ratchetLevels"]:
+            self.assertGreaterEqual(clicks, 2, "a ratchet of one click is a cut")
+            self.assertLessEqual(clicks, 5, "a ratchet of more than five clicks is a ladder")
         self.assertTrue(out["flickerBinary"])
         self.assertEqual(out["flickerEnds"], [0, 1])
         self.assertTrue(out["matteMonotone"], "the edge let less of the box through at a higher coverage")

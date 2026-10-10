@@ -356,7 +356,7 @@ function riteOf(seed, edge) {
   };
 
   // The ratchet: even clicks, evenly spaced -- a clock's, never a slip.
-  const clicks = treads + 1;
+  const clicks = treads;
   const ratchet = (p) => {
     const q = clamp01(p);
     if (q >= 1) return 1;

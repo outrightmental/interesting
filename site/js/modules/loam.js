@@ -58,29 +58,42 @@ function asked(env) {
    js/stage.js, "The rite"). Nothing in the ground moves along a formula, and nothing changes but
    behind one clean edge -- the piece's own slice or curve, the same edge for every surface of it
    -- in a few treads, always forward. A reading the visitor sets is SEALED on the drawing behind
-   that edge: a mark where they say the water stands, a bracket down the layers they count, a
-   bracket under the column they say the root leaves at, the cell they tap in the bed; an unset
-   one is taken back behind the same edge, the way it came. A cup that changes bag takes its new
-   soil over the old behind the edge, and the blend takes the bed the same way. Water keeps its
-   own edge, because water finds its level: in the core it rises to its line by one level edge
-   climbing in the stair's treads, while the wave on that line turns half a turn in the ratchet's
-   clicks and then lies still; in the bed it drains out by its level, falling in treads. The root
-   goes down the core and through the bed's rows in treads; the dark over the surface and the
-   light over a solved bed come behind the piece's edge, never a wash; a ruled-out blend, a
-   caption and a ring are cut on at one moment and stay. Every change is read against the
-   piece's own clock, s.t, which frame() advances: a change made at `since` has come came() of
-   its way, which is 1 at once for a visitor who asked for less motion and for whatever stood
-   there from the start, and a finale shows such a visitor where it ends. Every trigger rolls its
-   own treads (rite.at(k) with the count of that trigger in k), so a second reading, a second
-   tap, a second mix steps differently from the first while cutting along the same edge. */
+   that edge: a mark where they say the water stands, the cell they tap in the bed, a bracket
+   under the column they say the root leaves at; an unset one is taken back behind the same edge,
+   the way it came. A mark is how far the edge has passed over it, and a press turns it round from
+   wherever it stands, so a second press made before the first has landed never makes a mark jump
+   to whole before it goes back, and never drops one half-way (marks(), choose()). The bracket
+   down the layers they count is one bar, and a new count seals on or takes back only the layers
+   that differ (recount()). A cup that changes bag takes its new soil over the old behind the
+   edge (pour()).
+
+   A solve is one gesture: one roll and one clock, so the whole picture steps on the same few
+   moments. In the core the dark over the surface lifts and the day comes over the drawing behind
+   the one edge, while the water rises to its line -- water finds its level, so its edge is a level
+   one, climbing on those same treads -- and the root goes down as far as each tread takes it. In
+   the bed the blend comes in wet behind that edge with the day, and once it lies there its water
+   drains out by its level, falling in treads, slower the less sand there is. In the route the root
+   goes down through the rows a tread at a time under the same day. A ruled-out blend, a caption,
+   a ring or a cup's letter is cut on at one moment and stays; old words go before new ones come.
+
+   Every change is read against the piece's own clock, s.t, which frame() advances: a change made
+   at `since` has come came() of its way, which is 1 at once for a visitor who asked for less
+   motion and for whatever stood there from the start, and a finale shows such a visitor where it
+   ends. Every trigger rolls its own treads (roll() with the count of that trigger), so a second
+   reading, a second tap, a second mix steps differently from the first while cutting along the
+   same edge. And a frame redraws only while something is moving (framed()): a still drawing is
+   left on the canvas as it stands, so nothing is computed that does not show. */
 
 // The rite of a drawing handed none: every movement at its end and every surface whole.
 const STILL = {
-  stair: () => 1, ratchet: () => 1, flicker: () => 1,
+  stair: () => 1, flicker: () => 1,
   paint(g, x, y, w, h, k, style) {
     if (k <= 0) return;
     if (style != null) g.fillStyle = style;
     g.fillRect(x, y, w, h);
+  },
+  region(g, x, y, w, h, k) {
+    if (k > 0) g.rect(x, y, w, h);
   },
   at: () => STILL
 };
@@ -89,9 +102,13 @@ function riteOf(env) {
   return env && env.rite ? env.rite : STILL;
 }
 
+// How far a change made at `since` has come, over `span` seconds of the piece's clock. Anything
+// still on its way marks the drawing busy, so the next frame draws it again.
 function came(s, since, span, reduced) {
   if (reduced || since == null || since < 0) return 1;
-  return Math.max(0, Math.min(1, (s.t - since) / span));
+  const p = Math.max(0, Math.min(1, (s.t - since) / span));
+  if (p < 1) s.busy = true;
+  return p;
 }
 
 // The rite rolled afresh for the n-th trigger of one kind of thing: a second press steps in other
@@ -100,18 +117,134 @@ function roll(rite, base, n) {
   return rite.at(((base | 0) ^ (Math.imul((n | 0) + 1, 0x9e37) | 0)) >>> 0);
 }
 
-// A sealed mark: the piece's edge passes over its box in treads while it is set, and goes back the
-// way it came when it is unset, each on the roll of that set.
-function sealed(g, rite, box, on, p) {
-  const k = on ? rite.stair(p) : 1 - rite.stair(p);
-  rite.paint(g, box.x, box.y, box.w, box.h, k);
+// One frame of a piece: the drawing is made again only when something on it is moving, when a
+// trigger changed it, or when the scene was sized again (which clears the canvas); otherwise the
+// picture already on the canvas is the picture, and the frame answers false.
+function framed(s, c, draw) {
+  const lost = !!(c.g && typeof c.g.isContextLost === 'function' && c.g.isContextLost());
+  if (!s.dirty && !s.busy && !lost && s.on === c.g && s.w === c.w && s.h === c.h && s.dpr === c.dpr) return false;
+  draw(c);
+  return true;
 }
 
-// The light that comes over a solved bed: behind the piece's edge from the moment of the solve, in
-// the stair's treads, and then it holds.
-function daybreak(g, rite, env, w, h, p, strength) {
-  const own = roll(rite, 0xdb, 0);
-  own.paint(g, 0, 0, w, h, own.stair(p), env.alpha(env.colors.accent2, strength || 0.1));
+// Draws with the bookkeeping framed() reads: whatever is moving marks itself busy as it is drawn.
+function drawn(s, c, paint) {
+  s.busy = false;
+  s.dirty = false;
+  s.on = c.g;
+  s.w = c.w;
+  s.h = c.h;
+  s.dpr = c.dpr;
+  paint();
+}
+
+/* ---- marks: what a visitor sets, sealed on the drawing ------------------------------------- */
+
+// A kind of mark (a reading, a tap, a column): its own salt for the rolls and its own length.
+function marks(base, span) {
+  return { base, span, n: 0, list: [] };
+}
+
+// How far the edge has passed over mark m now: from where it stood when its last trigger came,
+// toward 1 while it is set and 0 once it is not, in that trigger's treads.
+function cover(set, m, rite, s, reduced) {
+  return m.from + (m.to - m.from) * roll(rite, set.base, m.n).stair(came(s, m.at, set.span, reduced));
+}
+
+// `key` becomes the one mark set (null for none): a mark heading the other way turns where it
+// stands, on this trigger's roll, and a new one comes from nothing. False when it already was.
+function choose(set, key, rite, s, reduced) {
+  const was = set.list.find((m) => m.to === 1);
+  if ((was ? was.key : null) === key) return false;
+  set.n += 1;
+  set.list = set.list.filter((m) => m.to === 1 || m.key === key || cover(set, m, rite, s, reduced) > 0);
+  for (const m of set.list) {
+    const to = m.key === key ? 1 : 0;
+    if (m.to !== to) {
+      m.from = cover(set, m, rite, s, reduced);
+      m.to = to;
+      m.at = s.t;
+      m.n = set.n;
+    }
+  }
+  if (key != null && !set.list.some((m) => m.key === key)) set.list.push({ key, from: 0, to: 1, at: s.t, n: set.n });
+  return true;
+}
+
+// Every mark of a kind at its coverage now, each one paint in the box box(key) gives it.
+function sealMarks(g, set, rite, s, reduced, box, style) {
+  for (const m of set.list) {
+    const k = cover(set, m, rite, s, reduced);
+    const b = k > 0 ? box(m.key) : null;
+    if (b) roll(rite, set.base, m.n).paint(g, b.x, b.y, b.w, b.h, k, style);
+  }
+}
+
+// The mark of a kind that is set now, once its trigger's moment has come: what a ring is cut on for.
+function markedNow(set, rite, s, reduced) {
+  const m = set.list.find((x) => x.to === 1);
+  return m && roll(rite, set.base, m.n).flicker(came(s, m.at, set.span, reduced)) === 1 ? m.key : null;
+}
+
+// The bracket down the counted layers, as runs of layers [lo, hi), each with its own coverage. A
+// new count leaves alone the runs that already say it, splits a whole run where the count now
+// ends (nothing moves there), turns round the runs that no longer belong, and seals on the layers
+// nothing is yet bringing on. A run caught half-way and cut by the count goes back as it is, and
+// the part of it still wanted is sealed again over it, so nothing jumps.
+function recount(bar, count, rite, s, reduced) {
+  if (bar.said === count) return false;
+  bar.said = count;
+  bar.n += 1;
+  const k = (r) => r.from + (r.to - r.from) * roll(rite, bar.base, r.n).stair(came(s, r.at, bar.span, reduced));
+  // What has landed is settled first: runs gone to nothing are let go, and the runs wholly on are
+  // one run wherever they meet, so a change after them moves one edge, not one per run.
+  const whole = [];
+  const runs = [];
+  for (const r of bar.runs) {
+    const c = k(r);
+    if (r.to === 0 && c <= 0) continue;
+    if (r.to === 1 && c >= 1) whole.push([r.lo, r.hi]);
+    else runs.push(r);
+  }
+  whole.sort((a, b) => a[0] - b[0]);
+  for (let i = 0; i < whole.length; i++) {
+    const lo = whole[i][0];
+    let hi = whole[i][1];
+    while (i + 1 < whole.length && whole[i + 1][0] <= hi) hi = Math.max(hi, whole[++i][1]);
+    // A whole run the count now ends inside is split there: nothing of it moves at the split.
+    if (lo < count && count < hi) runs.push({ lo, hi: count, from: 1, to: 1, at: -1, n: 0 }, { lo: count, hi, from: 1, to: 1, at: -1, n: 0 });
+    else runs.push({ lo, hi, from: 1, to: 1, at: -1, n: 0 });
+  }
+  for (const r of runs) {
+    const to = r.hi <= count ? 1 : 0;
+    if (r.to !== to) {
+      r.from = k(r);
+      r.to = to;
+      r.at = s.t;
+      r.n = bar.n;
+    }
+  }
+  let reached = 0;
+  for (const r of runs.filter((x) => x.to === 1).sort((a, b) => a.lo - b.lo)) {
+    if (r.lo > reached) runs.push({ lo: reached, hi: r.lo, from: 0, to: 1, at: s.t, n: bar.n });
+    reached = Math.max(reached, r.hi);
+  }
+  if (reached < count) runs.push({ lo: reached, hi: count, from: 0, to: 1, at: s.t, n: bar.n });
+  bar.runs = runs;
+  return true;
+}
+
+// The light that comes over a solved bed: behind the finale's edge, on its treads, and then it
+// holds.
+function daybreak(g, fin, env, w, h, k, strength) {
+  if (k > 0) fin.paint(g, 0, 0, w, h, k, env.alpha(env.colors.accent2, strength || 0.1));
+}
+
+const FINALE = 2.4; // seconds from a solve to the end of its finale
+
+// How far a finale has come: one roll and one clock for the whole solve, 0 before it.
+function finale(s, fin, reduced) {
+  return s.doneAt != null && s.doneAt >= 0 ? fin.stair(came(s, s.doneAt, FINALE, reduced)) : 0;
 }
 
 /* ---- shared drawing ------------------------------------------------------------------------ */
@@ -129,17 +262,22 @@ function write(g, text, x, y, size, tone, align, weight) {
 }
 
 // The ground and the dark above it, as the old cutaway laid them. The dark lifts off a solved
-// bed by its area: the day comes over it behind the piece's edge, on a stair, never a wash.
-function sky(g, w, h, env, top, lift, rite) {
+// bed by its area: where the finale's edge has passed over the whole drawing (the same edge the
+// day comes behind), the dark band is lifted, on the finale's treads, never a wash.
+function sky(g, w, h, env, top, k, fin) {
   const c = env.colors;
   const ground = env.mix(c.bg, c.bg2, 0.25);
   g.fillStyle = ground;
   g.fillRect(0, 0, w, h);
   g.fillStyle = 'rgba(0,0,0,0.35)';
   g.fillRect(0, 0, w, top);
-  if (lift > 0) {
-    const own = roll(rite || STILL, 0xa1, 0);
-    own.paint(g, 0, 0, w, top, own.stair(lift), env.alpha(ground, 0.57));
+  if (k > 0) {
+    g.save();
+    g.beginPath();
+    g.rect(0, 0, w, top);
+    g.clip();
+    (fin || STILL).paint(g, 0, 0, w, h, k, env.alpha(ground, 0.57));
+    g.restore();
   }
   g.strokeStyle = env.alpha(c.accent2, 0.5);
   g.lineWidth = 1;
@@ -234,8 +372,8 @@ function layerTone(env, k) {
 }
 
 function coreBlank(caption) {
-  return { fill: 0, grow: 0, lift: 0, root: null, caption, captionAt: -1, t: 0, doneAt: -1,
-    read: null, readAt: -1, reads: 0, counted: null, countedAt: -1, counts: 0 };
+  return { root: null, caption, t: 0, doneAt: -1, reads: marks(0x2a, 0.8),
+    bar: { base: 0x2b, span: 0.8, n: 0, runs: [], said: 0 } };
 }
 
 function drawCore(g, w, h, env, plan, s, variant) {
@@ -247,7 +385,11 @@ function drawCore(g, w, h, env, plan, s, variant) {
   const m = Math.min(w, h);
   const size = Math.max(10, Math.min(14, Math.round(m * 0.036)));
   const small = Math.max(9, size - 2);
-  sky(g, w, h, env, geo.top, s.lift, rite);
+  // The finale: one roll and one clock, so the dark, the day, the water and the root all step on
+  // the same moments.
+  const fin = roll(rite, 0xf1, 0);
+  const k = finale(s, fin, reduced);
+  sky(g, w, h, env, geo.top, k, fin);
   write(g, 'surface', w * 0.5, geo.top - size * 0.9, small, env.alpha(c.muted, 0.9));
   const colW = geo.right - geo.left;
   let y = geo.top;
@@ -277,39 +419,57 @@ function drawCore(g, w, h, env, plan, s, variant) {
     write(g, t + ' cm', geo.right + size * 0.6, y + lh / 2, small, env.alpha(c.fg, 0.95), 'left');
     y += lh;
   });
-  // The visitor's readings, sealed on the drawing: a mark where they say the water stands and a
-  // bracket down the layers they count, each coming behind the piece's edge on the roll of that
-  // reading.
-  if (s.read != null && s.readAt >= 0) {
-    const own = roll(rite, 0x2a, s.reads);
-    const ry = geo.top + Math.max(0, Math.min(totalOf(plan), s.read)) * geo.scale;
-    g.fillStyle = env.alpha(c.accent, 0.55);
-    sealed(g, own, { x: geo.left - size * 0.3, y: ry - 2, w: colW + size * 0.6, h: 4 }, true, came(s, s.readAt, 0.8, reduced));
-  }
-  if (s.counted != null && s.countedAt >= 0) {
-    const own = roll(rite, 0x2b, s.counts);
-    let span = 0;
-    for (let i = 0; i < Math.min(plan.layers.length, Math.max(0, s.counted)); i++) span += plan.layers[i] * geo.scale;
-    g.fillStyle = env.alpha(c.accent2, 0.7);
-    sealed(g, own, { x: geo.left - 5, y: geo.top, w: 4, h: span }, true, came(s, s.countedAt, 0.8, reduced));
+  // The visitor's readings, sealed on the drawing: a mark where they say the water stands, coming
+  // behind the piece's edge on the roll of that reading while the one said before goes back behind
+  // the same edge from as far as it had come; and the bracket down the layers they count, one bar
+  // whose changed part alone is sealed on or taken back. The bracket is laid in the solid its
+  // translucent accent made over the bare ground beside the core, so where a run going and a run
+  // coming cross for a moment the bar is still one colour.
+  sealMarks(g, s.reads, rite, s, reduced, (read) => {
+    const ry = geo.top + Math.max(0, Math.min(totalOf(plan), read)) * geo.scale;
+    return { x: geo.left - size * 0.3, y: ry - 2, w: colW + size * 0.6, h: 4 };
+  }, env.alpha(c.accent, 0.55));
+  if (s.bar.runs.length) {
+    const down = (count) => {
+      let span = 0;
+      for (let i = 0; i < Math.min(plan.layers.length, Math.max(0, count)); i++) span += plan.layers[i] * geo.scale;
+      return geo.top + span;
+    };
+    const bar = s.bar;
+    const tone = env.mix(env.mix(c.bg, c.bg2, 0.25), c.accent2, 0.7);
+    // The runs wholly on are one stretch each where they meet, so the bar has no seams.
+    const whole = [];
+    g.fillStyle = tone;
+    for (const r of bar.runs) {
+      const got = r.from + (r.to - r.from) * roll(rite, bar.base, r.n).stair(came(s, r.at, bar.span, reduced));
+      if (got >= 1) whole.push([r.lo, r.hi]);
+      else if (got > 0) roll(rite, bar.base, r.n).paint(g, geo.left - 5, down(r.lo), 4, down(r.hi) - down(r.lo), got, tone);
+    }
+    whole.sort((a, b) => a[0] - b[0]);
+    for (let i = 0; i < whole.length; i++) {
+      let hi = whole[i][1];
+      const lo = whole[i][0];
+      while (i + 1 < whole.length && whole[i + 1][0] <= hi) hi = Math.max(hi, whole[++i][1]);
+      g.fillStyle = tone;
+      g.fillRect(geo.left - 5, down(lo), 4, down(hi) - down(lo));
+    }
   }
   // The water, risen to its line at the finale: water finds its level, so its edge is a level one,
-  // climbing from the foot of the core to the line in the stair's treads, never a wash.
+  // climbing from the foot of the core to the line on the finale's treads, never a wash.
   const wy = geo.top + depth * geo.scale;
-  if (s.fill > 0) {
-    const from = geo.bottom - (geo.bottom - wy) * roll(rite, 0xf1, 0).stair(s.fill);
+  if (k > 0) {
+    const from = geo.bottom - (geo.bottom - wy) * k;
     g.fillStyle = env.alpha(c.accent, 0.28);
     g.fillRect(geo.left, from, colW, geo.bottom - from);
   }
-  // The water line, wavy, at a layer boundary. While the water rises to it its wave turns half a
-  // turn in the ratchet's clicks; once the water stands at its line, the line lies still.
-  const phase = s.fill > 0 ? roll(rite, 0x77, 0).ratchet(s.fill) * Math.PI : 0;
+  // The water line, wavy, at a layer boundary, and still: the water comes to it, not it to the
+  // water.
   g.strokeStyle = c.accent;
   g.lineWidth = 2;
   g.beginPath();
   const amp = Math.max(1.5, m * 0.006);
   for (let x = geo.left - size * 0.4; x <= geo.right + size * 0.4; x += 3) {
-    const yy = wy + Math.sin((x / m) * 40 + v.turn * TAU + phase) * amp;
+    const yy = wy + Math.sin((x / m) * 40 + v.turn * TAU) * amp;
     if (x === geo.left - size * 0.4) g.moveTo(x, yy);
     else g.lineTo(x, yy);
   }
@@ -319,11 +479,10 @@ function drawCore(g, w, h, env, plan, s, variant) {
   g.strokeStyle = env.alpha(c.fg, 0.35);
   g.lineWidth = 1;
   g.strokeRect(geo.left, geo.top, colW, geo.bottom - geo.top);
-  // The root, at the finale: down from the surface and round the stones, in the stair's treads.
-  if (s.root && s.grow > 0) {
-    const own = roll(rite, 0x90, 0);
-    const went = own.stair(s.grow);
-    const n = Math.max(2, Math.round(s.root.length * went));
+  // The root, at the finale: down from the surface and round the stones, and its shoot up out of
+  // it, as far as each of the finale's treads takes them.
+  if (s.root && k > 0) {
+    const n = Math.max(2, Math.round(s.root.length * k));
     g.strokeStyle = env.alpha(c.accent2, 0.9);
     g.lineCap = 'round';
     g.lineWidth = 2.2;
@@ -331,16 +490,16 @@ function drawCore(g, w, h, env, plan, s, variant) {
     g.moveTo(s.root[0].x, s.root[0].y);
     for (let i = 1; i < n; i++) g.lineTo(s.root[i].x, s.root[i].y);
     g.stroke();
-    g.strokeStyle = env.alpha(c.accent2, 0.9);
     g.lineWidth = 2;
     g.beginPath();
     g.moveTo(s.root[0].x, geo.top);
-    g.lineTo(s.root[0].x + 3, geo.top - m * 0.04 * own.stair(Math.min(1, s.grow * 2)));
+    g.lineTo(s.root[0].x + 3, geo.top - m * 0.04 * k);
     g.stroke();
   }
-  if (s.doneAt != null && s.doneAt >= 0) daybreak(g, rite, env, w, h, came(s, s.doneAt, 2.4, reduced), 0.1);
-  // The caption goes when it changes and the new one is cut on at one moment of its roll.
-  if (roll(rite, 0xca, 0).flicker(came(s, s.captionAt, 0.8, reduced))) write(g, s.caption, w / 2, h * 0.955, small, env.alpha(c.muted, 0.9));
+  daybreak(g, fin, env, w, h, k, 0.1);
+  // The caption a solve writes goes at the solve, and the new one is cut on with the finale's
+  // first tread.
+  if (s.doneAt < 0 || k > 0) write(g, s.caption, w / 2, h * 0.955, small, env.alpha(c.muted, 0.9));
 }
 
 function corePreview(g, w, h, env, plan) {
@@ -355,7 +514,7 @@ function corePiece(env, plan) {
   const total = totalOf(plan);
   const depth = waterDepth(plan);
   const s = coreBlank('drawn to scale; the thicknesses are written');
-  const draw = (c) => drawCore(c.g, c.w, c.h, c, plan, s, env.variant);
+  const draw = (c) => drawn(s, c, () => drawCore(c.g, c.w, c.h, c, plan, s, env.variant));
   return {
     title: coreTitle(plan),
     brief: 'A reading of the ground. A core from the bed, drawn to scale: ' + WORDS[n] + ' layers, each with its thickness in centimetres written beside it. One layer is a band of stones. The wavy line is where the water stands. The band is a layer of its own and is not one a root passes through.',
@@ -388,32 +547,29 @@ function corePiece(env, plan) {
     apply(id, value, c) {
       if (id === 'water') {
         const read = Math.round(Number(value));
-        // The mark is sealed afresh where the reading now stands, on a roll of this reading's own.
-        s.read = Number.isFinite(read) ? read : null;
-        s.readAt = s.t;
-        s.reads += 1;
+        // The mark is sealed where the reading now stands, and the one before is taken back from
+        // as far as it had come, on a roll of this reading's own. The same reading again changes
+        // nothing.
+        choose(s.reads, Number.isFinite(read) ? read : null, riteOf(c), s, !!c.reduced);
         c.status('water at ' + read + ' cm, you say');
       }
       if (id === 'layers') {
         const counted = Math.round(Number(value));
-        s.counted = Number.isFinite(counted) ? counted : null;
-        s.countedAt = s.t;
-        s.counts += 1;
+        // The bracket takes on or gives back only the layers the new count differs by.
+        recount(s.bar, Number.isFinite(counted) ? Math.max(0, Math.min(n, counted)) : 0, riteOf(c), s, !!c.reduced);
         c.status(counted + ' layers to the stones, you say');
       }
       draw(c);
     },
     frame(t, dt, c) {
       s.t += Math.max(0, dt);
-      if (c.done) {
-        if (s.doneAt < 0) s.doneAt = s.t;
-        // The finale's movements run on the piece's clock; a visitor who asked for less motion is
-        // shown where they end: the water at its line, the root grown, the dark lifted.
-        s.fill = c.reduced ? 1 : Math.min(1, s.fill + dt * 0.5);
-        s.grow = c.reduced ? 1 : Math.min(1, s.grow + dt * 0.35);
-        s.lift = c.reduced ? 1 : Math.min(1, s.lift + dt * 0.5);
+      if (c.done && s.doneAt < 0) {
+        s.doneAt = s.t;
+        s.dirty = true;
       }
-      draw(c);
+      // The finale runs on the piece's clock; a visitor who asked for less motion is shown where
+      // it ends: the water at its line, the root grown, the dark lifted.
+      return framed(s, c, draw);
     },
     end(c) {
       // The root: down to the band, then sideways along it, because that is what roots do.
@@ -438,8 +594,8 @@ function corePiece(env, plan) {
       }
       s.root = path;
       s.caption = 'water at ' + depth + ' cm; the root went sideways at the stones';
-      s.captionAt = s.t;
       if (s.doneAt < 0) s.doneAt = s.t;
+      s.dirty = true;
       c.status('Read right. The root meets the stones and goes sideways for a while first. ' + LINES[1]);
     }
   };
@@ -505,13 +661,57 @@ function bag(g, env, x, y, r, share, name, tilt, density, size) {
 }
 
 function mixBlank(parts, caption) {
-  return { parts, partsPrev: null, partsAt: -1, sets: 0, blend: -1, drained: 0, lift: 0, ruled: [], ruledAt: [],
-    caption, captionAt: -1, t: 0, doneAt: -1 };
+  // Each cup rests on one soil (`under`) with the soils being laid over it, or taken back off it,
+  // behind the piece's edge (`over`): a layer wholly laid becomes what the cup rests on.
+  const cups = Array.from({ length: 10 }, (_, i) => ({ under: cupOf(parts, i), over: [], at: -1, n: 0 }));
+  return { parts, partsAt: -1, sets: 0, cups, blend: -1, ruled: [], ruledAt: [], caption, t: 0, doneAt: -1 };
 }
 
 // What a cup holds: null before a is set, else bag A for the first `parts` cups and bag B after.
 function cupOf(parts, i) {
   return parts == null ? null : i < parts ? 'A' : 'B';
+}
+
+const POUR = 0.9; // seconds a cup takes to change its soil
+
+function laid(o, rite, s, reduced) {
+  return o.from + (o.to - o.from) * roll(rite, 0x10, o.n).stair(came(s, o.at, POUR, reduced));
+}
+
+// A set of a: every cup whose bag changes takes the new soil from where it stands now, on this
+// set's roll. A layer still coming that the cup no longer wants goes back behind the edge as far
+// as it had come; one going back that is wanted again comes on again from there; and a soil the
+// cup neither rests on nor is getting is laid over whatever is showing. So a quick second set
+// never makes a cup jump to its last soil before it changes again.
+function pour(s, parts, rite, reduced) {
+  s.sets += 1;
+  s.cups.forEach((cup, i) => {
+    const want = cupOf(parts, i);
+    let over = [];
+    for (const o of cup.over) {
+      const c = laid(o, rite, s, reduced);
+      if (o.to === 1 && c >= 1) {
+        cup.under = o.bag;
+        over = [];
+      } else if (!(o.to === 0 && c <= 0)) over.push(o);
+    }
+    cup.over = over;
+    const heading = over.filter((o) => o.to === 1);
+    const now = heading.length ? heading[heading.length - 1].bag : cup.under;
+    if (now === want) return;
+    const turn = (o, to) => {
+      if (o.to === to) return;
+      o.from = laid(o, rite, s, reduced);
+      o.to = to;
+      o.at = s.t;
+      o.n = s.sets;
+    };
+    const keep = cup.under === want ? -1 : over.map((o) => o.bag).lastIndexOf(want);
+    if (cup.under === want || keep >= 0) over.forEach((o, j) => turn(o, j === keep ? 1 : j > keep ? 0 : o.to));
+    else over.push({ bag: want, from: 0, to: 1, at: s.t, n: s.sets });
+    cup.at = s.t;
+    cup.n = s.sets;
+  });
 }
 
 function drawMix(g, w, h, env, plan, s, variant) {
@@ -523,39 +723,43 @@ function drawMix(g, w, h, env, plan, s, variant) {
   const size = Math.max(10, Math.min(14, Math.round(m * 0.036)));
   const small = Math.max(9, size - 2);
   const target = shareOf(plan.a, plan.b, plan.parts);
-  sky(g, w, h, env, h * 0.62, s.lift, rite);
+  // The finale: one roll and one clock, so the dark, the day and the blend come behind one edge
+  // on the same moments, and the water drains after on that roll's treads.
+  const fin = roll(rite, 0xbe, 0);
+  const k = finale(s, fin, reduced);
+  sky(g, w, h, env, h * 0.62, k, fin);
   const r = m * 0.13 * Math.min(1.1, Math.max(0.9, v.scale));
   const tilt = (v.turn - 0.5) * 0.12;
   bag(g, env, w * 0.27, h * 0.17, r, plan.a, 'A', tilt, v.density, small);
   bag(g, env, w * 0.73, h * 0.17, r, plan.b, 'B', -tilt, v.density, small);
   write(g, 'a parts of A with 10 - a parts of B', w / 2, h * 0.38, small, env.alpha(c.muted, 0.95));
-  // Ten cups, the first `parts` of them from bag A. A cup that changed bag at the last set takes
-  // its new soil over the old behind the piece's edge, on the roll of that set, and its letter is
-  // cut on at that roll's moment.
+  // Ten cups, the first `parts` of them from bag A. A cup that changed bag takes its new soil over
+  // what it showed behind the piece's edge, on the roll of that set (pour()), and its letter goes
+  // at the set and is cut on at that roll's moment.
   const cupW = (w * 0.76) / 10;
   const cupH = m * 0.05;
   const cy = h * 0.45;
-  const setRite = roll(rite, 0x10, s.sets);
-  const setP = came(s, s.partsAt, 0.9, reduced);
   const tone = (bagName) => (bagName == null ? env.alpha(c.muted, 0.12) : soilTone(env, bagName === 'A' ? plan.a : plan.b));
   for (let i = 0; i < 10; i++) {
     const x = w * 0.12 + i * cupW;
+    const cup = s.cups[i];
     const now = cupOf(s.parts, i);
-    const before = s.partsAt >= 0 ? cupOf(s.partsPrev, i) : now;
-    const changed = before !== now && setP < 1;
-    g.fillStyle = tone(changed ? before : now);
+    g.fillStyle = tone(cup.under);
     g.fillRect(x + cupW * 0.08, cy, cupW * 0.84, cupH);
-    if (changed) setRite.paint(g, x + cupW * 0.08, cy, cupW * 0.84, cupH, setRite.stair(setP), tone(now));
+    for (const o of cup.over) {
+      const got = laid(o, rite, s, reduced);
+      if (got > 0) roll(rite, 0x10, o.n).paint(g, x + cupW * 0.08, cy, cupW * 0.84, cupH, got, tone(o.bag));
+    }
     g.strokeStyle = env.alpha(c.fg, 0.4);
     g.lineWidth = 1;
     g.strokeRect(x + cupW * 0.08, cy, cupW * 0.84, cupH);
-    if (now != null && (!changed || setRite.flicker(setP))) {
+    if (now != null && roll(rite, 0x10, cup.n).flicker(came(s, cup.at, POUR, reduced))) {
       write(g, now, x + cupW / 2, cy + cupH / 2, Math.max(8, Math.round(cupH * 0.55)), c.bg, 'center', '600');
     }
   }
   // The count under the cups goes with the set that changed it and is cut on again at that roll's
   // moment, so old words never turn straight into new ones.
-  if (setRite.flicker(setP)) write(g, s.parts == null ? 'how many of the ten from A?' : 'a = ' + s.parts, w / 2, cy + cupH + small * 1.1, small, env.alpha(c.fg, 0.9));
+  if (roll(rite, 0x10, s.sets).flicker(came(s, s.partsAt, POUR, reduced))) write(g, s.parts == null ? 'how many of the ten from A?' : 'a = ' + s.parts, w / 2, cy + cupH + small * 1.1, small, env.alpha(c.fg, 0.9));
   // The blends the shed has ruled out, as ticks along a = 0..10, each cut on at one moment of its
   // own roll once it is struck.
   if (s.ruled && s.ruled.length) {
@@ -575,15 +779,13 @@ function drawMix(g, w, h, env, plan, s, variant) {
     }
   }
   // The bed, which wants its share and takes the blend at the finale: the blend comes over the bare
-  // bed behind the piece's edge, in the stair's treads, and then the water drains out of it.
+  // bed behind the finale's edge, the one the day comes behind, and then the water drains out of it.
   const bx = w * 0.14;
   const by = h * 0.62;
   const bw = w * 0.72;
   const bh = h * 0.28;
   write(g, 'the bed wants ' + target + '% sand', w / 2, by - small * 1.1, size, c.accent2);
-  const bedRite = roll(rite, 0xbe, 0);
-  const bedP = s.blend >= 0 ? came(s, s.doneAt, 1.2, reduced) : 0;
-  const bedK = s.blend >= 0 ? bedRite.stair(bedP) : 0;
+  const bedK = s.blend >= 0 ? k : 0;
   if (bedK < 1) {
     g.fillStyle = env.mix(c.bg, c.bg2, 0.6);
     g.fillRect(bx, by, bw, bh);
@@ -591,23 +793,38 @@ function drawMix(g, w, h, env, plan, s, variant) {
     write(g, '?', w / 2, by + bh / 2, size * 2, env.alpha(c.muted, 0.5), 'center', '600');
   }
   if (bedK > 0) {
-    bedRite.paint(g, bx, by, bw, bh, bedK, soilTone(env, s.blend));
-    if (bedK >= 1) {
-      flecks(g, env, bx, by, bw, bh, Math.round((20 + s.blend * 0.8) * v.density), 7, 0.3);
-      // The water, draining through it: faster the sandier it is. Water keeps a level edge, so
-      // its level falls through the bed to the bed's foot in the stair's treads and is gone.
-      const level = Math.max(0, 1 - roll(rite, 0xd2, 0).stair(s.drained));
-      if (level > 0) {
-        g.fillStyle = env.alpha(c.accent, 0.3);
-        g.fillRect(bx, by + bh * (1 - level), bw, bh * level);
-      }
+    // The blend comes in wet, its grit and its water with it, all behind the one edge: the bed is
+    // clipped to the part of the drawing the edge has passed and the soaked soil is laid inside.
+    g.save();
+    g.beginPath();
+    g.rect(bx, by, bw, bh);
+    g.clip();
+    if (bedK < 1) {
+      g.beginPath();
+      fin.region(g, 0, 0, w, h, bedK);
+      g.clip();
     }
+    g.fillStyle = soilTone(env, s.blend);
+    g.fillRect(bx, by, bw, bh);
+    flecks(g, env, bx, by, bw, bh, Math.round((20 + s.blend * 0.8) * v.density), 7, 0.3);
+    // The water, draining through it once the blend lies there: faster the sandier it is. Water
+    // keeps a level edge, so its level falls through the bed to the bed's foot on the finale's
+    // treads and is gone.
+    const drain = s.blend >= 0 ? came(s, s.doneAt + FINALE, 1 / (0.08 + (s.blend / 100) * 0.22), reduced) : 0;
+    const level = Math.max(0, 1 - fin.stair(drain));
+    if (level > 0) {
+      g.fillStyle = env.alpha(c.accent, 0.3);
+      g.fillRect(bx, by + bh * (1 - level), bw, bh * level);
+    }
+    g.restore();
   }
   g.strokeStyle = env.alpha(c.fg, 0.4);
   g.lineWidth = 1;
   g.strokeRect(bx, by, bw, bh);
-  if (s.doneAt != null && s.doneAt >= 0) daybreak(g, rite, env, w, h, came(s, s.doneAt, 2.4, reduced), 0.1);
-  if (roll(rite, 0xca, 0).flicker(came(s, s.captionAt, 0.8, reduced))) write(g, s.caption, w / 2, h * 0.955, small, env.alpha(c.muted, 0.9));
+  daybreak(g, fin, env, w, h, k, 0.1);
+  // The caption a solve writes goes at the solve, and the new one is cut on with the finale's
+  // first tread.
+  if (s.doneAt < 0 || k > 0) write(g, s.caption, w / 2, h * 0.955, small, env.alpha(c.muted, 0.9));
 }
 
 function mixPreview(g, w, h, env, plan) {
@@ -623,7 +840,7 @@ function mixPiece(env, plan) {
   // the difficulty allows. A ruled-out blend is help, not the answer.
   const rulings = [0, 10, 1, 9, 2, 8, 3, 7, 4, 6, 5].filter((k) => k !== plan.parts);
   const s = mixBlank(null, 'a sandier soil drains faster');
-  const draw = (c) => drawMix(c.g, c.w, c.h, c, plan, s, env.variant);
+  const draw = (c) => drawn(s, c, () => drawMix(c.g, c.w, c.h, c, plan, s, env.variant));
   return {
     title: mixTitle(plan),
     brief: 'An offering for the bed, from two bags of soil. Bag A is ' + plan.a + '% sand and bag B is ' + plan.b + '%; the bed wants ' + target + '%. Mixing a parts of A with 10 - a parts of B makes a soil whose sand share is the two shares averaged, weighted by the parts. A sandier soil drains faster.',
@@ -673,10 +890,9 @@ function mixPiece(env, plan) {
         const next = Number.isFinite(p) ? Math.max(0, Math.min(10, p)) : 0;
         if (next !== s.parts) {
           // The cups that change bag take their new soil, on a roll of this set's own.
-          s.partsPrev = s.parts;
           s.parts = next;
           s.partsAt = s.t;
-          s.sets += 1;
+          pour(s, next, riteOf(c), !!c.reduced);
         }
         c.status(s.parts + ' of the ten from bag A, ' + (10 - s.parts) + ' from bag B');
       }
@@ -685,26 +901,24 @@ function mixPiece(env, plan) {
     },
     frame(t, dt, c) {
       s.t += Math.max(0, dt);
-      if (c.done) {
-        if (s.doneAt < 0) s.doneAt = s.t;
-        // The water goes through in about four seconds at pure sand, slower the less sand there
-        // is; a visitor who asked for less motion is shown the bed drained and the dark lifted.
-        s.lift = c.reduced ? 1 : Math.min(1, s.lift + dt * 0.5);
-        s.drained = c.reduced ? 1 : Math.min(1, s.drained + dt * (0.08 + target / 100 * 0.22));
+      if (c.done && s.doneAt < 0) {
+        s.doneAt = s.t;
+        s.dirty = true;
       }
-      draw(c);
+      // The water goes through in about four seconds at pure sand, slower the less sand there is;
+      // a visitor who asked for less motion is shown the bed drained and the dark lifted.
+      return framed(s, c, draw);
     },
     end(c) {
       s.blend = target;
       if (s.parts == null) {
-        s.partsPrev = null;
         s.parts = plan.parts;
         s.partsAt = s.t;
-        s.sets += 1;
+        pour(s, plan.parts, riteOf(c), !!c.reduced);
       }
       s.caption = target + '% sand: it drains ' + drains + ' than bag A';
-      s.captionAt = s.t;
       if (s.doneAt < 0) s.doneAt = s.t;
+      s.dirty = true;
       c.status('Mixed and watered. ' + LINES[3]);
     }
   };
@@ -750,8 +964,7 @@ function routeTitle(plan) {
 }
 
 function routeBlank(path) {
-  return { path, inspect: -1, inspectPrev: -1, inspectAt: -1, taps: 0, hintRow: null, hintAt: -1, grow: 0,
-    exit: -1, exitPrev: -1, exitAt: -1, exits: 0, t: 0, doneAt: -1 };
+  return { path, taps: marks(0x40, 0.9), hints: marks(0x50, 0.9), hintRow: null, exits: marks(0x60, 0.8), t: 0, doneAt: -1 };
 }
 
 function drawRoute(g, w, h, env, plan, s, variant) {
@@ -764,43 +977,41 @@ function drawRoute(g, w, h, env, plan, s, variant) {
   const cell = w * 0.7 / 4;
   const layer = h * 0.6 / plan.n;
   const size = Math.max(10, Math.min(15, Math.round(Math.min(w, h) * 0.035)));
-  sky(g, w, h, env, top, s.grow, rite);
+  // The finale: one roll and one clock, so the dark, the day and the root step on the same moments.
+  const fin = roll(rite, 0x90, 0);
+  const k = finale(s, fin, reduced);
+  sky(g, w, h, env, top, k, fin);
   write(g, 'root enters at ' + COLUMNS[plan.start], w / 2, top * 0.48, size, c.accent2);
   for (let col = 0; col < 4; col++) write(g, COLUMNS[col], left + (col + 0.5) * cell, top - size * 0.55, size, c.fg);
   // The tapped cell is sealed: the piece's edge passes over it on the roll of that tap and its ring
-  // is cut on at that roll's moment; the cell tapped before goes back behind the same edge, the
-  // way it came. The hint's cell seals the same way, on a roll of its own.
-  const tapRite = roll(rite, 0x40, s.taps);
-  const tapP = came(s, s.inspectAt, 0.9, reduced);
-  const hintRite = roll(rite, 0x50, 0);
-  const hintP = came(s, s.hintAt, 0.9, reduced);
-  const hintCell = s.hintRow !== null ? (s.hintRow + 1) * 4 + s.path[s.hintRow + 1] : -1;
+  // is cut on at that roll's moment; the cell tapped before goes back behind the same edge from as
+  // far as it had come, and its ring goes with the tap. The hint's cell seals the same way, on a
+  // roll of its own.
+  const tapped = markedNow(s.taps, rite, s, reduced);
+  const hinted = markedNow(s.hints, rite, s, reduced);
+  const seal = env.alpha(c.accent, 0.26);
+  const boxOf = (idx) => ({ x: left + (idx % 4) * cell + 3, y: top + Math.floor(idx / 4) * layer + 3, w: cell - 6, h: layer - 6 });
   for (let row = 0; row < plan.n; row++) {
     write(g, String(row + 1), left - size * 0.8, top + (row + 0.5) * layer, size, c.muted, 'right');
     for (let col = 0; col < 4; col++) {
       const x = left + col * cell;
       const y = top + row * layer;
       const idx = row * 4 + col;
-      const way = plan.arrows[idx];
       g.fillStyle = layerTone(env, row % (KINDS.length - 1) + 1);
       g.fillRect(x, y, cell, layer);
       flecks(g, env, x, y, cell, layer, Math.round(4 * v.density), idx, 0.17);
       stone(g, env, x + cell * 0.5, y + layer * 0.5, Math.min(cell, layer) * 0.22, v.turn, 0.32);
-      const box = { x: x + 3, y: y + 3, w: cell - 6, h: layer - 6 };
-      let ring = false;
-      if (idx === s.inspect) {
-        g.fillStyle = env.alpha(c.accent, 0.26);
-        sealed(g, tapRite, box, true, tapP);
-        ring = tapRite.flicker(tapP) === 1;
-      } else if (idx === s.inspectPrev) {
-        g.fillStyle = env.alpha(c.accent, 0.26);
-        sealed(g, tapRite, box, false, tapP);
-      }
-      if (idx === hintCell) {
-        g.fillStyle = env.alpha(c.accent, 0.26);
-        sealed(g, hintRite, box, true, hintP);
-        ring = ring || hintRite.flicker(hintP) === 1;
-      }
+    }
+  }
+  sealMarks(g, s.taps, rite, s, reduced, boxOf, seal);
+  sealMarks(g, s.hints, rite, s, reduced, boxOf, seal);
+  for (let row = 0; row < plan.n; row++) {
+    for (let col = 0; col < 4; col++) {
+      const x = left + col * cell;
+      const y = top + row * layer;
+      const idx = row * 4 + col;
+      const way = plan.arrows[idx];
+      const ring = idx === tapped || idx === hinted;
       g.strokeStyle = env.alpha(c.fg, 0.45);
       g.lineWidth = 1;
       g.strokeRect(x, y, cell, layer);
@@ -814,21 +1025,12 @@ function drawRoute(g, w, h, env, plan, s, variant) {
     }
   }
   // The column the visitor says the root leaves at: a bracket under it, sealed on the roll of
-  // that choice; the one said before goes back behind the same edge.
-  if (s.exitAt >= 0) {
-    const exitRite = roll(rite, 0x60, s.exits);
-    const exitP = came(s, s.exitAt, 0.8, reduced);
-    const bracket = (col, on) => {
-      if (col < 0) return;
-      g.fillStyle = env.alpha(c.accent, 0.85);
-      sealed(g, exitRite, { x: left + col * cell + cell * 0.2, y: top + plan.n * layer + 3, w: cell * 0.6, h: 5 }, on, exitP);
-    };
-    bracket(s.exit, true);
-    if (s.exitPrev !== s.exit) bracket(s.exitPrev, false);
-  }
-  // The root, at the finale: through the bed a row or more per tread of the stair.
-  if (s.grow > 0) {
-    const rows = Math.round(roll(rite, 0x90, 0).stair(s.grow) * plan.n);
+  // that choice; the one said before goes back behind the same edge from as far as it had come.
+  sealMarks(g, s.exits, rite, s, reduced,
+    (col) => ({ x: left + col * cell + cell * 0.2, y: top + plan.n * layer + 3, w: cell * 0.6, h: 5 }), env.alpha(c.accent, 0.85));
+  // The root, at the finale: through the bed a row or more per tread of the finale.
+  if (k > 0) {
+    const rows = Math.round(k * plan.n);
     g.strokeStyle = env.alpha(c.accent2, 0.9);
     g.lineWidth = 2.5;
     g.lineCap = 'round';
@@ -839,7 +1041,7 @@ function drawRoute(g, w, h, env, plan, s, variant) {
     }
     g.stroke();
   }
-  if (s.doneAt != null && s.doneAt >= 0) daybreak(g, rite, env, w, h, came(s, s.doneAt, 2.4, reduced), 0.1);
+  daybreak(g, fin, env, w, h, k, 0.1);
   write(g, 'L: left   D: down   R: right', w / 2, h * 0.91, size, c.fg);
 }
 
@@ -853,7 +1055,7 @@ function routePiece(env, plan) {
   const exit = COLUMNS[path[plan.n]];
   const lefts = path.slice(0, plan.n).filter((col, row) => plan.arrows[row * 4 + col] === -1).length;
   const s = routeBlank(path);
-  const draw = (c) => drawRoute(c.g, c.w, c.h, c, plan, s, env.variant);
+  const draw = (c) => drawn(s, c, () => drawRoute(c.g, c.w, c.h, c, plan, s, env.variant));
   return {
     title: routeTitle(plan),
     brief: 'Follow the root from column ' + COLUMNS[plan.start] + ' through the rows from top to bottom. In each cell, L sends it one column left in the next row, D sends it straight down, and R sends it one column right. No arrow leaves the bed. Columns run A to D from left to right. ' + routeRows(plan) + '.',
@@ -881,20 +1083,15 @@ function routePiece(env, plan) {
     apply(id, value, c) {
       if (id === 'exit') {
         const col = COLUMNS.indexOf(String(value));
-        if (col !== s.exit) {
-          // The bracket moves to the column now said, on a roll of this choice's own.
-          s.exitPrev = s.exit;
-          s.exit = col;
-          s.exitAt = s.t;
-          s.exits += 1;
-        }
+        // The bracket moves to the column now said, on a roll of this choice's own.
+        choose(s.exits, col >= 0 ? col : null, riteOf(c), s, !!c.reduced);
         c.status('you say the root leaves at ' + value);
       }
       if (id === 'lefts') c.status('you counted ' + value + ' left turns');
       if (id === 'hint') {
         if (s.hintRow === null) {
           s.hintRow = Math.floor(plan.n / 2) - 1;
-          s.hintAt = s.t;
+          choose(s.hints, (s.hintRow + 1) * 4 + path[s.hintRow + 1], riteOf(c), s, !!c.reduced);
           c.hint();
         }
         c.status('after row ' + (s.hintRow + 1) + ', the root enters column ' + COLUMNS[path[s.hintRow + 1]]);
@@ -908,25 +1105,26 @@ function routePiece(env, plan) {
         c.status('tap an arrow in the bed to read it');
         return;
       }
-      // The cell tapped before is unsealed while this one seals, on a roll of this tap's own.
-      s.inspectPrev = s.inspect;
-      s.inspect = row * 4 + col;
-      s.inspectAt = s.t;
-      s.taps += 1;
+      // The cell tapped before is unsealed while this one seals, on a roll of this tap's own. The
+      // cell already sealed, tapped again, is read again and stays as it is: the stage answers
+      // the press with its own mark.
+      const idx = row * 4 + col;
+      choose(s.taps, idx, riteOf(c), s, !!c.reduced);
       c.status('row ' + (row + 1) + ', column ' + COLUMNS[col] + ': '
-        + ['left', 'down', 'right'][plan.arrows[s.inspect] + 1]);
+        + ['left', 'down', 'right'][plan.arrows[idx] + 1]);
       draw(c);
     },
     frame(t, dt, c) {
       s.t += Math.max(0, dt);
-      if (c.done) {
-        if (s.doneAt < 0) s.doneAt = s.t;
-        s.grow = c.reduced ? 1 : Math.min(1, s.grow + dt * 0.7);
+      if (c.done && s.doneAt < 0) {
+        s.doneAt = s.t;
+        s.dirty = true;
       }
-      draw(c);
+      return framed(s, c, draw);
     },
     end(c) {
       if (s.doneAt < 0) s.doneAt = s.t;
+      s.dirty = true;
       c.status('the root found its way to ' + exit + ' through ' + plan.n + ' layers');
     }
   };
