@@ -375,7 +375,7 @@ $mono: var(--font-mono, #{$mono-stack});
 // a card's name or a control. Included after rite, in a rule with no ::before/::after of its own.
 @mixin rite-dress {
   &::before {
-    content: var(--rite-before, '');
+    content: var(--rite-before, '') / '';
     color: var(--md-sys-color-tertiary);
     font-variant-caps: normal;
     font-variation-settings: 'opsz' 36, 'wght' 400, 'SOFT' 50, 'WONK' 0;
@@ -383,7 +383,7 @@ $mono: var(--font-mono, #{$mono-stack});
   }
 
   &::after {
-    content: var(--rite-after, '');
+    content: var(--rite-after, '') / '';
     color: var(--md-sys-color-tertiary);
     font-variant-caps: normal;
     font-variation-settings: 'opsz' 36, 'wght' 400, 'SOFT' 50, 'WONK' 0;

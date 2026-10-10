@@ -2106,14 +2106,15 @@
 
     /* ---- the glyph rite -------------------------------------------------------------------- */
 
-    /* Words do not appear: they are revealed. For the length of the rite each character of the
-       element is wrapped in a span.glyph that carries a sigil in its place (data-sigil, which the
-       stylesheet shows through ::before) and its own delay (--d), and each word in a span.glyph-word
-       so no word breaks in the middle; the stylesheet (_sass/_rite.scss, @keyframes glyph-in and
-       glyph-sigil) shows the sigil and then the letter, in a stair. When the last has landed the
-       spans are taken out and the text put back, so the element is afterwards exactly what it was,
-       and textContent is never anything but the words. A visitor who asked for less motion is
-       shown the words. Hands back a function that ends the rite early. */
+    /* Words do not appear: they are revealed. Each moving character is wrapped in a span.glyph
+       carrying a decorative sigil (data-sigil, shown through ::before) and its own delay (--d).
+       Each word sits in a span.glyph-word that stays whole unless it exceeds its line. The
+       stylesheet (_sass/_rite.scss, @keyframes glyph-in and glyph-sigil) shows the sigil and then
+       the letter, in a stair. At most GLYPH_LIMIT characters animate, with their delays spread
+       over no more than one long beat; the remaining text stays plain. When the last has landed,
+       the spans are removed and the text restored. textContent is always the original words.
+       A visitor who asked for less motion is shown the words. Hands back a function that ends
+       the rite early. */
 
     var SIGILS = '§¶†‡•¤±÷×¬~^*#%&@=?!/|<>:;.';
     var CURVE_POOL = 4;
@@ -2150,6 +2151,10 @@
       for (var q = 0; q < CURVE_POOL; q++) pool.push(cssOf(makeCurve('stair', t, Math.floor(rnd() * 0x7fffffff)), 'stair', rnd));
       var scramble = opts.scramble == null ? 1 : opts.scramble;
       var nodes = textNodesOf(el);
+      var count = Math.min(GLYPH_LIMIT, nodes.reduce(function (sum, node) {
+        return sum + node.nodeValue.replace(/\s/g, '').length;
+      }, 0));
+      step = Math.min(step, (ms('long') || 560) / Math.max(1, count));
       var done = [];
       var k = 0;
       var last = 0;
@@ -2171,7 +2176,7 @@
           span.className = 'glyph-word';
           var chars = typeof Array.from === 'function' ? Array.from(word) : word.split('');
           var wordDelay = -1;
-          for (var c = 0; c < chars.length; c++) {
+          for (var c = 0; c < chars.length && k < GLYPH_LIMIT; c++) {
             var glyph = doc.createElement('span');
             glyph.className = 'glyph';
             glyph.textContent = chars[c];
@@ -2187,6 +2192,7 @@
             span.appendChild(glyph);
             k += 1;
           }
+          if (c < chars.length) span.appendChild(doc.createTextNode(chars.slice(c).join('')));
           // The word drops into place as its first glyph lands (a glyph is inline, so it keeps
           // the line's kerning, and the word is what moves).
           span.style.setProperty('--wd', Math.max(0, wordDelay) + 'ms');
