@@ -106,7 +106,9 @@ function isPerm(list, n) {
    seed crossed with how many times it has moved), so the second swing of the aim clicks in another
    rhythm from the first and no turn of a wheel clicks like the one before -- every roll keeping the
    piece's edge. The dust stands still: nothing in it waits for anything, so nothing in it moves,
-   and once every change has landed the scene is not drawn again until something changes. */
+   and once every change has landed the scene is not drawn again until something changes: frame()
+   says it is at rest (it returns false) and the stage asks for no more frames until the visitor
+   acts, the scene is sized again or it comes back into view. */
 
 // The rite of a piece handed none: everything stands where it ends, and a surface is cut by a
 // plain upright slice from its left side.
@@ -252,8 +254,21 @@ function body(g, env, x, y, radius, halo, rings) {
   g.fill();
 }
 
+// The face words are set in, set only when it is not the one the canvas already holds: setting a
+// canvas's font, even to the face it has, makes the browser bring the page's style up to date
+// first, and the well labels every moon and every reading, so a picture sets it once for each size
+// rather than once for each word. A canvas spells a face back in its own way (700 as 'bold', a size
+// cut to a few places), so the canvas is asked whether it holds the face as it spelled it when it
+// was first set here: a canvas resized back to its defaults, or restored to a face it saved, is
+// never mistaken. Only a few dozen spellings are kept, so a feed of many cards does not gather
+// them.
+const spelled = new Map();
 function font(g, size, weight) {
-  g.font = (weight || 500) + ' ' + Math.round(size) + 'px system-ui, sans-serif';
+  const face = (weight || 500) + ' ' + Math.round(size) + 'px system-ui, sans-serif';
+  if (g.font === (spelled.get(face) || face)) return;
+  g.font = face;
+  if (spelled.size >= 48) spelled.clear();
+  spelled.set(face, g.font);
 }
 
 /* ---- the slingshot -------------------------------------------------------------------------- */
@@ -674,8 +689,10 @@ function slingPiece(env, p) {
         s.fraction = c.reduced ? 1 : Math.max(0, Math.min(1, roll(riteOf(c), 0xf17, s.flights).ease(s.clock / REPLAY)));
       }
       if (c.done && s.doneAt == null) s.doneAt = s.t;
-      if (!flying && settled(s, c)) return;
-      draw(c);
+      if (flying || !settled(s, c)) draw(c);
+      // At rest once the flight has landed and its verdict is said, and every change on the field
+      // was drawn whole: false, and the stage asks for no more frames.
+      return (s.flight && s.clock < REPLAY + 1) || !settled(s, c);
     },
     end(c) {
       c.status('through the ring. the probe flew on past ' + p.name + ' with its engine off the whole way');
@@ -814,6 +831,10 @@ function moonsScene(g, w, h, env, p, s, v) {
   // while no moon ever glides. A moon the hint names is a set surface: its halo is cut in by the
   // piece's edge in treads, and its colour and its reading come with the first of them.
   const order = moonsOrder(p);
+  // The numerals the order has dealt are set after every moon is named, all in one face, so the
+  // canvas's font is set once for them rather than once for each moon between its name and its
+  // numeral.
+  const places = [];
   p.radii.forEach((r, i) => {
     const period = LAP * Math.pow(r / outer, 1.5);
     const a = (p.angles[i] + (s.spin ? 360 * turns(rite, 0x30 + i, s.spin / period) : 0)) * Math.PI / 180;
@@ -853,21 +874,21 @@ function moonsScene(g, w, h, env, p, s, v) {
     const clue = rank === 0 ? 'shortest period' : rank === order.length - 1 ? 'longest period' : 'period rank ' + (rank + 1);
     g.fillText(FIRST[p.names[i]] + (on ? ', ' + clue : ''), x + (Math.cos(a) < 0 ? -1 : 1) * rad * 1.8, y - rad * 1.6);
     const place = placeShown(s, rite, reduced, i);
-    if (place >= 0) {
-      // The numeral sits in a small set surface of its own, which comes whole with it on its tread
-      // of the series -- the tread is its step -- and rests in two shades of one colour split by
-      // the piece's edge, never a flat chip.
-      const nx = x + (Math.cos(a) < 0 ? -1 : 1) * rad * 1.8;
-      const ny = y + rad * 1.9;
-      const boxW = size * 1.1;
-      g.fillStyle = env.alpha(col.accent2, 0.18);
-      cover(g, rite, Math.cos(a) < 0 ? nx - boxW : nx, ny - size * 0.5, boxW, size, 1);
-      font(g, size * 0.8, 700);
-      g.textAlign = Math.cos(a) < 0 ? 'right' : 'left';
-      g.fillStyle = col.accent2;
-      g.fillText(String(place + 1), nx + (Math.cos(a) < 0 ? -size * 0.15 : size * 0.15), ny);
-    }
+    if (place >= 0) places.push({ place, left: Math.cos(a) < 0, nx: x + (Math.cos(a) < 0 ? -1 : 1) * rad * 1.8, ny: y + rad * 1.9 });
   });
+  // Each numeral sits in a small set surface of its own, which comes whole with it on its tread of
+  // the series -- the tread is its step -- and rests in two shades of one colour split by the
+  // piece's edge, never a flat chip.
+  if (places.length) font(g, size * 0.8, 700);
+  for (const { place, left, nx, ny } of places) {
+    const boxW = size * 1.1;
+    g.fillStyle = env.alpha(col.accent2, 0.18);
+    cover(g, rite, left ? nx - boxW : nx, ny - size * 0.5, boxW, size, 1);
+    g.textAlign = left ? 'right' : 'left';
+    g.textBaseline = 'middle';
+    g.fillStyle = col.accent2;
+    g.fillText(String(place + 1), nx + (left ? -size * 0.15 : size * 0.15), ny);
+  }
   // The light over a solved sky, on the roll of the check that solved it.
   if (lit > 0) {
     const light = roll(rite, 0xdb, s.solvedN);
@@ -1062,8 +1083,9 @@ function moonsPiece(env, p) {
           riding = true;
         }
       }
-      if (!riding && settled(s, c)) return;
-      draw(c);
+      if (riding || !settled(s, c)) draw(c);
+      // At rest once the lap is ridden and every change on the sky was drawn whole.
+      return (c.done && !c.reduced && s.spin < LAP) || !settled(s, c);
     },
     end(c) {
       c.status('the moons are in motion: watch the ' + names[answer[0]] + ' moon lap the ' + names[answer[n - 1]] + ' moon ' + WORDS[p.k] + ' times; tap any moon to inspect it');
@@ -1292,8 +1314,8 @@ function meetingPiece(env, p) {
     },
     frame(t, dt, c) {
       s.t += Math.max(0, dt);
-      if (settled(s, c)) return;
-      draw(c);
+      if (!settled(s, c)) draw(c);
+      return !settled(s, c);
     },
     end(c) {
       s.open = true;

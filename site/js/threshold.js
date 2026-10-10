@@ -617,8 +617,9 @@
   // still arriving behind an edge of its own (the stage's ask lands as the question is put, a
   // moment after this is called): the deal follows that edge and never crosses it. Both are read
   // a frame later, when the host's arrival has begun; until then each waits behind its slice,
-  // which has not yet moved, on its place in the page's order. data-dealt is what the stylesheet
-  // plays the arrival on, and it stays, so nothing replays when a passing class comes off.
+  // which has not yet moved, on its place in the page's order. data-dealt='true' is what the
+  // stylesheet plays the arrival on, and it holds until the arrival's own edge has crossed
+  // (settle), so nothing replays when a passing class comes off on the way.
   function dealOut(nodes) {
     var dealt = nodes.filter(function (node) { return node && node.style && typeof node.setAttribute === 'function'; });
     if (!dealt.length) return;
@@ -626,7 +627,7 @@
     dealt.forEach(function (node, k) {
       node.style.setProperty('--d', staggerOf(k) + 'ms');
       cutFor(node, 'develop', { seed: seed, duration: 'long' });
-      node.setAttribute('data-dealt', 'true');
+      settle(node);
     });
     if (stilled() || typeof window.requestAnimationFrame !== 'function') return;
     window.requestAnimationFrame(function () {
@@ -636,6 +637,25 @@
       var angle = angleOf(window.getComputedStyle(live[0]), '--arrive-angle', 0);
       var steps = stepsBy(live.map(function (node) { return reach(centreOf(node), angle); }), 4);
       live.forEach(function (node, k) { node.style.setProperty('--d', Math.round(wait + staggerOf(steps[k])) + 'ms'); });
+    });
+  }
+  // A thing dealt in, and then standing: data-dealt='true' while its edge crosses it (the moving
+  // state the stylesheet plays the arrival on), and 'arrived' once the arrival's own cut-in has
+  // ended on it, which wears no mask and plays nothing -- a mask held at the end of its movement
+  // would go on painting the thing through it for as long as it stands, with nothing left to cut.
+  // For a visitor who asked for less it has arrived at once. One listener per thing, however
+  // often it is dealt again.
+  function settle(node) {
+    if (stilled() || typeof node.addEventListener !== 'function') {
+      node.setAttribute('data-dealt', 'arrived');
+      return;
+    }
+    node.setAttribute('data-dealt', 'true');
+    if (node.settles) return;
+    node.settles = true;
+    node.addEventListener('animationend', function (ev) {
+      if (ev.target !== node || ev.pseudoElement || ev.animationName !== 'cut-in') return;
+      if (node.getAttribute('data-dealt') === 'true') node.setAttribute('data-dealt', 'arrived');
     });
   }
   // The length the engine cut for a movement on an element (--motion-<rite>, written inline), in
@@ -663,7 +683,7 @@
       if (old.parentNode) old.parentNode.removeChild(old);
       return;
     }
-    fresh.setAttribute('data-dealt', 'true');
+    settle(fresh);
     ['--arrive-angle', '--ease-develop', '--motion-develop'].forEach(function (name) {
       old.style.setProperty(name, fresh.style.getPropertyValue(name));
     });
@@ -1244,8 +1264,8 @@
           taken = true;
           add(answer, option.weights, 1);
           index += 1;
-          // The chosen thing is sealed (data-set: the engine grows its fill from the press, and its
-          // label is set down a tread) and the rest go behind a slice, one after another in one
+          // The chosen thing is sealed (data-set: the engine grows its fill from the press, which
+          // has set it down a tread) and the rest go behind a slice, one after another in one
           // stair, out from the chosen one -- the nearest first -- as if the choice put them by;
           // only then does the next landing come.
           var others = buttons.filter(function (other) { return other !== button; });
@@ -1775,24 +1795,37 @@
       var pane = el('span', 'probe-window-pane');
       pane.setAttribute('aria-hidden', 'true');
       // The lamp behind the pane: a layer of its own, lit in treads cut for that lighting
-      // (--ease-seal) and put out in treads cut for that (--ease-unseal).
+      // (--ease-seal) and put out in treads cut for that (--ease-unseal). Its curve is the
+      // movement's alone: once a lighting's edge has reached the far corner the lamp stands lit,
+      // unmasked (data-lamp='lit'); once a putting-out's edge has shrunk into the lamp the window
+      // is dark again (data-was-lit comes off) and paints no lamp. For a visitor who asked for
+      // less, each is at rest at once.
       var light = el('span', 'probe-window-light');
       pane.appendChild(light);
       button.appendChild(pane);
       panes.push(pane);
+      light.addEventListener('animationend', function (ev) {
+        if (ev.target !== light) return;
+        var lit = button.getAttribute('aria-pressed') === 'true';
+        if (ev.animationName === 'cut-in' && lit) light.setAttribute('data-lamp', 'lit');
+        else if (ev.animationName === 'cut-out' && !lit) button.removeAttribute('data-was-lit');
+      });
       button.addEventListener('click', function () {
         if (read) return;
         var at = selected.indexOf(index);
+        light.removeAttribute('data-lamp');
         if (at !== -1) {
           selected.splice(at, 1);
           cutFor(light, 'unseal', { duration: 'medium' });
-          button.setAttribute('data-was-lit', 'true');
           button.setAttribute('aria-pressed', 'false');
+          if (stilled()) button.removeAttribute('data-was-lit');
+          else button.setAttribute('data-was-lit', 'true');
         } else {
           selected.push(index);
           cutFor(light, 'seal', { duration: 'medium' });
           button.removeAttribute('data-was-lit');
           button.setAttribute('aria-pressed', 'true');
+          if (stilled()) light.setAttribute('data-lamp', 'lit');
         }
         if (selected.length < 3) {
           note(trace, selected.length ? selected.length + ' lit; ' + (3 - selected.length) + ' to go.' : 'All windows dark again. Light any three.');
@@ -3210,20 +3243,24 @@
     go.addEventListener('click', setOut);
     paint();
   }
-  // A bath of still water, a white cloth, and three jars of dye. Each drop goes into the bath and
-  // spreads there as a blot of its own dye, cut out of the water by one curve round the point it
-  // fell at, stepping out in a few treads -- never a wash of colour -- and it rests in two shades
-  // of its dye, a deeper core and a paler ring, split by that curve. The water rests in two shades
-  // split by one slice through the bath at the register's angle. The answer is the bath the
-  // visitor made: which dyes and in what share, how much, and whether they kept to one, matched
-  // all three, or let them muddle. Nothing about it is wrong, and the bath never answers on its
-  // own: dipping the cloth is the visitor's press. The cloth is lowered in from above behind one
-  // slice, white, and then the bath's colour soaks through it behind one curve from where the last
-  // drop fell (the middle of the bath, if none did), and it rests in two shades of that colour split
-  // by a curve round the same point, deeper inside: the reading's one seal. A tap on a jar in the
-  // picture adds its dye; a tap on the water adds the last dye where it fell; a tap before any jar
-  // is chosen says how to choose one. Start over draws every blot back into the point it fell at,
-  // in treads, one way. The bath is drawn only when a tread lands; there is no clock.
+  // A bath of still water, a white cloth, and three jars of dye. A drop from a jar falls in from
+  // that jar: at the bath's near rim, straight up the water from where the jar stands on the
+  // bench. The drops of one dye gather there into one pool, which spreads outward by one curve
+  // round that point, a step further for each drop, in a few treads, one stair at a time however
+  // fast the drops fall -- never a wash of colour, and never a scatter: where a pool lies says
+  // which jar it came from, and how far it has spread how many drops went in. A drop let fall on the water by a tap is a blot of its own, the size of
+  // one drop, where it fell. Each rests in two shades of its dye, a deeper core and a paler ring,
+  // split by its curve. The water rests in two shades split by one slice through the bath at the
+  // register's angle. The answer is the bath the visitor made: which dyes and in what share, how
+  // much, and whether they kept to one, matched all three, or let them muddle. Nothing about it is
+  // wrong, and the bath never answers on its own: dipping the cloth is the visitor's press. The
+  // cloth is lowered in from above behind one slice, white, and then the bath's colour soaks
+  // through it behind one curve from where the last drop went in (the middle of the bath, if none
+  // did), and it rests in two shades of that colour split by a curve round the same point, deeper
+  // inside: the reading's one seal. A tap on a jar in the picture adds its dye, as its button does;
+  // a tap on the water adds the last dye where it fell; a tap before any jar is chosen says how to
+  // choose one. Start over draws every pool and blot back into the point it went in at, in treads,
+  // one way. The bath is drawn only when a tread lands; there is no clock.
   function dyeProbe(probe, body, trace, answer, finish) {
     var MOST = probe.most || 24;
     var pot = el('canvas', 'probe-pad');
@@ -3265,8 +3302,16 @@
     var linen = tone('--fg', '#e6eaf5');
     var inks = probe.dyes.map(function (dye) { return rgbOf(dye.ink, '#9fcbff'); });
     var BATH = { x: 0.5, y: 0.34, rx: 0.4, ry: 0.27 };
+    // A blot is drawn out to `at` px from its point and spreads toward `r`. One drop spreads DROP
+    // px; a jar's pool spreads that far, and GROW px further for each drop after the first -- far
+    // enough that each of the two treads a drop takes moves the edge a step the eye sees, even on
+    // a phone, where the picture is shown at little over half its own size.
+    var DROP = 16;
+    var GROW = 5;
     var blots = [];
     var draining = [];
+    var pools = []; // each jar's pool in the bath, by the jar's place in probe.dyes
+    var fell = null; // the blot the last drop went into, which the cloth soaks from
     var last = -1;
     var dipped = false;
     var laid = 0; // how far the cloth has been lowered in, 0 to 1
@@ -3284,10 +3329,11 @@
       counts.forEach(function (k, i) { for (var q = 0; q < 3; q++) c[q] += inks[i][q] * k / n; });
       return blend(linen, c, Math.min(0.92, 0.35 + n * 0.05));
     }
-    function inside() {
-      var a = Math.random() * Math.PI * 2;
-      var r = Math.sqrt(Math.random()) * 0.78;
-      return [BATH.x + Math.cos(a) * BATH.rx * r, BATH.y + Math.sin(a) * BATH.ry * r];
+    // Where a jar's drops go in: straight up the water from the jar, its place along the bench
+    // drawn in toward the middle so the outer jars' pools lie inside the bath's narrower ends, and
+    // half way from the middle to the rim nearest the bench, where a drop poured from it lands.
+    function poolAt(i) {
+      return [BATH.x + (jarX(i) - BATH.x) * 0.75, BATH.y + BATH.ry * 0.5];
     }
     function line() {
       var n = total();
@@ -3328,18 +3374,19 @@
       var all = blots.concat(draining);
       for (var i = 0; i < all.length; i++) {
         var b = all[i];
-        if (b.k <= 0) continue;
-        // A blot: a paler ring and a deeper core of its dye, split by one curve, both cut out of
-        // the water from the point it fell at as it spreads, and drawn back into it as it drains.
+        if (b.at <= 0) continue;
+        // A pool or a blot: a paler ring and a deeper core of its dye, split by one curve, both cut
+        // out of the water from the point it went in at as it spreads, and drawn back into it as
+        // it drains.
         var x = b.x * w;
         var y = b.y * h;
         g.fillStyle = rgba(inks[b.dye], 0.28);
         g.beginPath();
-        g.arc(x, y, b.r * b.k, 0, Math.PI * 2);
+        g.arc(x, y, b.at, 0, Math.PI * 2);
         g.fill();
         g.fillStyle = rgba(inks[b.dye], 0.42);
         g.beginPath();
-        g.arc(x, y, b.r * 0.58 * b.k, 0, Math.PI * 2);
+        g.arc(x, y, b.at * 0.58, 0, Math.PI * 2);
         g.fill();
       }
       // The cloth: lowered in from above behind one slice, white; then the bath's colour soaks
@@ -3391,19 +3438,42 @@
       if (total() >= MOST) { note(trace, 'the bath will take no more; dip the cloth, or start over'); return; }
       counts[index] += 1;
       last = index;
-      var p = at || inside();
-      var blot = { x: p[0], y: p[1], r: between(16, 34), dye: index, k: 0, gone: false };
-      blots.push(blot);
+      var blot;
+      if (at) {
+        // A tap's drop: a blot of its own where it fell.
+        blot = { x: at[0], y: at[1], r: DROP, at: 0, dye: index, gone: false };
+        blots.push(blot);
+      } else {
+        // A jar's drop: into that jar's pool, begun with its first drop and grown by each after.
+        blot = pools[index];
+        if (!blot) {
+          var p = poolAt(index);
+          blot = pools[index] = { x: p[0], y: p[1], r: 0, at: 0, drops: 0, dye: index, gone: false };
+          blots.push(blot);
+        }
+        blot.drops += 1;
+        blot.r = DROP + GROW * (blot.drops - 1);
+      }
+      fell = blot;
       refresh();
       note(trace, line());
       gauge(trace, tally(total()));
-      // The drop spreads from where it fell in rolled treads, always outward; a blot already
-      // being drawn back by start over is the drain's to move.
-      series({ ms: beat('medium'), treads: 3 + Math.floor(Math.random() * 3), step: function (k, n) {
-        if (!k || blot.gone) return;
-        blot.k = k / n;
+      // The drop spreads from where it went in, in one stair of even treads, always outward: a
+      // blot from nothing in three to five; a pool already spread, by the GROW its drop adds, in
+      // two. A pool has one edge, so it has one stair at a time: a drop that falls while its pool
+      // is still spreading is taken on by that stair, its treads still to come sharing evenly
+      // what is left to the edge the drops now reach (blot.r, read at each tread) -- a second
+      // stair beside it would creep the one edge out in slivers. A blot already being drawn back
+      // by start over is the drain's to move.
+      if (blot.spreading) return;
+      blot.spreading = true;
+      var reached = 0;
+      series({ ms: beat('medium'), treads: blot.at ? 2 : 3 + Math.floor(Math.random() * 3), step: function (k, n) {
+        if (k <= reached || blot.gone) return;
+        blot.at += (blot.r - blot.at) * (k - reached) / (n - reached);
+        reached = k;
         paint();
-      } });
+      }, done: function () { blot.spreading = false; } });
     }
     pot.addEventListener('click', function (ev) {
       if (dipped) { note(trace, 'the cloth is already in the bath'); return; }
@@ -3428,7 +3498,9 @@
       if (dipped || !blots.length) return;
       var going = blots;
       blots = [];
-      going.forEach(function (b) { b.gone = true; });
+      pools = [];
+      fell = null;
+      going.forEach(function (b) { b.gone = true; b.drained = b.at; });
       draining = draining.concat(going);
       counts = counts.map(function () { return 0; });
       last = -1;
@@ -3436,11 +3508,11 @@
       refresh();
       gauge(trace, '');
       note(trace, 'fresh water: add whatever you like');
-      // Each blot is drawn back into the point it fell at, in treads, never out again; on the last
-      // tread every one is gone, so the end draws nothing more.
+      // Each pool and blot is drawn back into the point it went in at, in treads, never out again;
+      // on the last tread every one is gone, so the end draws nothing more.
       series({ ms: beat('medium'), treads: 3, step: function (k, n) {
         if (!k) return;
-        going.forEach(function (b) { b.k = Math.min(b.k, 1 - k / n); });
+        going.forEach(function (b) { b.at = Math.min(b.at, b.drained * (1 - k / n)); });
         paint();
       }, done: function () {
         draining = draining.filter(function (b) { return going.indexOf(b) === -1; });
@@ -3460,7 +3532,7 @@
       if (used === 1 && n >= 2) add(answer, probe.pure, 1);
       else if (used === 3) add(answer, most - least <= 1 ? probe.even : probe.muddied, 1);
       pot.style.cursor = 'default';
-      var from = blots.length ? blots[blots.length - 1] : BATH;
+      var from = fell || BATH;
       soak = { kind: 'curve', x: from.x * pot.width, y: from.y * pot.height };
       // The cloth goes in in one stair: two treads lower it in, the rest soak the colour through,
       // so each tread moves one edge and none goes back. The jars and the two controls grey once

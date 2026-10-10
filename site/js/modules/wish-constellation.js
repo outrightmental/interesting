@@ -65,7 +65,9 @@ function asked(env) {
    and each line moves on a roll of its own, and each time it moves it is rolled again (roll():
    the thing's seed crossed with how many times it has moved), so no two step together and no
    press plays like the one before -- every roll keeping the piece's edge. Once every change has
-   landed the scene is not drawn again until something changes. */
+   landed the scene is not drawn again until something changes: frame() says it is at rest (it
+   returns false) and the stage asks for no more frames until the visitor acts, the scene is sized
+   again or it comes back into view. */
 
 // The rite of a piece handed none: everything stands where it ends, and a surface is cut by a
 // plain upright slice from its left side.
@@ -317,8 +319,20 @@ function ring(g, c, x, y, a, r, sweep) {
   g.stroke();
 }
 
+// The face words are set in, set only when it is not the one the canvas already holds: setting a
+// canvas's font, even to the face it has, makes the browser bring the page's style up to date
+// first, and the sky letters every light, so a picture sets it once for each size rather than once
+// for each word. A canvas spells a face back in its own way (700 as 'bold', a size cut to a few
+// places), so the canvas is asked whether it holds the face as it spelled it when it was first set
+// here: a canvas resized back to its defaults, or restored to a face it saved, is never mistaken.
+// Only a few dozen spellings are kept, so a feed of many cards does not gather them.
+const spelled = new Map();
 function font(g, size, weight) {
-  g.font = (weight || 500) + ' ' + Math.round(size) + 'px system-ui, sans-serif';
+  const face = (weight || 500) + ' ' + Math.round(size) + 'px system-ui, sans-serif';
+  if (g.font === (spelled.get(face) || face)) return;
+  g.font = face;
+  if (spelled.size >= 48) spelled.clear();
+  spelled.set(face, g.font);
 }
 
 /* ---- the postcard: nearest to farthest ------------------------------------------------------ */
@@ -431,6 +445,10 @@ function postcardScene(g, w, h, c, plan, s, v) {
     g.beginPath();
     g.rect(left, box.top, box.width, box.height);
     g.clip();
+    // A light's place -- its number in the order tapped, or the place a hint names -- is set after
+    // every light in the view is lettered, the places of one size together, so the canvas's font
+    // is set once for each size rather than twice for each light.
+    const places = [];
     plan.points.forEach((p, i) => {
       const shift = pane === 1 ? shiftOf(plan.ranks[i], n) : 0;
       const x = left + (p.x - shift) / 100 * box.width;
@@ -463,11 +481,7 @@ function postcardScene(g, w, h, c, plan, s, v) {
         // A tapped light: its ring comes round in clicks and its place is cut on at its moment.
         const shown = tapShown(s, rite, reduced, i);
         ring(g, c, x, y, 0.8, size * 0.6, shown.ring);
-        if (shown.said) {
-          font(g, size * 0.7);
-          g.fillStyle = c.alpha(c.colors.accent2, 0.95);
-          g.fillText(String(tapped + 1), x + size * 0.55, y + size * 0.55);
-        }
+        if (shown.said) places.push({ text: String(tapped + 1), x: x + size * 0.55, y: y + size * 0.55, size: size * 0.7 });
       } else if (gone >= 0 && s.clearedAt >= 0) {
         // The order complete: each ring goes back round the way it came from as far as it had
         // come, and each place that was showing is cut out at its moment -- one that had not yet
@@ -477,23 +491,21 @@ function postcardScene(g, w, h, c, plan, s, v) {
         const cp = came(s, s.clearedAt, 0.7, reduced);
         if (cp < 1) {
           ring(g, c, x, y, 0.8, size * 0.6, was.ring * (1 - own.ratchet(cp)));
-          if (was.said && !own.flicker(cp)) {
-            font(g, size * 0.7);
-            g.fillStyle = c.alpha(c.colors.accent2, 0.95);
-            g.fillText(String(gone + 1), x + size * 0.55, y + size * 0.55);
-          }
+          if (was.said && !own.flicker(cp)) places.push({ text: String(gone + 1), x: x + size * 0.55, y: y + size * 0.55, size: size * 0.7 });
         }
       } else if (s.hinted.includes(i)) {
         const own = roll(rite, 0x71 + i, 0);
         const hp = came(s, s.hintAt[i], 1, reduced);
         ring(g, c, x, y, 0.9, size * 0.7, own.ratchet(hp));
-        if (own.flicker(hp)) {
-          font(g, size * 0.75);
-          g.fillStyle = c.alpha(c.colors.accent2, 0.95);
-          g.fillText(PLACE[plan.ranks[i]], x + size * 0.55, y + size * 0.6);
-        }
+        if (own.flicker(hp)) places.push({ text: PLACE[plan.ranks[i]], x: x + size * 0.55, y: y + size * 0.6, size: size * 0.75 });
       }
     });
+    g.fillStyle = c.alpha(c.colors.accent2, 0.95);
+    g.textAlign = 'left';
+    for (const at of places.sort((a, b) => a.size - b.size)) {
+      font(g, at.size);
+      g.fillText(at.text, at.x, at.y);
+    }
     g.restore();
   });
   font(g, size);
@@ -619,8 +631,8 @@ function postcardPiece(env, plan) {
     frame(t, dt, c) {
       if (!c.reduced) s.t += dt;
       if (c.done && s.doneAt < 0) s.doneAt = s.t;
-      if (settled(s, c)) return;
-      draw(c);
+      if (!settled(s, c)) draw(c);
+      return !settled(s, c);
     },
     end(c) {
       c.status('sealed: postcard ' + plan.number + '. light ' + LETTERS[answer[0]] + ' is nearest and light ' + LETTERS[answer[n - 1]] + ' farthest; the lines show how far each one shifted');
@@ -799,13 +811,9 @@ function skyBox(g, c, pts, x, y, side, v, opts) {
     g.fillStyle = opts.border || c.alpha(c.colors.fg, 0.9);
     g.fillText(opts.label, x + size * 0.4, y + size * 0.3);
   }
-  if (opts.note) {
-    font(g, size * 0.85);
-    g.textAlign = 'right';
-    g.textBaseline = 'bottom';
-    g.fillStyle = c.alpha(c.colors.accent2, 0.9);
-    g.fillText(opts.note, x + side - size * 0.4, y + side - size * 0.3);
-  }
+  // The box's note for its lower corner -- 'decoy' over a sky the hint has ruled out -- is handed
+  // to the caller's `notes`, which writes them all together (whichScene).
+  if (opts.note) opts.notes.push({ text: opts.note, x: x + side - size * 0.4, y: y + side - size * 0.3, size: size * 0.85 });
 }
 
 // The state the four skies are drawn from; -1 is "from the start". Each sky's fill is a surface
@@ -862,6 +870,9 @@ function whichScene(g, w, h, c, plan, s, v) {
   const c1 = lay.cells[1];
   g.fillText('four skies', c0.x + (c1.x + c1.side - c0.x) / 2, h * 0.085, c1.x + c1.side - c0.x);
   skyBox(g, c, reference(plan, rite, s, reduced), lay.left, lay.top, lay.side, v, { rite, border: c.alpha(c.colors.accent, 0.8) });
+  // The skies' notes are written after all four are labelled, so the canvas's font is set once for
+  // the labels and once for the notes rather than twice for each sky.
+  const notes = [];
   plan.skies.forEach((sky, i) => {
     const cell = lay.cells[i];
     // Chosen: the sky is cut in by the edge; the one chosen before it gives its fill back the
@@ -880,11 +891,18 @@ function whichScene(g, w, h, c, plan, s, v) {
       fill: c.alpha(c.colors.accent2, 0.1), fillK: chosenK,
       lit: c.alpha(c.colors.accent2, 0.18), litK: foundK,
       veil: c.alpha(c.colors.bg, 0.48), veilK: decoyK,
-      note: decoyK > 0 ? 'decoy' : '',
+      note: decoyK > 0 ? 'decoy' : '', notes,
       border: found || chosenK > 0 ? c.colors.accent2 : undefined,
       width: found || chosenK >= 0.5 ? 2 : 1
     });
   });
+  g.textAlign = 'right';
+  g.textBaseline = 'bottom';
+  g.fillStyle = c.alpha(c.colors.accent2, 0.9);
+  for (const at of notes) {
+    font(g, at.size);
+    g.fillText(at.text, at.x, at.y);
+  }
   font(g, size);
   g.textAlign = 'center';
   g.textBaseline = 'middle';
@@ -994,8 +1012,8 @@ function whichPiece(env, plan) {
     frame(t, dt, c) {
       if (!c.reduced) s.t += dt;
       if (c.done && s.doneAt < 0) s.doneAt = s.t;
-      if (settled(s, c)) return;
-      draw(c);
+      if (!settled(s, c)) draw(c);
+      return !settled(s, c);
     },
     end(c) {
       c.status('sky ' + SKIES[plan.which] + ' is yours, ' + turnsWord(plan.turns) + (plan.mirror ? ', flipped first' : '') + '; watch your sky turn to meet it');

@@ -325,9 +325,11 @@
 
   // Words written to a line, and revealed there. A line still being revealed is ended first, so a
   // question asked over a question starts its own cut rather than finishing the last one's.
+  // `gesture` ({ seed, length }) is the one roll several lines share, for the words of a box that
+  // are written as one (sayOnLanding, below); a line alone rolls its own.
   var revealed = typeof WeakMap === 'function' ? new WeakMap() : null;
 
-  function say(node, text, quiet) {
+  function say(node, text, quiet, gesture) {
     if (!node) return;
     var before = revealed && revealed.get(node);
     if (before) {
@@ -337,15 +339,19 @@
     if (text != null) node.textContent = text;
     var m = engine();
     if (quiet || !m || typeof m.reveal !== 'function' || calm()) return;
-    var undo = m.reveal(node);
+    var undo = gesture ? m.reveal(node, gesture) : m.reveal(node);
     if (revealed && typeof undo === 'function') revealed.set(node, undo);
   }
 
-  // The words a box carries, written onto it once the box has landed rather than while it is still
-  // coming: one edge at a time (README: "Motion axiom"), so the box's own slice crosses an empty
-  // card and the register's slant then writes its words, and no word is cut in where the box is
-  // not yet there to be seen. Each line is held unseen until `box` says its arrival has ended
-  // (animationend on the box itself, never on what is inside it), and then revealed; `after` --
+  // The words a box says, written onto it once the box has landed rather than while it is still
+  // coming: one edge at a time (README: "Motion axiom"), so the box's own slice crosses a card
+  // with nothing written on it yet and the register's slant then writes its words, and no word is
+  // cut in where the box is not yet there to be seen. Its controls are not among them: a button
+  // arrives with the box, named, so the one the focus lands on is never a button with no name.
+  // Each line is held unseen until `box` says its arrival has ended (animationend on the box
+  // itself, never on what is inside it), and then all of them are revealed as ONE gesture: one
+  // roll of the treads and one length, the page's long one, shared by every line, so the lines
+  // step together as one slant writing the box rather than each at a pace of its own. `after` --
   // the length of that arrival as the caller rolled it, and a little more -- is only the fallback
   // for a browser that never says so, or a box whose arrival did not start again. Where nothing
   // moves they are simply there. Hands back the stop, for a box answered or taken away before it
@@ -375,9 +381,10 @@
     function land(ev) {
       if (ev && ev.target !== box) return;
       stop();
+      var gesture = { seed: Math.floor(Math.random() * 0x7fffffff), length: riteMs('long', 560) };
       for (var j = 0; j < held.length; j++) {
         held[j].style.removeProperty('visibility');
-        say(held[j]);
+        say(held[j], null, false, gesture);
       }
     }
     if (listening) box.addEventListener('animationend', land);
@@ -612,13 +619,8 @@
       var line = el('p', 'unlock-note', note);
       box.appendChild(line);
       var controls = el('div', 'controls');
-      // The button's words sit in a span of their own, so they can be revealed: the reveal is a
-      // mask over the element it is given, and given the button it would cut the button in with
-      // its words, fill and state layers and all.
-      var go = el('button', 'unlock-go btn-filled');
+      var go = el('button', 'unlock-go btn-filled', button);
       go.type = 'button';
-      var goWord = el('span', 'unlock-word', button);
-      go.appendChild(goWord);
       controls.appendChild(go);
       box.appendChild(controls);
       var more = null;
@@ -646,10 +648,11 @@
       host.setAttribute('aria-hidden', 'true');
       // Then the box comes up out of the machine it powers (its direction is the stylesheet's,
       // _unlock.scss), waiting under its own edge until the sheet is down, in treads rolled for
-      // this arrival; and once it has landed its words are written on it.
+      // this arrival, with its controls named on it; and once it has landed what it says is
+      // written on it.
       if (sheet && box.style) box.style.setProperty('--unlock-wait', sheet + 'ms');
       var landing = cutOn(box, 'develop', { duration: 'long' });
-      unwritten = sayOnLanding(box, [heading, line, goWord, more], sheet + landing);
+      unwritten = sayOnLanding(box, [heading, line], sheet + landing);
       var heard = powered && !waking; // the caller was told it is powered, so it is told it is not
       waking = null;
       powered = false;
@@ -870,18 +873,39 @@
     return { x: x, y: y };
   }
 
+  /* The veil going down. js/motion.js leaves a ghost of it in its place, cloned from it once it is
+     hidden and cut back from however far the veil had risen (_sass/_lightbox.scss). So what the
+     ghost must not copy comes off the veil first -- is-risen (below), which would leave the ghost
+     no edge to step back with -- and what the ghost needs is said on it. Where what stood in front
+     of the veil goes by a curve of its own round the same point (the constellation's sky, going
+     back into the mark), the ghost goes as that curve: `leave` is how long it takes
+     (data-leave-ms, which the engine gives the ghost) and `treads` the stair it steps in
+     (--ease-veil-leave, which the clone carries and the ghost steps in before a stair of its
+     own), so the dimmed page and the sky are taken back by one edge, ending as the last chip
+     goes. */
+  function letGo(leave, treads) {
+    veil.classList.remove('is-risen');
+    if (leave > 0) veil.setAttribute('data-leave-ms', String(Math.round(leave)));
+    else veil.removeAttribute('data-leave-ms');
+    if (leave > 0 && treads) veil.style.setProperty('--ease-veil-leave', treads);
+    else veil.style.removeProperty('--ease-veil-leave');
+  }
+
   /* The page, arranged around the top of the stack: one lightbox, one over another, or none. Every
      change goes through here rather than through the callers, so a box that opens over another and
-     closes again leaves the one underneath exactly as it was. */
-  function arrange() {
+     closes again leaves the one underneath exactly as it was. Whatever it reads of the page it
+     reads before it writes anything: the page going aside restyles the whole document, and a
+     read after that would make the browser do it there and then, inside the press, and again in
+     the next frame for whatever was written after the read. */
+  function arrange(leave, treads) {
     var top = raised.length ? raised[raised.length - 1] : null;
     if (!veil) veil = document.getElementById(VEIL_ID);
     if (top) {
       var point = veil && veil.hidden ? riseFrom(top.from) : null;
+      if (point) cutOn(veil, 'veil', point);
       installHold();
       aside(top.keep);
       hold(true);
-      if (point) cutOn(veil, 'veil', point);
       if (veil) veil.hidden = false;
       // Written only when it says something new, never cleared and set again: a box renamed while
       // it is up (the state interface, below) leaves every rule keyed on a lightbox being up
@@ -890,6 +914,7 @@
         html.setAttribute('data-lightbox', top.name);
       }
     } else {
+      if (veil && !veil.hidden) letGo(leave, treads);
       html.removeAttribute('data-lightbox');
       if (veil) veil.hidden = true;
       hold(false);
@@ -935,10 +960,13 @@
       arrange();
     }
 
-    function down() {
+    // down(leave, treads) takes it down; `leave`, where given, is how long what was open takes to
+    // go (in ms) and `treads` the stair it goes in (a timing function), and the veil, if this was
+    // the last box up, goes with it (letGo, above).
+    function down(leave, treads) {
       var at = raised.indexOf(box);
       if (at !== -1) raised.splice(at, 1);
-      arrange();
+      arrange(leave, treads);
     }
 
     return { up: up, down: down, name: named };
@@ -954,6 +982,12 @@
     veil.addEventListener('click', function () {
       var top = raised.length ? raised[raised.length - 1] : null;
       if (top && top.onPress) top.onPress();
+    });
+    // Risen: its curve has reached the far corner and has nothing left to cut, so it stands with no
+    // mask (.is-risen, _sass/_lightbox.scss) -- a whole viewport masked under a blur, for as long
+    // as something is open, would be painting for nothing.
+    veil.addEventListener('animationend', function (ev) {
+      if (ev && ev.target === veil && !veil.hidden) veil.classList.add('is-risen');
     });
   }
 
@@ -980,8 +1014,6 @@
     var actions = el('div', 'controls are-you-sure-actions');
     var go = el('button', 'warning are-you-sure-go');
     go.type = 'button';
-    var goWord = el('span', 'are-you-sure-word'); // the words, revealable (see unlock)
-    go.appendChild(goWord);
     var no = el('button', 'are-you-sure-no', 'cancel');
     no.type = 'button';
     actions.appendChild(go);
@@ -1029,7 +1061,7 @@
         next.focus();
       }
     });
-    return { host: host, title: title, note: note, go: go, goWord: goWord, no: no };
+    return { host: host, title: title, note: note, go: go, no: no };
   }
 
   function settle(yes) {
@@ -1072,14 +1104,14 @@
     }
     // The words are put in now and written on the box once it has landed (sayOnLanding): the box
     // arrives behind its own slice (.are-you-sure[open], _controls.scss), in treads rolled for
-    // this question, and only then does the register's slant write the question on it.
+    // this question, with its two buttons named on it alike -- the answer and "cancel" -- and only
+    // then does the register's slant write the question on it, in one gesture.
     say(sure.title, 'are you sure you want to ' + what + '?', true);
     say(sure.note, opts.detail || '', true);
     sure.note.hidden = !opts.detail;
-    say(sure.goWord, String(opts.confirm || '').trim() || ('yes, ' + what), true);
+    sure.go.textContent = String(opts.confirm || '').trim() || ('yes, ' + what);
     var landing = cutOn(sure.host, 'dialog-in', { family: 'arrive' });
-    var lines = opts.detail ? [sure.title, sure.note, sure.goWord] : [sure.title, sure.goWord];
-    sureUnwritten = sayOnLanding(sure.host, lines, landing);
+    sureUnwritten = sayOnLanding(sure.host, opts.detail ? [sure.title, sure.note] : [sure.title], landing);
     asking = {
       onConfirm: onConfirm,
       onCancel: onCancel,
@@ -1292,6 +1324,10 @@
     return shown;
   }
 
+  // Which way each star lies from the logo's heart, kept for aimAtLogo (below) as the script's own
+  // data: nothing in a stylesheet reads it, so it is not written on the page.
+  var outward = typeof WeakMap === 'function' ? new WeakMap() : null;
+
   // One star: the chip at (x, y), and the ray from the logo's heart to the middle of its left edge.
   function star(option, x, y, mid, order) {
     var middle = y + option.height / 2;
@@ -1305,11 +1341,7 @@
     style.setProperty('--len', Math.round(Math.sqrt(dx * dx + dy * dy)) + 'px');
     style.setProperty('--a', (Math.atan2(dy, dx) * 180 / Math.PI).toFixed(2) + 'deg');
     style.setProperty('--k', String(order));
-    // Where the chip starts from when it branches out, a little over half of the way back to the
-    // logo: kept on the option for aimAtLogo (below), which points the chip's arrival and its
-    // leaving along it.
-    style.setProperty('--fx', Math.round(-dx * 0.55) + 'px');
-    style.setProperty('--fy', Math.round(-dy * 0.55) + 'px');
+    if (outward) outward.set(option.element, { x: dx, y: dy });
     // The way the chip's edge runs: out along its ray, away from the logo's heart, so a slice that
     // cuts the chip -- reached by the keyboard, set, unset -- travels the way the chip itself
     // branched out (README: "Motion axiom", the cut). A pointer still brings its own angle in.
@@ -1493,11 +1525,19 @@
 
   /* ---- opening and closing ---------------------------------------------------------------- */
 
-  /* The constellation, out and away. Idempotent on purpose, because two things call it: the
-     <details> element's own toggle event, and close() below -- a browser fires `toggle` in a task
-     of its own, which is a moment too late for anything that has to happen before the next line
-     runs. The lightbox is the shared one, so the veil, the inert page, the paused animations and
-     the held frame loop are one call rather than four. */
+  /* The constellation, out and away. Idempotent on purpose, because three things call it: the
+     press on the logo that opens it and close() below, which call it at once, and the <details>
+     element's own toggle event, which a browser fires in a task of its own -- a moment too late
+     for anything that has to happen before the next frame is drawn, so it only follows a change
+     nothing else has answered, and one that comes after a close has answered it is let be
+     (follow, in buildNav). The lightbox is the shared one, so the veil, the inert page, the
+     paused animations and the held frame loop are one call rather than four.
+
+     Opening, everything the constellation measures is read first -- where each star goes, and
+     where the veil rises from -- and only then is the page put aside, which restyles the whole
+     document: with nothing read after it, that happens once, in the next frame, and never inside
+     the press. Closing, `leave` is how long the constellation's leaving lasts (rollLeaving), for
+     the veil to go with it, in the treads the sky goes back in (leavingTreads). */
   // A chip's words, revealed when they change while the constellation is on screen; written
   // plainly while it is away, where nobody is watching.
   function relabel(node, text) {
@@ -1538,12 +1578,15 @@
     }
   }
 
-  /* The constellation unmade (close below): each chip goes back toward the logo behind a slice
-     pointing that way, its ray is cut back into the logo with it, and the rings and the sky go
-     back into the mark (.is-unmaking, _sass/_nav.scss); only then does the <details> close. The
-     lightbox, the inert page and aria-expanded are given back at once, before it, because the
-     page behind has to be live for whatever the press was for. Without the engine, or for a
-     visitor who asked for less motion, `then()` runs at once. */
+  /* The constellation unmade (close below): each chip is cut away where it stands by a slice
+     pointing back along its ray to the logo, its ray is cut back into the logo with it, and the
+     rings and the sky go back into the mark (.is-unmaking, _sass/_nav.scss); only then does the
+     <details> close. The lightbox, the inert page and aria-expanded are given back at once, before
+     it, because the page behind has to be live for whatever the press was for -- and the veil's
+     ghost goes back into the mark with the sky, as one edge in the sky's own treads and length
+     (close, below), so the dimmed page is taken back as the stars are and reaches the heart as the
+     last chip goes. Without the engine, or for a visitor who asked for less motion, `then()` runs
+     at once. */
   var unmaking = 0; // the clock on the unmaking under way, or 0
 
   function endUnmake() {
@@ -1554,71 +1597,82 @@
     if (typeof nav.sky.removeAttribute === 'function') nav.sky.removeAttribute('inert');
   }
 
-  function unmakeSky(then) {
+  /* The leaving, rolled: each chip's anew for this close (--ease-unmake and --motion-unmake, which
+     the chip's leaving reads), pointed back at the logo it branched from, and shared with its ray,
+     which is cut back into the logo in the same treads. Written on the chips and the mark and
+     nothing else, so it can be rolled before the lightbox comes down and the veil can be told how
+     long it is and in what treads (leavingTreads). Hands back how long the last of it takes -- the
+     longest leaving and the last chip's turn in the order -- or 0 where nothing is unmade. */
+  function rollLeaving() {
     var count = 0;
     var options = nav.sky.querySelectorAll('.sparknav-option');
     for (var i = 0; i < options.length; i++) if (!options[i].hidden) count += 1;
-    if (!count || !canUnmake(nav.sky)) {
-      then();
-      return;
-    }
+    if (!count || !canUnmake(nav.sky)) return 0;
     endUnmake();
-    // Each chip's leaving rolled anew for this close (--ease-unmake and --motion-unmake, which the
-    // chip's cut.unmake reads), pointed back at the logo it branched from, and shared with its ray,
-    // which is cut back into the logo in the same treads.
     var longest = 0;
     for (i = 0; i < options.length; i++) {
       if (options[i].hidden) continue;
       var node = typeof options[i].querySelector === 'function' ? options[i].querySelector('.sparknav-node') : null;
       if (!node) continue;
-      aimAtLogo(node, options[i], 'leave', 0.72);
+      aimAtLogo(node, options[i], 'leave');
       longest = Math.max(longest, cutLeave(node));
       shareTreads(node, options[i], 'unmake');
     }
-    // The rings and the sky go last, in treads rolled for this close and as long as the longest
-    // leaving rolled above and the last chip's turn in the order, so no chip is left after the
-    // circle it was cast in has gone. cast-ring-out is no keyframes: it is only the name the rings'
-    // transitions and the sky's cut read these treads by (_sass/_nav.scss), on the mark they all sit
-    // in. The outer ring and the sky read this length; the dashed ring reads its own, a little
-    // shorter, so it is gone just before the outer one.
+    var last = Math.max(riteMs('medium', 340), longest) + Math.ceil(count / 2) * riteMs('stagger', 44);
+    // The rings and the sky go last, in treads rolled for this close and as long as the last chip,
+    // so no chip is left after the circle it was cast in has gone. cast-ring-out is no keyframes:
+    // it is only the name the rings' transitions and the sky's cut read these treads by
+    // (_sass/_nav.scss), on the mark they all sit in, and the veil's ghost is handed them too, so
+    // it goes back into the heart with the sky. The outer ring, the sky and the ghost take this
+    // length; the dashed ring its own, a little shorter, so it is gone just before the outer one.
     if (nav.host.style && typeof nav.host.style.setProperty === 'function') {
       cutOn(nav.host, 'cast-ring-out', { family: 'leave' });
-      var rings = Math.max(riteMs('medium', 340), longest) + Math.ceil(count / 2) * riteMs('stagger', 44);
-      nav.host.style.setProperty('--motion-cast-ring-out', rings + 'ms');
-      nav.host.style.setProperty('--motion-cast-ring-dashed-out', Math.round(rings * 0.92) + 'ms');
+      nav.host.style.setProperty('--motion-cast-ring-out', last + 'ms');
+      nav.host.style.setProperty('--motion-cast-ring-dashed-out', Math.round(last * 0.92) + 'ms');
+    }
+    return last;
+  }
+
+  // The treads rollLeaving() rolled for the sky's going back into the mark, as a timing function,
+  // for the veil's ghost to go back in the same ones (letGo). Read off the mark's own style, which
+  // is where it was written: nothing is worked out to read it.
+  function leavingTreads() {
+    var style = nav.host.style;
+    return style && typeof style.getPropertyValue === 'function' ? style.getPropertyValue('--ease-cast-ring-out') : '';
+  }
+
+  // `length` is the leaving rollLeaving() rolled, where the caller rolled it first; else it is
+  // rolled here.
+  function unmakeSky(then, length) {
+    var last = length == null ? rollLeaving() : length;
+    if (!last) {
+      then();
+      return;
     }
     nav.sky.classList.add('is-unmaking');
     // Out of reach while it goes: a chip being unmade is not in the tab order or the tree a
     // reader walks, as it is already out from under the pointer.
     if (typeof nav.sky.setAttribute === 'function') nav.sky.setAttribute('inert', '');
-    // The <details> closes only when the last chip, the last ray and the rings have gone: the
-    // longest leaving the engine rolled (or the stylesheet's own length), the last chip's turn in
-    // the order, and a little.
+    // The <details> closes only when the last chip, the last ray and the rings have gone, and a
+    // little after.
     unmaking = window.setTimeout(function () {
       unmaking = 0;
       nav.sky.classList.remove('is-unmaking');
       if (typeof nav.sky.removeAttribute === 'function') nav.sky.removeAttribute('inert');
       then();
-    }, Math.max(riteMs('medium', 340), longest) + Math.ceil(count / 2) * riteMs('stagger', 44) + 80);
+    }, last + 80);
   }
 
   /* A chip's own way, said by the shell rather than rolled: a star branches out of the logo and
-     goes back into it (--fx/--fy, star() above), so what the engine writes for its arrival or its
-     leaving (m.arrive, cutLeave) is pointed that way -- its --arrive-x/-y, the step back toward
-     the logo it starts from, or its --leave-x/-y, the step toward the logo it goes by -- and the
-     slice it moves behind points the way it travels along its ray (--arrive-angle out of the
-     logo, --leave-angle back into it). The treads and the length stay the engine's roll. */
-  function aimAtLogo(node, option, way, by) {
-    if (!option.style || typeof option.style.getPropertyValue !== 'function'
-        || !node.style || typeof node.style.setProperty !== 'function') return;
-    var fx = parseFloat(option.style.getPropertyValue('--fx'));
-    var fy = parseFloat(option.style.getPropertyValue('--fy'));
-    if (!isFinite(fx) || !isFinite(fy)) return;
-    node.style.setProperty('--' + way + '-x', Math.round(fx * by) + 'px');
-    node.style.setProperty('--' + way + '-y', Math.round(fy * by) + 'px');
-    if (fx || fy) {
-      node.style.setProperty('--' + way + '-angle', way === 'arrive' ? angleOf(-fx, -fy) : angleOf(fx, fy));
-    }
+     goes back into it (outward, star() above), so the slice it is cut in by points out along its
+     ray (--arrive-angle) and the slice it is cut away by points back along it (--leave-angle).
+     Neither moves the chip: it is cut in and away where it stands, so no chip passes over
+     another and none is ever out from under a pointer that has found it. The treads and the
+     length stay the engine's roll. */
+  function aimAtLogo(node, option, way) {
+    var out = outward && outward.get(option);
+    if (!out || !(out.x || out.y) || !node.style || typeof node.style.setProperty !== 'function') return;
+    node.style.setProperty('--' + way + '-angle', way === 'arrive' ? angleOf(out.x, out.y) : angleOf(-out.x, -out.y));
   }
 
   /* A ray is its chip's sibling and cannot read what the engine wrote on the chip, so the chip's
@@ -1635,18 +1689,18 @@
     }
   }
 
-  /* Each chip's arrival rolled anew on every press (m.arrive: --ease-develop and --motion-develop,
-     read by the chip's cut.develop under .is-branching, and shared with its ray): its own treads
-     and length, and the way out of the logo as its direction. Without the engine the
-     stylesheet's baked stair plays, from the same place. */
+  /* Each chip's arrival, pointed out of the logo along its ray (the slice's direction), and rolled
+     anew on every press (--ease-develop and --motion-develop, read by the chip's slice under
+     .is-branching, and shared with its ray): its own treads and length. Without the engine the
+     stylesheet's baked stair plays, along the same ray. */
   function cast() {
     var options = nav.sky.querySelectorAll('.sparknav-option');
     for (var i = 0; i < options.length; i++) {
       if (options[i].hidden) continue;
       var node = typeof options[i].querySelector === 'function' ? options[i].querySelector('.sparknav-node') : null;
-      if (!node || !cutArrival(node)) continue;
-      aimAtLogo(node, options[i], 'arrive', 1);
-      shareTreads(node, options[i], 'develop');
+      if (!node) continue;
+      aimAtLogo(node, options[i], 'arrive');
+      if (cutOn(node, 'develop', { duration: 'long' })) shareTreads(node, options[i], 'develop');
     }
   }
 
@@ -1737,7 +1791,7 @@
     }
   }
 
-  function branch(on) {
+  function branch(on, leave) {
     nav.logo.setAttribute('aria-expanded', on ? 'true' : 'false');
     if (on) {
       endUnmake(); // pressed again before the last close had finished: cast afresh
@@ -1745,20 +1799,50 @@
       deal();
       cast();
       castDust();
-      navBox.up(null, nav.logo); // the veil rises from the logo that was pressed
+      clearLanded();
       // The branch starts over on every press: a browser that keeps a closed <details> rendered
-      // would otherwise have run the animation once and left it there.
-      nav.sky.classList.remove('is-branching');
-      void nav.sky.offsetWidth;
+      // would otherwise have run the animation once and left it there. Only a sky still marked
+      // from before needs the style pass in between, and it is taken here, before the page is
+      // put aside, so it costs the sky alone.
+      if (nav.sky.classList.contains('is-branching')) {
+        nav.sky.classList.remove('is-branching');
+        void nav.sky.offsetWidth;
+      }
       nav.sky.classList.add('is-branching');
+      // The veil rises from the logo that was pressed, and from its heart -- the mark, the point
+      // the rings and the visitor's sky are cast from -- so the closing takes the dimmed page and
+      // the sky back into one point by one edge, rather than by two curves a pill's width apart.
+      navBox.up(null, nav.heart || nav.logo);
     } else {
       // Whatever the lightbox was holding goes with it: the state interface back to its corner,
       // the constellation back on screen for the next press, and then the one box itself.
       stateModal(false);
-      navBox.down();
+      navBox.down(leave, leave > 0 ? leavingTreads() : '');
       nav.sky.classList.remove('is-branching');
       if (!nav.host.open) endUnmake(); // closed by the browser itself: nothing left to unmake
     }
+  }
+
+  /* Landed: a part whose arrival has ended -- a chip cut in, its ray drawn out, the sky uncovered
+     to the far corner -- is marked so (is-landed), and stands with no mask (_sass/_nav.scss): an
+     edge held past the far side of its box has nothing left to cut, and the sky's is the size of
+     the viewport. Read off the arrival's own end, as the veil's rising is (watchTheVeil), so
+     nothing is asked of the page; its own arrival only, so a chip's wax on its ::after is not
+     counted. The mark comes off on every press (clearLanded, in branch), so the next arrival has
+     its edge back, and the unmaking needs nothing: the stylesheet says it only of a constellation
+     that is not being unmade. */
+  function noteLanded(ev) {
+    var part = ev && ev.target;
+    if (!part || ev.pseudoElement || ev.animationName !== 'cut-in' || !part.classList) return;
+    if (!nav.sky.classList.contains('is-branching') || nav.sky.classList.contains('is-unmaking')) return;
+    if (part === nav.dust || part.classList.contains('sparknav-node') || part.classList.contains('sparknav-ray')) {
+      part.classList.add('is-landed');
+    }
+  }
+
+  function clearLanded() {
+    var landed = nav.sky.querySelectorAll('.is-landed');
+    for (var i = 0; i < landed.length; i++) landed[i].classList.remove('is-landed');
   }
 
   /* What had not landed when the close began -- a chip still on its turn or its way, a ray not
@@ -1796,14 +1880,22 @@
      on the next line has to find the page live, not inert. */
   function close(focusLogo) {
     // Only a constellation that is on screen is unmade: the state interface's close has nothing
-    // of the sky to show, and a browser without the engine closes at once.
+    // of the sky to show, and a browser without the engine closes at once. Its leaving is rolled
+    // before the lightbox comes down, so the veil's ghost is told how long it lasts and the stair
+    // the sky goes back into the mark in, and goes back the same way: the dimmed page and the sky
+    // are drawn into the heart by one edge, in the same treads, the stair holding first and taking
+    // the most at the end, and the edge reaches the heart as the last chip goes.
     var skyShown = nav.host.open && !nav.sky.hidden;
-    if (skyShown) markUnlanded();
-    branch(false);
+    var leave = 0;
+    if (skyShown) {
+      markUnlanded();
+      leave = rollLeaving();
+    }
+    branch(false, leave);
     if (skyShown) {
       unmakeSky(function () {
         if (nav.host.open) nav.host.open = false;
-      });
+      }, leave);
     } else if (nav.host.open) {
       nav.host.open = false;
     }
@@ -1971,6 +2063,7 @@
     nav = {
       host: host,
       logo: document.getElementById('sparknav-logo'),
+      heart: host.querySelector('.sparknav-spark'),
       sky: host.querySelector('.sparknav-sky'),
       orbits: host.querySelectorAll('.sparknav-orbit'),
       reading: document.getElementById('sparknav-reading'),
@@ -2004,9 +2097,20 @@
       onPress: function () { close(true); }
     });
 
-    nav.host.addEventListener('toggle', function () {
+    // The constellation follows the <details>, for whatever opened or closed it that did not say
+    // so itself. The browser's own toggle event comes in a task of its own, and may come late: the
+    // press below has answered the opening already, and by the time the event says "opened" the
+    // visitor may have closed it again (a second press, Escape) -- the <details> still open while
+    // its chips are unmade, the constellation already closed. While it is being unmade, an open
+    // <details> is the shell's own doing and its timer closes it, so the event has nothing to say;
+    // otherwise it says something only where the <details> and the logo disagree.
+    function follow() {
+      if (unmaking) return;
+      if (nav.host.open === (nav.logo.getAttribute('aria-expanded') === 'true')) return;
       branch(nav.host.open);
-    });
+    }
+    nav.host.addEventListener('toggle', follow);
+    nav.sky.addEventListener('animationend', noteLanded);
 
     // The state interface's host has landed: where the panel stands now is where it stays.
     if (nav.modal && typeof nav.modal.addEventListener === 'function') {
@@ -2015,17 +2119,25 @@
       });
     }
 
-    // Opening is the browser's own disclosure. Closing by the logo goes through close(), so the
-    // constellation is unmade before the <details> closes rather than cut by it; pressed again
-    // while it is still being unmade, the constellation is cast afresh.
+    // The press opens the <details> itself, and branches the constellation out in the same breath:
+    // left to the browser, the disclosure would open in the press and say so only in a task of
+    // its own, and every frame drawn in between would show the whole constellation, unmasked, over
+    // a page with no veil yet. (A key presses a summary by a click as well.) Closing by the logo
+    // goes through close(), so the constellation is unmade before the <details> closes rather than
+    // cut by it; pressed again while it is still being unmade, the constellation is cast afresh.
     nav.logo.addEventListener('click', function (event) {
-      if (!nav.host.open) return;
       if (event && typeof event.preventDefault === 'function') event.preventDefault();
+      if (!nav.host.open) {
+        nav.host.open = true;
+        follow();
+        return;
+      }
       if (unmaking) {
         endUnmake();
         nav.host.open = false;
         void nav.host.offsetWidth; // a style pass with [open] gone, so the rings are cast again from nothing
         nav.host.open = true;
+        follow();
         return;
       }
       close(false);

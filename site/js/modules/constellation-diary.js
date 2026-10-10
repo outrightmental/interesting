@@ -76,11 +76,14 @@ function asked(env) {
    and for whatever stood there from the start (since < 0). Each star, line or mark moves on a roll
    of its own (rite.at: the same edge, its own treads and moment), so no two step together.
 
-   What a frame costs. The stage asks for a frame sixty times a second, and the diary has something
-   new to show in very few of them. A piece notes how long each change it makes goes on moving
-   (pace().stir) -- the showing of the sky is one -- and draws the change at once; after that a
-   frame does nothing at all unless something is still moving or the canvas is not the one it last
-   drew on (a new size, new colours). While something moves, a frame takes a note of the picture it
+   What a frame costs. The stage asks for a frame sixty times a second while the diary says
+   something on it is moving, and the diary has something new to show in very few of them. A piece
+   notes how long each change it makes goes on moving (pace().stir) -- the showing of the sky is
+   one -- and draws the change at once; after that a frame does nothing at all unless something is
+   still moving or the canvas is not the one it last drew on (a new size, new colours), and once
+   the last change has been shown at its end frame() says the diary is at rest (it returns false),
+   so the stage asks for no more frames until the visitor acts, the scene is sized again or it
+   comes back into view. While something moves, a frame takes a note of the picture it
    would draw, which costs no pixels (sketch), and paints only when that note differs from the last
    picture drawn: a stair holds each tread for a good part of its span, so most of those frames
    have nothing new in them either. The sky's gradient, which never changes while a piece plays,
@@ -128,8 +131,10 @@ function came(s, since, span, reduced) {
 // When a frame has anything new to draw (see "What a frame costs" above). stir(until) says a change
 // has just been made that moves until the piece's clock reaches `until`. due() is whether this
 // frame could show anything new at all: a change still moving, a change not yet shown, or a canvas
-// that is not the one last drawn on. show() puts the picture `paint` makes on the canvas -- if it
-// differs from the one already there (or `force`), and otherwise leaves the canvas alone.
+// that is not the one last drawn on, so once a frame has shown its picture due() is also whether
+// the diary is still on its way (true) or at rest (false). show() puts the picture `paint` makes
+// on the canvas -- if it differs from the one already there (or `force`), and otherwise leaves the
+// canvas alone.
 function pace() {
   let key = null;
   let seenAt = -Infinity;
@@ -170,7 +175,7 @@ function sketch(real, paint) {
       if (k === 'canvas') return real.canvas;
       if (k === 'measureText') {
         return (text) => {
-          if (t.font) real.font = t.font;
+          if (t.font) face(real, t.font);
           return real.measureText(text);
         };
       }
@@ -358,7 +363,7 @@ function star(g, env, p, letter, scale, glow, size, rite) {
   g.arc(p.x, p.y, r, 0, Math.PI * 2);
   g.fill();
   if (letter) {
-    g.font = '600 ' + Math.round(size) + 'px system-ui, sans-serif';
+    face(g, '600 ' + Math.round(size) + 'px system-ui, sans-serif');
     g.textAlign = 'left';
     g.textBaseline = 'middle';
     g.fillStyle = env.alpha(glow > 0 ? env.colors.accent2 : env.colors.fg, 0.9);
@@ -388,15 +393,39 @@ function page(g, w, h, split, env, ink, m, rows) {
   return step;
 }
 
+// The face words are set in, set only when it is not the one the canvas already holds: setting a
+// canvas's font, even to the face it has, makes the browser bring the page's style up to date
+// first, and the diary letters every star and writes every line of its page, so a picture sets it
+// once for each size rather than once for each word. A canvas spells a face back in its own way
+// (700 as 'bold', a size cut to a few places, and a page's rows are sized in fractions of a pixel),
+// so the canvas is asked whether it holds the face as it spelled it when it was first set here: a
+// canvas resized back to its defaults, or restored to a face it saved, is never mistaken. Only a
+// few dozen spellings are kept, so a feed of many cards does not gather them.
+const spelled = new Map();
+function face(g, font) {
+  if (g.font === (spelled.get(font) || font)) return;
+  g.font = font;
+  if (spelled.size >= 48) spelled.clear();
+  spelled.set(font, g.font);
+}
+
 // A line of handwriting on a rule, shrunk a little and then cut short if it would run off the page.
+// A line too wide goes straight to the size its width at this one says will fit (a line's width
+// goes with its size), rather than trying a pixel smaller at a time, and only a line that still
+// overruns there is tried smaller again.
 function write(g, text, x, y, maxW, size, color) {
   let s = size;
   g.textAlign = 'left';
   g.textBaseline = 'alphabetic';
-  g.font = '500 ' + s + 'px system-ui, sans-serif';
-  while (s > 9 && g.measureText(text).width > maxW) {
-    s -= 1;
-    g.font = '500 ' + s + 'px system-ui, sans-serif';
+  face(g, '500 ' + s + 'px system-ui, sans-serif');
+  const wide = g.measureText(text).width;
+  if (s > 9 && wide > maxW) {
+    s = Math.max(9, Math.min(s - 1, Math.floor(s * maxW / wide)));
+    face(g, '500 ' + s + 'px system-ui, sans-serif');
+    while (s > 9 && g.measureText(text).width > maxW) {
+      s -= 1;
+      face(g, '500 ' + s + 'px system-ui, sans-serif');
+    }
   }
   let t = text;
   if (g.measureText(t).width > maxW) {
@@ -524,6 +553,9 @@ function recallScene(g, w, h, c, plan, s, v, plates) {
     const line = plan.seq.slice(0, whole + 2).map((i) => pts[i]);
     path(g, line, c.alpha(gold, 0.6), whole >= seg ? null : far - whole);
   }
+  // The tapped stars' numbers are set after every star is drawn, all in one size, so the canvas's
+  // font is set once for them rather than once for each star between its letter and its number.
+  const numbers = [];
   pts.forEach((p, i) => {
     const its = own(rite, 0x57a + i);
     // A star coming out has its halo cut in up its stair and its ring cut on at its moment; one
@@ -537,13 +569,16 @@ function recallScene(g, w, h, c, plan, s, v, plates) {
     const worn = tapRing(rite, s, i, reduced);
     if (worn.on) {
       ring(g, p.x, p.y, fr.unit * (0.02 + 0.008 * worn.r), c.alpha(gold, 0.85), 1.2);
-      if (worn.no > 0) {
-        g.font = '500 ' + Math.round(fr.size * 0.8) + 'px system-ui, sans-serif';
-        g.fillStyle = c.alpha(gold, 0.95);
-        g.fillText(String(worn.no), p.x + fr.size * 0.5, p.y + fr.size * 0.6);
-      }
+      if (worn.no > 0) numbers.push({ no: String(worn.no), x: p.x + fr.size * 0.5, y: p.y + fr.size * 0.6 });
     }
   });
+  if (numbers.length) {
+    face(g, '500 ' + Math.round(fr.size * 0.8) + 'px system-ui, sans-serif');
+    g.textAlign = 'left';
+    g.textBaseline = 'middle';
+    g.fillStyle = c.alpha(gold, 0.95);
+    for (const at of numbers) g.fillText(at.no, at.x, at.y);
+  }
   const step = page(g, w, h, fr.split, c, ink, fr.m, Math.max(3, Math.round(4 * v.density)));
   const lines = [OPENER + ' entry ' + plan.number];
   // The second line changes as the showing goes, and when it is written up: each change is cut on
@@ -676,6 +711,7 @@ function recallPiece(env, plan) {
     frame(t, dt, c) {
       s.t += dt;
       if (paced.due(s, c)) paced.show(s, c, paint(c));
+      return paced.due(s, c);
     },
     end(c) {
       s.doneAt = s.t;
@@ -930,7 +966,7 @@ function linesScene(g, w, h, c, plan, s, v, plates) {
   g.moveTo(0, fr.split - 1);
   g.lineTo(w, fr.split - 1);
   g.stroke();
-  g.font = '500 ' + Math.round(fr.size * 0.8) + 'px system-ui, sans-serif';
+  face(g, '500 ' + Math.round(fr.size * 0.8) + 'px system-ui, sans-serif');
   g.textBaseline = 'middle';
   g.fillStyle = c.alpha(c.colors.muted, 0.9);
   g.textAlign = 'center';
@@ -962,7 +998,7 @@ function linesScene(g, w, h, c, plan, s, v, plates) {
   rows(g, fr, step, lines, (i) => (i === 0 ? c.alpha(gold, 0.95)
     : done && plan.lies.includes(i - 1) && bands[i - 1].own.flicker(doneP) ? c.alpha(gold, 0.9)
       : c.alpha(c.colors.fg, bands[i - 1].k >= 1 && picked.includes(i - 1) ? 1 : 0.85)));
-  g.font = '600 ' + Math.round(fr.size * 0.85) + 'px system-ui, sans-serif';
+  face(g, '600 ' + Math.round(fr.size * 0.85) + 'px system-ui, sans-serif');
   g.textAlign = 'right';
   g.textBaseline = 'alphabetic';
   for (let i = 0; i < count; i++) {
@@ -1089,6 +1125,7 @@ function linesPiece(env, plan) {
     frame(t, dt, c) {
       s.t += dt;
       if (paced.due(s, c)) paced.show(s, c, paint(c));
+      return paced.due(s, c);
     },
     end(c) {
       s.doneAt = s.t;
@@ -1223,7 +1260,7 @@ function driftScene(g, w, h, c, plan, s, v, plates) {
   g.lineTo(pw, fr.split);
   g.stroke();
   g.setLineDash([]);
-  g.font = '500 ' + Math.round(fr.size * 0.8) + 'px system-ui, sans-serif';
+  face(g, '500 ' + Math.round(fr.size * 0.8) + 'px system-ui, sans-serif');
   g.textBaseline = 'middle';
   g.textAlign = 'center';
   g.fillStyle = c.alpha(c.colors.muted, 0.9);
@@ -1409,6 +1446,7 @@ function driftPiece(env, plan) {
     frame(t, dt, c) {
       s.t += dt;
       if (paced.due(s, c)) paced.show(s, c, paint(c));
+      return paced.due(s, c);
     },
     end(c) {
       s.doneAt = s.t;

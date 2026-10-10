@@ -66,7 +66,9 @@ function asked(env) {
    Each surface set or unset steps on a roll of its own (rite.at, rolled once and kept), so a
    second naming steps in other treads than the first, along the same edge. Between changes
    nothing moves and nothing is drawn: the map waits for its forecast, and a frame with nothing new
-   on it is let go (settled). */
+   on it is let go (settled). Once nothing is on its way, frame() says so -- it returns false --
+   and the stage asks for no more frames until the visitor acts, the scene is sized again or it
+   comes back into view. */
 
 // What stands in for a rite on an env that carries none: whatever has not begun stands where it
 // was, whatever has begun is already at its end, and a surface is painted whole -- so a drawing
@@ -197,9 +199,25 @@ function sideBand(geo, side) {
 
 /* ---- drawing shared by both ---------------------------------------------------------------- */
 
+// The face words are set in, set only when it is not the one the canvas already holds: setting a
+// canvas's font, even to the face it has, makes the browser bring the page's style up to date
+// first, so a map that labels its rows and its instruments sets it once for each size, not once for
+// each word. A canvas spells a face back in its own way (700 as 'bold', a size cut to a few
+// places), so the canvas is asked whether it holds the face as it spelled it when it was first set
+// here: a canvas resized back to its defaults, or restored to a face it saved, is never mistaken,
+// and the stations' bold letters are set once, not once for each station. Only a few dozen
+// spellings are kept, so a feed of many cards does not gather them.
+const spelled = new Map();
+function face(g, font) {
+  if (g.font === (spelled.get(font) || font)) return;
+  g.font = font;
+  if (spelled.size >= 48) spelled.clear();
+  spelled.set(font, g.font);
+}
+
 function write(g, text, x, y, size, align, tone, weight) {
   g.fillStyle = tone;
-  g.font = (weight || '500') + ' ' + size + 'px system-ui, sans-serif';
+  face(g, (weight || '500') + ' ' + size + 'px system-ui, sans-serif');
   g.textAlign = align || 'left';
   g.textBaseline = 'middle';
   g.fillText(text, x, y);
@@ -349,7 +367,7 @@ function slip(g, w, h, env, lines, rise, size) {
   const rite = riteOf(env);
   const down = rite.ease(rise);
   if (down <= 0) return;
-  g.font = '500 ' + size + 'px system-ui, sans-serif';
+  face(g, '500 ' + size + 'px system-ui, sans-serif');
   let widest = 0;
   for (const l of lines) widest = Math.max(widest, g.measureText(l).width);
   const lh = size * 1.5;
@@ -693,7 +711,9 @@ function frontPiece(env, plan) {
     // Once solved, the ceremony plays in order -- the front comes in, then the rain, while the
     // ledger's slip comes down -- and each part rests at its end. Less motion is shown where they
     // all end at once. A frame is drawn only when it has something new on it: a step of the
-    // ceremony, or a change still coming its way; otherwise the map stands as it was drawn.
+    // ceremony, or a change still coming its way; otherwise the map stands as it was drawn. The
+    // map is at rest -- false, and the stage asks for no more frames -- once the ceremony has
+    // ended and the picture on the canvas is the finished one.
     frame(t, dt, c) {
       s.t += dt;
       if (c.done) {
@@ -701,8 +721,10 @@ function frontPiece(env, plan) {
         if (s.sweep >= 1) s.rain = c.reduced ? 1 : Math.min(1, s.rain + dt * 0.6);
         if (s.lines) s.rise = c.reduced ? 1 : Math.min(1, s.rise + dt * 1.2);
       }
-      if (settled(s, c, frontKey(c, plan, s), latest(s, [s.guessAt, s.sideAt, s.hintAt, s.doneAt]))) return;
-      draw(c);
+      const last = latest(s, [s.guessAt, s.sideAt, s.hintAt, s.doneAt]);
+      if (!settled(s, c, frontKey(c, plan, s), last)) draw(c);
+      const going = c.done && (s.sweep < 1 || s.rain < 1 || (s.lines && s.rise < 1));
+      return going || !settled(s, c, frontKey(c, plan, s), last);
     },
     end(c) {
       s.lines = ['front ledger', 'from the ' + plan.side + ', ' + plan.squares * KM + ' km at ' + plan.speed + ' km/h', 'arrived ' + fmt(arrives) + (plan.now + hours >= 24 ? ', past midnight' : '')];
@@ -836,7 +858,15 @@ function drawPressure(g, w, h, env, plan, s, variant) {
     const shown = s.hinted === i ? prog(env, s.t, s.hintAt == null ? 0 : s.hintAt, 1.3) : 0;
     if (shown > 0) disc(g, rite, x, y, geo.sq * 0.95 * v.scale, rolled(rite, 0x417).stair(shown), env.alpha(c.accent2, 0.3));
     station(g, env, x, y, geo.sq * 0.42 * v.scale, LETTERS[i], size);
+  });
+  // Each station's reading, and what is said of it, is written once every station is drawn: the
+  // canvas's font is set once for the letters and once for the readings rather than twice for
+  // each station, and no station's rings are drawn over another's words.
+  st.forEach((q, i) => {
+    const x = geo.x(q.c);
+    const y = geo.y(q.r);
     const below = q.r > GR - 4;
+    const shown = s.hinted === i ? prog(env, s.t, s.hintAt == null ? 0 : s.hintAt, 1.3) : 0;
     write(g, q.p + ' hPa', x, y + (below ? -1 : 1) * geo.sq * 0.95, size, 'center', c.fg, '600');
     if (toward === i) write(g, 'toward here?', x, y + (below ? -1 : 1) * geo.sq * 0.95 + (below ? -1 : 1) * size * 1.2, size, 'center', env.alpha(c.accent, 0.95));
     if (s.hinted === i && rite.flicker(shown)) write(g, 'the wind blows from here', x, y + (below ? -1 : 1) * geo.sq * 0.95 + (below ? -1 : 1) * size * 1.2, size, 'center', c.accent2, '600');
@@ -996,15 +1026,17 @@ function pressurePiece(env, plan) {
     },
     // Once solved, the wind's arrow is drawn in while the ledger's slip comes down, and each rests
     // at its end; less motion is shown where they end at once. A frame is drawn only when it has
-    // something new on it (settled), as on the front's map.
+    // something new on it (settled), and the map is at rest once nothing is, as on the front's.
     frame(t, dt, c) {
       s.t += dt;
       if (c.done) {
         s.blow = c.reduced ? 1 : Math.min(1, s.blow + dt * 0.5);
         if (s.lines) s.rise = c.reduced ? 1 : Math.min(1, s.rise + dt * 1.2);
       }
-      if (settled(s, c, pressureKey(c, s), latest(s, [s.towardAt, s.saidAt, s.hintAt, s.doneAt]))) return;
-      draw(c);
+      const last = latest(s, [s.towardAt, s.saidAt, s.hintAt, s.doneAt]);
+      if (!settled(s, c, pressureKey(c, s), last)) draw(c);
+      const going = c.done && (s.blow < 1 || (s.lines && s.rise < 1));
+      return going || !settled(s, c, pressureKey(c, s), last);
     },
     end(c) {
       s.lines = ['wind ledger', 'from station ' + LETTERS[hi] + ' (' + st[hi].p + ' hPa) to station ' + LETTERS[lo] + ' (' + st[lo].p + ' hPa)', 'blowing ' + way + ', ' + gap + ' hPa between them'];

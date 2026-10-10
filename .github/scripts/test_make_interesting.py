@@ -5948,7 +5948,9 @@ class NavTest(unittest.TestCase):
         # It rises as one curve from the control that raised it, and its ghost goes the same way.
         self.assertIn("mask: cut.curve()", css)
         self.assertIn("@include cut.play(in, veil", css)
-        self.assertIn("@include cut.play(out, veil-out", css)
+        # Its ghost goes back from as far as the veil had risen (--cut-from, which the engine writes).
+        self.assertIn("animation: veil-out var(--motion-veil-out", css)
+        self.assertIn("from { --cut: var(--cut-from, 100%); }", css)
         # And the nav's own veil is gone, markup, paint and keyframes alike: there is one.
         for rel, content in sorted(self.source.items()):
             with self.subTest(rel=rel):
@@ -6415,7 +6417,7 @@ class LightboxTest(unittest.TestCase):
 
     def test_the_paint_is_written_once_and_reaches_every_page(self):
         partial = self.source[f"{mi.SASS_DIR}/_lightbox.scss"]
-        for rule in [".lightbox-veil", "@include cut.play(in, veil", "@include cut.play(out, veil-out",
+        for rule in [".lightbox-veil", "@include cut.play(in, veil", "animation: veil-out var(--motion-veil-out",
                      "[data-lightbox-front]", "[data-lightbox-aside]"]:
             with self.subTest(rule=rule):
                 self.assertIn(rule, partial)

@@ -117,22 +117,26 @@ $registers-of: (
 // ---- the shift of modality -----------------------------------------------------------------
 // The site changing what it is wearing: js/motion.js writes <html data-shifting> for one moment
 // whenever the mood, the world or the featured piece changes on :root, rolls the page's stairs
-// again under the new temperament, and cuts the words that carry the page into their new face.
-// The stage's head is cut in whole, with all its lines, by one slice at the register's slant
-// (--reveal-angle, the same edge a line of words is revealed by) stepping across it in the
-// shift's treads, while its axes, size and tracking step to the new register along the stair
-// (type.rite). Its title is cut with it, and the engine leaves the title out of the words it
-// reveals on a shift: a second edge on the same words would be two changes on one thing.
-// Elsewhere type.rite cuts only the wearers that ask for it (type.rite($shift: true): a prose
-// page's headings, a list line's name), and the engine reveals a page's heading and a section's
-// or a panel's title by a slice of their own. The palette's own change (js/stage.js) runs under
-// it, the page's sky turning its colour in the corner it opened from (_panel.scss). A card's
-// overline is not cut: a card wears its own world's register, which a shift of the site does not
-// change, so cutting it would cost the page and show nothing.
+// again under the new temperament, and rolls ONE stair and ONE length for the whole shift, which it
+// writes on :root (--ease-rite-shift, --motion-rite-shift) and hands to every line of words it cuts
+// into the new face. The palette, the faces and the register's axes, size and spacing all land in
+// the shift's first frame (type.rite steps none of them), and what is seen to move is the slice
+// over the words, every one of them at the new register's slant and on that one stair: a stair of
+// the shift family, whose first tread is taken at once, so words already standing are never blank
+// for a held tread. The stage's head is cut in whole, with all its lines, by one slice at that
+// slant (--reveal-angle, the same edge a line of words is revealed by), on the shift's stair and in
+// its length, so it is cut on the same treads as every other word of the shift and lands with them.
+// Its title is cut with it, and the engine leaves the title out of the words it reveals on a shift:
+// a second edge on the same words would be two changes on one thing. Elsewhere type.rite cuts only
+// the wearers that ask for it (type.rite($shift: true): a prose page's headings, a list line's
+// name), and the engine reveals a page's heading and a section's or a panel's title on the same
+// stair. The page's sky turns its colour with the palette, in the corner it opened from
+// (_panel.scss). A card's overline is not cut: a card wears its own world's register, which a shift
+// of the site does not change, so cutting it would cost the page and show nothing.
 html[data-shifting] .stage-head {
   --cut: 100%;
   mask: cut.slice(var(--reveal-angle, 100deg));
-  animation: rite-shift var(--motion-shift, 640ms) var(--ease-rite-shift, var(--ease-stair)) both;
+  animation: rite-shift var(--motion-rite-shift, var(--motion-shift)) var(--ease-rite-shift, var(--ease-shift)) both;
 }
 
 // The slice crossing the head, from nothing to the whole of it.
@@ -186,7 +190,9 @@ html[data-shifting] .stage-head {
 
 // The next landing of a question that has several: cut in by a slice from the side the roll gives
 // it, in the place of the one before. The question itself stands with its host, which arrives on
-// its own (.stage-ask.is-landing, _stage.scss): one edge for one arrival.
+// its own (.stage-ask.is-landing, _stage.scss): one edge for one arrival. Like a dealt option, it
+// holds the slice only while the edge crosses it: then the script writes data-dealt='arrived', and
+// the landing stands unmasked.
 .probe-landing[data-dealt='true'] {
   --cut: 100%;
   mask: cut.slice(var(--arrive-angle, 0deg));
@@ -325,7 +331,10 @@ html[data-shifting] .stage-head {
 // Options dealt: one after another (--d) in the order the slice their question arrives by reaches
 // them, those it reaches at once together, and not before the host has arrived; each behind that
 // slice (the --arrive-angle it inherits) and lifting in from the same side, all in the one stair
-// the script cut for the whole deal.
+// the script cut for the whole deal. The slice and the lift are the arrival's alone: once its edge
+// has crossed, the script writes data-dealt='arrived' (settle), and an option that has arrived
+// wears no mask and plays nothing, like any other control -- a mask held at its end would go on
+// painting the option through it for as long as the question stands, with nothing left to cut.
 .probe-body .probe-options .probe-option[data-dealt='true']:not(.probe-skip) {
   --cut: 100%;
   @include cut.develop(develop, medium);
@@ -342,10 +351,12 @@ html[data-shifting] .stage-head {
 }
 
 // The chosen one is sealed: filled, its fill grown from the press (the engine's seal plays on
-// data-set through _controls.scss), and its label set down one tread. Specific enough to outrank
-// the stage's own ground for the threshold's cards (_stage.scss, imported after this sheet), so
-// the sealed door changes its ground where the question is actually asked; the ground steps along
-// the control's own stair (the transition every button carries).
+// data-set through _controls.scss). The press itself set it down in one tread, the stamp every
+// button plays (rite-stamp, _controls.scss), so its label is set down with it and has no stamp of
+// its own: one press, one set-down. Specific enough to outrank the stage's own ground for the
+// threshold's cards (_stage.scss, imported after this sheet), so the sealed door changes its
+// ground where the question is actually asked; the ground steps along the control's own stair
+// (the transition every button carries).
 .probe-body .probe-options .probe-option[data-set='true']:not(.probe-skip),
 .probe-option[data-set='true'] {
   background: var(--md-sys-color-primary-container);
@@ -358,7 +369,6 @@ html[data-shifting] .stage-head {
 
 .probe-option[data-set='true'] .probe-option-label {
   color: inherit;
-  animation: count-stamp var(--motion-short) var(--ease-count-stamp, var(--ease-flicker)) both;
 }
 
 .probe-option[data-set='true'] .probe-option-detail {
@@ -618,15 +628,11 @@ html[data-shifting] .stage-head {
   content: none;
 }
 
-// The lamp: two shades of the tertiary split by a curve round the lamp itself, low in the pane
-// where a lamp on a sill would stand, and shown only as far as a curve from that same point has
-// grown -- nothing, until the window is lit.
+// The lamp: a layer of its own behind the mullions. A dark lamp paints nothing at all.
 .probe-window-light {
   position: absolute;
   inset: 0;
   z-index: -1;
-  background: radial-gradient(circle farthest-corner at 50% 72%, var(--md-sys-color-tertiary) 45%, var(--md-sys-color-tertiary-container) 45%);
-  mask: cut.curve(50%, 72%);
   pointer-events: none;
 }
 
@@ -661,9 +667,17 @@ html[data-shifting] .stage-head {
   --pane-border: var(--md-sys-color-tertiary);
 }
 
-// A lamp lit grows out from the lamp in the treads the script cut for it (--ease-seal); a window
-// put out shrinks back into its lamp (--ease-unseal). data-was-lit says it was lit, so the nine
-// dark panes at the start play nothing.
+// A lamp lit, or going out: two shades of the tertiary split by a curve round the lamp itself,
+// low in the pane where a lamp on a sill would stand, and shown only as far as a curve from that
+// same point has grown. A lamp lit grows out from the lamp in the treads the script cut for it
+// (--ease-seal); a window put out shrinks back into its lamp (--ease-unseal). data-was-lit says it
+// is going out, so the nine dark panes at the start play nothing.
+.probe-window[aria-pressed='true'] .probe-window-light,
+.probe-window[data-was-lit='true'][aria-pressed='false'] .probe-window-light {
+  background: radial-gradient(circle farthest-corner at 50% 72%, var(--md-sys-color-tertiary) 45%, var(--md-sys-color-tertiary-container) 45%);
+  mask: cut.curve(50%, 72%);
+}
+
 .probe-window[aria-pressed='true'] .probe-window-light {
   --cut: 100%;
   @include cut.play(in, seal, medium, arrive);
@@ -672,6 +686,16 @@ html[data-shifting] .stage-head {
 .probe-window[data-was-lit='true'][aria-pressed='false'] .probe-window-light {
   --cut: 0%;
   @include cut.play(out, unseal, medium, leave);
+}
+
+// The curve is the movement's alone. Once it has reached the pane's far corner the script writes
+// data-lamp='lit', and a lit lamp stands whole, unmasked, playing nothing; once a lamp put out has
+// shrunk into its point the script takes data-was-lit off, and the window is dark again and paints
+// no lamp -- a mask held at the end of either would go on painting the lamp through it for as long
+// as the question stands, with nothing left to cut.
+.probe-window[aria-pressed='true'] .probe-window-light[data-lamp='lit'] {
+  mask: none;
+  animation: none;
 }
 
 // The third light: the whole facade reads, every pane set down one tread (--d), outward from the
@@ -1044,7 +1068,6 @@ html[data-shifting] .stage-head {
   [data-probe-state='read'] .probe::before,
   .probe-order-arrow[data-tick],
   .probe-body .probe-options .probe-option[data-dealt='true']:not(.probe-skip),
-  .probe-option[data-set='true'] .probe-option-label,
   .probe-big[data-tick],
   .probe-counter[data-tick],
   .probe-meter[data-tick],

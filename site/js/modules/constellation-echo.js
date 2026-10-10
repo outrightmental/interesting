@@ -80,10 +80,26 @@ function skyDots(g, w, h, c, v) {
   }
 }
 
+// The face words are set in, set only when it is not the one the canvas already holds: setting a
+// canvas's font, even to the face it has, makes the browser bring the page's style up to date
+// first, and the chamber labels every star, beat and voice, so a picture sets it once for each size
+// rather than once for each word. A canvas spells a face back in its own way (700 as 'bold', a size
+// cut to a few places), so the canvas is asked whether it holds the face as it spelled it when it
+// was first set here: a canvas resized back to its defaults, or restored to a face it saved, is
+// never mistaken. Only a few dozen spellings are kept, so a feed of many cards does not gather
+// them.
+const spelled = new Map();
+function face(g, font) {
+  if (g.font === (spelled.get(font) || font)) return;
+  g.font = font;
+  if (spelled.size >= 48) spelled.clear();
+  spelled.set(font, g.font);
+}
+
 function caption(g, w, c, text, x, y, a, size, align) {
   if (!text || a <= 0) return;
   g.fillStyle = c.alpha(c.colors.fg, a);
-  g.font = '500 ' + size + 'px system-ui, sans-serif';
+  face(g, '500 ' + size + 'px system-ui, sans-serif');
   g.textAlign = align || 'center';
   g.textBaseline = 'middle';
   g.fillText(text, x, y);
@@ -124,8 +140,10 @@ function gcd(a, b) {
    steps, and then it rests on the farthest. A star the ring lands on lights -- its glow cut in by
    the ring's own curve round the mark (or the piece's slice), its echo ring stepping out in the
    same treads -- and stays lit. Before a solve the only thing that moves of itself is the mark's
-   breath, a ring no larger than a control stepping out from the mark's own ring and released, lap
-   after lap, because the mark is waiting to be sent. The dust and the sky stand still.
+   breath, a ring no larger than a control stepping out from the mark's own ring and released, for
+   the first few laps the room is open (BREATHS), because the mark is waiting to be sent: that is
+   long enough to say where the pulse will leave from, and then the mark holds its own ring and the
+   room is still, so a room left waiting costs nothing. The dust and the sky stand still.
 
    In the midnight chord a picked voice's row has a band cut in, from the row's name (the name the
    rail's item shares) on a piece whose edge is a curve, and given back the same way when it is
@@ -138,7 +156,9 @@ function gcd(a, b) {
    at once for a visitor who asked for less motion. Each thing that moves has a roll of its own
    (roll(), rite.at underneath), so no two step alike and every one cuts the way the piece does, and
    a change made while another is still under way goes on from where that one stood, one way. A
-   frame with nothing new in it is not drawn at all (settled, below). */
+   frame with nothing new in it is not drawn at all (settled, below), and once nothing is on its
+   way frame() says the room is at rest (it returns false) and the stage asks for no more frames
+   until the visitor acts, the scene is sized again or it comes back into view. */
 
 // The rite of a piece handed none: everything stands where it ends, and a surface is cut by a
 // plain upright slice from its left side.
@@ -285,10 +305,15 @@ function disc(g, rite, cx, cy, r, k, from) {
   g.restore();
 }
 
+// How many laps the mark breathes when the room opens, three seconds each, before it holds still.
+const BREATHS = 3;
+
 // The mark's breath before a solve at `t`: how far its ring has stepped out from the mark's own
 // ring, on a stair of its own for each three-second lap -- or -1 when there is no ring to draw: at
-// the start of a lap it lies on the mark's own ring, and on its last tread it has been released.
+// the start of a lap it lies on the mark's own ring, on its last tread it has been released, and
+// after the BREATHS laps there is no breath at all.
 function breath(rite, t) {
+  if (t >= BREATHS * 3) return -1;
   const out = roll(rite, 0xb000 + (Math.floor(t / 3) % 64)).stair(fract(t / 3));
   return out > 0 && out < 1 ? out : -1;
 }
@@ -443,8 +468,9 @@ function drawEcho(g, w, h, c, plan, s, variant, t) {
   // The pulse. After a solve it goes out once (see frame()): it stands on the star it last landed
   // on, and before its first tread it is not drawn. Before a solve the mark breathes: a ring
   // stepping out from the mark's own ring to the edge of its glow, dimming in the same treads, and
-  // released on the last, lap after lap -- no larger than a control, and the only thing in the room
-  // that moves of itself, because the mark is waiting to be sent. Less motion: no breath at all.
+  // released on the last, for the first BREATHS laps the room is open -- no larger than a control,
+  // and the only thing in the room that moves of itself, because the mark is waiting to be sent.
+  // Less motion: no breath at all.
   const reach = s.pulse;
   if (reach > 0) {
     g.strokeStyle = c.alpha(col.accent2, 0.55);
@@ -484,7 +510,7 @@ function drawEcho(g, w, h, c, plan, s, variant, t) {
   // same treads. The stars it landed on before stay lit.
   const landed = s.tread > 0 ? order[s.tread - 1] : -1;
   const since = c.reduced ? 1 : clamp(((s.played || 0) - (s.treadAt || 0)) / 0.5, 0, 1);
-  g.font = '600 ' + size + 'px system-ui, sans-serif';
+  face(g, '600 ' + size + 'px system-ui, sans-serif');
   g.textBaseline = 'middle';
   plan.stars.forEach((star, i) => {
     const p = at(star);
@@ -745,8 +771,11 @@ function echoPiece(env, plan) {
         }
         s.pulse = s.tread > 0 ? reaches[s.tread - 1] : 0;
       }
-      if (settled(s, c, look(c), until())) return;
-      draw(c);
+      if (!settled(s, c, look(c), until())) draw(c);
+      // At rest (false) once the pulse has gone out and rested on the farthest star, the mark has
+      // breathed its laps, and the picture on the canvas is the finished one.
+      return (c.done && s.tread < n) || (s.pulse < 0 && !c.reduced && time < BREATHS * 3)
+        || !settled(s, c, look(c), until());
     },
     end(c) {
       s.pulse = 0;
@@ -891,7 +920,10 @@ function drawChord(g, w, h, c, plan, s, variant, t) {
   // A picked row is a set surface: a band is cut in across it when it is picked -- from the row's
   // name, the name the rail's item shares, on a piece whose edge is a curve -- and given back the
   // same way, the region shrinking, when it is unpicked; at rest it is two shades split by the edge.
-  // The rows are this chord's four candidates, in order of period.
+  // The rows are this chord's four candidates, in order of period. The words a hint has put over
+  // a voice's name are written after every row is named, so the canvas's font is set once for the
+  // names and once for those words rather than twice for each row.
+  const said = [];
   periods.forEach((p, row) => {
     const y = geo.rowTop + row * geo.rowGap;
     const shown = s.shown[p];
@@ -936,14 +968,16 @@ function drawChord(g, w, h, c, plan, s, variant, t) {
     }
     // A voice a hint has named says so, over its name, cut on at its moment.
     if (shown && roll(rite, 0x5400 + p).flicker(prog(c, t, marks['shown' + p] ? marks['shown' + p].at : 0, 1.2))) {
-      const x = geo.left - size * 0.6;
-      g.fillStyle = col.accent2;
-      g.font = '600 ' + small + 'px system-ui, sans-serif';
-      g.textAlign = 'right';
-      g.textBaseline = 'middle';
-      g.fillText(shown === 'on' ? 'sounds' : 'silent', x, y - geo.rowGap * 0.34);
+      said.push({ text: shown === 'on' ? 'sounds' : 'silent', x: geo.left - size * 0.6, y: y - geo.rowGap * 0.34 });
     }
   });
+  if (said.length) {
+    g.fillStyle = col.accent2;
+    face(g, '600 ' + small + 'px system-ui, sans-serif');
+    g.textAlign = 'right';
+    g.textBaseline = 'middle';
+    for (const word of said) g.fillText(word.text, word.x, word.y);
+  }
   g.fillStyle = c.alpha(col.muted, 0.2);
   g.fillRect(geo.left, geo.rowTop - geo.rowGap * 0.6, geo.right - geo.left, 1);
 }
@@ -1077,8 +1111,8 @@ function chordPiece(env, plan) {
     },
     frame(t, dt, c) {
       time += Math.max(0, dt);
-      if (settled(s, c, look(c), until())) return;
-      draw(c);
+      if (!settled(s, c, look(c), until())) draw(c);
+      return !settled(s, c, look(c), until());
     },
     end(c) {
       s.reveal = true;

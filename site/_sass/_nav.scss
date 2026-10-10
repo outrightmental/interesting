@@ -11,28 +11,29 @@
 //                  reads over any world's palette.
 //   on rollover    the pill waxes: its state layer -- two shades of its ink split by a slice
 //                  through its centre -- is cut in by a slice that steps across it from the side
-//                  the pointer came in by, and in the same treads the pill's room opens, its right
-//                  edge stepping out over the site's name. Focus does the same thing, so a keyboard
-//                  sees what a pointer sees.
+//                  the pointer came in by, and the pill's room opens at once beside the mark, where
+//                  the same slice, in the same treads, cuts in the site's name. Focus does the same
+//                  thing, so a keyboard sees what a pointer sees.
 //   on press       the pill is stamped (down in one cut, back in two, and inked by a curve that
 //                  grows from where the press landed), the page becomes a lightbox -- dimmed,
 //                  blurred, its animation held, its controls inert -- the sparkles turn by a sixth
 //                  of a turn and the roll's extra, two rings are cast out of the mark, the
 //                  visitor's own sky is uncovered by one curve growing from the mark's heart, and
 //                  the options branch out from the logo as a constellation of chips. Each chip is
-//                  cut in by a slice pointing the way it travels out of the logo while it steps out
-//                  along its ray, in the order and at the stagger js/site.js rolls for the press,
-//                  and each ray is cut out of the logo half a step behind its chip. Every ray is
+//                  cut in where it stands by a slice pointing out along its ray, away from the
+//                  logo, in the order and at the stagger js/site.js rolls for the press, and each
+//                  ray is cut out of the logo half a step behind its chip. Every ray is
 //                  drawn beneath every chip, so a ray crossing the scatter passes behind the options
 //                  in its way rather than over their labels (issue #72). The lightbox itself is not
 //                  this file's: it is the one the whole site shares (_lightbox.scss, and
 //                  window.interestingSite.lightbox in js/site.js), the same one the persona sheet
 //                  and the shared "are you sure?" modal open through (issue #70).
-//   on close       nothing is simply gone: each chip goes back toward the logo behind a slice
-//                  pointing that way, the rays are cut back into the logo, the rings shrink into it
-//                  and the sky is drawn back into it by its curve, and the <details> closes only
-//                  when the last of them has gone (js/site.js, close()). Then the sparkles turn
-//                  back. Whatever had not landed when the close began is cut away at once, so a
+//   on close       nothing is simply gone: each chip is cut away by a slice pointing back along
+//                  its ray to the logo, the rays are cut back into the logo, the rings shrink into
+//                  it, and the sky and the veil are drawn back into its heart by one curve, in the
+//                  same treads, reaching it as the last chip goes; the <details> closes only when
+//                  the last of them has gone (js/site.js, close()). Then the sparkles turn back.
+//                  Whatever had not landed when the close began is cut away at once, so a
 //                  constellation closed the moment it opened never shows itself whole to go.
 //
 // Nothing here fades, glides or moves along a standard curve (README: "Motion axiom", the cut). A
@@ -41,9 +42,10 @@
 // writes on the element (--ease-<rite>, --motion-<rite>); a place, a size or a turn that changes
 // steps in the same treads, by translate or transform, which the compositor draws without the
 // page. This file declares no keyframes of its own: what arrives or leaves plays the edge's
-// (cut-in and cut-out, lift-in and lift-out), a press plays the controls' stamp, and what only
-// turns or grows in place -- the sparkles, the rings -- is a transition between its two states,
-// so asked to go back half-way it goes back from where it had got to.
+// (cut-in and cut-out, and lift-in for what comes from a step away), a press plays the controls'
+// stamp, and what only turns, grows or shows in place -- the sparkles, the rings, the name -- is a
+// transition between its two states, so asked to go back half-way it goes back from where it had
+// got to.
 //
 // Two layouts, and the <details> element does the work of switching between them:
 //   with scripting the options are placed by js/site.js, which is the only thing that knows how
@@ -53,11 +55,11 @@
 //                  --x, --y, --len, --a, --mx, --my and --k on to each option (where the star
 //                  sits, the ray that reaches it and the point it reaches out from, and its place
 //                  in the order) and --roll on every press (its rolled place in the order the
-//                  chips arrive in), and the rules below are what consume them; --fx and --fy,
-//                  where a chip branches out from, the script reads back itself, to aim each
-//                  chip's arrival and its leaving at the logo. <html data-nav>
-//                  says the script is here; it is set before the body is drawn, so there is no
-//                  flash of the other layout.
+//                  chips arrive in), and the rules below are what consume them; which way each
+//                  star lies from the logo it keeps to itself, and writes on each chip only as the
+//                  slice its arrival or its leaving is cut by (--arrive-angle, --leave-angle).
+//                  <html data-nav> says the script is here; it is set before the body is drawn, so
+//                  there is no flash of the other layout.
 //   without it     a plain cascade of the same chips under the logo, which is what the markup is
 //                  on its own: the disclosure is the browser's, the options are links, and the
 //                  rays are hidden because nothing has measured them. The script falls back to
@@ -71,6 +73,13 @@
 // in the markup) times the step between stars, so the chips come out one after another in an
 // order of the press's own.
 $turn: calc(var(--roll, var(--k, 0)) * var(--motion-stagger, 40ms));
+
+// The pill's room either side of what it holds, and the gap between the mark (an .icon, 24px)
+// and the site's name: said once, because the name's edge is drawn over the whole pill from them
+// (.sparknav-name, below).
+$logo-start: 0.55rem;
+$logo-end: 0.6rem;
+$name-gap: 0.45rem;
 
 // The skip link drops in when a keyboard reaches it: down from the top edge it waits behind, cut
 // in by a slice that sweeps downward the way it travels, in the arrival's treads. When the focus
@@ -135,7 +144,7 @@ $turn: calc(var(--roll, var(--k, 0)) * var(--motion-stagger, 40ms));
   align-items: center;
   min-height: 44px;
   min-width: 44px;
-  padding: 0 0.6rem 0 0.55rem;
+  padding: 0 $logo-end 0 $logo-start;
   border-radius: var(--md-sys-shape-corner-full);
   background: color-mix(in oklab, var(--md-sys-color-surface-container-high) 84%, transparent);
   backdrop-filter: blur(14px);
@@ -177,14 +186,27 @@ $turn: calc(var(--roll, var(--k, 0)) * var(--motion-stagger, 40ms));
 }
 
 // Waxing: js/motion.js puts is-waxing on the summary while a pointer or a visible focus is on it,
-// and the slice steps across from the pointer's side; :hover and :focus-visible are the same rite
-// for a page with no script, at the register's angle.
-.sparknav-logo.is-waxing::after,
-.sparknav-logo:hover::after,
-.sparknav-logo:focus-visible::after {
+// and the slice steps across from the pointer's side. :hover and :focus-visible are the same rite
+// for a page with no engine, at the register's angle -- and only there (html:not([data-cut]); the
+// engine writes data-cut on <html> as it loads), and a hover only where there is a pointer that
+// hovers: on a touch screen a tap leaves :hover stuck on what was tapped, and a rule of its own
+// would answer it a second time, after the engine's own press, and leave the layer on for good.
+// The gate is said with no weight (:where), so each rule keeps the weight it had against the rest.
+@mixin logo-waxed {
   opacity: 0.16;
   mask: cut.slice();
   @include cut.play(in, wax, medium);
+}
+
+.sparknav-logo.is-waxing::after,
+:where(html:not([data-cut])) .sparknav-logo:focus-visible::after {
+  @include logo-waxed;
+}
+
+@media (hover: hover) {
+  :where(html:not([data-cut])) .sparknav-logo:hover::after {
+    @include logo-waxed;
+  }
 }
 
 // Waning: the slice steps back the way it came, and the layer is gone with it.
@@ -201,9 +223,9 @@ $turn: calc(var(--roll, var(--k, 0)) * var(--motion-stagger, 40ms));
 
 // The stamp: down in one cut and back in two (rite-stamp, the controls' own, _controls.scss), and
 // the ink -- a solid of the pill's ink -- grows as a curve from where the press landed (--cut-x,
-// --cut-y; the middle for a key). :active is the same for a page with no script.
+// --cut-y; the middle for a key). :active is the same for a page with no engine.
 .sparknav-logo.is-stamping,
-.sparknav-logo:active {
+:where(html:not([data-cut])) .sparknav-logo:active {
   animation: rite-stamp var(--motion-stamp, var(--motion-short)) var(--ease-stamp, var(--ease-flicker)) both;
 }
 
@@ -211,7 +233,7 @@ $turn: calc(var(--roll, var(--k, 0)) * var(--motion-stagger, 40ms));
 // press even on the layer a hover has already cut in; the wax's cut-in is listed first and carries
 // on as it is, so when the press is over the layer is not cut in afresh.
 .sparknav-logo.is-stamping::after,
-.sparknav-logo:active::after {
+:where(html:not([data-cut])) .sparknav-logo:active::after {
   opacity: 0.2;
   background: currentColor;
   mask: cut.curve();
@@ -239,39 +261,61 @@ $turn: calc(var(--roll, var(--k, 0)) * var(--motion-stagger, 40ms));
   transition: transform var(--motion-seal, var(--motion-long)) var(--ease-seal, var(--ease-arrive));
 }
 
-// The title: its room opens beside the mark and the name is uncovered by the room's own right
-// edge, which steps out over it in the treads of the pill's wax (--ease-wax and --motion-wax,
-// written on the pill and inherited here) and steps back over it in the wane's. One edge, and no
-// mask: the clip is the room. It is the one change in the nav that is laid out, and it is kept
-// because the room is the point -- the pill has to grow for the words to have somewhere to stand
-// -- and because it is cheap: the mark is fixed, so nothing of the page moves with it, and a stair
-// holds its value between treads, so the mark is laid out again once a tread rather than once a
-// frame. It keeps its place in the accessibility tree throughout -- clipped, never display:none --
-// so the logo is always named. It is transparent at rest too, and turns opaque at once as its room
-// starts to open and back only once the room has shut, so the words are only ever shown or hidden
-// by the edge.
+// The title: its room opens beside the mark at once, and the name in it is cut in by the pill's
+// wax -- the same slice at the same angle (--cut-angle, which the engine writes on the pill and the
+// name inherits), stepping across it in the same treads at the same moments (--ease-wax and
+// --motion-wax, written on the pill before is-waxing goes on, so the two are started by one style
+// pass). Waning, the slice takes it back out in the wane's treads, and only once it has gone does
+// the room shut, again at once. The room is the one change in the nav that is laid out, and it is
+// laid out twice per hover, opening and shutting -- never once a tread, as it would be if its width
+// stepped: the edge the visitor sees is the slice, and the room is only somewhere for the words to
+// stand. A transition rather than keyframes, so a pointer that leaves while the name is still
+// being cut in takes it back out from where it had got to. The same holds while the menu is open
+// ([open]), whatever opened it -- a tap, which waxes nothing, as well. It keeps its place in the
+// accessibility tree throughout -- clipped, never display:none -- so the logo is always named. It
+// is transparent at rest too, and turns opaque at once as its room opens and back only once the
+// room has shut, so the words are only ever shown or hidden by the edge. Hover and visible focus
+// open it on their own only for a page with no engine (see the pill's own wax above).
 .sparknav-name {
   max-width: 0;
   margin-left: 0;
   opacity: 0;
   overflow: hidden;
   white-space: nowrap;
+  // The name's edge is the pill's own: its mask is laid over the whole pill -- the mark and the
+  // room either side of the name, and the pill's height -- so the slice that cuts the name in is
+  // the very line, in the very place, that cuts the pill's state layer in. One edge across the
+  // pill, not one for the layer and another, at the same fraction of a smaller box, for the name.
+  mask: cut.slice();
+  mask-clip: no-clip;
+  mask-repeat: no-repeat;
+  mask-size: calc(100% + #{$logo-start} + 24px + #{$name-gap} + #{$logo-end}) 44px;
+  mask-position: calc(-1 * (#{$logo-start} + 24px + #{$name-gap})) center;
   transition:
-    max-width var(--motion-wane, var(--motion-medium)) var(--ease-wane, var(--ease-leave)),
-    margin-left var(--motion-wane, var(--motion-medium)) var(--ease-wane, var(--ease-leave)),
+    --cut var(--motion-wane, var(--motion-medium)) var(--ease-wane, var(--ease-leave)),
+    max-width 0s var(--ease-stair) var(--motion-wane, var(--motion-medium)),
+    margin-left 0s var(--ease-stair) var(--motion-wane, var(--motion-medium)),
     opacity 0s var(--ease-stair) var(--motion-wane, var(--motion-medium));
 }
 
-.sparknav:hover .sparknav-name,
-.sparknav-logo.is-waxing .sparknav-name,
-.sparknav-logo:focus-visible .sparknav-name,
-.sparknav[open] .sparknav-name {
+@mixin name-shown {
+  --cut: 100%;
   max-width: 9rem;
-  margin-left: 0.45rem;
+  margin-left: $name-gap;
   opacity: 1;
-  transition:
-    max-width var(--motion-wax, var(--motion-medium)) var(--ease-wax, var(--ease-stair)),
-    margin-left var(--motion-wax, var(--motion-medium)) var(--ease-wax, var(--ease-stair));
+  transition: --cut var(--motion-wax, var(--motion-medium)) var(--ease-wax, var(--ease-stair));
+}
+
+.sparknav-logo.is-waxing .sparknav-name,
+:where(html:not([data-cut])) .sparknav-logo:focus-visible .sparknav-name,
+.sparknav[open] .sparknav-name {
+  @include name-shown;
+}
+
+@media (hover: hover) {
+  :where(html:not([data-cut])) .sparknav:hover .sparknav-name {
+    @include name-shown;
+  }
 }
 
 // ---- the state interface, hosted in the lightbox -----------------------------------------
@@ -397,15 +441,34 @@ html[data-nav] .sparknav-sky[hidden] {
   opacity: 0;
 }
 
+// Except on the chip of the page the visitor is on (below), which rests set, in two shades split
+// by a curve round its icon: under the pointer it keeps that one edge, its state layer split by
+// the same curve as its fill, so the wax deepens the set surface along the edge it already has
+// rather than laying a second split across it through its centre. The slice still cuts the layer
+// in from the pointer's side; once it has landed there is one edge on the chip, not two. (A press
+// inks it with a solid, below, like any other chip.)
+.sparknav-node[aria-current='page']::after {
+  background: cut.shades-curve(currentColor);
+}
+
 // Waxing: the slice steps across from the pointer's side and the layer stays while the pointer or
 // the focus is on the chip (is-waxing, js/motion.js; :hover and :focus-visible for a page with no
-// script).
-.sparknav-node.is-waxing::after,
-.sparknav-node:hover::after,
-.sparknav-node:focus-visible::after {
+// engine, and a hover only for a pointer that hovers, as on the logo above).
+@mixin node-waxed {
   opacity: var(--state-opacity, var(--md-sys-state-hover-opacity));
   mask: cut.slice();
   @include cut.play(in, wax, medium);
+}
+
+.sparknav-node.is-waxing::after,
+:where(html:not([data-cut])) .sparknav-node:focus-visible::after {
+  @include node-waxed;
+}
+
+@media (hover: hover) {
+  :where(html:not([data-cut])) .sparknav-node:hover::after {
+    @include node-waxed;
+  }
 }
 
 .sparknav-node:focus-visible::after {
@@ -420,10 +483,10 @@ html[data-nav] .sparknav-sky[hidden] {
 }
 
 // The ink of a press: a solid of the chip's ink growing as a curve from where the press landed
-// (--cut-x, --cut-y), at the pressed opacity. :active is the same for a page with no script. Its
+// (--cut-x, --cut-y), at the pressed opacity. :active is the same for a page with no engine. Its
 // own keyframes after the wax's cut-in, as on the logo, so it starts from nothing on every press.
 .sparknav-node.is-stamping::after,
-.sparknav-node:active::after {
+:where(html:not([data-cut])) .sparknav-node:active::after {
   opacity: var(--md-sys-state-pressed-opacity);
   background: currentColor;
   mask: cut.curve();
@@ -434,7 +497,7 @@ html[data-nav] .sparknav-sky[hidden] {
 
 // The stamp: the chip goes down in one cut and comes back in two (rite-stamp, _controls.scss).
 .sparknav .sparknav-node.is-stamping,
-.sparknav .sparknav-node:active {
+:where(html:not([data-cut])) .sparknav .sparknav-node:active {
   animation: rite-stamp var(--motion-stamp, var(--motion-short)) var(--ease-stamp, var(--ease-flicker)) both;
 }
 
@@ -476,11 +539,23 @@ html[data-nav] .sparknav-sky[hidden] {
   transition: color var(--motion-wane, var(--motion-short)) var(--ease-wane, var(--ease-stair));
 }
 
-.sparknav-node.is-waxing .sparknav-gloss,
-.sparknav-node:hover .sparknav-gloss,
-.sparknav-node:focus-visible .sparknav-gloss {
+// Brought up by is-waxing alone where the engine runs: it writes the wax's treads on the chip
+// before the class goes on, so the line steps in the slice's own treads and never in the last
+// hover's. :hover and :focus-visible only for a page with no engine, as on the logo above.
+@mixin gloss-up {
   color: var(--md-sys-color-on-surface);
   transition: color var(--motion-wax, var(--motion-short)) var(--ease-wax, var(--ease-stair));
+}
+
+.sparknav-node.is-waxing .sparknav-gloss,
+:where(html:not([data-cut])) .sparknav-node:focus-visible .sparknav-gloss {
+  @include gloss-up;
+}
+
+@media (hover: hover) {
+  :where(html:not([data-cut])) .sparknav-node:hover .sparknav-gloss {
+    @include gloss-up;
+  }
 }
 
 .sparknav-node[aria-current='page'] .sparknav-gloss {
@@ -561,39 +636,46 @@ html:not([data-nav='live']) .sparknav-node {
 // The branching, in both layouts: js/site.js adds .is-branching on every press, so the
 // constellation branches out again each time instead of only the first time it is rendered --
 // and never the same way. Each chip takes its turn in the order rolled for the press ($turn
-// above), and its arrival is rolled for it (m.arrive in js/site.js: its own treads and length,
-// --ease-develop and --motion-develop), pointed the way it really comes: in the scatter, out of
-// the logo -- it starts a little over half of the way back to the mark (--arrive-x, --arrive-y,
-// from --fx, --fy) and the slice it is cut in by points along its ray (--arrive-angle); in the
-// cascade, from the side the page's roll gives arrivals. Said after the stamp above and as strong,
-// so a press held on a chip without the engine (:active) never stops its arrival half-way.
+// above), and its arrival is rolled for it (js/site.js: its own treads and length,
+// --ease-develop and --motion-develop). It is cut in where it stands, by a slice pointing the way
+// it branches -- out along its ray from the logo (--arrive-angle, which js/site.js aims) -- and it
+// does not move: a chip that travelled in from nearer the logo would pass over the chips beside
+// it on its way, and slide out from under a pointer that had already found it. With its room
+// round it (bleed), so its ring and its shadow come in with it. A chip nothing has aimed -- the
+// cascade a page with no script shows -- is cut in from the page's own side for arrivals. Said
+// after the stamp above and as strong, so a press held on a chip without the engine (:active)
+// never stops its arrival half-way.
 .sparknav-sky.is-branching .sparknav-node {
-  @include cut.develop(develop, long);
-  animation-delay: $turn, $turn;
+  mask: cut.slice(var(--arrive-angle, 0deg));
+  @include cut.bleed;
+  @include cut.play(in, develop, long, arrive);
+  animation-delay: $turn;
 }
 
 // On a constellation that has branched, a stamped chip is still carrying its arrival, held at its
-// end: the stamp plays beside it rather than in its place -- the arrival's two animations first,
-// as they were, so they are not started over from the logo the moment the press lets go -- with
-// the arrival's turn in the order as their delay and none for the stamp.
+// end: the stamp plays beside it rather than in its place -- the arrival first, as it was, so it
+// is not started over the moment the press lets go -- with the arrival's turn in the order as its
+// delay and none for the stamp. The arrival moves nothing, so the stamp's set-down has no place
+// of the arrival's to override: a chip pressed while it is still being cut in stays where the
+// pointer found it.
 .sparknav .sparknav-sky.is-branching .sparknav-node.is-stamping {
   animation:
     cut-in var(--motion-develop, var(--motion-long)) var(--ease-develop, var(--ease-arrive)) both,
-    lift-in var(--motion-develop, var(--motion-long)) var(--ease-develop, var(--ease-arrive)) both,
     rite-stamp var(--motion-stamp, var(--motion-short)) var(--ease-stamp, var(--ease-flicker)) both;
-  animation-delay: $turn, $turn, 0ms;
+  animation-delay: $turn, 0ms;
 }
 
-// The unmaking (js/site.js, close()): each chip goes back toward the logo behind a slice pointing
-// that way (--leave-x, --leave-y and --leave-angle, aimed at the mark by js/site.js, and the
-// leaving's own treads, --ease-unmake), half a step apart in the same rolled order, and nothing
-// is pressable meanwhile. As strong as the stamp and after it, so a chip whose press is what
-// closed the constellation goes with the rest.
+// The unmaking (js/site.js, close()): each chip is cut away where it stands by a slice pointing
+// back along its ray to the logo (--leave-angle, aimed by js/site.js, and the leaving's own treads,
+// --ease-unmake), half a step apart in the same rolled order -- its end nearest the logo going
+// first, as if it were drawn back down its ray -- and nothing is pressable meanwhile. As strong
+// as the stamp and after it, so a chip whose press is what closed the constellation goes with the
+// rest.
 .sparknav-sky.is-unmaking .sparknav-node {
-  @include cut.unmake(unmake, medium);
-  animation-delay:
-    calc(var(--roll, var(--k, 0)) * var(--motion-stagger, 40ms) * 0.5),
-    calc(var(--roll, var(--k, 0)) * var(--motion-stagger, 40ms) * 0.5);
+  mask: cut.slice(var(--leave-angle, 0deg));
+  @include cut.bleed;
+  @include cut.play(out, unmake, medium, leave);
+  animation-delay: calc(var(--roll, var(--k, 0)) * var(--motion-stagger, 40ms) * 0.5);
   pointer-events: none;
 }
 
@@ -739,11 +821,12 @@ html[data-nav='live'] {
 // the nearer first, and each thread is drawn out from its nearer star toward the farther. It is
 // cast once the veil has come down, onto the dark the veil makes, so a star never stands over a
 // page the veil has not yet dimmed. Closing, the same curve draws the sky back into the mark with
-// the outer ring. The stars and the threads themselves never move: they rest where the visitor
-// put them, and nothing in the sky loops, since a loop on up to twenty-eight motes would keep the
-// compositor busy for every frame the constellation stands, for nothing the visitor came for. The
-// dust is absolute inside the fixed mark -- never a fixed layer of its own -- and only the live
-// scatter shows it; the cascade keeps its plain list.
+// the outer ring, and the veil's ghost goes back with it as the same edge: it rose from this heart
+// too, and js/site.js hands it these treads and this length. The stars and the threads themselves
+// never move: they rest where the visitor put them, and nothing in the sky loops, since a loop on
+// up to twenty-eight motes would keep the compositor busy for every frame the constellation
+// stands, for nothing the visitor came for. The dust is absolute inside the fixed mark -- never a
+// fixed layer of its own -- and only the live scatter shows it; the cascade keeps its plain list.
 .sparknav-dust {
   display: none;
 }
@@ -772,7 +855,8 @@ html[data-nav='live'] .sparknav-sky.is-branching .sparknav-dust {
 }
 
 // Drawn back in the outer ring's length and the treads of this closing, both written on the mark
-// by js/site.js.
+// by js/site.js, which hands the same two to the veil's ghost (_lightbox.scss), so the sky and the
+// dimmed page under it go back as one edge.
 html[data-nav='live'] .sparknav-sky.is-unmaking .sparknav-dust {
   @include cut.play(out, cast-ring-out, medium, leave);
 }
@@ -819,6 +903,20 @@ html[data-nav] .sparknav-sky.is-unmaking .sparknav-ray.is-unlanded,
 html[data-nav] .sparknav-sky.is-unmaking .sparknav-dust.is-unlanded {
   animation: none;
   visibility: hidden;
+}
+
+// ---- a constellation that has landed -------------------------------------------------------
+// Once a part's arrival has ended -- a chip cut in, its ray drawn out, the sky uncovered to the far
+// corner -- its edge stands past the far side of its box with nothing left to cut, and a mask held
+// there would be painted for as long as the constellation stands: the sky's the size of the
+// viewport, the same thing the risen veil under it lets go of (_lightbox.scss). So js/site.js marks
+// each part as its own arrival ends (is-landed) and it stands with no mask. Said only of a
+// constellation that is not being unmade, so the unmaking finds every edge where it was and cuts
+// it back; js/site.js takes the mark off on every press, so the next arrival has its edge again.
+html[data-nav] .sparknav-sky.is-branching:not(.is-unmaking) .sparknav-node.is-landed,
+html[data-nav] .sparknav-sky.is-branching:not(.is-unmaking) .sparknav-ray.is-landed,
+html[data-nav] .sparknav-sky.is-branching:not(.is-unmaking) .sparknav-dust.is-landed {
+  mask: none;
 }
 
 // Less motion: the name is there or it is not, the constellation arrives all at once instead of

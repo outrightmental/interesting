@@ -105,6 +105,22 @@ function rows(text, limit) {
   return result;
 }
 
+// The face letters are set in, set only when it is not the one the canvas already holds: setting a
+// canvas's font, even to the face it has, makes the browser bring the page's style up to date
+// first, and the cabinet sets two alphabets, a line and a word letter by letter, so a picture sets
+// it once for each size rather than once for each letter. A canvas spells a face back in its own
+// way (700 as 'bold', a size cut to a few places), so the canvas is asked whether it holds the face
+// as it spelled it when it was first set here: a canvas resized back to its defaults, or restored
+// to a face it saved, is never mistaken. Only a few dozen spellings are kept, so a feed of many
+// cards does not gather them.
+const spelled = new Map();
+function face(g, font) {
+  if (g.font === (spelled.get(font) || font)) return;
+  g.font = font;
+  if (spelled.size >= 48) spelled.clear();
+  spelled.set(font, g.font);
+}
+
 function writeRows(g, text, x, y, width, size) {
   const limit = Math.max(8, Math.floor(width / (size * 0.68)));
   rows(text, limit).forEach((line, index) => {
@@ -170,7 +186,10 @@ function cleaned(value) {
    to. What is showing is the scene's look (wheelLook, grilleLook): every value in the picture that
    a change moves, read off the clock. The scene draws from it, a change moves from it, and a frame
    whose look and size are the ones already on the canvas draws nothing (picture, below) -- so the
-   cabinet draws once per tread while something moves, and not at all while nothing does. */
+   cabinet draws once per tread while something moves, and not at all while nothing does. Once the
+   last change has come the whole of its way (settledAt, below) frame() says the cabinet is at rest
+   (it returns false) and the stage asks for no more frames until the visitor acts, the scene is
+   sized again or it comes back into view. */
 
 // The rite of a piece handed none (no env builder does this; a guard): every change already made,
 // and a surface cut by a plain upright slice from its left side.
@@ -221,6 +240,16 @@ const REVEAL = 1.6; // seconds a solved note takes to be cut in, the longest cha
 // (the stage clears the canvas to resize it) or a new tread of any change draws again.
 function picture(c, look) {
   return c.w + 'x' + c.h + '@' + (c.dpr || 1) + ' ' + JSON.stringify(look);
+}
+
+// The moment on the piece's clock when the last change made has come the whole of its way: the
+// latest of `changes`, each [the moment it was made (-1: there from the start), its span]. Until
+// then something in the scene is still moving, even on a frame between two treads that draws
+// nothing; from then on the scene is at rest.
+function settledAt(changes) {
+  let last = -Infinity;
+  for (const [at, span] of changes) if (at != null && at >= 0) last = Math.max(last, at + span);
+  return last;
 }
 
 /* ---- the letter wheel ----------------------------------------------------------------------- */
@@ -362,13 +391,13 @@ function wheelScene(g, w, h, c, p, look, variant) {
 
   g.textAlign = 'left';
   g.textBaseline = 'middle';
-  g.font = '500 ' + small + 'px ui-monospace, monospace';
+  face(g, '500 ' + small + 'px ui-monospace, monospace');
   g.fillStyle = colors.accent2;
   g.fillText('RECEIVED / ' + p.case, w * 0.06, h * 0.08);
   // The received line, the key word underlined letter by letter so it can be found again. The
   // lines take what room there is between the rule and the wheel.
   g.textAlign = 'center';
-  g.font = '600 ' + size + 'px ui-monospace, monospace';
+  face(g, '600 ' + size + 'px ui-monospace, monospace');
   const lines = rows(received, Math.max(8, Math.floor((w * 0.88) / (size * 0.66))));
   const lineStep = Math.min(size * 1.16, (middle - radius * 1.12 - h * 0.17) / Math.max(1, lines.length));
   let at = 0;
@@ -407,20 +436,24 @@ function wheelScene(g, w, h, c, p, look, variant) {
   g.stroke();
   const outerSize = Math.max(7, Math.round(radius * 0.16));
   const innerSize = Math.max(6, Math.round(radius * 0.13));
+  // Each ring is set whole in its own size, the outer and then the inner, so the font is set once
+  // for each ring rather than twice for each letter.
+  face(g, '600 ' + outerSize + 'px ui-monospace, monospace');
+  g.fillStyle = colors.fg;
   for (let i = 0; i < 26; i++) {
     const a = (i / 26) * Math.PI * 2 - Math.PI / 2;
-    g.font = '600 ' + outerSize + 'px ui-monospace, monospace';
-    g.fillStyle = colors.fg;
     g.fillText(ALPHABET[i], w / 2 + Math.cos(a) * radius * 0.86, middle + Math.sin(a) * radius * 0.86);
+  }
+  face(g, '600 ' + innerSize + 'px ui-monospace, monospace');
+  g.fillStyle = c.alpha(colors.accent2, 0.95);
+  for (let i = 0; i < 26; i++) {
     const b = ((i + look.offset) / 26) * Math.PI * 2 - Math.PI / 2;
-    g.font = '600 ' + innerSize + 'px ui-monospace, monospace';
-    g.fillStyle = c.alpha(colors.accent2, 0.95);
     g.fillText(ALPHABET[i], w / 2 + Math.cos(b) * radius * 0.56, middle + Math.sin(b) * radius * 0.56);
   }
-  g.font = '600 ' + Math.max(8, Math.round(radius * 0.16)) + 'px ui-monospace, monospace';
+  face(g, '600 ' + Math.max(8, Math.round(radius * 0.16)) + 'px ui-monospace, monospace');
   g.fillStyle = colors.accent2;
   g.fillText(String(look.number).padStart(2, '0'), w / 2, middle - radius * 0.1);
-  g.font = '500 ' + Math.max(7, Math.round(radius * 0.13)) + 'px ui-monospace, monospace';
+  face(g, '500 ' + Math.max(7, Math.round(radius * 0.13)) + 'px ui-monospace, monospace');
   g.fillText(look.reverse ? '<<' : '>>', w / 2, middle + radius * 0.12);
   if (roomy) {
     // The letter ledger beside the wheel: the commonest letters of the received line, and what
@@ -428,7 +461,7 @@ function wheelScene(g, w, h, c, p, look, variant) {
     // how the setting is found without trying all twenty-six. It draws only where it fits clear of
     // the ring: a stretched frame can leave no room, and a column across the letters would be
     // worse than none.
-    g.font = '500 ' + small + 'px ui-monospace, monospace';
+    face(g, '500 ' + small + 'px ui-monospace, monospace');
     const column = w / 2 - radius * 1.1 - w * 0.06;
     if (column > small * 6) {
       const ledger = look.ledger.slice(0, Math.max(3, Math.min(LEDGER, Math.floor(radius * 2 / (small * 1.6)))));
@@ -468,7 +501,7 @@ function wheelScene(g, w, h, c, p, look, variant) {
   // cut in across it behind the piece's edge up the stair, resting in two shades, and the note is
   // written in the band, showing as far as the edge has passed -- never a wash.
   const opened = look.revealK > 0;
-  g.font = '500 ' + small + 'px ui-monospace, monospace';
+  face(g, '500 ' + small + 'px ui-monospace, monospace');
   g.textAlign = 'left';
   g.fillStyle = colors.accent2;
   g.fillText(opened ? 'THE NOTE' : 'THE WORD, THROUGH THE WHEEL', w * 0.06, h * 0.79);
@@ -480,7 +513,7 @@ function wheelScene(g, w, h, c, p, look, variant) {
     g.beginPath();
     rite.region(g, 0, h * 0.76, w, h * 0.24, look.revealK);
     g.clip();
-    g.font = '600 ' + size + 'px ui-monospace, monospace';
+    face(g, '600 ' + size + 'px ui-monospace, monospace');
     g.fillStyle = colors.accent2;
     writeRows(g, note, w / 2, h * 0.88, w * 0.88, size);
     g.restore();
@@ -490,18 +523,15 @@ function wheelScene(g, w, h, c, p, look, variant) {
   const cell = Math.min(cellH * 1.1, (w * 0.8) / word.length);
   const x0 = w / 2 - (cell * word.length) / 2;
   const top = h * 0.84;
-  g.font = '600 ' + Math.round(cellH * 0.7) + 'px ui-monospace, monospace';
+  face(g, '600 ' + Math.round(cellH * 0.7) + 'px ui-monospace, monospace');
   for (let i = 0; i < word.length; i++) {
     const x = x0 + cell * i;
     // A cell that has been shown its letter is marked: its tint is cut in behind the edge up its
-    // stair and rests in two shades, and the letter above it is cut on at the stair's first tread.
+    // stair and rests in two shades, and the letter above it is cut on at the stair's first tread
+    // (set below, with the others shown, in their own size).
     if (look.shown[i] > 0) {
       g.fillStyle = c.alpha(colors.accent2, 0.22);
       cover(g, rite, x + cell * 0.08, top, cell * 0.84, cellH, look.shown[i]);
-      g.fillStyle = colors.accent2;
-      g.font = '500 ' + small + 'px ui-monospace, monospace';
-      g.fillText(word[i], x + cell / 2, top - small * 0.7);
-      g.font = '600 ' + Math.round(cellH * 0.7) + 'px ui-monospace, monospace';
     }
     g.strokeStyle = c.alpha(colors.muted, 0.6);
     g.lineWidth = 1;
@@ -509,6 +539,13 @@ function wheelScene(g, w, h, c, p, look, variant) {
     if (look.typed[i]) {
       g.fillStyle = colors.fg;
       g.fillText(look.typed[i], x + cell / 2, top + cellH * 0.52);
+    }
+  }
+  if (look.shown.some((k) => k > 0)) {
+    face(g, '500 ' + small + 'px ui-monospace, monospace');
+    g.fillStyle = colors.accent2;
+    for (let i = 0; i < word.length; i++) {
+      if (look.shown[i] > 0) g.fillText(word[i], x0 + cell * i + cell / 2, top - small * 0.7);
     }
   }
 }
@@ -629,9 +666,14 @@ function wheelPiece(env) {
       }
       draw(c, true);
     },
+    // The clock moves on, and the scene is drawn if a tread has changed it; the wheel is at rest
+    // (false) once every change has come the whole of its way -- at once, for a visitor who asked
+    // for less motion.
     frame(t, dt, c) {
       if (!c.reduced) state.time += Math.max(0, Number(dt) || 0);
       draw(c);
+      return !c.reduced && state.time < settledAt([[state.shiftAt, TURN], [state.reverseAt, SPAN], [state.guessAt, SPAN],
+        ...state.hintAt.map((at) => [at, SPAN]), [state.reveal ? state.solvedAt : -1, REVEAL]]);
     },
     end(c) {
       state.reveal = true;
@@ -824,13 +866,13 @@ function grilleScene(g, w, h, c, p, board, look, variant) {
     g.fillRect(x, y, Math.max(1, v.scale), Math.max(1, v.scale));
   }
 
-  g.font = '500 ' + small + 'px ui-monospace, monospace';
+  face(g, '500 ' + small + 'px ui-monospace, monospace');
   g.textAlign = 'center';
   g.textBaseline = 'middle';
   g.fillStyle = col.accent2;
   g.fillText(opened ? 'ONE KEY / FOUR VIEWS' : 'KEY / ' + p.case, w / 2, h * 0.045);
 
-  g.font = '600 ' + size + 'px ui-monospace, monospace';
+  face(g, '600 ' + size + 'px ui-monospace, monospace');
   for (let index = 0; index < SQUARES; index++) {
     const x = left + index % SIDE * cell;
     const y = top + Math.floor(index / SIDE) * cell;
@@ -902,7 +944,7 @@ function grilleScene(g, w, h, c, p, board, look, variant) {
   g.closePath();
   g.fill();
 
-  g.font = '500 ' + small + 'px ui-monospace, monospace';
+  face(g, '500 ' + small + 'px ui-monospace, monospace');
   g.textAlign = 'left';
   if (!opened) {
     // The four views along the route the visitor has set, the one on the board marked: the mark is
@@ -1054,9 +1096,12 @@ function grillePiece(env, carriedPlan) {
       }
       draw(c, true);
     },
+    // As the wheel's: drawn on a new tread, at rest (false) once every change has come its way.
     frame(t, dt, c) {
       if (!c.reduced) s.t += Math.max(0, Number(dt) || 0);
       draw(c);
+      return !c.reduced && s.t < settledAt([[s.turnAt, TURN], [s.hintAt, SPAN], [s.guessAt, SPAN],
+        [s.reveal ? s.solvedAt : -1, REVEAL]]);
     },
     end(c) {
       s.reveal = true;

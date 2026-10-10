@@ -95,7 +95,10 @@ function lcmOf(list) {
    stood there from the start. Every trigger rolls its own treads (rite.at(k) with the count of
    that trigger in k, rolled once and kept), so a second pick or a second move of the slider steps
    differently from the first while cutting along the same edge. Between clicks and changes
-   nothing is drawn: a frame with nothing new on it is let go (settled). */
+   nothing is drawn: a frame with nothing new on it is let go (settled). Once nothing is on its
+   way -- no clock counting out, no change still coming -- frame() says so (it returns false) and
+   the stage asks for no more frames until the visitor acts, the scene is sized again or it comes
+   back into view. */
 
 // What stands in for a rite on an env that carries none: whatever has not begun stands where it
 // was, whatever has begun is already at its end, and a surface is painted whole.
@@ -225,8 +228,24 @@ function hallBackground(g, w, h, c, v) {
   }
 }
 
+// The face words are set in, set only when it is not the one the canvas already holds: setting a
+// canvas's font, even to the face it has, makes the browser bring the page's style up to date
+// first, and the hall labels every pendulum and every tenth beat of its ruler. Its labels come in a
+// size or two, so a picture sets the font once for each size, not once for each label. A canvas
+// spells a face back in its own way (700 as 'bold', a size cut to a few places), so the canvas is
+// asked whether it holds the face as it spelled it when it was first set here: a canvas resized
+// back to its defaults, or restored to a face it saved, is never mistaken. Only a few dozen
+// spellings are kept, so a feed of many cards does not gather them.
+const spelled = new Map();
+function face(g, font) {
+  if (g.font === (spelled.get(font) || font)) return;
+  g.font = font;
+  if (spelled.size >= 48) spelled.clear();
+  spelled.set(font, g.font);
+}
+
 function text(g, c, line, x, y, size, color, align, width) {
-  g.font = '500 ' + size + 'px system-ui, sans-serif';
+  face(g, '500 ' + size + 'px system-ui, sans-serif');
   g.textAlign = align || 'center';
   g.textBaseline = 'middle';
   g.fillStyle = color || c.colors.fg;
@@ -596,13 +615,15 @@ function rackPiece(env, plan) {
     // The rack counts out to the beat asked for -- after a check the beat named, after the solve
     // the meeting -- once, from beat 0, and rests there: the whole rack is never wound back to
     // play again. Less motion is shown the beat at once. A frame is drawn only when the
-    // escapement has clicked or a change is still coming its way (settled).
+    // escapement has clicked or a change is still coming its way (settled); between two clicks of
+    // a count-out nothing is drawn, but the rack is not at rest until it has counted out to its
+    // beat and the picture on the canvas is the finished one (false).
     frame(t, dt, c) {
       s.t += Math.max(0, dt);
       if (c.done && s.doneAt < 0) s.doneAt = s.t;
       if (s.to >= 0) s.beat = c.reduced ? s.to : Math.min(s.to, s.beat + Math.max(0, dt) / BEAT);
-      if (settled(s, c, rackKey(riteOf(c), s), rackLast(s))) return;
-      draw(c);
+      if (!settled(s, c, rackKey(riteOf(c), s), rackLast(s))) draw(c);
+      return (s.to >= 0 && s.beat < s.to) || !settled(s, c, rackKey(riteOf(c), s), rackLast(s));
     },
     end(c) {
       s.to = meet;
@@ -934,13 +955,15 @@ function springPiece(env, plan) {
     // A run plays out once, from the let-go to the end of the ruler, and rests on its last tooth --
     // the solved run too, played once more from the let-go: the whole pair is never wound back to
     // play again. Less motion is shown the whole run at once. A frame is drawn only when the
-    // escapement has clicked or a change is still coming its way (settled).
+    // escapement has clicked or a change is still coming its way (settled); the pair is at rest
+    // (false) once its run has played to the end of the ruler and the picture on the canvas is
+    // the finished one.
     frame(t, dt, c) {
       s.t += Math.max(0, dt);
       if (c.done && s.doneAt < 0) s.doneAt = s.t;
       if (s.replay) s.replay.t = c.reduced ? span : Math.min(span, s.replay.t + Math.max(0, dt));
-      if (settled(s, c, springKey(riteOf(c), s), springLast(s))) return;
-      draw(c);
+      if (!settled(s, c, springKey(riteOf(c), s), springLast(s))) draw(c);
+      return (s.replay && s.replay.t < span) || !settled(s, c, springKey(riteOf(c), s), springLast(s));
     },
     end(c) {
       s.replay = { k: s.replay ? s.replay.k : sol.value, t: 0 };

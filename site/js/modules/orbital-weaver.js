@@ -82,7 +82,10 @@ function clamp(v, lo, hi) {
    is the scene's look (foldsLook, moireLook): every value in the picture that a change moves,
    read off the clock. The scene draws from it, a change moves from it, and a frame whose look
    and size are the ones already on the canvas draws nothing (picture, below) -- so the loom draws
-   once per tread while something moves, and not at all while nothing does. */
+   once per tread while something moves, and not at all while nothing does. Once the last change
+   has come the whole of its way (settledAt, below) frame() says the loom is at rest (it returns
+   false) and the stage asks for no more frames until the visitor acts, the scene is sized again
+   or it comes back into view. */
 
 // The rite of a piece handed none (no env builder does this; a guard): every change already made,
 // and a surface cut by a plain upright slice from its left side.
@@ -161,6 +164,16 @@ function picture(c, look) {
   return c.w + 'x' + c.h + '@' + (c.dpr || 1) + ' ' + JSON.stringify(look);
 }
 
+// The moment on the piece's clock when the last change made has come the whole of its way: the
+// latest of `changes`, each [the moment it was made (null: not made), its span]. Until then
+// something in the scene is still moving, even on a frame between two treads that draws nothing;
+// from then on the scene is at rest.
+function settledAt(changes) {
+  let last = -Infinity;
+  for (const [at, span] of changes) if (at != null && at >= 0) last = Math.max(last, at + span);
+  return last;
+}
+
 /* ---- shared drawing ------------------------------------------------------------------------- */
 
 function night(g, w, h, env) {
@@ -193,8 +206,21 @@ function sky(g, w, h, env, v) {
   }
 }
 
+// A word on the scene, in a face set only when it is not the one the canvas already holds: setting
+// a canvas's font, even to the face it has, makes the browser bring the page's style up to date
+// first, so a picture whose words share a size sets it once. A canvas spells a face back in its own
+// way (700 as 'bold', a size cut to a few places), so the canvas is asked whether it holds the face
+// as it spelled it when it was first set here: a canvas resized back to its defaults, or restored
+// to a face it saved, is never mistaken. Only a few dozen spellings are kept, so a feed of many
+// cards does not gather them.
+const spelled = new Map();
 function label(g, env, text, x, y, size, align, tone) {
-  g.font = '500 ' + size + 'px system-ui, sans-serif';
+  const face = '500 ' + size + 'px system-ui, sans-serif';
+  if (g.font !== (spelled.get(face) || face)) {
+    g.font = face;
+    if (spelled.size >= 48) spelled.clear();
+    spelled.set(face, g.font);
+  }
   g.textAlign = align || 'left';
   g.textBaseline = 'middle';
   g.fillStyle = tone || env.colors.fg;
@@ -569,10 +595,14 @@ function foldsPiece(env, plan) {
             : n + ' marks on the rim: ' + n + ' folds, you say');
       draw(c, true);
     },
+    // Less motion asked for: the clock stands, and every change came() at once. The loom is at
+    // rest (false) once every change has come the whole of its way -- the solved loom's one turn
+    // the longest of them.
     frame(t, dt, c) {
-      // Less motion asked for: the clock stands, and every change came() at once.
       if (!c.reduced) s.t += dt;
       draw(c);
+      return !c.reduced && s.t < settledAt([[s.turnAt, SPIN], [s.litAt, 1.6], [s.handAt, 1.8], [s.guessAt, 1.2],
+        [s.mirrorAt, 1.2], [s.open ? s.openAt : null, 1], ...s.ticks.map((tick) => [tick.at, 0.6])]);
     },
     // Solved: the answer is cut on, and the loom turns once by one arm's step, so every copy comes
     // to lie where its neighbour lay -- which is what a fold is -- and rests.
@@ -852,9 +882,12 @@ function moirePiece(env, plan) {
       }
       draw(c, true);
     },
+    // As the loom's: drawn on a new tread, at rest (false) once every change has come its way.
     frame(t, dt, c) {
       if (!c.reduced) s.t += dt;
       draw(c);
+      return !c.reduced && s.t < settledAt([[s.finerAt, 1.6], [s.open ? s.openAt : null, 1.8], [s.guessAt, 1.2],
+        [s.bandsAt, 1.2], [s.whichAt, 0.9]]);
     },
     end(c) {
       s.open = true;

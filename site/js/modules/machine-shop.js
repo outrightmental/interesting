@@ -116,10 +116,14 @@ function clamp(v, lo, hi) {
 
    Every cell and mark steps on a roll of its own (rite.at, the same edge with its own treads), and
    a cell pressed twice steps differently the second time, so no two step together. Every change
-   is read against the piece's own clock, recorded in frame(t); a visitor who asked for less
-   motion, and whatever stood there from the start, sees every end state at once. A bench at rest
-   does not move and is not drawn again: frame() draws only while something is on its way, or
-   when the canvas has been sized again. */
+   is read against the piece's own clock, s.t, which frame() moves on by each frame's dt; a
+   visitor who asked for less motion, and whatever stood there from the start, sees every end
+   state at once. A bench at rest does not move and is not drawn again: frame() draws only while
+   something is on its way, or when the canvas has been sized again, and once nothing is it says
+   the bench is at rest (it returns false) and the stage asks for no more frames until the visitor
+   acts, the scene is sized again or it comes back into view. That is why the clock is the piece's
+   own and not the stage's: the stage's runs on through a rest with no frame to read it, and a
+   change made after one, timed by it, would be found already over on the first frame back. */
 
 // The rite of a piece handed none: every change already made, and a surface cut by a plain
 // upright slice from its left side.
@@ -220,7 +224,8 @@ function showing(r, now, span, reduced) {
 }
 
 // Whether frame() has anything to draw: a movement that ends after the last picture drawn, or a
-// canvas sized again since (which clears it). `seen` records the picture just drawn.
+// canvas sized again since (which clears it). `seen` records the picture just drawn, so once a
+// frame has drawn, due() is also whether the bench is still on its way (true) or at rest.
 function due(s, c) {
   const z = s.drawn;
   return !z || z.g !== c.g || z.w !== c.w || z.h !== c.h || z.dpr !== c.dpr || z.t < s.until;
@@ -309,10 +314,17 @@ function ruleTable(g, env, x0, y, span, rule, v, reveal) {
 
 // The face words are set in, set only when it is not the one the canvas already holds: setting a
 // canvas's font, even to the face it has, makes the browser bring the page's style up to date
-// first, and a redraw labels its rows half a dozen times over. The canvas itself is asked what it
-// holds, so a face the rule table set, or a canvas resized back to its defaults, is never mistaken.
+// first, and a redraw labels its rows half a dozen times over. A canvas spells a face back in its
+// own way (700 as 'bold', a size cut to a few places), so the canvas is asked whether it holds the
+// face as it spelled it when it was first set here: a face the rule table set, a canvas resized
+// back to its defaults, or one restored to a face it saved, is never mistaken. Only a few dozen
+// spellings are kept, so a feed of many cards does not gather them.
+const spelled = new Map();
 function face(g, font) {
-  if (g.font !== font) g.font = font;
+  if (g.font === (spelled.get(font) || font)) return;
+  g.font = font;
+  if (spelled.size >= 48) spelled.clear();
+  spelled.set(font, g.font);
 }
 
 function label(g, env, text, x, y, size, align, tone) {
@@ -641,11 +653,13 @@ function nextPiece(env, plan) {
       c.status('cell ' + (col + 1) + ' of row ' + rowName(i) + ' ' + (next[i] ? 'lit' : 'dark') + '; its three parents are bracketed above and their pattern is marked in the table');
       draw(c);
     },
-    // The clock moves every frame; the bench is drawn only while something is on its way, or
-    // when the canvas has been sized again. A bench at rest is not drawn at all.
+    // The clock moves on by every frame's dt; the bench is drawn only while something is on its
+    // way, or when the canvas has been sized again. A bench at rest is not drawn at all, and says
+    // so (false).
     frame(t, dt, c) {
-      s.t = t;
+      s.t += Math.max(0, dt);
       if (due(s, c)) draw(c);
+      return due(s, c);
     },
     end(c) {
       s.open = true;
@@ -877,11 +891,12 @@ function apexPiece(env, plan) {
       }
       draw(c);
     },
-    // As on the next row: the clock moves every frame, the tapes are drawn only while something
-    // is on its way or the canvas has been sized again.
+    // As on the next row: the clock moves on by every frame's dt, the tapes are drawn only while
+    // something is on its way or the canvas has been sized again, and at rest they say so.
     frame(t, dt, c) {
-      s.t = t;
+      s.t += Math.max(0, dt);
       if (due(s, c)) draw(c);
+      return due(s, c);
     },
     end(c) {
       s.pointed = true;

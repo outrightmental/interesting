@@ -11,7 +11,8 @@
 // another, and nothing fades. Powering down, a dust sheet is drawn down over the machine from the
 // top edge -- the side the unlock box stands on -- by a slice stepping down it; the sheet is the
 // whole of the dimming. Then the box comes up out of the part it powers, from below, behind a slice
-// in the way it travels, and once it has landed its words are written on it (js/site.js). Powering
+// in the way it travels, with its controls named on it as it comes, and once it has landed what
+// it says -- its title and its note -- is written on it in one gesture (js/site.js). Powering
 // up is the same backwards: the box goes back down into the machine (_lightbox.scss, the shell's
 // leave rite), and then the sheet is lifted back up off it the way it came -- unless the page takes
 // the part away itself, as the stage does with its gate, and the sheet goes with it. js/site.js

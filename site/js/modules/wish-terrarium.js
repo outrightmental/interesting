@@ -85,11 +85,14 @@ function asked(env) {
    motion, and for whatever stood there from the start (since < 0). Each stem and drip steps on a
    roll of its own (rite.at, the same edge with its own treads), so no two step together.
 
-   What a frame costs. The stage asks for a frame sixty times a second, and the glass has something
-   new to show in very few of them. A piece notes how long each change it makes goes on moving
-   (pace().stir) and draws the change at once; after that a frame does nothing at all unless
-   something is still moving or the canvas is not the one it last drew on (a new size, new
-   colours). While something moves, a frame takes a note of the picture it would draw, which
+   What a frame costs. The stage asks for a frame sixty times a second while the glass says
+   something on it is moving, and the glass has something new to show in very few of them. A piece
+   notes how long each change it makes goes on moving (pace().stir) and draws the change at once;
+   after that a frame does nothing at all unless something is still moving or the canvas is not
+   the one it last drew on (a new size, new colours), and once the last change has been shown at
+   its end frame() says the glass is at rest (it returns false), so the stage asks for no more
+   frames until the visitor acts, the scene is sized again or it comes back into view. While
+   something moves, a frame takes a note of the picture it would draw, which
    costs no pixels (sketch), and paints only when that note differs from the last picture drawn:
    a stair holds each tread for a good part of its span, so most of those frames have nothing new
    in them either. And what never changes while a piece plays -- the glass with its light and
@@ -153,8 +156,10 @@ function level(rite, s, on, at, from, span, reduced) {
 // When a frame has anything new to draw (see "What a frame costs" above). stir(until) says a change
 // has just been made that moves until the piece's clock reaches `until`. due() is whether this
 // frame could show anything new at all: a change still moving, a change not yet shown, or a canvas
-// that is not the one last drawn on. show() puts the picture `paint` makes on the canvas -- if it
-// differs from the one already there (or `force`), and otherwise leaves the canvas alone.
+// that is not the one last drawn on, so once a frame has shown its picture due() is also whether
+// the glass is still on its way (true) or at rest (false). show() puts the picture `paint` makes
+// on the canvas -- if it differs from the one already there (or `force`), and otherwise leaves the
+// canvas alone.
 function pace() {
   let key = null;
   let seenAt = -Infinity;
@@ -195,7 +200,7 @@ function sketch(real, paint) {
       if (k === 'canvas') return real.canvas;
       if (k === 'measureText') {
         return (text) => {
-          if (t.font) real.font = t.font;
+          if (t.font) face(real, t.font);
           return real.measureText(text);
         };
       }
@@ -259,9 +264,25 @@ function cover(g, rite, x, y, w, h, k) {
 
 /* ---- drawing shared by both ---------------------------------------------------------------- */
 
+// The face words are set in, set only when it is not the one the canvas already holds: setting a
+// canvas's font, even to the face it has, makes the browser bring the page's style up to date
+// first, and the glass labels every plant and every stem, so a picture sets it once for each size
+// rather than once for each word. A canvas spells a face back in its own way (700 as 'bold', a size
+// cut to a few places), so the canvas is asked whether it holds the face as it spelled it when it
+// was first set here: a canvas resized back to its defaults, or restored to a face it saved, is
+// never mistaken. Only a few dozen spellings are kept, so a feed of many cards does not gather
+// them.
+const spelled = new Map();
+function face(g, font) {
+  if (g.font === (spelled.get(font) || font)) return;
+  g.font = font;
+  if (spelled.size >= 48) spelled.clear();
+  spelled.set(font, g.font);
+}
+
 function write(g, text, x, y, size, align, tone, weight) {
   g.fillStyle = tone;
-  g.font = (weight || '500') + ' ' + size + 'px system-ui, sans-serif';
+  face(g, (weight || '500') + ' ' + size + 'px system-ui, sans-serif');
   g.textAlign = align || 'left';
   g.textBaseline = 'middle';
   g.fillText(text, x, y);
@@ -662,6 +683,7 @@ function drawWater(g, w, h, env, plan, s, variant, plates) {
   // edge, and its drops and its glow come with them, all up the stem's own stair from the moment
   // it was marked and back down it from the moment it was unmarked.
   const got = watered(plan);
+  const tips = [];
   for (let i = 0; i < n; i++) {
     const x = geo.left + (i + 0.5) * geo.cell;
     const mine = own(rite, 0x5e + i);
@@ -675,10 +697,7 @@ function drawWater(g, w, h, env, plan, s, variant, plates) {
     // Its drops come as the mark climbs, three at the top of the stair, and hang over the tip.
     const drops = Math.round(mark * 3);
     for (let j = 0; j < drops; j++) drop(g, env, x + (j - 1) * 5 * k, tip[1] - (17 + (j % 2) * 6) * k, k * 0.8, 0.8);
-    if (s.hinted.includes(i) && own(rite, 0x41 + i).flicker(came(s, s.hintAt[i], HINT, reduced))) {
-      write(g, got[i] ? 'water it' : 'leave it dry', x, tip[1] - 12 * k, small, 'center', c.accent2, '600');
-    }
-    badge(g, env, x, geo.soilY, String(i + 1), k, small);
+    tips.push(tip);
     const my = geo.soilY + h * 0.065;
     const bw = Math.min(geo.cell * 0.11, 9 * k);
     const gap = bw * 0.3;
@@ -692,10 +711,20 @@ function drawWater(g, w, h, env, plan, s, variant, plates) {
       drop(g, env, x - tiny * 1.6, geo.soilY + h * 0.165, k * 0.9, 0.9);
       write(g, 'last time', x - tiny * 0.9, geo.soilY + h * 0.165, tiny, 'left', env.alpha(c.fg, 0.8));
     }
-    g.font = '500 ' + tiny + 'px system-ui, sans-serif';
+    face(g, '500 ' + tiny + 'px system-ui, sans-serif');
     const lines = [];
     for (const part of RULES[plan.rules[i]].tag.split(', ')) for (const line of wrap(g, part, geo.cell * 0.95)) lines.push(line);
     lines.forEach((line, j) => write(g, line, x, geo.soilY + h * 0.225 + j * tiny * 1.25, tiny, 'center', env.alpha(c.accent2, 0.95)));
+  }
+  // Each plant's number, and the word a hint has given it, are set once every plant is drawn and
+  // tagged, so the canvas's font is set once for them and once for the tags rather than twice for
+  // each plant.
+  for (let i = 0; i < n; i++) {
+    const x = geo.left + (i + 0.5) * geo.cell;
+    if (s.hinted.includes(i) && own(rite, 0x41 + i).flicker(came(s, s.hintAt[i], HINT, reduced))) {
+      write(g, got[i] ? 'water it' : 'leave it dry', x, tips[i][1] - 12 * k, small, 'center', c.accent2, '600');
+    }
+    badge(g, env, x, geo.soilY, String(i + 1), k, small);
   }
   fogged(g, w, h, env, fogOf(s, rite, doneP, 1, reduced), rite);
   plate(plates, 'over', g, w, h, env, (pg) => glazing(pg, w, h, env));
@@ -806,6 +835,7 @@ function waterPiece(env, plan) {
         paced.stir(s.t + (c.reduced ? 0 : settles(1)));
       }
       if (paced.due(s, c)) paced.show(s, c, paint(c));
+      return paced.due(s, c);
     },
     end(c) {
       c.status('watered: ' + answer.map((i) => 'plant ' + (i + 1)).join(', ') + '; the glass fogs over and the rest stay dry');
@@ -894,6 +924,7 @@ function drawAge(g, w, h, env, plan, s, variant, plates) {
   const doneP = s.doneAt >= 0 ? came(s, s.doneAt, FOG, reduced) : 0;
   plate(plates, 'under', g, w, h, env, (pg) => glass(pg, w, h, env, v, true));
   write(g, 'your chosen ranks are below the stems', w / 2, h * 0.05, small, 'center', env.alpha(c.muted, 0.85));
+  const tips = [];
   for (let i = 0; i < 4; i++) {
     const x = geo.left + (i + 0.5) * geo.cell;
     const mine = own(rite, 0x5e + i);
@@ -906,13 +937,20 @@ function drawAge(g, w, h, env, plan, s, variant, plates) {
     column(g, mine, x - geo.cell * 0.46, h * 0.1, geo.cell * 0.92, geo.soilY, pulseOf(rite, s, i, reduced), env.alpha(c.accent2, 0.09));
     const bp = s.doneAt >= 0 ? came(s, s.doneAt + rank * 0.3, 1.1, reduced) : 0;
     const tip = stem(g, env, x, geo.soilY, height, plan.leaves[i], k, i * 1.3 + v.turn * TAU, 0.4 + (i % 3) * 0.25, 0, mine.stair(bp));
+    tips.push(tip);
     write(g, plan.leaves[i] + ' leaves', x, tip[1] - 11 * k, small, 'center', env.alpha(c.fg, 0.9));
-    if (s.hinted.includes(i) && own(rite, 0x41 + i).flicker(came(s, s.hintAt[i], HINT, reduced))) {
-      write(g, a[i] + (a[i] === 1 ? ' week' : ' weeks'), x, tip[1] - 11 * k - small * 1.3, small, 'center', c.accent2, '600');
-    }
-    badge(g, env, x, geo.soilY, LETTERS[i], k, small);
     write(g, plan.rates[i] + (plan.rates[i] === 1 ? ' leaf a week' : ' leaves a week'), x, geo.soilY + h * 0.07, small, 'center', env.alpha(c.accent2, 0.95));
     if (mine.flicker(mp)) write(g, RANKS[rank], x, geo.soilY + h * 0.13, small, 'center', env.alpha(c.fg, 0.8));
+  }
+  // Each stem's letter, and the age a hint has given it, are set once every stem is drawn and
+  // counted, so the canvas's font is set once for them and once for the counts rather than twice
+  // for each stem.
+  for (let i = 0; i < 4; i++) {
+    const x = geo.left + (i + 0.5) * geo.cell;
+    if (s.hinted.includes(i) && own(rite, 0x41 + i).flicker(came(s, s.hintAt[i], HINT, reduced))) {
+      write(g, a[i] + (a[i] === 1 ? ' week' : ' weeks'), x, tips[i][1] - 11 * k - small * 1.3, small, 'center', c.accent2, '600');
+    }
+    badge(g, env, x, geo.soilY, LETTERS[i], k, small);
   }
   fogged(g, w, h, env, fogOf(s, rite, doneP, 0.5, reduced), rite);
   plate(plates, 'over', g, w, h, env, (pg) => glazing(pg, w, h, env));
@@ -1029,6 +1067,7 @@ function agePiece(env, plan) {
         paced.stir(s.t + (c.reduced ? 0 : settles(0.5)));
       }
       if (paced.due(s, c)) paced.show(s, c, paint(c));
+      return paced.due(s, c);
     },
     end(c) {
       c.status('stem ' + LETTERS[order[0]] + ' came up first, ' + oldest + ' weeks ago; the bed blooms oldest to youngest');

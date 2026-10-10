@@ -42,6 +42,14 @@
   @include cut.play(in, veil, medium, wipe);
 }
 
+// Risen: the curve has reached the far corner, and a mask the size of the viewport under a blur
+// would be painted for as long as anything is open with nothing left to cut. js/site.js marks the
+// veil when its rising ends, and takes the mark off again before the veil goes, so the ghost below,
+// a copy of it, has its edge back to step.
+.lightbox-veil.is-risen {
+  mask: none;
+}
+
 // The one thing the veil leaves in front of it, named by the script on whichever child of <body>
 // holds what is open. A native <dialog> opened with showModal() is in the top layer and needs none
 // of this; the logo's constellation and the two fallback boxes (for a browser with no showModal)
@@ -81,10 +89,23 @@ html[data-lightbox] [data-lightbox-aside] .shell-unmake {
 // js/motion.js leaves a ghost of it in its place for one more movement (.is-ghost: a clone with no
 // id, aria-hidden and under no pointer, gone when this ends). The clone carries the veil's own
 // --cut-x and --cut-y, so the ghost goes back the way the veil came: the same curve, stepping in
-// to the control that raised it (--ease-veil-out, rolled by the engine for this leaving).
+// to the control that raised it, for as long as the engine says (--motion-veil-out) and in a stair
+// it rolls for this leaving (--ease-veil-out). Where what goes with it goes by a curve round the
+// same point -- the constellation's sky, drawn back into the logo's heart -- js/site.js hands the
+// ghost that curve's stair (--ease-veil-leave) and the engine its length, so the dimmed page and
+// the sky are taken back by one edge and reach the heart as the last chip goes.
+// It goes back from where the veil had got to (--cut-from, which the engine reckons from the veil's
+// rising as it is hidden and writes on the ghost), so a veil closed while it was still rising does
+// not first jump to the whole of itself; one the engine reckons never began leaves no ghost. So the
+// ghost plays keyframes of its own rather than cut-out, which always starts from the whole.
 .lightbox-veil.is-ghost {
   pointer-events: none;
-  @include cut.play(out, veil-out, medium, wipe);
+  animation: veil-out var(--motion-veil-out, var(--motion-medium)) var(--ease-veil-leave, var(--ease-veil-out, var(--ease-wipe))) both;
+}
+
+@keyframes veil-out {
+  from { --cut: var(--cut-from, 100%); }
+  to { --cut: 0%; }
 }
 
 // ---- the shell's leave rite -------------------------------------------------------------
