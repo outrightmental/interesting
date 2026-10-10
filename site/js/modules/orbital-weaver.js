@@ -46,23 +46,51 @@ function clamp(v, lo, hi) {
 /* ---- the rite: how this module moves ------------------------------------------------------- */
 
 /* env.rite (ctx.rite inside a piece) is the piece's own roll of how it moves (js/variant.js;
-   js/stage.js, "The rite"). Nothing on the loom moves along a formula or cuts without a rite:
-   the loom turns in the ratchet's clicks, one arm's step at a time, never a smooth rotation; the
-   dust drifts in treads and blinks on rite.flicker; a lit arm, a mirrored copy the visitor says
-   is there, and the bands of a read print all develop by their AREA through the matte, cell by
-   cell in the piece's own pattern, and never by a fade; a count the visitor sets arrives as a
-   series of ticks round the rim or under the print; an answer read out blinks on. Every change
-   is read against the piece's own clock, s.t, which frame() advances: a change made at `since`
-   has come came() of its way, which is 1 at once for a visitor who asked for less motion and
-   for whatever stood there from the start. Each thing that moves has a roll of its own
-   (rite.at), so no two step together -- and each TIME it moves it is rolled again (roll(): the
-   thing's seed crossed with how many times it has moved), so a count set twice arrives in two
-   rhythms, every turn of the loom clicks differently, and a turn may slip a tooth past and fall
-   back. */
+   js/stage.js, "The rite"): one clean edge -- a slice at an angle or a curve round a corner, the
+   piece's signature -- and the few treads every change climbs, always forward. Nothing on the
+   loom moves along a formula, and nothing moves without a reason:
 
+     at rest          the loom is waiting, so nothing on it moves: the stars and the dust lie
+                      where they are, and a frame with nothing new in it is not drawn at all
+                      (settled, below).
+     a fold shown     a woven loom turns once, by one arm's step, in rite.ratchet's even clicks,
+                      and rests: a fold is the turn that lays the weave on itself, and that one
+                      turn is the proof of it. A card of the loom does the same once, a few
+                      seconds after it is painted, and then lets the feed go.
+     a thing marked   -- the lit arm, the mirror-image copies once the loom has shown the hand of
+                      the weave, the sigil's box on a loom of one hand, the mirror the visitor
+                      says is there, the finer screen, the bands of a read print -- is cut in
+                      behind the piece's edge as its stair climbs (rite.paint: one path, never
+                      cells; a shape that is not a box is a clip with one paint through it), and
+                      one taken back is cut away back the way the edge came. A tint that marks a
+                      state rests as two shades of its colour split by that edge through its
+                      middle (cover, below).
+     a count set      arrives as ticks round the rim or under the print, stepping from the count
+                      that stood to the one set up the rite's stair, one way, in a few treads.
+     a thing said     -- a mark set on the rim, the hand of the weave, the direction the visitor
+                      says, an answer read out -- is cut on at its roll's moment (rite.flicker),
+                      once, and stays.
+
+   Every change is read against the piece's own clock, s.t, which frame() advances: a change made
+   at `since` has come came() of its way, which is 1 at once for a visitor who asked for less
+   motion and for whatever stood there from the start. Each thing that moves has a roll of its
+   own (rite.at): the same edge, with its own treads and its own moment -- and each TIME it moves
+   it is rolled again (roll(): the thing's seed crossed with how many times it has moved), so a
+   count set twice arrives in two rhythms and no two movements step alike. */
+
+// The rite of a piece handed none (no env builder does this; a guard): every change already made,
+// and a surface cut by a plain upright slice from its left side.
 const STILL = {
-  ease: () => 1, stair: () => 1, ratchet: () => 0, flicker: () => 1, matte: () => true,
-  series: (p, n) => Math.max(1, Math.floor(n || 1)), treads: 1, kind: 'none', cell: 4, at: () => STILL
+  stair: () => 1, ratchet: () => 1, flicker: () => 1,
+  region(g, x, y, w, h, k) {
+    if (k > 0) g.rect(x, y, w * Math.min(1, k), h);
+  },
+  paint(g, x, y, w, h, k, style) {
+    if (k <= 0) return;
+    if (style != null) g.fillStyle = style;
+    g.fillRect(x, y, w * Math.min(1, k), h);
+  },
+  at: () => STILL
 };
 
 function riteOf(env) {
@@ -74,66 +102,63 @@ function came(s, since, span, reduced) {
   return clamp((s.t - since) / span, 0, 1);
 }
 
-function fract(x) {
-  return x - Math.floor(x);
-}
-
 // The roll for the n-th time a thing moves: its own seed crossed with the count, so no two
 // triggers of one movement play alike while the same seed still plays the same piece.
 function roll(rite, base, n) {
   return rite.at(((base | 0) ^ (Math.imul((n | 0) + 1, 0x9e37) | 0)) >>> 0);
 }
 
-// A swing from 0 to 1 composed of the roll's pieces: the ratchet's clicks, and -- on a roll whose
-// curve overshoots -- a slip one tooth past the mark near the end, fallen back from on the last
-// tread. Never an even turn, and not the same swing twice.
-function swing(own, p) {
-  const q = clamp(p, 0, 1);
-  const k = own.ratchet(q);
-  const teeth = Math.max(2, own.treads || 2);
-  const slips = typeof own.ease === 'function' && own.ease(0.9) > 1;
-  if (slips && q >= 0.55 && q < 0.86 && k < 1) return Math.min(1, k + 1 / (teeth - 1));
-  return k;
+// The one turn of a woven loom: how far through its arm's step it has come, in the ratchet's even
+// clicks on a roll of its own, from the moment it began (`since`, on the piece's clock) -- and
+// none at all until it has begun.
+const SPIN = 3.6; // seconds the loom takes to turn one arm's step
+function spun(rite, s, since, reduced) {
+  if (since == null) return 0;
+  return roll(rite, 0x70, 0).ratchet(came(s, since, SPIN, reduced));
 }
 
-// Turns made at x turns along: the whole ones, and the one under way in the ratchet's clicks --
-// each whole turn on a roll of its own, so no turn of the loom clicks like the one before.
-function turns(rite, base, x) {
-  const whole = Math.floor(x);
-  return whole + swing(roll(rite, base, whole), x - whole);
+// How many of `n` notches have arrived at p: up the rite's stair in at most its own few treads --
+// a notch a tread when there are few of them, a few notches a tread when there are many, so a
+// long count is still one short stair and never a ladder.
+function notches(rite, p, n) {
+  return Math.round(rite.stair(p, Math.min(n, rite.treads || 1)) * n);
 }
 
-// The tread reached at p, 0 to n, on the rite's own uneven stair: a count arriving in a series.
-function series(rite, p, n) {
-  if (typeof rite.series === 'function') return rite.series(p, n);
-  return Math.round(rite.stair(p, n) * n);
-}
-
-// A count stepping from the one that stood to the one set, one notch per tread: never a cut to
-// zero and a fresh climb, and never a number that simply changes.
+// A count stepping from the one that stood to the one set, one way: never a cut to zero and a
+// fresh climb, and never a number that simply changes.
 function counted(rite, p, from, to) {
   const diff = to - from;
   if (!diff) return to;
-  return from + Math.round(series(rite, p, Math.abs(diff)) / Math.abs(diff) * diff);
+  return from + Math.sign(diff) * notches(rite, p, Math.abs(diff));
 }
 
-// The cells of a box the matte lets through at coverage k, filled in the current fillStyle: how a
-// surface changes by its area. Cells are rite.cell px, coarser over a wide box so a frame stays
-// cheap, on a grid fixed to the canvas so the pattern holds still while it grows. At k >= 1 every
-// cell is let through. Clip first to keep it to a shape.
-function develop(g, rite, x0, y0, bw, bh, k, size) {
+// A tint `k` of the way to marking its surface, in the current fillStyle: the part of the box the
+// piece's edge has passed, and over the half behind the edge's middle a second coat of the same
+// colour. One edge moves while it comes, and at rest it is two shades of one colour split by that
+// edge through the middle of the box. One path per coat.
+function cover(g, rite, x, y, w, h, k) {
   if (k <= 0) return;
-  const cell = size || Math.max(rite.cell, Math.ceil(Math.max(bw, bh) / 28));
-  const cx0 = Math.floor(x0 / cell);
-  const cy0 = Math.floor(y0 / cell);
-  const cx1 = Math.ceil((x0 + bw) / cell);
-  const cy1 = Math.ceil((y0 + bh) / cell);
-  for (let cy = cy0; cy < cy1; cy++) {
-    for (let cx = cx0; cx < cx1; cx++) {
-      if (k < 1 && !rite.matte(cx, cy, k)) continue;
-      g.fillRect(cx * cell, cy * cell, cell, cell);
-    }
-  }
+  rite.paint(g, x, y, w, h, k);
+  rite.paint(g, x, y, w, h, Math.min(k, 0.5));
+}
+
+function sizeOf(c) {
+  return c.w + 'x' + c.h + '@' + (c.dpr || 1);
+}
+
+// The moment, on the piece's clock, by which a change made at `since` and taking `span` seconds
+// has come the whole of its way; -Infinity for one never made.
+function over(since, span) {
+  return since == null || since < 0 ? -Infinity : since + span;
+}
+
+// Whether a frame has nothing to draw: the canvas holds the picture last drawn at this size, and
+// every change has come the whole of its way by now (`until` is when the last of them does) -- at
+// once, for a visitor who asked for less motion. The loom at rest stands still, so drawing it
+// again would spend a frame on nothing a visitor could see; a new size (the stage clears the
+// canvas to resize it) or a new change draws again.
+function settled(s, c, until) {
+  return s.drawn === sizeOf(c) && (!!c.reduced || s.t > until + 0.1);
 }
 
 /* ---- shared drawing ------------------------------------------------------------------------- */
@@ -148,9 +173,9 @@ function night(g, w, h, env) {
 }
 
 // The persona's stars, faint behind the loom, and a little dust whose number is the
-// configuration's density and whose drift is its turn. The dust drifts in treads -- a step along
-// every period, up the rite's stair -- and every fourth speck blinks out on a roll of its own.
-function sky(g, w, h, env, v, t, rite) {
+// configuration's density and whose place is its turn. The dust lies where it is: it neither
+// drifts nor blinks, because nothing on the loom moves while it waits.
+function sky(g, w, h, env, v) {
   const c = env.colors;
   for (const s of env.stars || []) {
     const x = Number(s && s.x);
@@ -162,16 +187,9 @@ function sky(g, w, h, env, v, t, rite) {
     g.fill();
   }
   const count = Math.max(10, Math.round(36 * v.density));
-  const period = 2.2;
-  // Every period's step is on a roll of its own, and so is every blink of a speck.
-  const drift = (Math.floor(t / period) + roll(rite, 0xd5, Math.floor(t / period)).stair(fract(t / period))) * period;
   for (let i = 0; i < count; i++) {
-    if (i % 4 === 0) {
-      const phase = t / 3.4 + i * 0.09;
-      if (!roll(rite, 0xd0 + (i % 11), Math.floor(phase)).flicker(fract(phase))) continue;
-    }
     g.fillStyle = env.alpha(c.muted, 0.06 + (i % 5) * 0.025);
-    g.fillRect((i * 129.3 + v.turn * 97 + drift * 9) % w, (i * 83.7 + v.turn * 41 + drift * 5) % h, 1, 1);
+    g.fillRect((i * 129.3 + v.turn * 97) % w, (i * 83.7 + v.turn * 41) % h, 1, 1);
   }
 }
 
@@ -263,9 +281,9 @@ function beads(g, pts, r) {
   }
 }
 
-// The area of a shard, developed through the matte at coverage k: clipped to the shard, so only
-// its cells are let through.
-function developShard(g, rite, pts, k, size) {
+// A shard marked, `k` of the way, in the current fillStyle: clipped to the shard, its bounding box
+// covered behind the piece's edge -- one clip and one tint in two shades, never cells.
+function coverShard(g, rite, pts, k) {
   if (k <= 0) return;
   let x0 = Infinity;
   let y0 = Infinity;
@@ -282,40 +300,42 @@ function developShard(g, rite, pts, k, size) {
   pts.forEach((p, i) => (i ? g.lineTo(p.x, p.y) : g.moveTo(p.x, p.y)));
   g.closePath();
   g.clip();
-  develop(g, rite, x0, y0, x1 - x0, y1 - y0, k, size);
+  cover(g, rite, x0, y0, x1 - x0, y1 - y0, k);
   g.restore();
 }
 
-// `s`: how long the loom has been turning (spun, in seconds), whether one arm is lit (a hint)
-// and since when, the visitor's count and whether they say it is mirrored (and since when),
+// Where the loom's first arm points: the configuration's turn, and as much of one arm's step as
+// the loom's one turn has come (spun, above) since it began at `s.turnAt`.
+function loomBase(rite, s, plan, v, reduced) {
+  return v.turn * Math.PI * 2 + ((Math.PI * 2) / plan.k) * spun(rite, s, s.turnAt, reduced);
+}
+
+// `s`: when the loom began its one turn (turnAt; null while it stands), whether one arm is lit (a
+// hint) and since when, the visitor's count and whether they say it is mirrored (and since when),
 // whether the answer is out (and since when); and the piece's clock, t.
-function drawFolds(g, w, h, env, plan, s, variant, t) {
+function drawFolds(g, w, h, env, plan, s, variant) {
   const v = variant || PLAIN;
   const c = env.colors;
   const rite = riteOf(env);
   const reduced = !!env.reduced;
   const geo = loomGeometry(w, h, v);
-  const step = (Math.PI * 2) / plan.k;
-  // The loom turns one arm's step every few seconds, in the ratchet's clicks, never evenly, and
-  // every turn on a roll of its own: some slip a tooth past and fall back.
-  const rot = s.spun ? step * turns(rite, 0x70, s.spun / 3.6) : 0;
-  const base = v.turn * Math.PI * 2 + rot;
+  const base = loomBase(rite, s, plan, v, reduced);
   const size = Math.max(9, Math.min(15, Math.round(geo.m * 0.036)));
   const bead = Math.max(1.4, geo.m * 0.006);
-  const cell = Math.max(rite.cell, Math.ceil(geo.m / 90));
   night(g, w, h, env);
-  sky(g, w, h, env, v, t || 0, rite);
+  sky(g, w, h, env, v);
   g.lineJoin = 'round';
   g.lineWidth = Math.max(1, geo.m * 0.003);
-  // The lit arm is a set surface: its shards develop through the matte from the moment the
-  // hint was asked, their halo thickens up a stair and their stroke blinks to the foreground.
+  // The lit arm is marked: its shards are cut in behind the piece's edge from the moment the hint
+  // was asked, their halo thickens up a stair of four treads and their stroke is cut over to the
+  // foreground at the arm's moment.
   const litRite = rite.at(0x11);
   const litP = s.lit ? came(s, s.litAt, 1.6, reduced) : 0;
   const litK = s.lit ? litRite.stair(litP) : 0;
   const litOn = s.lit && litRite.flicker(litP);
   // The hand of the weave, once the loom has shown it: on a mirrored loom every mirror-image copy
-  // is a set surface and develops its own texture through the matte; on a loom of one hand the
-  // sigil's box in the corner is the set surface instead (below).
+  // is marked, a tint cut in behind the piece's edge; on a loom of one hand the sigil's box in the
+  // corner is marked instead (below). Either is cut on at the hand's moment and climbs its stair.
   const handRite = rite.at(0x1d);
   const handP = s.handAt != null ? came(s, s.handAt, 1.8, reduced) : 0;
   const handK = handP > 0 ? handRite.stair(handP) : 0;
@@ -336,11 +356,11 @@ function drawFolds(g, w, h, env, plan, s, variant, t) {
       thread(g, pts, env.alpha(tone, 0.14));
       if (lit && litK > 0) {
         g.fillStyle = env.alpha(c.fg, 0.4);
-        developShard(g, litRite, pts, litK, cell);
+        coverShard(g, litRite, pts, litK);
       }
       if (sign < 0 && handOn && handK > 0) {
         g.fillStyle = env.alpha(c.accent2, 0.38);
-        developShard(g, handRite, pts, handK, cell);
+        coverShard(g, handRite, pts, handK);
       }
       g.fillStyle = env.alpha(fore ? c.fg : tone, 0.95);
       beads(g, pts, bead);
@@ -351,10 +371,10 @@ function drawFolds(g, w, h, env, plan, s, variant, t) {
   g.beginPath();
   g.arc(geo.cx, geo.cy, geo.R, 0, Math.PI * 2);
   g.stroke();
-  // The visitor's count, as ticks round the rim: they arrive one tread at a time, a series,
-  // stepping from the count that stood to the one set, on the roll of that setting.
-  // The marks the visitor set on the rim themselves, one per tap, each blinking on where it was
-  // set and turning with the loom; failing those, the count from the knob, as even ticks.
+  // The marks the visitor set on the rim themselves, one per tap, each cut on at its own moment
+  // where it was set and turning with the loom; failing those, the count from the knob, as even
+  // ticks round the rim that step from the count that stood to the one set in a few treads, one
+  // way, on the roll of that setting.
   if (s.ticks && s.ticks.length) {
     g.strokeStyle = env.alpha(c.accent2, 0.9);
     g.lineWidth = Math.max(1.5, geo.m * 0.005);
@@ -386,23 +406,23 @@ function drawFolds(g, w, h, env, plan, s, variant, t) {
   g.fillStyle = env.alpha(c.bg, 0.55);
   g.fillRect(bx, by, box, box);
   if (!plan.mirrored && handK > 0 && handOn) {
-    // One hand: the sigil's box is the set surface, textured through the matte.
+    // One hand: the sigil's box is marked, its tint cut in behind the edge, resting in two shades.
     g.fillStyle = env.alpha(c.accent, 0.22);
-    develop(g, handRite, bx, by, box, box, handK, Math.max(2, Math.min(cell, 3)));
+    cover(g, handRite, bx, by, box, box, handK);
   }
   g.strokeStyle = env.alpha(c.muted, 0.4);
   g.strokeRect(bx, by, box, box);
   const key = copyOf(plan, bx + box * 0.5, by + box * 0.56, box * 0.46, -Math.PI / 2, 0, 1);
-  // The mirror the visitor says is there: the key's mirror image develops into the corner
-  // through the matte when they say so, and leaves back down the stair when they take it back --
-  // each flip of the toggle on a roll of its own.
+  // The mirror the visitor says is there: the key's mirror image is cut into the corner behind the
+  // piece's edge when they say so, and cut away back down the stair when they take it back -- each
+  // flip of the toggle on a roll of its own.
   const mirrorRite = roll(rite, 0x3d, s.mirrors);
   const mirrorP = mirrorRite.stair(came(s, s.mirrorAt, 1.2, reduced));
   const mirrorK = s.mirror ? mirrorP : 1 - mirrorP;
   if (mirrorK > 0) {
     const twin = copyOf(plan, bx + box * 0.5, by + box * 0.56, box * 0.46, -Math.PI / 2, 0, -1);
     g.fillStyle = env.alpha(c.accent2, 0.45);
-    developShard(g, mirrorRite, twin, mirrorK, Math.max(2, Math.min(cell, 3)));
+    coverShard(g, mirrorRite, twin, mirrorK);
     g.strokeStyle = env.alpha(c.accent2, 0.5);
     g.lineWidth = 1;
     g.setLineDash([2, 3]);
@@ -415,9 +435,9 @@ function drawFolds(g, w, h, env, plan, s, variant, t) {
   g.fillStyle = c.fg;
   beads(g, key, bead);
   label(g, env, 'the sigil', bx + box * 0.5, by + box * 0.1, Math.max(8, size - 2), 'center', env.alpha(c.muted, 0.9));
-  // What the loom has said of the hand blinks on under the sigil.
+  // What the loom has said of the hand is cut on under the sigil at the hand's moment.
   if (handOn) label(g, env, plan.mirrored ? 'both hands' : 'one hand', bx + box * 0.5, by + box * 0.92, Math.max(8, size - 2), 'center', env.alpha(c.accent2, 0.95));
-  // The answer blinks on.
+  // The answer is cut on at its moment.
   if (s.open && rite.at(0x0a).flicker(came(s, s.openAt, 1, reduced))) {
     label(g, env, WORDS[plan.k] + ' folds' + (plan.mirrored ? ', mirrored' : ', one hand'), w - geo.m * 0.03, h - geo.m * 0.04, size, 'right', c.accent2);
   }
@@ -425,15 +445,16 @@ function drawFolds(g, w, h, env, plan, s, variant, t) {
 
 function foldsStill() {
   return {
-    spun: 0, lit: false, litAt: null, open: false, openAt: null, t: 0, guess: null, guessAt: null, mirror: false, mirrorAt: null,
+    turnAt: null, lit: false, litAt: null, open: false, openAt: null, t: 0, guess: null, guessAt: null, mirror: false, mirrorAt: null,
     // How many times each thing has moved (the roll for its next movement), and the count the
-    // ticks step from; and when the loom showed the hand of the weave.
-    guesses: 0, guessFrom: 0, mirrors: 0, handAt: null, ticks: []
+    // ticks step from; when the loom showed the hand of the weave; and the size the loom was last
+    // drawn at (settled, above).
+    guesses: 0, guessFrom: 0, mirrors: 0, handAt: null, ticks: [], drawn: null
   };
 }
 
-function foldsPreview(g, w, h, env, plan, t) {
-  drawFolds(g, w, h, env, plan, foldsStill(), env.variant, t || 0);
+function foldsPreview(g, w, h, env, plan) {
+  drawFolds(g, w, h, env, plan, foldsStill(), env.variant);
 }
 
 function foldsPiece(env, plan) {
@@ -446,7 +467,13 @@ function foldsPiece(env, plan) {
     'the weave ' + (plan.mirrored ? 'shows both hands: every copy is laid with its mirror image' : 'is all of one hand: no copy is mirrored')
   ];
   const s = Object.assign(foldsStill(), { shown: 0, ticksSet: 0 });
-  const draw = (c) => drawFolds(c.g, c.w, c.h, c, plan, s, env.variant, s.t);
+  const draw = (c) => {
+    drawFolds(c.g, c.w, c.h, c, plan, s, env.variant);
+    s.drawn = sizeOf(c);
+  };
+  // When the last change on the loom has come the whole of its way: until then, frames draw.
+  const until = () => Math.max(over(s.litAt, 1.6), over(s.handAt, 1.8), over(s.guessAt, 1.2),
+    over(s.mirrorAt, 1.2), over(s.openAt, Math.max(1, SPIN)), ...s.ticks.map((tick) => over(tick.at, 0.6)));
   return {
     title: foldsTitle(plan),
     brief: 'A working of the loom. A sigil of ' + WORDS[plan.motif.length] + ' joined points is laid on the midnight loom and turned about the centre a number of times: the folds. On some looms every copy is laid down with its mirror image as well, so the weave shows both hands. The sigil, as laid once, stands in the corner.',
@@ -520,9 +547,7 @@ function foldsPiece(env, plan) {
         c.status('tap over an arm, nearer the rim, to mark it');
         return;
       }
-      const step = (Math.PI * 2) / plan.k;
-      const base = v.turn * Math.PI * 2 + (s.spun ? step * turns(riteOf(c), 0x70, s.spun / 3.6) : 0);
-      const rel = Math.atan2(dy, dx) - base;
+      const rel = Math.atan2(dy, dx) - loomBase(riteOf(c), s, plan, v, !!c.reduced);
       const near = s.ticks.findIndex((tick) => {
         const d = Math.abs((((tick.rel - rel) % (Math.PI * 2)) + Math.PI * 3) % (Math.PI * 2) - Math.PI);
         return d < 0.2;
@@ -540,12 +565,15 @@ function foldsPiece(env, plan) {
     frame(t, dt, c) {
       // Less motion asked for: the clock stands, and every change came() at once.
       if (!c.reduced) s.t += dt;
-      if (c.done && !c.reduced) s.spun += dt;
+      if (settled(s, c, until())) return;
       draw(c);
     },
+    // Solved: the answer is cut on, and the loom turns once by one arm's step -- a fold is the turn
+    // that lays the weave on itself -- and rests.
     end(c) {
       s.open = true;
       s.openAt = s.t;
+      if (s.turnAt == null) s.turnAt = s.t;
       c.status('the weave turns: ' + WORDS[plan.k] + ' folds' + (plan.mirrored ? ', mirrored' : ''));
       draw(c);
     }
@@ -624,35 +652,35 @@ function drawMoire(g, w, h, env, plan, s, variant) {
   screenLines(g, boxes.both, plan.first, 0.5, phase, firstTone);
   // The second screen sits half a pitch along, which centres its bands in the print.
   screenLines(g, boxes.both, plan.second, 1, phase, secondTone);
-  // The finer screen, once the press has said which: its box is a set surface and develops its
-  // texture through the matte, blinking as it comes.
+  // The finer screen, once the press has said which: its box is marked, a tint cut in behind the
+  // piece's edge up its stair, resting in two shades.
   const finerRite = rite.at(0x7f);
   const finerP = s.finerAt != null ? came(s, s.finerAt, 1.6, reduced) : 0;
-  if (finerP > 0 && finerRite.flicker(finerP)) {
+  if (finerP > 0) {
     const finer = plan.second > plan.first ? boxes.both : boxes.alone;
     g.fillStyle = plan.second > plan.first ? env.alpha(c.accent2, 0.16) : env.alpha(env.mix(c.accent, c.fg, 0.35), 0.16);
-    develop(g, finerRite, finer.x, finer.y, finer.w, finer.h, finerRite.stair(finerP), Math.max(rite.cell, Math.ceil(finer.h / 36)));
+    cover(g, finerRite, finer.x, finer.y, finer.w, finer.h, finerRite.stair(finerP));
   }
-  // The bands, once the print is read: each develops through the matte from the moment the
-  // answer came out, its core at full coverage and its shoulders at half, blinking on the way the
-  // rite's flicker has it, and holds -- never a wash.
+  // The bands, once the print is read: one edge crosses the print from the moment the answer came
+  // out and lights every band's core it has passed, up its stair, and they hold -- never a wash.
+  // The cores are one path, filled once through the part of the print the edge has passed.
   const bandRite = rite.at(0x6a);
   const openP = s.open ? came(s, s.openAt, 1.8, reduced) : 0;
   const bandK = s.open ? bandRite.stair(openP) : 0;
-  if (bandK > 0 && bandRite.flicker(openP)) {
+  if (bandK > 0) {
     const apart = Math.abs(plan.first - plan.second);
-    const cell = Math.max(rite.cell, Math.ceil(boxes.both.h / 40));
-    g.fillStyle = env.alpha(c.accent2, 0.2);
+    const span = boxes.both.w / apart;
     g.save();
     g.beginPath();
-    g.rect(boxes.both.x, boxes.both.y, boxes.both.w, boxes.both.h);
+    bandRite.region(g, boxes.both.x, boxes.both.y, boxes.both.w, boxes.both.h, bandK);
     g.clip();
+    g.fillStyle = env.alpha(c.accent2, 0.2);
+    g.beginPath();
     for (let j = 0; j < apart; j++) {
       const x = boxes.both.x + ((j + 0.5) / apart) * boxes.both.w;
-      const span = boxes.both.w / apart;
-      develop(g, bandRite, x - span / 2, boxes.both.y, span, boxes.both.h, bandK * 0.3, cell);
-      develop(g, bandRite, x - span / 4, boxes.both.y, span / 2, boxes.both.h, bandK, cell);
+      g.rect(x - span / 4, boxes.both.y, span / 2, boxes.both.h);
     }
+    g.fill();
     g.restore();
   }
   g.strokeStyle = env.alpha(c.muted, 0.45);
@@ -665,8 +693,8 @@ function drawMoire(g, w, h, env, plan, s, variant) {
     g.lineTo(box.x + box.w, box.y + box.h);
     g.stroke();
   }
-  // The visitor's count, as ticks under the print, arriving one tread at a time: a series that
-  // steps from the count that stood to the one set, on the roll of that setting.
+  // The visitor's count, as ticks under the print that step from the count that stood to the one
+  // set in a few treads, one way, on the roll of that setting.
   if (s.guess) {
     const n = counted(roll(rite, 0x9e, s.guesses), came(s, s.guessAt, 1.2, reduced), s.guessFrom, s.guess);
     g.strokeStyle = env.alpha(c.accent2, 0.85);
@@ -679,10 +707,11 @@ function drawMoire(g, w, h, env, plan, s, variant) {
     }
     g.stroke();
   }
-  // The bands the press has counted out: that many brackets over the print, arriving in a series.
+  // The bands the press has counted out: that many brackets over the print, arriving up a stair of
+  // a few treads.
   if (s.bandsAt != null) {
     const apart = Math.abs(plan.first - plan.second);
-    const n = series(rite.at(0x2b), came(s, s.bandsAt, 1.2, reduced), apart);
+    const n = notches(rite.at(0x2b), came(s, s.bandsAt, 1.2, reduced), apart);
     g.strokeStyle = env.alpha(c.accent2, 0.9);
     g.lineWidth = Math.max(1.5, size * 0.12);
     g.beginPath();
@@ -697,12 +726,12 @@ function drawMoire(g, w, h, env, plan, s, variant) {
   label(g, env, 'the first screen alone: ' + plan.first + ' lines', boxes.alone.x, boxes.alone.y - size * 0.9, size, 'left', env.mix(c.accent, c.fg, 0.35));
   label(g, env, 'the second screen', boxes.both.x, boxes.both.y - size * 0.9, size, 'left', c.accent2);
   label(g, env, ' laid over the first', boxes.both.x + g.measureText('the second screen').width, boxes.both.y - size * 0.9, size, 'left', env.alpha(c.fg, 0.9));
-  // The direction the visitor says, blinking on beside the print's title, each choice on a roll
-  // of its own.
+  // The direction the visitor says, cut on beside the print's title at its moment, each choice on
+  // a roll of its own.
   if (s.which && roll(rite, 0x5c, s.whiches).flicker(came(s, s.whichAt, 0.9, reduced))) {
     label(g, env, s.which === 'more' ? 'more, you say' : 'fewer, you say', boxes.both.x + boxes.both.w, boxes.both.y - size * 0.9, size, 'right', env.alpha(c.accent2, 0.9));
   }
-  // The answer blinks on.
+  // The answer is cut on at its moment.
   if (s.open && rite.at(0x0a).flicker(came(s, s.openAt, 1, reduced))) {
     const apart = Math.abs(plan.first - plan.second);
     label(g, env, WORDS[apart] + (apart === 1 ? ' band: ' : ' bands: ') + plan.second + ' lines on the second screen', w - boxes.pad, h * 0.95, size, 'right', c.accent2);
@@ -713,8 +742,9 @@ function moireStill() {
   return {
     open: false, openAt: null, t: 0, guess: null, guessAt: null, which: null, whichAt: null,
     // How many times each thing has moved (the roll for its next movement), the count the ticks
-    // step from, and when the press showed which screen is finer and how many bands there are.
-    guesses: 0, guessFrom: 0, whiches: 0, finerAt: null, bandsAt: null
+    // step from, when the press showed which screen is finer and how many bands there are, and
+    // the size the print was last drawn at (settled, above).
+    guesses: 0, guessFrom: 0, whiches: 0, finerAt: null, bandsAt: null, drawn: null
   };
 }
 
@@ -731,7 +761,13 @@ function moirePiece(env, plan) {
     'the print shows ' + WORDS[apart] + (apart === 1 ? ' broad band' : ' broad bands') + ' across it'
   ];
   const s = Object.assign(moireStill(), { shown: 0 });
-  const draw = (c) => drawMoire(c.g, c.w, c.h, c, plan, s, env.variant);
+  const draw = (c) => {
+    drawMoire(c.g, c.w, c.h, c, plan, s, env.variant);
+    s.drawn = sizeOf(c);
+  };
+  // When the last change on the print has come the whole of its way: until then, frames draw.
+  const until = () => Math.max(over(s.finerAt, 1.6), over(s.bandsAt, 1.2), over(s.guessAt, 1.2),
+    over(s.whichAt, 0.9), over(s.openAt, 1.8));
   return {
     title: moireTitle(plan),
     brief: 'The seal is two screens of upright lines laid over each other: the first has ' + plan.first + ' lines across the width, the second a different count. Where their lines fall together and then apart, broad bands appear across the print, and there are as many bands as the two counts differ by.',
@@ -799,6 +835,7 @@ function moirePiece(env, plan) {
     },
     frame(t, dt, c) {
       if (!c.reduced) s.t += dt;
+      if (settled(s, c, until())) return;
       draw(c);
     },
     end(c) {
@@ -839,14 +876,18 @@ export default {
   paint(g, w, h, env) {
     const d = deal(env);
     if (d.moire) moirePreview(g, w, h, env, d.plan);
-    else foldsPreview(g, w, h, env, d.plan, 0);
+    else foldsPreview(g, w, h, env, d.plan);
   },
   animate(g, w, h, env, t) {
     const d = deal(env);
     // The printed screens of the moire puzzle do not move: the still picture is the whole of it.
-    if (d.moire) return false;
-    // The card's loom turns in the ratchet's clicks, an arm's step every few seconds.
-    drawFolds(g, w, h, env, d.plan, Object.assign(foldsStill(), { spun: t, t }), env.variant, t);
+    if (d.moire || env.reduced) return false;
+    // The card's loom turns once, by one arm's step, in the ratchet's even clicks from the moment it
+    // was painted -- the turn that lays the weave on itself, which is what a fold is -- and rests.
+    // Its last click falls before SPIN is out, so from then on there is nothing new to draw and the
+    // loop lets it go; a card first seen after that keeps the still picture it was painted with.
+    if (t >= SPIN) return false;
+    drawFolds(g, w, h, env, d.plan, Object.assign(foldsStill(), { turnAt: 0, t }), env.variant);
   },
   spark(env) {
     const d = deal(env);
@@ -867,7 +908,7 @@ export default {
       text: 'One sigil turned about the centre of the midnight loom, perhaps with its mirror image. Count the folds, and say whether the weave is mirrored.',
       mono: WORDS[plan.motif.length] + ' points / ? folds',
       aspect: '1 / 1',
-      paint: (ctx, cw, ch, cardEnv) => foldsPreview(ctx, cw, ch, cardEnv, plan, 0),
+      paint: (ctx, cw, ch, cardEnv) => foldsPreview(ctx, cw, ch, cardEnv, plan),
       of: plan
     };
   },

@@ -54,13 +54,18 @@ function asked(env) {
    turns out to be yours is lit by it; the visitor's own sky, once the puzzle is solved, flips in
    treads and turns in rite.ratchet's clicks to meet it; the postcard's finale draws each light's
    travel in treads. A surface that stays changed rests as two shades of its colour split by the
-   edge through its middle, never a flat wash or a pattern. The lights themselves hold still: they
-   wait for nothing, so they do not twinkle -- and on the postcard a light that varied in size
-   could be read as a clue to its depth. Every change is read against the piece's own clock, s.t,
-   which frame() advances: a change made at `since` has come came() of its way, which is 1 at once
-   for a visitor who asked for less motion, and for whatever stood there from the start (since <
-   0). Each light and each sky moves on a roll of its own (rite.at), so no two step together, and
-   every roll keeps the piece's edge. */
+   edge through its middle, never a flat wash or a pattern, and one that is given back or taken
+   up again mid-way sets out from where it stood, never from either end. A line of words that
+   changes keeps the words that stood until the new ones' moment and is cut over to them once, so
+   nothing blanks and comes back. The lights themselves hold still: they wait for nothing, so they
+   do not twinkle -- and on the postcard a light that varied in size could be read as a clue to
+   its depth. Every change is read against the piece's own clock, s.t, which frame() advances: a
+   change made at `since` has come came() of its way, which is 1 at once for a visitor who asked
+   for less motion, and for whatever stood there from the start (since < 0). Each light, each sky
+   and each line moves on a roll of its own, and each time it moves it is rolled again (roll():
+   the thing's seed crossed with how many times it has moved), so no two step together and no
+   press plays like the one before -- every roll keeping the piece's edge. Once every change has
+   landed the scene is not drawn again until something changes. */
 
 // The rite of a piece handed none: everything stands where it ends, and a surface is cut by a
 // plain upright slice from its left side.
@@ -82,34 +87,85 @@ function riteOf(env) {
   return env && env.rite ? env.rite : STILL;
 }
 
-// The rite rolled afresh for one thing this module moves, kept with the rite it was rolled from so
-// a frame rolls each one once rather than thirty times a second.
-const OWN = new WeakMap();
-function own(rite, n) {
-  let kept = OWN.get(rite);
+// The roll for the n-th time a thing moves: its own seed crossed with the count, so no two
+// triggers of one movement play alike while the same seed still plays the same piece. Kept with
+// the rite it was rolled from, so a frame reuses a roll rather than making it afresh thirty times
+// a second; the keeping is let go now and then so a long visit does not hoard them.
+const ROLLS = new WeakMap();
+function roll(rite, base, n) {
+  const seed = ((base | 0) ^ (Math.imul((n | 0) + 1, 0x9e37) | 0)) >>> 0;
+  let kept = ROLLS.get(rite);
   if (!kept) {
     kept = new Map();
-    OWN.set(rite, kept);
+    ROLLS.set(rite, kept);
   }
-  let r = kept.get(n);
-  if (!r) {
-    r = rite.at(n);
-    kept.set(n, r);
+  let own = kept.get(seed);
+  if (!own) {
+    if (kept.size > 96) kept.clear();
+    own = rite.at(seed);
+    kept.set(seed, own);
   }
-  return r;
+  return own;
 }
 
+// How far a change made at `since` has come, over `span` seconds. Each change asked about is also
+// kept in s.until, the moment the last of them lands, so a frame after that knows it has nothing
+// new to draw (settled, below).
 function came(s, since, span, reduced) {
   if (reduced || since == null || since < 0) return 1;
+  if (!(s.until >= since + span)) s.until = since + span;
   return Math.max(0, Math.min(1, (s.t - since) / span));
 }
 
-// How far a thing that is `on` has come up its stair since onAt, or back down it since offAt.
-function level(rite, s, on, onAt, offAt, span, reduced) {
-  if (on) return rite.stair(came(s, onAt, span, reduced));
-  if (offAt == null || offAt < 0) return 0;
-  return 1 - rite.stair(came(s, offAt, span, reduced));
+// The size and the state the canvas was last drawn at.
+function sizeOf(c) {
+  return c.w + 'x' + c.h + '@' + (c.dpr || 1) + (c.done ? ' solved' : '');
 }
+
+// Whether a frame has nothing to draw: the canvas holds the picture last drawn at this size and
+// state, and every change in that picture had come the whole of its way when it was drawn. The
+// sky at rest stands still, so drawing it again would spend a frame on nothing a visitor could
+// see; a new size (the stage clears the canvas to resize it), the solve, or a new change draws
+// again.
+function settled(s, c) {
+  return s.drawn === sizeOf(c) && s.drawnAt > (s.until == null ? -Infinity : s.until);
+}
+
+// Draws the scene and notes when and at what size it was drawn.
+function drawn(s, c, paint) {
+  paint();
+  s.drawn = sizeOf(c);
+  s.drawnAt = s.t;
+}
+
+// A surface that comes and goes -- a light's halo, a chosen sky's fill: whether it is coming
+// (`on`), the level it stood at when that last changed (`from`), when (`at`), and how many times
+// it has moved (`n`, the roll for its movement).
+function surface() {
+  return { on: false, from: 0, at: null, n: 0 };
+}
+
+// Where a surface stands: up its stair from where it stood toward whole while it comes, down it
+// toward nothing while it goes -- always from where it stood, so a change of mind mid-way never
+// jumps it to either end first.
+function level(sf, rite, base, s, span, reduced) {
+  if (sf.at == null) return sf.on ? 1 : 0;
+  const q = roll(rite, base, sf.n).stair(came(s, sf.at, span, reduced));
+  return sf.on ? sf.from + (1 - sf.from) * q : sf.from * (1 - q);
+}
+
+// The surface set coming or going from now, from where it stands, on a fresh roll.
+function turnTo(sf, on, rite, base, s, span, reduced) {
+  if (sf.on === on) return;
+  sf.from = level(sf, rite, base, s, span, reduced);
+  sf.on = on;
+  sf.at = s.t;
+  sf.n += 1;
+}
+
+// How long a light's halo and a chosen sky's fill take to come or go.
+const HALO = 0.6;
+const CHOSEN = 0.8;
 
 // A surface `k` of the way to being there, in the current fillStyle: the part of the box the
 // piece's edge has passed, and over the half behind the edge's middle a second coat of the same
@@ -303,13 +359,32 @@ function postcardLayout(w, h) {
 }
 
 // The state the postcard is drawn from. Every moment is on the piece's own clock, and -1 is
-// "from the start" (so a preview, and a light never touched, stand still).
+// "from the start" (so a preview, and a light never touched, stand still). `rounds` counts the
+// orders tapped out whole, the roll for each round's rings; `cleared` keeps, for each light of the
+// last round, how far its ring had come round and whether its place was showing, so the round
+// goes back from there.
 function postcardState(n, t) {
   return {
-    t, order: null, orderAt: -1, hinted: [], hintAt: new Array(n).fill(-1),
-    taps: [], tapAt: new Array(n).fill(-1), cleared: [], clearedAt: -1,
-    lit: -1, litAt: -1, wasLit: -1, wasLitAt: -1, doneAt: -1
+    t, order: null, orderAt: -1, orders: 0, orderWas: '', hinted: [], hintAt: new Array(n).fill(-1),
+    taps: [], tapAt: new Array(n).fill(-1), cleared: [], clearedAt: -1, rounds: 0,
+    lit: -1, halo: Array.from({ length: n }, surface), doneAt: -1
   };
+}
+
+// The rings and places of a round of taps as they stand: light i's ring, how far round, and
+// whether its place has been cut on.
+function tapShown(s, rite, reduced, i) {
+  const own = roll(rite, 0x51 + i, s.rounds);
+  const tp = came(s, s.tapAt[i], 0.7, reduced);
+  return { ring: own.ratchet(tp), said: !!own.flicker(tp) };
+}
+
+// The line under the views: the words that stood until a new order's words are cut over them at
+// their moment, on the roll of that ordering -- once, so the line never blanks.
+function orderShown(s, rite, reduced) {
+  if (!s.order) return '';
+  if (roll(rite, 0x0d, s.orders).flicker(came(s, s.orderAt, 0.9, reduced))) return 'nearest to farthest: ' + s.order.map((i) => LETTERS[i]).join('  ');
+  return s.orderWas;
 }
 
 function postcardScene(g, w, h, c, plan, s, v) {
@@ -357,14 +432,13 @@ function postcardScene(g, w, h, c, plan, s, v) {
     g.rect(left, box.top, box.width, box.height);
     g.clip();
     plan.points.forEach((p, i) => {
-      const mine = own(rite, 0x11 + i);
       const shift = pane === 1 ? shiftOf(plan.ranks[i], n) : 0;
       const x = left + (p.x - shift) / 100 * box.width;
       const y = box.top + p.y / 100 * box.height;
       if (pane === 1 && s.doneAt >= 0) {
         // The finale: the shift itself, drawn as the line each light travelled, laid in treads
         // from where the left eye had it, each light on its own roll and a little after the last.
-        const laid = mine.stair(came(s, s.doneAt + i * 0.15, 1.3, reduced));
+        const laid = roll(rite, 0x31 + i, 0).stair(came(s, s.doneAt + i * 0.15, 1.3, reduced));
         if (laid > 0) {
           const x0 = left + p.x / 100 * box.width;
           g.strokeStyle = c.alpha(c.colors.accent2, 0.7);
@@ -376,41 +450,44 @@ function postcardScene(g, w, h, c, plan, s, v) {
         }
       }
       // The light last touched: its halo is cut in by the piece's edge, and the one touched before
-      // it gives its halo back the same way.
-      const hot = i === s.lit ? mine.stair(came(s, s.litAt, 0.6, reduced))
-        : i === s.wasLit ? 1 - mine.stair(came(s, s.wasLitAt, 0.6, reduced)) : 0;
-      star(g, c, { x, y }, glow, mine, hot);
+      // it gives its halo back the same way, from wherever it had come to.
+      const hot = level(s.halo[i], rite, 0x11 + i, s, HALO, reduced);
+      star(g, c, { x, y }, glow, rite, hot);
       font(g, size * 0.9, 600);
       g.textAlign = 'left';
       g.fillStyle = c.alpha(hot >= 0.5 ? c.colors.accent2 : c.colors.fg, 0.9);
       g.fillText(LETTERS[i], x + size * 0.55, y - size * 0.6);
       const tapped = s.taps.indexOf(i);
-      const gone = s.cleared.indexOf(i);
+      const gone = s.cleared.findIndex((was) => was.light === i);
       if (tapped >= 0) {
         // A tapped light: its ring comes round in clicks and its place is cut on at its moment.
-        const tp = came(s, s.tapAt[i], 0.7, reduced);
-        ring(g, c, x, y, 0.8, size * 0.6, mine.ratchet(tp));
-        if (mine.flicker(tp)) {
+        const shown = tapShown(s, rite, reduced, i);
+        ring(g, c, x, y, 0.8, size * 0.6, shown.ring);
+        if (shown.said) {
           font(g, size * 0.7);
           g.fillStyle = c.alpha(c.colors.accent2, 0.95);
           g.fillText(String(tapped + 1), x + size * 0.55, y + size * 0.55);
         }
       } else if (gone >= 0 && s.clearedAt >= 0) {
-        // The order complete: the rings go back round the way they came, and each place is cut
-        // out at its moment.
+        // The order complete: each ring goes back round the way it came from as far as it had
+        // come, and each place that was showing is cut out at its moment -- one that had not yet
+        // been cut on is never shown.
+        const was = s.cleared[gone];
+        const own = roll(rite, 0x91 + i, s.rounds);
         const cp = came(s, s.clearedAt, 0.7, reduced);
         if (cp < 1) {
-          ring(g, c, x, y, 0.8, size * 0.6, 1 - mine.ratchet(cp));
-          if (!mine.flicker(cp)) {
+          ring(g, c, x, y, 0.8, size * 0.6, was.ring * (1 - own.ratchet(cp)));
+          if (was.said && !own.flicker(cp)) {
             font(g, size * 0.7);
             g.fillStyle = c.alpha(c.colors.accent2, 0.95);
             g.fillText(String(gone + 1), x + size * 0.55, y + size * 0.55);
           }
         }
       } else if (s.hinted.includes(i)) {
+        const own = roll(rite, 0x71 + i, 0);
         const hp = came(s, s.hintAt[i], 1, reduced);
-        ring(g, c, x, y, 0.9, size * 0.7, mine.ratchet(hp));
-        if (mine.flicker(hp)) {
+        ring(g, c, x, y, 0.9, size * 0.7, own.ratchet(hp));
+        if (own.flicker(hp)) {
           font(g, size * 0.75);
           g.fillStyle = c.alpha(c.colors.accent2, 0.95);
           g.fillText(PLACE[plan.ranks[i]], x + size * 0.55, y + size * 0.6);
@@ -422,9 +499,8 @@ function postcardScene(g, w, h, c, plan, s, v) {
   font(g, size);
   g.textAlign = 'center';
   g.fillStyle = c.alpha(c.colors.fg, 0.8);
-  if (s.order && own(rite, 0x0d).flicker(came(s, s.orderAt, 0.9, reduced))) {
-    g.fillText('nearest to farthest: ' + s.order.map((i) => LETTERS[i]).join('  '), w / 2, h * 0.86, w * 0.9);
-  }
+  const line = orderShown(s, rite, reduced);
+  if (line) g.fillText(line, w / 2, h * 0.86, w * 0.9);
   g.fillStyle = c.alpha(c.colors.muted, 0.85);
   g.fillText('the same lights; the nearer, the farther it shifts', w / 2, h * 0.94, w * 0.92);
 }
@@ -440,11 +516,14 @@ function postcardPiece(env, plan) {
   const answer = postcardOrder(plan);
   const s = postcardState(n, 0);
   s.order = range(n);
-  const draw = (c) => postcardScene(c.g, c.w, c.h, c, plan, s, v);
+  const draw = (c) => drawn(s, c, () => postcardScene(c.g, c.w, c.h, c, plan, s, v));
   const inPlace = (order) => order.filter((item, i) => item === answer[i]).length;
-  function settle(order) {
+  // A new order: the line keeps the words on it until the new ones are cut over them.
+  function settle(order, c) {
+    s.orderWas = orderShown(s, riteOf(c), c.reduced);
     s.order = order.slice();
     s.orderAt = s.t;
+    s.orders += 1;
   }
   return {
     title: postcardTitle(plan),
@@ -473,7 +552,7 @@ function postcardPiece(env, plan) {
     },
     apply(id, value, c) {
       if (id === 'order' && isPerm(value, n)) {
-        settle(value);
+        settle(value, c);
         c.status('nearest to farthest: ' + s.order.map((i) => LETTERS[i]).join(', '));
       }
       if (id === 'hint') {
@@ -508,11 +587,13 @@ function postcardPiece(env, plan) {
         }
       });
       if (best < 0 || bd > Math.min(c.w, c.h) * 0.08) return;
+      const rite = riteOf(c);
       if (s.lit !== best) {
-        s.wasLit = s.lit;
-        s.wasLitAt = s.t;
+        // The halo moves to the light touched: the last one gives its halo back and this one's
+        // comes, each from wherever it stood.
+        if (s.lit >= 0) turnTo(s.halo[s.lit], false, rite, 0x11 + s.lit, s, HALO, c.reduced);
+        turnTo(s.halo[best], true, rite, 0x11 + best, s, HALO, c.reduced);
         s.lit = best;
-        s.litAt = s.t;
       }
       if (s.taps.includes(best)) {
         c.status('light ' + LETTERS[best] + ' is already in your order; keep going');
@@ -522,9 +603,11 @@ function postcardPiece(env, plan) {
       s.taps.push(best);
       s.tapAt[best] = s.t;
       if (s.taps.length === n) {
-        settle(s.taps);
-        s.cleared = s.taps;
+        settle(s.taps, c);
+        // The round is cleared from where each ring and place stood, on the next round's roll.
+        s.cleared = s.taps.map((light) => Object.assign({ light }, tapShown(s, rite, c.reduced, light)));
         s.clearedAt = s.t;
+        s.rounds += 1;
         s.taps = [];
         c.set('order', s.order.slice());
         c.status('nearest to farthest: ' + s.order.map((i) => LETTERS[i]).join(', ') + '; check it');
@@ -536,6 +619,7 @@ function postcardPiece(env, plan) {
     frame(t, dt, c) {
       if (!c.reduced) s.t += dt;
       if (c.done && s.doneAt < 0) s.doneAt = s.t;
+      if (settled(s, c)) return;
       draw(c);
     },
     end(c) {
@@ -724,21 +808,35 @@ function skyBox(g, c, pts, x, y, side, v, opts) {
   }
 }
 
-// The state the four skies are drawn from; -1 is "from the start".
+// The state the four skies are drawn from; -1 is "from the start". Each sky's fill is a surface
+// that comes when it is chosen and goes when another is.
 function whichState(t) {
   return {
-    t, choice: -1, choiceAt: -1, wasChoice: -1, wasChoiceAt: -1, turns: 1, mirror: false,
-    hinted: [], hintAt: [-1, -1, -1, -1], doneAt: -1, live: false, saidAt: -1
+    t, choice: -1, chosen: [surface(), surface(), surface(), surface()], turns: 1, mirror: false,
+    hinted: [], hintAt: [-1, -1, -1, -1], doneAt: -1, live: false, saidAt: -1, saids: 0, saidWas: ''
   };
+}
+
+// The summary line's words for the settings as they stand.
+function summaryWords(s) {
+  return (s.choice >= 0 ? 'sky ' + SKIES[s.choice] : 'no sky yet') + ', ' + turnsWord(s.turns) + (s.mirror ? ', flipped first' : ', not flipped');
+}
+
+// The summary line: the words that stood until a new setting's words are cut over them at their
+// moment, on the roll of that setting -- once, so the line never blanks; a setting that leaves the
+// words as they were changes nothing.
+function summaryShown(s, rite, reduced) {
+  if (roll(rite, 0x5a1d, s.saids).flicker(came(s, s.saidAt, 0.8, reduced))) return summaryWords(s);
+  return s.saidWas;
 }
 
 // The visitor's own sky once the puzzle is solved: flipped left for right in treads, if it was
 // flipped, then turned clockwise in the ratchet's even clicks to lie as the true sky lies.
 function reference(plan, rite, s, reduced) {
   if (s.doneAt < 0) return plan.points;
-  const fp = plan.mirror ? own(rite, 0xf11).stair(came(s, s.doneAt, 1, reduced)) : 0;
+  const fp = plan.mirror ? roll(rite, 0xf11, 0).stair(came(s, s.doneAt, 1, reduced)) : 0;
   const tp = came(s, s.doneAt + (plan.mirror ? 1 : 0), 2.4, reduced);
-  const ang = own(rite, 0x7a7).ratchet(tp) * plan.turns * Math.PI / 2;
+  const ang = roll(rite, 0x7a7, 0).ratchet(tp) * plan.turns * Math.PI / 2;
   const cos = Math.cos(ang);
   const sin = Math.sin(ang);
   return plan.points.map((p) => {
@@ -766,17 +864,16 @@ function whichScene(g, w, h, c, plan, s, v) {
   skyBox(g, c, reference(plan, rite, s, reduced), lay.left, lay.top, lay.side, v, { rite, border: c.alpha(c.colors.accent, 0.8) });
   plan.skies.forEach((sky, i) => {
     const cell = lay.cells[i];
-    const mine = own(rite, 0x200 + i);
     // Chosen: the sky is cut in by the edge; the one chosen before it gives its fill back the
-    // same way, the region shrinking.
-    const chosenK = level(mine, s, s.choice === i, s.choiceAt, s.wasChoice === i ? s.wasChoiceAt : -1, 0.8, reduced);
+    // same way, the region shrinking from wherever it had come to.
+    const chosenK = level(s.chosen[i], rite, 0x200 + i, s, CHOSEN, reduced);
     // A decoy: a veil is cut over it by the edge, and the word comes with its first tread.
     const hp = s.hinted.includes(i) ? came(s, s.hintAt[i], 1.1, reduced) : 0;
-    const decoyK = hp > 0 ? mine.stair(hp) : 0;
+    const decoyK = hp > 0 ? roll(rite, 0x240 + i, 0).stair(hp) : 0;
     // Yours, once solved: a brighter surface of its own is cut in by the edge over the chosen
     // fill (the sky found is the sky chosen, so the chosen fill is already whole underneath).
     const fp = s.doneAt >= 0 && i === plan.which ? came(s, s.doneAt, 1.6, reduced) : 0;
-    const foundK = fp > 0 ? mine.stair(fp) : 0;
+    const foundK = fp > 0 ? roll(rite, 0x260 + i, 0).stair(fp) : 0;
     const found = foundK > 0;
     skyBox(g, c, sky, cell.x, cell.y, cell.side, v, {
       rite, label: SKIES[i],
@@ -792,10 +889,8 @@ function whichScene(g, w, h, c, plan, s, v) {
   g.textAlign = 'center';
   g.textBaseline = 'middle';
   if (s.live) {
-    if (own(rite, 0x5a1d).flicker(came(s, s.saidAt, 0.8, reduced))) {
-      g.fillStyle = c.alpha(c.colors.fg, 0.8);
-      g.fillText((s.choice >= 0 ? 'sky ' + SKIES[s.choice] : 'no sky yet') + ', ' + turnsWord(s.turns) + (s.mirror ? ', flipped first' : ', not flipped'), w / 2, h * 0.9, w * 0.9);
-    }
+    g.fillStyle = c.alpha(c.colors.fg, 0.8);
+    g.fillText(summaryShown(s, rite, reduced), w / 2, h * 0.9, w * 0.9);
   } else {
     g.fillStyle = c.alpha(c.colors.muted, 0.85);
     g.fillText('one of the four is your sky, turned; the others are near misses', w / 2, h * 0.9, w * 0.92);
@@ -812,8 +907,14 @@ function whichPiece(env, plan) {
   const v = dials(env);
   const s = whichState(0);
   s.live = true;
-  const draw = (c) => whichScene(c.g, c.w, c.h, c, plan, s, v);
-  const said = () => { s.saidAt = s.t; };
+  const draw = (c) => drawn(s, c, () => whichScene(c.g, c.w, c.h, c, plan, s, v));
+  // A setting is about to change: the summary keeps the words on it until the new ones are cut
+  // over them, on a fresh roll.
+  const saying = (c) => {
+    s.saidWas = summaryShown(s, riteOf(c), c.reduced);
+    s.saidAt = s.t;
+    s.saids += 1;
+  };
   return {
     title: whichTitle(plan),
     brief: 'Your sigil, turned. One of the four small skies is your ' + WORDS[n] + ' lights, turned clockwise by one, two or three quarter turns -- and perhaps flipped left for right before it was turned. The other three are near misses: the same lights, with a few nudged out of place.',
@@ -842,28 +943,32 @@ function whichPiece(env, plan) {
       draw(c);
     },
     apply(id, value, c) {
+      const rite = riteOf(c);
       if (id === 'sky') {
         const k = Number(value);
         if ([0, 1, 2, 3].includes(k) && k !== s.choice) {
-          s.wasChoice = s.choice;
-          s.wasChoiceAt = s.t;
+          // The sky chosen before gives its fill back and this one's comes, each from wherever
+          // it stood.
+          saying(c);
+          if (s.choice >= 0) turnTo(s.chosen[s.choice], false, rite, 0x200 + s.choice, s, CHOSEN, c.reduced);
+          turnTo(s.chosen[k], true, rite, 0x200 + k, s, CHOSEN, c.reduced);
           s.choice = k;
-          s.choiceAt = s.t;
         }
-        said();
         c.status('sky ' + SKIES[s.choice] + '; now how far it turned, and whether it was flipped');
       }
       if (id === 'turns') {
         const k = Math.round(Number(value));
-        if (k >= 1 && k <= 3) s.turns = k;
-        said();
+        if (k >= 1 && k <= 3 && k !== s.turns) {
+          saying(c);
+          s.turns = k;
+        }
         c.status(turnsWord(s.turns) + ' clockwise');
       }
-      if (id === 'mirror') {
+      if (id === 'mirror' && !!value !== s.mirror) {
+        saying(c);
         s.mirror = !!value;
-        said();
-        c.status(s.mirror ? 'flipped left for right, then turned' : 'turned, never flipped');
       }
+      if (id === 'mirror') c.status(s.mirror ? 'flipped left for right, then turned' : 'turned, never flipped');
       if (id === 'hint') {
         const next = s.hinted.length < helps
           ? range(4).find((k) => k !== plan.which && !s.hinted.includes(k)) : undefined;
@@ -889,6 +994,7 @@ function whichPiece(env, plan) {
     frame(t, dt, c) {
       if (!c.reduced) s.t += dt;
       if (c.done && s.doneAt < 0) s.doneAt = s.t;
+      if (settled(s, c)) return;
       draw(c);
     },
     end(c) {
@@ -919,7 +1025,7 @@ export default {
   id: 'wish-constellation',
   needsSky: true,
   // The card is a still picture: its lights wait for nothing, so it has no animate and the feed
-  // never repaints it.
+  // never animates it (it paints it again only for a new size or a new roll).
   paint(g, w, h, env) {
     const d = deal(env);
     if (d.postcard) postcardPreview(g, w, h, env, d.plan);

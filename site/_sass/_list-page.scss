@@ -1,5 +1,6 @@
 // The mood atlas and site map share a reading column and filled list cards.
 @use 'type';
+@use 'cut';
 
 .list-page-main {
   grid-template-columns: minmax(0, var(--main-max));
@@ -66,15 +67,17 @@
   @include type.scale(body-medium);
 }
 
-// A line of a list -- a page of the site map, an orientation of the atlas -- arrives through the
-// matte ladder from the roll's geometry, each a stagger after the one before (README: "Motion
-// axiom"): list-in is the page's own ladder, and the engine's m.arrive (asked for by the atlas's
-// script for every line it writes) composes a rite of the line's own and names it --rite-develop,
-// so no two lines come in by the same cuts.
+// A line of a list -- a page of the site map, an orientation of the atlas -- arrives (README:
+// "Motion axiom", the cut): it lifts in from the side the page's roll gives (--arrive-x,
+// --arrive-y) behind a slice square to the way it travels (--arrive-angle), the edge and the lift
+// stepping in the same landing stair, each line a stagger after the one before. The whole list
+// comes from one side, so it reads as one gesture; the treads are each line's own where a script
+// writes them (the atlas asks js/motion.js to cut each line it writes, m.cut), and the page's
+// arrival stair where none does.
 .orientations > li,
 .list-stack > li,
 .list-grid > li {
-  animation: var(--rite-develop, list-in) var(--motion-list-in, var(--motion-long)) var(--ease-list-in, var(--ease-arrive)) both;
+  @include cut.develop;
   animation-delay: calc(var(--k, 0) * var(--motion-stagger, 40ms) + var(--jit, 0ms));
 }
 
@@ -86,60 +89,12 @@
   }
 }
 
-@keyframes list-in {
-  0%, 13.9% {
-    mask: linear-gradient(transparent, transparent);
-    -webkit-mask: linear-gradient(transparent, transparent);
-    transform: translate(var(--arrive-x, 0px), var(--arrive-y, 24px)) rotate(var(--arrive-rot, 0deg)) skewX(var(--arrive-skew, 0deg));
-  }
-
-  14%, 31.9% {
-    mask: var(--matte-1);
-    -webkit-mask: var(--matte-1);
-    transform: translate(var(--arrive-x, 0px), var(--arrive-y, 24px)) rotate(var(--arrive-rot, 0deg)) skewX(var(--arrive-skew, 0deg));
-  }
-
-  32%, 47.9% {
-    mask: var(--matte-3);
-    -webkit-mask: var(--matte-3);
-    transform: translate(calc(var(--arrive-x, 0px) * 0.55), calc(var(--arrive-y, 24px) * 0.55)) rotate(calc(var(--arrive-rot, 0deg) * 0.5));
-  }
-
-  48%, 59.9% {
-    mask: var(--matte-2);
-    -webkit-mask: var(--matte-2);
-    transform: translate(calc(var(--arrive-x, 0px) * 0.55), calc(var(--arrive-y, 24px) * 0.55)) rotate(calc(var(--arrive-rot, 0deg) * 0.5));
-  }
-
-  60%, 75.9% {
-    mask: var(--matte-4);
-    -webkit-mask: var(--matte-4);
-    transform: translate(calc(var(--arrive-x, 0px) * 0.2), calc(var(--arrive-y, 24px) * 0.2));
-  }
-
-  76%, 87.9% {
-    mask: var(--matte-5);
-    -webkit-mask: var(--matte-5);
-    transform: translate(0px, calc(var(--arrive-y, 24px) * -0.08)) scale(var(--pop-over, 1.012));
-  }
-
-  88%, 95.9% {
-    mask: var(--matte-top);
-    -webkit-mask: var(--matte-top);
-    transform: none;
-  }
-
-  96%, 100% {
-    mask: none;
-    -webkit-mask: none;
-    transform: none;
-  }
-}
-
+// Less motion: every line is simply there, whole and in place.
 @media (prefers-reduced-motion: reduce) {
   .orientations > li,
   .list-stack > li,
   .list-grid > li {
+    mask: none;
     animation: none;
   }
 }
@@ -165,11 +120,7 @@
   display: inline-block;
   min-height: 24px;
   color: var(--md-sys-color-primary);
-  // Underlined in nothing at rest, so the line's colour and thickness have a stair to climb and
-  // come home by (_base.scss, a link in the words) instead of a line that is there or is not.
-  text-decoration-line: underline;
-  text-decoration-color: transparent;
-  text-decoration-thickness: 1px;
+  // Its underline, its plate and its press are a link in the words' (_base.scss).
   @include type.scale(title-large);
   @include type.rite;
   --role-size: 1.2rem;

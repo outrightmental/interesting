@@ -39,6 +39,7 @@
 @use 'sass:list';
 @use 'sass:map';
 @use 'type';
+@use 'cut';
 
 $moods: (
   tender: (#140d13, #46293c, #ffc6d6, #ffe4c8),
@@ -113,134 +114,149 @@ $registers-of: (
   }
 }
 
-// ---- the shift of modality -----------------------------------------------------------------
-// The site changing what it is wearing: js/motion.js writes <html data-shifting> for one rolled
-// moment whenever the mood, the world or the featured piece changes on :root, and for that moment
-// the rite's words are thrown, blurred and let land in their new face -- a flicker of the frame
-// as the whole modality turns over, along a curve rolled for this shift alone, by the distance
-// and the slant the same roll gave it. The palette's own crossfade (js/stage.js) and the sky's
-// wash (_panel.scss) run under it. It is the words that flicker and never a control: an
-// instruction stays where a visitor can read it. Every wearer of the rite is thrown by the mixin
-// itself (type.rite); the two below are thrown whole without wearing it: the stage's head with
-// all its lines (its title is thrown with it, not on its own), and a card's overline.
-html[data-shifting] .stage-head,
-html[data-shifting] .card-overline {
-  animation: rite-shift var(--motion-rite-shift, var(--motion-shift, 640ms)) var(--ease-rite-shift, var(--ease-stair)) both;
+// What a slice at `$angle` has not yet passed at --cut: the far side of cut.slice()'s edge. Where
+// one thing is cut in by a slice and another, in the same place, is cut away by it -- a question
+// replacing the last, a landing replacing the one before, soot lifted off a print -- this is the
+// mask of what goes, so the two changes are one edge.
+@function unpassed($angle) {
+  @return linear-gradient(#{$angle}, transparent var(--cut, 0%), #000 var(--cut, 0%));
 }
 
+// Room round a cut for what a box paints outside itself: its focus ring, and on the frame the
+// read seal half a rem beyond it. The mask an arrival leaves on is the size of the border box, and
+// held at the end of the arrival it would clip both for as long as the box stands; drawn over the
+// box and a margin round it, the one edge crosses them with the rest. Declared after the `mask`
+// shorthand, which resets these. (_persona.scss and _nav.scss keep the same four lines.)
+@mixin bleed($by: 16px) {
+  mask-clip: no-clip;
+  mask-repeat: no-repeat;
+  mask-size: calc(100% + #{2 * $by}) calc(100% + #{2 * $by});
+  mask-position: (-$by) (-$by);
+}
+
+// ---- the shift of modality -----------------------------------------------------------------
+// The site changing what it is wearing: js/motion.js writes <html data-shifting> for one moment
+// whenever the mood, the world or the featured piece changes on :root, rolls the page's stairs
+// again under the new temperament, and cuts the words that carry the page into their new face.
+// The stage's head is cut in whole, with all its lines, by one slice at the register's slant
+// (--reveal-angle, the same edge a line of words is revealed by) stepping across it in the
+// shift's treads, while its axes, size and tracking step to the new register along the stair
+// (type.rite). Its title, which the engine reveals as well, is cut at the same slant, so it shows
+// only the edge that is behind -- one edge to a line -- and goes on to the end of its own reveal
+// when the head's has stopped, never back. Every other wearer of the rite is thrown by the mixin
+// itself (type.rite); the palette's own change (js/stage.js) and the sky's (_panel.scss) run under
+// it. A card's overline is not cut: a card wears its own world's register, which a shift of the
+// site does not change, so cutting it would cost the page and show nothing.
+html[data-shifting] .stage-head {
+  --cut: 100%;
+  mask: cut.slice(var(--reveal-angle, 100deg));
+  animation: rite-shift var(--motion-shift, 640ms) var(--ease-rite-shift, var(--ease-stair)) both;
+}
+
+// The slice crossing the head, from nothing to the whole of it.
 @keyframes rite-shift {
-  // The turn-over in cuts: the words are eaten down the ladder in the old face, thrown to the
-  // rolled distance and slant, cut to the axes' extremes -- black, then hairline and wholly soft,
-  // then the alternates on -- and climb back through the ladder landing on the new register's
-  // own axes. No opacity, no blur: every frame a held pair.
-  0%, 11.9% {
-    mask: var(--matte-5);
-    -webkit-mask: var(--matte-5);
-    transform: none;
-    font-variation-settings: 'opsz' var(--rite-opsz, 72), 'wght' var(--rite-weight, 400), 'SOFT' var(--rite-soft, 20), 'WONK' var(--rite-wonk, 0);
+  from {
+    --cut: 0%;
   }
 
-  12%, 23.9% {
-    mask: var(--matte-3);
-    -webkit-mask: var(--matte-3);
-    transform: translateX(var(--shift-x, 3px)) skewX(var(--shift-skew, -4deg));
-    font-variation-settings: 'opsz' 144, 'wght' 900, 'SOFT' 0, 'WONK' 0;
-  }
-
-  24%, 37.9% {
-    mask: var(--matte-1);
-    -webkit-mask: var(--matte-1);
-    transform: translateX(calc(var(--shift-x, 3px) * -0.5)) skewX(calc(var(--shift-skew, -4deg) * -0.4));
-    font-variation-settings: 'opsz' 9, 'wght' 100, 'SOFT' 100, 'WONK' 0;
-  }
-
-  38%, 51.9% {
-    mask: var(--matte-2);
-    -webkit-mask: var(--matte-2);
-    transform: translateX(calc(var(--shift-x, 3px) * 0.3));
-    font-variation-settings: 'opsz' 72, 'wght' 500, 'SOFT' 50, 'WONK' 1;
-  }
-
-  52%, 69.9% {
-    mask: var(--matte-4);
-    -webkit-mask: var(--matte-4);
-    transform: none;
-    font-variation-settings: 'opsz' var(--rite-opsz, 72), 'wght' var(--rite-weight, 400), 'SOFT' var(--rite-soft, 20), 'WONK' var(--rite-wonk, 0);
-  }
-
-  70%, 83.9% {
-    mask: var(--matte-top);
-    -webkit-mask: var(--matte-top);
-    transform: none;
-    font-variation-settings: 'opsz' var(--rite-opsz, 72), 'wght' var(--rite-weight, 400), 'SOFT' var(--rite-soft, 20), 'WONK' var(--rite-wonk, 0);
-  }
-
-  84%, 100% {
-    mask: none;
-    -webkit-mask: none;
-    transform: none;
-    font-variation-settings: 'opsz' var(--rite-opsz, 72), 'wght' var(--rite-weight, 400), 'SOFT' var(--rite-soft, 20), 'WONK' var(--rite-wonk, 0);
+  to {
+    --cut: 100%;
   }
 }
 
 // ---- the threshold's query mechanisms ------------------------------------------------------
-// Everything js/threshold.js renders into #persona-probe, and how each of it moves (README:
-// "Motion axiom"). Nothing here fades, glides or cuts while a visitor watches: a frame or an
-// option DEVELOPS through the matte ladder from the roll's own geometry (probe-in) and is UNMADE
-// down it to the leave corner (probe-out); a chosen thing is SEALED with the fill texture (the
-// engine's own rite on data-set, plus the label's one-tread twitch); a count or a mark STAMPS
-// (count-tick, mark-stamp); every scalar that changes does so along the stair family; a press,
-// a hold and a rub change the surface by its AREA through the ladder (data-rung, soot-lift); a
-// key that turns RATCHETS (key-turn); and the words -- the ask, a landing's line, the trace --
-// are revealed glyph by glyph by the engine (_rite.scss). The script writes the classes,
-// attributes and custom properties and the stylesheet plays them, so a page with no engine
-// climbs the baked ladder of _tokens.scss and a stub browser sees the same DOM.
+// Everything js/threshold.js renders into #persona-probe, and how each of it changes (README:
+// "Motion axiom", the cut). Nothing here fades, glides or wears a pattern: every change is one
+// clean edge -- a slice (cut.slice) or a curve (cut.curve) -- stepping across the thing in a few
+// forward treads, chosen for the reason written beside it, and a surface that stays changed rests
+// as two shades split by its edge.
 //
-// The composed names (--rite-develop, --rite-unmake, --rite-seal) are read before the named
-// keyframes, so each trigger plays the composition the engine wrote for that element and the
-// named keyframes are the fallback for a page with no script.
+//   arriving   a question that replaces one comes in behind a slice from the side the roll gives
+//              it (--arrive-angle) while the one before is cut away by the same edge; the options
+//              of a question are dealt one after another (--d) behind the slice their question
+//              arrives by, in one stair cut for the whole deal, so a deal is one gesture
+//   leaving    an option not chosen, a name taken out, a line cleared go behind a slice toward
+//              where they go (--leave-angle, cut.unmake)
+//   sealing    a thing chosen is sealed: its fill, two shades split by a curve round the press,
+//              grows from that point (the engine's seal, _controls.scss); the reading's seal on
+//              the frame, the field's impression and the dial's seal grow from the point the
+//              answer was given
+//   stamping   a count, a mark, a tap is set down in one tread (a scale or a translate)
+//   filling    the big button, the lamp, the soot and the room change by their area behind one
+//              edge: a curve from the press, a curve from the lamp, a slice from the side the hand
+//              rubbed in, a slice at the dial's warmth
+//
+// The script writes the classes, the attributes and the custom properties, and asks the engine
+// (js/motion.js: cut, arrive, seal) for each movement's treads and length, written on the element
+// as --ease-<rite> and --motion-<rite>; the stylesheet plays them, so a page with no engine steps
+// along the baked stairs of _tokens.scss and a stub browser sees the same DOM. Every rule that
+// cuts a thing in declares --cut: 100% and every rule that cuts one away --cut: 0%, so the end of
+// the movement is what stands when the animation is taken off or never plays.
 .probe {
   position: relative;
   isolation: isolate;
   display: grid;
   gap: 0.75rem;
-  animation: var(--rite-develop, probe-in) var(--motion-probe-in, var(--motion-medium)) var(--ease-probe-in, var(--ease-arrive)) both;
+}
+
+// A question that replaces one, and the next landing of a question that has several: cut in by a
+// slice from the side the roll gives it, in the place of the one before. The first question of a
+// visit stands with its host, which arrives on its own (_stage.scss, _persona.scss): one edge
+// for one arrival.
+.probe[data-dealt='true'],
+.probe-landing[data-dealt='true'] {
+  --cut: 100%;
+  mask: cut.slice(var(--arrive-angle, 0deg));
+  @include cut.play(in, develop, medium, arrive);
+  @include bleed;
+}
+
+// The one before, left over the new one's place: cut away by the same edge in the same treads --
+// what the slice has not yet passed -- its --arrive-angle, --ease-develop and --motion-develop
+// copied from the new one by the script, and its mask drawn over the same margin, so the old is
+// ahead of the edge and the new behind it, never both and never neither.
+.probe.probe-ghost,
+.probe-landing.probe-landing-ghost {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  overflow: hidden;
+  pointer-events: none;
+  --cut: 100%;
+  mask: unpassed(var(--arrive-angle, 0deg));
+  @include cut.play(in, develop, medium, arrive);
+  @include bleed;
+}
+
+// A question skipped: behind a slice toward where it goes, lifting out with it.
+.probe.is-leaving {
+  --cut: 0%;
+  pointer-events: none;
+  @include cut.unmake(unmake, medium);
 }
 
 // The reading's seal: when the host says the question is read ([data-probe-state='read'], written
-// by the script before the answer is handed on), the frame takes the fill texture in the new
-// primary, climbing the ladder onto it from the roll's edge.
+// by the script before the answer is handed on), the frame's own layer -- two shades of the new
+// primary split by a curve round the point the answer was given (--read-x, --read-y, written by
+// the script from the last press in the frame) -- grows from that point and stays. Its own names,
+// so the controls inside the frame never take the frame's point for theirs.
 .probe::before {
   content: '';
   position: absolute;
   inset: -0.5rem;
   z-index: -1;
   border-radius: var(--md-sys-shape-corner-large);
-  background: var(--matte-fill);
-  background-size: var(--matte-fill-size);
+  background: cut.shades-curve(currentColor, 45%, var(--read-x, 50%), var(--read-y, 50%));
   color: var(--md-sys-color-primary);
   opacity: 0;
   pointer-events: none;
 }
 
 [data-probe-state='read'] .probe::before {
+  --cut: 100%;
   opacity: var(--fill-opacity, 0.18);
-  animation: var(--rite-seal, probe-read) var(--motion-probe-read, var(--motion-long)) var(--ease-probe-read, var(--ease-stair)) both;
-}
-
-// A question set aside: the frame descends the ladder to the rolled leave corner. A ghost is the
-// frame of the last question, left over the new one's place while it goes.
-.probe.is-leaving,
-.probe.probe-ghost {
-  pointer-events: none;
-  animation: var(--rite-unmake, probe-out) var(--motion-probe-out, var(--motion-medium)) var(--ease-probe-out, var(--ease-leave)) both;
-}
-
-.probe.probe-ghost {
-  position: absolute;
-  inset: 0;
-  z-index: 2;
-  overflow: hidden;
+  mask: cut.curve(var(--read-x, 50%), var(--read-y, 50%));
+  @include cut.play(in, seal, long, arrive);
 }
 
 // Each mechanism tints its seals a little differently: the host's data-probe has a say.
@@ -271,8 +287,8 @@ html[data-shifting] .card-overline {
   @include type.scale(body-medium);
 }
 
-// The chosen order (the sequence mechanisms): each name arrives by glyph reveal and its arrow
-// stamps a tread later.
+// The chosen order (the sequence mechanisms): each name is cut in by the engine's reveal, and its
+// arrow is stamped as it lands.
 .probe-order-name {
   color: var(--md-sys-color-on-surface);
   @include type.rite;
@@ -284,25 +300,15 @@ html[data-shifting] .card-overline {
 }
 
 .probe-order-arrow[data-tick='a'] {
-  animation: mark-stamp var(--motion-mark-stamp, var(--motion-short)) var(--ease-mark-stamp, var(--ease-flicker)) both;
+  animation: mark-stamp var(--motion-short) var(--ease-mark-stamp, var(--ease-flicker)) both;
 }
 
 .probe-order-arrow[data-tick='b'] {
-  animation: mark-stamp-b var(--motion-mark-stamp-b, var(--motion-short)) var(--ease-mark-stamp-b, var(--ease-flicker)) both;
+  animation: mark-stamp-b var(--motion-short) var(--ease-mark-stamp-b, var(--ease-flicker)) both;
 }
 
-// The body holds one landing at a time; a landing that is done is left over the new one's place
-// as a ghost that descends the ladder while the next develops under it (choiceProbe go()).
 .probe-body {
   position: relative;
-}
-
-.probe-landing.probe-landing-ghost {
-  position: absolute;
-  inset: 0;
-  z-index: 2;
-  overflow: hidden;
-  pointer-events: none;
 }
 
 .probe-options {
@@ -325,25 +331,29 @@ html[data-shifting] .card-overline {
   text-align: left;
 }
 
-// Options dealt: each develops from a geometry and a ladder of its own on its own delay (--d, in
-// a rolled order), reading the composition the engine wrote on it. Specific enough to outrank the
-// stage's own deal of the same cards (_stage.scss, knob-stamp), which stands for a page with no
-// script.
+// Options dealt: one after another in a rolled order (--d), each behind the slice its question
+// arrives by (the --arrive-angle it inherits) and lifting in from the same side, all in the one
+// stair the script cut for the whole deal.
 .probe-body .probe-options .probe-option[data-dealt='true']:not(.probe-skip) {
-  animation: var(--rite-develop, probe-in) var(--motion-probe-in, var(--motion-medium)) var(--ease-probe-in, var(--ease-arrive)) var(--d, 0ms) both;
+  --cut: 100%;
+  @include cut.develop(develop, medium);
+  animation-delay: var(--d, 0ms);
+  @include bleed;
 }
 
-// The ones not chosen go down the ladder to the leave corner, each on its own delay.
+// The ones not chosen go behind a slice toward where they go, each on its own delay.
 .probe-body .probe-options .probe-option.is-leaving:not(.probe-skip) {
+  --cut: 0%;
   pointer-events: none;
-  animation: var(--rite-unmake, probe-out) var(--motion-probe-out, var(--motion-medium)) var(--ease-probe-out, var(--ease-leave)) var(--d, 0ms) both;
+  @include cut.unmake(unmake, medium);
+  animation-delay: var(--d, 0ms);
 }
 
-// The chosen one is sealed: filled, textured (the engine's rite-seal plays on data-set through
-// _controls.scss), and its label twitches one tread. Specific enough to outrank the stage's own
-// ground for the threshold's cards (_stage.scss, imported after this sheet), so the sealed door
-// changes its ground where the question is actually asked; the ground cuts along the control's
-// own stair (the transition every button carries).
+// The chosen one is sealed: filled, its fill grown from the press (the engine's seal plays on
+// data-set through _controls.scss), and its label set down one tread. Specific enough to outrank
+// the stage's own ground for the threshold's cards (_stage.scss, imported after this sheet), so
+// the sealed door changes its ground where the question is actually asked; the ground steps along
+// the control's own stair (the transition every button carries).
 .probe-body .probe-options .probe-option[data-set='true']:not(.probe-skip),
 .probe-option[data-set='true'] {
   background: var(--md-sys-color-primary-container);
@@ -356,7 +366,7 @@ html[data-shifting] .card-overline {
 
 .probe-option[data-set='true'] .probe-option-label {
   color: inherit;
-  animation: count-tick var(--motion-count-tick, var(--motion-short)) var(--ease-count-tick, var(--ease-flicker)) both;
+  animation: count-stamp var(--motion-short) var(--ease-count-stamp, var(--ease-flicker)) both;
 }
 
 .probe-option[data-set='true'] .probe-option-detail {
@@ -364,16 +374,17 @@ html[data-shifting] .card-overline {
 }
 
 // Words that leave -- the glass twin of the trace, the meter, a name taken out of the chosen
-// order and its arrow, the order itself, a landing that is done -- go down the ladder like
-// everything else here, never cleared in a cut.
+// order and its arrow, the order itself -- go behind a slice like everything else here, never
+// cleared in a cut.
 .probe .probe-trace-glass.is-leaving,
 .probe .probe-meter.is-leaving,
 .probe .probe-order.is-leaving,
 .probe .probe-order-name.is-leaving,
-.probe .probe-order-arrow.is-leaving,
-.probe .probe-landing.is-leaving {
+.probe .probe-order-arrow.is-leaving {
+  --cut: 0%;
   pointer-events: none;
-  animation: var(--rite-unmake, probe-out) var(--motion-probe-out, var(--motion-medium)) var(--ease-probe-out, var(--ease-leave)) var(--d, 0ms) both;
+  @include cut.unmake(unmake, medium);
+  animation-delay: var(--d, 0ms);
 }
 
 // The thing offered -- a door, a stone, a jar -- is one of the rite's words and wears the serif;
@@ -406,10 +417,11 @@ html[data-shifting] .card-overline {
   margin-top: 0.25rem;
 }
 
-// The skip set aside with the question: down the ladder, never hidden in a cut.
+// The skip set aside with the question: behind a slice, never hidden in a cut.
 .probe .probe-option.probe-skip.is-leaving:not([hidden]) {
+  --cut: 0%;
   pointer-events: none;
-  animation: var(--rite-unmake, probe-out) var(--motion-probe-out, var(--motion-medium)) var(--ease-probe-out, var(--ease-leave)) both;
+  @include cut.unmake(unmake, medium);
 }
 
 .probe-big {
@@ -423,36 +435,16 @@ html[data-shifting] .card-overline {
   -webkit-touch-callout: none;
 }
 
-// The big button's fill is the ladder itself: a tap climbs it a rung per strike, a hold climbs it
-// a rung every rolled while and turns over at the top (data-rung, written by the script). The
-// surface changes by its area in the rolled texture, never by a tint; the press's colour stays.
-.probe-big[data-rung]::before {
+// The big button fills by its area: its fill (the control's own layer, two shades split by a
+// curve round the point it was first pressed at, --seal-x and --seal-y) is shown out to a curve
+// round that same point, as far as --fill-cut, which the script writes -- a fifth more for each
+// tap, or for a hold a step every rolled while, each smaller than the last, so a hold never quite
+// fills and implies no target. Each change steps the curve outward along the stair.
+.probe-big::before {
+  --cut: var(--fill-cut, 0%);
   opacity: var(--fill-opacity, 0.24);
-}
-
-.probe-big[data-rung='1']::before {
-  mask: var(--matte-1);
-  -webkit-mask: var(--matte-1);
-}
-
-.probe-big[data-rung='2']::before {
-  mask: var(--matte-2);
-  -webkit-mask: var(--matte-2);
-}
-
-.probe-big[data-rung='3']::before {
-  mask: var(--matte-3);
-  -webkit-mask: var(--matte-3);
-}
-
-.probe-big[data-rung='4']::before {
-  mask: var(--matte-4);
-  -webkit-mask: var(--matte-4);
-}
-
-.probe-big[data-rung='5']::before {
-  mask: var(--matte-5);
-  -webkit-mask: var(--matte-5);
+  mask: cut.curve(var(--seal-x, 18%), var(--seal-y, 82%));
+  transition: --cut var(--motion-short) var(--ease-stair);
 }
 
 // Held: the ring of the primary, in treads, around the ground that stays its own colour.
@@ -460,14 +452,14 @@ html[data-shifting] .card-overline {
   box-shadow: inset 0 0 0 2px var(--md-sys-color-primary);
 }
 
-// A tap's stamp is sized by the gap since the last (--stamp-scale: short and sharp, or wide);
-// the two names alternate so every tap restarts it.
+// A tap is set down in one tread, as deep as the gap since the last asks (--stamp-scale: short
+// and sharp, or wide); the two names alternate so every tap restarts it.
 .probe-big[data-tick='a'] {
-  animation: tap-stamp var(--motion-tap-stamp, var(--motion-short)) var(--ease-tap-stamp, var(--ease-flicker)) both;
+  animation: tap-stamp var(--motion-short) var(--ease-tap-stamp, var(--ease-flicker)) both;
 }
 
 .probe-big[data-tick='b'] {
-  animation: tap-stamp-b var(--motion-tap-stamp-b, var(--motion-short)) var(--ease-tap-stamp-b, var(--ease-flicker)) both;
+  animation: tap-stamp-b var(--motion-short) var(--ease-tap-stamp-b, var(--ease-flicker)) both;
 }
 
 .probe-count,
@@ -479,23 +471,23 @@ html[data-shifting] .card-overline {
   @include type.scale(body-small);
 }
 
-// The counter ('pair 3 of 5', '2 to place') advances with a one-tread flick of its tracking; the
-// instruction lines beside it stay deliberately still.
+// The counter ('pair 3 of 5', '2 to place') ticks over as it advances: the new figure drops into
+// place in one tread, like a counter's wheel; the instruction lines beside it stay still.
 .probe-counter {
   display: inline-block;
 }
 
 .probe-counter[data-tick='a'] {
-  animation: count-tick var(--motion-count-tick, var(--motion-short)) var(--ease-count-tick, var(--ease-flicker)) both;
+  animation: count-stamp var(--motion-short) var(--ease-count-stamp, var(--ease-flicker)) both;
 }
 
 .probe-counter[data-tick='b'] {
-  animation: count-tick-b var(--motion-count-tick-b, var(--motion-short)) var(--ease-count-tick-b, var(--ease-flicker)) both;
+  animation: count-stamp-b var(--motion-short) var(--ease-count-stamp-b, var(--ease-flicker)) both;
 }
 
 // The scribe: the live line is read by assistive tech and the glass twin shows the same words
-// arriving through sigils. With the glass present the live line is clipped out of sight, so the
-// words are shown once and heard once.
+// cut in by the engine's reveal. With the glass present the live line is clipped out of sight, so
+// the words are shown once and heard once.
 .probe-trace-wrap {
   position: relative;
 }
@@ -520,7 +512,7 @@ html[data-shifting] .card-overline {
   display: none;
 }
 
-// The meter's marks stamp as they land.
+// The meter's marks are stamped as they land.
 .probe-meter {
   display: inline-block;
   letter-spacing: 0.08em;
@@ -528,11 +520,11 @@ html[data-shifting] .card-overline {
 }
 
 .probe-meter[data-tick='a'] {
-  animation: mark-stamp var(--motion-mark-stamp, var(--motion-short)) var(--ease-mark-stamp, var(--ease-flicker)) both;
+  animation: mark-stamp var(--motion-short) var(--ease-mark-stamp, var(--ease-flicker)) both;
 }
 
 .probe-meter[data-tick='b'] {
-  animation: mark-stamp-b var(--motion-mark-stamp-b, var(--motion-short)) var(--ease-mark-stamp-b, var(--ease-flicker)) both;
+  animation: mark-stamp-b var(--motion-short) var(--ease-mark-stamp-b, var(--ease-flicker)) both;
 }
 
 .probe-field {
@@ -548,16 +540,16 @@ html[data-shifting] .card-overline {
   cursor: crosshair;
 }
 
-// The field takes the impression: once the mark is set (data-set) it is sealed with the fill
-// texture in the primary, climbing the ladder from the roll's edge, and closed.
+// The field takes the impression: once the mark is set (data-set) its layer -- two shades of the
+// primary split by a curve round the mark (--mark-x, --mark-y, where the mark was left) -- grows
+// from the mark and stays, and the field is closed.
 .probe-field::after {
   content: '';
   position: absolute;
   inset: 0;
   z-index: 0;
   border-radius: inherit;
-  background: var(--matte-fill);
-  background-size: var(--matte-fill-size);
+  background: cut.shades-curve(currentColor, 45%, var(--mark-x, 50%), var(--mark-y, 50%));
   color: var(--md-sys-color-primary);
   opacity: 0;
   pointer-events: none;
@@ -568,13 +560,15 @@ html[data-shifting] .card-overline {
 }
 
 .probe-field[data-set='true']::after {
+  --cut: 100%;
   opacity: var(--fill-opacity, 0.16);
-  animation: var(--rite-seal, field-seal) var(--motion-rite-seal, var(--motion-long)) var(--ease-field-seal, var(--ease-stair)) both;
+  mask: cut.curve(var(--mark-x, 50%), var(--mark-y, 50%));
+  @include cut.play(in, seal, long, arrive);
 }
 
-// The mark drops like a seal into wax: from the roll's arrival offset in three cuts (mark-set),
-// and a ring of the matte stamps out from it and stays faint (mark-ring). Keyboard moves ratchet
-// along the stair.
+// The mark is set down where it was left, like a seal into wax: from a size larger, in the
+// landing's shrinking treads (mark-set). Moved by the arrow keys it steps to its new place in
+// treads (the engine's flip), never along a glide.
 .probe-mark {
   position: absolute;
   z-index: 1;
@@ -584,23 +578,7 @@ html[data-shifting] .card-overline {
   border-radius: 50%;
   background: var(--md-sys-color-tertiary);
   box-shadow: 0 0 14px var(--md-sys-color-primary);
-  transition:
-    left var(--motion-short) var(--ease-stair),
-    top var(--motion-short) var(--ease-stair);
-  animation: mark-set var(--motion-mark-set, var(--motion-medium)) var(--ease-mark-set, var(--ease-arrive)) both;
-}
-
-.probe-mark::after {
-  content: '';
-  position: absolute;
-  inset: -250%;
-  border-radius: 50%;
-  background: var(--md-sys-color-primary);
-  opacity: 0.16;
-  mask: var(--matte-2);
-  -webkit-mask: var(--matte-2);
-  pointer-events: none;
-  animation: mark-ring var(--motion-mark-ring, var(--motion-long)) var(--ease-mark-ring, var(--ease-stair)) both;
+  animation: mark-set var(--motion-medium) var(--ease-mark-set, var(--ease-arrive)) both;
 }
 
 .probe-windows {
@@ -623,9 +601,8 @@ html[data-shifting] .card-overline {
   color: var(--md-sys-color-on-surface);
 }
 
-// The pane: its border and its glow change along the stair (a rolled flight of cuts), and the
-// lamp behind it is a layer of its own (.probe-window-light, under the mullions) that climbs the
-// ladder when lit and descends it when put out.
+// The pane: its border steps to the lamp's colour along the stair, and the lamp behind it is a
+// layer of its own (.probe-window-light, under the mullions).
 .probe-window-pane {
   --pane-border: var(--md-sys-color-outline);
   position: relative;
@@ -637,17 +614,18 @@ html[data-shifting] .card-overline {
   border: 2px solid var(--pane-border);
   border-radius: var(--md-sys-shape-corner-extra-small);
   background: var(--md-sys-color-surface-dim);
-  transition:
-    border-color var(--motion-medium) var(--ease-stair),
-    box-shadow var(--motion-medium) var(--ease-stair);
+  transition: border-color var(--motion-medium) var(--ease-stair);
 }
 
+// The lamp: two shades of the tertiary split by a curve round the lamp itself, low in the pane
+// where a lamp on a sill would stand, and shown only as far as a curve from that same point has
+// grown -- nothing, until the window is lit.
 .probe-window-light {
   position: absolute;
   inset: 0;
   z-index: -1;
-  background: radial-gradient(circle, var(--md-sys-color-tertiary), var(--md-sys-color-tertiary-container));
-  visibility: hidden;
+  background: radial-gradient(circle farthest-corner at 50% 72%, var(--md-sys-color-tertiary) 45%, var(--md-sys-color-tertiary-container) 45%);
+  mask: cut.curve(50%, 72%);
   pointer-events: none;
 }
 
@@ -678,29 +656,27 @@ html[data-shifting] .card-overline {
   box-shadow: inset 0 0 0 2px var(--md-sys-color-primary);
 }
 
-// A lamp lit behind a curtain: the light climbs the ladder in hard treads with one gutter (the
-// composition the script wrote on it, pane-light for a page with no script), and a window going
-// dark descends it (--rite-unseal, pane-dark; data-was-lit says it was lit, so the nine dark
-// panes at the start play nothing). The pane's own border and glow take the stair.
 .probe-window[aria-pressed='true'] .probe-window-pane {
   --pane-border: var(--md-sys-color-tertiary);
-  box-shadow: 0 0 18px var(--md-sys-color-tertiary-container);
 }
 
+// A lamp lit grows out from the lamp in the treads the script cut for it (--ease-seal); a window
+// put out shrinks back into its lamp (--ease-unseal). data-was-lit says it was lit, so the nine
+// dark panes at the start play nothing.
 .probe-window[aria-pressed='true'] .probe-window-light {
-  visibility: visible;
-  animation: var(--rite-seal, pane-light) var(--motion-pane-light, var(--motion-medium)) var(--ease-pane-light, var(--ease-stair)) both;
+  --cut: 100%;
+  @include cut.play(in, seal, medium, arrive);
 }
 
 .probe-window[data-was-lit='true'][aria-pressed='false'] .probe-window-light {
-  visibility: visible;
-  animation: var(--rite-unseal, pane-dark) var(--motion-pane-dark, var(--motion-medium)) var(--ease-pane-dark, var(--ease-stair)) both;
+  --cut: 0%;
+  @include cut.play(out, unseal, medium, leave);
 }
 
-// The third light: the whole facade reads, every pane stamping one tread in a rolled order,
-// once the third lamp has climbed (data-read is written by the script after that rite).
+// The third light: the whole facade reads, every pane set down one tread in a rolled order (--d),
+// once the third lamp has grown (data-read is written by the script after that rite).
 .probe-windows[data-read='true'] .probe-window-pane {
-  animation: pane-read var(--motion-pane-read, var(--motion-medium)) var(--ease-pane-read, var(--ease-flicker)) var(--d, 0ms) both;
+  animation: pane-read var(--motion-medium) var(--ease-pane-read, var(--ease-flicker)) var(--d, 0ms) both;
 }
 
 .probe-pad {
@@ -713,7 +689,7 @@ html[data-shifting] .card-overline {
   cursor: crosshair;
 }
 
-// The print stays beneath sixteen native buttons; their soot lifts wherever rubbed.
+// The print lies beneath sixteen native buttons; their soot lifts wherever it is rubbed.
 .probe-rubbing {
   position: relative;
   isolation: isolate;
@@ -727,6 +703,9 @@ html[data-shifting] .card-overline {
   background: var(--md-sys-color-surface-container-lowest);
   overflow: hidden;
   touch-action: none;
+  // The soot's split, fixed here for the whole print at the register's angle, so the angle a
+  // pointer writes on one patch as it passes never turns that patch's soot against its neighbours'.
+  --soot-angle: var(--cut-angle, 112deg);
 }
 
 .probe-rubbing-picture {
@@ -738,46 +717,64 @@ html[data-shifting] .card-overline {
   pointer-events: none;
 }
 
-// The soot is the rolled fill texture in the primary over the ground, each cell at a phase of
-// its own (--cell-shift, written by the script) so neighbouring cells never tile alike.
 .probe-rub-cell {
   z-index: 1;
   min-width: 0;
   min-height: 44px;
   padding: 0;
   border-radius: 0;
-  background:
-    var(--matte-fill),
-    var(--md-sys-color-surface-container-high);
-  background-size: var(--matte-fill-size), auto;
-  background-position: var(--cell-shift, 0 0), 0 0;
+  background: transparent;
   color: color-mix(in oklab, var(--md-sys-color-primary) 22%, transparent);
-  box-shadow: inset 0 0 0 1px var(--md-sys-color-outline-variant);
   @include type.scale(label-medium);
 }
 
-// Soot lifts in blotches: the cell descends the ladder (soot-lift) and the print shows through
-// holes that spread, then the cell is clear. The clear cell is the state; the lift is the rite.
-.probe-rub-cell[data-uncovered='true'] {
-  background: transparent;
-  color: var(--md-sys-color-on-surface);
-  box-shadow: none;
-  animation: soot-lift var(--motion-soot-lift, var(--motion-medium)) var(--ease-soot-lift, var(--ease-stair)) var(--d, 0ms) both;
+// The soot is one sheet over the whole print: two shades of the primary over the ground, split by
+// one slice through the print's centre. Each patch carries its own part of that sheet on its fill
+// layer (--cell-at, written by the script from the patch's place in the grid), so the sixteen read
+// as one surface and never as tiles.
+.probe-rub-cell::before {
+  opacity: 1;
+  background:
+    linear-gradient(
+      var(--soot-angle, 112deg),
+      color-mix(in oklab, var(--md-sys-color-primary) 24%, var(--md-sys-color-surface-container-high)) 50%,
+      color-mix(in oklab, var(--md-sys-color-primary) 12%, var(--md-sys-color-surface-container-high)) 50%
+    )
+    var(--cell-at, 0 0) / 400% 400% no-repeat;
 }
 
-// Start over: the soot settles back by climbing the ladder, cell by cell on a rolled stagger.
-.probe-rub-cell[data-covering='true'] {
-  animation: soot-cover var(--motion-soot-cover, var(--motion-medium)) var(--ease-soot-cover, var(--ease-stair)) var(--d, 0ms) both;
+// Rubbed: the soot is lifted behind a slice from the side the hand came in by (--cut-angle, which
+// the script writes from the rub's own direction; a press writes the pointer's approach, a key the
+// register's): what the slice has passed is clear, the rest is soot until the edge has crossed
+// it. The clear patch is the state; the lift is the movement.
+.probe-rub-cell[data-uncovered='true'] {
+  color: var(--md-sys-color-on-surface);
+}
+
+.probe-rub-cell[data-uncovered='true']::before {
+  --cut: 100%;
+  mask: unpassed(var(--cut-angle, 112deg));
+  @include cut.play(in, lift, medium, leave);
+  animation-delay: var(--d, 0ms);
+}
+
+// Start over: the soot is laid back behind a slice the way it was lifted, patch after patch in a
+// rolled order (--d).
+.probe-rub-cell[data-covering='true']::before {
+  --cut: 100%;
+  mask: cut.slice();
+  @include cut.play(in, cover, medium, stair);
+  animation-delay: var(--d, 0ms);
 }
 
 .probe-rub-cell:focus-visible {
   outline-offset: -3px;
 }
 
-// The room answers the dial by area: an ember texture (::before, tertiary) and a frost texture
-// (::after, primary), each masked at a rung proportional to its share (data-warmth 0..5, written
-// on input), trade coverage in hard treads, never a colour lerp. The panel nudges one tread on
-// each change (room-turn) and the nearer end's word opens its tracking a step.
+// The room answers the dial by area: ember and frost are the two shades of one layer, split by
+// one upright slice, and the dial moves the edge (data-warmth, 0 to 5, written on input) -- the
+// ember takes the share the dial gives it from the warm end, stepping along the stair, never a
+// colour lerp. The nearer end's word opens its tracking a step.
 .probe-dial {
   position: relative;
   isolation: isolate;
@@ -789,103 +786,60 @@ html[data-shifting] .card-overline {
   overflow: hidden;
 }
 
-.probe-dial::before,
-.probe-dial::after {
+.probe-dial::before {
   content: '';
   position: absolute;
   inset: 0;
   z-index: -1;
-  background: var(--matte-fill);
-  background-size: var(--matte-fill-size);
-  opacity: 0;
-  pointer-events: none;
-}
-
-.probe-dial::before {
-  color: var(--md-sys-color-tertiary);
-}
-
-.probe-dial::after {
-  color: var(--md-sys-color-primary);
-  background-position: 7px 3px;
-}
-
-.probe-dial[data-warmth]::before,
-.probe-dial[data-warmth]::after {
+  --cut: var(--warmth, 50%);
+  background: linear-gradient(270deg, var(--md-sys-color-tertiary) var(--cut), var(--md-sys-color-primary) var(--cut));
   opacity: var(--fill-opacity, 0.16);
+  pointer-events: none;
+  transition: --cut var(--motion-short) var(--ease-stair);
 }
 
-.probe-dial[data-warmth='0']::before,
-.probe-dial[data-warmth='5']::after {
-  opacity: 0;
+.probe-dial[data-warmth='0'] {
+  --warmth: 0%;
 }
 
-.probe-dial[data-warmth='1']::before,
-.probe-dial[data-warmth='4']::after {
-  mask: var(--matte-1);
-  -webkit-mask: var(--matte-1);
+.probe-dial[data-warmth='1'] {
+  --warmth: 20%;
 }
 
-.probe-dial[data-warmth='2']::before,
-.probe-dial[data-warmth='3']::after {
-  mask: var(--matte-2);
-  -webkit-mask: var(--matte-2);
+.probe-dial[data-warmth='2'] {
+  --warmth: 40%;
 }
 
-.probe-dial[data-warmth='3']::before,
-.probe-dial[data-warmth='2']::after {
-  mask: var(--matte-3);
-  -webkit-mask: var(--matte-3);
+.probe-dial[data-warmth='3'] {
+  --warmth: 60%;
 }
 
-.probe-dial[data-warmth='4']::before,
-.probe-dial[data-warmth='1']::after {
-  mask: var(--matte-4);
-  -webkit-mask: var(--matte-4);
+.probe-dial[data-warmth='4'] {
+  --warmth: 80%;
 }
 
-.probe-dial[data-warmth='5']::before,
-.probe-dial[data-warmth='0']::after {
-  mask: var(--matte-5);
-  -webkit-mask: var(--matte-5);
+.probe-dial[data-warmth='5'] {
+  --warmth: 100%;
 }
 
-.probe-dial[data-tick='a'] {
-  animation: room-turn var(--motion-room-turn, var(--motion-short)) var(--ease-room-turn, var(--ease-stair)) both;
-}
-
-.probe-dial[data-tick='b'] {
-  animation: room-turn-b var(--motion-room-turn-b, var(--motion-short)) var(--ease-room-turn-b, var(--ease-stair)) both;
-}
-
-// Set: the panel is sealed. A layer of its own (.probe-dial-seal, the fill texture in the
-// primary) climbs onto the room through the composition the engine wrote on the panel at
-// data-set (--rite-seal, read before dial-seal, the no-script wipe from the roll's edge), the
-// ember and the frost keep the coverage the dial gave them, and the ring of the primary cuts in
-// along the stair.
-.probe-dial {
-  transition: box-shadow var(--motion-short) var(--ease-stair);
-}
-
+// Set: the panel is sealed. A layer of its own (.probe-dial-seal: two shades of the primary split
+// by a curve round the point the dial's thumb was left at, --dial-at and --dial-y, written by the
+// script) grows from that point and stays, over the room, which keeps the share the dial gave it.
 .probe-dial-seal {
   position: absolute;
   inset: 0;
   z-index: -1;
-  background: var(--matte-fill);
-  background-size: var(--matte-fill-size);
-  background-position: 3px 9px;
+  background: cut.shades-curve(currentColor, 45%, var(--dial-at, 50%), var(--dial-y, 72%));
   color: var(--md-sys-color-primary);
   opacity: 0;
   pointer-events: none;
 }
 
-.probe-dial[data-set='true'] {
-  box-shadow: inset 0 0 0 2px var(--md-sys-color-primary);
-}
-
 .probe-dial[data-set='true'] .probe-dial-seal {
+  --cut: 100%;
   opacity: var(--fill-opacity, 0.16);
-  animation: var(--rite-seal, dial-seal) var(--motion-rite-seal, var(--motion-long)) var(--ease-dial-seal, var(--ease-stair)) both;
+  mask: cut.curve(var(--dial-at, 50%), var(--dial-y, 72%));
+  @include cut.play(in, seal, long, arrive);
 }
 
 // The dial's own input, spent with the panel: inert under the rite, and native-disabled only
@@ -924,23 +878,26 @@ html[data-shifting] .card-overline {
   color: inherit;
 }
 
-// The key that turns: a ratchet of rolled treads about the bow (--key-turn written by the script),
-// the lock giving on the second cut; the other six shed down the ladder meanwhile.
+// The key that turns: about its bow, by the angle the script rolled (--key-turn), in the
+// ratchet's even clicks, and it stays turned -- the mark of the answer -- while the other six go.
+// It stands unmasked from here, so taking its arrival off can never hide it.
 .probe-options.probe-keys .probe-option[data-turned='true']:not(.probe-skip) {
   --fill-opacity: 0.3;
+  mask: none;
   transform-origin: 12% 50%;
-  animation: key-turn var(--motion-key-turn, var(--motion-long)) var(--ease-key-turn, var(--ease-ratchet)) both;
+  rotate: var(--key-turn, 12deg);
+  animation: key-turn var(--motion-long) var(--ease-key-turn, var(--ease-ratchet)) both;
 }
 
-// A control spent (data-spent, written before it is disabled): its texture leaves down the ladder
-// (the composition the script wrote, --rite-unseal, or rite-unseal) while its ground cuts to the
-// disabled grey along the stair every control carries (the transition in _controls.scss) and its
-// tracking closes a step with one flash (rite-spent, its length rolled per retirement as
-// --motion-rite-spent); only at the end is it disabled, since a disabled control plays nothing.
-// Specific enough to outrank the stage's ground for the threshold's cards.
+// A control spent (data-spent, written before it is disabled): inert at once; its fill, where it
+// has one, is cut away by a slice at the register's angle in the treads the script cut for this
+// retirement (--ease-unseal), while its ground steps to the disabled grey along the stair every
+// control carries (_controls.scss); only then is it disabled, since a disabled control plays
+// nothing. The big button's fill goes back the way it came instead: the script takes --fill-cut
+// off and its curve steps back to its point. Specific enough to outrank the stage's ground for
+// the threshold's cards.
 .probe [data-spent='true'] {
   pointer-events: none;
-  animation: rite-spent var(--motion-rite-spent, var(--motion-medium)) var(--ease-rite-spent, var(--ease-stair)) both;
 }
 
 // The ground: a button's, never a range input's (its track and thumb are its own drawing).
@@ -951,677 +908,171 @@ html[data-shifting] .card-overline {
   box-shadow: none;
 }
 
-.probe [data-spent='true']::before {
-  animation: var(--rite-unseal, rite-unseal) var(--motion-rite-spent, var(--motion-medium)) var(--ease-rite-unseal, var(--ease-stair)) both;
+.probe [data-spent='true']:not(.probe-big)::before {
+  --cut: 0%;
+  mask: cut.slice();
+  @include cut.play(out, unseal, medium, leave);
 }
 
-// ---- the keyframes: hard cuts, every tread held to the moment of the next ---------------------
+// ---- the keyframes: each a from and a to, stepped by its stair -------------------------------
+// Each plays at one of the page's lengths (--motion-short, --motion-medium, --motion-long), never a
+// length written on the element: the engine rolls a spell's treads afresh on the element that
+// played it, so the next play steps differently, and a length rolled afresh after the end would
+// put a held movement back in play -- the stamp set down again, the key turned back.
 
-// A thing developing: through the ladder from the roll's arrival geometry, with one refusal.
-@keyframes probe-in {
-  0%, 17.9% {
-    mask: var(--matte-1);
-    -webkit-mask: var(--matte-1);
-    transform: translate(var(--arrive-x, 0px), var(--arrive-y, 28px)) rotate(var(--arrive-rot, 0.6deg)) skewX(var(--arrive-skew, 0deg)) scale(var(--arrive-scale, 0.96));
+// A count ticking over: the new figure drops into place in one tread. The second name is a twin,
+// so that writing the other name restarts it.
+@keyframes count-stamp {
+  from {
+    translate: 0 -0.3em;
   }
 
-  18%, 35.9% {
-    mask: var(--matte-2);
-    -webkit-mask: var(--matte-2);
-    transform: translate(calc(var(--arrive-x, 0px) * 0.5), calc(var(--arrive-y, 28px) * 0.5)) rotate(var(--arrive-rot, 0.6deg));
-  }
-
-  36%, 43.9% {
-    mask: var(--matte-1);
-    -webkit-mask: var(--matte-1);
-    transform: translate(calc(var(--arrive-x, 0px) * 0.5), calc(var(--arrive-y, 28px) * 0.5)) rotate(var(--arrive-rot, 0.6deg));
-  }
-
-  44%, 61.9% {
-    mask: var(--matte-3);
-    -webkit-mask: var(--matte-3);
-    transform: translate(calc(var(--arrive-x, 0px) * 0.15), calc(var(--arrive-y, 28px) * 0.15)) scale(var(--pop-over, 1.1));
-  }
-
-  62%, 79.9% {
-    mask: var(--matte-4);
-    -webkit-mask: var(--matte-4);
-    transform: translateY(var(--lift-y, -2px));
-  }
-
-  80%, 93.9% {
-    mask: var(--matte-5);
-    -webkit-mask: var(--matte-5);
-    transform: none;
-  }
-
-  94%, 100% {
-    mask: none;
-    -webkit-mask: none;
-    transform: none;
+  to {
+    translate: 0 0;
   }
 }
 
-// A thing unmade: down the ladder with one flicker back, to the roll's leave corner. Opacity is
-// held at 1 in every tread and cut to 0 only in the last, with the mask closed under it, so the
-// browser has nothing to interpolate and the thing goes by its area to the end.
-@keyframes probe-out {
-  0%, 19.9% {
-    opacity: 1;
-    mask: var(--matte-5);
-    -webkit-mask: var(--matte-5);
-    transform: translateY(var(--lift-y, -2px));
+@keyframes count-stamp-b {
+  from {
+    translate: 0 -0.3em;
   }
 
-  20%, 39.9% {
-    opacity: 1;
-    mask: var(--matte-3);
-    -webkit-mask: var(--matte-3);
-    transform: translate(calc(var(--leave-x, 0px) * 0.2), calc(var(--leave-y, -22px) * 0.2)) rotate(calc(var(--leave-rot, -0.8deg) * 0.5));
-  }
-
-  40%, 47.9% {
-    opacity: 1;
-    mask: var(--matte-4);
-    -webkit-mask: var(--matte-4);
-    transform: translate(calc(var(--leave-x, 0px) * 0.2), calc(var(--leave-y, -22px) * 0.2)) rotate(calc(var(--leave-rot, -0.8deg) * 0.5));
-  }
-
-  48%, 69.9% {
-    opacity: 1;
-    mask: var(--matte-2);
-    -webkit-mask: var(--matte-2);
-    transform: translate(calc(var(--leave-x, 0px) * 0.6), calc(var(--leave-y, -22px) * 0.6)) rotate(var(--leave-rot, -0.8deg)) scale(var(--leave-scale, 0.92));
-  }
-
-  70%, 89.9% {
-    opacity: 1;
-    mask: var(--matte-1);
-    -webkit-mask: var(--matte-1);
-    transform: translate(var(--leave-x, 0px), var(--leave-y, -22px)) rotate(var(--leave-rot, -0.8deg)) scale(var(--leave-scale, 0.92));
-  }
-
-  90%, 100% {
-    opacity: 0;
-    mask: linear-gradient(transparent, transparent);
-    -webkit-mask: linear-gradient(transparent, transparent);
-    transform: translate(var(--leave-x, 0px), var(--leave-y, -22px)) rotate(var(--leave-rot, -0.8deg)) scale(var(--leave-scale, 0.92));
+  to {
+    translate: 0 0;
   }
 }
 
-// The reading's seal: the texture climbs onto the frame from the roll's edge and stays.
-@keyframes probe-read {
-  0%, 19.9% {
-    clip-path: var(--state-from, inset(0 100% 0 0));
-    mask: var(--matte-1);
-    -webkit-mask: var(--matte-1);
-  }
-
-  20%, 39.9% {
-    clip-path: inset(0);
-    mask: var(--matte-2);
-    -webkit-mask: var(--matte-2);
-  }
-
-  40%, 59.9% {
-    clip-path: inset(0);
-    mask: var(--matte-3);
-    -webkit-mask: var(--matte-3);
-  }
-
-  60%, 79.9% {
-    clip-path: inset(0);
-    mask: var(--matte-4);
-    -webkit-mask: var(--matte-4);
-  }
-
-  80%, 100% {
-    clip-path: inset(0);
-    mask: var(--matte-top);
-    -webkit-mask: var(--matte-top);
-  }
-}
-
-// A count advancing: the tracking opens one step and snaps back, in two cuts.
-@keyframes count-tick {
-  0%, 44.9% {
-    letter-spacing: 0.12em;
-  }
-
-  45%, 69.9% {
-    letter-spacing: -0.02em;
-  }
-
-  70%, 100% {
-    letter-spacing: normal;
-  }
-}
-
-@keyframes count-tick-b {
-  0%, 39.9% {
-    letter-spacing: 0.1em;
-  }
-
-  40%, 74.9% {
-    letter-spacing: -0.03em;
-  }
-
-  75%, 100% {
-    letter-spacing: normal;
-  }
-}
-
-// A mark landing: one tread large, then its own size.
+// A mark landing: set down from a size larger to its own, and no smaller. A twin, as above.
 @keyframes mark-stamp {
-  0%, 44.9% {
-    transform: scale(1.3);
+  from {
+    scale: 1.3;
   }
 
-  45%, 69.9% {
-    transform: scale(0.94);
-  }
-
-  70%, 100% {
-    transform: none;
+  to {
+    scale: 1;
   }
 }
 
 @keyframes mark-stamp-b {
-  0%, 34.9% {
-    transform: scale(1.24) translateY(-1px);
+  from {
+    scale: 1.3;
   }
 
-  35%, 74.9% {
-    transform: scale(1.04);
-  }
-
-  75%, 100% {
-    transform: none;
+  to {
+    scale: 1;
   }
 }
 
-// A tap: the press sized by the gap since the last, a flash of contrast, home in cuts.
+// A tap: pressed down as far as the gap since the last asks, and home. A twin, as above.
 @keyframes tap-stamp {
-  0%, 34.9% {
-    transform: translateY(1px) scale(var(--stamp-scale, 0.965));
-    filter: contrast(1.3) brightness(1.1);
+  from {
+    translate: 0 1px;
+    scale: var(--stamp-scale, 0.965);
   }
 
-  35%, 64.9% {
-    transform: translateY(1px) scale(var(--stamp-scale, 0.965));
-    filter: contrast(1.3) brightness(1.1);
-  }
-
-  65%, 84.9% {
-    transform: scale(calc(2 - var(--stamp-scale, 0.965)));
-    filter: none;
-  }
-
-  85%, 100% {
-    transform: none;
-    filter: none;
+  to {
+    translate: 0 0;
+    scale: 1;
   }
 }
 
 @keyframes tap-stamp-b {
-  0%, 24.9% {
-    transform: translateY(1px) scale(var(--stamp-scale, 0.965));
-    filter: contrast(1.3) brightness(1.1);
+  from {
+    translate: 0 1px;
+    scale: var(--stamp-scale, 0.965);
   }
 
-  25%, 59.9% {
-    transform: translateY(2px) scale(var(--stamp-scale, 0.965)) skewX(calc(var(--arrive-skew, 0deg) * 0.3));
-    filter: contrast(1.3) brightness(1.1);
-  }
-
-  60%, 79.9% {
-    transform: scale(calc(2 - var(--stamp-scale, 0.965)));
-    filter: none;
-  }
-
-  80%, 100% {
-    transform: none;
-    filter: none;
+  to {
+    translate: 0 0;
+    scale: 1;
   }
 }
 
-// The mark set: dropped from the roll's arrival offset in three cuts, past its size, and home.
+// The mark set: from a size larger, down onto the field where it was left.
 @keyframes mark-set {
-  0%, 29.9% {
-    transform: translate(var(--arrive-x, 0px), var(--arrive-y, 28px)) scale(var(--pop-over, 1.1));
+  from {
+    scale: 1.8;
   }
 
-  30%, 59.9% {
-    transform: translate(calc(var(--arrive-x, 0px) * 0.3), calc(var(--arrive-y, 28px) * 0.3)) scale(calc(var(--pop-over, 1.1) * 1.4));
-  }
-
-  60%, 79.9% {
-    transform: scale(0.92);
-  }
-
-  80%, 100% {
-    transform: none;
+  to {
+    scale: 1;
   }
 }
 
-// The impression the field takes around the mark: the ring stamps two treads and stays faint.
-@keyframes mark-ring {
-  0%, 24.9% {
-    opacity: 0;
-    mask: var(--matte-1);
-    -webkit-mask: var(--matte-1);
-    transform: scale(0.3);
-  }
-
-  25%, 54.9% {
-    opacity: 0.4;
-    mask: var(--matte-3);
-    -webkit-mask: var(--matte-3);
-    transform: scale(0.7);
-  }
-
-  55%, 79.9% {
-    opacity: 0.28;
-    mask: var(--matte-2);
-    -webkit-mask: var(--matte-2);
-    transform: scale(1.05);
-  }
-
-  80%, 100% {
-    opacity: 0.16;
-    mask: var(--matte-2);
-    -webkit-mask: var(--matte-2);
-    transform: none;
-  }
-}
-
-// A field sealed: the texture climbs onto it from the roll's edge, with one refusal.
-@keyframes field-seal {
-  0%, 19.9% {
-    clip-path: var(--state-from, inset(0 100% 0 0));
-    mask: var(--matte-1);
-    -webkit-mask: var(--matte-1);
-  }
-
-  20%, 39.9% {
-    clip-path: inset(0);
-    mask: var(--matte-2);
-    -webkit-mask: var(--matte-2);
-  }
-
-  40%, 47.9% {
-    clip-path: inset(0);
-    mask: var(--matte-1);
-    -webkit-mask: var(--matte-1);
-  }
-
-  48%, 69.9% {
-    clip-path: inset(0);
-    mask: var(--matte-3);
-    -webkit-mask: var(--matte-3);
-  }
-
-  70%, 89.9% {
-    clip-path: inset(0);
-    mask: var(--matte-4);
-    -webkit-mask: var(--matte-4);
-  }
-
-  90%, 100% {
-    clip-path: inset(0);
-    mask: none;
-    -webkit-mask: none;
-  }
-}
-
-// A lamp lit: the light (its own layer behind the mullions) climbs the ladder with one gutter.
-@keyframes pane-light {
-  0%, 19.9% {
-    mask: var(--matte-1);
-    -webkit-mask: var(--matte-1);
-  }
-
-  20%, 37.9% {
-    mask: var(--matte-2);
-    -webkit-mask: var(--matte-2);
-  }
-
-  38%, 45.9% {
-    mask: var(--matte-1);
-    -webkit-mask: var(--matte-1);
-  }
-
-  46%, 65.9% {
-    mask: var(--matte-3);
-    -webkit-mask: var(--matte-3);
-  }
-
-  66%, 85.9% {
-    mask: var(--matte-4);
-    -webkit-mask: var(--matte-4);
-  }
-
-  86%, 100% {
-    mask: none;
-    -webkit-mask: none;
-  }
-}
-
-// A lamp put out: the light gutters down the ladder with one last flare and is closed off.
-@keyframes pane-dark {
-  0%, 24.9% {
-    mask: var(--matte-4);
-    -webkit-mask: var(--matte-4);
-  }
-
-  25%, 49.9% {
-    mask: var(--matte-2);
-    -webkit-mask: var(--matte-2);
-  }
-
-  50%, 59.9% {
-    mask: var(--matte-3);
-    -webkit-mask: var(--matte-3);
-  }
-
-  60%, 84.9% {
-    mask: var(--matte-1);
-    -webkit-mask: var(--matte-1);
-  }
-
-  85%, 100% {
-    mask: linear-gradient(transparent, transparent);
-    -webkit-mask: linear-gradient(transparent, transparent);
-  }
-}
-
-// The facade read: each pane stamps one tread in its own time. The border is held in every
-// tread (its own colour at either end, so a lit pane keeps the tertiary throughout) and only cut.
+// The facade read: each pane set down one tread in its own time.
 @keyframes pane-read {
-  0%, 29.9% {
-    transform: none;
-    border-color: var(--pane-border, var(--md-sys-color-outline));
+  from {
+    scale: 1.12;
   }
 
-  30%, 54.9% {
-    transform: scale(1.18);
-    border-color: var(--md-sys-color-tertiary);
-  }
-
-  55%, 74.9% {
-    transform: scale(0.96);
-    border-color: var(--md-sys-color-tertiary);
-  }
-
-  75%, 100% {
-    transform: none;
-    border-color: var(--pane-border, var(--md-sys-color-outline));
+  to {
+    scale: 1;
   }
 }
 
-// Soot lifting: the cell descends the ladder (the soot it paints in every tread) and is clear.
-@keyframes soot-lift {
-  0%, 19.9% {
-    background: var(--matte-fill), var(--md-sys-color-surface-container-high);
-    background-size: var(--matte-fill-size), auto;
-    background-position: var(--cell-shift, 0 0), 0 0;
-    box-shadow: inset 0 0 0 1px var(--md-sys-color-outline-variant);
-    mask: var(--matte-5);
-    -webkit-mask: var(--matte-5);
-  }
-
-  20%, 39.9% {
-    background: var(--matte-fill), var(--md-sys-color-surface-container-high);
-    background-size: var(--matte-fill-size), auto;
-    background-position: var(--cell-shift, 0 0), 0 0;
-    box-shadow: inset 0 0 0 1px var(--md-sys-color-outline-variant);
-    mask: var(--matte-4);
-    -webkit-mask: var(--matte-4);
-  }
-
-  40%, 59.9% {
-    background: var(--matte-fill), var(--md-sys-color-surface-container-high);
-    background-size: var(--matte-fill-size), auto;
-    background-position: var(--cell-shift, 0 0), 0 0;
-    box-shadow: inset 0 0 0 1px var(--md-sys-color-outline-variant);
-    mask: var(--matte-3);
-    -webkit-mask: var(--matte-3);
-  }
-
-  60%, 77.9% {
-    background: var(--matte-fill), var(--md-sys-color-surface-container-high);
-    background-size: var(--matte-fill-size), auto;
-    background-position: var(--cell-shift, 0 0), 0 0;
-    box-shadow: inset 0 0 0 1px var(--md-sys-color-outline-variant);
-    mask: var(--matte-2);
-    -webkit-mask: var(--matte-2);
-  }
-
-  78%, 91.9% {
-    background: var(--matte-fill), var(--md-sys-color-surface-container-high);
-    background-size: var(--matte-fill-size), auto;
-    background-position: var(--cell-shift, 0 0), 0 0;
-    box-shadow: inset 0 0 0 1px var(--md-sys-color-outline-variant);
-    mask: var(--matte-1);
-    -webkit-mask: var(--matte-1);
-  }
-
-  92%, 100% {
-    background: transparent;
-    box-shadow: none;
-    mask: none;
-    -webkit-mask: none;
-  }
-}
-
-// Soot settling back: up the ladder, with one refusal.
-@keyframes soot-cover {
-  0%, 24.9% {
-    mask: var(--matte-1);
-    -webkit-mask: var(--matte-1);
-  }
-
-  25%, 49.9% {
-    mask: var(--matte-2);
-    -webkit-mask: var(--matte-2);
-  }
-
-  50%, 57.9% {
-    mask: var(--matte-1);
-    -webkit-mask: var(--matte-1);
-  }
-
-  58%, 79.9% {
-    mask: var(--matte-3);
-    -webkit-mask: var(--matte-3);
-  }
-
-  80%, 93.9% {
-    mask: var(--matte-4);
-    -webkit-mask: var(--matte-4);
-  }
-
-  94%, 100% {
-    mask: none;
-    -webkit-mask: none;
-  }
-}
-
-// The room turned: the panel nudges one cut and settles.
-@keyframes room-turn {
-  0%, 49.9% {
-    transform: translateX(calc(var(--shake-x, 6px) * 0.3)) skewX(calc(var(--arrive-skew, 0deg) * 0.5));
-  }
-
-  50%, 100% {
-    transform: none;
-  }
-}
-
-@keyframes room-turn-b {
-  0%, 39.9% {
-    transform: translateX(calc(var(--shake-x, 6px) * -0.25));
-  }
-
-  40%, 69.9% {
-    transform: translateX(calc(var(--shake-x, 6px) * 0.1));
-  }
-
-  70%, 100% {
-    transform: none;
-  }
-}
-
-// The dial set: the two textures wipe whole from the roll's edge, in treads.
-@keyframes dial-seal {
-  0%, 24.9% {
-    clip-path: var(--state-from, inset(0 100% 0 0));
-  }
-
-  25%, 49.9% {
-    clip-path: inset(0 50% 0 0);
-  }
-
-  50%, 59.9% {
-    clip-path: inset(0 70% 0 0);
-  }
-
-  60%, 84.9% {
-    clip-path: inset(0 15% 0 0);
-  }
-
-  85%, 100% {
-    clip-path: inset(0);
-  }
-}
-
-// The key turning in the lock: a ratchet of treads about the bow, the lock giving on the second.
+// The key turning in the lock, about its bow, to the angle it stays at.
 @keyframes key-turn {
-  0%, 19.9% {
-    transform: rotate(calc(var(--key-turn, 14deg) * 0.4));
-    filter: none;
+  from {
+    rotate: 0deg;
   }
 
-  20%, 44.9% {
-    transform: rotate(var(--key-turn, 14deg)) scale(0.985);
-    filter: contrast(1.2);
-  }
-
-  45%, 59.9% {
-    transform: rotate(calc(var(--key-turn, 14deg) * 0.75));
-    filter: none;
-  }
-
-  60%, 79.9% {
-    transform: rotate(calc(var(--key-turn, 14deg) * 0.9));
-    filter: none;
-  }
-
-  80%, 100% {
-    transform: none;
-    filter: none;
+  to {
+    rotate: var(--key-turn, 12deg);
   }
 }
 
-// A control spent: its tracking opens a step, closes a step with one flash of contrast, and is
-// home; every property held in every tread. The ground's change is the stair transition the
-// control itself carries (cut by the data-spent rule above), never a tread of this rite, so the
-// browser never has an underlying colour to interpolate from.
-@keyframes rite-spent {
-  0%, 34.9% {
-    letter-spacing: 0.04em;
-    filter: none;
-  }
-
-  35%, 69.9% {
-    letter-spacing: -0.01em;
-    filter: contrast(0.8) saturate(0.4);
-  }
-
-  70%, 100% {
-    letter-spacing: normal;
-    filter: none;
-  }
-}
-
-// Less motion asked for: every rite above is stilled. What is dealt is there, what is chosen is
-// sealed, what is spent is grey, the soot is lifted or back, the lamp is lit or dark -- the
-// textures stay, because a texture is a state and not a movement.
+// Less motion asked for: nothing steps, and every end stands. What is dealt is there, what is
+// chosen is sealed, what is spent is grey, the soot is lifted or back, the lamp is lit or dark, the
+// room at its share -- each rule above declares the --cut its movement ends on, so with the
+// animation taken off that end is what shows. What leaves is simply gone. The selectors are the
+// rules' own, so each is stilled at the specificity it plays at.
 @media (prefers-reduced-motion: reduce) {
-  .probe,
-  .probe::before,
-  .probe.is-leaving,
-  .probe.probe-ghost,
+  .probe[data-dealt='true'],
+  .probe-landing[data-dealt='true'],
   [data-probe-state='read'] .probe::before,
-  .probe-order-arrow,
+  .probe-order-arrow[data-tick],
   .probe-body .probe-options .probe-option[data-dealt='true']:not(.probe-skip),
-  .probe-body .probe-options .probe-option.is-leaving:not(.probe-skip),
   .probe-option[data-set='true'] .probe-option-label,
-  .probe .probe-option.probe-skip.is-leaving:not([hidden]),
-  .probe-big,
-  .probe-counter,
-  .probe-meter,
-  .probe-field::after,
+  .probe-big[data-tick],
+  .probe-counter[data-tick],
+  .probe-meter[data-tick],
+  .probe-field[data-set='true']::after,
   .probe-mark,
-  .probe-mark::after,
-  .probe-window-pane,
-  .probe-window-light,
-  .probe-rub-cell,
-  .probe-dial,
-  .probe-dial::before,
-  .probe-dial::after,
-  .probe-dial-seal,
+  .probe-window[aria-pressed='true'] .probe-window-light,
+  .probe-window[data-was-lit='true'][aria-pressed='false'] .probe-window-light,
+  .probe-windows[data-read='true'] .probe-window-pane,
+  .probe-rub-cell[data-uncovered='true']::before,
+  .probe-rub-cell[data-covering='true']::before,
+  .probe-dial[data-set='true'] .probe-dial-seal,
   .probe-options.probe-keys .probe-option[data-turned='true']:not(.probe-skip),
-  .probe .probe-body [data-spent='true']:not([hidden]),
-  .probe [data-spent='true'],
-  .probe [data-spent='true']::before,
-  .probe .probe-trace-glass.is-leaving,
-  .probe .probe-meter.is-leaving,
-  .probe .probe-order.is-leaving,
-  .probe .probe-order-name.is-leaving,
-  .probe .probe-order-arrow.is-leaving,
-  .probe .probe-landing.is-leaving {
+  .probe [data-spent='true']:not(.probe-big)::before {
     animation: none;
   }
 
-  .probe-mark,
-  .probe-dial,
-  .probe-dial-end,
-  .probe-window-pane {
+  .probe-big::before,
+  .probe-window-pane,
+  .probe-dial::before,
+  .probe-dial-end {
     transition: none;
-  }
-
-  // A lamp put out is simply out.
-  .probe-window[data-was-lit='true'][aria-pressed='false'] .probe-window-light {
-    visibility: hidden;
   }
 
   .probe.is-leaving,
   .probe.probe-ghost,
+  .probe-landing.probe-landing-ghost,
   .probe-body .probe-options .probe-option.is-leaving:not(.probe-skip),
   .probe .probe-option.probe-skip.is-leaving:not([hidden]),
   .probe .probe-trace-glass.is-leaving,
   .probe .probe-meter.is-leaving,
   .probe .probe-order.is-leaving,
   .probe .probe-order-name.is-leaving,
-  .probe .probe-order-arrow.is-leaving,
-  .probe .probe-landing.is-leaving {
+  .probe .probe-order-arrow.is-leaving {
     display: none;
   }
-}
 
-@media (prefers-reduced-motion: reduce) {
-  .probe-option,
-  .probe-big,
-  .probe-window,
-  .probe-rub-cell {
-    transition: none;
-  }
-
-  // The change of modality without the throw: the words land in their new face at once (the
+  // The change of modality without the cut: the words land in their new face at once (the
   // wearers of the rite are stilled by type.rite itself).
-  html[data-shifting] .stage-head,
-  html[data-shifting] .card-overline {
+  html[data-shifting] .stage-head {
     animation: none;
+    mask: none;
   }
 }

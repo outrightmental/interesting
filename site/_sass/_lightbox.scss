@@ -52,11 +52,29 @@ html [data-lightbox-front] {
 
 // A page's own animation stops while a lightbox is up, so there is nothing moving behind the veil.
 // Said of exactly what the script put aside, so what is stilled is exactly what is unreachable:
-// the constellation still branches out, and the sheet in front of the veil still moves. CSS can
-// pause an animation but not a frame loop, which is why js/site.js holds the loop as well.
+// the constellation still branches out, and the sheet in front of the veil still moves. Said of
+// the layers drawn before and after each element as well, since `*` does not reach them and a
+// paused element does not pause them -- a loop on one would otherwise go on under the blur, and
+// the blur be drawn again for every step of it. And said over whatever a page's own rule says
+// (!important): an `animation` shorthand anywhere on the page sets the play state back to running,
+// and the more particular rule would otherwise win. CSS can pause an animation but not a frame
+// loop, which is why js/site.js holds the loop as well.
 html[data-lightbox] [data-lightbox-aside],
-html[data-lightbox] [data-lightbox-aside] * {
-  animation-play-state: paused;
+html[data-lightbox] [data-lightbox-aside]::before,
+html[data-lightbox] [data-lightbox-aside]::after,
+html[data-lightbox] [data-lightbox-aside] *,
+html[data-lightbox] [data-lightbox-aside] *::before,
+html[data-lightbox] [data-lightbox-aside] *::after {
+  animation-play-state: paused !important;
+}
+
+// The one thing behind the veil that does play: what the shell is taking off the page while a
+// lightbox is up (.shell-unmake, below) -- the unlock box going back down when a sky is placed in
+// the persona sheet, the gate the stage unmakes after it -- which plays its leaving out, so it is
+// gone by the time the page comes back.
+html[data-lightbox] [data-lightbox-aside].shell-unmake,
+html[data-lightbox] [data-lightbox-aside] .shell-unmake {
+  animation-play-state: running !important;
 }
 
 // The veil leaving. js/site.js hides it the instant what was behind it is put away, and
@@ -71,17 +89,31 @@ html[data-lightbox] [data-lightbox-aside] * {
 
 // ---- the shell's leave rite -------------------------------------------------------------
 // What the shell takes off the screen is unmade, never cut away at once (js/site.js, unmake and
-// ghostOf): the "are you sure?" question once it is answered -- as a ghost, a copy of the box left
-// where the box was, since the dialog itself has to close at once for the focus to go home -- and
-// the unlock box once the part it guarded has powered up. A slice steps across it toward where it
-// goes (--leave-angle) while it moves that way by --leave-x and --leave-y, in the same growing
-// treads (--ease-unmake, rolled by js/motion.js for this leaving). Where it goes is said by the
-// reason it goes: the question goes back toward the control it was asked from, the state panel
-// toward the logo, the unlock box down into the part it powered (_unlock.scss). The script takes
-// the class off (or the ghost out) when the animation ends.
+// ghostOf): the "are you sure?" question once it is answered and the state panel once it is put
+// away -- each as a ghost, a copy of the box left where it stood, since the box itself has to go
+// at once for the focus to go home -- and the unlock box once the part it guarded has powered up.
+// It goes behind a slice pointing where it goes (--leave-angle): the side nearest its destination
+// goes first, as if it sank through a slot on that side, while it steps that way by --leave-x and
+// --leave-y, in the same growing treads (--ease-unmake, rolled by js/motion.js for this leaving).
+// Where it goes is said by the reason it goes: the question goes back toward the control it was
+// asked from, the state panel toward the logo, the unlock box down into the part it powered
+// (_unlock.scss). The script takes the class off (or the ghost out) when the animation ends.
 .shell-ghost {
   pointer-events: none;
   animation-play-state: running; // a ghost put aside by the lightbox still plays itself out
+}
+
+// A ghost is lifted into the top layer as a popover, so it is seen over a sheet the question was
+// asked from. The browser dresses a popover as a box of its own (centred, bordered, padded, in
+// the system's colours); none of that is the box it is a copy of, so it is taken off here, at no
+// weight at all, and whatever the copied class paints wins over it.
+:where(.shell-ghost[popover]) {
+  inset: auto;
+  margin: 0;
+  border: 0;
+  padding: 0;
+  color: inherit;
+  background: none;
 }
 
 // The leading `html` outranks the one class a leaving box already carries (.unlock develops with

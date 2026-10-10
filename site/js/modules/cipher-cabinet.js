@@ -135,22 +135,47 @@ function cleaned(value) {
 /* ---- the rite: how this module moves ------------------------------------------------------- */
 
 /* env.rite (ctx.rite inside a piece) is the piece's own roll of how it moves (js/variant.js;
-   js/stage.js, "The rite"). Nothing drawn here moves along a formula or cuts without a rite: the
-   wheel's inner alphabet turns to a new setting in rite.ratchet's clicks, with its backlash, and
-   so does the grille's key to its next view; the ring's glow breathes up rite.stair and back down
-   it, never a sine; a bar of the ledger that comes to read E, a cell of the word that is shown, a
-   view of the key that becomes the one on the board, the band over a solved note, the key that
-   lifts off a solved board -- every surface that becomes set or unset changes by its AREA through
-   rite.matte, cell by cell in the piece's own pattern, and never by a fade; and every word or
-   letter that arrives -- a typed letter, a hint, the setting's number, the note itself -- blinks
-   on with rite.flicker and holds. Every change is read against the piece's own clock, which
-   frame() advances: a change made at `since` has come came() of its way, which is 1 at once for
-   a visitor who asked for less motion and for whatever stood there from the start (since < 0).
-   Each letter, bar or view moves on a roll of its own (rite.at), so no two step together. */
+   js/stage.js, "The rite"): one clean edge -- a slice at an angle or a curve round a corner, the
+   piece's signature -- and the few treads every change climbs, always forward. Nothing in the
+   cabinet moves along a formula, and nothing moves without a reason:
 
+     at rest          the cabinet is waiting, so nothing in it moves: the ring holds one glow and
+                      the dust lies where it settled. A frame with nothing new in it is not drawn
+                      at all (settled, below), and a card of the cabinet is a printed thing.
+     a setting turned the wheel's inner alphabet turns the shortest way round to the new setting,
+                      and the grille's key to its new view, in rite.ratchet's even clicks.
+     a thing said     -- the setting's number, the reading direction, a letter typed or shown, a
+                      strip's letters, the route, the note itself -- is cut over to the new one at
+                      its roll's moment (rite.flicker), once, and stays.
+     a thing marked   -- a bar of the ledger that comes to read E, a cell of the word that is
+                      shown, the view of the key that is on the board, the band over a solved
+                      note -- is cut in behind the piece's edge as its stair climbs (rite.paint:
+                      one path, never cells), and one unmarked is cut away back the way the edge
+                      came. A tint that marks a state rests as two shades of its colour split by
+                      that edge through its middle (cover, below); a bar that reads E is lit whole.
+     a key lifted     off a solved board goes the same way: the whole key, its holes and its
+                      outline with it, is drawn through the part of the board the edge still holds,
+                      and that part shrinks back the way the edge came.
+
+   Every change is read against the piece's own clock, which frame() advances: a change made at
+   `since` has come came() of its way, which is 1 at once for a visitor who asked for less motion
+   and for whatever stood there from the start (since < 0). Each letter, bar or view moves on a
+   roll of its own (rite.at): the same edge, with its own treads and its own moment, so no two
+   step together. */
+
+// The rite of a piece handed none (no env builder does this; a guard): every change already made,
+// and a surface cut by a plain upright slice from its left side.
 const STILL = {
-  ease: () => 1, stair: () => 1, ratchet: () => 1, flicker: () => 1, matte: () => true,
-  treads: 1, kind: 'none', cell: 4, at: () => STILL
+  stair: () => 1, ratchet: () => 1, flicker: () => 1,
+  region(g, x, y, w, h, k) {
+    if (k > 0) g.rect(x, y, w * Math.min(1, k), h);
+  },
+  paint(g, x, y, w, h, k, style) {
+    if (k <= 0) return;
+    if (style != null) g.fillStyle = style;
+    g.fillRect(x, y, w * Math.min(1, k), h);
+  },
+  at: () => STILL
 };
 
 function riteOf(env) {
@@ -162,34 +187,19 @@ function came(now, since, span, reduced) {
   return Math.max(0, Math.min(1, (now - since) / span));
 }
 
-function fract(x) {
-  return x - Math.floor(x);
-}
-
-// The cells of a box that the matte lets through at coverage k, filled in the current fillStyle:
-// how a surface changes by its area. Cells are rite.cell px, coarser over a wide box so a frame
-// stays cheap, on a grid fixed to the canvas so the pattern holds still while it grows. `inside`
-// keeps the tiling to a shape within the box. At k >= 1 every cell is let through.
-function develop(g, rite, x0, y0, bw, bh, k, inside, size) {
+// A tint `k` of the way to marking its surface, in the current fillStyle: the part of the box the
+// piece's edge has passed, and over the half behind the edge's middle a second coat of the same
+// colour. One edge moves while it comes, and at rest it is two shades of one colour split by that
+// edge through the middle of the box. One path per coat.
+function cover(g, rite, x, y, w, h, k) {
   if (k <= 0) return;
-  const cell = size || Math.max(rite.cell, Math.ceil(Math.max(bw, bh) / 28));
-  const cx0 = Math.floor(x0 / cell);
-  const cy0 = Math.floor(y0 / cell);
-  const cx1 = Math.ceil((x0 + bw) / cell);
-  const cy1 = Math.ceil((y0 + bh) / cell);
-  for (let cy = cy0; cy < cy1; cy++) {
-    for (let cx = cx0; cx < cx1; cx++) {
-      const px = cx * cell;
-      const py = cy * cell;
-      if (inside && !inside(px + cell / 2, py + cell / 2)) continue;
-      if (k < 1 && !rite.matte(cx, cy, k)) continue;
-      g.fillRect(px, py, cell, cell);
-    }
-  }
+  rite.paint(g, x, y, w, h, k);
+  rite.paint(g, x, y, w, h, Math.min(k, 0.5));
 }
 
-// A surface that is coming (set) or going (unset): its coverage, 1 when it has been there all
-// along, climbing the stair when it is arriving and coming back down it when it is leaving.
+// A surface that is coming (marked) or going (unmarked): its coverage, 1 when it has been there
+// all along, climbing the stair when it is arriving and coming back down it when it is leaving --
+// each of them one way.
 function coverage(now, was, rite, p) {
   if (now && was) return 1;
   if (now) return rite.stair(p);
@@ -197,17 +207,22 @@ function coverage(now, was, rite, p) {
   return 0;
 }
 
-// How far through its breath a ring is, t seconds in: up the stair and back down it, entered at
-// the point the configuration puts this card at so no two rings on a screen swell together.
-const BREATH = 7;
-function breath(v, rite, t) {
-  const phase = fract(t / BREATH + v.turn);
-  return phase < 0.5 ? rite.stair(phase * 2) : 1 - rite.stair((phase - 0.5) * 2);
-}
-
 const TURN = 0.9;   // seconds a wheel or a key takes to click round to its next setting
 const SPAN = 0.7;   // seconds a letter, a bar or a view takes to arrive
-const REVEAL = 1.6; // seconds a solved note takes to develop
+const REVEAL = 1.6; // seconds a solved note takes to be cut in, the longest change in the cabinet
+
+function sizeOf(c) {
+  return c.w + 'x' + c.h + '@' + (c.dpr || 1);
+}
+
+// Whether a frame has nothing to draw: the canvas holds the picture last drawn at this size, and
+// the latest change (made at `last` on the piece's clock, which stands at `now`) has come the
+// whole of its way -- at once, for a visitor who asked for less motion. The cabinet at rest stands
+// still, so drawing it again would spend a frame on nothing a visitor could see; a new size (the
+// stage clears the canvas to resize it) or a new change draws again.
+function settled(drawn, c, now, last) {
+  return drawn === sizeOf(c) && (!!c.reduced || now - last > REVEAL + 0.1);
+}
 
 /* ---- the letter wheel ----------------------------------------------------------------------- */
 
@@ -248,11 +263,12 @@ function keySpan(p) {
 
 // The wheel's state, with the moment (on the piece's own clock) each part of it last changed, so
 // the scene can play the change as a rite rather than cut to it; -1 is "there from the start".
+// `drawn` is the size the scene was last drawn at (settled, above).
 function blank() {
   return {
     shift: 0, shiftWas: 0, shiftAt: -1, reverse: false, reverseAt: -1,
     guess: '', guessWas: '', guessAt: -1, hints: [], hintAt: [],
-    reveal: false, solvedAt: -1, time: 0
+    reveal: false, solvedAt: -1, time: 0, drawn: null
   };
 }
 
@@ -278,11 +294,10 @@ function wheelScene(g, w, h, c, p, state, variant, time) {
   const got = (since, span) => came(time, since, span, reduced);
   background(g, w, h, c);
 
-  // The dust of the house: each mote blinks on in its own time, on a roll of its own, and drops
-  // out again every few seconds -- never a glide of alpha.
+  // The dust of the house, where it settled: as many motes as the configuration asks, laid where
+  // its turn puts them. They neither drift nor blink -- nothing in the cabinet moves while it waits.
   g.fillStyle = c.alpha(colors.accent, 0.12);
   for (let i = 0, count = Math.max(7, Math.round(18 * v.density)); i < count; i++) {
-    if (!reduced && !rite.at(0x9d + i).flicker(fract(time / 3.1 + i * 0.6180339))) continue;
     g.fillRect(((i * 0.6180339 + v.turn * 0.3) % 1) * w, ((i * 0.7548777) % 1) * h, 1, 1);
   }
   g.strokeStyle = c.alpha(colors.muted, 0.38);
@@ -326,11 +341,10 @@ function wheelScene(g, w, h, c, p, state, variant, time) {
 
   // The wheel: the received alphabet round the outside, the plain alphabet round the inside,
   // turned by the shift the visitor has set. It shows which letter stands for which; it never
-  // reads the note out. The ring's glow breathes up the stair and back down it; the inner
-  // alphabet turns from the setting that stood to the new one in the ratchet's clicks, the
-  // shortest way round, and the setting's number blinks on once the wheel is under way.
-  const glow = c.reduced ? 0.5 : breath(v, rite, time);
-  g.strokeStyle = c.alpha(colors.accent2, 0.45 + glow * 0.3);
+  // reads the note out. The ring holds one glow. The inner alphabet turns from the setting that
+  // stood to the new one in the ratchet's even clicks, the shortest way round, and the setting's
+  // number is cut over to the new one at its moment once the wheel is under way.
+  g.strokeStyle = c.alpha(colors.accent2, 0.6);
   g.lineWidth = Math.max(1, radius * 0.04);
   g.beginPath();
   g.arc(w / 2, middle, radius, 0, Math.PI * 2);
@@ -380,9 +394,9 @@ function wheelScene(g, w, h, c, p, state, variant, time) {
       g.fillStyle = c.alpha(colors.muted, 0.9);
       g.fillText('counted', w * 0.06, middle - (ledger.length / 2) * rowGap - small * 0.8);
       g.fillText('reads', readsAt, middle - (ledger.length / 2) * rowGap - small * 0.8);
-      // A bar that comes to read E is a set surface: the lit colour develops over it through the
-      // matte, cell by cell, as the wheel turns, and leaves the bar it stood on the same way; the
-      // letter each bar reads blinks over to the new one on a roll of its own.
+      // A bar that comes to read E is marked: the lit colour is cut in over it behind the piece's
+      // edge as the wheel turns, and cut away from the bar it stood on back the way it came; the
+      // letter each bar reads is cut over to the new one at the moment of a roll of its own.
       ledger.forEach((entry, i) => {
         const y = middle + (i - (ledger.length - 1) / 2) * rowGap;
         const len = barMax * entry.count / ledger[0].count;
@@ -395,13 +409,10 @@ function wheelScene(g, w, h, c, p, state, variant, time) {
         g.fillText(entry.letter, w * 0.06, y);
         g.fillStyle = c.alpha(colors.accent, 0.5);
         g.fillRect(w * 0.06 + small * 1.5, y - small * 0.2, len, small * 0.4);
-        if (k > 0) {
-          g.fillStyle = c.alpha(colors.accent2, 0.9);
-          develop(g, own, w * 0.06 + small * 1.5, y - small * 0.2, len, small * 0.4, k, null, Math.max(2, rite.cell));
-        }
-        const settled = turnP >= 1 || own.flicker(turnP);
-        g.fillStyle = (settled ? lit : was === 'E') ? colors.accent2 : colors.fg;
-        g.fillText(settled ? reads : was, readsAt, y);
+        if (k > 0) own.paint(g, w * 0.06 + small * 1.5, y - small * 0.2, len, small * 0.4, k, c.alpha(colors.accent2, 0.9));
+        const over = turnP >= 1 || own.flicker(turnP);
+        g.fillStyle = (over ? lit : was === 'E') ? colors.accent2 : colors.fg;
+        g.fillText(over ? reads : was, readsAt, y);
       });
     }
     const wayNow = state.reverse ? 'read right to left' : 'read left to right';
@@ -416,8 +427,9 @@ function wheelScene(g, w, h, c, p, state, variant, time) {
   }
 
   // The word, as typed, letter by letter in the cells the note's word fills; hints above. A solved
-  // note blinks in over the cells (and the cells blink out under it) while a band of the lock's
-  // colour develops across the foot of the scene through the matte: it never washes in.
+  // note is cut in over the cells at its moment (and the cells are cut away under it) while a band
+  // of the lock's colour is cut in across the foot of the scene behind the piece's edge, and rests
+  // there in two shades: it never washes in.
   const revealP = got(state.solvedAt, REVEAL);
   const opened = state.reveal && rite.flicker(revealP);
   g.font = '500 ' + small + 'px ui-monospace, monospace';
@@ -426,10 +438,8 @@ function wheelScene(g, w, h, c, p, state, variant, time) {
   g.fillText(opened ? 'THE NOTE' : 'THE WORD, THROUGH THE WHEEL', w * 0.06, h * 0.79);
   g.textAlign = 'center';
   if (opened) {
-    const k = rite.stair(revealP);
     g.fillStyle = c.alpha(colors.accent2, 0.16);
-    if (k >= 1) g.fillRect(0, h * 0.76, w, h * 0.24);
-    else develop(g, rite, 0, h * 0.76, w, h * 0.24, k);
+    cover(g, rite, 0, h * 0.76, w, h * 0.24, rite.stair(revealP));
     if (rite.at(0x7e).flicker(revealP)) {
       g.font = '600 ' + size + 'px ui-monospace, monospace';
       g.fillStyle = colors.accent2;
@@ -449,11 +459,12 @@ function wheelScene(g, w, h, c, p, state, variant, time) {
     const x = x0 + cell * i;
     const own = rite.at(0x600 + i);
     const hinted = state.hints.indexOf(i);
-    // A cell that has been shown its letter is a set surface: it textures through the matte.
+    // A cell that has been shown its letter is marked: its tint is cut in behind the edge and
+    // rests in two shades, and the letter above it is cut on at the cell's moment.
     if (hinted >= 0) {
       const hp = got(state.hintAt[hinted], SPAN);
       g.fillStyle = c.alpha(colors.accent2, 0.22);
-      develop(g, own, x + cell * 0.08, top, cell * 0.84, cellH, own.stair(hp));
+      cover(g, own, x + cell * 0.08, top, cell * 0.84, cellH, own.stair(hp));
       if (own.flicker(hp)) {
         g.fillStyle = colors.accent2;
         g.font = '500 ' + small + 'px ui-monospace, monospace';
@@ -464,7 +475,7 @@ function wheelScene(g, w, h, c, p, state, variant, time) {
     g.strokeStyle = c.alpha(colors.muted, 0.6);
     g.lineWidth = 1;
     g.strokeRect(x + cell * 0.08, top, cell * 0.84, cellH);
-    // A typed letter blinks on; one that was already there stands.
+    // A typed letter is cut on at its moment; one that was already there stands.
     const letter = guess[i] === guessWas[i] || own.flicker(guessP) ? guess[i] : guessWas[i];
     if (letter) {
       g.fillStyle = colors.fg;
@@ -480,7 +491,12 @@ function wheelPiece(env) {
   const note = NOTES[p.note];
   const word = keyWordOf(note);
   const received = locked(p);
-  const draw = (c) => wheelScene(c.g, c.w, c.h, c, p, state, env.variant, state.time);
+  const draw = (c) => {
+    wheelScene(c.g, c.w, c.h, c, p, state, env.variant, state.time);
+    state.drawn = sizeOf(c);
+  };
+  // The moment the latest change was made: until it has come the whole of its way, frames draw.
+  const last = () => Math.max(state.shiftAt, state.reverseAt, state.guessAt, state.solvedAt, ...state.hintAt);
   return {
     title: wheelTitle(p),
     brief: 'A working of the wheel. The note was shifted some way round the alphabet, and the house sometimes writes a line backwards first. The wheel shows which letter stands for which at the setting you choose; it never reads the note for you. The bars beside it count the line\'s commonest letters, and the tallest nearly always wants to read E. One word of the note is underlined.',
@@ -565,6 +581,7 @@ function wheelPiece(env) {
     },
     frame(t, dt, c) {
       if (!c.reduced) state.time += Math.max(0, Number(dt) || 0);
+      if (settled(state.drawn, c, state.time, last())) return;
       draw(c);
     },
     end(c) {
@@ -683,12 +700,14 @@ function grilleBoard(p) {
 // so the scene plays the change as a rite rather than cutting to it; -1 is "from the start".
 // `from` is the angle the key stood at when it was last sent turning, which the ratchet turns
 // from; `routeWas` the route line and `stripsWas` the four views that stood before the last
-// change of notch or turn, which the new ones blink over.
+// change of notch or turn, which the new ones are cut over; `drawn` the size the scene was last
+// drawn at (settled, above).
 function grilleBlank() {
   return {
     corner: 0, direction: 1, view: 0, viewWas: 0, viewAt: -1, from: 0, turnAt: -1, routeWas: '',
     stripsWas: ['', '', '', ''],
-    guess: '', guessWas: '', guessAt: -1, hints: 0, hintAt: -1, reveal: false, solvedAt: -1, t: 0
+    guess: '', guessWas: '', guessAt: -1, hints: 0, hintAt: -1, reveal: false, solvedAt: -1, t: 0,
+    drawn: null
   };
 }
 
@@ -705,7 +724,7 @@ function routeLine(s) {
 }
 
 // The angle the key stands at: the notch and view it was set to, reached from where it stood in
-// the ratchet's clicks, each with its backlash, the shortest way round -- never a smooth turn.
+// the ratchet's even clicks, the shortest way round -- never a smooth turn.
 function keyAngle(s, rite, reduced) {
   const goal = quarter(s.corner + s.direction * s.view) * QUARTER;
   const p = came(s.t, s.turnAt, TURN, reduced);
@@ -762,46 +781,38 @@ function grilleScene(g, w, h, c, p, board, s, variant) {
   }
 
   // The holes are actual holes in one rotating mask; the board underneath never turns. Over a
-  // solved board the key lifts off down the matte ladder: its surface leaves cell by cell in the
-  // piece's own pattern (in the key's own frame, so the pattern turns with it), never by alpha.
+  // solved board the key lifts off behind the piece's edge: the whole key, its surface, its holes
+  // and its outline, is drawn through the part of it the edge still holds -- in the key's own
+  // frame, so the edge turns with the key -- and that part shrinks back the way the edge came,
+  // tread by tread down the stair, never by alpha.
   const inset = cell * 0.09;
   const keep = s.reveal ? 1 - rite.stair(revealP) : 1;
   if (keep > 0) {
+    const line = Math.max(1, cell * 0.035);
     g.save();
     g.translate(cx, cy);
     g.rotate(angle);
-    g.fillStyle = c.mix(col.bg, col.bg2, 0.3);
-    if (keep >= 1) {
+    if (keep < 1) {
       g.beginPath();
-      g.rect(-side / 2, -side / 2, side, side);
-      for (const index of p.holes) {
-        g.rect(-side / 2 + index % SIDE * cell + inset,
-          -side / 2 + Math.floor(index / SIDE) * cell + inset,
-          cell - inset * 2, cell - inset * 2);
-      }
-      g.fill('evenodd');
-    } else {
-      const solid = (px, py) => {
-        const ix = Math.floor((px + side / 2) / cell);
-        const iy = Math.floor((py + side / 2) / cell);
-        if (ix < 0 || iy < 0 || ix >= SIDE || iy >= SIDE || !p.holes.includes(iy * SIDE + ix)) return true;
-        const fx = px + side / 2 - ix * cell;
-        const fy = py + side / 2 - iy * cell;
-        return fx < inset || fy < inset || fx > cell - inset || fy > cell - inset;
-      };
-      develop(g, rite, -side / 2, -side / 2, side, side, keep, solid, Math.max(rite.cell, Math.ceil(side / 36)));
+      rite.region(g, -side / 2 - line, -side / 2 - line, side + line * 2, side + line * 2, keep);
+      g.clip();
     }
-    // The key's outline goes the way a thing leaves: it holds while the mask thins, blinks out
-    // with the flicker's refusals (the flicker read backwards) and is gone before the last cell.
-    if (!s.reveal || rite.at(0x8a).flicker(1 - revealP)) {
-      g.strokeStyle = col.accent;
-      g.lineWidth = Math.max(1, cell * 0.035);
-      g.strokeRect(-side / 2, -side / 2, side, side);
-      for (const index of p.holes) {
-        g.strokeRect(-side / 2 + index % SIDE * cell + inset,
-          -side / 2 + Math.floor(index / SIDE) * cell + inset,
-          cell - inset * 2, cell - inset * 2);
-      }
+    g.fillStyle = c.mix(col.bg, col.bg2, 0.3);
+    g.beginPath();
+    g.rect(-side / 2, -side / 2, side, side);
+    for (const index of p.holes) {
+      g.rect(-side / 2 + index % SIDE * cell + inset,
+        -side / 2 + Math.floor(index / SIDE) * cell + inset,
+        cell - inset * 2, cell - inset * 2);
+    }
+    g.fill('evenodd');
+    g.strokeStyle = col.accent;
+    g.lineWidth = line;
+    g.strokeRect(-side / 2, -side / 2, side, side);
+    for (const index of p.holes) {
+      g.strokeRect(-side / 2 + index % SIDE * cell + inset,
+        -side / 2 + Math.floor(index / SIDE) * cell + inset,
+        cell - inset * 2, cell - inset * 2);
     }
     g.restore();
   }
@@ -832,13 +843,14 @@ function grilleScene(g, w, h, c, p, board, s, variant) {
   g.textAlign = 'left';
   if (!opened) {
     // The four views along the route the visitor has set, the one on the board marked: the mark
-    // is a set surface that develops behind the strip through the matte and leaves the strip it
-    // stood behind the same way, and the strip's colour blinks over once it is under way.
+    // is a tint cut in behind the strip by the piece's edge, resting in two shades, and cut away
+    // from the strip it stood behind back the way it came; the strip's colour is cut over at its
+    // moment once the mark is under way.
     const viewP = got(s.viewAt, SPAN);
     const turnP = got(s.turnAt, TURN);
     for (let view = 0; view < 4; view++) {
-      // A strip whose letters changed with the route blinks over to the new ones; one that
-      // reads the same stands.
+      // A strip whose letters changed with the route is cut over to the new ones at its moment;
+      // one that reads the same stands.
       const now = strip(p, board, s.corner, s.direction, view);
       const letters = turnP >= 1 || now === s.stripsWas[view] || rite.at(0x4c0 + view).flicker(turnP) ? now : s.stripsWas[view];
       const text = (view + 1) + '  ' + letters;
@@ -847,13 +859,13 @@ function grilleScene(g, w, h, c, p, board, s, variant) {
       const k = coverage(view === s.view, view === s.viewWas, own, viewP);
       if (k > 0) {
         g.fillStyle = c.alpha(col.accent2, 0.2);
-        develop(g, own, w * 0.08 - small * 0.4, y - small * 0.62, g.measureText(text).width + small * 0.8, small * 1.24, k);
+        cover(g, own, w * 0.08 - small * 0.4, y - small * 0.62, g.measureText(text).width + small * 0.8, small * 1.24, k);
       }
       const marked = view === s.view && (view === s.viewWas || own.flicker(viewP));
       g.fillStyle = marked ? col.accent2 : col.fg;
       g.fillText(text, w * 0.08, y);
     }
-    // The route line blinks over to the new route; a hint blinks on after it.
+    // The route line is cut over to the new route at its moment; a hint is cut on at its own.
     const hintP = got(s.hintAt, SPAN);
     const route = turnP >= 1 || rite.at(0x3a).flicker(turnP) ? routeLine(s) : s.routeWas;
     const hint = s.hints >= 1 && rite.at(0x3b).flicker(hintP)
@@ -867,7 +879,7 @@ function grilleScene(g, w, h, c, p, board, s, variant) {
     const guess = rite.at(0x3c).flicker(guessP) ? s.guess : s.guessWas;
     g.fillText('first word: ' + (cleaned(guess) || '_'), w * 0.92, h * 0.935);
   } else {
-    // The note blinks in under the lifting key, each line on a roll of its own.
+    // The note is cut in under the lifting key, each line at the moment of a roll of its own.
     g.fillStyle = col.accent2;
     g.fillText('THE NOTE', w * 0.08, h * 0.74);
     g.textAlign = 'center';
@@ -892,7 +904,12 @@ function grillePiece(env, carriedPlan) {
   const note = NOTES[p.note];
   const first = note.split(' ')[0];
   const rite = riteOf(env);
-  const draw = (c) => grilleScene(c.g, c.w, c.h, c, p, board, s, env.variant);
+  const draw = (c) => {
+    grilleScene(c.g, c.w, c.h, c, p, board, s, env.variant);
+    s.drawn = sizeOf(c);
+  };
+  // The moment the latest change was made: until it has come the whole of its way, frames draw.
+  const last = () => Math.max(s.viewAt, s.turnAt, s.guessAt, s.hintAt, s.solvedAt);
   return {
     title: grilleTitle(p),
     brief: 'One key, turned four ways. Thirty-six letters and a nine-hole key. From one notch, turned one way, the key\'s four views read the note out nine letters at a time, left to right and then down; from any other they read noise. The strips below the board follow the route you set.',
@@ -979,6 +996,7 @@ function grillePiece(env, carriedPlan) {
     },
     frame(t, dt, c) {
       if (!c.reduced) s.t += Math.max(0, Number(dt) || 0);
+      if (settled(s.drawn, c, s.t, last())) return;
       draw(c);
     },
     end(c) {
@@ -999,13 +1017,11 @@ export default {
     if (dealsGrille(env)) grillePreview(g, w, h, env, grillePlan(env));
     else wheelScene(g, w, h, env, plan(env), blank(), env.variant, 0);
   },
-  animate(g, w, h, env, t) {
-    // The grille is a printed card: nothing on it moves, so the loop can let it go. The wheel does
-    // turn, and both the branch above and plan() below are arithmetic over env.seed rather than
-    // draws from the env's seeded stream, so asking again every frame deals the same cabinet
-    // (issue #92; js/feed.js has the contract animate is held to).
-    if (dealsGrille(env)) return false;
-    wheelScene(g, w, h, env, plan(env), blank(), env.variant, t);
+  animate() {
+    // A card of the cabinet is a printed thing, the wheel as much as the grille: a locked note
+    // waits to be opened and nothing on it moves until it is, so the loop lets it go at once
+    // (js/feed.js has the contract animate is held to).
+    return false;
   },
   spark(env) {
     if (dealsGrille(env)) {

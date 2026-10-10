@@ -339,12 +339,16 @@
   function reducedMotion() { return !!(calm && calm.matches); }
 
   /* ---- the rites of the threshold ---------------------------------------------------------
-     Nothing here fades, glides or cuts while a visitor watches (README: "Motion axiom"). The
-     engine (js/motion.js, window.interestingMotion) is optional everywhere: every use is guarded,
-     and without it the stylesheet's baked ladder plays and the flow keeps a glitch of a curve of
-     its own. What the engine gives when it is there: a beat rolled for the page, a stagger, the
-     glyph reveal for words, a composed arrival or leave of an element's own, a stepper in treads
-     for the canvases, and the texture a sealed surface wears. */
+     Nothing here fades, glides or wears a pattern (README: "Motion axiom", the cut). A thing
+     changes by one clean edge -- a slice at an angle, or a curve round a point -- stepping across
+     it in a few treads that always go forward, and the edge is where it is for a reason the
+     visitor gave: the side a question comes in from, the point a press landed, the way a hand
+     rubbed. The engine (js/motion.js, window.interestingMotion) is optional everywhere: every use
+     is guarded, and without it the stylesheet's baked stairs play and the flow keeps a clean stair
+     of its own. What the engine gives when it is there: a beat rolled for the page, a stagger, the
+     reveal that cuts a line of words in by one slice, each movement's treads and length written on
+     the element that makes it (cut, arrive), the point a set control's two shades split round
+     (seal), and a stepper for the canvases. */
   function engine() {
     var m = window.interestingMotion;
     return m && typeof m.ms === 'function' ? m : null;
@@ -365,6 +369,7 @@
   }
   function between(a, b) { return a + Math.random() * (b - a); }
   function unit(value) { return Math.max(0, Math.min(1, value)); }
+  function seedOf() { return Math.floor(Math.random() * 0x7fffffff); }
   function shuffled(list) {
     var out = list.slice();
     for (var i = out.length - 1; i > 0; i--) {
@@ -378,63 +383,49 @@
   function staggerOf(k) {
     var m = engine();
     if (m && typeof m.stagger === 'function') { try { return m.stagger(k); } catch (e) { /* the bake */ } }
-    return Math.max(0, Math.round(k * BEATS.stagger + between(-14, 14)));
+    return Math.max(0, Math.round(k * BEATS.stagger));
   }
 
-  /* A curve for one movement of a mechanism -- a star coming out, a knock ringing -- rolled by
-     the motion engine (js/motion.js) for that movement alone, so no two stars come out the same
-     way and no knock rings like the last (README: "Motion axiom"). Where there is no engine the
-     flow keeps a glitch of a curve of its own, a polyline and never a formula, because nothing
-     on this site fades or grows along one -- and even that polyline is jittered per call, with a
-     hold put in at a rolled place, so two stars never share it either. */
-  var OWN_CURVE = [[0, 0], [0.12, 0.03], [0.4, 0.66], [0.48, 0.6], [0.66, 1.04], [0.84, 0.98], [1, 1]];
-  function along(stops) {
+  /* A stair for a movement only a script can make -- the night falling as the stars come out --
+     rolled by the motion engine for that movement alone (README: "Motion axiom"). Where there is
+     no engine the flow keeps a clean stair of its own: two to five treads at evenly spaced moments
+     after a hold, always forward, shaped by the family -- an arrival's treads shrink as it lands, a
+     leaving's grow as it goes, a stair or a ratchet steps evenly. Never a formula, never a slip. */
+  function ownStair(family) {
+    var n = 2 + Math.floor(Math.random() * 4);
+    var first = between(0.16, 0.3);
+    var last = between(0.84, 0.94);
+    var moments = [];
+    var rises = [];
+    var total = 0;
+    for (var i = 0; i < n; i++) {
+      moments.push(first + (last - first) * (i / (n - 1)));
+      var rise = family === 'arrive' ? Math.pow(0.55, i) : family === 'leave' ? Math.pow(1.6, i) : 1;
+      rises.push(rise);
+      total += rise;
+    }
     return function (t) {
-      if (t <= 0) return stops[0][1];
-      if (t >= 1) return stops[stops.length - 1][1];
-      for (var i = 1; i < stops.length; i++) {
-        if (t <= stops[i][0]) {
-          var t0 = stops[i - 1][0];
-          var y0 = stops[i - 1][1];
-          return stops[i][0] > t0 ? y0 + (stops[i][1] - y0) * ((t - t0) / (stops[i][0] - t0)) : stops[i][1];
-        }
-      }
-      return 1;
+      if (t >= 1) return 1;
+      var y = 0;
+      for (var k = 0; k < n && moments[k] <= t; k++) y += rises[k] / total;
+      return Math.min(1, y);
     };
-  }
-  function ownRoll() {
-    var stops = OWN_CURVE.map(function (s, i) {
-      if (i === 0 || i === OWN_CURVE.length - 1) return [s[0], s[1]];
-      return [unit(s[0] + between(-0.04, 0.04)), s[1] + between(-0.06, 0.06)];
-    });
-    // A hold: the same y repeated a little later, at a rolled place.
-    var at = 1 + Math.floor(Math.random() * (stops.length - 3));
-    stops.splice(at + 1, 0, [Math.min(stops[at + 1][0] - 0.01, stops[at][0] + between(0.03, 0.1)), stops[at][1]]);
-    stops.sort(function (a, b) { return a[0] - b[0]; });
-    return stops;
   }
   function rite(family) {
     var motion = window.interestingMotion;
     if (motion && typeof motion.ease === 'function') {
-      try { return motion.ease(family); } catch (e) { /* the flow's own curve stands */ }
+      try { return motion.ease(family); } catch (e) { /* the flow's own stair stands */ }
     }
-    var curve = along(ownRoll());
-    if (family === 'stair' || family === 'ratchet') return treadsOf(curve, 3 + Math.floor(Math.random() * 4));
-    return curve;
-  }
-  // A step series over a curve: the tread index 0..n, never a fraction between.
-  function treadsOf(curve, n) {
-    var steps = Math.max(2, Math.round(n || 4));
-    return function (t) { return Math.round(unit(curve(t)) * steps) / steps; };
+    return ownStair(family);
   }
 
-  /* A movement in treads for a script: `step(k, n, slipping)` at uneven moments over `ms`, with
-     a slip or two back by a tread, then `done()`. The engine's stepper when it is there; the
-     flow's own uneven widths when it is not; the last tread at once when stilled. Hands back a
+  /* A movement in treads for a script: `step(k, n)` with the tread reached, 0 to n, then
+     `done()` -- two to five treads, always forward. The engine's stepper when it is there; evenly
+     spaced moments after a hold when it is not; the last tread at once when stilled. Hands back a
      function that stops it. */
   function series(opts) {
     var m = engine();
-    var n = Math.max(2, Math.round(opts.treads || (3 + Math.random() * 4)));
+    var n = Math.max(2, Math.min(5, Math.round(opts.treads || (2 + Math.random() * 3))));
     var total = Math.max(0, Number(opts.ms) || 0);
     var step = typeof opts.step === 'function' ? opts.step : function () {};
     var done = typeof opts.done === 'function' ? opts.done : function () {};
@@ -442,45 +433,32 @@
       try { return m.stepper({ ms: total, treads: n, step: step, done: done }); } catch (e) { /* the flow's own */ }
     }
     if (!total || stilled() || typeof window.requestAnimationFrame !== 'function') {
-      step(n, n, false);
+      step(n, n);
       done();
       return function () {};
     }
-    var widths = [];
-    var acc = 0;
-    for (var i = 0; i < n; i++) { var w = between(0.4, 1.4); widths.push(w); acc += w; }
-    var moments = [];
-    var at = 0;
-    for (var j = 0; j < n; j++) {
-      at += widths[j] / acc;
-      moments.push({ at: at, k: j + 1 });
-      if (j > 0 && j < n - 1 && Math.random() < 0.25) {
-        moments.push({ at: at + widths[j] / acc * 0.3, k: j, slip: true });
-        moments.push({ at: at + widths[j] / acc * 0.55, k: j + 1 });
-      }
-    }
-    moments.sort(function (a, b) { return a.at - b.at; });
+    var first = between(0.16, 0.3);
+    var last = between(0.86, 0.95);
     var started = performance.now();
     var stopped = false;
-    var next = 0;
-    var last = -1;
+    var reached = 0;
     function frame(tm) {
       if (stopped) return;
       var p = unit((tm - started) / total);
-      while (next < moments.length && moments[next].at <= p) {
-        if (moments[next].k !== last) { last = moments[next].k; step(last, n, !!moments[next].slip); }
-        next += 1;
-      }
+      var k = reached;
+      while (k < n && first + (last - first) * (k / (n - 1)) <= p) k += 1;
+      if (k !== reached) { reached = k; step(k, n); }
       if (p < 1) window.requestAnimationFrame(frame);
-      else { if (last !== n) step(n, n, false); done(); }
+      else { if (reached !== n) step(n, n); done(); }
     }
-    step(0, n, false);
+    step(0, n);
     window.requestAnimationFrame(frame);
     return function () { stopped = true; };
   }
 
-  // Words arriving: written at once (textContent is never anything but the words), then revealed
-  // glyph by glyph through sigils when the engine is there and the visitor has not asked for less.
+  // Words arriving: written at once (textContent is never anything but the words), then cut in by
+  // the engine's reveal -- one slice at the register's slant stepping across the line, a tread to a
+  // word or two -- when the engine is there and the visitor has not asked for less.
   function say(node, text, pace) {
     if (!node) return;
     node.textContent = text;
@@ -489,10 +467,10 @@
     try { m.reveal(node, { pace: pace || 0.42 }); } catch (e) { /* the words are there */ }
   }
   // The trace line is the scribe: the live region gets its plain write (assistive tech hears each
-  // line once) and the glass twin under it shows the same words arriving through sigils. Only
-  // the part of the line that changed is revealed (a count ticking over in a status line that
-  // is otherwise the same words), and a line revealed whole is paced to land within one long
-  // beat however many glyphs it has, so a run of presses never leaves the glass a scramble.
+  // line once) and the glass twin under it shows the same words cut in. Only the part of the line
+  // that changed is cut in (a count ticking over in a status line that is otherwise the same
+  // words), and a line cut in whole is paced to land within one long beat however long it is, so a
+  // run of presses never leaves the glass behind.
   function paceFor(text) {
     var n = text ? text.length : 0;
     var step = beat('stagger') || BEATS.stagger;
@@ -528,13 +506,13 @@
     if (!changed) return;
     try { trace.undoGlass = m.reveal(part, { pace: paceFor(changed) }); } catch (e) { /* the words are there */ }
   }
-  // The meter (aria-hidden) takes its marks and stamps them: data-tick alternates so the
-  // stylesheet's one-tread mark-stamp restarts on every write.
+  // A mark, a count or an arrow is stamped as it lands: data-tick alternates between two names so
+  // the stylesheet's one-tread stamp restarts on every write.
   function tick(node) {
     if (!node || typeof node.setAttribute !== 'function') return;
     node.setAttribute('data-tick', node.getAttribute('data-tick') === 'a' ? 'b' : 'a');
   }
-  // The meter cleared goes down the ladder before its marks are taken, and is itself again after.
+  // The meter cleared goes behind a slice before its marks are taken, and is itself again after.
   function gauge(trace, text) {
     if (!trace || !trace.meter) return;
     var meter = trace.meter;
@@ -553,62 +531,96 @@
     for (var i = 1; i <= n; i++) out += (i % 5 === 0) ? '/' : '|';
     return out.replace(/(\|{4}\/)/g, '$1 ');
   }
-  // Things dealt out: each gets a delay of its own in a rolled order (--d, --k) and, with the
-  // engine, a geometry, a ladder and a composition of its own; data-dealt is what the stylesheet
-  // plays probe-in on, and it stays, so nothing replays when a passing class comes off.
-  function dealOut(nodes, spell) {
-    var order = shuffled(nodes);
+  // One movement's treads and length, cut by the engine for this element and this trigger (m.cut:
+  // --ease-<rite> and --motion-<rite> written on the element, and the slice's angle where one is
+  // given). Hands back the length in ms, or 0 where there is no engine or the visitor asked for
+  // stillness -- the stylesheet's baked stair plays then, or nothing does.
+  function cutFor(node, riteName, options) {
     var m = engine();
-    order.forEach(function (node, k) {
+    if (!m || typeof m.cut !== 'function' || stilled() || !node || !node.style) return 0;
+    try { return m.cut(node, riteName, options || {}) || 0; } catch (e) { return 0; }
+  }
+  // Things dealt out: one after another, each on a delay of its own in a rolled order (--d), all
+  // in one stair cut for the whole deal (one seed), so the deal is one gesture and not a scatter.
+  // They come in behind the slice their question arrives by, which they inherit (--arrive-angle),
+  // and where the question is itself coming in behind one, only once that edge has crossed
+  // (dealAfter, the question's own length), so the two movements follow each other and never
+  // cross. data-dealt is what the stylesheet plays the arrival on, and it stays, so nothing
+  // replays when a passing class comes off.
+  var dealAfter = 0;
+  function dealOut(nodes) {
+    var seed = seedOf();
+    shuffled(nodes).forEach(function (node, k) {
       if (!node || !node.style) return;
-      node.style.setProperty('--d', staggerOf(k) + 'ms');
-      node.style.setProperty('--k', String(k));
-      if (m && typeof m.arrive === 'function' && !stilled()) {
-        try { m.arrive(node, { spell: spell || 'probe-in', className: false, mattes: k % 2 === 1 }); } catch (e) { /* the page's roll */ }
-      }
+      node.style.setProperty('--d', Math.round(dealAfter + staggerOf(k)) + 'ms');
+      cutFor(node, 'develop', { seed: seed, duration: 'long' });
       node.setAttribute('data-dealt', 'true');
     });
   }
-  // The length the engine rolled for a rite on an element (--motion-<name>, written inline by
-  // composeOn), in ms; 0 where none was written.
+  // The length the engine cut for a movement on an element (--motion-<rite>, written inline), in
+  // ms; 0 where none was written.
   function rolled(node, name) {
     if (!node || !node.style || typeof node.style.getPropertyValue !== 'function') return 0;
     var v = parseFloat(node.style.getPropertyValue(name));
     return isFinite(v) && v > 0 ? v : 0;
   }
-  // A rite composed for one element and one trigger: --rite-<kind> names the composition and
-  // --motion-<fallback> its rolled length (both read by the stylesheet before its own keyframes).
-  // Hands back that length, or 0 where there is no engine or the visitor asked for stillness.
-  function composeFor(node, kind, fallback, beatName) {
+  // One thing replacing another in the same place -- a question the last, a landing the one
+  // before: the new one is cut in by a slice from the side the roll gives it (data-dealt), and the
+  // old one, left over its place as a ghost (`ghostClass`), is cut away by the same edge, its angle,
+  // treads and length copied from the new one's, so the change is one edge; it is taken out of the
+  // page once the edge has crossed. With no engine, or for a visitor who asked for less, the old
+  // one simply goes.
+  function replace(fresh, old, ghostClass) {
+    if (!old) return;
     var m = engine();
-    var wait = beat(beatName || 'medium');
-    if (!m || typeof m.composeOn !== 'function' || !wait || !node || !node.style) return 0;
-    try { m.composeOn(node, kind, fallback, wait); } catch (e) { return 0; }
-    return rolled(node, '--motion-' + fallback) || wait;
-  }
-  // A thing leaving: down the ladder to the rolled leave corner (is-leaving, probe-out or the
-  // composition the engine wrote), then `fn` at the animation's own end or, failing that, the
-  // clock's. Hands back the rite's length in ms, so a caller can wait for the rite and not the
-  // clock. A node restored before the end (restore) keeps what it has: the callback of a leave
-  // that was undone never runs.
-  function unmake(node, fn) {
-    if (node && node.unmakeToken) restore(node);
-    var wait = beat('medium');
-    if (!node || !wait || !node.classList) { if (fn) fn(); return 0; }
-    var m = engine();
-    if (m && typeof m.composeOn === 'function' && !(node.style && node.style.getPropertyValue('--rite-unmake'))) {
-      try { m.composeOn(node, 'unmake', 'probe-out', wait); } catch (e) { /* the stylesheet's own */ }
-    } else if (node.style && !rolled(node, '--motion-probe-out') && rolled(node, '--motion-card-out')) {
-      // The leave the engine composed at the arrival (m.arrive) plays at the length it rolled then.
-      node.style.setProperty('--motion-probe-out', node.style.getPropertyValue('--motion-card-out'));
+    var length = 0;
+    if (m && typeof m.arrive === 'function' && !stilled() && fresh && fresh.style) {
+      try { m.arrive(fresh, { spell: 'develop', className: false }); } catch (e) { /* no edge */ }
+      length = rolled(fresh, '--motion-develop');
     }
-    var length = rolled(node, '--motion-probe-out') || wait;
+    if (!length || !old.style) {
+      if (old.parentNode) old.parentNode.removeChild(old);
+      return;
+    }
+    fresh.setAttribute('data-dealt', 'true');
+    ['--arrive-angle', '--ease-develop', '--motion-develop'].forEach(function (name) {
+      old.style.setProperty(name, fresh.style.getPropertyValue(name));
+    });
+    old.classList.add(ghostClass);
+    old.setAttribute('aria-hidden', 'true');
+    old.setAttribute('inert', '');
+    var gone = false;
+    function drop() {
+      if (gone) return;
+      gone = true;
+      if (old.parentNode) old.parentNode.removeChild(old);
+    }
+    old.addEventListener('animationend', function (ev) {
+      if (ev.target === old && !ev.pseudoElement && ev.animationName === 'cut-in') drop();
+    });
+    window.setTimeout(drop, length + 240);
+  }
+  // A thing leaving: behind a slice toward where it goes (is-leaving; cut.unmake in the
+  // stylesheet), in treads cut for it -- or for its whole group, when the callers share a seed --
+  // after `delay` ms (--d: a group goes one after another), then `fn` at the animation's own end
+  // or, failing that, the clock's. Hands back the length in ms, delay and all, so a caller can wait
+  // for the movement and not the clock. A node restored before the end (restore) keeps what it
+  // has: the callback of a leave that was undone never runs.
+  function unmake(node, fn, seed, delay) {
+    if (node && node.unmakeToken) restore(node);
+    if (!node || !node.classList) { if (fn) fn(); return 0; }
     var token = { hid: node.getAttribute('aria-hidden') !== 'true' };
     node.unmakeToken = token;
     node.classList.add('is-leaving');
     node.setAttribute('aria-hidden', 'true');
     if (node.style) node.style.pointerEvents = 'none';
     if (node.tagName === 'BUTTON') node.tabIndex = -1;
+    // Stillness: the thing is simply gone (the stylesheet hides what is leaving), at once.
+    var wait = beat('medium');
+    if (!wait) { if (fn) fn(); return 0; }
+    var after = Math.max(0, Math.round(delay || 0));
+    if (node.style) node.style.setProperty('--d', after + 'ms');
+    var length = (cutFor(node, 'unmake', { seed: seed, duration: 'medium' }) || wait) + after;
     var once = false;
     var timer = 0;
     function cancel() {
@@ -625,7 +637,7 @@
       if (fn) fn();
     }
     function ended(ev) {
-      if (ev.target === node && !ev.pseudoElement) go();
+      if (ev.target === node && !ev.pseudoElement && ev.animationName === 'cut-out') go();
     }
     token.cancel = cancel;
     node.addEventListener('animationend', ended);
@@ -633,7 +645,7 @@
     return length;
   }
   // A thing that was leaving, kept after all (a meter written again, an order that takes a new
-  // name): the leave is undone, and the next leave composes anew.
+  // name): the leave is undone, and the next leave is cut anew.
   function restore(node) {
     if (!node || !node.classList) return;
     var token = node.unmakeToken;
@@ -641,166 +653,111 @@
     node.unmakeToken = null;
     node.classList.remove('is-leaving');
     if (!token || token.hid) node.removeAttribute('aria-hidden');
-    if (node.style) {
-      node.style.pointerEvents = '';
-      if (typeof node.style.removeProperty === 'function') {
-        node.style.removeProperty('--rite-unmake');
-        node.style.removeProperty('--motion-probe-out');
-      }
-    }
+    if (node.style) node.style.pointerEvents = '';
     if (node.tagName === 'BUTTON') node.tabIndex = 0;
   }
-  // A control spent: its texture leaves down the ladder by a composition of this retirement's own
-  // (--rite-unseal) at a length rolled for it (--motion-rite-spent), its ground cuts to the
-  // disabled grey along its own stair (data-spent, rite-spent), and only then is it disabled -- a
-  // disabled control plays nothing. An input is spent the same way.
+  // A control spent: inert at once (data-spent), its fill cut away by a slice in treads cut for
+  // this retirement (--ease-unseal) -- or, for the big button, its fill's curve stepped back to its
+  // point (--fill-cut taken off) -- while its ground steps to the disabled grey along its own
+  // stair, and only then disabled: a disabled control plays nothing. An input is spent the same way.
   function retire(button) {
     if (!button || button.disabled) return;
     button.setAttribute('aria-disabled', 'true');
+    if (button.style && typeof button.style.removeProperty === 'function') button.style.removeProperty('--fill-cut');
     var wait = beat('medium');
     if (!wait) { button.disabled = true; return; }
-    var length = composeFor(button, 'unseal', 'rite-spent') || wait;
+    var length = cutFor(button, 'unseal', { duration: 'medium' }) || wait;
     button.setAttribute('data-spent', 'true');
     var once = false;
     function go() { if (once) return; once = true; button.disabled = true; }
-    button.addEventListener('animationend', function (ev) { if (ev.target === button && !ev.pseudoElement && /spent/.test(ev.animationName)) go(); });
-    window.setTimeout(go, length + wait + 240);
+    button.addEventListener('animationend', function (ev) {
+      if (ev.target === button && ev.pseudoElement === '::before' && ev.animationName === 'cut-out') go();
+    });
+    window.setTimeout(go, length + 240);
   }
-  // The texture a sealed surface wears, rolled for it alone when the engine is there.
+  // Where a set surface's two shades split: round the point it was pressed at a moment ago, which
+  // the engine read from the press (m.seal writes --seal-x and --seal-y on it).
   function dress(node) {
     var m = engine();
-    if (m && typeof m.seal === 'function') { try { m.seal(node); } catch (e) { /* the page's fill */ } }
+    if (m && typeof m.seal === 'function') { try { m.seal(node); } catch (e) { /* the corner it has */ } }
   }
 
-  /* ---- a matte for a canvas ---------------------------------------------------------------
-     A selection on a canvas changes by its AREA in a pattern, never by alpha: a field over cells,
-     thresholded by coverage, in one of six kinds (noise, shards, scan lines, dither, iris, grain)
-     -- the harness's own matte, kept here because the threshold's canvases are not modules and
-     load no engine. `at(x, y, k)` says whether the cell at column x, row y is let through at
-     coverage k; `paint` fills a rectangle's cells through it; `disc` a circle's. Seeded, so a
-     star keeps its grain from frame to frame. */
-  function prng(seed) {
-    var a = (seed >>> 0) || 1;
-    return function () {
-      a |= 0;
-      a = a + 0x6D2B79F5 | 0;
-      var t = Math.imul(a ^ a >>> 15, 1 | a);
-      t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
-      return ((t ^ t >>> 14) >>> 0) / 4294967296;
-    };
-  }
-  var MATTE_KINDS = ['noise', 'noise', 'shards', 'scan', 'dither', 'iris', 'grain'];
-  var BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
-  function matteField(seed, kindWanted) {
-    var r = prng(seed == null ? Math.floor(Math.random() * 0x7fffffff) : seed);
-    var kind = kindWanted || MATTE_KINDS[Math.floor(r() * MATTE_KINDS.length)];
-    var salt = Math.floor(r() * 0x7fffffff);
-    var block = 1 + Math.floor(r() * 3);
-    var angle = r() * Math.PI;
-    var period = 3 + Math.floor(r() * 6);
-    var cx = 0.2 + r() * 0.6;
-    var cy = 0.2 + r() * 0.6;
-    var span = Math.round(10 + r() * 26);
-    var cell = kind === 'grain' ? 2 : kind === 'dither' ? 3 : 2 + Math.floor(r() * 4);
-    function field(x, y) {
-      var h = (Math.imul(x | 0, 374761393) + Math.imul(y | 0, 668265263) + salt) | 0;
-      h = Math.imul(h ^ (h >>> 13), 1274126177);
-      return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+  /* ---- the cut on a canvas ----------------------------------------------------------------
+     The threshold's canvases are not modules and are handed no env.rite, so they keep the cut
+     here, as arithmetic and nothing more: one edge -- a slice at an angle (0deg sweeping upward,
+     90deg rightward, as the page's --cut-angle reads) or a curve round a point -- and the part of
+     a box it has passed at coverage k (0 to 1), added to the canvas's path as one polygon or one
+     arc, never cells. `cutRegion` adds it to the path, to fill or to clip by; `paintCut` fills it,
+     clipped to the box. A picture at rest is two shades split by one such edge, never grain. */
+  function cutRegion(g, x, y, w, h, k, edge) {
+    var c = unit(k);
+    if (!g || c <= 0) return false;
+    if (c >= 1) { g.rect(x, y, w, h); return true; }
+    if (edge.kind === 'curve') {
+      var far = Math.max(Math.hypot(x - edge.x, y - edge.y), Math.hypot(x + w - edge.x, y - edge.y),
+        Math.hypot(x - edge.x, y + h - edge.y), Math.hypot(x + w - edge.x, y + h - edge.y));
+      g.moveTo(edge.x + far * c, edge.y);
+      g.arc(edge.x, edge.y, far * c, 0, Math.PI * 2);
+      return true;
     }
-    function at(x, y, k) {
-      var c = unit(k);
-      if (c <= 0) return false;
-      if (c >= 1) return true;
-      var v;
-      if (kind === 'noise') v = field(Math.floor(x / block), Math.floor(y / block)) * 0.7 + field(x, y) * 0.3;
-      else if (kind === 'grain') v = field(x, y);
-      else if (kind === 'shards') {
-        var s = (x * Math.cos(angle) + y * Math.sin(angle)) / period;
-        v = field(Math.floor(s), Math.floor((y * Math.cos(angle) - x * Math.sin(angle)) / (period * 3)));
-      } else if (kind === 'scan') v = ((y % period) / period) * 0.8 + field(0, Math.floor(y / period)) * 0.2;
-      else if (kind === 'dither') v = (BAYER[((y & 3) << 2) | (x & 3)] + field(x >> 2, y >> 2) * 0.9) / 16;
-      else {
-        var dx = (((x % span) + span) % span) / span - cx;
-        var dy = (((y % span) + span) % span) / span - cy;
-        v = Math.min(1, Math.sqrt(dx * dx + dy * dy) / 0.72) * 0.85 + field(x, y) * 0.15;
-      }
-      return v < c;
-    }
-    function paint(g, x, y, w, h, k, style) {
-      if (!g || k <= 0) return;
-      g.fillStyle = style;
-      var x0 = Math.floor(x / cell);
-      var y0 = Math.floor(y / cell);
-      var x1 = Math.ceil((x + w) / cell);
-      var y1 = Math.ceil((y + h) / cell);
-      if (k >= 1) { g.fillRect(x, y, w, h); return; }
-      for (var cy2 = y0; cy2 < y1; cy2++) {
-        for (var cx2 = x0; cx2 < x1; cx2++) {
-          if (at(cx2, cy2, k)) g.fillRect(cx2 * cell, cy2 * cell, cell, cell);
-        }
-      }
-    }
-    function disc(g, x, y, radius, k, style) {
-      if (!g || k <= 0 || radius <= 0) return;
-      g.fillStyle = style;
-      var c = Math.max(1, Math.min(cell, Math.ceil(radius / 2)));
-      var x0 = Math.floor((x - radius) / c);
-      var y0 = Math.floor((y - radius) / c);
-      var x1 = Math.ceil((x + radius) / c);
-      var y1 = Math.ceil((y + radius) / c);
-      var r2 = radius * radius;
-      for (var cy2 = y0; cy2 <= y1; cy2++) {
-        for (var cx2 = x0; cx2 <= x1; cx2++) {
-          var px = cx2 * c + c / 2 - x;
-          var py = cy2 * c + c / 2 - y;
-          if (px * px + py * py > r2) continue;
-          if (k >= 1 || at(cx2, cy2, k)) g.fillRect(cx2 * c, cy2 * c, c, c);
-        }
-      }
-    }
-    // A mask canvas at coverage k, for clipping a drawing through the matte (destination-in).
-    var masks = {};
-    function mask(w, h, k) {
-      var key = Math.round(unit(k) * 20);
-      if (masks[key]) return masks[key];
-      var off = document.createElement('canvas');
-      off.width = w;
-      off.height = h;
-      var og = off.getContext('2d');
-      if (og) paint(og, 0, 0, w, h, key / 20, '#000');
-      masks[key] = off;
-      return off;
-    }
-    function clip(g, w, h, k) {
-      if (!g || k >= 1) return;
-      g.save();
-      g.globalCompositeOperation = 'destination-in';
-      g.drawImage(mask(w, h, k), 0, 0);
-      g.restore();
-    }
-    // A flicker series: on from a rolled moment with a few dropouts, cycling at a rolled period.
-    function flicker() {
-      var onAt = 0.05 + r() * 0.25;
-      var drops = [];
-      var n = Math.floor(r() * 4);
-      for (var i = 0; i < n; i++) { var a = onAt + r() * (0.85 - onAt); drops.push([a, a + 0.01 + r() * 0.05]); }
-      var period = 1400 + r() * 2600;
-      var phase = r();
-      return function (now) {
-        var q = ((now / period + phase) % 1 + 1) % 1;
-        if (q < onAt) return 0;
-        for (var i = 0; i < drops.length; i++) if (q >= drops[i][0] && q < drops[i][1]) return 0;
-        return 1;
-      };
-    }
-    return { kind: kind, cell: cell, at: at, paint: paint, disc: disc, clip: clip, flicker: flicker, roll: r };
-  }
-  // A dash pattern of a movement's own: two to four rolled segments.
-  function dashesOf(r) {
-    var n = 2 + Math.floor(r() * 3);
+    // The slice: how far along its direction a point of the box lies, 0 at the corner it starts
+    // from and 1 at the corner it ends on; the box is cut where that reaches k.
+    var rad = (edge.angle || 0) * Math.PI / 180;
+    var dx = Math.sin(rad);
+    var dy = -Math.cos(rad);
+    var half = (Math.abs(dx) * w + Math.abs(dy) * h) / 2 || 1;
+    function reach(px, py) { return ((px - (x + w / 2)) * dx + (py - (y + h / 2)) * dy + half) / (2 * half); }
+    var corners = [[x, y], [x + w, y], [x + w, y + h], [x, y + h]];
     var out = [];
-    for (var i = 0; i < n; i++) out.push(Math.round(2 + r() * 9));
-    return out;
+    for (var i = 0; i < 4; i++) {
+      var a = corners[i];
+      var b = corners[(i + 1) % 4];
+      var ra = reach(a[0], a[1]);
+      var rb = reach(b[0], b[1]);
+      if (ra <= c) out.push(a);
+      if ((ra <= c) !== (rb <= c)) {
+        var f = (c - ra) / (rb - ra);
+        out.push([a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f]);
+      }
+    }
+    if (out.length < 3) return false;
+    g.moveTo(out[0][0], out[0][1]);
+    for (var j = 1; j < out.length; j++) g.lineTo(out[j][0], out[j][1]);
+    g.closePath();
+    return true;
+  }
+  function paintCut(g, x, y, w, h, k, edge, style) {
+    if (!g || unit(k) <= 0) return;
+    g.save();
+    g.beginPath();
+    g.rect(x, y, w, h);
+    g.clip();
+    g.beginPath();
+    if (cutRegion(g, x, y, w, h, k, edge)) {
+      g.fillStyle = style;
+      g.fill();
+    }
+    g.restore();
+  }
+  // A picture sealed: a curve grows from the point its answer lives at -- the knocker, the top
+  // stone, the needle's tip, the balance's pivot, the last star -- out to most of the picture and
+  // no further, and inside it the picture takes a wash of the warm accent. At rest it is two shades
+  // split by that one curve.
+  var SEAL_REACH = 0.62;
+  function sealWash(g, w, h, k, at, warm) {
+    paintCut(g, 0, 0, w, h, unit(k) * SEAL_REACH, { kind: 'curve', x: at.x, y: at.y }, rgba(warm, 0.12));
+  }
+  // The angle the page's register cuts at (--cut-angle), read once for a canvas that matches it.
+  function angleOf(style) {
+    var v = parseFloat(style && typeof style.getPropertyValue === 'function' ? style.getPropertyValue('--cut-angle') : '');
+    return isFinite(v) ? v : 112;
+  }
+  // The direction a movement went, as a slice's angle (0deg upward, 90deg rightward), to the
+  // nearest 15 degrees, as the engine quantizes a pointer's approach; null for no movement at all.
+  function headingOf(dx, dy) {
+    if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return null;
+    var deg = Math.atan2(dx, -dy) * 180 / Math.PI;
+    return ((Math.round(deg / 15) * 15) % 360 + 360) % 360;
   }
 
   function load() {
@@ -999,8 +956,8 @@
     });
     if (selector) selector.value = '';
     noteProbe(probe.probe);
-    // A question already up is set aside, not deleted: its frame stays as a ghost that descends
-    // the ladder to the rolled leave corner while the new one develops under it.
+    // A question already up is set aside, not deleted: its frame stays over the new one's place
+    // as a ghost, and the one slice that cuts the new question in cuts it away (replace, below).
     var old = null;
     for (var c = 0; c < host.children.length && !old; c++) {
       var kid = host.children[c];
@@ -1009,12 +966,8 @@
     var ghost = old && beat('medium') ? old : null;
     host.textContent = '';
     if (ghost) {
-      ghost.classList.add('probe-ghost');
-      ghost.setAttribute('aria-hidden', 'true');
-      ghost.setAttribute('inert', '');
       try { if (window.getComputedStyle(host).position === 'static') host.style.position = 'relative'; } catch (e) { /* it reads as it lies */ }
       host.appendChild(ghost);
-      unmake(ghost, function () { if (ghost.parentNode) ghost.parentNode.removeChild(ghost); });
     }
     host.setAttribute('data-probe', probe.probe);
     host.removeAttribute('data-probe-state');
@@ -1056,7 +1009,7 @@
       lentFocus = !host.hasAttribute('tabindex');
       if (lentFocus) host.setAttribute('tabindex', '-1');
       try { host.focus({ preventScroll: true }); } catch (e) { try { host.focus(); } catch (e2) { /* it stays */ } }
-      // The question descends the ladder before it goes; only then is the host cleared.
+      // The question goes behind a slice before it goes; only then is the host cleared.
       unmake(frame, function () {
         if (!current()) { releaseFocus(); return; }
         if (frame.parentNode === host) host.removeChild(frame);
@@ -1067,13 +1020,26 @@
     });
     frame.appendChild(skip);
     host.appendChild(frame);
-    // The frame develops from a geometry, a ladder and a composition of its own; the ask's words
-    // arrive through sigils; and the mechanism's own tint is the host's data-probe (the stylesheet).
-    var m = engine();
-    if (m && typeof m.arrive === 'function' && !stilled()) {
-      try { m.arrive(frame, { spell: 'probe-in', className: false, mattes: true }); } catch (e) { /* the page's roll */ }
-    }
+    // A question that replaces one comes in behind one slice that cuts the last away; the first
+    // question stands with its host, which arrives on its own (js/stage.js, js/persona.js), so an
+    // arrival is one edge and never two. The ask's words are cut in by the engine's reveal, and the
+    // mechanism's own tint is the host's data-probe (the stylesheet).
+    replace(frame, ghost, 'probe-ghost');
     say(ask, probe.ask, 0.3);
+    // Where the answer was given: the last press in the frame, as a point of it (a key's press is
+    // the middle of the control it pressed), so the reading's seal grows from there.
+    var pressed = null;
+    function pressAt(x, y) {
+      var box = frame.getBoundingClientRect();
+      if (!box.width || !box.height) return;
+      pressed = { x: unit((x - box.left) / box.width) * 100, y: unit((y - box.top) / box.height) * 100 };
+    }
+    frame.addEventListener('pointerdown', function (ev) { pressAt(ev.clientX, ev.clientY); }, true);
+    frame.addEventListener('keydown', function (ev) {
+      if ((ev.key !== 'Enter' && ev.key !== ' ') || !ev.target || typeof ev.target.getBoundingClientRect !== 'function') return;
+      var at = ev.target.getBoundingClientRect();
+      pressAt(at.left + at.width / 2, at.top + at.height / 2);
+    }, true);
     function finish() {
       if (answered || !current()) return;
       answered = true;
@@ -1081,27 +1047,30 @@
       var reading = record(answer);
       if (!current()) return;
       // The trace's last line was heard once already, so the live line is let go; its glass twin
-      // and the meter go down the ladder rather than being wiped.
+      // and the meter go behind a slice rather than being wiped.
       trace.textContent = '';
       if (typeof trace.undoGlass === 'function') { try { trace.undoGlass(); } catch (e) { /* the words stand */ } }
       trace.undoGlass = null;
       if (glass.textContent) unmake(glass, function () { glass.textContent = ''; restore(glass); });
       gauge(trace, '');
-      // The reading lands as a seal: the frame takes the fill texture in the new primary, climbing
-      // the ladder (probe-read, or the composition written here), before the question is handed on.
-      dress(frame);
+      // The reading lands as a seal: the frame's layer, two shades of the new primary split by a
+      // curve round the point the answer was given, grows from that point in treads cut for it,
+      // before the question is handed on.
+      if (pressed) {
+        frame.style.setProperty('--read-x', pressed.x.toFixed(1) + '%');
+        frame.style.setProperty('--read-y', pressed.y.toFixed(1) + '%');
+      }
       var wait = beat('long');
-      if (m && typeof m.composeOn === 'function' && wait) { try { m.composeOn(frame, 'seal', 'probe-read', wait); } catch (e) { /* the stylesheet's */ } }
+      var sealLength = cutFor(frame, 'seal', { duration: 'long' }) || wait;
       host.setAttribute('data-probe-state', 'read');
       var handed = false;
       function hand() { if (handed || !current()) return; handed = true; if (typeof opts.onAnswer === 'function') opts.onAnswer(reading, probe); }
       if (!wait) { hand(); return; }
-      // Handed on when the seal has climbed -- the rite's own end on the frame's ::before, or its
-      // rolled length on the clock -- and not before the skip has gone down the ladder.
-      var sealLength = rolled(frame, '--motion-probe-read') || wait;
+      // Handed on when the seal has grown -- its own end on the frame's ::before, or its length on
+      // the clock -- and not before the skip has gone.
       var after = Math.max(0, (skipLength || 0) - sealLength) + 40;
       frame.addEventListener('animationend', function (ev) {
-        if (ev.target !== frame || ev.pseudoElement !== '::before' || !/probe-read|rite-seal/.test(ev.animationName)) return;
+        if (ev.target !== frame || ev.pseudoElement !== '::before' || ev.animationName !== 'cut-in') return;
         window.setTimeout(hand, after);
       });
       window.setTimeout(hand, Math.max(sealLength, skipLength || 0) + 240);
@@ -1112,7 +1081,8 @@
       slider: sliderProbe, sky: skyProbe, keys: keysProbe, knock: knockProbe,
       rubbing: rubbingProbe, cairn: cairnProbe, compass: compassProbe
     };
-    (kinds[probe.kind] || choiceProbe)(probe, body, trace, answer, finish);
+    dealAfter = ghost ? rolled(frame, '--motion-develop') : 0;
+    try { (kinds[probe.kind] || choiceProbe)(probe, body, trace, answer, finish); } finally { dealAfter = 0; }
     return probe;
   }
   function optionButton(label, detail) {
@@ -1122,10 +1092,11 @@
     if (detail) button.appendChild(el('span', 'probe-option-detail', detail));
     return button;
   }
-  // Each landing (a line, its doors, its counter) is dealt into a landing of its own; when the
-  // next is dealt the one that was is left over its place as a ghost that descends the ladder,
-  // sealed door and all, while the new one develops under it. The last landing is never wiped:
-  // its sealed door stands under the frame's read seal until the question is handed on.
+  // Each landing (a line, its doors, its counter) is a landing of its own. The first deals its
+  // doors one after another; each one after it replaces the last behind one slice, the last left
+  // over its place as a ghost, sealed door and all, and cut away by the same edge. The last landing
+  // is never wiped: its sealed door stands under the frame's read seal until the question is
+  // handed on.
   function choiceProbe(probe, body, trace, answer, finish) {
     var steps = probe.steps || [{ ask: null, options: probe.options }];
     var index = 0;
@@ -1151,11 +1122,14 @@
           taken = true;
           add(answer, option.weights, 1);
           index += 1;
-          // The chosen thing is sealed (data-set: the engine's texture climbs onto it, the label
-          // twitches) and the rest go down the ladder; only then does the next landing come.
-          dress(button);
+          // The chosen thing is sealed (data-set: the engine grows its fill from the press, and its
+          // label is set down a tread) and the rest go behind a slice, one after another in one
+          // stair; only then does the next landing come.
           button.setAttribute('data-set', 'true');
-          buttons.forEach(function (other) { if (other !== button) unmake(other); });
+          var gone = seedOf();
+          shuffled(buttons.filter(function (other) { return other !== button; })).forEach(function (other, k) {
+            unmake(other, null, gone, staggerOf(k));
+          });
           var wait = beat(probe.quick ? 'short' : 'long');
           function go() {
             if (index < steps.length) {
@@ -1174,22 +1148,24 @@
         counter = el('p', 'probe-count probe-counter', (probe.quick ? 'pair ' : '') + (index + 1) + ' of ' + steps.length);
         landing.appendChild(counter);
       }
-      if (old) old.classList.add('probe-landing-ghost');
       body.appendChild(landing);
       if (line) say(line, stage.ask);
-      dealOut(buttons);
+      if (old && beat('medium')) replace(landing, old, 'probe-landing-ghost');
+      else {
+        if (old && old.parentNode === body) body.removeChild(old);
+        dealOut(buttons);
+      }
       if (counter) tick(counter);
       // Focus moves to the new landing before the old one is hidden from assistive tech.
       var first = group.querySelector('button');
       if (first && index > 0) first.focus();
-      if (old) unmake(old, function () { if (old.parentNode === body) body.removeChild(old); });
     }
     step();
   }
-  // An object is carried, not teleported: the pressed one seals, then leaves down the ladder
-  // while the rest close ranks (FLIP), and its name travels into the chosen order where it is
-  // revealed with its arrow stamped a tread later. Undo runs the same in reverse. The reading is
-  // the `picked` array, never the DOM.
+  // An object is carried, not teleported: the pressed one seals, then goes behind a slice while
+  // the rest close ranks in treads (the engine's flip), and its name goes into the chosen order,
+  // cut in by the reveal, with its arrow stamped as it lands. Undo runs the same in reverse. The
+  // reading is the `picked` array, never the DOM.
   function sequenceProbe(probe, body, trace, answer, finish) {
     var items = Array.isArray(probe.items) ? probe.items.slice() : [];
     var target = Math.max(1, Math.min(items.length, probe.take || items.length));
@@ -1255,7 +1231,7 @@
     function shuffle(change) {
       var m = engine();
       if (m && typeof m.flip === 'function' && !stilled()) {
-        try { m.flip(group, change, { family: 'drift', dealt: false }); return; } catch (e) { /* plain */ }
+        try { m.flip(group, change, { family: 'arrive', dealt: false }); return; } catch (e) { /* plain */ }
       }
       change();
     }
@@ -1288,7 +1264,7 @@
       }
       say(name, item.label);
     }
-    // A name taken out of the order goes down the ladder with its arrow; the last one takes the
+    // A name taken out of the order goes behind a slice with its arrow; the last one takes the
     // whole line with it, and only then is the line hidden.
     function takeName() {
       var list = typeof names.querySelectorAll === 'function' ? names.querySelectorAll('.probe-order-name:not(.is-leaving)') : names.childNodes;
@@ -1315,7 +1291,6 @@
       busy = true;
       picked.push(item);
       var button = buttons[index];
-      dress(button);
       button.setAttribute('data-set', 'true');
       note(trace, 'placed: ' + item.label);
       var wait = beat('short');
@@ -1356,10 +1331,11 @@
       var now = Date.now();
       var gap = taps.length ? now - taps[taps.length - 1] : 0;
       taps.push(now);
-      // Each tap leaves its mark: the fill climbs one rung of the ladder per strike (data-rung),
-      // and the stamp's size is the gap since the last -- short and sharp, or wide.
+      // Each tap leaves its mark: the fill steps a fifth further out from where the first tap
+      // landed (--fill-cut), and the stamp's depth is the gap since the last -- short and sharp,
+      // or wide.
       if (taps.length === 1) dress(button);
-      button.setAttribute('data-rung', String(Math.min(5, taps.length)));
+      button.style.setProperty('--fill-cut', Math.min(5, taps.length) * 20 + '%');
       button.style.setProperty('--stamp-scale', (gap ? 0.94 + unit((gap - 120) / 1400) * 0.12 : 0.97).toFixed(3));
       tick(button);
       var left = 5 - taps.length;
@@ -1384,22 +1360,19 @@
   function holdProbe(probe, body, trace, answer, finish) {
     var started = 0;
     var ticker = null;
-    var rung = 0;
     var marks = 0;
     var button = el('button', 'probe-big');
     button.type = 'button';
     button.textContent = probe.label;
-    // The hold is a filling vessel: the fill texture advances a rung every rolled while, and past
-    // the top the texture itself is re-rolled and the climb begins again, so a long hold keeps
-    // turning over and never saturates into a solid. The tally beneath ratchets with it. None of
-    // it implies a target: the length of the press is the whole answer.
+    // The hold is a vessel filling: every rolled while its fill steps outward from where it was
+    // pressed by a fifth of what is left (--fill-cut), so it comes ever nearer full and never gets
+    // there, and it never turns back. The tally beneath counts the whiles. None of it implies a
+    // target: the length of the press is the whole answer.
     function advance() {
       ticker = window.setTimeout(function () {
         if (!started) return;
-        rung += 1;
-        if (rung > 5) { rung = 1; dress(button); }
-        button.setAttribute('data-rung', String(rung));
         marks += 1;
+        button.style.setProperty('--fill-cut', ((1 - Math.pow(0.8, marks)) * 100).toFixed(1) + '%');
         gauge(trace, tally(marks));
         advance();
       }, between(160, 420));
@@ -1407,7 +1380,6 @@
     function down() {
       if (started || button.disabled) return;
       started = Date.now();
-      rung = 0;
       marks = 0;
       dress(button);
       button.classList.add('held');
@@ -1432,9 +1404,9 @@
       if (!started) return;
       started = 0;
       window.clearTimeout(ticker);
-      // A let-go: the fill drops in one cut.
+      // A let-go: the fill steps back to the point it grew from.
       button.classList.remove('held');
-      button.removeAttribute('data-rung');
+      button.style.removeProperty('--fill-cut');
       gauge(trace, '');
       note(trace, 'let go early; press again');
     });
@@ -1468,6 +1440,15 @@
       mark.style.left = cursor.x * 100 + '%';
       mark.style.top = cursor.y * 100 + '%';
     }
+    // A mark already out, moved by a key, steps to its new place in treads (the engine's flip, a
+    // translate the compositor draws), never along a glide; the first showing is its set-down.
+    function move() {
+      var m = engine();
+      if (!mark.hidden && m && typeof m.flip === 'function' && !stilled()) {
+        try { m.flip(field, show, { items: [mark], family: 'ratchet', dealt: false }); return; } catch (e) { /* it jumps */ }
+      }
+      show();
+    }
     function place(x, y) {
       cursor.x = Math.min(1, Math.max(0, x));
       cursor.y = Math.min(1, Math.max(0, y));
@@ -1482,9 +1463,11 @@
       field.setAttribute('aria-disabled', 'true');
       field.tabIndex = -1;
       placed = true;
-      // The mark is set like a seal in wax (mark-set, mark-ring), and the field takes the
-      // impression: sealed with the fill texture (data-set), it is closed, not merely tinted.
-      dress(field);
+      // The mark is set like a seal in wax (mark-set), and the field takes the impression: its
+      // layer grows from the mark as a curve (--mark-x, --mark-y; data-set), so it is closed, not
+      // merely tinted.
+      field.style.setProperty('--mark-x', (cursor.x * 100).toFixed(1) + '%');
+      field.style.setProperty('--mark-y', (cursor.y * 100).toFixed(1) + '%');
       field.setAttribute('data-set', 'true');
       finish();
     }
@@ -1501,7 +1484,7 @@
         ev.preventDefault();
         cursor.x = Math.min(1, Math.max(0, cursor.x + moves[ev.key][0]));
         cursor.y = Math.min(1, Math.max(0, cursor.y + moves[ev.key][1]));
-        show();
+        move();
         note(trace, 'arrow keys move the mark, enter leaves it there');
       } else if (ev.key === 'Enter' || ev.key === ' ') {
         ev.preventDefault();
@@ -1511,10 +1494,11 @@
     body.appendChild(field);
     body.appendChild(el('p', 'probe-count', 'tap or click anywhere in the field, or move the mark with the arrow keys and press enter'));
   }
-  // The line is laid as ink into grain: drawn, then clipped by a matte rolled for this pad, so it
-  // is a rubbing and not a vector; when the hand lifts the line SETS, replayed from its start in
-  // rolled treads with the grain's coverage climbing and the colour cutting to the second accent
-  // on the last tread. The reading is `points` alone.
+  // The line is drawn as the hand moves, plainly, on paper that rests in two shades split by one
+  // slice through its centre at the register's angle. When the hand lifts, the line SETS: a slice
+  // in the line's own direction -- from where it began toward where it ended -- steps across the
+  // pad in a few treads, and behind it the line is the second accent. The reading is `points`
+  // alone.
   function drawProbe(probe, body, trace, answer, finish) {
     var pad = el('canvas', 'probe-pad');
     pad.width = 520;
@@ -1529,62 +1513,48 @@
     var cool = rgbOf(style.getPropertyValue('--accent'), '#9fcbff');
     var warm = rgbOf(style.getPropertyValue('--accent2'), '#ffe7ab');
     var paper = rgbOf(style.getPropertyValue('--bg2'), '#1c2a4e');
-    var grain = matteField(null);
-    var tooth = matteField(null, 'grain');
-    var cover = between(0.55, 0.8);
-    var set = null; // { k: coverage, warm: the last tread }
-    var off = document.createElement('canvas');
-    off.width = pad.width;
-    off.height = pad.height;
-    var og = off.getContext('2d');
-    var ground = null;
+    var fold = { kind: 'slice', angle: angleOf(style) };
+    var settled = false; // the line is set, and the pad takes no more
+    var set = 0; // how far the setting slice has stepped across the pad, 0 to 1
+    var setEdge = null;
     function at(ev) {
       var box = pad.getBoundingClientRect();
       return { x: (ev.clientX - box.left) / box.width * pad.width,
         y: (ev.clientY - box.top) / box.height * pad.height };
+    }
+    function line(g, color, width) {
+      g.strokeStyle = color;
+      g.lineWidth = width;
+      g.lineJoin = 'round';
+      g.lineCap = 'round';
+      g.beginPath();
+      for (var i = 0; i < points.length; i++) { i ? g.lineTo(points[i].x, points[i].y) : g.moveTo(points[i].x, points[i].y); }
+      g.stroke();
     }
     function paint() {
       if (!ctx) return;
       var w = pad.width;
       var h = pad.height;
       ctx.clearRect(0, 0, w, h);
-      // The paper has tooth: a scan matte at low coverage, painted once.
-      if (!ground) {
-        ground = document.createElement('canvas');
-        ground.width = w;
-        ground.height = h;
-        var gg = ground.getContext('2d');
-        if (gg) tooth.paint(gg, 0, 0, w, h, 0.3, rgba(paper, 0.45));
-      }
-      ctx.drawImage(ground, 0, 0);
+      // The paper: two shades split by one slice through its centre.
+      ctx.fillStyle = rgba(paper, 0.3);
+      ctx.fillRect(0, 0, w, h);
+      paintCut(ctx, 0, 0, w, h, 0.5, fold, rgba(paper, 0.25));
       if (!points.length) return;
-      var shown = set ? Math.max(1, Math.round(points.length * Math.min(1, set.k))) : points.length;
-      var g = og || ctx;
-      if (og) og.clearRect(0, 0, w, h);
-      g.strokeStyle = rgba(set && set.warm ? warm : cool, 0.95);
-      g.lineWidth = set && set.warm ? 3 : 2.4;
-      g.lineJoin = 'round';
-      g.lineCap = 'round';
-      g.beginPath();
-      for (var i = 0; i < shown; i++) { i ? g.lineTo(points[i].x, points[i].y) : g.moveTo(points[i].x, points[i].y); }
-      g.stroke();
-      if (og) {
-        // The older segments settle into the grain; the newest is drawn full while the hand moves.
-        grain.clip(og, w, h, set ? Math.min(1, 0.3 + 0.7 * set.k) : cover);
-        if (!set && points.length > 1) {
-          var n = points.length;
-          og.strokeStyle = rgba(cool, 0.95);
-          og.lineWidth = 2.4;
-          og.beginPath();
-          og.moveTo(points[n - 2].x, points[n - 2].y);
-          og.lineTo(points[n - 1].x, points[n - 1].y);
-          og.stroke();
+      line(ctx, rgba(cool, 0.95), 2.4);
+      if (set > 0 && setEdge) {
+        // Behind the setting slice the line is warm.
+        ctx.save();
+        ctx.beginPath();
+        if (cutRegion(ctx, 0, 0, w, h, set, setEdge)) {
+          ctx.clip();
+          line(ctx, rgba(warm, 0.95), 3);
         }
-        ctx.drawImage(off, 0, 0);
+        ctx.restore();
       }
     }
     pad.addEventListener('pointerdown', function (ev) {
-      if (set) return;
+      if (settled) return;
       drawing = true;
       points = [at(ev)];
       pad.setPointerCapture(ev.pointerId);
@@ -1601,7 +1571,7 @@
       score();
     });
     pad.addEventListener('keydown', function (ev) {
-      if (set) return;
+      if (settled) return;
       var moves = { ArrowLeft: [-24, 0], ArrowRight: [24, 0], ArrowUp: [0, -24], ArrowDown: [0, 24] };
       if (moves[ev.key]) {
         ev.preventDefault();
@@ -1617,7 +1587,9 @@
       }
     });
     function score() {
+      if (settled) return;
       if (points.length < 2) { note(trace, 'one line, any line'); return; }
+      settled = true;
       var length = 0;
       var turn = 0;
       for (var i = 1; i < points.length; i++) {
@@ -1639,11 +1611,15 @@
       if (wander < 1.08) add(answer, probe.straight, 1);
       else if (turn / points.length > 0.35) add(answer, probe.jagged, 1);
       else add(answer, probe.curved, 1);
-      // The line sets: replayed from its start, the grain filling, warm on the last tread.
+      // The line sets: a slice in the line's own direction steps across the pad, and behind it
+      // the line is warm. A line that comes back to where it began has no direction of its own,
+      // and sets at the register's angle.
       gauge(trace, '');
       pad.style.cursor = 'default';
-      series({ ms: beat('long'), treads: 4 + Math.floor(Math.random() * 3), step: function (k, n) {
-        set = { k: k / n, warm: k === n };
+      var heading = headingOf(points[points.length - 1].x - points[0].x, points[points.length - 1].y - points[0].y);
+      setEdge = { kind: 'slice', angle: heading === null ? fold.angle : heading };
+      series({ ms: beat('long'), treads: 3 + Math.floor(Math.random() * 3), step: function (k, n) {
+        set = k / n;
         paint();
       } });
       finish();
@@ -1652,9 +1628,9 @@
     body.appendChild(el('p', 'probe-count', 'draw with a finger, a mouse, or the arrow keys'));
     paint();
   }
-  // A lamp is lit behind a curtain: the pane's light climbs the ladder (pane-light), a window
-  // going dark descends it (pane-dark), and on the third light the whole facade reads -- all nine
-  // panes stamp one tread each in a rolled order (pane-read) before the shape is scored.
+  // A lamp is lit behind a curtain: the pane's light grows out from the lamp as a curve, a window
+  // put out shrinks back into it, and on the third light the whole facade reads -- all nine panes
+  // set down one tread each in a rolled order (pane-read) before the shape is scored.
   function windowsProbe(probe, body, trace, answer, finish) {
     var selected = [];
     var field = el('div', 'probe-windows');
@@ -1669,8 +1645,8 @@
       button.setAttribute('aria-pressed', 'false');
       var pane = el('span', 'probe-window-pane');
       pane.setAttribute('aria-hidden', 'true');
-      // The lamp behind the pane: a layer of its own, lit through a composition of its own
-      // (--rite-seal, pane-light) and put out through another (--rite-unseal, pane-dark).
+      // The lamp behind the pane: a layer of its own, lit in treads cut for that lighting
+      // (--ease-seal) and put out in treads cut for that (--ease-unseal).
       var light = el('span', 'probe-window-light');
       pane.appendChild(light);
       button.appendChild(pane);
@@ -1680,12 +1656,12 @@
         var at = selected.indexOf(index);
         if (at !== -1) {
           selected.splice(at, 1);
-          composeFor(light, 'unseal', 'pane-dark');
+          cutFor(light, 'unseal', { duration: 'medium' });
           button.setAttribute('data-was-lit', 'true');
           button.setAttribute('aria-pressed', 'false');
         } else {
           selected.push(index);
-          composeFor(light, 'seal', 'pane-light');
+          cutFor(light, 'seal', { duration: 'medium' });
           button.removeAttribute('data-was-lit');
           button.setAttribute('aria-pressed', 'true');
         }
@@ -1713,16 +1689,16 @@
           add(answer, { curious: 3, verbal: 2, tempestuous: 1 }, 1);
         } else add(answer, { brooding: 2, cosmic: 1, curious: 1 }, 1);
         note(trace, 'three lit: the building reads');
-        // The third lamp climbs before the facade reads: data-read waits for that rite's rolled
-        // length, and the reading is handed on a long beat after the last pane has stamped.
-        var climb = stilled() ? 0 : rolled(light, '--motion-pane-light') || beat('medium');
+        // The third lamp is lit before the facade reads: data-read waits for that lighting's
+        // length, and the reading is handed on a long beat after the last pane is set down.
+        var lighting = stilled() ? 0 : rolled(light, '--motion-seal') || beat('medium');
         function facade() {
           shuffled(panes).forEach(function (p, k) { p.style.setProperty('--d', staggerOf(k) + 'ms'); });
           field.setAttribute('data-read', 'true');
           var wait = beat('long');
           if (wait) window.setTimeout(finish, wait); else finish();
         }
-        if (climb) window.setTimeout(facade, climb); else facade();
+        if (lighting) window.setTimeout(facade, lighting); else facade();
       });
       field.appendChild(button);
     });
@@ -1730,10 +1706,10 @@
     body.appendChild(el('p', 'probe-count', 'Tap a lit window to close it before lighting the third.'));
   }
   // The final division is the answer, not the order of presses. Undo never leaves a reading behind.
-  // The balance settles as a ratchet: the beam and the bowls move toward their marks in rolled
-  // treads with an overshoot past level and a slip back, the dropped weight falls from the spare
-  // row in two cuts with a burst of dust drawn through a shards matte, and 'leave them hanging'
-  // seals the picture under a scan matte with the beam cut to the second accent.
+  // The balance settles in treads: a dropped weight falls from the spare row to halfway and into
+  // its bowl, and the beam and the bowls step to their marks on the treads after, always forward
+  // and never past them; a weight taken back moves them at once. 'leave them hanging' seals the
+  // picture from the pivot it hangs from, and the beam is cut to the second accent.
   function balanceProbe(probe, body, trace, answer, finish) {
     var counts = probe.bowls.map(function () { return 0; });
     var placed = [];
@@ -1757,7 +1733,7 @@
       var button = el('button', 'probe-option');
       button.type = 'button';
       button.appendChild(el('span', 'probe-option-label', bowl.label));
-      // The count under each bowl is a counter that ticks (count-tick) when it changes.
+      // The count under each bowl is a counter, stamped (count-stamp) when it changes.
       var detail = el('span', 'probe-option-detail', bowl.place + ' bowl: ');
       var counter = el('span', 'probe-counter');
       detail.appendChild(counter);
@@ -1803,9 +1779,7 @@
     controls.appendChild(leave);
     body.appendChild(controls);
 
-    var dust = matteField(null, 'shards');
-    var veil = matteField(null, 'scan');
-    var shown = { tilt: 0, depth: counts.map(function () { return 0; }), fall: null, dust: null, sealed: 0 };
+    var shown = { tilt: 0, depth: counts.map(function () { return 0; }), fall: null, sealed: 0 };
     var cancel = null;
     function tiltFor(c) { return (c[0] - c[2]) * picture.height * 0.012; }
     function paint() {
@@ -1818,6 +1792,7 @@
       var warm = rgbOf(style.getPropertyValue('--accent2'), '#ffe7ab');
       var w = picture.width;
       var h = picture.height;
+      var pivot = { x: w * 0.5, y: h * 0.2 };
       var tilt = shown.tilt;
       var beamY = function (x) { return h * 0.2 - (x - w / 2) / (w * 0.4) * tilt; };
       g.fillStyle = ground;
@@ -1876,9 +1851,6 @@
           g.arc(shown.fall.k === 0 ? w / 2 : x, shown.fall.k === 0 ? fromY : (fromY + toY) / 2, radius, 0, Math.PI * 2);
           g.fill();
         }
-        if (shown.dust && shown.dust.index === index) {
-          dust.paint(g, x - bw / 2, y + bh * 0.4, bw, bh * 0.9, shown.dust.k, rgba(rgbOf(brass, '#ffe7ab'), 0.55));
-        }
       });
       g.fillStyle = brass;
       var spare = probe.total - placed.length + (shown.fall && shown.fall.k === 0 ? 1 : 0);
@@ -1887,29 +1859,25 @@
         g.arc(w / 2 + (i - (spare - 1) / 2) * h * 0.055, h * 0.92, h * 0.018, 0, Math.PI * 2);
         g.fill();
       }
-      if (shown.sealed) veil.paint(g, 0, 0, w, h, shown.sealed, rgba(rgbOf(ground, '#070a14'), 0.75));
+      if (shown.sealed) sealWash(g, w, h, shown.sealed, pivot, warm);
     }
     function settle(how) {
       if (cancel) cancel();
       var fromTilt = shown.tilt;
       var toTilt = tiltFor(counts);
       var fromDepth = shown.depth.slice();
-      var over = 1 + between(0.08, 0.22);
-      shown.fall = how.drop != null ? { index: how.drop, k: 0 } : null;
-      shown.dust = null;
-      cancel = series({ ms: beat(how.seal ? 'medium' : 'long'), treads: how.lift ? 3 : 4 + Math.floor(Math.random() * 3), step: function (k, n, slipping) {
+      var dropping = how.drop != null;
+      shown.fall = dropping ? { index: how.drop, k: 0 } : null;
+      cancel = series({ ms: beat(how.seal ? 'medium' : 'long'), treads: how.lift || how.seal ? 3 : 3 + Math.floor(Math.random() * 3), step: function (k, n) {
         if (shown.fall) shown.fall.k = k;
-        if (how.drop != null && k === 2) shown.dust = { index: how.drop, k: 0.3 };
-        else if (shown.dust) shown.dust.k = k === 3 ? 0.14 : 0;
-        // The beam catches on its pivot: past level on the second-to-last tread, home on the last.
-        var y = k >= n ? 1 : k === n - 1 ? over : k / n;
-        if (slipping) y = Math.max(0, y - 0.12);
-        var p = how.drop != null ? Math.max(0, (k - 1) / Math.max(1, n - 1)) : y;
-        shown.tilt = fromTilt + (toTilt - fromTilt) * (how.drop != null ? (k >= n ? 1 : k === n - 1 ? over : p) : y);
-        for (var i = 0; i < counts.length; i++) shown.depth[i] = fromDepth[i] + (counts[i] - fromDepth[i]) * (k >= n ? 1 : p);
-        if (how.seal) shown.sealed = k >= n ? 0.42 : k >= 2 ? 0.22 : 0;
+        // A dropped weight lands first (its fall takes the first tread), and the beam and the
+        // bowls answer it on the treads after.
+        var p = k >= n ? 1 : dropping ? Math.max(0, (k - 1) / Math.max(1, n - 1)) : k / n;
+        shown.tilt = fromTilt + (toTilt - fromTilt) * p;
+        for (var i = 0; i < counts.length; i++) shown.depth[i] = fromDepth[i] + (counts[i] - fromDepth[i]) * p;
+        if (how.seal) shown.sealed = k / n;
         paint();
-      }, done: function () { shown.fall = null; shown.dust = null; shown.tilt = toTilt; paint(); } });
+      }, done: function () { shown.fall = null; shown.tilt = toTilt; paint(); } });
     }
     function redraw(how) {
       var left = probe.total - placed.length;
@@ -1939,9 +1907,10 @@
   // Seven keys, one lock. A first press on a key weighs it in the hand and reads its one line; a
   // second press on the same key tries it in the lock. The key tried is most of the answer, and
   // how many were weighed before trying is the rest. Nothing is hidden that matters: any key
-  // turns, so the weighing is curiosity made visible, never a puzzle. Weighing reveals the detail
-  // glyph by glyph; turning rotates the key in rolled treads (key-turn) while the other six shed
-  // down the ladder, and only then are they disabled.
+  // turns, so the weighing is curiosity made visible, never a puzzle. Weighing cuts the detail in
+  // by the reveal; turning turns the key about its bow in even clicks (key-turn), and it stays
+  // turned while the other six go behind a slice, one after another in one stair, and only then
+  // are they disabled.
   function keysProbe(probe, body, trace, answer, finish) {
     var weighed = [];
     var held = -1;
@@ -1968,18 +1937,18 @@
           else if (others >= probe.keys.length - 1) add(answer, probe.all, 1);
           else if (others <= 2) add(answer, probe.few, 1);
           else add(answer, probe.many, 1);
-          button.style.setProperty('--key-turn', (10 + Math.random() * 10).toFixed(1) + 'deg');
+          button.style.setProperty('--key-turn', (8 + Math.random() * 6).toFixed(1) + 'deg');
+          cutFor(button, 'key-turn', { family: 'ratchet', duration: 'long' });
           button.setAttribute('data-turned', 'true');
           var shed = 0;
+          var gone = seedOf();
           shuffled(buttons.filter(function (b) { return b !== button; })).forEach(function (other, k) {
-            var delay = staggerOf(k);
-            other.style.setProperty('--d', delay + 'ms');
-            shed = Math.max(shed, delay + unmake(other));
+            shed = Math.max(shed, unmake(other, null, gone, staggerOf(k)));
           });
           note(trace, key.label + ' turns in the lock');
           var wait = beat('long');
-          // The turned key stays as it is, its texture the mark of the answer, and is only inert
-          // (the `done` guard ignores presses); the six that shed are disabled once they have gone.
+          // The turned key stays as it is, turned and filled, the mark of the answer, and is only
+          // inert (the `done` guard ignores presses); the six are disabled once they have gone.
           function turned() {
             button.setAttribute('aria-disabled', 'true');
             finish();
@@ -2008,13 +1977,13 @@
     dealOut(buttons);
     body.appendChild(el('p', 'probe-count', 'a first press weighs a key in your hand; a second press on the same key tries it in the lock'));
   }
-  // The room answers the dial by area: an ember texture and a frost texture, each masked at a rung
-  // of the ladder proportional to its share (data-warmth), trade coverage in hard treads; the
-  // nearer end's word opens its tracking a step; 'leave it there' seals the panel.
+  // The room answers the dial by area: ember and frost are two shades split by one edge, and the
+  // dial moves the edge (data-warmth) in treads; the nearer end's word opens its tracking a step;
+  // 'leave it there' seals the panel from the point the dial was left at.
   function sliderProbe(probe, body, trace, answer, finish) {
     var wrap = el('div', 'probe-dial');
-    // The panel's seal: a layer of its own that the composition the engine writes at data-set
-    // (--rite-seal) climbs onto, leaving the ember and the frost at the coverage the dial gave them.
+    // The panel's seal: a layer of its own that grows from the dial's thumb at data-set, in the
+    // treads the engine cuts for that seal, over the room at the share the dial gave it.
     var seal = el('span', 'probe-dial-seal');
     seal.setAttribute('aria-hidden', 'true');
     wrap.appendChild(seal);
@@ -2032,7 +2001,6 @@
     wrap.appendChild(el('span', 'probe-dial-end', probe.high));
     var done = el('button', 'probe-option probe-undo', 'leave it there');
     done.type = 'button';
-    dress(wrap);
     function room() {
       var v = Number(input.value);
       wrap.setAttribute('data-warmth', String(Math.round(v / 20)));
@@ -2043,7 +2011,6 @@
     input.addEventListener('input', function () {
       if (sealed !== null) { input.value = sealed; return; }
       room();
-      tick(wrap);
       note(trace, 'the dial is somewhere it was not');
     });
     input.addEventListener('keydown', function (ev) { if (sealed !== null) ev.preventDefault(); });
@@ -2053,8 +2020,14 @@
       add(answer, probe.cold, 1 - warmth);
       add(answer, probe.warm, warmth);
       // The dial is spent like any control (inert under the rite, disabled only after it), and
-      // the panel is sealed.
+      // the panel is sealed from where its thumb was left.
       sealed = input.value;
+      var panel = wrap.getBoundingClientRect();
+      var track = input.getBoundingClientRect();
+      if (panel.width && panel.height) {
+        wrap.style.setProperty('--dial-at', unit((track.left - panel.left + track.width * warmth) / panel.width) * 100 + '%');
+        wrap.style.setProperty('--dial-y', unit((track.top - panel.top + track.height / 2) / panel.height) * 100 + '%');
+      }
       retire(input);
       wrap.setAttribute('data-set', 'true');
       retire(done);
@@ -2066,13 +2039,14 @@
   // The stars come out one at a time, faster as the dusk deepens, and the answer is how many
   // there are when the visitor says enough -- and how many of them they hurried out by hand. The
   // sky fills on its own if they wait, but it never answers on its own: the press is theirs.
-  // A star does not fade in, it resolves: a matte disc whose coverage climbs in rolled treads
-  // with a flare on the last; it twinkles by a flicker series of holds and drops, never a sine;
-  // the lines between stars come up as rolled dashes advancing in cuts; the stars a visitor
-  // hurried are warm and shard-matted so their hand shows; 'enough' lays a glass over the night.
+  // A star does not fade in: it is cut out of the dark as a curve growing from its centre in a few
+  // treads, and its line to the nearest star already out comes up with it, tread for tread. Night
+  // falls by area: the sky rests in two shades, night above and dusk below, split by one slice
+  // that steps down the sky as the stars come out. The stars a visitor hurried are warm, so their
+  // hand shows, and 'enough' seals the sky from the last star out. The sky is drawn only when a
+  // tread changes: no frame loop, and no twinkle.
   function skyProbe(probe, body, trace, answer, finish) {
     var full = probe.full || 48;
-    var still = stilled();
     var sky = el('canvas', 'probe-pad');
     sky.width = 600;
     sky.height = 220;
@@ -2100,27 +2074,15 @@
     var stars = [];
     var hurried = 0;
     var stopped = false;
-    var glass = 0; // the coverage of the glass laid over the night at 'enough'
-    var due = 0;
-    var veil = matteField(null, 'scan');
-    // The dusk deepens by area: night is laid over the sky through a matte of this sky's own at
-    // a coverage that climbs a stair of three to five rolled treads as the stars come out, each
-    // tread painted once and kept; never a colour lerp. And the stars keep no series: each
-    // comes after a pace jittered for it alone, with a hold every few stars, the few rolled per sky.
-    var duskField = matteField(null);
-    var duskStair = treadsOf(rite('stair'), 3 + Math.floor(Math.random() * 3));
-    var duskLayers = {};
-    function duskLayer(w, h, k) {
-      var key = Math.round(unit(k) * 20);
-      if (duskLayers[key]) return duskLayers[key];
-      var off = document.createElement('canvas');
-      off.width = w;
-      off.height = h;
-      var og = off.getContext('2d');
-      if (og) duskField.paint(og, 0, 0, w, h, key / 20, rgba(night, 0.9));
-      duskLayers[key] = off;
-      return off;
-    }
+    var sealed = 0; // how far the seal has grown from the last star, 0 to 1
+    var timer = 0;
+    // Night falls from the zenith: a slice sweeping down the sky, as far as a stair rolled for this
+    // sky says for the share of the stars that are out -- never the whole sky, so the dusk keeps
+    // the horizon.
+    var nightfall = rite('stair');
+    var NIGHT = { kind: 'slice', angle: 180 };
+    // The stars keep no even pace: each comes after a pace rolled for it alone, with a hold every
+    // few stars, the few rolled per sky.
     var holdEvery = 3 + Math.floor(Math.random() * 4);
     function pace(n) {
       var base = 160 + 900 * Math.pow(0.95, n);
@@ -2133,15 +2095,26 @@
       for (var i = 0; i < stars.length; i++) dots += (i && i % 8 === 0 ? ' ' : '') + '·';
       gauge(trace, stars.length ? dots : 'none out yet');
     }
-    var linkRise = treadsOf(rite('shift'), 3 + Math.floor(Math.random() * 3)); // how the lines between stars come up, rolled for this sky
-    var linkDash = dashesOf(prng(Math.floor(Math.random() * 0x7fffffff)));
+    // The star already out nearest to (x, y), near enough to be joined to it, or -1.
+    function nearest(x, y) {
+      var reach = 0.2;
+      var best = reach * reach;
+      var near = -1;
+      for (var j = 0; j < stars.length; j++) {
+        var dx = stars[j].x - x;
+        var dy = (stars[j].y - y) * sky.height / sky.width;
+        var d2 = dx * dx + dy * dy;
+        if (d2 < best) { best = d2; near = j; }
+      }
+      return near;
+    }
     function appear(x, y, own) {
-      // Each star comes out along a curve rolled for it alone, through a matte of its own.
-      var field = matteField(null, own ? 'shards' : null);
-      var treads = 3 + Math.floor(Math.random() * 3);
-      stars.push({ x: x, y: y, r: 0.9 + Math.random() * 1.5, born: performance.now(), own: !!own,
-        rise: treadsOf(rite('arrive'), treads), treads: treads, life: 420 + Math.random() * 500,
-        matte: field, twinkle: field.flicker() });
+      var star = { x: x, y: y, r: 0.9 + Math.random() * 1.5, own: !!own, k: 0, link: nearest(x, y) };
+      stars.push(star);
+      series({ ms: beat('medium') * between(1, 1.6), treads: 2 + Math.floor(Math.random() * 3), step: function (k, n) {
+        star.k = k / n;
+        paint();
+      } });
       count();
       if (stars.length === 1) note(trace, 'the first one is out');
       if (stars.length >= full) {
@@ -2156,89 +2129,62 @@
       hurried += 1;
       if (stars.length < full) note(trace, hurried === 1 ? 'one hurried along' : hurried + ' hurried along');
     }
-    function paint(now) {
+    function paint() {
       if (!g) return;
       var w = sky.width;
       var h = sky.height;
-      var p = Math.min(1, stars.length / full);
-      var grad = g.createLinearGradient(0, 0, 0, h);
-      grad.addColorStop(0, rgba(blend(blend(dusk, warm, 0.22), night, 0.3), 1));
-      grad.addColorStop(1, rgba(blend(night, dusk, 0.2), 1));
-      g.fillStyle = grad;
+      var i;
+      g.fillStyle = rgba(blend(blend(dusk, warm, 0.22), night, 0.5), 1);
       g.fillRect(0, 0, w, h);
-      // Night laid over the dusk by area, one tread of the rolled stair at a time.
-      var deep = duskStair(p);
-      if (deep > 0) g.drawImage(duskLayer(w, h, deep * 0.85), 0, 0);
+      paintCut(g, 0, 0, w, h, nightfall(Math.min(1, stars.length / full)) * 0.85, NIGHT, rgba(night, 0.9));
       g.fillStyle = 'rgba(0,0,0,0.4)';
       g.fillRect(0, h * 0.9, w, h * 0.1);
-      var reach = w * 0.2;
-      var i;
-      var j;
       g.lineWidth = 1;
       for (i = 0; i < stars.length; i++) {
         var a = stars[i];
-        var near = -1;
-        var best = reach * reach;
-        for (j = 0; j < stars.length; j++) {
-          if (i === j) continue;
-          var dx = (stars[j].x - a.x) * w;
-          var dy = (stars[j].y - a.y) * h;
-          var d2 = dx * dx + dy * dy;
-          if (d2 < best) { best = d2; near = j; }
-        }
-        if (near < 0) continue;
-        // The line advances in cuts along its dashes: so far, and no further, until the next tread.
-        var up = still ? 1 : linkRise(Math.min(1, (now - Math.max(a.born, stars[near].born)) / 900));
-        if (up <= 0) continue;
-        g.strokeStyle = rgba(glass && stopped ? warm : cool, 0.1 + 0.22 * (1 - Math.sqrt(best) / reach));
-        g.setLineDash(linkDash);
+        if (a.link < 0 || a.k <= 0) continue;
+        // The line comes up with its star: so far, and no further, until the next tread.
+        var b = stars[a.link];
+        var near = Math.hypot((b.x - a.x) * w, (b.y - a.y) * h) / (w * 0.2);
+        g.strokeStyle = rgba(sealed ? warm : cool, 0.1 + 0.22 * Math.max(0, 1 - near));
         g.beginPath();
         g.moveTo(a.x * w, a.y * h);
-        g.lineTo(a.x * w + (stars[near].x - a.x) * w * up, a.y * h + (stars[near].y - a.y) * h * up);
+        g.lineTo(a.x * w + (b.x - a.x) * w * a.k, a.y * h + (b.y - a.y) * h * a.k);
         g.stroke();
-        g.setLineDash([]);
       }
       for (i = 0; i < stars.length; i++) {
         var s = stars[i];
-        var age = (now - s.born) / s.life;
-        var f = still ? 1 : s.rise(Math.min(1, age));
-        var lit = still ? 1 : s.twinkle(now);
+        if (s.k <= 0) continue;
+        // A star: two shades of its light split by one curve, a halo and its core, both cut out of
+        // the dark from its centre as it comes out.
         var c = s.own ? warm : blend(cool, [255, 255, 255], 0.55);
         var x = s.x * w;
         var y = s.y * h;
-        var flare = !still && age < 1 && f >= 1 ? 1.6 : 1;
-        var r = s.r * 1.5 * (lit ? 1 : 0.7) * flare;
-        if (f <= 0) continue;
-        if (age >= 1 || f >= 1) {
-          // Out: a core, and a halo that is a matte disc (its area, never its alpha, is the twinkle).
-          if (lit) s.matte.disc(g, x, y, r * 4, 0.3, rgba(c, 0.45));
-          g.fillStyle = rgba(c, lit ? 1 : 0.85);
-          g.beginPath();
-          g.arc(x, y, r, 0, Math.PI * 2);
-          g.fill();
-        } else {
-          // Resolving: the disc's area fills through its matte, tread by tread.
-          s.matte.disc(g, x, y, r * 4, f, rgba(c, 1));
-        }
+        g.fillStyle = rgba(c, 0.22);
+        g.beginPath();
+        g.arc(x, y, s.r * 4 * s.k, 0, Math.PI * 2);
+        g.fill();
+        g.fillStyle = rgba(c, 1);
+        g.beginPath();
+        g.arc(x, y, s.r * 1.5 * s.k, 0, Math.PI * 2);
+        g.fill();
       }
-      if (glass) veil.paint(g, 0, 0, w, h, glass, rgba(night, 0.8));
+      if (sealed) {
+        var last = stars[stars.length - 1];
+        sealWash(g, w, h, sealed, last ? { x: last.x * w, y: last.y * h } : { x: w / 2, y: h / 2 }, warm);
+      }
     }
-    // One star a frame at most, so a tab that was hidden for a while does not dump the sky at once;
-    // and nothing comes out while the page is set aside behind a lightbox.
-    function frame(now) {
-      if (!sky.isConnected) return;
-      var aside = sky.closest('[data-lightbox-aside]');
-      if (aside) due = 0;
-      else if (!stopped && stars.length < full) {
-        if (!due) due = now + 500;
-        else if (now >= due) {
-          appear(0.04 + Math.random() * 0.92, 0.05 + Math.random() * 0.78, false);
-          due = now + pace(stars.length);
-        }
-      }
-      paint(now);
-      if (stopped && (still || glass >= 0.3)) return;
-      window.requestAnimationFrame(frame);
+    // The next star, after its pace; nothing comes out while the page is set aside behind a
+    // lightbox (it asks again in a while), and nothing at all once the sky has left the page.
+    function next(delay) {
+      if (stopped || stars.length >= full) return;
+      timer = window.setTimeout(function () {
+        timer = 0;
+        if (stopped || !sky.isConnected) return;
+        if (sky.closest('[data-lightbox-aside]')) { next(500); return; }
+        appear(0.04 + Math.random() * 0.92, 0.05 + Math.random() * 0.78, false);
+        next(pace(stars.length));
+      }, delay);
     }
     sky.addEventListener('click', function (ev) {
       var box = sky.getBoundingClientRect();
@@ -2252,6 +2198,8 @@
     enough.addEventListener('click', function () {
       if (stopped) return;
       stopped = true;
+      if (timer) window.clearTimeout(timer);
+      timer = 0;
       var n = stars.length;
       bucket(probe.buckets, n, answer);
       if (n >= full) add(answer, probe.filled, 1);
@@ -2261,24 +2209,25 @@
       retire(hurry);
       sky.style.cursor = 'default';
       gauge(trace, '');
-      // A glass over the night: the scan matte settles in treads, the lines cut warm.
-      series({ ms: beat('medium'), treads: 3, step: function (k, n2) { glass = k >= n2 ? 0.3 : k * 0.1; } });
+      // Sealed from the last star out, in treads; the lines between the stars cut warm.
+      series({ ms: beat('medium'), treads: 3, step: function (k, n2) { sealed = k / n2; paint(); } });
       finish();
     });
     count();
-    window.requestAnimationFrame(frame);
+    paint();
+    next(500);
   }
   // A door, and however the visitor knocks on it. The count is most of the answer -- one knock, two,
   // three, a handful, a volley -- and for a longer knock its rhythm is the rest: even, swung,
   // quickening or slowing, and whether they knocked at once or stood a moment first. Each knock
   // rings on the door and leaves its tick on the strip above it, spaced as it fell, so the knock is
   // written where it can be read back. No knock is wrong, and the door never answers on its own:
-  // saying the knock is done is the visitor's press. A knock rings as a ratchet and dies as shards:
-  // the ring's radius advances in rolled cuts as a dashed circle and sheds through a shards matte
-  // instead of dimming; the door's shudder is a film-reel jolt of rolled displacements with holds;
-  // each tick on the strip stamps; 'that is my knock' seals the door.
+  // saying the knock is done is the visitor's press. A knock rings out from where it landed as one
+  // circle that steps outward in a few treads and is gone after its last, never dimming; the door
+  // is set back a hair under it for that first tread, once, and is home; the newest tick on the
+  // strip is stamped; 'that is my knock' seals the door from the knocker out, its panels cut warm.
+  // The door is drawn only when a tread changes.
   function knockProbe(probe, body, trace, answer, finish) {
-    var still = stilled();
     var KNOCKER = { x: 0.5, y: 0.42 };
     var door = el('canvas', 'probe-pad');
     door.width = 600;
@@ -2308,10 +2257,7 @@
     var arrived = Date.now();
     var knocks = [];
     var stopped = false;
-    var running = false;
-    var sealed = 0;
-    var grain = matteField(null, 'grain');
-    var RING_MS = 700;
+    var sealed = 0; // how far the seal has grown from the knocker, 0 to 1
     function pattern() {
       var out = '·';
       for (var i = 1; i < knocks.length; i++) {
@@ -2320,7 +2266,7 @@
       }
       return out;
     }
-    function paint(now) {
+    function paint() {
       if (!g) return;
       var w = door.width;
       var h = door.height;
@@ -2329,30 +2275,19 @@
       var top = h * 0.16;
       var bottom = h * 0.94;
       var i;
-      var grad = g.createLinearGradient(0, 0, 0, h);
-      grad.addColorStop(0, rgba(blend(night, dusk, 0.55), 1));
-      grad.addColorStop(1, rgba(night, 1));
-      g.fillStyle = grad;
+      // The wall and the step: two shades split by the one line the door stands on.
+      g.fillStyle = rgba(blend(night, dusk, 0.35), 1);
       g.fillRect(0, 0, w, h);
       g.fillStyle = 'rgba(0,0,0,0.35)';
       g.fillRect(0, bottom, w, h - bottom);
-      // The door shudders under a fresh knock, unless the visitor asked for stillness: a reel of
-      // rolled displacements, each held until the next, never a sine.
-      var shake = 0;
-      if (!still) {
-        for (i = 0; i < knocks.length; i++) {
-          var age = now - knocks[i].born;
-          var jolts = knocks[i].jolts;
-          for (var q = 0; q < jolts.length; q++) {
-            if (age < jolts[q][0]) { shake += jolts[q][1]; break; }
-          }
-        }
-      }
+      // Under a fresh knock (one still on its first tread) the door is set back a hair, once.
+      var last = knocks[knocks.length - 1];
+      var setBack = last && last.ring === 0 ? 1.5 : 0;
       g.strokeStyle = rgba(cool, 0.35);
       g.lineWidth = 3;
       g.strokeRect(left - 5, top - 5, right - left + 10, bottom - top + 5);
       g.save();
-      g.translate(shake, 0);
+      g.translate(0, setBack);
       g.fillStyle = rgba(blend(night, warm, 0.14), 1);
       g.fillRect(left, top, right - left, bottom - top);
       var inset = (right - left) * 0.14;
@@ -2376,33 +2311,19 @@
       g.arc(left + (right - left) * 0.78, top + (bottom - top) * 0.5, h * 0.012, 0, Math.PI * 2);
       g.fill();
       g.restore();
-      // Each knock rings out from where it landed in cuts, breaking up as it goes; with less motion
-      // the ring is simply there.
+      // Each knock rings out from where it landed, one circle a tread further out each tread, and
+      // is gone after its last.
+      g.strokeStyle = rgba(cool, 0.75);
+      g.lineWidth = 2;
       for (i = 0; i < knocks.length; i++) {
         var k = knocks[i];
-        var life = (now - k.born) / RING_MS;
-        if (life >= 1) continue;
-        var rung = still ? 0.5 : k.ring(life); // how far this knock's ring has got, its own way
-        var radius = still ? h * 0.08 : h * 0.03 + rung * h * 0.22;
-        var keep = still ? 0.6 : 1 - rung; // what the shards matte still lets through
-        g.strokeStyle = rgba(cool, 0.75);
-        g.lineWidth = 2;
-        var segs = 64;
-        var dash = k.dash;
-        for (var s = 0; s < segs; s++) {
-          if (!dash[s % dash.length]) continue;
-          var a0 = s / segs * Math.PI * 2;
-          var a1 = (s + 1) / segs * Math.PI * 2;
-          var mx = k.x + Math.cos((a0 + a1) / 2) * radius;
-          var my = k.y + Math.sin((a0 + a1) / 2) * radius;
-          if (!k.matte.at(Math.floor(mx / k.matte.cell), Math.floor(my / k.matte.cell), keep)) continue;
-          g.beginPath();
-          g.arc(k.x, k.y, radius, a0, a1);
-          g.stroke();
-        }
+        if (k.ring >= 1) continue;
+        g.beginPath();
+        g.arc(k.x, k.y, h * 0.03 + k.ring * h * 0.25, 0, Math.PI * 2);
+        g.stroke();
       }
       // The knock written down: one tick for each, spaced along the strip as they fell; the newest
-      // stamps -- one frame wide and tall, then its own width.
+      // is stamped -- taller for its first tread, then its own height.
       if (knocks.length) {
         var span = knocks[knocks.length - 1].at - knocks[0].at;
         var scale = Math.min(0.11, (w * 0.84) / Math.max(1, span));
@@ -2415,51 +2336,28 @@
         g.strokeStyle = rgba(warm, 0.9);
         for (i = 0; i < knocks.length; i++) {
           var x = w * 0.08 + (knocks[i].at - knocks[0].at) * scale;
-          var fresh = !still && now - knocks[i].born < 90;
+          var fresh = knocks[i].ring === 0;
           g.lineWidth = fresh ? 3 : 2;
           g.beginPath();
           g.moveTo(x, fresh ? h * 0.03 : h * 0.05);
           g.lineTo(x, fresh ? h * 0.15 : h * 0.13);
           g.stroke();
         }
-        if (sealed) grain.paint(g, w * 0.06, h * 0.02, w * 0.88, h * 0.14, sealed, rgba(night, 0.7));
       }
-    }
-    function frame(now) {
-      running = false;
-      if (!door.isConnected) return;
-      paint(now);
-      for (var i = 0; i < knocks.length; i++) {
-        if (now - knocks[i].born < RING_MS) { kick(); return; }
-      }
-    }
-    function kick() {
-      if (running) return;
-      running = true;
-      window.requestAnimationFrame(frame);
+      if (sealed) sealWash(g, w, h, sealed, { x: kx, y: ky }, warm);
     }
     function rap(fx, fy) {
       if (stopped) return;
-      // Each knock rings out and shudders the door along a stair rolled for that knock alone: its
-      // own tread count, dash pattern, shards matte and reel of jolts.
-      var r = prng(Math.floor(Math.random() * 0x7fffffff));
-      var jolts = [];
-      var until = 0;
-      var n = 3 + Math.floor(r() * 3);
-      for (var i = 0; i < n; i++) {
-        until += 30 + r() * 60;
-        jolts.push([until, Math.round((i % 2 ? -1 : 1) * (3.5 - i * 0.7) * (0.7 + r() * 0.6) * 10) / 10]);
-      }
-      var dash = [];
-      var dl = 6 + Math.floor(r() * 6);
-      for (var d = 0; d < dl; d++) dash.push(r() < 0.65 ? 1 : 0);
-      knocks.push({ at: Date.now(), born: performance.now(), x: fx * door.width, y: fy * door.height,
-        ring: treadsOf(rite('leave'), 4 + Math.floor(r() * 4)), jolts: jolts, dash: dash,
-        matte: matteField(Math.floor(r() * 0x7fffffff), 'shards') });
+      // Each knock rings out in treads cut for that knock alone.
+      var knocked = { at: Date.now(), x: fx * door.width, y: fy * door.height, ring: 0 };
+      knocks.push(knocked);
+      series({ ms: beat('long'), treads: 2 + Math.floor(Math.random() * 3), step: function (k, n) {
+        knocked.ring = k / n;
+        paint();
+      } });
       done.disabled = false;
       note(trace, knocks.length === 1 ? 'one knock' : knocks.length + ' knocks');
       gauge(trace, pattern());
-      kick();
     }
     function sum(list) { return list.reduce(function (a, b) { return a + b; }, 0); }
     door.addEventListener('click', function (ev) {
@@ -2496,21 +2394,21 @@
       retire(done);
       door.style.cursor = 'default';
       gauge(trace, '');
-      // The door is sealed: its panels cut warm and a grain settles over the strip, in treads.
-      series({ ms: beat('medium'), treads: 3, step: function (k, n2) { sealed = k >= n2 ? 0.3 : k * 0.1; paint(performance.now()); } });
+      // The door is sealed from the knocker out, in treads, and its panels cut warm.
+      series({ ms: beat('medium'), treads: 3, step: function (k, n2) { sealed = k / n2; paint(); } });
       finish();
     });
-    paint(performance.now());
+    paint();
   }
   // A cairn is read when it is left standing, never while it rises: how many stones, and the
   // shape the stack took -- plumb, swaying, leaning, or daring. Each stone goes where the visitor
   // sets it: tap the ground either side of the stack, steer the next stone with the arrow keys and
   // place it with enter, or let the button set one square on. No cairn is wrong and nothing falls:
   // a stone set far out simply hangs there, which is its own kind of answer. A stone is set, not
-  // drawn: it drops from above in rolled treads, slips a hair sideways on the last cut (cosmetic,
-  // never written into the reading), raises a one-frame dust matte, and wears a grain of its own;
-  // the ghost's dashes are rolled per move and it ratchets to its offset in two cuts; 'leave it
-  // standing' settles dusk over the cairn.
+  // drawn: it drops from above in a few treads, each shorter than the last, onto the place it was
+  // given and nowhere else, and rests in two shades split by one edge through its middle, lit from
+  // above; the guide for the next stone steps to its offset in two treads; 'leave it standing'
+  // seals the cairn from its top stone out, the stones' highlights cut warm.
   function cairnProbe(probe, body, trace, answer, finish) {
     var MAX = 14;
     var ground = el('canvas', 'probe-pad');
@@ -2544,10 +2442,7 @@
     var cursor = 0;
     var shownCursor = 0;
     var done = false;
-    var dusky = 0;
-    var dustField = matteField(null, 'shards');
-    var veil = matteField(null, 'scan');
-    var ghostDash = [4, 5];
+    var sealed = 0; // how far the seal has grown from the top stone, 0 to 1
     var cancelCursor = null;
     function stoneW(i) { return Math.max(26, 86 - i * 4); }
     function topX() {
@@ -2559,12 +2454,9 @@
       if (!g) return;
       var w = ground.width;
       var h = ground.height;
-      var grad = g.createLinearGradient(0, 0, 0, h);
-      grad.addColorStop(0, rgba(blend(night, dusk, 0.5), 1));
-      grad.addColorStop(1, rgba(night, 1));
-      g.fillStyle = grad;
+      // The air and the ground: two shades split by the one line the cairn stands on.
+      g.fillStyle = rgba(blend(night, dusk, 0.35), 1);
       g.fillRect(0, 0, w, h);
-      if (dusky) veil.paint(g, 0, 0, w, h * 0.88, dusky, rgba(night, 0.8));
       var floor = h * 0.88;
       g.fillStyle = 'rgba(0,0,0,0.4)';
       g.fillRect(0, floor, w, h - floor);
@@ -2584,45 +2476,50 @@
         var sh = Math.max(9, 19 - i);
         x += i ? stone.off * stoneW(i - 1) : 0;
         y -= sh + 1;
-        var lift = stone.drop ? stone.drop.lift : 0;
-        var slip = stone.drop ? stone.drop.slip : 0;
+        var lift = stone.lift;
         var mid = y + sh / 2 - lift;
-        var sx = x + slip;
-        g.strokeStyle = rgba(blend(night, cool, 0.3 + (i % 3) * 0.07), 1);
+        var tone = blend(night, cool, 0.3 + (i % 3) * 0.07);
+        g.strokeStyle = rgba(tone, 1);
         g.lineWidth = sh;
         g.beginPath();
-        g.moveTo(sx - sw / 2 + sh / 2, mid);
-        g.lineTo(sx + sw / 2 - sh / 2, mid);
+        g.moveTo(x - sw / 2 + sh / 2, mid);
+        g.lineTo(x + sw / 2 - sh / 2, mid);
         g.stroke();
-        // The stone's face: a grain of its own, so no two stones wear the same texture.
-        stone.face.paint(g, sx - sw / 2 + sh / 2, mid - sh / 2 + 1, sw - sh, sh - 2, stone.grain, rgba(night, 0.35));
-        g.strokeStyle = dusky ? rgba(warm, 0.6) : rgba(cool, 0.35);
+        // The stone's face: two shades split by one edge through its middle, the upper lit.
+        g.save();
+        g.beginPath();
+        g.rect(x - sw / 2, mid - sh / 2 - 1, sw, sh / 2 + 1);
+        g.clip();
+        g.strokeStyle = rgba(blend(tone, cool, 0.16), 1);
+        g.beginPath();
+        g.moveTo(x - sw / 2 + sh / 2, mid);
+        g.lineTo(x + sw / 2 - sh / 2, mid);
+        g.stroke();
+        g.restore();
+        g.strokeStyle = sealed ? rgba(warm, 0.6) : rgba(cool, 0.35);
         g.lineWidth = 1.2;
         g.beginPath();
-        g.moveTo(sx - sw / 2 + sh, y + 1 - lift);
-        g.lineTo(sx + sw / 2 - sh, y + 1 - lift);
+        g.moveTo(x - sw / 2 + sh, y + 1 - lift);
+        g.lineTo(x + sw / 2 - sh, y + 1 - lift);
         g.stroke();
-        if (stone.drop && stone.drop.dust) {
-          dustField.paint(g, sx - sw / 2 - 6, y + sh - 4, sw + 12, 10, stone.drop.dust, rgba(cool, 0.5));
-        }
       }
+      // The guide: a hairline where the next stone would go.
       if (!done && stones.length < MAX) {
         var gw = stoneW(stones.length);
         var gx = x + (stones.length ? shownCursor * stoneW(stones.length - 1) : 0);
-        g.setLineDash(ghostDash);
-        g.strokeStyle = rgba(warm, 0.65);
+        g.strokeStyle = rgba(warm, 0.5);
         g.lineWidth = 2;
         g.beginPath();
         g.moveTo(gx - gw / 2, y - 7);
         g.lineTo(gx + gw / 2, y - 7);
         g.stroke();
-        g.setLineDash([]);
       }
+      if (sealed) sealWash(g, w, h, sealed, { x: x, y: y }, warm);
     }
     function place(off) {
       if (done || stones.length >= MAX) return;
       var o = stones.length ? Math.max(-0.42, Math.min(0.42, off)) : 0;
-      var stone = { off: o, face: matteField(null, Math.random() < 0.5 ? 'grain' : 'noise'), grain: between(0.25, 0.45), drop: null };
+      var stone = { off: o, lift: 0 };
       stones.push(stone);
       cursor = 0;
       shownCursor = 0;
@@ -2633,22 +2530,16 @@
       gauge(trace, stones.slice(1).map(function (s) {
         return s.off > 0.08 ? '↗' : s.off < -0.08 ? '↖' : '·';
       }).join(' '));
-      // The drop: from above, in treads, a slip on the last cut and a puff of dust that goes.
+      // The drop: from above, onto its place, in treads that shrink as it lands.
       var from = 18 + Math.random() * 12;
-      var slip = (Math.random() < 0.5 ? -1 : 1) * between(1, 2.5);
-      stone.drop = { lift: from, slip: 0, dust: 0 };
+      stone.lift = from;
       series({ ms: beat('medium'), treads: 2 + Math.floor(Math.random() * 3), step: function (k, n) {
-        if (k >= n) { stone.drop = { lift: 0, slip: slip, dust: 0.25 }; }
-        else stone.drop = { lift: from * (1 - k / n), slip: 0, dust: 0 };
-        paint();
-      }, done: function () {
-        stone.drop = { lift: 0, slip: slip, dust: 0 };
+        stone.lift = from * (1 - (1 - Math.pow(0.5, k)) / (1 - Math.pow(0.5, n)));
         paint();
       } });
     }
     function steer() {
-      // The ghost ratchets to the new offset in two cuts, its dashes rolled for this move.
-      ghostDash = dashesOf(prng(Math.floor(Math.random() * 0x7fffffff)));
+      // The guide steps to the new offset in two treads.
       var from = shownCursor;
       var to = cursor;
       if (cancelCursor) cancelCursor();
@@ -2702,18 +2593,19 @@
       retire(leave);
       ground.style.cursor = 'default';
       gauge(trace, '');
-      // Dusk settles over the cairn in treads; the stones' highlights cut warm.
-      series({ ms: beat('medium'), treads: 3, step: function (k, n2) { dusky = k >= n2 ? 0.3 : k * 0.1; paint(); } });
+      // The cairn is sealed from its top stone out, in treads; the stones' highlights cut warm.
+      series({ ms: beat('medium'), treads: 3, step: function (k, n2) { sealed = k / n2; paint(); } });
       finish();
     });
     paint();
   }
   // A rubbing reads the final coverage, not the path or speed of the hand. Dragging and native
   // buttons uncover the same patches; no gesture history or drawing is kept with the reading.
-  // Soot lifts in blotches: an uncovered cell descends the matte ladder (soot-lift) so the print
-  // shows through holes that spread; the soot itself is the rolled fill texture, each cell at a
-  // phase of its own (--cell-shift) so no two tile alike; 'start over' covers the print again by
-  // climbing the ladder (soot-cover), cell by cell in a rolled stagger.
+  // The soot is one sheet over the print, two shades split by one slice through its centre, each
+  // patch carrying its own part of it (--cell-at). A patch rubbed has its soot lifted behind a
+  // slice from the side the hand came in by (--cut-angle, written from the rub's direction), so
+  // the print shows as the edge crosses; 'start over' lays the soot back the same way, patch after
+  // patch in a rolled order, all in one stair.
   function rubbingProbe(probe, body, trace, answer, finish) {
     var revealed = new Array(16).fill(false);
     var buttons = [];
@@ -2745,13 +2637,18 @@
         + (n ? n + ' of 16 patches uncovered.' : 'The print is still covered.')
         + (detail ? ' ' + detail : ''));
     }
-    function uncover(index) {
+    function uncover(index, heading) {
       if (index < 0 || index >= buttons.length) return;
       var motif = probe.motifs[motifOf(index)];
       if (!revealed[index]) {
         revealed[index] = true;
         buttons[index].removeAttribute('data-covering');
         buttons[index].style.setProperty('--d', '0ms');
+        // The lift's treads, and its edge: square to the rub, from the side the hand came in by;
+        // a press or a key leaves the angle the engine wrote for it (the pointer's approach, or the
+        // register's).
+        cutFor(buttons[index], 'lift', heading == null ? { family: 'leave', duration: 'medium' }
+          : { family: 'leave', duration: 'medium', angle: heading });
         buttons[index].setAttribute('data-uncovered', 'true');
         buttons[index].setAttribute('aria-label', patchLabel(index) + ': ' + motif.label + ', uncovered');
         if (!g) buttons[index].textContent = motif.word;
@@ -2763,7 +2660,7 @@
         var button = el('button', 'probe-rub-cell');
         button.type = 'button';
         button.setAttribute('aria-label', 'uncover ' + patchLabel(index));
-        button.style.setProperty('--cell-shift', Math.round(Math.random() * 100) + '% ' + Math.round(Math.random() * 100) + '%');
+        button.style.setProperty('--cell-at', (index % 4 * 100 / 3).toFixed(3) + '% ' + (Math.floor(index / 4) * 100 / 3).toFixed(3) + '%');
         button.addEventListener('click', function () { uncover(index); });
         buttons.push(button);
         field.appendChild(button);
@@ -2788,16 +2685,20 @@
       if (!isFinite(x) || !isFinite(y) || x < 0 || x >= 1 || y < 0 || y >= 1) return -1;
       return Math.floor(y * 4) * 4 + Math.floor(x * 4);
     }
+    var rubbed = null; // where the hand last was, for the direction it is going
     field.addEventListener('pointerdown', function (ev) {
       if (pointer !== null || ev.button !== 0) return;
       pointer = ev.pointerId;
+      rubbed = { x: ev.clientX, y: ev.clientY };
       if (field.setPointerCapture) field.setPointerCapture(ev.pointerId);
       uncover(at(ev));
     });
     field.addEventListener('pointermove', function (ev) {
       if (pointer !== ev.pointerId) return;
+      var heading = rubbed ? headingOf(ev.clientX - rubbed.x, ev.clientY - rubbed.y) : null;
+      rubbed = { x: ev.clientX, y: ev.clientY };
       var index = at(ev);
-      if (index >= 0 && !revealed[index]) uncover(index);
+      if (index >= 0 && !revealed[index]) uncover(index, heading);
     });
     function release(ev) {
       if (pointer === ev.pointerId) pointer = null;
@@ -2827,8 +2728,10 @@
         button.setAttribute('aria-label', 'uncover ' + patchLabel(index));
         button.textContent = '';
       });
+      var laid = seedOf();
       shuffled(covering).forEach(function (button, k) {
         button.style.setProperty('--d', staggerOf(k) + 'ms');
+        cutFor(button, 'cover', { family: 'stair', duration: 'medium', seed: laid });
         button.setAttribute('data-covering', 'true');
       });
       report('You can rub a different part, or open a puzzle without uncovering any more.');
@@ -2922,9 +2825,10 @@
   // unlettered points, and how far the needle travelled to get there is the rest: left as it lay,
   // nudged, swung round, or spun past a full turn. No bearing is wrong, and the compass never
   // answers on its own: setting out is the visitor's press. The needle ratchets after the hand in
-  // rolled treads with a slip back, never a glide; the face is grained through a matte of this
-  // compass's own; the meter tallies each eighth of a turn; and 'set out' settles dusk over the
-  // dial in treads with the needle cut warm.
+  // two to four even clicks, always forward, never a glide; the face rests in two shades split by
+  // one slice through the hub at the register's angle; the meter tallies each eighth of a turn;
+  // and 'set out' seals the compass from the needle's tip -- the way the visitor chose -- out, in
+  // treads, with the needle cut warm.
   function compassProbe(probe, body, trace, answer, finish) {
     var dial = el('canvas', 'probe-pad probe-compass');
     dial.width = 600;
@@ -2958,10 +2862,7 @@
     var lastHour = null;
     var lastMarks = 0;
     var cancel = null;
-    var face = null;
-    var tooth = matteField(null, 'grain');
-    var veil = matteField(null, 'scan');
-    var ringDash = dashesOf(prng(Math.floor(Math.random() * 0x7fffffff)));
+    var split = { kind: 'slice', angle: angleOf(style) };
     function wrap(a) { return ((a % 360) + 360) % 360; }
     function hourOf(b) { var hr = Math.round(wrap(b) / 30) % 12; return hr === 0 ? 12 : hr; }
     function point(a, r, cx, cy) { var rad = a * Math.PI / 180; return [cx + Math.sin(rad) * r, cy - Math.cos(rad) * r]; }
@@ -2973,42 +2874,30 @@
       var cy = h * 0.52;
       var R = h * 0.4;
       var i;
-      var grad = g.createLinearGradient(0, 0, 0, h);
-      grad.addColorStop(0, rgba(blend(night, dusk, 0.5), 1));
-      grad.addColorStop(1, rgba(night, 1));
-      g.fillStyle = grad;
+      g.fillStyle = rgba(blend(night, dusk, 0.35), 1);
       g.fillRect(0, 0, w, h);
-      // The face: a disc of the dusk, grained once through a matte of this compass's own.
+      // The face: a disc of the dusk in two shades, split by one slice through the hub.
       g.fillStyle = rgba(blend(night, dusk, 0.75), 1);
       g.beginPath();
       g.arc(cx, cy, R, 0, Math.PI * 2);
       g.fill();
-      if (!face) {
-        face = document.createElement('canvas');
-        face.width = w;
-        face.height = h;
-        var fg = face.getContext('2d');
-        if (fg) {
-          fg.beginPath();
-          fg.arc(cx, cy, R, 0, Math.PI * 2);
-          fg.clip();
-          tooth.paint(fg, cx - R, cy - R, R * 2, R * 2, 0.3, rgba(dusk, 0.55));
-        }
-      }
-      g.drawImage(face, 0, 0);
+      g.save();
+      g.beginPath();
+      g.arc(cx, cy, R, 0, Math.PI * 2);
+      g.clip();
+      paintCut(g, cx - R, cy - R, R * 2, R * 2, 0.5, split, rgba(dusk, 0.35));
+      g.restore();
       g.lineCap = 'butt';
       g.lineWidth = 1.5;
       g.strokeStyle = rgba(cool, 0.45);
       g.beginPath();
       g.arc(cx, cy, R, 0, Math.PI * 2);
       g.stroke();
-      g.setLineDash(ringDash);
       g.lineWidth = 1;
-      g.strokeStyle = rgba(cool, 0.28);
+      g.strokeStyle = rgba(cool, 0.2);
       g.beginPath();
       g.arc(cx, cy, R * 0.72, 0, Math.PI * 2);
       g.stroke();
-      g.setLineDash([]);
       // Thirty-two ticks, the eight points longer and warm, and no letter on any of them.
       for (i = 0; i < 32; i++) {
         var major = i % 4 === 0;
@@ -3032,16 +2921,14 @@
         g.lineTo(s1[0], s1[1]);
       }
       g.stroke();
-      // Where the needle lay at first: a dashed hairline, so what was turned can be read back.
+      // Where the needle lay at first: a faint hairline, so what was turned can be read back.
       var w0 = point(start, R * 0.5, cx, cy);
       var w1 = point(start, R * 0.78, cx, cy);
-      g.setLineDash([2, 4]);
-      g.strokeStyle = rgba(warm, 0.35);
+      g.strokeStyle = rgba(warm, 0.3);
       g.beginPath();
       g.moveTo(w0[0], w0[1]);
       g.lineTo(w1[0], w1[1]);
       g.stroke();
-      g.setLineDash([]);
       // The needle: warm toward the way, cool behind, on a hub.
       var rad = shown * Math.PI / 180;
       var px = Math.cos(rad) * 7;
@@ -3069,18 +2956,16 @@
       g.arc(cx, cy, 5, 0, Math.PI * 2);
       g.fill();
       g.stroke();
-      if (sealed) veil.paint(g, 0, 0, w, h, sealed, rgba(night, 0.8));
+      if (sealed) sealWash(g, w, h, sealed, { x: tip[0], y: tip[1] }, warm);
     }
-    // The needle ratchets after the hand: from where it stands to the bearing, in two to four
-    // rolled treads with a slip back where the roll allows, never a glide.
+    // The needle ratchets after the hand: from where it stands to the bearing, in two to four even
+    // clicks, always toward it, never a glide.
     function ratchet() {
       if (cancel) cancel();
       var from = wrap(shown);
       var d = ((bearing - from + 540) % 360) - 180;
-      cancel = series({ ms: beat('short'), treads: 2 + Math.floor(Math.random() * 3), step: function (k, n, slipping) {
-        var y = k >= n ? 1 : k / n;
-        if (slipping) y = Math.max(0, y - 0.2);
-        shown = from + d * y;
+      cancel = series({ ms: beat('short'), treads: 2 + Math.floor(Math.random() * 3), step: function (k, n) {
+        shown = from + d * (k / n);
         paint();
       }, done: function () { shown = bearing; paint(); } });
     }
@@ -3157,8 +3042,8 @@
       dial.setAttribute('aria-disabled', 'true');
       dial.tabIndex = -1;
       gauge(trace, '');
-      // Dusk settles over the dial in treads; the needle cuts warm.
-      series({ ms: beat('medium'), treads: 3, step: function (k, n2) { sealed = k >= n2 ? 0.3 : k * 0.1; paint(); } });
+      // Sealed from the needle's tip out, in treads; the needle cuts warm.
+      series({ ms: beat('medium'), treads: 3, step: function (k, n2) { sealed = k / n2; paint(); } });
       finish();
     }
     go.addEventListener('click', setOut);

@@ -90,19 +90,23 @@ function isPerm(list, n) {
    js/stage.js, "The rite"): a few treads, always forward, and one clean edge -- the piece's slice
    or curve, its signature -- for any surface that changes. The aim swings to a new angle in the
    ratchet's even clicks and the speed line climbs a stair, the readout counting after them; a
-   released probe flies its path again in the rite's landing treads, and the verdict and the
-   nearest-approach mark are cut on at their moment; the moons of a solved sky ride their orbits
-   in clicks, a lap at a time to keep Kepler's ratio, and the orbit dashes tick round with them. A
+   released probe flies its path again in the rite's landing treads, and the nearest-approach mark
+   is laid toward the ring in the treads of that flight's stair; the moons of a solved sky ride one
+   lap of the outermost orbit in clicks, keeping Kepler's ratio, and the orbit dashes tick round
+   with them, then stand. A line of words that changes keeps the words that stood until the new
+   ones' moment and is cut over to them once, so nothing on the canvas blanks and comes back. A
    surface that comes to stay -- the ring a probe has passed and the light over a solved field, a
-   moon the hint names -- is cut in by the piece's edge (rite.paint, one path) in treads and rests
-   as two shades of its colour split by that edge through its middle: never a fade, a flat wash or
-   a pattern. Every change is read against the piece's own clock, s.t, which frame() advances: a
-   change made at `since` has come came() of its way, which is 1 at once for a visitor who asked
-   for less motion and for whatever stood there from the start. Each thing that moves has a roll of
-   its own, and each TIME it moves it is rolled again (roll(): the thing's seed crossed with how
-   many times it has moved), so the second swing of the aim clicks in another rhythm from the
-   first and no turn of a wheel clicks like the one before -- every roll keeping the piece's edge.
-   The dust stands still: nothing in it waits for anything, so nothing in it moves. */
+   moon the hint names -- is cut in by the piece's edge (rite.paint, one path per coat) in treads
+   and rests as two shades of its colour split by that edge through its middle: never a fade, a
+   flat wash or a pattern. Every change is read against the piece's own clock, s.t, which frame()
+   advances: a change made at `since` has come came() of its way, which is 1 at once for a visitor
+   who asked for less motion and for whatever stood there from the start; a change made while
+   another was under way sets out from where that one stood, never from either end. Each thing
+   that moves has a roll of its own, and each TIME it moves it is rolled again (roll(): the thing's
+   seed crossed with how many times it has moved), so the second swing of the aim clicks in another
+   rhythm from the first and no turn of a wheel clicks like the one before -- every roll keeping the
+   piece's edge. The dust stands still: nothing in it waits for anything, so nothing in it moves,
+   and once every change has landed the scene is not drawn again until something changes. */
 
 // The rite of a piece handed none: everything stands where it ends, and a surface is cut by a
 // plain upright slice from its left side.
@@ -124,9 +128,34 @@ function riteOf(env) {
   return env && env.rite ? env.rite : STILL;
 }
 
+// How far a change made at `since` has come, over `span` seconds. Each change asked about is also
+// kept in s.until, the moment the last of them lands, so a frame after that knows it has nothing
+// new to draw (settled, below).
 function came(s, since, span, reduced) {
   if (reduced || since == null || since < 0) return 1;
+  if (!(s.until >= since + span)) s.until = since + span;
   return Math.max(0, Math.min(1, (s.t - since) / span));
+}
+
+// The size and the state the canvas was last drawn at.
+function sizeOf(c) {
+  return c.w + 'x' + c.h + '@' + (c.dpr || 1) + (c.done ? ' solved' : '');
+}
+
+// Whether a frame has nothing to draw: the canvas holds the picture last drawn at this size and
+// state, and every change in that picture had come the whole of its way when it was drawn. The
+// scene at rest stands still, so drawing it again would spend a frame on nothing a visitor could
+// see; a new size (the stage clears the canvas to resize it), the solve, or a new change draws
+// again.
+function settled(s, c) {
+  return s.drawn === sizeOf(c) && s.drawnAt > (s.until == null ? -Infinity : s.until);
+}
+
+// Draws the scene and notes when and at what size it was drawn.
+function drawn(s, c, paint) {
+  paint();
+  s.drawn = sizeOf(c);
+  s.drawnAt = s.t;
 }
 
 // The roll for the n-th time a thing moves: its own seed crossed with the count, so no two
@@ -365,14 +394,15 @@ function slingScene(g, w, h, env, p, s, v) {
   body(g, env, well.x, well.y, k * WELL_R, 4 * v.scale, true);
   // The ring. Once a probe has passed it, it is a set surface: from the moment the field was
   // solved its disc is cut in by the piece's edge and its rim thickens, in the same treads as the
-  // light over the field and the glow along the path -- one gesture, on the roll of the flight
-  // that passed, so a ring passed on the fourth try lights in other treads than one passed on the
-  // first. Never a fade.
+  // light over the field and the glow along the passing path -- one gesture, on the roll of the
+  // flight that passed, so a ring passed on the fourth try lights in other treads than one passed
+  // on the first. It is kept by that flight: a probe released after the solve, through the ring or
+  // past it, flies its own trace and leaves the light standing. Never a fade.
   const ring = map.at(p.rx, p.ry);
   const ringR = k * RING_R;
   const pass = s.flight && s.pass && s.pass.d <= RING_R;
-  const lit = pass && s.doneAt != null ? came(s, s.doneAt, 2.4, reduced) : 0;
-  const light = roll(rite, 0x21, s.flights);
+  const lit = s.solved && s.doneAt != null ? came(s, s.doneAt, 2.4, reduced) : 0;
+  const light = roll(rite, 0x21, s.solvedN);
   const shone = light.stair(lit);
   g.fillStyle = env.alpha(col.accent2, 0.06);
   g.beginPath();
@@ -436,9 +466,13 @@ function slingScene(g, w, h, env, p, s, v) {
       else g.moveTo(at.x, at.y);
     }
     g.stroke();
-    // A passed flight's path is set too: a broad glow along it, shown where the edge crossing the
-    // field has passed -- the same edge, in the same treads, as the light over the field.
+    // The path that passed is set too: a broad glow along it, shown where the edge crossing the
+    // field has passed -- the same edge, in the same treads, as the light over the field. It runs
+    // as far as the replay has come while that flight is the one on the field, and the whole way
+    // once another has been released after it.
     if (shone > 0) {
+      const lane = s.solved.pts;
+      const along = s.solved === s.flight ? until : lane.length;
       g.save();
       g.beginPath();
       light.region(g, 0, 0, w, h, shone);
@@ -446,8 +480,8 @@ function slingScene(g, w, h, env, p, s, v) {
       g.strokeStyle = env.alpha(col.accent2, 0.3);
       g.lineWidth = Math.max(12, k * 0.036);
       g.beginPath();
-      for (let i = 0; i < until; i++) {
-        const at = map.at(pts[i].x, pts[i].y);
+      for (let i = 0; i < along; i++) {
+        const at = map.at(lane[i].x, lane[i].y);
         if (i) g.lineTo(at.x, at.y);
         else g.moveTo(at.x, at.y);
       }
@@ -495,17 +529,25 @@ function slingScene(g, w, h, env, p, s, v) {
   g.fillText((angleRead > 0 ? '+' : '') + angleRead + '° · speed ' + Math.round(speedNow), w * 0.96, h * 0.07, w * 0.5);
   g.textAlign = 'center';
   g.fillStyle = env.alpha(col.muted, 0.85);
-  // The verdict is cut on at its moment when a flight is released, on that flight's own roll;
-  // nothing is said before it.
-  const said = s.flight ? (reduced ? 1 : Math.max(0, Math.min(1, s.clock / 0.9))) : 0;
-  if (!s.flight) g.fillText('the well bends every flight the same way; through the ring is the goal', w / 2, h * 0.94, w * 0.92);
-  else if (roll(rite, 0x7e, s.flights).flicker(said)) g.fillText(s.verdict, w / 2, h * 0.94, w * 0.92);
+  g.fillText(verdictShown(s, rite, reduced), w / 2, h * 0.94, w * 0.92);
+}
+
+const OPENING = 'the well bends every flight the same way; through the ring is the goal';
+
+// The line under the field: the words that stood until a released flight's verdict is cut over
+// them at its moment, on that flight's own roll -- once, so the line never blanks; a replay of the
+// same flight has the same words and changes nothing.
+function verdictShown(s, rite, reduced) {
+  if (!s.flight) return OPENING;
+  const said = reduced ? 1 : Math.max(0, Math.min(1, s.clock / 0.9));
+  return roll(rite, 0x7e, s.flights).flicker(said) ? s.verdict : s.verdictWas;
 }
 
 function slingState(p) {
   return {
     angle: AIM.open, speed: PUSH.open, flight: null, pass: null, fraction: 0, clock: 0, verdict: '',
-    t: 0, doneAt: null, aimFrom: AIM.open, aimAt: null, speedFrom: PUSH.open, speedAt: null,
+    verdictWas: OPENING, t: 0, doneAt: null, aimFrom: AIM.open, aimAt: null, speedFrom: PUSH.open,
+    speedAt: null, solved: null, solvedN: 0,
     // How many times each thing has moved: the roll for its next movement.
     aims: 0, speeds: 0, flights: 0
   };
@@ -539,7 +581,7 @@ function slingPiece(env, p) {
   // The ring is the verifier here -- a probe is through it or it is not -- so this puzzle has no
   // margin to widen and moves on the help alone: how many times the last flight may be replayed.
   let replays = 0;
-  const draw = (c) => slingScene(c.g, c.w, c.h, c, p, s, v);
+  const draw = (c) => drawn(s, c, () => slingScene(c.g, c.w, c.h, c, p, s, v));
   const clampTo = (value, knob) => Math.max(knob.min, Math.min(knob.max, Math.round(Number(value)) || 0));
   return {
     title: slingTitle(p),
@@ -558,12 +600,21 @@ function slingPiece(env, p) {
       const speed = clampTo(c.value('speed'), PUSH);
       const flight = fly(p, angle, speed);
       const pass = nearestTo(flight.pts, p.rx, p.ry);
+      // The words on the field stand until this flight's verdict is cut over them.
+      s.verdictWas = verdictShown(s, riteOf(c), c.reduced);
       s.flight = flight;
       s.pass = pass;
       s.flights += 1;
       s.clock = c.reduced ? REPLAY + 1 : 0;
       s.fraction = c.reduced ? 1 : 0;
+      // A new flight is a new picture, which the next frame draws even where nothing moves.
+      s.drawn = null;
       const solved = pass.d <= RING_R;
+      // The first flight through the ring is the one the solved light keeps.
+      if (solved && !s.solved) {
+        s.solved = flight;
+        s.solvedN = s.flights;
+      }
       if (solved) s.verdict = 'through the ring at ' + (angle > 0 ? '+' : '') + angle + '°, speed ' + speed;
       else if (flight.outcome === 'struck') s.verdict = 'the probe struck ' + p.name + ' before it reached the ring';
       else {
@@ -598,7 +649,9 @@ function slingPiece(env, p) {
           c.status('the flight has been replayed as often as this difficulty allows; release another');
         } else if (s.flight) {
           replays += 1;
-          // A replay is another flight of the same path, on a roll of its own.
+          // A replay is another flight of the same path, on a roll of its own. Its verdict is the
+          // one already on the field, so the line keeps those words throughout.
+          s.verdictWas = verdictShown(s, rite, c.reduced);
           s.flights += 1;
           s.clock = c.reduced ? REPLAY + 1 : 0;
           s.fraction = c.reduced ? 1 : 0;
@@ -612,13 +665,16 @@ function slingPiece(env, p) {
     },
     frame(t, dt, c) {
       s.t += dt;
+      let flying = false;
       if (s.flight && s.clock < REPLAY + 1) {
         s.clock += dt;
+        flying = true;
         // The replay runs in the landing treads this flight rolled: a leap off the pad, each
         // leap after it shorter, never past the end of the path.
         s.fraction = c.reduced ? 1 : Math.max(0, Math.min(1, roll(riteOf(c), 0xf17, s.flights).ease(s.clock / REPLAY)));
       }
       if (c.done && s.doneAt == null) s.doneAt = s.t;
+      if (!flying && settled(s, c)) return;
       draw(c);
     },
     end(c) {
@@ -679,6 +735,11 @@ function moonsOrder(p) {
   return p.radii.map((r, i) => i).sort((a, b) => p.radii[a] - p.radii[b]);
 }
 
+// The period of the outermost orbit, in seconds of a solved sky's riding, and so how long the
+// solved moons ride: one lap of the outermost, in which the innermost makes the laps the puzzle
+// counts. Then they stand where the lap leaves them.
+const LAP = 30;
+
 function moonsScene(g, w, h, env, p, s, v) {
   const col = env.colors;
   const rite = riteOf(env);
@@ -705,12 +766,10 @@ function moonsScene(g, w, h, env, p, s, v) {
   g.setLineDash([]);
   g.lineDashOffset = 0;
   // The laps the visitor says: that many notches round the outermost orbit. A new count steps
-  // from the last one, up or down, in at most five treads on a roll of its own -- a counter that
-  // counts toward the number set, never back.
+  // from the one standing, up or down, in at most five treads on a roll of its own -- a counter
+  // that counts toward the number set, never back.
   if (s.lapsAt != null) {
-    const lapRite = roll(rite, 0x1a, s.counts);
-    const treads = Math.max(1, Math.min(5, Math.abs(s.laps - s.lapsFrom)));
-    const shown = s.lapsFrom + Math.round(lapRite.stair(came(s, s.lapsAt, 1.1, reduced), treads) * (s.laps - s.lapsFrom));
+    const shown = lapsShown(s, rite, reduced);
     g.strokeStyle = env.alpha(col.accent2, 0.9);
     g.lineWidth = Math.max(1.5, u * 0.3);
     g.beginPath();
@@ -755,11 +814,8 @@ function moonsScene(g, w, h, env, p, s, v) {
   // while no moon ever glides. A moon the hint names is a set surface: its halo is cut in by the
   // piece's edge in treads, and its colour and its reading come with the first of them.
   const order = moonsOrder(p);
-  // The visitor's order, as a numeral by each moon: the numerals arrive one tread at a time in a
-  // series on the roll of that setting, so the second ordering deals them in another rhythm.
-  const placed = s.orderAt != null ? roll(rite, 0x60, s.orders).series(came(s, s.orderAt, 0.9, reduced), p.radii.length) : 0;
   p.radii.forEach((r, i) => {
-    const period = 30 * Math.pow(r / outer, 1.5);
+    const period = LAP * Math.pow(r / outer, 1.5);
     const a = (p.angles[i] + (s.spin ? 360 * turns(rite, 0x30 + i, s.spin / period) : 0)) * Math.PI / 180;
     const x = cx + Math.cos(a) * r * u;
     const y = cy + Math.sin(a) * r * u;
@@ -796,10 +852,11 @@ function moonsScene(g, w, h, env, p, s, v) {
     const rank = order.indexOf(i);
     const clue = rank === 0 ? 'shortest period' : rank === order.length - 1 ? 'longest period' : 'period rank ' + (rank + 1);
     g.fillText(FIRST[p.names[i]] + (on ? ', ' + clue : ''), x + (Math.cos(a) < 0 ? -1 : 1) * rad * 1.8, y - rad * 1.6);
-    const place = s.order ? s.order.indexOf(i) : -1;
-    if (place >= 0 && place < placed) {
-      // The numeral sits in a small set surface of its own, which comes with it on its tread of
-      // the series: two shades of one colour split by the piece's edge, never a flat chip.
+    const place = placeShown(s, rite, reduced, i);
+    if (place >= 0) {
+      // The numeral sits in a small set surface of its own, which comes whole with it on its tread
+      // of the series -- the tread is its step -- and rests in two shades of one colour split by
+      // the piece's edge, never a flat chip.
       const nx = x + (Math.cos(a) < 0 ? -1 : 1) * rad * 1.8;
       const ny = y + rad * 1.9;
       const boxW = size * 1.1;
@@ -813,7 +870,7 @@ function moonsScene(g, w, h, env, p, s, v) {
   });
   // The light over a solved sky, on the roll of the check that solved it.
   if (lit > 0) {
-    const light = roll(rite, 0xdb, s.checks);
+    const light = roll(rite, 0xdb, s.solvedN);
     daybreak(g, light, env, w, h, light.stair(lit), 0.07);
   }
   // The scale bar, and the law.
@@ -841,17 +898,47 @@ function moonsScene(g, w, h, env, p, s, v) {
   g.fillText('period ∝ radius³ᐟ²', w * 0.96, h * 0.07, w * 0.4);
   g.textAlign = 'center';
   g.fillStyle = env.alpha(col.muted, 0.85);
-  // The footer reads the settings back; a new reading is cut on at its moment on the roll of
-  // that change, the old words gone before it.
-  const foot = s.order && s.footAt != null ? 'shortest period first: ' + s.order.map((i) => FIRST[p.names[i]]).join(', ') + ' · ' + s.laps + (s.laps === 1 ? ' lap' : ' laps') + ' of the innermost for one of the outermost'
+  g.fillText(footShown(p, s, rite, reduced), w / 2, h * 0.95, w * 0.92);
+}
+
+// The footer's words for the settings as they stand.
+function footWords(p, s) {
+  return s.order && s.footAt != null ? 'shortest period first: ' + s.order.map((i) => FIRST[p.names[i]]).join(', ') + ' · ' + s.laps + (s.laps === 1 ? ' lap' : ' laps') + ' of the innermost for one of the outermost'
     : WORDS[p.radii.length] + ' moons to scale; the inner one laps the outer a whole number of times';
-  if (s.footAt == null || roll(rite, 0x0f, s.foots).flicker(came(s, s.footAt, 0.7, reduced))) g.fillText(foot, w / 2, h * 0.95, w * 0.92);
+}
+
+// The footer reads the settings back: the words that stood, until the new reading is cut over
+// them at its moment on the roll of that change -- once, so the line never blanks.
+function footShown(p, s, rite, reduced) {
+  if (s.footAt == null || roll(rite, 0x0f, s.foots).flicker(came(s, s.footAt, 0.7, reduced))) return footWords(p, s);
+  return s.footWas;
+}
+
+// The notches standing: from the count that stood when the last one was set to the count set, in
+// at most five treads on the roll of that setting.
+function lapsShown(s, rite, reduced) {
+  if (s.lapsAt == null) return 0;
+  const treads = Math.max(1, Math.min(5, Math.abs(s.laps - s.lapsFrom)));
+  return s.lapsFrom + Math.round(roll(rite, 0x1a, s.counts).stair(came(s, s.lapsAt, 1.1, reduced), treads) * (s.laps - s.lapsFrom));
+}
+
+// The numeral by moon i as it stands, or -1 for none. An ordering changes only the numerals whose
+// place it changes (s.dealt, in the order of their new places), and those are cut over from the
+// place they showed to the new one one tread at a time, in a series on the roll of that setting,
+// so the second ordering deals them in another rhythm; a numeral whose place holds stays put.
+function placeShown(s, rite, reduced, i) {
+  if (s.orderAt == null || !s.order) return -1;
+  const rank = s.dealt.indexOf(i);
+  if (rank < 0) return s.order.indexOf(i);
+  const come = roll(rite, 0x60, s.orders).series(came(s, s.orderAt, 0.9, reduced), s.dealt.length);
+  return rank < come ? s.order.indexOf(i) : s.placeWas[i];
 }
 
 function moonsState() {
   return {
     spin: 0, hinted: [], hintedAt: null, order: null, laps: 1, t: 0, doneAt: null,
-    orderAt: null, orders: 0, lapsAt: null, lapsFrom: 1, counts: 0, footAt: null, foots: 0, checks: 0
+    orderAt: null, orders: 0, dealt: [], placeWas: [], lapsAt: null, lapsFrom: 1, counts: 0,
+    footAt: null, foots: 0, footWas: '', checks: 0, solvedN: 0
   };
 }
 
@@ -865,7 +952,7 @@ function moonsPiece(env, p) {
   const answer = moonsOrder(p);
   const n = p.radii.length;
   const s = Object.assign(moonsState(), { order: p.radii.map((r, i) => i) });
-  const draw = (c) => moonsScene(c.g, c.w, c.h, c, p, s, v);
+  const draw = (c) => drawn(s, c, () => moonsScene(c.g, c.w, c.h, c, p, s, v));
   const names = p.names.map((i) => FIRST[i]);
   return {
     title: moonsTitle(p),
@@ -898,24 +985,35 @@ function moonsPiece(env, p) {
       draw(c);
     },
     apply(id, value, c) {
-      if (id === 'order' && isPerm(value, n)) {
-        s.order = value.slice();
-        s.orderAt = s.t;
-        s.orders += 1;
+      const rite = riteOf(c);
+      // The footer's words as they stand, which hold until the new reading is cut over them.
+      const footing = () => {
+        s.footWas = footShown(p, s, rite, c.reduced);
         s.footAt = s.t;
         s.foots += 1;
+      };
+      if (id === 'order' && isPerm(value, n)) {
+        // The numerals as they stand (mid-series, or none the first time), and the moons whose
+        // numeral the new order changes.
+        const was = p.radii.map((r, i) => placeShown(s, rite, c.reduced, i));
+        footing();
+        s.order = value.slice();
+        s.placeWas = was;
+        s.dealt = s.order.filter((m, place) => was[m] !== place);
+        s.orderAt = s.t;
+        s.orders += 1;
         c.status('shortest period first: ' + s.order.map((i) => names[i]).join(', '));
       }
       if (id === 'laps') {
         const n = Math.round(Number(value));
         if (n >= 1 && n <= 9 && (s.lapsAt == null || n !== s.laps)) {
-          // The notches step from the count that stood (none, the first time) to the one set.
-          s.lapsFrom = s.lapsAt == null ? 0 : s.laps;
+          // The notches step from the count standing (none, the first time; mid-way, if the last
+          // count had not landed) to the one set.
+          s.lapsFrom = lapsShown(s, rite, c.reduced);
+          footing();
           s.laps = n;
           s.lapsAt = s.t;
           s.counts += 1;
-          s.footAt = s.t;
-          s.foots += 1;
         }
         c.status(s.laps + (s.laps === 1 ? ' lap' : ' laps') + ' of the innermost for one of the outermost');
       }
@@ -940,7 +1038,7 @@ function moonsPiece(env, p) {
       let distance = Infinity;
       const rite = riteOf(c);
       p.radii.forEach((r, i) => {
-        const period = 30 * Math.pow(r / outer, 1.5);
+        const period = LAP * Math.pow(r / outer, 1.5);
         const a = (p.angles[i] + (s.spin ? 360 * turns(rite, 0x30 + i, s.spin / period) : 0)) * Math.PI / 180;
         const d = Math.hypot(x * c.w - (c.w * 0.46 + Math.cos(a) * r * u), y * c.h - (c.h * 0.5 + Math.sin(a) * r * u));
         if (d < distance) { distance = d; nearest = i; }
@@ -951,10 +1049,20 @@ function moonsPiece(env, p) {
     },
     frame(t, dt, c) {
       s.t += dt;
+      let riding = false;
       if (c.done) {
-        if (s.doneAt == null) s.doneAt = s.t;
-        if (!c.reduced) s.spin += dt;
+        if (s.doneAt == null) {
+          s.doneAt = s.t;
+          // The light over the sky keeps the roll of the check that solved it.
+          s.solvedN = s.checks;
+        }
+        // One lap of the outermost orbit, then the moons stand.
+        if (!c.reduced && s.spin < LAP) {
+          s.spin = Math.min(LAP, s.spin + dt);
+          riding = true;
+        }
       }
+      if (!riding && settled(s, c)) return;
       draw(c);
     },
     end(c) {
@@ -1084,12 +1192,8 @@ function meetingScene(g, w, h, env, p, s, v) {
   g.fillText(FIRST[p.names[1]] + ': ' + p.outer + ' ticks/lap', w * 0.96, h * 0.19, w * 0.45);
   g.textAlign = 'center';
   g.fillStyle = env.alpha(col.fg, 0.9);
-  // The reading is cut over to the new tick's words at its moment once the turn lands, on the
-  // setting's roll; the clue is cut on at its moment when it is first asked for.
-  if (landed && roll(rite, 0x2e, s.sets).flicker(s.tickAt == null ? 1 : came(s, s.tickAt + 0.9, 0.6, reduced))) {
-    g.fillText(s.tick === 0 ? 'tick 0: together at the start'
-      : 'tick ' + s.tick + (joined ? ': together again' : ': still apart'), cx, h * 0.86, w * 0.92);
-  }
+  // The reading; the clue is cut on at its moment when it is first asked for.
+  g.fillText(readingShown(p, s, rite, reduced), cx, h * 0.86, w * 0.92);
   if (s.hints && roll(rite, 0x7e, 0).flicker(came(s, s.hintAt, 0.8, reduced))) {
     g.fillStyle = env.alpha(col.accent2, 0.9);
     g.fillText('inner gains ' + (p.outer - p.inner) + '/' + (p.inner * p.outer) + ' lap each tick',
@@ -1097,8 +1201,21 @@ function meetingScene(g, w, h, env, p, s, v) {
   }
 }
 
+// The reading's words for a tick.
+function meetingReading(p, tick) {
+  return tick === 0 ? 'tick 0: together at the start'
+    : 'tick ' + tick + (tick % meetingTick(p) === 0 ? ': together again' : ': still apart');
+}
+
+// The reading under the moons: the words that stood hold while the system turns, and are cut over
+// to the new tick's words once, at their moment after the turn lands, on the setting's roll.
+function readingShown(p, s, rite, reduced) {
+  if (s.tickAt == null || roll(rite, 0x2e, s.sets).flicker(came(s, s.tickAt + 0.9, 0.6, reduced))) return meetingReading(p, s.tick);
+  return s.readingWas;
+}
+
 function meetingState() {
-  return { tick: 0, tickFrom: 0, tickAt: null, sets: 0, hints: 0, hintAt: null, open: false, openAt: null, t: 0 };
+  return { tick: 0, tickFrom: 0, tickAt: null, sets: 0, readingWas: '', hints: 0, hintAt: null, open: false, openAt: null, t: 0 };
 }
 
 function meetingPreview(g, w, h, env, p) {
@@ -1110,7 +1227,7 @@ function meetingPiece(env, p) {
   const first = meetingTick(p);
   const laps = meetingLaps(p);
   const s = meetingState();
-  const draw = (c) => meetingScene(c.g, c.w, c.h, c, p, s, dials(env));
+  const draw = (c) => drawn(s, c, () => meetingScene(c.g, c.w, c.h, c, p, s, dials(env)));
   const clues = [
     'Each tick the inner gains ' + (p.outer - p.inner) + '/' + (p.inner * p.outer) + ' of a lap on the outer.',
     'At tick ' + p.inner + ', the inner has made one lap; the outer has not.',
@@ -1149,7 +1266,9 @@ function meetingPiece(env, p) {
       if (id === 'tick' && Number.isFinite(Number(value))) {
         const next = Math.max(0, Math.min(40, Math.round(Number(value))));
         if (next !== s.tick) {
-          // The moons set out from wherever they stand, on a fresh roll for this turn.
+          // The moons set out from wherever they stand, on a fresh roll for this turn, and the
+          // reading keeps the words on it until the turn lands.
+          s.readingWas = readingShown(p, s, riteOf(c), !!c.reduced);
           s.tickFrom = meetingShown(s, riteOf(c), !!c.reduced);
           s.tick = next;
           s.tickAt = s.t;
@@ -1173,6 +1292,7 @@ function meetingPiece(env, p) {
     },
     frame(t, dt, c) {
       s.t += Math.max(0, dt);
+      if (settled(s, c)) return;
       draw(c);
     },
     end(c) {
@@ -1206,7 +1326,7 @@ export default {
   // The card is a still picture, whichever puzzle it deals: its moons are set going only by the
   // solving of the puzzle they belong to, the probe flies only when released and the meeting turns
   // only to a tick that is set, so a card waits for nothing, has no animate, and the feed never
-  // repaints it.
+  // animates it (it paints it again only for a new size or a new roll).
   paint(g, w, h, env) {
     const plan = deal(env);
     if (plan.kind === 'moons') moonsPreview(g, w, h, env, plan);

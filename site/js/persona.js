@@ -62,13 +62,18 @@
     + 'you answer picks a world to suggest; every world stays open below either way.';
 
   /* ---- the rites the persona asks the engine for ------------------------------------------ */
-  /* Nothing the persona writes or takes away is cut while a visitor is watching (README: "Motion
-     axiom"): words a script writes are revealed glyph by glyph, what leaves is unmade or leaves a
-     ghost that is, what arrives develops, and what this script draws on a canvas it draws in
-     treads along a stair of its own. js/motion.js is optional throughout -- the stub browsers the
-     harnesses run load none, and a visitor who asked for less motion gets everything at once -- so
-     every rite is guarded, and every write below lands synchronously whether or not one plays:
-     textContent is never anything but the words, hidden means hidden, and the list is the list. */
+  /* Nothing the persona writes or takes away is switched while a visitor is watching (README:
+     "Motion axiom", the cut): it changes by one clean edge -- a slice or a curve -- that steps
+     across it in a few treads that only go forward, chosen for a reason. Words a script writes are
+     cut in by the reveal's slice, what arrives comes in behind a slice from where it comes from,
+     what leaves is cut away toward where it goes (or a ghost of it is), and a star appears as a
+     curve growing from its own point. The edges are drawn by _sass/_persona.scss; this file asks
+     js/motion.js for the treads of each one (cut, arrive), writes the reason where it is a place
+     on the screen, and puts the passing classes on and off. js/motion.js is optional throughout --
+     the stub browsers the harnesses run load none, and a visitor who asked for less motion gets
+     everything at once -- so every rite is guarded, and every write below lands synchronously
+     whether or not one plays: textContent is never anything but the words, hidden means hidden,
+     and the list is the list. */
   function engine() {
     var m = window.interestingMotion;
     return m && typeof m.ms === 'function' ? m : null;
@@ -84,8 +89,10 @@
   // One passing rite on an element, by the name of its class is-<name>, taken off again after
   // `after` ms. Put on here rather than by the engine's own rite(), which waits a frame before the
   // class goes on so a restarted rite restarts: the shared lightbox holds the page's frames while
-  // the sheet is up (js/site.js), and most of these rites are the sheet's. A style flush between
-  // the class going and coming does the same work at once.
+  // the sheet is up (js/site.js), and most of these rites are the sheet's. A rite already playing
+  // is restarted by taking the class off and reading the box once, which makes the browser see the
+  // gap; a class going on for the first time needs no such read, so a loop that deals many fresh
+  // elements reads no layout at all.
   var passing = typeof WeakMap === 'function' ? new WeakMap() : null;
   function rite(el, name, after) {
     var m = engine();
@@ -97,10 +104,12 @@
       passing.set(el, timers);
     }
     if (timers && timers[name]) window.clearTimeout(timers[name]);
-    el.classList.remove(cls);
-    if (typeof el.getBoundingClientRect === 'function') el.getBoundingClientRect();
+    if (el.classList.contains(cls)) {
+      el.classList.remove(cls);
+      if (typeof el.getBoundingClientRect === 'function') el.getBoundingClientRect();
+    }
     el.classList.add(cls);
-    var wait = after || riteMs('long', 560) * 2 + 400;
+    var wait = after || riteMs('long', 500) * 2 + 400;
     if (timers) {
       timers[name] = window.setTimeout(function () {
         timers[name] = 0;
@@ -108,55 +117,92 @@
       }, wait);
     }
   }
-  // What arrives arrives by a composition of its own (README: "Motion axiom", the composer): the
-  // engine rolls the element a geometry, a curve for the named spell and a fresh @keyframes rule
-  // put together from pieces, and writes them inline (--arrive-*, --ease-<spell>, --rite-develop,
-  // --motion-<spell>), which _sass/_persona.scss reads before its own keyframes. The class that
-  // plays it is put on by the caller (rite, or the stylesheet's :not([hidden]) / [open]), never by
-  // the engine, whose own pass waits a frame the lightbox may be holding.
-  // With `mattes`, a matte ladder of the element's own as well (--matte-1..5, --matte-top, inline),
-  // for the things a visitor sees arrive side by side -- the stars dealt together, the sheet --
-  // so they climb as many ladders as there are of them, not the page's one.
-  function arriveOn(el, spell, seed, mattes) {
+  // One movement's treads and length, rolled for this trigger by the engine and written on the
+  // element as --ease-<name> and --motion-<name>, which the stylesheet reads under the same name.
+  // Hands back the length in ms, or 0 where nothing moves.
+  function cutOn(el, name, options) {
+    var m = engine();
+    if (!el || !el.style || !m || calm() || typeof m.cut !== 'function') return 0;
+    try { return m.cut(el, name, options || {}) || 0; }
+    catch (e) { console.error('The movement could not be rolled', e); return 0; }
+  }
+  // An arrival whose direction the engine rolls (m.arrive): where it comes from, the slice it comes
+  // in behind and its treads, written on the element (and the treads again under `spell`, the name
+  // the stylesheet reads). The class that plays it is the stylesheet's (:not([hidden]), [open]).
+  function arriveOn(el, spell) {
     var m = engine();
     if (!el || !el.style || !m || calm() || typeof m.arrive !== 'function') return;
-    try { m.arrive(el, { spell: spell, seed: seed, className: false, mattes: !!mattes }); }
-    catch (e) { console.error('The arrival could not be composed', e); }
+    try { m.arrive(el, { spell: spell, className: false }); }
+    catch (e) { console.error('The arrival could not be rolled', e); }
   }
-  // A star moved by an arrow key is nudged (is-nudged, _sass/_persona.scss star-nudge): a tread
-  // past its new place along the key's way (--nudge-dx/-dy, the sign of the move) and one flicker
-  // of its gleam, with the dip the engine composes for this one press (--rite-stamp, --motion-star-
-  // nudge), so no two nudges are alike. Nothing here moves the star: placeElement has, at once.
-  function nudge(el, move) {
-    var m = engine();
-    if (!el || !el.style || !m || calm() || typeof el.style.setProperty !== 'function') return;
-    el.style.setProperty('--nudge-dx', String(move[0] > 0 ? 1 : move[0] < 0 ? -1 : 0));
-    el.style.setProperty('--nudge-dy', String(move[1] > 0 ? 1 : move[1] < 0 ? -1 : 0));
-    if (typeof m.composeOn === 'function') {
-      try { m.composeOn(el, 'stamp', 'star-nudge', riteMs('short', 170)); }
-      catch (e) { console.error('The nudge could not be composed', e); }
+  // How far a box steps as it arrives or leaves, in CSS pixels: the engine's own reach.
+  var REACH = 18;
+  // The way (dx, dy) points, as the angle of the slice a thing travelling that way moves behind:
+  // the way a CSS gradient counts it, 0deg up and clockwise, as the engine writes its own.
+  function angleOf(dx, dy) {
+    return Math.round((Math.atan2(dx, -dy) * 180 / Math.PI + 360) % 360) + 'deg';
+  }
+  // The middle of a control on the screen, or null for one with no box to measure.
+  function middleOf(node) {
+    var box = node && typeof node.getBoundingClientRect === 'function' ? node.getBoundingClientRect() : null;
+    return box && (box.width || box.height) ? { x: box.left + box.width / 2, y: box.top + box.height / 2 } : null;
+  }
+  // An arrival from a control on the screen, for a box that comes out of the control that called it
+  // up: the sheet, out of the avatar (or whatever opened it), toward the middle of the screen where
+  // a dialog stands. It starts a step back toward the control (--arrive-x, --arrive-y) and comes in
+  // behind a slice pointing the way it travels (--arrive-angle), in treads rolled for it under
+  // `spell`. A control with no box leaves the page's own direction standing.
+  function arriveFrom(el, spell, from) {
+    if (!el || !el.style || !engine() || calm()) return 0;
+    var names = ['--arrive-x', '--arrive-y', '--arrive-angle'];
+    var start = middleOf(from);
+    var dx = start ? (window.innerWidth || 0) / 2 - start.x : 0;
+    var dy = start ? (window.innerHeight || 0) / 2 - start.y : 0;
+    var d = Math.sqrt(dx * dx + dy * dy);
+    if (d >= 1) {
+      el.style.setProperty(names[0], (-dx / d * REACH).toFixed(1) + 'px');
+      el.style.setProperty(names[1], (-dy / d * REACH).toFixed(1) + 'px');
+      el.style.setProperty(names[2], angleOf(dx, dy));
+    } else {
+      for (var i = 0; i < names.length; i++) el.style.removeProperty(names[i]);
     }
-    rite(el, 'nudged', riteLength(el, 'star-nudge', riteMs('short', 170)) + 100);
+    return cutOn(el, spell, { duration: 'long' });
   }
-  // What leaves leaves by a composition of its own (--rite-unmake, --motion-<spell>), written on
-  // the element -- or on the ghost of it -- that plays it.
-  function leaveOn(el, spell, baseMs) {
-    var m = engine();
-    if (!el || !el.style || !m || calm() || typeof m.composeOn !== 'function') return;
-    try { m.composeOn(el, 'unmake', spell, baseMs || riteMs('medium', 340)); }
-    catch (e) { console.error('The leaving could not be composed', e); }
+  // Where a leaving box goes, when the reason it goes is a control on the screen -- the one the
+  // focus is going home to: a step toward it (--leave-x, --leave-y) and the slice it goes behind
+  // pointing the same way (--leave-angle). Without a place to go it keeps the page's own roll.
+  function aimAt(el, box, toward) {
+    var end = middleOf(toward);
+    if (!end || !box || !el.style) return;
+    var dx = end.x - (box.left + box.width / 2);
+    var dy = end.y - (box.top + box.height / 2);
+    var d = Math.sqrt(dx * dx + dy * dy);
+    if (!(d >= 1)) return;
+    el.style.setProperty('--leave-x', (dx / d * REACH).toFixed(1) + 'px');
+    el.style.setProperty('--leave-y', (dy / d * REACH).toFixed(1) + 'px');
+    el.style.setProperty('--leave-angle', angleOf(dx, dy));
   }
-  // How long a composed rite was given, read back off the element, so a class is never taken off
-  // or a node hidden while the rite it plays is still running.
-  function riteLength(el, spell, fallback) {
-    var style = el && el.style;
-    if (!style || typeof style.getPropertyValue !== 'function') return fallback;
-    var n = parseFloat(style.getPropertyValue('--motion-' + spell));
-    return isFinite(n) && n > 0 ? n : fallback;
+  // A star moved by an arrow key is already in its new place (placeElement has moved it, at once),
+  // and steps there from the old one (is-nudged, _sass/_persona.scss star-nudge): --nudge-x/-y is
+  // the way back to where it was, in pixels of the field, and the treads are rolled for this one
+  // press, so no two nudges are alike. One read of the field's box per key, never in a loop.
+  function nudge(el, dxPct, dyPct) {
+    if (!el || !el.style || !engine() || calm() || !sheet || !sheet.field) return;
+    var box = sheet.field.getBoundingClientRect();
+    if (!box || !box.width || !box.height) return;
+    el.style.setProperty('--nudge-x', (-dxPct / 100 * Math.max(0, box.width - 44)).toFixed(1) + 'px');
+    el.style.setProperty('--nudge-y', (-dyPct / 100 * Math.max(0, box.height - 44)).toFixed(1) + 'px');
+    var length = cutOn(el, 'star-nudge', { family: 'arrive', duration: 'short' });
+    rite(el, 'nudged', (length || riteMs('short', 170)) + 100);
   }
-  // Words written to a line and revealed there. A line still revealing is put back whole first, so
-  // a status rewritten mid-rite never carries the old glyphs into the new words; `quiet` writes
-  // the words without the rite, for a line nobody can see at the moment.
+  // A leaving's treads, rolled for it and written on the element (or the ghost of it) that plays it
+  // under `spell`, the name its stylesheet reads. Hands back the length.
+  function leaveOn(el, spell) {
+    return cutOn(el, spell, { family: 'leave', duration: 'medium' });
+  }
+  // Words written to a line and revealed there. A line still being revealed is ended first, so a
+  // status rewritten mid-reveal starts its own cut rather than finishing the last one's; `quiet`
+  // writes the words without the reveal, for a line nobody can see at the moment.
   var revealed = typeof WeakMap === 'function' ? new WeakMap() : null;
   function say(node, text, quiet) {
     if (!node) return;
@@ -172,9 +218,9 @@
     var undo = m.reveal(node);
     if (revealed && typeof undo === 'function') revealed.set(node, undo);
   }
-  // A part of the sheet shown or hidden: shown at once (the stylesheet develops it through the
-  // ladder, _sass/_persona.scss part-in), and unmade down the ladder (is-unmaking) before it is
-  // hidden -- at once where nothing can play, so hidden is hidden synchronously in the stubs.
+  // A part of the sheet shown or hidden: shown at once (the stylesheet cuts it in behind a slice,
+  // _sass/_persona.scss part-in), and cut away (is-unmaking) before it is hidden -- at once where
+  // nothing can play, so hidden is hidden synchronously in the stubs.
   var concealing = typeof WeakMap === 'function' ? new WeakMap() : null;
   function show(node) {
     if (!node) return;
@@ -184,35 +230,38 @@
       concealing['delete'](node);
     }
     if (node.classList) node.classList.remove('is-unmaking');
-    // A part coming into view arrives by a composition of its own; one already in view keeps
-    // the words it has.
+    // A part coming into view arrives by a roll of its own; one already in view keeps the words
+    // it has.
     if (node.hidden) arriveOn(node, 'part-in');
     node.hidden = false;
   }
   function conceal(node) {
     if (!node || node.hidden) return;
-    if (concealing && concealing.get(node)) return; // already on its way down the ladder
+    if (concealing && concealing.get(node)) return; // already being cut away
     var m = engine();
     if (!m || calm() || !node.classList || !concealing || typeof window.setTimeout !== 'function') {
       node.hidden = true;
       return;
     }
-    leaveOn(node, 'part-unmake');
+    var length = leaveOn(node, 'part-unmake');
     node.classList.add('is-unmaking');
     concealing.set(node, window.setTimeout(function () {
       concealing['delete'](node);
       node.classList.remove('is-unmaking');
       node.hidden = true;
-    }, riteLength(node, 'part-unmake', riteMs('medium', 340)) + 60));
+    }, (length || riteMs('medium', 320)) + 60));
   }
+  // The passing rites a box may be caught in as it is copied (a star under the pointer, a badge
+  // being stamped, a line being revealed): its ghost leaves as it stands, so none of them plays
+  // again in it.
+  var PASSING = /(^|\s)(?:is-(?:waxing|waning|stamping|sealing|unsealing|revealing|placed|nudged|unthreaded|unmaking)|dragging)(?=\s|$)/g;
   // A ghost of a box that has to go at once -- the sheet, which must close for the focus to go
   // home and the veil to come down; the question in the card, whose words are the threshold's to
-  // clear: a copy of it left exactly where it was, unmade there by the stylesheet (the class the
-  // caller names), and taken out when the rite has ended. Under no pointer and hidden from a
-  // screen reader, with every id stripped so the page keeps its one of each. `spell` names the
-  // keyframes the stylesheet would play without a script, which is the length the composed
-  // unmaking is written under.
-  function ghostOf(host, className, layer, spell) {
+  // clear: a copy of it left exactly where it was, cut away there by the stylesheet (the class the
+  // caller names) toward `toward`, the control the focus or the answer goes home to, and taken out
+  // when the cut has ended. Under no pointer and hidden from a screen reader, with every id
+  // stripped so the page keeps its one of each. `spell` names the treads the stylesheet reads.
+  function ghostOf(host, className, layer, spell, toward) {
     var m = engine();
     if (!m || calm() || !host || typeof host.getBoundingClientRect !== 'function' || !document.body
         || typeof host.innerHTML !== 'string' || typeof host.querySelectorAll !== 'function'
@@ -224,6 +273,12 @@
     ghost.innerHTML = host.innerHTML;
     var named = ghost.querySelectorAll('[id]');
     for (var i = 0; i < named.length; i++) named[i].removeAttribute('id');
+    var moving = ghost.querySelectorAll('[class]');
+    for (var j = 0; j < moving.length; j++) {
+      var cls = moving[j].getAttribute('class') || '';
+      if (PASSING.test(cls)) moving[j].setAttribute('class', cls.replace(PASSING, ' ').replace(/\s+/g, ' ').trim());
+      PASSING.lastIndex = 0;
+    }
     ghost.setAttribute('aria-hidden', 'true');
     ghost.setAttribute('inert', '');
     var style = ghost.style;
@@ -234,30 +289,28 @@
     style.setProperty('height', box.height + 'px');
     style.setProperty('margin', '0');
     style.setProperty('pointer-events', 'none');
+    style.setProperty('animation-play-state', 'running'); // a ghost plays itself out under a veil
     if (layer) style.setProperty('z-index', layer);
-    if (spell) leaveOn(ghost, spell);
+    aimAt(ghost, box, toward);
+    var length = spell ? leaveOn(ghost, spell) : 0;
     document.body.appendChild(ghost);
     function gone() {
       if (ghost.parentNode) ghost.parentNode.removeChild(ghost);
     }
     ghost.addEventListener('animationend', function (ev) { if (!ev || ev.target === ghost) gone(); });
     ghost.addEventListener('animationcancel', function (ev) { if (!ev || ev.target === ghost) gone(); });
-    window.setTimeout(gone, riteMs('medium', 340) * 3 + 400);
+    window.setTimeout(gone, Math.max(length, riteMs('medium', 320)) * 2 + 400);
     return ghost;
   }
-  // The stair this script draws by: a small polyline of its own, rolled for every series -- as
-  // many treads as the roll says, none the same width, one of them a flicker back -- so the lines
-  // of a sky arrive in uneven cuts and never along a formula.
-  function ownStair(treads) {
-    var widths = [];
-    var sum = 0;
-    for (var i = 0; i < treads; i++) {
-      var w = 0.45 + Math.random() * 1.15;
-      widths.push(w);
-      sum += w;
+  // The moments a stair the engine rolled steps at, and how far it has come at each: [[t, y], ...],
+  // forward only, the last at y = 1. For what this script draws on a canvas in treads.
+  function jumpsOf(curve) {
+    var out = [];
+    var stops = curve && curve.stops ? curve.stops : [];
+    for (var i = 1; i < stops.length; i++) {
+      if (stops[i][1] > stops[i - 1][1]) out.push([stops[i][0], stops[i][1]]);
     }
-    for (var j = 0; j < treads; j++) widths[j] /= sum;
-    return { widths: widths, flickerAt: treads > 2 ? 1 + Math.floor(Math.random() * (treads - 2)) : -1 };
+    return out;
   }
   // The order a sky's stars are dealt in: a rolled permutation of their places.
   function dealOrder(n) {
@@ -504,15 +557,7 @@
     // Placed, moved, seeded, removed or cleared: the constellation was set, and if it was set in
     // the sheet it is handed over when the sheet closes (the hand-off, below).
     var figure = figureOf(list);
-    if (sheet && sheet.host.open) {
-      noteSet('sky', sheet.field);
-      // A star landing or going strikes the sky: the ring clicks one tooth and the lines flicker
-      // (_sass/_persona.scss, is-struck); a star moved or worded only redraws -- unless the move
-      // has just made a figure, which is struck like a star landing.
-      if ((how !== 'moved' && how !== 'worded') || (figure && figure !== lastFigure)) {
-        rite(sheet.field, 'struck', riteMs('medium', 340) + 100);
-      }
-    }
+    if (sheet && sheet.host.open) noteSet('sky', sheet.field);
     lastFigure = figure;
     announce(list, how || 'placed', kept);
     return kept;
@@ -675,10 +720,10 @@
     };
   }
   /* The sky, drawn whole -- or, with a `pass`, one tread of it: `pass.order` is the place each
-     star has in the deal (a star at -1 is already in the sky), `pass.stars` the fraction of the
-     deal so far, so a star and the lines to it are drawn only once its place has come up;
-     `pass.flicker` draws the tread with the lines thinned, the refusal before the next; and
-     `pass.glint(i)` scales a star's dot, for the portrait's twinkle. */
+     star has in the deal (a star at -1 is already in the sky), `pass.count` how many are being
+     dealt and `pass.stars` the fraction of the deal so far, so a star and the lines to it are
+     drawn only once its place has come up. Each tread draws more of the sky than the last and
+     never less. */
   function drawSky(ctx, list, w, h, pad, dotRadius, lineWidth, route, pass) {
     var path = route || threadOf(list);
     var points = list.map(function (s) {
@@ -688,9 +733,8 @@
     function shown(index) {
       if (!through || !through.order || typeof through.stars !== 'number') return true;
       var at = through.order[index];
-      return !(at >= 0) || at < through.stars * points.length;
+      return !(at >= 0) || at < through.stars * (through.count || points.length);
     }
-    var thin = through && through.flicker ? 0.45 : 1;
     var maxDistanceSq = Math.pow(Math.min(w, h) * 0.3, 2);
     var used = Object.create(null);
     ctx.lineWidth = lineWidth;
@@ -712,7 +756,7 @@
         var key = a + '-' + b;
         if (used[key] || !shown(nearest[k].j)) continue;
         used[key] = true;
-        ctx.globalAlpha = (0.14 + (1 - nearest[k].d2 / maxDistanceSq) * 0.5) * thin;
+        ctx.globalAlpha = 0.14 + (1 - nearest[k].d2 / maxDistanceSq) * 0.5;
         ctx.strokeStyle = 'currentColor';
         ctx.beginPath();
         ctx.moveTo(points[a].x, points[a].y);
@@ -721,7 +765,7 @@
       }
     }
     if (path.length > 1) {
-      ctx.globalAlpha = 0.9 * thin;
+      ctx.globalAlpha = 0.9;
       ctx.lineWidth = lineWidth * 2.8;
       ctx.strokeStyle = 'currentColor';
       ctx.beginPath();
@@ -738,10 +782,9 @@
     ctx.globalAlpha = 1;
     for (var p = 0; p < points.length; p++) {
       if (!shown(p)) continue;
-      var glint = through && typeof through.glint === 'function' ? through.glint(p) : 1;
       ctx.beginPath();
       ctx.fillStyle = 'rgba(236, 244, 255, 0.96)';
-      ctx.arc(points[p].x, points[p].y, dotRadius * starGleam(list[p].text) * glint
+      ctx.arc(points[p].x, points[p].y, dotRadius * starGleam(list[p].text)
         * (path.indexOf(p) === -1 ? 1 : 1.7), 0, Math.PI * 2);
       ctx.fill();
     }
@@ -800,16 +843,20 @@
     var isRead = readOf(r);
     var sentence = cardText(saved, list, r);
     if (card.text.textContent !== sentence) card.text.textContent = sentence;
-    // The first sky cast into an empty portrait is a rite of its own (_sass/_persona.scss,
-    // is-casting): the waiting glyph unmade, the dashed ring ratcheting off, the sky developing.
-    // (A sky already there as the page arrives only dawns: the drawn sky develops, nothing is
-    // unmade, since no visitor watched it being cast.)
-    if (list.length && card.drawnCount === 0) {
-      rite(card.host, card.everDrawn ? 'casting' : 'dawning', riteMs('long', 560) + 200);
+    // The first sky cast into an empty portrait while a visitor watches is a rite of its own
+    // (castPortrait, below). A sky placed in the sheet is cast when the sheet closes, since until
+    // then the portrait is behind the veil, held still; a sky already there as the page arrives
+    // comes with the corner's own arrival instead, since nobody watched it being cast.
+    if (!list.length) card.castPending = false;
+    else if (card.drawnCount === 0 && card.everDrawn) {
+      if (sheet && sheet.host.open) card.castPending = true;
+      else castPortrait();
     }
     // A reading first read while a visitor watches seals a ring onto the portrait (is-read); one
     // carried in from an earlier page is simply worn.
-    if (isRead && card.everDrawn && !card.readDrawn) rite(card.host, 'read', riteMs('medium', 340) + 200);
+    if (isRead && card.everDrawn && !card.readDrawn) {
+      rite(card.host, 'read', (cutOn(card.host, 'reading-seal', { family: 'arrive' }) || riteMs('medium', 320)) + 200);
+    }
     card.readDrawn = isRead;
     card.everDrawn = true;
     card.host.setAttribute('data-state', askingInCard ? 'asking' : (!list.length && !isRead ? 'empty' : 'ready'));
@@ -817,8 +864,9 @@
     card.host.setAttribute('data-asking', askingInCard ? 'true' : 'false');
     card.host.setAttribute('data-sky', list.length ? 'set' : 'none');
     card.host.setAttribute('data-difficulty', difficulty().name);
-    // The corner is shown once it has read what it holds, and arrives by a composition of its own.
-    if (card.open.hidden) arriveOn(card.open, 'avatar-in');
+    // The corner is shown once it has read what it holds, and arrives behind a slice from the
+    // right, the edge it is pinned to (_sass/_persona.scss), in treads rolled for it.
+    if (card.open.hidden) cutOn(card.open, 'avatar-in', { family: 'arrive', duration: 'long' });
     card.open.hidden = false;
     var label = list.length || isRead ? 'open persona' : 'set up persona';
     var named = list.length ? skyName(list) : '';
@@ -831,16 +879,10 @@
     if (named) card.open.setAttribute('aria-label', label + ': ' + named);
     else card.open.removeAttribute('aria-label');
     if (card.portrait) {
-      // A sky with more or fewer stars than the one drawn is cast star by star, in treads; a sky
-      // of the same stars moved about is simply drawn again.
-      var count = list.length;
-      var changed = count !== card.drawnCount;
-      card.drawnCount = count;
-      if (changed && count) castPortrait(list, false);
-      else {
-        stopPortraitCast();
-        paintPortrait(list, null);
-      }
+      // Drawn whole, at once: what moves as the first sky is cast is the stylesheet's edge across
+      // the portrait, not the drawing.
+      card.drawnCount = list.length;
+      paintPortrait(list);
     }
     if (sheet && sheet.host.open) {
       if (!sameStars(serialize(), list)) renderField();
@@ -848,56 +890,19 @@
       renderSkyAnswer();
     }
   }
-  /* The portrait, drawn in treads. A sky cast into it arrives star by star in a rolled order along
-     the script's own stair (ownStair), the lines following their stars, with one tread drawn thin
-     as the refusal; a pointer or the focus arriving on the avatar twinkles it instead -- two or
-     three redraws on uneven treads, each with a rolled gleam per star. One draw, at once, without
-     the engine or for a visitor who asked for less motion. */
-  var portraitCast = null;
-  function stopPortraitCast() {
-    if (!portraitCast) return;
-    window.clearTimeout(portraitCast.timer);
-    portraitCast = null;
+  /* The portrait: the sky drawn small, whole, in one draw. What moves as the first sky is cast is
+     the stylesheet's edge across it (_sass/_persona.scss, is-casting): one slice from the lower
+     left cuts the drawn sky in and the waiting star away, in treads rolled for it and written on
+     the corner for both to read (--ease-portrait-cast). */
+  function castPortrait() {
+    card.castPending = false;
+    rite(card.host, 'casting', (cutOn(card.host, 'portrait-cast', { duration: 'long' }) || riteMs('long', 500)) + 200);
   }
-  function paintPortrait(list, pass) {
+  function paintPortrait(list) {
     if (!card || !card.portrait) return;
     var size = card.portraitSize;
     var ctx = sizeCanvas(card.portrait, size, size);
-    if (ctx && list.length) drawSky(ctx, list, size, size, size * 0.15, size * 0.032, size * 0.018, null, pass);
-  }
-  function castPortrait(list, twinkling) {
-    stopPortraitCast();
-    var m = engine();
-    if (!m || calm() || !list.length || typeof window.setTimeout !== 'function') {
-      paintPortrait(list, null);
-      return;
-    }
-    var treads = twinkling ? 2 + Math.floor(Math.random() * 2) : 4 + Math.floor(Math.random() * 4);
-    var stair = ownStair(treads);
-    var total = riteMs(twinkling ? 'medium' : 'long', 560) * (twinkling ? 1 : 1.3);
-    var order = dealOrder(list.length);
-    var cast = { at: 0, timer: 0 };
-    portraitCast = cast;
-    function glints() {
-      var g = [];
-      for (var i = 0; i < list.length; i++) g.push(0.6 + Math.random() * 1.1);
-      return function (i) { return g[i]; };
-    }
-    function tread() {
-      if (portraitCast !== cast) return;
-      cast.at += 1;
-      if (cast.at >= treads) {
-        portraitCast = null;
-        paintPortrait(list, null);
-        return;
-      }
-      var f = cast.at === stair.flickerAt ? Math.max(0, cast.at - 1) / treads : cast.at / treads;
-      paintPortrait(list, twinkling ? { glint: glints() }
-        : { order: order, stars: f, flicker: cast.at === stair.flickerAt });
-      cast.timer = window.setTimeout(tread, total * stair.widths[cast.at]);
-    }
-    paintPortrait(list, twinkling ? { glint: glints() } : { order: order, stars: 0 });
-    cast.timer = window.setTimeout(tread, total * stair.widths[0]);
+    if (ctx && list.length) drawSky(ctx, list, size, size, size * 0.15, size * 0.032, size * 0.018, null, null);
   }
   function askInCard() {
     var t = window.threshold;
@@ -905,6 +910,8 @@
     if (sheet && sheet.host.open) closeSheet();
     askingInCard = true;
     arriveOn(card.probe, 'part-in');
+    // The ring the question puts on the portrait is struck in treads of its own.
+    cutOn(card.host, 'portrait-ask', {});
     card.probe.hidden = false;
     refresh();
     t.mount(card.probe, {
@@ -921,9 +928,10 @@
     if (!askingInCard) return;
     askingInCard = false;
     if (card && card.probe) {
-      // The question's words are the threshold's to clear, so what is unmade is a ghost of it,
-      // left where the question was (_sass/_persona.scss, .persona-probe.is-unmaking).
-      if (!card.probe.hidden) ghostOf(card.probe, 'persona-probe is-unmaking', '44', 'part-unmake');
+      // The question's words are the threshold's to clear, so what is cut away is a ghost of it,
+      // left where the question was (_sass/_persona.scss, .persona-probe.is-unmaking), going
+      // toward the avatar the answer goes home to.
+      if (!card.probe.hidden) ghostOf(card.probe, 'persona-probe is-unmaking', '44', 'part-unmake', card.open);
       card.probe.textContent = '';
       card.probe.hidden = true;
     }
@@ -941,15 +949,9 @@
     if (!card.text || !card.open) { card = null; return; }
     card.portraitSize = card.portrait && Number(card.portrait.getAttribute('width')) || 40;
     card.drawnCount = 0;
+    card.castPending = false;
     card.readDrawn = false;
     card.open.addEventListener('click', function () { openSheet('sky', card.open); });
-    // The portrait's sky twinkles as the pointer or the focus arrives on it.
-    function twinkle() {
-      var list = stars();
-      if (list.length && engine() && !calm()) castPortrait(list, true);
-    }
-    card.open.addEventListener('pointerenter', twinkle);
-    card.open.addEventListener('focus', twinkle);
     card.text.setAttribute('aria-live', 'polite');
     refresh();
   }
@@ -968,7 +970,7 @@
        flourish on every close is one a visitor stops reading by the third time.
        One mark, for the last thing set. The sentence is singular, and two marks racing in would be
        noise rather than an answer.
-       Each setting carries its own mark. The same flight, its own glyph: the sky sends a star and
+       Each setting carries its own mark. The same flight, its own sign: the sky sends a star and
        the reading sends the half-lit disc the palette it dresses the site in is read off. A third
        setting -- the difficulty of issue #93 -- is one more line of MARKS and one more noteSet().
 
@@ -985,7 +987,7 @@
      the portrait, held there, and taken away again. That is what the stage's own small mark does
      with the same query (.stage-reject and its is-still), and the class is written here off the
      query so the script and _sass/_persona.scss cannot fall out of step. */
-  var MARKS = { sky: '✦', reading: '◐' }; // the glyph each setting sends home
+  var MARKS = { sky: '✦', reading: '◐' }; // the sign each setting sends home
   MARKS.difficulty = '◇';
   var FLIGHT_MS = 520; // the flight, as long as _sass/_persona.scss animates it for
   var STILL_MS = 260; // how long the mark is simply held on the portrait instead, with less motion
@@ -1047,16 +1049,13 @@
     mark.style.setProperty('top', Math.round(y - corner.top) + 'px');
     if (still) mark.classList.add('is-still');
     else {
+      // The way home is the straight line from the control to the portrait: where it starts is
+      // the whole of it (_sass/_persona.scss, persona-flight), and the treads it lands in, and the
+      // ring's, are rolled for this flight alone. The length is FLIGHT_MS whatever the roll says.
       mark.style.setProperty('--persona-flight-x', Math.round(set.from.x - x) + 'px');
       mark.style.setProperty('--persona-flight-y', Math.round(set.from.y - y) + 'px');
-      // The way home is bowed: a rolled offset off the straight line, to one side or the other,
-      // which the middle treads of the flight read (_sass/_persona.scss, --persona-flight-ax/-ay).
-      var dx = set.from.x - x;
-      var dy = set.from.y - y;
-      var length = Math.sqrt(dx * dx + dy * dy) || 1;
-      var bow = (Math.random() < 0.5 ? -1 : 1) * (0.12 + Math.random() * 0.22) * length;
-      mark.style.setProperty('--persona-flight-ax', Math.round(-dy / length * bow) + 'px');
-      mark.style.setProperty('--persona-flight-ay', Math.round(dx / length * bow) + 'px');
+      cutOn(mark, 'persona-flight', { family: 'arrive' });
+      cutOn(mark, 'persona-flight-ring', { family: 'arrive' });
     }
     sweep();
     flying = mark;
@@ -1239,12 +1238,14 @@
       if (!el) continue;
       var place = path.indexOf(i);
       if (place < 0) {
-        // A place taken away is unmade, not cut: the old number stays on the star for the rite
-        // (data-thread-was, is-unthreaded, _sass/_persona.scss) while the badge goes down the ladder.
+        // A place taken away goes as it came, not at once: the old number stays on the star
+        // (data-thread-was, is-unthreaded, _sass/_persona.scss) while the badge goes back into its
+        // centre. A badge still going is left to finish rather than started again, so this loop
+        // over the sky never reads the layout.
         var was = el.getAttribute('data-thread');
-        if (was && engine() && !calm()) {
+        if (was && engine() && !calm() && !el.classList.contains('is-unthreaded')) {
           el.setAttribute('data-thread-was', was);
-          rite(el, 'unthreaded', riteMs('medium', 340) + 100);
+          rite(el, 'unthreaded', riteMs('medium', 320) + 100);
         }
         el.removeAttribute('data-thread');
       } else el.setAttribute('data-thread', String(place + 1));
@@ -1288,9 +1289,11 @@
   }
   /* The lines of the sky drawn in treads (README: "Motion axiom"): when the sheet opens its sky or
      a star is added, each star's lines arrive at the star's place in the deal (`order`, -1 for a
-     star already in the sky), over as many uneven treads as the script's own stair rolls, one
-     drawn thin as the refusal, and the last drawn whole. The stars themselves are buttons, dealt
-     by the stylesheet to the same order (is-placed, --d). One draw without the engine. */
+     star already in the sky), on the treads of a landing stair the engine rolls for this one deal
+     -- the first the longest way, each after it shorter -- each tread drawing more of the sky than
+     the last, and the last drawing it whole. A tread is one draw, at the moment the stair steps,
+     and nothing is drawn between. The stars themselves are buttons, dealt by the stylesheet to the
+     same order (is-placed, --d). One draw without the engine. */
   var fieldCast = null;
   function stopFieldCast() {
     if (!fieldCast) return;
@@ -1300,30 +1303,32 @@
   function castField(order) {
     stopFieldCast();
     var m = engine();
-    if (!m || calm() || !sheet || !sheet.canvas || typeof window.setTimeout !== 'function') {
+    var jumps = m && !calm() && typeof m.curve === 'function' ? jumpsOf(m.curve('arrive')) : [];
+    if (!jumps.length || !sheet || !sheet.canvas || typeof window.setTimeout !== 'function') {
       paintField(null);
       return;
     }
-    var treads = 5 + Math.floor(Math.random() * 5);
-    var stair = ownStair(treads);
-    var total = riteMs('long', 560) * 1.6;
-    var cast = { at: 0, pass: { order: order, stars: 0 }, timer: 0 };
+    var count = 0;
+    for (var i = 0; i < order.length; i++) if (order[i] >= 0) count += 1;
+    var total = riteMs('long', 500) * 1.6;
+    var cast = { pass: { order: order, count: count, stars: 0 }, timer: 0 };
+    var at = 0;
     fieldCast = cast;
     function tread() {
       if (fieldCast !== cast) return;
-      cast.at += 1;
-      if (cast.at >= treads) {
+      var jump = jumps[at];
+      at += 1;
+      if (at >= jumps.length || jump[1] >= 1) {
         fieldCast = null;
         paintField(null);
         return;
       }
-      var f = cast.at === stair.flickerAt ? Math.max(0, cast.at - 1) / treads : cast.at / treads;
-      cast.pass = { order: order, stars: f, flicker: cast.at === stair.flickerAt };
+      cast.pass = { order: order, count: count, stars: jump[1] };
       paintField(cast.pass);
-      cast.timer = window.setTimeout(tread, total * stair.widths[cast.at]);
+      cast.timer = window.setTimeout(tread, total * (jumps[at][0] - jump[0]));
     }
     paintField(cast.pass);
-    cast.timer = window.setTimeout(tread, total * stair.widths[0]);
+    cast.timer = window.setTimeout(tread, total * jumps[0][0]);
   }
   function select(index) {
     var changed = selected !== index;
@@ -1366,9 +1371,10 @@
     el.className = 'persona-star';
     el.setAttribute('aria-label', starLabel(star));
     el.setAttribute('aria-pressed', 'false');
-    // The light is a child of the button, so the matte it waxes through masks the light alone and
-    // the thread badge stays legible (_sass/_persona.scss, .persona-star-light). Nothing is read
-    // from it: the button keeps its name, its press and its place.
+    // The light is a child of the button, so the edges it is cut by -- its arrival, its state
+    // layer's wax -- cut the light alone and the thread badge stays legible (_sass/_persona.scss,
+    // .persona-star-light). Nothing is read from it: the button keeps its name, its press and its
+    // place.
     var light = document.createElement('span');
     light.className = 'persona-star-light';
     light.setAttribute('aria-hidden', 'true');
@@ -1405,10 +1411,12 @@
       var moves = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] };
       if (moves[ev.key]) {
         ev.preventDefault();
+        var fromX = star.x;
+        var fromY = star.y;
         star.x = Number(clamp(star.x + moves[ev.key][0], 1, 99).toFixed(2));
         star.y = Number(clamp(star.y + moves[ev.key][1], 1, 99).toFixed(2));
         placeElement(star);
-        nudge(star.el, moves[ev.key]);
+        nudge(star.el, star.x - fromX, star.y - fromY);
         var kept = setStars(serialize(), 'moved');
         drawField();
         select(index);
@@ -1420,16 +1428,18 @@
     });
     sheet.field.appendChild(el);
   }
-  /* A star taken out of the sky is unmade where it was: the button itself goes at once (the list
+  /* A star taken out of the sky is cut away where it was: the button itself goes at once (the list
      is the list), and a ghost of it -- a copy with no name, no press and no place in the thread --
-     is left in its place for the stylesheet to take down the ladder (_sass/_persona.scss,
-     .persona-star-ghost), and taken out when the rite ends. */
+     is left in its place for the stylesheet to cut back into its point by a curve
+     (_sass/_persona.scss, .persona-star-ghost), and taken out when the cut ends. */
   function unmakeStar(el) {
     var m = engine();
     if (!m || calm() || !el || typeof el.cloneNode !== 'function' || !el.parentNode
         || typeof el.parentNode.insertBefore !== 'function' || typeof window.setTimeout !== 'function') return;
     var ghost = el.cloneNode(true); // with the light inside it, which is what is seen to go
     ghost.className = 'persona-star persona-star-ghost';
+    var light = ghost.querySelector ? ghost.querySelector('.persona-star-light') : null;
+    if (light) light.className = 'persona-star-light';
     ghost.removeAttribute('id');
     ghost.removeAttribute('aria-pressed');
     ghost.removeAttribute('aria-label');
@@ -1437,22 +1447,22 @@
     ghost.setAttribute('aria-hidden', 'true');
     ghost.setAttribute('tabindex', '-1');
     ghost.setAttribute('inert', '');
-    leaveOn(ghost, 'star-unmake');
+    var length = leaveOn(ghost, 'star-unmake');
     el.parentNode.insertBefore(ghost, el);
-    // The ghost's own rite ending takes it out -- not the light's inside it, whose end bubbles.
+    // The ghost's own cut ending takes it out -- not a part's inside it, whose end bubbles.
     function gone(ev) {
       if (ev && ev.target && ev.target !== ghost) return;
       if (ghost.parentNode) ghost.parentNode.removeChild(ghost);
     }
     ghost.addEventListener('animationend', gone);
     ghost.addEventListener('animationcancel', gone);
-    window.setTimeout(gone, riteMs('medium', 340) * 3 + 400);
+    window.setTimeout(gone, Math.max(length, riteMs('medium', 320)) * 2 + 400);
   }
   /* The field drawn from the saved sky. A star that is where it was keeps its button (so it is not
-     re-dealt every time another is added); one that is gone is unmade; the new ones are dealt in a
-     rolled order, each developing through the ladder a rolled stagger after the last (is-placed,
-     --d), with the lines of the sky cast to the same order. `dealAll` deals the whole sky again,
-     as the sheet does when it opens. */
+     re-dealt every time another is added); one that is gone is cut away; the new ones are dealt in
+     a rolled order, each growing as a curve from its own point a rolled stagger after the last
+     (is-placed, --d), with the lines of the sky cast to the same order. `dealAll` deals the whole
+     sky again, as the sheet does when it opens. */
   function renderField(dealAll) {
     if (!sheet || !sheet.field) return;
     stopFieldCast();
@@ -1462,8 +1472,8 @@
     var fresh = [];
     var order = [];
     // A star is the same star by what it is, not by its place in the list: one taken out shifts
-    // every star after it by one, and those stay where they are rather than being unmade and dealt
-    // again.
+    // every star after it by one, and those stay where they are rather than being cut away and
+    // dealt again.
     var keep = Object.create(null);
     if (!dealAll) {
       for (var o = 0; o < old.length; o++) {
@@ -1502,9 +1512,9 @@
       if (!m || calm() || !el || !el.style || typeof el.style.setProperty !== 'function') continue;
       var wait = deal.length > 1 && typeof m.stagger === 'function' ? Math.round(m.stagger(k)) : 0;
       el.style.setProperty('--d', wait + 'ms');
-      // Each star's own arrival: its geometry, its curve, its composition, then the class.
-      arriveOn(el, 'star-develop', null, true);
-      rite(el, 'placed', riteLength(el, 'star-develop', riteMs('long', 560)) + wait + 200);
+      // Each star's own treads, then the class: a fresh button, so nothing is read to start it.
+      var length = cutOn(el, 'star-develop', { family: 'arrive', duration: 'long' });
+      rite(el, 'placed', (length || riteMs('long', 500)) + wait + 200);
     }
     select(-1);
     sheetStatus(saved.status === 'unreadable'
@@ -1527,8 +1537,8 @@
     activeDrag = null;
     var star = fieldStars[drag.index];
     if (star && star.el) {
+      // Set down: the lift comes off, and the star comes back to its size in treads.
       star.el.classList.remove('dragging');
-      rite(star.el, 'dropped', riteMs('medium', 340) + 100);
       if (star.el.releasePointerCapture) {
         try { star.el.releasePointerCapture(pointerId); }
         catch (e) { console.error('Could not release the dragged star', e); }
@@ -1560,10 +1570,11 @@
   }
   function renderSheet(dealAll) { renderField(dealAll); renderReading(); renderSkyAnswer(); }
   /* The sheet closing is a modal dialog closing: it has to close at once for the focus to go home
-     and the veil to come down, so what is unmade is a ghost of it, left where the sheet was
-     (_sass/_persona.scss, .persona-sheet.persona-ghost), with the sky's lines drawn again on the
-     copy's blank canvas. Made before the dialog closes -- a shut dialog has no box to measure --
-     from closeSheet and from the browser's own Escape (the dialog's cancel event). */
+     and the veil to come down, so what is cut away is a ghost of it, left where the sheet was
+     (_sass/_persona.scss, .persona-sheet.persona-ghost) and going toward the control the focus
+     goes home to, with the sky's lines drawn again on the copy's blank canvas. Made before the
+     dialog closes -- a shut dialog has no box to measure -- from closeSheet and from the
+     browser's own Escape (the dialog's cancel event). */
   var sheetGhost = null;
   function dropSheetGhost() {
     if (sheetGhost && sheetGhost.parentNode) sheetGhost.parentNode.removeChild(sheetGhost);
@@ -1572,7 +1583,7 @@
   function leaveSheetGhost() {
     if (!sheet || !sheet.host.open) return;
     dropSheetGhost();
-    var ghost = ghostOf(sheet.host, 'persona-sheet persona-ghost', null, 'sheet-out');
+    var ghost = ghostOf(sheet.host, 'persona-sheet persona-ghost', null, 'sheet-out', openedBy || (card && card.open));
     if (!ghost) return;
     sheetGhost = ghost;
     var copy = typeof ghost.querySelector === 'function' ? ghost.querySelector('.persona-sky-canvas') : null;
@@ -1600,10 +1611,9 @@
       dropSheetGhost();
       if (sheetBox) sheetBox.up();
       if (typeof sheet.host.showModal === 'function') {
-        // The sheet is dealt by a composition of its own, rolled before it is shown so its first
-        // frame is already the composition's (the fallback box keeps its own transform, so it is
-        // dealt by the stylesheet's keyframes instead).
-        arriveOn(sheet.host, 'sheet-in', null, true);
+        // The sheet comes out of the control that opened it: the way and the treads are written
+        // before it is shown, so its first frame is already the arrival's.
+        arriveFrom(sheet.host, 'sheet-in', openedBy);
         sheet.host.showModal();
       } else { sheet.host.setAttribute('open', ''); sheet.host.classList.add('persona-sheet-fallback'); }
       sheetWasOpen = true;
@@ -1639,6 +1649,9 @@
     sheet.host.classList.remove('persona-sheet-fallback');
     if (sheetBox) sheetBox.down();
     refresh();
+    // The sky placed while the sheet was open is cast now, as the portrait comes out from behind
+    // the veil and the mark that says so flies home to it.
+    if (card && card.castPending && card.drawnCount) castPortrait();
     var back = openedBy;
     openedBy = null;
     if (back && typeof back.focus === 'function' && document.contains(back)) back.focus();
@@ -1742,17 +1755,9 @@
     sheet.field.addEventListener('click', function (ev) {
       if (Date.now() < suppressClickUntil) return;
       if (ev.target !== sheet.field && ev.target !== sheet.canvas) return;
+      // The star lands where the finger fell, and it is the mark of the press: it grows there as a
+      // curve from its own point (_sass/_persona.scss, is-placed).
       var point = pointInField(ev.clientX, ev.clientY);
-      // The sky is stamped where the finger fell (_sass/_persona.scss, .persona-sky.is-stamping),
-      // as the star lands there.
-      if (sheet.field.style && typeof sheet.field.style.setProperty === 'function') {
-        var box = sheet.field.getBoundingClientRect();
-        if (box && box.width && box.height) {
-          sheet.field.style.setProperty('--stamp-x', ((ev.clientX - box.left) / box.width * 100).toFixed(1) + '%');
-          sheet.field.style.setProperty('--stamp-y', ((ev.clientY - box.top) / box.height * 100).toFixed(1) + '%');
-        }
-      }
-      rite(sheet.field, 'stamping', riteMs('medium', 340) + 100);
       var words = thought();
       var kept = addStar({ x: point.x, y: point.y, text: words });
       focusStar(fieldStars.length - 1);

@@ -5,11 +5,12 @@
 //     @use 'type';
 //     h1 { @include type.scale(headline-large); }
 //
-// Emits nothing until it is included, so css/site.css carries none of it.
+// Emits nothing of its own until it is included, so css/site.css carries none of it.
 
 @use 'sass:list';
 @use 'sass:map';
 @use 'sass:math';
+@use 'cut';
 
 $scale: (
   display-large: (57px, 64px, 400, -0.25px),
@@ -82,10 +83,12 @@ $typewriter: 'American Typewriter', 'Courier Prime', 'Courier New', Courier, 'Ni
 // ones the mixins below read, with the home register as every fallback: --font-rite, --font-act,
 // --font-mono, --rite-weight, --rite-opsz, --rite-soft, --rite-wonk, --rite-tracking, --rite-words,
 // --rite-style, --rite-caps, --rite-case, --rite-scale, --rite-leading,
-// --rite-rule, --rite-rule-width, --rite-before, --rite-after, --rite-cap, --rite-glow, and the
-// three of the temperament, --motion-grain, --motion-tempo and --motion-steps. The numeric ones
-// are registered (_tokens.scss), so when the register turns over they step to their new values
-// along the stair -- the letterforms themselves a movement of the rite.
+// --rite-rule, --rite-rule-width, --rite-before, --rite-after, --rite-cap, --rite-glow; the three
+// of the temperament, --motion-grain (how uneven its treads are), --motion-tempo and
+// --motion-steps; and the hand that cuts, --cut-angle and --reveal-angle. The numeric axes are
+// registered (_tokens.scss), so when the register turns over they step to their new values along
+// the stair while one slice at the new slant cuts the words into their new face (rite, below) --
+// the letterforms themselves a movement of the rite, and one gesture with the edge.
 //
 //   rite / act / mono   the faces
 //   weight, opsz, soft, wonk   the axes
@@ -96,11 +99,11 @@ $typewriter: 'American Typewriter', 'Courier Prime', 'Courier New', Courier, 'Ni
 //   scale, leading      the size against the role's (type.scale), and the line height
 //   rule                the rule under the rite's words: none | hair | double | dotted | dashed
 //   rule-width          how far it runs, as a share of the measure
-//   before, after       ornaments beside the words, from glyphs the vendored subset has
+//   before, after       ornaments beside the words, from characters the vendored subset has
 //   cap                 the raised first letter of a page of prose, as a multiple of the size
 //   glow                a halo of the primary behind the words, 0 or 1
 //   cut, slant          the angle the register's slices cut at (_cut.scss: a hover, a seal, an
-//                       unseal, a page's own movements) and the slant its words are revealed at
+//                       unseal, a page's own movements) and the slant its words are cut in at
 $registers: (
   // The home register: Fraunces roman at a middle optical size, over the system sans.
   votive: (
@@ -272,7 +275,8 @@ $registers: (
 );
 
 // The rules a register may draw under the rite's words: an image and a height, drawn in the
-// primary at the bottom of the words over the register's width.
+// primary at the bottom of the words over the register's width. A dotted or a dashed rule is a
+// line of type, like the ornaments: painted once under the heading, and never moved.
 $rules: (
   none: (none, 0px),
   hair: (linear-gradient(var(--md-sys-color-primary), var(--md-sys-color-primary)), 1px),
@@ -349,9 +353,16 @@ $mono: var(--font-mono, #{$mono-stack});
 // the axis for the fallback faces, which have no axis to set. Small capitals are made from the
 // capitals (the vendored subset has no smcp of its own); a weight or a slant is never faked, so a
 // fallback face shows what it has. The size is the role's (--role-size, which type.scale writes)
-// taken by the register's scale, or the inherited size where a wearer sets no role. And every
-// wearer is thrown when the register turns over (rite-shift, _mood.scss) -- except inside the
-// stage's head, which is thrown whole.
+// taken by the register's scale, or the inherited size where a wearer sets no role.
+//
+// When the register turns over (html[data-shifting], written by js/motion.js for one rolled
+// moment), every wearer is cut into its new face by one slice at the new register's slant
+// (--reveal-angle): the reason for the edge is the hand the new register writes in. The slice and
+// the axes step together, in the same stair and the same length, so the change reads as one
+// gesture. Three kinds of wearer are left to what already cuts them: the stage's head, which is
+// cut whole (_mood.scss); a card's words, which wear the card's own register and do not change;
+// and a page's heading and the titles of its sections and panels, which js/motion.js (shift)
+// reveals itself with a tread at each word -- two edges on one line would fight over it.
 @mixin rite {
   font-family: var(--font-rite, #{$rite});
   font-weight: var(--rite-weight, 400);
@@ -364,10 +375,8 @@ $mono: var(--font-mono, #{$mono-stack});
   word-spacing: calc(var(--rite-words, 0) * 1em);
   text-transform: var(--rite-case, none);
   line-height: var(--rite-leading, 1.15);
-  // What steps when the register turns over (html[data-shifting], _mood.scss): the axes, the
-  // size, the leading, the tracking and the word-spacing, each along the stair -- never a glide,
-  // and never the same stair twice. rite-dress repeats the list with the rule, the padding under
-  // it and the glow (one transition declaration per rule, so it cannot add to this one).
+  // What steps when the register turns over: the axes, the size, the leading, the tracking and
+  // the word-spacing, each along the stair -- never a glide.
   transition:
     font-variation-settings var(--motion-shift) var(--ease-stair),
     font-size var(--motion-shift) var(--ease-stair),
@@ -375,14 +384,17 @@ $mono: var(--font-mono, #{$mono-stack});
     letter-spacing var(--motion-shift) var(--ease-stair),
     word-spacing var(--motion-shift) var(--ease-stair);
 
-  html[data-shifting] &:not(.stage-head *) {
-    animation: rite-shift var(--motion-rite-shift, var(--motion-shift, 640ms)) var(--ease-rite-shift, var(--ease-stair)) both;
+  html[data-shifting] &:not(.stage-head *, body [data-mood] *, .list-page-main > h1, .prose-main > h1, .section-title, .panel-title) {
+    mask: cut.slice(var(--reveal-angle, 100deg));
+    @include cut.play(in, rite-shift, shift);
   }
 
+  // Less motion: the new face is simply there, whole.
   @media (prefers-reduced-motion: reduce) {
     transition: none;
 
-    html[data-shifting] &:not(.stage-head *) {
+    html[data-shifting] &:not(.stage-head *, body [data-mood] *, .list-page-main > h1, .prose-main > h1, .section-title, .panel-title) {
+      mask: none;
       animation: none;
     }
   }
@@ -392,6 +404,8 @@ $mono: var(--font-mono, #{$mono-stack});
 // rule under them, which is what tells one register from another at the first glance. For the
 // words that carry a page -- a page's h1, the stage's title, the persona sheet's title -- and never
 // a card's name or a control. Included after rite, in a rule with no ::before/::after of its own.
+// None of it moves on its own: the ornaments, the rule and the glow belong to the words, and when
+// the register turns over they are cut in with them, under the same edge.
 @mixin rite-dress {
   &::before {
     content: var(--rite-before, '');
@@ -416,21 +430,6 @@ $mono: var(--font-mono, #{$mono-stack});
   background-size: var(--rite-rule-width, 0) var(--rite-rule-size, 0px);
   padding-block-end: calc(var(--rite-rule-size, 0px) + 0.1em);
   text-shadow: 0 0 calc(var(--rite-glow, 0) * 0.5em) color-mix(in oklab, var(--md-sys-color-primary) 55%, transparent);
-  // The rule, the padding under it and the glow turn over in the same treads as the words (the
-  // rite's own list again, since this declaration replaces the mixin's).
-  transition:
-    font-variation-settings var(--motion-shift) var(--ease-stair),
-    font-size var(--motion-shift) var(--ease-stair),
-    line-height var(--motion-shift) var(--ease-stair),
-    letter-spacing var(--motion-shift) var(--ease-stair),
-    word-spacing var(--motion-shift) var(--ease-stair),
-    background-size var(--motion-shift) var(--ease-stair),
-    padding-block-end var(--motion-shift) var(--ease-stair),
-    text-shadow var(--motion-shift) var(--ease-stair);
-
-  @media (prefers-reduced-motion: reduce) {
-    transition: none;
-  }
 }
 
 // The raised cap that opens a page of prose: the first letter at the register's cap, in the

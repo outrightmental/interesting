@@ -55,42 +55,55 @@ function asked(env) {
 /* ---- the rite: how this module moves ------------------------------------------------------- */
 
 /* env.rite (ctx.rite inside a piece) is the piece's own roll of how it moves (js/variant.js;
-   js/stage.js, "The rite"): one edge, a slice at an angle or a curve round a corner, which is the
-   piece's signature, and the few treads every change climbs, always forward. Nothing under this
-   glass moves along a formula, and nothing moves without a reason:
+   js/stage.js, "The rite"): one clean edge, a slice at an angle or a curve round a corner or the
+   middle of a side, which is the piece's signature, and the few treads every change climbs,
+   always forward. Nothing under this glass moves along a formula, and nothing moves without a
+   reason:
 
-     the breeze      comes through the vent, and only while it is open: a gust bows each stem away
-                     from the vent in a few treads and stands it up again in a few more, reaching
-                     the stem nearest the vent first. With the vent shut -- or in the stems'
-                     puzzle, which has none -- the air is still, and so are the stems.
+     at rest         the glass is waiting, so nothing in it moves: the stems stand in their own
+                     curves, the light through the panes lies where it falls and the petals of a
+                     bloom hold still. No breeze, drift or turning petal spends a frame on a
+                     picture that has nothing new in it, and a card of the glass is a still one.
      a marked plant  changes by its area: the air over its bed and the wet ground at its foot are
-                     cut in behind the piece's edge as its stair climbs, its stem thickens on the
-                     same stair and its drops come one to a tread; unmarked, all of it goes back
-                     the way it came.
-     a moved stem    has the air over its bed cut in behind the edge and taken back the way it
-                     came, and its new rank cut on at its moment (rite.flicker: off, then on for
-                     good). A hint is cut on the same way.
-     a solved glass  blooms on each stem's own stair, left to right or oldest to youngest, and
-                     the fog comes over it behind the piece's edge, densest at the top pane; once
-                     it is there its drips run down the glass, each in treads of its own, and stay.
+                     cut in behind the piece's edge as its stair climbs, and rest in two shades of
+                     their colour split by that edge through their middle; its stem thickens on
+                     the same stair and its drops come as it climbs, three at the top, and hang
+                     there. Unmarked, all of it goes back down the stair the way it came. A mark
+                     changed again before its stair is done goes on from wherever it had reached,
+                     so it never jumps to the far end before it turns.
+     a moved stem    has the air over its bed cut in behind the edge, from wherever it stood, and
+                     taken back the way it came, and its new rank cut on at its moment
+                     (rite.flicker: the old rank goes at the move, the new one comes for good). A
+                     hint is cut on the same way.
+     a solved glass  blooms on each stem's own stair, left to right or oldest to youngest, the
+                     petals opening a tread at a time; the fog comes over it behind the piece's
+                     edge and rests in two shades, and then its drips run down the glass, each in
+                     treads of its own, and stay where they stop.
 
    Every change is read against the piece's own clock, s.t, which frame() advances: a change made
    at `since` has come came() of its way, which is 1 at once for a visitor who asked for less
    motion, and for whatever stood there from the start (since < 0). Each stem and drip steps on a
-   roll of its own (rite.at, the same edge with its own treads), so no two step together. */
+   roll of its own (rite.at, the same edge with its own treads), so no two step together.
 
-// The rite when an env carries none: every change already made, the air still, and a surface that
-// is there at all is there whole.
+   What a frame costs. The stage asks for a frame sixty times a second, and the glass has something
+   new to show in very few of them. A piece notes how long each change it makes goes on moving
+   (pace().stir) and draws the change at once; after that a frame does nothing at all unless
+   something is still moving or the canvas is not the one it last drew on (a new size, new
+   colours). While something moves, a frame takes a note of the picture it would draw, which
+   costs no pixels (sketch), and paints only when that note differs from the last picture drawn:
+   a stair holds each tread for a good part of its span, so most of those frames have nothing new
+   in them either. And what never changes while a piece plays -- the glass with its light and
+   dapples, the lamp and the vent, the frame and the shine over all of it -- is painted once for
+   its size and colours onto a canvas of its own and laid down whole each time (plate). */
+
+// The rite of a piece handed none: every change already made, and a surface cut by a plain upright
+// slice from its left side.
 const STILL = {
-  ease: () => 1, stair: () => 1, ratchet: () => 1, flicker: () => 1, series: (t, n) => n || 1,
-  matte: () => true, treads: 1, kind: 'slice', angle: 90, origin: [0, 1],
-  region(g, x, y, w, h, k) {
-    if (k > 0) g.rect(x, y, w, h);
-  },
+  stair: () => 1, flicker: () => 1, treads: 1, kind: 'slice', angle: 90,
   paint(g, x, y, w, h, k, style) {
     if (k <= 0) return;
     if (style != null) g.fillStyle = style;
-    g.fillRect(x, y, w, h);
+    g.fillRect(x, y, w * Math.min(1, k), h);
   },
   at: () => STILL
 };
@@ -121,32 +134,127 @@ function came(s, since, span, reduced) {
   return Math.max(0, Math.min(1, (s.t - since) / span));
 }
 
-function fract(x) {
-  return x - Math.floor(x);
+// A pulse `p` of the way through its play: a highlight cut in up the stair from where it stood
+// (`from`, which is where an earlier pulse still in flight had reached) and taken back down it, the
+// way it came -- two forward movements, with the stair's hold between them.
+function pulse(rite, p, from) {
+  if (p >= 1) return 0;
+  return p < 0.5 ? from + (1 - from) * rite.stair(p * 2) : 1 - rite.stair((p - 0.5) * 2);
 }
 
-// The breeze through an open vent, as it leans a stem standing `far` of the glass's width from the
-// vent: a gust every GUST seconds, the stem bowing away in a few treads and standing up again in a
-// few more, and reaching a stem later the farther it stands from the vent, as a breeze would. 0 is
-// upright and 1 the gust's full lean; with no rite to step by, the air is still.
-const GUST = 6;
-function gust(rite, t, far) {
-  if (rite === STILL) return 0;
-  const phase = fract(t / GUST - far * 0.3);
-  return phase < 0.5 ? rite.stair(phase * 2) : 1 - rite.stair((phase - 0.5) * 2);
+// How far a thing has come since it last changed, at `at`: up its stair from `from` while it is
+// on, or back down it from `from` while it is off. `from` is where it stood when it changed, so a
+// change reversed half way goes on from there rather than jumping to the far end first.
+function level(rite, s, on, at, from, span, reduced) {
+  const p = rite.stair(came(s, at, span, reduced));
+  return on ? from + (1 - from) * p : from * (1 - p);
 }
 
-// A pulse: a highlight cut in up the stair and taken back down it, the way it came, within one
-// play -- two forward movements, with the stair's hold between them.
-function pulse(rite, p) {
-  return p >= 1 ? 0 : p < 0.5 ? rite.stair(p * 2) : 1 - rite.stair((p - 0.5) * 2);
+// When a frame has anything new to draw (see "What a frame costs" above). stir(until) says a change
+// has just been made that moves until the piece's clock reaches `until`. due() is whether this
+// frame could show anything new at all: a change still moving, a change not yet shown, or a canvas
+// that is not the one last drawn on. show() puts the picture `paint` makes on the canvas -- if it
+// differs from the one already there (or `force`), and otherwise leaves the canvas alone.
+function pace() {
+  let key = null;
+  let seenAt = -Infinity;
+  let until = -Infinity;
+  let shown = null;
+  return {
+    stir(at) {
+      key = null;
+      if (at > until) until = at;
+    },
+    due(s, c) {
+      return key === null || seenAt < until || canvasKey(c) !== key;
+    },
+    show(s, c, paint, force) {
+      const fresh = force || key === null || canvasKey(c) !== key;
+      const note = sketch(c.g, paint);
+      if (fresh || note !== shown) paint(c.g);
+      key = canvasKey(c);
+      seenAt = s.t;
+      shown = note;
+    }
+  };
 }
 
-// How far a thing that is `on` has come up its stair since onAt, or back down it since offAt.
-function level(rite, s, on, onAt, offAt, span, reduced) {
-  if (on) return rite.stair(came(s, onAt, span, reduced));
-  if (offAt == null || offAt < 0) return 0;
-  return 1 - rite.stair(came(s, offAt, span, reduced));
+// What `paint` would put on the canvas, as a note of every call it makes and every setting it
+// writes, taken against a stand-in that paints nothing (text is measured by the real context, so
+// a line wraps as it will). Two equal notes are the same picture: a stair holds most of its span
+// on one tread, and a frame on the same tread as the last one drawn has nothing new to show.
+function sketch(real, paint) {
+  const note = [];
+  const gradient = (kind, args) => {
+    note.push(kind, ...args);
+    return { addColorStop: (at, color) => note.push(at, color) };
+  };
+  const pad = new Proxy({}, {
+    get(t, k) {
+      if (k in t) return t[k];
+      if (k === 'canvas') return real.canvas;
+      if (k === 'measureText') {
+        return (text) => {
+          if (t.font) real.font = t.font;
+          return real.measureText(text);
+        };
+      }
+      if (k === 'createLinearGradient' || k === 'createRadialGradient') return (...args) => gradient(k, args);
+      return (...args) => note.push(k, ...args);
+    },
+    set(t, k, v) {
+      t[k] = v;
+      note.push(k, v);
+      return true;
+    }
+  });
+  paint(pad);
+  return note.join('\u0001');
+}
+
+// The canvas a picture was drawn on, as far as it matters to the picture: its size, its pixels and
+// its colours. A canvas sized again is a cleared one.
+function canvasKey(c) {
+  const col = c.colors || {};
+  const cv = c.canvas || (c.g && c.g.canvas) || {};
+  return [c.w, c.h, c.dpr, cv.width, cv.height, col.bg, col.bg2, col.accent, col.accent2, col.fg, col.muted, c.reduced ? 1 : 0].join('|');
+}
+
+// A part of the picture that stands still while a piece plays, painted by `paint` once for this
+// size and these colours onto a canvas of its own and laid down whole from then on. A card, painted
+// once, has no `cache` and paints it straight; so does a page that has no such canvas to give.
+function plate(cache, name, g, w, h, c, paint) {
+  const Off = typeof OffscreenCanvas === 'function' ? OffscreenCanvas : null;
+  if (!cache || !Off || typeof g.drawImage !== 'function') {
+    paint(g);
+    return;
+  }
+  const dpr = Number(c.dpr) > 0 ? Number(c.dpr) : 1;
+  const key = canvasKey(c);
+  let kept = cache[name];
+  if (!kept || kept.key !== key) {
+    const canvas = new Off(Math.max(1, Math.round(w * dpr)), Math.max(1, Math.round(h * dpr)));
+    const pg = canvas.getContext('2d');
+    if (!pg) {
+      paint(g);
+      return;
+    }
+    pg.setTransform(dpr, 0, 0, dpr, 0, 0);
+    paint(pg);
+    kept = { key, canvas };
+    cache[name] = kept;
+  }
+  g.drawImage(kept.canvas, 0, 0, w, h);
+}
+
+// A surface `k` of the way to being there, in the current fillStyle: the part of the box the
+// piece's edge has passed, and over the half behind the edge's middle a second coat of the same
+// colour. One edge moves while it comes or goes, and at rest it is two shades of one colour split
+// by that edge through the middle of the box. One path per coat.
+function cover(g, rite, x, y, w, h, k) {
+  if (k <= 0) return;
+  rite.paint(g, x, y, w, h, k);
+  rite.paint(g, x, y, w, h, Math.min(k, 0.5));
 }
 
 /* ---- drawing shared by both ---------------------------------------------------------------- */
@@ -175,8 +283,9 @@ function wrap(g, text, max) {
 
 // The air in the glasshouse: brighter under a lamp that is on, dappled by the configuration, with
 // the stars as they stand shining faintly through the top panes, and the soil along the bottom.
-// Each dapple drifts on a swing of its own: a lean in treads one way, then the other.
-function glass(g, w, h, env, v, lit, t, rite) {
+// The dapples lie where the configuration puts them and stay there: the light waits as the glass
+// does.
+function glass(g, w, h, env, v, lit) {
   const c = env.colors;
   const grad = g.createLinearGradient(0, 0, 0, h);
   grad.addColorStop(0, lit ? env.mix(c.bg2, c.fg, 0.16) : c.bg2);
@@ -198,8 +307,7 @@ function glass(g, w, h, env, v, lit, t, rite) {
   }
   const n = Math.max(3, Math.round(7 * v.density));
   for (let i = 0; i < n; i++) {
-    const drift = swing(own(rite, 0xda + i), t || 0, 6 + (i % 3) * 1.5, i * 0.17) * 0.02;
-    const x = ((i * 0.618 + 0.1 + v.turn * 0.23 + drift + 1) % 1) * w;
+    const x = ((i * 0.618 + 0.1 + v.turn * 0.23) % 1) * w;
     const y = ((i * 0.38 + 0.05 + v.turn * 0.1) % 1) * h * 0.55;
     const r = Math.min(w, h) * (0.07 + (i % 3) * 0.03) * v.scale;
     const d = g.createRadialGradient(x, y, 0, x, y, r);
@@ -218,28 +326,38 @@ function glass(g, w, h, env, v, lit, t, rite) {
   }
 }
 
-// The glass itself: fog and its drips, the frame and glazing bars, and a shine. The fog is
-// { k, depth, on }: it develops through the matte to coverage k, densest at the top pane and
-// thinnest at the soil, `depth` deep, and is not there at all while `on` is false (the flicker of
-// its arrival); its drips creep down the glass in treads.
-function pane(g, w, h, env, fog, t, rite) {
+// The fog on the glass and its drips. The fog is { k, depth, run }: it comes over the whole glass
+// behind the piece's edge to coverage k, `depth` deep, and rests in two shades split by that edge;
+// `run(i)` is how far drip i has run down the glass since the fog settled. Each drip runs once,
+// from where it gathered near the top, in the treads of its own roll, and stays where it stops; all
+// of them are one stroke.
+function fogged(g, w, h, env, fog, rite) {
+  if (!fog || fog.k <= 0) return;
   const c = env.colors;
-  if (fog && fog.on && fog.k > 0) {
-    g.fillStyle = env.alpha(c.fg, 0.2 * fog.depth);
-    develop(g, rite, 0, 0, w, h, (px, py) => fog.k * (1 - 0.75 * py / h), null, 40);
-    g.strokeStyle = env.alpha(c.fg, 0.35 * fog.depth);
-    g.lineWidth = 1.2;
-    const n = Math.round(fog.k * fog.depth * 9);
-    for (let i = 0; i < n; i++) {
-      const drip = own(rite, 0xd0 + i);
-      const x = ((i * 0.618034 + 0.07) % 1) * w;
-      const y = drip.stair(fract(t * (0.03 + (i % 3) * 0.02) + i * 0.37), 12) * h * 0.7;
-      g.beginPath();
-      g.moveTo(x, Math.max(0, y - 18 * fog.depth));
-      g.lineTo(x, y);
-      g.stroke();
-    }
+  g.fillStyle = env.alpha(c.fg, 0.14 * fog.depth);
+  cover(g, rite, 0, 0, w, h, fog.k);
+  g.strokeStyle = env.alpha(c.fg, 0.35 * fog.depth);
+  g.lineWidth = 1.2;
+  g.beginPath();
+  for (let i = 0; i < drips(fog.depth); i++) {
+    const ran = own(rite, 0xd0 + i).stair(fog.run(i));
+    if (ran <= 0) continue;
+    const x = ((i * 0.618034 + 0.07) % 1) * w;
+    const top = h * (0.03 + ((i * 0.381966) % 1) * 0.2);
+    g.moveTo(x, top);
+    g.lineTo(x, top + h * (0.16 + ((i * 0.754877) % 1) * 0.3) * ran);
   }
+  g.stroke();
+}
+
+// How many drips a fog `depth` deep gathers.
+function drips(depth) {
+  return Math.round(depth * 9);
+}
+
+// The glass itself, over everything under it: the frame and glazing bars, and a shine.
+function glazing(g, w, h, env) {
+  const c = env.colors;
   g.strokeStyle = env.alpha(c.fg, 0.35);
   g.lineWidth = 2;
   g.strokeRect(1, 1, w - 2, h - 2);
@@ -260,19 +378,34 @@ function pane(g, w, h, env, fog, t, rite) {
   g.fillRect(0, 0, w, h);
 }
 
-// One stem, `height` tall, with exactly `leaves` leaves along it, leaning with the breeze: a swing
-// on the stem's own rite, the tip a few treads behind the foot. `glow` is how far up its stair the
-// stem's marking has come (its stroke and its leaves thicken in those treads) and `bloom` how far
-// its flower has opened; the petals turn in the ratchet's clicks. Returns where its tip is.
-function stem(g, env, x, soilY, height, leaves, t, k, phase, bend, glow, bloom, rite) {
+// The fog over a solved glass, `depth` deep, or null before the glass is solved: it comes over up
+// the piece's stair as the solve's FOG seconds run (doneP), and once it is there each drip runs in
+// a span of its own, the next a little after the one before.
+const FOG = 2.4;
+const DRIP = 1.4;
+const DRIP_GAP = 0.3;
+function fogOf(s, rite, doneP, depth, reduced) {
+  if (!(doneP > 0)) return null;
+  return { k: rite.stair(doneP), depth, run: (i) => came(s, s.doneAt + FOG + i * DRIP_GAP, DRIP, reduced) };
+}
+
+// How long after the solve the last thing on a glass fogged `depth` deep is still moving: the fog,
+// then its last drip (the blooms are done well before).
+function settles(depth) {
+  return FOG + Math.max(0, drips(depth) - 1) * DRIP_GAP + DRIP;
+}
+
+// One stem, `height` tall, with exactly `leaves` leaves along it, standing in a curve of its own
+// that `phase` and `bend` give it. `glow` is how far up its stair the stem's marking has come (its
+// stroke and its leaves thicken in those treads) and `bloom` how far up its stair its flower has
+// opened; the petals sit where `phase` turns them and do not spin. Returns where its tip is.
+function stem(g, env, x, soilY, height, leaves, k, phase, bend, glow, bloom) {
   const c = env.colors;
   const seg = 8;
   const pts = [];
   for (let j = 0; j <= seg; j++) {
     const r = j / seg;
-    const lean = swing(rite, t, 5.5, phase / TAU + r * 0.08);
-    const sway = lean * bend * r * 7 * k + Math.sin(r * 3 + phase) * bend * 5 * k * r;
-    pts.push([x + sway, soilY - r * height]);
+    pts.push([x + Math.sin(r * 3 + phase) * bend * 5 * k * r, soilY - r * height]);
   }
   const at = (r) => {
     const j = Math.min(seg - 1, Math.floor(r * seg));
@@ -301,11 +434,9 @@ function stem(g, env, x, soilY, height, leaves, t, k, phase, bend, glow, bloom, 
   g.fill();
   if (bloom > 0.02) {
     const br = 4.5 * k * bloom;
-    // Five petals: a click round of one petal's width lands the flower on itself.
-    const turned = rite.ratchet(fract(t / 4.5)) * TAU / 5;
     g.fillStyle = env.alpha(c.accent2, 0.85 * bloom);
     for (let q = 0; q < 5; q++) {
-      const a = (q / 5) * TAU + turned;
+      const a = (q / 5) * TAU + phase;
       g.beginPath();
       g.ellipse(tip[0] + Math.cos(a) * br, tip[1] + Math.sin(a) * br, br, br * 0.55, a, 0, TAU);
       g.fill();
@@ -341,20 +472,25 @@ function badge(g, env, x, y, text, k, size) {
   write(g, text, x, y + 0.5, size, 'center', c.fg, '600');
 }
 
-// The air about one plant, `k` of the way to being lit: the column over its bed fills cell by cell
-// through the matte, from the soil up to the top of the glass.
-function column(g, env, rite, x0, top, width, bottom, k, tone) {
+// The air about one plant, `k` of the way to being lit: the column over its bed, from the soil up
+// to the top of the glass, cut in behind the piece's edge and resting in two shades.
+function column(g, rite, x0, top, width, bottom, k, tone) {
   if (k <= 0) return;
   g.fillStyle = tone;
-  develop(g, rite, x0, top, width, bottom - top, k, null, 14);
+  cover(g, rite, x0, top, width, bottom - top, k);
 }
 
-// The wet ground at a plant's foot, `k` of the way to being there: the cells of an ellipse.
+// The wet ground at a plant's foot, `k` of the way to being there: the ellipse is a clip, and the
+// edge crosses its bounding box inside it.
 function wet(g, env, rite, x, y, rx, ry, k) {
   if (k <= 0) return;
-  g.fillStyle = env.alpha(env.colors.accent2, 0.55);
-  develop(g, rite, x - rx, y - ry, rx * 2, ry * 2, k,
-    (px, py) => ((px - x) * (px - x)) / (rx * rx) + ((py - y) * (py - y)) / (ry * ry) <= 1, 16);
+  g.save();
+  g.beginPath();
+  g.ellipse(x, y, rx, ry, 0, 0, TAU);
+  g.clip();
+  g.fillStyle = env.alpha(env.colors.accent2, 0.4);
+  cover(g, rite, x - rx, y - ry, rx * 2, ry * 2, k);
+  g.restore();
 }
 
 // The stroke scale and the small type size everything under the glass is drawn at.
@@ -444,27 +580,30 @@ function waterGeometry(w, h, n) {
 }
 
 // The state the water puzzle is drawn from. Every moment is on the piece's own clock, and -1 is
-// "from the start" (so a preview, and a plant never marked, stand still).
-function waterState(n, t) {
+// "from the start" (so a preview, and a plant never marked, stand still). markAt is when a plant's
+// mark last changed and markFrom how far up its stair the mark stood then.
+function waterState(n) {
   return {
     chosen: [], hinted: [], hintAt: new Array(n).fill(-1),
-    markAt: new Array(n).fill(-1), unmarkAt: new Array(n).fill(-1),
-    doneAt: -1, t
+    markAt: new Array(n).fill(-1), markFrom: new Array(n).fill(0),
+    doneAt: -1, t: 0
   };
 }
 
-function drawWater(g, w, h, env, plan, s, variant) {
-  const v = variant || PLAIN;
+// How long a plant's mark takes to climb its stair, or to go back down it; and how long a hint takes
+// to be cut on.
+const MARK = 0.9;
+const HINT = 1;
+
+// How far plant i's mark has come, on its own stair.
+function markOf(rite, s, i, reduced) {
+  return level(own(rite, 0x5e + i), s, s.chosen.includes(i), s.markAt[i], s.markFrom[i], MARK, reduced);
+}
+
+// The lamp on its cord, and the vent in the top corner, as the plan has them. Their words are
+// written over them by the scene itself.
+function lampAndVent(g, w, h, env, plan, k) {
   const c = env.colors;
-  const rite = riteOf(env);
-  const reduced = !!env.reduced;
-  const n = plan.n;
-  const geo = waterGeometry(w, h, n);
-  const { k, small } = metrics(w, h, v);
-  const tiny = Math.max(7, Math.min(11, Math.round(geo.cell * 0.16)));
-  const doneP = s.doneAt >= 0 ? came(s, s.doneAt, 2.4, reduced) : 0;
-  glass(g, w, h, env, v, !!plan.lamp, s.t, rite);
-  // The lamp, on its cord, and the vent in the top corner.
   const lx = w * 0.5;
   const ly = h * 0.075;
   g.strokeStyle = env.alpha(c.muted, 0.5);
@@ -488,7 +627,6 @@ function drawWater(g, w, h, env, plan, s, variant) {
   g.fill();
   g.strokeStyle = env.alpha(c.fg, 0.6);
   g.stroke();
-  write(g, 'lamp ' + (plan.lamp ? 'on' : 'off'), lx + 12 * k, ly, small, 'left', env.alpha(c.fg, 0.9));
   const vx = w * 0.9;
   const vy = h * 0.075;
   g.strokeStyle = env.alpha(c.fg, 0.7);
@@ -500,30 +638,44 @@ function drawWater(g, w, h, env, plan, s, variant) {
     g.lineTo(vx + 8 * k, plan.vent ? y - 2 * k : y);
   }
   g.stroke();
-  write(g, 'vent ' + (plan.vent ? 'open' : 'shut'), vx - 14 * k, vy, small, 'right', env.alpha(c.fg, 0.9));
-  // The plants, each with its number, its meter, its mark and its tag. A marked plant is a
-  // surface that develops: the air over its bed, the wet ground at its foot, its drops and its
-  // glow all come up the stem's own stair from the moment it was marked, and go back down it from
-  // the moment it was unmarked.
+}
+
+// `plates` is the piece's cache of what stands still (plate); a card has none.
+function drawWater(g, w, h, env, plan, s, variant, plates) {
+  const v = variant || PLAIN;
+  const c = env.colors;
+  const rite = riteOf(env);
+  const reduced = !!env.reduced;
+  const n = plan.n;
+  const geo = waterGeometry(w, h, n);
+  const { k, small } = metrics(w, h, v);
+  const tiny = Math.max(7, Math.min(11, Math.round(geo.cell * 0.16)));
+  const doneP = s.doneAt >= 0 ? came(s, s.doneAt, FOG, reduced) : 0;
+  plate(plates, 'under', g, w, h, env, (pg) => {
+    glass(pg, w, h, env, v, !!plan.lamp);
+    lampAndVent(pg, w, h, env, plan, k);
+  });
+  write(g, 'lamp ' + (plan.lamp ? 'on' : 'off'), w * 0.5 + 12 * k, h * 0.075, small, 'left', env.alpha(c.fg, 0.9));
+  write(g, 'vent ' + (plan.vent ? 'open' : 'shut'), w * 0.9 - 14 * k, h * 0.075, small, 'right', env.alpha(c.fg, 0.9));
+  // The plants, each with its number, its meter, its mark and its tag. A marked plant changes by
+  // its area: the air over its bed and the wet ground at its foot are cut in behind the piece's
+  // edge, and its drops and its glow come with them, all up the stem's own stair from the moment
+  // it was marked and back down it from the moment it was unmarked.
   const got = watered(plan);
   for (let i = 0; i < n; i++) {
     const x = geo.left + (i + 0.5) * geo.cell;
     const mine = own(rite, 0x5e + i);
     const height = (geo.soilY - h * 0.16) * (0.55 + 0.09 * ((i * 3 + plan.soil[i]) % 5));
     const leaves = 4 + ((i * 5 + plan.soil[i]) % 4);
-    const chosen = s.chosen.includes(i);
-    const mark = level(mine, s, chosen, s.markAt[i], s.unmarkAt[i], 0.9, reduced);
-    column(g, env, mine, x - geo.cell * 0.46, h * 0.12, geo.cell * 0.92, geo.soilY, mark, env.alpha(c.accent2, 0.11));
+    const mark = markOf(rite, s, i, reduced);
+    column(g, mine, x - geo.cell * 0.46, h * 0.12, geo.cell * 0.92, geo.soilY, mark, env.alpha(c.accent2, 0.08));
     wet(g, env, mine, x, geo.soilY, 12 * k, 4 * k, mark);
     const bp = s.doneAt >= 0 && got[i] ? came(s, s.doneAt + i * 0.22, 1.2, reduced) : 0;
-    const bloom = bp > 0 && mine.flicker(bp) ? mine.stair(bp) : 0;
-    const tip = stem(g, env, x, geo.soilY, height, leaves, s.t, k, i * 1.3 + v.turn * TAU, 0.5 + (i % 3) * 0.3, mark * 0.7, bloom, mine);
+    const tip = stem(g, env, x, geo.soilY, height, leaves, k, i * 1.3 + v.turn * TAU, 0.5 + (i % 3) * 0.3, mark * 0.7, mine.stair(bp));
+    // Its drops come as the mark climbs, three at the top of the stair, and hang over the tip.
     const drops = Math.round(mark * 3);
-    for (let j = 0; j < drops; j++) {
-      const fall = own(rite, 0xd20 + i * 4 + j).stair(fract(s.t * 0.55 + j * 0.39 + i * 0.28), 9);
-      drop(g, env, x + (j - 1) * 5 * k, tip[1] - (14 + fall * 18) * k, k * 0.8, 0.8);
-    }
-    if (s.hinted.includes(i) && own(rite, 0x41 + i).flicker(came(s, s.hintAt[i], 1, reduced))) {
+    for (let j = 0; j < drops; j++) drop(g, env, x + (j - 1) * 5 * k, tip[1] - (17 + (j % 2) * 6) * k, k * 0.8, 0.8);
+    if (s.hinted.includes(i) && own(rite, 0x41 + i).flicker(came(s, s.hintAt[i], HINT, reduced))) {
       write(g, got[i] ? 'water it' : 'leave it dry', x, tip[1] - 12 * k, small, 'center', c.accent2, '600');
     }
     badge(g, env, x, geo.soilY, String(i + 1), k, small);
@@ -545,11 +697,12 @@ function drawWater(g, w, h, env, plan, s, variant) {
     for (const part of RULES[plan.rules[i]].tag.split(', ')) for (const line of wrap(g, part, geo.cell * 0.95)) lines.push(line);
     lines.forEach((line, j) => write(g, line, x, geo.soilY + h * 0.225 + j * tiny * 1.25, tiny, 'center', env.alpha(c.accent2, 0.95)));
   }
-  pane(g, w, h, env, doneP > 0 ? { k: rite.stair(doneP), depth: 1, on: !!rite.flicker(doneP) } : null, s.t, rite);
+  fogged(g, w, h, env, fogOf(s, rite, doneP, 1, reduced), rite);
+  plate(plates, 'over', g, w, h, env, (pg) => glazing(pg, w, h, env));
 }
 
-function waterPreview(g, w, h, env, plan, t) {
-  drawWater(g, w, h, env, plan, waterState(plan.n, t || 0), env.variant);
+function waterPreview(g, w, h, env, plan) {
+  drawWater(g, w, h, env, plan, waterState(plan.n), env.variant);
 }
 
 function waterPiece(env, plan) {
@@ -558,23 +711,30 @@ function waterPiece(env, plan) {
   const got = watered(plan);
   const answer = [];
   for (let i = 0; i < n; i++) if (got[i]) answer.push(i);
-  const s = waterState(n, (env.variant || PLAIN).turn * 5);
-  const draw = (c) => drawWater(c.g, c.w, c.h, c, plan, s, env.variant);
+  const s = waterState(n);
+  const plates = {};
+  const paced = pace();
+  // The picture as it stands now. A change the piece has just made is drawn at once; a frame
+  // draws only a picture that differs from the one on the canvas.
+  const paint = (c) => (g) => drawWater(g, c.w, c.h, c, plan, s, env.variant, plates);
+  const draw = (c) => paced.show(s, c, paint(c), true);
   const kinds = RULE_IDS.filter((r) => plan.rules.includes(r));
   function chosenNow(c) {
     const v = c.value('water');
     return Array.isArray(v) ? v.map(Number).filter((i) => Number.isInteger(i) && i >= 0 && i < n) : s.chosen;
   }
-  // The marking moves to `next`, and every plant whose state changed has its moment noted, so its
-  // surface develops (or unmakes) from now.
-  function take(next) {
+  // The marking moves to `next`, and every plant whose state changed has its moment noted, and how
+  // far up its stair its mark stood then, so its surface goes on from there (in, or back out) from
+  // now.
+  function take(next, c) {
+    const rite = riteOf(c);
     for (let i = 0; i < n; i++) {
-      const was = s.chosen.includes(i);
-      const now = next.includes(i);
-      if (now && !was) s.markAt[i] = s.t;
-      if (was && !now) s.unmarkAt[i] = s.t;
+      if (s.chosen.includes(i) === next.includes(i)) continue;
+      s.markFrom[i] = markOf(rite, s, i, c.reduced);
+      s.markAt[i] = s.t;
     }
     s.chosen = next;
+    paced.stir(s.t + (c.reduced ? 0 : MARK));
   }
   return {
     title: waterTitle(plan),
@@ -605,7 +765,7 @@ function waterPiece(env, plan) {
     },
     apply(id, value, c) {
       if (id === 'water' && Array.isArray(value)) {
-        take(value.map(Number).filter((i) => Number.isInteger(i) && i >= 0 && i < n).sort((a, b) => a - b));
+        take(value.map(Number).filter((i) => Number.isInteger(i) && i >= 0 && i < n).sort((a, b) => a - b), c);
         c.status(s.chosen.length ? 'marked: ' + s.chosen.map((i) => 'plant ' + (i + 1)).join(', ') : 'nothing marked');
       }
       if (id === 'hint') {
@@ -615,6 +775,7 @@ function waterPiece(env, plan) {
         if (next !== undefined) {
           s.hinted.push(next);
           s.hintAt[next] = s.t;
+          paced.stir(s.t + (c.reduced ? 0 : HINT));
           c.hint();
           c.status('plant ' + (next + 1) + (got[next] ? ' gets water' : ' stays dry'));
         } else if (s.hinted.length >= helps) {
@@ -633,15 +794,18 @@ function waterPiece(env, plan) {
         return;
       }
       const next = s.chosen.includes(col) ? s.chosen.filter((i) => i !== col) : s.chosen.concat([col]).sort((a, b) => a - b);
-      take(next);
+      take(next, c);
       c.set('water', next.slice());
       c.status('plant ' + (col + 1) + (next.includes(col) ? ' marked for water' : ' left dry'));
       draw(c);
     },
     frame(t, dt, c) {
       if (!c.reduced) s.t += dt;
-      if (c.done && s.doneAt < 0) s.doneAt = s.t;
-      draw(c);
+      if (c.done && s.doneAt < 0) {
+        s.doneAt = s.t;
+        paced.stir(s.t + (c.reduced ? 0 : settles(1)));
+      }
+      if (paced.due(s, c)) paced.show(s, c, paint(c));
     },
     end(c) {
       c.status('watered: ' + answer.map((i) => 'plant ' + (i + 1)).join(', ') + '; the glass fogs over and the rest stay dry');
@@ -705,12 +869,21 @@ function ageGeometry(w, h) {
   return { left: (w - span) / 2, cell: span / 4, soilY: h * 0.64 };
 }
 
-// The state the stems are drawn from; -1 is "from the start".
-function ageState(order, t) {
-  return { order: order.slice(), hinted: [], hintAt: [-1, -1, -1, -1], movedAt: [-1, -1, -1, -1], doneAt: -1, t };
+// The state the stems are drawn from; -1 is "from the start". movedAt is when a stem last changed
+// place, and pulseFrom how lit the air over its bed was then.
+function ageState(order) {
+  return { order: order.slice(), hinted: [], hintAt: [-1, -1, -1, -1], movedAt: [-1, -1, -1, -1], pulseFrom: [0, 0, 0, 0], doneAt: -1, t: 0 };
 }
 
-function drawAge(g, w, h, env, plan, s, variant) {
+// How long the air over a moved stem's bed takes to light and go out again.
+const MOVE = 1.1;
+
+// How lit the air over stem i's bed is.
+function pulseOf(rite, s, i, reduced) {
+  return pulse(own(rite, 0x5e + i), came(s, s.movedAt[i], MOVE, reduced), s.pulseFrom[i]);
+}
+
+function drawAge(g, w, h, env, plan, s, variant, plates) {
   const v = variant || PLAIN;
   const c = env.colors;
   const rite = riteOf(env);
@@ -718,34 +891,35 @@ function drawAge(g, w, h, env, plan, s, variant) {
   const geo = ageGeometry(w, h);
   const { k, small } = metrics(w, h, v);
   const a = ages(plan);
-  const doneP = s.doneAt >= 0 ? came(s, s.doneAt, 2.4, reduced) : 0;
-  glass(g, w, h, env, v, true, s.t, rite);
+  const doneP = s.doneAt >= 0 ? came(s, s.doneAt, FOG, reduced) : 0;
+  plate(plates, 'under', g, w, h, env, (pg) => glass(pg, w, h, env, v, true));
   write(g, 'your chosen ranks are below the stems', w / 2, h * 0.05, small, 'center', env.alpha(c.muted, 0.85));
   for (let i = 0; i < 4; i++) {
     const x = geo.left + (i + 0.5) * geo.cell;
     const mine = own(rite, 0x5e + i);
     const height = (geo.soilY - h * 0.14) * (0.32 + (0.66 * plan.leaves[i]) / 24);
     const rank = s.order.indexOf(i);
-    // A stem that has just changed place: the air over its bed fills through the matte and
-    // empties again, and its new rank blinks on.
-    const mp = came(s, s.movedAt[i], 1.1, reduced);
-    column(g, env, mine, x - geo.cell * 0.46, h * 0.1, geo.cell * 0.92, geo.soilY, pulse(mine, mp), env.alpha(c.accent2, 0.12));
+    // A stem that has just changed place: the air over its bed is cut in behind the piece's edge
+    // and taken back the way it came, and its old rank goes at the move and its new one is cut on
+    // at its moment. Solved, it blooms in its rank's turn, oldest first.
+    const mp = came(s, s.movedAt[i], MOVE, reduced);
+    column(g, mine, x - geo.cell * 0.46, h * 0.1, geo.cell * 0.92, geo.soilY, pulseOf(rite, s, i, reduced), env.alpha(c.accent2, 0.09));
     const bp = s.doneAt >= 0 ? came(s, s.doneAt + rank * 0.3, 1.1, reduced) : 0;
-    const bloom = bp > 0 && mine.flicker(bp) ? mine.stair(bp) : 0;
-    const tip = stem(g, env, x, geo.soilY, height, plan.leaves[i], s.t, k, i * 1.3 + v.turn * TAU, 0.4 + (i % 3) * 0.25, 0, bloom, mine);
+    const tip = stem(g, env, x, geo.soilY, height, plan.leaves[i], k, i * 1.3 + v.turn * TAU, 0.4 + (i % 3) * 0.25, 0, mine.stair(bp));
     write(g, plan.leaves[i] + ' leaves', x, tip[1] - 11 * k, small, 'center', env.alpha(c.fg, 0.9));
-    if (s.hinted.includes(i) && own(rite, 0x41 + i).flicker(came(s, s.hintAt[i], 1, reduced))) {
+    if (s.hinted.includes(i) && own(rite, 0x41 + i).flicker(came(s, s.hintAt[i], HINT, reduced))) {
       write(g, a[i] + (a[i] === 1 ? ' week' : ' weeks'), x, tip[1] - 11 * k - small * 1.3, small, 'center', c.accent2, '600');
     }
     badge(g, env, x, geo.soilY, LETTERS[i], k, small);
     write(g, plan.rates[i] + (plan.rates[i] === 1 ? ' leaf a week' : ' leaves a week'), x, geo.soilY + h * 0.07, small, 'center', env.alpha(c.accent2, 0.95));
     if (mine.flicker(mp)) write(g, RANKS[rank], x, geo.soilY + h * 0.13, small, 'center', env.alpha(c.fg, 0.8));
   }
-  pane(g, w, h, env, doneP > 0 ? { k: rite.stair(doneP), depth: 0.5, on: !!rite.flicker(doneP) } : null, s.t, rite);
+  fogged(g, w, h, env, fogOf(s, rite, doneP, 0.5, reduced), rite);
+  plate(plates, 'over', g, w, h, env, (pg) => glazing(pg, w, h, env));
 }
 
-function agePreview(g, w, h, env, plan, t) {
-  drawAge(g, w, h, env, plan, ageState(plan.start, t || 0), env.variant);
+function agePreview(g, w, h, env, plan) {
+  drawAge(g, w, h, env, plan, ageState(plan.start), env.variant);
 }
 
 function agePiece(env, plan) {
@@ -753,17 +927,29 @@ function agePiece(env, plan) {
   const order = ageOrder(plan);
   const a = ages(plan);
   const oldest = a[order[0]];
-  const s = ageState(plan.start, (env.variant || PLAIN).turn * 5);
-  const draw = (c) => drawAge(c.g, c.w, c.h, c, plan, s, env.variant);
+  const s = ageState(plan.start);
+  const plates = {};
+  const paced = pace();
+  // The picture as it stands now. A change the piece has just made is drawn at once; a frame
+  // draws only a picture that differs from the one on the canvas.
+  const paint = (c) => (g) => drawAge(g, c.w, c.h, c, plan, s, env.variant, plates);
+  const draw = (c) => paced.show(s, c, paint(c), true);
   const named = (list) => list.map((i) => LETTERS[i]).join(', ');
   function current(c) {
     const v = c.value('order');
     return Array.isArray(v) && v.length === 4 ? v.map(Number) : s.order;
   }
-  // The order moves to `next`, and every stem that changed place has its moment noted.
-  function arrange(next) {
-    for (let i = 0; i < 4; i++) if (s.order.indexOf(i) !== next.indexOf(i)) s.movedAt[i] = s.t;
+  // The order moves to `next`, and every stem that changed place has its moment noted, and how lit
+  // the air over its bed was then, so a stem moved again while it is still lit goes on from there.
+  function arrange(next, c) {
+    const rite = riteOf(c);
+    for (let i = 0; i < 4; i++) {
+      if (s.order.indexOf(i) === next.indexOf(i)) continue;
+      s.pulseFrom[i] = pulseOf(rite, s, i, c.reduced);
+      s.movedAt[i] = s.t;
+    }
     s.order = next;
+    paced.stir(s.t + (c.reduced ? 0 : MOVE));
   }
   return {
     title: ageTitle(),
@@ -795,7 +981,7 @@ function agePiece(env, plan) {
     },
     apply(id, value, c) {
       if (id === 'order' && Array.isArray(value) && value.length === 4) {
-        arrange(value.map(Number));
+        arrange(value.map(Number), c);
         c.status('oldest first: ' + named(s.order));
       }
       if (id === 'oldest') c.status('you say the oldest has grown ' + Math.round(Number(value)) + ' weeks');
@@ -804,6 +990,7 @@ function agePiece(env, plan) {
         if (next !== undefined) {
           s.hinted.push(next);
           s.hintAt[next] = s.t;
+          paced.stir(s.t + (c.reduced ? 0 : HINT));
           c.hint();
           c.status('stem ' + LETTERS[next] + ' has grown ' + a[next] + (a[next] === 1 ? ' week' : ' weeks'));
         } else if (s.hinted.length >= helps) {
@@ -830,15 +1017,18 @@ function agePiece(env, plan) {
         next[rank] = next[rank - 1];
         next[rank - 1] = col;
       }
-      arrange(next);
+      arrange(next, c);
       c.set('order', next.slice());
       c.status('stem ' + LETTERS[col] + ' is now ' + RANKS[next.indexOf(col)]);
       draw(c);
     },
     frame(t, dt, c) {
       if (!c.reduced) s.t += dt;
-      if (c.done && s.doneAt < 0) s.doneAt = s.t;
-      draw(c);
+      if (c.done && s.doneAt < 0) {
+        s.doneAt = s.t;
+        paced.stir(s.t + (c.reduced ? 0 : settles(0.5)));
+      }
+      if (paced.due(s, c)) paced.show(s, c, paint(c));
     },
     end(c) {
       c.status('stem ' + LETTERS[order[0]] + ' came up first, ' + oldest + ' weeks ago; the bed blooms oldest to youngest');
@@ -868,14 +1058,14 @@ export default {
   needsSky: true,
   paint(g, w, h, env) {
     const d = deal(env);
-    if (d.water) waterPreview(g, w, h, env, d.plan, env.variant.turn * 5);
-    else agePreview(g, w, h, env, d.plan, env.variant.turn * 5);
+    if (d.water) waterPreview(g, w, h, env, d.plan);
+    else agePreview(g, w, h, env, d.plan);
   },
-  animate(g, w, h, env, t) {
-    if (env.reduced) return false;
-    const d = deal(env);
-    if (d.water) waterPreview(g, w, h, env, d.plan, t + env.variant.turn * 5);
-    else agePreview(g, w, h, env, d.plan, t + env.variant.turn * 5);
+  // The card is the glass waiting for its first visitor, and nothing in a waiting glass moves (see
+  // "the rite" above): it says so, and the feed lets it go rather than redrawing a still picture
+  // thirty times a second.
+  animate() {
+    return false;
   },
   spark(env) {
     if (!env.stars.length) return null;
@@ -887,7 +1077,7 @@ export default {
         mono: 'lamp ' + (plan.lamp ? 'on' : 'off') + ' / vent ' + (plan.vent ? 'open' : 'shut') + '\nsoil ' + plan.soil.join(' ') + '\ntags: ' + plan.rules.map((r) => RULES[r].tag).join('; '),
         text: 'A midnight round under glass. Every plant wears one rule; the readings say which of them drink. Mark them.',
         aspect: '16 / 10',
-        paint: (g, w, h, cardEnv) => waterPreview(g, w, h, cardEnv, plan, cardEnv.variant.turn * 5),
+        paint: (g, w, h, cardEnv) => waterPreview(g, w, h, cardEnv, plan),
         of: plan
       };
     }
@@ -897,7 +1087,7 @@ export default {
       mono: LETTERS.map((l, i) => l + ': ' + plan.leaves[i] + ' leaves, ' + plan.rates[i] + ' a week').join('\n'),
       text: 'A reading of the leaves: four stems, four rates of growth. Which came up first, and how many weeks ago?',
       aspect: '16 / 10',
-      paint: (g, w, h, cardEnv) => agePreview(g, w, h, cardEnv, plan, cardEnv.variant.turn * 5),
+      paint: (g, w, h, cardEnv) => agePreview(g, w, h, cardEnv, plan),
       of: plan
     };
   },
