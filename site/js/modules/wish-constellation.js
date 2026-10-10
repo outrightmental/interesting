@@ -471,6 +471,14 @@ function postcardScene(g, w, h, c, plan, s, v) {
       // it gives its halo back the same way, from wherever it had come to.
       const hot = level(s.halo[i], rite, 0x11 + i, s, HALO, reduced);
       star(g, c, { x, y }, glow, rite, hot);
+      if (s.lit === i) {
+        g.strokeStyle = c.alpha(c.colors.accent2, 0.65);
+        g.lineWidth = 1;
+        g.beginPath();
+        g.moveTo(x, y + size * 0.6);
+        g.lineTo(x, box.top + box.height);
+        g.stroke();
+      }
       font(g, size * 0.9, 600);
       g.textAlign = 'left';
       g.fillStyle = c.alpha(hot >= 0.5 ? c.colors.accent2 : c.colors.fg, 0.9);
@@ -511,6 +519,12 @@ function postcardScene(g, w, h, c, plan, s, v) {
   font(g, size);
   g.textAlign = 'center';
   g.fillStyle = c.alpha(c.colors.fg, 0.8);
+  if (s.lit >= 0) {
+    const p = plan.points[s.lit];
+    const shift = Math.round(shiftOf(plan.ranks[s.lit], n));
+    g.fillStyle = c.alpha(c.colors.accent2, 0.95);
+    g.fillText('light ' + LETTERS[s.lit] + ': left ' + p.x + ', right ' + (p.x - shift) + '; shift ' + shift, w / 2, h * 0.81, w * 0.94);
+  }
   const line = orderShown(s, rite, reduced);
   if (line) g.fillText(line, w / 2, h * 0.86, w * 0.9);
   g.fillStyle = c.alpha(c.colors.muted, 0.85);
@@ -607,8 +621,9 @@ function postcardPiece(env, plan) {
         turnTo(s.halo[best], true, rite, 0x11 + best, s, HALO, c.reduced);
         s.lit = best;
       }
+      const measure = 'light ' + LETTERS[best] + ' shifts ' + Math.round(shiftOf(plan.ranks[best], n)) + ' marks between the views';
       if (s.taps.includes(best)) {
-        c.status('light ' + LETTERS[best] + ' is already in your order; keep going');
+        c.status(measure + '; already in your order');
         draw(c);
         return;
       }
@@ -622,9 +637,9 @@ function postcardPiece(env, plan) {
         s.rounds += 1;
         s.taps = [];
         c.set('order', s.order.slice());
-        c.status('nearest to farthest: ' + s.order.map((i) => LETTERS[i]).join(', ') + '; check it');
+        c.status(measure + '; order set: ' + s.order.map((i) => LETTERS[i]).join(', ') + '; check it');
       } else {
-        c.status('light ' + LETTERS[best] + ' is ' + PLACE[s.taps.length - 1] + '; tap the next');
+        c.status(measure + '; placed ' + PLACE[s.taps.length - 1] + '; tap the next');
       }
       draw(c);
     },
@@ -821,7 +836,8 @@ function skyBox(g, c, pts, x, y, side, v, opts) {
 function whichState(t) {
   return {
     t, choice: -1, chosen: [surface(), surface(), surface(), surface()], turns: 1, mirror: false,
-    hinted: [], hintAt: [-1, -1, -1, -1], doneAt: -1, live: false, saidAt: -1, saids: 0, saidWas: ''
+    hinted: [], hintAt: [-1, -1, -1, -1], doneAt: -1, live: false, saidAt: -1, saids: 0, saidWas: '',
+    previewFrom: null, previewTo: null, previewAt: -1, previewRoll: 0, previewAfter: false
   };
 }
 
@@ -838,10 +854,20 @@ function summaryShown(s, rite, reduced) {
   return s.saidWas;
 }
 
+// A changed turn or flip moves the reference sky from wherever its last movement stood.
+function previewSky(plan, rite, s, reduced) {
+  if (!s.previewTo) return plan.points;
+  const step = roll(rite, 0x435, s.previewRoll).stair(came(s, s.previewAt, 0.9, reduced));
+  return s.previewTo.map((p, i) => ({
+    x: s.previewFrom[i].x + (p.x - s.previewFrom[i].x) * step,
+    y: s.previewFrom[i].y + (p.y - s.previewFrom[i].y) * step
+  }));
+}
+
 // The visitor's own sky once the puzzle is solved: flipped left for right in treads, if it was
 // flipped, then turned clockwise in the ratchet's even clicks to lie as the true sky lies.
 function reference(plan, rite, s, reduced) {
-  if (s.doneAt < 0) return plan.points;
+  if (s.doneAt < 0 || s.previewAfter) return previewSky(plan, rite, s, reduced);
   const fp = plan.mirror ? roll(rite, 0xf11, 0).stair(came(s, s.doneAt, 1, reduced)) : 0;
   const tp = came(s, s.doneAt + (plan.mirror ? 1 : 0), 2.4, reduced);
   const ang = roll(rite, 0x7a7, 0).ratchet(tp) * plan.turns * Math.PI / 2;
@@ -865,7 +891,7 @@ function whichScene(g, w, h, c, plan, s, v) {
   g.textAlign = 'center';
   g.textBaseline = 'middle';
   g.fillStyle = c.alpha(c.colors.fg, 0.85);
-  g.fillText('your sky', lay.left + lay.side / 2, h * 0.085, lay.side);
+  g.fillText(s.previewTo ? 'your sky, as turned' : 'your sky', lay.left + lay.side / 2, h * 0.085, lay.side);
   const c0 = lay.cells[0];
   const c1 = lay.cells[1];
   g.fillText('four skies', c0.x + (c1.x + c1.side - c0.x) / 2, h * 0.085, c1.x + c1.side - c0.x);
@@ -933,6 +959,13 @@ function whichPiece(env, plan) {
     s.saidAt = s.t;
     s.saids += 1;
   };
+  const preview = (c, from) => {
+    s.previewFrom = from;
+    s.previewTo = turned(plan.points, s.turns, s.mirror);
+    s.previewAt = s.t;
+    s.previewRoll += 1;
+    s.previewAfter = !!c.done;
+  };
   return {
     title: whichTitle(plan),
     brief: 'Your sigil, turned. One of the four small skies is your ' + WORDS[n] + ' lights, turned clockwise by one, two or three quarter turns -- and perhaps flipped left for right before it was turned. The other three are near misses: the same lights, with a few nudged out of place.',
@@ -976,17 +1009,21 @@ function whichPiece(env, plan) {
       }
       if (id === 'turns') {
         const k = Math.round(Number(value));
-        if (k >= 1 && k <= 3 && k !== s.turns) {
+        if (k >= 1 && k <= 3 && (k !== s.turns || !s.previewTo)) {
+          const from = reference(plan, rite, s, !!c.reduced).map((p) => ({ x: p.x, y: p.y }));
           saying(c);
           s.turns = k;
+          preview(c, from);
         }
-        c.status(turnsWord(s.turns) + ' clockwise');
+        c.status(turnsWord(s.turns) + ' clockwise; compare the moving sky with A-D');
       }
-      if (id === 'mirror' && !!value !== s.mirror) {
+      if (id === 'mirror' && (!!value !== s.mirror || !s.previewTo)) {
+        const from = reference(plan, rite, s, !!c.reduced).map((p) => ({ x: p.x, y: p.y }));
         saying(c);
         s.mirror = !!value;
+        preview(c, from);
       }
-      if (id === 'mirror') c.status(s.mirror ? 'flipped left for right, then turned' : 'turned, never flipped');
+      if (id === 'mirror') c.status(s.mirror ? 'flipped first, then turned; compare with A-D' : 'not flipped; compare the turned sky with A-D');
       if (id === 'hint') {
         const next = s.hinted.length < helps
           ? range(4).find((k) => k !== plan.which && !s.hinted.includes(k)) : undefined;
@@ -1006,8 +1043,11 @@ function whichPiece(env, plan) {
     tap(x, y, c) {
       const lay = whichLayout(c.w, c.h);
       const k = lay.cells.findIndex((cell) => x * c.w >= cell.x && x * c.w <= cell.x + cell.side && y * c.h >= cell.y && y * c.h <= cell.y + cell.side);
-      if (k < 0) return;
-      c.status('sky ' + SKIES[k] + (s.hinted.includes(k) ? ', a decoy' : '; choose it on the rail if it is yours'));
+      if (k < 0) {
+        c.status('set the turn or flip to move your sky, then compare its lights with A-D');
+        return;
+      }
+      c.status('sky ' + SKIES[k] + (s.hinted.includes(k) ? ', a decoy' : '; compare its lights with your turned sky'));
     },
     frame(t, dt, c) {
       if (!c.reduced) s.t += dt;

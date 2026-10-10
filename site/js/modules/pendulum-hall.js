@@ -414,6 +414,25 @@ function drawRack(g, w, h, c, plan, s, variant) {
     disc(g, seal.own, pivots[i] + Math.sin(theta) * length, barY + Math.cos(theta) * length, r * 3.1,
       seal.k, c.alpha(col.accent2, 0.28));
     const at = bob(g, c, pivots[i], barY, length, theta, r, tone);
+    if (beat >= start) {
+      const before = Math.sin(TAU * (beat - start - 0.18) / p);
+      const after = Math.sin(TAU * (beat - start + 0.18) / p);
+      const direction = Math.sign(after - before);
+      if (direction) {
+        const extent = Math.max(r * 1.8, Math.min(r * 4.5, Math.abs(after - before) * length * amp));
+        const tip = at.x + direction * extent / 2;
+        const guideY = at.y + r * 3.2;
+        g.strokeStyle = c.alpha(col.accent2, 0.9);
+        g.lineWidth = 1.5;
+        g.beginPath();
+        g.moveTo(at.x - direction * extent / 2, guideY);
+        g.lineTo(tip, guideY);
+        g.lineTo(tip - direction * r * 0.65, guideY - r * 0.5);
+        g.moveTo(tip, guideY);
+        g.lineTo(tip - direction * r * 0.65, guideY + r * 0.5);
+        g.stroke();
+      }
+    }
     if (seal.ring) {
       g.strokeStyle = col.accent2;
       g.lineWidth = 1.5;
@@ -545,7 +564,7 @@ function rackPiece(env, plan) {
         if (Number.isFinite(beat) && beat >= 1 && beat <= 60) {
           s.to = -1;
           s.beat = beat;
-          c.status('showing beat ' + beat + '; a centred bob may be heading left or still waiting to start, so use the periods and start beats to check heading right');
+          c.status('showing beat ' + beat + '; arrows show each moving bob\'s direction; use the periods and starts to find their first shared rightward crossing');
         } else c.status('choose a meeting beat from 1 to 60');
       }
       if (id === 'which' && Array.isArray(value)) {
@@ -590,7 +609,7 @@ function rackPiece(env, plan) {
         s.to = -1;
         s.beat = beat;
         c.set('meet', beat);
-        c.status('beat ' + beat + ' shown and set as the meeting beat; a centred bob may be heading left or still waiting to start');
+        c.status('beat ' + beat + ' shown and set; arrows show which moving bobs head right');
         draw(c);
         return;
       }
@@ -767,6 +786,19 @@ function springRuler(g, w, h, c, plan, s, v, size, now) {
   g.stroke();
   g.setLineDash([]);
   text(g, c, 'cross here', tx, top - size * 0.9, Math.max(8, size * 0.85), col.accent2);
+  if (s.runs.length) {
+    const predicted = crossTime(stiffnessShown(s, rite, reduced));
+    const px = xOf(predicted);
+    g.strokeStyle = c.alpha(col.accent, 0.85);
+    g.lineWidth = 1.5;
+    g.setLineDash([2, 3]);
+    g.beginPath();
+    g.moveTo(px, top - size * 0.2);
+    g.lineTo(px, bottom);
+    g.stroke();
+    g.setLineDash([]);
+    text(g, c, predicted > span ? 'later' : 'next', px, top - size * 2.1, Math.max(8, size * 0.85), col.accent);
+  }
   // Past runs: a mark at the crossing each stiffness made, cut on when it was logged.
   for (const run of s.runs) {
     if (!rolled(rite, 0x300 + run.k).flicker(came(s, run.at == null ? -1 : run.at, 0.9, reduced))) continue;
@@ -894,7 +926,7 @@ function springPiece(env, plan) {
   return {
     title: springTitle(plan),
     brief: 'The rite of the handed swing. Two pendulums of the same length, joined by a spring. Only the first is let go, from the side; the spring hands the swing across until the first hangs still and the second has all of it. '
-      + 'A stiffer spring hands it across at a different pace. One breath is ' + plan.breath + ' seconds. Each check lets the pair go and leaves its mark on the ruler.',
+      + 'A stiffer spring hands it across sooner; a softer one takes longer. One breath is ' + plan.breath + ' seconds. Let the pair go once to mark its crossing on the ruler; after that, moving the spring previews where the next run will cross.',
     goal: 'Set the spring so the swing crosses to the second pendulum in ' + WORDS[plan.breaths] + ' breaths, and say what a ' + plan.ask + ' spring would do.',
     aspect: '16 / 10',
     checkLabel: 'let go',
@@ -918,7 +950,7 @@ function springPiece(env, plan) {
       return { solved: false, say: parts.join('; ') };
     },
     start(c) {
-      c.status('pair ' + plan.number + ': cross in ' + WORDS[plan.breaths] + ' breaths of ' + plan.breath + ' seconds');
+      c.status('pair ' + plan.number + ': aim for ' + WORDS[plan.breaths] + ' breaths of ' + plan.breath + ' seconds; let go once to start tracing crossings');
       draw(c);
     },
     apply(id, value, c) {
@@ -1065,7 +1097,7 @@ export default {
       const plan = d.plan;
       return {
         title: springTitle(plan),
-        text: 'Two pendulums, one spring, one swing to hand across. Set the spring so the swing crosses from the first to the second in ' + WORDS[plan.breaths] + ' breaths, then say what a ' + plan.ask + ' spring would do.',
+        text: 'Two pendulums and a spring: aim for a crossing in ' + WORDS[plan.breaths] + ' breaths. Run it once, then watch the next crossing follow your spring setting.',
         mono: 'breath   ' + plan.breath + ' seconds\ncross in ' + plan.breaths + ' breaths\nalone    one swing in ' + OWN + ' seconds',
         aspect: '16 / 10',
         paint: (g, w, h, cardEnv) => springPreview(g, w, h, cardEnv, plan),
@@ -1075,7 +1107,7 @@ export default {
     const plan = d.plan;
     return {
       title: rackTitle(plan),
-      text: plan.starts.some((s) => s > 0) ? 'The rack starts one pendulum after another. Use each start beat and period to find the first shared rightward crossing, then pick the ones crossing at beat ' + plan.at + '.' : 'A vigil in beats. Starting together at beat 0, when do they first cross heading right together again, and which cross at beat ' + plan.at + '?',
+      text: plan.starts.some((s) => s > 0) ? 'The rack starts one pendulum after another. Show a beat to see which way each moves; find their first shared rightward crossing and pick the ones crossing at beat ' + plan.at + '.' : 'Starting together at beat 0, when do they first cross heading right together again? Show a beat to see their directions, then pick the ones crossing at beat ' + plan.at + '.',
       mono: 'periods  ' + plan.periods.join(', ') + ' beats\nstarts   ' + plan.starts.join(', ') + '\nasked    beat ' + plan.at,
       aspect: '16 / 10',
       paint: (g, w, h, cardEnv) => rackPreview(g, w, h, cardEnv, plan),
