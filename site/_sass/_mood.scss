@@ -93,6 +93,8 @@ $registers-of: (
 @mixin modality($mood, $palette) {
   @include seeds($palette);
   @include type.register(map.get($registers-of, $mood));
+  // A nested mood must resolve its own font instead of inheriting its ancestor's resolved face.
+  font-family: type.$sans;
 }
 
 @each $mood, $palette in $moods {

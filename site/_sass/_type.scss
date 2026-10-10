@@ -416,7 +416,7 @@ $mono: var(--font-mono, #{$mono-stack});
 // whatever edge cuts the words into a new face (a reveal, the shift's slice) cuts them too.
 @mixin rite-dress {
   &::before {
-    content: var(--rite-before, '');
+    content: var(--rite-before, '') / '';
     color: var(--md-sys-color-tertiary);
     font-variant-caps: normal;
     font-variation-settings: 'opsz' 36, 'wght' 400, 'SOFT' 50, 'WONK' 0;
@@ -424,7 +424,7 @@ $mono: var(--font-mono, #{$mono-stack});
   }
 
   &::after {
-    content: var(--rite-after, '');
+    content: var(--rite-after, '') / '';
     color: var(--md-sys-color-tertiary);
     font-variant-caps: normal;
     font-variation-settings: 'opsz' 36, 'wght' 400, 'SOFT' 50, 'WONK' 0;
