@@ -2158,7 +2158,7 @@ def check_motion(before, after):
 #
 # Its other half, which no check refuses a plan for: a piece of content does not End just because it
 # is Done (issue #86). The ceremony reports completion and lights the way on and takes nothing away
-# -- the frames keep drawing, the knobs stay settable, a tap still reaches the piece -- and the done
+# -- the frames come back when it is worked again, the knobs stay settable, a tap still reaches the piece -- and the done
 # mark reports from beside the progress dots rather than from over the scene. The prompt states it
 # and the stage harness holds the committed site to it, for the same reason the rest of the stage is
 # held that way: it is read off the stage's own elements, which are a run's to rewrite.
@@ -3028,7 +3028,8 @@ def build_prompt(shown, omitted=(), run=None, budget=None, feedback=""):
         "piece of content does not End just because it is Done -- this one holds "
         "site-wide, and the stage is where it is read off. Finishing is a report, not a closing "
         "time: a piece makes itself available for continued interaction as long as the visitor is "
-        "still interested in it. So the ceremony takes nothing away. The frame loop keeps drawing, "
+        "still interested in it. So the ceremony takes nothing away. Its frames come back whenever "
+        "it is worked again, "
         "a tap on the scene still reaches the piece's tap(), every knob stays enabled and can be "
         "set again -- a gate behind another knob included, since every gate stands open once "
         "everything is set -- and the piece keeps hearing apply() for all of it; there is no "
@@ -3096,7 +3097,12 @@ def build_prompt(shown, omitted=(), run=None, budget=None, feedback=""):
         "holding an answer that will not check. A piece is one instantiation and "
         "keeps nothing between them: all its state lives inside piece(env), so a world the feed "
         "deals a second time plays exactly as it did the first. "
-        "frame's t is seconds since the piece started. The same seed "
+        "frame's t is seconds since the piece started, and frame returns false when, and only "
+        "when, nothing it draws is moving or due to move until the visitor acts, the canvas is "
+        "sized again or the scene comes back into view: the stage then asks for no more frames "
+        "until one of those happens, so a piece at rest costs the page nothing; any other return "
+        "keeps them coming, and a piece between two treads of a movement in flight must not "
+        "return false. The same seed "
         "makes the same piece and different seeds make different pieces. A piece is also the card "
         "it was opened from: the stage hands it the pressed card's configuration on env.variant "
         "and the content that card was showing on env.card, so piece(env) reads env.card and opens "
@@ -3148,7 +3154,8 @@ def build_prompt(shown, omitted=(), run=None, budget=None, feedback=""):
         "silently holding the check shut, a hold knob is set the moment its bar fills rather than "
         "when the visitor lets go, a solved piece stays on the stage with the way on lit and the "
         "keyboard on it rather than showing itself out, a solved piece is still fully playable "
-        "(its frames still drawing, its knobs still settable, a tap still reaching it, the done "
+        "(its frames coming back when it is worked again, its knobs still settable, a tap still "
+        "reaching it, the done "
         "mark clear of its scene, and the ceremony played once through all of it), a piece that "
         "is over leaves nothing of itself on the stage or still running, a press the piece has "
         "nothing to do with is answered by the stage rather than swallowed, a card pressed opens "

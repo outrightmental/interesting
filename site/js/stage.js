@@ -47,12 +47,12 @@
 
   A piece of content does not End just because it is Done (issue #86). Finishing is a report, not a
   closing time: finish() plays the ceremony, says so beside the progress dots and lights the way on,
-  and changes nothing whatever about how playable the piece is. The frame loop keeps running, a tap
-  on the scene still reaches tap(), every knob stays enabled and can be set again -- including one
-  that was gated behind another, since every gate stands open once everything is set -- and the
-  piece keeps hearing apply() for all of it. There is no timeout, no fade, no inert state and no
-  teardown in between; close() is the one teardown and the only thing that reaches it is the next
-  piece actually opening, which only the press of the way on can do.
+  and changes nothing whatever about how playable the piece is. The frames still come whenever the
+  piece moves, a tap on the scene still reaches tap(), every knob stays enabled and can be set
+  again -- including one that was gated behind another, since every gate stands open once
+  everything is set -- and the piece keeps hearing apply() for all of it. There is no timeout, no
+  fade, no inert state and no teardown in between; close() is the one teardown and the only thing
+  that reaches it is the next piece actually opening, which only the press of the way on can do.
 
   Two things follow from that, and are deliberate. The done mark is laid out with the rail at the
   end of the dots' row, not over the scene: a finished piece's picture is still the content, and
@@ -135,11 +135,11 @@
           start(ctx) {},                            // the scene is ready to draw on (called again
                                                     // after a resize if the piece has no frame)
           frame(t, dt, ctx) {},                     // one frame (optional); t is seconds since the
-                                                    // piece started, dt since the last frame. It is
-                                                    // asked for every frame the scene is on the
-                                                    // screen, and draws only when something on it
-                                                    // has moved: the canvas keeps the last picture,
-                                                    // and a still one is not drawn again
+                                                    // piece started, dt since the frame before (one
+                                                    // frame's worth after a rest). It draws only
+                                                    // when something on it has moved -- the canvas
+                                                    // keeps the last picture -- and returns false
+                                                    // when the piece is at rest (the frames, below)
           apply(id, value, ctx) {},                 // a knob was set (the stage sets it)
           tap(x, y, ctx) {},                        // the scene was tapped, x and y in 0..1
                                                     // (optional; a 'tap' knob needs it. A press
@@ -214,6 +214,23 @@
   ctx.set(id, value) is for a piece whose scene is the control: a tap on a cell of a grid drawn
   on the canvas, an item dragged into order. It may only be called from tap(), it writes the
   value onto the knob (the rail follows), and it counts as the visitor setting that knob.
+
+  The frames. A page where nothing moves costs nothing, so the stage asks for frames only while the
+  piece has something moving: one that asked every vsync for a still picture kept the main thread
+  awake sixty times a second for as long as a visitor sat reading. frame() returns false when, and
+  only when, the piece is at rest -- nothing it draws is moving or due to move until the visitor
+  acts, the canvas is sized again (ctx.w, ctx.h or ctx.dpr change, and the canvas is cleared with
+  them) or the scene comes back into view -- and on false the stage asks for no more. Any other
+  return, undefined included, keeps the frames coming, so a piece that never says so is asked every
+  frame its scene is on the screen. A piece between two treads of a movement in flight, drawing
+  nothing on this frame because its next tread is not yet due, is not at rest and must not return
+  false: nothing would come back for that tread. Nor is one running a wait knob's timed phase.
+  The stage starts the frames again whenever the piece may have been set moving: a knob applied, a
+  tap (on the scene or through 'tap for me'), ctx.set, ctx.satisfy or ctx.hint, a check or the
+  finale, the scene sized again, the palette landing, and the scene back on the screen or the page
+  shown again. The first frame after a rest starts a fresh clock -- its dt is one frame's worth,
+  not the length of the rest -- and t is the wall clock as ever. So a piece never counts on a frame
+  arriving while it is at rest (a timer counted in frames, a clock advanced by dt): none does.
 
   Every knob has to be settable by the visitor it is put in front of, and the stage has to say
   which ones are not set yet. A knob nobody can satisfy is a puzzle nobody can check, and the way
@@ -584,14 +601,15 @@ function inlineMs(node, spell, fallback) {
    cut's end along with its start and never takes a part away halfway across. An animation that is
    cancelled (a part moved where it is stilled) ends it too. The clock stays behind it, generous, for
    an animation that never plays: a stylesheet without it, a browser with no engine, a part never
-   shown. `own` makes the whole wait the piece's, so close() stops it with the rest. Hands back a
-   cancel that ends the wait without its ending. */
+   shown. `name` null takes whichever of the node's own animations ends first, for a part that
+   leaves by two in the same treads (a slice and a lift). `own` makes the whole wait the piece's, so
+   close() stops it with the rest. Hands back a cancel that ends the wait without its ending. */
 function whenEnded(node, name, pseudo, wait, fn, own) {
   let over = false;
   let stop = null;
   const listens = !!(node && typeof node.addEventListener === 'function' && typeof node.removeEventListener === 'function');
   const on = (ev) => {
-    if (!ev || ev.target !== node || ev.animationName !== name) return;
+    if (!ev || ev.target !== node || (name && ev.animationName !== name)) return;
     if (String(ev.pseudoElement || '').replace(/^:+/, '') !== (pseudo || '')) return;
     end();
   };
@@ -878,6 +896,7 @@ function crossfade(from, to, done) {
       }
       turning = [];
       writeSeeds(to);
+      startFrames(); // the palette has landed: a piece already on the stage is given a frame in it
       if (done) done();
     }, tread.at));
   }
@@ -1594,6 +1613,7 @@ function makeCtx(env) {
     hint() {
       c.hints += 1;
       renderTries();
+      startFrames();
     },
     get tries() {
       return c.tries;
@@ -1656,6 +1676,7 @@ function sizeScene() {
   current.ctx.w = w;
   current.ctx.h = h;
   current.ctx.dpr = dpr;
+  startFrames(); // the canvas is cleared by sizing it: a piece at rest draws its picture again
 }
 
 /* ---- the knobs ----------------------------------------------------------------------------- */
@@ -1714,6 +1735,7 @@ function apply(id, value) {
   } catch (e) {
     /* one knob's handler failing must not stop the piece */
   }
+  startFrames(); // the piece may have been set moving (the frames, above)
 }
 
 function markSet(id, value, by) {
@@ -1725,6 +1747,7 @@ function markSet(id, value, by) {
   // apply() is the usual way that is learnt, and a slider left where it stands never reaches it.
   if (by === 'knob') c.touched = true;
   if (value !== undefined) s.value = value;
+  startFrames(); // set, or set again: the piece may read it on its next frame
   if (!s.set) {
     s.set = true;
     if (s.knob) {
@@ -1813,6 +1836,7 @@ function judge() {
   } catch (e) {
     verdict = null; /* a verifier that throws has not said yes */
   }
+  startFrames(); // an experiment's check computes a run that its frames replay
   const solved = !!(verdict && verdict.solved);
   const say = verdict && typeof verdict.say === 'string' ? verdict.say.trim() : '';
   if (c.completed) {
@@ -2325,7 +2349,6 @@ const KNOBS = {
     const marks = [];
     for (let i = 0; i < count; i++) {
       const notch = el('i');
-      notch.style.setProperty('--notch-i', String(i));
       marks.push(notch);
       notches.appendChild(notch);
     }
@@ -2461,6 +2484,7 @@ const KNOBS = {
         /* the piece's tap failing is the piece's own problem */
       }
       current.inTap = false;
+      startFrames();
     });
     knob.appendChild(b);
   },
@@ -2472,14 +2496,18 @@ const KNOBS = {
 /* ---- frames and taps ----------------------------------------------------------------------- */
 
 /* The piece's own frames, and nothing more: the loop asks for a frame only while there is a piece
-   that draws in frame() and a scene on the screen to draw it on. A piece that draws only in start()
-   costs no frame at all, and one whose scene has been scrolled out of sight (the feed read under
-   it) stops until the scene comes back, when it picks up where its clock now is -- nothing is
-   computed that does not show. */
+   that draws in frame(), a scene on the screen to draw it on and something on it moving (the
+   frames, in the contract above). A piece that draws only in start() costs no frame at all; one
+   whose scene has been scrolled out of sight (the feed read under it) stops until the scene comes
+   back; and one whose frame() answered false is at rest and stops until startFrames() is called
+   from wherever it may have been set moving. Each picks up where its clock now is, on a fresh dt
+   -- nothing is computed that does not show. A ctx call the piece makes from inside its own frame()
+   wakes nothing: the piece knows what it did, and its answer is the one that counts. */
 let sceneSeen = true;
+let framing = false; // inside the piece's frame()
 
 function startFrames() {
-  if (!frameHandle && sceneSeen) frameHandle = requestAnimationFrame(frame);
+  if (!frameHandle && sceneSeen && !framing) frameHandle = requestAnimationFrame(frame);
 }
 
 function frame(now) {
@@ -2491,14 +2519,21 @@ function frame(now) {
   }
   const dt = lastFrame ? Math.max(0, Math.min(0.05, (now - lastFrame) / 1000)) : 0.016;
   lastFrame = now;
+  let moving = true;
   if (!document.hidden) {
+    framing = true;
     try {
-      c.piece.frame((now - c.startedAt) / 1000, dt, c.ctx);
+      moving = c.piece.frame((now - c.startedAt) / 1000, dt, c.ctx) !== false;
     } catch (e) {
       /* a frame that throws is skipped; the next may not */
     }
+    framing = false;
   }
-  frameHandle = requestAnimationFrame(frame);
+  if (!moving) {
+    lastFrame = 0; // at rest: the frame that wakes it starts a fresh clock
+    return;
+  }
+  if (!frameHandle) frameHandle = requestAnimationFrame(frame);
 }
 
 /* ---- every press on the scene is answered -------------------------------------------------- */
@@ -2571,18 +2606,19 @@ if (ui) {
       rejectTap(x, y);
     }
     c.inTap = false;
+    startFrames();
   });
 }
 
 /* ---- finishing ----------------------------------------------------------------------------- */
 
 /* The piece is finished: the ceremony runs and the way on lights, and that is the whole of what
-   changes. Done is not the End (issue #86): the frame loop keeps running, the knobs stay enabled
-   and settable again, a tap still reaches tap(), and nothing of the piece is taken apart -- close()
-   is the one teardown and the only thing that reaches it is the next piece actually opening. The
-   knobs used to be disabled here, in one line, which turned a toy into a picture of a toy the
-   moment it was solved: a visitor still playing with the thing found it dead under their hands,
-   over a mark that said the stage was waiting for them.
+   changes. Done is not the End (issue #86): the frames still come whenever the piece moves, the
+   knobs stay enabled and settable again, a tap still reaches tap(), and nothing of the piece is
+   taken apart -- close() is the one teardown and the only thing that reaches it is the next piece
+   actually opening. The knobs used to be disabled here, in one line, which turned a toy into a
+   picture of a toy the moment it was solved: a visitor still playing with the thing found it dead
+   under their hands, over a mark that said the stage was waiting for them.
 
    It runs once. A knob re-set after this does not play a second ceremony, dispatch a second
    'stage:complete' or re-light anything -- one piece is finished once -- and markSet() sees to that
@@ -2616,6 +2652,7 @@ function finish(say) {
   } catch (e) {
     /* the finale is optional */
   }
+  startFrames(); // the finale plays in the piece's frames
   setMode('done');
   // The ceremony's one edge (README: "Motion axiom"): the done chip lands as a curve growing out of
   // its end of the dots' row, in treads cut for this solve (is-landing, done-land), and its word
@@ -2946,9 +2983,45 @@ function thresholdStart() {
     if (!isGone()) land(askBox, 'ask-in', { seed: newSeed() });
   };
 
+  // An answered question is cut away as a ghost of itself, left where it stood (js/persona.js,
+  // stopAskingInCard: a copy of the probe, with no id, playing part-unmake), and the stage brings
+  // on what the question leaves behind only once that cut has ended -- on the ghost's own
+  // animationend. The clock behind it is as generous as every other here (twice the cut's length
+  // and a little), for a ghost that never plays: a busy page, as it is just after an answer, starts
+  // the cut frames after the ghost is put down, and a clock of the cut's length alone would end the
+  // wait with the question still standing. The hand-off is then one change, the question going and
+  // then the piece coming, and the old question's words and plate never stand over the arriving
+  // stage with two edges crossing two layers in one place. A question put aside empty leaves no
+  // ghost, and nothing waits.
+  //
+  // While it waits, the ask keeps the room the question took. The feature is centred in the first
+  // screen (main, _panel.scss), so an ask emptied at once would drop the heading over it to the
+  // middle of the stage, beside the ghost, and lift it again when the piece arrived: a jump with no
+  // edge inside what is one change. The room is the ghost's own height, which js/persona.js wrote on
+  // it as the question's, so it is held without a layout read, and given back as the wait ends.
+  let handing = null; // the cancel of that wait, while it stands
+  function ghostOfQuestion() {
+    if (!probe || typeof document.querySelectorAll !== 'function') return null;
+    let ghost = null; // the newest, if an earlier one is still on its way out
+    for (const node of document.querySelectorAll('.threshold-probe.is-unmaking')) {
+      if (node !== probe) ghost = node;
+    }
+    return ghost;
+  }
+  function keepRoom(height) {
+    if (!askBox || !askBox.style) return;
+    if (height) askBox.style.setProperty('min-height', height);
+    else askBox.style.removeProperty('min-height');
+  }
+
   function render() {
     const asking = !!(probe && !probe.hidden);
     if (asking) {
+      if (handing) {
+        handing();
+        handing = null;
+        keepRoom('');
+      }
       // Through goHome(), not a bare close(): the piece that was on takes its name, its line and
       // its featured palette with it, so the question is asked on the threshold's own ground.
       if (current || pending) goHome();
@@ -2957,6 +3030,27 @@ function thresholdStart() {
       wasAsking = true;
       return;
     }
+    // Still cutting the question away: the reading is read when the cut has ended, as it is then.
+    if (handing) return;
+    const ghost = wasAsking ? ghostOfQuestion() : null;
+    if (ghost) {
+      // A card pressed while the cut plays has already opened a piece of its own, and the reading
+      // does not open another over it.
+      const was = current || pending;
+      const length = inlineMs(ghost, 'part-unmake', riteMs('medium', 340));
+      keepRoom(ghost.style ? ghost.style.getPropertyValue('height') : '');
+      handing = whenEnded(ghost, null, '', length * 2 + 200, () => {
+        handing = null;
+        keepRoom('');
+        if ((current || pending) !== was) wasAsking = false;
+        else settle();
+      }, false);
+      return;
+    }
+    settle();
+  }
+
+  function settle() {
     const r = readingNow();
     const o = r && r.orientation;
     const read = !!(o && r.source && r.source !== 'signals');
@@ -3016,6 +3110,12 @@ function start() {
       sceneSeen = !last || last.isIntersecting;
       if (sceneSeen) startFrames();
     }).observe(ui.scene);
+  }
+  // And the page shown again after it was hidden: the scene is back in view for the piece.
+  if (typeof document.addEventListener === 'function') {
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) startFrames();
+    });
   }
   // A stage that was gone has arrived once its inner's slice has landed (isGone above).
   if (ui.inner && typeof ui.inner.addEventListener === 'function') {

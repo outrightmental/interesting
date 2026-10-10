@@ -151,11 +151,11 @@
   // up: the sheet, out of the avatar (or whatever opened it), toward the middle of the screen where
   // a dialog stands. It starts a step back toward the control (--arrive-x, --arrive-y) and comes in
   // behind a slice pointing the way it travels (--arrive-angle), in treads rolled for it under
-  // `spell`. A control with no box leaves the page's own direction standing.
-  function arriveFrom(el, spell, from) {
+  // `spell`. `start` is the control's middle (middleOf), measured by the caller before it wrote
+  // anything, so this only writes; a control with no box leaves the page's own direction standing.
+  function arriveFrom(el, spell, start) {
     if (!el || !el.style || !engine() || calm()) return 0;
     var names = ['--arrive-x', '--arrive-y', '--arrive-angle'];
-    var start = middleOf(from);
     var dx = start ? (window.innerWidth || 0) / 2 - start.x : 0;
     var dy = start ? (window.innerHeight || 0) / 2 - start.y : 0;
     var d = Math.sqrt(dx * dx + dy * dy);
@@ -209,6 +209,19 @@
     try { el.style.setProperty(name, m.curve(family).css); }
     catch (e) { console.error('The treads could not be rolled', e); }
   }
+  // A passing rite given longer than it was first given (a part held back while what it pushes
+  // steps aside, makeRoom), without being started again: its clock alone is set afresh, and the
+  // wait it was held for goes with its class.
+  function holdRite(el, name, after) {
+    var timers = passing && el ? passing.get(el) : null;
+    if (!timers || !timers[name] || !el.classList.contains('is-' + name)) return;
+    window.clearTimeout(timers[name]);
+    timers[name] = window.setTimeout(function () {
+      timers[name] = 0;
+      el.classList.remove('is-' + name);
+      el.style.removeProperty('--part-wait');
+    }, after);
+  }
   // A passing rite taken off before its time: its clock stopped and its class gone.
   function endRite(el, name) {
     var timers = passing && el ? passing.get(el) : null;
@@ -258,20 +271,33 @@
     if (node.classList) node.classList.remove('is-unmaking');
     node.hidden = false;
     if (arriving && !dealing && engine() && !calm()) {
+      if (node.style) node.style.removeProperty('--part-wait'); // a wait is makeRoom's to give, each time
       arriveOn(node, 'part-in'); // where it comes from: a direction the engine rolls
       var length = cutOn(node, 'part-in', { family: 'arrive', duration: 'medium' });
       rite(node, 'arriving', (length || riteMs('medium', 320)) + 100);
     }
     return arriving;
   }
-  function conceal(node) {
-    if (!node || node.hidden) return;
+  // `keep` is for a line that holds its room whether or not it has anything to say (the sky's name,
+  // with no sky to name): what it says is cut away the same way, and then the line is emptied where
+  // it stands rather than hidden, so nothing under it moves. `room`, for a part whose going lets
+  // what is under it up (makeRoom), is what the hiding is done through once the cut has ended.
+  function conceal(node, keep, room) {
+    if (!node || node.hidden || (keep && !node.textContent)) return;
     if (concealing && concealing.get(node)) return; // already being cut away
     endRite(node, 'arriving');
+    function hide() {
+      if (keep) node.textContent = '';
+      else node.hidden = true;
+    }
+    function gone() {
+      if (typeof room === 'function') room(hide);
+      else hide();
+    }
     var m = engine();
     // A sheet being opened arrives without it, by its own one edge.
     if (dealing || !m || calm() || !node.classList || !concealing || typeof window.setTimeout !== 'function') {
-      node.hidden = true;
+      gone();
       return;
     }
     var length = leaveOn(node, 'part-unmake');
@@ -279,7 +305,7 @@
     concealing.set(node, window.setTimeout(function () {
       concealing['delete'](node);
       node.classList.remove('is-unmaking');
-      node.hidden = true;
+      gone();
     }, (length || riteMs('medium', 320)) + 60));
   }
   // The passing rites a box may be caught in as it is copied (a star under the pointer, a part
@@ -989,22 +1015,60 @@
     var ctx = sizeCanvas(card.portrait, size, size);
     if (ctx && list.length) drawSky(ctx, list, size, size, size * 0.15, size * 0.032, size * 0.018, null, null);
   }
-  function askInCard() {
+  // A question asked where the visitor cannot see it -- from the sheet, say, with the page scrolled
+  // away from the threshold it is asked on -- is brought to them: the page steps to it by the
+  // engine's own scroll (in its treads, or at once for a visitor who asked for less motion), the
+  // question in the middle of the screen, or its first words near the top where the whole of it is
+  // taller than the screen. Measured on the next frame, not as it is asked: the stage answers the
+  // question's coming by putting away the piece it was showing above it (js/stage.js, render),
+  // which moves the question up the page, and a scroll reckoned before that would carry the
+  // visitor past it. One read; a question already in view moves nothing.
+  function bringToView(node) {
+    var tall = window.innerHeight || 0;
+    if (!tall || !node || typeof node.getBoundingClientRect !== 'function' || !askingInCard) return;
+    var box = node.getBoundingClientRect();
+    if (!box || !box.height || (box.top >= 0 && box.top < tall * 0.6)) return;
+    var by = box.height < tall ? box.top + box.height / 2 - tall / 2 : box.top - tall * 0.1;
+    var to = (window.scrollY || window.pageYOffset || 0) + by;
+    var m = engine();
+    if (m && typeof m.scrollTo === 'function') m.scrollTo(to);
+    else if (typeof window.scrollTo === 'function') window.scrollTo(0, Math.max(0, to));
+  }
+  // `arriving` is the question the threshold asks as the page arrives, which stands where the page
+  // opens and is not scrolled to.
+  function askInCard(arriving) {
     var t = window.threshold;
     if (!card || !card.probe || !t || typeof t.mount !== 'function' || askingInCard) return;
     if (sheet && sheet.host.open) closeSheet();
     askingInCard = true;
     // The question arrives with the stage's ask it stands in (js/stage.js lands it), so nothing is
-    // rolled for it here. The ring the question puts on the portrait is struck in treads of its own.
-    cutOn(card.host, 'portrait-ask', {});
+    // rolled for it here. The ring the question puts on the portrait is struck in treads of its own,
+    // by a curve that is on the ring for as long as it cuts and no longer (is-asked, put on in the
+    // same task data-asking goes true, below).
+    var strike = cutOn(card.host, 'portrait-ask', {});
+    if (strike) rite(card.host, 'asked', strike * 2 + 400);
     card.probe.hidden = false;
     refresh();
     t.mount(card.probe, {
       onAnswer: function () { stopAskingInCard(true); card.open.focus(); },
       onSkip: function () { stopAskingInCard(true); card.open.focus(); }
     });
-    var first = card.probe.querySelector('button, input, [tabindex]');
-    if (first && typeof first.focus === 'function') first.focus();
+    // The focus goes to the question, not to an answer: onto the box that holds it, focusable for
+    // that alone (tabindex -1, out of the tab order), so a screen reader is in the question and
+    // the next Tab is its first answer. Put on an answer, a focus nobody gave from the keyboard
+    // would be one the browser shows -- a ring, and the engine's wax -- and the first answer
+    // would arrive looking already chosen. And without the browser's own scroll to it, as
+    // js/threshold.js lends this box the focus: the box is tall, and the browser would put its
+    // middle in the middle of the screen, scrolling a page that opens on the question down past
+    // the question's own words. Where the page is scrolled away from it, bringToView brings it.
+    if (typeof card.probe.focus === 'function') {
+      card.probe.setAttribute('tabindex', '-1');
+      card.probe.focus({ preventScroll: true });
+      if (!arriving && typeof window.requestAnimationFrame === 'function') {
+        var asked = card.probe;
+        window.requestAnimationFrame(function () { bringToView(asked); });
+      }
+    }
   }
   // `closing` says the question is going away because it was finished, which is the persona closing
   // and the moment the hand-off below belongs to. Without it the question is only being put aside,
@@ -1019,6 +1083,7 @@
       if (!card.probe.hidden) ghostOf(card.probe, 'is-unmaking', '44', 'part-unmake', card.open);
       card.probe.textContent = '';
       card.probe.hidden = true;
+      card.probe.removeAttribute('tabindex'); // focusable only while it holds a question
     }
     refresh();
     if (closing) handOff();
@@ -1037,6 +1102,16 @@
     card.castAfter = 0;
     card.readDrawn = false;
     card.open.addEventListener('click', function () { openSheet('sky', card.open); });
+    // The ring's curve comes off the moment it has cut the ring in -- its own end, on the
+    // portrait's ::before -- so the ring a visitor wears stands unmasked; the clocks rite() keeps
+    // for is-asked and is-read are the backstop for a page too busy to draw the end.
+    var seat = card.portrait && card.portrait.parentNode;
+    if (seat && typeof seat.addEventListener === 'function') {
+      seat.addEventListener('animationend', function (ev) {
+        if (!ev || ev.target !== seat || ev.pseudoElement !== '::before') return;
+        endRite(card.host, ev.animationName === 'reading-seal' ? 'read' : 'asked');
+      });
+    }
     card.text.setAttribute('aria-live', 'polite');
     refresh();
   }
@@ -1115,7 +1190,13 @@
     flying = null;
   }
 
-  /* The persona is closing: whatever was set while it was open goes home to the portrait. */
+  /* The persona is closing: whatever was set while it was open goes home to the portrait. Where it
+     lands is read here, with the focus home, and not as the sheet closes: a focus brought home from
+     the keyboard waxes the avatar, its name opens beside the portrait, and the corner, pinned at its
+     right, grows to its left and takes the portrait with it. Read as the sheet closed, the flight
+     would start that far to one side of the control it was set on. The page was restyled whole as
+     the dialog closed (closeSheet), so what this read works out afresh is only what changed since:
+     the avatar. */
   function handOff() {
     var set = carried;
     carried = null;
@@ -1320,18 +1401,26 @@
     star.el.style.top = 'calc(22px + ' + star.y + '% - ' + (star.y * 0.44).toFixed(2) + 'px)';
     star.el.style.setProperty('--star-gleam', String(starGleam(star.text)));
   }
-  // The name under the field follows each move, including a drag.
+  // The name under the field follows each move, including a drag. The line keeps its room while the
+  // sky has no name (buildSheet shows it for good, and the stylesheet sizes it for a first star's
+  // name), so the first star placed most often moves nothing under it: the name's words are cut
+  // into a line already there, by the reveal's slice, and cut away from it when the sky is
+  // cleared. A first name longer than the room kept for it -- a register that sets it wide, on a
+  // narrow sheet -- pushes what is under it down, and that steps there (makeRoom) rather than
+  // jumping; a name renamed later, by a drag, is left to take the room it takes.
   function renderName() {
     if (!sheet || !sheet.name) return;
     var list = serialize();
     var named = skyName(list);
     sheet.name.setAttribute('data-figure', figureOf(list) ? 'true' : 'false');
-    if (named) {
-      say(sheet.name, '✦ ' + named + ' — ' + skyRead(list), show(sheet.name));
-    } else {
-      conceal(sheet.name);
-      if (sheet.name.hidden) say(sheet.name, '', true);
+    if (!named) {
+      conceal(sheet.name, true, makeRoom);
+      return;
     }
+    var line = '✦ ' + named + ' — ' + skyRead(list);
+    function write() { say(sheet.name, line, show(sheet.name)); }
+    if (sheet.name.textContent) write();
+    else makeRoom(write);
   }
   function renderThread() {
     var path = threadOf(fieldStars, selected);
@@ -1368,11 +1457,12 @@
         var text = fieldStars[index].text.trim();
         return text ? '“' + text + '”' : 'a star without words';
       }).join(' → ');
-      if (words) {
-        say(sheet.thread, words, show(sheet.thread));
-      } else {
-        conceal(sheet.thread);
-        if (sheet.thread.hidden) say(sheet.thread, '', true);
+      var thread = sheet.thread;
+      if (words && thread.hidden) makeRoom(function () { say(thread, words, show(thread)); }, [thread]);
+      else if (words) say(thread, words, show(thread));
+      else {
+        conceal(thread, false, makeRoom);
+        if (thread.hidden) say(thread, '', true);
       }
     }
     return path;
@@ -1442,19 +1532,74 @@
     paintField(cast.pass);
     cast.timer = window.setTimeout(tread, total * jumps[0][0]);
   }
+  /* The parts that come and go between the sky and what stands under it -- the thread, the words
+     form, the remove button, and a first name longer than the room the line keeps for it -- push
+     all of that (the sky's other controls, its status line, its preview, the sections after it)
+     down as they come and let it up as they go. What they push steps there in the landing's
+     treads, on one stair for all of it (the engine's flip), instead of jumping in the one frame the
+     form appears, from under a pointer that was on 'drop a star' a moment before. Only what was
+     shown before the change is stepped. What comes with it (`arrivals`) takes its room at once and
+     waits there, cut away, until what it pushed has stepped aside, and is cut in only then: one
+     movement after the other, and never the new part's words under the old controls passing over
+     them. A step still under way when the next change comes (the name and then the form, for a
+     star dropped on an empty sky) is measured where it stands and taken off as the next begins
+     from there, so the two are one stair and never a step back. Not while the sheet is being
+     opened, which arrives whole by its own one edge; and nothing moves for a visitor who asked for
+     less motion. */
+  var stepping = [];
+  function makeRoom(change, arrivals) {
+    var m = engine();
+    if (dealing || !m || calm() || typeof m.flip !== 'function' || !sheet || !sheet.host.open) {
+      change();
+      return;
+    }
+    var parts = [sheet.thread, sheet.wordsForm, sheet.drop, sheet.seed, sheet.remove, sheet.clear, sheet.status, sheet.answer];
+    var section = sheet.field.parentNode;
+    for (var next = section ? section.nextElementSibling : null; next; next = next.nextElementSibling) parts.push(next);
+    var items = parts.filter(function (part) { return part && !part.hidden; });
+    var changed = false;
+    try {
+      stepping = m.flip(null, function () {
+        changed = true;
+        for (var i = 0; i < stepping.length; i++) stepping[i].cancel();
+        stepping = [];
+        change();
+      }, { items: items, dealt: false }) || [];
+    } catch (e) {
+      console.error('The sheet could not step aside', e);
+      if (!changed) change();
+      return;
+    }
+    var wait = 0;
+    for (var s = 0; s < stepping.length; s++) {
+      var timing = stepping[s].effect && typeof stepping[s].effect.getTiming === 'function' ? stepping[s].effect.getTiming() : null;
+      if (timing && Number(timing.duration) > wait) wait = Math.round(Number(timing.duration));
+    }
+    if (!wait || !arrivals) return;
+    for (var a = 0; a < arrivals.length; a++) {
+      var part = arrivals[a];
+      if (!part || !part.classList || !part.classList.contains('is-arriving')) continue;
+      part.style.setProperty('--part-wait', wait + 'ms');
+      holdRite(part, 'arriving', wait + riteMs('medium', 320) * 2 + 100);
+    }
+  }
   function select(index) {
     var changed = selected !== index;
     selected = index;
     for (var i = 0; i < fieldStars.length; i++) {
       if (fieldStars[i].el) fieldStars[i].el.setAttribute('aria-pressed', i === index ? 'true' : 'false');
     }
-    if (sheet.remove) {
-      if (index < 0) conceal(sheet.remove);
-      else show(sheet.remove);
-    }
-    if (sheet.wordsForm) {
-      if (index < 0) conceal(sheet.wordsForm);
-      else show(sheet.wordsForm);
+    if (index < 0) {
+      conceal(sheet.remove, false, makeRoom);
+      conceal(sheet.wordsForm, false, makeRoom);
+    } else {
+      var parts = function () {
+        show(sheet.remove);
+        show(sheet.wordsForm);
+      };
+      if ((sheet.remove && sheet.remove.hidden) || (sheet.wordsForm && sheet.wordsForm.hidden)) {
+        makeRoom(parts, [sheet.remove, sheet.wordsForm]);
+      } else parts();
     }
     if (index >= 0) {
       if (changed && sheet.words) sheet.words.value = fieldStars[index].text;
@@ -1462,16 +1607,20 @@
     }
     drawField();
   }
-  // The focus put on a star. `placing` says it is being placed (the drop button's star, a seeded
-  // sky's first): the focus goes to it, so the arrow keys move it, but it is not chosen by that
-  // focus -- it is placed first, and chosen by the next press -- so it arrives as its light alone,
-  // and not as its light, its seal, the words form and the remove button all at once.
+  // The focus put on a star, which chooses it as any focus on a star does. `place` says it is being
+  // placed instead (a seeded sky's first): the focus goes to it, so the arrow keys move it, but it
+  // is not chosen by that focus -- it is placed first, and chosen by the next press -- so it arrives
+  // as its light alone, and not as its light, its seal, the words form and the remove button all at
+  // once. Nothing else stays chosen while it holds the focus, either: the words form and the remove
+  // button act on the chosen star, and a star the focus has left behind is not the one a visitor is
+  // on.
   var placing = null;
   function focusStar(index, place) {
     var star = fieldStars[index];
     var target = star && star.el ? star.el : sheet.drop;
     if (!target) return;
     placing = place && star && star.el ? star.el : null;
+    if (placing && selected >= 0) select(-1);
     try { target.focus(); }
     finally { placing = null; }
   }
@@ -1694,9 +1843,10 @@
      and the veil to come down, so what is cut away is a ghost of it, left where the sheet was
      (_sass/_persona.scss, .persona-sheet.persona-ghost) and going toward the control the focus
      goes home to -- scrolled where the sheet was and showing its pictures (ghostOf). Made before
-     the dialog closes -- a shut dialog has no box to measure -- from closeSheet and from the
-     browser's own Escape (the dialog's cancel event); and the last moment, too, to read where a
-     control that was set stands, for the mark the hand-off flies from it. */
+     the dialog closes -- a shut dialog has no box to measure -- by closeSheet, whichever way the
+     sheet is closed; and the last moment, too, to read where a control that was set stands, for
+     the mark the hand-off flies from it. Everything it reads it reads before it writes anything,
+     the ghost included. */
   var sheetGhost = null;
   function dropSheetGhost() {
     if (sheetGhost && sheetGhost.parentNode) sheetGhost.parentNode.removeChild(sheetGhost);
@@ -1712,10 +1862,20 @@
   }
   function openSheet(section, opener) {
     if (!sheet) return;
-    stopAskingInCard();
     var fresh = !sheet.host.open;
+    // Read before anything is written. The control the sheet comes out of is measured first, on the
+    // page as the visitor left it: once the page is put aside (sheetBox.up, which makes every other
+    // child of the body inert) the browser has to work out the style of the whole document again
+    // before it can answer for one box, and it would do that here, inside the press, and again for
+    // the dialog. Read now, it costs nothing; the one whole-document restyle the inert page needs
+    // is the one showModal() does.
+    var from = null;
     if (fresh) {
       openedBy = opener || document.activeElement || (card && card.open);
+      from = middleOf(openedBy);
+    }
+    stopAskingInCard();
+    if (fresh) {
       // A fresh visit: only what is set from here on is handed over on the way out, and a mark
       // still in the air from the last visit is taken away rather than stilled behind the veil,
       // as is a ghost of the sheet still leaving.
@@ -1726,7 +1886,7 @@
       // The sheet comes out of the control that opened it: the way and the treads are written
       // before it is shown, so its first frame is already the arrival's (is-arriving), and the
       // class comes off when the arrival is done.
-      var arrival = arriveFrom(sheet.host, 'sheet-in', openedBy);
+      var arrival = arriveFrom(sheet.host, 'sheet-in', from);
       if (typeof sheet.host.showModal === 'function') sheet.host.showModal();
       else { sheet.host.setAttribute('open', ''); sheet.host.classList.add('persona-sheet-fallback'); }
       if (arrival) rite(sheet.host, 'arriving', arrival + 100);
@@ -1752,14 +1912,40 @@
     } finally { dealing = false; }
     sheet.host.scrollTop = 0;
   }
+  /* Closing reads first and then writes, all in the one task, so the page is restyled whole once
+     and not once for each thing that changes. The ghost and the hand-off take what they need of
+     the open sheet (leaveSheetGhost); then the page is given back (sheetBox.down) before the
+     dialog closes, so the browser's own close of a modal dialog can hand the focus back to the
+     control that had it when the sheet opened -- which it can only do once that control is no
+     longer inert -- and the style it works out to do so is the one restyle the page needs. What
+     is read after it (where the hand-off's mark lands) is worked out on top of that one. */
   function closeSheet() {
     if (!sheet) return;
     if (sheet.host.open) {
       leaveSheetGhost();
+      if (sheetBox) sheetBox.down();
       if (typeof sheet.host.close === 'function') sheet.host.close();
       else sheet.host.removeAttribute('open');
     }
     onSheetClosed();
+  }
+  /* The focus going home, to the control that opened the sheet (or the avatar). Most often it is
+     there already: the browser's close of a modal dialog takes it back to where it was. Where it is
+     not -- a browser that does not focus the button it clicks, a sheet closed some other way -- it
+     is handed back on the next frame, where the look the browser takes at the page to focus it is
+     part of the restyle that frame does anyway, rather than a second one forced now. Unless the
+     focus has gone somewhere by then (the question, asked from the sheet, takes it at once): it
+     is only taken home from nowhere. */
+  function focusHome(back) {
+    var home = back && typeof back.focus === 'function' && document.contains(back) ? back : (card && card.open);
+    if (!home || typeof home.focus !== 'function' || document.activeElement === home) return;
+    if (typeof window.requestAnimationFrame !== 'function') { home.focus(); return; }
+    window.requestAnimationFrame(function () {
+      var now = document.activeElement;
+      var adrift = !now || now === document.body || now === document.documentElement
+        || (sheet && typeof sheet.host.contains === 'function' && sheet.host.contains(now));
+      if (adrift && !(sheet && sheet.host.open) && document.contains(home)) home.focus();
+    });
   }
   function onSheetClosed() {
     if (!sheet || sheet.host.open || !sheetWasOpen) return;
@@ -1780,8 +1966,7 @@
     if (card) card.castAfter = 0;
     var back = openedBy;
     openedBy = null;
-    if (back && typeof back.focus === 'function' && document.contains(back)) back.focus();
-    else if (card && card.open) card.open.focus();
+    focusHome(back);
     // Last of all, and after the veil has gone: the mark crosses a page the visitor has back, and
     // nothing about the focus coming home waits on an animation.
     handOff();
@@ -1820,6 +2005,9 @@
       tune: document.getElementById('persona-difficulty')
     };
     if (!sheet.field) { sheet = null; return; }
+    // The sky's name line holds its room from the start, empty until there is a sky to name
+    // (renderName), so the first star does not push the controls under it down.
+    if (sheet.name) sheet.name.hidden = false;
     // The third setting, in its own section: the same control the stage puts beside a piece, so a
     // visitor meets one slider wherever they meet the setting.
     if (sheet.tune) tuner(sheet.tune, { label: 'difficulty' });
@@ -1828,7 +2016,9 @@
       sheetBox = shell.lightbox({ name: 'persona', keep: host, onPress: closeSheet });
     }
     if (sheet.close) sheet.close.addEventListener('click', closeSheet);
-    host.addEventListener('cancel', leaveSheetGhost); // Escape, which closes the dialog itself
+    // Escape, which closes the dialog itself: closed here instead, through the same reads and the same
+    // order as the close button, and the browser's own close after it finds the dialog shut.
+    host.addEventListener('cancel', closeSheet);
     // The first preview, opened under the line that opens it, arrives out of that line each time it
     // is opened: the class goes on as the line is pressed, before the browser opens the box.
     var compareLine = sheet.comparison && sheet.comparison.querySelector ? sheet.comparison.querySelector('summary') : null;
@@ -1918,11 +2108,13 @@
     });
     document.addEventListener('pointerup', function (ev) { endDrag(ev.pointerId); });
     document.addEventListener('pointercancel', function (ev) { endDrag(ev.pointerId); });
+    // A star dropped is the one the visitor is on: the focus goes to it and chooses it, so its words
+    // are the form's and 'remove this star' takes it out, whichever star was chosen before.
     if (sheet.drop) sheet.drop.addEventListener('click', function () {
       var words = thought();
       var kept = addStar({ x: 50 + (Math.random() - 0.5) * 30,
         y: 50 + (Math.random() - 0.5) * 30, text: words });
-      focusStar(fieldStars.length - 1, true);
+      focusStar(fieldStars.length - 1);
       sheetStatus('✦ ' + words + namedLine() + ' Drag it where it belongs.' + keptNote(kept));
     });
     function seedTheSky() {
@@ -2017,7 +2209,7 @@
       if (sheet && sheet.host.open) renderReading();
     });
     var t = window.threshold;
-    if (t && typeof t.arrival === 'function' && t.arrival()) askInCard();
+    if (t && typeof t.arrival === 'function' && t.arrival()) askInCard(true);
   }
   window.interestingPersona = {
     key: SKY, maxStars: MAX_STARS, stars: stars, read: read, holds: holds,

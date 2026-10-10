@@ -41,9 +41,10 @@
                       the piece unfinished, and light nothing. Then set the answers right and
                       check again: solved, on the second try, with the done chip saying so.
     afterDone         Play a piece to its finish and then go on playing with it. Done is not the
-                      End (issue #86): six seconds after the ceremony the frames must still be
-                      drawing, the knobs must still be enabled and settable again, a tap must still
-                      reach the piece, nothing may have been torn down -- and the ceremony must have
+                      End (issue #86): six seconds after the ceremony a knob worked again or a tap
+                      must still set the piece's frames going, the knobs must still be enabled and
+                      settable again, a tap must still reach the piece, nothing may have been torn
+                      down -- and the ceremony must have
                       played once through all of it. Also where the done mark's place in the tree is
                       read off: a mark inside the scene is a mark over the content.
     sliderUsed        Play every knob, and use the slider without moving it -- the visitor is
@@ -998,8 +999,8 @@ const RESETTABLE = ['choice', 'toggle', 'range', 'number', 'word', 'order', 'pic
 
    Nothing here judges; the readings are what the assertions are made from. `later` and
    `drawing` are a second apart with nobody touching anything, so a frame count that moved between
-   them is the piece's own loop still drawing (the burst's frames are long spent by then). `afterKnob`
-   and `afterTap` are the stage still carrying a visitor's gestures to a piece it has already
+   them is a piece that never rests; one at rest holds still, and `afterKnob` and `afterTap` show its
+   frames coming back -- the stage still carrying a visitor's gestures to a piece it has already
    finished. And `completes` says the ceremony played once for all of that: a finished piece being
    playable is not a piece that finishes over and over. */
 async function afterDone(stageDir, worlds, deal, clock) {

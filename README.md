@@ -1860,7 +1860,8 @@ out of the way of the content it is reporting on.
 
 - **The stage holds to it.** `finish()` in [`site/js/stage.js`](site/js/stage.js) plays the
   ceremony, says *solved* beside the progress dots and lights the way on — and takes nothing away.
-  The frame loop keeps drawing, a tap on the scene still reaches the piece's `tap()`, every knob
+  The frames come back whenever the piece is worked again (a piece at rest asks for none: see "The
+  frames." in `js/stage.js`), a tap on the scene still reaches the piece's `tap()`, every knob
   stays enabled and can be set again (including one that was gated behind another, since every gate
   stands open once everything is set), and the piece keeps hearing `apply()` for all of it. There is
   no timeout, no fade-out, no inert state and no teardown in between: `close()` is the one teardown
@@ -1882,8 +1883,8 @@ out of the way of the content it is reporting on.
 - **Covered where the stage is covered.** The `afterDone` scenario in
   [`.github/scripts/stage_harness.mjs`](.github/scripts/stage_harness.mjs) plays a piece out, sits
   on it for six seconds the way the rounds do, and then goes on using it: it reads back whether the
-  frames are still drawing a second later, whether a knob worked again reaches the piece, whether a
-  tap on the scene reaches it, whether anything was torn down, where the done mark is in the tree,
+  frames come back when a knob is worked again or the scene is tapped, whether a knob worked again
+  reaches the piece, whether a tap on the scene reaches it, whether anything was torn down, where the done mark is in the tree,
   and how many times the ceremony played. `StageTest` plays a purpose-built piece through it that
   writes those counts onto its own live line, so what reaches a finished piece is read off the stage
   rather than taken on trust; `RealSiteTest` plays the site as committed, and holds the markup and

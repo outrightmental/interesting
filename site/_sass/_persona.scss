@@ -27,8 +27,8 @@
 //   avatar      the corner arrives behind a slice from the right, the screen edge it is pinned to
 //               (avatar-in); from then on a press stamps it as it stamps every control
 //   beckon      while there is no persona at all, the star in the empty portrait turns a quarter
-//               turn a beat, in even clicks: the one loop in this corner (persona-beckon), and it
-//               rests while a veil is up
+//               turn a beat, in even clicks, three beats as the page arrives and then it rests
+//               (persona-beckon); it holds still while a veil is up
 //   name        the sky's name opens beside the portrait on wax, its words cut in by a slice at the
 //               register's slant, and cut back out on wane
 //   flight      the mark going home on the straight line in landing treads (persona-flight), its
@@ -169,13 +169,16 @@
 }
 
 // The beckon. While there is no persona at all the avatar is the one control on the page that is
-// waiting for its first press, so it alone keeps a loop: the star it holds turns a quarter turn a
-// beat, in even clicks with a rest between beats (the pulse family, rolled once for the page). A
-// quarter turn brings a four-pointed star back onto itself, so every beat ends where it began and
-// nothing ever steps back. It is `rotate` on a star the size of a letter, which the compositor
-// draws alone; the label beside it and the portrait around it hold still.
+// waiting for its first press, so it alone beckons: the star it holds turns a quarter turn a beat,
+// in even clicks with a rest between beats (the pulse family, rolled once for the page), three
+// beats as the page arrives and then it rests. Three are enough to be seen and few enough to stop:
+// a beckon that never ended would keep the compositor and the GPU drawing for as long as the page
+// stood, for a step every second. A quarter turn brings a four-pointed star back onto itself, so
+// every beat ends where it began, nothing ever steps back, and the star at rest is the star the
+// beckon started from. It is `rotate` on a star the size of a letter, which the compositor draws
+// alone; the label beside it and the portrait around it hold still.
 .persona[data-state='empty'] .persona-portrait::after {
-  animation: persona-beckon var(--motion-persona-beckon, 2.4s) var(--ease-persona-beckon, var(--ease-pulse)) infinite;
+  animation: persona-beckon var(--motion-persona-beckon, 2.4s) var(--ease-persona-beckon, var(--ease-pulse)) 3;
 }
 
 @keyframes persona-beckon {
@@ -189,10 +192,10 @@
 }
 
 // Behind a veil (any lightbox up, html[data-lightbox]) nobody can see the star, and every step of
-// it would have the blur over the page drawn again, so the beckon rests there where it had turned
-// to and goes on when the page comes back. The shell stills everything it puts aside
-// (_lightbox.scss); this corner says so of its own loop as well, outranking the beckon's shorthand
-// above, which would otherwise set its play state back to running.
+// it would have the blur over the page drawn again, so a beckon still beating rests there where it
+// had turned to and finishes its beats when the page comes back. The shell stills everything it
+// puts aside (_lightbox.scss); this corner says so of its own beckon as well, outranking the
+// beckon's shorthand above, which would otherwise set its play state back to running.
 html[data-lightbox] .persona[data-state='empty'] .persona-portrait::after {
   animation-play-state: paused;
 }
@@ -218,14 +221,30 @@ html[data-lightbox] .persona[data-state='empty'] .persona-portrait::after {
 
 // With a persona the portrait is enough at rest, and the label carries the sky's name -- what the
 // persona reads the arrangement as (js/persona.js, skyName). It is printed beside the portrait on
-// wax (is-waxing from js/motion.js, :hover and :focus-visible for a page with no script), as the
-// site's name is printed beside the logo opposite it (_nav.scss): hover either mark and it says who
-// it is. The room for the name opens at once, and the words are cut into it by a slice at the
-// register's slant (--reveal-angle), the edge every line of words on the site arrives behind, in
-// the treads the wax was rolled (--ease-wax, written on the button and read here through it). On
-// wane the same slice cuts them back out, and the room closes in one jump when the wane has had its
-// length. Collapsed by max-width rather than hidden, so the button keeps its name in the
-// accessibility tree throughout; the width itself never moves by degrees.
+// wax (is-waxing from js/motion.js), as the site's name is printed beside the logo opposite it
+// (_nav.scss): hover either mark and it says who it is. The room for the name opens at once, and
+// the words are cut into it by a slice at the register's slant (--reveal-angle), the edge every
+// line of words on the site arrives behind, in the treads the wax was rolled (--ease-wax, written
+// on the button and read here through it). On wane the same slice cuts them back out, and the room
+// closes in one jump when the wane has had its length. Collapsed by max-width rather than hidden,
+// so the button keeps its name in the accessibility tree throughout; the width itself never moves
+// by degrees.
+//
+// :hover and :focus-visible print it only for a page the engine is not running on
+// (html:not([data-cut]); js/motion.js writes data-cut at load), and :hover only where there is a
+// pointer that hovers. With the engine, is-waxing alone draws it, and a tap -- which a touch
+// screen leaves "hovering" until the next tap somewhere else -- is a press and never a hover: the
+// name does not open on a tap and stay open after the sheet it opened has closed.
+@mixin name-shown {
+  max-width: 13rem;
+  margin-left: 0;
+  margin-right: 0.5rem;
+  opacity: 1;
+  transition: none;
+  mask: cut.slice(var(--reveal-angle, 100deg));
+  @include cut.play(in, wax, medium);
+}
+
 .persona:not([data-state='empty']) .persona-label {
   max-width: 0;
   margin-left: -0.6rem; // the flex gap the collapsed label would otherwise hold open
@@ -239,16 +258,15 @@ html[data-lightbox] .persona[data-state='empty'] .persona-portrait::after {
     opacity 0s var(--ease-stair) var(--motion-wane, var(--motion-medium));
 }
 
-.persona:not([data-state='empty']) .persona-avatar:hover .persona-label,
 .persona:not([data-state='empty']) .persona-avatar.is-waxing .persona-label,
-.persona:not([data-state='empty']) .persona-avatar:focus-visible .persona-label {
-  max-width: 13rem;
-  margin-left: 0;
-  margin-right: 0.5rem;
-  opacity: 1;
-  transition: none;
-  mask: cut.slice(var(--reveal-angle, 100deg));
-  @include cut.play(in, wax, medium);
+:where(html:not([data-cut])) .persona:not([data-state='empty']) .persona-avatar:focus-visible .persona-label {
+  @include name-shown;
+}
+
+@media (hover: hover) {
+  :where(html:not([data-cut])) .persona:not([data-state='empty']) .persona-avatar:hover .persona-label {
+    @include name-shown;
+  }
 }
 
 .persona:not([data-state='empty']) .persona-avatar.is-waning .persona-label {
@@ -277,13 +295,21 @@ html[data-lightbox] .persona[data-state='empty'] .persona-portrait::after {
 
 // Each is sealed on as the grammar seals what has been set: by a curve, here from the portrait's
 // lower left, the side of the page the question was answered on and the mark comes home from.
-// The question's ring is struck as the persona starts asking (data-asking); the reading's the
-// moment a reading is first read while a visitor watches (is-read, from js/persona.js) -- the
-// question answered in the card giving way to its reading, most often -- and one carried in from
-// an earlier page is simply worn, since nobody watched it arrive.
+// The question's ring is struck as the persona starts asking (is-asked, from js/persona.js, put on
+// as data-asking goes true); the reading's the moment a reading is first read while a visitor
+// watches (is-read) -- the question answered in the card giving way to its reading, most often --
+// and one carried in from an earlier page is simply worn, since nobody watched it arrive. Each
+// curve is on the ring only while it is being cut: js/persona.js takes the passing class off once
+// the cut has had its length, and the ring stands unmasked for as long as it is worn.
 .persona[data-asking='true'] .persona-portrait::before {
   border-color: var(--md-sys-color-primary);
+}
+
+// The curve cuts the ring in afresh in the question's colour, so the colour does not step on its
+// own beside it as well: one edge.
+.persona.is-asked[data-asking='true'] .persona-portrait::before {
   mask: cut.curve(18%, 82%);
+  transition: none;
   @include cut.play(in, portrait-ask, medium);
 }
 
@@ -296,9 +322,10 @@ html[data-lightbox] .persona[data-state='empty'] .persona-portrait::after {
 }
 
 // The reading's seal is the edge cut-in steps, under a name of its own. The question's ring gives
-// way to the reading's on one frame (data-asking goes false as is-read goes on), and an animation
-// whose name has not changed is not started again: under cut-in's name the ring would only have
-// changed its colour. Under its own, the curve is cut afresh.
+// way to the reading's on one frame (data-asking goes false as is-read goes on), and if the
+// question was answered while its own ring was still being cut, an animation whose name has not
+// changed is not started again: under cut-in's name the ring would only have changed its colour.
+// Under its own, the curve is cut afresh.
 @keyframes reading-seal {
   from {
     --cut: 0%;
@@ -437,6 +464,13 @@ html[data-lightbox] .persona[data-state='empty'] .persona-portrait::after {
 // leaves where it was (.persona-probe.is-unmaking, below), toward the avatar the answer goes home to.
 .persona-probe {
   margin-top: 0.5rem;
+}
+
+// The question's box takes the focus as it is put (js/persona.js, askInCard), so a screen reader is
+// in the question and the next Tab reaches its first answer. It is not a control and is never
+// tabbed to, so it wears no ring: the ring belongs to the answer the visitor moves to.
+.persona-probe:focus-visible {
+  outline: none;
 }
 
 // ---- the sheet ---------------------------------------------------------------------------
@@ -579,8 +613,12 @@ html[data-lightbox] .persona[data-state='empty'] .persona-portrait::after {
   transition: outline-color var(--motion-medium) var(--ease-stair);
 }
 
-.persona-sky:hover {
-  outline-color: color-mix(in oklab, var(--md-sys-color-primary) 55%, transparent);
+// Only where a pointer hovers: a tap on a touch screen leaves the sky "hovered" until the next tap
+// lands somewhere else, and its edge would stay lit after every star placed.
+@media (hover: hover) {
+  .persona-sky:hover {
+    outline-color: color-mix(in oklab, var(--md-sys-color-primary) 55%, transparent);
+  }
 }
 
 .persona-sky-canvas {
@@ -595,11 +633,27 @@ html[data-lightbox] .persona[data-state='empty'] .persona-portrait::after {
 
 // The sky's name, under the field: what the persona reads the arrangement as (js/persona.js,
 // skyName), renamed live as a star is dragged across a boundary -- its words cut in by the reveal's
-// slice (js/motion.js), and the line arriving behind a slice when it first has a name to show.
+// slice (js/motion.js). The line holds a line's room even while the sky has no name, so the first
+// star placed cuts its name into a line already standing and the controls under it stay where they
+// are; clearing the sky cuts the words away and leaves the line empty.
 .persona-sky-name {
+  min-height: 1.25rem; // title-small's line, for a browser that does not know the lh unit
+  min-height: 1lh;
   margin: 0;
   color: var(--md-sys-color-tertiary);
   @include type.scale(title-small);
+}
+
+// The room is the first star's name: one line where the sheet is wide, and two where it is narrow
+// (the phone's sheet, below), which is where '✦ the lone star — one star, close-knit, keeping to
+// the north-west' and its like wrap. That holds it in most registers down to the narrowest screen;
+// one that sets its words wider still pushes what is under the line down, which steps there
+// (js/persona.js, makeRoom) rather than jumping.
+@media (max-width: 599px) {
+  .persona-sky-name {
+    min-height: 2.5rem;
+    min-height: 2lh;
+  }
 }
 
 // A figure found -- a shape with a name of its own (js/persona.js, figureOf) -- is one of the
@@ -620,14 +674,19 @@ html[data-lightbox] .persona[data-state='empty'] .persona-portrait::after {
   @include type.rite;
 }
 
-// What comes and goes in the sheet -- the name, the thread, the words form, the remove and forget
-// buttons, the world the reading points at, the preview and its comparison -- arrives behind a
-// slice when js/persona.js shows it (is-arriving, with the direction and the treads it rolls for
-// each showing, m.arrive) and is cut away (is-unmaking) before it is hidden, never switched. Only
-// what is shown arrives, on the arrival's one stair: words given to a part as it arrives come with
-// it, and a part already in view keeps its place while its new words are cut in by the reveal.
+// What comes and goes in the sheet -- the thread, the words form, the remove and forget buttons,
+// the world the reading points at, the preview and its comparison -- arrives behind a slice when
+// js/persona.js shows it (is-arriving, with the direction and the treads it rolls for each showing,
+// m.arrive) and is cut away (is-unmaking) before it is hidden, never switched. Only what is shown
+// arrives, on the arrival's one stair: words given to a part as it arrives come with it, and a part
+// already in view keeps its place while its new words are cut in by the reveal. The sky's name is
+// a line that stays: its words are cut away the same way when the sky is cleared, and the line is
+// left standing, empty. A part that pushes what is under it down (the thread, the words form, the
+// remove button) takes its room at once and waits in it, cut away, while what it pushed steps
+// aside (js/persona.js, makeRoom, which writes the wait as --part-wait), and only then is cut in.
 .persona-sheet .is-arriving {
   @include cut.develop(part-in, medium);
+  animation-delay: var(--part-wait, 0ms);
 }
 
 .persona-sheet .is-unmaking,
@@ -802,11 +861,23 @@ button.persona-star {
   opacity: 0;
 }
 
-.persona-star.is-waxing .persona-star-light::before,
-.persona-star:hover .persona-star-light::before {
+@mixin star-lit {
   opacity: 0.16;
   mask: cut.slice();
   @include cut.play(in, wax, medium);
+}
+
+.persona-star.is-waxing .persona-star-light::before {
+  @include star-lit;
+}
+
+// A star under the pointer with no engine to wax it (html:not([data-cut])), and only where a
+// pointer hovers at all: on a touch screen a tapped star would otherwise go on "hovering", lit, for
+// as long as nothing else was tapped.
+@media (hover: hover) {
+  :where(html:not([data-cut])) .persona-star:hover .persona-star-light::before {
+    @include star-lit;
+  }
 }
 
 .persona-star.is-waning .persona-star-light::before {
@@ -993,11 +1064,11 @@ button.persona-star {
   .persona[data-state='empty'] .persona-portrait::after,
   .persona.is-casting .persona-portrait canvas,
   .persona.is-casting .persona-portrait::after,
-  .persona:not([data-state='empty']) .persona-avatar:hover .persona-label,
+  :where(html:not([data-cut])) .persona:not([data-state='empty']) .persona-avatar:hover .persona-label,
   .persona:not([data-state='empty']) .persona-avatar.is-waxing .persona-label,
-  .persona:not([data-state='empty']) .persona-avatar:focus-visible .persona-label,
+  :where(html:not([data-cut])) .persona:not([data-state='empty']) .persona-avatar:focus-visible .persona-label,
   .persona:not([data-state='empty']) .persona-avatar.is-waning .persona-label,
-  .persona[data-asking='true'] .persona-portrait::before,
+  .persona.is-asked[data-asking='true'] .persona-portrait::before,
   .persona.is-read .persona-portrait::before,
   .persona-sheet[open].is-arriving,
   .persona-sheet.persona-ghost,
@@ -1005,7 +1076,7 @@ button.persona-star {
   .persona-sheet .is-unmaking,
   .persona-probe.is-unmaking,
   .persona-star.is-waxing .persona-star-light::before,
-  .persona-star:hover .persona-star-light::before,
+  :where(html:not([data-cut])) .persona-star:hover .persona-star-light::before,
   .persona-star.is-waning .persona-star-light::before,
   .persona-star.is-placed .persona-star-light,
   .persona-star.persona-star-ghost,

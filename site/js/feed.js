@@ -37,20 +37,30 @@
    length, which it also uses to know when the movement is over. A card dealt waits rolled up
    (card-rolled) until it first meets the viewport, then develops (card-enter) a stagger after the
    card before it in its batch, up from below, or down from above for a card met while scrolling
-   back up; a face re-dealt by "another" or by the sky arriving is cut away where it stands
-   (card-redeal) before the new one is cut in (is-dealt); a card taken goes up toward the stage
-   (card-leave, and card-taken for the one pressed); a badge pinned on comes down (is-dealt) and one
-   taken off lifts away (is-gone); the suggested card and the unpowered one are sealed in their fill
-   (is-sealing / is-unsealing); and when the columns are laid again every card near the screen that
-   changed its place jumps there in the treads of one stair (js/motion.js flip).
+   back up; a face re-dealt by "another" or by the sky arriving is cut away where it stands by one
+   slice over its link (card-redeal), and the new one is cut in by one slice from the tread that
+   cut lands on (is-dealt), so the card is never blank between them; a card taken goes up toward
+   the stage (card-leave, and card-taken for the one pressed); a badge pinned on comes down
+   (is-dealt) and one taken off lifts away (is-gone); the suggested card and the unpowered one are
+   sealed in their fill (is-sealing / is-unsealing); and when the columns are laid again every card
+   near the screen that changed its place jumps there in the treads of one stair (js/motion.js
+   flip). Nothing here listens to the pointer: a card's wax is the engine's, and the engine waxes
+   only for a pointer that moves, so the cards a still pointer passes over while the page steps up
+   to the stage stay as they are.
 
    What it costs. A movement is played only where the visitor can see it: a card off screen simply
    takes its new state and its new place, and a module's frames are drawn only for a card on
-   screen. The page is laid out once for a batch of cards, never once per card: sizes and colours
-   are read in one pass before anything is written or moved. Nothing here animates a size: a plate
-   that changes its shape is its new size at once while its face is cut away. The engine is
-   optional throughout: without it the classes still go on and the clock takes them off. */
-import { roll, PLAIN, recolor, aspect, light, mulberry32, hash, mix, alpha, rite } from './variant.js';
+   screen; a card settled off screen is not drawn at all (content-visibility, _sass/_feed.scss). The
+   page is styled and laid out once for a batch of cards, never once per card: a card dealt is put
+   straight into the column a guess at its height says it will stay in, and tinted there, and the
+   batch's heights are read in one pass after that (a guess that missed is put right before the
+   card is ever drawn); a batch painted reads every plate's size and colours first, then sizes and
+   paints the canvases, then puts its classes on. Whether the feed needs more is the
+   sentinel's watcher's to say, after the page has been laid out, never a measurement taken in
+   between. Nothing here animates a size: a plate that changes its shape is its new size at once
+   while its face is cut away. The engine is optional throughout: without it the classes still go
+   on and the clock takes them off. */
+import { roll, PLAIN, recolor, aspect, ratioOf, light, mulberry32, hash, mix, alpha, rite } from './variant.js';
 
 const persona = window.interestingPersona;
 const root = document.documentElement.getAttribute('data-root') || '';
@@ -107,13 +117,35 @@ function riteMs(name) {
 }
 
 // One movement's treads and length, rolled by the engine for this trigger alone and written on
-// the element as --ease-<rite> and --motion-<rite>, which the stylesheet reads (m.cut). Hands back
-// the length in ms -- the duration's own length when there is no engine -- for the timer that
-// stands in for the movement's end.
-function cut(node, rite, duration) {
+// the element as --ease-<rite> and --motion-<rite>, which the stylesheet reads (m.cut); `family`
+// names the stair when it is not the rite's own. Hands back the length in ms -- the duration's own
+// length when there is no engine -- for the timer that stands in for the movement's end.
+function cut(node, rite, duration, family) {
   const motion = engine();
-  const got = node && !calm.matches && motion && typeof motion.cut === 'function' ? motion.cut(node, rite, { duration }) : 0;
+  const options = family ? { duration, family } : { duration };
+  const got = node && !calm.matches && motion && typeof motion.cut === 'function' ? motion.cut(node, rite, options) : 0;
   return got || riteMs(duration);
+}
+
+// A stair the engine cut on `node` for `rite` (`length` ms), made to end on the tread it lands on:
+// every tread keeps its moment, and the movement stops where its edge would have gone all the way,
+// so its end -- an animationend, handled before the frame it falls in is drawn -- is its landing,
+// and whatever takes the landing's place is put in on that tread. The stair is the very one the
+// stylesheet plays, read back off the element (linear(): the treads and the moments they fall at);
+// one it cannot read is left as it is. Hands back the new length.
+function landOnEnd(node, rite, length) {
+  const stair = /^\s*linear\((.*)\)\s*$/.exec(node.style.getPropertyValue('--ease-' + rite));
+  if (!stair || !length) return length;
+  const stops = stair[1].split(',').map((stop) => stop.trim().split(/\s+/));
+  const landed = stops.find(([y, at]) => at && parseFloat(y) >= 1);
+  const end = landed ? parseFloat(landed[1]) / 100 : 1;
+  if (!(end > 0 && end < 1)) return length;
+  const kept = stops.filter(([, at]) => !at || parseFloat(at) / 100 <= end)
+    .map(([y, at]) => at ? y + ' ' + Math.round(parseFloat(at) / end * 10) / 10 + '%' : y);
+  const ends = Math.round(length * end);
+  node.style.setProperty('--ease-' + rite, 'linear(' + kept.join(', ') + ')');
+  node.style.setProperty('--motion-' + rite, ends + 'ms');
+  return ends;
 }
 
 // A passing rite: its class goes on now, in the same task as the change it marks, so no frame is
@@ -336,10 +368,25 @@ function makeEnv(card, seed, world, variant, starsOverride, colorsOverride) {
   };
 }
 
+// The colours a card's own mood gives it (_sass/_mood.scss: a card wears its world's palette by its
+// data-mood, whatever the page around it wears), read once a mood -- off the cards the template
+// wrote, as the feed starts (registerStatic), or off the first card of a mood met later -- and
+// kept: every card of that mood starts from the same four seeds, so the feed asks the page's style
+// for them once a mood and not once a card.
+const bases = new Map();
+function baseOf(card) {
+  const mood = card.dataset.mood || '';
+  if (mood && bases.has(mood)) return bases.get(mood);
+  const base = readColors(card);
+  if (mood) bases.set(mood, base);
+  return base;
+}
+
 // A tint is written as custom properties, and the stylesheet steps every colour that derives from
 // them to the new palette along the stair (_feed.scss), so a re-tinted card never cuts or fades.
-// Each card's own colours (its world's, from its data-mood) are read for the whole list before any
-// card is written to, so a batch costs the page one style pass for the reading and not one a card.
+// Each card's own colours (its world's, from its mood) are known, or read for the whole list,
+// before any card is written to, so a batch costs the page at most one style pass for the reading
+// and not one a card.
 function tintAll(list) {
   const due = list.filter((card) => {
     const m = meta.get(card);
@@ -347,7 +394,7 @@ function tintAll(list) {
   });
   for (const card of due) {
     const m = meta.get(card);
-    if (!m.base) m.base = readColors(card);
+    if (!m.base) m.base = baseOf(card);
   }
   for (const card of due) {
     const m = meta.get(card);
@@ -475,41 +522,43 @@ function unpowered(card, is, first) {
   setAs(card, 'card-unpowered', is, first);
 }
 
-async function paint(card) {
-  const m = meta.get(card);
-  if (!m || !m.canvas || !card.isConnected) return;
-  // The plate's size and the card's colours are read together, before anything is written (the
-  // card is tinted when it is placed, so tint() here has nothing left to write), and the canvas is
-  // sized only after: a watcher painting a row of cards lays the page out once for the row and not
-  // once for each card.
-  tint(card, m);
-  const box = m.canvas.parentNode;
-  const w = box.clientWidth;
-  const h = box.clientHeight;
-  const colors = readColors(card);
-  const mod = m.id ? await loadModule(m.id) : null;
-  if (meta.get(card) !== m || !m.canvas || m.canvas.parentNode !== box) return;
-  if (!w || !h) return;
-  const ctx = sizeCanvas(m.canvas, w, h);
-  if (!ctx) return;
-  const env = makeEnv(card, m.seed, m.world, m.variant, null, colors);
-  const first = !m.painted;
-  Object.assign(m, { ctx, w, h, env, painted: true, dirty: false, animate: null, at: null });
-  if (mod && mod.needsSky && !env.stars.length) {
-    const ghost = makeEnv(card, m.seed, m.world, m.variant, ghostSky(m.seed, env.variant), Object.assign({}, colors));
-    if (typeof mod.paint === 'function') mod.paint(ctx, w, h, ghost);
-    else paintFallback(ctx, w, h, ghost);
-    paintUnpowered(ctx, w, h, env);
-    unpowered(card, true, first);
-    return;
+// A batch of cards painted (a row a watcher meets, the cards a laying or a new sky changed), in
+// three passes so the page is styled and laid out once for the lot and not once a card. First
+// every plate's size and every card's colours are read, before anything is written (each card was
+// tinted when it was placed, so the tint here has nothing left to write). Then, with the modules
+// loaded, every canvas is sized and then painted, with nothing else written between them: a module
+// that sets a font on its canvas finds the page's style as the reading left it. Only then does any
+// card take a class (unpowered or not) or a watcher for its frames.
+async function paintAll(list) {
+  tintAll(list);
+  const jobs = [];
+  for (const card of list) {
+    const m = meta.get(card);
+    if (!m || !m.canvas || !card.isConnected) continue;
+    const box = m.canvas.parentNode;
+    jobs.push({ card, m, box, w: box.clientWidth, h: box.clientHeight, colors: readColors(card) });
   }
-  unpowered(card, false, first);
-  const painter = m.spec && m.spec.paint || mod && mod.paint;
-  if (painter) painter(ctx, w, h, env);
-  else paintFallback(ctx, w, h, env);
-  if (!(m.spec && m.spec.paint) && mod && typeof mod.animate === 'function') {
-    m.animate = mod.animate;
-    if (viewer) {
+  if (!jobs.length) return;
+  const mods = await Promise.all(jobs.map((job) => job.m.id ? loadModule(job.m.id) : null));
+  const ready = jobs.filter((job, i) => {
+    const { card, m, box, w, h } = job;
+    job.mod = mods[i];
+    if (meta.get(card) !== m || !m.canvas || m.canvas.parentNode !== box || !w || !h) return false;
+    job.ctx = sizeCanvas(m.canvas, w, h);
+    return !!job.ctx;
+  });
+  for (const job of ready) {
+    try {
+      draw(job);
+    } catch (error) {
+      console.error('Could not paint a card for ' + job.m.world.name, error);
+    }
+  }
+  for (const job of ready) {
+    const { card, m } = job;
+    if (job.unpowered === undefined || meta.get(card) !== m) continue;
+    unpowered(card, job.unpowered, job.first);
+    if (m.animate && viewer) {
       if (m.watched !== m.canvas) {
         if (m.watched) viewer.unobserve(m.watched);
         m.watched = m.canvas;
@@ -518,6 +567,29 @@ async function paint(card) {
       } else if (m.inView) activate(card);
     }
   }
+}
+
+// One card's picture, drawn on the canvas sized for it: by its module (or the face's own painter),
+// or over a ghost of a sky not yet cast for a module that needs one, which the card then wears as
+// unpowered. What the card is to be set as is noted for the pass that puts classes on.
+function draw(job) {
+  const { card, m, ctx, w, h, colors, mod } = job;
+  const env = makeEnv(card, m.seed, m.world, m.variant, null, colors);
+  job.first = !m.painted;
+  Object.assign(m, { ctx, w, h, env, painted: true, dirty: false, animate: null, at: null });
+  if (mod && mod.needsSky && !env.stars.length) {
+    const ghost = makeEnv(card, m.seed, m.world, m.variant, ghostSky(m.seed, env.variant), Object.assign({}, colors));
+    if (typeof mod.paint === 'function') mod.paint(ctx, w, h, ghost);
+    else paintFallback(ctx, w, h, ghost);
+    paintUnpowered(ctx, w, h, env);
+    job.unpowered = true;
+    return;
+  }
+  job.unpowered = false;
+  const painter = m.spec && m.spec.paint || mod && mod.paint;
+  if (painter) painter(ctx, w, h, env);
+  else paintFallback(ctx, w, h, env);
+  if (!(m.spec && m.spec.paint) && mod && typeof mod.animate === 'function') m.animate = mod.animate;
 }
 
 // The cards whose module is drawing them, frame by frame, while they are on screen. Nothing else
@@ -576,12 +648,14 @@ function frame(now) {
 // scrolling from. And one runs a card's frames only while its picture is on screen; it watches only
 // the pictures whose module moves, so a still card costs it nothing.
 const watcher = 'IntersectionObserver' in window ? new IntersectionObserver((entries) => {
+  const due = [];
   for (const entry of entries) {
     const m = meta.get(entry.target);
     if (!m) continue;
     m.near = entry.isIntersecting;
-    if (m.near && (!m.painted || m.dirty)) paint(entry.target);
+    if (m.near && (!m.painted || m.dirty)) due.push(entry.target);
   }
+  paintAll(due);
 }, { rootMargin: '320px 0px' }) : null;
 
 // Where the page was scrolled the last time cards were met: a batch met with the page scrolled
@@ -620,16 +694,39 @@ function columnCount() {
   const min = window.innerWidth < 600 ? 150 : 230;
   return Math.max(1, Math.min(6, Math.floor((grid.clientWidth + gap) / (min + gap))));
 }
-function shortest() {
+// The shortest of the columns, by `of` (the heights the columns came to, or a guess at them).
+function shortest(of = heights) {
   let s = 0;
-  for (let i = 1; i < heights.length; i++) if (heights[i] < heights[s]) s = i;
+  for (let i = 1; i < of.length; i++) if (of[i] < of[s]) s = i;
   return s;
 }
-// What a card needs once it has its place: its tint, and -- where no watcher will see it -- its
-// picture and its arrival now.
+// A card settled off screen is not drawn (content-visibility, _sass/_feed.scss): it stands, and
+// answers, at the height it had when it was last drawn. One whose face has changed since, or whose
+// column has changed its width, would stand at a height it no longer has, and would jump to its
+// own when the visitor reached it, pushing its column about under their eyes. So such a card is
+// drawn again (card-measured) while it is measured and through the next frame -- in which the page
+// keeps its new height for it -- and only then left undrawn again.
+const measuring = new Set();
+let measured = 0;
+function measure(list) {
+  if (!list.length) return;
+  for (const card of list) {
+    card.classList.add('card-measured');
+    measuring.add(card);
+  }
+  if (measured) cancelAnimationFrame(measured);
+  measured = requestAnimationFrame(() => {
+    measured = requestAnimationFrame(() => {
+      measured = 0;
+      for (const card of measuring) card.classList.remove('card-measured');
+      measuring.clear();
+    });
+  });
+}
+// What a card needs once it has its place, where no watcher will see it: its picture and its
+// arrival now.
 function placed(card) {
-  tint(card, meta.get(card));
-  if (!watcher && meta.get(card).canvas) paint(card);
+  if (!watcher && meta.get(card).canvas) paintAll([card]);
   if (!developer) develop(card, 0);
 }
 // A card is placed in the shortest column, by its height already read (`size`). Laying the columns
@@ -648,34 +745,64 @@ function place(card, cursors, size) {
   heights[s] += size + gap;
   placed(card);
 }
+// How tall a card's picture stands in a column of the width the columns were last laid at.
+function plateOf(card) {
+  const m = meta.get(card);
+  const box = m && m.canvas && m.canvas.parentNode;
+  const ratio = box ? ratioOf(box.style.aspectRatio) : 0;
+  return ratio ? laidWidth / ratio : 0;
+}
+// What a card's words and its actions took below its picture, in the last batch measured.
+let words = 160;
 // A batch dealt goes on the ends of the columns, rolled up, to develop when its watcher sees it.
-// Its cards are put down in the first column together, and their heights and their own colours are
-// read in one pass -- the page laid out once for the lot -- before any of them is tinted; each then
-// goes to whichever column is shortest, by arithmetic on the heights already known (one that falls
-// to the first column is already in its place, after the others of the batch that fell there).
+// Each card goes straight into the column it will stay in -- whichever will then be shortest, by
+// the heights already known and a guess at the card's own (its picture at the columns' width, and
+// the words' height the last batch took) -- so it is styled once, where it stands. The batch is
+// tinted there, and only then are its heights read, in one pass that covers the tint too: the page
+// laid out once for the lot. Then each card's column is settled by its real height, by the rule
+// every laying of the columns places cards by (place()), so the next laying finds every card
+// already where it belongs; a guess that missed is put right, in order, before the card has ever
+// been drawn.
 function lay(batch) {
   if (!columns.length) {
     for (const card of batch) grid.appendChild(card);
     return;
   }
-  for (const card of batch) columns[0].appendChild(card);
-  const sizes = batch.map((card) => card.offsetHeight);
-  tintAll(batch);
-  batch.forEach((card, i) => {
-    const s = shortest();
-    if (s) columns[s].appendChild(card);
-    heights[s] += sizes[i] + gap;
-    placed(card);
+  const guess = heights.slice();
+  const into = batch.map((card) => {
+    const s = shortest(guess);
+    guess[s] += plateOf(card) + words + gap;
+    columns[s].appendChild(card);
+    return s;
   });
+  tintAll(batch);
+  const sizes = batch.map((card) => card.offsetHeight);
+  let below = 0;
+  let missed = -1;
+  const real = batch.map((card, i) => {
+    const s = shortest();
+    heights[s] += sizes[i] + gap;
+    below += sizes[i] - plateOf(card);
+    if (missed < 0 && s !== into[i]) missed = i;
+    return s;
+  });
+  if (missed >= 0) for (let i = missed; i < batch.length; i++) columns[real[i]].appendChild(batch[i]);
+  if (batch.length) words = Math.max(0, below / batch.length);
+  for (const card of batch) placed(card);
 }
 // Changes that alter a card's height (a face re-dealt with another plate) wait for the next laying
 // and are made inside it, so the cards they push aside are measured before and after and step to
 // their new places with the rest.
 const pending = [];
+// The width the columns were last laid at: a card painted at another width is painted again.
+let laidWidth = 0;
 // The columns are kept from one laying to the next and made or taken away only when their number
-// changes, so a relayout restarts no card's movement; a card whose plate changed width, or that was
-// given a new plate, is repainted. Every card's height is read in one pass before any card is moved:
-// the columns share one width, so which column a card lands in does not change how tall it is.
+// changes, so a relayout restarts no card's movement; when their width changes every card painted
+// is painted again, and a card given a new plate is painted. Every card is tinted, and then every
+// card's height read, in one pass before any card is moved: the columns share one width, so which
+// column a card lands in does not change how tall it is. A card whose height may have changed out
+// of sight -- every card when the width has, a card with a new face -- is drawn to be measured
+// (measure()); any other answers with the height it already stands at.
 function rebuild(change) {
   if (change) pending.push(change);
   if (relayoutHandle) {
@@ -683,6 +810,7 @@ function rebuild(change) {
     relayoutHandle = 0;
   }
   const changes = pending.splice(0);
+  let resized = false;
   flipCards(() => {
     for (const made of changes) made();
     grid.classList.add('is-masonry');
@@ -700,20 +828,30 @@ function rebuild(change) {
     }
     // A card the template wrote, not yet in a column, joins the first.
     for (const card of cards) if (!card.parentNode || card.parentNode === grid) columns[0].appendChild(card);
-    const sizes = cards.map((card) => card.offsetHeight);
     tintAll(cards);
+    const width = columns[0].clientWidth;
+    resized = width !== laidWidth;
+    laidWidth = width;
+    measure(cards.filter((card) => {
+      const m = meta.get(card);
+      const afresh = resized || !!(m && m.stale);
+      if (m) m.stale = false;
+      return afresh;
+    }));
+    const sizes = cards.map((card) => card.offsetHeight);
     heights = columns.map(() => 0);
     const cursors = columns.map(() => 0);
     cards.forEach((card, i) => place(card, cursors, sizes[i]));
   });
   laid = true;
+  const due = [];
   for (const card of cards) {
     const m = meta.get(card);
-    if (!m || !m.canvas || !m.canvas.parentNode) continue;
-    if (!m.dirty && (!m.painted || m.canvas.parentNode.clientWidth === m.w)) continue;
-    m.dirty = true;
-    if (m.near) paint(card);
+    if (!m || !m.canvas) continue;
+    if (resized && m.painted) m.dirty = true;
+    if (m.dirty && m.near) due.push(card);
   }
+  paintAll(due);
 }
 function add(card, first) {
   if (first) cards.unshift(card);
@@ -748,6 +886,9 @@ function registerStatic() {
     if (world) statics.push([card, world]);
   }
   const below = statics.map(([card]) => !calm.matches && belowTheFold(card));
+  // Every world has a card here, so every mood a card is dealt in is read now, while the page's
+  // style is still clean from the reading above, and never again while a batch is being laid.
+  for (const [card] of statics) baseOf(card);
   statics.forEach(([card, world], i) => {
     const seed = (hash(world.file) ^ salt) >>> 0;
     meta.set(card, { kind: 'world', world, id: world.id, seed,
@@ -826,14 +967,15 @@ function sparkCard(world, mod, seed) {
   return card;
 }
 // Another face for the card: what the card is showing (m.spec, which take() and a press hand on)
-// changes at once; what the visitor sees is cut away first where it stands, by a slice going up
-// (card-redeal), and the new face is swapped in when that has played and cut in where it stands by
-// a slice from below, its picture and then its words (is-dealt). A plate that changes its shape,
-// or is put on or taken off, is its new size at once -- the card's old face is cut away by then and
-// the new one not yet cut in, so nothing is drawn mid-way -- and the swap is made inside a laying
-// of the columns, so the cards it pushes aside step to their new places in the treads of one stair
-// (flipCards). Nothing animates a height. A card the visitor cannot see simply shows its new face,
-// made in the next laying with any others.
+// changes at once; what the visitor sees is cut away first where it stands, by one slice over the
+// whole link stepping down to the side the new face comes in from (card-redeal), and the new face
+// is put in on the tread that slice lands on -- the moment its edge would leave the card blank --
+// and cut in where it stands by one slice from below, whose first tread is taken at once
+// (is-dealt), so no frame shows the card empty. A plate that changes its shape, or is put on or
+// taken off, is its new size at once, in the frame the new face comes in, and the swap is made
+// inside a laying of the columns, so the cards it pushes aside step to their new places in the
+// treads of one stair (flipCards). Nothing animates a height. A card the visitor cannot see simply
+// shows its new face, made in the next laying with any others.
 function reroll(card, keepSeed) {
   const m = meta.get(card);
   if (!m || !m.mod) return;
@@ -849,12 +991,12 @@ function reroll(card, keepSeed) {
   if (!spec) return;
   Object.assign(m, { seed, variant, spec });
   const live = seen(card);
-  // Only the newest face is made: a swap still waiting when another face is dealt does nothing.
+  const link = card.querySelector('.card-link');
+  // Only the newest face is made: a swap still waiting when another face is dealt makes that one.
   const face = {};
   m.face = face;
   const change = () => {
-    if (meta.get(card) !== m || m.face !== face || !card.isConnected) return;
-    const link = card.querySelector('.card-link');
+    if (meta.get(card) !== m || m.face !== face || !card.isConnected || !link) return;
     link.replaceChild(sparkBody(m.world, m.spec), link.querySelector('.card-body'));
     const plate = link.querySelector('.card-media');
     const ratio = aspect(m.spec.aspect || m.world.aspect, m.variant);
@@ -870,52 +1012,47 @@ function reroll(card, keepSeed) {
       plate.style.aspectRatio = ratio;
     }
     // Painted afresh once the columns are laid (rebuild), and quietly: a face cut in whole wears
-    // whatever state it has from the start.
+    // whatever state it has from the start. Measured afresh too (measure()): off screen, the height
+    // the card stands at is its old face's.
     m.painted = false;
     m.dirty = true;
+    m.stale = true;
   };
-  const swap = () => {
+  // The newest face put in: where the visitor sees the card, cut in by the one slice over the link
+  // from its first tread (the shift's stair, which has no opening hold), and the columns laid
+  // again round it; anywhere else, at the next laying.
+  m.redeal = () => {
+    if (m.swap) window.clearTimeout(m.swap);
+    m.swap = 0;
+    m.redeal = null;
+    card.classList.remove('card-redeal');
     if (meta.get(card) !== m || m.face !== face || !card.isConnected) return;
-    if (!live) {
+    if (!live || !link) {
       relayout(change);
       return;
     }
-    pass(card, 'is-dealt', cut(card, 'develop', 'long') + riteMs('stagger') * 2 + 300);
+    pass(card, 'is-dealt', cut(link, 'develop', 'long', 'shift') + 300);
     rebuild(change);
   };
-  if (m.swap) {
-    window.clearTimeout(m.swap);
-    m.swap = 0;
-  }
-  if (m.swapEnd) {
-    card.removeEventListener('animationend', m.swapEnd);
-    m.swapEnd = null;
-  }
+  // A cut already under way puts this newer face in when it lands.
+  if (m.swap && live) return;
   unpass(card, 'is-dealt');
-  if (!live) {
-    card.classList.remove('card-redeal');
-    swap();
+  if (!live || !link) {
+    m.redeal();
     return;
   }
-  // The old face is cut away; its own movement ending (on the plate or the words, whichever lands
-  // first) swaps the new one in, with the clock standing in for an end that never comes.
-  const dealt = () => {
-    if (m.swap) window.clearTimeout(m.swap);
-    m.swap = 0;
-    card.removeEventListener('animationend', m.swapEnd);
-    m.swapEnd = null;
-    card.classList.remove('card-redeal');
-    swap();
-  };
-  m.swapEnd = (ev) => {
-    if (!ev || ev.pseudoElement || !ev.target || ev.target.parentNode !== card.querySelector('.card-link')) return;
-    if (ev.animationName !== 'cut-out') return;
-    dealt();
-  };
-  const length = cut(card, 'unmake', 'medium');
+  // The old face is cut away by a stair that ends on the tread it lands on, and that end puts the
+  // new face in, before the frame it falls in is drawn: the old face's last step down is the new
+  // face's first step in. The clock stands in only for an end that never comes.
+  if (!m.landed) {
+    m.landed = (ev) => {
+      if (ev.target === link && !ev.pseudoElement && ev.animationName === 'cut-out' && m.redeal) m.redeal();
+    };
+    link.addEventListener('animationend', m.landed);
+  }
+  const length = landOnEnd(link, 'unmake', cut(link, 'unmake', 'medium'));
   card.classList.add('card-redeal');
-  card.addEventListener('animationend', m.swapEnd);
-  m.swap = window.setTimeout(dealt, length + 300);
+  m.swap = window.setTimeout(() => m.redeal && m.redeal(), length + 300);
 }
 
 function consume(card) {
@@ -933,9 +1070,8 @@ function consume(card) {
   if (m) {
     // A face half-way to being re-dealt is not re-dealt: the card is leaving.
     if (m.swap) window.clearTimeout(m.swap);
-    if (m.swapEnd) card.removeEventListener('animationend', m.swapEnd);
     m.swap = 0;
-    m.swapEnd = null;
+    m.redeal = null;
   }
   card.classList.remove('card-rolled', 'card-enter', 'card-redeal');
   unpass(card, 'is-dealt');
@@ -1029,6 +1165,12 @@ async function buildNext() {
   const world = nextWorld();
   return world ? worldCard(world, newSeed()) : null;
 }
+// The sentinel's watcher says when the end of the feed comes within reach, and says it once the
+// page has been laid out. It is asked afresh after every batch (watched again, which it answers
+// with where the sentinel now stands), so a batch that leaves the end still in reach is followed by
+// another, and none is dealt on a measurement taken while the batch just laid is still unstyled.
+// A browser without one measures, after the batch.
+let dealer = null;
 function nearBottom() {
   return sentinel.getBoundingClientRect().top < window.innerHeight + 900;
 }
@@ -1046,7 +1188,10 @@ async function more() {
   } finally {
     busy = false;
   }
-  if (sentinel && nearBottom()) more();
+  if (dealer) {
+    dealer.unobserve(sentinel);
+    dealer.observe(sentinel);
+  } else if (sentinel && nearBottom()) more();
 }
 
 // The card a fresh reading points at: badged "for you" and sealed in its fill; the one it pointed
@@ -1085,9 +1230,10 @@ function start() {
   suggest();
   rebuild();
   if (sentinel && 'IntersectionObserver' in window) {
-    new IntersectionObserver((entries) => {
+    dealer = new IntersectionObserver((entries) => {
       if (entries.some((entry) => entry.isIntersecting)) more();
-    }, { rootMargin: '900px 0px' }).observe(sentinel);
+    }, { rootMargin: '900px 0px' });
+    dealer.observe(sentinel);
   }
   grid.addEventListener('click', openFromCard);
   let lastWidth = grid.clientWidth;
@@ -1125,6 +1271,7 @@ function start() {
     requestAnimationFrame(() => {
       skyPending = false;
       const ready = skyStars().length > 0;
+      const due = [];
       for (const card of cards) {
         const m = meta.get(card);
         if (m && m.mod && m.mod.needsSky && ready) {
@@ -1134,8 +1281,9 @@ function start() {
         }
         if (!m || !(m.id && modules.has(m.id) && m.painted)) continue;
         m.dirty = true;
-        if (m.near) paint(card);
+        if (m.near) due.push(card);
       }
+      paintAll(due);
     });
   });
   document.addEventListener('visibilitychange', () => {

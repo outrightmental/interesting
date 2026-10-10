@@ -791,6 +791,8 @@ export function play(mod, seed, options) {
   const g = stubContext(canvas);
   const state = new Map(piece.steps.map((s) => [s.id, { step: s, set: false, value: undefined }]));
   let completed = false;
+  let resting = false;
+  let inFrame = false;
   let ended = false;
   let touched = false; // has the visitor set a knob yet?
   let inTap = false;
@@ -819,6 +821,7 @@ export function play(mod, seed, options) {
   function finish() {
     if (completed) return;
     completed = true;
+    resting = false;
     if (!ended && typeof piece.end === 'function') {
       ended = true;
       piece.end(ctx);
@@ -827,6 +830,7 @@ export function play(mod, seed, options) {
   function mark(id, value) {
     const s = state.get(id);
     if (!s) return;
+    if (!inFrame) resting = false;
     if (value !== undefined) s.value = value;
     if (!s.set) s.set = true;
   }
@@ -863,19 +867,32 @@ export function play(mod, seed, options) {
   };
   function apply(id, value) {
     touched = true;
+    resting = false;
     const s = state.get(id);
     if (s) s.value = value;
     if (typeof piece.apply === 'function') piece.apply(id, value, ctx);
   }
+  // The frames, as js/stage.js gives them ("The frames."): a piece's frame() that answers false is
+  // at rest, and is asked for no more frames until something sets it going again -- a knob, a tap,
+  // a check, its end, or a knob it sets itself from outside its own frame. A piece that answers
+  // false while it still has something to move, or while a wait knob is still waiting on its
+  // frames, stalls here exactly as it would stall on the stage.
   function frames(seconds) {
     const n = Math.max(1, Math.round(seconds / FRAME));
     for (let i = 0; i < n && time < MAX_SECONDS + 1; i++) {
       time += FRAME;
-      if (typeof piece.frame === 'function') piece.frame(time, FRAME, ctx);
+      if (resting || typeof piece.frame !== 'function') continue;
+      inFrame = true;
+      try {
+        if (piece.frame(time, FRAME, ctx) === false) resting = true;
+      } finally {
+        inFrame = false;
+      }
     }
   }
   function tapAt(x, y) {
     touched = true;
+    resting = false;
     inTap = true;
     try {
       piece.tap(x, y, ctx);
@@ -908,6 +925,7 @@ export function play(mod, seed, options) {
   // The check, pressed: the verifier is asked, and a solve ends the piece.
   function judge() {
     tries += 1;
+    resting = false;
     const verdict = piece.check(ctx);
     const solved = !!(verdict && verdict.solved);
     if (verdict && verdict.say != null && typeof verdict.say !== 'string') out.problems.push('check() said something that is not a string');

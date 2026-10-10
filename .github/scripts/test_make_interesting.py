@@ -4696,8 +4696,9 @@ HOLD_PIECE = """    let holds = 0;
 
 # A piece that says what it is still being told, so a finished piece staying playable can be read
 # back off the stage (issue #86). Its frame() writes the counts onto the one live line a piece has,
-# so the harness can see the loop still drawing, the knob still reaching apply() and the scene still
-# reaching tap() long after the ceremony wrote "finished" over that same line.
+# so the harness can see its frames still coming (it never says it is at rest), the knob still
+# reaching apply() and the scene still reaching tap() long after the ceremony wrote "finished" over
+# that same line.
 LIVE_PIECE = """    let frames = 0;
     let turns = 0;
     let taps = 0;
@@ -5165,8 +5166,8 @@ class StageTest(unittest.TestCase):
         self.assertEqual(result["unset"], [], "a knob the visitor worked was not set")
         self.assertEqual(result["atDone"]["mode"], "done", "the piece did not finish")
         self.assertTrue(result["atDone"]["doneShown"], "nothing said the piece was done")
-        # Six seconds on, and a second after that, with nobody touching anything: the frame loop is
-        # still drawing (the burst's own frames are long spent by then) and nothing is disabled.
+        # Six seconds on, and a second after that, with nobody touching anything: this piece never
+        # says it is at rest, so its frames keep coming, and nothing is disabled.
         self.assertGreater(result["drawing"]["frames"], result["later"]["frames"],
                            "the frame loop stopped when the piece finished")
         for when in ["atDone", "later", "drawing", "afterKnob", "afterTap"]:
@@ -7406,16 +7407,19 @@ class RealSiteTest(unittest.TestCase):
                                  "the way on lit and the keyboard was left wherever it was")
                 self.assertTrue(played["movedOn"], "the way on was pressed and nothing followed")
         # Done is not the End (issue #86), on the site as committed. What can be held of every
-        # world's piece without knowing which piece it is, is held: the frames still drawing a
-        # second after the ceremony is long over, every knob still enabled, nothing of the piece
-        # torn down, the done mark clear of the scene, the ceremony played once through all of it,
-        # and the way on still the one thing that takes the piece away.
+        # world's piece without knowing which piece it is, is held: the frames coming back when a
+        # knob is worked again or the scene is tapped (a piece at rest asks for none, js/stage.js
+        # "The frames."), every knob still enabled, nothing of the piece torn down, the done mark
+        # clear of the scene, the ceremony played once through all of it, and the way on still the
+        # one thing that takes the piece away.
         live = report["afterDone"]["result"]
         self.assertTrue(live["playable"], f"{live['world']}: the piece never became playable")
         self.assertEqual(live["unset"], [], f"{live['world']}: a knob the visitor worked was not set")
         self.assertEqual(live["atDone"]["mode"], "done", f"{live['world']}: the piece never finished")
-        self.assertGreater(live["drawing"]["frames"], live["later"]["frames"],
-                           f"{live['world']}: the frame loop stopped when the piece finished")
+        self.assertGreater(live["afterKnob"]["frames"], live["drawing"]["frames"],
+                           f"{live['world']}: a knob worked again on a finished piece set nothing moving")
+        self.assertGreater(live["afterTap"]["frames"], live["afterKnob"]["frames"],
+                           f"{live['world']}: a tap on a finished piece set nothing moving")
         for when in ["atDone", "later", "drawing", "afterKnob", "afterTap"]:
             with self.subTest(when=when):
                 seen = live[when]
@@ -7431,7 +7435,6 @@ class RealSiteTest(unittest.TestCase):
                                  f"{live['world']}: the dots went away with the finish")
         self.assertTrue(live["reworked"], f"{live['world']}: no knob on this piece could be worked again")
         self.assertEqual(live["current"]["file"], live["world"], "the stage left the finished piece")
-        self.assertGreater(live["running"], 0, f"{live['world']}: nothing was left running for a live piece")
         self.assertTrue(live["onward"]["movedOn"], f"{live['world']}: the way on was pressed and nothing followed")
         used = report["sliderUsed"]["result"]
         self.assertTrue(used["ranges"], "no world the stage opened had a slider to check")

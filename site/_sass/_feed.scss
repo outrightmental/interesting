@@ -7,22 +7,31 @@
 // is a control like any other, so js/motion.js puts its classes on; js/feed.js puts on the card's
 // own:
 //
-//   wax / wane     the pointer or a visible focus on the link (is-waxing / is-waning, :hover,
-//                  :focus-visible): its state layer -- two shades of the ink split by a slice
-//                  through its centre -- is cut in by a slice from the side the pointer came in by,
-//                  and cut back out the way it came; the card stands up by --lift-y meanwhile.
-//   stamp          a press (is-stamping, :active): the link sets down in one cut and comes back,
-//                  and the primary's ink grows as a curve from the point the press landed.
+//   wax / wane     a moving pointer or a visible focus on the link (is-waxing / is-waning): its
+//                  state layer -- two shades of the ink split by a slice through its centre -- is
+//                  cut in by a slice from the side the pointer came in by, and cut back out the way
+//                  it came; the card stands up by --lift-y meanwhile.
+//   stamp          a press (is-stamping): the link sets down in one cut and comes back, and the
+//                  primary's ink grows as a curve from the point the press landed; a press nothing
+//                  hovers (a tap) takes its ink back the same way (is-uninking).
 //   seal / unseal  a card that becomes the current one, the suggested one or an unpowered one
 //                  (is-sealing / is-unsealing on its link or on the card): the fill over its
 //                  picture -- two shades split by a curve round the point its light opens from --
 //                  grows in from that point and stays; unset, a slice steps it away.
 //   develop        a card met for the first time (card-enter), a stagger after the card before it
 //                  in its batch: behind a slice from the side it comes from, rising the same treads.
-//                  A face re-dealt in place (is-dealt) is cut in where it stands, from below.
+//                  A face re-dealt in place (is-dealt) is cut in where it stands, from below, by one
+//                  slice over the whole link.
 //   unmake         a card taken (card-leave, and card-taken for the one pressed) goes up toward the
-//                  stage behind a slice; a face about to be re-dealt (card-redeal) is cut away the
-//                  same way, where it stands; a badge taken off (is-gone) lifts away.
+//                  stage behind a slice; a face about to be re-dealt (card-redeal) is cut away by
+//                  one slice over the whole link, where it stands; a badge taken off (is-gone)
+//                  lifts away.
+//
+// The :hover, :focus-visible and :active rules below are the same rites for a page with no script,
+// and only there: js/motion.js writes <html data-cut> as it starts, and under it they stand aside
+// (html:not([data-cut])), since a rule matched beside the engine's own class would cut the layer
+// in a second time on another stair. :hover is asked only where a pointer can hover at all
+// (@media (hover: hover)): a touch screen keeps the card it tapped :hover, and a tap is a press.
 //
 // The treads and the length of each movement are written on the element that makes it, for that
 // movement alone (--ease-<rite> and --motion-<rite>, by js/motion.js), so no two are quite alike;
@@ -86,6 +95,19 @@
 // Its tint and its ink change in place when the script re-tints it (js/feed.js, tint()), along the
 // page's stair; under the pointer it stands up by --lift-y in the same stair, and back down when
 // the pointer leaves. A card arriving or leaving is left to its own movement.
+//
+// A card that has settled is drawn only near the screen (content-visibility: auto), so a change
+// to the whole page -- the nav or the persona opening, a change of mood, a resize -- restyles the
+// cards a visitor can see and not every card the feed has dealt, however far down it was read.
+// Off screen it stands at the height it last had when it was drawn. Every card keeps that height
+// (contain-intrinsic-size: auto), from the moment it is dealt and all through its arrival, so a
+// card that settles out of sight keeps the height it arrived at, and nothing in the columns moves
+// when it stops being drawn; on a card that is drawn the size is only kept, never used. 360px is
+// a card's usual height, for the moment before the script first lays the columns. A card rolled
+// up, arriving or leaving is drawn whatever happens: the feed reads the height of a card it has
+// just dealt (js/feed.js, lay()) and watches it arrive, and a card leaving plays its movement where
+// it stands. So is one the feed is measuring afresh (card-measured: its face or its column's width
+// has changed), for the frame in which the page keeps its new height (js/feed.js, measure()).
 .card {
   --arrive-x: 0px;
   --arrive-y: 22px;
@@ -99,15 +121,26 @@
   background: var(--md-sys-color-surface-container);
   color: var(--md-sys-color-on-surface);
   overflow: hidden;
+  contain-intrinsic-size: auto 360px;
   transition:
     translate var(--motion-medium) var(--ease-stair),
     background-color var(--motion-medium) var(--ease-stair),
     color var(--motion-medium) var(--ease-stair);
 }
 
-.card:hover,
-.card:has(> .card-link:focus-visible) {
+.card:not(.card-rolled, .card-enter, .card-leave, .card-measured) {
+  content-visibility: auto;
+}
+
+.card:has(> .card-link.is-waxing),
+html:not([data-cut]) .card:has(> .card-link:focus-visible) {
   translate: 0 var(--lift-y, -2px);
+}
+
+@media (hover: hover) {
+  html:not([data-cut]) .card:hover {
+    translate: 0 var(--lift-y, -2px);
+  }
 }
 
 .card-rolled,
@@ -147,14 +180,23 @@
 }
 
 // Waxing: the slice steps across from the side the pointer came in by, and the layer stays while
-// the pointer or the focus is on the card. A page with no script plays it from :hover and
-// :focus-visible, at the register's angle.
-.card-link.is-waxing::after,
-.card-link:hover::after,
-.card-link:focus-visible::after {
+// the pointer or the focus is on the card. A page with no script plays it from :hover, where a
+// pointer can hover, and :focus-visible, at the register's angle.
+@mixin waxed {
   opacity: var(--state-opacity, var(--md-sys-state-hover-opacity));
   mask: cut.slice();
   @include cut.play(in, wax, medium);
+}
+
+.card-link.is-waxing::after,
+html:not([data-cut]) .card-link:focus-visible::after {
+  @include waxed;
+}
+
+@media (hover: hover) {
+  html:not([data-cut]) .card-link:hover::after {
+    @include waxed;
+  }
 }
 
 .card-link:focus-visible::after {
@@ -171,7 +213,7 @@
 // The stamp: the link sets down in one cut and comes back in the next -- never a darker tint, never
 // a filter. :active is the same stamp for a page with no script.
 .card-link.is-stamping,
-.card-link:active {
+html:not([data-cut]) .card-link:active {
   animation: card-stamp var(--motion-stamp, var(--motion-short)) var(--ease-stamp, var(--ease-flicker)) both;
 }
 
@@ -195,10 +237,19 @@
 }
 
 .card-link.is-stamping::before,
-.card-link:active::before {
+html:not([data-cut]) .card-link:active::before {
   opacity: 0.2;
   mask: cut.curve();
   @include cut.ink;
+}
+
+// A press that ends with nothing hovering the link -- a tap, a key on a card the pointer is not
+// over -- takes its ink back the way it grew: the same curve, stepping in to the point the press
+// landed (is-uninking, js/motion.js), never switched off at once.
+.card-link.is-uninking::before {
+  opacity: 0.2;
+  mask: cut.curve();
+  @include cut.play(out, unink, short, flicker);
 }
 
 // A key brings the focus to a card: the ring in the primary just inside its edge, there with the
@@ -425,8 +476,11 @@
 // it develops (card-enter): it rises from --arrive-y behind a slice at --arrive-angle, in the
 // treads js/motion.js rolled for it, after a delay of its own (--d: its place in the batch it was
 // seen with, one stagger apart; --k from the markup is the fallback). A face re-dealt in place
-// ("another", or the sky arriving) is cut in where it stands -- its picture, and a stagger later
-// its words -- by a slice from below, the side the "another" button is on (is-dealt).
+// ("another", or the sky arriving) is cut in where it stands, picture and words together, by one
+// slice over the whole link from below, the side the "another" button is on (is-dealt). It is put
+// in on the tread the old face's cut lands on (js/feed.js), and its own first tread is taken at
+// once (the shift's stair, which has no opening hold), so no frame shows the card blank between
+// the two faces.
 .card-rolled {
   opacity: 0;
 }
@@ -436,24 +490,18 @@
   animation-delay: var(--d, calc(var(--k, 0) * var(--motion-stagger, 44ms)));
 }
 
-.card.is-dealt .card-media,
-.card.is-dealt .card-body {
+.card.is-dealt > .card-link {
   mask: cut.slice(var(--arrive-angle, 0deg));
-  @include cut.play(in, develop, long, arrive);
-}
-
-.card.is-dealt .card-body {
-  animation-delay: calc(var(--motion-stagger, 44ms) * 2);
+  @include cut.play(in, develop, long, shift);
 }
 
 // ---- unmake: a face about to be re-dealt, a card taken -------------------------------------
-// Before "another" deals a new face, the old one is cut away where it stands by a slice going up
-// (card-redeal), and js/feed.js swaps the words when that has played. A card taken by the stage
-// (card-leave) goes up toward it behind a slice, in growing treads, and js/feed.js takes it out of
-// the feed when it has gone; the card a visitor pressed (card-taken) does the same over its
-// neighbours.
-.card-redeal .card-media,
-.card-redeal .card-body {
+// Before "another" deals a new face, the old one is cut away where it stands by one slice over the
+// whole link, stepping down to the side the new one comes in from (card-redeal), and js/feed.js
+// swaps the faces as that slice lands. A card taken by the stage (card-leave) goes up toward it
+// behind a slice, in growing treads, and js/feed.js takes it out of the feed when it has gone; the
+// card a visitor pressed (card-taken) does the same over its neighbours.
+.card.card-redeal > .card-link {
   mask: cut.slice(var(--leave-angle, 0deg));
   @include cut.play(out, unmake, medium, leave);
 }
@@ -493,13 +541,14 @@
 
   // Each rule that starts a movement, named as it is named above, so none of them outranks this.
   .card-link.is-waxing::after,
-  .card-link:hover::after,
-  .card-link:focus-visible::after,
+  html:not([data-cut]) .card-link:hover::after,
+  html:not([data-cut]) .card-link:focus-visible::after,
   .card-link.is-waning::after,
   .card-link.is-stamping,
-  .card-link:active,
+  html:not([data-cut]) .card-link:active,
   .card-link.is-stamping::before,
-  .card-link:active::before,
+  html:not([data-cut]) .card-link:active::before,
+  .card-link.is-uninking::before,
   .card.is-sealing .card-media::before,
   .card-link.is-sealing .card-media::before,
   .card.is-unsealing .card-media::before,
@@ -508,10 +557,8 @@
   .card-badge.is-gone,
   .card-enter,
   .card-leave,
-  .card-redeal .card-media,
-  .card-redeal .card-body,
-  .card.is-dealt .card-media,
-  .card.is-dealt .card-body {
+  .card.card-redeal > .card-link,
+  .card.is-dealt > .card-link {
     animation: none;
   }
 
@@ -520,20 +567,20 @@
   }
 
   .card-link.is-waxing::after,
-  .card-link:hover::after,
-  .card-link:focus-visible::after,
+  html:not([data-cut]) .card-link:hover::after,
+  html:not([data-cut]) .card-link:focus-visible::after,
   .card-link.is-stamping::before,
-  .card-link:active::before,
+  html:not([data-cut]) .card-link:active::before,
   .card.is-sealing .card-media::before,
   .card-link.is-sealing .card-media::before,
   .card-badge.is-dealt,
   .card-enter,
-  .card.is-dealt .card-media,
-  .card.is-dealt .card-body {
+  .card.is-dealt > .card-link {
     mask: none;
   }
 
   .card-link.is-waning::after,
+  .card-link.is-uninking::before,
   .card.is-unsealing .card-media::before,
   .card:not(.card-suggested, .card-unpowered) .card-link.is-unsealing .card-media::before {
     opacity: 0;
@@ -541,8 +588,7 @@
 
   .card-badge.is-gone,
   .card-leave,
-  .card-redeal .card-media,
-  .card-redeal .card-body {
+  .card.card-redeal > .card-link {
     visibility: hidden;
   }
 }
