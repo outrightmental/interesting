@@ -404,6 +404,59 @@
     }
     return '';
   }
+  /* How near the sky is to a figure it does not make yet: the same measures as figureOf with
+     looser tolerances, so a visitor moving stars toward a named shape is told, in plain words,
+     what would complete it. Pure arithmetic, like figureOf. */
+  function nearFigure(list) {
+    var t = skyTraits(list);
+    if (!t || t.n < 2 || figureOf(list)) return '';
+    var i;
+    var j;
+    if (t.n === 2) {
+      var gx = (list[0].x - list[1].x) * 2;
+      var gy = list[0].y - list[1].y;
+      return gx * gx + gy * gy < 400 ? 'twins, if these two stars were a little closer' : '';
+    }
+    var xx = 0;
+    var yy = 0;
+    var xy = 0;
+    var reach = [];
+    var sum = 0;
+    for (i = 0; i < t.n; i++) {
+      var dx = (list[i].x - t.cx) * 2;
+      var dy = list[i].y - t.cy;
+      xx += dx * dx;
+      yy += dy * dy;
+      xy += dx * dy;
+      var r = Math.sqrt(dx * dx + dy * dy);
+      reach.push(r);
+      sum += r;
+    }
+    var half = (xx + yy) / 2;
+    var skew = Math.sqrt(Math.max(0, (xx - yy) * (xx - yy) / 4 + xy * xy));
+    var major = half + skew;
+    var minor = half - skew;
+    if (major > 100 * t.n && minor < major * 0.03) return 'a straight line, if every star lined up exactly';
+    if (t.n >= 5) {
+      var mean = sum / t.n;
+      var worst = 0;
+      for (i = 0; i < t.n; i++) worst = Math.max(worst, Math.abs(reach[i] - mean));
+      if (mean > 12 && worst < mean * 0.3) return 'a ring, if every star sat the same distance from the middle';
+    }
+    if (t.n >= 4) {
+      var off = 0;
+      var matched = 0;
+      for (i = 0; i < t.n; i++) {
+        if (Math.abs(list[i].x - t.cx) * 2 > 6) off += 1;
+        var mx = 2 * t.cx - list[i].x;
+        for (j = 0; j < t.n; j++) {
+          if (Math.abs((list[j].x - mx) * 2) < 16 && Math.abs(list[j].y - list[i].y) < 10) { matched += 1; break; }
+        }
+      }
+      if (off >= 2 && matched === t.n) return 'a mirror image, if each star matched one opposite it, left to right';
+    }
+    return '';
+  }
   var lastFigure = figureOf(stars());
   function skyName(value) {
     var list = clean(value === undefined ? stars() : value);
@@ -817,6 +870,7 @@
     card.host.setAttribute('data-asking', askingInCard ? 'true' : 'false');
     card.host.setAttribute('data-sky', list.length ? 'set' : 'none');
     card.host.setAttribute('data-difficulty', difficulty().name);
+    card.host.setAttribute('data-figure', figureOf(list) ? 'true' : 'false');
     // The corner is shown once it has read what it holds, and arrives by a composition of its own.
     if (card.open.hidden) arriveOn(card.open, 'avatar-in');
     card.open.hidden = false;
@@ -1226,7 +1280,8 @@
     sheet.name.setAttribute('data-figure', figureOf(list) ? 'true' : 'false');
     if (named) {
       show(sheet.name);
-      say(sheet.name, '✦ ' + named + ' — ' + skyRead(list));
+      var near = nearFigure(list);
+      say(sheet.name, '✦ ' + named + ' — ' + skyRead(list) + (near ? '. Close to a named shape: ' + near + '.' : ''));
     } else {
       conceal(sheet.name);
       if (sheet.name.hidden) say(sheet.name, '', true);
@@ -1268,7 +1323,9 @@
     var list = serialize();
     var named = skyName(list);
     if (!named) return '';
-    return figureOf(list) ? ' A figure with a name of its own: ' + named + '.' : ' Your sky reads as ' + named + ' now.';
+    if (figureOf(list)) return ' A figure with a name of its own: ' + named + '.';
+    var near = nearFigure(list);
+    return ' Your sky reads as ' + named + ' now.' + (near ? ' Close to a named shape: ' + near + '.' : '');
   }
   function paintField(pass) {
     if (!sheet || !sheet.field || !sheet.canvas) return;

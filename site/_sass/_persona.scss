@@ -607,6 +607,14 @@
   box-shadow: 0 0 0 2px color-mix(in oklab, var(--md-sys-color-tertiary) 70%, transparent);
 }
 
+// A sky that makes a named shape (js/persona.js, figureOf, written as data-figure on the corner)
+// wears it on the portrait: a solid ring in the primary where the dashed one once waited, so the
+// corner says on every page that a figure was found.
+.persona[data-figure='true'] .persona-portrait::before {
+  inset: 3px;
+  border: 1px solid color-mix(in oklab, var(--md-sys-color-primary) 80%, transparent);
+}
+
 .persona.is-read .persona-portrait {
   animation: reading-seal var(--motion-reading-seal, var(--motion-medium)) var(--ease-reading-seal, var(--ease-stair)) both;
 }
