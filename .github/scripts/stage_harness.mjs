@@ -395,7 +395,6 @@ function makePage(worlds, clock) {
 
   const stage = make('main', 'stage', body, 'stage');
   stage.setAttribute('data-mode', 'idle');
-  make('canvas', 'stage-burst', stage);
   const inner = make('div', 'stage-inner', stage);
   const head = make('div', null, inner, 'stage-head');
   make('h1', 'stage-world', head).textContent = 'a world';

@@ -5884,12 +5884,16 @@ class NavTest(unittest.TestCase):
         # Read off _lightbox.scss rather than _nav.scss: the veil the logo raises is the one the
         # whole site shares now (issue #70), and the nav holds no paint of its own for it.
         css = self.source["_sass/_lightbox.scss"]
-        veil = css[css.index(".lightbox-veil {"):css.index("@keyframes lightbox-veil")]
+        veil = css[css.index(".lightbox-veil {"):css.index("}", css.index(".lightbox-veil {"))]
         self.assertIn("position: fixed", veil)
         self.assertIn("inset: 0", veil)
         self.assertIn("backdrop-filter: blur(", veil)
         self.assertRegex(veil, r"background: color-mix\(")
         self.assertIn("animation-play-state: paused", css)
+        # It rises as one curve from the control that raised it, and its ghost goes the same way.
+        self.assertIn("mask: cut.curve()", css)
+        self.assertIn("@include cut.play(in, veil", css)
+        self.assertIn("@include cut.play(out, veil-out", css)
         # And the nav's own veil is gone, markup, paint and keyframes alike: there is one.
         for rel, content in sorted(self.source.items()):
             with self.subTest(rel=rel):
@@ -6356,8 +6360,8 @@ class LightboxTest(unittest.TestCase):
 
     def test_the_paint_is_written_once_and_reaches_every_page(self):
         partial = self.source[f"{mi.SASS_DIR}/_lightbox.scss"]
-        for rule in [".lightbox-veil", "@keyframes lightbox-veil", "[data-lightbox-front]",
-                     "[data-lightbox-aside]"]:
+        for rule in [".lightbox-veil", "@include cut.play(in, veil", "@include cut.play(out, veil-out",
+                     "[data-lightbox-front]", "[data-lightbox-aside]"]:
             with self.subTest(rule=rule):
                 self.assertIn(rule, partial)
         # Through the one stylesheet every page links, like every other shared partial.
@@ -6879,7 +6883,7 @@ class RealSiteTest(unittest.TestCase):
             text = re.sub(r"#\{[^}]*\}", "X", text)
             for declaration in mi.TIMING_DECLARATION.finditer(text):
                 value = declaration.group(1)
-                if value.strip() == "none":
+                if re.fullmatch(r"\s*none(\s*!important)?\s*", value):
                     continue  # stillness, under prefers-reduced-motion: no curve to roll
                 with self.subTest(rel=rel, declaration=declaration.group(0)[:60]):
                     self.assertIn("var(--ease-", value, "a movement with no rolled curve")

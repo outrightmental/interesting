@@ -594,7 +594,7 @@
     function onAnimationEnd(ev) {
       var name = ev && ev.animationName;
       var el = ev && ev.target;
-      if (!name || !el || looping[name] || name === 'cut-in' || name === 'cut-out') return;
+      if (!name || !el || looping[name] || /^(cut|lift)-(in|out)$/.test(name)) return;
       if (el === html || !el.style) return;
       spellOn(el, name);
     }
@@ -860,7 +860,7 @@
       setInline(el, '--stamp-y', py + '%');
       if (!reduced()) {
         cut(el, 'stamp', { alias: 'rite-stamp', base: 170, x: px, y: py });
-        cut(el, 'ink', { alias: 'stamp-ink', base: 170 });
+        cut(el, 'ink', { base: 170 });
       }
       pass(el, 'stamping', (ms('medium') || 320) + 400);
     }
@@ -912,10 +912,15 @@
         var is = isSet(el, attr);
         if (was === is) continue;
         if (el.getAttribute('data-rite') === 'none') continue;
+        // A dialog's open is its own arrival, not a control becoming set.
+        if (attr === 'open' && el.tagName === 'DIALOG') continue;
         if (is) dress(el);
         if (reduced()) continue;
-        if (is) cut(el, 'seal', { alias: 'rite-seal', duration: 'long' });
-        else cut(el, 'unseal', { alias: 'rite-unseal' });
+        if (is) cut(el, 'seal', { duration: 'long' });
+        else cut(el, 'unseal');
+        // A seal and an unseal end each other, as a wax ends a wane: set and unset within one
+        // moment is the one the visitor left it in.
+        endPass(el, is ? 'unsealing' : 'sealing');
         pass(el, is ? 'sealing' : 'unsealing');
       }
     }
@@ -1321,12 +1326,15 @@
           new global.MutationObserver(function (changes) {
             for (var i = 0; i < changes.length; i++) {
               var attr = changes[i].attributeName;
+              // Only a mood that really changed shifts the page: a script writing the same mood
+              // again costs nothing.
+              if (changes[i].oldValue === html.getAttribute(attr)) continue;
               if (attr === 'data-mood' || attr === 'data-featured' || attr === 'data-world') {
                 shift();
                 return;
               }
             }
-          }).observe(html, { attributes: true, attributeFilter: ['data-mood', 'data-featured', 'data-world'] });
+          }).observe(html, { attributes: true, attributeOldValue: true, attributeFilter: ['data-mood', 'data-featured', 'data-world'] });
         } catch (e) {
           /* a browser whose observer takes no filter keeps the roll it loaded with */
         }

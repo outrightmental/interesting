@@ -138,7 +138,7 @@ button.is-stamping,
 a.action.is-stamping,
 button:active,
 a.action:active {
-  animation: rite-stamp var(--motion-stamp, var(--motion-short)) var(--ease-stamp, var(--ease-flicker)) both;
+  animation: rite-stamp var(--motion-rite-stamp, var(--motion-short)) var(--ease-rite-stamp, var(--ease-flicker)) both;
 }
 
 @keyframes rite-stamp {
@@ -409,8 +409,7 @@ textarea {
   @include type.scale(body-large);
   transition:
     border-color var(--motion-short) var(--ease-stair),
-    background-color var(--motion-short) var(--ease-stair),
-    box-shadow var(--motion-short) var(--ease-stair);
+    background-color var(--motion-short) var(--ease-stair);
 }
 
 input[type='text'].is-waxing,
@@ -568,30 +567,49 @@ a.action.warning:focus-visible {
     animation: none;
   }
 
-  button.is-waning::after,
-  a.action.is-waning::after {
-    opacity: 0;
-  }
-
-  button.is-unsealing::before,
-  a.action.is-unsealing::before {
-    opacity: 0;
-  }
-
+  // Every end state is simply there. These name the same selectors the movements do, so they
+  // outrank them: a layer that would have waited for its edge to pass shows whole, with no mask.
+  button.is-waxing::after,
+  a.action.is-waxing::after,
+  button:hover::after,
+  a.action:hover::after,
+  button:focus-visible::after,
+  a.action:focus-visible::after,
   button.is-stamping::after,
   a.action.is-stamping::after,
   button:active::after,
   a.action:active::after,
+  button.is-sealing::before,
+  a.action.is-sealing::before,
+  .is-sealing > button::before,
+  .are-you-sure[open] {
+    animation: none;
+    mask: none;
+  }
+
+  button.is-stamping,
+  a.action.is-stamping,
+  button:active,
+  a.action:active {
+    animation: none;
+  }
+
+  button.is-waning::after,
+  a.action.is-waning::after,
+  button.is-unsealing::before,
+  a.action.is-unsealing::before {
+    animation: none;
+    opacity: 0;
+  }
+
+  // A field's own slice of ink: whole, since nothing steps it across.
   input[type='text'].is-waxing,
   input[type='search'].is-waxing,
   textarea.is-waxing,
   input[type='text']:hover,
   input[type='search']:hover,
-  textarea:hover,
-  button[aria-pressed='true']::before,
-  [aria-selected='true']::before,
-  [aria-checked='true']::before {
+  textarea:hover {
+    --cut: 100%;
     animation: none;
-    transition: none;
   }
 }

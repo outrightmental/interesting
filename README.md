@@ -1027,11 +1027,11 @@ to begin*, which writes a small random sky to the persona exactly as placing sta
 and powers the world up where the visitor stands. A quieter second choice may follow the button
 and never replaces it: for the sky, a button that opens the persona sheet, where stars are placed
 by hand. The powering down and up are rites of the motion axiom: the host dims along the stair and
-a dust sheet of the rolled fill texture comes down the matte ladder onto it, the box develops from
-a geometry of its own and its words are revealed; when the power comes on the sheet lifts back up
-the ladder, the box is unmade down it, and on the stage the gate the helper powered down — a
-visible, unexposed plate where the scene will be — is unmade before the scene develops in its
-place.
+a dust sheet — the page's own surface in two shades — is cut down over it by one slice from the top
+edge, the box develops up out of the part it powers and its words are revealed; when the power
+comes on the sheet is lifted back up the same way, the box is unmade back down into the part, and
+on the stage the gate the helper powered down — a visible, unexposed plate where the scene will be
+— is unmade before the scene develops in its place.
 
 - **Stated in the prompt**, under `POWERED DOWN, NEVER BROKEN`, to the model only: as with `WHOLE`,
   no check could tell a dead end from a deliberate one, so a `check_` of its own was ruled out
@@ -1619,9 +1619,9 @@ invariant of the iteration, stated in the prompt and held to in code.
   `<main>` — a world page is front matter and two lines that include it — and
   [`site/js/stage.js`](site/js/stage.js), one shared line in the `<head>`, runs it: the world's
   name over the piece's title and its one line, the scene (a canvas) beside the knobs, a row of
-  dots for progress, and the ceremony — a done chip at the end of that row of dots, a burst in the
-  world's palette and a short chime; for a visitor who asked for less motion there is no burst and
-  no transition, only the chip. Nothing of the ceremony is laid over the scene and nothing of it
+  dots for progress, and the ceremony — a done chip at the end of that row of dots, cut in by a
+  curve from its end of the row, and a short chime; for a visitor who asked for less motion there is
+  no cut, only the chip. Nothing of the ceremony is laid over the scene and nothing of it
   closes the piece down (see [Continued-interaction axiom](#continued-interaction-axiom)), and every
   press on the scene is answered — by the piece's own `tap()`, or by the stage itself where the piece
   has nothing to do with it (see [Responsiveness axiom](#responsiveness-axiom)). The scene fills the real estate the first screen has (issue #65): it
@@ -1839,7 +1839,7 @@ out of the way of the content it is reporting on.
   used to undo all of that — the knobs were disabled in `finish()` — so the moment a visitor solved
   the toy it went dead under their hands, under a mark that said the stage was waiting for them.
 - **Done reports, once.** The ceremony plays a single time: one `stage:complete`, one chime, one
-  burst, however much fidgeting follows. Still playable is not still finishing, so a visitor who
+  landing of the chip, however much fidgeting follows. Still playable is not still finishing, so a visitor who
   keeps turning the knobs changes the piece without re-staging its finish, and a run reading the
   event count is reading one piece finished once.
 - **The mark stays off the picture.** The done mark used to be a 64px filled disc and a *done* pill
@@ -1848,8 +1848,7 @@ out of the way of the content it is reporting on.
   the rail beside the scene: the dots say how many knobs are set and the chip says that they all
   are, so the report lives where the progress was already reported and the scene is left whole.
   A finished piece's picture is still the content, and nothing that reports on content gets to sit
-  on it. The burst is the one thing that still crosses the scene, and it is transient and clears
-  itself.
+  on it. Nothing of the ceremony crosses the scene at all.
 - **Covered where the stage is covered.** The `afterDone` scenario in
   [`.github/scripts/stage_harness.mjs`](.github/scripts/stage_harness.mjs) plays a piece out, sits
   on it for six seconds the way the rounds do, and then goes on using it: it reads back whether the
@@ -1898,7 +1897,8 @@ gesture they make at it.
   another, a `tap()` that threw — and in the stage's own non-live moments, where there is no piece
   to reach at all (a module still loading), `rejectTap()` in
   [`site/js/stage.js`](site/js/stage.js) answers for it: one `.stage-reject` mark laid in the scene
-  at the point pressed, which opens, fades and is gone a fifth of a second later. The stage used to
+  at the point pressed, a ring cut in by a curve growing from that point in two treads and taken
+  away a moment after its cut has ended — never rippled open and never faded. The stage used to
   return from that handler and do nothing whatever, and most of the time it is a module with no
   `tap()` that the press was landing on, so pressing the picture of a world that does not read
   taps was simply dead. The handler asks nothing at all about the stage's mode, so every state the
@@ -1916,9 +1916,9 @@ gesture they make at it.
   of, and must not be mistakable for the piece's own answer.
 - **It respects less motion, like every other motion of the stage.** `calm.matches` — the
   `prefers-reduced-motion` query the stage already keeps, and `ctx.reduced` as a piece sees it —
-  puts `is-still` on the mark, so it is held still and taken away again rather than rippling open.
-  The change and not the shift, which is what the theme's crossfade does with the same query and
-  why the ceremony's burst does not run at all. `_sass/_stage.scss` holds the same answer behind
+  puts `is-still` on the mark, so it is simply there and taken away again rather than cut in.
+  The change and not the movement, which is what the theme's change of colour does with the same
+  query and why the done chip simply appears. `_sass/_stage.scss` holds the same answer behind
   the media query, so a page whose script never read it behaves the same way.
 - **It never advances anything.** A rejection is not a knob set, a dot filled, a progress bar moved
   or a piece finished, and it never reaches the piece: a `tap` knob is satisfied by the piece's own

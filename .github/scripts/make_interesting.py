@@ -3662,7 +3662,7 @@ FRAMEWORK_PINS = (
     "\"from './variant.js'\", \"function heading(world, card)\" with no world.what on a line "
     "that sets ui.title.textContent, \"setProperty('--stage-head'\", \"ui.head.offsetHeight\" and "
     "\"observe(ui.head)\"; it imports only ./variant.js and the modules; its ids stay (stage, "
-    "stage-burst, stage-inner, stage-world, stage-title, stage-brief, stage-body, stage-scene, "
+    "stage-inner, stage-world, stage-title, stage-brief, stage-body, stage-scene, "
     "stage-canvas, stage-done, stage-done-text, stage-knobs, stage-check, stage-tries, stage-goal, "
     "stage-goal-text, stage-status, stage-wanted, "
     "stage-progress, stage-next, stage-head, site-worlds) and so do the knob classes is-set and "
