@@ -56,15 +56,16 @@ const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 const PLAIN = { density: 1, scale: 1, turn: 0 };
 const WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
 
-/* How hard the visitor asked for their puzzles. The persona keeps one difficulty for the whole
-   site (js/persona.js) and js/stage.js hands it to a piece on env.difficulty, 1 (gentle) to 5
-   (fierce); a card's env carries none, so the middle of the dial stands in. A level buys `helps`
-   -- how many things a piece will show when it is asked -- and `margin`, how far out a measured
-   answer may be and still count. Read inside piece() only: the subject is the seed's. */
+/* How many things a piece will show when it is asked: the one thing the difficulty buys here.
+   The persona keeps one difficulty for the whole site (js/persona.js) and js/stage.js hands it to
+   a piece on env.difficulty, 1 (gentle) to 5 (fierce); a card's env carries none, so the middle
+   of the dial stands in. The cabinet's answers -- a setting, a notch, a count of faces, a word --
+   are exact things the scene itself decides, so the dial buys no margin here: it moves on the
+   help alone. Read inside piece() only: the subject is the seed's. */
 function asked(env) {
   const said = env && env.difficulty ? Number(env.difficulty.level) : NaN;
   const level = Number.isFinite(said) ? Math.max(1, Math.min(5, Math.round(said))) : 3;
-  return { level, helps: 6 - level, margin: Math.max(0, 3 - level) };
+  return 6 - level;
 }
 
 /* ---- shared arithmetic ---------------------------------------------------------------------- */
@@ -141,12 +142,15 @@ function background(g, w, h, env) {
   g.fillRect(0, 0, w, h);
 }
 
-// How many letters of `guess` stand where `word` has them: the one thing a wrong check says.
-function lettersRight(guess, word) {
-  const g = String(guess || '').toUpperCase().replace(/[^A-Z]/g, '');
+// What a wrong word earns: how many of its letters stand where the note's word has them, said in
+// the piece's own words -- the one measured thing a wrong check says of it, never the word. The
+// guess is handed in already cleaned (cleaned, below).
+function missed(guess, word, name) {
   let right = 0;
-  for (let i = 0; i < word.length && i < g.length; i++) if (g[i] === word[i]) right += 1;
-  return right;
+  for (let i = 0; i < word.length && i < guess.length; i++) if (guess[i] === word[i]) right += 1;
+  if (right === 0) return 'no letter of the ' + name + ' is in its place';
+  if (right === 1) return 'one letter of the ' + name + ' is right';
+  return WORDS[Math.min(right, 10)] + ' letters of the ' + name + ' are right';
 }
 
 function cleaned(value) {
@@ -562,7 +566,7 @@ function wheelPreview(g, w, h, env, p) {
 
 function wheelPiece(env) {
   const p = carried(env) || plan(env);
-  const helps = asked(env).helps;
+  const helps = asked(env);
   const state = blank();
   const note = NOTES[p.note];
   const word = keyWordOf(note);
@@ -598,9 +602,8 @@ function wheelPiece(env) {
       const typed = cleaned(c.value('word'));
       const wordRight = typed === word;
       if (shiftRight && wayRight && wordRight) return { solved: true, say: 'the lock turns: ' + note };
-      const right = lettersRight(typed, word);
       const parts = [];
-      if (!wordRight) parts.push(right === 0 ? 'no letter of the word is in its place' : (right === 1 ? 'one letter of the word is right' : WORDS[Math.min(right, 10)] + ' letters of the word are right'));
+      if (!wordRight) parts.push(missed(typed, word, 'word'));
       if (!shiftRight) {
         const at = Math.round(Number(c.value('wheel')));
         const tallest = tally(received)[0];
@@ -731,7 +734,16 @@ function openings(p, amount) {
   return p.holes.map((index) => rotated(index, amount)).sort((a, b) => a - b);
 }
 
+// The grille's plan is the one plan here dealt from env's seeded stream (env.int, env.chance),
+// which is stateful: dealt a second time on the same env -- a card repainted, a piece opened on
+// the env its card was painted with -- it would come out a different puzzle. So it is dealt once
+// per env and kept with it; the wheel's and the rod's plans are arithmetic on the seed alone and
+// need no keeping.
+const grillePlans = new WeakMap();
+
 function grillePlan(env) {
+  const kept = grillePlans.get(env);
+  if (kept) return kept;
   const holes = [];
   const used = new Set();
   for (let index = 0; index < SQUARES; index++) {
@@ -740,7 +752,7 @@ function grillePlan(env) {
     used.add(group);
     holes.push(rotated(group, env.int(0, 3)));
   }
-  return {
+  const p = {
     family: 'turning-grille',
     case: (env.seed >>> 0).toString(36).toUpperCase().padStart(7, '0'),
     note: env.int(0, NOTES.length - 1),
@@ -748,6 +760,8 @@ function grillePlan(env) {
     direction: env.chance(0.5) ? 1 : -1,
     holes
   };
+  grillePlans.set(env, p);
+  return p;
 }
 
 function carriedGrille(env) {
@@ -1002,7 +1016,7 @@ function grillePreview(g, w, h, env, p) {
 
 function grillePiece(env, carriedPlan) {
   const p = carriedPlan || grillePlan(env);
-  const helps = Math.min(2, asked(env).helps);
+  const helps = Math.min(2, asked(env));
   const board = grilleBoard(p);
   const s = grilleBlank();
   const note = NOTES[p.note];
@@ -1037,10 +1051,7 @@ function grillePiece(env, carriedPlan) {
       const wordRight = typed === first;
       if (cornerRight && wayRight && wordRight) return { solved: true, say: 'the key fits: ' + note };
       const parts = [];
-      if (!wordRight) {
-        const right = lettersRight(typed, first);
-        parts.push(right === 0 ? 'no letter of the first word is in its place' : (right === 1 ? 'one letter of the first word is right' : WORDS[Math.min(right, 10)] + ' letters of the first word are right'));
-      }
+      if (!wordRight) parts.push(missed(typed, first, 'first word'));
       if (!cornerRight && !wayRight) parts.push('the notch and the turn are both off');
       else if (!cornerRight) parts.push('the key does not start there');
       else if (!wayRight) parts.push('the key turns the other way');
@@ -1295,7 +1306,7 @@ function rodPreview(g, w, h, env, p) {
 
 function rodPiece(env, carriedPlan) {
   const p = carriedPlan || rodPlan(env);
-  const helps = asked(env).helps;
+  const helps = asked(env);
   const strip = rodStrip(p);
   const note = NOTES[p.note];
   const last = note.split(' ').pop();
@@ -1328,10 +1339,7 @@ function rodPiece(env, carriedPlan) {
       const wordRight = typed === last;
       if (facesRight && wordRight) return { solved: true, say: 'the strip unwinds: ' + note };
       const parts = [];
-      if (!wordRight) {
-        const right = lettersRight(typed, last);
-        parts.push(right === 0 ? 'no letter of the last word is in its place' : (right === 1 ? 'one letter of the last word is right' : WORDS[Math.min(right, 10)] + ' letters of the last word are right'));
-      }
+      if (!wordRight) parts.push(missed(typed, last, 'last word'));
       if (!facesRight) {
         parts.push(Number.isFinite(k) && spare(k)
           ? 'the rod is off: ' + k + ' faces leave ' + spare(k) + ' of the ' + strip.length + ' letters over'
