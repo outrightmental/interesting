@@ -2338,6 +2338,55 @@ def eval_ratio(aspect):
     return float(parts[0]) / (float(parts[1]) if len(parts) > 1 else 1.0)
 
 
+def sass_block(text, start):
+    """The text between the brace that opens at or after `start` and the brace that closes it."""
+    open_at = text.index("{", start)
+    depth = 0
+    for i in range(open_at, len(text)):
+        if text[i] == "{":
+            depth += 1
+        elif text[i] == "}":
+            depth -= 1
+            if depth == 0:
+                return text[open_at + 1:i]
+    return text[open_at + 1:]
+
+
+def sass_keyframes(text):
+    """Every @keyframes in a stylesheet, wherever it is written, by name."""
+    return {m.group(1): sass_block(text, m.end()) for m in re.finditer(r"@keyframes\s+([\w-]+)\s*(?=\{)", text)}
+
+
+def sass_stops(body):
+    """A keyframes body's stops, in order: (selector, the rule's declarations)."""
+    stops, at = [], 0
+    for m in re.finditer(r"((?:from|to|\d+(?:\.\d+)?%)(?:\s*,\s*(?:from|to|\d+(?:\.\d+)?%))*)\s*(?=\{)", body):
+        if m.start() < at:
+            continue
+        rule = sass_block(body, m.end())
+        stops.append((m.group(1), rule))
+        at = m.end() + len(rule) + 2
+    return stops
+
+
+def top_level_parts(value):
+    """A comma-separated value split at its top level, so var(--a, var(--b)) stays whole."""
+    parts, depth, start = [], 0, 0
+    for i, ch in enumerate(value):
+        depth += (ch == "(") - (ch == ")")
+        if ch == "," and depth == 0:
+            parts.append(value[start:i])
+            start = i + 1
+    parts.append(value[start:])
+    return parts
+
+
+def js_function(text, name):
+    """The body of `function name(...) { ... }` in a script, or '' when there is none."""
+    m = re.search(rf"function {re.escape(name)}\s*\([^)]*\)\s*(?=\{{)", text)
+    return sass_block(text, m.end()) if m else ""
+
+
 # The rites js/motion.js composes for a movement and writes on the element that plays it
 # (cut(el, rite)): a stylesheet's keyframes may read one of these as their spell.
 ENGINE_RITES = ["wax", "wane", "stamp", "ink", "seal", "unseal", "develop", "unmake", "reveal", "veil", "veil-out"]
@@ -6899,7 +6948,7 @@ class RealSiteTest(unittest.TestCase):
         # edge's own keyframes in _cut.scss, by the rite the mixin is played for.
         for rel, text in sorted(self.source.items()):
             if rel.startswith(f"{mi.SASS_DIR}/"):
-                for name in re.findall(r"^@keyframes ([\w-]+) \{", text, re.M):
+                for name in sass_keyframes(text):
                     with self.subTest(spell=name):
                         if rel == f"{mi.SASS_DIR}/_cut.scss":
                             self.assertRegex(text, rf"{re.escape(name.split('-')[0])}-(?:#\{{\$dir\}}|{re.escape(name.split('-')[1])}) var\(--motion-#\{{\$rite\}}, var\(--motion-#\{{\$base\}}\)\) var\(--ease-#\{{\$rite\}}, var\(--ease-#\{{\$family\}}\)\)",
@@ -6959,9 +7008,19 @@ class RealSiteTest(unittest.TestCase):
         # Cheap by construction: nothing is written into a stylesheet while the page runs, a line
         # is never taken apart into a span per letter, and a movement that ends is rolled afresh on
         # the element that played it -- never by re-rolling the whole page.
-        for gone in ["insertRule", "data-interesting-rites", "createElement('span')", "setInterval("]:
+        for gone in ["insertRule", "data-interesting-rites", "setInterval("]:
             with self.subTest(gone=gone):
                 self.assertNotIn(gone, engine)
+        self.assertNotRegex(engine, r"createElement\(\s*['\"]span['\"]", "the engine takes a line apart into spans")
+        # And :root is the page's roll, written as it loads and when its mood changes -- never by a
+        # movement. The functions a trigger runs write only on the element that plays it.
+        for trigger in ["cut", "wax", "wane", "onStamp", "onSetChange", "reveal", "arrive", "onAnimationEnd",
+                        "onRiteEnd", "pass", "endPass", "flip"]:
+            body = js_function(engine, trigger)
+            with self.subTest(trigger=trigger):
+                self.assertTrue(body, f"the engine has no {trigger}()")
+                self.assertNotRegex(body, r"(?<![\w.])write\(", f"{trigger}() writes the page's roll on :root")
+                self.assertNotIn("documentElement.style", body, f"{trigger}() writes on :root")
         ending = engine[engine.index("function onAnimationEnd(ev) {"):]
         ending = ending[:ending.index("\n    }\n")]
         self.assertNotIn("rollAll", ending, "an animation's end re-rolls the whole page")
@@ -7010,6 +7069,21 @@ class RealSiteTest(unittest.TestCase):
                 self.assertFalse(retired.search(text), f"{rel} still changes a surface through the old ladder")
                 self.assertNotRegex(text, r"(?m)^\s*mask(?:-image)?\s*:[^;]*(?:url\(|repeating-)",
                                     "a mask that is a picture or a pattern")
+        # Nor at rest: a surface that stays changed is two shades split by one edge, never a pattern
+        # painted as its background. The one repeating gradient on the site is the dotted or dashed
+        # rule a register draws under a heading (_type.scss's $rules), which is typography and
+        # never a state; and no stylesheet carries a picture of its own.
+        for rel, text in sorted(self.source.items()):
+            if not rel.startswith(f"{mi.SASS_DIR}/") or rel in mi.FIXED_FILES:
+                continue
+            body = text
+            if rel == f"{mi.SASS_DIR}/_type.scss" and "$rules:" in body:
+                start = body.index("$rules:")
+                body = body[:start] + body[body.index(");", start):]
+            with self.subTest(pattern=rel):
+                self.assertNotRegex(body, r"repeating-(?:linear|radial|conic)-gradient\(",
+                                    "a patterned surface outside the registers' rules")
+                self.assertNotRegex(body, r"url\(\s*['\"]?data:image/svg", "a stylesheet paints a picture of its own")
         ornament = self.source[f"{mi.SASS_DIR}/_rite.scss"]
         self.assertIn(".is-revealing {", ornament)
         self.assertIn("mask: cut.slice(var(--reveal-angle", ornament)
@@ -7021,8 +7095,12 @@ class RealSiteTest(unittest.TestCase):
                 continue
             with self.subTest(script=rel):
                 for gone in ["composeOn(", ".compose(", "rite.cell", "matteField", "insertRule", "'--rite-wax'",
-                             "'--rite-develop'", "'--rite-unmake'"]:
+                             "'--rite-develop'", "'--rite-unmake'", "feTurbulence"]:
                     self.assertFalse(gone in text, f"{rel} still uses {gone}")
+                # A module paints a changing surface as one shape (rite.paint, rite.region); asking the
+                # edge point by point is how a grid of cells comes back.
+                if rel.startswith("js/modules/"):
+                    self.assertNotRegex(text, r"\.matte\(", f"{rel} asks the edge point by point")
         # A module moves by env.rite, handed by every env builder and both of the harnesses that
         # play a module, and the stage's contract says so.
         variant = self.source[mi.VARIANT_SCRIPT]
@@ -7045,44 +7123,48 @@ class RealSiteTest(unittest.TestCase):
 
     def test_nothing_costs_the_page_more_than_it_shows(self):
         # The user's second ask, held where source can hold it: a movement animates only what the
-        # compositor can draw cheaply or the one --cut the edge moves by, a loop is only ever a
-        # small turn of a transform, and every keyframe is a short, plain rule -- so the rite says
-        # "a very specific choice" with the minimum of processing.
+        # compositor can draw cheaply or the one --cut the edge moves by, the edge only ever goes
+        # one way, a loop is only ever a small turn of a transform, and every keyframe is a short,
+        # plain rule -- so the rite says "a very specific choice" with the minimum of processing.
+        # Keyframes are found wherever they are written: at the top of a partial, inside a media
+        # query, or inside a mixin.
         costly = re.compile(r"(?<![\w-])(box-shadow|filter|backdrop-filter|clip-path|mask(?:-[\w-]+)?|"
                             r"background-position|background-size|width|height|top|left|right|bottom|"
                             r"inset|margin(?:-[\w-]+)?|padding(?:-[\w-]+)?)\s*:")
         cheap = re.compile(r"(?<![\w-])(transform|translate|rotate|scale|opacity|--cut)\s*:")
+        found = 0
         for rel, text in sorted(self.source.items()):
             if not rel.startswith(f"{mi.SASS_DIR}/") or rel in mi.FIXED_FILES:
                 continue
             plain = re.sub(r"#\{[^}]*\}", "X", text)
-            for match in re.finditer(r"(?m)^@keyframes ([\w-]+) \{\n(.*?)^\}", plain, re.S):
-                name, body = match.group(1), match.group(2)
+            keyframes = sass_keyframes(plain)
+            for name, body in keyframes.items():
+                found += 1
                 with self.subTest(rel=rel, keyframes=name):
                     self.assertFalse(costly.search(body), f"@keyframes {name} animates something the page pays to repaint")
-                    stops = re.findall(r"(?m)^\s*((?:from|to|\d+(?:\.\d+)?%)(?:\s*,\s*(?:from|to|\d+(?:\.\d+)?%))*)\s*\{", body)
+                    stops = sass_stops(body)
                     self.assertLessEqual(len(stops), 3, f"@keyframes {name} climbs a ladder of {len(stops)} stops")
+                    # The edge goes one way: --cut never turns back within one movement.
+                    cuts = [float(m.group(1)) for _, rule in stops
+                            for m in [re.search(r"--cut\s*:\s*(-?[\d.]+)%", rule)] if m]
+                    if len(cuts) > 2:
+                        rising = all(b2 >= a2 for a2, b2 in zip(cuts, cuts[1:]))
+                        falling = all(b2 <= a2 for a2, b2 in zip(cuts, cuts[1:]))
+                        self.assertTrue(rising or falling, f"@keyframes {name} slips the edge back: {cuts}")
             for declaration in re.finditer(r"(?m)^\s*animation\s*:([^;]*);", plain):
                 value = declaration.group(1)
                 if "infinite" not in value:
                     continue
-                parts, depth, start = [], 0, 0
-                for i, ch in enumerate(value):
-                    depth += (ch == "(") - (ch == ")")
-                    if ch == "," and depth == 0:
-                        parts.append(value[start:i])
-                        start = i + 1
-                parts.append(value[start:])
-                for part in parts:
+                for part in top_level_parts(value):
                     if "infinite" not in part:
                         continue
                     name = part.split()[0]
-                    body = re.search(rf"(?m)^@keyframes {re.escape(name)} \{{\n(.*?)^\}}", plain, re.S)
                     with self.subTest(rel=rel, loop=name):
-                        self.assertTrue(body, f"the loop {name} plays keyframes declared elsewhere")
-                        props = re.findall(r"(?m)^\s*([\w-]+)\s*:", body.group(1))
+                        self.assertIn(name, keyframes, f"the loop {name} plays keyframes declared elsewhere")
+                        props = re.findall(r"(?m)^\s*([\w-]+)\s*:", keyframes[name])
                         self.assertTrue(props and all(cheap.match(p + ":") for p in props),
                                         f"the loop {name} moves {props}, which the compositor cannot draw alone")
+        self.assertGreater(found, 5, "the sweep found almost no keyframes, so it is reading the Sass wrong")
 
     def test_a_pieces_rite_is_a_stair_a_ratchet_a_cut_and_one_edge(self):
         # env.rite in arithmetic: the same seed rolls the same rite; the stair and the ratchet climb
