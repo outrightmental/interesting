@@ -21,6 +21,11 @@
    The first preview's picture and words stay available for comparison while that world is being
    previewed in the open sheet. This is a temporary picture, never another saved or editable sky.
 
+   Named-shape buttons toggle hollow targets on the existing sky, never placing stars themselves.
+   Each star keeps its target while it moves; targets are reassigned only when membership changes.
+   The guide remains usable after the shape is found and keeps nothing between pages. The portrait
+   fits the sky's 2:1 geometry without stretching it, so a found shape travels recognisably.
+
    The difficulty is advertised as specifically as the sky and settable from everywhere it is a
    dependency (issue #93), which is every piece on the site: `tuner(host)` below renders the one
    slider, the sheet puts it in its own section, and js/stage.js puts the same control on the
@@ -884,9 +889,10 @@
      never less. The lines take the canvas's
      own CSS colour, read once a draw: Chromium resolves a context's 'currentColor' from the
      element's inline style alone and paints black for one set by a stylesheet, as these are. */
-  function drawSky(ctx, list, w, h, pad, dotRadius, lineWidth, route, pass) {
+  function drawSky(ctx, list, w, h, pad, dotRadius, lineWidth, route, pass, guide) {
     var path = route || threadOf(list);
     var ink = skyInk(ctx);
+    if (guide) drawFigureGuide(ctx, guide, w, h, pad, ink);
     var points = list.map(function (s) {
       return { x: pad + s.x / 100 * (w - pad * 2), y: pad + s.y / 100 * (h - pad * 2) };
     });
@@ -1110,7 +1116,20 @@
     if (!card || !card.portrait) return;
     var size = card.portraitSize;
     var ctx = sizeCanvas(card.portrait, size, size);
-    if (ctx && list.length) drawSky(ctx, list, size, size, size * 0.15, size * 0.032, size * 0.018, null, null);
+    if (!ctx || !list.length) return;
+    var centre = skyTraits(list);
+    var reach = 0;
+    list.forEach(function (star) {
+      var dx = (star.x - centre.cx) * 2;
+      var dy = star.y - centre.cy;
+      reach = Math.max(reach, Math.sqrt(dx * dx + dy * dy));
+    });
+    var scale = reach ? 46 / reach : 0;
+    var miniature = list.map(function (star) {
+      return { x: 50 + (star.x - centre.cx) * 2 * scale,
+        y: 50 + (star.y - centre.cy) * scale, text: star.text };
+    });
+    drawSky(ctx, miniature, size, size, size * 0.15, size * 0.032, size * 0.018, threadOf(list), null);
   }
   // A question asked where the visitor cannot see it -- from the sheet, say, with the page scrolled
   // away from the threshold it is asked on -- is brought to them: the page steps to it by the
@@ -1541,7 +1560,7 @@
       });
       return;
     }
-    var near = figure === 'true' ? '' : nearFigure(list);
+    var near = figure === 'true' || guiding ? '' : nearFigure(list);
     var hint = near ? '. Close to a named shape: ' + near + '.' : '';
     var line = '✦ ' + named + ' — ' + skyRead(list) + hint;
     var room = !sheet.name.textContent || hint !== nameHint || sheet.name.getAttribute('data-figure') !== figure;
@@ -1565,17 +1584,135 @@
      the sheet is shut, so the engine passes that change over (markFigure): a seal begun on a
      hidden mark would wait for the sheet and play inside its arrival. */
   var FIGURES = [
-    { name: 'the twins', rule: 'exactly two stars, side by side' },
-    { name: 'the belt', rule: 'exactly three stars in a straight line' },
-    { name: 'the spear', rule: 'four or more stars in a straight line' },
-    { name: 'the halo', rule: 'five or more stars, all the same distance from their middle' },
-    { name: 'the moth', rule: 'four or more stars, each matched by one opposite it, left to right' }
+    { name: 'the twins', rule: 'exactly two stars, side by side', min: 2, max: 2 },
+    { name: 'the belt', rule: 'exactly three stars in a straight line', min: 3, max: 3 },
+    { name: 'the spear', rule: 'four or more stars in a straight line', min: 4 },
+    { name: 'the halo', rule: 'five or more stars, all the same distance from their middle', min: 5 },
+    { name: 'the moth', rule: 'four or more stars, each matched by one opposite it, left to right', min: 4 }
   ];
+  var guiding = null;
+  function figureTargets(f, count) {
+    var n = Math.max(f.min, Math.min(f.max || MAX_STARS, count));
+    var points = [];
+    var i;
+    if (f.name === 'the moth') {
+      var pairs = Math.floor(n / 2);
+      for (i = 0; i < pairs; i++) {
+        var offset = i % 2 ? 10 : 26;
+        var y = 14 + i * 72 / (pairs - 1);
+        points.push({ x: 50 - offset, y: y }, { x: 50 + offset, y: y });
+      }
+      if (n % 2) points.push({ x: 50, y: 50 });
+    } else {
+      for (i = 0; i < n; i++) {
+        if (f.name === 'the halo') {
+          var angle = i / n * Math.PI * 2 - Math.PI / 2;
+          points.push({ x: 50 + Math.cos(angle) * 17, y: 50 + Math.sin(angle) * 34 });
+        } else points.push({ x: f.name === 'the twins' ? 49 + i * 2 : 16 + i * 68 / (n - 1), y: 50 });
+      }
+    }
+    return points;
+  }
+  function prepareFigureGuide() {
+    if (!guiding) return;
+    if (guiding.stars && guiding.stars.length === fieldStars.length
+        && guiding.stars.every(function (star, i) { return star === fieldStars[i]; })) return;
+    guiding.stars = fieldStars.slice();
+    guiding.points = figureTargets(guiding.figure, fieldStars.length);
+    var spare = guiding.points.slice();
+    guiding.targets = fieldStars.map(function (star) {
+      var nearest = -1;
+      var distance = Infinity;
+      for (var i = 0; i < spare.length; i++) {
+        var dx = (spare[i].x - star.x) * 2;
+        var dy = spare[i].y - star.y;
+        var gap = dx * dx + dy * dy;
+        if (gap < distance) { distance = gap; nearest = i; }
+      }
+      return nearest < 0 ? null : spare.splice(nearest, 1)[0];
+    });
+  }
+  function guideMove(star, target) {
+    var moves = [];
+    function axis(gap, forward, backward) {
+      if (Math.abs(gap) <= 1) return;
+      var presses = Math.round(Math.abs(gap) / 2);
+      moves.push(presses + ' ' + (gap > 0 ? forward : backward)
+        + '-arrow ' + (presses === 1 ? 'press' : 'presses'));
+    }
+    axis(target.x - star.x, 'right', 'left');
+    axis(target.y - star.y, 'down', 'up');
+    return moves.length ? 'Move this star with about ' + moves.join(' and ')
+      + ', or drag it to its hollow circle.'
+      : 'This star is close to its hollow circle. Choose another star to move.';
+  }
+  function renderFigureGuide() {
+    if (!sheet || !sheet.guide) return;
+    for (var i = 0; i < fieldStars.length; i++) {
+      var star = fieldStars[i].el;
+      if (!star) continue;
+      if (guiding) star.setAttribute('aria-describedby', 'persona-figure-guide');
+      else star.removeAttribute('aria-describedby');
+    }
+    if (!guiding) { conceal(sheet.guide, false, makeRoom); return; }
+    prepareFigureGuide();
+    var f = guiding.figure;
+    var count = fieldStars.length;
+    var next;
+    if (count < f.min) {
+      var need = f.min - count;
+      next = 'Add ' + need + ' more ' + (need === 1 ? 'star' : 'stars')
+        + ' using drop a star. The hollow circles show where this shape can go.';
+    } else if (f.max && count > f.max) {
+      next = 'This shape needs exactly ' + f.max + ' stars. Remove ' + (count - f.max)
+        + ' using remove this star, or choose another guide.';
+    } else if (figureOf(fieldStars) === f.name) {
+      next = 'Your sky makes it now. Close the sheet to carry the shape and its ring in your portrait, or keep shaping.';
+    } else if (selected >= 0 && guiding.targets[selected]) {
+      next = guideMove(fieldStars[selected], guiding.targets[selected]);
+    } else {
+      next = 'Choose a star to see its route to a hollow circle. Drag it there or use its arrow keys.';
+    }
+    var line = f.name + ': ' + next;
+    function write() { say(sheet.guide, line, show(sheet.guide)); }
+    if (sheet.guide.hidden) makeRoom(write, [sheet.guide]);
+    else write();
+  }
+  function drawFigureGuide(ctx, guide, w, h, pad, ink) {
+    function point(p) {
+      return { x: pad + p.x / 100 * (w - pad * 2), y: pad + p.y / 100 * (h - pad * 2) };
+    }
+    ctx.strokeStyle = ink;
+    ctx.lineWidth = 1;
+    ctx.globalAlpha = 0.65;
+    guide.points.forEach(function (target) {
+      var p = point(target);
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 6, 0, Math.PI * 2);
+      ctx.stroke();
+    });
+    var target = selected >= 0 && guide.targets[selected];
+    if (target && fieldStars[selected]) {
+      var from = point(fieldStars[selected]);
+      var to = point(target);
+      ctx.globalAlpha = 0.9;
+      ctx.lineWidth = 1.5;
+      if (typeof ctx.setLineDash === 'function') ctx.setLineDash([3, 4]);
+      ctx.beginPath();
+      ctx.moveTo(from.x, from.y);
+      ctx.lineTo(to.x, to.y);
+      ctx.stroke();
+      if (typeof ctx.setLineDash === 'function') ctx.setLineDash([]);
+      ctx.beginPath();
+      ctx.arc(to.x, to.y, 9, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  }
   function tellFigure(f) {
-    var list = serialize();
-    var near = nearFigure(list);
-    sheetStatus(f.name + ': ' + f.rule + '. ' + (figureOf(list) === f.name ? 'Your sky makes it now.'
-      : near ? 'Your sky is close to a named shape: ' + near + '.' : 'Move, drop or remove stars to make it.'));
+    guiding = guiding && guiding.figure === f ? null : { figure: f, stars: null, points: [], targets: [] };
+    drawField();
+    if (!guiding) sheetStatus(f.name + ' guide hidden. Your stars stay as they are.');
   }
   // One mark written as lit or not: only what has changed is written, so a drag that keeps the sky
   // in or out of a shape writes nothing here. A mark lit or unlit in a shut sheet is passed over
@@ -1585,7 +1722,9 @@
   // control.
   function markFigure(chip, f, on) {
     var words = (on ? '✦ ' : '✧ ') + f.name;
-    var label = f.name + ': ' + f.rule + (on ? '. Your sky makes this now.' : '. Press to hear how close you are.');
+    var expanded = !!(guiding && guiding.figure === f);
+    var label = f.name + ': ' + f.rule + (on ? '. Your sky makes this now.' : '')
+      + (expanded ? '. Guide shown; press to hide it.' : '. Press for a guide.');
     if (on ? chip.getAttribute('data-set') !== 'true' : chip.hasAttribute('data-set')) {
       var unseen = chip.isConnected && !sheet.host.open && typeof Promise === 'function' && !chip.hasAttribute('data-rite');
       if (unseen) chip.setAttribute('data-rite', 'none');
@@ -1596,6 +1735,7 @@
     }
     if (chip.textContent !== words) chip.textContent = words;
     if (chip.getAttribute('aria-label') !== label) chip.setAttribute('aria-label', label);
+    if (chip.getAttribute('aria-expanded') !== String(expanded)) chip.setAttribute('aria-expanded', String(expanded));
   }
   function buildFigures() {
     if (!sheet || !sheet.figures || sheet.figureChips) return;
@@ -1603,6 +1743,7 @@
     sheet.figureChips = FIGURES.map(function (f) {
       var chip = element('button', 'persona-figure');
       chip.type = 'button';
+      chip.setAttribute('aria-controls', 'persona-figure-guide');
       markFigure(chip, f, made === f.name);
       chip.addEventListener('click', function () { tellFigure(f); });
       sheet.figures.appendChild(chip);
@@ -1666,7 +1807,7 @@
     var named = skyName(list);
     if (!named) return '';
     if (figureOf(list)) return ' A figure with a name of its own: ' + named + '.';
-    var near = nearFigure(list);
+    var near = guiding ? '' : nearFigure(list);
     return ' Your sky reads as ' + named + ' now.' + (near ? ' Close to a named shape: ' + near + '.' : '');
   }
   function paintField(pass, measured) {
@@ -1674,7 +1815,7 @@
     var box = measured || sheet.field.getBoundingClientRect();
     if (!box.width || !box.height) return;
     var ctx = sizeCanvas(sheet.canvas, box.width, box.height);
-    if (ctx) drawSky(ctx, fieldStars, box.width, box.height, 22, 0, 1.1, threadOf(fieldStars, selected), pass);
+    if (ctx) drawSky(ctx, fieldStars, box.width, box.height, 22, 0, 1.1, threadOf(fieldStars, selected), pass, guiding);
   }
   // The field redrawn: its name, its thread and the lines between its stars -- at the tread the
   // sky is at, if it is still being cast, so a star chosen or dragged mid-cast joins the cast
@@ -1684,6 +1825,7 @@
     renderFigures();
     renderThread();
     renderNeighbor();
+    renderFigureGuide();
     paintField(fieldCast ? fieldCast.pass : null, box);
   }
   /* The lines of the sky drawn in treads (README: "Motion axiom"): when the sheet opens its sky or
@@ -1751,7 +1893,7 @@
       change();
       return;
     }
-    var parts = [sheet.thread, sheet.figures, sheet.wordsForm, sheet.drop, sheet.seed, sheet.remove, sheet.clear, sheet.status, sheet.answer];
+    var parts = [sheet.guide, sheet.name, sheet.thread, sheet.figures, sheet.wordsForm, sheet.drop, sheet.seed, sheet.remove, sheet.clear, sheet.status, sheet.answer];
     var section = sheet.field.parentNode;
     for (var next = section ? section.nextElementSibling : null; next; next = next.nextElementSibling) parts.push(next);
     var items = parts.filter(function (part) { return part && !part.hidden; });
@@ -2189,6 +2331,7 @@
       seed: document.getElementById('persona-seed'), remove: document.getElementById('persona-remove'),
       clear: document.getElementById('persona-clear'), status: document.getElementById('persona-sky-status'),
       name: document.getElementById('persona-sky-name'),
+      guide: document.getElementById('persona-figure-guide'),
       thread: document.getElementById('persona-thread'),
       figures: document.getElementById('persona-figures'),
       wordsForm: document.getElementById('persona-star-words'),

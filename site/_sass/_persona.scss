@@ -745,6 +745,15 @@ button.persona-figure[data-set='true'] {
   color: var(--md-sys-color-on-primary-container);
 }
 
+button.persona-figure[aria-expanded='true'] {
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+.persona-figure-guide {
+  overflow-wrap: anywhere;
+}
+
 // Set, the mark rests in two shades split by the fill's curve, and its state layer is split by
 // the same curve, so under the pointer it still shows the one edge. That rule weighs less than the
 // press's ink and the ink going (button.is-stamping::after, button.is-uninking::after,
