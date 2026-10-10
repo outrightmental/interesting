@@ -21,6 +21,10 @@
      the route  A root enters a four-column bed. Each cell sends it down-left, straight down or
                 down-right into the next layer. Follow it to its exit and count its left turns.
                 A look halfway costs a hint; a wrong check says how many readings fit.
+                Some beds have a spring the root misses: change one visited arrow to reach it
+                with the requested left-turn count. These targets are chosen by enumerating all
+                legal single changes and keeping only unique solutions. Hints rule out a turn
+                with its measured result; after solving, each new turn grows a different route.
 
    A card and the feature it opens as are one bed: the spark puts the whole plan on its spec as
    `of` -- the layers, the band and the water line, or the two bags and the bed -- and piece(env)
@@ -999,7 +1003,16 @@ function routePlan(env) {
       arrows.push(row === 0 && col === start ? -1 : env.pick(ways));
     }
   }
-  return { kind: 'route', n, start, arrows };
+  const plan = { kind: 'route', n, start, arrows };
+  const turns = routeTurns(plan);
+  const exit = routePath(plan)[n];
+  const targets = turns.filter((turn) => turn.exit !== exit
+    && turns.filter((other) => other.exit === turn.exit && other.lefts === turn.lefts).length === 1);
+  if (targets.length && env.rnd() < 0.55) {
+    const target = env.pick(targets);
+    plan.spring = { exit: target.exit, lefts: target.lefts };
+  }
+  return plan;
 }
 
 function carriedRoute(env) {
@@ -1008,7 +1021,16 @@ function carriedRoute(env) {
   if (!Number.isInteger(p.start) || p.start < 1 || p.start > 3) return null;
   if (!Array.isArray(p.arrows) || p.arrows.length !== p.n * 4 || p.arrows[p.start] !== -1) return null;
   if (!p.arrows.every((way, i) => Number.isInteger(way) && way >= -1 && way <= 1 && i % 4 + way >= 0 && i % 4 + way < 4)) return null;
-  return { kind: 'route', n: p.n, start: p.start, arrows: p.arrows.slice() };
+  const plan = { kind: 'route', n: p.n, start: p.start, arrows: p.arrows.slice() };
+  if (p.spring != null) {
+    const spring = p.spring;
+    if (typeof spring !== 'object' || !Number.isInteger(spring.exit) || spring.exit < 0 || spring.exit > 3
+      || !Number.isInteger(spring.lefts) || spring.lefts < 0 || spring.lefts > p.n) return null;
+    if (spring.exit === routePath(plan)[plan.n]) return null;
+    if (routeTurns(plan).filter((turn) => turn.exit === spring.exit && turn.lefts === spring.lefts).length !== 1) return null;
+    plan.spring = { exit: spring.exit, lefts: spring.lefts };
+  }
+  return plan;
 }
 
 function routePath(plan) {
@@ -1017,17 +1039,50 @@ function routePath(plan) {
   return path;
 }
 
+function routeTurns(plan) {
+  const original = routePath(plan);
+  const turns = [];
+  for (let row = 0; row < plan.n; row++) {
+    const col = original[row];
+    const idx = row * 4 + col;
+    for (let way = -1; way <= 1; way++) {
+      if (way === plan.arrows[idx] || col + way < 0 || col + way > 3) continue;
+      const arrows = plan.arrows.slice();
+      arrows[idx] = way;
+      const path = routePath({ n: plan.n, start: plan.start, arrows });
+      turns.push({ row: row + 1, way, idx, path, exit: path[plan.n],
+        lefts: path.slice(1).filter((next, i) => next < path[i]).length });
+    }
+  }
+  return turns;
+}
+
+function routeOutcome(turn) {
+  return 'exits at ' + COLUMNS[turn.exit] + ' with ' + turn.lefts + ' left turn' + (turn.lefts === 1 ? '' : 's');
+}
+
 function routeRows(plan) {
   return Array.from({ length: plan.n }, (_, row) => 'row ' + (row + 1) + ': '
     + plan.arrows.slice(row * 4, row * 4 + 4).map((way) => ['L', 'D', 'R'][way + 1]).join(' ')).join('; ');
 }
 
 function routeTitle(plan) {
-  return 'the root path: ' + plan.n + ' layers';
+  return plan.spring ? 'the thirsty root: spring ' + COLUMNS[plan.spring.exit] + ', ' + plan.n + ' layers'
+    : 'the root path: ' + plan.n + ' layers';
+}
+
+function routeBrief(plan) {
+  return 'Follow the root from column ' + COLUMNS[plan.start] + ' through the rows from top to bottom. In each cell, L sends it one column left in the next row, D sends it straight down, and R sends it one column right. No arrow leaves the bed. Columns run A to D from left to right. ' + routeRows(plan) + '.';
+}
+
+function springGoal(plan) {
+  return 'Change one arrow so the root exits at ' + COLUMNS[plan.spring.exit] + ' with exactly '
+    + plan.spring.lefts + ' left turn' + (plan.spring.lefts === 1 ? '' : 's') + '.';
 }
 
 function routeBlank(path) {
-  return { path, taps: marks(0x40, 0.9), hints: marks(0x50, 0.9), hintRow: null, exits: marks(0x60, 0.8), t: 0, doneAt: -1 };
+  return { path, taps: marks(0x40, 0.9), hints: marks(0x50, 0.9), hintRow: null, exits: marks(0x60, 0.8),
+    edits: marks(0x70, 0.8), patch: null, traceAt: null, traceN: 0, t: 0, doneAt: -1 };
 }
 
 function drawRoute(g, w, h, env, plan, s, variant) {
@@ -1052,6 +1107,7 @@ function drawRoute(g, w, h, env, plan, s, variant) {
   // roll of its own.
   const tapped = markedNow(s.taps, rite, s, reduced);
   const hinted = markedNow(s.hints, rite, s, reduced);
+  const edited = markedNow(s.edits, rite, s, reduced);
   const seal = env.alpha(c.accent, 0.26);
   const boxOf = (idx) => ({ x: left + (idx % 4) * cell + 3, y: top + Math.floor(idx / 4) * layer + 3, w: cell - 6, h: layer - 6 });
   for (let row = 0; row < plan.n; row++) {
@@ -1068,18 +1124,22 @@ function drawRoute(g, w, h, env, plan, s, variant) {
   }
   sealMarks(g, s.taps, rite, s, reduced, boxOf, seal);
   sealMarks(g, s.hints, rite, s, reduced, boxOf, seal);
+  sealMarks(g, s.edits, rite, s, reduced, (key) => boxOf(Math.floor(key / 3)), env.alpha(c.accent2, 0.2));
   for (let row = 0; row < plan.n; row++) {
     for (let col = 0; col < 4; col++) {
       const x = left + col * cell;
       const y = top + row * layer;
       const idx = row * 4 + col;
-      const way = plan.arrows[idx];
-      const ring = idx === tapped || idx === hinted;
+      const patch = s.patch && s.patch.idx === idx ? s.patch : null;
+      const way = patch ? patch.way : plan.arrows[idx];
+      const ring = idx === tapped || idx === hinted || (patch && edited === idx * 3 + way + 1);
       g.strokeStyle = env.alpha(c.fg, 0.45);
       g.lineWidth = 1;
       g.strokeRect(x, y, cell, layer);
-      write(g, ['L', 'D', 'R'][way + 1], x + cell * 0.5, y + layer * 0.5,
-        Math.max(12, Math.min(24, cell * 0.36 * v.scale)), c.accent2, 'center', '600');
+      if (!patch || edited === idx * 3 + way + 1) {
+        write(g, ['L', 'D', 'R'][way + 1], x + cell * 0.5, y + layer * 0.5,
+          Math.max(12, Math.min(24, cell * 0.36 * v.scale)), c.accent2, 'center', '600');
+      }
       if (ring) {
         g.strokeStyle = c.accent;
         g.lineWidth = 2.5;
@@ -1091,9 +1151,20 @@ function drawRoute(g, w, h, env, plan, s, variant) {
   // that choice; the one said before goes back behind the same edge from as far as it had come.
   sealMarks(g, s.exits, rite, s, reduced,
     (col) => ({ x: left + col * cell + cell * 0.2, y: top + plan.n * layer + 3, w: cell * 0.6, h: 5 }), env.alpha(c.accent, 0.85));
+  if (plan.spring) {
+    const sx = left + (plan.spring.exit + 0.5) * cell;
+    g.fillStyle = env.alpha(c.accent, 0.22);
+    g.strokeStyle = c.accent;
+    g.lineWidth = 2;
+    g.beginPath();
+    g.ellipse(sx, h * 0.85, cell * 0.3, cell * 0.12, 0, 0, TAU);
+    g.fill();
+    g.stroke();
+  }
   // The root, at the finale: through the bed a row or more per tread of the finale.
   if (k > 0) {
-    const rows = Math.round(k * plan.n);
+    const trace = s.traceAt == null ? 1 : roll(rite, 0x72, s.traceN).stair(came(s, s.traceAt, 0.8, reduced));
+    const rows = Math.round(k * trace * plan.n);
     g.strokeStyle = env.alpha(c.accent2, 0.9);
     g.lineWidth = 2.5;
     g.lineCap = 'round';
@@ -1106,6 +1177,8 @@ function drawRoute(g, w, h, env, plan, s, variant) {
   }
   daybreak(g, fin, env, w, h, k, 0.1);
   write(g, 'L: left   D: down   R: right', w / 2, h * 0.91, size, c.fg);
+  if (plan.spring) write(g, 'spring ' + COLUMNS[plan.spring.exit] + ' / ' + plan.spring.lefts + ' left turns',
+    w / 2, h * 0.96, size, c.fg);
 }
 
 function routePreview(g, w, h, env, plan) {
@@ -1113,6 +1186,7 @@ function routePreview(g, w, h, env, plan) {
 }
 
 function routePiece(env, plan) {
+  if (plan.spring) return springPiece(env, plan);
   const helps = asked(env).helps;
   const path = routePath(plan);
   const exit = COLUMNS[path[plan.n]];
@@ -1121,7 +1195,7 @@ function routePiece(env, plan) {
   const draw = (c) => drawn(s, c, () => drawRoute(c.g, c.w, c.h, c, plan, s, env.variant));
   return {
     title: routeTitle(plan),
-    brief: 'Follow the root from column ' + COLUMNS[plan.start] + ' through the rows from top to bottom. In each cell, L sends it one column left in the next row, D sends it straight down, and R sends it one column right. No arrow leaves the bed. Columns run A to D from left to right. ' + routeRows(plan) + '.',
+    brief: routeBrief(plan),
     goal: 'Name the column where the root leaves the bed and count the L arrows on its path.',
     aspect: '4 / 5',
     checkLabel: 'check the path',
@@ -1193,6 +1267,128 @@ function routePiece(env, plan) {
   };
 }
 
+function springPiece(env, plan) {
+  const helps = asked(env).helps;
+  const original = routePath(plan);
+  const turns = routeTurns(plan);
+  const letters = ['L', 'D', 'R'];
+  const fits = (turn) => turn.exit === plan.spring.exit && turn.lefts === plan.spring.lefts;
+  const answer = turns.find(fits);
+  const ruled = [];
+  const s = routeBlank(original);
+  const draw = (c) => drawn(s, c, () => drawRoute(c.g, c.w, c.h, c, plan, s, env.variant));
+  const turnOf = (c) => turns.find((turn) => turn.row === Number(c.value('row'))
+    && letters[turn.way + 1] === c.value('turn'));
+  function reason(c) {
+    const row = Number(c.value('row'));
+    const way = letters.indexOf(c.value('turn')) - 1;
+    if (!Number.isInteger(row) || row < 1 || row > plan.n || way < -1) {
+      return 'Choose a row and a new direction before checking the route.';
+    }
+    const col = original[row - 1] + way;
+    return col < 0 || col > 3 ? 'That turn sends the root outside the bed at row ' + row + '.'
+      : 'That row still has its original arrow. Choose a different direction.';
+  }
+  function refresh(c) {
+    const turn = turnOf(c);
+    const changed = s.patch !== (turn || null);
+    s.patch = turn || null;
+    s.path = turn ? turn.path : original;
+    choose(s.edits, turn ? turn.idx * 3 + turn.way + 1 : null, riteOf(c), s, !!c.reduced);
+    const row = Number(c.value('row'));
+    choose(s.taps, Number.isInteger(row) && row >= 1 && row <= plan.n
+      ? (row - 1) * 4 + original[row - 1] : null, riteOf(c), s, !!c.reduced);
+    if (c.done && changed) {
+      s.traceAt = s.t;
+      s.traceN += 1;
+    }
+    return turn;
+  }
+  return {
+    title: routeTitle(plan),
+    brief: 'Redirect a root to a buried spring by changing one arrow. Choose a row and a new direction for the arrow the root reaches in that row. All other arrows stay as listed below; each new choice replaces your previous change. The root must stay inside the bed. ' + routeBrief(plan),
+    goal: springGoal(plan),
+    aspect: '4 / 5',
+    checkLabel: 'check the diversion',
+    steps: [
+      { id: 'row', ask: 'row of the arrow to change', kind: 'number', min: 1, max: plan.n, step: 1, unit: 'row' },
+      { id: 'turn', ask: 'new direction for that arrow', kind: 'choice', options: [
+        { label: 'left (L)', value: 'L' },
+        { label: 'straight down (D)', value: 'D' },
+        { label: 'right (R)', value: 'R' }
+      ] },
+      { id: 'hint', ask: 'a wrong turn and where it leads', kind: 'press', count: 1, label: 'rule out a turn', optional: true }
+    ],
+    solution: { row: answer.row, turn: letters[answer.way + 1] },
+    check(c) {
+      const turn = turnOf(c);
+      if (!turn) return { solved: false, say: reason(c) };
+      const matched = Number(turn.exit === plan.spring.exit) + Number(turn.lefts === plan.spring.lefts);
+      return { solved: matched === 2, say: matched === 2
+        ? 'One turn was enough: the root ' + routeOutcome(turn) + '.'
+        : 'That route ' + routeOutcome(turn) + '; ' + matched + ' of 2 targets met.' };
+    },
+    start(c) {
+      c.status('The unchanged root misses the spring. ' + springGoal(plan));
+      draw(c);
+    },
+    apply(id, value, c) {
+      if (id === 'hint') {
+        if (ruled.length >= helps) {
+          c.status('No hints left at this difficulty. Follow the unchanged rows before trying a new turn.');
+        } else {
+          const current = turnOf(c);
+          const next = current && !fits(current) && !ruled.includes(current) ? current
+            : turns.find((turn) => !fits(turn) && !ruled.includes(turn));
+          if (next) {
+            ruled.push(next);
+            choose(s.hints, next.idx, riteOf(c), s, !!c.reduced);
+            c.hint();
+            c.status('Ruled out: row ' + next.row + ' set to ' + letters[next.way + 1] + ' '
+              + routeOutcome(next) + '. Your arrows have not changed.');
+          } else c.status('Every other legal turn has been ruled out. Only one remains.');
+        }
+      }
+      if (id === 'row' || id === 'turn') {
+        const turn = refresh(c);
+        c.status(turn ? 'Row ' + turn.row + ': ' + letters[plan.arrows[turn.idx] + 1] + ' changed to '
+          + letters[turn.way + 1] + '. ' + (c.done ? 'The root ' + routeOutcome(turn) + '.'
+            : 'Follow the arrows again from ' + COLUMNS[plan.start] + '.') : reason(c));
+      }
+      draw(c);
+    },
+    tap(x, y, c) {
+      const col = Math.floor((x - 0.15) / (0.7 / 4));
+      const row = Math.floor((y - 0.2) / (0.6 / plan.n));
+      if (col < 0 || col >= 4 || row < 0 || row >= plan.n) {
+        c.status('Tap an arrow to read it. Use the row and direction controls to change one turn.');
+        return;
+      }
+      const idx = row * 4 + col;
+      const changed = s.patch && s.patch.idx === idx;
+      const way = changed ? s.patch.way : plan.arrows[idx];
+      choose(s.taps, idx, riteOf(c), s, !!c.reduced);
+      c.status('Row ' + (row + 1) + ', column ' + COLUMNS[col] + ': '
+        + ['left', 'straight down', 'right'][way + 1]
+        + (changed ? '; your replacement for ' + letters[plan.arrows[idx] + 1] : '; unchanged') + '.');
+      draw(c);
+    },
+    frame(t, dt, c) {
+      s.t += Math.max(0, dt);
+      if (c.done && s.doneAt < 0) {
+        s.doneAt = s.t;
+        s.dirty = true;
+      }
+      return framed(s, c, draw);
+    },
+    end(c) {
+      if (s.doneAt < 0) s.doneAt = s.t;
+      s.dirty = true;
+      c.status('The spring is reached. Change another row or direction to follow a different root.');
+    }
+  };
+}
+
 /* ---- the module ----------------------------------------------------------------------------- */
 
 // Which puzzle this card is, and its plan, dealt once from the env's seeded stream and kept with
@@ -1251,8 +1447,10 @@ export default {
     if (plan.kind === 'route') {
       return {
         title: routeTitle(plan),
-        mono: 'root enters at ' + COLUMNS[plan.start] + '\n' + routeRows(plan),
-        text: 'Follow L, D and R through the bed. Name the exit column and count the left turns.',
+        mono: 'root enters at ' + COLUMNS[plan.start] + '\n' + routeRows(plan)
+          + (plan.spring ? '\n' + springGoal(plan) : ''),
+        text: plan.spring ? 'A spring out of reach. Change the arrow in one row to reach it with the requested number of left turns.'
+          : 'Follow L, D and R through the bed. Name the exit column and count the left turns.',
         aspect: '4 / 5',
         paint: (g, w, h, cardEnv) => routePreview(g, w, h, cardEnv, plan),
         of: plan
