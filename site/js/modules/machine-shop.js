@@ -483,6 +483,16 @@ function nextPiece(env, plan) {
       const geo = nextGeometry(c.w, c.h, width, env.variant || PLAIN);
       const y0 = geo.top + shown * geo.size + geo.gap;
       const col = Math.floor((x * c.w - geo.left) / geo.size);
+      const scanRow = Math.floor((y * c.h - geo.top) / geo.size);
+      if (col >= 0 && col < width && scanRow >= 0 && scanRow < shown) {
+        const hood = hoodOf(rows[scanRow], col);
+        const pattern = [(hood >> 2) & 1, (hood >> 1) & 1, hood & 1].join('');
+        s.lens = { r: scanRow, u: col };
+        s.lensAt = s.t;
+        c.status('row ' + (scanRow + 1) + ', column ' + (col + 1) + ': pattern ' + pattern + (scanRow < shown - 1 ? ' makes a ' + (rows[scanRow + 1][col] ? 'lit' : 'dark') + ' cell below' : '; find what this pattern made in an earlier row'));
+        draw(c);
+        return;
+      }
       const rel = (y * c.h - y0) / geo.size;
       if (col < 0 || col >= width || rel < -0.4 || rel > depth + 0.4) {
         c.status((depth === 2 ? 'rows four and five are' : 'row five is') + ' outlined; tap a cell there');
@@ -630,6 +640,13 @@ function drawApex(g, w, h, env, plan, s, variant) {
         }
       }
     }
+    if (s.inspected) {
+      g.strokeStyle = c.accent2;
+      g.lineWidth = Math.max(1.5, geo.size * 0.1);
+      g.strokeRect(left + s.inspected.col * geo.size + inset * 0.3,
+        geo.top + s.inspected.r * geo.size + inset * 0.3,
+        geo.size - inset * 0.6, geo.size - inset * 0.6);
+    }
     g.strokeStyle = env.alpha(c.muted, 0.25);
     g.lineWidth = 1;
     g.strokeRect(left - inset, geo.top - inset, geo.tapeW + inset * 2, geo.size * (plan.rows + 1) + inset * 2);
@@ -655,7 +672,7 @@ function drawApex(g, w, h, env, plan, s, variant) {
 // The scene's state before anyone has touched it: no row marked, the flip not pointed out, and
 // no clock yet (a card is drawn once and stands).
 function apexBlank() {
-  return { marked: [], markedAt: [], pointed: false, pointedAt: null, t: 0 };
+  return { marked: [], markedAt: [], inspected: null, pointed: false, pointedAt: null, t: 0 };
 }
 
 function apexPreview(g, w, h, env, plan) {
@@ -690,7 +707,7 @@ function apexPiece(env, plan) {
       return { solved: false, say: colRight ? 'the column is right; the count is off' : 'the count is right; the column is off' };
     },
     start(c) {
-      c.status('compare the two tapes row by row');
+      c.status('compare the two tapes row by row; tap a shown cell to inspect the same place on both');
       draw(c);
     },
     apply(id, value, c) {
@@ -721,6 +738,20 @@ function apexPiece(env, plan) {
           c.status('every row between the first and the last is marked; the rest is yours');
         }
       }
+      draw(c);
+    },
+    tap(x, y, c) {
+      const geo = apexGeometry(c.w, c.h, plan, env.variant || PLAIN);
+      const px = x * c.w;
+      const tape = geo.left.findIndex((left) => px >= left && px < left + geo.tapeW);
+      const row = Math.floor((y * c.h - geo.top) / geo.size);
+      const col = tape < 0 ? -1 : Math.floor((px - geo.left[tape]) / geo.size);
+      if (row < 1 || row > plan.rows || col < 0 || col >= plan.width) {
+        c.status('Tap a cell in a shown row on either tape to compare the two.');
+        return;
+      }
+      s.inspected = { r: row, col };
+      c.status('row ' + row + ', column ' + (col + 1) + ': first tape ' + (hist.a[row][col] ? 'lit' : 'dark') + ', second tape ' + (hist.b[row][col] ? 'lit' : 'dark'));
       draw(c);
     },
     frame(t, dt, c) {

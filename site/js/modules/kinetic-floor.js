@@ -5,7 +5,7 @@
 
    Three puzzles, all deduction, each with something to tip at the end:
 
-     will it cross      Four lanes of dominoes, each with one gap. A falling domino reaches across
+     will it cross      Four or five lanes of dominoes, each with one gap. A falling domino reaches across
                         a gap only when the gap is narrower than four fifths of its height. Every
                         lane writes its domino height and its gap width and draws both on one
                         grid; no lane sits within five per cent of the edge, so the arithmetic
@@ -157,6 +157,10 @@ function crosses(lane) {
   return lane.g < REACH * lane.h;
 }
 
+function lanesTitle(plan) {
+  return 'will it cross: ' + WORDS[plan.lanes.length] + ' lanes in procession';
+}
+
 // How far apart the ordinary dominoes of a lane stand, centre to centre, in grid units: always
 // well under the reach, so only the marked gap is ever in question.
 function pitch(h) {
@@ -164,9 +168,10 @@ function pitch(h) {
 }
 
 function lanesPlan(env) {
+  const count = env.chance(0.38) ? 5 : 4;
   for (let attempt = 0; attempt < 24; attempt++) {
     const lanes = [];
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < count; i++) {
       const h = env.int(4, 10);
       const over = env.chance(0.5);
       // Well away from the edge, by more than five per cent either way: 0.74 of the height or under
@@ -178,12 +183,12 @@ function lanesPlan(env) {
     }
     if (lanes.some(crosses) && !lanes.every(crosses)) return { kind: 'lanes', lanes };
   }
-  return { kind: 'lanes', lanes: [{ h: 8, g: 5, n: 5, at: 2 }, { h: 6, g: 6, n: 5, at: 1 }, { h: 10, g: 9, n: 6, at: 2 }, { h: 5, g: 3, n: 4, at: 1 }] };
+  return { kind: 'lanes', lanes: [{ h: 8, g: 5, n: 5, at: 2 }, { h: 6, g: 6, n: 5, at: 1 }, { h: 10, g: 9, n: 6, at: 2 }, { h: 5, g: 3, n: 4, at: 1 }, { h: 7, g: 4, n: 5, at: 2 }].slice(0, count) };
 }
 
 function carriedLanes(env) {
   const p = env.card && env.card.of;
-  if (!p || p.kind !== 'lanes' || !Array.isArray(p.lanes) || p.lanes.length !== 4) return null;
+  if (!p || p.kind !== 'lanes' || !Array.isArray(p.lanes) || ![4, 5].includes(p.lanes.length)) return null;
   const lanes = [];
   for (const l of p.lanes) {
     if (!l || typeof l !== 'object') return null;
@@ -215,7 +220,7 @@ function laneLayout(lane) {
 
 function lanesGeometry(w, h, plan, v) {
   const top = h * 0.1;
-  const band = h * 0.22;
+  const band = h * 0.88 / plan.lanes.length;
   const spanMax = Math.max(...plan.lanes.map((l) => laneLayout(l).span));
   const fit = Math.min((w * 0.62) / spanMax, (band * 0.56) / 10);
   return { top, band, x0: w * 0.1, u: fit * Math.min(1.08, Math.max(0.92, v.scale)), spanMax };
@@ -367,8 +372,9 @@ function drawLanes(g, w, h, env, plan, s, variant) {
     }
     if (countOn) {
       const n = fallen(lane, s.time, rite, k);
-      label(g, n === lane.n ? 'all ' + n + ' fell' : n + ' of ' + lane.n + ' fell', callX, floorY - u * 2, small, c.accent2);
-    } else if (wordOn) {
+      label(g, n === lane.n ? 'all ' + n + ' fell' : n + ' of ' + lane.n + ' fell', callX, floorY - u * 5, small, c.accent2);
+    }
+    if (wordOn) {
       label(g, s.calls[k] ? 'crosses' : 'stops', callX, floorY - u * 2, size, c.accent2);
     } else {
       label(g, '?', callX, floorY - u * 2, size, env.alpha(c.muted, 0.7));
@@ -389,7 +395,8 @@ function lanesPreview(g, w, h, env, plan) {
 function lanesPiece(env, plan) {
   const helps = asked(env).helps;
   const truth = plan.lanes.map((l) => (crosses(l) ? 1 : 0));
-  const s = { calls: [0, 0, 0, 0], touched: false, hinted: [], time: -1, t: 0, calledAt: [-1, -1, -1, -1], changes: [0, 0, 0, 0], hintAt: {} };
+  const count = truth.length;
+  const s = { calls: new Array(count).fill(0), touched: false, hinted: [], time: -1, t: 0, calledAt: new Array(count).fill(-1), changes: new Array(count).fill(0), hintAt: {} };
   const draw = (c) => drawLanes(c.g, c.w, c.h, c, plan, s, env.variant);
   function right() {
     return truth.reduce((n, t, i) => n + (s.calls[i] === t ? 1 : 0), 0);
@@ -403,21 +410,21 @@ function lanesPiece(env, plan) {
     s.changes[k] += 1;
   }
   return {
-    title: 'will it cross: four lanes in procession',
-    brief: 'Four lanes of dominoes stand in procession, each with one gap. A falling domino reaches across a gap only when the gap is narrower than four fifths of its height. Every lane writes its domino height and its gap width, and both are drawn on the same grid. Tap a lane to change its call. ' + plan.lanes.map((l, i) => 'Lane ' + (i + 1) + ': height ' + l.h + ', gap ' + l.g).join('; ') + '.',
+    title: lanesTitle(plan),
+    brief: (count === 4 ? 'Four' : 'Five') + ' lanes of dominoes stand in procession, each with one gap. A falling domino reaches across a gap only when the gap is narrower than four fifths of its height. Every lane writes its domino height and its gap width, and both are drawn on the same grid. Tap a lane to change its call. ' + plan.lanes.map((l, i) => 'Lane ' + (i + 1) + ': height ' + l.h + ', gap ' + l.g).join('; ') + '.',
     goal: 'Call every lane: does the push stop at the gap, or cross it?',
     aspect: '4 / 5',
     checkLabel: 'check the lanes',
     steps: [
-      { id: 'calls', ask: 'lanes 1 to 4: stops, or crosses', kind: 'grid', rows: 1, cols: 4, labels: ['stops', 'crosses'] },
+      { id: 'calls', ask: 'lanes 1 to ' + count + ': stops, or crosses', kind: 'grid', rows: 1, cols: count, labels: ['stops', 'crosses'] },
       { id: 'hint', ask: 'one lane called for you', kind: 'press', count: 1, label: 'show one lane', optional: true }
     ],
     solution: { calls: truth },
     check(c) {
       const n = right();
       return {
-        solved: n === 4,
-        say: n === 4 ? 'every lane is called right; the chains go over' : (n === 0 ? 'no lane is called right; the push waits' : WORDS[n] + ' of four lanes called right; the push waits')
+        solved: n === count,
+        say: n === count ? 'every lane is called right; tip the chains to see which stop' : (n === 0 ? 'no lane is called right; the push waits' : WORDS[n] + ' of ' + WORDS[count] + ' lanes called right; the push waits')
       };
     },
     start(c) {
@@ -425,9 +432,9 @@ function lanesPiece(env, plan) {
       draw(c);
     },
     apply(id, value, c) {
-      if (id === 'calls' && Array.isArray(value) && value.length === 4) {
+      if (id === 'calls' && Array.isArray(value) && value.length === count) {
         const next = value.map((v) => (v ? 1 : 0));
-        for (let k = 0; k < 4; k++) if (s.calledAt[k] < 0 || next[k] !== s.calls[k]) called(k);
+        for (let k = 0; k < count; k++) if (s.calledAt[k] < 0 || next[k] !== s.calls[k]) called(k);
         s.calls = next;
         s.touched = true;
         c.status(callWords());
@@ -452,8 +459,8 @@ function lanesPiece(env, plan) {
     tap(x, y, c) {
       const geo = lanesGeometry(c.w, c.h, plan, env.variant || PLAIN);
       const k = Math.floor((y * c.h - geo.top) / geo.band);
-      if (k < 0 || k > 3) {
-        c.status('Tap one of the four numbered lanes to change its call.');
+      if (k < 0 || k >= count) {
+        c.status('Tap one of the ' + WORDS[count] + ' numbered lanes to change its call.');
         return;
       }
       const next = s.calls.slice();
@@ -474,7 +481,7 @@ function lanesPiece(env, plan) {
     end(c) {
       s.time = c.reduced ? 8 : 0;
       const over = truth.filter(Boolean).length;
-      c.status('tipped. ' + (over === 1 ? 'one lane goes over' : WORDS[over] + ' lanes go over') + ' and ' + (4 - over === 1 ? 'one stops' : WORDS[4 - over] + ' stop') + ' at the gap. nothing here was fragile.');
+      c.status('tipped. ' + (over === 1 ? 'one lane goes over' : WORDS[over] + ' lanes go over') + ' and ' + (count - over === 1 ? 'one stops' : WORDS[count - over] + ' stop') + ' at the gap. nothing here was fragile.');
     }
   };
 }
@@ -925,18 +932,19 @@ function plankPiece(env, plan) {
       draw(c);
     },
     tap(x, y, c) {
-      if (!moving) {
-        c.status('Set the pivot with its number field, then check the balance.');
-        return;
-      }
-      if (y < 0.55) {
-        c.status('Choose a mass with its button; tap below the plank to place the hanger on the ruler.');
+      if (y < 0.55 || y > 0.88) {
+        c.status(moving ? 'Choose a mass with its button; tap the ruler below the plank to place the hanger.' : 'Tap the ruler below the plank to place the pivot.');
         return;
       }
       const geo = plankGeometry(c.w, c.h);
       const position = Math.max(0, Math.min(20, Math.round((x * c.w - geo.left) / geo.u)));
-      moveWeight(position, c);
-      c.set('position', position);
+      if (moving) {
+        moveWeight(position, c);
+        c.set('position', position);
+      } else {
+        c.set('pivot', position);
+        c.status('pivot at mark ' + position + '; check to see which way it tips');
+      }
       draw(c);
     },
     frame(t, dt, c) {
@@ -994,9 +1002,9 @@ export default {
     }
     if (plan.kind === 'lanes') {
       return {
-        title: 'will it cross: four lanes in procession',
+        title: lanesTitle(plan),
         mono: plan.lanes.map((l, i) => 'lane ' + (i + 1) + '  height ' + l.h + '  gap ' + l.g).join('\n'),
-        text: 'Four lanes in procession. A falling domino crosses a gap narrower than four fifths of its height. Call each lane: stops, or crosses.',
+        text: (plan.lanes.length === 4 ? 'Four' : 'Five') + ' lanes in procession. A falling domino crosses a gap narrower than four fifths of its height. Call each lane: stops, or crosses.',
         aspect: '4 / 5',
         paint: (g, w, h, cardEnv) => lanesPreview(g, w, h, cardEnv, plan),
         of: plan

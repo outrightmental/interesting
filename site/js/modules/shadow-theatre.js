@@ -165,6 +165,15 @@ function breath(rite, t, period, turn, n) {
   return phase < 0.5 ? rite.stair(phase * 2, n) : 1 - rite.stair((phase - 0.5) * 2, n);
 }
 
+function flameBeat(rite, t) {
+  if (t <= 0) return 0;
+  const phase = t % 5;
+  if (phase <= 0) return 0;
+  const towards = phase <= 2.5 ? phase / 2.5 : (5 - phase) / 2.5;
+  const rung = rite.at(0x1a5 + Math.floor(t / 5)).stair(towards, 8);
+  return Math.max(1, Math.min(8, Math.round(rung * 8)));
+}
+
 // The lamp lit for good over a solved night: light comes over the whole house through the matte
 // from the moment of the solve, blinking on and dropping out the way the rite's flicker has it,
 // and holds.
@@ -416,7 +425,7 @@ function sideView(g, w, h, c, p, s, variant) {
   g.strokeStyle = c.alpha(col.accent2, 0.7);
   g.lineWidth = 1;
   g.stroke();
-  lampDot(g, c, lampX, floor - 3, Math.max(3, m * 0.012), swell);
+  lampDot(g, c, lampX, floor - 3, Math.max(3, m * 0.012) + flameBeat(rite, t) * Math.max(0.8, m * 0.002), swell);
   // The measurements: the cutout's height, the gap to the wall, the shadow's height, and the
   // one that is asked.
   const dim = (x1, y1, x2, y2) => {
@@ -483,15 +492,26 @@ function sideView(g, w, h, c, p, s, variant) {
   if (s.reveal) daybreak(g, rite, c, w, h, revealP);
 }
 
-function lampPreview(g, w, h, env, p) {
-  sideView(g, w, h, env, p, lampState(), env.variant);
+function lampPreview(g, w, h, env, p, t = 0) {
+  const s = lampState();
+  s.t = t;
+  sideView(g, w, h, env, p, s, env.variant);
 }
 
 function lampPiece(env, p) {
   // The distance is a length in spans off the drawing, so it is a measured answer: the difficulty
   // says how many spans out it may be and still light the lamp.
-  const margin = asked(env).margin;
+  const settings = asked(env);
+  const margin = settings.margin;
   const H = shadowHeight(p, p.d);
+  let helped = 0;
+  const hints = [
+    'The shadow is ' + (H - p.h) + ' spans taller than the cutout. That extra height comes from the gap to the wall.',
+    'The two triangles match: extra shadow height times lamp distance equals cutout height times gap to the wall.',
+    'Here, ' + (H - p.h) + ' times lamp distance equals ' + (p.h * p.a) + '.',
+    'Divide ' + (p.h * p.a) + ' by ' + (H - p.h) + ' to find the distance behind the cutout.',
+    'Check your distance by seeing whether it makes a shadow ' + H + ' spans tall.'
+  ];
   const move = MOVES[p.move];
   const s = lampState();
   const draw = (c) => sideView(c.g, c.w, c.h, c, p, s, env.variant);
@@ -504,7 +524,8 @@ function lampPiece(env, p) {
     checkLabel: 'light the lamp',
     steps: [
       { id: 'distance', ask: 'the lamp\'s distance behind the cutout', kind: 'number', min: 1, max: 20, step: 1, value: 1, unit: 'spans' },
-      { id: 'change', ask: 'the shadow, when ' + move.text, kind: 'choice', options: CHANGES }
+      { id: 'change', ask: 'the shadow, when ' + move.text, kind: 'choice', options: CHANGES },
+      { id: 'hint', ask: 'help with the measurements', kind: 'press', count: 1, label: 'compare the heights', optional: true }
     ],
     solution: { distance: p.d, change: move.answer },
     check(c) {
@@ -552,6 +573,13 @@ function lampPiece(env, p) {
             s.changeAt = s.t;
           }
         }
+      }
+      if (id === 'hint') {
+        if (helped < settings.helps) {
+          c.status(hints[helped]);
+          helped += 1;
+          c.hint();
+        } else c.status('No comparisons left at this difficulty; use the heights and the gap on the drawing.');
       }
       draw(c);
     },
@@ -613,7 +641,7 @@ function matchState(order) {
   return {
     order: order ? order.slice() : null, from: order ? order.slice() : null,
     movedAt: new Array(order ? order.length : 6).fill(-1),
-    hinted: [], hintAt: new Array(order ? order.length : 6).fill(-1), reveal: false, revealAt: -1, t: 0
+    hinted: [], hintAt: new Array(order ? order.length : 6).fill(-1), inspected: null, reveal: false, revealAt: -1, t: 0
   };
 }
 
@@ -629,7 +657,7 @@ function bench(g, w, h, c, p, s, variant) {
   const swell = breath(rite.at(0x1a4), t, 5, v.turn);
   const revealP = s.reveal ? came(s, s.revealAt, 2.2, reduced) : 0;
   house(g, w, h, c, v, lampX, h * 0.12, swell);
-  lampDot(g, c, lampX, h * 0.12, Math.max(3, m * 0.013), swell);
+  lampDot(g, c, lampX, h * 0.12, Math.max(3, m * 0.013) + flameBeat(rite, t) * Math.max(0.8, m * 0.002), swell);
   const fs = Math.max(9, Math.min(14, m * 0.03));
   const columns = p.items.length > 4 ? 3 : 4;
   const rows = Math.ceil(p.items.length / columns);
@@ -688,6 +716,11 @@ function bench(g, w, h, c, p, s, variant) {
     g.fill();
     text(g, String(n + 1), (column + 0.5) * cell, rowY + fs * 1.1, fs * 1.1, col.bg, 'center', 700);
     text(g, 'x ' + (f % 1 ? f.toFixed(1) : f), (column + 0.5) * cell, rowY + rowH - fs * 2.1, fs * 0.9, col.bg, 'center', 600);
+    if (s.inspected === n) {
+      g.strokeStyle = col.accent;
+      g.lineWidth = 2;
+      g.strokeRect((column + 0.08) * cell, rowY + 2, cell * 0.84, rowH - 4);
+    }
     // The visitor's matching, written under each shadow once it has been set: a name that
     // changes blinks out and the new one blinks on, on this shadow's own roll; a name proved
     // right develops a chip behind it through the matte.
@@ -720,8 +753,10 @@ function bench(g, w, h, c, p, s, variant) {
   if (s.reveal) daybreak(g, rite, c, w, h, revealP);
 }
 
-function matchPreview(g, w, h, env, p) {
-  bench(g, w, h, env, p, matchState(null), env.variant);
+function matchPreview(g, w, h, env, p, t = 0) {
+  const s = matchState(null);
+  s.t = t;
+  bench(g, w, h, env, p, s, env.variant);
 }
 
 function matchPiece(env, p) {
@@ -755,7 +790,7 @@ function matchPiece(env, p) {
       };
     },
     start(c) {
-      c.status(WORDS[count] + ' cutouts and ' + WORDS[count] + ' shadows; match by outline, not size');
+      c.status(WORDS[count] + ' cutouts and ' + WORDS[count] + ' shadows; tap a shadow to inspect its outline');
       draw(c);
     },
     apply(id, value, c) {
@@ -784,6 +819,23 @@ function matchPiece(env, p) {
           c.status('every shadow you have matched wrongly has been named; the rest is yours');
         }
       }
+      draw(c);
+    },
+    tap(x, y, c) {
+      const columns = count > 4 ? 3 : 4;
+      const rows = Math.ceil(count / columns);
+      const screenY = rows === 2 ? 0.51 : 0.44;
+      const screenH = rows === 2 ? 0.42 : 0.5;
+      const column = Math.floor(x * columns);
+      const row = Math.floor((y - screenY) / (screenH / rows));
+      const n = row * columns + column;
+      if (x < 0.02 || x > 0.98 || y < screenY || y >= screenY + screenH || n < 0 || n >= count) {
+        c.status('Tap one of the numbered shadows on the screen to inspect it.');
+        return;
+      }
+      s.inspected = n;
+      const sh = p.shadows[n];
+      c.status('shadow ' + (n + 1) + ': ' + OUTLINES[p.items[sh.cut]] + '; enlarged ' + (sh.f / 10) + ' times and leaning ' + (sh.k < 0 ? 'left' : 'right'));
       draw(c);
     },
     frame(t, dt, c) {
@@ -824,7 +876,11 @@ export default {
     else matchPreview(g, w, h, env, p);
   },
   animate(g, w, h, env, t) {
-    return false;
+    if (env.reduced) return false;
+    const p = deal(env);
+    if (p.kind === 'lamp') lampPreview(g, w, h, env, p, t);
+    else matchPreview(g, w, h, env, p, t);
+    return true;
   },
   spark(env) {
     const p = deal(env);
