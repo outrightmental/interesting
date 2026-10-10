@@ -15,6 +15,7 @@
    its clues. The sheet's optional puzzle preview borrows the feed's own modules and card
    configurations through interestingFeed.previewSky(), so changing a star reveals a real world's
    response rather than an imitation. Moving a star updates the preview when the move ends.
+   A pending preview is invalidated as soon as its stars change, even during a drag.
    The first preview's picture and words stay available for comparison while that world is being
    previewed in the open sheet. This is a temporary picture, never another saved or editable sky.
 
@@ -184,6 +185,7 @@
       concealing['delete'](node);
     }
     if (node.classList) node.classList.remove('is-unmaking');
+    node.removeAttribute('inert');
     // A part coming into view arrives by a composition of its own; one already in view keeps
     // the words it has.
     if (node.hidden) arriveOn(node, 'part-in');
@@ -192,6 +194,7 @@
   function conceal(node) {
     if (!node || node.hidden) return;
     if (concealing && concealing.get(node)) return; // already on its way down the ladder
+    node.setAttribute('inert', '');
     var m = engine();
     if (!m || calm() || !node.classList || !concealing || typeof window.setTimeout !== 'function') {
       node.hidden = true;
@@ -1213,8 +1216,13 @@
       return;
     }
     show(sheet.answer);
-    if (!skyAnswerWanted || activeDrag) return;
+    if (!skyAnswerWanted) return;
     if (skyAnswerAt === skyAnswerIndex && skyAnswerStars && sameStars(skyAnswerStars, list)) return;
+    if (activeDrag) {
+      skyAnswerTicket += 1;
+      skyAnswerStars = null;
+      return;
+    }
     var ticket = ++skyAnswerTicket;
     skyAnswerStars = list;
     skyAnswerAt = skyAnswerIndex;
@@ -1709,12 +1717,13 @@
       if (sheet.title && m && typeof m.reveal === 'function' && !calm()) m.reveal(sheet.title);
     }
     renderSheet(fresh);
+    sheet.host.scrollTop = 0;
+    var skyTarget = sheet.field.querySelector('.persona-star:not([inert])') || sheet.drop;
     var target = section === 'reading' ? sheet.ask
       : section === 'difficulty' ? (sheet.tune && sheet.tune.querySelector('input'))
-        : (sheet.field.querySelector('.persona-star') || sheet.drop);
-    if (!target) target = sheet.field.querySelector('.persona-star') || sheet.drop;
+        : skyTarget;
+    if (!target) target = skyTarget;
     if (target && typeof target.focus === 'function') target.focus();
-    sheet.host.scrollTop = 0;
   }
   function closeSheet() {
     if (!sheet) return;
@@ -1804,22 +1813,31 @@
       if (ev.clientX < box.left || ev.clientX > box.right || ev.clientY < box.top || ev.clientY > box.bottom) closeSheet();
     });
     document.addEventListener('keydown', function (ev) {
+      var front = document.documentElement.getAttribute('data-lightbox');
       if (!host.open || typeof host.showModal === 'function'
-          || document.documentElement.getAttribute('data-lightbox') === 'are-you-sure') return;
+          || (front && front !== 'persona')) return;
       if (ev.key === 'Escape' || ev.key === 'Esc') {
         ev.preventDefault();
         closeSheet();
         return;
       }
       if (ev.key !== 'Tab') return;
-      var controls = host.querySelectorAll('button, a[href], input:not([disabled])');
+      var controls = host.querySelectorAll(
+        'summary, a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex="0"]');
       var reachable = [];
       for (var i = 0; i < controls.length; i++) {
         var control = controls[i];
-        if (control.disabled) continue;
+        var tab = control.getAttribute('tabindex');
+        if (control.disabled || (tab !== null && Number(tab) < 0)) continue;
         var visible = true;
         for (var parent = control; parent && parent !== host; parent = parent.parentNode) {
-          if (parent.hidden) { visible = false; break; }
+          if (parent.hidden || parent.hasAttribute('inert')
+              || parent.getAttribute('aria-hidden') === 'true'
+              || (parent.tagName === 'DETAILS' && !parent.open
+                && control !== parent.querySelector('summary'))) {
+            visible = false;
+            break;
+          }
         }
         if (visible) reachable.push(control);
       }
