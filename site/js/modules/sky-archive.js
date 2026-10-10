@@ -1176,7 +1176,10 @@ function routePiece(env, p) {
         s.shownAt = s.t;
         s.shows += 1;
       }
-      c.status('The route ends at star ' + end + '; its landings add to ' + sum + '. The chart stays open to read again.');
+      // Every solve is answered in the archive's own voice: the line is the plan's, so one route
+      // always reads the same and another route reads another.
+      const line = READINGS[(p.start + p.moves.length + p.lights[trail[trail.length - 1]]) % READINGS.length];
+      c.status('The route ends at star ' + end + '; its landings add to ' + sum + '. The archive reads: ' + line);
       draw(c);
     }
   };

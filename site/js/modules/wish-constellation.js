@@ -30,6 +30,17 @@ const TAU = Math.PI * 2;
 // How far the nearest and the farthest light shift between the two views, in hundredths of a view.
 const SHIFT_NEAR = 26;
 const SHIFT_FAR = 4;
+// What the sky says once a piece is sealed: one line, chosen by the card, in the site's own voice,
+// so one postcard always reads the same and another reads another.
+const SEALS = [
+  'what the left eye saw, the right eye measured',
+  'the sky kept its distance, and you kept count',
+  'turn once more and it is still your sky',
+  'depth is a thing two eyes agree on',
+  'every light stood where you left it; only you moved',
+  'the pattern knew you before you knew it',
+  'a near miss is still a miss; this one is yours'
+];
 
 /* How hard the visitor asked for their puzzles. The persona keeps one difficulty for the whole
    site (js/persona.js) and js/stage.js hands it to a piece on env.difficulty, 1 (gentle) to 5
@@ -650,7 +661,7 @@ function postcardPiece(env, plan) {
       return !settled(s, c);
     },
     end(c) {
-      c.status('sealed: postcard ' + plan.number + '. light ' + LETTERS[answer[0]] + ' is nearest and light ' + LETTERS[answer[n - 1]] + ' farthest; the lines show how far each one shifted');
+      c.status('sealed: postcard ' + plan.number + '. light ' + LETTERS[answer[0]] + ' is nearest and light ' + LETTERS[answer[n - 1]] + ' farthest; the lines show how far each one shifted. the sky reads: ' + SEALS[plan.number % SEALS.length]);
     }
   };
 }
@@ -1056,7 +1067,7 @@ function whichPiece(env, plan) {
       return !settled(s, c);
     },
     end(c) {
-      c.status('sky ' + SKIES[plan.which] + ' is yours, ' + turnsWord(plan.turns) + (plan.mirror ? ', flipped first' : '') + '; watch your sky turn to meet it');
+      c.status('sky ' + SKIES[plan.which] + ' is yours, ' + turnsWord(plan.turns) + (plan.mirror ? ', flipped first' : '') + '; watch your sky turn to meet it. the sky reads: ' + SEALS[(plan.number + plan.turns) % SEALS.length]);
     }
   };
 }

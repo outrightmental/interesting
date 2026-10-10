@@ -326,7 +326,7 @@ function slitGeometry(w, h) {
 function slitState() {
   return {
     open: false, t: 0, openAt: -1, guess: null, guessWas: null, guessAt: -1, guesses: 0,
-    effect: null, effectWas: null, effectAt: -1, effects: 0, drawn: null, drawnAt: -1
+    effect: null, effectWas: null, effectAt: -1, effects: 0, measured: 0, measuredAt: -1, drawn: null, drawnAt: -1
   };
 }
 
@@ -498,6 +498,24 @@ function drawSlits(g, w, h, env, plan, s, variant) {
     if (mm % every === 0) label(g, env, String(mm), geo.rulerX + w * 0.04, y, tickSize, 'left', env.alpha(c.fg, 0.9));
   }
   label(g, env, 'mm', geo.rulerX + w * 0.02, geo.top - size * 0.9, size, 'left', env.alpha(c.muted, 0.9));
+  // The reading asked of the ruler: a bracket from the middle bright fringe to the next, drawn out
+  // along the screen in the stair's treads from the moment it was asked, and named once it lands.
+  if (s.measured > 0) {
+    const k = roll(rite, 0x6e1, 0).stair(came(s, s.measuredAt, 1.1, reduced));
+    if (k > 0) {
+      const mx = geo.screenX - w * 0.006;
+      const y1 = geo.middle - plan.fringe * perMm;
+      g.strokeStyle = env.alpha(c.accent2, 0.9);
+      g.lineWidth = 1.5;
+      g.beginPath();
+      g.moveTo(mx - w * 0.006, geo.middle);
+      g.lineTo(mx, geo.middle);
+      g.lineTo(mx, geo.middle + (y1 - geo.middle) * k);
+      if (k >= 1) g.lineTo(mx - w * 0.006, y1);
+      g.stroke();
+      if (k >= 1) label(g, env, plan.fringe + ' mm', geo.screenX + geo.screenW / 2, y1 - size * 0.8, Math.max(8, size - 2), 'center', c.accent2);
+    }
+  }
   // The table read true: the light comes over it behind the piece's edge, and the fringes burn
   // brighter behind an edge of their own, both on their stairs.
   if (s.open) {
@@ -515,7 +533,7 @@ function slitPreview(g, w, h, env, plan) {
 function slitPiece(env, plan) {
   // The spacing is read off a ruler, so it is a measured answer: the difficulty says how many
   // hundredths of a millimetre out it may be and still be on the mark.
-  const margin = asked(env).margin;
+  const { helps, margin } = asked(env);
   const spacing = spacingOf(plan.lambda, plan.length, plan.fringe);
   const full = Object.assign({ spacing }, plan);
   const change = CHANGES[plan.ask];
@@ -533,7 +551,10 @@ function slitPiece(env, plan) {
     checkLabel: 'check the table',
     steps: [
       { id: 'spacing', ask: 'the slit spacing, in hundredths of a millimetre', kind: 'number', min: 10, max: 100, step: 1, unit: '/100 mm' },
-      { id: 'change', ask: 'what ' + change.what + ' does to the fringes', kind: 'choice', options: EFFECTS }
+      { id: 'change', ask: 'what ' + change.what + ' does to the fringes', kind: 'choice', options: EFFECTS },
+      // A reading off the ruler, at a price: first the fringe spacing itself, then what the spacing
+      // the visitor has guessed would throw on the screen, never the answer.
+      { id: 'measure', ask: 'a reading off the ruler', kind: 'press', count: helps, label: 'measure for me', optional: true }
     ],
     solution: { spacing, change: change.does },
     check(c) {
@@ -568,6 +589,22 @@ function slitPiece(env, plan) {
           }
         }
       }
+      if (id === 'measure') {
+        if (s.measured >= helps) c.status('the ruler has said all it will at this difficulty; the rest is yours to read');
+        else if (s.measured === 0) {
+          s.measured = 1;
+          s.measuredAt = s.t;
+          c.hint();
+          c.status('the ruler reads: neighbouring bright fringes fall ' + plan.fringe + ' mm apart');
+        } else if (s.guess === null) c.status('set a spacing first, and the ruler will say what fringes slits that far apart would throw');
+        else {
+          s.measured += 1;
+          c.hint();
+          const d = clamp(s.guess, 10, 100);
+          const would = Math.round((plan.lambda * plan.length) / (d * 10000) * 100) / 100;
+          c.status('slits ' + (d / 100).toFixed(2) + ' mm apart would throw fringes ' + would + ' mm apart; the ruler shows ' + plan.fringe + ' mm');
+        }
+      }
       if (id === 'change') {
         const effect = EFFECTS.find((e) => e.value === value);
         if (effect) {
@@ -585,7 +622,7 @@ function slitPiece(env, plan) {
     },
     frame(t, dt, c) {
       s.t += Math.max(0, dt);
-      return step(s, c, Math.max(s.openAt, s.guessAt, s.effectAt), draw);
+      return step(s, c, Math.max(s.openAt, s.guessAt, s.effectAt, s.measuredAt), draw);
     },
     end(c) {
       s.open = true;
